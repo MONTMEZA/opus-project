@@ -266,6 +266,15 @@ export const createConversation = !hasSupabase ? noop : async (proId) => {
   return data;
 };
 
+/** Côté professionnel : ouvrir une conversation avec le particulier auteur d'une demande. */
+export const createConversationWithClient = !hasSupabase ? noop : async (clientId) => {
+  const { data, error } = await supabase.from('conversations')
+    .insert({ client_id: clientId, professional_id: currentUserId })
+    .select().single();
+  if (error) throw error;
+  return data;
+};
+
 export const sendMessage = !hasSupabase ? noop : async (conversationId, texte) => {
   const { data, error } = await supabase.from('messages')
     .insert({ conversation_id: conversationId, sender_id: currentUserId, texte })

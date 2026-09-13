@@ -351,11 +351,38 @@ export default function OpusApp() {
     showBanner('Votre demande est publiée. Les pros du métier vont la recevoir.');
   };
 
-  const repondreDemande = (demande) => {
-    setDemandes((ds) => ds.map((d) => (
-      d.id === demande.id ? { ...d, reponses: d.reponses + 1 } : d
-    )));
-    showBanner(`Réponse envoyée à ${demande.auteur}.`);
+  const repondreDemande = async (demande) => {
+    const contactId = `part-${demande.auteurId || demande.id}`;
+    let conv = conversations.find((c) => c.contact && c.contact.id === contactId);
+
+    if (!conv) {
+      let id = `local-${Date.now()}`;
+      try {
+        const row = await api.createConversationWithClient(demande.auteurId);
+        if (row) id = row.id;
+      } catch (e) {
+        showBanner("La conversation n'a pas pu être ouverte.");
+        return;
+      }
+      conv = {
+        id,
+        proId: null,
+        contact: {
+          id: contactId,
+          titre: demande.auteur,
+          metier: `Demande · ${demande.metier}`,
+          avatarUrl: null,
+        },
+        messages: [],
+      };
+      setConversations((cs) => [conv, ...cs]);
+      setDemandes((ds) => ds.map((d) => (
+        d.id === demande.id ? { ...d, reponses: d.reponses + 1 } : d
+      )));
+    }
+
+    setActiveConvId(conv.id);
+    setScreen('messages');
   };
 
   /* ---------- SOS : intervention d'urgence ---------- */
@@ -402,7 +429,24 @@ export default function OpusApp() {
     ? visiblePosts.filter((p) => p.type === 'ad' || followingIds.has(p.proId))
     : visiblePosts;
 
-  const activeConv = conversations.find((c) => c.id === activeConvId);
+  /**
+   * L'interlocuteur d'une conversation. C'est un professionnel quand un
+   * particulier l'a contacté, et un particulier quand un pro répond à une
+   * demande : la messagerie fonctionne dans les deux sens.
+   */
+  const contactDe = (conv) => {
+    if (conv.proId && pros[conv.proId]) {
+      const p = pros[conv.proId];
+      return {
+        id: p.id, titre: p.entreprise, metier: p.metier,
+        avatarUrl: p.avatarUrl, verifie: p.verifie,
+      };
+    }
+    return conv.contact || { id: conv.id, titre: 'Contact' };
+  };
+
+  const conversationsAffichees = conversations.map((c) => ({ ...c, contact: contactDe(c) }));
+  const activeConv = conversationsAffichees.find((c) => c.id === activeConvId);
   const unreadCount = notifications.filter((n) => !n.lue).length;
 
   /** Le fil d'actualité est réservé aux professionnels. */
@@ -433,7 +477,7 @@ export default function OpusApp() {
     : screen === 'sos' ? 'SOS — Urgence'
     : screen === 'profilEdit' ? 'Modifier mon profil'
     : screen === 'creer' ? 'Publier'
-    : activeConv && pros[activeConv.proId] ? pros[activeConv.proId].entreprise : '';
+    : activeConv && activeConv.contact ? activeConv.contact.titre : '';
 
   /* En mode "Vidéos", la diapositive occupe tout l'écran : on retire la barre
      du haut et la navigation du bas passe en flottant par-dessus. */
@@ -504,6 +548,7 @@ export default function OpusApp() {
             ) : (
               <DemandesScreen
                 userType={userType}
+                monMetier={pros[myProId] ? pros[myProId].metier : null}
                 demandes={demandes}
                 filtreMetier={demandeFiltre}
                 setFiltreMetier={setDemandeFiltre}
@@ -525,7 +570,7 @@ export default function OpusApp() {
         )}
 
         {screen === 'messages' && !activeConv && (
-          <MessagesScreen conversations={conversations} pros={pros} onOpen={setActiveConvId} />
+          <MessagesScreen conversations={conversationsAffichees} onOpen={setActiveConvId} />
         )}
 
         {screen === 'messages' && activeConv && (

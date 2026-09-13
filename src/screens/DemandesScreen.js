@@ -15,7 +15,7 @@ import { MapPin, MessageCircle } from '../components/icons';
 import { METIERS } from '../data/demo';
 
 export default function DemandesScreen({
-  userType, demandes, filtreMetier, setFiltreMetier, onPublier, onRepondre,
+  userType, monMetier, demandes, filtreMetier, setFiltreMetier, onPublier, onRepondre,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
   const [metier, setMetier] = useState(METIERS[0]);
@@ -23,7 +23,13 @@ export default function DemandesScreen({
   const [texte, setTexte] = useState('');
 
   const estPro = userType === 'pro';
-  const liste = filtreMetier ? demandes.filter((d) => d.metier === filtreMetier) : demandes;
+  const filtrees = filtreMetier ? demandes.filter((d) => d.metier === filtreMetier) : demandes;
+
+  /* Pour un professionnel, les demandes de SON métier remontent en tête.
+     L'ordre d'arrivée est conservé à l'intérieur de chaque groupe. */
+  const liste = estPro && monMetier
+    ? [...filtrees].sort((a, b) => (b.metier === monMetier) - (a.metier === monMetier))
+    : filtrees;
 
   const publier = () => {
     if (!texte.trim()) return;
@@ -102,8 +108,10 @@ export default function DemandesScreen({
                   <Text style={s.meta}>{d.ville} · {d.time}</Text>
                 </View>
               </View>
-              <View style={s.badgeMetier}>
-                <Text style={s.badgeMetierText}>{d.metier}</Text>
+              <View style={[s.badgeMetier, estPro && d.metier === monMetier && s.badgeMetierMien]}>
+                <Text style={[s.badgeMetierText, estPro && d.metier === monMetier && { color: '#fff' }]}>
+                  {d.metier}
+                </Text>
               </View>
             </View>
 
@@ -157,6 +165,7 @@ const s = StyleSheet.create({
   meta: { fontSize: 11, color: C.muted, fontFamily: F.inter },
   badgeMetier: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, paddingVertical: 3, paddingHorizontal: 8 },
   badgeMetierText: { fontFamily: F.oswald, fontSize: 10.5, color: C.ink },
+  badgeMetierMien: { backgroundColor: C.accent2, borderColor: C.accent2 },
 
   texte: { fontSize: 12.8, lineHeight: 18, color: C.ink, marginTop: 10, fontFamily: F.inter },
   media: { width: '100%', aspectRatio: 16 / 10, marginTop: 10 },

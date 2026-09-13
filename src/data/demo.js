@@ -167,13 +167,13 @@ export const initialNotifications = [
  * professionnelle, les demandes vivent dans leur propre espace.
  */
 export const initialDemandes = [
-  { id: 1, auteur: 'Camille R.', metier: 'Carreleur', ville: 'Toulouse (31)',
+  { id: 1, auteurId: 'p-camille', auteur: 'Camille R.', metier: 'Carreleur', ville: 'Toulouse (31)',
     texte: "Salle de bain de 6 m² à carreler entièrement, murs et sol. Faïence déjà achetée.",
     media: '#6b4226,#b98255', time: 'Il y a 3 h', reponses: 2 },
-  { id: 2, auteur: 'Hugo P.', metier: 'Peintre', ville: 'Marseille (13)',
+  { id: 2, auteurId: 'p-hugo', auteur: 'Hugo P.', metier: 'Peintre', ville: 'Marseille (13)',
     texte: "Deux chambres à repeindre, environ 30 m² au total. Murs en bon état.",
     media: null, time: 'Hier', reponses: 5 },
-  { id: 3, auteur: 'Nadia K.', metier: 'Maçon', ville: 'Aix-en-Provence (13)',
+  { id: 3, auteurId: 'p-nadia', auteur: 'Nadia K.', metier: 'Maçon', ville: 'Aix-en-Provence (13)',
     texte: "Mur de clôture de 12 m à monter en parpaing, avec un portail à sceller.",
     media: '#3a3a38,#8a8578', time: 'Il y a 2 j', reponses: 1 },
 ];
