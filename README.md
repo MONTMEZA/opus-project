@@ -52,6 +52,7 @@ enregistré : c'est normal, on branche la base à l'étape 2.
 | 10 | Navigation | Les 5 icônes du bas. Le bouton central change selon le compte : **Publier** (orange) pour un pro, **SOS** (rouge) pour un particulier. |
 | 11 | SOS (particulier) | Bouton rouge central → métier → problème → adresse → liste d'artisans avec distance, délai et **fourchette de prix**, puis choix. |
 | 12 | Demandes | Découvrir → onglet « Demandes ». Le particulier publie un besoin, le pro y répond. Un point orange sur Découvrir prévient le pro. |
+| 13 | Mon compte | Profil → « Modifier mon profil » : photo (appareil photo ou galerie), bannière, coordonnées, et pour un pro sa disponibilité aux urgences. « Se déconnecter » ramène à l'écran d'accueil. |
 
 ---
 
@@ -206,6 +207,14 @@ Dans **Découvrir → Demandes**, le particulier décrit un besoin (métier, vil
 description, photo). Les professionnels du métier concerné le voient et
 répondent. Un **point orange** sur l'icône Découvrir prévient le pro qu'il y a
 du nouveau. Le fil et les demandes ne se mélangent jamais.
+
+### Côté artisan : le miroir du SOS
+
+L'artisan ne voit jamais de bouton SOS — il **reçoit**. Dans
+**Profil → Modifier mon profil**, il trouve l'interrupteur « Je réponds aux
+urgences » et les trois chiffres de sa grille. Le bloc n'apparaît que pour les
+quatre métiers concernés : un maçon lit une note lui expliquant pourquoi il
+n'est pas concerné, plutôt qu'un formulaire inutile.
 
 ### Le SOS
 

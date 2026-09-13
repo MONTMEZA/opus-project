@@ -1,11 +1,16 @@
 /**
  * 7. Mon profil — différent selon pro / particulier.
  * (ProfilOwnScreen du prototype)
+ *
+ * On y trouve aussi les deux commandes du compte : modifier le profil
+ * et se déconnecter, qui ramène à l'écran d'accueil.
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
-import { Avatar, BtnMini, EmptyState, SectionLabel, ProfileBanner } from '../components/ui';
+import {
+  Avatar, BtnMini, BtnOutline, EmptyState, SectionLabel, ProfileBanner,
+} from '../components/ui';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import { BadgeCheck } from '../components/icons';
@@ -16,8 +21,29 @@ function Cover({ uri }) {
   return <ProfileBanner uri={uri} height={140} />;
 }
 
+function Stat({ value, label }) {
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <Text style={s.statValue}>{value}</Text>
+      <Text style={s.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+/** Les deux commandes du compte, en bas de page. */
+function Compte({ onLogout }) {
+  return (
+    <View style={s.compte}>
+      <Pressable style={s.logout} onPress={onLogout}>
+        <Text style={s.logoutText}>Se déconnecter</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function ProfilOwnScreen({
-  userType, pros, myProId, followingIds, savedIds, onAddPartner, onViewProfile,
+  userType, pros, myProId, monProfil, followingIds, savedIds,
+  onAddPartner, onViewProfile, onEdit, onLogout,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -27,15 +53,18 @@ export default function ProfilOwnScreen({
     const followed = [...followingIds];
     return (
       <ScrollView style={{ flex: 1 }}>
-        <Cover />
+        <Cover uri={monProfil.bannerUrl} />
         <View style={s.head}>
-          <Avatar seed={9} size={88} ring={4} />
-          <Text style={[s.name, { marginTop: 8 }]}>Vous</Text>
-          <Text style={s.metier}>Particulier</Text>
+          <Avatar seed={9} size={88} ring={4} uri={monProfil.avatarUrl} />
+          <Text style={[s.name, { marginTop: 8 }]}>{monProfil.nom || 'Vous'}</Text>
+          <Text style={s.metier}>
+            Particulier{monProfil.ville ? ` · ${monProfil.ville}` : ''}
+          </Text>
           <View style={s.stats}>
             <Stat value={followingIds.size} label="Abonnements" />
             <Stat value={savedIds.size} label="Enregistrés" />
           </View>
+          <BtnOutline label="Modifier mon profil" onPress={onEdit} />
         </View>
 
         <SectionLabel>Professionnels suivis</SectionLabel>
@@ -52,6 +81,8 @@ export default function ProfilOwnScreen({
             <EmptyState>Vous ne suivez encore aucun professionnel.</EmptyState>
           )}
         </View>
+
+        <Compte onLogout={onLogout} />
       </ScrollView>
     );
   }
@@ -82,6 +113,7 @@ export default function ProfilOwnScreen({
           <Stat value={me.followers} label="Abonnés" />
           <Stat value={avg.count ? avg.global.toFixed(1) : '—'} label="Note" />
         </View>
+        <BtnOutline label="Modifier mon profil" onPress={onEdit} />
       </View>
 
       <Text style={s.bio}>{me.bio}</Text>
@@ -118,16 +150,9 @@ export default function ProfilOwnScreen({
           />
         ))}
       </View>
-    </ScrollView>
-  );
-}
 
-function Stat({ value, label }) {
-  return (
-    <View style={{ alignItems: 'center' }}>
-      <Text style={s.statValue}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
+      <Compte onLogout={onLogout} />
+    </ScrollView>
   );
 }
 
@@ -145,4 +170,8 @@ const s = StyleSheet.create({
     textAlign: 'center', lineHeight: 18, fontFamily: F.inter,
   },
   list: { gap: 10, paddingHorizontal: 16, paddingBottom: 24 },
+
+  compte: { paddingHorizontal: 16, paddingBottom: 34, alignItems: 'center' },
+  logout: { paddingVertical: 12, paddingHorizontal: 20 },
+  logoutText: { fontFamily: F.oswald6, fontSize: 12.5, color: C.bad },
 });

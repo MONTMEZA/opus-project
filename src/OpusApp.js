@@ -24,6 +24,7 @@ import ConversationScreen from './screens/ConversationScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
+import ProfilEditScreen from './screens/ProfilEditScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
 import { METIERS, POST_GRADIENTS, avgReviews, initialDemandes } from './data/demo';
@@ -59,6 +60,10 @@ export default function OpusApp() {
   const [demandes, setDemandes] = useState(initialDemandes);
   const [demandeFiltre, setDemandeFiltre] = useState(null);
   const [demandesVues, setDemandesVues] = useState(false);
+
+  /* Compte : profil du particulier, et disponibilité SOS du professionnel. */
+  const [monProfil, setMonProfil] = useState({ nom: 'Vous', ville: '', avatarUrl: null, bannerUrl: null });
+  const [mesSos, setMesSos] = useState(null);
 
   const [quote, setQuote] = useState({ open: false, pro: null, mode: 'devis' });
   const [banner, setBanner] = useState(null);
@@ -285,6 +290,52 @@ export default function OpusApp() {
     api.markNotificationRead(id).catch(() => {});
   };
 
+  /* ---------- mon compte ---------- */
+  const enregistrerProfil = async ({ profil, sos }) => {
+    try {
+      await api.updateProfile({ userType, profil });
+      if (sos) await api.updateSosAvailability(sos);
+    } catch (e) {
+      showBanner(`Enregistrement impossible : ${e.message || e}`);
+      return;
+    }
+
+    if (userType === 'pro') {
+      setPros((prev) => (prev[myProId]
+        ? { ...prev, [myProId]: { ...prev[myProId], ...profil } }
+        : prev));
+    } else {
+      setMonProfil((p) => ({ ...p, ...profil }));
+    }
+    if (sos) setMesSos(sos);
+
+    setScreen('profil');
+    showBanner('Profil enregistré.');
+  };
+
+  /** Déconnexion : on repart de l'écran d'accueil, l'état est remis à zéro. */
+  const deconnexion = async () => {
+    try { await api.signOut(); } catch (e) { /* rien à faire de plus */ }
+    setUserType(null);
+    setScreen('home');
+    setPros({});
+    setPosts([]);
+    setConversations([]);
+    setNotifications([]);
+    setFollowingIds(new Set());
+    setSavedIds(new Set());
+    setHiddenIds(new Set());
+    setActiveConvId(null);
+    setViewedProId(null);
+    setCommentsPostId(null);
+    setDecouvrirTab('artisans');
+    setDemandesVues(false);
+    setMonProfil({ nom: 'Vous', ville: '', avatarUrl: null, bannerUrl: null });
+    setMesSos(null);
+    setFeedMode('classic');
+    setFeedTab('pourvous');
+  };
+
   /* ---------- demandes de particuliers ---------- */
   const publierDemande = ({ metier, ville, texte }) => {
     setDemandes((ds) => [{
@@ -375,11 +426,12 @@ export default function OpusApp() {
   }
 
   const showBack = screen === 'profilPro' || screen === 'creer' || screen === 'sos'
-    || (screen === 'messages' && activeConvId);
+    || screen === 'profilEdit' || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'profilPro'
     ? (pros[viewedProId] ? pros[viewedProId].entreprise : '')
     : screen === 'sos' ? 'SOS — Urgence'
+    : screen === 'profilEdit' ? 'Modifier mon profil'
     : screen === 'creer' ? 'Publier'
     : activeConv && pros[activeConv.proId] ? pros[activeConv.proId].entreprise : '';
 
@@ -396,6 +448,7 @@ export default function OpusApp() {
           title={backTitle}
           onBack={() => {
             if (screen === 'messages') setActiveConvId(null);
+            else if (screen === 'profilEdit') setScreen('profil');
             else setScreen('home');
           }}
         />
@@ -482,6 +535,16 @@ export default function OpusApp() {
           />
         )}
 
+        {screen === 'profilEdit' && (
+          <ProfilEditScreen
+            userType={userType}
+            profil={userType === 'pro' ? (pros[myProId] || {}) : monProfil}
+            sos={mesSos}
+            onSave={enregistrerProfil}
+            onErreur={showBanner}
+          />
+        )}
+
         {screen === 'sos' && (
           <SosScreen pros={pros} onEnvoyer={envoyerSos} />
         )}
@@ -492,9 +555,11 @@ export default function OpusApp() {
 
         {screen === 'profil' && (
           <ProfilOwnScreen
-            userType={userType} pros={pros} myProId={myProId}
+            userType={userType} pros={pros} myProId={myProId} monProfil={monProfil}
             followingIds={followingIds} savedIds={savedIds}
             onAddPartner={addPartner} onViewProfile={viewProfile}
+            onEdit={() => setScreen('profilEdit')}
+            onLogout={deconnexion}
           />
         )}
 

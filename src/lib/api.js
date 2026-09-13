@@ -48,6 +48,12 @@ export async function ensureSession(userType) {
 
 export function getUserId() { return currentUserId; }
 
+/** Ferme la session. En mode démo, il n'y a rien à fermer côté serveur. */
+export async function signOut() {
+  if (hasSupabase && supabase) await supabase.auth.signOut();
+  currentUserId = null;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Lecture                                                            */
 /* ------------------------------------------------------------------ */
@@ -294,6 +300,48 @@ export const createQuoteRequest = !hasSupabase ? noop : async ({ proId, metier, 
 export const createCallbackRequest = !hasSupabase ? noop : async ({ proId, nom, telephone, creneau }) => {
   const { error } = await supabase.from('callback_requests')
     .insert({ client_id: currentUserId, professional_id: proId, nom, telephone, creneau });
+  if (error) throw error;
+};
+
+/** Enregistre les modifications du profil (pro ou particulier). */
+export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) => {
+  if (userType === 'pro') {
+    const { error } = await supabase.from('professional_profiles').update({
+      entreprise: profil.entreprise,
+      metier: profil.metier,
+      ville: profil.ville,
+      bio: profil.bio,
+      siret: profil.siret,
+      experience_annees: profil.exp,
+      avatar_url: profil.avatarUrl,
+      banner_url: profil.bannerUrl,
+    }).eq('id', currentUserId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('users').update({
+      nom: profil.nom,
+      avatar_url: profil.avatarUrl,
+    }).eq('id', currentUserId);
+    if (error) throw error;
+  }
+};
+
+/**
+ * Disponibilité aux urgences d'un artisan : l'interrupteur « je réponds aux
+ * urgences » et les trois chiffres qui servent à calculer la fourchette.
+ */
+export const updateSosAvailability = !hasSupabase ? noop : async (sos) => {
+  if (!sos) return;
+  const { error } = await supabase.from('sos_availability').upsert({
+    professional_id: currentUserId,
+    metier_key: sos.metierKey,
+    actif: sos.actif,
+    deplacement: sos.deplacement,
+    horaire: sos.horaire,
+    majoration: sos.majoration,
+    rayon_km: sos.rayonKm,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'professional_id,metier_key' });
   if (error) throw error;
 };
 
