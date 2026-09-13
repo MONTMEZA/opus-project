@@ -19,6 +19,7 @@ export const C = {
   okBg: '#E7F3EC',     // fond du badge "Client vérifié"
   bad: '#B4432B',      // information manquante / erreur
   dark: '#111111',     // fond du fil vidéo
+  sos: '#B4432B',      // rouge brique des urgences (même valeur que `bad`)
 };
 
 /** Familles de polices chargées dans App.js */

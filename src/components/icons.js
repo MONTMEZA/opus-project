@@ -59,3 +59,12 @@ export const ShieldCheck = mk(MaterialCommunityIcons, 'shield-check');
 export const ShieldX = mk(MaterialCommunityIcons, 'shield-off');
 export const ClipboardCheck = mk(MaterialCommunityIcons, 'clipboard-check-outline');
 export const Sparkles = mk(MaterialCommunityIcons, 'auto-fix');
+
+// SOS / urgences
+export const Zap = mk(Feather, 'zap');
+export const Key = mk(Feather, 'key');
+export const Thermometer = mk(Feather, 'thermometer');
+export const AlertTriangle = mk(Feather, 'alert-triangle');
+export const Clock = mk(Feather, 'clock');
+export const Navigation = mk(Feather, 'navigation');
+export const ChevronLeft = mk(Feather, 'chevron-left');

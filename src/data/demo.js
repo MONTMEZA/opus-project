@@ -8,6 +8,7 @@
 export const METIERS = [
   'Maçon', 'Électricien', 'Plombier', 'Charpentier', 'Peintre',
   'Carreleur', 'Couvreur', 'Menuisier', 'Plaquiste', 'Terrassier',
+  'Serrurier', 'Chauffagiste',
 ];
 
 export const proProfiles = {
@@ -61,6 +62,42 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Claire D.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 4, commentaire: "Intervention rapide pour une urgence, très professionnel." },
          { id: 2, auteur: 'Hugo P.', verifie: true, date: 'Juin 2026', delais: 4, qualite: 5, tarif: 3, commentaire: "Excellent travail sur le remplacement de chaudière, prix un peu haut." },
+       ] },
+  8: { id: 8, nom: 'Léa Sanchez', entreprise: 'Sanchez Plomberie', metier: 'Plombier',
+       ville: 'Marseille (13)', verifie: true, exp: 5,
+       siret: '901 447 226 00014', followers: 380,
+       bio: "Dépannage, sanitaire et rénovation de salle de bain. Devis gratuit sous 24 h.",
+       partners: [],
+       assurance: { valide: true, expire: '03/2027' },
+       kbis: { valide: true, maj: '06/2026' },
+       rge: false,
+       portfolio: ['#1b4b6b,#4d7f9e', '#6b4226,#b98255'],
+       reviews: [
+         { id: 1, auteur: 'Samir T.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 5, commentaire: "Fuite réparée en une heure, tarif annoncé respecté." },
+       ] },
+  6: { id: 6, nom: 'Driss Amrani', entreprise: 'Amrani Serrurerie', metier: 'Serrurier',
+       ville: 'Marseille (13)', verifie: true, exp: 7,
+       siret: '823 554 119 00022', followers: 540,
+       bio: "Ouverture de porte, changement de serrure, blindage. Interventions d'urgence 7j/7.",
+       partners: [],
+       assurance: { valide: true, expire: '08/2027' },
+       kbis: { valide: true, maj: '04/2026' },
+       rge: false,
+       portfolio: ['#3a3a38,#8a8578', '#5a3a3a,#a87a7a'],
+       reviews: [
+         { id: 1, auteur: 'Léa V.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 4, commentaire: "Porte claquée un dimanche soir, arrivé en 25 minutes, aucune dégradation." },
+       ] },
+  7: { id: 7, nom: 'Pierre Nogaret', entreprise: 'Nogaret Chauffage', metier: 'Chauffagiste',
+       ville: 'Aix-en-Provence (13)', verifie: true, exp: 15,
+       siret: '654 220 887 00031', followers: 720,
+       bio: "Chaudières gaz et fioul, pompes à chaleur, dépannage et entretien annuel.",
+       partners: [4],
+       assurance: { valide: true, expire: '11/2026' },
+       kbis: { valide: true, maj: '05/2026' },
+       rge: true,
+       portfolio: ['#1b4b6b,#4d7f9e', '#2f4b3a,#6a9a7a'],
+       reviews: [
+         { id: 1, auteur: 'Farid B.', verifie: true, date: 'Août 2026', delais: 4, qualite: 5, tarif: 4, commentaire: "Chaudière relancée le jour même, explications claires sur l'entretien." },
        ] },
   5: { id: 5, nom: 'Élodie Faure', entreprise: 'Faure Charpente', metier: 'Charpentier',
        ville: 'Aix-en-Provence (13)', verifie: true, exp: 8,
@@ -122,6 +159,23 @@ export const initialNotifications = [
   { id: 2, texte: 'Nouveau commentaire de Julie M.', lue: false },
   { id: 3, texte: 'Marc Dubreuil vous suit désormais', lue: true },
   { id: 4, texte: 'Votre publication a été enregistrée par 3 personnes', lue: true },
+];
+
+/**
+ * Demandes de travaux publiées par des particuliers.
+ * Volontairement SÉPARÉES du fil d'actualité : le fil reste une vitrine
+ * professionnelle, les demandes vivent dans leur propre espace.
+ */
+export const initialDemandes = [
+  { id: 1, auteur: 'Camille R.', metier: 'Carreleur', ville: 'Toulouse (31)',
+    texte: "Salle de bain de 6 m² à carreler entièrement, murs et sol. Faïence déjà achetée.",
+    media: '#6b4226,#b98255', time: 'Il y a 3 h', reponses: 2 },
+  { id: 2, auteur: 'Hugo P.', metier: 'Peintre', ville: 'Marseille (13)',
+    texte: "Deux chambres à repeindre, environ 30 m² au total. Murs en bon état.",
+    media: null, time: 'Hier', reponses: 5 },
+  { id: 3, auteur: 'Nadia K.', metier: 'Maçon', ville: 'Aix-en-Provence (13)',
+    texte: "Mur de clôture de 12 m à monter en parpaing, avec un portail à sceller.",
+    media: '#3a3a38,#8a8578', time: 'Il y a 2 j', reponses: 1 },
 ];
 
 /** Dégradés utilisés pour illustrer une nouvelle publication. */

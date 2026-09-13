@@ -49,7 +49,9 @@ enregistré : c'est normal, on branche la base à l'étape 2.
 | 7 | Mon profil | Version pro : SIRET, assurance, stats, portfolio, « Mes partenaires » → « + Ajouter ». Version particulier (relance l'app et choisis « particulier ») : abonnements et enregistrés. |
 | 8 | Profil d'un pro | Informations vérifiées (bouclier vert/rouge), 3 barres de notation, bouton « Laisser un avis » (3 curseurs + commentaire → les moyennes se recalculent), avis avec badge « Client vérifié ». |
 | 9 | Devis / rappel | Bouton « Demander un devis » ou « Être rappelé » → formulaire qui monte du bas. |
-| 10 | Navigation | Les 5 icônes du bas, le bouton orange central. |
+| 10 | Navigation | Les 5 icônes du bas. Le bouton central change selon le compte : **Publier** (orange) pour un pro, **SOS** (rouge) pour un particulier. |
+| 11 | SOS (particulier) | Bouton rouge central → métier → problème → adresse → liste d'artisans avec distance, délai et **fourchette de prix**, puis choix. |
+| 12 | Demandes | Découvrir → onglet « Demandes ». Le particulier publie un besoin, le pro y répond. Un point orange sur Découvrir prévient le pro. |
 
 ---
 
@@ -98,15 +100,19 @@ voir apparaître dans Supabase → **Table Editor**.
 
 `users`, `professional_profiles`, `posts`, `post_likes`, `saved_posts`,
 `comments`, `follows`, `reviews`, `conversations`, `messages`,
-`quote_requests`, `callback_requests`, `professional_partners`, `notifications`.
+`quote_requests`, `callback_requests`, `professional_partners`,
+`demandes`, `demande_reponses`, `sos_availability`, `sos_requests`,
+`notifications`.
 
 *(`saved_posts` a été ajoutée à la liste initiale : le bouton « Enregistrer » du
-fil en a besoin.)*
+fil en a besoin. Les quatre tables `demandes`, `demande_reponses`,
+`sos_availability` et `sos_requests` portent l'espace Demandes et le SOS.)*
 
 ### La règle « Client vérifié »
 
 Un avis n'affiche le badge **Client vérifié** que si son auteur a réellement un
-devis ou une demande de rappel **acceptée** avec ce professionnel. Ce n'est pas
+devis accepté, une demande de rappel acceptée, **ou une intervention d'urgence**
+avec ce professionnel. Ce n'est pas
 une case que l'utilisateur coche : c'est la base de données qui décide, via le
 trigger `calcule_client_verifie` dans `schema.sql`. La valeur envoyée par l'app
 est ignorée et recalculée à chaque insertion.
@@ -183,6 +189,48 @@ Le modèle utilisé est `claude-opus-5`. Pour en changer, modifie la constante
 `MODEL` en haut de `supabase/functions/ai/index.ts` puis redéploie.
 
 ---
+
+## Le SOS et l'espace Demandes
+
+Deux fonctions qui distinguent Opus des plateformes de mise en relation classiques.
+
+### Le fil reste une vitrine
+
+Seuls les professionnels publient dans le fil d'actualité. Un particulier
+consulte, aime, commente, partage et envoie des messages, mais ne publie pas.
+Le bouton Publier disparaît simplement de sa navigation.
+
+### Les demandes vivent à part
+
+Dans **Découvrir → Demandes**, le particulier décrit un besoin (métier, ville,
+description, photo). Les professionnels du métier concerné le voient et
+répondent. Un **point orange** sur l'icône Découvrir prévient le pro qu'il y a
+du nouveau. Le fil et les demandes ne se mélangent jamais.
+
+### Le SOS
+
+Le bouton rouge central, visible uniquement par les particuliers. Quatre
+métiers : plomberie, électricité, serrurerie, chauffage.
+
+Le principe tarifaire est volontairement simple et honnête. L'artisan renseigne
+**trois chiffres une seule fois** dans son profil :
+
+| Champ | Exemple |
+|---|---|
+| Forfait de déplacement | 45 € |
+| Tarif horaire | 62 €/h |
+| Majoration nuit et week-end | +40 % |
+
+Chaque type de problème porte une **durée moyenne** d'intervention (une fuite
+d'eau : 1 à 2 h). L'app en déduit une fourchette — ici 107 à 169 € en journée,
+150 à 237 € la nuit. C'est une **estimation avant diagnostic**, jamais un prix
+ferme : l'artisan n'a pas encore vu le chantier.
+
+Le client voit alors trois à cinq artisans avec distance, délai d'arrivée,
+fourchette et note, et **il choisit**. C'est la différence avec les plateformes
+qui imposent un intervenant.
+
+Les durées par métier se modifient dans `src/data/urgences.js`.
 
 ## Structure du projet
 

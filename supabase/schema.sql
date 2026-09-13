@@ -172,6 +172,12 @@ begin
       where c.client_id = new.author_id
         and c.professional_id = new.professional_id
         and c.statut in ('accepte', 'termine')
+    )
+    or exists (
+      select 1 from public.sos_requests s
+      where s.client_id = new.author_id
+        and s.professional_id = new.professional_id
+        and s.statut in ('acceptee', 'termine')
     );
   return new;
 end;
@@ -216,7 +222,76 @@ create table if not exists public.professional_partners (
 );
 
 -- --------------------------------------------------------------------------
---  9. NOTIFICATIONS
+--  9. DEMANDES DE PARTICULIERS
+--     L'inverse du fil : ici c'est le particulier qui publie.
+--     Volontairement séparé de `posts` — le fil reste une vitrine de pros.
+-- --------------------------------------------------------------------------
+create table if not exists public.demandes (
+  id         uuid primary key default gen_random_uuid(),
+  client_id  uuid not null references public.users(id) on delete cascade,
+  metier     text not null,
+  ville      text,
+  texte      text not null,
+  media      text,
+  statut     text not null default 'ouverte'
+             check (statut in ('ouverte', 'pourvue', 'fermee')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_demandes_metier on public.demandes (metier, created_at desc);
+
+create table if not exists public.demande_reponses (
+  id              uuid primary key default gen_random_uuid(),
+  demande_id      uuid not null references public.demandes(id) on delete cascade,
+  professional_id uuid not null references public.professional_profiles(id) on delete cascade,
+  message         text,
+  created_at      timestamptz not null default now(),
+  unique (demande_id, professional_id)
+);
+
+-- --------------------------------------------------------------------------
+--  10. SOS — INTERVENTIONS D'URGENCE
+--     L'artisan renseigne trois chiffres une fois pour toutes ; chaque type
+--     de problème porte une durée moyenne, et l'app en déduit une FOURCHETTE.
+--     Jamais un prix ferme : l'artisan n'a pas encore vu le chantier.
+-- --------------------------------------------------------------------------
+create table if not exists public.sos_availability (
+  professional_id uuid not null references public.professional_profiles(id) on delete cascade,
+  metier_key      text not null
+                  check (metier_key in ('plomberie', 'electricite', 'serrurerie', 'chauffage')),
+  actif           boolean not null default false,
+  deplacement     numeric(7,2) not null default 0,   -- forfait de deplacement, en euros
+  horaire         numeric(7,2) not null default 0,   -- tarif horaire, en euros
+  majoration      int not null default 0             -- % applique la nuit et le week-end
+                  check (majoration between 0 and 200),
+  rayon_km        int not null default 20,           -- distance maximale d'intervention
+  updated_at      timestamptz not null default now(),
+  primary key (professional_id, metier_key)
+);
+
+create table if not exists public.sos_requests (
+  id              uuid primary key default gen_random_uuid(),
+  client_id       uuid not null references public.users(id) on delete cascade,
+  professional_id uuid not null references public.professional_profiles(id) on delete cascade,
+  metier_key      text not null,
+  probleme_key    text not null,
+  probleme_label  text,
+  adresse         text,
+  details         text,
+  media           text,
+  creneau         text not null default 'immediat'
+                  check (creneau in ('immediat', 'journee', 'demain')),
+  prix_min        numeric(8,2),
+  prix_max        numeric(8,2),
+  statut          text not null default 'envoyee'
+                  check (statut in ('envoyee', 'acceptee', 'refusee', 'termine', 'annulee')),
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists idx_sos_pro on public.sos_requests (professional_id, created_at desc);
+
+-- --------------------------------------------------------------------------
+--  11. NOTIFICATIONS
 -- --------------------------------------------------------------------------
 create table if not exists public.notifications (
   id         uuid primary key default gen_random_uuid(),
@@ -281,6 +356,10 @@ alter table public.callback_requests     enable row level security;
 alter table public.conversations         enable row level security;
 alter table public.messages              enable row level security;
 alter table public.professional_partners enable row level security;
+alter table public.demandes              enable row level security;
+alter table public.demande_reponses      enable row level security;
+alter table public.sos_availability      enable row level security;
+alter table public.sos_requests          enable row level security;
 alter table public.notifications         enable row level security;
 
 -- Lecture publique du contenu visible dans le fil et les profils
@@ -355,6 +434,29 @@ create policy "envoi message" on public.messages
 create policy "mes partenaires" on public.professional_partners
   for all using (auth.uid() = professional_id or auth.uid() = partner_id)
   with check (auth.uid() = professional_id or auth.uid() = partner_id);
+
+-- Demandes : visibles de tous, publiees par leur auteur seulement
+create policy "lecture demandes" on public.demandes for select using (true);
+create policy "mes demandes" on public.demandes
+  for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
+
+create policy "lecture reponses" on public.demande_reponses for select using (true);
+create policy "mes reponses" on public.demande_reponses
+  for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
+
+-- Disponibilites SOS : lisibles de tous (c'est ce qui alimente la recherche),
+-- modifiables uniquement par l'artisan concerne.
+create policy "lecture dispo sos" on public.sos_availability for select using (true);
+create policy "ma dispo sos" on public.sos_availability
+  for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
+
+-- Demandes d'urgence : reservees au client et a l'artisan sollicite
+create policy "lecture mes sos" on public.sos_requests
+  for select using (auth.uid() = client_id or auth.uid() = professional_id);
+create policy "creation sos" on public.sos_requests
+  for insert with check (auth.uid() = client_id);
+create policy "le pro traite le sos" on public.sos_requests
+  for update using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
 
 -- Notifications : strictement personnelles
 create policy "mes notifications" on public.notifications

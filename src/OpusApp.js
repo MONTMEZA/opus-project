@@ -10,7 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { C } from './theme';
-import { ConfirmBanner } from './components/ui';
+import { ConfirmBanner, PillToggle } from './components/ui';
 import { TopBrand, BackBar } from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import QuoteModal from './components/QuoteModal';
@@ -24,7 +24,9 @@ import ConversationScreen from './screens/ConversationScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
-import { METIERS, POST_GRADIENTS, avgReviews } from './data/demo';
+import SosScreen from './screens/SosScreen';
+import DemandesScreen from './screens/DemandesScreen';
+import { METIERS, POST_GRADIENTS, avgReviews, initialDemandes } from './data/demo';
 import * as api from './lib/api';
 import { aiMatchPros } from './lib/ai';
 
@@ -51,6 +53,12 @@ export default function OpusApp() {
   const [viewedProId, setViewedProId] = useState(null);
   const [commentsPostId, setCommentsPostId] = useState(null);  // fil vidéo
   const [navHeight, setNavHeight] = useState(0);               // hauteur de la nav flottante
+
+  /* Espace « Demandes » : l'inverse du fil, réservé aux particuliers qui publient. */
+  const [decouvrirTab, setDecouvrirTab] = useState('artisans');
+  const [demandes, setDemandes] = useState(initialDemandes);
+  const [demandeFiltre, setDemandeFiltre] = useState(null);
+  const [demandesVues, setDemandesVues] = useState(false);
 
   const [quote, setQuote] = useState({ open: false, pro: null, mode: 'devis' });
   const [banner, setBanner] = useState(null);
@@ -277,6 +285,44 @@ export default function OpusApp() {
     api.markNotificationRead(id).catch(() => {});
   };
 
+  /* ---------- demandes de particuliers ---------- */
+  const publierDemande = ({ metier, ville, texte }) => {
+    setDemandes((ds) => [{
+      id: `local-${Date.now()}`,
+      auteur: 'Vous',
+      metier,
+      ville: ville || 'Non précisée',
+      texte,
+      media: null,
+      time: "À l'instant",
+      reponses: 0,
+    }, ...ds]);
+    showBanner('Votre demande est publiée. Les pros du métier vont la recevoir.');
+  };
+
+  const repondreDemande = (demande) => {
+    setDemandes((ds) => ds.map((d) => (
+      d.id === demande.id ? { ...d, reponses: d.reponses + 1 } : d
+    )));
+    showBanner(`Réponse envoyée à ${demande.auteur}.`);
+  };
+
+  /* ---------- SOS : intervention d'urgence ---------- */
+  const envoyerSos = (demande) => {
+    const pro = pros[demande.proId];
+    setScreen('home');
+    setNotifications((ns) => [{
+      id: `sos-${Date.now()}`,
+      texte: `${pro ? pro.entreprise : "L'artisan"} a été prévenu : ${demande.probleme} · ${demande.adresse || 'adresse à préciser'}`,
+      lue: false,
+    }, ...ns]);
+    showBanner(
+      pro
+        ? `${pro.entreprise} est prévenu. Estimation ${demande.prixMin}–${demande.prixMax} €.`
+        : 'Votre demande d\'urgence est partie.',
+    );
+  };
+
   /* ---------- assistant IA ---------- */
   const askAiMatch = async () => {
     if (!aiQuery.trim()) return;
@@ -328,11 +374,12 @@ export default function OpusApp() {
     );
   }
 
-  const showBack = screen === 'profilPro' || screen === 'creer'
+  const showBack = screen === 'profilPro' || screen === 'creer' || screen === 'sos'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'profilPro'
     ? (pros[viewedProId] ? pros[viewedProId].entreprise : '')
+    : screen === 'sos' ? 'SOS — Urgence'
     : screen === 'creer' ? 'Publier'
     : activeConv && pros[activeConv.proId] ? pros[activeConv.proId].entreprise : '';
 
@@ -376,14 +423,42 @@ export default function OpusApp() {
         )}
 
         {screen === 'decouvrir' && (
-          <DecouvrirScreen
-            pros={pros}
-            aiQuery={aiQuery} setAiQuery={setAiQuery} askAiMatch={askAiMatch}
-            aiMatches={aiMatches} aiMatchLoading={aiMatchLoading} aiMatchError={aiMatchError}
-            search={search} setSearch={setSearch}
-            filterMetier={filterMetier} setFilterMetier={setFilterMetier}
-            onView={viewProfile} onContact={handleContact}
-          />
+          <View style={{ flex: 1 }}>
+            <View style={s.subTabs}>
+              <PillToggle
+                small
+                value={decouvrirTab}
+                onChange={(k) => {
+                  setDecouvrirTab(k);
+                  if (k === 'demandes') setDemandesVues(true);
+                }}
+                options={[
+                  { key: 'artisans', label: 'Artisans' },
+                  { key: 'demandes', label: 'Demandes' },
+                ]}
+              />
+            </View>
+
+            {decouvrirTab === 'artisans' ? (
+              <DecouvrirScreen
+                pros={pros}
+                aiQuery={aiQuery} setAiQuery={setAiQuery} askAiMatch={askAiMatch}
+                aiMatches={aiMatches} aiMatchLoading={aiMatchLoading} aiMatchError={aiMatchError}
+                search={search} setSearch={setSearch}
+                filterMetier={filterMetier} setFilterMetier={setFilterMetier}
+                onView={viewProfile} onContact={handleContact}
+              />
+            ) : (
+              <DemandesScreen
+                userType={userType}
+                demandes={demandes}
+                filtreMetier={demandeFiltre}
+                setFiltreMetier={setDemandeFiltre}
+                onPublier={publierDemande}
+                onRepondre={repondreDemande}
+              />
+            )}
+          </View>
         )}
 
         {screen === 'creer' && (
@@ -405,6 +480,10 @@ export default function OpusApp() {
             conversation={activeConv}
             draft={msgDraft} setDraft={setMsgDraft} onSend={sendMessage}
           />
+        )}
+
+        {screen === 'sos' && (
+          <SosScreen pros={pros} onEnvoyer={envoyerSos} />
         )}
 
         {screen === 'notifications' && (
@@ -433,6 +512,7 @@ export default function OpusApp() {
         screen={screen}
         dark={videoMode}
         canPublish={canPublish}
+        dots={{ decouvrir: canPublish && !demandesVues && demandes.length > 0 }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
         onNavigate={(key) => { setScreen(key); setActiveConvId(null); }}
       />
@@ -455,6 +535,10 @@ export default function OpusApp() {
 
 const s = StyleSheet.create({
   app: { flex: 1, backgroundColor: C.bg },
+  subTabs: {
+    paddingVertical: 10, paddingHorizontal: 14,
+    backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
   body: { flex: 1, backgroundColor: C.bg },
   loader: {
     ...StyleSheet.absoluteFillObject,
