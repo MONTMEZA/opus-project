@@ -4,23 +4,16 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { C, F, GRAD_120 } from '../theme';
-import { Avatar, BtnMini, EmptyState, SectionLabel } from '../components/ui';
+import { C, F } from '../theme';
+import { Avatar, BtnMini, EmptyState, SectionLabel, ProfileBanner } from '../components/ui';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import { BadgeCheck } from '../components/icons';
 import { avgReviews } from '../data/demo';
 
-function Cover() {
-  return (
-    <LinearGradient
-      colors={['#1B4B6B', '#3a3a38']}
-      start={GRAD_120.start}
-      end={GRAD_120.end}
-      style={{ height: 100 }}
-    />
-  );
+/** Bannière de profil, façon LinkedIn : une vraie image si elle existe. */
+function Cover({ uri }) {
+  return <ProfileBanner uri={uri} height={140} />;
 }
 
 export default function ProfilOwnScreen({
@@ -36,7 +29,7 @@ export default function ProfilOwnScreen({
       <ScrollView style={{ flex: 1 }}>
         <Cover />
         <View style={s.head}>
-          <Avatar seed={9} size={76} />
+          <Avatar seed={9} size={88} ring={4} />
           <Text style={[s.name, { marginTop: 8 }]}>Vous</Text>
           <Text style={s.metier}>Particulier</Text>
           <View style={s.stats}>
@@ -73,9 +66,9 @@ export default function ProfilOwnScreen({
 
   return (
     <ScrollView style={{ flex: 1 }}>
-      <Cover />
+      <Cover uri={me.bannerUrl} />
       <View style={s.head}>
-        <Avatar seed={me.id} size={76} />
+        <Avatar seed={me.id} size={88} ring={4} uri={me.avatarUrl} />
         <View style={s.nameRow}>
           <Text style={s.name}>{me.entreprise}</Text>
           {me.verifie && <BadgeCheck size={16} color={C.verif} />}
@@ -139,7 +132,7 @@ function Stat({ value, label }) {
 }
 
 const s = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center', marginTop: -34 },
+  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center', marginTop: -48 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
   metier: { fontSize: 12.5, color: C.muted, marginTop: 2, fontFamily: F.inter },

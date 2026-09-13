@@ -1,6 +1,8 @@
 /**
  * Diapositive du fil vidéo plein écran (.feed-card du prototype).
- * Le défilement vertical page par page est géré par l'écran Accueil.
+ * La diapositive occupe toute la hauteur de l'écran : la barre du haut et la
+ * navigation du bas flottent par-dessus, comme sur TikTok. `bottomInset`
+ * réserve la place de cette navigation pour que le texte ne passe pas dessous.
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
@@ -22,15 +24,17 @@ function Scrim() {
 }
 
 export default function VideoSlide({
-  post, pro, following, saved, height,
-  onLike, onFollow, onSave, onView, onShare, onContact,
+  post, pro, following, saved, height, bottomInset = 0,
+  onLike, onFollow, onSave, onView, onShare, onContact, onComment,
 }) {
+  const infoPad = 24 + bottomInset;
+
   /* --- publicité en plein écran --- */
   if (post.type === 'ad') {
     return (
       <Gradient media={post.media} style={[s.card, { height }]}>
         <Scrim />
-        <View style={s.info}>
+        <View style={[s.info, { paddingBottom: infoPad }]}>
           <View style={[s.tag, { backgroundColor: '#fff' }]}><Text style={s.tagText}>Sponsorisé</Text></View>
           <Text style={s.feedName}>{post.annonceur}</Text>
           <Text style={s.feedText}>{post.accroche}</Text>
@@ -52,17 +56,17 @@ export default function VideoSlide({
       <Scrim />
 
       {/* actions sur le côté droit */}
-      <View style={s.actions}>
+      <View style={[s.actions, { bottom: 150 + bottomInset }]}>
         <Pressable style={s.action} onPress={() => onLike(post.id)}>
           <View style={s.actionIcon}>
             <Heart size={22} filled={post.liked} color={post.liked ? C.accent : '#fff'} />
           </View>
           <Text style={s.actionLabel}>{post.likes}</Text>
         </Pressable>
-        <View style={s.action}>
+        <Pressable style={s.action} onPress={() => onComment(post)}>
           <View style={s.actionIcon}><MessageSquare size={22} color="#fff" /></View>
           <Text style={s.actionLabel}>{post.comments.length}</Text>
-        </View>
+        </Pressable>
         <Pressable style={s.action} onPress={() => onShare('Lien de la vidéo copié.')}>
           <View style={s.actionIcon}><Share2 size={20} color="#fff" /></View>
           <Text style={s.actionLabel}>Partager</Text>
@@ -75,7 +79,7 @@ export default function VideoSlide({
       </View>
 
       {/* informations en bas */}
-      <View style={s.info}>
+      <View style={[s.info, { paddingBottom: infoPad }]}>
         <View style={s.tag}><Text style={s.tagText}>{pro.metier}</Text></View>
         <Pressable style={s.feedNameRow} onPress={() => onView(pro.id)}>
           <Text style={s.feedName}>{pro.entreprise}</Text>
@@ -98,7 +102,7 @@ export default function VideoSlide({
 const s = StyleSheet.create({
   card: { width: '100%', justifyContent: 'flex-end' },
 
-  actions: { position: 'absolute', right: 10, bottom: 150, zIndex: 2, gap: 16, alignItems: 'center' },
+  actions: { position: 'absolute', right: 10, zIndex: 2, gap: 16, alignItems: 'center' },
   action: { alignItems: 'center', gap: 3 },
   actionIcon: {
     width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.16)',
@@ -106,7 +110,7 @@ const s = StyleSheet.create({
   },
   actionLabel: { color: '#fff', fontSize: 11, fontFamily: F.inter },
 
-  info: { zIndex: 2, paddingHorizontal: 16, paddingBottom: 24 },
+  info: { zIndex: 2, paddingHorizontal: 16 },
   tag: { alignSelf: 'flex-start', backgroundColor: C.accent, paddingVertical: 3, paddingHorizontal: 9, marginBottom: 8 },
   tagText: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
   feedNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },

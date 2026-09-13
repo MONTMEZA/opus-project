@@ -6,11 +6,10 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
-import { C, F, GRAD_120 } from '../theme';
+import { C, F } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea,
+  Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea, ProfileBanner,
 } from '../components/ui';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
@@ -85,16 +84,11 @@ export default function ProfilProScreen({
 
   return (
     <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
-      <LinearGradient
-        colors={['#1B4B6B', '#3a3a38']}
-        start={GRAD_120.start}
-        end={GRAD_120.end}
-        style={{ height: 100 }}
-      />
+      <ProfileBanner uri={pro.bannerUrl} height={140} />
 
       {/* --- en-tête --- */}
       <View style={s.head}>
-        <Avatar seed={pro.id} size={76} />
+        <Avatar seed={pro.id} size={88} ring={4} uri={pro.avatarUrl} />
         <View style={s.nameRow}>
           <Text style={s.name}>{pro.entreprise}</Text>
           {pro.verifie && <BadgeCheck size={16} color={C.verif} />}
@@ -268,7 +262,7 @@ function SliderRow({ label, value, onChange }) {
 }
 
 const s = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center', marginTop: -34 },
+  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center', marginTop: -48 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
   metier: { fontSize: 12.5, color: C.muted, marginTop: 2, fontFamily: F.inter },

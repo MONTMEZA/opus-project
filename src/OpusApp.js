@@ -14,6 +14,7 @@ import { ConfirmBanner } from './components/ui';
 import { TopBrand, BackBar } from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import QuoteModal from './components/QuoteModal';
+import CommentsSheet from './components/CommentsSheet';
 import OnboardingScreen from './screens/OnboardingScreen';
 import HomeScreen from './screens/HomeScreen';
 import DecouvrirScreen from './screens/DecouvrirScreen';
@@ -48,6 +49,8 @@ export default function OpusApp() {
 
   const [notifications, setNotifications] = useState([]);
   const [viewedProId, setViewedProId] = useState(null);
+  const [commentsPostId, setCommentsPostId] = useState(null);  // fil vidéo
+  const [navHeight, setNavHeight] = useState(0);               // hauteur de la nav flottante
 
   const [quote, setQuote] = useState({ open: false, pro: null, mode: 'devis' });
   const [banner, setBanner] = useState(null);
@@ -196,6 +199,10 @@ export default function OpusApp() {
 
   /* ---------- création ---------- */
   const publish = async () => {
+    if (userType !== 'pro') {
+      showBanner("Le fil d'actualité est réservé aux professionnels.");
+      return;
+    }
     if (!createText.trim()) { showBanner('Ajoute une description avant de publier.'); return; }
     const media = POST_GRADIENTS[Math.floor(Math.random() * POST_GRADIENTS.length)];
     const texte = (userType === 'particulier' ? `[Demande particulier · ${createMetier}] ` : '')
@@ -301,6 +308,13 @@ export default function OpusApp() {
   const activeConv = conversations.find((c) => c.id === activeConvId);
   const unreadCount = notifications.filter((n) => !n.lue).length;
 
+  /** Le fil d'actualité est réservé aux professionnels. */
+  const canPublish = userType === 'pro';
+  /** Le post dont on regarde les commentaires dans le fil vidéo. */
+  const commentsPost = commentsPostId != null
+    ? posts.find((p) => p.id === commentsPostId)
+    : null;
+
   /* ---------- rendu ---------- */
   if (!userType) {
     return (
@@ -322,11 +336,15 @@ export default function OpusApp() {
     : screen === 'creer' ? 'Publier'
     : activeConv && pros[activeConv.proId] ? pros[activeConv.proId].entreprise : '';
 
-  return (
-    <View style={s.app}>
-      <StatusBar style="dark" />
+  /* En mode "Vidéos", la diapositive occupe tout l'écran : on retire la barre
+     du haut et la navigation du bas passe en flottant par-dessus. */
+  const videoMode = screen === 'home' && feedMode === 'video' && !showBack;
 
-      {showBack ? (
+  return (
+    <View style={[s.app, videoMode && { backgroundColor: C.dark }]}>
+      <StatusBar style={videoMode ? 'light' : 'dark'} />
+
+      {!videoMode && (showBack ? (
         <BackBar
           title={backTitle}
           onBack={() => {
@@ -336,9 +354,9 @@ export default function OpusApp() {
         />
       ) : (
         <TopBrand unreadCount={unreadCount} onBell={() => setScreen('notifications')} />
-      )}
+      ))}
 
-      <View style={s.body}>
+      <View style={[s.body, videoMode && { backgroundColor: C.dark }]}>
         <ConfirmBanner msg={banner} onClose={() => setBanner(null)} />
 
         {screen === 'home' && (
@@ -348,10 +366,12 @@ export default function OpusApp() {
             feedTab={feedTab} setFeedTab={setFeedTab}
             followingIds={followingIds} savedIds={savedIds}
             openCommentsId={openCommentsId} openContactId={openContactId}
+            bottomInset={videoMode ? navHeight : 0}
             onLike={toggleLike} onFollow={toggleFollow} onView={viewProfile} onHide={hidePost}
             onToggleComments={toggleComments} onAddComment={addComment}
             onSave={toggleSave} onToggleContact={toggleContact}
             onContact={handleContact} onShare={showBanner}
+            onComment={(post) => setCommentsPostId(post.id)}
           />
         )}
 
@@ -411,6 +431,9 @@ export default function OpusApp() {
 
       <BottomNav
         screen={screen}
+        dark={videoMode}
+        canPublish={canPublish}
+        onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
         onNavigate={(key) => { setScreen(key); setActiveConvId(null); }}
       />
 
@@ -418,6 +441,13 @@ export default function OpusApp() {
         quote={quote}
         onClose={() => setQuote({ open: false, pro: null, mode: 'devis' })}
         onSubmit={submitQuote}
+      />
+
+      <CommentsSheet
+        visible={!!commentsPost}
+        post={commentsPost}
+        onClose={() => setCommentsPostId(null)}
+        onAddComment={addComment}
       />
     </View>
   );

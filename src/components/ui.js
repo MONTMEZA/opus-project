@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import {
-  View, Text, Pressable, TextInput, StyleSheet, useWindowDimensions,
+  View, Text, Pressable, TextInput, StyleSheet, useWindowDimensions, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, AVATAR_TONES, gradColors, GRAD_160, GRAD_120 } from '../theme';
@@ -46,10 +46,46 @@ export function HazardStrip({ height = 5, dark = C.ink }) {
   );
 }
 
-/* --- .avatar --- */
-export function Avatar({ seed = 0, size = 40 }) {
-  const bg = AVATAR_TONES[Math.abs(Number(seed) || 0) % 4];
-  return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg }} />;
+/* --- .avatar ---
+   `uri` : la vraie photo de profil quand elle existe.
+   `ring` : l'anneau blanc autour de l'avatar sur les pages profil.
+   Sans photo, on retombe sur une pastille de couleur, comme le prototype. */
+function toneIndex(seed) {
+  const s = String(seed || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 997;
+  return h % AVATAR_TONES.length;
+}
+
+export function Avatar({ seed = 0, size = 40, uri, ring = 0 }) {
+  const base = {
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    backgroundColor: AVATAR_TONES[toneIndex(seed)],
+  };
+  const withRing = ring ? { ...base, borderWidth: ring, borderColor: C.surface } : base;
+  if (uri) return <Image source={{ uri }} style={withRing} />;
+  return <View style={withRing} />;
+}
+
+/* --- bannière de profil, façon LinkedIn ---
+   Une vraie image quand le professionnel en a envoyé une,
+   sinon le dégradé bleu acier du prototype. */
+export function ProfileBanner({ uri, height = 140, children }) {
+  if (uri) {
+    return (
+      <View style={{ height, width: '100%' }}>
+        <Image source={{ uri }} style={{ height, width: '100%' }} resizeMode="cover" />
+        {children}
+      </View>
+    );
+  }
+  return (
+    <Gradient media="#1B4B6B,#3a3a38" angle={120} style={{ height, width: '100%' }}>
+      {children}
+    </Gradient>
+  );
 }
 
 /* --- .confirm-banner --- */

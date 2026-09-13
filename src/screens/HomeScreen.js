@@ -1,103 +1,112 @@
 /**
  * 2. Accueil — bascule "Fil" / "Vidéos" et sous-onglets "Pour vous" / "Abonnements".
  * (.home-wrap du prototype)
+ *
+ * En mode "Vidéos", les diapositives occupent toute la hauteur de l'écran et
+ * la bascule Fil/Vidéos flotte par-dessus, comme sur TikTok.
  */
 import React, { useState } from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
+import { View, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { PillToggle, EmptyState } from '../components/ui';
 import PostCard from '../components/PostCard';
 import VideoSlide from '../components/VideoSlide';
 
+const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
+const TABS = [
+  { key: 'pourvous', label: 'Pour vous' },
+  { key: 'abonnements', label: 'Abonnements' },
+];
+
 export default function HomeScreen({
   posts, pros, feedMode, setFeedMode, feedTab, setFeedTab,
-  followingIds, savedIds, openCommentsId, openContactId,
+  followingIds, savedIds, openCommentsId, openContactId, bottomInset = 0,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
-  onSave, onToggleContact, onContact, onShare,
+  onSave, onToggleContact, onContact, onShare, onComment,
 }) {
   const [bodyHeight, setBodyHeight] = useState(0);
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
+  /* ---------- mode vidéo : plein écran ---------- */
+  if (feedMode === 'video') {
+    return (
+      <View style={s.videoWrap}>
+        <FlatList
+          data={posts}
+          keyExtractor={(p) => String(p.id)}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          snapToInterval={windowHeight}
+          decelerationRate="fast"
+          getItemLayout={(_, index) => ({
+            length: windowHeight, offset: windowHeight * index, index,
+          })}
+          renderItem={({ item: p }) => (
+            <VideoSlide
+              post={p}
+              pro={p.proId ? pros[p.proId] : null}
+              following={p.proId ? followingIds.has(p.proId) : false}
+              saved={savedIds.has(p.id)}
+              height={windowHeight}
+              bottomInset={bottomInset}
+              onLike={onLike}
+              onFollow={onFollow}
+              onSave={onSave}
+              onView={onView}
+              onShare={onShare}
+              onContact={onContact}
+              onComment={onComment}
+            />
+          )}
+        />
+
+        {/* bascule flottante par-dessus la vidéo */}
+        <View style={[s.floatingToggle, { top: insets.top + 10 }]}>
+          <PillToggle value={feedMode} onChange={setFeedMode} options={MODES} />
+        </View>
+      </View>
+    );
+  }
+
+  /* ---------- mode fil classique ---------- */
   return (
     <View style={s.wrap}>
-      {/* bascule de mode */}
       <View style={s.modeRow}>
-        <PillToggle
-          value={feedMode}
-          onChange={setFeedMode}
-          options={[{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }]}
-        />
-        {feedMode === 'classic' && (
-          <PillToggle
-            small
-            value={feedTab}
-            onChange={setFeedTab}
-            options={[
-              { key: 'pourvous', label: 'Pour vous' },
-              { key: 'abonnements', label: 'Abonnements' },
-            ]}
-          />
-        )}
+        <PillToggle value={feedMode} onChange={setFeedMode} options={MODES} />
+        <PillToggle small value={feedTab} onChange={setFeedTab} options={TABS} />
       </View>
 
       <View style={{ flex: 1 }} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
-        {feedMode === 'classic' ? (
-          <FlatList
-            data={posts}
-            keyExtractor={(p) => String(p.id)}
-            contentContainerStyle={s.classicContent}
-            ListEmptyComponent={
-              <EmptyState>Suis des professionnels pour voir leurs publications ici.</EmptyState>
-            }
-            renderItem={({ item: p }) => (
-              <PostCard
-                post={p}
-                pro={p.proId ? pros[p.proId] : null}
-                following={p.proId ? followingIds.has(p.proId) : false}
-                onLike={onLike}
-                onFollow={onFollow}
-                onView={onView}
-                onHide={onHide}
-                commentsOpen={openCommentsId === p.id}
-                onToggleComments={onToggleComments}
-                onAddComment={onAddComment}
-                saved={savedIds.has(p.id)}
-                onSave={onSave}
-                contactOpen={openContactId === p.id}
-                onToggleContact={onToggleContact}
-                onContact={onContact}
-                onShare={onShare}
-              />
-            )}
-          />
-        ) : (
-          bodyHeight > 0 && (
-            <FlatList
-              data={posts}
-              keyExtractor={(p) => String(p.id)}
-              pagingEnabled
-              showsVerticalScrollIndicator={false}
-              snapToInterval={bodyHeight}
-              decelerationRate="fast"
-              style={{ backgroundColor: C.dark }}
-              getItemLayout={(_, index) => ({ length: bodyHeight, offset: bodyHeight * index, index })}
-              renderItem={({ item: p }) => (
-                <VideoSlide
-                  post={p}
-                  pro={p.proId ? pros[p.proId] : null}
-                  following={p.proId ? followingIds.has(p.proId) : false}
-                  saved={savedIds.has(p.id)}
-                  height={bodyHeight}
-                  onLike={onLike}
-                  onFollow={onFollow}
-                  onSave={onSave}
-                  onView={onView}
-                  onShare={onShare}
-                  onContact={onContact}
-                />
-              )}
+        <FlatList
+          data={posts}
+          keyExtractor={(p) => String(p.id)}
+          contentContainerStyle={s.classicContent}
+          ListEmptyComponent={
+            <EmptyState>Suis des professionnels pour voir leurs publications ici.</EmptyState>
+          }
+          renderItem={({ item: p }) => (
+            <PostCard
+              post={p}
+              pro={p.proId ? pros[p.proId] : null}
+              following={p.proId ? followingIds.has(p.proId) : false}
+              onLike={onLike}
+              onFollow={onFollow}
+              onView={onView}
+              onHide={onHide}
+              commentsOpen={openCommentsId === p.id}
+              onToggleComments={onToggleComments}
+              onAddComment={onAddComment}
+              saved={savedIds.has(p.id)}
+              onSave={onSave}
+              contactOpen={openContactId === p.id}
+              onToggleContact={onToggleContact}
+              onContact={onContact}
+              onShare={onShare}
             />
-          )
-        )}
+          )}
+        />
       </View>
     </View>
   );
@@ -105,6 +114,8 @@ export default function HomeScreen({
 
 const s = StyleSheet.create({
   wrap: { flex: 1 },
+  videoWrap: { flex: 1, backgroundColor: C.dark },
+  floatingToggle: { position: 'absolute', left: 14, zIndex: 5 },
   modeRow: {
     gap: 8, paddingVertical: 10, paddingHorizontal: 14,
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,

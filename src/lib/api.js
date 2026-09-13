@@ -70,6 +70,8 @@ function rowToPro(row, reviews = [], partners = []) {
     kbis: { valide: !!row.kbis_valide, maj: row.kbis_maj },
     rge: !!row.rge,
     portfolio: row.portfolio || [],
+    avatarUrl: row.avatar_url || null,
+    bannerUrl: row.banner_url || null,
     reviews,
   };
 }
