@@ -299,6 +299,15 @@ n'est pas concerné, plutôt qu'un formulaire inutile.
 Le bouton rouge central, visible uniquement par les particuliers. Quatre
 métiers : plomberie, électricité, serrurerie, chauffage.
 
+Avec Supabase branché, la recherche d'artisans est faite **par la base** :
+la fonction `artisans_urgence(metier, latitude, longitude)` trie par distance
+réelle et écarte ceux dont le rayon d'intervention ne couvre pas l'adresse.
+Le téléphone ne fait qu'afficher le résultat. Il faut donc choisir l'adresse
+dans les suggestions : sans coordonnées, aucune distance n'est calculable.
+
+Sans `.env`, l'application se rabat sur les disponibilités d'exemple de
+`src/data/urgences.js`, avec des distances simulées.
+
 Le principe tarifaire est volontairement simple et honnête. L'artisan renseigne
 **trois chiffres une seule fois** dans son profil :
 
