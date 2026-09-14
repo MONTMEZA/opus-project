@@ -14,6 +14,7 @@ import {
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import { BadgeCheck } from '../components/icons';
+import RappelVerification from '../components/RappelVerification';
 import { avgReviews } from '../data/demo';
 
 /** Bannière de profil, façon LinkedIn : une vraie image si elle existe. */
@@ -117,6 +118,13 @@ export default function ProfilOwnScreen({
       </View>
 
       <Text style={s.bio}>{me.bio}</Text>
+
+      <RappelVerification
+        statut={me.verificationStatut}
+        note={me.verificationNote}
+        onAction={onEdit}
+        style={{ marginHorizontal: 16, marginTop: 10 }}
+      />
 
       <SectionLabel>Portfolio de chantiers</SectionLabel>
       <PortfolioGrid items={me.portfolio} />

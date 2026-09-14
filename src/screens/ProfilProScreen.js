@@ -16,6 +16,7 @@ import PortfolioGrid from '../components/PortfolioGrid';
 import {
   BadgeCheck, ShieldCheck, ShieldX, Sparkles, ClipboardCheck, MessageCircle,
 } from '../components/icons';
+import { EtatVerificationPublic } from '../components/RappelVerification';
 import { avgReviews } from '../data/demo';
 import { aiSummarizeReviews } from '../lib/ai';
 
@@ -117,6 +118,7 @@ export default function ProfilProScreen({
 
       {/* --- informations vérifiées --- */}
       <SectionLabel>Informations vérifiées</SectionLabel>
+      <EtatVerificationPublic pro={pro} />
       <View style={s.verifBlock}>
         <VerifRow
           ok={pro.assurance.valide}

@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F, GRAD_160 } from '../theme';
 import { HazardStrip, Field, Chip, BtnMain } from '../components/ui';
-import { ChevronLeft, Check } from '../components/icons';
+import { ChevronLeft, Check, ShieldCheck } from '../components/icons';
 import { METIERS } from '../data/demo';
 
 export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
@@ -186,10 +186,19 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
             </BtnMain>
 
             {mode === 'inscription' && estPro && (
-              <Text style={s.note}>
-                Après l'inscription, vous pourrez envoyer votre Kbis et votre
-                attestation d'assurance pour obtenir le badge vérifié.
-              </Text>
+              <View style={s.encart}>
+                <ShieldCheck size={15} color={C.accent2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.encartTitre}>Le badge vérifié, en deux étapes</Text>
+                  <Text style={s.encartTexte}>
+                    Vous entrez tout de suite et pouvez publier. Ensuite, depuis votre
+                    profil, vous enverrez votre <Text style={s.gras}>extrait Kbis</Text> et
+                    votre <Text style={s.gras}>attestation d'assurance décennale</Text>.
+                    Après contrôle, le badge vérifié apparaît sur votre profil — sans lui,
+                    les particuliers voient que vos justificatifs n'ont pas été fournis.
+                  </Text>
+                </View>
+              </View>
             )}
           </View>
         </ScrollView>
@@ -261,7 +270,14 @@ const s = StyleSheet.create({
     fontFamily: F.inter, borderLeftWidth: 3, borderLeftColor: C.bad, paddingLeft: 8,
   },
   btnText: { fontFamily: F.oswald6, fontSize: 12.5, color: '#fff' },
-  note: { fontSize: 11, color: C.muted, marginTop: 12, lineHeight: 16, fontFamily: F.inter },
+  encart: {
+    flexDirection: 'row', gap: 9, alignItems: 'flex-start',
+    backgroundColor: C.bg, borderLeftWidth: 3, borderLeftColor: C.accent2,
+    padding: 11, marginTop: 14,
+  },
+  encartTitre: { fontFamily: F.oswald6, fontSize: 12, color: C.accent2, marginBottom: 4 },
+  encartTexte: { fontSize: 11, color: C.muted, lineHeight: 16, fontFamily: F.inter },
+  gras: { fontFamily: F.inter6, color: C.ink },
 
   titre: { fontFamily: F.oswald6, fontSize: 17, color: C.ink, marginBottom: 8, textAlign: 'center' },
   texte: { fontSize: 12.5, color: C.muted, lineHeight: 19, textAlign: 'center', marginBottom: 16, fontFamily: F.inter },

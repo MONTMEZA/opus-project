@@ -159,6 +159,7 @@ function rowToPro(row, reviews = [], partners = []) {
     assurancePath: row.assurance_url || null,
     verificationStatut: row.verification_statut || 'non_soumis',
     verificationNote: row.verification_note || null,
+    verifieLe: row.verifie_le || null,
     reviews,
   };
 }
@@ -200,8 +201,14 @@ export function relativeTime(iso) {
  */
 export async function loadAll() {
   if (!hasSupabase) {
+    // En démonstration, l'état de vérification découle du drapeau `verifie`
+    // des données d'exemple : un pro vérifié n'a pas de rappel à voir.
+    const pros = JSON.parse(JSON.stringify(demoPros));
+    Object.values(pros).forEach((p) => {
+      p.verificationStatut = p.verifie ? 'verifie' : 'non_soumis';
+    });
     return {
-      pros: JSON.parse(JSON.stringify(demoPros)),
+      pros,
       posts: initialPosts.map((p) => ({ ...p, comments: p.comments ? [...p.comments] : undefined })),
       conversations: initialConversations.map((c) => ({ ...c, messages: [...c.messages] })),
       notifications: initialNotifications.map((n) => ({ ...n })),

@@ -15,6 +15,7 @@ import { TopBrand, BackBar } from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import QuoteModal from './components/QuoteModal';
 import CommentsSheet from './components/CommentsSheet';
+import RappelVerification from './components/RappelVerification';
 import OnboardingScreen from './screens/OnboardingScreen';
 import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -624,6 +625,13 @@ export default function OpusApp() {
             followingIds={followingIds} savedIds={savedIds}
             openCommentsId={openCommentsId} openContactId={openContactId}
             bottomInset={videoMode ? navHeight : 0}
+            rappel={canPublish && pros[myProId] ? (
+              <RappelVerification
+                statut={pros[myProId].verificationStatut}
+                note={pros[myProId].verificationNote}
+                onAction={() => setScreen('profilEdit')}
+              />
+            ) : null}
             onLike={toggleLike} onFollow={toggleFollow} onView={viewProfile} onHide={hidePost}
             onToggleComments={toggleComments} onAddComment={addComment}
             onSave={toggleSave} onToggleContact={toggleContact}

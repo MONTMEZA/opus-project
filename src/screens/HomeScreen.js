@@ -21,7 +21,7 @@ const TABS = [
 
 export default function HomeScreen({
   posts, pros, feedMode, setFeedMode, feedTab, setFeedTab,
-  followingIds, savedIds, openCommentsId, openContactId, bottomInset = 0,
+  followingIds, savedIds, openCommentsId, openContactId, bottomInset = 0, rappel,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
   onSave, onToggleContact, onContact, onShare, onComment,
 }) {
@@ -83,6 +83,7 @@ export default function HomeScreen({
           data={posts}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={s.classicContent}
+          ListHeaderComponent={rappel || null}
           ListEmptyComponent={
             <EmptyState>Suis des professionnels pour voir leurs publications ici.</EmptyState>
           }
