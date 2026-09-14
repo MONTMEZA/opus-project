@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, Field, TextArea, EmptyState,
+  Avatar, BtnMain, BtnMini, TextArea, EmptyState,
 } from '../components/ui';
 import {
   Wrench, Zap, Key, Thermometer, AlertTriangle, Clock, Navigation,
@@ -19,6 +19,7 @@ import {
   METIERS_SOS, PROBLEMES, CRENEAUX_SOS,
   artisansDisponibles, estimation, estNuitOuWeekend,
 } from '../data/urgences';
+import ChampVille from '../components/ChampVille';
 import { avgReviews } from '../data/demo';
 
 const ICONES = { wrench: Wrench, zap: Zap, key: Key, thermometer: Thermometer };
@@ -27,7 +28,7 @@ export default function SosScreen({ pros, onEnvoyer }) {
   const [etape, setEtape] = useState('metier');
   const [metier, setMetier] = useState(null);
   const [probleme, setProbleme] = useState(null);
-  const [adresse, setAdresse] = useState('');
+  const [lieu, setLieu] = useState({ affichage: '' });
   const [details, setDetails] = useState('');
   const [creneau, setCreneau] = useState('immediat');
 
@@ -111,11 +112,12 @@ export default function SosScreen({ pros, onEnvoyer }) {
           <Text style={s.question}>Où et quand ?</Text>
           <Text style={s.rappel}>{metier.label} · {probleme.label}</Text>
 
-          <Field
+          <ChampVille
             style={{ marginBottom: 10 }}
-            placeholder="Adresse complète"
-            value={adresse}
-            onChangeText={setAdresse}
+            type="address"
+            placeholder="Adresse complète de l'intervention"
+            valeur={lieu.affichage}
+            onChange={setLieu}
           />
           <TextArea
             placeholder="Précisez la situation (étage, code, ce que vous constatez)..."
@@ -158,7 +160,7 @@ export default function SosScreen({ pros, onEnvoyer }) {
         <>
           <Text style={s.question}>Choisissez votre artisan</Text>
           <Text style={s.rappel}>
-            {metier.label} · {probleme.label}{adresse ? ` · ${adresse}` : ''}
+            {metier.label} · {probleme.label}{lieu.affichage ? ` · ${lieu.affichage}` : ''}
           </Text>
 
           <View style={{ gap: 10, paddingBottom: 30 }}>
@@ -203,7 +205,10 @@ export default function SosScreen({ pros, onEnvoyer }) {
                         proId: a.proId,
                         metier: metier.label,
                         probleme: probleme.label,
-                        adresse,
+                        adresse: lieu.affichage,
+                        codePostal: lieu.codePostal,
+                        latitude: lieu.latitude,
+                        longitude: lieu.longitude,
                         details,
                         creneau,
                         prixMin: prix.min,

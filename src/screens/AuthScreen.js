@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F, GRAD_160 } from '../theme';
 import { HazardStrip, Field, Chip, BtnMain } from '../components/ui';
+import ChampVille from '../components/ChampVille';
 import { ChevronLeft, Check, ShieldCheck } from '../components/icons';
 import { METIERS } from '../data/demo';
 
@@ -27,7 +28,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
   const [nom, setNom] = useState('');
   const [entreprise, setEntreprise] = useState('');
   const [metier, setMetier] = useState(METIERS[0]);
-  const [ville, setVille] = useState('');
+  const [lieu, setLieu] = useState({ affichage: '' });
 
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState(null);
@@ -61,7 +62,12 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
         const resultat = await onSignUp({
           email, motDePasse,
           nom: estPro ? entreprise : nom,
-          entreprise, metier, ville,
+          entreprise, metier,
+          ville: lieu.affichage,
+          codePostal: lieu.codePostal,
+          codeInsee: lieu.codeInsee,
+          latitude: lieu.latitude,
+          longitude: lieu.longitude,
         });
         if (resultat && resultat.confirmationRequise) setMailEnvoye(true);
       } else {
@@ -142,7 +148,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
                 </View>
 
                 <Text style={s.label}>Ville</Text>
-                <Field value={ville} onChangeText={setVille} placeholder="Marseille (13)" />
+                <ChampVille valeur={lieu.affichage} onChange={setLieu} />
               </>
             ) : (
               <>

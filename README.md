@@ -319,6 +319,31 @@ qui imposent un intervenant.
 
 Les durées par métier se modifient dans `src/data/urgences.js`.
 
+## Ville, code postal et coordonnées
+
+Les champs ville et adresse proposent des suggestions dès trois lettres, issues
+de la **Base Adresse Nationale** (`api-adresse.data.gouv.fr`) — le service
+officiel de l'État : gratuit, sans clé d'API, sans quota à demander.
+
+Choisir une suggestion remplit d'un coup :
+
+| Donnée | Exemple |
+|---|---|
+| Ville | Marseille |
+| Code postal | 13001 |
+| Code INSEE | 13055 |
+| Département | Bouches-du-Rhône |
+| **Coordonnées GPS** | 43.282, 5.405 |
+
+Ce sont ces coordonnées qui permettent au SOS de trier les artisans par
+distance réelle. La base sait les exploiter seule : la fonction
+`artisans_urgence(metier, latitude, longitude)` renvoie les artisans
+disponibles, triés du plus proche au plus loin, en écartant ceux dont le rayon
+d'intervention ne couvre pas la distance.
+
+La saisie libre reste possible : une suggestion qui n'arrive pas ne doit jamais
+empêcher quelqu'un de taper sa ville à la main.
+
 ## Structure du projet
 
 ```

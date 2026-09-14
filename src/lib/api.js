@@ -88,7 +88,9 @@ export async function signIn({ email, password }) {
  * Appelée juste après l'inscription d'un pro : sans elle, l'artisan n'a
  * pas de profil public et n'apparaît nulle part.
  */
-export async function ensureProProfile({ entreprise, metier, ville, nom }) {
+export async function ensureProProfile({
+  entreprise, metier, ville, nom, codePostal, codeInsee, latitude, longitude,
+}) {
   if (!hasSupabase) return null;
 
   const { data: existante } = await supabase.from('professional_profiles')
@@ -101,6 +103,10 @@ export async function ensureProProfile({ entreprise, metier, ville, nom }) {
     entreprise: entreprise || 'Mon entreprise',
     metier: metier || 'Maçon',
     ville: ville || '',
+    code_postal: codePostal || null,
+    code_insee: codeInsee || null,
+    latitude: latitude || null,
+    longitude: longitude || null,
     verification_statut: 'non_soumis',
   }).select().single();
   if (error) throw error;
@@ -160,6 +166,9 @@ function rowToPro(row, reviews = [], partners = []) {
     verificationStatut: row.verification_statut || 'non_soumis',
     verificationNote: row.verification_note || null,
     verifieLe: row.verifie_le || null,
+    codePostal: row.code_postal || null,
+    latitude: row.latitude || null,
+    longitude: row.longitude || null,
     reviews,
   };
 }
@@ -412,6 +421,10 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
       experience_annees: profil.exp,
       avatar_url: profil.avatarUrl,
       banner_url: profil.bannerUrl,
+      code_postal: profil.codePostal || null,
+      code_insee: profil.codeInsee || null,
+      latitude: profil.latitude || null,
+      longitude: profil.longitude || null,
     }).eq('id', currentUserId);
     if (error) throw error;
   } else {
@@ -419,6 +432,9 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
       nom: profil.nom,
       ville: profil.ville,
       avatar_url: profil.avatarUrl,
+      code_postal: profil.codePostal || null,
+      latitude: profil.latitude || null,
+      longitude: profil.longitude || null,
     }).eq('id', currentUserId);
     if (error) throw error;
   }

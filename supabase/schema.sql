@@ -21,6 +21,9 @@ create table if not exists public.users (
 alter table public.users add column if not exists email      text;
 alter table public.users add column if not exists avatar_url text;
 alter table public.users add column if not exists ville      text;
+alter table public.users add column if not exists code_postal text;
+alter table public.users add column if not exists latitude    double precision;
+alter table public.users add column if not exists longitude   double precision;
 
 -- --------------------------------------------------------------------------
 --  2. PROFILS PROFESSIONNELS
@@ -65,6 +68,14 @@ alter table public.professional_profiles add column if not exists verification_n
 alter table public.professional_profiles add column if not exists verifie_le          timestamptz;
 alter table public.professional_profiles add column if not exists verification_statut text
   not null default 'non_soumis';
+
+-- Localisation, renseignée par le champ ville à suggestions (Base Adresse
+-- Nationale). Les coordonnées servent à trier les artisans par distance
+-- lors d'une urgence.
+alter table public.professional_profiles add column if not exists code_postal text;
+alter table public.professional_profiles add column if not exists code_insee  text;
+alter table public.professional_profiles add column if not exists latitude    double precision;
+alter table public.professional_profiles add column if not exists longitude   double precision;
 
 create index if not exists idx_pro_metier on public.professional_profiles (metier);
 create index if not exists idx_pro_ville  on public.professional_profiles (ville);
@@ -265,6 +276,10 @@ create table if not exists public.demandes (
   created_at timestamptz not null default now()
 );
 
+alter table public.demandes add column if not exists code_postal text;
+alter table public.demandes add column if not exists latitude    double precision;
+alter table public.demandes add column if not exists longitude   double precision;
+
 create index if not exists idx_demandes_metier on public.demandes (metier, created_at desc);
 
 create table if not exists public.demande_reponses (
@@ -314,6 +329,10 @@ create table if not exists public.sos_requests (
                   check (statut in ('envoyee', 'acceptee', 'refusee', 'termine', 'annulee')),
   created_at      timestamptz not null default now()
 );
+
+alter table public.sos_requests add column if not exists code_postal text;
+alter table public.sos_requests add column if not exists latitude    double precision;
+alter table public.sos_requests add column if not exists longitude   double precision;
 
 create index if not exists idx_sos_pro on public.sos_requests (professional_id, created_at desc);
 
@@ -601,3 +620,55 @@ drop trigger if exists trg_cree_fiche_utilisateur on auth.users;
 create trigger trg_cree_fiche_utilisateur
   after insert on auth.users
   for each row execute function public.cree_fiche_utilisateur();
+
+
+-- ==========================================================================
+--  14. DISTANCE ENTRE DEUX POINTS
+--
+--  Formule de haversine : la distance à vol d'oiseau en kilomètres.
+--  Sert à trier les artisans disponibles autour d'une urgence, sans avoir
+--  à installer d'extension géographique.
+-- ==========================================================================
+create or replace function public.distance_km(
+  lat1 double precision, lon1 double precision,
+  lat2 double precision, lon2 double precision
+) returns double precision
+language sql immutable as $$
+  select case
+    when lat1 is null or lon1 is null or lat2 is null or lon2 is null then null
+    else round((
+      2 * 6371 * asin(sqrt(
+        power(sin(radians(lat2 - lat1) / 2), 2)
+        + cos(radians(lat1)) * cos(radians(lat2))
+          * power(sin(radians(lon2 - lon1) / 2), 2)
+      ))
+    )::numeric, 1)::double precision
+  end
+$$;
+
+/**
+ * Les artisans disponibles pour une urgence, du plus proche au plus loin.
+ * On ne garde que ceux dont le rayon d'intervention couvre la distance.
+ */
+create or replace function public.artisans_urgence(
+  p_metier_key text, p_lat double precision, p_lon double precision
+) returns table (
+  professional_id uuid, entreprise text, metier text, ville text,
+  avatar_url text, verifie boolean,
+  deplacement numeric, horaire numeric, majoration int,
+  distance double precision
+)
+language sql stable as $$
+  select
+    pp.id, pp.entreprise, pp.metier, pp.ville,
+    pp.avatar_url, pp.verifie,
+    sa.deplacement, sa.horaire, sa.majoration,
+    public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) as distance
+  from public.sos_availability sa
+  join public.professional_profiles pp on pp.id = sa.professional_id
+  where sa.actif
+    and sa.metier_key = p_metier_key
+    and public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) is not null
+    and public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) <= sa.rayon_km
+  order by distance asc
+$$;

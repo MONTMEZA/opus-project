@@ -12,6 +12,7 @@ import {
   Avatar, BtnMain, BtnMini, BtnOutline, Chip, Field, TextArea, ProfileBanner, SectionLabel,
 } from '../components/ui';
 import { Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX } from '../components/icons';
+import ChampVille from '../components/ChampVille';
 import { METIERS } from '../data/demo';
 import { METIERS_SOS } from '../data/urgences';
 import { choisirImage, choisirDocument } from '../lib/media';
@@ -31,7 +32,12 @@ export default function ProfilEditScreen({
   const [nom, setNom] = useState(profil.nom || '');
   const [entreprise, setEntreprise] = useState(profil.entreprise || '');
   const [metier, setMetier] = useState(profil.metier || METIERS[0]);
-  const [ville, setVille] = useState(profil.ville || '');
+  const [lieu, setLieu] = useState({
+    affichage: profil.ville || '',
+    codePostal: profil.codePostal || null,
+    latitude: profil.latitude || null,
+    longitude: profil.longitude || null,
+  });
   const [bio, setBio] = useState(profil.bio || '');
   const [siret, setSiret] = useState(profil.siret || '');
   const [exp, setExp] = useState(String(profil.exp || ''));
@@ -63,10 +69,21 @@ export default function ProfilEditScreen({
     onSave({
       profil: estPro
         ? {
-            avatarUrl, bannerUrl, entreprise, metier, ville, bio, siret,
+            avatarUrl, bannerUrl, entreprise, metier, bio, siret,
+            ville: lieu.affichage,
+            codePostal: lieu.codePostal,
+            codeInsee: lieu.codeInsee,
+            latitude: lieu.latitude,
+            longitude: lieu.longitude,
             exp: Number(exp) || 0,
           }
-        : { avatarUrl, nom, ville },
+        : {
+            avatarUrl, nom,
+            ville: lieu.affichage,
+            codePostal: lieu.codePostal,
+            latitude: lieu.latitude,
+            longitude: lieu.longitude,
+          },
       sos: estPro && sosMetier
         ? {
             actif: sosActif,
@@ -123,7 +140,7 @@ export default function ProfilEditScreen({
             </View>
 
             <Text style={s.label}>Ville</Text>
-            <Field value={ville} onChangeText={setVille} placeholder="Marseille (13)" />
+            <ChampVille valeur={lieu.affichage} onChange={setLieu} />
 
             <Text style={s.label}>Présentation</Text>
             <TextArea value={bio} onChangeText={setBio} placeholder="Décrivez votre activité..." />
@@ -140,7 +157,7 @@ export default function ProfilEditScreen({
             <Field value={nom} onChangeText={setNom} placeholder="Dylan M." />
 
             <Text style={s.label}>Ville</Text>
-            <Field value={ville} onChangeText={setVille} placeholder="Marseille (13)" />
+            <ChampVille valeur={lieu.affichage} onChange={setLieu} />
           </>
         )}
       </View>

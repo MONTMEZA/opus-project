@@ -9,9 +9,10 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, Gradient,
+  Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState, Gradient,
 } from '../components/ui';
 import { MapPin, MessageCircle } from '../components/icons';
+import ChampVille from '../components/ChampVille';
 import { METIERS } from '../data/demo';
 
 export default function DemandesScreen({
@@ -19,7 +20,7 @@ export default function DemandesScreen({
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
   const [metier, setMetier] = useState(METIERS[0]);
-  const [ville, setVille] = useState('');
+  const [lieu, setLieu] = useState({ affichage: '' });
   const [texte, setTexte] = useState('');
 
   const estPro = userType === 'pro';
@@ -33,8 +34,15 @@ export default function DemandesScreen({
 
   const publier = () => {
     if (!texte.trim()) return;
-    onPublier({ metier, ville: ville.trim(), texte: texte.trim() });
-    setTexte(''); setVille(''); setFormOuvert(false);
+    onPublier({
+      metier,
+      ville: (lieu.affichage || '').trim(),
+      codePostal: lieu.codePostal,
+      latitude: lieu.latitude,
+      longitude: lieu.longitude,
+      texte: texte.trim(),
+    });
+    setTexte(''); setLieu({ affichage: '' }); setFormOuvert(false);
   };
 
   return (
@@ -62,7 +70,7 @@ export default function DemandesScreen({
                 value={texte}
                 onChangeText={setTexte}
               />
-              <Field placeholder="Ville" value={ville} onChangeText={setVille} />
+              <ChampVille valeur={lieu.affichage} onChange={setLieu} placeholder="Ville du chantier" />
               <View style={s.formBtns}>
                 <BtnMini outline label="Annuler" onPress={() => setFormOuvert(false)} />
                 <BtnMain label="Publier" onPress={publier} />
