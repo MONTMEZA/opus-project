@@ -71,6 +71,15 @@ enregistré : c'est normal, on branche la base à l'étape 2.
 3. Nouvelle requête : copie-colle `supabase/seed.sql` → **Run**
    (ça remplit la base avec les 5 artisans de démonstration).
 
+Les deux fichiers ont été exécutés et vérifiés sur un PostgreSQL 16 réel avant
+publication : 18 tables, 5 comptes, 5 profils, 7 publications, et la règle du
+« client vérifié » testée dans les trois cas (devis accepté, aucun devis,
+intervention d'urgence terminée).
+
+Si le second script affiche malgré tout une erreur rouge, la solution de
+rechange est de créer les cinq comptes à la main dans **Authentication →
+Users**, puis de remplacer les cinq UUID en haut de `seed.sql` par les vôtres.
+
 ### 2.3 Autoriser la connexion anonyme
 
 L'app n'a pas d'écran de connexion (comme le prototype) : elle ouvre une session
