@@ -88,7 +88,14 @@ anonyme. Va dans **Authentication → Sign In / Providers** et active
 
 ### 2.4 Donner les clés à l'application
 
-Dans Supabase : **Project Settings → API**. Tu y trouves deux valeurs.
+Dans Supabase, le plus simple est le bouton **Connect** en haut du tableau de
+bord : il affiche les deux valeurs ensemble, prêtes à coller. Sinon elles sont
+sur deux pages distinctes — **Project Settings → Data API** pour l'URL, et
+**Project Settings → API Keys** pour la clé.
+
+Prends la clé **Publishable** (`sb_publishable_...`) ou, sur un projet plus
+ancien, **anon public** (`eyJ...`) : les deux fonctionnent. Jamais la clé
+**secret** / **service_role**, qui contourne toutes les règles de sécurité.
 Crée à la racine du projet un fichier nommé `.env` (copie `.env.example`) :
 
 ```
