@@ -47,6 +47,7 @@ export default function ProfilEditScreen({
   const [horaire, setHoraire] = useState(String((sos && sos.horaire) || ''));
   const [majoration, setMajoration] = useState(String((sos && sos.majoration) || ''));
   const [rayonKm, setRayonKm] = useState(String((sos && sos.rayonKm) || '20'));
+  const [delaiMinutes, setDelaiMinutes] = useState(String((sos && sos.delaiMinutes) || '45'));
 
   const [kbis, setKbis] = useState(null);
   const [assurance, setAssurance] = useState(null);
@@ -92,6 +93,7 @@ export default function ProfilEditScreen({
             horaire: Number(horaire) || 0,
             majoration: Number(majoration) || 0,
             rayonKm: Number(rayonKm) || 20,
+            delaiMinutes: Number(delaiMinutes) || 45,
           }
         : null,
     });
@@ -264,6 +266,9 @@ export default function ProfilEditScreen({
 
                     <Text style={s.label}>Rayon d'intervention (km)</Text>
                     <Field value={rayonKm} onChangeText={setRayonKm} keyboardType="number-pad" placeholder="20" />
+
+                    <Text style={s.label}>Délai d'arrivée habituel (minutes)</Text>
+                    <Field value={delaiMinutes} onChangeText={setDelaiMinutes} keyboardType="number-pad" placeholder="45" />
 
                     <View style={s.avert}>
                       <AlertTriangle size={14} color={C.sos} />

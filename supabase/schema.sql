@@ -307,9 +307,12 @@ create table if not exists public.sos_availability (
   majoration      int not null default 0             -- % applique la nuit et le week-end
                   check (majoration between 0 and 200),
   rayon_km        int not null default 20,           -- distance maximale d'intervention
+  delai_minutes   int not null default 45,           -- delai d'arrivee habituel
   updated_at      timestamptz not null default now(),
   primary key (professional_id, metier_key)
 );
+
+alter table public.sos_availability add column if not exists delai_minutes int not null default 45;
 
 create table if not exists public.sos_requests (
   id              uuid primary key default gen_random_uuid(),
@@ -646,6 +649,8 @@ language sql immutable as $$
   end
 $$;
 
+drop function if exists public.artisans_urgence(text, double precision, double precision);
+
 /**
  * Les artisans disponibles pour une urgence, du plus proche au plus loin.
  * On ne garde que ceux dont le rayon d'intervention couvre la distance.
@@ -655,14 +660,14 @@ create or replace function public.artisans_urgence(
 ) returns table (
   professional_id uuid, entreprise text, metier text, ville text,
   avatar_url text, verifie boolean,
-  deplacement numeric, horaire numeric, majoration int,
+  deplacement numeric, horaire numeric, majoration int, delai_minutes int,
   distance double precision
 )
 language sql stable as $$
   select
     pp.id, pp.entreprise, pp.metier, pp.ville,
     pp.avatar_url, pp.verifie,
-    sa.deplacement, sa.horaire, sa.majoration,
+    sa.deplacement, sa.horaire, sa.majoration, sa.delai_minutes,
     public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) as distance
   from public.sos_availability sa
   join public.professional_profiles pp on pp.id = sa.professional_id

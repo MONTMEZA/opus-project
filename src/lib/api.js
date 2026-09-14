@@ -11,6 +11,7 @@
 import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
+  initialDemandes,
 } from '../data/demo';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
@@ -220,6 +221,8 @@ export async function loadAll() {
       pros,
       posts: initialPosts.map((p) => ({ ...p, comments: p.comments ? [...p.comments] : undefined })),
       conversations: initialConversations.map((c) => ({ ...c, messages: [...c.messages] })),
+      demandes: initialDemandes.map((d) => ({ ...d })),
+      mesSos: null,
       notifications: initialNotifications.map((n) => ({ ...n })),
       followingIds: [4],
       savedIds: [],
@@ -229,7 +232,8 @@ export async function loadAll() {
   const uid = currentUserId;
 
   const [profilesRes, reviewsRes, partnersRes, postsRes, commentsRes,
-         likesRes, savesRes, followsRes, convRes, msgRes, notifRes] = await Promise.all([
+         likesRes, savesRes, followsRes, convRes, msgRes, notifRes,
+         demandesRes, reponsesRes, masosRes] = await Promise.all([
     supabase.from('professional_profiles').select('*'),
     supabase.from('reviews').select('*, users:author_id(nom)').order('created_at', { ascending: false }),
     supabase.from('professional_partners').select('*'),
@@ -241,6 +245,9 @@ export async function loadAll() {
     supabase.from('conversations').select('*').or(`client_id.eq.${uid},professional_id.eq.${uid}`),
     supabase.from('messages').select('*').order('created_at'),
     supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+    supabase.from('demandes').select('*, users:client_id(nom)').order('created_at', { ascending: false }),
+    supabase.from('demande_reponses').select('demande_id'),
+    supabase.from('sos_availability').select('*').eq('professional_id', uid).maybeSingle(),
   ]);
 
   const err = [profilesRes, reviewsRes, partnersRes, postsRes].find((r) => r.error);
@@ -298,10 +305,45 @@ export async function loadAll() {
     messages: msgsByConv[c.id] || [],
   }));
 
+  // Nombre de réponses par demande, compté ici plutôt qu'en interrogeant
+  // la base une fois par demande.
+  const nbReponses = {};
+  (reponsesRes.data || []).forEach((r) => {
+    nbReponses[r.demande_id] = (nbReponses[r.demande_id] || 0) + 1;
+  });
+
+  const demandes = (demandesRes.data || []).map((d) => ({
+    id: d.id,
+    auteurId: d.client_id,
+    auteur: d.users ? d.users.nom : 'Un particulier',
+    metier: d.metier,
+    ville: d.ville || 'Non précisée',
+    codePostal: d.code_postal,
+    latitude: d.latitude,
+    longitude: d.longitude,
+    texte: d.texte,
+    media: d.media,
+    time: relativeTime(d.created_at),
+    reponses: nbReponses[d.id] || 0,
+  }));
+
+  const ligne = masosRes.data;
+  const mesSos = ligne ? {
+    actif: ligne.actif,
+    metierKey: ligne.metier_key,
+    deplacement: Number(ligne.deplacement),
+    horaire: Number(ligne.horaire),
+    majoration: ligne.majoration,
+    rayonKm: ligne.rayon_km,
+    delaiMinutes: ligne.delai_minutes,
+  } : null;
+
   return {
     pros,
     posts,
     conversations,
+    demandes,
+    mesSos,
     notifications: (notifRes.data || []).map((n) => ({ id: n.id, texte: n.texte, lue: n.lue })),
     followingIds: (followsRes.data || []).map((f) => f.following_id),
     savedIds: (savesRes.data || []).map((s) => s.post_id),
@@ -454,9 +496,81 @@ export const updateSosAvailability = !hasSupabase ? noop : async (sos) => {
     horaire: sos.horaire,
     majoration: sos.majoration,
     rayon_km: sos.rayonKm,
+    delai_minutes: sos.delaiMinutes || 45,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'professional_id,metier_key' });
   if (error) throw error;
+};
+
+/** Publication d'une demande par un particulier. */
+export const createDemande = !hasSupabase ? noop : async (
+  { metier, ville, texte, media, codePostal, latitude, longitude },
+) => {
+  const { data, error } = await supabase.from('demandes').insert({
+    client_id: currentUserId,
+    metier, ville, texte, media: media || null,
+    code_postal: codePostal || null,
+    latitude: latitude || null,
+    longitude: longitude || null,
+  }).select().single();
+  if (error) throw error;
+  return data;
+};
+
+/** Un professionnel répond à une demande. */
+export const repondreADemande = !hasSupabase ? noop : async (demandeId, message) => {
+  const { error } = await supabase.from('demande_reponses').upsert(
+    { demande_id: demandeId, professional_id: currentUserId, message: message || null },
+    { onConflict: 'demande_id,professional_id' },
+  );
+  if (error) throw error;
+};
+
+/**
+ * Les artisans disponibles autour d'une urgence.
+ * Le tri par distance et le filtrage par rayon d'intervention sont faits
+ * par la base (fonction artisans_urgence), pas par le téléphone.
+ */
+export const chercherArtisansUrgence = !hasSupabase ? noop : async (
+  { metierKey, latitude, longitude },
+) => {
+  const { data, error } = await supabase.rpc('artisans_urgence', {
+    p_metier_key: metierKey,
+    p_lat: latitude,
+    p_lon: longitude,
+  });
+  if (error) throw error;
+  return (data || []).map((a) => ({
+    proId: a.professional_id,
+    metierKey,
+    deplacement: Number(a.deplacement),
+    horaire: Number(a.horaire),
+    majoration: a.majoration,
+    delaiMin: a.delai_minutes,
+    distanceKm: a.distance,
+    actif: true,
+  }));
+};
+
+/** Enregistre la demande d'urgence envoyée à un artisan. */
+export const createSosRequest = !hasSupabase ? noop : async (d) => {
+  const { data, error } = await supabase.from('sos_requests').insert({
+    client_id: currentUserId,
+    professional_id: d.proId,
+    metier_key: d.metierKey,
+    probleme_key: d.problemeKey,
+    probleme_label: d.probleme,
+    adresse: d.adresse || null,
+    details: d.details || null,
+    creneau: d.creneau || 'immediat',
+    code_postal: d.codePostal || null,
+    latitude: d.latitude || null,
+    longitude: d.longitude || null,
+    prix_min: d.prixMin,
+    prix_max: d.prixMax,
+  }).select().single();
+  if (error) throw error;
+  return data;
 };
 
 export const addPartner = !hasSupabase ? noop : async (proId, partnerId) => {

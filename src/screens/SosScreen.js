@@ -6,7 +6,7 @@
  * C'est la différence avec les plateformes qui imposent un intervenant.
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, TextArea, EmptyState,
@@ -16,15 +16,14 @@ import {
   BadgeCheck, Star, ChevronLeft,
 } from '../components/icons';
 import {
-  METIERS_SOS, PROBLEMES, CRENEAUX_SOS,
-  artisansDisponibles, estimation, estNuitOuWeekend,
+  METIERS_SOS, PROBLEMES, CRENEAUX_SOS, estimation, estNuitOuWeekend,
 } from '../data/urgences';
 import ChampVille from '../components/ChampVille';
 import { avgReviews } from '../data/demo';
 
 const ICONES = { wrench: Wrench, zap: Zap, key: Key, thermometer: Thermometer };
 
-export default function SosScreen({ pros, onEnvoyer }) {
+export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
   const [etape, setEtape] = useState('metier');
   const [metier, setMetier] = useState(null);
   const [probleme, setProbleme] = useState(null);
@@ -32,7 +31,30 @@ export default function SosScreen({ pros, onEnvoyer }) {
   const [details, setDetails] = useState('');
   const [creneau, setCreneau] = useState('immediat');
 
+  const [artisans, setArtisans] = useState([]);
+  const [recherche, setRecherche] = useState(false);
+  const [erreur, setErreur] = useState(null);
+
   const majore = estNuitOuWeekend();
+
+  /** Cherche les artisans disponibles puis passe à l'étape du choix. */
+  const chercherArtisans = async () => {
+    setRecherche(true);
+    setErreur(null);
+    setEtape('artisans');
+    try {
+      const liste = await onChercherArtisans({
+        metierKey: metier.key,
+        latitude: lieu.latitude,
+        longitude: lieu.longitude,
+      });
+      setArtisans(liste || []);
+    } catch (e) {
+      setErreur(e.message || "La recherche d'artisans a échoué.");
+      setArtisans([]);
+    }
+    setRecherche(false);
+  };
 
   const retour = () => {
     if (etape === 'probleme') { setEtape('metier'); setProbleme(null); }
@@ -149,7 +171,7 @@ export default function SosScreen({ pros, onEnvoyer }) {
           <BtnMain
             block
             label="Voir les artisans disponibles"
-            onPress={() => setEtape('artisans')}
+            onPress={chercherArtisans}
             style={{ marginBottom: 30 }}
           />
         </>
@@ -163,8 +185,17 @@ export default function SosScreen({ pros, onEnvoyer }) {
             {metier.label} · {probleme.label}{lieu.affichage ? ` · ${lieu.affichage}` : ''}
           </Text>
 
+          {recherche && (
+            <View style={s.chargement}>
+              <ActivityIndicator size="small" color={C.sos} />
+              <Text style={s.chargementTexte}>Recherche des artisans disponibles...</Text>
+            </View>
+          )}
+
+          {!!erreur && <Text style={s.erreur}>{erreur}</Text>}
+
           <View style={{ gap: 10, paddingBottom: 30 }}>
-            {artisansDisponibles(metier.key).map((a) => {
+            {artisans.map((a) => {
               const pro = pros[a.proId];
               if (!pro) return null;
               const prix = estimation(a, probleme, majore);
@@ -203,7 +234,9 @@ export default function SosScreen({ pros, onEnvoyer }) {
                       style={{ backgroundColor: C.sos }}
                       onPress={() => onEnvoyer({
                         proId: a.proId,
+                        metierKey: metier.key,
                         metier: metier.label,
+                        problemeKey: probleme.key,
                         probleme: probleme.label,
                         adresse: lieu.affichage,
                         codePostal: lieu.codePostal,
@@ -225,10 +258,10 @@ export default function SosScreen({ pros, onEnvoyer }) {
               );
             })}
 
-            {artisansDisponibles(metier.key).length === 0 && (
+            {!recherche && !erreur && artisans.length === 0 && (
               <EmptyState>
-                Aucun artisan disponible pour ce métier en ce moment.
-                Essayez une demande de devis classique.
+                Aucun artisan disponible pour ce métier autour de cette adresse.
+                Essayez une demande de devis classique depuis Découvrir.
               </EmptyState>
             )}
           </View>
@@ -271,6 +304,13 @@ const s = StyleSheet.create({
   ligneTitre: { fontFamily: F.inter6, fontSize: 13, color: C.ink },
   ligneDetail: { fontSize: 11, color: C.muted, marginTop: 2, fontFamily: F.inter },
   ligneDuree: { fontSize: 11, color: C.muted, fontFamily: F.inter },
+
+  chargement: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 16 },
+  chargementTexte: { fontSize: 12, color: C.muted, fontFamily: F.inter },
+  erreur: {
+    fontSize: 11.5, color: C.bad, lineHeight: 16, marginBottom: 10,
+    borderLeftWidth: 3, borderLeftColor: C.bad, paddingLeft: 8, fontFamily: F.inter,
+  },
 
   artisan: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
   artisanHaut: { flexDirection: 'row', gap: 12, alignItems: 'center' },

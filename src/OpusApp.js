@@ -29,9 +29,10 @@ import ProfilProScreen from './screens/ProfilProScreen';
 import ProfilEditScreen from './screens/ProfilEditScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
-import { METIERS, POST_GRADIENTS, avgReviews, initialDemandes } from './data/demo';
+import { METIERS, POST_GRADIENTS, avgReviews } from './data/demo';
 import * as api from './lib/api';
 import { hasSupabase } from './lib/supabase';
+import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
 import { envoyerFichier, estFichierLocal } from './lib/storage';
 import { aiMatchPros } from './lib/ai';
 
@@ -63,7 +64,7 @@ export default function OpusApp() {
 
   /* Espace « Demandes » : l'inverse du fil, réservé aux particuliers qui publient. */
   const [decouvrirTab, setDecouvrirTab] = useState('artisans');
-  const [demandes, setDemandes] = useState(initialDemandes);
+  const [demandes, setDemandes] = useState([]);
   const [demandeFiltre, setDemandeFiltre] = useState(null);
   const [demandesVues, setDemandesVues] = useState(false);
 
@@ -105,6 +106,8 @@ export default function OpusApp() {
       setPros(data.pros);
       setPosts(data.posts);
       setConversations(data.conversations);
+      setDemandes(data.demandes || []);
+      setMesSos(data.mesSos || null);
       setNotifications(data.notifications);
       setFollowingIds(new Set(data.followingIds));
       setSavedIds(new Set(data.savedIds));
@@ -431,12 +434,25 @@ export default function OpusApp() {
   };
 
   /* ---------- demandes de particuliers ---------- */
-  const publierDemande = ({ metier, ville, texte }) => {
+  const publierDemande = async ({ metier, ville, texte, codePostal, latitude, longitude }) => {
+    let id = `local-${Date.now()}`;
+    try {
+      const ligne = await api.createDemande({
+        metier, ville, texte, codePostal, latitude, longitude,
+      });
+      if (ligne) id = ligne.id;
+    } catch (e) {
+      showBanner(`Publication impossible : ${e.message || e}`);
+      return;
+    }
+
     setDemandes((ds) => [{
-      id: `local-${Date.now()}`,
-      auteur: 'Vous',
+      id,
+      auteurId: api.getUserId(),
+      auteur: monProfil.nom || 'Vous',
       metier,
       ville: ville || 'Non précisée',
+      codePostal, latitude, longitude,
       texte,
       media: null,
       time: "À l'instant",
@@ -470,6 +486,12 @@ export default function OpusApp() {
         messages: [],
       };
       setConversations((cs) => [conv, ...cs]);
+
+      try {
+        await api.repondreADemande(demande.id, null);
+      } catch (e) {
+        // La conversation est ouverte : la réponse sera comptée au prochain envoi.
+      }
       setDemandes((ds) => ds.map((d) => (
         d.id === demande.id ? { ...d, reponses: d.reponses + 1 } : d
       )));
@@ -480,8 +502,32 @@ export default function OpusApp() {
   };
 
   /* ---------- SOS : intervention d'urgence ---------- */
-  const envoyerSos = (demande) => {
+
+  /**
+   * Cherche les artisans disponibles autour de l'adresse déclarée.
+   * Avec Supabase, c'est la base qui trie par distance et écarte ceux dont
+   * le rayon ne couvre pas l'intervention. En démonstration, on se rabat sur
+   * les disponibilités d'exemple et leurs distances simulées.
+   */
+  const chercherArtisansUrgence = async ({ metierKey, latitude, longitude }) => {
+    if (!hasSupabase) return artisansDisponiblesDemo(metierKey);
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      throw new Error(
+        "Choisissez votre adresse dans la liste de suggestions : sans coordonnées, "
+        + 'impossible de trouver les artisans les plus proches.',
+      );
+    }
+    return api.chercherArtisansUrgence({ metierKey, latitude, longitude });
+  };
+
+  const envoyerSos = async (demande) => {
     const pro = pros[demande.proId];
+    try {
+      await api.createSosRequest(demande);
+    } catch (e) {
+      showBanner(`Envoi impossible : ${e.message || e}`);
+      return;
+    }
     setScreen('home');
     setNotifications((ns) => [{
       id: `sos-${Date.now()}`,
@@ -713,7 +759,11 @@ export default function OpusApp() {
         )}
 
         {screen === 'sos' && (
-          <SosScreen pros={pros} onEnvoyer={envoyerSos} />
+          <SosScreen
+            pros={pros}
+            onEnvoyer={envoyerSos}
+            onChercherArtisans={chercherArtisansUrgence}
+          />
         )}
 
         {screen === 'notifications' && (
