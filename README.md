@@ -35,6 +35,30 @@ se recharge toute seule.
 avis et les messages du prototype sont en mémoire. Tout est cliquable, rien n'est
 enregistré : c'est normal, on branche la base à l'étape 2.
 
+### Le réflexe après chaque `git pull`
+
+```bash
+git pull
+npm install
+npm start
+```
+
+**`npm install` après chaque `git pull`.** Le `git pull` récupère le code et la
+*liste* des bibliothèques ; `npm install` télécharge les bibliothèques
+elles-mêmes. Si rien n'a changé, la commande se termine en deux secondes.
+
+Si vous l'oubliez, Expo affichera au démarrage :
+
+```
+Unable to resolve "<nom-de-la-bibliotheque>" from "src/..."
+```
+
+Ce message veut dire « cette bibliothèque manque sur votre disque ». La réponse
+est toujours la même : `npm install`.
+
+Ajoutez `-- --clear` (`npm start -- --clear`) quand le fichier `.env` a changé :
+sans lui, Expo garde l'ancienne configuration en mémoire.
+
 ### Ce qu'il faut tester, écran par écran
 
 | # | Écran | À vérifier |
