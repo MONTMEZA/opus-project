@@ -12,15 +12,18 @@
 
 -- 1. Comptes de démonstration -----------------------------------------------
 --    Identifiants fixes pour que le script puisse être relancé sans doublon.
+-- Les quatre colonnes de jetons sont mises à '' volontairement : laissées à NULL,
+-- elles font planter l'écran Authentication > Users du tableau de bord Supabase.
 insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
                         email_confirmed_at, created_at, updated_at,
-                        raw_app_meta_data, raw_user_meta_data)
+                        raw_app_meta_data, raw_user_meta_data,
+                        confirmation_token, email_change, email_change_token_new, recovery_token)
 values
-  ('00000000-0000-0000-0000-000000000000', '11111111-1111-4111-8111-111111111111', 'authenticated', 'authenticated', 'karim@demo.opus',   '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}'),
-  ('00000000-0000-0000-0000-000000000000', '22222222-2222-4222-8222-222222222222', 'authenticated', 'authenticated', 'sophie@demo.opus',  '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}'),
-  ('00000000-0000-0000-0000-000000000000', '33333333-3333-4333-8333-333333333333', 'authenticated', 'authenticated', 'yanis@demo.opus',   '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}'),
-  ('00000000-0000-0000-0000-000000000000', '44444444-4444-4444-8444-444444444444', 'authenticated', 'authenticated', 'marc@demo.opus',    '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}'),
-  ('00000000-0000-0000-0000-000000000000', '55555555-5555-4555-8555-555555555555', 'authenticated', 'authenticated', 'elodie@demo.opus',  '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}')
+  ('00000000-0000-0000-0000-000000000000', '11111111-1111-4111-8111-111111111111', 'authenticated', 'authenticated', 'karim@demo.opus',   '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}', '', '', '', ''),
+  ('00000000-0000-0000-0000-000000000000', '22222222-2222-4222-8222-222222222222', 'authenticated', 'authenticated', 'sophie@demo.opus',  '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}', '', '', '', ''),
+  ('00000000-0000-0000-0000-000000000000', '33333333-3333-4333-8333-333333333333', 'authenticated', 'authenticated', 'yanis@demo.opus',   '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}', '', '', '', ''),
+  ('00000000-0000-0000-0000-000000000000', '44444444-4444-4444-8444-444444444444', 'authenticated', 'authenticated', 'marc@demo.opus',    '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}', '', '', '', ''),
+  ('00000000-0000-0000-0000-000000000000', '55555555-5555-4555-8555-555555555555', 'authenticated', 'authenticated', 'elodie@demo.opus',  '', now(), now(), now(), '{"provider":"email","providers":["email"]}', '{}', '', '', '', '')
 on conflict (id) do nothing;
 
 -- 2. Fiches utilisateurs -----------------------------------------------------
