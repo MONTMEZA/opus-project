@@ -6,7 +6,7 @@
  * puis on écrit dans Supabase en arrière-plan via src/lib/api.js.
  * Sans .env, l'écriture Supabase ne fait rien : l'app tourne en mode démo.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { C } from './theme';
@@ -16,6 +16,7 @@ import BottomNav from './components/BottomNav';
 import QuoteModal from './components/QuoteModal';
 import CommentsSheet from './components/CommentsSheet';
 import OnboardingScreen from './screens/OnboardingScreen';
+import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import DecouvrirScreen from './screens/DecouvrirScreen';
 import CreerScreen from './screens/CreerScreen';
@@ -29,11 +30,15 @@ import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
 import { METIERS, POST_GRADIENTS, avgReviews, initialDemandes } from './data/demo';
 import * as api from './lib/api';
+import { hasSupabase } from './lib/supabase';
+import { envoyerFichier, estFichierLocal } from './lib/storage';
 import { aiMatchPros } from './lib/ai';
 
 export default function OpusApp() {
   const [userType, setUserType] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [demarrage, setDemarrage] = useState(true);   // reprise de session
+  const [typeChoisi, setTypeChoisi] = useState(null); // type retenu avant connexion
   const [screen, setScreen] = useState('home');
   const [feedMode, setFeedMode] = useState('classic');
   const [feedTab, setFeedTab] = useState('pourvous');
@@ -91,7 +96,7 @@ export default function OpusApp() {
   useEffect(() => () => { if (bannerTimer.current) clearTimeout(bannerTimer.current); }, []);
 
   /* ---------- chargement (démo ou Supabase) ---------- */
-  const start = async (type) => {
+  const start = useCallback(async (type) => {
     setLoading(true);
     try {
       await api.ensureSession(type);
@@ -108,6 +113,46 @@ export default function OpusApp() {
       showBanner(`Chargement impossible : ${e.message || e}`);
     }
     setLoading(false);
+  }, []);
+
+  /* Une session déjà ouverte sur ce téléphone évite de redemander le mot de passe. */
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const session = await api.restoreSession();
+        if (session && vivant) await start(session.userType);
+      } catch (e) {
+        // pas de session valide : on affichera l'écran d'accueil
+      }
+      if (vivant) setDemarrage(false);
+    })();
+    return () => { vivant = false; };
+  }, [start]);
+
+  /* ---------- création de compte et connexion ---------- */
+  const choisirType = (type) => {
+    // En mode démo, il n'y a pas de compte : on entre directement.
+    if (!hasSupabase) { start(type); return; }
+    setTypeChoisi(type);
+  };
+
+  const handleSignUp = async ({ email, motDePasse, nom, entreprise, metier, ville }) => {
+    const { session } = await api.signUp({
+      email, password: motDePasse, userType: typeChoisi, nom,
+    });
+    if (!session) return { confirmationRequise: true };
+
+    if (typeChoisi === 'pro') {
+      await api.ensureProProfile({ entreprise, metier, ville, nom });
+    }
+    await start(typeChoisi);
+    return {};
+  };
+
+  const handleSignIn = async ({ email, motDePasse }) => {
+    const { userType: type } = await api.signIn({ email, password: motDePasse });
+    await start(type || typeChoisi);
   };
 
   /** Mon compte professionnel : le mien s'il existe, sinon le premier de la liste. */
@@ -292,8 +337,20 @@ export default function OpusApp() {
 
   /* ---------- mon compte ---------- */
   const enregistrerProfil = async ({ profil, sos }) => {
+    let complet = profil;
     try {
-      await api.updateProfile({ userType, profil });
+      // Les images choisies sur le téléphone sont d'abord envoyées vers
+      // Supabase Storage ; sans ça, elles ne seraient visibles que par vous.
+      const uid = api.getUserId();
+      const avatarUrl = estFichierLocal(profil.avatarUrl)
+        ? await envoyerFichier({ uri: profil.avatarUrl, bucket: 'avatars', nom: 'avatar', userId: uid })
+        : profil.avatarUrl;
+      const bannerUrl = estFichierLocal(profil.bannerUrl)
+        ? await envoyerFichier({ uri: profil.bannerUrl, bucket: 'bannieres', nom: 'banniere', userId: uid })
+        : profil.bannerUrl;
+      complet = { ...profil, avatarUrl, bannerUrl };
+
+      await api.updateProfile({ userType, profil: complet });
       if (sos) await api.updateSosAvailability(sos);
     } catch (e) {
       showBanner(`Enregistrement impossible : ${e.message || e}`);
@@ -302,10 +359,10 @@ export default function OpusApp() {
 
     if (userType === 'pro') {
       setPros((prev) => (prev[myProId]
-        ? { ...prev, [myProId]: { ...prev[myProId], ...profil } }
+        ? { ...prev, [myProId]: { ...prev[myProId], ...complet } }
         : prev));
     } else {
-      setMonProfil((p) => ({ ...p, ...profil }));
+      setMonProfil((p) => ({ ...p, ...complet }));
     }
     if (sos) setMesSos(sos);
 
@@ -313,10 +370,46 @@ export default function OpusApp() {
     showBanner('Profil enregistré.');
   };
 
+  /**
+   * Envoi du Kbis et de l'attestation d'assurance.
+   * Le profil passe en « en attente » : c'est vous qui validez depuis Supabase.
+   */
+  const envoyerDocuments = async ({ kbis, assurance }) => {
+    try {
+      const uid = api.getUserId();
+      const kbisPath = kbis
+        ? await envoyerFichier({ uri: kbis.uri, bucket: 'documents', nom: 'kbis', userId: uid })
+        : null;
+      const assurancePath = assurance
+        ? await envoyerFichier({ uri: assurance.uri, bucket: 'documents', nom: 'assurance', userId: uid })
+        : null;
+
+      await api.submitDocuments({ kbisPath, assurancePath });
+
+      setPros((prev) => (prev[myProId]
+        ? {
+            ...prev,
+            [myProId]: {
+              ...prev[myProId],
+              kbisPath: kbisPath || prev[myProId].kbisPath,
+              assurancePath: assurancePath || prev[myProId].assurancePath,
+              verificationStatut: 'en_attente',
+            },
+          }
+        : prev));
+
+      setScreen('profil');
+      showBanner('Documents envoyés. Votre profil passe en vérification.');
+    } catch (e) {
+      showBanner(`Envoi impossible : ${e.message || e}`);
+    }
+  };
+
   /** Déconnexion : on repart de l'écran d'accueil, l'état est remis à zéro. */
   const deconnexion = async () => {
     try { await api.signOut(); } catch (e) { /* rien à faire de plus */ }
     setUserType(null);
+    setTypeChoisi(null);
     setScreen('home');
     setPros({});
     setPosts([]);
@@ -457,11 +550,31 @@ export default function OpusApp() {
     : null;
 
   /* ---------- rendu ---------- */
+
+  // Reprise d'une session existante : on évite de faire clignoter l'accueil.
+  if (demarrage) {
+    return (
+      <View style={s.demarrage}>
+        <StatusBar style="light" />
+        <ActivityIndicator size="large" color={C.accent} />
+      </View>
+    );
+  }
+
   if (!userType) {
     return (
       <>
         <StatusBar style="light" />
-        <OnboardingScreen onChoose={start} />
+        {typeChoisi ? (
+          <AuthScreen
+            userType={typeChoisi}
+            onSignUp={handleSignUp}
+            onSignIn={handleSignIn}
+            onRetour={() => setTypeChoisi(null)}
+          />
+        ) : (
+          <OnboardingScreen onChoose={choisirType} />
+        )}
         {loading && (
           <View style={s.loader}><ActivityIndicator size="large" color={C.accent} /></View>
         )}
@@ -586,6 +699,7 @@ export default function OpusApp() {
             profil={userType === 'pro' ? (pros[myProId] || {}) : monProfil}
             sos={mesSos}
             onSave={enregistrerProfil}
+            onEnvoyerDocuments={envoyerDocuments}
             onErreur={showBanner}
           />
         )}
@@ -645,6 +759,7 @@ export default function OpusApp() {
 
 const s = StyleSheet.create({
   app: { flex: 1, backgroundColor: C.bg },
+  demarrage: { flex: 1, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center' },
   subTabs: {
     paddingVertical: 10, paddingHorizontal: 14,
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,

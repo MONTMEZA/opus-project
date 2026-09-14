@@ -104,7 +104,25 @@ Si le second script affiche malgré tout une erreur rouge, la solution de
 rechange est de créer les cinq comptes à la main dans **Authentication →
 Users**, puis de remplacer les cinq UUID en haut de `seed.sql` par les vôtres.
 
-### 2.3 Autoriser la connexion anonyme
+### 2.2 bis — Relancer `schema.sql` quand la base évolue
+
+`schema.sql` est **ré-exécutable**. Chaque fois que le modèle de données change,
+recollez le fichier entier dans le SQL Editor et faites **Run** : les tables et
+colonnes déjà présentes sont conservées, les nouvelles sont ajoutées, et aucune
+donnée n'est perdue. Vérifié en le jouant quatre fois de suite sur une base
+remplie.
+
+### 2.3 Réglages de connexion
+
+Dans **Authentication → Sign In / Providers → Email** :
+
+- **Confirm email** : désactivez-le **pendant le développement**. Sinon chaque
+  compte de test attend un clic dans un mail. Réactivez-le avant d'ouvrir
+  l'application à de vrais utilisateurs.
+- **Anonymous sign-ins** : plus nécessaire depuis que l'application a de vrais
+  comptes ; laissez-le désactivé.
+
+### 2.3 bis — Ancienne étape : connexion anonyme
 
 L'app n'a pas d'écran de connexion (comme le prototype) : elle ouvre une session
 anonyme. Va dans **Authentication → Sign In / Providers** et active
@@ -164,6 +182,26 @@ correspondant à `statut = 'accepte'` dans le Table Editor, modifie l'avis, et l
 badge apparaît.
 
 ---
+
+## Vérifier un professionnel
+
+Quand un artisan envoie son Kbis et son attestation d'assurance, son profil
+passe en **`en_attente`**. Le badge vérifié ne s'obtient pas tout seul : c'est
+vous qui décidez.
+
+1. Supabase → **Storage** → espace **documents** → ouvrez le dossier portant
+   l'identifiant de l'artisan et regardez les fichiers
+2. Supabase → **Table Editor** → **professional_profiles** → trouvez sa ligne
+3. Passez **`verification_statut`** à `verifie` et **`verifie`** à `true`
+4. Renseignez **`verifie_le`** avec la date du jour
+
+Le badge apparaît alors sur son profil public. Pour refuser, mettez
+`verification_statut` à `refuse` et expliquez pourquoi dans
+`verification_note` : l'artisan lira la raison dans son écran de profil.
+
+L'espace **documents** est privé : ces fichiers ne sont lisibles que par leur
+propriétaire et par vous depuis le tableau de bord. Ils n'apparaissent jamais
+sur le profil public.
 
 ## Étape 3 — Brancher l'IA en sécurité
 

@@ -31,7 +31,11 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+# .env contient les clés de VOTRE projet Supabase : il ne doit jamais partir
+# sur GitHub. Le modèle à recopier est .env.example, lui versionné.
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo

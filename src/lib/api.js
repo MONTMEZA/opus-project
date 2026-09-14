@@ -21,29 +21,106 @@ export const mode = hasSupabase ? 'supabase' : 'demo';
 
 let currentUserId = null;
 
-/**
- * En mode Supabase on ouvre une session anonyme (pas d'écran de connexion
- * dans le prototype). L'utilisateur est ensuite enregistré dans `users`
- * avec son type (pro / particulier).
- */
+/** Mode démo : pas de vrai compte, un identifiant fictif suffit. */
 export async function ensureSession(userType) {
   if (!hasSupabase) { currentUserId = 'demo-user'; return currentUserId; }
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Aucune session ouverte.');
+  currentUserId = session.user.id;
+  return currentUserId;
+}
 
-  let { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (error) throw error;
-    session = data.session;
-  }
+/**
+ * Reprend la session déjà ouverte sur ce téléphone, s'il y en a une.
+ * Évite de redemander le mot de passe à chaque ouverture de l'app.
+ * Renvoie { userId, userType } ou null.
+ */
+export async function restoreSession() {
+  if (!hasSupabase) return null;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
   currentUserId = session.user.id;
 
-  if (userType) {
-    await supabase.from('users').upsert(
-      { id: currentUserId, type: userType, nom: userType === 'pro' ? 'Mon entreprise' : 'Vous' },
-      { onConflict: 'id' },
-    );
-  }
-  return currentUserId;
+  const { data } = await supabase.from('users').select('type').eq('id', currentUserId).maybeSingle();
+  return { userId: currentUserId, userType: (data && data.type) || 'particulier' };
+}
+
+/**
+ * Création de compte. Le type et le nom voyagent dans les métadonnées :
+ * un trigger côté base crée la fiche dans `users` à partir de là
+ * (voir cree_fiche_utilisateur dans schema.sql).
+ *
+ * Renvoie { session } — session vaut null quand Supabase exige une
+ * confirmation par email avant d'ouvrir le compte.
+ */
+export async function signUp({ email, password, userType, nom }) {
+  if (!hasSupabase) { currentUserId = 'demo-user'; return { session: true }; }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: { data: { type: userType, nom: nom.trim() } },
+  });
+  if (error) throw error;
+
+  if (data.session) currentUserId = data.session.user.id;
+  return { session: data.session };
+}
+
+/** Connexion à un compte existant. */
+export async function signIn({ email, password }) {
+  if (!hasSupabase) { currentUserId = 'demo-user'; return { userType: null }; }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+  if (error) throw error;
+  currentUserId = data.session.user.id;
+
+  const { data: fiche } = await supabase.from('users')
+    .select('type').eq('id', currentUserId).maybeSingle();
+  return { userType: (fiche && fiche.type) || 'particulier' };
+}
+
+/**
+ * Crée la fiche professionnelle si elle n'existe pas encore.
+ * Appelée juste après l'inscription d'un pro : sans elle, l'artisan n'a
+ * pas de profil public et n'apparaît nulle part.
+ */
+export async function ensureProProfile({ entreprise, metier, ville, nom }) {
+  if (!hasSupabase) return null;
+
+  const { data: existante } = await supabase.from('professional_profiles')
+    .select('id').eq('id', currentUserId).maybeSingle();
+  if (existante) return existante;
+
+  const { data, error } = await supabase.from('professional_profiles').insert({
+    id: currentUserId,
+    nom: nom || '',
+    entreprise: entreprise || 'Mon entreprise',
+    metier: metier || 'Maçon',
+    ville: ville || '',
+    verification_statut: 'non_soumis',
+  }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Envoi des justificatifs. Le profil passe en « en attente » : c'est VOUS
+ * qui basculerez verification_statut sur 'verifie' depuis Supabase, après
+ * avoir regardé les documents. Le badge vérifié ne s'obtient pas tout seul.
+ */
+export async function submitDocuments({ kbisPath, assurancePath }) {
+  if (!hasSupabase) return null;
+  const patch = { verification_statut: 'en_attente' };
+  if (kbisPath) patch.kbis_url = kbisPath;
+  if (assurancePath) patch.assurance_url = assurancePath;
+
+  const { error } = await supabase.from('professional_profiles')
+    .update(patch).eq('id', currentUserId);
+  if (error) throw error;
 }
 
 export function getUserId() { return currentUserId; }
@@ -78,6 +155,10 @@ function rowToPro(row, reviews = [], partners = []) {
     portfolio: row.portfolio || [],
     avatarUrl: row.avatar_url || null,
     bannerUrl: row.banner_url || null,
+    kbisPath: row.kbis_url || null,
+    assurancePath: row.assurance_url || null,
+    verificationStatut: row.verification_statut || 'non_soumis',
+    verificationNote: row.verification_note || null,
     reviews,
   };
 }
@@ -329,6 +410,7 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
   } else {
     const { error } = await supabase.from('users').update({
       nom: profil.nom,
+      ville: profil.ville,
       avatar_url: profil.avatarUrl,
     }).eq('id', currentUserId);
     if (error) throw error;

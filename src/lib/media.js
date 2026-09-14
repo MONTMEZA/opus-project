@@ -68,3 +68,20 @@ export async function choisirVideo({ camera = false, dureeMax = 60 } = {}) {
   if (res.canceled || !res.assets || res.assets.length === 0) return null;
   return res.assets[0];
 }
+
+/**
+ * Choix d'un justificatif : PDF ou photo du document.
+ * Un Kbis est souvent un PDF téléchargé, une attestation d'assurance souvent
+ * une photo — on accepte les deux.
+ */
+export async function choisirDocument() {
+  const DocumentPicker = await import('expo-document-picker');
+  const res = await DocumentPicker.getDocumentAsync({
+    type: ['application/pdf', 'image/*'],
+    copyToCacheDirectory: true,
+    multiple: false,
+  });
+  if (res.canceled || !res.assets || res.assets.length === 0) return null;
+  const a = res.assets[0];
+  return { uri: a.uri, nom: a.name, taille: a.size, type: a.mimeType };
+}

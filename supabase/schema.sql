@@ -10,9 +10,17 @@ create table if not exists public.users (
   id          uuid primary key references auth.users(id) on delete cascade,
   type        text not null default 'particulier' check (type in ('pro', 'particulier')),
   nom         text not null default 'Vous',
+  email       text,
+  avatar_url  text,
+  ville       text,
   avatar_seed int  not null default 1,
   created_at  timestamptz not null default now()
 );
+
+-- Ajouts pour les projets créés avant l'arrivée des comptes.
+alter table public.users add column if not exists email      text;
+alter table public.users add column if not exists avatar_url text;
+alter table public.users add column if not exists ville      text;
 
 -- --------------------------------------------------------------------------
 --  2. PROFILS PROFESSIONNELS
@@ -36,8 +44,27 @@ create table if not exists public.professional_profiles (
   kbis_maj           text,            -- ex. "03/2026"
   rge                boolean not null default false,
   portfolio          text[] not null default '{}',
+  avatar_url         text,
+  banner_url         text,
+  -- Documents envoyés par l'artisan, et suivi de leur vérification.
+  kbis_url           text,
+  assurance_url      text,
+  verification_statut text not null default 'non_soumis'
+                     check (verification_statut in ('non_soumis', 'en_attente', 'verifie', 'refuse')),
+  verification_note  text,
+  verifie_le         timestamptz,
   created_at         timestamptz not null default now()
 );
+
+-- Ajouts pour les projets créés avant l'arrivée des comptes.
+alter table public.professional_profiles add column if not exists avatar_url          text;
+alter table public.professional_profiles add column if not exists banner_url          text;
+alter table public.professional_profiles add column if not exists kbis_url            text;
+alter table public.professional_profiles add column if not exists assurance_url       text;
+alter table public.professional_profiles add column if not exists verification_note   text;
+alter table public.professional_profiles add column if not exists verifie_le          timestamptz;
+alter table public.professional_profiles add column if not exists verification_statut text
+  not null default 'non_soumis';
 
 create index if not exists idx_pro_metier on public.professional_profiles (metier);
 create index if not exists idx_pro_ville  on public.professional_profiles (ville);
@@ -363,67 +390,94 @@ alter table public.sos_requests          enable row level security;
 alter table public.notifications         enable row level security;
 
 -- Lecture publique du contenu visible dans le fil et les profils
+drop policy if exists "lecture users" on public.users;
 create policy "lecture users"      on public.users                 for select using (true);
+drop policy if exists "lecture profils" on public.professional_profiles;
 create policy "lecture profils"    on public.professional_profiles for select using (true);
+drop policy if exists "lecture posts" on public.posts;
 create policy "lecture posts"      on public.posts                 for select using (true);
+drop policy if exists "lecture likes" on public.post_likes;
 create policy "lecture likes"      on public.post_likes            for select using (true);
+drop policy if exists "lecture comments" on public.comments;
 create policy "lecture comments"   on public.comments              for select using (true);
+drop policy if exists "lecture follows" on public.follows;
 create policy "lecture follows"    on public.follows               for select using (true);
+drop policy if exists "lecture reviews" on public.reviews;
 create policy "lecture reviews"    on public.reviews               for select using (true);
+drop policy if exists "lecture partenaires" on public.professional_partners;
 create policy "lecture partenaires" on public.professional_partners for select using (true);
 
 -- Chacun gère sa propre fiche
+drop policy if exists "ecriture mon user" on public.users;
 create policy "ecriture mon user"   on public.users
   for all using (auth.uid() = id) with check (auth.uid() = id);
+drop policy if exists "ecriture mon profil" on public.professional_profiles;
 create policy "ecriture mon profil" on public.professional_profiles
   for all using (auth.uid() = id) with check (auth.uid() = id);
 
 -- Publications : seul l'auteur crée / modifie / supprime les siennes
+drop policy if exists "ecriture mes posts" on public.posts;
 create policy "ecriture mes posts" on public.posts
   for all using (auth.uid() = author_id) with check (auth.uid() = author_id);
 
 -- J'aime, enregistrés, abonnements : chacun les siens
+drop policy if exists "mes likes" on public.post_likes;
 create policy "mes likes"  on public.post_likes
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "mes saves" on public.saved_posts;
 create policy "mes saves"  on public.saved_posts
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "lecture mes saves" on public.saved_posts;
 create policy "lecture mes saves" on public.saved_posts
   for select using (auth.uid() = user_id);
+drop policy if exists "mes follows" on public.follows;
 create policy "mes follows" on public.follows
   for all using (auth.uid() = follower_id) with check (auth.uid() = follower_id);
+drop policy if exists "mes comments" on public.comments;
 create policy "mes comments" on public.comments
   for all using (auth.uid() = author_id) with check (auth.uid() = author_id);
 
 -- Avis : je peux écrire le mien ; client_verifie reste calculé par le trigger
+drop policy if exists "mes reviews" on public.reviews;
 create policy "mes reviews" on public.reviews
   for all using (auth.uid() = author_id) with check (auth.uid() = author_id);
 
 -- Devis / rappels : visibles par le client et par le professionnel concerné
+drop policy if exists "lecture mes devis" on public.quote_requests;
 create policy "lecture mes devis" on public.quote_requests
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
+drop policy if exists "creation devis" on public.quote_requests;
 create policy "creation devis" on public.quote_requests
   for insert with check (auth.uid() = client_id);
+drop policy if exists "le pro traite le devis" on public.quote_requests;
 create policy "le pro traite le devis" on public.quote_requests
   for update using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
 
+drop policy if exists "lecture mes rappels" on public.callback_requests;
 create policy "lecture mes rappels" on public.callback_requests
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
+drop policy if exists "creation rappel" on public.callback_requests;
 create policy "creation rappel" on public.callback_requests
   for insert with check (auth.uid() = client_id);
+drop policy if exists "le pro traite le rappel" on public.callback_requests;
 create policy "le pro traite le rappel" on public.callback_requests
   for update using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
 
 -- Messagerie : réservée aux deux participants
+drop policy if exists "mes conversations" on public.conversations;
 create policy "mes conversations" on public.conversations
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
+drop policy if exists "creation conversation" on public.conversations;
 create policy "creation conversation" on public.conversations
   for insert with check (auth.uid() = client_id or auth.uid() = professional_id);
 
+drop policy if exists "lecture mes messages" on public.messages;
 create policy "lecture mes messages" on public.messages
   for select using (exists (
     select 1 from public.conversations c
     where c.id = messages.conversation_id
       and (c.client_id = auth.uid() or c.professional_id = auth.uid())));
+drop policy if exists "envoi message" on public.messages;
 create policy "envoi message" on public.messages
   for insert with check (auth.uid() = sender_id and exists (
     select 1 from public.conversations c
@@ -431,33 +485,119 @@ create policy "envoi message" on public.messages
       and (c.client_id = auth.uid() or c.professional_id = auth.uid())));
 
 -- Partenaires : le professionnel gère sa propre liste
+drop policy if exists "mes partenaires" on public.professional_partners;
 create policy "mes partenaires" on public.professional_partners
   for all using (auth.uid() = professional_id or auth.uid() = partner_id)
   with check (auth.uid() = professional_id or auth.uid() = partner_id);
 
 -- Demandes : visibles de tous, publiees par leur auteur seulement
+drop policy if exists "lecture demandes" on public.demandes;
 create policy "lecture demandes" on public.demandes for select using (true);
+drop policy if exists "mes demandes" on public.demandes;
 create policy "mes demandes" on public.demandes
   for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
 
+drop policy if exists "lecture reponses" on public.demande_reponses;
 create policy "lecture reponses" on public.demande_reponses for select using (true);
+drop policy if exists "mes reponses" on public.demande_reponses;
 create policy "mes reponses" on public.demande_reponses
   for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
 
 -- Disponibilites SOS : lisibles de tous (c'est ce qui alimente la recherche),
 -- modifiables uniquement par l'artisan concerne.
+drop policy if exists "lecture dispo sos" on public.sos_availability;
 create policy "lecture dispo sos" on public.sos_availability for select using (true);
+drop policy if exists "ma dispo sos" on public.sos_availability;
 create policy "ma dispo sos" on public.sos_availability
   for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
 
 -- Demandes d'urgence : reservees au client et a l'artisan sollicite
+drop policy if exists "lecture mes sos" on public.sos_requests;
 create policy "lecture mes sos" on public.sos_requests
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
+drop policy if exists "creation sos" on public.sos_requests;
 create policy "creation sos" on public.sos_requests
   for insert with check (auth.uid() = client_id);
+drop policy if exists "le pro traite le sos" on public.sos_requests;
 create policy "le pro traite le sos" on public.sos_requests
   for update using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
 
 -- Notifications : strictement personnelles
+drop policy if exists "mes notifications" on public.notifications;
 create policy "mes notifications" on public.notifications
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ==========================================================================
+--  12. STOCKAGE DES FICHIERS (Supabase Storage)
+--
+--  Quatre espaces séparés, parce qu'ils n'ont pas les mêmes règles :
+--    avatars, bannieres, publications -> publics, tout le monde les affiche
+--    documents                        -> PRIVÉS (Kbis, assurance)
+--
+--  Convention de rangement : chaque fichier est placé dans un dossier portant
+--  l'identifiant de son propriétaire, par exemple  <uid>/kbis-2026.pdf.
+--  C'est ce qui permet aux règles ci-dessous de savoir à qui appartient quoi.
+-- ==========================================================================
+insert into storage.buckets (id, name, public) values
+  ('avatars',      'avatars',      true),
+  ('bannieres',    'bannieres',    true),
+  ('publications', 'publications', true),
+  ('documents',    'documents',    false)
+on conflict (id) do nothing;
+
+-- Lecture publique des médias affichés dans l'application
+drop policy if exists "lecture publique des medias" on storage.objects;
+create policy "lecture publique des medias" on storage.objects
+  for select using (bucket_id in ('avatars', 'bannieres', 'publications'));
+
+-- Les documents justificatifs ne sont lisibles que par leur propriétaire
+-- (et par vous depuis le tableau de bord, qui contourne ces règles).
+drop policy if exists "lecture de mes documents" on storage.objects;
+create policy "lecture de mes documents" on storage.objects
+  for select using (
+    bucket_id = 'documents'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Chacun n'envoie, remplace et supprime que ses propres fichiers
+drop policy if exists "envoi de mes fichiers" on storage.objects;
+create policy "envoi de mes fichiers" on storage.objects
+  for insert with check (
+    bucket_id in ('avatars', 'bannieres', 'publications', 'documents')
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "remplacement de mes fichiers" on storage.objects;
+create policy "remplacement de mes fichiers" on storage.objects
+  for update using ((storage.foldername(name))[1] = auth.uid()::text)
+  with check ((storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "suppression de mes fichiers" on storage.objects;
+create policy "suppression de mes fichiers" on storage.objects
+  for delete using ((storage.foldername(name))[1] = auth.uid()::text);
+
+-- ==========================================================================
+--  13. CRÉATION AUTOMATIQUE DE LA FICHE UTILISATEUR
+--
+--  À chaque inscription, une ligne est créée dans public.users à partir des
+--  informations du formulaire. Évite que l'application ait à le faire, et
+--  garantit qu'aucun compte ne reste sans fiche.
+-- ==========================================================================
+create or replace function public.cree_fiche_utilisateur()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.users (id, type, nom, email)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'type', 'particulier'),
+    coalesce(new.raw_user_meta_data ->> 'nom', 'Vous'),
+    new.email
+  )
+  on conflict (id) do nothing;
+  return new;
+end; $$;
+
+drop trigger if exists trg_cree_fiche_utilisateur on auth.users;
+create trigger trg_cree_fiche_utilisateur
+  after insert on auth.users
+  for each row execute function public.cree_fiche_utilisateur();
