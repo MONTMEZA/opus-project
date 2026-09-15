@@ -34,23 +34,46 @@ function formater(feature) {
 }
 
 /**
- * Cherche des villes (`type: 'municipality'`) ou des adresses complètes.
+ * Les seules valeurs que l'API accepte pour le paramètre `type`.
+ * En envoyer une autre lui fait renvoyer une erreur 400, et donc aucune
+ * suggestion. Pour chercher une adresse, on n'envoie PAS de type : la
+ * recherche libre renvoie numéros de rue, rues et communes mélangés.
+ */
+const TYPES_VALIDES = ['housenumber', 'street', 'locality', 'municipality'];
+
+/** `__DEV__` n'existe que dans React Native ; ailleurs (tests, Node) il est absent. */
+function enDeveloppement() {
+  return typeof __DEV__ !== 'undefined' && __DEV__;
+}
+
+/**
+ * Cherche des villes (`type: 'municipality'`) ou des adresses complètes
+ * (`type: 'address'`, qui déclenche une recherche libre).
+ *
  * Renvoie [] plutôt que de lever une erreur : une suggestion qui n'arrive
- * pas ne doit jamais empêcher quelqu'un de taper sa ville à la main.
+ * pas ne doit jamais empêcher quelqu'un de taper sa ville à la main. Mais en
+ * développement, on écrit la raison dans la console, sans quoi une requête
+ * mal formée passe inaperçue.
  */
 export async function chercher(texte, { type = 'municipality', limite = 6 } = {}) {
   const q = (texte || '').trim();
   if (q.length < 3) return [];
 
   const params = new URLSearchParams({ q, limit: String(limite) });
-  if (type) params.set('type', type);
+  if (TYPES_VALIDES.includes(type)) params.set('type', type);
 
   try {
     const reponse = await fetch(`${BASE}?${params.toString()}`);
-    if (!reponse.ok) return [];
+    if (!reponse.ok) {
+      if (enDeveloppement()) {
+        console.warn(`[adresse] L'API a répondu ${reponse.status} pour « ${q} »`);
+      }
+      return [];
+    }
     const data = await reponse.json();
     return (data.features || []).map(formater);
   } catch (e) {
+    if (enDeveloppement()) console.warn('[adresse] Appel impossible :', e.message);
     return [];
   }
 }

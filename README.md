@@ -353,6 +353,23 @@ d'intervention ne couvre pas la distance.
 La saisie libre reste possible : une suggestion qui n'arrive pas ne doit jamais
 empêcher quelqu'un de taper sa ville à la main.
 
+### Vérifier que la recherche fonctionne
+
+```bash
+npm run verifier-adresse
+```
+
+Ce script interroge réellement la Base Adresse Nationale et contrôle que les
+villes, les adresses complètes, les coordonnées et le calcul de distance
+répondent correctement.
+
+Il existe pour une raison précise : une version envoyait un paramètre
+`type=address` que l'API refuse. Elle répondait **HTTP 400**, le code attrapait
+l'erreur et renvoyait une liste vide — aucune suggestion, aucun message. Un
+test à réponse simulée n'y voyait que du feu, puisqu'il répondait « tout va
+bien » quels que soient les paramètres envoyés. Ce script-ci parle à la vraie
+API : il aurait attrapé la panne.
+
 ## Structure du projet
 
 ```
