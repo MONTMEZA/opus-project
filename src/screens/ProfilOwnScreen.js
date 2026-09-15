@@ -11,7 +11,7 @@ import { C, F } from '../theme';
 import {
   BtnMini, BtnOutline, EmptyState, SectionLabel,
 } from '../components/ui';
-import EnteteProfil from '../components/EnteteProfil';
+import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import { BadgeCheck } from '../components/icons';
@@ -50,12 +50,22 @@ export default function ProfilOwnScreen({
     const followed = [...followingIds];
     return (
       <ScrollView style={{ flex: 1 }}>
-        <EnteteProfil seed={9} bannerUrl={monProfil.bannerUrl} avatarUrl={monProfil.avatarUrl} />
+        <EnteteProfilAuto
+          seed={9}
+          bannerUrl={monProfil.bannerUrl}
+          avatarUrl={monProfil.avatarUrl}
+          titre={monProfil.nom || 'Vous'}
+          sousTitre={`Particulier${monProfil.ville ? ` · ${monProfil.ville}` : ''}`}
+        />
         <View style={s.head}>
-          <Text style={[s.name, { marginTop: 10 }]}>{monProfil.nom || 'Vous'}</Text>
-          <Text style={s.metier}>
-            Particulier{monProfil.ville ? ` · ${monProfil.ville}` : ''}
-          </Text>
+          {!NOM_DANS_ENTETE && (
+            <>
+              <Text style={[s.name, { marginTop: 10 }]}>{monProfil.nom || 'Vous'}</Text>
+              <Text style={s.metier}>
+                Particulier{monProfil.ville ? ` · ${monProfil.ville}` : ''}
+              </Text>
+            </>
+          )}
           <View style={s.stats}>
             <Stat value={followingIds.size} label="Abonnements" />
             <Stat value={savedIds.size} label="Enregistrés" />
@@ -93,13 +103,25 @@ export default function ProfilOwnScreen({
 
   return (
     <ScrollView style={{ flex: 1 }}>
-      <EnteteProfil seed={me.id} bannerUrl={me.bannerUrl} avatarUrl={me.avatarUrl} />
+      <EnteteProfilAuto
+        seed={me.id}
+        bannerUrl={me.bannerUrl}
+        avatarUrl={me.avatarUrl}
+        portfolio={me.portfolio}
+        titre={me.entreprise}
+        sousTitre={`${me.metier} · ${me.ville}`}
+        verifie={me.verifie}
+      />
       <View style={s.head}>
-        <View style={s.nameRow}>
-          <Text style={s.name}>{me.entreprise}</Text>
-          {me.verifie && <BadgeCheck size={16} color={C.verif} />}
-        </View>
-        <Text style={s.metier}>{me.metier} · {me.ville}</Text>
+        {!NOM_DANS_ENTETE && (
+          <>
+            <View style={s.nameRow}>
+              <Text style={s.name}>{me.entreprise}</Text>
+              {me.verifie && <BadgeCheck size={16} color={C.verif} />}
+            </View>
+            <Text style={s.metier}>{me.metier} · {me.ville}</Text>
+          </>
+        )}
         <Text style={s.sub}>
           SIRET {me.siret} vérifié · {me.assurance.valide ? 'Assurance décennale à jour' : 'Assurance non renseignée'}
         </Text>
@@ -159,7 +181,7 @@ export default function ProfilOwnScreen({
 }
 
 const s = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center' },
+  head: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6, alignItems: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
   metier: { fontSize: 12.5, color: C.muted, marginTop: 2, fontFamily: F.inter },

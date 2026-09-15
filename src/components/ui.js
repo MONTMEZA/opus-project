@@ -69,11 +69,15 @@ export function Avatar({ seed = 0, size = 40, uri, ring = 0 }) {
   return <View style={withRing} />;
 }
 
-/* --- bannière de profil, façon LinkedIn ---
-   Une vraie image quand le professionnel en a envoyé une,
-   sinon le dégradé bleu acier du prototype. */
+/* --- bannière de profil ---
+   Trois cas, dans l'ordre : une vraie photo envoyée par le professionnel,
+   un dégradé venu de son portfolio (les réalisations de démonstration en
+   sont), ou à défaut le dégradé bleu acier du prototype. */
 export function ProfileBanner({ uri, height = 140, children }) {
-  if (uri) {
+  const estPhoto = typeof uri === 'string' && /^(https?:|file:|data:|content:|blob:)/.test(uri);
+  const estDegrade = typeof uri === 'string' && !estPhoto && uri.includes(',');
+
+  if (estPhoto) {
     return (
       <View style={{ height, width: '100%' }}>
         <Image source={{ uri }} style={{ height, width: '100%' }} resizeMode="cover" />
@@ -81,8 +85,13 @@ export function ProfileBanner({ uri, height = 140, children }) {
       </View>
     );
   }
+
   return (
-    <Gradient media="#1B4B6B,#3a3a38" angle={120} style={{ height, width: '100%' }}>
+    <Gradient
+      media={estDegrade ? uri : '#1B4B6B,#3a3a38'}
+      angle={120}
+      style={{ height, width: '100%' }}
+    >
       {children}
     </Gradient>
   );

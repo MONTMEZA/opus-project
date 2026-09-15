@@ -54,3 +54,17 @@ export function gradColors(media) {
 export const GRAD_160 = { start: { x: 0.33, y: 0.03 }, end: { x: 0.67, y: 0.97 } };
 /** linear-gradient(120deg, ...) pour la bannière de profil. */
 export const GRAD_120 = { start: { x: 0.07, y: 0.25 }, end: { x: 0.93, y: 0.75 } };
+
+
+/**
+ * Style de l'en-tête de profil. Deux partis pris, changeables d'un mot :
+ *
+ *   'classique' — bannière de 170 px, photo centrée qui enjambe la bande de
+ *                 chantier, puis tout le reste sur le fond béton.
+ *
+ *   'immersif'  — grande image en haut, avec seulement la photo, le nom, le
+ *                 métier et la ville posés dessus. Les statistiques, les
+ *                 boutons et surtout le bloc « informations vérifiées »
+ *                 restent sur le fond béton, où ils gardent leur autorité.
+ */
+export const STYLE_ENTETE = 'immersif';

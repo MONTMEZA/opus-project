@@ -11,7 +11,7 @@ import { C, F } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea,
 } from '../components/ui';
-import EnteteProfil from '../components/EnteteProfil';
+import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import {
@@ -86,15 +86,27 @@ export default function ProfilProScreen({
 
   return (
     <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
-      <EnteteProfil seed={pro.id} bannerUrl={pro.bannerUrl} avatarUrl={pro.avatarUrl} />
+      <EnteteProfilAuto
+        seed={pro.id}
+        bannerUrl={pro.bannerUrl}
+        avatarUrl={pro.avatarUrl}
+        portfolio={pro.portfolio}
+        titre={pro.entreprise}
+        sousTitre={`${pro.metier} · ${pro.ville}`}
+        verifie={pro.verifie}
+      />
 
       {/* --- en-tête --- */}
       <View style={s.head}>
-        <View style={s.nameRow}>
-          <Text style={s.name}>{pro.entreprise}</Text>
-          {pro.verifie && <BadgeCheck size={16} color={C.verif} />}
-        </View>
-        <Text style={s.metier}>{pro.metier} · {pro.ville}</Text>
+        {!NOM_DANS_ENTETE && (
+          <>
+            <View style={s.nameRow}>
+              <Text style={s.name}>{pro.entreprise}</Text>
+              {pro.verifie && <BadgeCheck size={16} color={C.verif} />}
+            </View>
+            <Text style={s.metier}>{pro.metier} · {pro.ville}</Text>
+          </>
+        )}
         <Text style={s.sub}>{pro.exp} ans d'expérience · {avg.count} avis vérifiés</Text>
 
         <View style={s.stats}>
@@ -264,7 +276,7 @@ function SliderRow({ label, value, onChange }) {
 }
 
 const s = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center' },
+  head: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6, alignItems: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
   metier: { fontSize: 12.5, color: C.muted, marginTop: 2, fontFamily: F.inter },

@@ -416,12 +416,27 @@ Titres et boutons en **Oswald**, texte courant en **Inter**, angles nets partout
 sauf les avatars (ronds) et les petits badges, et la bande diagonale façon ruban
 de chantier en haut de l'app.
 
-**L'en-tête de profil** (`src/components/EnteteProfil.js`) reprend l'idée
-LinkedIn — grande bannière, photo qui la chevauche — avec la signature d'Opus :
-la bande de chantier court au bas de la bannière et la photo vient l'enjamber.
-Un voile sombre sous la bannière garantit que l'anneau blanc se détache, même
-sur une image claire. Les trois mesures se règlent en haut du fichier :
-hauteur de bannière, taille de la photo, profondeur du chevauchement.
+**L'en-tête de profil** existe en deux partis pris, qu'on choisit d'un mot
+dans `src/theme.js` :
+
+```js
+export const STYLE_ENTETE = 'immersif';   // ou 'classique'
+```
+
+`classique` — bannière de 170 px, photo centrée qui enjambe la bande de
+chantier (`EnteteProfil.js`). Les trois mesures se règlent en haut du fichier.
+
+`immersif` — grande image occupant environ 38 % de l'écran, avec **seulement**
+l'identité posée dessus : photo, nom, métier, ville (`EnteteProfilImmersif.js`).
+
+Dans les deux cas, ce qui relève de la **preuve** reste sur le fond béton :
+statistiques, boutons, et surtout le bloc des informations vérifiées. Une
+attestation d'assurance posée sur une photo de chantier cesse de se lire comme
+un document — c'est précisément ce qu'il faut éviter dans une application dont
+la valeur est la confiance.
+
+À défaut de bannière envoyée, c'est la **première réalisation du portfolio**
+qui sert de vitrine : l'artisan n'a aucune image à préparer.
 
 ## Différences assumées avec le prototype web
 
