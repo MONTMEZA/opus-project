@@ -101,15 +101,32 @@ export default function ProfilEditScreen({
 
   return (
     <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
-      {/* --- bannière (professionnels seulement) --- */}
+      {/* --- bannière (professionnels seulement) ---
+           L'aperçu montre exactement ce que verront les visiteurs : la
+           bannière choisie si elle existe, sinon la première réalisation. */}
       {estPro && (
         <>
-          <ProfileBanner uri={bannerUrl} height={120} />
-          <View style={s.mediaBtns}>
-            <BtnMini outline onPress={() => prendre('banniere', false)}>
-              <Camera size={12} color={C.ink} />
-              <Text style={s.mediaBtnText}>Changer la bannière</Text>
-            </BtnMini>
+          <ProfileBanner
+            uri={bannerUrl || (profil.portfolio && profil.portfolio[0]) || null}
+            height={130}
+          />
+          <View style={s.banniereBarre}>
+            <Text style={s.banniereNote}>
+              {bannerUrl
+                ? 'Bannière personnalisée'
+                : 'Par défaut : votre première réalisation'}
+            </Text>
+            <View style={s.banniereBoutons}>
+              {!!bannerUrl && (
+                <BtnMini outline label="Retirer" onPress={() => setBannerUrl(null)} />
+              )}
+              <BtnMini outline onPress={() => prendre('banniere', false)}>
+                <Camera size={12} color={C.ink} />
+                <Text style={s.mediaBtnText}>
+                  {bannerUrl ? 'Changer' : 'Choisir'}
+                </Text>
+              </BtnMini>
+            </View>
           </View>
         </>
       )}
@@ -344,7 +361,13 @@ function LigneDocument({ titre, detail, fichier, dejaEnvoye, onChoisir }) {
 
 const s = StyleSheet.create({
   pad: { paddingHorizontal: 16 },
-  mediaBtns: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, marginTop: -16 },
+  banniereBarre: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 10, paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+  banniereNote: { flex: 1, fontSize: 11, color: C.muted, fontFamily: F.inter },
+  banniereBoutons: { flexDirection: 'row', gap: 6 },
   mediaBtnText: { fontFamily: F.oswald6, fontSize: 11, color: C.ink },
   mediaBtnTextOn: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
 
