@@ -5,7 +5,7 @@
  * En mode "Vidéos", les diapositives occupent toute la hauteur de l'écran et
  * la bascule Fil/Vidéos flotte par-dessus, comme sur TikTok.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme';
@@ -31,6 +31,16 @@ export default function HomeScreen({
   /* Une seule vidéo joue à la fois : en laisser tourner cinq en arrière-plan
      vide la batterie et sature les décodeurs du téléphone. */
   const [slideActive, setSlideActive] = useState(0);
+
+  /* Dans le fil classique, la vidéo se lance quand la carte arrive à l'écran,
+     et s'arrête quand elle en sort. Le son reste coupé : une vidéo qui parle
+     toute seule pendant qu'on fait défiler est insupportable — Instagram et
+     Facebook font pareil, le son ne vient qu'en plein écran. */
+  const [visibles, setVisibles] = useState(() => new Set());
+  const reglesVisibilite = useRef({ itemVisiblePercentThreshold: 65 });
+  const surVisibilite = useRef(({ viewableItems }) => {
+    setVisibles(new Set(viewableItems.map((v) => v.item.id)));
+  });
 
   /* ---------- mode vidéo : plein écran ---------- */
   if (feedMode === 'video') {
@@ -104,9 +114,12 @@ export default function HomeScreen({
           ListEmptyComponent={
             <EmptyState>Suis des professionnels pour voir leurs publications ici.</EmptyState>
           }
+          viewabilityConfig={reglesVisibilite.current}
+          onViewableItemsChanged={surVisibilite.current}
           renderItem={({ item: p }) => (
             <PostCard
               post={p}
+              actif={visibles.has(p.id)}
               pro={p.proId ? pros[p.proId] : null}
               pros={pros}
               onVoirCommentateur={onVoirCommentateur}

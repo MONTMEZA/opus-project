@@ -306,6 +306,48 @@ Limite de **45 Mo par fichier** — au-delà, un message clair le dit plutôt qu
 l'erreur brute du serveur. Une seule vidéo joue à la fois dans le fil : en
 laisser tourner cinq vide la batterie et sature les décodeurs du téléphone.
 
+### Si une publication ne part pas
+
+L'écran Publier écrit maintenant, **juste au-dessus du bouton**, ce qui manque
+encore, et le bouton reste grisé tant qu'il manque quelque chose. Un message
+qui apparaissait trois secondes en haut de l'écran pendant qu'on appuyait sur
+un bouton tout en bas ne se voyait pas.
+
+Pendant l'envoi, une **jauge** indique le fichier en cours et le pourcentage.
+Sans elle, une vidéo de 30 Mo donnait l'impression que rien ne se passait.
+
+En cas de refus par Supabase, le **motif exact** du serveur est affiché
+(limite de taille, espace saturé, règle refusée) plutôt qu'un code d'erreur.
+
+### Pourquoi les vidéos sont courtes et en qualité moyenne
+
+Trente secondes filmées en 4K pèsent plus de 100 Mo : le fichier ne passe pas,
+et met une minute à se charger chez celui qui regarde. Vingt secondes en 720p
+pèsent une dizaine de mégaoctets et démarrent tout de suite. Sur un chantier,
+c'est la seule version qui sert.
+
+Les fichiers partent donc en **flux continu** depuis le téléphone
+(`File.upload`), sans jamais être chargés entièrement en mémoire. Une photo de
+2 Mo s'en moque ; une vidéo de 60 Mo, non — c'est ce qui faisait échouer la
+publication d'un clip, silencieusement.
+
+### Démarrage des vidéos
+
+Deux réglages, pour que l'image apparaisse tout de suite :
+
+- **un seul lecteur par vidéo, jamais recréé.** Avant, une vidéo qui passait
+  de « vignette » à « lecture » changeait de composant : le lecteur était
+  détruit et la vidéo rechargée depuis zéro. C'était la vraie cause de
+  l'attente ;
+- **mise en mémoire tampon réduite** : la lecture démarre après une
+  demi-seconde de réserve au lieu de deux, avec cinq secondes d'avance au lieu
+  de vingt. Largement assez pour une vidéo courte.
+
+Dans le fil, une vidéo **se lance quand la carte arrive à l'écran** et
+s'arrête quand elle en sort. Le son reste coupé : une vidéo qui parle toute
+seule pendant qu'on fait défiler est insupportable. Le son ne vient qu'en
+plein écran — c'est ce que font Instagram et Facebook.
+
 ### Le montage : ce qu'il fait, et ce qu'il ne fait pas encore
 
 Le montage enchaîne les clips dans l'ordre choisi, avec la musique par-dessus,

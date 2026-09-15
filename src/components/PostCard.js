@@ -19,7 +19,7 @@ import Media, { EtiquetteVideo } from './Media';
 const EST_VIDEO = new Set(['video', 'montage']);
 
 export default function PostCard({
-  post, pro, pros = {}, following, onLike, onFollow, onView, onHide,
+  post, pro, pros = {}, following, actif = false, onLike, onFollow, onView, onHide,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
 }) {
@@ -84,7 +84,12 @@ export default function PostCard({
           ))}
         </View>
       ) : (
-        <Media media={post.media} style={{ width: '100%', aspectRatio: 16 / 10 }}>
+        <Media
+          media={post.media}
+          style={{ width: '100%', aspectRatio: 16 / 10 }}
+          lecture={actif}
+          muet
+        >
           {EST_VIDEO.has(post.format) && <EtiquetteVideo />}
         </Media>
       )}

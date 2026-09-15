@@ -7,12 +7,28 @@
  */
 import * as ImagePicker from 'expo-image-picker';
 
-/** Au-delà, l'envoi échoue côté Supabase (limite par fichier). */
+/**
+ * Limite par fichier. Supabase plafonne aussi côté projet (50 Mo par défaut) :
+ * on reste en dessous pour que le refus vienne d'ici, avec une phrase claire,
+ * plutôt que du serveur avec un code d'erreur.
+ */
 export const TAILLE_MAX_MO = 45;
 
-/** Un clip de montage : court, sinon le fichier devient trop lourd. */
-export const DUREE_CLIP_MAX = 30;
+/**
+ * Un clip court, et filmé en qualité moyenne.
+ *
+ * Ce n'est pas de l'avarice : trente secondes filmées en 4K pèsent plus de
+ * 100 Mo, ne passent pas, et mettent une minute à se charger chez celui qui
+ * regarde. Vingt secondes en 720p pèsent une dizaine de mégaoctets et
+ * démarrent tout de suite. Sur un chantier, c'est la seule version qui sert.
+ */
+export const DUREE_CLIP_MAX = 20;
 export const CLIPS_MAX = 6;
+
+/** Qualité de capture vidéo : moyenne, volontairement (voir ci-dessus). */
+const QUALITE_VIDEO = ImagePicker.UIImagePickerControllerQualityType
+  ? ImagePicker.UIImagePickerControllerQualityType.Medium
+  : undefined;
 
 /** Formats de découpe selon l'usage. */
 const RATIOS = {
@@ -65,7 +81,8 @@ export async function choisirVideo({ camera = false, dureeMax = 60 } = {}) {
     mediaTypes: ['videos'],
     allowsEditing: true,
     videoMaxDuration: dureeMax,
-    quality: 0.8,
+    videoQuality: QUALITE_VIDEO,
+    quality: 0.7,
   };
 
   const res = camera
@@ -90,7 +107,8 @@ export async function choisirClips({ restants = CLIPS_MAX } = {}) {
     allowsMultipleSelection: true,
     selectionLimit: Math.max(1, restants),
     videoMaxDuration: DUREE_CLIP_MAX,
-    quality: 0.8,
+    videoQuality: QUALITE_VIDEO,
+    quality: 0.7,
   });
 
   if (res.canceled || !res.assets) return [];

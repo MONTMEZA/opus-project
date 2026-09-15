@@ -8,8 +8,16 @@
  *
  * Les écrans n'ont pas à savoir laquelle : ils posent un <Media> et
  * s'occupent de la mise en page.
+ *
+ * UN SEUL LECTEUR, qu'on met en pause
+ * -----------------------------------
+ * `lecture` ne change PAS de composant : le même lecteur reste monté et on
+ * se contente de jouer ou de mettre en pause. C'est essentiel — passer d'un
+ * composant « vignette » à un composant « lecture » détruisait le lecteur et
+ * rechargeait la vidéo depuis le début, à chaque fois qu'on arrivait dessus.
+ * D'où l'attente avant que l'image apparaisse.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { C, F } from '../theme';
@@ -17,6 +25,22 @@ import { Gradient } from './ui';
 import { Play } from './icons';
 
 const EXT_VIDEO = /\.(mp4|mov|m4v|webm)(\?|$)/i;
+
+/**
+ * Réglages de mise en mémoire tampon, choisis pour démarrer vite.
+ *
+ * Par défaut, Android attend 2 secondes de vidéo en réserve avant de lancer
+ * la lecture, et en garde 20 d'avance. Sur un fil qu'on fait défiler, cette
+ * prudence se paie en attente à chaque vidéo. On démarre après une
+ * demi-seconde, et on garde 5 secondes d'avance : c'est assez pour une vidéo
+ * courte, et l'image apparaît presque immédiatement.
+ */
+const TAMPON = {
+  minBufferForPlayback: 0.5,
+  preferredForwardBufferDuration: 5,
+  prioritizeTimeOverSizeThreshold: true,
+  waitsToMinimizeStalling: false,
+};
 
 /** Un dégradé s'écrit « couleur,couleur » ; tout le reste est un fichier. */
 export function estFichier(media) {
@@ -29,20 +53,17 @@ export function estVideo(media) {
   return EXT_VIDEO.test(media) || /\/video\//i.test(media);
 }
 
-/**
- * `lecture` demande la lecture automatique en boucle — le fil vidéo plein
- * écran. Ailleurs on se contente de la première image, avec une pastille :
- * une carte du fil qui lance trois vidéos en même temps vide la batterie.
- */
 export default function Media({ media, style, lecture = false, muet = true, children }) {
   if (!estFichier(media)) {
     return <Gradient media={media} style={style}>{children}</Gradient>;
   }
 
   if (estVideo(media)) {
-    return lecture
-      ? <VideoLue uri={media} style={style} muet={muet}>{children}</VideoLue>
-      : <VideoFigee uri={media} style={style}>{children}</VideoFigee>;
+    return (
+      <VideoMedia uri={media} style={style} lecture={lecture} muet={muet}>
+        {children}
+      </VideoMedia>
+    );
   }
 
   return (
@@ -53,13 +74,24 @@ export default function Media({ media, style, lecture = false, muet = true, chil
   );
 }
 
-/** Vidéo en lecture : fil plein écran. */
-function VideoLue({ uri, style, muet, children }) {
+function VideoMedia({ uri, style, lecture, muet, children }) {
+  /* Le lecteur est créé une fois pour cette source. Il charge la vidéo dès
+     le montage, même en pause : quand la diapositive devient visible, tout
+     est déjà en mémoire et la lecture part sans délai. */
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
     p.muted = muet;
-    p.play();
+    p.bufferOptions = TAMPON;
   });
+
+  useEffect(() => {
+    if (!player) return;
+    if (lecture) player.play(); else player.pause();
+  }, [player, lecture]);
+
+  useEffect(() => {
+    if (player) player.muted = muet;
+  }, [player, muet]);
 
   return (
     <View style={style}>
@@ -70,37 +102,11 @@ function VideoLue({ uri, style, muet, children }) {
         nativeControls={false}
         allowsPictureInPicture={false}
       />
-      {children}
-    </View>
-  );
-}
-
-/**
- * Vidéo arrêtée sur sa première image, façon vignette.
- * expo-video n'expose pas d'extraction de miniature : on charge la vidéo en
- * pause, ce qui affiche la première image sans rien lire.
- */
-function VideoFigee({ uri, style, children }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = false;
-    p.muted = true;
-    p.pause();
-  });
-
-  return (
-    <View style={style}>
-      <VideoView
-        style={StyleSheet.absoluteFill}
-        player={player}
-        contentFit="cover"
-        nativeControls={false}
-        allowsPictureInPicture={false}
-      />
-      <View style={s.voile} pointerEvents="none">
-        <View style={s.pastille}>
-          <Play size={14} color="#fff" />
+      {!lecture && (
+        <View style={s.voile} pointerEvents="none">
+          <View style={s.pastille}><Play size={14} color="#fff" /></View>
         </View>
-      </View>
+      )}
       {children}
     </View>
   );

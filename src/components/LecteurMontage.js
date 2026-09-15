@@ -33,6 +33,14 @@ export default function LecteurMontage({ clips = [], musique, style, muet = fals
     // Avec une musique, le son des clips est coupé : deux bandes-son
     // simultanées ne s'écoutent pas.
     p.muted = muet || !!musique;
+    // Même réglage que Media : on démarre après une demi-seconde de réserve
+    // au lieu de deux, sinon chaque changement de clip marque un temps.
+    p.bufferOptions = {
+      minBufferForPlayback: 0.5,
+      preferredForwardBufferDuration: 5,
+      prioritizeTimeOverSizeThreshold: true,
+      waitsToMinimizeStalling: false,
+    };
     p.play();
   });
 

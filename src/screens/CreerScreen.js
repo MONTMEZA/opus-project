@@ -54,7 +54,7 @@ export default function CreerScreen({
   createMetier, setCreateMetier, createVille, setCreateVille,
   createDestination, setCreateDestination,
   medias, setMedias, musique, setMusique,
-  onPublish, onErreur,
+  envoi, onPublish, onErreur,
 }) {
   const [occupe, setOccupe] = useState(false);
   const aUnVisuel = FORMATS_VISUELS.has(createType);
@@ -109,6 +109,21 @@ export default function CreerScreen({
 
   const plein = medias.length >= maximum;
   const Icone = (TYPES.find(([k]) => k === createType) || TYPES[0])[1];
+
+  /* Ce qui manque encore, dit ici plutôt que dans un bandeau fugace en haut
+     de l'écran : on appuie sur « Publier » tout en bas, et un message qui
+     apparaît à l'autre bout pendant trois secondes ne se voit pas. */
+  const manques = [];
+  if (aUnVisuel && medias.length === 0) {
+    manques.push(estMontage ? 'Ajoutez au moins un clip.' : 'Choisissez une photo ou une vidéo.');
+  }
+  if (createType === 'avantapres' && medias.length === 1) {
+    manques.push('Il manque la seconde photo (l\'après).');
+  }
+  if (dansLeFil && !createText.trim()) {
+    manques.push('Écrivez une description : elle apparaît sous la publication.');
+  }
+  const pret = manques.length === 0 && !envoi;
 
   return (
     <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">
@@ -268,9 +283,33 @@ export default function CreerScreen({
 
       <Field placeholder="Ville" value={createVille} onChangeText={setCreateVille} />
 
+      {manques.length > 0 && (
+        <View style={s.manques}>
+          {manques.map((m) => (
+            <Text key={m} style={s.manque}>• {m}</Text>
+          ))}
+        </View>
+      )}
+
+      {/* Un envoi de vidéo prend du temps : sans jauge, l'écran a l'air figé
+          et on appuie une deuxième fois. */}
+      {!!envoi && (
+        <View style={s.envoi}>
+          <View style={s.jaugeFond}>
+            <View style={[s.jaugeBarre, { width: `${Math.round((envoi.part || 0) * 100)}%` }]} />
+          </View>
+          <Text style={s.envoiTexte}>
+            Envoi {envoi.index} / {envoi.total} — {Math.round((envoi.part || 0) * 100)} %
+          </Text>
+        </View>
+      )}
+
       <BtnMain
         block
-        label={destination === 'portfolio' ? 'Ajouter à mon portfolio' : 'Publier'}
+        disabled={!pret}
+        label={envoi
+          ? 'Envoi en cours...'
+          : destination === 'portfolio' ? 'Ajouter à mon portfolio' : 'Publier'}
         onPress={onPublish}
         style={{ marginTop: 14, marginBottom: 30 }}
       />
@@ -337,4 +376,15 @@ const s = StyleSheet.create({
   destinationDetail: { fontSize: 10.5, color: C.muted, fontFamily: F.inter, marginTop: 1 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+
+  manques: {
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+    borderLeftWidth: 4, borderLeftColor: C.accent, padding: 10, gap: 3, marginTop: 12,
+  },
+  manque: { fontSize: 11.5, color: C.muted, fontFamily: F.inter, lineHeight: 17 },
+
+  envoi: { marginTop: 12, gap: 5 },
+  jaugeFond: { height: 4, backgroundColor: C.line },
+  jaugeBarre: { height: 4, backgroundColor: C.accent },
+  envoiTexte: { fontSize: 11, color: C.muted, fontFamily: F.inter6 },
 });

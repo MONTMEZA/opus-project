@@ -844,6 +844,21 @@ insert into storage.buckets (id, name, public) values
   ('documents',    'documents',    false)
 on conflict (id) do nothing;
 
+-- --------------------------------------------------------------------------
+--  Taille maximale par fichier.
+--
+--  Une photo tient dans 10 Mo, une vidéo de 20 secondes dans 50. Sans cette
+--  limite explicite, l'espace hérite du réglage du projet — et une vidéo
+--  était refusée par le serveur avec un code d'erreur que personne ne lit.
+--
+--  Attention : le projet Supabase a SA propre limite globale, réglée dans
+--  Storage → Settings (50 Mo par défaut). Celle-ci ne peut pas la dépasser.
+-- --------------------------------------------------------------------------
+update storage.buckets set file_size_limit = 50 * 1024 * 1024
+ where id in ('publications', 'avatars', 'bannieres');
+update storage.buckets set file_size_limit = 20 * 1024 * 1024
+ where id = 'documents';
+
 -- Lecture publique des médias affichés dans l'application
 drop policy if exists "lecture publique des medias" on storage.objects;
 create policy "lecture publique des medias" on storage.objects

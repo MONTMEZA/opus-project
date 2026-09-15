@@ -107,6 +107,8 @@ export default function OpusApp() {
   // Fichiers choisis pour la publication en cours, et sa bande-son.
   const [medias, setMedias] = useState([]);
   const [musique, setMusique] = useState(null);
+  // Progression de l'envoi : { index, total, part } ou null.
+  const [envoi, setEnvoi] = useState(null);
   const [createText, setCreateText] = useState('');
   const [createMetier, setCreateMetier] = useState(METIERS[0]);
   const [createVille, setCreateVille] = useState('');
@@ -372,6 +374,7 @@ export default function OpusApp() {
 
   /* ---------- création ---------- */
   const publish = async () => {
+    if (envoi) return;                     // envoi déjà en cours
     if (userType !== 'pro') {
       showBanner("Le fil d'actualité est réservé aux professionnels.");
       return;
@@ -401,20 +404,30 @@ export default function OpusApp() {
     let envoyes = medias;
     let urlMusique = musique ? musique.uri : null;
 
-    setLoading(true);
+    /* On ne met pas le voile de chargement : il masquerait la jauge. C'est
+       elle qui dit que l'application travaille, et combien il reste. */
+    const total = medias.length + (musique ? 1 : 0);
+    setEnvoi({ index: 1, total, part: 0 });
     try {
       /* Les fichiers partent d'abord vers Supabase Storage : un chemin local
          « file://… » ne veut rien dire sur le téléphone de quelqu'un d'autre. */
       const uid = api.getUserId();
       envoyes = [];
       for (const uri of medias) {
+        const rang = envoyes.length + 1;
+        setEnvoi({ index: rang, total, part: 0 });
         envoyes.push(estFichierLocal(uri)
-          ? await envoyerFichier({ uri, bucket: 'publications', nom: 'media', userId: uid })
+          ? await envoyerFichier({
+              uri, bucket: 'publications', nom: 'media', userId: uid,
+              onProgress: (part) => setEnvoi({ index: rang, total, part }),
+            })
           : uri);
       }
       if (musique && estFichierLocal(musique.uri)) {
+        setEnvoi({ index: total, total, part: 0 });
         urlMusique = await envoyerFichier({
           uri: musique.uri, bucket: 'publications', nom: 'musique', userId: uid,
+          onProgress: (part) => setEnvoi({ index: total, total, part }),
         });
       }
 
@@ -432,11 +445,11 @@ export default function OpusApp() {
         for (const url of envoyes) await api.ajouterAuPortfolio(url);
       }
     } catch (e) {
-      setLoading(false);
+      setEnvoi(null);
       showBanner(`Publication non enregistrée : ${e.message || e}`);
       return;
     }
-    setLoading(false);
+    setEnvoi(null);
 
     const couverture = envoyes[0] || POST_GRADIENTS[0];
     if (versLeFil) {
@@ -1005,6 +1018,7 @@ export default function OpusApp() {
             createDestination={createDestination} setCreateDestination={setCreateDestination}
             medias={medias} setMedias={setMedias}
             musique={musique} setMusique={setMusique}
+            envoi={envoi}
             onErreur={showBanner}
             createText={createText} setCreateText={setCreateText}
             createMetier={createMetier} setCreateMetier={setCreateMetier}
