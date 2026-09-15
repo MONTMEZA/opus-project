@@ -2,23 +2,23 @@
  * Carte publication du fil classique (.post-card du prototype).
  * Gère aussi les publications sponsorisées (.ad-card).
  */
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import {
-  Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn, Field,
+  Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn,
 } from './ui';
+import Commentaires, { nombreCommentaires } from './Commentaires';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
   MessageCircle, Phone, FileText, User, Send, Play,
 } from './icons';
 
 export default function PostCard({
-  post, pro, following, onLike, onFollow, onView, onHide,
-  commentsOpen, onToggleComments, onAddComment,
+  post, pro, pros = {}, following, onLike, onFollow, onView, onHide,
+  commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
 }) {
-  const [draft, setDraft] = useState('');
 
   /* --- publication sponsorisée --- */
   if (post.type === 'ad') {
@@ -83,7 +83,7 @@ export default function PostCard({
         </Pressable>
         <Pressable style={s.action} onPress={() => onToggleComments(post.id)}>
           <MessageSquare size={17} color={C.muted} />
-          <Text style={s.actionText}>{post.comments.length}</Text>
+          <Text style={s.actionText}>{nombreCommentaires(post.comments)}</Text>
         </Pressable>
         <Pressable style={s.action} onPress={() => onShare('Lien de la publication copié.')}>
           <Share2 size={16} color={C.muted} />
@@ -110,30 +110,12 @@ export default function PostCard({
       {/* commentaires */}
       {commentsOpen && (
         <View style={s.comments}>
-          {post.comments.map((c) => (
-            <Text style={s.commentRow} key={c.id}>
-              <Text style={s.commentAuthor}>{c.auteur}</Text> {c.texte}
-            </Text>
-          ))}
-          {post.comments.length === 0 && (
-            <Text style={s.commentEmpty}>Aucun commentaire pour l'instant.</Text>
-          )}
-          <View style={s.commentInputRow}>
-            <Field
-              style={{ flex: 1, borderColor: C.line, paddingVertical: 7, paddingHorizontal: 10 }}
-              placeholder="Ajouter un commentaire..."
-              value={draft}
-              onChangeText={setDraft}
-            />
-            <Pressable
-              style={s.commentSend}
-              onPress={() => {
-                if (draft.trim()) { onAddComment(post.id, draft.trim()); setDraft(''); }
-              }}
-            >
-              <Send size={14} color="#fff" />
-            </Pressable>
-          </View>
+          <Commentaires
+            commentaires={post.comments}
+            pros={pros}
+            onVoirProfil={onVoirCommentateur}
+            onEnvoyer={(texte, parentId) => onAddComment(post.id, texte, parentId)}
+          />
         </View>
       )}
     </View>
@@ -194,11 +176,6 @@ const s = StyleSheet.create({
   contactItemText: { fontSize: 12, color: C.ink, fontFamily: F.inter },
 
   comments: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 8, paddingHorizontal: 12, paddingBottom: 10 },
-  commentRow: { fontSize: 12, paddingVertical: 4, color: C.ink, fontFamily: F.inter },
-  commentAuthor: { fontFamily: F.inter6 },
-  commentEmpty: { fontSize: 11.5, color: C.muted, paddingVertical: 4, fontFamily: F.inter },
-  commentInputRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  commentSend: { backgroundColor: C.ink, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
 
   adTag: {
     position: 'absolute', top: 8, left: 8, zIndex: 2,

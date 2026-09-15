@@ -26,6 +26,7 @@ import ConversationScreen from './screens/ConversationScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
+import ProfilPublicScreen from './screens/ProfilPublicScreen';
 import ProfilEditScreen from './screens/ProfilEditScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
@@ -68,6 +69,9 @@ export default function OpusApp() {
   const [notifications, setNotifications] = useState([]);
   const [viewedProId, setViewedProId] = useState(null);
   const [commentsPostId, setCommentsPostId] = useState(null);  // fil vidéo
+  // Fiche publique d'un particulier, ouverte depuis un commentaire.
+  const [profilPublic, setProfilPublic] = useState(null);
+  const [profilPublicCharge, setProfilPublicCharge] = useState(false);
   const [navHeight, setNavHeight] = useState(0);               // hauteur de la nav flottante
 
   /* Espace « Demandes » : l'inverse du fil, réservé aux particuliers qui publient. */
@@ -172,6 +176,11 @@ export default function OpusApp() {
   /** Mon compte professionnel : le mien s'il existe, sinon le premier de la liste. */
   const myProId = pros[api.getUserId()] ? api.getUserId() : Object.keys(pros)[0];
 
+  /** Ma photo, d'où qu'elle vienne : fiche pro pour un artisan, compte sinon. */
+  const monAvatar = userType === 'pro' && pros[myProId]
+    ? pros[myProId].avatarUrl
+    : monProfil.avatarUrl;
+
   /* ---------- actions publication ---------- */
   const toggleLike = (id) => {
     let liked = false;
@@ -197,11 +206,60 @@ export default function OpusApp() {
   const toggleComments = (id) => setOpenCommentsId((c) => (c === id ? null : id));
   const toggleContact = (id) => setOpenContactId((c) => (c === id ? null : id));
 
-  const addComment = (id, texte) => {
-    setPosts((ps) => ps.map((p) => (p.id === id
-      ? { ...p, comments: [...p.comments, { id: `local-${Date.now()}`, auteur: 'Vous', texte }] }
-      : p)));
-    api.addComment(id, texte).catch(() => showBanner("Le commentaire n'a pas pu être envoyé."));
+  /**
+   * Ajoute un commentaire, ou une réponse à un commentaire existant.
+   * On l'affiche tout de suite, avant la réponse du serveur : sinon
+   * l'utilisateur tape, et rien ne se passe pendant une seconde.
+   */
+  const addComment = (postId, texte, parentId = null) => {
+    const nouveau = {
+      id: `local-${Date.now()}`,
+      auteurId: api.getUserId(),
+      auteur: userType === 'pro' && pros[myProId]
+        ? pros[myProId].entreprise
+        : (monProfil.nom || 'Vous'),
+      auteurType: userType,
+      avatarUrl: monAvatar,
+      texte,
+      time: "À l'instant",
+      reponses: [],
+    };
+
+    setPosts((ps) => ps.map((p) => {
+      if (p.id !== postId) return p;
+      if (!parentId) return { ...p, comments: [...p.comments, nouveau] };
+      return {
+        ...p,
+        comments: p.comments.map((c) => (c.id === parentId
+          ? { ...c, reponses: [...(c.reponses || []), nouveau] }
+          : c)),
+      };
+    }));
+
+    api.addComment(postId, texte, parentId)
+      .catch(() => showBanner("Le commentaire n'a pas pu être envoyé."));
+  };
+
+  /**
+   * Toucher le nom sous un commentaire. Un professionnel a sa page ; un
+   * particulier a sa fiche publique, qu'on va chercher à la demande.
+   */
+  const voirCommentateur = async (c) => {
+    if (!c.auteurId) return;
+    setOpenContactId(null);
+    if (pros[c.auteurId]) { viewProfile(c.auteurId); return; }
+
+    setScreen('profilPublic');
+    setProfilPublicCharge(true);
+    // Repli du mode démo : la fiche se reconstruit depuis le commentaire.
+    setProfilPublic({ id: c.auteurId, nom: c.auteur, avatarUrl: c.avatarUrl, demandes: [] });
+    try {
+      const fiche = await api.chargerProfilPublic(c.auteurId);
+      if (fiche) setProfilPublic(fiche);
+    } catch (e) {
+      showBanner("Ce profil n'a pas pu être chargé.");
+    }
+    setProfilPublicCharge(false);
   };
 
   const toggleFollow = (proId) => {
@@ -535,6 +593,41 @@ export default function OpusApp() {
     setScreen('messages');
   };
 
+  /**
+   * Ouvrir une conversation avec un particulier depuis sa fiche publique.
+   * Même mécanique que la réponse à une demande, sans la demande.
+   */
+  const contacterParticulier = async (profil) => {
+    const contactId = `part-${profil.id}`;
+    let conv = conversations.find((c) => c.contact && c.contact.id === contactId);
+
+    if (!conv) {
+      let id = `local-${Date.now()}`;
+      try {
+        const row = await api.createConversationWithClient(profil.id);
+        if (row) id = row.id;
+      } catch (e) {
+        showBanner("La conversation n'a pas pu être ouverte.");
+        return;
+      }
+      conv = {
+        id,
+        proId: null,
+        contact: {
+          id: contactId,
+          titre: profil.nom,
+          metier: profil.ville || 'Particulier',
+          avatarUrl: profil.avatarUrl || null,
+        },
+        messages: [],
+      };
+      setConversations((cs) => [conv, ...cs]);
+    }
+
+    setActiveConvId(conv.id);
+    setScreen('messages');
+  };
+
   /* ---------- SOS : intervention d'urgence ---------- */
 
   /**
@@ -672,10 +765,12 @@ export default function OpusApp() {
   }
 
   const showBack = screen === 'profilPro' || screen === 'creer' || screen === 'sos'
-    || screen === 'profilEdit' || (screen === 'messages' && activeConvId);
+    || screen === 'profilEdit' || screen === 'profilPublic'
+    || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'profilPro'
     ? (pros[viewedProId] ? pros[viewedProId].entreprise : '')
+    : screen === 'profilPublic' ? (profilPublic ? profilPublic.nom : 'Profil')
     : screen === 'sos' ? 'SOS — Urgence'
     : screen === 'profilEdit' ? 'Modifier mon profil'
     : screen === 'creer' ? 'Publier'
@@ -722,6 +817,7 @@ export default function OpusApp() {
             ) : null}
             onLike={toggleLike} onFollow={toggleFollow} onView={viewProfile} onHide={hidePost}
             onToggleComments={toggleComments} onAddComment={addComment}
+            onVoirCommentateur={voirCommentateur}
             onSave={toggleSave} onToggleContact={toggleContact}
             onContact={handleContact} onShare={showBanner}
             onComment={(post) => setCommentsPostId(post.id)}
@@ -823,6 +919,14 @@ export default function OpusApp() {
           />
         )}
 
+        {screen === 'profilPublic' && (
+          <ProfilPublicScreen
+            profil={profilPublic}
+            chargement={profilPublicCharge && !profilPublic}
+            onContacter={contacterParticulier}
+          />
+        )}
+
         {screen === 'profilPro' && viewedProId && pros[viewedProId] && (
           <ProfilProScreen
             pro={pros[viewedProId]} pros={pros}
@@ -851,8 +955,10 @@ export default function OpusApp() {
       <CommentsSheet
         visible={!!commentsPost}
         post={commentsPost}
+        pros={pros}
         onClose={() => setCommentsPostId(null)}
         onAddComment={addComment}
+        onVoirCommentateur={voirCommentateur}
       />
     </View>
   );

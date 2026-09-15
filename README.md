@@ -318,6 +318,38 @@ ajoute **à la fin** du tableau. C'est important : `portfolio[1]` reste la toute
 première réalisation, donc la bannière par défaut du profil ne change pas à
 chaque publication.
 
+## Les commentaires et leurs réponses
+
+Un commentaire, et ses réponses. **Deux niveaux, pas davantage** — comme
+Facebook, Instagram et TikTok, et ce n'est pas un hasard : à chaque niveau
+supplémentaire le texte s'indente, et sur un téléphone la troisième réponse se
+lirait dans une colonne de six mots de large.
+
+Répondre à une réponse reste possible, sans limite : la nouvelle réponse
+rejoint le même fil, précédée d'un **« @Nom »** ajouté automatiquement. La
+conversation continue, la lisibilité aussi.
+
+La règle est tenue par **la base de données**, pas par l'écran : le trigger
+`limite_profondeur_commentaire` rattache au commentaire d'origine toute
+réponse visant une réponse. Un client modifié ne peut pas créer de fil sans
+fin.
+
+### Toucher un nom
+
+Le nom et la photo sous chaque commentaire sont tactiles :
+
+| Auteur | Où l'on arrive |
+|---|---|
+| **Professionnel** | Sa page publique : réalisations, avis, documents vérifiés |
+| **Particulier** | Sa fiche publique : nom, ville, demandes publiées, bouton « Envoyer un message » |
+
+La fiche d'un particulier ne montre que ce qu'il a lui-même rendu public.
+Jamais son adresse ni son courriel : ce n'est pas parce qu'une donnée est en
+base qu'elle a sa place à l'écran.
+
+Le compteur sous une publication additionne les commentaires **et** leurs
+réponses.
+
 ## Le SOS et l'espace Demandes
 
 Deux fonctions qui distinguent Opus des plateformes de mise en relation classiques.

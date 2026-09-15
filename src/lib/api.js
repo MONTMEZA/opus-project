@@ -238,7 +238,7 @@ export async function loadAll() {
     supabase.from('reviews').select('*, users:author_id(nom)').order('created_at', { ascending: false }),
     supabase.from('professional_partners').select('*'),
     supabase.from('posts').select('*').order('created_at', { ascending: false }),
-    supabase.from('comments').select('*, users:author_id(nom, avatar_url)').order('created_at'),
+    supabase.from('comments').select('*, users:author_id(nom, avatar_url, type)').order('created_at'),
     supabase.from('post_likes').select('post_id').eq('user_id', uid),
     supabase.from('saved_posts').select('post_id').eq('user_id', uid),
     supabase.from('follows').select('following_id').eq('follower_id', uid),
@@ -270,12 +270,26 @@ export async function loadAll() {
     pros[row.id] = rowToPro(row, reviewsByPro[row.id] || [], partnersByPro[row.id] || []);
   });
 
+  /* Les commentaires arrivent à plat ; on les remonte en fils de deux
+     niveaux. Les lignes sont déjà triées par date, donc un parent précède
+     toujours ses réponses et une seule passe suffit. */
   const commentsByPost = {};
+  const parIdentifiant = {};
   (commentsRes.data || []).forEach((c) => {
-    (commentsByPost[c.post_id] ||= []).push({
-      id: c.id, auteur: c.users ? c.users.nom : 'Client', texte: c.texte,
+    const noeud = {
+      id: c.id,
+      auteurId: c.author_id,
+      auteur: c.users ? c.users.nom : 'Client',
+      auteurType: c.users ? c.users.type : 'particulier',
       avatarUrl: c.users ? c.users.avatar_url : null,
-    });
+      texte: c.texte,
+      time: relativeTime(c.created_at),
+      reponses: [],
+    };
+    parIdentifiant[c.id] = noeud;
+    const parent = c.parent_id ? parIdentifiant[c.parent_id] : null;
+    if (parent) parent.reponses.push(noeud);
+    else (commentsByPost[c.post_id] ||= []).push(noeud);
   });
 
   const likedSet = new Set((likesRes.data || []).map((l) => l.post_id));
@@ -388,11 +402,42 @@ export const setFollow = !hasSupabase ? noop : async (proId, following) => {
   }
 };
 
-export const addComment = !hasSupabase ? noop : async (postId, texte) => {
+export const addComment = !hasSupabase ? noop : async (postId, texte, parentId = null) => {
   const { data } = await supabase.from('comments')
-    .insert({ post_id: postId, author_id: currentUserId, texte })
+    .insert({ post_id: postId, author_id: currentUserId, texte, parent_id: parentId })
     .select().single();
   return data;
+};
+
+/**
+ * Fiche publique d'un particulier : ce qu'on voit en touchant son nom sous
+ * un commentaire. Un professionnel a déjà sa page ; un particulier n'avait
+ * rien, et son nom n'était donc cliquable nulle part.
+ *
+ * On ne montre que ce qu'il a lui-même rendu public : son nom, sa ville, et
+ * les demandes qu'il a publiées. Jamais son adresse ni son courriel.
+ */
+export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
+  const [uRes, dRes] = await Promise.all([
+    supabase.from('users').select('id, nom, avatar_url, ville, type, created_at')
+      .eq('id', userId).maybeSingle(),
+    supabase.from('demandes').select('*').eq('client_id', userId)
+      .order('created_at', { ascending: false }),
+  ]);
+  if (uRes.error) throw uRes.error;
+  if (!uRes.data) return null;
+  return {
+    id: uRes.data.id,
+    nom: uRes.data.nom,
+    avatarUrl: uRes.data.avatar_url,
+    ville: uRes.data.ville,
+    type: uRes.data.type,
+    inscritLe: uRes.data.created_at,
+    demandes: (dRes.data || []).map((d) => ({
+      id: d.id, metier: d.metier, ville: d.ville || 'Non précisée',
+      texte: d.texte, media: d.media, time: relativeTime(d.created_at),
+    })),
+  };
 };
 
 export const createPost = !hasSupabase ? noop : async ({ type, texte, media, metier, ville }) => {

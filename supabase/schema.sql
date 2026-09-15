@@ -132,6 +132,45 @@ create table if not exists public.comments (
   created_at timestamptz not null default now()
 );
 
+-- Réponse à un commentaire. Supprimer un commentaire emporte ses réponses.
+alter table public.comments add column if not exists parent_id uuid
+  references public.comments(id) on delete cascade;
+create index if not exists idx_comments_parent on public.comments(parent_id);
+
+-- --------------------------------------------------------------------------
+--  Deux niveaux, pas davantage.
+--
+--  Facebook, Instagram et TikTok s'arrêtent tous là, et ce n'est pas un
+--  hasard : à chaque niveau supplémentaire le texte s'indente, et sur un
+--  téléphone la troisième réponse se lit dans une colonne de six mots de
+--  large. Répondre à une réponse reste possible — la réponse rejoint le même
+--  fil, avec un « @Nom » en tête, comme partout ailleurs.
+--
+--  La règle est tenue par la base et non par l'écran : un client modifié ne
+--  peut pas créer de fil sans fin.
+-- --------------------------------------------------------------------------
+create or replace function public.limite_profondeur_commentaire()
+returns trigger language plpgsql as $$
+declare grand_parent uuid;
+begin
+  if new.parent_id is null then return new; end if;
+
+  select parent_id into grand_parent from public.comments where id = new.parent_id;
+  if not found then
+    raise exception 'Le commentaire parent n''existe pas';
+  end if;
+  -- Le parent est déjà une réponse : on rattache au commentaire d'origine.
+  if grand_parent is not null then
+    new.parent_id := grand_parent;
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists trg_limite_profondeur_commentaire on public.comments;
+create trigger trg_limite_profondeur_commentaire
+  before insert or update on public.comments
+  for each row execute function public.limite_profondeur_commentaire();
+
 create table if not exists public.follows (
   follower_id  uuid references public.users(id) on delete cascade,
   following_id uuid references public.users(id) on delete cascade,

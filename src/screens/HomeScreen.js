@@ -23,7 +23,7 @@ export default function HomeScreen({
   posts, pros, feedMode, setFeedMode, feedTab, setFeedTab,
   followingIds, savedIds, openCommentsId, openContactId, bottomInset = 0, rappel,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
-  onSave, onToggleContact, onContact, onShare, onComment,
+  onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
 }) {
   const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
@@ -101,6 +101,8 @@ export default function HomeScreen({
             <PostCard
               post={p}
               pro={p.proId ? pros[p.proId] : null}
+              pros={pros}
+              onVoirCommentateur={onVoirCommentateur}
               following={p.proId ? followingIds.has(p.proId) : false}
               onLike={onLike}
               onFollow={onFollow}

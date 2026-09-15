@@ -3,27 +3,24 @@
  * Utilisé par le fil vidéo plein écran, où il n'y a pas la place
  * de déplier les commentaires dans la carte comme sur le fil classique.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Modal, View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform, StyleSheet,
+  Modal, View, Text, Pressable, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme';
-import { Field, IconBtn, EmptyState } from './ui';
-import { X, Send } from './icons';
+import { IconBtn } from './ui';
+import Commentaires, { nombreCommentaires } from './Commentaires';
+import { X } from './icons';
 
-export default function CommentsSheet({ visible, post, onClose, onAddComment }) {
-  const [draft, setDraft] = useState('');
+export default function CommentsSheet({
+  visible, post, pros = {}, onClose, onAddComment, onVoirCommentateur,
+}) {
   const insets = useSafeAreaInsets();
 
   if (!visible || !post) return null;
   const comments = post.comments || [];
-
-  const envoyer = () => {
-    if (!draft.trim()) return;
-    onAddComment(post.id, draft.trim());
-    setDraft('');
-  };
+  const total = nombreCommentaires(comments);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -37,36 +34,19 @@ export default function CommentsSheet({ visible, post, onClose, onAddComment }) 
 
             <View style={s.head}>
               <Text style={s.headText}>
-                {comments.length} {comments.length > 1 ? 'commentaires' : 'commentaire'}
+                {total} {total > 1 ? 'commentaires' : 'commentaire'}
               </Text>
               <IconBtn onPress={onClose}><X size={16} color={C.ink} /></IconBtn>
             </View>
 
-            <ScrollView style={s.list} keyboardShouldPersistTaps="handled">
-              {comments.map((c) => (
-                <View key={String(c.id)} style={s.row}>
-                  <Text style={s.auteur}>{c.auteur}</Text>
-                  <Text style={s.texte}>{c.texte}</Text>
-                </View>
-              ))}
-              {comments.length === 0 && (
-                <EmptyState>Aucun commentaire — lancez la discussion.</EmptyState>
-              )}
-            </ScrollView>
-
-            <View style={s.inputRow}>
-              <Field
-                style={{ flex: 1, paddingVertical: 9, paddingHorizontal: 12, fontSize: 12.5 }}
-                placeholder="Ajouter un commentaire..."
-                value={draft}
-                onChangeText={setDraft}
-                onSubmitEditing={envoyer}
-                returnKeyType="send"
-              />
-              <Pressable style={s.send} onPress={envoyer}>
-                <Send size={16} color="#fff" />
-              </Pressable>
-            </View>
+            <Commentaires
+              scroll
+              style={s.list}
+              commentaires={comments}
+              pros={pros}
+              onVoirProfil={(c) => { onClose(); onVoirCommentateur(c); }}
+              onEnvoyer={(texte, parentId) => onAddComment(post.id, texte, parentId)}
+            />
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -76,7 +56,9 @@ export default function CommentsSheet({ visible, post, onClose, onAddComment }) 
 
 const s = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheetWrap: { width: '100%' },
+  // flex:1 est indispensable : sans hauteur connue, le « 62% » du panneau
+  // ne se résout pas et le panneau s'écrase sur son contenu.
+  sheetWrap: { flex: 1, width: '100%', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: C.surface, width: '100%', height: '62%',
     paddingTop: 8, borderTopWidth: 1, borderTopColor: C.line,
@@ -92,12 +74,4 @@ const s = StyleSheet.create({
   },
   headText: { fontFamily: F.oswald6, fontSize: 13, color: C.ink },
   list: { flex: 1, paddingHorizontal: 16 },
-  row: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line },
-  auteur: { fontFamily: F.inter6, fontSize: 12, color: C.ink, marginBottom: 2 },
-  texte: { fontSize: 12.5, lineHeight: 18, color: C.ink, fontFamily: F.inter },
-  inputRow: {
-    flexDirection: 'row', gap: 8, paddingTop: 10, paddingHorizontal: 16,
-    borderTopWidth: 1, borderTopColor: C.line,
-  },
-  send: { backgroundColor: C.ink, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
 });
