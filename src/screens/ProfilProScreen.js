@@ -15,9 +15,12 @@ import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAut
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import {
-  BadgeCheck, ShieldCheck, ShieldX, Sparkles, ClipboardCheck, MessageCircle,
+  BadgeCheck, ShieldCheck, ShieldX, FileText, Sparkles, ClipboardCheck, MessageCircle,
 } from '../components/icons';
 import { EtatVerificationPublic } from '../components/RappelVerification';
+import {
+  detailDocument, VALIDE, ATTENTE, REFUSE, ABSENT,
+} from '../lib/verification';
 import { avgReviews } from '../data/demo';
 import { aiSummarizeReviews } from '../lib/ai';
 
@@ -35,13 +38,22 @@ function CritereBar({ label, value }) {
 }
 
 /* --- une ligne du bloc "Informations vérifiées" --- */
-function VerifRow({ ok, label, value }) {
-  const color = ok ? C.ok : C.bad;
+/* Trois états et non deux : « reçu, en cours de vérification » n'est ni un
+   feu vert ni un feu rouge, et l'afficher en rouge découragerait à tort. */
+const APPARENCE = {
+  [VALIDE]: { couleur: C.ok, Icone: ShieldCheck },
+  [ATTENTE]: { couleur: C.accent2, Icone: FileText },
+  [REFUSE]: { couleur: C.bad, Icone: ShieldX },
+  [ABSENT]: { couleur: C.bad, Icone: ShieldX },
+};
+
+function VerifRow({ etat, label, value }) {
+  const { couleur, Icone } = APPARENCE[etat] || APPARENCE[ABSENT];
   return (
     <View style={s.verifRow}>
-      {ok ? <ShieldCheck size={16} color={color} /> : <ShieldX size={16} color={color} />}
+      <Icone size={16} color={couleur} />
       <Text style={s.verifLabel}>{label}</Text>
-      <Text style={[s.verifValue, { color }]}>{value}</Text>
+      <Text style={[s.verifValue, { color: couleur }]}>{value}</Text>
     </View>
   );
 }
@@ -61,6 +73,8 @@ export default function ProfilProScreen({
 
   const reviews = pro.reviews || [];
   const avg = avgReviews(pro);
+  const kbisDetail = detailDocument(pro, 'kbis');
+  const assuranceDetail = detailDocument(pro, 'assurance');
 
   const submitReview = () => {
     if (!rTexte.trim()) return;
@@ -133,16 +147,20 @@ export default function ProfilProScreen({
       <EtatVerificationPublic pro={pro} />
       <View style={s.verifBlock}>
         <VerifRow
-          ok={pro.assurance.valide}
+          etat={assuranceDetail.etat}
           label="Assurance décennale"
-          value={pro.assurance.valide ? `À jour · exp. ${pro.assurance.expire}` : 'Non communiquée'}
+          value={assuranceDetail.valeur}
         />
         <VerifRow
-          ok={pro.kbis.valide}
+          etat={kbisDetail.etat}
           label="Extrait Kbis"
-          value={pro.kbis.valide ? `À jour · maj ${pro.kbis.maj}` : 'Non communiqué'}
+          value={kbisDetail.valeur}
         />
-        <VerifRow ok={pro.rge} label="Certification RGE" value={pro.rge ? 'Certifié' : 'Non certifié'} />
+        <VerifRow
+          etat={pro.rge ? VALIDE : ABSENT}
+          label="Certification RGE"
+          value={pro.rge ? 'Certifié' : 'Non certifié'}
+        />
       </View>
 
       {/* --- réalisations --- */}

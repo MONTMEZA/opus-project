@@ -9,6 +9,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import { ShieldCheck, ShieldX, FileText, ChevronRight } from './icons';
+import { toutValide, etatKbis, etatAssurance, ATTENTE, VALIDE } from '../lib/verification';
 
 const ETATS = {
   non_soumis: {
@@ -61,7 +62,11 @@ export default function RappelVerification({ statut, note, onAction, style }) {
 
 /** Version publique, visible par les particuliers sur le profil d'un pro. */
 export function EtatVerificationPublic({ pro }) {
-  const verifie = pro.verificationStatut === 'verifie' || pro.verifie;
+  // Même source que le reste de l'application : le badge n'apparaît que si
+  // les deux documents sont réellement validés.
+  const verifie = toutValide(pro);
+  const enCours = !verifie
+    && (etatKbis(pro) === ATTENTE || etatAssurance(pro) === ATTENTE);
 
   if (verifie) {
     return (
@@ -78,18 +83,48 @@ export function EtatVerificationPublic({ pro }) {
     );
   }
 
+  if (enCours) {
+    return (
+      <View style={[s.public, { borderLeftColor: C.accent2 }]}>
+        <FileText size={16} color={C.accent2} />
+        <View style={{ flex: 1 }}>
+          <Text style={[s.publicTitre, { color: C.accent2 }]}>Vérification en cours</Text>
+          <Text style={s.publicTexte}>
+            Ce professionnel a transmis ses justificatifs. Ils sont en cours de
+            contrôle : le badge vérifié n'est pas encore accordé.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[s.public, { borderLeftColor: C.bad }]}>
       <ShieldX size={16} color={C.bad} />
       <View style={{ flex: 1 }}>
         <Text style={[s.publicTitre, { color: C.bad }]}>Profil non vérifié</Text>
         <Text style={s.publicTexte}>
-          Ce professionnel n'a pas encore fourni son extrait Kbis ni son attestation
-          d'assurance décennale. Demandez-les-lui avant tout engagement.
+          {texteManquant(pro)} Demandez-{manquantsDe(pro).length > 1 ? 'les' : 'le'}-lui
+          avant tout engagement.
         </Text>
       </View>
     </View>
   );
+}
+
+/** Ne nomme que les justificatifs réellement manquants. */
+function manquantsDe(pro) {
+  const liste = [];
+  if (etatKbis(pro) !== VALIDE) liste.push('son extrait Kbis');
+  if (etatAssurance(pro) !== VALIDE) liste.push("son attestation d'assurance décennale");
+  return liste;
+}
+
+function texteManquant(pro) {
+  const liste = manquantsDe(pro);
+  if (liste.length === 0) return 'Les justificatifs de ce professionnel sont incomplets.';
+  if (liste.length === 1) return `Ce professionnel n'a pas fourni ${liste[0]}.`;
+  return `Ce professionnel n'a fourni ni ${liste[0]} ni ${liste[1]}.`;
 }
 
 function formatDate(iso) {

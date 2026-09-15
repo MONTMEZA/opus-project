@@ -192,12 +192,24 @@ vous qui décidez.
 1. Supabase → **Storage** → espace **documents** → ouvrez le dossier portant
    l'identifiant de l'artisan et regardez les fichiers
 2. Supabase → **Table Editor** → **professional_profiles** → trouvez sa ligne
-3. Passez **`verification_statut`** à `verifie` et **`verifie`** à `true`
-4. Renseignez **`verifie_le`** avec la date du jour
+3. Cochez **`kbis_valide`** si l'extrait Kbis est bon, et renseignez
+   **`kbis_maj`** (par exemple `03/2026`)
+4. Cochez **`assurance_valide`** si l'attestation est bonne, et renseignez
+   **`assurance_expire`** (par exemple `12/2026`)
 
-Le badge apparaît alors sur son profil public. Pour refuser, mettez
-`verification_statut` à `refuse` et expliquez pourquoi dans
-`verification_note` : l'artisan lira la raison dans son écran de profil.
+C'est tout. Les colonnes **`verifie`**, **`verification_statut`** et
+**`verifie_le`** se remplissent toutes seules : la base contient une règle
+(`synchronise_verification`) qui accorde le badge **si et seulement si** les
+deux documents sont validés.
+
+C'est volontaire, et c'est important : l'extrait Kbis est ce qui prouve
+l'existence légale de l'entreprise, donc son SIRET. Tant qu'il n'est pas
+validé, l'application n'écrit nulle part que le SIRET est vérifié. Et si vous
+dé-cochez `assurance_valide` le jour où une attestation expire, le badge tombe
+immédiatement, sur le profil comme dans les listes.
+
+Pour refuser, mettez `verification_statut` à `refuse` et expliquez pourquoi
+dans `verification_note` : l'artisan lira la raison dans son écran de profil.
 
 L'espace **documents** est privé : ces fichiers ne sont lisibles que par leur
 propriétaire et par vous depuis le tableau de bord. Ils n'apparaissent jamais

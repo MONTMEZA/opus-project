@@ -57,14 +57,14 @@ function toneIndex(seed) {
   return h % AVATAR_TONES.length;
 }
 
-export function Avatar({ seed = 0, size = 40, uri, ring = 0 }) {
+export function Avatar({ seed = 0, size = 40, uri, ring = 0, ringColor = C.surface }) {
   const base = {
     width: size,
     height: size,
     borderRadius: size / 2,
     backgroundColor: AVATAR_TONES[toneIndex(seed)],
   };
-  const withRing = ring ? { ...base, borderWidth: ring, borderColor: C.surface } : base;
+  const withRing = ring ? { ...base, borderWidth: ring, borderColor: ringColor } : base;
   if (uri) return <Image source={{ uri }} style={withRing} />;
   return <View style={withRing} />;
 }

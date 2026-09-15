@@ -387,6 +387,47 @@ create trigger trg_followers_count
   after insert or delete on public.follows
   for each row execute function public.maj_followers_count();
 
+-- --------------------------------------------------------------------------
+--  10 bis. LE BADGE « VÉRIFIÉ » NE PEUT PAS ÊTRE POSÉ À LA MAIN
+--
+--  L'extrait Kbis prouve l'existence légale de l'entreprise — donc son
+--  SIRET. L'attestation prouve la couverture décennale. Le badge exige les
+--  deux, et c'est la base qui le garantit : sans cela, un profil pouvait
+--  afficher « SIRET vérifié » alors qu'aucun document n'avait été envoyé.
+--
+--  Concrètement, pour vérifier un professionnel depuis Supabase, il suffit
+--  de passer kbis_valide et assurance_valide à true : verifie,
+--  verification_statut et verifie_le suivent tout seuls.
+-- --------------------------------------------------------------------------
+create or replace function public.synchronise_verification()
+returns trigger language plpgsql as $$
+begin
+  if new.kbis_valide and new.assurance_valide then
+    new.verifie            := true;
+    new.verification_statut := 'verifie';
+    new.verifie_le         := coalesce(new.verifie_le, now());
+  else
+    new.verifie    := false;
+    new.verifie_le := null;
+    -- On ne touche pas à 'refuse' : c'est une décision explicite.
+    if new.verification_statut = 'verifie' then
+      new.verification_statut := case
+        when new.kbis_url is not null or new.assurance_url is not null then 'en_attente'
+        else 'non_soumis'
+      end;
+    end if;
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists trg_synchronise_verification on public.professional_profiles;
+create trigger trg_synchronise_verification
+  before insert or update on public.professional_profiles
+  for each row execute function public.synchronise_verification();
+
+-- Remet d'aplomb les fiches déjà en base (le trigger s'applique à la mise à jour).
+update public.professional_profiles set verifie = verifie;
+
 -- ==========================================================================
 --  SÉCURITÉ (Row Level Security)
 --  Règle générale : tout le monde peut LIRE le contenu public,

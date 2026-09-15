@@ -16,6 +16,7 @@ import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import { BadgeCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
+import { resumeVerification, toutValide } from '../lib/verification';
 import { avgReviews } from '../data/demo';
 
 function Stat({ value, label }) {
@@ -122,8 +123,11 @@ export default function ProfilOwnScreen({
             <Text style={s.metier}>{me.metier} · {me.ville}</Text>
           </>
         )}
-        <Text style={s.sub}>
-          SIRET {me.siret} vérifié · {me.assurance.valide ? 'Assurance décennale à jour' : 'Assurance non renseignée'}
+        {/* Le texte est déduit des documents réellement validés : il ne peut
+            plus annoncer « vérifié » pendant que le rappel juste en dessous
+            réclame les mêmes justificatifs. */}
+        <Text style={[s.sub, !toutValide(me) && { color: C.muted }]}>
+          {resumeVerification(me)}
         </Text>
         <View style={s.stats}>
           <Stat value={me.portfolio.length} label="Réalisations" />
