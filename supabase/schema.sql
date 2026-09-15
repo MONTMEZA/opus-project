@@ -104,6 +104,22 @@ create table if not exists public.posts (
     check ((is_ad = true and annonceur is not null) or (is_ad = false and author_id is not null))
 );
 
+-- --------------------------------------------------------------------------
+--  De vrais fichiers, et un montage.
+--
+--  `media` porte la vignette : la photo, ou la première image de la vidéo.
+--  `medias` porte la suite complète — une photo unique n'en a qu'une, un
+--  montage en a plusieurs, lues à la file.
+--  `musique` est la bande-son du montage, quand l'artisan en a choisi une ;
+--  sans elle, on entend le son des clips.
+--
+--  On garde `media` renseigné dans tous les cas : c'est lui qu'affichent les
+--  listes et les aperçus, sans avoir à lire le tableau.
+-- --------------------------------------------------------------------------
+alter table public.posts add column if not exists medias  text[] not null default '{}';
+alter table public.posts add column if not exists musique text;
+alter table public.demandes add column if not exists medias text[] not null default '{}';
+
 create index if not exists idx_posts_created on public.posts (created_at desc);
 
 -- --------------------------------------------------------------------------

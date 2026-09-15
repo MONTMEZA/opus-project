@@ -322,7 +322,10 @@ export async function loadAll() {
         // dit ce qu'on regarde. Les deux étaient confondus, si bien qu'une
         // photo se retrouvait dans le fil des vidéos.
         format: p.type || 'photo',
-        texte: p.texte, media: p.media, likes: p.likes_count || 0,
+        texte: p.texte, media: p.media,
+        medias: (p.medias && p.medias.length) ? p.medias : (p.media ? [p.media] : []),
+        musique: p.musique || null,
+        likes: p.likes_count || 0,
         liked: likedSet.has(p.id), comments: commentsByPost[p.id] || [],
       }));
 
@@ -360,6 +363,7 @@ export async function loadAll() {
     longitude: d.longitude,
     texte: d.texte,
     media: d.media,
+    medias: (d.medias && d.medias.length) ? d.medias : (d.media ? [d.media] : []),
     time: relativeTime(d.created_at),
     reponses: nbReponses[d.id] || 0,
   }));
@@ -476,9 +480,14 @@ export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
   };
 };
 
-export const createPost = !hasSupabase ? noop : async ({ type, texte, media, metier, ville }) => {
+export const createPost = !hasSupabase ? noop : async ({
+  type, texte, media, medias = [], musique = null, metier, ville,
+}) => {
   const { data, error } = await supabase.from('posts')
-    .insert({ author_id: currentUserId, type, texte, media, metier, ville })
+    .insert({
+      author_id: currentUserId, type, texte, media,
+      medias, musique, metier, ville,
+    })
     .select().single();
   if (error) throw error;
   return data;
@@ -619,11 +628,11 @@ export const updateSosAvailability = !hasSupabase ? noop : async (sos) => {
 
 /** Publication d'une demande par un particulier. */
 export const createDemande = !hasSupabase ? noop : async (
-  { metier, ville, texte, media, codePostal, latitude, longitude },
+  { metier, ville, texte, media, medias = [], codePostal, latitude, longitude },
 ) => {
   const { data, error } = await supabase.from('demandes').insert({
     client_id: currentUserId,
-    metier, ville, texte, media: media || null,
+    metier, ville, texte, media: media || null, medias,
     code_postal: codePostal || null,
     latitude: latitude || null,
     longitude: longitude || null,

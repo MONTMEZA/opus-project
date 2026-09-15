@@ -6,22 +6,35 @@
  * séparé du fil, qui reste une vitrine réservée aux pros.
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState, Gradient,
+  Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
 } from '../components/ui';
-import { MapPin, MessageCircle } from '../components/icons';
+import Media from '../components/Media';
+import { MapPin, MessageCircle, Camera, X } from '../components/icons';
+import { choisirImage } from '../lib/media';
 import ChampVille from '../components/ChampVille';
 import { METIERS } from '../data/demo';
 
 export default function DemandesScreen({
-  userType, monMetier, demandes, filtreMetier, setFiltreMetier, onPublier, onRepondre,
+  userType, monMetier, demandes, filtreMetier, setFiltreMetier,
+  onPublier, onRepondre, onErreur,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
   const [metier, setMetier] = useState(METIERS[0]);
   const [lieu, setLieu] = useState({ affichage: '' });
   const [texte, setTexte] = useState('');
+  const [photos, setPhotos] = useState([]);
+
+  const ajouterPhoto = async (camera) => {
+    try {
+      const uri = await choisirImage({ camera, usage: 'photo' });
+      if (uri) setPhotos((p) => [...p, uri].slice(0, 3));
+    } catch (e) {
+      if (onErreur) onErreur(e.message || String(e));
+    }
+  };
 
   const estPro = userType === 'pro';
   const filtrees = filtreMetier ? demandes.filter((d) => d.metier === filtreMetier) : demandes;
@@ -41,8 +54,9 @@ export default function DemandesScreen({
       latitude: lieu.latitude,
       longitude: lieu.longitude,
       texte: texte.trim(),
+      photos,
     });
-    setTexte(''); setLieu({ affichage: '' }); setFormOuvert(false);
+    setTexte(''); setLieu({ affichage: '' }); setPhotos([]); setFormOuvert(false);
   };
 
   return (
@@ -71,6 +85,38 @@ export default function DemandesScreen({
                 onChangeText={setTexte}
               />
               <ChampVille valeur={lieu.affichage} onChange={setLieu} placeholder="Ville du chantier" />
+
+              {/* Une photo du problème vaut dix lignes de description : c'est
+                  elle qui permet à l'artisan de chiffrer sans se déplacer. */}
+              {photos.length > 0 && (
+                <View style={s.apercus}>
+                  {photos.map((uri, i) => (
+                    <View key={`${uri}-${i}`}>
+                      <Media media={uri} style={s.apercu} />
+                      <Pressable
+                        style={s.retirer}
+                        hitSlop={6}
+                        onPress={() => setPhotos((p) => p.filter((_, k) => k !== i))}
+                      >
+                        <X size={11} color="#fff" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <View style={s.photoBtns}>
+                <BtnMini outline onPress={() => ajouterPhoto(true)} disabled={photos.length >= 3}>
+                  <Camera size={12} color={C.ink} />
+                  <Text style={s.photoBtnTexte}>Photographier</Text>
+                </BtnMini>
+                <BtnMini
+                  outline
+                  label="Galerie"
+                  onPress={() => ajouterPhoto(false)}
+                  disabled={photos.length >= 3}
+                />
+              </View>
+
               <View style={s.formBtns}>
                 <BtnMini outline label="Annuler" onPress={() => setFormOuvert(false)} />
                 <BtnMain label="Publier" onPress={publier} />
@@ -124,7 +170,9 @@ export default function DemandesScreen({
             </View>
 
             <Text style={s.texte}>{d.texte}</Text>
-            {!!d.media && <Gradient media={d.media} style={s.media} />}
+            {(d.medias && d.medias.length ? d.medias : (d.media ? [d.media] : [])).map((m, i) => (
+              <Media key={i} media={m} style={s.media} />
+            ))}
 
             <View style={s.carteBas}>
               <Text style={s.reponses}>
@@ -162,6 +210,14 @@ const s = StyleSheet.create({
   encartTitre: { fontFamily: F.oswald6, fontSize: 13, color: C.ink, marginBottom: 4 },
   encartTexte: { fontSize: 11.5, color: C.muted, lineHeight: 17, marginBottom: 10, fontFamily: F.inter },
   label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginBottom: 6 },
+  apercus: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  apercu: { width: 74, height: 74, backgroundColor: C.line },
+  retirer: {
+    position: 'absolute', right: 3, top: 3, width: 18, height: 18, borderRadius: 9,
+    backgroundColor: 'rgba(26,27,25,0.72)', alignItems: 'center', justifyContent: 'center',
+  },
+  photoBtns: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  photoBtnTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.ink },
   formBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 4 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },

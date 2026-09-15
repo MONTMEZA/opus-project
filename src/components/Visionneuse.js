@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme';
-import { Gradient } from './ui';
+import Media from './Media';
 import { X, ChevronLeft, ChevronRight } from './icons';
 
 export default function Visionneuse({ items = [], index = 0, onClose }) {
@@ -48,9 +48,12 @@ export default function Visionneuse({ items = [], index = 0, onClose }) {
           onMomentumScrollEnd={(e) => {
             setCourant(Math.round(e.nativeEvent.contentOffset.x / width));
           }}
-          renderItem={({ item }) => (
+          renderItem={({ item, index: i }) => (
             <Pressable style={{ width, height }} onPress={onClose}>
-              <Gradient media={item} style={{ width, height }} />
+              {/* Seule la photo affichée se lit : comparer les adresses ne
+                  suffirait pas, deux réalisations peuvent être le même
+                  fichier. On compare les rangs. */}
+              <Media media={item} style={{ width, height }} lecture={i === courant} muet={false} />
             </Pressable>
           )}
         />

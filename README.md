@@ -281,6 +281,62 @@ Le modèle utilisé est `claude-opus-5`. Pour en changer, modifie la constante
 
 ---
 
+## Photos, vidéos et montage
+
+### De vrais fichiers
+
+**Publier** ouvre l'appareil photo ou la galerie. Le fichier part dans
+l'espace `publications` de Supabase Storage, et l'URL obtenue est enregistrée
+avec la publication. Un chemin local `file://…` ne veut rien dire sur le
+téléphone de quelqu'un d'autre : c'est l'envoi qui rend la photo visible.
+
+| Format | Ce qu'il attend |
+|---|---|
+| **Photo** | Une photo, prise ou choisie |
+| **Vidéo** | Un clip de 30 s maximum |
+| **Montage** | Jusqu'à 6 clips, réordonnables, avec une musique |
+| **Avant/Après** | Deux photos, affichées côte à côte et étiquetées |
+| **Texte**, **Conseil** | Pas de média |
+
+Un particulier peut joindre **jusqu'à 3 photos** à une demande. Une photo du
+problème vaut dix lignes de description : c'est elle qui permet de chiffrer
+sans se déplacer.
+
+Limite de **45 Mo par fichier** — au-delà, un message clair le dit plutôt que
+l'erreur brute du serveur. Une seule vidéo joue à la fois dans le fil : en
+laisser tourner cinq vide la batterie et sature les décodeurs du téléphone.
+
+### Le montage : ce qu'il fait, et ce qu'il ne fait pas encore
+
+Le montage enchaîne les clips dans l'ordre choisi, avec la musique par-dessus,
+et reboucle. Des jauges en haut montrent où l'on en est. **C'est assemblé à la
+lecture, pas encodé dans un fichier unique.**
+
+La raison est précise, et il vaut mieux la connaître : coller des clips et y
+incruster une bande-son demande un encodeur vidéo sur le téléphone. En React
+Native, cela passait par **`ffmpeg-kit-react-native`** — un paquet
+**abandonné par son éditeur**, déprécié sur npm et sans nouvelle version
+depuis janvier 2025. Il n'existe pas aujourd'hui d'équivalent maintenu.
+
+Conséquences concrètes :
+
+| | État |
+|---|---|
+| Le montage se regarde dans l'app, clips enchaînés + musique | ✅ |
+| Il se publie, se commente, se partage comme une vidéo | ✅ |
+| Il existe comme **un seul fichier** à reposter sur TikTok ou Instagram | ❌ |
+
+Le jour où l'export deviendra utile, il se fera **côté serveur** (un service
+d'encodage reçoit les clips et rend un MP4), pas sur le téléphone.
+
+### La musique
+
+Pas de bibliothèque de musiques intégrée : il faudrait des morceaux sous
+licence, ce qui est une **décision d'entreprise**, avec un vrai enjeu
+juridique — pas un détail technique. L'artisan apporte donc son morceau depuis
+son téléphone, et reste responsable de ses droits. Sans musique, on entend le
+son des clips.
+
 ## Publier : le format et la destination
 
 Deux choix distincts, sur le même écran, et c'est volontaire.

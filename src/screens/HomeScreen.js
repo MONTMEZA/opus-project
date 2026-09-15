@@ -28,6 +28,9 @@ export default function HomeScreen({
   const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  /* Une seule vidéo joue à la fois : en laisser tourner cinq en arrière-plan
+     vide la batterie et sature les décodeurs du téléphone. */
+  const [slideActive, setSlideActive] = useState(0);
 
   /* ---------- mode vidéo : plein écran ---------- */
   if (feedMode === 'video') {
@@ -43,6 +46,9 @@ export default function HomeScreen({
           getItemLayout={(_, index) => ({
             length: windowHeight, offset: windowHeight * index, index,
           })}
+          onMomentumScrollEnd={(e) => {
+            setSlideActive(Math.round(e.nativeEvent.contentOffset.y / windowHeight));
+          }}
           ListEmptyComponent={
             <View style={[s.videoVide, { height: windowHeight }]}>
               <Text style={s.videoVideTexte}>
@@ -53,9 +59,10 @@ export default function HomeScreen({
               </Text>
             </View>
           }
-          renderItem={({ item: p }) => (
+          renderItem={({ item: p, index }) => (
             <VideoSlide
               post={p}
+              actif={index === slideActive}
               pro={p.proId ? pros[p.proId] : null}
               following={p.proId ? followingIds.has(p.proId) : false}
               saved={savedIds.has(p.id)}

@@ -36,7 +36,7 @@ import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
 import { envoyerFichier, estFichierLocal } from './lib/storage';
 import { aiMatchPros } from './lib/ai';
-import { FORMATS_VISUELS } from './screens/CreerScreen';
+import { FORMATS_VISUELS, FORMATS_VIDEO } from './screens/CreerScreen';
 
 /** Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie. */
 const MESSAGE_PUBLICATION = {
@@ -104,6 +104,9 @@ export default function OpusApp() {
   const [createType, setCreateType] = useState('photo');
   // Où va la publication : le fil, le portfolio, ou les deux.
   const [createDestination, setCreateDestination] = useState('deux');
+  // Fichiers choisis pour la publication en cours, et sa bande-son.
+  const [medias, setMedias] = useState([]);
+  const [musique, setMusique] = useState(null);
   const [createText, setCreateText] = useState('');
   const [createMetier, setCreateMetier] = useState(METIERS[0]);
   const [createVille, setCreateVille] = useState('');
@@ -384,40 +387,75 @@ export default function OpusApp() {
       showBanner('Ajoute une description avant de publier.');
       return;
     }
-
-    const media = POST_GRADIENTS[Math.floor(Math.random() * POST_GRADIENTS.length)];
-    const texte = createText.trim();
-
-    let id = `local-${Date.now()}`;
-    try {
-      if (versLeFil) {
-        const row = await api.createPost({
-          type: createType, texte, media, metier: createMetier, ville: createVille,
-        });
-        if (row) id = row.id;
-      }
-      if (versLePortfolio) await api.ajouterAuPortfolio(media);
-    } catch (e) {
-      showBanner(`Publication non enregistrée : ${e.message || e}`);
+    if (aUnVisuel && medias.length === 0) {
+      showBanner('Choisis une photo ou une vidéo avant de publier.');
+      return;
+    }
+    if (createType === 'avantapres' && medias.length < 2) {
+      showBanner("Un avant/après demande deux photos : l'avant, puis l'après.");
       return;
     }
 
+    const texte = createText.trim();
+    let id = `local-${Date.now()}`;
+    let envoyes = medias;
+    let urlMusique = musique ? musique.uri : null;
+
+    setLoading(true);
+    try {
+      /* Les fichiers partent d'abord vers Supabase Storage : un chemin local
+         « file://… » ne veut rien dire sur le téléphone de quelqu'un d'autre. */
+      const uid = api.getUserId();
+      envoyes = [];
+      for (const uri of medias) {
+        envoyes.push(estFichierLocal(uri)
+          ? await envoyerFichier({ uri, bucket: 'publications', nom: 'media', userId: uid })
+          : uri);
+      }
+      if (musique && estFichierLocal(musique.uri)) {
+        urlMusique = await envoyerFichier({
+          uri: musique.uri, bucket: 'publications', nom: 'musique', userId: uid,
+        });
+      }
+
+      // La vignette est le premier média : c'est elle que montrent les listes.
+      const couverture = envoyes[0] || POST_GRADIENTS[0];
+
+      if (versLeFil) {
+        const row = await api.createPost({
+          type: createType, texte, media: couverture, medias: envoyes,
+          musique: urlMusique, metier: createMetier, ville: createVille,
+        });
+        if (row) id = row.id;
+      }
+      if (versLePortfolio) {
+        for (const url of envoyes) await api.ajouterAuPortfolio(url);
+      }
+    } catch (e) {
+      setLoading(false);
+      showBanner(`Publication non enregistrée : ${e.message || e}`);
+      return;
+    }
+    setLoading(false);
+
+    const couverture = envoyes[0] || POST_GRADIENTS[0];
     if (versLeFil) {
       setPosts((ps) => [{
         id, type: 'post', format: createType, proId: myProId, time: "À l'instant",
-        texte, media, likes: 0, liked: false, comments: [],
+        texte, media: couverture, medias: envoyes, musique: urlMusique,
+        likes: 0, liked: false, comments: [],
       }, ...ps]);
     }
     if (versLePortfolio && myProId) {
       setPros((ps) => (ps[myProId]
-        ? { ...ps, [myProId]: { ...ps[myProId], portfolio: [...ps[myProId].portfolio, media] } }
+        ? { ...ps, [myProId]: { ...ps[myProId], portfolio: [...ps[myProId].portfolio, ...envoyes] } }
         : ps));
     }
 
-    setCreateText(''); setCreateVille('');
+    setCreateText(''); setCreateVille(''); setMedias([]); setMusique(null);
     // Le fil des vidéos ne montre que des vidéos : on y renvoie l'artisan
     // quand c'est là que sa publication vient d'atterrir.
-    if (versLeFil) setFeedMode(createType === 'video' ? 'video' : 'classic');
+    if (versLeFil) setFeedMode(FORMATS_VIDEO.has(createType) ? 'video' : 'classic');
     setScreen(versLeFil ? 'home' : 'profil');
     showBanner(MESSAGE_PUBLICATION[destination]);
   };
@@ -606,27 +644,43 @@ export default function OpusApp() {
   };
 
   /* ---------- demandes de particuliers ---------- */
-  const publierDemande = async ({ metier, ville, texte, codePostal, latitude, longitude }) => {
+  const publierDemande = async ({
+    metier, ville, texte, codePostal, latitude, longitude, photos = [],
+  }) => {
     let id = `local-${Date.now()}`;
+    let envoyees = photos;
+    setLoading(true);
     try {
+      const uid = api.getUserId();
+      envoyees = [];
+      for (const uri of photos) {
+        envoyees.push(estFichierLocal(uri)
+          ? await envoyerFichier({ uri, bucket: 'publications', nom: 'demande', userId: uid })
+          : uri);
+      }
       const ligne = await api.createDemande({
         metier, ville, texte, codePostal, latitude, longitude,
+        media: envoyees[0] || null, medias: envoyees,
       });
       if (ligne) id = ligne.id;
     } catch (e) {
+      setLoading(false);
       showBanner(`Publication impossible : ${e.message || e}`);
       return;
     }
+    setLoading(false);
 
     setDemandes((ds) => [{
       id,
       auteurId: api.getUserId(),
       auteur: monProfil.nom || 'Vous',
+      avatarUrl: monProfil.avatarUrl || null,
       metier,
       ville: ville || 'Non précisée',
       codePostal, latitude, longitude,
       texte,
-      media: null,
+      media: envoyees[0] || null,
+      medias: envoyees,
       time: "À l'instant",
       reponses: 0,
     }, ...ds]);
@@ -939,6 +993,7 @@ export default function OpusApp() {
                 setFiltreMetier={setDemandeFiltre}
                 onPublier={publierDemande}
                 onRepondre={repondreDemande}
+                onErreur={showBanner}
               />
             )}
           </View>
@@ -948,6 +1003,9 @@ export default function OpusApp() {
           <CreerScreen
             createType={createType} setCreateType={setCreateType}
             createDestination={createDestination} setCreateDestination={setCreateDestination}
+            medias={medias} setMedias={setMedias}
+            musique={musique} setMusique={setMusique}
+            onErreur={showBanner}
             createText={createText} setCreateText={setCreateText}
             createMetier={createMetier} setCreateMetier={setCreateMetier}
             createVille={createVille} setCreateVille={setCreateVille}

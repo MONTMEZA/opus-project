@@ -10,6 +10,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { C, F } from '../theme';
 import { Gradient, BtnMain, ChipFollow } from './ui';
 import { nombreCommentaires } from './Commentaires';
+import Media from './Media';
+import LecteurMontage from './LecteurMontage';
 import { BadgeCheck, Heart, MessageSquare, Share2, Bookmark, MapPin } from './icons';
 
 function Scrim() {
@@ -25,10 +27,11 @@ function Scrim() {
 }
 
 export default function VideoSlide({
-  post, pro, following, saved, height, bottomInset = 0,
+  post, pro, following, saved, height, bottomInset = 0, actif = true,
   onLike, onFollow, onSave, onView, onShare, onContact, onComment,
 }) {
   const infoPad = 24 + bottomInset;
+  const clips = post.medias && post.medias.length ? post.medias : [post.media];
 
   /* --- publicité en plein écran --- */
   if (post.type === 'ad') {
@@ -52,8 +55,15 @@ export default function VideoSlide({
 
   if (!pro) return null;
 
+  /* Un montage enchaîne ses clips avec sa musique ; une vidéo seule se lit en
+     boucle. Dans les deux cas c'est la même surface plein écran. */
+  const Surface = post.format === 'montage' ? LecteurMontage : Media;
+  const proprietes = post.format === 'montage'
+    ? { clips, musique: post.musique, muet: !actif }
+    : { media: post.media, lecture: actif, muet: false };
+
   return (
-    <Gradient media={post.media} style={[s.card, { height }]}>
+    <Surface {...proprietes} style={[s.card, { height }]}>
       <Scrim />
 
       {/* actions sur le côté droit */}
@@ -96,7 +106,7 @@ export default function VideoSlide({
           <BtnMain label="Contacter" onPress={() => onContact(pro, 'message')} />
         </View>
       </View>
-    </Gradient>
+    </Surface>
   );
 }
 

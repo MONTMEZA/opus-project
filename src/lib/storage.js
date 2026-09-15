@@ -11,6 +11,7 @@
  */
 import { Platform } from 'react-native';
 import { supabase, hasSupabase } from './supabase';
+import { TAILLE_MAX_MO } from './media';
 
 /** Devine le type du fichier à partir de son extension. */
 function typeDeFichier(uri) {
@@ -18,7 +19,9 @@ function typeDeFichier(uri) {
   const types = {
     jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
     heic: 'image/heic', webp: 'image/webp', gif: 'image/gif',
-    mp4: 'video/mp4', mov: 'video/quicktime',
+    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4',
+    mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac',
+    wav: 'audio/wav', ogg: 'audio/ogg',
     pdf: 'application/pdf',
   };
   return { ext: ext || 'jpg', type: types[ext] || 'application/octet-stream' };
@@ -51,6 +54,17 @@ export async function envoyerFichier({ uri, bucket, nom, userId }) {
   const { ext, type } = typeDeFichier(uri);
   const chemin = `${userId}/${nom}-${Date.now()}.${ext}`;
   const octets = await octetsDuFichier(uri);
+
+  /* Une vidéo dépasse vite la limite par fichier de Supabase. Mieux vaut le
+     dire clairement ici qu'afficher l'erreur brute du serveur, que personne
+     ne comprend. */
+  const mo = octets.length / (1024 * 1024);
+  if (mo > TAILLE_MAX_MO) {
+    throw new Error(
+      `Fichier trop lourd (${mo.toFixed(0)} Mo, maximum ${TAILLE_MAX_MO} Mo). `
+      + 'Filmez une séquence plus courte.',
+    );
+  }
 
   const { error } = await supabase.storage.from(bucket).upload(chemin, octets, {
     contentType: type,

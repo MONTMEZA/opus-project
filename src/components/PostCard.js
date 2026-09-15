@@ -11,8 +11,12 @@ import {
 import Commentaires, { nombreCommentaires } from './Commentaires';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
-  MessageCircle, Phone, FileText, User, Send, Play,
+  MessageCircle, Phone, FileText, User, Send,
 } from './icons';
+import Media, { EtiquetteVideo } from './Media';
+
+/** Les formats qui se regardent aussi en plein écran dans le fil « Vidéos ». */
+const EST_VIDEO = new Set(['video', 'montage']);
 
 export default function PostCard({
   post, pro, pros = {}, following, onLike, onFollow, onView, onHide,
@@ -66,14 +70,24 @@ export default function PostCard({
       <Text style={s.postText}>{post.texte}</Text>
       {/* Une vidéo reste visible dans le fil, mais se signale comme telle :
           la pastille dit qu'elle se regarde aussi en plein écran. */}
-      <Gradient media={post.media} style={{ width: '100%', aspectRatio: 16 / 10 }}>
-        {post.format === 'video' && (
-          <View style={s.pastilleVideo}>
-            <Play size={13} color="#fff" />
-            <Text style={s.pastilleVideoTexte}>Vidéo</Text>
-          </View>
-        )}
-      </Gradient>
+      {post.format === 'avantapres' && (post.medias || []).length > 1 ? (
+        /* Avant/après : les deux photos côte à côte, chacune étiquetée.
+           C'est la comparaison qui fait tout l'intérêt du format. */
+        <View style={s.avantApres}>
+          {post.medias.slice(0, 2).map((m, i) => (
+            <View key={i} style={{ flex: 1 }}>
+              <Media media={m} style={{ width: '100%', aspectRatio: 3 / 4 }} />
+              <View style={s.etiquetteAA}>
+                <Text style={s.etiquetteAATexte}>{i === 0 ? 'Avant' : 'Après'}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Media media={post.media} style={{ width: '100%', aspectRatio: 16 / 10 }}>
+          {EST_VIDEO.has(post.format) && <EtiquetteVideo />}
+        </Media>
+      )}
 
       {/* barre d'actions */}
       <View style={s.actions}>
@@ -132,11 +146,12 @@ function ContactItem({ icon, label, onPress, last }) {
 }
 
 const s = StyleSheet.create({
-  pastilleVideo: {
-    position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center',
-    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)', paddingVertical: 4, paddingHorizontal: 8,
+  avantApres: { flexDirection: 'row', gap: 2 },
+  etiquetteAA: {
+    position: 'absolute', left: 8, top: 8,
+    backgroundColor: 'rgba(26,27,25,0.72)', paddingVertical: 3, paddingHorizontal: 7,
   },
-  pastilleVideoTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+  etiquetteAATexte: { fontFamily: F.oswald6, fontSize: 10, color: '#fff' },
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
 
   head: {
