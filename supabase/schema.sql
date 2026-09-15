@@ -171,6 +171,92 @@ create trigger trg_limite_profondeur_commentaire
   before insert or update on public.comments
   for each row execute function public.limite_profondeur_commentaire();
 
+-- --------------------------------------------------------------------------
+--  Qui est prévenu quand un commentaire arrive.
+--
+--  C'est la base qui décide, jamais le téléphone : une notification s'écrit
+--  dans la boîte de quelqu'un d'autre, et aucun client ne doit pouvoir le
+--  faire. D'où security definer.
+--
+--  Trois règles, celles de Facebook, Instagram et TikTok :
+--
+--   1. l'auteur de la publication est prévenu qu'on a commenté chez lui ;
+--   2. dans un fil de réponses, tous ceux qui y ont déjà parlé sont prévenus
+--      — pas seulement l'auteur du commentaire d'origine. C'est ce qui
+--      remplace l'analyse des « @Nom », qui serait fragile : deux personnes
+--      peuvent porter le même nom, un nom peut contenir un espace ;
+--   3. on ne se prévient jamais soi-même, et jamais deux fois pour le même
+--      commentaire.
+--
+--  Ce qu'on NE fait PAS, volontairement : prévenir tout le monde dès qu'un
+--  nouveau commentaire arrive sur une publication qu'on a commentée. C'est le
+--  réglage le plus bruyant de Facebook, et un artisan sur un toit n'a pas
+--  besoin de quarante vibrations.
+-- --------------------------------------------------------------------------
+create or replace function public.notifie_commentaire()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  nom_acteur   text;
+  auteur_post  uuid;
+  auteur_fil   uuid;
+  destinataire uuid;
+  prevenus     uuid[] := array[new.author_id];   -- on ne se prévient pas soi-même
+begin
+  -- Un professionnel se présente sous le nom de son entreprise, un
+  -- particulier sous le sien.
+  select coalesce(nullif(pp.entreprise, ''), nullif(u.nom, ''), 'Quelqu''un')
+    into nom_acteur
+    from public.users u
+    left join public.professional_profiles pp on pp.id = u.id
+   where u.id = new.author_id;
+  nom_acteur := coalesce(nom_acteur, 'Quelqu''un');
+
+  -- 1. l'auteur de la publication (une publicité n'en a pas)
+  select author_id into auteur_post from public.posts where id = new.post_id;
+  if auteur_post is not null and not (auteur_post = any(prevenus)) then
+    insert into public.notifications (user_id, type, texte, acteur_id, post_id, comment_id)
+    values (auteur_post, 'commentaire',
+            nom_acteur || case when new.parent_id is null
+              then ' a commenté votre publication'
+              else ' a répondu à un commentaire sur votre publication' end,
+            new.author_id, new.post_id, new.id);
+    prevenus := prevenus || auteur_post;
+  end if;
+
+  if new.parent_id is null then return null; end if;
+
+  -- 2. l'auteur du commentaire auquel on répond
+  select author_id into auteur_fil from public.comments where id = new.parent_id;
+  if auteur_fil is not null and not (auteur_fil = any(prevenus)) then
+    insert into public.notifications (user_id, type, texte, acteur_id, post_id, comment_id)
+    values (auteur_fil, 'reponse',
+            nom_acteur || ' a répondu à votre commentaire',
+            new.author_id, new.post_id, new.id);
+    prevenus := prevenus || auteur_fil;
+  end if;
+
+  -- 3. ceux qui ont déjà parlé dans le même fil
+  for destinataire in
+    select distinct author_id from public.comments
+     where parent_id = new.parent_id and id <> new.id
+  loop
+    if not (destinataire = any(prevenus)) then
+      insert into public.notifications (user_id, type, texte, acteur_id, post_id, comment_id)
+      values (destinataire, 'reponse',
+              nom_acteur || ' a répondu dans une discussion à laquelle vous participez',
+              new.author_id, new.post_id, new.id);
+      prevenus := prevenus || destinataire;
+    end if;
+  end loop;
+
+  return null;
+end; $$;
+
+drop trigger if exists trg_notifie_commentaire on public.comments;
+create trigger trg_notifie_commentaire
+  after insert on public.comments
+  for each row execute function public.notifie_commentaire();
+
 create table if not exists public.follows (
   follower_id  uuid references public.users(id) on delete cascade,
   following_id uuid references public.users(id) on delete cascade,
@@ -388,6 +474,14 @@ create table if not exists public.notifications (
   lue        boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+-- De quoi ouvrir la bonne publication en touchant la notification, et
+-- afficher la photo de celui qui l'a déclenchée.
+alter table public.notifications add column if not exists type       text not null default 'info';
+alter table public.notifications add column if not exists acteur_id  uuid references public.users(id) on delete set null;
+alter table public.notifications add column if not exists post_id    uuid references public.posts(id) on delete cascade;
+alter table public.notifications add column if not exists comment_id uuid references public.comments(id) on delete cascade;
+create index if not exists idx_notifications_user on public.notifications(user_id, created_at desc);
 
 -- --------------------------------------------------------------------------
 --  10. COMPTEURS TENUS À JOUR AUTOMATIQUEMENT

@@ -350,6 +350,42 @@ base qu'elle a sa place à l'écran.
 Le compteur sous une publication additionne les commentaires **et** leurs
 réponses.
 
+### Qui est prévenu, et quand
+
+Les règles de Facebook, Instagram et TikTok, sans leur partie bruyante :
+
+| Événement | Qui reçoit la notification |
+|---|---|
+| On commente votre publication | **Vous** |
+| On répond à votre commentaire | **Vous** |
+| On répond dans un fil où vous avez déjà parlé | **Vous** |
+| Vous commentez ou répondez | **Personne** — on ne se prévient jamais soi-même |
+
+Deux choses qu'on ne fait **pas**, délibérément :
+
+- **prévenir tout le monde dès qu'un commentaire arrive sur une publication
+  qu'on a commentée.** C'est le réglage le plus bruyant de Facebook. Un
+  artisan sur un toit n'a pas besoin de quarante vibrations ;
+- **analyser les « @Nom » du texte** pour deviner qui est visé. Deux personnes
+  peuvent porter le même nom, un nom peut contenir un espace. On prévient les
+  participants du fil, ce qui donne le même résultat sans deviner.
+
+Une personne reçoit **au plus une notification par commentaire**, même si elle
+est à la fois l'auteur de la publication et celui du commentaire visé.
+
+C'est **la base de données** qui écrit ces notifications, via le trigger
+`notifie_commentaire` en `security definer` — jamais le téléphone. Une
+notification s'écrit dans la boîte de quelqu'un d'autre, et les règles RLS
+interdisent justement cela à un utilisateur ordinaire. Le seul moyen correct
+est donc de laisser le serveur décider.
+
+Toucher une notification **ouvre la publication concernée**, commentaires
+dépliés, et la marque lue.
+
+> **Notifications push (sur l'écran verrouillé)** : pas encore. Elles exigent
+> un *development build*, donc un compte Apple Developer payant côté iPhone.
+> La cloche dans l'application fonctionne dès maintenant, elle.
+
 ## Le SOS et l'espace Demandes
 
 Deux fonctions qui distinguent Opus des plateformes de mise en relation classiques.

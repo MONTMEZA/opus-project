@@ -244,7 +244,7 @@ export async function loadAll() {
     supabase.from('follows').select('following_id').eq('follower_id', uid),
     supabase.from('conversations').select('*').or(`client_id.eq.${uid},professional_id.eq.${uid}`),
     supabase.from('messages').select('*').order('created_at'),
-    supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+    supabase.from('notifications').select('*, acteur:acteur_id(nom, avatar_url)').eq('user_id', uid).order('created_at', { ascending: false }),
     supabase.from('demandes').select('*, users:client_id(nom, avatar_url)').order('created_at', { ascending: false }),
     supabase.from('demande_reponses').select('demande_id'),
     supabase.from('sos_availability').select('*').eq('professional_id', uid).maybeSingle(),
@@ -364,7 +364,13 @@ export async function loadAll() {
     conversations,
     demandes,
     mesSos,
-    notifications: (notifRes.data || []).map((n) => ({ id: n.id, texte: n.texte, lue: n.lue })),
+    notifications: (notifRes.data || []).map((n) => ({
+      id: n.id, texte: n.texte, lue: n.lue, type: n.type || 'info',
+      postId: n.post_id || null, commentId: n.comment_id || null,
+      acteurId: n.acteur_id || null,
+      avatarUrl: n.acteur ? n.acteur.avatar_url : null,
+      time: relativeTime(n.created_at),
+    })),
     followingIds: (followsRes.data || []).map((f) => f.following_id),
     savedIds: (savesRes.data || []).map((s) => s.post_id),
   };

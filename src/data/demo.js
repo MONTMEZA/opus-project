@@ -173,10 +173,13 @@ export const initialConversations = [
 ];
 
 export const initialNotifications = [
-  { id: 1, texte: 'Sophie Renaud a aimé votre publication', lue: false },
-  { id: 2, texte: 'Nouveau commentaire de Julie M.', lue: false },
-  { id: 3, texte: 'Marc Dubreuil vous suit désormais', lue: true },
-  { id: 4, texte: 'Votre publication a été enregistrée par 3 personnes', lue: true },
+  { id: 1, type: 'commentaire', texte: 'Julie M. a commenté votre publication',
+    acteurId: 'demo-julie', postId: 1, lue: false, time: 'Il y a 1 h' },
+  { id: 2, type: 'reponse', texte: 'Julie M. a répondu à votre commentaire',
+    acteurId: 'demo-julie', postId: 1, lue: false, time: 'Il y a 30 min' },
+  { id: 3, type: 'info', texte: 'Marc Dubreuil vous suit désormais', lue: true, time: 'Hier' },
+  { id: 4, type: 'info', texte: 'Votre publication a été enregistrée par 3 personnes',
+    lue: true, time: 'Il y a 2 j' },
 ];
 
 /**

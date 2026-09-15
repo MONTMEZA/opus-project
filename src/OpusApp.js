@@ -431,6 +431,26 @@ export default function OpusApp() {
     api.markNotificationRead(id).catch(() => {});
   };
 
+  /**
+   * Toucher une notification doit mener au contenu, pas seulement la marquer
+   * lue. On revient au fil et on ouvre la discussion concernée — en remettant
+   * l'onglet « Pour vous », sinon la publication resterait invisible derrière
+   * le filtre « Abonnements ».
+   */
+  const ouvrirNotification = (n) => {
+    readNotification(n.id);
+    if (!n.postId) return;
+    if (!posts.some((p) => p.id === n.postId)) {
+      showBanner("Cette publication n'est plus disponible.");
+      return;
+    }
+    setFeedMode('classic');
+    setFeedTab('pourvous');
+    setHiddenIds((h) => { const c = new Set(h); c.delete(n.postId); return c; });
+    setOpenCommentsId(n.postId);
+    setScreen('home');
+  };
+
   /* ---------- mon compte ---------- */
   const enregistrerProfil = async ({ profil, sos }) => {
     let complet = profil;
@@ -906,7 +926,7 @@ export default function OpusApp() {
         )}
 
         {screen === 'notifications' && (
-          <NotificationsScreen notifications={notifications} onRead={readNotification} />
+          <NotificationsScreen notifications={notifications} onOuvrir={ouvrirNotification} />
         )}
 
         {screen === 'profil' && (
