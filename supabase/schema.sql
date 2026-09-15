@@ -21,6 +21,7 @@ create table if not exists public.users (
 alter table public.users add column if not exists email      text;
 alter table public.users add column if not exists avatar_url text;
 alter table public.users add column if not exists ville      text;
+alter table public.users add column if not exists telephone  text;
 alter table public.users add column if not exists code_postal text;
 alter table public.users add column if not exists latitude    double precision;
 alter table public.users add column if not exists longitude   double precision;
@@ -282,6 +283,10 @@ create table if not exists public.quote_requests (
                   check (statut in ('en_attente', 'accepte', 'refuse', 'termine')),
   created_at      timestamptz not null default now()
 );
+-- Le pro doit pouvoir rappeler le client : ses coordonnées voyagent avec la
+-- demande, pré-remplies depuis son compte.
+alter table public.quote_requests add column if not exists nom       text;
+alter table public.quote_requests add column if not exists telephone text;
 
 create table if not exists public.callback_requests (
   id              uuid primary key default gen_random_uuid(),
@@ -383,6 +388,68 @@ create table if not exists public.professional_partners (
   primary key (professional_id, partner_id),
   constraint pas_son_propre_partenaire check (professional_id <> partner_id)
 );
+
+-- --------------------------------------------------------------------------
+--  Un partenariat se demande, il ne se prend pas.
+--
+--  Avant : deux lignes écrites d'un coup, dans les deux sens. N'importe quel
+--  artisan pouvait donc s'ajouter aux partenaires d'un confrère sans que
+--  celui-ci ne soit consulté — et ce confrère se retrouvait à cautionner
+--  publiquement quelqu'un qu'il ne connaissait pas.
+--
+--  Maintenant : UNE ligne. professional_id est celui qui demande, partner_id
+--  celui qui accepte. Le partenariat n'apparaît sur les deux profils qu'une
+--  fois le statut passé à 'accepte' — et seul partner_id peut le faire.
+-- --------------------------------------------------------------------------
+alter table public.professional_partners add column if not exists statut text
+  not null default 'accepte'
+  check (statut in ('en_attente', 'accepte', 'refuse'));
+alter table public.professional_partners add column if not exists repondu_le timestamptz;
+
+-- Les partenariats existants étaient écrits dans les deux sens : on ne garde
+-- qu'une ligne par paire, sans rien perdre, avant de poser l'index unique.
+delete from public.professional_partners a
+ using public.professional_partners b
+ where a.professional_id = b.partner_id
+   and a.partner_id = b.professional_id
+   and a.professional_id > a.partner_id;
+
+-- Une seule demande par paire, quel que soit le sens : sinon deux artisans
+-- peuvent s'inviter l'un l'autre et se retrouver avec deux demandes ouvertes.
+create unique index if not exists idx_partenaires_paire
+  on public.professional_partners (
+    least(professional_id::text, partner_id::text),
+    greatest(professional_id::text, partner_id::text)
+  );
+
+create or replace function public.notifie_partenariat()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare nom_demandeur text; nom_partenaire text;
+begin
+  select coalesce(nullif(entreprise, ''), 'Un professionnel') into nom_demandeur
+    from public.professional_profiles where id = new.professional_id;
+  select coalesce(nullif(entreprise, ''), 'Un professionnel') into nom_partenaire
+    from public.professional_profiles where id = new.partner_id;
+
+  if tg_op = 'INSERT' and new.statut = 'en_attente' then
+    insert into public.notifications (user_id, type, texte, acteur_id)
+    values (new.partner_id, 'partenaire_demande',
+            nom_demandeur || ' vous propose un partenariat',
+            new.professional_id);
+
+  elsif tg_op = 'UPDATE' and new.statut = 'accepte' and old.statut <> 'accepte' then
+    insert into public.notifications (user_id, type, texte, acteur_id)
+    values (new.professional_id, 'partenaire_accepte',
+            nom_partenaire || ' a accepté votre partenariat',
+            new.partner_id);
+  end if;
+  return null;
+end; $$;
+
+drop trigger if exists trg_notifie_partenariat on public.professional_partners;
+create trigger trg_notifie_partenariat
+  after insert or update on public.professional_partners
+  for each row execute function public.notifie_partenariat();
 
 -- --------------------------------------------------------------------------
 --  9. DEMANDES DE PARTICULIERS
@@ -681,10 +748,30 @@ create policy "envoi message" on public.messages
       and (c.client_id = auth.uid() or c.professional_id = auth.uid())));
 
 -- Partenaires : le professionnel gère sa propre liste
+-- Partenariats : un partenariat accepté est public — il s'affiche sur les deux
+-- profils. Une demande en cours ne regarde que les deux intéressés.
 drop policy if exists "mes partenaires" on public.professional_partners;
-create policy "mes partenaires" on public.professional_partners
-  for all using (auth.uid() = professional_id or auth.uid() = partner_id)
-  with check (auth.uid() = professional_id or auth.uid() = partner_id);
+drop policy if exists "lecture partenariats" on public.professional_partners;
+create policy "lecture partenariats" on public.professional_partners
+  for select using (
+    statut = 'accepte' or auth.uid() = professional_id or auth.uid() = partner_id
+  );
+
+-- Je ne peux demander qu'en mon nom, et seulement une demande en attente :
+-- personne ne s'ajoute d'office aux partenaires d'un confrère.
+drop policy if exists "je demande un partenariat" on public.professional_partners;
+create policy "je demande un partenariat" on public.professional_partners
+  for insert with check (auth.uid() = professional_id and statut = 'en_attente');
+
+-- Seul celui à qui on demande peut répondre.
+drop policy if exists "je reponds a un partenariat" on public.professional_partners;
+create policy "je reponds a un partenariat" on public.professional_partners
+  for update using (auth.uid() = partner_id) with check (auth.uid() = partner_id);
+
+-- Chacun peut rompre un partenariat, ou annuler sa demande.
+drop policy if exists "je romps un partenariat" on public.professional_partners;
+create policy "je romps un partenariat" on public.professional_partners
+  for delete using (auth.uid() = professional_id or auth.uid() = partner_id);
 
 -- Demandes : visibles de tous, publiees par leur auteur seulement
 drop policy if exists "lecture demandes" on public.demandes;

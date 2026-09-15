@@ -81,7 +81,12 @@ export default function OpusApp() {
   const [demandesVues, setDemandesVues] = useState(false);
 
   /* Compte : profil du particulier, et disponibilité SOS du professionnel. */
-  const [monProfil, setMonProfil] = useState({ nom: 'Vous', ville: '', avatarUrl: null, bannerUrl: null });
+  const [monProfil, setMonProfil] = useState({
+    nom: 'Vous', ville: '', telephone: '', avatarUrl: null, bannerUrl: null,
+  });
+  // Partenariats en cours : reçus d'un côté, envoyés de l'autre.
+  const [demandesPartenariat, setDemandesPartenariat] = useState([]);
+  const [partenariatsEnvoyes, setPartenariatsEnvoyes] = useState([]);
   const [mesSos, setMesSos] = useState(null);
 
   const [quote, setQuote] = useState({ open: false, pro: null, mode: 'devis' });
@@ -125,6 +130,12 @@ export default function OpusApp() {
       setNotifications(data.notifications);
       setFollowingIds(new Set(data.followingIds));
       setSavedIds(new Set(data.savedIds));
+      setDemandesPartenariat(data.demandesPartenariat || []);
+      setPartenariatsEnvoyes(data.partenariatsEnvoyes || []);
+      // Sans ça, un particulier qui se reconnecte s'appelle « Vous ».
+      if (data.monCompte && data.monCompte.nom) {
+        setMonProfil((p) => ({ ...p, ...data.monCompte }));
+      }
       setUserType(type);
       setScreen('home');
     } catch (e) {
@@ -294,6 +305,22 @@ export default function OpusApp() {
       }
       conv = { id, proId: pro.id, messages: [] };
       setConversations((cs) => [conv, ...cs]);
+
+      /* Première prise de contact : on amorce le message avec ce qu'on sait
+         déjà du client. Un artisan qui reçoit « Bonjour » tout court doit
+         redemander qui écrit et d'où. Le texte reste modifiable, et
+         effaçable — c'est une amorce, pas un message imposé. */
+      if (userType !== 'pro') {
+        const nom = monProfil.nom && monProfil.nom !== 'Vous' ? monProfil.nom : '';
+        const ville = monProfil.ville || '';
+        const presentation = nom && ville ? `${nom}, ${ville}`
+          : nom || ville;
+        // Beaucoup de gens s'inscrivent sous « Dylan M. » : sans ce nettoyage,
+        // l'amorce se terminerait par deux points.
+        setMsgDraft(presentation
+          ? `Bonjour, je suis ${presentation.replace(/\.+$/, '')}. `
+          : 'Bonjour, ');
+      }
     }
     setActiveConvId(conv.id);
     setScreen('messages');
@@ -301,12 +328,25 @@ export default function OpusApp() {
 
   const submitQuote = async (form) => {
     const { pro, mode } = quote;
+    const { memoriser, ...donnees } = form;
     setQuote({ open: false, pro: null, mode: 'devis' });
     try {
       if (mode === 'devis') {
-        await api.createQuoteRequest({ proId: pro.id, ...form });
+        await api.createQuoteRequest({ proId: pro.id, ...donnees });
       } else {
-        await api.createCallbackRequest({ proId: pro.id, ...form });
+        await api.createCallbackRequest({ proId: pro.id, ...donnees });
+      }
+      // Coordonnées saisies dans le formulaire : on les garde, pour que la
+      // demande suivante parte déjà remplie.
+      if (memoriser) {
+        const { nom, telephone, ville } = donnees;
+        setMonProfil((p) => ({
+          ...p,
+          nom: nom || p.nom,
+          telephone: telephone || p.telephone,
+          ville: ville || p.ville,
+        }));
+        api.enregistrerCoordonnees({ nom, telephone, ville }).catch(() => {});
       }
       showBanner(mode === 'devis'
         ? `Demande de devis envoyée à ${pro.entreprise}.`
@@ -408,21 +448,40 @@ export default function OpusApp() {
       : 'Avis publié (non vérifié : aucun devis accepté avec ce pro).');
   };
 
-  /* ---------- partenaires ---------- */
-  const addPartner = async (myId, otherId) => {
+  /* ---------- partenaires ----------
+     Un partenariat engage les deux noms : il se demande, il ne se prend pas.
+     Rien n'apparaît sur les profils tant que l'autre n'a pas accepté. */
+  const demanderPartenariat = async (otherId) => {
     try {
-      await api.addPartner(myId, otherId);
+      await api.demanderPartenariat(otherId);
     } catch (e) {
-      showBanner(`Partenariat impossible : ${e.message || e}`);
+      showBanner(`Demande impossible : ${e.message || e}`);
       return;
     }
-    setPros((prev) => ({
-      ...prev,
-      [myId]: { ...prev[myId], partners: [...new Set([...prev[myId].partners, otherId])] },
-      [otherId]: { ...prev[otherId], partners: [...new Set([...prev[otherId].partners, myId])] },
-    }));
-    showBanner('Partenariat confirmé.');
-    setScreen('profil');
+    setPartenariatsEnvoyes((l) => [...new Set([...l, otherId])]);
+    showBanner('Demande envoyée. Le partenariat apparaîtra une fois acceptée.');
+  };
+
+  const repondrePartenariat = async (demandeurId, accepte) => {
+    try {
+      await api.repondrePartenariat(demandeurId, accepte);
+    } catch (e) {
+      showBanner(`Réponse impossible : ${e.message || e}`);
+      return;
+    }
+    setDemandesPartenariat((l) => l.filter((id) => id !== demandeurId));
+    if (!accepte) { showBanner('Demande refusée.'); return; }
+
+    // Accepté : chacun apparaît maintenant chez l'autre.
+    setPros((prev) => {
+      if (!prev[myProId] || !prev[demandeurId]) return prev;
+      return {
+        ...prev,
+        [myProId]: { ...prev[myProId], partners: [...new Set([...prev[myProId].partners, demandeurId])] },
+        [demandeurId]: { ...prev[demandeurId], partners: [...new Set([...prev[demandeurId].partners, myProId])] },
+      };
+    });
+    showBanner('Partenariat accepté.');
   };
 
   /* ---------- notifications ---------- */
@@ -539,7 +598,8 @@ export default function OpusApp() {
     setCommentsPostId(null);
     setDecouvrirTab('artisans');
     setDemandesVues(false);
-    setMonProfil({ nom: 'Vous', ville: '', avatarUrl: null, bannerUrl: null });
+    setMonProfil({ nom: 'Vous', ville: '', telephone: '', avatarUrl: null, bannerUrl: null });
+    setDemandesPartenariat([]); setPartenariatsEnvoyes([]);
     setMesSos(null);
     setFeedMode('classic');
     setFeedTab('pourvous');
@@ -933,7 +993,11 @@ export default function OpusApp() {
           <ProfilOwnScreen
             userType={userType} pros={pros} myProId={myProId} monProfil={monProfil}
             followingIds={followingIds} savedIds={savedIds}
-            onAddPartner={addPartner} onViewProfile={viewProfile}
+            demandesPartenariat={demandesPartenariat}
+            partenariatsEnvoyes={partenariatsEnvoyes}
+            onDemanderPartenariat={demanderPartenariat}
+            onRepondrePartenariat={repondrePartenariat}
+            onViewProfile={viewProfile}
             onEdit={() => setScreen('profilEdit')}
             onLogout={deconnexion}
           />
@@ -968,6 +1032,9 @@ export default function OpusApp() {
 
       <QuoteModal
         quote={quote}
+        moi={userType === 'pro' && pros[myProId]
+          ? { nom: pros[myProId].entreprise, ville: pros[myProId].ville, telephone: monProfil.telephone }
+          : monProfil}
         onClose={() => setQuote({ open: false, pro: null, mode: 'devis' })}
         onSubmit={submitQuote}
       />

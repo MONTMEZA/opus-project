@@ -318,6 +318,66 @@ ajoute **à la fin** du tableau. C'est important : `portfolio[1]` reste la toute
 première réalisation, donc la bannière par défaut du profil ne change pas à
 chaque publication.
 
+## Les partenaires : ça se demande, ça ne se prend pas
+
+Un partenariat affiché sur un profil, c'est une recommandation publique. Il
+engage le nom des **deux** artisans.
+
+1. l'artisan A ouvre **Profil → Mes partenaires → + Ajouter** et clique
+   **Demander** ;
+2. l'artisan B reçoit une notification et voit la demande en tête de sa
+   section partenaires, avec **Accepter** / **Refuser** ;
+3. une fois acceptée, chacun apparaît chez l'autre — et A est prévenu.
+
+Tant que B n'a pas répondu, A voit **« En attente »** et rien ne s'affiche
+publiquement.
+
+C'est la **base de données** qui garantit la règle, pas l'écran :
+
+| Action | Qui y parvient |
+|---|---|
+| Créer une demande | Seulement en son propre nom, et seulement en attente |
+| Accepter ou refuser | **Seulement** celui à qui on demande |
+| Rompre | L'un ou l'autre |
+| Voir une demande en cours | Seulement les deux intéressés |
+
+Un index unique empêche par ailleurs deux demandes croisées sur la même paire.
+
+> **Ce qui a été corrigé.** Avant, « Ajouter » écrivait les deux sens d'un
+> coup : n'importe quel artisan pouvait s'inscrire dans les partenaires d'un
+> confrère sans que celui-ci ne soit jamais consulté. En rejouant
+> `schema.sql`, les partenariats existants sont conservés et marqués acceptés.
+
+## Regarder une réalisation en grand
+
+Une vignette de 130 px ne montre pas un chantier. On touche une photo du
+portfolio : elle s'ouvre en plein écran sur fond noir, avec le compteur
+(« 3 / 6 »), une croix pour fermer, et des flèches. **On balaie du doigt**
+pour passer d'une photo à l'autre — c'est le geste naturel sur un téléphone ;
+les flèches servent sur tablette et sur le web.
+
+## Les formulaires partent remplis
+
+Quand un particulier clique sur **Contacter**, l'application sait déjà qui il
+est. Ses coordonnées pré-remplissent la demande de devis comme la demande de
+rappel.
+
+Ce qui manque **reste vide**, mais une phrase dit pourquoi il faut le
+remplir :
+
+> *Sans numéro, l'artisan ne pourra pas vous rappeler.*
+
+« Votre numéro » tout seul n'explique rien ; cette phrase-là, si.
+
+Ce qu'on saisit peut être **retenu dans le profil** (case à cocher, proposée
+seulement s'il y a du nouveau) : la demande suivante part déjà remplie. Le
+téléphone se renseigne aussi une fois pour toutes dans **Modifier mon
+profil** ; il ne s'affiche nulle part et ne part qu'avec les demandes.
+
+Pour un **premier message**, le brouillon est amorcé avec « Bonjour, je suis
+*Nom*, *Ville*. » — modifiable et effaçable. Un artisan qui reçoit
+« Bonjour » tout court doit redemander qui écrit et d'où.
+
 ## Les commentaires et leurs réponses
 
 Un commentaire, et ses réponses. **Deux niveaux, pas davantage** — comme

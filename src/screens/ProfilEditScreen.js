@@ -30,6 +30,7 @@ export default function ProfilEditScreen({
   const [avatarUrl, setAvatarUrl] = useState(profil.avatarUrl || null);
   const [bannerUrl, setBannerUrl] = useState(profil.bannerUrl || null);
   const [nom, setNom] = useState(profil.nom || '');
+  const [telephone, setTelephone] = useState(profil.telephone || '');
   const [entreprise, setEntreprise] = useState(profil.entreprise || '');
   const [metier, setMetier] = useState(profil.metier || METIERS[0]);
   const [lieu, setLieu] = useState({
@@ -79,7 +80,7 @@ export default function ProfilEditScreen({
             exp: Number(exp) || 0,
           }
         : {
-            avatarUrl, nom,
+            avatarUrl, nom, telephone,
             ville: lieu.affichage,
             codePostal: lieu.codePostal,
             latitude: lieu.latitude,
@@ -177,6 +178,20 @@ export default function ProfilEditScreen({
 
             <Text style={s.label}>Ville</Text>
             <ChampVille valeur={lieu.affichage} onChange={setLieu} />
+
+            {/* Renseigné ici une fois, le numéro pré-remplit ensuite toutes
+                les demandes de devis et de rappel. */}
+            <Text style={s.label}>Téléphone</Text>
+            <Field
+              value={telephone}
+              onChangeText={setTelephone}
+              placeholder="06 12 34 56 78"
+              keyboardType="phone-pad"
+            />
+            <Text style={s.aide}>
+              Il ne s'affiche nulle part. Il n'est transmis qu'aux artisans à
+              qui vous demandez un devis ou un rappel.
+            </Text>
           </>
         )}
       </View>
@@ -361,6 +376,7 @@ function LigneDocument({ titre, detail, fichier, dejaEnvoye, onChoisir }) {
 
 const s = StyleSheet.create({
   pad: { paddingHorizontal: 16 },
+  aide: { fontSize: 11, color: C.muted, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 6 },
   banniereBarre: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 10, paddingHorizontal: 16, paddingVertical: 10,

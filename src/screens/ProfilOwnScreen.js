@@ -41,7 +41,8 @@ function Compte({ onLogout }) {
 
 export default function ProfilOwnScreen({
   userType, pros, myProId, monProfil, followingIds, savedIds,
-  onAddPartner, onViewProfile, onEdit, onLogout,
+  demandesPartenariat = [], partenariatsEnvoyes = [],
+  onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit, onLogout,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -98,9 +99,11 @@ export default function ProfilOwnScreen({
   if (!me) return <EmptyState>Profil professionnel introuvable.</EmptyState>;
 
   const avg = avgReviews(me);
-  const candidats = Object.values(pros).filter(
-    (p) => p.id !== me.id && !me.partners.includes(p.id),
-  );
+  // On ne propose ni soi-même, ni un partenaire déjà en place, ni quelqu'un
+  // dont la demande est déjà en cours dans un sens ou dans l'autre.
+  const candidats = Object.values(pros).filter((p) => p.id !== me.id
+    && !me.partners.includes(p.id)
+    && !demandesPartenariat.includes(p.id));
 
   return (
     <ScrollView style={{ flex: 1 }}>
@@ -149,6 +152,32 @@ export default function ProfilOwnScreen({
       <SectionLabel>Portfolio de chantiers</SectionLabel>
       <PortfolioGrid items={me.portfolio} />
 
+      {/* --- demandes de partenariat reçues --- */}
+      {demandesPartenariat.length > 0 && (
+        <>
+          <SectionLabel>Demandes de partenariat</SectionLabel>
+          <View style={s.list}>
+            {demandesPartenariat.map((id) => pros[id] && (
+              <ArtisanRow
+                key={String(id)}
+                pro={pros[id]}
+                avatarSize={40}
+                right={(
+                  <View style={s.reponse}>
+                    <BtnMini label="Accepter" onPress={() => onRepondrePartenariat(id, true)} />
+                    <BtnMini outline label="Refuser" onPress={() => onRepondrePartenariat(id, false)} />
+                  </View>
+                )}
+              />
+            ))}
+          </View>
+          <Text style={s.noteSection}>
+            Un partenariat engage votre nom autant que le sien : il n'apparaît
+            sur vos deux profils qu'une fois accepté.
+          </Text>
+        </>
+      )}
+
       <SectionLabel
         right={<BtnMini label={showAdd ? 'Fermer' : '+ Ajouter'} onPress={() => setShowAdd((v) => !v)} />}
       >
@@ -166,17 +195,33 @@ export default function ProfilOwnScreen({
         ))}
         {me.partners.length === 0 && !showAdd && (
           <EmptyState>
-            Vous n'avez pas encore ajouté de partenaire. Développez votre réseau Opus.
+            Vous n'avez pas encore de partenaire. Développez votre réseau Opus.
           </EmptyState>
         )}
-        {showAdd && candidats.map((c) => (
+
+        {/* demandes envoyées, en attente de réponse */}
+        {!showAdd && partenariatsEnvoyes.map((id) => pros[id] && (
           <ArtisanRow
-            key={String(c.id)}
-            pro={c}
+            key={`attente-${id}`}
+            pro={pros[id]}
             avatarSize={40}
-            right={<BtnMini label="Ajouter" onPress={() => onAddPartner(me.id, c.id)} />}
+            right={<Text style={s.attente}>En attente</Text>}
           />
         ))}
+
+        {showAdd && candidats.map((c) => {
+          const envoyee = partenariatsEnvoyes.includes(c.id);
+          return (
+            <ArtisanRow
+              key={String(c.id)}
+              pro={c}
+              avatarSize={40}
+              right={envoyee
+                ? <Text style={s.attente}>Demandé</Text>
+                : <BtnMini label="Demander" onPress={() => onDemanderPartenariat(c.id)} />}
+            />
+          );
+        })}
       </View>
 
       <Compte onLogout={onLogout} />
@@ -198,6 +243,12 @@ const s = StyleSheet.create({
     textAlign: 'center', lineHeight: 18, fontFamily: F.inter,
   },
   list: { gap: 10, paddingHorizontal: 16, paddingBottom: 24 },
+  reponse: { flexDirection: 'row', gap: 6 },
+  attente: { fontSize: 11, color: C.muted, fontFamily: F.inter6 },
+  noteSection: {
+    fontSize: 11, color: C.muted, fontFamily: F.inter, lineHeight: 16,
+    paddingHorizontal: 16, paddingBottom: 6, marginTop: -12,
+  },
 
   compte: { paddingHorizontal: 16, paddingBottom: 34, alignItems: 'center' },
   logout: { paddingVertical: 12, paddingHorizontal: 20 },

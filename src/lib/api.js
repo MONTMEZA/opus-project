@@ -226,6 +226,10 @@ export async function loadAll() {
       notifications: initialNotifications.map((n) => ({ ...n })),
       followingIds: [4],
       savedIds: [],
+      monCompte: { nom: 'Vous', ville: '', telephone: '', avatarUrl: null },
+      // En démo, une demande en attente pour montrer le mécanisme.
+      demandesPartenariat: [3],
+      partenariatsEnvoyes: [5],
     };
   }
 
@@ -233,7 +237,7 @@ export async function loadAll() {
 
   const [profilesRes, reviewsRes, partnersRes, postsRes, commentsRes,
          likesRes, savesRes, followsRes, convRes, msgRes, notifRes,
-         demandesRes, reponsesRes, masosRes] = await Promise.all([
+         demandesRes, reponsesRes, masosRes, moiRes] = await Promise.all([
     supabase.from('professional_profiles').select('*'),
     supabase.from('reviews').select('*, users:author_id(nom)').order('created_at', { ascending: false }),
     supabase.from('professional_partners').select('*'),
@@ -248,6 +252,7 @@ export async function loadAll() {
     supabase.from('demandes').select('*, users:client_id(nom, avatar_url)').order('created_at', { ascending: false }),
     supabase.from('demande_reponses').select('demande_id'),
     supabase.from('sos_availability').select('*').eq('professional_id', uid).maybeSingle(),
+    supabase.from('users').select('*').eq('id', uid).maybeSingle(),
   ]);
 
   const err = [profilesRes, reviewsRes, partnersRes, postsRes].find((r) => r.error);
@@ -260,9 +265,21 @@ export async function loadAll() {
     );
   });
 
+  /* Une ligne décrit une relation entre deux artisans. Acceptée, elle vaut
+     dans les deux sens : chacun apparaît chez l'autre. En attente, elle ne
+     regarde que les deux intéressés — d'un côté une demande à traiter, de
+     l'autre une demande envoyée. */
   const partnersByPro = {};
+  const demandesRecues = [];
+  const demandesEnvoyees = [];
   (partnersRes.data || []).forEach((p) => {
-    (partnersByPro[p.professional_id] ||= []).push(p.partner_id);
+    if (p.statut === 'accepte') {
+      (partnersByPro[p.professional_id] ||= []).push(p.partner_id);
+      (partnersByPro[p.partner_id] ||= []).push(p.professional_id);
+    } else if (p.statut === 'en_attente') {
+      if (p.partner_id === uid) demandesRecues.push(p.professional_id);
+      else if (p.professional_id === uid) demandesEnvoyees.push(p.partner_id);
+    }
   });
 
   const pros = {};
@@ -358,12 +375,25 @@ export async function loadAll() {
     delaiMinutes: ligne.delai_minutes,
   } : null;
 
+  const moi = moiRes.data || {};
+
   return {
     pros,
     posts,
     conversations,
     demandes,
     mesSos,
+    monCompte: {
+      nom: moi.nom || '',
+      ville: moi.ville || '',
+      telephone: moi.telephone || '',
+      avatarUrl: moi.avatar_url || null,
+      codePostal: moi.code_postal || null,
+      latitude: moi.latitude || null,
+      longitude: moi.longitude || null,
+    },
+    demandesPartenariat: demandesRecues,
+    partenariatsEnvoyes: demandesEnvoyees,
     notifications: (notifRes.data || []).map((n) => ({
       id: n.id, texte: n.texte, lue: n.lue, type: n.type || 'info',
       postId: n.post_id || null, commentId: n.comment_id || null,
@@ -508,9 +538,24 @@ export const createReview = !hasSupabase ? noop : async ({ proId, delais, qualit
   return data;
 };
 
-export const createQuoteRequest = !hasSupabase ? noop : async ({ proId, metier, description, ville, budget }) => {
-  const { error } = await supabase.from('quote_requests')
-    .insert({ client_id: currentUserId, professional_id: proId, metier, description, ville, budget });
+export const createQuoteRequest = !hasSupabase ? noop : async ({
+  proId, metier, description, ville, budget, nom, telephone,
+}) => {
+  const { error } = await supabase.from('quote_requests').insert({
+    client_id: currentUserId, professional_id: proId,
+    metier, description, ville, budget, nom, telephone,
+  });
+  if (error) throw error;
+};
+
+/** Mémoriser les coordonnées saisies dans un formulaire, pour la fois d'après. */
+export const enregistrerCoordonnees = !hasSupabase ? noop : async ({ nom, telephone, ville }) => {
+  const patch = {};
+  if (nom) patch.nom = nom;
+  if (telephone) patch.telephone = telephone;
+  if (ville) patch.ville = ville;
+  if (!Object.keys(patch).length) return;
+  const { error } = await supabase.from('users').update(patch).eq('id', currentUserId);
   if (error) throw error;
 };
 
@@ -542,6 +587,7 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
     const { error } = await supabase.from('users').update({
       nom: profil.nom,
       ville: profil.ville,
+      telephone: profil.telephone || null,
       avatar_url: profil.avatarUrl,
       code_postal: profil.codePostal || null,
       latitude: profil.latitude || null,
@@ -642,10 +688,30 @@ export const createSosRequest = !hasSupabase ? noop : async (d) => {
   return data;
 };
 
-export const addPartner = !hasSupabase ? noop : async (proId, partnerId) => {
-  const { error } = await supabase.from('professional_partners').insert([
-    { professional_id: proId, partner_id: partnerId },
-    { professional_id: partnerId, partner_id: proId },
-  ]);
+/**
+ * Proposer un partenariat. Une seule ligne, en attente : c'est l'autre qui
+ * décidera. Les règles de la base refusent tout le reste — on ne peut pas
+ * s'inscrire d'office chez un confrère.
+ */
+export const demanderPartenariat = !hasSupabase ? noop : async (partnerId) => {
+  const { error } = await supabase.from('professional_partners').insert({
+    professional_id: currentUserId, partner_id: partnerId, statut: 'en_attente',
+  });
+  if (error) throw error;
+};
+
+/** Répondre à une demande reçue. Seul le destinataire y parvient. */
+export const repondrePartenariat = !hasSupabase ? noop : async (demandeurId, accepte) => {
+  const { error } = await supabase.from('professional_partners')
+    .update({ statut: accepte ? 'accepte' : 'refuse', repondu_le: new Date().toISOString() })
+    .eq('professional_id', demandeurId).eq('partner_id', currentUserId);
+  if (error) throw error;
+};
+
+/** Annuler une demande envoyée, ou rompre un partenariat. */
+export const retirerPartenariat = !hasSupabase ? noop : async (autreId) => {
+  const { error } = await supabase.from('professional_partners').delete()
+    .or(`and(professional_id.eq.${currentUserId},partner_id.eq.${autreId}),`
+      + `and(professional_id.eq.${autreId},partner_id.eq.${currentUserId})`);
   if (error) throw error;
 };
