@@ -281,6 +281,43 @@ Le modèle utilisé est `claude-opus-5`. Pour en changer, modifie la constante
 
 ---
 
+## Publier : le format et la destination
+
+Deux choix distincts, sur le même écran, et c'est volontaire.
+
+### Le format dit ce qu'on montre
+
+**Photo**, **Vidéo**, **Avant/Après**, **Texte**, **Conseil**.
+
+C'est le format qui décide dans quel fil la publication apparaît :
+
+| Fil | Ce qu'on y voit |
+|---|---|
+| **Fil** | Tout : photos, vidéos, avant/après, textes, conseils, publicités. Une vidéo y porte une pastille « ▷ Vidéo ». |
+| **Vidéos** | **Uniquement les vidéos**, en plein écran, façon TikTok. Ni photos, ni textes, ni publicités. |
+
+En base, la colonne `posts.type` porte le format (`photo`, `video`…), et la
+colonne `posts.is_ad` dit s'il s'agit d'une publicité. Côté application, le
+format s'appelle `post.format` et la nature `post.type` (`post` ou `ad`).
+
+### La destination dit où elle va
+
+| Choix | Effet |
+|---|---|
+| **Le fil** | Publiée, visible de tous, avec likes et commentaires. Rien dans le portfolio. |
+| **Mon portfolio** | Rangée dans les réalisations du profil. Rien dans le fil, personne n'est notifié. |
+| **Les deux** *(par défaut)* | Publiée **et** ajoutée aux réalisations, d'un seul geste. |
+
+Un artisan ne veut pas toujours annoncer quelque chose : parfois il veut juste
+étoffer sa vitrine. Le choix n'apparaît que pour les formats qui produisent une
+image ou une vidéo — un texte ou un conseil n'a rien à ranger dans un
+portfolio, il va donc directement dans le fil.
+
+L'ajout au portfolio passe par la fonction SQL `ajoute_au_portfolio`, qui
+ajoute **à la fin** du tableau. C'est important : `portfolio[1]` reste la toute
+première réalisation, donc la bannière par défaut du profil ne change pas à
+chaque publication.
+
 ## Le SOS et l'espace Demandes
 
 Deux fonctions qui distinguent Opus des plateformes de mise en relation classiques.

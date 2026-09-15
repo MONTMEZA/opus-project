@@ -10,7 +10,7 @@ import {
 } from './ui';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
-  MessageCircle, Phone, FileText, User, Send,
+  MessageCircle, Phone, FileText, User, Send, Play,
 } from './icons';
 
 export default function PostCard({
@@ -64,7 +64,16 @@ export default function PostCard({
       </View>
 
       <Text style={s.postText}>{post.texte}</Text>
-      <Gradient media={post.media} style={{ width: '100%', aspectRatio: 16 / 10 }} />
+      {/* Une vidéo reste visible dans le fil, mais se signale comme telle :
+          la pastille dit qu'elle se regarde aussi en plein écran. */}
+      <Gradient media={post.media} style={{ width: '100%', aspectRatio: 16 / 10 }}>
+        {post.format === 'video' && (
+          <View style={s.pastilleVideo}>
+            <Play size={13} color="#fff" />
+            <Text style={s.pastilleVideoTexte}>Vidéo</Text>
+          </View>
+        )}
+      </Gradient>
 
       {/* barre d'actions */}
       <View style={s.actions}>
@@ -141,6 +150,11 @@ function ContactItem({ icon, label, onPress, last }) {
 }
 
 const s = StyleSheet.create({
+  pastilleVideo: {
+    position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center',
+    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)', paddingVertical: 4, paddingHorizontal: 8,
+  },
+  pastilleVideoTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
 
   head: {

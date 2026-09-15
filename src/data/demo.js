@@ -123,28 +123,31 @@ export function avgReviews(pro) {
   return { delais, qualite, tarif, global: (delais + qualite + tarif) / 3, count: rs.length };
 }
 
+// « format » dit ce qu'on regarde (photo, vidéo…) ; « type » dit s'il s'agit
+// d'une publication ou d'une publicité. Le fil des vidéos ne retient que les
+// publications dont le format est 'video'.
 export const initialPosts = [
-  { id: 1, type: 'post', proId: 1, time: 'Il y a 2 h',
+  { id: 1, type: 'post', format: 'photo', proId: 1, time: 'Il y a 2 h',
     texte: "Fondations coulées ce matin, dalle prévue vendredi. Chantier villa R+1.",
     media: '#3a3a38,#8a8578', likes: 214, liked: false,
     comments: [{ id: 1, auteur: 'Julie M.', texte: 'Superbe avancée, bravo !' }] },
-  { id: 2, type: 'post', proId: 2, time: 'Il y a 4 h',
+  { id: 2, type: 'post', format: 'video', proId: 2, time: 'Il y a 4 h',
     texte: "Tableau électrique aux normes NF C 15-100, mise en service demain matin.",
     media: '#1b4b6b,#4d7f9e', likes: 132, liked: false, comments: [] },
   { id: 'ad1', type: 'ad', annonceur: 'BricoPro Matériaux',
     accroche: "-15% sur les sacs de ciment ce mois-ci pour les pros inscrits.",
     cta: "Voir l'offre", media: '#2b2b2b,#555555' },
-  { id: 3, type: 'post', proId: 3, time: 'Hier',
+  { id: 3, type: 'post', format: 'video', proId: 3, time: 'Hier',
     texte: "Pose grand format 120x60 en salle de bain, jointoiement fini cette semaine. Rendu au top.",
     media: '#6b4226,#b98255', likes: 341, liked: false,
     comments: [{ id: 2, auteur: 'Antoine R.', texte: 'Magnifique travail, vous intervenez sur Toulouse centre ?' }] },
-  { id: 4, type: 'post', proId: 4, time: 'Hier',
+  { id: 4, type: 'post', format: 'photo', proId: 4, time: 'Hier',
     texte: "Remplacement chaudière + purge complète du circuit. Client satisfait, garantie 2 ans.",
     media: '#1b4b6b,#2f4b3a', likes: 87, liked: false, comments: [] },
   { id: 'ad2', type: 'ad', annonceur: 'AssurBTP',
     accroche: "Assurance décennale dès 39€/mois pour les artisans du bâtiment.",
     cta: 'En savoir plus', media: '#111111,#3a3a38' },
-  { id: 5, type: 'post', proId: 5, time: 'Il y a 2 j',
+  { id: 5, type: 'post', format: 'avantapres', proId: 5, time: 'Il y a 2 j',
     texte: "Charpente traditionnelle posée en 3 jours, ossature chêne massif.",
     media: '#4b4b2f,#9a9a5a', likes: 176, liked: false, comments: [] },
 ];

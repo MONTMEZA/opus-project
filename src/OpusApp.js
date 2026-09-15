@@ -35,6 +35,14 @@ import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
 import { envoyerFichier, estFichierLocal } from './lib/storage';
 import { aiMatchPros } from './lib/ai';
+import { FORMATS_VISUELS } from './screens/CreerScreen';
+
+/** Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie. */
+const MESSAGE_PUBLICATION = {
+  fil: 'Votre publication est en ligne.',
+  portfolio: 'Ajouté à votre portfolio.',
+  deux: 'En ligne, et ajouté à votre portfolio.',
+};
 
 export default function OpusApp() {
   const [userType, setUserType] = useState(null);
@@ -85,6 +93,8 @@ export default function OpusApp() {
   const [filterMetier, setFilterMetier] = useState(null);
 
   const [createType, setCreateType] = useState('photo');
+  // Où va la publication : le fil, le portfolio, ou les deux.
+  const [createDestination, setCreateDestination] = useState('deux');
   const [createText, setCreateText] = useState('');
   const [createMetier, setCreateMetier] = useState(METIERS[0]);
   const [createVille, setCreateVille] = useState('');
@@ -265,29 +275,53 @@ export default function OpusApp() {
       showBanner("Le fil d'actualité est réservé aux professionnels.");
       return;
     }
-    if (!createText.trim()) { showBanner('Ajoute une description avant de publier.'); return; }
+
+    // Un texte et un conseil n'ont rien à montrer : ils ne vont que dans le fil.
+    const aUnVisuel = FORMATS_VISUELS.has(createType);
+    const destination = aUnVisuel ? createDestination : 'fil';
+    const versLeFil = destination !== 'portfolio';
+    const versLePortfolio = aUnVisuel && destination !== 'fil';
+
+    if (versLeFil && !createText.trim()) {
+      showBanner('Ajoute une description avant de publier.');
+      return;
+    }
+
     const media = POST_GRADIENTS[Math.floor(Math.random() * POST_GRADIENTS.length)];
-    const texte = (userType === 'particulier' ? `[Demande particulier · ${createMetier}] ` : '')
-      + createText.trim();
+    const texte = createText.trim();
 
     let id = `local-${Date.now()}`;
     try {
-      const row = await api.createPost({
-        type: createType, texte, media, metier: createMetier, ville: createVille,
-      });
-      if (row) id = row.id;
+      if (versLeFil) {
+        const row = await api.createPost({
+          type: createType, texte, media, metier: createMetier, ville: createVille,
+        });
+        if (row) id = row.id;
+      }
+      if (versLePortfolio) await api.ajouterAuPortfolio(media);
     } catch (e) {
       showBanner(`Publication non enregistrée : ${e.message || e}`);
       return;
     }
 
-    setPosts((ps) => [{
-      id, type: 'post', proId: myProId, time: "À l'instant",
-      texte, media, likes: 0, liked: false, comments: [],
-    }, ...ps]);
+    if (versLeFil) {
+      setPosts((ps) => [{
+        id, type: 'post', format: createType, proId: myProId, time: "À l'instant",
+        texte, media, likes: 0, liked: false, comments: [],
+      }, ...ps]);
+    }
+    if (versLePortfolio && myProId) {
+      setPros((ps) => (ps[myProId]
+        ? { ...ps, [myProId]: { ...ps[myProId], portfolio: [...ps[myProId].portfolio, media] } }
+        : ps));
+    }
+
     setCreateText(''); setCreateVille('');
-    setScreen('home');
-    showBanner('Votre publication est en ligne.');
+    // Le fil des vidéos ne montre que des vidéos : on y renvoie l'artisan
+    // quand c'est là que sa publication vient d'atterrir.
+    if (versLeFil) setFeedMode(createType === 'video' ? 'video' : 'classic');
+    setScreen(versLeFil ? 'home' : 'profil');
+    showBanner(MESSAGE_PUBLICATION[destination]);
   };
 
   /* ---------- avis ---------- */
@@ -565,9 +599,17 @@ export default function OpusApp() {
 
   /* ---------- dérivés ---------- */
   const visiblePosts = posts.filter((p) => !hiddenIds.has(p.id));
-  const feedFiltered = feedTab === 'abonnements'
+  const feedAbonnements = feedTab === 'abonnements'
     ? visiblePosts.filter((p) => p.type === 'ad' || followingIds.has(p.proId))
     : visiblePosts;
+  /**
+   * Le fil « Vidéos » ne retient que les vidéos — et pas les publicités, qui
+   * n'en sont pas. Le fil « Fil » garde tout : une vidéo y apparaît comme une
+   * carte, avec sa pastille de lecture.
+   */
+  const feedFiltered = feedMode === 'video'
+    ? feedAbonnements.filter((p) => p.type === 'post' && p.format === 'video')
+    : feedAbonnements;
 
   /**
    * L'interlocuteur d'une conversation. C'est un professionnel quand un
@@ -729,6 +771,7 @@ export default function OpusApp() {
         {screen === 'creer' && (
           <CreerScreen
             createType={createType} setCreateType={setCreateType}
+            createDestination={createDestination} setCreateDestination={setCreateDestination}
             createText={createText} setCreateText={setCreateText}
             createMetier={createMetier} setCreateMetier={setCreateMetier}
             createVille={createVille} setCreateVille={setCreateVille}

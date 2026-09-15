@@ -24,6 +24,8 @@ export const Check = mk(Feather, 'check');
 export const ChevronRight = mk(Feather, 'chevron-right');
 export const EyeOff = mk(Feather, 'eye-off');
 export const Send = mk(Feather, 'send');
+export const Grid = mk(Feather, 'grid');
+export const Play = mk(Feather, 'play');
 
 // Publication
 export const Heart = function Heart({ size = 18, color = C.ink, filled = false }) {

@@ -673,6 +673,28 @@ create trigger trg_cree_fiche_utilisateur
 --  Sert à trier les artisans disponibles autour d'une urgence, sans avoir
 --  à installer d'extension géographique.
 -- ==========================================================================
+-- --------------------------------------------------------------------------
+--  Ajouter une réalisation à son portfolio.
+--
+--  On ajoute à la FIN du tableau, volontairement : portfolio[1] reste la
+--  toute première réalisation, et la bannière par défaut du profil ne change
+--  donc pas à chaque publication.
+--
+--  security invoker : la fonction s'exécute avec les droits de l'appelant,
+--  donc les règles RLS s'appliquent. Personne ne peut remplir le portfolio
+--  de quelqu'un d'autre.
+-- --------------------------------------------------------------------------
+create or replace function public.ajoute_au_portfolio(media text)
+returns text[] language plpgsql security invoker set search_path = public as $$
+declare resultat text[];
+begin
+  update public.professional_profiles
+     set portfolio = array_append(portfolio, media)
+   where id = auth.uid()
+  returning portfolio into resultat;
+  return resultat;
+end; $$;
+
 create or replace function public.distance_km(
   lat1 double precision, lon1 double precision,
   lat2 double precision, lon2 double precision

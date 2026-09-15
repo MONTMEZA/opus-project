@@ -287,6 +287,10 @@ export async function loadAll() {
       }
     : {
         id: p.id, type: 'post', proId: p.author_id, time: relativeTime(p.created_at),
+        // « type » dit si c'est une publication ou une publicité ; « format »
+        // dit ce qu'on regarde. Les deux étaient confondus, si bien qu'une
+        // photo se retrouvait dans le fil des vidéos.
+        format: p.type || 'photo',
         texte: p.texte, media: p.media, likes: p.likes_count || 0,
         liked: likedSet.has(p.id), comments: commentsByPost[p.id] || [],
       }));
@@ -395,6 +399,18 @@ export const createPost = !hasSupabase ? noop : async ({ type, texte, media, met
   const { data, error } = await supabase.from('posts')
     .insert({ author_id: currentUserId, type, texte, media, metier, ville })
     .select().single();
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Ajoute une réalisation au portfolio du professionnel connecté.
+ *
+ * On ajoute à la fin : la première photo reste la première, et la bannière
+ * par défaut du profil ne change donc pas à chaque publication.
+ */
+export const ajouterAuPortfolio = !hasSupabase ? noop : async (media) => {
+  const { data, error } = await supabase.rpc('ajoute_au_portfolio', { media });
   if (error) throw error;
   return data;
 };
