@@ -416,6 +416,13 @@ Titres et boutons en **Oswald**, texte courant en **Inter**, angles nets partout
 sauf les avatars (ronds) et les petits badges, et la bande diagonale façon ruban
 de chantier en haut de l'app.
 
+**L'en-tête de profil** (`src/components/EnteteProfil.js`) reprend l'idée
+LinkedIn — grande bannière, photo qui la chevauche — avec la signature d'Opus :
+la bande de chantier court au bas de la bannière et la photo vient l'enjamber.
+Un voile sombre sous la bannière garantit que l'anneau blanc se détache, même
+sur une image claire. Les trois mesures se règlent en haut du fichier :
+hauteur de bannière, taille de la photo, profondeur du chevauchement.
+
 ## Différences assumées avec le prototype web
 
 Le rendu et les interactions sont identiques. Trois points ont dû changer parce

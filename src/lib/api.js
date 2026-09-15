@@ -238,14 +238,14 @@ export async function loadAll() {
     supabase.from('reviews').select('*, users:author_id(nom)').order('created_at', { ascending: false }),
     supabase.from('professional_partners').select('*'),
     supabase.from('posts').select('*').order('created_at', { ascending: false }),
-    supabase.from('comments').select('*, users:author_id(nom)').order('created_at'),
+    supabase.from('comments').select('*, users:author_id(nom, avatar_url)').order('created_at'),
     supabase.from('post_likes').select('post_id').eq('user_id', uid),
     supabase.from('saved_posts').select('post_id').eq('user_id', uid),
     supabase.from('follows').select('following_id').eq('follower_id', uid),
     supabase.from('conversations').select('*').or(`client_id.eq.${uid},professional_id.eq.${uid}`),
     supabase.from('messages').select('*').order('created_at'),
     supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
-    supabase.from('demandes').select('*, users:client_id(nom)').order('created_at', { ascending: false }),
+    supabase.from('demandes').select('*, users:client_id(nom, avatar_url)').order('created_at', { ascending: false }),
     supabase.from('demande_reponses').select('demande_id'),
     supabase.from('sos_availability').select('*').eq('professional_id', uid).maybeSingle(),
   ]);
@@ -274,6 +274,7 @@ export async function loadAll() {
   (commentsRes.data || []).forEach((c) => {
     (commentsByPost[c.post_id] ||= []).push({
       id: c.id, auteur: c.users ? c.users.nom : 'Client', texte: c.texte,
+      avatarUrl: c.users ? c.users.avatar_url : null,
     });
   });
 
@@ -316,6 +317,7 @@ export async function loadAll() {
     id: d.id,
     auteurId: d.client_id,
     auteur: d.users ? d.users.nom : 'Un particulier',
+    avatarUrl: d.users ? d.users.avatar_url : null,
     metier: d.metier,
     ville: d.ville || 'Non précisée',
     codePostal: d.code_postal,

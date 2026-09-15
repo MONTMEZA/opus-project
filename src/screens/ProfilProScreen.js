@@ -9,8 +9,9 @@ import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from
 import Slider from '@react-native-community/slider';
 import { C, F } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea, ProfileBanner,
+  Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea,
 } from '../components/ui';
+import EnteteProfil from '../components/EnteteProfil';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import {
@@ -85,11 +86,10 @@ export default function ProfilProScreen({
 
   return (
     <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
-      <ProfileBanner uri={pro.bannerUrl} height={140} />
+      <EnteteProfil seed={pro.id} bannerUrl={pro.bannerUrl} avatarUrl={pro.avatarUrl} />
 
       {/* --- en-tête --- */}
       <View style={s.head}>
-        <Avatar seed={pro.id} size={88} ring={4} uri={pro.avatarUrl} />
         <View style={s.nameRow}>
           <Text style={s.name}>{pro.entreprise}</Text>
           {pro.verifie && <BadgeCheck size={16} color={C.verif} />}
@@ -264,8 +264,8 @@ function SliderRow({ label, value, onChange }) {
 }
 
 const s = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center', marginTop: -48 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
+  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
   metier: { fontSize: 12.5, color: C.muted, marginTop: 2, fontFamily: F.inter },
   sub: { fontSize: 11, color: C.accent2, marginTop: 4, fontFamily: F.inter6 },

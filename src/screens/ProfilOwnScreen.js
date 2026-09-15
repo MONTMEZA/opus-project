@@ -9,18 +9,14 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import {
-  Avatar, BtnMini, BtnOutline, EmptyState, SectionLabel, ProfileBanner,
+  BtnMini, BtnOutline, EmptyState, SectionLabel,
 } from '../components/ui';
+import EnteteProfil from '../components/EnteteProfil';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import { BadgeCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
 import { avgReviews } from '../data/demo';
-
-/** Bannière de profil, façon LinkedIn : une vraie image si elle existe. */
-function Cover({ uri }) {
-  return <ProfileBanner uri={uri} height={140} />;
-}
 
 function Stat({ value, label }) {
   return (
@@ -54,10 +50,9 @@ export default function ProfilOwnScreen({
     const followed = [...followingIds];
     return (
       <ScrollView style={{ flex: 1 }}>
-        <Cover uri={monProfil.bannerUrl} />
+        <EnteteProfil seed={9} bannerUrl={monProfil.bannerUrl} avatarUrl={monProfil.avatarUrl} />
         <View style={s.head}>
-          <Avatar seed={9} size={88} ring={4} uri={monProfil.avatarUrl} />
-          <Text style={[s.name, { marginTop: 8 }]}>{monProfil.nom || 'Vous'}</Text>
+          <Text style={[s.name, { marginTop: 10 }]}>{monProfil.nom || 'Vous'}</Text>
           <Text style={s.metier}>
             Particulier{monProfil.ville ? ` · ${monProfil.ville}` : ''}
           </Text>
@@ -98,9 +93,8 @@ export default function ProfilOwnScreen({
 
   return (
     <ScrollView style={{ flex: 1 }}>
-      <Cover uri={me.bannerUrl} />
+      <EnteteProfil seed={me.id} bannerUrl={me.bannerUrl} avatarUrl={me.avatarUrl} />
       <View style={s.head}>
-        <Avatar seed={me.id} size={88} ring={4} uri={me.avatarUrl} />
         <View style={s.nameRow}>
           <Text style={s.name}>{me.entreprise}</Text>
           {me.verifie && <BadgeCheck size={16} color={C.verif} />}
@@ -165,8 +159,8 @@ export default function ProfilOwnScreen({
 }
 
 const s = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center', marginTop: -48 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
+  head: { paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
   metier: { fontSize: 12.5, color: C.muted, marginTop: 2, fontFamily: F.inter },
   sub: { fontSize: 11, color: C.accent2, marginTop: 4, fontFamily: F.inter6, textAlign: 'center' },

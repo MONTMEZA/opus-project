@@ -48,7 +48,7 @@ export default function PostCard({
       {/* en-tête */}
       <View style={s.head}>
         <Pressable style={s.headLeft} onPress={() => onView(pro.id)}>
-          <Avatar seed={pro.id} />
+          <Avatar seed={pro.id} uri={pro.avatarUrl} />
           <View>
             <View style={s.nameRow}>
               <Text style={s.name}>{pro.entreprise}</Text>

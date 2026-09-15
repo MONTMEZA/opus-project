@@ -108,7 +108,7 @@ export default function DemandesScreen({
         {liste.map((d) => (
           <View key={String(d.id)} style={s.carte}>
             <View style={s.carteHaut}>
-              <Avatar seed={String(d.auteur)} size={38} />
+              <Avatar seed={String(d.auteurId || d.auteur)} size={38} uri={d.avatarUrl} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={s.auteur}>{d.auteur}</Text>
                 <View style={s.metaRow}>
