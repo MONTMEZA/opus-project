@@ -467,7 +467,7 @@ C'est le format qui décide dans quel fil la publication apparaît :
 
 | Fil | Ce qu'on y voit |
 |---|---|
-| **Fil** | Tout : photos, vidéos, avant/après, textes, conseils, publicités. Une vidéo y porte une pastille « ▷ Vidéo ». |
+| **Fil** | Tout : photos, vidéos, avant/après, textes, conseils, publicités. Une vidéo y porte une pastille « ▷ Vidéo », se lit muette au format 4/5, et **s'ouvre en plein écran d'une pression** — sur elle-même, pas au début de la liste. |
 | **Vidéos** | **Uniquement ce qui se regarde en plein écran** — vidéos et montages, façon TikTok. Ni photos, ni textes, ni publicités. |
 
 En base, la colonne `posts.type` porte le format (`photo`, `video`…), et la

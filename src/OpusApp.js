@@ -55,6 +55,8 @@ export default function OpusApp() {
   const [typeChoisi, setTypeChoisi] = useState(null); // type retenu avant connexion
   const [screen, setScreen] = useState('home');
   const [feedMode, setFeedMode] = useState('classic');
+  // Vidéo sur laquelle ouvrir le plein écran, quand on y arrive depuis le fil.
+  const [videoCible, setVideoCible] = useState(null);
   const [feedTab, setFeedTab] = useState('pourvous');
 
   const [pros, setPros] = useState({});
@@ -201,6 +203,25 @@ export default function OpusApp() {
   const monAvatar = userType === 'pro' && pros[myProId]
     ? pros[myProId].avatarUrl
     : monProfil.avatarUrl;
+
+  /**
+   * Toucher une vidéo dans le fil l'ouvre en plein écran, sur elle-même.
+   *
+   * Dans le fil, une vidéo filmée debout n'est vue qu'en partie et reste
+   * muette : c'est un aperçu. Le plein écran, lui, la montre entière, avec le
+   * son. Renvoyer au début de la liste ferait perdre celle qu'on regardait.
+   */
+  const ouvrirVideoEnGrand = (post) => {
+    setVideoCible(post.id);
+    setFeedMode('video');
+  };
+
+  /* Bascule manuelle Fil / Vidéos : on oublie la vidéo visée, sinon le fil
+     rouvrirait toujours au même endroit. */
+  const changerFeedMode = (mode) => {
+    setVideoCible(null);
+    setFeedMode(mode);
+  };
 
   /* ---------- actions publication ---------- */
   const toggleLike = (id) => {
@@ -999,7 +1020,8 @@ export default function OpusApp() {
         {screen === 'home' && (
           <HomeScreen
             posts={feedFiltered} pros={pros}
-            feedMode={feedMode} setFeedMode={setFeedMode}
+            feedMode={feedMode} setFeedMode={changerFeedMode}
+            videoCible={videoCible} onOuvrirVideo={ouvrirVideoEnGrand}
             feedTab={feedTab} setFeedTab={setFeedTab}
             followingIds={followingIds} savedIds={savedIds}
             openCommentsId={openCommentsId} openContactId={openContactId}

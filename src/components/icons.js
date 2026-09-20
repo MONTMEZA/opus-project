@@ -26,6 +26,7 @@ export const EyeOff = mk(Feather, 'eye-off');
 export const Send = mk(Feather, 'send');
 export const Grid = mk(Feather, 'grid');
 export const Play = mk(Feather, 'play');
+export const Maximize = mk(Feather, 'maximize');
 export const Music = mk(Feather, 'music');
 export const Plus = mk(Feather, 'plus');
 export const CornerDownRight = mk(Feather, 'corner-down-right');

@@ -11,7 +11,7 @@ import {
 import Commentaires, { nombreCommentaires } from './Commentaires';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
-  MessageCircle, Phone, FileText, User, Send,
+  MessageCircle, Phone, FileText, User, Send, Maximize,
 } from './icons';
 import Media, { EtiquetteVideo } from './Media';
 
@@ -19,10 +19,13 @@ import Media, { EtiquetteVideo } from './Media';
 const EST_VIDEO = new Set(['video', 'montage']);
 
 export default function PostCard({
-  post, pro, pros = {}, following, actif = false, onLike, onFollow, onView, onHide,
+  post, pro, pros = {}, following, actif = false,
+  onLike, onFollow, onView, onHide, onOuvrirVideo,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
 }) {
+
+  const estVideo = EST_VIDEO.has(post.format);
 
   /* --- publication sponsorisée --- */
   if (post.type === 'ad') {
@@ -68,8 +71,6 @@ export default function PostCard({
       </View>
 
       <Text style={s.postText}>{post.texte}</Text>
-      {/* Une vidéo reste visible dans le fil, mais se signale comme telle :
-          la pastille dit qu'elle se regarde aussi en plein écran. */}
       {post.format === 'avantapres' && (post.medias || []).length > 1 ? (
         /* Avant/après : les deux photos côte à côte, chacune étiquetée.
            C'est la comparaison qui fait tout l'intérêt du format. */
@@ -83,15 +84,33 @@ export default function PostCard({
             </View>
           ))}
         </View>
+      ) : estVideo ? (
+        /* Une vidéo se filme debout : dans un cadre 16/10 on n'en voit qu'une
+           bande. Le format 4/5 en montre beaucoup plus sans dévorer le fil —
+           c'est le compromis retenu par Instagram.
+           Et surtout, on peut la toucher : elle s'ouvre alors en plein écran,
+           avec le son, à l'endroit exact où on l'a laissée dans le fil. */
+        <Pressable onPress={() => onOuvrirVideo && onOuvrirVideo(post)}>
+          <Media
+            media={post.media}
+            style={{ width: '100%', aspectRatio: 4 / 5, backgroundColor: C.dark }}
+            lecture={actif}
+            muet
+          >
+            <EtiquetteVideo />
+            <View style={s.indicePleinEcran} pointerEvents="none">
+              <Maximize size={12} color="#fff" />
+              <Text style={s.indicePleinEcranTexte}>Voir en plein écran</Text>
+            </View>
+          </Media>
+        </Pressable>
       ) : (
         <Media
           media={post.media}
           style={{ width: '100%', aspectRatio: 16 / 10 }}
           lecture={actif}
           muet
-        >
-          {EST_VIDEO.has(post.format) && <EtiquetteVideo />}
-        </Media>
+        />
       )}
 
       {/* barre d'actions */}
@@ -151,6 +170,11 @@ function ContactItem({ icon, label, onPress, last }) {
 }
 
 const s = StyleSheet.create({
+  indicePleinEcran: {
+    position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center',
+    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)', paddingVertical: 4, paddingHorizontal: 8,
+  },
+  indicePleinEcranTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
   avantApres: { flexDirection: 'row', gap: 2 },
   etiquetteAA: {
     position: 'absolute', left: 8, top: 8,

@@ -5,7 +5,7 @@
  * En mode "Vidéos", les diapositives occupent toute la hauteur de l'écran et
  * la bascule Fil/Vidéos flotte par-dessus, comme sur TikTok.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme';
@@ -22,8 +22,10 @@ const TABS = [
 export default function HomeScreen({
   posts, pros, feedMode, setFeedMode, feedTab, setFeedTab,
   followingIds, savedIds, openCommentsId, openContactId, bottomInset = 0, rappel,
+  videoCible,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
+  onOuvrirVideo,
 }) {
   const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
@@ -36,6 +38,16 @@ export default function HomeScreen({
      et s'arrête quand elle en sort. Le son reste coupé : une vidéo qui parle
      toute seule pendant qu'on fait défiler est insupportable — Instagram et
      Facebook font pareil, le son ne vient qu'en plein écran. */
+  /* Quand on arrive depuis une vidéo touchée dans le fil, le plein écran
+     s'ouvre directement sur elle plutôt qu'au début de la liste. */
+  const indexCible = videoCible
+    ? Math.max(0, posts.findIndex((p) => p.id === videoCible))
+    : 0;
+
+  useEffect(() => {
+    if (feedMode === 'video') setSlideActive(indexCible);
+  }, [feedMode, indexCible]);
+
   const [visibles, setVisibles] = useState(() => new Set());
   const reglesVisibilite = useRef({ itemVisiblePercentThreshold: 65 });
   const surVisibilite = useRef(({ viewableItems }) => {
@@ -51,6 +63,7 @@ export default function HomeScreen({
           keyExtractor={(p) => String(p.id)}
           pagingEnabled
           showsVerticalScrollIndicator={false}
+          initialScrollIndex={indexCible}
           snapToInterval={windowHeight}
           decelerationRate="fast"
           getItemLayout={(_, index) => ({
@@ -120,6 +133,7 @@ export default function HomeScreen({
             <PostCard
               post={p}
               actif={visibles.has(p.id)}
+              onOuvrirVideo={onOuvrirVideo}
               pro={p.proId ? pros[p.proId] : null}
               pros={pros}
               onVoirCommentateur={onVoirCommentateur}
