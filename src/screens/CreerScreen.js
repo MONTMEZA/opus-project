@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import { BtnMain, BtnMini, Chip, Field, TextArea } from '../components/ui';
+import AmeliorerTexte from '../components/AmeliorerTexte';
 import Media from '../components/Media';
 import {
   Camera, VideoIcon, TypeIcon, Layers, Lightbulb, Grid, Send, Music, X, Plus,
@@ -50,6 +51,7 @@ const DESTINATIONS = [
 ];
 
 export default function CreerScreen({
+  moi,
   createType, setCreateType, createText, setCreateText,
   createMetier, setCreateMetier, createVille, setCreateVille,
   createDestination, setCreateDestination,
@@ -269,9 +271,23 @@ export default function CreerScreen({
 
       <Text style={s.label}>{dansLeFil ? 'Description' : 'Description (facultative)'}</Text>
       <TextArea
-        placeholder={dansLeFil ? 'Décris ta publication...' : 'Une légende, si tu veux...'}
+        placeholder={dansLeFil
+          ? 'Raconte ce que tu as fait, avec tes mots...'
+          : 'Une légende, si tu veux...'}
         value={createText}
         onChangeText={setCreateText}
+      />
+
+      {/* L'artisan écrit comme il parle, puis fait relire. L'assistant part
+          de SES mots : il corrige et range, il ne remplace pas. */}
+      <AmeliorerTexte
+        texte={createText}
+        contexte="publication"
+        profil={moi ? {
+          entreprise: moi.entreprise, metiers: moi.metiers || [moi.metier],
+          ville: moi.ville, exp: moi.exp,
+        } : {}}
+        onRemplacer={setCreateText}
       />
 
       <Text style={s.label}>Métier</Text>

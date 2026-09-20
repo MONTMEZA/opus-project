@@ -12,10 +12,11 @@
  *   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
  *   supabase functions deploy ai
  *
- * TROIS ACTIONS :
- *   { action: "match",   besoin, artisans }  -> { recommandations: [...] }
- *   { action: "summary", entreprise, metier, avis } -> { resume: "..." }
- *   { action: "bio",     profil, reponses }  -> { propositions: [{titre, texte}] }
+ * QUATRE ACTIONS :
+ *   { action: "match",     besoin, artisans }  -> { recommandations: [...] }
+ *   { action: "summary",   entreprise, metier, avis } -> { resume: "..." }
+ *   { action: "bio",       profil, reponses }  -> { propositions: [{titre, texte}] }
+ *   { action: "ameliorer", texte, contexte, profil } -> { propositions: [...] }
  */
 import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
 
@@ -243,6 +244,81 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
       });
 
       if (aRefuse(message)) return json({ error: "L'assistant a refusé d'écrire cette présentation." }, 422);
+
+      const brut = textOf(message).replace(/```json|```/g, '').trim();
+      let parsed: { propositions?: unknown };
+      try {
+        parsed = JSON.parse(brut);
+      } catch {
+        return json({ error: "L'assistant a renvoyé une réponse illisible. Réessayez." }, 502);
+      }
+      const propositions = Array.isArray(parsed.propositions) ? parsed.propositions : [];
+      return json({ propositions });
+    }
+
+    /* ---- Améliorer un texte déjà écrit (publication, présentation) ---- */
+    if (payload.action === 'ameliorer') {
+      const texte = String(payload.texte || '').slice(0, 4000).trim();
+      const contexte = payload.contexte === 'presentation' ? 'presentation' : 'publication';
+      const profil = (payload.profil || {}) as Record<string, unknown>;
+
+      if (texte.length < 10) {
+        return json({ error: 'Écrivez d\'abord quelques mots : il faut de la matière à améliorer.' }, 400);
+      }
+
+      const angles = contexte === 'presentation'
+        ? `"Fidèle" : son texte, corrigé et remis d'aplomb. Même longueur, même ordre, mêmes mots partout où ils tiennent.
+"Mise en valeur" : les mêmes faits, rangés pour que son savoir-faire se voie. Rien de nouveau, un meilleur ordre.
+"Courte" : deux phrases, pour qui lit vite.`
+        : `"Fidèle" : son texte, corrigé et remis d'aplomb. Même longueur, même ordre, mêmes mots partout où ils tiennent.
+"Mise en valeur" : les mêmes faits, rangés pour que le travail accompli se voie — la difficulté, le soin, le résultat, s'il les a mentionnés. Rien de nouveau.
+"Courte" : une à deux lignes, pour un fil qu'on fait défiler.`;
+
+      const message = await client.messages.create({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        output_config: EFFORT,
+        system: `Tu améliores un texte écrit par un artisan du bâtiment. Tu RÉÉCRIS, tu n'écris pas : son texte est la matière, tu ne pars jamais de zéro.
+
+CE QUI COMPTE PLUS QUE TOUT — RIEN DE GÉNÉRIQUE
+Si une phrase que tu écris pourrait servir telle quelle à un autre artisan, sur un autre chantier, elle est ratée. Supprime-la, ou remplace-la par un détail concret pris dans SON texte. « Un travail soigné dans les règles de l'art » ne dit rien de personne. « Dalle de 40 m² coulée et lissée en une journée » dit tout de lui.
+
+GARDE SA VOIX
+- Son vocabulaire de métier est son autorité : « béton lissé », « chape », « IPN », « mur porteur » restent tels quels. Ne les remplace jamais par du vague (« finition de qualité »).
+- Son ton reste le sien. S'il est bref et direct, tu restes bref et direct. S'il est chaleureux, tu l'es.
+- S'il tutoie, s'il emploie « je » ou « nous », tu gardes ce choix. Ne mélange jamais « je » et « nous » dans un même texte.
+
+N'INVENTE RIEN
+Pas une mesure, pas une durée, pas un matériau, pas un nom de client, pas une garantie, pas un label, pas un délai qui ne soit pas dans son texte. Si son texte ne dit pas combien de m², tu n'écris pas de m².
+
+LA FICHE SERT À COMPRENDRE, PAS À REMPLIR
+Les informations sur l'artisan (métiers, ville, entreprise) t'aident à comprendre de quoi il parle — qu'une « dalle » relève de la maçonnerie, par exemple. Elles ne doivent PAS être ajoutées au texte s'il ne les a pas écrites lui-même. N'ajoute ni son nom d'entreprise, ni sa ville, ni son ancienneté de ta propre initiative.
+
+LONGUEUR
+Ne dépasse jamais le double de son texte. Une note de dix mots ne devient pas une annonce de cinq lignes — elle devient dix mots corrects.
+
+CE QUE TU CORRIGES
+L'orthographe, les accords, la ponctuation, les phrases qui ne se terminent pas. C'est souvent là tout le travail, et c'est déjà beaucoup.
+
+INTERDITS
+Pas de hashtag, pas d'emoji (sauf s'il en a mis), pas de slogan, pas d'appel à l'action ajouté, pas de superlatif publicitaire (« leader », « expert incontournable », « excellence », « votre satisfaction est notre priorité »).
+
+TROIS ANGLES
+${angles}
+
+Réponds UNIQUEMENT avec un JSON valide, sans texte autour :
+{"propositions":[{"titre":"Fidèle","texte":"..."},{"titre":"Mise en valeur","texte":"..."},{"titre":"Courte","texte":"..."}]}`,
+        messages: [{
+          role: 'user',
+          content: `Ce que l'artisan a écrit, mot pour mot :\n"""\n${texte}\n"""\n\n`
+            + `Sa fiche, pour comprendre son métier (à ne PAS recopier dans le texte) :\n${JSON.stringify(profil)}\n\n`
+            + (contexte === 'presentation'
+              ? `Ce texte est la présentation de son entreprise, sur son profil public.`
+              : `Ce texte est la description d'une publication qu'il s'apprête à poster.`),
+        }],
+      });
+
+      if (aRefuse(message)) return json({ error: "L'assistant a refusé de retravailler ce texte." }, 422);
 
       const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { propositions?: unknown };

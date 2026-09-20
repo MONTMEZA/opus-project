@@ -1299,6 +1299,7 @@ export default function OpusApp() {
 
         {screen === 'creer' && (
           <CreerScreen
+            moi={pros[myProId] || null}
             createType={createType} setCreateType={setCreateType}
             createDestination={createDestination} setCreateDestination={setCreateDestination}
             medias={medias} setMedias={setMedias}

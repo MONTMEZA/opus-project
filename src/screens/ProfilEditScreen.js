@@ -17,6 +17,7 @@ import {
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
 import AssistantPresentation from '../components/AssistantPresentation';
+import AmeliorerTexte from '../components/AmeliorerTexte';
 import { METIERS } from '../data/demo';
 import { METIERS_SOS } from '../data/urgences';
 import { choisirImage, choisirDocument } from '../lib/media';
@@ -221,17 +222,44 @@ export default function ProfilEditScreen({
 
             <View style={s.presentationTitre}>
               <Text style={[s.label, { marginBottom: 0 }]}>Présentation</Text>
-              {!assistantOuvert && (
+              {/* Deux situations, deux aides. Page blanche : le questionnaire,
+                  parce que personne n'aime parler de soi devant un champ vide.
+                  Quelque chose d'écrit : la relecture, qui part de ses mots.
+                  Proposer les deux en même temps serait un choix de plus à
+                  faire, et c'est justement ce qu'on veut lui épargner. */}
+              {!assistantOuvert && !bio.trim() && (
                 <BtnMini outline onPress={() => setAssistantOuvert(true)}>
                   <Sparkles size={12} color={C.accent2} />
                   <Text style={s.aiderTexte}>M'aider à l'écrire</Text>
                 </BtnMini>
               )}
             </View>
-            <TextArea value={bio} onChangeText={setBio} placeholder="Décrivez votre activité..." />
+            <TextArea
+              value={bio}
+              onChangeText={setBio}
+              placeholder="Décrivez votre activité, avec vos mots..."
+            />
 
             {/* C'est la case qui décide un particulier qui hésite entre deux
                 devis, et c'est celle qui reste vide le plus souvent. */}
+            {!!bio.trim() && !assistantOuvert && (
+              <AmeliorerTexte
+                texte={bio}
+                contexte="presentation"
+                profil={{
+                  entreprise, metiers, ville: lieu.affichage, exp: Number(exp) || 0,
+                }}
+                onRemplacer={setBio}
+              />
+            )}
+
+            {!bio.trim() && !assistantOuvert && (
+              <Text style={s.presentationAide}>
+                Écrivez quelques lignes comme vous les diriez : le bouton
+                « Améliorer avec l'IA » apparaîtra pour les relire.
+              </Text>
+            )}
+
             {assistantOuvert && (
               <AssistantPresentation
                 profil={{ entreprise, metiers, ville: lieu.affichage }}
@@ -455,6 +483,9 @@ const s = StyleSheet.create({
     marginBottom: 6, marginTop: 12,
   },
   aiderTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
+  presentationAide: {
+    fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginTop: 6,
+  },
   demande: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.accent2,
     padding: 12, marginTop: 10, gap: 8,

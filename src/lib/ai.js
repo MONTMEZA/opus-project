@@ -12,10 +12,18 @@
  */
 import { supabase, hasSupabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
 
-/** Erreur lisible quand le backend IA n'est pas encore branché. */
+/**
+ * Erreur lisible quand l'application tourne SANS Supabase.
+ *
+ * Le message parlait d'« Edge Function manquante », ce qui envoyait chercher
+ * la panne côté serveur alors que la fonction est déployée : c'est
+ * l'application qui n'est reliée à rien, faute de fichier `.env`. Un message
+ * qui désigne le mauvais coupable coûte plus cher que pas de message.
+ */
 export class AiNotConfiguredError extends Error {
   constructor() {
-    super("L'assistant IA n'est pas encore configuré (Edge Function Supabase manquante).");
+    super("L'application tourne en mode démonstration, sans connexion à "
+      + 'Supabase : ajoutez un fichier .env pour joindre l\'assistant IA.');
   }
 }
 
@@ -73,6 +81,30 @@ export async function aiRedigerPresentation({ profil, reponses }) {
     profil,
     reponses: reponsesLisibles(reponses),
   });
+  const liste = (data && data.propositions) || [];
+  return liste
+    .filter((p) => p && typeof p.texte === 'string' && p.texte.trim())
+    .map((p) => ({ titre: String(p.titre || 'Proposition'), texte: p.texte.trim() }));
+}
+
+/**
+ * Améliore un texte que l'artisan a DÉJÀ écrit — description de publication
+ * ou présentation d'entreprise.
+ *
+ * La différence avec `aiRedigerPresentation` est essentielle : ici l'IA ne
+ * part pas d'un questionnaire, elle part de SES mots. Elle corrige, elle
+ * remet d'aplomb, elle range — elle ne remplace pas. La consigne côté
+ * serveur lui interdit la phrase passe-partout : si une phrase pouvait
+ * servir à n'importe quel autre artisan, elle est à refaire.
+ *
+ * `profil` sert à COMPRENDRE (savoir qu'une « dalle » relève de la
+ * maçonnerie), pas à remplir : le serveur a interdiction d'ajouter le nom
+ * de l'entreprise ou la ville si l'artisan ne les a pas écrits.
+ *
+ * Retourne [{ titre, texte }].
+ */
+export async function aiAmeliorerTexte({ texte, contexte = 'publication', profil = {} }) {
+  const data = await callAiFunction({ action: 'ameliorer', texte, contexte, profil });
   const liste = (data && data.propositions) || [];
   return liste
     .filter((p) => p && typeof p.texte === 'string' && p.texte.trim())

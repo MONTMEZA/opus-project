@@ -781,6 +781,52 @@ qui imposent un intervenant.
 
 Les durées par métier se modifient dans `src/data/urgences.js`.
 
+## « Améliorer avec l'IA » — partout où l'artisan écrit
+
+Le même bouton sous la description d'une publication et sous la présentation
+de l'entreprise. L'artisan écrit avec **ses** mots, comme il parle ; l'IA lui
+rend le même propos remis d'aplomb.
+
+**Ce qu'elle fait :** corrige l'orthographe et les accords, met la ponctuation
+française en place, range les phrases pour que le travail accompli se voie.
+Trois versions au choix — fidèle, mise en valeur, courte.
+
+**Ce qu'elle ne fait jamais :**
+
+- **aucune phrase passe-partout.** Si une phrase pouvait servir à n'importe
+  quel autre artisan, elle est refusée. « Un travail soigné dans les règles de
+  l'art » ne met personne en avant ; « dalle de 40 m² coulée et lissée » ne
+  parle que de lui ;
+- **aucun mot de métier remplacé.** « IPN », « chape », « béton lissé », « mur
+  porteur » restent tels quels : c'est son autorité ;
+- **rien d'inventé** — pas une mesure, pas une durée, pas un matériau, pas un
+  délai absent de son texte ;
+- **rien d'ajouté depuis sa fiche.** Ses métiers et sa ville servent à
+  COMPRENDRE de quoi il parle, pas à remplir le texte ;
+- **pas plus du double de sa longueur.** Une note de dix mots devient dix mots
+  corrects, pas une annonce de cinq lignes.
+
+Exemple réel, vérifié sur le service :
+
+> **Avant** — on a du reprendre tout le mur porteur, poser un IPN de 4m parce
+> que la poutre en bois etait mangé par les capricornes. 3 jours de boulot a 2.
+>
+> **Après** — La poutre en bois était mangée par les capricornes : il a fallu
+> reprendre tout le mur porteur et poser un IPN de 4 m. 3 jours de boulot à 2,
+> et au final pas une fissure au plafond.
+
+**Sans IA, le bouton fait quand même quelque chose.** Hors réseau, la mise en
+forme typographique s'applique seule (majuscules, espaces, ponctuation
+française) et l'écran DIT que l'IA n'est pas intervenue. Vérifiée par
+`npm run verifier-typographie`, qui contrôle aussi qu'elle ne change **aucun
+mot** — pas même une faute d'orthographe, qui appartient à l'artisan tant que
+l'IA n'est pas passée.
+
+Et sur la présentation d'entreprise, deux aides selon la situation : page
+blanche → le questionnaire en cinq questions ; quelque chose d'écrit → la
+relecture. Jamais les deux en même temps : un choix de plus est un choix de
+trop.
+
 ## Les métiers d'un artisan, et pourquoi ils se figent
 
 Un artisan n'exerce presque jamais un seul métier : plombier **et**
