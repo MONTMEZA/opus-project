@@ -31,7 +31,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "verifier-adresse": "node scripts/verifier-adresse.mjs"
+    "verifier-adresse": "node scripts/verifier-adresse.mjs",
+    "verifier-montage": "node scripts/verifier-montage.mjs"
   },
   "private": true,
   "devDependencies": {
