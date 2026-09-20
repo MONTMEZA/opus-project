@@ -109,6 +109,8 @@ export default function OpusApp() {
   const [musique, setMusique] = useState(null);
   // Progression de l'envoi : { index, total, part } ou null.
   const [envoi, setEnvoi] = useState(null);
+  // Dernier refus, affiché sur l'écran Publier jusqu'au prochain essai.
+  const [erreurPublication, setErreurPublication] = useState(null);
   const [createText, setCreateText] = useState('');
   const [createMetier, setCreateMetier] = useState(METIERS[0]);
   const [createVille, setCreateVille] = useState('');
@@ -407,6 +409,7 @@ export default function OpusApp() {
     /* On ne met pas le voile de chargement : il masquerait la jauge. C'est
        elle qui dit que l'application travaille, et combien il reste. */
     const total = medias.length + (musique ? 1 : 0);
+    setErreurPublication(null);
     setEnvoi({ index: 1, total, part: 0 });
     try {
       /* Les fichiers partent d'abord vers Supabase Storage : un chemin local
@@ -446,7 +449,8 @@ export default function OpusApp() {
       }
     } catch (e) {
       setEnvoi(null);
-      showBanner(`Publication non enregistrée : ${e.message || e}`);
+      setErreurPublication(e.message || String(e));
+      showBanner('Publication non enregistrée.');
       return;
     }
     setEnvoi(null);
@@ -1018,7 +1022,7 @@ export default function OpusApp() {
             createDestination={createDestination} setCreateDestination={setCreateDestination}
             medias={medias} setMedias={setMedias}
             musique={musique} setMusique={setMusique}
-            envoi={envoi}
+            envoi={envoi} erreur={erreurPublication}
             onErreur={showBanner}
             createText={createText} setCreateText={setCreateText}
             createMetier={createMetier} setCreateMetier={setCreateMetier}

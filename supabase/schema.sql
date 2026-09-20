@@ -89,7 +89,7 @@ create table if not exists public.posts (
   id          uuid primary key default gen_random_uuid(),
   author_id   uuid references public.users(id) on delete cascade,
   type        text not null default 'photo'
-              check (type in ('photo', 'video', 'avantapres', 'texte', 'conseil')),
+              check (type in ('photo', 'video', 'montage', 'avantapres', 'texte', 'conseil')),
   texte       text,
   media       text,               -- "#3a3a38,#8a8578" ou une URL d'image
   metier      text,
@@ -116,6 +116,14 @@ create table if not exists public.posts (
 --  On garde `media` renseigné dans tous les cas : c'est lui qu'affichent les
 --  listes et les aperçus, sans avoir à lire le tableau.
 -- --------------------------------------------------------------------------
+-- Le format « montage » est arrivé après la création de la table : sur une
+-- base déjà en place, « add column if not exists » ne touche pas à la
+-- contrainte, qu'il faut donc refaire. Sans cela, la base refuse chaque
+-- montage et la publication échoue.
+alter table public.posts drop constraint if exists posts_type_check;
+alter table public.posts add constraint posts_type_check
+  check (type in ('photo', 'video', 'montage', 'avantapres', 'texte', 'conseil'));
+
 alter table public.posts add column if not exists medias  text[] not null default '{}';
 alter table public.posts add column if not exists musique text;
 alter table public.demandes add column if not exists medias text[] not null default '{}';

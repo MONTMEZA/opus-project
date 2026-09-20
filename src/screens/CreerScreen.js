@@ -54,7 +54,7 @@ export default function CreerScreen({
   createMetier, setCreateMetier, createVille, setCreateVille,
   createDestination, setCreateDestination,
   medias, setMedias, musique, setMusique,
-  envoi, onPublish, onErreur,
+  envoi, erreur, onPublish, onErreur,
 }) {
   const [occupe, setOccupe] = useState(false);
   const aUnVisuel = FORMATS_VISUELS.has(createType);
@@ -291,6 +291,16 @@ export default function CreerScreen({
         </View>
       )}
 
+      {/* Un refus reste affiché jusqu'à la tentative suivante. Un bandeau de
+          trois secondes en haut de l'écran ne se voit pas quand on vient
+          d'appuyer sur un bouton tout en bas. */}
+      {!!erreur && (
+        <View style={s.erreur}>
+          <Text style={s.erreurTitre}>La publication n'est pas partie</Text>
+          <Text style={s.erreurTexte}>{erreur}</Text>
+        </View>
+      )}
+
       {/* Un envoi de vidéo prend du temps : sans jauge, l'écran a l'air figé
           et on appuie une deuxième fois. */}
       {!!envoi && (
@@ -382,6 +392,13 @@ const s = StyleSheet.create({
     borderLeftWidth: 4, borderLeftColor: C.accent, padding: 10, gap: 3, marginTop: 12,
   },
   manque: { fontSize: 11.5, color: C.muted, fontFamily: F.inter, lineHeight: 17 },
+
+  erreur: {
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+    borderLeftWidth: 4, borderLeftColor: C.bad, padding: 10, gap: 3, marginTop: 12,
+  },
+  erreurTitre: { fontFamily: F.oswald6, fontSize: 12.5, color: C.bad },
+  erreurTexte: { fontSize: 11.5, color: C.muted, fontFamily: F.inter, lineHeight: 17 },
 
   envoi: { marginTop: 12, gap: 5 },
   jaugeFond: { height: 4, backgroundColor: C.line },
