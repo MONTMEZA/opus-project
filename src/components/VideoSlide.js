@@ -8,12 +8,14 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F } from '../theme';
-import { Gradient, BtnMain, ChipFollow } from './ui';
+import { Gradient, BtnMain, ChipFollow, Avatar, HazardStrip } from './ui';
 import { nombreCommentaires } from './Commentaires';
 import Media, { estFichier } from './Media';
 import LecteurMontage from './LecteurMontage';
 import GlissementLateral from './GlissementLateral';
-import { BadgeCheck, Heart, MessageSquare, Share2, Bookmark, MapPin } from './icons';
+import {
+  BadgeCheck, Heart, MessageSquare, Share2, Bookmark, MapPin, ChevronRight, Home,
+} from './icons';
 
 function Scrim() {
   return (
@@ -75,16 +77,19 @@ export default function VideoSlide({
     ? { clips, musique: post.musique, actif }
     : { media: montageAssemble ? post.montageUrl : post.media, lecture: actif, muet: false };
 
-  /* Glissements façon TikTok : à droite la page de l'artisan, à gauche le
-     fil principal. Le détecteur enveloppe toute la diapositive — il doit être
-     AU-DESSUS du lecteur vidéo dans l'arbre, pas à l'intérieur. */
+  /* Glissements façon TikTok. Le doigt part à GAUCHE : la page de l'artisan
+     arrive par la droite. Le doigt part à DROITE : on revient au fil. C'est
+     le sens qu'ont TikTok et Instagram — on pousse le contenu de côté pour
+     découvrir ce qui est derrière.
+     Le détecteur enveloppe toute la diapositive : il doit être AU-DESSUS du
+     lecteur vidéo dans l'arbre, pas à l'intérieur. */
   return (
     <GlissementLateral
       style={{ height }}
-      onVersDroite={onGlisserVersProfil && pro ? () => onGlisserVersProfil(pro) : null}
-      onVersGauche={onGlisserVersFil || null}
-      libelleDroite={pro ? pro.entreprise : 'Le profil'}
-      libelleGauche="Le fil"
+      onVersGauche={onGlisserVersProfil && pro ? () => onGlisserVersProfil(pro) : null}
+      onVersDroite={onGlisserVersFil || null}
+      apercuDroite={<ApercuPro pro={pro} />}
+      apercuGauche={<ApercuFil />}
     >
       <Surface {...proprietes} style={[s.card, { height }]}>
         <Scrim />
@@ -134,8 +139,69 @@ export default function VideoSlide({
   );
 }
 
+
+/**
+ * Ce qui attend derrière la vidéo quand le doigt part à gauche : la page de
+ * l'artisan, annoncée par ce qu'on a besoin de savoir pour décider d'y aller.
+ */
+function ApercuPro({ pro }) {
+  if (!pro) return null;
+  return (
+    <View style={s.apercu}>
+      <HazardStrip height={6} />
+      <View style={[s.apercuCorps, s.apercuDepuisDroite]}>
+        <Avatar seed={pro.id} uri={pro.avatarUrl} size={92} ring={3} ringColor={C.accent} />
+        <View style={s.apercuNomRang}>
+          <Text style={s.apercuNom}>{pro.entreprise}</Text>
+          {pro.verifie && <BadgeCheck size={17} color={C.verif} />}
+        </View>
+        <Text style={s.apercuMeta}>{pro.metier} · {pro.ville}</Text>
+        <View style={s.apercuAction}>
+          <Text style={s.apercuActionTexte}>Voir sa page</Text>
+          <ChevronRight size={15} color="#fff" />
+        </View>
+      </View>
+      <HazardStrip height={6} />
+    </View>
+  );
+}
+
+/** Et à droite : le fil principal, qu'on retrouve. */
+function ApercuFil() {
+  return (
+    <View style={s.apercu}>
+      <HazardStrip height={6} />
+      <View style={[s.apercuCorps, s.apercuDepuisGauche]}>
+        <View style={s.apercuRond}><Home size={34} color="#fff" /></View>
+        <Text style={s.apercuNom}>Le fil</Text>
+        <Text style={s.apercuMeta}>Photos et publications</Text>
+      </View>
+      <HazardStrip height={6} />
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   card: { width: '100%', justifyContent: 'flex-end' },
+
+  apercu: { ...StyleSheet.absoluteFillObject, backgroundColor: C.ink, justifyContent: 'center' },
+  /* Le contenu est calé contre le bord par lequel l'écran arrive — sinon il
+     reste au centre, donc caché par la vidéo pendant tout le glissement. */
+  apercuCorps: { flex: 1, justifyContent: 'center', gap: 8, paddingHorizontal: 26, maxWidth: 300 },
+  apercuDepuisDroite: { alignItems: 'flex-start' },
+  apercuDepuisGauche: { alignItems: 'flex-end', alignSelf: 'flex-end' },
+  apercuRond: {
+    width: 92, height: 92, borderRadius: 46, borderWidth: 3, borderColor: C.accent,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  apercuNomRang: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  apercuNom: { fontFamily: F.oswald7, fontSize: 22, color: '#fff' },
+  apercuMeta: { fontFamily: F.inter, fontSize: 13, color: 'rgba(255,255,255,0.72)' },
+  apercuAction: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 14,
+    backgroundColor: C.accent, paddingVertical: 9, paddingHorizontal: 14,
+  },
+  apercuActionTexte: { fontFamily: F.oswald6, fontSize: 13, color: '#fff' },
 
   actions: { position: 'absolute', right: 10, zIndex: 2, gap: 16, alignItems: 'center' },
   action: { alignItems: 'center', gap: 3 },

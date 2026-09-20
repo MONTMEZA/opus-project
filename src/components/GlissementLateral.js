@@ -1,55 +1,56 @@
 /**
- * Glissement latéral façon TikTok : on tire la vidéo vers la droite pour
- * ouvrir la page de l'artisan, vers la gauche pour revenir au fil.
+ * Glissement latéral façon TikTok.
+ *
+ * Le doigt part à GAUCHE : la page de l'artisan arrive par la droite.
+ * Le doigt part à DROITE : on revient au fil principal.
+ * C'est le sens de TikTok, d'Instagram et des applications de photos : on
+ * pousse le contenu de côté pour découvrir ce qui est derrière.
+ *
+ * CE QUI FAIT QUE ÇA « SENT » BON
+ * -------------------------------
+ * Trois choses, et aucune n'est décorative :
+ *   1. la vidéo suit le doigt au pixel près, sans retard ni ressort — un
+ *      ressort ici donne l'impression que l'écran traîne ;
+ *   2. la destination est posée JUSTE À CÔTÉ, comme la page suivante d'un
+ *      carrousel : elle entre exactement à la vitesse où la vidéo sort. Son
+ *      contenu est calé du bord par lequel elle arrive, sans quoi il reste
+ *      au centre de l'écran, donc caché par la vidéo pendant tout le geste —
+ *      c'est l'erreur de la première version ;
+ *   3. quand on lâche assez loin, la vidéo finit sa course jusqu'au bord
+ *      avant que l'écran change. Sans cela, on voit un saut.
  *
  * POURQUOI PAS PanResponder
  * -------------------------
- * La première version utilisait `PanResponder`, et elle ne marchait pas
- * au-dessus d'une vidéo. La raison : `VideoView` est une **vue native**.
- * Elle reçoit la touche avant JavaScript, et `PanResponder` — qui vit
- * entièrement en JavaScript — ne voyait tout simplement jamais le geste.
- * Au-dessus des dégradés de démonstration, il n'y a pas de vue native :
- * le glissement y fonctionnait. D'où l'impression d'un bug capricieux.
- *
- * `react-native-gesture-handler` pose ses détecteurs du côté natif, dans la
- * même arène que le lecteur vidéo et que la liste qui défile. C'est lui qui
- * arbitre, et c'est pour cela qu'il faut `GestureHandlerRootView` à la racine
- * de l'application (voir App.js).
+ * `VideoView` est une vue **native** : elle reçoit la touche avant
+ * JavaScript. `PanResponder`, qui vit entièrement en JavaScript, ne voyait
+ * donc jamais le geste — le glissement ne marchait qu'au-dessus des dégradés
+ * de démonstration, d'où l'impression d'un bug capricieux.
+ * `react-native-gesture-handler` arbitre du côté natif, dans la même arène
+ * que le lecteur vidéo et la liste qui défile. D'où `GestureHandlerRootView`
+ * à la racine de l'application (App.js).
  *
  * L'ARBITRAGE AVEC LE DÉFILEMENT VERTICAL
  * ---------------------------------------
- * La liste des vidéos défile de haut en bas ; ce composant écoute de gauche à
- * droite. Deux réglages suffisent à les départager :
- *   - `activeOffsetX` : le geste ne se déclenche qu'après 18 px horizontaux ;
- *   - `failOffsetY`   : il abandonne dès 14 px verticaux.
- * Autrement dit, au moindre doute, c'est le défilement qui gagne — ce qui est
- * le bon choix : on fait défiler cent fois pour un glissement.
+ *   - `activeOffsetX` : rien ne bouge avant 18 px horizontaux ;
+ *   - `failOffsetY`   : on rend la main dès 14 px verticaux.
+ * Au moindre doute, c'est le défilement qui gagne : on fait défiler cent
+ * fois pour un glissement.
  */
 import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring, runOnJS, interpolate, Extrapolation,
+  useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS,
 } from 'react-native-reanimated';
-import { C, F } from '../theme';
-import { ChevronLeft, ChevronRight } from './icons';
 
 const DEBUT_HORIZONTAL = 18;   // px avant de prendre la main
 const ABANDON_VERTICAL = 14;   // px verticaux qui rendent la main au défilement
-const VALIDATION = 78;         // px au-delà desquels on part vraiment
-const VITESSE = 600;           // un geste vif vaut un geste long
-const ELASTIQUE = 130;         // au-delà, la vidéo résiste
-
-/** Le déplacement freine après `ELASTIQUE` px : on sent qu'on touche le bout. */
-function freiner(x) {
-  'worklet';
-  const amplitude = Math.abs(x);
-  if (amplitude <= ELASTIQUE) return x;
-  return Math.sign(x) * (ELASTIQUE + (amplitude - ELASTIQUE) * 0.3);
-}
+const VALIDATION = 0.28;       // part de l'écran au-delà de laquelle on part
+const VITESSE = 650;           // un geste vif vaut un geste long
+const SORTIE = 190;            // ms de la course finale jusqu'au bord
 
 export default function GlissementLateral({
-  onVersDroite, onVersGauche, libelleDroite, libelleGauche, style, children,
+  onVersDroite, onVersGauche, apercuDroite, apercuGauche, style, children,
 }) {
   const { width } = useWindowDimensions();
   const decalage = useSharedValue(0);
@@ -62,70 +63,80 @@ export default function GlissementLateral({
     .failOffsetY([-ABANDON_VERTICAL, ABANDON_VERTICAL])
     .enabled(aDroite || aGauche)
     .onUpdate((e) => {
+      const d = e.translationX;
       /* Tirer vers un côté qui ne mène nulle part ne doit rien faire bouger :
          une animation sans suite se lit comme une panne. */
-      if (e.translationX > 0 && !aDroite) { decalage.value = 0; return; }
-      if (e.translationX < 0 && !aGauche) { decalage.value = 0; return; }
-      decalage.value = freiner(e.translationX);
+      if ((d > 0 && !aDroite) || (d < 0 && !aGauche)) { decalage.value = 0; return; }
+      // Un carrousel ne va pas au-delà de la page voisine : on borne à un écran.
+      decalage.value = Math.max(-width, Math.min(width, d));
     })
     .onEnd((e) => {
-      const assezLoin = Math.abs(e.translationX) > VALIDATION;
-      const assezVif = Math.abs(e.velocityX) > VITESSE && Math.abs(e.translationX) > 30;
+      const seuil = width * VALIDATION;
+      const part = Math.abs(e.translationX) > seuil
+        || (Math.abs(e.velocityX) > VITESSE && Math.abs(e.translationX) > 40);
+      const versLaDroite = e.translationX > 0;
+      const possible = versLaDroite ? aDroite : aGauche;
 
-      if (assezLoin || assezVif) {
-        if (e.translationX > 0 && aDroite) runOnJS(onVersDroite)();
-        else if (e.translationX < 0 && aGauche) runOnJS(onVersGauche)();
+      if (part && possible) {
+        /* La course finale jusqu'au bord, PUIS le changement d'écran. Changer
+           d'écran pendant que la vidéo est encore à moitié là donne un saut. */
+        decalage.value = withTiming(
+          versLaDroite ? width : -width,
+          { duration: SORTIE },
+          (fini) => {
+            if (!fini) return;
+            runOnJS(versLaDroite ? onVersDroite : onVersGauche)();
+            decalage.value = 0;
+          },
+        );
+        return;
       }
-      /* On revient toujours en place : si le geste a mené quelque part,
-         l'écran change de toute façon ; sinon la vidéo se remet droite. */
-      decalage.value = withSpring(0, { damping: 20, stiffness: 220, mass: 0.6 });
+      decalage.value = withSpring(0, { damping: 20, stiffness: 230, mass: 0.6 });
     });
 
-  const styleAnime = useAnimatedStyle(() => ({
+  const styleContenu = useAnimatedStyle(() => ({
     transform: [{ translateX: decalage.value }],
   }));
 
-  /* Les deux repères n'apparaissent qu'en tirant, et se remplissent à mesure :
-     à pleine opacité, on sait que lâcher suffira. */
-  const styleDroite = useAnimatedStyle(() => ({
-    opacity: interpolate(decalage.value, [0, VALIDATION], [0, 1], Extrapolation.CLAMP),
-  }));
+  /* Les deux voisines sont posées à un écran de distance, de part et d'autre.
+     Elles se déplacent avec la vidéo : c'est ce qui fait un carrousel plutôt
+     qu'une apparition. */
   const styleGauche = useAnimatedStyle(() => ({
-    opacity: interpolate(decalage.value, [0, -VALIDATION], [0, 1], Extrapolation.CLAMP),
+    transform: [{ translateX: decalage.value - width }],
+  }));
+  const styleDroite = useAnimatedStyle(() => ({
+    transform: [{ translateX: decalage.value + width }],
   }));
 
   return (
-    <View style={[style, { width, overflow: 'hidden' }]}>
-      {aDroite && (
-        <Animated.View style={[s.repere, s.repereGauche, styleDroite]} pointerEvents="none">
-          <ChevronRight size={16} color="#fff" />
-          <Text style={s.repereTexte} numberOfLines={1}>{libelleDroite}</Text>
+    <View style={[style, { width, overflow: 'hidden', backgroundColor: '#000' }]}>
+      {/* Les deux destinations attendent de part et d'autre, hors de l'écran.
+          Celle de gauche entre quand le doigt va à droite, et inversement.
+          Chaque aperçu cale son contenu contre le bord par lequel il arrive
+          (voir VideoSlide) : c'est ce qui le rend visible dès les premiers
+          pixels du geste, au lieu de rester caché au centre. */}
+      {aDroite && apercuGauche ? (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, styleGauche]}
+          pointerEvents="none"
+        >
+          {apercuGauche}
         </Animated.View>
-      )}
-      {aGauche && (
-        <Animated.View style={[s.repere, s.repereDroit, styleGauche]} pointerEvents="none">
-          <ChevronLeft size={16} color="#fff" />
-          <Text style={s.repereTexte} numberOfLines={1}>{libelleGauche}</Text>
+      ) : null}
+      {aGauche && apercuDroite ? (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, styleDroite]}
+          pointerEvents="none"
+        >
+          {apercuDroite}
         </Animated.View>
-      )}
+      ) : null}
 
       <GestureDetector gesture={geste}>
-        <Animated.View style={[{ flex: 1 }, styleAnime]}>
+        <Animated.View style={[{ flex: 1 }, styleContenu]}>
           {children}
         </Animated.View>
       </GestureDetector>
     </View>
   );
 }
-
-const s = StyleSheet.create({
-  repere: {
-    position: 'absolute', top: '46%', zIndex: 1,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    maxWidth: 150, paddingVertical: 8, paddingHorizontal: 11,
-    backgroundColor: C.accent,
-  },
-  repereGauche: { left: 0 },
-  repereDroit: { right: 0 },
-  repereTexte: { fontFamily: F.oswald6, fontSize: 12, color: '#fff', flexShrink: 1 },
-});

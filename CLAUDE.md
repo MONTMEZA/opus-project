@@ -87,6 +87,15 @@ Pour départager un geste horizontal d'une liste qui défile verticalement :
 `activeOffsetX` (px avant de prendre la main) et `failOffsetY` (px verticaux
 qui rendent la main). Au moindre doute, c'est le défilement qui doit gagner.
 
+Le SENS attendu, celui de TikTok et d'Instagram : le doigt part à **gauche**
+pour découvrir la page de l'artisan, à **droite** pour revenir au fil. On
+pousse le contenu de côté pour voir ce qu'il y a derrière.
+
+Et un écran qui arrive doit être posé **juste à côté**, comme la page suivante
+d'un carrousel, avec son contenu calé contre le bord par lequel il entre.
+Centré, ce contenu reste caché par la vidéo pendant tout le geste : on ne voit
+qu'une bande noire, et le glissement paraît vide.
+
 ### Ce qui se vérifie au navigateur, et ce qui ne s'y vérifie pas
 
 Playwright reproduit **les gestes à la souris** : un glissement latéral, un
