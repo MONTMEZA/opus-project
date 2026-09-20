@@ -36,6 +36,24 @@ alter table public.x add constraint x_champ_check check (champ in (...));
 
 `alter table ... add column if not exists` ne touche pas aux contraintes.
 
+## Où je tourne, et ce que le propriétaire a réellement
+
+Les sessions de travail s'exécutent **dans le cloud**, dans un conteneur qui a
+cloné le dépôt — pas sur l'ordinateur du propriétaire. Celui-ci travaille
+**depuis son navigateur**, avec **PowerShell** pour lancer l'application, et
+**n'a pas la commande `claude`** installée.
+
+Conséquence : ne jamais lui donner une instruction de ligne de commande sans
+avoir vérifié qu'elle s'applique à SON poste, et ne jamais supposer qu'une
+configuration faite chez lui change quelque chose ici. Une erreur déjà commise
+deux fois de suite.
+
+Ce qui fonctionne pour lui : les connecteurs de **claude.ai** (Paramètres →
+Connecteurs). Le connecteur **Supabase** y est installé : il donne accès à la
+vraie base du projet — schéma, contraintes, données, fichiers du stockage,
+journaux et alertes de sécurité. **S'en servir pour vérifier** plutôt que de
+lui faire coller des résultats de requêtes.
+
 ## Comment vérifier
 
 ```bash

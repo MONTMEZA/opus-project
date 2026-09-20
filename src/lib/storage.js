@@ -112,6 +112,13 @@ async function envoiTelephone({ uri, bucket, chemin, type, onProgress }) {
     headers: {
       Authorization: `Bearer ${session.access_token}`,
       apikey: SUPABASE_ANON_KEY,
+      // Le Content-Type est posé ICI, explicitement, et pas seulement par
+      // l'option mimeType ci-dessus : vérifié sur la vraie base, Supabase
+      // enregistrait sinon « application/octet-stream ». Une vidéo servie
+      // sous ce type n'est plus reconnue comme une vidéo par le lecteur :
+      // elle se télécharge en entier avant de démarrer, au lieu de se lire
+      // au fil de l'eau. C'est ce qui la rendait si lente à apparaître.
+      'Content-Type': type,
       'x-upsert': 'true',
       'cache-control': 'max-age=3600',
     },

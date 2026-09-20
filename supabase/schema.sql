@@ -175,7 +175,7 @@ create index if not exists idx_comments_parent on public.comments(parent_id);
 --  peut pas créer de fil sans fin.
 -- --------------------------------------------------------------------------
 create or replace function public.limite_profondeur_commentaire()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 declare grand_parent uuid;
 begin
   if new.parent_id is null then return new; end if;
@@ -624,7 +624,7 @@ create trigger trg_followers_count
 --  verification_statut et verifie_le suivent tout seuls.
 -- --------------------------------------------------------------------------
 create or replace function public.synchronise_verification()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if new.kbis_valide and new.assurance_valide then
     new.verifie            := true;
@@ -835,6 +835,65 @@ create policy "mes notifications" on public.notifications
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ==========================================================================
+--  11 bis. CE QUI NE DOIT PAS ÊTRE APPELABLE DEPUIS L'EXTÉRIEUR
+--
+--  Supabase publie automatiquement en API REST toutes les fonctions du schéma
+--  « public » : n'importe qui peut donc tenter /rest/v1/rpc/<nom>. Les
+--  fonctions de trigger n'ont rien à y faire — elles s'exécutent quand la
+--  base le décide, pas quand un client le demande.
+--
+--  Retirer le droit d'exécution N'EMPÊCHE PAS les triggers de fonctionner :
+--  PostgreSQL les déclenche pour le compte du propriétaire de la table, sans
+--  vérifier les droits de celui qui écrit. Vérifié sur PostgreSQL avant
+--  d'être écrit ici.
+--
+--  Les fonctions réellement destinées à être appelées — ajoute_au_portfolio,
+--  artisans_urgence, distance_km — gardent leurs droits, accordés
+--  explicitement juste après.
+-- --------------------------------------------------------------------------
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.calcule_client_verifie()',
+    'public.cree_fiche_utilisateur()',
+    'public.maj_followers_count()',
+    'public.maj_likes_count()',
+    'public.notifie_commentaire()',
+    'public.notifie_partenariat()',
+    'public.synchronise_verification()',
+    'public.limite_profondeur_commentaire()'
+  ] loop
+    begin
+      -- « from public » d'abord, et c'est l'essentiel : PostgreSQL accorde
+      -- le droit d'exécution à PUBLIC par défaut sur toute fonction. Ne
+      -- retirer que anon et authenticated ne change donc rien — vérifié.
+      execute format('revoke execute on function %s from public', f);
+      execute format('revoke execute on function %s from anon, authenticated', f);
+    exception when undefined_function or undefined_object then
+      null;   -- fonction ou rôle absent (base locale de test) : on passe
+    end;
+  end loop;
+end $$;
+
+-- Les trois fonctions que l'application appelle vraiment.
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.ajoute_au_portfolio(text)',
+    'public.artisans_urgence(text, double precision, double precision)',
+    'public.distance_km(double precision, double precision, double precision, double precision)'
+  ] loop
+    begin
+      execute format('grant execute on function %s to authenticated', f);
+    exception when undefined_function or undefined_object then
+      null;
+    end;
+  end loop;
+end $$;
+
+-- ==========================================================================
 --  12. STOCKAGE DES FICHIERS (Supabase Storage)
 --
 --  Quatre espaces séparés, parce qu'ils n'ont pas les mêmes règles :
@@ -958,7 +1017,7 @@ create or replace function public.distance_km(
   lat1 double precision, lon1 double precision,
   lat2 double precision, lon2 double precision
 ) returns double precision
-language sql immutable as $$
+language sql immutable set search_path = public as $$
   select case
     when lat1 is null or lon1 is null or lat2 is null or lon2 is null then null
     else round((
@@ -985,7 +1044,7 @@ create or replace function public.artisans_urgence(
   deplacement numeric, horaire numeric, majoration int, delai_minutes int,
   distance double precision
 )
-language sql stable as $$
+language sql stable set search_path = public as $$
   select
     pp.id, pp.entreprise, pp.metier, pp.ville,
     pp.avatar_url, pp.verifie,

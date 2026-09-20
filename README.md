@@ -331,6 +331,28 @@ Les fichiers partent donc en **flux continu** depuis le téléphone
 2 Mo s'en moque ; une vidéo de 60 Mo, non — c'est ce qui faisait échouer la
 publication d'un clip, silencieusement.
 
+### Le type des fichiers envoyés
+
+Une vidéo doit arriver dans le stockage avec le type `video/quicktime` ou
+`video/mp4`. Si elle arrive en `application/octet-stream`, le lecteur ne la
+reconnaît plus comme une vidéo : il la **télécharge en entier avant de
+démarrer**, au lieu de la lire au fil de l'eau.
+
+C'est ce qui se passait. L'envoi en flux continu posait bien l'option
+`mimeType`, mais Supabase enregistrait quand même `application/octet-stream`.
+Le `Content-Type` est désormais écrit explicitement dans les en-têtes.
+
+Pour vérifier l'état d'un fichier déjà envoyé :
+
+```sql
+select right(name, 28) as fichier,
+       round(((metadata->>'size')::bigint) / 1048576.0, 1) as mo,
+       metadata->>'mimetype' as type
+from storage.objects
+where bucket_id = 'publications'
+order by created_at desc limit 10;
+```
+
 ### Démarrage des vidéos
 
 Deux réglages, pour que l'image apparaisse tout de suite :
