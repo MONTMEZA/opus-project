@@ -71,6 +71,34 @@ Les captures d'écran valent mieux qu'une affirmation. Ce qui n'a pas pu être
 vérifié ici (appareil photo, lecture vidéo réelle, notifications push) doit
 être **dit explicitement** dans la réponse et dans le message de commit.
 
+### Les gestes : `PanResponder` ne voit rien au-dessus d'une vue native
+
+`VideoView` (expo-video), comme toute vue native, reçoit la touche **avant**
+JavaScript. Un `PanResponder` posé autour ne reçoit donc jamais le geste : le
+glissement du fil vidéo n'a jamais fonctionné pour cette seule raison, alors
+qu'il marchait au-dessus des dégradés de démonstration — d'où l'impression
+d'un bug capricieux.
+
+Pour tout geste : **`react-native-gesture-handler`**, qui arbitre côté natif,
+avec `GestureHandlerRootView` à la racine (`App.js`). Et `pointerEvents="none"`
+sur les `VideoView`, qui n'ont de toute façon aucune commande.
+
+Pour départager un geste horizontal d'une liste qui défile verticalement :
+`activeOffsetX` (px avant de prendre la main) et `failOffsetY` (px verticaux
+qui rendent la main). Au moindre doute, c'est le défilement qui doit gagner.
+
+### Ce qui se vérifie au navigateur, et ce qui ne s'y vérifie pas
+
+Playwright reproduit **les gestes à la souris** : un glissement latéral, un
+appui long suivi d'un déplacement, tout cela se teste et doit être testé —
+c'est ainsi qu'a été trouvé le point de départ qui se recalculait à chaque
+mouvement et faisait filer la photo hors de l'écran.
+
+Ce qu'il ne reproduit pas : le **défilement au doigt** (sur ordinateur, une
+zone défilante répond à la molette, pas au glissement). L'arbitrage entre un
+glissement horizontal et un défilement vertical ne peut donc **pas** être
+vérifié ici. À dire explicitement.
+
 ### Ce que le navigateur de test ne sait PAS faire
 
 Le Chromium fourni avec Playwright est une version allégée, **sans les codecs

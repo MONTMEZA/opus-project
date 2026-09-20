@@ -12,7 +12,7 @@ import { C, F, AVATAR_TONES, gradColors, GRAD_160, GRAD_120 } from '../theme';
 import { Check } from './icons';
 
 /* --- dégradé (remplace les linear-gradient CSS) --- */
-export function Gradient({ media, angle = 160, style, gestes, children }) {
+export function Gradient({ media, angle = 160, style, children }) {
   const dir = angle === 120 ? GRAD_120 : GRAD_160;
   return (
     <LinearGradient
@@ -20,7 +20,6 @@ export function Gradient({ media, angle = 160, style, gestes, children }) {
       start={dir.start}
       end={dir.end}
       style={style}
-      {...(gestes || {})}
     >
       {children}
     </LinearGradient>

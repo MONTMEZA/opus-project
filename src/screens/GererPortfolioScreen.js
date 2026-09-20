@@ -26,7 +26,8 @@ export default function GererPortfolioScreen({ portfolio = [], onEnregistrer, on
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 34 }}>
       <View style={s.intro}>
         <Text style={s.introTexte}>
-          Les flèches changent l'ordre, la croix retire une réalisation.
+          Maintenez une photo appuyée, puis faites-la glisser où vous voulez.
+          La croix la retire de la vitrine.
           {'\n'}
           La première sert de bannière à votre profil quand vous n'en avez pas
           choisi une.
@@ -37,7 +38,11 @@ export default function GererPortfolioScreen({ portfolio = [], onEnregistrer, on
         {liste.length} {liste.length > 1 ? 'réalisations' : 'réalisation'}
       </SectionLabel>
 
-      <GestionMedias items={liste} onChanger={setListe} />
+      {/* `portfolio` et non `liste` : la grille tient elle-même l'ordre pendant
+          qu'on déplace les photos, et prévient ici à chaque changement. Lui
+          renvoyer son propre résultat la ferait se réinitialiser à chaque
+          geste. */}
+      <GestionMedias items={portfolio} onChanger={setListe} />
 
       <View style={s.boutons}>
         <BtnOutline label="Annuler" onPress={onAnnuler} />

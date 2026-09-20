@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { Oswald_500Medium, Oswald_600SemiBold, Oswald_700Bold } from '@expo-google-fonts/oswald';
@@ -26,9 +27,15 @@ export default function App() {
     );
   }
 
+  /* GestureHandlerRootView doit envelopper toute l'application : c'est elle
+     qui reçoit les touches AVANT les vues natives (le lecteur vidéo, les
+     listes qui défilent) et qui décide ensuite qui gagne. Sans elle, aucun
+     glissement ne fonctionne au-dessus d'une vidéo. */
   return (
-    <SafeAreaProvider>
-      <OpusApp />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <OpusApp />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

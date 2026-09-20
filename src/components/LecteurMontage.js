@@ -37,7 +37,7 @@ function preparer(p) {
 }
 
 export default function LecteurMontage({
-  clips = [], musique, actif = true, muet = false, style, gestes, children,
+  clips = [], musique, actif = true, muet = false, style, children,
 }) {
   const a = useVideoPlayer(null, preparer);
   const b = useVideoPlayer(null, preparer);
@@ -138,8 +138,10 @@ export default function LecteurMontage({
 
   if (!clips.length) return <View style={style}>{children}</View>;
 
+  /* `pointerEvents="none"` sur les lecteurs : voir Media.js — c'est ce qui
+     laisse passer les gestes vers le détecteur posé au-dessus. */
   return (
-    <View style={style} {...(gestes || {})}>
+    <View style={style}>
       {/* Les deux lecteurs sont empilés ; seul celui à l'écran est visible.
           On ne les démonte jamais : c'est ce qui garde le clip suivant prêt. */}
       <VideoView
@@ -148,6 +150,7 @@ export default function LecteurMontage({
         contentFit="cover"
         nativeControls={false}
         allowsPictureInPicture={false}
+        pointerEvents="none"
       />
       {!unSeulClip && (
         <VideoView
@@ -156,6 +159,7 @@ export default function LecteurMontage({
           contentFit="cover"
           nativeControls={false}
           allowsPictureInPicture={false}
+          pointerEvents="none"
         />
       )}
 

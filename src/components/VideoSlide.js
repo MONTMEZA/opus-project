@@ -4,14 +4,15 @@
  * navigation du bas flottent par-dessus, comme sur TikTok. `bottomInset`
  * réserve la place de cette navigation pour que le texte ne passe pas dessous.
  */
-import React, { useRef } from 'react';
-import { View, Text, Pressable, PanResponder, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F } from '../theme';
 import { Gradient, BtnMain, ChipFollow } from './ui';
 import { nombreCommentaires } from './Commentaires';
 import Media, { estFichier } from './Media';
 import LecteurMontage from './LecteurMontage';
+import GlissementLateral from './GlissementLateral';
 import { BadgeCheck, Heart, MessageSquare, Share2, Bookmark, MapPin } from './icons';
 
 function Scrim() {
@@ -33,27 +34,6 @@ export default function VideoSlide({
 }) {
   const infoPad = 24 + bottomInset;
   const clips = post.medias && post.medias.length ? post.medias : [post.media];
-
-  /**
-   * Glissements horizontaux, comme sur TikTok : vers la droite on ouvre la
-   * page de l'artisan, vers la gauche on revient au fil.
-   *
-   * Le geste n'est capté que s'il est franchement horizontal — au moins deux
-   * fois plus large que haut. Sans cette condition, un défilement vertical
-   * légèrement de travers ferait quitter la vidéo, ce qui est exaspérant.
-   */
-  const gestes = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => (
-        Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2
-      ),
-      onPanResponderRelease: (_, g) => {
-        if (Math.abs(g.dx) < 70) return;         // hésitation : on ne fait rien
-        if (g.dx > 0) { if (onGlisserVersProfil && pro) onGlisserVersProfil(pro); }
-        else if (onGlisserVersFil) onGlisserVersFil();
-      },
-    }),
-  ).current;
 
   /* --- publicité en plein écran --- */
   if (post.type === 'ad') {
@@ -95,51 +75,62 @@ export default function VideoSlide({
     ? { clips, musique: post.musique, actif }
     : { media: montageAssemble ? post.montageUrl : post.media, lecture: actif, muet: false };
 
+  /* Glissements façon TikTok : à droite la page de l'artisan, à gauche le
+     fil principal. Le détecteur enveloppe toute la diapositive — il doit être
+     AU-DESSUS du lecteur vidéo dans l'arbre, pas à l'intérieur. */
   return (
-    <Surface {...proprietes} style={[s.card, { height }]} gestes={gestes.panHandlers}>
-      <Scrim />
+    <GlissementLateral
+      style={{ height }}
+      onVersDroite={onGlisserVersProfil && pro ? () => onGlisserVersProfil(pro) : null}
+      onVersGauche={onGlisserVersFil || null}
+      libelleDroite={pro ? pro.entreprise : 'Le profil'}
+      libelleGauche="Le fil"
+    >
+      <Surface {...proprietes} style={[s.card, { height }]}>
+        <Scrim />
 
-      {/* actions sur le côté droit */}
-      <View style={[s.actions, { bottom: 150 + bottomInset }]}>
-        <Pressable style={s.action} onPress={() => onLike(post.id)}>
-          <View style={s.actionIcon}>
-            <Heart size={22} filled={post.liked} color={post.liked ? C.accent : '#fff'} />
-          </View>
-          <Text style={s.actionLabel}>{post.likes}</Text>
-        </Pressable>
-        <Pressable style={s.action} onPress={() => onComment(post)}>
-          <View style={s.actionIcon}><MessageSquare size={22} color="#fff" /></View>
-          <Text style={s.actionLabel}>{nombreCommentaires(post.comments)}</Text>
-        </Pressable>
-        <Pressable style={s.action} onPress={() => onShare('Lien de la vidéo copié.')}>
-          <View style={s.actionIcon}><Share2 size={20} color="#fff" /></View>
-          <Text style={s.actionLabel}>Partager</Text>
-        </Pressable>
-        <Pressable style={s.action} onPress={() => onSave(post.id)}>
-          <View style={s.actionIcon}>
-            <Bookmark size={19} filled={saved} color={saved ? C.accent : '#fff'} />
-          </View>
-        </Pressable>
-      </View>
+        {/* actions sur le côté droit */}
+        <View style={[s.actions, { bottom: 150 + bottomInset }]}>
+          <Pressable style={s.action} onPress={() => onLike(post.id)}>
+            <View style={s.actionIcon}>
+              <Heart size={22} filled={post.liked} color={post.liked ? C.accent : '#fff'} />
+            </View>
+            <Text style={s.actionLabel}>{post.likes}</Text>
+          </Pressable>
+          <Pressable style={s.action} onPress={() => onComment(post)}>
+            <View style={s.actionIcon}><MessageSquare size={22} color="#fff" /></View>
+            <Text style={s.actionLabel}>{nombreCommentaires(post.comments)}</Text>
+          </Pressable>
+          <Pressable style={s.action} onPress={() => onShare('Lien de la vidéo copié.')}>
+            <View style={s.actionIcon}><Share2 size={20} color="#fff" /></View>
+            <Text style={s.actionLabel}>Partager</Text>
+          </Pressable>
+          <Pressable style={s.action} onPress={() => onSave(post.id)}>
+            <View style={s.actionIcon}>
+              <Bookmark size={19} filled={saved} color={saved ? C.accent : '#fff'} />
+            </View>
+          </Pressable>
+        </View>
 
-      {/* informations en bas */}
-      <View style={[s.info, { paddingBottom: infoPad }]}>
-        <View style={s.tag}><Text style={s.tagText}>{pro.metier}</Text></View>
-        <Pressable style={s.feedNameRow} onPress={() => onView(pro.id)}>
-          <Text style={s.feedName}>{pro.entreprise}</Text>
-          {pro.verifie && <BadgeCheck size={15} color={C.verif} />}
-        </Pressable>
-        <View style={s.loc}>
-          <MapPin size={12} color="#fff" />
-          <Text style={s.locText}>{pro.ville}</Text>
+        {/* informations en bas */}
+        <View style={[s.info, { paddingBottom: infoPad }]}>
+          <View style={s.tag}><Text style={s.tagText}>{pro.metier}</Text></View>
+          <Pressable style={s.feedNameRow} onPress={() => onView(pro.id)}>
+            <Text style={s.feedName}>{pro.entreprise}</Text>
+            {pro.verifie && <BadgeCheck size={15} color={C.verif} />}
+          </Pressable>
+          <View style={s.loc}>
+            <MapPin size={12} color="#fff" />
+            <Text style={s.locText}>{pro.ville}</Text>
+          </View>
+          <Text style={s.feedText}>{post.texte}</Text>
+          <View style={s.btnRow}>
+            <ChipFollow video following={following} onPress={() => onFollow(pro.id)} />
+            <BtnMain label="Contacter" onPress={() => onContact(pro, 'message')} />
+          </View>
         </View>
-        <Text style={s.feedText}>{post.texte}</Text>
-        <View style={s.btnRow}>
-          <ChipFollow video following={following} onPress={() => onFollow(pro.id)} />
-          <BtnMain label="Contacter" onPress={() => onContact(pro, 'message')} />
-        </View>
-      </View>
-    </Surface>
+      </Surface>
+    </GlissementLateral>
   );
 }
 

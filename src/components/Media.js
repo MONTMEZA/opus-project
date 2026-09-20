@@ -54,29 +54,29 @@ export function estVideo(media) {
 }
 
 export default function Media({
-  media, style, lecture = false, muet = true, gestes, children,
+  media, style, lecture = false, muet = true, children,
 }) {
   if (!estFichier(media)) {
-    return <Gradient media={media} style={style} gestes={gestes}>{children}</Gradient>;
+    return <Gradient media={media} style={style}>{children}</Gradient>;
   }
 
   if (estVideo(media)) {
     return (
-      <VideoMedia uri={media} style={style} lecture={lecture} muet={muet} gestes={gestes}>
+      <VideoMedia uri={media} style={style} lecture={lecture} muet={muet}>
         {children}
       </VideoMedia>
     );
   }
 
   return (
-    <View style={style} {...(gestes || {})}>
+    <View style={style}>
       <Image source={{ uri: media }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       {children}
     </View>
   );
 }
 
-function VideoMedia({ uri, style, lecture, muet, gestes, children }) {
+function VideoMedia({ uri, style, lecture, muet, children }) {
   /* Le lecteur est créé une fois pour cette source. Il charge la vidéo dès
      le montage, même en pause : quand la diapositive devient visible, tout
      est déjà en mémoire et la lecture part sans délai. */
@@ -95,14 +95,20 @@ function VideoMedia({ uri, style, lecture, muet, gestes, children }) {
     if (player) player.muted = muet;
   }, [player, muet]);
 
+  /* `pointerEvents="none"` est capital : VideoView est une vue NATIVE, et
+     sans cela elle garde la touche pour elle. Les gestes posés au-dessus —
+     glisser vers le profil, toucher pour le plein écran — ne recevaient
+     jamais rien. On n'y perd aucune fonction : le lecteur n'a pas de
+     commandes (`nativeControls={false}`). */
   return (
-    <View style={style} {...(gestes || {})}>
+    <View style={style}>
       <VideoView
         style={StyleSheet.absoluteFill}
         player={player}
         contentFit="cover"
         nativeControls={false}
         allowsPictureInPicture={false}
+        pointerEvents="none"
       />
       {!lecture && (
         <View style={s.voile} pointerEvents="none">
