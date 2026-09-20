@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { C, F } from '../theme';
 import { Gradient, BtnMain, ChipFollow } from './ui';
 import { nombreCommentaires } from './Commentaires';
-import Media from './Media';
+import Media, { estFichier } from './Media';
 import LecteurMontage from './LecteurMontage';
 import { BadgeCheck, Heart, MessageSquare, Share2, Bookmark, MapPin } from './icons';
 
@@ -56,9 +56,14 @@ export default function VideoSlide({
   if (!pro) return null;
 
   /* Un montage enchaîne ses clips avec sa musique ; une vidéo seule se lit en
-     boucle. Dans les deux cas c'est la même surface plein écran. */
-  const Surface = post.format === 'montage' ? LecteurMontage : Media;
-  const proprietes = post.format === 'montage'
+     boucle. Dans les deux cas c'est la même surface plein écran.
+
+     Le lecteur de montage attend de vrais fichiers : les dégradés des données
+     de démonstration n'en sont pas, et le lecteur vidéo ne saurait pas quoi en
+     faire. On retombe alors sur l'affichage simple. */
+  const vraiMontage = post.format === 'montage' && clips.every(estFichier);
+  const Surface = vraiMontage ? LecteurMontage : Media;
+  const proprietes = vraiMontage
     ? { clips, musique: post.musique, muet: !actif }
     : { media: post.media, lecture: actif, muet: false };
 

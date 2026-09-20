@@ -847,12 +847,17 @@ export default function OpusApp() {
     ? visiblePosts.filter((p) => p.type === 'ad' || followingIds.has(p.proId))
     : visiblePosts;
   /**
-   * Le fil « Vidéos » ne retient que les vidéos — et pas les publicités, qui
-   * n'en sont pas. Le fil « Fil » garde tout : une vidéo y apparaît comme une
-   * carte, avec sa pastille de lecture.
+   * Le fil « Vidéos » ne retient que ce qui se regarde en plein écran — les
+   * vidéos ET les montages — et pas les publicités, qui n'en sont pas. Le fil
+   * « Fil » garde tout : une vidéo y apparaît comme une carte, avec sa
+   * pastille de lecture.
+   *
+   * FORMATS_VIDEO est la même liste que celle qui décide vers quel fil
+   * renvoyer après une publication. Deux listes séparées finiraient par
+   * diverger : c'est exactement ce qui excluait les montages d'ici.
    */
   const feedFiltered = feedMode === 'video'
-    ? feedAbonnements.filter((p) => p.type === 'post' && p.format === 'video')
+    ? feedAbonnements.filter((p) => p.type === 'post' && FORMATS_VIDEO.has(p.format))
     : feedAbonnements;
 
   /**

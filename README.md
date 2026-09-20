@@ -392,7 +392,7 @@ C'est le format qui décide dans quel fil la publication apparaît :
 | Fil | Ce qu'on y voit |
 |---|---|
 | **Fil** | Tout : photos, vidéos, avant/après, textes, conseils, publicités. Une vidéo y porte une pastille « ▷ Vidéo ». |
-| **Vidéos** | **Uniquement les vidéos**, en plein écran, façon TikTok. Ni photos, ni textes, ni publicités. |
+| **Vidéos** | **Uniquement ce qui se regarde en plein écran** — vidéos et montages, façon TikTok. Ni photos, ni textes, ni publicités. |
 
 En base, la colonne `posts.type` porte le format (`photo`, `video`…), et la
 colonne `posts.is_ad` dit s'il s'agit d'une publicité. Côté application, le
