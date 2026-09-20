@@ -102,9 +102,20 @@ Deno.serve(async (req) => {
       !apiKey && 'CLOUDINARY_API_KEY',
       !apiSecret && 'CLOUDINARY_API_SECRET',
     ].filter(Boolean).join(', ');
+
+    /* Diagnostic : les NOMS des secrets ajoutés au projet, jamais leurs
+       valeurs. Les variables fournies d'office par la plateforme sont
+       écartées. Cela distingue « rien n'a été enregistré » d'une faute de
+       frappe dans un nom — distinction qui a déjà fait gagner du temps, la
+       page de secrets contenant alors deux entrées mal nommées. */
+    const ajoutes = Object.keys(Deno.env.toObject())
+      .filter((n) => !/^(SUPABASE_|SB_|DENO_|EDGE_|FUNCTION|NODE_|PATH$|HOME$|LANG$|PWD$|SHLVL$|_$)/i.test(n))
+      .sort();
+
     return json({
       error: `Cloudinary n'est pas configuré côté serveur. Secret(s) manquant(s) : ${manquants}. `
         + 'À renseigner dans Supabase → Edge Functions → Secrets.',
+      secretsAjoutesAuProjet: ajoutes,
     }, 500);
   }
 
