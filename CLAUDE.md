@@ -71,6 +71,22 @@ Les captures d'écran valent mieux qu'une affirmation. Ce qui n'a pas pu être
 vérifié ici (appareil photo, lecture vidéo réelle, notifications push) doit
 être **dit explicitement** dans la réponse et dans le message de commit.
 
+### Ce que le navigateur de test ne sait PAS faire
+
+Le Chromium fourni avec Playwright est une version allégée, **sans les codecs
+propriétaires**. Vérifié : `canPlayType` renvoie « rien » pour
+`video/quicktime` ET pour `video/mp4; codecs=avc1`, et « maybe » seulement
+pour WebM.
+
+Conséquence : **aucune vidéo du projet ne se lit dans ce navigateur.** Un
+lecteur y reste à `readyState 0`, et les erreurs « play() interrupted by
+pause() » qui en découlent sont des artefacts du test, pas des défauts du
+code. Ne pas chercher à les corriger.
+
+Ce qu'on peut y vérifier malgré tout : qu'un lecteur est bien monté, quelle
+source il porte, et combien il y en a. C'est déjà beaucoup. La fluidité
+réelle, elle, ne se juge que sur le téléphone.
+
 ## Principes tenus depuis le début
 
 - **Les secrets ne vivent jamais dans l'application.** La clé Anthropic est

@@ -64,7 +64,7 @@ export default function VideoSlide({
   const vraiMontage = post.format === 'montage' && clips.every(estFichier);
   const Surface = vraiMontage ? LecteurMontage : Media;
   const proprietes = vraiMontage
-    ? { clips, musique: post.musique, muet: !actif }
+    ? { clips, musique: post.musique, actif }
     : { media: post.media, lecture: actif, muet: false };
 
   return (

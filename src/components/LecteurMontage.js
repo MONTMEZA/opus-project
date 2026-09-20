@@ -1,93 +1,164 @@
 /**
  * Lecteur de montage : plusieurs clips enchaînés, avec une musique par-dessus.
  *
- * Pourquoi ce n'est PAS un fichier vidéo unique
- * --------------------------------------------
- * Coller des clips et y incruster une bande-son demande un encodeur vidéo sur
- * le téléphone. En React Native, cela passait par ffmpeg-kit-react-native —
- * un paquet aujourd'hui abandonné par son éditeur (déprécié sur npm, plus
- * aucune version depuis janvier 2025). Il n'existe pas d'équivalent maintenu.
+ * DEUX LECTEURS QUI S'ALTERNENT
+ * -----------------------------
+ * La version précédente n'en avait qu'un : à la fin d'un clip, elle lui
+ * demandait de charger le suivant. Or charger une vidéo prend du temps —
+ * d'où le trou visible entre deux clips.
  *
- * Le montage est donc assemblé À LA LECTURE : les clips s'enchaînent dans
- * l'ordre choisi, la musique court par-dessus, et la boucle repart au
- * premier. Le spectateur voit exactement ce qu'il verrait d'un fichier
- * monté. La différence tient en une phrase : il n'y a pas de fichier à
- * exporter vers un autre réseau. Ce sera le travail d'un service
- * d'encodage côté serveur, le jour où il sera utile.
+ * Ici, pendant que le clip 1 joue dans le lecteur A, le clip 2 est déjà
+ * chargé et prêt dans le lecteur B, invisible. À la fin du clip 1, il n'y a
+ * rien à charger : on échange simplement lequel des deux est à l'écran, et le
+ * lecteur A part chercher le clip 3. C'est la technique employée partout où
+ * l'on enchaîne des vidéos sans coupure.
+ *
+ * Ce que cela ne fait toujours pas : un fichier unique. Le montage reste
+ * assemblé à la lecture (voir le README), parce qu'aucun encodeur vidéo
+ * maintenu n'existe aujourd'hui côté téléphone en React Native.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useAudioPlayer } from 'expo-audio';
 
-export default function LecteurMontage({ clips = [], musique, style, muet = false, children }) {
-  const [index, setIndex] = useState(0);
-  const suivant = useRef(null);
+/** Démarrer vite plutôt que mettre beaucoup en réserve — voir Media.js. */
+const TAMPON = {
+  minBufferForPlayback: 0.5,
+  preferredForwardBufferDuration: 5,
+  prioritizeTimeOverSizeThreshold: true,
+  waitsToMinimizeStalling: false,
+};
 
-  const clip = clips[index] || clips[0] || null;
+function preparer(p) {
+  p.loop = false;
+  p.muted = true;          // le son réel est réglé plus bas, selon la musique
+  p.bufferOptions = TAMPON;
+}
 
-  /* Un seul lecteur vidéo, dont on change la source : en ouvrir un par clip
-     multiplierait les décodeurs matériels, que le téléphone limite. */
-  const player = useVideoPlayer(clip, (p) => {
-    p.loop = false;
-    // Avec une musique, le son des clips est coupé : deux bandes-son
-    // simultanées ne s'écoutent pas.
-    p.muted = muet || !!musique;
-    // Même réglage que Media : on démarre après une demi-seconde de réserve
-    // au lieu de deux, sinon chaque changement de clip marque un temps.
-    p.bufferOptions = {
-      minBufferForPlayback: 0.5,
-      preferredForwardBufferDuration: 5,
-      prioritizeTimeOverSizeThreshold: true,
-      waitsToMinimizeStalling: false,
-    };
-    p.play();
-  });
-
+export default function LecteurMontage({
+  clips = [], musique, actif = true, muet = false, style, children,
+}) {
+  const a = useVideoPlayer(null, preparer);
+  const b = useVideoPlayer(null, preparer);
   const audio = useAudioPlayer(musique || null);
 
-  /* Fin d'un clip : on passe au suivant, et on reboucle sur le premier. */
+  const [surA, setSurA] = useState(true);
+  const [index, setIndex] = useState(0);
+
+  /* Les écouteurs d'événements capturent l'état au moment où ils sont posés.
+     Des références permettent de lire la valeur courante, pas celle d'hier. */
+  const surARef = useRef(true);
+  const indexRef = useRef(0);
+  const clipsRef = useRef(clips);
+  clipsRef.current = clips;
+
+  const signature = clips.join('|');
+  const unSeulClip = clips.length === 1;
+  // Avec une musique, le son des clips est coupé : deux bandes-son
+  // simultanées ne s'écoutent pas.
+  const clipsMuets = muet || !!musique;
+
+  /* --- chargement initial, et rechargement si la publication change --- */
   useEffect(() => {
-    if (!player) return undefined;
-    const abonnement = player.addListener('playToEnd', () => {
-      suivant.current = setTimeout(() => {
-        setIndex((i) => (clips.length ? (i + 1) % clips.length : 0));
-      }, 0);
-    });
-    return () => {
-      abonnement.remove();
-      if (suivant.current) clearTimeout(suivant.current);
+    if (!clips.length || !a || !b) return;
+
+    surARef.current = true; indexRef.current = 0;
+    setSurA(true); setIndex(0);
+
+    a.loop = unSeulClip;          // un clip seul se répète tout seul
+    a.replaceAsync(clips[0]).then(() => { if (actif) a.play(); }).catch(() => {});
+    if (!unSeulClip) {
+      // Le clip suivant se charge pendant que le premier joue : c'est tout
+      // l'intérêt du second lecteur.
+      b.replaceAsync(clips[1]).catch(() => {});
+    }
+  }, [signature]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* --- fin d'un clip : on bascule sur l'autre lecteur --- */
+  useEffect(() => {
+    if (!a || !b || unSeulClip) return undefined;
+
+    const basculer = (termine) => () => {
+      // Un clip qui finit alors qu'il n'est pas à l'écran ne déclenche rien.
+      const cEtaitLui = (termine === 'A') === surARef.current;
+      if (!cEtaitLui) return;
+
+      const liste = clipsRef.current;
+      const suivant = (indexRef.current + 1) % liste.length;
+      indexRef.current = suivant;
+      setIndex(suivant);
+
+      // L'autre lecteur est prêt : on l'affiche et on le lance, sans attente.
+      surARef.current = !surARef.current;
+      setSurA(surARef.current);
+      const aLEcran = surARef.current ? a : b;
+      const enCoulisse = surARef.current ? b : a;
+      aLEcran.currentTime = 0;
+      aLEcran.play();
+
+      // Et celui qui vient de finir part chercher le clip d'après.
+      // Sur deux clips, il recharge donc celui qu'il vient de jouer : c'est
+      // voulu, c'est ce qui fait repartir la boucle sans attente.
+      const apres = (suivant + 1) % liste.length;
+      enCoulisse.replaceAsync(liste[apres]).catch(() => {});
     };
-  }, [player, clips.length]);
+
+    const sa = a.addListener('playToEnd', basculer('A'));
+    const sb = b.addListener('playToEnd', basculer('B'));
+    return () => { sa.remove(); sb.remove(); };
+  }, [a, b, unSeulClip]);
+
+  /* --- lecture / pause selon que la diapositive est à l'écran --- */
+  useEffect(() => {
+    if (!a || !b) return;
+    const aLEcran = surA ? a : b;
+    const enCoulisse = surA ? b : a;
+    /* Ne demander une pause que si le lecteur joue vraiment : interrompre une
+       lecture qui démarre à peine provoque une erreur, et c'est ce que le
+       test a fait apparaître. */
+    if (enCoulisse.playing) enCoulisse.pause();
+    if (actif && !aLEcran.playing) aLEcran.play();
+    if (!actif && aLEcran.playing) aLEcran.pause();
+  }, [actif, surA, a, b]);
 
   useEffect(() => {
-    if (!player || !clip) return;
-    player.replace(clip);
-    player.muted = muet || !!musique;
-    player.play();
-  }, [clip, player, muet, musique]);
+    if (a) a.muted = clipsMuets;
+    if (b) b.muted = clipsMuets;
+  }, [clipsMuets, a, b]);
 
-  /* La musique tourne en boucle, indépendamment des clips : c'est elle qui
-     donne son unité au montage. */
+  /* --- la musique, qui donne son unité au montage --- */
   useEffect(() => {
     if (!audio || !musique) return undefined;
     audio.loop = true;
     audio.muted = muet;
-    audio.play();
+    if (actif) audio.play(); else audio.pause();
     return () => { try { audio.pause(); } catch (e) { /* déjà libéré */ } };
-  }, [audio, musique, muet]);
+  }, [audio, musique, muet, actif]);
 
-  if (!clip) return <View style={style}>{children}</View>;
+  if (!clips.length) return <View style={style}>{children}</View>;
 
   return (
     <View style={style}>
+      {/* Les deux lecteurs sont empilés ; seul celui à l'écran est visible.
+          On ne les démonte jamais : c'est ce qui garde le clip suivant prêt. */}
       <VideoView
-        style={StyleSheet.absoluteFill}
-        player={player}
+        style={[StyleSheet.absoluteFill, { opacity: surA ? 1 : 0 }]}
+        player={a}
         contentFit="cover"
         nativeControls={false}
         allowsPictureInPicture={false}
       />
+      {!unSeulClip && (
+        <VideoView
+          style={[StyleSheet.absoluteFill, { opacity: surA ? 0 : 1 }]}
+          player={b}
+          contentFit="cover"
+          nativeControls={false}
+          allowsPictureInPicture={false}
+        />
+      )}
+
       {clips.length > 1 && (
         <View style={s.jauges} pointerEvents="none">
           {clips.map((_, i) => (
