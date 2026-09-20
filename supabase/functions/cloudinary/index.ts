@@ -51,32 +51,62 @@ async function signer(parametres: Record<string, string>, secret: string) {
     .join('');
 }
 
+/**
+ * La clé publique du projet, quel que soit son nom.
+ *
+ * Supabase a changé de nomenclature : les projets récents reçoivent
+ * SUPABASE_PUBLISHABLE_KEYS, les anciens SUPABASE_ANON_KEY. Chercher les deux
+ * évite une panne le jour où l'ancienne disparaît.
+ */
+function clePublique(): string {
+  const ancienne = Deno.env.get('SUPABASE_ANON_KEY');
+  if (ancienne) return ancienne;
+
+  const nouvelles = Deno.env.get('SUPABASE_PUBLISHABLE_KEYS');
+  if (!nouvelles) return '';
+  try {
+    const liste = JSON.parse(nouvelles);
+    if (Array.isArray(liste) && liste.length) {
+      const premiere = liste[0];
+      return typeof premiere === 'string' ? premiere : (premiere.api_key ?? '');
+    }
+    return '';
+  } catch {
+    return nouvelles;   // une seule clé, en clair
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Méthode non autorisée' }, 405);
+
+  /* Qui demande ? Une signature n'est délivrée qu'à un utilisateur connecté,
+     et elle ne vaut que pour SON dossier : personne ne peut déposer de
+     fichiers chez quelqu'un d'autre.
+     Ce contrôle passe AVANT celui de la configuration, pour que la fonction
+     puisse être déployée et vérifiée avant même que Cloudinary existe. */
+  const entete = req.headers.get('Authorization') || '';
+  const jeton = entete.replace(/^Bearer\s+/i, '').trim();
+  if (!jeton) return json({ error: 'Connectez-vous pour envoyer un fichier.' }, 401);
+
+  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', clePublique());
+  const { data: { user }, error } = await supabase.auth.getUser(jeton);
+  if (error || !user) return json({ error: 'Connectez-vous pour envoyer un fichier.' }, 401);
 
   const cloudName = Deno.env.get('CLOUDINARY_CLOUD_NAME');
   const apiKey = Deno.env.get('CLOUDINARY_API_KEY');
   const apiSecret = Deno.env.get('CLOUDINARY_API_SECRET');
   if (!cloudName || !apiKey || !apiSecret) {
+    const manquants = [
+      !cloudName && 'CLOUDINARY_CLOUD_NAME',
+      !apiKey && 'CLOUDINARY_API_KEY',
+      !apiSecret && 'CLOUDINARY_API_SECRET',
+    ].filter(Boolean).join(', ');
     return json({
-      error: "Cloudinary n'est pas configuré côté serveur. Renseignez "
-        + 'CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY et CLOUDINARY_API_SECRET '
-        + 'dans les secrets Supabase.',
+      error: `Cloudinary n'est pas configuré côté serveur. Secret(s) manquant(s) : ${manquants}. `
+        + 'À renseigner dans Supabase → Edge Functions → Secrets.',
     }, 500);
   }
-
-  /* Qui demande ? Une signature n'est délivrée qu'à un utilisateur connecté,
-     et elle ne vaut que pour SON dossier : personne ne peut déposer de
-     fichiers chez quelqu'un d'autre. */
-  const autorisation = req.headers.get('Authorization') || '';
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    { global: { headers: { Authorization: autorisation } } },
-  );
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return json({ error: 'Connectez-vous pour envoyer un fichier.' }, 401);
 
   const timestamp = Math.floor(Date.now() / 1000);
   const dossier = `opus/${user.id}`;
