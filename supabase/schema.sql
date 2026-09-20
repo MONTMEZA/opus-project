@@ -636,6 +636,27 @@ alter table public.demandes add column if not exists longitude   double precisio
 
 create index if not exists idx_demandes_metier on public.demandes (metier, created_at desc);
 
+-- --------------------------------------------------------------------------
+--  Ce que le particulier précise en plus : son budget et son urgence.
+--
+--  Sans budget, l'artisan se déplace pour un chantier hors de portée, et le
+--  particulier reçoit des devis qui le sidèrent. Une fourchette, même large,
+--  évite les deux. Sans urgence, impossible de savoir si « refaire la salle
+--  de bain » est pour la semaine prochaine ou pour l'an prochain.
+-- --------------------------------------------------------------------------
+alter table public.demandes add column if not exists budget text;
+alter table public.demandes add column if not exists urgence text not null default 'quand_possible';
+
+alter table public.demandes drop constraint if exists demandes_urgence_check;
+alter table public.demandes add constraint demandes_urgence_check
+  check (urgence in ('quand_possible', 'ce_mois', 'urgent'));
+
+alter table public.demandes drop constraint if exists demandes_budget_check;
+alter table public.demandes add constraint demandes_budget_check
+  check (budget is null or budget in (
+    'moins_500', '500_2000', '2000_5000', '5000_15000', 'plus_15000', 'a_chiffrer'
+  ));
+
 create table if not exists public.demande_reponses (
   id              uuid primary key default gen_random_uuid(),
   demande_id      uuid not null references public.demandes(id) on delete cascade,
@@ -644,6 +665,80 @@ create table if not exists public.demande_reponses (
   created_at      timestamptz not null default now(),
   unique (demande_id, professional_id)
 );
+
+-- --------------------------------------------------------------------------
+--  9 bis. LA PLACE DES PROS — les annonces entre professionnels
+--
+--  POURQUOI CETTE TABLE EXISTE
+--  La sous-traitance dans le bâtiment se traite aujourd'hui par
+--  bouche-à-oreille et par groupes Facebook. La question qui s'y pose
+--  toujours, et à laquelle personne ne peut répondre, est : « ce plaquiste
+--  est-il vraiment assuré ? »
+--
+--  Ici, elle a déjà une réponse. Le badge vérifié est adossé au Kbis et à
+--  l'attestation d'assurance décennale, contrôlés par un humain. Une annonce
+--  posée dans Opus porte donc quelque chose qu'aucun groupe Facebook ne peut
+--  porter — et c'est la seule raison valable de construire cette page.
+--
+--  ENTRE PROS, ET SEULEMENT ENTRE PROS
+--  La lecture est réservée aux comptes professionnels. Ce n'est pas un
+--  réglage d'écran : c'est une règle RLS, donc un particulier qui bricole
+--  l'application ne voit rien. Les prix entre artisans ne sont pas les prix
+--  au particulier, et les afficher à tout le monde ferait du tort aux deux.
+-- --------------------------------------------------------------------------
+create table if not exists public.annonces_pro (
+  id          uuid primary key default gen_random_uuid(),
+  auteur_id   uuid not null references public.professional_profiles(id) on delete cascade,
+  type        text not null
+              check (type in (
+                'sous_traitance_cherche',   -- je cherche un sous-traitant
+                'sous_traitance_offre',     -- je suis disponible
+                'materiel_vente',
+                'materiel_location',
+                'entraide'
+              )),
+  titre       text not null,
+  texte       text not null,
+  metier      text,               -- le métier concerné, quand il y en a un
+  ville       text,
+  code_postal text,
+  latitude    double precision,
+  longitude   double precision,
+  -- Le créneau du chantier. C'est ce qui manque partout ailleurs : une
+  -- annonce de sous-traitance sans dates ne sert à rien, parce qu'un
+  -- chantier se joue sur une semaine précise.
+  date_debut  date,
+  date_fin    date,
+  prix        numeric(10,2),      -- vente ou location ; null si sans objet
+  unite       text not null default 'total'
+              check (unite in ('total', 'jour', 'semaine', 'mois')),
+  medias      text[] not null default '{}',
+  statut      text not null default 'ouverte'
+              check (statut in ('ouverte', 'pourvue', 'fermee')),
+  created_at  timestamptz not null default now()
+);
+
+-- Une date de fin avant la date de début n'a aucun sens : la base le refuse
+-- plutôt que d'afficher « du 20 au 12 mars » à tout le monde.
+alter table public.annonces_pro drop constraint if exists annonces_dates_check;
+alter table public.annonces_pro add constraint annonces_dates_check
+  check (date_debut is null or date_fin is null or date_fin >= date_debut);
+
+create index if not exists idx_annonces_type    on public.annonces_pro (type, created_at desc);
+create index if not exists idx_annonces_metier  on public.annonces_pro (metier);
+create index if not exists idx_annonces_statut  on public.annonces_pro (statut, created_at desc);
+
+create table if not exists public.annonce_reponses (
+  id              uuid primary key default gen_random_uuid(),
+  annonce_id      uuid not null references public.annonces_pro(id) on delete cascade,
+  professional_id uuid not null references public.professional_profiles(id) on delete cascade,
+  message         text,
+  created_at      timestamptz not null default now(),
+  unique (annonce_id, professional_id)
+);
+
+create index if not exists idx_annonce_reponses
+  on public.annonce_reponses (annonce_id, created_at desc);
 
 -- --------------------------------------------------------------------------
 --  10. SOS — INTERVENTIONS D'URGENCE
@@ -814,6 +909,36 @@ alter table public.sos_availability      enable row level security;
 alter table public.sos_requests          enable row level security;
 alter table public.notifications         enable row level security;
 alter table public.metier_demandes       enable row level security;
+alter table public.annonces_pro          enable row level security;
+alter table public.annonce_reponses      enable row level security;
+
+-- La Place des pros est réservée aux comptes professionnels. La règle est
+-- ICI, dans la base : un particulier qui modifie l'application ne verra
+-- toujours rien. Les prix entre artisans ne sont pas les prix au
+-- particulier ; les exposer ferait du tort aux deux.
+create or replace function public.est_un_pro()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.professional_profiles p where p.id = auth.uid())
+$$;
+
+drop policy if exists "annonces lecture pro" on public.annonces_pro;
+create policy "annonces lecture pro" on public.annonces_pro
+  for select using (public.est_un_pro());
+drop policy if exists "annonces ecriture auteur" on public.annonces_pro;
+create policy "annonces ecriture auteur" on public.annonces_pro
+  for all using (auth.uid() = auteur_id) with check (auth.uid() = auteur_id);
+
+drop policy if exists "annonce reponses lecture pro" on public.annonce_reponses;
+create policy "annonce reponses lecture pro" on public.annonce_reponses
+  for select using (public.est_un_pro());
+drop policy if exists "annonce reponses ecriture" on public.annonce_reponses;
+create policy "annonce reponses ecriture" on public.annonce_reponses
+  for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
 
 -- Demandes de modification des métiers : strictement privées. Personne
 -- d'autre que l'artisan ne les voit, et lui ne peut pas les trancher —

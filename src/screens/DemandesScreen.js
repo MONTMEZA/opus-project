@@ -12,20 +12,29 @@ import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
 } from '../components/ui';
 import Media from '../components/Media';
-import { MapPin, MessageCircle, Camera, X } from '../components/icons';
+import { MapPin, MessageCircle, Camera, X, Check } from '../components/icons';
 import { choisirImage } from '../lib/media';
 import ChampVille from '../components/ChampVille';
 import { METIERS } from '../data/demo';
+import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
+import { distanceKm } from '../lib/adresse';
 
 export default function DemandesScreen({
   userType, mesMetiers = [], demandes, filtreMetier, setFiltreMetier,
-  onPublier, onRepondre, onErreur,
+  onPublier, onRepondre, onErreur, moi, mesReponses,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
   const [metier, setMetier] = useState(METIERS[0]);
   const [lieu, setLieu] = useState({ affichage: '' });
   const [texte, setTexte] = useState('');
   const [photos, setPhotos] = useState([]);
+  const [budget, setBudget] = useState(null);
+  const [urgence, setUrgence] = useState('quand_possible');
+  /* Un artisan qui a répondu à dix demandes relit dix fois les mêmes.
+     On les masque sur demande plutôt que de les retirer d'office : une
+     demande à laquelle on a répondu reste une demande qu'on suit. */
+  const [masquerRepondues, setMasquerRepondues] = useState(false);
+  const [triDistance, setTriDistance] = useState(true);
 
   const ajouterPhoto = async (camera) => {
     try {
@@ -37,14 +46,37 @@ export default function DemandesScreen({
   };
 
   const estPro = userType === 'pro';
-  const filtrees = filtreMetier ? demandes.filter((d) => d.metier === filtreMetier) : demandes;
-
-  /* Pour un professionnel, les demandes de SES métiers remontent en tête —
-     tous ses métiers, pas seulement le principal : un plombier-chauffagiste
-     doit voir les deux. L'ordre d'arrivée est conservé dans chaque groupe. */
+  const repondues = mesReponses || new Set();
+  const jyAiRepondu = (d) => estPro && repondues.has(d.id);
   const estPourMoi = (d) => estPro && mesMetiers.includes(d.metier);
-  const liste = estPro && mesMetiers.length
-    ? [...filtrees].sort((a, b) => estPourMoi(b) - estPourMoi(a))
+
+  /* La distance est calculée ici, à partir des coordonnées que la Base
+     Adresse Nationale a déjà posées sur la demande et sur le profil. Elles
+     ne servaient jusqu'ici qu'aux urgences. */
+  const avecDistance = demandes.map((d) => ({
+    ...d,
+    km: (moi && typeof moi.latitude === 'number' && typeof d.latitude === 'number')
+      ? distanceKm(moi.latitude, moi.longitude, d.latitude, d.longitude)
+      : null,
+  }));
+
+  const filtrees = avecDistance
+    .filter((d) => (!filtreMetier || d.metier === filtreMetier))
+    .filter((d) => !(masquerRepondues && jyAiRepondu(d)));
+
+  /* Trois critères, dans cet ordre : mes métiers d'abord, puis l'urgence,
+     puis la distance. Un chantier urgent à 40 km passe avant un chantier
+     tranquille à 5 km — c'est l'ordre dans lequel on décide vraiment. */
+  const rangUrgence = (d) => URGENCES.findIndex((u) => u.cle === (d.urgence || 'quand_possible'));
+  const liste = estPro
+    ? [...filtrees].sort((a, b) => {
+      const mien = estPourMoi(b) - estPourMoi(a);
+      if (mien !== 0) return mien;
+      const presse = rangUrgence(b) - rangUrgence(a);
+      if (presse !== 0) return presse;
+      if (!triDistance || a.km === null || b.km === null) return 0;
+      return a.km - b.km;
+    })
     : filtrees;
 
   const publier = () => {
@@ -57,8 +89,11 @@ export default function DemandesScreen({
       longitude: lieu.longitude,
       texte: texte.trim(),
       photos,
+      budget,
+      urgence,
     });
-    setTexte(''); setLieu({ affichage: '' }); setPhotos([]); setFormOuvert(false);
+    setTexte(''); setLieu({ affichage: '' }); setPhotos([]);
+    setBudget(null); setUrgence('quand_possible'); setFormOuvert(false);
   };
 
   return (
@@ -87,6 +122,25 @@ export default function DemandesScreen({
                 onChangeText={setTexte}
               />
               <ChampVille valeur={lieu.affichage} onChange={setLieu} placeholder="Ville du chantier" />
+
+              {/* Sans fourchette, l'artisan se déplace pour un chantier hors
+                  de portée et vous recevez des devis qui vous sidèrent.
+                  « Je ne sais pas » existe parce que c'est souvent vrai. */}
+              <Text style={[s.label, { marginTop: 12 }]}>Votre budget</Text>
+              <View style={s.chipRow}>
+                {BUDGETS.map((b) => (
+                  <Chip key={b.cle} label={b.label} on={budget === b.cle}
+                    onPress={() => setBudget(budget === b.cle ? null : b.cle)} />
+                ))}
+              </View>
+
+              <Text style={[s.label, { marginTop: 12 }]}>C'est pour quand ?</Text>
+              <View style={s.chipRow}>
+                {URGENCES.map((u) => (
+                  <Chip key={u.cle} label={u.label} on={urgence === u.cle}
+                    onPress={() => setUrgence(u.cle)} />
+                ))}
+              </View>
 
               {/* Une photo du problème vaut dix lignes de description : c'est
                   elle qui permet à l'artisan de chiffrer sans se déplacer. */}
@@ -133,9 +187,28 @@ export default function DemandesScreen({
         <View style={[s.encart, { borderColor: C.accent2 }]}>
           <Text style={s.encartTitre}>Demandes de particuliers</Text>
           <Text style={s.encartTexte}>
-            Les demandes correspondant à vos métiers apparaissent en premier.
+            Vos métiers d'abord, puis les plus urgentes, puis les plus proches.
             Répondez pour ouvrir une conversation directe.
           </Text>
+
+          <View style={s.reglages}>
+            <Pressable
+              style={[s.reglage, masquerRepondues && s.reglageOn]}
+              onPress={() => setMasquerRepondues((v) => !v)}
+            >
+              <Text style={[s.reglageTexte, masquerRepondues && { color: '#fff' }]}>
+                Masquer celles où j'ai répondu
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[s.reglage, triDistance && s.reglageOn]}
+              onPress={() => setTriDistance((v) => !v)}
+            >
+              <Text style={[s.reglageTexte, triDistance && { color: '#fff' }]}>
+                Les plus proches d'abord
+              </Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -161,7 +234,11 @@ export default function DemandesScreen({
                 <Text style={s.auteur}>{d.auteur}</Text>
                 <View style={s.metaRow}>
                   <MapPin size={11} color={C.muted} />
-                  <Text style={s.meta}>{d.ville} · {d.time}</Text>
+                  <Text style={s.meta} numberOfLines={1}>
+                    {d.ville}
+                    {d.km !== null && d.km !== undefined ? ` · ${Math.round(d.km)} km` : ''}
+                    {' · '}{d.time}
+                  </Text>
                 </View>
               </View>
               <View style={[s.badgeMetier, estPourMoi(d) && s.badgeMetierMien]}>
@@ -169,6 +246,21 @@ export default function DemandesScreen({
                   {d.metier}
                 </Text>
               </View>
+            </View>
+
+            <View style={s.etiquettes}>
+              {d.urgence && d.urgence !== 'quand_possible' && (
+                <View style={[s.etiquette, { backgroundColor: urgenceDe(d.urgence).couleur }]}>
+                  <Text style={s.etiquetteTexte}>{urgenceDe(d.urgence).label}</Text>
+                </View>
+              )}
+              {!!libelleBudget(d.budget) && (
+                <View style={[s.etiquette, s.etiquetteBudget]}>
+                  <Text style={[s.etiquetteTexte, { color: C.ink }]}>
+                    {libelleBudget(d.budget)}
+                  </Text>
+                </View>
+              )}
             </View>
 
             <Text style={s.texte}>{d.texte}</Text>
@@ -180,12 +272,17 @@ export default function DemandesScreen({
               <Text style={s.reponses}>
                 {d.reponses} {d.reponses > 1 ? 'réponses' : 'réponse'}
               </Text>
-              {estPro && (
+              {estPro && (jyAiRepondu(d) ? (
+                <View style={s.dejaRepondu}>
+                  <Check size={12} color={C.accent2} />
+                  <Text style={s.dejaReponduTexte}>Vous avez répondu</Text>
+                </View>
+              ) : (
                 <BtnMini onPress={() => onRepondre(d)}>
                   <MessageCircle size={12} color="#111" />
                   <Text style={s.repondreText}>Répondre</Text>
                 </BtnMini>
-              )}
+              ))}
             </View>
           </View>
         ))}
@@ -223,6 +320,22 @@ const s = StyleSheet.create({
   formBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 4 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+
+  reglages: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  reglage: {
+    borderWidth: 1, borderColor: C.line, backgroundColor: C.bg,
+    paddingVertical: 6, paddingHorizontal: 10,
+  },
+  reglageOn: { backgroundColor: C.accent2, borderColor: C.accent2 },
+  reglageTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: C.muted },
+
+  etiquettes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  etiquette: { paddingVertical: 3, paddingHorizontal: 8 },
+  etiquetteBudget: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
+  etiquetteTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+
+  dejaRepondu: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dejaReponduTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
 
   carte: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
   carteHaut: { flexDirection: 'row', alignItems: 'center', gap: 10 },

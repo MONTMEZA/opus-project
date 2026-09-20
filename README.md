@@ -672,6 +672,17 @@ dépliés, et la marque lue.
 
 ## Le SOS et l'espace Demandes
 
+Côté artisan, les demandes sont triées dans l'ordre où l'on décide vraiment :
+**ses métiers d'abord**, puis **les plus urgentes**, puis **les plus proches**.
+Il voit « vous avez répondu » sur celles qu'il a déjà traitées, et peut les
+masquer — sans quoi il relit dix fois les mêmes.
+
+Côté particulier, la demande porte une **fourchette de budget** et un **degré
+d'urgence**. Sans budget, l'artisan se déplace pour un chantier hors de portée
+et le particulier reçoit des devis qui le sidèrent. « Je ne sais pas » est un
+choix à part entière : forcer une fourchette produirait des chiffres faux.
+
+
 Deux fonctions qui distinguent Opus des plateformes de mise en relation classiques.
 
 ### Le fil reste une vitrine
@@ -728,6 +739,61 @@ fourchette et note, et **il choisit**. C'est la différence avec les plateformes
 qui imposent un intervenant.
 
 Les durées par métier se modifient dans `src/data/urgences.js`.
+
+## Les métiers d'un artisan, et pourquoi ils se figent
+
+Un artisan n'exerce presque jamais un seul métier : plombier **et**
+chauffagiste, maçon **et** carreleur. Il en coche jusqu'à quatre ; le premier
+est le **métier principal**, celui qui s'affiche sur ses publications.
+
+Quatre au maximum, parce que tout cocher serait la façon évidente de capter
+toutes les demandes. La limite est tenue par la base
+(`pro_metiers_check`), pas par l'écran.
+
+**Le verrou est adossé à la preuve, pas à la date d'inscription :**
+
+| État du profil | Les métiers |
+| --- | --- |
+| Pas encore vérifié | Libres. Une faute de frappe se corrige seul. |
+| Vérifié (Kbis + assurance contrôlés) | Figés. Le déclencheur `tient_les_metiers` refuse. |
+| Besoin d'en changer | Demande motivée (`metier_demandes`), tranchée par un humain. |
+
+Ce que cela garantit à celui qui lit un profil : **les métiers affichés sont
+ceux qui étaient là quand les papiers ont été contrôlés.** Un verrou posé dès
+l'inscription n'aurait rien garanti de tel, et aurait envoyé chaque faute de
+frappe dans une file d'attente que personne ne traite.
+
+`npm run verifier-metiers` compare la liste de l'application et la contrainte
+SQL : deux listes qui divergent font refuser l'enregistrement sans que rien ne
+le montre en mode démo.
+
+## La Place des pros
+
+Un artisan connecté voyait « Assistant IA — trouver le bon pro ». Il n'a pas
+besoin qu'on lui trouve un artisan : il en est un. Cet onglet devient donc,
+côté professionnel, une place de marché entre pros. Côté particulier, rien ne
+change.
+
+Cinq types d'annonce : **je cherche** un sous-traitant, **je suis
+disponible**, du matériel **à vendre**, du matériel **à louer**, un **coup de
+main**.
+
+Trois choses font la différence avec un groupe Facebook :
+
+- **Le badge vérifié.** La sous-traitance se traite aujourd'hui par
+  bouche-à-oreille, où « ce plaquiste est-il vraiment assuré ? » reste sans
+  réponse. Ici le badge est adossé au Kbis et à l'attestation décennale,
+  contrôlés par un humain — d'où le filtre « artisans vérifiés uniquement ».
+- **Les dates.** « Je cherche un plaquiste du 12 au 20 octobre » est
+  exploitable ; « je cherche un plaquiste » ne l'est pas. Un chantier se joue
+  sur une semaine précise.
+- **La distance**, calculée depuis les coordonnées que la Base Adresse
+  Nationale pose déjà sur chaque profil.
+
+La lecture est réservée aux comptes professionnels par une **règle RLS**
+(`est_un_pro()`), pas par un réglage d'écran : un particulier qui modifierait
+l'application ne verrait toujours rien. Les prix entre artisans ne sont pas
+les prix au particulier.
 
 ## Ville, code postal et coordonnées
 

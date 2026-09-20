@@ -11,7 +11,7 @@
 import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
-  initialDemandes,
+  initialDemandes, initialAnnonces,
 } from '../data/demo';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
@@ -372,6 +372,10 @@ export async function loadAll() {
     medias: (d.medias && d.medias.length) ? d.medias : (d.media ? [d.media] : []),
     time: relativeTime(d.created_at),
     reponses: nbReponses[d.id] || 0,
+    budget: d.budget || null,
+    urgence: d.urgence || 'quand_possible',
+    latitude: d.latitude,
+    longitude: d.longitude,
   }));
 
   const ligne = masosRes.data;
@@ -697,7 +701,10 @@ export const updateSosAvailability = !hasSupabase ? noop : async (sos) => {
 
 /** Publication d'une demande par un particulier. */
 export const createDemande = !hasSupabase ? noop : async (
-  { metier, ville, texte, media, medias = [], codePostal, latitude, longitude },
+  {
+    metier, ville, texte, media, medias = [], codePostal, latitude, longitude,
+    budget = null, urgence = 'quand_possible',
+  },
 ) => {
   const { data, error } = await supabase.from('demandes').insert({
     client_id: currentUserId,
@@ -705,6 +712,7 @@ export const createDemande = !hasSupabase ? noop : async (
     code_postal: codePostal || null,
     latitude: latitude || null,
     longitude: longitude || null,
+    budget, urgence,
   }).select().single();
   if (error) throw error;
   return data;
@@ -717,6 +725,139 @@ export const repondreADemande = !hasSupabase ? noop : async (demandeId, message)
     { onConflict: 'demande_id,professional_id' },
   );
   if (error) throw error;
+};
+
+/* ------------------------------------------------------------------ */
+/*  La Place des pros                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Les annonces entre professionnels, la plus récente en tête.
+ *
+ * La lecture est déjà réservée aux comptes pro par une règle RLS : un
+ * particulier qui bricolerait l'application ne recevrait rien, et c'est
+ * volontaire — les prix entre artisans ne sont pas les prix au particulier.
+ */
+export const chargerAnnonces = !hasSupabase ? async () => (
+  /* En démo, les annonces viennent du jeu d'essai, et leur auteur est
+     recomposé depuis les profils de démonstration : l'écran reçoit
+     exactement la même forme que depuis Supabase. */
+  initialAnnonces.map((a) => {
+    const p = demoPros[a.auteurId] || null;
+    return {
+      ...a,
+      medias: a.medias || (a.media ? [a.media] : []),
+      aMoi: false,
+      jyAiRepondu: false,
+      auteur: p ? {
+        id: p.id,
+        entreprise: p.entreprise,
+        metier: p.metier,
+        metiers: p.metiers || [p.metier],
+        ville: p.ville,
+        verifie: !!p.verifie,
+        avatarUrl: p.avatarUrl || null,
+        latitude: p.latitude || null,
+        longitude: p.longitude || null,
+      } : null,
+    };
+  })
+) : async () => {
+  const { data, error } = await supabase
+    .from('annonces_pro')
+    .select('*, auteur:professional_profiles(id, entreprise, metier, metiers, ville, verifie, avatar_url, latitude, longitude)')
+    .eq('statut', 'ouverte')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+
+  const ids = (data || []).map((a) => a.id);
+  /* Qui a déjà répondu à quoi : c'est ce qui permet d'afficher « vous avez
+     déjà répondu » plutôt que de laisser l'artisan se répéter. */
+  const { data: miennes } = ids.length
+    ? await supabase.from('annonce_reponses')
+        .select('annonce_id').eq('professional_id', currentUserId).in('annonce_id', ids)
+    : { data: [] };
+  const dejaRepondu = new Set((miennes || []).map((r) => r.annonce_id));
+
+  const { data: toutes } = ids.length
+    ? await supabase.from('annonce_reponses').select('annonce_id').in('annonce_id', ids)
+    : { data: [] };
+  const compte = {};
+  (toutes || []).forEach((r) => { compte[r.annonce_id] = (compte[r.annonce_id] || 0) + 1; });
+
+  return (data || []).map((a) => ({
+    id: a.id,
+    type: a.type,
+    titre: a.titre,
+    texte: a.texte,
+    metier: a.metier,
+    ville: a.ville,
+    latitude: a.latitude,
+    longitude: a.longitude,
+    dateDebut: a.date_debut,
+    dateFin: a.date_fin,
+    prix: a.prix === null ? null : Number(a.prix),
+    unite: a.unite,
+    medias: a.medias || [],
+    time: relativeTime(a.created_at),
+    auteurId: a.auteur_id,
+    auteur: a.auteur ? {
+      id: a.auteur.id,
+      entreprise: a.auteur.entreprise,
+      metier: a.auteur.metier,
+      metiers: a.auteur.metiers || [],
+      ville: a.auteur.ville,
+      verifie: !!a.auteur.verifie,
+      avatarUrl: a.auteur.avatar_url,
+      latitude: a.auteur.latitude,
+      longitude: a.auteur.longitude,
+    } : null,
+    reponses: compte[a.id] || 0,
+    jyAiRepondu: dejaRepondu.has(a.id),
+    aMoi: a.auteur_id === currentUserId,
+  }));
+};
+
+export const publierAnnonce = !hasSupabase ? noop : async ({
+  type, titre, texte, metier = null, ville = null, codePostal = null,
+  latitude = null, longitude = null, dateDebut = null, dateFin = null,
+  prix = null, unite = 'total', medias = [],
+}) => {
+  const { data, error } = await supabase.from('annonces_pro').insert({
+    auteur_id: currentUserId,
+    type, titre, texte, metier, ville,
+    code_postal: codePostal,
+    latitude, longitude,
+    date_debut: dateDebut, date_fin: dateFin,
+    prix, unite, medias,
+  }).select().single();
+  if (error) throw error;
+  return data;
+};
+
+/** Répondre à une annonce. `upsert` : répondre deux fois ne crée pas deux lignes. */
+export const repondreAnnonce = !hasSupabase ? noop : async (annonceId, message) => {
+  const { error } = await supabase.from('annonce_reponses').upsert(
+    { annonce_id: annonceId, professional_id: currentUserId, message: message || null },
+    { onConflict: 'annonce_id,professional_id' },
+  );
+  if (error) throw error;
+};
+
+/** Retirer son annonce : elle est pourvue, ou elle n'a plus lieu d'être. */
+export const fermerAnnonce = !hasSupabase ? noop : async (annonceId, statut = 'pourvue') => {
+  const { error } = await supabase.from('annonces_pro')
+    .update({ statut }).eq('id', annonceId).eq('auteur_id', currentUserId);
+  if (error) throw error;
+};
+
+/** Les demandes de particuliers auxquelles j'ai déjà répondu. */
+export const mesReponsesDemandes = !hasSupabase ? async () => [] : async () => {
+  const { data, error } = await supabase.from('demande_reponses')
+    .select('demande_id').eq('professional_id', currentUserId);
+  if (error) throw error;
+  return (data || []).map((r) => r.demande_id);
 };
 
 /**

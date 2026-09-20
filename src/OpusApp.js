@@ -20,6 +20,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import DecouvrirScreen from './screens/DecouvrirScreen';
+import PlaceProScreen from './screens/PlaceProScreen';
 import CreerScreen from './screens/CreerScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import ConversationScreen from './screens/ConversationScreen';
@@ -100,6 +101,10 @@ export default function OpusApp() {
   /* La demande de modification des métiers en cours d'examen, s'il y en a
      une. Elle empêche d'en déposer une seconde — la base le refuse aussi. */
   const [demandeMetiers, setDemandeMetiers] = useState(null);
+  /* La Place des pros : les annonces entre professionnels, et les demandes
+     de particuliers auxquelles j'ai déjà répondu. */
+  const [annonces, setAnnonces] = useState([]);
+  const [mesReponsesDemandes, setMesReponsesDemandes] = useState(new Set());
 
   const [quote, setQuote] = useState({ open: false, pro: null, mode: 'devis' });
   const [banner, setBanner] = useState(null);
@@ -156,6 +161,10 @@ export default function OpusApp() {
       if (type === 'pro') {
         try { setDemandeMetiers(await api.chargerDemandeMetiers()); }
         catch (e) { setDemandeMetiers(null); }
+        try { setAnnonces(await api.chargerAnnonces()); }
+        catch (e) { setAnnonces([]); }
+        try { setMesReponsesDemandes(new Set(await api.mesReponsesDemandes())); }
+        catch (e) { setMesReponsesDemandes(new Set()); }
       }
       // Sans ça, un particulier qui se reconnecte s'appelle « Vous ».
       if (data.monCompte && data.monCompte.nom) {
@@ -818,6 +827,8 @@ export default function OpusApp() {
     setDemandesPartenariat([]); setPartenariatsEnvoyes([]);
     setMesSos(null);
     setDemandeMetiers(null);
+    setAnnonces([]);
+    setMesReponsesDemandes(new Set());
     setFeedMode('classic');
     setFeedTab('pourvous');
   };
@@ -825,6 +836,7 @@ export default function OpusApp() {
   /* ---------- demandes de particuliers ---------- */
   const publierDemande = async ({
     metier, ville, texte, codePostal, latitude, longitude, photos = [],
+    budget = null, urgence = 'quand_possible',
   }) => {
     let id = `local-${Date.now()}`;
     let envoyees = photos;
@@ -840,6 +852,7 @@ export default function OpusApp() {
       const ligne = await api.createDemande({
         metier, ville, texte, codePostal, latitude, longitude,
         media: envoyees[0] || null, medias: envoyees,
+        budget, urgence,
       });
       if (ligne) id = ligne.id;
     } catch (e) {
@@ -862,6 +875,7 @@ export default function OpusApp() {
       medias: envoyees,
       time: "À l'instant",
       reponses: 0,
+      budget, urgence,
     }, ...ds]);
     showBanner('Votre demande est publiée. Les pros du métier vont la recevoir.');
   };
@@ -902,8 +916,81 @@ export default function OpusApp() {
       )));
     }
 
+    /* Se souvenir qu'on a répondu, pour ne pas relire dix fois la même
+       demande. Même si la conversation existait déjà. */
+    setMesReponsesDemandes((r) => new Set([...r, demande.id]));
+
     setActiveConvId(conv.id);
     setScreen('messages');
+  };
+
+  /* ---------- la Place des pros ---------- */
+  const publierAnnonce = async (annonce) => {
+    let id = `local-${Date.now()}`;
+    try {
+      const ligne = await api.publierAnnonce(annonce);
+      if (ligne) id = ligne.id;
+    } catch (e) {
+      showBanner(`Publication impossible : ${e.message || e}`);
+      return;
+    }
+    const moi = pros[myProId] || {};
+    setAnnonces((as) => [{
+      ...annonce,
+      id,
+      time: "À l'instant",
+      reponses: 0,
+      aMoi: true,
+      jyAiRepondu: false,
+      auteurId: myProId,
+      auteur: {
+        id: myProId,
+        entreprise: moi.entreprise,
+        metier: moi.metier,
+        metiers: moi.metiers || [],
+        ville: moi.ville,
+        verifie: !!moi.verifie,
+        avatarUrl: moi.avatarUrl,
+        latitude: moi.latitude,
+        longitude: moi.longitude,
+      },
+    }, ...as]);
+    showBanner('Annonce publiée sur la Place des pros.');
+  };
+
+  /**
+   * Répondre à une annonce ouvre une conversation avec son auteur : c'est
+   * un artisan, donc le mécanisme des messages entre pros existe déjà.
+   */
+  const repondreAnnonce = async (annonce) => {
+    if (!annonce.auteur) return;
+    try {
+      await api.repondreAnnonce(annonce.id, null);
+    } catch (e) {
+      showBanner(`Réponse impossible : ${e.message || e}`);
+      return;
+    }
+    setAnnonces((as) => as.map((a) => (
+      a.id === annonce.id ? { ...a, jyAiRepondu: true, reponses: a.reponses + 1 } : a
+    )));
+
+    /* La conversation entre professionnels existe déjà : on réutilise le même
+       chemin que « Contacter », avec une amorce qui rappelle l'annonce —
+       un artisan qui reçoit « Bonjour » tout court doit redemander de quoi
+       il s'agit. */
+    setMsgDraft(`Bonjour, au sujet de votre annonce « ${annonce.titre} ». `);
+    handleContact({ id: annonce.auteur.id }, 'message');
+  };
+
+  const fermerAnnonce = async (annonce) => {
+    try {
+      await api.fermerAnnonce(annonce.id);
+    } catch (e) {
+      showBanner(`Retrait impossible : ${e.message || e}`);
+      return;
+    }
+    setAnnonces((as) => as.filter((a) => a.id !== annonce.id));
+    showBanner('Annonce retirée.');
   };
 
   /**
@@ -1158,14 +1245,29 @@ export default function OpusApp() {
                   setDecouvrirTab(k);
                   if (k === 'demandes') setDemandesVues(true);
                 }}
+                /* Un artisan n'a pas besoin qu'on lui trouve un artisan :
+                   il en est un. Le premier onglet devient sa place de
+                   marché entre pros. */
                 options={[
-                  { key: 'artisans', label: 'Artisans' },
+                  userType === 'pro'
+                    ? { key: 'artisans', label: 'Place des pros' }
+                    : { key: 'artisans', label: 'Artisans' },
                   { key: 'demandes', label: 'Demandes' },
                 ]}
               />
             </View>
 
-            {decouvrirTab === 'artisans' ? (
+            {decouvrirTab === 'artisans' ? (userType === 'pro' ? (
+              <PlaceProScreen
+                annonces={annonces}
+                moi={pros[myProId] || null}
+                onPublier={publierAnnonce}
+                onRepondre={repondreAnnonce}
+                onFermer={fermerAnnonce}
+                onVoirProfil={viewProfile}
+                onErreur={showBanner}
+              />
+            ) : (
               <DecouvrirScreen
                 pros={pros}
                 aiQuery={aiQuery} setAiQuery={setAiQuery} askAiMatch={askAiMatch}
@@ -1174,7 +1276,7 @@ export default function OpusApp() {
                 filterMetier={filterMetier} setFilterMetier={setFilterMetier}
                 onView={viewProfile} onContact={handleContact}
               />
-            ) : (
+            )) : (
               <DemandesScreen
                 userType={userType}
                 mesMetiers={metiersDe(pros[myProId])}
@@ -1183,6 +1285,8 @@ export default function OpusApp() {
                 setFiltreMetier={setDemandeFiltre}
                 onPublier={publierDemande}
                 onRepondre={repondreDemande}
+                moi={userType === 'pro' ? (pros[myProId] || null) : monProfil}
+                mesReponses={mesReponsesDemandes}
                 onErreur={showBanner}
               />
             )}
