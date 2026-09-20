@@ -5,6 +5,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
+import { libelleMetiers } from '../lib/metiers';
 import { Avatar } from './ui';
 import { BadgeCheck, Star } from './icons';
 
@@ -17,7 +18,7 @@ export default function ArtisanRow({ pro, avatarSize = 44, note, raison, right }
           <Text style={s.name} numberOfLines={1}>{pro.entreprise}</Text>
           {pro.verifie && <BadgeCheck size={13} color={C.verif} />}
         </View>
-        <Text style={s.meta}>{pro.metier} · {pro.ville}</Text>
+        <Text style={s.meta}>{libelleMetiers(pro)} · {pro.ville}</Text>
         {note !== undefined && (
           <View style={s.rate}>
             <Star size={12} color={C.accent} />

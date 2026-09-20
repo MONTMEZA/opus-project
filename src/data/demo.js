@@ -13,6 +13,7 @@ export const METIERS = [
 
 export const proProfiles = {
   1: { id: 1, nom: 'Karim Belaïd', entreprise: 'Belaïd Maçonnerie', metier: 'Maçon',
+       metiers: ['Maçon', 'Carreleur'],
        ville: 'Marseille (13)', verifie: true, exp: 9,
        siret: '812 345 678 00019', followers: 1240,
        bio: "Entreprise familiale spécialisée dans la maçonnerie générale et la rénovation depuis 2015.",
@@ -51,6 +52,7 @@ export const proProfiles = {
          { id: 1, auteur: 'Antoine R.', verifie: true, date: 'Août 2026', delais: 3, qualite: 4, tarif: 5, commentaire: "Très bon rapport qualité-prix, quelques jours de retard sur le planning." },
        ] },
   4: { id: 4, nom: 'Marc Dubreuil', entreprise: 'Dubreuil Plomberie', metier: 'Plombier',
+       metiers: ['Plombier', 'Chauffagiste'],
        ville: 'Marseille (13)', verifie: true, exp: 12,
        siret: '701 998 332 00041', followers: 990,
        bio: "Plomberie générale, chauffage, dépannage rapide sur Marseille et alentours.",

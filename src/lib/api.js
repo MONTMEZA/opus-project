@@ -90,7 +90,7 @@ export async function signIn({ email, password }) {
  * pas de profil public et n'apparaît nulle part.
  */
 export async function ensureProProfile({
-  entreprise, metier, ville, nom, codePostal, codeInsee, latitude, longitude,
+  entreprise, metier, metiers, ville, nom, codePostal, codeInsee, latitude, longitude,
 }) {
   if (!hasSupabase) return null;
 
@@ -102,7 +102,8 @@ export async function ensureProProfile({
     id: currentUserId,
     nom: nom || '',
     entreprise: entreprise || 'Mon entreprise',
-    metier: metier || 'Maçon',
+    metier: metier || (metiers && metiers[0]) || 'Maçon',
+    metiers: (metiers && metiers.length ? metiers : [metier || 'Maçon']),
     ville: ville || '',
     code_postal: codePostal || null,
     code_insee: codeInsee || null,
@@ -149,6 +150,9 @@ function rowToPro(row, reviews = [], partners = []) {
     nom: row.nom || '',
     entreprise: row.entreprise,
     metier: row.metier,
+    /* Les métiers exercés. Le premier est le principal, celui qui s'affiche
+       partout ; un profil créé avant la nouveauté n'en a qu'un. */
+    metiers: (row.metiers && row.metiers.length) ? row.metiers : [row.metier].filter(Boolean),
     ville: row.ville,
     verifie: !!row.verifie,
     exp: row.experience_annees || 0,
@@ -606,12 +610,45 @@ export const createCallbackRequest = !hasSupabase ? noop : async ({ proId, nom, 
   if (error) throw error;
 };
 
+/**
+ * Dépose une demande de modification des métiers.
+ *
+ * Un profil vérifié a ses métiers figés — c'est ce qui donne sa valeur au
+ * badge. Pour en changer, l'artisan explique pourquoi, et c'est un humain
+ * qui tranche depuis Supabase. La base n'accepte qu'UNE demande en attente
+ * par artisan : sans cela on reçoit quinze demandes contradictoires.
+ */
+export const demanderChangementMetiers = !hasSupabase ? noop
+  : async ({ metiersActuels = [], metiersVoulus, motif }) => {
+    const { data, error } = await supabase.from('metier_demandes').insert({
+      professional_id: currentUserId,
+      metiers_actuels: metiersActuels,
+      metiers_voulus: metiersVoulus,
+      motif: motif || null,
+    }).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+/** La demande en attente de l'artisan connecté, s'il en a une. */
+export const chargerDemandeMetiers = !hasSupabase ? async () => null : async () => {
+  const { data, error } = await supabase.from('metier_demandes')
+    .select('*').eq('professional_id', currentUserId).eq('statut', 'en_attente')
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+};
+
 /** Enregistre les modifications du profil (pro ou particulier). */
 export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) => {
   if (userType === 'pro') {
     const { error } = await supabase.from('professional_profiles').update({
       entreprise: profil.entreprise,
       metier: profil.metier,
+      /* Sur un profil vérifié, la base refuse tout changement de métiers.
+         L'écran n'en propose d'ailleurs pas : envoyer la liste inchangée ne
+         déclenche rien. */
+      metiers: profil.metiers && profil.metiers.length ? profil.metiers : undefined,
       ville: profil.ville,
       bio: profil.bio,
       siret: profil.siret,

@@ -13,8 +13,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F, GRAD_160 } from '../theme';
-import { HazardStrip, Field, Chip, BtnMain } from '../components/ui';
+import { HazardStrip, Field, BtnMain } from '../components/ui';
 import ChampVille from '../components/ChampVille';
+import ChoixMetiers from '../components/ChoixMetiers';
 import { ChevronLeft, Check, ShieldCheck } from '../components/icons';
 import { METIERS } from '../data/demo';
 
@@ -27,7 +28,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
   const [motDePasse, setMotDePasse] = useState('');
   const [nom, setNom] = useState('');
   const [entreprise, setEntreprise] = useState('');
-  const [metier, setMetier] = useState(METIERS[0]);
+  const [metiers, setMetiers] = useState([METIERS[0]]);
   const [lieu, setLieu] = useState({ affichage: '' });
 
   const [enCours, setEnCours] = useState(false);
@@ -62,7 +63,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
         const resultat = await onSignUp({
           email, motDePasse,
           nom: estPro ? entreprise : nom,
-          entreprise, metier,
+          entreprise, metiers, metier: metiers[0],
           ville: lieu.affichage,
           codePostal: lieu.codePostal,
           codeInsee: lieu.codeInsee,
@@ -140,12 +141,8 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
                 <Text style={s.label}>Nom de l'entreprise</Text>
                 <Field value={entreprise} onChangeText={setEntreprise} placeholder="Belaïd Maçonnerie" />
 
-                <Text style={s.label}>Métier</Text>
-                <View style={s.chipRow}>
-                  {METIERS.map((m) => (
-                    <Chip key={m} label={m} on={metier === m} onPress={() => setMetier(m)} />
-                  ))}
-                </View>
+                <Text style={s.label}>Vos métiers</Text>
+                <ChoixMetiers valeurs={metiers} onChange={setMetiers} />
 
                 <Text style={s.label}>Ville</Text>
                 <ChampVille valeur={lieu.affichage} onChange={setLieu} />
@@ -269,7 +266,6 @@ const s = StyleSheet.create({
   ongletText: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted },
 
   label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginTop: 14, marginBottom: 6 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
 
   erreur: {
     fontSize: 11.5, color: C.bad, marginTop: 12, lineHeight: 16,

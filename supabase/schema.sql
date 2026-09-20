@@ -82,6 +82,124 @@ create index if not exists idx_pro_metier on public.professional_profiles (metie
 create index if not exists idx_pro_ville  on public.professional_profiles (ville);
 
 -- --------------------------------------------------------------------------
+--  2 bis. PLUSIEURS MÉTIERS, ET UN VERROU QUI TIENT
+--
+--  Un artisan n'exerce presque jamais un seul métier : plombier ET
+--  chauffagiste, maçon ET carreleur. Avec un seul champ, il devait choisir —
+--  et il disparaissait de la moitié des recherches qui le concernaient.
+--
+--  Mais des métiers librement modifiables, c'est la porte ouverte à celui
+--  qui coche tout pour capter toutes les demandes. D'où le verrou :
+--
+--    - tant que le profil n'est PAS vérifié, les métiers se modifient
+--      librement — un débutant qui s'est trompé au premier écran doit
+--      pouvoir se corriger seul ;
+--    - dès que le profil est vérifié (Kbis + assurance contrôlés), les
+--      métiers sont FIGÉS. La base refuse la modification, pas l'écran :
+--      une application modifiée ne peut pas contourner la règle.
+--    - pour en changer, l'artisan dépose une demande (table plus bas), et
+--      c'est un humain qui tranche.
+--
+--  Le verrou est ainsi adossé à la preuve, et non à une date ou à un
+--  réglage : ce qui est garanti à celui qui lit le profil, c'est que les
+--  métiers affichés sont ceux qui étaient là quand les papiers ont été
+--  contrôlés.
+-- --------------------------------------------------------------------------
+alter table public.professional_profiles
+  add column if not exists metiers text[] not null default '{}';
+
+-- Les profils créés avant cette colonne reprennent leur métier unique.
+update public.professional_profiles
+   set metiers = array[metier]
+ where coalesce(cardinality(metiers), 0) = 0
+   and metier is not null;
+
+-- La liste fermée des métiers. ELLE DOIT RESTER IDENTIQUE à METIERS dans
+-- src/data/demo.js — `npm run verifier-metiers` le vérifie, et c'est
+-- exactement le genre d'écart qui a déjà fait refuser des montages.
+alter table public.professional_profiles
+  drop constraint if exists pro_metiers_check;
+alter table public.professional_profiles
+  add constraint pro_metiers_check check (
+    cardinality(metiers) between 1 and 4
+    and metiers <@ array[
+      'Maçon', 'Électricien', 'Plombier', 'Charpentier', 'Peintre',
+      'Carreleur', 'Couvreur', 'Menuisier', 'Plaquiste', 'Terrassier',
+      'Serrurier', 'Chauffagiste'
+    ]::text[]
+  ) not valid;
+-- `not valid` puis `validate` : les lignes déjà en base sont contrôlées
+-- séparément, ce qui évite d'échouer sur une donnée historique.
+alter table public.professional_profiles validate constraint pro_metiers_check;
+
+-- Index pour « les artisans qui font ce métier » : GIN sur un tableau.
+create index if not exists idx_pro_metiers on public.professional_profiles using gin (metiers);
+
+create or replace function public.tient_les_metiers()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  -- Une ancienne version de l'application n'envoie qu'un métier : on en
+  -- fait une liste, pour que rien ne casse pendant la transition.
+  if coalesce(cardinality(new.metiers), 0) = 0 and new.metier is not null then
+    new.metiers := array[new.metier];
+  end if;
+
+  -- Le métier PRINCIPAL est toujours le premier de la liste. Tout le code
+  -- existant (recherche, badges, tri des demandes) continue de lire
+  -- `metier` sans rien savoir de la nouveauté.
+  if coalesce(cardinality(new.metiers), 0) > 0 then
+    new.metier := new.metiers[1];
+  end if;
+
+  -- Le verrou. `is distinct from` compare aussi les null correctement.
+  if tg_op = 'UPDATE'
+     and old.verifie
+     and new.metiers is distinct from old.metiers then
+    raise exception
+      'Les métiers d''un profil vérifié ne se modifient pas directement : déposez une demande de modification.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_tient_les_metiers on public.professional_profiles;
+create trigger trg_tient_les_metiers
+  before insert or update on public.professional_profiles
+  for each row execute function public.tient_les_metiers();
+
+-- --------------------------------------------------------------------------
+--  Demande de modification des métiers.
+--  Déposée par l'artisan, tranchée par un humain depuis Supabase.
+-- --------------------------------------------------------------------------
+create table if not exists public.metier_demandes (
+  id              uuid primary key default gen_random_uuid(),
+  professional_id uuid not null references public.professional_profiles(id) on delete cascade,
+  metiers_actuels text[] not null default '{}',
+  metiers_voulus  text[] not null,
+  motif           text,
+  statut          text not null default 'en_attente'
+                  check (statut in ('en_attente', 'acceptee', 'refusee')),
+  note            text,          -- réponse de la personne qui tranche
+  created_at      timestamptz not null default now(),
+  traite_le       timestamptz
+);
+
+create index if not exists idx_metier_demandes_pro
+  on public.metier_demandes (professional_id, created_at desc);
+
+-- Une seule demande en attente à la fois : sans cela, on se retrouve avec
+-- quinze demandes contradictoires du même artisan.
+create unique index if not exists idx_metier_demande_unique_en_attente
+  on public.metier_demandes (professional_id)
+  where statut = 'en_attente';
+
+-- --------------------------------------------------------------------------
 --  3. PUBLICATIONS
 --     Une publication sponsorisée est une ligne avec is_ad = true.
 -- --------------------------------------------------------------------------
@@ -142,7 +260,6 @@ alter table public.posts add column if not exists musique text;
 --  retombe alors sur la lecture enchaînée des clips.
 -- --------------------------------------------------------------------------
 alter table public.posts add column if not exists montage_url text;
-alter table public.demandes add column if not exists medias text[] not null default '{}';
 
 create index if not exists idx_posts_created on public.posts (created_at desc);
 
@@ -508,6 +625,11 @@ create table if not exists public.demandes (
   created_at timestamptz not null default now()
 );
 
+-- Plusieurs photos par demande : une seule ne suffit pas à montrer une fuite
+-- (le point d'eau, puis le dégât au plafond). Cette ligne vivait plus haut
+-- dans le fichier, AVANT la création de la table — sur une base neuve, le
+-- fichier s'arrêtait donc là. Invisible sur une base déjà en place.
+alter table public.demandes add column if not exists medias text[] not null default '{}';
 alter table public.demandes add column if not exists code_postal text;
 alter table public.demandes add column if not exists latitude    double precision;
 alter table public.demandes add column if not exists longitude   double precision;
@@ -691,6 +813,17 @@ alter table public.demande_reponses      enable row level security;
 alter table public.sos_availability      enable row level security;
 alter table public.sos_requests          enable row level security;
 alter table public.notifications         enable row level security;
+alter table public.metier_demandes       enable row level security;
+
+-- Demandes de modification des métiers : strictement privées. Personne
+-- d'autre que l'artisan ne les voit, et lui ne peut pas les trancher —
+-- `statut` et `note` restent la main de celui qui contrôle les papiers.
+drop policy if exists "metier demande lecture" on public.metier_demandes;
+create policy "metier demande lecture" on public.metier_demandes
+  for select using (auth.uid() = professional_id);
+drop policy if exists "metier demande depot" on public.metier_demandes;
+create policy "metier demande depot" on public.metier_demandes
+  for insert with check (auth.uid() = professional_id and statut = 'en_attente');
 
 -- Lecture publique du contenu visible dans le fil et les profils
 drop policy if exists "lecture users" on public.users;

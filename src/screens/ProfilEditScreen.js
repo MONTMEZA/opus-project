@@ -9,21 +9,31 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, Switch, ActivityIndicator, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, BtnOutline, Chip, Field, TextArea, ProfileBanner, SectionLabel,
+  Avatar, BtnMain, BtnMini, BtnOutline, Field, TextArea, ProfileBanner, SectionLabel,
 } from '../components/ui';
 import { Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX } from '../components/icons';
 import ChampVille from '../components/ChampVille';
+import ChoixMetiers from '../components/ChoixMetiers';
 import { METIERS } from '../data/demo';
 import { METIERS_SOS } from '../data/urgences';
 import { choisirImage, choisirDocument } from '../lib/media';
 
-/** Le métier d'urgence correspondant au métier déclaré, s'il existe. */
-function metierSosDe(metier) {
-  return METIERS_SOS.find((m) => m.metier === metier) || null;
+/**
+ * Le métier d'urgence correspondant aux métiers déclarés, s'il en existe un.
+ * On les parcourt dans l'ordre : un plombier-chauffagiste peut répondre aux
+ * urgences, et c'est son métier principal qui décide lequel.
+ */
+function metierSosDe(metiers = []) {
+  for (const m of metiers) {
+    const trouve = METIERS_SOS.find((x) => x.metier === m);
+    if (trouve) return trouve;
+  }
+  return null;
 }
 
 export default function ProfilEditScreen({
   userType, profil, sos, onSave, onEnvoyerDocuments, onErreur,
+  onDemanderMetiers, demandeMetiers,
 }) {
   const estPro = userType === 'pro';
 
@@ -32,7 +42,16 @@ export default function ProfilEditScreen({
   const [nom, setNom] = useState(profil.nom || '');
   const [telephone, setTelephone] = useState(profil.telephone || '');
   const [entreprise, setEntreprise] = useState(profil.entreprise || '');
-  const [metier, setMetier] = useState(profil.metier || METIERS[0]);
+  /* Les métiers déjà enregistrés ; un profil d'avant la nouveauté n'en a
+     qu'un, on en fait une liste d'un seul élément. */
+  const [metiers, setMetiers] = useState(
+    profil.metiers && profil.metiers.length ? profil.metiers : [profil.metier || METIERS[0]],
+  );
+  const [demandeOuverte, setDemandeOuverte] = useState(false);
+  const [metiersVoulus, setMetiersVoulus] = useState(
+    profil.metiers && profil.metiers.length ? profil.metiers : [profil.metier || METIERS[0]],
+  );
+  const [motif, setMotif] = useState('');
   const [lieu, setLieu] = useState({
     affichage: profil.ville || '',
     codePostal: profil.codePostal || null,
@@ -54,7 +73,7 @@ export default function ProfilEditScreen({
   const [assurance, setAssurance] = useState(null);
   const [envoiDocs, setEnvoiDocs] = useState(false);
 
-  const sosMetier = metierSosDe(metier);
+  const sosMetier = metierSosDe(metiers);
 
   const prendre = async (usage, camera) => {
     try {
@@ -71,7 +90,7 @@ export default function ProfilEditScreen({
     onSave({
       profil: estPro
         ? {
-            avatarUrl, bannerUrl, entreprise, metier, bio, siret,
+            avatarUrl, bannerUrl, entreprise, metiers, metier: metiers[0], bio, siret,
             ville: lieu.affichage,
             codePostal: lieu.codePostal,
             codeInsee: lieu.codeInsee,
@@ -152,12 +171,46 @@ export default function ProfilEditScreen({
             <Text style={s.label}>Nom de l'entreprise</Text>
             <Field value={entreprise} onChangeText={setEntreprise} placeholder="Belaïd Maçonnerie" />
 
-            <Text style={s.label}>Métier</Text>
-            <View style={s.chipRow}>
-              {METIERS.map((m) => (
-                <Chip key={m} label={m} on={metier === m} onPress={() => setMetier(m)} />
-              ))}
-            </View>
+            <Text style={s.label}>Vos métiers</Text>
+            <ChoixMetiers
+              valeurs={metiers}
+              onChange={setMetiers}
+              verrouille={!!profil.verifie}
+              demandeEnCours={!!demandeMetiers}
+              onDemanderModification={() => setDemandeOuverte(true)}
+            />
+
+            {/* Le profil est vérifié et l'artisan veut changer de métier :
+                c'est un humain qui tranchera, mais la demande part d'ici et
+                porte ce qu'il faut pour décider — les métiers voulus et la
+                raison. */}
+            {profil.verifie && demandeOuverte && !demandeMetiers && (
+              <View style={s.demande}>
+                <Text style={s.demandeTitre}>Demande de modification</Text>
+                <Text style={s.demandeTexte}>
+                  Choisissez les métiers souhaités et expliquez pourquoi. Votre
+                  badge et vos métiers actuels restent en place tant que la
+                  demande n'a pas été examinée.
+                </Text>
+                <ChoixMetiers valeurs={metiersVoulus} onChange={setMetiersVoulus} />
+                <TextArea
+                  value={motif}
+                  onChangeText={setMotif}
+                  placeholder="Ex. : certification carrelage obtenue en septembre, attestation jointe au Kbis."
+                />
+                <View style={s.demandeBtns}>
+                  <BtnMini outline label="Annuler" onPress={() => setDemandeOuverte(false)} />
+                  <BtnMain
+                    label="Envoyer la demande"
+                    disabled={!motif.trim()}
+                    onPress={() => {
+                      onDemanderMetiers({ metiersVoulus, motif: motif.trim() });
+                      setDemandeOuverte(false);
+                    }}
+                  />
+                </View>
+              </View>
+            )}
 
             <Text style={s.label}>Ville</Text>
             <ChampVille valeur={lieu.affichage} onChange={setLieu} />
@@ -375,6 +428,14 @@ function LigneDocument({ titre, detail, fichier, dejaEnvoye, onChoisir }) {
 }
 
 const s = StyleSheet.create({
+  demande: {
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.accent2,
+    padding: 12, marginTop: 10, gap: 8,
+  },
+  demandeTitre: { fontFamily: F.oswald6, fontSize: 13, color: C.ink },
+  demandeTexte: { fontFamily: F.inter, fontSize: 11.5, color: C.muted, lineHeight: 17 },
+  demandeBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+
   pad: { paddingHorizontal: 16 },
   aide: { fontSize: 11, color: C.muted, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 6 },
   banniereBarre: {
@@ -393,7 +454,6 @@ const s = StyleSheet.create({
   },
 
   label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginTop: 12, marginBottom: 6 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
 
   sosBloc: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
 

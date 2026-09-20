@@ -9,16 +9,19 @@ import { BtnMain, BtnMini, Chip, EmptyState, TextArea, Field } from '../componen
 import ArtisanRow from '../components/ArtisanRow';
 import { Sparkles, Search } from '../components/icons';
 import { METIERS, avgReviews } from '../data/demo';
+import { metiersDe, exerce } from '../lib/metiers';
 
 export default function DecouvrirScreen({
   pros, aiQuery, setAiQuery, askAiMatch, aiMatches, aiMatchLoading, aiMatchError,
   search, setSearch, filterMetier, setFilterMetier, onView, onContact,
 }) {
+  /* La recherche porte sur TOUS les métiers exercés, pas seulement le
+     principal : un plombier-chauffagiste doit sortir sur « chauffagiste ».
+     C'était la première raison d'ouvrir le champ à plusieurs métiers. */
   const results = Object.values(pros).filter((p) => {
-    const hay = (p.nom + p.entreprise + p.metier + p.ville).toLowerCase();
+    const hay = (p.nom + p.entreprise + metiersDe(p).join(' ') + p.ville).toLowerCase();
     const matchText = hay.includes(search.toLowerCase());
-    const matchMetier = !filterMetier || p.metier === filterMetier;
-    return matchText && matchMetier;
+    return matchText && exerce(p, filterMetier);
   });
 
   return (

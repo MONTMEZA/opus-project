@@ -18,7 +18,7 @@ import ChampVille from '../components/ChampVille';
 import { METIERS } from '../data/demo';
 
 export default function DemandesScreen({
-  userType, monMetier, demandes, filtreMetier, setFiltreMetier,
+  userType, mesMetiers = [], demandes, filtreMetier, setFiltreMetier,
   onPublier, onRepondre, onErreur,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
@@ -39,10 +39,12 @@ export default function DemandesScreen({
   const estPro = userType === 'pro';
   const filtrees = filtreMetier ? demandes.filter((d) => d.metier === filtreMetier) : demandes;
 
-  /* Pour un professionnel, les demandes de SON métier remontent en tête.
-     L'ordre d'arrivée est conservé à l'intérieur de chaque groupe. */
-  const liste = estPro && monMetier
-    ? [...filtrees].sort((a, b) => (b.metier === monMetier) - (a.metier === monMetier))
+  /* Pour un professionnel, les demandes de SES métiers remontent en tête —
+     tous ses métiers, pas seulement le principal : un plombier-chauffagiste
+     doit voir les deux. L'ordre d'arrivée est conservé dans chaque groupe. */
+  const estPourMoi = (d) => estPro && mesMetiers.includes(d.metier);
+  const liste = estPro && mesMetiers.length
+    ? [...filtrees].sort((a, b) => estPourMoi(b) - estPourMoi(a))
     : filtrees;
 
   const publier = () => {
@@ -131,7 +133,7 @@ export default function DemandesScreen({
         <View style={[s.encart, { borderColor: C.accent2 }]}>
           <Text style={s.encartTitre}>Demandes de particuliers</Text>
           <Text style={s.encartTexte}>
-            Les demandes correspondant à votre métier apparaissent en premier.
+            Les demandes correspondant à vos métiers apparaissent en premier.
             Répondez pour ouvrir une conversation directe.
           </Text>
         </View>
@@ -162,8 +164,8 @@ export default function DemandesScreen({
                   <Text style={s.meta}>{d.ville} · {d.time}</Text>
                 </View>
               </View>
-              <View style={[s.badgeMetier, estPro && d.metier === monMetier && s.badgeMetierMien]}>
-                <Text style={[s.badgeMetierText, estPro && d.metier === monMetier && { color: '#fff' }]}>
+              <View style={[s.badgeMetier, estPourMoi(d) && s.badgeMetierMien]}>
+                <Text style={[s.badgeMetierText, estPourMoi(d) && { color: '#fff' }]}>
                   {d.metier}
                 </Text>
               </View>

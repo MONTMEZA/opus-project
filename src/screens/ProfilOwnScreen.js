@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
+import { libelleMetiers } from '../lib/metiers';
 import {
   BtnMini, BtnOutline, EmptyState, SectionLabel,
 } from '../components/ui';
@@ -114,7 +115,7 @@ export default function ProfilOwnScreen({
         avatarUrl={me.avatarUrl}
         portfolio={me.portfolio}
         titre={me.entreprise}
-        sousTitre={`${me.metier} · ${me.ville}`}
+        sousTitre={`${libelleMetiers(me)} · ${me.ville}`}
         verifie={me.verifie}
       />
       <View style={s.head}>
@@ -124,7 +125,7 @@ export default function ProfilOwnScreen({
               <Text style={s.name}>{me.entreprise}</Text>
               {me.verifie && <BadgeCheck size={16} color={C.verif} />}
             </View>
-            <Text style={s.metier}>{me.metier} · {me.ville}</Text>
+            <Text style={s.metier}>{libelleMetiers(me, { max: 3 })} · {me.ville}</Text>
           </>
         )}
         {/* Le texte est déduit des documents réellement validés : il ne peut

@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { C, F } from '../theme';
+import { libelleMetiers } from '../lib/metiers';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea,
 } from '../components/ui';
@@ -106,7 +107,7 @@ export default function ProfilProScreen({
         avatarUrl={pro.avatarUrl}
         portfolio={pro.portfolio}
         titre={pro.entreprise}
-        sousTitre={`${pro.metier} · ${pro.ville}`}
+        sousTitre={`${libelleMetiers(pro)} · ${pro.ville}`}
         verifie={pro.verifie}
       />
 
@@ -118,7 +119,7 @@ export default function ProfilProScreen({
               <Text style={s.name}>{pro.entreprise}</Text>
               {pro.verifie && <BadgeCheck size={16} color={C.verif} />}
             </View>
-            <Text style={s.metier}>{pro.metier} · {pro.ville}</Text>
+            <Text style={s.metier}>{libelleMetiers(pro, { max: 3 })} · {pro.ville}</Text>
           </>
         )}
         <Text style={s.sub}>{pro.exp} ans d'expérience · {avg.count} avis vérifiés</Text>

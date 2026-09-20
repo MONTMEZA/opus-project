@@ -36,7 +36,8 @@
     "web": "expo start --web",
     "verifier-adresse": "node scripts/verifier-adresse.mjs",
     "verifier-montage": "node scripts/verifier-montage.mjs",
-    "verifier-signature": "node scripts/verifier-signature-cloudinary.mjs"
+    "verifier-signature": "node scripts/verifier-signature-cloudinary.mjs",
+    "verifier-metiers": "node scripts/verifier-metiers.mjs"
   },
   "private": true,
   "devDependencies": {

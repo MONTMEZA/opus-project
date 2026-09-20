@@ -34,6 +34,7 @@ import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
 import { METIERS, POST_GRADIENTS, avgReviews } from './data/demo';
 import * as api from './lib/api';
+import { metiersDe } from './lib/metiers';
 import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
 import { envoyerFichier, estFichierLocal } from './lib/storage';
@@ -96,6 +97,9 @@ export default function OpusApp() {
   const [demandesPartenariat, setDemandesPartenariat] = useState([]);
   const [partenariatsEnvoyes, setPartenariatsEnvoyes] = useState([]);
   const [mesSos, setMesSos] = useState(null);
+  /* La demande de modification des métiers en cours d'examen, s'il y en a
+     une. Elle empêche d'en déposer une seconde — la base le refuse aussi. */
+  const [demandeMetiers, setDemandeMetiers] = useState(null);
 
   const [quote, setQuote] = useState({ open: false, pro: null, mode: 'devis' });
   const [banner, setBanner] = useState(null);
@@ -147,6 +151,12 @@ export default function OpusApp() {
       setSavedIds(new Set(data.savedIds));
       setDemandesPartenariat(data.demandesPartenariat || []);
       setPartenariatsEnvoyes(data.partenariatsEnvoyes || []);
+      /* Une demande de modification des métiers déjà déposée doit réapparaître
+         à la reconnexion, sinon l'artisan la redépose et la base la refuse. */
+      if (type === 'pro') {
+        try { setDemandeMetiers(await api.chargerDemandeMetiers()); }
+        catch (e) { setDemandeMetiers(null); }
+      }
       // Sans ça, un particulier qui se reconnecte s'appelle « Vous ».
       if (data.monCompte && data.monCompte.nom) {
         setMonProfil((p) => ({ ...p, ...data.monCompte }));
@@ -181,14 +191,14 @@ export default function OpusApp() {
     setTypeChoisi(type);
   };
 
-  const handleSignUp = async ({ email, motDePasse, nom, entreprise, metier, ville }) => {
+  const handleSignUp = async ({ email, motDePasse, nom, entreprise, metier, metiers, ville }) => {
     const { session } = await api.signUp({
       email, password: motDePasse, userType: typeChoisi, nom,
     });
     if (!session) return { confirmationRequise: true };
 
     if (typeChoisi === 'pro') {
-      await api.ensureProProfile({ entreprise, metier, ville, nom });
+      await api.ensureProProfile({ entreprise, metier, metiers, ville, nom });
     }
     await start(typeChoisi);
     return {};
@@ -694,6 +704,29 @@ export default function OpusApp() {
   };
 
   /* ---------- mon compte ---------- */
+  /**
+   * Demande de modification des métiers, pour un profil déjà vérifié.
+   * La base n'en accepte qu'une en attente à la fois : le message d'erreur
+   * le dit plutôt que de laisser croire à une panne.
+   */
+  const demanderMetiers = async ({ metiersVoulus, motif }) => {
+    const moi = pros[myProId] || {};
+    try {
+      await api.demanderChangementMetiers({
+        metiersActuels: moi.metiers || (moi.metier ? [moi.metier] : []),
+        metiersVoulus,
+        motif,
+      });
+      setDemandeMetiers({ metiers_voulus: metiersVoulus, motif, statut: 'en_attente' });
+      showBanner('Demande envoyée. Vos métiers actuels restent en place en attendant.');
+    } catch (e) {
+      const dejaUne = String(e.message || e).includes('idx_metier_demande_unique_en_attente');
+      showBanner(dejaUne
+        ? 'Vous avez déjà une demande en cours d\'examen.'
+        : `Demande impossible : ${e.message || e}`);
+    }
+  };
+
   const enregistrerProfil = async ({ profil, sos }) => {
     let complet = profil;
     try {
@@ -784,6 +817,7 @@ export default function OpusApp() {
     setMonProfil({ nom: 'Vous', ville: '', telephone: '', avatarUrl: null, bannerUrl: null });
     setDemandesPartenariat([]); setPartenariatsEnvoyes([]);
     setMesSos(null);
+    setDemandeMetiers(null);
     setFeedMode('classic');
     setFeedTab('pourvous');
   };
@@ -1143,7 +1177,7 @@ export default function OpusApp() {
             ) : (
               <DemandesScreen
                 userType={userType}
-                monMetier={pros[myProId] ? pros[myProId].metier : null}
+                mesMetiers={metiersDe(pros[myProId])}
                 demandes={demandes}
                 filtreMetier={demandeFiltre}
                 setFiltreMetier={setDemandeFiltre}
@@ -1211,6 +1245,8 @@ export default function OpusApp() {
             sos={mesSos}
             onSave={enregistrerProfil}
             onEnvoyerDocuments={envoyerDocuments}
+            onDemanderMetiers={demanderMetiers}
+            demandeMetiers={demandeMetiers}
             onErreur={showBanner}
           />
         )}

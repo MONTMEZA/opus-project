@@ -28,6 +28,7 @@ export const Grid = mk(Feather, 'grid');
 export const Play = mk(Feather, 'play');
 export const Maximize = mk(Feather, 'maximize');
 export const Move = mk(Feather, 'move');
+export const Lock = mk(Feather, 'lock');
 export const Trash = mk(Feather, 'trash-2');
 export const RefreshCw = mk(Feather, 'refresh-cw');
 export const Music = mk(Feather, 'music');
