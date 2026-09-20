@@ -1,0 +1,92 @@
+# Opus-Project — règles du projet
+
+Réseau social des professionnels du bâtiment. React Native + Expo (SDK 57),
+JavaScript, Supabase. Le propriétaire du projet **débute en développement** :
+tout ce qui est écrit pour lui — messages d'erreur, README, commentaires —
+doit être en **français** et expliquer le pourquoi, pas seulement le comment.
+
+## La règle qui a déjà coûté cher
+
+**Le mode démo masque toutes les erreurs de base de données.**
+
+Sans fichier `.env`, `src/lib/api.js` remplace chaque écriture par `noop`.
+Un écran peut donc paraître parfait dans les tests pendant que la base
+refuserait l'enregistrement.
+
+Conséquence, sans exception :
+
+> Toute écriture nouvelle ou modifiée doit être **insérée pour de vrai dans
+> PostgreSQL** avant d'être annoncée comme fonctionnelle.
+
+C'est précisément ce qui a manqué le jour où le format `montage` a été ajouté
+à l'application sans être ajouté à la contrainte `posts_type_check` : la base
+refusait chaque montage, et les essais en mode démo n'y voyaient rien.
+
+### En particulier : les contraintes `check (... in (...))`
+
+`schema.sql` en contient une dizaine (types de publication, statuts de devis,
+métiers d'urgence, statuts de vérification…). **Toute nouvelle valeur envoyée
+par l'application doit être ajoutée à la contrainte correspondante**, et sur
+une base déjà en place il faut la refaire explicitement :
+
+```sql
+alter table public.x drop constraint if exists x_champ_check;
+alter table public.x add constraint x_champ_check check (champ in (...));
+```
+
+`alter table ... add column if not exists` ne touche pas aux contraintes.
+
+## Comment vérifier
+
+```bash
+# 1. le SQL, sur un vrai PostgreSQL, DEUX FOIS (il doit être rejouable)
+psql ... -f supabase/schema.sql      # puis une seconde fois : aucune erreur
+
+# 2. insérer réellement la ligne que l'application produira
+
+# 3. l'application, dans un navigateur
+npx expo export --platform android   # le bundle doit passer
+npx expo start --web                 # puis Playwright + /opt/pw-browsers
+```
+
+Les captures d'écran valent mieux qu'une affirmation. Ce qui n'a pas pu être
+vérifié ici (appareil photo, lecture vidéo réelle, notifications push) doit
+être **dit explicitement** dans la réponse et dans le message de commit.
+
+## Principes tenus depuis le début
+
+- **Les secrets ne vivent jamais dans l'application.** La clé Anthropic est
+  dans une Edge Function Supabase. Même règle pour toute clé à venir.
+- **Les règles métier sont tenues par la base, pas par l'écran.** Badge
+  vérifié, partenariats consentis, profondeur des commentaires, notifications :
+  des triggers et des règles RLS, pour qu'un client modifié ne puisse pas les
+  contourner.
+- **Les documents (Kbis, assurance) restent privés** dans l'espace `documents`
+  de Supabase Storage, protégé par RLS. Ne jamais les déplacer ailleurs.
+- **`schema.sql` est rejouable**, toujours : `drop policy if exists` avant
+  chaque policy, `add column if not exists`, aucune donnée perdue.
+- **Le fil d'actualité est réservé aux professionnels.** Les particuliers
+  aiment, commentent, partagent, publient des demandes — mais ne publient pas.
+
+## Identité visuelle — ne pas réinterpréter
+
+```
+--ink: #1A1B19   --bg: #E7E4DC   --surface: #FFFFFF   --line: #CFC9BB
+--accent: #E85C1F   --accent-2: #1B4B6B   --muted: #726E63
+```
+
+Titres et boutons en **Oswald**, textes en **Inter**. Angles vifs partout sauf
+les avatars. La bande de chantier diagonale
+(`repeating-linear-gradient(135deg, #E85C1F 0 10px, #1A1B19 10px 20px)`,
+5–6 px) est la signature de l'application.
+
+## Dépendances : vérifier avant de proposer
+
+Deux paquets ont déjà été écartés après vérification sur npm :
+`ffmpeg-kit-react-native` (déprécié, abandonné en janvier 2025) et
+`react-native-video-processing` (aucune version depuis 2022). Toujours
+regarder la date de la dernière publication avant de conseiller un paquet.
+
+Et se rappeler qu'un **module natif impose un development build** : il ne
+fonctionne pas dans Expo Go, ce qui est aujourd'hui le seul moyen de test du
+propriétaire.
