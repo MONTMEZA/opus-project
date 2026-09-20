@@ -224,9 +224,12 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
 
 RÈGLES ABSOLUES
 - N'invente RIEN. Tu n'utilises que les informations fournies. Pas de label, pas de certification, pas de chiffre, pas de garantie qui ne soit pas dans les réponses.
+- N'élargis RIEN. Si la ville est "Marseille (13)", tu écris Marseille — pas "et dans le département", pas "et ses environs", pas "dans toute la région". Une zone d'intervention non demandée engage l'artisan à se déplacer où il ne veut peut-être pas aller. Même règle pour les spécialités : rien au-delà des chantiers cités.
+- Reprends les indications de durée et d'effectif TELLES QUELLES. "depuis plus de dix ans" ne devient pas "depuis de nombreuses années" : l'artisan a répondu précisément, la précision est son argument.
 - Pas de superlatif publicitaire ("leader", "expert incontournable", "excellence", "votre satisfaction est notre priorité"). Un artisan qui se relit doit reconnaître sa façon de parler.
 - Français simple, phrases courtes. On s'adresse à un particulier qui hésite.
-- Chaque proposition tient en 3 à 5 phrases, et ne mélange jamais "je" et "nous".
+- Chaque proposition tient en 3 à 5 phrases, et ne mélange JAMAIS "je" et "nous".
+- La réponse "particularite" est écrite par l'artisan avec SES mots, donc à SA personne. Reprends-la en l'ACCORDANT au texte : dans une présentation au "nous", "je repasse voir le chantier" devient "nous repassons voir le chantier" ; dans la présentation factuelle, "une visite est effectuée". Ne change rien d'autre à son contenu.
 
 Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
 {"propositions":[{"titre":"Factuelle","texte":"..."},{"titre":"À la première personne","texte":"..."},{"titre":"Courte","texte":"..."}]}

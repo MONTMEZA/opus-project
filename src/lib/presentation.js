@@ -250,6 +250,33 @@ export function redigerLocalement({ profil = {}, reponses = {} }) {
   ].filter((p) => p.texte.length > 0);
 }
 
+/**
+ * Les réponses TRADUITES, pour l'assistant IA.
+ *
+ * Le questionnaire enregistre des clés internes : « longue », « petite »,
+ * « propre ». Envoyées telles quelles au modèle, elles ne veulent rien dire —
+ * et le premier essai réel l'a montré : l'artisan avait coché « plus de
+ * 10 ans », le texte revenait avec « depuis de nombreuses années ». Le modèle
+ * n'inventait pas, il devinait, faute de savoir.
+ *
+ * On lui envoie donc exactement ce que l'artisan a lu à l'écran, plus le seul
+ * renseignement qu'il ne peut pas déduire : travaille-t-il seul, ce qui décide
+ * entre « je » et « nous ».
+ */
+export function reponsesLisibles(reponses = {}) {
+  const anciennete = ANCIENNETE[reponses.anciennete] || null;
+  const equipe = EQUIPE[reponses.equipe] || null;
+
+  return {
+    anciennete: anciennete ? anciennete.phrase : null,
+    equipe: equipe ? equipe.sansPersonne : null,
+    travailleSeul: equipe ? !equipe.pluriel : null,
+    chantiers: String(reponses.chantiers || '').trim() || null,
+    qualites: (reponses.qualites || []).map((c) => QUALITES[c]).filter(Boolean),
+    particularite: String(reponses.particularite || '').trim() || null,
+  };
+}
+
 /** Le questionnaire est-il assez rempli pour écrire quelque chose ? */
 export function assezRempli(reponses = {}) {
   return Boolean(reponses.anciennete && reponses.equipe

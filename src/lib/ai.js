@@ -65,7 +65,14 @@ export async function aiSummarizeReviews(pro, reviews) {
  * Retourne [{ titre, texte }].
  */
 export async function aiRedigerPresentation({ profil, reponses }) {
-  const data = await callAiFunction({ action: 'bio', profil, reponses });
+  /* On traduit les clés du questionnaire avant de les envoyer : « longue »
+     ne veut rien dire pour le modèle, « depuis plus de dix ans » si. */
+  const { reponsesLisibles } = await import('./presentation');
+  const data = await callAiFunction({
+    action: 'bio',
+    profil,
+    reponses: reponsesLisibles(reponses),
+  });
   const liste = (data && data.propositions) || [];
   return liste
     .filter((p) => p && typeof p.texte === 'string' && p.texte.trim())

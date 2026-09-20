@@ -1073,10 +1073,14 @@ export default function OpusApp() {
     if (!aiQuery.trim()) return;
     setAiMatchLoading(true); setAiMatchError(null); setAiMatches(null);
     try {
+      /* On envoie TOUS les métiers exercés, pas seulement le principal :
+         sinon un plombier-chauffagiste reste invisible pour une demande de
+         chauffage. C'est le même oubli qui avait été corrigé dans la
+         recherche par mot-clé. */
       const liste = Object.values(pros).map((p) => {
         const avg = avgReviews(p);
         return {
-          proId: p.id, metier: p.metier, ville: p.ville, exp: p.exp,
+          proId: p.id, metiers: metiersDe(p), ville: p.ville, exp: p.exp,
           note: avg.count ? avg.global.toFixed(1) : null, bio: p.bio,
         };
       });
