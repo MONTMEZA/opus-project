@@ -37,7 +37,8 @@
     "verifier-adresse": "node scripts/verifier-adresse.mjs",
     "verifier-montage": "node scripts/verifier-montage.mjs",
     "verifier-signature": "node scripts/verifier-signature-cloudinary.mjs",
-    "verifier-metiers": "node scripts/verifier-metiers.mjs"
+    "verifier-metiers": "node scripts/verifier-metiers.mjs",
+    "verifier-presentation": "node scripts/verifier-presentation.mjs"
   },
   "private": true,
   "devDependencies": {

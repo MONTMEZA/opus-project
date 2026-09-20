@@ -232,7 +232,16 @@ Téléphone  ──(besoin de l'utilisateur)──►  Edge Function "ai"  ─�
 ```
 
 La clé ne quitte jamais le serveur. Le code de cette fonction est dans
-`supabase/functions/ai/index.ts`.
+`supabase/functions/ai/index.ts`. Elle sert à trois choses : trouver le bon
+artisan à partir d'un besoin décrit en français, résumer les avis d'un profil,
+et mettre en forme la présentation d'un artisan.
+
+**Ce qui marche sans l'IA.** L'assistant de présentation écrit déjà trois
+textes corrects sans elle, à partir du questionnaire (`src/lib/presentation.js`,
+vérifié par `npm run verifier-presentation`). L'IA les remplace par des
+versions mieux tournées quand elle est joignable, et l'écran dit laquelle des
+deux a écrit. C'est volontaire : une fonction qui ne marche qu'à moitié du
+temps n'est pas utilisée.
 
 ### Mise en place
 

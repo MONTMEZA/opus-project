@@ -54,6 +54,24 @@ export async function aiSummarizeReviews(pro, reviews) {
   return String((data && data.resume) || '').trim();
 }
 
+/**
+ * Écran « Modifier mon profil » — l'IA met en forme les réponses au
+ * questionnaire et renvoie trois présentations au choix.
+ *
+ * Elle n'ajoute AUCUNE information : la consigne côté serveur le lui
+ * interdit. Une présentation qui invente un label ou une garantie ferait
+ * courir un vrai risque à l'artisan.
+ *
+ * Retourne [{ titre, texte }].
+ */
+export async function aiRedigerPresentation({ profil, reponses }) {
+  const data = await callAiFunction({ action: 'bio', profil, reponses });
+  const liste = (data && data.propositions) || [];
+  return liste
+    .filter((p) => p && typeof p.texte === 'string' && p.texte.trim())
+    .map((p) => ({ titre: String(p.titre || 'Proposition'), texte: p.texte.trim() }));
+}
+
 /** Utilisé par l'écran de réglages pour expliquer l'état du backend IA. */
 export const aiBackendUrl = hasSupabase ? `${SUPABASE_URL}/functions/v1/ai` : null;
 export const aiBackendReady = Boolean(SUPABASE_ANON_KEY);

@@ -12,9 +12,10 @@
  *   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
  *   supabase functions deploy ai
  *
- * DEUX ACTIONS :
+ * TROIS ACTIONS :
  *   { action: "match",   besoin, artisans }  -> { recommandations: [...] }
  *   { action: "summary", entreprise, metier, avis } -> { resume: "..." }
+ *   { action: "bio",     profil, reponses }  -> { propositions: [{titre, texte}] }
  */
 import Anthropic from 'npm:@anthropic-ai/sdk';
 
@@ -112,6 +113,45 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
       });
 
       return json({ resume: textOf(message).trim() });
+    }
+
+    /* -------- Présentation d'un artisan (écran Modifier mon profil) -------- */
+    if (payload.action === 'bio') {
+      const profil = (payload.profil || {}) as Record<string, unknown>;
+      const reponses = (payload.reponses || {}) as Record<string, unknown>;
+
+      const message = await client.messages.create({
+        model: MODEL,
+        max_tokens: 1200,
+        output_config: { effort: 'low' },
+        system: `Tu écris la présentation d'un artisan du bâtiment pour son profil public, en français.
+
+RÈGLES ABSOLUES
+- N'invente RIEN. Tu n'utilises que les informations fournies. Pas de label, pas de certification, pas de chiffre, pas de garantie qui ne soit pas dans les réponses.
+- Pas de superlatif publicitaire ("leader", "expert incontournable", "excellence", "votre satisfaction est notre priorité"). Un artisan qui se relit doit reconnaître sa façon de parler.
+- Français simple, phrases courtes. On s'adresse à un particulier qui hésite.
+- Chaque proposition tient en 3 à 5 phrases, et ne mélange jamais "je" et "nous".
+
+Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
+{"propositions":[{"titre":"Factuelle","texte":"..."},{"titre":"À la première personne","texte":"..."},{"titre":"Courte","texte":"..."}]}
+
+"Factuelle" n'emploie ni "je" ni "nous". "À la première personne" emploie "je" si l'artisan travaille seul, "nous" sinon. "Courte" fait deux phrases au plus.`,
+        messages: [{
+          role: 'user',
+          content: `Artisan :\n${JSON.stringify(profil)}\n\n`
+            + `Ses réponses au questionnaire :\n${JSON.stringify(reponses)}`,
+        }],
+      });
+
+      const brut = textOf(message).replace(/```json|```/g, '').trim();
+      let parsed: { propositions?: unknown };
+      try {
+        parsed = JSON.parse(brut);
+      } catch {
+        return json({ error: "L'assistant a renvoyé une réponse illisible. Réessayez." }, 502);
+      }
+      const propositions = Array.isArray(parsed.propositions) ? parsed.propositions : [];
+      return json({ propositions });
     }
 
     return json({ error: 'Action inconnue.' }, 400);

@@ -11,9 +11,12 @@ import { C, F } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, Field, TextArea, ProfileBanner, SectionLabel,
 } from '../components/ui';
-import { Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX } from '../components/icons';
+import {
+  Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX, Sparkles,
+} from '../components/icons';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
+import AssistantPresentation from '../components/AssistantPresentation';
 import { METIERS } from '../data/demo';
 import { METIERS_SOS } from '../data/urgences';
 import { choisirImage, choisirDocument } from '../lib/media';
@@ -52,6 +55,7 @@ export default function ProfilEditScreen({
     profil.metiers && profil.metiers.length ? profil.metiers : [profil.metier || METIERS[0]],
   );
   const [motif, setMotif] = useState('');
+  const [assistantOuvert, setAssistantOuvert] = useState(false);
   const [lieu, setLieu] = useState({
     affichage: profil.ville || '',
     codePostal: profil.codePostal || null,
@@ -215,8 +219,26 @@ export default function ProfilEditScreen({
             <Text style={s.label}>Ville</Text>
             <ChampVille valeur={lieu.affichage} onChange={setLieu} />
 
-            <Text style={s.label}>Présentation</Text>
+            <View style={s.presentationTitre}>
+              <Text style={[s.label, { marginBottom: 0 }]}>Présentation</Text>
+              {!assistantOuvert && (
+                <BtnMini outline onPress={() => setAssistantOuvert(true)}>
+                  <Sparkles size={12} color={C.accent2} />
+                  <Text style={s.aiderTexte}>M'aider à l'écrire</Text>
+                </BtnMini>
+              )}
+            </View>
             <TextArea value={bio} onChangeText={setBio} placeholder="Décrivez votre activité..." />
+
+            {/* C'est la case qui décide un particulier qui hésite entre deux
+                devis, et c'est celle qui reste vide le plus souvent. */}
+            {assistantOuvert && (
+              <AssistantPresentation
+                profil={{ entreprise, metiers, ville: lieu.affichage }}
+                onFermer={() => setAssistantOuvert(false)}
+                onUtiliser={(texte) => { setBio(texte); setAssistantOuvert(false); }}
+              />
+            )}
 
             <Text style={s.label}>SIRET</Text>
             <Field value={siret} onChangeText={setSiret} placeholder="812 345 678 00019" />
@@ -428,6 +450,11 @@ function LigneDocument({ titre, detail, fichier, dejaEnvoye, onChoisir }) {
 }
 
 const s = StyleSheet.create({
+  presentationTitre: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6, marginTop: 12,
+  },
+  aiderTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
   demande: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.accent2,
     padding: 12, marginTop: 10, gap: 8,
