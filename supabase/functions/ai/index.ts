@@ -17,9 +17,39 @@
  *   { action: "summary", entreprise, metier, avis } -> { resume: "..." }
  *   { action: "bio",     profil, reponses }  -> { propositions: [{titre, texte}] }
  */
-import Anthropic from 'npm:@anthropic-ai/sdk';
+import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
 
 const MODEL = 'claude-opus-5';
+
+/**
+ * ATTENTION — LA RÉFLEXION PARTAGE LE BUDGET DE max_tokens
+ *
+ * Sur Claude Opus 5, le modèle réfléchit par défaut, et ces jetons de
+ * réflexion sont pris sur `max_tokens`. Avec les 1 500 jetons de la première
+ * version, la réflexion pouvait consommer presque tout le budget et le JSON
+ * arrivait TRONQUÉ — donc illisible, donc une erreur sans cause apparente.
+ *
+ * 16 000 est le budget recommandé pour une requête sans streaming. On ne paie
+ * que ce qui est réellement produit : ce n'est pas un coût, c'est une marge.
+ */
+const MAX_TOKENS = 16000;
+
+/**
+ * `effort: 'low'` : ces trois tâches sont simples (trier une liste, résumer
+ * des avis, mettre en forme un questionnaire). Un effort élevé coûterait plus
+ * cher sans rien améliorer.
+ */
+const EFFORT = { effort: 'low' } as const;
+
+/**
+ * Le modèle peut refuser une demande (stop_reason « refusal »). C'est très
+ * improbable ici — on lui demande d'écrire la présentation d'un maçon — mais
+ * sans ce contrôle on lirait un contenu vide et on afficherait « réponse
+ * illisible », ce qui enverrait chercher le problème au mauvais endroit.
+ */
+function aRefuse(message: Anthropic.Message): boolean {
+  return message.stop_reason === 'refusal';
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -47,7 +77,19 @@ Deno.serve(async (req) => {
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) {
-    return json({ error: "La clé ANTHROPIC_API_KEY n'est pas configurée côté serveur." }, 500);
+    /* On renvoie les NOMS des secrets ajoutés au projet, jamais leurs
+       valeurs. C'est ce qui a permis de diagnostiquer, pour Cloudinary, un
+       secret rangé sous un mauvais nom : sans cela on cherche pendant une
+       heure une clé qui est bien là, mais qui s'appelle autrement. */
+    const ajoutes = Object.keys(Deno.env.toObject())
+      .filter((n) => !/^(SUPABASE_|SB_|DENO_|EDGE_|FUNCTION|NODE_|PATH$|HOME$|LANG$|PWD$|SHLVL$|_$)/i.test(n))
+      .sort();
+
+    return json({
+      error: "La clé ANTHROPIC_API_KEY n'est pas configurée côté serveur. "
+        + 'À renseigner dans Supabase → Edge Functions → Secrets, sous ce nom exact.',
+      secretsAjoutesAuProjet: ajoutes,
+    }, 500);
   }
 
   let payload: Record<string, unknown>;
@@ -68,8 +110,8 @@ Deno.serve(async (req) => {
 
       const message = await client.messages.create({
         model: MODEL,
-        max_tokens: 1500,
-        output_config: { effort: 'low' },
+        max_tokens: MAX_TOKENS,
+        output_config: EFFORT,
         system: `Tu es l'assistant de mise en relation d'un réseau social du BTP. Réponds UNIQUEMENT avec un JSON valide, sans aucun texte autour, de la forme exacte :
 {"recommandations":[{"proId":"identifiant","pertinence":5,"raison":"courte phrase expliquant pourquoi ce pro correspond"}]}
 Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dans la liste fournie, recopiés à l'identique. Ne propose que des artisans dont le métier correspond réellement au besoin. Si aucun ne correspond, renvoie une liste vide.`,
@@ -79,6 +121,8 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
             + `Liste des artisans disponibles (JSON) :\n${JSON.stringify(artisans)}`,
         }],
       });
+
+      if (aRefuse(message)) return json({ error: "L'assistant a refusé de répondre à cette demande." }, 422);
 
       const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { recommandations?: unknown };
@@ -102,8 +146,8 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
 
       const message = await client.messages.create({
         model: MODEL,
-        max_tokens: 600,
-        output_config: { effort: 'low' },
+        max_tokens: MAX_TOKENS,
+        output_config: EFFORT,
         system: "Tu résumes des avis clients d'un artisan du BTP en français, de façon neutre, concise et utile. N'invente aucune information absente des avis fournis. Réponds uniquement avec le résumé, sans préambule.",
         messages: [{
           role: 'user',
@@ -112,6 +156,7 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
         }],
       });
 
+      if (aRefuse(message)) return json({ error: "L'assistant a refusé de résumer ces avis." }, 422);
       return json({ resume: textOf(message).trim() });
     }
 
@@ -122,8 +167,8 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
 
       const message = await client.messages.create({
         model: MODEL,
-        max_tokens: 1200,
-        output_config: { effort: 'low' },
+        max_tokens: MAX_TOKENS,
+        output_config: EFFORT,
         system: `Tu écris la présentation d'un artisan du bâtiment pour son profil public, en français.
 
 RÈGLES ABSOLUES
@@ -142,6 +187,8 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
             + `Ses réponses au questionnaire :\n${JSON.stringify(reponses)}`,
         }],
       });
+
+      if (aRefuse(message)) return json({ error: "L'assistant a refusé d'écrire cette présentation." }, 422);
 
       const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { propositions?: unknown };

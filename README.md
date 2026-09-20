@@ -250,27 +250,46 @@ temps n'est pas utilisée.
 → **Create Key** → copie la clé (elle commence par `sk-ant-`). Elle ne s'affiche
 qu'une fois. Prévois aussi un moyen de paiement : l'API est facturée à l'usage.
 
-**2. Installer la CLI Supabase**
+**2. Ranger la clé dans les secrets du serveur**
+
+Depuis le navigateur, sans rien installer :
+
+Dashboard Supabase → ton projet → **Edge Functions** → onglet **Secrets** →
+**Add new secret**.
+
+| Champ | Valeur |
+| --- | --- |
+| Name | `ANTHROPIC_API_KEY` — ce nom exact, en majuscules |
+| Value | la clé, seule, qui commence par `sk-ant-` |
+
+**Un seul secret par ligne.** Coller le nom et la valeur dans la même case ne
+marche pas : c'est l'erreur qui a coûté une heure lors de la mise en place de
+Cloudinary.
+
+**3. Déployer la fonction**
+
+Elle l'est déjà — elle se déploie depuis ce dépôt via le connecteur Supabase.
+Si tu veux le faire toi-même, il faut alors la CLI :
 
 ```bash
 npm install -g supabase
 supabase login
 supabase link --project-ref TON_REF_PROJET
-```
-
-`TON_REF_PROJET` est la partie `xxxxxxxx` de ton URL Supabase.
-
-**3. Ranger la clé dans les secrets du serveur**
-
-```bash
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-ta-cle-ici
-```
-
-**4. Déployer la fonction**
-
-```bash
 supabase functions deploy ai
 ```
+
+**Vérifier que la clé est bien vue par le serveur**, sans la révéler : appelle
+la fonction avec une action inconnue.
+
+- réponse `Action inconnue` → la clé est en place ;
+- réponse `La clé ANTHROPIC_API_KEY n'est pas configurée` → elle manque, et la
+  réponse liste les **noms** des secrets présents (jamais leurs valeurs) pour
+  repérer une faute de frappe.
+
+**Ce que ça coûte.** Claude Opus 5 est facturé 5 $ par million de jetons
+envoyés et 25 $ par million produits. Les trois usages d'Opus-Project sont
+courts : quelques centimes pour des centaines d'appels. Le budget se plafonne
+dans la console Anthropic (Settings → Limits).
 
 C'est tout. Relance l'app : l'assistant IA de l'écran **Découvrir** et le bouton
 **« Générer un résumé IA »** du profil d'un pro fonctionnent.
