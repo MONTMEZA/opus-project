@@ -4,8 +4,8 @@
  * navigation du bas flottent par-dessus, comme sur TikTok. `bottomInset`
  * réserve la place de cette navigation pour que le texte ne passe pas dessous.
  */
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, Pressable, PanResponder, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F } from '../theme';
 import { Gradient, BtnMain, ChipFollow } from './ui';
@@ -29,9 +29,31 @@ function Scrim() {
 export default function VideoSlide({
   post, pro, following, saved, height, bottomInset = 0, actif = true,
   onLike, onFollow, onSave, onView, onShare, onContact, onComment,
+  onGlisserVersProfil, onGlisserVersFil,
 }) {
   const infoPad = 24 + bottomInset;
   const clips = post.medias && post.medias.length ? post.medias : [post.media];
+
+  /**
+   * Glissements horizontaux, comme sur TikTok : vers la droite on ouvre la
+   * page de l'artisan, vers la gauche on revient au fil.
+   *
+   * Le geste n'est capté que s'il est franchement horizontal — au moins deux
+   * fois plus large que haut. Sans cette condition, un défilement vertical
+   * légèrement de travers ferait quitter la vidéo, ce qui est exaspérant.
+   */
+  const gestes = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => (
+        Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2
+      ),
+      onPanResponderRelease: (_, g) => {
+        if (Math.abs(g.dx) < 70) return;         // hésitation : on ne fait rien
+        if (g.dx > 0) { if (onGlisserVersProfil && pro) onGlisserVersProfil(pro); }
+        else if (onGlisserVersFil) onGlisserVersFil();
+      },
+    }),
+  ).current;
 
   /* --- publicité en plein écran --- */
   if (post.type === 'ad') {
@@ -74,7 +96,7 @@ export default function VideoSlide({
     : { media: montageAssemble ? post.montageUrl : post.media, lecture: actif, muet: false };
 
   return (
-    <Surface {...proprietes} style={[s.card, { height }]}>
+    <Surface {...proprietes} style={[s.card, { height }]} gestes={gestes.panHandlers}>
       <Scrim />
 
       {/* actions sur le côté droit */}

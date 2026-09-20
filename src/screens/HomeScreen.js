@@ -25,7 +25,7 @@ export default function HomeScreen({
   videoCible,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
-  onOuvrirVideo,
+  onOuvrirVideo, onGlisserVersProfil,
 }) {
   const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
@@ -86,6 +86,8 @@ export default function HomeScreen({
             <VideoSlide
               post={p}
               actif={index === slideActive}
+              onGlisserVersProfil={onGlisserVersProfil}
+              onGlisserVersFil={() => setFeedMode('classic')}
               pro={p.proId ? pros[p.proId] : null}
               following={p.proId ? followingIds.has(p.proId) : false}
               saved={savedIds.has(p.id)}

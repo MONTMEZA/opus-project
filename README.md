@@ -492,6 +492,47 @@ ajoute **à la fin** du tableau. C'est important : `portfolio[1]` reste la toute
 première réalisation, donc la bannière par défaut du profil ne change pas à
 chaque publication.
 
+## Le fil vidéo, à la manière de TikTok
+
+En plein écran, deux glissements horizontaux :
+
+| Geste | Où l'on arrive |
+|---|---|
+| **Vers la droite →** | La page du professionnel |
+| **Vers la gauche ←** | Retour au fil principal |
+
+Le geste n'est capté que s'il est **franchement horizontal** — au moins deux
+fois plus large que haut, et d'au moins 70 px. Sans cette condition, un
+défilement vertical légèrement de travers ferait quitter la vidéo, ce qui est
+exaspérant.
+
+## Gérer ce qu'on a publié
+
+### Mes publications
+
+**Profil → Mes publications** rassemble tout ce que le professionnel a publié.
+Le fil mêle ses publications à celles des autres : pour retrouver la sienne
+d'il y a trois semaines, il fallait faire défiler indéfiniment.
+
+Trois actions par publication :
+
+| Action | Effet |
+|---|---|
+| **Remettre en avant** | La publication remonte en tête du fil **en gardant ses j'aime et ses commentaires**. Ce n'est pas une copie : un doublon perdrait tout et encombrerait le fil |
+| **Partager** | Ouvre la feuille de partage du téléphone — messages, WhatsApp, courriel. C'est l'utilisateur qui choisit à qui |
+| **Supprimer** | **Demande confirmation**, et la confirmation *remplace* la barre d'actions : impossible d'appuyer à côté |
+
+### Organiser ses réalisations
+
+**Profil → Portfolio → Organiser** permet de réordonner et de retirer les
+photos. L'ordre compte : la première réalisation sert de bannière par défaut,
+et ce sont les premières que voit un particulier qui hésite entre deux
+artisans.
+
+Rien n'est enregistré avant d'avoir appuyé sur **Enregistrer** — on peut
+essayer plusieurs ordres et repartir sans rien casser. Retirer une réalisation
+ne supprime pas la publication correspondante : seule la vitrine change.
+
 ## Les partenaires : ça se demande, ça ne se prend pas
 
 Un partenariat affiché sur un profil, c'est une recommandation publique. Il

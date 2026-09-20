@@ -507,6 +507,36 @@ export const ajouterAuPortfolio = !hasSupabase ? noop : async (media) => {
   return data;
 };
 
+/** Supprimer une de mes publications. Les règles RLS n'autorisent que les miennes. */
+export const supprimerPost = !hasSupabase ? noop : async (postId) => {
+  const { error } = await supabase.from('posts')
+    .delete().eq('id', postId).eq('author_id', currentUserId);
+  if (error) throw error;
+};
+
+/**
+ * Remettre une publication en tête du fil.
+ *
+ * On ne la recopie pas : une copie perdrait ses j'aime et ses commentaires,
+ * et laisserait deux fois la même chose dans le fil. On change sa date, ce
+ * qui la fait remonter — le fil étant trié par date.
+ */
+export const republierPost = !hasSupabase ? noop : async (postId) => {
+  const { data, error } = await supabase.from('posts')
+    .update({ created_at: new Date().toISOString() })
+    .eq('id', postId).eq('author_id', currentUserId)
+    .select().single();
+  if (error) throw error;
+  return data;
+};
+
+/** Remplacer la liste des réalisations : suppression et réordonnancement. */
+export const definirPortfolio = !hasSupabase ? noop : async (liste) => {
+  const { error } = await supabase.from('professional_profiles')
+    .update({ portfolio: liste }).eq('id', currentUserId);
+  if (error) throw error;
+};
+
 export const createConversation = !hasSupabase ? noop : async (proId) => {
   const { data, error } = await supabase.from('conversations')
     .insert({ client_id: currentUserId, professional_id: proId })

@@ -42,7 +42,8 @@ function Compte({ onLogout }) {
 export default function ProfilOwnScreen({
   userType, pros, myProId, monProfil, followingIds, savedIds,
   demandesPartenariat = [], partenariatsEnvoyes = [],
-  onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit, onLogout,
+  onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
+  onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -149,8 +150,25 @@ export default function ProfilOwnScreen({
         style={{ marginHorizontal: 16, marginTop: 10 }}
       />
 
-      <SectionLabel>Portfolio de chantiers</SectionLabel>
+      <SectionLabel
+        right={me.portfolio.length > 0
+          ? <BtnMini outline label="Organiser" onPress={onGererPortfolio} />
+          : null}
+      >
+        Portfolio de chantiers
+      </SectionLabel>
       <PortfolioGrid items={me.portfolio} />
+
+      {/* Le fil mêle nos publications à celles des autres : pour retrouver la
+          sienne d'il y a trois semaines, il faut un endroit à part. */}
+      <View style={s.pad}>
+        <BtnOutline
+          label={nbPublications > 0
+            ? `Mes publications (${nbPublications})`
+            : 'Mes publications'}
+          onPress={onMesPublications}
+        />
+      </View>
 
       {/* --- demandes de partenariat reçues --- */}
       {demandesPartenariat.length > 0 && (
@@ -243,6 +261,7 @@ const s = StyleSheet.create({
     textAlign: 'center', lineHeight: 18, fontFamily: F.inter,
   },
   list: { gap: 10, paddingHorizontal: 16, paddingBottom: 24 },
+  pad: { paddingHorizontal: 16, paddingTop: 10 },
   reponse: { flexDirection: 'row', gap: 6 },
   attente: { fontSize: 11, color: C.muted, fontFamily: F.inter6 },
   noteSection: {

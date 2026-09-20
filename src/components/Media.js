@@ -53,28 +53,30 @@ export function estVideo(media) {
   return EXT_VIDEO.test(media) || /\/video\//i.test(media);
 }
 
-export default function Media({ media, style, lecture = false, muet = true, children }) {
+export default function Media({
+  media, style, lecture = false, muet = true, gestes, children,
+}) {
   if (!estFichier(media)) {
-    return <Gradient media={media} style={style}>{children}</Gradient>;
+    return <Gradient media={media} style={style} gestes={gestes}>{children}</Gradient>;
   }
 
   if (estVideo(media)) {
     return (
-      <VideoMedia uri={media} style={style} lecture={lecture} muet={muet}>
+      <VideoMedia uri={media} style={style} lecture={lecture} muet={muet} gestes={gestes}>
         {children}
       </VideoMedia>
     );
   }
 
   return (
-    <View style={style}>
+    <View style={style} {...(gestes || {})}>
       <Image source={{ uri: media }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       {children}
     </View>
   );
 }
 
-function VideoMedia({ uri, style, lecture, muet, children }) {
+function VideoMedia({ uri, style, lecture, muet, gestes, children }) {
   /* Le lecteur est créé une fois pour cette source. Il charge la vidéo dès
      le montage, même en pause : quand la diapositive devient visible, tout
      est déjà en mémoire et la lecture part sans délai. */
@@ -94,7 +96,7 @@ function VideoMedia({ uri, style, lecture, muet, children }) {
   }, [player, muet]);
 
   return (
-    <View style={style}>
+    <View style={style} {...(gestes || {})}>
       <VideoView
         style={StyleSheet.absoluteFill}
         player={player}

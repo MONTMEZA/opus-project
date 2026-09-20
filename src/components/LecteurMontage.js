@@ -37,7 +37,7 @@ function preparer(p) {
 }
 
 export default function LecteurMontage({
-  clips = [], musique, actif = true, muet = false, style, children,
+  clips = [], musique, actif = true, muet = false, style, gestes, children,
 }) {
   const a = useVideoPlayer(null, preparer);
   const b = useVideoPlayer(null, preparer);
@@ -139,7 +139,7 @@ export default function LecteurMontage({
   if (!clips.length) return <View style={style}>{children}</View>;
 
   return (
-    <View style={style}>
+    <View style={style} {...(gestes || {})}>
       {/* Les deux lecteurs sont empilés ; seul celui à l'écran est visible.
           On ne les démonte jamais : c'est ce qui garde le clip suivant prêt. */}
       <VideoView

@@ -28,6 +28,8 @@ import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
 import ProfilPublicScreen from './screens/ProfilPublicScreen';
 import ProfilEditScreen from './screens/ProfilEditScreen';
+import MesPublicationsScreen from './screens/MesPublicationsScreen';
+import GererPortfolioScreen from './screens/GererPortfolioScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
 import { METIERS, POST_GRADIENTS, avgReviews } from './data/demo';
@@ -39,6 +41,7 @@ import {
   aCloudinary, urlMontage, envoyerVideo as envoyerVideoCloudinary,
 } from './lib/cloudinary';
 import { aiMatchPros } from './lib/ai';
+import { partagerPost } from './lib/partage';
 import { FORMATS_VISUELS, FORMATS_VIDEO } from './screens/CreerScreen';
 
 /** Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie. */
@@ -600,6 +603,70 @@ export default function OpusApp() {
     showBanner('Partenariat accepté.');
   };
 
+  /* ---------- mes publications ---------- */
+  /* Comparaison sur le texte, et non sur la valeur brute : les identifiants
+     sont des UUID avec Supabase, mais des nombres dans les données de
+     démonstration — où myProId, lu comme clé d'objet, est une chaîne. Sans
+     cette précaution, la liste restait vide en démonstration. */
+  const mesPublications = posts.filter(
+    (p) => p.type === 'post' && String(p.proId) === String(myProId),
+  );
+
+  const supprimerPublication = async (post) => {
+    setPosts((ps) => ps.filter((p) => p.id !== post.id));
+    try {
+      await api.supprimerPost(post.id);
+      showBanner('Publication supprimée.');
+    } catch (e) {
+      showBanner(`Suppression impossible : ${e.message || e}`);
+      await start(userType);          // on remet la liste d'aplomb
+    }
+  };
+
+  /* Remonter une publication, sans la recopier : une copie perdrait ses
+     j'aime et ses commentaires, et laisserait deux fois la même chose. */
+  const republierPublication = async (post) => {
+    try {
+      await api.republierPost(post.id);
+    } catch (e) {
+      showBanner(`Impossible de remettre en avant : ${e.message || e}`);
+      return;
+    }
+    setPosts((ps) => [
+      { ...post, time: "À l'instant" },
+      ...ps.filter((p) => p.id !== post.id),
+    ]);
+    showBanner('Publication remise en tête du fil.');
+  };
+
+  const partagerPublication = async (post) => {
+    try {
+      const message = await partagerPost(post, pros[post.proId]);
+      if (message) showBanner(message);
+    } catch (e) {
+      showBanner(`Partage impossible : ${e.message || e}`);
+    }
+  };
+
+  /* ---------- portfolio ---------- */
+  const enregistrerPortfolio = async (liste) => {
+    if (!myProId) return;
+    const avant = pros[myProId] ? pros[myProId].portfolio : [];
+    setPros((ps) => (ps[myProId]
+      ? { ...ps, [myProId]: { ...ps[myProId], portfolio: liste } }
+      : ps));
+    try {
+      await api.definirPortfolio(liste);
+      showBanner('Réalisations enregistrées.');
+      setScreen('profil');
+    } catch (e) {
+      setPros((ps) => (ps[myProId]
+        ? { ...ps, [myProId]: { ...ps[myProId], portfolio: avant } }
+        : ps));
+      showBanner(`Enregistrement impossible : ${e.message || e}`);
+    }
+  };
+
   /* ---------- notifications ---------- */
   const readNotification = (id) => {
     setNotifications((ns) => ns.map((n) => (n.id === id ? { ...n, lue: true } : n)));
@@ -983,6 +1050,7 @@ export default function OpusApp() {
 
   const showBack = screen === 'profilPro' || screen === 'creer' || screen === 'sos'
     || screen === 'profilEdit' || screen === 'profilPublic'
+    || screen === 'mesPublications' || screen === 'gererPortfolio'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'profilPro'
@@ -990,6 +1058,8 @@ export default function OpusApp() {
     : screen === 'profilPublic' ? (profilPublic ? profilPublic.nom : 'Profil')
     : screen === 'sos' ? 'SOS — Urgence'
     : screen === 'profilEdit' ? 'Modifier mon profil'
+    : screen === 'mesPublications' ? 'Mes publications'
+    : screen === 'gererPortfolio' ? 'Organiser mes réalisations'
     : screen === 'creer' ? 'Publier'
     : activeConv && activeConv.contact ? activeConv.contact.titre : '';
 
@@ -1006,7 +1076,8 @@ export default function OpusApp() {
           title={backTitle}
           onBack={() => {
             if (screen === 'messages') setActiveConvId(null);
-            else if (screen === 'profilEdit') setScreen('profil');
+            else if (screen === 'profilEdit' || screen === 'mesPublications'
+                     || screen === 'gererPortfolio') setScreen('profil');
             else setScreen('home');
           }}
         />
@@ -1022,6 +1093,7 @@ export default function OpusApp() {
             posts={feedFiltered} pros={pros}
             feedMode={feedMode} setFeedMode={changerFeedMode}
             videoCible={videoCible} onOuvrirVideo={ouvrirVideoEnGrand}
+            onGlisserVersProfil={(pro) => viewProfile(pro.id)}
             feedTab={feedTab} setFeedTab={setFeedTab}
             followingIds={followingIds} savedIds={savedIds}
             openCommentsId={openCommentsId} openContactId={openContactId}
@@ -1109,6 +1181,29 @@ export default function OpusApp() {
           />
         )}
 
+        {screen === 'mesPublications' && (
+          <MesPublicationsScreen
+            posts={mesPublications}
+            onSupprimer={supprimerPublication}
+            onRepublier={republierPublication}
+            onPartager={partagerPublication}
+            onOuvrir={(p) => {
+              setFeedMode(FORMATS_VIDEO.has(p.format) ? 'video' : 'classic');
+              setVideoCible(FORMATS_VIDEO.has(p.format) ? p.id : null);
+              setOpenCommentsId(null);
+              setScreen('home');
+            }}
+          />
+        )}
+
+        {screen === 'gererPortfolio' && (
+          <GererPortfolioScreen
+            portfolio={(pros[myProId] && pros[myProId].portfolio) || []}
+            onEnregistrer={enregistrerPortfolio}
+            onAnnuler={() => setScreen('profil')}
+          />
+        )}
+
         {screen === 'profilEdit' && (
           <ProfilEditScreen
             userType={userType}
@@ -1142,6 +1237,9 @@ export default function OpusApp() {
             onRepondrePartenariat={repondrePartenariat}
             onViewProfile={viewProfile}
             onEdit={() => setScreen('profilEdit')}
+            onMesPublications={() => setScreen('mesPublications')}
+            onGererPortfolio={() => setScreen('gererPortfolio')}
+            nbPublications={mesPublications.length}
             onLogout={deconnexion}
           />
         )}
