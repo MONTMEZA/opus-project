@@ -286,10 +286,32 @@ la fonction avec une action inconnue.
   réponse liste les **noms** des secrets présents (jamais leurs valeurs) pour
   repérer une faute de frappe.
 
+**4. Mettre du crédit sur le compte Anthropic**
+
+Une clé valide ne suffit pas : l'API refuse tout tant que le solde est à zéro.
+console.anthropic.com → **Plans & Billing** → ajouter un moyen de paiement et
+acheter du crédit. C'est un compte prépayé, pas un abonnement.
+
 **Ce que ça coûte.** Claude Opus 5 est facturé 5 $ par million de jetons
 envoyés et 25 $ par million produits. Les trois usages d'Opus-Project sont
 courts : quelques centimes pour des centaines d'appels. Le budget se plafonne
 dans la console Anthropic (Settings → Limits).
+
+### Quand ça ne marche pas
+
+L'Edge Function traduit les pannes d'Anthropic en français — sans cela,
+l'application affichait du JSON anglais au milieu d'une phrase française.
+
+| Ce que vous lisez | Ce qu'il faut faire |
+| --- | --- |
+| La clé ANTHROPIC_API_KEY n'est pas configurée | Ajouter le secret (étape 2). La réponse liste les **noms** des secrets présents, jamais leurs valeurs. |
+| Le compte Anthropic n'a plus de crédit | Recharger (étape 4). |
+| La clé Anthropic est refusée | Clé révoquée ou mal recopiée : en recréer une. |
+| Trop de demandes d'un coup | Attendre une minute. |
+| Le service est momentanément saturé | Réessayer. |
+
+Le détail technique complet part dans les journaux Supabase (Edge Functions →
+ai → Logs) : l'utilisateur voit une phrase, vous gardez la trace.
 
 C'est tout. Relance l'app : l'assistant IA de l'écran **Découvrir** et le bouton
 **« Générer un résumé IA »** du profil d'un pro fonctionnent.

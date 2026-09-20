@@ -51,6 +51,57 @@ function aRefuse(message: Anthropic.Message): boolean {
   return message.stop_reason === 'refusal';
 }
 
+/**
+ * Traduit les pannes d'Anthropic en français lisible.
+ *
+ * Sans cela, l'application affiche le message brut de l'API — du JSON anglais
+ * au milieu d'une phrase française. Le premier essai réel a renvoyé
+ * « L'assistant IA n'a pas pu répondre (400 {"type":"error","error":... }) »
+ * pour dire simplement : il n'y a plus de crédit sur le compte Anthropic.
+ * Chacune de ces pannes a une cause précise et une action précise : c'est ce
+ * qu'il faut afficher, pas le JSON.
+ */
+function messageLisible(e: unknown): { texte: string; statut: number } {
+  const brut = e instanceof Error ? e.message : String(e);
+  const statutApi = (e as { status?: number })?.status ?? 0;
+
+  if (/credit balance is too low/i.test(brut)) {
+    return {
+      texte: "Le compte Anthropic n'a plus de crédit. Rechargez-le sur "
+        + 'console.anthropic.com → Plans & Billing, puis réessayez.',
+      statut: 402,
+    };
+  }
+  if (statutApi === 401 || /invalid x-api-key|authentication/i.test(brut)) {
+    return {
+      texte: "La clé Anthropic est refusée. Vérifiez ANTHROPIC_API_KEY dans "
+        + 'Supabase → Edge Functions → Secrets : une clé révoquée ou recopiée '
+        + 'de travers donne cette erreur.',
+      statut: 401,
+    };
+  }
+  if (statutApi === 429 || /rate limit/i.test(brut)) {
+    return {
+      texte: "Trop de demandes d'un coup. Attendez une minute et réessayez.",
+      statut: 429,
+    };
+  }
+  if (statutApi === 529 || /overloaded/i.test(brut)) {
+    return {
+      texte: 'Le service est momentanément saturé. Réessayez dans un instant.',
+      statut: 503,
+    };
+  }
+  if (/model/i.test(brut) && /not found|does not exist/i.test(brut)) {
+    return {
+      texte: "Le modèle demandé n'existe pas ou n'est pas accessible à ce "
+        + "compte. C'est une erreur de configuration du serveur, pas de votre fait.",
+      statut: 500,
+    };
+  }
+  return { texte: `L'assistant IA n'a pas pu répondre (${brut}).`, statut: 502 };
+}
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -203,8 +254,10 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
 
     return json({ error: 'Action inconnue.' }, 400);
   } catch (e) {
+    /* Le détail complet part dans les journaux Supabase, où on peut le lire
+       quand on cherche une panne. L'utilisateur, lui, reçoit une phrase. */
     console.error('Erreur Anthropic:', e);
-    const msg = e instanceof Error ? e.message : String(e);
-    return json({ error: `L'assistant IA n'a pas pu répondre (${msg}).` }, 502);
+    const { texte, statut } = messageLisible(e);
+    return json({ error: texte }, statut);
   }
 });
