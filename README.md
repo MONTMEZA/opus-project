@@ -370,6 +370,60 @@ s'arrête quand elle en sort. Le son reste coupé : une vidéo qui parle toute
 seule pendant qu'on fait défiler est insupportable. Le son ne vient qu'en
 plein écran — c'est ce que font Instagram et Facebook.
 
+## Cloudinary : les vidéos et les montages
+
+### Ce qu'il fait, et ce qu'il ne touche pas
+
+Seules les **vidéos** passent par Cloudinary. Les photos, les avatars, les
+bannières et surtout les **justificatifs (Kbis, assurance)** restent dans
+Supabase Storage : les documents y sont protégés par des règles liées au
+compte, et les déplacer reviendrait à refaire cette protection.
+
+Trois gains, mesurés sur de vrais fichiers du projet :
+
+| | Sans Cloudinary | Avec |
+|---|---|---|
+| Un montage de 2 clips | deux fichiers enchaînés | **un seul MP4**, partageable |
+| Aperçu d'une vidéo | la vidéo entière, 780 Ko | une image, **45 Ko** |
+| Fabrication du montage | — | 4 s la première fois, puis en cache |
+
+### Le secret ne quitte jamais le serveur
+
+Cloudinary propose un envoi « sans signature », avec un mot de passe glissé
+dans l'application. Sa propre documentation demande alors de traiter ce mot de
+passe comme un secret — or le code d'une application mobile se lit en quelques
+minutes.
+
+Le téléphone demande donc une **signature** à l'Edge Function `cloudinary`,
+valable quelques minutes et pour son seul dossier, puis envoie le fichier
+directement à Cloudinary. Le fichier ne transite pas par nos serveurs.
+
+### Mise en place
+
+1. Compte gratuit sur **cloudinary.com** → **Settings → API Keys**
+2. Dans Supabase → **Edge Functions → Secrets**, **trois secrets séparés** :
+   `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
+   Le nom va dans la case **Key**, la valeur dans **Value** — jamais les deux
+   ensemble, jamais de libellé en français.
+3. Déployer la fonction : `supabase functions deploy cloudinary`
+4. Dans le `.env` du projet, **le nom du compte seul** :
+   `EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME=...`
+   La clé et le secret n'y figurent **jamais**.
+
+Sans cette ligne dans le `.env`, l'application continue de fonctionner : les
+vidéos partent dans Supabase Storage et un montage est lu clip après clip.
+
+### Vérifier
+
+```bash
+npm run verifier-montage      # les adresses de montage, caractère par caractère
+npm run verifier-signature    # la signature, comparée au SDK officiel Cloudinary
+```
+
+En cas de « Cloudinary n'est pas configuré », la fonction renvoie **les noms
+des secrets qu'elle voit** — jamais leurs valeurs. Une faute de frappe ou un
+secret mal nommé se repère alors immédiatement.
+
 ### Le montage : ce qu'il fait, et ce qu'il ne fait pas encore
 
 Le montage enchaîne les clips dans l'ordre choisi, avec la musique par-dessus,

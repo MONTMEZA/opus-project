@@ -325,6 +325,8 @@ export async function loadAll() {
         texte: p.texte, media: p.media,
         medias: (p.medias && p.medias.length) ? p.medias : (p.media ? [p.media] : []),
         musique: p.musique || null,
+        // Le montage assemblé en un seul fichier, quand Cloudinary l'a fabriqué.
+        montageUrl: p.montage_url || null,
         likes: p.likes_count || 0,
         liked: likedSet.has(p.id), comments: commentsByPost[p.id] || [],
       }));
@@ -481,12 +483,12 @@ export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
 };
 
 export const createPost = !hasSupabase ? noop : async ({
-  type, texte, media, medias = [], musique = null, metier, ville,
+  type, texte, media, medias = [], musique = null, montageUrl = null, metier, ville,
 }) => {
   const { data, error } = await supabase.from('posts')
     .insert({
       author_id: currentUserId, type, texte, media,
-      medias, musique, metier, ville,
+      medias, musique, montage_url: montageUrl, metier, ville,
     })
     .select().single();
   if (error) throw error;

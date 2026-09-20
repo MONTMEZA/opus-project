@@ -126,6 +126,22 @@ alter table public.posts add constraint posts_type_check
 
 alter table public.posts add column if not exists medias  text[] not null default '{}';
 alter table public.posts add column if not exists musique text;
+
+-- --------------------------------------------------------------------------
+--  Le montage, assemblé en UN SEUL fichier.
+--
+--  `medias` garde les clips d'origine — c'est ce qui permet de rejouer le
+--  montage autrement plus tard, ou de le reconstruire. `montage_url` porte le
+--  résultat : un MP4 unique, fabriqué par Cloudinary.
+--
+--  C'est ce fichier unique qui rend la lecture réellement fluide : il n'y a
+--  plus de passage d'un clip à l'autre, puisqu'il n'y a plus qu'une vidéo. Et
+--  il se repartage tel quel sur un autre réseau.
+--
+--  La colonne reste vide quand Cloudinary n'est pas configuré : l'application
+--  retombe alors sur la lecture enchaînée des clips.
+-- --------------------------------------------------------------------------
+alter table public.posts add column if not exists montage_url text;
 alter table public.demandes add column if not exists medias text[] not null default '{}';
 
 create index if not exists idx_posts_created on public.posts (created_at desc);

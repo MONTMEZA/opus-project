@@ -35,6 +35,9 @@ import * as api from './lib/api';
 import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
 import { envoyerFichier, estFichierLocal } from './lib/storage';
+import {
+  aCloudinary, urlMontage, envoyerVideo as envoyerVideoCloudinary,
+} from './lib/cloudinary';
 import { aiMatchPros } from './lib/ai';
 import { FORMATS_VISUELS, FORMATS_VIDEO } from './screens/CreerScreen';
 
@@ -405,6 +408,11 @@ export default function OpusApp() {
     let id = `local-${Date.now()}`;
     let envoyes = medias;
     let urlMusique = musique ? musique.uri : null;
+    // Identifiants Cloudinary des clips, nécessaires pour fabriquer le montage.
+    const identifiants = [];
+    let identifiantMusique = null;
+    let montageUrl = null;
+    const versCloudinary = FORMATS_VIDEO.has(createType) && aCloudinary;
 
     /* On ne met pas le voile de chargement : il masquerait la jauge. C'est
        elle qui dit que l'application travaille, et combien il reste. */
@@ -419,28 +427,60 @@ export default function OpusApp() {
       for (const uri of medias) {
         const rang = envoyes.length + 1;
         setEnvoi({ index: rang, total, part: 0 });
-        envoyes.push(estFichierLocal(uri)
-          ? await envoyerFichier({
-              uri, bucket: 'publications', nom: 'media', userId: uid,
-              onProgress: (part) => setEnvoi({ index: rang, total, part }),
-            })
-          : uri);
+        const suivi = (part) => setEnvoi({ index: rang, total, part });
+
+        if (!estFichierLocal(uri)) { envoyes.push(uri); continue; }
+
+        /* Les vidéos passent par Cloudinary quand il est configuré : lui seul
+           sait les compresser et, surtout, assembler un montage en un seul
+           fichier. Les photos — et tout le reste si Cloudinary manque —
+           restent dans Supabase Storage, où les règles d'accès sont déjà
+           écrites. */
+        if (versCloudinary) {
+          const clip = await envoyerVideoCloudinary({ uri, onProgress: suivi });
+          identifiants.push(clip.publicId);
+          envoyes.push(clip.url);
+        } else {
+          envoyes.push(await envoyerFichier({
+            uri, bucket: 'publications', nom: 'media', userId: uid, onProgress: suivi,
+          }));
+        }
       }
       if (musique && estFichierLocal(musique.uri)) {
         setEnvoi({ index: total, total, part: 0 });
-        urlMusique = await envoyerFichier({
-          uri: musique.uri, bucket: 'publications', nom: 'musique', userId: uid,
-          onProgress: (part) => setEnvoi({ index: total, total, part }),
-        });
+        const suiviSon = (part) => setEnvoi({ index: total, total, part });
+
+        /* La musique suit le même chemin que les clips. Elle doit se trouver
+           chez Cloudinary pour pouvoir entrer dans le montage assemblé : une
+           bande-son restée chez Supabase serait injoignable au moment de
+           fabriquer le fichier unique. Cloudinary range l'audio parmi les
+           ressources vidéo, l'envoi est donc identique. */
+        if (versCloudinary) {
+          const son = await envoyerVideoCloudinary({ uri: musique.uri, onProgress: suiviSon });
+          identifiantMusique = son.publicId;
+          urlMusique = son.url;
+        } else {
+          urlMusique = await envoyerFichier({
+            uri: musique.uri, bucket: 'publications', nom: 'musique', userId: uid,
+            onProgress: suiviSon,
+          });
+        }
       }
 
       // La vignette est le premier média : c'est elle que montrent les listes.
       const couverture = envoyes[0] || POST_GRADIENTS[0];
 
+      /* Le montage assemblé : une seule adresse, que Cloudinary fabriquera au
+         premier visionnage puis gardera en cache. Un montage d'un seul clip
+         n'a rien à assembler. */
+      if (createType === 'montage' && identifiants.length > 1) {
+        montageUrl = urlMontage(identifiants, { musique: identifiantMusique });
+      }
+
       if (versLeFil) {
         const row = await api.createPost({
           type: createType, texte, media: couverture, medias: envoyes,
-          musique: urlMusique, metier: createMetier, ville: createVille,
+          musique: urlMusique, montageUrl, metier: createMetier, ville: createVille,
         });
         if (row) id = row.id;
       }
@@ -459,7 +499,7 @@ export default function OpusApp() {
     if (versLeFil) {
       setPosts((ps) => [{
         id, type: 'post', format: createType, proId: myProId, time: "À l'instant",
-        texte, media: couverture, medias: envoyes, musique: urlMusique,
+        texte, media: couverture, medias: envoyes, musique: urlMusique, montageUrl,
         likes: 0, liked: false, comments: [],
       }, ...ps]);
     }

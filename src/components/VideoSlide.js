@@ -55,17 +55,23 @@ export default function VideoSlide({
 
   if (!pro) return null;
 
-  /* Un montage enchaîne ses clips avec sa musique ; une vidéo seule se lit en
-     boucle. Dans les deux cas c'est la même surface plein écran.
+  /* Trois cas, du meilleur au moins bon :
 
-     Le lecteur de montage attend de vrais fichiers : les dégradés des données
-     de démonstration n'en sont pas, et le lecteur vidéo ne saurait pas quoi en
-     faire. On retombe alors sur l'affichage simple. */
-  const vraiMontage = post.format === 'montage' && clips.every(estFichier);
-  const Surface = vraiMontage ? LecteurMontage : Media;
-  const proprietes = vraiMontage
+     1. le montage a été assemblé en UN SEUL fichier par Cloudinary : on le lit
+        comme une vidéo ordinaire, et il n'y a par construction aucun passage
+        d'un clip à l'autre ;
+     2. pas de fichier assemblé, mais de vrais clips : on les enchaîne avec
+        deux lecteurs qui s'alternent ;
+     3. ni l'un ni l'autre — les dégradés des données de démonstration : on
+        affiche simplement, un lecteur vidéo ne saurait quoi en faire. */
+  const montageAssemble = post.format === 'montage' && estFichier(post.montageUrl);
+  const clipsEnchaines = post.format === 'montage' && !montageAssemble
+    && clips.every(estFichier);
+
+  const Surface = clipsEnchaines ? LecteurMontage : Media;
+  const proprietes = clipsEnchaines
     ? { clips, musique: post.musique, actif }
-    : { media: post.media, lecture: actif, muet: false };
+    : { media: montageAssemble ? post.montageUrl : post.media, lecture: actif, muet: false };
 
   return (
     <Surface {...proprietes} style={[s.card, { height }]}>
