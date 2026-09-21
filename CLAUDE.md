@@ -60,6 +60,16 @@ alter table public.x add constraint x_champ_check check (champ in (...));
 
 `alter table ... add column if not exists` ne touche pas aux contraintes.
 
+## Ce qu'il reste à faire
+
+`docs/A-FAIRE.md` tient la liste, par ordre de priorité. **À relire au début
+d'une session qui parle de la suite du projet**, et à mettre à jour quand un
+point est traité.
+
+Les trois premiers points — signalement et blocage, suppression de compte,
+mentions légales — ne sont pas des améliorations : sans eux, l'application ne
+peut pas être ouverte au public ni soumise aux magasins d'applications.
+
 ## Où je tourne, et ce que le propriétaire a réellement
 
 Les sessions de travail s'exécutent **dans le cloud**, dans un conteneur qui a
