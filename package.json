@@ -40,7 +40,8 @@
     "verifier-metiers": "node scripts/verifier-metiers.mjs",
     "verifier-presentation": "node scripts/verifier-presentation.mjs",
     "verifier-annonces": "node scripts/verifier-annonces.mjs",
-    "verifier-typographie": "node scripts/verifier-typographie.mjs"
+    "verifier-typographie": "node scripts/verifier-typographie.mjs",
+    "captures": "node scripts/captures.mjs"
   },
   "private": true,
   "devDependencies": {
