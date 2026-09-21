@@ -23,7 +23,8 @@ import {
 } from '../components/icons';
 import { METIERS } from '../data/demo';
 import {
-  choisirImage, choisirVideo, choisirClips, choisirMusique, CLIPS_MAX, DUREE_CLIP_MAX,
+  choisirImage, choisirPhotos, choisirVideo, choisirClips, choisirMusique,
+  CLIPS_MAX, DUREE_CLIP_MAX, PHOTOS_MAX,
 } from '../lib/media';
 
 const TYPES = [
@@ -41,8 +42,15 @@ export const FORMATS_VISUELS = new Set(['photo', 'video', 'montage', 'avantapres
 /** Ceux qui alimentent le fil « Vidéos ». */
 export const FORMATS_VIDEO = new Set(['video', 'montage']);
 
-/** Combien de médias chaque format attend. */
-const NB_MEDIAS = { photo: 1, video: 1, avantapres: 2, montage: CLIPS_MAX };
+/**
+ * Combien de médias chaque format attend.
+ *
+ * `photo` en accepte désormais plusieurs : elles se font défiler au doigt
+ * dans le fil (voir components/Carrousel.js). `avantapres` en garde
+ * exactement deux — c'est la comparaison qui fait le format, une troisième
+ * photo n'aurait pas de place où aller.
+ */
+const NB_MEDIAS = { photo: PHOTOS_MAX, video: 1, avantapres: 2, montage: CLIPS_MAX };
 
 const DESTINATIONS = [
   ['fil', Send, 'Le fil', 'Visible par tous, avec likes et commentaires.'],
@@ -83,6 +91,14 @@ export default function CreerScreen({
   const ajouterPhoto = (camera) => proteger(async () => {
     const uri = await choisirImage({ camera, usage: 'photo' });
     if (uri) setMedias((m) => [...m, uri].slice(0, maximum));
+  });
+
+  /* La galerie en sélection multiple, quand le format en accepte plusieurs.
+     Choisir six photos une par une, en rouvrant la galerie à chaque fois,
+     est exactement le genre de corvée qui fait renoncer à publier. */
+  const ajouterPhotos = () => proteger(async () => {
+    const uris = await choisirPhotos({ restants: maximum - medias.length });
+    if (uris.length) setMedias((m) => [...m, ...uris].slice(0, maximum));
   });
 
   const ajouterVideo = (camera) => proteger(async () => {
@@ -153,7 +169,9 @@ export default function CreerScreen({
                   ? `Jusqu'à ${CLIPS_MAX} clips, ${DUREE_CLIP_MAX} secondes chacun`
                   : createType === 'avantapres'
                     ? 'Deux photos : avant, puis après'
-                    : 'Aucun média choisi'}
+                    : createType === 'photo'
+                      ? `Jusqu'à ${PHOTOS_MAX} photos, qu'on fait défiler au doigt`
+                      : 'Aucun média choisi'}
               </Text>
             </View>
           ) : (
@@ -195,7 +213,12 @@ export default function CreerScreen({
             {(createType === 'photo' || createType === 'avantapres') && (
               <>
                 <BtnMini label="Prendre une photo" onPress={() => ajouterPhoto(true)} disabled={plein || occupe} />
-                <BtnMini outline label="Galerie" onPress={() => ajouterPhoto(false)} disabled={plein || occupe} />
+                <BtnMini
+                  outline
+                  label="Galerie"
+                  onPress={() => (maximum > 1 ? ajouterPhotos() : ajouterPhoto(false))}
+                  disabled={plein || occupe}
+                />
               </>
             )}
             {createType === 'video' && (

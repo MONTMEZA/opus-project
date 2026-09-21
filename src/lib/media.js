@@ -25,6 +25,15 @@ export const TAILLE_MAX_MO = 45;
 export const DUREE_CLIP_MAX = 20;
 export const CLIPS_MAX = 6;
 
+/**
+ * Combien de photos dans une même publication.
+ *
+ * Un chantier ne se montre pas en une image : le carrelage, la douche, la
+ * robinetterie, les joints. Six, c'est assez pour raconter un chantier et
+ * assez peu pour que personne n'abandonne au milieu du carrousel.
+ */
+export const PHOTOS_MAX = 6;
+
 /** Qualité de capture vidéo : moyenne, volontairement (voir ci-dessus). */
 const QUALITE_VIDEO = ImagePicker.UIImagePickerControllerQualityType
   ? ImagePicker.UIImagePickerControllerQualityType.Medium
@@ -91,6 +100,31 @@ export async function choisirVideo({ camera = false, dureeMax = 60 } = {}) {
 
   if (res.canceled || !res.assets || res.assets.length === 0) return null;
   return res.assets[0];
+}
+
+/**
+ * Plusieurs photos d'un coup, pour une publication à faire défiler.
+ *
+ * ATTENTION à un détail qui surprend : avec `allowsMultipleSelection`, le
+ * recadrage (`allowsEditing`) est IGNORÉ par le système, sur iPhone comme sur
+ * Android. Les photos gardent donc leur cadrage d'origine — ce qui tombe
+ * bien ici : c'est le carrousel qui impose un cadre commun à l'affichage, et
+ * recadrer six photos à la main serait une corvée.
+ */
+export async function choisirPhotos({ restants = PHOTOS_MAX } = {}) {
+  if (!(await autorisation(false))) {
+    throw new Error('Accès aux photos refusé. Autorisez-le dans les réglages du téléphone.');
+  }
+
+  const res = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsMultipleSelection: true,
+    selectionLimit: Math.max(1, restants),
+    quality: 0.8,
+  });
+
+  if (res.canceled || !res.assets) return [];
+  return res.assets.map((a) => a.uri);
 }
 
 /**

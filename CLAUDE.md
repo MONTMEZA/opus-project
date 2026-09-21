@@ -180,10 +180,43 @@ réelle, elle, ne se juge que sur le téléphone.
 --accent: #E85C1F   --accent-2: #1B4B6B   --muted: #726E63
 ```
 
-Titres et boutons en **Oswald**, textes en **Inter**. Angles vifs partout sauf
-les avatars. La bande de chantier diagonale
+Titres et boutons en **Oswald**, textes en **Inter**. La bande de chantier
+diagonale
 (`repeating-linear-gradient(135deg, #E85C1F 0 10px, #1A1B19 10px 20px)`,
 5–6 px) est la signature de l'application.
+
+### Les bords : une règle, pas un goût
+
+La règle « angles vifs partout sauf les avatars » a été précisée avec le
+propriétaire, parce qu'elle empêchait une chose qu'il voulait — des boutons
+plus arrondis — sans protéger ce qu'elle servait vraiment à protéger.
+
+> **Angle vif = la STRUCTURE.** Cartes, champs de saisie, blocs, sections,
+> bandeaux, listes. Tout ce qui PORTE l'information.
+>
+> **Arrondi = ce qui FLOTTE au-dessus, et sur quoi on appuie.** Boutons,
+> puces de filtre, pastilles, étiquettes posées sur une image, menus
+> surgissants. Avatars toujours ronds.
+
+Ce n'est pas un assouplissement : c'est ce qui rend l'interface lisible au
+doigt. Un bord arrondi dit « je suis détaché du fond, appuie sur moi » ; un
+bord vif dit « je suis le fond, lis-moi ». Arrondir une carte ou un champ
+reste interdit — c'est là que se perdrait l'identité.
+
+Les valeurs sont dans `src/theme.js` (`R.vif`, `R.doux`, `R.gelule`) : ne pas
+écrire un rayon en dur.
+
+### Les échelles : `src/theme.js` fait foi
+
+Un relevé sur `src/` avait trouvé **20 tailles de police**, **24 valeurs
+d'espacement** (dont 97 usages sur des nombres impairs), **14 rayons** et
+**5 opacités d'ombre utilisées chacune une seule fois**.
+
+`theme.js` porte désormais `T` (8 tailles), `interligne()`, `S` (grille de
+4 px), `R` (3 rayons) et `SH` (3 ombres). **Toute nouvelle valeur passe par
+ces échelles.** Les fichiers déjà écrits migrent au fur et à mesure : une
+valeur en dur qui traîne encore continue de fonctionner, elle n'est pas une
+urgence.
 
 ## Dépendances : vérifier avant de proposer
 

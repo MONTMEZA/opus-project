@@ -1411,6 +1411,8 @@ export default function OpusApp() {
         screen={screen}
         dark={videoMode}
         canPublish={canPublish}
+        avatarUrl={monAvatar}
+        avatarSeed={myProId || 'moi'}
         dots={{ decouvrir: canPublish && !demandesVues && demandes.length > 0 }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
         onNavigate={(key) => { setScreen(key); setActiveConvId(null); }}

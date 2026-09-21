@@ -158,9 +158,14 @@ export const initialPosts = [
         texte: 'Magnifique travail, vous intervenez sur Toulouse centre ?',
         time: 'Il y a 3 h', reponses: [] },
     ] },
+  /* Plusieurs photos : c'est CE post qui montre le carrousel en mode démo.
+     Un chantier ne se raconte pas en une image — ici la chaudière posée, le
+     circuit purgé, le raccordement, le tableau de commande. */
   { id: 4, type: 'post', format: 'photo', proId: 4, time: 'Hier',
     texte: "Remplacement chaudière + purge complète du circuit. Client satisfait, garantie 2 ans.",
-    media: '#1b4b6b,#2f4b3a', likes: 87, liked: false, comments: [] },
+    media: '#1b4b6b,#2f4b3a',
+    medias: ['#1b4b6b,#2f4b3a', '#3a3a38,#8a8578', '#6b4226,#b98255', '#2f4b3a,#6a9a7a'],
+    likes: 87, liked: false, comments: [] },
   { id: 'ad2', type: 'ad', annonceur: 'AssurBTP',
     accroche: "Assurance décennale dès 39€/mois pour les artisans du bâtiment.",
     cta: 'En savoir plus', media: '#111111,#3a3a38' },

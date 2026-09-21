@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, T, S, R, SH, interligne } from '../theme';
 import {
   Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn,
 } from './ui';
@@ -14,6 +14,7 @@ import {
   MessageCircle, Phone, FileText, User, Send, Maximize,
 } from './icons';
 import Media, { EtiquetteVideo } from './Media';
+import Carrousel from './Carrousel';
 
 /** Les formats qui se regardent aussi en plein écran dans le fil « Vidéos ». */
 const EST_VIDEO = new Set(['video', 'montage']);
@@ -26,6 +27,13 @@ export default function PostCard({
 }) {
 
   const estVideo = EST_VIDEO.has(post.format);
+
+  /* Les photos de la publication. `medias` porte la série complète ; `media`
+     reste la première, gardée pour les anciennes publications et pour les
+     aperçus (notifications, partage) qui n'attendent qu'une image. */
+  const photos = (post.medias && post.medias.length)
+    ? post.medias
+    : (post.media ? [post.media] : []);
 
   /* --- publication sponsorisée --- */
   if (post.type === 'ad') {
@@ -105,12 +113,10 @@ export default function PostCard({
           </Media>
         </Pressable>
       ) : (
-        <Media
-          media={post.media}
-          style={{ width: '100%', aspectRatio: 16 / 10 }}
-          lecture={actif}
-          muet
-        />
+        /* Une photo, ou plusieurs qu'on fait défiler au doigt. Avec une seule
+           image, le carrousel se retire complètement : ni points, ni
+           compteur. */
+        <Carrousel medias={photos} aspectRatio={16 / 10} />
       )}
 
       {/* barre d'actions */}
@@ -170,17 +176,20 @@ function ContactItem({ icon, label, onPress, last }) {
 }
 
 const s = StyleSheet.create({
+  /* Posé sur l'image, donc flottant, donc arrondi (règle dans theme.js). */
   indicePleinEcran: {
     position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center',
-    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)', paddingVertical: 4, paddingHorizontal: 8,
+    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)',
+    paddingVertical: 4, paddingHorizontal: S.sm, borderRadius: R.gelule,
   },
-  indicePleinEcranTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+  indicePleinEcranTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
   avantApres: { flexDirection: 'row', gap: 2 },
   etiquetteAA: {
-    position: 'absolute', left: 8, top: 8,
-    backgroundColor: 'rgba(26,27,25,0.72)', paddingVertical: 3, paddingHorizontal: 7,
+    position: 'absolute', left: S.sm, top: S.sm,
+    backgroundColor: 'rgba(26,27,25,0.72)',
+    paddingVertical: 3, paddingHorizontal: S.sm, borderRadius: R.gelule,
   },
-  etiquetteAATexte: { fontFamily: F.oswald6, fontSize: 10, color: '#fff' },
+  etiquetteAATexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
 
   head: {
@@ -190,12 +199,12 @@ const s = StyleSheet.create({
   headLeft: { flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 },
   headRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { fontFamily: F.inter6, fontSize: 13, color: C.ink },
-  meta: { fontSize: 10.5, color: C.muted, marginTop: 1, fontFamily: F.inter },
+  name: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
+  meta: { fontSize: T.micro, color: C.muted, marginTop: 1, fontFamily: F.inter },
 
   postText: {
-    fontSize: 12.8, paddingTop: 4, paddingHorizontal: 12, paddingBottom: 8,
-    lineHeight: 18, color: C.ink, fontFamily: F.inter,
+    fontSize: T.corps, paddingTop: S.xs, paddingHorizontal: S.md, paddingBottom: S.sm,
+    lineHeight: interligne(T.corps), color: C.ink, fontFamily: F.inter,
   },
 
   actions: {
@@ -203,28 +212,31 @@ const s = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 12, flexWrap: 'wrap',
   },
   action: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  actionText: { fontSize: 12, color: C.muted, fontFamily: F.inter },
+  actionText: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
   contactWrap: { marginLeft: 'auto' },
 
+  /* Ce menu FLOTTE au-dessus de la carte : légèrement arrondi, et une ombre
+     de la même famille que partout ailleurs. */
   contactPop: {
-    alignSelf: 'flex-end', width: 190, marginRight: 12, marginBottom: 10,
+    alignSelf: 'flex-end', width: 190, marginRight: S.md, marginBottom: 10,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    borderRadius: R.doux, overflow: 'hidden',
+    ...SH.flottant,
   },
   contactItem: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingVertical: 9, paddingHorizontal: 12,
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  contactItemText: { fontSize: 12, color: C.ink, fontFamily: F.inter },
+  contactItemText: { fontSize: T.courant, color: C.ink, fontFamily: F.inter },
 
   comments: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 8, paddingHorizontal: 12, paddingBottom: 10 },
 
   adTag: {
-    position: 'absolute', top: 8, left: 8, zIndex: 2,
-    backgroundColor: 'rgba(0,0,0,0.65)', paddingVertical: 3, paddingHorizontal: 8,
+    position: 'absolute', top: S.sm, left: S.sm, zIndex: 2,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingVertical: 3, paddingHorizontal: S.sm, borderRadius: R.gelule,
   },
-  adTagText: { color: '#fff', fontSize: 10, fontFamily: F.oswald },
-  adAnnonceur: { fontFamily: F.oswald6, fontSize: 13, paddingTop: 6, paddingHorizontal: 12, color: C.ink },
+  adTagText: { color: '#fff', fontSize: T.micro, fontFamily: F.oswald },
+  adAnnonceur: { fontFamily: F.oswald6, fontSize: T.corps, paddingTop: 6, paddingHorizontal: S.md, color: C.ink },
 });

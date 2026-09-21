@@ -20,7 +20,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { C, F } from '../theme';
+import { C, F, T, S, R, rond } from '../theme';
 import { Gradient } from './ui';
 import { Play } from './icons';
 
@@ -133,12 +133,15 @@ export function EtiquetteVideo() {
 const s = StyleSheet.create({
   voile: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   pastille: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 44, height: 44, borderRadius: rond(44),
     backgroundColor: 'rgba(26,27,25,0.55)', alignItems: 'center', justifyContent: 'center',
   },
+  /* Une étiquette posée sur une image flotte au-dessus du contenu : elle
+     suit donc la règle des arrondis (voir src/theme.js). */
   etiquette: {
-    position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center',
-    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)', paddingVertical: 4, paddingHorizontal: 8,
+    position: 'absolute', left: S.sm, top: S.sm, flexDirection: 'row', alignItems: 'center',
+    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)',
+    paddingVertical: 4, paddingHorizontal: S.sm, borderRadius: R.gelule,
   },
-  etiquetteTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+  etiquetteTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
 });

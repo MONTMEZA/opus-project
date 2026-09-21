@@ -8,7 +8,7 @@ import {
   View, Text, Pressable, TextInput, StyleSheet, useWindowDimensions, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { C, F, AVATAR_TONES, gradColors, GRAD_160, GRAD_120 } from '../theme';
+import { C, F, T, S, R, SH, AVATAR_TONES, gradColors, GRAD_160, GRAD_120 } from '../theme';
 import { Check } from './icons';
 
 /* --- dégradé (remplace les linear-gradient CSS) --- */
@@ -231,7 +231,7 @@ export function PillToggle({ options, value, onChange, small }) {
             onPress={() => onChange(o.key)}
             style={[s.pillBtn, small && s.pillBtnSm, on && s.pillBtnOn]}
           >
-            <Text style={[s.pillText, small && { fontSize: 10.5 }, on && { color: '#fff' }]}>
+            <Text style={[s.pillText, small && { fontSize: T.micro }, on && { color: '#fff' }]}>
               {o.label}
             </Text>
           </Pressable>
@@ -241,77 +241,101 @@ export function PillToggle({ options, value, onChange, small }) {
   );
 }
 
+/* --------------------------------------------------------------------------
+ *  LA RÈGLE DES BORDS, appliquée ici une fois pour toutes
+ *
+ *  Angle vif  = la STRUCTURE : champ de saisie, bloc, section, carte.
+ *  Arrondi    = ce sur quoi on APPUIE : bouton, puce, pastille, bandeau.
+ *
+ *  L'identité d'Opus ne tient pas à ce que TOUT soit carré, elle tient à ce
+ *  que le contenu le soit. Un bouton en gélule se distingue immédiatement du
+ *  fond qu'il surplombe — c'est de la lisibilité au doigt, pas une mode.
+ *  La règle complète est écrite dans src/theme.js.
+ * ------------------------------------------------------------------------ */
 const s = StyleSheet.create({
   banner: {
     position: 'absolute', top: 60, alignSelf: 'center', zIndex: 20,
-    backgroundColor: C.ink, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20,
+    backgroundColor: C.ink, paddingVertical: S.sm, paddingHorizontal: S.lg,
+    borderRadius: R.gelule,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    ...SH.detache,
   },
-  bannerText: { color: '#fff', fontSize: 11.5, fontFamily: F.inter },
+  bannerText: { color: '#fff', fontSize: T.petit, fontFamily: F.inter },
 
   btnMain: {
-    backgroundColor: C.ink, paddingVertical: 9, paddingHorizontal: 18,
+    backgroundColor: C.ink, paddingVertical: 10, paddingHorizontal: S.xl,
+    borderRadius: R.gelule,
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6,
   },
-  btnBlock: { width: '100%', marginTop: 8 },
-  btnMainText: { fontFamily: F.oswald6, fontSize: 12.5, color: '#fff' },
+  btnBlock: { width: '100%', marginTop: S.sm },
+  btnMainText: { fontFamily: F.oswald6, fontSize: T.courant, color: '#fff' },
 
   btnOutline: {
-    paddingVertical: 9, paddingHorizontal: 18, borderWidth: 1.5, borderColor: C.ink,
+    paddingVertical: 10, paddingHorizontal: S.xl, borderWidth: 1.5, borderColor: C.ink,
+    borderRadius: R.gelule,
     alignItems: 'center', justifyContent: 'center',
   },
   btnOutlineOn: { backgroundColor: C.ink },
-  btnOutlineText: { fontFamily: F.oswald6, fontSize: 12.5, color: C.ink },
+  btnOutlineText: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
 
   btnMini: {
-    backgroundColor: C.accent, paddingVertical: 7, paddingHorizontal: 11,
+    backgroundColor: C.accent, paddingVertical: S.sm, paddingHorizontal: S.md,
+    borderRadius: R.gelule,
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5,
   },
   btnMiniOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: C.ink },
-  btnMiniText: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
+  btnMiniText: { fontFamily: F.oswald6, fontSize: T.petit, color: '#111' },
 
   chip: {
-    paddingVertical: 6, paddingHorizontal: 11,
+    paddingVertical: 6, paddingHorizontal: S.md,
+    borderRadius: R.gelule,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
   },
   chipOn: { backgroundColor: C.ink, borderColor: C.ink },
-  chipText: { fontFamily: F.oswald, fontSize: 11, color: C.ink },
+  chipText: { fontFamily: F.oswald, fontSize: T.petit, color: C.ink },
 
-  chipFollow: { paddingVertical: 5, paddingHorizontal: 10, backgroundColor: C.ink },
+  chipFollow: {
+    paddingVertical: 5, paddingHorizontal: S.md,
+    borderRadius: R.gelule, backgroundColor: C.ink,
+  },
   chipFollowed: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
   chipFollowVideo: { backgroundColor: 'rgba(255,255,255,0.2)' },
-  chipFollowText: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+  chipFollowText: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
 
-  iconBtn: { padding: 4, position: 'relative' },
+  iconBtn: { padding: S.xs, position: 'relative' },
 
   empty: {
-    fontSize: 12.5, color: C.muted, textAlign: 'center',
+    fontSize: T.corps, color: C.muted, textAlign: 'center',
     paddingVertical: 30, paddingHorizontal: 20, lineHeight: 19, fontFamily: F.inter,
   },
 
   sectionLabel: {
-    paddingTop: 14, paddingHorizontal: 16, paddingBottom: 8,
+    paddingTop: 14, paddingHorizontal: S.lg, paddingBottom: S.sm,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  sectionLabelText: { fontFamily: F.oswald6, fontSize: 12.5, color: C.ink },
+  sectionLabelText: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
 
+  /* Les champs gardent leurs angles vifs : c'est de la structure, ils
+     portent ce que l'artisan écrit. Les arrondir les ferait ressembler à
+     des boutons, et on chercherait où appuyer. */
   field: {
-    borderWidth: 1, borderColor: C.line, paddingVertical: 9, paddingHorizontal: 10,
-    fontSize: 12, fontFamily: F.inter, backgroundColor: C.surface, color: C.ink,
+    borderWidth: 1, borderColor: C.line, paddingVertical: 10, paddingHorizontal: 10,
+    fontSize: T.courant, fontFamily: F.inter, backgroundColor: C.surface, color: C.ink,
   },
   textarea: {
     width: '100%', minHeight: 70, borderWidth: 1, borderColor: C.line, padding: 10,
-    fontFamily: F.inter, fontSize: 12.5, marginBottom: 10,
+    fontFamily: F.inter, fontSize: T.corps, marginBottom: 10,
     backgroundColor: C.surface, color: C.ink,
   },
 
-  pill: { flexDirection: 'row', backgroundColor: C.bg, borderRadius: 20, padding: 3, alignSelf: 'flex-start' },
-  pillBtn: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 16 },
-  pillBtnSm: { paddingVertical: 5, paddingHorizontal: 11 },
+  pill: {
+    flexDirection: 'row', backgroundColor: C.bg, borderRadius: R.gelule,
+    padding: 3, alignSelf: 'flex-start',
+  },
+  pillBtn: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: R.gelule },
+  pillBtnSm: { paddingVertical: 5, paddingHorizontal: S.md },
   pillBtnOn: { backgroundColor: C.ink },
-  pillText: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted },
+  pillText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
 });
 
 export const uiStyles = s;
