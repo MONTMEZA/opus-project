@@ -1357,3 +1357,494 @@ language sql stable set search_path = public as $$
     and public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) <= sa.rayon_km
   order by distance asc
 $$;
+
+-- ==========================================================================
+--  13. MODÉRATION, BLOCAGE, ET DROITS DES PERSONNES
+--
+--  Cette section n'ajoute pas une fonctionnalité de confort : sans elle,
+--  l'application ne peut pas être ouverte au public. Apple et Google
+--  refusent toute application à contenu publié par les utilisateurs qui n'a
+--  ni signalement ni blocage, et le RGPD impose la suppression du compte et
+--  l'accès à ses propres données.
+--
+--  Tout est tenu ICI, dans la base. Un client modifié ne doit pas pouvoir
+--  contourner un blocage : c'est la règle de fond du projet.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  13.1  BLOCAGE
+--
+--  Le blocage est SYMÉTRIQUE : si A bloque B, aucun des deux ne voit plus
+--  les contenus de l'autre, et aucun des deux ne peut plus écrire à l'autre.
+--  Un blocage à sens unique laisse celui qu'on fuit continuer à lire, à
+--  commenter et à recommencer sous les yeux de sa victime.
+-- --------------------------------------------------------------------------
+create table if not exists public.blocages (
+  bloqueur_id uuid not null references public.users(id) on delete cascade,
+  bloque_id   uuid not null references public.users(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  primary key (bloqueur_id, bloque_id)
+);
+
+alter table public.blocages drop constraint if exists blocage_pas_soi_meme;
+alter table public.blocages add constraint blocage_pas_soi_meme
+  check (bloqueur_id <> bloque_id);
+
+-- L'index sur la colonne bloquée : la fonction ci-dessous cherche dans les
+-- DEUX sens, et la clé primaire ne couvre que le premier.
+create index if not exists idx_blocages_bloque on public.blocages (bloque_id);
+
+/**
+ * Cette personne est-elle masquée pour moi ?
+ *
+ * POURQUOI SECURITY DEFINER, ET POURQUOI ELLE RESTE APPELABLE
+ * -----------------------------------------------------------
+ * La table `blocages` ne laisse lire à chacun que SES PROPRES blocages —
+ * sinon n'importe qui pourrait lister ceux qui l'ont bloqué. Mais le
+ * masquage doit marcher dans les deux sens : il faut donc lire des lignes
+ * que l'appelant n'a pas le droit de voir. D'où SECURITY DEFINER.
+ *
+ * Et contrairement aux fonctions de trigger, on ne peut PAS lui retirer le
+ * droit d'exécution : vérifié sur PostgreSQL, une règle RLS qui appelle une
+ * fonction dont l'appelant n'a pas le droit d'exécution échoue avec
+ * « permission denied for function ». Les politiques ci-dessous s'en
+ * servent : elle doit rester exécutable par `authenticated`.
+ *
+ * Ce qu'elle laisse filtrer, et pourquoi c'est acceptable : elle ne répond
+ * que sur l'appelant lui-même (`auth.uid()`), un identifiant à la fois, et
+ * seulement à quelqu'un qui connaît déjà cet identifiant. Elle ne permet
+ * jamais de LISTER qui que ce soit.
+ */
+create or replace function public.est_masque(p_autre uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p_autre is not null
+     and auth.uid() is not null
+     and exists (
+       select 1 from public.blocages b
+       where (b.bloqueur_id = auth.uid() and b.bloque_id   = p_autre)
+          or (b.bloqueur_id = p_autre    and b.bloque_id   = auth.uid())
+     )
+$$;
+
+-- --------------------------------------------------------------------------
+--  13.2  SIGNALEMENT
+--
+--  `cible_id` est un uuid : toutes les tables de contenu du projet ont une
+--  clé primaire uuid. Pas de clé étrangère, volontairement — un signalement
+--  doit SURVIVRE à la suppression du contenu signalé, sinon celui qui
+--  supprime sa publication efface la preuve en même temps.
+-- --------------------------------------------------------------------------
+create table if not exists public.signalements (
+  id         uuid primary key default gen_random_uuid(),
+  auteur_id  uuid not null references public.users(id) on delete cascade,
+  cible_type text not null,
+  cible_id   uuid not null,
+  -- Recopiés au moment du signalement : le contenu peut disparaître ensuite,
+  -- et un signalement sans trace de ce qui a été signalé est inexploitable.
+  cible_auteur_id uuid,
+  extrait    text,
+  motif      text not null,
+  details    text,
+  statut     text not null default 'nouveau',
+  created_at timestamptz not null default now(),
+  traite_at  timestamptz,
+  unique (auteur_id, cible_type, cible_id)
+);
+
+-- Les contraintes sont refaites explicitement : sur une base déjà en place,
+-- `create table if not exists` ne rejoue rien du tout.
+alter table public.signalements drop constraint if exists signalements_cible_type_check;
+alter table public.signalements add constraint signalements_cible_type_check
+  check (cible_type in ('publication', 'commentaire', 'message', 'profil', 'demande', 'annonce'));
+
+alter table public.signalements drop constraint if exists signalements_motif_check;
+alter table public.signalements add constraint signalements_motif_check
+  check (motif in (
+    'spam',                -- publicité répétée, contenu sans rapport
+    'arnaque',             -- tentative d'escroquerie, faux devis
+    'haine',               -- injures, racisme, harcèlement
+    'violence',            -- menaces, intimidation
+    'nudite',              -- contenu sexuel
+    'faux_profil',         -- usurpation d'entreprise ou de personne
+    'travail_dissimule',   -- propre au bâtiment : pas d'assurance, pas de facture
+    'contrefacon',         -- photos de chantier volées à un confrère
+    'autre'
+  ));
+
+alter table public.signalements drop constraint if exists signalements_statut_check;
+alter table public.signalements add constraint signalements_statut_check
+  check (statut in ('nouveau', 'en_examen', 'traite', 'rejete'));
+
+create index if not exists idx_signalements_statut
+  on public.signalements (statut, created_at desc);
+create index if not exists idx_signalements_cible
+  on public.signalements (cible_type, cible_id);
+
+-- --------------------------------------------------------------------------
+--  13.3  CE QUI RESTE QUAND UN COMPTE DISPARAÎT
+--
+--  Supprimer un compte ne doit pas effacer l'historique de quelqu'un
+--  d'autre. Un avis laissé chez un artisan compte dans sa note et dans sa
+--  réputation : le faire disparaître parce que son auteur s'en va reviendrait
+--  à modifier le passé d'un tiers qui n'a rien demandé.
+--
+--  On ANONYMISE donc plutôt qu'on ne supprime : le lien vers la personne est
+--  coupé (`author_id` devient nul), le contenu reste. C'est exactement ce que
+--  demande le RGPD — la donnée n'est plus personnelle une fois qu'elle n'est
+--  plus rattachable à quelqu'un.
+--
+--  D'où ces deux colonnes rendues facultatives, et leurs clés étrangères
+--  refaites en « on delete set null » au lieu de « on delete cascade ».
+-- --------------------------------------------------------------------------
+do $$
+begin
+  -- Les avis
+  alter table public.reviews alter column author_id drop not null;
+  alter table public.reviews drop constraint if exists reviews_author_id_fkey;
+  alter table public.reviews add constraint reviews_author_id_fkey
+    foreign key (author_id) references public.users(id) on delete set null;
+exception when undefined_table or undefined_column then null;
+end $$;
+
+do $$
+begin
+  -- Les commentaires
+  alter table public.comments alter column author_id drop not null;
+  alter table public.comments drop constraint if exists comments_author_id_fkey;
+  alter table public.comments add constraint comments_author_id_fkey
+    foreign key (author_id) references public.users(id) on delete set null;
+exception when undefined_table or undefined_column then null;
+end $$;
+
+-- Le nom affiché à la place. On le stocke plutôt que de le deviner à
+-- l'affichage : l'application, les exports et un futur back-office doivent
+-- dire la même chose.
+alter table public.reviews  add column if not exists auteur_supprime boolean not null default false;
+alter table public.comments add column if not exists auteur_supprime boolean not null default false;
+
+-- --------------------------------------------------------------------------
+--  13.4  ACCEPTATION DES CONDITIONS
+--
+--  Il faut pouvoir PROUVER qu'une personne a accepté, et QUELLE version elle
+--  a acceptée : des conditions modifiées après coup ne valent rien si on ne
+--  sait pas laquelle était affichée ce jour-là.
+-- --------------------------------------------------------------------------
+alter table public.users add column if not exists cgu_version     text;
+alter table public.users add column if not exists cgu_acceptees_le timestamptz;
+
+-- --------------------------------------------------------------------------
+--  13.5  LES RÈGLES D'ACCÈS
+--
+--  Les politiques de lecture définies plus haut sont REFAITES ici, pour
+--  tenir compte du blocage. C'est voulu : `drop policy if exists` avant
+--  chaque `create policy` rend le fichier rejouable, et regrouper le
+--  masquage au même endroit évite d'oublier une table.
+-- --------------------------------------------------------------------------
+alter table public.blocages     enable row level security;
+alter table public.signalements enable row level security;
+
+-- Mes blocages ne regardent que moi. Personne ne doit pouvoir LISTER ceux
+-- qui l'ont bloqué : la politique ne porte que sur `bloqueur_id`.
+drop policy if exists "mes blocages" on public.blocages;
+create policy "mes blocages" on public.blocages
+  for all using (auth.uid() = bloqueur_id) with check (auth.uid() = bloqueur_id);
+
+-- Un signalement se dépose et se relit par son auteur. Il ne se modifie ni
+-- ne s'efface : `statut` est la main de celui qui modère, et un signalement
+-- retiré sous la pression n'aurait aucune valeur.
+drop policy if exists "lecture mes signalements" on public.signalements;
+create policy "lecture mes signalements" on public.signalements
+  for select using (auth.uid() = auteur_id);
+drop policy if exists "depot signalement" on public.signalements;
+create policy "depot signalement" on public.signalements
+  for insert with check (auth.uid() = auteur_id and statut = 'nouveau');
+
+-- LE CONTENU PUBLIC, MOINS CELUI DES PERSONNES MASQUÉES.
+--
+-- Chaque table reçoit DEUX politiques de lecture, et c'est nécessaire :
+--
+--   * `to authenticated` — la vraie règle, qui interroge les blocages ;
+--   * `to anon`          — la même lecture publique qu'avant, SANS appeler
+--                          `est_masque`.
+--
+-- Pourquoi séparer ? Parce qu'on retire à `anon` le droit d'exécuter
+-- `est_masque` (voir plus bas : c'est une fonction SECURITY DEFINER, et
+-- Supabase signale à juste titre toute fonction de ce type appelable sans
+-- être connecté). Or une règle RLS qui appelle une fonction interdite ne
+-- rend pas « rien » : elle ÉCHOUE, avec « permission denied for function ».
+-- Vérifié sur PostgreSQL. Une politique séparée pour les visiteurs est donc
+-- la seule façon de retirer ce droit sans casser la lecture publique.
+--
+-- Un visiteur non connecté n'a de toute façon bloqué personne : il n'y a
+-- rien à masquer pour lui.
+drop policy if exists "lecture posts" on public.posts;
+create policy "lecture posts" on public.posts
+  for select to authenticated using (not public.est_masque(author_id));
+drop policy if exists "lecture posts visiteur" on public.posts;
+create policy "lecture posts visiteur" on public.posts
+  for select to anon using (true);
+
+drop policy if exists "lecture comments" on public.comments;
+create policy "lecture comments" on public.comments
+  for select to authenticated using (not public.est_masque(author_id));
+drop policy if exists "lecture comments visiteur" on public.comments;
+create policy "lecture comments visiteur" on public.comments
+  for select to anon using (true);
+
+drop policy if exists "lecture reviews" on public.reviews;
+create policy "lecture reviews" on public.reviews
+  for select to authenticated using (not public.est_masque(author_id));
+drop policy if exists "lecture reviews visiteur" on public.reviews;
+create policy "lecture reviews visiteur" on public.reviews
+  for select to anon using (true);
+
+drop policy if exists "lecture demandes" on public.demandes;
+create policy "lecture demandes" on public.demandes
+  for select to authenticated using (not public.est_masque(client_id));
+drop policy if exists "lecture demandes visiteur" on public.demandes;
+create policy "lecture demandes visiteur" on public.demandes
+  for select to anon using (true);
+
+drop policy if exists "lecture reponses" on public.demande_reponses;
+create policy "lecture reponses" on public.demande_reponses
+  for select to authenticated using (not public.est_masque(professional_id));
+drop policy if exists "lecture reponses visiteur" on public.demande_reponses;
+create policy "lecture reponses visiteur" on public.demande_reponses
+  for select to anon using (true);
+
+-- La Place des pros n'a jamais été visible d'un visiteur : pas de politique
+-- « anon » ici, l'absence de règle suffit à tout refuser.
+drop policy if exists "annonces lecture pro" on public.annonces_pro;
+create policy "annonces lecture pro" on public.annonces_pro
+  for select to authenticated using (public.est_un_pro() and not public.est_masque(auteur_id));
+
+drop policy if exists "annonce reponses lecture pro" on public.annonce_reponses;
+create policy "annonce reponses lecture pro" on public.annonce_reponses
+  for select to authenticated using (public.est_un_pro() and not public.est_masque(professional_id));
+
+-- La messagerie : bloquer quelqu'un, c'est d'abord ne plus recevoir ses
+-- messages. La conversation disparaît des deux côtés, et plus personne ne
+-- peut y écrire — la règle est dans la base, pas dans l'écran.
+drop policy if exists "mes conversations" on public.conversations;
+create policy "mes conversations" on public.conversations
+  for select to authenticated using (
+    (auth.uid() = client_id and not public.est_masque(professional_id))
+    or (auth.uid() = professional_id and not public.est_masque(client_id))
+  );
+
+drop policy if exists "creation conversation" on public.conversations;
+create policy "creation conversation" on public.conversations
+  for insert to authenticated with check (
+    (auth.uid() = client_id and not public.est_masque(professional_id))
+    or (auth.uid() = professional_id and not public.est_masque(client_id))
+  );
+
+drop policy if exists "lecture mes messages" on public.messages;
+create policy "lecture mes messages" on public.messages
+  for select to authenticated using (
+    not public.est_masque(sender_id)
+    and exists (
+      select 1 from public.conversations c
+      where c.id = messages.conversation_id
+        and (c.client_id = auth.uid() or c.professional_id = auth.uid())));
+
+drop policy if exists "envoi message" on public.messages;
+create policy "envoi message" on public.messages
+  for insert to authenticated with check (
+    auth.uid() = sender_id
+    and exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id
+        and (c.client_id = auth.uid() or c.professional_id = auth.uid())
+        and not public.est_masque(c.client_id)
+        and not public.est_masque(c.professional_id)));
+
+-- Et l'on ne sollicite pas quelqu'un qu'on a bloqué, ni quelqu'un qui nous
+-- a bloqué : devis, rappel, urgence.
+drop policy if exists "creation devis" on public.quote_requests;
+create policy "creation devis" on public.quote_requests
+  for insert to authenticated with check (auth.uid() = client_id and not public.est_masque(professional_id));
+
+drop policy if exists "creation rappel" on public.callback_requests;
+create policy "creation rappel" on public.callback_requests
+  for insert to authenticated with check (auth.uid() = client_id and not public.est_masque(professional_id));
+
+drop policy if exists "creation sos" on public.sos_requests;
+create policy "creation sos" on public.sos_requests
+  for insert to authenticated with check (auth.uid() = client_id and not public.est_masque(professional_id));
+
+-- Le signalement survit lui aussi à son auteur : sinon, il suffirait de
+-- supprimer son compte pour effacer ce qu'on a dénoncé — ou, à l'inverse,
+-- un modérateur perdrait le dossier parce que le témoin est parti.
+do $$
+begin
+  alter table public.signalements alter column auteur_id drop not null;
+  alter table public.signalements drop constraint if exists signalements_auteur_id_fkey;
+  alter table public.signalements add constraint signalements_auteur_id_fkey
+    foreign key (auteur_id) references public.users(id) on delete set null;
+exception when undefined_table or undefined_column then null;
+end $$;
+
+-- --------------------------------------------------------------------------
+--  13.6  SUPPRIMER SON COMPTE
+--
+--  Obligation RGPD, et exigence des deux magasins d'applications.
+--
+--  Cette fonction fait le ménage dans les données ; elle NE SUPPRIME PAS le
+--  compte d'authentification lui-même — `auth.users` appartient à Supabase
+--  et se supprime depuis la fonction Edge `compte`, qui possède la clé de
+--  service. L'ordre est donc : cette fonction, puis les fichiers du
+--  stockage, puis le compte.
+--
+--  CE QUI EST ANONYMISÉ, ET NON SUPPRIMÉ
+--  Les avis, les commentaires et les signalements concernent des TIERS.
+--  Les effacer reviendrait à modifier le passé de quelqu'un qui n'a rien
+--  demandé : un artisan perdrait des avis et verrait sa note remonter le
+--  jour où un client mécontent quitte l'application. On coupe donc le lien
+--  vers la personne — la donnée cesse d'être personnelle — et on garde le
+--  contenu.
+-- --------------------------------------------------------------------------
+create or replace function public.preparer_suppression_compte()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi uuid := auth.uid();
+  resume jsonb;
+begin
+  if moi is null then
+    raise exception 'Personne n''est connecté.';
+  end if;
+
+  -- 1. Ce qui reste, sans son auteur.
+  update public.reviews      set author_id = null, auteur_supprime = true where author_id = moi;
+  update public.comments     set author_id = null, auteur_supprime = true where author_id = moi;
+  update public.signalements set auteur_id = null                          where auteur_id = moi;
+
+  -- 2. Ce qui disparaît. Les publications emportent leurs commentaires et
+  --    leurs « j'aime » : la publication n'existe plus, il n'y a plus rien
+  --    à commenter.
+  delete from public.posts               where author_id      = moi;
+  delete from public.demandes            where client_id      = moi;
+  delete from public.demande_reponses    where professional_id = moi;
+  delete from public.annonces_pro        where auteur_id      = moi;
+  delete from public.annonce_reponses    where professional_id = moi;
+  delete from public.quote_requests      where client_id = moi or professional_id = moi;
+  delete from public.callback_requests   where client_id = moi or professional_id = moi;
+  delete from public.sos_requests        where client_id = moi or professional_id = moi;
+  delete from public.sos_availability    where professional_id = moi;
+  delete from public.metier_demandes     where professional_id = moi;
+  delete from public.professional_partners where professional_id = moi or partner_id = moi;
+  delete from public.follows             where follower_id = moi or following_id = moi;
+  delete from public.post_likes          where user_id = moi;
+  delete from public.saved_posts         where user_id = moi;
+  delete from public.notifications       where user_id = moi;
+  delete from public.blocages            where bloqueur_id = moi or bloque_id = moi;
+
+  -- 3. Les conversations privées partent entières. Une conversation dont un
+  --    seul côté subsiste n'a plus de sens, et garder les messages de
+  --    quelqu'un qui s'en va serait précisément ce qu'il a demandé d'effacer.
+  delete from public.conversations       where client_id = moi or professional_id = moi;
+
+  resume := jsonb_build_object(
+    'compte', moi,
+    'prepare_le', now(),
+    'avis_anonymises', (select count(*) from public.reviews  where auteur_supprime),
+    'commentaires_anonymises', (select count(*) from public.comments where auteur_supprime)
+  );
+
+  -- 4. La fiche elle-même. `professional_profiles` part en cascade, et avec
+  --    elle les avis REÇUS : ils portaient sur une entreprise qui n'existe
+  --    plus.
+  delete from public.users where id = moi;
+
+  return resume;
+end $$;
+
+-- --------------------------------------------------------------------------
+--  13.7  RÉCUPÉRER SES DONNÉES
+--
+--  Droit d'accès et de portabilité (RGPD, articles 15 et 20). Il ne suffit
+--  pas de promettre les données : il faut pouvoir les rendre, dans un format
+--  lisible et réutilisable. D'où du JSON, et non une page d'écran.
+--
+--  SECURITY INVOKER : chacun a déjà le droit de lire ses propres lignes.
+--  Emprunter des privilèges serait inutile — et dangereux, puisque la
+--  fonction est publiée en API REST.
+-- --------------------------------------------------------------------------
+create or replace function public.mes_donnees()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'export_du', now(),
+    'compte',    (select to_jsonb(u) from public.users u where u.id = auth.uid()),
+    'fiche_professionnelle',
+                 (select to_jsonb(p) from public.professional_profiles p where p.id = auth.uid()),
+    'publications',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.posts x where x.author_id = auth.uid()), '[]'::jsonb),
+    'commentaires',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.comments x where x.author_id = auth.uid()), '[]'::jsonb),
+    'avis_laisses',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.reviews x where x.author_id = auth.uid()), '[]'::jsonb),
+    'demandes',  coalesce((select jsonb_agg(to_jsonb(x)) from public.demandes x where x.client_id = auth.uid()), '[]'::jsonb),
+    'annonces',  coalesce((select jsonb_agg(to_jsonb(x)) from public.annonces_pro x where x.auteur_id = auth.uid()), '[]'::jsonb),
+    'devis',     coalesce((select jsonb_agg(to_jsonb(x)) from public.quote_requests x
+                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
+    'rappels',   coalesce((select jsonb_agg(to_jsonb(x)) from public.callback_requests x
+                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
+    'messages',  coalesce((select jsonb_agg(to_jsonb(x)) from public.messages x where x.sender_id = auth.uid()), '[]'::jsonb),
+    'abonnements',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.follows x where x.follower_id = auth.uid()), '[]'::jsonb),
+    'personnes_bloquees',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.blocages x where x.bloqueur_id = auth.uid()), '[]'::jsonb),
+    'signalements_deposes',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.signalements x where x.auteur_id = auth.uid()), '[]'::jsonb)
+  )
+$$;
+
+-- --------------------------------------------------------------------------
+--  13.8  QUI A LE DROIT D'APPELER QUOI
+--
+--  `est_masque` et `preparer_suppression_compte` sont SECURITY DEFINER :
+--  elles s'exécutent avec les droits du propriétaire de la base. Supabase
+--  signale toute fonction de ce type appelable SANS ÊTRE CONNECTÉ, et il a
+--  raison de le faire. On retire donc le droit à `anon`.
+--
+--  Elles restent appelables par `authenticated`, et c'est VOULU :
+--    - `est_masque` est appelée par les règles RLS ci-dessus. Vérifié sur
+--      PostgreSQL : une règle qui appelle une fonction interdite à
+--      l'appelant échoue au lieu de filtrer. Ce qu'elle laisse filtrer est
+--      minime : elle ne répond que sur l'appelant, un identifiant à la
+--      fois, et ne permet jamais de lister qui que ce soit ;
+--    - `preparer_suppression_compte` doit évidemment pouvoir être appelée
+--      par la personne qui supprime son propre compte. Elle ne touche que
+--      les lignes de `auth.uid()`, et refuse tout net sans session.
+-- --------------------------------------------------------------------------
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.est_masque(uuid)',
+    'public.preparer_suppression_compte()',
+    'public.mes_donnees()'
+  ] loop
+    begin
+      execute format('grant execute on function %s to authenticated', f);
+      execute format('revoke execute on function %s from public', f);
+      execute format('revoke execute on function %s from anon', f);
+    exception when undefined_function or undefined_object then
+      null;
+    end;
+  end loop;
+end $$;
