@@ -16,7 +16,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import { Avatar, Field } from './ui';
-import { BadgeCheck, Send, X } from './icons';
+import { BadgeCheck, Send, X, Flag } from './icons';
 
 /** Le compteur affiché sous un post : les commentaires ET leurs réponses. */
 export function nombreCommentaires(commentaires = []) {
@@ -30,7 +30,7 @@ export function nombreCommentaires(commentaires = []) {
  * une zone de défilement imbriquée piégerait le geste.
  */
 export default function Commentaires({
-  commentaires = [], pros = {}, onEnvoyer, onVoirProfil, style, scroll,
+  commentaires = [], pros = {}, onEnvoyer, onVoirProfil, onSignaler, style, scroll,
 }) {
   const [draft, setDraft] = useState('');
   const [repondA, setRepondA] = useState(null);       // { id, auteur }
@@ -77,7 +77,7 @@ export default function Commentaires({
         const ouvert = deplies.has(c.id) || reponses.length <= 1;
         return (
           <View key={String(c.id)}>
-            <Ligne c={c} pros={pros} onVoirProfil={onVoirProfil} onRepondre={() => repondre(c)} />
+            <Ligne c={c} pros={pros} onVoirProfil={onVoirProfil} onSignaler={onSignaler} onRepondre={() => repondre(c)} />
 
             {reponses.length > 1 && !ouvert && (
               <Pressable style={s.voirPlus} onPress={() => basculer(c.id)}>
@@ -95,6 +95,7 @@ export default function Commentaires({
                 reponse
                 pros={pros}
                 onVoirProfil={onVoirProfil}
+                onSignaler={onSignaler}
                 onRepondre={() => repondre(r, c.id)}
               />
             ))}
@@ -139,7 +140,7 @@ export default function Commentaires({
   );
 }
 
-function Ligne({ c, reponse, pros, onVoirProfil, onRepondre }) {
+function Ligne({ c, reponse, pros, onVoirProfil, onSignaler, onRepondre }) {
   const pro = pros[c.auteurId];
   const taille = reponse ? 24 : 30;
   const cliquable = !!c.auteurId;
@@ -168,6 +169,22 @@ function Ligne({ c, reponse, pros, onVoirProfil, onRepondre }) {
           <Pressable onPress={onRepondre} hitSlop={6}>
             <Text style={s.repondre}>Répondre</Text>
           </Pressable>
+          {/* Un commentaire se signale comme le reste : c'est souvent là que
+              commencent les insultes, plus que dans les publications. */}
+          {!!onSignaler && !!c.auteurId && (
+            <Pressable
+              hitSlop={6}
+              onPress={() => onSignaler({
+                cibleType: 'commentaire',
+                cibleId: c.id,
+                auteurId: c.auteurId,
+                auteurNom: (pro ? pro.entreprise : c.auteur),
+                extrait: c.texte,
+              })}
+            >
+              <Flag size={11} color={C.muted} />
+            </Pressable>
+          )}
         </View>
       </View>
     </View>

@@ -28,6 +28,9 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
 import ProfilPublicScreen from './screens/ProfilPublicScreen';
+import ConfidentialiteScreen from './screens/ConfidentialiteScreen';
+import LegalScreen, { TITRES_LEGAUX } from './screens/LegalScreen';
+import Signaler from './components/Signaler';
 import ProfilEditScreen from './screens/ProfilEditScreen';
 import MesPublicationsScreen from './screens/MesPublicationsScreen';
 import GererPortfolioScreen from './screens/GererPortfolioScreen';
@@ -123,6 +126,16 @@ export default function OpusApp() {
   const [createDestination, setCreateDestination] = useState('deux');
   // Fichiers choisis pour la publication en cours, et sa bande-son.
   const [medias, setMedias] = useState([]);
+
+  /* Signalement : une seule modale pour toute l'application. Chaque écran
+     lui dit QUOI est signalé ; elle s'occupe du reste. */
+  const [aSignaler, setASignaler] = useState(null);
+  /* Quel texte légal est affiché (mentions / cgu / confidentialite). */
+  const [texteLegal, setTexteLegal] = useState('cgu');
+  /* Les textes légaux doivent être lisibles AVANT d'avoir un compte : c'est
+     une exigence des magasins d'applications, et c'est logique — on ne peut
+     pas accepter des conditions qu'on n'a pas pu lire. */
+  const [legalAvantConnexion, setLegalAvantConnexion] = useState(null);
   const [musique, setMusique] = useState(null);
   // Progression de l'envoi : { index, total, part } ou null.
   const [envoi, setEnvoi] = useState(null);
@@ -200,7 +213,9 @@ export default function OpusApp() {
     setTypeChoisi(type);
   };
 
-  const handleSignUp = async ({ email, motDePasse, nom, entreprise, metier, metiers, ville }) => {
+  const handleSignUp = async ({
+    email, motDePasse, nom, entreprise, metier, metiers, ville, cguVersion,
+  }) => {
     const { session } = await api.signUp({
       email, password: motDePasse, userType: typeChoisi, nom,
     });
@@ -208,6 +223,14 @@ export default function OpusApp() {
 
     if (typeChoisi === 'pro') {
       await api.ensureProProfile({ entreprise, metier, metiers, ville, nom });
+    }
+    /* La trace de l'acceptation, avec sa VERSION. Si elle échoue, le compte
+       existe quand même : refuser l'inscription entière pour ça serait pire.
+       On le consigne dans les journaux plutôt que de bloquer quelqu'un. */
+    if (cguVersion) {
+      try { await api.accepterConditions(cguVersion); } catch (e) {
+        console.warn('Acceptation des conditions non enregistrée :', e);
+      }
     }
     await start(typeChoisi);
     return {};
@@ -833,6 +856,54 @@ export default function OpusApp() {
     setFeedTab('pourvous');
   };
 
+  /* ---------- modération et droits des personnes ---------- */
+
+  /**
+   * Supprimer son compte.
+   *
+   * La suppression côté serveur se fait en deux temps (voir api.js). Quoi
+   * qu'il arrive ensuite, on repart de l'écran d'accueil et on vide tout ce
+   * qui est en mémoire : laisser des publications affichées après une
+   * suppression donnerait l'impression qu'elle n'a pas eu lieu.
+   */
+  const supprimerMonCompte = async () => {
+    try {
+      await api.supprimerMonCompte();
+      await deconnexion();
+      showBanner('Votre compte a été supprimé. Merci d’être passé par Opus.');
+    } catch (e) {
+      /* Cas particulier : les données sont parties mais le compte de
+         connexion subsiste. On le DIT, au lieu de laisser croire à un
+         échec complet — et on déconnecte quand même. */
+      if (e && e.partiel) {
+        await deconnexion();
+        showBanner(e.message);
+        return;
+      }
+      throw e;
+    }
+  };
+
+  /**
+   * Signaler un contenu. L'écran ouvre la modale en disant QUOI ; elle
+   * s'occupe du reste, y compris du blocage si la personne préfère ça.
+   */
+  const ouvrirSignalement = (cible) => setASignaler(cible);
+
+  const bloquerPersonne = async (userId) => {
+    await api.bloquer(userId);
+    /* On retire tout de suite ce qui vient de cette personne : la base ne le
+       renverra plus, mais ce qui est déjà affiché à l'écran, si. */
+    setPosts((ps) => ps.filter((post) => String(post.proId) !== String(userId)));
+    setDemandes((ds) => ds.filter((d) => String(d.auteurId) !== String(userId)));
+    setConversations((cs) => cs.filter((c) => String(c.proId) !== String(userId)));
+    setFollowingIds((ids) => {
+      const suite = new Set(ids);
+      suite.delete(userId);
+      return suite;
+    });
+  };
+
   /* ---------- demandes de particuliers ---------- */
   const publierDemande = async ({
     metier, ville, texte, codePostal, latitude, longitude, photos = [],
@@ -1153,6 +1224,22 @@ export default function OpusApp() {
   }
 
   if (!userType) {
+    /* Un texte légal consulté depuis l'écran d'inscription : il prend tout
+       l'écran, avec son propre retour. On ne perd pas ce qui était déjà
+       saisi, puisqu'AuthScreen reste monté derrière. */
+    if (legalAvantConnexion) {
+      return (
+        <View style={s.app}>
+          <StatusBar style="dark" />
+          <BackBar
+            title={TITRES_LEGAUX[legalAvantConnexion] || 'Informations légales'}
+            onBack={() => setLegalAvantConnexion(null)}
+          />
+          <LegalScreen texte={legalAvantConnexion} />
+        </View>
+      );
+    }
+
     return (
       <>
         <StatusBar style="light" />
@@ -1162,6 +1249,7 @@ export default function OpusApp() {
             onSignUp={handleSignUp}
             onSignIn={handleSignIn}
             onRetour={() => setTypeChoisi(null)}
+            onLireLegal={setLegalAvantConnexion}
           />
         ) : (
           <OnboardingScreen onChoose={choisirType} />
@@ -1176,6 +1264,7 @@ export default function OpusApp() {
   const showBack = screen === 'profilPro' || screen === 'creer' || screen === 'sos'
     || screen === 'profilEdit' || screen === 'profilPublic'
     || screen === 'mesPublications' || screen === 'gererPortfolio'
+    || screen === 'confidentialite' || screen === 'legal'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'profilPro'
@@ -1185,6 +1274,8 @@ export default function OpusApp() {
     : screen === 'profilEdit' ? 'Modifier mon profil'
     : screen === 'mesPublications' ? 'Mes publications'
     : screen === 'gererPortfolio' ? 'Organiser mes réalisations'
+    : screen === 'confidentialite' ? 'Confidentialité et sécurité'
+    : screen === 'legal' ? (TITRES_LEGAUX[texteLegal] || 'Informations légales')
     : screen === 'creer' ? 'Publier'
     : activeConv && activeConv.contact ? activeConv.contact.titre : '';
 
@@ -1201,8 +1292,10 @@ export default function OpusApp() {
           title={backTitle}
           onBack={() => {
             if (screen === 'messages') setActiveConvId(null);
+            else if (screen === 'legal') setScreen('confidentialite');
             else if (screen === 'profilEdit' || screen === 'mesPublications'
-                     || screen === 'gererPortfolio') setScreen('profil');
+                     || screen === 'gererPortfolio'
+                     || screen === 'confidentialite') setScreen('profil');
             else setScreen('home');
           }}
         />
@@ -1231,6 +1324,7 @@ export default function OpusApp() {
               />
             ) : null}
             onLike={toggleLike} onFollow={toggleFollow} onView={viewProfile} onHide={hidePost}
+            onSignaler={ouvrirSignalement}
             onToggleComments={toggleComments} onAddComment={addComment}
             onVoirCommentateur={voirCommentateur}
             onSave={toggleSave} onToggleContact={toggleContact}
@@ -1270,6 +1364,7 @@ export default function OpusApp() {
                 onFermer={fermerAnnonce}
                 onVoirProfil={viewProfile}
                 onErreur={showBanner}
+                onSignaler={ouvrirSignalement}
               />
             ) : (
               <DecouvrirScreen
@@ -1292,6 +1387,7 @@ export default function OpusApp() {
                 moi={userType === 'pro' ? (pros[myProId] || null) : monProfil}
                 mesReponses={mesReponsesDemandes}
                 onErreur={showBanner}
+                onSignaler={ouvrirSignalement}
               />
             )}
           </View>
@@ -1385,9 +1481,26 @@ export default function OpusApp() {
             onMesPublications={() => setScreen('mesPublications')}
             onGererPortfolio={() => setScreen('gererPortfolio')}
             nbPublications={mesPublications.length}
+            onConfidentialite={() => setScreen('confidentialite')}
             onLogout={deconnexion}
           />
         )}
+
+        {screen === 'confidentialite' && (
+          <ConfidentialiteScreen
+            onCharger={async () => ({
+              blocages: await api.chargerBlocages(),
+              signalements: await api.mesSignalements(),
+            })}
+            onDebloquer={api.debloquer}
+            onExporter={api.exporterMesDonnees}
+            onSupprimer={supprimerMonCompte}
+            onLire={(cle) => { setTexteLegal(cle); setScreen('legal'); }}
+            onErreur={showBanner}
+          />
+        )}
+
+        {screen === 'legal' && <LegalScreen texte={texteLegal} />}
 
         {screen === 'profilPublic' && (
           <ProfilPublicScreen
@@ -1403,6 +1516,7 @@ export default function OpusApp() {
             following={followingIds.has(viewedProId)}
             onFollow={toggleFollow} onContact={handleContact}
             onViewProfile={viewProfile} onSubmitReview={submitReview}
+            onSignaler={ouvrirSignalement}
           />
         )}
       </View>
@@ -1416,6 +1530,18 @@ export default function OpusApp() {
         dots={{ decouvrir: canPublish && !demandesVues && demandes.length > 0 }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
         onNavigate={(key) => { setScreen(key); setActiveConvId(null); }}
+      />
+
+      <Signaler
+        ouvert={!!aSignaler}
+        cibleType={aSignaler ? aSignaler.cibleType : 'publication'}
+        cibleId={aSignaler ? aSignaler.cibleId : null}
+        auteurId={aSignaler ? aSignaler.auteurId : null}
+        auteurNom={aSignaler ? aSignaler.auteurNom : null}
+        extrait={aSignaler ? aSignaler.extrait : null}
+        onFermer={() => setASignaler(null)}
+        onSignaler={api.signaler}
+        onBloquer={bloquerPersonne}
       />
 
       <QuoteModal
@@ -1434,6 +1560,7 @@ export default function OpusApp() {
         onClose={() => setCommentsPostId(null)}
         onAddComment={addComment}
         onVoirCommentateur={voirCommentateur}
+        onSignaler={ouvrirSignalement}
       />
     </View>
   );

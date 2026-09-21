@@ -33,7 +33,7 @@ import {
 import Media from '../components/Media';
 import ChampVille from '../components/ChampVille';
 import {
-  MapPin, BadgeCheck, MessageCircle, Calendar, Check, X, Plus, Search,
+  MapPin, BadgeCheck, MessageCircle, Calendar, Check, X, Plus, Search, Flag,
 } from '../components/icons';
 import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
@@ -56,7 +56,7 @@ function versISO(saisie) {
 }
 
 export default function PlaceProScreen({
-  annonces = [], moi, onPublier, onRepondre, onFermer, onVoirProfil, onErreur,
+  annonces = [], moi, onPublier, onRepondre, onFermer, onVoirProfil, onErreur, onSignaler,
 }) {
   const [recherche, setRecherche] = useState('');
   const [filtreType, setFiltreType] = useState(null);
@@ -335,6 +335,7 @@ export default function PlaceProScreen({
             onRepondre={() => onRepondre(a)}
             onFermer={() => onFermer(a)}
             onVoirProfil={onVoirProfil}
+            onSignaler={onSignaler}
           />
         ))}
 
@@ -352,7 +353,7 @@ export default function PlaceProScreen({
   );
 }
 
-function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil }) {
+function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler }) {
   const t = typeAnnonce(a.type);
   const dates = libelleDates(a.dateDebut, a.dateFin);
   const prix = libellePrix(a.prix, a.unite);
@@ -415,6 +416,23 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil }) {
           <Text style={s.reponses}>
             {a.reponses} {a.reponses > 1 ? 'réponses' : 'réponse'}
           </Text>
+          {/* Une annonce entre pros aussi peut être une arnaque — matériel
+              qui n'existe pas, acompte demandé puis disparition. */}
+          {!!onSignaler && !a.aMoi && !!auteur && (
+            <Pressable
+              hitSlop={8}
+              style={{ marginLeft: 'auto', marginRight: 10 }}
+              onPress={() => onSignaler({
+                cibleType: 'annonce',
+                cibleId: a.id,
+                auteurId: auteur.id,
+                auteurNom: auteur.entreprise,
+                extrait: `${a.titre} — ${a.texte}`,
+              })}
+            >
+              <Flag size={13} color={C.muted} />
+            </Pressable>
+          )}
 
           {a.aMoi ? (
             <BtnMini outline label="Retirer" onPress={onFermer} />

@@ -76,6 +76,12 @@ export const Zap = mk(Feather, 'zap');
 export const Key = mk(Feather, 'key');
 export const Thermometer = mk(Feather, 'thermometer');
 export const AlertTriangle = mk(Feather, 'alert-triangle');
+
+/* Modération et droits des personnes (section 13 du schéma). */
+export const Flag = mk(Feather, 'flag');
+export const MoreHorizontal = mk(Feather, 'more-horizontal');
+export const Download = mk(Feather, 'download');
+export const Scale = mk(MaterialCommunityIcons, 'scale-balance');
 export const Clock = mk(Feather, 'clock');
 export const Navigation = mk(Feather, 'navigation');
 export const ChevronLeft = mk(Feather, 'chevron-left');

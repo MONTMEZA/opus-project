@@ -934,3 +934,187 @@ export const retirerPartenariat = !hasSupabase ? noop : async (autreId) => {
       + `and(professional_id.eq.${autreId},partner_id.eq.${currentUserId})`);
   if (error) throw error;
 };
+
+/* ------------------------------------------------------------------ */
+/*  Modération : signaler, bloquer                                     */
+/*                                                                     */
+/*  En mode démo, ces fonctions gardent leur effet EN MÉMOIRE au lieu   */
+/*  de ne rien faire. C'est volontaire : ce sont des écrans qu'il faut  */
+/*  pouvoir essayer sans base, et un bouton « Bloquer » qui ne bloque   */
+/*  rien ne se teste pas.                                              */
+/* ------------------------------------------------------------------ */
+
+const demoBlocages = new Set();
+const demoSignalements = [];
+
+/**
+ * Signaler un contenu.
+ *
+ * On recopie l'auteur et un extrait AU MOMENT du signalement : le contenu
+ * peut disparaître ensuite (son auteur l'efface, justement), et un
+ * signalement qui ne dit plus ce qui a été signalé est inexploitable.
+ */
+export const signaler = !hasSupabase
+  ? async (s) => { demoSignalements.push({ ...s, id: `demo-${Date.now()}` }); return true; }
+  : async ({ cibleType, cibleId, cibleAuteurId = null, extrait = null, motif, details = null }) => {
+    const { error } = await supabase.from('signalements').insert({
+      auteur_id: currentUserId,
+      cible_type: cibleType,
+      cible_id: cibleId,
+      cible_auteur_id: cibleAuteurId,
+      extrait: extrait ? String(extrait).slice(0, 500) : null,
+      motif,
+      details: details ? String(details).slice(0, 1000) : null,
+      statut: 'nouveau',
+    });
+    /* 23505 = la clé unique (auteur, type, cible). On a déjà signalé ce
+       contenu : ce n'est pas une erreur, c'est une bonne nouvelle. */
+    if (error && error.code !== '23505') throw error;
+    return true;
+  };
+
+/** Les signalements que J'AI déposés. Personne d'autre ne les voit. */
+export const mesSignalements = !hasSupabase
+  ? async () => demoSignalements
+  : async () => {
+    const { data, error } = await supabase.from('signalements')
+      .select('id, cible_type, motif, statut, created_at')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  };
+
+/**
+ * Bloquer quelqu'un. Le masquage est SYMÉTRIQUE et tenu par la base : ce
+ * n'est pas l'écran qui cache, ce sont les règles RLS qui refusent.
+ */
+export const bloquer = !hasSupabase
+  ? async (userId) => { demoBlocages.add(String(userId)); return true; }
+  : async (userId) => {
+    const { error } = await supabase.from('blocages')
+      .insert({ bloqueur_id: currentUserId, bloque_id: userId });
+    if (error && error.code !== '23505') throw error;
+    return true;
+  };
+
+export const debloquer = !hasSupabase
+  ? async (userId) => { demoBlocages.delete(String(userId)); return true; }
+  : async (userId) => {
+    const { error } = await supabase.from('blocages').delete()
+      .eq('bloqueur_id', currentUserId).eq('bloque_id', userId);
+    if (error) throw error;
+    return true;
+  };
+
+/**
+ * Les personnes que j'ai bloquées, avec de quoi les reconnaître.
+ *
+ * Attention : `users` reste lisible même pour une personne bloquée — c'est
+ * volontaire. Masquer jusqu'à la fiche rendrait cette liste illisible, avec
+ * des lignes vides à la place des noms, et on ne saurait plus qui
+ * débloquer.
+ */
+export const chargerBlocages = !hasSupabase
+  ? async () => [...demoBlocages].map((id) => ({ id, nom: 'Compte de démonstration' }))
+  : async () => {
+    const { data, error } = await supabase.from('blocages')
+      .select('bloque_id, created_at, users:bloque_id (id, nom, avatar_url)')
+      .eq('bloqueur_id', currentUserId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((b) => ({
+      id: b.bloque_id,
+      nom: (b.users && b.users.nom) || 'Compte supprimé',
+      avatarUrl: b.users ? b.users.avatar_url : null,
+      depuis: b.created_at,
+    }));
+  };
+
+/** Est-ce que j'ai bloqué cette personne ? Sert à l'affichage du bouton. */
+export const aiJeBloque = !hasSupabase
+  ? async (userId) => demoBlocages.has(String(userId))
+  : async (userId) => {
+    const { data } = await supabase.from('blocages')
+      .select('bloque_id')
+      .eq('bloqueur_id', currentUserId).eq('bloque_id', userId)
+      .maybeSingle();
+    return !!data;
+  };
+
+/* ------------------------------------------------------------------ */
+/*  Droits sur ses propres données (RGPD)                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Récupérer TOUTES ses données, en JSON.
+ *
+ * Articles 15 et 20 du RGPD : droit d'accès et droit à la portabilité. Il
+ * ne suffit pas de montrer les données à l'écran — il faut les rendre dans
+ * un format réutilisable, que la personne puisse emporter ailleurs.
+ */
+export const exporterMesDonnees = !hasSupabase
+  ? async () => ({
+    export_du: new Date().toISOString(),
+    mode: 'démonstration',
+    note: "Sans base de données connectée, il n'y a rien de réel à exporter.",
+  })
+  : async () => {
+    const { data, error } = await supabase.rpc('mes_donnees');
+    if (error) throw error;
+    return data;
+  };
+
+/**
+ * Supprimer son compte. En DEUX temps, et c'est nécessaire :
+ *
+ *   1. `preparer_suppression_compte()` fait le ménage dans les données et
+ *      anonymise ce qui concerne des tiers (avis, commentaires) ;
+ *   2. la fonction Edge `compte` supprime les fichiers du stockage puis le
+ *      compte d'authentification lui-même — `auth.users` appartient à
+ *      Supabase et ne se touche qu'avec la clé de service, qui ne doit
+ *      JAMAIS se trouver dans l'application.
+ *
+ * Si la seconde étape échoue, la première a déjà eu lieu : les données sont
+ * parties, seul le compte de connexion subsiste. On le dit franchement
+ * plutôt que de laisser croire à un échec complet.
+ */
+export const supprimerMonCompte = !hasSupabase
+  ? async () => ({ mode: 'démonstration', supprime: false })
+  : async () => {
+    const { data: resume, error: erreurDonnees } = await supabase.rpc('preparer_suppression_compte');
+    if (erreurDonnees) throw erreurDonnees;
+
+    try {
+      const { error } = await supabase.functions.invoke('compte', {
+        body: { action: 'supprimer' },
+      });
+      if (error) throw error;
+    } catch (e) {
+      await supabase.auth.signOut();
+      currentUserId = null;
+      const err = new Error(
+        'Vos données ont bien été supprimées, mais le compte de connexion n’a '
+        + 'pas pu être fermé. Écrivez-nous et nous le ferons sous 48 heures.',
+      );
+      err.partiel = true;
+      err.resume = resume;
+      throw err;
+    }
+
+    await supabase.auth.signOut();
+    currentUserId = null;
+    return { supprime: true, resume };
+  };
+
+/**
+ * Consigner l'acceptation des conditions, avec leur VERSION.
+ *
+ * Sans la version, la trace ne vaut rien : des conditions modifiées après
+ * coup ne prouvent pas ce que la personne a accepté ce jour-là.
+ */
+export const accepterConditions = !hasSupabase ? noop : async (version) => {
+  const { error } = await supabase.from('users')
+    .update({ cgu_version: version, cgu_acceptees_le: new Date().toISOString() })
+    .eq('id', currentUserId);
+  if (error) throw error;
+};

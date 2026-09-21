@@ -12,7 +12,9 @@ import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
 } from '../components/ui';
 import Media from '../components/Media';
-import { MapPin, MessageCircle, Camera, X, Check } from '../components/icons';
+import {
+  MapPin, MessageCircle, Camera, X, Check, Flag,
+} from '../components/icons';
 import { choisirImage } from '../lib/media';
 import ChampVille from '../components/ChampVille';
 import { METIERS } from '../data/demo';
@@ -21,7 +23,7 @@ import { distanceKm } from '../lib/adresse';
 
 export default function DemandesScreen({
   userType, mesMetiers = [], demandes, filtreMetier, setFiltreMetier,
-  onPublier, onRepondre, onErreur, moi, mesReponses,
+  onPublier, onRepondre, onErreur, moi, mesReponses, onSignaler,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
   const [metier, setMetier] = useState(METIERS[0]);
@@ -272,6 +274,23 @@ export default function DemandesScreen({
               <Text style={s.reponses}>
                 {d.reponses} {d.reponses > 1 ? 'réponses' : 'réponse'}
               </Text>
+              {/* Une demande peut être une arnaque ou un démarchage déguisé :
+                  elle se signale comme le reste. */}
+              {!!onSignaler && !!d.auteurId && (
+                <Pressable
+                  hitSlop={8}
+                  style={{ marginLeft: 'auto', marginRight: 10 }}
+                  onPress={() => onSignaler({
+                    cibleType: 'demande',
+                    cibleId: d.id,
+                    auteurId: d.auteurId,
+                    auteurNom: d.auteur,
+                    extrait: d.texte,
+                  })}
+                >
+                  <Flag size={13} color={C.muted} />
+                </Pressable>
+              )}
               {estPro && (jyAiRepondu(d) ? (
                 <View style={s.dejaRepondu}>
                   <Check size={12} color={C.accent2} />

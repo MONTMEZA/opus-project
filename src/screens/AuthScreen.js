@@ -12,14 +12,15 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F, GRAD_160 } from '../theme';
+import { C, F, T, S, R, GRAD_160 } from '../theme';
 import { HazardStrip, Field, BtnMain } from '../components/ui';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
 import { ChevronLeft, Check, ShieldCheck } from '../components/icons';
 import { METIERS } from '../data/demo';
+import { VERSION } from '../data/legal';
 
-export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
+export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onLireLegal }) {
   const insets = useSafeAreaInsets();
   const estPro = userType === 'pro';
 
@@ -34,6 +35,10 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState(null);
   const [mailEnvoye, setMailEnvoye] = useState(false);
+  /* L'acceptation des conditions. Décochée au départ, sans exception : une
+     case pré-cochée ne vaut rien juridiquement — c'est le point que la CNIL
+     rappelle le plus souvent. */
+  const [conditions, setConditions] = useState(false);
 
   const valider = async () => {
     setErreur(null);
@@ -55,6 +60,10 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
         setErreur('Indiquez votre nom.');
         return;
       }
+      if (!conditions) {
+        setErreur('Il faut accepter les conditions d’utilisation pour créer un compte.');
+        return;
+      }
     }
 
     setEnCours(true);
@@ -69,6 +78,11 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
           codeInsee: lieu.codeInsee,
           latitude: lieu.latitude,
           longitude: lieu.longitude,
+          /* La VERSION acceptée voyage avec l'inscription : sans elle, on
+             saurait que la personne a accepté « quelque chose », sans savoir
+             quoi — et des conditions modifiées après coup ne prouveraient
+             rien. */
+          cguVersion: VERSION,
         });
         if (resultat && resultat.confirmationRequise) setMailEnvoye(true);
       } else {
@@ -173,6 +187,30 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour }) {
               autoCapitalize="none"
             />
 
+            {mode === 'inscription' && (
+              <Pressable style={s.conditions} onPress={() => setConditions((v) => !v)}>
+                <View style={[s.case, conditions && s.caseCochee]}>
+                  {conditions && <Check size={12} color="#fff" />}
+                </View>
+                <Text style={s.conditionsTexte}>
+                  J’ai lu et j’accepte les{' '}
+                  <Text
+                    style={s.conditionsLien}
+                    onPress={() => onLireLegal && onLireLegal('cgu')}
+                  >
+                    conditions d’utilisation
+                  </Text>
+                  {' '}et la{' '}
+                  <Text
+                    style={s.conditionsLien}
+                    onPress={() => onLireLegal && onLireLegal('confidentialite')}
+                  >
+                    politique de confidentialité
+                  </Text>.
+                </Text>
+              </Pressable>
+            )}
+
             {!!erreur && <Text style={s.erreur}>{erreur}</Text>}
 
             <BtnMain block onPress={valider} disabled={enCours} style={{ marginTop: 14 }}>
@@ -248,6 +286,23 @@ function traduire(e) {
 }
 
 const s = StyleSheet.create({
+  /* L'acceptation des conditions. La case est CARRÉE : c'est de la
+     structure, pas un bouton (voir la règle des bords dans theme.js). */
+  conditions: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: S.md,
+    marginTop: S.lg, paddingRight: S.xs,
+  },
+  case: {
+    width: 20, height: 20, borderWidth: 1.5, borderColor: C.line,
+    backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center',
+    marginTop: 1,
+  },
+  caseCochee: { backgroundColor: C.accent, borderColor: C.accent },
+  conditionsTexte: {
+    flex: 1, fontFamily: F.inter, fontSize: T.petit, color: C.ink, lineHeight: 17,
+  },
+  conditionsLien: { color: C.accent2, fontFamily: F.inter6 },
+
   scroll: { padding: 20, paddingBottom: 40, flexGrow: 1, justifyContent: 'center' },
 
   retour: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },

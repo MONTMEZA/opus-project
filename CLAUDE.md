@@ -66,9 +66,43 @@ alter table public.x add constraint x_champ_check check (champ in (...));
 d'une session qui parle de la suite du projet**, et à mettre à jour quand un
 point est traité.
 
-Les trois premiers points — signalement et blocage, suppression de compte,
-mentions légales — ne sont pas des améliorations : sans eux, l'application ne
-peut pas être ouverte au public ni soumise aux magasins d'applications.
+Les trois points bloquants — signalement et blocage, suppression de compte,
+textes légaux — sont **faits** (21/09/2026). Il reste deux gestes que seul le
+propriétaire peut faire, et ils sont en tête du fichier : remplir
+`src/data/legal.js`, et activer la protection contre les mots de passe
+compromis dans Supabase.
+
+## Modération : ce qui ne se discute plus
+
+Une règle a été ajoutée au projet le jour où le blocage a été construit, et
+elle vaut pour tout ce qui suivra :
+
+> **Un blocage est symétrique, et il est tenu par la BASE.**
+> Si A bloque B, aucun des deux ne voit plus les contenus de l'autre et aucun
+> des deux ne peut plus écrire à l'autre. Filtrer côté écran ne protège
+> personne : un client modifié verrait tout.
+
+Deux pièges rencontrés, à ne pas redécouvrir :
+
+1. **Une règle RLS qui appelle une fonction interdite à l'appelant ÉCHOUE**,
+   elle ne filtre pas. « permission denied for function ». Vérifié sur
+   PostgreSQL. `est_masque()` doit donc rester exécutable par
+   `authenticated`.
+2. Supabase signale alors, à juste titre, les fonctions `security definer`
+   appelables **sans être connecté**. D'où deux politiques de lecture par
+   table de contenu : la vraie règle `to authenticated`, et la lecture
+   publique `to anon` qui n'appelle pas la fonction. Un visiteur n'a bloqué
+   personne : il n'a rien à masquer.
+
+Et une règle RGPD qui a la même force :
+
+> **Ce qui concerne des TIERS s'anonymise, il ne se supprime pas.**
+> Avis, commentaires, signalements : `on delete set null` plus un drapeau
+> `auteur_supprime`. Effacer un avis parce que son auteur s'en va ferait
+> remonter la note d'un artisan qui n'a rien demandé.
+
+Les listes de motifs et de cibles sont contrôlées par la base :
+`npm run verifier-moderation`.
 
 ## Où je tourne, et ce que le propriétaire a réellement
 

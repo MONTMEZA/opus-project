@@ -7,7 +7,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, T, S } from '../theme';
 import { libelleMetiers } from '../lib/metiers';
 import {
   BtnMini, BtnOutline, EmptyState, SectionLabel,
@@ -15,7 +15,7 @@ import {
 import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
-import { BadgeCheck } from '../components/icons';
+import { BadgeCheck, Lock, ChevronRight } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
 import { resumeVerification, toutValide } from '../lib/verification';
 import { avgReviews } from '../data/demo';
@@ -30,9 +30,26 @@ function Stat({ value, label }) {
 }
 
 /** Les deux commandes du compte, en bas de page. */
-function Compte({ onLogout }) {
+/**
+ * Le bas du profil : ce qui relève du compte, et non du métier.
+ *
+ * « Confidentialité et sécurité » est mis AVANT la déconnexion et bien
+ * visible, avec son icône : c'est là que se trouvent les personnes bloquées,
+ * les signalements déposés, les textes légaux, la récupération de ses données
+ * et la suppression du compte. Les magasins d'applications vérifient que ces
+ * choses existent ET qu'on les trouve — enterrer la suppression de compte au
+ * fond d'un formulaire de contact est le motif de refus le plus courant.
+ */
+function Compte({ onLogout, onConfidentialite }) {
   return (
     <View style={s.compte}>
+      {!!onConfidentialite && (
+        <Pressable style={s.reglage} onPress={onConfidentialite}>
+          <Lock size={15} color={C.accent2} />
+          <Text style={s.reglageTexte}>Confidentialité et sécurité</Text>
+          <ChevronRight size={15} color={C.muted} />
+        </Pressable>
+      )}
       <Pressable style={s.logout} onPress={onLogout}>
         <Text style={s.logoutText}>Se déconnecter</Text>
       </Pressable>
@@ -45,6 +62,7 @@ export default function ProfilOwnScreen({
   demandesPartenariat = [], partenariatsEnvoyes = [],
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
+  onConfidentialite,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -92,7 +110,7 @@ export default function ProfilOwnScreen({
           )}
         </View>
 
-        <Compte onLogout={onLogout} />
+        <Compte onLogout={onLogout} onConfidentialite={onConfidentialite} />
       </ScrollView>
     );
   }
@@ -243,7 +261,7 @@ export default function ProfilOwnScreen({
         })}
       </View>
 
-      <Compte onLogout={onLogout} />
+      <Compte onLogout={onLogout} onConfidentialite={onConfidentialite} />
     </ScrollView>
   );
 }
@@ -270,7 +288,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingBottom: 6, marginTop: -12,
   },
 
-  compte: { paddingHorizontal: 16, paddingBottom: 34, alignItems: 'center' },
-  logout: { paddingVertical: 12, paddingHorizontal: 20 },
+  compte: { paddingHorizontal: S.lg, paddingBottom: 34, gap: S.md },
+  reglage: {
+    flexDirection: 'row', alignItems: 'center', gap: S.md,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+    paddingVertical: S.md, paddingHorizontal: S.md,
+  },
+  reglageTexte: { flex: 1, fontFamily: F.inter5, fontSize: T.courant, color: C.ink },
+  logout: { paddingVertical: S.md, paddingHorizontal: 20, alignSelf: 'center' },
   logoutText: { fontFamily: F.oswald6, fontSize: 12.5, color: C.bad },
 });

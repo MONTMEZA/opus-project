@@ -16,7 +16,7 @@ import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAut
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import {
-  BadgeCheck, ShieldCheck, ShieldX, FileText, Sparkles, ClipboardCheck, MessageCircle,
+  BadgeCheck, ShieldCheck, ShieldX, FileText, Sparkles, ClipboardCheck, MessageCircle, Flag,
 } from '../components/icons';
 import { EtatVerificationPublic } from '../components/RappelVerification';
 import {
@@ -60,7 +60,7 @@ function VerifRow({ etat, label, value }) {
 }
 
 export default function ProfilProScreen({
-  pro, pros, following, onFollow, onContact, onViewProfile, onSubmitReview,
+  pro, pros, following, onFollow, onContact, onViewProfile, onSubmitReview, onSignaler,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [rDelais, setRDelais] = useState(5);
@@ -139,6 +139,27 @@ export default function ProfilProScreen({
           <MessageCircle size={13} color={C.accent2} />
           <Text style={s.linkBtnText}>Envoyer un message</Text>
         </Pressable>
+
+        {/* Signaler ou bloquer ce profil. Discret — on ne le cherche que
+            lorsqu'on en a besoin — mais toujours au même endroit, sous les
+            boutons de contact, comme sur tous les réseaux. */}
+        {!!onSignaler && (
+          <Pressable
+            style={s.linkBtn}
+            onPress={() => onSignaler({
+              cibleType: 'profil',
+              cibleId: pro.id,
+              auteurId: pro.id,
+              auteurNom: pro.entreprise,
+              extrait: pro.bio,
+            })}
+          >
+            <Flag size={12} color={C.muted} />
+            <Text style={[s.linkBtnText, { color: C.muted }]}>
+              Signaler ou bloquer ce profil
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       <Text style={s.bio}>{pro.bio}</Text>

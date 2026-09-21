@@ -14,7 +14,7 @@ import Commentaires, { nombreCommentaires } from './Commentaires';
 import { X } from './icons';
 
 export default function CommentsSheet({
-  visible, post, pros = {}, onClose, onAddComment, onVoirCommentateur,
+  visible, post, pros = {}, onClose, onAddComment, onVoirCommentateur, onSignaler,
 }) {
   const insets = useSafeAreaInsets();
 
@@ -45,6 +45,7 @@ export default function CommentsSheet({
               commentaires={comments}
               pros={pros}
               onVoirProfil={(c) => { onClose(); onVoirCommentateur(c); }}
+              onSignaler={onSignaler ? (cible) => { onClose(); onSignaler(cible); } : null}
               onEnvoyer={(texte, parentId) => onAddComment(post.id, texte, parentId)}
             />
           </Pressable>

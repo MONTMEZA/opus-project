@@ -25,7 +25,7 @@ export default function HomeScreen({
   videoCible,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
-  onOuvrirVideo, onGlisserVersProfil,
+  onOuvrirVideo, onGlisserVersProfil, onSignaler,
 }) {
   const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
@@ -144,6 +144,7 @@ export default function HomeScreen({
               onFollow={onFollow}
               onView={onView}
               onHide={onHide}
+              onSignaler={onSignaler}
               commentsOpen={openCommentsId === p.id}
               onToggleComments={onToggleComments}
               onAddComment={onAddComment}

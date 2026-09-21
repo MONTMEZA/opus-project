@@ -11,7 +11,7 @@ import {
 import Commentaires, { nombreCommentaires } from './Commentaires';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
-  MessageCircle, Phone, FileText, User, Send, Maximize,
+  MessageCircle, Phone, FileText, User, Send, Maximize, Flag,
 } from './icons';
 import Media, { EtiquetteVideo } from './Media';
 import Carrousel from './Carrousel';
@@ -21,7 +21,7 @@ const EST_VIDEO = new Set(['video', 'montage']);
 
 export default function PostCard({
   post, pro, pros = {}, following, actif = false,
-  onLike, onFollow, onView, onHide, onOuvrirVideo,
+  onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
 }) {
@@ -74,7 +74,23 @@ export default function PostCard({
         </Pressable>
         <View style={s.headRight}>
           <ChipFollow following={following} onPress={() => onFollow(pro.id)} />
+          {/* Deux gestes distincts, et deux icônes distinctes. « Masquer »
+              range la publication pour soi ; « Signaler » l'envoie à la
+              modération. Les cacher tous les deux derrière un « … » ferait
+              qu'on ne trouverait ni l'un ni l'autre — or les magasins
+              d'applications vérifient qu'un signalement se trouve. */}
           <IconBtn onPress={() => onHide(post.id)}><EyeOff size={15} color={C.ink} /></IconBtn>
+          {!!onSignaler && (
+            <IconBtn onPress={() => onSignaler({
+              cibleType: 'publication',
+              cibleId: post.id,
+              auteurId: pro.id,
+              auteurNom: pro.entreprise,
+              extrait: post.texte,
+            })}>
+              <Flag size={14} color={C.muted} />
+            </IconBtn>
+          )}
         </View>
       </View>
 
@@ -158,6 +174,7 @@ export default function PostCard({
             commentaires={post.comments}
             pros={pros}
             onVoirProfil={onVoirCommentateur}
+            onSignaler={onSignaler}
             onEnvoyer={(texte, parentId) => onAddComment(post.id, texte, parentId)}
           />
         </View>

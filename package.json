@@ -42,7 +42,8 @@
     "verifier-annonces": "node scripts/verifier-annonces.mjs",
     "verifier-typographie": "node scripts/verifier-typographie.mjs",
     "captures": "node scripts/captures.mjs",
-    "verifier-recherche": "node scripts/verifier-recherche.mjs"
+    "verifier-recherche": "node scripts/verifier-recherche.mjs",
+    "verifier-moderation": "node scripts/verifier-moderation.mjs"
   },
   "private": true,
   "devDependencies": {

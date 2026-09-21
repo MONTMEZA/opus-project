@@ -9,43 +9,82 @@ ce sont des conditions pour ouvrir l'application à de vrais utilisateurs.
 
 ---
 
-## 1. Bloquant — sans ça, on ne publie pas
+## 1. Bloquant — fait le 21/09/2026, sauf DEUX gestes qui ne sont qu'à vous
 
-### 1.1 Signalement et blocage
+Les trois points de cette section sont **construits et vérifiés**. Il reste
+deux choses que je ne peux pas faire à votre place, et sans lesquelles rien
+de tout cela ne vaut : elles sont juste en dessous.
 
-**Absent aujourd'hui.** Aucun moyen de signaler une publication, un
-commentaire, un message ou un profil. Aucun moyen de bloquer quelqu'un.
+### ⚠️ 1.0 Ce qu'il reste à faire, et que vous seul pouvez faire
 
-C'est le manque le plus sérieux. Une plateforme ouverte au public sans
-modération reçoit, tôt ou tard, du contenu qu'il faut pouvoir retirer — et
-Apple comme Google refusent les applications à contenu utilisateur qui n'ont
-ni signalement ni blocage.
+**a) Remplir `src/data/legal.js`** — six informations manquent : dénomination,
+forme juridique, SIREN, adresse du siège, directeur de la publication, région
+d'hébergement Supabase. Tant qu'elles manquent, un bandeau orange s'affiche en
+haut de chaque texte légal dans l'application, avec la liste. Ce ne sont pas
+des oublis : vous seul les connaissez, et une mention légale inventée
+engagerait votre responsabilité.
 
-Ce que ça demande :
-- table `signalements` (qui, quoi, motif, statut) avec RLS ;
-- table `blocages` (qui bloque qui), et le filtrage qui va avec dans le fil,
-  les commentaires et les messages ;
-- un bouton de signalement sur chaque contenu ;
-- un délai d'examen annoncé, et tenu.
+**b) Supabase → Authentication → Policies → activer la protection contre les
+mots de passe compromis.** C'est un interrupteur, et c'est la dernière alerte
+de sécurité du projet. Elle vérifie les mots de passe contre la base des
+fuites connues.
 
-### 1.2 Suppression de compte
+### 1.1 Signalement et blocage — ✅ fait
 
-**Absente aujourd'hui.** Obligation RGPD, et exigence des deux magasins
-d'applications.
+- tables `signalements` et `blocages`, avec RLS ;
+- `est_masque()` interrogée par **neuf politiques RLS** : publications,
+  commentaires, avis, demandes, réponses aux demandes, annonces entre pros,
+  réponses aux annonces, conversations, messages ; plus les trois écritures
+  qui sollicitent quelqu'un (devis, rappel, urgence) ;
+- le blocage est **symétrique** — un blocage à sens unique laisse celui qu'on
+  fuit continuer à lire et à recommencer ;
+- personne ne peut LISTER qui l'a bloqué ;
+- un bouton de signalement sur : publication, commentaire, profil d'artisan,
+  demande de particulier, annonce entre pros ;
+- neuf motifs, dont deux propres au bâtiment : **travail dissimulé** et
+  **photos volées** ;
+- délai d'examen annoncé : **48 heures**, écrit une seule fois dans
+  `src/data/moderation.js` pour que l'écran et la réalité ne divergent pas ;
+- `npm run verifier-moderation` compare les listes de l'application aux
+  contraintes de la base, et contrôle neuf garde-fous.
 
-Attention au détail qui coince : supprimer le compte ne doit pas faire
-disparaître les avis laissés CHEZ D'AUTRES artisans, sinon on efface
-l'historique de quelqu'un qui n'a rien demandé. Il faut anonymiser, pas
-supprimer, ce qui concerne des tiers.
+**Ce qui manque encore ici :** un signalement ne peut pas être déposé sur un
+MESSAGE privé depuis l'écran de conversation (la base l'accepte déjà, le type
+`message` existe). À ajouter.
 
-### 1.3 Mentions légales, CGU, politique de confidentialité
+### 1.2 Suppression de compte — ✅ fait
 
-**Absentes aujourd'hui.** Obligatoires en France pour une plateforme de mise
-en relation, et demandées à la soumission sur les stores.
+Profil → Confidentialité et sécurité → « Supprimer mon compte ». Il faut
+taper le mot SUPPRIMER : un geste sans retour ne doit pas pouvoir se faire
+d'un pouce qui glisse.
 
-À couvrir en particulier : le statut d'hébergeur, le traitement des données
-personnelles (documents Kbis et assurance compris), et le fait que l'IA
-intervient dans la rédaction des textes.
+En deux temps : `preparer_suppression_compte()` fait le ménage et anonymise,
+puis la fonction Edge `compte` vide les fichiers du stockage et ferme le
+compte d'authentification — cette dernière étape demande la clé de service,
+qui ne doit jamais se trouver dans l'application.
+
+Les avis, commentaires et signalements sont **anonymisés, pas supprimés** :
+les effacer ferait remonter la note d'un artisan le jour où un client
+mécontent s'en va.
+
+### 1.3 Mentions légales, CGU, confidentialité — ✅ fait (textes à compléter)
+
+Les trois textes vivent dans `src/data/legal.js` et s'affichent depuis
+l'application, **y compris avant d'avoir un compte** — on ne peut pas accepter
+des conditions qu'on n'a pas pu lire. Une case à cocher, jamais pré-cochée, à
+l'inscription ; la VERSION acceptée est consignée dans `users.cgu_version`.
+
+La politique de confidentialité dit explicitement ce qui part chez
+**Anthropic** quand on appuie sur « Améliorer avec l'IA », et pourquoi il n'y
+a **aucun bandeau de cookies** : une application mobile n'en utilise pas, et
+le seul élément gardé sur le téléphone est le jeton de connexion, strictement
+nécessaire.
+
+### 1.4 Export des données (RGPD, articles 15 et 20) — ✅ fait
+
+Profil → Confidentialité et sécurité → « Récupérer mes données ». Renvoie du
+JSON, partagé via le partage du système, pour que la personne l'envoie où
+elle veut.
 
 ---
 
