@@ -22,6 +22,30 @@ C'est précisément ce qui a manqué le jour où le format `montage` a été ajo
 à l'application sans être ajouté à la contrainte `posts_type_check` : la base
 refusait chaque montage, et les essais en mode démo n'y voyaient rien.
 
+### L'application peut prendre de l'avance sur la base
+
+Écrire `schema.sql` ne l'applique nulle part. Le propriétaire doit le rejouer
+dans Supabase → SQL Editor, et il ne le fait pas forcément : six commits ont
+ainsi tourné contre une base qui ignorait `metiers`, `budget`, `annonces_pro`
+et `metier_demandes`. L'enregistrement du profil échouait en silence, la Place
+des pros restait vide.
+
+**Après toute modification de `schema.sql`, vérifier l'état RÉEL avec le
+connecteur Supabase** — une requête sur `information_schema` suffit — et
+appliquer la migration soi-même plutôt que de compter sur un copier-coller.
+
+Pour reproduire fidèlement une panne, la bonne base de départ n'est pas
+`schema.sql` d'aujourd'hui mais **celle de la version que le propriétaire a
+réellement appliquée** (`git show <commit>:supabase/schema.sql`).
+
+### Les versions de paquets Expo se désalignent toutes seules
+
+`npm install` d'un nouveau paquet peut laisser les autres en arrière.
+`npx expo install --check` le dit, `--fix` le répare. Un `expo-image-picker`
+en retard sur la version attendue par Expo Go casse le choix des photos sans
+qu'aucune ligne de code n'ait changé. **À lancer après chaque ajout de
+dépendance.**
+
 ### En particulier : les contraintes `check (... in (...))`
 
 `schema.sql` en contient une dizaine (types de publication, statuts de devis,

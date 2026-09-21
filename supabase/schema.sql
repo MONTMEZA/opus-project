@@ -916,11 +916,15 @@ alter table public.annonce_reponses      enable row level security;
 -- ICI, dans la base : un particulier qui modifie l'application ne verra
 -- toujours rien. Les prix entre artisans ne sont pas les prix au
 -- particulier ; les exposer ferait du tort aux deux.
+-- SECURITY INVOKER, et non DEFINER : `professional_profiles` est déjà en
+-- lecture publique, la fonction n'a donc aucun privilège à emprunter. En
+-- DEFINER, Supabase la signalait comme appelable par n'importe qui via
+-- /rest/v1/rpc/est_un_pro avec les droits du propriétaire.
 create or replace function public.est_un_pro()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select exists (select 1 from public.professional_profiles p where p.id = auth.uid())
