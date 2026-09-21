@@ -26,20 +26,21 @@
  */
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, T, S, R } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
 } from '../components/ui';
 import Media from '../components/Media';
 import ChampVille from '../components/ChampVille';
 import {
-  MapPin, BadgeCheck, MessageCircle, Calendar, Check, X, Plus,
+  MapPin, BadgeCheck, MessageCircle, Calendar, Check, X, Plus, Search,
 } from '../components/icons';
 import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
 } from '../data/annonces';
 import { METIERS } from '../data/demo';
 import { distanceKm } from '../lib/adresse';
+import { correspond, texteDe } from '../lib/recherche';
 import { libelleMetiers } from '../lib/metiers';
 
 /** Une date au format que la base attend : 2026-10-12. */
@@ -57,6 +58,7 @@ function versISO(saisie) {
 export default function PlaceProScreen({
   annonces = [], moi, onPublier, onRepondre, onFermer, onVoirProfil, onErreur,
 }) {
+  const [recherche, setRecherche] = useState('');
   const [filtreType, setFiltreType] = useState(null);
   const [filtreMetier, setFiltreMetier] = useState(null);
   const [verifiesSeulement, setVerifiesSeulement] = useState(false);
@@ -86,6 +88,10 @@ export default function PlaceProScreen({
     });
 
     return avecDistance
+      /* La recherche passe AVANT les filtres : on tape « placo », on voit
+         tout ce qui contient placo, tous types confondus. Restreindre
+         ensuite par type est un choix, pas une obligation. */
+      .filter((a) => correspond(texteDe(a), recherche))
       .filter((a) => (!filtreType || a.type === filtreType))
       .filter((a) => (!filtreMetier || a.metier === filtreMetier))
       .filter((a) => (!verifiesSeulement || (a.auteur && a.auteur.verifie)))
@@ -96,7 +102,7 @@ export default function PlaceProScreen({
         if (a.km === null || b.km === null) return 0;
         return a.km - b.km;
       });
-  }, [annonces, filtreType, filtreMetier, verifiesSeulement, moi]);
+  }, [annonces, recherche, filtreType, filtreMetier, verifiesSeulement, moi]);
 
   const publier = () => {
     if (!titre.trim() || !texte.trim()) return;
@@ -143,8 +149,8 @@ export default function PlaceProScreen({
       <View style={s.entete}>
         <Text style={s.enteteTitre}>La Place des pros</Text>
         <Text style={s.enteteTexte}>
-          Sous-traitance, matériel, coups de main. Entre professionnels
-          seulement : un particulier ne voit rien de cette page.
+          Sous-traitance, matériel, fournisseurs, coups de main. Entre
+          professionnels seulement : un particulier ne voit rien de cette page.
         </Text>
         {!formOuvert && (
           <BtnMain block onPress={() => setFormOuvert(true)}>
@@ -256,9 +262,31 @@ export default function PlaceProScreen({
         </View>
       )}
 
+      {/* --- la recherche ---
+          Elle passe avant les filtres parce que c'est par là qu'on commence :
+          on sait ce qu'on cherche (« placo », « nacelle », « IPN ») bien
+          avant de savoir dans quelle catégorie ça a été rangé. */}
+      <View style={s.recherche}>
+        <Search size={15} color={C.muted} />
+        <Field
+          style={s.rechercheChamp}
+          value={recherche}
+          onChangeText={setRecherche}
+          placeholder="placo, nacelle, IPN, un fournisseur..."
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {!!recherche && (
+          <Pressable onPress={() => setRecherche('')} hitSlop={10}>
+            <X size={15} color={C.muted} />
+          </Pressable>
+        )}
+      </View>
+
       {/* --- filtres --- */}
       <SectionLabel>
         {liste.length} {liste.length > 1 ? 'annonces' : 'annonce'}
+        {recherche.trim() ? ` pour « ${recherche.trim()} »` : ''}
       </SectionLabel>
 
       <View style={s.chipRow}>
@@ -312,9 +340,11 @@ export default function PlaceProScreen({
 
         {liste.length === 0 && (
           <EmptyState>
-            {verifiesSeulement
-              ? 'Aucune annonce d’artisan vérifié pour ce filtre.'
-              : 'Aucune annonce pour le moment. Posez la première.'}
+            {recherche.trim()
+              ? `Rien pour « ${recherche.trim()} ». Essayez un mot plus court, ou le nom que les artisans emploient sur le chantier.`
+              : verifiesSeulement
+                ? 'Aucune annonce d’artisan vérifié pour ce filtre.'
+                : 'Aucune annonce pour le moment. Posez la première.'}
           </EmptyState>
         )}
       </View>
@@ -407,6 +437,21 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil }) {
 
 const s = StyleSheet.create({
   pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+
+  /* La barre de recherche : une seule ligne, la loupe à gauche, la croix à
+     droite quand il y a quelque chose à effacer. Le champ garde ses angles
+     vifs — c'est un champ de saisie, donc de la structure (règle des bords
+     dans src/theme.js) — mais le bloc entier est posé sur le fond blanc
+     pour qu'on le voie tout de suite en arrivant. */
+  recherche: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+    paddingHorizontal: S.md, marginBottom: S.xs,
+  },
+  rechercheChamp: {
+    flex: 1, borderWidth: 0, backgroundColor: 'transparent',
+    paddingHorizontal: 0, fontSize: T.corps,
+  },
 
   entete: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.accent2,

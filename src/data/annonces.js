@@ -51,6 +51,30 @@ export const TYPES_ANNONCE = [
     avecUnite: true,
     aide: 'Nacelle, échafaudage, bétonnière. Précisez si le prix est par jour, par semaine ou par mois.',
   },
+  /**
+   * Les fournisseurs : négoces, marques, loueurs.
+   *
+   * C'est le seul type posé par quelqu'un qui n'est pas venu chercher un
+   * chantier mais VENDRE. Il est donc reconnaissable au premier coup d'œil —
+   * couleur propre, libellé explicite — pour qu'un artisan ne le confonde
+   * jamais avec l'annonce d'un confrère. Une publicité déguisée en annonce
+   * d'artisan ferait perdre la confiance dans toute la page, et elle ne
+   * revient pas.
+   *
+   * Sans dates (un catalogue n'a pas de créneau) mais avec un prix, parce
+   * que c'est la première question qu'on se pose.
+   */
+  {
+    cle: 'fournisseur',
+    label: 'Fournisseur',
+    long: 'Nouveauté fournisseur',
+    couleur: '#3A5B7A',
+    avecMetier: false,
+    avecDates: false,
+    avecPrix: true,
+    avecUnite: true,
+    aide: "Une nouveauté, un déstockage, une offre du mois. Nommez le produit comme les artisans le cherchent — « placo », « BA13 », « nacelle » — pas comme il figure au catalogue.",
+  },
   {
     cle: 'entraide',
     label: 'Coup de main',

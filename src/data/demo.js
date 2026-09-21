@@ -240,6 +240,27 @@ export const initialAnnonces = [
     texte: "Nacelle articulée, contrôle technique à jour. Livraison possible dans un rayon de 30 km.",
     ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698,
     prix: 95, unite: 'jour', time: 'Il y a 3 j', reponses: 2 },
+  /* --- Les fournisseurs ---
+     Ces annonces existent surtout pour que la recherche par mots-clés ait de
+     quoi trouver dès le premier lancement : tapez « placo », « BA13 » ou
+     « nacelle » dans la Place des pros.
+
+     ATTENTION, limite assumée de cette première version : il n'existe pas
+     encore de TYPE DE COMPTE « fournisseur ». Ces annonces sont donc portées
+     par des comptes professionnels ordinaires, et l'encart d'auteur affiche
+     un métier d'artisan. C'est le prochain vrai chantier de cette page —
+     voir docs/A-FAIRE.md. */
+  { id: 'a6', type: 'fournisseur', auteurId: 2,
+    titre: 'Placo BA13 hydrofuge — palette complète',
+    texte: "Nouvelle gamme hydrofuge pour pièces humides. 60 plaques par palette, livraison sous 48 h sur Lyon et sa couronne.",
+    ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357,
+    prix: 380, unite: 'total', time: 'Il y a 1 j', reponses: 2 },
+  { id: 'a7', type: 'fournisseur', auteurId: 5,
+    titre: 'Déstockage laine de roche — fin de série',
+    texte: "Isolation semi-rigide 100 mm, lot de fin de série. Quantités limitées, retrait à l'entrepôt.",
+    ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357,
+    prix: 12, unite: 'total', time: 'Il y a 2 j', reponses: 0 },
+
   /* Volontairement posée par un artisan NON vérifié (YC Carrelage) : c'est
      ce qui permet de voir le filtre « vérifiés uniquement » faire son
      travail dès le premier lancement. */

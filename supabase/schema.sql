@@ -695,6 +695,7 @@ create table if not exists public.annonces_pro (
                 'sous_traitance_offre',     -- je suis disponible
                 'materiel_vente',
                 'materiel_location',
+                'fournisseur',              -- négoce, marque, loueur : une nouveauté
                 'entraide'
               )),
   titre       text not null,
@@ -720,6 +721,26 @@ create table if not exists public.annonces_pro (
 
 -- Une date de fin avant la date de début n'a aucun sens : la base le refuse
 -- plutôt que d'afficher « du 20 au 12 mars » à tout le monde.
+-- --------------------------------------------------------------------------
+--  Le type « fournisseur » est arrivé APRÈS la création de la table.
+--
+--  Sur une base déjà en place, `create table if not exists` ne fait rien du
+--  tout : la contrainte inline écrite plus haut n'est jamais rejouée, et la
+--  base continue de refuser le nouveau type sans que rien ne le montre.
+--  C'est exactement ce qui était arrivé au format « montage ».
+--  D'où ce bloc explicite, qui refait la contrainte à chaque exécution.
+-- --------------------------------------------------------------------------
+alter table public.annonces_pro drop constraint if exists annonces_pro_type_check;
+alter table public.annonces_pro add constraint annonces_pro_type_check
+  check (type in (
+    'sous_traitance_cherche',
+    'sous_traitance_offre',
+    'materiel_vente',
+    'materiel_location',
+    'fournisseur',
+    'entraide'
+  ));
+
 alter table public.annonces_pro drop constraint if exists annonces_dates_check;
 alter table public.annonces_pro add constraint annonces_dates_check
   check (date_debut is null or date_fin is null or date_fin >= date_debut);

@@ -90,42 +90,41 @@ au minimum un script qui compare `information_schema` à ce que le code attend.
   servent qu'au tri par distance.
 - **Côté particulier** — reste plus pauvre que le côté pro.
 
-### Les fournisseurs (idée du 21/09/2026, à trancher)
+### Les fournisseurs — première marche posée le 21/09/2026
 
-Proposition du propriétaire : un espace où les fournisseurs — négoces,
-marques d'outillage, loueurs — exposent leurs nouveautés, avec une
-**recherche par mots-clés** pour qu'un artisan trouve un produit sans
-remonter tout le fil.
+Décision du propriétaire : les fournisseurs vivent **dans la Place des pros**,
+pas dans un cinquième onglet, avec une **recherche par mots-clés** (« on met
+placo et on voit toutes les nouveautés »).
 
-L'idée est juste, et c'est probablement le premier vrai revenu d'Opus : ce
-sont les fournisseurs qui ont un budget pour toucher des artisans.
+**Ce qui est fait :**
 
-**Mais ce n'est pas un fil de plus.** Un fil suppose une chronologie ; un
-catalogue se cherche. La demande de barre de recherche le dit d'elle-même.
-D'où la forme retenue si c'est validé :
+- le type d'annonce `fournisseur` existe dans l'application
+  (`src/data/annonces.js`) et dans la base — la contrainte
+  `annonces_pro_type_check` a été refaite, en local ET sur la vraie base ;
+- la **recherche par mots-clés** de la Place des pros
+  (`src/lib/recherche.js`) : accents ignorés, tous les mots exigés, début de
+  mot accepté, et une courte table d'équivalences du bâtiment
+  (placo / BA13 / plaque de plâtre, nacelle / PEMP, IPN / poutrelle…).
+  Testée par `npm run verifier-recherche`.
 
-- une **section « Fournisseurs » dans la Place des pros**, pas un cinquième
-  onglet. La Place des pros a déjà ses types d'annonces (`annonces_pro`) —
-  un type de plus y tient naturellement ;
-- la **recherche par mots-clés** manque de toute façon à cette page :
-  aujourd'hui elle filtre par type, métier et badge vérifié, et rien ne
-  permet de taper « nacelle » ou « IPN » ;
-- un **type de compte `fournisseur`**, distinct de `pro` et de
-  `particulier` : un négoce n'est pas un artisan et ne doit pas apparaître
-  dans les recherches d'artisan ;
-- les produits **peuvent** remonter dans le fil, mais **toujours étiquetés**.
-  `posts.is_ad` et la carte « Sponsorisé » existent déjà : les réutiliser.
-  Un produit déguisé en publication d'artisan ferait perdre la confiance
-  dans tout le fil, et elle ne revient pas.
+**Ce qui manque, et que ça a rendu visible :**
 
-Ce qui ferait vraiment la différence : **le stock et la distance** —
-« disponible aujourd'hui à 12 km de votre chantier ». Personne ne le fait
-bien dans le bâtiment. Mais ça suppose des données de stock côté
-fournisseur : en v1, c'est le fournisseur qui saisit ses annonces à la main.
+- il n'existe pas de **type de compte `fournisseur`**. Une annonce de négoce
+  est donc portée par un compte professionnel ordinaire, et l'encart
+  d'auteur affiche un métier d'artisan. C'est faux, et un artisan finira par
+  s'en apercevoir. C'est le prochain vrai chantier de cette page :
+  inscription, profil, règles RLS et modération à part ;
+- les produits ne remontent pas encore dans le fil. Quand ce sera le cas,
+  ils devront être **étiquetés** : `posts.is_ad` et la carte « Sponsorisé »
+  existent déjà. Un produit déguisé en publication d'artisan ferait perdre
+  la confiance dans tout le fil, et elle ne revient pas ;
+- ce qui ferait vraiment la différence : **le stock et la distance** —
+  « disponible aujourd'hui à 12 km de votre chantier ». Personne ne le fait
+  bien dans le bâtiment. Mais ça suppose des données de stock côté
+  fournisseur ; en v1 c'est le fournisseur qui saisit ses annonces.
 
-**À ne pas faire avant la section 1.** Un type de compte nouveau, c'est
-l'inscription, le profil, les règles RLS et la modération qui doublent —
-plus gros que tout ce qui a été fait jusqu'ici. Et sans signalement,
+**Le type de compte ne passe pas avant la section 1.** L'inscription, le
+profil, les règles RLS et la modération doubleraient — et sans signalement,
 suppression de compte ni mentions légales, l'application ne peut de toute
 façon pas être ouverte au public.
 
