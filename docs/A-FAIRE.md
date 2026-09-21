@@ -48,9 +48,9 @@ fuites connues.
 - `npm run verifier-moderation` compare les listes de l'application aux
   contraintes de la base, et contrôle neuf garde-fous.
 
-**Ce qui manque encore ici :** un signalement ne peut pas être déposé sur un
-MESSAGE privé depuis l'écran de conversation (la base l'accepte déjà, le type
-`message` existe). À ajouter.
+Y compris sur un **message privé**, depuis la conversation : c'est souvent
+là, et pas dans le fil, que commencent les menaces et les arnaques — et c'est
+le seul endroit où personne d'autre ne peut le voir.
 
 ### 1.2 Suppression de compte — ✅ fait
 

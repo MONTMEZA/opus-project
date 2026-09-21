@@ -338,6 +338,11 @@ export async function loadAll() {
   const msgsByConv = {};
   (msgRes.data || []).forEach((m) => {
     (msgsByConv[m.conversation_id] ||= []).push({
+      /* L'identifiant et l'expéditeur sont gardés : sans eux, on ne peut pas
+         SIGNALER un message précis — et un message privé est justement là où
+         commencent les menaces. */
+      id: m.id,
+      auteurId: m.sender_id,
       from: m.sender_id === uid ? 'moi' : 'pro',
       texte: m.texte,
       heure: relativeTime(m.created_at),

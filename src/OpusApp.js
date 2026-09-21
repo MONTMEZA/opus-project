@@ -1417,6 +1417,10 @@ export default function OpusApp() {
           <ConversationScreen
             conversation={activeConv}
             draft={msgDraft} setDraft={setMsgDraft} onSend={sendMessage}
+            onSignaler={ouvrirSignalement}
+            interlocuteur={activeConv.proId && pros[activeConv.proId]
+              ? pros[activeConv.proId].entreprise
+              : (activeConv.contact ? activeConv.contact.titre : null)}
           />
         )}
 

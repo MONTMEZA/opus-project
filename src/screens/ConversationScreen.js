@@ -8,9 +8,11 @@ import {
 } from 'react-native';
 import { C, F } from '../theme';
 import { EmptyState, Field } from '../components/ui';
-import { Send } from '../components/icons';
+import { Send, Flag } from '../components/icons';
 
-export default function ConversationScreen({ conversation, draft, setDraft, onSend }) {
+export default function ConversationScreen({
+  conversation, draft, setDraft, onSend, onSignaler, interlocuteur,
+}) {
   const scrollRef = useRef(null);
 
   return (
@@ -26,8 +28,28 @@ export default function ConversationScreen({ conversation, draft, setDraft, onSe
         onContentSizeChange={() => scrollRef.current && scrollRef.current.scrollToEnd({ animated: true })}
       >
         {conversation.messages.map((m, i) => (
-          <View key={i} style={[s.bubble, m.from === 'moi' && s.bubbleMoi]}>
-            <Text style={[s.bubbleText, m.from === 'moi' && { color: '#fff' }]}>{m.texte}</Text>
+          <View key={m.id || i} style={s.rangee}>
+            <View style={[s.bubble, m.from === 'moi' && s.bubbleMoi]}>
+              <Text style={[s.bubbleText, m.from === 'moi' && { color: '#fff' }]}>{m.texte}</Text>
+            </View>
+            {/* Un message reçu se signale. C'est souvent là, et pas dans le
+                fil, que commencent les menaces et les arnaques — et c'est le
+                seul endroit où personne d'autre ne peut le voir. */}
+            {!!onSignaler && m.from !== 'moi' && !!m.id && (
+              <Pressable
+                hitSlop={8}
+                style={s.signaler}
+                onPress={() => onSignaler({
+                  cibleType: 'message',
+                  cibleId: m.id,
+                  auteurId: m.auteurId,
+                  auteurNom: interlocuteur || 'cette personne',
+                  extrait: m.texte,
+                })}
+              >
+                <Flag size={11} color={C.muted} />
+              </Pressable>
+            )}
           </View>
         ))}
         {conversation.messages.length === 0 && <EmptyState>Dites bonjour 👋</EmptyState>}
@@ -52,6 +74,8 @@ export default function ConversationScreen({ conversation, draft, setDraft, onSe
 
 const s = StyleSheet.create({
   scroll: { padding: 14, gap: 8 },
+  rangee: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  signaler: { paddingVertical: 4, paddingHorizontal: 2 },
   bubble: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12,
