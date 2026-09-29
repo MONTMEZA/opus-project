@@ -2065,3 +2065,83 @@ exception
   when duplicate_object then null;
   when undefined_object then null;
 end $$;
+
+-- ==========================================================================
+--  16. LA NOTE D'UN ARTISAN, TENUE PAR LA BASE
+--
+--  POURQUOI
+--  L'application téléchargeait TOUS les avis de TOUS les artisans à chaque
+--  ouverture, uniquement pour afficher une moyenne dans les listes. Avec
+--  cinq cents artisans et vingt avis chacun, c'est dix mille lignes lues
+--  pour montrer dix étoiles.
+--
+--  Le compteur est donc tenu par un trigger, comme `likes_count`,
+--  `followers_count` et `comments_count`. Les avis eux-mêmes ne sont plus
+--  chargés qu'à l'ouverture d'un profil.
+--
+--  On recalcule la moyenne ENTIÈRE à chaque changement plutôt que de
+--  l'ajuster : un artisan a quelques dizaines d'avis, le calcul est
+--  instantané, et surtout la valeur ne peut JAMAIS dériver. Un compteur
+--  incrémental qui se décale d'un avis est invisible et définitif.
+-- --------------------------------------------------------------------------
+alter table public.professional_profiles add column if not exists avis_count   int not null default 0;
+alter table public.professional_profiles add column if not exists note_delais  numeric(4,2) not null default 0;
+alter table public.professional_profiles add column if not exists note_qualite numeric(4,2) not null default 0;
+alter table public.professional_profiles add column if not exists note_tarif   numeric(4,2) not null default 0;
+
+create or replace function public.recalcule_notes_pro(p_pro uuid)
+returns void language sql security definer set search_path = public as $$
+  update public.professional_profiles p
+     set avis_count   = coalesce(a.n, 0),
+         note_delais  = coalesce(a.d, 0),
+         note_qualite = coalesce(a.q, 0),
+         note_tarif   = coalesce(a.t, 0)
+    from (
+      select count(*) as n, avg(delais) as d, avg(qualite) as q, avg(tarif) as t
+        from public.reviews where professional_id = p_pro
+    ) a
+   where p.id = p_pro;
+$$;
+
+create or replace function public.maj_notes_pro()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  -- Un avis peut changer d'artisan : on remet les deux d'aplomb.
+  if tg_op in ('UPDATE', 'DELETE') then
+    perform public.recalcule_notes_pro(old.professional_id);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    perform public.recalcule_notes_pro(new.professional_id);
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists trg_notes_pro on public.reviews;
+create trigger trg_notes_pro
+  after insert or update or delete on public.reviews
+  for each row execute function public.maj_notes_pro();
+
+-- Les fiches antérieures au trigger n'ont jamais été calculées.
+do $$
+declare p uuid;
+begin
+  for p in select id from public.professional_profiles loop
+    perform public.recalcule_notes_pro(p);
+  end loop;
+end $$;
+
+-- Les avis d'UN artisan, lus à l'ouverture de son profil.
+create index if not exists idx_reviews_pro on public.reviews (professional_id, created_at desc);
+
+-- Ces deux fonctions ne s'appellent pas depuis l'extérieur.
+do $$
+declare f text;
+begin
+  foreach f in array array['public.maj_notes_pro()', 'public.recalcule_notes_pro(uuid)'] loop
+    begin
+      execute format('revoke execute on function %s from public', f);
+      execute format('revoke execute on function %s from anon, authenticated', f);
+    exception when undefined_function or undefined_object then null;
+    end;
+  end loop;
+end $$;

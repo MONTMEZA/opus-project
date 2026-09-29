@@ -117,12 +117,37 @@ export const proProfiles = {
  * Moyenne des avis sur 3 critères :
  * respect des délais, qualité du travail, rapport qualité-prix.
  */
+/**
+ * La note d'un artisan.
+ *
+ * DEUX SOURCES, ET L'ORDRE COMPTE
+ *   - si les AVIS sont chargés, on les calcule. C'est ce qui fait que la
+ *     note bouge tout de suite quand on en publie un ;
+ *   - sinon, on prend la moyenne tenue par la base (`note_delais`,
+ *     `note_qualite`, `note_tarif`, `avis_count`), mise à jour par un
+ *     trigger à chaque avis ajouté, modifié ou supprimé.
+ *
+ * Pourquoi cette seconde source existe : les listes (Découvrir, SOS, le fil)
+ * affichent une note pour chaque artisan. Les calculer à partir des avis
+ * obligeait à télécharger TOUS les avis de TOUS les artisans à chaque
+ * ouverture de l'application — dix mille lignes pour dix étoiles.
+ */
 export function avgReviews(pro) {
   const rs = (pro && pro.reviews) || [];
-  if (rs.length === 0) return { delais: 0, qualite: 0, tarif: 0, global: 0, count: 0 };
-  const sum = (k) => rs.reduce((a, r) => a + r[k], 0) / rs.length;
-  const delais = sum('delais'), qualite = sum('qualite'), tarif = sum('tarif');
-  return { delais, qualite, tarif, global: (delais + qualite + tarif) / 3, count: rs.length };
+
+  if (rs.length > 0) {
+    const sum = (k) => rs.reduce((a, r) => a + r[k], 0) / rs.length;
+    const delais = sum('delais'), qualite = sum('qualite'), tarif = sum('tarif');
+    return { delais, qualite, tarif, global: (delais + qualite + tarif) / 3, count: rs.length };
+  }
+
+  const n = (pro && pro.avisCount) || 0;
+  if (n === 0) return { delais: 0, qualite: 0, tarif: 0, global: 0, count: 0 };
+
+  const delais = Number(pro.noteDelais) || 0;
+  const qualite = Number(pro.noteQualite) || 0;
+  const tarif = Number(pro.noteTarif) || 0;
+  return { delais, qualite, tarif, global: (delais + qualite + tarif) / 3, count: n };
 }
 
 // « format » dit ce qu'on regarde (photo, vidéo…) ; « type » dit s'il s'agit

@@ -127,9 +127,18 @@ Les commentaires ne sont plus chargés d'avance du tout — ils arrivent quand
 on les ouvre. Le nombre affiché vient de `posts.comments_count`, tenu par un
 trigger (comme `likes_count`). Et « tirer pour rafraîchir » existe enfin.
 
-**Ce qui reste de A1 :** les PROFILS partent encore tous d'un coup
-(`professional_profiles.select('*')`, portfolios compris). C'est le dernier
-chargement non borné. Les messages, eux, sont traités (voir B1/B2).
+**A1 est maintenant COMPLET (29/09/2026).** Les profils ne partent plus
+avec `select('*')` : la liste des colonnes est explicite, **sans `bio` ni
+`portfolio`** — les deux colonnes lourdes, qui ne servent que sur la page
+d'un artisan et arrivent avec `chargerProfilPro()`.
+
+Et les AVIS ne sont plus chargés du tout au démarrage. Ils l'étaient pour
+tous les artisans, uniquement pour afficher une moyenne dans les listes.
+La note vient désormais de `avis_count` / `note_delais` / `note_qualite` /
+`note_tarif`, tenus par un trigger — vérifié sur la vraie base : les
+compteurs correspondent exactement aux avis réels.
+
+Plus aucun chargement non borné au démarrage.
 
 ~~**A1 — `loadAll()` télécharge TOUTE la base à chaque ouverture.**~~
 Quinze requêtes en parallèle (`src/lib/api.js`), et **une seule `.limit()`

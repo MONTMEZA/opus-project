@@ -46,7 +46,8 @@
     "captures": "node scripts/captures.mjs",
     "verifier-recherche": "node scripts/verifier-recherche.mjs",
     "verifier-moderation": "node scripts/verifier-moderation.mjs",
-    "verifier-legal": "node scripts/verifier-legal.mjs"
+    "verifier-legal": "node scripts/verifier-legal.mjs",
+    "verifier-notes": "node scripts/verifier-notes.mjs"
   },
   "private": true,
   "devDependencies": {

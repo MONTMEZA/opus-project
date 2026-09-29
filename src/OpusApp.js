@@ -179,6 +179,17 @@ export default function OpusApp() {
       /* Une demande de modification des métiers déjà déposée doit réapparaître
          à la reconnexion, sinon l'artisan la redépose et la base la refuse. */
       if (type === 'pro') {
+        /* MA fiche complète : mon portfolio et ma présentation s'affichent
+           sur mon propre profil, qui n'est pas la page publique. */
+        try {
+          const moiComplet = await api.chargerProfilPro(api.getUserId());
+          if (moiComplet) {
+            setPros((ps) => (ps[api.getUserId()]
+              ? { ...ps, [api.getUserId()]: { ...ps[api.getUserId()], ...moiComplet, portfolioCharge: true } }
+              : ps));
+          }
+        } catch (e) { /* la fiche légère suffit à afficher l'écran */ }
+
         try { setDemandeMetiers(await api.chargerDemandeMetiers()); }
         catch (e) { setDemandeMetiers(null); }
         try { setAnnonces(await api.chargerAnnonces()); }
@@ -474,10 +485,40 @@ export default function OpusApp() {
     api.setFollow(proId, following).catch(() => {});
   };
 
-  const viewProfile = (proId) => {
+  /**
+   * Ouvrir la page d'un artisan.
+   *
+   * La fiche connue est légère : elle n'a ni présentation, ni réalisations,
+   * ni avis — ces trois-là ne servent que sur cette page, et les charger
+   * pour tout le monde au démarrage revenait à télécharger cinq cents
+   * portfolios pour en regarder un.
+   *
+   * On affiche donc TOUT DE SUITE ce qu'on a — nom, métier, ville, note —
+   * et le reste arrive derrière. Attendre pour montrer une page complète
+   * donnerait l'impression que l'application est lente.
+   */
+  const viewProfile = async (proId) => {
     setViewedProId(proId);
     setScreen('profilPro');
     setOpenContactId(null);
+
+    const connu = pros[proId];
+    /* `portfolioCharge` distingue « pas encore demandé » de « demandé, et
+       il est vide ». Sans lui, on redemanderait à chaque ouverture le
+       profil d'un artisan qui n'a aucune réalisation. */
+    if (connu && connu.portfolioCharge) return;
+
+    try {
+      const complet = await api.chargerProfilPro(proId);
+      if (!complet) return;
+      setPros((ps) => (ps[proId]
+        ? { ...ps, [proId]: { ...ps[proId], ...complet, portfolioCharge: true } }
+        : ps));
+    } catch (e) {
+      /* La page reste utilisable avec ce qu'on a déjà : on ne bloque pas
+         pour une présentation manquante. */
+      showBanner("Le profil n'a pas pu être chargé entièrement.");
+    }
   };
 
   /* ---------- contact / devis / rappel ---------- */

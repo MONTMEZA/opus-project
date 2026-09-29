@@ -144,6 +144,23 @@ export async function signOut() {
 /* ------------------------------------------------------------------ */
 
 /** Transforme une ligne `professional_profiles` en objet utilisé par les écrans. */
+/**
+ * Les colonnes d'une fiche professionnelle utiles DANS UNE LISTE.
+ *
+ * `bio` et `portfolio` n'y sont pas, et c'est tout l'intérêt : ce sont les
+ * deux colonnes lourdes, et elles ne servent que sur la page d'un artisan.
+ * Elles arrivent avec chargerProfilPro().
+ */
+const COLONNES_PRO_LISTE = [
+  'id', 'nom', 'entreprise', 'metier', 'metiers', 'ville', 'verifie',
+  'experience_annees', 'siret', 'followers_count', 'rge',
+  'assurance_valide', 'assurance_expire', 'kbis_valide', 'kbis_maj',
+  'avatar_url', 'banner_url', 'kbis_url', 'assurance_url',
+  'verification_statut', 'verification_note', 'verifie_le',
+  'code_postal', 'latitude', 'longitude',
+  'avis_count', 'note_delais', 'note_qualite', 'note_tarif',
+].join(', ');
+
 function rowToPro(row, reviews = [], partners = []) {
   return {
     id: row.id,
@@ -170,6 +187,12 @@ function rowToPro(row, reviews = [], partners = []) {
     assurancePath: row.assurance_url || null,
     verificationStatut: row.verification_statut || 'non_soumis',
     verificationNote: row.verification_note || null,
+    /* La note tenue par la base : elle permet d'afficher une moyenne dans
+       les listes SANS télécharger les avis. Voir avgReviews(). */
+    avisCount: row.avis_count || 0,
+    noteDelais: row.note_delais || 0,
+    noteQualite: row.note_qualite || 0,
+    noteTarif: row.note_tarif || 0,
     verifieLe: row.verifie_le || null,
     codePostal: row.code_postal || null,
     latitude: row.latitude || null,
@@ -267,11 +290,18 @@ export async function loadAll() {
          page (voir chargerPageFil) ;
        - les COMMENTAIRES ne viennent plus du tout : on les charge quand
          quelqu'un les ouvre. La plupart n'étaient jamais lus. */
-  const [profilesRes, reviewsRes, partnersRes, postsRes,
+  const [profilesRes, partnersRes, postsRes,
          likesRes, savesRes, followsRes, convRes, notifRes,
          demandesRes, reponsesRes, masosRes, moiRes] = await Promise.all([
-    supabase.from('professional_profiles').select('*'),
-    supabase.from('reviews').select('*, users:author_id(nom)').order('created_at', { ascending: false }),
+    /* SANS `bio` NI `portfolio` : ce sont les deux colonnes lourdes, et
+       elles ne servent QUE sur la page d'un artisan — jamais dans une
+       liste. Un portfolio, c'est un tableau d'adresses de photos ; multiplié
+       par cinq cents artisans, c'est l'essentiel du poids du démarrage.
+       Elles arrivent avec chargerProfilPro(), à l'ouverture du profil. */
+    supabase.from('professional_profiles').select(COLONNES_PRO_LISTE),
+    /* Les avis ne sont plus chargés du tout au démarrage : la note affichée
+       dans les listes vient de `avis_count` / `note_*`, tenus par un
+       trigger. Les avis eux-mêmes arrivent à l'ouverture d'un profil. */
     supabase.from('professional_partners').select('*'),
     supabase.from('posts').select('*')
       .order('created_at', { ascending: false }).limit(TAILLE_PAGE_FIL),
@@ -289,16 +319,9 @@ export async function loadAll() {
     supabase.from('users').select('*').eq('id', uid).maybeSingle(),
   ]);
 
-  const err = [profilesRes, reviewsRes, partnersRes, postsRes].find((r) => r.error);
+  const err = [profilesRes, partnersRes, postsRes].find((r) => r.error);
   if (err) throw err.error;
 
-  const reviewsByPro = {};
-  (reviewsRes.data || []).forEach((r) => {
-    if (!reviewsByPro[r.professional_id]) reviewsByPro[r.professional_id] = [];
-    reviewsByPro[r.professional_id].push(
-      rowToReview({ ...r, auteur: r.users ? r.users.nom : 'Client' }),
-    );
-  });
 
   /* Une ligne décrit une relation entre deux artisans. Acceptée, elle vaut
      dans les deux sens : chacun apparaît chez l'autre. En attente, elle ne
@@ -321,7 +344,10 @@ export async function loadAll() {
 
   const pros = {};
   (profilesRes.data || []).forEach((row) => {
-    pros[row.id] = rowToPro(row, reviewsByPro[row.id] || [], partnersByPro[row.id] || []);
+    /* Liste vide, pas `null` : « aucun avis chargé » se comporte comme
+       « aucun avis » pour l'affichage, et avgReviews() se rabat alors sur
+       la moyenne tenue par la base. */
+    pros[row.id] = rowToPro(row, [], partnersByPro[row.id] || []);
   });
 
   const likedSet = new Set((likesRes.data || []).map((l) => l.post_id));
@@ -417,6 +443,52 @@ export async function loadAll() {
     finDuFil,
   };
 }
+
+/**
+ * La fiche COMPLÈTE d'un artisan, à l'ouverture de son profil : sa
+ * présentation, ses réalisations, et ses avis.
+ *
+ * Ces trois choses ne servent nulle part ailleurs. Les charger pour tout le
+ * monde à chaque ouverture de l'application, c'était télécharger cinq cents
+ * portfolios pour en regarder un.
+ */
+async function profilProDeSupabase(id) {
+  const [ficheRes, avisRes] = await Promise.all([
+    supabase.from('professional_profiles').select('*').eq('id', id).maybeSingle(),
+    supabase.from('reviews').select('*, users:author_id(nom)')
+      .eq('professional_id', id).order('created_at', { ascending: false }),
+  ]);
+  if (ficheRes.error) throw ficheRes.error;
+  if (!ficheRes.data) return null;
+
+  const avis = (avisRes.data || []).map((r) => rowToReview({
+    ...r,
+    /* Un avis dont l'auteur a supprimé son compte est conservé mais
+       anonymisé : on le DIT, au lieu d'afficher « Client » comme s'il était
+       toujours là. */
+    auteur: r.auteur_supprime ? 'Compte supprimé' : (r.users ? r.users.nom : 'Client'),
+  }));
+  return { fiche: ficheRes.data, avis };
+}
+
+async function profilProDeDemo() { return null; }
+
+/**
+ * Renvoie ce qu'il faut fusionner dans la fiche déjà connue : la
+ * présentation, les réalisations et les avis. `null` en démonstration, où
+ * tout est déjà en mémoire.
+ */
+export const chargerProfilPro = hasSupabase
+  ? async (id) => {
+    const complet = await profilProDeSupabase(id);
+    if (!complet) return null;
+    return {
+      bio: complet.fiche.bio || '',
+      portfolio: complet.fiche.portfolio || [],
+      reviews: complet.avis,
+    };
+  }
+  : profilProDeDemo;
 
 /* ------------------------------------------------------------------ */
 /*  Le fil, par pages                                                   */
