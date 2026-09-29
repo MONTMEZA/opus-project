@@ -67,10 +67,21 @@ d'une session qui parle de la suite du projet**, et à mettre à jour quand un
 point est traité.
 
 Les trois points bloquants — signalement et blocage, suppression de compte,
-textes légaux — sont **faits** (21/09/2026). Il reste deux gestes que seul le
-propriétaire peut faire, et ils sont en tête du fichier : remplir
-`src/data/legal.js`, et activer la protection contre les mots de passe
-compromis dans Supabase.
+textes légaux — sont **faits** (21/09/2026).
+
+### Le propriétaire n'a PAS de société ni de SIRET (constaté le 29/09/2026)
+
+Ne jamais lui écrire des mentions légales de société : ce serait faux, et une
+mention légale fausse engage sa responsabilité. `src/data/legal.js` porte un
+champ **`STATUT`** (`essai` · `particulier` · `micro` · `societe`) qui décide
+de ce que la loi exige et de ce que les écrans affichent. Il vaut `'essai'` :
+l'application n'est pas ouverte au public, il n'y a donc rien à publier.
+
+`npm run verifier-legal` refuse de passer si le statut change sans que les
+champs correspondants soient remplis. **À lancer avant toute mise en ligne.**
+
+L'autre geste qui n'appartient qu'à lui : activer la protection contre les
+mots de passe compromis dans Supabase → Authentication → Policies.
 
 ## Modération : ce qui ne se discute plus
 

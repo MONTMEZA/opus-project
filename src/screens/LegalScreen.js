@@ -14,9 +14,10 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { C, F, T, S, interligne } from '../theme';
-import { AlertTriangle } from '../components/icons';
+import { AlertTriangle, Info } from '../components/icons';
 import {
   VERSION, MENTIONS, CGU, CONFIDENTIALITE, editeurComplet, manquesEditeur,
+  rappelStatut,
 } from '../data/legal';
 
 const TEXTES = {
@@ -34,9 +35,11 @@ export const TITRES_LEGAUX = {
 export default function LegalScreen({ texte = 'cgu' }) {
   const { titre, blocs } = TEXTES[texte] || TEXTES.cgu;
   const manques = manquesEditeur();
+  const rappel = rappelStatut();
 
   return (
     <ScrollView style={s.page} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Ce qui MANQUE pour le statut actuel : orange, c'est bloquant. */}
       {!editeurComplet() && (
         <View style={s.alerte}>
           <View style={s.alerteHaut}>
@@ -52,6 +55,20 @@ export default function LegalScreen({ texte = 'cgu' }) {
             Personne d’autre que vous ne les connaît, et une mention légale
             inventée engagerait votre responsabilité.
           </Text>
+        </View>
+      )}
+
+      {/* Où en est le projet : bleu, ce n'est pas une alerte.
+          Ce rappel s'affiche même quand rien ne manque — c'est justement là
+          qu'il sert : tout est en ordre POUR UN ESSAI, et seulement pour un
+          essai. Sans cette phrase, on croirait le sujet réglé. */}
+      {!!rappel && (
+        <View style={s.info}>
+          <View style={s.alerteHaut}>
+            <Info size={15} color={C.accent2} />
+            <Text style={s.infoTitre}>Où en est le projet</Text>
+          </View>
+          <Text style={s.alerteTexte}>{rappel}</Text>
         </View>
       )}
 
@@ -77,6 +94,12 @@ const s = StyleSheet.create({
   },
   alerteHaut: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   alerteTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent },
+
+  info: {
+    backgroundColor: C.surface, borderLeftWidth: 3, borderLeftColor: C.accent2,
+    padding: S.md, gap: 6, marginBottom: S.lg,
+  },
+  infoTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2 },
   alerteTexte: {
     fontFamily: F.inter, fontSize: T.petit, color: C.ink,
     lineHeight: interligne(T.petit),

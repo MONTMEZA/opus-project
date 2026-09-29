@@ -29,64 +29,219 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-09-21';
+export const VERSION = '2026-09-29';
 
-/** À remplir. Les valeurs nulles font apparaître l'avertissement. */
+/**
+ * OÙ EN EST LE PROJET, JURIDIQUEMENT.
+ *
+ * Ce n'est pas un détail de présentation : ce que la loi exige d'afficher
+ * dépend entièrement de ce champ. Écrire des mentions de société quand on
+ * n'en a pas est aussi faux que de n'en écrire aucune.
+ *
+ *   'essai'      — l'application n'est PAS ouverte au public. Elle tourne sur
+ *                  le téléphone du propriétaire, ou auprès de quelques
+ *                  testeurs invités (TestFlight interne, canal fermé Google
+ *                  Play). Il n'y a alors rien à publier : les mentions
+ *                  légales s'adressent au public, et il n'y a pas de public.
+ *                  C'est l'état actuel.
+ *
+ *   'particulier'— publiée, mais à titre NON PROFESSIONNEL : aucune recette,
+ *                  aucune intention commerciale. La loi (LCEN, article 6-III-2)
+ *                  permet alors de ne pas exposer son nom ni son adresse au
+ *                  public, À CONDITION de les avoir communiqués à
+ *                  l'hébergeur. Les mentions ne nomment que l'hébergeur.
+ *
+ *   'micro'      — micro-entrepreneur. Nom, SIRET et adresse deviennent
+ *                  obligatoires et publics. Pas de forme juridique ni de
+ *                  capital : une entreprise individuelle n'en a pas.
+ *
+ *   'societe'    — SAS, SARL… Tout devient obligatoire, capital et directeur
+ *                  de la publication compris.
+ *
+ * ⚠️  LE PASSAGE DE 'essai' À AUTRE CHOSE N'EST PAS AUTOMATIQUE.
+ * Dès qu'Opus est ouverte au public ET qu'elle peut rapporter de l'argent
+ * (annonces de fournisseurs, publicité, abonnement), l'activité devient
+ * professionnelle : 'particulier' ne suffit plus, il faut un SIRET.
+ */
+export const STATUT = 'essai';
+
+/**
+ * À remplir selon le STATUT ci-dessus. Les valeurs nulles font apparaître
+ * l'avertissement dans l'application.
+ */
 export const EDITEUR = {
-  denomination: null,      // ex. « Opus SAS » ou « Dylan Montmeza, entrepreneur individuel »
-  formeJuridique: null,    // ex. « SAS au capital de 1 000 € », ou « entrepreneur individuel »
-  siren: null,             // 9 chiffres (ou SIRET à 14)
-  adresse: null,           // siège social — obligatoire, même pour un particulier
-  email: 'contact@opus-project.fr',   // À VÉRIFIER : cette adresse doit exister et être relevée
+  // Statuts 'particulier', 'micro' et 'societe'
+  denomination: null,      // « Dylan Montmeza » ou « Opus SAS »
+  // Statut 'societe' seulement
+  formeJuridique: null,    // ex. « SAS au capital de 1 000 € »
   directeurPublication: null,
+  // Statuts 'micro' et 'societe'
+  siren: null,             // SIREN (9 chiffres) ou SIRET (14)
+  adresse: null,
+  // Toujours : c'est par là qu'on signale et qu'on exerce ses droits.
+  // À VÉRIFIER : cette adresse doit exister et être relevée.
+  email: 'contact@opus-project.fr',
+  /**
+   * Statut 'particulier' : la loi ne dispense d'afficher son identité que si
+   * on l'a REMISE à l'hébergeur. Tant que ce n'est pas fait, la dispense ne
+   * s'applique pas — d'où ce drapeau, qu'on ne coche qu'une fois la chose
+   * faite (Supabase → Support, ou les informations de facturation du compte).
+   */
+  identiteRemiseALHebergeur: false,
   hebergeur: {
     nom: 'Supabase Inc.',
     adresse: '970 Toa Payoh North, #07-04, Singapour 318992',
     site: 'https://supabase.com',
-    // La base du projet est hébergée dans une région à confirmer dans le
-    // tableau de bord Supabase (Project Settings → General → Region).
-    region: null,
+    /**
+     * Relevé directement dans le projet Supabase : `eu-west-2`, c'est-à-dire
+     * LONDRES.
+     *
+     * ⚠️  Londres n'est plus dans l'Union européenne. Les données y sont
+     * transférées au titre de la décision d'adéquation de la Commission
+     * européenne concernant le Royaume-Uni — transfert donc autorisé, sans
+     * formalité supplémentaire, mais cette décision est renouvelée
+     * périodiquement : à revérifier avant l'ouverture au public.
+     *
+     * Le plus simple resterait d'héberger DANS l'Union (Supabase propose
+     * Paris, `eu-west-3`, et Francfort, `eu-central-1`). Changer de région
+     * impose de recréer le projet et de tout transférer : c'est aujourd'hui,
+     * avec presque aucune donnée, que ça coûte le moins cher.
+     */
+    region: 'eu-west-2 (Londres, Royaume-Uni)',
   },
 };
 
-export function editeurComplet() {
-  return Boolean(
-    EDITEUR.denomination && EDITEUR.siren && EDITEUR.adresse
-    && EDITEUR.directeurPublication && EDITEUR.hebergeur.region,
-  );
+/**
+ * Ce que chaque statut exige RÉELLEMENT. Une seule table, pour que la
+ * question « qu'est-ce qui me manque ? » ait une réponse unique.
+ */
+const EXIGENCES = {
+  essai: [],
+  particulier: [
+    ['hebergeur.region', 'la région d’hébergement Supabase'],
+    ['identiteRemiseALHebergeur',
+      'la confirmation que votre identité a été communiquée à l’hébergeur '
+      + '(sans elle, la dispense d’anonymat ne s’applique pas)'],
+  ],
+  micro: [
+    ['denomination', 'votre nom et prénom'],
+    ['siren', 'votre numéro SIRET'],
+    ['adresse', 'l’adresse de l’entreprise'],
+    ['hebergeur.region', 'la région d’hébergement Supabase'],
+  ],
+  societe: [
+    ['denomination', 'la dénomination sociale'],
+    ['formeJuridique', 'la forme juridique et le capital'],
+    ['siren', 'le numéro SIREN ou SIRET'],
+    ['adresse', 'l’adresse du siège'],
+    ['directeurPublication', 'le directeur de la publication'],
+    ['hebergeur.region', 'la région d’hébergement Supabase'],
+  ],
+};
+
+function valeurDe(chemin) {
+  return chemin.split('.').reduce((o, cle) => (o ? o[cle] : null), EDITEUR);
 }
 
-/** Ce qui manque, listé pour que ce soit une corvée de dix minutes. */
+/** Ce qui manque POUR LE STATUT ACTUEL, et rien d'autre. */
 export function manquesEditeur() {
-  const manques = [];
-  if (!EDITEUR.denomination) manques.push('la dénomination (nom de l’entreprise ou nom et prénom)');
-  if (!EDITEUR.formeJuridique) manques.push('la forme juridique et le capital');
-  if (!EDITEUR.siren) manques.push('le numéro SIREN ou SIRET');
-  if (!EDITEUR.adresse) manques.push('l’adresse du siège');
-  if (!EDITEUR.directeurPublication) manques.push('le directeur de la publication');
-  if (!EDITEUR.hebergeur.region) manques.push('la région d’hébergement Supabase');
-  return manques;
+  return (EXIGENCES[STATUT] || EXIGENCES.societe)
+    .filter(([chemin]) => !valeurDe(chemin))
+    .map(([, libelle]) => libelle);
+}
+
+export function editeurComplet() {
+  return manquesEditeur().length === 0;
+}
+
+/**
+ * Le rappel affiché en tête des textes, même quand rien ne manque.
+ *
+ * En statut 'essai', rien ne manque — et c'est justement là qu'un mot
+ * d'avertissement est le plus utile : tout est en ordre POUR UN ESSAI, et
+ * seulement pour un essai. Sans cette phrase, on croirait le sujet réglé.
+ */
+export function rappelStatut() {
+  if (STATUT === 'essai') {
+    return 'Application en essai — non ouverte au public. Avant la première '
+      + 'mise en ligne sur l’App Store ou Google Play, changez STATUT dans '
+      + 'src/data/legal.js : la loi exigera alors votre identité, et un SIRET '
+      + 'dès que l’application pourra rapporter de l’argent.';
+  }
+  if (STATUT === 'particulier') {
+    return 'Publication à titre non professionnel. Cette dispense tombe dès '
+      + 'qu’Opus rapporte de l’argent — annonce de fournisseur, publicité, '
+      + 'abonnement : il faut alors un SIRET et le statut « micro ».';
+  }
+  return null;
 }
 
 const ou = (valeur, defaut) => valeur || defaut;
 
 /* ------------------------------------------------------------------ */
 /*  1. MENTIONS LÉGALES                                                */
+/*                                                                     */
+/*  Elles changent AVEC LE STATUT. Une entreprise individuelle n'a ni   */
+/*  forme juridique ni capital : afficher « SAS au capital de… » quand  */
+/*  on est micro-entrepreneur est aussi faux que de ne rien afficher.   */
 /* ------------------------------------------------------------------ */
 
-export const MENTIONS = [
-  {
+function blocEditeur() {
+  if (STATUT === 'essai') {
+    return {
+      titre: 'Éditeur',
+      texte: "Opus est en cours de développement et n'est pas ouverte au "
+        + 'public. Elle est utilisée par son auteur et par quelques testeurs '
+        + "invités.\n\nLes mentions légales complètes — identité de l'éditeur, "
+        + 'numéro d’immatriculation, directeur de la publication — seront '
+        + "renseignées avant la première mise en ligne publique.\n\n"
+        + `Contact : ${EDITEUR.email}`,
+    };
+  }
+
+  if (STATUT === 'particulier') {
+    return {
+      titre: 'Éditeur',
+      texte: "Opus est éditée à titre NON PROFESSIONNEL par une personne "
+        + 'physique. Conformément à l’article 6-III-2 de la loi pour la '
+        + 'confiance dans l’économie numérique, son identité n’est pas '
+        + 'publiée ici : elle a été communiquée à l’hébergeur, qui la tient '
+        + `à la disposition de l’autorité judiciaire.\n\n`
+        + `Contact : ${EDITEUR.email}`,
+    };
+  }
+
+  if (STATUT === 'micro') {
+    return {
+      titre: 'Éditeur',
+      texte: `${ou(EDITEUR.denomination, '[à compléter : nom et prénom]')}\n`
+        + `Entrepreneur individuel (micro-entreprise)\n`
+        + `SIRET ${ou(EDITEUR.siren, '[à compléter]')}\n`
+        + `${ou(EDITEUR.adresse, '[à compléter : adresse]')}\n`
+        + `Contact : ${EDITEUR.email}`,
+    };
+  }
+
+  return {
     titre: 'Éditeur',
     texte: `${ou(EDITEUR.denomination, '[à compléter : dénomination]')}\n`
       + `${ou(EDITEUR.formeJuridique, '[à compléter : forme juridique]')}\n`
       + `SIREN ${ou(EDITEUR.siren, '[à compléter]')}\n`
       + `${ou(EDITEUR.adresse, '[à compléter : adresse du siège]')}\n`
       + `Contact : ${EDITEUR.email}`,
-  },
-  {
+  };
+}
+
+const BLOC_DIRECTEUR = STATUT === 'societe'
+  ? [{
     titre: 'Directeur de la publication',
     texte: ou(EDITEUR.directeurPublication, '[à compléter]'),
-  },
+  }]
+  : [];
+
+export const MENTIONS = [
+  blocEditeur(),
+  ...BLOC_DIRECTEUR,
   {
     titre: 'Hébergement',
     texte: `${EDITEUR.hebergeur.nom}\n${EDITEUR.hebergeur.adresse}\n`
@@ -103,9 +258,10 @@ export const MENTIONS = [
   },
   {
     titre: 'Signaler un contenu',
-    texte: "Chaque publication, commentaire, profil, demande et annonce porte "
-      + 'un bouton de signalement. Les signalements sont examinés sous '
-      + '48 heures. Vous pouvez aussi écrire à ' + EDITEUR.email + '.',
+    texte: "Chaque publication, commentaire, message, profil, demande et "
+      + 'annonce porte un bouton de signalement. Les signalements sont '
+      + 'examinés sous 48 heures. Vous pouvez aussi écrire à '
+      + EDITEUR.email + '.',
   },
 ];
 
@@ -202,9 +358,18 @@ export const CGU = [
 export const CONFIDENTIALITE = [
   {
     titre: 'Qui traite vos données',
-    texte: `${ou(EDITEUR.denomination, '[à compléter : dénomination]')}, `
-      + `${ou(EDITEUR.adresse, '[à compléter : adresse]')}. `
-      + `Pour toute question sur vos données : ${EDITEUR.email}.`,
+    texte: STATUT === 'essai'
+      ? "Opus est en cours de développement et n'est pas ouverte au public. "
+        + "Le responsable du traitement est l'auteur de l'application ; son "
+        + 'identité complète sera publiée ici avant la première mise en ligne '
+        + `publique.\n\nPour toute question sur vos données : ${EDITEUR.email}.`
+      : STATUT === 'particulier'
+        ? 'Opus est éditée à titre non professionnel par une personne '
+          + 'physique, dont l’identité a été communiquée à l’hébergeur. '
+          + `Pour toute question sur vos données : ${EDITEUR.email}.`
+        : `${ou(EDITEUR.denomination, '[à compléter : dénomination]')}, `
+          + `${ou(EDITEUR.adresse, '[à compléter : adresse]')}. `
+          + `Pour toute question sur vos données : ${EDITEUR.email}.`,
   },
   {
     titre: 'Ce que nous collectons',
@@ -238,6 +403,14 @@ export const CONFIDENTIALITE = [
       + 'légitime, et obligation légale pour un service en ligne ouvert au '
       + 'public. Contrôler les documents du badge vérifié : votre '
       + 'consentement, que vous donnez en les envoyant.',
+  },
+  {
+    titre: 'Où vos données sont hébergées',
+    texte: 'La base et les fichiers sont hébergés par Supabase à Londres '
+      + '(Royaume-Uni). Le Royaume-Uni ne fait plus partie de l’Union '
+      + 'européenne, mais la Commission européenne a reconnu qu’il offre un '
+      + 'niveau de protection équivalent : le transfert est donc autorisé '
+      + 'sans formalité supplémentaire.',
   },
   {
     titre: 'À qui vos données sont transmises',

@@ -79,6 +79,7 @@ export const AlertTriangle = mk(Feather, 'alert-triangle');
 
 /* Modération et droits des personnes (section 13 du schéma). */
 export const Flag = mk(Feather, 'flag');
+export const Info = mk(Feather, 'info');
 export const MoreHorizontal = mk(Feather, 'more-horizontal');
 export const Download = mk(Feather, 'download');
 export const Scale = mk(MaterialCommunityIcons, 'scale-balance');

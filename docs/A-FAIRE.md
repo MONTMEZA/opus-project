@@ -17,12 +17,30 @@ de tout cela ne vaut : elles sont juste en dessous.
 
 ### ⚠️ 1.0 Ce qu'il reste à faire, et que vous seul pouvez faire
 
-**a) Remplir `src/data/legal.js`** — six informations manquent : dénomination,
-forme juridique, SIREN, adresse du siège, directeur de la publication, région
-d'hébergement Supabase. Tant qu'elles manquent, un bandeau orange s'affiche en
-haut de chaque texte légal dans l'application, avec la liste. Ce ne sont pas
-des oublis : vous seul les connaissez, et une mention légale inventée
-engagerait votre responsabilité.
+**a) Le statut juridique — rien à faire AUJOURD'HUI.** Mis à jour le
+29/09/2026, quand le propriétaire a indiqué qu'il n'a pas encore de société
+ni de SIRET.
+
+`src/data/legal.js` porte désormais un champ `STATUT`, réglé sur `'essai'` :
+l'application n'est pas ouverte au public, donc il n'y a **aucune mention
+légale à publier**. Ce qu'exige la loi dépend entièrement de ce champ :
+
+| STATUT | Quand | Ce qu'il faut afficher |
+| --- | --- | --- |
+| `essai` | aujourd'hui — test personnel, TestFlight interne | rien de plus |
+| `particulier` | en ligne, **sans rien gagner** | l'hébergeur seul (LCEN 6-III-2), à condition d'avoir remis son identité à Supabase |
+| `micro` | dès qu'Opus **peut** rapporter de l'argent | nom, SIRET, adresse |
+| `societe` | SAS, SARL… | tout, capital et directeur de publication compris |
+
+**Le passage de `essai` à autre chose n'est pas automatique** : c'est une
+ligne à changer, et `npm run verifier-legal` refuse alors de passer tant que
+les champs correspondants sont vides. Tester ce passage AVANT la première
+mise en ligne, pas pendant.
+
+Le chemin le moins cher pour obtenir un SIRET : **micro-entrepreneur**,
+gratuit, en ligne sur le guichet unique des formalités des entreprises
+(formalites.entreprises.gouv.fr). Aucune cotisation tant qu'il n'y a aucune
+recette. À faire quand l'ouverture au public approche, pas avant.
 
 **b) Supabase → Authentication → Policies → activer la protection contre les
 mots de passe compromis.** C'est un interrupteur, et c'est la dernière alerte
