@@ -38,6 +38,39 @@ Pour reproduire fidèlement une panne, la bonne base de départ n'est pas
 `schema.sql` d'aujourd'hui mais **celle de la version que le propriétaire a
 réellement appliquée** (`git show <commit>:supabase/schema.sql`).
 
+### Le piège Metro qui a coûté une heure : asynchrone + ternaire
+
+Cette forme **fait échouer la construction**, sans indiquer ni la ligne ni la
+cause :
+
+```js
+export const x = !hasSupabase
+  ? async (options = {}) => { … }   // <- paramètre par défaut ET corps en bloc
+  : async (options = {}) => { … };
+```
+
+    SyntaxError: src/lib/api.js: Property id of VariableDeclarator expected
+    node to be of a type ["LVal","VoidPattern"] but instead got
+    "AssignmentExpression"
+
+Le même fichier passe pourtant **avec Babel seul**, y compris avec le
+préréglage d'Expo et le greffon `react-native-worklets` : l'erreur ne sort
+que de Metro. Trouvé par dichotomie — `async (o = {}) => (expression)`
+construit, `async (o = {}) => { bloc }` dans la PREMIÈRE branche d'un
+ternaire, non.
+
+**La parade : deux fonctions nommées, et le choix à la fin.**
+
+```js
+async function xDemo(options = {}) { … }
+async function xSupabase(options = {}) { … }
+export const x = hasSupabase ? xSupabase : xDemo;
+```
+
+C'est de toute façon plus lisible. Le reste du fichier garde sa forme
+`!hasSupabase ? noop : async () => {…}` — elle n'a pas de paramètre par
+défaut, donc elle ne déclenche rien.
+
 ### Les versions de paquets Expo se désalignent toutes seules
 
 `npm install` d'un nouveau paquet peut laisser les autres en arrière.

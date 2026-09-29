@@ -15,7 +15,7 @@ import { C, F } from '../theme';
 import { BtnMini, EmptyState, SectionLabel } from '../components/ui';
 import Media from '../components/Media';
 import { apercuDe } from '../lib/cloudinary';
-import { nombreCommentaires } from '../components/Commentaires';
+import { nbCommentairesDe } from '../components/Commentaires';
 import {
   Heart, MessageSquare, Share2, Trash, RefreshCw, Grid, VideoIcon, Layers, TypeIcon,
 } from '../components/icons';
@@ -80,7 +80,7 @@ export default function MesPublicationsScreen({
                     </View>
                     <View style={s.chiffre}>
                       <MessageSquare size={12} color={C.muted} />
-                      <Text style={s.chiffreTexte}>{nombreCommentaires(p.comments)}</Text>
+                      <Text style={s.chiffreTexte}>{nbCommentairesDe(p)}</Text>
                     </View>
                   </View>
                 </View>

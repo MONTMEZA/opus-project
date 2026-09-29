@@ -117,7 +117,21 @@ utilisateurs. **Par ordre d'importance réelle, pas de difficulté.**
 
 ### A. Ce qui cassera dès qu'il y aura du monde
 
-**A1 — `loadAll()` télécharge TOUTE la base à chaque ouverture.**
+**A1 — ✅ FAIT le 29/09/2026.** Le fil se charge par pages de 20, par
+CURSEUR (« ce qui est plus ancien que telle date ») et non par numéro de
+page : entre deux pages quelqu'un publie, et un numéro de page ferait revoir
+une publication ou en sauter une. Vérifié sur la vraie base en rejouant trois
+pages : 13 publications, 13 paginées, 13 distinctes, 0 oubliée.
+
+Les commentaires ne sont plus chargés d'avance du tout — ils arrivent quand
+on les ouvre. Le nombre affiché vient de `posts.comments_count`, tenu par un
+trigger (comme `likes_count`). Et « tirer pour rafraîchir » existe enfin.
+
+**Ce qui reste de A1 :** les MESSAGES partent encore tous d'un coup
+(`supabase.from('messages').select('*')`), et tous les profils aussi. À
+traiter de la même façon.
+
+~~**A1 — `loadAll()` télécharge TOUTE la base à chaque ouverture.**~~
 Quinze requêtes en parallèle (`src/lib/api.js`), et **une seule `.limit()`
 dans tout le fichier**. Toutes les publications, tous les commentaires, tous
 les profils, toutes les demandes, tous les avis, à chaque lancement.
@@ -179,8 +193,7 @@ existe en base et **n'est lue ni écrite nulle part**. Donc : pas de pastille
 sur une conversation, pas de compteur dans la barre du bas, et un message
 reste « non lu » pour toujours.
 
-**B3 — aucun « tirer pour rafraîchir ».** Pas un seul `RefreshControl` dans
-le projet. Le seul moyen de voir du neuf est de fermer l'application.
+**B3 — ✅ FAIT le 29/09/2026**, en même temps que la pagination.
 
 **B4 — aucun écran de chargement progressif.** Pas un squelette : l'écran
 reste vide, puis tout apparaît d'un coup. Sur une connexion lente, on croit

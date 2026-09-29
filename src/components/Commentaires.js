@@ -20,7 +20,26 @@ import { BadgeCheck, Send, X, Flag } from './icons';
 
 /** Le compteur affiché sous un post : les commentaires ET leurs réponses. */
 export function nombreCommentaires(commentaires = []) {
-  return commentaires.reduce((n, c) => n + 1 + ((c.reponses || []).length), 0);
+  return (commentaires || []).reduce((n, c) => n + 1 + ((c.reponses || []).length), 0);
+}
+
+/**
+ * Combien de commentaires porte cette publication ?
+ *
+ * Deux sources, et l'ordre compte :
+ *   - si les commentaires sont CHARGÉS, on les compte. C'est ce qui fait que
+ *     le nombre bouge tout de suite quand on en écrit un ;
+ *   - sinon, on prend `nbCommentaires`, le compteur tenu par la base.
+ *
+ * `comments` vaut `null` tant qu'on ne les a pas ouverts : depuis que le fil
+ * se charge par pages, on ne les télécharge plus d'avance. Distinguer `null`
+ * (pas chargés) de `[]` (chargés, aucun) est exactement ce qui évite
+ * d'afficher « 0 » sur une publication qui a trois commentaires.
+ */
+export function nbCommentairesDe(post) {
+  if (!post) return 0;
+  if (Array.isArray(post.comments)) return nombreCommentaires(post.comments);
+  return post.nbCommentaires || 0;
 }
 
 /**

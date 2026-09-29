@@ -9,7 +9,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F } from '../theme';
 import { Gradient, BtnMain, ChipFollow, Avatar, HazardStrip } from './ui';
-import { nombreCommentaires } from './Commentaires';
+import { nbCommentairesDe } from './Commentaires';
 import Media, { estFichier } from './Media';
 import LecteurMontage from './LecteurMontage';
 import GlissementLateral from './GlissementLateral';
@@ -104,7 +104,7 @@ export default function VideoSlide({
           </Pressable>
           <Pressable style={s.action} onPress={() => onComment(post)}>
             <View style={s.actionIcon}><MessageSquare size={22} color="#fff" /></View>
-            <Text style={s.actionLabel}>{nombreCommentaires(post.comments)}</Text>
+            <Text style={s.actionLabel}>{nbCommentairesDe(post)}</Text>
           </Pressable>
           <Pressable style={s.action} onPress={() => onShare('Lien de la vidéo copié.')}>
             <View style={s.actionIcon}><Share2 size={20} color="#fff" /></View>

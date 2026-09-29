@@ -223,7 +223,13 @@ export async function loadAll() {
     });
     return {
       pros,
-      posts: initialPosts.map((p) => ({ ...p, comments: p.comments ? [...p.comments] : undefined })),
+      posts: initialPosts.slice(0, TAILLE_PAGE_FIL).map((p, i) => ({
+        ...p,
+        comments: p.comments ? [...p.comments] : [],
+        nbCommentaires: p.comments ? p.comments.length : 0,
+        curseur: String(i + 1),
+      })),
+      finDuFil: initialPosts.length <= TAILLE_PAGE_FIL,
       conversations: initialConversations.map((c) => ({ ...c, messages: [...c.messages] })),
       demandes: initialDemandes.map((d) => ({ ...d })),
       mesSos: null,
@@ -239,14 +245,20 @@ export async function loadAll() {
 
   const uid = currentUserId;
 
-  const [profilesRes, reviewsRes, partnersRes, postsRes, commentsRes,
+  /* Ce qui part en une seule fois au démarrage. Deux absents remarquables,
+     et c'est le cœur de la pagination :
+       - les PUBLICATIONS ne viennent plus toutes : seulement la première
+         page (voir chargerPageFil) ;
+       - les COMMENTAIRES ne viennent plus du tout : on les charge quand
+         quelqu'un les ouvre. La plupart n'étaient jamais lus. */
+  const [profilesRes, reviewsRes, partnersRes, postsRes,
          likesRes, savesRes, followsRes, convRes, msgRes, notifRes,
          demandesRes, reponsesRes, masosRes, moiRes] = await Promise.all([
     supabase.from('professional_profiles').select('*'),
     supabase.from('reviews').select('*, users:author_id(nom)').order('created_at', { ascending: false }),
     supabase.from('professional_partners').select('*'),
-    supabase.from('posts').select('*').order('created_at', { ascending: false }),
-    supabase.from('comments').select('*, users:author_id(nom, avatar_url, type)').order('created_at'),
+    supabase.from('posts').select('*')
+      .order('created_at', { ascending: false }).limit(TAILLE_PAGE_FIL),
     supabase.from('post_likes').select('post_id').eq('user_id', uid),
     supabase.from('saved_posts').select('post_id').eq('user_id', uid),
     supabase.from('follows').select('following_id').eq('follower_id', uid),
@@ -264,7 +276,8 @@ export async function loadAll() {
 
   const reviewsByPro = {};
   (reviewsRes.data || []).forEach((r) => {
-    (reviewsByPro[r.professional_id] ||= []).push(
+    if (!reviewsByPro[r.professional_id]) reviewsByPro[r.professional_id] = [];
+    reviewsByPro[r.professional_id].push(
       rowToReview({ ...r, auteur: r.users ? r.users.nom : 'Client' }),
     );
   });
@@ -278,8 +291,10 @@ export async function loadAll() {
   const demandesEnvoyees = [];
   (partnersRes.data || []).forEach((p) => {
     if (p.statut === 'accepte') {
-      (partnersByPro[p.professional_id] ||= []).push(p.partner_id);
-      (partnersByPro[p.partner_id] ||= []).push(p.professional_id);
+      if (!partnersByPro[p.professional_id]) partnersByPro[p.professional_id] = [];
+      if (!partnersByPro[p.partner_id]) partnersByPro[p.partner_id] = [];
+      partnersByPro[p.professional_id].push(p.partner_id);
+      partnersByPro[p.partner_id].push(p.professional_id);
     } else if (p.statut === 'en_attente') {
       if (p.partner_id === uid) demandesRecues.push(p.professional_id);
       else if (p.professional_id === uid) demandesEnvoyees.push(p.partner_id);
@@ -291,53 +306,17 @@ export async function loadAll() {
     pros[row.id] = rowToPro(row, reviewsByPro[row.id] || [], partnersByPro[row.id] || []);
   });
 
-  /* Les commentaires arrivent à plat ; on les remonte en fils de deux
-     niveaux. Les lignes sont déjà triées par date, donc un parent précède
-     toujours ses réponses et une seule passe suffit. */
-  const commentsByPost = {};
-  const parIdentifiant = {};
-  (commentsRes.data || []).forEach((c) => {
-    const noeud = {
-      id: c.id,
-      auteurId: c.author_id,
-      auteur: c.users ? c.users.nom : 'Client',
-      auteurType: c.users ? c.users.type : 'particulier',
-      avatarUrl: c.users ? c.users.avatar_url : null,
-      texte: c.texte,
-      time: relativeTime(c.created_at),
-      reponses: [],
-    };
-    parIdentifiant[c.id] = noeud;
-    const parent = c.parent_id ? parIdentifiant[c.parent_id] : null;
-    if (parent) parent.reponses.push(noeud);
-    else (commentsByPost[c.post_id] ||= []).push(noeud);
-  });
-
   const likedSet = new Set((likesRes.data || []).map((l) => l.post_id));
 
-  const posts = (postsRes.data || []).map((p) => (p.is_ad
-    ? {
-        id: p.id, type: 'ad', annonceur: p.annonceur, accroche: p.accroche,
-        cta: p.cta, media: p.media,
-      }
-    : {
-        id: p.id, type: 'post', proId: p.author_id, time: relativeTime(p.created_at),
-        // « type » dit si c'est une publication ou une publicité ; « format »
-        // dit ce qu'on regarde. Les deux étaient confondus, si bien qu'une
-        // photo se retrouvait dans le fil des vidéos.
-        format: p.type || 'photo',
-        texte: p.texte, media: p.media,
-        medias: (p.medias && p.medias.length) ? p.medias : (p.media ? [p.media] : []),
-        musique: p.musique || null,
-        // Le montage assemblé en un seul fichier, quand Cloudinary l'a fabriqué.
-        montageUrl: p.montage_url || null,
-        likes: p.likes_count || 0,
-        liked: likedSet.has(p.id), comments: commentsByPost[p.id] || [],
-      }));
+  /* Première page du fil. `null` pour les commentaires : « pas encore
+     chargés », à distinguer de « chargés, aucun ». */
+  const posts = (postsRes.data || []).map((p) => rowToPost(p, likedSet, null));
+  const finDuFil = (postsRes.data || []).length < TAILLE_PAGE_FIL;
 
   const msgsByConv = {};
   (msgRes.data || []).forEach((m) => {
-    (msgsByConv[m.conversation_id] ||= []).push({
+    if (!msgsByConv[m.conversation_id]) msgsByConv[m.conversation_id] = [];
+    msgsByConv[m.conversation_id].push({
       /* L'identifiant et l'expéditeur sont gardés : sans eux, on ne peut pas
          SIGNALER un message précis — et un message privé est justement là où
          commencent les menaces. */
@@ -422,8 +401,201 @@ export async function loadAll() {
     })),
     followingIds: (followsRes.data || []).map((f) => f.following_id),
     savedIds: (savesRes.data || []).map((s) => s.post_id),
+    finDuFil,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/*  Le fil, par pages                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Combien de publications par page.
+ *
+ * Vingt, c'est environ trois écrans de fil : assez pour qu'on ait le temps
+ * de lire avant que la page suivante n'arrive, assez peu pour que le premier
+ * affichage soit immédiat même en 4G sur un chantier.
+ */
+export const TAILLE_PAGE_FIL = 20;
+
+/**
+ * Une publication de démonstration, avec son repère de pagination.
+ *
+ * Sortie de la fonction asynchrone À DESSEIN : voir le commentaire de
+ * `chargerPageFil` — un objet construit par étalement (`...p`) à l'intérieur
+ * d'une fonction asynchrone fait échouer la construction sous Metro.
+ */
+function postDemo(p, rang) {
+  const commentaires = p.comments ? p.comments.slice() : [];
+  return Object.assign({}, p, {
+    comments: commentaires,
+    nbCommentaires: commentaires.length,
+    curseur: String(rang),
+  });
+}
+
+/**
+ * Une ligne de la table `posts` devient une publication de l'application.
+ *
+ * `commentaires` vaut `null` quand ils n'ont PAS été chargés — ce qui est
+ * désormais le cas normal, on ne les charge qu'à l'ouverture. Le nombre
+ * affiché vient alors de `comments_count`, tenu par un trigger côté base.
+ * Distinguer `null` (pas chargés) de `[]` (chargés, aucun) est ce qui permet
+ * à l'écran de savoir s'il faut aller les chercher.
+ */
+function rowToPost(p, likedSet, commentaires = null) {
+  if (p.is_ad) {
+    return {
+      id: p.id, type: 'ad', annonceur: p.annonceur, accroche: p.accroche,
+      cta: p.cta, media: p.media,
+    };
+  }
+  return {
+    id: p.id, type: 'post', proId: p.author_id, time: relativeTime(p.created_at),
+    // « type » dit si c'est une publication ou une publicité ; « format »
+    // dit ce qu'on regarde. Les deux étaient confondus, si bien qu'une
+    // photo se retrouvait dans le fil des vidéos.
+    format: p.type || 'photo',
+    texte: p.texte, media: p.media,
+    medias: (p.medias && p.medias.length) ? p.medias : (p.media ? [p.media] : []),
+    musique: p.musique || null,
+    // Le montage assemblé en un seul fichier, quand Cloudinary l'a fabriqué.
+    montageUrl: p.montage_url || null,
+    likes: p.likes_count || 0,
+    liked: likedSet.has(p.id),
+    comments: commentaires,
+    nbCommentaires: p.comments_count || 0,
+    // Le repère de pagination : on redemande « ce qui est plus ancien que ».
+    curseur: p.created_at,
+  };
+}
+
+/**
+ * La page suivante du fil.
+ *
+ * Pagination PAR CURSEUR et non par numéro de page : entre deux pages,
+ * quelqu'un publie, et tout se décale. Avec un numéro de page, on reverrait
+ * la même publication deux fois ou on en sauterait une. Avec « ce qui est
+ * plus ancien que telle date », rien ne bouge sous les pieds.
+ *
+ * Renvoie `{ posts, fin }` — `fin` dit qu'il n'y a plus rien à charger, pour
+ * que l'écran cesse de redemander chaque fois qu'on touche le bas.
+ */
+/**
+ * DEUX FONCTIONS NOMMÉES, ET SURTOUT PAS UN TERNAIRE.
+ *
+ * Le reste de ce fichier écrit `export const x = !hasSupabase ? … : …`.
+ * Ici, c'est impossible : une fonction ASYNCHRONE qui a un PARAMÈTRE PAR
+ * DÉFAUT et un CORPS EN BLOC, placée dans la première branche d'un
+ * ternaire, fait échouer la construction avec
+ *
+ *     Property id of VariableDeclarator expected node to be of a type
+ *     ["LVal","VoidPattern"] but instead got "AssignmentExpression"
+ *
+ * Le même code passe avec Babel seul, y compris avec le préréglage d'Expo :
+ * l'erreur ne sort que de Metro, et elle ne dit ni la ligne ni la cause.
+ * Trouvé par dichotomie — `async (o = {}) => (expression)` construit,
+ * `async (o = {}) => { bloc }` non.
+ *
+ * Deux fonctions nommées, et le choix fait à la fin. C'est plus lisible, et
+ * ça construit.
+ */
+
+/** Le fil en mode démonstration : on découpe la liste en mémoire. */
+async function pageFilDemo(options = {}) {
+  const depart = options.curseur ? Number(options.curseur) : 0;
+  const page = initialPosts
+    .slice(depart, depart + TAILLE_PAGE_FIL)
+    .map((p, i) => postDemo(p, depart + i + 1));
+  return { posts: page, fin: depart + TAILLE_PAGE_FIL >= initialPosts.length };
+}
+
+/**
+ * Le fil depuis la base, page par page.
+ *
+ * Pagination PAR CURSEUR et non par numéro de page : entre deux pages,
+ * quelqu'un publie, et tout se décale. Avec un numéro de page on reverrait
+ * la même publication deux fois ou on en sauterait une. Avec « ce qui est
+ * plus ancien que telle date », rien ne bouge sous les pieds.
+ */
+async function pageFilSupabase(options = {}) {
+  const curseur = options.curseur || null;
+  let requete = supabase.from('posts').select('*')
+    .order('created_at', { ascending: false })
+    .limit(TAILLE_PAGE_FIL);
+  if (curseur) requete = requete.lt('created_at', curseur);
+
+  const reponse = await requete;
+  if (reponse.error) throw reponse.error;
+
+  const lignes = reponse.data || [];
+  /* Les « j'aime » UNIQUEMENT pour les publications de cette page. C'est
+     tout l'intérêt : on ne redemande plus la totalité de la table. */
+  const ids = lignes.filter((p) => !p.is_ad).map((p) => p.id);
+  let likedSet = new Set();
+  if (ids.length) {
+    const reponseLikes = await supabase.from('post_likes')
+      .select('post_id').eq('user_id', currentUserId).in('post_id', ids);
+    likedSet = new Set((reponseLikes.data || []).map((l) => l.post_id));
+  }
+
+  return {
+    posts: lignes.map((p) => rowToPost(p, likedSet, null)),
+    fin: lignes.length < TAILLE_PAGE_FIL,
+  };
+}
+
+/**
+ * La page suivante du fil. Renvoie `{ posts, fin }` — `fin` dit qu'il n'y a
+ * plus rien à charger, pour que l'écran cesse de redemander chaque fois
+ * qu'on touche le bas.
+ */
+export const chargerPageFil = hasSupabase ? pageFilSupabase : pageFilDemo;
+
+
+/**
+ * Les commentaires d'UNE publication, chargés au moment où on les ouvre.
+ *
+ * Avant, ils étaient tous chargés d'avance, pour toutes les publications, à
+ * chaque ouverture de l'application. La plupart n'étaient jamais lus.
+ */
+export const chargerCommentaires = !hasSupabase
+  ? async () => []
+  : async (postId) => {
+    const { data, error } = await supabase.from('comments')
+      .select('*, users:author_id(nom, avatar_url, type)')
+      .eq('post_id', postId)
+      .order('created_at');
+    if (error) throw error;
+    return arbreCommentaires(data || []);
+  };
+
+/**
+ * Les commentaires sont à plat en base, avec un `parent_id`. L'écran les
+ * veut en arbre à deux niveaux.
+ */
+function arbreCommentaires(lignes) {
+  const parIdentifiant = {};
+  const racines = [];
+  lignes.forEach((c) => {
+    const noeud = {
+      id: c.id,
+      auteurId: c.author_id,
+      auteur: c.users ? c.users.nom : 'Client',
+      auteurType: c.users ? c.users.type : 'particulier',
+      avatarUrl: c.users ? c.users.avatar_url : null,
+      texte: c.texte,
+      time: relativeTime(c.created_at),
+      reponses: [],
+    };
+    parIdentifiant[c.id] = noeud;
+    const parent = c.parent_id ? parIdentifiant[c.parent_id] : null;
+    if (parent) parent.reponses.push(noeud);
+    else racines.push(noeud);
+  });
+  return racines;
+}
+
 
 /* ------------------------------------------------------------------ */
 /*  Écriture                                                           */

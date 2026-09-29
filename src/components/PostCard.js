@@ -8,7 +8,7 @@ import { C, F, T, S, R, SH, interligne } from '../theme';
 import {
   Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn,
 } from './ui';
-import Commentaires, { nombreCommentaires } from './Commentaires';
+import Commentaires, { nbCommentairesDe } from './Commentaires';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
   MessageCircle, Phone, FileText, User, Send, Maximize, Flag,
@@ -143,7 +143,7 @@ export default function PostCard({
         </Pressable>
         <Pressable style={s.action} onPress={() => onToggleComments(post.id)}>
           <MessageSquare size={17} color={C.muted} />
-          <Text style={s.actionText}>{nombreCommentaires(post.comments)}</Text>
+          <Text style={s.actionText}>{nbCommentairesDe(post)}</Text>
         </Pressable>
         <Pressable style={s.action} onPress={() => onShare('Lien de la publication copié.')}>
           <Share2 size={16} color={C.muted} />
@@ -170,8 +170,13 @@ export default function PostCard({
       {/* commentaires */}
       {commentsOpen && (
         <View style={s.comments}>
+          {/* `null` = pas encore arrivés. On le DIT, au lieu d'afficher un
+              blanc qui ressemble à « aucun commentaire ». */}
+          {!Array.isArray(post.comments) && (
+            <Text style={s.chargement}>Chargement des commentaires…</Text>
+          )}
           <Commentaires
-            commentaires={post.comments}
+            commentaires={post.comments || []}
             pros={pros}
             onVoirProfil={onVoirCommentateur}
             onSignaler={onSignaler}
@@ -248,6 +253,7 @@ const s = StyleSheet.create({
   contactItemText: { fontSize: T.courant, color: C.ink, fontFamily: F.inter },
 
   comments: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 8, paddingHorizontal: 12, paddingBottom: 10 },
+  chargement: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, paddingVertical: 6 },
 
   adTag: {
     position: 'absolute', top: S.sm, left: S.sm, zIndex: 2,

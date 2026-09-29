@@ -127,6 +127,12 @@ export default function OpusApp() {
   // Fichiers choisis pour la publication en cours, et sa bande-son.
   const [medias, setMedias] = useState([]);
 
+  /* La pagination du fil. `finDuFil` évite que l'écran redemande une page à
+     chaque fois qu'on touche le bas alors qu'il n'y a plus rien. */
+  const [finDuFil, setFinDuFil] = useState(false);
+  const [chargePage, setChargePage] = useState(false);
+  const [rafraichit, setRafraichit] = useState(false);
+
   /* Signalement : une seule modale pour toute l'application. Chaque écran
      lui dit QUOI est signalé ; elle s'occupe du reste. */
   const [aSignaler, setASignaler] = useState(null);
@@ -161,6 +167,7 @@ export default function OpusApp() {
       const data = await api.loadAll();
       setPros(data.pros);
       setPosts(data.posts);
+      setFinDuFil(!!data.finDuFil);
       setConversations(data.conversations);
       setDemandes(data.demandes || []);
       setMesSos(data.mesSos || null);
@@ -290,7 +297,69 @@ export default function OpusApp() {
   };
 
   const hidePost = (id) => setHiddenIds((s) => new Set(s).add(id));
-  const toggleComments = (id) => setOpenCommentsId((c) => (c === id ? null : id));
+  /**
+   * La page suivante du fil, quand on arrive en bas.
+   *
+   * `chargePage` sert de verrou : une liste peut appeler `onEndReached`
+   * plusieurs fois de suite pendant un défilement rapide, et sans lui on
+   * demanderait trois fois la même page.
+   */
+  const chargerPlusDeFil = async () => {
+    if (chargePage || finDuFil || posts.length === 0) return;
+    const dernier = posts[posts.length - 1];
+    if (!dernier || !dernier.curseur) { setFinDuFil(true); return; }
+
+    setChargePage(true);
+    try {
+      const { posts: suite, fin } = await api.chargerPageFil({ curseur: dernier.curseur });
+      /* On écarte ce qu'on a déjà : si quelqu'un publie entre deux pages, la
+         même publication peut revenir. Mieux vaut un doublon écarté qu'un
+         doublon affiché. */
+      setPosts((ps) => {
+        const connus = new Set(ps.map((x) => String(x.id)));
+        return [...ps, ...suite.filter((x) => !connus.has(String(x.id)))];
+      });
+      setFinDuFil(fin);
+    } catch (e) {
+      showBanner('La suite du fil n’a pas pu être chargée.');
+    }
+    setChargePage(false);
+  };
+
+  /** Tirer vers le bas : on recharge la première page, rien d'autre. */
+  const rafraichirFil = async () => {
+    setRafraichit(true);
+    try {
+      const { posts: page, fin } = await api.chargerPageFil({});
+      setPosts(page);
+      setFinDuFil(fin);
+    } catch (e) {
+      showBanner('Le fil n’a pas pu être rafraîchi.');
+    }
+    setRafraichit(false);
+  };
+
+  /**
+   * Ouvrir les commentaires d'une publication — et aller les chercher si
+   * c'est la première fois. Depuis que le fil se charge par pages, ils ne
+   * sont plus téléchargés d'avance.
+   */
+  const toggleComments = async (id) => {
+    const ouvre = openCommentsId !== id;
+    setOpenCommentsId(ouvre ? id : null);
+    if (!ouvre) return;
+
+    const post = posts.find((p) => p.id === id);
+    if (!post || Array.isArray(post.comments)) return;
+
+    try {
+      const liste = await api.chargerCommentaires(id);
+      setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, comments: liste } : p)));
+    } catch (e) {
+      showBanner('Les commentaires n’ont pas pu être chargés.');
+      setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, comments: [] } : p)));
+    }
+  };
   const toggleContact = (id) => setOpenContactId((c) => (c === id ? null : id));
 
   /**
@@ -314,10 +383,16 @@ export default function OpusApp() {
 
     setPosts((ps) => ps.map((p) => {
       if (p.id !== postId) return p;
-      if (!parentId) return { ...p, comments: [...p.comments, nouveau] };
+      /* `comments` peut valoir null : on commente depuis un endroit où ils
+         n'ont pas été chargés. On part alors d'une liste vide plutôt que de
+         planter. Le compteur, lui, avance dans tous les cas. */
+      const actuels = Array.isArray(p.comments) ? p.comments : [];
+      const nbCommentaires = (p.nbCommentaires || 0) + 1;
+      if (!parentId) return { ...p, nbCommentaires, comments: [...actuels, nouveau] };
       return {
         ...p,
-        comments: p.comments.map((c) => (c.id === parentId
+        nbCommentaires,
+        comments: actuels.map((c) => (c.id === parentId
           ? { ...c, reponses: [...(c.reponses || []), nouveau] }
           : c)),
       };
@@ -836,6 +911,7 @@ export default function OpusApp() {
     setScreen('home');
     setPros({});
     setPosts([]);
+    setFinDuFil(false);
     setConversations([]);
     setNotifications([]);
     setFollowingIds(new Set());
@@ -1325,6 +1401,11 @@ export default function OpusApp() {
             ) : null}
             onLike={toggleLike} onFollow={toggleFollow} onView={viewProfile} onHide={hidePost}
             onSignaler={ouvrirSignalement}
+            onChargerPlus={chargerPlusDeFil}
+            chargePage={chargePage}
+            finDuFil={finDuFil}
+            rafraichit={rafraichit}
+            onRafraichir={rafraichirFil}
             onToggleComments={toggleComments} onAddComment={addComment}
             onVoirCommentateur={voirCommentateur}
             onSave={toggleSave} onToggleContact={toggleContact}

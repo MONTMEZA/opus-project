@@ -1848,3 +1848,62 @@ begin
     end;
   end loop;
 end $$;
+
+-- ==========================================================================
+--  14. LE FIL PAR PAGES
+--
+--  POURQUOI CETTE SECTION EXISTE
+--  L'application chargeait TOUTE la base à chaque ouverture : toutes les
+--  publications, et tous leurs commentaires. Avec treize publications c'est
+--  instantané ; avec cinq mille, c'est plusieurs mégaoctets avant que le
+--  premier écran s'affiche, sur un téléphone, en 4G, sur un chantier.
+--
+--  Le fil se charge désormais par pages de vingt. Mais une carte de
+--  publication affiche « 3 commentaires » : si les commentaires ne sont plus
+--  chargés d'avance, il faut que la base sache les compter.
+--
+--  D'où ce compteur, tenu par un trigger — exactement comme `likes_count` et
+--  `followers_count`. Le compter à la volée ferait une requête par
+--  publication affichée : vingt requêtes pour une page de fil.
+-- --------------------------------------------------------------------------
+alter table public.posts add column if not exists comments_count int not null default 0;
+
+create or replace function public.maj_comments_count()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.posts set comments_count = comments_count + 1 where id = new.post_id;
+  elsif (tg_op = 'DELETE') then
+    update public.posts set comments_count = greatest(comments_count - 1, 0) where id = old.post_id;
+  end if;
+  return null;
+end; $$;
+
+drop trigger if exists trg_comments_count on public.comments;
+create trigger trg_comments_count
+  after insert or delete on public.comments
+  for each row execute function public.maj_comments_count();
+
+-- Le compteur est remis d'aplomb à chaque exécution du fichier : les
+-- publications déjà en base n'ont jamais vu passer le trigger, et une
+-- suppression faite avant son arrivée n'a décrémenté personne.
+update public.posts p
+   set comments_count = coalesce((select count(*) from public.comments c where c.post_id = p.id), 0)
+ where p.comments_count is distinct from
+       coalesce((select count(*) from public.comments c where c.post_id = p.id), 0);
+
+-- Le fil se lit du plus récent au plus ancien, par pages : c'est cet index
+-- qui rend la pagination réellement rapide, sinon PostgreSQL relit toute la
+-- table pour trouver les vingt suivantes.
+create index if not exists idx_posts_fil on public.posts (created_at desc, id desc);
+
+-- Et celui qui sert quand on ouvre les commentaires d'UNE publication.
+create index if not exists idx_comments_post on public.comments (post_id, created_at);
+
+-- Le trigger de comptage n'a rien à faire dans l'API REST.
+do $$
+begin
+  execute 'revoke execute on function public.maj_comments_count() from public';
+  execute 'revoke execute on function public.maj_comments_count() from anon, authenticated';
+exception when undefined_function or undefined_object then null;
+end $$;

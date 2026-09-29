@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme';
 import { IconBtn } from './ui';
-import Commentaires, { nombreCommentaires } from './Commentaires';
+import Commentaires, { nbCommentairesDe } from './Commentaires';
 import { X } from './icons';
 
 export default function CommentsSheet({
@@ -20,7 +20,7 @@ export default function CommentsSheet({
 
   if (!visible || !post) return null;
   const comments = post.comments || [];
-  const total = nombreCommentaires(comments);
+  const total = nbCommentairesDe(post);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>

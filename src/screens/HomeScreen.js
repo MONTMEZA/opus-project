@@ -6,7 +6,10 @@
  * la bascule Fil/Vidéos flotte par-dessus, comme sur TikTok.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
+import {
+  View, Text, FlatList, RefreshControl, ActivityIndicator,
+  StyleSheet, useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme';
 import { PillToggle, EmptyState } from '../components/ui';
@@ -14,6 +17,33 @@ import PostCard from '../components/PostCard';
 import VideoSlide from '../components/VideoSlide';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
+
+/**
+ * Le bas du fil : il dit toujours quelque chose.
+ *
+ * Trois états, et chacun répond à une question que l'utilisateur se pose
+ * vraiment en arrivant en bas : « ça charge ? », « c'est tout ? », ou rien
+ * du tout quand le fil est vide — l'écran a déjà son message à lui.
+ */
+function BasDuFil({ chargement, fin, vide }) {
+  if (vide) return null;
+  if (chargement) {
+    return (
+      <View style={s.bas}>
+        <ActivityIndicator size="small" color={C.muted} />
+        <Text style={s.basTexte}>Chargement…</Text>
+      </View>
+    );
+  }
+  if (fin) {
+    return (
+      <View style={s.bas}>
+        <Text style={s.basTexte}>Vous êtes à jour.</Text>
+      </View>
+    );
+  }
+  return <View style={{ height: 20 }} />;
+}
 const TABS = [
   { key: 'pourvous', label: 'Pour vous' },
   { key: 'abonnements', label: 'Abonnements' },
@@ -26,6 +56,8 @@ export default function HomeScreen({
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
   onOuvrirVideo, onGlisserVersProfil, onSignaler,
+  onChargerPlus, chargePage = false, finDuFil = false,
+  rafraichit = false, onRafraichir,
 }) {
   const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
@@ -131,6 +163,20 @@ export default function HomeScreen({
           }
           viewabilityConfig={reglesVisibilite.current}
           onViewableItemsChanged={surVisibilite.current}
+          /* La page suivante arrive quand il reste la moitié d'un écran à
+             défiler : assez tôt pour qu'elle soit là avant qu'on y soit,
+             assez tard pour ne pas charger ce que personne ne lira. */
+          onEndReached={onChargerPlus}
+          onEndReachedThreshold={0.5}
+          refreshControl={onRafraichir ? (
+            <RefreshControl
+              refreshing={rafraichit}
+              onRefresh={onRafraichir}
+              tintColor={C.muted}
+              colors={[C.accent]}
+            />
+          ) : undefined}
+          ListFooterComponent={<BasDuFil chargement={chargePage} fin={finDuFil} vide={posts.length === 0} />}
           renderItem={({ item: p }) => (
             <PostCard
               post={p}
@@ -163,6 +209,8 @@ export default function HomeScreen({
 }
 
 const s = StyleSheet.create({
+  bas: { alignItems: 'center', justifyContent: 'center', paddingVertical: 22, gap: 8 },
+  basTexte: { fontFamily: F.inter, fontSize: 12, color: C.muted },
   wrap: { flex: 1 },
   videoWrap: { flex: 1, backgroundColor: C.dark },
   videoVide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34, gap: 8 },
