@@ -34,6 +34,9 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { C, F, T, S, R } from '../theme';
 import Media from './Media';
 
+/** Combien de photos on monte de part et d'autre de celle qu'on regarde. */
+const VOISINES_MONTEES = 1;
+
 export default function Carrousel({ medias = [], style, aspectRatio = 16 / 10, enfant }) {
   const [largeur, setLargeur] = useState(0);
   const [index, setIndex] = useState(0);
@@ -72,8 +75,22 @@ export default function Carrousel({ medias = [], style, aspectRatio = 16 / 10, e
         scrollEventThrottle={32}
         style={StyleSheet.absoluteFill}
       >
+        {/* On ne monte que la photo affichée et ses deux voisines.
+            Une publication peut porter six photos : les six se
+            téléchargeaient et se décodaient au moment où la carte
+            apparaissait, alors qu'une seule est visible. Les emplacements,
+            eux, restent tous là — sinon le carrousel ne saurait plus où
+            s'arrêter. La voisine est toujours prête avant qu'on l'atteigne,
+            donc le glissement ne montre jamais de vide. */}
         {medias.map((m, i) => (
-          <Media key={`${i}-${String(m).slice(0, 24)}`} media={m} style={{ width: largeur || 1, height: '100%' }} />
+          <View
+            key={`${i}-${String(m).slice(0, 24)}`}
+            style={{ width: largeur || 1, height: '100%' }}
+          >
+            {Math.abs(i - index) <= VOISINES_MONTEES && (
+              <Media media={m} style={{ width: '100%', height: '100%' }} />
+            )}
+          </View>
         ))}
       </ScrollView>
 

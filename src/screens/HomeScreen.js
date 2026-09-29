@@ -104,6 +104,23 @@ export default function HomeScreen({
           onMomentumScrollEnd={(e) => {
             setSlideActive(Math.round(e.nativeEvent.contentOffset.y / windowHeight));
           }}
+          /* CE QUI FIGEAIT L'APPLICATION AU DÉMARRAGE
+             -----------------------------------------
+             Sans ces trois réglages, une FlatList monte DIX éléments d'un
+             coup. Ici, dix diapositives plein écran — et chacune crée un
+             lecteur vidéo qui se met à télécharger aussitôt (voir le
+             commentaire de VideoMedia : le lecteur charge dès le montage,
+             même en pause). Dix vidéos qui démarrent ensemble, sur un
+             téléphone : l'écran répond aux appuis, mais le défilement reste
+             bloqué plusieurs secondes. C'est exactement ce qui a été
+             constaté le 29/09/2026 sur iPhone.
+
+             `windowSize` 3 = la précédente, celle qu'on regarde, la
+             suivante. C'est ce qu'il faut pour qu'un fil façon TikTok
+             enchaîne sans attendre — et pas une de plus. */
+          initialNumToRender={1}
+          maxToRenderPerBatch={2}
+          windowSize={3}
           ListEmptyComponent={
             <View style={[s.videoVide, { height: windowHeight }]}>
               <Text style={s.videoVideTexte}>
@@ -168,6 +185,15 @@ export default function HomeScreen({
              assez tard pour ne pas charger ce que personne ne lira. */
           onEndReached={onChargerPlus}
           onEndReachedThreshold={0.5}
+          /* Même raison que pour le fil vidéo : par défaut, dix cartes se
+             montaient ensemble — mesuré à 5,8 écrans de contenu au premier
+             affichage, photos comprises. On en monte deux, puis trois par
+             trois pendant que le doigt descend. Rien ne change à l'écran :
+             ce qui change, c'est que l'écran répond tout de suite. */
+          initialNumToRender={2}
+          maxToRenderPerBatch={3}
+          updateCellsBatchingPeriod={80}
+          windowSize={5}
           refreshControl={onRafraichir ? (
             <RefreshControl
               refreshing={rafraichit}

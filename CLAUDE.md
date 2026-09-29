@@ -289,6 +289,32 @@ d'un carrousel, avec son contenu calé contre le bord par lequel il entre.
 Centré, ce contenu reste caché par la vidéo pendant tout le geste : on ne voit
 qu'une bande noire, et le glissement paraît vide.
 
+### Une FlatList monte DIX éléments d'un coup
+
+Constaté sur iPhone le 29/09/2026, et impossible à voir ici : au démarrage,
+« le clic marche mais plus rien ne défile », pendant quelques secondes, puis
+tout revient. Ce n'est pas le défilement qui est cassé — c'est le premier
+rendu qui bloque le téléphone.
+
+`initialNumToRender` vaut **10** par défaut. Dans le fil vidéo, cela faisait
+dix diapositives plein écran, donc **dix lecteurs vidéo** créés ensemble — et
+`VideoMedia` charge la vidéo dès le montage, même en pause. Dans le fil
+classique, 5,8 écrans de contenu montés avant le premier affichage, photos
+comprises.
+
+> **Toute liste longue règle `initialNumToRender`, `maxToRenderPerBatch` et
+> `windowSize`.** Pour un fil façon TikTok : `windowSize={3}` — la
+> précédente, celle qu'on regarde, la suivante.
+
+Même principe pour un carrousel : les emplacements restent tous là (sinon il
+ne sait plus où s'arrêter), mais on ne **monte** que la photo affichée et ses
+voisines.
+
+Et le corollaire : un écran qui répond aux appuis n'est pas un écran prêt.
+Le navigateur de test, lui, ne montre rien de tout cela — il a la mémoire et
+le processeur d'un ordinateur. Ce qui se mesure ici, c'est le **nombre de
+nœuds et d'écrans de contenu montés** ; c'est un bon indicateur indirect.
+
 ### Ce qui se vérifie au navigateur, et ce qui ne s'y vérifie pas
 
 Playwright reproduit **les gestes à la souris** : un glissement latéral, un

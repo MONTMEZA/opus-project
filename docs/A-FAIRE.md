@@ -218,6 +218,16 @@ que l'application est plantée.
 
 **B5 — pas de « tout marquer comme lu »** sur les notifications.
 
+**B6 — ✅ FAIT le 29/09/2026 : l'application se figeait au démarrage.**
+Constaté sur iPhone — « le clic marche mais plus rien ne défile », quelques
+secondes, puis tout revient. Les deux listes montaient dix éléments d'un
+coup (valeur par défaut de `initialNumToRender`) : dans le fil vidéo, dix
+lecteurs qui se mettaient à télécharger ensemble. Réglé à 1 (vidéo) et 2
+(fil classique), avec `windowSize` 3 et 5. Et le carrousel ne monte plus que
+la photo affichée et ses voisines, au lieu des six.
+Mesuré au navigateur : 342 nœuds et 5,8 écrans de contenu montés → 206 nœuds
+et 3,2 écrans. L'effet réel, lui, ne se juge que sur le téléphone.
+
 ### C. Ce qui manque au PROFIL PRO pour être complet
 
 **C1, C2, C3 — ✅ FAITS le 29/09/2026**, en une seule migration
