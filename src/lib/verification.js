@@ -50,6 +50,38 @@ export function detailDocument(pro, doc) {
   return { etat: e, valeur: doc === 'kbis' ? 'Non communiqué' : 'Non communiquée' };
 }
 
+/**
+ * La certification RGE — et pourquoi elle ne se lit PAS comme les deux
+ * autres documents.
+ *
+ * Le Kbis et l'assurance décennale sont obligatoires : leur absence est un
+ * manque, et s'affiche en rouge. Le RGE ne l'est pas. Un carreleur, un
+ * serrurier, un terrassier n'ont aucune raison d'en avoir une, et il serait
+ * injuste que leur fiche affiche un feu rouge pour un label qui ne les
+ * concerne pas. D'où le drapeau `neutre` : même ligne, même place, mais en
+ * gris — « non communiquée », et non « manquant ».
+ *
+ * Le label lui-même ne s'allume (`pro.rge`) que lorsqu'un humain a regardé
+ * l'attestation. Entre les deux, il y a l'état « déclarée » : l'artisan l'a
+ * dite, elle n'est pas encore contrôlée, et on l'écrit tel quel.
+ */
+export function etatRge(pro) {
+  if (pro.rge) return VALIDE;
+  if (pro.verificationStatut === 'refuse' && pro.rgePath) return REFUSE;
+  if (pro.rgeDeclare || pro.rgePath) return ATTENTE;
+  return ABSENT;
+}
+
+export function detailRge(pro) {
+  const e = etatRge(pro);
+  if (e === VALIDE) {
+    return { etat: e, valeur: pro.rgeExpire ? `Certifié · exp. ${pro.rgeExpire}` : 'Certifié' };
+  }
+  if (e === ATTENTE) return { etat: e, valeur: 'Déclarée · en cours de vérification' };
+  if (e === REFUSE) return { etat: e, valeur: 'Refusée' };
+  return { etat: e, valeur: 'Non communiquée', neutre: true };
+}
+
 const MOT_SIRET = {
   [VALIDE]: 'vérifié',
   [ATTENTE]: 'en cours de vérification',

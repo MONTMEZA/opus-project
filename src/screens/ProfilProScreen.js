@@ -15,12 +15,13 @@ import {
 import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
+import FicheContactPro from '../components/FicheContactPro';
 import {
   BadgeCheck, ShieldCheck, ShieldX, FileText, Sparkles, ClipboardCheck, MessageCircle, Flag,
 } from '../components/icons';
 import { EtatVerificationPublic } from '../components/RappelVerification';
 import {
-  detailDocument, VALIDE, ATTENTE, REFUSE, ABSENT,
+  detailDocument, detailRge, VALIDE, ATTENTE, REFUSE, ABSENT,
 } from '../lib/verification';
 import { avgReviews } from '../data/demo';
 import { aiSummarizeReviews } from '../lib/ai';
@@ -48,8 +49,20 @@ const APPARENCE = {
   [ABSENT]: { couleur: C.bad, Icone: ShieldX },
 };
 
-function VerifRow({ etat, label, value }) {
+function VerifRow({ etat, label, value, neutre }) {
   const { couleur, Icone } = APPARENCE[etat] || APPARENCE[ABSENT];
+  /* `neutre` sert à un seul cas : une certification qu'on n'a aucune raison
+     d'avoir. L'afficher en rouge ferait passer pour un manquement ce qui
+     n'en est pas un. */
+  if (neutre) {
+    return (
+      <View style={s.verifRow}>
+        <FileText size={16} color={C.muted} />
+        <Text style={s.verifLabel}>{label}</Text>
+        <Text style={[s.verifValue, { color: C.muted }]}>{value}</Text>
+      </View>
+    );
+  }
   return (
     <View style={s.verifRow}>
       <Icone size={16} color={couleur} />
@@ -76,6 +89,7 @@ export default function ProfilProScreen({
   const avg = avgReviews(pro);
   const kbisDetail = detailDocument(pro, 'kbis');
   const assuranceDetail = detailDocument(pro, 'assurance');
+  const rgeDetail = detailRge(pro);
 
   const submitReview = () => {
     if (!rTexte.trim()) return;
@@ -178,12 +192,23 @@ export default function ProfilProScreen({
           label="Extrait Kbis"
           value={kbisDetail.valeur}
         />
+        {/* Trois états, pas deux. « Déclarée, en cours de vérification »
+            n'est pas la même chose que « non certifié » : la première dit
+            que l'attestation est arrivée et qu'un humain doit la regarder.
+            Et l'absence de RGE reste NEUTRE — grise, pas rouge : un
+            carreleur n'a aucune raison d'en avoir une. */}
         <VerifRow
-          etat={pro.rge ? VALIDE : ABSENT}
+          etat={rgeDetail.etat}
           label="Certification RGE"
-          value={pro.rge ? 'Certifié' : 'Non certifié'}
+          value={rgeDetail.valeur}
+          neutre={rgeDetail.neutre}
         />
       </View>
+
+      {/* La fiche de contact — téléphone, zone, spécialités. Le même
+          composant sert sur « mon profil » : c'est ce qui garantit que
+          l'artisan voit exactement ce que voient ses clients. */}
+      <FicheContactPro pro={pro} />
 
       {/* --- réalisations --- */}
       <SectionLabel>Réalisations</SectionLabel>
@@ -316,6 +341,7 @@ function SliderRow({ label, value, onChange }) {
 }
 
 const s = StyleSheet.create({
+
   head: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6, alignItems: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },

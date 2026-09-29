@@ -166,5 +166,24 @@ export function texteDe(annonce) {
     a.titre, a.texte, a.metier, a.ville,
     auteur.entreprise, auteur.metier,
     ...(auteur.metiers || []),
+    ...(auteur.specialites || []),
+  ].filter(Boolean).join(' ');
+}
+
+/**
+ * Tout le texte d'une FICHE d'artisan, pour la recherche de l'écran
+ * « Découvrir ».
+ *
+ * Les spécialités y pèsent autant que le métier, et c'est tout leur
+ * intérêt : « Maçon » est ce que l'artisan EST, « enduit à la chaux » est
+ * ce qu'on CHERCHE. Sans cette ligne, un artisan pouvait renseigner douze
+ * spécialités sans qu'aucune ne le rende trouvable.
+ */
+export function texteDePro(pro) {
+  const p = pro || {};
+  return [
+    p.nom, p.entreprise, p.metier, p.ville, p.bio,
+    ...(p.metiers || []),
+    ...(p.specialites || []),
   ].filter(Boolean).join(' ');
 }

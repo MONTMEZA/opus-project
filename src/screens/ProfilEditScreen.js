@@ -16,6 +16,7 @@ import {
 } from '../components/icons';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
+import ChampSpecialites from '../components/ChampSpecialites';
 import AssistantPresentation from '../components/AssistantPresentation';
 import AmeliorerTexte from '../components/AmeliorerTexte';
 import { METIERS } from '../data/demo';
@@ -66,6 +67,18 @@ export default function ProfilEditScreen({
   const [bio, setBio] = useState(profil.bio || '');
   const [siret, setSiret] = useState(profil.siret || '');
   const [exp, setExp] = useState(String(profil.exp || ''));
+  /* La zone d'intervention ordinaire, à ne pas confondre avec le rayon SOS
+     plus bas : celle-ci vaut pour les chantiers normaux, et concerne TOUS
+     les métiers. Vide veut dire « non renseigné », et rien ne s'affiche. */
+  const [zoneKm, setZoneKm] = useState(profil.zoneKm ? String(profil.zoneKm) : '');
+  const [specialites, setSpecialites] = useState(profil.specialites || []);
+
+  /* La certification RGE. Ce que l'artisan DÉCLARE ; le badge, lui, ne
+     s'allume que lorsque l'attestation a été regardée par un humain. */
+  const [rgeDeclare, setRgeDeclare] = useState(!!profil.rgeDeclare);
+  const [rgeNumero, setRgeNumero] = useState(profil.rgeNumero || '');
+  const [rgeExpire, setRgeExpire] = useState(profil.rgeExpire || '');
+  const [rgeFichier, setRgeFichier] = useState(null);
 
   const [sosActif, setSosActif] = useState(!!(sos && sos.actif));
   const [deplacement, setDeplacement] = useState(String((sos && sos.deplacement) || ''));
@@ -96,6 +109,8 @@ export default function ProfilEditScreen({
       profil: estPro
         ? {
             avatarUrl, bannerUrl, entreprise, metiers, metier: metiers[0], bio, siret,
+            telephone, specialites,
+            zoneKm: Number(zoneKm) || null,
             ville: lieu.affichage,
             codePostal: lieu.codePostal,
             codeInsee: lieu.codeInsee,
@@ -273,6 +288,45 @@ export default function ProfilEditScreen({
 
             <Text style={s.label}>Années d'expérience</Text>
             <Field value={exp} onChangeText={setExp} keyboardType="number-pad" placeholder="9" />
+
+            {/* Le téléphone d'un artisan est PUBLIC, et c'est voulu : c'est
+                le premier renseignement qu'un particulier cherche sur un
+                annuaire professionnel. On le dit franchement plutôt que de
+                laisser la surprise arriver après. */}
+            <Text style={s.label}>Téléphone</Text>
+            <Field
+              value={telephone}
+              onChangeText={setTelephone}
+              placeholder="04 78 00 00 00"
+              keyboardType="phone-pad"
+            />
+            <Text style={s.aide}>
+              Il s'affiche sur votre fiche, et un client peut l'appeler d'un
+              seul geste. Laissez-le vide si vous préférez n'être joint que
+              par message.
+            </Text>
+
+            {/* À ne pas confondre avec le rayon SOS, plus bas : celui-ci
+                ne concerne que les urgences, et seulement quatre métiers. */}
+            <Text style={s.label}>Zone d'intervention (km)</Text>
+            <Field
+              value={zoneKm}
+              onChangeText={setZoneKm}
+              keyboardType="number-pad"
+              placeholder="30"
+            />
+            <Text style={s.aide}>
+              Jusqu'où vous vous déplacez pour un chantier ordinaire. Cela
+              évite les demandes que vous refuserez, et les vôtres arrivent
+              plus vite.
+            </Text>
+
+            <Text style={s.label}>Vos spécialités</Text>
+            <ChampSpecialites
+              valeurs={specialites}
+              onChange={setSpecialites}
+              onErreur={onErreur}
+            />
           </>
         ) : (
           <>
@@ -339,15 +393,87 @@ export default function ProfilEditScreen({
                 }}
               />
 
+              {/* --- la certification RGE ---
+                   Elle est ici, avec les deux autres justificatifs, parce
+                   que c'est le même geste : « voici ce que je peux prouver ».
+                   Et elle est SÉPARÉE du badge vérifié : un carreleur n'a
+                   aucune raison d'être RGE, il serait absurde qu'il paraisse
+                   moins sérieux pour autant. */}
+              <View style={s.rgeLigne}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.docTitre}>Certification RGE</Text>
+                  <Text style={s.docDetail}>
+                    Reconnu Garant de l'Environnement — c'est elle qui ouvre
+                    MaPrimeRénov' et les aides à vos clients.
+                  </Text>
+                </View>
+                <Switch
+                  value={rgeDeclare}
+                  onValueChange={setRgeDeclare}
+                  trackColor={{ false: C.line, true: C.ok }}
+                  thumbColor="#fff"
+                />
+              </View>
+
+              {rgeDeclare && (
+                <View style={s.rgeBloc}>
+                  <Text style={s.label}>Numéro de qualification</Text>
+                  <Field
+                    value={rgeNumero}
+                    onChangeText={setRgeNumero}
+                    placeholder="QB/12345 ou E-E123456"
+                    autoCapitalize="characters"
+                  />
+
+                  <Text style={s.label}>Valable jusqu'au</Text>
+                  <Field value={rgeExpire} onChangeText={setRgeExpire} placeholder="12/2027" />
+
+                  <LigneDocument
+                    titre="Attestation RGE"
+                    detail="PDF ou photo, en cours de validité"
+                    fichier={rgeFichier}
+                    dejaEnvoye={!!profil.rgePath}
+                    onChoisir={async () => {
+                      try {
+                        const doc = await choisirDocument();
+                        if (doc) setRgeFichier(doc);
+                      } catch (e) { onErreur(e.message || "Le fichier n'a pas pu être ouvert."); }
+                    }}
+                  />
+
+                  <Text style={s.docDetail}>
+                    {profil.rge
+                      ? 'Certification vérifiée : le label s\'affiche sur votre fiche.'
+                      : 'Le label « Certifié RGE » n\'apparaîtra sur votre fiche qu\'une fois l\'attestation contrôlée.'}
+                  </Text>
+                </View>
+              )}
+
               <BtnMain
                 block
                 onPress={async () => {
-                  if (!kbis && !assurance) {
+                  /* On n'envoie que s'il y a vraiment quelque chose de
+                     nouveau : un fichier, ou une déclaration RGE modifiée.
+                     Sinon le profil repasserait en « en attente » pour
+                     rien, et perdrait sa place dans la file. */
+                  const rgeChange = rgeDeclare !== !!profil.rgeDeclare
+                    || rgeNumero.trim() !== (profil.rgeNumero || '')
+                    || rgeExpire.trim() !== (profil.rgeExpire || '');
+                  if (!kbis && !assurance && !rgeFichier && !rgeChange) {
                     onErreur('Choisissez au moins un document avant de l\'envoyer.');
                     return;
                   }
                   setEnvoiDocs(true);
-                  await onEnvoyerDocuments({ kbis, assurance });
+                  await onEnvoyerDocuments({
+                    kbis,
+                    assurance,
+                    rgeFichier,
+                    rge: {
+                      declare: rgeDeclare,
+                      numero: rgeNumero.trim(),
+                      expire: rgeExpire.trim(),
+                    },
+                  });
                   setEnvoiDocs(false);
                 }}
                 disabled={envoiDocs}
@@ -516,6 +642,11 @@ const s = StyleSheet.create({
   sosBloc: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
 
   docBloc: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
+  rgeLigne: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.line,
+  },
+  rgeBloc: { paddingBottom: 6 },
   docIntro: { fontSize: 11, color: C.muted, lineHeight: 16, marginBottom: 12, fontFamily: F.inter },
   docLigne: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

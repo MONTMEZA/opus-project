@@ -120,11 +120,22 @@ export async function ensureProProfile({
  * qui basculerez verification_statut sur 'verifie' depuis Supabase, après
  * avoir regardé les documents. Le badge vérifié ne s'obtient pas tout seul.
  */
-export async function submitDocuments({ kbisPath, assurancePath }) {
+export async function submitDocuments({ kbisPath, assurancePath, rgePath, rge }) {
   if (!hasSupabase) return null;
   const patch = { verification_statut: 'en_attente' };
   if (kbisPath) patch.kbis_url = kbisPath;
   if (assurancePath) patch.assurance_url = assurancePath;
+  if (rgePath) patch.rge_url = rgePath;
+  /* La déclaration RGE part avec les documents, et pas avec le reste du
+     profil : c'est le même geste — « voici mes justificatifs » — et il
+     serait déroutant qu'une moitié parte avec « Enregistrer » et l'autre
+     avec « Envoyer pour vérification ». La base refusera de toute façon
+     que `rge` passe à true depuis ici : c'est vous qui le basculez. */
+  if (rge) {
+    patch.rge_declare = !!rge.declare;
+    patch.rge_numero = rge.numero || null;
+    patch.rge_expire = rge.expire || null;
+  }
 
   const { error } = await supabase.from('professional_profiles')
     .update(patch).eq('id', currentUserId);
@@ -153,12 +164,19 @@ export async function signOut() {
  */
 const COLONNES_PRO_LISTE = [
   'id', 'nom', 'entreprise', 'metier', 'metiers', 'ville', 'verifie',
-  'experience_annees', 'siret', 'followers_count', 'rge',
+  'experience_annees', 'siret', 'followers_count',
   'assurance_valide', 'assurance_expire', 'kbis_valide', 'kbis_maj',
   'avatar_url', 'banner_url', 'kbis_url', 'assurance_url',
   'verification_statut', 'verification_note', 'verifie_le',
   'code_postal', 'latitude', 'longitude',
   'avis_count', 'note_delais', 'note_qualite', 'note_tarif',
+  /* La fiche de contact : téléphone, zone d'intervention, spécialités.
+     Elles sont courtes et s'affichent dans les listes de la Place des
+     pros, donc elles voyagent avec le reste. */
+  'telephone', 'zone_km', 'specialites',
+  /* La certification RGE. `rge` est la seule vérifiée ; les trois autres
+     sont ce que l'artisan a déclaré, et n'affichent pas de badge. */
+  'rge', 'rge_declare', 'rge_numero', 'rge_expire', 'rge_url',
 ].join(', ');
 
 function rowToPro(row, reviews = [], partners = []) {
@@ -179,7 +197,18 @@ function rowToPro(row, reviews = [], partners = []) {
     partners,
     assurance: { valide: !!row.assurance_valide, expire: row.assurance_expire },
     kbis: { valide: !!row.kbis_valide, maj: row.kbis_maj },
+    telephone: row.telephone || '',
+    /* `null` et 0 ne veulent pas dire la même chose : null = « il ne l'a
+       pas renseigné », et l'écran n'affiche alors rien du tout. */
+    zoneKm: row.zone_km == null ? null : Number(row.zone_km),
+    specialites: row.specialites || [],
+    /* La certification vérifiée par l'équipe — c'est elle qui fait le
+       badge — et, à côté, ce que l'artisan a déclaré lui-même. */
     rge: !!row.rge,
+    rgeDeclare: !!row.rge_declare,
+    rgeNumero: row.rge_numero || '',
+    rgeExpire: row.rge_expire || '',
+    rgePath: row.rge_url || null,
     portfolio: row.portfolio || [],
     avatarUrl: row.avatar_url || null,
     bannerUrl: row.banner_url || null,
@@ -925,6 +954,11 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
       code_insee: profil.codeInsee || null,
       latitude: profil.latitude || null,
       longitude: profil.longitude || null,
+      /* Le téléphone d'un artisan est PUBLIC : il est sur sa fiche pour
+         qu'on l'appelle. Vide, il redevient null et ne s'affiche plus. */
+      telephone: profil.telephone || null,
+      zone_km: profil.zoneKm || null,
+      specialites: profil.specialites || [],
     }).eq('id', currentUserId);
     if (error) throw error;
   } else {

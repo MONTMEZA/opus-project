@@ -9,7 +9,8 @@ import { BtnMain, BtnMini, Chip, EmptyState, TextArea, Field } from '../componen
 import ArtisanRow from '../components/ArtisanRow';
 import { Sparkles, Search } from '../components/icons';
 import { METIERS, avgReviews } from '../data/demo';
-import { metiersDe, exerce } from '../lib/metiers';
+import { exerce } from '../lib/metiers';
+import { correspond, texteDePro } from '../lib/recherche';
 
 export default function DecouvrirScreen({
   pros, aiQuery, setAiQuery, askAiMatch, aiMatches, aiMatchLoading, aiMatchError,
@@ -17,12 +18,17 @@ export default function DecouvrirScreen({
 }) {
   /* La recherche porte sur TOUS les métiers exercés, pas seulement le
      principal : un plombier-chauffagiste doit sortir sur « chauffagiste ».
-     C'était la première raison d'ouvrir le champ à plusieurs métiers. */
-  const results = Object.values(pros).filter((p) => {
-    const hay = (p.nom + p.entreprise + metiersDe(p).join(' ') + p.ville).toLowerCase();
-    const matchText = hay.includes(search.toLowerCase());
-    return matchText && exerce(p, filterMetier);
-  });
+     C'était la première raison d'ouvrir le champ à plusieurs métiers.
+     Elle porte aussi sur les SPÉCIALITÉS, qui sont les mots que les gens
+     tapent réellement — « douche à l'italienne » plutôt que « Carreleur ».
+
+     Et elle passe par `correspond()`, le même moteur que la Place des
+     pros : accents ignorés, synonymes de chantier reconnus (placo = BA13 =
+     plaque de plâtre), et tous les mots tapés exigés. Un simple
+     `includes()` échouait sur « maçon » tapé sans cédille. */
+  const results = Object.values(pros).filter(
+    (p) => correspond(texteDePro(p), search) && exerce(p, filterMetier),
+  );
 
   return (
     <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">

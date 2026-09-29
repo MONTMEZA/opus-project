@@ -47,7 +47,8 @@
     "verifier-recherche": "node scripts/verifier-recherche.mjs",
     "verifier-moderation": "node scripts/verifier-moderation.mjs",
     "verifier-legal": "node scripts/verifier-legal.mjs",
-    "verifier-notes": "node scripts/verifier-notes.mjs"
+    "verifier-notes": "node scripts/verifier-notes.mjs",
+    "verifier-profil": "node scripts/verifier-profil.mjs"
   },
   "private": true,
   "devDependencies": {

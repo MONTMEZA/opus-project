@@ -1043,7 +1043,7 @@ export default function OpusApp() {
    * Envoi du Kbis et de l'attestation d'assurance.
    * Le profil passe en « en attente » : c'est vous qui validez depuis Supabase.
    */
-  const envoyerDocuments = async ({ kbis, assurance }) => {
+  const envoyerDocuments = async ({ kbis, assurance, rgeFichier, rge }) => {
     try {
       const uid = api.getUserId();
       const kbisPath = kbis
@@ -1052,8 +1052,14 @@ export default function OpusApp() {
       const assurancePath = assurance
         ? await envoyerFichier({ uri: assurance.uri, bucket: 'documents', nom: 'assurance', userId: uid })
         : null;
+      /* L'attestation RGE rejoint les deux autres dans l'espace privé
+         `documents` : elle porte un numéro de qualification, elle n'a rien
+         à faire dans un espace public. */
+      const rgePath = rgeFichier
+        ? await envoyerFichier({ uri: rgeFichier.uri, bucket: 'documents', nom: 'rge', userId: uid })
+        : null;
 
-      await api.submitDocuments({ kbisPath, assurancePath });
+      await api.submitDocuments({ kbisPath, assurancePath, rgePath, rge });
 
       setPros((prev) => (prev[myProId]
         ? {
@@ -1062,6 +1068,10 @@ export default function OpusApp() {
               ...prev[myProId],
               kbisPath: kbisPath || prev[myProId].kbisPath,
               assurancePath: assurancePath || prev[myProId].assurancePath,
+              rgePath: rgePath || prev[myProId].rgePath,
+              rgeDeclare: rge ? !!rge.declare : prev[myProId].rgeDeclare,
+              rgeNumero: rge ? rge.numero : prev[myProId].rgeNumero,
+              rgeExpire: rge ? rge.expire : prev[myProId].rgeExpire,
               verificationStatut: 'en_attente',
             },
           }

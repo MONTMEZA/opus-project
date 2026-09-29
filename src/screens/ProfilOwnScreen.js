@@ -15,6 +15,7 @@ import {
 import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
+import FicheContactPro from '../components/FicheContactPro';
 import { BadgeCheck, Lock, ChevronRight } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
 import { resumeVerification, toutValide } from '../lib/verification';
@@ -161,6 +162,10 @@ export default function ProfilOwnScreen({
       </View>
 
       <Text style={s.bio}>{me.bio}</Text>
+
+      {/* Exactement le bloc que voient vos clients — et, s'il est vide, la
+          seule invitation de tout l'écran à le remplir. */}
+      <FicheContactPro pro={me} estMoi onEdit={onEdit} />
 
       <RappelVerification
         statut={me.verificationStatut}

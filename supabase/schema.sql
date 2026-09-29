@@ -2145,3 +2145,183 @@ begin
     end;
   end loop;
 end $$;
+
+-- ==========================================================================
+--  17. LE PROFIL PROFESSIONNEL COMPLET
+--      Téléphone, zone d'intervention, spécialités, certification RGE.
+--
+--  POURQUOI CETTE SECTION
+--  ----------------------
+--  Un relevé du 29/09/2026 a montré quatre manques sur la fiche d'un
+--  artisan, et tous les quatre touchent au même moment : celui où un
+--  particulier hésite entre deux profils.
+--
+--    - Pas de téléphone. Sur un annuaire professionnel, c'est le premier
+--      renseignement qu'on cherche. Le champ `telephone` n'existait que
+--      côté particulier.
+--    - Pas de zone d'intervention. `rayon_km` existe, mais il ne vaut que
+--      pour les urgences : un artisan qui ne fait PAS d'urgence n'avait
+--      aucun moyen de dire jusqu'où il se déplace.
+--    - Pas de spécialités. `metiers` est une liste FERMÉE de douze métiers ;
+--      « rénovation de fermes anciennes » ou « pose de poêles à granulés »
+--      n'y entrent pas, et ce sont pourtant ces mots-là qu'on tape dans une
+--      recherche.
+--    - La colonne `rge` existait depuis le début et n'était alimentée nulle
+--      part : elle s'affichait « Non certifié » pour tout le monde, y
+--      compris pour les artisans qui LE SONT. C'est le label qui ouvre
+--      MaPrimeRénov' à leurs clients.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  17.1 Les nouvelles colonnes
+-- --------------------------------------------------------------------------
+
+--  Le téléphone d'un professionnel est PUBLIC, et c'est voulu : il est sur
+--  sa fiche pour qu'on l'appelle. Celui d'un particulier
+--  (`public.users.telephone`) ne l'est pas — ce sont deux choses
+--  différentes, qui portent le même nom par hasard.
+alter table public.professional_profiles add column if not exists telephone text;
+
+--  Volontairement SANS valeur par défaut : `null` veut dire « il ne l'a pas
+--  renseigné », et l'écran n'affiche alors rien. Mettre 20 d'office ferait
+--  dire à toutes les fiches déjà en base quelque chose que personne n'a
+--  déclaré.
+alter table public.professional_profiles add column if not exists zone_km int;
+
+alter table public.professional_profiles drop constraint if exists pro_zone_km_check;
+alter table public.professional_profiles add constraint pro_zone_km_check
+  check (zone_km is null or zone_km between 1 and 300);
+
+--  Les spécialités sont du texte LIBRE, au contraire de `metiers`. C'est
+--  exactement ce qui manque à la recherche par mots-clés : personne ne
+--  cherche « Maçon », on cherche « mur en pierre » ou « enduit à la chaux ».
+alter table public.professional_profiles add column if not exists specialites text[] not null default '{}';
+
+-- --------------------------------------------------------------------------
+--  17.2 La certification RGE
+--
+--  Trois colonnes nouvelles, et une ancienne qui prend enfin son sens :
+--
+--    rge_declare  l'artisan DIT qu'il est certifié          (il l'écrit)
+--    rge_numero   son numéro de qualification               (il l'écrit)
+--    rge_expire   la date de fin de validité, ex. "12/2026" (il l'écrit)
+--    rge_url      l'attestation, dans l'espace privé        (il l'envoie)
+--    rge          la certification est VÉRIFIÉE             (vous seul)
+--
+--  Le même découpage que le Kbis : ce que l'artisan déclare d'un côté, ce
+--  qu'un humain a contrôlé de l'autre. Le badge « Certifié RGE » ne
+--  s'affiche que sur `rge`.
+--
+--  Et une décision d'interface qui compte : le RGE n'entre PAS dans le
+--  badge « vérifié ». Un carreleur n'a aucune raison d'être RGE, et il
+--  serait absurde qu'il apparaisse moins sérieux pour autant.
+-- --------------------------------------------------------------------------
+alter table public.professional_profiles add column if not exists rge_declare boolean not null default false;
+alter table public.professional_profiles add column if not exists rge_numero  text;
+alter table public.professional_profiles add column if not exists rge_expire  text;
+alter table public.professional_profiles add column if not exists rge_url     text;
+
+-- --------------------------------------------------------------------------
+--  17.3 Le verrou : un client modifié ne se décerne pas ses propres badges
+--
+--  LE DÉFAUT QUE CETTE SECTION CORRIGE
+--  -----------------------------------
+--  La règle d'écriture était « chacun sa fiche », toutes colonnes
+--  confondues :
+--
+--      create policy "ecriture mon profil" on public.professional_profiles
+--        for all using (auth.uid() = id) with check (auth.uid() = id);
+--
+--  Rien n'empêchait donc un artisan d'envoyer lui-même
+--  `kbis_valide = true, assurance_valide = true`. Le déclencheur
+--  `synchronise_verification()` en tirait consciencieusement
+--  `verifie = true`, et le badge s'affichait sans qu'aucun document n'ait
+--  jamais été regardé. L'application ne le fait pas — mais l'application
+--  n'est pas la seule à pouvoir parler à la base : la clé publiable est
+--  dans le téléphone de tout le monde.
+--
+--  C'est précisément le principe du projet : « les règles métier sont
+--  tenues par la base, pas par l'écran ».
+--
+--  COMMENT ON DISTINGUE L'ARTISAN DE L'ÉQUIPE
+--  ------------------------------------------
+--  `auth.uid()` renvoie l'identité du porteur du jeton. Depuis l'éditeur
+--  SQL de Supabase, ou depuis une Edge Function à clé de service, il n'y a
+--  pas de jeton : `auth.uid()` est `null`, et le verrou laisse passer.
+--  Autrement dit, vous gardez la main, lui ne l'a jamais.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_profil_pro()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  nettoyees text[];
+begin
+  -- 1. Le téléphone : on enlève les espaces de début et de fin, et un champ
+  --    vidé redevient `null` plutôt qu'une chaîne vide (sinon l'écran
+  --    afficherait un téléphone qui n'existe pas).
+  new.telephone := nullif(btrim(coalesce(new.telephone, '')), '');
+  new.rge_numero := nullif(btrim(coalesce(new.rge_numero, '')), '');
+  new.rge_expire := nullif(btrim(coalesce(new.rge_expire, '')), '');
+
+  -- 2. Les spécialités : on retire les blancs, les doublons et les vides.
+  --    `distinct` sur le texte mis en minuscules éviterait « Placo » et
+  --    « placo » côte à côte, mais ferait perdre la casse choisie par
+  --    l'artisan ; on se contente donc des doublons exacts.
+  select coalesce(array_agg(distinct s order by s), '{}'::text[])
+    into nettoyees
+    from unnest(coalesce(new.specialites, '{}'::text[])) x(s0),
+         lateral (select btrim(s0) as s) t
+   where btrim(s0) <> '';
+  new.specialites := nettoyees;
+
+  if cardinality(new.specialites) > 12 then
+    raise exception 'Douze spécialités au maximum : au-delà, plus personne ne les lit.'
+      using errcode = 'check_violation';
+  end if;
+  if exists (select 1 from unnest(new.specialites) s where length(s) > 40) then
+    raise exception 'Une spécialité tient en 40 caractères. Au-delà, c''est une phrase, pas un mot-clé.'
+      using errcode = 'check_violation';
+  end if;
+
+  -- 3. Le verrou. Uniquement quand c'est le professionnel lui-même qui
+  --    modifie sa fiche depuis l'application.
+  if tg_op = 'UPDATE' and auth.uid() is not null and auth.uid() = new.id then
+    new.verifie           := old.verifie;
+    new.verifie_le        := old.verifie_le;
+    new.kbis_valide       := old.kbis_valide;
+    new.kbis_maj          := old.kbis_maj;
+    new.assurance_valide  := old.assurance_valide;
+    new.assurance_expire  := old.assurance_expire;
+    new.rge               := old.rge;
+    new.verification_note := old.verification_note;
+
+    -- Il a le droit de dire « voici mes documents » (`en_attente`), pas de
+    -- dire « je suis vérifié ».
+    if new.verification_statut is distinct from old.verification_statut
+       and new.verification_statut not in ('non_soumis', 'en_attente') then
+      new.verification_statut := old.verification_statut;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- L'ordre compte : `trg_synchronise_verification` s'exécute avant
+-- (s < t dans l'ordre alphabétique, qui est celui des déclencheurs de même
+-- moment), il calcule `verifie` — et celui-ci remet ensuite la vraie valeur.
+drop trigger if exists trg_tient_le_profil_pro on public.professional_profiles;
+create trigger trg_tient_le_profil_pro
+  before insert or update on public.professional_profiles
+  for each row execute function public.tient_le_profil_pro();
+
+-- --------------------------------------------------------------------------
+--  17.4 Retrouver un artisan par sa spécialité
+--
+--  Un index GIN, comme pour `metiers` : sans lui, chercher « poêle à
+--  granulés » relirait toutes les fiches une par une.
+-- --------------------------------------------------------------------------
+create index if not exists idx_pro_specialites on public.professional_profiles using gin (specialites);
