@@ -162,6 +162,49 @@ Deux pièges rencontrés, à ne pas redécouvrir :
    publique `to anon` qui n'appelle pas la fonction. Un visiteur n'a bloqué
    personne : il n'a rien à masquer.
 
+### Une règle RLS filtre des LIGNES, jamais des COLONNES
+
+Constaté le 29/09/2026, sur la vraie base : `public.users` est lisible par
+tout le monde (`for select using (true)`) parce que le fil affiche des noms
+et des photos. La même autorisation laissait lire **l'adresse e-mail, le
+téléphone et les coordonnées GPS** de chacun, avec la clé publiable, sans
+même avoir de compte — alors que l'écran promet au particulier : « il ne
+s'affiche nulle part ».
+
+Ce qui protège une colonne, ce sont les **droits de colonne** (`grant
+select (col)`), pas la politique RLS. Et deux pièges :
+
+1. **`revoke select (colonne)` ne retire RIEN** tant que le rôle possède le
+   droit de lire la table entière — ce que Supabase accorde d'office. Il
+   faut `revoke select on <table>`, **puis** rendre colonne par colonne.
+   Le premier essai est passé sans erreur en ne protégeant rien.
+2. **`select *` cesse alors de fonctionner** pour ces rôles, et c'est voulu.
+   Pour lire SA PROPRE ligne entière, une fonction `security definer` avec
+   `where id = auth.uid()` — c'est ce que fait `mon_compte()`.
+   Attention à toute fonction `security invoker` qui fait `to_jsonb(u)` :
+   elle lit toutes les colonnes et échoue. `mes_donnees()` (l'export RGPD)
+   est passée par `mon_compte()` pour cette raison.
+
+Et l'ordre du fichier compte : une fonction SQL est contrôlée à sa création,
+donc `mon_compte()` est déclarée **avant** `mes_donnees()`, pas dans la
+section qui l'explique.
+
+### Le badge ne se décerne pas soi-même
+
+Même journée, même famille de défaut : la règle d'écriture d'un profil pro
+était « chacun sa fiche », toutes colonnes confondues. Un client modifié
+pouvait donc s'envoyer `kbis_valide = true, assurance_valide = true`, et le
+déclencheur en tirait consciencieusement `verifie = true`.
+
+Le déclencheur `tient_le_profil_pro()` remet les colonnes de vérification à
+leur ancienne valeur **dès que c'est le professionnel lui-même qui écrit**.
+On le reconnaît à `auth.uid() = new.id` ; depuis l'éditeur SQL ou une Edge
+Function, `auth.uid()` est `null` et le verrou laisse passer.
+
+> **Toute colonne qu'un humain doit valider se protège par un déclencheur.**
+> Aujourd'hui : `verifie`, `kbis_valide`, `assurance_valide`, `rge`,
+> `verification_note`.
+
 Et une règle RGPD qui a la même force :
 
 > **Ce qui concerne des TIERS s'anonymise, il ne se supprime pas.**

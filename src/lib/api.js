@@ -345,7 +345,10 @@ export async function loadAll() {
     supabase.from('demandes').select('*, users:client_id(nom, avatar_url)').order('created_at', { ascending: false }),
     supabase.from('demande_reponses').select('demande_id'),
     supabase.from('sos_availability').select('*').eq('professional_id', uid).maybeSingle(),
-    supabase.from('users').select('*').eq('id', uid).maybeSingle(),
+    /* Ma propre fiche, avec mon téléphone — que `select *` ne sait plus
+       lire depuis que ces colonnes sont fermées à tout le monde (section
+       18 de schema.sql). La fonction, elle, ne renvoie QUE ma ligne. */
+    supabase.rpc('mon_compte').maybeSingle(),
   ]);
 
   const err = [profilesRes, partnersRes, postsRes].find((r) => r.error);

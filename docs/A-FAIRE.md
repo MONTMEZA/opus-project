@@ -220,18 +220,37 @@ que l'application est plantée.
 
 ### C. Ce qui manque au PROFIL PRO pour être complet
 
-**C1 — la colonne `rge` existe en base et n'est utilisée NULLE PART.**
-C'est pourtant le label qui ouvre MaPrimeRénov' à ses clients : pour un
-artisan, c'est un argument commercial de premier plan, et il est déjà à
-moitié construit. À afficher sur le profil, à filtrer dans la recherche, et à
-contrôler comme le Kbis.
+**C1, C2, C3 — ✅ FAITS le 29/09/2026**, en une seule migration
+(section 17 de `supabase/schema.sql`).
 
-**C2 — un artisan ne peut pas publier de numéro de téléphone.** Le champ
-`telephone` n'existe que du côté particulier de `ProfilEditScreen`. Sur un
-annuaire professionnel, c'est le premier renseignement qu'on cherche.
+- **RGE** : quatre colonnes de plus (`rge_declare`, `rge_numero`,
+  `rge_expire`, `rge_url`) pour ce que l'artisan DÉCLARE, et l'ancienne
+  `rge` pour ce que vous avez CONTRÔLÉ. Trois états sur la fiche —
+  certifié / déclarée en cours de vérification / non communiquée — et le
+  troisième reste **gris, jamais rouge** : un carreleur n'a aucune raison
+  d'être RGE.
+- **Téléphone** : `professional_profiles.telephone`, public et appelable
+  d'un geste depuis la fiche. À ne pas confondre avec
+  `users.telephone`, celui d'un particulier, qui lui n'est lisible par
+  personne (voir plus bas).
+- **Zone d'intervention** : `zone_km`, de 1 à 300 km, pour les chantiers
+  ordinaires — `rayon_km` ne valait que pour le SOS.
+- **En plus** : les **spécialités** (texte libre, douze au maximum). C'est
+  ce qu'on tape dans une recherche — « enduit à la chaux », « douche à
+  l'italienne » — alors que `metiers` est une liste fermée de douze
+  entrées. La recherche de « Découvrir » les lit, et passe désormais par
+  le même moteur que la Place des pros (accents et synonymes de chantier).
 
-**C3 — pas de zone d'intervention** pour les chantiers ordinaires. Le rayon
-en kilomètres n'existe que pour le SOS.
+**Deux failles corrigées au passage** (elles n'étaient pas dans ce relevé) :
+
+1. Un client modifié pouvait **se décerner le badge vérifié** en écrivant
+   lui-même `kbis_valide = true, assurance_valide = true`. Verrouillé par
+   le déclencheur `tient_le_profil_pro()`.
+2. **L'e-mail, le téléphone et les coordonnées GPS de chacun étaient
+   lisibles par n'importe qui** avec la clé publiable — onze comptes, cinq
+   adresses, deux numéros. Une politique RLS filtre des lignes, pas des
+   colonnes. Fermé par des droits de colonne (section 18), et sa propre
+   fiche se lit maintenant par `mon_compte()`.
 
 **C4 — pas d'horaires.** « Ouvert jusqu'à 18 h » change le fait d'appeler ou
 non, maintenant.

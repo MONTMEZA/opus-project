@@ -27,6 +27,40 @@ alter table public.users add column if not exists latitude    double precision;
 alter table public.users add column if not exists longitude   double precision;
 
 -- --------------------------------------------------------------------------
+--  LIRE SA PROPRE FICHE, ENTIÈREMENT  (elle appartient à la section 18,
+--  mais elle est déclarée ici : `mes_donnees()` s'en sert, et une fonction
+--  SQL est contrôlée au moment où on la crée.)
+--
+--  L'adresse e-mail, le téléphone et les coordonnées d'un particulier ne
+--  sont lisibles par PERSONNE — voir la section 18, tout en bas, qui
+--  explique comment et pourquoi. Sauf par l'intéressé lui-même : c'est son
+--  numéro qui pré-remplit ses demandes de devis.
+--
+--  Un droit de colonne ne sait pas distinguer « sa ligne » des autres ;
+--  une fonction, si.
+--
+--  `security definer` lui donne le droit de lire les colonnes protégées,
+--  et le `where id = auth.uid()` fait le reste : elle ne peut renvoyer que
+--  la ligne de celui qui l'appelle. Un visiteur sans compte a `auth.uid()`
+--  à null, et n'obtient rien.
+-- --------------------------------------------------------------------------
+create or replace function public.mon_compte()
+returns public.users
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select u.* from public.users u where u.id = auth.uid();
+$$;
+
+-- Elle ne s'appelle que connecté. La laisser ouverte à `anon` ferait
+-- remonter, à juste titre, une alerte de sécurité Supabase.
+revoke execute on function public.mon_compte() from public;
+revoke execute on function public.mon_compte() from anon;
+grant  execute on function public.mon_compte() to authenticated;
+
+-- --------------------------------------------------------------------------
 --  2. PROFILS PROFESSIONNELS
 --     Les champs de vérification sont ceux affichés dans le bloc
 --     "Informations vérifiées" du profil.
@@ -1788,7 +1822,12 @@ set search_path = public
 as $$
   select jsonb_build_object(
     'export_du', now(),
-    'compte',    (select to_jsonb(u) from public.users u where u.id = auth.uid()),
+    /* Passe par mon_compte() (section 18) et non par un `to_jsonb(u)`
+       direct : `mes_donnees()` s'exécute avec les droits de l'appelant, et
+       depuis que les colonnes sensibles de `public.users` lui sont fermées,
+       lire la ligne entière échouerait — l'export RGPD reviendrait vide ou
+       en erreur, pour la meilleure des raisons. */
+    'compte',    (select to_jsonb(public.mon_compte())),
     'fiche_professionnelle',
                  (select to_jsonb(p) from public.professional_profiles p where p.id = auth.uid()),
     'publications',
@@ -2325,3 +2364,89 @@ create trigger trg_tient_le_profil_pro
 --  granulés » relirait toutes les fiches une par une.
 -- --------------------------------------------------------------------------
 create index if not exists idx_pro_specialites on public.professional_profiles using gin (specialites);
+
+-- ==========================================================================
+--  18. CE QUI ÉTAIT LISIBLE PAR TOUT LE MONDE, ET NE DEVAIT PAS L'ÊTRE
+--
+--  LE DÉFAUT
+--  ---------
+--  La table `public.users` est lue par tout le monde, et c'est normal : le
+--  fil affiche des noms et des photos.
+--
+--      create policy "lecture users" on public.users for select using (true);
+--
+--  Seulement, une règle RLS filtre des LIGNES, jamais des COLONNES. La même
+--  autorisation qui laisse lire « Karim Belaïd » laissait donc lire son
+--  adresse e-mail, son téléphone et ses coordonnées GPS — avec la clé
+--  publiable, celle qui est dans toutes les applications installées, sans
+--  même avoir de compte.
+--
+--  Vérifié le 29/09/2026 sur la vraie base, depuis un client anonyme :
+--  onze comptes, cinq adresses e-mail et deux numéros de téléphone
+--  lisibles. Or l'écran promet exactement l'inverse au particulier qui
+--  renseigne son numéro : « Il ne s'affiche nulle part. Il n'est transmis
+--  qu'aux artisans à qui vous demandez un devis ou un rappel. »
+--
+--  À ne pas confondre avec `professional_profiles.telephone`, ajouté à la
+--  section 17 : celui d'un artisan est PUBLIC, il est sur sa fiche pour
+--  qu'on l'appelle. Deux colonnes du même nom, deux intentions opposées.
+--
+--  LA CORRECTION
+--  -------------
+--  PostgreSQL sait donner des droits COLONNE par colonne, et PostgREST les
+--  respecte : demander une colonne interdite renvoie une erreur, elle ne
+--  revient pas vide. C'est donc la base qui tient la règle, là encore, et
+--  non l'écran.
+--
+--  Conséquence à connaître : `select *` sur `public.users` ÉCHOUE désormais
+--  pour l'application. C'est voulu — c'est ce qui empêche la fuite de
+--  revenir par inadvertance — et c'est pourquoi `mon_compte()` existe
+--  juste en dessous.
+-- ==========================================================================
+
+--  LE PIÈGE, RENCONTRÉ EN ÉCRIVANT CETTE SECTION
+--  ---------------------------------------------
+--  Un `revoke select (colonne)` NE RETIRE RIEN si le rôle possède le droit
+--  de lire la TABLE entière — et c'est exactement ce que Supabase accorde
+--  d'office à `anon` et `authenticated`. Le premier essai est donc passé
+--  sans erreur, en ne protégeant rien du tout : les trois colonnes se
+--  lisaient encore. Vérifié sur PostgreSQL 16.
+--
+--  Il faut retirer le droit sur la table, PUIS le rendre colonne par
+--  colonne. D'où la boucle ci-dessous : elle dresse la liste des colonnes
+--  au moment où elle s'exécute, ce qui veut dire qu'une colonne ajoutée
+--  plus tard sera automatiquement couverte au prochain passage du fichier.
+--  Une colonne sensible de plus n'aura qu'à rejoindre la liste `SECRETES`.
+do $$
+declare
+  secretes text[] := array['email', 'telephone', 'latitude', 'longitude'];
+  toutes   text;
+  permises text;
+begin
+  select string_agg(quote_ident(column_name), ', ' order by ordinal_position)
+    into toutes
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'users';
+
+  select string_agg(quote_ident(column_name), ', ' order by ordinal_position)
+    into permises
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'users'
+     and not (column_name = any(secretes));
+
+  -- 1. plus aucun droit de lecture, ni sur la table ni sur les colonnes
+  execute 'revoke select on public.users from anon, authenticated';
+  execute format('revoke select (%s) on public.users from anon, authenticated', toutes);
+  -- 2. puis on rend, une par une, celles qui peuvent être publiques
+  execute format('grant select (%s) on public.users to anon, authenticated', permises);
+end $$;
+
+-- Écrire reste permis : c'est bien son propre numéro qu'on enregistre, et
+-- la règle « ecriture mon user » limite déjà cela à sa propre ligne.
+grant update (email, telephone, latitude, longitude) on public.users to authenticated;
+
+-- La fonction `mon_compte()` qui va avec est déclarée plus haut, juste
+-- après la table : une fonction SQL est contrôlée au moment où on la crée,
+-- et `mes_donnees()` — qui s'en sert — vient avant cette section dans le
+-- fichier. L'ordre du fichier compte, et ce n'est pas une coquetterie :
+-- rejouer schema.sql sur une base neuve échouait sans cela.
