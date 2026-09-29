@@ -1018,23 +1018,61 @@ export default function OpusApp() {
 
   const enregistrerProfil = async ({ profil, sos }) => {
     let complet = profil;
-    try {
-      // Les images choisies sur le téléphone sont d'abord envoyées vers
-      // Supabase Storage ; sans ça, elles ne seraient visibles que par vous.
-      const uid = api.getUserId();
-      const avatarUrl = estFichierLocal(profil.avatarUrl)
-        ? await envoyerFichier({ uri: profil.avatarUrl, bucket: 'avatars', nom: 'avatar', userId: uid })
-        : profil.avatarUrl;
-      const bannerUrl = estFichierLocal(profil.bannerUrl)
-        ? await envoyerFichier({ uri: profil.bannerUrl, bucket: 'bannieres', nom: 'banniere', userId: uid })
-        : profil.bannerUrl;
-      complet = { ...profil, avatarUrl, bannerUrl };
 
+    /* TROIS ÉTAPES, TROIS MESSAGES DISTINCTS
+       --------------------------------------
+       Tout était dans un seul `try`, et l'échec s'annonçait toujours par
+       « Enregistrement impossible ». Or ces trois étapes échouent pour des
+       raisons qui n'ont rien à voir : l'envoi d'une image dépend du réseau
+       et du stockage, l'écriture de la fiche dépend de la base. Le
+       29/09/2026, une photo de profil refusait de s'enregistrer, et le
+       message ne disait pas laquelle des trois avait lâché.
+
+       On nomme donc l'étape. Sur un défaut qu'on ne peut pas reproduire —
+       l'envoi depuis un téléphone n'existe pas dans le conteneur où je
+       travaille — c'est la moitié du chemin. */
+    const uid = api.getUserId();
+    let avatarUrl = profil.avatarUrl;
+    let bannerUrl = profil.bannerUrl;
+
+    if (estFichierLocal(profil.avatarUrl)) {
+      try {
+        avatarUrl = await envoyerFichier({
+          uri: profil.avatarUrl, bucket: 'avatars', nom: 'avatar', userId: uid,
+        });
+      } catch (e) {
+        showErreur(`Envoi de la photo de profil impossible : ${e.message || e}`);
+        return;
+      }
+    }
+
+    if (estFichierLocal(profil.bannerUrl)) {
+      try {
+        bannerUrl = await envoyerFichier({
+          uri: profil.bannerUrl, bucket: 'bannieres', nom: 'banniere', userId: uid,
+        });
+      } catch (e) {
+        showErreur(`Envoi de la bannière impossible : ${e.message || e}`);
+        return;
+      }
+    }
+
+    complet = { ...profil, avatarUrl, bannerUrl };
+
+    try {
       await api.updateProfile({ userType, profil: complet });
-      if (sos) await api.updateSosAvailability(sos);
     } catch (e) {
-      showErreur(`Enregistrement impossible : ${e.message || e}`);
+      showErreur(`Enregistrement de la fiche impossible : ${e.message || e}`);
       return;
+    }
+
+    if (sos) {
+      try {
+        await api.updateSosAvailability(sos);
+      } catch (e) {
+        showErreur(`Disponibilité aux urgences non enregistrée : ${e.message || e}`);
+        return;
+      }
     }
 
     if (userType === 'pro') {
