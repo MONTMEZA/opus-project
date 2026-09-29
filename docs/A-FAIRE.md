@@ -106,6 +106,115 @@ elle veut.
 
 ---
 
+## 1 bis. Finir la PREMIÈRE BRIQUE : le réseau social et le profil pro
+
+Relevé fait le 29/09/2026, en lisant le code, à la demande du propriétaire :
+« que reste-t-il pour que la première brique soit terminée et optimisée ? »
+
+Les fonctionnalités, elles, sont là. Ce qui suit n'invente rien de nouveau :
+c'est ce qui manque pour que l'existant tienne debout devant de vrais
+utilisateurs. **Par ordre d'importance réelle, pas de difficulté.**
+
+### A. Ce qui cassera dès qu'il y aura du monde
+
+**A1 — `loadAll()` télécharge TOUTE la base à chaque ouverture.**
+Quinze requêtes en parallèle (`src/lib/api.js`), et **une seule `.limit()`
+dans tout le fichier**. Toutes les publications, tous les commentaires, tous
+les profils, toutes les demandes, tous les avis, à chaque lancement.
+
+Avec 13 publications c'est instantané. Avec 5 000, c'est plusieurs mégaoctets
+téléchargés avant que le premier écran s'affiche — sur un téléphone, en 4G,
+sur un chantier. C'est LE point qui décidera si l'application est utilisable
+ou non le jour où elle marche.
+
+Ce que ça demande :
+- le fil par pages de 20 (`.range()`), avec chargement à la fin du défilement ;
+- les commentaires d'une publication chargés **à l'ouverture** des
+  commentaires, pas tous d'avance ;
+- les messages chargés **par conversation**, pas tous d'un coup ;
+- les profils chargés à la demande plutôt qu'en bloc.
+
+**A2 — les photos partent et reviennent en pleine résolution.**
+`expo-image-picker` est réglé sur `quality: 0.8`, mais **sans limite de
+dimension** : une photo d'iPhone fait 3 à 4 Mo. Une publication de six photos
+= une vingtaine de mégaoctets à l'envoi, et autant à chaque lecture par
+quelqu'un d'autre.
+
+La solution ne coûte rien et tient dans Expo Go (paquets Expo officiels,
+vérifiés à jour le 29/09/2026) :
+- **`expo-image-manipulator`** (57.0.20) — redimensionner à 1600 px de large
+  AVANT l'envoi. Une photo passe de 3,5 Mo à environ 400 Ko, sans différence
+  visible sur un téléphone ;
+- **`expo-image`** (57.0.5) — remplace `Image` de React Native et apporte le
+  cache disque. Aujourd'hui, redescendre dans le fil retélécharge tout.
+
+(Les transformations d'image de Supabase feraient la même chose côté serveur,
+mais elles sont réservées aux offres payantes. Redimensionner sur le
+téléphone est gratuit, et fait gagner aussi sur l'envoi.)
+
+### B. Ce qui manque pour que ça se comporte comme une vraie application
+
+**B1 — aucun temps réel.** Un message reçu n'apparaît qu'en refermant et
+rouvrant l'application. Pour une messagerie, c'est rédhibitoire. Supabase
+Realtime est **gratuit** et déjà présent dans la librairie installée : il
+reste à s'abonner aux nouvelles lignes de `messages` et `notifications`.
+
+**B2 — les messages non lus ne servent à rien.** La colonne `messages.lu`
+existe en base et **n'est lue ni écrite nulle part**. Donc : pas de pastille
+sur une conversation, pas de compteur dans la barre du bas, et un message
+reste « non lu » pour toujours.
+
+**B3 — aucun « tirer pour rafraîchir ».** Pas un seul `RefreshControl` dans
+le projet. Le seul moyen de voir du neuf est de fermer l'application.
+
+**B4 — aucun écran de chargement progressif.** Pas un squelette : l'écran
+reste vide, puis tout apparaît d'un coup. Sur une connexion lente, on croit
+que l'application est plantée.
+
+**B5 — pas de « tout marquer comme lu »** sur les notifications.
+
+### C. Ce qui manque au PROFIL PRO pour être complet
+
+**C1 — la colonne `rge` existe en base et n'est utilisée NULLE PART.**
+C'est pourtant le label qui ouvre MaPrimeRénov' à ses clients : pour un
+artisan, c'est un argument commercial de premier plan, et il est déjà à
+moitié construit. À afficher sur le profil, à filtrer dans la recherche, et à
+contrôler comme le Kbis.
+
+**C2 — un artisan ne peut pas publier de numéro de téléphone.** Le champ
+`telephone` n'existe que du côté particulier de `ProfilEditScreen`. Sur un
+annuaire professionnel, c'est le premier renseignement qu'on cherche.
+
+**C3 — pas de zone d'intervention** pour les chantiers ordinaires. Le rayon
+en kilomètres n'existe que pour le SOS.
+
+**C4 — pas d'horaires.** « Ouvert jusqu'à 18 h » change le fait d'appeler ou
+non, maintenant.
+
+### D. Finitions visibles
+
+- **`· 0 km`** s'affiche quand l'artisan est dans la même commune
+  (`DemandesScreen.js:241`, `PlaceProScreen.js:388`). Il faudrait « dans votre
+  commune ».
+- **Un commentaire ne peut être ni modifié ni supprimé** par son auteur.
+  Une publication non plus (la suppression, elle, existe).
+- **Zéro `accessibilityLabel` dans tout le projet.** Un artisan qui travaille
+  avec des lunettes, ou qui utilise le zoom de son téléphone, n'a aucune aide.
+
+### L'ordre que je recommande
+
+1. **A2** (photos redimensionnées) — une demi-journée, effet immédiat et
+   visible dès le premier essai sur téléphone.
+2. **A1** (pagination) — le vrai chantier, mais il devient beaucoup plus
+   coûteux à faire plus tard.
+3. **B1 + B2** (temps réel et messages lus) — c'est ce qui fait passer la
+   messagerie de « maquette » à « ça marche ».
+4. **C1** (RGE) — le plus rentable des quatre points profil : la moitié est
+   déjà en base.
+5. **B3, B4, D** — finitions, à faire au fil de l'eau.
+
+---
+
 ## 2. Important — la plateforme ne tient pas à l'échelle sans ça
 
 ### 2.1 Un back-office, même minimal
