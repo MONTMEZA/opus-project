@@ -5,6 +5,31 @@ ici, dans l'ordre où je te conseille de l'essayer. **Un point, une réponse.**
 Si un point ne va pas, arrête-toi là et dis-le-moi : c'est plus rapide que de
 tout essayer puis de chercher lequel a cassé.
 
+---
+
+## ✅ Résultat des essais du 29/09/2026 — tout passe
+
+Les seize points ont été essayés sur iPhone, avec la vraie base. Quatre
+défauts sont sortis, tous corrigés et vérifiés :
+
+| Ce qui a été vu | Ce que c'était vraiment |
+|---|---|
+| « Le clic marche mais plus rien ne défile », quelques secondes au démarrage | Dix éléments montés d'un coup, dont dix lecteurs vidéo qui se téléchargeaient ensemble |
+| « On ne peut pas écrire » dans l'assistant IA | 219 ms par lettre : chaque touche re-rendait toute l'application |
+| Les propositions de l'IA restaient après avoir vidé le champ, et se mêlaient aux résultats de la recherche | Rien ne les effaçait, et rien ne disait où s'arrêtait une liste et où commençait l'autre |
+| « Enregistrement impossible » sur la photo de profil | Le message ne disait ni l'étape ni la cause — il s'affichait trois secondes avec une **coche verte** |
+
+La photo de profil s'enregistre depuis : relevé sur la base, 83 Ko en JPEG
+dans l'espace `avatars`, et la fiche pointe dessus. **Je ne sais pas ce qui
+l'a débloquée** — aucune des corrections de la journée ne touchait à
+l'envoi. La piste la plus probable est un ancien paquet resté en mémoire
+avant le `npm start -- --clear`. Si cela revient, le message rouge nommera
+désormais l'étape exacte.
+
+Ce qui reste à faire est dans `docs/A-FAIRE.md`.
+
+---
+
 Chaque point est écrit pareil :
 
 - **Tu fais** — les gestes, dans l'ordre.

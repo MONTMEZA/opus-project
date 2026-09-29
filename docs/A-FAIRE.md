@@ -218,6 +218,14 @@ que l'application est plantée.
 
 **B5 — pas de « tout marquer comme lu »** sur les notifications.
 
+**B8 — ✅ FAIT le 29/09/2026 : écrire dans un champ était impossible.**
+219 ms par lettre dans l'assistant IA, mesuré au navigateur avec le
+processeur bridé six fois. Deux causes : l'état de saisie vivait dans
+`OpusApp` (chaque lettre re-rendait tous les écrans), et un écran entier se
+re-rendait pour une lettre. Un champ de recherche est désormais un
+composant avec son texte à lui, et le filtrage part quand la frappe retombe
+(`src/lib/frappe.js`). 219 → 26 ms, 74 → 21, 93 → 29.
+
 **B7 — ✅ FAIT le 29/09/2026 : un échec s'affichait avec une coche verte.**
 Le bandeau du haut servait à tout, pendant trois secondes, avec la même
 icône. « Enregistrement impossible : … » se lisait donc comme une réussite,
