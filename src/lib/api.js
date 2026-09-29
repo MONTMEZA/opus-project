@@ -1295,3 +1295,21 @@ export const accepterConditions = !hasSupabase ? noop : async (version) => {
     .eq('id', currentUserId);
   if (error) throw error;
 };
+
+/**
+ * Supprimer un commentaire.
+ *
+ * QUI A LE DROIT : SON AUTEUR, ET PERSONNE D'AUTRE.
+ * Ce n'est pas l'écran qui le décide — la règle RLS « mes comments » ne
+ * laisse passer que `auth.uid() = author_id`. Vérifié sur PostgreSQL :
+ * l'auteur de la PUBLICATION lui-même se fait refuser la suppression du
+ * commentaire de quelqu'un d'autre. Un client modifié n'y changerait rien.
+ *
+ * ATTENTION : supprimer un commentaire emporte ses RÉPONSES
+ * (`on delete cascade` sur `parent_id`). C'est voulu — une réponse sans la
+ * question ne veut plus rien dire — mais l'écran doit le dire avant.
+ */
+export const supprimerCommentaire = !hasSupabase ? noop : async (id) => {
+  const { error } = await supabase.from('comments').delete().eq('id', id);
+  if (error) throw error;
+};

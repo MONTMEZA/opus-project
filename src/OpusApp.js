@@ -403,6 +403,46 @@ export default function OpusApp() {
   };
 
   /**
+   * Retirer un commentaire — le SIEN, et rien d'autre.
+   *
+   * La règle est tenue par la base : la politique RLS des commentaires ne
+   * laisse passer que `auth.uid() = author_id`. Vérifié sur PostgreSQL —
+   * même l'auteur de la publication se fait refuser la suppression du
+   * commentaire de quelqu'un d'autre. Cet écran ne fait que proposer le
+   * geste à qui y a droit ; il ne décide de rien.
+   *
+   * Supprimer un commentaire emporte ses réponses (`on delete cascade`) :
+   * le compteur baisse donc de 1 PLUS le nombre de réponses.
+   */
+  const supprimerCommentaire = async (postId, commentaire) => {
+    const nbReponses = (commentaire.reponses || []).length;
+
+    /* Retrait immédiat, avant la réponse du serveur : sinon on appuie et
+       rien ne bouge pendant une seconde. */
+    setPosts((ps) => ps.map((p) => {
+      if (p.id !== postId) return p;
+      const actuels = Array.isArray(p.comments) ? p.comments : [];
+      const restants = actuels
+        .filter((c) => c.id !== commentaire.id)
+        .map((c) => ({
+          ...c,
+          reponses: (c.reponses || []).filter((r) => r.id !== commentaire.id),
+        }));
+      return {
+        ...p,
+        comments: restants,
+        nbCommentaires: Math.max((p.nbCommentaires || 0) - 1 - nbReponses, 0),
+      };
+    }));
+
+    try {
+      await api.supprimerCommentaire(commentaire.id);
+    } catch (e) {
+      showBanner("Le commentaire n'a pas pu être supprimé. Rechargez le fil.");
+    }
+  };
+
+  /**
    * Toucher le nom sous un commentaire. Un professionnel a sa page ; un
    * particulier a sa fiche publique, qu'on va chercher à la demande.
    */
@@ -1402,6 +1442,8 @@ export default function OpusApp() {
             onLike={toggleLike} onFollow={toggleFollow} onView={viewProfile} onHide={hidePost}
             onSignaler={ouvrirSignalement}
             onChargerPlus={chargerPlusDeFil}
+            onSupprimerCommentaire={supprimerCommentaire}
+            moiId={api.getUserId()}
             chargePage={chargePage}
             finDuFil={finDuFil}
             rafraichit={rafraichit}
@@ -1646,6 +1688,8 @@ export default function OpusApp() {
         onAddComment={addComment}
         onVoirCommentateur={voirCommentateur}
         onSignaler={ouvrirSignalement}
+        onSupprimerCommentaire={supprimerCommentaire}
+        moiId={api.getUserId()}
       />
     </View>
   );

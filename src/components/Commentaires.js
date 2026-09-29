@@ -49,7 +49,8 @@ export function nbCommentairesDe(post) {
  * une zone de défilement imbriquée piégerait le geste.
  */
 export default function Commentaires({
-  commentaires = [], pros = {}, onEnvoyer, onVoirProfil, onSignaler, style, scroll,
+  commentaires = [], pros = {}, onEnvoyer, onVoirProfil, onSignaler,
+  onSupprimer, moiId = null, style, scroll,
 }) {
   const [draft, setDraft] = useState('');
   const [repondA, setRepondA] = useState(null);       // { id, auteur }
@@ -96,7 +97,15 @@ export default function Commentaires({
         const ouvert = deplies.has(c.id) || reponses.length <= 1;
         return (
           <View key={String(c.id)}>
-            <Ligne c={c} pros={pros} onVoirProfil={onVoirProfil} onSignaler={onSignaler} onRepondre={() => repondre(c)} />
+            <Ligne
+              c={c}
+              pros={pros}
+              moiId={moiId}
+              onVoirProfil={onVoirProfil}
+              onSignaler={onSignaler}
+              onSupprimer={onSupprimer}
+              onRepondre={() => repondre(c)}
+            />
 
             {reponses.length > 1 && !ouvert && (
               <Pressable style={s.voirPlus} onPress={() => basculer(c.id)}>
@@ -113,8 +122,10 @@ export default function Commentaires({
                 c={r}
                 reponse
                 pros={pros}
+                moiId={moiId}
                 onVoirProfil={onVoirProfil}
                 onSignaler={onSignaler}
+                onSupprimer={onSupprimer}
                 onRepondre={() => repondre(r, c.id)}
               />
             ))}
@@ -159,7 +170,12 @@ export default function Commentaires({
   );
 }
 
-function Ligne({ c, reponse, pros, onVoirProfil, onSignaler, onRepondre }) {
+function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer, onRepondre }) {
+  /* La confirmation se fait DANS la ligne, pas dans une alerte du système :
+     une alerte ne se teste pas au navigateur, et elle coupe la lecture. */
+  const [confirme, setConfirme] = useState(false);
+  const aMoi = !!moiId && !!c.auteurId && String(c.auteurId) === String(moiId);
+  const nbReponses = (c.reponses || []).length;
   const pro = pros[c.auteurId];
   const taille = reponse ? 24 : 30;
   const cliquable = !!c.auteurId;
@@ -188,9 +204,30 @@ function Ligne({ c, reponse, pros, onVoirProfil, onSignaler, onRepondre }) {
           <Pressable onPress={onRepondre} hitSlop={6}>
             <Text style={s.repondre}>Répondre</Text>
           </Pressable>
-          {/* Un commentaire se signale comme le reste : c'est souvent là que
-              commencent les insultes, plus que dans les publications. */}
-          {!!onSignaler && !!c.auteurId && (
+          {/* Le sien, on le retire. Celui des autres, on le signale — et
+              JAMAIS on ne le supprime, même sur sa propre publication : la
+              règle est tenue par la base, pas par cet écran. */}
+          {aMoi && !!onSupprimer && !confirme && (
+            <Pressable onPress={() => setConfirme(true)} hitSlop={6}>
+              <Text style={s.supprimer}>Supprimer</Text>
+            </Pressable>
+          )}
+          {aMoi && !!onSupprimer && confirme && (
+            <View style={s.confirme}>
+              <Text style={s.confirmeTexte}>
+                {nbReponses > 0
+                  ? `Supprimer ? Les ${nbReponses} réponse${nbReponses > 1 ? 's' : ''} partiront aussi.`
+                  : 'Supprimer ?'}
+              </Text>
+              <Pressable onPress={() => { setConfirme(false); onSupprimer(c); }} hitSlop={6}>
+                <Text style={s.confirmeOui}>Oui</Text>
+              </Pressable>
+              <Pressable onPress={() => setConfirme(false)} hitSlop={6}>
+                <Text style={s.confirmeNon}>Annuler</Text>
+              </Pressable>
+            </View>
+          )}
+          {!aMoi && !!onSignaler && !!c.auteurId && (
             <Pressable
               hitSlop={6}
               onPress={() => onSignaler({
@@ -218,6 +255,11 @@ const s = StyleSheet.create({
   nomLigne: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   nom: { fontFamily: F.inter6, fontSize: 11.5, color: C.ink },
   nomCliquable: { color: C.accent2 },
+  supprimer: { fontFamily: F.inter5, fontSize: 11, color: C.muted },
+  confirme: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+  confirmeTexte: { fontFamily: F.inter, fontSize: 10.5, color: C.muted, flexShrink: 1 },
+  confirmeOui: { fontFamily: F.inter6, fontSize: 11, color: C.bad },
+  confirmeNon: { fontFamily: F.inter5, fontSize: 11, color: C.muted },
   texte: { fontSize: 12.5, lineHeight: 18, color: C.ink, fontFamily: F.inter, marginTop: 2 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 3, paddingLeft: 2 },
   metaTexte: { fontSize: 10.5, color: C.muted, fontFamily: F.inter },
