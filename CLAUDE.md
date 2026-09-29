@@ -66,6 +66,28 @@ alter table public.x add constraint x_champ_check check (champ in (...));
 d'une session qui parle de la suite du projet**, et à mettre à jour quand un
 point est traité.
 
+### Le cahier des charges du propriétaire (remis le 29/09/2026)
+
+`docs/CAHIER-DES-CHARGES.md` — sa vision complète, en 28 sections et
+12 phases : logiciel de gestion du bâtiment piloté par un agent IA, dont le
+réseau social est le module 9. L'original PDF est à côté et **fait foi**.
+
+`docs/LECTURE-CAHIER-DES-CHARGES.md` — mon analyse, à ne pas confondre avec
+le document. **À lire avant de construire quoi que ce soit de nouveau.**
+Trois points en sortent, à ne pas redécouvrir :
+
+1. **Un compte = un artisan aujourd'hui.** Il n'existe ni entreprise, ni
+   salarié, ni rôle. Le cahier des charges en a besoin à cinq endroits, et le
+   jour où ça changera, **toutes les règles RLS seront à réécrire**. En
+   attendant : ne rien construire qui enfonce cette hypothèse.
+2. **Le côté particulier n'apparaît NULLE PART** dans le cahier des charges
+   (demandes de travaux, SOS, profil public particulier). Question posée au
+   propriétaire, sans réponse à ce jour — ne pas investir de temps à
+   optimiser ces écrans tant qu'elle n'est pas tranchée.
+3. **Ne plus ajouter d'action IA « à la main »** dans la fonction Edge `ai`.
+   La prochaine se construit avec le journal d'audit et les permissions du
+   §21, ou elle sera à refaire.
+
 Les trois points bloquants — signalement et blocage, suppression de compte,
 textes légaux — sont **faits** (21/09/2026).
 
