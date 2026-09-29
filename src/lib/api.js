@@ -262,7 +262,12 @@ export async function loadAll() {
     supabase.from('post_likes').select('post_id').eq('user_id', uid),
     supabase.from('saved_posts').select('post_id').eq('user_id', uid),
     supabase.from('follows').select('following_id').eq('follower_id', uid),
-    supabase.from('conversations').select('*').or(`client_id.eq.${uid},professional_id.eq.${uid}`),
+    /* On ramène les DEUX comptes de la conversation. Sans cela, un
+       particulier n'a pas de fiche professionnelle, donc pas de nom : la
+       messagerie affichait « Contact » à la place de la personne. */
+    supabase.from('conversations')
+      .select('*, leClient:client_id(id, nom, avatar_url, type), lePro:professional_id(id, nom, avatar_url, type)')
+      .or(`client_id.eq.${uid},professional_id.eq.${uid}`),
     supabase.from('messages').select('*').order('created_at'),
     supabase.from('notifications').select('*, acteur:acteur_id(nom, avatar_url)').eq('user_id', uid).order('created_at', { ascending: false }),
     supabase.from('demandes').select('*, users:client_id(nom, avatar_url)').order('created_at', { ascending: false }),
@@ -328,11 +333,21 @@ export async function loadAll() {
     });
   });
 
-  const conversations = (convRes.data || []).map((c) => ({
-    id: c.id,
-    proId: c.professional_id === uid ? c.client_id : c.professional_id,
-    messages: msgsByConv[c.id] || [],
-  }));
+  const conversations = (convRes.data || []).map((c) => {
+    /* « L'autre », c'est celui des deux qui n'est pas moi. Dans une
+       conversation où les deux colonnes portent le même compte (un essai
+       avec soi-même), c'est moi — et c'est bien ce qu'il faut afficher. */
+    const jeSuisLePro = c.professional_id === uid;
+    const autre = jeSuisLePro ? c.leClient : c.lePro;
+    return {
+      id: c.id,
+      proId: jeSuisLePro ? c.client_id : c.professional_id,
+      autre: autre ? {
+        id: autre.id, nom: autre.nom, avatarUrl: autre.avatar_url, type: autre.type,
+      } : null,
+      messages: msgsByConv[c.id] || [],
+    };
+  });
 
   // Nombre de réponses par demande, compté ici plutôt qu'en interrogeant
   // la base une fois par demande.

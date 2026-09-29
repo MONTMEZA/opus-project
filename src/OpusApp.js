@@ -494,7 +494,12 @@ export default function OpusApp() {
       } catch (e) {
         showBanner("La conversation n'a pas pu être créée.");
       }
-      conv = { id, proId: pro.id, messages: [] };
+      conv = {
+        id,
+        proId: pro.id,
+        autre: { id: pro.id, nom: pro.entreprise, avatarUrl: pro.avatarUrl || null, type: 'pro' },
+        messages: [],
+      };
       setConversations((cs) => [conv, ...cs]);
 
       /* Première prise de contact : on amorce le message avec ce qu'on sait
@@ -1083,11 +1088,20 @@ export default function OpusApp() {
       conv = {
         id,
         proId: null,
+        /* La photo du particulier arrive avec la demande : on la reprend,
+           au lieu de laisser une pastille vide jusqu'au prochain
+           rechargement. */
+        autre: {
+          id: demande.auteurId,
+          nom: demande.auteur,
+          avatarUrl: demande.avatarUrl || null,
+          type: 'particulier',
+        },
         contact: {
           id: contactId,
           titre: demande.auteur,
           metier: `Demande · ${demande.metier}`,
-          avatarUrl: null,
+          avatarUrl: demande.avatarUrl || null,
         },
         messages: [],
       };
@@ -1200,6 +1214,12 @@ export default function OpusApp() {
       conv = {
         id,
         proId: null,
+        autre: {
+          id: profil.id,
+          nom: profil.nom,
+          avatarUrl: profil.avatarUrl || null,
+          type: 'particulier',
+        },
         contact: {
           id: contactId,
           titre: profil.nom,
@@ -1306,6 +1326,8 @@ export default function OpusApp() {
    * demande : la messagerie fonctionne dans les deux sens.
    */
   const contactDe = (conv) => {
+    /* 1. Un professionnel : sa fiche est la plus riche — raison sociale,
+          métier, badge vérifié. */
     if (conv.proId && pros[conv.proId]) {
       const p = pros[conv.proId];
       return {
@@ -1313,7 +1335,25 @@ export default function OpusApp() {
         avatarUrl: p.avatarUrl, verifie: p.verifie,
       };
     }
-    return conv.contact || { id: conv.id, titre: 'Contact' };
+
+    /* 2. Un PARTICULIER : il n'a pas de fiche professionnelle, mais il a un
+          nom et une photo dans `users`. C'est ce qui manquait — la
+          messagerie affichait « Contact » à la place de la personne dès
+          qu'un artisan parlait à un client. */
+    if (conv.autre && conv.autre.nom) {
+      return {
+        id: conv.autre.id,
+        titre: conv.autre.nom,
+        avatarUrl: conv.autre.avatarUrl || null,
+      };
+    }
+
+    /* 3. Une conversation ouverte à l'instant, pas encore rechargée. */
+    if (conv.contact) return conv.contact;
+
+    /* 4. Le compte a été supprimé. On le dit, plutôt que « Contact » — qui
+          ne veut rien dire et laisse croire à un défaut d'affichage. */
+    return { id: conv.id, titre: 'Compte supprimé' };
   };
 
   const conversationsAffichees = conversations.map((c) => ({ ...c, contact: contactDe(c) }));
