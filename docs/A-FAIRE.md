@@ -281,6 +281,120 @@ non, maintenant.
 
 ## 2. Important — la plateforme ne tient pas à l'échelle sans ça
 
+### 2.0 Le référentiel des métiers — demandé le 29/09/2026
+
+> **À faire juste après la première brique, et AVANT toute fonctionnalité
+> nouvelle qui demande un métier** (appels d'offres, publicité ciblée,
+> recherche de partenaire, disponibilités). Chaque écran construit d'ici là
+> avec l'ancienne liste sera un écran à refaire.
+
+#### Ce qui est demandé
+
+Une **source de vérité unique** pour les métiers, un **sélecteur avec champ
+de recherche** à la place des grilles de cases, et un référentiel qui couvre
+**tout l'écosystème du bâtiment** — pas seulement les artisans de chantier :
+architectes, bureaux d'études, géomètres, diagnostiqueurs, experts, avocats
+spécialisés, courtiers, consultants. Avec des **catégories** pour organiser,
+des **synonymes** pour la recherche, et des **spécialités rattachées à un
+métier**.
+
+Le document complet du propriétaire est le message du 29/09/2026 ; ce qui
+suit est l'audit que j'en ai fait, à relire avant de commencer.
+
+#### Ce qui existe déjà, et qu'il ne faut pas refaire
+
+**La limite de 4 métiers est DÉJÀ tenue, et des deux côtés.**
+
+- `ChoixMetiers.js` : `MAX_METIERS = 4`, compteur « 2 sur 4 », le cinquième
+  n'est pas cliquable.
+- La base : `pro_metiers_check` impose `cardinality(metiers) between 1 and 4`.
+  Une tentative par l'API échoue — le TEST 10 demandé passe déjà.
+
+**Le métier principal existe déjà** : c'est le premier de la liste, et le
+déclencheur `tient_les_metiers()` recopie `metiers[1]` dans `metier` pour que
+tout le code existant continue de lire une seule valeur.
+
+**Les métiers d'un profil vérifié sont figés**, et une demande de
+modification passe par la table `metier_demandes`, tranchée par un humain.
+
+#### Ce qu'il y a vraiment à faire
+
+1. **Le référentiel.** Aujourd'hui : `METIERS`, douze chaînes de caractères
+   dans `src/data/demo.js`, et la même liste **recopiée en dur dans la
+   contrainte `pro_metiers_check`**. Deux endroits à tenir d'accord, et
+   personne ne s'en souvient. C'est le cœur du travail.
+2. **Le sélecteur avec recherche**, en remplacement des grilles de puces.
+3. **Les spécialités rattachées à un métier** (voir la décision n° 1
+   ci-dessous).
+4. **Remplacer la liste dans les douze fichiers qui l'utilisent** :
+   `AuthScreen`, `ProfilEditScreen`, `CreerScreen`, `DecouvrirScreen`,
+   `PlaceProScreen`, `DemandesScreen`, `SosScreen`, `QuoteModal`,
+   `ChoixMetiers`, `OpusApp`, `demo.js`, `urgences.js`.
+
+#### TROIS DÉCISIONS À PRENDRE AVANT DE CODER
+
+Je ne les tranche pas seul : chacune change beaucoup de choses.
+
+**Décision 1 — les spécialités.** J'ai ajouté le 29/09/2026 un champ
+`specialites` en **texte libre** (douze au maximum), précisément pour que
+« enduit à la chaux » rende trouvable. Le document, lui, veut des spécialités
+**rattachées à un métier** et choisies dans une liste.
+
+Les deux ont leur raison. Une liste garantit que deux artisans qui font la
+même chose emploient le même mot — c'est ce qui fait marcher une recherche. Le
+texte libre laisse dire ce qu'aucune liste n'avait prévu, et c'est souvent ce
+qui distingue un artisan.
+
+*Ce que je proposerai* : garder les deux. Les spécialités du référentiel
+d'abord, proposées selon les métiers choisis ; et la possibilité d'en écrire
+une qui n'y est pas, qui rejoint alors une file d'attente pour être ajoutée au
+référentiel. Personne n'est bloqué, et le référentiel s'enrichit de l'usage
+réel au lieu d'être deviné.
+
+**Décision 2 — tableau ou tables.** Le document propose `professional_trades`
+et `professional_specialties`, deux tables de liaison. Aujourd'hui c'est
+`metiers text[]`, avec un index GIN.
+
+Passer aux tables, c'est réécrire les règles RLS, les index, la recherche, le
+tri des demandes et de la Place des pros. Le tableau ne gêne que le jour où un
+métier portera des données propres (une certification par métier, par
+exemple).
+
+*Ce que je proposerai* : garder `metiers text[]` pour le rattachement, mais
+sortir le **catalogue** dans une vraie table `metiers_catalogue` (avec
+catégorie, synonymes, `actif`, `ordre`). La contrainte `pro_metiers_check`
+cesse alors de recopier les douze noms : elle vérifie que chaque valeur existe
+dans le catalogue et est active. Une seule source de vérité, et la migration
+se limite à créer une table.
+
+**Décision 3 — qui peut s'inscrire.** Ouvrir le référentiel aux avocats, aux
+courtiers, aux experts-comptables change ce qu'Opus est. Aujourd'hui, la
+vérification repose sur le **Kbis** et l'**assurance décennale** : un avocat
+n'a pas d'assurance décennale, et le badge « vérifié » ne veut plus rien dire
+pour lui.
+
+*Ce que je proposerai* : des **pièces justificatives par catégorie** — Kbis +
+décennale pour les métiers de chantier, inscription à l'Ordre pour un
+architecte, barreau pour un avocat, ORIAS pour un courtier. Sinon, ou bien on
+laisse entrer des professions sans les vérifier, ou bien on affiche « non
+vérifié » à des gens parfaitement en règle.
+
+#### Le bon moment, et pourquoi
+
+**Maintenant la migration est gratuite** : six fiches professionnelles, sept
+valeurs de métier en tout, toutes dans les douze actuelles. Vérifié sur la
+vraie base le 29/09/2026. Dans six mois avec deux cents artisans, ce sera un
+chantier à part entière.
+
+Mais **après la première brique** : il reste les horaires d'ouverture, les
+squelettes de chargement, et surtout zéro `accessibilityLabel` dans tout le
+projet. Le référentiel des métiers est une amélioration ; l'accessibilité est
+un manque.
+
+Et le §18 du document — l'administration du référentiel — est exactement le
+**back-office du 2.1** ci-dessous. Les deux se construisent ensemble : une
+liste des métiers à ajouter ou désactiver, à côté des Kbis à valider.
+
 ### 2.1 Un back-office, même minimal
 
 Aujourd'hui, valider un Kbis ou trancher une demande de changement de métier

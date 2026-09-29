@@ -123,6 +123,20 @@ Trois points en sortent, à ne pas redécouvrir :
    La prochaine se construit avec le journal d'audit et les permissions du
    §21, ou elle sera à refaire.
 
+### Le référentiel des métiers (demandé le 29/09/2026)
+
+`docs/DEMANDE-METIERS.md` — le texte du propriétaire, qui fait foi.
+`docs/A-FAIRE.md` **section 2.0** — mon audit et **trois décisions à prendre
+avant de coder** (spécialités libres ou listées ; `metiers text[]` ou tables
+de liaison ; quelles pièces justificatives pour un avocat ou un architecte,
+qui n'ont pas d'assurance décennale).
+
+À retenir en attendant : **la liste des douze métiers est écrite à DEUX
+endroits** — `METIERS` dans `src/data/demo.js`, et recopiée en dur dans la
+contrainte `pro_metiers_check`. Ne pas en ajouter un treizième sans toucher
+les deux. Et **ne pas construire d'écran neuf demandant un métier** avant ce
+chantier : il serait à refaire.
+
 Les trois points bloquants — signalement et blocage, suppression de compte,
 textes légaux — sont **faits** (21/09/2026).
 
