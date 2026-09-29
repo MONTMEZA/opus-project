@@ -127,9 +127,9 @@ Les commentaires ne sont plus chargés d'avance du tout — ils arrivent quand
 on les ouvre. Le nombre affiché vient de `posts.comments_count`, tenu par un
 trigger (comme `likes_count`). Et « tirer pour rafraîchir » existe enfin.
 
-**Ce qui reste de A1 :** les MESSAGES partent encore tous d'un coup
-(`supabase.from('messages').select('*')`), et tous les profils aussi. À
-traiter de la même façon.
+**Ce qui reste de A1 :** les PROFILS partent encore tous d'un coup
+(`professional_profiles.select('*')`, portfolios compris). C'est le dernier
+chargement non borné. Les messages, eux, sont traités (voir B1/B2).
 
 ~~**A1 — `loadAll()` télécharge TOUTE la base à chaque ouverture.**~~
 Quinze requêtes en parallèle (`src/lib/api.js`), et **une seule `.limit()`
@@ -183,15 +183,23 @@ téléphone est gratuit, et fait gagner aussi sur l'envoi.)
 
 ### B. Ce qui manque pour que ça se comporte comme une vraie application
 
-**B1 — aucun temps réel.** Un message reçu n'apparaît qu'en refermant et
-rouvrant l'application. Pour une messagerie, c'est rédhibitoire. Supabase
-Realtime est **gratuit** et déjà présent dans la librairie installée : il
-reste à s'abonner aux nouvelles lignes de `messages` et `notifications`.
+**B1 — ✅ FAIT le 29/09/2026.** Prouvé de bout en bout avec un compte
+jetable : abonnement `SUBSCRIBED`, ligne insérée APRÈS l'abonnement, reçue
+en **301 ms**. Compte supprimé après l'essai.
 
-**B2 — les messages non lus ne servent à rien.** La colonne `messages.lu`
-existe en base et **n'est lue ni écrite nulle part**. Donc : pas de pastille
-sur une conversation, pas de compteur dans la barre du bas, et un message
-reste « non lu » pour toujours.
+Piège à ne pas redécouvrir : une table absente de la publication
+`supabase_realtime` ne diffuse rien, et l'abonnement **ne renvoie aucune
+erreur** — il se connecte et attend indéfiniment. `messages` et
+`notifications` y sont inscrites (schema.sql, section 15).
+
+**B2 — ✅ FAIT le 29/09/2026.** Pastille orange sur la conversation, point
+sur l'onglet Messages, et les messages reçus passent en lus à l'ouverture.
+
+`marquer_lus()` ne touche QUE la colonne `lu`, QUE sur les messages reçus,
+et QUE dans une conversation dont l'appelant est participant. Pas de
+politique `update` sur `messages`, et il ne doit pas y en avoir : elle
+permettrait au destinataire de récrire le TEXTE du message reçu. Vérifié :
+la tentative de récriture échoue.
 
 **B3 — ✅ FAIT le 29/09/2026**, en même temps que la pagination.
 

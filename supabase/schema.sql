@@ -1907,3 +1907,161 @@ begin
   execute 'revoke execute on function public.maj_comments_count() from anon, authenticated';
 exception when undefined_function or undefined_object then null;
 end $$;
+
+-- ==========================================================================
+--  15. LA MESSAGERIE : NON LUS, LISTE, ET TEMPS RÉEL
+--
+--  Trois manques constatés le 29/09/2026 :
+--    - la colonne `messages.lu` existait et n'était NI LUE NI ÉCRITE. Donc
+--      aucune pastille de conversation non lue, et un message restait « non
+--      lu » pour toujours ;
+--    - l'application téléchargeait TOUS les messages de TOUTES ses
+--      conversations à chaque ouverture, juste pour afficher un aperçu ;
+--    - rien n'arrivait en temps réel : il fallait fermer et rouvrir
+--      l'application pour voir un message reçu.
+-- --------------------------------------------------------------------------
+
+/**
+ * La liste des conversations, en UNE requête.
+ *
+ * Elle rend, pour chacune : l'interlocuteur (nom et photo, professionnel ou
+ * particulier), le DERNIER message, et le nombre de messages non lus.
+ *
+ * Pourquoi une fonction plutôt que trois requêtes : sans elle, il faut lire
+ * tous les messages de toutes les conversations pour en extraire le dernier
+ * et compter les non-lus. Avec cinquante conversations de deux cents
+ * messages, c'est dix mille lignes téléchargées pour afficher dix lignes.
+ *
+ * SECURITY INVOKER, et c'est important : les règles RLS s'appliquent donc
+ * normalement. Une conversation avec quelqu'un qu'on a bloqué disparaît
+ * d'elle-même, sans que cette fonction ait à le savoir.
+ */
+create or replace function public.mes_conversations()
+returns table (
+  id            uuid,
+  autre_id      uuid,
+  autre_nom     text,
+  autre_avatar  text,
+  autre_type    text,
+  dernier_texte text,
+  dernier_le    timestamptz,
+  dernier_de    uuid,
+  non_lus       int
+)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select
+    c.id,
+    u.id, u.nom, u.avatar_url, u.type,
+    dernier.texte, dernier.created_at, dernier.sender_id,
+    coalesce(compte.n, 0)::int
+  from public.conversations c
+  -- « L'autre », c'est celui des deux qui n'est pas moi. Quand les deux
+  -- colonnes portent le même compte (un essai avec soi-même), c'est moi.
+  join public.users u
+    on u.id = case when c.professional_id = auth.uid() then c.client_id
+                   else c.professional_id end
+  left join lateral (
+    select m.texte, m.created_at, m.sender_id
+      from public.messages m
+     where m.conversation_id = c.id
+     order by m.created_at desc
+     limit 1
+  ) dernier on true
+  left join lateral (
+    select count(*) as n
+      from public.messages m
+     where m.conversation_id = c.id
+       and m.sender_id <> auth.uid()
+       and not m.lu
+  ) compte on true
+  order by coalesce(dernier.created_at, '-infinity'::timestamptz) desc
+$$;
+
+/**
+ * Marquer comme lus les messages REÇUS dans une conversation.
+ *
+ * POURQUOI UNE FONCTION, ET PAS UNE RÈGLE D'ÉCRITURE
+ * Il n'existe aucune politique `update` sur `messages`, et il ne doit pas en
+ * exister : une règle qui autoriserait le destinataire à modifier une ligne
+ * lui permettrait aussi d'en changer le TEXTE. On ne récrit pas les messages
+ * de quelqu'un d'autre.
+ *
+ * Cette fonction, elle, ne touche qu'à `lu`, seulement sur les messages
+ * REÇUS (`sender_id <> auth.uid()`), et seulement dans une conversation dont
+ * l'appelant est participant. D'où SECURITY DEFINER, assumé et restreint.
+ */
+create or replace function public.marquer_lus(p_conversation uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare n int;
+begin
+  if auth.uid() is null then
+    raise exception 'Personne n''est connecté.';
+  end if;
+
+  update public.messages m
+     set lu = true
+   where m.conversation_id = p_conversation
+     and m.sender_id <> auth.uid()
+     and not m.lu
+     and exists (
+       select 1 from public.conversations c
+        where c.id = p_conversation
+          and (c.client_id = auth.uid() or c.professional_id = auth.uid())
+     );
+
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Compter les non-lus d'une conversation, encore et encore : sans cet index
+-- PostgreSQL relit tous les messages de la conversation à chaque fois.
+create index if not exists idx_messages_non_lus
+  on public.messages (conversation_id, sender_id) where not lu;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.mes_conversations()', 'public.marquer_lus(uuid)'] loop
+    begin
+      execute format('grant execute on function %s to authenticated', f);
+      execute format('revoke execute on function %s from public', f);
+      execute format('revoke execute on function %s from anon', f);
+    exception when undefined_function or undefined_object then null;
+    end;
+  end loop;
+end $$;
+
+-- --------------------------------------------------------------------------
+--  LE TEMPS RÉEL
+--
+--  Supabase ne diffuse que les tables inscrites dans la publication
+--  `supabase_realtime`. Sans cette inscription, l'abonnement côté
+--  application se connecte, ne renvoie aucune erreur, et ne reçoit jamais
+--  rien : la panne la plus difficile à diagnostiquer qui soit.
+--
+--  Les règles RLS continuent de s'appliquer à la diffusion : chacun ne
+--  reçoit que les lignes qu'il aurait le droit de lire.
+-- --------------------------------------------------------------------------
+do $$
+begin
+  alter publication supabase_realtime add table public.messages;
+exception
+  when duplicate_object then null;   -- déjà inscrite
+  when undefined_object then null;   -- publication absente (base de test)
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.notifications;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $$;

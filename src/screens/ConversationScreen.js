@@ -12,6 +12,7 @@ import { Send, Flag } from '../components/icons';
 
 export default function ConversationScreen({
   conversation, draft, setDraft, onSend, onSignaler, interlocuteur,
+  chargement = false,
 }) {
   const scrollRef = useRef(null);
 
@@ -52,7 +53,13 @@ export default function ConversationScreen({
             )}
           </View>
         ))}
-        {conversation.messages.length === 0 && <EmptyState>Dites bonjour 👋</EmptyState>}
+        {/* On dit que ça charge, au lieu d'afficher « Dites bonjour » sur
+            une conversation qui a dix messages mais qui n'est pas encore
+            arrivée. */}
+        {chargement && <EmptyState>Chargement…</EmptyState>}
+        {!chargement && conversation.messages.length === 0 && (
+          <EmptyState>Dites bonjour 👋</EmptyState>
+        )}
       </ScrollView>
 
       <View style={s.inputRow}>

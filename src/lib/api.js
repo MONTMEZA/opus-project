@@ -230,7 +230,23 @@ export async function loadAll() {
         curseur: String(i + 1),
       })),
       finDuFil: initialPosts.length <= TAILLE_PAGE_FIL,
-      conversations: initialConversations.map((c) => ({ ...c, messages: [...c.messages] })),
+      /* Le mode démonstration doit se comporter EXACTEMENT comme la base :
+         un dernier message, un nombre de non-lus, et les messages déjà là
+         (ici on les garde, il n'y en a que quelques-uns). Sans cela, la
+         liste des conversations s'afficherait vide au navigateur et on
+         croirait à un défaut. */
+      conversations: initialConversations.map((c) => {
+        const messages = [...c.messages];
+        const dernierMessage = messages[messages.length - 1] || null;
+        return {
+          ...c,
+          messages,
+          dernier: dernierMessage
+            ? { texte: dernierMessage.texte, heure: dernierMessage.heure, de: null }
+            : null,
+          nonLus: messages.filter((m) => m.from !== 'moi' && !m.lu).length,
+        };
+      }),
       demandes: initialDemandes.map((d) => ({ ...d })),
       mesSos: null,
       notifications: initialNotifications.map((n) => ({ ...n })),
@@ -252,7 +268,7 @@ export async function loadAll() {
        - les COMMENTAIRES ne viennent plus du tout : on les charge quand
          quelqu'un les ouvre. La plupart n'étaient jamais lus. */
   const [profilesRes, reviewsRes, partnersRes, postsRes,
-         likesRes, savesRes, followsRes, convRes, msgRes, notifRes,
+         likesRes, savesRes, followsRes, convRes, notifRes,
          demandesRes, reponsesRes, masosRes, moiRes] = await Promise.all([
     supabase.from('professional_profiles').select('*'),
     supabase.from('reviews').select('*, users:author_id(nom)').order('created_at', { ascending: false }),
@@ -262,13 +278,10 @@ export async function loadAll() {
     supabase.from('post_likes').select('post_id').eq('user_id', uid),
     supabase.from('saved_posts').select('post_id').eq('user_id', uid),
     supabase.from('follows').select('following_id').eq('follower_id', uid),
-    /* On ramène les DEUX comptes de la conversation. Sans cela, un
-       particulier n'a pas de fiche professionnelle, donc pas de nom : la
-       messagerie affichait « Contact » à la place de la personne. */
-    supabase.from('conversations')
-      .select('*, leClient:client_id(id, nom, avatar_url, type), lePro:professional_id(id, nom, avatar_url, type)')
-      .or(`client_id.eq.${uid},professional_id.eq.${uid}`),
-    supabase.from('messages').select('*').order('created_at'),
+    /* La liste des conversations en UNE requête : interlocuteur, dernier
+       message et nombre de non-lus. Avant, on téléchargeait TOUS les
+       messages de TOUTES les conversations juste pour afficher un aperçu. */
+    supabase.rpc('mes_conversations'),
     supabase.from('notifications').select('*, acteur:acteur_id(nom, avatar_url)').eq('user_id', uid).order('created_at', { ascending: false }),
     supabase.from('demandes').select('*, users:client_id(nom, avatar_url)').order('created_at', { ascending: false }),
     supabase.from('demande_reponses').select('demande_id'),
@@ -318,36 +331,21 @@ export async function loadAll() {
   const posts = (postsRes.data || []).map((p) => rowToPost(p, likedSet, null));
   const finDuFil = (postsRes.data || []).length < TAILLE_PAGE_FIL;
 
-  const msgsByConv = {};
-  (msgRes.data || []).forEach((m) => {
-    if (!msgsByConv[m.conversation_id]) msgsByConv[m.conversation_id] = [];
-    msgsByConv[m.conversation_id].push({
-      /* L'identifiant et l'expéditeur sont gardés : sans eux, on ne peut pas
-         SIGNALER un message précis — et un message privé est justement là où
-         commencent les menaces. */
-      id: m.id,
-      auteurId: m.sender_id,
-      from: m.sender_id === uid ? 'moi' : 'pro',
-      texte: m.texte,
-      heure: relativeTime(m.created_at),
-    });
-  });
-
-  const conversations = (convRes.data || []).map((c) => {
-    /* « L'autre », c'est celui des deux qui n'est pas moi. Dans une
-       conversation où les deux colonnes portent le même compte (un essai
-       avec soi-même), c'est moi — et c'est bien ce qu'il faut afficher. */
-    const jeSuisLePro = c.professional_id === uid;
-    const autre = jeSuisLePro ? c.leClient : c.lePro;
-    return {
-      id: c.id,
-      proId: jeSuisLePro ? c.client_id : c.professional_id,
-      autre: autre ? {
-        id: autre.id, nom: autre.nom, avatarUrl: autre.avatar_url, type: autre.type,
-      } : null,
-      messages: msgsByConv[c.id] || [],
-    };
-  });
+  /* Les conversations arrivent déjà résumées par la base. `messages` reste
+     vide : on charge le fil d'une conversation quand on l'ouvre, pas avant.
+     `null` signifie « pas encore chargés », `[]` « chargés, aucun ». */
+  const conversations = (convRes.data || []).map((c) => ({
+    id: c.id,
+    proId: c.autre_id,
+    autre: {
+      id: c.autre_id, nom: c.autre_nom, avatarUrl: c.autre_avatar, type: c.autre_type,
+    },
+    dernier: c.dernier_texte
+      ? { texte: c.dernier_texte, heure: relativeTime(c.dernier_le), de: c.dernier_de }
+      : null,
+    nonLus: c.non_lus || 0,
+    messages: null,
+  }));
 
   // Nombre de réponses par demande, compté ici plutôt qu'en interrogeant
   // la base une fois par demande.
@@ -1328,3 +1326,102 @@ export const supprimerCommentaire = !hasSupabase ? noop : async (id) => {
   const { error } = await supabase.from('comments').delete().eq('id', id);
   if (error) throw error;
 };
+
+/* ------------------------------------------------------------------ */
+/*  La messagerie : à la demande, et en temps réel                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Les messages d'UNE conversation, chargés au moment où on l'ouvre.
+ *
+ * Avant, l'application téléchargeait tous les messages de toutes ses
+ * conversations à chaque ouverture — pour n'en afficher qu'un aperçu.
+ */
+async function messagesDeSupabase(conversationId) {
+  const { data, error } = await supabase.from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at');
+  if (error) throw error;
+  return (data || []).map((m) => rowToMessage(m, currentUserId));
+}
+
+async function messagesDeDemo() { return []; }
+
+export const chargerMessages = hasSupabase ? messagesDeSupabase : messagesDeDemo;
+
+/** Une ligne de `messages` telle que l'écran l'attend. */
+function rowToMessage(m, moi) {
+  return {
+    id: m.id,
+    auteurId: m.sender_id,
+    from: m.sender_id === moi ? 'moi' : 'pro',
+    texte: m.texte,
+    heure: relativeTime(m.created_at),
+    lu: !!m.lu,
+  };
+}
+
+/**
+ * Marquer comme lus les messages REÇUS d'une conversation.
+ *
+ * Renvoie combien ont changé — l'écran s'en sert pour savoir de combien
+ * faire baisser le compteur, sans recharger toute la liste.
+ */
+export const marquerLus = !hasSupabase ? async () => 0 : async (conversationId) => {
+  const { data, error } = await supabase.rpc('marquer_lus', { p_conversation: conversationId });
+  if (error) throw error;
+  return data || 0;
+};
+
+/**
+ * Écouter ce qui arrive : nouveaux messages, nouvelles notifications.
+ *
+ * POURQUOI C'EST NÉCESSAIRE
+ * Sans cela, un message reçu n'apparaît qu'en refermant et rouvrant
+ * l'application. Pour une messagerie, c'est rédhibitoire.
+ *
+ * LES RÈGLES D'ACCÈS S'APPLIQUENT AUSSI À LA DIFFUSION : chacun ne reçoit
+ * que les lignes qu'il aurait le droit de lire. On ne reçoit donc pas les
+ * messages des autres, et une conversation avec quelqu'un qu'on a bloqué ne
+ * remonte plus.
+ *
+ * ATTENTION, panne classique : une table absente de la publication
+ * `supabase_realtime` ne diffuse rien, et l'abonnement ne renvoie AUCUNE
+ * erreur — il se connecte et attend indéfiniment. L'inscription est faite
+ * dans supabase/schema.sql, section 15.
+ *
+ * Renvoie une fonction à appeler pour se désabonner.
+ */
+export function ecouterMessagerie({ onMessage, onNotification }) {
+  if (!hasSupabase || !currentUserId) return () => {};
+
+  const moi = currentUserId;
+  const canal = supabase.channel(`opus-${moi}`);
+
+  if (onMessage) {
+    canal.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages' },
+      (charge) => {
+        const m = charge.new;
+        if (!m) return;
+        /* Les siens reviennent aussi par ce canal : l'écran les a déjà
+           affichés au moment de l'envoi, les rajouter ferait un doublon. */
+        if (m.sender_id === moi) return;
+        onMessage({ conversationId: m.conversation_id, message: rowToMessage(m, moi) });
+      },
+    );
+  }
+
+  if (onNotification) {
+    canal.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${moi}` },
+      (charge) => charge.new && onNotification(charge.new),
+    );
+  }
+
+  canal.subscribe();
+  return () => { supabase.removeChannel(canal); };
+}

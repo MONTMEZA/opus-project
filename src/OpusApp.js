@@ -518,8 +518,7 @@ export default function OpusApp() {
           : 'Bonjour, ');
       }
     }
-    setActiveConvId(conv.id);
-    setScreen('messages');
+    await ouvrirConversation(conv.id);
   };
 
   const submitQuote = async (form) => {
@@ -553,15 +552,101 @@ export default function OpusApp() {
   };
 
   /* ---------- messagerie ---------- */
+
+  /**
+   * Ouvrir une conversation : aller chercher ses messages, et marquer comme
+   * lus ceux qu'on vient de lire.
+   *
+   * Les messages ne sont plus téléchargés d'avance — `messages` vaut `null`
+   * tant qu'on n'a pas ouvert. Avant, l'application téléchargeait TOUS les
+   * messages de TOUTES ses conversations à chaque ouverture, pour n'afficher
+   * qu'un aperçu.
+   */
+  const ouvrirConversation = async (id) => {
+    setActiveConvId(id);
+    setScreen('messages');
+
+    const conv = conversations.find((c) => c.id === id);
+    if (!conv) return;
+
+    if (!Array.isArray(conv.messages)) {
+      try {
+        const liste = await api.chargerMessages(id);
+        setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, messages: liste } : c)));
+      } catch (e) {
+        showBanner("La conversation n'a pas pu être chargée.");
+        setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, messages: [] } : c)));
+      }
+    }
+
+    /* Le compteur retombe tout de suite : on est en train de les lire. Si
+       l'appel échoue, ils repasseront non-lus au prochain chargement — mieux
+       que de laisser une pastille sur une conversation ouverte. */
+    if (conv.nonLus) {
+      setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, nonLus: 0 } : c)));
+      api.marquerLus(id).catch(() => {});
+    }
+  };
+
   const sendMessage = () => {
     if (!msgDraft.trim() || activeConvId == null) return;
     const texte = msgDraft.trim();
     setConversations((cs) => cs.map((c) => (c.id === activeConvId
-      ? { ...c, messages: [...c.messages, { from: 'moi', texte, heure: "à l'instant" }] }
+      ? {
+        ...c,
+        messages: [...(Array.isArray(c.messages) ? c.messages : []),
+          { from: 'moi', texte, heure: "à l'instant" }],
+        dernier: { texte, heure: "à l'instant", de: api.getUserId() },
+      }
       : c)));
     setMsgDraft('');
     api.sendMessage(activeConvId, texte).catch(() => showBanner("Message non envoyé."));
   };
+
+  /**
+   * Le temps réel : un message reçu apparaît sans rien faire.
+   *
+   * L'abonnement suit la session : on le referme à la déconnexion, sinon il
+   * survivrait au changement de compte et le suivant recevrait les messages
+   * du précédent.
+   */
+  useEffect(() => {
+    if (!userType) return undefined;
+
+    const fermer = api.ecouterMessagerie({
+      onMessage: ({ conversationId, message }) => {
+        setConversations((cs) => cs.map((c) => {
+          if (c.id !== conversationId) return c;
+          const dejaLa = Array.isArray(c.messages)
+            && c.messages.some((m) => m.id && m.id === message.id);
+          if (dejaLa) return c;
+          return {
+            ...c,
+            messages: Array.isArray(c.messages) ? [...c.messages, message] : c.messages,
+            dernier: { texte: message.texte, heure: message.heure, de: message.auteurId },
+            /* La conversation ouverte à l'écran est lue à l'instant : pas de
+               pastille sur ce qu'on est en train de regarder. */
+            nonLus: conversationId === activeConvId ? 0 : (c.nonLus || 0) + 1,
+          };
+        }));
+
+        if (conversationId === activeConvId) api.marquerLus(conversationId).catch(() => {});
+      },
+      onNotification: (n) => {
+        setNotifications((ns) => (ns.some((x) => x.id === n.id) ? ns : [{
+          id: n.id,
+          type: n.type,
+          texte: n.texte,
+          acteurId: n.acteur_id,
+          postId: n.post_id,
+          lue: false,
+          time: "À l'instant",
+        }, ...ns]));
+      },
+    });
+
+    return fermer;
+  }, [userType, activeConvId]);
 
   /* ---------- création ---------- */
   const publish = async () => {
@@ -1121,8 +1206,7 @@ export default function OpusApp() {
        demande. Même si la conversation existait déjà. */
     setMesReponsesDemandes((r) => new Set([...r, demande.id]));
 
-    setActiveConvId(conv.id);
-    setScreen('messages');
+    await ouvrirConversation(conv.id);
   };
 
   /* ---------- la Place des pros ---------- */
@@ -1231,8 +1315,7 @@ export default function OpusApp() {
       setConversations((cs) => [conv, ...cs]);
     }
 
-    setActiveConvId(conv.id);
-    setScreen('messages');
+    await ouvrirConversation(conv.id);
   };
 
   /* ---------- SOS : intervention d'urgence ---------- */
@@ -1359,6 +1442,8 @@ export default function OpusApp() {
   const conversationsAffichees = conversations.map((c) => ({ ...c, contact: contactDe(c) }));
   const activeConv = conversationsAffichees.find((c) => c.id === activeConvId);
   const unreadCount = notifications.filter((n) => !n.lue).length;
+  /* Le total des messages non lus, pour la pastille de la barre du bas. */
+  const messagesNonLus = conversations.reduce((n, c) => n + (c.nonLus || 0), 0);
 
   /** Le fil d'actualité est réservé aux professionnels. */
   const canPublish = userType === 'pro';
@@ -1573,12 +1658,13 @@ export default function OpusApp() {
         )}
 
         {screen === 'messages' && !activeConv && (
-          <MessagesScreen conversations={conversationsAffichees} onOpen={setActiveConvId} />
+          <MessagesScreen conversations={conversationsAffichees} onOpen={ouvrirConversation} />
         )}
 
         {screen === 'messages' && activeConv && (
           <ConversationScreen
-            conversation={activeConv}
+            conversation={{ ...activeConv, messages: activeConv.messages || [] }}
+            chargement={!Array.isArray(activeConv.messages)}
             draft={msgDraft} setDraft={setMsgDraft} onSend={sendMessage}
             onSignaler={ouvrirSignalement}
             interlocuteur={activeConv.proId && pros[activeConv.proId]
@@ -1694,7 +1780,10 @@ export default function OpusApp() {
         canPublish={canPublish}
         avatarUrl={monAvatar}
         avatarSeed={myProId || 'moi'}
-        dots={{ decouvrir: canPublish && !demandesVues && demandes.length > 0 }}
+        dots={{
+          decouvrir: canPublish && !demandesVues && demandes.length > 0,
+          messages: messagesNonLus > 0,
+        }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
         onNavigate={(key) => { setScreen(key); setActiveConvId(null); }}
       />
