@@ -218,6 +218,13 @@ que l'application est plantée.
 
 **B5 — pas de « tout marquer comme lu »** sur les notifications.
 
+**B7 — ✅ FAIT le 29/09/2026 : un échec s'affichait avec une coche verte.**
+Le bandeau du haut servait à tout, pendant trois secondes, avec la même
+icône. « Enregistrement impossible : … » se lisait donc comme une réussite,
+et le motif technique — la seule chose utile — disparaissait avant d'avoir
+été lu. Les erreurs sont désormais ROUGES, avec un triangle, sur autant de
+lignes qu'il faut, et restent neuf secondes. Trente-trois appels convertis.
+
 **B6 — ✅ FAIT le 29/09/2026 : l'application se figeait au démarrage.**
 Constaté sur iPhone — « le clic marche mais plus rien ne défile », quelques
 secondes, puis tout revient. Les deux listes montaient dix éléments d'un

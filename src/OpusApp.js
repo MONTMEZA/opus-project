@@ -158,11 +158,15 @@ export default function OpusApp() {
   const [createMetier, setCreateMetier] = useState(METIERS[0]);
   const [createVille, setCreateVille] = useState('');
 
-  const showBanner = (msg) => {
-    setBanner(msg);
+  /* Une confirmation se lit en trois secondes : « Profil enregistré. » Un
+     échec, non — il porte un motif technique, et c'est justement lui qui
+     sert. Il reste donc neuf secondes, en rouge, et se ferme d'une touche. */
+  const showBanner = (msg, erreur = false) => {
+    setBanner({ texte: msg, erreur });
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
-    bannerTimer.current = setTimeout(() => setBanner(null), 3000);
+    bannerTimer.current = setTimeout(() => setBanner(null), erreur ? 9000 : 3000);
   };
+  const showErreur = (msg) => showBanner(msg, true);
 
   useEffect(() => () => { if (bannerTimer.current) clearTimeout(bannerTimer.current); }, []);
 
@@ -211,7 +215,7 @@ export default function OpusApp() {
       setUserType(type);
       setScreen('home');
     } catch (e) {
-      showBanner(`Chargement impossible : ${e.message || e}`);
+      showErreur(`Chargement impossible : ${e.message || e}`);
     }
     setLoading(false);
   }, []);
@@ -301,7 +305,7 @@ export default function OpusApp() {
       liked = !p.liked;
       return { ...p, liked, likes: p.likes + (p.liked ? -1 : 1) };
     }));
-    api.setLike(id, liked).catch(() => showBanner("Le j'aime n'a pas pu être enregistré."));
+    api.setLike(id, liked).catch(() => showErreur("Le j'aime n'a pas pu être enregistré."));
   };
 
   const toggleSave = (id) => {
@@ -339,7 +343,7 @@ export default function OpusApp() {
       });
       setFinDuFil(fin);
     } catch (e) {
-      showBanner('La suite du fil n’a pas pu être chargée.');
+      showErreur('La suite du fil n’a pas pu être chargée.');
     }
     setChargePage(false);
   };
@@ -352,7 +356,7 @@ export default function OpusApp() {
       setPosts(page);
       setFinDuFil(fin);
     } catch (e) {
-      showBanner('Le fil n’a pas pu être rafraîchi.');
+      showErreur('Le fil n’a pas pu être rafraîchi.');
     }
     setRafraichit(false);
   };
@@ -374,7 +378,7 @@ export default function OpusApp() {
       const liste = await api.chargerCommentaires(id);
       setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, comments: liste } : p)));
     } catch (e) {
-      showBanner('Les commentaires n’ont pas pu être chargés.');
+      showErreur('Les commentaires n’ont pas pu être chargés.');
       setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, comments: [] } : p)));
     }
   };
@@ -417,7 +421,7 @@ export default function OpusApp() {
     }));
 
     api.addComment(postId, texte, parentId)
-      .catch(() => showBanner("Le commentaire n'a pas pu être envoyé."));
+      .catch(() => showErreur("Le commentaire n'a pas pu être envoyé."));
   };
 
   /**
@@ -456,7 +460,7 @@ export default function OpusApp() {
     try {
       await api.supprimerCommentaire(commentaire.id);
     } catch (e) {
-      showBanner("Le commentaire n'a pas pu être supprimé. Rechargez le fil.");
+      showErreur("Le commentaire n'a pas pu être supprimé. Rechargez le fil.");
     }
   };
 
@@ -477,7 +481,7 @@ export default function OpusApp() {
       const fiche = await api.chargerProfilPublic(c.auteurId);
       if (fiche) setProfilPublic(fiche);
     } catch (e) {
-      showBanner("Ce profil n'a pas pu être chargé.");
+      showErreur("Ce profil n'a pas pu être chargé.");
     }
     setProfilPublicCharge(false);
   };
@@ -524,7 +528,7 @@ export default function OpusApp() {
     } catch (e) {
       /* La page reste utilisable avec ce qu'on a déjà : on ne bloque pas
          pour une présentation manquante. */
-      showBanner("Le profil n'a pas pu être chargé entièrement.");
+      showErreur("Le profil n'a pas pu être chargé entièrement.");
     }
   };
 
@@ -540,7 +544,7 @@ export default function OpusApp() {
         const row = await api.createConversation(pro.id);
         if (row) id = row.id;
       } catch (e) {
-        showBanner("La conversation n'a pas pu être créée.");
+        showErreur("La conversation n'a pas pu être créée.");
       }
       conv = {
         id,
@@ -595,7 +599,7 @@ export default function OpusApp() {
         ? `Demande de devis envoyée à ${pro.entreprise}.`
         : `Demande de rappel envoyée à ${pro.entreprise}.`);
     } catch (e) {
-      showBanner(`Envoi impossible : ${e.message || e}`);
+      showErreur(`Envoi impossible : ${e.message || e}`);
     }
   };
 
@@ -622,7 +626,7 @@ export default function OpusApp() {
         const liste = await api.chargerMessages(id);
         setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, messages: liste } : c)));
       } catch (e) {
-        showBanner("La conversation n'a pas pu être chargée.");
+        showErreur("La conversation n'a pas pu être chargée.");
         setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, messages: [] } : c)));
       }
     }
@@ -869,7 +873,7 @@ export default function OpusApp() {
     try {
       await api.demanderPartenariat(otherId);
     } catch (e) {
-      showBanner(`Demande impossible : ${e.message || e}`);
+      showErreur(`Demande impossible : ${e.message || e}`);
       return;
     }
     setPartenariatsEnvoyes((l) => [...new Set([...l, otherId])]);
@@ -880,7 +884,7 @@ export default function OpusApp() {
     try {
       await api.repondrePartenariat(demandeurId, accepte);
     } catch (e) {
-      showBanner(`Réponse impossible : ${e.message || e}`);
+      showErreur(`Réponse impossible : ${e.message || e}`);
       return;
     }
     setDemandesPartenariat((l) => l.filter((id) => id !== demandeurId));
@@ -913,7 +917,7 @@ export default function OpusApp() {
       await api.supprimerPost(post.id);
       showBanner('Publication supprimée.');
     } catch (e) {
-      showBanner(`Suppression impossible : ${e.message || e}`);
+      showErreur(`Suppression impossible : ${e.message || e}`);
       await start(userType);          // on remet la liste d'aplomb
     }
   };
@@ -939,7 +943,7 @@ export default function OpusApp() {
       const message = await partagerPost(post, pros[post.proId]);
       if (message) showBanner(message);
     } catch (e) {
-      showBanner(`Partage impossible : ${e.message || e}`);
+      showErreur(`Partage impossible : ${e.message || e}`);
     }
   };
 
@@ -958,7 +962,7 @@ export default function OpusApp() {
       setPros((ps) => (ps[myProId]
         ? { ...ps, [myProId]: { ...ps[myProId], portfolio: avant } }
         : ps));
-      showBanner(`Enregistrement impossible : ${e.message || e}`);
+      showErreur(`Enregistrement impossible : ${e.message || e}`);
     }
   };
 
@@ -1006,7 +1010,7 @@ export default function OpusApp() {
       showBanner('Demande envoyée. Vos métiers actuels restent en place en attendant.');
     } catch (e) {
       const dejaUne = String(e.message || e).includes('idx_metier_demande_unique_en_attente');
-      showBanner(dejaUne
+      showErreur(dejaUne
         ? 'Vous avez déjà une demande en cours d\'examen.'
         : `Demande impossible : ${e.message || e}`);
     }
@@ -1029,7 +1033,7 @@ export default function OpusApp() {
       await api.updateProfile({ userType, profil: complet });
       if (sos) await api.updateSosAvailability(sos);
     } catch (e) {
-      showBanner(`Enregistrement impossible : ${e.message || e}`);
+      showErreur(`Enregistrement impossible : ${e.message || e}`);
       return;
     }
 
@@ -1087,7 +1091,7 @@ export default function OpusApp() {
       setScreen('profil');
       showBanner('Documents envoyés. Votre profil passe en vérification.');
     } catch (e) {
-      showBanner(`Envoi impossible : ${e.message || e}`);
+      showErreur(`Envoi impossible : ${e.message || e}`);
     }
   };
 
@@ -1192,7 +1196,7 @@ export default function OpusApp() {
       if (ligne) id = ligne.id;
     } catch (e) {
       setLoading(false);
-      showBanner(`Publication impossible : ${e.message || e}`);
+      showErreur(`Publication impossible : ${e.message || e}`);
       return;
     }
     setLoading(false);
@@ -1225,7 +1229,7 @@ export default function OpusApp() {
         const row = await api.createConversationWithClient(demande.auteurId);
         if (row) id = row.id;
       } catch (e) {
-        showBanner("La conversation n'a pas pu être ouverte.");
+        showErreur("La conversation n'a pas pu être ouverte.");
         return;
       }
       conv = {
@@ -1274,7 +1278,7 @@ export default function OpusApp() {
       const ligne = await api.publierAnnonce(annonce);
       if (ligne) id = ligne.id;
     } catch (e) {
-      showBanner(`Publication impossible : ${e.message || e}`);
+      showErreur(`Publication impossible : ${e.message || e}`);
       return;
     }
     const moi = pros[myProId] || {};
@@ -1310,7 +1314,7 @@ export default function OpusApp() {
     try {
       await api.repondreAnnonce(annonce.id, null);
     } catch (e) {
-      showBanner(`Réponse impossible : ${e.message || e}`);
+      showErreur(`Réponse impossible : ${e.message || e}`);
       return;
     }
     setAnnonces((as) => as.map((a) => (
@@ -1329,7 +1333,7 @@ export default function OpusApp() {
     try {
       await api.fermerAnnonce(annonce.id);
     } catch (e) {
-      showBanner(`Retrait impossible : ${e.message || e}`);
+      showErreur(`Retrait impossible : ${e.message || e}`);
       return;
     }
     setAnnonces((as) => as.filter((a) => a.id !== annonce.id));
@@ -1350,7 +1354,7 @@ export default function OpusApp() {
         const row = await api.createConversationWithClient(profil.id);
         if (row) id = row.id;
       } catch (e) {
-        showBanner("La conversation n'a pas pu être ouverte.");
+        showErreur("La conversation n'a pas pu être ouverte.");
         return;
       }
       conv = {
@@ -1400,7 +1404,7 @@ export default function OpusApp() {
     try {
       await api.createSosRequest(demande);
     } catch (e) {
-      showBanner(`Envoi impossible : ${e.message || e}`);
+      showErreur(`Envoi impossible : ${e.message || e}`);
       return;
     }
     setScreen('home');
@@ -1604,7 +1608,11 @@ export default function OpusApp() {
       ))}
 
       <View style={[s.body, videoMode && { backgroundColor: C.dark }]}>
-        <ConfirmBanner msg={banner} onClose={() => setBanner(null)} />
+        <ConfirmBanner
+          msg={banner && banner.texte}
+          erreur={!!(banner && banner.erreur)}
+          onClose={() => setBanner(null)}
+        />
 
         {screen === 'home' && (
           <HomeScreen
@@ -1670,13 +1678,14 @@ export default function OpusApp() {
                 onRepondre={repondreAnnonce}
                 onFermer={fermerAnnonce}
                 onVoirProfil={viewProfile}
-                onErreur={showBanner}
+                onErreur={showErreur}
                 onSignaler={ouvrirSignalement}
               />
             ) : (
               <DecouvrirScreen
                 pros={pros}
                 askAiMatch={askAiMatch}
+                onEffacerIa={() => { setAiMatches(null); setAiMatchError(null); }}
                 aiMatches={aiMatches} aiMatchLoading={aiMatchLoading} aiMatchError={aiMatchError}
                 onView={viewProfile} onContact={handleContact}
               />
@@ -1691,7 +1700,7 @@ export default function OpusApp() {
                 onRepondre={repondreDemande}
                 moi={userType === 'pro' ? (pros[myProId] || null) : monProfil}
                 mesReponses={mesReponsesDemandes}
-                onErreur={showBanner}
+                onErreur={showErreur}
                 onSignaler={ouvrirSignalement}
               />
             )}
@@ -1706,7 +1715,7 @@ export default function OpusApp() {
             medias={medias} setMedias={setMedias}
             musique={musique} setMusique={setMusique}
             envoi={envoi} erreur={erreurPublication}
-            onErreur={showBanner}
+            onErreur={showErreur}
             createText={createText} setCreateText={setCreateText}
             createMetier={createMetier} setCreateMetier={setCreateMetier}
             createVille={createVille} setCreateVille={setCreateVille}
@@ -1762,7 +1771,7 @@ export default function OpusApp() {
             onEnvoyerDocuments={envoyerDocuments}
             onDemanderMetiers={demanderMetiers}
             demandeMetiers={demandeMetiers}
-            onErreur={showBanner}
+            onErreur={showErreur}
           />
         )}
 
@@ -1806,7 +1815,7 @@ export default function OpusApp() {
             onExporter={api.exporterMesDonnees}
             onSupprimer={supprimerMonCompte}
             onLire={(cle) => { setTexteLegal(cle); setScreen('legal'); }}
-            onErreur={showBanner}
+            onErreur={showErreur}
           />
         )}
 

@@ -26,8 +26,18 @@ import { useRechercheDifferee } from '../lib/frappe';
  * cette séparation. Sur un iPhone, le champ paraissait ne pas répondre du
  * tout — c'est ce qui a été constaté le 29/09/2026.
  */
-function AssistantIA({ askAiMatch, aiMatches, aiMatchLoading, aiMatchError, pros, onView }) {
+function AssistantIA({ askAiMatch, onEffacerIa, aiMatches, aiMatchLoading, aiMatchError, pros, onView }) {
   const [aiQuery, setAiQuery] = useState('');
+
+  /* Vider le champ efface aussi les propositions. Sans cela, elles
+     restaient affichées sous un champ vide, et se lisaient comme les
+     résultats de la recherche juste en dessous — deux listes d'artisans
+     l'une sur l'autre, sans qu'on sache laquelle répondait à quoi.
+     Constaté le 29/09/2026. */
+  const ecrire = (texte) => {
+    setAiQuery(texte);
+    if (!texte.trim() && (aiMatches || aiMatchError)) onEffacerIa();
+  };
 
   return (
     <View style={s.aiBox}>
@@ -39,7 +49,7 @@ function AssistantIA({ askAiMatch, aiMatches, aiMatchLoading, aiMatchError, pros
         style={{ minHeight: 50 }}
         placeholder="Décrivez votre besoin : « je veux refaire ma salle de bain, carrelage et plomberie »..."
         value={aiQuery}
-        onChangeText={setAiQuery}
+        onChangeText={ecrire}
       />
       <BtnMain block onPress={() => askAiMatch(aiQuery)} disabled={aiMatchLoading}>
         {aiMatchLoading ? (
@@ -56,6 +66,16 @@ function AssistantIA({ askAiMatch, aiMatches, aiMatchLoading, aiMatchError, pros
 
       {aiMatches && (
         <View style={{ gap: 8, marginTop: 10 }}>
+          {/* Sans ce titre, les propositions de l'IA et les résultats de la
+              recherche classique formaient une seule longue liste. */}
+          <View style={s.iaResultatsTitre}>
+            <Text style={s.iaResultatsTexte}>
+              {aiMatches.length > 0
+                ? `Proposé par l'IA · ${aiMatches.length} artisan${aiMatches.length > 1 ? 's' : ''}`
+                : "Réponse de l'IA"}
+            </Text>
+            <BtnMini outline label="Effacer" onPress={() => { setAiQuery(''); onEffacerIa(); }} />
+          </View>
           {aiMatches.length === 0 && (
             <EmptyState>Aucun artisan pertinent trouvé pour ce besoin.</EmptyState>
           )}
@@ -96,7 +116,7 @@ function BarreRecherche({ valeur, onChange }) {
 }
 
 export default function DecouvrirScreen({
-  pros, askAiMatch, aiMatches, aiMatchLoading, aiMatchError, onView, onContact,
+  pros, askAiMatch, onEffacerIa, aiMatches, aiMatchLoading, aiMatchError, onView, onContact,
 }) {
   /* CE QUE CES DEUX LIGNES CORRIGENT
      --------------------------------
@@ -131,6 +151,7 @@ export default function DecouvrirScreen({
     <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">
       <AssistantIA
         askAiMatch={askAiMatch}
+        onEffacerIa={onEffacerIa}
         aiMatches={aiMatches}
         aiMatchLoading={aiMatchLoading}
         aiMatchError={aiMatchError}
@@ -151,6 +172,12 @@ export default function DecouvrirScreen({
           />
         ))}
       </View>
+
+      <Text style={s.listeTitre}>
+        {search.trim() || filterMetier
+          ? `${results.length} artisan${results.length > 1 ? 's' : ''} pour cette recherche`
+          : 'Tous les artisans'}
+      </Text>
 
       <View style={{ gap: 10, paddingBottom: 24 }}>
         {results.map((a) => {
@@ -188,5 +215,13 @@ const s = StyleSheet.create({
     paddingVertical: 2, paddingHorizontal: 12,
   },
   searchInput: { flex: 1, borderWidth: 0, backgroundColor: 'transparent', fontSize: 13, paddingHorizontal: 0 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, marginBottom: 16 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, marginBottom: 10 },
+  iaResultatsTitre: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 8, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 10,
+  },
+  iaResultatsTexte: { flex: 1, fontFamily: F.oswald6, fontSize: 11.5, color: C.accent2 },
+  listeTitre: {
+    fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginBottom: 8,
+  },
 });

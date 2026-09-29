@@ -13,7 +13,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, T, S, R, SH, AVATAR_TONES, gradColors, GRAD_160, GRAD_120 } from '../theme';
-import { Check } from './icons';
+import { Check, AlertTriangle } from './icons';
 
 /* --- dégradé (remplace les linear-gradient CSS) --- */
 export function Gradient({ media, angle = 160, style, children }) {
@@ -113,11 +113,23 @@ export function ProfileBanner({ uri, height = 140, children }) {
 }
 
 /* --- .confirm-banner --- */
-export function ConfirmBanner({ msg, onClose }) {
+/**
+ * Le bandeau du haut — confirmation OU erreur.
+ *
+ * Il affichait une COCHE VERTE sur tous les messages, y compris
+ * « Enregistrement impossible : … ». Un échec annoncé par une coche se lit
+ * comme une réussite, et le vrai motif — qui suit les deux-points — passait
+ * inaperçu. Constaté le 29/09/2026 : le propriétaire a vu « enregistrement
+ * impossible » sans pouvoir lire la suite.
+ *
+ * Une erreur est donc ROUGE, avec un triangle, et elle tient sur autant de
+ * lignes qu'il faut : le motif est souvent la seule chose utile.
+ */
+export function ConfirmBanner({ msg, erreur, onClose }) {
   if (!msg) return null;
   return (
-    <Pressable style={s.banner} onPress={onClose}>
-      <Check size={14} color="#fff" />
+    <Pressable style={[s.banner, erreur && s.bannerErreur]} onPress={onClose}>
+      {erreur ? <AlertTriangle size={15} color="#fff" /> : <Check size={14} color="#fff" />}
       <Text style={s.bannerText}>{msg}</Text>
     </Pressable>
   );
@@ -270,7 +282,11 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
     ...SH.detache,
   },
-  bannerText: { color: '#fff', fontSize: T.petit, fontFamily: F.inter },
+  /* Rouge, et non plus noir : on doit voir AVANT de lire que c'est un
+     échec. Et une largeur bornée, pour que le motif tienne sur plusieurs
+     lignes au lieu d'être coupé. */
+  bannerErreur: { backgroundColor: C.bad, maxWidth: '88%' },
+  bannerText: { flexShrink: 1, color: '#fff', fontSize: T.petit, fontFamily: F.inter },
 
   btnMain: {
     backgroundColor: C.ink, paddingVertical: 10, paddingHorizontal: S.xl,
