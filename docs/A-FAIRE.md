@@ -134,7 +134,22 @@ Ce que ça demande :
 - les messages chargés **par conversation**, pas tous d'un coup ;
 - les profils chargés à la demande plutôt qu'en bloc.
 
-**A2 — les photos partent et reviennent en pleine résolution.**
+**A2 — ✅ FAIT le 29/09/2026.** Mesuré sur une photo de 12 Mpx réaliste
+(4032 × 3024, avec du grain — un aplat uni donnerait un chiffre flatteur qui
+ne veut rien dire) : **2,65 Mo → 232 Ko, soit 91,5 % de moins.** Une
+publication de six photos passe de **15,9 Mo à 1,36 Mo**.
+
+`reduireImage()` dans `src/lib/media.js` ramène à 1600 px de large (512 pour
+un avatar) avant l'envoi, avec deux garde-fous : on ne touche pas à un
+fichier de moins de 200 Ko — recompresser une petite image l'abîme sans rien
+gagner — et si la réduction échoue on envoie l'original plutôt que de faire
+échouer la publication.
+
+Et `expo-image` remplace l'`Image` de React Native partout (photos, avatars,
+bannières) : cache disque, donc redescendre dans le fil ne retélécharge plus
+rien.
+
+~~**A2 — les photos partent et reviennent en pleine résolution.**~~
 `expo-image-picker` est réglé sur `quality: 0.8`, mais **sans limite de
 dimension** : une photo d'iPhone fait 3 à 4 Mo. Une publication de six photos
 = une vingtaine de mégaoctets à l'envoi, et autant à chaque lecture par

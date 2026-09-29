@@ -18,7 +18,8 @@
  * D'où l'attente avant que l'image apparaisse.
  */
 import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { C, F, T, S, R, rond } from '../theme';
 import { Gradient } from './ui';
@@ -68,9 +69,19 @@ export default function Media({
     );
   }
 
+  /* `Image` vient d'expo-image, pas de React Native : il met les photos en
+     cache sur le disque. Avec celui de React Native, redescendre dans le fil
+     retéléchargeait chaque image — sur le forfait de l'artisan, à chaque
+     fois. `transition` évite le clignotement blanc quand l'image arrive. */
   return (
     <View style={style}>
-      <Image source={{ uri: media }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      <Image
+        source={{ uri: media }}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        transition={150}
+        cachePolicy="memory-disk"
+      />
       {children}
     </View>
   );

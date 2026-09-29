@@ -81,9 +81,11 @@ Trois points en sortent, à ne pas redécouvrir :
    jour où ça changera, **toutes les règles RLS seront à réécrire**. En
    attendant : ne rien construire qui enfonce cette hypothèse.
 2. **Le côté particulier n'apparaît NULLE PART** dans le cahier des charges
-   (demandes de travaux, SOS, profil public particulier). Question posée au
-   propriétaire, sans réponse à ce jour — ne pas investir de temps à
-   optimiser ces écrans tant qu'elle n'est pas tranchée.
+   (demandes de travaux, SOS, profil public particulier). Le propriétaire a
+   tranché le 29/09/2026 : **c'est un oubli du document, on les garde.**
+   Conséquence à retenir : le cahier des charges décrit le côté PRO, ce n'est
+   pas une description exhaustive d'Opus — ne jamais déduire qu'une
+   fonctionnalité absente du document est abandonnée, demander.
 3. **Ne plus ajouter d'action IA « à la main »** dans la fonction Edge `ai`.
    La prochaine se construit avec le journal d'audit et les permissions du
    §21, ou elle sera à refaire.

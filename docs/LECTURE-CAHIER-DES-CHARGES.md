@@ -134,10 +134,16 @@ Or ce qui existe aujourd'hui côté particulier n'est pas rien :
 - les **avis**, qui sont écrits par des particuliers — et qui, eux, sont bien
   au §6.
 
-**C'est la question qui bloque le plus de travail**, parce qu'elle décide si
-je passe du temps à optimiser ces écrans ou non. Trois lectures possibles :
-le côté particulier est abandonné ; il est simplement hors sujet de ce
-document ; ou il devient une application séparée.
+**RÉPONSE DU PROPRIÉTAIRE, 29/09/2026 : « on les garde, c'est un oubli ».**
+
+Le cahier des charges décrit la partie professionnelle, mais les particuliers
+restent dans Opus. `DemandesScreen`, `SosScreen` et le profil public
+particulier sont donc à terminer et à optimiser **au même titre que le reste
+de la brique 1**.
+
+À retenir pour la suite : le cahier des charges est un document sur le côté
+PRO, pas une description exhaustive d'Opus. Ne pas en déduire qu'une
+fonctionnalité absente du document est abandonnée — demander.
 
 ### 3.3 Le Dashboard de la phase 2 n'a presque pas de données à montrer
 
@@ -202,9 +208,8 @@ tenable et une facture qui ne l'est pas.
 
 ## 6. Ce que j'attends comme réponse
 
-1. **Les particuliers : on les garde ?** (voir 3.2) — c'est ce qui décide si
-   j'optimise ou non `DemandesScreen`, `SosScreen` et le profil public
-   particulier.
+1. ~~Les particuliers : on les garde ?~~ **Répondu le 29/09/2026 : oui**,
+   c'était un oubli du document. Ils sont dans la brique 1.
 2. **Le multi-entreprise (3.1)** : ma lecture est qu'il appartient à la
    phase 1 et pas à la brique 1 — donc **pas maintenant**, conformément à la
    consigne « finir l'existant d'abord ». À corriger si c'est faux.

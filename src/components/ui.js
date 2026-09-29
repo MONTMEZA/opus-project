@@ -5,8 +5,12 @@
  */
 import React from 'react';
 import {
-  View, Text, Pressable, TextInput, StyleSheet, useWindowDimensions, Image,
+  View, Text, Pressable, TextInput, StyleSheet, useWindowDimensions,
 } from 'react-native';
+/* expo-image et non celui de React Native : cache disque, et pas de
+   clignotement blanc au chargement. Un avatar revient sur presque chaque
+   écran — sans cache, il est retéléchargé à chaque fois. */
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, T, S, R, SH, AVATAR_TONES, gradColors, GRAD_160, GRAD_120 } from '../theme';
 import { Check } from './icons';
@@ -70,7 +74,7 @@ export function Avatar({ seed = 0, size = 40, uri, ring = 0, ringColor = C.surfa
     backgroundColor: AVATAR_TONES[toneIndex(seed)],
   };
   const withRing = ring ? { ...base, borderWidth: ring, borderColor: ringColor } : base;
-  if (uri) return <Image source={{ uri }} style={withRing} />;
+  if (uri) return <Image source={{ uri }} style={withRing} contentFit="cover" cachePolicy="memory-disk" />;
   return <View style={withRing} />;
 }
 
@@ -85,7 +89,13 @@ export function ProfileBanner({ uri, height = 140, children }) {
   if (estPhoto) {
     return (
       <View style={{ height, width: '100%' }}>
-        <Image source={{ uri }} style={{ height, width: '100%' }} resizeMode="cover" />
+        <Image
+          source={{ uri }}
+          style={{ height, width: '100%' }}
+          contentFit="cover"
+          transition={150}
+          cachePolicy="memory-disk"
+        />
         {children}
       </View>
     );
