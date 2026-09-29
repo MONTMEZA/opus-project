@@ -315,6 +315,46 @@ Le navigateur de test, lui, ne montre rien de tout cela — il a la mémoire et
 le processeur d'un ordinateur. Ce qui se mesure ici, c'est le **nombre de
 nœuds et d'écrans de contenu montés** ; c'est un bon indicateur indirect.
 
+### Un champ de saisie ne re-rend que LUI
+
+Constaté sur iPhone le 29/09/2026 : « dans Découvrir, on ne peut pas écrire
+dans le champ de l'assistant IA ». Au navigateur, il se remplissait
+parfaitement. La différence : le processeur.
+
+On peut la reproduire — **Playwright sait brider le processeur** :
+
+```js
+const cdp = await ctx.newCDPSession(page);
+await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+```
+
+Ce que cela a donné, en millisecondes par lettre :
+
+| | avant | après |
+|---|---|---|
+| Assistant IA | **219** | 26 |
+| Découvrir, recherche | 74 | 21 |
+| Place des pros | 93 | 29 |
+
+Deux causes, et la seconde est la moins évidente :
+
+1. **L'état de saisie vivait trop haut.** `aiQuery`, `search` et
+   `filterMetier` étaient dans `OpusApp` : chaque lettre re-rendait TOUS les
+   écrans. Descendus dans l'écran : 219 → 152 ms. Mieux, toujours
+   inutilisable.
+2. **Un écran entier se re-rend pour une lettre.** Il faut que le champ soit
+   dans SON PROPRE composant, avec son texte. C'est ce qui fait passer de
+   152 à 26 ms.
+
+> **Un champ de recherche = un composant, avec son texte à lui.** Le
+> filtrage part quand la frappe retombe (`useRechercheDifferee`,
+> `src/lib/frappe.js`), jamais à chaque lettre.
+
+Et le piège rencontré en corrigeant : poser le différé **dans l'écran** ne
+sert à rien — l'écran se redessine quand même, et le minuteur en plus coûte
+du temps. Mesuré : 93 ms avant, **180 ms** avec le différé seul, 29 ms une
+fois le champ isolé. Ce qui compte, c'est **où vit le texte**.
+
 ### Ce qui se vérifie au navigateur, et ce qui ne s'y vérifie pas
 
 Playwright reproduit **les gestes à la souris** : un glissement latéral, un

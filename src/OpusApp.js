@@ -113,13 +113,20 @@ export default function OpusApp() {
   const [banner, setBanner] = useState(null);
   const bannerTimer = useRef(null);
 
-  const [aiQuery, setAiQuery] = useState('');
   const [aiMatches, setAiMatches] = useState(null);
   const [aiMatchLoading, setAiMatchLoading] = useState(false);
   const [aiMatchError, setAiMatchError] = useState(null);
 
-  const [search, setSearch] = useState('');
-  const [filterMetier, setFilterMetier] = useState(null);
+  /* `search`, `filterMetier` et `aiQuery` vivaient ici, à la racine de
+     l'application. Conséquence : CHAQUE LETTRE tapée dans « Découvrir »
+     re-rendait OpusApp en entier — tous les écrans, toutes les listes.
+     Mesuré au navigateur avec le processeur bridé six fois, pour imiter un
+     téléphone : 219 ms par lettre. Sur un iPhone, le champ paraît
+     simplement ne pas répondre, et c'est ce qui a été constaté le
+     29/09/2026 sur l'assistant IA.
+
+     Ils sont désormais DANS DecouvrirScreen : une lettre ne re-rend plus
+     que cet écran-là. Rien d'autre ne les lisait. */
 
   const [createType, setCreateType] = useState('photo');
   // Où va la publication : le fil, le portfolio, ou les deux.
@@ -1410,8 +1417,9 @@ export default function OpusApp() {
   };
 
   /* ---------- assistant IA ---------- */
-  const askAiMatch = async () => {
-    if (!aiQuery.trim()) return;
+  const askAiMatch = async (texte) => {
+    const demande = String(texte || '').trim();
+    if (!demande) return;
     setAiMatchLoading(true); setAiMatchError(null); setAiMatches(null);
     try {
       /* On envoie TOUS les métiers exercés, pas seulement le principal :
@@ -1425,7 +1433,7 @@ export default function OpusApp() {
           note: avg.count ? avg.global.toFixed(1) : null, bio: p.bio,
         };
       });
-      const recs = await aiMatchPros(aiQuery.trim(), liste);
+      const recs = await aiMatchPros(demande, liste);
       setAiMatches(recs.filter((r) => pros[r.proId]));
     } catch (e) {
       setAiMatchError(e && e.message
@@ -1668,10 +1676,8 @@ export default function OpusApp() {
             ) : (
               <DecouvrirScreen
                 pros={pros}
-                aiQuery={aiQuery} setAiQuery={setAiQuery} askAiMatch={askAiMatch}
+                askAiMatch={askAiMatch}
                 aiMatches={aiMatches} aiMatchLoading={aiMatchLoading} aiMatchError={aiMatchError}
-                search={search} setSearch={setSearch}
-                filterMetier={filterMetier} setFilterMetier={setFilterMetier}
                 onView={viewProfile} onContact={handleContact}
               />
             )) : (

@@ -41,6 +41,7 @@ import {
 import { METIERS } from '../data/demo';
 import { distanceKm } from '../lib/adresse';
 import { correspond, texteDe } from '../lib/recherche';
+import { useRechercheDifferee } from '../lib/frappe';
 import { libelleMetiers } from '../lib/metiers';
 
 /** Une date au format que la base attend : 2026-10-12. */
@@ -53,6 +54,42 @@ function versISO(saisie) {
   let annee = m[3] ? Number(m[3]) : new Date().getFullYear();
   if (annee < 100) annee += 2000;
   return `${annee}-${String(mois).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+}
+
+/**
+ * La barre de recherche, dans SON composant — et ce n'est pas un rangement.
+ *
+ * Deux raisons, mesurées au navigateur avec le processeur bridé six fois
+ * (voir src/lib/frappe.js) :
+ *   1. le texte tapé reste ici, donc une lettre ne redessine que ce champ
+ *      et non les annonces, les filtres et les cartes ;
+ *   2. le filtrage part quand la frappe retombe, pas à chaque lettre.
+ *
+ * Mettre seulement le point 2 dans l'écran ne sert à RIEN : l'écran entier
+ * se redessinait quand même, et le minuteur en plus faisait perdre du
+ * temps. Vérifié : 93 ms par lettre avant, 180 ms avec le différé seul.
+ */
+function BarreRecherche({ valeur, onChange }) {
+  const [texte, setTexte] = useRechercheDifferee(valeur, onChange);
+
+  return (
+    <View style={s.recherche}>
+      <Search size={15} color={C.muted} />
+      <Field
+        style={s.rechercheChamp}
+        value={texte}
+        onChangeText={setTexte}
+        placeholder="placo, nacelle, IPN, un fournisseur..."
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      {!!texte && (
+        <Pressable onPress={() => { setTexte(''); onChange(''); }} hitSlop={10}>
+          <X size={15} color={C.muted} />
+        </Pressable>
+      )}
+    </View>
+  );
 }
 
 export default function PlaceProScreen({
@@ -266,22 +303,7 @@ export default function PlaceProScreen({
           Elle passe avant les filtres parce que c'est par là qu'on commence :
           on sait ce qu'on cherche (« placo », « nacelle », « IPN ») bien
           avant de savoir dans quelle catégorie ça a été rangé. */}
-      <View style={s.recherche}>
-        <Search size={15} color={C.muted} />
-        <Field
-          style={s.rechercheChamp}
-          value={recherche}
-          onChangeText={setRecherche}
-          placeholder="placo, nacelle, IPN, un fournisseur..."
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {!!recherche && (
-          <Pressable onPress={() => setRecherche('')} hitSlop={10}>
-            <X size={15} color={C.muted} />
-          </Pressable>
-        )}
-      </View>
+      <BarreRecherche valeur={recherche} onChange={setRecherche} />
 
       {/* --- filtres --- */}
       <SectionLabel>
