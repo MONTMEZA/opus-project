@@ -71,6 +71,42 @@ C'est de toute façon plus lisible. Le reste du fichier garde sa forme
 `!hasSupabase ? noop : async () => {…}` — elle n'a pas de paramètre par
 défaut, donc elle ne déclenche rien.
 
+### `npm audit fix --force` DÉTRUIRAIT le projet
+
+Constaté le 30/09/2026. `npm install` affiche « 11 vulnerabilities » et
+propose deux commandes. La seconde est un piège :
+
+```
+npm audit fix --force
+→ Will install expo@46.0.21, which is a breaking change
+→ added 471 packages, removed 57 packages
+```
+
+**Expo 57 redescendrait en 46.** C'est npm qui « corrige » une faille en
+ramenant la dépendance à une version antérieure : il ne sait pas qu'Expo 46
+ne fait plus tourner ce projet.
+
+Ce que disent réellement ces alertes, une fois les doublons écartés — il
+n'y a que DEUX causes, pas onze :
+
+| paquet | d'où il vient | ce qu'il sert |
+|---|---|---|
+| `brace-expansion` | expo → @expo/fingerprint → minimatch | lire des motifs de fichiers |
+| `uuid` | expo → @expo/config-plugins → **xcode** | générer un projet iOS natif |
+
+Les deux sont **des dépendances d'Expo lui-même**, utilisées par les outils
+qui tournent sur l'ordinateur pendant `npm start`. **Aucune ne part dans
+l'application installée sur le téléphone.** Et `xcode` ne sert qu'au
+`prebuild`, que ce projet ne fait jamais puisqu'il tourne dans Expo Go.
+
+> **`npm audit fix` tout court : oui.** Vérifié — il n'a touché qu'une
+> ligne du verrou (`brace-expansion` 5.0.9 → 5.0.12), n'a pas modifié
+> `package.json`, a supprimé la seule alerte « high », et
+> `npx expo install --check` répond toujours « up to date ».
+>
+> **`npm audit fix --force` : jamais.** Les dix alertes « moderate » qui
+> restent ne se corrigent qu'en attendant qu'Expo mette à jour `xcode`.
+
 ### Les versions de paquets Expo se désalignent toutes seules
 
 `npm install` d'un nouveau paquet peut laisser les autres en arrière.
