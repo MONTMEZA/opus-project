@@ -279,7 +279,11 @@ et 3,2 écrans. L'effet réel, lui, ne se juge que sur le téléphone.
   `users.telephone`, celui d'un particulier, qui lui n'est lisible par
   personne (voir plus bas).
 - **Zone d'intervention** : `zone_km`, de 1 à 300 km, pour les chantiers
-  ordinaires — `rayon_km` ne valait que pour le SOS.
+  ordinaires — `rayon_km` ne valait que pour le SOS. Depuis le 30/09/2026,
+  elle se **voit** : une carte au niveau de la commune avec le cercle du
+  rayon, en lecture sur la fiche et au curseur dans « Modifier mon profil »
+  (`src/components/CarteZone.js`). Le zoom est plafonné exprès — une carte
+  qu'on agrandit finirait par montrer l'adresse du domicile.
 - **En plus** : les **spécialités** (texte libre, douze au maximum). C'est
   ce qu'on tape dans une recherche — « enduit à la chaux », « douche à
   l'italienne » — alors que `metiers` est une liste fermée de douze
@@ -531,7 +535,11 @@ au minimum un script qui compare `information_schema` à ce que le code attend.
 - **Publicités** — la base sait les stocker (`posts.is_ad`), les cartes
   existent dans le fil, mais rien ne les alimente.
 - **Recherche par carte** — les coordonnées GPS sont déjà là, elles ne
-  servent qu'au tri par distance.
+  servent qu'au tri par distance et à la carte de la zone d'intervention.
+  Une recherche SUR la carte, elle, poserait la question du zoom : le
+  plafond qui protège l'adresse d'un artisan sur sa fiche n'aurait pas de
+  sens sur une carte de recherche, et il faudra trancher ce que l'on montre
+  avant de la construire.
 - **Côté particulier** — reste plus pauvre que le côté pro.
 
 ### Les fournisseurs — première marche posée le 21/09/2026

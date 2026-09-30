@@ -19,6 +19,7 @@ import { C, F, T, S, R, interligne } from '../theme';
 import { SectionLabel } from './ui';
 import { Phone, MapPin, Clock } from './icons';
 import { etatMaintenant, semaineGroupee } from '../lib/horaires';
+import CarteZone from './CarteZone';
 
 export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
   const telephone = pro.telephone || '';
@@ -68,6 +69,20 @@ export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
               <Text style={s.label}>Se déplace</Text>
               <Text style={s.valeur}>jusqu'à {zoneKm} km</Text>
             </View>
+          )}
+
+          {/* Le chiffre reste : il se lit, il se compare, il se retient.
+              La carte, elle, se comprend sans réfléchir — « est-ce qu'il
+              vient jusque chez moi ? » ne se répond pas de tête.
+              Elle ne s'affiche que si la fiche porte des coordonnées. */}
+          {!!zoneKm && (
+            <CarteZone
+              latitude={pro.latitude}
+              longitude={pro.longitude}
+              rayonKm={zoneKm}
+              ville={pro.ville}
+              style={s.carte}
+            />
           )}
 
           {/* UNE SEULE PHRASE, d'abord : « Ouvert · ferme à 18 h ».
@@ -136,6 +151,8 @@ const s = StyleSheet.create({
   /* Un numéro de téléphone se lit de loin et se compose d'un doigt : il est
      plus gros que le reste, et de la couleur sur laquelle on appuie. */
   valeurLien: { fontFamily: F.oswald6, fontSize: T.sousTitre - 1, color: C.accent, letterSpacing: 0.3 },
+
+  carte: { paddingBottom: S.md },
 
   semaine: {
     paddingBottom: S.md - 2, paddingLeft: S.lg + S.sm,

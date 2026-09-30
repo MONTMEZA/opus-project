@@ -50,7 +50,8 @@
     "verifier-notes": "node scripts/verifier-notes.mjs",
     "verifier-profil": "node scripts/verifier-profil.mjs",
     "verifier-acces": "node scripts/verifier-acces.mjs",
-    "verifier-horaires": "node scripts/verifier-horaires.mjs"
+    "verifier-horaires": "node scripts/verifier-horaires.mjs",
+    "verifier-carte": "node scripts/verifier-carte.mjs"
   },
   "private": true,
   "devDependencies": {

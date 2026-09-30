@@ -18,6 +18,7 @@ import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
 import ChampSpecialites from '../components/ChampSpecialites';
 import ChampHoraires from '../components/ChampHoraires';
+import CarteZone from '../components/CarteZone';
 import AssistantPresentation from '../components/AssistantPresentation';
 import AmeliorerTexte from '../components/AmeliorerTexte';
 import { METIERS } from '../data/demo';
@@ -309,18 +310,33 @@ export default function ProfilEditScreen({
             </Text>
 
             {/* À ne pas confondre avec le rayon SOS, plus bas : celui-ci
-                ne concerne que les urgences, et seulement quatre métiers. */}
-            <Text style={s.label}>Zone d'intervention (km)</Text>
-            <Field
-              value={zoneKm}
-              onChangeText={setZoneKm}
-              keyboardType="number-pad"
-              placeholder="30"
+                ne concerne que les urgences, et seulement quatre métiers.
+
+                Le champ de saisie a laissé la place au curseur : taper
+                « 30 » ne dit rien tant qu'on n'a pas vu ce que 30 km
+                couvrent depuis chez soi. Le cercle bouge sous le doigt,
+                et la question se répond toute seule.
+
+                Pourquoi pas en tirant le bord du cercle, comme demandé :
+                sur un téléphone, viser un trait de 2 px pendant que la
+                carte interprète le doigt comme un déplacement, c'est la
+                bagarre — le même piège que le glissement du fil vidéo. Le
+                curseur montre exactement la même chose, sans rater sa
+                cible. */}
+            <Text style={s.label}>Zone d'intervention</Text>
+            <CarteZone
+              latitude={lieu.latitude}
+              longitude={lieu.longitude}
+              rayonKm={Number(zoneKm) || 0}
+              ville={lieu.affichage}
+              onChangeRayon={(km) => setZoneKm(String(km))}
             />
             <Text style={s.aide}>
-              Jusqu'où vous vous déplacez pour un chantier ordinaire. Cela
-              évite les demandes que vous refuserez, et les vôtres arrivent
-              plus vite.
+              Le cercle suit le curseur : c'est ce qu'un client verra sur
+              votre fiche. La distance est à vol d'oiseau, pas en temps de
+              route — une vallée de montagne et une autoroute ne se valent
+              pas. Et la carte ne s'agrandit jamais jusqu'à la rue : elle
+              montre votre zone, pas votre adresse.
             </Text>
 
             <Text style={s.label}>Vos spécialités</Text>

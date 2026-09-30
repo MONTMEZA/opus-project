@@ -436,6 +436,52 @@ sert à rien — l'écran se redessine quand même, et le minuteur en plus coût
 du temps. Mesuré : 93 ms avant, **180 ms** avec le différé seul, 29 ms une
 fois le champ isolé. Ce qui compte, c'est **où vit le texte**.
 
+### La carte : une image, pas une bibliothèque de cartographie
+
+Ajoutée le 30/09/2026. `react-native-maps` existe et fonctionne dans Expo
+Go (vérifié dans les docs du SDK 57) — il n'a pourtant pas été pris, et il
+faut savoir pourquoi avant de le proposer à nouveau :
+
+> **Une carte qu'on peut agrandir finit par montrer la rue.** Beaucoup
+> d'artisans déclarent l'adresse de leur MAISON. « Se déplace jusqu'à
+> 30 km » ne dit pas où ils habitent ; une carte zoomable, si.
+
+`src/lib/tuiles.js` fabrique donc le damier d'images à la main, avec un
+`ZOOM_MAX` qui est **un verrou, pas un réglage** — et un point au centre,
+jamais une épingle. Trois bénéfices en plus : aucune dépendance (donc aucun
+risque de devoir quitter Expo Go), le même rendu au navigateur et sur le
+téléphone (donc ça se vérifie ici), et des calculs purs contrôlés par
+`npm run verifier-carte`.
+
+Le piège que ces calculs contiennent : **le cosinus de la latitude**. La
+projection Web Mercator étire les distances vers les pôles, donc un rayon
+de 30 km sans ce cosinus serait juste à l'équateur et faux partout en
+France. Et le zoom s'arrondit **vers le bas**, sinon le cercle déborde du
+cadre une fois sur deux.
+
+Les fonds viennent de la **Géoplateforme de l'IGN** (`data.geopf.fr`) :
+données publiques, sans clé depuis la bascule des géoservices. La mention
+« © IGN » sur la carte est la condition d'usage — ne pas la retirer.
+
+Et pour modifier le rayon : **un curseur, pas le bord du cercle.** Sur un
+téléphone, viser un trait de 2 px pendant que la carte interprète le doigt
+comme un déplacement, c'est le même piège que le glissement du fil vidéo.
+
+#### Les tuiles ne partent pas depuis le conteneur de travail
+
+Le navigateur de test n'a aucun accès direct à l'extérieur : tout passe par
+le mandataire de l'agent, qui n'accepte que des tunnels HTTPS. Sans rien
+faire, **les tuiles ne partent jamais et la carte reste grise** — ce qui
+ressemble beaucoup à un bug du code. Lancer Chromium AVEC le mandataire ne
+marche pas davantage : son option de contournement pour `localhost` est
+ignorée, et c'est alors le serveur Expo qu'on n'atteint plus.
+
+La seule voie qui marche, et c'est celle de `scripts/captures-carte.mjs` :
+laisser le navigateur tranquille et **intercepter les seules adresses de
+l'IGN** (`page.route`), qu'on va chercher avec `curl`. Prévoir des essais
+répétés : le mandataire coupe environ une connexion sur cinq — vérifié en
+appelant la même adresse cinq fois, quatre 200 et un échec.
+
 ### Ce qui se vérifie au navigateur, et ce qui ne s'y vérifie pas
 
 Playwright reproduit **les gestes à la souris** : un glissement latéral, un

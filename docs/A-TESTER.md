@@ -549,6 +549,42 @@ réponses, c'est là que ça se voit.
 
 ---
 
+## 23. 🟠 La carte de la zone d'intervention
+
+**Tu fais** — Profil → « Modifier mon profil » → descends jusqu'à **Zone
+d'intervention**.
+
+**Tu dois voir** — Une petite carte, ta commune au centre, un cercle orange
+autour, et un curseur en dessous. **Fais-le glisser** : le cercle grandit et
+rétrécit en direct, et le chiffre à droite suit.
+
+**Tu dois voir aussi** — Que la carte **ne s'agrandit pas**. Elle ne se
+pince pas, elle ne se déplace pas, et elle ne descend jamais jusqu'aux noms
+de rue. C'est voulu : beaucoup d'artisans déclarent l'adresse de leur
+maison, et une carte zoomable la donnerait à tout le monde. Il n'y a pas
+d'épingle non plus, juste un point — « c'est par là », pas « il habite
+ici ».
+
+**Tu fais** — Enregistre, puis va voir ta fiche comme la voit un client
+(côté particulier : Découvrir → un artisan → Profil).
+
+**Tu dois voir** — La même carte, sans curseur, sous la ligne « Se déplace
+jusqu'à X km ». Le chiffre reste : il se lit et se compare. La carte, elle,
+répond à la seule question qui compte — « est-ce qu'il vient jusque chez
+moi ? »
+
+**Si la carte reste grise** — C'est le réseau, pas l'application : les fonds
+de carte viennent de la Géoplateforme de l'IGN (données publiques, sans
+compte ni clé). Réessaie avec une meilleure connexion. Les images se gardent
+ensuite sur le téléphone, donc la deuxième fois est instantanée.
+
+**Si aucune carte n'apparaît dans « Modifier mon profil »** — C'est que ta
+ville n'a pas de coordonnées : rouvre le champ **Ville** et choisis-la dans
+la liste qui s'ouvre, au lieu de la taper entièrement. C'est la liste qui
+donne le point de départ.
+
+---
+
 ## Ce que je n'ai PAS pu vérifier, et qu'il faut donc regarder
 
 Je le redis à part, parce que c'est ce qui compte le plus :
