@@ -17,6 +17,7 @@ import {
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
 import ChampSpecialites from '../components/ChampSpecialites';
+import ChampHoraires from '../components/ChampHoraires';
 import AssistantPresentation from '../components/AssistantPresentation';
 import AmeliorerTexte from '../components/AmeliorerTexte';
 import { METIERS } from '../data/demo';
@@ -72,6 +73,7 @@ export default function ProfilEditScreen({
      les métiers. Vide veut dire « non renseigné », et rien ne s'affiche. */
   const [zoneKm, setZoneKm] = useState(profil.zoneKm ? String(profil.zoneKm) : '');
   const [specialites, setSpecialites] = useState(profil.specialites || []);
+  const [horaires, setHoraires] = useState(profil.horaires || null);
 
   /* La certification RGE. Ce que l'artisan DÉCLARE ; le badge, lui, ne
      s'allume que lorsque l'attestation a été regardée par un humain. */
@@ -109,7 +111,7 @@ export default function ProfilEditScreen({
       profil: estPro
         ? {
             avatarUrl, bannerUrl, entreprise, metiers, metier: metiers[0], bio, siret,
-            telephone, specialites,
+            telephone, specialites, horaires,
             zoneKm: Number(zoneKm) || null,
             ville: lieu.affichage,
             codePostal: lieu.codePostal,
@@ -327,6 +329,12 @@ export default function ProfilEditScreen({
               onChange={setSpecialites}
               onErreur={onErreur}
             />
+
+            {/* « Ouvert jusqu'à 18 h » change le fait d'appeler ou non,
+                maintenant. C'est le renseignement qu'on cherche au moment
+                précis où on tient son téléphone. */}
+            <Text style={s.label}>Horaires d'ouverture</Text>
+            <ChampHoraires valeur={horaires} onChange={setHoraires} />
           </>
         ) : (
           <>

@@ -2450,3 +2450,120 @@ grant update (email, telephone, latitude, longitude) on public.users to authenti
 -- et `mes_donnees()` — qui s'en sert — vient avant cette section dans le
 -- fichier. L'ordre du fichier compte, et ce n'est pas une coquetterie :
 -- rejouer schema.sql sur une base neuve échouait sans cela.
+
+-- ==========================================================================
+--  19. LES HORAIRES D'OUVERTURE
+--
+--  POURQUOI
+--  --------
+--  « Ouvert jusqu'à 18 h » change le fait d'appeler ou non, MAINTENANT.
+--  C'est le dernier renseignement qui manquait à la fiche d'un artisan, et
+--  celui qu'on cherche au moment précis où on tient son téléphone.
+--
+--  LA FORME, ET POURQUOI DEUX PLAGES
+--  ---------------------------------
+--  Un artisan ferme entre midi et deux. Une seule plage par jour dirait
+--  donc « ouvert de 8 h à 18 h » à quelqu'un qui appellera à 12 h 30 et
+--  tombera sur un répondeur — c'est pire que pas d'horaires du tout.
+--
+--      {
+--        "lun": [["08:00","12:00"], ["14:00","18:00"]],
+--        "sam": [["09:00","12:00"]],
+--        "dim": []
+--      }
+--
+--  Un tableau VIDE veut dire fermé ce jour-là. Une clé absente veut dire
+--  la même chose : on ne force personne à déclarer ses sept jours.
+--  `horaires` à null veut dire « non renseigné », et l'écran n'affiche
+--  alors rien du tout — ce qui n'est pas la même chose que « fermé ».
+--
+--  POURQUOI DU JSON PLUTÔT QUE QUATORZE COLONNES
+--  --------------------------------------------
+--  `lundi_ouvre`, `lundi_ferme`, `lundi_ouvre_2`… donnerait vingt-huit
+--  colonnes pour une information qu'on lit toujours d'un bloc, et qu'on
+--  n'interroge jamais séparément. Le jour où il faudra chercher « ouvert
+--  le samedi », un index GIN sur le JSON suffira.
+-- ==========================================================================
+
+alter table public.professional_profiles add column if not exists horaires jsonb;
+
+-- --------------------------------------------------------------------------
+--  19.1 La base refuse un horaire qui ne veut rien dire
+--
+--  Sans ce contrôle, l'écran serait seul juge — et un client modifié
+--  pourrait enregistrer « de 25 h à 3 h ». C'est le principe du projet :
+--  les règles métier sont tenues par la base.
+--
+--  `immutable` est exigé pour qu'une contrainte puisse l'appeler.
+-- --------------------------------------------------------------------------
+create or replace function public.horaires_valides(p jsonb)
+returns boolean
+language plpgsql
+immutable
+as $$
+declare
+  jour     text;
+  plages   jsonb;
+  plage    jsonb;
+  debut    text;
+  fin      text;
+  dernier  text;
+begin
+  if p is null then return true; end if;
+  if jsonb_typeof(p) <> 'object' then return false; end if;
+
+  for jour in select jsonb_object_keys(p) loop
+    if jour not in ('lun','mar','mer','jeu','ven','sam','dim') then return false; end if;
+
+    plages := p -> jour;
+    if jsonb_typeof(plages) <> 'array' then return false; end if;
+    -- Deux plages au maximum : le matin et l'après-midi. Au-delà, ce n'est
+    -- plus un horaire, c'est un agenda.
+    if jsonb_array_length(plages) > 2 then return false; end if;
+
+    dernier := null;
+    for plage in select * from jsonb_array_elements(plages) loop
+      if jsonb_typeof(plage) <> 'array' or jsonb_array_length(plage) <> 2 then
+        return false;
+      end if;
+      debut := plage ->> 0;
+      fin   := plage ->> 1;
+
+      -- HH:MM, et des heures qui existent.
+      if debut !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then return false; end if;
+      if fin   !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then return false; end if;
+
+      -- Une plage va vers l'avant, et l'après-midi vient après le matin.
+      if fin <= debut then return false; end if;
+      if dernier is not null and debut < dernier then return false; end if;
+      dernier := fin;
+    end loop;
+  end loop;
+
+  return true;
+end;
+$$;
+
+alter table public.professional_profiles drop constraint if exists pro_horaires_check;
+alter table public.professional_profiles add constraint pro_horaires_check
+  check (public.horaires_valides(horaires));
+
+-- --------------------------------------------------------------------------
+--  ET SURTOUT : NE PAS LUI RETIRER LE DROIT D'ÊTRE APPELÉE
+--
+--  Le premier essai révoquait `execute` à `anon` et `authenticated`, par
+--  prudence : une fonction qui ne sert qu'à une contrainte n'a rien à faire
+--  dans l'API REST. Résultat, sur PostgreSQL 16 :
+--
+--      ERROR: permission denied for function horaires_valides
+--
+--  dès qu'un artisan enregistrait ses horaires. Une contrainte `check` qui
+--  appelle une fonction s'exécute avec les droits de CELUI QUI ÉCRIT — pas
+--  avec ceux du propriétaire de la table. Elle échoue donc, au lieu de
+--  filtrer. C'est exactement le piège déjà rencontré avec `est_masque()` et
+--  les règles RLS (voir CLAUDE.md), et il vaut aussi pour les contraintes.
+--
+--  Aucun risque à la laisser ouverte : elle n'est pas `security definer`,
+--  elle ne lit aucune table, et elle ne fait que répondre oui ou non sur le
+--  JSON qu'on lui tend.
+-- --------------------------------------------------------------------------

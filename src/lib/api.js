@@ -173,7 +173,7 @@ const COLONNES_PRO_LISTE = [
   /* La fiche de contact : téléphone, zone d'intervention, spécialités.
      Elles sont courtes et s'affichent dans les listes de la Place des
      pros, donc elles voyagent avec le reste. */
-  'telephone', 'zone_km', 'specialites',
+  'telephone', 'zone_km', 'specialites', 'horaires',
   /* La certification RGE. `rge` est la seule vérifiée ; les trois autres
      sont ce que l'artisan a déclaré, et n'affichent pas de badge. */
   'rge', 'rge_declare', 'rge_numero', 'rge_expire', 'rge_url',
@@ -202,6 +202,9 @@ function rowToPro(row, reviews = [], partners = []) {
        pas renseigné », et l'écran n'affiche alors rien du tout. */
     zoneKm: row.zone_km == null ? null : Number(row.zone_km),
     specialites: row.specialites || [],
+    /* `null` veut dire « non renseigné », et ce n'est PAS « fermé » :
+       l'écran n'affiche alors rien du tout. */
+    horaires: row.horaires || null,
     /* La certification vérifiée par l'équipe — c'est elle qui fait le
        badge — et, à côté, ce que l'artisan a déclaré lui-même. */
     rge: !!row.rge,
@@ -986,6 +989,7 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
       telephone: profil.telephone || null,
       zone_km: profil.zoneKm || null,
       specialites: profil.specialites || [],
+      horaires: profil.horaires || null,
     }).eq('id', currentUserId);
     if (error) throw error;
   } else {

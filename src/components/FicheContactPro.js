@@ -13,17 +13,21 @@
  * remplir quand il est vide. Un visiteur n'a rien à faire d'un cadre vide ;
  * le propriétaire, si.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, Linking, StyleSheet } from 'react-native';
 import { C, F, T, S, R, interligne } from '../theme';
 import { SectionLabel } from './ui';
-import { Phone, MapPin } from './icons';
+import { Phone, MapPin, Clock } from './icons';
+import { etatMaintenant, semaineGroupee } from '../lib/horaires';
 
 export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
   const telephone = pro.telephone || '';
   const zoneKm = pro.zoneKm || null;
   const specialites = pro.specialites || [];
-  const rienDeRempli = !telephone && !zoneKm && specialites.length === 0;
+  const etat = etatMaintenant(pro.horaires);
+  const semaine = semaineGroupee(pro.horaires);
+  const [semaineOuverte, setSemaineOuverte] = useState(false);
+  const rienDeRempli = !telephone && !zoneKm && specialites.length === 0 && !etat;
 
   // Un visiteur ne voit rien plutôt qu'un cadre vide.
   if (rienDeRempli && !estMoi) return null;
@@ -36,8 +40,8 @@ export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
         <View style={s.bloc}>
           <Text style={s.invite}>
             Votre fiche ne porte ni téléphone, ni zone d'intervention, ni
-            spécialité. Ce sont les trois choses qu'un client regarde avant
-            d'appeler — et celles par lesquelles il vous trouve.
+            spécialité, ni horaires. Ce sont les choses qu'un client regarde
+            avant d'appeler — et celles par lesquelles il vous trouve.
           </Text>
           <Pressable onPress={onEdit} accessibilityRole="button">
             <Text style={s.inviteLien}>Compléter ma fiche</Text>
@@ -63,6 +67,39 @@ export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
               <MapPin size={16} color={C.muted} />
               <Text style={s.label}>Se déplace</Text>
               <Text style={s.valeur}>jusqu'à {zoneKm} km</Text>
+            </View>
+          )}
+
+          {/* UNE SEULE PHRASE, d'abord : « Ouvert · ferme à 18 h ».
+              Personne ne lit un tableau de sept lignes au moment où il
+              tient son téléphone ; le tableau sert ensuite, pour préparer.
+              D'où le repli. */}
+          {!!etat && (
+            <Pressable
+              style={s.ligne}
+              onPress={() => setSemaineOuverte((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={`${etat.texte}. ${semaineOuverte ? 'Masquer' : 'Voir'} la semaine`}
+              aria-expanded={semaineOuverte}
+            >
+              <Clock size={16} color={etat.ouvert ? C.ok : C.muted} />
+              <Text style={s.label}>Horaires</Text>
+              <Text style={[s.valeur, { color: etat.ouvert ? C.ok : C.muted }]}>
+                {etat.texte}
+              </Text>
+            </Pressable>
+          )}
+
+          {!!etat && semaineOuverte && (
+            <View style={s.semaine}>
+              {semaine.map((l) => (
+                <View key={l.jours} style={s.ligneSemaine}>
+                  <Text style={s.jours}>{l.jours}</Text>
+                  <Text style={[s.heures, l.texte === 'Fermé' && { color: C.muted }]}>
+                    {l.texte}
+                  </Text>
+                </View>
+              ))}
             </View>
           )}
 
@@ -99,6 +136,14 @@ const s = StyleSheet.create({
   /* Un numéro de téléphone se lit de loin et se compose d'un doigt : il est
      plus gros que le reste, et de la couleur sur laquelle on appuie. */
   valeurLien: { fontFamily: F.oswald6, fontSize: T.sousTitre - 1, color: C.accent, letterSpacing: 0.3 },
+
+  semaine: {
+    paddingBottom: S.md - 2, paddingLeft: S.lg + S.sm,
+    borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+  ligneSemaine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+  jours: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
+  heures: { fontFamily: F.inter6, fontSize: T.courant, color: C.ink },
 
   specialites: { paddingVertical: S.md - 2, borderTopWidth: 1, borderTopColor: C.line },
   specialitesTitre: {

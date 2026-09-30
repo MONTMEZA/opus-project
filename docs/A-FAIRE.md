@@ -297,8 +297,26 @@ et 3,2 écrans. L'effet réel, lui, ne se juge que sur le téléphone.
    colonnes. Fermé par des droits de colonne (section 18), et sa propre
    fiche se lit maintenant par `mon_compte()`.
 
-**C4 — pas d'horaires.** « Ouvert jusqu'à 18 h » change le fait d'appeler ou
-non, maintenant.
+**C4 — ✅ FAIT le 30/09/2026.** « Ouvert jusqu'à 18 h » change le fait
+d'appeler ou non, maintenant.
+
+**Deux plages par jour**, et c'est le point qui compte : un artisan ferme
+entre midi et deux. Une seule plage dirait « ouvert de 8 h à 18 h » à
+quelqu'un qui appelle à 12 h 30 et tombera sur un répondeur — c'est pire
+que pas d'horaires du tout. À 12 h 30, la fiche dit donc « Fermé · rouvre
+à 14 h », pas « ouvre demain ».
+
+La fiche affiche UNE phrase, et la semaine se déplie si on la demande :
+personne ne lit sept lignes au moment où il tient son téléphone. Les jours
+identiques sont regroupés — « Lundi au jeudi », comme sur une vitrine.
+
+`horaires` à null veut dire « non renseigné », et ce n'est PAS « fermé » :
+l'écran n'affiche alors rien du tout.
+
+La base refuse ce qui ne veut rien dire (section 19 de `schema.sql`) :
+neuf cas éprouvés sur PostgreSQL 16, dont « 25:00 », « ferme avant
+d'ouvrir » et « trois plages dans la journée ».
+`npm run verifier-horaires` couvre 38 cas côté application.
 
 ### D. Finitions visibles
 

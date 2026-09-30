@@ -170,6 +170,17 @@ Deux pièges rencontrés, à ne pas redécouvrir :
    elle ne filtre pas. « permission denied for function ». Vérifié sur
    PostgreSQL. `est_masque()` doit donc rester exécutable par
    `authenticated`.
+
+   **Et cela vaut AUSSI pour les contraintes `check`** — reconstaté le
+   30/09/2026 avec `horaires_valides()`, révoquée « par prudence » parce
+   qu'elle ne sert qu'à une contrainte. Résultat : plus aucun horaire ne
+   s'enregistrait. Une contrainte s'exécute avec les droits de CELUI QUI
+   ÉCRIT, pas avec ceux du propriétaire de la table.
+
+   > **Toute fonction appelée par une policy ou une contrainte reste
+   > exécutable par `authenticated`.** Ce n'est pas un relâchement : une
+   > fonction qui ne lit aucune table et n'est pas `security definer` ne
+   > donne accès à rien.
 2. Supabase signale alors, à juste titre, les fonctions `security definer`
    appelables **sans être connecté**. D'où deux politiques de lecture par
    table de contenu : la vraie règle `to authenticated`, et la lecture
