@@ -30,6 +30,23 @@ Ce qui reste à faire est dans `docs/A-FAIRE.md`.
 
 ---
 
+## ✅ Essais du 30/09/2026 — rien à signaler
+
+Les points **1 à 23** ont été repassés sur iPhone, avec la vraie base :
+tout fonctionne. Aucun défaut relevé.
+
+Ce qui avait été ajouté dans la journée et qui est donc confirmé sur le
+téléphone :
+
+- le commentaire qui **se ferme dès qu'on y a répondu** (point 18) ;
+- les commentaires **sans cadre gris**, avec le filet des réponses
+  (point 22) ;
+- la **carte de la zone d'intervention** et son curseur (point 23) — y
+  compris le chargement des fonds de carte, que je ne pouvais pas juger
+  depuis le conteneur.
+
+---
+
 Chaque point est écrit pareil :
 
 - **Tu fais** — les gestes, dans l'ordre.
