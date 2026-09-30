@@ -48,7 +48,8 @@
     "verifier-moderation": "node scripts/verifier-moderation.mjs",
     "verifier-legal": "node scripts/verifier-legal.mjs",
     "verifier-notes": "node scripts/verifier-notes.mjs",
-    "verifier-profil": "node scripts/verifier-profil.mjs"
+    "verifier-profil": "node scripts/verifier-profil.mjs",
+    "verifier-acces": "node scripts/verifier-acces.mjs"
   },
   "private": true,
   "devDependencies": {

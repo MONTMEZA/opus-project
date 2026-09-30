@@ -224,7 +224,13 @@ function Case({
 
         <View style={s.rang}><Text style={s.rangTexte}>{rang}</Text></View>
 
-        <Pressable style={s.retirer} onPress={onRetirer} hitSlop={10}>
+        <Pressable
+          style={s.retirer}
+          onPress={onRetirer}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Retirer cette réalisation"
+        >
           <X size={13} color="#fff" />
         </Pressable>
 

@@ -44,9 +44,12 @@ export default function BottomNav({
 }) {
   const insets = useSafeAreaInsets();
 
+  /* Les deux boutons du milieu n'ont PAS de texte sous l'icône — c'est
+     voulu, ils se reconnaissent à leur forme. Mais un lecteur d'écran, lui,
+     n'a que le texte : d'où `annonce`, qui dit ce que le bouton fait. */
   const centre = canPublish
-    ? { key: 'creer', label: '', Icon: PlusSquare }
-    : { key: 'sos', label: '', sos: true };
+    ? { key: 'creer', label: '', annonce: 'Publier', Icon: PlusSquare }
+    : { key: 'sos', label: '', annonce: 'SOS — demander une intervention d’urgence', sos: true };
 
   const tabs = [
     { key: 'home', label: 'Accueil', Icon: Home },
@@ -62,12 +65,23 @@ export default function BottomNav({
   return (
     <View
       onLayout={onLayout}
+      accessibilityRole="tablist"
       style={[s.nav, dark && s.navDark, { paddingBottom: S.md + insets.bottom }]}
     >
-      {tabs.map(({ key, label, Icon, sos }) => {
+      {tabs.map(({ key, label, annonce, Icon, sos }) => {
         const on = screen === key || (key === 'profil' && screen === 'profilPro');
+        /* La pastille est une information, pas une décoration : sans cela,
+           « Messages » et « Messages, nouveautés » s'annoncent pareil. */
+        const etiquette = (annonce || label) + (dots[key] ? ', nouveautés' : '');
         return (
-          <Pressable key={key} style={s.btn} onPress={() => onNavigate(key)}>
+          <Pressable
+            key={key}
+            style={s.btn}
+            onPress={() => onNavigate(key)}
+            accessibilityRole="tab"
+            accessibilityLabel={etiquette}
+            aria-selected={on}
+          >
             {sos ? (
               <View style={s.sos}><Text style={s.sosText}>SOS</Text></View>
             ) : key === 'creer' ? (

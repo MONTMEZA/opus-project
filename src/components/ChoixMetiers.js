@@ -97,7 +97,12 @@ export default function ChoixMetiers({
               <Text style={s.pastilleTexte}>{m}</Text>
             </Pressable>
             {choisis.length > 1 && (
-              <Pressable onPress={() => retirer(m)} hitSlop={8}>
+              <Pressable
+                onPress={() => retirer(m)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Retirer le métier ${m}`}
+              >
                 <X size={12} color="#fff" />
               </Pressable>
             )}

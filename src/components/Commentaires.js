@@ -108,7 +108,12 @@ export default function Commentaires({
             />
 
             {reponses.length > 1 && !ouvert && (
-              <Pressable style={s.voirPlus} onPress={() => basculer(c.id)}>
+              <Pressable
+                style={s.voirPlus}
+                onPress={() => basculer(c.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Voir les ${reponses.length} réponses`}
+              >
                 <View style={s.trait} />
                 <Text style={s.voirPlusTexte}>
                   Voir les {reponses.length} réponses
@@ -147,6 +152,8 @@ export default function Commentaires({
           <Pressable
             hitSlop={8}
             onPress={() => { setRepondA(null); setDraft(''); }}
+            accessibilityRole="button"
+            accessibilityLabel="Annuler la réponse"
           >
             <X size={13} color={C.muted} />
           </Pressable>
@@ -162,7 +169,12 @@ export default function Commentaires({
           onSubmitEditing={envoyer}
           returnKeyType="send"
         />
-        <Pressable style={s.envoyer} onPress={envoyer}>
+        <Pressable
+          style={s.envoyer}
+          onPress={envoyer}
+          accessibilityRole="button"
+          accessibilityLabel="Envoyer le commentaire"
+        >
           <Send size={14} color="#fff" />
         </Pressable>
       </View>
@@ -184,13 +196,30 @@ function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer,
 
   return (
     <View style={[s.ligne, reponse && s.ligneReponse]}>
-      <Pressable onPress={ouvrir} disabled={!cliquable} hitSlop={6}>
+      {/* L'avatar et le nom mènent au même endroit : un lecteur d'écran
+          annoncerait deux fois la même chose. On efface donc l'avatar et on
+          laisse parler le nom, juste à côté. */}
+      <Pressable
+        onPress={ouvrir}
+        disabled={!cliquable}
+        hitSlop={6}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
+      >
         <Avatar seed={c.auteurId || c.id} size={taille} uri={c.avatarUrl} />
       </Pressable>
 
       <View style={s.corps}>
         <View style={s.bulle}>
-          <Pressable onPress={ouvrir} disabled={!cliquable} style={s.nomLigne}>
+          <Pressable
+            onPress={ouvrir}
+            disabled={!cliquable}
+            style={s.nomLigne}
+            accessibilityRole={cliquable ? 'button' : 'text'}
+            accessibilityLabel={cliquable
+              ? `Voir la fiche de ${pro ? pro.entreprise : c.auteur}`
+              : (pro ? pro.entreprise : c.auteur)}
+          >
             <Text style={[s.nom, cliquable && s.nomCliquable]}>
               {pro ? pro.entreprise : c.auteur}
             </Text>
@@ -201,14 +230,24 @@ function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer,
 
         <View style={s.meta}>
           {!!c.time && <Text style={s.metaTexte}>{c.time}</Text>}
-          <Pressable onPress={onRepondre} hitSlop={6}>
+          <Pressable
+            onPress={onRepondre}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Répondre à ${pro ? pro.entreprise : c.auteur}`}
+          >
             <Text style={s.repondre}>Répondre</Text>
           </Pressable>
           {/* Le sien, on le retire. Celui des autres, on le signale — et
               JAMAIS on ne le supprime, même sur sa propre publication : la
               règle est tenue par la base, pas par cet écran. */}
           {aMoi && !!onSupprimer && !confirme && (
-            <Pressable onPress={() => setConfirme(true)} hitSlop={6}>
+            <Pressable
+              onPress={() => setConfirme(true)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Supprimer mon commentaire"
+            >
               <Text style={s.supprimer}>Supprimer</Text>
             </Pressable>
           )}
@@ -219,10 +258,20 @@ function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer,
                   ? `Supprimer ? Les ${nbReponses} réponse${nbReponses > 1 ? 's' : ''} partiront aussi.`
                   : 'Supprimer ?'}
               </Text>
-              <Pressable onPress={() => { setConfirme(false); onSupprimer(c); }} hitSlop={6}>
+              <Pressable
+                onPress={() => { setConfirme(false); onSupprimer(c); }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Oui, supprimer ce commentaire"
+              >
                 <Text style={s.confirmeOui}>Oui</Text>
               </Pressable>
-              <Pressable onPress={() => setConfirme(false)} hitSlop={6}>
+              <Pressable
+                onPress={() => setConfirme(false)}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Annuler la suppression"
+              >
                 <Text style={s.confirmeNon}>Annuler</Text>
               </Pressable>
             </View>
@@ -230,6 +279,8 @@ function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer,
           {!aMoi && !!onSignaler && !!c.auteurId && (
             <Pressable
               hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Signaler ce commentaire"
               onPress={() => onSignaler({
                 cibleType: 'commentaire',
                 cibleId: c.id,

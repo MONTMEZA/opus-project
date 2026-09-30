@@ -92,3 +92,31 @@ export function distanceKm(lat1, lon1, lat2, lon2) {
     + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
   return Math.round(2 * R * Math.asin(Math.sqrt(a)) * 10) / 10;
 }
+
+/**
+ * La distance, écrite comme on la dirait.
+ *
+ * `· 0 km` s'affichait quand l'artisan et le chantier étaient dans la même
+ * commune. C'est juste, et ça ne veut rien dire : personne ne comprend
+ * « zéro kilomètre ». Ce qu'on veut savoir à cet instant, c'est « c'est
+ * chez moi » ou « c'est loin ».
+ *
+ * Trois paliers, et rien de plus :
+ *   - moins de 1 km  → « dans votre commune »
+ *   - moins de 10 km → au demi-kilomètre près, parce que 3 et 7 km ne se
+ *     décident pas pareil
+ *   - au-delà        → au kilomètre entier
+ *
+ * Renvoie `null` quand la distance est inconnue : l'écran n'affiche alors
+ * rien du tout, plutôt qu'un tiret qui ferait croire à une panne.
+ */
+export function libelleDistance(km) {
+  if (km === null || km === undefined || Number.isNaN(Number(km))) return null;
+  const d = Number(km);
+  if (d < 1) return 'dans votre commune';
+  if (d < 10) {
+    const arrondi = Math.round(d * 2) / 2;
+    return `à ${String(arrondi).replace('.', ',')} km`;
+  }
+  return `à ${Math.round(d)} km`;
+}

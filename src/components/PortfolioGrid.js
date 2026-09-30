@@ -19,7 +19,12 @@ export default function PortfolioGrid({ items = [] }) {
     <>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, paddingHorizontal: 2, paddingBottom: 6 }}>
         {items.map((g, i) => (
-          <Pressable key={i} onPress={() => setOuvert(i)}>
+          <Pressable
+            key={i}
+            onPress={() => setOuvert(i)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel={`Réalisation ${i + 1} sur ${items.length}, agrandir`}
+          >
             {/* Une vignette dans la grille : ces réalisations ne se lisent
                 jamais ici, il est inutile d'y ouvrir un lecteur vidéo. */}
             <Media media={apercuDe(g)} style={{ width: cell, height: cell }} />

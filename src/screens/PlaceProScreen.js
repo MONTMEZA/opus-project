@@ -39,7 +39,7 @@ import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
 } from '../data/annonces';
 import { METIERS } from '../data/demo';
-import { distanceKm } from '../lib/adresse';
+import { distanceKm, libelleDistance } from '../lib/adresse';
 import { correspond, texteDe } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
 import { libelleMetiers } from '../lib/metiers';
@@ -84,7 +84,12 @@ function BarreRecherche({ valeur, onChange }) {
         returnKeyType="search"
       />
       {!!texte && (
-        <Pressable onPress={() => { setTexte(''); onChange(''); }} hitSlop={10}>
+        <Pressable
+          onPress={() => { setTexte(''); onChange(''); }}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Effacer la recherche"
+        >
           <X size={15} color={C.muted} />
         </Pressable>
       )}
@@ -202,7 +207,12 @@ export default function PlaceProScreen({
         <View style={s.form}>
           <View style={s.formHaut}>
             <Text style={s.formTitre}>Nouvelle annonce</Text>
-            <Pressable onPress={() => setFormOuvert(false)} hitSlop={10}>
+            <Pressable
+              onPress={() => setFormOuvert(false)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer le formulaire"
+            >
               <X size={16} color={C.muted} />
             </Pressable>
           </View>
@@ -407,7 +417,7 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
             <View style={s.repere}>
               <MapPin size={11} color={C.muted} />
               <Text style={s.repereTexte}>
-                {a.ville}{a.km !== null && a.km !== undefined ? ` · ${Math.round(a.km)} km` : ''}
+                {a.ville}{libelleDistance(a.km) ? ` · ${libelleDistance(a.km)}` : ''}
               </Text>
             </View>
           )}
@@ -444,6 +454,8 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
             <Pressable
               hitSlop={8}
               style={{ marginLeft: 'auto', marginRight: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Signaler cette annonce"
               onPress={() => onSignaler({
                 cibleType: 'annonce',
                 cibleId: a.id,

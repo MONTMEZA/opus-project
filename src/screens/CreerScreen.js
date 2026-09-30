@@ -184,18 +184,34 @@ export default function CreerScreen({
                       {createType === 'avantapres' ? (i === 0 ? 'Avant' : 'Après') : i + 1}
                     </Text>
                   </View>
-                  <Pressable style={s.retirer} onPress={() => retirer(i)} hitSlop={6}>
+                  <Pressable
+                    style={s.retirer}
+                    onPress={() => retirer(i)}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Retirer le média ${i + 1}`}
+                  >
                     <X size={12} color="#fff" />
                   </Pressable>
                   {medias.length > 1 && (
                     <View style={s.ordre}>
-                      <Pressable onPress={() => deplacer(i, -1)} hitSlop={6} disabled={i === 0}>
+                      <Pressable
+                        onPress={() => deplacer(i, -1)}
+                        hitSlop={6}
+                        disabled={i === 0}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Déplacer le média ${i + 1} vers la gauche`}
+                        aria-disabled={i === 0}
+                      >
                         <ChevronLeft size={14} color={i === 0 ? 'rgba(255,255,255,0.3)' : '#fff'} />
                       </Pressable>
                       <Pressable
                         onPress={() => deplacer(i, 1)}
                         hitSlop={6}
                         disabled={i === medias.length - 1}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Déplacer le média ${i + 1} vers la droite`}
+                        aria-disabled={i === medias.length - 1}
                       >
                         <ChevronRight
                           size={14}

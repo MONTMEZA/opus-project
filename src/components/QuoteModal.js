@@ -62,17 +62,31 @@ export default function QuoteModal({ quote, moi = {}, onClose, onSubmit }) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.overlay} onPress={onClose}>
+      {/* Voir CommentsSheet : le voile ferme au doigt, mais reste muet
+          pour les lecteurs d'écran — la croix, elle, est nommée. */}
+      <Pressable
+        style={s.overlay}
+        onPress={onClose}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ width: '100%' }}
         >
-          <Pressable style={s.card} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={s.card}
+            onPress={(e) => e.stopPropagation()}
+            accessibilityViewIsModal
+            accessibilityRole="none"
+          >
             <View style={s.head}>
               <Text style={s.headText} numberOfLines={1}>
                 {mode === 'devis' ? 'Demander un devis' : 'Être rappelé'} — {pro.entreprise}
               </Text>
-              <IconBtn onPress={onClose}><X size={16} color={C.ink} /></IconBtn>
+              <IconBtn onPress={onClose} accessibilityLabel="Fermer">
+                <X size={16} color={C.ink} />
+              </IconBtn>
             </View>
 
             <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 400 }}>

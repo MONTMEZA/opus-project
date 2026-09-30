@@ -25,19 +25,39 @@ export default function CommentsSheet({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.overlay} onPress={onClose}>
+      {/* Le voile : on ferme en touchant à côté. Pour un lecteur
+          d'écran, en revanche, il n'existe pas — on ferme par la croix, qui
+          est nommée. L'annoncer ferait un « bouton » de plus, occupant tout
+          l'écran, avant d'arriver au contenu. */}
+      <Pressable
+        style={s.overlay}
+        onPress={onClose}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={s.sheetWrap}
         >
-          <Pressable style={[s.sheet, { paddingBottom: insets.bottom + 10 }]} onPress={(e) => e.stopPropagation()}>
+          {/* Le corps n'est pas un bouton : il n'est là que pour empêcher
+              la touche de traverser jusqu'au voile. `accessibilityViewIsModal`
+              retient VoiceOver à l'intérieur, comme le fait la fenêtre elle-même
+              pour le doigt. */}
+          <Pressable
+            style={[s.sheet, { paddingBottom: insets.bottom + 10 }]}
+            onPress={(e) => e.stopPropagation()}
+            accessibilityViewIsModal
+            accessibilityRole="none"
+          >
             <View style={s.grabber} />
 
             <View style={s.head}>
               <Text style={s.headText}>
                 {total} {total > 1 ? 'commentaires' : 'commentaire'}
               </Text>
-              <IconBtn onPress={onClose}><X size={16} color={C.ink} /></IconBtn>
+              <IconBtn onPress={onClose} accessibilityLabel="Fermer les commentaires">
+                <X size={16} color={C.ink} />
+              </IconBtn>
             </View>
 
             <Commentaires

@@ -63,7 +63,12 @@ export default function PostCard({
     <View style={s.card}>
       {/* en-tête */}
       <View style={s.head}>
-        <Pressable style={s.headLeft} onPress={() => onView(pro.id)}>
+        <Pressable
+          style={s.headLeft}
+          onPress={() => onView(pro.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`Voir la fiche de ${pro.entreprise}`}
+        >
           <Avatar seed={pro.id} uri={pro.avatarUrl} />
           <View>
             <View style={s.nameRow}>
@@ -80,15 +85,23 @@ export default function PostCard({
               modération. Les cacher tous les deux derrière un « … » ferait
               qu'on ne trouverait ni l'un ni l'autre — or les magasins
               d'applications vérifient qu'un signalement se trouve. */}
-          <IconBtn onPress={() => onHide(post.id)}><EyeOff size={15} color={C.ink} /></IconBtn>
+          <IconBtn
+            onPress={() => onHide(post.id)}
+            accessibilityLabel="Masquer cette publication"
+          >
+            <EyeOff size={15} color={C.ink} />
+          </IconBtn>
           {!!onSignaler && (
-            <IconBtn onPress={() => onSignaler({
-              cibleType: 'publication',
-              cibleId: post.id,
-              auteurId: pro.id,
-              auteurNom: pro.entreprise,
-              extrait: post.texte,
-            })}>
+            <IconBtn
+              accessibilityLabel="Signaler cette publication"
+              onPress={() => onSignaler({
+                cibleType: 'publication',
+                cibleId: post.id,
+                auteurId: pro.id,
+                auteurNom: pro.entreprise,
+                extrait: post.texte,
+              })}
+            >
               <Flag size={14} color={C.muted} />
             </IconBtn>
           )}
@@ -115,7 +128,11 @@ export default function PostCard({
            c'est le compromis retenu par Instagram.
            Et surtout, on peut la toucher : elle s'ouvre alors en plein écran,
            avec le son, à l'endroit exact où on l'a laissée dans le fil. */
-        <Pressable onPress={() => onOuvrirVideo && onOuvrirVideo(post)}>
+        <Pressable
+          onPress={() => onOuvrirVideo && onOuvrirVideo(post)}
+          accessibilityRole="button"
+          accessibilityLabel="Voir la vidéo en plein écran"
+        >
           <Media
             media={post.media}
             style={{ width: '100%', aspectRatio: 4 / 5, backgroundColor: C.dark }}
@@ -138,19 +155,46 @@ export default function PostCard({
 
       {/* barre d'actions */}
       <View style={s.actions}>
-        <Pressable style={s.action} onPress={() => onLike(post.id)}>
+        <Pressable
+          style={s.action}
+          onPress={() => onLike(post.id)}
+          accessibilityRole="button"
+          accessibilityLabel={post.liked
+            ? `Je n'aime plus. ${post.likes} j'aime`
+            : `J'aime cette publication. ${post.likes} j'aime`}
+          aria-selected={!!post.liked}
+        >
           <Heart size={17} filled={post.liked} color={post.liked ? C.accent : C.muted} />
           <Text style={[s.actionText, post.liked && { color: C.accent }]}>{post.likes}</Text>
         </Pressable>
-        <Pressable style={s.action} onPress={() => onToggleComments(post.id)}>
+        <Pressable
+          style={s.action}
+          onPress={() => onToggleComments(post.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`Commentaires, ${nbCommentairesDe(post)}`}
+          aria-expanded={!!commentsOpen}
+        >
           <MessageSquare size={17} color={C.muted} />
           <Text style={s.actionText}>{nbCommentairesDe(post)}</Text>
         </Pressable>
-        <Pressable style={s.action} onPress={() => onShare('Lien de la publication copié.')}>
+        <Pressable
+          style={s.action}
+          onPress={() => onShare('Lien de la publication copié.')}
+          accessibilityRole="button"
+          accessibilityLabel="Partager cette publication"
+        >
           <Share2 size={16} color={C.muted} />
           <Text style={s.actionText}>Partager</Text>
         </Pressable>
-        <Pressable style={s.action} onPress={() => onSave(post.id)}>
+        <Pressable
+          style={s.action}
+          onPress={() => onSave(post.id)}
+          accessibilityRole="button"
+          accessibilityLabel={saved
+            ? 'Retirer de mes publications enregistrées'
+            : 'Enregistrer cette publication'}
+          aria-selected={!!saved}
+        >
           <Bookmark size={16} filled={saved} color={saved ? C.accent : C.muted} />
         </Pressable>
         <View style={s.contactWrap}>
@@ -195,7 +239,12 @@ export default function PostCard({
 
 function ContactItem({ icon, label, onPress, last }) {
   return (
-    <Pressable style={[s.contactItem, last && { borderBottomWidth: 0 }]} onPress={onPress}>
+    <Pressable
+      style={[s.contactItem, last && { borderBottomWidth: 0 }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
       {icon}
       <Text style={s.contactItemText}>{label}</Text>
     </Pressable>

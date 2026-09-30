@@ -40,6 +40,8 @@ export default function ConversationScreen({
               <Pressable
                 hitSlop={8}
                 style={s.signaler}
+                accessibilityRole="button"
+                accessibilityLabel="Signaler ce message"
                 onPress={() => onSignaler({
                   cibleType: 'message',
                   cibleId: m.id,
@@ -71,7 +73,12 @@ export default function ConversationScreen({
           onSubmitEditing={onSend}
           returnKeyType="send"
         />
-        <Pressable style={s.send} onPress={onSend}>
+        <Pressable
+          style={s.send}
+          onPress={onSend}
+          accessibilityRole="button"
+          accessibilityLabel="Envoyer le message"
+        >
           <Send size={16} color="#fff" />
         </Pressable>
       </View>

@@ -79,7 +79,13 @@ export default function AssistantPresentation({ profil, onUtiliser, onFermer }) 
       <View style={s.entete}>
         <Sparkles size={14} color={C.accent2} />
         <Text style={s.enteteTexte}>Écrire ma présentation</Text>
-        <Pressable onPress={onFermer} hitSlop={10} style={{ marginLeft: 'auto' }}>
+        <Pressable
+          onPress={onFermer}
+          hitSlop={10}
+          style={{ marginLeft: 'auto' }}
+          accessibilityRole="button"
+          accessibilityLabel="Fermer l'assistant"
+        >
           <X size={15} color={C.muted} />
         </Pressable>
       </View>

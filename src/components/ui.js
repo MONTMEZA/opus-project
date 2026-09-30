@@ -66,7 +66,9 @@ function toneIndex(seed) {
   return h % AVATAR_TONES.length;
 }
 
-export function Avatar({ seed = 0, size = 40, uri, ring = 0, ringColor = C.surface }) {
+export function Avatar({
+  seed = 0, size = 40, uri, ring = 0, ringColor = C.surface, nom,
+}) {
   const base = {
     width: size,
     height: size,
@@ -74,8 +76,25 @@ export function Avatar({ seed = 0, size = 40, uri, ring = 0, ringColor = C.surfa
     backgroundColor: AVATAR_TONES[toneIndex(seed)],
   };
   const withRing = ring ? { ...base, borderWidth: ring, borderColor: ringColor } : base;
-  if (uri) return <Image source={{ uri }} style={withRing} contentFit="cover" cachePolicy="memory-disk" />;
-  return <View style={withRing} />;
+  /* Le nom est presque toujours écrit juste à côté : annoncer la photo en
+     plus ferait entendre deux fois la même chose. On ne l'annonce donc que
+     si l'appelant donne un nom, et on l'efface sinon. */
+  const acces = nom
+    ? { accessible: true, accessibilityRole: 'image', accessibilityLabel: `Photo de ${nom}` }
+    : { accessible: false, importantForAccessibility: 'no' };
+
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={withRing}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        {...acces}
+      />
+    );
+  }
+  return <View style={withRing} {...acces} />;
 }
 
 /* --- bannière de profil ---
@@ -128,19 +147,60 @@ export function ProfileBanner({ uri, height = 140, children }) {
 export function ConfirmBanner({ msg, erreur, onClose }) {
   if (!msg) return null;
   return (
-    <Pressable style={[s.banner, erreur && s.bannerErreur]} onPress={onClose}>
+    <Pressable
+      style={[s.banner, erreur && s.bannerErreur]}
+      onPress={onClose}
+      accessibilityRole="alert"
+      accessibilityLabel={`${erreur ? 'Erreur' : 'Confirmation'} : ${msg}. Touchez pour fermer.`}
+      accessibilityLiveRegion="polite"
+    >
       {erreur ? <AlertTriangle size={15} color="#fff" /> : <Check size={14} color="#fff" />}
       <Text style={s.bannerText}>{msg}</Text>
     </Pressable>
   );
 }
 
+/* ==========================================================================
+   L'ACCESSIBILITÉ, ET POURQUOI ELLE COMMENCE ICI
+   --------------------------------------------------------------------------
+   Un relevé sur `src/` n'avait trouvé AUCUN `accessibilityLabel` dans tout
+   le projet. Conséquence concrète, sur un chantier : un artisan qui
+   travaille avec des lunettes, qui agrandit les caractères de son iPhone ou
+   qui se sert de VoiceOver entendait « bouton » — sans savoir lequel.
+
+   Le pire cas n'est pas le texte, c'est l'ICÔNE SEULE : un cœur, une
+   flèche, trois points. Sans étiquette, elle ne dit rigoureusement rien.
+
+   Trois règles tenues partout :
+
+   1. L'étiquette dit ce que le bouton FAIT, pas ce qu'il montre.
+      « J'aime cette publication », pas « cœur ».
+   2. L'ÉTAT ne se met pas dans l'étiquette. Il se met dans un attribut
+      `aria-selected` / `aria-disabled` / `aria-expanded` : un lecteur
+      d'écran annonce « sélectionné » lui-même, dans la langue du
+      téléphone. Écrire « J'aime (activé) » dans l'étiquette ferait dire
+      deux fois la même chose, et pas dans la bonne langue.
+
+      Pourquoi la forme `aria-*` plutôt que `accessibilityState` : React
+      Native comprend les deux, mais la version WEB ne traduit pas
+      `accessibilityState`. Avec `aria-*`, l'état se relève au navigateur —
+      donc il se vérifie, au lieu d'être supposé.
+   3. Les boutons de ce fichier déduisent leur étiquette de leur `label`.
+      On n'écrit donc rien de plus dans les écrans, SAUF quand le bouton
+      n'a pas de texte — et c'est justement là que ça compte.
+   ========================================================================== */
+
 /* --- .btn-main / .btn-block --- */
-export function BtnMain({ label, onPress, block, disabled, children, style }) {
+export function BtnMain({
+  label, onPress, block, disabled, children, style, accessibilityLabel,
+}) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      aria-disabled={!!disabled}
       style={[s.btnMain, block && s.btnBlock, disabled && { opacity: 0.6 }, style]}
     >
       {children || <Text style={s.btnMainText}>{label}</Text>}
@@ -149,20 +209,31 @@ export function BtnMain({ label, onPress, block, disabled, children, style }) {
 }
 
 /* --- .btn-outline / .btn-outline-on --- */
-export function BtnOutline({ label, onPress, on }) {
+export function BtnOutline({ label, onPress, on, accessibilityLabel }) {
   return (
-    <Pressable onPress={onPress} style={[s.btnOutline, on && s.btnOutlineOn]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      aria-selected={!!on}
+      style={[s.btnOutline, on && s.btnOutlineOn]}
+    >
       <Text style={[s.btnOutlineText, on && { color: '#fff' }]}>{label}</Text>
     </Pressable>
   );
 }
 
 /* --- .btn-mini / .btn-mini-outline --- */
-export function BtnMini({ label, onPress, outline, disabled, children, style }) {
+export function BtnMini({
+  label, onPress, outline, disabled, children, style, accessibilityLabel,
+}) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      aria-disabled={!!disabled}
       style={[s.btnMini, outline && s.btnMiniOutline, disabled && { opacity: 0.6 }, style]}
     >
       {children || <Text style={[s.btnMiniText, outline && { color: C.ink }]}>{label}</Text>}
@@ -173,7 +244,13 @@ export function BtnMini({ label, onPress, outline, disabled, children, style }) 
 /* --- .chip / .chip-on --- */
 export function Chip({ label, on, onPress }) {
   return (
-    <Pressable onPress={onPress} style={[s.chip, on && s.chipOn]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Filtrer sur ${label}`}
+      aria-selected={!!on}
+      style={[s.chip, on && s.chipOn]}
+    >
       <Text style={[s.chipText, on && { color: '#fff' }]}>{label}</Text>
     </Pressable>
   );
@@ -184,6 +261,9 @@ export function ChipFollow({ following, onPress, video }) {
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={following ? 'Ne plus suivre' : 'Suivre ce professionnel'}
+      aria-selected={!!following}
       style={[s.chipFollow, video && s.chipFollowVideo, following && !video && s.chipFollowed]}
     >
       <Text style={[s.chipFollowText, following && !video && { color: C.ink }]}>
@@ -194,9 +274,26 @@ export function ChipFollow({ following, onPress, video }) {
 }
 
 /* --- .icon-btn --- */
-export function IconBtn({ onPress, children, style }) {
+/**
+ * Un bouton qui ne porte QU'UNE ICÔNE.
+ *
+ * `accessibilityLabel` n'est pas facultatif ici : sans lui, un lecteur
+ * d'écran annonce « bouton » et rien d'autre. Il est donc réclamé, et un
+ * oubli laisse une trace dans les journaux plutôt que de passer inaperçu.
+ */
+export function IconBtn({ onPress, children, style, accessibilityLabel }) {
+  if (__DEV__ && !accessibilityLabel) {
+    console.warn('IconBtn sans accessibilityLabel : ce bouton n’a aucun texte, '
+      + 'il sera annoncé « bouton » et rien de plus.');
+  }
   return (
-    <Pressable onPress={onPress} hitSlop={8} style={[s.iconBtn, style]}>
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={[s.iconBtn, style]}
+    >
       {children}
     </Pressable>
   );

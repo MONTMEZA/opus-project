@@ -96,21 +96,45 @@ export default function VideoSlide({
 
         {/* actions sur le côté droit */}
         <View style={[s.actions, { bottom: 150 + bottomInset }]}>
-          <Pressable style={s.action} onPress={() => onLike(post.id)}>
+          <Pressable
+            style={s.action}
+            onPress={() => onLike(post.id)}
+            accessibilityRole="button"
+            accessibilityLabel={post.liked
+              ? `Je n'aime plus. ${post.likes} j'aime`
+              : `J'aime cette vidéo. ${post.likes} j'aime`}
+            aria-selected={!!post.liked}
+          >
             <View style={s.actionIcon}>
               <Heart size={22} filled={post.liked} color={post.liked ? C.accent : '#fff'} />
             </View>
             <Text style={s.actionLabel}>{post.likes}</Text>
           </Pressable>
-          <Pressable style={s.action} onPress={() => onComment(post)}>
+          <Pressable
+            style={s.action}
+            onPress={() => onComment(post)}
+            accessibilityRole="button"
+            accessibilityLabel={`Commentaires, ${nbCommentairesDe(post)}`}
+          >
             <View style={s.actionIcon}><MessageSquare size={22} color="#fff" /></View>
             <Text style={s.actionLabel}>{nbCommentairesDe(post)}</Text>
           </Pressable>
-          <Pressable style={s.action} onPress={() => onShare('Lien de la vidéo copié.')}>
+          <Pressable
+            style={s.action}
+            onPress={() => onShare('Lien de la vidéo copié.')}
+            accessibilityRole="button"
+            accessibilityLabel="Partager cette vidéo"
+          >
             <View style={s.actionIcon}><Share2 size={20} color="#fff" /></View>
             <Text style={s.actionLabel}>Partager</Text>
           </Pressable>
-          <Pressable style={s.action} onPress={() => onSave(post.id)}>
+          <Pressable
+            style={s.action}
+            onPress={() => onSave(post.id)}
+            accessibilityRole="button"
+            accessibilityLabel={saved ? 'Retirer des enregistrées' : 'Enregistrer cette vidéo'}
+            aria-selected={!!saved}
+          >
             <View style={s.actionIcon}>
               <Bookmark size={19} filled={saved} color={saved ? C.accent : '#fff'} />
             </View>
@@ -120,7 +144,12 @@ export default function VideoSlide({
         {/* informations en bas */}
         <View style={[s.info, { paddingBottom: infoPad }]}>
           <View style={s.tag}><Text style={s.tagText}>{pro.metier}</Text></View>
-          <Pressable style={s.feedNameRow} onPress={() => onView(pro.id)}>
+          <Pressable
+            style={s.feedNameRow}
+            onPress={() => onView(pro.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Voir la fiche de ${pro.entreprise}`}
+          >
             <Text style={s.feedName}>{pro.entreprise}</Text>
             {pro.verifie && <BadgeCheck size={15} color={C.verif} />}
           </Pressable>

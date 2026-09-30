@@ -19,7 +19,7 @@ import { choisirImage } from '../lib/media';
 import ChampVille from '../components/ChampVille';
 import { METIERS } from '../data/demo';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
-import { distanceKm } from '../lib/adresse';
+import { distanceKm, libelleDistance } from '../lib/adresse';
 
 export default function DemandesScreen({
   userType, mesMetiers = [], demandes, filtreMetier, setFiltreMetier,
@@ -155,6 +155,8 @@ export default function DemandesScreen({
                         style={s.retirer}
                         hitSlop={6}
                         onPress={() => setPhotos((p) => p.filter((_, k) => k !== i))}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Retirer la photo ${i + 1}`}
                       >
                         <X size={11} color="#fff" />
                       </Pressable>
@@ -238,7 +240,7 @@ export default function DemandesScreen({
                   <MapPin size={11} color={C.muted} />
                   <Text style={s.meta} numberOfLines={1}>
                     {d.ville}
-                    {d.km !== null && d.km !== undefined ? ` · ${Math.round(d.km)} km` : ''}
+                    {libelleDistance(d.km) ? ` · ${libelleDistance(d.km)}` : ''}
                     {' · '}{d.time}
                   </Text>
                 </View>
@@ -280,6 +282,8 @@ export default function DemandesScreen({
                 <Pressable
                   hitSlop={8}
                   style={{ marginLeft: 'auto', marginRight: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Signaler cette demande"
                   onPress={() => onSignaler({
                     cibleType: 'demande',
                     cibleId: d.id,

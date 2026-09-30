@@ -84,7 +84,14 @@ export default function Signaler({
             <Text style={s.titre}>
               {fait ? 'C’est fait' : `Signaler ${cible.label}`}
             </Text>
-            <Pressable onPress={fermer} hitSlop={12}><X size={18} color={C.muted} /></Pressable>
+            <Pressable
+              onPress={fermer}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+            >
+              <X size={18} color={C.muted} />
+            </Pressable>
           </View>
 
           {fait === 'signale' && (

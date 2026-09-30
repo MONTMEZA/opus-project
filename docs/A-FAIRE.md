@@ -282,13 +282,34 @@ non, maintenant.
 
 ### D. Finitions visibles
 
-- **`· 0 km`** s'affiche quand l'artisan est dans la même commune
-  (`DemandesScreen.js:241`, `PlaceProScreen.js:388`). Il faudrait « dans votre
-  commune ».
+- **`· 0 km`** — ✅ **FAIT le 30/09/2026.** `libelleDistance()` dans
+  `src/lib/adresse.js` : moins d'un kilomètre → « dans votre commune » ;
+  moins de dix → au demi-kilomètre près, parce que 3 et 7 km ne se décident
+  pas pareil ; au-delà → au kilomètre entier. Distance inconnue → on
+  n'affiche rien, plutôt qu'un tiret qui ferait croire à une panne.
+  Douze cas contrôlés par `npm run verifier-adresse`.
 - **Un commentaire ne peut être ni modifié ni supprimé** par son auteur.
   Une publication non plus (la suppression, elle, existe).
-- **Zéro `accessibilityLabel` dans tout le projet.** Un artisan qui travaille
-  avec des lunettes, ou qui utilise le zoom de son téléphone, n'a aucune aide.
+- **Accessibilité** — ✅ **FAIT le 30/09/2026.** Les 90 boutons du projet
+  ont été relus : aucun n'est plus muet. Les six composants partagés
+  (`BtnMain`, `BtnOutline`, `BtnMini`, `Chip`, `ChipFollow`, `IconBtn`)
+  déduisent leur étiquette de leur texte, donc les écrans n'ont rien à
+  écrire — sauf pour les boutons SANS texte, et c'est justement là que ça
+  compte : le cœur, la croix, les flèches, les trois onglets sans libellé.
+
+  L'état ne se met pas dans l'étiquette mais dans `aria-selected` /
+  `aria-disabled` / `aria-expanded` : un lecteur d'écran annonce
+  « sélectionné » lui-même, dans la langue du téléphone. Forme `aria-*` et
+  non `accessibilityState` parce que la version web ne traduit pas la
+  seconde : avec celle-ci, l'état se RELÈVE au navigateur, donc il se
+  vérifie.
+
+  `npm run verifier-acces` refuse désormais tout bouton sans texte ni
+  étiquette. Relevé au navigateur sur le fil : 40 éléments interactifs,
+  0 sans nom.
+
+  Ce qui n'a PAS été vérifié : VoiceOver lui-même. Le relevé des attributs
+  dit ce qui SERAIT annoncé, pas comment ça s'entend.
 
 ### L'ordre que je recommande
 

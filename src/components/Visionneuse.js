@@ -49,7 +49,12 @@ export default function Visionneuse({ items = [], index = 0, onClose }) {
             setCourant(Math.round(e.nativeEvent.contentOffset.x / width));
           }}
           renderItem={({ item, index: i }) => (
-            <Pressable style={{ width, height }} onPress={onClose}>
+            <Pressable
+              style={{ width, height }}
+              onPress={onClose}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`Réalisation ${i + 1} sur ${items.length}. Toucher pour fermer.`}
+            >
               {/* Seule la photo affichée se lit : comparer les adresses ne
                   suffirait pas, deux réalisations peuvent être le même
                   fichier. On compare les rangs. */}
@@ -61,7 +66,13 @@ export default function Visionneuse({ items = [], index = 0, onClose }) {
         {/* haut : compteur et fermeture */}
         <View style={[s.haut, { paddingTop: insets.top + 8 }]}>
           <Text style={s.compteur}>{courant + 1} / {items.length}</Text>
-          <Pressable style={s.rond} onPress={onClose} hitSlop={10}>
+          <Pressable
+            style={s.rond}
+            onPress={onClose}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer"
+          >
             <X size={18} color="#fff" />
           </Pressable>
         </View>
@@ -70,12 +81,24 @@ export default function Visionneuse({ items = [], index = 0, onClose }) {
         {items.length > 1 && (
           <>
             {courant > 0 && (
-              <Pressable style={[s.fleche, { left: 10 }]} onPress={() => aller(courant - 1)} hitSlop={10}>
+              <Pressable
+                style={[s.fleche, { left: 10 }]}
+                onPress={() => aller(courant - 1)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Réalisation précédente"
+              >
                 <ChevronLeft size={22} color="#fff" />
               </Pressable>
             )}
             {courant < items.length - 1 && (
-              <Pressable style={[s.fleche, { right: 10 }]} onPress={() => aller(courant + 1)} hitSlop={10}>
+              <Pressable
+                style={[s.fleche, { right: 10 }]}
+                onPress={() => aller(courant + 1)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Réalisation suivante"
+              >
                 <ChevronRight size={22} color="#fff" />
               </Pressable>
             )}

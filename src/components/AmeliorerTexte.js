@@ -94,7 +94,12 @@ export default function AmeliorerTexte({
         </BtnMini>
 
         {propositions && (
-          <Pressable onPress={() => { setPropositions(null); setNote(null); }} hitSlop={10}>
+          <Pressable
+            onPress={() => { setPropositions(null); setNote(null); }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer les propositions"
+          >
             <X size={14} color={C.muted} />
           </Pressable>
         )}

@@ -15,11 +15,16 @@ export function TopBrand({ unreadCount, onBell }) {
       <View style={{ paddingTop: insets.top, backgroundColor: C.ink }} />
       <HazardStrip height={5} />
       <View style={s.row}>
-        <View style={s.left}>
+        <View style={s.left} accessible accessibilityRole="header">
           <HardHat size={18} color={C.ink} />
           <Text style={s.brand}>OPUS</Text>
         </View>
-        <IconBtn onPress={onBell}>
+        <IconBtn
+          onPress={onBell}
+          accessibilityLabel={unreadCount > 0
+            ? `Notifications, ${unreadCount} non lue${unreadCount > 1 ? 's' : ''}`
+            : 'Notifications'}
+        >
           <Bell size={18} color={C.ink} />
           {unreadCount > 0 && (
             <View style={s.badge}><Text style={s.badgeText}>{unreadCount}</Text></View>
@@ -36,8 +41,10 @@ export function BackBar({ title, onBack }) {
     <View style={s.top}>
       <View style={{ paddingTop: insets.top, backgroundColor: C.surface }} />
       <View style={s.backRow}>
-        <IconBtn onPress={onBack}><ArrowLeft size={18} color={C.ink} /></IconBtn>
-        <Text style={s.backTitle} numberOfLines={1}>{title}</Text>
+        <IconBtn onPress={onBack} accessibilityLabel="Revenir en arrière">
+          <ArrowLeft size={18} color={C.ink} />
+        </IconBtn>
+        <Text style={s.backTitle} numberOfLines={1} accessibilityRole="header">{title}</Text>
       </View>
     </View>
   );
