@@ -869,6 +869,30 @@ export const markNotificationRead = !hasSupabase ? noop : async (id) => {
 };
 
 /**
+ * Tout marquer comme lu.
+ *
+ * POURQUOI CETTE FONCTION
+ * -----------------------
+ * Le point orange de la cloche ne tombait qu'en ouvrant les notifications
+ * UNE PAR UNE. Après une semaine d'absence, il fallait toucher vingt
+ * lignes pour faire disparaître une pastille — alors qu'on voulait juste
+ * dire « j'ai vu ». La plupart des gens renoncent, et la pastille ne veut
+ * plus rien dire du tout : c'est ainsi qu'une notification cesse d'être
+ * lue.
+ *
+ * `.eq('lue', false)` n'est pas une coquetterie : sans lui, la requête
+ * récrit TOUTES les lignes à chaque appel, y compris les centaines déjà
+ * lues. La règle RLS limite déjà cela à ses propres notifications.
+ */
+export const marquerToutesNotificationsLues = !hasSupabase ? noop : async () => {
+  const { error } = await supabase.from('notifications')
+    .update({ lue: true })
+    .eq('user_id', currentUserId)
+    .eq('lue', false);
+  if (error) throw error;
+};
+
+/**
  * Enregistre un avis. `client_verifie` n'est PAS envoyé par l'app :
  * c'est un trigger Postgres qui le calcule à partir des devis / demandes
  * de rappel réellement acceptés (voir supabase/schema.sql).

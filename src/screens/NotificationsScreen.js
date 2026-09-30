@@ -8,7 +8,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
-import { Avatar, EmptyState } from '../components/ui';
+import { Avatar, EmptyState, BtnMini } from '../components/ui';
 import { MessageSquare, CornerDownRight, Bell, ChevronRight } from '../components/icons';
 
 const ICONES = {
@@ -16,18 +16,42 @@ const ICONES = {
   reponse: CornerDownRight,
 };
 
-export default function NotificationsScreen({ notifications, onOuvrir }) {
+export default function NotificationsScreen({ notifications, onOuvrir, onToutLire }) {
   if (!notifications.length) {
     return <EmptyState>Aucune notification pour le moment.</EmptyState>;
   }
 
+  const nonLues = notifications.filter((n) => !n.lue).length;
+
   return (
     <ScrollView style={s.pad} contentContainerStyle={{ paddingBottom: 24 }}>
+      {/* POURQUOI CE BOUTON
+          Le point orange de la cloche ne tombait qu'en ouvrant les
+          notifications UNE PAR UNE. Après une semaine d'absence, il fallait
+          toucher vingt lignes pour faire disparaître une pastille — alors
+          qu'on voulait juste dire « j'ai vu ». La plupart des gens
+          renoncent, et la pastille finit par ne plus rien vouloir dire. */}
+      {nonLues > 0 && !!onToutLire && (
+        <View style={s.barre}>
+          <Text style={s.compte}>
+            {nonLues} non lue{nonLues > 1 ? 's' : ''}
+          </Text>
+          <BtnMini outline label="Tout marquer comme lu" onPress={onToutLire} />
+        </View>
+      )}
+
       {notifications.map((n) => {
         const Icone = ICONES[n.type] || Bell;
         const menuQuelquePart = !!n.postId;
         return (
-          <Pressable key={String(n.id)} style={s.row} onPress={() => onOuvrir(n)}>
+          <Pressable
+            key={String(n.id)}
+            style={s.row}
+            onPress={() => onOuvrir(n)}
+            accessibilityRole="button"
+            accessibilityLabel={`${n.lue ? '' : 'Non lue. '}${n.texte}`
+              + (menuQuelquePart ? '. Ouvrir la publication' : '')}
+          >
             {!n.lue && <View style={s.dot} />}
 
             {n.acteurId
@@ -52,6 +76,11 @@ export default function NotificationsScreen({ notifications, onOuvrir }) {
 
 const s = StyleSheet.create({
   pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+  barre: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 10, paddingBottom: 10,
+  },
+  compte: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 9,
     paddingVertical: 11, paddingHorizontal: 4,

@@ -212,11 +212,31 @@ la tentative de récriture échoue.
 
 **B3 — ✅ FAIT le 29/09/2026**, en même temps que la pagination.
 
-**B4 — aucun écran de chargement progressif.** Pas un squelette : l'écran
-reste vide, puis tout apparaît d'un coup. Sur une connexion lente, on croit
-que l'application est plantée.
+**B4 — ✅ FAIT le 30/09/2026 : un squelette, pas un rond qui tourne.**
+`src/components/Squelette.js` montre la FORME de ce qui arrive — le fil,
+ses cartes, ses avatars — au lieu d'un rond au milieu d'un écran vide. Un
+rond dit « attends » ; il ne dit pas « attends QUOI ».
 
-**B5 — pas de « tout marquer comme lu »** sur les notifications.
+Les blocs gardent les angles vifs (ce sont des cartes, donc de la
+structure), seuls les avatars sont ronds. Le battement va de 0,45 à 1 en
+une seconde, et passe par `useNativeDriver` : il continue donc pendant que
+le fil JavaScript est occupé à charger, ce qui est précisément le moment.
+
+Vérifié au navigateur, en retenant le chargement quatre secondes :
+28 blocs dessinés, et l'opacité relevée trois fois à 600 ms d'intervalle —
+0,45 → 0,84 → 0,92.
+
+**B5 — ✅ FAIT le 30/09/2026.** Le point orange de la cloche ne tombait
+qu'en ouvrant les notifications UNE PAR UNE : après une semaine d'absence,
+il fallait toucher vingt lignes pour faire disparaître une pastille, alors
+qu'on voulait juste dire « j'ai vu ». La plupart des gens renoncent, et la
+pastille finit par ne plus rien vouloir dire.
+
+L'écran se met à jour tout de suite et la base suit : si l'écriture
+échoue, les notifications repassent non lues au prochain chargement — on
+n'a rien perdu. Éprouvé sur la vraie base avec un compte jetable : trois
+notifications, une ouverte à la main, puis le bouton — 3 sur 3 lues, et
+zéro notification d'autrui visible.
 
 **B8 — ✅ FAIT le 29/09/2026 : écrire dans un champ était impossible.**
 219 ms par lettre dans l'assistant IA, mesuré au navigateur avec le

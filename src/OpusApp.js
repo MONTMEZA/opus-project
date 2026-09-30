@@ -25,6 +25,7 @@ import CreerScreen from './screens/CreerScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import ConversationScreen from './screens/ConversationScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import SqueletteFil from './components/Squelette';
 import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
 import ProfilPublicScreen from './screens/ProfilPublicScreen';
@@ -992,6 +993,24 @@ export default function OpusApp() {
     setScreen('home');
   };
 
+  /**
+   * Tout marquer comme lu.
+   *
+   * L'écran se met à jour TOUT DE SUITE, et la base suit. Attendre la
+   * réponse du serveur pour effacer vingt points orange donnerait
+   * l'impression que le bouton n'a pas marché — et si l'écriture échoue,
+   * les notifications repasseront non lues au prochain chargement, ce qui
+   * est exactement le bon comportement : on n'a rien perdu.
+   */
+  const toutMarquerLu = async () => {
+    setNotifications((liste) => liste.map((n) => ({ ...n, lue: true })));
+    try {
+      await api.marquerToutesNotificationsLues();
+    } catch (e) {
+      showErreur(`Les notifications n'ont pas pu être marquées lues : ${e.message || e}`);
+    }
+  };
+
   /* ---------- mon compte ---------- */
   /**
    * Demande de modification des métiers, pour un profil déjà vérifié.
@@ -1555,12 +1574,15 @@ export default function OpusApp() {
 
   /* ---------- rendu ---------- */
 
-  // Reprise d'une session existante : on évite de faire clignoter l'accueil.
+  /* Reprise d'une session existante : on évite de faire clignoter l'accueil.
+     Un rond qui tourne sur fond vide, c'est ce qu'on regarde en se demandant
+     si l'application est plantée. Le squelette, lui, montre la forme de ce
+     qui arrive — on reconnaît le fil avant même qu'il soit là. */
   if (demarrage) {
     return (
-      <View style={s.demarrage}>
-        <StatusBar style="light" />
-        <ActivityIndicator size="large" color={C.accent} />
+      <View style={{ flex: 1, backgroundColor: C.bg }}>
+        <StatusBar style="dark" />
+        <SqueletteFil />
       </View>
     );
   }
@@ -1596,8 +1618,13 @@ export default function OpusApp() {
         ) : (
           <OnboardingScreen onChoose={choisirType} />
         )}
+        {/* La connexion est partie : on quitte l'écran d'accueil pour
+            montrer ce qui arrive, plutôt qu'un rond par-dessus un
+            formulaire qu'on ne peut plus utiliser. */}
         {loading && (
-          <View style={s.loader}><ActivityIndicator size="large" color={C.accent} /></View>
+          <View style={s.chargementPleinEcran}>
+            <SqueletteFil />
+          </View>
         )}
       </>
     );
@@ -1822,7 +1849,11 @@ export default function OpusApp() {
         )}
 
         {screen === 'notifications' && (
-          <NotificationsScreen notifications={notifications} onOuvrir={ouvrirNotification} />
+          <NotificationsScreen
+            notifications={notifications}
+            onOuvrir={ouvrirNotification}
+            onToutLire={toutMarquerLu}
+          />
         )}
 
         {screen === 'profil' && (
@@ -1936,6 +1967,11 @@ const s = StyleSheet.create({
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
   },
   body: { flex: 1, backgroundColor: C.bg },
+  chargementPleinEcran: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: C.bg,
+    zIndex: 30,
+  },
   loader: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center',
