@@ -32,8 +32,8 @@ Ce qui reste à faire est dans `docs/A-FAIRE.md`.
 
 ## ✅ Essais du 30/09/2026 — rien à signaler
 
-Les points **1 à 23** ont été repassés sur iPhone, avec la vraie base :
-tout fonctionne. Aucun défaut relevé.
+Les points **1 à 25** ont été repassés sur iPhone, avec la vraie base :
+tout fonctionne. **Aucun défaut relevé.**
 
 Ce qui avait été ajouté dans la journée et qui est donc confirmé sur le
 téléphone :
@@ -43,7 +43,15 @@ téléphone :
   (point 22) ;
 - la **carte de la zone d'intervention** et son curseur (point 23) — y
   compris le chargement des fonds de carte, que je ne pouvais pas juger
-  depuis le conteneur.
+  depuis le conteneur ;
+- le **référentiel des métiers** et son sélecteur (points 24 et 25) — dont
+  le test 5 du §20 de la demande, *fermer l'application et la rouvrir*, qui
+  ne pouvait se faire que là. Les 92 métiers, la recherche par spécialité,
+  la limite de quatre : tout tient sur le téléphone.
+
+Et la migration des métiers est confirmée côté utilisateur : aucun profil
+n'a perdu son métier, et aucune clé technique (`macon`) ne s'affiche à la
+place d'un nom.
 
 ---
 
