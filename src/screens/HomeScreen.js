@@ -57,7 +57,7 @@ export default function HomeScreen({
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
   onOuvrirVideo, onGlisserVersProfil, onSignaler,
   onChargerPlus, chargePage = false, finDuFil = false,
-  rafraichit = false, onRafraichir, onSupprimerCommentaire, moiId,
+  rafraichit = false, onRafraichir, onSupprimerCommentaire, onModifierCommentaire, moiId,
 }) {
   const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
@@ -218,6 +218,7 @@ export default function HomeScreen({
               onHide={onHide}
               onSignaler={onSignaler}
               onSupprimerCommentaire={onSupprimerCommentaire}
+              onModifierCommentaire={onModifierCommentaire}
               moiId={moiId}
               commentsOpen={openCommentsId === p.id}
               onToggleComments={onToggleComments}

@@ -50,7 +50,7 @@ export function nbCommentairesDe(post) {
  */
 export default function Commentaires({
   commentaires = [], pros = {}, onEnvoyer, onVoirProfil, onSignaler,
-  onSupprimer, moiId = null, style, scroll,
+  onSupprimer, onModifier, moiId = null, style, scroll,
 }) {
   const [draft, setDraft] = useState('');
   const [repondA, setRepondA] = useState(null);       // { id, auteur }
@@ -104,6 +104,7 @@ export default function Commentaires({
               onVoirProfil={onVoirProfil}
               onSignaler={onSignaler}
               onSupprimer={onSupprimer}
+              onModifier={onModifier}
               onRepondre={() => repondre(c)}
             />
 
@@ -131,6 +132,7 @@ export default function Commentaires({
                 onVoirProfil={onVoirProfil}
                 onSignaler={onSignaler}
                 onSupprimer={onSupprimer}
+                onModifier={onModifier}
                 onRepondre={() => repondre(r, c.id)}
               />
             ))}
@@ -182,7 +184,13 @@ export default function Commentaires({
   );
 }
 
-function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer, onRepondre }) {
+function Ligne({
+  c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer, onModifier, onRepondre,
+}) {
+  /* La correction se fait SUR PLACE, dans la bulle : ouvrir une fenêtre
+     pour changer trois lettres ferait perdre le fil de la conversation. */
+  const [enEdition, setEnEdition] = useState(false);
+  const [brouillon, setBrouillon] = useState(c.texte);
   /* La confirmation se fait DANS la ligne, pas dans une alerte du système :
      une alerte ne se teste pas au navigateur, et elle coupe la lecture. */
   const [confirme, setConfirme] = useState(false);
@@ -225,11 +233,49 @@ function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer,
             </Text>
             {pro && pro.verifie && <BadgeCheck size={12} color={C.verif} />}
           </Pressable>
-          <Text style={s.texte}>{c.texte}</Text>
+          {enEdition ? (
+            <View style={s.edition}>
+              <Field
+                value={brouillon}
+                onChangeText={setBrouillon}
+                autoFocus
+                multiline
+                style={s.champEdition}
+                accessibilityLabel="Corriger mon commentaire"
+              />
+              <View style={s.editionBtns}>
+                <Pressable
+                  onPress={() => { setBrouillon(c.texte); setEnEdition(false); }}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Annuler la correction"
+                >
+                  <Text style={s.confirmeNon}>Annuler</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const propre = brouillon.trim();
+                    if (propre && propre !== c.texte) onModifier(c, propre);
+                    setEnEdition(false);
+                  }}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Enregistrer la correction"
+                >
+                  <Text style={s.confirmeOui}>Enregistrer</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Text style={s.texte}>{c.texte}</Text>
+          )}
         </View>
 
         <View style={s.meta}>
           {!!c.time && <Text style={s.metaTexte}>{c.time}</Text>}
+          {/* Le drapeau vient de la BASE : impossible de corriger un
+              commentaire en faisant croire qu'il n'a pas bougé. */}
+          {!!c.modifie && <Text style={s.metaTexte}>· modifié</Text>}
           <Pressable
             onPress={onRepondre}
             hitSlop={6}
@@ -241,7 +287,17 @@ function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer,
           {/* Le sien, on le retire. Celui des autres, on le signale — et
               JAMAIS on ne le supprime, même sur sa propre publication : la
               règle est tenue par la base, pas par cet écran. */}
-          {aMoi && !!onSupprimer && !confirme && (
+          {aMoi && !!onModifier && !confirme && !enEdition && (
+            <Pressable
+              onPress={() => { setBrouillon(c.texte); setEnEdition(true); }}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Corriger mon commentaire"
+            >
+              <Text style={s.repondre}>Modifier</Text>
+            </Pressable>
+          )}
+          {aMoi && !!onSupprimer && !confirme && !enEdition && (
             <Pressable
               onPress={() => setConfirme(true)}
               hitSlop={6}
@@ -299,6 +355,10 @@ function Ligne({ c, reponse, pros, moiId, onVoirProfil, onSignaler, onSupprimer,
 }
 
 const s = StyleSheet.create({
+  edition: { gap: 6, marginTop: 4 },
+  champEdition: { minHeight: 38, fontSize: 12.5, paddingVertical: 6, paddingHorizontal: 8 },
+  editionBtns: { flexDirection: 'row', gap: 14, justifyContent: 'flex-end' },
+
   ligne: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
   ligneReponse: { paddingLeft: 26 },
   corps: { flex: 1, minWidth: 0 },

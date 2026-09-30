@@ -24,7 +24,7 @@ export default function PostCard({
   onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
-  onSupprimerCommentaire, moiId,
+  onSupprimerCommentaire, onModifierCommentaire, moiId,
 }) {
 
   const estVideo = EST_VIDEO.has(post.format);
@@ -226,6 +226,9 @@ export default function PostCard({
             onVoirProfil={onVoirCommentateur}
             onSignaler={onSignaler}
             moiId={moiId}
+            onModifier={onModifierCommentaire
+              ? (c, texte) => onModifierCommentaire(post.id, c, texte)
+              : undefined}
             onSupprimer={onSupprimerCommentaire
               ? (c) => onSupprimerCommentaire(post.id, c)
               : null}

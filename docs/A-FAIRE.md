@@ -326,8 +326,24 @@ d'ouvrir » et « trois plages dans la journée ».
   pas pareil ; au-delà → au kilomètre entier. Distance inconnue → on
   n'affiche rien, plutôt qu'un tiret qui ferait croire à une panne.
   Douze cas contrôlés par `npm run verifier-adresse`.
-- **Un commentaire ne peut être ni modifié ni supprimé** par son auteur.
-  Une publication non plus (la suppression, elle, existe).
+- **Modifier son texte** — ✅ **FAIT le 30/09/2026.** Un commentaire se
+  corrige sur place, dans la bulle ; une publication depuis « Mes
+  publications ». Le TEXTE seulement : changer la photo d'une publication
+  que des gens ont déjà aimée en ferait autre chose.
+
+  La mention « · modifié » vient de la BASE (`modifie_le`), jamais de
+  l'application : on ne peut donc pas récrire un commentaire en faisant
+  croire qu'il n'a pas bougé.
+
+  **Une faille a été trouvée en chemin**, et c'est la vraie raison d'être
+  de cette section. La règle d'écriture était « chacun les siennes »,
+  toutes colonnes confondues. Vérifié sur PostgreSQL 16 : un auteur
+  pouvait s'écrire `likes_count = 9999` et surtout `created_at = now() +
+  10 ans`. Le fil étant trié par date décroissante, cette publication
+  serait restée **en tête du fil de tout le monde, pour toujours** — et la
+  pagination par curseur n'aurait jamais atteint la suivante.
+  Fermé par le déclencheur `tient_le_texte()` (section 20 de
+  `schema.sql`), éprouvé sur la vraie base.
 - **Accessibilité** — ✅ **FAIT le 30/09/2026.** Les 90 boutons du projet
   ont été relus : aucun n'est plus muet. Les six composants partagés
   (`BtnMain`, `BtnOutline`, `BtnMini`, `Chip`, `ChipFollow`, `IconBtn`)

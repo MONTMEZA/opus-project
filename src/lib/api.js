@@ -586,6 +586,7 @@ function rowToPost(p, likedSet, commentaires = null) {
     comments: commentaires,
     nbCommentaires: p.comments_count || 0,
     // Le repère de pagination : on redemande « ce qui est plus ancien que ».
+    modifie: !!p.modifie_le,
     curseur: p.created_at,
   };
 }
@@ -706,6 +707,10 @@ function arbreCommentaires(lignes) {
       avatarUrl: c.users ? c.users.avatar_url : null,
       texte: c.texte,
       time: relativeTime(c.created_at),
+      /* Posé par la BASE, jamais par l'application : on ne peut donc pas
+         récrire un commentaire en faisant croire qu'il n'a pas bougé.
+         Quelqu'un à qui on a répondu doit pouvoir le constater. */
+      modifie: !!c.modifie_le,
       reponses: [],
     };
     parIdentifiant[c.id] = noeud;
@@ -1459,6 +1464,27 @@ export const accepterConditions = !hasSupabase ? noop : async (version) => {
  * (`on delete cascade` sur `parent_id`). C'est voulu — une réponse sans la
  * question ne veut plus rien dire — mais l'écran doit le dire avant.
  */
+/**
+ * Corriger SON texte — le sien seulement, et le texte seulement.
+ *
+ * La base s'en assure de deux façons : la règle RLS limite aux lignes dont
+ * on est l'auteur, et le déclencheur `tient_le_texte()` remet toutes les
+ * autres colonnes à leur valeur d'avant (section 20 de schema.sql). Envoyer
+ * `likes_count` d'ici ne servirait donc à rien — et c'est exactement le
+ * but : l'écran n'a pas à être le gardien.
+ */
+export const modifierCommentaire = !hasSupabase ? noop : async (id, texte) => {
+  const { error } = await supabase.from('comments')
+    .update({ texte }).eq('id', id).eq('author_id', currentUserId);
+  if (error) throw error;
+};
+
+export const modifierPost = !hasSupabase ? noop : async (id, texte) => {
+  const { error } = await supabase.from('posts')
+    .update({ texte }).eq('id', id).eq('author_id', currentUserId);
+  if (error) throw error;
+};
+
 export const supprimerCommentaire = !hasSupabase ? noop : async (id) => {
   const { error } = await supabase.from('comments').delete().eq('id', id);
   if (error) throw error;

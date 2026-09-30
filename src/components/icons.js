@@ -86,3 +86,7 @@ export const Scale = mk(MaterialCommunityIcons, 'scale-balance');
 export const Clock = mk(Feather, 'clock');
 export const Navigation = mk(Feather, 'navigation');
 export const ChevronLeft = mk(Feather, 'chevron-left');
+
+/* Corriger le texte d'une publication ou d'un commentaire (section 20 de
+   schema.sql : le texte seulement, jamais les photos ni les compteurs). */
+export const Edit = mk(Feather, 'edit-2');

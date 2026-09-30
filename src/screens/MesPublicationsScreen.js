@@ -12,12 +12,13 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
-import { BtnMini, EmptyState, SectionLabel } from '../components/ui';
+import { BtnMini, EmptyState, SectionLabel, TextArea } from '../components/ui';
 import Media from '../components/Media';
 import { apercuDe } from '../lib/cloudinary';
 import { nbCommentairesDe } from '../components/Commentaires';
 import {
   Heart, MessageSquare, Share2, Trash, RefreshCw, Grid, VideoIcon, Layers, TypeIcon,
+  Edit,
 } from '../components/icons';
 
 const ICONE_FORMAT = {
@@ -31,11 +32,16 @@ const NOM_FORMAT = {
 };
 
 export default function MesPublicationsScreen({
-  posts = [], onSupprimer, onRepublier, onPartager, onOuvrir,
+  posts = [], onSupprimer, onModifier, onRepublier, onPartager, onOuvrir,
 }) {
   // La publication dont on vient de demander la suppression, en attente de
   // confirmation. Une seule à la fois.
   const [aSupprimer, setASupprimer] = useState(null);
+  /* Seul le TEXTE se corrige, pas les photos : changer l'image d'une
+     publication que des gens ont déjà aimée en ferait autre chose. La base
+     tient d'ailleurs la même règle (section 20 de schema.sql). */
+  const [aModifier, setAModifier] = useState(null);
+  const [brouillon, setBrouillon] = useState('');
 
   if (posts.length === 0) {
     return (
@@ -56,6 +62,7 @@ export default function MesPublicationsScreen({
         {posts.map((p) => {
           const Icone = ICONE_FORMAT[p.format] || Grid;
           const enSuppression = aSupprimer === p.id;
+          const enModification = aModifier === p.id;
 
           return (
             <View key={String(p.id)} style={s.carte}>
@@ -71,6 +78,7 @@ export default function MesPublicationsScreen({
 
                   <Text style={s.texte} numberOfLines={2}>
                     {p.texte || '(sans description)'}
+                    {p.modifie ? '  · modifié' : ''}
                   </Text>
 
                   <View style={s.chiffres}>
@@ -86,7 +94,31 @@ export default function MesPublicationsScreen({
                 </View>
               </Pressable>
 
-              {enSuppression ? (
+              {enModification ? (
+                <View style={s.confirmation}>
+                  <Text style={s.confirmationTexte}>
+                    Corriger le texte. Les photos, elles, ne changent pas :
+                    ce serait une autre publication.
+                  </Text>
+                  <TextArea
+                    value={brouillon}
+                    onChangeText={setBrouillon}
+                    autoFocus
+                    accessibilityLabel="Corriger le texte de ma publication"
+                  />
+                  <View style={s.confirmationBoutons}>
+                    <BtnMini outline label="Annuler" onPress={() => setAModifier(null)} />
+                    <BtnMini
+                      label="Enregistrer"
+                      disabled={!brouillon.trim() || brouillon === p.texte}
+                      onPress={() => {
+                        setAModifier(null);
+                        onModifier(p, brouillon.trim());
+                      }}
+                    />
+                  </View>
+                </View>
+              ) : enSuppression ? (
                 /* La confirmation remplace la barre d'actions : impossible
                    d'appuyer sur « Supprimer » en croyant viser autre chose. */
                 <View style={s.confirmation}>
@@ -109,6 +141,18 @@ export default function MesPublicationsScreen({
                     <RefreshCw size={14} color={C.accent2} />
                     <Text style={[s.actionTexte, { color: C.accent2 }]}>Remettre en avant</Text>
                   </Pressable>
+
+                  {!!onModifier && (
+                    <Pressable
+                      style={s.action}
+                      onPress={() => { setBrouillon(p.texte || ''); setAModifier(p.id); }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Corriger le texte de cette publication"
+                    >
+                      <Edit size={14} color={C.muted} />
+                      <Text style={s.actionTexte}>Modifier</Text>
+                    </Pressable>
+                  )}
 
                   <Pressable style={s.action} onPress={() => onPartager(p)}>
                     <Share2 size={14} color={C.muted} />

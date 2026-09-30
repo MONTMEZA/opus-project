@@ -437,6 +437,35 @@ export default function OpusApp() {
    * Supprimer un commentaire emporte ses réponses (`on delete cascade`) :
    * le compteur baisse donc de 1 PLUS le nombre de réponses.
    */
+  /**
+   * Corriger son commentaire.
+   *
+   * Le texte change TOUT DE SUITE à l'écran, et la base suit. Si elle
+   * refuse, on remet l'ancien et on le dit : c'est le seul cas où revenir
+   * en arrière est moins déroutant que de laisser un texte qui n'existe
+   * que sur ce téléphone.
+   */
+  const modifierCommentaire = async (postId, commentaire, texte) => {
+    const remplacer = (c) => (c.id === commentaire.id
+      ? { ...c, texte, modifie: true }
+      : { ...c, reponses: (c.reponses || []).map(remplacer) });
+    const restaurer = (c) => (c.id === commentaire.id
+      ? { ...c, texte: commentaire.texte, modifie: commentaire.modifie }
+      : { ...c, reponses: (c.reponses || []).map(restaurer) });
+
+    const appliquer = (fn) => setPosts((ps) => ps.map((p) => (p.id !== postId || !Array.isArray(p.comments)
+      ? p
+      : { ...p, comments: p.comments.map(fn) })));
+
+    appliquer(remplacer);
+    try {
+      await api.modifierCommentaire(commentaire.id, texte);
+    } catch (e) {
+      appliquer(restaurer);
+      showErreur("Le commentaire n'a pas pu être corrigé.");
+    }
+  };
+
   const supprimerCommentaire = async (postId, commentaire) => {
     const nbReponses = (commentaire.reponses || []).length;
 
@@ -911,6 +940,28 @@ export default function OpusApp() {
   const mesPublications = posts.filter(
     (p) => p.type === 'post' && String(p.proId) === String(myProId),
   );
+
+  /**
+   * Corriger le texte d'une de mes publications.
+   *
+   * Le texte SEULEMENT : changer la photo d'une publication que des gens
+   * ont déjà aimée en ferait autre chose. La base tient la même règle,
+   * indépendamment de cet écran (section 20 de schema.sql).
+   */
+  const modifierPublication = async (post, texte) => {
+    const appliquer = (t, modifie) => setPosts((ps) => ps.map((p) => (p.id === post.id
+      ? { ...p, texte: t, modifie }
+      : p)));
+
+    appliquer(texte, true);
+    try {
+      await api.modifierPost(post.id, texte);
+      showBanner('Publication corrigée.');
+    } catch (e) {
+      appliquer(post.texte, post.modifie);
+      showErreur(`Correction impossible : ${e.message || e}`);
+    }
+  };
 
   const supprimerPublication = async (post) => {
     setPosts((ps) => ps.filter((p) => p.id !== post.id));
@@ -1700,6 +1751,7 @@ export default function OpusApp() {
             onSignaler={ouvrirSignalement}
             onChargerPlus={chargerPlusDeFil}
             onSupprimerCommentaire={supprimerCommentaire}
+            onModifierCommentaire={modifierCommentaire}
             moiId={api.getUserId()}
             chargePage={chargePage}
             finDuFil={finDuFil}
@@ -1808,6 +1860,7 @@ export default function OpusApp() {
           <MesPublicationsScreen
             posts={mesPublications}
             onSupprimer={supprimerPublication}
+            onModifier={modifierPublication}
             onRepublier={republierPublication}
             onPartager={partagerPublication}
             onOuvrir={(p) => {
@@ -1953,6 +2006,7 @@ export default function OpusApp() {
         onVoirCommentateur={voirCommentateur}
         onSignaler={ouvrirSignalement}
         onSupprimerCommentaire={supprimerCommentaire}
+        onModifierCommentaire={modifierCommentaire}
         moiId={api.getUserId()}
       />
     </View>

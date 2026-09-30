@@ -15,7 +15,7 @@ import { X } from './icons';
 
 export default function CommentsSheet({
   visible, post, pros = {}, onClose, onAddComment, onVoirCommentateur, onSignaler,
-  onSupprimerCommentaire, moiId,
+  onSupprimerCommentaire, onModifierCommentaire, moiId,
 }) {
   const insets = useSafeAreaInsets();
 
@@ -68,6 +68,9 @@ export default function CommentsSheet({
               onVoirProfil={(c) => { onClose(); onVoirCommentateur(c); }}
               onSignaler={onSignaler ? (cible) => { onClose(); onSignaler(cible); } : null}
               moiId={moiId}
+              onModifier={onModifierCommentaire
+                ? (c, texte) => onModifierCommentaire(post.id, c, texte)
+                : undefined}
               onSupprimer={onSupprimerCommentaire
                 ? (c) => onSupprimerCommentaire(post.id, c)
                 : null}

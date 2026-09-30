@@ -2567,3 +2567,93 @@ alter table public.professional_profiles add constraint pro_horaires_check
 --  elle ne lit aucune table, et elle ne fait que répondre oui ou non sur le
 --  JSON qu'on lui tend.
 -- --------------------------------------------------------------------------
+
+-- ==========================================================================
+--  20. MODIFIER SON TEXTE — ET RIEN D'AUTRE
+--
+--  LA FAILLE QUE CETTE SECTION FERME
+--  ---------------------------------
+--  Les deux règles d'écriture étaient « chacun les siennes », toutes
+--  colonnes confondues :
+--
+--      create policy "ecriture mes posts" on public.posts
+--        for all using (auth.uid() = author_id) ...
+--
+--  Un client modifié pouvait donc écrire ce qu'il voulait dans SA propre
+--  publication. Vérifié sur PostgreSQL 16, le 30/09/2026 :
+--
+--      update public.posts set likes_count = 9999,
+--             created_at = now() + interval '10 years' ...
+--      → likes : 9999 | créé le : 2036-09-30
+--
+--  Neuf mille neuf cent quatre-vingt-dix-neuf j'aime, et surtout une date
+--  dans dix ans : le fil étant trié par `created_at desc`, cette
+--  publication serait restée en TÊTE du fil de tout le monde, pour
+--  toujours — et la pagination par curseur ne serait jamais passée à la
+--  suivante.
+--
+--  CE QUI RESTE PERMIS, ET CE QUI NE L'EST PLUS
+--  --------------------------------------------
+--  Un auteur peut corriger SON TEXTE. C'est le manque relevé dans
+--  `docs/A-FAIRE.md` : une faute de frappe restait là pour toujours.
+--  Tout le reste — l'auteur, la date, les compteurs, les photos, le
+--  format — est remis à sa valeur d'avant.
+--
+--  ET LA DATE DE MODIFICATION SE VOIT
+--  ----------------------------------
+--  `modifie_le` est posée par la base, pas par l'application : on ne peut
+--  donc pas réécrire un commentaire en faisant croire qu'il n'a pas
+--  bougé. Quelqu'un à qui on a répondu doit pouvoir constater que la
+--  question a changé.
+-- ==========================================================================
+
+alter table public.posts    add column if not exists modifie_le timestamptz;
+alter table public.comments add column if not exists modifie_le timestamptz;
+
+-- --------------------------------------------------------------------------
+--  20.1 Le verrou
+--
+--  `pg_trigger_depth()` vaut 1 quand la modification vient directement de
+--  l'application, et 2 ou plus quand elle vient d'un AUTRE déclencheur —
+--  ceux qui tiennent `likes_count` et `comments_count`. Vérifié sur
+--  PostgreSQL 16 : sans cette distinction, aimer sa propre publication
+--  aurait remis le compteur à sa valeur d'avant, et le j'aime aurait
+--  paru ne pas marcher.
+--
+--  `jsonb_populate_record` remet TOUTES les anciennes valeurs sauf celle
+--  qu'on retire du lot. Écrire la liste des colonnes à la main aurait
+--  voulu dire l'oublier à la prochaine colonne ajoutée : ici, une colonne
+--  nouvelle est protégée d'office.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_texte()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE'
+     and auth.uid() is not null
+     and auth.uid() = new.author_id
+     and pg_trigger_depth() = 1
+  then
+    -- tout revient à l'ancienne valeur, sauf le texte
+    new := jsonb_populate_record(new, to_jsonb(old) - 'texte');
+
+    if new.texte is distinct from old.texte then
+      new.modifie_le := now();
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_tient_le_texte_post on public.posts;
+create trigger trg_tient_le_texte_post
+  before update on public.posts
+  for each row execute function public.tient_le_texte();
+
+drop trigger if exists trg_tient_le_texte_comment on public.comments;
+create trigger trg_tient_le_texte_comment
+  before update on public.comments
+  for each row execute function public.tient_le_texte();
