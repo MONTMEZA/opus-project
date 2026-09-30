@@ -4,6 +4,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { C, F, T, S, R } from '../theme';
+import { nomMetier } from '../lib/metiers';
 import { Avatar, EmptyState } from '../components/ui';
 
 export default function MessagesScreen({ conversations, onOpen }) {
@@ -27,7 +28,7 @@ export default function MessagesScreen({ conversations, onOpen }) {
                 </Text>
                 <Text style={s.time}>{last ? last.heure : ''}</Text>
               </View>
-              {!!contact.metier && <Text style={s.sousTitre}>{contact.metier}</Text>}
+              {!!contact.metier && <Text style={s.sousTitre}>{nomMetier(contact.metier)}</Text>}
               <View style={s.basLigne}>
                 <Text
                   style={[s.preview, nonLus > 0 && s.previewNonLu]}

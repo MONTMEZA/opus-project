@@ -58,19 +58,14 @@ export const GROUPES = [
   ['echafaudage', 'echaffaudage'],   // la faute est tellement courante
 ];
 
-/**
- * Enlève les accents et la casse.
- * `normalize('NFD')` sépare la lettre de son accent, et on retire ensuite
- * tous les signes diacritiques d'un coup.
- */
-export function normaliser(texte) {
-  return String(texte || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+/* `normaliser` a déménagé dans `texte.js` : `metiers.js` en a besoin
+   aussi, et deux modules qui s'importent l'un l'autre finissent par se
+   charger dans le mauvais ordre. On la ré-exporte ici pour que rien de ce
+   qui l'importait déjà n'ait à changer. */
+import { normaliser } from './texte.js';
+import { motsDuMetier } from './metiers.js';
+
+export { normaliser };
 
 /**
  * Les mots utiles d'une recherche. On écarte ce qui fait moins de deux
@@ -163,9 +158,9 @@ export function texteDe(annonce) {
   const a = annonce || {};
   const auteur = a.auteur || {};
   return [
-    a.titre, a.texte, a.metier, a.ville,
-    auteur.entreprise, auteur.metier,
-    ...(auteur.metiers || []),
+    a.titre, a.texte, motsDuMetier(a.metier), a.ville,
+    auteur.entreprise, motsDuMetier(auteur.metier),
+    ...(auteur.metiers || []).map(motsDuMetier),
     ...(auteur.specialites || []),
   ].filter(Boolean).join(' ');
 }
@@ -178,12 +173,20 @@ export function texteDe(annonce) {
  * intérêt : « Maçon » est ce que l'artisan EST, « enduit à la chaux » est
  * ce qu'on CHERCHE. Sans cette ligne, un artisan pouvait renseigner douze
  * spécialités sans qu'aucune ne le rende trouvable.
+ *
+ * LE MÉTIER PASSE PAR `motsDuMetier()`, ET C'EST INDISPENSABLE
+ * -----------------------------------------------------------
+ * Une fiche enregistre `peintre-en-batiment`, pas « Peintre en bâtiment ».
+ * Chercher le texte brut marcherait par accident pour `macon` et casserait
+ * pour `be-thermique` ou `amo`. `motsDuMetier()` rend le nom ET les
+ * synonymes du catalogue : « placo » trouve donc un plaquiste, et
+ * « mur de soutènement » trouve un maçon.
  */
 export function texteDePro(pro) {
   const p = pro || {};
   return [
-    p.nom, p.entreprise, p.metier, p.ville, p.bio,
-    ...(p.metiers || []),
+    p.nom, p.entreprise, motsDuMetier(p.metier), p.ville, p.bio,
+    ...(p.metiers || []).map(motsDuMetier),
     ...(p.specialites || []),
   ].filter(Boolean).join(' ');
 }

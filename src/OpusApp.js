@@ -37,7 +37,8 @@ import MesPublicationsScreen from './screens/MesPublicationsScreen';
 import GererPortfolioScreen from './screens/GererPortfolioScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
-import { METIERS, POST_GRADIENTS, avgReviews } from './data/demo';
+import { POST_GRADIENTS, avgReviews } from './data/demo';
+import { METIER_PAR_DEFAUT, nomMetier } from './lib/metiers';
 import * as api from './lib/api';
 import { metiersDe } from './lib/metiers';
 import { hasSupabase } from './lib/supabase';
@@ -156,7 +157,7 @@ export default function OpusApp() {
   // Dernier refus, affiché sur l'écran Publier jusqu'au prochain essai.
   const [erreurPublication, setErreurPublication] = useState(null);
   const [createText, setCreateText] = useState('');
-  const [createMetier, setCreateMetier] = useState(METIERS[0]);
+  const [createMetier, setCreateMetier] = useState(METIER_PAR_DEFAUT);
   const [createVille, setCreateVille] = useState('');
 
   /* Une confirmation se lit en trois secondes : « Profil enregistré. » Un
@@ -1362,7 +1363,7 @@ export default function OpusApp() {
         contact: {
           id: contactId,
           titre: demande.auteur,
-          metier: `Demande · ${demande.metier}`,
+          metier: `Demande · ${nomMetier(demande.metier)}`,
           avatarUrl: demande.avatarUrl || null,
         },
         messages: [],

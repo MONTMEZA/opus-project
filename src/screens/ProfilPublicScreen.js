@@ -14,6 +14,7 @@ import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-nat
 import { C, F } from '../theme';
 import { Avatar, BtnMain, EmptyState, SectionLabel, Gradient } from '../components/ui';
 import { MapPin } from '../components/icons';
+import { nomMetier } from '../lib/metiers';
 
 export default function ProfilPublicScreen({ profil, chargement, onContacter }) {
   if (chargement) {
@@ -57,7 +58,7 @@ export default function ProfilPublicScreen({ profil, chargement, onContacter }) 
         {demandes.map((d) => (
           <View key={String(d.id)} style={s.carte}>
             <View style={s.carteHaut}>
-              <Text style={s.metier}>{d.metier}</Text>
+              <Text style={s.metier}>{nomMetier(d.metier)}</Text>
               <Text style={s.temps}>{d.time}</Text>
             </View>
             <Text style={s.texte}>{d.texte}</Text>

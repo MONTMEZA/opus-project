@@ -38,7 +38,8 @@ import {
 import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
 } from '../data/annonces';
-import { METIERS } from '../data/demo';
+import { ChampMetier } from '../components/SelecteurMetiers';
+import { nomMetier } from '../lib/metiers';
 import { distanceKm, libelleDistance } from '../lib/adresse';
 import { correspond, texteDe } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
@@ -242,11 +243,12 @@ export default function PlaceProScreen({
           {reglages.avecMetier && (
             <>
               <Text style={s.label}>Métier concerné</Text>
-              <View style={s.chipRow}>
-                {METIERS.map((m) => (
-                  <Chip key={m} label={m} on={metier === m} onPress={() => setMetier(m)} />
-                ))}
-              </View>
+              <ChampMetier
+                valeur={metier}
+                onChange={setMetier}
+                titre="Quel type de partenaire recherchez-vous ?"
+                placeholder="Choisir le métier concerné..."
+              />
             </>
           )}
 
@@ -346,16 +348,14 @@ export default function PlaceProScreen({
       </Pressable>
 
       {filtreType && typeAnnonce(filtreType).avecMetier && (
-        <View style={[s.chipRow, { marginTop: 10 }]}>
-          {METIERS.map((m) => (
-            <Chip
-              key={m}
-              label={m}
-              on={filtreMetier === m}
-              onPress={() => setFiltreMetier(filtreMetier === m ? null : m)}
-            />
-          ))}
-        </View>
+        <ChampMetier
+          valeur={filtreMetier}
+          onChange={setFiltreMetier}
+          titre="Métier recherché"
+          placeholder="Filtrer par métier..."
+          avecTous
+          style={{ marginTop: 10 }}
+        />
       )}
 
       {/* --- les annonces --- */}
@@ -395,7 +395,7 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
     <View style={s.carte}>
       <View style={[s.bandeau, { backgroundColor: t.couleur }]}>
         <Text style={s.bandeauTexte}>{t.long}</Text>
-        {a.metier && <Text style={s.bandeauMetier}>{a.metier}</Text>}
+        {a.metier && <Text style={s.bandeauMetier}>{nomMetier(a.metier)}</Text>}
       </View>
 
       <View style={s.carteCorps}>

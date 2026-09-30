@@ -18,13 +18,20 @@
  * C'est le premier de la liste. Il s'affiche sur les publications, sur le
  * profil et dans le fil : c'est l'étiquette par laquelle on vous reconnaît.
  * On le change en touchant un métier déjà choisi.
+ *
+ * LA GRILLE DE PUCES A DISPARU
+ * ----------------------------
+ * Elle affichait les douze métiers d'un coup. Le catalogue en compte
+ * quatre-vingt-douze : la même grille serait un mur. On garde les métiers
+ * CHOISIS bien visibles — c'est la seule chose qui compte ici — et on
+ * ajoute par le sélecteur, qui sait chercher.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
-import { Chip } from './ui';
-import { X, Lock, Star } from './icons';
-import { METIERS } from '../data/demo';
+import { C, F, T, S, R, interligne } from '../theme';
+import { X, Lock, Star, Plus } from './icons';
+import SelecteurMetiers from './SelecteurMetiers';
+import { nomMetier } from '../lib/metiers';
 
 export const MAX_METIERS = 4;
 
@@ -32,6 +39,7 @@ export default function ChoixMetiers({
   valeurs = [], onChange, verrouille = false, onDemanderModification, demandeEnCours,
 }) {
   const choisis = valeurs.filter(Boolean);
+  const [selecteurOuvert, setSelecteurOuvert] = useState(false);
 
   const basculer = (m) => {
     if (choisis.includes(m)) return;             // on retire par la croix
@@ -55,7 +63,7 @@ export default function ChoixMetiers({
           {choisis.map((m, i) => (
             <View key={m} style={[s.pastille, s.pastilleFigee]}>
               {i === 0 && <Star size={11} color={C.muted} />}
-              <Text style={s.pastilleTexteFige}>{m}</Text>
+              <Text style={s.pastilleTexteFige}>{nomMetier(m)}</Text>
             </View>
           ))}
         </View>
@@ -94,14 +102,14 @@ export default function ChoixMetiers({
               hitSlop={4}
             >
               {i === 0 && <Star size={11} color="#fff" />}
-              <Text style={s.pastilleTexte}>{m}</Text>
+              <Text style={s.pastilleTexte}>{nomMetier(m)}</Text>
             </Pressable>
             {choisis.length > 1 && (
               <Pressable
                 onPress={() => retirer(m)}
                 hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel={`Retirer le métier ${m}`}
+                accessibilityLabel={`Retirer le métier ${nomMetier(m)}`}
               >
                 <X size={12} color="#fff" />
               </Pressable>
@@ -112,30 +120,46 @@ export default function ChoixMetiers({
 
       <Text style={s.aide}>
         {choisis.length > 1
-          ? `Métier principal : ${choisis[0]}. Touchez un autre métier choisi pour en faire le principal.`
+          ? `Métier principal : ${nomMetier(choisis[0])}. Touchez un autre métier choisi pour en faire le principal.`
           : 'Ajoutez un deuxième métier si vous en exercez un autre.'}
         {'\n'}
         {choisis.length} sur {MAX_METIERS} — vos métiers seront figés le jour où
         vos documents seront vérifiés.
       </Text>
 
-      <View style={s.chipRow}>
-        {METIERS.filter((m) => !choisis.includes(m)).map((m) => (
-          <Chip
-            key={m}
-            label={m}
-            on={false}
-            onPress={() => basculer(m)}
-          />
-        ))}
-      </View>
+      {/* Un bouton FLOTTE au-dessus du fond : arrondi, contrairement aux
+          pastilles de métier qui, elles, portent l'information. */}
+      <Pressable
+        style={[s.ajouter, choisis.length >= MAX_METIERS && s.ajouterEteint]}
+        onPress={() => setSelecteurOuvert(true)}
+        disabled={choisis.length >= MAX_METIERS}
+        aria-disabled={choisis.length >= MAX_METIERS}
+        accessibilityRole="button"
+        accessibilityLabel={choisis.length >= MAX_METIERS
+          ? 'Ajouter un métier, indisponible : quatre métiers au maximum'
+          : 'Ajouter un métier'}
+      >
+        <Plus size={14} color={choisis.length >= MAX_METIERS ? C.muted : C.accent2} />
+        <Text style={[s.ajouterTexte, choisis.length >= MAX_METIERS && s.ajouterTexteEteint]}>
+          Ajouter un métier
+        </Text>
+      </Pressable>
 
       {choisis.length >= MAX_METIERS && (
         <Text style={s.limite}>
-          Quatre métiers, c'est le maximum. Un profil qui les coche tous ne
-          rassure personne.
+          Vous pouvez sélectionner jusqu'à 4 métiers maximum. Supprimez un
+          métier pour en sélectionner un autre.
         </Text>
       )}
+
+      <SelecteurMetiers
+        ouvert={selecteurOuvert}
+        onFermer={() => setSelecteurOuvert(false)}
+        onChoisir={basculer}
+        choisis={choisis}
+        restant={MAX_METIERS - choisis.length}
+        titre="Ajouter un métier"
+      />
     </View>
   );
 }
@@ -153,8 +177,19 @@ const s = StyleSheet.create({
   pastilleTexteFige: { fontFamily: F.oswald6, fontSize: 11.5, color: C.ink },
 
   aide: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginBottom: 8 },
-  limite: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginTop: 6 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  limite: {
+    fontFamily: F.inter, fontSize: T.petit, color: C.bad,
+    lineHeight: interligne(T.petit), marginTop: S.sm,
+  },
+
+  ajouter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: S.sm,
+    borderWidth: 1, borderColor: C.accent2, borderRadius: R.gelule,
+    paddingVertical: S.md - 2, paddingHorizontal: S.lg,
+  },
+  ajouterEteint: { borderColor: C.line },
+  ajouterTexte: { fontFamily: F.oswald6, fontSize: T.corps, color: C.accent2 },
+  ajouterTexteEteint: { color: C.muted },
 
   verrou: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',

@@ -17,7 +17,7 @@ import {
 import { C, F } from '../theme';
 import { BtnMain, Chip, Field, TextArea, IconBtn } from './ui';
 import { X, Check } from './icons';
-import { METIERS } from '../data/demo';
+import { ChampMetier } from './SelecteurMetiers';
 
 const CRENEAUX = ['Matin', 'Midi', 'Après-midi', 'Soir'];
 
@@ -37,7 +37,7 @@ export default function QuoteModal({ quote, moi = {}, onClose, onSubmit }) {
   // compte. On ne garde rien de la demande précédente.
   useEffect(() => {
     if (!open) return;
-    setMetier(pro ? pro.metier : METIERS[0]);
+    setMetier(pro ? pro.metier : null);
     setDescription(''); setBudget(''); setCreneau(null);
     setNom(moi.nom && moi.nom !== 'Vous' ? moi.nom : '');
     setVille(moi.ville || '');
@@ -93,11 +93,15 @@ export default function QuoteModal({ quote, moi = {}, onClose, onSubmit }) {
               {mode === 'devis' && (
                 <>
                   <Text style={s.label}>Métier concerné</Text>
-                  <View style={s.chipRow}>
-                    {METIERS.map((m) => (
-                      <Chip key={m} label={m} on={metier === m} onPress={() => setMetier(m)} />
-                    ))}
-                  </View>
+                  {/* Une grille de quatre-vingt-douze puces serait un mur :
+                      on demande DE QUEL professionnel le client a besoin,
+                      et il le cherche par son nom. */}
+                  <ChampMetier
+                    valeur={metier}
+                    onChange={setMetier}
+                    titre="De quel professionnel avez-vous besoin ?"
+                    placeholder="Choisir le métier concerné..."
+                  />
                   <TextArea
                     placeholder="Décrivez votre projet..."
                     value={description}

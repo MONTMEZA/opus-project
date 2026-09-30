@@ -21,7 +21,7 @@ import {
   Camera, VideoIcon, TypeIcon, Layers, Lightbulb, Grid, Send, Music, X, Plus,
   ChevronLeft, ChevronRight,
 } from '../components/icons';
-import { METIERS } from '../data/demo';
+import { ChampMetier } from '../components/SelecteurMetiers';
 import {
   choisirImage, choisirPhotos, choisirVideo, choisirClips, choisirMusique,
   CLIPS_MAX, DUREE_CLIP_MAX, PHOTOS_MAX,
@@ -330,11 +330,12 @@ export default function CreerScreen({
       />
 
       <Text style={s.label}>Métier</Text>
-      <View style={s.chipRow}>
-        {METIERS.map((m) => (
-          <Chip key={m} label={m} on={createMetier === m} onPress={() => setCreateMetier(m)} />
-        ))}
-      </View>
+      <ChampMetier
+        valeur={createMetier}
+        onChange={setCreateMetier}
+        titre="Métier de cette publication"
+        placeholder="Choisir un métier..."
+      />
 
       <Field placeholder="Ville" value={createVille} onChangeText={setCreateVille} />
 

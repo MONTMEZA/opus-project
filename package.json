@@ -51,7 +51,8 @@
     "verifier-profil": "node scripts/verifier-profil.mjs",
     "verifier-acces": "node scripts/verifier-acces.mjs",
     "verifier-horaires": "node scripts/verifier-horaires.mjs",
-    "verifier-carte": "node scripts/verifier-carte.mjs"
+    "verifier-carte": "node scripts/verifier-carte.mjs",
+    "generer-catalogue": "node scripts/generer-catalogue.mjs"
   },
   "private": true,
   "devDependencies": {

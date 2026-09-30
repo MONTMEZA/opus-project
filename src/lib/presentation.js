@@ -22,20 +22,41 @@
  * Ce fichier ne contient aucune dépendance React : il se teste avec node.
  */
 
-/** Le nom de l'activité, pour écrire « maçonnerie » et pas « maçon ». */
+import { nomMetier } from './metiers.js';
+
+/**
+ * Le nom de l'ACTIVITÉ, pour écrire « maçonnerie » et pas « maçon ».
+ *
+ * La clé est celle du catalogue (`macon`), jamais le libellé : c'est ce qui
+ * est rangé en base. Tous les métiers n'y sont pas — quatre-vingt-douze
+ * tournures de ce genre n'apporteraient rien —, et ceux qui manquent
+ * retombent sur leur nom en minuscules, ce qui se lit très bien :
+ * « une entreprise de couverture » d'un côté, « un géomètre-expert » de
+ * l'autre.
+ */
 export const ACTIVITES = {
-  'Maçon': 'maçonnerie',
-  'Électricien': 'électricité',
-  'Plombier': 'plomberie',
-  'Charpentier': 'charpente',
-  'Peintre': 'peinture',
-  'Carreleur': 'carrelage',
-  'Couvreur': 'couverture',
-  'Menuisier': 'menuiserie',
-  'Plaquiste': 'plâtrerie',
-  'Terrassier': 'terrassement',
-  'Serrurier': 'serrurerie',
-  'Chauffagiste': 'chauffage',
+  'macon': 'maçonnerie',
+  'electricien': 'électricité',
+  'plombier': 'plomberie',
+  'charpentier': 'charpente',
+  'peintre-en-batiment': 'peinture',
+  'carreleur': 'carrelage',
+  'couvreur': 'couverture',
+  'menuisier': 'menuiserie',
+  'plaquiste': 'plâtrerie',
+  'terrassier': 'terrassement',
+  'serrurier': 'serrurerie',
+  'chauffagiste': 'chauffage',
+  'facadier': 'façade',
+  'paysagiste': 'aménagement paysager',
+  'pisciniste': 'construction de piscine',
+  'climaticien': 'climatisation',
+  'metallier': 'métallerie',
+  'vitrier': 'vitrerie',
+  'isolation': 'isolation',
+  'etancheur': 'étanchéité',
+  'zingueur': 'zinguerie',
+  'parqueteur': 'pose de parquet',
 };
 
 export const QUESTIONS = [
@@ -120,7 +141,7 @@ const QUALITES = {
 
 /** « maçonnerie et carrelage », « plomberie, chauffage et électricité ». */
 export function activitesDe(metiers = []) {
-  const noms = metiers.map((m) => ACTIVITES[m] || String(m).toLowerCase());
+  const noms = metiers.map((m) => ACTIVITES[m] || nomMetier(m).toLowerCase());
   if (noms.length === 0) return '';
   if (noms.length === 1) return noms[0];
   return `${noms.slice(0, -1).join(', ')} et ${noms[noms.length - 1]}`;
@@ -128,7 +149,9 @@ export function activitesDe(metiers = []) {
 
 /** « maçon et carreleur ». */
 export function metiersEnToutesLettres(metiers = []) {
-  const noms = metiers.map((m) => String(m).toLowerCase());
+  /* La clé du catalogue ne se lit pas : `peintre-en-batiment` deviendrait
+     « peintre-en-batiment ». On passe par le nom. */
+  const noms = metiers.map((m) => nomMetier(m).toLowerCase());
   if (noms.length === 0) return 'artisan';
   if (noms.length === 1) return noms[0];
   return `${noms.slice(0, -1).join(', ')} et ${noms[noms.length - 1]}`;

@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { C, F } from '../theme';
 import { Gradient, BtnMain, ChipFollow, Avatar, HazardStrip } from './ui';
 import { nbCommentairesDe } from './Commentaires';
+import { nomMetier } from '../lib/metiers';
 import Media, { estFichier } from './Media';
 import LecteurMontage from './LecteurMontage';
 import GlissementLateral from './GlissementLateral';
@@ -143,7 +144,7 @@ export default function VideoSlide({
 
         {/* informations en bas */}
         <View style={[s.info, { paddingBottom: infoPad }]}>
-          <View style={s.tag}><Text style={s.tagText}>{pro.metier}</Text></View>
+          <View style={s.tag}><Text style={s.tagText}>{nomMetier(pro.metier)}</Text></View>
           <Pressable
             style={s.feedNameRow}
             onPress={() => onView(pro.id)}
@@ -184,7 +185,7 @@ function ApercuPro({ pro }) {
           <Text style={s.apercuNom}>{pro.entreprise}</Text>
           {pro.verifie && <BadgeCheck size={17} color={C.verif} />}
         </View>
-        <Text style={s.apercuMeta}>{pro.metier} · {pro.ville}</Text>
+        <Text style={s.apercuMeta}>{nomMetier(pro.metier)} · {pro.ville}</Text>
         <View style={s.apercuAction}>
           <Text style={s.apercuActionTexte}>Voir sa page</Text>
           <ChevronRight size={15} color="#fff" />

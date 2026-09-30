@@ -385,7 +385,26 @@ d'ouvrir » et « trois plages dans la journée ».
 
 ## 2. Important — la plateforme ne tient pas à l'échelle sans ça
 
-### 2.0 Le référentiel des métiers — demandé le 29/09/2026
+### 2.0 Le référentiel des métiers — ✅ FAIT le 30/09/2026
+
+> **Le gros du chantier est construit.** Le rapport complet — ce qui a été
+> fait, les fichiers, les tables, les dix tests du §20, et ce qui reste —
+> est dans **`docs/RAPPORT-METIERS.md`**.
+>
+> En deux lignes : une seule source (`src/data/catalogue-metiers.js`,
+> 15 catégories · 92 métiers · 124 spécialités), le SQL engendré depuis
+> elle, un sélecteur unique qui remplace les neuf grilles de puces, et les
+> 26 lignes de la vraie base migrées vers les clés sans en perdre une.
+>
+> **Ce qui reste** : les spécialités proposées selon les métiers choisis,
+> les pièces justificatives par catégorie (un avocat n'a pas d'assurance
+> décennale), et l'administration du référentiel — qui est le 2.1
+> ci-dessous.
+>
+> Ce qui suit est l'audit d'avant, conservé parce qu'il explique les
+> décisions.
+
+#### L'audit d'origine — demandé le 29/09/2026
 
 > **À faire juste après la première brique, et AVANT toute fonctionnalité
 > nouvelle qui demande un métier** (appels d'offres, publicité ciblée,

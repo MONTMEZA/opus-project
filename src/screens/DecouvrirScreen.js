@@ -8,7 +8,8 @@ import { C, F } from '../theme';
 import { BtnMain, BtnMini, Chip, EmptyState, TextArea, Field } from '../components/ui';
 import ArtisanRow from '../components/ArtisanRow';
 import { Sparkles, Search } from '../components/icons';
-import { METIERS, avgReviews } from '../data/demo';
+import { avgReviews } from '../data/demo';
+import { ChampMetier } from '../components/SelecteurMetiers';
 import { exerce } from '../lib/metiers';
 import { correspond, texteDePro } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
@@ -162,16 +163,16 @@ export default function DecouvrirScreen({
       {/* --- recherche classique --- */}
       <BarreRecherche valeur={search} onChange={setSearch} />
 
-      <View style={s.chipRow}>
-        {METIERS.map((m) => (
-          <Chip
-            key={m}
-            label={m}
-            on={filterMetier === m}
-            onPress={() => setFilterMetier(filterMetier === m ? null : m)}
-          />
-        ))}
-      </View>
+      {/* Le filtre par métier passe par le même sélecteur que partout
+          ailleurs : « Tous les métiers » le remet à zéro. */}
+      <ChampMetier
+        valeur={filterMetier}
+        onChange={setFilterMetier}
+        titre="Métier recherché"
+        placeholder="Filtrer par métier..."
+        avecTous
+        style={s.filtreMetier}
+      />
 
       <Text style={s.listeTitre}>
         {search.trim() || filterMetier
@@ -215,7 +216,7 @@ const s = StyleSheet.create({
     paddingVertical: 2, paddingHorizontal: 12,
   },
   searchInput: { flex: 1, borderWidth: 0, backgroundColor: 'transparent', fontSize: 13, paddingHorizontal: 0 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, marginBottom: 10 },
+  filtreMetier: { marginTop: 12, marginBottom: 10 },
   iaResultatsTitre: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 8, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 10,

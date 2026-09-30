@@ -17,7 +17,7 @@ import { HazardStrip, Field, BtnMain } from '../components/ui';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
 import { ChevronLeft, Check, ShieldCheck } from '../components/icons';
-import { METIERS } from '../data/demo';
+import { METIER_PAR_DEFAUT } from '../lib/metiers';
 import { VERSION } from '../data/legal';
 
 export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onLireLegal }) {
@@ -29,7 +29,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
   const [motDePasse, setMotDePasse] = useState('');
   const [nom, setNom] = useState('');
   const [entreprise, setEntreprise] = useState('');
-  const [metiers, setMetiers] = useState([METIERS[0]]);
+  const [metiers, setMetiers] = useState([METIER_PAR_DEFAUT]);
   const [lieu, setLieu] = useState({ affichage: '' });
 
   const [enCours, setEnCours] = useState(false);

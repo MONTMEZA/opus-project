@@ -148,23 +148,18 @@ update public.professional_profiles
  where coalesce(cardinality(metiers), 0) = 0
    and metier is not null;
 
--- La liste fermée des métiers. ELLE DOIT RESTER IDENTIQUE à METIERS dans
--- src/data/demo.js — `npm run verifier-metiers` le vérifie, et c'est
--- exactement le genre d'écart qui a déjà fait refuser des montages.
+-- La liste des métiers NE VIT PLUS ICI.
+--
+-- Elle recopiait les douze noms à la main, et il fallait penser à la tenir
+-- d'accord avec `METIERS` dans le code — deux endroits, aucun rappel. La
+-- contrainte est donc reconstruite en **section 21**, après le catalogue
+-- qu'elle interroge : on ne peut pas contrôler une valeur contre une table
+-- qui n'existe pas encore.
+--
+-- On la retire seulement ici, pour que le fichier reste rejouable : la
+-- section 21 la repose, dans sa forme nouvelle.
 alter table public.professional_profiles
   drop constraint if exists pro_metiers_check;
-alter table public.professional_profiles
-  add constraint pro_metiers_check check (
-    cardinality(metiers) between 1 and 4
-    and metiers <@ array[
-      'Maçon', 'Électricien', 'Plombier', 'Charpentier', 'Peintre',
-      'Carreleur', 'Couvreur', 'Menuisier', 'Plaquiste', 'Terrassier',
-      'Serrurier', 'Chauffagiste'
-    ]::text[]
-  ) not valid;
--- `not valid` puis `validate` : les lignes déjà en base sont contrôlées
--- séparément, ce qui évite d'échouer sur une donnée historique.
-alter table public.professional_profiles validate constraint pro_metiers_check;
 
 -- Index pour « les artisans qui font ce métier » : GIN sur un tableau.
 create index if not exists idx_pro_metiers on public.professional_profiles using gin (metiers);
@@ -189,9 +184,31 @@ begin
     new.metier := new.metiers[1];
   end if;
 
-  -- Le verrou. `is distinct from` compare aussi les null correctement.
+  /* Le verrou — et son échappatoire d'administration.
+     `is distinct from` compare aussi les null correctement.
+
+     LE DÉFAUT QUE `auth.uid()` CORRIGE ICI
+     --------------------------------------
+     Sans cette condition, le verrou s'appliquait à TOUT LE MONDE, y
+     compris à une migration lancée depuis l'éditeur SQL. Constaté le
+     30/09/2026 : la migration vers le référentiel des métiers a été
+     refusée sur les fiches vérifiées, alors qu'elle ne changeait que
+     l'écriture d'un même métier (« Maçon » → `macon`).
+
+     C'est la règle déjà tenue par `tient_le_profil_pro()` pour les
+     colonnes de vérification : on reconnaît le professionnel lui-même à
+     `auth.uid() = new.id` ; depuis l'éditeur SQL ou une Edge Function,
+     `auth.uid()` est `null` et le verrou laisse passer.
+
+     Ce n'est pas un relâchement : la règle RLS « chacun sa fiche » exige
+     `auth.uid() = id` pour qu'une mise à jour touche une ligne. Un client
+     modifié ne peut donc pas se présenter avec `auth.uid()` vide — il ne
+     verrait plus aucune ligne à modifier. Et c'est par là que passera le
+     back-office qui validera les demandes de `metier_demandes`. */
   if tg_op = 'UPDATE'
      and old.verifie
+     and auth.uid() is not null
+     and auth.uid() = new.id
      and new.metiers is distinct from old.metiers then
     raise exception
       'Les métiers d''un profil vérifié ne se modifient pas directement : déposez une demande de modification.'
@@ -2765,3 +2782,478 @@ drop trigger if exists trg_tient_le_texte_comment on public.comments;
 create trigger trg_tient_le_texte_comment
   before update on public.comments
   for each row execute function public.tient_le_texte();
+
+-- ==========================================================================
+--  21. LE RÉFÉRENTIEL DES MÉTIERS
+--
+--  LE DÉFAUT QUE CETTE SECTION CORRIGE
+--  -----------------------------------
+--  La liste des métiers était écrite à DEUX endroits : douze chaînes dans
+--  `src/data/demo.js`, et les mêmes douze recopiées à la main dans la
+--  contrainte `pro_metiers_check`. Deux endroits à tenir d'accord, et
+--  personne ne s'en souvient — c'est exactement le défaut qui avait fait
+--  refuser tous les montages, quand l'application envoyait une valeur que
+--  la base ne connaissait pas.
+--
+--  Il n'y a désormais qu'une source : `src/data/catalogue-metiers.js`.
+--  Le bloc d'insertion plus bas est ENGENDRÉ à partir de ce fichier
+--  (`npm run generer-catalogue`), et `npm run verifier-metiers` refuse de
+--  passer si les deux ont divergé.
+--
+--  LA CLÉ, PAS LE NOM
+--  ------------------
+--  Un profil enregistre `macon`, pas « Maçon ». Le jour où le libellé
+--  changera, aucune ligne n'aura à être réécrite — et une clé sans accent
+--  ni majuscule ne se compare jamais de travers.
+--
+--  MÉTIER ET SPÉCIALITÉ, DANS LA MÊME TABLE
+--  ----------------------------------------
+--  Une spécialité est une ligne dont `parent` désigne son métier. Deux
+--  tables auraient obligé à écrire deux fois chaque requête de recherche,
+--  pour une hiérarchie qui n'a que deux niveaux.
+--
+--  Un professionnel porte au maximum quatre MÉTIERS (`parent is null`).
+--  Ses spécialités ne consomment aucun de ces quatre emplacements — sans
+--  quoi un maçon qui fait aussi des extensions en aurait déjà brûlé deux
+--  pour un seul métier.
+--
+--  L'INTERNATIONALISATION
+--  ----------------------
+--  Tout est en français et la France est la seule référence. La colonne
+--  `locale` existe néanmoins : ajouter une langue voudra dire ajouter des
+--  lignes, jamais réécrire le schéma.
+-- ==========================================================================
+
+create table if not exists public.metiers_categories (
+  cle    text primary key,
+  nom    text not null,
+  ordre  int  not null default 0,
+  locale text not null default 'fr-FR'
+);
+
+create table if not exists public.metiers_catalogue (
+  cle        text primary key,
+  nom        text not null,
+  categorie  text not null references public.metiers_categories(cle),
+  -- `null` = c'est un MÉTIER. Renseigné = c'est une spécialité de ce métier.
+  parent     text references public.metiers_catalogue(cle) on delete cascade,
+  -- Ce que les gens TAPENT : « placo », « parpaing », « clim ».
+  synonymes  text[] not null default '{}',
+  -- §18 de la demande : on DÉSACTIVE, on ne supprime pas. Des comptes y
+  -- sont rattachés, et les effacer casserait leurs fiches.
+  actif      boolean not null default true,
+  ordre      int  not null default 0,
+  locale     text not null default 'fr-FR'
+);
+
+create index if not exists idx_catalogue_parent    on public.metiers_catalogue (parent);
+create index if not exists idx_catalogue_categorie on public.metiers_catalogue (categorie);
+
+-- Le catalogue se lit sans être connecté : l'inscription demande un métier
+-- AVANT qu'un compte existe. Personne ne l'écrit depuis l'application —
+-- aucune politique d'écriture, donc seul l'administrateur y touche.
+alter table public.metiers_categories enable row level security;
+alter table public.metiers_catalogue  enable row level security;
+drop policy if exists "lecture categories metiers" on public.metiers_categories;
+create policy "lecture categories metiers" on public.metiers_categories
+  for select using (true);
+drop policy if exists "lecture catalogue metiers" on public.metiers_catalogue;
+create policy "lecture catalogue metiers" on public.metiers_catalogue
+  for select using (true);
+
+-- --------------------------------------------------------------------------
+--  21.1 Le contenu
+--
+--  ENGENDRÉ à partir de `src/data/catalogue-metiers.js`. Ne rien corriger
+--  ici : la prochaine exécution de `npm run generer-catalogue` écraserait
+--  la correction. C'est le fichier JavaScript qui fait foi.
+--
+--  `on conflict` met à jour plutôt qu'échouer : le fichier reste rejouable,
+--  et un métier renommé dans le catalogue se propage au prochain passage.
+--  `actif` n'est PAS écrasé — un métier désactivé à la main par
+--  l'administrateur le reste.
+-- --------------------------------------------------------------------------
+-- <<< CATALOGUE ENGENDRÉ — ne pas modifier à la main >>>
+
+-- 15 catégories.
+insert into public.metiers_categories (cle, nom, ordre) values
+  ('gros-oeuvre', 'Gros œuvre', 0),
+  ('toiture', 'Toiture, charpente, étanchéité', 1),
+  ('plomberie-cvc', 'Plomberie, chauffage, climatisation', 2),
+  ('electricite', 'Électricité, domotique, énergie', 3),
+  ('menuiserie', 'Menuiserie, serrurerie, vitrerie', 4),
+  ('finitions', 'Revêtements et finitions', 5),
+  ('isolation-facade', 'Isolation et façade', 6),
+  ('terrassement-vrd', 'Terrassement, VRD, assainissement', 7),
+  ('exterieur', 'Extérieur, paysage, piscine', 8),
+  ('demolition', 'Démolition et désamiantage', 9),
+  ('construction', 'Construction et entreprise générale', 10),
+  ('conception', 'Architecture et maîtrise d''œuvre', 11),
+  ('etudes', 'Bureaux d''études et ingénierie', 12),
+  ('mesure', 'Géomètres, diagnostics, contrôle', 13),
+  ('conseil', 'Conseil, juridique, assurance, finance', 14)
+  on conflict (cle) do update set nom = excluded.nom, ordre = excluded.ordre;
+
+-- 92 métiers.
+insert into public.metiers_catalogue
+  (cle, nom, categorie, parent, synonymes, ordre) values
+  ('macon', 'Maçon', 'gros-oeuvre', null, array['maçonnerie', 'parpaing', 'agglo', 'béton', 'briques']::text[], 0),
+  ('maconnerie-generale', 'Maçonnerie générale', 'gros-oeuvre', null, array['entreprise de maçonnerie', 'gros œuvre']::text[], 1),
+  ('macon-patrimoine', 'Maçon du patrimoine', 'gros-oeuvre', null, array['monument historique', 'bâti ancien', 'restauration']::text[], 2),
+  ('coffreur-bancheur', 'Coffreur-bancheur', 'gros-oeuvre', null, array['banche', 'coffrage']::text[], 3),
+  ('ferrailleur', 'Ferrailleur', 'gros-oeuvre', null, array['armature', 'treillis']::text[], 4),
+  ('tailleur-pierre', 'Tailleur de pierre', 'gros-oeuvre', null, '{}'::text[], 5),
+  ('couvreur', 'Couvreur', 'toiture', null, array['toiture', 'toit', 'couverture']::text[], 6),
+  ('zingueur', 'Zingueur', 'toiture', null, array['zinc', 'gouttière', 'chéneau']::text[], 7),
+  ('charpentier', 'Charpentier', 'toiture', null, array['charpente', 'bois', 'poutre']::text[], 8),
+  ('etancheur', 'Étancheur', 'toiture', null, array['étanchéité', 'infiltration']::text[], 9),
+  ('bardeur', 'Bardeur', 'toiture', null, array['bardage']::text[], 10),
+  ('ramoneur', 'Ramoneur', 'toiture', null, array['ramonage', 'conduit']::text[], 11),
+  ('plombier', 'Plombier', 'plomberie-cvc', null, array['plomberie', 'sanitaire', 'fuite', 'canalisation']::text[], 12),
+  ('chauffagiste', 'Chauffagiste', 'plomberie-cvc', null, array['chauffage', 'chaudière', 'radiateur']::text[], 13),
+  ('climaticien', 'Climaticien', 'plomberie-cvc', null, array['climatisation', 'clim', 'cvc']::text[], 14),
+  ('frigoriste', 'Frigoriste', 'plomberie-cvc', null, array['froid', 'chambre froide']::text[], 15),
+  ('installateur-poele', 'Installateur de poêle et cheminée', 'plomberie-cvc', null, array['poêle', 'insert', 'cheminée', 'granulés']::text[], 16),
+  ('electricien', 'Électricien', 'electricite', null, array['électricité', 'courant', 'tableau', 'prise']::text[], 17),
+  ('domoticien', 'Domoticien', 'electricite', null, array['domotique', 'maison connectée', 'volets connectés']::text[], 18),
+  ('installateur-photovoltaique', 'Installateur photovoltaïque', 'electricite', null, array['panneaux solaires', 'solaire', 'autoconsommation']::text[], 19),
+  ('installateur-borne-recharge', 'Installateur de bornes de recharge', 'electricite', null, array['borne électrique', 'wallbox', 'irve']::text[], 20),
+  ('installateur-alarme', 'Installateur alarme et vidéosurveillance', 'electricite', null, array['alarme', 'caméra', 'sécurité']::text[], 21),
+  ('menuisier', 'Menuisier', 'menuiserie', null, array['menuiserie', 'porte', 'fenêtre', 'placard']::text[], 22),
+  ('menuisier-bois', 'Menuisier bois', 'menuiserie', null, '{}'::text[], 23),
+  ('menuisier-alu', 'Menuisier aluminium', 'menuiserie', null, array['alu']::text[], 24),
+  ('menuisier-pvc', 'Menuisier PVC', 'menuiserie', null, '{}'::text[], 25),
+  ('serrurier', 'Serrurier', 'menuiserie', null, array['serrure', 'porte claquée', 'clé', 'verrou']::text[], 26),
+  ('metallier', 'Métallier', 'menuiserie', null, array['ferronnerie', 'acier', 'soudure']::text[], 27),
+  ('vitrier', 'Vitrier', 'menuiserie', null, array['vitre', 'vitrage', 'miroir']::text[], 28),
+  ('poseur-volets', 'Poseur de volets et stores', 'menuiserie', null, array['volet roulant', 'store', 'pergola bioclimatique']::text[], 29),
+  ('peintre-en-batiment', 'Peintre en bâtiment', 'finitions', null, array['peintre', 'peinture', 'papier peint']::text[], 30),
+  ('plaquiste', 'Plaquiste', 'finitions', null, array['placo', 'placoplatre', 'ba13', 'plaque de plâtre']::text[], 31),
+  ('platrier', 'Plâtrier', 'finitions', null, array['plâtre', 'staff']::text[], 32),
+  ('carreleur', 'Carreleur', 'finitions', null, array['carrelage', 'faïence', 'carreau', 'mosaïque']::text[], 33),
+  ('solier', 'Solier-moquettiste', 'finitions', null, array['sol souple', 'lino', 'moquette', 'pvc']::text[], 34),
+  ('parqueteur', 'Parqueteur', 'finitions', null, array['parquet', 'ponçage', 'vitrification']::text[], 35),
+  ('facadier', 'Façadier', 'isolation-facade', null, array['façade', 'ravalement', 'crépi']::text[], 36),
+  ('enduiseur', 'Enduiseur', 'isolation-facade', null, array['enduit']::text[], 37),
+  ('isolation', 'Entreprise d''isolation', 'isolation-facade', null, array['isolant', 'laine de verre', 'laine de roche', 'combles']::text[], 38),
+  ('ite', 'Isolation thermique par l''extérieur', 'isolation-facade', null, array['ite', 'isolation extérieure']::text[], 39),
+  ('terrassier', 'Terrassier', 'terrassement-vrd', null, array['terrassement', 'pelle', 'remblai', 'fouille']::text[], 40),
+  ('canalisateur', 'Canalisateur', 'terrassement-vrd', null, array['canalisation', 'réseau enterré']::text[], 41),
+  ('vrd', 'Entreprise VRD', 'terrassement-vrd', null, array['voirie', 'réseaux divers', 'vrd']::text[], 42),
+  ('assainissement', 'Assainissement', 'terrassement-vrd', null, array['fosse', 'tout à l’égout', 'eaux usées']::text[], 43),
+  ('forage', 'Forage et puits', 'terrassement-vrd', null, array['puits', 'géothermie']::text[], 44),
+  ('paysagiste', 'Paysagiste', 'exterieur', null, array['jardin', 'espaces verts', 'gazon', 'plantation']::text[], 45),
+  ('macon-paysagiste', 'Maçon paysagiste', 'exterieur', null, array['terrasse', 'allée', 'muret']::text[], 46),
+  ('pisciniste', 'Pisciniste', 'exterieur', null, array['piscine', 'bassin', 'spa']::text[], 47),
+  ('elagueur', 'Élagueur', 'exterieur', null, array['élagage', 'abattage', 'arbre']::text[], 48),
+  ('cloturiste', 'Poseur de clôtures et portails', 'exterieur', null, array['clôture', 'grillage', 'portail']::text[], 49),
+  ('demolisseur', 'Entreprise de démolition', 'demolition', null, array['démolition', 'casse', 'curage']::text[], 50),
+  ('desamianteur', 'Désamianteur', 'demolition', null, array['amiante', 'désamiantage']::text[], 51),
+  ('depollution', 'Entreprise de dépollution', 'demolition', null, array['dépollution', 'sol pollué']::text[], 52),
+  ('constructeur-maisons', 'Constructeur de maisons individuelles', 'construction', null, array['cmi', 'maison neuve']::text[], 53),
+  ('entreprise-generale', 'Entreprise générale du bâtiment', 'construction', null, array['tous corps d’état', 'tce']::text[], 54),
+  ('contractant-general', 'Contractant général', 'construction', null, '{}'::text[], 55),
+  ('renovation-globale', 'Entreprise de rénovation globale', 'construction', null, array['rénovation complète', 'clé en main']::text[], 56),
+  ('promoteur', 'Promoteur immobilier', 'construction', null, '{}'::text[], 57),
+  ('architecte', 'Architecte', 'conception', null, array['archi', 'plans', 'permis']::text[], 58),
+  ('architecte-interieur', 'Architecte d''intérieur', 'conception', null, array['archi intérieur', 'aménagement']::text[], 59),
+  ('architecte-paysagiste', 'Architecte paysagiste', 'conception', null, '{}'::text[], 60),
+  ('maitre-oeuvre', 'Maître d''œuvre', 'conception', null, array['moe', 'suivi de chantier']::text[], 61),
+  ('amo', 'Assistant à maîtrise d''ouvrage', 'conception', null, array['amo', 'amoa']::text[], 62),
+  ('decorateur-interieur', 'Décorateur d''intérieur', 'conception', null, array['décoration', 'home staging']::text[], 63),
+  ('dessinateur-projeteur', 'Dessinateur-projeteur', 'conception', null, array['plans', 'autocad']::text[], 64),
+  ('bim-manager', 'BIM Manager', 'conception', null, array['bim', 'maquette numérique']::text[], 65),
+  ('modeleur-bim', 'Modeleur BIM', 'conception', null, array['revit']::text[], 66),
+  ('ingenieur-structure', 'Ingénieur structure', 'etudes', null, array['calcul de structure', 'descente de charges']::text[], 67),
+  ('ingenieur-batiment', 'Ingénieur bâtiment', 'etudes', null, '{}'::text[], 68),
+  ('ingenieur-genie-civil', 'Ingénieur génie civil', 'etudes', null, '{}'::text[], 69),
+  ('be-structure', 'Bureau d''études structure', 'etudes', null, array['bet structure']::text[], 70),
+  ('be-thermique', 'Bureau d''études thermique', 'etudes', null, array['rt 2020', 're 2020', 'étude thermique']::text[], 71),
+  ('be-fluides', 'Bureau d''études fluides', 'etudes', null, array['cvc', 'plomberie', 'électricité']::text[], 72),
+  ('be-acoustique', 'Bureau d''études acoustique', 'etudes', null, array['acoustique', 'bruit']::text[], 73),
+  ('be-environnement', 'Bureau d''études environnement', 'etudes', null, '{}'::text[], 74),
+  ('be-geotechnique', 'Bureau d''études géotechnique', 'etudes', null, array['g2', 'étude de sol']::text[], 75),
+  ('geotechnicien', 'Géotechnicien', 'etudes', null, array['étude de sol', 'sondage']::text[], 76),
+  ('economiste-construction', 'Économiste de la construction', 'etudes', null, array['chiffrage', 'dpgf']::text[], 77),
+  ('metreur', 'Métreur', 'etudes', null, array['métré', 'quantitatif']::text[], 78),
+  ('geometre-expert', 'Géomètre-expert', 'mesure', null, array['bornage', 'division parcellaire']::text[], 79),
+  ('topographe', 'Topographe', 'mesure', null, array['relevé topographique']::text[], 80),
+  ('diagnostiqueur', 'Diagnostiqueur immobilier', 'mesure', null, array['diagnostic', 'dpe', 'amiante', 'plomb']::text[], 81),
+  ('expert-batiment', 'Expert bâtiment', 'mesure', null, array['expertise', 'fissures', 'malfaçon']::text[], 82),
+  ('expert-construction', 'Expert construction', 'mesure', null, array['sinistre', 'contre-expertise']::text[], 83),
+  ('bureau-controle', 'Bureau de contrôle', 'mesure', null, array['contrôle technique', 'ctc']::text[], 84),
+  ('coordonnateur-sps', 'Coordonnateur SPS', 'mesure', null, array['sps', 'sécurité chantier']::text[], 85),
+  ('avocat-construction', 'Avocat en droit de la construction', 'conseil', null, array['avocat', 'litige chantier']::text[], 86),
+  ('avocat-immobilier', 'Avocat en droit immobilier', 'conseil', null, array['avocat', 'copropriété']::text[], 87),
+  ('expert-comptable-btp', 'Expert-comptable spécialisé BTP', 'conseil', null, array['comptable', 'comptabilité']::text[], 88),
+  ('courtier-assurance-construction', 'Courtier en assurance construction', 'conseil', null, array['assurance', 'décennale', 'orias']::text[], 89),
+  ('courtier-financement', 'Courtier en financement', 'conseil', null, array['prêt', 'crédit', 'financement']::text[], 90),
+  ('consultant-btp', 'Consultant BTP', 'conseil', null, array['conseil', 'accompagnement']::text[], 91)
+  on conflict (cle) do update set
+    nom = excluded.nom, categorie = excluded.categorie,
+    parent = excluded.parent, synonymes = excluded.synonymes,
+    ordre = excluded.ordre;
+
+-- 124 spécialités — après les métiers, car `parent` pointe vers eux.
+insert into public.metiers_catalogue
+  (cle, nom, categorie, parent, synonymes, ordre) values
+  ('construction-maison', 'Construction de maison', 'gros-oeuvre', 'macon', '{}'::text[], 0),
+  ('renovation-maconnerie', 'Rénovation', 'gros-oeuvre', 'macon', '{}'::text[], 1),
+  ('extension', 'Extension', 'gros-oeuvre', 'macon', '{}'::text[], 2),
+  ('fondations', 'Fondations', 'gros-oeuvre', 'macon', '{}'::text[], 3),
+  ('dalle-beton', 'Dalle béton', 'gros-oeuvre', 'macon', '{}'::text[], 4),
+  ('beton-arme', 'Béton armé', 'gros-oeuvre', 'macon', '{}'::text[], 5),
+  ('ouverture-mur-porteur', 'Ouverture de mur porteur', 'gros-oeuvre', 'macon', array['ipn', 'poutre']::text[], 6),
+  ('mur-soutenement', 'Mur de soutènement', 'gros-oeuvre', 'macon', '{}'::text[], 7),
+  ('maconnerie-pierre', 'Maçonnerie en pierre', 'gros-oeuvre', 'macon', '{}'::text[], 8),
+  ('pierre-de-taille', 'Pierre de taille', 'gros-oeuvre', 'macon-patrimoine', '{}'::text[], 9),
+  ('enduit-chaux-ancien', 'Enduit à la chaux', 'gros-oeuvre', 'macon-patrimoine', '{}'::text[], 10),
+  ('rejointoiement', 'Rejointoiement', 'gros-oeuvre', 'macon-patrimoine', '{}'::text[], 11),
+  ('toiture-tuile', 'Toiture en tuile', 'toiture', 'couvreur', '{}'::text[], 12),
+  ('toiture-ardoise', 'Toiture en ardoise', 'toiture', 'couvreur', '{}'::text[], 13),
+  ('toiture-zinc', 'Toiture en zinc', 'toiture', 'couvreur', '{}'::text[], 14),
+  ('renovation-toiture', 'Rénovation de toiture', 'toiture', 'couvreur', '{}'::text[], 15),
+  ('recherche-fuite-toiture', 'Recherche de fuite', 'toiture', 'couvreur', '{}'::text[], 16),
+  ('isolation-toiture', 'Isolation de toiture', 'toiture', 'couvreur', '{}'::text[], 17),
+  ('fenetre-de-toit', 'Fenêtre de toit', 'toiture', 'couvreur', array['velux']::text[], 18),
+  ('demoussage', 'Démoussage', 'toiture', 'couvreur', '{}'::text[], 19),
+  ('gouttiere', 'Gouttières', 'toiture', 'zingueur', '{}'::text[], 20),
+  ('habillage-zinc', 'Habillage en zinc', 'toiture', 'zingueur', '{}'::text[], 21),
+  ('charpente-traditionnelle', 'Charpente traditionnelle', 'toiture', 'charpentier', '{}'::text[], 22),
+  ('fermette', 'Fermette industrielle', 'toiture', 'charpentier', '{}'::text[], 23),
+  ('ossature-bois', 'Ossature bois', 'toiture', 'charpentier', '{}'::text[], 24),
+  ('surelevation', 'Surélévation', 'toiture', 'charpentier', '{}'::text[], 25),
+  ('carport', 'Abri, carport, pergola', 'toiture', 'charpentier', '{}'::text[], 26),
+  ('toiture-terrasse', 'Toiture-terrasse', 'toiture', 'etancheur', '{}'::text[], 27),
+  ('membrane-epdm', 'Membrane EPDM', 'toiture', 'etancheur', '{}'::text[], 28),
+  ('etancheite-balcon', 'Étanchéité de balcon', 'toiture', 'etancheur', '{}'::text[], 29),
+  ('salle-de-bain', 'Salle de bain', 'plomberie-cvc', 'plombier', '{}'::text[], 30),
+  ('douche-italienne', 'Douche à l''italienne', 'plomberie-cvc', 'plombier', '{}'::text[], 31),
+  ('recherche-fuite-eau', 'Recherche de fuite d''eau', 'plomberie-cvc', 'plombier', '{}'::text[], 32),
+  ('degorgement', 'Débouchage et dégorgement', 'plomberie-cvc', 'plombier', '{}'::text[], 33),
+  ('chauffe-eau', 'Chauffe-eau', 'plomberie-cvc', 'plombier', '{}'::text[], 34),
+  ('reseau-per-cuivre', 'Réseau cuivre ou PER', 'plomberie-cvc', 'plombier', '{}'::text[], 35),
+  ('chaudiere-gaz', 'Chaudière gaz', 'plomberie-cvc', 'chauffagiste', '{}'::text[], 36),
+  ('pompe-a-chaleur', 'Pompe à chaleur', 'plomberie-cvc', 'chauffagiste', array['pac']::text[], 37),
+  ('plancher-chauffant', 'Plancher chauffant', 'plomberie-cvc', 'chauffagiste', '{}'::text[], 38),
+  ('radiateurs', 'Radiateurs', 'plomberie-cvc', 'chauffagiste', '{}'::text[], 39),
+  ('entretien-chaudiere', 'Entretien de chaudière', 'plomberie-cvc', 'chauffagiste', '{}'::text[], 40),
+  ('clim-reversible', 'Climatisation réversible', 'plomberie-cvc', 'climaticien', '{}'::text[], 41),
+  ('gainable', 'Climatisation gainable', 'plomberie-cvc', 'climaticien', '{}'::text[], 42),
+  ('vmc', 'VMC et ventilation', 'plomberie-cvc', 'climaticien', '{}'::text[], 43),
+  ('renovation-electrique', 'Rénovation électrique', 'electricite', 'electricien', '{}'::text[], 44),
+  ('tableau-electrique', 'Tableau électrique', 'electricite', 'electricien', '{}'::text[], 45),
+  ('mise-aux-normes', 'Mise aux normes NF C 15-100', 'electricite', 'electricien', '{}'::text[], 46),
+  ('eclairage', 'Éclairage', 'electricite', 'electricien', '{}'::text[], 47),
+  ('reseau-informatique', 'Réseau informatique et TV', 'electricite', 'electricien', '{}'::text[], 48),
+  ('cuisine', 'Cuisine', 'menuiserie', 'menuisier', '{}'::text[], 49),
+  ('dressing', 'Dressing et placards', 'menuiserie', 'menuisier', '{}'::text[], 50),
+  ('escalier-bois', 'Escalier bois', 'menuiserie', 'menuisier', '{}'::text[], 51),
+  ('agencement', 'Agencement sur mesure', 'menuiserie', 'menuisier', '{}'::text[], 52),
+  ('porte-interieure', 'Portes intérieures', 'menuiserie', 'menuisier', '{}'::text[], 53),
+  ('ouverture-porte', 'Ouverture de porte', 'menuiserie', 'serrurier', '{}'::text[], 54),
+  ('changement-serrure', 'Changement de serrure', 'menuiserie', 'serrurier', '{}'::text[], 55),
+  ('porte-blindee', 'Porte blindée', 'menuiserie', 'serrurier', '{}'::text[], 56),
+  ('controle-acces', 'Contrôle d''accès', 'menuiserie', 'serrurier', '{}'::text[], 57),
+  ('garde-corps', 'Garde-corps', 'menuiserie', 'metallier', '{}'::text[], 58),
+  ('portail', 'Portail', 'menuiserie', 'metallier', '{}'::text[], 59),
+  ('verriere', 'Verrière', 'menuiserie', 'metallier', '{}'::text[], 60),
+  ('escalier-metal', 'Escalier métallique', 'menuiserie', 'metallier', '{}'::text[], 61),
+  ('double-vitrage', 'Double vitrage', 'menuiserie', 'vitrier', '{}'::text[], 62),
+  ('remplacement-vitre', 'Remplacement de vitre', 'menuiserie', 'vitrier', '{}'::text[], 63),
+  ('miroiterie', 'Miroiterie', 'menuiserie', 'vitrier', '{}'::text[], 64),
+  ('peinture-interieure', 'Peinture intérieure', 'finitions', 'peintre-en-batiment', '{}'::text[], 65),
+  ('peinture-exterieure', 'Peinture extérieure', 'finitions', 'peintre-en-batiment', '{}'::text[], 66),
+  ('papier-peint', 'Papier peint', 'finitions', 'peintre-en-batiment', '{}'::text[], 67),
+  ('enduit-decoratif', 'Enduit décoratif', 'finitions', 'peintre-en-batiment', '{}'::text[], 68),
+  ('laque-boiserie', 'Laque et boiseries', 'finitions', 'peintre-en-batiment', '{}'::text[], 69),
+  ('cloison', 'Cloisons', 'finitions', 'plaquiste', '{}'::text[], 70),
+  ('faux-plafond', 'Faux plafond', 'finitions', 'plaquiste', '{}'::text[], 71),
+  ('doublage', 'Doublage', 'finitions', 'plaquiste', '{}'::text[], 72),
+  ('bandes-joints', 'Bandes et joints', 'finitions', 'plaquiste', '{}'::text[], 73),
+  ('enduit-platre', 'Enduit au plâtre', 'finitions', 'platrier', '{}'::text[], 74),
+  ('moulure-staff', 'Moulures et staff', 'finitions', 'platrier', '{}'::text[], 75),
+  ('carrelage-grand-format', 'Grand format', 'finitions', 'carreleur', '{}'::text[], 76),
+  ('faience', 'Faïence', 'finitions', 'carreleur', '{}'::text[], 77),
+  ('mosaique', 'Mosaïque', 'finitions', 'carreleur', '{}'::text[], 78),
+  ('carrelage-exterieur', 'Terrasse et extérieur', 'finitions', 'carreleur', '{}'::text[], 79),
+  ('chape', 'Chape', 'finitions', 'carreleur', '{}'::text[], 80),
+  ('pose-parquet', 'Pose de parquet', 'finitions', 'parqueteur', '{}'::text[], 81),
+  ('poncage-vitrification', 'Ponçage et vitrification', 'finitions', 'parqueteur', '{}'::text[], 82),
+  ('ravalement', 'Ravalement de façade', 'isolation-facade', 'facadier', '{}'::text[], 83),
+  ('enduit-monocouche', 'Enduit monocouche', 'isolation-facade', 'facadier', '{}'::text[], 84),
+  ('enduit-chaux', 'Enduit à la chaux', 'isolation-facade', 'facadier', '{}'::text[], 85),
+  ('nettoyage-facade', 'Nettoyage de façade', 'isolation-facade', 'facadier', '{}'::text[], 86),
+  ('isolation-combles', 'Isolation des combles', 'isolation-facade', 'isolation', '{}'::text[], 87),
+  ('isolation-murs', 'Isolation des murs', 'isolation-facade', 'isolation', '{}'::text[], 88),
+  ('isolation-plancher', 'Isolation du plancher', 'isolation-facade', 'isolation', '{}'::text[], 89),
+  ('soufflage', 'Soufflage', 'isolation-facade', 'isolation', '{}'::text[], 90),
+  ('isolation-phonique', 'Isolation phonique', 'isolation-facade', 'isolation', '{}'::text[], 91),
+  ('fouille', 'Fouilles et tranchées', 'terrassement-vrd', 'terrassier', '{}'::text[], 92),
+  ('nivellement', 'Nivellement et plateforme', 'terrassement-vrd', 'terrassier', '{}'::text[], 93),
+  ('viabilisation', 'Viabilisation de terrain', 'terrassement-vrd', 'terrassier', '{}'::text[], 94),
+  ('drainage', 'Drainage', 'terrassement-vrd', 'terrassier', '{}'::text[], 95),
+  ('fosse-septique', 'Fosse septique', 'terrassement-vrd', 'assainissement', '{}'::text[], 96),
+  ('micro-station', 'Micro-station', 'terrassement-vrd', 'assainissement', '{}'::text[], 97),
+  ('epandage', 'Épandage', 'terrassement-vrd', 'assainissement', '{}'::text[], 98),
+  ('creation-jardin', 'Création de jardin', 'exterieur', 'paysagiste', '{}'::text[], 99),
+  ('entretien-espaces-verts', 'Entretien des espaces verts', 'exterieur', 'paysagiste', '{}'::text[], 100),
+  ('arrosage-automatique', 'Arrosage automatique', 'exterieur', 'paysagiste', '{}'::text[], 101),
+  ('gazon', 'Gazon et pelouse', 'exterieur', 'paysagiste', '{}'::text[], 102),
+  ('terrasse', 'Terrasse', 'exterieur', 'macon-paysagiste', '{}'::text[], 103),
+  ('allee', 'Allée et accès', 'exterieur', 'macon-paysagiste', '{}'::text[], 104),
+  ('muret', 'Muret', 'exterieur', 'macon-paysagiste', '{}'::text[], 105),
+  ('escalier-exterieur', 'Escalier extérieur', 'exterieur', 'macon-paysagiste', '{}'::text[], 106),
+  ('piscine-beton', 'Piscine béton', 'exterieur', 'pisciniste', '{}'::text[], 107),
+  ('piscine-coque', 'Piscine coque', 'exterieur', 'pisciniste', '{}'::text[], 108),
+  ('renovation-piscine', 'Rénovation de piscine', 'exterieur', 'pisciniste', '{}'::text[], 109),
+  ('local-technique', 'Local technique', 'exterieur', 'pisciniste', '{}'::text[], 110),
+  ('spa', 'Spa et jacuzzi', 'exterieur', 'pisciniste', '{}'::text[], 111),
+  ('demolition-interieure', 'Démolition intérieure', 'demolition', 'demolisseur', '{}'::text[], 112),
+  ('curage', 'Curage', 'demolition', 'demolisseur', '{}'::text[], 113),
+  ('permis-de-construire', 'Permis de construire', 'conception', 'architecte', '{}'::text[], 114),
+  ('maison-individuelle', 'Maison individuelle', 'conception', 'architecte', '{}'::text[], 115),
+  ('renovation-lourde', 'Rénovation lourde', 'conception', 'architecte', '{}'::text[], 116),
+  ('erp', 'Bâtiment recevant du public', 'conception', 'architecte', '{}'::text[], 117),
+  ('dpe', 'DPE', 'mesure', 'diagnostiqueur', '{}'::text[], 118),
+  ('diag-amiante', 'Amiante', 'mesure', 'diagnostiqueur', '{}'::text[], 119),
+  ('diag-plomb', 'Plomb', 'mesure', 'diagnostiqueur', '{}'::text[], 120),
+  ('diag-termites', 'Termites', 'mesure', 'diagnostiqueur', '{}'::text[], 121),
+  ('diag-electricite-gaz', 'Électricité et gaz', 'mesure', 'diagnostiqueur', '{}'::text[], 122),
+  ('loi-carrez', 'Loi Carrez', 'mesure', 'diagnostiqueur', '{}'::text[], 123)
+  on conflict (cle) do update set
+    nom = excluded.nom, categorie = excluded.categorie,
+    parent = excluded.parent, synonymes = excluded.synonymes,
+    ordre = excluded.ordre;
+
+-- <<< FIN DU CATALOGUE ENGENDRÉ >>>
+
+-- --------------------------------------------------------------------------
+--  21.2 La migration des douze anciens noms
+--
+--  Six fiches professionnelles et sept valeurs de métier en tout, le
+--  30/09/2026 — relevé sur la vraie base avant d'écrire ceci. La migration
+--  ne coûte donc rien AUJOURD'HUI ; avec deux cents artisans, elle aurait
+--  été un chantier à part entière.
+--
+--  Elle est rejouable d'elle-même : au deuxième passage, les valeurs sont
+--  déjà des clés, et une clé n'est le nom d'aucune ancienne entrée.
+--
+--  Aucune ligne n'est supprimée, aucune valeur inconnue n'est effacée en
+--  silence : ce qui ne correspond à rien reste tel quel et ressortira dans
+--  le contrôle de la section suivante.
+-- --------------------------------------------------------------------------
+create or replace function public.metier_depuis_ancien_nom(p_nom text)
+returns text
+language sql
+immutable
+-- `set search_path` même ici, où la fonction ne lit aucune table : sans
+-- lui, Supabase signale « Function Search Path Mutable », et une alerte
+-- qu'on apprend à ignorer est une alerte qui ne sert plus à rien.
+set search_path = public
+as $$
+  select case p_nom
+    when 'Maçon'        then 'macon'
+    when 'Électricien'  then 'electricien'
+    when 'Plombier'     then 'plombier'
+    when 'Charpentier'  then 'charpentier'
+    when 'Peintre'      then 'peintre-en-batiment'
+    when 'Carreleur'    then 'carreleur'
+    when 'Couvreur'     then 'couvreur'
+    when 'Menuisier'    then 'menuisier'
+    when 'Plaquiste'    then 'plaquiste'
+    when 'Terrassier'   then 'terrassier'
+    when 'Serrurier'    then 'serrurier'
+    when 'Chauffagiste' then 'chauffagiste'
+    else p_nom
+  end;
+$$;
+
+do $$
+begin
+  -- Les fiches professionnelles : le tableau ET la colonne principale.
+  update public.professional_profiles
+     set metiers = (select array_agg(public.metier_depuis_ancien_nom(m))
+                      from unnest(metiers) m)
+   where exists (select 1 from unnest(metiers) m
+                  where public.metier_depuis_ancien_nom(m) <> m);
+
+  update public.professional_profiles
+     set metier = public.metier_depuis_ancien_nom(metier)
+   where public.metier_depuis_ancien_nom(metier) <> metier;
+
+  -- Partout ailleurs où un métier est écrit.
+  update public.posts
+     set metier = public.metier_depuis_ancien_nom(metier)
+   where metier is not null and public.metier_depuis_ancien_nom(metier) <> metier;
+
+  update public.demandes
+     set metier = public.metier_depuis_ancien_nom(metier)
+   where metier is not null and public.metier_depuis_ancien_nom(metier) <> metier;
+
+  update public.quote_requests
+     set metier = public.metier_depuis_ancien_nom(metier)
+   where metier is not null and public.metier_depuis_ancien_nom(metier) <> metier;
+
+  update public.annonces_pro
+     set metier = public.metier_depuis_ancien_nom(metier)
+   where metier is not null and public.metier_depuis_ancien_nom(metier) <> metier;
+
+  update public.metier_demandes
+     set metiers_actuels = (select array_agg(public.metier_depuis_ancien_nom(m))
+                              from unnest(metiers_actuels) m),
+         metiers_voulus  = (select array_agg(public.metier_depuis_ancien_nom(m))
+                              from unnest(metiers_voulus) m)
+   where exists (select 1 from unnest(metiers_actuels || metiers_voulus) m
+                  where public.metier_depuis_ancien_nom(m) <> m);
+end $$;
+
+-- --------------------------------------------------------------------------
+--  21.3 La contrainte, qui ne recopie plus rien
+--
+--  DEUX CHOSES QU'ELLE NE FAIT PAS, ET C'EST VOULU
+--  -----------------------------------------------
+--  1. Elle ne vérifie PAS que le métier est `actif`. Désactiver un métier
+--     (§18) empêcherait sinon l'artisan concerné d'enregistrer quoi que ce
+--     soit d'autre sur sa fiche — son téléphone, ses horaires. On le
+--     retire de ce qui est PROPOSÉ, on ne casse pas son compte.
+--  2. Elle n'accepte que des lignes `parent is null`, c'est-à-dire de
+--     vrais métiers. Une spécialité rangée dans `metiers` consommerait un
+--     des quatre emplacements, ce que le §9 interdit explicitement.
+--
+--  La fonction reste exécutable par `authenticated` : une contrainte
+--  s'exécute avec les droits de CELUI QUI ÉCRIT, et une fonction révoquée
+--  « par prudence » ferait échouer chaque enregistrement au lieu de
+--  filtrer. C'est l'erreur déjà commise avec `horaires_valides()`.
+-- --------------------------------------------------------------------------
+create or replace function public.metiers_connus(p_metiers text[])
+returns boolean
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select p_metiers is not null
+     and cardinality(p_metiers) between 1 and 4
+     and not exists (
+       select 1
+         from unnest(p_metiers) c
+        where not exists (
+          select 1 from public.metiers_catalogue mc
+           where mc.cle = c and mc.parent is null
+        )
+     );
+$$;
+
+grant execute on function public.metiers_connus(text[])
+  to anon, authenticated, service_role;
+
+alter table public.professional_profiles
+  drop constraint if exists pro_metiers_check;
+alter table public.professional_profiles
+  add constraint pro_metiers_check check (public.metiers_connus(metiers)) not valid;
+-- `not valid` puis `validate` : les lignes déjà en base sont contrôlées
+-- séparément, ce qui évite d'échouer sur une donnée historique. Si la
+-- validation échoue ici, c'est qu'une fiche porte un métier absent du
+-- catalogue — à regarder, jamais à effacer.
+alter table public.professional_profiles validate constraint pro_metiers_check;

@@ -22,6 +22,7 @@ export const Bell = mk(Feather, 'bell');
 export const X = mk(Feather, 'x');
 export const Check = mk(Feather, 'check');
 export const ChevronRight = mk(Feather, 'chevron-right');
+export const ChevronDown = mk(Feather, 'chevron-down');
 export const EyeOff = mk(Feather, 'eye-off');
 export const Send = mk(Feather, 'send');
 export const Grid = mk(Feather, 'grid');

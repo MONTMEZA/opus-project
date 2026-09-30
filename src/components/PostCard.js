@@ -9,6 +9,7 @@ import {
   Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn,
 } from './ui';
 import Commentaires, { nbCommentairesDe } from './Commentaires';
+import { nomMetier } from '../lib/metiers';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
   MessageCircle, Phone, FileText, User, Send, Maximize, Flag,
@@ -75,7 +76,7 @@ export default function PostCard({
               <Text style={s.name}>{pro.entreprise}</Text>
               {pro.verifie && <BadgeCheck size={14} color={C.verif} />}
             </View>
-            <Text style={s.meta}>{pro.metier} · {pro.ville} · {post.time}</Text>
+            <Text style={s.meta}>{nomMetier(pro.metier)} · {pro.ville} · {post.time}</Text>
           </View>
         </Pressable>
         <View style={s.headRight}>

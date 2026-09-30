@@ -21,8 +21,8 @@ import ChampHoraires from '../components/ChampHoraires';
 import CarteZone from '../components/CarteZone';
 import AssistantPresentation from '../components/AssistantPresentation';
 import AmeliorerTexte from '../components/AmeliorerTexte';
-import { METIERS } from '../data/demo';
 import { METIERS_SOS } from '../data/urgences';
+import { METIER_PAR_DEFAUT } from '../lib/metiers';
 import { choisirImage, choisirDocument } from '../lib/media';
 
 /**
@@ -52,11 +52,11 @@ export default function ProfilEditScreen({
   /* Les métiers déjà enregistrés ; un profil d'avant la nouveauté n'en a
      qu'un, on en fait une liste d'un seul élément. */
   const [metiers, setMetiers] = useState(
-    profil.metiers && profil.metiers.length ? profil.metiers : [profil.metier || METIERS[0]],
+    profil.metiers && profil.metiers.length ? profil.metiers : [profil.metier || METIER_PAR_DEFAUT],
   );
   const [demandeOuverte, setDemandeOuverte] = useState(false);
   const [metiersVoulus, setMetiersVoulus] = useState(
-    profil.metiers && profil.metiers.length ? profil.metiers : [profil.metier || METIERS[0]],
+    profil.metiers && profil.metiers.length ? profil.metiers : [profil.metier || METIER_PAR_DEFAUT],
   );
   const [motif, setMotif] = useState('');
   const [assistantOuvert, setAssistantOuvert] = useState(false);

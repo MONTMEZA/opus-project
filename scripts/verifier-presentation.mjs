@@ -13,12 +13,19 @@ const verifier = (nom, condition, detail = '') => {
 };
 
 console.log('\nAccords et listes');
-verifier('un métier', activitesDe(['Maçon']) === 'maçonnerie');
-verifier('deux métiers', activitesDe(['Maçon', 'Carreleur']) === 'maçonnerie et carrelage');
+/* Les CLÉS du catalogue, pas les libellés : c'est ce qui est rangé en
+   base depuis le 30/09/2026. Écrire « Maçon » ici ne prouverait plus rien. */
+verifier('un métier', activitesDe(['macon']) === 'maçonnerie');
+verifier('deux métiers', activitesDe(['macon', 'carreleur']) === 'maçonnerie et carrelage');
 verifier('trois métiers',
-  activitesDe(['Plombier', 'Chauffagiste', 'Électricien']) === 'plomberie, chauffage et électricité');
+  activitesDe(['plombier', 'chauffagiste', 'electricien']) === 'plomberie, chauffage et électricité');
 verifier('métiers en toutes lettres',
-  metiersEnToutesLettres(['Maçon', 'Carreleur']) === 'maçon et carreleur');
+  metiersEnToutesLettres(['macon', 'carreleur']) === 'maçon et carreleur');
+/* Un métier SANS tournure d'activité doit retomber sur son nom, pas sur
+   sa clé : c'est ce qui vaut pour les quatre-vingts autres. */
+verifier('un métier sans tournure retombe sur son nom',
+  activitesDe(['geometre-expert']) === 'géomètre-expert',
+  activitesDe(['geometre-expert']));
 
 console.log('\nQuestionnaire incomplet');
 verifier('vide : pas assez', !assezRempli({}));

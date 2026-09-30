@@ -13,6 +13,7 @@ import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
   initialDemandes, initialAnnonces,
 } from '../data/demo';
+import { METIER_PAR_DEFAUT } from './metiers';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -102,8 +103,8 @@ export async function ensureProProfile({
     id: currentUserId,
     nom: nom || '',
     entreprise: entreprise || 'Mon entreprise',
-    metier: metier || (metiers && metiers[0]) || 'Maçon',
-    metiers: (metiers && metiers.length ? metiers : [metier || 'Maçon']),
+    metier: metier || (metiers && metiers[0]) || METIER_PAR_DEFAUT,
+    metiers: (metiers && metiers.length ? metiers : [metier || METIER_PAR_DEFAUT]),
     ville: ville || '',
     code_postal: codePostal || null,
     code_insee: codeInsee || null,

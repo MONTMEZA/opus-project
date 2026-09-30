@@ -159,19 +159,46 @@ Trois points en sortent, à ne pas redécouvrir :
    La prochaine se construit avec le journal d'audit et les permissions du
    §21, ou elle sera à refaire.
 
-### Le référentiel des métiers (demandé le 29/09/2026)
+### Le référentiel des métiers — fait le 30/09/2026
 
 `docs/DEMANDE-METIERS.md` — le texte du propriétaire, qui fait foi.
-`docs/A-FAIRE.md` **section 2.0** — mon audit et **trois décisions à prendre
-avant de coder** (spécialités libres ou listées ; `metiers text[]` ou tables
-de liaison ; quelles pièces justificatives pour un avocat ou un architecte,
-qui n'ont pas d'assurance décennale).
+`docs/RAPPORT-METIERS.md` — ce qui a été construit, et ce qui reste.
 
-À retenir en attendant : **la liste des douze métiers est écrite à DEUX
-endroits** — `METIERS` dans `src/data/demo.js`, et recopiée en dur dans la
-contrainte `pro_metiers_check`. Ne pas en ajouter un treizième sans toucher
-les deux. Et **ne pas construire d'écran neuf demandant un métier** avant ce
-chantier : il serait à refaire.
+**Il n'y a plus qu'une source : `src/data/catalogue-metiers.js`.**
+15 catégories, 92 métiers, 124 spécialités. Le SQL du catalogue est
+**engendré** depuis ce fichier (`npm run generer-catalogue`), et
+`npm run verifier-metiers` refuse de passer s'ils ont divergé.
+
+> **Une fiche enregistre `macon`, jamais « Maçon ».** Le nom ne s'obtient
+> que par `nomMetier(cle)` — écrire la clé à l'écran ressemble à une faute
+> de frappe, donc personne ne la signale. `captures-metiers.mjs` parcourt
+> trois écrans et vérifie qu'aucune clé ne s'affiche.
+
+Les trois décisions du propriétaire, prises le 30/09/2026 :
+
+1. **Spécialités** : les deux. La liste du catalogue d'abord, et le texte
+   libre pour ce qu'aucune liste n'avait prévu.
+2. **Rangement** : `metiers text[]` reste — passer à des tables de liaison
+   aurait voulu dire réécrire toutes les règles RLS. C'est le CATALOGUE qui
+   est sorti dans une vraie table.
+3. **Qui peut s'inscrire** : tout l'écosystème, avec des pièces
+   justificatives **par catégorie** — un avocat n'a pas d'assurance
+   décennale, et son badge « vérifié » ne voudrait rien dire.
+
+Trois pièges rencontrés en le construisant, à ne pas redécouvrir :
+
+- **La contrainte ne vérifie PAS `actif`.** Désactiver un métier (§18 de la
+  demande) empêcherait sinon l'artisan concerné d'enregistrer son téléphone
+  ou ses horaires. On le retire de ce qui est PROPOSÉ, on ne casse pas son
+  compte.
+- **Elle n'accepte que `parent is null`.** Une spécialité rangée dans
+  `metiers` consommerait un des quatre emplacements, ce que le §9 interdit.
+- **Le verrou des métiers d'un profil vérifié n'avait pas d'échappatoire.**
+  `tient_les_metiers()` refusait la migration elle-même, lancée depuis
+  l'éditeur SQL. Il suit désormais la règle déjà tenue par
+  `tient_le_profil_pro()` : `auth.uid() = new.id` reconnaît le
+  professionnel, et `auth.uid()` vide laisse passer l'administration.
+  C'est aussi par là que passera le back-office.
 
 Les trois points bloquants — signalement et blocage, suppression de compte,
 textes légaux — sont **faits** (21/09/2026).

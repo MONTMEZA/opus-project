@@ -602,6 +602,74 @@ donne le point de départ.
 
 ---
 
+## 24. 🟠 Le sélecteur de métier — il remplace toutes les grilles
+
+**Tu fais** — Profil → « Modifier mon profil » → **Vos métiers** → bouton
+« **+ Ajouter un métier** ».
+
+**Tu dois voir** — Un panneau plein écran avec un champ de recherche en
+haut, et **quinze catégories repliées** en dessous (Gros œuvre, Toiture,
+Plomberie…), chacune avec son nombre de métiers à droite.
+
+**Tu fais** — Appuie sur une catégorie, par exemple « Bureaux d'études et
+ingénierie ».
+
+**Tu dois voir** — Elle se déplie : Ingénieur structure, Ingénieur bâtiment,
+Bureau d'études thermique… Le chevron passe au orange.
+
+**Tu fais** — Maintenant tape « **plomb** » dans le champ.
+
+**Tu dois voir** — Les catégories disparaissent, et trois résultats
+apparaissent : **Plombier** en premier, puis Bureau d'études fluides et
+Diagnostiqueur immobilier (à cause du diagnostic plomb). Sous chaque nom,
+ses spécialités en petit — c'est ce qui permet de reconnaître le bon quand
+deux se ressemblent.
+
+**Tu fais** — Efface, et tape « **mur de souten** ».
+
+**Tu dois voir** — **Maçon**. Ce n'est pas un métier qu'on a tapé, c'est ce
+qu'un maçon fait. C'est le point le plus important du sélecteur : un client
+décrit son chantier avec ses mots à lui, pas avec les nôtres.
+
+**Essaie aussi** — « placo » → Plaquiste. « ba13 » → Plaquiste. « parpaing »
+→ Maçon. « clim » → Climaticien. « velux » → Couvreur. « archi » → les trois
+architectes. « avocat construction » → l'avocat en droit de la construction,
+et **pas** celui en droit immobilier.
+
+**Tu fais** — Choisis un métier, puis rouvre le panneau.
+
+**Tu dois voir** — Le métier déjà choisi porte une **coche verte** et n'est
+plus sélectionnable. À quatre métiers, le bouton « Ajouter » s'éteint et la
+phrase apparaît : « Vous pouvez sélectionner jusqu'à 4 métiers maximum.
+Supprimez un métier pour en sélectionner un autre. »
+
+**Ce qui compte et que tu ne verras pas** — Un téléphone modifié qui tente
+d'enregistrer cinq métiers, ou de faire passer une spécialité pour un
+métier, est refusé **par la base**. Vérifié sur ta vraie base.
+
+---
+
+## 25. 🟠 Les métiers, partout ailleurs
+
+Le même sélecteur remplace les grilles de puces à **six autres endroits**.
+Vérifie qu'aucun ne montre une clé technique (`macon`) à la place d'un nom
+(« Maçon ») :
+
+- **Découvrir** (côté particulier) → « Filtrer par métier… » ;
+- **Place des pros** → le filtre, et « Métier concerné » quand tu publies ;
+- **Publier** → « Métier » ;
+- **Demandes** → « Métier recherché », et le filtre ;
+- **Demander un devis** sur la fiche d'un artisan → « Métier concerné ».
+
+**Dans chacun**, « Tous les métiers » en haut du panneau remet le filtre à
+zéro.
+
+**Si tu vois un mot bizarre** comme `peintre-en-batiment` ou `macon` affiché
+quelque part : dis-le-moi, c'est un oubli de traduction. J'ai vérifié trois
+écrans automatiquement, pas les vingt.
+
+---
+
 ## Ce que je n'ai PAS pu vérifier, et qu'il faut donc regarder
 
 Je le redis à part, parce que c'est ce qui compte le plus :

@@ -17,7 +17,8 @@ import {
 } from '../components/icons';
 import { choisirImage } from '../lib/media';
 import ChampVille from '../components/ChampVille';
-import { METIERS } from '../data/demo';
+import { ChampMetier } from '../components/SelecteurMetiers';
+import { METIER_PAR_DEFAUT, nomMetier } from '../lib/metiers';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
 import { distanceKm, libelleDistance } from '../lib/adresse';
 
@@ -26,7 +27,7 @@ export default function DemandesScreen({
   onPublier, onRepondre, onErreur, moi, mesReponses, onSignaler,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
-  const [metier, setMetier] = useState(METIERS[0]);
+  const [metier, setMetier] = useState(METIER_PAR_DEFAUT);
   const [lieu, setLieu] = useState({ affichage: '' });
   const [texte, setTexte] = useState('');
   const [photos, setPhotos] = useState([]);
@@ -113,11 +114,12 @@ export default function DemandesScreen({
           ) : (
             <View style={{ marginTop: 10 }}>
               <Text style={s.label}>Métier recherché</Text>
-              <View style={s.chipRow}>
-                {METIERS.map((m) => (
-                  <Chip key={m} label={m} on={metier === m} onPress={() => setMetier(m)} />
-                ))}
-              </View>
+              <ChampMetier
+                valeur={metier}
+                onChange={setMetier}
+                titre="De quel professionnel avez-vous besoin ?"
+                placeholder="Choisir le métier recherché..."
+              />
               <TextArea
                 placeholder="Décrivez ce dont vous avez besoin..."
                 value={texte}
@@ -217,16 +219,13 @@ export default function DemandesScreen({
       )}
 
       {/* --- filtre par métier --- */}
-      <View style={s.chipRow}>
-        {METIERS.map((m) => (
-          <Chip
-            key={m}
-            label={m}
-            on={filtreMetier === m}
-            onPress={() => setFiltreMetier(filtreMetier === m ? null : m)}
-          />
-        ))}
-      </View>
+      <ChampMetier
+        valeur={filtreMetier}
+        onChange={setFiltreMetier}
+        titre="Métier recherché"
+        placeholder="Filtrer par métier..."
+        avecTous
+      />
 
       {/* --- la liste --- */}
       <View style={{ gap: 10, paddingBottom: 24 }}>
@@ -247,7 +246,7 @@ export default function DemandesScreen({
               </View>
               <View style={[s.badgeMetier, estPourMoi(d) && s.badgeMetierMien]}>
                 <Text style={[s.badgeMetierText, estPourMoi(d) && { color: '#fff' }]}>
-                  {d.metier}
+                  {nomMetier(d.metier)}
                 </Text>
               </View>
             </View>

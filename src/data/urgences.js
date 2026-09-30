@@ -13,10 +13,10 @@
 
 /** Les quatre métiers qui relèvent d'une vraie urgence domestique. */
 export const METIERS_SOS = [
-  { key: 'plomberie', label: 'Plomberie', metier: 'Plombier', icon: 'wrench' },
-  { key: 'electricite', label: 'Électricité', metier: 'Électricien', icon: 'zap' },
-  { key: 'serrurerie', label: 'Serrurerie', metier: 'Serrurier', icon: 'key' },
-  { key: 'chauffage', label: 'Chauffage', metier: 'Chauffagiste', icon: 'thermometer' },
+  { key: 'plomberie', label: 'Plomberie', metier: 'plombier', icon: 'wrench' },
+  { key: 'electricite', label: 'Électricité', metier: 'electricien', icon: 'zap' },
+  { key: 'serrurerie', label: 'Serrurerie', metier: 'serrurier', icon: 'key' },
+  { key: 'chauffage', label: 'Chauffage', metier: 'chauffagiste', icon: 'thermometer' },
 ];
 
 /**

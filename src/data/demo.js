@@ -5,15 +5,10 @@
  * et de seed pour la base (voir supabase/seed.sql).
  */
 
-export const METIERS = [
-  'Maçon', 'Électricien', 'Plombier', 'Charpentier', 'Peintre',
-  'Carreleur', 'Couvreur', 'Menuisier', 'Plaquiste', 'Terrassier',
-  'Serrurier', 'Chauffagiste',
-];
 
 export const proProfiles = {
-  1: { id: 1, nom: 'Karim Belaïd', entreprise: 'Belaïd Maçonnerie', metier: 'Maçon',
-       metiers: ['Maçon', 'Carreleur'],
+  1: { id: 1, nom: 'Karim Belaïd', entreprise: 'Belaïd Maçonnerie', metier: 'macon',
+       metiers: ['macon', 'carreleur'],
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 9,
        siret: '812 345 678 00019', followers: 1240,
        horaires: {
@@ -39,7 +34,7 @@ export const proProfiles = {
          { id: 2, auteur: 'Thomas B.', verifie: true, date: 'Août 2026', delais: 4, qualite: 5, tarif: 4, commentaire: "Fondations nickel, un léger retard sur la fin mais bien communiqué." },
          { id: 3, auteur: 'Nadia K.', verifie: true, date: 'Juil. 2026', delais: 5, qualite: 4, tarif: 3, commentaire: "Bon travail dans l'ensemble, tarif un peu élevé par rapport au devis initial." },
        ] },
-  2: { id: 2, nom: 'Sophie Renaud', entreprise: 'Renaud Élec', metier: 'Électricien',
+  2: { id: 2, nom: 'Sophie Renaud', entreprise: 'Renaud Élec', metier: 'electricien',
        ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357, verifie: true, exp: 6,
        siret: '798 221 044 00027', followers: 860,
        horaires: {
@@ -59,7 +54,7 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Marc L.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 5, commentaire: "Impeccable du devis à la mise en service, je recommande." },
        ] },
-  3: { id: 3, nom: 'Yanis Cortez', entreprise: 'YC Carrelage', metier: 'Carreleur',
+  3: { id: 3, nom: 'Yanis Cortez', entreprise: 'YC Carrelage', metier: 'carreleur',
        ville: 'Toulouse (31)', latitude: 43.6045, longitude: 1.4442, verifie: false, exp: 4,
        siret: '889 112 004 00013', followers: 410,
        telephone: '05 61 22 33 44', zoneKm: 25,
@@ -73,8 +68,8 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Antoine R.', verifie: true, date: 'Août 2026', delais: 3, qualite: 4, tarif: 5, commentaire: "Très bon rapport qualité-prix, quelques jours de retard sur le planning." },
        ] },
-  4: { id: 4, nom: 'Marc Dubreuil', entreprise: 'Dubreuil Plomberie', metier: 'Plombier',
-       metiers: ['Plombier', 'Chauffagiste'],
+  4: { id: 4, nom: 'Marc Dubreuil', entreprise: 'Dubreuil Plomberie', metier: 'plombier',
+       metiers: ['plombier', 'chauffagiste'],
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 12,
        siret: '701 998 332 00041', followers: 990,
        bio: "Plomberie générale, chauffage, dépannage rapide sur Marseille et alentours.",
@@ -87,7 +82,7 @@ export const proProfiles = {
          { id: 1, auteur: 'Claire D.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 4, commentaire: "Intervention rapide pour une urgence, très professionnel." },
          { id: 2, auteur: 'Hugo P.', verifie: true, date: 'Juin 2026', delais: 4, qualite: 5, tarif: 3, commentaire: "Excellent travail sur le remplacement de chaudière, prix un peu haut." },
        ] },
-  8: { id: 8, nom: 'Léa Sanchez', entreprise: 'Sanchez Plomberie', metier: 'Plombier',
+  8: { id: 8, nom: 'Léa Sanchez', entreprise: 'Sanchez Plomberie', metier: 'plombier',
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 5,
        siret: '901 447 226 00014', followers: 380,
        bio: "Dépannage, sanitaire et rénovation de salle de bain. Devis gratuit sous 24 h.",
@@ -99,7 +94,7 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Samir T.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 5, commentaire: "Fuite réparée en une heure, tarif annoncé respecté." },
        ] },
-  6: { id: 6, nom: 'Driss Amrani', entreprise: 'Amrani Serrurerie', metier: 'Serrurier',
+  6: { id: 6, nom: 'Driss Amrani', entreprise: 'Amrani Serrurerie', metier: 'serrurier',
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 7,
        siret: '823 554 119 00022', followers: 540,
        bio: "Ouverture de porte, changement de serrure, blindage. Interventions d'urgence 7j/7.",
@@ -111,7 +106,7 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Léa V.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 4, commentaire: "Porte claquée un dimanche soir, arrivé en 25 minutes, aucune dégradation." },
        ] },
-  7: { id: 7, nom: 'Pierre Nogaret', entreprise: 'Nogaret Chauffage', metier: 'Chauffagiste',
+  7: { id: 7, nom: 'Pierre Nogaret', entreprise: 'Nogaret Chauffage', metier: 'chauffagiste',
        ville: 'Aix-en-Provence (13)', latitude: 43.5297, longitude: 5.4474, verifie: true, exp: 15,
        siret: '654 220 887 00031', followers: 720,
        bio: "Chaudières gaz et fioul, pompes à chaleur, dépannage et entretien annuel.",
@@ -123,7 +118,7 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Farid B.', verifie: true, date: 'Août 2026', delais: 4, qualite: 5, tarif: 4, commentaire: "Chaudière relancée le jour même, explications claires sur l'entretien." },
        ] },
-  5: { id: 5, nom: 'Élodie Faure', entreprise: 'Faure Charpente', metier: 'Charpentier',
+  5: { id: 5, nom: 'Élodie Faure', entreprise: 'Faure Charpente', metier: 'charpentier',
        ville: 'Aix-en-Provence (13)', latitude: 43.5297, longitude: 5.4474, verifie: true, exp: 8,
        siret: '845 667 210 00018', followers: 320,
        bio: "Charpente traditionnelle et ossature bois, du neuf à la rénovation.",
@@ -247,15 +242,15 @@ export const initialNotifications = [
  * professionnelle, les demandes vivent dans leur propre espace.
  */
 export const initialDemandes = [
-  { id: 1, auteurId: 'p-camille', auteur: 'Camille R.', metier: 'Carreleur', ville: 'Toulouse (31)',
+  { id: 1, auteurId: 'p-camille', auteur: 'Camille R.', metier: 'carreleur', ville: 'Toulouse (31)',
     texte: "Salle de bain de 6 m² à carreler entièrement, murs et sol. Faïence déjà achetée.",
     media: '#6b4226,#b98255', time: 'Il y a 3 h', reponses: 2,
     budget: '2000_5000', urgence: 'ce_mois', latitude: 43.6045, longitude: 1.4442 },
-  { id: 2, auteurId: 'p-hugo', auteur: 'Hugo P.', metier: 'Peintre', ville: 'Marseille (13)',
+  { id: 2, auteurId: 'p-hugo', auteur: 'Hugo P.', metier: 'peintre-en-batiment', ville: 'Marseille (13)',
     texte: "Deux chambres à repeindre, environ 30 m² au total. Murs en bon état.",
     media: null, time: 'Hier', reponses: 5,
     budget: '500_2000', urgence: 'quand_possible', latitude: 43.2965, longitude: 5.3698 },
-  { id: 3, auteurId: 'p-nadia', auteur: 'Nadia K.', metier: 'Maçon', ville: 'Aix-en-Provence (13)',
+  { id: 3, auteurId: 'p-nadia', auteur: 'Nadia K.', metier: 'macon', ville: 'Aix-en-Provence (13)',
     texte: "Mur de clôture de 12 m à monter en parpaing, avec un portail à sceller.",
     media: '#3a3a38,#8a8578', time: 'Il y a 2 j', reponses: 1,
     budget: 'a_chiffrer', urgence: 'urgent', latitude: 43.5297, longitude: 5.4474 },
@@ -270,12 +265,12 @@ export const initialAnnonces = [
   { id: 'a1', type: 'sous_traitance_cherche', auteurId: 2,
     titre: 'Plaquiste recherché — chantier de 180 m²',
     texte: "Cloisons et faux plafonds sur un plateau de bureaux. Matériel fourni, accès facile, parking sur place.",
-    metier: 'Plaquiste', ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357,
+    metier: 'plaquiste', ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357,
     dateDebut: '2026-10-12', dateFin: '2026-10-20', time: 'Il y a 4 h', reponses: 3 },
   { id: 'a2', type: 'sous_traitance_offre', auteurId: 4,
     titre: 'Équipe de deux disponible fin octobre',
     texte: "Plomberie et chauffage, rénovation comme neuf. Nous intervenons sur tout le département.",
-    metier: 'Plombier', ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698,
+    metier: 'plombier', ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698,
     dateDebut: '2026-10-23', dateFin: '2026-10-31', time: 'Hier', reponses: 1 },
   { id: 'a3', type: 'materiel_vente', auteurId: 1,
     titre: '40 m² de tuiles canal, jamais posées',
