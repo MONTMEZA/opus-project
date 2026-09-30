@@ -459,8 +459,20 @@ n'apparaît que sur le tien**.
 
 **Tu fais** — Appuie sur Modifier, change le texte, Enregistrer.
 
-**Tu dois voir** — Le texte corrigé sur place, dans la bulle, et la mention
+**Tu dois voir** — Le texte corrigé sur place, et la mention
 « **· modifié** » à côté de l'heure.
+
+**Tu fais** — Demande à quelqu'un de **répondre** à ce commentaire (ou
+réponds-y depuis un autre compte), puis regarde à nouveau ta ligne.
+
+**Tu dois voir** — **Modifier a disparu.** Il reste « Répondre ·
+Supprimer ». C'est voulu, depuis le 30/09/2026 : un commentaire auquel on a
+répondu ne se récrit plus, sinon la réponse cautionnerait une phrase que son
+auteur n'a jamais lue. Et ce n'est pas l'écran qui le tient — la base refuse
+l'écriture, même si le bouton revenait.
+
+**Tu dois voir aussi** — Sur la **dernière** réponse d'un fil, Modifier est
+toujours là : personne n'a encore écrit après elle.
 
 **Tu fais** — Côté professionnel : Profil → « Mes publications » →
 **Modifier** sur une publication.
@@ -517,6 +529,23 @@ Puis ouvre Opus et balaie l'écran vers la droite, élément par élément.
 > C'est le point que je n'ai **pas** pu vérifier : j'ai relevé ce qui SERAIT
 > annoncé (40 éléments sur le fil, aucun sans nom), pas comment ça s'entend.
 > Si une étiquette te paraît maladroite à l'oreille, dis-le-moi.
+
+---
+
+## 22. 🔵 Les commentaires, redessinés
+
+**Tu fais** — Ouvre les commentaires d'une publication qui en a plusieurs,
+et déplie les réponses.
+
+**Tu dois voir** — **Plus de rectangle gris** autour de chaque commentaire :
+le nom en gras, l'heure à côté, le texte juste en dessous, à même le fond.
+Et pour les réponses, un **filet vertical fin** à gauche qui dit « ceci
+répond à ce qui est au-dessus ».
+
+**Ce qu'il faut regarder** — Le texte est un peu plus gros qu'avant (13 px
+au lieu de 12,5) et la largeur utile a gagné une vingtaine de pixels par
+niveau, puisque le cadre ne la mange plus. Sur un long commentaire avec
+réponses, c'est là que ça se voit.
 
 ---
 

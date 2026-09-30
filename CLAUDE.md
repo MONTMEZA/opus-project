@@ -266,6 +266,40 @@ Function, `auth.uid()` est `null` et le verrou laisse passer.
 > Aujourd'hui : `verifie`, `kbis_valide`, `assurance_valide`, `rge`,
 > `verification_note`.
 
+### Un commentaire auquel on a répondu ne se récrit plus
+
+Ajouté le 30/09/2026, à la demande du propriétaire, et c'est la même famille
+que les deux précédentes : ce qui engage quelqu'un d'AUTRE se ferme.
+
+Pouvoir corriger son texte pour toujours permet de réécrire une conversation
+entière — j'écris « ce prix me paraît trop bas », on me répond « d'accord »,
+je remplace ma phrase, et la réponse cautionne ce que son auteur n'a jamais
+lu. La mention « · modifié » dit QUE le texte a bougé, jamais CE QUI a bougé.
+
+Interdire toute correction ne réglait rien non plus : supprimer un
+commentaire emporte ses réponses (`on delete cascade`), donc réparer une
+faute de frappe aurait détruit la discussion. D'où la règle tenue par la
+base :
+
+> **Le texte d'un commentaire est libre tant que personne n'a écrit après
+> lui dans le même fil, et figé pour toujours ensuite.** Code d'erreur
+> `OP001`, section 20.1 bis de `schema.sql`.
+
+Deux détails à ne pas redécouvrir :
+
+1. **Le fil n'a que deux niveaux, donc une réponse n'a jamais d'enfant.**
+   Regarder par `parent_id` laisserait toutes les réponses modifiables à
+   vie. On raisonne par FIL : racine = `coalesce(parent_id, id)`, et on
+   cherche un message plus récent dans le même fil.
+2. **La fonction est `security definer`, et il le faut.** La politique de
+   lecture masque les commentaires des personnes bloquées : avec les droits
+   de l'appelant, **bloquer celui qui a répondu aurait ROUVERT le texte**.
+   Vérifié sur PostgreSQL — la réponse devient bien invisible à l'auteur, et
+   le verrou tient quand même.
+
+La publication, elle, reste corrigeable : sa légende n'est pas un tour de
+parole.
+
 Et une règle RGPD qui a la même force :
 
 > **Ce qui concerne des TIERS s'anonymise, il ne se supprime pas.**

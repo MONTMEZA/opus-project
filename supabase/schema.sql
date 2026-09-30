@@ -2604,12 +2604,16 @@ alter table public.professional_profiles add constraint pro_horaires_check
 --  Tout le reste — l'auteur, la date, les compteurs, les photos, le
 --  format — est remis à sa valeur d'avant.
 --
+--  Et pour un COMMENTAIRE, cette permission a une fin : elle s'arrête
+--  dès que quelqu'un a écrit après lui dans le même fil. La section
+--  20.1 bis explique pourquoi, et pourquoi une simple mention
+--  « modifié » n'y suffisait pas.
+--
 --  ET LA DATE DE MODIFICATION SE VOIT
 --  ----------------------------------
 --  `modifie_le` est posée par la base, pas par l'application : on ne peut
 --  donc pas réécrire un commentaire en faisant croire qu'il n'a pas
---  bougé. Quelqu'un à qui on a répondu doit pouvoir constater que la
---  question a changé.
+--  bougé. Celui qui lit doit pouvoir constater que le texte a changé.
 -- ==========================================================================
 
 alter table public.posts    add column if not exists modifie_le timestamptz;
@@ -2630,6 +2634,89 @@ alter table public.comments add column if not exists modifie_le timestamptz;
 --  voulu dire l'oublier à la prochaine colonne ajoutée : ici, une colonne
 --  nouvelle est protégée d'office.
 -- --------------------------------------------------------------------------
+-- --------------------------------------------------------------------------
+--  20.1 bis  « Quelqu'un m'a répondu » — et le texte se referme
+--
+--  LE DÉFAUT QUE CECI CORRIGE
+--  --------------------------
+--  Pouvoir corriger son texte pour toujours permet de réécrire une
+--  conversation entière. J'écris « ce prix me paraît trop bas », on me
+--  répond « tout à fait d'accord », et je remplace ma phrase par autre
+--  chose : la réponse cautionne désormais quelque chose que son auteur
+--  n'a jamais lu. Le drapeau « · modifié » signale QUE le texte a bougé,
+--  jamais CE QUI a bougé — il ne suffit donc pas.
+--
+--  À l'inverse, interdire toute correction ne réglerait rien : supprimer
+--  un commentaire emporte ses réponses (`on delete cascade`, section 4).
+--  Quelqu'un qui veut réparer une faute de frappe n'aurait plus qu'un
+--  seul geste possible — supprimer et réécrire — et il détruirait la
+--  discussion pour un accent.
+--
+--  D'où la règle tenue ici : **le texte est libre tant que personne n'a
+--  écrit après, et figé pour toujours ensuite.**
+--
+--  CE QUE « APRÈS » VEUT DIRE
+--  -------------------------
+--  Le fil n'a que deux niveaux (section 4), donc une réponse n'a jamais
+--  d'enfant : la regarder par `parent_id` laisserait les réponses
+--  modifiables à vie. On raisonne donc par FIL : la racine d'un
+--  commentaire est `coalesce(parent_id, id)`, et le texte se ferme dès
+--  qu'un autre message du même fil a été écrit à partir de cet instant.
+--
+--    - un commentaire de premier niveau se ferme à sa première réponse ;
+--    - une réponse se ferme dès qu'une réponse plus récente la suit.
+--
+--  POURQUOI `security definer`
+--  ---------------------------
+--  La politique de lecture des commentaires masque ceux des personnes
+--  bloquées (`not est_masque(author_id)`, section 14). Un `exists` posé
+--  avec les droits de l'appelant ne verrait donc PAS la réponse d'une
+--  personne qu'il a bloquée — et son commentaire redeviendrait
+--  modifiable. Bloquer quelqu'un rouvrirait le texte : exactement le
+--  genre de règle qu'un écran ne peut pas tenir.
+--
+--  Cette fonction ne lit qu'une existence de ligne, ne renvoie aucun
+--  contenu, et n'est pas donnée à `anon` : un visiteur ne modifie rien.
+-- --------------------------------------------------------------------------
+create or replace function public.a_deja_une_reponse(p_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.comments suivant, public.comments moi
+    where moi.id = p_id
+      and coalesce(suivant.parent_id, suivant.id)
+          = coalesce(moi.parent_id, moi.id)
+      and suivant.id <> moi.id
+      and suivant.created_at >= moi.created_at
+  );
+$$;
+
+revoke all on function public.a_deja_une_reponse(uuid) from public, anon;
+grant execute on function public.a_deja_une_reponse(uuid) to authenticated;
+
+-- --------------------------------------------------------------------------
+--  20.2 Le verrou
+--
+--  `pg_trigger_depth()` vaut 1 quand la modification vient directement de
+--  l'application, et 2 ou plus quand elle vient d'un AUTRE déclencheur —
+--  ceux qui tiennent `likes_count` et `comments_count`. Vérifié sur
+--  PostgreSQL 16 : sans cette distinction, aimer sa propre publication
+--  aurait remis le compteur à sa valeur d'avant, et le j'aime aurait
+--  paru ne pas marcher.
+--
+--  `jsonb_populate_record` remet TOUTES les anciennes valeurs sauf celle
+--  qu'on retire du lot. Écrire la liste des colonnes à la main aurait
+--  voulu dire l'oublier à la prochaine colonne ajoutée : ici, une colonne
+--  nouvelle est protégée d'office.
+--
+--  Le refus est une ERREUR, pas un silence : l'application affiche la
+--  phrase. Remettre discrètement l'ancien texte ferait croire à un bug.
+-- --------------------------------------------------------------------------
 create or replace function public.tient_le_texte()
 returns trigger
 language plpgsql
@@ -2646,6 +2733,22 @@ begin
     new := jsonb_populate_record(new, to_jsonb(old) - 'texte');
 
     if new.texte is distinct from old.texte then
+      /* Un commentaire auquel on a répondu ne se récrit plus. La
+         publication, elle, reste corrigeable : sa légende n'est pas un
+         tour de parole, et personne ne « répond » à un texte de
+         publication comme on répond à un commentaire. */
+      if tg_table_name = 'comments'
+         and public.a_deja_une_reponse(old.id)
+      then
+        /* Un code d'erreur à nous, pour que l'application distingue CE
+           refus d'une panne quelconque et affiche la vraie raison. Un
+           « la correction a échoué » sans explication passerait pour un
+           bug — ici, c'est une règle. */
+        raise exception
+          'Ce commentaire ne peut plus être corrigé : quelqu''un a répondu après lui.'
+          using errcode = 'OP001';
+      end if;
+
       new.modifie_le := now();
     end if;
   end if;

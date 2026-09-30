@@ -462,7 +462,14 @@ export default function OpusApp() {
       await api.modifierCommentaire(commentaire.id, texte);
     } catch (e) {
       appliquer(restaurer);
-      showErreur("Le commentaire n'a pas pu être corrigé.");
+      /* `OP001` est le code que la base renvoie quand quelqu'un a répondu
+         après ce commentaire : il ne se corrige plus (section 20.1 bis de
+         schema.sql). On dit POURQUOI — un « échec » sans raison passerait
+         pour un bug, alors que c'est une règle. Le cas se produit quand une
+         réponse arrive pendant qu'on est en train de corriger. */
+      showErreur(e && e.code === 'OP001'
+        ? 'Trop tard : quelqu\u2019un a répondu, ce commentaire ne se corrige plus.'
+        : "Le commentaire n'a pas pu être corrigé.");
     }
   };
 
