@@ -2500,6 +2500,11 @@ create or replace function public.horaires_valides(p jsonb)
 returns boolean
 language plpgsql
 immutable
+-- `search_path` figé : sans cela, Supabase signale — à juste titre —
+-- qu'un schéma glissé devant `public` pourrait détourner les fonctions
+-- appelées ici. La contrainte s'exécutant avec les droits de celui qui
+-- écrit, c'est exactement le genre d'endroit où ça compte.
+set search_path = public
 as $$
 declare
   jour     text;

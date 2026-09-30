@@ -418,6 +418,108 @@ des pros), puis ouvre **sa fiche**.
 
 ---
 
+## 17. 🔵 Les horaires d'ouverture
+
+**Tu fais** — Ouvre la fiche d'un artisan, bloc « Contact et déplacement ».
+
+**Tu dois voir** — Une ligne « Horaires » avec **une seule phrase** :
+« Ouvert · ferme à 18 h », ou « Fermé · rouvre à 14 h », ou « Fermé · ouvre
+demain à 8 h ». Verte si c'est ouvert, grise sinon.
+
+**Tu fais** — Appuie sur cette ligne.
+
+**Tu dois voir** — La semaine se déplier, **regroupée** : « Lundi au jeudi »,
+« Vendredi », « Samedi », « Dimanche — Fermé ». Pas sept lignes identiques.
+
+**Tu fais** — Côté professionnel, « Modifier mon profil » → « Horaires
+d'ouverture » → appuie sur **Semaine type**.
+
+**Tu dois voir** — Les sept jours remplis d'un coup : 8 h-12 h et 14 h-18 h
+du lundi au vendredi, samedi matin, dimanche fermé. Il ne te reste qu'à
+corriger ce qui diffère.
+
+**Tu fais** — Efface une heure et tape `0730`.
+
+**Tu dois voir** — « 07:30 ». Et si tu tapes seulement `830` puis que tu
+touches ailleurs, ça devient « 08:30 ».
+
+> **Le point qui compte** : la coupure de midi. À 12 h 30, la fiche doit dire
+> « rouvre à 14 h » — pas « ouvre demain ». Sans ça, on dirait « ouvert de
+> 8 h à 18 h » à quelqu'un qui tombera sur un répondeur, ce qui est pire que
+> pas d'horaires du tout.
+
+---
+
+## 18. 🟠 Corriger son texte
+
+**Tu fais** — Écris un commentaire, puis regarde la ligne en dessous.
+
+**Tu dois voir** — « Répondre · **Modifier** · Supprimer » — et **Modifier
+n'apparaît que sur le tien**.
+
+**Tu fais** — Appuie sur Modifier, change le texte, Enregistrer.
+
+**Tu dois voir** — Le texte corrigé sur place, dans la bulle, et la mention
+« **· modifié** » à côté de l'heure.
+
+**Tu fais** — Côté professionnel : Profil → « Mes publications » →
+**Modifier** sur une publication.
+
+**Tu dois voir** — Un champ avec le texte actuel, et l'avertissement que les
+**photos ne changent pas** : corriger l'image d'une publication que des gens
+ont déjà aimée en ferait autre chose.
+
+> Ce que tu ne peux pas voir, et qui est le plus important : un client
+> modifié ne peut plus s'écrire « 9 999 j'aime », ni antidater sa
+> publication de dix ans pour rester en tête du fil pour toujours. C'était
+> possible jusqu'au 30/09/2026.
+
+---
+
+## 19. 🟠 Tout marquer comme lu
+
+**Tu fais** — Appuie sur la cloche, en haut à droite.
+
+**Tu dois voir** — « N non lues » et un bouton « **Tout marquer comme lu** ».
+
+**Tu fais** — Appuie dessus.
+
+**Tu dois voir** — Les points orange disparaître, le bouton s'en aller, et la
+**pastille de la cloche** tomber.
+
+---
+
+## 20. 🔵 L'écran de chargement
+
+**Tu fais** — Ferme complètement l'application et rouvre-la.
+
+**Tu dois voir** — Pendant le chargement, la **forme du fil** : des cartes
+grises qui battent doucement, avec leurs avatars ronds. Pas un rond qui
+tourne au milieu d'un écran vide.
+
+**Si ça ne va pas** — Si tu ne le vois pas, ce n'est pas forcément un défaut :
+ça veut dire que le chargement est trop rapide pour qu'on ait le temps. C'est
+plutôt bon signe.
+
+---
+
+## 21. 🔵 L'accessibilité — à essayer une fois
+
+**Tu fais** — Réglages de l'iPhone → Accessibilité → VoiceOver → active-le.
+Puis ouvre Opus et balaie l'écran vers la droite, élément par élément.
+
+**Tu dois entendre** — Ce que fait chaque bouton, pas ce qu'il montre :
+« J'aime cette publication, 214 j'aime », « Masquer cette publication »,
+« Accueil, sélectionné ». Plus jamais « bouton » tout court.
+
+**Pour revenir** — Triple-appui sur le bouton latéral, ou redemande à Siri.
+
+> C'est le point que je n'ai **pas** pu vérifier : j'ai relevé ce qui SERAIT
+> annoncé (40 éléments sur le fil, aucun sans nom), pas comment ça s'entend.
+> Si une étiquette te paraît maladroite à l'oreille, dis-le-moi.
+
+---
+
 ## Ce que je n'ai PAS pu vérifier, et qu'il faut donc regarder
 
 Je le redis à part, parce que c'est ce qui compte le plus :
@@ -432,7 +534,9 @@ Je le redis à part, parce que c'est ce qui compte le plus :
    ordinateur, une zone défilante répond à la molette, pas au doigt. Point 1
    de cette liste.
 4. **L'appel depuis une fiche** (`tel:`) — pas de téléphone ici. Point 13.
-5. **Les notifications poussées** — elles ne sont pas encore branchées.
+5. **VoiceOver** — le relevé dit ce qui serait annoncé, pas comment ça
+   s'entend. Point 21.
+6. **Les notifications poussées** — elles ne sont pas encore branchées.
 
 ---
 
