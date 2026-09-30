@@ -136,6 +136,49 @@ console.log('\nPlus aucun ancien nom ne traîne comme VALEUR dans le code');
     coupables.length === 0, coupables.join('\n      '));
 }
 
+console.log('\nPersonne ne refabrique une grille de métiers dans son coin');
+{
+  /* LE DÉFAUT QUE CECI EMPÊCHE
+     --------------------------
+     Les grilles de puces ont été retirées de neuf écrans le 30/09/2026.
+     Rien n'empêche d'en refaire une : il suffit d'importer le catalogue et
+     de le parcourir. Six mois plus tard, on aurait de nouveau un écran qui
+     affiche quatre-vingt-douze boutons, et personne ne saurait d'où il
+     sort.
+
+     Le catalogue n'est donc lisible QUE par le sélecteur et par la
+     bibliothèque des métiers. Partout ailleurs, on passe par
+     `SelecteurMetiers` ou `ChampMetier`. */
+  const AUTORISES = [
+    'src/lib/metiers.js',
+    'src/components/SelecteurMetiers.js',
+  ];
+  const fichiers = execFileSync('git', ['ls-files', 'src'], { encoding: 'utf8' })
+    .split('\n').filter((f) => f.endsWith('.js') && !f.endsWith('catalogue-metiers.js'));
+  const intrus = fichiers.filter((f) => !AUTORISES.includes(f)
+    && readFileSync(f, 'utf8').includes('catalogue-metiers'));
+  verifier('seuls le sélecteur et lib/metiers.js lisent le catalogue',
+    intrus.length === 0,
+    `${intrus.join(', ')}\n      → passe par <SelecteurMetiers> ou <ChampMetier>`);
+}
+
+console.log('\nLes quatre métiers d’urgence existent vraiment');
+{
+  /* `METIERS_SOS` porte des clés de métier écrites à la main. Si l'une
+     d'elles cesse de correspondre au catalogue, le bouton SOS n'atteint
+     plus aucun artisan — et rien ne le signale : l'écran s'affiche, la
+     demande part, personne ne la reçoit. */
+  const sos = JSON.parse(JSON.stringify(
+    (await import('../src/data/urgences.js')).METIERS_SOS,
+  ));
+  const inconnus = sos.filter((m) => !MAP_METIERS[m.metier]);
+  verifier('chaque métier SOS existe dans le catalogue',
+    inconnus.length === 0, JSON.stringify(inconnus.map((m) => m.metier)));
+  const specialites = sos.filter((m) => MAP_SPECIALITES[m.metier]);
+  verifier('aucun n’est une spécialité (personne ne l’aurait comme métier)',
+    specialites.length === 0, JSON.stringify(specialites.map((m) => m.metier)));
+}
+
 console.log('\nLa recherche — les exemples de la demande, mot pour mot');
 {
   const cles = (texte) => chercherMetiers(texte).map((m) => m.cle);
