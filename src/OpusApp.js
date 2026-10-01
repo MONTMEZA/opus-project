@@ -40,6 +40,7 @@ import DemandesScreen from './screens/DemandesScreen';
 import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier } from './lib/metiers';
 import * as api from './lib/api';
+import * as retour from './lib/retour';
 import { metiersDe } from './lib/metiers';
 import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
@@ -164,6 +165,12 @@ export default function OpusApp() {
      échec, non — il porte un motif technique, et c'est justement lui qui
      sert. Il reste donc neuf secondes, en rouge, et se ferme d'une touche. */
   const showBanner = (msg, erreur = false) => {
+    /* Le bandeau sort en HAUT de l'écran, et on regarde rarement le haut de
+       l'écran quand on vient d'appuyer en bas. La vibration est souvent la
+       seule chose qui prévient — surtout pour un échec. Voir la doctrine
+       dans `src/lib/retour.js` : elle passe toute par ici, donc elle ne se
+       disperse pas dans trente fichiers. */
+    if (erreur) retour.echec(); else retour.reussite();
     setBanner({ texte: msg, erreur });
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
     bannerTimer.current = setTimeout(() => setBanner(null), erreur ? 9000 : 3000);

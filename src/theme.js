@@ -189,3 +189,69 @@ export const SH = {
     shadowOffset: { width: 0, height: 12 }, elevation: 10,
   },
 };
+
+/* ==========================================================================
+   LE MOUVEMENT — la quatrième échelle, et la raison pour laquelle elle existe
+   --------------------------------------------------------------------------
+   Relevé fait le 01/10/2026 sur tout `src/` : `react-native-reanimated` est
+   installé (4.5.1) et n'était importé que dans DEUX fichiers sur
+   soixante-treize. Zéro `entering=`, zéro `exiting=`, zéro `layout=`, zéro
+   `LayoutAnimation`. Et surtout, le mot `pressed` n'apparaissait NULLE
+   PART : sur 106 zones appuyables, aucune ne montrait qu'on l'avait
+   touchée.
+
+   C'est ce qui fait dire « ça ne réagit pas », même quand tout marche :
+   l'écran ne change qu'une fois l'action terminée, donc le doigt doute
+   pendant tout le temps du traitement.
+
+   Les deux fichiers qui bougeaient déjà — `GlissementLateral.js` et
+   `GestionMedias.js` — avaient chacun écrit SON ressort, et ils ne sont
+   pas les mêmes (230 et 190 de raideur). C'est exactement la dérive que
+   `T`, `S`, `R` et `SH` ont corrigée ailleurs : une échelle, trois crans,
+   et plus personne n'invente.
+
+   CE QU'IL NE FAUT PAS ANIMER — à lire avant d'en poser une seule
+   ---------------------------------------------------------------
+   Le projet a déjà payé ce défaut une fois : dix éléments montés d'un coup
+   bloquaient l'écran plusieurs secondes sur l'iPhone (voir `initialNumToRender`
+   dans CLAUDE.md). Une animation sur le chemin du premier rendu coûte du
+   temps de calcul au pire moment.
+
+     1. Jamais d'`entering` dans un `renderItem` de liste. Le fil, le fil
+        vidéo et le sélecteur de métiers montent déjà le minimum : animer
+        chaque arrivée annulerait ce réglage.
+     2. Jamais d'animation sur un écran tant qu'il charge. On anime ce qui
+        est prêt, pas ce qui attend.
+     3. Jamais d'`exiting` sur un élément qui peut être démonté en masse
+        (une liste qu'on filtre) : chaque sortie garde son nœud vivant le
+        temps de l'animation.
+   ========================================================================== */
+
+/** Trois durées, en millisecondes. Au-delà de 320 ms, on attend. */
+export const M = {
+  bref: 120,      // un retour immédiat : un bouton, une pastille, un cran
+  courant: 220,   // ce qui entre ou sort : un bandeau, une feuille, un écran
+  ample: 320,     // un mouvement qu'on doit suivre des yeux
+};
+
+/** Le ressort du retour en place — celui de `GlissementLateral`. */
+export const RESSORT = { damping: 20, stiffness: 230, mass: 0.6 };
+
+/** Un peu plus mou : ce qu'on porte au doigt (une photo qu'on déplace). */
+export const RESSORT_PORTE = { damping: 20, stiffness: 190, mass: 0.6 };
+
+/**
+ * CE QU'ON VOIT QUAND LE DOIGT EST POSÉ.
+ *
+ * `plein` sert à ce qui a une forme propre — un bouton, une puce : il
+ * s'enfonce légèrement. 0,97 se voit sans donner l'impression que le bouton
+ * recule.
+ *
+ * `discret` sert à ce qui n'a pas de forme — une icône seule, une ligne de
+ * liste, une carte entière : une échelle n'y serait pas lisible, seule
+ * l'opacité l'est.
+ */
+export const APPUI = {
+  plein: { opacity: 0.72, transform: [{ scale: 0.97 }] },
+  discret: { opacity: 0.55 },
+};

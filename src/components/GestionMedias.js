@@ -31,8 +31,8 @@ import Animated, {
   useSharedValue, useAnimatedStyle, useAnimatedReaction,
   withSpring, withTiming, runOnJS,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import { C, F } from '../theme';
+import { C, F, RESSORT_PORTE } from '../theme';
+import { decision } from '../lib/retour';
 import Media from './Media';
 import { apercuDe } from '../lib/cloudinary';
 import { X, Move } from './icons';
@@ -41,7 +41,9 @@ const COLONNES = 2;
 const ECART = 12;
 const MARGE = 16;
 const APPUI_LONG = 220;                                  // ms avant la saisie
-const RESSORT = { damping: 20, stiffness: 190, mass: 0.6 };
+/* Le ressort vit dans `theme.js` depuis le 01/10/2026 : celui-ci et celui
+   de `GlissementLateral.js` avaient divergé sans que personne ne le voie. */
+const RESSORT = RESSORT_PORTE;
 
 /**
  * Renumérote les cases quand la photo `item` part occuper la case `cible`.
@@ -102,15 +104,11 @@ export default function GestionMedias({ items = [], onChanger }) {
     onChanger(ordreAffiche(positions.value, base));
   };
 
-  const vibrer = () => {
-    /* Le petit choc au moment où la photo se soulève : c'est lui qui fait
-       comprendre qu'on la tient. Le navigateur ne sait pas vibrer, et un
-       appareil peut refuser : dans les deux cas on continue sans rien dire,
-       un retour tactile absent ne doit jamais casser un déplacement. */
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    } catch (e) { /* pas de vibreur ici */ }
-  };
+  /* Le petit choc au moment où la photo se soulève : c'est lui qui fait
+     comprendre qu'on la tient. Le `try`/`catch` qui vivait ici est devenu
+     la doctrine commune de `src/lib/retour.js` — un vibreur absent ne doit
+     jamais casser un déplacement, et cette règle vaut partout. */
+  const vibrer = decision;
 
   if (base.length === 0) {
     return <Text style={s.vide}>Aucune réalisation pour l'instant.</Text>;

@@ -53,7 +53,8 @@
     "verifier-horaires": "node scripts/verifier-horaires.mjs",
     "verifier-carte": "node scripts/verifier-carte.mjs",
     "generer-catalogue": "node scripts/generer-catalogue.mjs",
-    "verifier-imports": "node scripts/verifier-imports.mjs"
+    "verifier-imports": "node scripts/verifier-imports.mjs",
+    "verifier-retour": "node scripts/verifier-retour.mjs"
   },
   "private": true,
   "devDependencies": {

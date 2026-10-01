@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F, T, S, R, SH, interligne } from '../theme';
+import { C, F, T, S, R, SH, interligne, APPUI } from '../theme';
 import {
   Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn,
 } from './ui';
@@ -157,7 +157,8 @@ export default function PostCard({
       {/* barre d'actions */}
       <View style={s.actions}>
         <Pressable
-          style={s.action}
+          style={({ pressed }) => [s.action, pressed && APPUI.discret]}
+          hitSlop={S.sm}
           onPress={() => onLike(post.id)}
           accessibilityRole="button"
           accessibilityLabel={post.liked
@@ -169,7 +170,8 @@ export default function PostCard({
           <Text style={[s.actionText, post.liked && { color: C.accent }]}>{post.likes}</Text>
         </Pressable>
         <Pressable
-          style={s.action}
+          style={({ pressed }) => [s.action, pressed && APPUI.discret]}
+          hitSlop={S.sm}
           onPress={() => onToggleComments(post.id)}
           accessibilityRole="button"
           accessibilityLabel={`Commentaires, ${nbCommentairesDe(post)}`}
@@ -179,7 +181,8 @@ export default function PostCard({
           <Text style={s.actionText}>{nbCommentairesDe(post)}</Text>
         </Pressable>
         <Pressable
-          style={s.action}
+          style={({ pressed }) => [s.action, pressed && APPUI.discret]}
+          hitSlop={S.sm}
           onPress={() => onShare('Lien de la publication copié.')}
           accessibilityRole="button"
           accessibilityLabel="Partager cette publication"
@@ -188,7 +191,8 @@ export default function PostCard({
           <Text style={s.actionText}>Partager</Text>
         </Pressable>
         <Pressable
-          style={s.action}
+          style={({ pressed }) => [s.action, pressed && APPUI.discret]}
+          hitSlop={S.sm}
           onPress={() => onSave(post.id)}
           accessibilityRole="button"
           accessibilityLabel={saved
@@ -291,7 +295,13 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingVertical: 10, paddingHorizontal: 12, flexWrap: 'wrap',
   },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  /* Une icône de 17 px ne fait pas un bouton : 36 px de haut plus 8 px
+     de `hitSlop` donnent les 44 px que réclame un pouce. Mesuré avant :
+     17 px de haut, sans aucune marge de visée. */
+  action: {
+    flexDirection: 'row', alignItems: 'center', gap: S.xs + 1,
+    minHeight: 36, paddingHorizontal: S.xs,
+  },
   actionText: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
   contactWrap: { marginLeft: 'auto' },
 

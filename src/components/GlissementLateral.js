@@ -42,6 +42,8 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS,
 } from 'react-native-reanimated';
+import { RESSORT } from '../theme';
+import { prise } from '../lib/retour';
 
 const DEBUT_HORIZONTAL = 18;   // px avant de prendre la main
 const ABANDON_VERTICAL = 14;   // px verticaux qui rendent la main au défilement
@@ -78,6 +80,12 @@ export default function GlissementLateral({
       const possible = versLaDroite ? aDroite : aGauche;
 
       if (part && possible) {
+        /* L'instant exact où la décision est prise : le doigt est encore sur
+           l'écran, les yeux suivent le mouvement. C'est là qu'un geste doit
+           « cliquer » sous le doigt, pas une demi-seconde plus tard quand
+           l'écran a déjà changé. `runOnJS` est obligatoire : le geste tourne
+           sur le fil natif, le vibreur sur le fil JavaScript. */
+        runOnJS(prise)();
         /* La course finale jusqu'au bord, PUIS le changement d'écran. Changer
            d'écran pendant que la vidéo est encore à moitié là donne un saut. */
         decalage.value = withTiming(
@@ -91,7 +99,10 @@ export default function GlissementLateral({
         );
         return;
       }
-      decalage.value = withSpring(0, { damping: 20, stiffness: 230, mass: 0.6 });
+      /* Le même ressort que partout ailleurs : il vit dans `theme.js`
+         depuis le 01/10/2026, parce que deux fichiers en avaient chacun
+         inventé un, et pas le même. */
+      decalage.value = withSpring(0, RESSORT);
     });
 
   const styleContenu = useAnimatedStyle(() => ({

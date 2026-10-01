@@ -12,7 +12,12 @@ import {
    écran — sans cache, il est retéléchargé à chaque fois. */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { C, F, T, S, R, SH, AVATAR_TONES, gradColors, GRAD_160, GRAD_120 } from '../theme';
+/* Import EN HAUT, comme tout le reste : `await import()` est interdit dans
+   `src/` et `npm run verifier-imports` le refuse. */
+import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import {
+  C, F, T, S, R, SH, M, APPUI, AVATAR_TONES, gradColors, GRAD_160, GRAD_120,
+} from '../theme';
 import { Check, AlertTriangle } from './icons';
 
 /* --- dégradé (remplace les linear-gradient CSS) --- */
@@ -144,11 +149,21 @@ export function ProfileBanner({ uri, height = 140, children }) {
  * Une erreur est donc ROUGE, avec un triangle, et elle tient sur autant de
  * lignes qu'il faut : le motif est souvent la seule chose utile.
  */
+/* C'est le SEUL canal par lequel l'application répond — une trentaine
+   d'appels à `showBanner` y passent. Il apparaissait et disparaissait d'un
+   coup sec, au point qu'on pouvait le rater entièrement. Il glisse
+   désormais depuis le haut, d'où il vient.
+   `exiting` est sans danger ici : il n'y en a qu'un seul à l'écran, jamais
+   une liste qu'on filtre (voir les trois interdits dans `theme.js`). */
+const BandeauAnime = Animated.createAnimatedComponent(Pressable);
+
 export function ConfirmBanner({ msg, erreur, onClose }) {
   if (!msg) return null;
   return (
-    <Pressable
-      style={[s.banner, erreur && s.bannerErreur]}
+    <BandeauAnime
+      entering={FadeInUp.duration(M.courant)}
+      exiting={FadeOutUp.duration(M.bref)}
+      style={({ pressed }) => [s.banner, erreur && s.bannerErreur, pressed && APPUI.discret]}
       onPress={onClose}
       accessibilityRole="alert"
       accessibilityLabel={`${erreur ? 'Erreur' : 'Confirmation'} : ${msg}. Touchez pour fermer.`}
@@ -156,7 +171,7 @@ export function ConfirmBanner({ msg, erreur, onClose }) {
     >
       {erreur ? <AlertTriangle size={15} color="#fff" /> : <Check size={14} color="#fff" />}
       <Text style={s.bannerText}>{msg}</Text>
-    </Pressable>
+    </BandeauAnime>
   );
 }
 
@@ -201,7 +216,10 @@ export function BtnMain({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
       aria-disabled={!!disabled}
-      style={[s.btnMain, block && s.btnBlock, disabled && { opacity: 0.6 }, style]}
+      style={({ pressed }) => [
+        s.btnMain, block && s.btnBlock, disabled && { opacity: 0.6 }, style,
+        pressed && !disabled && APPUI.plein,
+      ]}
     >
       {children || <Text style={s.btnMainText}>{label}</Text>}
     </Pressable>
@@ -216,7 +234,7 @@ export function BtnOutline({ label, onPress, on, accessibilityLabel }) {
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
       aria-selected={!!on}
-      style={[s.btnOutline, on && s.btnOutlineOn]}
+      style={({ pressed }) => [s.btnOutline, on && s.btnOutlineOn, pressed && APPUI.plein]}
     >
       <Text style={[s.btnOutlineText, on && { color: '#fff' }]}>{label}</Text>
     </Pressable>
@@ -234,7 +252,11 @@ export function BtnMini({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
       aria-disabled={!!disabled}
-      style={[s.btnMini, outline && s.btnMiniOutline, disabled && { opacity: 0.6 }, style]}
+      hitSlop={S.sm}
+      style={({ pressed }) => [
+        s.btnMini, outline && s.btnMiniOutline, disabled && { opacity: 0.6 }, style,
+        pressed && !disabled && APPUI.plein,
+      ]}
     >
       {children || <Text style={[s.btnMiniText, outline && { color: C.ink }]}>{label}</Text>}
     </Pressable>
@@ -249,7 +271,8 @@ export function Chip({ label, on, onPress }) {
       accessibilityRole="button"
       accessibilityLabel={`Filtrer sur ${label}`}
       aria-selected={!!on}
-      style={[s.chip, on && s.chipOn]}
+      hitSlop={S.sm}
+      style={({ pressed }) => [s.chip, on && s.chipOn, pressed && APPUI.plein]}
     >
       <Text style={[s.chipText, on && { color: '#fff' }]}>{label}</Text>
     </Pressable>
@@ -264,7 +287,11 @@ export function ChipFollow({ following, onPress, video }) {
       accessibilityRole="button"
       accessibilityLabel={following ? 'Ne plus suivre' : 'Suivre ce professionnel'}
       aria-selected={!!following}
-      style={[s.chipFollow, video && s.chipFollowVideo, following && !video && s.chipFollowed]}
+      hitSlop={S.sm}
+      style={({ pressed }) => [
+        s.chipFollow, video && s.chipFollowVideo,
+        following && !video && s.chipFollowed, pressed && APPUI.plein,
+      ]}
     >
       <Text style={[s.chipFollowText, following && !video && { color: C.ink }]}>
         {following ? 'Suivi' : 'Suivre'}
@@ -292,7 +319,7 @@ export function IconBtn({ onPress, children, style, accessibilityLabel }) {
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      style={[s.iconBtn, style]}
+      style={({ pressed }) => [s.iconBtn, style, pressed && APPUI.discret]}
     >
       {children}
     </Pressable>
