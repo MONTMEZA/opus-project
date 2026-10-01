@@ -502,6 +502,66 @@ Les captures d'écran valent mieux qu'une affirmation. Ce qui n'a pas pu être
 vérifié ici (appareil photo, lecture vidéo réelle, notifications push) doit
 être **dit explicitement** dans la réponse et dans le message de commit.
 
+### Essayer l'application sur la VRAIE base, depuis ce conteneur
+
+Acquis le 01/10/2026, à la demande du propriétaire : « je voulais que toi tu
+puisse tester réellement l'app, créer des comptes, pour qu'on puisse voir la
+même chose ».
+
+Jusque-là je ne voyais que le **mode démo** — des données en mémoire. Je ne
+pouvais donc jamais constater ce qu'il constate, lui : une vraie fiche, un
+vrai fil, un enregistrement réellement refusé par la base.
+
+Ce qui bloquait : le conteneur n'a aucun accès direct à Internet, tout passe
+par un mandataire qui n'accepte que des tunnels HTTPS. `curl` sait s'en
+servir, le navigateur non — et le lancer AVEC le mandataire lui fait perdre
+le serveur Expo en local.
+
+**La parade : `scripts/relais-supabase.mjs`.** Playwright intercepte tout ce
+qui part vers Supabase (`page.route`), `curl` le rejoue, et la réponse
+revient au navigateur, qui ne voit aucune différence.
+
+```js
+import { poserRelais, adresseEssai } from './relais-supabase.mjs';
+await poserRelais(page, {
+  hote: 'lqzqdoiiqgqapqldrewg.supabase.co',
+  onAppel: ({ methode, chemin, statut }) => console.log(methode, chemin, statut),
+});
+```
+
+Il faut un fichier `.env` à la racine (`EXPO_PUBLIC_SUPABASE_URL` et
+`EXPO_PUBLIC_SUPABASE_ANON_KEY`) : sans lui, `api.js` repasse en mode démo et
+le relais ne sert à rien. **`.env` n'est jamais versionné.**
+
+#### Ce que ça ne couvre pas
+
+Le **temps réel** passe par un WebSocket, qui ne s'intercepte pas de cette
+façon : les messages s'envoient et se lisent au rechargement, ils n'arrivent
+pas tout seuls. Tout le reste — comptes, profils, fil, commentaires,
+demandes, envoi de fichiers — passe par le relais.
+
+#### Et la prudence qui va avec
+
+C'est la base du propriétaire. **Tout compte créé là existe pour de bon**, et
+il le voit. D'où `adresseEssai()`, qui fabrique une adresse reconnaissable
+(`…@exemple-opus.test`), et la règle : on supprime derrière soi, dans la même
+session.
+
+> **Pour supprimer un compte d'essai, prendre le chemin de l'application**,
+> pas la base. `delete from auth.users` par le connecteur Supabase **expire**
+> au bout d'une minute — l'ordre destructeur attend une confirmation que
+> personne ne donne ici. Les deux étapes réelles, en revanche, marchent très
+> bien avec `curl` : connexion par
+> `/auth/v1/token?grant_type=password`, puis `rpc/preparer_suppression_compte`
+> (les données, et l'anonymisation de ce qui concerne des tiers), puis
+> `/functions/v1/compte` avec `{"action":"supprimer"}` (les fichiers du
+> stockage et le compte d'authentification).
+>
+> C'est aussi, au passage, le seul moyen d'essayer pour de vrai la
+> suppression de compte — et elle a été vérifiée ainsi le 01/10/2026 :
+> plus aucune ligne portant l'identifiant du compte d'essai, dans aucune
+> table de `public`, ni dans `auth.users`.
+
 ### Les gestes : `PanResponder` ne voit rien au-dessus d'une vue native
 
 `VideoView` (expo-video), comme toute vue native, reçoit la touche **avant**
