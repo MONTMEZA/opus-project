@@ -3606,3 +3606,234 @@ alter table public.professional_profiles add column if not exists email_pro text
 alter table public.professional_profiles drop constraint if exists pro_email_check;
 alter table public.professional_profiles add constraint pro_email_check
   check (email_pro is null or email_pro ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$');
+
+-- ==========================================================================
+--  24. LES DEMANDES ARRIVENT ENFIN CHEZ L'ARTISAN
+--
+--  LE DÉFAUT, CONSTATÉ LE 01/10/2026
+--  ---------------------------------
+--  `quote_requests`, `callback_requests` et `sos_requests` n'apparaissaient
+--  dans tout `src/` qu'aux TROIS `insert` de `api.js`. Aucun écran ne les
+--  lisait. Aucun déclencheur n'en faisait une notification. Et pendant ce
+--  temps l'application affichait « X est prévenu ».
+--
+--  Un client remplissait un formulaire, l'application le remerciait, et la
+--  demande tombait dans un trou. C'est le défaut le plus grave trouvé par
+--  l'audit, et ce n'est pas un défaut d'apparence : c'est la promesse même
+--  du produit.
+--
+--  Tout le travail côté base était pourtant déjà fait — les politiques
+--  « lecture mes devis », « le pro traite le devis » et leurs jumelles
+--  existent depuis le début. Il manquait le facteur.
+--
+--  CE QUE CETTE SECTION POSE
+--  -------------------------
+--    1. de quoi RAPPELER le client d'une urgence (nom et téléphone) ;
+--    2. `notifie_demande()` — la base prévient, dans les deux sens ;
+--    3. `mes_demandes_recues()` — une seule liste pour les trois origines.
+--
+--  POURQUOI LA BASE ET PAS L'ÉCRAN
+--  -------------------------------
+--  Même raison que pour le badge vérifié et les partenariats : un client
+--  modifié ne doit pas pouvoir s'inventer une notification, ni en priver
+--  quelqu'un. Et surtout, une notification écrite par l'écran n'existe que
+--  sur le téléphone qui l'a écrite — c'est exactement ce que faisait
+--  `envoyerSos`, qui poussait une fausse ligne dans son propre état.
+-- --------------------------------------------------------------------------
+
+-- 24.1  Une urgence sans numéro ne sert à rien
+--
+-- `quote_requests` avait déjà reçu `nom` et `telephone` pour cette raison
+-- (« le pro doit pouvoir rappeler le client »). `sos_requests` ne les avait
+-- pas — alors que c'est le cas où rappeler est le plus urgent.
+--
+-- ATTENTION, ET C'EST UNE RÈGLE DU PROJET : ce téléphone est celui que le
+-- client ACCEPTE de transmettre à CET artisan-là, au moment où il le
+-- choisit. Ce n'est pas `users.telephone`, fermé à tout le monde depuis le
+-- 29/09/2026. Les deux ne doivent jamais être confondus : l'écran du SOS
+-- écrit noir sur blanc ce qui part, et il ne part que là.
+alter table public.sos_requests add column if not exists nom       text;
+alter table public.sos_requests add column if not exists telephone text;
+
+-- 24.2  La base prévient, dans les deux sens
+--
+-- Vers l'ARTISAN quand une demande arrive. Vers le CLIENT quand elle est
+-- acceptée ou refusée — sans quoi il reste devant un écran muet, ce qui
+-- est précisément le défaut qu'on corrige.
+--
+-- `security definer` parce que la fonction lit `professional_profiles` et
+-- `users` pour fabriquer un texte lisible, et écrit dans `notifications`
+-- d'un AUTRE utilisateur — ce que la politique « mes notifications »
+-- interdit à juste titre à l'appelant.
+create or replace function public.notifie_demande()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  genre      text;
+  nom_client text;
+  nom_pro    text;
+  accepte    text;   -- la valeur de `statut` qui vaut « acceptée »
+begin
+  -- Les trois tables n'emploient pas les mêmes mots : 'accepte' pour un
+  -- devis et un rappel, 'acceptee' pour une urgence. On ne les aligne PAS
+  -- ici : des lignes existent déjà avec ces valeurs, et la contrainte
+  -- `check` de chaque table les impose. On traduit, c'est tout.
+  if tg_table_name = 'quote_requests' then
+    genre := 'devis';    accepte := 'accepte';
+  elsif tg_table_name = 'callback_requests' then
+    genre := 'rappel';   accepte := 'accepte';
+  else
+    genre := 'sos';      accepte := 'acceptee';
+  end if;
+
+  select coalesce(nullif(btrim(entreprise), ''), 'Un professionnel') into nom_pro
+    from public.professional_profiles where id = new.professional_id;
+  select coalesce(nullif(btrim(nom), ''), 'Un client') into nom_client
+    from public.users where id = new.client_id;
+
+  if tg_op = 'INSERT' then
+    insert into public.notifications (user_id, type, texte, acteur_id)
+    values (
+      new.professional_id,
+      genre,
+      case genre
+        when 'devis'  then nom_client || ' vous demande un devis'
+        when 'rappel' then nom_client || ' souhaite être rappelé'
+        else                nom_client || ' a besoin de vous EN URGENCE'
+      end,
+      new.client_id);
+
+  elsif tg_op = 'UPDATE' and new.statut is distinct from old.statut then
+    -- Le client n'a que faire d'un passage en « terminé » : il le sait, il
+    -- était là. Seules la réponse et le refus l'intéressent.
+    if new.statut = accepte then
+      insert into public.notifications (user_id, type, texte, acteur_id)
+      values (new.client_id, genre || '_accepte',
+              nom_pro || ' a accepté votre demande', new.professional_id);
+    elsif new.statut in ('refuse', 'refusee') then
+      insert into public.notifications (user_id, type, texte, acteur_id)
+      values (new.client_id, 'demande_refusee',
+              nom_pro || ' ne peut pas donner suite', new.professional_id);
+    end if;
+  end if;
+
+  return null;
+end; $$;
+
+-- `create or replace trigger` (PostgreSQL 14+) plutôt que la paire
+-- `drop` + `create` employée ailleurs dans ce fichier, POUR DEUX RAISONS
+-- apprises en appliquant cette section le 01/10/2026 :
+--   1. un `drop trigger` passé par le CONNECTEUR Supabase attend une
+--      confirmation que personne ne peut donner depuis une session de
+--      travail — l'appel expire au bout d'une minute, et rien n'est
+--      appliqué. Avec `create or replace`, la migration passe ;
+--   2. il n'existe aucun instant où le déclencheur est absent. Avec la
+--      paire, une demande déposée entre les deux ordres ne notifierait
+--      personne, et ce serait précisément le défaut qu'on corrige.
+create or replace trigger trg_notifie_devis
+  after insert or update on public.quote_requests
+  for each row execute function public.notifie_demande();
+
+create or replace trigger trg_notifie_rappel
+  after insert or update on public.callback_requests
+  for each row execute function public.notifie_demande();
+
+create or replace trigger trg_notifie_sos
+  after insert or update on public.sos_requests
+  for each row execute function public.notifie_demande();
+
+-- 24.3  Une seule liste pour les trois origines
+--
+-- Un artisan ne range pas sa journée par type de formulaire : il veut
+-- savoir QUI veut le faire travailler, dans l'ordre où c'est arrivé.
+-- D'où une seule fonction, et un champ `genre` pour la couleur du bandeau.
+--
+-- `security definer` POUR UNE RAISON PRÉCISE, et pas par commodité :
+-- `public.users` ne se lit plus en entier depuis le 29/09/2026 (droits de
+-- colonne), donc un simple `join` sur le nom du client échouerait côté
+-- appelant. Le garde-fou reste le même qu'ailleurs : la fonction ne rend
+-- QUE les lignes dont `professional_id = auth.uid()`, et elle refuse de
+-- travailler sans session.
+--
+-- ET CE QU'ELLE NE REND PAS : `users.telephone`. Le numéro affiché est
+-- celui que le client a ÉCRIT dans sa demande, pour cet artisan-là. Le
+-- téléphone du compte reste fermé — le remettre à l'écran par cette porte
+-- annulerait sans bruit le travail du 29/09.
+create or replace function public.mes_demandes_recues()
+returns table (
+  id          uuid,
+  genre       text,
+  statut      text,
+  created_at  timestamptz,
+  client_id   uuid,
+  nom         text,
+  telephone   text,
+  metier      text,
+  titre       text,
+  details     text,
+  ville       text,
+  budget      text,
+  creneau     text,
+  prix_min    numeric,
+  prix_max    numeric,
+  avatar_url  text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select q.id, 'devis'::text, q.statut, q.created_at, q.client_id,
+         coalesce(nullif(btrim(q.nom), ''), nullif(btrim(u.nom), ''), 'Un client'),
+         nullif(btrim(q.telephone), ''),
+         q.metier, nullif(btrim(q.description), ''), null::text,
+         q.ville, q.budget, null::text, null::numeric, null::numeric, u.avatar_url
+    from public.quote_requests q join public.users u on u.id = q.client_id
+   where auth.uid() is not null and q.professional_id = auth.uid()
+
+  union all
+  select c.id, 'rappel'::text, c.statut, c.created_at, c.client_id,
+         coalesce(nullif(btrim(c.nom), ''), nullif(btrim(u.nom), ''), 'Un client'),
+         nullif(btrim(c.telephone), ''),
+         null::text, null::text, null::text,
+         null::text, null::text, c.creneau, null::numeric, null::numeric, u.avatar_url
+    from public.callback_requests c join public.users u on u.id = c.client_id
+   where auth.uid() is not null and c.professional_id = auth.uid()
+
+  union all
+  select s.id, 'sos'::text, s.statut, s.created_at, s.client_id,
+         coalesce(nullif(btrim(s.nom), ''), nullif(btrim(u.nom), ''), 'Un client'),
+         nullif(btrim(s.telephone), ''),
+         s.metier_key,
+         coalesce(nullif(btrim(s.probleme_label), ''), s.probleme_key),
+         nullif(btrim(concat_ws(' · ', nullif(btrim(s.details), ''),
+                                nullif(btrim(s.adresse), ''))), ''),
+         null::text, null::text, s.creneau, s.prix_min, s.prix_max, u.avatar_url
+    from public.sos_requests s join public.users u on u.id = s.client_id
+   where auth.uid() is not null and s.professional_id = auth.uid()
+
+  order by created_at desc
+$$;
+
+-- Elle est faite pour être appelée : on lui rend donc explicitement le
+-- droit que la boucle de révocation (section 19) retire par défaut.
+do $$ begin
+  begin
+    revoke execute on function public.notifie_demande() from public;
+    revoke execute on function public.notifie_demande() from anon, authenticated;
+  exception when undefined_function or undefined_object then null;
+  end;
+  begin
+    -- PostgreSQL accorde l'exécution à PUBLIC par défaut. Une fonction
+    -- `security definer` appelable SANS être connecté est signalée par
+    -- Supabase, et à juste titre : on retire d'abord, on rend ensuite.
+    -- (Elle ne rendrait rien de toute façon — `auth.uid() is not null` —
+    -- mais une porte fermée vaut mieux qu'une porte sans intérêt.)
+    revoke execute on function public.mes_demandes_recues() from public;
+    revoke execute on function public.mes_demandes_recues() from anon;
+    grant  execute on function public.mes_demandes_recues() to authenticated;
+  exception when undefined_function or undefined_object then null;
+  end;
+end $$;
+
+create index if not exists idx_devis_pro  on public.quote_requests    (professional_id, created_at desc);
+create index if not exists idx_rappel_pro on public.callback_requests (professional_id, created_at desc);

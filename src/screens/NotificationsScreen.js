@@ -9,12 +9,29 @@ import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import { Avatar, EmptyState, BtnMini } from '../components/ui';
-import { MessageSquare, CornerDownRight, Bell, ChevronRight } from '../components/icons';
+import {
+  MessageSquare, CornerDownRight, Bell, ChevronRight,
+  Phone, Clock, AlertTriangle, Check, X,
+} from '../components/icons';
 
+/* Une notification qui porte la même cloche que les dix autres ne dit rien.
+   Depuis le 01/10/2026, les demandes reçues arrivent ici aussi — et une
+   urgence ne doit pas ressembler à un « j'aime ». */
 const ICONES = {
   commentaire: MessageSquare,
   reponse: CornerDownRight,
+  devis: Clock,
+  rappel: Phone,
+  sos: AlertTriangle,
+  devis_accepte: Check,
+  rappel_accepte: Check,
+  sos_accepte: Check,
+  demande_refusee: X,
 };
+
+/* L'urgence est la seule qui change de couleur : tout mettre en rouge
+   reviendrait à ne rien signaler du tout. */
+const COULEURS = { sos: C.sos };
 
 export default function NotificationsScreen({ notifications, onOuvrir, onToutLire }) {
   if (!notifications.length) {
@@ -42,6 +59,7 @@ export default function NotificationsScreen({ notifications, onOuvrir, onToutLir
 
       {notifications.map((n) => {
         const Icone = ICONES[n.type] || Bell;
+        const teinte = COULEURS[n.type] || C.muted;
         const menuQuelquePart = !!n.postId;
         return (
           <Pressable
@@ -56,12 +74,12 @@ export default function NotificationsScreen({ notifications, onOuvrir, onToutLir
 
             {n.acteurId
               ? <Avatar seed={n.acteurId} size={34} uri={n.avatarUrl} />
-              : <View style={s.rond}><Icone size={15} color={C.muted} /></View>}
+              : <View style={s.rond}><Icone size={15} color={teinte} /></View>}
 
             <View style={s.corps}>
               <Text style={[s.text, !n.lue && { fontFamily: F.inter6 }]}>{n.texte}</Text>
               <View style={s.meta}>
-                <Icone size={11} color={C.muted} />
+                <Icone size={11} color={teinte} />
                 {!!n.time && <Text style={s.time}>{n.time}</Text>}
               </View>
             </View>

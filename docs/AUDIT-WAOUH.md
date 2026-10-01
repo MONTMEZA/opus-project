@@ -321,3 +321,57 @@ Je le redis ici pour qu'on ne l'oublie pas en route :
   processeur bridé six fois, ce qui est une imitation, pas une mesure ;
 - **la lecture des vidéos** — le navigateur de test n'a pas les codecs ;
 - **les notifications poussées**.
+
+---
+
+## 9. Lot 2 — les demandes arrivent chez l'artisan ✅ fait le 01/10/2026
+
+Le constat du §5.1 est corrigé, et la correction est vérifiée **sur la vraie
+base**, pas seulement en démonstration.
+
+**Ce que la base fait maintenant** (section 24 de `schema.sql`, appliquée
+pour de vrai le 01/10/2026) :
+
+- `notifie_demande()` prévient l'artisan dès qu'un devis, un rappel ou une
+  urgence arrive — et prévient **le client en retour** quand c'est accepté
+  ou refusé. Un client qui attend devant un écran muet, c'est le même défaut
+  vu de l'autre côté.
+- `mes_demandes_recues()` rend une seule liste pour les trois origines : un
+  artisan ne range pas sa journée par type de formulaire.
+- `sos_requests` porte enfin un nom et un téléphone : une urgence sans
+  numéro ne sert à rien.
+
+**Ce que l'artisan voit** : un segment « Pour moi », **en premier** dans
+Découvrir, parce qu'une demande nommément adressée passe avant une annonce
+publique. Une urgence encore en attente remonte en tête — c'est la seule
+demande qui se périme. Accepter, refuser, appeler, clore. Et une phrase qui
+dit pourquoi accepter compte : c'est ce qui permet au client de laisser un
+avis « client vérifié ».
+
+**Ce que le client lit maintenant** : « Votre demande est partie à X. Vous
+serez prévenu dès qu'il répond. » au lieu de « X est prévenu », qui était
+faux.
+
+### Vérifié de bout en bout sur la base du propriétaire
+
+Deux comptes jetables, un devis réel, et tout supprimé après :
+
+| étape | résultat |
+|---|---|
+| le client dépose un devis | `201` |
+| l'artisan le voit par `mes_demandes_recues()` | `devis · Essai Client · 0611223344 · en_attente` |
+| sa notification, écrite par la base | `[devis] Essai Client vous demande un devis` |
+| l'artisan accepte | `204` |
+| le client est prévenu en retour | `[devis_accepte] Essai Lot 2 a accepté votre demande` |
+| le téléphone du COMPTE du client, lu par l'artisan | **`42501 permission denied`** |
+
+Et sur PostgreSQL 16 en local : `schema.sql` rejoué deux fois sans erreur,
+les trois déclencheurs posés, un passage en « terminé » qui ne notifie
+personne (c'est voulu), et l'avis qui devient « client vérifié » tout seul
+une fois le devis accepté.
+
+### Ce qui t'attend déjà dans ta base
+
+L'écran ne s'ouvrira pas vide : **trois demandes réelles y dorment**, deux
+devis et un rappel, encore « en attente ». La plus ancienne date du
+**15 septembre**.

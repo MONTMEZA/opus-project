@@ -11,7 +11,7 @@
 import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
-  initialDemandes, initialAnnonces,
+  initialDemandes, initialAnnonces, initialDemandesRecues,
 } from '../data/demo';
 import { METIER_PAR_DEFAUT } from './metiers';
 
@@ -876,6 +876,116 @@ export const sendMessage = !hasSupabase ? noop : async (conversationId, texte) =
   return data;
 };
 
+/* ==========================================================================
+   LES DEMANDES REÇUES — devis, rappels et urgences adressés à MOI
+   --------------------------------------------------------------------------
+   LE DÉFAUT QUE CECI CORRIGE, et il était grave
+   ---------------------------------------------
+   Jusqu'au 01/10/2026, `quote_requests`, `callback_requests` et
+   `sos_requests` n'apparaissaient dans tout `src/` qu'aux TROIS `insert`
+   ci-dessus. On écrivait, on ne relisait jamais. Un client remplissait un
+   formulaire, l'application le remerciait, et la demande tombait dans un
+   trou — pendant qu'un bandeau affirmait « X est prévenu ».
+
+   POURQUOI UNE SEULE FONCTION POUR TROIS TABLES
+   ---------------------------------------------
+   Un artisan ne range pas sa journée par type de formulaire. Il veut
+   savoir QUI veut le faire travailler, dans l'ordre où c'est arrivé. La
+   base rend donc une liste unique (`mes_demandes_recues`, section 24 de
+   `schema.sql`) avec un champ `genre` pour la couleur du bandeau.
+
+   ET POURQUOI ELLE N'EST PAS CHARGÉE AU DÉMARRAGE
+   -----------------------------------------------
+   `loadAll()` est déjà le point sensible du démarrage. Ces demandes
+   n'intéressent que l'artisan, et seulement quand il ouvre l'onglet : on
+   les charge à ce moment-là, comme les commentaires depuis le 29/09.
+   Le SIGNAL, lui, ne coûte rien — c'est la notification que la base vient
+   d'écrire.
+   ========================================================================== */
+
+/** Les trois genres, et ce qu'ils valent côté base. */
+export const GENRES_DEMANDE = {
+  devis:  { table: 'quote_requests',    accepte: 'accepte',  refuse: 'refuse',  termine: 'termine' },
+  rappel: { table: 'callback_requests', accepte: 'accepte',  refuse: 'refuse',  termine: 'termine' },
+  /* Les urgences accordent leurs participes : 'acceptee', 'refusee'. On ne
+     les aligne PAS — des lignes existent déjà, et la contrainte `check` de
+     la table les impose. On traduit ici, une fois pour toutes. */
+  sos:    { table: 'sos_requests',      accepte: 'acceptee', refuse: 'refusee', termine: 'termine' },
+};
+
+/* Une copie VIVANTE : accepter une demande en mode démo doit se voir, comme
+   sur la vraie base. Sans cela, l'écran paraît cassé alors qu'il ne l'est
+   pas — c'est le genre de détail qui fait perdre une heure. */
+const DEMANDES_RECUES_DEMO = initialDemandesRecues.map((d) => ({ ...d }));
+
+async function demandesRecuesDemo() {
+  return DEMANDES_RECUES_DEMO.map((d) => ({ ...d }));
+}
+
+async function demandesRecuesSupabase() {
+  const { data, error } = await supabase.rpc('mes_demandes_recues');
+  if (error) throw error;
+  return (data || []).map((d) => ({
+    id: d.id,
+    genre: d.genre,
+    statut: d.statut,
+    clientId: d.client_id,
+    nom: d.nom,
+    /* Celui que le client a ÉCRIT dans sa demande. JAMAIS `users.telephone`,
+       fermé à tout le monde depuis le 29/09 — la fonction de la base ne le
+       rend pas, et il ne faut pas aller le chercher ailleurs. */
+    telephone: d.telephone || null,
+    metier: d.metier || null,
+    titre: d.titre || null,
+    details: d.details || null,
+    ville: d.ville || null,
+    budget: d.budget || null,
+    creneau: d.creneau || null,
+    prixMin: d.prix_min != null ? Number(d.prix_min) : null,
+    prixMax: d.prix_max != null ? Number(d.prix_max) : null,
+    avatarUrl: d.avatar_url || null,
+    quand: relativeTime(d.created_at),
+    createdAt: d.created_at,
+  }));
+}
+
+/** Tout ce qu'on m'a adressé, les trois origines mêlées, du plus récent. */
+export const chargerDemandesRecues = hasSupabase ? demandesRecuesSupabase : demandesRecuesDemo;
+
+async function repondreDemandeDemo(genre, id, statut) {
+  const d = DEMANDES_RECUES_DEMO.find((x) => x.id === id);
+  if (d) d.statut = (GENRES_DEMANDE[genre] || {})[statut] || statut;
+  return { id, statut };
+}
+
+async function repondreDemandeSupabase(genre, id, statut) {
+  const regles = GENRES_DEMANDE[genre];
+  if (!regles) throw new Error(`Genre de demande inconnu : ${genre}`);
+  const valeur = regles[statut];
+  if (!valeur) throw new Error(`Réponse inconnue : ${statut}`);
+  const { error } = await supabase.from(regles.table)
+    .update({ statut: valeur })
+    .eq('id', id)
+    .eq('professional_id', currentUserId);
+  if (error) throw error;
+  return { id, statut: valeur };
+}
+
+/**
+ * Accepter, refuser ou clore une demande.
+ *
+ * `statut` vaut 'accepte', 'refuse' ou 'termine' — les mots de
+ * l'APPLICATION. La traduction vers ceux de la base vit dans
+ * `GENRES_DEMANDE`, à un seul endroit.
+ *
+ * Le `.eq('professional_id', …)` fait doublon avec la règle RLS « le pro
+ * traite le devis », et c'est voulu : une règle de base qui échoue rend
+ * une erreur, un filtre qui échoue ne touche aucune ligne. Mieux vaut les
+ * deux — et surtout, ACCEPTER est ce qui rend un avis « client vérifié »
+ * (déclencheur `calcule_client_verifie`). Ce n'est pas un bouton anodin.
+ */
+export const repondreDemandeRecue = hasSupabase ? repondreDemandeSupabase : repondreDemandeDemo;
+
 export const markNotificationRead = !hasSupabase ? noop : async (id) => {
   await supabase.from('notifications').update({ lue: true }).eq('id', id);
 };
@@ -1223,11 +1333,26 @@ export const chercherArtisansUrgence = !hasSupabase ? noop : async (
   }));
 };
 
-/** Enregistre la demande d'urgence envoyée à un artisan. */
+/**
+ * Enregistre la demande d'urgence envoyée à un artisan.
+ *
+ * LE NOM ET LE TÉLÉPHONE PARTENT AVEC, et c'est un choix, pas un oubli
+ * corrigé : une urgence sans numéro ne sert à rien — l'artisan ne peut ni
+ * confirmer, ni demander le code de l'immeuble, ni dire qu'il arrive dans
+ * vingt minutes.
+ *
+ * Ce n'est PAS une brèche dans la fermeture de `users.telephone` du
+ * 29/09 : le numéro ne part qu'à l'artisan que le client vient de choisir,
+ * pour cette intervention-là, et l'écran du SOS l'écrit noir sur blanc
+ * juste au-dessus du bouton. Un numéro transmis en le sachant n'est pas un
+ * numéro divulgué.
+ */
 export const createSosRequest = !hasSupabase ? noop : async (d) => {
   const { data, error } = await supabase.from('sos_requests').insert({
     client_id: currentUserId,
     professional_id: d.proId,
+    nom: d.nom || null,
+    telephone: d.telephone || null,
     metier_key: d.metierKey,
     probleme_key: d.problemeKey,
     probleme_label: d.probleme,

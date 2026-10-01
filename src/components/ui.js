@@ -366,6 +366,19 @@ export function TextArea({ style, ...props }) {
 }
 
 /* --- .pill-toggle --- */
+/**
+ * Le sélecteur d'onglets — « Fil / Vidéos », « Pour moi / Place des pros /
+ * Demandes ».
+ *
+ * C'EST LE BOUTON LE PLUS TOUCHÉ DE L'APPLICATION, et il était le seul à
+ * n'avoir ni état pressé, ni rôle, ni étiquette : un lecteur d'écran
+ * annonçait « bouton » sans dire lequel, ni lequel était choisi. Relevé le
+ * 01/10/2026, corrigé ici parce que c'est une brique partagée — la réparer
+ * une fois les répare toutes.
+ *
+ * L'état va dans `aria-selected`, jamais dans l'étiquette : un lecteur
+ * d'écran annonce « sélectionné » lui-même, dans la langue du téléphone.
+ */
 export function PillToggle({ options, value, onChange, small }) {
   return (
     <View style={s.pill}>
@@ -375,7 +388,14 @@ export function PillToggle({ options, value, onChange, small }) {
           <Pressable
             key={o.key}
             onPress={() => onChange(o.key)}
-            style={[s.pillBtn, small && s.pillBtnSm, on && s.pillBtnOn]}
+            accessibilityRole="tab"
+            accessibilityLabel={o.label}
+            aria-selected={on}
+            hitSlop={S.xs}
+            style={({ pressed }) => [
+              s.pillBtn, small && s.pillBtnSm, on && s.pillBtnOn,
+              pressed && !on && APPUI.discret,
+            ]}
           >
             <Text style={[s.pillText, small && { fontSize: T.micro }, on && { color: '#fff' }]}>
               {o.label}

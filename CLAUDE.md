@@ -843,6 +843,61 @@ n'apparaissent qu'aux trois `insert` de `api.js`), alors que l'application
 affiche « X est prévenu ». Les règles RLS côté base sont pourtant déjà
 écrites.
 
+### Une demande qui ne se relit jamais — le défaut du 01/10/2026
+
+`quote_requests`, `callback_requests` et `sos_requests` n'apparaissaient
+dans tout `src/` qu'aux **trois `insert`** de `api.js`. On écrivait, on ne
+relisait jamais. Un client remplissait un formulaire, l'application le
+remerciait, et la demande tombait dans un trou — pendant qu'un bandeau
+affirmait « l'artisan **est prévenu** ».
+
+Trois demandes réelles dormaient ainsi dans la base du propriétaire, la
+plus ancienne du 15 septembre.
+
+Rien ne le signalait : aucune erreur, aucun écran cassé, aucun contrôle
+rouge. **Une table qu'on écrit sans jamais la lire est une panne
+silencieuse** — et c'est devenu un contrôle : `npm run verifier-demandes`.
+
+> **Avant d'annoncer qu'une fonctionnalité marche, chercher qui LIT ce
+> qu'elle écrit.** Un `insert` sans `select` quelque part, c'est un trou.
+
+Ce que la section 24 de `schema.sql` pose : `notifie_demande()` prévient
+l'artisan à l'arrivée et le client à la réponse — **dans les deux sens**,
+parce qu'un client qui attend devant un écran muet est le même défaut vu
+de l'autre côté. `mes_demandes_recues()` rend une seule liste pour les
+trois origines, l'écran « Pour moi » l'affiche, et accepter une demande
+reste ce qui rend un avis « client vérifié ».
+
+Trois pièges rencontrés en le construisant :
+
+1. **`sos_requests.metier_key` n'est PAS une clé du catalogue.** C'est une
+   clé d'URGENCE (`plomberie`, et non `plombier`). Passer les deux par
+   `nomMetier()` affichait « plomberie » brut à l'écran. Les urgences ont
+   leur propre table de noms, `METIERS_SOS` dans `src/data/urgences.js`.
+2. **Le métier appartient à la DEMANDE, pas au client.** Écrit sous son
+   nom, il se lisait « Julie M., plombier-chauffagiste » — or Julie n'est
+   pas plombière, elle en cherche un.
+3. **Le numéro affiché à l'artisan est celui que le client a ÉCRIT dans sa
+   demande.** Jamais `users.telephone`, fermé à tout le monde le 29/09 :
+   le remettre à l'écran par cette porte annulerait ce travail sans bruit.
+   Vérifié sur la vraie base — un artisan authentifié reçoit toujours
+   `42501 permission denied` sur `users.telephone`.
+
+#### Le connecteur Supabase refuse un `drop`
+
+Appris en appliquant cette section. Une migration contenant `drop trigger`
+ou `revoke` passée par le connecteur **expire au bout d'une minute** sans
+rien appliquer : l'ordre attend une confirmation que personne ne peut
+donner depuis une session de travail. Même cause que pour
+`delete from auth.users`.
+
+> **La parade : `create or replace trigger`** (PostgreSQL 14+), qui passe
+> très bien. Elle est de toute façon meilleure : avec la paire
+> `drop` + `create`, il existe un instant où le déclencheur est absent — et
+> une demande déposée là ne notifierait personne.
+>
+> Un `revoke` isolé passe, lui, s'il est seul dans un bloc `do $$ … $$`.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

@@ -317,3 +317,42 @@ export const initialAnnonces = [
 export const POST_GRADIENTS = [
   '#3a3a38,#8a8578', '#1b4b6b,#4d7f9e', '#6b4226,#b98255', '#4b4b2f,#9a9a5a',
 ];
+
+/**
+ * Trois demandes reçues, pour que l'écran « Pour moi » montre quelque chose
+ * sans base de données.
+ *
+ * ELLES SONT ICI POUR UNE RAISON PRÉCISE, et pas pour faire joli : l'écran
+ * qu'on vient d'écrire est celui qui n'existait pas. Sans jeu d'essai, on ne
+ * voit ni le bandeau de couleur, ni le bouton « Appeler », ni ce que devient
+ * une demande acceptée — et c'est exactement le genre d'écran qu'on croit
+ * fini parce qu'il est vide.
+ *
+ * Le téléphone qui s'affiche est celui que le client a ÉCRIT dans son
+ * formulaire. Jamais celui de son compte.
+ */
+export const initialDemandesRecues = [
+  {
+    id: 'dr-sos-1', genre: 'sos', statut: 'envoyee',
+    clientId: 'u-julie', nom: 'Julie M.', telephone: '06 11 22 33 44',
+    metier: 'plomberie', titre: 'Fuite sous l’évier',
+    details: 'Ça coule depuis ce matin · 12 rue des Lices, Lambesc',
+    ville: null, budget: null, creneau: 'immediat',
+    prixMin: 90, prixMax: 180, avatarUrl: null, quand: 'Il y a 12 min',
+  },
+  {
+    id: 'dr-devis-1', genre: 'devis', statut: 'en_attente',
+    clientId: 'u-marc', nom: 'Marc Dumont', telephone: '06 55 44 33 22',
+    metier: 'macon', titre: 'Ouverture de mur porteur, 3 m de portée',
+    details: null, ville: 'Lambesc (13)', budget: '5000_15000',
+    creneau: null, prixMin: null, prixMax: null, avatarUrl: null,
+    quand: 'Il y a 2 h',
+  },
+  {
+    id: 'dr-rappel-1', genre: 'rappel', statut: 'accepte',
+    clientId: 'u-sophie', nom: 'Sophie B.', telephone: '06 77 88 99 00',
+    metier: null, titre: null, details: null, ville: null, budget: null,
+    creneau: 'Matin', prixMin: null, prixMax: null, avatarUrl: null,
+    quand: 'Hier',
+  },
+];

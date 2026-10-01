@@ -37,6 +37,7 @@ import MesPublicationsScreen from './screens/MesPublicationsScreen';
 import GererPortfolioScreen from './screens/GererPortfolioScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
+import DemandesRecuesScreen, { compterEnAttente, appeler } from './screens/DemandesRecuesScreen';
 import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier } from './lib/metiers';
 import * as api from './lib/api';
@@ -95,6 +96,18 @@ export default function OpusApp() {
   const [demandes, setDemandes] = useState([]);
   const [demandeFiltre, setDemandeFiltre] = useState(null);
   const [demandesVues, setDemandesVues] = useState(false);
+  /* Les demandes qui me sont ADRESSÉES — devis, rappels, urgences. Elles ne
+     partent pas avec `loadAll()` : le démarrage est déjà le point sensible,
+     et elles n'intéressent que l'artisan au moment où il ouvre l'onglet.
+     Le SIGNAL, lui, est gratuit : c'est la notification que la base écrit. */
+  const [demandesRecues, setDemandesRecues] = useState([]);
+  const [demandesRecuesEtat, setDemandesRecuesEtat] = useState('jamais');
+  /* Un MIROIR de l'état, parce que l'abonnement au temps réel est posé une
+     fois pour toutes dans un `useEffect` : la valeur qu'il capture ne
+     bougerait plus jamais. Un `ref`, lui, est toujours à jour.
+     C'est le piège classique de la fermeture périmée, et il ne se voit
+     qu'à l'usage — l'écran ne se rafraîchirait simplement jamais. */
+  const demandesRecuesChargees = useRef(false);
 
   /* Compte : profil du particulier, et disponibilité SOS du professionnel. */
   const [monProfil, setMonProfil] = useState({
@@ -651,9 +664,13 @@ export default function OpusApp() {
         }));
         api.enregistrerCoordonnees({ nom, telephone, ville }).catch(() => {});
       }
+      /* « Envoyée » et rien d'autre, c'était vrai — mais ça laissait le
+         client devant un écran muet, sans savoir ce qui allait se passer.
+         Depuis que la base prévient l'artisan (section 24), on peut
+         annoncer la suite, et elle arrive vraiment. */
       showBanner(mode === 'devis'
-        ? `Demande de devis envoyée à ${pro.entreprise}.`
-        : `Demande de rappel envoyée à ${pro.entreprise}.`);
+        ? `Demande de devis envoyée à ${pro.entreprise}. Vous serez prévenu dès qu'il répond.`
+        : `Demande de rappel envoyée à ${pro.entreprise}. Vous serez prévenu dès qu'il répond.`);
     } catch (e) {
       showErreur(`Envoi impossible : ${e.message || e}`);
     }
@@ -750,6 +767,15 @@ export default function OpusApp() {
           lue: false,
           time: "À l'instant",
         }, ...ns]));
+
+        /* Une demande qui arrive PENDANT qu'on regarde l'écran « Pour moi »
+           doit s'y poser toute seule. Sans cela, l'artisan voit la
+           notification et une liste qui ne bouge pas : il croit à une
+           panne. Silencieux, parce que l'écran affiche déjà quelque
+           chose. */
+        if (['devis', 'rappel', 'sos'].includes(n.type) && demandesRecuesChargees.current) {
+          chargerDemandesRecues({ silencieux: true });
+        }
       },
     });
 
@@ -1085,6 +1111,90 @@ export default function OpusApp() {
       await api.marquerToutesNotificationsLues();
     } catch (e) {
       showErreur(`Les notifications n'ont pas pu être marquées lues : ${e.message || e}`);
+    }
+  };
+
+  /* ---------- les demandes qu'on m'adresse ---------- */
+
+  /**
+   * Charger « Pour moi ».
+   *
+   * À LA DEMANDE, et pas au démarrage : `loadAll()` est déjà ce qui décide
+   * si l'application s'ouvre vite ou non. Ces demandes n'intéressent que
+   * l'artisan, et seulement quand il ouvre l'onglet.
+   *
+   * `silencieux` sert au rafraîchissement d'arrière-plan : on ne remet pas
+   * l'écran en « Chargement… » alors qu'il affiche déjà quelque chose.
+   */
+  /* LE SIGNAL NE COÛTE RIEN.
+     On ne charge pas les demandes au démarrage pour savoir s'il y en a : la
+     base vient d'écrire une notification pour chacune, et elle est déjà
+     chargée. Une notification non lue de type `devis`, `rappel` ou `sos`
+     veut dire, littéralement, « une demande vient d'arriver ». */
+  const TYPES_DEMANDE = ['devis', 'rappel', 'sos'];
+  const nouvellesDemandes = notifications.filter(
+    (n) => !n.lue && TYPES_DEMANDE.includes(n.type),
+  );
+
+  const chargerDemandesRecues = async ({ silencieux = false } = {}) => {
+    if (!silencieux) setDemandesRecuesEtat('charge');
+    try {
+      setDemandesRecues(await api.chargerDemandesRecues());
+      setDemandesRecuesEtat('pret');
+      demandesRecuesChargees.current = true;
+    } catch (e) {
+      setDemandesRecuesEtat('echec');
+      showErreur(`Vos demandes n'ont pas pu être chargées : ${e.message || e}`);
+    }
+  };
+
+  /**
+   * Accepter, refuser, clore.
+   *
+   * L'écran se met à jour tout de suite et la base suit — même raison que
+   * pour les notifications : attendre le serveur pour faire bouger un
+   * bouton donne l'impression qu'il n'a pas marché. En cas d'échec, on
+   * remet la demande dans son état d'avant ET on le dit : une demande
+   * qu'on croit acceptée alors qu'elle ne l'est pas, c'est un client qui
+   * attend pour rien.
+   */
+  /** Éteindre le signal : les notifications de demande passent lues. */
+  const marquerDemandesVues = () => {
+    const aEteindre = nouvellesDemandes.map((n) => n.id);
+    if (!aEteindre.length) return;
+    setNotifications((liste) => liste.map((n) => (
+      aEteindre.includes(n.id) ? { ...n, lue: true } : n
+    )));
+    /* On n'attend pas, et on ne crie pas si ça échoue : au pire la
+       pastille revient au prochain chargement, ce qui est le bon
+       comportement — on n'a rien perdu. */
+    aEteindre.forEach((id) => { api.markNotificationRead(id).catch(() => {}); });
+  };
+
+  const repondreDemandeRecue = async (demande, statut) => {
+    const avant = demande.statut;
+    setDemandesRecues((liste) => liste.map((d) => (
+      d.id === demande.id ? { ...d, statut } : d
+    )));
+    try {
+      const { statut: enBase } = await api.repondreDemandeRecue(demande.genre, demande.id, statut);
+      setDemandesRecues((liste) => liste.map((d) => (
+        d.id === demande.id ? { ...d, statut: enBase } : d
+      )));
+      if (statut === 'accepte') {
+        showBanner(demande.telephone
+          ? `Demande acceptée. Vous pouvez appeler ${demande.nom} au ${demande.telephone}.`
+          : 'Demande acceptée. Le client est prévenu.');
+      } else if (statut === 'refuse') {
+        showBanner('Demande refusée. Le client est prévenu, il pourra chercher ailleurs.');
+      } else {
+        showBanner('Demande close.');
+      }
+    } catch (e) {
+      setDemandesRecues((liste) => liste.map((d) => (
+        d.id === demande.id ? { ...d, statut: avant } : d
+      )));
+      showErreur(`La réponse n'est pas partie : ${e.message || e}`);
     }
   };
 
@@ -1536,20 +1646,30 @@ export default function OpusApp() {
   const envoyerSos = async (demande) => {
     const pro = pros[demande.proId];
     try {
-      await api.createSosRequest(demande);
+      /* Le nom et le numéro partent avec la demande : une urgence sans
+         numéro ne sert à rien, l'artisan ne peut même pas dire qu'il
+         arrive. L'écran du SOS le dit avant qu'on appuie. */
+      await api.createSosRequest({
+        ...demande,
+        nom: monProfil.nom || null,
+        telephone: monProfil.telephone || null,
+      });
     } catch (e) {
       showErreur(`Envoi impossible : ${e.message || e}`);
       return;
     }
     setScreen('home');
-    setNotifications((ns) => [{
-      id: `sos-${Date.now()}`,
-      texte: `${pro ? pro.entreprise : "L'artisan"} a été prévenu : ${demande.probleme} · ${demande.adresse || 'adresse à préciser'}`,
-      lue: false,
-    }, ...ns]);
+    /* ON NE POUSSE PLUS DE FAUSSE NOTIFICATION ICI.
+       Celle qui vivait à cet endroit n'existait que sur CE téléphone :
+       elle annonçait « l'artisan a été prévenu » à celui qui venait
+       d'écrire, et personne d'autre ne la voyait jamais. C'est maintenant
+       la base qui prévient — déclencheur `notifie_demande`, section 24 de
+       schema.sql —, donc l'artisan la reçoit pour de bon, et le client est
+       prévenu en retour quand elle est acceptée. */
     showBanner(
       pro
-        ? `${pro.entreprise} est prévenu. Estimation ${demande.prixMin}–${demande.prixMax} €.`
+        ? `Votre demande est partie à ${pro.entreprise}. Vous serez prévenu dès qu'il répond. `
+          + `Estimation ${demande.prixMin}–${demande.prixMax} €.`
         : 'Votre demande d\'urgence est partie.',
     );
   };
@@ -1800,20 +1920,45 @@ export default function OpusApp() {
                 onChange={(k) => {
                   setDecouvrirTab(k);
                   if (k === 'demandes') setDemandesVues(true);
+                  /* On recharge à chaque ouverture : une demande peut être
+                     arrivée depuis la dernière fois, et l'artisan vient
+                     justement vérifier ça. Silencieux si on a déjà
+                     quelque chose à montrer. */
+                  if (k === 'pourmoi') {
+                    chargerDemandesRecues({ silencieux: demandesRecuesEtat === 'pret' });
+                    /* Venir les lire ÉTEINT le signal. Sans cela, la
+                       pastille resterait allumée pour toujours et finirait
+                       par ne plus rien vouloir dire — c'est exactement ce
+                       qui était arrivé à la cloche des notifications. */
+                    marquerDemandesVues();
+                  }
                 }}
-                /* Un artisan n'a pas besoin qu'on lui trouve un artisan :
-                   il en est un. Le premier onglet devient sa place de
-                   marché entre pros. */
-                options={[
-                  userType === 'pro'
-                    ? { key: 'artisans', label: 'Place des pros' }
-                    : { key: 'artisans', label: 'Artisans' },
+                /* L'ORDRE EST UN CHOIX. « Pour moi » d'abord, parce qu'une
+                   demande qui m'est nommément adressée passe avant une
+                   annonce publique : c'est du travail qui attend une
+                   réponse, pas une occasion à saisir.
+                   Un artisan n'a pas besoin qu'on lui trouve un artisan :
+                   son deuxième onglet est sa place de marché entre pros. */
+                options={userType === 'pro' ? [
+                  { key: 'pourmoi', label: 'Pour moi' },
+                  { key: 'artisans', label: 'Place des pros' },
+                  { key: 'demandes', label: 'Demandes' },
+                ] : [
+                  { key: 'artisans', label: 'Artisans' },
                   { key: 'demandes', label: 'Demandes' },
                 ]}
               />
             </View>
 
-            {decouvrirTab === 'artisans' ? (userType === 'pro' ? (
+            {decouvrirTab === 'pourmoi' && userType === 'pro' ? (
+              <DemandesRecuesScreen
+                demandes={demandesRecues}
+                chargement={demandesRecuesEtat === 'charge'}
+                onRepondre={repondreDemandeRecue}
+                onAppeler={appeler}
+                onVoirProfil={viewProfile}
+              />
+            ) : decouvrirTab === 'artisans' ? (userType === 'pro' ? (
               <PlaceProScreen
                 annonces={annonces}
                 moi={pros[myProId] || null}
@@ -1996,7 +2141,8 @@ export default function OpusApp() {
         avatarUrl={monAvatar}
         avatarSeed={myProId || 'moi'}
         dots={{
-          decouvrir: canPublish && !demandesVues && demandes.length > 0,
+          decouvrir: (canPublish && !demandesVues && demandes.length > 0)
+            || nouvellesDemandes.length > 0,
           messages: messagesNonLus > 0,
         }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
