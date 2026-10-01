@@ -787,6 +787,62 @@ ces échelles.** Les fichiers déjà écrits migrent au fur et à mesure : une
 valeur en dur qui traîne encore continue de fonctionner, elle n'est pas une
 urgence.
 
+### Le mouvement et le toucher — quatrième échelle, ajoutée le 01/10/2026
+
+Un relevé sur tout `src/` a trouvé **106 zones appuyables et zéro
+occurrence du mot `pressed`** : aucun bouton ne montrait qu'on l'avait
+touché. `expo-haptics` était installé depuis le début et appelé à UN seul
+endroit. `react-native-reanimated` (4.5.1) n'était importé que dans deux
+fichiers sur soixante-treize. Et les deux fichiers qui animaient quelque
+chose avaient chacun écrit SON ressort, 230 et 190 de raideur.
+
+C'est ce qui fait dire « ça ne réagit pas » d'une application qui marche :
+l'écran ne change qu'une fois l'action terminée, donc le doigt doute
+pendant tout le traitement.
+
+`theme.js` porte désormais `M` (trois durées), `RESSORT` et
+`RESSORT_PORTE`, et `APPUI` (`plein` pour ce qui a une forme propre,
+`discret` pour une icône ou une ligne). `src/lib/retour.js` porte la
+doctrine haptique en six fonctions. `npm run verifier-retour` tient les
+deux.
+
+> **Une seule porte vers le vibreur : `src/lib/retour.js`.** Chaque appel y
+> est enveloppé d'un `try`/`catch` — un vibreur absent, coupé dans les
+> réglages, ou inexistant au navigateur n'est PAS une panne, et une
+> publication qui échouerait pour cette raison serait absurde.
+>
+> **On ne vibre pas pour ce qu'on voit déjà** (ouvrir un écran, choisir
+> dans une liste). **On vibre pour ce qu'on ne regarde pas** : un geste qui
+> vient d'être validé, un envoi qui part, un refus. Une application qui
+> vibre partout finit par être coupée entièrement.
+
+**Et les trois interdits, écrits dans `theme.js` :**
+
+1. **Jamais d'`entering` dans un `renderItem` de liste.** Le fil, le fil
+   vidéo et le sélecteur de métiers montent déjà le strict minimum ; animer
+   chaque arrivée annulerait ce réglage — et c'est exactement le défaut qui
+   bloquait l'iPhone plusieurs secondes au démarrage.
+2. **Jamais d'animation sur un écran tant qu'il charge.** On anime ce qui
+   est prêt, pas ce qui attend.
+3. **Jamais d'`exiting` sur un élément démontable en masse** (une liste
+   qu'on filtre) : chaque sortie garde son nœud vivant le temps de
+   l'animation.
+
+### L'audit du 01/10/2026 — `docs/AUDIT-WAOUH.md`
+
+Toute l'application a été parcourue au navigateur (45 captures, planche de
+contact dans `captures/planche-opus.png`), mesurée, puis relue par onze
+lectures indépendantes. **À lire avant de proposer une amélioration
+visuelle** : les huit lots y sont dans un ordre défendu, et ce qu'on écarte
+y est écarté avec sa raison.
+
+Le constat le plus grave n'y est pas esthétique : **une demande de devis,
+de rappel ou d'urgence est insérée en base et n'est jamais relue ni
+notifiée** (`quote_requests`, `callback_requests`, `sos_requests`
+n'apparaissent qu'aux trois `insert` de `api.js`), alors que l'application
+affiche « X est prévenu ». Les règles RLS côté base sont pourtant déjà
+écrites.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

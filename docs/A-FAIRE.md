@@ -383,6 +383,24 @@ d'ouvrir » et « trois plages dans la journée ».
 
 ---
 
+## 1 ter. L'audit « waouh » du 01/10/2026 — `docs/AUDIT-WAOUH.md`
+
+Toute l'application a été parcourue au navigateur, écran par écran
+(45 captures), mesurée, puis relue par onze lectures indépendantes :
+**109 constats**. Le rapport complet et les huit lots sont dans
+`docs/AUDIT-WAOUH.md`.
+
+**Le lot 1 — le socle du toucher — est FAIT** (état pressé sur toute
+l'application, doctrine haptique, échelle de mouvement dans `theme.js`,
+`npm run verifier-retour`).
+
+**Le plus grave n'est pas esthétique, et il passe avant le reste :** une
+demande de devis, de rappel ou d'urgence est insérée dans la base et n'est
+**jamais relue ni notifiée**, alors que l'application affiche « X est
+prévenu ». C'est le lot 2.
+
+---
+
 ## 2. Important — la plateforme ne tient pas à l'échelle sans ça
 
 ### 2.0 Le référentiel des métiers — ✅ FAIT le 30/09/2026
