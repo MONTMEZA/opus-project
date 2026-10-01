@@ -306,8 +306,32 @@ console.log('\nLes spécialités proposées suivent les métiers choisis');
   verifier('un maçon-carreleur voit les deux listes',
     cles(['macon', 'carreleur']).includes('mur-soutenement')
       && cles(['macon', 'carreleur']).includes('faience'));
-  verifier('un métier sans spécialité n’en propose aucune',
-    cles(['ramoneur']).length === 0);
+  /* LE DÉFAUT QU'ON SURVEILLE ICI
+     -----------------------------
+     Le 01/10/2026, le propriétaire a signalé qu'avec quatre métiers, un
+     seul ne lui proposait AUCUNE spécialité — son métier PRINCIPAL. En
+     cause : 63 métiers sur 92 n'en avaient aucune. Le catalogue a été
+     complété, et ce contrôle interdit que ça recommence. */
+  const muets = Object.keys(MAP_METIERS).filter((c) => cles([c]).length === 0);
+  verifier('chaque métier propose au moins une spécialité',
+    muets.length === 0, JSON.stringify(muets));
+
+  /* L'héritage : « Maçonnerie générale » n'est pas un autre métier que
+     « Maçon », c'est une façon de nommer son entreprise. */
+  verifier('« Maçonnerie générale » hérite des spécialités du maçon',
+    cles(['maconnerie-generale']).includes('mur-soutenement'));
+  verifier('… et c’est bien un héritage, pas une recopie',
+    (MAP_METIERS['maconnerie-generale'].spe || []).length === 0
+      && MAP_METIERS['maconnerie-generale'].herite === 'macon');
+  verifier('un métier hérité se trouve aussi à la recherche',
+    chercherMetiers('mur de soutènement').map((m) => m.cle)
+      .includes('maconnerie-generale'));
+
+  /* Deux métiers partageant une spécialité ne la montrent qu'une fois :
+     sinon la liste se répète et on croit à un bug. */
+  const avecDoublon = cles(['macon', 'entreprise-generale']);
+  verifier('une spécialité partagée n’apparaît qu’une fois',
+    new Set(avecDoublon).size === avecDoublon.length);
   verifier('aucun métier choisi → aucune proposition',
     cles([]).length === 0 && cles(null).length === 0);
   /* Douze au maximum sur la fiche : si un seul métier en proposait plus,

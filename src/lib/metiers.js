@@ -36,6 +36,15 @@ export const MAP_METIERS = Object.fromEntries(CATALOGUE.map((m) => [m.cle, m]));
 /** cle → le nom lisible d'une catégorie. */
 export const MAP_CATEGORIES = Object.fromEntries(CATEGORIES.map((c) => [c.cle, c.nom]));
 
+/* Même chose que `specialitesDe`, mais utilisable AVANT que les tables
+   ci-dessus soient prêtes : ce fichier se construit de haut en bas. */
+function specialitesDeBrut(m) {
+  if (m.spe && m.spe.length) return m.spe;
+  if (!m.herite) return [];
+  const parent = CATALOGUE.find((x) => x.cle === m.herite);
+  return parent ? (parent.spe || []) : [];
+}
+
 /** cle d'une spécialité → { cle, nom, metier }. */
 export const MAP_SPECIALITES = Object.fromEntries(
   CATALOGUE.flatMap((m) => (m.spe || []).map((s) => [s.cle, { ...s, metier: m.cle }])),
@@ -54,7 +63,9 @@ const FOIN = Object.fromEntries(CATALOGUE.map((m) => [
   normaliser([
     m.nom,
     ...(m.syn || []),
-    ...(m.spe || []).flatMap((s) => [s.nom, ...(s.syn || [])]),
+    /* L'héritage compte ici aussi : chercher « mur de soutènement » doit
+       rendre « Maçonnerie générale » autant que « Maçon ». */
+    ...specialitesDeBrut(m).flatMap((s) => [s.nom, ...(s.syn || [])]),
   ].join(' ')),
 ]));
 
@@ -162,10 +173,78 @@ export function chercherMetiers(texte, { limite = 40 } = {}) {
  * aucun des quatre emplacements de métier.
  */
 export function specialitesProposees(cles = []) {
+  const vues = new Set();
   return (cles || [])
     .map((cle) => MAP_METIERS[cle])
     .filter(Boolean)
-    .flatMap((m) => (m.spe || []).map((s) => ({ ...s, metier: m.cle })));
+    .flatMap((m) => specialitesDe(m).map((s) => ({ ...s, metier: m.cle })))
+    /* Deux métiers peuvent proposer la même spécialité — « rénovation »
+       chez le maçon et chez l'entreprise générale. On ne la montre qu'une
+       fois, sous le premier métier, sinon la liste se répète. */
+    .filter((s) => (vues.has(s.cle) ? false : vues.add(s.cle)));
+}
+
+/**
+ * Les spécialités D'UN métier, héritage compris.
+ *
+ * `herite` sert aux quasi-doublons : « Maçonnerie générale » et « Maçon »
+ * ne sont pas deux métiers différents dans la vraie vie, c'est une façon
+ * de nommer son entreprise. Recopier les neuf spécialités du maçon dans
+ * l'autre entrée, c'était se condamner à les voir diverger.
+ *
+ * Constaté le 01/10/2026 : le propriétaire, dont le métier principal est
+ * « Maçonnerie générale », ne se voyait proposer AUCUNE spécialité pour
+ * son métier principal. C'est ce lien qui le corrige.
+ */
+export function specialitesDe(metier) {
+  if (!metier) return [];
+  if (metier.spe && metier.spe.length) return metier.spe;
+  const parent = metier.herite ? MAP_METIERS[metier.herite] : null;
+  return parent ? (parent.spe || []) : [];
+}
+
+/**
+ * Les spécialités d'un artisan, RANGÉES SOUS LEUR MÉTIER.
+ *
+ * LE DÉFAUT QUE CECI CORRIGE
+ * --------------------------
+ * La fiche affichait les spécialités en vrac, tout en bas, à quarante
+ * lignes des métiers. Remarque du propriétaire le 01/10/2026 : « on ne
+ * comprend pas pourquoi un maçon aurait en spécialité toiture en tuile ».
+ * Il avait raison — rien ne disait de quel métier venait quoi.
+ *
+ * Une spécialité est rangée sous le PREMIER métier qui la propose : si
+ * deux métiers la partagent, elle ne s'affiche qu'une fois.
+ *
+ * `autres` récupère ce qui n'appartient à aucun des métiers : les
+ * spécialités écrites à la main, et celles qui restent d'un métier
+ * retiré depuis. On ne les jette pas — ce sont ses mots.
+ */
+export function metiersAvecSpecialites(pro) {
+  const restantes = [...((pro && pro.specialites) || [])].filter(Boolean);
+
+  const groupes = metiersDe(pro).map((cle) => {
+    const offertes = new Set(specialitesProposees([cle]).map((s) => s.cle));
+    const noms = new Set(
+      specialitesProposees([cle]).map((s) => normaliser(s.nom)),
+    );
+    const miennes = [];
+    /* On parcourt à l'envers pour pouvoir retirer au fur et à mesure sans
+       sauter d'élément. */
+    for (let i = restantes.length - 1; i >= 0; i -= 1) {
+      const x = restantes[i];
+      /* La clé du catalogue, ou le NOM écrit à la main avant lui : une
+         fiche remplie il y a six mois porte « Dalle béton » en toutes
+         lettres, et c'est la même chose que `dalle-beton`. */
+      if (offertes.has(x) || noms.has(normaliser(x))) {
+        miennes.unshift(x);
+        restantes.splice(i, 1);
+      }
+    }
+    return { metier: cle, specialites: miennes };
+  });
+
+  return { groupes, autres: restantes };
 }
 
 /** Les métiers d'un artisan, principal en tête. Toujours un tableau. */

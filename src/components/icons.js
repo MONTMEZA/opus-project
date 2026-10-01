@@ -19,6 +19,7 @@ export const MessageCircle = mk(Feather, 'message-circle');
 export const User = mk(Feather, 'user');
 export const ArrowLeft = mk(Feather, 'arrow-left');
 export const Bell = mk(Feather, 'bell');
+export const Mail = mk(Feather, 'mail');
 export const X = mk(Feather, 'x');
 export const Check = mk(Feather, 'check');
 export const ChevronRight = mk(Feather, 'chevron-right');

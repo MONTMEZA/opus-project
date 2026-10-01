@@ -560,6 +560,13 @@ au minimum un script qui compare `information_schema` à ce que le code attend.
   sens sur une carte de recherche, et il faudra trancher ce que l'on montre
   avant de la construire.
 - **Côté particulier** — reste plus pauvre que le côté pro.
+- **Des pièces jointes dans la messagerie** — proposé par le propriétaire
+  le 01/10/2026, et c'est le vrai besoin derrière l'e-mail professionnel :
+  recevoir un plan, un devis signé, une attestation. Supabase Storage est
+  déjà en place pour les documents et les photos ; il manque l'écran, la
+  limite de taille, et la règle RLS qui réserve la pièce jointe aux deux
+  personnes de la conversation. L'e-mail restera utile même après : tout le
+  monde n'a pas Opus.
 
 ### Les fournisseurs — première marche posée le 21/09/2026
 

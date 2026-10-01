@@ -718,6 +718,47 @@ son chantier avec ses mots, et il doit tomber sur toi.
 
 ---
 
+## 27. 🟠 Ce que tes essais du 01/10 ont fait changer
+
+Quatre choses que tu as relevées, et qui sont corrigées.
+
+**Tu fais** — Profil → « Modifier mon profil ».
+
+**Tu dois voir** — **Vos spécialités juste sous Vos métiers**, plus après
+le SIRET. Et dans le bloc « Les plus courantes dans vos métiers », **tes
+quatre métiers**, y compris ton métier principal : « Maçonnerie générale »
+propose désormais les mêmes spécialités que « Maçon ». 63 métiers sur 92
+n'en avaient aucune ; le catalogue en compte maintenant **367**.
+
+**Tu fais** — Descends un peu : un nouveau champ **E-mail professionnel**,
+juste sous le téléphone.
+
+**Ce qu'il faut savoir avant de le remplir** — Il s'affiche publiquement,
+comme ton téléphone. **Ce n'est pas l'adresse de ton compte Opus**, qui
+reste invisible : on a passé du temps le 29/09 à la retirer de ce que tout
+le monde pouvait lire, ce serait absurde de la remettre par une autre
+porte.
+
+**Tu fais** — Enregistre, puis regarde ta fiche comme la voit un client
+(côté particulier : Découvrir → un artisan → Profil).
+
+**Tu dois voir, dans cet ordre** :
+
+1. ton nom, puis **ton métier principal seul** — plus de « +2 » ;
+2. **Métiers et spécialités** : les quatre métiers, chacun avec les siennes
+   en dessous. Le principal porte une étoile. Ce que tu as écrit à la main
+   et qui n'appartient à aucun métier apparaît sous « **Aussi** » ;
+3. ta présentation ;
+4. les informations vérifiées ;
+5. **Contact et déplacement** : téléphone, **e-mail**, carte, horaires.
+
+**Ce que ça règle** — Tu disais « on ne comprend pas pourquoi un maçon
+aurait en spécialité toiture en tuile ». Maintenant chaque spécialité est
+écrite sous son métier, et le bloc est en haut : c'est la première question
+d'un client, elle passe avant le téléphone.
+
+---
+
 ## Ce que je n'ai PAS pu vérifier, et qu'il faut donc regarder
 
 Je le redis à part, parce que c'est ce qui compte le plus :

@@ -38,7 +38,7 @@ par catégorie **restent à construire** (voir « Ce qui reste » plus bas).
 |---|---|
 | Catégories | **15** |
 | Métiers | **92** |
-| Spécialités | **124** |
+| Spécialités | **367** |
 
 **Une seule source : `src/data/catalogue-metiers.js`.** Le SQL du catalogue
 n'est pas écrit à la main — il est **engendré** depuis ce fichier par
@@ -235,6 +235,40 @@ reconnaissait pas dans la proposition du catalogue
 haut et comme à ajouter en dessous — et un second clic aurait créé un
 doublon que rien n'aurait rapproché. On compare désormais à la clé **et**
 au nom.
+
+---
+
+## Ce que les essais du propriétaire ont corrigé — 01/10/2026
+
+Quatre remarques, après l'avoir utilisé sur son téléphone. Toutes justes.
+
+**1. « J'ai 4 métiers mais seules 3 ont des spécialités, et pas mon métier
+principal. »** Compté : **63 métiers sur 92 n'en avaient aucune**. Le
+catalogue passe de 124 à **367** spécialités, et plus aucun métier n'en est
+dépourvu — `verifier-metiers` refuse désormais de passer si c'est le cas.
+
+Et un défaut de modélisation derrière : **« Maçonnerie générale » n'aurait
+pas dû être un métier séparé de « Maçon »**. C'est une façon de nommer son
+entreprise. On ne le supprime pas — des comptes y sont rattachés —, il
+**hérite** (`herite` dans le catalogue, `herite_de` en base).
+
+**2 et 3. « On voit Maçonnerie générale +2 et jamais les deux autres ; les
+spécialités sont quarante lignes plus bas et on ne comprend pas de quel
+métier elles viennent. »** Nouveau bloc **`MetiersPro`** : les quatre
+métiers, chacun avec ses spécialités en dessous, **en haut de la fiche** —
+avant la présentation, avant le téléphone. C'est la première question d'un
+client. Le titre ne porte plus que le métier principal.
+
+Même logique dans « Modifier mon profil » : les spécialités remontent
+**juste sous les métiers**. Elles étaient après le SIRET, ce qui était un
+rangement et pas un sens.
+
+**4. « Ajouter un e-mail ? »** Oui — `email_pro`, une adresse de contact
+déclarée pour être publique. **Jamais `users.email`**, qui est celle du
+compte et qui a été retirée du public le 29/09.
+
+Le propriétaire a proposé mieux pour plus tard : des **pièces jointes dans
+la messagerie**. C'est le vrai besoin ; noté dans `docs/A-FAIRE.md`.
 
 ---
 

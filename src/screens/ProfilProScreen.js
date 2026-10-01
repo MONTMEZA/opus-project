@@ -8,7 +8,8 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { C, F } from '../theme';
-import { libelleMetiers } from '../lib/metiers';
+import { metierPrincipal, nomMetier } from '../lib/metiers';
+import MetiersPro from '../components/MetiersPro';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea,
 } from '../components/ui';
@@ -121,7 +122,7 @@ export default function ProfilProScreen({
         avatarUrl={pro.avatarUrl}
         portfolio={pro.portfolio}
         titre={pro.entreprise}
-        sousTitre={`${libelleMetiers(pro)} · ${pro.ville}`}
+        sousTitre={`${nomMetier(metierPrincipal(pro))} · ${pro.ville}`}
         verifie={pro.verifie}
       />
 
@@ -133,7 +134,11 @@ export default function ProfilProScreen({
               <Text style={s.name}>{pro.entreprise}</Text>
               {pro.verifie && <BadgeCheck size={16} color={C.verif} />}
             </View>
-            <Text style={s.metier}>{libelleMetiers(pro, { max: 3 })} · {pro.ville}</Text>
+        {/* Le titre ne porte plus que le métier PRINCIPAL. Il affichait
+            « Maçonnerie générale +2 », c'est-à-dire un décompte que
+            personne ne pouvait dérouler. Les quatre métiers sont juste en
+            dessous, dans leur bloc, avec leurs spécialités. */}
+            <Text style={s.metier}>{nomMetier(metierPrincipal(pro))} · {pro.ville}</Text>
           </>
         )}
         <Text style={s.sub}>{pro.exp} ans d'expérience · {avg.count} avis vérifiés</Text>
@@ -175,6 +180,11 @@ export default function ProfilProScreen({
           </Pressable>
         )}
       </View>
+
+      {/* La première question d'un client : « est-ce qu'il fait ce dont
+          j'ai besoin ? » Elle passe donc avant la présentation, et avant
+          le téléphone. */}
+      <MetiersPro pro={pro} />
 
       <Text style={s.bio}>{pro.bio}</Text>
 

@@ -191,6 +191,24 @@ Les trois décisions du propriétaire, prises le 30/09/2026 :
    justificatives **par catégorie** — un avocat n'a pas d'assurance
    décennale, et son badge « vérifié » ne voudrait rien dire.
 
+**Le 01/10/2026, le propriétaire a trouvé deux défauts en l'utilisant :**
+
+- **63 métiers sur 92 n'avaient AUCUNE spécialité** — dont le sien. Le
+  catalogue en compte désormais **367**, et `verifier-metiers` refuse de
+  passer si un seul métier n'en propose aucune.
+- **« Maçonnerie générale » n'aurait pas dû être un métier séparé de
+  « Maçon »** : c'est une façon de nommer son entreprise. On ne le
+  supprime pas — des comptes y sont rattachés —, il **hérite** (`herite`
+  dans le catalogue, `herite_de` en base). Avant d'ajouter un métier
+  proche d'un autre, se demander si ce n'en est pas le même.
+
+> **Métiers et spécialités s'affichent ENSEMBLE.** Le bloc
+> `MetiersPro` les montre groupés, en haut de la fiche, avant la
+> présentation et avant le téléphone. Ils étaient séparés par quarante
+> lignes, et on ne comprenait plus de quel métier venait quelle
+> spécialité. Même règle dans « Modifier mon profil » : les spécialités
+> viennent juste sous les métiers, parce qu'elles en dépendent.
+
 Trois pièges rencontrés en le construisant, à ne pas redécouvrir :
 
 - **La contrainte ne vérifie PAS `actif`.** Désactiver un métier (§18 de la
@@ -208,6 +226,28 @@ Trois pièges rencontrés en le construisant, à ne pas redécouvrir :
 
 Les trois points bloquants — signalement et blocage, suppression de compte,
 textes légaux — sont **faits** (21/09/2026).
+
+### L'e-mail affiché n'est JAMAIS celui du compte
+
+Ajouté le 01/10/2026. `professional_profiles.email_pro` est une adresse de
+**contact**, que le professionnel renseigne POUR qu'elle s'affiche, comme
+son téléphone. Elle est vide par défaut.
+
+> `users.email` est l'adresse du COMPTE. Elle a été retirée le 29/09/2026
+> de ce que tout le monde pouvait lire. **La remettre à l'écran par une
+> autre porte — « on affiche l'e-mail du pro » — annulerait ce travail
+> sans que personne ne s'en aperçoive.**
+
+Le déclencheur `tient_le_profil_pro()` la met en minuscules et la vide
+(`null`) quand elle ne contient que des espaces. La contrainte
+`pro_email_check` refuse ce qui ne peut PAS être une adresse — pas
+d'arobase, pas de point après. Elle ne cherche pas à prouver qu'une
+adresse existe : la seule preuve, c'est qu'un message y arrive.
+
+Le propriétaire a proposé mieux, pour plus tard : **des pièces jointes
+dans la messagerie**. C'est le vrai besoin — recevoir un plan, un devis
+signé. L'e-mail reste utile en attendant, et après : tout le monde n'a
+pas Opus.
 
 ### Le propriétaire n'a PAS de société ni de SIRET (constaté le 29/09/2026)
 

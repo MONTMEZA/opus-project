@@ -80,44 +80,52 @@ await ajouter.scrollIntoViewIfNeeded();
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${DOSSIER}/1-mes-metiers.png` });
 
-await ajouter.click();
-await page.waitForTimeout(1200);
-await page.screenshot({ path: `${DOSSIER}/2-selecteur-categories.png` });
-
-/* Déplier une catégorie : celui qui ne sait pas quoi chercher. */
-const cat = page.locator('[aria-label^="Bureaux d\'études"]').first();
-if (await cat.count()) {
-  await cat.click();
-  await page.waitForTimeout(900);
-  await cat.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: `${DOSSIER}/3-categorie-depliee.png` });
+/* À quatre métiers, le bouton est ÉTEINT — c'est la règle, pas une panne.
+   On ne peut alors pas ouvrir le panneau depuis ici. */
+const ouvrable = await ajouter.isEnabled();
+console.log(`bouton « Ajouter un métier » : ${ouvrable ? 'actif' : 'éteint (4 métiers)'}`);
+if (ouvrable) {
+  await ajouter.click();
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${DOSSIER}/2-selecteur-categories.png` });
 }
 
-/* Taper : le chemin de celui qui sait. On mesure la frappe.
+if (ouvrable) {
+  /* Déplier une catégorie : celui qui ne sait pas quoi chercher. */
+  const cat = page.locator('[aria-label^="Bureaux d\'études"]').first();
+  if (await cat.count()) {
+    await cat.click();
+    await page.waitForTimeout(900);
+    await cat.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${DOSSIER}/3-categorie-depliee.png` });
+  }
 
-   UN CHIFFRE SEUL NE VEUT RIEN DIRE. La façon de mesurer compte autant
-   que ce qu'on mesure : `press()` lettre par lettre coûte plus cher que
-   la frappe réelle, et les millisecondes obtenues ici ne se comparent
-   donc PAS à celles d'une autre session. Ce qui se compare, c'est le
-   sélecteur contre la recherche de « Découvrir », mesurée plus haut. */
-const champ = page.locator('[aria-label="Rechercher un métier"]').first();
-const parLettre = await msParLettre(champ, 'plomb');
-await page.waitForTimeout(1500);
-await page.screenshot({ path: `${DOSSIER}/4-recherche-plomb.png` });
-console.log(`frappe dans le sélecteur : ${parLettre.toFixed(0)} ms par lettre `
-  + '(processeur bridé ×6)');
+  /* Taper : le chemin de celui qui sait. On mesure la frappe.
 
-/* Chercher par SPÉCIALITÉ — le §13 de la demande. */
-await champ.click();
-for (const lettre of 'mur de souten') {
-  await champ.press(lettre);
-  await page.waitForTimeout(30);
+     UN CHIFFRE SEUL NE VEUT RIEN DIRE. La façon de mesurer compte autant
+     que ce qu'on mesure : `press()` lettre par lettre coûte plus cher que
+     la frappe réelle, et les millisecondes obtenues ici ne se comparent
+     donc PAS à celles d'une autre session. Ce qui se compare, c'est le
+     sélecteur contre la recherche de « Découvrir », mesurée plus haut. */
+  const champ = page.locator('[aria-label="Rechercher un métier"]').first();
+  const parLettre = await msParLettre(champ, 'plomb');
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${DOSSIER}/4-recherche-plomb.png` });
+  console.log(`frappe dans le sélecteur : ${parLettre.toFixed(0)} ms par lettre `
+    + '(processeur bridé ×6)');
+
+  /* Chercher par SPÉCIALITÉ — le §13 de la demande. */
+  await champ.click();
+  for (const lettre of 'mur de souten') {
+    await champ.press(lettre);
+    await page.waitForTimeout(30);
+  }
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${DOSSIER}/5-recherche-specialite.png` });
+  const visible = await page.evaluate(() => document.body.innerText.includes('Maçon'));
+  console.log(`« mur de souten » fait apparaître Maçon : ${visible}`);
 }
-await page.waitForTimeout(1500);
-await page.screenshot({ path: `${DOSSIER}/5-recherche-specialite.png` });
-const visible = await page.evaluate(() => document.body.innerText.includes('Maçon'));
-console.log(`« mur de souten » fait apparaître Maçon : ${visible}`);
 
 /* Les spécialités : la liste proposée selon les métiers choisis, et le
    champ libre pour ce qu'aucune liste n'avait prévu. */
@@ -147,7 +155,11 @@ for (const [nom, x] of [['Découvrir', 0.30], ['Profil', 0.89], ['Accueil', 0.11
   await page.mouse.click(width * x, height - 30);
   await page.waitForTimeout(1600);
   const texte = await page.innerText('body');
-  const vues = CLES.filter((c) => texte.includes(c));
+  /* Une clé se cherche sur ses BORDS, pas en sous-chaîne. Vérifié le
+     01/10/2026 : l'adresse `contact@belaid-maconnerie.fr` contient
+     « macon », et le contrôle criait à la clé affichée alors que l'écran
+     était juste. Un contrôle qui se trompe une fois cesse d'être lu. */
+  const vues = CLES.filter((c) => new RegExp(`(^|[^a-z-])${c}([^a-z-]|$)`).test(texte));
   fuites += vues.length;
   console.log(`${nom} : ${vues.length ? `✘ clés affichées → ${vues.join(', ')}` : '✔ aucune clé'}`);
 }

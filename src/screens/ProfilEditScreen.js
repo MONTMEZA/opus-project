@@ -48,6 +48,7 @@ export default function ProfilEditScreen({
   const [bannerUrl, setBannerUrl] = useState(profil.bannerUrl || null);
   const [nom, setNom] = useState(profil.nom || '');
   const [telephone, setTelephone] = useState(profil.telephone || '');
+  const [emailPro, setEmailPro] = useState(profil.emailPro || '');
   const [entreprise, setEntreprise] = useState(profil.entreprise || '');
   /* Les métiers déjà enregistrés ; un profil d'avant la nouveauté n'en a
      qu'un, on en fait une liste d'un seul élément. */
@@ -112,7 +113,7 @@ export default function ProfilEditScreen({
       profil: estPro
         ? {
             avatarUrl, bannerUrl, entreprise, metiers, metier: metiers[0], bio, siret,
-            telephone, specialites, horaires,
+            telephone, emailPro, specialites, horaires,
             zoneKm: Number(zoneKm) || null,
             ville: lieu.affichage,
             codePostal: lieu.codePostal,
@@ -235,6 +236,21 @@ export default function ProfilEditScreen({
               </View>
             )}
 
+            {/* Les spécialités viennent JUSTE APRÈS les métiers, et c'est
+                leur place : elles en dépendent entièrement. Elles étaient
+                posées après le SIRET et les années d'expérience — remarque
+                du propriétaire le 01/10/2026 : « on choisit nos métiers
+                mais les spécialités sont après le SIRET, pas très
+                compréhensible ». C'était un rangement, pas un sens. */}
+            <Text style={s.label}>Vos spécialités</Text>
+            <ChampSpecialites
+              valeurs={specialites}
+              onChange={setSpecialites}
+              metiers={metiers}
+              onProposer={onProposerSpecialite}
+              onErreur={onErreur}
+            />
+
             <Text style={s.label}>Ville</Text>
             <ChampVille valeur={lieu.affichage} onChange={setLieu} />
 
@@ -309,6 +325,24 @@ export default function ProfilEditScreen({
               par message.
             </Text>
 
+            {/* L'adresse de CONTACT, et jamais celle du compte : celle-ci
+                est déclarée pour être publique, comme le téléphone. */}
+            <Text style={s.label}>E-mail professionnel</Text>
+            <Field
+              value={emailPro}
+              onChangeText={setEmailPro}
+              placeholder="contact@votre-entreprise.fr"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={s.aide}>
+              Pour recevoir un plan, un devis signé, une attestation — ce que
+              la messagerie ne fait pas encore. Il s'affiche publiquement, au
+              même titre que votre téléphone. Ce n'est pas l'adresse de votre
+              compte Opus, qui elle reste invisible.
+            </Text>
+
             {/* À ne pas confondre avec le rayon SOS, plus bas : celui-ci
                 ne concerne que les urgences, et seulement quatre métiers.
 
@@ -338,19 +372,6 @@ export default function ProfilEditScreen({
               pas. Et la carte ne s'agrandit jamais jusqu'à la rue : elle
               montre votre zone, pas votre adresse.
             </Text>
-
-            <Text style={s.label}>Vos spécialités</Text>
-            {/* Les spécialités PROPOSÉES dépendent des métiers choisis au
-                dessus : un couvreur ne doit pas se voir proposer
-                « ouverture de mur porteur ». Elles suivent donc la
-                sélection en direct, sans qu'il faille enregistrer. */}
-            <ChampSpecialites
-              valeurs={specialites}
-              onChange={setSpecialites}
-              metiers={metiers}
-              onProposer={onProposerSpecialite}
-              onErreur={onErreur}
-            />
 
             {/* « Ouvert jusqu'à 18 h » change le fait d'appeler ou non,
                 maintenant. C'est le renseignement qu'on cherche au moment

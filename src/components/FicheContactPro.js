@@ -15,21 +15,20 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, Linking, StyleSheet } from 'react-native';
-import { C, F, T, S, R, interligne } from '../theme';
+import { C, F, T, S, interligne } from '../theme';
 import { SectionLabel } from './ui';
-import { Phone, MapPin, Clock } from './icons';
+import { Phone, Mail, MapPin, Clock } from './icons';
 import { etatMaintenant, semaineGroupee } from '../lib/horaires';
-import { nomSpecialite } from '../lib/metiers';
 import CarteZone from './CarteZone';
 
 export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
   const telephone = pro.telephone || '';
+  const email = pro.emailPro || '';
   const zoneKm = pro.zoneKm || null;
-  const specialites = pro.specialites || [];
   const etat = etatMaintenant(pro.horaires);
   const semaine = semaineGroupee(pro.horaires);
   const [semaineOuverte, setSemaineOuverte] = useState(false);
-  const rienDeRempli = !telephone && !zoneKm && specialites.length === 0 && !etat;
+  const rienDeRempli = !telephone && !email && !zoneKm && !etat;
 
   // Un visiteur ne voit rien plutôt qu'un cadre vide.
   if (rienDeRempli && !estMoi) return null;
@@ -41,9 +40,9 @@ export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
       {rienDeRempli ? (
         <View style={s.bloc}>
           <Text style={s.invite}>
-            Votre fiche ne porte ni téléphone, ni zone d'intervention, ni
-            spécialité, ni horaires. Ce sont les choses qu'un client regarde
-            avant d'appeler — et celles par lesquelles il vous trouve.
+            Votre fiche ne porte ni téléphone, ni e-mail, ni zone
+            d'intervention, ni horaires. Ce sont les choses qu'un client
+            regarde au moment de vous joindre.
           </Text>
           <Pressable onPress={onEdit} accessibilityRole="button">
             <Text style={s.inviteLien}>Compléter ma fiche</Text>
@@ -61,6 +60,24 @@ export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
               <Phone size={16} color={C.accent} />
               <Text style={s.label}>Téléphone</Text>
               <Text style={s.valeurLien}>{telephone}</Text>
+            </Pressable>
+          )}
+
+          {/* L'e-mail PROFESSIONNEL, et jamais celui du compte. Celui-ci
+              est déclaré pour être public, comme le téléphone ; l'autre a
+              été retiré de ce que tout le monde peut lire le 29/09/2026,
+              et le remettre à l'écran par une autre porte n'aurait aucun
+              sens. */}
+          {!!email && (
+            <Pressable
+              style={s.ligne}
+              onPress={() => Linking.openURL(`mailto:${email}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Écrire à ${pro.entreprise} à l'adresse ${email}`}
+            >
+              <Mail size={16} color={C.accent2} />
+              <Text style={s.label}>E-mail</Text>
+              <Text style={s.valeurMail} numberOfLines={1}>{email}</Text>
             </Pressable>
           )}
 
@@ -119,20 +136,6 @@ export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
             </View>
           )}
 
-          {specialites.length > 0 && (
-            <View style={s.specialites}>
-              <Text style={s.specialitesTitre}>Spécialités</Text>
-              <View style={s.rang}>
-                {/* La fiche range `mur-soutenement` quand la spécialité
-                    vient du catalogue : on affiche le nom, jamais la clé. */}
-                {specialites.map((mot) => (
-                  <View key={mot} style={s.pastille}>
-                    <Text style={s.pastilleTexte}>{nomSpecialite(mot)}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
         </View>
       )}
     </>
@@ -154,6 +157,9 @@ const s = StyleSheet.create({
   /* Un numéro de téléphone se lit de loin et se compose d'un doigt : il est
      plus gros que le reste, et de la couleur sur laquelle on appuie. */
   valeurLien: { fontFamily: F.oswald6, fontSize: T.sousTitre - 1, color: C.accent, letterSpacing: 0.3 },
+  /* L'e-mail est long : il ne peut pas avoir la taille du téléphone sans
+     repousser son libellé hors de l'écran. */
+  valeurMail: { flexShrink: 1, fontFamily: F.inter6, fontSize: T.courant, color: C.accent2 },
 
   carte: { paddingBottom: S.md },
 
@@ -164,18 +170,6 @@ const s = StyleSheet.create({
   ligneSemaine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
   jours: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
   heures: { fontFamily: F.inter6, fontSize: T.courant, color: C.ink },
-
-  specialites: { paddingVertical: S.md - 2, borderTopWidth: 1, borderTopColor: C.line },
-  specialitesTitre: {
-    fontFamily: F.inter, fontSize: T.courant, color: C.muted, marginBottom: S.sm,
-  },
-  rang: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm - 2 },
-  /* Une pastille flotte au-dessus du fond : arrondie. */
-  pastille: {
-    borderWidth: 1, borderColor: C.accent2, borderRadius: R.gelule,
-    paddingVertical: 6, paddingHorizontal: S.md,
-  },
-  pastilleTexte: { fontFamily: F.oswald6, fontSize: T.petit + 0.5, color: C.accent2 },
 
   invite: {
     fontFamily: F.inter, fontSize: T.courant, color: C.muted,

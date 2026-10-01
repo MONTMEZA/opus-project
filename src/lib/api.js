@@ -174,7 +174,7 @@ const COLONNES_PRO_LISTE = [
   /* La fiche de contact : téléphone, zone d'intervention, spécialités.
      Elles sont courtes et s'affichent dans les listes de la Place des
      pros, donc elles voyagent avec le reste. */
-  'telephone', 'zone_km', 'specialites', 'horaires',
+  'telephone', 'email_pro', 'zone_km', 'specialites', 'horaires',
   /* La certification RGE. `rge` est la seule vérifiée ; les trois autres
      sont ce que l'artisan a déclaré, et n'affichent pas de badge. */
   'rge', 'rge_declare', 'rge_numero', 'rge_expire', 'rge_url',
@@ -199,6 +199,9 @@ function rowToPro(row, reviews = [], partners = []) {
     assurance: { valide: !!row.assurance_valide, expire: row.assurance_expire },
     kbis: { valide: !!row.kbis_valide, maj: row.kbis_maj },
     telephone: row.telephone || '',
+    /* L'adresse de CONTACT, déclarée pour être publique — jamais celle du
+       compte, qui n'est lisible par personne. */
+    emailPro: row.email_pro || '',
     /* `null` et 0 ne veulent pas dire la même chose : null = « il ne l'a
        pas renseigné », et l'écran n'affiche alors rien du tout. */
     zoneKm: row.zone_km == null ? null : Number(row.zone_km),
@@ -993,6 +996,7 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
       /* Le téléphone d'un artisan est PUBLIC : il est sur sa fiche pour
          qu'on l'appelle. Vide, il redevient null et ne s'affiche plus. */
       telephone: profil.telephone || null,
+      email_pro: profil.emailPro || null,
       zone_km: profil.zoneKm || null,
       specialites: profil.specialites || [],
       horaires: profil.horaires || null,

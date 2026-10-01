@@ -8,7 +8,8 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F, T, S } from '../theme';
-import { libelleMetiers } from '../lib/metiers';
+import { metierPrincipal, nomMetier } from '../lib/metiers';
+import MetiersPro from '../components/MetiersPro';
 import {
   BtnMini, BtnOutline, EmptyState, SectionLabel,
 } from '../components/ui';
@@ -134,7 +135,7 @@ export default function ProfilOwnScreen({
         avatarUrl={me.avatarUrl}
         portfolio={me.portfolio}
         titre={me.entreprise}
-        sousTitre={`${libelleMetiers(me)} · ${me.ville}`}
+        sousTitre={`${nomMetier(metierPrincipal(me))} · ${me.ville}`}
         verifie={me.verifie}
       />
       <View style={s.head}>
@@ -144,7 +145,11 @@ export default function ProfilOwnScreen({
               <Text style={s.name}>{me.entreprise}</Text>
               {me.verifie && <BadgeCheck size={16} color={C.verif} />}
             </View>
-            <Text style={s.metier}>{libelleMetiers(me, { max: 3 })} · {me.ville}</Text>
+        {/* Le titre ne porte plus que le métier PRINCIPAL. Il affichait
+            « Maçonnerie générale +2 », c'est-à-dire un décompte que
+            personne ne pouvait dérouler. Les quatre métiers sont juste en
+            dessous, dans leur bloc, avec leurs spécialités. */}
+            <Text style={s.metier}>{nomMetier(metierPrincipal(me))} · {me.ville}</Text>
           </>
         )}
         {/* Le texte est déduit des documents réellement validés : il ne peut
@@ -160,6 +165,10 @@ export default function ProfilOwnScreen({
         </View>
         <BtnOutline label="Modifier mon profil" onPress={onEdit} />
       </View>
+
+      {/* Le même bloc que voient ses clients : c'est ce qui garantit
+          qu'il sait à quoi ressemble sa fiche. */}
+      <MetiersPro pro={me} estMoi onEdit={onEdit} />
 
       <Text style={s.bio}>{me.bio}</Text>
 

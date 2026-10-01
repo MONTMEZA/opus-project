@@ -53,9 +53,10 @@ function engendrer() {
 
   lignes.push(`-- ${metiers.length} métiers.`);
   lignes.push('insert into public.metiers_catalogue');
-  lignes.push('  (cle, nom, categorie, parent, synonymes, ordre) values');
+  lignes.push('  (cle, nom, categorie, parent, synonymes, ordre, herite_de) values');
   lignes.push(metiers
-    .map((m, i) => `  (${txt(m.cle)}, ${txt(m.nom)}, ${txt(m.categorie)}, null, ${tableau(m.syn)}, ${i})`)
+    .map((m, i) => `  (${txt(m.cle)}, ${txt(m.nom)}, ${txt(m.categorie)}, null, `
+      + `${tableau(m.syn)}, ${i}, ${m.herite ? txt(m.herite) : 'null'})`)
     .join(',\n') + ';');
   lignes.push('');
 
@@ -64,10 +65,10 @@ function engendrer() {
   lignes.push(`-- ${specialites.length} spécialités — après les métiers, car `
     + '`parent` pointe vers eux.');
   lignes.push('insert into public.metiers_catalogue');
-  lignes.push('  (cle, nom, categorie, parent, synonymes, ordre) values');
+  lignes.push('  (cle, nom, categorie, parent, synonymes, ordre, herite_de) values');
   lignes.push(specialites
     .map((s, i) => `  (${txt(s.cle)}, ${txt(s.nom)}, ${txt(s.parent.categorie)}, `
-      + `${txt(s.parent.cle)}, ${tableau(s.syn)}, ${i})`)
+      + `${txt(s.parent.cle)}, ${tableau(s.syn)}, ${i}, null)`)
     .join(',\n') + ';');
   lignes.push('');
   lignes.push(FIN);
@@ -91,7 +92,7 @@ function avecConflit(sql) {
         + '  on conflict (cle) do update set\n'
         + '    nom = excluded.nom, categorie = excluded.categorie,\n'
         + '    parent = excluded.parent, synonymes = excluded.synonymes,\n'
-        + '    ordre = excluded.ordre;\n'));
+        + '    ordre = excluded.ordre, herite_de = excluded.herite_de;\n'));
 }
 
 const sql = avecConflit(engendrer());
