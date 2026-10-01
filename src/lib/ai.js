@@ -11,6 +11,7 @@
  * Aucune clé Anthropic ne circule dans ce fichier.
  */
 import { supabase, hasSupabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
+import { reponsesLisibles } from './presentation';
 
 /**
  * Erreur lisible quand l'application tourne SANS Supabase.
@@ -75,7 +76,6 @@ export async function aiSummarizeReviews(pro, reviews) {
 export async function aiRedigerPresentation({ profil, reponses }) {
   /* On traduit les clés du questionnaire avant de les envoyer : « longue »
      ne veut rien dire pour le modèle, « depuis plus de dix ans » si. */
-  const { reponsesLisibles } = await import('./presentation');
   const data = await callAiFunction({
     action: 'bio',
     profil,

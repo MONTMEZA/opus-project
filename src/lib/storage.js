@@ -22,7 +22,31 @@
  * en mémoire — les fichiers y sont choisis depuis un ordinateur, et la
  * mémoire y est moins comptée.
  */
+/* POURQUOI CES IMPORTS SONT EN HAUT, ET PLUS `await import(...)`
+   --------------------------------------------------------------
+   Un `await import()` n'est pas un import : sur téléphone, c'est Metro qui
+   DÉCOUPE le paquet et va chercher le morceau manquant auprès du serveur
+   de développement, au moment où la ligne s'exécute. Si la liaison a été
+   perdue entre-temps — veille du téléphone, Wi-Fi qui bouge, serveur
+   redémarré —, l'envoi échoue sur une erreur venue des entrailles d'Expo,
+   qui ne parle ni du fichier ni du réseau.
+
+   C'est très probablement ce qu'a vu le propriétaire le 01/10/2026 :
+   « envoi de la photo de profil impossible : cannot read property
+   'reload' of undefined ». `reload` n'existe nulle part dans ce projet ;
+   il vient du mécanisme de découpage d'Expo.
+
+   Et ça explique l'épisode du 29/09, resté sans explication : la photo de
+   profil qui refusait de s'enregistrer, puis qui a remarché après un
+   `npm start -- --clear` — sans qu'aucune correction n'ait touché à
+   l'envoi. Un paquet redécoupé proprement, et le morceau redevient
+   joignable.
+
+   Ces modules sont des dépendances DIRECTES du projet : ils sont dans le
+   paquet de toute façon. Les charger en haut ne coûte rien et retire
+   entièrement ce mécanisme du chemin d'un envoi. */
 import { Platform } from 'react-native';
+import { File, UploadType } from 'expo-file-system';
 import { supabase, hasSupabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
 import { TAILLE_MAX_MO } from './media';
 
@@ -95,17 +119,41 @@ async function envoiWeb({ uri, bucket, chemin, type }) {
  * l'endpoint, avec le jeton de la session en cours.
  */
 async function envoiTelephone({ uri, bucket, chemin, type, onProgress }) {
-  const { File, UploadType } = await import('expo-file-system');
-  const fichier = new File(uri);
+  /* CHAQUE ÉTAPE PORTE SON NOM
+     --------------------------
+     Un envoi qui échoue depuis un téléphone ne se reproduit pas dans le
+     conteneur où je travaille : la seule chose dont je dispose, c'est le
+     message que voit le propriétaire. Quand il disait seulement « envoi
+     impossible », il fallait deviner laquelle des quatre étapes avait
+     lâché — et deux fois, on a deviné faux.
 
-  const taille = fichier.size || 0;
+     Les étapes ne coûtent rien et transforment un message inutile en
+     indication. `etape()` enveloppe l'erreur sans la perdre : la cause
+     d'origine reste écrite à la fin. */
+  const etape = async (nom, action) => {
+    try {
+      return await action();
+    } catch (e) {
+      const cause = (e && e.message) || String(e);
+      /* Déjà nommée par un appel plus profond : on ne rempile pas. */
+      if (cause.startsWith('[')) throw e;
+      throw new Error(`[${nom}] ${cause}`);
+    }
+  };
+
+  const fichier = await etape('lecture du fichier', async () => new File(uri));
+
+  const taille = await etape('taille du fichier', async () => fichier.size || 0);
   if (taille > TAILLE_MAX_MO * 1024 * 1024) throw tropLourd(taille);
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const session = await etape('session', async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session;
+  });
   if (!session) throw new Error('Session expirée. Reconnectez-vous et réessayez.');
 
   const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${encodeURI(chemin)}`;
-  const resultat = await fichier.upload(url, {
+  const resultat = await etape('envoi vers Supabase', async () => fichier.upload(url, {
     httpMethod: 'POST',
     uploadType: UploadType.BINARY_CONTENT,
     mimeType: type,
@@ -127,7 +175,7 @@ async function envoiTelephone({ uri, bucket, chemin, type, onProgress }) {
           if (totalBytes > 0) onProgress(bytesSent / totalBytes);
         }
       : undefined,
-  });
+  }));
 
   if (resultat.status >= 400) {
     /* Le corps de la réponse porte le vrai motif : limite de taille du

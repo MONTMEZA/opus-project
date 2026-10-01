@@ -16,6 +16,14 @@
  * l'Edge Function « cloudinary » (voir supabase/functions/cloudinary), puis
  * envoie le fichier directement. Voir aussi src/lib/ai.js, même principe.
  */
+
+/* Les imports sont EN HAUT, et pas en `await import(...)` : voir le long
+   commentaire de `lib/storage.js`. Sur téléphone, un import dynamique fait
+   aller chercher un morceau de paquet auprès du serveur de développement
+   au moment de l'envoi — et échoue sur une erreur incompréhensible si la
+   liaison a bougé depuis. */
+import { File, UploadType } from 'expo-file-system';
+import { supabase, hasSupabase } from './supabase';
 /* La connexion Supabase n'est chargée qu'au moment de l'envoi, pas à
    l'ouverture du fichier : cela permet de vérifier la fabrication des
    adresses avec un simple « node », sans embarquer React Native.
@@ -112,7 +120,6 @@ export function apercuDe(url) {
  * il ne transite pas par nos serveurs. Seule la signature vient de chez nous.
  */
 export async function envoyerVideo({ uri, onProgress }) {
-  const { supabase, hasSupabase } = await import('./supabase');
   if (!hasSupabase) throw new Error('Cloudinary a besoin de la connexion Supabase.');
   if (!aCloudinary) {
     throw new Error(
@@ -125,7 +132,6 @@ export async function envoyerVideo({ uri, onProgress }) {
   if (error) throw error;
   if (data && data.error) throw new Error(data.error);
 
-  const { File, UploadType } = await import('expo-file-system');
   const resultat = await new File(uri).upload(
     `https://api.cloudinary.com/v1_1/${data.cloudName}/video/upload`,
     {

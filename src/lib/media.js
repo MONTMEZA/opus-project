@@ -6,6 +6,8 @@
  * lib/storage.js) : c'est lui qui rend le média visible par les autres.
  */
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
 /**
@@ -121,7 +123,6 @@ export async function reduireImage(uri, usage = 'photo') {
  */
 export async function poidsDe(uri) {
   try {
-    const { File } = await import('expo-file-system');
     const taille = new File(uri).size;
     return typeof taille === 'number' ? taille : null;
   } catch {
@@ -248,7 +249,6 @@ export async function choisirClips({ restants = CLIPS_MAX } = {}) {
  * L'artisan apporte donc sa musique — et reste responsable de ses droits.
  */
 export async function choisirMusique() {
-  const DocumentPicker = await import('expo-document-picker');
   const res = await DocumentPicker.getDocumentAsync({
     type: 'audio/*',
     copyToCacheDirectory: true,
@@ -265,7 +265,6 @@ export async function choisirMusique() {
  * une photo — on accepte les deux.
  */
 export async function choisirDocument() {
-  const DocumentPicker = await import('expo-document-picker');
   const res = await DocumentPicker.getDocumentAsync({
     type: ['application/pdf', 'image/*'],
     copyToCacheDirectory: true,

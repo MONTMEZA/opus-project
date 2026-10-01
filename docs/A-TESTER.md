@@ -759,6 +759,41 @@ d'un client, elle passe avant le téléphone.
 
 ---
 
+## 28. 🔴 La photo de profil et la bannière — le défaut du 01/10
+
+**Tu fais** — Profil → Modifier mon profil → change ta **photo de profil**,
+puis enregistre. Recommence avec la **bannière**. Puis les deux en même
+temps.
+
+**Tu dois voir** — Ça s'enregistre. C'est tout.
+
+**Ce qui se passait** — « Envoi de la photo de profil impossible : cannot
+read property 'reload' of undefined ». Ce mot, `reload`, n'existe nulle
+part dans ton application : il vient d'un mécanisme d'Expo qui découpe le
+programme en morceaux et va chercher les morceaux manquants **auprès de
+ton ordinateur, pendant que tu t'en sers**. Quand la liaison a bougé — le
+téléphone s'est mis en veille, le Wi-Fi a changé, tu as relancé
+`npm start` —, le morceau n'arrive plus et l'envoi échoue.
+
+Sept endroits de l'application fonctionnaient comme ça. Ils sont tous
+corrigés : plus rien ne se charge en cours de route.
+
+**Et ça explique le 29/09** — tu te souviens, « Enregistrement impossible »
+sur la photo de profil, puis plus rien après un `npm start -- --clear`,
+sans que j'aie touché à l'envoi. C'était déjà ça. Le `--clear` refaisait
+les morceaux proprement, et ça remarchait… jusqu'à la fois suivante.
+
+**Si ça devait encore échouer** — le message te dira maintenant **à quelle
+étape**, entre crochets : `[lecture du fichier]`, `[session]`,
+`[envoi vers Supabase]`. Recopie-le-moi tel quel, c'est ce qui me permettra
+de trouver sans deviner.
+
+**À essayer aussi, parce que c'est le même mécanisme** : envoyer un Kbis ou
+une attestation d'assurance, choisir une photo pour une publication,
+publier une vidéo, et l'assistant IA de présentation.
+
+---
+
 ## Ce que je n'ai PAS pu vérifier, et qu'il faut donc regarder
 
 Je le redis à part, parce que c'est ce qui compte le plus :

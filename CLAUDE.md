@@ -38,6 +38,57 @@ Pour reproduire fidèlement une panne, la bonne base de départ n'est pas
 `schema.sql` d'aujourd'hui mais **celle de la version que le propriétaire a
 réellement appliquée** (`git show <commit>:supabase/schema.sql`).
 
+### `await import(...)` : interdit dans `src/`, et ça a coûté deux incidents
+
+Constaté le 01/10/2026. « **Envoi de la photo de profil impossible :
+cannot read property 'reload' of undefined** », au moment d'enregistrer
+une photo de profil ou une bannière, depuis l'iPhone.
+
+`reload` n'existe nulle part dans ce projet. Il vient du **mécanisme de
+découpage de paquet** d'Expo : `expo/src/async-require/hmrUtils.native.ts`
+contient `DevSettings.reload('Bundle Splitting – Metro disconnected')`.
+
+**Ce qu'un `await import()` fait vraiment sur téléphone** : Metro découpe
+le paquet et va chercher le morceau manquant **auprès du serveur de
+développement, au moment où la ligne s'exécute**. Tant que la liaison
+tient, personne ne voit la différence. Le jour où elle a bougé —
+téléphone en veille, Wi-Fi qui change, serveur redémarré —, la ligne
+échoue sur une erreur qui ne parle ni du fichier ni du réseau.
+
+**Mesuré**, sur le paquet de développement iOS servi par Metro
+(`/index.bundle?platform=ios&dev=true`), les deux versions construites
+chacune sur un serveur neuf :
+
+| | occurrences de `asyncRequire` |
+|---|---|
+| avec les 7 `await import()` | **15** |
+| avec les mêmes imports en haut | **0** |
+
+La machinerie entre dans le paquet à cause de ces sept lignes, et en sort
+quand on les remonte. L'export de PRODUCTION, lui, ne montre rien : il
+range tout dans un seul fichier. Il ne faut donc pas chercher là.
+
+> **Aucun `await import(...)` dans `src/`.** `npm run verifier-imports`
+> le refuse. Ces modules sont des dépendances directes : ils sont dans le
+> paquet de toute façon, les charger en haut ne coûte rien.
+
+**Ce que ça explique en plus** : l'épisode du 29/09/2026, resté sans
+explication — « Enregistrement impossible » sur la photo de profil, puis
+plus rien après un `npm start -- --clear`, sans qu'aucune correction
+n'ait touché à l'envoi. Un paquet redécoupé proprement, et le morceau
+redevient joignable. CLAUDE.md attribuait alors la guérison à « un ancien
+paquet resté en mémoire » ; c'était la bonne intuition, pas la bonne
+cause.
+
+Ce qui n'est **pas** prouvé, et doit être dit : je n'ai pas pu reproduire
+l'erreur elle-même, faute d'iPhone et d'Expo Go dans le conteneur. Ce qui
+est mesuré, c'est la présence de la machinerie, et sa disparition.
+
+Et pour la prochaine fois : `envoiTelephone` **nomme chaque étape**
+(`[lecture du fichier]`, `[session]`, `[envoi vers Supabase]`). Sur un
+défaut qu'on ne peut pas reproduire, le message de l'utilisateur est la
+seule donnée dont on dispose.
+
 ### Le piège Metro qui a coûté une heure : asynchrone + ternaire
 
 Cette forme **fait échouer la construction**, sans indiquer ni la ligne ni la
