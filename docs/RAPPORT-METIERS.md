@@ -188,19 +188,53 @@ fichier ne compare plus un libellé de métier.
 
 ## Ce qui reste
 
-1. **Les spécialités proposées selon les métiers choisis**, et la file
-   d'attente pour celles écrites à la main. Le catalogue les porte déjà et
-   `specialitesProposees()` sait les rendre ; c'est l'écran qui manque.
-2. **Les pièces justificatives par catégorie** (décision 3). Aujourd'hui,
+1. **Les pièces justificatives par catégorie** (décision 3). Aujourd'hui,
    un avocat qui s'inscrit se voit demander une assurance décennale qu'il
    n'a pas. À construire avec le back-office.
-3. **L'administration du référentiel** (§18) : ajouter, renommer,
-   désactiver un métier. La base est prête — `actif`, et aucune politique
-   d'écriture. C'est la section 2.1 de `docs/A-FAIRE.md`.
-4. **L'internationalisation** (§17) : la colonne `locale` existe et vaut
+2. **L'administration du référentiel** (§18) : ajouter, renommer,
+   désactiver un métier, et **traiter la file `specialites_proposees`**.
+   La base est prête — `actif`, aucune politique d'écriture, et la file
+   qui se remplit toute seule. C'est la section 2.1 de `docs/A-FAIRE.md`.
+3. **L'internationalisation** (§17) : la colonne `locale` existe et vaut
    `fr-FR`. Ajouter une langue voudra dire ajouter des lignes, pas
    réécrire le schéma. Rien d'autre n'est fait, et rien d'autre n'est
    nécessaire aujourd'hui.
+
+---
+
+## Les spécialités — fait le 01/10/2026
+
+La décision 1 est maintenant construite, et pas seulement décidée.
+
+**Dans « Modifier mon profil »** : un bloc « Les plus courantes dans vos
+métiers », rangé par métier, qui suit la sélection en direct. Un couvreur
+ne se voit jamais proposer « ouverture de mur porteur ». En dessous, le
+champ libre reste, pour ce qu'aucune liste n'avait prévu.
+
+**Ce qui est rangé** : la CLÉ quand la spécialité vient du catalogue
+(`mur-soutenement`), le texte quand elle a été écrite à la main. Les deux
+cohabitent dans la même colonne, et `nomSpecialite()` rend le nom dans les
+deux cas — l'écran ne voit pas la différence.
+
+**La file d'attente** : `specialites_proposees` (section 22 de
+`schema.sql`). Un mot écrit à la main qui n'est pas au catalogue y part en
+parallèle. Ce n'est **pas** une modération : la spécialité est sur la fiche
+tout de suite, rien n'attend. La file sert à faire entrer au référentiel ce
+que les artisans écrivent vraiment, au lieu de le deviner. Un même mot
+proposé cent fois ne fait qu'une ligne.
+
+**La recherche**, vérifiée bout en bout : un artisan dont la fiche porte
+`mur-soutenement` est trouvé en tapant « mur de soutènement », avec ou sans
+accents ; une spécialité écrite à la main se cherche pareil ; et le
+couvreur ne remonte pas.
+
+**Un défaut trouvé sur la capture d'écran, et corrigé** : une spécialité
+écrite à la main AVANT le catalogue (« Ouverture de mur porteur ») ne se
+reconnaissait pas dans la proposition du catalogue
+(`ouverture-mur-porteur`). Elle s'affichait donc à la fois comme choisie en
+haut et comme à ajouter en dessous — et un second clic aurait créé un
+doublon que rien n'aurait rapproché. On compare désormais à la clé **et**
+au nom.
 
 ---
 

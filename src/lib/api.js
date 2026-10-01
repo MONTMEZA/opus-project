@@ -1474,6 +1474,29 @@ export const accepterConditions = !hasSupabase ? noop : async (version) => {
  * `likes_count` d'ici ne servirait donc à rien — et c'est exactement le
  * but : l'écran n'a pas à être le gardien.
  */
+/**
+ * « Cette spécialité n'est pas dans la liste » — on la fait remonter.
+ *
+ * Elle est DÉJÀ sur la fiche quand cette fonction part : rien n'attend
+ * ici, et un échec ne doit donc rien casser. C'est pour cela qu'elle
+ * avale ses erreurs au lieu de les lever — l'artisan n'a pas à voir un
+ * message rouge parce qu'une table d'administration était indisponible.
+ *
+ * `ignoreDuplicates` : le même mot proposé cent fois ferait cent lignes,
+ * et la file deviendrait illisible au moment précis où elle servirait.
+ * L'index unique de la section 22 s'en charge ; ici on évite juste de
+ * faire remonter l'erreur de conflit.
+ */
+export const proposerSpecialite = !hasSupabase ? noop : async (texte, metier) => {
+  try {
+    await supabase.from('specialites_proposees')
+      .upsert({ texte, metier: metier || null, propose_par: currentUserId },
+        { onConflict: 'texte,metier', ignoreDuplicates: true });
+  } catch (e) {
+    /* Silence volontaire : voir le commentaire ci-dessus. */
+  }
+};
+
 export const modifierCommentaire = !hasSupabase ? noop : async (id, texte) => {
   const { error } = await supabase.from('comments')
     .update({ texte }).eq('id', id).eq('author_id', currentUserId);

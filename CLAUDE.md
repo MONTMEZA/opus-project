@@ -176,8 +176,14 @@ Trois points en sortent, à ne pas redécouvrir :
 
 Les trois décisions du propriétaire, prises le 30/09/2026 :
 
-1. **Spécialités** : les deux. La liste du catalogue d'abord, et le texte
-   libre pour ce qu'aucune liste n'avait prévu.
+1. **Spécialités** : les deux — construit le 01/10/2026. La liste du
+   catalogue d'abord, proposée selon les métiers choisis, et le texte libre
+   pour ce qu'aucune liste n'avait prévu. Un mot écrit à la main part dans
+   `specialites_proposees` (section 22) : **ce n'est pas une modération**,
+   la spécialité est sur la fiche tout de suite. La file sert à faire
+   entrer au référentiel ce que les artisans écrivent vraiment.
+   Une fiche range la CLÉ quand la spécialité vient du catalogue, le texte
+   sinon ; les deux cohabitent et `nomSpecialite()` rend le nom.
 2. **Rangement** : `metiers text[]` reste — passer à des tables de liaison
    aurait voulu dire réécrire toutes les règles RLS. C'est le CATALOGUE qui
    est sorti dans une vraie table.
@@ -249,6 +255,39 @@ Deux pièges rencontrés, à ne pas redécouvrir :
    table de contenu : la vraie règle `to authenticated`, et la lecture
    publique `to anon` qui n'appelle pas la fonction. Un visiteur n'a bloqué
    personne : il n'a rien à masquer.
+
+### Un essai de RLS écrit dans un bloc `do $$ … $$` ne prouve RIEN
+
+Constaté le 01/10/2026, sur la vraie base, en construisant la file des
+spécialités. Deux contrôles ont « échoué » alors que la règle était juste.
+
+```sql
+do $$ begin
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claim.sub', moi, true);
+  insert into t (…, propose_par) values (…, QUELQU_UN_D_AUTRE);  -- passe !
+end $$;
+```
+
+`current_user` vaut pourtant bien `authenticated` à l'intérieur du bloc —
+vérifié. Mais la politique `with check` n'est pas appliquée. Le MÊME ordre,
+écrit directement, est refusé comme il doit l'être :
+
+```sql
+set local role authenticated;
+set local request.jwt.claim.sub = '…';
+insert into t (…) values (…);
+-- ERROR 42501: new row violates row-level security policy
+```
+
+> **Pour vérifier une règle RLS : `set local role` puis l'ordre, chacun
+> dans son propre appel.** Jamais dans un `do`.
+
+Ce qui reste valable dans un bloc `do`, et qui a servi tout au long de ce
+projet : les **déclencheurs** et les **contraintes `check`**. Ils
+s'exécutent quoi qu'il arrive — c'est ainsi qu'ont été vérifiés le verrou
+du commentaire (`OP001`) et `pro_metiers_check`. Seule la RLS est
+concernée par ce piège.
 
 ### Une règle RLS filtre des LIGNES, jamais des COLONNES
 

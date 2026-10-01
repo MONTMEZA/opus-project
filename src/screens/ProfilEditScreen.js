@@ -40,7 +40,7 @@ function metierSosDe(metiers = []) {
 
 export default function ProfilEditScreen({
   userType, profil, sos, onSave, onEnvoyerDocuments, onErreur,
-  onDemanderMetiers, demandeMetiers,
+  onDemanderMetiers, demandeMetiers, onProposerSpecialite,
 }) {
   const estPro = userType === 'pro';
 
@@ -340,9 +340,15 @@ export default function ProfilEditScreen({
             </Text>
 
             <Text style={s.label}>Vos spécialités</Text>
+            {/* Les spécialités PROPOSÉES dépendent des métiers choisis au
+                dessus : un couvreur ne doit pas se voir proposer
+                « ouverture de mur porteur ». Elles suivent donc la
+                sélection en direct, sans qu'il faille enregistrer. */}
             <ChampSpecialites
               valeurs={specialites}
               onChange={setSpecialites}
+              metiers={metiers}
+              onProposer={onProposerSpecialite}
               onErreur={onErreur}
             />
 

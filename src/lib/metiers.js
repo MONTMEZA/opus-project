@@ -85,6 +85,21 @@ export function nomSpecialite(cle) {
   return s ? s.nom : String(cle);
 }
 
+/**
+ * Tous les mots par lesquels on peut trouver cette spécialité.
+ *
+ * Une fiche range `mur-soutenement` quand la spécialité vient du
+ * catalogue, et le texte tel quel quand l'artisan l'a écrite lui-même.
+ * Dans le premier cas il faut rendre le NOM — personne ne tape un tiret
+ * au milieu d'un mot —, dans le second le texte suffit.
+ */
+export function motsDeSpecialite(x) {
+  if (!x) return '';
+  const s = MAP_SPECIALITES[x];
+  if (!s) return String(x);
+  return [s.nom, ...(s.syn || [])].join(' ');
+}
+
 /** Le nom de la catégorie d'un métier. */
 export function categorieDe(cle) {
   const m = MAP_METIERS[cle];

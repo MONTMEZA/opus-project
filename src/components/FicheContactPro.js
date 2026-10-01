@@ -19,6 +19,7 @@ import { C, F, T, S, R, interligne } from '../theme';
 import { SectionLabel } from './ui';
 import { Phone, MapPin, Clock } from './icons';
 import { etatMaintenant, semaineGroupee } from '../lib/horaires';
+import { nomSpecialite } from '../lib/metiers';
 import CarteZone from './CarteZone';
 
 export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
@@ -122,9 +123,11 @@ export default function FicheContactPro({ pro, estMoi = false, onEdit }) {
             <View style={s.specialites}>
               <Text style={s.specialitesTitre}>Spécialités</Text>
               <View style={s.rang}>
+                {/* La fiche range `mur-soutenement` quand la spécialité
+                    vient du catalogue : on affiche le nom, jamais la clé. */}
                 {specialites.map((mot) => (
                   <View key={mot} style={s.pastille}>
-                    <Text style={s.pastilleTexte}>{mot}</Text>
+                    <Text style={s.pastilleTexte}>{nomSpecialite(mot)}</Text>
                   </View>
                 ))}
               </View>

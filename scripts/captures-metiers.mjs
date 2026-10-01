@@ -119,6 +119,24 @@ await page.screenshot({ path: `${DOSSIER}/5-recherche-specialite.png` });
 const visible = await page.evaluate(() => document.body.innerText.includes('Maçon'));
 console.log(`« mur de souten » fait apparaître Maçon : ${visible}`);
 
+/* Les spécialités : la liste proposée selon les métiers choisis, et le
+   champ libre pour ce qu'aucune liste n'avait prévu. */
+const fermerPanneau = page.locator('[aria-label="Fermer"]').first();
+if (await fermerPanneau.count()) { await fermerPanneau.click(); await page.waitForTimeout(1000); }
+const titreSpe = page.getByText('Vos spécialités').first();
+if (await titreSpe.count()) {
+  await titreSpe.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${DOSSIER}/6-specialites.png` });
+
+  /* Celles qu'on propose doivent dépendre des métiers : un maçon-carreleur
+     voit les deux listes, et jamais « toiture en zinc ». */
+  const texte = await page.innerText('body');
+  console.log(`spécialités proposées — « Mur de soutènement » : `
+    + `${texte.includes('Mur de soutènement')} · `
+    + `« Toiture en zinc » (ne doit PAS y être) : ${texte.includes('Toiture en zinc')}`);
+}
+
 /* LA CLÉ NE DOIT JAMAIS S'AFFICHER. Une fiche enregistre `macon` ; si
    l'écran l'écrit tel quel, personne ne le signalera comme un bug — ça
    ressemble juste à une faute de frappe. On le cherche donc. */

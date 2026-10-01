@@ -63,7 +63,7 @@ export const GROUPES = [
    charger dans le mauvais ordre. On la ré-exporte ici pour que rien de ce
    qui l'importait déjà n'ait à changer. */
 import { normaliser } from './texte.js';
-import { motsDuMetier } from './metiers.js';
+import { motsDuMetier, motsDeSpecialite } from './metiers.js';
 
 export { normaliser };
 
@@ -161,7 +161,7 @@ export function texteDe(annonce) {
     a.titre, a.texte, motsDuMetier(a.metier), a.ville,
     auteur.entreprise, motsDuMetier(auteur.metier),
     ...(auteur.metiers || []).map(motsDuMetier),
-    ...(auteur.specialites || []),
+    ...(auteur.specialites || []).map(motsDeSpecialite),
   ].filter(Boolean).join(' ');
 }
 
@@ -187,6 +187,6 @@ export function texteDePro(pro) {
   return [
     p.nom, p.entreprise, motsDuMetier(p.metier), p.ville, p.bio,
     ...(p.metiers || []).map(motsDuMetier),
-    ...(p.specialites || []),
+    ...(p.specialites || []).map(motsDeSpecialite),
   ].filter(Boolean).join(' ');
 }

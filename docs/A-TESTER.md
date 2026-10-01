@@ -678,6 +678,46 @@ quelque part : dis-le-moi, c'est un oubli de traduction. J'ai vérifié trois
 
 ---
 
+## 26. 🟠 Les spécialités — proposées d'abord, libres ensuite
+
+**Tu fais** — Profil → « Modifier mon profil » → descends jusqu'à **Vos
+spécialités**.
+
+**Tu dois voir** — Un bloc « **Les plus courantes dans vos métiers** »,
+rangé **par métier** : sous Maçon, « Mur de soutènement », « Dalle béton »,
+« Ouverture de mur porteur »… ; sous Carreleur, « Faïence », « Mosaïque »…
+Chacune avec un **+**.
+
+**Tu dois voir aussi** — Celles que tu as **déjà** sont en bleu plein avec
+une **coche**, et pas un **+**. Même celles que tu avais écrites à la main
+avant : « Ouverture de mur porteur » tapé au clavier et la proposition du
+catalogue sont **la même chose**, et l'écran doit le montrer. (C'était faux
+dans ma première version, corrigé le 01/10/2026.)
+
+**Tu fais** — Change tes métiers en haut de l'écran, puis redescends.
+
+**Tu dois voir** — La liste proposée a changé : un couvreur ne se voit
+jamais proposer « ouverture de mur porteur ».
+
+**Tu fais** — En bas, « **La vôtre, si elle n'y est pas** » : écris quelque
+chose qui n'est pas dans la liste, par exemple « mur en pierre sèche », puis
+Ajouter.
+
+**Tu dois voir** — Elle apparaît tout de suite avec les autres. **Rien
+n'attend, rien n'est à valider.** En coulisse, elle nous est signalée : si
+plusieurs artisans écrivent la même chose, elle entrera dans la liste. Tu
+n'as aucun message à voir — ni vert ni rouge, ce serait laisser croire que
+tu attends une autorisation.
+
+**Tu fais** — Enregistre, puis cherche-toi depuis un compte particulier
+(Découvrir) avec le **nom** d'une spécialité du catalogue, par exemple
+« mur de soutènement ».
+
+**Tu dois voir** — Ta fiche. C'est le point qui compte : un client décrit
+son chantier avec ses mots, et il doit tomber sur toi.
+
+---
+
 ## Ce que je n'ai PAS pu vérifier, et qu'il faut donc regarder
 
 Je le redis à part, parce que c'est ce qui compte le plus :

@@ -3257,3 +3257,64 @@ alter table public.professional_profiles
 -- validation échoue ici, c'est qu'une fiche porte un métier absent du
 -- catalogue — à regarder, jamais à effacer.
 alter table public.professional_profiles validate constraint pro_metiers_check;
+
+-- ==========================================================================
+--  22. LES SPÉCIALITÉS PROPOSÉES — la file d'attente
+--
+--  POURQUOI UNE FILE, ET PAS UNE LISTE FERMÉE
+--  ------------------------------------------
+--  Décision du propriétaire, 30/09/2026 : les deux. La liste du catalogue
+--  d'abord, parce qu'elle garantit que deux artisans qui font la même
+--  chose emploient le même mot — c'est ce qui fait marcher une recherche.
+--  Et le texte libre ensuite, parce qu'aucune liste ne prévoit tout, et
+--  que c'est souvent l'imprévu qui distingue un artisan.
+--
+--  Le risque du texte libre, c'est que le catalogue n'apprenne rien :
+--  cinquante artisans écrivent « poêle à granulés », la recherche les
+--  trouve à peu près, et le mot n'entre jamais au catalogue. Cette table
+--  le fait remonter — le référentiel s'enrichit alors de l'usage RÉEL,
+--  au lieu d'être deviné une fois pour toutes.
+--
+--  CE QU'ELLE N'EST PAS
+--  --------------------
+--  Ce n'est pas une modération : la spécialité est enregistrée sur la
+--  fiche DANS TOUS LES CAS, tout de suite. Rien n'attend ici. La file sert
+--  à l'administration du référentiel (§18 de la demande), pas à autoriser
+--  l'artisan.
+-- ==========================================================================
+
+create table if not exists public.specialites_proposees (
+  id          uuid primary key default gen_random_uuid(),
+  texte       text not null,
+  -- Le métier dans lequel elle a été écrite : « rénovation » n'a pas le
+  -- même sens chez un maçon et chez un couvreur, et c'est sous ce métier
+  -- qu'elle entrera au catalogue.
+  metier      text references public.metiers_catalogue(cle),
+  propose_par uuid references public.users(id) on delete set null,
+  statut      text not null default 'en_attente',
+  created_at  timestamptz not null default now()
+);
+
+alter table public.specialites_proposees drop constraint if exists specialite_statut_check;
+alter table public.specialites_proposees add constraint specialite_statut_check
+  check (statut in ('en_attente', 'ajoutee', 'refusee'));
+
+-- Le même mot proposé cent fois ferait cent lignes, et la file deviendrait
+-- illisible au moment précis où elle servirait. Un seul couple mot/métier,
+-- quelle que soit la casse.
+create unique index if not exists idx_specialite_proposee_unique
+  on public.specialites_proposees (lower(btrim(texte)), coalesce(metier, ''));
+
+alter table public.specialites_proposees enable row level security;
+
+-- On peut proposer, et relire CE QU'ON A proposé. Pas ce que les autres
+-- ont écrit : une spécialité en dit long sur un chantier en cours.
+drop policy if exists "proposer une specialite" on public.specialites_proposees;
+create policy "proposer une specialite" on public.specialites_proposees
+  for insert to authenticated with check (auth.uid() = propose_par);
+drop policy if exists "lire mes propositions" on public.specialites_proposees;
+create policy "lire mes propositions" on public.specialites_proposees
+  for select to authenticated using (auth.uid() = propose_par);
+
+create index if not exists idx_specialite_proposee_statut
+  on public.specialites_proposees (statut, created_at desc);

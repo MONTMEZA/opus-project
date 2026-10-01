@@ -446,6 +446,17 @@ export default function OpusApp() {
    * en arrière est moins déroutant que de laisser un texte qui n'existe
    * que sur ce téléphone.
    */
+  /**
+   * Une spécialité écrite à la main rejoint la file du référentiel.
+   *
+   * Elle est DÉJÀ sur la fiche : cette remontée ne bloque rien et ne dit
+   * rien à l'artisan, ni en succès ni en échec. Un message — même vert —
+   * laisserait croire qu'il attend une autorisation, alors que non.
+   */
+  const proposerSpecialite = (texte, metier) => {
+    api.proposerSpecialite(texte, metier);
+  };
+
   const modifierCommentaire = async (postId, commentaire, texte) => {
     const remplacer = (c) => (c.id === commentaire.id
       ? { ...c, texte, modifie: true }
@@ -1897,6 +1908,7 @@ export default function OpusApp() {
             onEnvoyerDocuments={envoyerDocuments}
             onDemanderMetiers={demanderMetiers}
             demandeMetiers={demandeMetiers}
+            onProposerSpecialite={proposerSpecialite}
             onErreur={showErreur}
           />
         )}

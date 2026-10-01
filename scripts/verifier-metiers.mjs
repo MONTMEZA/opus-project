@@ -27,8 +27,9 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 import { CATALOGUE, CATEGORIES, ANCIENS_NOMS } from '../src/data/catalogue-metiers.js';
-import { chercherMetiers, MAP_METIERS, MAP_SPECIALITES, nomMetier, motsDuMetier }
-  from '../src/lib/metiers.js';
+import { chercherMetiers, MAP_METIERS, MAP_SPECIALITES, nomMetier, motsDuMetier,
+  nomSpecialite, specialitesProposees } from '../src/lib/metiers.js';
+import { texteDePro, correspond } from '../src/lib/recherche.js';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -229,6 +230,48 @@ console.log('\nLa recherche — les exemples de la demande, mot pour mot');
     cles('plombier').length <= 3, JSON.stringify(cles('plombier')));
 }
 
+console.log('\nTrouver un artisan PAR SA SPÉCIALITÉ — le §13, bout en bout');
+{
+  /* Ce n'est pas la même chose que le contrôle du dessus. Plus haut, on
+     vérifie que le SÉLECTEUR trouve le métier Maçon quand on tape « mur de
+     soutènement ». Ici, on vérifie qu'un artisan dont la FICHE porte cette
+     spécialité est trouvé par la recherche de « Découvrir » — c'est le
+     chemin qu'emprunte un vrai client.
+
+     Le piège : une fiche range `mur-soutenement`, pas « Mur de
+     soutènement ». Sans passer par le catalogue, la recherche chercherait
+     un texte que personne ne tape jamais. */
+  const macon = {
+    nom: 'Untel', entreprise: 'Untel SARL', ville: 'Lyon (69)', bio: '',
+    metier: 'macon', metiers: ['macon'],
+    specialites: ['mur-soutenement', 'Poêle à granulés'],
+  };
+  const couvreur = {
+    nom: 'Autre', entreprise: 'Autre SARL', ville: 'Lyon (69)', bio: '',
+    metier: 'couvreur', metiers: ['couvreur'],
+    specialites: ['recherche-fuite-toiture'],
+  };
+  const trouve = (pro, requete) => correspond(texteDePro(pro), requete);
+
+  verifier('« mur de soutènement » trouve le maçon qui l’a déclaré',
+    trouve(macon, 'mur de soutènement'));
+  verifier('… sans les accents non plus', trouve(macon, 'mur de soutenement'));
+  verifier('… et pas le couvreur', !trouve(couvreur, 'mur de soutènement'));
+
+  /* Une spécialité ÉCRITE À LA MAIN doit marcher pareil : c'est toute la
+     raison de garder le texte libre. */
+  verifier('« poêle à granulés », écrit à la main, le trouve aussi',
+    trouve(macon, 'poele a granules'));
+
+  verifier('« recherche de fuite » trouve le couvreur',
+    trouve(couvreur, 'recherche de fuite'));
+  verifier('« maçon » trouve le maçon malgré la clé rangée',
+    trouve(macon, 'maçon'));
+  verifier('« parpaing » aussi, par les synonymes du catalogue',
+    trouve(macon, 'parpaing'));
+  verifier('un mot sans rapport ne le trouve pas', !trouve(macon, 'piscine'));
+}
+
 console.log('\nLes noms s’affichent, jamais les clés');
 {
   verifier('nomMetier(« macon ») donne « Maçon »', nomMetier('macon') === 'Maçon');
@@ -244,6 +287,35 @@ console.log('\nLes noms s’affichent, jamais les clés');
       && motsDuMetier('plaquiste').includes('ba13'));
   verifier('une spécialité connue a son nom',
     MAP_SPECIALITES['mur-soutenement'].nom === 'Mur de soutènement');
+  verifier('nomSpecialite traduit une clé du catalogue',
+    nomSpecialite('mur-soutenement') === 'Mur de soutènement');
+  /* Une spécialité écrite à la main n'est dans aucun catalogue : elle se
+     rend telle quelle, et c'est voulu. */
+  verifier('… et laisse le texte libre intact',
+    nomSpecialite('Poêle à granulés') === 'Poêle à granulés');
+}
+
+console.log('\nLes spécialités proposées suivent les métiers choisis');
+{
+  const cles = (metiers) => specialitesProposees(metiers).map((s0) => s0.cle);
+
+  verifier('un maçon se voit proposer « mur de soutènement »',
+    cles(['macon']).includes('mur-soutenement'));
+  verifier('… et PAS « toiture en zinc »',
+    !cles(['macon']).includes('toiture-zinc'), JSON.stringify(cles(['macon'])));
+  verifier('un maçon-carreleur voit les deux listes',
+    cles(['macon', 'carreleur']).includes('mur-soutenement')
+      && cles(['macon', 'carreleur']).includes('faience'));
+  verifier('un métier sans spécialité n’en propose aucune',
+    cles(['ramoneur']).length === 0);
+  verifier('aucun métier choisi → aucune proposition',
+    cles([]).length === 0 && cles(null).length === 0);
+  /* Douze au maximum sur la fiche : si un seul métier en proposait plus,
+     l'artisan ne pourrait plus rien écrire à lui. */
+  const plusGrosse = Math.max(...Object.keys(MAP_METIERS)
+    .map((c) => cles([c]).length));
+  verifier(`le métier le plus fourni propose ${plusGrosse} spécialités, pas plus de 12`,
+    plusGrosse <= 12, String(plusGrosse));
 }
 
 console.log('');
