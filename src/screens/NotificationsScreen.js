@@ -6,7 +6,7 @@
  * ouvre la publication concernée, commentaires dépliés, et la marque lue.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet , RefreshControl } from 'react-native';
 import { C, F } from '../theme';
 import { Avatar, EmptyState, BtnMini } from '../components/ui';
 import {
@@ -33,7 +33,9 @@ const ICONES = {
    reviendrait à ne rien signaler du tout. */
 const COULEURS = { sos: C.sos };
 
-export default function NotificationsScreen({ notifications, onOuvrir, onToutLire }) {
+export default function NotificationsScreen({ notifications, onOuvrir, onToutLire,
+  onRafraichir, rafraichit = false,
+}) {
   if (!notifications.length) {
     return <EmptyState>Aucune notification pour le moment.</EmptyState>;
   }
@@ -41,7 +43,16 @@ export default function NotificationsScreen({ notifications, onOuvrir, onToutLir
   const nonLues = notifications.filter((n) => !n.lue).length;
 
   return (
-    <ScrollView style={s.pad} contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView
+        /* TIRER POUR RAFRAÎCHIR.
+           Le geste existait sur le fil, et nulle part ailleurs : sur les six
+           autres écrans défilants, tirer vers le bas ne faisait rien. Or
+           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
+           pas y répondre se lit comme un écran figé. */
+        refreshControl={onRafraichir ? (
+          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+            tintColor={C.muted} colors={[C.accent]} />
+        ) : undefined} style={s.pad} contentContainerStyle={{ paddingBottom: 24 }}>
       {/* POURQUOI CE BOUTON
           Le point orange de la cloche ne tombait qu'en ouvrant les
           notifications UNE PAR UNE. Après une semaine d'absence, il fallait

@@ -73,14 +73,23 @@ export default function Media({
      cache sur le disque. Avec celui de React Native, redescendre dans le fil
      retéléchargeait chaque image — sur le forfait de l'artisan, à chaque
      fois. `transition` évite le clignotement blanc quand l'image arrive. */
+  /* UNE MATIÈRE SOUS LA PHOTO, et pas du vide. Sans elle, une image qui
+     n'arrive pas — réseau coupé, fichier supprimé — laissait un trou
+     transparent dans la carte : on voyait le fond de l'écran au milieu
+     d'une publication, ce qui ressemble beaucoup plus à un défaut du
+     programme qu'à une photo manquante. */
   return (
-    <View style={style}>
+    <View style={[{ backgroundColor: C.line }, style]}>
       <Image
         source={{ uri: media }}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
         transition={150}
         cachePolicy="memory-disk"
+        /* Dans une liste, expo-image réutilise ses vues : sans cette clé,
+           une vignette peut rester affichée sur la ligne du voisin pendant
+           un instant. */
+        recyclingKey={media}
       />
       {children}
     </View>

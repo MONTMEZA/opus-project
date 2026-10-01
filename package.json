@@ -55,7 +55,8 @@
     "generer-catalogue": "node scripts/generer-catalogue.mjs",
     "verifier-imports": "node scripts/verifier-imports.mjs",
     "verifier-retour": "node scripts/verifier-retour.mjs",
-    "verifier-demandes": "node scripts/verifier-demandes.mjs"
+    "verifier-demandes": "node scripts/verifier-demandes.mjs",
+    "verifier-etats": "node scripts/verifier-etats.mjs"
   },
   "private": true,
   "devDependencies": {

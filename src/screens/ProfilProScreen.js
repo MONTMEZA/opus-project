@@ -16,6 +16,7 @@ import {
 import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
+import { SqueletteAvis, SquelettePortfolio } from '../components/Squelette';
 import FicheContactPro from '../components/FicheContactPro';
 import {
   BadgeCheck, ShieldCheck, ShieldX, FileText, Sparkles, ClipboardCheck, MessageCircle, Flag,
@@ -75,6 +76,7 @@ function VerifRow({ etat, label, value, neutre }) {
 
 export default function ProfilProScreen({
   pro, pros, following, onFollow, onContact, onViewProfile, onSubmitReview, onSignaler,
+  charge = true,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [rDelais, setRDelais] = useState(5);
@@ -222,7 +224,9 @@ export default function ProfilProScreen({
 
       {/* --- réalisations --- */}
       <SectionLabel>Réalisations</SectionLabel>
-      <PortfolioGrid items={pro.portfolio} />
+      {charge
+        ? <PortfolioGrid items={pro.portfolio} />
+        : <SquelettePortfolio />}
 
       {/* --- avis --- */}
       <SectionLabel
@@ -298,7 +302,11 @@ export default function ProfilProScreen({
             <Text style={s.reviewTexte}>{r.commentaire}</Text>
           </View>
         ))}
-        {reviews.length === 0 && (
+        {/* « Aucun avis » est une affirmation. On ne l'écrit donc qu'une
+            fois la fiche complète arrivée — avant, on montre la forme de ce
+            qui vient. */}
+        {!charge && <SqueletteAvis />}
+        {charge && reviews.length === 0 && (
           <EmptyState>Aucun avis pour le moment — soyez le premier à en laisser un.</EmptyState>
         )}
       </View>

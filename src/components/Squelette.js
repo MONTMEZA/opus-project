@@ -110,6 +110,21 @@ export default function SqueletteFil() {
 
 const s = StyleSheet.create({
   pad: { flex: 1, backgroundColor: C.bg, paddingTop: S.md, gap: S.md },
+
+  /* Les deux formes de la fiche d'un artisan. Mêmes angles vifs que les
+     blocs qu'elles remplacent : un squelette doit avoir la silhouette de ce
+     qui arrive, sinon l'écran saute au moment du remplacement. */
+  bloc: {
+    backgroundColor: C.surface, borderTopWidth: 1, borderBottomWidth: 1,
+    borderColor: C.line, paddingHorizontal: S.lg, paddingVertical: S.md,
+  },
+  avis: { paddingVertical: S.sm },
+  avisSuivant: { borderTopWidth: 1, borderTopColor: C.line, marginTop: S.sm },
+  ligne: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  grille: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between',
+    paddingHorizontal: S.lg, paddingTop: S.sm,
+  },
   /* Angle vif : une carte PORTE l'information, elle ne flotte pas. */
   carte: {
     backgroundColor: C.surface,
@@ -125,3 +140,52 @@ const s = StyleSheet.create({
     paddingHorizontal: S.md, paddingTop: S.md,
   },
 });
+
+/**
+ * LA FICHE D'UN ARTISAN, PENDANT QU'ELLE ARRIVE.
+ *
+ * POURQUOI ELLE EXISTE
+ * --------------------
+ * Ouvrir la fiche d'un artisan affichait l'écran TOUT DE SUITE, avec la
+ * version légère du profil — celle qui sert aux listes, et qui ne porte ni
+ * présentation, ni réalisations, ni avis. L'écran annonçait donc, noir sur
+ * blanc : « Aucun avis pour le moment — soyez le premier à en laisser un »,
+ * et « Aucune réalisation ».
+ *
+ * C'est un mensonge, et c'est le pire endroit pour en faire un : la fiche
+ * est exactement ce qu'un client regarde avant de décider. Un artisan avec
+ * trente avis pouvait passer pour un débutant pendant une seconde — et une
+ * seconde suffit à faire remonter le pouce.
+ *
+ * On montre donc la FORME de ce qui arrive, comme pour le fil.
+ */
+export function SqueletteAvis({ combien = 2 }) {
+  return (
+    <View style={s.bloc}>
+      {Array.from({ length: combien }).map((_, i) => (
+        <View key={i} style={[s.avis, i > 0 && s.avisSuivant]}>
+          <View style={s.ligne}>
+            <Bloc largeur={38} hauteur={38} ronde />
+            <View style={{ flex: 1, gap: S.xs }}>
+              <Bloc largeur="45%" hauteur={11} />
+              <Bloc largeur="30%" hauteur={9} />
+            </View>
+          </View>
+          <Bloc largeur="92%" hauteur={10} style={{ marginTop: S.sm }} />
+          <Bloc largeur="70%" hauteur={10} style={{ marginTop: S.xs }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Une grille de réalisations, telle qu'elle arrivera. */
+export function SquelettePortfolio({ combien = 6 }) {
+  return (
+    <View style={s.grille}>
+      {Array.from({ length: combien }).map((_, i) => (
+        <Bloc key={i} largeur="31%" hauteur={92} style={{ marginBottom: S.sm }} />
+      ))}
+    </View>
+  );
+}

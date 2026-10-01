@@ -375,3 +375,59 @@ une fois le devis accepté.
 L'écran ne s'ouvrira pas vide : **trois demandes réelles y dorment**, deux
 devis et un rappel, encore « en attente ». La plus ancienne date du
 **15 septembre**.
+
+---
+
+## 10. Lot 3 — les quatre états ✅ fait le 01/10/2026
+
+Vide, en cours, cassé — et le quatrième, celui qu'on oublie toujours : **sans
+réseau**.
+
+### Ce qui a changé
+
+- **Le mode démonstration se voit.** Une bande noire permanente, avec la
+  bande de chantier. `api.mode` valait `'demo'` depuis le début et n'était lu
+  nulle part ; l'application répondait « Votre publication est en ligne »
+  alors que rien n'était écrit.
+- **Un échec ne s'affiche plus en vert.** Trois messages annonçaient un
+  échec avec une coche de réussite.
+- **Les erreurs parlent français** — `src/lib/erreurs.js` : le réseau, la
+  session expirée, une contrainte refusée (avec renvoi à `schema.sql`), une
+  règle RLS, un droit manquant. Et le motif technique n'est jamais jeté
+  quand on ne sait pas traduire.
+- **Sans réseau, l'application s'ouvre quand même**, avec une bande « Pas de
+  connexion » et un bouton Réessayer.
+- **Un message qui n'est pas parti se voit**, et se renvoie d'une touche.
+- **La fiche d'un artisan n'annonce plus « Aucun avis » pendant qu'elle
+  charge** : un squelette, puis la vérité.
+- **Tirer pour rafraîchir** marche sur les cinq écrans défilants, plus
+  seulement sur le fil.
+- **Une photo qui ne charge pas** ne laisse plus un trou transparent.
+
+### Deux défauts trouvés en le faisant, et invisibles autrement
+
+**L'application restait figée pour toujours.** Session valide, base
+injoignable : le squelette de démarrage battait doucement, sans fin. Un
+`catch` ne protège de rien quand rien n'échoue — il ne se passe simplement
+rien. Tout appel réseau du démarrage porte désormais un délai de 12 secondes.
+
+**Le bandeau d'erreur avait perdu son fond.** Un composant animé ignore
+silencieusement un style en forme de fonction : le texte blanc s'affichait
+sur le fond beige. C'était une régression du lot 1, et elle touchait le seul
+canal par lequel l'application parle. Vue en coupant le réseau, pas en
+relisant le code.
+
+### Vérifié en coupant la liaison pour de vrai
+
+Un compte jetable créé sur la vraie base, le relais coupé, la page
+rechargée — la situation exacte de l'artisan qui descend à la cave :
+
+| | |
+|---|---|
+| renvoyé à « Choisissez votre profil » | **non** |
+| bande « Pas de connexion » | **oui**, avec Réessayer |
+| message d'erreur | « pas de connexion. Vérifiez votre réseau… » |
+| navigation | utilisable |
+
+Compte supprimé après l'essai. 17 contrôles `npm run verifier-*` au vert,
+`npx expo export --platform android` passe.

@@ -24,6 +24,7 @@ import {
   Modal, View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet,
 } from 'react-native';
 import { C, F, T, S, R } from '../theme';
+import { messageClair } from '../lib/erreurs';
 import { BtnMain, BtnMini, TextArea } from './ui';
 import { X, Check, Flag, EyeOff } from './icons';
 import { MOTIFS, cibleDe, DELAI_EXAMEN_HEURES } from '../data/moderation';
@@ -60,7 +61,7 @@ export default function Signaler({
       });
       setFait('signale');
     } catch (e) {
-      setErreur((e && e.message) || "Le signalement n'a pas pu être envoyé.");
+      setErreur(messageClair(e, "Le signalement n'est pas parti"));
     }
     setEnCours(false);
   };
@@ -71,7 +72,7 @@ export default function Signaler({
       await onBloquer(auteurId);
       setFait('bloque');
     } catch (e) {
-      setErreur((e && e.message) || "Le blocage n'a pas pu être enregistré.");
+      setErreur(messageClair(e, "Le blocage n'est pas enregistré"));
     }
     setEnCours(false);
   };

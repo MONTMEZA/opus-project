@@ -22,6 +22,7 @@ import {
   View, Text, ScrollView, Pressable, ActivityIndicator, Share, StyleSheet,
 } from 'react-native';
 import { C, F, T, S, R, interligne } from '../theme';
+import { messageClair } from '../lib/erreurs';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, Field, EmptyState, SectionLabel,
 } from '../components/ui';
@@ -54,7 +55,7 @@ export default function ConfidentialiteScreen({
         if (!vivant) return;
         setBlocages(b); setSignalements(sg);
       } catch (e) {
-        if (vivant) onErreur((e && e.message) || 'Chargement impossible.');
+        if (vivant) onErreur(messageClair(e, 'Chargement impossible'));
       }
       if (vivant) setChargement(false);
     })();
@@ -66,7 +67,7 @@ export default function ConfidentialiteScreen({
       await onDebloquer(id);
       setBlocages((liste) => liste.filter((b) => b.id !== id));
     } catch (e) {
-      onErreur((e && e.message) || 'Le déblocage a échoué.');
+      onErreur(messageClair(e, 'Le déblocage a échoué'));
     }
   };
 
@@ -84,7 +85,7 @@ export default function ConfidentialiteScreen({
         message: JSON.stringify(donnees, null, 2),
       });
     } catch (e) {
-      onErreur((e && e.message) || "L'export a échoué.");
+      onErreur(messageClair(e, "L'export a échoué"));
     }
     setExportEnCours(false);
   };
@@ -95,7 +96,7 @@ export default function ConfidentialiteScreen({
     try {
       await onSupprimer();
     } catch (e) {
-      onErreur((e && e.message) || 'La suppression a échoué.');
+      onErreur(messageClair(e, 'La suppression a échoué'));
       setSuppressionEnCours(false);
     }
   };

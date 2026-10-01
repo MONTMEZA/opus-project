@@ -17,8 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import {
   C, F, T, S, R, SH, M, APPUI, AVATAR_TONES, gradColors, GRAD_160, GRAD_120,
+  interligne,
 } from '../theme';
-import { Check, AlertTriangle } from './icons';
+import { Check, AlertTriangle, WifiOff } from './icons';
 
 /* --- dégradé (remplace les linear-gradient CSS) --- */
 export function Gradient({ media, angle = 160, style, children }) {
@@ -155,23 +156,42 @@ export function ProfileBanner({ uri, height = 140, children }) {
    désormais depuis le haut, d'où il vient.
    `exiting` est sans danger ici : il n'y en a qu'un seul à l'écran, jamais
    une liste qu'on filtre (voir les trois interdits dans `theme.js`). */
-const BandeauAnime = Animated.createAnimatedComponent(Pressable);
-
+/**
+ * UN PIÈGE À NE PAS REDÉCOUVRIR, payé le 01/10/2026.
+ *
+ * Un `Animated.createAnimatedComponent(Pressable)` n'accepte PAS la forme
+ * fonction du style — `style={({ pressed }) => […]}`. Elle est silencieusement
+ * ignorée : aucune erreur, aucun avertissement, et le composant se retrouve
+ * SANS AUCUN STYLE.
+ *
+ * Constaté en coupant le réseau : le bandeau d'erreur affichait son texte
+ * blanc sur le fond beige de l'application, donc illisible — alors que
+ * c'est le seul canal par lequel l'application parle. Un bandeau d'erreur
+ * invisible est pire que pas de bandeau du tout.
+ *
+ * L'état pressé passe donc par une vue INTÉRIEURE, qui, elle, est un
+ * `Pressable` ordinaire. L'animation reste dehors.
+ */
 export function ConfirmBanner({ msg, erreur, onClose }) {
   if (!msg) return null;
   return (
-    <BandeauAnime
+    <Animated.View
       entering={FadeInUp.duration(M.courant)}
       exiting={FadeOutUp.duration(M.bref)}
-      style={({ pressed }) => [s.banner, erreur && s.bannerErreur, pressed && APPUI.discret]}
-      onPress={onClose}
-      accessibilityRole="alert"
-      accessibilityLabel={`${erreur ? 'Erreur' : 'Confirmation'} : ${msg}. Touchez pour fermer.`}
-      accessibilityLiveRegion="polite"
+      style={s.bannerPort}
+      pointerEvents="box-none"
     >
-      {erreur ? <AlertTriangle size={15} color="#fff" /> : <Check size={14} color="#fff" />}
-      <Text style={s.bannerText}>{msg}</Text>
-    </BandeauAnime>
+      <Pressable
+        style={({ pressed }) => [s.banner, erreur && s.bannerErreur, pressed && APPUI.discret]}
+        onPress={onClose}
+        accessibilityRole="alert"
+        accessibilityLabel={`${erreur ? 'Erreur' : 'Confirmation'} : ${msg}. Touchez pour fermer.`}
+        accessibilityLiveRegion="polite"
+      >
+        {erreur ? <AlertTriangle size={15} color="#fff" /> : <Check size={14} color="#fff" />}
+        <Text style={s.bannerText}>{msg}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -204,6 +224,77 @@ export function ConfirmBanner({ msg, erreur, onClose }) {
       On n'écrit donc rien de plus dans les écrans, SAUF quand le bouton
       n'a pas de texte — et c'est justement là que ça compte.
    ========================================================================== */
+
+/* --- la bande « mode démonstration » --- */
+/**
+ * CE BANDEAU EXISTE À CAUSE D'UNE PANNE PRÉCISE.
+ *
+ * Sans fichier `.env`, `src/lib/api.js` remplace CHAQUE écriture par rien.
+ * L'application répond alors « Votre publication est en ligne » — et rien
+ * n'est enregistré nulle part. C'est la première règle de CLAUDE.md, et
+ * c'est elle qui a laissé passer le format `montage` refusé par la base
+ * pendant plusieurs jours : les essais ne voyaient rien.
+ *
+ * `api.mode` valait `'demo'` depuis le début, et n'était LU nulle part —
+ * calculé, puis oublié. Il est désormais à l'écran, en permanence, avec la
+ * bande de chantier : impossible de confondre une réussite avec un
+ * simulacre.
+ *
+ * Elle n'apparaît QUE dans ce mode. Un propriétaire relié à sa base ne la
+ * voit jamais.
+ */
+export function BandeDemo({ visible }) {
+  if (!visible) return null;
+  return (
+    <View
+      style={s.demo}
+      accessibilityRole="alert"
+      accessibilityLabel="Mode démonstration : rien n’est enregistré dans la base de données."
+    >
+      <HazardStrip height={4} />
+      <Text style={s.demoTexte}>
+        MODE DÉMONSTRATION — rien n’est enregistré
+      </Text>
+    </View>
+  );
+}
+
+/* --- la bande « pas de connexion » --- */
+/**
+ * CE QUI MANQUAIT : une porte de sortie.
+ *
+ * Quand le chargement échouait, trois `catch` posaient des listes VIDES —
+ * `setAnnonces([])`, `setDemandes([])`. L'écran affichait donc « Aucune
+ * annonce » : une panne de réseau devenait, mot pour mot, « il n'y a
+ * rien ». L'utilisateur n'avait aucun moyen de savoir laquelle des deux
+ * c'était, ni rien à toucher pour réessayer.
+ *
+ * Cette bande dit lequel des deux, et donne le bouton. Elle est posée EN
+ * HAUT DU CONTENU, pas en flottant : ce n'est pas un message passager,
+ * c'est un état.
+ */
+export function BandeHorsLigne({ raison, onReessayer, enCours }) {
+  if (!raison) return null;
+  const reseau = raison === 'reseau';
+  return (
+    <View style={s.horsLigne} accessibilityRole="alert">
+      <WifiOff size={14} color={C.bad} />
+      <Text style={s.horsLigneTexte}>
+        {reseau
+          ? 'Pas de connexion. Ce qui est affiché date de votre dernière visite.'
+          : 'Le chargement a échoué. Ce qui est affiché peut être incomplet.'}
+      </Text>
+      {!!onReessayer && (
+        <BtnMini
+          outline
+          label={enCours ? 'Essai…' : 'Réessayer'}
+          disabled={enCours}
+          onPress={onReessayer}
+        />
+      )}
+    </View>
+  );
+}
 
 /* --- .btn-main / .btn-block --- */
 export function BtnMain({
@@ -327,8 +418,33 @@ export function IconBtn({ onPress, children, style, accessibilityLabel }) {
 }
 
 /* --- .empty-state --- */
-export function EmptyState({ children, style }) {
-  return <Text style={[s.empty, style]}>{children}</Text>;
+/**
+ * Ce qu'on voit quand il n'y a rien.
+ *
+ * C'ÉTAIT UNE SEULE LIGNE DE TEXTE GRIS, quatorze fois dans l'application.
+ * Un écran vide n'est pourtant pas une information : c'est une question.
+ * « Aucune demande » ne dit ni pourquoi, ni ce qu'on peut y faire, ni si
+ * c'est normal.
+ *
+ * La signature reste compatible — `<EmptyState>du texte</EmptyState>`
+ * continue de marcher partout — et s'enrichit : une icône, un titre, et
+ * surtout une ACTION quand il y en a une à proposer. Un écran vide qui
+ * porte un bouton cesse d'être un cul-de-sac.
+ */
+export function EmptyState({ icone: Icone, titre, children, action, style }) {
+  if (!Icone && !titre && !action) {
+    return <Text style={[s.empty, style]}>{children}</Text>;
+  }
+  return (
+    <View style={[s.videBloc, style]}>
+      {!!Icone && <Icone size={26} color={C.line} />}
+      {!!titre && <Text style={s.videTitre}>{titre}</Text>}
+      {!!children && <Text style={s.empty}>{children}</Text>}
+      {!!action && (
+        <BtnOutline label={action.label} onPress={action.onPress} />
+      )}
+    </View>
+  );
 }
 
 /* --- .portfolio-label --- */
@@ -419,8 +535,46 @@ export function PillToggle({ options, value, onChange, small }) {
  *  La règle complète est écrite dans src/theme.js.
  * ------------------------------------------------------------------------ */
 const s = StyleSheet.create({
+  /* La bande PORTE une information : angle vif, et elle est collée en haut
+     du contenu plutôt que flottante — on ne doit pas pouvoir la rater ni la
+     confondre avec un message passager. */
+  demo: { backgroundColor: C.ink },
+  /* Rouge brique sur fond clair : lisible, et ce n'est pas une alerte
+     rouge vif qui ferait croire à une catastrophe. */
+  horsLigne: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm,
+    backgroundColor: '#F6E7E3',   // le rouge brique, très éclairci
+    borderBottomWidth: 1, borderBottomColor: C.line,
+    paddingVertical: S.sm, paddingHorizontal: S.lg,
+  },
+  horsLigneTexte: {
+    flex: 1, fontFamily: F.inter5, fontSize: T.petit, color: C.bad,
+    lineHeight: interligne(T.petit),
+  },
+  demoTexte: {
+    fontFamily: F.oswald6, fontSize: T.micro, color: C.bg,
+    letterSpacing: 1, textAlign: 'center',
+    paddingVertical: 3,
+  },
+
+  videBloc: {
+    alignItems: 'center', gap: S.sm,
+    paddingVertical: S.xxl, paddingHorizontal: S.xl,
+  },
+  videTitre: {
+    fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink,
+    textAlign: 'center', letterSpacing: 0.3,
+  },
+
+  /* Le positionnement passe sur l'enveloppe ANIMÉE ; la bulle, elle, garde
+     sa forme. Les deux séparées, parce qu'un composant animé ne sait pas
+     prendre un style en forme de fonction (voir le commentaire de
+     ConfirmBanner). */
+  bannerPort: {
+    position: 'absolute', top: 60, left: 0, right: 0, zIndex: 20,
+    alignItems: 'center',
+  },
   banner: {
-    position: 'absolute', top: 60, alignSelf: 'center', zIndex: 20,
     backgroundColor: C.ink, paddingVertical: S.sm, paddingHorizontal: S.lg,
     borderRadius: R.gelule,
     flexDirection: 'row', alignItems: 'center', gap: 6,

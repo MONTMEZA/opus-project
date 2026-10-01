@@ -78,6 +78,7 @@ export const Zap = mk(Feather, 'zap');
 export const Key = mk(Feather, 'key');
 export const Thermometer = mk(Feather, 'thermometer');
 export const AlertTriangle = mk(Feather, 'alert-triangle');
+export const WifiOff = mk(Feather, 'wifi-off');
 
 /* Modération et droits des personnes (section 13 du schéma). */
 export const Flag = mk(Feather, 'flag');

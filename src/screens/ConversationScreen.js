@@ -6,13 +6,13 @@ import React, { useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, T, APPUI } from '../theme';
 import { EmptyState, Field } from '../components/ui';
-import { Send, Flag } from '../components/icons';
+import { Send, Flag, AlertTriangle } from '../components/icons';
 
 export default function ConversationScreen({
   conversation, draft, setDraft, onSend, onSignaler, interlocuteur,
-  chargement = false,
+  chargement = false, onRenvoyer,
 }) {
   const scrollRef = useRef(null);
 
@@ -29,9 +29,34 @@ export default function ConversationScreen({
         onContentSizeChange={() => scrollRef.current && scrollRef.current.scrollToEnd({ animated: true })}
       >
         {conversation.messages.map((m, i) => (
-          <View key={m.id || i} style={s.rangee}>
-            <View style={[s.bubble, m.from === 'moi' && s.bubbleMoi]}>
-              <Text style={[s.bubbleText, m.from === 'moi' && { color: '#fff' }]}>{m.texte}</Text>
+          <View key={m.cle || m.id || i} style={s.rangee}>
+            <View style={{ alignItems: m.from === 'moi' ? 'flex-end' : 'flex-start' }}>
+              <View style={[
+                s.bubble, m.from === 'moi' && s.bubbleMoi,
+                m.etat === 'echec' && s.bubbleEchec,
+              ]}>
+                <Text style={[s.bubbleText, m.from === 'moi' && { color: '#fff' }]}>{m.texte}</Text>
+              </View>
+
+              {/* L'ÉTAT DE L'ENVOI, SOUS LA BULLE.
+                  Sans lui, un message qui n'est jamais parti ressemblait
+                  trait pour trait à un message reçu par son destinataire —
+                  et on continuait la conversation tout seul. */}
+              {m.from === 'moi' && m.etat === 'envoi' && (
+                <Text style={s.etat}>Envoi…</Text>
+              )}
+              {m.from === 'moi' && m.etat === 'echec' && (
+                <Pressable
+                  onPress={() => onRenvoyer && onRenvoyer(m)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message non envoyé. Toucher pour réessayer."
+                  style={({ pressed }) => [s.rangeeEchec, pressed && APPUI.discret]}
+                >
+                  <AlertTriangle size={11} color={C.bad} />
+                  <Text style={s.etatEchec}>Non envoyé — toucher pour réessayer</Text>
+                </Pressable>
+              )}
             </View>
             {/* Un message reçu se signale. C'est souvent là, et pas dans le
                 fil, que commencent les menaces et les arnaques — et c'est le
@@ -102,4 +127,15 @@ const s = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.surface,
   },
   send: { backgroundColor: C.ink, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+
+  /* Une bulle en échec reste LISIBLE : on ne la grise pas au point de ne
+     plus pouvoir la relire. Un liseré suffit à dire que quelque chose
+     cloche. */
+  bubbleEchec: { borderWidth: 1, borderColor: C.bad },
+  etat: { fontFamily: F.inter, fontSize: T.micro, color: C.muted, paddingTop: 2 },
+  rangeeEchec: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingTop: 2, minHeight: 22,
+  },
+  etatEchec: { fontFamily: F.inter5, fontSize: T.micro, color: C.bad },
 });

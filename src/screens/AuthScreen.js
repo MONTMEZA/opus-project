@@ -13,6 +13,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F, T, S, R, GRAD_160 } from '../theme';
+/* La traduction des erreurs vivait ICI, enfermée : partout ailleurs dans
+   l'application, le même défaut sortait en anglais. Elle est devenue
+   `src/lib/erreurs.js`, et elle sait aussi reconnaître une perte de réseau —
+   le cas le plus fréquent sur un chantier. */
+import { messageClair as traduire } from '../lib/erreurs';
 import { HazardStrip, Field, BtnMain } from '../components/ui';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
@@ -263,26 +268,6 @@ function Fond({ insets, children }) {
       {children}
     </LinearGradient>
   );
-}
-
-/** Traduit les messages d'erreur techniques de Supabase en français clair. */
-function traduire(e) {
-  const m = ((e && e.message) || '').toLowerCase();
-  if (m.includes('invalid login credentials')) return 'Email ou mot de passe incorrect.';
-  if (m.includes('already registered') || m.includes('already been registered')) {
-    return 'Un compte existe déjà avec cet email. Utilisez « Se connecter ».';
-  }
-  if (m.includes('email not confirmed')) {
-    return "Votre email n'est pas encore confirmé. Regardez votre boîte mail.";
-  }
-  if (m.includes('password')) return 'Mot de passe trop court (6 caractères minimum).';
-  if (m.includes('invalid email') || m.includes('unable to validate email')) {
-    return "Cette adresse email n'est pas valide.";
-  }
-  if (m.includes('signups not allowed') || m.includes('signup is disabled')) {
-    return "Les inscriptions sont désactivées dans les réglages Supabase.";
-  }
-  return (e && e.message) || 'Une erreur est survenue. Réessayez.';
 }
 
 const s = StyleSheet.create({

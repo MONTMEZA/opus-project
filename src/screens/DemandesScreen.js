@@ -6,7 +6,7 @@
  * séparé du fil, qui reste une vitrine réservée aux pros.
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet , RefreshControl } from 'react-native';
 import { C, F } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
@@ -25,6 +25,7 @@ import { distanceKm, libelleDistance } from '../lib/adresse';
 export default function DemandesScreen({
   userType, mesMetiers = [], demandes, filtreMetier, setFiltreMetier,
   onPublier, onRepondre, onErreur, moi, mesReponses, onSignaler,
+  onRafraichir, rafraichit = false,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
   const [metier, setMetier] = useState(METIER_PAR_DEFAUT);
@@ -100,7 +101,16 @@ export default function DemandesScreen({
   };
 
   return (
-    <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">
+    <ScrollView
+        /* TIRER POUR RAFRAÎCHIR.
+           Le geste existait sur le fil, et nulle part ailleurs : sur les six
+           autres écrans défilants, tirer vers le bas ne faisait rien. Or
+           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
+           pas y répondre se lit comme un écran figé. */
+        refreshControl={onRafraichir ? (
+          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+            tintColor={C.muted} colors={[C.accent]} />
+        ) : undefined} style={s.pad} keyboardShouldPersistTaps="handled">
       {/* --- côté particulier : publier une demande --- */}
       {!estPro && (
         <View style={s.encart}>

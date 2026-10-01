@@ -898,6 +898,71 @@ donner depuis une session de travail. Même cause que pour
 >
 > Un `revoke` isolé passe, lui, s'il est seul dans un bloc `do $$ … $$`.
 
+### Les quatre états — vide, en cours, cassé, et SANS RÉSEAU (01/10/2026)
+
+Trois pièges trouvés en les traitant, et aucun des trois ne faisait planter
+quoi que ce soit. C'est bien le problème.
+
+#### Une requête qui ne revient JAMAIS n'atteint jamais le `catch`
+
+Avec une session valide et la base injoignable, l'application restait
+bloquée sur son squelette de démarrage — **pour toujours**. Pas d'erreur,
+pas de message : les blocs gris battaient doucement, et c'est tout.
+
+`setDemarrage(false)` était pourtant bien écrit après l'attente. Mais un
+`catch` ne protège de rien quand rien n'échoue : il ne se passe simplement
+rien. Et l'écran a l'air vivant, donc on attend, puis on ferme
+l'application.
+
+> **Tout appel réseau sur le chemin du démarrage porte un délai**
+> (`avecDelai()`, `src/lib/erreurs.js`), et la sortie est dans un `finally`.
+> Les deux vont ensemble : le `finally` ne sert à rien sans le délai.
+
+Et le corollaire : **ce que le téléphone sait tout seul se lit en premier.**
+`sessionLocale()` ne demande rien à personne — la session et le type de
+compte sont dans les métadonnées, déjà sur l'appareil. La requête à la base
+ne sert plus qu'à confirmer, en arrière-plan. Avant, les deux étaient
+collées : sans réseau, un artisan connecté se retrouvait devant
+« Choisissez votre profil », comme s'il n'avait pas de compte.
+
+#### Un composant animé ignore SILENCIEUSEMENT un style en forme de fonction
+
+`Animated.createAnimatedComponent(Pressable)` n'accepte pas
+`style={({ pressed }) => […]}`. Aucune erreur, aucun avertissement : le
+composant se retrouve **sans aucun style**.
+
+Le bandeau d'erreur a ainsi affiché son texte blanc sur le fond beige de
+l'application — illisible — alors que c'est le SEUL canal par lequel
+l'application parle. Un bandeau d'erreur invisible est pire que pas de
+bandeau du tout. Trouvé en coupant le réseau, pas en relisant le code.
+
+> **L'animation à l'extérieur, l'état pressé à l'intérieur.** Une
+> `Animated.View` qui porte `entering`/`exiting`, et un `Pressable`
+> ordinaire dedans. `npm run verifier-etats` refuse l'autre forme.
+
+#### Le mode démonstration doit se VOIR
+
+`api.mode` valait `'demo'` depuis le début et n'était **lu nulle part** :
+calculé, puis oublié. Pendant ce temps, sans fichier `.env`, l'application
+répondait « Votre publication est en ligne » alors que rien n'était écrit —
+la première règle de ce document, et la panne qui a laissé passer le format
+`montage` refusé par la base pendant plusieurs jours.
+
+> Une bande noire permanente le dit désormais, avec la bande de chantier,
+> et les messages de publication changent de texte dans ce mode.
+
+#### Et la règle d'ensemble
+
+> **Un échec ne s'affiche jamais en vert.** Trois appels à `showBanner`
+> annonçaient « Publication non enregistrée » avec une coche. Le contrôle
+> relit tous les appels et refuse ceux dont le texte parle d'échec.
+>
+> **Les messages d'erreur sont en français et disent quoi faire.** La
+> traduction vivait enfermée dans `AuthScreen.js` ; elle est devenue
+> `src/lib/erreurs.js`, et elle reconnaît le réseau, la session expirée,
+> une contrainte `check` refusée (avec renvoi à `schema.sql`), une règle
+> RLS, un droit manquant sur une fonction.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

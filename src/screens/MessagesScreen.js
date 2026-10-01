@@ -2,14 +2,25 @@
  * 5a. Messages — liste des conversations. (.msg-list du prototype)
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet , RefreshControl } from 'react-native';
 import { C, F, T, S, R } from '../theme';
 import { nomMetier } from '../lib/metiers';
 import { Avatar, EmptyState } from '../components/ui';
 
-export default function MessagesScreen({ conversations, onOpen }) {
+export default function MessagesScreen({ conversations, onOpen,
+  onRafraichir, rafraichit = false,
+}) {
   return (
-    <ScrollView style={s.pad}>
+    <ScrollView
+        /* TIRER POUR RAFRAÎCHIR.
+           Le geste existait sur le fil, et nulle part ailleurs : sur les six
+           autres écrans défilants, tirer vers le bas ne faisait rien. Or
+           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
+           pas y répondre se lit comme un écran figé. */
+        refreshControl={onRafraichir ? (
+          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+            tintColor={C.muted} colors={[C.accent]} />
+        ) : undefined} style={s.pad}>
       {conversations.map((c) => {
         const { contact } = c;
         if (!contact) return null;

@@ -36,15 +36,57 @@ export async function ensureSession(userType) {
  * Reprend la session déjà ouverte sur ce téléphone, s'il y en a une.
  * Évite de redemander le mot de passe à chaque ouverture de l'app.
  * Renvoie { userId, userType } ou null.
+ *
+ * ELLE DOIT MARCHER SANS RÉSEAU, et elle ne le faisait pas.
+ * ---------------------------------------------------------
+ * `supabase.auth.getSession()` lit la session rangée sur le téléphone : il
+ * répond même dans une cave. Mais la requête qui suivait — chercher le
+ * TYPE de compte dans la table `users` — a besoin du réseau. Sans 4G, elle
+ * échouait, la fonction levait, et l'application renvoyait à
+ * « Choisissez votre profil » : un artisan déjà connecté se retrouvait
+ * devant l'écran d'accueil comme s'il n'avait pas de compte.
+ *
+ * Le type est pourtant DÉJÀ sur le téléphone : `signUp()` l'écrit dans les
+ * métadonnées du compte, et elles voyagent avec la session. On s'en sert
+ * quand la base est injoignable, et la requête ne sert plus qu'à corriger
+ * le tir quand le réseau est là.
  */
 export async function restoreSession() {
+  const locale = await sessionLocale();
+  if (!locale) return null;
+
+  try {
+    const { data } = await supabase.from('users').select('type')
+      .eq('id', currentUserId).maybeSingle();
+    return { ...locale, userType: (data && data.type) || locale.userType };
+  } catch (e) {
+    /* Pas de réseau : on garde ce que le téléphone sait déjà. */
+    return { ...locale, horsLigne: true };
+  }
+}
+
+/**
+ * LA PARTIE QUI NE DEMANDE RIEN À PERSONNE.
+ *
+ * `supabase.auth.getSession()` lit la session rangée sur le téléphone : elle
+ * répond dans une cave, en avion, partout. Le TYPE de compte est dans les
+ * métadonnées, que `signUp()` y écrit — donc il est là aussi.
+ *
+ * C'est elle qu'on appelle en premier au démarrage. La requête à la base
+ * qui suit (`restoreSession`) ne sert plus qu'à corriger le tir si le type
+ * a changé — et si elle ne revient pas, on a déjà de quoi ouvrir
+ * l'application.
+ */
+export async function sessionLocale() {
   if (!hasSupabase) return null;
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
   currentUserId = session.user.id;
-
-  const { data } = await supabase.from('users').select('type').eq('id', currentUserId).maybeSingle();
-  return { userId: currentUserId, userType: (data && data.type) || 'particulier' };
+  const metadonnees = (session.user && session.user.user_metadata) || {};
+  return {
+    userId: currentUserId,
+    userType: metadonnees.type === 'pro' ? 'pro' : 'particulier',
+  };
 }
 
 /**

@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { C } from './theme';
-import { ConfirmBanner, PillToggle } from './components/ui';
+import { BandeDemo, BandeHorsLigne, ConfirmBanner, PillToggle } from './components/ui';
 import { TopBrand, BackBar } from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import QuoteModal from './components/QuoteModal';
@@ -42,6 +42,7 @@ import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier } from './lib/metiers';
 import * as api from './lib/api';
 import * as retour from './lib/retour';
+import { messageClair, estUnProblemeDeReseau, avecDelai } from './lib/erreurs';
 import { metiersDe } from './lib/metiers';
 import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
@@ -53,8 +54,19 @@ import { aiMatchPros } from './lib/ai';
 import { partagerPost } from './lib/partage';
 import { FORMATS_VISUELS, FORMATS_VIDEO } from './screens/CreerScreen';
 
-/** Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie. */
-const MESSAGE_PUBLICATION = {
+/**
+ * Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie.
+ *
+ * ET SELON LE MODE, parce que « Votre publication est en ligne » était FAUX
+ * sans fichier `.env` : `api.js` remplace alors chaque écriture par rien.
+ * C'est la panne qui a laissé passer le format `montage` refusé par la base
+ * pendant plusieurs jours — les essais ne voyaient rien.
+ */
+const MESSAGE_PUBLICATION = api.mode === 'demo' ? {
+  fil: 'Démonstration : la publication s’affiche, mais rien n’est enregistré.',
+  portfolio: 'Démonstration : rien n’est enregistré.',
+  deux: 'Démonstration : rien n’est enregistré.',
+} : {
   fil: 'Votre publication est en ligne.',
   portfolio: 'Ajouté à votre portfolio.',
   deux: 'En ligne, et ajouté à votre portfolio.',
@@ -100,6 +112,13 @@ export default function OpusApp() {
      partent pas avec `loadAll()` : le démarrage est déjà le point sensible,
      et elles n'intéressent que l'artisan au moment où il ouvre l'onglet.
      Le SIGNAL, lui, est gratuit : c'est la notification que la base écrit. */
+  /* Pourquoi le chargement a échoué, pour pouvoir proposer de réessayer
+     plutôt que de laisser des listes vides qui ressemblent à « il n'y a
+     rien ». */
+  const [echecChargement, setEchecChargement] = useState(null);
+  /* Une clé par message envoyé, pour retrouver SA bulle quand la réponse du
+     serveur arrive — l'index dans la liste bouge, lui. */
+  const compteurEnvoi = useRef(0);
   const [demandesRecues, setDemandesRecues] = useState([]);
   const [demandesRecuesEtat, setDemandesRecuesEtat] = useState('jamais');
   /* Un MIROIR de l'état, parce que l'abonnement au temps réel est posé une
@@ -193,11 +212,33 @@ export default function OpusApp() {
   useEffect(() => () => { if (bannerTimer.current) clearTimeout(bannerTimer.current); }, []);
 
   /* ---------- chargement (démo ou Supabase) ---------- */
+  /**
+   * ON ENTRE DANS L'APPLICATION DÈS QUE LA SESSION EST VALIDE.
+   *
+   * Avant, `setUserType` et `setScreen('home')` étaient à la FIN, après
+   * `loadAll()`. Sans réseau, le chargement échouait, les deux lignes
+   * n'étaient jamais atteintes, et un artisan déjà connecté se retrouvait
+   * devant « Choisissez votre profil » — comme s'il n'avait pas de compte.
+   *
+   * Désormais la session ouvre la porte, et l'échec de chargement se
+   * traite À L'INTÉRIEUR : on voit ses écrans, on lit « pas de
+   * connexion », et on peut réessayer. C'est la différence entre une
+   * application qui attend le réseau et une application qui en dépend.
+   */
   const start = useCallback(async (type) => {
     setLoading(true);
     try {
       await api.ensureSession(type);
-      const data = await api.loadAll();
+      /* La porte, ici et pas plus bas. */
+      setUserType(type);
+      setScreen('home');
+      setEchecChargement(null);
+      /* AVEC UN DÉLAI, et ce n'est pas une précaution théorique : sans lui,
+         une base injoignable laissait l'application figée sur son squelette
+         de démarrage pour toujours. Une requête qui ne revient jamais
+         n'atteint jamais la ligne suivante, et aucun `catch` n'y peut rien.
+         Mesuré en coupant la liaison le 01/10/2026. */
+      const data = await avecDelai(api.loadAll(), 12000, 'La base');
       setPros(data.pros);
       setPosts(data.posts);
       setFinDuFil(!!data.finDuFil);
@@ -234,10 +275,13 @@ export default function OpusApp() {
       if (data.monCompte && data.monCompte.nom) {
         setMonProfil((p) => ({ ...p, ...data.monCompte }));
       }
-      setUserType(type);
-      setScreen('home');
+      setEchecChargement(null);
     } catch (e) {
-      showErreur(`Chargement impossible : ${e.message || e}`);
+      /* Si la session elle-même n'a pas pu s'ouvrir, on n'est entré nulle
+         part : il faut le dire et laisser l'écran d'accueil. Sinon, on est
+         DEDANS, et c'est le contenu qui manque — pas le compte. */
+      setEchecChargement(estUnProblemeDeReseau(e) ? 'reseau' : 'autre');
+      showErreur(messageClair(e, 'Chargement impossible'));
     }
     setLoading(false);
   }, []);
@@ -247,12 +291,29 @@ export default function OpusApp() {
     let vivant = true;
     (async () => {
       try {
-        const session = await api.restoreSession();
-        if (session && vivant) await start(session.userType);
+        /* DEUX TEMPS, ET C'EST TOUT L'INTÉRÊT.
+           D'abord ce que le téléphone sait tout seul : la session et le
+           type de compte, lus localement, sans réseau. Ensuite seulement on
+           demande à la base de confirmer — et si elle ne répond pas, on est
+           DÉJÀ entré. Avant, les deux étaient collés : sans réseau, un
+           artisan connecté se retrouvait devant « Choisissez votre
+           profil », comme s'il n'avait pas de compte. */
+        const locale = await api.sessionLocale();
+        if (locale && vivant) {
+          await start(locale.userType);
+          /* La confirmation, en arrière-plan. Elle ne bloque plus rien. */
+          avecDelai(api.restoreSession(), 8000, 'La base')
+            .then((s2) => { if (s2 && vivant && s2.userType !== locale.userType) start(s2.userType); })
+            .catch(() => {});
+        }
       } catch (e) {
-        // pas de session valide : on affichera l'écran d'accueil
+        // pas de session valide : on montre l'écran d'accueil
+      } finally {
+        /* `finally` et pas après le `catch` : si une promesse n'aboutit
+           jamais, on n'arrive pas non plus au `catch`. C'est le délai
+           ci-dessus qui garantit qu'on y arrive — les deux vont ensemble. */
+        if (vivant) setDemarrage(false);
       }
-      if (vivant) setDemarrage(false);
     })();
     return () => { vivant = false; };
   }, [start]);
@@ -379,6 +440,39 @@ export default function OpusApp() {
       setFinDuFil(fin);
     } catch (e) {
       showErreur('Le fil n’a pas pu être rafraîchi.');
+    }
+    setRafraichit(false);
+  };
+
+  /**
+   * Tirer vers le bas, sur les autres écrans.
+   *
+   * Le geste n'existait que sur le fil. Ailleurs — notifications, messages,
+   * demandes, Place des pros —, tirer ne faisait rien : l'écran paraissait
+   * figé alors qu'il suffisait de redemander. Une seule fonction, parce que
+   * ces quatre listes viennent toutes du même chargement.
+   *
+   * `echecChargement` est remis à zéro en cas de succès : la bande « pas de
+   * connexion » disparaît alors d'elle-même, ce qui est la seule preuve
+   * honnête que le réseau est revenu.
+   */
+  const rafraichirEcran = async () => {
+    setRafraichit(true);
+    try {
+      const data = await api.loadAll();
+      setPosts(data.posts);
+      setFinDuFil(!!data.finDuFil);
+      setConversations(data.conversations);
+      setDemandes(data.demandes || []);
+      setNotifications(data.notifications);
+      setPros(data.pros);
+      if (userType === 'pro') {
+        try { setAnnonces(await api.chargerAnnonces()); } catch (e) { /* liste conservée */ }
+      }
+      setEchecChargement(null);
+    } catch (e) {
+      setEchecChargement(estUnProblemeDeReseau(e) ? 'reseau' : 'autre');
+      showErreur(messageClair(e, 'Rafraîchissement impossible'));
     }
     setRafraichit(false);
   };
@@ -672,7 +766,7 @@ export default function OpusApp() {
         ? `Demande de devis envoyée à ${pro.entreprise}. Vous serez prévenu dès qu'il répond.`
         : `Demande de rappel envoyée à ${pro.entreprise}. Vous serez prévenu dès qu'il répond.`);
     } catch (e) {
-      showErreur(`Envoi impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Envoi impossible'));
     }
   };
 
@@ -713,19 +807,54 @@ export default function OpusApp() {
     }
   };
 
-  const sendMessage = () => {
-    if (!msgDraft.trim() || activeConvId == null) return;
-    const texte = msgDraft.trim();
+  /**
+   * Envoyer un message.
+   *
+   * LE MESSAGE S'AFFICHE AVANT D'ÊTRE PARTI — c'est la bonne pratique, et
+   * elle était déjà là. Ce qui manquait, c'est la SUITE : en cas d'échec,
+   * la bulle restait exactement comme une bulle envoyée, et le bandeau
+   * sortait en VERT avec une coche (`showBanner` sans le drapeau d'erreur).
+   * On croyait donc avoir écrit à quelqu'un qui n'avait rien reçu.
+   *
+   * Chaque bulle porte désormais son état : `envoi`, `envoye`, `echec`. Et
+   * une bulle en échec se touche pour réessayer — sans ça, le seul recours
+   * serait de retaper le message.
+   */
+  const sendMessage = (texteDonne) => {
+    const texte = String(texteDonne || msgDraft).trim();
+    if (!texte || activeConvId == null) return;
+
+    const cle = `envoi-${compteurEnvoi.current}`;
+    compteurEnvoi.current += 1;
+
+    const majEtat = (etat) => setConversations((cs) => cs.map((c) => (c.id === activeConvId
+      ? { ...c, messages: (c.messages || []).map((m) => (m.cle === cle ? { ...m, etat } : m)) }
+      : c)));
+
     setConversations((cs) => cs.map((c) => (c.id === activeConvId
       ? {
         ...c,
         messages: [...(Array.isArray(c.messages) ? c.messages : []),
-          { from: 'moi', texte, heure: "à l'instant" }],
+          { cle, from: 'moi', texte, heure: "à l'instant", etat: 'envoi' }],
         dernier: { texte, heure: "à l'instant", de: api.getUserId() },
       }
       : c)));
-    setMsgDraft('');
-    api.sendMessage(activeConvId, texte).catch(() => showBanner("Message non envoyé."));
+    if (!texteDonne) setMsgDraft('');
+
+    api.sendMessage(activeConvId, texte)
+      .then(() => majEtat('envoye'))
+      .catch((e) => {
+        majEtat('echec');
+        showErreur(messageClair(e, "Message non envoyé"));
+      });
+  };
+
+  /** Retenter un message resté en échec, sans avoir à le retaper. */
+  const renvoyerMessage = (m) => {
+    setConversations((cs) => cs.map((c) => (c.id === activeConvId
+      ? { ...c, messages: (c.messages || []).filter((x) => x.cle !== m.cle) }
+      : c)));
+    sendMessage(m.texte);
   };
 
   /**
@@ -895,7 +1024,7 @@ export default function OpusApp() {
     } catch (e) {
       setEnvoi(null);
       setErreurPublication(e.message || String(e));
-      showBanner('Publication non enregistrée.');
+      showErreur('Publication non enregistrée.');
       return;
     }
     setEnvoi(null);
@@ -930,7 +1059,7 @@ export default function OpusApp() {
       const row = await api.createReview({ proId, delais, qualite, tarif, commentaire });
       if (row) { id = row.id; verifie = !!row.client_verifie; }
     } catch (e) {
-      showBanner(`Avis non enregistré : ${e.message || e}`);
+      showErreur(messageClair(e, 'Avis non enregistré'));
       return;
     }
 
@@ -955,7 +1084,7 @@ export default function OpusApp() {
     try {
       await api.demanderPartenariat(otherId);
     } catch (e) {
-      showErreur(`Demande impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Demande impossible'));
       return;
     }
     setPartenariatsEnvoyes((l) => [...new Set([...l, otherId])]);
@@ -966,7 +1095,7 @@ export default function OpusApp() {
     try {
       await api.repondrePartenariat(demandeurId, accepte);
     } catch (e) {
-      showErreur(`Réponse impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Réponse impossible'));
       return;
     }
     setDemandesPartenariat((l) => l.filter((id) => id !== demandeurId));
@@ -1011,7 +1140,7 @@ export default function OpusApp() {
       showBanner('Publication corrigée.');
     } catch (e) {
       appliquer(post.texte, post.modifie);
-      showErreur(`Correction impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Correction impossible'));
     }
   };
 
@@ -1021,7 +1150,7 @@ export default function OpusApp() {
       await api.supprimerPost(post.id);
       showBanner('Publication supprimée.');
     } catch (e) {
-      showErreur(`Suppression impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Suppression impossible'));
       await start(userType);          // on remet la liste d'aplomb
     }
   };
@@ -1032,7 +1161,7 @@ export default function OpusApp() {
     try {
       await api.republierPost(post.id);
     } catch (e) {
-      showBanner(`Impossible de remettre en avant : ${e.message || e}`);
+      showErreur(messageClair(e, 'Impossible de remettre en avant'));
       return;
     }
     setPosts((ps) => [
@@ -1047,7 +1176,7 @@ export default function OpusApp() {
       const message = await partagerPost(post, pros[post.proId]);
       if (message) showBanner(message);
     } catch (e) {
-      showErreur(`Partage impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Partage impossible'));
     }
   };
 
@@ -1066,7 +1195,7 @@ export default function OpusApp() {
       setPros((ps) => (ps[myProId]
         ? { ...ps, [myProId]: { ...ps[myProId], portfolio: avant } }
         : ps));
-      showErreur(`Enregistrement impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Enregistrement impossible'));
     }
   };
 
@@ -1110,7 +1239,7 @@ export default function OpusApp() {
     try {
       await api.marquerToutesNotificationsLues();
     } catch (e) {
-      showErreur(`Les notifications n'ont pas pu être marquées lues : ${e.message || e}`);
+      showErreur(messageClair(e, "Les notifications n'ont pas pu être marquées lues"));
     }
   };
 
@@ -1144,7 +1273,7 @@ export default function OpusApp() {
       demandesRecuesChargees.current = true;
     } catch (e) {
       setDemandesRecuesEtat('echec');
-      showErreur(`Vos demandes n'ont pas pu être chargées : ${e.message || e}`);
+      showErreur(messageClair(e, "Vos demandes n'ont pas pu être chargées"));
     }
   };
 
@@ -1194,7 +1323,7 @@ export default function OpusApp() {
       setDemandesRecues((liste) => liste.map((d) => (
         d.id === demande.id ? { ...d, statut: avant } : d
       )));
-      showErreur(`La réponse n'est pas partie : ${e.message || e}`);
+      showErreur(messageClair(e, "La réponse n'est pas partie"));
     }
   };
 
@@ -1218,7 +1347,7 @@ export default function OpusApp() {
       const dejaUne = String(e.message || e).includes('idx_metier_demande_unique_en_attente');
       showErreur(dejaUne
         ? 'Vous avez déjà une demande en cours d\'examen.'
-        : `Demande impossible : ${e.message || e}`);
+        : messageClair(e, 'Demande impossible'));
     }
   };
 
@@ -1247,7 +1376,7 @@ export default function OpusApp() {
           uri: profil.avatarUrl, bucket: 'avatars', nom: 'avatar', userId: uid,
         });
       } catch (e) {
-        showErreur(`Envoi de la photo de profil impossible : ${e.message || e}`);
+        showErreur(messageClair(e, 'Envoi de la photo de profil impossible'));
         return;
       }
     }
@@ -1258,7 +1387,7 @@ export default function OpusApp() {
           uri: profil.bannerUrl, bucket: 'bannieres', nom: 'banniere', userId: uid,
         });
       } catch (e) {
-        showErreur(`Envoi de la bannière impossible : ${e.message || e}`);
+        showErreur(messageClair(e, 'Envoi de la bannière impossible'));
         return;
       }
     }
@@ -1268,7 +1397,7 @@ export default function OpusApp() {
     try {
       await api.updateProfile({ userType, profil: complet });
     } catch (e) {
-      showErreur(`Enregistrement de la fiche impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Enregistrement de la fiche impossible'));
       return;
     }
 
@@ -1276,7 +1405,7 @@ export default function OpusApp() {
       try {
         await api.updateSosAvailability(sos);
       } catch (e) {
-        showErreur(`Disponibilité aux urgences non enregistrée : ${e.message || e}`);
+        showErreur(messageClair(e, 'Disponibilité aux urgences non enregistrée'));
         return;
       }
     }
@@ -1335,7 +1464,7 @@ export default function OpusApp() {
       setScreen('profil');
       showBanner('Documents envoyés. Votre profil passe en vérification.');
     } catch (e) {
-      showErreur(`Envoi impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Envoi impossible'));
     }
   };
 
@@ -1440,7 +1569,7 @@ export default function OpusApp() {
       if (ligne) id = ligne.id;
     } catch (e) {
       setLoading(false);
-      showErreur(`Publication impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Publication impossible'));
       return;
     }
     setLoading(false);
@@ -1522,7 +1651,7 @@ export default function OpusApp() {
       const ligne = await api.publierAnnonce(annonce);
       if (ligne) id = ligne.id;
     } catch (e) {
-      showErreur(`Publication impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Publication impossible'));
       return;
     }
     const moi = pros[myProId] || {};
@@ -1558,7 +1687,7 @@ export default function OpusApp() {
     try {
       await api.repondreAnnonce(annonce.id, null);
     } catch (e) {
-      showErreur(`Réponse impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Réponse impossible'));
       return;
     }
     setAnnonces((as) => as.map((a) => (
@@ -1577,7 +1706,7 @@ export default function OpusApp() {
     try {
       await api.fermerAnnonce(annonce.id);
     } catch (e) {
-      showErreur(`Retrait impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Retrait impossible'));
       return;
     }
     setAnnonces((as) => as.filter((a) => a.id !== annonce.id));
@@ -1655,7 +1784,7 @@ export default function OpusApp() {
         telephone: monProfil.telephone || null,
       });
     } catch (e) {
-      showErreur(`Envoi impossible : ${e.message || e}`);
+      showErreur(messageClair(e, 'Envoi impossible'));
       return;
     }
     setScreen('home');
@@ -1870,6 +1999,15 @@ export default function OpusApp() {
       ))}
 
       <View style={[s.body, videoMode && { backgroundColor: C.dark }]}>
+        {/* Elle est DANS le corps et pas flottante : on ne doit ni pouvoir
+            la rater, ni la confondre avec un message passager. */}
+        <BandeDemo visible={api.mode === 'demo'} />
+        <BandeHorsLigne
+          raison={echecChargement}
+          enCours={loading}
+          onReessayer={() => start(userType)}
+        />
+
         <ConfirmBanner
           msg={banner && banner.texte}
           erreur={!!(banner && banner.erreur)}
@@ -1960,6 +2098,7 @@ export default function OpusApp() {
               />
             ) : decouvrirTab === 'artisans' ? (userType === 'pro' ? (
               <PlaceProScreen
+                onRafraichir={rafraichirEcran} rafraichit={rafraichit}
                 annonces={annonces}
                 moi={pros[myProId] || null}
                 onPublier={publierAnnonce}
@@ -1979,6 +2118,7 @@ export default function OpusApp() {
               />
             )) : (
               <DemandesScreen
+                onRafraichir={rafraichirEcran} rafraichit={rafraichit}
                 userType={userType}
                 mesMetiers={metiersDe(pros[myProId])}
                 demandes={demandes}
@@ -2012,7 +2152,12 @@ export default function OpusApp() {
         )}
 
         {screen === 'messages' && !activeConv && (
-          <MessagesScreen conversations={conversationsAffichees} onOpen={ouvrirConversation} />
+          <MessagesScreen
+            conversations={conversationsAffichees}
+            onOpen={ouvrirConversation}
+            onRafraichir={rafraichirEcran}
+            rafraichit={rafraichit}
+          />
         )}
 
         {screen === 'messages' && activeConv && (
@@ -2020,6 +2165,7 @@ export default function OpusApp() {
             conversation={{ ...activeConv, messages: activeConv.messages || [] }}
             chargement={!Array.isArray(activeConv.messages)}
             draft={msgDraft} setDraft={setMsgDraft} onSend={sendMessage}
+            onRenvoyer={renvoyerMessage}
             onSignaler={ouvrirSignalement}
             interlocuteur={activeConv.proId && pros[activeConv.proId]
               ? pros[activeConv.proId].entreprise
@@ -2075,6 +2221,7 @@ export default function OpusApp() {
 
         {screen === 'notifications' && (
           <NotificationsScreen
+            onRafraichir={rafraichirEcran} rafraichit={rafraichit}
             notifications={notifications}
             onOuvrir={ouvrirNotification}
             onToutLire={toutMarquerLu}
@@ -2126,6 +2273,11 @@ export default function OpusApp() {
         {screen === 'profilPro' && viewedProId && pros[viewedProId] && (
           <ProfilProScreen
             pro={pros[viewedProId]} pros={pros}
+            /* La fiche s'ouvre AVANT d'être complète : la version légère,
+               celle des listes, n'a ni avis ni réalisations. Sans ce
+               drapeau, l'écran affichait « Aucun avis — soyez le premier »
+               sur un artisan qui en a trente. */
+            charge={!!pros[viewedProId].portfolioCharge}
             following={followingIds.has(viewedProId)}
             onFollow={toggleFollow} onContact={handleContact}
             onViewProfile={viewProfile} onSubmitReview={submitReview}

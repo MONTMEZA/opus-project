@@ -25,7 +25,7 @@
  * plus sûrement.
  */
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet , RefreshControl } from 'react-native';
 import { C, F, T, S, R } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
@@ -100,6 +100,7 @@ function BarreRecherche({ valeur, onChange }) {
 
 export default function PlaceProScreen({
   annonces = [], moi, onPublier, onRepondre, onFermer, onVoirProfil, onErreur, onSignaler,
+  onRafraichir, rafraichit = false,
 }) {
   const [recherche, setRecherche] = useState('');
   const [filtreType, setFiltreType] = useState(null);
@@ -188,7 +189,16 @@ export default function PlaceProScreen({
     || (reglages.avecMetier && !metier);
 
   return (
-    <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">
+    <ScrollView
+        /* TIRER POUR RAFRAÎCHIR.
+           Le geste existait sur le fil, et nulle part ailleurs : sur les six
+           autres écrans défilants, tirer vers le bas ne faisait rien. Or
+           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
+           pas y répondre se lit comme un écran figé. */
+        refreshControl={onRafraichir ? (
+          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+            tintColor={C.muted} colors={[C.accent]} />
+        ) : undefined} style={s.pad} keyboardShouldPersistTaps="handled">
       <View style={s.entete}>
         <Text style={s.enteteTitre}>La Place des pros</Text>
         <Text style={s.enteteTexte}>
