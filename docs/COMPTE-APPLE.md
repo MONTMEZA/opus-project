@@ -181,11 +181,50 @@ Changer d'appareil en cours de route oblige à repartir de zéro.
 11. Vous recevez un reçu par courriel. (Il se renvoie depuis Réglages →
     Historique des achats.)
 
+### ⚠️ Rien à payer tout de suite — c'est NORMAL
+
+Constaté par le propriétaire le 02/10/2026, et mon guide ne le disait pas :
+après avoir envoyé la photo du passeport, **l'application ne demande pas de
+payer**. Ce n'est pas un échec, et il ne faut surtout pas recommencer
+l'inscription.
+
+Apple l'écrit sur sa page d'aide :
+
+> « **Once your enrollment information has been verified** and you have
+> agreed to the associated program license agreement, **you can purchase
+> your membership.** »
+
+Autrement dit, l'ordre est : identité **d'abord**, paiement **ensuite**.
+Apple vérifie que la photo correspond bien au nom du compte, et ce contrôle
+prend du temps. Tant qu'il n'est pas fini, il n'y a **aucun écran de
+paiement à atteindre** — et c'est rassurant, pas inquiétant : Apple ne
+prélève rien avant d'être sûre de qui vous êtes.
+
+**Ce qu'il reste à faire quand la vérification sera passée** (l'application
+vous y ramènera, et vous recevrez un courriel) :
+
+1. choisir le type d'entité → **Individual** ;
+2. accepter l'*Apple Developer Program License Agreement* ;
+3. **Subscribe** → payer les 99 €.
+
+Donc : il n'y a **rien à faire maintenant**, sinon attendre. Comptez **24 à
+48 heures** pour un particulier. ⚠️ Et **ne relancez pas une seconde
+inscription** : ça n'accélère rien et ça embrouille le dossier.
+
+### Si ça dépasse 48 heures
+
+La cause la plus fréquente, de loin : **le nom du compte Apple ne
+correspond pas exactement à celui du passeport** (un accent, un second
+prénom, un nom d'usage). Vérifiez-le dans Réglages → votre nom. Si tout est
+juste et que rien ne bouge au bout de deux jours, contactez
+**Apple Developer Support** avec votre *Enrollment ID* — c'est lui qui dira
+si le blocage est sur l'identité ou sur le paiement.
+
 ### Après avoir payé
 
-- Apple **examine le dossier**. Comptez généralement 24 à 48 heures ; ça peut
-  être plus long si un nom ne correspond pas exactement à la pièce
-  d'identité. Vous recevez un courriel.
+- Apple **finit d'activer le compte**. Le courriel de confirmation arrive
+  normalement dans les 24 heures qui suivent le paiement ; au-delà, Apple
+  demande de la contacter.
 - **C'est un abonnement à renouvellement automatique annuel.** Il
   s'interrompt dans Réglages, jusqu'à un jour avant la date de
   renouvellement. ⚠️ **Les frais ne sont pas remboursables** si vous
@@ -249,6 +288,57 @@ commandes à coller, et je les écrirai pour PowerShell :
    **déjà alimentée par des déclencheurs** depuis la section 24 de
    `schema.sql`. Le travail côté base est fait ; il ne manque que le
    dernier mètre.
+
+---
+
+## 7 bis. L'application est en anglais — le lexique
+
+**Apple ne traduit pas ses outils pour développeurs.** L'application Apple
+Developer, le site `developer.apple.com` et App Store Connect sont en
+anglais, en France comme ailleurs. Ce n'est pas un réglage à changer : c'est
+comme ça.
+
+Voilà donc ce que vous lirez, et ce que ça veut dire.
+
+### Les boutons et les écrans
+
+| en anglais | en français |
+|---|---|
+| **Enroll Now** | Commencer l'inscription |
+| **Entity Type** | Type d'entité (→ choisissez **Individual**) |
+| **Individual / Sole Proprietor** | Particulier / entrepreneur seul — **le vôtre** |
+| **Organization** | Société — demande une personne morale et un D-U-N-S |
+| **Legal first / last name** | Prénom / nom **légal**, celui de la pièce d'identité |
+| **Agree** | J'accepte |
+| **License Agreement** | Contrat de licence |
+| **Subscribe** | S'abonner (c'est là que les 99 € se paient) |
+| **Purchase History** | Historique des achats |
+| **Trusted phone number** | Numéro de téléphone de confiance |
+| **Two-factor authentication** | Double authentification |
+
+### Les statuts, et ce qu'ils veulent dire pour vous
+
+| ce que l'écran dit | où vous en êtes |
+|---|---|
+| *Your enrollment is being processed* | Apple examine le dossier. **Rien à faire, attendez.** |
+| *We're reviewing your information* | idem — la vérification d'identité est en cours |
+| *Pending* | en attente : soit l'identité, soit le paiement |
+| *Action needed* / *Additional information required* | ⚠️ Apple demande quelque chose. **Montrez-moi l'écran.** |
+| *Your enrollment is complete* | c'est bon, le compte est actif |
+| *Unable to verify your identity* | la photo ou le nom n'a pas convenu — on reprend ensemble |
+
+### Où regarder où vous en êtes
+
+Deux endroits, qui disent la même chose :
+
+- **dans l'application** : onglet **Account** en bas ;
+- **depuis votre navigateur, sur le PC** : `developer.apple.com/account`,
+  en vous connectant avec **le même** compte Apple que celui de
+  l'inscription. C'est souvent plus lisible sur grand écran.
+
+> **Au moindre écran dont vous n'êtes pas sûr : faites une capture et
+> montrez-la-moi.** Traduire un bouton me prend dix secondes, et une
+> mauvaise case cochée dans cette inscription peut coûter des jours.
 
 ---
 
