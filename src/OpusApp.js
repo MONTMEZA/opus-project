@@ -9,7 +9,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { C } from './theme';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { C, M } from './theme';
 import { BandeDemo, BandeHorsLigne, ConfirmBanner, PillToggle } from './components/ui';
 import { TopBrand, BackBar } from './components/TopBar';
 import BottomNav from './components/BottomNav';
@@ -42,6 +43,7 @@ import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier } from './lib/metiers';
 import * as api from './lib/api';
 import * as retour from './lib/retour';
+import { useMouvementReduit } from './lib/retour';
 import {
   messageClair, estUnProblemeDeReseau, avecDelai, avecReprise,
 } from './lib/erreurs';
@@ -78,6 +80,9 @@ export default function OpusApp() {
   const [userType, setUserType] = useState(null);
   const [loading, setLoading] = useState(false);
   const [demarrage, setDemarrage] = useState(true);   // reprise de session
+  /* « Réduire les animations » : lu une fois ici, et respecté par la
+     transition d'écran comme par l'ouverture. */
+  const sansMouvement = useMouvementReduit();
   const [typeChoisi, setTypeChoisi] = useState(null); // type retenu avant connexion
   const [screen, setScreen] = useState('home');
   /* 'filVideo' quand la fiche d'un artisan a été ouverte depuis le fil
@@ -2047,6 +2052,26 @@ export default function OpusApp() {
           onClose={() => setBanner(null)}
         />
 
+        {/* UNE TRANSITION, ET POURQUOI ELLE EST SI COURTE.
+            On passait d'un écran à l'autre par un remplacement sec : rien
+            ne reliait les deux, et l'application paraissait assemblée de
+            morceaux. Un fondu très bref avec une montée de quelques
+            pixels suffit à les relier — au-delà, on ATTEND l'écran, ce qui
+            est exactement le défaut qu'on voulait corriger.
+
+            `key={screen}` est ce qui déclenche l'animation : React remonte
+            le bloc à chaque changement, comme il le faisait déjà. On
+            n'ajoute donc aucun montage, seulement l'animation de celui qui
+            avait déjà lieu.
+
+            Et elle se tait pendant le DÉMARRAGE : `theme.js` l'interdit
+            depuis le lot 1 — on anime ce qui est prêt, pas ce qui
+            attend. */}
+        <Animated.View
+          key={screen}
+          style={{ flex: 1 }}
+          entering={(sansMouvement || demarrage) ? undefined : FadeInDown.duration(M.bref)}
+        >
         {screen === 'home' && (
           <HomeScreen
             posts={feedFiltered} pros={pros}
@@ -2325,6 +2350,7 @@ export default function OpusApp() {
             onSignaler={ouvrirSignalement}
           />
         )}
+        </Animated.View>
       </View>
 
       <BottomNav

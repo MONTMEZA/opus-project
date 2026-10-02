@@ -16,6 +16,7 @@ import {
 } from './icons';
 import Media, { EtiquetteVideo } from './Media';
 import Carrousel from './Carrousel';
+import DoubleAppui from './DoubleAppui';
 
 /** Les formats qui se regardent aussi en plein écran dans le fil « Vidéos ». */
 const EST_VIDEO = new Set(['video', 'montage']);
@@ -71,22 +72,24 @@ const PostCard = React.memo(function PostCard({
     <View style={s.card}>
       {/* en-tête */}
       <View style={s.head}>
+        {/* « Suivre » est passé SUR la photo le 02/10/2026 : il mangeait la
+            largeur de la ligne « métier · ville », coupée sur deux cartes
+            sur trois. Et la photo est VOISINE du bloc du nom, pas dedans :
+            deux boutons imbriqués ne s'annoncent pas. Voir `AvatarSuivre`. */}
+        <AvatarSuivre
+          seed={pro.id}
+          uri={pro.avatarUrl}
+          nom={pro.entreprise}
+          suivi={following}
+          onVoir={() => onView(pro.id)}
+          onSuivre={onFollow ? () => onFollow(pro.id) : null}
+        />
         <Pressable
           style={s.headLeft}
           onPress={() => onView(pro.id)}
           accessibilityRole="button"
           accessibilityLabel={`Voir la fiche de ${pro.entreprise}`}
         >
-          {/* « Suivre » est passé SUR la photo le 02/10/2026 : il mangeait
-              la largeur de la ligne « métier · ville », coupée sur deux
-              cartes sur trois. Voir `AvatarSuivre`. */}
-          <AvatarSuivre
-            seed={pro.id}
-            uri={pro.avatarUrl}
-            nom={pro.entreprise}
-            suivi={following}
-            onSuivre={onFollow ? () => onFollow(pro.id) : null}
-          />
           {/* `flex: 1, minWidth: 0` : sans ça, le nom et la ligne de
               métier poussent la rangée au lieu de se raccourcir, et le
               bouton « Suivre » leur passe dessus. Constaté le 02/10/2026,
@@ -139,6 +142,15 @@ const PostCard = React.memo(function PostCard({
       </View>
 
       <Text style={s.postText}>{post.texte}</Text>
+      {/* DEUX APPUIS POUR AIMER. Le cœur s'envole même si c'était déjà
+          aimé — sinon le geste a l'air de n'avoir rien fait et on
+          recommence. Et il n'enlève JAMAIS : on double-appuie parfois par
+          accident, et un accident ne doit pas défaire quelque chose. Pour
+          retirer, le cœur de la barre du bas est là, et lui bascule. */}
+      <DoubleAppui
+        onAimer={() => { if (!post.liked) onLike(post.id); }}
+        onAppuiSimple={estVideo && onOuvrirVideo ? () => onOuvrirVideo(post) : null}
+      >
       {post.format === 'avantapres' && (post.medias || []).length > 1 ? (
         /* Avant/après : les deux photos côte à côte, chacune étiquetée.
            C'est la comparaison qui fait tout l'intérêt du format. */
@@ -157,9 +169,15 @@ const PostCard = React.memo(function PostCard({
            bande. Le format 4/5 en montre beaucoup plus sans dévorer le fil —
            c'est le compromis retenu par Instagram.
            Et surtout, on peut la toucher : elle s'ouvre alors en plein écran,
-           avec le son, à l'endroit exact où on l'a laissée dans le fil. */
-        <Pressable
-          onPress={() => onOuvrirVideo && onOuvrirVideo(post)}
+           avec le son, à l'endroit exact où on l'a laissée dans le fil.
+
+           L'appui simple est porté par `DoubleAppui`, au-dessus. S'il
+           restait ici, il partirait AVANT que le double ait pu échouer, et
+           la vidéo s'ouvrirait au premier des deux appuis.
+           (Et ce commentaire reste en forme JS : un commentaire JSX placé
+           au début d'une parenthèse se lit comme un objet, pas comme du
+           JSX — le piège est déjà consigné dans CLAUDE.md.) */
+        <View
           accessibilityRole="button"
           accessibilityLabel="Voir la vidéo en plein écran"
         >
@@ -175,13 +193,14 @@ const PostCard = React.memo(function PostCard({
               <Text style={s.indicePleinEcranTexte}>Voir en plein écran</Text>
             </View>
           </Media>
-        </Pressable>
+        </View>
       ) : (
         /* Une photo, ou plusieurs qu'on fait défiler au doigt. Avec une seule
            image, le carrousel se retire complètement : ni points, ni
            compteur. */
         <Carrousel medias={photos} aspectRatio={16 / 10} />
       )}
+      </DoubleAppui>
 
       {/* barre d'actions */}
       <View style={s.actions}>
@@ -310,7 +329,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingTop: 10, paddingHorizontal: 12, paddingBottom: 6, gap: S.xs,
   },
-  headLeft: { flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1, minWidth: 0 },
+  headLeft: { flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, marginLeft: 9 },
   headRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', minWidth: 0 },

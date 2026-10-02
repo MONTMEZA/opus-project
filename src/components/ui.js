@@ -177,16 +177,38 @@ export function Avatar({
  * qui est une cible bien plus grande.
  */
 export function AvatarSuivre({
-  seed, uri, nom, size = 40, suivi, onSuivre,
+  seed, uri, nom, size = 40, suivi, onSuivre, onVoir,
 }) {
-  /* Pas de bouton du tout quand il n'y a rien à suivre (sa propre
-     publication) : un bouton sans effet est pire qu'un bouton absent. */
-  if (!onSuivre) return <Avatar seed={seed} uri={uri} nom={nom} size={size} />;
-
   const d = Math.round(size * 0.55);
+
+  /* UN BOUTON NE SE MET PAS DANS UN BOUTON, et le navigateur l'a dit tout
+     de suite : « button cannot be a descendant of button ». La photo était
+     posée dans le bloc appuyable qui ouvre la fiche, et le « + » est un
+     bouton à son tour. Sur le web c'est un avertissement ; pour un lecteur
+     d'écran, c'est une cible qui en contient une autre, et on ne sait plus
+     laquelle on actionne.
+     D'où DEUX boutons VOISINS dans un conteneur qui, lui, n'en est pas
+     un : la photo ouvre la fiche, la pastille suit. */
+  const photo = onVoir ? (
+    <Pressable
+      onPress={onVoir}
+      accessibilityRole="button"
+      accessibilityLabel={`Voir la fiche de ${nom || 'cet artisan'}`}
+      style={({ pressed }) => [pressed && APPUI.discret]}
+    >
+      <Avatar seed={seed} uri={uri} nom={nom} size={size} />
+    </Pressable>
+  ) : (
+    <Avatar seed={seed} uri={uri} nom={nom} size={size} />
+  );
+
+  /* Pas de pastille du tout quand il n'y a rien à suivre (sa propre
+     publication) : un bouton sans effet est pire qu'un bouton absent. */
+  if (!onSuivre) return <View style={{ width: size, height: size }}>{photo}</View>;
+
   return (
     <View style={{ width: size, height: size }}>
-      <Avatar seed={seed} uri={uri} nom={nom} size={size} />
+      {photo}
       <Pressable
         onPress={onSuivre}
         hitSlop={viser(d)}

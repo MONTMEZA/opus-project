@@ -896,6 +896,84 @@ deux.
    qu'on filtre) : chaque sortie garde son nœud vivant le temps de
    l'animation.
 
+### Le lot 6 — le mouvement visible (02/10/2026)
+
+#### L'ouverture occupe un temps qui existe, elle ne l'ajoute pas
+
+Mesuré au navigateur, processeur bridé six fois : **1,24 s** entre la page
+servie et le premier écran — les polices et la session. Jusque-là, une roue
+qui tournait. Maintenant, deux barrières de chantier qui s'écartent
+(`src/components/Ouverture.js`).
+
+> **Une intro se juge à ce qu'elle REMPLACE, pas à sa durée.** Celle-ci
+> reste fermée tant que le travail réel n'est pas fini, et s'ouvre quand il
+> l'est. Un doigt l'interrompt. Complète au premier lancement, courte
+> ensuite — une intro de 1,7 s est magnifique la première fois et
+> détestable la vingtième.
+
+Trois pièges rencontrés, les trois trouvés par la MESURE et non à l'œil :
+
+1. **`skewX` penche autour du CENTRE** et décale donc de la moitié de la
+   hauteur. Inoffensif sur la bande de 5 px de l'en-tête, destructeur sur
+   844 px : le motif laissait le tiers bas nu. Une bande fait exactement la
+   hauteur du panneau, et le nombre de bandes en tient compte.
+2. **Le mot-symbole sautait de 22 px** au fondu : il s'affichait d'abord
+   dans la police de secours du système. Il n'est monté qu'une fois Oswald
+   là. Et il est au PIXEL celui de l'écran d'accueil — mêmes mots, même
+   taille, même place : quand les barrières sortent, il ne bouge pas, seul
+   le reste de l'écran arrive. Mesuré : 112,0 contre 112,0.
+3. **Ralentir n'est pas étirer.** Passée de 1,13 à 1,73 s à la demande du
+   propriétaire, la course des panneaux et l'angle du pivot ont grandi en
+   même temps — sinon on obtient de la lenteur, pas de l'ampleur. Et à
+   8 degrés un panneau penché découvre ses coins, ce qui ne se voyait pas
+   à 5 : il déborde donc en hauteur.
+
+#### Un bouton ne se met pas dans un bouton
+
+En posant « Suivre » sur la photo, le navigateur l'a dit tout de suite :
+« button cannot be a descendant of button ». La photo vivait dans le bloc
+appuyable qui ouvre la fiche, et la pastille est un bouton à son tour.
+
+> **Deux cibles voisines, jamais imbriquées.** Pour un lecteur d'écran, une
+> cible qui en contient une autre ne s'annonce pas : on ne sait plus
+> laquelle on actionne. Le conteneur, lui, n'est pas un bouton.
+
+#### Le double-appui aime, il n'enlève jamais
+
+`src/components/DoubleAppui.js`. Trois règles, et aucune n'est cosmétique :
+
+- **il AIME, il ne retire pas.** On double-appuie parfois par accident, et
+  un accident ne doit pas défaire quelque chose. Pour retirer, le cœur de
+  la barre est là, et lui bascule ;
+- **le cœur s'envole même si c'était déjà aimé** — sinon le geste a l'air
+  de n'avoir rien fait, et on recommence ;
+- **l'appui simple attend que le double ait échoué**, environ 250 ms, et
+  cette attente ne se paie QUE là où un appui simple fait quelque chose
+  (ouvrir une vidéo). Sur une photo, aucune attente.
+
+Vérifié au navigateur : 214 → 215, puis 215 → 215 au second double-appui,
+puis 215 → 214 par le cœur de la barre.
+
+#### Et la nuance qui sauve les trois interdits de `theme.js`
+
+`DoubleAppui` vit dans le `renderItem` d'une liste, là où `entering` est
+interdit. **Mais son animation ne part qu'au doigt, jamais au montage** —
+et c'est toute la différence. L'interdit vise ce qui s'anime en arrivant,
+pas ce qui s'anime quand on le touche.
+
+Même raisonnement pour la transition d'écran (`FadeInDown`, 120 ms) : elle
+se tait pendant le démarrage, parce qu'on anime ce qui est prêt, pas ce qui
+attend.
+
+#### Une poignée qui ne s'attrape pas est pire que pas de poignée
+
+Le trait gris en haut du panneau des commentaires était dessiné, et rien
+d'autre. Or ce trait est une PROMESSE — partout, il veut dire « tire-moi ».
+On tire, rien ne se passe, et on en conclut que l'application est cassée.
+Il se tire désormais vers le bas, sur toute la bande du haut (viser 4 px au
+pouce est impossible), et ferme à un tiers de la hauteur ou sur un geste
+vif.
+
 ### L'audit du 01/10/2026 — `docs/AUDIT-WAOUH.md`
 
 Toute l'application a été parcourue au navigateur (45 captures, planche de
