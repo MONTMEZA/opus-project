@@ -177,10 +177,10 @@ export default function ProfilEditScreen({
 
       {/* --- photo de profil --- */}
       <View style={s.avatarZone}>
-        <Avatar seed={profil.id || 9} size={88} ring={4} uri={avatarUrl} />
+        <Avatar seed={profil.id || 9} size={88} ring={4} uri={avatarUrl} nom={profil.entreprise || profil.nom} />
         <View style={{ gap: 6 }}>
           <BtnMini onPress={() => prendre('avatar', true)}>
-            <Camera size={12} color="#111" />
+            <Camera size={12} color={C.surAccent} />
             <Text style={s.mediaBtnTextOn}>Prendre une photo</Text>
           </BtnMini>
           <BtnMini outline onPress={() => prendre('avatar', false)}>
@@ -224,7 +224,10 @@ export default function ProfilEditScreen({
                 />
                 <View style={s.demandeBtns}>
                   <BtnMini outline label="Annuler" onPress={() => setDemandeOuverte(false)} />
+                  {/* Secondaire : l'action de CET écran, c'est « Enregistrer ».
+                      Celle-ci n'appartient qu'à sa section. */}
                   <BtnMain
+                    ton="sombre"
                     label="Envoyer la demande"
                     disabled={!motif.trim()}
                     onPress={() => {
@@ -500,8 +503,11 @@ export default function ProfilEditScreen({
                 </View>
               )}
 
+              {/* Secondaire, comme la demande de métiers : l'action de
+                  l'écran « Modifier mon profil », c'est « Enregistrer ». */}
               <BtnMain
                 block
+                ton="sombre"
                 onPress={async () => {
                   /* On n'envoie que s'il y a vraiment quelque chose de
                      nouveau : un fichier, ou une déclaration RGE modifiée.

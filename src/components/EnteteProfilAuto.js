@@ -28,7 +28,7 @@ export default function EnteteProfilAuto({
     );
   }
 
-  return <EnteteProfil seed={seed} bannerUrl={banniere} avatarUrl={avatarUrl} />;
+  return <EnteteProfil seed={seed} bannerUrl={banniere} avatarUrl={avatarUrl} titre={titre} />;
 }
 
 /** Vrai quand le nom est déjà affiché dans l'en-tête, et ne doit pas être répété. */

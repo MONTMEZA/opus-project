@@ -6,7 +6,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { C, F, T, S, R, SH, interligne, APPUI, viser } from '../theme';
 import {
-  Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn,
+  Gradient, AvatarSuivre, BtnMain, BtnMini, IconBtn,
 } from './ui';
 import Commentaires, { nbCommentairesDe } from './Commentaires';
 import { nomMetier } from '../lib/metiers';
@@ -50,8 +50,12 @@ const PostCard = React.memo(function PostCard({
           <Text style={s.adAnnonceur}>{post.annonceur}</Text>
           <Text style={s.postText}>{post.accroche}</Text>
           <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+            {/* Une PUBLICITÉ ne porte pas la couleur des actions d'Opus :
+                sinon on ne distingue plus ce que propose l'application de
+                ce que propose quelqu'un qui a payé pour être là. */}
             <BtnMain
               block
+              ton="sombre"
               label={post.cta}
               onPress={() => onShare(`Ouverture de "${post.annonceur}" (simulation).`)}
             />
@@ -73,7 +77,16 @@ const PostCard = React.memo(function PostCard({
           accessibilityRole="button"
           accessibilityLabel={`Voir la fiche de ${pro.entreprise}`}
         >
-          <Avatar seed={pro.id} uri={pro.avatarUrl} />
+          {/* « Suivre » est passé SUR la photo le 02/10/2026 : il mangeait
+              la largeur de la ligne « métier · ville », coupée sur deux
+              cartes sur trois. Voir `AvatarSuivre`. */}
+          <AvatarSuivre
+            seed={pro.id}
+            uri={pro.avatarUrl}
+            nom={pro.entreprise}
+            suivi={following}
+            onSuivre={onFollow ? () => onFollow(pro.id) : null}
+          />
           {/* `flex: 1, minWidth: 0` : sans ça, le nom et la ligne de
               métier poussent la rangée au lieu de se raccourcir, et le
               bouton « Suivre » leur passe dessus. Constaté le 02/10/2026,
@@ -97,7 +110,6 @@ const PostCard = React.memo(function PostCard({
           </View>
         </Pressable>
         <View style={s.headRight}>
-          <ChipFollow following={following} onPress={() => onFollow(pro.id)} />
           {/* Deux gestes distincts, et deux icônes distinctes. « Masquer »
               range la publication pour soi ; « Signaler » l'envoie à la
               modération. Les cacher tous les deux derrière un « … » ferait

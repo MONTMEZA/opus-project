@@ -24,7 +24,7 @@ const Conversation = React.memo(function Conversation({ c, onOpen }) {
       accessibilityLabel={`Conversation avec ${contact.titre}`
         + (nonLus > 0 ? `, ${nonLus} message${nonLus > 1 ? 's' : ''} non lu${nonLus > 1 ? 's' : ''}` : '')}
     >
-      <Avatar seed={contact.id} size={44} uri={contact.avatarUrl} />
+      <Avatar seed={contact.id} size={44} uri={contact.avatarUrl} nom={contact.nom} />
       <View style={s.body}>
         <View style={s.top}>
           <Text style={[s.name, nonLus > 0 && s.nameNonLu]} numberOfLines={1}>

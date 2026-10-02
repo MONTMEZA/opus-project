@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import {
   C, F, T, S, R, SH, M, APPUI, TOUCHE, viser, AVATAR_TONES,
-  gradColors, GRAD_160, GRAD_120, interligne,
+  gradColors, GRAD_160, GRAD_120, interligne, surFond,
 } from '../theme';
 import { Check, AlertTriangle, WifiOff, Eye, EyeOff } from './icons';
 import { useMouvementReduit } from '../lib/retour';
@@ -73,14 +73,41 @@ function toneIndex(seed) {
   return h % AVATAR_TONES.length;
 }
 
+/**
+ * LES INITIALES — et pourquoi l'application en était pleine de trous.
+ *
+ * Relevé le 02/10/2026 : sur SEIZE avatars posés dans l'application,
+ * **quinze ne recevaient pas le nom** de la personne. Et même avec le nom,
+ * l'avatar sans photo n'affichait rien du tout : une pastille beige vide.
+ *
+ * Or la plupart des comptes n'ont pas encore de photo. Un fil entier de
+ * ronds beiges, ça ne ressemble pas à une application qui démarre : ça
+ * ressemble à une application cassée. Deux lettres suffisent à transformer
+ * un trou en quelqu'un.
+ *
+ * L'encre se calcule (`surFond`) : les quatre tons béton sont clairs, donc
+ * c'est le presque-noir qui tombe — mais on ne l'écrit pas en dur, sans
+ * quoi un ton ajouté un jour donnerait des initiales illisibles.
+ */
+export function initialesDe(nom) {
+  const mots = String(nom || '')
+    .replace(/[^\p{L}\p{N}\s'’-]/gu, ' ')
+    .split(/[\s'’-]+/)
+    .filter(Boolean);
+  if (mots.length === 0) return '';
+  if (mots.length === 1) return mots[0].slice(0, 2).toUpperCase();
+  return (mots[0][0] + mots[1][0]).toUpperCase();
+}
+
 export function Avatar({
   seed = 0, size = 40, uri, ring = 0, ringColor = C.surface, nom,
 }) {
+  const fond = AVATAR_TONES[toneIndex(seed)];
   const base = {
     width: size,
     height: size,
     borderRadius: size / 2,
-    backgroundColor: AVATAR_TONES[toneIndex(seed)],
+    backgroundColor: fond,
   };
   const withRing = ring ? { ...base, borderWidth: ring, borderColor: ringColor } : base;
   /* Le nom est presque toujours écrit juste à côté : annoncer la photo en
@@ -101,7 +128,93 @@ export function Avatar({
       />
     );
   }
-  return <View style={withRing} {...acces} />;
+
+  const initiales = initialesDe(nom);
+  return (
+    <View style={[withRing, { alignItems: 'center', justifyContent: 'center' }]} {...acces}>
+      {!!initiales && (
+        <Text
+          style={{
+            fontFamily: F.oswald6,
+            /* 38 % du diamètre : la proportion tient de 24 px à 96 px. */
+            fontSize: Math.round(size * 0.38),
+            color: surFond(fond),
+            letterSpacing: 0.5,
+          }}
+        >
+          {initiales}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * L'AVATAR QUI PORTE « SUIVRE » — le choix du propriétaire, 02/10/2026.
+ *
+ * Avant, « Suivre » était une pastille noire pleine posée dans l'en-tête
+ * d'une publication. Deux conséquences, les deux mesurées :
+ *
+ *   1. elle mangeait la largeur, et **deux cartes sur trois avaient leur
+ *      ligne « métier · ville » coupée** — « Maçon · Marseille (13) »
+ *      devenait « Maçon · Marseille … » ;
+ *   2. elle était la chose la plus voyante de la carte. Un bouton pesait
+ *      plus lourd que le travail de l'artisan.
+ *
+ * Le « + » posé sur la photo rend TOUTE la largeur au texte.
+ *
+ * CE QUE ÇA COÛTE, ET IL FAUT LE SAVOIR : un « + » est moins explicite
+ * qu'un mot écrit. Trois précautions, donc :
+ *   - il est ORANGE PLEIN, pas discret : on doit le voir au premier
+ *     coup d'œil ;
+ *   - il porte une étiquette lue à voix haute (« Suivre <nom> ») ;
+ *   - **le mot « Suivre » reste écrit en toutes lettres sur la fiche de
+ *     l'artisan** (`ChipFollow`). C'est là qu'on apprend le geste.
+ *
+ * Et un arbitrage assumé : la zone de visée du « + » recouvre le quart
+ * inférieur droit de la photo. Appuyer là suit donc le « + » et non la
+ * photo — mais ouvrir la fiche reste possible par le nom, juste à côté,
+ * qui est une cible bien plus grande.
+ */
+export function AvatarSuivre({
+  seed, uri, nom, size = 40, suivi, onSuivre,
+}) {
+  /* Pas de bouton du tout quand il n'y a rien à suivre (sa propre
+     publication) : un bouton sans effet est pire qu'un bouton absent. */
+  if (!onSuivre) return <Avatar seed={seed} uri={uri} nom={nom} size={size} />;
+
+  const d = Math.round(size * 0.55);
+  return (
+    <View style={{ width: size, height: size }}>
+      <Avatar seed={seed} uri={uri} nom={nom} size={size} />
+      <Pressable
+        onPress={onSuivre}
+        hitSlop={viser(d)}
+        accessibilityRole="button"
+        accessibilityLabel={suivi ? `Ne plus suivre ${nom || 'cet artisan'}` : `Suivre ${nom || 'cet artisan'}`}
+        aria-selected={!!suivi}
+        style={({ pressed }) => [
+          s.suivreBadge,
+          { width: d, height: d, borderRadius: d / 2, right: -2, bottom: -2 },
+          suivi && s.suivreBadgeOn,
+          pressed && APPUI.plein,
+        ]}
+      >
+        {/* L'encre se calcule : le « + » est posé sur l'ORANGE, où le blanc
+            ne donnerait que 3,51 : 1 — et sur le presque-noir une fois
+            suivi, où c'est l'inverse. Deux fonds, donc jamais de couleur
+            écrite en dur. */}
+        <Text
+          style={[
+            s.suivreBadgeTexte,
+            { fontSize: Math.round(d * 0.62), color: surFond(suivi ? C.ink : C.accent) },
+          ]}
+        >
+          {suivi ? '✓' : '+'}
+        </Text>
+      </Pressable>
+    </View>
+  );
 }
 
 /* --- bannière de profil ---
@@ -303,9 +416,47 @@ export function BandeHorsLigne({ raison, onReessayer, enCours }) {
 }
 
 /* --- .btn-main / .btn-block --- */
+/**
+ * LES TROIS NIVEAUX D'ACTION — et pourquoi il a fallu les écrire.
+ *
+ * `theme.js` dit depuis le premier jour :
+ *
+ *     accent: '#E85C1F',   // orange chantier, CTA principaux
+ *
+ * …et les VINGT-TROIS gros boutons de l'application étaient noirs. Le code
+ * contredisait l'identité qu'il prétendait tenir. Le propriétaire l'a dit
+ * autrement le 02/10/2026 : « les gros boutons tout noirs font des taches,
+ * les boutons orange ou bleu sortent mieux ».
+ *
+ * Il avait raison, mais la correction n'est pas « tout en orange » : si
+ * tout crie, plus rien ne ressort — c'est exactement le défaut qu'on
+ * corrige, avec une autre couleur. D'où trois niveaux, et un seul orange
+ * par écran :
+ *
+ *   `principal` (orange) — CE QUE L'ÉCRAN ATTEND DE VOUS. Un par écran.
+ *       Publier, Contacter, Créer mon compte, Envoyer ma demande.
+ *
+ *   `sombre` (presque-noir) — une action solide mais SECONDAIRE : elle
+ *       ouvre autre chose, ou elle appartient à une section et non à
+ *       l'écran. C'est aussi le ton des publicités : le bouton d'un
+ *       annonceur ne doit PAS porter la couleur des actions d'Opus, sans
+ *       quoi on ne distingue plus ce qui vient de l'application de ce qui
+ *       vient de quelqu'un qui a payé.
+ *
+ *   `danger` (rouge brique) — ce qui détruit. Supprimer son compte.
+ *
+ * L'encre se CALCULE à partir du fond (`surFond`) : noir sur l'orange,
+ * blanc sur les deux autres. Écrite en dur, elle serait fausse une fois
+ * sur trois — mesuré au lot 5.
+ */
+const FOND_ACTION = { principal: C.accent, sombre: C.ink, danger: C.bad };
+
 export function BtnMain({
   label, onPress, block, disabled, children, style, accessibilityLabel,
+  ton = 'principal',
 }) {
+  const fond = FOND_ACTION[ton] || C.accent;
+  const encre = surFond(fond);
   return (
     <Pressable
       onPress={onPress}
@@ -314,11 +465,12 @@ export function BtnMain({
       accessibilityLabel={accessibilityLabel || label}
       aria-disabled={!!disabled}
       style={({ pressed }) => [
-        s.btnMain, block && s.btnBlock, disabled && { opacity: 0.6 }, style,
+        s.btnMain, { backgroundColor: fond },
+        block && s.btnBlock, disabled && { opacity: 0.6 }, style,
         pressed && !disabled && APPUI.plein,
       ]}
     >
-      {children || <Text style={s.btnMainText}>{label}</Text>}
+      {children || <Text style={[s.btnMainText, { color: encre }]}>{label}</Text>}
     </Pressable>
   );
 }
@@ -646,13 +798,14 @@ const s = StyleSheet.create({
   /* `minHeight: TOUCHE` partout où la mise en page le supporte : c'est la
      BOÎTE qui grandit, pas le texte. Relevé du 02/10/2026 : 70 cibles sur
      71 étaient sous les 44 points, la plus petite à 14. */
+  /* Sans `backgroundColor` : c'est `ton` qui le pose (voir BtnMain). */
   btnMain: {
-    backgroundColor: C.ink, paddingVertical: 10, paddingHorizontal: S.xl,
+    paddingVertical: 10, paddingHorizontal: S.xl,
     borderRadius: R.gelule, minHeight: TOUCHE,
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6,
   },
   btnBlock: { width: '100%', marginTop: S.sm },
-  btnMainText: { fontFamily: F.oswald6, fontSize: T.courant, color: '#fff' },
+  btnMainText: { fontFamily: F.oswald6, fontSize: T.courant },
 
   btnOutline: {
     paddingVertical: 10, paddingHorizontal: S.xl, borderWidth: 1.5, borderColor: C.ink,
@@ -679,6 +832,23 @@ const s = StyleSheet.create({
   },
   chipOn: { backgroundColor: C.ink, borderColor: C.ink },
   chipText: { fontFamily: F.oswald, fontSize: T.petit, color: C.ink },
+
+  /* La pastille « Suivre » posée sur la photo. Bordure de la couleur du
+     fond : c'est ce qui la détache de la photo quelle qu'elle soit. */
+  suivreBadge: {
+    position: 'absolute',
+    backgroundColor: C.accent,
+    borderWidth: 2, borderColor: C.surface,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  /* Suivi : on ne garde qu'une confirmation discrète. Elle reste
+     appuyable — se désabonner doit rester possible depuis le fil. */
+  suivreBadgeOn: { backgroundColor: C.ink },
+  suivreBadgeTexte: {
+    fontFamily: F.oswald7,
+    /* La croix d'Oswald tombe un cheveu bas dans son cadre. */
+    marginTop: -1,
+  },
 
   chipFollow: {
     paddingVertical: 5, paddingHorizontal: S.md,

@@ -15,7 +15,7 @@ import { BadgeCheck, Star } from './icons';
 const ArtisanRow = React.memo(function ArtisanRow({ pro, avatarSize = 44, note, raison, right }) {
   return (
     <View style={s.row}>
-      <Avatar seed={pro.id} size={avatarSize} uri={pro.avatarUrl} />
+      <Avatar seed={pro.id} size={avatarSize} uri={pro.avatarUrl} nom={pro.entreprise} />
       <View style={s.info}>
         <View style={s.nameRow}>
           <Text style={s.name} numberOfLines={1}>{pro.entreprise}</Text>

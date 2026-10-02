@@ -56,7 +56,7 @@ const Ligne = React.memo(function Ligne({ n, onOuvrir }) {
       {!n.lue && <View style={s.dot} />}
 
       {n.acteurId
-        ? <Avatar seed={n.acteurId} size={34} uri={n.avatarUrl} />
+        ? <Avatar seed={n.acteurId} size={34} uri={n.avatarUrl} nom={n.acteurNom} />
         : <View style={s.rond}><Icone size={15} color={teinte} /></View>}
 
       <View style={s.corps}>

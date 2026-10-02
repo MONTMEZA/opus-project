@@ -48,7 +48,9 @@ export default function VideoSlide({
           <Text style={s.feedName}>{post.annonceur}</Text>
           <Text style={s.feedText}>{post.accroche}</Text>
           <View style={{ flexDirection: 'row', marginTop: 10 }}>
+            {/* Une publicité reste sombre — voir PostCard. */}
             <BtnMain
+              ton="sombre"
               label={post.cta}
               onPress={() => onShare(`Ouverture de "${post.annonceur}" (simulation).`)}
             />
@@ -180,7 +182,7 @@ function ApercuPro({ pro }) {
     <View style={s.apercu}>
       <HazardStrip height={6} />
       <View style={[s.apercuCorps, s.apercuDepuisDroite]}>
-        <Avatar seed={pro.id} uri={pro.avatarUrl} size={92} ring={3} ringColor={C.accent} />
+        <Avatar seed={pro.id} uri={pro.avatarUrl} size={92} ring={3} ringColor={C.accent} nom={pro.entreprise} />
         <View style={s.apercuNomRang}>
           <Text style={s.apercuNom}>{pro.entreprise}</Text>
           {pro.verifie && <BadgeCheck size={17} color={C.verif} />}

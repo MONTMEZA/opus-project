@@ -203,7 +203,7 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
               return (
                 <View key={a.proId} style={s.artisan}>
                   <View style={s.artisanHaut}>
-                    <Avatar seed={pro.id} size={44} uri={pro.avatarUrl} />
+                    <Avatar seed={pro.id} size={44} uri={pro.avatarUrl} nom={pro.entreprise} />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <View style={s.nomRow}>
                         <Text style={s.nom} numberOfLines={1}>{pro.entreprise}</Text>

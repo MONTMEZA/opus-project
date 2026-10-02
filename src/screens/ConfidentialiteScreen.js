@@ -133,7 +133,7 @@ export default function ConfidentialiteScreen({
         )}
         {blocages.map((b, i) => (
           <View key={String(b.id)} style={[s.ligne, i === blocages.length - 1 && { borderBottomWidth: 0 }]}>
-            <Avatar seed={b.id} uri={b.avatarUrl} size={32} />
+            <Avatar seed={b.id} uri={b.avatarUrl} size={32} nom={b.nom} />
             <Text style={s.ligneTexte} numberOfLines={1}>{b.nom}</Text>
             <BtnMini outline label="Débloquer" onPress={() => debloquer(b.id)} />
           </View>
@@ -223,9 +223,9 @@ export default function ConfidentialiteScreen({
                 onPress={() => { setConfirmation(false); setMot(''); }}
               />
               <BtnMain
+                ton="danger"
                 disabled={mot.trim().toUpperCase() !== MOT_DE_PASSE_DE_SORTIE || suppressionEnCours}
                 onPress={supprimer}
-                style={{ backgroundColor: C.bad }}
               >
                 {suppressionEnCours
                   ? <ActivityIndicator size="small" color="#fff" />

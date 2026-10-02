@@ -170,8 +170,8 @@ export default function Signaler({
                 onPress={envoyer}
               >
                 {enCours
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Flag size={13} color="#fff" />}
+                  ? <ActivityIndicator size="small" color={C.surAccent} />
+                  : <Flag size={13} color={C.surAccent} />}
                 <Text style={s.envoyerTexte}>
                   {enCours ? 'Envoi…' : 'Envoyer le signalement'}
                 </Text>

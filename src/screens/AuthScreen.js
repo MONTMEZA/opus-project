@@ -236,7 +236,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
             <BtnMain block onPress={valider} disabled={enCours} style={{ marginTop: 14 }}>
               {enCours ? (
                 <>
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={C.surAccent} />
                   <Text style={s.btnText}>Un instant...</Text>
                 </>
               ) : (
@@ -326,7 +326,7 @@ const s = StyleSheet.create({
     fontSize: 11.5, color: C.bad, marginTop: 12, lineHeight: 16,
     fontFamily: F.inter, borderLeftWidth: 3, borderLeftColor: C.bad, paddingLeft: 8,
   },
-  btnText: { fontFamily: F.oswald6, fontSize: 12.5, color: '#fff' },
+  btnText: { fontFamily: F.oswald6, fontSize: 12.5, color: C.surAccent },
   encart: {
     flexDirection: 'row', gap: 9, alignItems: 'flex-start',
     backgroundColor: C.bg, borderLeftWidth: 3, borderLeftColor: C.accent2,

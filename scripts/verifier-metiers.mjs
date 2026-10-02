@@ -122,7 +122,11 @@ console.log('\nPlus aucun ancien nom ne traîne comme VALEUR dans le code');
   /* On cherche les libellés d'avant écrits entre apostrophes hors du
      catalogue et de sa table de migration : ce serait une comparaison
      vouée à échouer, puisque la base ne contient plus que des clés. */
-  const fichiers = execFileSync('git', ['ls-files', 'src'], { encoding: 'utf8' })
+  const fichiers = execFileSync('git',
+  /* `--others` : un fichier NEUF, pas encore ajouté à git, échappait à
+     tous les contrôles — constaté le 02/10/2026 avec `Ouverture.js`,
+     qui est passé vert sans jamais avoir été lu. */
+  ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
     .split('\n').filter((f) => f.endsWith('.js')
       && !f.endsWith('catalogue-metiers.js'));
   const noms = Object.keys(ANCIENS_NOMS);
@@ -154,7 +158,7 @@ console.log('\nPersonne ne refabrique une grille de métiers dans son coin');
     'src/lib/metiers.js',
     'src/components/SelecteurMetiers.js',
   ];
-  const fichiers = execFileSync('git', ['ls-files', 'src'], { encoding: 'utf8' })
+  const fichiers = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
     .split('\n').filter((f) => f.endsWith('.js') && !f.endsWith('catalogue-metiers.js'));
   const intrus = fichiers.filter((f) => !AUTORISES.includes(f)
     && readFileSync(f, 'utf8').includes('catalogue-metiers'));

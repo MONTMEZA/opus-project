@@ -129,7 +129,7 @@ export default function AssistantPresentation({ profil, onUtiliser, onFermer }) 
       <BtnMain block onPress={rediger} disabled={!pret || enCours}>
         {enCours ? (
           <>
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={C.surAccent} />
             <Text style={s.btnTexte}>L'assistant met en forme...</Text>
           </>
         ) : (
@@ -192,7 +192,7 @@ const s = StyleSheet.create({
   facultatif: { fontFamily: F.inter, fontSize: 10.5, color: C.muted },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
 
-  btnTexte: { fontFamily: F.oswald6, fontSize: 12.5, color: '#fff' },
+  btnTexte: { fontFamily: F.oswald6, fontSize: 12.5, color: C.surAccent },
   manque: { fontFamily: F.inter, fontSize: 11, color: C.muted, marginTop: 6 },
 
   resultats: { marginTop: 14, gap: 10 },

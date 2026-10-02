@@ -225,7 +225,7 @@ export default function PlaceProScreen({
         </Text>
         {!formOuvert && (
           <BtnMain block onPress={() => setFormOuvert(true)}>
-            <Plus size={13} color="#fff" />
+            <Plus size={13} color={C.surAccent} />
             <Text style={s.btnTexte}>Poser une annonce</Text>
           </BtnMain>
         )}
@@ -463,7 +463,7 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
 
         {auteur && (
           <Pressable style={s.auteur} onPress={() => onVoirProfil && onVoirProfil(auteur.id)}>
-            <Avatar seed={auteur.id} uri={auteur.avatarUrl} size={30} />
+            <Avatar seed={auteur.id} uri={auteur.avatarUrl} size={30} nom={auteur.entreprise} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={s.auteurNom}>
                 <Text style={s.auteurTexte} numberOfLines={1}>{auteur.entreprise}</Text>
@@ -546,7 +546,7 @@ const s = StyleSheet.create({
   },
   enteteTitre: { fontFamily: F.oswald6, fontSize: 14, color: C.ink },
   enteteTexte: { fontFamily: F.inter, fontSize: 11.5, color: C.muted, lineHeight: 17 },
-  btnTexte: { fontFamily: F.oswald6, fontSize: 12.5, color: '#fff' },
+  btnTexte: { fontFamily: F.oswald6, fontSize: 12.5, color: C.surAccent },
 
   form: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,

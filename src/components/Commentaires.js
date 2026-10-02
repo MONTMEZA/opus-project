@@ -265,7 +265,7 @@ function Ligne({
         importantForAccessibility="no-hide-descendants"
         accessibilityElementsHidden
       >
-        <Avatar seed={c.auteurId || c.id} size={taille} uri={c.avatarUrl} />
+        <Avatar seed={c.auteurId || c.id} size={taille} uri={c.avatarUrl} nom={c.auteur} />
       </Pressable>
 
       <View style={s.corps}>

@@ -54,6 +54,7 @@ export default function EnteteProfilImmersif({
             ring={ANNEAU}
             ringColor={C.bg}
             uri={avatarUrl}
+            nom={titre}
           />
         </View>
       </View>

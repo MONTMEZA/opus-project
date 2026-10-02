@@ -55,7 +55,7 @@ function AssistantIA({ askAiMatch, onEffacerIa, aiMatches, aiMatchLoading, aiMat
       <BtnMain block onPress={() => askAiMatch(aiQuery)} disabled={aiMatchLoading}>
         {aiMatchLoading ? (
           <>
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={C.surAccent} />
             <Text style={s.btnMainText}>L'IA analyse votre besoin...</Text>
           </>
         ) : (

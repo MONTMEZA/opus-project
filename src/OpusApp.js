@@ -2333,6 +2333,9 @@ export default function OpusApp() {
         canPublish={canPublish}
         avatarUrl={monAvatar}
         avatarSeed={myProId || 'moi'}
+        /* Sans photo, la barre du bas montrait un rond beige vide. Deux
+           lettres suffisent à ce qu'on s'y reconnaisse. */
+        avatarNom={(myProId && pros[myProId] && pros[myProId].entreprise) || monProfil.nom}
         dots={{
           decouvrir: (canPublish && !demandesVues && demandes.length > 0)
             || nouvellesDemandes.length > 0,

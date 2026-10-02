@@ -31,7 +31,7 @@ export default function ProfilPublicScreen({ profil, chargement, onContacter }) 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }}>
       <View style={s.entete}>
-        <Avatar seed={profil.id} size={84} uri={profil.avatarUrl} ring={4} ringColor={C.bg} />
+        <Avatar seed={profil.id} size={84} uri={profil.avatarUrl} ring={4} ringColor={C.bg} nom={profil.nom} />
         <Text style={s.nom}>{profil.nom}</Text>
         {!!profil.ville && (
           <View style={s.ligneVille}>

@@ -40,7 +40,7 @@ const PHOTO = 22;
 
 export default function BottomNav({
   screen, onNavigate, dark, canPublish = true, dots = {}, onLayout,
-  avatarUrl = null, avatarSeed = 0,
+  avatarUrl = null, avatarSeed = 0, avatarNom = null,
 }) {
   const insets = useSafeAreaInsets();
 
@@ -93,6 +93,7 @@ export default function BottomNav({
                 <Avatar
                   size={PHOTO}
                   uri={avatarUrl}
+                  nom={avatarNom}
                   seed={avatarSeed}
                   ring={2}
                   ringColor={on ? (dark ? '#fff' : C.accent) : 'transparent'}

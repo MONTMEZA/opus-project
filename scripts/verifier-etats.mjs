@@ -39,7 +39,11 @@ const verifier = (nom, ok, detail = '') => {
   console.error(`  ✘ ${nom}${detail ? `\n      ${detail}` : ''}`);
 };
 
-const fichiers = execFileSync('git', ['ls-files', 'src'], { encoding: 'utf8' })
+const fichiers = execFileSync('git',
+  /* `--others` : un fichier NEUF, pas encore ajouté à git, échappait à
+     tous les contrôles — constaté le 02/10/2026 avec `Ouverture.js`,
+     qui est passé vert sans jamais avoir été lu. */
+  ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
   .split('\n').filter((f) => f.endsWith('.js'));
 const lire = (f) => readFileSync(f, 'utf8');
 const app = lire('src/OpusApp.js');

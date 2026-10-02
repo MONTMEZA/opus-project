@@ -21,7 +21,7 @@ const ANNEAU = 5;
 /** Part de la photo qui déborde sur la bannière : un peu plus de la moitié. */
 const CHEVAUCHEMENT = 62;
 
-export default function EnteteProfil({ bannerUrl, avatarUrl, seed, action }) {
+export default function EnteteProfil({ bannerUrl, avatarUrl, seed, action, titre }) {
   return (
     <View>
       <ProfileBanner uri={bannerUrl} height={HAUTEUR_BANNIERE}>
@@ -38,7 +38,7 @@ export default function EnteteProfil({ bannerUrl, avatarUrl, seed, action }) {
 
       <View style={s.zonePhoto}>
         <View style={s.ombre}>
-          <Avatar seed={seed} size={TAILLE_PHOTO} ring={ANNEAU} uri={avatarUrl} />
+          <Avatar seed={seed} size={TAILLE_PHOTO} ring={ANNEAU} uri={avatarUrl} nom={titre} />
         </View>
       </View>
 
