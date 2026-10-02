@@ -100,15 +100,20 @@ console.log('\nSans réseau, l’application s’ouvre quand même');
     /user_metadata/.test(api) && /export async function sessionLocale/.test(api),
     'la requête qui cherchait le type de compte a besoin du réseau');
   verifier('on entre AVANT de charger',
-    app.indexOf("setScreen('home');") < app.indexOf('avecDelai(api.loadAll()')
+    app.indexOf("setScreen('home');") < app.indexOf('api.loadAll()')
     && app.indexOf("await api.ensureSession(type);") < app.indexOf("setScreen('home');"),
     'sinon un échec de chargement renvoie à « Choisissez votre profil »');
   /* UNE REQUÊTE QUI NE REVIENT JAMAIS N'ATTEINT JAMAIS LE `catch`.
      Sans délai, l'application restait figée sur son squelette de démarrage
      pour toujours : l'écran avait l'air vivant, et on finissait par fermer
      l'application. Mesuré en coupant la liaison le 01/10/2026. */
+  /* Le délai est désormais DANS `avecReprise`, qui l'applique aux deux
+     essais. On vérifie donc les deux bouts : que le démarrage y passe, et
+     qu'`avecReprise` s'appuie bien sur `avecDelai` — sinon la reprise
+     aurait réintroduit l'attente infinie par la porte de derrière. */
   verifier('le démarrage porte un délai',
-    /avecDelai\(api\.loadAll\(\)/.test(app),
+    /avecReprise\(\(\) => api\.loadAll\(\)/.test(app)
+    && /avecDelai\(faire\(\), 12000, quoi\)/.test(lire('src/lib/erreurs.js')),
     'src/OpusApp.js — sinon une base muette fige l’application');
   verifier('la session se lit d’abord SANS réseau',
     /await api\.sessionLocale\(\)/.test(app) && /export async function sessionLocale/.test(lire('src/lib/api.js')),
@@ -185,6 +190,59 @@ console.log('\nUne photo qui ne charge pas ne laisse plus un trou');
   const media = lire('src/components/Media.js');
   verifier('il y a une matière sous la photo', /backgroundColor: C\.line \}, style\]/.test(media));
   verifier('et la vue n’est pas réutilisée pour la voisine', /recyclingKey=\{media\}/.test(media));
+}
+
+console.log('\nUn serveur qui se réveille n’est pas un serveur en panne');
+{
+  /* Constaté le 02/10/2026 sur la vraie base : la couche API de Supabase a
+     redémarré pendant que le propriétaire essayait l'application. Aucune
+     requête refusée, personne au bout du fil — et « Le chargement a
+     échoué ». Rouvrir l'application a suffi ; or rouvrir, côté réseau,
+     c'est exactement redemander. On le fait donc tout seul, UNE fois.
+     Ce contrôle ne lit pas le code : il FAIT TOURNER la fonction. */
+  const { avecReprise } = await import('../src/lib/erreurs.js');
+  const app = lire('src/OpusApp.js');
+
+  verifier('le démarrage passe par `avecReprise`',
+    /const data = await avecReprise\(\(\) => api\.loadAll\(\)/.test(app),
+    'src/OpusApp.js — sinon un redémarrage du serveur ressemble à une panne');
+
+  let n = 0;
+  const r = await avecReprise(() => {
+    n += 1;
+    return n === 1 ? Promise.reject(new Error('Failed to fetch')) : Promise.resolve('le fil');
+  }, { pause: 60 });
+  verifier('un échec réseau se retente, et le second essai passe',
+    r === 'le fil' && n === 2, `${n} essai(s), « ${r} »`);
+
+  let m = 0;
+  let leve = false;
+  try {
+    await avecReprise(() => { m += 1; return Promise.reject(new Error('Network request failed')); },
+      { pause: 20 });
+  } catch (e) { leve = true; }
+  verifier('…mais une seule fois : au second échec on le DIT',
+    m === 2 && leve, `${m} essai(s)`,);
+
+  for (const [quoi, faire] of [
+    ['un droit refusé', () => Promise.reject(new Error('permission denied for table users'))],
+    ['une contrainte refusée', () => {
+      const e = new Error('new row violates check constraint');
+      e.code = '23514';
+      return Promise.reject(e);
+    }],
+  ]) {
+    let k = 0;
+    try { await avecReprise(() => { k += 1; return faire(); }, { pause: 20 }); } catch (e) { /* attendu */ }
+    verifier(`${quoi} ne se retente pas`, k === 1,
+      'la base a RÉPONDU — insister n’ajoute que de l’attente à une mauvaise nouvelle');
+  }
+
+  let p = 0;
+  const t = Date.now();
+  await avecReprise(() => { p += 1; return Promise.resolve(1); }, { pause: 3000 });
+  verifier('quand tout va bien : un seul appel, aucune attente ajoutée',
+    p === 1 && Date.now() - t < 200);
 }
 
 console.log('');

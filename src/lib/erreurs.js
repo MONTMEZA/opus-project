@@ -174,3 +174,57 @@ export function avecDelai(promesse, ms = 12000, quoi = 'La base') {
   });
   return Promise.race([promesse, limite]).finally(() => clearTimeout(minuteur));
 }
+
+/**
+ * UN SERVEUR QUI SE RÉVEILLE N'EST PAS UN SERVEUR EN PANNE.
+ *
+ * CONSTATÉ LE 02/10/2026, sur la vraie base, par le propriétaire.
+ * --------------------------------------------------------------
+ * « Plus rien ne fonctionne, plus de contenu, et une phrase d'erreur. »
+ * Rien n'était cassé : à cet instant précis, la couche API du projet
+ * Supabase REDÉMARRAIT. Les journaux le disent à la seconde près —
+ * « Successfully connected to PostgreSQL », « Connection Pool
+ * initialized », « Schema cache loaded 26 Relations » — deux fois de
+ * suite. Aucune requête refusée (zéro réponse 4xx, zéro erreur
+ * PostgreSQL) : il n'y avait simplement personne au bout du fil.
+ *
+ * L'application a fait exactement ce qu'on lui avait appris : elle a
+ * attendu, échoué, et affiché « Le chargement a échoué ». Ce qu'elle n'a
+ * PAS fait, c'est redemander. Or un serveur qui démarre répond deux
+ * secondes plus tard. Le propriétaire a dû fermer et rouvrir — ce qui,
+ * du point de vue du réseau, est exactement ce qu'un simple nouvel essai
+ * aurait fait.
+ *
+ * > **Un échec réseau sur le chemin du démarrage se retente UNE fois**,
+ * > après une courte pause. Une seule : au deuxième échec, c'est une vraie
+ * > panne, et la taire derrière un sablier serait pire que de le dire.
+ *
+ * Ce qu'on ne retente PAS : une session expirée, un droit refusé, une
+ * contrainte violée. Ces trois-là donneront la même réponse mille fois —
+ * les retenter ne fait qu'ajouter de l'attente à une mauvaise nouvelle.
+ */
+export const PAUSE_REPRISE = 2500;
+
+export function estDefinitif(e) {
+  if (estUneSessionExpiree(e)) return true;
+  const m = String((e && (e.message || e.error_description)) || e).toLowerCase();
+  const code = String((e && e.code) || '');
+  /* Un refus de la base est une réponse, pas une absence de réponse. */
+  return m.includes('permission denied')
+    || m.includes('row-level security')
+    || m.includes('violates')
+    || code.startsWith('23')   // contraintes
+    || code.startsWith('42');  // droits, syntaxe
+}
+
+export async function avecReprise(faire, { pause = PAUSE_REPRISE, quoi = 'La base' } = {}) {
+  try {
+    return await avecDelai(faire(), 12000, quoi);
+  } catch (e) {
+    if (estDefinitif(e)) throw e;
+    await new Promise((r) => setTimeout(r, pause));
+    /* Le second essai n'est pas enveloppé d'un `try` : s'il échoue aussi,
+       c'est l'appelant qui doit le dire à l'utilisateur. */
+    return avecDelai(faire(), 12000, quoi);
+  }
+}

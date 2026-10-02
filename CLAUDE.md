@@ -966,6 +966,53 @@ donner depuis une session de travail. Même cause que pour
 >
 > Un `revoke` isolé passe, lui, s'il est seul dans un bloc `do $$ … $$`.
 
+### « Plus rien ne fonctionne » — et la base allait très bien (02/10/2026)
+
+Le propriétaire : « plus de contenu, et une phrase d'erreur ». Puis, cinq
+minutes après : « j'ai rechargé la page et ça fonctionne ».
+
+**Ce que les journaux Supabase disent, à la seconde près.** À 15:12:39 son
+iPhone (agent `Expo/… CFNetwork`) rafraîchit son jeton : 215 ms, succès. À
+**15:12:40 et 15:12:41, la couche API du projet REDÉMARRE** — « Successfully
+connected to PostgreSQL 17.6 », « Connection Pool initialized », « Schema
+cache loaded 26 Relations », deux fois de suite. Et ensuite : plus **aucune**
+requête REST jusqu'à la mienne, cinq minutes plus tard.
+
+Zéro réponse 4xx. Zéro erreur PostgreSQL. **Rien n'a été refusé — il n'y
+avait personne au bout du fil.**
+
+> **Avant d'accuser le code, lire les journaux de la base.** Une absence de
+> réponse et un refus ne se ressemblent pas du tout dans les journaux, et
+> ils ne se corrigent pas au même endroit. `query_logs` sur `postgrest_logs`
+> montre un redémarrage ; sur `edge_logs`, un refus.
+
+Vérifié de mon côté sur SA base, avec un vrai compte d'essai supprimé
+ensuite : le fil, ses publications, ses photos — tout arrive, 200 partout.
+
+#### Ce qui a été changé, et ce qui n'est PAS prouvé
+
+`avecReprise()` (`src/lib/erreurs.js`) : un échec réseau au démarrage se
+retente **une** fois, après 2,5 s. Pas deux — au second échec c'est une
+vraie panne, et la taire derrière un sablier serait pire. Et **on ne
+retente jamais** une session expirée, un droit refusé ou une contrainte
+violée : la base a RÉPONDU, insister n'ajoute que de l'attente à une
+mauvaise nouvelle. Six contrôles de comportement dans
+`npm run verifier-etats` — ils font tourner la fonction, ils ne lisent pas
+le code.
+
+**Mais je n'ai pas réussi à reproduire sa panne au navigateur**, et il faut
+le dire : en coupant l'API pendant deux secondes au moment exact du
+chargement, l'ANCIENNE version guérissait déjà. La trace le montre —
+`loadAll` est reparti tout seul à 481 ms, 1494 ms, puis a réussi à
+3502 ms. Ce second départ venait d'ailleurs (l'écouteur de session), pas
+d'une reprise voulue. Autrement dit : la reprise existait **par accident**,
+elle est maintenant **voulue et bornée** — mais je ne peux pas affirmer
+qu'elle lui aurait évité son bandeau.
+
+Un repère utile au passage, mesuré sur un démarrage normal :
+**24 requêtes, et `loadAll` ne part qu'une fois.** Si ce nombre double un
+jour, quelque chose relance le chargement.
+
 ### Les quatre états — vide, en cours, cassé, et SANS RÉSEAU (01/10/2026)
 
 Trois pièges trouvés en les traitant, et aucun des trois ne faisait planter

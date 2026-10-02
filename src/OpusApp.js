@@ -42,7 +42,9 @@ import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier } from './lib/metiers';
 import * as api from './lib/api';
 import * as retour from './lib/retour';
-import { messageClair, estUnProblemeDeReseau, avecDelai } from './lib/erreurs';
+import {
+  messageClair, estUnProblemeDeReseau, avecDelai, avecReprise,
+} from './lib/erreurs';
 import { metiersDe } from './lib/metiers';
 import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
@@ -243,8 +245,15 @@ export default function OpusApp() {
          une base injoignable laissait l'application figée sur son squelette
          de démarrage pour toujours. Une requête qui ne revient jamais
          n'atteint jamais la ligne suivante, et aucun `catch` n'y peut rien.
-         Mesuré en coupant la liaison le 01/10/2026. */
-      const data = await avecDelai(api.loadAll(), 12000, 'La base');
+         Mesuré en coupant la liaison le 01/10/2026.
+
+         ET AVEC UN SECOND ESSAI, ajouté le 02/10/2026. Le propriétaire a
+         vu « Le chargement a échoué » pendant que la couche API de Supabase
+         REDÉMARRAIT — aucune requête refusée, personne au bout du fil. Il a
+         dû fermer et rouvrir l'application ; or rouvrir, côté réseau, c'est
+         exactement redemander. L'application le fait donc elle-même, une
+         fois, et une seule. */
+      const data = await avecReprise(() => api.loadAll(), { quoi: 'La base' });
       setPros(data.pros);
       setPosts(data.posts);
       setFinDuFil(!!data.finDuFil);
