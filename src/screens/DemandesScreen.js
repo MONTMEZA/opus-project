@@ -7,7 +7,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
-import { C, F, viser } from '../theme';
+import { C, F, viser, surFond } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
 } from '../components/ui';
@@ -58,7 +58,10 @@ const Demande = React.memo(function Demande({
         <View style={s.etiquettes}>
           {d.urgence && d.urgence !== 'quand_possible' && (
             <View style={[s.etiquette, { backgroundColor: urgenceDe(d.urgence).couleur }]}>
-              <Text style={s.etiquetteTexte}>{urgenceDe(d.urgence).label}</Text>
+              {/* « Urgent » est orange : le blanc n'y tient pas (3,51 : 1). */}
+              <Text style={[s.etiquetteTexte, { color: surFond(urgenceDe(d.urgence).couleur) }]}>
+                {urgenceDe(d.urgence).label}
+              </Text>
             </View>
           )}
           {!!libelleBudget(d.budget) && (
@@ -429,5 +432,5 @@ const s = StyleSheet.create({
     marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line,
   },
   reponses: { fontSize: 11, color: C.muted, fontFamily: F.inter },
-  repondreText: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
+  repondreText: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
 });

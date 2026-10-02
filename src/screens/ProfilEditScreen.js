@@ -681,7 +681,7 @@ const s = StyleSheet.create({
   banniereNote: { flex: 1, fontSize: 11, color: C.muted, fontFamily: F.inter },
   banniereBoutons: { flexDirection: 'row', gap: 6 },
   mediaBtnText: { fontFamily: F.oswald6, fontSize: 11, color: C.ink },
-  mediaBtnTextOn: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
+  mediaBtnTextOn: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
 
   avatarZone: {
     flexDirection: 'row', alignItems: 'center', gap: 16,

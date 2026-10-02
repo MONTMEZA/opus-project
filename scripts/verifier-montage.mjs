@@ -12,7 +12,7 @@
  */
 process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME = 'demo-opus';
 
-const { urlMontage, urlVideo, urlVignette } = await import('../src/lib/cloudinary.js');
+const { urlMontage, urlVideo, urlVignette } = await import('../src/lib/cloudinary-adresses.js');
 
 const B = 'https://res.cloudinary.com/demo-opus/video/upload';
 const C = 'c_fill,h_1280,w_720';

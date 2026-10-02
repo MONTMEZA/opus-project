@@ -78,6 +78,9 @@ export default function OpusApp() {
   const [demarrage, setDemarrage] = useState(true);   // reprise de session
   const [typeChoisi, setTypeChoisi] = useState(null); // type retenu avant connexion
   const [screen, setScreen] = useState('home');
+  /* 'filVideo' quand la fiche d'un artisan a été ouverte depuis le fil
+     vidéo — par le glissement comme par un appui sur son nom. */
+  const [origineProfil, setOrigineProfil] = useState(null);
   const [feedMode, setFeedMode] = useState('classic');
   // Vidéo sur laquelle ouvrir le plein écran, quand on y arrive depuis le fil.
   const [videoCible, setVideoCible] = useState(null);
@@ -674,8 +677,17 @@ export default function OpusApp() {
    * et le reste arrive derrière. Attendre pour montrer une page complète
    * donnerait l'impression que l'application est lente.
    */
-  const viewProfile = async (proId) => {
+  const viewProfile = async (proId, origine = null) => {
     setViewedProId(proId);
+    /* D'OÙ L'ON VIENT, et pourquoi il faut s'en souvenir.
+       Le glissement de retour n'est proposé sur la fiche d'un artisan que
+       si le fil vidéo est réellement DERRIÈRE elle. Ouverte depuis la
+       Place des pros ou depuis une notification, le même geste
+       téléporterait l'artisan dans un fil qu'il n'a pas demandé.
+       Un argument qui vaut `null` par défaut remet donc le compteur à
+       zéro : tous les autres appels à `viewProfile` ferment le geste sans
+       avoir à y penser. */
+    setOrigineProfil(origine);
     setScreen('profilPro');
     setOpenContactId(null);
 
@@ -2031,7 +2043,7 @@ export default function OpusApp() {
             posts={feedFiltered} pros={pros}
             feedMode={feedMode} setFeedMode={changerFeedMode}
             videoCible={videoCible} onOuvrirVideo={ouvrirVideoEnGrand}
-            onGlisserVersProfil={(pro) => viewProfile(pro.id)}
+            onVoirDepuisVideo={(proId) => viewProfile(proId, 'filVideo')}
             feedTab={feedTab} setFeedTab={setFeedTab}
             followingIds={followingIds} savedIds={savedIds}
             openCommentsId={openCommentsId} openContactId={openContactId}
@@ -2289,6 +2301,15 @@ export default function OpusApp() {
                drapeau, l'écran affichait « Aucun avis — soyez le premier »
                sur un artisan qui en a trente. */
             charge={!!pros[viewedProId].portfolioCharge}
+            /* Le geste inverse de celui qui a amené ici. `setFeedMode` est
+               une ceinture : on n'arrive de 'filVideo' qu'en mode vidéo,
+               mais si quelque chose l'avait changé entre-temps, revenir
+               au fil CLASSIQUE serait la pire des réponses. */
+            onRetourFilVideo={origineProfil === 'filVideo' ? () => {
+              setFeedMode('video');
+              setScreen('home');
+              setOrigineProfil(null);
+            } : null}
             following={followingIds.has(viewedProId)}
             onFollow={toggleFollow} onContact={handleContact}
             onViewProfile={viewProfile} onSubmitReview={submitReview}

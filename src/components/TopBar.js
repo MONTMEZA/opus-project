@@ -59,7 +59,7 @@ const s = StyleSheet.create({
     position: 'absolute', top: -3, right: -4, backgroundColor: C.accent,
     width: 15, height: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
   },
-  badgeText: { fontSize: 9, fontFamily: F.oswald7, color: '#111' },
+  badgeText: { fontSize: 9, fontFamily: F.oswald7, color: C.surAccent },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
   backTitle: { fontFamily: F.oswald6, fontSize: 14, color: C.ink, flex: 1 },
 });

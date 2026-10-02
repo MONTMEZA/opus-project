@@ -85,7 +85,7 @@ export default function BottomNav({
             {sos ? (
               <View style={s.sos}><Text style={s.sosText}>SOS</Text></View>
             ) : key === 'creer' ? (
-              <View style={s.publier}><Icon size={18} color="#111" /></View>
+              <View style={s.publier}><Icon size={18} color={C.surAccent} /></View>
             ) : key === 'profil' && avatarUrl ? (
               /* L'anneau marque l'onglet actif exactement comme la couleur le
                  fait pour les icônes : même information, même endroit. */

@@ -55,7 +55,7 @@ export default function HomeScreen({
   videoCible,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
-  onOuvrirVideo, onGlisserVersProfil, onSignaler,
+  onOuvrirVideo, onVoirDepuisVideo, onSignaler,
   onChargerPlus, chargePage = false, finDuFil = false,
   rafraichit = false, onRafraichir, onSupprimerCommentaire, onModifierCommentaire, moiId,
 }) {
@@ -135,7 +135,7 @@ export default function HomeScreen({
             <VideoSlide
               post={p}
               actif={index === slideActive}
-              onGlisserVersProfil={onGlisserVersProfil}
+              onGlisserVersProfil={(pro) => onVoirDepuisVideo(pro.id)}
               onGlisserVersFil={() => setFeedMode('classic')}
               pro={p.proId ? pros[p.proId] : null}
               following={p.proId ? followingIds.has(p.proId) : false}
@@ -145,7 +145,11 @@ export default function HomeScreen({
               onLike={onLike}
               onFollow={onFollow}
               onSave={onSave}
-              onView={onView}
+              /* Le MÊME chemin que le glissement, et c'est voulu : qu'on
+                 appuie sur le nom de l'artisan ou qu'on pousse la vidéo de
+                 côté, on arrive de la même page — donc le geste de retour
+                 doit marcher dans les deux cas. */
+              onView={onVoirDepuisVideo}
               onShare={onShare}
               onContact={onContact}
               onComment={onComment}

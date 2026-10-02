@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { C, F } from '../theme';
+import GlissementLateral from '../components/GlissementLateral';
 import { metierPrincipal, nomMetier } from '../lib/metiers';
 import MetiersPro from '../components/MetiersPro';
 import {
@@ -20,6 +21,7 @@ import { SqueletteAvis, SquelettePortfolio } from '../components/Squelette';
 import FicheContactPro from '../components/FicheContactPro';
 import {
   BadgeCheck, ShieldCheck, ShieldX, FileText, Sparkles, ClipboardCheck, MessageCircle, Flag,
+  Play, ChevronLeft,
 } from '../components/icons';
 import { EtatVerificationPublic } from '../components/RappelVerification';
 import {
@@ -76,7 +78,7 @@ function VerifRow({ etat, label, value, neutre }) {
 
 export default function ProfilProScreen({
   pro, pros, following, onFollow, onContact, onViewProfile, onSubmitReview, onSignaler,
-  charge = true,
+  charge = true, onRetourFilVideo = null,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [rDelais, setRDelais] = useState(5);
@@ -116,7 +118,13 @@ export default function ProfilProScreen({
     setAiLoading(false);
   };
 
-  return (
+  /* LE GESTE DE RETOUR — et pourquoi il ne s'affiche pas toujours.
+     Il n'a de sens que si la fiche a été ouverte DEPUIS le fil vidéo :
+     ailleurs, le fil vidéo n'est pas « derrière », et y arriver d'un coup
+     de pouce serait une téléportation. C'est `OpusApp` qui s'en souvient.
+     Et il se tait pendant le formulaire d'avis : trois curseurs s'y
+     tirent horizontalement, comme ce geste. */
+  const contenu = (
     <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
       <EnteteProfilAuto
         seed={pro.id}
@@ -326,6 +334,44 @@ export default function ProfilProScreen({
       </View>
     </ScrollView>
   );
+
+  if (!onRetourFilVideo) return contenu;
+
+  return (
+    <GlissementLateral
+      style={{ flex: 1 }}
+      fond={C.bg}
+      actif={!showForm}
+      onVersDroite={onRetourFilVideo}
+      apercuGauche={<ApercuFilVideo />}
+    >
+      {contenu}
+    </GlissementLateral>
+  );
+}
+
+/**
+ * Ce qui attend derrière la fiche quand le doigt part à droite.
+ *
+ * Son contenu est calé contre le bord DROIT : c'est par là qu'il entre, et
+ * c'est donc la première chose qu'on en voit. Centré, il resterait caché
+ * par la fiche pendant tout le geste — on ne verrait qu'une bande vide, et
+ * le glissement paraîtrait ne mener nulle part. L'erreur a déjà été faite
+ * une fois, sur l'aperçu du fil vidéo.
+ */
+function ApercuFilVideo() {
+  return (
+    <View style={s.apercu}>
+      <View style={s.apercuCorps}>
+        <View style={s.apercuRond}><Play size={30} color="#fff" /></View>
+        <Text style={s.apercuTitre}>Le fil vidéo</Text>
+        <View style={s.apercuRetour}>
+          <ChevronLeft size={14} color="rgba(255,255,255,0.72)" />
+          <Text style={s.apercuMeta}>Retour</Text>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 function Stat({ value, label }) {
@@ -359,6 +405,18 @@ function SliderRow({ label, value, onChange }) {
 }
 
 const s = StyleSheet.create({
+  /* L'APERÇU DU FIL VIDÉO — sur le noir du fil, pas sur le béton : ce
+     qu'on annonce doit ressembler à ce qu'on va trouver. */
+  apercu: { flex: 1, backgroundColor: C.dark, justifyContent: 'center' },
+  apercuCorps: { alignItems: 'flex-end', alignSelf: 'flex-end', paddingHorizontal: 28, gap: 6 },
+  apercuRond: {
+    width: 84, height: 84, borderRadius: 42, borderWidth: 3, borderColor: C.accent,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  apercuTitre: { fontFamily: F.oswald7, fontSize: 21, color: '#fff', marginTop: 6 },
+  apercuRetour: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  apercuMeta: { fontFamily: F.inter, fontSize: 13, color: 'rgba(255,255,255,0.72)' },
+
 
   head: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6, alignItems: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },

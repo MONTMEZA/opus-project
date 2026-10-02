@@ -88,7 +88,7 @@ const s = StyleSheet.create({
   carte: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
   carteHaut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metier: {
-    fontFamily: F.oswald6, fontSize: 11, color: '#fff', backgroundColor: C.accent,
+    fontFamily: F.oswald6, fontSize: 11, color: C.surAccent, backgroundColor: C.accent,
     paddingVertical: 2, paddingHorizontal: 7, overflow: 'hidden',
   },
   temps: { fontSize: 10.5, color: C.muted, fontFamily: F.inter },

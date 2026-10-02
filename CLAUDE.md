@@ -498,6 +498,16 @@ npx expo export --platform android   # le bundle doit passer
 npx expo start --web                 # puis Playwright + /opt/pw-browsers
 ```
 
+**Un contrôle qui PLANTE ne vérifie rien** — et ça ne se voit pas, puisqu'il
+n'écrit aucun « ✘ ». Constaté le 02/10/2026 : `npm run verifier-montage`
+tombait sur `Cannot find module '.../src/lib/supabase'` depuis le jour où les
+`await import(...)` ont été interdits dans `src/` — `cloudinary.js` chargeait
+dès lors React Native, que `node` ne sait pas ouvrir. Les adresses de montage
+Cloudinary n'étaient donc plus contrôlées, et personne ne l'avait remarqué.
+Le calcul des adresses vit maintenant seul, dans `src/lib/cloudinary-adresses.js`,
+qui n'importe rien. **Lancer les contrôles en lisant leur code de sortie, pas
+leur sortie à l'écran.**
+
 Les captures d'écran valent mieux qu'une affirmation. Ce qui n'a pas pu être
 vérifié ici (appareil photo, lecture vidéo réelle, notifications push) doit
 être **dit explicitement** dans la réponse et dans le message de commit.
@@ -586,6 +596,36 @@ Et un écran qui arrive doit être posé **juste à côté**, comme la page suiv
 d'un carrousel, avec son contenu calé contre le bord par lequel il entre.
 Centré, ce contenu reste caché par la vidéo pendant tout le geste : on ne voit
 qu'une bande noire, et le glissement paraît vide.
+
+#### Un geste sans inverse s'apprend mal — 02/10/2026
+
+Signalé par le propriétaire : on glissait du fil vidéo vers la fiche de
+l'artisan, et on ne pouvait pas repartir en sens inverse. Il faut les deux.
+On pousse le fil de côté pour voir la fiche, donc on doit pouvoir repousser
+la fiche pour retrouver le fil — sans aller chercher la flèche en haut à
+gauche, qui est à l'autre bout du pouce.
+
+Trois choses à ne pas redécouvrir en le construisant :
+
+1. **Le geste de retour n'existe que si l'écran d'avant est VRAIMENT
+   derrière.** `OpusApp` retient d'où la fiche a été ouverte
+   (`origineProfil`), et `viewProfile(id, origine = null)` remet le compteur
+   à zéro par défaut : tous les autres chemins ferment le geste sans qu'on
+   ait à y penser. Ouverte depuis le fil classique ou la Place des pros, le
+   même geste téléporterait l'artisan dans un fil qu'il n'a pas demandé.
+   **Vérifié au navigateur** : depuis le fil classique, le glissement ne
+   quitte pas la fiche.
+2. **Un curseur se tire horizontalement, exactement comme ce geste.** La
+   fiche porte trois curseurs (la note sur trois critères) ; le geste se
+   tait pendant que le formulaire d'avis est ouvert (`actif={!showForm}`).
+   Sans ça, noter « 3/5 » ferait quitter la page.
+3. **Appuyer sur le nom et glisser mènent au même endroit, donc le retour
+   doit marcher dans les deux cas.** Un geste qui ne marche qu'une fois sur
+   deux ne s'apprend jamais.
+
+Ce que le navigateur ne dit PAS : l'en-tête (la flèche et le nom) ne glisse
+pas avec la fiche, il reste posé pendant les 190 ms de la course. On le voit
+sur `captures/g4-apercu-mi-course.png`. Sur iPhone, c'est à juger au doigt.
 
 ### Une FlatList monte DIX éléments d'un coup
 
@@ -774,6 +814,34 @@ reste interdit — c'est là que se perdrait l'identité.
 
 Les valeurs sont dans `src/theme.js` (`R.vif`, `R.doux`, `R.gelule`) : ne pas
 écrire un rayon en dur.
+
+### Ce qu'on pose SUR une couleur — décidé le 02/10/2026
+
+L'orange de signature ne bouge pas. Ce qui bouge, c'est l'encre posée
+dessus : **le blanc sur `#E85C1F` ne donne que 3,51 : 1**, sous le seuil de
+4,5. Le presque-noir donne **4,92**. Mesuré, puis vérifié dans le navigateur
+sur les quatre écrans : plus un seul texte blanc sur l'orange, le pire cas
+est à 4,92.
+
+> **`C.surAccent` est l'encre de l'orange.** Et la règle ne se généralise
+> PAS :
+>
+> | remplissage | blanc | noir | |
+> |---|---|---|---|
+> | `accent` #E85C1F | 3,51 | **4,92** | → noir |
+> | `sos` / `bad` #B4432B | **5,56** | 3,11 | → blanc |
+> | `accent2` #1B4B6B | **9,27** | 1,86 | → blanc |
+> | `ink` #1A1B19 | **17,29** | 1,00 | → blanc |
+
+Et pour tout ce dont le fond vient des **données** — le type d'une annonce,
+le degré d'urgence d'une demande, l'origine d'une demande reçue —
+**`surFond(couleur)`** tranche par le calcul. C'est ce qui rend lisible une
+étiquette dont la couleur sera ajoutée plus tard à `annonces.js` sans que
+personne n'y repense.
+
+`npm run verifier-cibles` tient les deux sens, refuse un `'#fff'` écrit dans
+le même objet de style qu'un remplissage orange, et refuse `'#111'` : il n'y
+a qu'une encre sombre, et elle a un nom.
 
 ### Les échelles : `src/theme.js` fait foi
 

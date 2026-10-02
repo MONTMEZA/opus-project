@@ -188,7 +188,7 @@ function ApercuPro({ pro }) {
         <Text style={s.apercuMeta}>{nomMetier(pro.metier)} · {pro.ville}</Text>
         <View style={s.apercuAction}>
           <Text style={s.apercuActionTexte}>Voir sa page</Text>
-          <ChevronRight size={15} color="#fff" />
+          <ChevronRight size={15} color={C.surAccent} />
         </View>
       </View>
       <HazardStrip height={6} />
@@ -231,7 +231,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 14,
     backgroundColor: C.accent, paddingVertical: 9, paddingHorizontal: 14,
   },
-  apercuActionTexte: { fontFamily: F.oswald6, fontSize: 13, color: '#fff' },
+  apercuActionTexte: { fontFamily: F.oswald6, fontSize: 13, color: C.surAccent },
 
   actions: { position: 'absolute', right: 10, zIndex: 2, gap: 16, alignItems: 'center' },
   action: { alignItems: 'center', gap: 3 },
@@ -243,7 +243,7 @@ const s = StyleSheet.create({
 
   info: { zIndex: 2, paddingHorizontal: 16 },
   tag: { alignSelf: 'flex-start', backgroundColor: C.accent, paddingVertical: 3, paddingHorizontal: 9, marginBottom: 8 },
-  tagText: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
+  tagText: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
   feedNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   feedName: { fontFamily: F.oswald6, fontSize: 16, color: '#fff' },
   loc: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },

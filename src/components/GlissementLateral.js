@@ -2,9 +2,30 @@
  * Glissement latéral façon TikTok.
  *
  * Le doigt part à GAUCHE : la page de l'artisan arrive par la droite.
- * Le doigt part à DROITE : on revient au fil principal.
+ * Le doigt part à DROITE : on revient d'où l'on vient.
  * C'est le sens de TikTok, d'Instagram et des applications de photos : on
  * pousse le contenu de côté pour découvrir ce qui est derrière.
+ *
+ * IL VA DANS LES DEUX SENS, ET IL LE FALLAIT
+ * ------------------------------------------
+ * Signalé par le propriétaire le 02/10/2026 : « quand on est sur le fil
+ * vidéo on scroll pour arriver sur la page du pro, cela est parfait ;
+ * j'aimerais qu'arrivé sur la page du pro on puisse scroller de l'autre
+ * côté pour revenir sur le fil vidéo. »
+ *
+ * Il avait raison, et c'est plus qu'un confort : un geste qui n'a pas
+ * d'inverse s'apprend mal. On pousse le fil de côté pour voir la fiche,
+ * donc on doit pouvoir repousser la fiche pour retrouver le fil — sans
+ * chercher la flèche en haut à gauche, qui est à l'autre bout du pouce.
+ *
+ * D'où deux réglages qui n'existaient pas tant qu'il ne servait qu'au fil :
+ *   - `fond` : le noir du fil vidéo n'a rien à faire derrière une fiche
+ *     posée sur le béton clair ; il apparaîtrait une fraction de seconde
+ *     au bord de l'écran ;
+ *   - `actif` : la fiche d'un artisan contient TROIS CURSEURS (la note sur
+ *     trois critères). Un curseur se tire horizontalement, exactement comme
+ *     ce geste. On rend donc la main pendant que le formulaire d'avis est
+ *     ouvert — sinon noter « 3/5 » ferait quitter la page.
  *
  * CE QUI FAIT QUE ÇA « SENT » BON
  * -------------------------------
@@ -53,12 +74,13 @@ const SORTIE = 190;            // ms de la course finale jusqu'au bord
 
 export default function GlissementLateral({
   onVersDroite, onVersGauche, apercuDroite, apercuGauche, style, children,
+  fond = '#000', actif = true,
 }) {
   const { width } = useWindowDimensions();
   const decalage = useSharedValue(0);
 
-  const aDroite = typeof onVersDroite === 'function';
-  const aGauche = typeof onVersGauche === 'function';
+  const aDroite = actif && typeof onVersDroite === 'function';
+  const aGauche = actif && typeof onVersGauche === 'function';
 
   const geste = Gesture.Pan()
     .activeOffsetX([-DEBUT_HORIZONTAL, DEBUT_HORIZONTAL])
@@ -120,7 +142,7 @@ export default function GlissementLateral({
   }));
 
   return (
-    <View style={[style, { width, overflow: 'hidden', backgroundColor: '#000' }]}>
+    <View style={[style, { width, overflow: 'hidden', backgroundColor: fond }]}>
       {/* Les deux destinations attendent de part et d'autre, hors de l'écran.
           Celle de gauche entre quand le doigt va à droite, et inversement.
           Chaque aperçu cale son contenu contre le bord par lequel il arrive

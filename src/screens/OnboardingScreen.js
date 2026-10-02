@@ -42,7 +42,7 @@ export default function OnboardingScreen({ onChoose }) {
         <View style={{ flex: 1 }} />
 
         <Pressable style={[s.btn, s.btnPro]} onPress={() => onChoose('pro')}>
-          <Text style={[s.btnText, { color: '#111' }]}>JE SUIS UN PROFESSIONNEL</Text>
+          <Text style={[s.btnText, { color: C.surAccent }]}>JE SUIS UN PROFESSIONNEL</Text>
         </Pressable>
         <Pressable style={[s.btn, s.btnPart]} onPress={() => onChoose('particulier')}>
           <Text style={[s.btnText, { color: '#fff' }]}>JE SUIS UN PARTICULIER</Text>

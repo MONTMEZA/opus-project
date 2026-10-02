@@ -26,7 +26,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
-import { C, F, T, S, R, TOUCHE, viser } from '../theme';
+import { C, F, T, S, R, TOUCHE, viser, surFond } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
 } from '../components/ui';
@@ -418,9 +418,16 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
 
   return (
     <View style={s.carte}>
+      {/* La couleur du bandeau vient du TYPE d'annonce, pas d'ici : le
+          texte posé dessus se calcule donc, il ne s'écrit pas. En dur, le
+          blanc ne donnait que 3,51 : 1 sur l'orange de « Je cherche ». */}
       <View style={[s.bandeau, { backgroundColor: t.couleur }]}>
-        <Text style={s.bandeauTexte}>{t.long}</Text>
-        {a.metier && <Text style={s.bandeauMetier}>{nomMetier(a.metier)}</Text>}
+        <Text style={[s.bandeauTexte, { color: surFond(t.couleur) }]}>{t.long}</Text>
+        {a.metier && (
+          <Text style={[s.bandeauMetier, { color: surFond(t.couleur) }]}>
+            {nomMetier(a.metier)}
+          </Text>
+        )}
       </View>
 
       <View style={s.carteCorps}>
@@ -572,7 +579,9 @@ const s = StyleSheet.create({
     paddingVertical: 5, paddingHorizontal: 10,
   },
   bandeauTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
-  bandeauMetier: { fontFamily: F.oswald6, fontSize: 10.5, color: 'rgba(255,255,255,0.85)' },
+  /* L'atténuation passe par `opacity` et non par un blanc translucide :
+     la couleur, elle, est calculée depuis le fond (`surFond`). */
+  bandeauMetier: { fontFamily: F.oswald6, fontSize: 10.5, opacity: 0.85 },
   carteCorps: { padding: 12, gap: 8 },
   titre: { fontFamily: F.oswald6, fontSize: 14, color: C.ink, lineHeight: 19 },
 
@@ -597,7 +606,7 @@ const s = StyleSheet.create({
     paddingTop: 8, borderTopWidth: 1, borderTopColor: C.line,
   },
   reponses: { fontFamily: F.inter, fontSize: 11, color: C.muted },
-  repondreTexte: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
+  repondreTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
   dejaRepondu: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dejaReponduTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
 });

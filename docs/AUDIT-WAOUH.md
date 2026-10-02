@@ -528,3 +528,31 @@ Le texte blanc sur un bouton orange donne **3,51 : 1**, là où il en faudrait
 
 Je n'ai rien touché : c'est ta couleur, et aucune de ces options n'est
 neutre. Dis-moi.
+
+**Tranché le 02/10/2026 : l'option 2.** L'orange reste exact, c'est l'encre
+qui change. Appliqué partout d'un seul jeton, `C.surAccent`, et mesuré dans
+le navigateur sur quatre écrans — **plus un seul texte blanc sur l'orange,
+le pire cas est à 4,92 : 1**.
+
+Deux choses en sont sorties, qui n'étaient pas prévues :
+
+- **La règle ne se généralise pas.** Sur le rouge brique (5,56 contre 3,11)
+  et sur le bleu acier (9,27 contre 1,86), c'est le blanc qui gagne, et de
+  loin. Un « tout en noir » aurait rendu les bandeaux d'urgence illisibles.
+  `verifier-cibles` tient donc les DEUX sens.
+- **Les étiquettes dont la couleur vient des données** — le type d'une
+  annonce, le degré d'urgence, l'origine d'une demande reçue — ne peuvent
+  pas être traitées à la main : la couleur n'est pas connue à l'écriture.
+  `surFond(couleur)` tranche par le calcul. C'est aussi ce qui protège la
+  prochaine couleur ajoutée à `annonces.js`.
+
+### Lot 6 — ce qui a été fait avant lui, à ta demande
+
+Le glissement de retour depuis la fiche de l'artisan. Il va désormais dans
+les deux sens, il ne s'active que si le fil vidéo est vraiment derrière, et
+il se tait pendant le formulaire d'avis — trois curseurs s'y tirent
+horizontalement, comme lui. Huit contrôles au navigateur, tous verts ;
+captures `g2` à `g8`.
+
+Ce que le navigateur ne dit pas : l'en-tête ne glisse pas avec la fiche
+pendant les 190 ms de la course. À juger au doigt sur l'iPhone.

@@ -670,7 +670,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5,
   },
   btnMiniOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: C.ink },
-  btnMiniText: { fontFamily: F.oswald6, fontSize: T.petit, color: '#111' },
+  btnMiniText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent },
 
   chip: {
     paddingVertical: 6, paddingHorizontal: S.md,

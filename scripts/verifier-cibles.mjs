@@ -50,6 +50,12 @@ const fichiers = execFileSync('git', ['ls-files', 'src'], { encoding: 'utf8' })
 const theme = lire('src/theme.js');
 const ui = lire('src/components/ui.js');
 
+/* Troisième fois que la DOCUMENTATION se fait accuser par un contrôle : un
+   exemple écrit dans un commentaire n'est pas du code. */
+const sansCommentaires = (c) => c
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '');
+
 /* ---------- le contraste, recalculé à chaque passage ---------- */
 function luminance(hex) {
   const h = hex.replace('#', '');
@@ -69,7 +75,7 @@ function couleur(nom) {
 console.log('\nCe qu’on lit dehors — le contraste, calculé sur la palette du moment');
 {
   const C = Object.fromEntries(['ink', 'bg', 'surface', 'line', 'accent',
-    'accent2', 'muted', 'bad', 'bordChamp', 'accentTexte']
+    'accent2', 'muted', 'bad', 'bordChamp', 'accentTexte', 'surAccent', 'sos']
     .map((n) => [n, couleur(n)]));
 
   const cas = [
@@ -92,6 +98,60 @@ console.log('\nCe qu’on lit dehors — le contraste, calculé sur la palette d
      vérifie seulement qu'on ne l'emploie pas comme couleur de TEXTE. */
   verifier('l’orange de signature est resté #E85C1F', C.accent === '#E85C1F',
     'la couleur de remplissage ne se renégocie pas sans le propriétaire');
+
+  /* CE QU'ON POSE SUR L'ORANGE — l'option retenue le 02/10/2026.
+     Le blanc n'y donnait que 3,51 : 1. Et la règle ne se généralise pas :
+     sur le rouge brique et sur le bleu, c'est le blanc qui gagne, donc le
+     contrôle vérifie les DEUX sens. */
+  const surA = couleur('surAccent');
+  if (!surA) {
+    verifier('`surAccent` existe', false, 'theme.js — l’encre posée sur l’orange');
+  } else {
+    const r = contraste(surA, C.accent);
+    verifier(`l’encre posée sur l’orange — ${r.toFixed(2)} : 1 (il en faut 4.5)`, r >= 4.5);
+    verifier('…et elle y bat le blanc',
+      r > contraste('#FFFFFF', C.accent),
+      'si le blanc redevenait meilleur, c’est l’orange qui aurait changé');
+    [['le rouge brique', C.sos], ['le bleu acier', C.accent2], ['le presque-noir', C.ink]]
+      .forEach(([quoi, fond]) => {
+        verifier(`${quoi} garde le blanc`,
+          contraste('#FFFFFF', fond) > contraste(surA, fond),
+          'le noir y serait un recul — ce n’est pas une règle « tout en noir »');
+      });
+  }
+
+  /* `surFond()` tranche par le calcul : c'est ce qui rend une étiquette
+     lisible le jour où une couleur est ajoutée à `annonces.js` sans que
+     personne n'y repense. */
+  verifier('`surFond()` existe et choisit la meilleure des deux encres',
+    /export function surFond\(/.test(theme) && /contraste\(C\.surAccent, fond\)/.test(theme));
+
+  /* Un `'#fff'` écrit dans le même objet de style qu'un remplissage orange
+     est l'erreur exacte qu'on vient de corriger, à quinze endroits. */
+  const blancSurOrange = [];
+  fichiers.forEach((f) => {
+    const c = sansCommentaires(lire(f));
+    /* Chaque objet de style, du `{` à son `}` de même niveau — approché par
+       un découpage sur les accolades de premier niveau d'un StyleSheet. */
+    (c.match(/\{[^{}]*\}/g) || []).forEach((bloc) => {
+      if (!/backgroundColor: C\.accent[,}\s]/.test(bloc)) return;
+      if (/color: '#fff'|color: '#FFFFFF'|color: C\.surface/.test(bloc)) {
+        blancSurOrange.push(`${f} : ${bloc.replace(/\s+/g, ' ').slice(0, 90)}`);
+      }
+    });
+  });
+  verifier('aucun blanc posé sur un remplissage orange',
+    blancSurOrange.length === 0,
+    `${blancSurOrange.join('\n      ')}\n      → C.surAccent, ou surFond() si le fond vient des données`);
+
+  /* Il y avait DEUX encres sombres dans le projet — `#111` et `C.ink` —
+     employées au hasard sur le même orange. Ce n'est pas une faute de
+     lisibilité (5,38 contre 4,92, les deux passent) mais une faute
+     d'entretien : le jour où l'orange bouge, l'une des deux sera oubliée. */
+  const centOnze = fichiers.filter((f) => /'#111'/.test(sansCommentaires(lire(f))));
+  verifier('une seule encre sombre, et elle a un nom',
+    centOnze.length === 0,
+    `${centOnze.join(', ')}\n      → C.surAccent`);
   /* Une exception, et une seule : le mot-symbole de l'écran d'accueil, où
      l'orange est posé sur le presque-noir — 4,92 : 1, il passe. On la
      reconnaît au commentaire qui la justifie, juste au-dessus : sans

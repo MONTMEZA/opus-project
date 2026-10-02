@@ -162,7 +162,7 @@ export default function QuoteModal({ quote, moi = {}, onClose, onSubmit }) {
               {duNouveau && (
                 <Pressable style={s.memo} onPress={() => setMemoriser((v) => !v)}>
                   <View style={[s.case, memoriser && s.caseOn]}>
-                    {memoriser && <Check size={11} color="#fff" />}
+                    {memoriser && <Check size={11} color={C.surAccent} />}
                   </View>
                   <Text style={s.memoTexte}>
                     Retenir ces informations dans mon profil, pour ne plus les retaper

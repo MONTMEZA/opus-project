@@ -34,7 +34,7 @@ import React, { useState } from 'react';
 import {
   View, Text, FlatList, Pressable, Linking, StyleSheet,
 } from 'react-native';
-import { C, F, T, S, R, APPUI, interligne } from '../theme';
+import { C, F, T, S, R, APPUI, interligne, surFond } from '../theme';
 import { Avatar, BtnMini, EmptyState, SectionLabel } from '../components/ui';
 import { Phone, Check, X, Clock, AlertTriangle } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
@@ -169,10 +169,13 @@ function Demande({ d, onRepondre, onAppeler, onVoirProfil }) {
 
   return (
     <View style={s.carte}>
+      {/* Rouge brique pour une urgence, bleu pour un devis, ORANGE pour un
+          rappel : trois fonds, donc une encre calculée. En blanc fixe, le
+          bandeau « Demande de rappel » tombait à 3,51 : 1. */}
       <View style={[s.bandeau, { backgroundColor: genre.fond }]}>
-        <Icone size={13} color="#fff" />
-        <Text style={s.bandeauTexte}>{genre.titre}</Text>
-        <Text style={s.quand}>{d.quand}</Text>
+        <Icone size={13} color={surFond(genre.fond)} />
+        <Text style={[s.bandeauTexte, { color: surFond(genre.fond) }]}>{genre.titre}</Text>
+        <Text style={[s.quand, { color: surFond(genre.fond) }]}>{d.quand}</Text>
       </View>
 
       <View style={s.corps}>
@@ -214,7 +217,7 @@ function Demande({ d, onRepondre, onAppeler, onVoirProfil }) {
               disabled={!!envoi}
               onPress={() => repondre('accepte')}
             >
-              <Check size={12} color="#fff" />
+              <Check size={12} color={C.surAccent} />
               <Text style={s.btnTexte}>
                 {envoi === 'accepte' ? 'Envoi…' : 'Accepter'}
               </Text>
@@ -238,7 +241,7 @@ function Demande({ d, onRepondre, onAppeler, onVoirProfil }) {
                 accessibilityLabel={`Appeler ${d.nom} au ${d.telephone}`}
                 onPress={() => onAppeler && onAppeler(d.telephone)}
               >
-                <Phone size={12} color="#fff" />
+                <Phone size={12} color={C.surAccent} />
                 <Text style={s.btnTexte}>{d.telephone}</Text>
               </BtnMini>
             )}
@@ -298,9 +301,9 @@ const s = StyleSheet.create({
     paddingVertical: S.sm - 2, paddingHorizontal: S.md,
   },
   bandeauTexte: {
-    fontFamily: F.oswald6, fontSize: T.petit, color: '#fff', letterSpacing: 0.5,
+    fontFamily: F.oswald6, fontSize: T.petit, letterSpacing: 0.5,
   },
-  quand: { marginLeft: 'auto', fontFamily: F.inter, fontSize: T.micro, color: '#fff', opacity: 0.85 },
+  quand: { marginLeft: 'auto', fontFamily: F.inter, fontSize: T.micro, opacity: 0.85 },
 
   corps: { padding: S.md, gap: S.sm },
   client: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 40 },
@@ -320,7 +323,7 @@ const s = StyleSheet.create({
   info: { fontFamily: F.inter5, fontSize: T.petit, color: C.accent2 },
 
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
-  btnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: '#fff', letterSpacing: 0.3 },
+  btnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent, letterSpacing: 0.3 },
   etat: { fontFamily: F.inter5, fontSize: T.petit, color: C.muted },
 
   aide: {

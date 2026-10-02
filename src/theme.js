@@ -37,6 +37,24 @@ export const C = {
      icônes), `accentTexte` pour ce qu'on LIT. */
   accentTexte: '#B14212',
 
+  /* CE QU'ON POSE SUR L'ORANGE — mesuré le 02/10/2026.
+     Le blanc sur #E85C1F donne 3,51 : 1. C'est sous le seuil de 4,5, et
+     ça se voit : le label d'un bouton orange se lit moins bien que celui
+     d'un bouton noir, alors que c'est le bouton orange qui compte.
+     Le presque-noir, lui, donne 4,92 : 1.
+
+     ATTENTION, la règle ne se généralise PAS. Sur les autres
+     remplissages, le noir serait un recul, et de loin :
+
+         remplissage            blanc      noir
+         accent  (#E85C1F)      3,51       4,92   → noir
+         sos/bad (#B4432B)      5,56       3,11   → blanc
+         accent2 (#1B4B6B)      9,27       1,86   → blanc
+         ink     (#1A1B19)     17,29       1,00   → blanc
+
+     D'où un jeton par couple, et non une règle « tout en noir ». */
+  surAccent: '#1A1B19',
+
   verif: '#4FA9E0',    // pastille "vérifié"
   ok: '#1F7A4D',       // information vérifiée valide
   okBg: '#E7F3EC',     // fond du badge "Client vérifié"
@@ -318,4 +336,56 @@ export const TOUCHE = 44;
  */
 export function viser(hauteur) {
   return Math.max(0, Math.ceil((TOUCHE - hauteur) / 2));
+}
+
+
+/* ==========================================================================
+ *  CE QU'ON POSE SUR UNE COULEUR — et pourquoi ça se calcule
+ * ==========================================================================
+ *
+ * Les étiquettes d'Opus tirent leur couleur de leurs DONNÉES, pas d'une
+ * feuille de style : le type d'une annonce (`TYPES_ANNONCE`), le degré
+ * d'urgence d'une demande (`URGENCES`), l'origine d'une demande reçue. Le
+ * texte posé dessus, lui, était écrit en dur — `'#fff'`, partout, par
+ * habitude.
+ *
+ * Mesuré le 02/10/2026 : le blanc tenait sur le bleu (9,27 : 1) et sur le
+ * rouge brique (5,56), mais pas sur l'orange de signature — 3,51, sous le
+ * seuil de 4,5. Et l'orange est précisément la couleur des étiquettes qui
+ * comptent : « Je cherche », « Urgent », « Demande de rappel ».
+ *
+ * `surFond()` tranche par le CALCUL, pas par l'œil. Conséquence utile : le
+ * jour où une couleur est ajoutée au catalogue des annonces, son étiquette
+ * est lisible sans que personne n'y pense.
+ */
+
+/** Luminance relative WCAG — la même formule que `verifier-cibles.mjs`. */
+function luminance(hex) {
+  const h = String(hex).replace('#', '');
+  if (h.length !== 6) return 0;
+  const v = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  const f = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * f(v[0]) + 0.7152 * f(v[1]) + 0.0722 * f(v[2]);
+}
+
+/** Le rapport de contraste entre deux couleurs, de 1 à 21. */
+export function contraste(a, b) {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/**
+ * LA COULEUR DU TEXTE À POSER SUR `fond` : celle des deux qui se lit le
+ * mieux. Pas de demi-mesure — un gris « qui va avec » perdrait sur les
+ * deux tableaux.
+ *
+ * On ne rend pas du blanc pur mais `C.surface`, et pas du noir pur mais
+ * `C.surAccent` : ce sont les deux encres de l'application.
+ */
+export function surFond(fond) {
+  if (!fond) return C.surface;
+  return contraste(C.surAccent, fond) >= contraste(C.surface, fond)
+    ? C.surAccent
+    : C.surface;
 }

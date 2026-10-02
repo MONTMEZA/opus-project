@@ -180,7 +180,7 @@ const s = StyleSheet.create({
   propositionTitre: { fontFamily: F.oswald6, fontSize: 10.5, color: C.accentTexte },
   propositionTexte: { fontFamily: F.inter, fontSize: 12.5, color: C.ink, lineHeight: 18 },
   propositionBas: { flexDirection: 'row', justifyContent: 'flex-end' },
-  utiliserTexte: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },
+  utiliserTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
 
   rappel: { fontFamily: F.inter, fontSize: 10.5, color: C.muted, lineHeight: 15 },
 });

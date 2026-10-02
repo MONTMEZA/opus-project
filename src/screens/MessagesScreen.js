@@ -91,7 +91,7 @@ const s = StyleSheet.create({
     minWidth: 18, height: 18, borderRadius: R.gelule, backgroundColor: C.accent,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
   },
-  pastilleTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
+  pastilleTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surAccent },
   sousTitre: { fontSize: 11, color: C.accent2, fontFamily: F.inter },
   time: { fontSize: 11, color: C.muted, fontFamily: F.inter },
   preview: { flex: 1, fontSize: 12, color: C.muted, fontFamily: F.inter },

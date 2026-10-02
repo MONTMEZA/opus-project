@@ -210,7 +210,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
             {mode === 'inscription' && (
               <Pressable style={s.conditions} onPress={() => setConditions((v) => !v)}>
                 <View style={[s.case, conditions && s.caseCochee]}>
-                  {conditions && <Check size={12} color="#fff" />}
+                  {conditions && <Check size={12} color={C.surAccent} />}
                 </View>
                 <Text style={s.conditionsTexte}>
                   J’ai lu et j’accepte les{' '}
@@ -310,7 +310,7 @@ const s = StyleSheet.create({
 
   carte: { backgroundColor: C.surface, padding: 18 },
   badge: {
-    alignSelf: 'flex-start', backgroundColor: C.accent, color: '#111',
+    alignSelf: 'flex-start', backgroundColor: C.accent, color: C.surAccent,
     fontFamily: F.oswald6, fontSize: 10.5, paddingVertical: 3, paddingHorizontal: 9,
     marginBottom: 14, overflow: 'hidden',
   },
