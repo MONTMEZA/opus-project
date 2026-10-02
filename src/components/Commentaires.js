@@ -12,10 +12,11 @@
  * Le nom et la photo sont tactiles. Ils mènent à la page du professionnel,
  * ou à la fiche publique du particulier.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { C, F, T, S, interligne } from '../theme';
+import { C, F, T, S, APPUI, interligne } from '../theme';
 import { Avatar, Field } from './ui';
+import ChampLocal from './ChampLocal';
 import { BadgeCheck, Send, X, Flag } from './icons';
 
 /** Le compteur affiché sous un post : les commentaires ET leurs réponses. */
@@ -52,15 +53,24 @@ export default function Commentaires({
   commentaires = [], pros = {}, onEnvoyer, onVoirProfil, onSignaler,
   onSupprimer, onModifier, moiId = null, style, scroll,
 }) {
-  const [draft, setDraft] = useState('');
+  /* LE BROUILLON NE REDESSINE PLUS TOUS LES COMMENTAIRES.
+     Il vivait ici, donc chaque lettre redessinait la liste entière — les
+     bulles, les avatars, les réponses dépliées : 72 ms par lettre au
+     navigateur, processeur bridé six fois. Une publication populaire en a
+     cinquante.
+     Le texte vit maintenant dans le champ. Ce composant n'apprend que
+     lorsqu'il devient vide ou cesse de l'être — pour éteindre le bouton
+     d'envoi, et rien d'autre. */
+  const champ = useRef(null);
+  const [vide, setVide] = useState(true);
   const [repondA, setRepondA] = useState(null);       // { id, auteur }
   const [deplies, setDeplies] = useState(() => new Set());
 
   const envoyer = () => {
-    const texte = draft.trim();
+    const texte = (champ.current ? champ.current.lire() : '').trim();
     if (!texte) return;
     onEnvoyer(texte, repondA ? repondA.id : null);
-    setDraft('');
+    champ.current.vider();
     setRepondA(null);
   };
 
@@ -72,7 +82,12 @@ export default function Commentaires({
   const repondre = (c, parentId) => {
     if (parentId) {
       setRepondA({ id: parentId, auteur: c.auteur });
-      setDraft((d) => (d.startsWith('@') ? d : `@${c.auteur} `));
+      /* Répondre pré-remplit le champ avec le nom. On lit l'existant pour
+         ne pas l'écraser si l'artisan avait déjà commencé à écrire. */
+      if (champ.current) {
+        const d = champ.current.lire();
+        if (!d.startsWith('@')) champ.current.ecrire(`@${c.auteur} `);
+      }
     } else {
       setRepondA({ id: c.id, auteur: c.auteur });
     }
@@ -161,7 +176,7 @@ export default function Commentaires({
           </Text>
           <Pressable
             hitSlop={8}
-            onPress={() => { setRepondA(null); setDraft(''); }}
+            onPress={() => { setRepondA(null); if (champ.current) champ.current.vider(); }}
             accessibilityRole="button"
             accessibilityLabel="Annuler la réponse"
           >
@@ -171,17 +186,19 @@ export default function Commentaires({
       )}
 
       <View style={s.saisie}>
-        <Field
+        <ChampLocal
+          ref={champ}
           style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 10, fontSize: 12.5 }}
           placeholder={repondA ? `Répondre à ${repondA.auteur}...` : 'Ajouter un commentaire...'}
-          value={draft}
-          onChangeText={setDraft}
+          surSeuil={({ vide: v }) => setVide(v)}
           onSubmitEditing={envoyer}
           returnKeyType="send"
         />
         <Pressable
-          style={s.envoyer}
+          style={({ pressed }) => [s.envoyer, vide && { opacity: 0.4 }, pressed && APPUI.discret]}
           onPress={envoyer}
+          disabled={vide}
+          aria-disabled={vide}
           accessibilityRole="button"
           accessibilityLabel="Envoyer le commentaire"
         >

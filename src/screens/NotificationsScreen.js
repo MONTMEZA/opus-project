@@ -6,8 +6,8 @@
  * ouvre la publication concernée, commentaires dépliés, et la marque lue.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet , RefreshControl } from 'react-native';
-import { C, F } from '../theme';
+import { View, Text, Pressable, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { C, F, APPUI } from '../theme';
 import { Avatar, EmptyState, BtnMini } from '../components/ui';
 import {
   MessageSquare, CornerDownRight, Bell, ChevronRight,
@@ -33,6 +33,45 @@ const ICONES = {
    reviendrait à ne rien signaler du tout. */
 const COULEURS = { sos: C.sos };
 
+/**
+ * UNE LIGNE DE NOTIFICATION, isolée et mémorisée.
+ *
+ * POURQUOI `React.memo` : dans une liste virtualisée, React redessine
+ * chaque ligne visible dès que l'écran se redessine — même celles qui
+ * n'ont pas bougé d'un pixel. `memo` lui dit de n'en rien faire tant que
+ * la notification elle-même est la même ligne.
+ */
+const Ligne = React.memo(function Ligne({ n, onOuvrir }) {
+  const Icone = ICONES[n.type] || Bell;
+  const teinte = COULEURS[n.type] || C.muted;
+  const menuQuelquePart = !!n.postId;
+  return (
+    <Pressable
+      style={({ pressed }) => [s.row, pressed && APPUI.discret]}
+      onPress={() => onOuvrir(n)}
+      accessibilityRole="button"
+      accessibilityLabel={`${n.lue ? '' : 'Non lue. '}${n.texte}`
+        + (menuQuelquePart ? '. Ouvrir la publication' : '')}
+    >
+      {!n.lue && <View style={s.dot} />}
+
+      {n.acteurId
+        ? <Avatar seed={n.acteurId} size={34} uri={n.avatarUrl} />
+        : <View style={s.rond}><Icone size={15} color={teinte} /></View>}
+
+      <View style={s.corps}>
+        <Text style={[s.text, !n.lue && { fontFamily: F.inter6 }]}>{n.texte}</Text>
+        <View style={s.meta}>
+          <Icone size={11} color={teinte} />
+          {!!n.time && <Text style={s.time}>{n.time}</Text>}
+        </View>
+      </View>
+
+      {menuQuelquePart && <ChevronRight size={14} color={C.muted} />}
+    </Pressable>
+  );
+});
+
 export default function NotificationsScreen({ notifications, onOuvrir, onToutLire,
   onRafraichir, rafraichit = false,
 }) {
@@ -43,63 +82,40 @@ export default function NotificationsScreen({ notifications, onOuvrir, onToutLir
   const nonLues = notifications.filter((n) => !n.lue).length;
 
   return (
-    <ScrollView
-        /* TIRER POUR RAFRAÎCHIR.
-           Le geste existait sur le fil, et nulle part ailleurs : sur les six
-           autres écrans défilants, tirer vers le bas ne faisait rien. Or
-           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
-           pas y répondre se lit comme un écran figé. */
-        refreshControl={onRafraichir ? (
-          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
-            tintColor={C.muted} colors={[C.accent]} />
-        ) : undefined} style={s.pad} contentContainerStyle={{ paddingBottom: 24 }}>
-      {/* POURQUOI CE BOUTON
-          Le point orange de la cloche ne tombait qu'en ouvrant les
-          notifications UNE PAR UNE. Après une semaine d'absence, il fallait
-          toucher vingt lignes pour faire disparaître une pastille — alors
-          qu'on voulait juste dire « j'ai vu ». La plupart des gens
-          renoncent, et la pastille finit par ne plus rien vouloir dire. */}
-      {nonLues > 0 && !!onToutLire && (
+    /* UNE LISTE VIRTUALISÉE, et pas une boucle dans un `ScrollView`.
+       Avant, les notifications étaient TOUTES montées d'un coup, avec leurs
+       avatars. Après une semaine d'absence il y en a cinquante ; après six
+       mois, des centaines. Les réglages sont ceux que CLAUDE.md impose à
+       toute liste longue depuis le blocage de l'iPhone du 29/09. */
+    <FlatList
+      style={s.pad}
+      data={notifications}
+      keyExtractor={(n) => String(n.id)}
+      initialNumToRender={8}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews
+      contentContainerStyle={{ paddingBottom: 24 }}
+      refreshControl={onRafraichir ? (
+        <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+          tintColor={C.muted} colors={[C.accent]} />
+      ) : undefined}
+      /* POURQUOI CE BOUTON
+         Le point orange de la cloche ne tombait qu'en ouvrant les
+         notifications UNE PAR UNE. Après une semaine d'absence, il fallait
+         toucher vingt lignes pour faire disparaître une pastille — alors
+         qu'on voulait juste dire « j'ai vu ». La plupart des gens
+         renoncent, et la pastille finit par ne plus rien vouloir dire. */
+      ListHeaderComponent={nonLues > 0 && !!onToutLire ? (
         <View style={s.barre}>
           <Text style={s.compte}>
             {nonLues} non lue{nonLues > 1 ? 's' : ''}
           </Text>
           <BtnMini outline label="Tout marquer comme lu" onPress={onToutLire} />
         </View>
-      )}
-
-      {notifications.map((n) => {
-        const Icone = ICONES[n.type] || Bell;
-        const teinte = COULEURS[n.type] || C.muted;
-        const menuQuelquePart = !!n.postId;
-        return (
-          <Pressable
-            key={String(n.id)}
-            style={s.row}
-            onPress={() => onOuvrir(n)}
-            accessibilityRole="button"
-            accessibilityLabel={`${n.lue ? '' : 'Non lue. '}${n.texte}`
-              + (menuQuelquePart ? '. Ouvrir la publication' : '')}
-          >
-            {!n.lue && <View style={s.dot} />}
-
-            {n.acteurId
-              ? <Avatar seed={n.acteurId} size={34} uri={n.avatarUrl} />
-              : <View style={s.rond}><Icone size={15} color={teinte} /></View>}
-
-            <View style={s.corps}>
-              <Text style={[s.text, !n.lue && { fontFamily: F.inter6 }]}>{n.texte}</Text>
-              <View style={s.meta}>
-                <Icone size={11} color={teinte} />
-                {!!n.time && <Text style={s.time}>{n.time}</Text>}
-              </View>
-            </View>
-
-            {menuQuelquePart && <ChevronRight size={14} color={C.muted} />}
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+      ) : null}
+      renderItem={({ item }) => <Ligne n={item} onOuvrir={onOuvrir} />}
+    />
   );
 }
 

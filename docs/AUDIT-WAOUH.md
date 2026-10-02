@@ -431,3 +431,48 @@ rechargée — la situation exacte de l'artisan qui descend à la cave :
 
 Compte supprimé après l'essai. 17 contrôles `npm run verifier-*` au vert,
 `npx expo export --platform android` passe.
+
+---
+
+## 11. Lot 4 — les listes et la frappe ✅ fait le 02/10/2026
+
+### Les listes
+
+Sept listes sont désormais virtualisées et réglées : le fil, les annonces,
+les demandes, les conversations, les messages, les notifications, les
+demandes reçues. Six composants de ligne sont mémorisés.
+
+Mesuré en gonflant le jeu d'essai à **217 éléments** — le cas normal d'une
+place de marché qui marche — et en comparant les deux versions côte à côte :
+
+| nœuds montés d'un coup | avant | après |
+|---|---|---|
+| Place des pros | **5 939** | **317** (−95 %) |
+| Demandes | **2 265** | **257** (−89 %) |
+
+Le temps mesuré au navigateur n'a presque pas bougé, et c'est attendu : il a
+le processeur d'un ordinateur. Ce que ces nombres prédisent, c'est le
+comportement de l'iPhone — où 5 939 nœuds montés avec leurs photos, c'est
+exactement le blocage de plusieurs secondes du 29 septembre.
+
+### La frappe
+
+| processeur bridé ×6 | avant | après |
+|---|---|---|
+| description d'une publication | **203 ms/lettre** | **60** |
+| message dans une conversation | **132** | **48** |
+| commentaire | **72** | **58** |
+
+203 ms, c'était le niveau de l'assistant IA du 29/09 — « on ne peut pas
+écrire dedans ».
+
+La conversation passe en liste **inversée** : le dernier message arrive en
+bas sans qu'on fasse défiler quoi que ce soit, et les anciens ne sont montés
+que si on remonte les chercher.
+
+### Vérifié
+
+19 contrôles `npm run verifier-*` au vert (dont `verifier-listes`, nouveau),
+le paquet Android se construit, zéro erreur JavaScript sur un parcours
+complet — fil, place des pros, demandes, messages, conversation, envoi d'un
+message, commentaires, publication.

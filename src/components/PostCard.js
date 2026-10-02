@@ -20,7 +20,10 @@ import Carrousel from './Carrousel';
 /** Les formats qui se regardent aussi en plein écran dans le fil « Vidéos ». */
 const EST_VIDEO = new Set(['video', 'montage']);
 
-export default function PostCard({
+/* MÉMORISÉ : ce composant vit dans une liste, et une liste redessine
+   chacune de ses lignes visibles dès que l'écran bouge — même celles qui
+   n'ont pas changé d'un pixel. */
+const PostCard = React.memo(function PostCard({
   post, pro, pros = {}, following, actif = false,
   onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
@@ -243,8 +246,9 @@ export default function PostCard({
       )}
     </View>
   );
-}
+});
 
+export default PostCard;
 function ContactItem({ icon, label, onPress, last }) {
   return (
     <Pressable

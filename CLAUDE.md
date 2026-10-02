@@ -963,6 +963,73 @@ la première règle de ce document, et la panne qui a laissé passer le format
 > une contrainte `check` refusée (avec renvoi à `schema.sql`), une règle
 > RLS, un droit manquant sur une fonction.
 
+### Les listes et la frappe — le lot 4 (02/10/2026)
+
+#### Mesurer avec SEPT éléments ne prouve rien
+
+La première mesure du lot n'a montré aucun gain : avec sept annonces de
+démonstration, une liste virtualisée et une boucle ordinaire font
+exactement la même chose. Il n'y a rien à économiser.
+
+La bonne méthode : **gonfler le jeu d'essai au cas réel**, et comparer les
+deux versions côte à côte — `git worktree add` sur le commit précédent, le
+même jeu gonflé des deux côtés, deux serveurs, un seul script de mesure.
+
+| nœuds montés, 217 éléments | avant | après |
+|---|---|---|
+| Place des pros | **5 939** | 317 |
+| Demandes | **2 265** | 257 |
+
+Le TEMPS, lui, n'a presque pas bougé au navigateur (−6 %) — et c'est
+normal : il a la mémoire et le processeur d'un ordinateur. Ce que le
+nombre de nœuds prédit, c'est le comportement du téléphone. À dire comme
+ça, sans gonfler le résultat.
+
+#### `ChampLocal` — et pourquoi un simple différé ne suffisait pas
+
+Trois champs vivaient encore dans `OpusApp`, donc chaque lettre redessinait
+toute l'application. Mesuré, processeur bridé six fois :
+
+| | avant | après |
+|---|---|---|
+| description d'une publication | **203 ms/lettre** | 60 |
+| message dans une conversation | 132 | 48 |
+| commentaire | 72 | 58 |
+
+203 ms, c'est le niveau de l'assistant IA du 29/09 — celui dont le
+propriétaire avait dit « on ne peut pas écrire dedans ».
+
+`useRechercheDifferee` ne pouvait pas servir ici : pour une recherche, le
+texte ne sert qu'à filtrer, on peut donc attendre. La description, elle,
+commande le bouton « Publier », l'assistant de relecture, et la
+publication elle-même — un différé aurait cassé les deux premiers et
+rendu la troisième approximative.
+
+> **`src/components/ChampLocal.js` garde le texte, et ne remonte que les
+> FRANCHISSEMENTS DE SEUIL** — il devient vide, il cesse de l'être, il
+> dépasse la longueur minimale. Deux ou trois fois dans une saisie au lieu
+> d'une fois par lettre. Et `lire()` rend la valeur du moment, via une
+> référence : publier juste après la dernière lettre doit envoyer le texte
+> ENTIER.
+
+#### Deux pièges rencontrés
+
+1. **Un commentaire JSX juste après `return (` casse la construction.**
+   `return ( {/* … */} <FlatList …` n'est pas du JSX : Babel s'arrête sans
+   indiquer la cause réelle. Le commentaire se met AU-DESSUS du `return`.
+2. **`React.memo` ne sert à rien si on lui passe des fonctions.**
+   `jyAiRepondu` et `estPourMoi` sont recréées à chaque rendu de l'écran :
+   chaque carte se croyait différente. On passe le RÉSULTAT (`mien`,
+   `dejaRepondu`), qui ne change que lorsqu'il change vraiment.
+
+Et un détail d'affichage : **l'en-tête d'une `FlatList` n'est pas séparé du
+premier élément** par `ItemSeparatorComponent`. Sans
+`ListHeaderComponentStyle`, le filtre se collait au bord de la première
+carte.
+
+`npm run verifier-listes` tient les sept listes, leurs trois réglages,
+les six composants mémorisés et les trois champs sortis d'`OpusApp`.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

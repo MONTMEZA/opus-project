@@ -2,68 +2,76 @@
  * 5a. Messages — liste des conversations. (.msg-list du prototype)
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet , RefreshControl } from 'react-native';
-import { C, F, T, S, R } from '../theme';
+import { View, Text, Pressable, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { C, F, T, S, R, APPUI } from '../theme';
 import { nomMetier } from '../lib/metiers';
 import { Avatar, EmptyState } from '../components/ui';
+
+/** Une conversation dans la liste. Mémorisée : voir NotificationsScreen. */
+const Conversation = React.memo(function Conversation({ c, onOpen }) {
+  const { contact } = c;
+  if (!contact) return null;
+  /* L'aperçu vient de `dernier`, calculé par la base : les messages
+     eux-mêmes ne sont plus chargés tant qu'on n'ouvre pas la
+     conversation. */
+  const last = c.dernier;
+  const nonLus = c.nonLus || 0;
+  return (
+    <Pressable
+      style={({ pressed }) => [s.row, pressed && APPUI.discret]}
+      onPress={() => onOpen(c.id)}
+      accessibilityRole="button"
+      accessibilityLabel={`Conversation avec ${contact.titre}`
+        + (nonLus > 0 ? `, ${nonLus} message${nonLus > 1 ? 's' : ''} non lu${nonLus > 1 ? 's' : ''}` : '')}
+    >
+      <Avatar seed={contact.id} size={44} uri={contact.avatarUrl} />
+      <View style={s.body}>
+        <View style={s.top}>
+          <Text style={[s.name, nonLus > 0 && s.nameNonLu]} numberOfLines={1}>
+            {contact.titre}
+          </Text>
+          <Text style={s.time}>{last ? last.heure : ''}</Text>
+        </View>
+        {!!contact.metier && <Text style={s.sousTitre}>{nomMetier(contact.metier)}</Text>}
+        <View style={s.basLigne}>
+          <Text style={[s.preview, nonLus > 0 && s.previewNonLu]} numberOfLines={1}>
+            {last ? last.texte : ''}
+          </Text>
+          {/* La pastille : le seul endroit où le nombre compte vraiment.
+              Au-delà de 9, « 9+ » — un cercle qui s'allonge pour afficher
+              137 ne dit rien de plus. */}
+          {nonLus > 0 && (
+            <View style={s.pastille}>
+              <Text style={s.pastilleTexte}>{nonLus > 9 ? '9+' : nonLus}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Pressable>
+  );
+});
 
 export default function MessagesScreen({ conversations, onOpen,
   onRafraichir, rafraichit = false,
 }) {
   return (
-    <ScrollView
-        /* TIRER POUR RAFRAÎCHIR.
-           Le geste existait sur le fil, et nulle part ailleurs : sur les six
-           autres écrans défilants, tirer vers le bas ne faisait rien. Or
-           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
-           pas y répondre se lit comme un écran figé. */
-        refreshControl={onRafraichir ? (
-          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
-            tintColor={C.muted} colors={[C.accent]} />
-        ) : undefined} style={s.pad}>
-      {conversations.map((c) => {
-        const { contact } = c;
-        if (!contact) return null;
-        /* L'aperçu vient de `dernier`, calculé par la base : les messages
-           eux-mêmes ne sont plus chargés tant qu'on n'ouvre pas la
-           conversation. */
-        const last = c.dernier;
-        const nonLus = c.nonLus || 0;
-        return (
-          <Pressable key={String(c.id)} style={s.row} onPress={() => onOpen(c.id)}>
-            <Avatar seed={contact.id} size={44} uri={contact.avatarUrl} />
-            <View style={s.body}>
-              <View style={s.top}>
-                <Text style={[s.name, nonLus > 0 && s.nameNonLu]} numberOfLines={1}>
-                  {contact.titre}
-                </Text>
-                <Text style={s.time}>{last ? last.heure : ''}</Text>
-              </View>
-              {!!contact.metier && <Text style={s.sousTitre}>{nomMetier(contact.metier)}</Text>}
-              <View style={s.basLigne}>
-                <Text
-                  style={[s.preview, nonLus > 0 && s.previewNonLu]}
-                  numberOfLines={1}
-                >
-                  {last ? last.texte : ''}
-                </Text>
-                {/* La pastille : le seul endroit où le nombre compte
-                    vraiment. Au-delà de 9, « 9+ » — un cercle qui s'allonge
-                    pour afficher 137 ne dit rien de plus. */}
-                {nonLus > 0 && (
-                  <View style={s.pastille}>
-                    <Text style={s.pastilleTexte}>{nonLus > 9 ? '9+' : nonLus}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </Pressable>
-        );
-      })}
-      {conversations.length === 0 && (
+    <FlatList
+      style={s.pad}
+      data={conversations}
+      keyExtractor={(c) => String(c.id)}
+      initialNumToRender={8}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews
+      refreshControl={onRafraichir ? (
+        <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+          tintColor={C.muted} colors={[C.accent]} />
+      ) : undefined}
+      ListEmptyComponent={(
         <EmptyState>Vos prochaines conversations apparaîtront ici.</EmptyState>
       )}
-    </ScrollView>
+      renderItem={({ item }) => <Conversation c={item} onOpen={onOpen} />}
+    />
   );
 }
 

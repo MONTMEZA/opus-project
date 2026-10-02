@@ -25,7 +25,7 @@
  * plus sûrement.
  */
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet , RefreshControl } from 'react-native';
+import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { C, F, T, S, R } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
@@ -188,17 +188,35 @@ export default function PlaceProScreen({
   const manque = !titre.trim() || !texte.trim()
     || (reglages.avecMetier && !metier);
 
+  /* UNE LISTE VIRTUALISÉE, et tout le reste en EN-TÊTE.
+     Avant : une boucle dans un `ScrollView`, donc toutes les annonces
+     montées d'un coup, chacune avec jusqu'à deux photos. Avec sept
+     annonces de démonstration ça ne se voit pas ; avec deux cents,
+     c'est le blocage de l'iPhone du 29/09 qui revient, et sur l'écran
+     où l'artisan cherche du travail.
+     Le formulaire, la recherche et les filtres deviennent l'en-tête de
+     la liste : ils défilent avec elle, exactement comme avant. */
   return (
-    <ScrollView
-        /* TIRER POUR RAFRAÎCHIR.
-           Le geste existait sur le fil, et nulle part ailleurs : sur les six
-           autres écrans défilants, tirer vers le bas ne faisait rien. Or
-           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
-           pas y répondre se lit comme un écran figé. */
-        refreshControl={onRafraichir ? (
-          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
-            tintColor={C.muted} colors={[C.accent]} />
-        ) : undefined} style={s.pad} keyboardShouldPersistTaps="handled">
+    <FlatList
+      style={s.pad}
+      keyboardShouldPersistTaps="handled"
+      data={liste}
+      keyExtractor={(a) => String(a.id)}
+      initialNumToRender={4}
+      maxToRenderPerBatch={6}
+      windowSize={5}
+      removeClippedSubviews
+      contentContainerStyle={{ paddingBottom: 24 }}
+      refreshControl={onRafraichir ? (
+        <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+          tintColor={C.muted} colors={[C.accent]} />
+      ) : undefined}
+      /* L'en-tête d'une FlatList n'est PAS séparé du premier élément par
+         `ItemSeparatorComponent` : sans cette marge, le filtre se collait
+         au bord de la première carte. */
+      ListHeaderComponentStyle={{ marginBottom: 10 }}
+      ListHeaderComponent={(
+        <>
       <View style={s.entete}>
         <Text style={s.enteteTitre}>La Place des pros</Text>
         <Text style={s.enteteTexte}>
@@ -367,21 +385,9 @@ export default function PlaceProScreen({
           style={{ marginTop: 10 }}
         />
       )}
-
-      {/* --- les annonces --- */}
-      <View style={{ gap: 10, paddingBottom: 24, marginTop: 12 }}>
-        {liste.map((a) => (
-          <Annonce
-            key={String(a.id)}
-            annonce={a}
-            onRepondre={() => onRepondre(a)}
-            onFermer={() => onFermer(a)}
-            onVoirProfil={onVoirProfil}
-            onSignaler={onSignaler}
-          />
-        ))}
-
-        {liste.length === 0 && (
+        </>
+      )}
+      ListEmptyComponent={(
           <EmptyState>
             {recherche.trim()
               ? `Rien pour « ${recherche.trim()} ». Essayez un mot plus court, ou le nom que les artisans emploient sur le chantier.`
@@ -389,9 +395,18 @@ export default function PlaceProScreen({
                 ? 'Aucune annonce d’artisan vérifié pour ce filtre.'
                 : 'Aucune annonce pour le moment. Posez la première.'}
           </EmptyState>
-        )}
-      </View>
-    </ScrollView>
+      )}
+      ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+      renderItem={({ item: a }) => (
+        <Annonce
+          annonce={a}
+          onRepondre={() => onRepondre(a)}
+          onFermer={() => onFermer(a)}
+          onVoirProfil={onVoirProfil}
+          onSignaler={onSignaler}
+        />
+      )}
+    />
   );
 }
 

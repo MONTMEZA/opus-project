@@ -11,10 +11,12 @@
  *   - la DESTINATION dit où elle va. Un artisan ne veut pas toujours publier :
  *     parfois il veut juste enrichir son portfolio.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import { BtnMain, BtnMini, Chip, Field, TextArea } from '../components/ui';
+import ChampLocal from '../components/ChampLocal';
+import { MINIMUM as MINIMUM_RELECTURE } from '../components/AmeliorerTexte';
 import AmeliorerTexte from '../components/AmeliorerTexte';
 import Media from '../components/Media';
 import {
@@ -60,13 +62,25 @@ const DESTINATIONS = [
 
 export default function CreerScreen({
   moi,
-  createType, setCreateType, createText, setCreateText,
+  createType, setCreateType,
   createMetier, setCreateMetier, createVille, setCreateVille,
   createDestination, setCreateDestination,
   medias, setMedias, musique, setMusique,
   envoi, erreur, onPublish, onErreur,
 }) {
   const [occupe, setOccupe] = useState(false);
+
+  /* LA DESCRIPTION NE VIT PLUS DANS `OpusApp`.
+     Elle y était, et chaque lettre redessinait donc toute l'application —
+     203 ms par lettre au navigateur, processeur bridé six fois, soit le
+     niveau de l'assistant IA du 29/09 dont le propriétaire avait dit
+     « on ne peut pas écrire dedans ».
+     Elle vit maintenant dans son champ. Cet écran n'apprend que deux
+     choses : qu'elle est vide ou non (pour le bouton Publier), et qu'elle
+     a dépassé la longueur minimale (pour la relecture). Deux ou trois fois
+     dans une saisie, au lieu d'une fois par lettre. */
+  const legende = useRef(null);
+  const [etatLegende, setEtatLegende] = useState({ vide: true, long: false });
   const aUnVisuel = FORMATS_VISUELS.has(createType);
   const destination = aUnVisuel ? createDestination : 'fil';
   const dansLeFil = destination !== 'portfolio';
@@ -138,7 +152,7 @@ export default function CreerScreen({
   if (createType === 'avantapres' && medias.length === 1) {
     manques.push('Il manque la seconde photo (l\'après).');
   }
-  if (dansLeFil && !createText.trim()) {
+  if (dansLeFil && etatLegende.vide) {
     manques.push('Écrivez une description : elle apparaît sous la publication.');
   }
   const pret = manques.length === 0 && !envoi;
@@ -309,24 +323,27 @@ export default function CreerScreen({
       )}
 
       <Text style={s.label}>{dansLeFil ? 'Description' : 'Description (facultative)'}</Text>
-      <TextArea
+      <ChampLocal
+        ref={legende}
+        multiligne
         placeholder={dansLeFil
           ? 'Raconte ce que tu as fait, avec tes mots...'
           : 'Une légende, si tu veux...'}
-        value={createText}
-        onChangeText={setCreateText}
+        surSeuil={setEtatLegende}
+        seuilLong={MINIMUM_RELECTURE}
       />
 
       {/* L'artisan écrit comme il parle, puis fait relire. L'assistant part
           de SES mots : il corrige et range, il ne remplace pas. */}
       <AmeliorerTexte
-        texte={createText}
+        lireTexte={() => (legende.current ? legende.current.lire() : '')}
+        longueurAtteinte={etatLegende.long}
         contexte="publication"
         profil={moi ? {
           entreprise: moi.entreprise, metiers: moi.metiers || [moi.metier],
           ville: moi.ville, exp: moi.exp,
         } : {}}
-        onRemplacer={setCreateText}
+        onRemplacer={(t) => legende.current && legende.current.ecrire(t)}
       />
 
       <Text style={s.label}>Métier</Text>
@@ -376,7 +393,17 @@ export default function CreerScreen({
         label={envoi
           ? 'Envoi en cours...'
           : destination === 'portfolio' ? 'Ajouter à mon portfolio' : 'Publier'}
-        onPress={onPublish}
+        /* Le texte EXACT, lu à l'instant où on appuie. Pas de différé :
+           publier une demi-seconde après la dernière lettre enverrait une
+           description amputée. */
+        onPress={async () => {
+          const parti = await onPublish(legende.current ? legende.current.lire() : '');
+          /* L'écran vide SON champ : le texte ne vit plus dans `OpusApp`,
+             qui ne peut donc plus le remettre à zéro. Et seulement si
+             c'est parti — sinon on effacerait le travail de l'artisan
+             parce qu'une photo manquait. */
+          if (parti && legende.current) legende.current.vider();
+        }}
         style={{ marginTop: 14, marginBottom: 30 }}
       />
     </ScrollView>

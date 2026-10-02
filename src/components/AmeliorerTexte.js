@@ -37,15 +37,32 @@ import { aiAmeliorerTexte } from '../lib/ai';
 /** En dessous, il n'y a pas de matière : on ne réécrit pas trois mots. */
 export const MINIMUM = 10;
 
+/**
+ * `texte` peut être une CHAÎNE ou une FONCTION qui la rend.
+ *
+ * POURQUOI LES DEUX : depuis le 02/10/2026, la description d'une
+ * publication vit dans son propre composant (`ChampLocal`) — l'écran ne la
+ * reçoit plus à chaque lettre, sinon il se redessinait entièrement vingt
+ * fois par phrase (203 ms par lettre, mesuré). On lui passe donc de quoi
+ * la LIRE au moment utile, plus la valeur elle-même.
+ *
+ * `assezEcrit` ne peut pas se calculer à partir d'une fonction : c'est
+ * `longueurAtteinte` qui le dit, et le champ ne le signale que lorsque le
+ * seuil est franchi — deux fois dans une saisie, pas vingt.
+ */
 export default function AmeliorerTexte({
-  texte, contexte = 'publication', profil = {}, onRemplacer, compact = false,
+  texte, lireTexte, longueurAtteinte, contexte = 'publication', profil = {},
+  onRemplacer, compact = false,
 }) {
   const [propositions, setPropositions] = useState(null);
   const [parIA, setParIA] = useState(false);
   const [note, setNote] = useState(null);
   const [enCours, setEnCours] = useState(false);
 
-  const assezEcrit = String(texte || '').trim().length >= MINIMUM;
+  const lire = () => (lireTexte ? lireTexte() : texte) || '';
+  const assezEcrit = longueurAtteinte !== undefined
+    ? !!longueurAtteinte
+    : String(texte || '').trim().length >= MINIMUM;
 
   const ameliorer = async () => {
     setEnCours(true);
@@ -54,15 +71,16 @@ export default function AmeliorerTexte({
     /* On applique D'ABORD la mise en forme locale. Même si l'IA échoue,
        l'artisan repart avec quelque chose — c'est tout l'intérêt de cet
        ordre, et c'est ce qui rend le bouton fiable. */
-    const propre = nettoyerTypographie(texte);
-    const locales = aChange(texte, propre)
+    const brut = lire();
+    const propre = nettoyerTypographie(brut);
+    const locales = aChange(brut, propre)
       ? [{ titre: 'Mise en forme', texte: propre }]
       : [];
     setPropositions(locales);
     setParIA(false);
 
     try {
-      const mieux = await aiAmeliorerTexte({ texte, contexte, profil });
+      const mieux = await aiAmeliorerTexte({ texte: brut, contexte, profil });
       if (mieux.length) {
         setPropositions(mieux);
         setParIA(true);

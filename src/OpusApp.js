@@ -93,7 +93,6 @@ export default function OpusApp() {
 
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
-  const [msgDraft, setMsgDraft] = useState('');
 
   const [notifications, setNotifications] = useState([]);
   const [viewedProId, setViewedProId] = useState(null);
@@ -189,7 +188,6 @@ export default function OpusApp() {
   const [envoi, setEnvoi] = useState(null);
   // Dernier refus, affiché sur l'écran Publier jusqu'au prochain essai.
   const [erreurPublication, setErreurPublication] = useState(null);
-  const [createText, setCreateText] = useState('');
   const [createMetier, setCreateMetier] = useState(METIER_PAR_DEFAUT);
   const [createVille, setCreateVille] = useState('');
 
@@ -821,7 +819,7 @@ export default function OpusApp() {
    * serait de retaper le message.
    */
   const sendMessage = (texteDonne) => {
-    const texte = String(texteDonne || msgDraft).trim();
+    const texte = String(texteDonne || '').trim();
     if (!texte || activeConvId == null) return;
 
     const cle = `envoi-${compteurEnvoi.current}`;
@@ -839,7 +837,6 @@ export default function OpusApp() {
         dernier: { texte, heure: "à l'instant", de: api.getUserId() },
       }
       : c)));
-    if (!texteDonne) setMsgDraft('');
 
     api.sendMessage(activeConvId, texte)
       .then(() => majEtat('envoye'))
@@ -912,7 +909,14 @@ export default function OpusApp() {
   }, [userType, activeConvId]);
 
   /* ---------- création ---------- */
-  const publish = async () => {
+  /**
+   * `legende` arrive de l'écran, qui la lit à l'instant où on appuie.
+   *
+   * Elle ne vit plus ici depuis le 02/10/2026 : tant qu'elle y était,
+   * chaque lettre redessinait toute l'application — 203 ms par lettre,
+   * mesuré. Voir `src/components/ChampLocal.js`.
+   */
+  const publish = async (legende = '') => {
     if (envoi) return;                     // envoi déjà en cours
     if (userType !== 'pro') {
       showBanner("Le fil d'actualité est réservé aux professionnels.");
@@ -925,20 +929,20 @@ export default function OpusApp() {
     const versLeFil = destination !== 'portfolio';
     const versLePortfolio = aUnVisuel && destination !== 'fil';
 
-    if (versLeFil && !createText.trim()) {
+    if (versLeFil && !String(legende).trim()) {
       showBanner('Ajoute une description avant de publier.');
-      return;
+      return false;
     }
     if (aUnVisuel && medias.length === 0) {
       showBanner('Choisis une photo ou une vidéo avant de publier.');
-      return;
+      return false;
     }
     if (createType === 'avantapres' && medias.length < 2) {
       showBanner("Un avant/après demande deux photos : l'avant, puis l'après.");
-      return;
+      return false;
     }
 
-    const texte = createText.trim();
+    const texte = String(legende).trim();
     let id = `local-${Date.now()}`;
     let envoyes = medias;
     let urlMusique = musique ? musique.uri : null;
@@ -1043,12 +1047,15 @@ export default function OpusApp() {
         : ps));
     }
 
-    setCreateText(''); setCreateVille(''); setMedias([]); setMusique(null);
+    setCreateVille(''); setMedias([]); setMusique(null);
     // Le fil des vidéos ne montre que des vidéos : on y renvoie l'artisan
     // quand c'est là que sa publication vient d'atterrir.
     if (versLeFil) setFeedMode(FORMATS_VIDEO.has(createType) ? 'video' : 'classic');
     setScreen(versLeFil ? 'home' : 'profil');
     showBanner(MESSAGE_PUBLICATION[destination]);
+    /* L'écran vide SON champ lui-même : le texte ne vit plus ici, donc on
+       ne peut plus le remettre à zéro d'ici. On dit juste que c'est parti. */
+    return true;
   };
 
   /* ---------- avis ---------- */
@@ -2144,7 +2151,6 @@ export default function OpusApp() {
             musique={musique} setMusique={setMusique}
             envoi={envoi} erreur={erreurPublication}
             onErreur={showErreur}
-            createText={createText} setCreateText={setCreateText}
             createMetier={createMetier} setCreateMetier={setCreateMetier}
             createVille={createVille} setCreateVille={setCreateVille}
             onPublish={publish}
@@ -2164,7 +2170,7 @@ export default function OpusApp() {
           <ConversationScreen
             conversation={{ ...activeConv, messages: activeConv.messages || [] }}
             chargement={!Array.isArray(activeConv.messages)}
-            draft={msgDraft} setDraft={setMsgDraft} onSend={sendMessage}
+            onSend={sendMessage}
             onRenvoyer={renvoyerMessage}
             onSignaler={ouvrirSignalement}
             interlocuteur={activeConv.proId && pros[activeConv.proId]

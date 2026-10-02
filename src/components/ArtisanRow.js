@@ -9,7 +9,10 @@ import { libelleMetiers } from '../lib/metiers';
 import { Avatar } from './ui';
 import { BadgeCheck, Star } from './icons';
 
-export default function ArtisanRow({ pro, avatarSize = 44, note, raison, right }) {
+/* MÉMORISÉ : ce composant vit dans une liste, et une liste redessine
+   chacune de ses lignes visibles dès que l'écran bouge — même celles qui
+   n'ont pas changé d'un pixel. */
+const ArtisanRow = React.memo(function ArtisanRow({ pro, avatarSize = 44, note, raison, right }) {
   return (
     <View style={s.row}>
       <Avatar seed={pro.id} size={avatarSize} uri={pro.avatarUrl} />
@@ -30,8 +33,9 @@ export default function ArtisanRow({ pro, avatarSize = 44, note, raison, right }
       {right}
     </View>
   );
-}
+});
 
+export default ArtisanRow;
 const s = StyleSheet.create({
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,

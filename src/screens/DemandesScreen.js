@@ -6,7 +6,7 @@
  * séparé du fil, qui reste une vitrine réservée aux pros.
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet , RefreshControl } from 'react-native';
+import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { C, F } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
@@ -21,6 +21,98 @@ import { ChampMetier } from '../components/SelecteurMetiers';
 import { METIER_PAR_DEFAUT, nomMetier } from '../lib/metiers';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
 import { distanceKm, libelleDistance } from '../lib/adresse';
+
+/**
+ * UNE DEMANDE, isolée et mémorisée.
+ *
+ * Elle était écrite à l'intérieur de la boucle, donc refabriquée à chaque
+ * rendu de l'écran — et toutes les demandes étaient montées d'un coup dans
+ * un `ScrollView`, photos comprises. `memo` et la liste virtualisée
+ * règlent les deux.
+ */
+const Demande = React.memo(function Demande({
+  d, estPro, mien, dejaRepondu, onRepondre, onSignaler,
+}) {
+  return (
+      <View key={String(d.id)} style={s.carte}>
+        <View style={s.carteHaut}>
+          <Avatar seed={String(d.auteurId || d.auteur)} size={38} uri={d.avatarUrl} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.auteur}>{d.auteur}</Text>
+            <View style={s.metaRow}>
+              <MapPin size={11} color={C.muted} />
+              <Text style={s.meta} numberOfLines={1}>
+                {d.ville}
+                {libelleDistance(d.km) ? ` · ${libelleDistance(d.km)}` : ''}
+                {' · '}{d.time}
+              </Text>
+            </View>
+          </View>
+          <View style={[s.badgeMetier, mien && s.badgeMetierMien]}>
+            <Text style={[s.badgeMetierText, mien && { color: '#fff' }]}>
+              {nomMetier(d.metier)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={s.etiquettes}>
+          {d.urgence && d.urgence !== 'quand_possible' && (
+            <View style={[s.etiquette, { backgroundColor: urgenceDe(d.urgence).couleur }]}>
+              <Text style={s.etiquetteTexte}>{urgenceDe(d.urgence).label}</Text>
+            </View>
+          )}
+          {!!libelleBudget(d.budget) && (
+            <View style={[s.etiquette, s.etiquetteBudget]}>
+              <Text style={[s.etiquetteTexte, { color: C.ink }]}>
+                {libelleBudget(d.budget)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={s.texte}>{d.texte}</Text>
+        {(d.medias && d.medias.length ? d.medias : (d.media ? [d.media] : [])).map((m, i) => (
+          <Media key={i} media={m} style={s.media} />
+        ))}
+
+        <View style={s.carteBas}>
+          <Text style={s.reponses}>
+            {d.reponses} {d.reponses > 1 ? 'réponses' : 'réponse'}
+          </Text>
+          {/* Une demande peut être une arnaque ou un démarchage déguisé :
+              elle se signale comme le reste. */}
+          {!!onSignaler && !!d.auteurId && (
+            <Pressable
+              hitSlop={8}
+              style={{ marginLeft: 'auto', marginRight: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Signaler cette demande"
+              onPress={() => onSignaler({
+                cibleType: 'demande',
+                cibleId: d.id,
+                auteurId: d.auteurId,
+                auteurNom: d.auteur,
+                extrait: d.texte,
+              })}
+            >
+              <Flag size={13} color={C.muted} />
+            </Pressable>
+          )}
+          {estPro && (dejaRepondu ? (
+            <View style={s.dejaRepondu}>
+              <Check size={12} color={C.accent2} />
+              <Text style={s.dejaReponduTexte}>Vous avez répondu</Text>
+            </View>
+          ) : (
+            <BtnMini onPress={() => onRepondre(d)}>
+              <MessageCircle size={12} color="#111" />
+              <Text style={s.repondreText}>Répondre</Text>
+            </BtnMini>
+          ))}
+        </View>
+      </View>
+  );
+});
 
 export default function DemandesScreen({
   userType, mesMetiers = [], demandes, filtreMetier, setFiltreMetier,
@@ -100,17 +192,33 @@ export default function DemandesScreen({
     setBudget(null); setUrgence('quand_possible'); setFormOuvert(false);
   };
 
+  /* UNE LISTE VIRTUALISÉE, et le formulaire en EN-TÊTE.
+     Avant : une boucle dans un `ScrollView`, donc toutes les demandes
+     montées d'un coup avec leurs photos. C'est l'écran où l'artisan
+     cherche du travail : le jour où il y en a deux cents, c'est le
+     blocage de l'iPhone du 29/09 qui revient. */
   return (
-    <ScrollView
-        /* TIRER POUR RAFRAÎCHIR.
-           Le geste existait sur le fil, et nulle part ailleurs : sur les six
-           autres écrans défilants, tirer vers le bas ne faisait rien. Or
-           c'est devenu LE geste par lequel on demande « quoi de neuf » — ne
-           pas y répondre se lit comme un écran figé. */
-        refreshControl={onRafraichir ? (
-          <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
-            tintColor={C.muted} colors={[C.accent]} />
-        ) : undefined} style={s.pad} keyboardShouldPersistTaps="handled">
+    <FlatList
+      style={s.pad}
+      keyboardShouldPersistTaps="handled"
+      data={liste}
+      keyExtractor={(d) => String(d.id)}
+      initialNumToRender={4}
+      maxToRenderPerBatch={6}
+      windowSize={5}
+      removeClippedSubviews
+      contentContainerStyle={{ paddingBottom: 24 }}
+      refreshControl={onRafraichir ? (
+        <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
+          tintColor={C.muted} colors={[C.accent]} />
+      ) : undefined}
+      /* L'en-tête d'une FlatList n'est PAS séparé du premier élément par
+         `ItemSeparatorComponent` : sans cette marge, le filtre se collait
+         au bord de la première carte. */
+      ListHeaderComponentStyle={{ marginBottom: 10 }}
+      ListHeaderComponent={(
+        <>
+
       {/* --- côté particulier : publier une demande --- */}
       {!estPro && (
         <View style={s.encart}>
@@ -236,98 +344,33 @@ export default function DemandesScreen({
         placeholder="Filtrer par métier..."
         avecTous
       />
-
-      {/* --- la liste --- */}
-      <View style={{ gap: 10, paddingBottom: 24 }}>
-        {liste.map((d) => (
-          <View key={String(d.id)} style={s.carte}>
-            <View style={s.carteHaut}>
-              <Avatar seed={String(d.auteurId || d.auteur)} size={38} uri={d.avatarUrl} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.auteur}>{d.auteur}</Text>
-                <View style={s.metaRow}>
-                  <MapPin size={11} color={C.muted} />
-                  <Text style={s.meta} numberOfLines={1}>
-                    {d.ville}
-                    {libelleDistance(d.km) ? ` · ${libelleDistance(d.km)}` : ''}
-                    {' · '}{d.time}
-                  </Text>
-                </View>
-              </View>
-              <View style={[s.badgeMetier, estPourMoi(d) && s.badgeMetierMien]}>
-                <Text style={[s.badgeMetierText, estPourMoi(d) && { color: '#fff' }]}>
-                  {nomMetier(d.metier)}
-                </Text>
-              </View>
-            </View>
-
-            <View style={s.etiquettes}>
-              {d.urgence && d.urgence !== 'quand_possible' && (
-                <View style={[s.etiquette, { backgroundColor: urgenceDe(d.urgence).couleur }]}>
-                  <Text style={s.etiquetteTexte}>{urgenceDe(d.urgence).label}</Text>
-                </View>
-              )}
-              {!!libelleBudget(d.budget) && (
-                <View style={[s.etiquette, s.etiquetteBudget]}>
-                  <Text style={[s.etiquetteTexte, { color: C.ink }]}>
-                    {libelleBudget(d.budget)}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <Text style={s.texte}>{d.texte}</Text>
-            {(d.medias && d.medias.length ? d.medias : (d.media ? [d.media] : [])).map((m, i) => (
-              <Media key={i} media={m} style={s.media} />
-            ))}
-
-            <View style={s.carteBas}>
-              <Text style={s.reponses}>
-                {d.reponses} {d.reponses > 1 ? 'réponses' : 'réponse'}
-              </Text>
-              {/* Une demande peut être une arnaque ou un démarchage déguisé :
-                  elle se signale comme le reste. */}
-              {!!onSignaler && !!d.auteurId && (
-                <Pressable
-                  hitSlop={8}
-                  style={{ marginLeft: 'auto', marginRight: 10 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Signaler cette demande"
-                  onPress={() => onSignaler({
-                    cibleType: 'demande',
-                    cibleId: d.id,
-                    auteurId: d.auteurId,
-                    auteurNom: d.auteur,
-                    extrait: d.texte,
-                  })}
-                >
-                  <Flag size={13} color={C.muted} />
-                </Pressable>
-              )}
-              {estPro && (jyAiRepondu(d) ? (
-                <View style={s.dejaRepondu}>
-                  <Check size={12} color={C.accent2} />
-                  <Text style={s.dejaReponduTexte}>Vous avez répondu</Text>
-                </View>
-              ) : (
-                <BtnMini onPress={() => onRepondre(d)}>
-                  <MessageCircle size={12} color="#111" />
-                  <Text style={s.repondreText}>Répondre</Text>
-                </BtnMini>
-              ))}
-            </View>
-          </View>
-        ))}
-
-        {liste.length === 0 && (
+        </>
+      )}
+      ListEmptyComponent={(
           <EmptyState>
             {filtreMetier
-              ? `Aucune demande en ${filtreMetier} pour le moment.`
+              ? `Aucune demande en ${nomMetier(filtreMetier)} pour le moment.`
               : 'Aucune demande pour le moment.'}
           </EmptyState>
-        )}
-      </View>
-    </ScrollView>
+      )}
+      ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+      renderItem={({ item: d }) => (
+        /* LES PROPRIÉTÉS SONT DES VALEURS, PAS DES FONCTIONS.
+           Passer `jyAiRepondu` et `estPourMoi` tels quels aurait annulé le
+           `memo` : ces fonctions sont recréées à chaque rendu de l'écran,
+           donc chaque carte se serait crue différente. On passe le
+           RÉSULTAT, qui lui ne change que lorsqu'il change vraiment. */
+        <Demande
+          d={d}
+          estPro={estPro}
+          mien={estPourMoi(d)}
+          dejaRepondu={jyAiRepondu(d)}
+          onRepondre={onRepondre}
+          onSignaler={onSignaler}
+        />
+      )}
+    />
+
   );
 }
 
