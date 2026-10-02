@@ -126,6 +126,33 @@ console.log('\nLa clé d’un métier ne s’affiche jamais brute');
     !/Aucune demande en \$\{filtreMetier\}/.test(d), 'DemandesScreen.js');
 }
 
+console.log('\nLe cadre d’une photo suit la photo, entre deux bornes');
+{
+  /* Mesuré le 02/10/2026 sur les VRAIES photos du propriétaire : trois
+     carrées (1179 × 1179) et une très verticale (1600 × 2845). Dans le
+     cadre fixe de 16:10, la carrée perdait 37,5 % de sa hauteur et la
+     verticale 64,9 %. Un cadre fixe en 4:5 n'aurait rien réglé : une photo
+     de chantier en paysage y perdrait 55 % de sa LARGEUR.
+     Ce contrôle fait tourner le calcul, il ne le relit pas. */
+  const { cadrePhoto, PLUS_HAUT, PLUS_LARGE } = await import('../src/lib/cadre.js')
+    .catch(() => ({}));
+  if (!cadrePhoto) {
+    verifier('`cadrePhoto` est exporté', false, 'src/lib/cadre.js');
+  } else {
+    verifier('une photo carrée est gardée telle quelle', cadrePhoto(1) === 1);
+    verifier('une photo très verticale est ramenée à la borne portrait',
+      Math.abs(cadrePhoto(1600 / 2845) - PLUS_HAUT) < 1e-9, `${cadrePhoto(1600 / 2845)}`);
+    verifier('une photo très large est ramenée à la borne paysage',
+      Math.abs(cadrePhoto(21 / 9) - PLUS_LARGE) < 1e-9);
+    verifier('un rapport absurde ne casse pas la carte',
+      cadrePhoto(0) === 1 && cadrePhoto(NaN) === 1 && cadrePhoto(undefined) === 1,
+      'une image sans dimensions retombe sur le carré');
+    verifier('les bornes gardent la carte lisible',
+      PLUS_HAUT >= 0.6 && PLUS_LARGE <= 2,
+      'sans bornes, une carte deviendrait une bande ou un mur de deux écrans');
+  }
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

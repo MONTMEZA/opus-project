@@ -55,7 +55,7 @@ export function estVideo(media) {
 }
 
 export default function Media({
-  media, style, lecture = false, muet = true, children,
+  media, style, lecture = false, muet = true, children, onRatio,
 }) {
   if (!estFichier(media)) {
     return <Gradient media={media} style={style}>{children}</Gradient>;
@@ -86,6 +86,14 @@ export default function Media({
         contentFit="cover"
         transition={150}
         cachePolicy="memory-disk"
+        /* LA FORME RÉELLE DE LA PHOTO, remontée une fois qu'elle est
+           chargée. C'est la seule façon de la connaître : elle n'est
+           écrite nulle part en base. Voir `Carrousel`, qui s'en sert pour
+           que le cadre suive la photo au lieu de la rogner. */
+        onLoad={onRatio ? (e) => {
+          const src = (e && e.source) || {};
+          if (src.width > 0 && src.height > 0) onRatio(src.width / src.height);
+        } : undefined}
         /* Dans une liste, expo-image réutilise ses vues : sans cette clé,
            une vignette peut rester affichée sur la ligne du voisin pendant
            un instant. */

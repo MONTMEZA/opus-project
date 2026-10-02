@@ -33,19 +33,40 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { C, F, T, S, R } from '../theme';
 import Media from './Media';
+import { cadrePhoto } from '../lib/cadre';
 
 /** Combien de photos on monte de part et d'autre de celle qu'on regarde. */
 const VOISINES_MONTEES = 1;
 
-export default function Carrousel({ medias = [], style, aspectRatio = 16 / 10, enfant }) {
+/**
+ * Le cadre d'une photo suit la PHOTO, borné des deux côtés — voir
+ * `src/lib/cadre.js`, qui porte le calcul, les mesures et les raisons.
+ */
+export default function Carrousel({
+  medias = [], style, aspectRatio = 1, enfant, basReserve = 0,
+}) {
   const [largeur, setLargeur] = useState(0);
   const [index, setIndex] = useState(0);
+  /* `aspectRatio` n'est plus qu'un POINT DE DÉPART : le carré, qui est la
+     forme la plus fréquente, donc celle qui bouge le moins au chargement.
+     La vraie forme arrive avec la photo. */
+  const [cadre, setCadre] = useState(aspectRatio);
+
+  const mesurer = (r) => {
+    if (!(r > 0)) return;
+    const borne = cadrePhoto(r);
+    setCadre((ancien) => (Math.abs(ancien - borne) < 0.005 ? ancien : borne));
+  };
 
   /* Une seule photo : pas de carrousel, pas de points. Un indicateur qui ne
      sert à rien est un indicateur qu'on finit par ne plus voir du tout. */
   if (medias.length <= 1) {
     return (
-      <Media media={medias[0]} style={[{ width: '100%', aspectRatio }, style]}>
+      <Media
+        media={medias[0]}
+        style={[{ width: '100%', aspectRatio: cadre }, style]}
+        onRatio={mesurer}
+      >
         {enfant}
       </Media>
     );
@@ -59,7 +80,7 @@ export default function Carrousel({ medias = [], style, aspectRatio = 16 / 10, e
 
   return (
     <View
-      style={[{ width: '100%', aspectRatio }, style]}
+      style={[{ width: '100%', aspectRatio: cadre }, style]}
       onLayout={(e) => setLargeur(e.nativeEvent.layout.width)}
     >
       <ScrollView
@@ -88,7 +109,14 @@ export default function Carrousel({ medias = [], style, aspectRatio = 16 / 10, e
             style={{ width: largeur || 1, height: '100%' }}
           >
             {Math.abs(i - index) <= VOISINES_MONTEES && (
-              <Media media={m} style={{ width: '100%', height: '100%' }} />
+              <Media
+                media={m}
+                style={{ width: '100%', height: '100%' }}
+                /* Seule la PREMIÈRE donne le cadre : sur une série, les
+                   photos n'ont pas toutes la même forme, et un cadre qui
+                   changerait à chaque glissement serait insupportable. */
+                onRatio={i === 0 ? mesurer : undefined}
+              />
             )}
           </View>
         ))}
@@ -101,7 +129,10 @@ export default function Carrousel({ medias = [], style, aspectRatio = 16 / 10, e
         <Text style={s.compteurTexte}>{index + 1}/{medias.length}</Text>
       </View>
 
-      <View style={s.points} pointerEvents="none">
+      {/* `basReserve` : la place prise par la barre d'actions posée sur la
+          photo. Sans ça, les points se retrouvent DERRIÈRE elle et on ne
+          sait plus combien de photos il reste. */}
+      <View style={[s.points, { bottom: S.sm + basReserve }]} pointerEvents="none">
         {medias.map((_, i) => (
           <View key={i} style={[s.point, i === index && s.pointActif]} />
         ))}
@@ -122,7 +153,7 @@ const s = StyleSheet.create({
   compteurTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
 
   points: {
-    position: 'absolute', left: 0, right: 0, bottom: S.sm,
+    position: 'absolute', left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'center', gap: 5,
   },
   point: {

@@ -14,12 +14,17 @@ import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
   MessageCircle, Phone, FileText, User, Send, Maximize, Flag,
 } from './icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import Media, { EtiquetteVideo } from './Media';
 import Carrousel from './Carrousel';
 import DoubleAppui from './DoubleAppui';
 
 /** Les formats qui se regardent aussi en plein écran dans le fil « Vidéos ». */
 const EST_VIDEO = new Set(['video', 'montage']);
+
+/* Ce que la barre d'actions occupe en bas de la photo. Les points du
+   carrousel s'en écartent d'autant. */
+const HAUTEUR_BARRE = 56;
 
 /* MÉMORISÉ : ce composant vit dans une liste, et une liste redessine
    chacune de ses lignes visibles dès que l'écran bouge — même celles qui
@@ -198,12 +203,30 @@ const PostCard = React.memo(function PostCard({
         /* Une photo, ou plusieurs qu'on fait défiler au doigt. Avec une seule
            image, le carrousel se retire complètement : ni points, ni
            compteur. */
-        <Carrousel medias={photos} aspectRatio={16 / 10} />
+        <Carrousel medias={photos} basReserve={HAUTEUR_BARRE} />
       )}
-      </DoubleAppui>
 
-      {/* barre d'actions */}
-      <View style={s.actions}>
+      {/* LA BARRE D'ACTIONS EST POSÉE SUR LA PHOTO — demandé par le
+          propriétaire le 02/10/2026 : « la photo prend tout le post, et les
+          boutons en transparence dessus, en dessous ».
+
+          Il a raison, et pour une raison qui n'est pas que de goût : la
+          bande blanche sous la photo coupait la carte en deux, alors que
+          l'image est la seule chose qu'on regarde. Le fil vidéo faisait
+          déjà exactement ça — les deux fils parlent enfin la même langue.
+
+          LE VOILE N'EST PAS DÉCORATIF. Une icône blanche sur une photo de
+          mur blanc disparaît. Le dégradé garantit un fond sombre sous les
+          commandes, quelle que soit la photo. C'est le même `Scrim` que le
+          fil vidéo, pour la même raison. */}
+      <View style={s.barreSurPhoto} pointerEvents="box-none">
+        <LinearGradient
+          colors={['transparent', 'rgba(26,27,25,0.22)', 'rgba(26,27,25,0.78)']}
+          locations={[0, 0.35, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View style={s.actions}>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
           hitSlop={viser(36)}
@@ -214,8 +237,13 @@ const PostCard = React.memo(function PostCard({
             : `J'aime cette publication. ${post.likes} j'aime`}
           aria-selected={!!post.liked}
         >
-          <Heart size={17} filled={post.liked} color={post.liked ? C.accent : C.muted} />
-          <Text style={[s.actionText, post.liked && { color: C.accentTexte }]}>{post.likes}</Text>
+            <Heart size={17} filled={post.liked} color={post.liked ? C.accent : C.surface} />
+            {/* Le NOMBRE reste blanc, seul le cœur devient orange. Le voile
+                n'est qu'à 78 % : sur une photo claire, un chiffre orange
+                deviendrait illisible, et sa lisibilité dépendrait alors de
+                la photo — ce qui n'est pas une règle, c'est un hasard.
+                Un cœur rempli dit déjà « c'est aimé ». */}
+            <Text style={s.actionText}>{post.likes}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
@@ -225,8 +253,8 @@ const PostCard = React.memo(function PostCard({
           accessibilityLabel={`Commentaires, ${nbCommentairesDe(post)}`}
           aria-expanded={!!commentsOpen}
         >
-          <MessageSquare size={17} color={C.muted} />
-          <Text style={s.actionText}>{nbCommentairesDe(post)}</Text>
+            <MessageSquare size={17} color={C.surface} />
+            <Text style={s.actionText}>{nbCommentairesDe(post)}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
@@ -235,8 +263,8 @@ const PostCard = React.memo(function PostCard({
           accessibilityRole="button"
           accessibilityLabel="Partager cette publication"
         >
-          <Share2 size={16} color={C.muted} />
-          <Text style={s.actionText}>Partager</Text>
+            <Share2 size={16} color={C.surface} />
+            <Text style={s.actionText}>Partager</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
@@ -248,12 +276,14 @@ const PostCard = React.memo(function PostCard({
             : 'Enregistrer cette publication'}
           aria-selected={!!saved}
         >
-          <Bookmark size={16} filled={saved} color={saved ? C.accent : C.muted} />
+            <Bookmark size={16} filled={saved} color={saved ? C.accent : C.surface} />
         </Pressable>
-        <View style={s.contactWrap}>
-          <BtnMini label="Contacter" onPress={() => onToggleContact(post.id)} />
+          <View style={s.contactWrap}>
+            <BtnMini label="Contacter" onPress={() => onToggleContact(post.id)} />
+          </View>
         </View>
       </View>
+      </DoubleAppui>
 
       {/* menu Contacter */}
       {contactOpen && (
@@ -341,9 +371,15 @@ const s = StyleSheet.create({
     lineHeight: interligne(T.corps), color: C.ink, fontFamily: F.inter,
   },
 
+  /* La barre est POSÉE SUR la photo, calée en bas. `box-none` sur le
+     conteneur : le voile ne doit pas intercepter le double-appui, seuls
+     les boutons reçoivent la touche. */
+  barreSurPhoto: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   actions: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingVertical: 10, paddingHorizontal: 12, flexWrap: 'wrap',
+    paddingVertical: 10, paddingHorizontal: 12,
+    /* Plus de `flexWrap` : sur la photo, une barre qui passe à la ligne
+       mangerait l'image. Les quatre icônes et le bouton tiennent. */
   },
   /* Une icône de 17 px ne fait pas un bouton : 36 px de haut plus 8 px
      de `hitSlop` donnent les 44 px que réclame un pouce. Mesuré avant :
@@ -352,7 +388,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: S.xs + 1,
     minHeight: 36, paddingHorizontal: S.xs,
   },
-  actionText: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
+  actionText: { fontSize: T.courant, color: C.surface, fontFamily: F.inter },
   contactWrap: { marginLeft: 'auto' },
 
   /* Ce menu FLOTTE au-dessus de la carte : légèrement arrondi, et une ombre

@@ -987,6 +987,59 @@ genre d'animation qui fait dire que l'application rame.
 > famille. Une règle qui dépend du nombre d'éléments se trompera le jour
 > où il y aura du monde — c'est-à-dire le jour où ça compte.
 
+#### Le cadre d'une photo suit la PHOTO — 02/10/2026
+
+Signalé par le propriétaire : « sur le fil photo, les photos ne prennent
+plus tout le post, une bande blanche est en dessous, ce n'est pas joli ».
+
+Mesuré sur SES photos, et c'était pire que la bande : trois sont carrées
+(1179 × 1179), une est très verticale (1600 × 2845), et le cadre était
+fixé à 16:10.
+
+| | 16:10 | 4:5 | adaptatif |
+|---|---|---|---|
+| carrée 1179×1179 | **37,5 % de hauteur perdue** | 20 % de largeur | **0 %** |
+| verticale 1600×2845 | **64,9 % de hauteur** | 29,7 % | **29,7 %** |
+| paysage 1600×900 | 10 % de largeur | **55 % de largeur** | **10 %** |
+
+> **Aucune valeur FIXE ne convient à tout le monde** — passer en 4:5
+> aurait simplement déplacé la perte sur les photos de chantier en
+> paysage. C'est la photo qui décide, entre deux bornes.
+
+Les bornes (`src/lib/cadre.js`) ne sont pas un compromis esthétique :
+sans elles, une panoramique ferait une bande de 40 px et une capture
+d'écran de téléphone un mur de deux écrans de haut à franchir avant la
+publication suivante. Elles tiennent le RYTHME du fil.
+
+Et le calcul vit dans un fichier qui **n'importe rien** — c'est la leçon
+de `cloudinary-adresses.js`, appliquée le jour même : rangé dans le
+composant, `node` ne pouvait pas l'ouvrir, donc le contrôle ne pouvait
+plus le FAIRE TOURNER. La vraie forme de l'image ne s'obtient que par
+`onLoad` : elle n'est écrite nulle part en base.
+
+#### La barre d'actions est posée SUR la photo
+
+Même demande : « les boutons en transparence sur la photo, en dessous ».
+La bande blanche coupait la carte en deux alors que l'image est la seule
+chose qu'on regarde — et le fil vidéo faisait déjà exactement ça. Les deux
+fils parlent enfin la même langue. Mesuré après : **bas de la carte et bas
+de la photo au même pixel**.
+
+Trois choses à ne pas redécouvrir :
+
+1. **Le voile n'est pas décoratif.** Une icône blanche sur une photo de
+   mur blanc disparaît. Le dégradé garantit un fond sombre sous les
+   commandes, quelle que soit la photo.
+2. **Mais il ne va qu'à 78 %**, donc tout ce qui s'y pose doit rester
+   lisible sur la photo la plus claire. Le compteur « aimé » était passé
+   en orange : `verifier-cibles` l'a refusé, et il avait raison — sa
+   lisibilité aurait dépendu de la photo, ce qui n'est pas une règle mais
+   un hasard. Le nombre reste blanc, seul le cœur devient orange.
+3. **Le conteneur du voile est en `pointerEvents="box-none"`.** Sinon il
+   avalerait le double-appui sur toute la moitié basse de la photo.
+   Vérifié : deux appuis sur « Partager » n'aiment pas, deux appuis sur
+   l'image aiment.
+
 #### Une poignée qui ne s'attrape pas est pire que pas de poignée
 
 Le trait gris en haut du panneau des commentaires était dessiné, et rien
