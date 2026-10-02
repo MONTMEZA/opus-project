@@ -26,7 +26,7 @@
  */
 import React from 'react';
 import { View, Text, Pressable, Switch, StyleSheet } from 'react-native';
-import { C, F, T, S, R, interligne } from '../theme';
+import { C, F, T, S, R, interligne, viser } from '../theme';
 import { Field, BtnMini } from './ui';
 import { JOURS, minutes, heureTexte } from '../lib/horaires';
 
@@ -154,7 +154,7 @@ export default function ChampHoraires({ valeur, onChange }) {
                 {plages.length > 1 && (
                   <Pressable
                     onPress={() => poser(cle, plages.filter((_, k) => k !== i))}
-                    hitSlop={8}
+                    hitSlop={viser(24)}
                     accessibilityRole="button"
                     accessibilityLabel={`${nom} : retirer cette plage`}
                   >
@@ -169,7 +169,7 @@ export default function ChampHoraires({ valeur, onChange }) {
             {ouvert && plages.length === 1 && (
               <Pressable
                 onPress={() => poser(cle, [...plages, ['14:00', '18:00']])}
-                hitSlop={6}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel={`${nom} : ajouter une coupure de midi`}
               >

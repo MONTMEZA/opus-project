@@ -13,7 +13,7 @@
  */
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { C, F, T, S, interligne } from '../theme';
+import { C, F, T, S, interligne  } from '../theme';
 import { AlertTriangle, Info } from '../components/icons';
 import {
   VERSION, MENTIONS, CGU, CONFIDENTIALITE, editeurComplet, manquesEditeur,
@@ -93,7 +93,7 @@ const s = StyleSheet.create({
     padding: S.md, gap: 6, marginBottom: S.lg,
   },
   alerteHaut: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  alerteTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent },
+  alerteTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accentTexte },
 
   info: {
     backgroundColor: C.surface, borderLeftWidth: 3, borderLeftColor: C.accent2,

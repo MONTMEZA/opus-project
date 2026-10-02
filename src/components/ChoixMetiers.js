@@ -28,7 +28,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F, T, S, R, interligne } from '../theme';
+import { C, F, T, S, R, interligne, viser } from '../theme';
 import { X, Lock, Star, Plus } from './icons';
 import SelecteurMetiers from './SelecteurMetiers';
 import { nomMetier } from '../lib/metiers';
@@ -99,7 +99,7 @@ export default function ChoixMetiers({
             <Pressable
               style={s.pastilleCorps}
               onPress={() => mettreEnPrincipal(m)}
-              hitSlop={4}
+              hitSlop={viser(24)}
             >
               {i === 0 && <Star size={11} color="#fff" />}
               <Text style={s.pastilleTexte}>{nomMetier(m)}</Text>
@@ -107,7 +107,7 @@ export default function ChoixMetiers({
             {choisis.length > 1 && (
               <Pressable
                 onPress={() => retirer(m)}
-                hitSlop={8}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel={`Retirer le métier ${nomMetier(m)}`}
               >

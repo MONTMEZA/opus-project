@@ -3,7 +3,7 @@
  * Chaque composant correspond à une classe CSS du prototype
  * (le nom de la classe d'origine est rappelé en commentaire).
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, Pressable, TextInput, StyleSheet, useWindowDimensions,
 } from 'react-native';
@@ -16,10 +16,11 @@ import { LinearGradient } from 'expo-linear-gradient';
    `src/` et `npm run verifier-imports` le refuse. */
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import {
-  C, F, T, S, R, SH, M, APPUI, AVATAR_TONES, gradColors, GRAD_160, GRAD_120,
-  interligne,
+  C, F, T, S, R, SH, M, APPUI, TOUCHE, viser, AVATAR_TONES,
+  gradColors, GRAD_160, GRAD_120, interligne,
 } from '../theme';
-import { Check, AlertTriangle, WifiOff } from './icons';
+import { Check, AlertTriangle, WifiOff, Eye, EyeOff } from './icons';
+import { useMouvementReduit } from '../lib/retour';
 
 /* --- dégradé (remplace les linear-gradient CSS) --- */
 export function Gradient({ media, angle = 160, style, children }) {
@@ -173,11 +174,16 @@ export function ProfileBanner({ uri, height = 140, children }) {
  * `Pressable` ordinaire. L'animation reste dehors.
  */
 export function ConfirmBanner({ msg, erreur, onClose }) {
+  /* « Réduire les animations » n'est pas un goût : ce réglage existe pour
+     les personnes que le mouvement rend malades. Le bandeau apparaît alors
+     sans glisser — il apparaît quand même, c'est le mouvement qu'on retire,
+     pas l'information. */
+  const sansMouvement = useMouvementReduit();
   if (!msg) return null;
   return (
     <Animated.View
-      entering={FadeInUp.duration(M.courant)}
-      exiting={FadeOutUp.duration(M.bref)}
+      entering={sansMouvement ? undefined : FadeInUp.duration(M.courant)}
+      exiting={sansMouvement ? undefined : FadeOutUp.duration(M.bref)}
       style={s.bannerPort}
       pointerEvents="box-none"
     >
@@ -343,7 +349,7 @@ export function BtnMini({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
       aria-disabled={!!disabled}
-      hitSlop={S.sm}
+      hitSlop={viser(40)}
       style={({ pressed }) => [
         s.btnMini, outline && s.btnMiniOutline, disabled && { opacity: 0.6 }, style,
         pressed && !disabled && APPUI.plein,
@@ -362,7 +368,7 @@ export function Chip({ label, on, onPress }) {
       accessibilityRole="button"
       accessibilityLabel={`Filtrer sur ${label}`}
       aria-selected={!!on}
-      hitSlop={S.sm}
+      hitSlop={viser(40)}
       style={({ pressed }) => [s.chip, on && s.chipOn, pressed && APPUI.plein]}
     >
       <Text style={[s.chipText, on && { color: '#fff' }]}>{label}</Text>
@@ -378,7 +384,7 @@ export function ChipFollow({ following, onPress, video }) {
       accessibilityRole="button"
       accessibilityLabel={following ? 'Ne plus suivre' : 'Suivre ce professionnel'}
       aria-selected={!!following}
-      hitSlop={S.sm}
+      hitSlop={viser(40)}
       style={({ pressed }) => [
         s.chipFollow, video && s.chipFollowVideo,
         following && !video && s.chipFollowed, pressed && APPUI.plein,
@@ -407,7 +413,7 @@ export function IconBtn({ onPress, children, style, accessibilityLabel }) {
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={8}
+      hitSlop={viser(44)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [s.iconBtn, style, pressed && APPUI.discret]}
@@ -458,15 +464,19 @@ export function SectionLabel({ children, right, style }) {
 }
 
 /* --- .create-input / .create-select (champ texte) --- */
-export function Field({ style, ...props }) {
+/* `forwardRef` : c'est par là que « Suivant » sur le clavier atteint le
+   champ d'après. Sans elle, la référence s'arrête sur le composant et
+   `.focus()` ne fait rien. */
+export const Field = React.forwardRef(function Field({ style, ...props }, ref) {
   return (
     <TextInput
+      ref={ref}
       placeholderTextColor={C.muted}
       style={[s.field, style]}
       {...props}
     />
   );
-}
+});
 
 /* --- .create-textarea --- */
 export function TextArea({ style, ...props }) {
@@ -480,6 +490,53 @@ export function TextArea({ style, ...props }) {
     />
   );
 }
+
+/* --- un champ de mot de passe --- */
+/**
+ * LE MOT DE PASSE SE TAPE À L'AVEUGLE, ET L'IPHONE NE SAIT MÊME PAS QU'IL
+ * EN EXISTE UN.
+ *
+ * Deux défauts en un, relevés le 02/10/2026 :
+ *
+ *   - **aucun œil pour vérifier.** Sur un téléphone, au soleil, avec des
+ *     mains sales, on se trompe. Sans moyen de relire, on recommence —
+ *     et au bout de deux fois on renonce à créer son compte.
+ *   - **aucune indication au système.** Sans `textContentType`, iOS ne
+ *     propose ni le trousseau, ni « mot de passe fort », ni le
+ *     remplissage automatique. L'artisan tape donc son mot de passe à la
+ *     main à chaque connexion.
+ *
+ * `autoComplete` est la propriété de React Native, `textContentType` celle
+ * d'iOS : les deux sont nécessaires, elles ne font pas le même travail.
+ */
+export const ChampMotDePasse = React.forwardRef(function ChampMotDePasse(
+  { nouveau = false, style, ...reste }, ref,
+) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <View style={s.motDePasse}>
+      <Field
+        ref={ref}
+        {...reste}
+        style={[{ flex: 1, borderWidth: 0, minHeight: TOUCHE - 2 }, style]}
+        secureTextEntry={!visible}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete={nouveau ? 'new-password' : 'current-password'}
+        textContentType={nouveau ? 'newPassword' : 'password'}
+      />
+      <Pressable
+        onPress={() => setVisible((v) => !v)}
+        hitSlop={viser(TOUCHE)}
+        accessibilityRole="button"
+        accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+        style={({ pressed }) => [s.oeil, pressed && APPUI.discret]}
+      >
+        {visible ? <EyeOff size={16} color={C.muted} /> : <Eye size={16} color={C.muted} />}
+      </Pressable>
+    </View>
+  );
+});
 
 /* --- .pill-toggle --- */
 /**
@@ -507,7 +564,7 @@ export function PillToggle({ options, value, onChange, small }) {
             accessibilityRole="tab"
             accessibilityLabel={o.label}
             aria-selected={on}
-            hitSlop={S.xs}
+            hitSlop={viser(38)}
             style={({ pressed }) => [
               s.pillBtn, small && s.pillBtnSm, on && s.pillBtnOn,
               pressed && !on && APPUI.discret,
@@ -586,9 +643,12 @@ const s = StyleSheet.create({
   bannerErreur: { backgroundColor: C.bad, maxWidth: '88%' },
   bannerText: { flexShrink: 1, color: '#fff', fontSize: T.petit, fontFamily: F.inter },
 
+  /* `minHeight: TOUCHE` partout où la mise en page le supporte : c'est la
+     BOÎTE qui grandit, pas le texte. Relevé du 02/10/2026 : 70 cibles sur
+     71 étaient sous les 44 points, la plus petite à 14. */
   btnMain: {
     backgroundColor: C.ink, paddingVertical: 10, paddingHorizontal: S.xl,
-    borderRadius: R.gelule,
+    borderRadius: R.gelule, minHeight: TOUCHE,
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6,
   },
   btnBlock: { width: '100%', marginTop: S.sm },
@@ -596,15 +656,17 @@ const s = StyleSheet.create({
 
   btnOutline: {
     paddingVertical: 10, paddingHorizontal: S.xl, borderWidth: 1.5, borderColor: C.ink,
-    borderRadius: R.gelule,
+    borderRadius: R.gelule, minHeight: TOUCHE,
     alignItems: 'center', justifyContent: 'center',
   },
   btnOutlineOn: { backgroundColor: C.ink },
   btnOutlineText: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
 
+  /* Un « mini » reste visuellement petit — il vit dans des cartes denses —
+     mais sa boîte atteint 36, et `hitSlop` finit le travail. */
   btnMini: {
     backgroundColor: C.accent, paddingVertical: S.sm, paddingHorizontal: S.md,
-    borderRadius: R.gelule,
+    borderRadius: R.gelule, minHeight: 36,
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5,
   },
   btnMiniOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: C.ink },
@@ -612,7 +674,7 @@ const s = StyleSheet.create({
 
   chip: {
     paddingVertical: 6, paddingHorizontal: S.md,
-    borderRadius: R.gelule,
+    borderRadius: R.gelule, minHeight: 40, justifyContent: 'center',
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
   },
   chipOn: { backgroundColor: C.ink, borderColor: C.ink },
@@ -621,12 +683,22 @@ const s = StyleSheet.create({
   chipFollow: {
     paddingVertical: 5, paddingHorizontal: S.md,
     borderRadius: R.gelule, backgroundColor: C.ink,
+    minHeight: 40, justifyContent: 'center',
   },
   chipFollowed: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
   chipFollowVideo: { backgroundColor: 'rgba(255,255,255,0.2)' },
   chipFollowText: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
 
-  iconBtn: { padding: S.xs, position: 'relative' },
+  /* Un bouton-icône : l'icône fait 15 px, la boîte 44. C'est le
+     remplissage qui change, pas le dessin. */
+  /* 44 de HAUT, 40 de large. La hauteur est ce que vise le pouce ; la
+     largeur, elle, se dispute avec le nom de l'artisan dans l'en-tête
+     d'une publication — et un nom coupé est une information perdue. */
+  iconBtn: {
+    padding: S.xs, position: 'relative',
+    minWidth: 40, minHeight: TOUCHE,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   empty: {
     fontSize: T.corps, color: C.muted, textAlign: 'center',
@@ -642,12 +714,25 @@ const s = StyleSheet.create({
   /* Les champs gardent leurs angles vifs : c'est de la structure, ils
      portent ce que l'artisan écrit. Les arrondir les ferait ressembler à
      des boutons, et on chercherait où appuyer. */
+  /* Le champ et l'œil dans un seul cadre : la bordure est portée par
+     l'enveloppe, sinon on verrait deux rectangles. */
+  motDePasse: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: C.bordChamp, backgroundColor: C.surface,
+    minHeight: TOUCHE,
+  },
+  oeil: {
+    width: TOUCHE, minHeight: TOUCHE,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
   field: {
-    borderWidth: 1, borderColor: C.line, paddingVertical: 10, paddingHorizontal: 10,
+    borderWidth: 1, borderColor: C.bordChamp, paddingVertical: 10, paddingHorizontal: 10,
+    minHeight: TOUCHE,
     fontSize: T.courant, fontFamily: F.inter, backgroundColor: C.surface, color: C.ink,
   },
   textarea: {
-    width: '100%', minHeight: 70, borderWidth: 1, borderColor: C.line, padding: 10,
+    width: '100%', minHeight: 70, borderWidth: 1, borderColor: C.bordChamp, padding: 10,
     fontFamily: F.inter, fontSize: T.corps, marginBottom: 10,
     backgroundColor: C.surface, color: C.ink,
   },
@@ -656,8 +741,11 @@ const s = StyleSheet.create({
     flexDirection: 'row', backgroundColor: C.bg, borderRadius: R.gelule,
     padding: 3, alignSelf: 'flex-start',
   },
-  pillBtn: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: R.gelule },
-  pillBtnSm: { paddingVertical: 5, paddingHorizontal: S.md },
+  pillBtn: {
+    paddingVertical: 6, paddingHorizontal: 14, borderRadius: R.gelule,
+    minHeight: 38, justifyContent: 'center',
+  },
+  pillBtnSm: { paddingVertical: 5, paddingHorizontal: S.md, minHeight: 38, justifyContent: 'center' },
   pillBtnOn: { backgroundColor: C.ink },
   pillText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
 });

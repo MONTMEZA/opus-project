@@ -7,7 +7,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, viser } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
 } from '../components/ui';
@@ -83,7 +83,7 @@ const Demande = React.memo(function Demande({
               elle se signale comme le reste. */}
           {!!onSignaler && !!d.auteurId && (
             <Pressable
-              hitSlop={8}
+              hitSlop={viser(24)}
               style={{ marginLeft: 'auto', marginRight: 10 }}
               accessibilityRole="button"
               accessibilityLabel="Signaler cette demande"
@@ -273,7 +273,7 @@ export default function DemandesScreen({
                       <Media media={uri} style={s.apercu} />
                       <Pressable
                         style={s.retirer}
-                        hitSlop={6}
+                        hitSlop={viser(24)}
                         onPress={() => setPhotos((p) => p.filter((_, k) => k !== i))}
                         accessibilityRole="button"
                         accessibilityLabel={`Retirer la photo ${i + 1}`}

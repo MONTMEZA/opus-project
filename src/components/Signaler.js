@@ -23,7 +23,7 @@ import React, { useState } from 'react';
 import {
   Modal, View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet,
 } from 'react-native';
-import { C, F, T, S, R } from '../theme';
+import { C, F, T, S, R, viser } from '../theme';
 import { messageClair } from '../lib/erreurs';
 import { BtnMain, BtnMini, TextArea } from './ui';
 import { X, Check, Flag, EyeOff } from './icons';
@@ -87,7 +87,7 @@ export default function Signaler({
             </Text>
             <Pressable
               onPress={fermer}
-              hitSlop={12}
+              hitSlop={viser(24)}
               accessibilityRole="button"
               accessibilityLabel="Fermer"
             >

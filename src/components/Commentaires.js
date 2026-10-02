@@ -14,7 +14,7 @@
  */
 import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { C, F, T, S, APPUI, interligne } from '../theme';
+import { C, F, T, S, APPUI, interligne, viser } from '../theme';
 import { Avatar, Field } from './ui';
 import ChampLocal from './ChampLocal';
 import { BadgeCheck, Send, X, Flag } from './icons';
@@ -175,7 +175,7 @@ export default function Commentaires({
             Réponse à {repondA.auteur}
           </Text>
           <Pressable
-            hitSlop={8}
+            hitSlop={viser(24)}
             onPress={() => { setRepondA(null); if (champ.current) champ.current.vider(); }}
             accessibilityRole="button"
             accessibilityLabel="Annuler la réponse"
@@ -261,7 +261,7 @@ function Ligne({
       <Pressable
         onPress={ouvrir}
         disabled={!cliquable}
-        hitSlop={6}
+        hitSlop={viser(24)}
         importantForAccessibility="no-hide-descendants"
         accessibilityElementsHidden
       >
@@ -307,7 +307,7 @@ function Ligne({
             <View style={s.editionBtns}>
               <Pressable
                 onPress={() => { setBrouillon(c.texte); setEnEdition(false); }}
-                hitSlop={6}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel="Annuler la correction"
               >
@@ -319,7 +319,7 @@ function Ligne({
                   if (propre && propre !== c.texte) onModifier(c, propre);
                   setEnEdition(false);
                 }}
-                hitSlop={6}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel="Enregistrer la correction"
               >
@@ -334,7 +334,7 @@ function Ligne({
         <View style={s.actions}>
           <Pressable
             onPress={onRepondre}
-            hitSlop={6}
+            hitSlop={viser(24)}
             accessibilityRole="button"
             accessibilityLabel={`Répondre à ${pro ? pro.entreprise : c.auteur}`}
           >
@@ -346,7 +346,7 @@ function Ligne({
           {aMoi && !!onModifier && !fige && !confirme && !enEdition && (
             <Pressable
               onPress={() => { setBrouillon(c.texte); setEnEdition(true); }}
-              hitSlop={6}
+              hitSlop={viser(24)}
               accessibilityRole="button"
               accessibilityLabel="Corriger mon commentaire"
             >
@@ -356,7 +356,7 @@ function Ligne({
           {aMoi && !!onSupprimer && !confirme && !enEdition && (
             <Pressable
               onPress={() => setConfirme(true)}
-              hitSlop={6}
+              hitSlop={viser(24)}
               accessibilityRole="button"
               accessibilityLabel="Supprimer mon commentaire"
             >
@@ -372,7 +372,7 @@ function Ligne({
               </Text>
               <Pressable
                 onPress={() => { setConfirme(false); onSupprimer(c); }}
-                hitSlop={6}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel="Oui, supprimer ce commentaire"
               >
@@ -380,7 +380,7 @@ function Ligne({
               </Pressable>
               <Pressable
                 onPress={() => setConfirme(false)}
-                hitSlop={6}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel="Annuler la suppression"
               >
@@ -390,7 +390,7 @@ function Ligne({
           )}
           {!aMoi && !!onSignaler && !!c.auteurId && (
             <Pressable
-              hitSlop={6}
+              hitSlop={viser(24)}
               accessibilityRole="button"
               accessibilityLabel="Signaler ce commentaire"
               onPress={() => onSignaler({

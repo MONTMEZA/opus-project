@@ -45,7 +45,7 @@
  */
 import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F, T, S, R, interligne } from '../theme';
+import { C, F, T, S, R, viser, interligne, APPUI } from '../theme';
 import { Field, BtnMini } from './ui';
 import { X, Plus, Check } from './icons';
 import {
@@ -151,9 +151,14 @@ export default function ChampSpecialites({
           {liste.map((x) => (
             <View key={x} style={s.pastille}>
               <Text style={s.pastilleTexte}>{nomSpecialite(x)}</Text>
+              {/* La croix faisait 14 px à l'écran : on ne la touchait
+                  jamais avec un gant, et on retirait la mauvaise
+                  spécialité. La boîte monte à 32 et `hitSlop` finit à 44 ;
+                  la croix, elle, garde ses 12 px. */}
               <Pressable
                 onPress={() => retirer(x)}
-                hitSlop={8}
+                hitSlop={viser(32)}
+                style={({ pressed }) => [s.croix, pressed && APPUI.discret]}
                 accessibilityRole="button"
                 accessibilityLabel={`Retirer la spécialité ${nomSpecialite(x)}`}
               >
@@ -181,6 +186,7 @@ export default function ChampSpecialites({
                   return (
                     <Pressable
                       key={spe.cle}
+                      hitSlop={viser(40)}
                       style={[s.puce, choisie && s.puceChoisie,
                         !choisie && plein && s.puceEteinte]}
                       onPress={() => basculer(spe)}
@@ -252,6 +258,10 @@ const s = StyleSheet.create({
     backgroundColor: C.accent2, paddingVertical: 6, paddingHorizontal: S.md,
     borderRadius: R.gelule,
   },
+  croix: {
+    width: 32, height: 32, marginRight: -S.sm,
+    alignItems: 'center', justifyContent: 'center',
+  },
   pastilleTexte: { fontFamily: F.oswald6, fontSize: T.petit + 0.5, color: '#fff' },
 
   /* Le bloc des propositions PORTE de l'information : angle vif. */
@@ -273,6 +283,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.accent2, borderRadius: R.gelule,
     paddingVertical: 5, paddingHorizontal: S.md - 2,
     backgroundColor: C.surface,
+    minHeight: 40, justifyContent: 'center',
   },
   puceChoisie: { backgroundColor: C.accent2 },
   puceEteinte: { borderColor: C.line },

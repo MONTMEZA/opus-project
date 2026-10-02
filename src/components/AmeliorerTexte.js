@@ -28,7 +28,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, viser } from '../theme';
 import { BtnMini } from './ui';
 import { Sparkles, Check, X } from './icons';
 import { nettoyerTypographie, aChange } from '../lib/typographie';
@@ -114,7 +114,7 @@ export default function AmeliorerTexte({
         {propositions && (
           <Pressable
             onPress={() => { setPropositions(null); setNote(null); }}
-            hitSlop={10}
+            hitSlop={viser(24)}
             accessibilityRole="button"
             accessibilityLabel="Fermer les propositions"
           >
@@ -177,7 +177,7 @@ const s = StyleSheet.create({
   note: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginTop: 6 },
 
   proposition: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, padding: 10, gap: 6 },
-  propositionTitre: { fontFamily: F.oswald6, fontSize: 10.5, color: C.accent },
+  propositionTitre: { fontFamily: F.oswald6, fontSize: 10.5, color: C.accentTexte },
   propositionTexte: { fontFamily: F.inter, fontSize: 12.5, color: C.ink, lineHeight: 18 },
   propositionBas: { flexDirection: 'row', justifyContent: 'flex-end' },
   utiliserTexte: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },

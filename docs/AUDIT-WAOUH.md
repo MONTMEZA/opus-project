@@ -476,3 +476,55 @@ que si on remonte les chercher.
 le paquet Android se construit, zéro erreur JavaScript sur un parcours
 complet — fil, place des pros, demandes, messages, conversation, envoi d'un
 message, commentaires, publication.
+
+---
+
+## 12. Lot 5 — viser avec un gant, lire au soleil ✅ fait le 02/10/2026
+
+### Les cibles
+
+| boîte réelle, mesurée sur cinq écrans | avant | après |
+|---|---|---|
+| cibles sous 44 points | **70 / 71** | **32 / 66** |
+| la plus petite | **14 px** | **32 px** |
+| mon profil | 7 / 7 sous 44 | **0 / 7** |
+
+Les 32 qui restent sous 44 **à l'écran** y arrivent par `hitSlop`, calculé
+par `viser()` à partir de leur hauteur réelle. Et il faut le dire :
+`react-native-web` ignore `hitSlop`, donc **cette partie-là ne se mesure pas
+au navigateur** — seul l'iPhone le confirmera.
+
+### Les couleurs
+
+| | avant | après |
+|---|---|---|
+| bordure d'un champ, sur blanc | 1,65 : 1 | **3,85** |
+| texte secondaire sur le fond | 4,01 | **4,51** |
+| texte orange sur le fond | 2,76 | **4,52** |
+
+L'orange de signature **#E85C1F n'a pas bougé** : il reste la couleur de ce
+qu'on remplit. C'est un second ton, **#B14212**, exactement la même teinte
+assombrie, qui sert quand l'orange est du TEXTE.
+
+`npm run verifier-cibles` recalcule tous ces contrastes à chaque passage.
+
+### Le reste
+
+Un œil sur le mot de passe, le trousseau du téléphone enfin prévenu, le
+clavier qui enchaîne les champs, les erreurs annoncées à voix haute pour
+VoiceOver (sur iPhone, elles ne l'étaient pas du tout), et « Réduire les
+animations » respecté.
+
+### Une chose qui reste à TON arbitrage
+
+Le texte blanc sur un bouton orange donne **3,51 : 1**, là où il en faudrait
+4,5. Trois issues, chiffrées :
+
+| | contraste | ce que ça change |
+|---|---|---|
+| laisser tel quel | 3,51 | rien — mais ça reste dur à lire dehors |
+| texte **noir** sur l'orange | **4,92** | l'orange reste exact, les boutons changent d'allure |
+| foncer l'orange à #CC4C15 | **4,55** | le blanc reste, la signature bouge un peu |
+
+Je n'ai rien touché : c'est ta couleur, et aucune de ces options n'est
+neutre. Dis-moi.

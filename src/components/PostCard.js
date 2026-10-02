@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F, T, S, R, SH, interligne, APPUI } from '../theme';
+import { C, F, T, S, R, SH, interligne, APPUI, viser } from '../theme';
 import {
   Gradient, Avatar, BtnMain, BtnMini, ChipFollow, IconBtn,
 } from './ui';
@@ -74,12 +74,26 @@ const PostCard = React.memo(function PostCard({
           accessibilityLabel={`Voir la fiche de ${pro.entreprise}`}
         >
           <Avatar seed={pro.id} uri={pro.avatarUrl} />
-          <View>
+          {/* `flex: 1, minWidth: 0` : sans ça, le nom et la ligne de
+              métier poussent la rangée au lieu de se raccourcir, et le
+              bouton « Suivre » leur passe dessus. Constaté le 02/10/2026,
+              en agrandissant les boutons à 40 points. */}
+          <View style={{ flex: 1, minWidth: 0 }}>
             <View style={s.nameRow}>
-              <Text style={s.name}>{pro.entreprise}</Text>
+              <Text style={s.name} numberOfLines={1}>{pro.entreprise}</Text>
               {pro.verifie && <BadgeCheck size={14} color={C.verif} />}
             </View>
-            <Text style={s.meta}>{nomMetier(pro.metier)} · {pro.ville} · {post.time}</Text>
+            {/* L'HEURE NE SE FAIT PAS COUPER. Sur une ligne unique, c'est
+                elle qui sautait la première alors que c'est la plus utile :
+                un chantier publié « il y a 2 h » n'a pas le même sens que
+                celui d'il y a trois semaines. La ville, elle, se raccourcit
+                sans qu'on perde grand-chose. */}
+            <View style={s.metaRow}>
+              <Text style={s.meta} numberOfLines={1}>
+                {nomMetier(pro.metier)} · {pro.ville}
+              </Text>
+              <Text style={[s.meta, { flexShrink: 0 }]}> · {post.time}</Text>
+            </View>
           </View>
         </Pressable>
         <View style={s.headRight}>
@@ -161,7 +175,7 @@ const PostCard = React.memo(function PostCard({
       <View style={s.actions}>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
-          hitSlop={S.sm}
+          hitSlop={viser(36)}
           onPress={() => onLike(post.id)}
           accessibilityRole="button"
           accessibilityLabel={post.liked
@@ -170,11 +184,11 @@ const PostCard = React.memo(function PostCard({
           aria-selected={!!post.liked}
         >
           <Heart size={17} filled={post.liked} color={post.liked ? C.accent : C.muted} />
-          <Text style={[s.actionText, post.liked && { color: C.accent }]}>{post.likes}</Text>
+          <Text style={[s.actionText, post.liked && { color: C.accentTexte }]}>{post.likes}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
-          hitSlop={S.sm}
+          hitSlop={viser(36)}
           onPress={() => onToggleComments(post.id)}
           accessibilityRole="button"
           accessibilityLabel={`Commentaires, ${nbCommentairesDe(post)}`}
@@ -185,7 +199,7 @@ const PostCard = React.memo(function PostCard({
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
-          hitSlop={S.sm}
+          hitSlop={viser(36)}
           onPress={() => onShare('Lien de la publication copié.')}
           accessibilityRole="button"
           accessibilityLabel="Partager cette publication"
@@ -195,7 +209,7 @@ const PostCard = React.memo(function PostCard({
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
-          hitSlop={S.sm}
+          hitSlop={viser(36)}
           onPress={() => onSave(post.id)}
           accessibilityRole="button"
           accessibilityLabel={saved
@@ -282,13 +296,14 @@ const s = StyleSheet.create({
 
   head: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: 10, paddingHorizontal: 12, paddingBottom: 6,
+    paddingTop: 10, paddingHorizontal: 12, paddingBottom: 6, gap: S.xs,
   },
-  headLeft: { flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 },
+  headLeft: { flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1, minWidth: 0 },
   headRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
-  meta: { fontSize: T.micro, color: C.muted, marginTop: 1, fontFamily: F.inter },
+  metaRow: { flexDirection: 'row', alignItems: 'center', minWidth: 0 },
+  name: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink, flexShrink: 1 },
+  meta: { fontSize: T.micro, color: C.muted, marginTop: 1, fontFamily: F.inter, flexShrink: 1 },
 
   postText: {
     fontSize: T.corps, paddingTop: S.xs, paddingHorizontal: S.md, paddingBottom: S.sm,

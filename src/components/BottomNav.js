@@ -125,7 +125,10 @@ const s = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(17,17,17,0.82)', borderTopColor: 'rgba(255,255,255,0.12)',
   },
-  btn: { flex: 1, alignItems: 'center', gap: 3 },
+  /* 48 et non 38 : c'est la barre la plus touchée de l'application, et
+     elle est en bas, là où le pouce arrive de travers. Mesuré au
+     navigateur le 02/10/2026. */
+  btn: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 48 },
   label: { fontSize: T.micro, fontFamily: F.inter5 },
 
   publier: {

@@ -13,7 +13,7 @@ import {
   Modal, View, Text, Pressable, FlatList, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F } from '../theme';
+import { C, F, viser } from '../theme';
 import Media from './Media';
 import { X, ChevronLeft, ChevronRight } from './icons';
 
@@ -69,7 +69,7 @@ export default function Visionneuse({ items = [], index = 0, onClose }) {
           <Pressable
             style={s.rond}
             onPress={onClose}
-            hitSlop={10}
+            hitSlop={viser(24)}
             accessibilityRole="button"
             accessibilityLabel="Fermer"
           >
@@ -84,7 +84,7 @@ export default function Visionneuse({ items = [], index = 0, onClose }) {
               <Pressable
                 style={[s.fleche, { left: 10 }]}
                 onPress={() => aller(courant - 1)}
-                hitSlop={10}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel="Réalisation précédente"
               >
@@ -95,7 +95,7 @@ export default function Visionneuse({ items = [], index = 0, onClose }) {
               <Pressable
                 style={[s.fleche, { right: 10 }]}
                 onPress={() => aller(courant + 1)}
-                hitSlop={10}
+                hitSlop={viser(24)}
                 accessibilityRole="button"
                 accessibilityLabel="Réalisation suivante"
               >

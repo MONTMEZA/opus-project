@@ -14,7 +14,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Modal, View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
-import { C, F } from '../theme';
+import { C, F  } from '../theme';
 import { BtnMain, Chip, Field, TextArea, IconBtn } from './ui';
 import { X, Check } from './icons';
 import { ChampMetier } from './SelecteurMetiers';
@@ -191,7 +191,7 @@ const s = StyleSheet.create({
   label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginBottom: 6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   input: { marginBottom: 8 },
-  aide: { fontSize: 11, color: C.accent, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 9 },
+  aide: { fontSize: 11, color: C.accentTexte, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 9 },
 
   memo: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 6 },
   case: {

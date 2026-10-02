@@ -32,6 +32,10 @@ export default function OnboardingScreen({ onChoose }) {
           <Paintbrush size={22} color="#fff" />
         </View>
 
+        {/* L'orange de signature, et pas `accentTexte` : ici il est posé
+            sur le presque-noir de cet écran, ce qui donne 4,92 : 1 — il
+            passe largement. Et c'est le mot-symbole d'Opus : on ne le
+            retouche pas pour une règle qu'il respecte déjà. */}
         <Text style={s.brand}>OPUS<Text style={{ color: C.accent }}>-PROJECT</Text></Text>
         <Text style={s.tag}>Découvrez. Partagez. Construisez.</Text>
 

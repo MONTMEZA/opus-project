@@ -5,7 +5,7 @@
  * le nom de son entreprise, son métier et sa ville, pour que sa fiche publique
  * existe dès l'inscription.
  */
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, ActivityIndicator,
   KeyboardAvoidingView, Platform, StyleSheet,
@@ -18,7 +18,7 @@ import { C, F, T, S, R, GRAD_160 } from '../theme';
    `src/lib/erreurs.js`, et elle sait aussi reconnaître une perte de réseau —
    le cas le plus fréquent sur un chantier. */
 import { messageClair as traduire } from '../lib/erreurs';
-import { HazardStrip, Field, BtnMain } from '../components/ui';
+import { HazardStrip, Field, BtnMain, ChampMotDePasse } from '../components/ui';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
 import { ChevronLeft, Check, ShieldCheck } from '../components/icons';
@@ -26,6 +26,9 @@ import { METIER_PAR_DEFAUT } from '../lib/metiers';
 import { VERSION } from '../data/legal';
 
 export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onLireLegal }) {
+  /* Le clavier doit mener quelque part : « Suivant » saute d'un champ à
+     l'autre au lieu de se refermer. */
+  const champMotDePasse = useRef(null);
   const insets = useSafeAreaInsets();
   const estPro = userType === 'pro';
 
@@ -181,15 +184,27 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              /* Le trousseau du téléphone propose alors l'adresse déjà
+                 enregistrée, au lieu de la faire retaper. */
+              autoComplete="email"
+              textContentType="emailAddress"
+              /* LE CLAVIER MÈNE QUELQUE PART. Sans ça, « Suivant » n'existe
+                 pas et il faut refermer le clavier pour viser le champ
+                 d'après — six fois à l'inscription. */
+              returnKeyType="next"
+              onSubmitEditing={() => champMotDePasse.current && champMotDePasse.current.focus()}
+              blurOnSubmit={false}
             />
 
             <Text style={s.label}>Mot de passe</Text>
-            <Field
+            <ChampMotDePasse
+              ref={champMotDePasse}
               value={motDePasse}
               onChangeText={setMotDePasse}
               placeholder={mode === 'inscription' ? '6 caractères minimum' : 'Votre mot de passe'}
-              secureTextEntry
-              autoCapitalize="none"
+              nouveau={mode === 'inscription'}
+              returnKeyType={mode === 'inscription' ? 'next' : 'go'}
+              onSubmitEditing={mode === 'inscription' ? undefined : valider}
             />
 
             {mode === 'inscription' && (

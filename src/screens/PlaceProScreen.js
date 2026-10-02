@@ -26,7 +26,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
-import { C, F, T, S, R } from '../theme';
+import { C, F, T, S, R, TOUCHE, viser } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
 } from '../components/ui';
@@ -87,7 +87,7 @@ function BarreRecherche({ valeur, onChange }) {
       {!!texte && (
         <Pressable
           onPress={() => { setTexte(''); onChange(''); }}
-          hitSlop={10}
+          hitSlop={viser(24)}
           accessibilityRole="button"
           accessibilityLabel="Effacer la recherche"
         >
@@ -238,7 +238,7 @@ export default function PlaceProScreen({
             <Text style={s.formTitre}>Nouvelle annonce</Text>
             <Pressable
               onPress={() => setFormOuvert(false)}
-              hitSlop={10}
+              hitSlop={viser(24)}
               accessibilityRole="button"
               accessibilityLabel="Fermer le formulaire"
             >
@@ -430,7 +430,7 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
           {!!dates && (
             <View style={s.repere}>
               <Calendar size={11} color={C.accent} />
-              <Text style={[s.repereTexte, { color: C.accent }]}>{dates}</Text>
+              <Text style={[s.repereTexte, { color: C.accentTexte }]}>{dates}</Text>
             </View>
           )}
           {!!prix && (
@@ -477,8 +477,11 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
               qui n'existe pas, acompte demandé puis disparition. */}
           {!!onSignaler && !a.aMoi && !!auteur && (
             <Pressable
-              hitSlop={8}
-              style={{ marginLeft: 'auto', marginRight: 10 }}
+              /* 14 px à l'écran : on ne l'atteint jamais avec un gant. La
+                 boîte grandit à 44 sans bouger l'icône — c'est le
+                 remplissage qui change. */
+              style={{ marginLeft: 'auto', marginRight: 4, width: TOUCHE, minHeight: TOUCHE,
+                alignItems: 'center', justifyContent: 'center' }}
               accessibilityRole="button"
               accessibilityLabel="Signaler cette annonce"
               onPress={() => onSignaler({

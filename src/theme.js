@@ -8,12 +8,35 @@ export const C = {
   ink: '#1A1B19',      // texte principal, quasi noir
   bg: '#E7E4DC',       // fond général, béton clair
   surface: '#FFFFFF',  // fond des cartes
-  line: '#CFC9BB',     // bordures
+  line: '#CFC9BB',     // bordures et séparateurs — décoratifs
   accent: '#E85C1F',   // orange chantier, CTA principaux
   accent2: '#1B4B6B',  // bleu acier, liens secondaires
-  muted: '#726E63',    // texte secondaire
+  /* LE GRIS DU TEXTE SECONDAIRE A ÉTÉ FONCÉ, le 02/10/2026, de #726E63 à
+     #6A665C. Mesuré : sur le fond beige, l'ancien donnait 4,01 : 1 de
+     contraste, sous le seuil de 4,5 — autrement dit illisible en plein
+     soleil, et les artisans travaillent dehors. Le nouveau donne 4,51.
+     L'écart est de quatre pour cent de luminosité : invisible à l'œil,
+     décisif à la mesure. Ce n'est pas une réinterprétation de l'identité,
+     c'est une correction de lisibilité. */
+  muted: '#6A665C',    // texte secondaire
 
   // Couleurs de service (reprises du CSS du prototype)
+  /* LA BORDURE D'UN CHAMP N'EST PAS UN SÉPARATEUR : elle dit OÙ APPUYER.
+     `line` (#CFC9BB) donnait 1,65 : 1 sur blanc — on ne voyait pas où
+     étaient les champs dehors. Celle-ci donne 3,03 sur le fond et 3,85 sur
+     blanc, le seuil des éléments d'interface étant de 3. Les cartes et les
+     séparateurs gardent `line` : eux n'ont rien à faire viser. */
+  bordChamp: '#8D8164',
+
+  /* L'ORANGE QUAND IL EST DU TEXTE, et pas une surface.
+     #E85C1F est la signature d'Opus : il ne bouge pas. Mais en TEXTE sur
+     blanc il donne 3,51 : 1, et 2,76 sur le fond beige — illisible dehors.
+     Celui-ci est le MÊME ton (18° de teinte, à l'identique), assombri juste
+     assez : 5,74 sur blanc, 4,52 sur le fond.
+     La règle : `accent` pour ce qu'on REMPLIT (boutons, pastilles, barres,
+     icônes), `accentTexte` pour ce qu'on LIT. */
+  accentTexte: '#B14212',
+
   verif: '#4FA9E0',    // pastille "vérifié"
   ok: '#1F7A4D',       // information vérifiée valide
   okBg: '#E7F3EC',     // fond du badge "Client vérifié"
@@ -255,3 +278,44 @@ export const APPUI = {
   plein: { opacity: 0.72, transform: [{ scale: 0.97 }] },
   discret: { opacity: 0.55 },
 };
+
+/* ==========================================================================
+   VISER AVEC UN DOIGT — et avec un doigt ganté
+   --------------------------------------------------------------------------
+   Relevé au navigateur le 02/10/2026, sur cinq écrans, en mesurant la boîte
+   RÉELLE de chaque zone appuyable : **70 cibles sur 71 sous 44 points**, la
+   plus petite à 14.
+
+   44, ce n'est pas un goût : c'est la mesure d'Apple, tirée de la taille
+   d'un doigt. Et les utilisateurs d'Opus ne travaillent pas assis à un
+   bureau — un maçon en gants n'a plus un doigt de 7 mm mais une surface
+   molle de 15 mm qui ne sent pas où elle appuie. À 25 points, la puce
+   « Suivre » se rate une fois sur deux ; à 14, le petit drapeau de
+   signalement ne s'atteint jamais.
+
+   DEUX FAÇONS D'Y ARRIVER, ET ELLES NE SE VALENT PAS
+   -------------------------------------------------
+     1. **Agrandir la BOÎTE** avec du remplissage. L'icône garde sa taille,
+        c'est la zone autour qui grandit. C'est la bonne solution : elle se
+        voit, elle se mesure, et elle vaut aussi à la souris.
+     2. **`hitSlop`**, qui élargit la zone de touche SANS changer la mise en
+        page. Indispensable quand la boîte ne peut pas grandir — mais
+        `react-native-web` l'ignore, donc ça ne se vérifie PAS au
+        navigateur. Seul l'iPhone le dira.
+
+   On préfère donc (1) partout où la mise en page le supporte, et on ne
+   garde (2) que pour ce qui est vraiment à l'étroit.
+   ========================================================================== */
+
+/** Le minimum qu'un pouce atteint. Mesure d'Apple, pas une préférence. */
+export const TOUCHE = 44;
+
+/**
+ * De combien élargir la zone de touche d'un élément haut de `hauteur`
+ * points pour atteindre les 44. Rend 0 quand il n'y a rien à faire.
+ *
+ *     <Pressable hitSlop={viser(24)} …>   // 10 de chaque côté
+ */
+export function viser(hauteur) {
+  return Math.max(0, Math.ceil((TOUCHE - hauteur) / 2));
+}

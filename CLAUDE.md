@@ -1030,6 +1030,81 @@ carte.
 `npm run verifier-listes` tient les sept listes, leurs trois réglages,
 les six composants mémorisés et les trois champs sortis d'`OpusApp`.
 
+### Viser avec un gant, lire au soleil — le lot 5 (02/10/2026)
+
+Mesuré au navigateur en relevant la boîte RÉELLE de chaque zone appuyable,
+sur cinq écrans : **70 cibles sur 71 sous 44 points**, la plus petite à 14.
+Et le contraste, calculé sur la palette : bordure d'un champ 1,65 : 1,
+texte secondaire 4,01, texte orange sur le fond 2,76.
+
+Autrement dit : dehors, on ne voyait plus où étaient les champs, et on ne
+touchait pas ce qu'on visait.
+
+> **44 points, c'est la mesure d'Apple**, tirée de la taille d'un doigt. Et
+> les utilisateurs d'Opus ne sont pas assis à un bureau : un maçon en gants
+> n'a plus un doigt de 7 mm mais une surface molle de 15 mm qui ne sent pas
+> où elle appuie.
+
+`theme.js` porte `TOUCHE = 44` et `viser(hauteur)`. Deux façons d'y arriver,
+et elles ne se valent pas :
+
+1. **Agrandir la BOÎTE** avec du remplissage — l'icône garde sa taille.
+   Ça se voit, ça se mesure, et ça vaut aussi à la souris. **À préférer.**
+2. **`hitSlop`**, quand la mise en page ne peut pas grandir. Mais
+   `react-native-web` l'ignore : **ça ne se vérifie PAS au navigateur**.
+
+> **Toute marge de visée passe par `viser()`**, jamais par un nombre écrit à
+> la main. `hitSlop={8}` sur une boîte de 14 donne 30, pas 44 — il y en
+> avait 37 dans le projet, tous faux. `npm run verifier-cibles` les refuse.
+
+#### Les couleurs : ce qu'on remplit, et ce qu'on lit
+
+L'orange de signature **#E85C1F ne bouge pas** — c'est l'identité. Mais en
+TEXTE il donne 3,51 : 1 sur blanc et 2,76 sur le fond.
+
+> **`C.accent` pour ce qu'on REMPLIT** (boutons, pastilles, barres, icônes).
+> **`C.accentTexte` (#B14212) pour ce qu'on LIT** : la même teinte, 18°, à
+> l'identique, assombrie juste assez — 5,74 sur blanc, 4,52 sur le fond.
+
+Deux autres corrections de lisibilité, visuellement imperceptibles :
+`muted` passe de #726E63 à **#6A665C** (4,01 → 4,51 sur le fond), et les
+champs reçoivent leur propre bordure **`bordChamp` #8D8164** (1,65 → 3,85),
+les cartes gardant `line`. **Une bordure de champ n'est pas un séparateur :
+elle dit où appuyer.**
+
+`npm run verifier-cibles` RECALCULE tous ces contrastes à chaque passage :
+une couleur ajoutée sans y penser le fera rougir.
+
+#### Le reste du lot
+
+`ChampMotDePasse` : un œil pour relire — au soleil, avec des mains sales,
+on se trompe —, plus `autoComplete` et `textContentType`, sans quoi iOS ne
+propose ni le trousseau ni « mot de passe fort ». Le clavier enchaîne les
+champs (`returnKeyType` + `focus()`), ce qui demande `forwardRef` sur
+`Field`.
+
+`retour.annoncer()` : **`accessibilityLiveRegion` n'existe que sur
+Android**. Sur iPhone, un échec passait complètement inaperçu pour qui se
+sert de VoiceOver — on appuyait sur « Publier », on n'entendait rien, on
+recommençait. Tout message du bandeau y passe désormais.
+
+`retour.useMouvementReduit()` : « Réduire les animations » n'est pas un
+goût, ce réglage existe pour les personnes que le mouvement rend malades.
+Il devient urgent maintenant qu'Opus bouge.
+
+#### Deux pièges rencontrés
+
+1. **Agrandir les boutons casse les en-têtes.** Le « Suivre » passé à 40
+   points recouvrait le nom de l'artisan. Il faut `flex: 1, minWidth: 0` sur
+   le bloc qui porte le texte — sinon il pousse la rangée au lieu de se
+   raccourcir. Et dans la ligne de métadonnées, **c'est la ville qui se
+   coupe, pas l'heure** : « il y a 2 h » est plus utile que la fin du nom
+   d'une commune.
+2. **Un contrôle qui accuse la documentation, pour la TROISIÈME fois.**
+   `verifier-acces` a signalé « bouton sans étiquette » sur l'exemple écrit
+   dans le commentaire de `viser()`. Il retire désormais les commentaires
+   avant de lire, comme `verifier-imports` et `verifier-retour`.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

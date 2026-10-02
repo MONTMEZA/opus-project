@@ -83,12 +83,43 @@ const PARLE = [
   'accessibilityViewIsModal',     // il n'est pas un bouton : il retient le focus
 ];
 
+/**
+ * Le code, SANS ses commentaires — et sans perdre les numéros de ligne.
+ *
+ * C'EST LA TROISIÈME FOIS DANS CE PROJET.
+ * `verifier-imports` accusait le commentaire qui EXPLIQUE pourquoi on ne
+ * veut plus d'`await import`. `verifier-retour` comptait les constantes
+ * passées en argument comme des appels. Et le 02/10/2026, celui-ci a
+ * signalé « bouton sans étiquette » sur l'EXEMPLE écrit dans la
+ * documentation de `viser()`, dans `theme.js`.
+ *
+ * Un contrôle qui accuse la documentation de ce qu'elle décrit cesse d'être
+ * lu. On remplace donc chaque caractère de commentaire par une espace : les
+ * lignes gardent leur numéro, et il ne reste que du code.
+ */
+function sansCommentaires(source) {
+  let dedans = null;
+  let sortie = '';
+  for (let i = 0; i < source.length; i += 1) {
+    const c = source[i];
+    const suivant = source[i + 1];
+    if (!dedans && c === '/' && suivant === '/') { dedans = 'ligne'; }
+    else if (!dedans && c === '/' && suivant === '*') { dedans = 'bloc'; }
+    else if (dedans === 'ligne' && c === '\n') { dedans = null; }
+    else if (dedans === 'bloc' && c === '*' && suivant === '/') {
+      dedans = null; sortie += '  '; i += 1; continue;
+    }
+    sortie += dedans && c !== '\n' ? ' ' : c;
+  }
+  return sortie;
+}
+
 let muets = 0;
 let total = 0;
 const sansRole = [];
 
 for (const chemin of fichiers(RACINE)) {
-  const texte = readFileSync(chemin, 'utf8');
+  const texte = sansCommentaires(readFileSync(chemin, 'utf8'));
   const court = chemin.slice(chemin.indexOf('/src/') + 1);
 
   for (const { ligne, code } of blocsPressable(texte)) {

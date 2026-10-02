@@ -201,6 +201,11 @@ export default function OpusApp() {
        dans `src/lib/retour.js` : elle passe toute par ici, donc elle ne se
        disperse pas dans trente fichiers. */
     if (erreur) retour.echec(); else retour.reussite();
+    /* ET À VOIX HAUTE. `accessibilityLiveRegion` n'existe que sur Android :
+       sur iPhone, un échec passait complètement inaperçu pour qui se sert
+       de VoiceOver — on appuyait sur « Publier », on n'entendait rien, on
+       recommençait. */
+    retour.annoncer(msg);
     setBanner({ texte: msg, erreur });
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
     bannerTimer.current = setTimeout(() => setBanner(null), erreur ? 9000 : 3000);

@@ -13,7 +13,7 @@
  */
 import React, { useRef, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, viser } from '../theme';
 import { BtnMain, BtnMini, Chip, Field, TextArea } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
 import { MINIMUM as MINIMUM_RELECTURE } from '../components/AmeliorerTexte';
@@ -201,7 +201,7 @@ export default function CreerScreen({
                   <Pressable
                     style={s.retirer}
                     onPress={() => retirer(i)}
-                    hitSlop={6}
+                    hitSlop={viser(24)}
                     accessibilityRole="button"
                     accessibilityLabel={`Retirer le média ${i + 1}`}
                   >
@@ -211,7 +211,7 @@ export default function CreerScreen({
                     <View style={s.ordre}>
                       <Pressable
                         onPress={() => deplacer(i, -1)}
-                        hitSlop={6}
+                        hitSlop={viser(24)}
                         disabled={i === 0}
                         accessibilityRole="button"
                         accessibilityLabel={`Déplacer le média ${i + 1} vers la gauche`}
@@ -221,7 +221,7 @@ export default function CreerScreen({
                       </Pressable>
                       <Pressable
                         onPress={() => deplacer(i, 1)}
-                        hitSlop={6}
+                        hitSlop={viser(24)}
                         disabled={i === medias.length - 1}
                         accessibilityRole="button"
                         accessibilityLabel={`Déplacer le média ${i + 1} vers la droite`}
@@ -312,7 +312,7 @@ export default function CreerScreen({
                 >
                   <Icon size={15} color={on ? C.accent : C.muted} />
                   <View style={s.destinationTextes}>
-                    <Text style={[s.destinationTitre, on && { color: C.accent }]}>{titre}</Text>
+                    <Text style={[s.destinationTitre, on && { color: C.accentTexte }]}>{titre}</Text>
                     <Text style={s.destinationDetail}>{detail}</Text>
                   </View>
                 </Pressable>

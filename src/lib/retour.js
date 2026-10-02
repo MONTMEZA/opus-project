@@ -38,6 +38,8 @@
  * `expo-haptics` directement ailleurs. **Que ça se sente bien dans la main,
  * seul l'iPhone le dira.**
  */
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 /**
@@ -110,4 +112,58 @@ export function avertissement() {
  */
 export function cran() {
   sansJamaisEchouer(() => Haptics.selectionAsync());
+}
+
+/* ==========================================================================
+   CE QUI S'ANNONCE, ET CE QUI SE RESPECTE
+   ========================================================================== */
+
+/**
+ * DIRE UNE ERREUR À VOIX HAUTE.
+ *
+ * Relevé le 02/10/2026 : quand une action échouait, VoiceOver ne disait
+ * RIEN. Le bandeau portait pourtant `accessibilityLiveRegion="polite"` —
+ * mais cette propriété n'existe que sur Android. Sur iPhone, il faut
+ * l'annoncer explicitement.
+ *
+ * Conséquence concrète : un artisan qui se sert de VoiceOver appuyait sur
+ * « Publier », n'entendait rien, et recommençait.
+ */
+export function annoncer(message) {
+  try {
+    if (message) AccessibilityInfo.announceForAccessibility(String(message));
+  } catch (e) { /* un lecteur d'écran absent n'est pas une panne */ }
+}
+
+/**
+ * « RÉDUIRE LES ANIMATIONS » — le réglage du téléphone, et pourquoi il
+ * devient urgent.
+ *
+ * Tant que rien ne bougeait dans Opus, l'ignorer ne coûtait rien. Depuis le
+ * lot 1, les bandeaux glissent, les boutons s'enfoncent, et le lot 6 va en
+ * ajouter partout. Or ce réglage n'est pas un goût : il existe pour les
+ * personnes que le mouvement rend MALADES — vertiges, nausées, migraines.
+ *
+ * `useMouvementReduit()` rend `true` quand la personne l'a demandé. Les
+ * animations se contentent alors d'apparaître, sans glisser ni rebondir.
+ */
+export function useMouvementReduit() {
+  const [reduit, setReduit] = useState(false);
+
+  useEffect(() => {
+    let vivant = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((v) => { if (vivant) setReduit(!!v); })
+      .catch(() => {});
+    const abonnement = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      (v) => { if (vivant) setReduit(!!v); },
+    );
+    return () => {
+      vivant = false;
+      if (abonnement && abonnement.remove) abonnement.remove();
+    };
+  }, []);
+
+  return reduit;
 }

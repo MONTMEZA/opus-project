@@ -31,7 +31,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, useAnimatedReaction,
   withSpring, withTiming, runOnJS,
 } from 'react-native-reanimated';
-import { C, F, RESSORT_PORTE } from '../theme';
+import { C, F, RESSORT_PORTE, viser } from '../theme';
 import { decision } from '../lib/retour';
 import Media from './Media';
 import { apercuDe } from '../lib/cloudinary';
@@ -225,7 +225,7 @@ function Case({
         <Pressable
           style={s.retirer}
           onPress={onRetirer}
-          hitSlop={10}
+          hitSlop={viser(24)}
           accessibilityRole="button"
           accessibilityLabel="Retirer cette réalisation"
         >

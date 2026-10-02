@@ -112,8 +112,11 @@ console.log('\nTout ce sur quoi on appuie réagit sous le doigt');
   });
 
   const barre = code['src/components/PostCard.js'];
+  /* Depuis le lot 5, la marge de visée est CALCULÉE par `viser()` à
+     partir de la hauteur réelle : un nombre écrit à la main mentait
+     (8 sur une boîte de 14 donne 30, pas 44). */
   verifier('les quatre actions du fil ont une zone de touche élargie',
-    (barre.match(/hitSlop=\{S\.sm\}/g) || []).length >= 4,
+    (barre.match(/hitSlop=\{viser\(\d+\)\}/g) || []).length >= 4,
     'PostCard.js — un cœur de 17 px ne se vise pas au pouce');
 }
 

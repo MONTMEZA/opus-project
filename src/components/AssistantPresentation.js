@@ -25,7 +25,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, viser } from '../theme';
 import { BtnMain, BtnMini, Chip, TextArea } from './ui';
 import { Sparkles, Check, X } from './icons';
 import { QUESTIONS, redigerLocalement, assezRempli } from '../lib/presentation';
@@ -81,7 +81,7 @@ export default function AssistantPresentation({ profil, onUtiliser, onFermer }) 
         <Text style={s.enteteTexte}>Écrire ma présentation</Text>
         <Pressable
           onPress={onFermer}
-          hitSlop={10}
+          hitSlop={viser(24)}
           style={{ marginLeft: 'auto' }}
           accessibilityRole="button"
           accessibilityLabel="Fermer l'assistant"
@@ -200,7 +200,7 @@ const s = StyleSheet.create({
   note: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16 },
 
   proposition: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, padding: 10, gap: 6 },
-  propositionTitre: { fontFamily: F.oswald6, fontSize: 11, color: C.accent },
+  propositionTitre: { fontFamily: F.oswald6, fontSize: 11, color: C.accentTexte },
   propositionTexte: { fontFamily: F.inter, fontSize: 12.5, color: C.ink, lineHeight: 18 },
   propositionBas: { flexDirection: 'row', justifyContent: 'flex-end' },
   utiliserTexte: { fontFamily: F.oswald6, fontSize: 11, color: '#111' },

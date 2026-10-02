@@ -15,7 +15,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, Linking, StyleSheet } from 'react-native';
-import { C, F, T, S, interligne } from '../theme';
+import { C, F, T, S, interligne  } from '../theme';
 import { SectionLabel } from './ui';
 import { Phone, Mail, MapPin, Clock } from './icons';
 import { etatMaintenant, semaineGroupee } from '../lib/horaires';
@@ -156,7 +156,7 @@ const s = StyleSheet.create({
   valeur: { fontFamily: F.inter6, fontSize: T.courant + 0.5, color: C.ink },
   /* Un numéro de téléphone se lit de loin et se compose d'un doigt : il est
      plus gros que le reste, et de la couleur sur laquelle on appuie. */
-  valeurLien: { fontFamily: F.oswald6, fontSize: T.sousTitre - 1, color: C.accent, letterSpacing: 0.3 },
+  valeurLien: { fontFamily: F.oswald6, fontSize: T.sousTitre - 1, color: C.accentTexte, letterSpacing: 0.3 },
   /* L'e-mail est long : il ne peut pas avoir la taille du téléphone sans
      repousser son libellé hors de l'écran. */
   valeurMail: { flexShrink: 1, fontFamily: F.inter6, fontSize: T.courant, color: C.accent2 },

@@ -6,7 +6,7 @@ import React, { useMemo, useRef } from 'react';
 import {
   View, Text, FlatList, Pressable, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
-import { C, F, T, APPUI } from '../theme';
+import { C, F, T, APPUI, viser } from '../theme';
 import { EmptyState } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
 import { Send, Flag, AlertTriangle } from '../components/icons';
@@ -39,7 +39,7 @@ const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocute
         {m.from === 'moi' && m.etat === 'echec' && (
           <Pressable
             onPress={() => onRenvoyer && onRenvoyer(m)}
-            hitSlop={8}
+            hitSlop={viser(24)}
             accessibilityRole="button"
             accessibilityLabel="Message non envoyé. Toucher pour réessayer."
             style={({ pressed }) => [s.rangeeEchec, pressed && APPUI.discret]}
@@ -55,7 +55,7 @@ const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocute
           endroit où personne d'autre ne peut le voir. */}
       {!!onSignaler && m.from !== 'moi' && !!m.id && (
         <Pressable
-          hitSlop={8}
+          hitSlop={viser(24)}
           style={s.signaler}
           accessibilityRole="button"
           accessibilityLabel="Signaler ce message"
