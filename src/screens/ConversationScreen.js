@@ -150,7 +150,7 @@ export default function ConversationScreen({
       <View style={s.inputRow}>
         <ChampLocal
           ref={brouillon}
-          style={{ flex: 1, paddingVertical: 9, paddingHorizontal: 12, fontSize: 12.5 }}
+          style={{ flex: 1, paddingVertical: 9, paddingHorizontal: 12, fontSize: T.corps }}
           placeholder="Écrire un message..."
           onSubmitEditing={envoyer}
           returnKeyType="send"
@@ -178,7 +178,7 @@ const s = StyleSheet.create({
     maxWidth: '75%', alignSelf: 'flex-start',
   },
   bubbleMoi: { backgroundColor: C.ink, alignSelf: 'flex-end', borderColor: C.ink },
-  bubbleText: { fontSize: 12.5, color: C.ink, fontFamily: F.inter },
+  bubbleText: { fontSize: T.corps, color: C.ink, fontFamily: F.inter },
   inputRow: {
     flexDirection: 'row', gap: 8, paddingVertical: 10, paddingHorizontal: 12,
     borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.surface,

@@ -10,7 +10,9 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { Field } from './ui';
 import { MapPin, Check } from './icons';
 import { chercher } from '../lib/adresse';
@@ -101,6 +103,6 @@ const s = StyleSheet.create({
     paddingVertical: 9, paddingHorizontal: 10,
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  nom: { fontFamily: F.inter6, fontSize: 12.5, color: C.ink },
-  detail: { fontSize: 11, color: C.muted, marginTop: 1, fontFamily: F.inter },
+  nom: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
+  detail: { fontSize: T.petit, color: C.muted, marginTop: 1, fontFamily: F.inter },
 });

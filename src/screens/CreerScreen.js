@@ -13,7 +13,9 @@
  */
 import React, { useRef, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { C, F, viser } from '../theme';
+import {
+  C, F, T, viser, S, GOUTTIERE,
+} from '../theme';
 import { BtnMain, BtnMini, Chip, Field, TextArea } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
 import { MINIMUM as MINIMUM_RELECTURE } from '../components/AmeliorerTexte';
@@ -158,7 +160,11 @@ export default function CreerScreen({
   const pret = manques.length === 0 && !envoi;
 
   return (
-    <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={s.pad}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={s.label}>Format</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.types}>
         {TYPES.map(([key, Icon, label]) => {
@@ -411,21 +417,22 @@ export default function CreerScreen({
 }
 
 const s = StyleSheet.create({
-  pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+  /* `contentContainerStyle`, pas `style` — voir GOUTTIERE dans theme.js. */
+  pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
   types: { gap: 6, paddingBottom: 6 },
   type: {
     alignItems: 'center', gap: 4, backgroundColor: C.surface,
     borderWidth: 1, borderColor: C.line, paddingVertical: 10, paddingHorizontal: 12,
   },
   typeOn: { backgroundColor: C.ink, borderColor: C.ink },
-  typeText: { fontSize: 10.5, color: C.muted, fontFamily: F.oswald },
-  label: { fontFamily: F.oswald6, fontSize: 12, color: C.ink, marginBottom: 6, marginTop: 6 },
+  typeText: { fontSize: T.petit, color: C.muted, fontFamily: F.oswald },
+  label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink, marginBottom: 6, marginTop: 6 },
 
   vide: {
     height: 120, marginVertical: 10, alignItems: 'center', justifyContent: 'center', gap: 7,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderStyle: 'dashed',
   },
-  videTexte: { fontSize: 11.5, color: C.muted, fontFamily: F.inter, textAlign: 'center', paddingHorizontal: 20 },
+  videTexte: { fontSize: T.courant, color: C.muted, fontFamily: F.inter, textAlign: 'center', paddingHorizontal: 20 },
 
   apercus: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 10 },
   apercu: { width: 96, height: 120 },
@@ -434,7 +441,7 @@ const s = StyleSheet.create({
     position: 'absolute', left: 4, top: 4,
     backgroundColor: 'rgba(26,27,25,0.72)', paddingHorizontal: 5, paddingVertical: 2,
   },
-  rangTexte: { fontFamily: F.oswald6, fontSize: 10, color: '#fff' },
+  rangTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
   retirer: {
     position: 'absolute', right: 4, top: 4, width: 20, height: 20, borderRadius: 10,
     backgroundColor: 'rgba(26,27,25,0.72)', alignItems: 'center', justifyContent: 'center',
@@ -446,16 +453,16 @@ const s = StyleSheet.create({
   },
 
   boutonsMedia: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  boutonTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.ink },
-  note: { fontSize: 11, color: C.muted, fontFamily: F.inter, marginTop: 6 },
+  boutonTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.ink },
+  note: { fontSize: T.petit, color: C.muted, fontFamily: F.inter, marginTop: 6 },
 
   musique: {
     flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     paddingVertical: 9, paddingHorizontal: 11,
   },
-  musiqueTitre: { fontFamily: F.oswald6, fontSize: 12, color: C.ink },
-  musiqueDetail: { fontSize: 10.5, color: C.muted, fontFamily: F.inter, marginTop: 1 },
+  musiqueTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
+  musiqueDetail: { fontSize: T.petit, color: C.muted, fontFamily: F.inter, marginTop: 1 },
 
   destinations: { gap: 6, marginBottom: 12 },
   destination: {
@@ -465,8 +472,8 @@ const s = StyleSheet.create({
   },
   destinationOn: { borderColor: C.accent, borderWidth: 2 },
   destinationTextes: { flex: 1, minWidth: 0 },
-  destinationTitre: { fontFamily: F.oswald6, fontSize: 12.5, color: C.ink },
-  destinationDetail: { fontSize: 10.5, color: C.muted, fontFamily: F.inter, marginTop: 1 },
+  destinationTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
+  destinationDetail: { fontSize: T.petit, color: C.muted, fontFamily: F.inter, marginTop: 1 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
 
@@ -474,17 +481,17 @@ const s = StyleSheet.create({
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     borderLeftWidth: 4, borderLeftColor: C.accent, padding: 10, gap: 3, marginTop: 12,
   },
-  manque: { fontSize: 11.5, color: C.muted, fontFamily: F.inter, lineHeight: 17 },
+  manque: { fontSize: T.courant, color: C.muted, fontFamily: F.inter, lineHeight: 17 },
 
   erreur: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     borderLeftWidth: 4, borderLeftColor: C.bad, padding: 10, gap: 3, marginTop: 12,
   },
-  erreurTitre: { fontFamily: F.oswald6, fontSize: 12.5, color: C.bad },
-  erreurTexte: { fontSize: 11.5, color: C.muted, fontFamily: F.inter, lineHeight: 17 },
+  erreurTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.bad },
+  erreurTexte: { fontSize: T.courant, color: C.muted, fontFamily: F.inter, lineHeight: 17 },
 
   envoi: { marginTop: 12, gap: 5 },
   jaugeFond: { height: 4, backgroundColor: C.line },
   jaugeBarre: { height: 4, backgroundColor: C.accent },
-  envoiTexte: { fontSize: 11, color: C.muted, fontFamily: F.inter6 },
+  envoiTexte: { fontSize: T.petit, color: C.muted, fontFamily: F.inter6 },
 });

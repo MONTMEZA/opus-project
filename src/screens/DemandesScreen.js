@@ -7,7 +7,9 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
-import { C, F, viser, surFond } from '../theme';
+import {
+  C, F, T, S, viser, surFond, GOUTTIERE, CARTE_PLEINE,
+} from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
 } from '../components/ui';
@@ -202,7 +204,7 @@ export default function DemandesScreen({
      blocage de l'iPhone du 29/09 qui revient. */
   return (
     <FlatList
-      style={s.pad}
+      style={{ flex: 1 }}
       keyboardShouldPersistTaps="handled"
       data={liste}
       keyExtractor={(d) => String(d.id)}
@@ -210,7 +212,7 @@ export default function DemandesScreen({
       maxToRenderPerBatch={6}
       windowSize={5}
       removeClippedSubviews
-      contentContainerStyle={{ paddingBottom: 24 }}
+      contentContainerStyle={[s.pad, { paddingBottom: S.xl }]}
       refreshControl={onRafraichir ? (
         <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
           tintColor={C.muted} colors={[C.accent]} />
@@ -378,15 +380,15 @@ export default function DemandesScreen({
 }
 
 const s = StyleSheet.create({
-  pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+  pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
 
   encart: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     padding: 12, marginBottom: 14,
   },
-  encartTitre: { fontFamily: F.oswald6, fontSize: 13, color: C.ink, marginBottom: 4 },
-  encartTexte: { fontSize: 11.5, color: C.muted, lineHeight: 17, marginBottom: 10, fontFamily: F.inter },
-  label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginBottom: 6 },
+  encartTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, marginBottom: 4 },
+  encartTexte: { fontSize: T.courant, color: C.muted, lineHeight: 17, marginBottom: 10, fontFamily: F.inter },
+  label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginBottom: 6 },
   apercus: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   apercu: { width: 74, height: 74, backgroundColor: C.line },
   retirer: {
@@ -394,7 +396,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(26,27,25,0.72)', alignItems: 'center', justifyContent: 'center',
   },
   photoBtns: { flexDirection: 'row', gap: 6, marginTop: 8 },
-  photoBtnTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.ink },
+  photoBtnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.ink },
   formBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 4 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
@@ -405,32 +407,32 @@ const s = StyleSheet.create({
     paddingVertical: 6, paddingHorizontal: 10,
   },
   reglageOn: { backgroundColor: C.accent2, borderColor: C.accent2 },
-  reglageTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: C.muted },
+  reglageTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
 
   etiquettes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   etiquette: { paddingVertical: 3, paddingHorizontal: 8 },
   etiquetteBudget: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
-  etiquetteTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+  etiquetteTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: '#fff' },
 
   dejaRepondu: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dejaReponduTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
+  dejaReponduTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2 },
 
-  carte: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
+  carte: { ...CARTE_PLEINE },
   carteHaut: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  auteur: { fontFamily: F.inter6, fontSize: 13, color: C.ink },
+  auteur: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
-  meta: { fontSize: 11, color: C.muted, fontFamily: F.inter },
+  meta: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
   badgeMetier: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, paddingVertical: 3, paddingHorizontal: 8 },
-  badgeMetierText: { fontFamily: F.oswald, fontSize: 10.5, color: C.ink },
+  badgeMetierText: { fontFamily: F.oswald, fontSize: T.petit, color: C.ink },
   badgeMetierMien: { backgroundColor: C.accent2, borderColor: C.accent2 },
 
-  texte: { fontSize: 12.8, lineHeight: 18, color: C.ink, marginTop: 10, fontFamily: F.inter },
+  texte: { fontSize: T.corps, lineHeight: 18, color: C.ink, marginTop: 10, fontFamily: F.inter },
   media: { width: '100%', aspectRatio: 16 / 10, marginTop: 10 },
 
   carteBas: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line,
   },
-  reponses: { fontSize: 11, color: C.muted, fontFamily: F.inter },
-  repondreText: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
+  reponses: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
+  repondreText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent },
 });

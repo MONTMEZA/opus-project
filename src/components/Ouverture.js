@@ -53,7 +53,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { HardHat, Hammer, Wrench, Paintbrush } from './icons';
 
 /** Le drapeau « cette personne a déjà vu l'ouverture complète ». */
@@ -319,12 +321,12 @@ const s = StyleSheet.create({
   logoPlace: { ...StyleSheet.absoluteFillObject, alignItems: 'center', paddingHorizontal: 26 },
   outils: { flexDirection: 'row', gap: 16, marginTop: 60, opacity: 0.85 },
   mot: {
-    fontFamily: F.oswald7, fontSize: 34, color: C.surface,
+    fontFamily: F.oswald7, fontSize: T.heros, color: C.surface,
     marginTop: 24, letterSpacing: 0.5,
     /* Le suffixe est en orange de remplissage, et c'est volontaire : il est
        posé sur le presque-noir de cet écran, ce qui donne 4,92 : 1. C'est
        la même exception que l'écran d'accueil — et il FAUT que ce soit la
        même, puisque c'est le même mot-symbole, au même endroit. */
   },
-  tag: { fontSize: 13, color: C.surface, opacity: 0.85, marginTop: 6, fontFamily: F.inter },
+  tag: { fontSize: T.corps, color: C.surface, opacity: 0.85, marginTop: 6, fontFamily: F.inter },
 });

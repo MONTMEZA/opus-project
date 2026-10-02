@@ -11,7 +11,9 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T, CARTE,
+} from '../theme';
 import { BtnMini, EmptyState, SectionLabel, TextArea } from '../components/ui';
 import Media from '../components/Media';
 import { apercuDe } from '../lib/cloudinary';
@@ -180,17 +182,17 @@ export default function MesPublicationsScreen({
 
 const s = StyleSheet.create({
   liste: { gap: 10, paddingHorizontal: 16 },
-  carte: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
+  carte: { ...CARTE },
   haut: { flexDirection: 'row', gap: 10, padding: 10 },
   vignette: { width: 64, height: 80, backgroundColor: C.line },
   infos: { flex: 1, minWidth: 0 },
   formatLigne: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  format: { fontFamily: F.oswald6, fontSize: 11, color: C.muted },
-  temps: { fontSize: 10.5, color: C.muted, fontFamily: F.inter },
-  texte: { fontSize: 12.5, color: C.ink, fontFamily: F.inter, lineHeight: 18, marginTop: 4 },
+  format: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
+  temps: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
+  texte: { fontSize: T.corps, color: C.ink, fontFamily: F.inter, lineHeight: 18, marginTop: 4 },
   chiffres: { flexDirection: 'row', gap: 14, marginTop: 6 },
   chiffre: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  chiffreTexte: { fontSize: 11, color: C.muted, fontFamily: F.inter6 },
+  chiffreTexte: { fontSize: T.petit, color: C.muted, fontFamily: F.inter6 },
 
   actions: {
     flexDirection: 'row', borderTopWidth: 1, borderTopColor: C.line,
@@ -199,17 +201,17 @@ const s = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 5, paddingVertical: 10,
   },
-  actionTexte: { fontSize: 11, color: C.muted, fontFamily: F.inter6 },
+  actionTexte: { fontSize: T.petit, color: C.muted, fontFamily: F.inter6 },
 
   confirmation: {
     borderTopWidth: 1, borderTopColor: C.line, padding: 10, gap: 8,
     backgroundColor: C.bg,
   },
-  confirmationTexte: { fontSize: 11.5, color: C.ink, fontFamily: F.inter, lineHeight: 17 },
+  confirmationTexte: { fontSize: T.courant, color: C.ink, fontFamily: F.inter, lineHeight: 17 },
   confirmationBoutons: { flexDirection: 'row', gap: 6, justifyContent: 'flex-end' },
 
   note: {
-    fontSize: 11, color: C.muted, fontFamily: F.inter, lineHeight: 16,
+    fontSize: T.petit, color: C.muted, fontFamily: F.inter, lineHeight: 16,
     paddingHorizontal: 16, paddingTop: 14,
   },
 });

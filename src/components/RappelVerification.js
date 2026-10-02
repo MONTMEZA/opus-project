@@ -7,7 +7,9 @@
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { ShieldCheck, ShieldX, FileText, ChevronRight } from './icons';
 import { toutValide, etatKbis, etatAssurance, ATTENTE, VALIDE } from '../lib/verification';
 
@@ -139,17 +141,17 @@ const s = StyleSheet.create({
     borderLeftWidth: 4, padding: 12,
   },
   haut: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  titre: { fontFamily: F.oswald6, fontSize: 13 },
-  texte: { fontSize: 11.5, color: C.muted, lineHeight: 17, marginTop: 5, fontFamily: F.inter },
-  note: { fontSize: 11.5, color: C.bad, lineHeight: 17, marginTop: 5, fontFamily: F.inter6 },
+  titre: { fontFamily: F.oswald6, fontSize: T.corps },
+  texte: { fontSize: T.courant, color: C.muted, lineHeight: 17, marginTop: 5, fontFamily: F.inter },
+  note: { fontSize: T.courant, color: C.bad, lineHeight: 17, marginTop: 5, fontFamily: F.inter6 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 9 },
-  actionTexte: { fontFamily: F.oswald6, fontSize: 11.5 },
+  actionTexte: { fontFamily: F.oswald6, fontSize: T.courant },
 
   public: {
     flexDirection: 'row', gap: 9, alignItems: 'flex-start',
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     borderLeftWidth: 4, padding: 11, marginHorizontal: 16, marginBottom: 8,
   },
-  publicTitre: { fontFamily: F.inter6, fontSize: 12.5 },
-  publicTexte: { fontSize: 11.5, color: C.muted, lineHeight: 16, marginTop: 3, fontFamily: F.inter },
+  publicTitre: { fontFamily: F.inter6, fontSize: T.corps },
+  publicTexte: { fontSize: T.courant, color: C.muted, lineHeight: 16, marginTop: 3, fontFamily: F.inter },
 });

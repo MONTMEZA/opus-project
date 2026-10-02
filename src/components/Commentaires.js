@@ -188,7 +188,7 @@ export default function Commentaires({
       <View style={s.saisie}>
         <ChampLocal
           ref={champ}
-          style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 10, fontSize: 12.5 }}
+          style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 10, fontSize: T.corps }}
           placeholder={repondA ? `Répondre à ${repondA.auteur}...` : 'Ajouter un commentaire...'}
           surSeuil={({ vide: v }) => setVide(v)}
           onSubmitEditing={envoyer}

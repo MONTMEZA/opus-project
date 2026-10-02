@@ -11,7 +11,9 @@ import {
   StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F } from '../theme';
+import {
+  C, F, T, S, GOUTTIERE,
+} from '../theme';
 import { PillToggle, EmptyState } from '../components/ui';
 import PostCard from '../components/PostCard';
 import VideoSlide from '../components/VideoSlide';
@@ -243,13 +245,13 @@ export default function HomeScreen({
 
 const s = StyleSheet.create({
   bas: { alignItems: 'center', justifyContent: 'center', paddingVertical: 22, gap: 8 },
-  basTexte: { fontFamily: F.inter, fontSize: 12, color: C.muted },
+  basTexte: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
   wrap: { flex: 1 },
   videoWrap: { flex: 1, backgroundColor: C.dark },
   videoVide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34, gap: 8 },
-  videoVideTexte: { fontFamily: F.oswald6, fontSize: 15, color: '#fff', textAlign: 'center' },
+  videoVideTexte: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: '#fff', textAlign: 'center' },
   videoVideDetail: {
-    fontFamily: F.inter, fontSize: 12, color: 'rgba(255,255,255,0.7)',
+    fontFamily: F.inter, fontSize: T.courant, color: 'rgba(255,255,255,0.7)',
     textAlign: 'center', lineHeight: 18,
   },
   floatingToggle: { position: 'absolute', left: 14, zIndex: 5 },
@@ -257,5 +259,10 @@ const s = StyleSheet.create({
     gap: 8, paddingVertical: 10, paddingHorizontal: 14,
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  classicContent: { paddingTop: 10, paddingHorizontal: 12, paddingBottom: 16, gap: 10 },
+  /* LA MÊME gouttière que partout ailleurs : le Fil posait ses cartes à
+     12 px du bord et les autres écrans à 16 (32 par le défaut doublé).
+     On changeait d'onglet et le contenu sautait de côté. */
+  classicContent: {
+    paddingTop: S.md, paddingHorizontal: GOUTTIERE, paddingBottom: S.lg, gap: S.md - 2,
+  },
 });

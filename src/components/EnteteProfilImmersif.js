@@ -16,7 +16,9 @@ import React from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { useMouvementReduit } from '../lib/retour';
 import { Avatar, ProfileBanner, HazardStrip } from './ui';
 import { BadgeCheck } from './icons';
@@ -113,5 +115,5 @@ const s = StyleSheet.create({
   identite: { alignItems: 'center', paddingHorizontal: 20, marginTop: 9 },
   titreLigne: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   titre: { fontFamily: F.oswald6, fontSize: 20, color: C.ink, flexShrink: 1, textAlign: 'center' },
-  sousTitre: { fontFamily: F.inter5, fontSize: 12.5, color: C.muted, marginTop: 3, textAlign: 'center' },
+  sousTitre: { fontFamily: F.inter5, fontSize: T.corps, color: C.muted, marginTop: 3, textAlign: 'center' },
 });

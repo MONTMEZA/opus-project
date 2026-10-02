@@ -3,7 +3,9 @@
  */
 import React from 'react';
 import { View, Text, Pressable, FlatList, StyleSheet, RefreshControl } from 'react-native';
-import { C, F, T, S, R, APPUI } from '../theme';
+import {
+  C, F, T, S, R, APPUI, GOUTTIERE,
+} from '../theme';
 import { nomMetier } from '../lib/metiers';
 import { Avatar, EmptyState } from '../components/ui';
 
@@ -56,7 +58,8 @@ export default function MessagesScreen({ conversations, onOpen,
 }) {
   return (
     <FlatList
-      style={s.pad}
+      style={{ flex: 1 }}
+      contentContainerStyle={s.pad}
       data={conversations}
       keyExtractor={(c) => String(c.id)}
       initialNumToRender={8}
@@ -76,14 +79,15 @@ export default function MessagesScreen({ conversations, onOpen,
 }
 
 const s = StyleSheet.create({
-  pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+  /* `contentContainerStyle`, pas `style` — voir GOUTTIERE dans theme.js. */
+  pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.line,
   },
   body: { flex: 1, minWidth: 0 },
   top: { flexDirection: 'row', justifyContent: 'space-between' },
-  name: { fontFamily: F.inter6, fontSize: 13.5, color: C.ink, flexShrink: 1 },
+  name: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink, flexShrink: 1 },
   nameNonLu: { fontFamily: F.inter6, color: C.ink },
   basLigne: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
   previewNonLu: { color: C.ink, fontFamily: F.inter5 },
@@ -92,7 +96,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
   },
   pastilleTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surAccent },
-  sousTitre: { fontSize: 11, color: C.accent2, fontFamily: F.inter },
-  time: { fontSize: 11, color: C.muted, fontFamily: F.inter },
-  preview: { flex: 1, fontSize: 12, color: C.muted, fontFamily: F.inter },
+  sousTitre: { fontSize: T.petit, color: C.accent2, fontFamily: F.inter },
+  time: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
+  preview: { flex: 1, fontSize: T.courant, color: C.muted, fontFamily: F.inter },
 });

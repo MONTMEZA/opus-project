@@ -28,7 +28,9 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F, viser } from '../theme';
+import {
+  C, F, T, viser,
+} from '../theme';
 import { BtnMini } from './ui';
 import { Sparkles, Check, X } from './icons';
 import { nettoyerTypographie, aChange } from '../lib/typographie';
@@ -169,18 +171,18 @@ export default function AmeliorerTexte({
 const s = StyleSheet.create({
   bloc: { marginTop: 8 },
   ligne: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  boutonTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
-  aide: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginTop: 6 },
+  boutonTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2 },
+  aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginTop: 6 },
 
   resultats: { marginTop: 10, gap: 8 },
-  resultatsTitre: { fontFamily: F.oswald6, fontSize: 11.5, color: C.ink },
-  note: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginTop: 6 },
+  resultatsTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
+  note: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginTop: 6 },
 
   proposition: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, padding: 10, gap: 6 },
-  propositionTitre: { fontFamily: F.oswald6, fontSize: 10.5, color: C.accentTexte },
-  propositionTexte: { fontFamily: F.inter, fontSize: 12.5, color: C.ink, lineHeight: 18 },
+  propositionTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accentTexte },
+  propositionTexte: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, lineHeight: 18 },
   propositionBas: { flexDirection: 'row', justifyContent: 'flex-end' },
-  utiliserTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
+  utiliserTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent },
 
-  rappel: { fontFamily: F.inter, fontSize: 10.5, color: C.muted, lineHeight: 15 },
+  rappel: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 15 },
 });

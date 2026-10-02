@@ -8,7 +8,9 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
-import { C, F } from '../theme';
+import {
+  C, F, T, S, GOUTTIERE, CARTE_PLEINE,
+} from '../theme';
 import GlissementLateral from '../components/GlissementLateral';
 import { metierPrincipal, nomMetier } from '../lib/metiers';
 import MetiersPro from '../components/MetiersPro';
@@ -429,22 +431,22 @@ const s = StyleSheet.create({
   },
   apercuTitre: { fontFamily: F.oswald7, fontSize: 21, color: '#fff', marginTop: 6 },
   apercuRetour: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  apercuMeta: { fontFamily: F.inter, fontSize: 13, color: 'rgba(255,255,255,0.72)' },
+  apercuMeta: { fontFamily: F.inter, fontSize: T.corps, color: 'rgba(255,255,255,0.72)' },
 
 
   head: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6, alignItems: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   name: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
-  metier: { fontSize: 12.5, color: C.muted, marginTop: 2, fontFamily: F.inter },
-  sub: { fontSize: 11, color: C.accent2, marginTop: 4, fontFamily: F.inter6 },
+  metier: { fontSize: T.corps, color: C.muted, marginTop: 2, fontFamily: F.inter },
+  sub: { fontSize: T.petit, color: C.accent2, marginTop: 4, fontFamily: F.inter6 },
   stats: { flexDirection: 'row', justifyContent: 'center', gap: 26, marginVertical: 14 },
   statValue: { fontFamily: F.oswald6, fontSize: 16, color: C.ink },
-  statLabel: { fontSize: 11, color: C.muted, fontFamily: F.inter },
+  statLabel: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
   headBtns: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 8 },
   linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, justifyContent: 'center' },
-  linkBtnText: { color: C.accent2, fontSize: 11.5, fontFamily: F.inter6 },
+  linkBtnText: { color: C.accent2, fontSize: T.courant, fontFamily: F.inter6 },
   bio: {
-    fontSize: 12, color: C.muted, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 4,
+    fontSize: T.courant, color: C.muted, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 4,
     textAlign: 'center', lineHeight: 18, fontFamily: F.inter,
   },
 
@@ -454,47 +456,48 @@ const s = StyleSheet.create({
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     paddingVertical: 8, paddingHorizontal: 10,
   },
-  verifLabel: { flex: 1, color: C.muted, fontSize: 11.5, fontFamily: F.inter },
-  verifValue: { fontSize: 11, fontFamily: F.inter6 },
+  verifLabel: { flex: 1, color: C.muted, fontSize: T.courant, fontFamily: F.inter },
+  verifValue: { fontSize: T.petit, fontFamily: F.inter6 },
 
   ratingBlock: { paddingHorizontal: 16, paddingTop: 2, paddingBottom: 10, gap: 7 },
   critRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  critLabel: { fontSize: 11, color: C.muted, width: 120, fontFamily: F.inter },
+  critLabel: { fontSize: T.petit, color: C.muted, width: 120, fontFamily: F.inter },
   critBar: { flex: 1, height: 6, backgroundColor: C.line, borderRadius: 4, overflow: 'hidden' },
   critFill: { height: '100%', backgroundColor: C.accent },
-  critVal: { fontSize: 11, fontFamily: F.inter6, width: 26, textAlign: 'right', color: C.ink },
+  critVal: { fontSize: T.petit, fontFamily: F.inter6, width: 26, textAlign: 'right', color: C.ink },
 
   aiBox: {
-    marginHorizontal: 16, marginBottom: 14, backgroundColor: C.surface,
-    borderWidth: 1, borderColor: C.accent2, paddingVertical: 10, paddingHorizontal: 12,
+    ...CARTE_PLEINE,
+    borderColor: C.accent2,
+    marginHorizontal: GOUTTIERE, marginBottom: S.md + 2,
   },
   aiHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  aiHeadText: { fontFamily: F.oswald6, fontSize: 12, color: C.accent2 },
-  aiText: { fontSize: 12, lineHeight: 18, color: C.ink, fontFamily: F.inter },
-  aiBtnText: { fontFamily: F.oswald6, fontSize: 11, color: C.ink },
-  aiError: { fontSize: 11, color: C.bad, marginTop: 4, fontFamily: F.inter },
+  aiHeadText: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2 },
+  aiText: { fontSize: T.courant, lineHeight: 18, color: C.ink, fontFamily: F.inter },
+  aiBtnText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.ink },
+  aiError: { fontSize: T.petit, color: C.bad, marginTop: 4, fontFamily: F.inter },
 
   form: {
     marginHorizontal: 16, marginBottom: 14, backgroundColor: C.surface,
     borderWidth: 1, borderColor: C.line, padding: 12, gap: 8,
   },
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sliderLabel: { width: 120, fontSize: 11, color: C.muted, fontFamily: F.inter },
-  sliderValue: { width: 32, textAlign: 'right', color: C.ink, fontSize: 11, fontFamily: F.inter6 },
+  sliderLabel: { width: 120, fontSize: T.petit, color: C.muted, fontFamily: F.inter },
+  sliderValue: { width: 32, textAlign: 'right', color: C.ink, fontSize: T.petit, fontFamily: F.inter6 },
 
   reviewList: { gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
-  reviewCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, paddingVertical: 10, paddingHorizontal: 12 },
+  reviewCard: { ...CARTE_PLEINE },
   reviewTop: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  reviewAuteur: { fontFamily: F.inter6, fontSize: 12, color: C.ink },
+  reviewAuteur: { fontFamily: F.inter6, fontSize: T.courant, color: C.ink },
   reviewBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: C.okBg, paddingVertical: 2, paddingHorizontal: 6, borderRadius: 8,
   },
   reviewBadgeText: { fontSize: 9.5, color: C.ok, fontFamily: F.inter },
-  reviewDate: { fontSize: 10.5, color: C.muted, marginLeft: 'auto', fontFamily: F.inter },
+  reviewDate: { fontSize: T.petit, color: C.muted, marginLeft: 'auto', fontFamily: F.inter },
   reviewScores: { flexDirection: 'row', gap: 10, marginVertical: 4 },
-  reviewScore: { fontSize: 10, color: C.muted, fontFamily: F.inter },
-  reviewTexte: { fontSize: 12, lineHeight: 17, color: C.ink, fontFamily: F.inter },
+  reviewScore: { fontSize: T.micro, color: C.muted, fontFamily: F.inter },
+  reviewTexte: { fontSize: T.courant, lineHeight: 17, color: C.ink, fontFamily: F.inter },
 
   partners: { gap: 10, paddingHorizontal: 16, paddingBottom: 24 },
 });

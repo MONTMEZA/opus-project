@@ -6,7 +6,9 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F, GRAD_160 } from '../theme';
+import {
+  C, F, T, GRAD_160,
+} from '../theme';
 import { HazardStrip } from '../components/ui';
 import { HardHat, Hammer, Wrench, Paintbrush } from '../components/icons';
 
@@ -60,11 +62,11 @@ const s = StyleSheet.create({
   wrap: { flex: 1 },
   content: { flex: 1, alignItems: 'center', paddingHorizontal: 26, paddingBottom: 20 },
   icons: { flexDirection: 'row', gap: 16, marginTop: 60, opacity: 0.85 },
-  brand: { fontFamily: F.oswald7, fontSize: 34, color: '#fff', marginTop: 24, letterSpacing: 0.5 },
-  tag: { fontSize: 13, color: '#fff', opacity: 0.85, marginTop: 6, fontFamily: F.inter },
+  brand: { fontFamily: F.oswald7, fontSize: T.heros, color: '#fff', marginTop: 24, letterSpacing: 0.5 },
+  tag: { fontSize: T.corps, color: '#fff', opacity: 0.85, marginTop: 6, fontFamily: F.inter },
   btn: { width: '100%', paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
   btnPro: { backgroundColor: C.accent },
   btnPart: { backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
-  btnText: { fontFamily: F.oswald6, fontSize: 13, letterSpacing: 0.3 },
-  note: { fontSize: 10, color: '#fff', opacity: 0.6, textAlign: 'center' },
+  btnText: { fontFamily: F.oswald6, fontSize: T.corps, letterSpacing: 0.3 },
+  note: { fontSize: T.micro, color: '#fff', opacity: 0.6, textAlign: 'center' },
 });

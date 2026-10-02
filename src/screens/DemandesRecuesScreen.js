@@ -34,7 +34,9 @@ import React, { useState } from 'react';
 import {
   View, Text, FlatList, Pressable, Linking, StyleSheet,
 } from 'react-native';
-import { C, F, T, S, R, APPUI, interligne, surFond } from '../theme';
+import {
+  C, F, T, S, R, APPUI, interligne, surFond, CARTE, GOUTTIERE,
+} from '../theme';
 import { Avatar, BtnMini, EmptyState, SectionLabel } from '../components/ui';
 import { Phone, Check, X, Clock, AlertTriangle } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
@@ -293,8 +295,8 @@ const s = StyleSheet.create({
 
   /* Une carte PORTE l'information : angle vif, comme partout ailleurs. */
   carte: {
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
-    marginHorizontal: S.lg, marginBottom: S.md,
+    ...CARTE,
+    marginHorizontal: GOUTTIERE, marginBottom: S.md,
   },
   bandeau: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm - 2,

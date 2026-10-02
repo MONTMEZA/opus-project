@@ -306,38 +306,38 @@ const s = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 40, flexGrow: 1, justifyContent: 'center' },
 
   retour: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },
-  retourText: { color: '#fff', opacity: 0.8, fontSize: 11.5, fontFamily: F.inter6 },
+  retourText: { color: '#fff', opacity: 0.8, fontSize: T.courant, fontFamily: F.inter6 },
 
   carte: { backgroundColor: C.surface, padding: 18 },
   badge: {
     alignSelf: 'flex-start', backgroundColor: C.accent, color: C.surAccent,
-    fontFamily: F.oswald6, fontSize: 10.5, paddingVertical: 3, paddingHorizontal: 9,
+    fontFamily: F.oswald6, fontSize: T.petit, paddingVertical: 3, paddingHorizontal: 9,
     marginBottom: 14, overflow: 'hidden',
   },
 
   onglets: { flexDirection: 'row', backgroundColor: C.bg, borderRadius: 20, padding: 3, marginBottom: 6 },
   onglet: { flex: 1, paddingVertical: 8, borderRadius: 16, alignItems: 'center' },
   ongletOn: { backgroundColor: C.ink },
-  ongletText: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted },
+  ongletText: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted },
 
-  label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginTop: 14, marginBottom: 6 },
+  label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginTop: 14, marginBottom: 6 },
 
   erreur: {
-    fontSize: 11.5, color: C.bad, marginTop: 12, lineHeight: 16,
+    fontSize: T.courant, color: C.bad, marginTop: 12, lineHeight: 16,
     fontFamily: F.inter, borderLeftWidth: 3, borderLeftColor: C.bad, paddingLeft: 8,
   },
-  btnText: { fontFamily: F.oswald6, fontSize: 12.5, color: C.surAccent },
+  btnText: { fontFamily: F.oswald6, fontSize: T.corps, color: C.surAccent },
   encart: {
     flexDirection: 'row', gap: 9, alignItems: 'flex-start',
     backgroundColor: C.bg, borderLeftWidth: 3, borderLeftColor: C.accent2,
     padding: 11, marginTop: 14,
   },
-  encartTitre: { fontFamily: F.oswald6, fontSize: 12, color: C.accent2, marginBottom: 4 },
-  encartTexte: { fontSize: 11, color: C.muted, lineHeight: 16, fontFamily: F.inter },
+  encartTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2, marginBottom: 4 },
+  encartTexte: { fontSize: T.petit, color: C.muted, lineHeight: 16, fontFamily: F.inter },
   gras: { fontFamily: F.inter6, color: C.ink },
 
   titre: { fontFamily: F.oswald6, fontSize: 17, color: C.ink, marginBottom: 8, textAlign: 'center' },
-  texte: { fontSize: 12.5, color: C.muted, lineHeight: 19, textAlign: 'center', marginBottom: 16, fontFamily: F.inter },
+  texte: { fontSize: T.corps, color: C.muted, lineHeight: 19, textAlign: 'center', marginBottom: 16, fontFamily: F.inter },
   checkRond: {
     width: 48, height: 48, borderRadius: 24, backgroundColor: C.ok,
     alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 14,

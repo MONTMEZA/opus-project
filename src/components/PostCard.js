@@ -4,7 +4,9 @@
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F, T, S, R, SH, interligne, APPUI, viser } from '../theme';
+import {
+  C, F, T, S, R, SH, interligne, APPUI, viser, CARTE,
+} from '../theme';
 import {
   Gradient, AvatarSuivre, BtnMain, BtnMini, IconBtn,
 } from './ui';
@@ -353,7 +355,7 @@ const s = StyleSheet.create({
     paddingVertical: 3, paddingHorizontal: S.sm, borderRadius: R.gelule,
   },
   etiquetteAATexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
-  card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
+  card: { ...CARTE },
 
   head: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

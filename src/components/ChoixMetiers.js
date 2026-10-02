@@ -172,11 +172,11 @@ const s = StyleSheet.create({
   },
   pastillePrincipale: { backgroundColor: C.accent },
   pastilleCorps: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  pastilleTexte: { fontFamily: F.oswald6, fontSize: 11.5, color: '#fff' },
+  pastilleTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: '#fff' },
   pastilleFigee: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
-  pastilleTexteFige: { fontFamily: F.oswald6, fontSize: 11.5, color: C.ink },
+  pastilleTexteFige: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
 
-  aide: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginBottom: 8 },
+  aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginBottom: 8 },
   limite: {
     fontFamily: F.inter, fontSize: T.petit, color: C.bad,
     lineHeight: interligne(T.petit), marginTop: S.sm,
@@ -196,8 +196,8 @@ const s = StyleSheet.create({
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.accent2,
     padding: 10, marginTop: 2,
   },
-  verrouTexte: { flex: 1, fontFamily: F.inter, fontSize: 11.5, color: C.ink, lineHeight: 17 },
+  verrouTexte: { flex: 1, fontFamily: F.inter, fontSize: T.courant, color: C.ink, lineHeight: 17 },
   lien: { paddingVertical: 8 },
-  lienTexte: { fontFamily: F.oswald6, fontSize: 12, color: C.accent2, textDecorationLine: 'underline' },
-  enCours: { fontFamily: F.inter, fontSize: 11.5, color: C.muted, paddingVertical: 8 },
+  lienTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2, textDecorationLine: 'underline' },
+  enCours: { fontFamily: F.inter, fontSize: T.courant, color: C.muted, paddingVertical: 8 },
 });

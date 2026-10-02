@@ -4,7 +4,9 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { HazardStrip, IconBtn } from './ui';
 import { HardHat, Bell, ArrowLeft } from './icons';
 
@@ -54,7 +56,7 @@ const s = StyleSheet.create({
   top: { backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 14 },
   left: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brand: { fontFamily: F.oswald7, fontSize: 18, letterSpacing: 0.5, color: C.ink },
+  brand: { fontFamily: F.oswald7, fontSize: T.titre, letterSpacing: 0.5, color: C.ink },
   badge: {
     position: 'absolute', top: -3, right: -4, backgroundColor: C.accent,
     width: 15, height: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center',

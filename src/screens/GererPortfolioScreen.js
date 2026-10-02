@@ -12,7 +12,9 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { BtnMain, BtnOutline, SectionLabel } from '../components/ui';
 import GestionMedias from '../components/GestionMedias';
 
@@ -64,13 +66,13 @@ export default function GererPortfolioScreen({ portfolio = [], onEnregistrer, on
 
 const s = StyleSheet.create({
   intro: { paddingHorizontal: 16, paddingTop: 14 },
-  introTexte: { fontSize: 12, color: C.muted, fontFamily: F.inter, lineHeight: 18 },
+  introTexte: { fontSize: T.courant, color: C.muted, fontFamily: F.inter, lineHeight: 18 },
   boutons: {
     flexDirection: 'row', gap: 8, justifyContent: 'flex-end',
     paddingHorizontal: 16, paddingTop: 18,
   },
   note: {
-    fontSize: 11, color: C.muted, fontFamily: F.inter, lineHeight: 16,
+    fontSize: T.petit, color: C.muted, fontFamily: F.inter, lineHeight: 16,
     paddingHorizontal: 16, paddingTop: 16,
   },
 });

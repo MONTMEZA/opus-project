@@ -13,7 +13,9 @@
  */
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { C, F, T, S, interligne  } from '../theme';
+import {
+  C, F, T, S, interligne, GOUTTIERE,
+} from '../theme';
 import { AlertTriangle, Info } from '../components/icons';
 import {
   VERSION, MENTIONS, CGU, CONFIDENTIALITE, editeurComplet, manquesEditeur,
@@ -38,7 +40,10 @@ export default function LegalScreen({ texte = 'cgu' }) {
   const rappel = rappelStatut();
 
   return (
-    <ScrollView style={s.page} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={[s.page, { paddingBottom: S.xl + S.lg }]}
+    >
       {/* Ce qui MANQUE pour le statut actuel : orange, c'est bloquant. */}
       {!editeurComplet() && (
         <View style={s.alerte}>
@@ -86,7 +91,7 @@ export default function LegalScreen({ texte = 'cgu' }) {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, paddingHorizontal: S.lg, paddingTop: S.md },
+  page: { paddingHorizontal: GOUTTIERE, paddingTop: S.md },
 
   alerte: {
     backgroundColor: C.surface, borderLeftWidth: 3, borderLeftColor: C.accent,

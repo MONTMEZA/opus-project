@@ -14,7 +14,9 @@ import React, { useEffect, useState } from 'react';
 import {
   Modal, View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
-import { C, F  } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { BtnMain, Chip, Field, TextArea, IconBtn } from './ui';
 import { X, Check } from './icons';
 import { ChampMetier } from './SelecteurMetiers';
@@ -187,11 +189,11 @@ const s = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   card: { backgroundColor: C.surface, width: '100%', padding: 16, paddingBottom: 26, gap: 8 },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  headText: { fontFamily: F.oswald6, fontSize: 13, color: C.ink, flex: 1 },
-  label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginBottom: 6 },
+  headText: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, flex: 1 },
+  label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginBottom: 6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   input: { marginBottom: 8 },
-  aide: { fontSize: 11, color: C.accentTexte, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 9 },
+  aide: { fontSize: T.petit, color: C.accentTexte, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 9 },
 
   memo: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 6 },
   case: {
@@ -199,5 +201,5 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg,
   },
   caseOn: { backgroundColor: C.accent, borderColor: C.accent },
-  memoTexte: { flex: 1, fontSize: 11, color: C.muted, fontFamily: F.inter, lineHeight: 16 },
+  memoTexte: { flex: 1, fontSize: T.petit, color: C.muted, fontFamily: F.inter, lineHeight: 16 },
 });

@@ -203,6 +203,68 @@ export function rond(taille) {
   return taille / 2;
 }
 
+/* ==========================================================================
+ *  LA GOUTTIÈRE — une seule marge, sur tous les écrans
+ * ==========================================================================
+ *
+ * MESURÉ LE 02/10/2026, au navigateur, sur six écrans : le Fil posait ses
+ * cartes à **12 px** du bord, Découvrir, la Place des pros et les Demandes
+ * à **32**. On change d'onglet, et tout le contenu saute de 20 px de côté.
+ * C'est exactement ce qui fait dire d'une application qu'elle est
+ * « assemblée de morceaux » sans qu'on sache dire pourquoi.
+ *
+ * ET LE 32 ÉTAIT UN DÉFAUT, PAS UN CHOIX. La marge était écrite dans le
+ * `style` d'un `ScrollView` :
+ *
+ *     <ScrollView style={{ paddingHorizontal: 16 }}>   // ← 16 + 16 = 32
+ *
+ * Un `ScrollView` a DEUX boîtes — son cadre, et le conteneur de son
+ * contenu — et une marge écrite dans `style` se retrouve sur les deux.
+ *
+ * > **Sur une liste, la marge va dans `contentContainerStyle`.** Dans
+ * > `style`, elle rétrécit AUSSI le cadre qui défile : la barre de
+ * > défilement se décale, et la zone qui reçoit le doigt se réduit
+ * > d'autant, des deux côtés.
+ *
+ * 16 px, et pas 12 : c'est la valeur de la grille de 4 (`S.lg`), celle que
+ * trois écrans sur quatre visaient déjà, et elle laisse respirer une carte
+ * qui porte un bord.
+ */
+export const GOUTTIERE = S.lg;
+
+/* ==========================================================================
+ *  LA CARTE — une seule, et ce qu'elle n'est PAS
+ * ==========================================================================
+ *
+ * Relevé le 02/10/2026 : **62 blocs blancs** dans le projet, pour
+ * **12 combinaisons différentes** de bordure, de rayon et de remplissage.
+ * Posées côte à côte, deux cartes voisines ne s'alignent jamais tout à
+ * fait, et l'œil lit ça comme « pas fini » sans savoir dire pourquoi.
+ *
+ * `CARTE` est la carte de CONTENU : ce qui présente un élément qu'on peut
+ * lire, parcourir ou toucher — une publication, une annonce, une demande,
+ * un avis, un artisan. Toutes se ressemblent, et c'est ce qui fait qu'on
+ * reconnaît un contenu d'Opus d'un coup d'œil.
+ *
+ * CE QU'ELLE N'EST PAS, et il faut le dire parce que la tentation est de
+ * tout y faire entrer : un CHAMP de saisie (sa bordure dit où appuyer, pas
+ * où lire), une PUCE, une FEUILLE qui monte du bas, une barre d'onglets.
+ * Ces objets-là ont leurs propres règles — les uniformiser avec la carte
+ * les rendrait tous illisibles ensemble.
+ *
+ * L'angle reste VIF : une carte porte l'information, elle ne flotte pas.
+ * C'est la règle des bords, et elle ne se renégocie pas ici.
+ */
+export const CARTE = {
+  backgroundColor: C.surface,
+  borderWidth: 1,
+  borderColor: C.line,
+  borderRadius: R.vif,   // la structure ne s'arrondit pas
+};
+
+/** La carte avec son remplissage habituel, quand le contenu n'en pose pas. */
+export const CARTE_PLEINE = { ...CARTE, padding: S.md };
+
 /**
  * LES OMBRES — trois niveaux, pas davantage.
  *

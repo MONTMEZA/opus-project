@@ -7,7 +7,9 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import { Gradient, BtnMain, ChipFollow, Avatar, HazardStrip } from './ui';
 import { nbCommentairesDe } from './Commentaires';
 import { nomMetier } from '../lib/metiers';
@@ -243,12 +245,12 @@ const s = StyleSheet.create({
   },
   apercuNomRang: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   apercuNom: { fontFamily: F.oswald7, fontSize: 22, color: '#fff' },
-  apercuMeta: { fontFamily: F.inter, fontSize: 13, color: 'rgba(255,255,255,0.72)' },
+  apercuMeta: { fontFamily: F.inter, fontSize: T.corps, color: 'rgba(255,255,255,0.72)' },
   apercuAction: {
     flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 14,
     backgroundColor: C.accent, paddingVertical: 9, paddingHorizontal: 14,
   },
-  apercuActionTexte: { fontFamily: F.oswald6, fontSize: 13, color: C.surAccent },
+  apercuActionTexte: { fontFamily: F.oswald6, fontSize: T.corps, color: C.surAccent },
 
   actions: { position: 'absolute', right: 10, zIndex: 2, gap: 16, alignItems: 'center' },
   action: { alignItems: 'center', gap: 3 },
@@ -256,15 +258,15 @@ const s = StyleSheet.create({
     width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center', justifyContent: 'center',
   },
-  actionLabel: { color: '#fff', fontSize: 11, fontFamily: F.inter },
+  actionLabel: { color: '#fff', fontSize: T.petit, fontFamily: F.inter },
 
   info: { zIndex: 2, paddingHorizontal: 16 },
   tag: { alignSelf: 'flex-start', backgroundColor: C.accent, paddingVertical: 3, paddingHorizontal: 9, marginBottom: 8 },
-  tagText: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
+  tagText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent },
   feedNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   feedName: { fontFamily: F.oswald6, fontSize: 16, color: '#fff' },
   loc: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
-  locText: { fontSize: 11, color: '#fff', opacity: 0.85, fontFamily: F.inter },
-  feedText: { fontSize: 13, color: '#fff', marginTop: 8, lineHeight: 18, maxWidth: 250, fontFamily: F.inter },
+  locText: { fontSize: T.petit, color: '#fff', opacity: 0.85, fontFamily: F.inter },
+  feedText: { fontSize: T.corps, color: '#fff', marginTop: 8, lineHeight: 18, maxWidth: 250, fontFamily: F.inter },
   btnRow: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center' },
 });

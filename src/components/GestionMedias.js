@@ -31,7 +31,9 @@ import Animated, {
   useSharedValue, useAnimatedStyle, useAnimatedReaction,
   withSpring, withTiming, runOnJS,
 } from 'react-native-reanimated';
-import { C, F, RESSORT_PORTE, viser } from '../theme';
+import {
+  C, F, T, RESSORT_PORTE, viser,
+} from '../theme';
 import { decision } from '../lib/retour';
 import Media from './Media';
 import { apercuDe } from '../lib/cloudinary';
@@ -251,14 +253,14 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowRadius: 14, shadowOffset: { width: 0, height: 8 },
   },
   vide: {
-    fontSize: 12, color: C.muted, fontFamily: F.inter,
+    fontSize: T.courant, color: C.muted, fontFamily: F.inter,
     paddingHorizontal: MARGE, paddingVertical: 10,
   },
   rang: {
     position: 'absolute', left: 6, top: 6,
     backgroundColor: 'rgba(26,27,25,0.72)', paddingHorizontal: 6, paddingVertical: 2,
   },
-  rangTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+  rangTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: '#fff' },
   retirer: {
     position: 'absolute', right: 6, top: 6, width: 26, height: 26, borderRadius: 13,
     backgroundColor: 'rgba(180,67,43,0.92)', alignItems: 'center', justifyContent: 'center',

@@ -1049,6 +1049,66 @@ Il se tire désormais vers le bas, sur toute la bande du haut (viser 4 px au
 pouce est impossible), et ferme à un tiers de la hauteur ou sur un geste
 vif.
 
+### Le lot 7 — une seule carte, une seule échelle (02/10/2026)
+
+#### La marge d'une liste va dans `contentContainerStyle`
+
+Mesuré au navigateur sur six écrans : le Fil posait ses cartes à **12 px**
+du bord, Découvrir, la Place des pros et les Demandes à **32**. On change
+d'onglet et tout le contenu saute de 20 px de côté — c'est ça, « assemblé
+de morceaux ».
+
+Et le 32 n'était pas un choix, c'était un défaut :
+
+```js
+<ScrollView style={{ paddingHorizontal: 16 }}>   // ← 16 + 16 = 32
+```
+
+> **Un `ScrollView` a DEUX boîtes** — son cadre, et le conteneur de son
+> contenu. Une marge écrite dans `style` se retrouve sur les deux. Dans
+> `style`, elle rétrécit AUSSI le cadre qui défile : la barre de défilement
+> se décale et la zone qui reçoit le doigt se réduit d'autant.
+
+`GOUTTIERE` (= `S.lg`, 16) est la seule marge, partout. Le contrôle en a
+trouvé **cinq écrans de plus** que je n'avais mesurés — CreerScreen,
+LegalScreen, MessagesScreen, NotificationsScreen, SosScreen. C'est
+précisément à ça qu'il sert.
+
+#### `CARTE` — et ce qu'elle n'est PAS
+
+**62 blocs blancs** dans le projet, pour **12 combinaisons** de bordure, de
+rayon et de remplissage. `CARTE` et `CARTE_PLEINE` (`theme.js`) sont la
+carte de CONTENU : ce qui présente une publication, une annonce, une
+demande, un avis, un artisan.
+
+> **Un champ de saisie n'est pas une carte**, ni une puce, ni une feuille
+> qui monte du bas, ni une barre d'onglets. Les uniformiser avec la carte
+> les rendrait tous illisibles ensemble. La carte garde l'angle VIF :
+> elle porte l'information, elle ne flotte pas.
+
+#### Le cliquet — et pourquoi pas un seuil
+
+Il restait des centaines de valeurs écrites à la main. Les corriger toutes
+d'un coup serait un massacre : chacune peut déplacer quelque chose, et
+personne ne relirait trois cents changements à l'œil.
+
+> **`npm run verifier-echelles` est un CLIQUET : les nombres ne peuvent que
+> descendre.** Un seuil fixe serait franchi le jour où quelqu'un ajoute un
+> écran, et on le relèverait « juste cette fois ». Le cliquet, lui,
+> n'autorise que la descente — le projet cesse de se dégrader, et
+> s'améliore à chaque passage.
+
+Premier tour : **`fontSize` de 225 à 18**. 120 valeurs correspondaient
+EXACTEMENT à une marche de `T` (aucun pixel déplacé) et 87 en étaient à un
+demi-pixel — les 11,5 / 12,5 / 10,5 que `theme.js` dénonçait depuis le
+lot 1 comme « deux tailles pour le prix d'une seule information ». Les 18
+qui restent (14, 16, 17, 19, 20, 21, 22, deux 9) demandent un arbitrage
+par endroit ; le cliquet les empêche de se multiplier.
+
+Les trois autres compteurs — 359 espacements hors de la grille de 4,
+56 `lineHeight`, 21 `borderRadius` — attendent les lots suivants, et ne
+peuvent plus monter.
+
 ### L'audit du 01/10/2026 — `docs/AUDIT-WAOUH.md`
 
 Toute l'application a été parcourue au navigateur (45 captures, planche de

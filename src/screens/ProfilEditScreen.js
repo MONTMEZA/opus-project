@@ -7,7 +7,9 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, Switch, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T,
+} from '../theme';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, Field, TextArea, ProfileBanner, SectionLabel,
 } from '../components/ui';
@@ -665,36 +667,36 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 6, marginTop: 12,
   },
-  aiderTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
+  aiderTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2 },
   presentationAide: {
-    fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginTop: 6,
+    fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginTop: 6,
   },
   demande: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.accent2,
     padding: 12, marginTop: 10, gap: 8,
   },
-  demandeTitre: { fontFamily: F.oswald6, fontSize: 13, color: C.ink },
-  demandeTexte: { fontFamily: F.inter, fontSize: 11.5, color: C.muted, lineHeight: 17 },
+  demandeTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
+  demandeTexte: { fontFamily: F.inter, fontSize: T.courant, color: C.muted, lineHeight: 17 },
   demandeBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
 
   pad: { paddingHorizontal: 16 },
-  aide: { fontSize: 11, color: C.muted, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 6 },
+  aide: { fontSize: T.petit, color: C.muted, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 6 },
   banniereBarre: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 10, paddingHorizontal: 16, paddingVertical: 10,
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  banniereNote: { flex: 1, fontSize: 11, color: C.muted, fontFamily: F.inter },
+  banniereNote: { flex: 1, fontSize: T.petit, color: C.muted, fontFamily: F.inter },
   banniereBoutons: { flexDirection: 'row', gap: 6 },
-  mediaBtnText: { fontFamily: F.oswald6, fontSize: 11, color: C.ink },
-  mediaBtnTextOn: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
+  mediaBtnText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.ink },
+  mediaBtnTextOn: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent },
 
   avatarZone: {
     flexDirection: 'row', alignItems: 'center', gap: 16,
     paddingHorizontal: 16, paddingVertical: 16,
   },
 
-  label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginTop: 12, marginBottom: 6 },
+  label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginTop: 12, marginBottom: 6 },
 
   sosBloc: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
 
@@ -704,31 +706,31 @@ const s = StyleSheet.create({
     paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.line,
   },
   rgeBloc: { paddingBottom: 6 },
-  docIntro: { fontSize: 11, color: C.muted, lineHeight: 16, marginBottom: 12, fontFamily: F.inter },
+  docIntro: { fontSize: T.petit, color: C.muted, lineHeight: 16, marginBottom: 12, fontFamily: F.inter },
   docLigne: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.line,
   },
-  docTitre: { fontFamily: F.inter6, fontSize: 12.5, color: C.ink },
-  docDetail: { fontSize: 11, color: C.muted, marginTop: 2, fontFamily: F.inter },
+  docTitre: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
+  docDetail: { fontSize: T.petit, color: C.muted, marginTop: 2, fontFamily: F.inter },
   docChoisi: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  docChoisiTexte: { fontSize: 11, color: C.ok, flexShrink: 1, fontFamily: F.inter },
+  docChoisiTexte: { fontSize: T.petit, color: C.ok, flexShrink: 1, fontFamily: F.inter },
 
   statut: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
     backgroundColor: C.bg, borderLeftWidth: 3, padding: 10, marginBottom: 12,
   },
-  statutTexte: { fontFamily: F.inter6, fontSize: 12 },
-  statutNote: { fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 15, fontFamily: F.inter },
+  statutTexte: { fontFamily: F.inter6, fontSize: T.courant },
+  statutNote: { fontSize: T.petit, color: C.muted, marginTop: 3, lineHeight: 15, fontFamily: F.inter },
 
-  btnText: { fontFamily: F.oswald6, fontSize: 12.5, color: '#fff' },
+  btnText: { fontFamily: F.oswald6, fontSize: T.corps, color: '#fff' },
   sosLigne: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  sosTitre: { fontFamily: F.inter6, fontSize: 13, color: C.ink },
-  sosDetail: { fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 16, fontFamily: F.inter },
+  sosTitre: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
+  sosDetail: { fontSize: T.courant, color: C.muted, marginTop: 3, lineHeight: 16, fontFamily: F.inter },
 
   avert: {
     flexDirection: 'row', gap: 8, marginTop: 14,
     backgroundColor: C.bg, borderLeftWidth: 3, borderLeftColor: C.sos, padding: 10,
   },
-  avertText: { flex: 1, fontSize: 11, color: C.muted, lineHeight: 16, fontFamily: F.inter },
+  avertText: { flex: 1, fontSize: T.petit, color: C.muted, lineHeight: 16, fontFamily: F.inter },
 });

@@ -26,7 +26,9 @@
  */
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
-import { C, F, T, S, R, TOUCHE, viser, surFond } from '../theme';
+import {
+  C, F, T, S, R, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
+} from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
 } from '../components/ui';
@@ -198,7 +200,7 @@ export default function PlaceProScreen({
      la liste : ils défilent avec elle, exactement comme avant. */
   return (
     <FlatList
-      style={s.pad}
+      style={{ flex: 1 }}
       keyboardShouldPersistTaps="handled"
       data={liste}
       keyExtractor={(a) => String(a.id)}
@@ -206,7 +208,7 @@ export default function PlaceProScreen({
       maxToRenderPerBatch={6}
       windowSize={5}
       removeClippedSubviews
-      contentContainerStyle={{ paddingBottom: 24 }}
+      contentContainerStyle={[s.pad, { paddingBottom: S.xl }]}
       refreshControl={onRafraichir ? (
         <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
           tintColor={C.muted} colors={[C.accent]} />
@@ -523,7 +525,7 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
 }
 
 const s = StyleSheet.create({
-  pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+  pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
 
   /* La barre de recherche : une seule ligne, la loupe à gauche, la croix à
      droite quand il y a quelque chose à effacer. Le champ garde ses angles
@@ -545,17 +547,17 @@ const s = StyleSheet.create({
     padding: 12, marginBottom: 14, gap: 8,
   },
   enteteTitre: { fontFamily: F.oswald6, fontSize: 14, color: C.ink },
-  enteteTexte: { fontFamily: F.inter, fontSize: 11.5, color: C.muted, lineHeight: 17 },
-  btnTexte: { fontFamily: F.oswald6, fontSize: 12.5, color: C.surAccent },
+  enteteTexte: { fontFamily: F.inter, fontSize: T.courant, color: C.muted, lineHeight: 17 },
+  btnTexte: { fontFamily: F.oswald6, fontSize: T.corps, color: C.surAccent },
 
   form: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     padding: 12, marginBottom: 14,
   },
   formHaut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  formTitre: { fontFamily: F.oswald6, fontSize: 13, color: C.ink },
-  label: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginTop: 12, marginBottom: 6 },
-  aide: { fontFamily: F.inter, fontSize: 11, color: C.muted, lineHeight: 16, marginTop: 6 },
+  formTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
+  label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginTop: 12, marginBottom: 6 },
+  aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginTop: 6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   deuxChamps: { flexDirection: 'row', gap: 8 },
   formBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 14 },
@@ -571,26 +573,26 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   caseOn: { backgroundColor: C.verif, borderColor: C.verif },
-  verifiesTexte: { fontFamily: F.inter, fontSize: 12, color: C.muted },
+  verifiesTexte: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
 
-  carte: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
+  carte: { ...CARTE },
   bandeau: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 5, paddingHorizontal: 10,
   },
-  bandeauTexte: { fontFamily: F.oswald6, fontSize: 10.5, color: '#fff' },
+  bandeauTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: '#fff' },
   /* L'atténuation passe par `opacity` et non par un blanc translucide :
      la couleur, elle, est calculée depuis le fond (`surFond`). */
-  bandeauMetier: { fontFamily: F.oswald6, fontSize: 10.5, opacity: 0.85 },
+  bandeauMetier: { fontFamily: F.oswald6, fontSize: T.petit, opacity: 0.85 },
   carteCorps: { padding: 12, gap: 8 },
   titre: { fontFamily: F.oswald6, fontSize: 14, color: C.ink, lineHeight: 19 },
 
   reperes: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   repere: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  repereTexte: { fontFamily: F.inter, fontSize: 11.5, color: C.muted },
-  prix: { fontFamily: F.oswald6, fontSize: 13, color: C.ink },
+  repereTexte: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
+  prix: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
 
-  texte: { fontFamily: F.inter, fontSize: 12.8, color: C.ink, lineHeight: 18 },
+  texte: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, lineHeight: 18 },
   media: { width: '100%', aspectRatio: 16 / 10 },
 
   auteur: {
@@ -598,15 +600,15 @@ const s = StyleSheet.create({
     paddingTop: 8, borderTopWidth: 1, borderTopColor: C.line,
   },
   auteurNom: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  auteurTexte: { fontFamily: F.inter6, fontSize: 12.5, color: C.ink },
-  auteurMeta: { fontFamily: F.inter, fontSize: 11, color: C.muted, marginTop: 1 },
+  auteurTexte: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
+  auteurMeta: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, marginTop: 1 },
 
   bas: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingTop: 8, borderTopWidth: 1, borderTopColor: C.line,
   },
-  reponses: { fontFamily: F.inter, fontSize: 11, color: C.muted },
-  repondreTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.surAccent },
+  reponses: { fontFamily: F.inter, fontSize: T.petit, color: C.muted },
+  repondreTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent },
   dejaRepondu: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dejaReponduTexte: { fontFamily: F.oswald6, fontSize: 11, color: C.accent2 },
+  dejaReponduTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2 },
 });

@@ -11,7 +11,9 @@
  */
 import React from 'react';
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T, CARTE_PLEINE,
+} from '../theme';
 import { Avatar, BtnMain, EmptyState, SectionLabel, Gradient } from '../components/ui';
 import { MapPin } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
@@ -81,16 +83,16 @@ const s = StyleSheet.create({
   entete: { alignItems: 'center', paddingTop: 22, paddingHorizontal: 20, paddingBottom: 14 },
   nom: { fontFamily: F.oswald6, fontSize: 19, color: C.ink, marginTop: 10, textAlign: 'center' },
   ligneVille: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  ville: { fontSize: 11.5, color: C.muted, fontFamily: F.inter },
-  role: { fontSize: 11, color: C.muted, fontFamily: F.inter6, marginTop: 6 },
+  ville: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
+  role: { fontSize: T.petit, color: C.muted, fontFamily: F.inter6, marginTop: 6 },
 
   liste: { gap: 10, paddingHorizontal: 16 },
-  carte: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
+  carte: { ...CARTE_PLEINE },
   carteHaut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metier: {
-    fontFamily: F.oswald6, fontSize: 11, color: C.surAccent, backgroundColor: C.accent,
+    fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent, backgroundColor: C.accent,
     paddingVertical: 2, paddingHorizontal: 7, overflow: 'hidden',
   },
-  temps: { fontSize: 10.5, color: C.muted, fontFamily: F.inter },
-  texte: { fontSize: 12.5, lineHeight: 18, color: C.ink, fontFamily: F.inter, marginTop: 8 },
+  temps: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
+  texte: { fontSize: T.corps, lineHeight: 18, color: C.ink, fontFamily: F.inter, marginTop: 8 },
 });

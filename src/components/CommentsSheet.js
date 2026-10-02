@@ -33,7 +33,9 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F, M, RESSORT, viser } from '../theme';
+import {
+  C, F, T, M, RESSORT, viser,
+} from '../theme';
 import { IconBtn } from './ui';
 import Commentaires, { nbCommentairesDe } from './Commentaires';
 import { X } from './icons';
@@ -171,6 +173,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingBottom: 8,
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  headText: { fontFamily: F.oswald6, fontSize: 13, color: C.ink },
+  headText: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
   list: { flex: 1, paddingHorizontal: 16 },
 });

@@ -4,7 +4,9 @@
  */
 import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T, S, GOUTTIERE, CARTE_PLEINE,
+} from '../theme';
 import { BtnMain, BtnMini, Chip, EmptyState, TextArea, Field } from '../components/ui';
 import ArtisanRow from '../components/ArtisanRow';
 import { Sparkles, Search } from '../components/icons';
@@ -149,7 +151,11 @@ export default function DecouvrirScreen({
   );
 
   return (
-    <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={s.pad}
+      keyboardShouldPersistTaps="handled"
+    >
       <AssistantIA
         askAiMatch={askAiMatch}
         onEffacerIa={onEffacerIa}
@@ -204,25 +210,28 @@ export default function DecouvrirScreen({
 }
 
 const s = StyleSheet.create({
-  pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
-  aiBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.accent2, padding: 12, marginBottom: 14 },
+  /* `contentContainerStyle`, pas `style` : voir GOUTTIERE dans theme.js. */
+  pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
+  /* Son bord est BLEU, et c'est la seule différence admise : ce bloc ne
+     présente pas un contenu d'Opus, il présente l'assistant. */
+  aiBox: { ...CARTE_PLEINE, borderColor: C.accent2, marginBottom: S.md + 2 },
   aiHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  aiHeadText: { fontFamily: F.oswald6, fontSize: 12, color: C.accent2 },
-  btnMainText: { fontFamily: F.oswald6, fontSize: 12.5, color: '#fff' },
-  aiError: { fontSize: 11, color: C.bad, marginTop: 4, fontFamily: F.inter },
+  aiHeadText: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2 },
+  btnMainText: { fontFamily: F.oswald6, fontSize: T.corps, color: '#fff' },
+  aiError: { fontSize: T.petit, color: C.bad, marginTop: 4, fontFamily: F.inter },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     paddingVertical: 2, paddingHorizontal: 12,
   },
-  searchInput: { flex: 1, borderWidth: 0, backgroundColor: 'transparent', fontSize: 13, paddingHorizontal: 0 },
+  searchInput: { flex: 1, borderWidth: 0, backgroundColor: 'transparent', fontSize: T.corps, paddingHorizontal: 0 },
   filtreMetier: { marginTop: 12, marginBottom: 10 },
   iaResultatsTitre: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 8, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 10,
   },
-  iaResultatsTexte: { flex: 1, fontFamily: F.oswald6, fontSize: 11.5, color: C.accent2 },
+  iaResultatsTexte: { flex: 1, fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2 },
   listeTitre: {
-    fontFamily: F.oswald6, fontSize: 11.5, color: C.muted, marginBottom: 8,
+    fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginBottom: 8,
   },
 });

@@ -4,7 +4,9 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T, S, CARTE_PLEINE,
+} from '../theme';
 import { libelleMetiers } from '../lib/metiers';
 import { Avatar } from './ui';
 import { BadgeCheck, Star } from './icons';
@@ -38,15 +40,14 @@ const ArtisanRow = React.memo(function ArtisanRow({ pro, avatarSize = 44, note, 
 export default ArtisanRow;
 const s = StyleSheet.create({
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
-    paddingVertical: 10, paddingHorizontal: 12,
+    ...CARTE_PLEINE,
+    flexDirection: 'row', alignItems: 'center', gap: S.md,
   },
   info: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { fontFamily: F.inter6, fontSize: 13, color: C.ink, flexShrink: 1 },
-  meta: { fontSize: 11.5, color: C.muted, marginTop: 1, fontFamily: F.inter },
+  name: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink, flexShrink: 1 },
+  meta: { fontSize: T.courant, color: C.muted, marginTop: 1, fontFamily: F.inter },
   rate: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
-  rateText: { fontSize: 11, color: C.ink, fontFamily: F.inter },
-  raison: { fontSize: 10.5, color: C.accent2, marginTop: 2, lineHeight: 14, fontFamily: F.inter },
+  rateText: { fontSize: T.petit, color: C.ink, fontFamily: F.inter },
+  raison: { fontSize: T.petit, color: C.accent2, marginTop: 2, lineHeight: 14, fontFamily: F.inter },
 });

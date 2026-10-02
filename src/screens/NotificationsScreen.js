@@ -7,7 +7,9 @@
  */
 import React from 'react';
 import { View, Text, Pressable, FlatList, StyleSheet, RefreshControl } from 'react-native';
-import { C, F, APPUI } from '../theme';
+import {
+  C, F, T, APPUI, S, GOUTTIERE,
+} from '../theme';
 import { Avatar, EmptyState, BtnMini } from '../components/ui';
 import {
   MessageSquare, CornerDownRight, Bell, ChevronRight,
@@ -88,14 +90,14 @@ export default function NotificationsScreen({ notifications, onOuvrir, onToutLir
        mois, des centaines. Les réglages sont ceux que CLAUDE.md impose à
        toute liste longue depuis le blocage de l'iPhone du 29/09. */
     <FlatList
-      style={s.pad}
+      style={{ flex: 1 }}
       data={notifications}
       keyExtractor={(n) => String(n.id)}
       initialNumToRender={8}
       maxToRenderPerBatch={10}
       windowSize={5}
       removeClippedSubviews
-      contentContainerStyle={{ paddingBottom: 24 }}
+      contentContainerStyle={[s.pad, { paddingBottom: S.xl }]}
       refreshControl={onRafraichir ? (
         <RefreshControl refreshing={!!rafraichit} onRefresh={onRafraichir}
           tintColor={C.muted} colors={[C.accent]} />
@@ -120,12 +122,13 @@ export default function NotificationsScreen({ notifications, onOuvrir, onToutLir
 }
 
 const s = StyleSheet.create({
-  pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+  /* `contentContainerStyle`, pas `style` — voir GOUTTIERE dans theme.js. */
+  pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
   barre: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 10, paddingBottom: 10,
   },
-  compte: { fontFamily: F.oswald6, fontSize: 11.5, color: C.muted },
+  compte: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 9,
     paddingVertical: 11, paddingHorizontal: 4,
@@ -137,7 +140,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center',
   },
   corps: { flex: 1, minWidth: 0 },
-  text: { fontSize: 12.5, color: C.ink, fontFamily: F.inter, lineHeight: 18 },
+  text: { fontSize: T.corps, color: C.ink, fontFamily: F.inter, lineHeight: 18 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
-  time: { fontSize: 10.5, color: C.muted, fontFamily: F.inter },
+  time: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
 });

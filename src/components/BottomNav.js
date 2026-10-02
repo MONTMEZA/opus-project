@@ -140,7 +140,7 @@ const s = StyleSheet.create({
     width: 46, height: 30, borderRadius: R.gelule, backgroundColor: C.sos,
     alignItems: 'center', justifyContent: 'center',
   },
-  sosText: { fontFamily: F.oswald7, fontSize: 13, color: '#fff', letterSpacing: 0.5 },
+  sosText: { fontFamily: F.oswald7, fontSize: T.corps, color: '#fff', letterSpacing: 0.5 },
 
   /* le « voyant » : un point orange quand de nouvelles demandes arrivent */
   dot: {

@@ -7,7 +7,9 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
-import { C, F } from '../theme';
+import {
+  C, F, T, CARTE_PLEINE, S, GOUTTIERE,
+} from '../theme';
 import {
   Avatar, BtnMain, BtnMini, TextArea, EmptyState,
 } from '../components/ui';
@@ -63,7 +65,11 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
   };
 
   return (
-    <ScrollView style={s.pad} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={s.pad}
+      keyboardShouldPersistTaps="handled"
+    >
       {/* bandeau d'urgence */}
       <View style={s.hero}>
         <AlertTriangle size={18} color="#fff" />
@@ -272,28 +278,29 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
 }
 
 const s = StyleSheet.create({
-  pad: { flex: 1, paddingTop: 12, paddingHorizontal: 16 },
+  /* `contentContainerStyle`, pas `style` — voir GOUTTIERE dans theme.js. */
+  pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
 
   hero: {
     flexDirection: 'row', gap: 10, alignItems: 'flex-start',
     backgroundColor: C.sos, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 14,
   },
   heroTitle: { fontFamily: F.oswald6, fontSize: 14, color: '#fff' },
-  heroSub: { fontSize: 11, color: 'rgba(255,255,255,0.9)', marginTop: 3, lineHeight: 15, fontFamily: F.inter },
+  heroSub: { fontSize: T.petit, color: 'rgba(255,255,255,0.9)', marginTop: 3, lineHeight: 15, fontFamily: F.inter },
 
   retour: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 10 },
-  retourText: { color: C.accent2, fontSize: 11.5, fontFamily: F.inter6 },
+  retourText: { color: C.accent2, fontSize: T.courant, fontFamily: F.inter6 },
 
-  question: { fontFamily: F.oswald6, fontSize: 15, color: C.ink, marginBottom: 4 },
-  rappel: { fontSize: 11.5, color: C.muted, marginBottom: 12, fontFamily: F.inter },
-  sousTitre: { fontFamily: F.oswald6, fontSize: 12.5, color: C.ink, marginBottom: 8 },
+  question: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink, marginBottom: 4 },
+  rappel: { fontSize: T.courant, color: C.muted, marginBottom: 12, fontFamily: F.inter },
+  sousTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, marginBottom: 8 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
   carte: {
     width: '47%', flexGrow: 1, alignItems: 'center', gap: 8,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, paddingVertical: 22,
   },
-  carteText: { fontFamily: F.oswald6, fontSize: 13, color: C.ink },
+  carteText: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
 
   ligne: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -301,29 +308,29 @@ const s = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 12,
   },
   ligneOn: { backgroundColor: C.ink, borderColor: C.ink },
-  ligneTitre: { fontFamily: F.inter6, fontSize: 13, color: C.ink },
-  ligneDetail: { fontSize: 11, color: C.muted, marginTop: 2, fontFamily: F.inter },
-  ligneDuree: { fontSize: 11, color: C.muted, fontFamily: F.inter },
+  ligneTitre: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
+  ligneDetail: { fontSize: T.petit, color: C.muted, marginTop: 2, fontFamily: F.inter },
+  ligneDuree: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
 
   chargement: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 16 },
-  chargementTexte: { fontSize: 12, color: C.muted, fontFamily: F.inter },
+  chargementTexte: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
   erreur: {
-    fontSize: 11.5, color: C.bad, lineHeight: 16, marginBottom: 10,
+    fontSize: T.courant, color: C.bad, lineHeight: 16, marginBottom: 10,
     borderLeftWidth: 3, borderLeftColor: C.bad, paddingLeft: 8, fontFamily: F.inter,
   },
 
-  artisan: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, padding: 12 },
+  artisan: { ...CARTE_PLEINE },
   artisanHaut: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   nomRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  nom: { fontFamily: F.inter6, fontSize: 13.5, color: C.ink, flexShrink: 1 },
+  nom: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink, flexShrink: 1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' },
-  meta: { fontSize: 11, color: C.muted, marginRight: 4, fontFamily: F.inter },
+  meta: { fontSize: T.petit, color: C.muted, marginRight: 4, fontFamily: F.inter },
 
   prixBloc: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line,
   },
   prix: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
-  prixNote: { fontSize: 10, color: C.muted, marginTop: 1, fontFamily: F.inter },
-  detailTarif: { fontSize: 10, color: C.muted, marginTop: 8, fontFamily: F.inter },
+  prixNote: { fontSize: T.micro, color: C.muted, marginTop: 1, fontFamily: F.inter },
+  detailTarif: { fontSize: T.micro, color: C.muted, marginTop: 8, fontFamily: F.inter },
 });

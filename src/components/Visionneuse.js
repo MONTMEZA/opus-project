@@ -13,7 +13,9 @@ import {
   Modal, View, Text, Pressable, FlatList, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F, viser } from '../theme';
+import {
+  C, F, T, viser,
+} from '../theme';
 import Media from './Media';
 import { X, ChevronLeft, ChevronRight } from './icons';
 
@@ -116,7 +118,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 14, paddingBottom: 8,
   },
-  compteur: { fontFamily: F.oswald6, fontSize: 13, color: '#fff' },
+  compteur: { fontFamily: F.oswald6, fontSize: T.corps, color: '#fff' },
   rond: {
     width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.16)',
