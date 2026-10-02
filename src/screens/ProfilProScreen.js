@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
+import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { C, F } from '../theme';
 import GlissementLateral from '../components/GlissementLateral';
 import { metierPrincipal, nomMetier } from '../lib/metiers';
@@ -86,6 +87,13 @@ export default function ProfilProScreen({
   const [rTarif, setRTarif] = useState(5);
   const [rTexte, setRTexte] = useState('');
 
+  /* Le défilement vit sur le fil natif : la bannière le suit sans qu'une
+     seule valeur ne remonte en JavaScript. */
+  const defilement = useSharedValue(0);
+  const suivreDefilement = useAnimatedScrollHandler((e) => {
+    defilement.value = e.contentOffset.y;
+  });
+
   const [aiSummary, setAiSummary] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
@@ -125,8 +133,14 @@ export default function ProfilProScreen({
      Et il se tait pendant le formulaire d'avis : trois curseurs s'y
      tirent horizontalement, comme ce geste. */
   const contenu = (
-    <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+    <Animated.ScrollView
+      style={{ flex: 1 }}
+      keyboardShouldPersistTaps="handled"
+      onScroll={suivreDefilement}
+      scrollEventThrottle={16}
+    >
       <EnteteProfilAuto
+        defilement={defilement}
         seed={pro.id}
         bannerUrl={pro.bannerUrl}
         avatarUrl={pro.avatarUrl}
@@ -332,7 +346,7 @@ export default function ProfilProScreen({
         ))}
         {pro.partners.length === 0 && <EmptyState>Aucun partenaire pour le moment.</EmptyState>}
       </View>
-    </ScrollView>
+    </Animated.ScrollView>
   );
 
   if (!onRetourFilVideo) return contenu;

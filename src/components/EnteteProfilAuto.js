@@ -11,7 +11,7 @@ import EnteteProfil from './EnteteProfil';
 import EnteteProfilImmersif from './EnteteProfilImmersif';
 
 export default function EnteteProfilAuto({
-  seed, bannerUrl, avatarUrl, portfolio, titre, sousTitre, verifie,
+  seed, bannerUrl, avatarUrl, portfolio, titre, sousTitre, verifie, defilement,
 }) {
   const banniere = bannerUrl || (portfolio && portfolio[0]) || null;
 
@@ -24,6 +24,7 @@ export default function EnteteProfilAuto({
         titre={titre}
         sousTitre={sousTitre}
         verifie={verifie}
+        defilement={defilement}
       />
     );
   }

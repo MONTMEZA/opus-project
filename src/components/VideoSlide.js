@@ -14,6 +14,7 @@ import { nomMetier } from '../lib/metiers';
 import Media, { estFichier } from './Media';
 import LecteurMontage from './LecteurMontage';
 import GlissementLateral from './GlissementLateral';
+import DoubleAppui from './DoubleAppui';
 import {
   BadgeCheck, Heart, MessageSquare, Share2, Bookmark, MapPin, ChevronRight, Home,
 } from './icons';
@@ -96,6 +97,20 @@ export default function VideoSlide({
     >
       <Surface {...proprietes} style={[s.card, { height }]}>
         <Scrim />
+
+        {/* DEUX APPUIS POUR AIMER, comme sur le fil photo. Posé AVANT les
+            boutons dans l'arbre, donc EN DESSOUS d'eux : un appui sur le
+            cœur, sur « Partager » ou sur « Contacter » part au bouton, et
+            seul le reste de l'image déclenche le geste. Sans ça, viser une
+            commande aurait aimé la vidéo par accident.
+            Et il cohabite avec le glissement latéral : un double appui ne
+            déplace pas le doigt, donc le `Pan` — qui attend 18 px — ne
+            prend jamais la main. */}
+        <DoubleAppui
+          style={StyleSheet.absoluteFill}
+          taille={118}
+          onAimer={() => { if (!post.liked) onLike(post.id); }}
+        />
 
         {/* actions sur le côté droit */}
         <View style={[s.actions, { bottom: 150 + bottomInset }]}>

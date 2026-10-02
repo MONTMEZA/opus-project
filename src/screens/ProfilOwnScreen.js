@@ -7,6 +7,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { C, F, T, S } from '../theme';
 import { metierPrincipal, nomMetier } from '../lib/metiers';
 import MetiersPro from '../components/MetiersPro';
@@ -68,13 +69,24 @@ export default function ProfilOwnScreen({
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
+  /* Comme sur la fiche d'un confrère : la bannière suit le doigt, sans
+     qu'aucune valeur ne remonte en JavaScript. */
+  const defilement = useSharedValue(0);
+  const suivreDefilement = useAnimatedScrollHandler((e) => {
+    defilement.value = e.contentOffset.y;
+  });
 
   /* --- profil particulier --- */
   if (userType === 'particulier') {
     const followed = [...followingIds];
     return (
-      <ScrollView style={{ flex: 1 }}>
+      <Animated.ScrollView
+        style={{ flex: 1 }}
+        onScroll={suivreDefilement}
+        scrollEventThrottle={16}
+      >
         <EnteteProfilAuto
+          defilement={defilement}
           seed={9}
           bannerUrl={monProfil.bannerUrl}
           avatarUrl={monProfil.avatarUrl}
@@ -113,7 +125,7 @@ export default function ProfilOwnScreen({
         </View>
 
         <Compte onLogout={onLogout} onConfidentialite={onConfidentialite} />
-      </ScrollView>
+      </Animated.ScrollView>
     );
   }
 
@@ -128,8 +140,13 @@ export default function ProfilOwnScreen({
     && !demandesPartenariat.includes(p.id));
 
   return (
-    <ScrollView style={{ flex: 1 }}>
+    <Animated.ScrollView
+      style={{ flex: 1 }}
+      onScroll={suivreDefilement}
+      scrollEventThrottle={16}
+    >
       <EnteteProfilAuto
+        defilement={defilement}
         seed={me.id}
         bannerUrl={me.bannerUrl}
         avatarUrl={me.avatarUrl}
@@ -276,7 +293,7 @@ export default function ProfilOwnScreen({
       </View>
 
       <Compte onLogout={onLogout} onConfidentialite={onConfidentialite} />
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 

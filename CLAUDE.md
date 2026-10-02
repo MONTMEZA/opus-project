@@ -965,6 +965,28 @@ Même raisonnement pour la transition d'écran (`FadeInDown`, 120 ms) : elle
 se tait pendant le démarrage, parce qu'on anime ce qui est prêt, pas ce qui
 attend.
 
+#### La bannière de profil suit le doigt — et ce qu'on a ÉCARTÉ
+
+L'audit disait : la bannière prend environ 600 px sur 900, il faut
+descendre avant de voir quoi que ce soit d'utile. On ne peut pas la
+supprimer — c'est la vitrine de l'artisan — mais on peut la faire
+travailler : elle part **deux fois moins vite** que le reste en
+descendant, et **s'agrandit** quand on tire vers le bas au lieu de laisser
+un trou. Mesuré : 240 px de défilement, 120 px de déplacement. Exactement
+la moitié.
+
+`defilement` est une valeur partagée qui vit sur le **fil natif** : aucune
+valeur ne remonte en JavaScript à chaque pixel. Sans ça, descendre une
+fiche redessinerait tout l'écran soixante fois par seconde — et c'est le
+genre d'animation qui fait dire que l'application rame.
+
+> **Ce qui a été ÉCARTÉ du lot 6, et pourquoi.** Les apparitions en
+> cascade dans les listes courtes. Elles supposent de distinguer à
+> l'exécution une liste « courte » d'une liste « longue », alors que les
+> trois interdits de `theme.js` viennent précisément d'un défaut de cette
+> famille. Une règle qui dépend du nombre d'éléments se trompera le jour
+> où il y aura du monde — c'est-à-dire le jour où ça compte.
+
 #### Une poignée qui ne s'attrape pas est pire que pas de poignée
 
 Le trait gris en haut du panneau des commentaires était dessiné, et rien
