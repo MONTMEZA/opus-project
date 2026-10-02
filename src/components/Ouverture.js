@@ -59,10 +59,29 @@ import { HardHat, Hammer, Wrench, Paintbrush } from './icons';
 /** Le drapeau « cette personne a déjà vu l'ouverture complète ». */
 const CLE_DEJA_VU = 'opus.ouverture.vue';
 
-/* Les durées. La version courte ne rogne pas sur l'écartement — c'est lui
-   qu'on regarde — mais sur tout ce qui l'entoure. */
-const COMPLETE = { tremblement: 150, ecart: 760, logo: 260, sortie: 220 };
-const COURTE = { tremblement: 0, ecart: 460, logo: 150, sortie: 180 };
+/* LES DURÉES, ralenties le 02/10/2026 à la demande du propriétaire :
+   « c'est joli mais je trouve ça trop rapide ».
+
+   Ralenties, et pas SEULEMENT : étirer le même mouvement donne de la
+   lenteur, pas de l'ampleur — ça traîne au lieu d'impressionner. La course
+   des panneaux et l'angle du pivot ont donc grandi en même temps
+   (`COURSE` et `PIVOT`). Le temps en plus se VOIT.
+
+   Ce que ça coûte, et il faut le dire : l'attente réelle du démarrage est
+   d'environ 1,24 s (mesurée, processeur bridé six fois). À 1,95 s,
+   l'ouverture la dépasse d'environ 0,7 s — c'est du temps AJOUTÉ. C'est un
+   choix assumé, pas un oubli, et le doigt l'interrompt toujours.
+
+   La version courte, elle, reste SOUS l'attente : à la vingtième ouverture
+   de la journée, personne ne veut d'une cérémonie. */
+const COMPLETE = { tremblement: 220, ecart: 1150, logo: 320, sortie: 260 };
+const COURTE = { tremblement: 0, ecart: 700, logo: 200, sortie: 200 };
+
+/* De combien le panneau sort au-delà du bord, et de combien il pivote.
+   Avec une course plus longue, le mouvement garde sa vitesse jusqu'au bout
+   au lieu de s'éteindre à mi-chemin. */
+const COURSE = 150;
+const PIVOT = 8;
 
 /** Largeur d'une bande du motif de chantier, et son pas. */
 const BANDE = 14;
@@ -193,21 +212,24 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
   };
 
   /* Chaque panneau couvre un peu plus que la moitié : sinon un cheveu de
-     fond apparaît entre les deux pendant le pivot. */
+     fond apparaît entre les deux pendant le pivot. Et il DÉBORDE en
+     hauteur, parce qu'un panneau penché découvre ses coins — ça ne se
+     voyait pas à 5 degrés, ça se voit à 8. */
   const demi = Math.ceil(width / 2) + 2;
+  const hautPanneau = height + Math.ceil(width * 0.32);
 
   const styleGauche = useAnimatedStyle(() => ({
     transform: [
-      { translateX: -secousse.value * 3 - ecart.value * (demi + 40) },
-      { rotate: `${-ecart.value * 5}deg` },
-      { translateY: ecart.value * 10 },
+      { translateX: -secousse.value * 4 - ecart.value * (demi + COURSE) },
+      { rotate: `${-ecart.value * PIVOT}deg` },
+      { translateY: ecart.value * 16 },
     ],
   }));
   const styleDroite = useAnimatedStyle(() => ({
     transform: [
-      { translateX: secousse.value * 3 + ecart.value * (demi + 40) },
-      { rotate: `${ecart.value * 5}deg` },
-      { translateY: ecart.value * 10 },
+      { translateX: secousse.value * 4 + ecart.value * (demi + COURSE) },
+      { rotate: `${ecart.value * PIVOT}deg` },
+      { translateY: ecart.value * 16 },
     ],
   }));
   const styleLogo = useAnimatedStyle(() => ({
@@ -266,11 +288,17 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
           )}
         </Animated.View>
 
-        <Animated.View style={[s.panneau, { left: 0 }, styleGauche]} pointerEvents="none">
-          <Panneau largeur={demi} hauteur={height} />
+        <Animated.View
+          style={[s.panneau, { left: 0, top: -(hautPanneau - height) / 2 }, styleGauche]}
+          pointerEvents="none"
+        >
+          <Panneau largeur={demi} hauteur={hautPanneau} />
         </Animated.View>
-        <Animated.View style={[s.panneau, { right: 0 }, styleDroite]} pointerEvents="none">
-          <Panneau largeur={demi} hauteur={height} />
+        <Animated.View
+          style={[s.panneau, { right: 0, top: -(hautPanneau - height) / 2 }, styleDroite]}
+          pointerEvents="none"
+        >
+          <Panneau largeur={demi} hauteur={hautPanneau} />
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -281,7 +309,7 @@ const s = StyleSheet.create({
   /* Le MÊME presque-noir que l'écran de lancement d'iOS (app.json) : on ne
      doit pas voir la jointure entre les deux. */
   scene: { backgroundColor: C.ink, zIndex: 100 },
-  panneau: { position: 'absolute', top: 0, bottom: 0 },
+  panneau: { position: 'absolute' },
   traverse: {
     position: 'absolute', left: 0, right: 0, height: 7,
     backgroundColor: C.ink, opacity: 0.85,
