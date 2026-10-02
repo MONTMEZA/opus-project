@@ -545,14 +545,36 @@ artisans. Pas pour cent.
 Le minimum : une liste des vérifications en attente, une liste des demandes
 de métiers, une liste des signalements — et trois boutons.
 
-### 2.2 Notifications push
+### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des
 triggers), mais rien n'arrive sur l'écran verrouillé.
 
-**Demande un development build** : les notifications push ne fonctionnent pas
-dans Expo Go. C'est donc aussi le moment de quitter Expo Go, ce qui change la
-façon de tester.
+**Demande un development build**, donc un **compte Apple Developer** : depuis
+le SDK 53, Expo Go ne reçoit plus les notifications push — Expo prêtait ses
+propres identifiants Apple, cette facilité a été retirée. Aucun contournement
+n'existe sans Mac : la distribution interne d'EAS « requires a paid Apple
+Developer account ».
+
+➡️ **`docs/COMPTE-APPLE.md`** — le guide d'inscription, vérifié sur les pages
+d'Apple le 02/10/2026 : pourquoi maintenant, les 99 €/an, la préparation, les
+onze étapes dans l'application Apple Developer de l'iPhone.
+
+Les deux points à ne pas redécouvrir, écrits là-bas en détail :
+
+1. **« Individual », jamais « Organization »** — celle-ci exige une personne
+   morale et un numéro D-U-N-S. Conséquence : sur l'App Store, le vendeur
+   porterait le **nom légal** du propriétaire, pas « Opus ».
+2. **Ne PAS créer la fiche dans App Store Connect maintenant.** Le nom public
+   se fixe au moment où la première application est ajoutée, et Apple ne
+   permet plus de le changer ensuite. Pour construire et installer sur son
+   propre iPhone, aucune fiche n'est nécessaire — seul l'abonnement l'est.
+   Ce choix se prendra quand `legal.js` passera de `essai` à `micro`.
+
+Et le piège déjà identifié pour la suite : sans le greffon
+`expo-notifications` déclaré dans `plugins` d'`app.json`, la construction iOS
+part **sans les autorisations APNs** et rien n'arrive — sans aucune erreur
+pour l'expliquer.
 
 ### 2.3 Rejouer `schema.sql` ne doit plus être manuel
 
