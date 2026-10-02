@@ -25,9 +25,9 @@
  * plus sûrement.
  */
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import {
-  C, F, T, S, R, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
+  C, F, T, S, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
@@ -41,11 +41,10 @@ import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
 } from '../data/annonces';
 import { ChampMetier } from '../components/SelecteurMetiers';
-import { nomMetier } from '../lib/metiers';
+import { nomMetier , libelleMetiers } from '../lib/metiers';
 import { distanceKm, libelleDistance } from '../lib/adresse';
 import { correspond, texteDe } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
-import { libelleMetiers } from '../lib/metiers';
 
 /** Une date au format que la base attend : 2026-10-12. */
 function versISO(saisie) {

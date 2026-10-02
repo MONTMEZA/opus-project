@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  C, F, T, viser,
+  F, T, viser,
 } from '../theme';
 import Media from './Media';
 import { X, ChevronLeft, ChevronRight } from './icons';

@@ -76,7 +76,7 @@ const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocute
 
 export default function ConversationScreen({
   conversation, onSend, onSignaler, interlocuteur,
-  chargement = false, onRenvoyer,
+  chargement = false, onRenvoyer, amorce = '', onAmorceUtilisee,
 }) {
   /* LE BROUILLON NE VIT PLUS DANS `OpusApp`.
      Il y était, et chaque lettre redessinait donc toute l'application —
@@ -150,6 +150,8 @@ export default function ConversationScreen({
       <View style={s.inputRow}>
         <ChampLocal
           ref={brouillon}
+          amorce={amorce}
+          onAmorceUtilisee={onAmorceUtilisee}
           style={{ flex: 1, paddingVertical: 9, paddingHorizontal: 12, fontSize: T.corps }}
           placeholder="Écrire un message..."
           onSubmitEditing={envoyer}

@@ -36,6 +36,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "verifier": "node scripts/verifier.mjs",
+    "lint": "eslint .",
     "verifier-adresse": "node scripts/verifier-adresse.mjs",
     "verifier-montage": "node scripts/verifier-montage.mjs",
     "verifier-signature": "node scripts/verifier-signature-cloudinary.mjs",
@@ -59,11 +61,14 @@
     "verifier-etats": "node scripts/verifier-etats.mjs",
     "verifier-listes": "node scripts/verifier-listes.mjs",
     "verifier-cibles": "node scripts/verifier-cibles.mjs",
-    "verifier-echelles": "node scripts/verifier-echelles.mjs"
+    "verifier-echelles": "node scripts/verifier-echelles.mjs",
+    "verifier-atelier": "node scripts/verifier-atelier.mjs"
   },
   "private": true,
   "devDependencies": {
     "@types/react": "~19.2.4",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^57.0.2",
     "typescript": "~6.0.3"
   }
 }

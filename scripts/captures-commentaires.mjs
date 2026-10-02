@@ -10,9 +10,9 @@
  * c'est celui qui montre à la fois le filet des réponses et le bouton
  * « Modifier » absent sur une réponse à laquelle une autre a succédé.
  */
+import { mkdirSync } from 'node:fs';
 const PW = process.env.PLAYWRIGHT || '/opt/node22/lib/node_modules/playwright/index.js';
 const { chromium } = await import('playwright').catch(() => import(PW).then((m) => m.default || m));
-import { mkdirSync } from 'node:fs';
 
 const EXE = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const URL = process.env.URL || 'http://localhost:8095';

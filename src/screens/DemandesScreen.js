@@ -6,7 +6,7 @@
  * séparé du fil, qui reste une vitrine réservée aux pros.
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import {
   C, F, T, S, viser, surFond, GOUTTIERE, CARTE_PLEINE,
 } from '../theme';

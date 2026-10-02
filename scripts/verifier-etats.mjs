@@ -178,9 +178,6 @@ console.log('\nLe bandeau d’erreur reste lisible');
      style en forme de fonction. Le bandeau s'est retrouvé sans aucun style
      — texte blanc sur fond beige — et c'est le seul canal par lequel
      l'application parle. Trouvé en coupant le réseau, pas en lisant. */
-  const anime = ui.slice(ui.indexOf('export function ConfirmBanner'));
-  const bloc = anime.slice(0, anime.indexOf('const s = StyleSheet') > 0
-    ? Math.min(anime.indexOf('}\n'), 2000) : 2000);
   verifier('aucun style en forme de fonction sur un composant animé',
     !/<Animated\.\w+[^>]*style=\{\(\{ pressed \}\)/s.test(ui)
     && !/<BandeauAnime[^>]*style=\{\(\{ pressed \}\)/s.test(ui),

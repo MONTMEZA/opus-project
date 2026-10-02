@@ -48,6 +48,13 @@
  * qu'elle fait remonter des résultats sans rapport et qu'on cesse alors de
  * faire confiance à la recherche.
  */
+/* `normaliser` a déménagé dans `texte.js` : `metiers.js` en a besoin
+   aussi, et deux modules qui s'importent l'un l'autre finissent par se
+   charger dans le mauvais ordre. On la ré-exporte ici pour que rien de ce
+   qui l'importait déjà n'ait à changer. */
+import { normaliser } from './texte.js';
+import { motsDuMetier, motsDeSpecialite } from './metiers.js';
+
 export const GROUPES = [
   ['placo', 'placoplatre', 'plaque de platre', 'ba13'],
   ['nacelle', 'plateforme elevatrice', 'pemp'],
@@ -57,13 +64,6 @@ export const GROUPES = [
   ['isolation', 'isolant', 'laine de verre', 'laine de roche'],
   ['echafaudage', 'echaffaudage'],   // la faute est tellement courante
 ];
-
-/* `normaliser` a déménagé dans `texte.js` : `metiers.js` en a besoin
-   aussi, et deux modules qui s'importent l'un l'autre finissent par se
-   charger dans le mauvais ordre. On la ré-exporte ici pour que rien de ce
-   qui l'importait déjà n'ait à changer. */
-import { normaliser } from './texte.js';
-import { motsDuMetier, motsDeSpecialite } from './metiers.js';
 
 export { normaliser };
 

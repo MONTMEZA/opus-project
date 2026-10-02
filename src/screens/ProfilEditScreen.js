@@ -6,12 +6,12 @@
  * ses trois chiffres (déplacement, tarif horaire, majoration).
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, Switch, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Switch, ActivityIndicator, StyleSheet } from 'react-native';
 import {
   C, F, T,
 } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, BtnOutline, Field, TextArea, ProfileBanner, SectionLabel,
+  Avatar, BtnMain, BtnMini, Field, TextArea, ProfileBanner, SectionLabel,
 } from '../components/ui';
 import {
   Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX, Sparkles,

@@ -16,10 +16,9 @@ import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import {
   C, F, T, viser, S, GOUTTIERE,
 } from '../theme';
-import { BtnMain, BtnMini, Chip, Field, TextArea } from '../components/ui';
+import { BtnMain, BtnMini, Field } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
-import { MINIMUM as MINIMUM_RELECTURE } from '../components/AmeliorerTexte';
-import AmeliorerTexte from '../components/AmeliorerTexte';
+import AmeliorerTexte, { MINIMUM as MINIMUM_RELECTURE } from '../components/AmeliorerTexte';
 import Media from '../components/Media';
 import {
   Camera, VideoIcon, TypeIcon, Layers, Lightbulb, Grid, Send, Music, X, Plus,

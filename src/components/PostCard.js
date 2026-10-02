@@ -14,7 +14,7 @@ import Commentaires, { nbCommentairesDe } from './Commentaires';
 import { nomMetier } from '../lib/metiers';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
-  MessageCircle, Phone, FileText, User, Send, Maximize, Flag,
+  MessageCircle, Phone, FileText, User, Maximize, Flag,
 } from './icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Media, { EtiquetteVideo } from './Media';

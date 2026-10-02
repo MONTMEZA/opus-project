@@ -35,7 +35,7 @@ import {
   View, Text, FlatList, Pressable, Linking, StyleSheet,
 } from 'react-native';
 import {
-  C, F, T, S, R, APPUI, interligne, surFond, CARTE, GOUTTIERE,
+  C, F, T, S, APPUI, interligne, surFond, CARTE, GOUTTIERE,
 } from '../theme';
 import { Avatar, BtnMini, EmptyState, SectionLabel } from '../components/ui';
 import { Phone, Check, X, Clock, AlertTriangle } from '../components/icons';

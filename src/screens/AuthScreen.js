@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F, T, S, R, GRAD_160 } from '../theme';
+import { C, F, T, S, GRAD_160 } from '../theme';
 /* La traduction des erreurs vivait ICI, enfermée : partout ailleurs dans
    l'application, le même défaut sortait en anglais. Elle est devenue
    `src/lib/erreurs.js`, et elle sait aussi reconnaître une perte de réseau —

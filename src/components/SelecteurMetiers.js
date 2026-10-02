@@ -41,7 +41,7 @@ import React, { useState, useMemo } from 'react';
 import {
   View, Text, Pressable, Modal, FlatList, StyleSheet,
 } from 'react-native';
-import { C, F, T, S, R, interligne, viser } from '../theme';
+import { C, F, T, S, interligne, viser } from '../theme';
 import { Field } from './ui';
 import { Search, X, ChevronDown, ChevronRight, Check } from './icons';
 import { CATEGORIES } from '../data/catalogue-metiers';

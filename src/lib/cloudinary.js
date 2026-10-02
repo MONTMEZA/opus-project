@@ -24,6 +24,7 @@
    liaison a bougé depuis. */
 import { File, UploadType } from 'expo-file-system';
 import { supabase, hasSupabase } from './supabase';
+import { aCloudinary, urlVideo, urlVignette } from './cloudinary-adresses';
 
 /* Les adresses sont calculées à côté, dans un fichier qui n'importe rien :
    c'est ce qui permet à `npm run verifier-montage` de les contrôler avec un
@@ -32,7 +33,6 @@ export {
   CLOUD_NAME, aCloudinary, LARGEUR, HAUTEUR,
   urlMontage, urlVideo, urlVignette, apercuDe,
 } from './cloudinary-adresses';
-import { aCloudinary, urlVideo, urlVignette } from './cloudinary-adresses';
 
 /**
  * Envoie une vidéo et renvoie son identifiant Cloudinary.

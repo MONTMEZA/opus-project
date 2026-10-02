@@ -924,6 +924,65 @@ test à réponse simulée n'y voyait que du feu, puisqu'il répondait « tout va
 bien » quels que soient les paramètres envoyés. Ce script-ci parle à la vraie
 API : il aurait attrapé la panne.
 
+## Vérifier que rien n'est cassé — une seule commande
+
+```bash
+npm run verifier
+```
+
+Elle lance **les vingt-trois contrôles** du projet, l'un après l'autre, et
+affiche un verdict. Une dizaine de secondes.
+
+```
+Opus — 23 contrôles
+
+  ✔ verifier-acces              312 ms
+  ✔ verifier-annonces           289 ms
+  …
+✔ Les 23 contrôles passent, en 18.0 s.
+```
+
+Trois choses à savoir :
+
+- **Elle lit le code de SORTIE de chaque contrôle, pas son texte.** Un
+  contrôle qui *plante* n'écrit aucun « ✘ » — il ressemble donc à un
+  contrôle qui passe. Celui-ci les distingue, et dit « N'A PAS PU SE
+  LANCER », parce que ça ne se répare pas au même endroit.
+- **Un contrôle ajouté plus tard entre tout seul** : la commande les
+  découvre dans `package.json` au lieu d'en tenir une liste, qui se
+  périmerait au premier oubli.
+- **Elle ne construit pas le paquet et n'ouvre pas le navigateur.** Les deux
+  prennent des minutes ; l'intégration continue s'en charge à chaque envoi
+  sur GitHub.
+
+```bash
+npm run verifier -- --bref     # seulement ce qui ne va pas
+npm run lint                   # le linter seul
+```
+
+### Le linter
+
+```bash
+npm run lint
+```
+
+Il ne surveille que les deux familles d'erreurs qui **cassent** quelque
+chose : un nom employé sans exister, et un import ou une variable morte. Le
+style d'écriture — guillemets, points-virgules — est laissé de côté exprès :
+un linter qui crie trois cents fois ne se lit plus.
+
+Son premier passage, le 02/10/2026, a trouvé **deux défauts réels** que
+personne n'avait vus : une fonction appelée alors qu'elle n'existait plus
+(l'application plantait quand un particulier contactait un artisan), et une
+clé écrite deux fois dans le même objet.
+
+### Ce qui tourne tout seul
+
+`.github/workflows/verifier.yml` lance, **à chaque envoi sur GitHub** : les
+vingt-trois contrôles, puis la construction du paquet iOS **et** Android.
+Rien de ce qui demande un navigateur ou un téléphone n'y est : les captures,
+les gestes au doigt et la fluidité réelle restent à la main.
+
 ## Structure du projet
 
 ```
@@ -949,6 +1008,12 @@ supabase/
   schema.sql                  tables, triggers, sécurité (RLS)
   seed.sql                    données de démonstration
   functions/ai/index.ts       la fonction serveur qui appelle Anthropic
+  functions/compte/index.ts   suppression de compte (stockage + authentification)
+scripts/
+  verifier.mjs                LA commande unique : lance tous les contrôles
+  verifier-*.mjs              un contrôle par règle du projet
+eslint.config.js              le linter, réglé serré exprès
+.github/workflows/            l'intégration continue
 reference/opus-project.jsx    le prototype web d'origine, pour comparaison
 ```
 

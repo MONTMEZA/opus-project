@@ -5,7 +5,7 @@
  * (ProfilProScreen du prototype)
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import {
@@ -15,7 +15,7 @@ import GlissementLateral from '../components/GlissementLateral';
 import { metierPrincipal, nomMetier } from '../lib/metiers';
 import MetiersPro from '../components/MetiersPro';
 import {
-  Avatar, BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea,
+  BtnMain, BtnMini, BtnOutline, EmptyState, SectionLabel, TextArea,
 } from '../components/ui';
 import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';

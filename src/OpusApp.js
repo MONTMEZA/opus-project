@@ -7,7 +7,7 @@
  * Sans .env, l'écriture Supabase ne fait rien : l'app tourne en mode démo.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { C, M } from './theme';
@@ -22,7 +22,7 @@ import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import DecouvrirScreen from './screens/DecouvrirScreen';
 import PlaceProScreen from './screens/PlaceProScreen';
-import CreerScreen from './screens/CreerScreen';
+import CreerScreen, { FORMATS_VISUELS, FORMATS_VIDEO } from './screens/CreerScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import ConversationScreen from './screens/ConversationScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
@@ -38,16 +38,15 @@ import MesPublicationsScreen from './screens/MesPublicationsScreen';
 import GererPortfolioScreen from './screens/GererPortfolioScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
-import DemandesRecuesScreen, { compterEnAttente, appeler } from './screens/DemandesRecuesScreen';
+import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
 import { POST_GRADIENTS, avgReviews } from './data/demo';
-import { METIER_PAR_DEFAUT, nomMetier } from './lib/metiers';
+import { METIER_PAR_DEFAUT, nomMetier , metiersDe } from './lib/metiers';
 import * as api from './lib/api';
 import * as retour from './lib/retour';
 import { useMouvementReduit } from './lib/retour';
 import {
   messageClair, estUnProblemeDeReseau, avecDelai, avecReprise,
 } from './lib/erreurs';
-import { metiersDe } from './lib/metiers';
 import { hasSupabase } from './lib/supabase';
 import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
 import { envoyerFichier, estFichierLocal } from './lib/storage';
@@ -56,7 +55,6 @@ import {
 } from './lib/cloudinary';
 import { aiMatchPros } from './lib/ai';
 import { partagerPost } from './lib/partage';
-import { FORMATS_VISUELS, FORMATS_VIDEO } from './screens/CreerScreen';
 
 /**
  * Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie.
@@ -88,6 +86,13 @@ export default function OpusApp() {
   /* 'filVideo' quand la fiche d'un artisan a été ouverte depuis le fil
      vidéo — par le glissement comme par un appui sur son nom. */
   const [origineProfil, setOrigineProfil] = useState(null);
+  /* L'AMORCE D'UN MESSAGE — « Bonjour, je suis Dylan M., Lambesc. »
+     Elle vivait dans `setMsgDraft`, supprimé au lot 4 quand le brouillon
+     est descendu dans le champ. Les deux appels, eux, sont restés : ils
+     levaient un `ReferenceError` à chaque fois qu'un particulier
+     contactait un artisan, et à chaque réponse à une annonce.
+     Personne ne l'avait vu — c'est le linter du lot 8 qui l'a trouvé. */
+  const [amorceMessage, setAmorceMessage] = useState('');
   const [feedMode, setFeedMode] = useState('classic');
   // Vidéo sur laquelle ouvrir le plein écran, quand on y arrive depuis le fil.
   const [videoCible, setVideoCible] = useState(null);
@@ -241,7 +246,7 @@ export default function OpusApp() {
   const start = useCallback(async (type) => {
     setLoading(true);
     try {
-      await api.ensureSession(type);
+      await api.ensureSession();
       /* La porte, ici et pas plus bas. */
       setUserType(type);
       setScreen('home');
@@ -757,7 +762,7 @@ export default function OpusApp() {
           : nom || ville;
         // Beaucoup de gens s'inscrivent sous « Dylan M. » : sans ce nettoyage,
         // l'amorce se terminerait par deux points.
-        setMsgDraft(presentation
+        setAmorceMessage(presentation
           ? `Bonjour, je suis ${presentation.replace(/\.+$/, '')}. `
           : 'Bonjour, ');
       }
@@ -1736,7 +1741,7 @@ export default function OpusApp() {
        chemin que « Contacter », avec une amorce qui rappelle l'annonce —
        un artisan qui reçoit « Bonjour » tout court doit redemander de quoi
        il s'agit. */
-    setMsgDraft(`Bonjour, au sujet de votre annonce « ${annonce.titre} ». `);
+    setAmorceMessage(`Bonjour, au sujet de votre annonce « ${annonce.titre} ». `);
     handleContact({ id: annonce.auteur.id }, 'message');
   };
 
@@ -2224,6 +2229,8 @@ export default function OpusApp() {
             onSend={sendMessage}
             onRenvoyer={renvoyerMessage}
             onSignaler={ouvrirSignalement}
+            amorce={amorceMessage}
+            onAmorceUtilisee={() => setAmorceMessage('')}
             interlocuteur={activeConv.proId && pros[activeConv.proId]
               ? pros[activeConv.proId].entreprise
               : (activeConv.contact ? activeConv.contact.titre : null)}

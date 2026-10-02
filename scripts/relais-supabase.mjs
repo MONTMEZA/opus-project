@@ -38,7 +38,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { writeFileSync, readFileSync, unlinkSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, unlinkSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 

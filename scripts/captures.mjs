@@ -21,10 +21,10 @@
 /* Playwright n'est pas une dépendance du projet : il est installé une fois
    pour toutes sur la machine de test. On le cherche donc d'abord à côté du
    projet, puis là où il est installé globalement. PLAYWRIGHT le force. */
-const PW = process.env.PLAYWRIGHT || '/opt/node22/lib/node_modules/playwright/index.js';
-const { chromium } = await import('playwright').catch(() => import(PW).then((m) => m.default || m));
 import { mkdirSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+const PW = process.env.PLAYWRIGHT || '/opt/node22/lib/node_modules/playwright/index.js';
+const { chromium } = await import('playwright').catch(() => import(PW).then((m) => m.default || m));
 
 const EXE = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const URL = process.env.URL || 'http://localhost:8095';

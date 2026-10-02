@@ -6,7 +6,7 @@
  * et se déconnecter, qui ramène à l'écran d'accueil.
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { C, F, T, S } from '../theme';
 import { metierPrincipal, nomMetier } from '../lib/metiers';

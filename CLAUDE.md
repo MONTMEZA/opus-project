@@ -1433,6 +1433,73 @@ Il devient urgent maintenant qu'Opus bouge.
    dans le commentaire de `viser()`. Il retire désormais les commentaires
    avant de lire, comme `verifier-imports` et `verifier-retour`.
 
+### Le lot 8 — l'atelier (02/10/2026)
+
+#### `npm run verifier` : UNE commande
+
+Vingt-deux contrôles, et aucun moyen de les lancer ensemble — il fallait les
+connaître par leur nom. Autrement dit, personne ne les lançait tous, jamais.
+
+> **`npm run verifier` lit le CODE DE SORTIE de chaque contrôle**, jamais son
+> texte, et distingue un contrôle qui ÉCHOUE d'un contrôle qui **n'a pas pu
+> se lancer**. C'est la règle que ce document posait depuis le matin et que
+> rien ne tenait — celle que `verifier-montage` avait violée pendant des
+> jours sans que personne ne le voie.
+>
+> Et il **découvre** les contrôles dans `package.json` au lieu d'en tenir une
+> liste : un contrôle ajouté demain entre tout seul.
+
+#### Le linter a trouvé en un passage ce que l'œil n'avait pas vu en trois jours
+
+86 fichiers de JavaScript, aucun linter. Premier passage, **deux défauts
+réels** :
+
+1. **`setMsgDraft` appelé à deux endroits alors que la fonction n'existait
+   plus** depuis le lot 4. Un `ReferenceError` à chaque fois qu'un
+   particulier contactait un artisan, et à chaque réponse à une annonce.
+2. **`latitude` et `longitude` écrits DEUX FOIS** dans le même objet de
+   `api.js` : la seconde paire écrasait la première en silence.
+
+Et le premier est le plus instructif : `verifier-listes` cherchait bien
+`msgDraft` dans `OpusApp`… **en respectant la casse**. `setMsgDraft` porte un
+M majuscule. Le contrôle passait au vert pendant que l'application plantait.
+
+> **Un contrôle écrit à la main cherche ce qu'on a pensé à chercher ; un
+> linter lit ce qui est écrit.** Les deux sont nécessaires, aucun ne remplace
+> l'autre.
+
+Le réglage compte autant que l'outil. Deux familles de bruit ont été coupées,
+et il faut savoir pourquoi avant de les rallumer :
+
+- **`react/no-unescaped-entities`** : l'apostrophe française est dans un mot
+  sur cinq. Cette règle a produit à elle seule la moitié des 194 premières
+  alertes ;
+- **`Deno` dans `supabase/functions/`** : ces fichiers tournent sur Deno, pas
+  sur Node. Le signaler serait une erreur du linter, pas du code.
+
+Il reste **33 alertes**, toutes de la famille `react-hooks` (les règles du
+compilateur React). Elles décrivent de vrais risques, mais chacune demande un
+arbitrage : les corriger en bloc serait réécrire `OpusApp` à l'aveugle. Même
+parade qu'au lot 7, **un cliquet** — `npm run verifier-atelier` refuse que le
+nombre monte.
+
+#### Et la quatrième fois qu'un contrôle accuse la DOCUMENTATION
+
+Le commentaire qui EXPLIQUE le défaut `setMsgDraft` contient le mot, donc le
+contrôle corrigé l'a aussitôt signalé. C'est arrivé quatre fois maintenant :
+**un contrôle qui lit du code retire d'abord les commentaires.**
+
+#### Ce qui tourne tout seul
+
+`.github/workflows/verifier.yml`, à chaque envoi : les 23 contrôles, puis la
+construction du paquet **iOS et Android**. `npm ci` et pas `npm install` — il
+installe exactement ce que dit le verrou, donc la machine teste les mêmes
+versions que le poste du propriétaire.
+
+Rien de ce qui demande un navigateur ou un téléphone n'y est, et c'est dit
+exprès : les captures, les gestes au doigt et la fluidité réelle restent à la
+main.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

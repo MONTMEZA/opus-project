@@ -26,7 +26,7 @@
  */
 import React from 'react';
 import { View, Text, Pressable, Switch, StyleSheet } from 'react-native';
-import { C, F, T, S, R, interligne, viser } from '../theme';
+import { C, F, T, S, interligne, viser } from '../theme';
 import { Field, BtnMini } from './ui';
 import { JOURS, minutes, heureTexte } from '../lib/horaires';
 

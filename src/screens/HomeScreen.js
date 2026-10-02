@@ -61,7 +61,6 @@ export default function HomeScreen({
   onChargerPlus, chargePage = false, finDuFil = false,
   rafraichit = false, onRafraichir, onSupprimerCommentaire, onModifierCommentaire, moiId,
 }) {
-  const [bodyHeight, setBodyHeight] = useState(0);
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   /* Une seule vidéo joue à la fois : en laisser tourner cinq en arrière-plan
@@ -175,7 +174,7 @@ export default function HomeScreen({
         <PillToggle small value={feedTab} onChange={setFeedTab} options={TABS} />
       </View>
 
-      <View style={{ flex: 1 }} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
+      <View style={{ flex: 1 }}>
         <FlatList
           data={posts}
           keyExtractor={(p) => String(p.id)}

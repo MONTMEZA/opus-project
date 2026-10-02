@@ -40,6 +40,13 @@ const verifier = (nom, ok, detail = '') => {
   console.error(`  ✘ ${nom}${detail ? `\n      ${detail}` : ''}`);
 };
 const lire = (f) => readFileSync(f, 'utf8');
+/* QUATRIÈME fois qu'un contrôle accuse la DOCUMENTATION dans ce projet : le
+   commentaire qui EXPLIQUE `setMsgDraft` contient le mot. On retire donc les
+   commentaires avant de lire, comme `verifier-imports`, `verifier-retour` et
+   `verifier-acces` le font déjà. */
+const sansCommentaires = (c) => c
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '');
 const fichiers = execFileSync('git',
   /* `--others` : un fichier NEUF, pas encore ajouté à git, échappait à
      tous les contrôles — constaté le 02/10/2026 avec `Ouverture.js`,
@@ -94,8 +101,16 @@ console.log('\nAucun champ de saisie ne vit dans OpusApp');
   /* Les trois qui y étaient encore. Un champ dont le texte vit dans
      `OpusApp` redessine TOUS les écrans à chaque lettre — c'est la panne
      des 219 ms de l'assistant IA, et elle se reproduit à l'identique. */
-  ['msgDraft', 'createText', 'commentDraft'].forEach((nom) => {
-    verifier(`\`${nom}\` n’est plus dans OpusApp`, !app.includes(nom),
+  /* SANS CASSE, et ce n'est pas un détail : le contrôle cherchait
+     `msgDraft`, et `setMsgDraft` — avec un M majuscule — lui échappait.
+     Les deux appels de `setMsgDraft` sont restés dans `OpusApp` après la
+     suppression de l'état au lot 4 : ils levaient un `ReferenceError` à
+     chaque fois qu'un particulier contactait un artisan. Le contrôle
+     passait au vert pendant que l'application plantait. Trouvé par le
+     linter du lot 8, pas par ce contrôle. */
+  ['msgdraft', 'createtext', 'commentdraft'].forEach((nom) => {
+    verifier(`\`${nom}\` n’est plus dans OpusApp (ni sous une autre casse)`,
+      !sansCommentaires(app).toLowerCase().includes(nom),
       'src/OpusApp.js — le texte doit vivre dans le champ');
   });
   verifier('`ChampLocal` existe et garde son texte',

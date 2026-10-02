@@ -12,7 +12,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { C } from '../theme';
 import { Avatar, ProfileBanner, HazardStrip } from './ui';
 
 const HAUTEUR_BANNIERE = 170;

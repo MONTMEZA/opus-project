@@ -49,7 +49,7 @@
  *     onPublier(legende.current.lire());
  */
 import React, {
-  forwardRef, useCallback, useImperativeHandle, useRef, useState,
+  forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState,
 } from 'react';
 import { Field, TextArea } from './ui';
 
@@ -59,7 +59,8 @@ import { Field, TextArea } from './ui';
  * devient vrai ; laissé à 0, il ne sert pas.
  */
 const ChampLocal = forwardRef(function ChampLocal({
-  defaut = '', surSeuil, seuilLong = 0, multiligne = false, style, ...reste
+  defaut = '', surSeuil, seuilLong = 0, multiligne = false, style,
+  amorce = '', onAmorceUtilisee, ...reste
 }, ref) {
   const [texte, setTexte] = useState(defaut);
 
@@ -93,6 +94,20 @@ const ChampLocal = forwardRef(function ChampLocal({
     ecrire: (t) => changer(t || ''),
     vider: () => changer(''),
   }), [changer]);
+
+  /* L'AMORCE — un texte que l'écran pose DANS le champ au moment où il
+     s'ouvre : « Bonjour, je suis Dylan M., Lambesc. »
+
+     Elle n'écrase JAMAIS ce qui est déjà écrit : quelqu'un qui a commencé
+     à taper et qui revient en arrière retrouverait sa phrase remplacée par
+     une formule de politesse. Et elle est consommée une fois — sinon elle
+     reviendrait à chaque rendu, et on ne pourrait plus l'effacer. */
+  useEffect(() => {
+    if (!amorce) return;
+    if (vif.current.trim()) return;
+    changer(amorce);
+    if (onAmorceUtilisee) onAmorceUtilisee();
+  }, [amorce, changer, onAmorceUtilisee]);
 
   const Composant = multiligne ? TextArea : Field;
   return (

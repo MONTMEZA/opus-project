@@ -23,8 +23,10 @@ export const mode = hasSupabase ? 'supabase' : 'demo';
 
 let currentUserId = null;
 
-/** Mode démo : pas de vrai compte, un identifiant fictif suffit. */
-export async function ensureSession(userType) {
+/** Mode démo : pas de vrai compte, un identifiant fictif suffit.
+ *  (Le type de compte ne sert plus ici : il se lit dans les métadonnées de
+ *  la session, sans réseau — voir `sessionLocale()`.) */
+export async function ensureSession() {
   if (!hasSupabase) { currentUserId = 'demo-user'; return currentUserId; }
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Aucune session ouverte.');
@@ -478,8 +480,6 @@ export async function loadAll() {
     reponses: nbReponses[d.id] || 0,
     budget: d.budget || null,
     urgence: d.urgence || 'quand_possible',
-    latitude: d.latitude,
-    longitude: d.longitude,
   }));
 
   const ligne = masosRes.data;

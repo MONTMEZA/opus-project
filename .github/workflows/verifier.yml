@@ -1,0 +1,55 @@
+# CE QUI TOURNE TOUT SEUL, À CHAQUE ENVOI
+#
+# Avant ce fichier, les vingt-trois contrôles du projet ne tournaient que si
+# quelqu'un y pensait. Un contrôle qu'on oublie de lancer ne protège de rien :
+# c'est exactement ce qui a laissé `verifier-montage` planter pendant des
+# jours sans que personne ne le voie.
+#
+# Ce que ça vérifie, dans l'ordre du moins cher au plus cher :
+#   1. les contrôles du projet (quelques secondes) ;
+#   2. la construction du paquet, iOS ET Android.
+#
+# Pourquoi les DEUX plateformes : une construction qui ne passe que d'un côté
+# se découvre au pire moment. Le code est pourtant le même — il n'y a aucun
+# fichier propre à une plateforme dans ce projet — mais Metro ne résout pas
+# toujours les mêmes choses, et deux minutes de machine valent mieux qu'une
+# mauvaise surprise.
+#
+# Ce que ça ne vérifie PAS, et c'est dit exprès : rien de ce qui demande un
+# navigateur ou un téléphone. Les captures, les gestes au doigt, la fluidité
+# réelle restent à la main.
+
+name: Vérifier
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` et pas `npm install` : il installe EXACTEMENT ce que dit le
+      # verrou, sans jamais le modifier. C'est ce qui garantit que la machine
+      # teste les mêmes versions que le poste du propriétaire.
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Les contrôles du projet
+        run: npm run verifier
+
+      # Sans `.env`, l'application part en mode démonstration — c'est voulu :
+      # la construction ne doit dépendre d'aucun secret.
+      - name: Construire le paquet iOS
+        run: npx expo export --platform ios --output-dir /tmp/paquet-ios
+
+      - name: Construire le paquet Android
+        run: npx expo export --platform android --output-dir /tmp/paquet-android

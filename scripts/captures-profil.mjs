@@ -11,9 +11,14 @@
  * spécialités arrivaient quarante lignes plus bas, détachées de leur
  * métier. Ces captures servent à vérifier que ça ne revient pas.
  */
+import { mkdirSync } from 'node:fs';
+
+/* Les tuiles de l'IGN passent par curl : le navigateur du conteneur n'a
+   pas d'accès direct à l'extérieur (voir scripts/captures-carte.mjs). */
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 const PW = process.env.PLAYWRIGHT || '/opt/node22/lib/node_modules/playwright/index.js';
 const { chromium } = await import('playwright').catch(() => import(PW).then((m) => m.default || m));
-import { mkdirSync } from 'node:fs';
 
 const EXE = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const URL = process.env.URL || 'http://localhost:8095';
@@ -23,11 +28,6 @@ mkdirSync(DOSSIER, { recursive: true });
 const navigateur = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox'] });
 const ctx = await navigateur.newContext({ viewport: { width: 390, height: 900 } });
 const page = await ctx.newPage();
-
-/* Les tuiles de l'IGN passent par curl : le navigateur du conteneur n'a
-   pas d'accès direct à l'extérieur (voir scripts/captures-carte.mjs). */
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 const execFileP = promisify(execFile);
 await page.route('**data.geopf.fr**', async (route) => {
   for (let essai = 1; essai <= 4; essai += 1) {

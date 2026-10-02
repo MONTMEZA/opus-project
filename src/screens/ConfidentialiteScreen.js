@@ -21,13 +21,13 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, ActivityIndicator, Share, StyleSheet,
 } from 'react-native';
-import { C, F, T, S, R, interligne } from '../theme';
+import { C, F, T, S, interligne } from '../theme';
 import { messageClair } from '../lib/erreurs';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, Field, EmptyState, SectionLabel,
 } from '../components/ui';
 import {
-  EyeOff, Flag, Download, Trash, ChevronRight, Check, AlertTriangle, Scale,
+  Flag, Trash, ChevronRight, Check, AlertTriangle, Scale,
 } from '../components/icons';
 import { motifDe, cibleDe, DELAI_EXAMEN_HEURES } from '../data/moderation';
 import { TITRES_LEGAUX } from './LegalScreen';

@@ -7,7 +7,7 @@ import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-nat
 import {
   C, F, T, S, GOUTTIERE, CARTE_PLEINE,
 } from '../theme';
-import { BtnMain, BtnMini, Chip, EmptyState, TextArea, Field } from '../components/ui';
+import { BtnMain, BtnMini, EmptyState, TextArea, Field } from '../components/ui';
 import ArtisanRow from '../components/ArtisanRow';
 import { Sparkles, Search } from '../components/icons';
 import { avgReviews } from '../data/demo';
