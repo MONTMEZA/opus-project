@@ -1212,7 +1212,8 @@ begin
     'public.notifie_commentaire()',
     'public.notifie_partenariat()',
     'public.synchronise_verification()',
-    'public.limite_profondeur_commentaire()'
+    'public.limite_profondeur_commentaire()',
+    'public.anonymise_actes_admin()'
   ] loop
     begin
       -- « from public » d'abord, et c'est l'essentiel : PostgreSQL accorde
@@ -1778,6 +1779,11 @@ begin
   update public.reviews      set author_id = null, auteur_supprime = true where author_id = moi;
   update public.comments     set author_id = null, auteur_supprime = true where author_id = moi;
   update public.signalements set auteur_id = null                          where auteur_id = moi;
+  /* Le journal d'administration, lui, n'est PAS traité ici : il l'est par
+     le déclencheur `anonymise_actes_admin()` de la section 25.8. Un
+     compte peut partir par trois chemins — cette fonction, la cascade
+     depuis `auth.users`, ou une suppression à la main dans l'éditeur SQL
+     — et un seul des trois passait par ici. */
 
   -- 2. Ce qui disparaît. Les publications emportent leurs commentaires et
   --    leurs « j'aime » : la publication n'existe plus, il n'y a plus rien
@@ -3837,3 +3843,675 @@ end $$;
 
 create index if not exists idx_devis_pro  on public.quote_requests    (professional_id, created_at desc);
 create index if not exists idx_rappel_pro on public.callback_requests (professional_id, created_at desc);
+
+-- ==========================================================================
+--  25. LE BACK-OFFICE — la porte, le journal, et les deux files
+--
+--  POURQUOI, ET CE QUE ÇA REMPLACE
+--  -------------------------------
+--  Jusqu'au 02/10/2026, vérifier un artisan ou trancher un signalement se
+--  faisait À LA MAIN, dans l'éditeur SQL de Supabase. Ça va pour dix
+--  artisans ; pas pour cent. Et surtout, le propriétaire débute en
+--  développement : lui demander d'écrire du SQL pour poser un badge, c'est
+--  garantir que ce ne sera pas fait.
+--
+--  Relevé sur la VRAIE base le 02/10/2026, et c'est ce qui a décidé de
+--  l'ordre des choses :
+--
+--    - un signalement « contrefaçon » déposé le 29/09 était encore au
+--      statut `nouveau` TROIS JOURS plus tard, alors que l'application
+--      promet un « examen sous 48 heures » (`src/data/moderation.js`) ;
+--    - `kbis_url` était vide sur les six fiches : la chaîne envoi du
+--      document → stockage privé → contrôle → badge n'avait JAMAIS tourné
+--      une seule fois. Les trois `kbis_valide = true` venaient du jeu de
+--      démonstration, pas d'un contrôle humain.
+--
+--  Une promesse que rien ne tient, c'est la même famille de défaut que le
+--  « X est prévenu » de la section 24. On la ferme ici.
+--
+--  CE QUI A ÉTÉ ÉCARTÉ, ET POURQUOI
+--  --------------------------------
+--  Une fonction Edge à clé de service aurait marché : `auth.uid()` y est
+--  `null`, donc le verrou de la section 17.3 laisse passer. Elle a été
+--  écartée pour trois raisons :
+--
+--    1. elle met une clé de service DANS le circuit — le principe du
+--       projet est que les secrets n'y entrent jamais sans nécessité ;
+--    2. elle place la règle métier AILLEURS que dans `schema.sql`, qui est
+--       la référence rejouable du projet ;
+--    3. elle contourne TOUTE la RLS, donc le moindre oubli dans la
+--       fonction ouvre tout.
+--
+--  Ici, les actions sont des fonctions `security definer` DANS la base :
+--  la règle reste au même endroit que tout le reste, et un client modifié
+--  ne peut rien contourner.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  25.1 La porte : qui est administrateur
+--
+--  Une table, pas une colonne sur `users` : un administrateur n'est pas une
+--  propriété d'une personne, c'est un droit qu'on donne et qu'on retire. Et
+--  une table se journalise.
+--
+--  CE QU'ELLE N'A PAS, ET C'EST VOULU : aucune politique d'écriture.
+--  **Un administrateur ne peut donc PAS en nommer un autre depuis
+--  l'application.** La seule entrée est l'éditeur SQL de Supabase, c'est-à-
+--  dire le propriétaire du projet. Sans cette règle, un seul compte
+--  d'administration compromis se transformerait en accès permanent, et on
+--  ne saurait même pas par où.
+--
+--  Le §21 du cahier des charges prévoit des permissions fines (qui peut
+--  quoi). Elles viendront ici, en colonnes de cette table. Une liste plate
+--  est le minimum honnête aujourd'hui : il n'y a qu'une personne.
+-- --------------------------------------------------------------------------
+create table if not exists public.administrateurs (
+  user_id    uuid primary key references public.users(id) on delete cascade,
+  ajoute_le  timestamptz not null default now(),
+  ajoute_par uuid references public.users(id) on delete set null,
+  note       text
+);
+
+alter table public.administrateurs enable row level security;
+
+-- --------------------------------------------------------------------------
+--  25.2 `est_admin()` — et pourquoi elle DOIT être `security definer`
+--
+--  Elle lit `administrateurs`, et la politique de lecture d'`administrateurs`
+--  l'appelle. Avec les droits de l'appelant, ce serait une récursion
+--  infinie. `security definer` la fait tourner avec les droits du
+--  propriétaire, qui ne sont pas soumis à la RLS : la boucle est coupée.
+--
+--  Et elle reste exécutable par `authenticated`, parce que des POLITIQUES
+--  l'appellent. C'est la règle du projet, apprise le jour où
+--  `horaires_valides()` a été révoquée « par prudence » et où plus aucun
+--  horaire ne s'enregistrait : une fonction appelée par une policy ou une
+--  contrainte s'exécute avec les droits de CELUI QUI LIT.
+--
+--  Pas de droit pour `anon` : un visiteur n'administre rien, et une
+--  fonction `security definer` ouverte sans être connecté remonterait — à
+--  juste titre — dans les alertes de sécurité Supabase.
+--
+--  `auth.uid()` vide (éditeur SQL, Edge Function) rend `false`. Ce n'est
+--  pas une faiblesse : là, on EST déjà le propriétaire de la base.
+-- --------------------------------------------------------------------------
+create or replace function public.est_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.administrateurs a where a.user_id = auth.uid()
+  );
+$$;
+
+do $$
+begin
+  execute 'revoke execute on function public.est_admin() from public';
+  execute 'revoke execute on function public.est_admin() from anon';
+exception when undefined_object then null;
+end $$;
+grant execute on function public.est_admin() to authenticated;
+
+-- Un administrateur voit la liste — savoir QUI a ce droit fait partie du
+-- droit. Il ne peut ni l'allonger ni la raccourcir.
+do $$ begin
+  execute 'drop policy if exists "lecture des administrateurs" on public.administrateurs';
+end $$;
+create policy "lecture des administrateurs" on public.administrateurs
+  for select to authenticated using (public.est_admin());
+
+-- --------------------------------------------------------------------------
+--  25.3 Le journal : aucune décision sans trace
+--
+--  Un back-office sans journal est la chose qu'on regrette. Trois mois plus
+--  tard, un artisan écrit « on m'a retiré mon badge sans rien me dire », et
+--  il n'existe aucun moyen de savoir si c'est vrai.
+--
+--  AUCUNE POLITIQUE D'ÉCRITURE ICI NON PLUS, et c'est le cœur : seules les
+--  fonctions `security definer` de la section 25.4 écrivent dans ce
+--  journal. **Même un administrateur ne peut ni y ajouter une ligne, ni en
+--  modifier une, ni en effacer une.** Un journal qu'on peut récrire ne
+--  prouve rien.
+--
+--  Et la règle RGPD du projet s'applique telle quelle : un acte
+--  d'administration concerne un TIERS, donc il s'anonymise et ne se
+--  supprime pas. Si l'administrateur quitte Opus, la ligne reste et perd
+--  son auteur — exactement comme un avis ou un commentaire.
+-- --------------------------------------------------------------------------
+create table if not exists public.journal_admin (
+  id             uuid primary key default gen_random_uuid(),
+  admin_id       uuid references public.users(id) on delete set null,
+  admin_supprime boolean not null default false,
+  action         text not null,
+  cible_type     text not null,
+  cible_id       uuid,
+  -- L'état AVANT et APRÈS, en clair. C'est ce qui permet de répondre à
+  -- « qu'est-ce qui a changé, exactement ? » sans relire du code.
+  avant          jsonb,
+  apres          jsonb,
+  motif          text,
+  /* `clock_timestamp()` et NON `now()`. Trouvé par les essais : `now()` rend
+     l'heure de DÉBUT DE TRANSACTION, identique pour deux actes passés dans
+     la même. Le journal se retrouvait alors avec deux lignes au même
+     horodatage, et `order by created_at desc` en sortait une au hasard —
+     autrement dit, un journal dont on ne peut pas lire l'ordre.
+     Un journal note quand l'acte a eu lieu, pas quand la transaction a
+     commencé. */
+  created_at     timestamptz not null default clock_timestamp()
+);
+
+-- Sur une base déjà en place, `create table if not exists` ne rejoue rien :
+-- la valeur par défaut se refait explicitement.
+alter table public.journal_admin alter column created_at set default clock_timestamp();
+
+-- RÈGLE DU PROJET : toute valeur nouvelle envoyée par le code doit être
+-- ajoutée ICI. `add column if not exists` ne touche pas aux contraintes,
+-- donc on la refait explicitement à chaque fois.
+alter table public.journal_admin drop constraint if exists journal_admin_action_check;
+alter table public.journal_admin add constraint journal_admin_action_check
+  check (action in (
+    'pro_verifie',              -- badge posé
+    'pro_refuse',               -- documents refusés, avec motif obligatoire
+    /* Les deux suivantes se ressemblent et ne sont PAS le même acte.
+       Retirer un badge déjà posé est grave ; valider une pièce sur deux est
+       la routine. Les confondre rendrait le journal illisible au moment
+       précis où on le relit — « m'a-t-on retiré mon badge ? ». */
+    'pro_remis_en_attente',     -- un badge POSÉ a été retiré
+    'pro_partiellement_valide', -- une pièce sur deux : pas encore de badge
+    'signalement_traite'        -- en_examen / traite / rejete
+  ));
+
+alter table public.journal_admin drop constraint if exists journal_admin_cible_check;
+alter table public.journal_admin add constraint journal_admin_cible_check
+  check (cible_type in ('profil_pro', 'signalement'));
+
+create index if not exists idx_journal_admin_date
+  on public.journal_admin (created_at desc);
+create index if not exists idx_journal_admin_cible
+  on public.journal_admin (cible_type, cible_id, created_at desc);
+
+alter table public.journal_admin enable row level security;
+
+do $$ begin
+  execute 'drop policy if exists "lecture du journal" on public.journal_admin';
+end $$;
+create policy "lecture du journal" on public.journal_admin
+  for select to authenticated using (public.est_admin());
+
+-- --------------------------------------------------------------------------
+--  25.4 De quoi tracer une décision sur un signalement
+--
+--  `signalements` avait `statut` et `traite_at`, mais pas de place pour le
+--  POURQUOI. Or c'est la seule chose qu'on veut relire six mois après.
+-- --------------------------------------------------------------------------
+alter table public.signalements add column if not exists note       text;
+alter table public.signalements add column if not exists traite_par uuid references public.users(id) on delete set null;
+
+-- --------------------------------------------------------------------------
+--  25.5 Les documents privés, et l'administration
+--
+--  L'espace `documents` n'était lisible que par son propriétaire. Un
+--  back-office qui doit contrôler un Kbis sans pouvoir l'ouvrir ne sert à
+--  rien — jusqu'ici, il fallait passer par le tableau de bord Supabase,
+--  qui contourne la RLS.
+--
+--  Deux politiques de lecture plutôt qu'une élargie : celle du propriétaire
+--  ne change pas d'un caractère. Mélanger les deux conditions dans un seul
+--  `using` rendrait impossible de retirer l'une sans relire l'autre.
+--
+--  `drop policy` est écrit dans un bloc `do` : passé tel quel au connecteur
+--  Supabase, un `drop` attend une confirmation que personne ne peut donner
+--  depuis une session de travail, et la migration EXPIRE au bout d'une
+--  minute sans rien appliquer. Même raison que `create or replace trigger`
+--  en section 24.
+-- --------------------------------------------------------------------------
+do $$ begin
+  execute 'drop policy if exists "lecture des documents par l administration" on storage.objects';
+end $$;
+create policy "lecture des documents par l administration" on storage.objects
+  for select to authenticated using (
+    bucket_id = 'documents' and public.est_admin()
+  );
+
+-- ==========================================================================
+--  25.6 LES ACTIONS
+--
+--  LE PIÈGE TROUVÉ EN LISANT LE VERROU DE LA SECTION 17.3
+--  ------------------------------------------------------
+--  `tient_le_profil_pro()` remet les colonnes de vérification à leur
+--  ancienne valeur dès que `auth.uid() = new.id`. Dans une fonction
+--  `security definer`, `auth.uid()` renvoie TOUJOURS l'appelant — ce n'est
+--  pas `null`. Donc un administrateur qui vérifierait SA PROPRE fiche
+--  verrait le verrou annuler son geste EN SILENCE : aucune erreur, et le
+--  badge ne se poserait pas.
+--
+--  C'est exactement le premier geste que le propriétaire aurait tenté : il
+--  est le seul vrai professionnel de sa base.
+--
+--  La parade n'est pas technique, elle est morale, et elle était déjà
+--  écrite dans ce fichier : **« le badge ne se décerne pas soi-même ».** Un
+--  badge dit qu'un humain a regardé les documents de QUELQU'UN D'AUTRE.
+--  On refuse donc le geste, avec un message qui l'explique, au lieu de le
+--  contourner.
+--
+--  L'échappatoire reste l'éditeur SQL, où `auth.uid()` est `null` : c'est
+--  déjà la règle de `tient_les_metiers()` et de `tient_le_profil_pro()`.
+--  Se vérifier soi-même redevient alors un geste délibéré, et tracé.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  Le garde commun. Écrit une fois, appelé par chaque action : une règle
+--  recopiée quatre fois finit par diverger en trois endroits.
+-- --------------------------------------------------------------------------
+create or replace function public.admin_exige_droit()
+returns uuid
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare moi uuid := auth.uid();
+begin
+  if moi is null then
+    raise exception 'Personne n''est connecté.' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.administrateurs a where a.user_id = moi) then
+    raise exception 'Cette action est réservée à l''administration d''Opus.'
+      using errcode = '42501';
+  end if;
+  return moi;
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+--  Vérifier un professionnel.
+--
+--  On n'écrit PAS `verifie` : `synchronise_verification()` le calcule depuis
+--  `kbis_valide` et `assurance_valide`, et c'est lui qui doit rester la
+--  seule source. Poser `verifie` à la main ici créerait deux vérités.
+-- --------------------------------------------------------------------------
+create or replace function public.admin_verifier_pro(
+  p_pro       uuid,
+  p_kbis      boolean,
+  p_assurance boolean,
+  p_rge       boolean default null,
+  p_note      text    default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi   uuid := public.admin_exige_droit();
+  avant jsonb;
+  apres jsonb;
+  qui   text;
+begin
+  if p_pro = moi then
+    raise exception
+      'On ne vérifie pas sa propre fiche : le badge atteste qu''un humain a regardé les documents de quelqu''un d''autre. Passez par l''éditeur SQL de Supabase si c''est vraiment ce que vous voulez.'
+      using errcode = '42501';
+  end if;
+
+  select to_jsonb(p) - 'bio' - 'portfolio'
+    into avant
+    from public.professional_profiles p where p.id = p_pro;
+  if avant is null then
+    raise exception 'Cette fiche professionnelle n''existe pas.' using errcode = 'no_data_found';
+  end if;
+
+  update public.professional_profiles set
+    kbis_valide      = coalesce(p_kbis, kbis_valide),
+    assurance_valide = coalesce(p_assurance, assurance_valide),
+    rge              = coalesce(p_rge, rge),
+    /* Un refus précédent cesse d'être vrai dès qu'on valide. */
+    verification_statut = case
+      when coalesce(p_kbis, kbis_valide) and coalesce(p_assurance, assurance_valide)
+        then 'verifie'
+      else 'en_attente'
+    end,
+    verification_note = nullif(btrim(coalesce(p_note, '')), '')
+  where id = p_pro;
+
+  select to_jsonb(p) - 'bio' - 'portfolio'
+    into apres
+    from public.professional_profiles p where p.id = p_pro;
+
+  insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
+  values (moi,
+          case
+            when (apres->>'verifie')::boolean then 'pro_verifie'
+            when (avant->>'verifie')::boolean then 'pro_remis_en_attente'
+            else 'pro_partiellement_valide'
+          end,
+          'profil_pro', p_pro, avant, apres, nullif(btrim(coalesce(p_note, '')), ''));
+
+  /* On PRÉVIENT l'artisan. Un badge posé sans que personne ne le dise ne
+     sert à rien : il ne va pas regarder sa fiche tous les jours. */
+  qui := coalesce(apres->>'entreprise', 'votre entreprise');
+  insert into public.notifications (user_id, type, texte)
+  values (p_pro,
+          case when (apres->>'verifie')::boolean then 'verification_acceptee' else 'verification_attente' end,
+          case when (apres->>'verifie')::boolean
+            then 'Vos documents ont été contrôlés : ' || qui || ' affiche désormais le badge « vérifié ».'
+            else 'Vos documents ont été examinés. Il manque encore une pièce pour obtenir le badge « vérifié ».'
+          end);
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+--  Refuser des documents. Le MOTIF est obligatoire, et c'est la règle qui
+--  compte ici : un refus sans explication fait partir l'artisan sans qu'il
+--  sache quoi corriger. Il ne reviendra pas demander.
+-- --------------------------------------------------------------------------
+create or replace function public.admin_refuser_pro(p_pro uuid, p_note text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi   uuid := public.admin_exige_droit();
+  note  text := nullif(btrim(coalesce(p_note, '')), '');
+  avant jsonb;
+  apres jsonb;
+begin
+  if p_pro = moi then
+    raise exception 'On ne statue pas sur sa propre fiche.' using errcode = '42501';
+  end if;
+  if note is null or length(note) < 10 then
+    raise exception
+      'Un refus demande un motif d''au moins dix caractères : l''artisan doit savoir QUOI corriger, sinon il ne revient pas.'
+      using errcode = 'check_violation';
+  end if;
+
+  select to_jsonb(p) - 'bio' - 'portfolio'
+    into avant from public.professional_profiles p where p.id = p_pro;
+  if avant is null then
+    raise exception 'Cette fiche professionnelle n''existe pas.' using errcode = 'no_data_found';
+  end if;
+
+  update public.professional_profiles set
+    kbis_valide         = false,
+    assurance_valide    = false,
+    verification_statut = 'refuse',
+    verification_note   = note
+  where id = p_pro;
+
+  select to_jsonb(p) - 'bio' - 'portfolio'
+    into apres from public.professional_profiles p where p.id = p_pro;
+
+  insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
+  values (moi, 'pro_refuse', 'profil_pro', p_pro, avant, apres, note);
+
+  insert into public.notifications (user_id, type, texte)
+  values (p_pro, 'verification_refusee',
+          'Vos documents n''ont pas pu être validés : ' || note);
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+--  Trancher un signalement.
+--
+--  `traite` et `rejete` sont deux décisions DIFFÉRENTES, et il faut garder
+--  les deux : « j'ai agi » n'est pas « il n'y avait rien ». Confondre les
+--  deux rendrait le journal inutilisable — on ne saurait plus distinguer un
+--  modérateur actif d'un modérateur qui classe tout sans suite.
+-- --------------------------------------------------------------------------
+create or replace function public.admin_traiter_signalement(
+  p_signalement uuid,
+  p_statut      text,
+  p_note        text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi   uuid := public.admin_exige_droit();
+  avant jsonb;
+  apres jsonb;
+begin
+  if p_statut not in ('en_examen', 'traite', 'rejete') then
+    raise exception 'Statut inconnu : % (en_examen, traite ou rejete).', p_statut
+      using errcode = 'check_violation';
+  end if;
+
+  select to_jsonb(s) into avant from public.signalements s where s.id = p_signalement;
+  if avant is null then
+    raise exception 'Ce signalement n''existe pas.' using errcode = 'no_data_found';
+  end if;
+
+  update public.signalements set
+    statut     = p_statut,
+    note       = nullif(btrim(coalesce(p_note, '')), ''),
+    traite_par = moi,
+    /* `en_examen` n'est pas une fin : on ne pose la date que quand c'est
+       tranché, sinon le délai des 48 heures ne voudrait plus rien dire. */
+    traite_at  = case when p_statut in ('traite', 'rejete') then now() else null end
+  where id = p_signalement;
+
+  select to_jsonb(s) into apres from public.signalements s where s.id = p_signalement;
+
+  insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
+  values (moi, 'signalement_traite', 'signalement', p_signalement, avant, apres,
+          nullif(btrim(coalesce(p_note, '')), ''));
+end;
+$$;
+
+-- ==========================================================================
+--  25.7 LES DEUX FILES, EN LECTURE
+--
+--  Pourquoi des fonctions et pas des politiques de lecture pour
+--  l'administration :
+--
+--    1. la section 18 a fermé des COLONNES (`users.email`, `telephone`,
+--       GPS). Un `select *` échoue pour ces rôles — et une politique
+--       élargie inviterait à rouvrir la table entière « pour que le
+--       back-office marche ». C'est exactement la porte de derrière que ce
+--       document interdit ;
+--    2. une fonction rend une liste de colonnes EXPLICITE. Ce qui n'y est
+--       pas écrit ne sort pas, et ça se relit en dix secondes.
+--
+--  Et on n'y met PAS `users.email` : l'adresse du COMPTE est fermée depuis
+--  le 29/09. Pour écrire à un artisan, il y a `email_pro`, qu'il a
+--  renseignée POUR qu'on s'en serve, et la notification que ces fonctions
+--  envoient déjà.
+-- ==========================================================================
+
+create or replace function public.admin_file_verifications(p_limite int default 50)
+returns table (
+  id uuid, entreprise text, nom text, ville text, siret text,
+  metiers text[], specialites text[],
+  verification_statut text, verification_note text,
+  kbis_valide boolean, kbis_url text, kbis_maj text,
+  assurance_valide boolean, assurance_url text, assurance_expire text,
+  rge boolean, rge_declare boolean, rge_numero text, rge_expire text, rge_url text,
+  email_pro text, telephone text,
+  a_envoye boolean, est_moi boolean, inscrit_le timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare moi uuid := public.admin_exige_droit();
+begin
+  return query
+    select p.id, p.entreprise, p.nom, p.ville, p.siret,
+           p.metiers, p.specialites,
+           p.verification_statut, p.verification_note,
+           p.kbis_valide, p.kbis_url, p.kbis_maj,
+           p.assurance_valide, p.assurance_url, p.assurance_expire,
+           p.rge, p.rge_declare, p.rge_numero, p.rge_expire, p.rge_url,
+           p.email_pro, p.telephone,
+           (p.kbis_url is not null or p.assurance_url is not null) as a_envoye,
+           (p.id = moi) as est_moi,
+           p.created_at
+      from public.professional_profiles p
+     where not p.verifie
+     /* Celui qui a ENVOYÉ quelque chose passe devant : il attend une
+        réponse. Et à égalité, le plus ancien d'abord — c'est lui qui
+        attend depuis le plus longtemps. */
+     order by (p.kbis_url is not null or p.assurance_url is not null) desc,
+              p.created_at asc
+     limit greatest(1, least(coalesce(p_limite, 50), 200));
+end;
+$$;
+
+create or replace function public.admin_signalements(p_limite int default 50)
+returns table (
+  id uuid, cible_type text, cible_id uuid, cible_auteur_id uuid,
+  cible_auteur text, auteur text, extrait text,
+  motif text, details text, statut text, note text,
+  created_at timestamptz, traite_at timestamptz, jours int
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  perform public.admin_exige_droit();
+  return query
+    select s.id, s.cible_type, s.cible_id, s.cible_auteur_id,
+           /* Le NOM, pas l'adresse e-mail. Pour modérer, il faut savoir de
+              qui on parle ; l'e-mail du compte n'y sert à rien. */
+           coalesce(cu.nom, '(compte supprimé)') as cible_auteur,
+           coalesce(au.nom, '(compte supprimé)') as auteur,
+           s.extrait, s.motif, s.details, s.statut, s.note,
+           s.created_at, s.traite_at,
+           (now()::date - s.created_at::date)::int as jours
+      from public.signalements s
+      left join public.users cu on cu.id = s.cible_auteur_id
+      left join public.users au on au.id = s.auteur_id
+     /* Les non tranchés d'abord, et parmi eux le plus VIEUX en tête : c'est
+        celui qui ronge la promesse des 48 heures. */
+     order by (s.statut in ('nouveau', 'en_examen')) desc,
+              s.created_at asc
+     limit greatest(1, least(coalesce(p_limite, 50), 200));
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+--  Le résumé : les compteurs du bouton d'entrée.
+--
+--  Elle NE LÈVE PAS d'erreur pour un non-administrateur — elle rend des
+--  zéros et `admin = false`. C'est voulu : l'écran de profil l'appelle pour
+--  savoir s'il doit afficher le bouton, et faire échouer une requête chez
+--  tous les utilisateurs ordinaires remplirait les journaux d'erreurs qui
+--  n'en sont pas.
+-- --------------------------------------------------------------------------
+create or replace function public.admin_resume()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case when not public.est_admin() then jsonb_build_object('admin', false)
+  else jsonb_build_object(
+    'admin', true,
+    'verifications', (select count(*) from public.professional_profiles where not verifie
+                        and (kbis_url is not null or assurance_url is not null)),
+    'profils_non_verifies', (select count(*) from public.professional_profiles where not verifie),
+    'signalements', (select count(*) from public.signalements where statut in ('nouveau', 'en_examen')),
+    'signalements_en_retard', (select count(*) from public.signalements
+                                 where statut in ('nouveau', 'en_examen')
+                                   and created_at < now() - interval '48 hours'),
+    'specialites', (select count(*) from public.specialites_proposees where statut = 'en_attente'),
+    'metiers', (select count(*) from public.metier_demandes where statut = 'en_attente')
+  ) end;
+$$;
+
+-- Les six fonctions que l'application appelle. `admin_exige_droit()` n'en
+-- fait PAS partie : elle ne sert qu'aux autres, et l'exposer en REST
+-- donnerait un moyen de savoir si on est administrateur sans rien faire.
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.admin_exige_droit()'
+  ] loop
+    begin
+      execute format('revoke execute on function %s from public', f);
+      execute format('revoke execute on function %s from anon, authenticated', f);
+    exception when undefined_function or undefined_object then null;
+    end;
+  end loop;
+end $$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.admin_resume()',
+    'public.admin_file_verifications(int)',
+    'public.admin_signalements(int)',
+    'public.admin_verifier_pro(uuid, boolean, boolean, boolean, text)',
+    'public.admin_refuser_pro(uuid, text)',
+    'public.admin_traiter_signalement(uuid, text, text)'
+  ] loop
+    begin
+      execute format('revoke execute on function %s from public', f);
+      execute format('revoke execute on function %s from anon', f);
+      execute format('grant execute on function %s to authenticated', f);
+    exception when undefined_function or undefined_object then null;
+    end;
+  end loop;
+end $$;
+
+-- ==========================================================================
+--  25.8 UN ACTE D'ADMINISTRATION SURVIT À SON AUTEUR
+--
+--  POURQUOI UN DÉCLENCHEUR, ET PAS UNE LIGNE DANS
+--  `preparer_suppression_compte()`
+--  ----------------------------------------------
+--  C'est là que cette ligne avait été écrite d'abord. Elle était
+--  INSUFFISANTE : un compte peut disparaître par trois chemins, et cette
+--  fonction n'en est qu'un.
+--
+--    1. l'application → `preparer_suppression_compte()` ;
+--    2. la cascade depuis `auth.users` (la fonction Edge `compte`) ;
+--    3. une suppression à la main dans l'éditeur SQL.
+--
+--  Un déclencheur `before delete` sur `public.users` couvre les trois, et
+--  c'est le genre de règle qu'on ne veut pas avoir à se rappeler.
+--
+--  `admin_id` porte déjà `on delete set null` : le lien se coupe tout seul.
+--  Ce qui ne se ferait pas tout seul, c'est le DRAPEAU — et sans lui, une
+--  ligne du journal sans auteur ne se distinguerait pas d'une ligne écrite
+--  par l'administration de la base (éditeur SQL, où `auth.uid()` est vide).
+--
+--  `security definer` est OBLIGATOIRE ici : `journal_admin` n'a aucune
+--  politique d'écriture, exprès. Avec les droits de l'appelant, la mise à
+--  jour ne toucherait aucune ligne — sans lever d'erreur. C'est la famille
+--  de défaut la plus traître de ce projet.
+-- ==========================================================================
+create or replace function public.anonymise_actes_admin()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.journal_admin
+     set admin_id = null, admin_supprime = true
+   where admin_id = old.id;
+  return old;
+end;
+$$;
+
+-- `create or replace trigger` (PostgreSQL 14+) et non la paire
+-- suppression + création : avec celle-ci, il existe un instant où le
+-- déclencheur est absent — et un compte parti là laisserait un acte
+-- attribué à un identifiant qui n'existe plus. Même raison qu'en
+-- section 24.2.
+create or replace trigger trg_anonymise_actes_admin
+  before delete on public.users
+  for each row execute function public.anonymise_actes_admin();
