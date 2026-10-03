@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
-import { C, F, T, S } from '../theme';
+import { C, F, T, S, R } from '../theme';
 import { metierPrincipal, nomMetier } from '../lib/metiers';
 import MetiersPro from '../components/MetiersPro';
 import {
@@ -18,7 +18,7 @@ import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAut
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import FicheContactPro from '../components/FicheContactPro';
-import { BadgeCheck, Lock, ChevronRight } from '../components/icons';
+import { BadgeCheck, Lock, ChevronRight, ShieldCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
 import { resumeVerification, toutValide } from '../lib/verification';
 import { avgReviews } from '../data/demo';
@@ -43,9 +43,35 @@ function Stat({ value, label }) {
  * choses existent ET qu'on les trouve — enterrer la suppression de compte au
  * fond d'un formulaire de contact est le motif de refus le plus courant.
  */
-function Compte({ onLogout, onConfidentialite }) {
+function Compte({ onLogout, onConfidentialite, admin, onAdmin }) {
+  /* LE BACK-OFFICE N'APPARAÎT QUE POUR QUI L'A, et « qui l'a » est décidé
+     par la BASE : `admin` vient de `admin_resume()`, pas d'une liste
+     d'adresses écrite dans l'application. Un client modifié peut faire
+     apparaître ce bouton ; il ne peut rien en faire — chaque action
+     revérifie le droit côté base (section 25 de `schema.sql`).
+
+     Et il est AU-DESSUS de « Confidentialité », parce qu'on y va
+     plusieurs fois par semaine quand on exploite la plateforme, alors
+     qu'on ne va dans ses réglages de compte que deux fois par an. */
   return (
     <View style={s.compte}>
+      {!!admin && !!onAdmin && (
+        <Pressable
+          style={s.reglage}
+          onPress={onAdmin}
+          accessibilityRole="button"
+          accessibilityLabel="Administration d'Opus"
+        >
+          <ShieldCheck size={15} color={C.accent2} />
+          <Text style={s.reglageTexte}>Administration</Text>
+          {!!admin.aTraiter && (
+            <View style={s.pastille}>
+              <Text style={s.pastilleTexte}>{admin.aTraiter}</Text>
+            </View>
+          )}
+          <ChevronRight size={15} color={C.muted} />
+        </Pressable>
+      )}
       {!!onConfidentialite && (
         <Pressable style={s.reglage} onPress={onConfidentialite}>
           <Lock size={15} color={C.accent2} />
@@ -65,7 +91,7 @@ export default function ProfilOwnScreen({
   demandesPartenariat = [], partenariatsEnvoyes = [],
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
-  onConfidentialite,
+  onConfidentialite, admin = null, onAdmin,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -124,7 +150,8 @@ export default function ProfilOwnScreen({
           )}
         </View>
 
-        <Compte onLogout={onLogout} onConfidentialite={onConfidentialite} />
+        <Compte onLogout={onLogout} onConfidentialite={onConfidentialite}
+          admin={admin} onAdmin={onAdmin} />
       </Animated.ScrollView>
     );
   }
@@ -292,7 +319,8 @@ export default function ProfilOwnScreen({
         })}
       </View>
 
-      <Compte onLogout={onLogout} onConfidentialite={onConfidentialite} />
+      <Compte onLogout={onLogout} onConfidentialite={onConfidentialite}
+          admin={admin} onAdmin={onAdmin} />
     </Animated.ScrollView>
   );
 }
@@ -326,6 +354,17 @@ const s = StyleSheet.create({
     paddingVertical: S.md, paddingHorizontal: S.md,
   },
   reglageTexte: { flex: 1, fontFamily: F.inter5, fontSize: T.courant, color: C.ink },
+  /* Une pastille FLOTTE au-dessus : elle s'arrondit, contrairement à la
+     ligne de réglage qui porte l'information. */
+  pastille: {
+    /* Pas de `paddingVertical: 1` : la grille de 4 px de `theme.js` ne
+       connaît pas 1, et `verifier-echelles` l'a refusé — à juste titre.
+       Une hauteur explicite fait la même chose, en s'alignant. */
+    minWidth: 20, minHeight: 20, paddingHorizontal: S.xs,
+    borderRadius: R.gelule, backgroundColor: C.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pastilleTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surAccent },
   logout: { paddingVertical: S.md, paddingHorizontal: 20, alignSelf: 'center' },
   logoutText: { fontFamily: F.oswald6, fontSize: T.corps, color: C.bad },
 });

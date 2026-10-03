@@ -536,14 +536,47 @@ Et le §18 du document — l'administration du référentiel — est exactement 
 **back-office du 2.1** ci-dessous. Les deux se construisent ensemble : une
 liste des métiers à ajouter ou désactiver, à côté des Kbis à valider.
 
-### 2.1 Un back-office, même minimal
+### 2.1 Un back-office — lot 1 ✅ FAIT le 03/10/2026
 
-Aujourd'hui, valider un Kbis ou trancher une demande de changement de métier
-se fait **à la main, dans le tableau de bord Supabase**. Ça va pour dix
-artisans. Pas pour cent.
+Avant, valider un Kbis ou trancher un signalement se faisait **à la main,
+dans l'éditeur SQL de Supabase**. Deux files sont désormais dans
+l'application : Profil → **Administration**.
 
-Le minimum : une liste des vérifications en attente, une liste des demandes
-de métiers, une liste des signalements — et trois boutons.
+**Ce qui a décidé de l'ordre**, relevé sur la vraie base le 02/10 :
+un signalement du **29/09** était encore au statut `nouveau` quatre jours
+après, alors que l'application promet « un examen sous 48 heures ». Et
+`kbis_url` était vide sur les six fiches — la chaîne envoi → contrôle →
+badge n'avait **jamais** tourné une seule fois.
+
+**Ce qui est en place** (section 25 de `schema.sql`, `AdminScreen.js`) :
+
+- `administrateurs` + `est_admin()`, et **aucune politique d'écriture** : un
+  administrateur ne peut pas en nommer un autre, la seule entrée est
+  l'éditeur SQL ;
+- `journal_admin`, qui garde l'avant et l'après de chaque décision et que
+  **personne ne peut écrire, modifier ni effacer** — seules les fonctions de
+  la base y écrivent. Un acte s'anonymise quand son auteur part ;
+- vérifier / refuser un professionnel (motif obligatoire pour un refus),
+  trancher un signalement, le tout avec notification à l'intéressé ;
+- les documents privés s'ouvrent par une adresse signée **cinq minutes** ;
+- `npm run verifier-backoffice` tient les vingt-sept garde-fous, dont celui
+  qui compare les actions insérées à la contrainte `check`.
+
+> ⚠️ **On ne vérifie pas sa propre fiche.** La base refuse, et c'est voulu —
+> un badge atteste qu'un humain a regardé les documents de quelqu'un
+> d'AUTRE. L'écran l'explique au lieu de laisser tomber sur une erreur.
+
+**Ce qui reste — lot 2 :**
+
+1. **Les pièces justificatives par catégorie** (décision 3 de
+   `docs/DEMANDE-METIERS.md`) : un avocat n'a pas d'assurance décennale, et
+   lui en demander une rend son badge absurde ;
+2. **L'administration du référentiel métiers** (§18) : ajouter, renommer,
+   désactiver un métier, et traiter la file `specialites_proposees` — vide
+   aujourd'hui, mais elle se remplit toute seule ;
+3. **Les demandes de changement de métier** (`metier_demandes`) : la table et
+   ses statuts existent, rien ne les lit encore. C'est exactement le défaut
+   « une table qu'on écrit sans jamais la lire ».
 
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 

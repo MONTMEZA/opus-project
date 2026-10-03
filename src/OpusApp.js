@@ -39,6 +39,7 @@ import GererPortfolioScreen from './screens/GererPortfolioScreen';
 import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
 import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
+import AdminScreen from './screens/AdminScreen';
 import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier , metiersDe } from './lib/metiers';
 import * as api from './lib/api';
@@ -133,6 +134,13 @@ export default function OpusApp() {
   /* Une clé par message envoyé, pour retrouver SA bulle quand la réponse du
      serveur arrive — l'index dans la liste bouge, lui. */
   const compteurEnvoi = useRef(0);
+  /* LE BACK-OFFICE. `admin` reste `null` tant qu'on n'a pas demandé — et on
+     ne demande QU'EN OUVRANT le profil, jamais au démarrage. CLAUDE.md
+     retient un repère mesuré : « 24 requêtes, et `loadAll` ne part qu'une
+     fois ». Ajouter un appel sur le chemin du démarrage pour afficher un
+     bouton que presque personne ne verra serait un mauvais échange. */
+  const [admin, setAdmin] = useState(null);
+  const adminDemande = useRef(false);
   const [demandesRecues, setDemandesRecues] = useState([]);
   const [demandesRecuesEtat, setDemandesRecuesEtat] = useState('jamais');
   /* Un MIROIR de l'état, parce que l'abonnement au temps réel est posé une
@@ -1308,6 +1316,29 @@ export default function OpusApp() {
     (n) => !n.lue && TYPES_DEMANDE.includes(n.type),
   );
 
+  /* QUI PEUT ADMINISTRER EST DÉCIDÉ PAR LA BASE, pas par une liste
+     d'adresses écrite ici. `admin_resume()` rend `{ admin: false }` à tout
+     le monde sauf aux lignes de `public.administrateurs`, et elle ne lève
+     PAS d'erreur pour les autres : un utilisateur ordinaire ne doit pas
+     remplir les journaux d'erreurs du projet en ouvrant son profil.
+
+     `aTraiter` additionne les deux files : c'est ce que porte la pastille,
+     et une pastille qui compte une seule des deux ferait manquer l'autre. */
+  const chargerResumeAdmin = async () => {
+    try {
+      const r = await api.resumeAdmin();
+      setAdmin(r && r.admin
+        ? { ...r, aTraiter: (r.verifications || 0) + (r.signalements || 0) }
+        : null);
+    } catch (e) {
+      /* Un back-office qui ne répond pas n'est PAS une panne de
+         l'application : on n'affiche simplement pas le bouton. Afficher un
+         bandeau rouge ici alarmerait tout le monde pour une fonction que
+         presque personne n'utilise. */
+      setAdmin(null);
+    }
+  };
+
   const chargerDemandesRecues = async ({ silencieux = false } = {}) => {
     if (!silencieux) setDemandesRecuesEtat('charge');
     try {
@@ -2002,7 +2033,7 @@ export default function OpusApp() {
   const showBack = screen === 'profilPro' || screen === 'creer' || screen === 'sos'
     || screen === 'profilEdit' || screen === 'profilPublic'
     || screen === 'mesPublications' || screen === 'gererPortfolio'
-    || screen === 'confidentialite' || screen === 'legal'
+    || screen === 'confidentialite' || screen === 'legal' || screen === 'admin'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'profilPro'
@@ -2013,6 +2044,7 @@ export default function OpusApp() {
     : screen === 'mesPublications' ? 'Mes publications'
     : screen === 'gererPortfolio' ? 'Organiser mes réalisations'
     : screen === 'confidentialite' ? 'Confidentialité et sécurité'
+    : screen === 'admin' ? 'Administration'
     : screen === 'legal' ? (TITRES_LEGAUX[texteLegal] || 'Informations légales')
     : screen === 'creer' ? 'Publier'
     : activeConv && activeConv.contact ? activeConv.contact.titre : '';
@@ -2032,7 +2064,7 @@ export default function OpusApp() {
             if (screen === 'messages') setActiveConvId(null);
             else if (screen === 'legal') setScreen('confidentialite');
             else if (screen === 'profilEdit' || screen === 'mesPublications'
-                     || screen === 'gererPortfolio'
+                     || screen === 'gererPortfolio' || screen === 'admin'
                      || screen === 'confidentialite') setScreen('profil');
             else setScreen('home');
           }}
@@ -2306,6 +2338,8 @@ export default function OpusApp() {
             onGererPortfolio={() => setScreen('gererPortfolio')}
             nbPublications={mesPublications.length}
             onConfidentialite={() => setScreen('confidentialite')}
+            admin={admin}
+            onAdmin={() => setScreen('admin')}
             onLogout={deconnexion}
           />
         )}
@@ -2325,6 +2359,13 @@ export default function OpusApp() {
         )}
 
         {screen === 'legal' && <LegalScreen texte={texteLegal} />}
+
+        {screen === 'admin' && (
+          <AdminScreen
+            onRafraichirResume={chargerResumeAdmin}
+            onErreur={showErreur}
+          />
+        )}
 
         {screen === 'profilPublic' && (
           <ProfilPublicScreen
@@ -2375,7 +2416,16 @@ export default function OpusApp() {
           messages: messagesNonLus > 0,
         }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
-        onNavigate={(key) => { setScreen(key); setActiveConvId(null); }}
+        onNavigate={(key) => {
+          setScreen(key);
+          setActiveConvId(null);
+          /* Une seule fois par session : le droit d'administrer ne change
+             pas pendant qu'on se promène dans l'application. */
+          if (key === 'profil' && !adminDemande.current) {
+            adminDemande.current = true;
+            chargerResumeAdmin();
+          }
+        }}
       />
 
       <Signaler

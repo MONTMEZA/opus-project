@@ -1176,8 +1176,120 @@ donner depuis une session de travail. Même cause que pour
 > très bien. Elle est de toute façon meilleure : avec la paire
 > `drop` + `create`, il existe un instant où le déclencheur est absent — et
 > une demande déposée là ne notifierait personne.
+
+**Mesuré plus précisément le 03/10/2026, en posant la section 25 : le refus
+est TEXTUEL.** Ce n'est pas l'ordre exécuté qui est examiné, c'est la chaîne
+de caractères envoyée.
+
+| dans la migration | résultat |
+|---|---|
+| `revoke …`, même dans un `do` | **passe** |
+| `drop policy …` | expire |
+| `execute 'drop policy …'` **dans un `do`** | **expire aussi** |
+| `delete from …`, même dans un corps de fonction | expire |
+
+Autrement dit, cacher le mot dans une chaîne ne sert à rien — et **il ne
+faut pas essayer**. Ce garde-fou existe pour une raison : une session de
+travail ne doit pas pouvoir détruire quelque chose sans qu'un humain
+confirme.
+
+> **Les parades honnêtes :** `create or replace trigger` pour un
+> déclencheur ; pour une politique ou une contrainte, la créer **sous
+> condition d'existence** (`pg_policies`, `pg_constraint`) dans un bloc
+> `do`. `schema.sql`, lui, garde sa forme `drop … if exists` : il est
+> rejoué par `psql`, qui n'a pas ce garde-fou.
+
+### Le back-office — et le piège qu'il contenait (03/10/2026)
+
+Section 25 de `schema.sql`, écran `src/screens/AdminScreen.js`. Deux files :
+les fiches à contrôler, et les signalements.
+
+**Ce que le relevé sur la vraie base a montré ce jour-là**, et qui a décidé
+de l'ordre des choses :
+
+- un signalement « contrefaçon » déposé le **29/09** était encore au statut
+  `nouveau` **quatre jours plus tard**, alors que l'application promet un
+  « examen sous 48 heures » (`src/data/moderation.js`) ;
+- `kbis_url` était **vide sur les six fiches** : la chaîne envoi du document
+  → stockage privé → contrôle → badge n'avait jamais tourné une seule fois.
+  Les trois `kbis_valide = true` venaient du jeu de démonstration.
+
+Même famille que le « X est prévenu » de la section 24 : une promesse que
+rien ne tient.
+
+#### `auth.uid()` n'est PAS nul dans une fonction `security definer`
+
+C'est le piège, et il aurait frappé au tout premier geste du propriétaire.
+
+`tient_le_profil_pro()` annule les colonnes de vérification dès que
+`auth.uid() = new.id`. Dans une fonction `security definer`, `auth.uid()`
+renvoie **toujours l'appelant** — ce n'est `null` que depuis l'éditeur SQL
+ou une Edge Function. Un administrateur qui validerait **sa propre fiche**
+verrait donc son geste annulé **en silence** : aucune erreur, et pas de
+badge. Or le propriétaire est le seul vrai professionnel de sa base.
+
+Prouvé (essai 3 de `supabase/essais-section-25.sql`) : `UPDATE 1`, zéro
+erreur, et les trois colonnes à `false`.
+
+> **La parade n'est pas technique, elle est morale, et elle était déjà
+> écrite ici : « le badge ne se décerne pas soi-même ».** On REFUSE le
+> geste, avec un message qui l'explique, au lieu de le contourner.
+> L'échappatoire reste l'éditeur SQL — comme pour `tient_les_metiers()`.
+
+#### Le journal : ce qui le rend crédible, c'est ce qu'il n'a pas
+
+`administrateurs` et `journal_admin` n'ont **aucune politique d'écriture**.
+Conséquences voulues :
+
+- **un administrateur ne peut pas en nommer un autre.** La seule entrée est
+  l'éditeur SQL. Sans cette règle, un seul compte compromis devient un accès
+  permanent, et on ne sait pas par où ;
+- **personne n'écrit, ne modifie ni n'efface une ligne du journal**, pas même
+  l'administration. Seules les fonctions `security definer` y écrivent. Un
+  journal qu'on peut récrire ne prouve rien.
+
+Deux détails trouvés par les essais, et pas à l'œil :
+
+1. **`created_at default now()` rendait l'heure de DÉBUT DE TRANSACTION.**
+   Deux actes de la même transaction portaient le même horodatage, et
+   `order by created_at desc` en sortait un au hasard — un journal dont on
+   ne peut pas lire l'ordre. C'est `clock_timestamp()` qu'il faut.
+2. **« badge retiré » et « une pièce sur deux validée » ne sont pas le même
+   acte.** Les confondre rendrait le journal illisible au moment précis où
+   on le relit : « m'a-t-on retiré mon badge ? »
+
+Et l'anonymisation passe par un **déclencheur**, pas par
+`preparer_suppression_compte()` : un compte part par trois chemins
+(l'application, la cascade depuis `auth.users`, une suppression à la main),
+et cette fonction n'en est qu'un. Vérifié sur les trois.
+
+#### Enfin un moyen de rejouer `schema.sql` hors de Supabase
+
+`supabase/local-prelude.sql`. Ce document demande depuis le début de rejouer
+le schéma **deux fois** sur un vrai PostgreSQL ; rien dans le dépôt ne le
+permettait, et chaque session réécrivait ce prélude de mémoire en oubliant
+quelque chose.
+
+> **La ligne qui compte : `alter default privileges … grant all on tables`.**
+> Supabase accorde les droits de table à `anon` et `authenticated` sur tout
+> ce qui naît dans `public` ; un PostgreSQL nu ne les accorde à personne.
+> Sans elle, un essai de RLS échoue sur « permission denied for table »
+> **avant** que la politique ne s'applique — il ne vérifie donc rien, et ça
+> ressemble à s'y méprendre à une règle fausse. Deux heures perdues.
 >
-> Un `revoke` isolé passe, lui, s'il est seul dans un bloc `do $$ … $$`.
+> Et c'est bien `alter default privileges` : les tables n'existent pas
+> encore, et un `grant on all tables` posé APRÈS annulerait les révocations
+> de colonnes de la section 18.
+
+Les seize essais sont dans `supabase/essais-section-25.sql`, chacun dans son
+`begin … rollback` et **surtout pas** dans un bloc `do`.
+
+#### Ce qui n'a PAS été vérifié
+
+Aucun artisan réel n'a encore envoyé de Kbis : la chaîne complète depuis le
+téléphone reste à parcourir. Les essais de bout en bout ont été faits avec
+un compte jetable, sur la vraie base, supprimé dans la même session — et les
+documents étaient des chemins fabriqués, pas de vrais fichiers.
 
 ### « Plus rien ne fonctionne » — et la base allait très bien (02/10/2026)
 

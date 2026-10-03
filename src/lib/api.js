@@ -1783,3 +1783,173 @@ export function ecouterMessagerie({ onMessage, onNotification }) {
   canal.subscribe();
   return () => { supabase.removeChannel(canal); };
 }
+
+/* ==========================================================================
+   LE BACK-OFFICE  (section 25 de `schema.sql`)
+
+   POURQUOI TOUT PASSE PAR DES FONCTIONS DE LA BASE
+   ------------------------------------------------
+   Aucune de ces écritures n'est une requête ordinaire, et c'est voulu : le
+   verrou `tient_le_profil_pro()` remet les colonnes de vérification à leur
+   ancienne valeur dès que c'est le professionnel lui-même qui écrit. Un
+   `update` depuis l'application ne POURRAIT donc pas poser un badge — et il
+   échouerait EN SILENCE, sans la moindre erreur.
+
+   Les six appels ci-dessous sont des `rpc`. La règle reste dans la base,
+   là où un client modifié ne l'atteint pas.
+
+   ET POURQUOI `admin_resume()` NE LÈVE PAS D'ERREUR
+   -------------------------------------------------
+   Elle est appelée par l'écran de profil de TOUT LE MONDE, pour savoir s'il
+   doit afficher le bouton. Faire échouer la requête chez chaque utilisateur
+   ordinaire remplirait les journaux d'erreurs qui n'en sont pas. Elle rend
+   donc `{ admin: false }`, et c'est tout.
+   ========================================================================== */
+
+/** Les compteurs du bouton d'entrée. `{ admin: false }` pour tout le monde. */
+async function resumeAdminDemo() {
+  /* En mode démonstration, personne n'administre : il n'y a pas de base à
+     administrer. Afficher le back-office sur des données en mémoire
+     donnerait l'illusion d'avoir validé un artisan qui n'existe pas. */
+  return { admin: false };
+}
+
+async function resumeAdminSupabase() {
+  const { data, error } = await supabase.rpc('admin_resume');
+  if (error) throw error;
+  return data || { admin: false };
+}
+
+export const resumeAdmin = hasSupabase ? resumeAdminSupabase : resumeAdminDemo;
+
+/** La file des fiches à contrôler. */
+async function fileVerificationsDemo() { return []; }
+
+async function fileVerificationsSupabase() {
+  const { data, error } = await supabase.rpc('admin_file_verifications');
+  if (error) throw error;
+  return (data || []).map((p) => ({
+    id: p.id,
+    entreprise: p.entreprise,
+    nom: p.nom,
+    ville: p.ville,
+    siret: p.siret,
+    metiers: p.metiers || [],
+    specialites: p.specialites || [],
+    statut: p.verification_statut,
+    note: p.verification_note,
+    kbisValide: p.kbis_valide,
+    kbisUrl: p.kbis_url,
+    kbisMaj: p.kbis_maj,
+    assuranceValide: p.assurance_valide,
+    assuranceUrl: p.assurance_url,
+    assuranceExpire: p.assurance_expire,
+    rge: p.rge,
+    rgeDeclare: p.rge_declare,
+    rgeNumero: p.rge_numero,
+    rgeExpire: p.rge_expire,
+    rgeUrl: p.rge_url,
+    /* `email_pro` est une adresse de CONTACT, que le professionnel a
+       renseignée pour qu'elle s'affiche. Ce n'est jamais `users.email`,
+       fermée à tout le monde depuis le 29/09 — et la fonction de la base ne
+       la rend pas. */
+    emailPro: p.email_pro,
+    telephone: p.telephone,
+    aEnvoye: p.a_envoye,
+    estMoi: p.est_moi,
+    inscritLe: p.inscrit_le,
+  }));
+}
+
+export const fileVerifications = hasSupabase ? fileVerificationsSupabase : fileVerificationsDemo;
+
+/** La file des signalements. */
+async function signalementsAdminDemo() { return []; }
+
+async function signalementsAdminSupabase() {
+  const { data, error } = await supabase.rpc('admin_signalements');
+  if (error) throw error;
+  return (data || []).map((s) => ({
+    id: s.id,
+    cibleType: s.cible_type,
+    cibleId: s.cible_id,
+    cibleAuteurId: s.cible_auteur_id,
+    cibleAuteur: s.cible_auteur,
+    auteur: s.auteur,
+    extrait: s.extrait,
+    motif: s.motif,
+    details: s.details,
+    statut: s.statut,
+    note: s.note,
+    jours: s.jours,
+    creeLe: s.created_at,
+    traiteLe: s.traite_at,
+  }));
+}
+
+export const signalementsAdmin = hasSupabase ? signalementsAdminSupabase : signalementsAdminDemo;
+
+/* --------------------------------------------------------------------------
+   LES TROIS ÉCRITURES.
+
+   Elles ne rendent rien : l'écran recharge la file. Deux vérités côte à côte
+   (ce que l'écran croit, ce que la base dit) finissent toujours par diverger,
+   et c'est sur un badge que ça se verrait le plus mal.
+   -------------------------------------------------------------------------- */
+const refuseEnDemo = async () => {
+  throw new Error('Le back-office a besoin de la vraie base : il n’y a rien à administrer en mode démonstration.');
+};
+
+async function verifierProSupabase({ id, kbis, assurance, rge = null, note = null }) {
+  const { error } = await supabase.rpc('admin_verifier_pro', {
+    p_pro: id, p_kbis: !!kbis, p_assurance: !!assurance, p_rge: rge, p_note: note,
+  });
+  if (error) throw error;
+}
+
+export const verifierPro = hasSupabase ? verifierProSupabase : refuseEnDemo;
+
+async function refuserProSupabase({ id, note }) {
+  const { error } = await supabase.rpc('admin_refuser_pro', { p_pro: id, p_note: note });
+  if (error) throw error;
+}
+
+export const refuserPro = hasSupabase ? refuserProSupabase : refuseEnDemo;
+
+async function traiterSignalementSupabase({ id, statut, note = null }) {
+  const { error } = await supabase.rpc('admin_traiter_signalement', {
+    p_signalement: id, p_statut: statut, p_note: note,
+  });
+  if (error) throw error;
+}
+
+export const traiterSignalement = hasSupabase ? traiterSignalementSupabase : refuseEnDemo;
+
+/* --------------------------------------------------------------------------
+   OUVRIR UN DOCUMENT JUSTIFICATIF.
+
+   L'espace `documents` est PRIVÉ, et doit le rester : un Kbis porte le nom
+   et l'adresse du dirigeant. On ne rend donc pas une adresse publique mais
+   une adresse SIGNÉE, valable cinq minutes.
+
+   Cinq minutes et pas une heure : l'adresse se retrouve dans l'historique
+   du navigateur, et quiconque l'aurait n'aurait pas besoin de compte. Le
+   temps de regarder un document, pas celui de l'oublier quelque part.
+   -------------------------------------------------------------------------- */
+const DUREE_LIEN_DOCUMENT = 300;
+
+async function urlDocumentDemo() { return null; }
+
+async function urlDocumentSupabase(chemin) {
+  if (!chemin) return null;
+  /* Les fiches anciennes rangent parfois une adresse complète ; on ne garde
+     que le chemin dans l'espace. */
+  const propre = String(chemin).replace(/^.*\/documents\//, '');
+  const { data, error } = await supabase.storage
+    .from('documents')
+    .createSignedUrl(propre, DUREE_LIEN_DOCUMENT);
+  if (error) throw error;
+  return data ? data.signedUrl : null;
+}
+
+export const urlDocument = hasSupabase ? urlDocumentSupabase : urlDocumentDemo;
