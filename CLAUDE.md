@@ -2515,6 +2515,181 @@ Et la leçon de méthode, qui vaut pour la suite : **un défilement posé par
 programme n'est pas un essai.** Il ne déclenche pas les mêmes événements
 qu'un geste, et il m'avait fait conclure que tout allait bien.
 
+### La page Demandes — « je la trouve trop triste » (04/10/2026)
+
+Le propriétaire, après avoir essayé le glissement sur son iPhone :
+
+> « J'aimerais qu'on se penche sur la page Demandes, je la trouve trop
+> triste. Et j'aimerais qu'une demande déjà vue n'affiche plus de point sur
+> Découvrir ; un petit texte écrit "vu" ou quelque chose comme ça serait
+> bien. Vérifie déjà la page et dis-moi comment on peut l'améliorer autant
+> visuellement que fonctionnellement. »
+
+En vérifiant, trois défauts, et aucun ne faisait planter quoi que ce soit.
+
+#### Le point ne s'éteignait JAMAIS
+
+```js
+const [demandesVues, setDemandesVues] = useState(false);
+const voyantDemandes = canPublish && !demandesVues && demandes.length > 0;
+```
+
+Deux erreurs dans deux lignes :
+
+1. **un booléen en mémoire**, remis à faux **à chaque ouverture de
+   l'application**. On avait beau tout lire, le point revenait au lancement
+   suivant ;
+2. **il s'allumait sur `demandes.length > 0`** — sur l'EXISTENCE d'une
+   demande, pas sur sa nouveauté. La base du propriétaire en contient
+   **une seule, et pas de cette semaine** : le point était donc allumé en
+   permanence, depuis des jours, pour quelque chose de déjà vu dix fois.
+
+> **Ce qu'il faut retenir, c'est la DATE DE LA DERNIÈRE VISITE**, et elle
+> doit survivre au redémarrage. Une colonne suffit :
+> `professional_profiles.demandes_vues_le`. Une demande déposée après est
+> nouvelle, les autres sont vues.
+
+**Et le piège de ce lot, qui aurait tout gâché** : si les badges se
+calculaient sur l'heure qu'on vient d'écrire, ils **s'effaceraient sous les
+yeux** de celui qui ouvre l'onglet pour les lire.
+
+> **Deux dates, et ce n'est pas un doublon.** Celle qui vient de la base au
+> chargement ne bouge pas de la session : c'est elle qui décide des badges.
+> Celle posée à l'ouverture de l'onglet n'éteint que le POINT, tout de
+> suite. Vérifié au navigateur : après ouverture, les voyants tombent de
+> trois à un, **et les badges « Nouveau » sont toujours là**.
+
+Ce que ce choix ne fait pas, et il faut le savoir : ouvrir l'onglet marque
+tout comme vu, même ce qu'on n'a pas fait défiler. Le vrai « lu par
+article » demanderait une ligne par (artisan, demande) — beaucoup de lignes
+pour éteindre un point. On commence par la date.
+
+#### `demandes.statut` : encore une colonne que personne ne relisait
+
+Elle vaut `'ouverte'` par défaut **depuis le premier jour**, la contrainte
+accepte déjà `'pourvue'` et `'fermee'`, et **rien dans tout `src/` ne la
+lisait**. Une demande ne se refermait donc jamais : le particulier a trouvé
+son maçon il y a six mois, sa demande est toujours en tête de liste.
+
+C'est la même famille que les trois tables du 01/10 — et c'est **la vraie
+cause de la tristesse à venir** : une liste où rien ne meurt finit en
+cimetière. Le particulier a maintenant « J'ai trouvé », et seul lui :
+vérifié sur la vraie base, un autre compte qui tente reçoit **zéro ligne
+modifiée**.
+
+#### Et le chargement n'avait aucune limite
+
+Le fil en a une, la Place des pros 200, les demandes : rien. Le jour où il
+y en a cinq mille, l'application les télécharge toutes au démarrage. Elles
+sont désormais bornées comme le reste, et on ne charge plus que les
+demandes **ouvertes** — plus les siennes, que leur auteur doit continuer de
+voir, pourvues ou non.
+
+#### Une demande s'adresse aux ARTISANS — décidé par le propriétaire
+
+La règle de lecture était :
+
+```sql
+"lecture demandes visiteur"  to anon  using (true)
+```
+
+**N'importe qui, sans compte, pouvait lire toutes les demandes** — le
+texte, la commune, le prénom, et l'adresse des photos, qui vivent dans un
+espace de stockage public.
+
+Ce n'était pas une faute d'inattention : c'est le motif à deux politiques
+de la section 18, qui existe parce qu'une policy appelant une fonction
+interdite à l'appelant ÉCHOUE au lieu de filtrer. Il est juste pour une
+publication de professionnel — une vitrine est faite pour être vue. Il ne
+l'est pas pour « fissure dans mon mur », une photo de sa maison, et sa
+commune.
+
+**Vérifié sur la vraie base, les quatre cas :**
+
+| | ce qu'il lit |
+|---|---|
+| sans compte | **0** |
+| un particulier qui n'est pas l'auteur | **0** |
+| l'auteur | **sa demande**, pourvue ou non |
+| un professionnel connecté | **toutes les ouvertes** |
+
+> **Et `schema.sql` ne doit créer une politique qu'à UN endroit.** La
+> section 18 créait encore `lecture demandes visiteur` ; la section 30 la
+> supprimait trente lignes plus loin. Rejouable, mais c'est le premier des
+> deux qui se fait oublier le jour où la règle change. Le contrôle l'a
+> refusé, et il avait raison.
+
+#### Le visuel : 45 % de l'écran avant le premier contenu
+
+Mesuré au navigateur, écran de 844 px :
+
+| | avant | après |
+|---|---|---|
+| l'encadré explicatif commence à | 160 px | **supprimé** |
+| le filtre par métier commence à | 325 px | — |
+| **la première demande commence à** | **~380 px (45 %)** | **258 px** |
+| hauteur de l'en-tête | **165 px** | **76 px** |
+
+L'encadré prenait 165 px pour dire toujours la même phrase, et les deux
+réglages étaient deux rectangles gris. Même traitement que la Place des
+pros deux heures plus tôt : **une ligne de pastilles**, et le sélecteur de
+métiers s'ouvre depuis une pastille au lieu d'occuper cinquante pixels en
+permanence. Les deux pages sont jumelles — elles doivent se ressembler.
+
+Et dans la carte, deux choses qu'on doit voir **sans lire** :
+
+> **« Nouveau » et « Pour vous ».** Avant, « c'est un de vos métiers » ne
+> changeait qu'une petite pastille de bleu à marine, en haut à droite —
+> autant dire rien. Et rien du tout ne disait qu'une demande venait
+> d'arriver.
+>
+> **Le neuf se marque au BORD, pas au fond** : un fond teinté derrière le
+> texte le rendrait moins lisible, et c'est le texte qu'on vient lire. Un
+> trait orange de 3 px se repère en descendant sans rien gêner.
+
+#### Le défaut que SEUL le fait de lancer l'application a trouvé
+
+Les deux nouvelles fonctions d'API avaient été posées à côté de
+`TAILLE_PAGE_FIL`… **mille lignes au-dessus de la déclaration de `noop`** :
+
+```
+ERROR  [ReferenceError: Cannot access 'noop' before initialization]
+```
+
+Écran blanc au démarrage. **Les 30 contrôles passaient. Le linter n'a rien
+dit. `npx expo export` a réussi.** C'est la deuxième fois dans ce projet
+(après les trois voyants du matin) qu'une `const` lue avant sa déclaration
+passe tout, et c'est le rappel du propriétaire — « n'oublie pas que toi
+aussi tu peux tester réellement Opus » — qui l'a attrapée.
+
+> **Un export qui passe ne prouve pas qu'une application démarre.** Il
+> construit le paquet ; il ne l'exécute pas. Seul `npx expo start --web` et
+> un navigateur le font.
+
+#### Le mode démonstration doit faire VIVRE le mécanisme
+
+Les demandes de démonstration n'avaient pas de date de dépôt : le badge
+« Nouveau » ne se serait jamais affiché pour qui lance Opus sans fichier
+`.env` — et il ne se serait pas vérifié ici non plus. Elles portent
+maintenant des dates **calculées** (il y a 3 h, 26 h, 50 h) et la dernière
+visite est simulée à 24 h : une demande est nouvelle, deux ne le sont plus.
+Une date figée dans le fichier serait « nouvelle » le premier jour puis
+plus jamais.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un vrai PostgreSQL : aucune erreur, et
+il ne reste bien que deux politiques sur `demandes`. Les 30 contrôles
+passent (8 nouveaux dans `verifier-demandes`), `npx expo export --platform
+ios` passe. Sur la vraie base : les quatre cas de lecture ci-dessus,
+l'écriture de `demandes_vues_le` par un compte jetable supprimé dans la même
+session, et le verrou du badge vérifié qui n'a pas bougé au passage.
+
+**Ce qui n'a PAS été vérifié** : la page sur un vrai iPhone, et le ressenti
+— « moins triste » ne se mesure pas. Et la base du propriétaire ne contient
+qu'une demande : la liste à vingt cartes, avec ses « Nouveau » et ses
+« Pourvue » mêlés, n'a été vue qu'en démonstration.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

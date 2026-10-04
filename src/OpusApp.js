@@ -124,7 +124,16 @@ export default function OpusApp() {
   const [decouvrirTab, setDecouvrirTab] = useState('artisans');
   const [demandes, setDemandes] = useState([]);
   const [demandeFiltre, setDemandeFiltre] = useState(null);
-  const [demandesVues, setDemandesVues] = useState(false);
+  /* DEUX DATES, ET C'EST VOULU.
+     `demandesVuesLe` est celle qui vient de la BASE au chargement : elle ne
+     bouge pas de la session, et c'est elle qui décide ce qui porte
+     « Nouveau ». Sans ça, ouvrir l'onglet effacerait les badges SOUS LES
+     YEUX de celui qui vient les regarder.
+     `demandesVuesMaj` est posée au moment où l'on ouvre l'onglet : elle
+     n'éteint que le POINT, tout de suite, et la base retient l'heure pour
+     la prochaine fois. */
+  const [demandesVuesLe, setDemandesVuesLe] = useState(null);
+  const [demandesVuesMaj, setDemandesVuesMaj] = useState(false);
   /* Les demandes qui me sont ADRESSÉES — devis, rappels, urgences. Elles ne
      partent pas avec `loadAll()` : le démarrage est déjà le point sensible,
      et elles n'intéressent que l'artisan au moment où il ouvre l'onglet.
@@ -279,6 +288,8 @@ export default function OpusApp() {
       setFinDuFil(!!data.finDuFil);
       setConversations(data.conversations);
       setDemandes(data.demandes || []);
+      setDemandesVuesLe(data.demandesVuesLe || null);
+      setDemandesVuesMaj(false);
       setMesSos(data.mesSos || null);
       setNotifications(data.notifications);
       setFollowingIds(new Set(data.followingIds));
@@ -499,6 +510,8 @@ export default function OpusApp() {
       setFinDuFil(!!data.finDuFil);
       setConversations(data.conversations);
       setDemandes(data.demandes || []);
+      setDemandesVuesLe(data.demandesVuesLe || null);
+      setDemandesVuesMaj(false);
       setNotifications(data.notifications);
       setPros(data.pros);
       if (userType === 'pro') {
@@ -1622,7 +1635,7 @@ export default function OpusApp() {
     setViewedProId(null);
     setCommentsPostId(null);
     setDecouvrirTab('artisans');
-    setDemandesVues(false);
+    setDemandesVuesLe(null); setDemandesVuesMaj(false);
     setMonProfil({ nom: 'Vous', ville: '', telephone: '', avatarUrl: null, bannerUrl: null });
     setDemandesPartenariat([]); setPartenariatsEnvoyes([]);
     setMesSos(null);
@@ -1778,6 +1791,33 @@ export default function OpusApp() {
     setMesReponsesDemandes((r) => new Set([...r, demande.id]));
 
     await ouvrirConversation(conv.id);
+  };
+
+  /**
+   * « J'AI TROUVÉ » — l'auteur referme sa demande, ou la rouvre.
+   *
+   * `statut` existait depuis le premier jour et RIEN ne le lisait : une
+   * demande ne se fermait jamais, et la liste des artisans gardait des
+   * chantiers faits depuis six mois. C'est la même famille que les trois
+   * tables du 01/10 — une colonne écrite que personne ne relit.
+   *
+   * On met à jour l'écran AVANT la base, puis on remet en place si elle
+   * refuse : fermer sa demande est un geste sans conséquence, et attendre
+   * le réseau pour voir une étiquette changer donne l'impression que rien
+   * ne s'est passé.
+   */
+  const changerStatutDemande = async (id, statut) => {
+    const avant = demandes;
+    setDemandes((ds) => ds.map((d) => (d.id === id ? { ...d, statut } : d)));
+    try {
+      await api.changerStatutDemande(id, statut);
+      showBanner(statut === 'pourvue'
+        ? 'Demande fermée. Les artisans ne la voient plus.'
+        : 'Demande rouverte.');
+    } catch (e) {
+      setDemandes(avant);
+      showErreur(messageClair(e, 'La demande n’a pas pu être modifiée'));
+    }
   };
 
   /* ---------- la Place des pros ---------- */
@@ -2109,7 +2149,17 @@ export default function OpusApp() {
      un avertissement, un écran blanc. Le linter ne l'a pas signalé.
      ------------------------------------------------------------------ */
   const voyantPourMoi = nouvellesDemandes.length > 0;
-  const voyantDemandes = canPublish && !demandesVues && demandes.length > 0;
+  /* CE QUI EST NOUVEAU : déposé APRÈS ma dernière visite de l'onglet, et
+     pas par moi. Avant, le point s'allumait sur `demandes.length > 0` —
+     c'est-à-dire sur l'EXISTENCE d'une demande, pas sur sa nouveauté. Avec
+     une seule demande vieille de trois semaines dans la base, il était
+     allumé en permanence, et un point toujours allumé ne veut plus rien
+     dire. C'est le défaut que le propriétaire a signalé le 04/10. */
+  const estNouvelleDemande = (d) => !!d.deposeeLe
+    && String(d.auteurId) !== String(api.getUserId())
+    && (!demandesVuesLe || d.deposeeLe > demandesVuesLe);
+  const nbDemandesNouvelles = demandes.filter(estNouvelleDemande).length;
+  const voyantDemandes = canPublish && !demandesVuesMaj && nbDemandesNouvelles > 0;
   const voyantDecouvrir = voyantPourMoi || voyantDemandes;
 
   /* ------------------------------------------------------------------
@@ -2151,7 +2201,16 @@ export default function OpusApp() {
    */
   const changerOngletDecouvrir = (k) => {
     setDecouvrirTab(k);
-    if (k === 'demandes') setDemandesVues(true);
+    if (k === 'demandes') {
+      /* Le POINT s'éteint tout de suite ; les badges « Nouveau », eux,
+         restent jusqu'au prochain chargement — on ne les retire pas sous
+         les yeux de celui qui vient justement les lire. */
+      setDemandesVuesMaj(true);
+      /* Et la base retient l'heure, pour que le point ne revienne pas au
+         prochain lancement. L'échec n'est pas remonté : ne pas réussir à
+         éteindre un point n'est pas une raison d'afficher une erreur. */
+      api.marquerDemandesVues().catch(() => {});
+    }
     /* On recharge à chaque ouverture : une demande peut être arrivée depuis
        la dernière fois, et l'artisan vient justement vérifier ça.
        Silencieux si on a déjà quelque chose à montrer. */
@@ -2433,6 +2492,9 @@ export default function OpusApp() {
                       onRepondre={repondreDemande}
                       moi={userType === 'pro' ? (pros[myProId] || null) : monProfil}
                       mesReponses={mesReponsesDemandes}
+                      vuesLe={demandesVuesLe}
+                      monId={api.getUserId()}
+                      onChangerStatut={changerStatutDemande}
                       onErreur={showErreur}
                       onSignaler={ouvrirSignalement}
                     />

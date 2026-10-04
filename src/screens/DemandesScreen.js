@@ -6,9 +6,11 @@
  * séparé du fil, qui reste une vitrine réservée aux pros.
  */
 import React, { useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import {
-  C, F, T, S, viser, surFond, GOUTTIERE, CARTE_PLEINE,
+  View, Text, FlatList, Pressable, ScrollView, StyleSheet, RefreshControl,
+} from 'react-native';
+import {
+  C, F, T, S, R, viser, surFond, GOUTTIERE, CARTE_PLEINE,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
@@ -19,7 +21,8 @@ import {
 } from '../components/icons';
 import { choisirImage } from '../lib/media';
 import ChampVille from '../components/ChampVille';
-import { ChampMetier } from '../components/SelecteurMetiers';
+import SelecteurMetiers, { ChampMetier } from '../components/SelecteurMetiers';
+import { PastilleFiltre, PastilleBascule } from '../components/FiltresPlace';
 import { METIER_PAR_DEFAUT, nomMetier } from '../lib/metiers';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
 import { distanceKm, libelleDistance } from '../lib/adresse';
@@ -33,10 +36,36 @@ import { distanceKm, libelleDistance } from '../lib/adresse';
  * règlent les deux.
  */
 const Demande = React.memo(function Demande({
-  d, estPro, mien, dejaRepondu, onRepondre, onSignaler,
+  d, estPro, mien, dejaRepondu, nouvelle, onRepondre, onSignaler, onChangerStatut,
 }) {
+  const pourvue = d.statut === 'pourvue';
   return (
-      <View key={String(d.id)} style={s.carte}>
+      <View key={String(d.id)} style={[s.carte, nouvelle && s.carteNouvelle]}>
+        {/* DEUX CHOSES QU'ON DOIT VOIR SANS LIRE : que c'est nouveau, et
+            que c'est POUR MOI. Avant, « c'est un de vos métiers » ne
+            changeait qu'une petite pastille de bleu à marine, en haut à
+            droite — autant dire rien. Et rien du tout ne disait qu'une
+            demande venait d'arriver. */}
+        {(nouvelle || (estPro && mien) || pourvue) && (
+          <View style={s.rubans}>
+            {nouvelle && !pourvue && (
+              <View style={[s.ruban, s.rubanNeuf]}>
+                <Text style={[s.rubanTexte, { color: C.surAccent }]}>Nouveau</Text>
+              </View>
+            )}
+            {estPro && mien && !pourvue && (
+              <View style={[s.ruban, s.rubanMien]}>
+                <Text style={[s.rubanTexte, { color: '#fff' }]}>Pour vous</Text>
+              </View>
+            )}
+            {pourvue && (
+              <View style={[s.ruban, s.rubanPourvue]}>
+                <Check size={11} color={C.muted} />
+                <Text style={[s.rubanTexte, { color: C.muted }]}>Pourvue</Text>
+              </View>
+            )}
+          </View>
+        )}
         <View style={s.carteHaut}>
           <Avatar seed={String(d.auteurId || d.auteur)} size={38} uri={d.avatarUrl} nom={d.auteur} />
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -103,6 +132,18 @@ const Demande = React.memo(function Demande({
               <Flag size={13} color={C.muted} />
             </Pressable>
           )}
+          {/* L'AUTEUR REFERME SA DEMANDE. `statut` existait depuis le
+              premier jour et personne ne le lisait : une demande ne se
+              fermait jamais, et la liste des artisans gardait des chantiers
+              faits depuis six mois. Seul l'auteur peut le faire — la base
+              le tient (politique « mes demandes »), pas l'écran. */}
+          {!estPro && !!onChangerStatut && (
+            <BtnMini
+              outline
+              label={pourvue ? 'Rouvrir' : 'J’ai trouvé'}
+              onPress={() => onChangerStatut(d.id, pourvue ? 'ouverte' : 'pourvue')}
+            />
+          )}
           {estPro && (dejaRepondu ? (
             <View style={s.dejaRepondu}>
               <Check size={12} color={C.accent2} />
@@ -123,6 +164,11 @@ export default function DemandesScreen({
   userType, mesMetiers = [], demandes, filtreMetier, setFiltreMetier,
   onPublier, onRepondre, onErreur, moi, mesReponses, onSignaler,
   onRafraichir, rafraichit = false,
+  /* La date de ma dernière visite de l'onglet, telle qu'elle était AU
+     CHARGEMENT. Elle ne bouge pas de la session : sans quoi les badges
+     « Nouveau » s'effaceraient sous les yeux de celui qui vient les lire. */
+  vuesLe = null,
+  onChangerStatut, monId = null,
 }) {
   const [formOuvert, setFormOuvert] = useState(false);
   const [metier, setMetier] = useState(METIER_PAR_DEFAUT);
@@ -136,6 +182,7 @@ export default function DemandesScreen({
      demande à laquelle on a répondu reste une demande qu'on suit. */
   const [masquerRepondues, setMasquerRepondues] = useState(false);
   const [triDistance, setTriDistance] = useState(true);
+  const [metierOuvert, setMetierOuvert] = useState(false);
 
   const ajouterPhoto = async (camera) => {
     try {
@@ -147,6 +194,15 @@ export default function DemandesScreen({
   };
 
   const estPro = userType === 'pro';
+  /* UNE DEMANDE EST NOUVELLE si elle a été déposée après ma dernière visite.
+     `vuesLe` vide — je n'y suis jamais allé — veut dire que tout est
+     nouveau, et c'est la bonne réponse le premier jour. */
+  const estNouvelle = (d) => !!d.deposeeLe && (!vuesLe || d.deposeeLe > vuesLe);
+  /* SEUL L'AUTEUR REFERME SA DEMANDE. La base le tient déjà (politique
+     « mes demandes », vérifiée le 04/10 : un autre compte reçoit zéro ligne
+     modifiée), mais un bouton qu'on peut toucher et qui ne fait rien est
+     pire qu'un bouton absent. */
+  const estLaMienne = (d) => !!monId && String(d.auteurId) === String(monId);
   const repondues = mesReponses || new Set();
   const jyAiRepondu = (d) => estPro && repondues.has(d.id);
   const estPourMoi = (d) => estPro && mesMetiers.includes(d.metier);
@@ -179,6 +235,8 @@ export default function DemandesScreen({
       return a.km - b.km;
     })
     : filtrees;
+
+  const nbNouvelles = estPro ? liste.filter(estNouvelle).length : 0;
 
   const publier = () => {
     if (!texte.trim()) return;
@@ -229,8 +287,9 @@ export default function DemandesScreen({
         <View style={s.encart}>
           <Text style={s.encartTitre}>Décrivez votre besoin</Text>
           <Text style={s.encartTexte}>
-            Publiez une demande, les professionnels du métier concerné la reçoivent
-            et vous répondent. Vous choisissez qui vous recontacte.
+            Publiez une demande : les professionnels du métier concerné la
+            reçoivent et vous répondent. Elle n’est visible que d’eux —
+            ni des autres particuliers, ni des visiteurs.
           </Text>
           {!formOuvert ? (
             <BtnMain block label="Publier une demande" onPress={() => setFormOuvert(true)} />
@@ -311,51 +370,78 @@ export default function DemandesScreen({
         </View>
       )}
 
-      {/* --- côté pro : rappel du fonctionnement --- */}
+      {/* --- côté pro : le compte, puis UNE ligne de réglages ---
+          MESURÉ AU NAVIGATEUR LE 04/10/2026, avant ce lot : l'encadré
+          explicatif commençait à 160 px, le filtre par métier à 325, et la
+          première demande vers 380 — soit 45 % d'un écran de 844 px avant
+          le premier contenu. L'encadré prenait 165 px à lui seul pour dire
+          toujours la même phrase, et les deux réglages étaient deux
+          rectangles gris.
+
+          Même traitement que la Place des pros deux heures plus tôt : une
+          ligne de pastilles, et chacune AFFICHE son état. Les deux pages
+          sont jumelles — elles doivent se ressembler. */}
       {estPro && (
-        <View style={[s.encart, { borderColor: C.accent2 }]}>
-          <Text style={s.encartTitre}>Demandes de particuliers</Text>
-          <Text style={s.encartTexte}>
-            Vos métiers d'abord, puis les plus urgentes, puis les plus proches.
-            Répondez pour ouvrir une conversation directe.
-          </Text>
-
-          <View style={s.reglages}>
-            <Pressable
-              style={[s.reglage, masquerRepondues && s.reglageOn]}
-              onPress={() => setMasquerRepondues((v) => !v)}
-            >
-              <Text style={[s.reglageTexte, masquerRepondues && { color: '#fff' }]}>
-                Masquer celles où j'ai répondu
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[s.reglage, triDistance && s.reglageOn]}
-              onPress={() => setTriDistance((v) => !v)}
-            >
-              <Text style={[s.reglageTexte, triDistance && { color: '#fff' }]}>
-                Les plus proches d'abord
-              </Text>
-            </Pressable>
+        <>
+          <View style={s.ligneCompte}>
+            <Text style={s.compte}>
+              {liste.length} {liste.length > 1 ? 'demandes' : 'demande'}
+              {nbNouvelles > 0 ? ` · ${nbNouvelles} nouvelle${nbNouvelles > 1 ? 's' : ''}` : ''}
+            </Text>
           </View>
-        </View>
-      )}
 
-      {/* --- filtre par métier --- */}
-      <ChampMetier
-        valeur={filtreMetier}
-        onChange={setFiltreMetier}
-        titre="Métier recherché"
-        placeholder="Filtrer par métier..."
-        avecTous
-      />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.pastilles}
+          >
+            <PastilleFiltre
+              label="Métier"
+              valeur={filtreMetier ? nomMetier(filtreMetier) : null}
+              onPress={() => setMetierOuvert(true)}
+            />
+            <PastilleBascule
+              label="Les plus proches"
+              on={triDistance}
+              onPress={() => setTriDistance((v) => !v)}
+            />
+            <PastilleBascule
+              label="Masquer mes réponses"
+              on={masquerRepondues}
+              onPress={() => setMasquerRepondues((v) => !v)}
+            />
+          </ScrollView>
+
+          {/* Le sélecteur de métiers est une fenêtre entière : on l'ouvre
+              depuis la pastille, au lieu de laisser son champ occuper
+              cinquante pixels en permanence. */}
+          <SelecteurMetiers
+            ouvert={metierOuvert}
+            onFermer={() => setMetierOuvert(false)}
+            onChoisir={setFiltreMetier}
+            choisis={filtreMetier ? [filtreMetier] : []}
+            titre="Métier recherché"
+            avecTous
+          />
         </>
       )}
+        </>
+      )}
+      /* DEUX ÉCRANS VIDES DIFFÉRENTS, parce que ce ne sont ni les mêmes
+         gens ni la même attente. Depuis que la lecture est réservée aux
+         professionnels, un particulier ne voit ici que SES demandes : lui
+         dire « aucune demande pour le moment » laisserait croire que la
+         page est en panne.
+         Et le commentaire est AU-DESSUS, pas sous la parenthèse : un
+         commentaire JSX juste après `(` n'est pas du JSX, et Babel s'arrête
+         sans dire pourquoi. Troisième fois dans ce projet. */
       ListEmptyComponent={(
           <EmptyState>
-            {filtreMetier
-              ? `Aucune demande en ${nomMetier(filtreMetier)} pour le moment.`
-              : 'Aucune demande pour le moment.'}
+            {!estPro
+              ? 'Vous n’avez pas encore publié de demande. Décrivez votre besoin ci-dessus, et les artisans du métier vous répondront.'
+              : filtreMetier
+                ? `Aucune demande en ${nomMetier(filtreMetier)} pour le moment.`
+                : 'Aucune demande de particulier pour le moment. Elles arriveront ici, et le point orange vous préviendra.'}
           </EmptyState>
       )}
       ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -370,8 +456,13 @@ export default function DemandesScreen({
           estPro={estPro}
           mien={estPourMoi(d)}
           dejaRepondu={jyAiRepondu(d)}
+          nouvelle={estPro && estNouvelle(d)}
           onRepondre={onRepondre}
           onSignaler={onSignaler}
+          /* LA VALEUR, PAS LA FONCTION : `estLaMienne` est recréée à chaque
+             rendu de l'écran, donc la passer annulerait le `memo` et toutes
+             les cartes se croiraient différentes. Leçon du lot 4. */
+          onChangerStatut={estLaMienne(d) ? onChangerStatut : null}
         />
       )}
     />
@@ -401,13 +492,6 @@ const s = StyleSheet.create({
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
 
-  reglages: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  reglage: {
-    borderWidth: 1, borderColor: C.line, backgroundColor: C.bg,
-    paddingVertical: 6, paddingHorizontal: 10,
-  },
-  reglageOn: { backgroundColor: C.accent2, borderColor: C.accent2 },
-  reglageTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
 
   etiquettes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   etiquette: { paddingVertical: 3, paddingHorizontal: 8 },
@@ -418,6 +502,30 @@ const s = StyleSheet.create({
   dejaReponduTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2 },
 
   carte: { ...CARTE_PLEINE },
+  /* UNE DEMANDE NOUVELLE SE VOIT AU BORD, pas au fond : un fond teinté
+     derrière un texte le rendrait moins lisible, et c'est le texte qu'on
+     vient lire. Le trait orange, lui, se repère en descendant sans rien
+     gêner. */
+  carteNouvelle: { borderLeftWidth: 3, borderLeftColor: C.accent },
+
+  ligneCompte: { marginBottom: S.sm },
+  compte: {
+    fontFamily: F.oswald6, fontSize: T.petit, color: C.muted, letterSpacing: 0.6,
+  },
+  pastilles: { flexDirection: 'row', gap: S.sm, paddingRight: S.lg, paddingBottom: S.sm },
+
+  rubans: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: S.sm },
+  ruban: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingVertical: 3, paddingHorizontal: S.sm, borderRadius: R.gelule,
+  },
+  /* L'orange porte l'encre sombre : le blanc n'y donne que 3,51 : 1. */
+  rubanNeuf: { backgroundColor: C.accent },
+  rubanMien: { backgroundColor: C.accent2 },
+  rubanPourvue: { backgroundColor: C.bg },
+  rubanTexte: {
+    fontFamily: F.oswald6, fontSize: T.micro, letterSpacing: 0.5,
+  },
   carteHaut: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   auteur: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },

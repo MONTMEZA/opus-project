@@ -1655,12 +1655,11 @@ drop policy if exists "lecture reviews visiteur" on public.reviews;
 create policy "lecture reviews visiteur" on public.reviews
   for select to anon using (true);
 
-drop policy if exists "lecture demandes" on public.demandes;
-create policy "lecture demandes" on public.demandes
-  for select to authenticated using (not public.est_masque(client_id));
-drop policy if exists "lecture demandes visiteur" on public.demandes;
-create policy "lecture demandes visiteur" on public.demandes
-  for select to anon using (true);
+-- LES DEMANDES ONT CHANGÉ DE RÈGLE LE 04/10/2026 : elles ne se lisent plus
+-- qu'entre leur auteur et les professionnels connectés, et plus du tout sans
+-- compte. La règle est posée en SECTION 30, avec la raison. Rien ici : deux
+-- endroits qui créent la même politique, c'est le premier qui se fait
+-- oublier le jour où on la change.
 
 drop policy if exists "lecture reponses" on public.demande_reponses;
 create policy "lecture reponses" on public.demande_reponses
@@ -5114,3 +5113,110 @@ end; $$;
 create or replace trigger trg_notifie_reponse_annonce
   after insert on public.annonce_reponses
   for each row execute function public.notifie_reponse_annonce();
+
+
+-- ==========================================================================
+-- 30.  LES DEMANDES DE PARTICULIERS — à qui elles s'adressent, et jusqu'à
+--      quand (04/10/2026)
+-- ==========================================================================
+--
+-- Trois défauts relevés le même jour, et les trois étaient silencieux.
+--
+-- 30.0  CE QUE LE PROPRIÉTAIRE A DEMANDÉ
+-- -------------------------------------
+--   « J'aimerais qu'une demande déjà vue n'affiche plus de point sur
+--     Découvrir, et je pense qu'avoir un petit texte écrit "vu" ou quelque
+--     chose comme ça serait bien. »
+--
+-- Le point était pire que ça : `demandesVues` était un BOOLÉEN EN MÉMOIRE,
+-- remis à faux à chaque ouverture de l'application, et il s'allumait sur
+-- `demandes.length > 0` — sur l'EXISTENCE d'une demande, pas sur sa
+-- nouveauté. Avec une seule demande vieille de trois semaines dans la base,
+-- il était allumé en permanence.
+--
+-- > **Ce qu'il faut retenir, c'est la DATE DE LA DERNIÈRE VISITE**, et elle
+-- > doit survivre au redémarrage. Une colonne suffit : une demande est
+-- > « nouvelle » si elle a été déposée après, « vue » sinon.
+--
+-- Ce que ce choix NE fait pas, et il faut le savoir : ouvrir l'onglet marque
+-- tout comme vu, même ce qu'on n'a pas fait défiler. Le vrai « lu par
+-- article » demanderait une ligne par (artisan, demande) — beaucoup de
+-- lignes pour une information qui ne sert qu'à éteindre un point. On
+-- commence par la date ; le jour où ça ne suffit plus, la table existe
+-- toujours.
+
+alter table public.professional_profiles
+  add column if not exists demandes_vues_le timestamptz;
+
+comment on column public.professional_profiles.demandes_vues_le is
+  'Dernière ouverture de l''onglet Demandes. Une demande déposée après est '
+  '« nouvelle » ; le point de Découvrir ne s''allume que pour celles-là.';
+
+-- --------------------------------------------------------------------------
+-- 30.1  UNE DEMANDE S'ADRESSE AUX ARTISANS — décidé par le propriétaire
+-- --------------------------------------------------------------------------
+--
+-- La règle était :
+--
+--     "lecture demandes"           to authenticated  using (not est_masque(…))
+--     "lecture demandes visiteur"  to anon           using (true)
+--
+-- Autrement dit : **n'importe qui, sans compte, pouvait lire toutes les
+-- demandes** — le texte, la commune, le prénom, et l'adresse des photos, qui
+-- vivent dans un espace de stockage public.
+--
+-- Ce n'était pas une faute d'inattention : c'est le motif à deux politiques
+-- expliqué en section 18, qui existe parce qu'une policy appelant une
+-- fonction interdite à l'appelant ÉCHOUE au lieu de filtrer. Il est juste
+-- pour une publication de professionnel — une vitrine est faite pour être
+-- vue. Il ne l'est pas pour la demande d'un particulier : « fissure dans mon
+-- mur », une photo de sa maison, sa commune.
+--
+-- > **Une demande ne se lit qu'entre son auteur et les professionnels
+-- > connectés.** C'est exactement la règle de la Place des pros (section 29),
+-- > et pour la même raison : ce qui est adressé à un métier ne regarde pas
+-- > le reste du monde.
+--
+-- L'auteur, lui, continue de lire la sienne par la politique « mes
+-- demandes », qui couvre déjà toutes les opérations.
+
+drop policy if exists "lecture demandes" on public.demandes;
+create policy "lecture demandes" on public.demandes
+  for select to authenticated
+  using (public.est_un_pro() and not public.est_masque(client_id));
+
+-- PLUS AUCUNE LECTURE SANS COMPTE. On ne la remplace pas par une politique
+-- plus étroite : l'ABSENCE de règle suffit à tout refuser, comme pour
+-- `annonces_pro`. Et le `drop` ci-dessous ne pose aucun problème à `psql`.
+drop policy if exists "lecture demandes visiteur" on public.demandes;
+
+-- --------------------------------------------------------------------------
+-- 30.2  UNE DEMANDE POURVUE SORT DE LA LISTE
+-- --------------------------------------------------------------------------
+--
+-- `demandes.statut` existe depuis le début, vaut « ouverte » par défaut, et
+-- **rien dans toute l'application ne le lisait**. Une demande ne se fermait
+-- donc jamais : le particulier a trouvé son maçon il y a six mois, sa
+-- demande est toujours en tête de liste des artisans.
+--
+-- C'est la même famille que les trois tables du 01/10 — une colonne écrite
+-- que personne ne relit —, et c'est surtout ce qui transforme une place de
+-- marché en cimetière le jour où il y a du monde.
+--
+-- La contrainte acceptait DÉJÀ les trois valeurs : rien à refaire de ce
+-- côté. Ce qui manquait, c'est que quelqu'un s'en serve.
+--
+--     ouverte  → visible des artisans
+--     pourvue  → le particulier a trouvé ; elle sort de la liste publique
+--                et lui reste visible
+--     fermee   → réservé à la modération
+--
+-- Fermer sa demande passe par la politique « mes demandes » (toutes
+-- opérations, `auth.uid() = client_id`) : aucune règle nouvelle n'est
+-- nécessaire, et c'est voulu — personne d'autre que l'auteur ne peut
+-- déclarer qu'il a trouvé.
+
+comment on column public.demandes.statut is
+  'ouverte | pourvue | fermee. « pourvue » est posé par l''AUTEUR quand il a '
+  'trouvé : la demande sort de la liste des artisans et lui reste visible. '
+  'Lu par l''application depuis le 04/10/2026 — avant, personne ne le lisait.';

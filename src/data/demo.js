@@ -241,18 +241,25 @@ export const initialNotifications = [
  * Volontairement SÉPARÉES du fil d'actualité : le fil reste une vitrine
  * professionnelle, les demandes vivent dans leur propre espace.
  */
+/* LES DATES DE DÉPÔT SONT CALCULÉES, pas écrites en dur : c'est elles qui
+   décident de ce qui porte « Nouveau », et une date figée dans le fichier
+   serait « nouvelle » le premier jour puis plus jamais. Le mode démo doit
+   montrer le mécanisme, sinon personne ne le voit jamais fonctionner —
+   celui qui lance Opus sans fichier `.env` n'a que lui. */
+const ilYA = (heures) => new Date(Date.now() - heures * 3600e3).toISOString();
+
 export const initialDemandes = [
   { id: 1, auteurId: 'p-camille', auteur: 'Camille R.', metier: 'carreleur', ville: 'Toulouse (31)',
     texte: "Salle de bain de 6 m² à carreler entièrement, murs et sol. Faïence déjà achetée.",
-    media: '#6b4226,#b98255', time: 'Il y a 3 h', reponses: 2,
+    media: '#6b4226,#b98255', time: 'Il y a 3 h', deposeeLe: ilYA(3), statut: 'ouverte', reponses: 2,
     budget: '2000_5000', urgence: 'ce_mois', latitude: 43.6045, longitude: 1.4442 },
   { id: 2, auteurId: 'p-hugo', auteur: 'Hugo P.', metier: 'peintre-en-batiment', ville: 'Marseille (13)',
     texte: "Deux chambres à repeindre, environ 30 m² au total. Murs en bon état.",
-    media: null, time: 'Hier', reponses: 5,
+    media: null, time: 'Hier', deposeeLe: ilYA(26), statut: 'ouverte', reponses: 5,
     budget: '500_2000', urgence: 'quand_possible', latitude: 43.2965, longitude: 5.3698 },
   { id: 3, auteurId: 'p-nadia', auteur: 'Nadia K.', metier: 'macon', ville: 'Aix-en-Provence (13)',
     texte: "Mur de clôture de 12 m à monter en parpaing, avec un portail à sceller.",
-    media: '#3a3a38,#8a8578', time: 'Il y a 2 j', reponses: 1,
+    media: '#3a3a38,#8a8578', time: 'Il y a 2 j', deposeeLe: ilYA(50), statut: 'ouverte', reponses: 1,
     budget: 'a_chiffrer', urgence: 'urgent', latitude: 43.5297, longitude: 5.4474 },
 ];
 

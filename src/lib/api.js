@@ -357,6 +357,12 @@ export async function loadAll() {
         };
       }),
       demandes: initialDemandes.map((d) => ({ ...d })),
+      /* EN DÉMONSTRATION, « vu » ne peut venir d'aucune base. On fait comme
+         si la dernière visite datait de 24 h : deux demandes sont alors
+         nouvelles, une ne l'est plus. Sans ça, le mécanisme ne se verrait
+         jamais pour qui lance Opus sans fichier `.env` — et il ne se
+         vérifierait pas non plus ici. */
+      demandesVuesLe: new Date(Date.now() - 24 * 3600e3).toISOString(),
       mesSos: null,
       notifications: initialNotifications.map((n) => ({ ...n })),
       followingIds: [4],
@@ -378,7 +384,7 @@ export async function loadAll() {
          quelqu'un les ouvre. La plupart n'étaient jamais lus. */
   const [profilesRes, partnersRes, postsRes,
          likesRes, savesRes, followsRes, convRes, notifRes,
-         demandesRes, reponsesRes, masosRes, moiRes] = await Promise.all([
+         demandesRes, reponsesRes, masosRes, moiRes, vuesRes] = await Promise.all([
     /* SANS `bio` NI `portfolio` : ce sont les deux colonnes lourdes, et
        elles ne servent QUE sur la page d'un artisan — jamais dans une
        liste. Un portfolio, c'est un tableau d'adresses de photos ; multiplié
@@ -399,13 +405,31 @@ export async function loadAll() {
        messages de TOUTES les conversations juste pour afficher un aperçu. */
     supabase.rpc('mes_conversations'),
     supabase.from('notifications').select('*, acteur:acteur_id(nom, avatar_url)').eq('user_id', uid).order('created_at', { ascending: false }),
-    supabase.from('demandes').select('*, users:client_id(nom, avatar_url)').order('created_at', { ascending: false }),
+    /* DEUX CHOSES MANQUAIENT ICI, relevées le 04/10/2026.
+       `statut` : la colonne vaut « ouverte » par défaut depuis le premier
+       jour, et RIEN ne la lisait — une demande pourvue restait donc en tête
+       de liste pour toujours. On ne charge plus que ce qui est ouvert, sauf
+       les siennes : leur auteur doit continuer de les voir, pourvues ou pas.
+       La LIMITE : le fil en a une, la Place des pros aussi (200). Les
+       demandes n'en avaient aucune — le jour où il y en a cinq mille,
+       l'application les télécharge toutes au démarrage. */
+    supabase.from('demandes')
+      .select('*, users:client_id(nom, avatar_url)')
+      .or(`statut.eq.ouverte,client_id.eq.${uid}`)
+      .order('created_at', { ascending: false })
+      .limit(TAILLE_PAGE_DEMANDES),
     supabase.from('demande_reponses').select('demande_id'),
     supabase.from('sos_availability').select('*').eq('professional_id', uid).maybeSingle(),
     /* Ma propre fiche, avec mon téléphone — que `select *` ne sait plus
        lire depuis que ces colonnes sont fermées à tout le monde (section
        18 de schema.sql). La fonction, elle, ne renvoie QUE ma ligne. */
     supabase.rpc('mon_compte').maybeSingle(),
+    /* MA date de dernière visite de l'onglet Demandes, et la mienne seule :
+       elle ne sert qu'à moi, et l'ajouter à `COLONNES_PRO_LISTE` la ferait
+       voyager pour les cinq cents autres artisans. La requête part en
+       parallèle des autres : elle ne coûte pas une attente de plus. */
+    supabase.from('professional_profiles')
+      .select('demandes_vues_le').eq('id', uid).maybeSingle(),
   ]);
 
   const err = [profilesRes, partnersRes, postsRes].find((r) => r.error);
@@ -483,6 +507,11 @@ export async function loadAll() {
     media: d.media,
     medias: (d.medias && d.medias.length) ? d.medias : (d.media ? [d.media] : []),
     time: relativeTime(d.created_at),
+    /* LA DATE BRUTE EN PLUS DU « il y a 2 h ». C'est elle qui dit si une
+       demande est NOUVELLE — c'est-à-dire déposée après la dernière visite
+       de l'onglet. « il y a 2 h » est un texte, il ne se compare pas. */
+    deposeeLe: d.created_at,
+    statut: d.statut || 'ouverte',
     reponses: nbReponses[d.id] || 0,
     budget: d.budget || null,
     urgence: d.urgence || 'quand_possible',
@@ -516,6 +545,10 @@ export async function loadAll() {
       latitude: moi.latitude || null,
       longitude: moi.longitude || null,
     },
+    /* LA DATE DE MA DERNIÈRE VISITE de l'onglet Demandes. `null` pour qui
+       n'y est jamais allé — et dans ce cas TOUT est nouveau, ce qui est la
+       bonne réponse le premier jour. */
+    demandesVuesLe: vuesRes && vuesRes.data ? vuesRes.data.demandes_vues_le : null,
     demandesPartenariat: demandesRecues,
     partenariatsEnvoyes: demandesEnvoyees,
     notifications: (notifRes.data || []).map((n) => ({
@@ -589,6 +622,11 @@ export const chargerProfilPro = hasSupabase
  * affichage soit immédiat même en 4G sur un chantier.
  */
 export const TAILLE_PAGE_FIL = 20;
+
+/* LES DEMANDES N'AVAIENT AUCUNE LIMITE — relevé le 04/10/2026. Le fil en a
+   une, la Place des pros aussi (200), les demandes téléchargeaient tout.
+   Deux cents, comme les annonces : au-delà, on ne lit plus, on cherche. */
+export const TAILLE_PAGE_DEMANDES = 200;
 
 /**
  * Une publication de démonstration, avec son repère de pagination.
@@ -781,6 +819,39 @@ function arbreCommentaires(lignes) {
 /* ------------------------------------------------------------------ */
 
 const noop = async () => null;
+
+/**
+ * J'AI OUVERT L'ONGLET DEMANDES : on note l'heure.
+ *
+ * Avant, « vu » était un booléen en mémoire, remis à faux à chaque
+ * ouverture de l'application : le point revenait au lancement suivant, pour
+ * des demandes déjà lues dix fois. Une date en base survit au redémarrage,
+ * au changement de téléphone, et à la réinstallation.
+ *
+ * `noop` côté démonstration, et l'échec n'est PAS remonté : ne pas réussir
+ * à éteindre un point n'est pas une raison de montrer un message d'erreur à
+ * quelqu'un qui vient simplement de changer d'onglet.
+ */
+export const marquerDemandesVues = !hasSupabase ? noop : async () => {
+  await supabase.from('professional_profiles')
+    .update({ demandes_vues_le: new Date().toISOString() })
+    .eq('id', currentUserId);
+};
+
+/**
+ * « J'AI TROUVÉ » — l'auteur referme sa demande.
+ *
+ * Seul lui le peut : la politique « mes demandes » exige
+ * `auth.uid() = client_id`, et un autre compte qui essaie reçoit zéro
+ * ligne modifiée. Vérifié sur la vraie base le 04/10/2026.
+ */
+export const changerStatutDemande = !hasSupabase ? noop : async (id, statut) => {
+  const { error } = await supabase.from('demandes')
+    .update({ statut })
+    .eq('id', id)
+    .eq('client_id', currentUserId);
+  if (error) throw error;
+};
 
 export const setLike = !hasSupabase ? noop : async (postId, liked) => {
   if (liked) {

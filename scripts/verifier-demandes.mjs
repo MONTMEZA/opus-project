@@ -134,6 +134,81 @@ console.log('\nUne urgence passe devant le reste');
     + 'une clé affichée brute ressemble à une faute de frappe');
 }
 
+console.log('\nUne demande déjà vue, une demande pourvue, et une liste bornée');
+{
+  /* ====================================================================
+     LE 04/10/2026, LE PROPRIÉTAIRE : « j'aimerais qu'une demande déjà vue
+     n'affiche plus de point sur Découvrir, et un petit texte "vu" serait
+     bien ».
+
+     Le point était pire que ça : `demandesVues` était un BOOLÉEN EN
+     MÉMOIRE, remis à faux à chaque ouverture de l'application, et il
+     s'allumait sur `demandes.length > 0` — sur l'EXISTENCE d'une demande,
+     pas sur sa nouveauté. Avec une seule demande vieille de trois semaines
+     dans la base, il était allumé en permanence.
+     ==================================================================== */
+  const sql = lire('supabase/schema.sql');
+  const api2 = lire('src/lib/api.js');
+  const app2 = lire('src/OpusApp.js');
+  const ecran = lire('src/screens/DemandesScreen.js');
+
+  verifier('la dernière visite est retenue PAR LA BASE',
+    /demandes_vues_le timestamptz/.test(sql)
+    && /demandes_vues_le: new Date\(\)\.toISOString\(\)/.test(api2),
+    'un booléen en mémoire repart à zéro à chaque lancement : le point '
+    + 'revenait pour des demandes lues dix fois');
+
+  verifier('le point ne s’allume que pour du NEUF',
+    /nbDemandesNouvelles > 0/.test(app2)
+    && !/!demandesVues && demandes\.length > 0/.test(app2),
+    '« il existe une demande » n’est pas « il y a du nouveau »');
+
+  /* LE PIÈGE DE CE LOT : si les badges se calculaient sur l'heure qu'on
+     vient d'écrire, ils s'effaceraient SOUS LES YEUX de celui qui ouvre
+     l'onglet pour les lire. */
+  verifier('les badges « Nouveau » ne s’effacent pas sous les yeux',
+    /vuesLe = null/.test(ecran) && /setDemandesVuesMaj\(true\)/.test(app2)
+    && /vuesLe=\{demandesVuesLe\}/.test(app2),
+    'le POINT s’éteint tout de suite, les BADGES tiennent jusqu’au '
+    + 'prochain chargement — ce ne sont pas les mêmes dates');
+
+  /* `statut` valait « ouverte » par défaut depuis le premier jour et RIEN
+     ne le lisait. Une demande ne se fermait donc jamais. */
+  verifier('une demande pourvue sort de la liste des artisans',
+    /statut\.eq\.ouverte/.test(api2) && /changerStatutDemande/.test(api2),
+    'c’est la colonne écrite que personne ne relisait — et ce qui '
+    + 'transforme une place de marché en cimetière');
+
+  verifier('…et seul son AUTEUR peut la fermer',
+    /\.eq\('client_id', currentUserId\)/.test(api2)
+    && /estLaMienne\(d\) \? onChangerStatut : null/.test(ecran),
+    'la base le tient déjà, mais un bouton qui ne fait rien est pire '
+    + 'qu’un bouton absent');
+
+  verifier('le chargement des demandes est BORNÉ',
+    /TAILLE_PAGE_DEMANDES/.test(api2),
+    'le fil en a une limite, la Place des pros aussi : les demandes '
+    + 'téléchargeaient tout');
+
+  /* DÉCIDÉ PAR LE PROPRIÉTAIRE LE 04/10 : une demande s'adresse aux
+     artisans. Avant, n'importe qui pouvait la lire SANS COMPTE — texte,
+     commune, prénom, et l'adresse des photos. */
+  verifier('une demande ne se lit qu’entre son auteur et les pros',
+    /create policy "lecture demandes"[\s\S]{0,160}est_un_pro\(\)/.test(sql)
+    && !/create policy "lecture demandes visiteur"/.test(sql),
+    'la lecture sans compte est supprimée — l’ABSENCE de règle suffit à '
+    + 'tout refuser, comme pour `annonces_pro`');
+
+  /* Le mode démonstration doit MONTRER le mécanisme : celui qui lance Opus
+     sans fichier `.env` n'a que lui, et c'est aussi le seul endroit où ça
+     se vérifie ici. */
+  verifier('la démonstration fait vivre le « Nouveau »',
+    /deposeeLe: ilYA\(/.test(lire('src/data/demo.js'))
+    && /demandesVuesLe: new Date\(Date\.now\(\) - 24/.test(api2),
+    'des dates figées dans le fichier seraient « nouvelles » le premier '
+    + 'jour puis plus jamais');
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

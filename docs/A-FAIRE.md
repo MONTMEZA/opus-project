@@ -982,6 +982,52 @@ voisines se préparent une demi-seconde après, quand plus rien ne bouge.
 **À réessayer sur votre iPhone**, c'est le seul endroit où ça se juge.
 
 
+### 2.1 duodecies La page Demandes reprise ✅ FAIT le 04/10/2026
+
+Vous la trouviez « trop triste », et vous vouliez qu'une demande déjà vue
+n'allume plus le point. En vérifiant, j'ai trouvé trois défauts de fond.
+
+**Le point ne s'éteignait jamais.** Il était retenu dans la mémoire de
+l'application — donc remis à zéro à chaque lancement — et il s'allumait dès
+qu'il EXISTAIT une demande, pas quand il y en avait une nouvelle. Votre base
+en contient une seule, qui n'est pas récente : le point était allumé en
+permanence depuis des jours. Maintenant, la date de votre dernière visite est
+retenue **dans la base** : seules les demandes déposées après portent
+« Nouveau », et le point ne s'allume que pour celles-là.
+
+Petit détail qui compte : le point s'éteint dès que vous ouvrez l'onglet,
+mais **les badges « Nouveau » restent affichés** jusqu'au prochain
+lancement. Sinon ils s'effaceraient sous vos yeux au moment précis où vous
+venez les lire.
+
+**Une demande ne se refermait jamais.** La colonne existait depuis le premier
+jour et personne ne la lisait : un chantier trouvé il y a six mois reste en
+tête de liste. Le particulier a maintenant un bouton **« J'ai trouvé »** — et
+lui seul : la base refuse à tout autre compte.
+
+**Et la liste n'avait aucune limite de chargement**, contrairement au fil et
+à la Place des pros. C'est corrigé.
+
+**La lecture est maintenant réservée aux professionnels connectés**, comme
+vous l'avez décidé. Avant, n'importe qui pouvait lire toutes les demandes
+**sans même avoir de compte** — le texte, la commune, le prénom, et l'adresse
+des photos. Vérifié sur votre base : sans compte, zéro ; un particulier qui
+n'est pas l'auteur, zéro ; l'auteur voit la sienne ; un artisan voit les
+demandes ouvertes.
+
+**Et le visuel.** L'encadré explicatif prenait 165 px pour répéter la même
+phrase, et avec le filtre il repoussait la première demande à 45 % de
+l'écran. Il est remplacé par une ligne de pastilles, comme sur la Place des
+pros : la première demande commence maintenant à **258 px au lieu de 380**.
+Chaque carte montre d'un coup d'œil ce qui compte — **« Nouveau »** et
+**« Pour vous »** quand c'est un de vos métiers, ce qui ne se voyait
+pratiquement pas avant.
+
+**Pas vérifié** : la page sur votre iPhone, et le ressenti — « moins triste »
+ne se mesure pas. Votre base ne contenant qu'une demande, la liste bien
+remplie n'a été vue qu'en démonstration.
+
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des
