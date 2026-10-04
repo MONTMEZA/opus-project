@@ -1527,6 +1527,68 @@ une icône de document, pas avec un aperçu. Il faudrait une adresse signée
 par vignette, donc une requête de plus par bulle d'image, et des liens qui
 expirent au bout de cinq minutes. À trancher avant de le construire.
 
+### Un voyant qui promet doit dire OÙ (04/10/2026)
+
+Relevé par le propriétaire en s'en servant :
+
+> « Quand on est connecté sur Opus, on voit un point orange sur Découvrir,
+> ça veut dire qu'il y a quelque chose à aller voir, c'est parfait. Après
+> on clique sur Découvrir et là on a trois choix — Pour moi, Place des
+> pros, Demandes — mais le point ne s'affiche pas, donc on ne sait pas ce
+> qui doit être vu. »
+
+Le défaut n'était pas que les onglets manquaient de point. C'est que **la
+barre du bas calculait SA condition dans son coin** :
+
+```js
+dots={{ decouvrir: (canPublish && !demandesVues && demandes.length > 0)
+                   || nouvellesDemandes.length > 0, … }}
+```
+
+Deux formules pour une seule vérité, et rien pour les tenir ensemble.
+
+> **Un voyant de parent est exactement le OU de ses enfants.** Pas « à peu
+> près » : un voyant qui s'allume pour quelque chose qu'on ne trouvera
+> jamais s'éteint dans la tête de celui qui le regarde. Au bout de trois
+> fouilles inutiles, on cesse de le voir — c'est exactement ce qui était
+> arrivé à la cloche des notifications, et c'est pour ça qu'ouvrir
+> « Pour moi » ÉTEINT le signal.
+
+`voyantPourMoi`, `voyantDemandes` et `voyantDecouvrir` vivent donc dans
+`OpusApp`, nommés, écrits une seule fois, et la barre du bas n'a plus le
+droit d'en inventer une troisième. `npm run verifier-voyants` le refuse.
+
+Trois choses à ne pas redécouvrir :
+
+1. **« Place des pros » ne porte JAMAIS de point**, et c'est voulu : rien
+   n'y est adressé à quelqu'un en particulier. Un voyant sur une place
+   publique voudrait dire « il s'est passé quelque chose », ce qui est vrai
+   en permanence et ne se termine jamais ;
+2. **la couleur du point dépend du FOND, et c'est mesuré.** Un point de
+   7 px est un élément graphique : il lui faut 3 : 1. L'orange de signature
+   sur le fond clair de la barre d'onglets ne donne que **2,76** — on ne le
+   distingue pas. `C.accentTexte` y donne **4,52** ; sur l'onglet choisi,
+   dont le fond est presque noir, c'est l'inverse (3,01 contre **4,92**).
+   La règle du lot 5 s'applique donc ici aussi, et le contrôle **recalcule**
+   les trois contrastes à chaque passage ;
+3. **le point entre dans l'étiquette parlée** (`, nouveautés`), comme le
+   faisait déjà la barre du bas. Un voyant qu'on ne peut qu'apercevoir
+   n'existe pas pour qui se sert de VoiceOver.
+
+**Vérifié au navigateur, en mode démonstration** (le seul où le jeu de
+données allume un voyant) : avant d'ouvrir, `["Demandes, nouveautés",
+"Découvrir, nouveautés", "Messages, nouveautés"]` ; après,
+`["Messages, nouveautés"]`. Les deux niveaux s'allument et s'éteignent
+ensemble.
+
+#### Et une `const` lue avant sa déclaration ne lève PAS d'alerte
+
+J'avais d'abord posé les trois voyants au milieu du fichier, au-dessus de
+`const canPublish` — mille lignes plus haut que sa déclaration. C'est un
+`ReferenceError` au démarrage, donc un écran blanc, et **le linter ne l'a
+pas signalé** (`no-use-before-define` n'est pas dans la configuration).
+Trouvé en relisant, pas en lançant.
+
 ### Les pièces justificatives, et le métier qui ne construit pas (04/10/2026)
 
 `src/data/pieces-justificatives.js`. La décision du 30/09 — « tout

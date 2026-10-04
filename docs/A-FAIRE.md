@@ -695,6 +695,30 @@ rien casser.
 `npm run verifier-pieces-jointes` tient l'ensemble — et il **fait tourner**
 le calcul d'extension sur l'adresse qui a cassé, au lieu de relire le code.
 
+### 2.1 quater Le point orange dit maintenant OÙ — ✅ FAIT le 04/10/2026
+
+Votre remarque : « on voit un point orange sur Découvrir, c'est parfait,
+mais après on clique et on a trois choix — le point ne s'affiche pas, donc
+on ne sait pas ce qui doit être vu. »
+
+Le vrai défaut n'était pas l'absence de point sur les onglets : c'est que
+**la barre du bas calculait sa condition dans son coin**, sans lien avec ce
+qu'on trouverait derrière. Deux formules pour une seule vérité.
+
+La règle qui en sort, et qui vaudra pour tout ce qui suivra :
+
+> **Un voyant de parent est exactement le OU de ses enfants.** Sinon il
+> envoie chercher dans le vide, et au bout de trois fois on cesse de le
+> regarder.
+
+Le point apparaît donc sur « Pour moi » et sur « Demandes », jamais sur
+« Place des pros » — rien n'y est adressé à quelqu'un en particulier, donc
+un voyant ne s'y éteindrait jamais.
+
+Vérifié au navigateur : avant d'ouvrir, le point est sur Découvrir ET sur
+Demandes ; après, les deux sont éteints. `npm run verifier-voyants` refuse
+qu'ils puissent diverger à nouveau.
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

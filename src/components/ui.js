@@ -725,6 +725,25 @@ export const ChampMotDePasse = React.forwardRef(function ChampMotDePasse(
  *
  * L'état va dans `aria-selected`, jamais dans l'étiquette : un lecteur
  * d'écran annonce « sélectionné » lui-même, dans la langue du téléphone.
+ *
+ * UN POINT QUI DIT « IL Y A QUELQUE CHOSE » DOIT DIRE OÙ
+ * ------------------------------------------------------
+ * Relevé par le propriétaire le 04/10/2026 : « on voit un point orange sur
+ * Découvrir, ça veut dire qu'il y a quelque chose à aller voir, c'est
+ * parfait. Après on clique sur Découvrir et là on a trois choix — Pour moi,
+ * Place des pros, Demandes — mais le point ne s'affiche pas, donc on ne
+ * sait pas ce qui doit être vu. »
+ *
+ * C'est le défaut qui tue un voyant : il promet, on ouvre, et il faut
+ * fouiller les trois onglets. Au bout de trois fois, on cesse de le
+ * regarder — exactement ce qui était arrivé à la cloche des notifications.
+ *
+ * > **Un voyant se RELAIE jusqu'à ce qu'on voie la chose.** Le point de la
+ * > barre du bas dit « quelque part ici », celui de l'onglet dit « là ».
+ * > Chaque niveau rétrécit la recherche ; le dernier la termine.
+ *
+ * `o.dot` est donc une option de chaque onglet, pas un réglage du
+ * composant : c'est l'appelant qui sait ce qui est neuf.
  */
 export function PillToggle({ options, value, onChange, small }) {
   return (
@@ -736,7 +755,11 @@ export function PillToggle({ options, value, onChange, small }) {
             key={o.key}
             onPress={() => onChange(o.key)}
             accessibilityRole="tab"
-            accessibilityLabel={o.label}
+            /* LE POINT EST UNE INFORMATION, PAS UNE DÉCORATION. Sans ce
+               mot dans l'étiquette, VoiceOver annonce « Pour moi » que
+               l'onglet ait du neuf ou non — la même règle que la barre
+               du bas. */
+            accessibilityLabel={o.label + (o.dot ? ', nouveautés' : '')}
             aria-selected={on}
             hitSlop={viser(38)}
             style={({ pressed }) => [
@@ -744,9 +767,20 @@ export function PillToggle({ options, value, onChange, small }) {
               pressed && !on && APPUI.discret,
             ]}
           >
-            <Text style={[s.pillText, small && { fontSize: T.micro }, on && { color: '#fff' }]}>
-              {o.label}
-            </Text>
+            <View style={s.pillContenu}>
+              <Text style={[s.pillText, small && { fontSize: T.micro }, on && { color: '#fff' }]}>
+                {o.label}
+              </Text>
+              {/* LA COULEUR DU POINT DÉPEND DU FOND, et c'est mesuré.
+                  Le fond de la barre d'onglets est clair (`C.bg`) : l'orange
+                  de signature n'y donne que 2,76 : 1, sous le seuil de 3
+                  exigé d'un élément graphique — un point de 7 px qu'on ne
+                  distingue pas ne sert à rien. `C.accentTexte` y donne
+                  4,52. Sur l'onglet CHOISI, dont le fond est presque noir,
+                  c'est l'inverse : 3,01 contre 4,92. On prend donc l'encre
+                  qui va avec le fond, exactement comme le reste du projet. */}
+              {!!o.dot && <View style={[s.pillDot, on && s.pillDotOn]} />}
+            </View>
           </Pressable>
         );
       })}
@@ -940,6 +974,14 @@ const s = StyleSheet.create({
   pillBtnSm: { paddingVertical: 5, paddingHorizontal: S.md, minHeight: 38, justifyContent: 'center' },
   pillBtnOn: { backgroundColor: C.ink },
   pillText: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
+  /* Le point est POSÉ À CÔTÉ du mot, pas en exposant sur le coin : la
+     gélule est étroite, et un point débordant serait rogné par le fond de
+     la barre d'onglets. */
+  pillContenu: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  pillDot: {
+    width: 7, height: 7, borderRadius: R.gelule, backgroundColor: C.accentTexte,
+  },
+  pillDotOn: { backgroundColor: C.accent },
 });
 
 export const uiStyles = s;

@@ -1996,6 +1996,35 @@ export default function OpusApp() {
 
   /** Le fil d'actualité est réservé aux professionnels. */
   const canPublish = userType === 'pro';
+
+  /* ------------------------------------------------------------------
+     LES DEUX VOYANTS DE « DÉCOUVRIR », ÉCRITS UNE SEULE FOIS
+
+     Relevé par le propriétaire le 04/10/2026 : « on voit un point orange
+     sur Découvrir, ça veut dire qu'il y a quelque chose à aller voir.
+     Après on clique, et là on a trois choix, mais le point ne s'affiche
+     pas — donc on ne sait pas ce qui doit être vu. »
+
+     Le défaut n'était pas que les onglets manquaient de point : c'est que
+     la barre du bas calculait SA condition dans son coin. Deux formules
+     pour une seule vérité, et rien pour les tenir ensemble.
+
+     > **Un voyant de parent est exactement le OU de ses enfants.** Pas
+     > « à peu près » : exactement, sinon il s'allume pour quelque chose
+     > qu'on ne trouvera jamais — et au bout de trois fois, on cesse de le
+     > regarder. C'est ce qui était arrivé à la cloche des notifications.
+
+     Les deux conditions vivent donc ici, nommées, et la barre du bas n'a
+     plus le droit d'en inventer une troisième.
+
+     ET ELLES SONT ÉCRITES SOUS `canPublish`, PAS PLUS HAUT : une `const`
+     lue avant sa déclaration lève un `ReferenceError` au démarrage — pas
+     un avertissement, un écran blanc. Le linter ne l'a pas signalé.
+     ------------------------------------------------------------------ */
+  const voyantPourMoi = nouvellesDemandes.length > 0;
+  const voyantDemandes = canPublish && !demandesVues && demandes.length > 0;
+  const voyantDecouvrir = voyantPourMoi || voyantDemandes;
+
   /** Le post dont on regarde les commentaires dans le fil vidéo. */
   const commentsPost = commentsPostId != null
     ? posts.find((p) => p.id === commentsPostId)
@@ -2202,13 +2231,18 @@ export default function OpusApp() {
                    réponse, pas une occasion à saisir.
                    Un artisan n'a pas besoin qu'on lui trouve un artisan :
                    son deuxième onglet est sa place de marché entre pros. */
+                /* « Place des pros » ne porte jamais de point : rien n'y
+                   est adressé à quelqu'un en particulier. Un voyant sur une
+                   place publique voudrait dire « il s'est passé quelque
+                   chose », ce qui est vrai en permanence et ne se termine
+                   jamais. */
                 options={userType === 'pro' ? [
-                  { key: 'pourmoi', label: 'Pour moi' },
+                  { key: 'pourmoi', label: 'Pour moi', dot: voyantPourMoi },
                   { key: 'artisans', label: 'Place des pros' },
-                  { key: 'demandes', label: 'Demandes' },
+                  { key: 'demandes', label: 'Demandes', dot: voyantDemandes },
                 ] : [
                   { key: 'artisans', label: 'Artisans' },
-                  { key: 'demandes', label: 'Demandes' },
+                  { key: 'demandes', label: 'Demandes', dot: voyantDemandes },
                 ]}
               />
             </View>
@@ -2442,8 +2476,9 @@ export default function OpusApp() {
            lettres suffisent à ce qu'on s'y reconnaisse. */
         avatarNom={(myProId && pros[myProId] && pros[myProId].entreprise) || monProfil.nom}
         dots={{
-          decouvrir: (canPublish && !demandesVues && demandes.length > 0)
-            || nouvellesDemandes.length > 0,
+          /* Le OU des deux voyants d'onglet, et rien d'autre : voir le
+             bloc « LES DEUX VOYANTS DE DÉCOUVRIR ». */
+          decouvrir: voyantDecouvrir,
           messages: messagesNonLus > 0,
         }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
