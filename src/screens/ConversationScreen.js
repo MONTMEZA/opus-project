@@ -2,14 +2,69 @@
  * 5b. Messages — détail d'une conversation.
  * Bulles à droite pour moi, à gauche pour l'artisan. (.conv-wrap du prototype)
  */
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, KeyboardAvoidingView, Platform, StyleSheet,
+  View, Text, FlatList, Pressable, KeyboardAvoidingView, Platform, Linking, StyleSheet,
 } from 'react-native';
-import { C, F, T, APPUI, viser } from '../theme';
+import { C, F, T, S, R, APPUI, interligne, viser } from '../theme';
 import { EmptyState } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
-import { Send, Flag, AlertTriangle } from '../components/icons';
+import { Send, Flag, AlertTriangle, FileText, X } from '../components/icons';
+import { choisirDocument } from '../lib/media';
+import { refusPiece, urlPiece } from '../lib/api';
+import * as retour from '../lib/retour';
+import { messageClair } from '../lib/erreurs';
+
+/** « 182 ko », « 2,4 Mo » — jamais un nombre d'octets brut. */
+export function poidsLisible(octets) {
+  if (!octets) return '';
+  if (octets < 1024 * 1024) return `${Math.max(1, Math.round(octets / 1024))} ko`;
+  return `${(octets / 1024 / 1024).toFixed(1).replace('.', ',')} Mo`;
+}
+
+/**
+ * LA PIÈCE JOINTE, DANS LA BULLE.
+ *
+ * On ne range PAS d'adresse ouverte dans le message : l'espace est privé, et
+ * l'adresse se demande au moment où on touche — signée, valable cinq
+ * minutes. Une adresse éternelle posée dans une conversation finirait par
+ * circuler toute seule.
+ */
+function PieceJointe({ piece, clair, onErreur }) {
+  const [ouverture, setOuverture] = useState(false);
+
+  const ouvrir = async () => {
+    if (ouverture) return;
+    setOuverture(true);
+    try {
+      const url = await urlPiece(piece.chemin);
+      if (!url) throw new Error('Ce fichier n’est plus disponible.');
+      Linking.openURL(url).catch(() => {});
+    } catch (e) {
+      retour.echec();
+      if (onErreur) onErreur(messageClair(e));
+    } finally { setOuverture(false); }
+  };
+
+  return (
+    <Pressable
+      onPress={ouvrir}
+      accessibilityRole="button"
+      accessibilityLabel={`Ouvrir ${piece.nom || 'la pièce jointe'}`}
+      style={({ pressed }) => [s.piece, pressed && APPUI.discret]}
+    >
+      <FileText size={15} color={clair ? '#fff' : C.accentTexte} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={[s.pieceNom, clair && { color: '#fff' }]}>
+          {piece.nom || 'Pièce jointe'}
+        </Text>
+        <Text style={[s.piecePoids, clair && { color: 'rgba(255,255,255,0.75)' }]}>
+          {ouverture ? 'Ouverture…' : poidsLisible(piece.taille)}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
 
 /**
  * UNE BULLE, isolée et mémorisée.
@@ -18,15 +73,31 @@ import { Send, Flag, AlertTriangle } from '../components/icons';
  * l'écran se redessine. `memo` l'en empêche tant que le message n'a pas
  * changé — ce qui, pour un message déjà envoyé, n'arrive jamais.
  */
-const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocuteur }) {
+const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocuteur, onErreur }) {
   return (
     <View style={s.rangee}>
-      <View style={{ alignItems: m.from === 'moi' ? 'flex-end' : 'flex-start' }}>
+      {/* `flex: 1` N'EST PAS DÉCORATIF ICI. Sans lui, ce bloc se dimensionne
+          sur son contenu, et le `maxWidth: '75%'` de la bulle se calcule
+          alors sur… lui-même. Mesuré au navigateur : la rangée de la pièce
+          jointe faisait 196 px et la bulle 175, donc le nom du fichier
+          débordait du cadre sombre. Avec `flex: 1`, les 75 % se comptent
+          enfin sur la largeur de l'écran. */}
+      <View style={{
+        flex: 1, alignItems: m.from === 'moi' ? 'flex-end' : 'flex-start',
+      }}>
         <View style={[
           s.bubble, m.from === 'moi' && s.bubbleMoi,
           m.etat === 'echec' && s.bubbleEchec,
         ]}>
-          <Text style={[s.bubbleText, m.from === 'moi' && { color: '#fff' }]}>{m.texte}</Text>
+          {!!m.piece && (
+            <PieceJointe piece={m.piece} clair={m.from === 'moi'} onErreur={onErreur} />
+          )}
+          {/* Un message qui ne porte QU'un fichier n'a pas de texte : la
+              base l'autorise (section 28), et une ligne vide laisserait un
+              blanc sous la pièce. */}
+          {!!(m.texte || '').trim() && (
+            <Text style={[s.bubbleText, m.from === 'moi' && { color: '#fff' }]}>{m.texte}</Text>
+          )}
         </View>
 
         {/* L'ÉTAT DE L'ENVOI, SOUS LA BULLE.
@@ -64,7 +135,7 @@ const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocute
             cibleId: m.id,
             auteurId: m.auteurId,
             auteurNom: interlocuteur || 'cette personne',
-            extrait: m.texte,
+            extrait: m.texte || (m.piece ? `(pièce jointe : ${m.piece.nom})` : ''),
           })}
         >
           <Flag size={11} color={C.muted} />
@@ -76,7 +147,7 @@ const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocute
 
 export default function ConversationScreen({
   conversation, onSend, onSignaler, interlocuteur,
-  chargement = false, onRenvoyer, amorce = '', onAmorceUtilisee,
+  chargement = false, onRenvoyer, amorce = '', onAmorceUtilisee, onErreur,
 }) {
   /* LE BROUILLON NE VIT PLUS DANS `OpusApp`.
      Il y était, et chaque lettre redessinait donc toute l'application —
@@ -85,11 +156,43 @@ export default function ConversationScreen({
      Rien ici n'a besoin de connaître le texte avant l'envoi : il n'y a
      même pas de bouton à éteindre. Le champ le garde donc entièrement. */
   const brouillon = useRef(null);
-  const envoyer = () => {
+
+  /* LA PIÈCE CHOISIE VIT ICI, et pas dans `OpusApp` : c'est la même règle
+     que le brouillon. Elle ne concerne que cet écran, et la remonter
+     ferait redessiner toute l'application pour un nom de fichier. */
+  const [piece, setPiece] = useState(null);
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+
+  const joindre = async () => {
+    try {
+      const f = await choisirDocument();
+      if (!f) return;
+      /* On refuse AVANT de monter le fichier. Le serveur refuserait de
+         toute façon, mais au bout de l'envoi — trois minutes d'attente en
+         4G sur un chantier, pour un message que personne ne lit. */
+      const refus = refusPiece(f);
+      if (refus) { retour.echec(); if (onErreur) onErreur(refus); return; }
+      retour.prise();
+      setPiece(f);
+    } catch (e) {
+      if (onErreur) onErreur(messageClair(e));
+    }
+  };
+
+  const envoyer = async () => {
+    if (envoiEnCours) return;
     const t = brouillon.current ? brouillon.current.lire() : '';
-    if (!t.trim()) return;
-    onSend(t);
-    brouillon.current.vider();
+    /* Un fichier seul suffit : la base accepte un message sans texte dès
+       qu'il porte une pièce. */
+    if (!t.trim() && !piece) return;
+    setEnvoiEnCours(true);
+    try {
+      await onSend(t, piece);
+      brouillon.current.vider();
+      setPiece(null);
+    } finally {
+      setEnvoiEnCours(false);
+    }
   };
   /* La liste est INVERSÉE : on lui donne donc les messages à l'envers, du
      plus récent au plus ancien. `useMemo` pour ne pas refabriquer ce
@@ -131,6 +234,7 @@ export default function ConversationScreen({
             onRenvoyer={onRenvoyer}
             onSignaler={onSignaler}
             interlocuteur={interlocuteur}
+            onErreur={onErreur}
           />
         )}
         ListFooterComponent={(
@@ -147,7 +251,37 @@ export default function ConversationScreen({
         )}
       />
 
+      {/* CE QUI VA PARTIR, AVANT QUE ÇA PARTE. Sans cet aperçu, on choisit
+          un fichier et plus rien ne bouge à l'écran : on croit que le
+          trombone n'a pas marché, et on recommence. */}
+      {!!piece && (
+        <View style={s.apercu}>
+          <FileText size={15} color={C.accentTexte} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={s.pieceNom}>{piece.nom}</Text>
+            <Text style={s.piecePoids}>{poidsLisible(piece.taille)}</Text>
+          </View>
+          <Pressable
+            onPress={() => { retour.prise(); setPiece(null); }}
+            hitSlop={viser(24)}
+            accessibilityRole="button"
+            accessibilityLabel="Retirer la pièce jointe"
+            style={({ pressed }) => [pressed && APPUI.discret]}
+          >
+            <X size={15} color={C.muted} />
+          </Pressable>
+        </View>
+      )}
+
       <View style={s.inputRow}>
+        <Pressable
+          style={({ pressed }) => [s.trombone, pressed && APPUI.discret]}
+          onPress={joindre}
+          accessibilityRole="button"
+          accessibilityLabel="Joindre un fichier"
+        >
+          <FileText size={16} color={C.ink} />
+        </Pressable>
         <ChampLocal
           ref={brouillon}
           amorce={amorce}
@@ -162,13 +296,18 @@ export default function ConversationScreen({
           onPress={envoyer}
           accessibilityRole="button"
           accessibilityLabel="Envoyer le message"
+          disabled={envoiEnCours}
         >
-          <Send size={16} color="#fff" />
+          <Send size={16} color={envoiEnCours ? 'rgba(255,255,255,0.5)' : '#fff'} />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
 }
+
+/* La place qu'il faut pour lire un nom de fichier, en points. Mesuré au
+   navigateur : en dessous, le nom se coupe avant d'être reconnaissable. */
+const LARGEUR_PIECE = 196;
 
 const s = StyleSheet.create({
   scroll: { padding: 14, gap: 8 },
@@ -186,6 +325,35 @@ const s = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.surface,
   },
   send: { backgroundColor: C.ink, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  /* 44 points de haut et de large : la mesure d'Apple, et celle d'un doigt
+     ganté. Le trombone est un bouton comme un autre. */
+  trombone: {
+    width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: C.bordChamp, borderRadius: R.vif,
+  },
+
+  /* DE QUOI LIRE UN NOM DE FICHIER.
+     Sans largeur minimale, la bulle se dimensionne sur le TEXTE du
+     message : « Voici le devis. » donnait une bulle étroite, et le nom du
+     fichier s'affichait « devis-e… ». Or c'est l'information principale
+     d'une pièce jointe — deux devis du même chantier deviennent sinon
+     indiscernables, et on ouvre le mauvais.
+     La bulle reste bornée à 75 % de la largeur : ce minimum ne fait que
+     l'empêcher de se replier sur elle-même. */
+  piece: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm,
+    minHeight: 44, paddingVertical: S.xs, minWidth: LARGEUR_PIECE,
+  },
+  pieceNom: { fontFamily: F.inter6, fontSize: T.courant, color: C.accentTexte },
+  piecePoids: {
+    fontFamily: F.inter, fontSize: T.micro, color: C.muted,
+    lineHeight: interligne(T.micro),
+  },
+  apercu: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm,
+    paddingVertical: S.sm, paddingHorizontal: S.md,
+    backgroundColor: C.okBg, borderTopWidth: 1, borderTopColor: C.line,
+  },
 
   /* Une bulle en échec reste LISIBLE : on ne la grise pas au point de ne
      plus pouvoir la relire. Un liseré suffit à dire que quelque chose

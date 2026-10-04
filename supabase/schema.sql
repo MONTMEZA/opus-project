@@ -4844,3 +4844,116 @@ begin
     end;
   end loop;
 end $blk$;
+
+-- ==========================================================================
+--  28. LES PIÈCES JOINTES DANS LA MESSAGERIE
+--
+--  L'IDÉE VIENT DU PROPRIÉTAIRE, LE 01/10/2026
+--  --------------------------------------------
+--  En construisant l'e-mail professionnel, il a dit mieux : « des pièces
+--  jointes dans la messagerie ». C'est le vrai besoin derrière l'adresse de
+--  contact — recevoir un plan, un devis signé, une attestation. L'e-mail
+--  reste utile en attendant, et après : tout le monde n'a pas Opus.
+--
+--  LE RANGEMENT, QUI EST LA SEULE DÉCISION DIFFICILE
+--  -------------------------------------------------
+--  Un fichier de conversation doit être lisible par DEUX personnes, alors
+--  que tout le reste du stockage suit la règle « chacun son dossier ». Trois
+--  rangements ont été examinés :
+--
+--    a) `<conversation>/<fichier>` — la politique est limpide, mais la
+--       fonction Edge `compte` vide le stockage en listant `<uid>/` : elle
+--       ne trouverait jamais ces fichiers. **Un trou RGPD**, et de ceux qui
+--       ne se voient pas : le compte disparaît, les pièces restent ;
+--    b) `<uid>/<conversation>-<alea>.pdf` — à plat, donc le ménage marche
+--       sans rien changer. Mais la politique devrait alors découper le NOM
+--       du fichier pour y retrouver la conversation. Du découpage de chaîne
+--       dans une règle de sécurité, c'est ce qui casse en silence ;
+--    c) **`<uid>/<conversation>/<alea>-<nom>`** — retenu. La politique lit
+--       deux dossiers nets, et le ménage de compte apprend à descendre d'un
+--       niveau (la fonction Edge est modifiée en même temps que cette
+--       section : les deux ne vont pas l'une sans l'autre).
+--
+--  CE QUI NE SE DÉFAIT PAS
+--  -----------------------
+--  Aucune politique de suppression ni de modification. **Une pièce envoyée
+--  ne se retire pas**, exactement comme un message ne se récrit pas
+--  (section 20) : ce qui engage quelqu'un d'autre se ferme. Retirer le
+--  fichier laisserait en plus un lien mort dans la conversation.
+--
+--  Elle part, en revanche, avec la conversation : `preparer_suppression_compte`
+--  supprime les conversations entières, et la fonction Edge vide le dossier.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  28.1 Ce que porte un message
+--
+--  UNE pièce par message, comme partout ailleurs. Deux pièces dans une même
+--  bulle demanderaient une table de liaison pour un besoin que personne n'a
+--  exprimé — et on envoie un plan, puis un devis, pas les deux d'un geste.
+-- --------------------------------------------------------------------------
+alter table public.messages add column if not exists piece_url    text;
+alter table public.messages add column if not exists piece_nom    text;
+alter table public.messages add column if not exists piece_taille int;
+alter table public.messages add column if not exists piece_type   text;
+
+-- Une bulle vide n'a aucun sens. `texte` est `not null` depuis le début,
+-- mais rien n'empêchait d'y mettre une chaîne vide — et c'est précisément
+-- ce que l'application enverra pour un message qui ne porte qu'un fichier.
+alter table public.messages drop constraint if exists messages_contenu_check;
+alter table public.messages add constraint messages_contenu_check
+  check (btrim(texte) <> '' or piece_url is not null);
+
+-- --------------------------------------------------------------------------
+--  28.2 L'espace de stockage
+--
+--  PRIVÉ, comme `documents`. Un devis porte des prix, un plan porte une
+--  adresse : ces fichiers ne sont pas des photos de chantier.
+--
+--  10 Mo : un devis signé scanné tient dedans, une vidéo non. La messagerie
+--  n'est pas un service de transfert de fichiers, et une limite franche vaut
+--  mieux qu'un envoi qui échoue au bout de trois minutes.
+-- --------------------------------------------------------------------------
+insert into storage.buckets (id, name, public) values
+  ('pieces-jointes', 'pieces-jointes', false)
+on conflict (id) do nothing;
+
+update storage.buckets set file_size_limit = 10 * 1024 * 1024
+ where id = 'pieces-jointes';
+
+-- --------------------------------------------------------------------------
+--  28.3 Qui peut lire, qui peut écrire
+--
+--  Les deux politiques posent la MÊME question : « ce fichier est-il rangé
+--  sous mon identifiant, dans une conversation dont je fais partie ? » — et
+--  le blocage s'applique, comme sur les messages eux-mêmes. Sans cette
+--  dernière condition, bloquer quelqu'un masquerait ses messages mais
+--  laisserait ses fichiers accessibles à qui a gardé l'adresse.
+--
+--  `c.id::text = …` et non `… ::uuid` : un nom de fichier mal formé ferait
+--  échouer la conversion, donc la politique entière, sur toutes les lignes.
+--  Comparer du texte à du texte ne lève jamais d'exception.
+-- --------------------------------------------------------------------------
+drop policy if exists "lecture piece jointe" on storage.objects;
+create policy "lecture piece jointe" on storage.objects
+  for select to authenticated using (
+    bucket_id = 'pieces-jointes'
+    and exists (
+      select 1 from public.conversations c
+      where c.id::text = (storage.foldername(name))[2]
+        and (c.client_id = auth.uid() or c.professional_id = auth.uid())
+        and not public.est_masque(c.client_id)
+        and not public.est_masque(c.professional_id)));
+
+drop policy if exists "envoi piece jointe" on storage.objects;
+create policy "envoi piece jointe" on storage.objects
+  for insert to authenticated with check (
+    bucket_id = 'pieces-jointes'
+    -- Chacun n'écrit que dans SON dossier : la règle de tout le stockage.
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and exists (
+      select 1 from public.conversations c
+      where c.id::text = (storage.foldername(name))[2]
+        and (c.client_id = auth.uid() or c.professional_id = auth.uid())
+        and not public.est_masque(c.client_id)
+        and not public.est_masque(c.professional_id)));

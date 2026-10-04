@@ -1318,6 +1318,99 @@ téléphone reste à parcourir. Les essais de bout en bout ont été faits avec
 un compte jetable, sur la vraie base, supprimé dans la même session — et les
 documents étaient des chemins fabriqués, pas de vrais fichiers.
 
+### Les pièces jointes en messagerie (04/10/2026)
+
+Section 28 de `schema.sql`, espace de stockage `pieces-jointes`. Le besoin
+est du propriétaire, et il est juste : recevoir un plan, un devis signé.
+
+Ce qui change du reste du stockage, et qui porte tout le risque : **ce
+fichier doit être lisible par DEUX personnes**, alors que partout ailleurs
+la règle est « chacun son dossier ». D'où un chemin à deux niveaux,
+`<uid>/<conversation>/<fichier>`, et deux politiques — lecture et envoi —
+qui posent chacune les **trois** questions : est-ce mon dossier, est-ce ma
+conversation, n'y a-t-il pas de blocage. En oublier une n'ouvre aucune
+erreur et laisse lire les devis de tout le monde.
+
+**Aucune politique `update` ni `delete`** : une pièce envoyée ne se retire
+pas. Même raison qu'un commentaire auquel on a répondu — ce qui engage
+quelqu'un d'autre se ferme —, plus une seconde : la retirer laisserait un
+lien mort dans la conversation.
+
+#### L'extension d'un fichier se lit dans son NOM, pas dans son adresse
+
+**Le défaut le plus grave de ce lot, et il n'a été trouvé qu'en essayant
+pour de vrai.** `storage.js` calculait l'extension ainsi :
+
+```js
+const ext = (uri.split('?')[0].split('.').pop() || '').toLowerCase();
+```
+
+Sur téléphone, `expo-document-picker` rend `file:///…/devis.pdf` : juste.
+Au navigateur, il rend `blob:http://localhost:8097/3e7d592e-…`, **qui ne
+contient aucun point** — et `'abc'.split('.').pop()` rend `'abc'`.
+L'extension est donc devenue l'adresse entière, et le fichier s'est rangé
+là :
+
+```
+<uid>/<conversation>/devis-1791122012598.blob:http:/localhost:8097/3e7d…
+```
+
+Trois conséquences, et la première est la seule qui compte vraiment :
+
+1. **le ménage de compte ne l'a plus trouvé.** Les deux-points et les barres
+   obliques ont creusé deux niveaux de dossier en trop ; la fonction Edge
+   descend jusqu'à trois. Mesuré sur la vraie base : compte supprimé,
+   message effacé, réponse `{"espace":"pieces-jointes","retires":0}` **sans
+   erreur** — et le fichier toujours en place. Un trou RGPD qui ressemblait
+   trait pour trait à un ménage fait ;
+2. le type enregistré était `application/octet-stream` au lieu de
+   `application/pdf` : un devis se télécharge au lieu de s'ouvrir ;
+3. le nom devenait illisible.
+
+> **Le calcul vit dans `src/lib/types-fichiers.js`, qui n'importe RIEN** —
+> la leçon de `cloudinary-adresses.js` et de `cadre.js`, appliquée une
+> troisième fois : un calcul pur rangé dans un fichier qui charge React
+> Native ne peut pas être FAIT TOURNER par un contrôle.
+> `verifier-pieces-jointes` lui passe l'adresse `blob:` qui a cassé.
+>
+> **Et une extension est un mot court** (`/^[a-z0-9]{1,5}$/`). Tout ce qui
+> ne l'est pas n'est pas une extension : c'est autre chose qu'on vient de
+> lire par erreur. `morceauDeChemin()` tient la même garde sur le nom —
+> dans un chemin de stockage, la barre oblique est un séparateur de
+> dossier, et un niveau de plus échappe à la politique comme au ménage.
+
+**Et la limite de profondeur DIT maintenant qu'elle s'est arrêtée.** Ce
+jour-là, elle a transformé un trou RGPD en réponse rassurante. Un ménage
+incomplet ne doit pas pouvoir ressembler à un ménage fait — c'est la même
+famille que « X est prévenu » du 01/10.
+
+#### Une bulle se dimensionne sur son TEXTE, pas sur son fichier
+
+Trouvé au navigateur, capture à l'appui : « devis-2026-cuisine-dupont.pdf »
+s'affichait **« devis-e… »**, parce que la bulle prenait la largeur de
+« Voici le devis. ». Deux devis du même chantier deviennent alors
+indiscernables, et on ouvre le mauvais.
+
+Deux corrections, et la seconde est la vraie :
+
+1. la rangée de la pièce porte une largeur minimale ;
+2. **le bloc qui contient la bulle n'avait pas de `flex: 1`.** Il se
+   dimensionnait donc sur son contenu, et le `maxWidth: '75%'` de la bulle
+   se calculait sur… lui-même. Mesuré : rangée 196 px, bulle 175 — le nom
+   débordait du cadre sombre. Avec `flex: 1`, les 75 % se comptent enfin sur
+   l'écran : rangée 207, bulle 233.
+
+> **Un pourcentage ne veut rien dire dans un parent qui se dimensionne sur
+> son contenu.** Ça ne lève aucune erreur, et ça se voit uniquement en
+> mesurant les deux boîtes.
+
+#### Ce qui n'a PAS été vérifié
+
+Le choix du fichier passe par l'application **Fichiers** d'iOS, et
+l'ouverture par le visualiseur du téléphone : les deux ont été pilotés au
+navigateur, pas au doigt. Et les pièces n'arrivent pas en temps réel depuis
+ce conteneur — le WebSocket ne s'intercepte pas (voir `relais-supabase.mjs`).
+
 ### Les pièces justificatives, et le métier qui ne construit pas (04/10/2026)
 
 `src/data/pieces-justificatives.js`. La décision du 30/09 — « tout

@@ -605,6 +605,59 @@ l'ensemble.
    correspondent à des obligations réelles de ces professions, mais une
    exigence inventée écarterait des artisans légitimes.
 
+### 2.1 ter Les pièces jointes en messagerie — ✅ FAIT le 04/10/2026
+
+Votre idée du 01/10, et c'était bien le vrai besoin derrière l'e-mail de
+contact : **recevoir un plan, un devis signé, une attestation.** Un trombone
+à gauche du champ de saisie, un aperçu de ce qui va partir, et une bulle
+qu'on touche pour ouvrir le fichier.
+
+**Ce qui est tenu par la base, et pas par l'écran :**
+
+- l'espace `pieces-jointes` est **privé** et borné à 10 Mo ;
+- deux politiques seulement, LECTURE et ENVOI, et chacune pose les **trois**
+  questions : est-ce mon dossier, est-ce ma conversation, et n'y a-t-il pas
+  de blocage entre nous. En oublier une ouvrirait les devis de tout le
+  monde ;
+- **aucune politique de modification ni de suppression** : une pièce
+  envoyée ne se retire pas, exactement comme un commentaire auquel on a
+  répondu ne se récrit plus. Ce qui engage quelqu'un d'autre se ferme ;
+- `messages_contenu_check` accepte un message **sans texte** dès qu'il porte
+  une pièce — et refuse une bulle entièrement vide, ce que rien n'empêchait
+  jusqu'ici.
+
+**Un défaut a été trouvé en l'essayant pour de vrai, et il était grave.**
+L'extension du fichier était lue dans son ADRESSE. Au navigateur, cette
+adresse est un `blob:` sans aucun point, et l'extension est alors devenue
+l'adresse entière. Le fichier s'est rangé deux niveaux de dossier trop bas,
+et le ménage de compte — qui descend trois niveaux — ne l'a plus trouvé.
+
+Mesuré sur votre base : le compte d'essai supprimé, son message effacé, la
+réponse disait `"pieces-jointes","retires":0` **sans erreur**… et le fichier
+était toujours là. Un trou RGPD que rien ne signalait. L'extension se lit
+désormais dans le NOM du fichier (`src/lib/types-fichiers.js`), et la
+fonction Edge **dit** quand elle s'est arrêtée trop tôt.
+
+> ⚠️ **Un seul geste pour vous** : il reste **un fichier orphelin** dans
+> Supabase → Storage → `pieces-jointes`, celui qu'a laissé ce défaut.
+> Le dossier commence par `cd3711c0-2daa-4d3b-beb8-652475cb9be9`. Vous
+> pouvez le supprimer en toute sécurité — le compte qui l'a déposé n'existe
+> plus. Je ne peux pas le faire d'ici : le connecteur Supabase refuse, par
+> sécurité, tout ordre de suppression, et c'est une bonne chose.
+
+**Ce qui n'a pas pu être vérifié ici**, et qu'il faut regarder sur
+l'iPhone :
+
+- le choix du fichier passe par l'application **Fichiers** d'iOS — je l'ai
+  piloté au navigateur, pas au doigt ;
+- l'ouverture d'un PDF reçu : elle passe par le visualiseur du téléphone ;
+- les pièces jointes n'arrivent **pas en temps réel** (le WebSocket ne
+  s'intercepte pas depuis ce conteneur) : elles apparaissent au
+  rechargement de la conversation.
+
+`npm run verifier-pieces-jointes` tient l'ensemble — et il **fait tourner**
+le calcul d'extension sur l'adresse qui a cassé, au lieu de relire le code.
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

@@ -14,6 +14,12 @@ import {
   initialDemandes, initialAnnonces, initialDemandesRecues,
 } from '../data/demo';
 import { METIER_PAR_DEFAUT } from './metiers';
+/* En HAUT, jamais en `await import()` : la règle du 01/10 — Metro découpe
+   alors le paquet et va chercher le morceau manquant auprès du serveur de
+   développement, au moment où la ligne s'exécute. */
+import { envoyerFichier } from './storage';
+import { morceauDeChemin } from './types-fichiers';
+import { reduireImage } from './media';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -1717,6 +1723,12 @@ function rowToMessage(m, moi) {
     texte: m.texte,
     heure: relativeTime(m.created_at),
     lu: !!m.lu,
+    /* La pièce jointe voyage avec le message : son CHEMIN dans l'espace
+       privé, jamais une adresse ouverte. L'écran demande une adresse signée
+       au moment où on touche la bulle. */
+    piece: m.piece_url
+      ? { chemin: m.piece_url, nom: m.piece_nom, taille: m.piece_taille, type: m.piece_type }
+      : null,
   };
 }
 
@@ -2040,3 +2052,121 @@ async function traiterSpecialiteSupabase({ id, statut }) {
 }
 
 export const traiterSpecialite = hasSupabase ? traiterSpecialiteSupabase : refuseEnDemo;
+
+/* ==========================================================================
+   LES PIÈCES JOINTES DE LA MESSAGERIE  (section 28 de `schema.sql`)
+
+   L'idée vient du propriétaire, le 01/10/2026 : « des pièces jointes dans
+   la messagerie ». C'est le vrai besoin derrière l'e-mail de contact —
+   recevoir un plan, un devis signé, une attestation.
+
+   LE RANGEMENT, ET POURQUOI IL EST COMME ÇA
+   -----------------------------------------
+   `<uid>/<conversation>/<alea>-<nom>`. Le premier dossier porte
+   l'identifiant de celui qui envoie, comme partout ailleurs dans le
+   stockage — c'est ce qui permet à la fonction Edge `compte` de faire le
+   ménage quand un compte se ferme. Le second porte la conversation, parce
+   que la pièce doit être lisible par DEUX personnes, et que la règle de
+   sécurité doit pouvoir le vérifier sans découper un nom de fichier.
+   ========================================================================== */
+
+/** 10 Mo. Un devis scanné tient dedans, une vidéo non. */
+export const TAILLE_MAX_PIECE = 10 * 1024 * 1024;
+
+/**
+ * Ce qu'on refuse AVANT d'envoyer.
+ *
+ * Le serveur refuserait de toute façon — l'espace porte sa propre limite —
+ * mais il le ferait au bout de la montée, après trois minutes d'attente sur
+ * un chantier en 4G, avec un message que personne ne lit. Un refus immédiat
+ * et en français vaut mieux.
+ */
+export function refusPiece(piece) {
+  if (!piece) return null;
+  if (piece.taille && piece.taille > TAILLE_MAX_PIECE) {
+    return `Ce fichier fait ${Math.round(piece.taille / 1024 / 1024)} Mo. `
+      + 'La limite est de 10 Mo — au-delà, mieux vaut un lien de téléchargement.';
+  }
+  return null;
+}
+
+async function envoyerPieceSupabase(conversationId, piece) {
+  const refus = refusPiece(piece);
+  if (refus) throw new Error(refus);
+
+  /* Une photo passe par la même réduction que les publications : 2,65 Mo
+     → 232 Ko mesurés le 29/09. Un PDF, lui, ne se touche pas — le
+     recompresser abîmerait un devis sans rien gagner. */
+  let uri = piece.uri;
+  if (piece.type && piece.type.startsWith('image/')) {
+    try { uri = await reduireImage(piece.uri, 'photo'); } catch (e) { /* on envoie l'original */ }
+  }
+
+  /* LE DOSSIER DE CONVERSATION PASSE PAR `nom` : `envoyerFichier` range
+     sous `<userId>/<nom>-<horodatage>.<ext>`, donc un `nom` qui contient
+     une barre oblique crée le second niveau. C'est ce que la politique de
+     la section 28 attend : le premier dossier est celui qui envoie, le
+     second la conversation. Au-delà, plus rien ne tient : ni la politique,
+     qui compte les niveaux, ni le ménage de compte, qui les descend.
+     `morceauDeChemin()` retire donc tout ce qui pourrait en creuser un
+     troisième — et `nomOrigine` donne la vraie extension, que l'adresse du
+     fichier ne porte pas au navigateur. */
+  const propre = morceauDeChemin(piece.nom);
+  const chemin = await envoyerFichier({
+    uri,
+    bucket: 'pieces-jointes',
+    nom: `${conversationId}/${propre}`,
+    userId: currentUserId,
+    nomOrigine: piece.nom,
+    typeMime: piece.type || null,
+  });
+  if (!chemin) throw new Error('Le fichier n’a pas pu être envoyé.');
+  return {
+    piece_url: chemin,
+    piece_nom: piece.nom || propre,
+    piece_taille: piece.taille || null,
+    piece_type: piece.type || null,
+  };
+}
+
+async function envoyerMessageDemo() { return null; }
+
+async function envoyerMessageSupabase(conversationId, texte, piece = null) {
+  const colonnes = piece ? await envoyerPieceSupabase(conversationId, piece) : {};
+  const { data, error } = await supabase.from('messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: currentUserId,
+      texte: texte || '',
+      ...colonnes,
+    })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Remplace `sendMessage`, qui ne savait envoyer que du texte. */
+export const envoyerMessage = hasSupabase ? envoyerMessageSupabase : envoyerMessageDemo;
+
+/**
+ * Ouvrir une pièce jointe.
+ *
+ * L'espace est PRIVÉ : on ne rend donc pas une adresse publique mais une
+ * adresse SIGNÉE, valable cinq minutes. Même durée que pour les documents
+ * de vérification, et pour la même raison : le temps de regarder, pas celui
+ * de l'oublier dans un historique de navigation.
+ */
+const DUREE_LIEN_PIECE = 300;
+
+async function urlPieceDemo() { return null; }
+
+async function urlPieceSupabase(chemin) {
+  if (!chemin) return null;
+  const { data, error } = await supabase.storage
+    .from('pieces-jointes')
+    .createSignedUrl(chemin, DUREE_LIEN_PIECE);
+  if (error) throw error;
+  return data ? data.signedUrl : null;
+}
+
+export const urlPiece = hasSupabase ? urlPieceSupabase : urlPieceDemo;

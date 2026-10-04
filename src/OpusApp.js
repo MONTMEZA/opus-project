@@ -862,9 +862,11 @@ export default function OpusApp() {
    * une bulle en échec se touche pour réessayer — sans ça, le seul recours
    * serait de retaper le message.
    */
-  const sendMessage = (texteDonne) => {
+  const sendMessage = (texteDonne, piece = null) => {
     const texte = String(texteDonne || '').trim();
-    if (!texte || activeConvId == null) return;
+    /* Un fichier seul suffit depuis le 04/10 : la base accepte un message
+       sans texte dès qu'il porte une pièce (section 28). */
+    if ((!texte && !piece) || activeConvId == null) return Promise.resolve();
 
     const cle = `envoi-${compteurEnvoi.current}`;
     compteurEnvoi.current += 1;
@@ -873,20 +875,44 @@ export default function OpusApp() {
       ? { ...c, messages: (c.messages || []).map((m) => (m.cle === cle ? { ...m, etat } : m)) }
       : c)));
 
+    /* La bulle optimiste porte déjà le NOM du fichier : sur un chantier en
+       4G, un envoi de 8 Mo prend du temps, et un écran qui ne montre rien
+       pendant ce temps-là fait recommencer. `chemin` reste vide — la pièce
+       n'est pas encore là, on ne peut pas l'ouvrir. */
+    const apercu = piece
+      ? { chemin: null, nom: piece.nom, taille: piece.taille, type: piece.type }
+      : null;
+    const resume = texte || (piece ? `📎 ${piece.nom}` : '');
+
     setConversations((cs) => cs.map((c) => (c.id === activeConvId
       ? {
         ...c,
         messages: [...(Array.isArray(c.messages) ? c.messages : []),
-          { cle, from: 'moi', texte, heure: "à l'instant", etat: 'envoi' }],
-        dernier: { texte, heure: "à l'instant", de: api.getUserId() },
+          { cle, from: 'moi', texte, piece: apercu, heure: "à l'instant", etat: 'envoi' }],
+        dernier: { texte: resume, heure: "à l'instant", de: api.getUserId() },
       }
       : c)));
 
-    api.sendMessage(activeConvId, texte)
-      .then(() => majEtat('envoye'))
+    return api.envoyerMessage(activeConvId, texte, piece)
+      .then((ligne) => {
+        majEtat('envoye');
+        /* On remplace l'aperçu par la VRAIE pièce : sans son chemin, la
+           bulle resterait un libellé qu'on ne peut pas ouvrir jusqu'au
+           prochain chargement. */
+        if (ligne && ligne.piece_url) {
+          setConversations((cs) => cs.map((c) => (c.id === activeConvId
+            ? {
+              ...c,
+              messages: (c.messages || []).map((m) => (m.cle === cle
+                ? { ...m, id: ligne.id, piece: { chemin: ligne.piece_url, nom: ligne.piece_nom, taille: ligne.piece_taille, type: ligne.piece_type } }
+                : m)),
+            }
+            : c)));
+        }
+      })
       .catch((e) => {
         majEtat('echec');
-        showErreur(messageClair(e, "Message non envoyé"));
+        showErreur(messageClair(e, 'Message non envoyé'));
       });
   };
 
@@ -895,6 +921,9 @@ export default function OpusApp() {
     setConversations((cs) => cs.map((c) => (c.id === activeConvId
       ? { ...c, messages: (c.messages || []).filter((x) => x.cle !== m.cle) }
       : c)));
+    /* On ne renvoie que le TEXTE : le fichier local a pu disparaître du
+       cache du téléphone entre-temps, et renvoyer un chemin mort ferait
+       échouer une seconde fois sans rien expliquer. */
     sendMessage(m.texte);
   };
 
@@ -2262,6 +2291,7 @@ export default function OpusApp() {
             onSend={sendMessage}
             onRenvoyer={renvoyerMessage}
             onSignaler={ouvrirSignalement}
+            onErreur={showErreur}
             amorce={amorceMessage}
             onAmorceUtilisee={() => setAmorceMessage('')}
             interlocuteur={activeConv.proId && pros[activeConv.proId]

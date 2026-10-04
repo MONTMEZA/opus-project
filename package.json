@@ -65,7 +65,8 @@
     "verifier-atelier": "node scripts/verifier-atelier.mjs",
     "verifier-backoffice": "node scripts/verifier-backoffice.mjs",
     "verifier-pieces": "node scripts/verifier-pieces.mjs",
-    "verifier-dependances": "node scripts/verifier-dependances.mjs"
+    "verifier-dependances": "node scripts/verifier-dependances.mjs",
+    "verifier-pieces-jointes": "node scripts/verifier-pieces-jointes.mjs"
   },
   "private": true,
   "devDependencies": {

@@ -50,19 +50,12 @@ import { File, UploadType } from 'expo-file-system';
 import { supabase, hasSupabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
 import { TAILLE_MAX_MO } from './media';
 
-/** Devine le type du fichier à partir de son extension. */
-function typeDeFichier(uri) {
-  const ext = (uri.split('?')[0].split('.').pop() || '').toLowerCase();
-  const types = {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-    heic: 'image/heic', webp: 'image/webp', gif: 'image/gif',
-    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4',
-    mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac',
-    wav: 'audio/wav', ogg: 'audio/ogg',
-    pdf: 'application/pdf',
-  };
-  return { ext: ext || 'jpg', type: types[ext] || 'application/octet-stream' };
-}
+/* LE CALCUL DE L'EXTENSION VIT DANS SON PROPRE FICHIER, qui n'importe
+   rien — c'est ce qui permet au contrôle de le FAIRE TOURNER. Il était
+   ici, et il lisait l'extension dans l'ADRESSE du fichier : une adresse
+   `blob:` n'en contient aucune, et l'extension devenait l'adresse
+   entière. Toute l'histoire est dans `types-fichiers.js`. */
+import { typeDeFichier } from './types-fichiers';
 
 function tropLourd(octets) {
   const mo = octets / (1024 * 1024);
@@ -80,11 +73,21 @@ function tropLourd(octets) {
  *
  * `onProgress` reçoit un nombre entre 0 et 1 (téléphone uniquement).
  */
-export async function envoyerFichier({ uri, bucket, nom, userId, onProgress }) {
+/** Les espaces qui ne rendent jamais d'adresse publique. */
+export const ESPACES_PRIVES = ['documents', 'pieces-jointes'];
+
+export async function envoyerFichier({
+  uri, bucket, nom, userId, onProgress, nomOrigine = null, typeMime = null,
+}) {
   if (!hasSupabase) return uri;           // mode démo : on garde l'adresse locale
   if (!uri || !userId) return null;
 
-  const { ext, type } = typeDeFichier(uri);
+  /* LE NOM D'ORIGINE PASSE AVANT L'ADRESSE, et c'est tout le correctif du
+     04/10/2026 : `devis.pdf` dit ce qu'il est, `blob:http://localhost:8097/…`
+     ne dit rien. L'appelant qui connaît le nom choisi par l'utilisateur le
+     donne ; les autres (avatar, bannière, publication) ne passent rien et
+     retrouvent exactement l'ancien comportement. */
+  const { ext, type } = typeDeFichier(nomOrigine || uri, typeMime);
   const chemin = `${userId}/${nom}-${Date.now()}.${ext}`;
 
   if (Platform.OS === 'web') {
@@ -93,7 +96,12 @@ export async function envoyerFichier({ uri, bucket, nom, userId, onProgress }) {
     await envoiTelephone({ uri, bucket, chemin, type, onProgress });
   }
 
-  if (bucket === 'documents') return chemin;   // privé : on ne publie pas d'URL
+  /* LES ESPACES PRIVÉS rendent le CHEMIN, pas une adresse : il n'y a pas
+     d'adresse publique à publier, et en fabriquer une donnerait un lien
+     mort. L'écran demande une adresse signée au moment de l'ouverture.
+     `pieces-jointes` s'est ajouté le 04/10/2026 (section 28) — l'oublier
+     ici aurait rangé une URL inutilisable dans chaque message. */
+  if (ESPACES_PRIVES.includes(bucket)) return chemin;
   const { data } = supabase.storage.from(bucket).getPublicUrl(chemin);
   return data.publicUrl;
 }
