@@ -965,10 +965,21 @@ annonce. C'est ce que fait Instagram aussi, et c'est le seul comportement
 possible. Pour changer de page, on glisse sur une marge ou on touche la
 pastille.
 
-**Pas vérifié** : le geste lui-même. Un ordinateur répond à la molette, pas
-au doigt — l'arbitrage réel entre « je fais défiler la liste » et « je change
-de page » **ne se juge que sur votre iPhone**. C'est le point à essayer en
-premier.
+**Corrigé le même jour, après votre essai** : la première version s'arrêtait
+entre deux pages sur l'iPhone. Au navigateur elle paraissait parfaite — et
+les mesures aussi, vérification faite en remettant l'ancienne version en
+place. La raison : l'accrochage des pages ne marche pas pareil des deux
+côtés. Sur un ordinateur il suit le bord de chaque page ; sur l'iPhone il
+avance d'une largeur d'écran à la fois, donc la moindre différence de
+largeur fait arriver de travers, et l'écart grandit de page en page.
+
+Trois causes possibles ont été corrigées, faute de pouvoir reproduire la
+vôtre : la largeur des pages se mesure maintenant sur la zone qui défile et
+non sur l'écran, une page ne porte plus de réglage qui concurrence sa
+largeur, et **plus rien ne se charge pendant que vous glissez** — les pages
+voisines se préparent une demi-seconde après, quand plus rien ne bouge.
+
+**À réessayer sur votre iPhone**, c'est le seul endroit où ça se juge.
 
 
 ### 2.2 Notifications push — en cours depuis le 02/10/2026

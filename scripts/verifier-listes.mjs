@@ -212,20 +212,61 @@ console.log('\nLes trois pages de Découvrir, qu’on fait défiler au doigt');
      04/10 : un défilement posé par programme ne déclenche AUCUNE fin
      d'élan. Et `Carrousel.js` dit depuis le lot 0 qu'un glissement lent se
      termine sans élan sur Android. Une seule des deux ne suffit pas. */
-  verifier('l’arrivée se lit par les DEUX portes',
-    /onScroll=\{arrivee\}/.test(pages) && /onMomentumScrollEnd=\{arrivee\}/.test(pages),
-    'un glissement lent se termine sans élan : la pastille resterait '
-    + 'bloquée sur l’onglet de départ');
+  /* RIEN NE BOUGE PENDANT LE GESTE. L'onglet vit dans `OpusApp` : le
+     changer à mi-course redessine toute l'application ET monte la page
+     d'arrivée — un écran entier — au milieu du freinage. Un `ScrollView`
+     dont la mise en page change pendant qu'il décélère peut s'arrêter là
+     où il en est. */
+  verifier('pendant le geste, on ne fait que NOTER la position',
+    /offset\.current = e\.nativeEvent\.contentOffset\.x;/.test(pages)
+    && !/setVues\([\s\S]{0,40}onScroll/.test(pages),
+    'aucun rendu, aucun montage : la règle de la bannière du lot 6');
 
-  verifier('…et l’état ne change qu’au franchissement',
-    /if \(page === pageAffichee\.current\) return;/.test(pages),
-    'sinon chaque pixel redessinerait l’application — la leçon de la '
-    + 'bannière du lot 6');
+  /* MESURÉ LE 04/10 : au navigateur, un défilement à la molette accroche
+     bien les pages et n'émet NI fin d'élan NI fin de glissement. S'y fier
+     seul rendrait la pastille muette sur toute une plateforme. */
+  verifier('l’arrêt se détecte par l’ARRÊT des événements',
+    /setTimeout\(arrete, 150\)/.test(pages) && /onScroll=\{enDefilement\}/.test(pages),
+    'toute façon de faire défiler produit des `onScroll` — le doigt, la '
+    + 'molette, une position posée par programme. La règle est donc la '
+    + 'même partout, et elle se vérifie');
 
-  verifier('le placement de départ se fait à la mise en page',
-    /onLayout=\{auPremierRendu\}/.test(pages),
-    '`contentOffset` est ignoré par react-native-web : sans ce recalage, '
-    + 'on arriverait sur « Pour moi » au lieu de la Place des pros');
+  verifier('les voisines se montent AU REPOS, jamais pendant le geste',
+    /\[index - 1, index \+ 1\]\.forEach/.test(pages) && /\}, 500\);/.test(pages),
+    'pour qu’un glissement ne montre jamais de page vide — et que '
+    + 'l’ouverture de « Découvrir » ne monte toujours qu’UN écran');
+
+  /* ====================================================================
+     LE DÉFAUT TROUVÉ SUR L'IPHONE, LE 04/10/2026
+     --------------------------------------------------------------------
+     « Quand je scrolle j'arrive entre deux pages, je n'arrive pas
+     proprement sur une page comme le fait le bouton. » Au navigateur, la
+     même version paraissait parfaite.
+
+     `pagingEnabled` n'est PAS la même chose des deux côtés :
+     `react-native-web` le traduit en `scroll-snap`, qui s'accroche au bord
+     de chaque enfant quelle que soit sa largeur — donc tout défaut de
+     largeur y est invisible. iOS, lui, avance d'une LARGEUR DE CADRE à la
+     fois : si les pages ne font pas exactement cette largeur, on s'arrête
+     entre deux, et le décalage s'accumule.
+
+     Les deux contrôles ci-dessous tiennent les deux causes. Ils ne
+     remplacent pas l'essai au doigt — rien ici ne le remplace —, mais ils
+     empêchent de les réintroduire sans le voir.
+     ==================================================================== */
+  verifier('la largeur vient du CADRE, pas de la fenêtre',
+    /onLayout=\{mesurer\}/.test(pages)
+    && /e\.nativeEvent\.layout\.width/.test(pages)
+    && !/useWindowDimensions/.test(pages),
+    'les deux coïncident souvent, et « souvent » ne suffit pas : une marge '
+    + 'posée un jour au-dessus décalerait la pagination partout, sans la '
+    + 'moindre erreur');
+
+  verifier('une page ne porte AUCUN `flex`',
+    /style=\{\{ width: largeur \|\| 1, height: '100%' \}\}/.test(pages),
+    'dans un conteneur horizontal, `flex: 1` vaut `flexBasis: 0` : la '
+    + 'largeur explicite ne décide plus de rien. C’est mot pour mot ce que '
+    + 'fait `Carrousel.js` depuis le lot 0');
 
   /* AUCUNE DÉPENDANCE AJOUTÉE : le système arbitre le geste côté natif,
      comme pour le carrousel de photos. */

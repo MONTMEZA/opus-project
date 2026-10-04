@@ -2351,6 +2351,80 @@ La propriété `contentOffset` ne suffit pas — le placement se fait au premier
 `onLayout`, qui marche des deux côtés. Mesuré : offset 390 à l'ouverture,
 donc la bonne page, sans voir passer la première.
 
+#### LE DÉFAUT DE LA PREMIÈRE VERSION — et il n'était pas visible ici
+
+Essayée sur l'iPhone, elle s'arrêtait **entre deux pages** :
+
+> « Quand je scrolle j'arrive entre deux pages, ce n'est pas bon, je
+> n'arrive pas proprement sur une page comme le fait le bouton. »
+
+Au navigateur, la même version paraissait parfaite. **Et la mesure ne la
+dénonçait pas non plus** : vérifié en remettant l'ancien fichier en place,
+elle donnait exactement les mêmes nombres — trois pages de 390 px, total
+1170. Ce n'est donc pas « j'avais oublié de mesurer », c'est **mesurable
+nulle part ici**.
+
+> **`pagingEnabled` n'est PAS la même chose des deux côtés.**
+> `react-native-web` le traduit en `scroll-snap`, qui s'accroche au bord de
+> chaque enfant quelle que soit sa largeur — tout défaut de largeur y est
+> donc invisible. **iOS, lui, avance d'une LARGEUR DE CADRE à la fois** : si
+> les pages ne font pas exactement cette largeur, on s'arrête entre deux, et
+> le décalage s'accumule de page en page.
+
+Faute de pouvoir reproduire, trois causes plausibles ont été corrigées — et
+les trois sont des améliorations quelle qu'ait été la vraie. Les deux
+premières étaient déjà évitées par `Carrousel.js`, qui fait la même chose à
+l'échelle d'une photo depuis le lot 0 :
+
+1. **la largeur venait de la FENÊTRE** (`useWindowDimensions`), pas du cadre
+   qui défile. Les deux coïncident souvent, et « souvent » ne suffit pas :
+   une marge posée un jour au-dessus décalerait la pagination partout, sans
+   la moindre erreur ;
+2. **chaque page portait `flex: 1` EN PLUS de sa largeur.** Dans un
+   conteneur horizontal, `flex: 1` vaut `flexBasis: 0` — la largeur
+   explicite ne décide donc plus de rien, et `react-native-web` et Yoga ne
+   résolvent pas ce conflit pareil ;
+3. **l'onglet changeait à MI-COURSE**, et cet onglet vit dans `OpusApp` :
+   le changer redessinait toute l'application et **montait la page
+   d'arrivée** — un écran entier avec sa liste — au milieu du freinage. Un
+   `ScrollView` dont la mise en page change pendant qu'il décélère peut
+   s'arrêter là où il en est.
+
+> **La largeur d'une page se MESURE sur le cadre qui défile, jamais sur la
+> fenêtre. Une page ne porte aucun `flex` : seulement sa largeur et
+> `height: '100%'`. Et rien ne se rend ni ne se monte pendant le geste.**
+
+#### Et « fin d'élan » n'est pas une notion fiable
+
+La correction du point 3 s'appuyait d'abord sur `onMomentumScrollEnd` et
+`onScrollEndDrag`. Mesuré aussitôt : **au navigateur, un défilement à la
+molette déplace bien les pages, les accroche, et n'émet ni l'un ni
+l'autre.** Ce sont des notions de DOIGT. S'y fier seul rendait la pastille
+muette sur toute une plateforme — et m'enlevait toute possibilité de
+vérifier quoi que ce soit ici.
+
+> **On attend que les événements de défilement CESSENT** : un minuteur de
+> 150 ms, remis à zéro à chaque `onScroll`. Le doigt, la molette, une
+> position posée par programme : tout en produit. La règle est donc la même
+> partout, et elle se vérifie. `onMomentumScrollEnd` reste en plus, parce
+> que sur iPhone il arrive à l'instant exact de l'arrêt.
+
+#### Les voisines se montent AU REPOS
+
+Si rien ne se monte pendant le geste, la page vers laquelle on glisse doit
+être prête AVANT. Mais tout monter d'emblée, c'est le défaut qu'on voulait
+éviter. D'où le décalage dans le temps — mesuré au navigateur :
+
+| | pages montées | nœuds |
+|---|---|---|
+| 0,4 s après l'ouverture | **○ ● ○** | 1 / **214** / 1 |
+| 2 s après, au repos | ● ● ● | 2 / 214 / 94 |
+
+Le premier affichage ne porte qu'UN écran ; les deux autres se préparent
+une demi-seconde plus tard, quand plus rien ne bouge. C'est le raisonnement
+de `Carrousel.js` — « la voisine est toujours prête avant qu'on
+l'atteigne » — décalé dans le temps plutôt que fait d'emblée.
+
 #### Ce qu'il faut savoir, et qui ne se corrigera pas
 
 **Un glissement qui commence sur une zone qui défile déjà horizontalement
@@ -2370,10 +2444,17 @@ liste » et « je change de page » ne se juge que sur le téléphone. C'est
 écrit dans ce document depuis le lot 5, et c'est ce que ce lot-ci touche de
 plus près.
 
-Ce qui SE vérifie, et qui a été vérifié, c'est tout le reste : les trois
-pages existent avec la bonne largeur, une seule est montée au départ, la
-pastille suit le défilement, le défilement suit la pastille, et les voyants
-s'éteignent par les deux chemins.
+Ce qui SE vérifie, et qui a été vérifié **à la molette**, c'est-à-dire par
+un vrai défilement d'utilisateur et non par une position posée par
+programme : les trois pages font exactement la largeur du cadre (390 /
+390 / 390, total 1170 pour un cadre de 390), l'accrochage tombe juste
+(780 → 390 → 0), **la pastille suit à chaque fois**, une seule page est
+montée au premier affichage, et les voyants s'éteignent par les deux
+chemins.
+
+Et la leçon de méthode, qui vaut pour la suite : **un défilement posé par
+programme n'est pas un essai.** Il ne déclenche pas les mêmes événements
+qu'un geste, et il m'avait fait conclure que tout allait bien.
 
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
