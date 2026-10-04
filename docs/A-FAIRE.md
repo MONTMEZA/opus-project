@@ -719,6 +719,37 @@ Vérifié au navigateur : avant d'ouvrir, le point est sur Découvrir ET sur
 Demandes ; après, les deux sont éteints. `npm run verifier-voyants` refuse
 qu'ils puissent diverger à nouveau.
 
+### 2.1 quinquies La Place des pros — la boucle se referme ✅ 04/10/2026
+
+Relevé sur votre base avant d'y toucher : **2 annonces, 0 réponse,
+6 professionnels.** Et cinq trous, dont le premier est de la même famille
+que celui du 01/10 :
+
+1. **« 3 réponses » était un nombre mort** — ni qui, ni quoi, et appuyer
+   dessus ne faisait rien ;
+2. **le message d'une réponse n'était jamais enregistré** ;
+3. **personne n'était prévenu** quand quelqu'un répondait ;
+4. **répondre posait un brouillon.** Abandonné, le compteur montait et vous
+   n'entendiez jamais personne ;
+5. **vous ne pouviez pas retrouver vos propres annonces** autrement qu'en
+   faisant défiler la liste publique.
+
+Les cinq sont bouchés. En répondant, on écrit maintenant un vrai message —
+« Disponible jeudi et vendredi, je viens avec la remorque » — qui part
+**pour de bon** dans la messagerie. L'auteur reçoit une notification qui
+nomme l'annonce concernée, et son compteur s'ouvre sur la liste de ceux qui
+ont répondu, avec leur message.
+
+**Et un défaut de confidentialité qu'il fallait corriger AVANT :** la règle
+disait « tout professionnel lit toutes les réponses ». Tant que le message
+restait vide, cela ne montrait qu'un identifiant. Le jour où on le
+remplit — c'est tout l'objet de ce lot —, n'importe quel artisan aurait pu
+lire **qui a répondu à quoi, et à quel prix.** Une réponse ne se lit
+désormais qu'entre les deux personnes concernées.
+
+Vérifié sur votre vraie base avec deux comptes professionnels jetables,
+supprimés dans la même session, de bout en bout.
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

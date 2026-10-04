@@ -1275,11 +1275,13 @@ export const chargerAnnonces = !hasSupabase ? async () => (
     : { data: [] };
   const dejaRepondu = new Set((miennes || []).map((r) => r.annonce_id));
 
-  const { data: toutes } = ids.length
-    ? await supabase.from('annonce_reponses').select('annonce_id').in('annonce_id', ids)
-    : { data: [] };
-  const compte = {};
-  (toutes || []).forEach((r) => { compte[r.annonce_id] = (compte[r.annonce_id] || 0) + 1; });
+  /* LE NOMBRE DE RÉPONSES VIENT DE L'ANNONCE, plus d'un comptage des
+     lignes. Deux raisons, et la première n'est pas la performance :
+     depuis la section 29, une réponse ne se lit qu'entre les deux
+     personnes concernées — un comptage côté appelant rendrait donc 0 pour
+     tout le monde sauf l'auteur. `nb_reponses` est tenu par un
+     déclencheur, comme les « j'aime ».
+     Au passage, c'est une requête de moins au chargement de l'écran. */
 
   return (data || []).map((a) => ({
     id: a.id,
@@ -1308,7 +1310,7 @@ export const chargerAnnonces = !hasSupabase ? async () => (
       latitude: a.auteur.latitude,
       longitude: a.auteur.longitude,
     } : null,
-    reponses: compte[a.id] || 0,
+    reponses: a.nb_reponses || 0,
     jyAiRepondu: dejaRepondu.has(a.id),
     aMoi: a.auteur_id === currentUserId,
   }));
@@ -1339,6 +1341,52 @@ export const repondreAnnonce = !hasSupabase ? noop : async (annonceId, message) 
   );
   if (error) throw error;
 };
+
+/**
+ * QUI A RÉPONDU À MON ANNONCE, ET CE QU'IL A DIT.
+ *
+ * C'est le trou que cette section bouche. Jusqu'au 04/10/2026, l'auteur
+ * d'une annonce voyait « 3 réponses » et rien d'autre : pas de nom, pas de
+ * message, et appuyer dessus ne faisait rien. Un `insert` sans `select`
+ * quelque part — exactement le défaut des demandes de devis du 01/10.
+ *
+ * Aucun contrôle d'accès ICI, et c'est VOULU : c'est la politique de la
+ * section 29.2 qui tient la règle. Une vérification écrite dans
+ * l'application ne protégerait personne, puisqu'un client modifié
+ * l'enlèverait. Si `annonceId` n'est pas la mienne, la base rend une liste
+ * vide — pas une erreur, parce qu'il n'y a rien de secret dans le fait
+ * qu'une annonce existe.
+ */
+async function reponsesAnnonceDemo() { return []; }
+
+async function reponsesAnnonceSupabase(annonceId) {
+  if (!annonceId) return [];
+  const { data, error } = await supabase
+    .from('annonce_reponses')
+    .select('id, message, created_at, professional_id, '
+      + 'auteur:professional_profiles(id, entreprise, metier, metiers, ville, verifie, avatar_url)')
+    .eq('annonce_id', annonceId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  return (data || []).map((r) => ({
+    id: r.id,
+    message: r.message || '',
+    time: relativeTime(r.created_at),
+    proId: r.professional_id,
+    auteur: r.auteur ? {
+      id: r.auteur.id,
+      entreprise: r.auteur.entreprise,
+      metier: r.auteur.metier,
+      metiers: r.auteur.metiers || [],
+      ville: r.auteur.ville,
+      verifie: !!r.auteur.verifie,
+      avatarUrl: r.auteur.avatar_url,
+    } : null,
+  }));
+}
+
+export const reponsesAnnonce = hasSupabase ? reponsesAnnonceSupabase : reponsesAnnonceDemo;
 
 /** Retirer son annonce : elle est pourvue, ou elle n'a plus lieu d'être. */
 export const fermerAnnonce = !hasSupabase ? noop : async (annonceId, statut = 'pourvue') => {

@@ -738,9 +738,12 @@ export default function OpusApp() {
   };
 
   /* ---------- contact / devis / rappel ---------- */
+  /* ELLE REND LA CONVERSATION depuis le 04/10/2026. Répondre à une annonce
+     doit pouvoir y écrire DANS LA FOULÉE — l'état React, lui, n'aura pas
+     encore bougé. */
   const handleContact = async (pro, mode) => {
     setOpenContactId(null);
-    if (mode !== 'message') { setQuote({ open: true, pro, mode }); return; }
+    if (mode !== 'message') { setQuote({ open: true, pro, mode }); return null; }
 
     let conv = conversations.find((c) => c.proId === pro.id);
     if (!conv) {
@@ -776,6 +779,7 @@ export default function OpusApp() {
       }
     }
     await ouvrirConversation(conv.id);
+    return conv;
   };
 
   const submitQuote = async (form) => {
@@ -862,16 +866,22 @@ export default function OpusApp() {
    * une bulle en échec se touche pour réessayer — sans ça, le seul recours
    * serait de retaper le message.
    */
-  const sendMessage = (texteDonne, piece = null) => {
+  /* `convId` EST EXPLICITE DEPUIS LE 04/10/2026, et ce n'est pas du confort.
+     Répondre à une annonce crée la conversation PUIS envoie le message : à
+     cet instant, `activeConvId` ne vaut pas encore la nouvelle conversation
+     — un état React ne change pas dans la foulée de l'appel qui l'a posé.
+     Le message serait parti dans la conversation d'avant, ou nulle part. */
+  const sendMessage = (texteDonne, piece = null, convId = null) => {
+    const cible = convId || activeConvId;
     const texte = String(texteDonne || '').trim();
     /* Un fichier seul suffit depuis le 04/10 : la base accepte un message
        sans texte dès qu'il porte une pièce (section 28). */
-    if ((!texte && !piece) || activeConvId == null) return Promise.resolve();
+    if ((!texte && !piece) || cible == null) return Promise.resolve();
 
     const cle = `envoi-${compteurEnvoi.current}`;
     compteurEnvoi.current += 1;
 
-    const majEtat = (etat) => setConversations((cs) => cs.map((c) => (c.id === activeConvId
+    const majEtat = (etat) => setConversations((cs) => cs.map((c) => (c.id === cible
       ? { ...c, messages: (c.messages || []).map((m) => (m.cle === cle ? { ...m, etat } : m)) }
       : c)));
 
@@ -884,7 +894,7 @@ export default function OpusApp() {
       : null;
     const resume = texte || (piece ? `📎 ${piece.nom}` : '');
 
-    setConversations((cs) => cs.map((c) => (c.id === activeConvId
+    setConversations((cs) => cs.map((c) => (c.id === cible
       ? {
         ...c,
         messages: [...(Array.isArray(c.messages) ? c.messages : []),
@@ -893,14 +903,14 @@ export default function OpusApp() {
       }
       : c)));
 
-    return api.envoyerMessage(activeConvId, texte, piece)
+    return api.envoyerMessage(cible, texte, piece)
       .then((ligne) => {
         majEtat('envoye');
         /* On remplace l'aperçu par la VRAIE pièce : sans son chemin, la
            bulle resterait un libellé qu'on ne peut pas ouvrir jusqu'au
            prochain chargement. */
         if (ligne && ligne.piece_url) {
-          setConversations((cs) => cs.map((c) => (c.id === activeConvId
+          setConversations((cs) => cs.map((c) => (c.id === cible
             ? {
               ...c,
               messages: (c.messages || []).map((m) => (m.cle === cle
@@ -1785,24 +1795,37 @@ export default function OpusApp() {
    * Répondre à une annonce ouvre une conversation avec son auteur : c'est
    * un artisan, donc le mécanisme des messages entre pros existe déjà.
    */
-  const repondreAnnonce = async (annonce) => {
+  /**
+   * RÉPONDRE À UNE ANNONCE — et le message part VRAIMENT.
+   *
+   * Avant le 04/10/2026, cette fonction écrivait la ligne de réponse puis
+   * posait une AMORCE dans la conversation : un brouillon. Si le répondant
+   * l'abandonnait — ce que fait la moitié des gens —, l'auteur voyait son
+   * compteur monter et n'entendait jamais personne. Un « 3 réponses » qui
+   * ne veut rien dire.
+   *
+   * L'ORDRE COMPTE, et il est l'inverse de ce qu'on écrirait d'instinct :
+   * on envoie le message D'ABORD, on enregistre la réponse ENSUITE. Si
+   * l'envoi échoue, il n'y a pas de réponse fantôme à expliquer.
+   */
+  const repondreAnnonce = async (annonce, texte) => {
     if (!annonce.auteur) return;
+    const message = String(texte || '').trim();
+    if (!message) return;
+
     try {
-      await api.repondreAnnonce(annonce.id, null);
+      const conv = await handleContact({ id: annonce.auteur.id }, 'message');
+      if (!conv) throw new Error('La conversation n’a pas pu être ouverte.');
+      await sendMessage(message, null, conv.id);
+      await api.repondreAnnonce(annonce.id, message);
     } catch (e) {
       showErreur(messageClair(e, 'Réponse impossible'));
       return;
     }
+
     setAnnonces((as) => as.map((a) => (
       a.id === annonce.id ? { ...a, jyAiRepondu: true, reponses: a.reponses + 1 } : a
     )));
-
-    /* La conversation entre professionnels existe déjà : on réutilise le même
-       chemin que « Contacter », avec une amorce qui rappelle l'annonce —
-       un artisan qui reçoit « Bonjour » tout court doit redemander de quoi
-       il s'agit. */
-    setAmorceMessage(`Bonjour, au sujet de votre annonce « ${annonce.titre} ». `);
-    handleContact({ id: annonce.auteur.id }, 'message');
   };
 
   const fermerAnnonce = async (annonce) => {
@@ -2262,6 +2285,10 @@ export default function OpusApp() {
                 moi={pros[myProId] || null}
                 onPublier={publierAnnonce}
                 onRepondre={repondreAnnonce}
+                /* Écrire à quelqu'un qui a répondu : le même chemin que
+                   « Contacter », donc la même conversation s'il y en a
+                   déjà une. */
+                onEcrire={(pro) => handleContact({ id: pro.id }, 'message')}
                 onFermer={fermerAnnonce}
                 onVoirProfil={viewProfile}
                 onErreur={showErreur}

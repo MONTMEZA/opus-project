@@ -67,7 +67,8 @@
     "verifier-pieces": "node scripts/verifier-pieces.mjs",
     "verifier-dependances": "node scripts/verifier-dependances.mjs",
     "verifier-pieces-jointes": "node scripts/verifier-pieces-jointes.mjs",
-    "verifier-voyants": "node scripts/verifier-voyants.mjs"
+    "verifier-voyants": "node scripts/verifier-voyants.mjs",
+    "verifier-place": "node scripts/verifier-place.mjs"
   },
   "private": true,
   "devDependencies": {

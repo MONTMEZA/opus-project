@@ -4957,3 +4957,160 @@ create policy "envoi piece jointe" on storage.objects
         and (c.client_id = auth.uid() or c.professional_id = auth.uid())
         and not public.est_masque(c.client_id)
         and not public.est_masque(c.professional_id)));
+
+-- ==========================================================================
+--  29. LA PLACE DES PROS — FERMER LA BOUCLE                    (04/10/2026)
+--
+--  CE QUI A FAIT NAÎTRE CETTE SECTION
+--  ----------------------------------
+--  Le propriétaire : « concentrons-nous maintenant sur la fonctionnalité de
+--  la Place des pros. » Le relevé sur la vraie base ce jour-là : 2 annonces,
+--  **0 réponse**, 6 professionnels.
+--
+--  Et en cherchant QUI LIT ce que cette page écrit — la règle du projet
+--  depuis le 01/10 —, le même trou que pour les demandes de devis :
+--
+--    * l'auteur d'une annonce voyait « 3 réponses » et ne pouvait ni savoir
+--      QUI avait répondu, ni lire quoi que ce soit. Appuyer dessus ne
+--      faisait rien ;
+--    * `annonce_reponses.message` n'était JAMAIS rempli : l'application
+--      appelait `repondreAnnonce(id, null)`. Une colonne écrite vide ;
+--    * personne n'était prévenu. Le compteur montait en silence.
+--
+--  Le seul chemin qui fonctionnait vraiment : le répondant devait penser à
+--  envoyer le message ébauché dans la conversation. S'il abandonnait le
+--  brouillon — ce que fait la moitié des gens —, le compteur montait et
+--  personne n'appelait jamais.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  29.1  LE COMPTEUR SORT DE LA TABLE DES RÉPONSES
+--
+--  Il faut le sortir AVANT de fermer la lecture (29.2), et c'est l'ordre qui
+--  compte : aujourd'hui, le nombre « 3 réponses » s'obtient en comptant les
+--  lignes de `annonce_reponses`. Dès qu'une réponse cessera d'être lisible
+--  par tout le monde, ce compte deviendra faux pour tout le monde sauf
+--  l'auteur.
+--
+--  Un compteur tenu par un déclencheur est la même parade que
+--  `maj_likes_count()` : la valeur est publique, le détail ne l'est pas.
+--
+--  CE QUE CE NOMBRE NE FAIT PAS, et c'est voulu : il ne retire pas les
+--  réponses des personnes qu'on a bloquées. Un compteur ne sait pas qui le
+--  regarde. Afficher « 3 » à l'un et « 2 » à l'autre ferait surtout croire
+--  à un bug ; et le DÉTAIL, lui, applique bien le blocage.
+-- --------------------------------------------------------------------------
+alter table public.annonces_pro add column if not exists nb_reponses int not null default 0;
+
+create or replace function public.maj_nb_reponses()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.annonces_pro
+       set nb_reponses = nb_reponses + 1
+     where id = new.annonce_id;
+  elsif tg_op = 'DELETE' then
+    -- `greatest(..., 0)` : un compteur négatif se verrait à l'écran et ne se
+    -- corrigerait jamais tout seul.
+    update public.annonces_pro
+       set nb_reponses = greatest(nb_reponses - 1, 0)
+     where id = old.annonce_id;
+  end if;
+  return null;
+end; $$;
+
+create or replace trigger trg_maj_nb_reponses
+  after insert or delete on public.annonce_reponses
+  for each row execute function public.maj_nb_reponses();
+
+-- Le rattrapage : les lignes déjà en place n'ont jamais fait monter le
+-- compteur. Il est rejouable sans risque — il RECALCULE, il n'incrémente pas.
+update public.annonces_pro a
+   set nb_reponses = (select count(*) from public.annonce_reponses r
+                       where r.annonce_id = a.id)
+ where a.nb_reponses is distinct from (select count(*) from public.annonce_reponses r
+                                        where r.annonce_id = a.id);
+
+-- --------------------------------------------------------------------------
+--  29.2  UNE RÉPONSE NE SE LIT QU'ENTRE LES DEUX CONCERNÉS
+--
+--  La règle d'avant disait : « tout professionnel peut lire toutes les
+--  réponses ». Tant que `message` restait vide, cela ne montrait qu'un
+--  identifiant. Le jour où on le remplit — c'est l'objet de cette section —,
+--  cette règle laisserait n'importe quel artisan lire **qui a répondu à quoi,
+--  et à quel prix**. C'est exactement l'information qu'un concurrent
+--  cherche.
+--
+--  Même famille que « le badge ne se décerne pas soi-même » : ce qui engage
+--  quelqu'un d'autre se ferme. Une réponse concerne DEUX personnes, et deux
+--  seulement.
+-- --------------------------------------------------------------------------
+drop policy if exists "annonce reponses lecture pro" on public.annonce_reponses;
+create policy "annonce reponses lecture pro" on public.annonce_reponses
+  for select to authenticated using (
+    public.est_un_pro()
+    and (
+      -- la mienne…
+      auth.uid() = professional_id
+      -- …ou une réponse à MON annonce.
+      or exists (
+        select 1 from public.annonces_pro a
+         where a.id = annonce_id and a.auteur_id = auth.uid()
+      )
+    )
+    -- Et le blocage s'applique DANS LES DEUX SENS, comme partout ailleurs.
+    and not public.est_masque(professional_id)
+  );
+
+-- --------------------------------------------------------------------------
+--  29.3  LA BASE PRÉVIENT QUAND QUELQU'UN RÉPOND
+--
+--  Sans cela, l'auteur devait rouvrir la Place des pros et remarquer qu'un
+--  nombre avait changé. Autant dire jamais.
+--
+--  `notifications.type` n'a PAS de contrainte `check` — contrairement à
+--  `posts.type` ou `annonces_pro.type`. Ajouter une valeur est donc libre
+--  ici, et c'est la raison pour laquelle cette section n'en refait aucune.
+--  Ne pas en déduire que c'est toujours le cas : voir la règle du projet sur
+--  les contraintes `check (... in (...))`.
+--
+--  `security definer` pour la même raison que `notifie_demande()` : la
+--  fonction écrit une notification destinée à QUELQU'UN D'AUTRE, ce que la
+--  politique « mes notifications » interdit à juste titre à l'appelant.
+-- --------------------------------------------------------------------------
+create or replace function public.notifie_reponse_annonce()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  auteur  uuid;
+  titre   text;
+  nom_pro text;
+begin
+  select a.auteur_id, a.titre into auteur, titre
+    from public.annonces_pro a where a.id = new.annonce_id;
+
+  -- Répondre à sa propre annonce n'a pas de sens, mais si cela arrivait, se
+  -- notifier soi-même serait du bruit.
+  if auteur is null or auteur = new.professional_id then return null; end if;
+
+  select coalesce(nullif(btrim(entreprise), ''), 'Un professionnel') into nom_pro
+    from public.professional_profiles where id = new.professional_id;
+
+  -- LE TITRE DE L'ANNONCE EST DANS LE TEXTE, et ce n'est pas décoratif : un
+  -- artisan qui a trois annonces en cours doit savoir LAQUELLE a bougé sans
+  -- ouvrir l'application.
+  insert into public.notifications (user_id, type, texte, acteur_id)
+  values (
+    auteur,
+    'annonce',
+    nom_pro || ' a répondu à « ' || coalesce(nullif(btrim(titre), ''), 'votre annonce') || ' »',
+    new.professional_id);
+
+  return null;
+end; $$;
+
+-- `create or replace trigger` : voir la section 24 — le connecteur Supabase
+-- refuse un `drop trigger`, et la paire laisserait un instant où une réponse
+-- ne notifierait personne.
+create or replace trigger trg_notifie_reponse_annonce
+  after insert on public.annonce_reponses
+  for each row execute function public.notifie_reponse_annonce();

@@ -27,7 +27,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import {
-  C, F, T, S, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
+  C, F, T, S, APPUI, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
@@ -45,6 +45,7 @@ import { nomMetier , libelleMetiers } from '../lib/metiers';
 import { distanceKm, libelleDistance } from '../lib/adresse';
 import { correspond, texteDe } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
+import { EcrireReponse, ListeReponses } from '../components/ReponsesAnnonce';
 
 /** Une date au format que la base attend : 2026-10-12. */
 function versISO(saisie) {
@@ -101,13 +102,21 @@ function BarreRecherche({ valeur, onChange }) {
 
 export default function PlaceProScreen({
   annonces = [], moi, onPublier, onRepondre, onFermer, onVoirProfil, onErreur, onSignaler,
-  onRafraichir, rafraichit = false,
+  onEcrire, onRafraichir, rafraichit = false,
 }) {
   const [recherche, setRecherche] = useState('');
   const [filtreType, setFiltreType] = useState(null);
   const [filtreMetier, setFiltreMetier] = useState(null);
   const [verifiesSeulement, setVerifiesSeulement] = useState(false);
   const [formOuvert, setFormOuvert] = useState(false);
+  /* MES ANNONCES : sans ce filtre, retrouver la sienne demandait de faire
+     défiler la liste publique en espérant la reconnaître. Or c'est là qu'on
+     revient — pour lire les réponses. */
+  const [miennesSeulement, setMiennesSeulement] = useState(false);
+  /* Les deux feuilles portent l'annonce concernée, pas un booléen : il faut
+     savoir à LAQUELLE on répond, et de laquelle on lit les réponses. */
+  const [aRepondre, setARepondre] = useState(null);
+  const [aLire, setALire] = useState(null);
 
   /* --- le formulaire --- */
   const [type, setType] = useState(TYPES_ANNONCE[0].cle);
@@ -140,6 +149,7 @@ export default function PlaceProScreen({
       .filter((a) => (!filtreType || a.type === filtreType))
       .filter((a) => (!filtreMetier || a.metier === filtreMetier))
       .filter((a) => (!verifiesSeulement || (a.auteur && a.auteur.verifie)))
+      .filter((a) => (!miennesSeulement || a.aMoi))
       /* À distance connue, le plus proche d'abord : un chantier à 150 km
          n'intéresse personne. Les annonces sans coordonnées restent à leur
          place plutôt que d'être reléguées à la fin. */
@@ -147,7 +157,10 @@ export default function PlaceProScreen({
         if (a.km === null || b.km === null) return 0;
         return a.km - b.km;
       });
-  }, [annonces, recherche, filtreType, filtreMetier, verifiesSeulement, moi]);
+  }, [annonces, recherche, filtreType, filtreMetier, verifiesSeulement, miennesSeulement, moi]);
+
+  /* Combien d'annonces sont à moi : la puce ne s'affiche que si j'en ai. */
+  const nbMiennes = useMemo(() => annonces.filter((a) => a.aMoi).length, [annonces]);
 
   const publier = () => {
     if (!titre.trim() || !texte.trim()) return;
@@ -198,6 +211,7 @@ export default function PlaceProScreen({
      Le formulaire, la recherche et les filtres deviennent l'en-tête de
      la liste : ils défilent avec elle, exactement comme avant. */
   return (
+    <>
     <FlatList
       style={{ flex: 1 }}
       keyboardShouldPersistTaps="handled"
@@ -363,6 +377,19 @@ export default function PlaceProScreen({
         ))}
       </View>
 
+      {/* MES ANNONCES — elle n'apparaît que si j'en ai. Une puce qui ne
+          filtre jamais rien est du bruit, et elle apprend à ne plus
+          regarder cette rangée. */}
+      {nbMiennes > 0 && (
+        <View style={s.chipRow}>
+          <Chip
+            label={`Mes annonces (${nbMiennes})`}
+            on={miennesSeulement}
+            onPress={() => setMiennesSeulement((v) => !v)}
+          />
+        </View>
+      )}
+
       <Pressable
         style={[s.verifies, verifiesSeulement && s.verifiesOn]}
         onPress={() => setVerifiesSeulement((v) => !v)}
@@ -401,17 +428,44 @@ export default function PlaceProScreen({
       renderItem={({ item: a }) => (
         <Annonce
           annonce={a}
-          onRepondre={() => onRepondre(a)}
+          onRepondre={() => setARepondre(a)}
+          onLireReponses={() => setALire(a)}
           onFermer={() => onFermer(a)}
           onVoirProfil={onVoirProfil}
           onSignaler={onSignaler}
         />
       )}
     />
+
+    {/* LES DEUX FEUILLES. Elles vivent ici, et pas dans `OpusApp` : elles
+        ne concernent que cet écran, et les remonter ferait redessiner
+        toute l'application pour un champ de texte. C'est la règle du
+        lot 4. */}
+    {!!aRepondre && (
+      <EcrireReponse
+        annonce={aRepondre}
+        onFermer={() => setARepondre(null)}
+        onEnvoyer={async (texte) => {
+          await onRepondre(aRepondre, texte);
+          setARepondre(null);
+        }}
+      />
+    )}
+
+    {!!aLire && (
+      <ListeReponses
+        annonce={aLire}
+        onFermer={() => setALire(null)}
+        onVoirProfil={(id) => { setALire(null); onVoirProfil(id); }}
+        onEcrire={(pro) => { setALire(null); onEcrire(pro); }}
+        onErreur={onErreur}
+      />
+    )}
+    </>
   );
 }
 
-function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler }) {
+function Annonce({ annonce: a, onRepondre, onLireReponses, onFermer, onVoirProfil, onSignaler }) {
   const t = typeAnnonce(a.type);
   const dates = libelleDates(a.dateDebut, a.dateFin);
   const prix = libellePrix(a.prix, a.unite);
@@ -478,9 +532,27 @@ function Annonce({ annonce: a, onRepondre, onFermer, onVoirProfil, onSignaler })
         )}
 
         <View style={s.bas}>
-          <Text style={s.reponses}>
-            {a.reponses} {a.reponses > 1 ? 'réponses' : 'réponse'}
-          </Text>
+          {/* SUR MON ANNONCE, CE NOMBRE S'OUVRE. Jusqu'au 04/10/2026 il ne
+              faisait rien : on voyait « 3 réponses » et on ne pouvait ni
+              savoir qui, ni lire quoi. Un compteur qu'on ne peut pas
+              ouvrir est une promesse en l'air. */}
+          {a.aMoi && a.reponses > 0 ? (
+            <Pressable
+              onPress={onLireReponses}
+              hitSlop={viser(TOUCHE)}
+              accessibilityRole="button"
+              accessibilityLabel={`Lire les ${a.reponses} réponses à cette annonce`}
+              style={({ pressed }) => [pressed && APPUI.discret]}
+            >
+              <Text style={[s.reponses, s.reponsesOuvrables]}>
+                {a.reponses} {a.reponses > 1 ? 'réponses' : 'réponse'} →
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={s.reponses}>
+              {a.reponses} {a.reponses > 1 ? 'réponses' : 'réponse'}
+            </Text>
+          )}
           {/* Une annonce entre pros aussi peut être une arnaque — matériel
               qui n'existe pas, acompte demandé puis disparition. */}
           {!!onSignaler && !a.aMoi && !!auteur && (
@@ -607,6 +679,9 @@ const s = StyleSheet.create({
     paddingTop: 8, borderTopWidth: 1, borderTopColor: C.line,
   },
   reponses: { fontFamily: F.inter, fontSize: T.petit, color: C.muted },
+  /* Ce qui S'OUVRE se lit comme un lien : l'encre de l'orange, celle qu'on
+     LIT (5,74 sur blanc), jamais l'orange de remplissage. Lot 5. */
+  reponsesOuvrables: { fontFamily: F.inter6, color: C.accentTexte },
   repondreTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent },
   dejaRepondu: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dejaReponduTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2 },

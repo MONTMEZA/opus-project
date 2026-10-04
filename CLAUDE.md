@@ -1527,6 +1527,110 @@ une icône de document, pas avec un aperçu. Il faudrait une adresse signée
 par vignette, donc une requête de plus par bulle d'image, et des liens qui
 expirent au bout de cinq minutes. À trancher avant de le construire.
 
+### La Place des pros — fermer la boucle (04/10/2026)
+
+Section 29 de `schema.sql`, `src/components/ReponsesAnnonce.js`. Relevé sur
+la vraie base ce jour-là : **2 annonces, 0 réponse, 6 professionnels.**
+
+En cherchant QUI LIT ce que cette page écrit, le même trou que pour les
+demandes de devis du 01/10 :
+
+- l'auteur voyait **« 3 réponses » et rien d'autre** — ni qui, ni quoi.
+  Appuyer dessus ne faisait rien ;
+- **`annonce_reponses.message` n'était jamais rempli** : l'application
+  appelait `repondreAnnonce(id, null)`. Une colonne écrite vide ;
+- personne n'était prévenu : le compteur montait en silence ;
+- répondre posait une **amorce** dans la conversation, c'est-à-dire un
+  brouillon. Abandonné — ce que fait la moitié des gens —, le compteur
+  montait et l'auteur n'entendait jamais personne.
+
+#### L'ordre des trois corrections n'est pas interchangeable
+
+**Il faut sortir le COMPTEUR avant de fermer la LECTURE**, et c'est tout le
+raisonnement de cette section.
+
+Le nombre « 3 réponses » s'obtenait en comptant les lignes de
+`annonce_reponses`. Or la règle d'avant disait « tout professionnel lit
+toutes les réponses » — ce qui, dès qu'on remplit `message`, laisse
+n'importe quel artisan lire **qui a répondu à quoi, et à quel prix**.
+C'est exactement ce qu'un concurrent cherche.
+
+Mais refermer la lecture d'abord aurait rendu le compteur faux pour tout le
+monde sauf l'auteur, sans que rien ne le signale.
+
+> **`annonces_pro.nb_reponses` est tenu par un déclencheur**, comme les
+> « j'aime » : la valeur est publique, le détail ne l'est pas. Et c'est une
+> requête de moins au chargement de l'écran.
+>
+> **Ce que ce nombre ne fait PAS, et c'est voulu** : il ne retire pas les
+> réponses des personnes qu'on a bloquées. Un compteur ne sait pas qui le
+> regarde ; afficher « 3 » à l'un et « 2 » à l'autre ferait surtout croire
+> à un bug. Le DÉTAIL, lui, applique bien le blocage.
+
+#### Une réponse n'est plus un brouillon qu'on abandonne
+
+C'est le point le plus important du lot, et il tient à l'ORDRE des appels :
+
+> **On envoie le message D'ABORD, on enregistre la réponse ENSUITE.** Si
+> l'envoi échoue, il n'y a pas de réponse fantôme à expliquer — et le
+> compteur ne monte jamais sans que personne n'ait écrit.
+
+Et le piège qui va avec : `sendMessage` prend désormais une conversation
+**explicite**. Répondre crée la conversation PUIS écrit dedans ; à cet
+instant, `activeConvId` ne vaut pas encore la nouvelle conversation — un
+état React ne change pas dans la foulée de l'appel qui l'a posé. Le message
+serait parti dans la conversation d'avant, ou nulle part.
+
+#### Trois détails à ne pas redécouvrir
+
+1. **`greatest(nb_reponses - 1, 0)`** : un compteur négatif se verrait à
+   l'écran et ne se corrigerait jamais tout seul ;
+2. **le rattrapage RECALCULE**, il n'incrémente pas — sinon le rejouer une
+   seconde fois doublerait le compte, et `schema.sql` est rejouable ;
+3. **le titre de l'annonce est dans la notification.** Un artisan qui a
+   trois annonces en cours doit savoir LAQUELLE a bougé sans ouvrir
+   l'application.
+
+#### Et le connecteur, encore : `alter policy`
+
+Remplacer une politique demande de la supprimer, et le connecteur Supabase
+refuse tout ordre qui **commence** par `drop`. La parade honnête, en plus de
+celles déjà écrites ici :
+
+> **`alter policy <nom> on <table> using (…)`** passe très bien, et elle est
+> meilleure : il n'existe aucun instant où la table serait sans règle de
+> lecture. `schema.sql`, lui, garde sa forme `drop … if exists` — il est
+> rejoué par `psql`, qui n'a pas ce garde-fou.
+
+#### Un essai qui passe au vert sans rien éprouver
+
+En écrivant `supabase/essais-section-29.sql` : `\set` avale **tout** ce qui
+suit sur la ligne, commentaire compris. Un `-- auteur de l'annonce` écrit à
+droite entrait donc dans la valeur de la variable, et aucune ligne du jeu
+d'essai n'était insérée.
+
+Résultat : le cas le plus important — « un tiers ne lit rien » — affichait
+**0, le bon résultat**, parce qu'il n'y avait rien à lire. C'est exactement
+le défaut que ce document traque depuis `verifier-montage`.
+
+> **Un essai de sécurité doit d'abord prouver que la donnée EXISTE.** Les
+> cas 7 et 8 (« B voit 1 », « A voit 1 ») ne sont pas du décor : ce sont eux
+> qui rendent le « 0 » du cas 9 crédible.
+
+#### Vérifié, et comment
+
+Les onze cas de `essais-section-29.sql` passent sur un vrai PostgreSQL,
+schéma rejoué deux fois. Puis, au navigateur, sur la VRAIE base, avec deux
+comptes professionnels jetables supprimés dans la même session : A pose une
+annonce → la puce « Mes annonces » apparaît → B la voit et répond → le
+message arrive vraiment dans la conversation → A reçoit la notification
+« Essai Plomberie a répondu à "…" » → A ouvre son compteur et lit le
+message ET le nom de B.
+
+**Ce qui n'a PAS été vérifié** : le formulaire a été rempli en « Coup de
+main », qui ne demande pas de métier. Le sélecteur de métier d'une annonce
+de sous-traitance n'est pas couvert par cet essai.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

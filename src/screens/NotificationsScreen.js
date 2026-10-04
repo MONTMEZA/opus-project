@@ -13,7 +13,7 @@ import {
 import { Avatar, EmptyState, BtnMini } from '../components/ui';
 import {
   MessageSquare, CornerDownRight, Bell, ChevronRight,
-  Phone, Clock, AlertTriangle, Check, X,
+  Phone, Clock, AlertTriangle, Check, X, Megaphone,
 } from '../components/icons';
 
 /* Une notification qui porte la même cloche que les dix autres ne dit rien.
@@ -29,6 +29,10 @@ const ICONES = {
   rappel_accepte: Check,
   sos_accepte: Check,
   demande_refusee: X,
+  /* Une réponse à une annonce de la Place des pros (section 29). Sans
+     cette ligne elle porterait la cloche générique, et une réponse à une
+     annonce ressemblerait à un « j'aime ». */
+  annonce: Megaphone,
 };
 
 /* L'urgence est la seule qui change de couleur : tout mettre en rouge

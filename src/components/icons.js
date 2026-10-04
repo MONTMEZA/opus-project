@@ -66,6 +66,8 @@ export const ImageIcon = mk(Feather, 'image');
    pouvait envoyer que des fichiers — c'est ce qu'a relevé le propriétaire le
    04/10/2026, alors qu'il voulait envoyer une photo. */
 export const Paperclip = mk(Feather, 'paperclip');
+/* La Place des pros : une annonce qu'on lance à la cantonade. */
+export const Megaphone = mk(MaterialCommunityIcons, 'bullhorn-outline');
 export const VideoIcon = mk(Feather, 'video');
 export const TypeIcon = mk(Feather, 'type');
 export const Layers = mk(Feather, 'layers');
