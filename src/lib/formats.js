@@ -81,26 +81,20 @@ export function jourCourant(maintenant = new Date()) {
   return `${d.getFullYear()}-${m}-${j}`;
 }
 
-/**
- * « 12/10 » ou « 12/10/26 » vers « 2026-10-12 ».
- *
- * Écrit à la main, donc exactement le genre de code qui se casse en
- * silence — d'où sa place ici plutôt que dans l'écran, où `node` ne
- * pouvait pas le faire tourner (la leçon de `cloudinary-adresses.js`).
- *
- * Rend `null` sur tout ce qui n'est pas une date : on ne devine pas. Un
- * « 32/13 » refusé vaut mieux qu'un 1er février inventé.
- */
-export function versISO(saisie, maintenant = new Date()) {
-  const m = String(saisie || '').trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
-  if (!m) return null;
-  const jour = Number(m[1]);
-  const mois = Number(m[2]);
-  if (jour < 1 || jour > 31 || mois < 1 || mois > 12) return null;
-  let annee = m[3] ? Number(m[3]) : maintenant.getFullYear();
-  if (annee < 100) annee += 2000;
-  return `${annee}-${String(mois).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
-}
+/* `versISO` A QUITTÉ CE FICHIER LE 04/10/2026 — et c'est une suppression
+   voulue, pas un oubli.
+
+   Elle traduisait « 12/10 » en « 2026-10-12 », parce que les dates se
+   tapaient à la main. Depuis que les quatre champs de date de la Place des
+   pros sont des boutons qui ouvrent un calendrier
+   (`src/components/Calendrier.js`), plus personne ne l'appelait.
+
+   Une fonction sans appelant est le « bouton §18 » de CLAUDE.md : du code
+   qui a l'air de servir, qu'un contrôle couvre consciencieusement, et qui
+   ne fait rien. Et celle-ci avait en plus un DÉFAUT : elle vérifiait que
+   le jour tenait entre 1 et 31, pas qu'il existe dans ce mois-là. « 31/02 »
+   sortait donc « 2026-02-31 », que PostgreSQL refuse — un refus de la base
+   pour une faute de frappe. Le calendrier ne peut pas proposer ce jour. */
 
 /**
  * DEUX CRÉNEAUX SE CHEVAUCHENT-ILS ?
@@ -211,4 +205,160 @@ export function creneauSemaine(maintenant = new Date()) {
 export function creneauMois(maintenant = new Date()) {
   const dernier = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 0);
   return { debut: jourCourant(maintenant), fin: jourCourant(dernier) };
+}
+
+
+/* ==========================================================================
+ *  LA GRILLE D'UN MOIS — pour choisir une date au doigt plutôt qu'à la main
+ * ==========================================================================
+ *
+ * Demandé par le propriétaire le 04/10/2026 :
+ *
+ *   « Quand on doit sélectionner des dates il faut les taper à la main. Je
+ *     pense que ce serait mieux que quand on sélectionne l'espace pour
+ *     rentrer la date, un petit calendrier s'ouvre et qu'on puisse
+ *     sélectionner directement dessus. Ce serait plus ludique et il y
+ *     aurait moins d'erreurs. »
+ *
+ * POURQUOI CES CALCULS SONT ICI, ET PAS DANS LE COMPOSANT
+ * ------------------------------------------------------
+ * Cinquième application de la leçon de `cloudinary-adresses.js` : un
+ * calcul rangé dans un fichier qui charge React Native ne peut pas être
+ * FAIT TOURNER par un contrôle — `node` ne sait pas l'ouvrir. Or une
+ * grille de calendrier est exactement le genre de code qui se trompe d'un
+ * jour sans que ça se voie : un décalage d'une case en février, et toutes
+ * les dates sont fausses d'un cran pendant un mois.
+ *
+ * POURQUOI PAS `@react-native-community/datetimepicker`
+ * ----------------------------------------------------
+ * Vérifié dans les docs du SDK 57 : il EST fourni dans Expo Go, donc
+ * techniquement disponible. Il n'a pourtant pas été pris, et c'est le même
+ * raisonnement que pour la carte (`src/lib/tuiles.js`) :
+ *
+ *   1. **il ne s'affiche pas au navigateur.** `react-native-web` n'a pas
+ *      d'implémentation : je ne pourrais donc pas VOIR ce que je livre, et
+ *      le propriétaire n'a qu'Expo Go pour juger. On ne livre pas à
+ *      l'aveugle quelque chose qu'on peut écrire soi-même ;
+ *   2. il ne connaît pas la notion d'INTERVALLE. Or ici on ne choisit pas
+ *      une date, on choisit un créneau de chantier — « du 12 au 20 ». Deux
+ *      sélecteurs ouverts l'un après l'autre ne montrent jamais la durée,
+ *      qui est précisément l'information qui décide ;
+ *   3. une dépendance de moins, c'est un risque de moins de devoir quitter
+ *      Expo Go — le seul moyen d'essai du propriétaire.
+ *
+ * TOUT SE COMPTE EN ENTIERS, JAMAIS AVEC `Date`
+ * ---------------------------------------------
+ * `moisDecale` fait de l'arithmétique sur des nombres de mois, pas sur un
+ * objet `Date` : `new Date(2026, 12, 31)` « marche » et rend le 31 janvier
+ * 2027, ce qui est juste par accident et faux dès qu'on s'en sert pour
+ * autre chose. Et `indexJourSemaine` passe par `Date.UTC`, comme
+ * `joursEntre` : un midi local au changement d'heure décale le jour de la
+ * semaine d'un cran, une fois par an, dans un sens qui dépend du fuseau.
+ */
+
+/** Les jours de la semaine, LUNDI d'abord — c'est la semaine française. */
+export const JOURS_COURTS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+const MOIS_LONGS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+/** Le mois d'un jour : « 2026-10-12 » → « 2026-10 ». */
+export function moisDe(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}` : null;
+}
+
+/** « 2026-10 » → « octobre 2026 ». */
+export function nomMois(am) {
+  const m = String(am || '').match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const i = Number(m[2]) - 1;
+  if (i < 0 || i > 11) return null;
+  return `${MOIS_LONGS[i]} ${m[1]}`;
+}
+
+/**
+ * Le mois voisin — en comptant des MOIS, pas des jours.
+ *
+ * `moisDecale('2026-12', 1)` rend « 2027-01 », et `('2026-01', -1)`
+ * « 2025-12 ». Le passage d'année est la seule chose qui casse dans ce
+ * genre de fonction, donc elle ne fait que des divisions entières.
+ */
+export function moisDecale(am, pas) {
+  const m = String(am || '').match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const total = Number(m[1]) * 12 + (Number(m[2]) - 1) + Number(pas || 0);
+  const annee = Math.floor(total / 12);
+  const mois = total - annee * 12;
+  return `${String(annee).padStart(4, '0')}-${String(mois + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Combien de jours dans ce mois.
+ *
+ * Le jour 0 du mois SUIVANT est le dernier du mois courant : les années
+ * bissextiles se règlent toutes seules, y compris 2100 qui n'en est pas
+ * une.
+ */
+export function joursDuMois(am) {
+  const m = String(am || '').match(/^(\d{4})-(\d{2})$/);
+  if (!m) return 0;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
+}
+
+/** Le jour de la semaine, 0 = lundi … 6 = dimanche. */
+export function indexJourSemaine(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return (d.getUTCDay() + 6) % 7;   // getUTCDay() rend 0 pour DIMANCHE
+}
+
+/**
+ * La grille : des semaines de SEPT cases, `null` pour les trous.
+ *
+ * Les cases vides sont vraiment vides — pas les jours du mois voisin en
+ * gris. Un chiffre qu'on voit et qui ne répond pas est la pire des deux
+ * solutions : on appuie, rien ne se passe, et on croit l'application
+ * cassée. C'est la même famille que la poignée des commentaires qui ne
+ * s'attrapait pas.
+ *
+ * Un mois tient sur 4 semaines (février de 28 jours commençant un lundi)
+ * à 6 (31 jours commençant un dimanche). Le composant réserve donc la
+ * hauteur de SIX semaines : sans ça, le bouton « Valider » remonte de
+ * 50 px en changeant de mois, et on appuie à côté.
+ */
+export function grilleMois(am) {
+  const n = joursDuMois(am);
+  if (!n) return [];
+  const cases = new Array(indexJourSemaine(`${am}-01`)).fill(null);
+  for (let j = 1; j <= n; j += 1) cases.push(`${am}-${String(j).padStart(2, '0')}`);
+  while (cases.length % 7) cases.push(null);
+  const semaines = [];
+  for (let i = 0; i < cases.length; i += 7) semaines.push(cases.slice(i, i + 7));
+  return semaines;
+}
+
+/** Le nombre de semaines qu'un mois peut occuper : la hauteur à réserver. */
+export const SEMAINES_MAX = 6;
+
+/** « 2026-10-12 » → « 12/10 » : ce qu'on écrit dans un bouton étroit. */
+export function jourCourt(iso) {
+  const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})$/);
+  return m ? `${m[2]}/${m[1]}` : null;
+}
+
+/**
+ * Ce jour est-il DANS l'intervalle choisi, bornes comprises ?
+ *
+ * Sert à teinter les jours entre les deux bouts. Avec un seul bout posé,
+ * seul ce bout est dedans : on ne devine pas une fin que personne n'a
+ * donnée — même règle que `chevauche`.
+ */
+export function dansIntervalle(iso, debut, fin) {
+  if (!iso || !debut) return false;
+  if (!fin) return iso === debut;
+  return iso >= debut && iso <= fin;
 }

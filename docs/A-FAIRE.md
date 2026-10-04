@@ -833,6 +833,51 @@ ainsi depuis le premier jour pour le fil et les photos de profil. Le jour où
 une annonce devra porter un plan ou un devis, il faudra passer par l'espace
 privé et des adresses signées, comme en messagerie : c'est un lot à part.
 
+### 2.1 nonies Les dates se choisissent au calendrier ✅ FAIT le 04/10/2026
+
+Votre remarque : « quand on doit sélectionner des dates il faut les taper à
+la main […] un petit calendrier s'ouvrirait […] il y aurait moins
+d'erreurs ».
+
+**« Moins d'erreurs » n'était pas une impression.** L'ancienne saisie
+acceptait « 31/02 » et envoyait « 2026-02-31 » à la base — qui le refuse
+(vérifié sur votre base : *date/time field value out of range*). Une faute
+de frappe devenait un refus de la base, sans rien à l'écran pour
+l'expliquer. Un calendrier ne peut pas proposer un jour qui n'existe pas.
+
+Les quatre champs de date de la Place des pros — les deux du formulaire et
+les deux du filtre — sont maintenant des **boutons**. On appuie, un
+calendrier monte du bas : on touche le premier jour, puis le dernier, et la
+feuille écrit « du 12 au 20 octobre » au-dessus de la grille.
+
+Trois choses à savoir :
+
+- **toucher un jour avant le début recommence là**, au lieu de refuser. Il
+  n'existe donc aucune façon de créer un créneau à l'envers, et le message
+  d'erreur qui servait à ça a disparu ;
+- **dans le formulaire, les jours passés sont fermés** : une annonce pour
+  un chantier déjà fait sortirait aussitôt de la liste. Dans le filtre, au
+  contraire, il n'y a aucune limite — chercher est une question, pas un
+  engagement, et vos annonces terminées vous restent visibles ;
+- **le créneau est aussi écrit en toutes lettres**, pas seulement montré en
+  orange. Dehors, en plein soleil, une teinte pâle ne se distingue pas.
+
+**Pourquoi pas le sélecteur de dates d'iOS** — je l'ai vérifié, il est bien
+disponible dans Expo Go. Il n'a pas été pris parce qu'il **ne s'affiche pas
+dans le navigateur où je travaille** : je vous livrerais quelque chose que
+je n'ai jamais vu. Et il ne sait pas montrer une PÉRIODE, alors que c'est
+la durée qui décide un artisan. Même raisonnement que pour la carte.
+
+Vérifié sur votre base avec un compte jetable supprimé dans la même
+session : créneau choisi au doigt, annonce publiée, et après rechargement
+complet de la page les dates reviennent bien de Supabase (12 au
+20 novembre).
+
+**Pas vérifié** : la précision du doigt. Les cases font 48 points de côté
+sur un écran d'iPhone courant — au-dessus des 44 recommandés par Apple —
+mais cela se juge au pouce, pas à la souris.
+
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

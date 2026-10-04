@@ -1924,6 +1924,167 @@ mémoire du navigateur.
 d'appareil photo dans ce conteneur, et il n'y en aura jamais — ce chemin se
 juge sur l'iPhone, comme pour les pièces jointes.
 
+### Un calendrier plutôt qu'une saisie — et le 31 février (04/10/2026)
+
+Demandé par le propriétaire pour finir la Place des pros :
+
+> « Quand on doit sélectionner des dates il faut les taper à la main. Je
+> pense que ce serait mieux que quand on sélectionne l'espace pour rentrer
+> la date, un petit calendrier s'ouvre et qu'on puisse sélectionner
+> directement dessus. Ce serait plus ludique et il y aurait moins
+> d'erreurs. »
+
+**« Moins d'erreurs » n'était pas une impression.** `versISO` vérifiait que
+le jour tenait entre 1 et 31 et le mois entre 1 et 12 — pas que ce jour-là
+existe dans CE mois. « 31/02 » sortait donc `2026-02-31`, qui partait vers
+une colonne `date`. Vérifié sur la vraie base le jour même :
+
+```sql
+select '2026-02-31'::date;
+-- ERROR 22008: date/time field value out of range: "2026-02-31"
+```
+
+Un refus de la base pour une faute de frappe, et rien à l'écran pour
+l'expliquer. **Un calendrier ne peut pas proposer un jour qui n'existe
+pas** : on supprime le défaut au lieu de le contrôler.
+
+#### Pourquoi pas `@react-native-community/datetimepicker`
+
+Vérifié avant de trancher, comme l'exige ce document : il **est** fourni
+dans Expo Go au SDK 57 (page « third-party libraries », badge « Included in
+Expo Go »). Il était donc techniquement disponible, et il n'a pourtant pas
+été pris. C'est exactement le raisonnement de la carte (`tuiles.js`) :
+
+> **Il ne s'affiche pas au navigateur** — `react-native-web` n'en a aucune
+> implémentation. Je livrerais donc quelque chose que je n'ai jamais vu, à
+> quelqu'un dont le seul moyen d'essai est Expo Go. On ne fait pas ça pour
+> une grille qu'on sait écrire soi-même.
+
+Et deux raisons de plus : **il ne connaît pas la notion d'INTERVALLE**, or
+on ne choisit pas une date ici mais un créneau de chantier — c'est la durée
+qui décide un artisan, et deux sélecteurs ouverts l'un après l'autre ne la
+montrent jamais ; enfin une dépendance de moins est un risque de moins de
+devoir quitter Expo Go.
+
+#### `versISO` a quitté le dépôt, et c'est le point le plus important
+
+Les quatre champs de date de la Place des pros (deux dans le formulaire,
+deux dans le filtre) sont devenus des **boutons**. Ils portent donc
+directement des « AAAA-MM-JJ », et `versISO` n'avait plus un seul appelant.
+
+> **Une fonction que personne n'appelle est le « bouton §18 »** : du code
+> qui a l'air de servir, qu'un contrôle couvre consciencieusement, et qui
+> ne fait rien. Elle est partie avec ses sept contrôles — remplacés par
+> vingt-cinq sur la grille.
+
+C'est la même règle que la section précédente vue à l'envers : on y
+cherchait qui ÉCRIT ce qu'on lit ; ici, qui LIT ce qu'on écrit.
+
+**Et trois messages d'erreur sont partis avec elle.** « La date de fin est
+avant la date de début » ne peut plus arriver : un appui avant le début
+RECOMMENCE là, au lieu de refuser. Il n'existe aucun enchaînement qui
+produise un créneau à l'envers.
+
+> **Le meilleur message d'erreur est celui qu'on ne peut plus déclencher.**
+
+#### Un bouton, pas un champ — et c'est le défaut du matin évité
+
+Un `TextInput` sur lequel on appuie ouvre le clavier. Poser la feuille du
+calendrier par-dessus laisserait donc le clavier dessous, à pousser la mise
+en page d'une fenêtre où il n'y a **rien à écrire** — le défaut du clavier
+du matin, par une autre porte. Un `Pressable` n'a pas ce problème : rien ne
+prend le focus, rien ne monte.
+
+#### Ce que la grille sait, et qui ne se voit pas à l'œil
+
+Les calculs vivent dans `src/lib/formats.js`, **qui n'importe rien** —
+cinquième application de la leçon de `cloudinary-adresses.js`. Un
+calendrier se trompe d'UNE case sans que ça se voie : un décalage d'un cran
+en février, et toutes les dates du mois sont fausses pendant un mois.
+`verifier-annonces` fait donc tourner des mois choisis pour leurs bords :
+
+| | pourquoi ce mois-là |
+|---|---|
+| octobre 2026 | commence un **jeudi** : trois cases vides avant le 1er |
+| mars 2026 | commence un **dimanche** : six cases vides, **six semaines** |
+| février 2021 | 28 jours un **lundi** : quatre semaines pleines, aucun trou |
+| février 2024 | bissextile — 29 |
+| février **2100** | **pas** bissextile : divisible par 100, pas par 400 |
+
+**La hauteur est réservée pour six semaines**, le pire cas. Sans ça,
+« Valider » remonte d'une rangée en changeant de mois, et le doigt appuie à
+côté.
+
+**Les cases vides sont vraiment vides**, pas les jours du mois voisin en
+gris. Un chiffre qu'on voit et qui ne répond pas est la pire des deux
+solutions : on appuie, rien ne se passe, et on croit l'application cassée.
+Même famille que la poignée des commentaires qui ne s'attrapait pas.
+
+#### Sept colonnes ne font pas 44 points sur un petit écran
+
+Mesuré au navigateur, en relevant la boîte réelle des 31 cases d'octobre :
+**48 × 48 points** sur une fenêtre de 390 (un iPhone courant). Sur le plus
+petit écran encore vendu (320), elles tomberaient à 39.
+
+> **Aucun calendrier au monde ne fait autrement avec sept colonnes.** D'où
+> un `minHeight: TOUCHE` : la cible fait alors 39 × 44 plutôt que 39 × 39.
+> C'est mesuré et c'est dit, plutôt que d'annoncer 44 partout.
+
+Les deux flèches de mois, elles, sont des boîtes de 44 × 44 pleines : ce
+sont les cibles les plus utilisées de la feuille, et les rater fait changer
+de mois dans le mauvais sens.
+
+#### La couleur ne porte JAMAIS l'information toute seule
+
+`C.accentBg` (#F7D9C6) teinte les jours entre les deux bouts. Mesuré : le
+chiffre dessus donne **12,92 : 1**, parfaitement lisible — mais la teinte
+elle-même ne donne que **1,34 : 1** contre le blanc de la feuille. C'est la
+nature d'un fond pâle, et c'est pour ça que la règle du lot 5 ne suffit pas
+ici :
+
+> La feuille écrit le créneau **en mots** (« du 12 au 20 oct. »), toujours
+> à la même place, et chaque jour de l'intervalle s'annonce `selected` à
+> VoiceOver. Qui ne distingue pas la teinte **lit la phrase**.
+
+Et aujourd'hui se reconnaît à son **trait souligné**, pas à un fond : le
+fond est déjà pris par la sélection, et deux fonds qui se ressemblent dans
+la même grille ne veulent plus rien dire.
+
+#### Le minimum n'est pas le même des deux côtés, et c'est voulu
+
+- **Formulaire** : `minimum = aujourd'hui`. Poser une annonce pour un
+  chantier déjà passé ne produirait qu'une ligne qui sort aussitôt de la
+  liste publique. Vérifié : le 04/10, les 1, 2 et 3 octobre sont fermés.
+- **Filtre** : aucun minimum. Un filtre est une **question**, pas un
+  engagement — et l'auteur d'une annonce terminée doit pouvoir la
+  retrouver, puisqu'elle lui reste visible.
+
+#### Vérifié, et comment
+
+Les 30 contrôles passent (25 nouveaux sur la grille, 11 sur l'écran),
+`npx expo export --platform ios` passe. Puis au navigateur, sur la VRAIE
+base, avec un compte professionnel jetable supprimé dans la même session :
+
+| | relevé |
+|---|---|
+| cases de jour | **31**, la plus petite **48 × 48** |
+| après un appui | « à partir du 12 oct. » |
+| après le second | « du 12 au 20 oct. » |
+| un appui **avant** le début | « à partir du 5 oct. » — ça recommence |
+| jours fermés dans le formulaire | **1 2 3** (on est le 4) |
+| flèche « mois suivant » | « novembre 2026 » |
+| publication | `POST /rest/v1/annonces_pro → 201` |
+| **après rechargement complet** | « du 12 au 20 nov. » |
+
+Et en base : `date_debut 2026-11-12`, `date_fin 2026-11-20`.
+
+**Ce qui n'a PAS été vérifié** : le doigt. Le navigateur reproduit le clic,
+pas la précision d'un pouce ganté sur une case de 48 points — c'est à juger
+sur l'iPhone. Et l'essai est passé par « Coup de main », qui ne demande pas
+de métier : le sélecteur de métier d'une annonce de sous-traitance n'est
+toujours pas couvert, comme au lot précédent. Le bloc des dates, lui, est
+le même pour les deux.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

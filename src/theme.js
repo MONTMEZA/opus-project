@@ -55,6 +55,20 @@ export const C = {
      D'où un jeton par couple, et non une règle « tout en noir ». */
   surAccent: '#1A1B19',
 
+  /* L'ORANGE TRÈS PÂLE — le fond d'un intervalle choisi (calendrier).
+     Posé le 04/10/2026. Mesuré : le texte principal dessus donne
+     12,92 : 1, donc un chiffre de calendrier y reste parfaitement
+     lisible. Mais contre le blanc de la feuille, cette teinte ne donne
+     que 1,34 : 1 — c'est dans la nature d'un fond pâle, et aucun
+     calendrier ne fait autrement.
+
+     D'OÙ LA RÈGLE QUI VA AVEC : la couleur ne porte JAMAIS l'information
+     à elle seule. Les deux bouts de l'intervalle sont des pastilles
+     orange pleines, la feuille écrit le créneau en mots (« du 12 au
+     20 octobre »), et chaque jour dedans s'annonce comme sélectionné à
+     VoiceOver. Qui ne distingue pas la teinte lit la phrase. */
+  accentBg: '#F7D9C6',
+
   verif: '#4FA9E0',    // pastille "vérifié"
   ok: '#1F7A4D',       // information vérifiée valide
   okBg: '#E7F3EC',     // fond du badge "Client vérifié"

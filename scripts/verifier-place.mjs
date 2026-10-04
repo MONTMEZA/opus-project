@@ -189,6 +189,82 @@ console.log('\nUne réponse n’est plus un brouillon qu’on abandonne');
     'sans elle, le message partirait dans la conversation d’avant');
 }
 
+console.log('\nLes dates se choisissent, elles ne se tapent plus');
+{
+  /* DEMANDÉ PAR LE PROPRIÉTAIRE LE 04/10/2026 : « il faut les taper à la
+     main […] un petit calendrier s'ouvrirait […] il y aurait moins
+     d'erreurs ».
+
+     « Moins d'erreurs » n'était pas une impression. `versISO` acceptait
+     « 31/02 » et rendait « 2026-02-31 » — vérifié sur la VRAIE base :
+     `select '2026-02-31'::date` répond « ERROR 22008: date/time field
+     value out of range ». Une faute de frappe devenait un refus de la
+     base, sans rien à l'écran pour l'expliquer. */
+  const cal = sansCommentaires(lire('src/components/Calendrier.js'));
+
+  verifier('les calculs vivent dans un fichier qui n’importe RIEN',
+    /export function grilleMois\(/.test(sansCommentaires(lire('src/lib/formats.js'))),
+    'cinquième fois : rangé dans le composant, `node` ne peut pas le faire '
+    + 'tourner, donc aucun contrôle ne l’éprouve');
+
+  verifier('plus un seul champ de date à TAPER dans la Place des pros',
+    !/Field[\s\S]{0,200}placeholder="Du /.test(ecran)
+    && /<ChampDate/.test(ecran),
+    'un `TextInput` ouvrirait le clavier SOUS la feuille du calendrier — '
+    + 'le défaut du matin par une autre porte');
+
+  verifier('…et `versISO` a quitté le dépôt avec son dernier appelant',
+    !/export function versISO/.test(sansCommentaires(lire('src/lib/formats.js'))),
+    'une fonction que personne n’appelle est le « bouton §18 » : du code '
+    + 'qui a l’air de servir, qu’un contrôle couvre, et qui ne fait rien');
+
+  verifier('les deux bornes passent par UN SEUL calendrier',
+    (ecran.match(/<FeuilleDates/g) || []).length === 2
+    && (ecran.match(/setDatesOuvertes\(true\)/g) || []).length === 2
+    && (ecran.match(/setCreneauOuvert\(true\)/g) || []).length === 2,
+    'on choisit un créneau, pas deux dates sans rapport : c’est la DURÉE '
+    + 'qui décide un artisan');
+
+  /* LE FORMULAIRE interdit le passé, le FILTRE ne l'interdit pas. Ce n'est
+     pas une incohérence : un filtre est une question, pas un engagement, et
+     l'auteur d'une annonce terminée doit pouvoir la retrouver. */
+  verifier('le formulaire refuse un chantier déjà passé',
+    /titre="Dates du chantier"[\s\S]{0,200}minimum=\{jour\}/.test(ecran));
+  verifier('…et le filtre, lui, n’a pas de minimum',
+    !/titre="Chercher sur ces dates"[\s\S]{0,200}minimum=/.test(ecran),
+    'l’auteur doit pouvoir retrouver une annonce terminée, qui lui reste '
+    + 'visible');
+
+  /* IMPOSSIBLE PAR CONSTRUCTION : un appui avant le début RECOMMENCE là, au
+     lieu de refuser. Il n'existe donc aucun enchaînement qui produise un
+     créneau à l'envers — donc aucun message d'erreur à écrire. */
+  verifier('un créneau à l’envers ne peut pas se produire',
+    /if \(iso < debut\) \{ setDebut\(iso\); setFin\(null\); return; \}/.test(cal)
+    && !/est avant la date de début/.test(ecran),
+    'le troisième contrôle de saisie de `publier()` n’avait plus rien à '
+    + 'refuser : on supprime le défaut au lieu de le contrôler');
+
+  /* LA COULEUR NE PORTE JAMAIS L'INFORMATION SEULE. La teinte de
+     l'intervalle ne donne que 1,34 : 1 contre le blanc de la feuille —
+     c'est la nature d'un fond pâle, et aucun calendrier ne fait autrement.
+     D'où la phrase, et l'état parlé. */
+  verifier('le créneau est écrit EN MOTS dans la feuille',
+    /libelleDates\(debut, fin\)/.test(cal),
+    'dehors, en plein soleil, la teinte pâle ne se distingue pas');
+  verifier('…et chaque jour dedans s’annonce « sélectionné »',
+    /accessibilityState=\{\{ selected: dedans/.test(cal));
+
+  /* Sept colonnes ne peuvent pas faire 44 points de LARGE sur un écran de
+     320 — aucun calendrier au monde n'y arrive. On garantit donc les 44 en
+     HAUTEUR, ce qui est mesurable et honnête. */
+  verifier('une case de calendrier atteint les 44 points en hauteur',
+    /minHeight: TOUCHE/.test(cal));
+  verifier('les flèches de mois sont des cibles pleines',
+    /width: TOUCHE, height: TOUCHE/.test(cal),
+    'ce sont les cibles les plus utilisées : les rater change de mois dans '
+    + 'le mauvais sens');
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

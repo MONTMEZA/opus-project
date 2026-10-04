@@ -79,7 +79,8 @@ function couleur(nom) {
 console.log('\nCe qu’on lit dehors — le contraste, calculé sur la palette du moment');
 {
   const C = Object.fromEntries(['ink', 'bg', 'surface', 'line', 'accent',
-    'accent2', 'muted', 'bad', 'bordChamp', 'accentTexte', 'surAccent', 'sos']
+    'accent2', 'muted', 'bad', 'bordChamp', 'accentTexte', 'surAccent', 'sos',
+    'accentBg']
     .map((n) => [n, couleur(n)]));
 
   const cas = [
@@ -91,6 +92,11 @@ console.log('\nCe qu’on lit dehors — le contraste, calculé sur la palette d
     ['le texte orange sur le fond', C.accentTexte, C.bg, 4.5],
     ['le texte principal sur le fond', C.ink, C.bg, 4.5],
     ['le bleu sur blanc', C.accent2, C.surface, 4.5],
+    /* LE CHIFFRE D'UN JOUR POSÉ SUR L'INTERVALLE CHOISI (calendrier,
+       04/10/2026). Le fond est pâle — il ne se distingue que faiblement
+       du blanc de la feuille, et c'est la nature d'un fond pâle. Ce qui
+       doit tenir, c'est ce qu'on LIT dessus. */
+    ['le chiffre d’un jour sur l’intervalle choisi', C.ink, C.accentBg, 4.5],
   ];
   cas.forEach(([quoi, a, b, seuil]) => {
     if (!a || !b) { verifier(quoi, false, 'couleur introuvable dans theme.js'); return; }

@@ -41,7 +41,7 @@ import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
 } from '../data/annonces';
 import {
-  versISO, jourCourant, chevauche, estTerminee, libelleProximite,
+  jourCourant, jourCourt, chevauche, estTerminee, libelleProximite,
   creneauSemaine, creneauMois,
 } from '../lib/formats';
 import { ChampMetier } from '../components/SelecteurMetiers';
@@ -53,6 +53,7 @@ import { choisirImage } from '../lib/media';
 import Carrousel from '../components/Carrousel';
 
 import { EcrireReponse, ListeReponses } from '../components/ReponsesAnnonce';
+import FeuilleDates, { ChampDate } from '../components/Calendrier';
 
 /**
  * QUATRE PHOTOS, et pas trois comme une demande de particulier.
@@ -64,11 +65,18 @@ import { EcrireReponse, ListeReponses } from '../components/ReponsesAnnonce';
  */
 const PHOTOS_ANNONCE = 4;
 
-/* `versISO` VIT DANS `lib/formats.js` DEPUIS LE 04/10/2026. Elle était
-   écrite ici, donc `node` ne pouvait pas l'ouvrir — ce fichier charge React
-   Native — et aucun contrôle ne la faisait tourner. C'est du découpage de
-   date écrit à la main : exactement le genre de code qui se casse en
-   silence. Même leçon que `cloudinary-adresses.js` et `cadre.js`. */
+/* LES DATES NE SE TAPENT PLUS — 04/10/2026, à la demande du propriétaire.
+   Les quatre champs de date de cet écran (deux dans le formulaire, deux
+   dans le filtre) sont devenus des BOUTONS qui ouvrent un calendrier
+   (`src/components/Calendrier.js`). Ils portent donc directement des
+   « AAAA-MM-JJ », et `versISO` — le découpage de « 12/10 » écrit à la
+   main — a quitté le dépôt, faute d'appelant.
+
+   CE QUE ÇA SUPPRIME EN PLUS DES FAUTES DE FRAPPE : les trois contrôles de
+   saisie de `publier()`. « La date de fin est avant la date de début » ne
+   peut plus arriver, parce que le calendrier ne sait pas produire un
+   créneau à l'envers. Un message d'erreur qu'on ne peut plus déclencher
+   est un message de moins à traduire, à placer et à tester. */
 
 /**
  * La barre de recherche, dans SON composant — et ce n'est pas un rangement.
@@ -128,8 +136,13 @@ export default function PlaceProScreen({
      en fait depuis le début la différence d'Opus face aux groupes
      Facebook. `null` = pas de contrainte de dates. */
   const [creneau, setCreneau] = useState(null);         // 'semaine' | 'mois' | 'precises'
+  /* Les deux champs portent des « AAAA-MM-JJ », posés par le calendrier.
+     `creneauOuvert` dit si sa feuille est ouverte — un seul calendrier
+     pour les deux bornes, parce qu'on choisit un CRÉNEAU, pas deux dates
+     sans rapport. */
   const [creneauDu, setCreneauDu] = useState('');
   const [creneauAu, setCreneauAu] = useState('');
+  const [creneauOuvert, setCreneauOuvert] = useState(false);
   /* Les deux feuilles portent l'annonce concernée, pas un booléen : il faut
      savoir à LAQUELLE on répond, et de laquelle on lit les réponses. */
   const [aRepondre, setARepondre] = useState(null);
@@ -143,6 +156,7 @@ export default function PlaceProScreen({
   const [lieu, setLieu] = useState({ affichage: moi ? moi.ville || '' : '' });
   const [du, setDu] = useState('');
   const [au, setAu] = useState('');
+  const [datesOuvertes, setDatesOuvertes] = useState(false);
   const [prix, setPrix] = useState('');
   const [unite, setUnite] = useState('total');
   /* LES PHOTOS D'UNE ANNONCE. La colonne `medias` existait en base, l'API
@@ -177,10 +191,8 @@ export default function PlaceProScreen({
     if (creneau === 'semaine') return creneauSemaine();
     if (creneau === 'mois') return creneauMois();
     if (creneau === 'precises') {
-      const debut = versISO(creneauDu);
-      const fin = versISO(creneauAu);
-      if (!debut && !fin) return null;
-      return { debut, fin };
+      if (!creneauDu && !creneauAu) return null;
+      return { debut: creneauDu || null, fin: creneauAu || null };
     }
     return null;
   }, [creneau, creneauDu, creneauAu]);
@@ -236,20 +248,11 @@ export default function PlaceProScreen({
   const publier = () => {
     if (!titre.trim() || !texte.trim()) return;
 
-    const dateDebut = reglages.avecDates ? versISO(du) : null;
-    const dateFin = reglages.avecDates ? versISO(au) : null;
-    if (reglages.avecDates && du.trim() && !dateDebut) {
-      onErreur('La date de début se note 12/10 ou 12/10/2026.');
-      return;
-    }
-    if (reglages.avecDates && au.trim() && !dateFin) {
-      onErreur('La date de fin se note 20/10 ou 20/10/2026.');
-      return;
-    }
-    if (dateDebut && dateFin && dateFin < dateDebut) {
-      onErreur('La date de fin est avant la date de début.');
-      return;
-    }
+    /* LE CALENDRIER NE SAIT PAS PRODUIRE UNE DATE FAUSSE : pas de 31
+       février, pas de fin avant le début, pas de texte à découper. Les
+       trois contrôles qui vivaient ici n'avaient plus rien à refuser. */
+    const dateDebut = reglages.avecDates ? (du || null) : null;
+    const dateFin = reglages.avecDates ? (au || null) : null;
 
     onPublier({
       type,
@@ -377,12 +380,24 @@ export default function PlaceProScreen({
                 C'est ce qui fait toute la différence : un artisan disponible
                 cette semaine-là vous trouvera.
               </Text>
+              {/* UN SEUL CALENDRIER POUR LES DEUX BORNES. Appuyer sur l'un
+                  ou l'autre des deux boutons ouvre la même feuille : on
+                  choisit un créneau, et on le VOIT — c'est la durée qui
+                  décide un artisan, pas les deux dates prises à part. */}
               <View style={s.deuxChamps}>
                 <View style={{ flex: 1 }}>
-                  <Field value={du} onChangeText={setDu} placeholder="Du 12/10" />
+                  <ChampDate
+                    valeur={jourCourt(du)}
+                    placeholder="Du 12/10"
+                    onPress={() => setDatesOuvertes(true)}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Field value={au} onChangeText={setAu} placeholder="Au 20/10" />
+                  <ChampDate
+                    valeur={jourCourt(au)}
+                    placeholder="Au 20/10"
+                    onPress={() => setDatesOuvertes(true)}
+                  />
                 </View>
               </View>
             </>
@@ -520,19 +535,17 @@ export default function PlaceProScreen({
       {creneau === 'precises' && (
         <View style={s.rangeeDates}>
           <View style={{ flex: 1 }}>
-            <Field
-              value={creneauDu}
-              onChangeText={setCreneauDu}
+            <ChampDate
+              valeur={jourCourt(creneauDu)}
               placeholder="Du 12/10"
-              keyboardType="numbers-and-punctuation"
+              onPress={() => setCreneauOuvert(true)}
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Field
-              value={creneauAu}
-              onChangeText={setCreneauAu}
+            <ChampDate
+              valeur={jourCourt(creneauAu)}
               placeholder="Au 20/10"
-              keyboardType="numbers-and-punctuation"
+              onPress={() => setCreneauOuvert(true)}
             />
           </View>
         </View>
@@ -631,6 +644,33 @@ export default function PlaceProScreen({
         onVoirProfil={(id) => { setALire(null); onVoirProfil(id); }}
         onEcrire={(pro) => { setALire(null); onEcrire(pro); }}
         onErreur={onErreur}
+      />
+    )}
+
+    {/* LE CALENDRIER DU FORMULAIRE. `minimum` vaut aujourd'hui : poser une
+        annonce pour un chantier déjà passé ne produirait qu'une ligne qui
+        sort aussitôt de la liste publique. */}
+    {datesOuvertes && (
+      <FeuilleDates
+        titre="Dates du chantier"
+        debut={du}
+        fin={au}
+        minimum={jour}
+        onValider={(d, f) => { setDu(d || ''); setAu(f || ''); }}
+        onFermer={() => setDatesOuvertes(false)}
+      />
+    )}
+
+    {/* LE CALENDRIER DU FILTRE — sans minimum, lui. Un filtre est une
+        question, pas un engagement : l'auteur d'une annonce terminée doit
+        pouvoir la retrouver, puisqu'elle lui reste visible. */}
+    {creneauOuvert && (
+      <FeuilleDates
+        titre="Chercher sur ces dates"
+        debut={creneauDu}
+        fin={creneauAu}
+        onValider={(d, f) => { setCreneauDu(d || ''); setCreneauAu(f || ''); }}
+        onFermer={() => setCreneauOuvert(false)}
       />
     )}
     </>

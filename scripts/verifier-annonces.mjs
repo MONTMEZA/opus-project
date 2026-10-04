@@ -62,8 +62,10 @@ verifier(`${listeApp('URGENCES').length} urgences identiques`,
    importe le thème, donc React Native, et ne se charge pas sous node. */
 const {
   libelleDates, libellePrix,
-  versISO, jourCourant, chevauche, estTerminee, libelleProximite,
+  jourCourant, chevauche, estTerminee, libelleProximite,
   creneauSemaine, creneauMois, joursEntre,
+  JOURS_COURTS, SEMAINES_MAX, grilleMois, moisDe, moisDecale, nomMois,
+  joursDuMois, indexJourSemaine, jourCourt, dansIntervalle,
 } = await import('../src/lib/formats.js');
 
 {
@@ -164,17 +166,100 @@ const {
     creneauMois(new Date(2028, 1, 10)).fin === '2028-02-29',
     creneauMois(new Date(2028, 1, 10)).fin);
 
-  console.log('\nLa saisie d’une date, écrite à la main');
-  const ref = new Date(2026, 9, 4);
-  verifier('12/10 → 2026-10-12', versISO('12/10', ref) === '2026-10-12');
-  verifier('2/3 → 2026-03-02', versISO('2/3', ref) === '2026-03-02',
-    'un seul chiffre doit être complété, sinon la base refuse');
-  verifier('12/10/27 → 2027-10-12', versISO('12/10/27', ref) === '2027-10-12');
-  verifier('32/01 refusé', versISO('32/01', ref) === null);
-  verifier('12/13 refusé', versISO('12/13', ref) === null);
-  verifier('du texte refusé', versISO('la semaine prochaine', ref) === null,
-    'on ne devine pas : un refus vaut mieux qu’une date inventée');
-  verifier('vide refusé', versISO('', ref) === null);
+  /* ======================================================================
+     LA GRILLE DU CALENDRIER — 04/10/2026
+     ----------------------------------------------------------------------
+     Elle remplace les sept contrôles de `versISO`, le découpage de
+     « 12/10 » tapé à la main, qui a quitté le dépôt avec son appelant.
+
+     ET CE N'EST PAS UN ÉCHANGE À ÉGALITÉ : `versISO` acceptait « 31/02 »
+     et rendait « 2026-02-31 ». Vérifié sur la VRAIE base le 04/10 :
+     `select '2026-02-31'::date` répond
+     « ERROR 22008: date/time field value out of range ». Une faute de
+     frappe se traduisait donc en refus de la base. Une grille, elle, ne
+     peut pas proposer un jour qui n'existe pas — c'est le genre de défaut
+     qu'on supprime au lieu de le contrôler.
+
+     Un calendrier se trompe d'UNE CASE sans que ça se voie : un décalage
+     d'un cran en février, et toutes les dates du mois sont fausses. D'où
+     des mois choisis exprès pour leurs bords.
+     ====================================================================== */
+  console.log('\nLe calendrier — la grille d’un mois');
+
+  verifier('sept jours, lundi d’abord',
+    JOURS_COURTS.length === 7 && JOURS_COURTS[0] === 'L' && JOURS_COURTS[6] === 'D',
+    'la semaine française commence le lundi : un décalage d’un cran ici '
+    + 'décale TOUTE la grille');
+
+  /* 1er octobre 2026 = un JEUDI, donc trois cases vides avant lui. */
+  const oct = grilleMois('2026-10');
+  verifier('octobre 2026 commence un jeudi (3 cases vides avant)',
+    oct[0][0] === null && oct[0][2] === null && oct[0][3] === '2026-10-01',
+    JSON.stringify(oct[0]));
+  verifier('…et finit le 31',
+    oct[oct.length - 1].filter(Boolean).pop() === '2026-10-31');
+  verifier('toutes les semaines font exactement sept cases',
+    oct.every((sem) => sem.length === 7));
+  verifier('les 31 jours sont là, une seule fois chacun',
+    new Set(oct.flat().filter(Boolean)).size === 31);
+
+  /* LE PIRE CAS : le 1er tombe un DIMANCHE. Six cases vides avant, et le
+     mois déborde sur une sixième semaine. C'est lui qui fixe la hauteur à
+     réserver — sans quoi « Valider » remonte en changeant de mois. */
+  const mars = grilleMois('2026-03');   // 1er mars 2026 = dimanche, 31 jours
+  verifier('un mois qui commence un dimanche occupe six semaines',
+    mars.length === 6, `${mars.length} semaines`);
+  verifier(`la hauteur réservée couvre ce cas (${SEMAINES_MAX} semaines)`,
+    SEMAINES_MAX >= mars.length);
+
+  /* LE MEILLEUR CAS : février de 28 jours commençant un lundi → quatre
+     semaines pleines, aucune case vide. */
+  const fev2021 = grilleMois('2021-02');
+  verifier('février 2021 tient en quatre semaines pleines',
+    fev2021.length === 4 && fev2021.flat().every(Boolean),
+    `${fev2021.length} semaines`);
+
+  verifier('une année bissextile donne 29 jours',
+    joursDuMois('2024-02') === 29);
+  verifier('…et 2100 n’en est pas une',
+    joursDuMois('2100-02') === 28,
+    'la règle des siècles : divisible par 100 mais pas par 400');
+  verifier('février 2026 en a 28', joursDuMois('2026-02') === 28);
+
+  verifier('lundi vaut 0', indexJourSemaine('2026-10-05') === 0);
+  verifier('dimanche vaut 6', indexJourSemaine('2026-10-04') === 6,
+    'getUTCDay() rend 0 pour dimanche : c’est l’inversion qu’on corrige');
+
+  /* LE PASSAGE D'ANNÉE est la seule chose qui casse dans ce genre de
+     fonction, donc elle ne fait que des divisions entières. */
+  verifier('décembre + 1 = janvier de l’année suivante',
+    moisDecale('2026-12', 1) === '2027-01');
+  verifier('janvier − 1 = décembre de l’année d’avant',
+    moisDecale('2026-01', -1) === '2025-12');
+  verifier('reculer de douze mois rend le même mois',
+    moisDecale('2026-10', -12) === '2025-10');
+
+  verifier('le mois d’un jour', moisDe('2026-10-12') === '2026-10');
+  verifier('nomMois est en français, avec l’année',
+    nomMois('2026-10') === 'octobre 2026', nomMois('2026-10'));
+  verifier('jourCourt rend « 12/10 »', jourCourt('2026-10-12') === '12/10');
+  verifier('jourCourt sur rien rend rien', jourCourt('') === null);
+
+  /* L'INTERVALLE, bornes comprises — et la borne ABSENTE, qui ne se
+     devine pas : avec un seul bout posé, seul ce bout est dedans. Même
+     règle que `chevauche`. */
+  verifier('le premier jour est dedans',
+    dansIntervalle('2026-10-12', '2026-10-12', '2026-10-20'));
+  verifier('le dernier aussi',
+    dansIntervalle('2026-10-20', '2026-10-12', '2026-10-20'));
+  verifier('un jour du milieu aussi',
+    dansIntervalle('2026-10-15', '2026-10-12', '2026-10-20'));
+  verifier('la veille, non',
+    !dansIntervalle('2026-10-11', '2026-10-12', '2026-10-20'));
+  verifier('avec un seul bout, seul ce bout est dedans',
+    dansIntervalle('2026-10-12', '2026-10-12', null)
+    && !dansIntervalle('2026-10-13', '2026-10-12', null),
+    'on ne devine pas une fin que personne n’a donnée');
 
   console.log('\nLe jour courant');
   verifier('toujours sur dix caractères',
