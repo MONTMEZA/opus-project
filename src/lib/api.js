@@ -19,7 +19,7 @@ import { METIER_PAR_DEFAUT } from './metiers';
    développement, au moment où la ligne s'exécute. */
 import { envoyerFichier } from './storage';
 import { morceauDeChemin } from './types-fichiers';
-import { reduireImage } from './media';
+import { reduireImage, TAILLE_MAX_MO } from './media';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -2083,11 +2083,24 @@ export const TAILLE_MAX_PIECE = 10 * 1024 * 1024;
  */
 export function refusPiece(piece) {
   if (!piece) return null;
-  if (piece.taille && piece.taille > TAILLE_MAX_PIECE) {
-    return `Ce fichier fait ${Math.round(piece.taille / 1024 / 1024)} Mo. `
+  if (!piece.taille) return null;
+
+  /* UNE PHOTO N'EST PAS JUGÉE SUR SON POIDS BRUT, et c'est important : un
+     iPhone récent rend des photos de 5 à 12 Mo, et elles passent toutes
+     par `reduireImage()` avant de partir — 2,65 Mo devenaient 232 Ko,
+     mesuré le 29/09. Refuser sur le poids d'origine écarterait des photos
+     qui, une fois réduites, tiennent dix fois dans la limite.
+     `TAILLE_MAX_MO` reste la borne, la même que pour une publication :
+     au-delà, c'est la réduction elle-même qui fait ramer le téléphone. */
+  const image = (piece.type || '').startsWith('image/');
+  const limite = image ? TAILLE_MAX_MO * 1024 * 1024 : TAILLE_MAX_PIECE;
+  if (piece.taille <= limite) return null;
+
+  return image
+    ? `Cette photo fait ${Math.round(piece.taille / 1024 / 1024)} Mo, et c’est `
+      + `trop pour être réduite sur le téléphone (${TAILLE_MAX_MO} Mo maximum).`
+    : `Ce fichier fait ${Math.round(piece.taille / 1024 / 1024)} Mo. `
       + 'La limite est de 10 Mo — au-delà, mieux vaut un lien de téléchargement.';
-  }
-  return null;
 }
 
 async function envoyerPieceSupabase(conversationId, piece) {
@@ -2098,8 +2111,24 @@ async function envoyerPieceSupabase(conversationId, piece) {
      → 232 Ko mesurés le 29/09. Un PDF, lui, ne se touche pas — le
      recompresser abîmerait un devis sans rien gagner. */
   let uri = piece.uri;
-  if (piece.type && piece.type.startsWith('image/')) {
-    try { uri = await reduireImage(piece.uri, 'photo'); } catch (e) { /* on envoie l'original */ }
+  let nom = piece.nom;
+  let type = piece.type || null;
+  let taille = piece.taille || null;
+
+  if (type && type.startsWith('image/')) {
+    try {
+      const reduite = await reduireImage(piece.uri, 'photo');
+      if (reduite && reduite !== piece.uri) {
+        /* `reduireImage()` ENREGISTRE EN JPEG. Un PNG réduit reste donc
+           annoncé « image/png » sous une extension `.png`, alors que ce
+           sont des octets JPEG : le fichier se télécharge au lieu de
+           s'afficher, et personne ne comprend pourquoi. On suit ce que le
+           fichier est DEVENU, pas ce qu'il était. */
+        uri = reduite;
+        type = 'image/jpeg';
+        nom = `${String(piece.nom || 'photo').replace(/\.[^.]*$/, '')}.jpg`;
+      }
+    } catch (e) { /* on envoie l'original : une photo lourde vaut mieux que rien */ }
   }
 
   /* LE DOSSIER DE CONVERSATION PASSE PAR `nom` : `envoyerFichier` range
@@ -2111,21 +2140,28 @@ async function envoyerPieceSupabase(conversationId, piece) {
      `morceauDeChemin()` retire donc tout ce qui pourrait en creuser un
      troisième — et `nomOrigine` donne la vraie extension, que l'adresse du
      fichier ne porte pas au navigateur. */
-  const propre = morceauDeChemin(piece.nom);
+  const propre = morceauDeChemin(nom);
+  /* LE POIDS RANGÉ EN BASE EST CELUI DU FICHIER RÉELLEMENT ENVOYÉ, pas
+     celui qu'on avait choisi. Une photo d'iPhone de 5,9 Mo part à 1,3 Mo
+     une fois réduite ; annoncer 5,9 dans la bulle serait faux pour
+     toujours. Mesuré au navigateur le 04/10/2026 — et `poidsDe()` ne
+     pouvait pas le dire, `expo-file-system` n'ayant pas de fichiers là-bas.
+     `envoyerFichier` le sait, lui : il compte les octets de toute façon. */
   const chemin = await envoyerFichier({
     uri,
     bucket: 'pieces-jointes',
     nom: `${conversationId}/${propre}`,
     userId: currentUserId,
-    nomOrigine: piece.nom,
-    typeMime: piece.type || null,
+    nomOrigine: nom,
+    typeMime: type,
+    onTaille: (octets) => { if (octets) taille = octets; },
   });
   if (!chemin) throw new Error('Le fichier n’a pas pu être envoyé.');
   return {
     piece_url: chemin,
-    piece_nom: piece.nom || propre,
-    piece_taille: piece.taille || null,
-    piece_type: piece.type || null,
+    piece_nom: nom || propre,
+    piece_taille: taille,
+    piece_type: type,
   };
 }
 

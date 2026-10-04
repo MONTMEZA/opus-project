@@ -60,6 +60,12 @@ export const Paintbrush = mk(MaterialCommunityIcons, 'brush');
 
 // Création
 export const Camera = mk(Feather, 'camera');
+export const ImageIcon = mk(Feather, 'image');
+/* LE TROMBONE, et pas une feuille de papier : c'est le signe universel de
+   « joindre quelque chose ». Une icône de document laissait croire qu'on ne
+   pouvait envoyer que des fichiers — c'est ce qu'a relevé le propriétaire le
+   04/10/2026, alors qu'il voulait envoyer une photo. */
+export const Paperclip = mk(Feather, 'paperclip');
 export const VideoIcon = mk(Feather, 'video');
 export const TypeIcon = mk(Feather, 'type');
 export const Layers = mk(Feather, 'layers');

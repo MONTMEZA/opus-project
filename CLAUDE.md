@@ -1404,12 +1404,71 @@ Deux corrections, et la seconde est la vraie :
 > son contenu.** Ça ne lève aucune erreur, et ça se voit uniquement en
 > mesurant les deux boîtes.
 
+#### Fichiers et Photos sont DEUX MONDES sur iPhone
+
+Signalé par le propriétaire le 04/10/2026, après l'avoir essayé : « le
+bouton ouvre directement les fichiers sur le téléphone ; il faudrait qu'on
+puisse choisir, si par exemple ce qu'on veut envoyer est une photo ».
+
+Il a raison, et c'était une erreur de conception. **L'application Fichiers
+d'iOS ne montre PAS la photothèque**, et aucun filtre passé au sélecteur de
+documents n'y change quoi que ce soit : `type: ['image/*']` restreint ce
+qu'on voit dans Fichiers, il n'ouvre pas les Photos. Or sur un chantier, la
+photo est le cas le plus fréquent — une fissure, un compteur, un support
+avant de couler. Le devis en PDF vient après.
+
+> **Trois portes, et chacune a sa raison** (`SOURCES_PIECE`, `media.js`) :
+> la photothèque, l'appareil photo — on est devant, on ne range pas d'abord
+> pour ressortir aussitôt — et Fichiers. La forme rendue est la MÊME dans
+> les trois cas, pour que l'écran n'ait pas à savoir d'où vient le fichier.
+
+Trois choses à ne pas redécouvrir :
+
+1. **Une pièce jointe ne se recadre pas.** `choisirImage()` impose
+   `allowsEditing` avec un rapport fixe, parce qu'une photo de publication
+   entre dans un cadre. Recadrer en 16:10 la photo d'une fissure verticale
+   en couperait la moitié ;
+2. **une photo n'est pas jugée sur son poids BRUT.** Un iPhone rend des
+   photos de 5 à 12 Mo, et elles passent toutes par `reduireImage()` :
+   mesuré, 5,9 Mo → 1,3 Mo. Les refuser à 10 Mo écarterait des photos qui,
+   réduites, tiennent dix fois dans la limite ;
+3. **le nom rendu par la photothèque peut être vide.** On en fabrique un
+   daté — « photo-2026-10-04-1530.jpg ». Sinon la bulle affiche « Pièce
+   jointe », et deux photos du même chantier deviennent indiscernables.
+
+#### Ce qu'on envoie n'est pas ce qu'on a choisi
+
+Deux chiffres faux, rangés en base **pour toujours**, et aucun ne faisait
+planter quoi que ce soit :
+
+- **`reduireImage()` enregistre en JPEG.** Un PNG réduit restait annoncé
+  `image/png` sous une extension `.png` alors que ce sont des octets
+  JPEG — il se télécharge au lieu de s'afficher ;
+- **le poids affiché était celui d'AVANT la réduction.** Mesuré sur la
+  vraie base : une photo rangée comme pesant **5 883 258 octets** alors que
+  le fichier en faisait **1 293 484**. La bulle annonçait « 5,9 Mo ».
+
+> **Le poids vient de l'ENVOI, pas du choix.** `envoyerFichier` compte les
+> octets de toute façon pour son contrôle de taille : il les rend par
+> `onTaille`. `poidsDe()` ne pouvait pas le dire — `expo-file-system` n'a
+> pas de fichiers au navigateur, donc il répondait `null` sans erreur, et
+> l'ancienne valeur restait. Un chemin de secours qui ne secourt rien est
+> pire que pas de chemin du tout.
+
 #### Ce qui n'a PAS été vérifié
 
-Le choix du fichier passe par l'application **Fichiers** d'iOS, et
-l'ouverture par le visualiseur du téléphone : les deux ont été pilotés au
-navigateur, pas au doigt. Et les pièces n'arrivent pas en temps réel depuis
-ce conteneur — le WebSocket ne s'intercepte pas (voir `relais-supabase.mjs`).
+Le choix du fichier passe par l'application **Fichiers** ou **Photos**
+d'iOS, et l'ouverture par le visualiseur du téléphone : les trois ont été
+pilotés au navigateur, pas au doigt. **L'appareil photo n'a pas pu être
+essayé du tout** — il n'y en a pas dans ce conteneur.
+
+Et les pièces n'arrivent pas en temps réel depuis ici — le WebSocket ne
+s'intercepte pas (voir `relais-supabase.mjs`).
+
+**Ce qui n'est pas fait, et qui se verra :** une photo jointe s'affiche avec
+une icône de document, pas avec un aperçu. Il faudrait une adresse signée
+par vignette, donc une requête de plus par bulle d'image, et des liens qui
+expirent au bout de cinq minutes. À trancher avant de le construire.
 
 ### Les pièces justificatives, et le métier qui ne construit pas (04/10/2026)
 

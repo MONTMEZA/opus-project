@@ -121,6 +121,57 @@ console.log('\nAucune adresse publique pour un espace privé');
     'une adresse éternelle posée dans une conversation finit par circuler');
 }
 
+console.log('\nLe trombone laisse CHOISIR d’où vient le fichier');
+{
+  /* LE DÉFAUT SIGNALÉ PAR LE PROPRIÉTAIRE le 04/10/2026, après l'avoir
+     essayé sur son iPhone : « le bouton ouvre directement les fichiers sur
+     le téléphone ; il faudrait qu'on puisse choisir, si par exemple ce
+     qu'on veut envoyer est une photo ».
+
+     Sur iPhone, Fichiers et Photos sont DEUX MONDES SÉPARÉS : la
+     photothèque n'apparaît pas dans Fichiers, et aucun filtre `image/*`
+     n'y change quoi que ce soit. Sur un chantier, la photo est pourtant le
+     cas le plus fréquent. */
+  const media = sansCommentaires(lire('src/lib/media.js'));
+  const choix = sansCommentaires(lire('src/components/ChoixPiece.js'));
+
+  verifier('les trois portes existent',
+    ['photos', 'camera', 'fichiers']
+      .every((c) => new RegExp(`cle: '${c}'`).test(media)),
+    'la photothèque, l’appareil photo et les fichiers : trois endroits '
+    + 'différents sur un iPhone');
+
+  verifier('le trombone ouvre le choix, pas directement les fichiers',
+    /setChoixOuvert\(true\)/.test(ecran) && !/onPress=\{joindre\}/.test(ecran),
+    'c’est exactement le défaut du 04/10/2026');
+
+  verifier('…et il a l’icône d’un trombone',
+    /<Paperclip /.test(ecran),
+    'une icône de document laisse croire qu’on ne peut envoyer que des fichiers');
+
+  /* UNE PIÈCE JOINTE NE SE RECADRE PAS. `choisirImage()` impose un rapport
+     fixe parce qu'une photo de publication entre dans un cadre ; recadrer
+     en 16:10 la photo d'une fissure verticale en couperait la moitié. */
+  const bloc = media.slice(media.indexOf('export async function choisirPieceJointe'));
+  verifier('aucun recadrage imposé sur une pièce jointe',
+    !/allowsEditing/.test(bloc),
+    'recadrer la photo d’une fissure verticale en couperait la moitié');
+
+  verifier('chaque choix porte une phrase, pas seulement un mot',
+    (media.match(/aide: '/g) || []).length >= 3 && /source\.aide/.test(choix),
+    '« Photothèque » et « Fichiers » ne veulent rien dire pour qui ne '
+    + 'connaît pas iOS');
+
+  /* Une photo d'iPhone pèse 5 à 12 Mo et passe par `reduireImage()` : la
+     refuser sur son poids BRUT écarterait des photos qui, réduites,
+     tiennent dix fois dans la limite. */
+  verifier('une photo n’est pas refusée sur son poids d’origine',
+    /startsWith\('image\/'\)/.test(api.slice(api.indexOf('export function refusPiece'),
+      api.indexOf('async function envoyerPieceSupabase'))),
+    'un iPhone rend des photos de 5 à 12 Mo, et elles sont réduites avant '
+    + 'de partir');
+}
+
 console.log('\nL’extension se lit dans le NOM, pas dans l’adresse');
 {
   /* CE BLOC FAIT TOURNER LE CALCUL, il ne relit pas le code. C'est pour ça
@@ -199,11 +250,32 @@ console.log('\nL’appelant passe bien le nom et le type');
   verifier('`envoyerFichier` accepte un nom d’origine et un type',
     /nomOrigine/.test(sansCommentaires(lire('src/lib/storage.js')))
     && /typeMime/.test(sansCommentaires(lire('src/lib/storage.js'))));
+  const envoi = api.slice(api.indexOf('async function envoyerPieceSupabase'),
+    api.indexOf('async function envoyerMessageDemo'));
   verifier('…et l’envoi d’une pièce les passe',
-    /nomOrigine: piece\.nom/.test(api) && /typeMime: piece\.type/.test(api),
+    /nomOrigine:/.test(envoi) && /typeMime:/.test(envoi),
     'sans eux, l’extension retombe sur l’adresse du fichier');
   verifier('le nom est assaini avant d’entrer dans le chemin',
-    /morceauDeChemin\(piece\.nom\)/.test(api));
+    /morceauDeChemin\(/.test(envoi));
+
+  /* CE QUI EST ENVOYÉ N'EST PAS TOUJOURS CE QUI A ÉTÉ CHOISI :
+     `reduireImage()` enregistre en JPEG. Un PNG réduit resterait annoncé
+     « image/png » sous une extension `.png` alors que ce sont des octets
+     JPEG, et la bulle afficherait le poids d'AVANT — un chiffre faux rangé
+     en base pour toujours. */
+  verifier('le type suit la réduction, pas le fichier d’origine',
+    /image\/jpeg/.test(envoi),
+    'un PNG réduit reste annoncé « image/png » alors que ce sont des octets JPEG');
+
+  /* LE POIDS VIENT DE L'ENVOI LUI-MÊME. `poidsDe()` ne répond rien au
+     navigateur (`expo-file-system` n'y a pas de fichiers), et une photo
+     réduite de 5,9 Mo à 1,3 Mo était rangée en base comme pesant 5,9 —
+     mesuré sur la vraie base le 04/10/2026. */
+  verifier('le poids rangé en base est celui du fichier RÉELLEMENT envoyé',
+    /onTaille:/.test(envoi)
+    && /onTaille\(octets\.length\)/.test(sansCommentaires(lire('src/lib/storage.js')))
+    && /onTaille && taille/.test(sansCommentaires(lire('src/lib/storage.js'))),
+    'sinon la bulle annonce 5,9 Mo pour un fichier de 1,3 Mo, pour toujours');
 }
 
 console.log('');

@@ -78,6 +78,7 @@ export const ESPACES_PRIVES = ['documents', 'pieces-jointes'];
 
 export async function envoyerFichier({
   uri, bucket, nom, userId, onProgress, nomOrigine = null, typeMime = null,
+  onTaille = null,
 }) {
   if (!hasSupabase) return uri;           // mode démo : on garde l'adresse locale
   if (!uri || !userId) return null;
@@ -90,10 +91,17 @@ export async function envoyerFichier({
   const { ext, type } = typeDeFichier(nomOrigine || uri, typeMime);
   const chemin = `${userId}/${nom}-${Date.now()}.${ext}`;
 
+  /* `onTaille` REND LE POIDS RÉEL DU FICHIER ENVOYÉ, et il est déjà
+     calculé des deux côtés pour le contrôle de taille : c'est gratuit.
+     Sans lui, l'appelant doit le redemander — et `poidsDe()` ne répond
+     rien au navigateur, où `expo-file-system` n'a pas de fichiers. Mesuré
+     le 04/10/2026 : une photo réduite à 1,3 Mo était rangée en base comme
+     pesant 5,9 Mo, et la bulle l'affichait. Un chiffre faux, pour
+     toujours. */
   if (Platform.OS === 'web') {
-    await envoiWeb({ uri, bucket, chemin, type });
+    await envoiWeb({ uri, bucket, chemin, type, onTaille });
   } else {
-    await envoiTelephone({ uri, bucket, chemin, type, onProgress });
+    await envoiTelephone({ uri, bucket, chemin, type, onProgress, onTaille });
   }
 
   /* LES ESPACES PRIVÉS rendent le CHEMIN, pas une adresse : il n'y a pas
@@ -107,10 +115,11 @@ export async function envoyerFichier({
 }
 
 /** Web : lecture en mémoire, puis envoi par le client Supabase. */
-async function envoiWeb({ uri, bucket, chemin, type }) {
+async function envoiWeb({ uri, bucket, chemin, type, onTaille }) {
   const reponse = await fetch(uri);
   const octets = new Uint8Array(await reponse.arrayBuffer());
   if (octets.length > TAILLE_MAX_MO * 1024 * 1024) throw tropLourd(octets.length);
+  if (onTaille) onTaille(octets.length);
 
   const { error } = await supabase.storage.from(bucket).upload(chemin, octets, {
     contentType: type,
@@ -126,7 +135,7 @@ async function envoiWeb({ uri, bucket, chemin, type }) {
  * ce qu'on cherche précisément à éviter. On parle donc directement à
  * l'endpoint, avec le jeton de la session en cours.
  */
-async function envoiTelephone({ uri, bucket, chemin, type, onProgress }) {
+async function envoiTelephone({ uri, bucket, chemin, type, onProgress, onTaille }) {
   /* CHAQUE ÉTAPE PORTE SON NOM
      --------------------------
      Un envoi qui échoue depuis un téléphone ne se reproduit pas dans le
@@ -153,6 +162,7 @@ async function envoiTelephone({ uri, bucket, chemin, type, onProgress }) {
 
   const taille = await etape('taille du fichier', async () => fichier.size || 0);
   if (taille > TAILLE_MAX_MO * 1024 * 1024) throw tropLourd(taille);
+  if (onTaille && taille) onTaille(taille);
 
   const session = await etape('session', async () => {
     const { data } = await supabase.auth.getSession();

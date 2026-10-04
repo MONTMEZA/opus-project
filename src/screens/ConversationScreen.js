@@ -9,8 +9,9 @@ import {
 import { C, F, T, S, R, APPUI, interligne, viser } from '../theme';
 import { EmptyState } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
-import { Send, Flag, AlertTriangle, FileText, X } from '../components/icons';
-import { choisirDocument } from '../lib/media';
+import { Send, Flag, AlertTriangle, FileText, Paperclip, X } from '../components/icons';
+import { choisirPieceJointe } from '../lib/media';
+import ChoixPiece from '../components/ChoixPiece';
 import { refusPiece, urlPiece } from '../lib/api';
 import * as retour from '../lib/retour';
 import { messageClair } from '../lib/erreurs';
@@ -162,10 +163,15 @@ export default function ConversationScreen({
      ferait redessiner toute l'application pour un nom de fichier. */
   const [piece, setPiece] = useState(null);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  /* OÙ EST LE FICHIER ? Le trombone ouvrait Fichiers directement, et sur
+     iPhone la photothèque n'y apparaît pas : impossible d'envoyer la photo
+     qu'on vient de prendre. Signalé par le propriétaire le 04/10/2026. */
+  const [choixOuvert, setChoixOuvert] = useState(false);
 
-  const joindre = async () => {
+  const joindre = async (depuis) => {
+    setChoixOuvert(false);
     try {
-      const f = await choisirDocument();
+      const f = await choisirPieceJointe(depuis);
       if (!f) return;
       /* On refuse AVANT de monter le fichier. Le serveur refuserait de
          toute façon, mais au bout de l'envoi — trois minutes d'attente en
@@ -276,11 +282,11 @@ export default function ConversationScreen({
       <View style={s.inputRow}>
         <Pressable
           style={({ pressed }) => [s.trombone, pressed && APPUI.discret]}
-          onPress={joindre}
+          onPress={() => setChoixOuvert(true)}
           accessibilityRole="button"
-          accessibilityLabel="Joindre un fichier"
+          accessibilityLabel="Joindre une photo ou un fichier"
         >
-          <FileText size={16} color={C.ink} />
+          <Paperclip size={16} color={C.ink} />
         </Pressable>
         <ChampLocal
           ref={brouillon}
@@ -301,6 +307,11 @@ export default function ConversationScreen({
           <Send size={16} color={envoiEnCours ? 'rgba(255,255,255,0.5)' : '#fff'} />
         </Pressable>
       </View>
+      <ChoixPiece
+        ouvert={choixOuvert}
+        onChoisir={joindre}
+        onFermer={() => setChoixOuvert(false)}
+      />
     </KeyboardAvoidingView>
   );
 }

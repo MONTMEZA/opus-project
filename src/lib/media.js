@@ -274,3 +274,85 @@ export async function choisirDocument() {
   const a = res.assets[0];
   return { uri: a.uri, nom: a.name, taille: a.size, type: a.mimeType };
 }
+
+/**
+ * UNE PIÈCE JOINTE, DEPUIS LÀ OÙ ELLE SE TROUVE VRAIMENT.
+ *
+ * LE DÉFAUT SIGNALÉ PAR LE PROPRIÉTAIRE, le 04/10/2026
+ * ----------------------------------------------------
+ * « Le bouton ouvre directement les fichiers sur le téléphone ; il faudrait
+ * qu'on puisse choisir, si par exemple ce qu'on veut envoyer est une
+ * photo. »
+ *
+ * Il a raison, et c'est une erreur de ma part : sur iPhone, l'application
+ * **Fichiers** ne montre PAS la photothèque. Ce sont deux mondes séparés.
+ * Un `type: ['image/*']` passé au sélecteur de documents n'y change rien —
+ * il filtre ce qu'on voit dans Fichiers, il n'ouvre pas les Photos.
+ *
+ * Et sur un chantier, c'est le cas le PLUS fréquent : on photographie une
+ * fissure, un compteur, un support avant de couler. Le devis en PDF vient
+ * après.
+ *
+ * TROIS PORTES, ET CHACUNE A SA RAISON
+ * ------------------------------------
+ *   - `photos`   : la photothèque — la fissure prise ce matin ;
+ *   - `camera`   : l'appareil photo — on est devant, on ne range pas
+ *                  d'abord dans la photothèque pour ressortir aussitôt ;
+ *   - `fichiers` : l'application Fichiers — le devis, le plan, le PDF.
+ *
+ * TROIS CHOSES À NE PAS REDÉCOUVRIR
+ * ---------------------------------
+ *   1. **Aucun recadrage.** `choisirImage()` impose `allowsEditing` avec un
+ *      rapport fixe, parce qu'une photo de publication entre dans un cadre.
+ *      Une pièce jointe, non : recadrer en 16:10 la photo d'une fissure
+ *      verticale en couperait la moitié. Ici, on ne touche pas au cadrage ;
+ *   2. **le nom rendu par la photothèque peut être vide.** On en fabrique
+ *      un lisible et daté — « photo-2026-10-04-1530.jpg ». Sans ça, la
+ *      bulle afficherait « Pièce jointe » et deux photos du même chantier
+ *      deviendraient indiscernables ;
+ *   3. **la forme rendue est la MÊME dans les trois cas**
+ *      (`{ uri, nom, taille, type }`), pour que l'écran n'ait pas à savoir
+ *      d'où vient le fichier.
+ */
+export const SOURCES_PIECE = [
+  { cle: 'photos', label: 'Photothèque', aide: 'Une photo déjà prise' },
+  { cle: 'camera', label: 'Appareil photo', aide: 'Photographier maintenant' },
+  { cle: 'fichiers', label: 'Fichiers', aide: 'Un devis, un plan, un PDF' },
+];
+
+/** Deux chiffres, pour que la date se lise et se trie. */
+const deux = (n) => String(n).padStart(2, '0');
+
+function nomDatePour(type) {
+  const d = new Date();
+  const ext = (type || '').includes('png') ? 'png' : 'jpg';
+  return `photo-${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`
+    + `-${deux(d.getHours())}${deux(d.getMinutes())}.${ext}`;
+}
+
+export async function choisirPieceJointe(depuis = 'fichiers') {
+  if (depuis === 'fichiers') return choisirDocument();
+
+  const camera = depuis === 'camera';
+  if (!(await autorisation(camera))) {
+    throw new Error(camera
+      ? 'Accès à l’appareil photo refusé. Autorisez-le dans les réglages du téléphone.'
+      : 'Accès aux photos refusé. Autorisez-le dans les réglages du téléphone.');
+  }
+
+  /* PAS de `allowsEditing` : voir le point 1 ci-dessus. */
+  const options = { mediaTypes: ['images'], quality: 0.8 };
+  const res = camera
+    ? await ImagePicker.launchCameraAsync(options)
+    : await ImagePicker.launchImageLibraryAsync(options);
+
+  if (res.canceled || !res.assets || res.assets.length === 0) return null;
+  const a = res.assets[0];
+  const type = a.mimeType || 'image/jpeg';
+  return {
+    uri: a.uri,
+    nom: a.fileName || nomDatePour(type),
+    taille: a.fileSize ?? (await poidsDe(a.uri)),
+    type,
+  };
+}

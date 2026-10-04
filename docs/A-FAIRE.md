@@ -645,15 +645,39 @@ fonction Edge **dit** quand elle s'est arrêtée trop tôt.
 > plus. Je ne peux pas le faire d'ici : le connecteur Supabase refuse, par
 > sécurité, tout ordre de suppression, et c'est une bonne chose.
 
+**Le trombone laisse choisir d'où vient le fichier** — ajouté le
+04/10/2026, après votre essai sur l'iPhone : « le bouton ouvre directement
+les fichiers ; il faudrait qu'on puisse choisir, si par exemple ce qu'on
+veut envoyer est une photo ».
+
+Vous aviez raison, et c'était une erreur de ma part. Sur iPhone,
+**Fichiers ne montre pas la photothèque** : ce sont deux applications
+différentes. Un artisan qui vient de photographier une fissure n'avait
+donc aucun moyen de l'envoyer. Le trombone ouvre désormais trois
+choix — **Photothèque**, **Appareil photo**, **Fichiers** —, chacun avec
+une phrase qui dit ce que c'est.
+
+Deux chiffres faux ont été corrigés au passage, et aucun ne faisait
+planter quoi que ce soit : une photo réduite restait annoncée avec son
+**type** et son **poids d'avant réduction**. Mesuré sur votre base : 5,9 Mo
+affichés pour un fichier qui en pesait 1,3.
+
 **Ce qui n'a pas pu être vérifié ici**, et qu'il faut regarder sur
 l'iPhone :
 
-- le choix du fichier passe par l'application **Fichiers** d'iOS — je l'ai
-  piloté au navigateur, pas au doigt ;
-- l'ouverture d'un PDF reçu : elle passe par le visualiseur du téléphone ;
+- **l'appareil photo n'a pas pu être essayé du tout** — il n'y en a pas
+  dans ce conteneur ;
+- la photothèque et Fichiers ont été pilotées au navigateur, pas au doigt ;
+- l'ouverture d'un PDF reçu passe par le visualiseur du téléphone ;
 - les pièces jointes n'arrivent **pas en temps réel** (le WebSocket ne
   s'intercepte pas depuis ce conteneur) : elles apparaissent au
   rechargement de la conversation.
+
+**Ce qui n'est pas fait, et qui se verra :** une photo jointe s'affiche
+avec une icône de document, pas avec un aperçu de la photo. C'est
+faisable, mais ça demande une adresse signée par vignette — une requête de
+plus par bulle d'image, et des liens qui expirent au bout de cinq minutes.
+À décider ensemble avant de le construire.
 
 `npm run verifier-pieces-jointes` tient l'ensemble — et il **fait tourner**
 le calcul d'extension sur l'adresse qui a cassé, au lieu de relire le code.
