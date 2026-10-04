@@ -116,8 +116,72 @@ liste**. Mais deux choses sont vraies en même temps :
 - aujourd'hui il y a **11 comptes et 13 publications** à migrer. C'est le
   moment le moins cher de toute la vie du projet.
 
-**Règle à tenir en attendant** : ne rien construire de nouveau qui enfonce
-l'hypothèse « un compte = un artisan ».
+#### ✅ TRANCHÉ PAR LE PROPRIÉTAIRE le 04/10/2026
+
+> « Un artisan est vérifié avec un numéro de SIRET, donc un artisan détient
+> une entreprise. Je pense qu'on peut laisser comme c'est prévu depuis le
+> début. »
+
+**La décision est retenue, et elle est solide.** Elle ne contourne pas le
+problème : elle le dissout, parce qu'elle était déjà vraie dans le code
+sans qu'on l'ait écrite.
+
+`professional_profiles` porte **`siret`** depuis le début, et la doctrine
+de vérification (§ pièces justificatives) dit déjà, mot pour mot :
+« les deux prouvent la même chose : **votre entreprise existe et porte ce
+SIRET** ». Le badge vérifié n'atteste pas une personne — il atteste une
+ENTREPRISE.
+
+> **Une fiche professionnelle EST une entreprise.** Un compte, un SIRET,
+> une entreprise. Il n'y a pas de table `entreprises` à créer parce que la
+> fiche pro en tient lieu.
+
+**Ce que ça règle, et c'est beaucoup :**
+
+- un chantier appartient au compte, donc à l'entreprise. Aucune règle RLS
+  à réécrire, aucune migration ;
+- la **sous-traitance du §18 marche nativement** : elle se passe entre deux
+  SIRET, c'est-à-dire entre deux comptes. C'est exactement ce que la Place
+  des pros fait déjà ;
+- le modèle couvre micro-entrepreneur, entreprise individuelle, EURL et
+  SASU — c'est-à-dire l'écrasante majorité des entreprises du bâtiment, et
+  le cas du propriétaire lui-même.
+
+**Ce que ça ferme, et qu'il faut savoir sans en faire un drame :**
+
+| ce qui n'existera pas | le §concerné |
+|---|---|
+| un **salarié** qui a son propre accès | §5, §11 « planning des salariés » |
+| des **rôles** (qui fait un devis, qui le valide) | §21 « permissions par rôle » |
+| un artisan qui a **deux sociétés** | aucun — deux comptes |
+
+Un patron de trois compagnons aura donc **un** accès, pas quatre. C'est un
+choix, pas un oubli : au moment où le premier salarié arrivera pour de
+vrai, ce sera un vrai besoin, chiffrable, et on le construira avec les
+données devant nous plutôt qu'en l'imaginant.
+
+#### Et la seule discipline qui rend le retour en arrière bon marché
+
+Si ce choix devait être revu un jour, ce qui coûterait cher est précis :
+**56 règles de `schema.sql` disent aujourd'hui `auth.uid() = …`.** Les
+réécrire à la main est le travail d'une journée et le risque d'une faille.
+
+> **Pour tout ce qui sera construit À PARTIR DE MAINTENANT — chantiers,
+> devis, factures, clients —, l'appartenance passe par une FONCTION, pas
+> par une comparaison écrite à la main.** Une fonction qui, aujourd'hui,
+> rend exactement `auth.uid() = x`.
+>
+> C'est le même procédé que `est_masque()` et `est_un_pro()`, qui ont déjà
+> fait leurs preuves ici. Le jour — s'il vient — où une entreprise a
+> plusieurs membres, **on change UNE fonction** au lieu de trente règles.
+
+Elle ne se construit pas aujourd'hui : une fonction que personne n'appelle
+serait exactement le « bouton §18 » retiré avant d'être livré. Elle naîtra
+avec la première table de chantier, et c'est noté ici pour qu'on ne
+l'oublie pas.
+
+**Les 56 règles existantes ne bougent PAS.** Avec « un compte = une
+entreprise », elles sont justes telles qu'elles sont écrites.
 
 ### 3.2 Le côté PARTICULIER n'apparaît nulle part dans le cahier des charges
 

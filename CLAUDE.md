@@ -218,10 +218,31 @@ réseau social est le module 9. L'original PDF est à côté et **fait foi**.
 le document. **À lire avant de construire quoi que ce soit de nouveau.**
 Trois points en sortent, à ne pas redécouvrir :
 
-1. **Un compte = un artisan aujourd'hui.** Il n'existe ni entreprise, ni
-   salarié, ni rôle. Le cahier des charges en a besoin à cinq endroits, et le
-   jour où ça changera, **toutes les règles RLS seront à réécrire**. En
-   attendant : ne rien construire qui enfonce cette hypothèse.
+1. **Un compte = un artisan = UNE ENTREPRISE.** Tranché par le propriétaire
+   le 04/10/2026 : « un artisan est vérifié avec un numéro de SIRET, donc un
+   artisan détient une entreprise ». C'était déjà vrai dans le code sans
+   qu'on l'ait écrit — `professional_profiles.siret` existe depuis le début,
+   et le badge vérifié atteste une ENTREPRISE, pas une personne.
+
+   > **Une fiche professionnelle EST une entreprise.** Il n'y a pas de table
+   > `entreprises` à créer : la fiche pro en tient lieu. Un chantier
+   > appartiendra donc au compte, et la sous-traitance du §18 marche
+   > nativement — elle se passe entre deux SIRET, c'est-à-dire deux comptes.
+
+   Ce que ça ferme, et qui est un CHOIX, pas un oubli : pas de salarié avec
+   son propre accès, pas de rôles. Un patron de trois compagnons aura un
+   accès, pas quatre.
+
+   **Et la discipline qui va avec, pour tout ce qui sera construit à partir
+   de maintenant** (chantiers, devis, factures, clients) : l'appartenance
+   passe par une FONCTION — qui rend aujourd'hui exactement
+   `auth.uid() = x` —, jamais par une comparaison écrite à la main. Même
+   procédé que `est_masque()` et `est_un_pro()`. Si ce choix devait être
+   revu, on changerait UNE fonction au lieu des **56 règles** qui disent
+   `auth.uid() = …` dans `schema.sql`. Elle naîtra avec la première table de
+   chantier : une fonction que personne n'appelle serait le « bouton §18 »
+   retiré avant d'être livré. **Les 56 règles existantes ne bougent pas** —
+   avec « un compte = une entreprise », elles sont justes.
 2. **Le côté particulier n'apparaît NULLE PART** dans le cahier des charges
    (demandes de travaux, SOS, profil public particulier). Le propriétaire a
    tranché le 29/09/2026 : **c'est un oubli du document, on les garde.**
