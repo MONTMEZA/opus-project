@@ -2267,6 +2267,114 @@ travers le mandataire, qui coupe environ une connexion sur cinq. **Un échec
 isolé de ce contrôle n'est pas un défaut du code** — il faut le relancer
 avant de chercher ailleurs. C'est arrivé une fois pendant ce lot.
 
+### Glisser entre les trois pages de Découvrir (04/10/2026)
+
+Demandé par le propriétaire :
+
+> « J'aimerais qu'on puisse directement scroller pour passer de "Pour moi" à
+> "Place des pros" à "Demandes" et ainsi de suite. On conserverait le bouton
+> en haut qui se déplace pour dire sur quelle page on se trouve, mais c'est
+> plus simple de scroller je trouve. »
+
+#### Le risque de ce lot n'est PAS le geste, c'est le montage
+
+Un `ScrollView` monte **tous** ses enfants d'un coup. Poser les trois écrans
+dedans aurait donc triplé le premier rendu de « Découvrir » — trois listes,
+trois en-têtes, trois barres de recherche —, c'est-à-dire exactement le
+défaut qui bloquait l'iPhone plusieurs secondes au démarrage le 29/09 et que
+tout le lot 4 a servi à corriger. Une fonctionnalité de confort qui annule
+une correction de fond est une mauvaise affaire.
+
+> **Une page n'est montée qu'une fois VISITÉE, et elle le reste ensuite.**
+> Avant, ce n'est qu'une boîte vide de la largeur de l'écran — ce qui suffit
+> au défilement, qui ne connaît que des largeurs.
+
+Mesuré au navigateur : à l'ouverture de « Découvrir », **trois pages de
+390 px (1170 au total) et une seule montée** (`○ ● ○`). Après un passage sur
+chacune : `● ● ●`, et revenir est instantané.
+
+Et le franchissement à **mi-course** est un bénéfice, pas un compromis : la
+page suivante se monte quand elle occupe plus de la moitié de l'écran, donc
+avant qu'on la voie en entier.
+
+#### Aucune dépendance : le système arbitre déjà
+
+`react-native-pager-view` existe et est fourni dans Expo Go. Il n'a pas été
+pris, et c'est la raison déjà écrite dans `Carrousel.js` : **le système sait
+départager un glissement horizontal d'un défilement vertical, et il le fait
+côté natif** — donc toujours mieux qu'un arbitrage écrit en JavaScript.
+`PagesGlissantes` est le même mécanisme que le carrousel de photos, à
+l'échelle de l'écran.
+
+#### Une seule fonction pour la pastille ET pour le doigt
+
+C'est le point qui aurait cassé en silence. `onChange` de la pastille
+faisait trois choses : recharger les demandes reçues, éteindre le point,
+marquer les demandes vues. Un glissement qui aurait seulement changé
+`decouvrirTab` **aurait affiché le bon écran sans rien faire de tout ça** —
+et personne ne l'aurait remarqué, puisque l'écran, lui, s'affiche. Le point
+orange serait resté allumé pour toujours, ce qui est précisément le défaut
+réparé le matin même.
+
+> **Deux façons d'arriver au même écran doivent faire exactement le même
+> travail.** `changerOngletDecouvrir` est la seule porte, et
+> `ongletsDecouvrir` la seule liste — deux listes séparées se
+> désaligneraient le jour où l'on ajoute un onglet : la pastille dirait
+> « Demandes » et le doigt ouvrirait autre chose.
+
+**Vérifié au navigateur, en glissant et non en appuyant** : avant,
+`["Demandes, nouveautés", "Découvrir, nouveautés", "Messages, nouveautés"]` ;
+après être arrivé sur « Demandes » **par le défilement**,
+`["Messages, nouveautés"]`. Les deux niveaux s'éteignent ensemble.
+
+#### Il faut les DEUX portes pour savoir où l'on est arrivé
+
+`onMomentumScrollEnd` seul ne suffit pas — et `Carrousel.js` le disait déjà
+depuis le lot 0 : **un glissement lent se termine sans élan**, l'événement
+de fin d'élan n'arrive jamais, et la pastille reste bloquée sur l'onglet de
+départ. Reconstaté ici le 04/10, dans l'autre sens : **un défilement posé
+par programme ne déclenche aucune fin d'élan au navigateur** — la première
+version a donc affiché la bonne page avec la mauvaise pastille.
+
+D'où `onScroll` **et** `onMomentumScrollEnd`, avec `scrollEventThrottle={32}` :
+exactement le réglage du carrousel.
+
+> **Ce n'est pas la bannière du lot 6.** Le gestionnaire lit un nombre et
+> compare ; il ne redessine rien tant qu'on n'a pas franchi la moitié d'une
+> page. L'état change **une fois par glissement**, pas une fois par pixel.
+> La règle du lot 6 vise ce qui ANIME depuis JavaScript, pas ce qui observe.
+
+#### `contentOffset` est ignoré par `react-native-web`
+
+« Place des pros » est le deuxième onglet : on doit y arriver directement.
+La propriété `contentOffset` ne suffit pas — le placement se fait au premier
+`onLayout`, qui marche des deux côtés. Mesuré : offset 390 à l'ouverture,
+donc la bonne page, sans voir passer la première.
+
+#### Ce qu'il faut savoir, et qui ne se corrigera pas
+
+**Un glissement qui commence sur une zone qui défile déjà horizontalement
+déplace CETTE zone, pas la page.** Il y en a deux dans la Place des pros :
+la rangée de pastilles de filtre, et le carrousel de photos d'une annonce.
+C'est le comportement d'Instagram, et c'est le seul possible : deux
+défilements imbriqués dans le même axe ne peuvent pas répondre tous les deux
+au même doigt. En pratique la carte occupe une grande partie de l'écran —
+donc pour changer de page, on glisse sur une marge, un en-tête, ou on touche
+la pastille du haut, qui reste là pour ça.
+
+#### Ce qui n'a PAS été vérifié
+
+**Le geste lui-même.** Sur ordinateur, une zone défilante répond à la
+molette, pas au glissement : l'arbitrage réel entre « je fais défiler la
+liste » et « je change de page » ne se juge que sur le téléphone. C'est
+écrit dans ce document depuis le lot 5, et c'est ce que ce lot-ci touche de
+plus près.
+
+Ce qui SE vérifie, et qui a été vérifié, c'est tout le reste : les trois
+pages existent avec la bonne largeur, une seule est montée au départ, la
+pastille suit le défilement, le défilement suit la pastille, et les voyants
+s'éteignent par les deux chemins.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

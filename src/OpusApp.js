@@ -56,6 +56,7 @@ import {
 } from './lib/cloudinary';
 import { aiMatchPros } from './lib/ai';
 import { partagerPost } from './lib/partage';
+import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
 
 /**
@@ -2111,6 +2112,59 @@ export default function OpusApp() {
   const voyantDemandes = canPublish && !demandesVues && demandes.length > 0;
   const voyantDecouvrir = voyantPourMoi || voyantDemandes;
 
+  /* ------------------------------------------------------------------
+     LES ONGLETS DE « DÉCOUVRIR » — une seule liste, deux lecteurs.
+
+     Elle sert à la fois à la rangée de pastilles et aux pages qu'on fait
+     défiler au doigt. Deux listes séparées se désaligneraient le jour où
+     l'on ajoute un onglet : la pastille dirait « Demandes » et le doigt
+     ouvrirait autre chose, sans la moindre erreur. Même raisonnement que
+     les trois voyants ci-dessus.
+
+     L'ORDRE EST UN CHOIX. « Pour moi » d'abord, parce qu'une demande qui
+     m'est nommément adressée passe avant une annonce publique : c'est du
+     travail qui attend une réponse, pas une occasion à saisir. Et un
+     artisan n'a pas besoin qu'on lui trouve un artisan — son deuxième
+     onglet est sa place de marché entre pros.
+     ------------------------------------------------------------------ */
+  const ongletsDecouvrir = canPublish ? [
+    { key: 'pourmoi', label: 'Pour moi', dot: voyantPourMoi },
+    { key: 'artisans', label: 'Place des pros' },
+    { key: 'demandes', label: 'Demandes', dot: voyantDemandes },
+  ] : [
+    { key: 'artisans', label: 'Artisans' },
+    { key: 'demandes', label: 'Demandes', dot: voyantDemandes },
+  ];
+
+  const indexDecouvrir = Math.max(
+    0, ongletsDecouvrir.findIndex((o) => o.key === decouvrirTab),
+  );
+
+  /**
+   * CHANGER D'ONGLET — par la pastille OU par le glissement.
+   *
+   * Les deux chemins passent ici, et c'est la règle des voyants du 04/10
+   * appliquée d'avance : deux façons d'arriver au même écran doivent faire
+   * exactement le même travail. Sans cette fonction unique, glisser jusqu'à
+   * « Pour moi » n'aurait ni rechargé les demandes ni éteint le point — et
+   * personne ne l'aurait remarqué, puisque l'écran, lui, s'affiche.
+   */
+  const changerOngletDecouvrir = (k) => {
+    setDecouvrirTab(k);
+    if (k === 'demandes') setDemandesVues(true);
+    /* On recharge à chaque ouverture : une demande peut être arrivée depuis
+       la dernière fois, et l'artisan vient justement vérifier ça.
+       Silencieux si on a déjà quelque chose à montrer. */
+    if (k === 'pourmoi') {
+      chargerDemandesRecues({ silencieux: demandesRecuesEtat === 'pret' });
+      /* Venir les lire ÉTEINT le signal. Sans cela, la pastille resterait
+         allumée pour toujours et finirait par ne plus rien vouloir dire —
+         c'est exactement ce qui était arrivé à la cloche des
+         notifications. */
+      marquerDemandesVues();
+    }
+  };
+
   /** Le post dont on regarde les commentaires dans le fil vidéo. */
   const commentsPost = commentsPostId != null
     ? posts.find((p) => p.id === commentsPostId)
@@ -2295,92 +2349,99 @@ export default function OpusApp() {
               <PillToggle
                 small
                 value={decouvrirTab}
-                onChange={(k) => {
-                  setDecouvrirTab(k);
-                  if (k === 'demandes') setDemandesVues(true);
-                  /* On recharge à chaque ouverture : une demande peut être
-                     arrivée depuis la dernière fois, et l'artisan vient
-                     justement vérifier ça. Silencieux si on a déjà
-                     quelque chose à montrer. */
-                  if (k === 'pourmoi') {
-                    chargerDemandesRecues({ silencieux: demandesRecuesEtat === 'pret' });
-                    /* Venir les lire ÉTEINT le signal. Sans cela, la
-                       pastille resterait allumée pour toujours et finirait
-                       par ne plus rien vouloir dire — c'est exactement ce
-                       qui était arrivé à la cloche des notifications. */
-                    marquerDemandesVues();
-                  }
-                }}
-                /* L'ORDRE EST UN CHOIX. « Pour moi » d'abord, parce qu'une
-                   demande qui m'est nommément adressée passe avant une
-                   annonce publique : c'est du travail qui attend une
-                   réponse, pas une occasion à saisir.
-                   Un artisan n'a pas besoin qu'on lui trouve un artisan :
-                   son deuxième onglet est sa place de marché entre pros. */
+                /* LA PASTILLE ET LE GLISSEMENT APPELLENT LA MÊME FONCTION.
+                   C'est la règle des voyants du 04/10, appliquée d'avance :
+                   deux chemins qui mènent au même écran doivent faire
+                   exactement le même travail. Sinon, glisser jusqu'à « Pour
+                   moi » n'aurait ni rechargé les demandes ni éteint le
+                   point — et personne ne l'aurait remarqué, puisque
+                   l'écran, lui, s'affiche. */
+                onChange={changerOngletDecouvrir}
                 /* « Place des pros » ne porte jamais de point : rien n'y
                    est adressé à quelqu'un en particulier. Un voyant sur une
                    place publique voudrait dire « il s'est passé quelque
                    chose », ce qui est vrai en permanence et ne se termine
                    jamais. */
-                options={userType === 'pro' ? [
-                  { key: 'pourmoi', label: 'Pour moi', dot: voyantPourMoi },
-                  { key: 'artisans', label: 'Place des pros' },
-                  { key: 'demandes', label: 'Demandes', dot: voyantDemandes },
-                ] : [
-                  { key: 'artisans', label: 'Artisans' },
-                  { key: 'demandes', label: 'Demandes', dot: voyantDemandes },
-                ]}
+                options={ongletsDecouvrir}
               />
             </View>
 
-            {decouvrirTab === 'pourmoi' && userType === 'pro' ? (
-              <DemandesRecuesScreen
-                demandes={demandesRecues}
-                chargement={demandesRecuesEtat === 'charge'}
-                onRepondre={repondreDemandeRecue}
-                onAppeler={appeler}
-                onVoirProfil={viewProfile}
-              />
-            ) : decouvrirTab === 'artisans' ? (userType === 'pro' ? (
-              <PlaceProScreen
-                onRafraichir={rafraichirEcran} rafraichit={rafraichit}
-                annonces={annonces}
-                moi={pros[myProId] || null}
-                onPublier={publierAnnonce}
-                onRepondre={repondreAnnonce}
-                /* Écrire à quelqu'un qui a répondu : le même chemin que
-                   « Contacter », donc la même conversation s'il y en a
-                   déjà une. */
-                onEcrire={(pro) => handleContact({ id: pro.id }, 'message')}
-                onFermer={fermerAnnonce}
-                onVoirProfil={viewProfile}
-                onErreur={showErreur}
-                onSignaler={ouvrirSignalement}
-              />
-            ) : (
-              <DecouvrirScreen
-                pros={pros}
-                askAiMatch={askAiMatch}
-                onEffacerIa={() => { setAiMatches(null); setAiMatchError(null); }}
-                aiMatches={aiMatches} aiMatchLoading={aiMatchLoading} aiMatchError={aiMatchError}
-                onView={viewProfile} onContact={handleContact}
-              />
-            )) : (
-              <DemandesScreen
-                onRafraichir={rafraichirEcran} rafraichit={rafraichit}
-                userType={userType}
-                mesMetiers={metiersDe(pros[myProId])}
-                demandes={demandes}
-                filtreMetier={demandeFiltre}
-                setFiltreMetier={setDemandeFiltre}
-                onPublier={publierDemande}
-                onRepondre={repondreDemande}
-                moi={userType === 'pro' ? (pros[myProId] || null) : monProfil}
-                mesReponses={mesReponsesDemandes}
-                onErreur={showErreur}
-                onSignaler={ouvrirSignalement}
-              />
-            )}
+            {/* LES TROIS PAGES CÔTE À CÔTE, qu'on fait défiler au doigt —
+                demandé par le propriétaire le 04/10/2026 : « c'est plus
+                simple de scroller je trouve ».
+
+                Chaque page est une FONCTION, pas un élément : elle n'est
+                APPELÉE que lorsque la page a été visitée au moins une
+                fois. Écrire les trois écrans directement les monterait
+                tous les trois au premier affichage de « Découvrir » —
+                trois listes, trois en-têtes, trois barres de recherche —
+                et c'est exactement le défaut qui bloquait l'iPhone
+                plusieurs secondes au démarrage le 29/09. */}
+            <PagesGlissantes
+              pages={ongletsDecouvrir.map((o) => ({
+                key: o.key,
+                rendu: () => {
+                  if (o.key === 'pourmoi') {
+                    return (
+                      <DemandesRecuesScreen
+                        demandes={demandesRecues}
+                        chargement={demandesRecuesEtat === 'charge'}
+                        onRepondre={repondreDemandeRecue}
+                        onAppeler={appeler}
+                        onVoirProfil={viewProfile}
+                      />
+                    );
+                  }
+                  if (o.key === 'artisans') {
+                    return canPublish ? (
+                      <PlaceProScreen
+                        onRafraichir={rafraichirEcran} rafraichit={rafraichit}
+                        annonces={annonces}
+                        moi={pros[myProId] || null}
+                        onPublier={publierAnnonce}
+                        onRepondre={repondreAnnonce}
+                        /* Écrire à quelqu'un qui a répondu : le même chemin
+                           que « Contacter », donc la même conversation s'il
+                           y en a déjà une. */
+                        onEcrire={(pro) => handleContact({ id: pro.id }, 'message')}
+                        onFermer={fermerAnnonce}
+                        onVoirProfil={viewProfile}
+                        onErreur={showErreur}
+                        onSignaler={ouvrirSignalement}
+                      />
+                    ) : (
+                      <DecouvrirScreen
+                        pros={pros}
+                        askAiMatch={askAiMatch}
+                        onEffacerIa={() => { setAiMatches(null); setAiMatchError(null); }}
+                        aiMatches={aiMatches}
+                        aiMatchLoading={aiMatchLoading}
+                        aiMatchError={aiMatchError}
+                        onView={viewProfile} onContact={handleContact}
+                      />
+                    );
+                  }
+                  return (
+                    <DemandesScreen
+                      onRafraichir={rafraichirEcran} rafraichit={rafraichit}
+                      userType={userType}
+                      mesMetiers={metiersDe(pros[myProId])}
+                      demandes={demandes}
+                      filtreMetier={demandeFiltre}
+                      setFiltreMetier={setDemandeFiltre}
+                      onPublier={publierDemande}
+                      onRepondre={repondreDemande}
+                      moi={userType === 'pro' ? (pros[myProId] || null) : monProfil}
+                      mesReponses={mesReponsesDemandes}
+                      onErreur={showErreur}
+                      onSignaler={ouvrirSignalement}
+                    />
+                  );
+                },
+              }))}
+              index={indexDecouvrir}
+              onIndex={changerOngletDecouvrir}
+            />
           </View>
         )}
 

@@ -168,6 +168,74 @@ console.log('\nLe cadre d’une photo suit la photo, entre deux bornes');
   }
 }
 
+console.log('\nLes trois pages de Découvrir, qu’on fait défiler au doigt');
+{
+  /* DEMANDÉ PAR LE PROPRIÉTAIRE LE 04/10/2026 : « j'aimerais qu'on puisse
+     directement scroller pour passer de "Pour moi" à "Place des pros" à
+     "Demandes" ».
+
+     LE RISQUE DE CE LOT N'EST PAS LE GESTE, C'EST LE MONTAGE. Un
+     `ScrollView` monte TOUS ses enfants d'un coup : poser les trois écrans
+     dedans triplerait le premier rendu de « Découvrir ». C'est exactement
+     le défaut qui bloquait l'iPhone plusieurs secondes au démarrage le
+     29/09/2026, et que tout ce lot-ci a servi à corriger. */
+  const pages = sansCommentaires(lire('src/components/PagesGlissantes.js'));
+  const app = sansCommentaires(lire('src/OpusApp.js'));
+
+  verifier('une page n’est montée qu’une fois VISITÉE',
+    /vues\.has\(i\) \? p\.rendu\(\) : null/.test(pages)
+    && /rendu: \(\) =>/.test(app),
+    'chaque page est une FONCTION, pas un élément : écrire les trois écrans '
+    + 'directement les monterait tous les trois');
+
+  verifier('…et elle le reste ensuite',
+    /new Set\(vues\)\.add\(index\)/.test(pages),
+    'revenir en arrière doit être instantané');
+
+  /* UNE SEULE DEHORS COMME DEDANS. Sans cette fonction unique, glisser
+     jusqu'à « Pour moi » n'aurait ni rechargé les demandes ni éteint le
+     point — et personne ne l'aurait remarqué, puisque l'écran s'affiche.
+     C'est la règle des voyants du 04/10. */
+  verifier('la pastille et le doigt appellent la MÊME fonction',
+    (app.match(/changerOngletDecouvrir/g) || []).length >= 3
+    && /onChange=\{changerOngletDecouvrir\}/.test(app)
+    && /onIndex=\{changerOngletDecouvrir\}/.test(app));
+
+  verifier('…et lisent la MÊME liste d’onglets',
+    /options=\{ongletsDecouvrir\}/.test(app)
+    && /pages=\{ongletsDecouvrir\.map/.test(app),
+    'deux listes séparées se désaligneraient le jour où l’on ajoute un '
+    + 'onglet : la pastille dirait « Demandes » et le doigt ouvrirait '
+    + 'autre chose');
+
+  /* DEUX PORTES POUR SAVOIR OÙ L'ON EST ARRIVÉ. Mesuré au navigateur le
+     04/10 : un défilement posé par programme ne déclenche AUCUNE fin
+     d'élan. Et `Carrousel.js` dit depuis le lot 0 qu'un glissement lent se
+     termine sans élan sur Android. Une seule des deux ne suffit pas. */
+  verifier('l’arrivée se lit par les DEUX portes',
+    /onScroll=\{arrivee\}/.test(pages) && /onMomentumScrollEnd=\{arrivee\}/.test(pages),
+    'un glissement lent se termine sans élan : la pastille resterait '
+    + 'bloquée sur l’onglet de départ');
+
+  verifier('…et l’état ne change qu’au franchissement',
+    /if \(page === pageAffichee\.current\) return;/.test(pages),
+    'sinon chaque pixel redessinerait l’application — la leçon de la '
+    + 'bannière du lot 6');
+
+  verifier('le placement de départ se fait à la mise en page',
+    /onLayout=\{auPremierRendu\}/.test(pages),
+    '`contentOffset` est ignoré par react-native-web : sans ce recalage, '
+    + 'on arriverait sur « Pour moi » au lieu de la Place des pros');
+
+  /* AUCUNE DÉPENDANCE AJOUTÉE : le système arbitre le geste côté natif,
+     comme pour le carrousel de photos. */
+  const pkg = lire('package.json');
+  verifier('aucun paquet de pagination ajouté',
+    !/react-native-pager-view|react-native-tab-view/.test(pkg),
+    'le système sait déjà départager un glissement horizontal d’un '
+    + 'défilement vertical — la leçon de `Carrousel.js`');
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

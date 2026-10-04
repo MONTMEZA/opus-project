@@ -939,6 +939,38 @@ ordinateur répond à la molette, pas au glissement. **À essayer sur votre
 iPhone.**
 
 
+### 2.1 undecies Glisser entre les pages de Découvrir ✅ 04/10/2026
+
+Votre demande : « j'aimerais qu'on puisse directement scroller pour passer de
+"Pour moi" à "Place des pros" à "Demandes" ». C'est fait, et les pastilles du
+haut restent — elles suivent la page, et on peut toujours les toucher.
+
+**Ce qui méritait de l'attention n'était pas le geste, c'était le reste.**
+Mettre trois écrans côte à côte les aurait montés tous les trois d'un coup :
+trois listes, trois en-têtes, trois barres de recherche au lieu d'une. C'est
+exactement ce qui bloquait votre iPhone quelques secondes au démarrage le
+29/09. Une page n'est donc montée **qu'une fois visitée** — et elle le reste,
+donc revenir est instantané.
+
+Et un détail qui serait passé inaperçu : la pastille faisait trois choses en
+plus de changer d'écran (recharger vos demandes, éteindre le point orange,
+les marquer comme vues). Un glissement qui aurait seulement changé d'écran
+aurait laissé le point allumé pour toujours — le défaut qu'on venait de
+corriger. Les deux chemins passent maintenant par la même fonction. Vérifié
+en glissant, pas en appuyant : le point s'éteint bien.
+
+**À savoir** : un glissement qui démarre sur une zone qui défile déjà de côté
+déplace cette zone, pas la page — la rangée de filtres, ou les photos d'une
+annonce. C'est ce que fait Instagram aussi, et c'est le seul comportement
+possible. Pour changer de page, on glisse sur une marge ou on touche la
+pastille.
+
+**Pas vérifié** : le geste lui-même. Un ordinateur répond à la molette, pas
+au doigt — l'arbitrage réel entre « je fais défiler la liste » et « je change
+de page » **ne se juge que sur votre iPhone**. C'est le point à essayer en
+premier.
+
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des
