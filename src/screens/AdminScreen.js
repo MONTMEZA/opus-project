@@ -46,7 +46,7 @@ import {
 } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
 import {
-  ShieldCheck, FileText, Flag, Clock, AlertTriangle, Check,
+  ShieldCheck, FileText, Flag, Clock, AlertTriangle, Check, Hammer,
 } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
 /* Les deux pièces ne s'appellent pas pareil selon le métier : un
@@ -73,17 +73,21 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
   const [onglet, setOnglet] = useState('verifications');
   const [pros, setPros] = useState([]);
   const [signalements, setSignalements] = useState([]);
+  const [demandes, setDemandes] = useState([]);
+  const [specialites, setSpecialites] = useState([]);
   const [chargement, setChargement] = useState(true);
 
   /* LA LECTURE NE TOUCHE À AUCUN ÉTAT, et c'est ce qui la rend réutilisable :
      l'effet de montage et le rechargement d'après-acte en ont besoin tous
      les deux, mais pas au même moment ni avec les mêmes garde-fous. */
   const lire = useCallback(async () => {
-    const [p, sg] = await Promise.all([
+    const [p, sg, dm, sp] = await Promise.all([
       api.fileVerifications(),
       api.signalementsAdmin(),
+      api.metierDemandes(),
+      api.specialitesProposees(),
     ]);
-    return { p, sg };
+    return { p, sg, dm, sp };
   }, []);
 
   /* `onErreur` passe par une RÉFÉRENCE, et ce n'est pas du zèle. Mesuré au
@@ -108,10 +112,12 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
   useEffect(() => {
     let vivant = true;
     lire()
-      .then(({ p, sg }) => {
+      .then(({ p, sg, dm, sp }) => {
         if (!vivant) return;
         setPros(p);
         setSignalements(sg);
+        setDemandes(dm);
+        setSpecialites(sp);
       })
       .catch((e) => { if (vivant && signaler.current) signaler.current(messageClair(e)); })
       .finally(() => { if (vivant) setChargement(false); });
@@ -126,9 +132,11 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
 
   const apresActe = useCallback(async () => {
     try {
-      const { p, sg } = await lire();
+      const { p, sg, dm, sp } = await lire();
       setPros(p);
       setSignalements(sg);
+      setDemandes(dm);
+      setSpecialites(sp);
     } catch (e) {
       if (signaler.current) signaler.current(messageClair(e));
     }
@@ -137,6 +145,8 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
 
   const nbPros = pros.filter((p) => p.aEnvoye).length;
   const nbSig = signalements.filter((x) => x.statut === 'nouveau' || x.statut === 'en_examen').length;
+  const nbRef = demandes.filter((d) => d.statut === 'en_attente').length
+    + specialites.filter((x) => x.statut === 'en_attente').length;
 
   return (
     <View style={s.ecran}>
@@ -148,20 +158,31 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
           options={[
             { key: 'verifications', label: nbPros ? `Vérifications (${nbPros})` : 'Vérifications' },
             { key: 'signalements', label: nbSig ? `Signalements (${nbSig})` : 'Signalements' },
+            { key: 'referentiel', label: nbRef ? `Référentiel (${nbRef})` : 'Référentiel' },
           ]}
         />
       </View>
 
-      {onglet === 'verifications' ? (
+      {onglet === 'verifications' && (
         <FileVerifications
           pros={pros}
           chargement={chargement}
           onActe={apresActe}
           onErreur={onErreur}
         />
-      ) : (
+      )}
+      {onglet === 'signalements' && (
         <FileSignalements
           signalements={signalements}
+          chargement={chargement}
+          onActe={apresActe}
+          onErreur={onErreur}
+        />
+      )}
+      {onglet === 'referentiel' && (
+        <FileReferentiel
+          demandes={demandes}
+          specialites={specialites}
           chargement={chargement}
           onActe={apresActe}
           onErreur={onErreur}
@@ -608,6 +629,242 @@ const CarteSignalement = React.memo(function CarteSignalement({
             « Traité » et « Rien à signaler » ne sont pas la même chose, et
             le journal garde les deux : « j&apos;ai agi » n&apos;est pas
             « il n&apos;y avait rien ».
+          </Text>
+        </>
+      )}
+    </View>
+  );
+});
+
+
+/* ==========================================================================
+   LA FILE DU RÉFÉRENTIEL
+
+   Deux choses très différentes dans un même onglet, et c'est voulu : on
+   l'ouvre pour « voir ce qui attend du côté des métiers », pas pour
+   consulter une rubrique. Mais leurs boutons ne promettent PAS la même
+   chose, et l'écran doit le dire :
+
+     - accepter une demande de métiers APPLIQUE les métiers sur la fiche.
+       L'artisan vérifié ne peut pas le faire lui-même, c'est toute la
+       raison d'être de cette file ;
+     - retenir une spécialité n'ajoute RIEN au catalogue. Celui-ci n'a
+       qu'une source — le fichier du catalogue — et
+       `npm run verifier-metiers` refuse qu'ils divergent. « Retenue » dit
+       « celle-ci entrera au prochain passage », et le journal en garde la
+       trace. Laisser croire autre chose serait pire que pas de bouton.
+   ========================================================================== */
+function FileReferentiel({ demandes, specialites, chargement, onActe, onErreur }) {
+  if (chargement) return <EmptyState>Chargement du référentiel…</EmptyState>;
+
+  const enAttente = demandes.filter((d) => d.statut === 'en_attente');
+  const motsEnAttente = specialites.filter((x) => x.statut === 'en_attente');
+
+  if (!demandes.length && !specialites.length) {
+    return (
+      <EmptyState icone={Hammer} titre="Rien n’attend">
+        Aucune demande de changement de métier, aucune spécialité proposée.
+        Ces deux files se remplissent toutes seules quand les artisans
+        écrivent.
+      </EmptyState>
+    );
+  }
+
+  /* UNE SEULE LISTE pour les deux familles : deux `FlatList` imbriquées
+     perdent la virtualisation, et c'est exactement ce que le lot 4 a
+     corrigé ailleurs. On aplatit, avec un en-tête par famille. */
+  const lignes = [
+    ...(demandes.length
+      ? [{ type: 'titre', id: 't-metiers',
+        texte: enAttente.length
+          ? `${enAttente.length} demande${enAttente.length > 1 ? 's' : ''} de changement de métier`
+          : 'Demandes de métier — tout est traité' }]
+      : []),
+    ...demandes.map((d) => ({ type: 'demande', id: `d-${d.id}`, d })),
+    ...(specialites.length
+      ? [{ type: 'titre', id: 't-spe',
+        texte: motsEnAttente.length
+          ? `${motsEnAttente.length} spécialité${motsEnAttente.length > 1 ? 's' : ''} proposée${motsEnAttente.length > 1 ? 's' : ''}`
+          : 'Spécialités proposées — tout est traité' }]
+      : []),
+    ...specialites.map((x) => ({ type: 'specialite', id: `s-${x.id}`, x })),
+  ];
+
+  return (
+    <FlatList
+      style={s.liste}
+      data={lignes}
+      keyExtractor={(l) => l.id}
+      initialNumToRender={4}
+      maxToRenderPerBatch={6}
+      windowSize={5}
+      contentContainerStyle={{ paddingBottom: S.xxl }}
+      ListFooterComponent={PiedDuJournal}
+      renderItem={({ item }) => {
+        if (item.type === 'titre') return <SectionLabel>{item.texte}</SectionLabel>;
+        if (item.type === 'demande') {
+          return <CarteDemandeMetier d={item.d} onActe={onActe} onErreur={onErreur} />;
+        }
+        return <CarteSpecialite x={item.x} onActe={onActe} onErreur={onErreur} />;
+      }}
+    />
+  );
+}
+
+const CarteDemandeMetier = React.memo(function CarteDemandeMetier({ d, onActe, onErreur }) {
+  const [envoi, setEnvoi] = useState(null);
+  const note = useRef(null);
+  const tranchee = d.statut !== 'en_attente';
+
+  const agir = async (statut) => {
+    if (envoi) return;
+    setEnvoi(statut);
+    retour.decision();
+    try {
+      await api.traiterMetierDemande({
+        id: d.id, statut, note: note.current ? note.current.lire() : null,
+      });
+      retour.reussite();
+      await onActe();
+    } catch (e) {
+      retour.echec();
+      if (onErreur) onErreur(messageClair(e));
+    } finally { setEnvoi(null); }
+  };
+
+  /* Ce qui CHANGE, et rien d'autre. Afficher deux listes complètes
+     obligerait à les comparer à l'œil, et c'est là qu'on se trompe. */
+  const ajoutes = d.voulus.filter((m) => !d.actuels.includes(m));
+  const retires = d.actuels.filter((m) => !d.voulus.includes(m));
+
+  return (
+    <View style={s.carte}>
+      <View style={s.entete}>
+        <View style={s.enteteTexte}>
+          <Text style={s.entreprise} numberOfLines={1}>{d.entreprise}</Text>
+          <Text style={s.meta}>veut changer ses métiers</Text>
+        </View>
+        <View style={[s.etiquette, { backgroundColor: tranchee ? C.muted : C.accent }]}>
+          <Text style={[s.etiquetteTexte, { color: surFond(tranchee ? C.muted : C.accent) }]}>
+            {d.jours === 0 ? 'aujourd’hui' : `${d.jours} j`}
+          </Text>
+        </View>
+      </View>
+
+      {!!ajoutes.length && (
+        <Text style={s.ligne}>+ {ajoutes.map(nomMetier).join(', ')}</Text>
+      )}
+      {!!retires.length && (
+        <Text style={s.noteAncienne}>− {retires.map(nomMetier).join(', ')}</Text>
+      )}
+      {!!d.motif && <Text style={s.extrait}>« {d.motif} »</Text>}
+
+      {d.estMoi ? (
+        <View style={s.bloqueMoi}>
+          <AlertTriangle size={15} color={C.accent2} />
+          <Text style={s.bloqueMoiTexte}>
+            C&apos;est votre propre demande. La base la refuse — le verrou des
+            métiers annulerait l&apos;opération en silence. Passez par
+            Supabase → SQL Editor.
+          </Text>
+        </View>
+      ) : tranchee ? (
+        <View style={s.clos}>
+          <Check size={14} color={C.ok} />
+          <Text style={s.closTexte}>
+            {d.statut === 'acceptee' ? 'Acceptée — la fiche est à jour' : 'Refusée'}
+            {d.note ? ` — ${d.note}` : ''}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <ChampLocal
+            ref={note}
+            multiligne
+            placeholder="Motif — obligatoire pour refuser (dix caractères au moins)."
+            style={s.champ}
+            accessibilityLabel="Motif de la décision"
+          />
+          <View style={s.boutons}>
+            <BtnMain
+              label={envoi === 'acceptee' ? 'Application…' : 'Accepter'}
+              onPress={() => agir('acceptee')}
+              disabled={!!envoi}
+            />
+            <BtnMini
+              outline
+              label={envoi === 'refusee' ? '…' : 'Refuser'}
+              onPress={() => agir('refusee')}
+              disabled={!!envoi}
+            />
+          </View>
+          <Text style={s.aide}>
+            Accepter applique vraiment les métiers sur sa fiche : il ne peut
+            pas le faire lui-même tant qu&apos;il est vérifié.
+          </Text>
+        </>
+      )}
+    </View>
+  );
+});
+
+const CarteSpecialite = React.memo(function CarteSpecialite({ x, onActe, onErreur }) {
+  const [envoi, setEnvoi] = useState(null);
+  const tranchee = x.statut !== 'en_attente';
+
+  const agir = async (statut) => {
+    if (envoi) return;
+    setEnvoi(statut);
+    retour.decision();
+    try {
+      await api.traiterSpecialite({ id: x.id, statut });
+      retour.reussite();
+      await onActe();
+    } catch (e) {
+      retour.echec();
+      if (onErreur) onErreur(messageClair(e));
+    } finally { setEnvoi(null); }
+  };
+
+  return (
+    <View style={s.carte}>
+      <View style={s.entete}>
+        <View style={s.enteteTexte}>
+          <Text style={s.entreprise} numberOfLines={2}>« {x.texte} »</Text>
+          <Text style={s.meta} numberOfLines={1}>
+            écrite sous {x.metierNom}, par {x.proposePar}
+          </Text>
+        </View>
+      </View>
+
+      {tranchee ? (
+        <View style={s.clos}>
+          <Check size={14} color={C.ok} />
+          <Text style={s.closTexte}>
+            {x.statut === 'ajoutee' ? 'Retenue pour le catalogue' : 'Écartée'}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <View style={s.boutons}>
+            <BtnMain
+              label={envoi === 'ajoutee' ? '…' : 'Retenir'}
+              onPress={() => agir('ajoutee')}
+              disabled={!!envoi}
+            />
+            <BtnMini
+              outline
+              label={envoi === 'refusee' ? '…' : 'Écarter'}
+              onPress={() => agir('refusee')}
+              disabled={!!envoi}
+            />
+          </View>
+          <Text style={s.aide}>
+            « Retenir » marque une décision — ça n&apos;ajoute rien au
+            catalogue tout de suite. Le catalogue des métiers n&apos;a
+            qu&apos;une seule source, dans le code, et un contrôle refuse
+            qu&apos;elle diverge de la base : l&apos;ajout se fait donc en
+            modifiant le code.
           </Text>
         </>
       )}

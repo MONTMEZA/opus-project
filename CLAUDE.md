@@ -1184,14 +1184,19 @@ de caractères envoyée.
 | dans la migration | résultat |
 |---|---|
 | `revoke …`, même dans un `do` | **passe** |
+| `alter table … drop constraint if exists` | **passe** (mesuré le 03/10) |
 | `drop policy …` | expire |
 | `execute 'drop policy …'` **dans un `do`** | **expire aussi** |
 | `delete from …`, même dans un corps de fonction | expire |
 
-Autrement dit, cacher le mot dans une chaîne ne sert à rien — et **il ne
-faut pas essayer**. Ce garde-fou existe pour une raison : une session de
-travail ne doit pas pouvoir détruire quelque chose sans qu'un humain
-confirme.
+Autrement dit : ce sont les ordres qui **commencent** par `drop` ou
+`delete` qui sont refusés, où qu'ils se trouvent dans le texte — y compris
+à l'intérieur d'une chaîne passée à `execute`. Un `drop` au MILIEU d'un
+`alter table` passe, lui, sans problème.
+
+Cacher le mot dans une chaîne ne sert donc à rien — et **il ne faut pas
+essayer**. Ce garde-fou existe pour une raison : une session de travail ne
+doit pas pouvoir détruire quelque chose sans qu'un humain confirme.
 
 > **Les parades honnêtes :** `create or replace trigger` pour un
 > déclencheur ; pour une politique ou une contrainte, la créer **sous
@@ -1290,6 +1295,70 @@ Aucun artisan réel n'a encore envoyé de Kbis : la chaîne complète depuis le
 téléphone reste à parcourir. Les essais de bout en bout ont été faits avec
 un compte jetable, sur la vraie base, supprimé dans la même session — et les
 documents étaient des chemins fabriqués, pas de vrais fichiers.
+
+### Les pièces justificatives, et le métier qui ne construit pas (04/10/2026)
+
+`src/data/pieces-justificatives.js`. La décision du 30/09 — « tout
+l'écosystème peut s'inscrire, avec des pièces PAR CATÉGORIE » — n'était pas
+construite, et ça fermait deux portes :
+
+- **un avocat ne pouvait JAMAIS obtenir le badge.** La base exige
+  `kbis_valide AND assurance_valide` ; sans décennale, c'est définitif ;
+- **« extrait Kbis » est faux pour un micro-entrepreneur**, qui n'en a pas
+  (c'est l'avis de situation SIRENE). Le propriétaire est dans ce cas.
+
+> **Il y a toujours DEUX pièces, et le schéma ne bouge pas.** C'est leur
+> NATURE qui dépend du métier : l'existence légale (Kbis **ou** avis
+> SIRENE) et la couverture (décennale pour qui construit, **RC
+> professionnelle** pour qui conseille).
+
+Vérifié plutôt qu'écrit de mémoire, et ma première conception était
+FAUSSE : **architectes, bureaux d'études et géomètres sont soumis à la
+décennale** — ce sont des constructeurs au sens de l'article 1792 du Code
+civil. Une seule catégorie sur quinze y échappe, `conseil`.
+
+Trois choses à ne pas redécouvrir :
+
+1. **`categorieDe()` rend le NOM de la catégorie, pas sa clé.** La
+   comparaison avec `'conseil'` échouait en silence. D'où
+   `cleCategorieDe()`. Même règle que le catalogue : la clé sert à décider,
+   le nom à afficher.
+2. **Un seul métier qui construit suffit à exiger la décennale.** Un pro
+   porte jusqu'à quatre métiers ; un courtier en assurance construction
+   peut aussi être maçon. Prendre la catégorie du PREMIER laisserait une
+   entreprise de gros œuvre sans décennale.
+3. **Les CGU disaient le contraire de l'application** — « le badge après
+   contrôle d'un Kbis et d'une décennale ». Elles fermaient par écrit le
+   badge aux micro-entrepreneurs et aux avocats. Les textes légaux sont la
+   seule exception à « aucun document nommé en dur » : une clause doit être
+   lisible sans l'application sous les yeux, donc le contrôle exige au
+   contraire qu'ils nomment **les deux cas**.
+
+### Le référentiel côté administration — et le bouton qui n'a pas été livré
+
+Section 27. Deux files de plus : les demandes de changement de métier et
+les spécialités proposées. **Accepter une demande applique VRAIMENT les
+métiers** — un bouton qui passerait seulement le statut à « acceptée »
+serait un tampon, alors que l'artisan vérifié ne peut pas le faire
+lui-même.
+
+Deux défauts trouvés par les essais, pas à l'œil :
+
+1. **`set note = note` est ambigu** en plpgsql quand la table porte une
+   colonne du même nom. La fonction se crée sans broncher et échoue à
+   l'exécution.
+2. **Renommer une contrainte ne la désactive pas.** Pour éviter un `drop`
+   que je croyais refusé, j'avais renommé l'ancienne en `…_v1` et ajouté une
+   `…_v2` élargie : les DEUX s'appliquaient, et l'ancienne refusait les
+   nouvelles actions. Une contrainte ne se remplace pas, elle se refait.
+
+> **Et le bouton §18 « désactiver un métier » a été RETIRÉ avant d'être
+> livré.** En cherchant qui lirait la colonne : **rien, dans `src/`, ne lit
+> `metiers_catalogue`.** Le sélecteur filtre le FICHIER du catalogue. Le
+> bouton aurait parfaitement marché en base et n'aurait rien changé à
+> l'écran — le défaut du 01/10 vu dans l'autre sens. Ce qu'il faut trancher
+> d'abord est écrit en section 27.4 de `schema.sql` : où vit la vérité sur
+> `actif`, dans le fichier ou dans la base ?
 
 ### « Plus rien ne fonctionne » — et la base allait très bien (02/10/2026)
 

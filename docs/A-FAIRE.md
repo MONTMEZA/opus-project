@@ -566,17 +566,44 @@ badge n'avait **jamais** tourné une seule fois.
 > un badge atteste qu'un humain a regardé les documents de quelqu'un
 > d'AUTRE. L'écran l'explique au lieu de laisser tomber sur une erreur.
 
-**Ce qui reste — lot 2 :**
+### 2.1 bis Le back-office — lot 2 ✅ FAIT le 04/10/2026
 
-1. **Les pièces justificatives par catégorie** (décision 3 de
-   `docs/DEMANDE-METIERS.md`) : un avocat n'a pas d'assurance décennale, et
-   lui en demander une rend son badge absurde ;
-2. **L'administration du référentiel métiers** (§18) : ajouter, renommer,
-   désactiver un métier, et traiter la file `specialites_proposees` — vide
-   aujourd'hui, mais elle se remplit toute seule ;
-3. **Les demandes de changement de métier** (`metier_demandes`) : la table et
-   ses statuts existent, rien ne les lit encore. C'est exactement le défaut
-   « une table qu'on écrit sans jamais la lire ».
+**Les pièces justificatives par catégorie** (décision 3 du 30/09). Il y a
+toujours DEUX pièces — aucun changement de schéma —, mais leur NATURE suit
+le métier : existence légale (Kbis **ou avis SIRENE**, qu'un
+micro-entrepreneur n'avait nulle part) et couverture (**décennale** pour qui
+construit, **RC professionnelle** pour qui conseille). Un avocat pouvait
+sinon n'obtenir le badge jamais. Les CGU, qui promettaient « un Kbis et une
+décennale », ont été corrigées en même temps.
+
+**La troisième file du back-office** : demandes de changement de métier, et
+spécialités proposées. Accepter une demande **applique vraiment** les
+métiers — l'artisan vérifié ne peut pas le faire lui-même, c'est la raison
+d'être de cette table, qui n'était relue par personne depuis le début.
+
+`npm run verifier-pieces` (22 garde-fous) et `verifier-backoffice` tiennent
+l'ensemble.
+
+**Ce qui reste — lot 3 :**
+
+1. ⚠️ **Désactiver un métier (§18) demande une DÉCISION avant du code.**
+   La fonction a été écrite puis retirée : **rien, dans `src/`, ne lit
+   `metiers_catalogue.actif`** — le sélecteur filtre le FICHIER
+   `src/data/catalogue-metiers.js`. Un bouton « désactiver » aurait
+   parfaitement marché en base et n'aurait rien changé à l'écran. Il faut
+   trancher où vit la vérité : dans le fichier (désactiver = changement de
+   code, cohérent avec « une seule source ») ou dans la base (le sélecteur
+   doit alors la charger au démarrage, et ne marche plus hors ligne). Détail
+   en section 27.4 de `schema.sql` ;
+2. **Un emplacement d'envoi pour les pièces complémentaires** (ORIAS,
+   COFRAC, Ordre des architectes, certification amiante). Elles sont
+   déclarées et rappelées à l'administration, mais sans endroit où les
+   déposer. À construire le jour où quelqu'un de ces métiers s'inscrit —
+   pas avant : un emplacement que personne ne remplit est le défaut que ce
+   projet traque depuis le 01/10 ;
+3. **Faire confirmer ces exigences** avant l'ouverture au public. Elles
+   correspondent à des obligations réelles de ces professions, mais une
+   exigence inventée écarterait des artisans légitimes.
 
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 

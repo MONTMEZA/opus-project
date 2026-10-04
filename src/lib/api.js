@@ -1953,3 +1953,90 @@ async function urlDocumentSupabase(chemin) {
 }
 
 export const urlDocument = hasSupabase ? urlDocumentSupabase : urlDocumentDemo;
+
+/* ==========================================================================
+   LE RÉFÉRENTIEL, CÔTÉ ADMINISTRATION  (section 27 de `schema.sql`)
+
+   DEUX FILES QU'ON ÉCRIVAIT SANS JAMAIS LES LIRE
+   ----------------------------------------------
+   `metier_demandes` existe depuis le début : un professionnel VÉRIFIÉ ne
+   peut pas changer ses métiers lui-même, il doit demander. La table était
+   là, et rien ne la relisait — le défaut exact du 01/10 avec les demandes
+   de devis.
+
+   `specialites_proposees` se remplit toute seule à chaque mot écrit à la
+   main, et sert à faire entrer au référentiel ce que les artisans écrivent
+   vraiment. Encore faut-il quelqu'un pour le lire.
+
+   ET CE QU'ACCEPTER VEUT DIRE
+   ---------------------------
+   Accepter une demande de métiers APPLIQUE vraiment les métiers sur la
+   fiche. Un bouton qui se contenterait de passer le statut à « acceptée »
+   serait un tampon : l'artisan verrait sa demande acceptée et sa fiche
+   inchangée.
+
+   Retenir une spécialité, au contraire, n'insère RIEN au catalogue — qui
+   n'a qu'une source, le fichier du catalogue dans `src/data/`. L'écran
+   l'écrit en toutes lettres : laisser croire qu'un bouton enrichit le
+   référentiel serait pire que pas de bouton.
+   ========================================================================== */
+
+async function metierDemandesDemo() { return []; }
+
+async function metierDemandesSupabase() {
+  const { data, error } = await supabase.rpc('admin_metier_demandes');
+  if (error) throw error;
+  return (data || []).map((d) => ({
+    id: d.id,
+    proId: d.professional_id,
+    entreprise: d.entreprise,
+    actuels: d.metiers_actuels || [],
+    voulus: d.metiers_voulus || [],
+    motif: d.motif,
+    statut: d.statut,
+    note: d.note,
+    jours: d.jours,
+    creeLe: d.created_at,
+    traiteLe: d.traite_le,
+    estMoi: d.est_moi,
+  }));
+}
+
+export const metierDemandes = hasSupabase ? metierDemandesSupabase : metierDemandesDemo;
+
+async function specialitesProposeesDemo() { return []; }
+
+async function specialitesProposeesSupabase() {
+  const { data, error } = await supabase.rpc('admin_specialites');
+  if (error) throw error;
+  return (data || []).map((s) => ({
+    id: s.id,
+    texte: s.texte,
+    metier: s.metier,
+    metierNom: s.metier_nom,
+    proposePar: s.propose_par,
+    statut: s.statut,
+    creeLe: s.created_at,
+  }));
+}
+
+export const specialitesProposees = hasSupabase
+  ? specialitesProposeesSupabase : specialitesProposeesDemo;
+
+async function traiterMetierDemandeSupabase({ id, statut, note = null }) {
+  const { error } = await supabase.rpc('admin_traiter_metier_demande', {
+    p_demande: id, p_statut: statut, p_note: note,
+  });
+  if (error) throw error;
+}
+
+export const traiterMetierDemande = hasSupabase ? traiterMetierDemandeSupabase : refuseEnDemo;
+
+async function traiterSpecialiteSupabase({ id, statut }) {
+  const { error } = await supabase.rpc('admin_traiter_specialite', {
+    p_specialite: id, p_statut: statut,
+  });
+  if (error) throw error;
+}
+
+export const traiterSpecialite = hasSupabase ? traiterSpecialiteSupabase : refuseEnDemo;

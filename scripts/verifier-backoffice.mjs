@@ -37,6 +37,12 @@ const sql = lire('supabase/schema.sql');
 /* On ne lit QUE la section 25 pour les règles qui lui sont propres : le
    reste du fichier contient des politiques d'écriture parfaitement
    légitimes sur d'autres tables. */
+/* Le back-office s'étend sur DEUX sections : 25 (la porte, le journal, les
+   deux premières files) et 27 (le référentiel). Ne lire que la 25 laissait
+   les actions de la 27 hors contrôle — et c'est précisément la contrainte
+   `check` qu'il faut tenir à jour. Trouvé le 04/10/2026 en ajoutant la
+   troisième file : le contrôle annonçait « 5 actions permises » alors que
+   la base en acceptait neuf. */
 const section25 = sql.slice(sql.indexOf('--  25. LE BACK-OFFICE'));
 const api = lire('src/lib/api.js');
 const ecran = lire('src/screens/AdminScreen.js');
@@ -129,7 +135,11 @@ console.log('\nChaque action insérée est dans la contrainte');
   /* LA RÈGLE QUI A DÉJÀ COÛTÉ CHER (le format `montage`). Ici, l'oubli ne
      ferait pas échouer l'action mais la LIGNE DE JOURNAL : on validerait un
      artisan sans en garder trace. */
-  const contrainte = section25.match(/journal_admin_action_check\s*\n?\s*check \(action in \(([\s\S]*?)\)\)/);
+  /* On prend la DERNIÈRE définition du fichier : une contrainte se refait
+     (`drop` puis `add`), et c'est la dernière qui s'applique. */
+  const toutes = [...section25.matchAll(
+    /journal_admin_action_check\s*\n?\s*check \(action in \(([\s\S]*?)\)\)/g)];
+  const contrainte = toutes.length ? toutes[toutes.length - 1] : null;
   const permises = new Set(
     contrainte ? [...contrainte[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]) : [],
   );
@@ -138,9 +148,15 @@ console.log('\nChaque action insérée est dans la contrainte');
      « verifie » (une valeur de `verification_statut`) et
      « verification_acceptee » (un type de notification) : un contrôle qui
      se trompe de cible fait perdre plus de temps qu'il n'en fait gagner. */
+  /* Les `cible_type` ne sont pas des actions. On prend là aussi la DERNIÈRE
+     définition : la contrainte a été refaite en section 27, et lire la
+     première faisait passer `metier_demande` et `specialite` pour des
+     actions manquantes. */
+  const toutesCibles = [...section25.matchAll(/cible_type in \(([^)]*)\)/g)];
   const cibles = new Set(
-    [...(section25.match(/cible_type in \(([^)]*)\)/) || ['', ''])[1]
-      .matchAll(/'([a-z_]+)'/g)].map((m) => m[1]),
+    toutesCibles.length
+      ? [...toutesCibles[toutesCibles.length - 1][1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1])
+      : [],
   );
   const inserees = new Set();
   [...section25.matchAll(/insert into public\.journal_admin[\s\S]*?;/g)].forEach((bloc) => {

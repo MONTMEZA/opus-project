@@ -4515,3 +4515,332 @@ $$;
 create or replace trigger trg_anonymise_actes_admin
   before delete on public.users
   for each row execute function public.anonymise_actes_admin();
+
+-- ==========================================================================
+--  27. LE RÉFÉRENTIEL, CÔTÉ ADMINISTRATION  (§18 de la demande du 30/09)
+--
+--  TROIS FILES QU'ON ÉCRIVAIT SANS JAMAIS LES LIRE
+--  -----------------------------------------------
+--  `metier_demandes` existe depuis le début : un professionnel VÉRIFIÉ ne
+--  peut pas changer ses métiers lui-même (`tient_les_metiers()` le lui
+--  interdit), il doit donc demander. La table, ses statuts et son index
+--  « une seule demande en attente » étaient en place… et rien, nulle part,
+--  ne la relisait. C'est le défaut exact du 01/10 avec les demandes de
+--  devis : on écrit, on ne relit jamais, et l'artisan attend devant un
+--  écran muet.
+--
+--  `specialites_proposees` (section 22) a le même profil : elle se remplit
+--  toute seule à chaque mot écrit à la main, et sert à faire entrer au
+--  référentiel ce que les artisans écrivent vraiment. Encore faut-il
+--  quelqu'un pour le lire.
+--
+--  CE QUE L'ADMINISTRATION PEUT, ET CE QU'ELLE NE PEUT PAS
+--  -------------------------------------------------------
+--  C'est la contrainte la plus importante de cette section, et elle vient
+--  d'une décision prise le 30/09 : **le catalogue n'a qu'UNE source,
+--  `src/data/catalogue-metiers.js`.** Le SQL est ENGENDRÉ depuis ce fichier
+--  (`npm run generer-catalogue`), et `npm run verifier-metiers` refuse de
+--  passer s'ils ont divergé.
+--
+--  Donc :
+--
+--    - **ajouter ou renommer un métier ne peut PAS se faire ici.** Une
+--      ligne insérée à la main dans `metiers_catalogue` serait écrasée à la
+--      migration suivante, ou ferait rougir le contrôle. Ça reste un
+--      changement de code — ce n'est pas une limite, c'est ce qui garantit
+--      que le fichier et la base disent la même chose ;
+--    - **désactiver un métier, SI.** `generer-catalogue` n'écrase jamais la
+--      colonne `actif` (« sinon un métier désactivé par l'administrateur
+--      ressusciterait à chaque migration »). C'est précisément l'action que
+--      le §18 recommande : « privilégier sa désactivation plutôt que sa
+--      suppression brutale si des comptes y sont déjà rattachés » ;
+--    - **retenir une spécialité proposée** marque une DÉCISION, pas une
+--      insertion au catalogue. L'écran le dit en toutes lettres : laisser
+--      croire qu'un bouton enrichit le référentiel serait pire que pas de
+--      bouton du tout.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  27.1 Le journal accueille quatre actes de plus — et une cible qui n'est
+--       pas un identifiant
+--
+--  Un métier se désigne par sa CLÉ (`macon`), pas par un uuid. `cible_id`
+--  ne peut donc pas le porter. Plutôt que de détourner une colonne uuid en
+--  y rangeant du texte — ce qui finit toujours par une conversion ratée —
+--  le journal reçoit `cible_cle`.
+--
+--  LE DÉFAUT QUE LES ESSAIS ONT TROUVÉ ICI
+--  ---------------------------------------
+--  Premier jet : renommer l'ancienne contrainte en `…_v1` et en ajouter une
+--  `…_v2` élargie, pour éviter un `drop` que le connecteur Supabase refuse.
+--  **Renommer ne désactive rien.** Les DEUX contraintes s'appliquaient, et
+--  l'ancienne refusait les nouvelles actions — « violates check constraint
+--  journal_admin_action_check ». Une contrainte ne se remplace pas, elle se
+--  refait : `drop` puis `add`, comme partout ailleurs dans ce fichier.
+--
+--  Le connecteur refuse le mot `drop` ; ce n'est pas une raison pour écrire
+--  du SQL tordu. `schema.sql` garde la forme juste — il est rejoué par
+--  `psql` — et l'application sur la vraie base se fait autrement (voir le
+--  message de commit).
+-- --------------------------------------------------------------------------
+alter table public.journal_admin add column if not exists cible_cle text;
+
+alter table public.journal_admin drop constraint if exists journal_admin_action_check;
+alter table public.journal_admin add constraint journal_admin_action_check
+  check (action in (
+    'pro_verifie',
+    'pro_refuse',
+    'pro_remis_en_attente',
+    'pro_partiellement_valide',
+    'signalement_traite',
+    'metier_demande_traitee',   -- métiers acceptés ou refusés
+    'specialite_traitee'        -- spécialité retenue ou écartée
+    /* `metier_desactive` et `metier_reactive` ont été RETIRÉS avec la
+       fonction qui les écrivait (voir 27.4) : une valeur permise que rien
+       n'insère est une porte ouverte sur rien. Elles reviendront avec
+       l'écran, le jour où la question du §18 sera tranchée. */
+  ));
+
+alter table public.journal_admin drop constraint if exists journal_admin_cible_check;
+alter table public.journal_admin add constraint journal_admin_cible_check
+  check (cible_type in ('profil_pro', 'signalement', 'metier_demande',
+                        'specialite', 'metier'));
+
+-- --------------------------------------------------------------------------
+--  27.2 Les demandes de changement de métier
+--
+--  ACCEPTER APPLIQUE VRAIMENT LES MÉTIERS. Un bouton qui se contenterait de
+--  passer le statut à « acceptée » serait un tampon : l'artisan verrait sa
+--  demande acceptée et sa fiche inchangée. C'est la raison d'être de cette
+--  file — il ne peut pas le faire lui-même.
+--
+--  Le verrou `tient_les_metiers()` ne se déclenche que si
+--  `auth.uid() = new.id`, c'est-à-dire si c'est le professionnel lui-même
+--  qui écrit. Ici l'administrateur est quelqu'un d'autre : il passe. Et
+--  s'il est le professionnel visé, on REFUSE — sinon le verrou annulerait
+--  l'opération en silence, exactement comme pour le badge (section 25.6).
+-- --------------------------------------------------------------------------
+create or replace function public.admin_traiter_metier_demande(
+  p_demande uuid,
+  p_statut  text,
+  p_note    text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi    uuid := public.admin_exige_droit();
+  /* `v_note` et non `note` : la table porte une colonne du même nom, et
+     `set note = note` fait échouer la fonction sur « column reference
+     "note" is ambiguous ». Trouvé par les essais — la fonction se créait
+     sans broncher, puisque plpgsql ne résout les noms qu'à l'exécution. */
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+  d      public.metier_demandes;
+  avant  jsonb;
+  apres  jsonb;
+begin
+  if p_statut not in ('acceptee', 'refusee') then
+    raise exception 'Statut inconnu : % (acceptee ou refusee).', p_statut
+      using errcode = 'check_violation';
+  end if;
+
+  select * into d from public.metier_demandes where id = p_demande;
+  if d.id is null then
+    raise exception 'Cette demande n''existe pas.' using errcode = 'no_data_found';
+  end if;
+
+  if d.professional_id = moi then
+    raise exception
+      'On ne tranche pas sa propre demande de métiers : le verrou de la base annulerait l''opération en silence. Passez par l''éditeur SQL de Supabase.'
+      using errcode = '42501';
+  end if;
+
+  if p_statut = 'refusee' and (v_note is null or length(v_note) < 10) then
+    raise exception
+      'Un refus demande un motif d''au moins dix caractères : sans lui, l''artisan ne sait pas quoi corriger.'
+      using errcode = 'check_violation';
+  end if;
+
+  avant := to_jsonb(d);
+
+  if p_statut = 'acceptee' then
+    -- C'est ICI que la demande sert à quelque chose.
+    update public.professional_profiles
+       set metiers = d.metiers_voulus
+     where id = d.professional_id;
+  end if;
+
+  update public.metier_demandes
+     set statut = p_statut, note = v_note, traite_le = now()
+   where id = p_demande;
+
+  select to_jsonb(x) into apres from public.metier_demandes x where x.id = p_demande;
+
+  insert into public.journal_admin
+    (admin_id, action, cible_type, cible_id, avant, apres, motif)
+  values (moi, 'metier_demande_traitee', 'metier_demande', p_demande, avant, apres, v_note);
+
+  insert into public.notifications (user_id, type, texte)
+  values (d.professional_id,
+          case when p_statut = 'acceptee' then 'metiers_acceptes' else 'metiers_refuses' end,
+          case when p_statut = 'acceptee'
+            then 'Votre changement de métiers a été accepté : votre fiche est à jour.'
+            else 'Votre demande de changement de métiers n''a pas été retenue : ' || v_note
+          end);
+end;
+$$;
+
+create or replace function public.admin_metier_demandes(p_limite int default 50)
+returns table (
+  id uuid, professional_id uuid, entreprise text,
+  metiers_actuels text[], metiers_voulus text[],
+  motif text, statut text, note text,
+  created_at timestamptz, traite_le timestamptz, jours int, est_moi boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare moi uuid := public.admin_exige_droit();
+begin
+  return query
+    select d.id, d.professional_id, coalesce(p.entreprise, '(fiche supprimée)'),
+           d.metiers_actuels, d.metiers_voulus,
+           d.motif, d.statut, d.note,
+           d.created_at, d.traite_le,
+           (now()::date - d.created_at::date)::int,
+           (d.professional_id = moi)
+      from public.metier_demandes d
+      left join public.professional_profiles p on p.id = d.professional_id
+     order by (d.statut = 'en_attente') desc, d.created_at asc
+     limit greatest(1, least(coalesce(p_limite, 50), 200));
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+--  27.3 Les spécialités proposées
+--
+--  « Retenue » n'INSÈRE RIEN au catalogue, et c'est volontaire : le
+--  catalogue n'a qu'une source, le fichier JavaScript. Marquer une
+--  spécialité retenue dit « celle-ci entrera au prochain passage », et le
+--  journal en garde la trace. L'écran l'écrit noir sur blanc.
+-- --------------------------------------------------------------------------
+create or replace function public.admin_traiter_specialite(
+  p_specialite uuid,
+  p_statut     text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi   uuid := public.admin_exige_droit();
+  avant jsonb;
+  apres jsonb;
+begin
+  if p_statut not in ('ajoutee', 'refusee') then
+    raise exception 'Statut inconnu : % (ajoutee ou refusee).', p_statut
+      using errcode = 'check_violation';
+  end if;
+
+  select to_jsonb(x) into avant from public.specialites_proposees x where x.id = p_specialite;
+  if avant is null then
+    raise exception 'Cette proposition n''existe pas.' using errcode = 'no_data_found';
+  end if;
+
+  update public.specialites_proposees set statut = p_statut where id = p_specialite;
+  select to_jsonb(x) into apres from public.specialites_proposees x where x.id = p_specialite;
+
+  insert into public.journal_admin
+    (admin_id, action, cible_type, cible_id, avant, apres)
+  values (moi, 'specialite_traitee', 'specialite', p_specialite, avant, apres);
+end;
+$$;
+
+create or replace function public.admin_specialites(p_limite int default 100)
+returns table (
+  id uuid, texte text, metier text, metier_nom text,
+  propose_par text, statut text, created_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  perform public.admin_exige_droit();
+  return query
+    select s.id, s.texte, s.metier,
+           coalesce(m.nom, '(métier inconnu)'),
+           /* Le NOM de celui qui l'a proposée, jamais son adresse : on
+              modère un mot, pas une personne. */
+           coalesce(u.nom, '(compte supprimé)'),
+           s.statut, s.created_at
+      from public.specialites_proposees s
+      left join public.metiers_catalogue m on m.cle = s.metier
+      left join public.users u on u.id = s.propose_par
+     order by (s.statut = 'en_attente') desc, s.created_at asc
+     limit greatest(1, least(coalesce(p_limite, 100), 500));
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+--  27.4 DÉSACTIVER UN MÉTIER — ce qui manque pour que ce soit POSSIBLE
+--
+--  Le §18 de la demande le réclame, et l'architecture a l'air prête :
+--  `metiers_catalogue.actif` existe, `generer-catalogue` prend soin de ne
+--  jamais l'écraser (« sinon un métier désactivé par l'administrateur
+--  ressusciterait à chaque migration »), et `pro_metiers_check` ne vérifie
+--  PAS `actif`, pour qu'un métier retiré ne casse pas les comptes qui
+--  l'exercent.
+--
+--  La fonction a donc été écrite, puis RETIRÉE avant d'être livrée. Raison,
+--  constatée le 04/10/2026 en cherchant qui la lirait :
+--
+--  > **Rien, dans `src/`, ne lit `metiers_catalogue`.** Le sélecteur
+--  > (`SelecteurMetiers.js`) appelle `metiersActifs()`, qui filtre le
+--  > FICHIER `src/data/catalogue-metiers.js`. La colonne `actif` de la base
+--  > n'est lue par personne.
+--
+--  Un bouton « désactiver » aurait donc parfaitement fonctionné en base et
+--  n'aurait rien changé à l'écran : le métier serait resté proposé à tous
+--  les artisans. C'est le défaut du 01/10 vu dans l'autre sens — on écrit
+--  une donnée que personne ne relit.
+--
+--  CE QU'IL FAUT TRANCHER AVANT DE LA CONSTRUIRE, et ce n'est pas une
+--  question technique : où vit la vérité sur `actif` ?
+--
+--    a) **dans le fichier** — désactiver un métier devient un changement de
+--       code. C'est cohérent avec « une seule source », qui est la décision
+--       du 30/09, et `verifier-metiers` continue de tout garantir. Mais
+--       l'administration ne peut rien faire seule ;
+--    b) **dans la base** — le sélecteur doit alors aller chercher la liste
+--       des métiers désactivés au démarrage. Une requête de plus sur le
+--       chemin que CLAUDE.md surveille (« 24 requêtes, et `loadAll` ne part
+--       qu'une fois »), et un sélecteur qui ne marche plus hors ligne.
+--
+--  Tant que ce n'est pas tranché, le mieux est de ne RIEN livrer : un
+--  bouton qui ment coûte plus cher qu'un bouton absent.
+-- --------------------------------------------------------------------------
+
+do $blk$
+declare f text;
+begin
+  foreach f in array array[
+    'public.admin_metier_demandes(int)',
+    'public.admin_specialites(int)',
+    'public.admin_traiter_metier_demande(uuid, text, text)',
+    'public.admin_traiter_specialite(uuid, text)'
+  ] loop
+    begin
+      execute format('revoke execute on function %s from public', f);
+      execute format('revoke execute on function %s from anon', f);
+      execute format('grant execute on function %s to authenticated', f);
+    exception when undefined_function or undefined_object then null;
+    end;
+  end loop;
+end $blk$;
