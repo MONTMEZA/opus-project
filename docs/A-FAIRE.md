@@ -1028,6 +1028,50 @@ ne se mesure pas. Votre base ne contenant qu'une demande, la liste bien
 remplie n'a été vue qu'en démonstration.
 
 
+### 2.1 terdecies « Pour moi » relu avant de fermer Découvrir ✅ FAIT le 04/10/2026
+
+Vous avez dit « je pense qu'on a fait le tour de la partie Découvrir ». Des
+trois onglets, un seul n'avait pas été relu cette semaine : **« Pour moi »**,
+celui où arrivent les demandes de devis, de rappel et d'urgence. Quatre
+défauts y dormaient, et aucun ne faisait planter quoi que ce soit.
+
+**1. Quand le chargement ratait, l'écran annonçait une bonne nouvelle.** Il
+affichait « Aucune demande pour le moment » — alors qu'il n'avait rien pu
+lire. Le bandeau rouge, lui, s'efface au bout de quelques secondes. Il dit
+maintenant « Lecture impossible », explique que ce n'est pas qu'il n'y en a
+pas, et propose un bouton **Réessayer**.
+
+**2. La liste n'avait aucune limite.** Le fil en a une, la Place des pros
+aussi, les demandes depuis ce matin. Celle-ci téléchargeait tout, pour
+toujours. Elle en charge 200 — **et ce qui attend une réponse passe
+d'abord**, pour que la limite ne coupe jamais que du travail déjà fait.
+Mesuré : avec une limite posée sans ce tri, un devis en attente vieux d'un
+an disparaissait complètement derrière 250 demandes closes du jour.
+
+**3. Une demande refusée ce matin passait devant une demande en attente
+d'hier** — sur l'écran qui sert justement à savoir qui vous attend. Trois
+rangs maintenant : l'urgence en attente, puis tout ce qui attend, puis le
+reste.
+
+**4. Trois règles de la base étaient écrites à deux endroits.** Sans
+conséquence aujourd'hui, mais c'est la première des deux qu'on oublie le
+jour où la règle change.
+
+**Vérifié** sur la vraie base, avec un compte d'essai supprimé dans la
+foulée : le devis en attente du 30 août 2025 sort en tête, devant trois
+demandes closes du jour ; en coupant le réseau, l'écran le dit et le bouton
+recharge vraiment.
+
+**Pas vérifié** : la page sur votre iPhone, et une liste réellement à 200
+demandes.
+
+**Une chose reste, et c'est à vous de trancher** : une demande déjà traitée
+porte toujours un bandeau orange aussi fort qu'une demande qui attend. Le
+tri les a descendues ; leur couleur crie encore. Les faire reculer est trois
+lignes — mais l'orange est votre identité, donc je ne le fais pas sans vous
+demander.
+
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

@@ -2690,6 +2690,150 @@ session, et le verrou du badge vérifié qui n'a pas bougé au passage.
 qu'une demande : la liste à vingt cartes, avec ses « Nouveau » et ses
 « Pourvue » mêlés, n'a été vue qu'en démonstration.
 
+### « Pour moi » — le dernier onglet, audité parce qu'il ne l'avait pas été
+
+Le propriétaire, après avoir essayé : « je pense qu'on a fait le tour de la
+partie Découvrir ». Presque. Des trois onglets, un seul n'avait pas été
+relu cette semaine — **« Pour moi »**, celui qui porte les demandes de
+devis, de rappel et d'urgence. Quatre défauts y dormaient, et **aucun ne
+faisait planter quoi que ce soit**.
+
+#### Un échec de chargement annonçait une BONNE NOUVELLE
+
+`OpusApp` calculait déjà `demandesRecuesEtat === 'echec'`. Il ne le
+transmettait simplement pas à l'écran. Un chargement raté affichait donc :
+
+> « Aucune demande pour le moment. »
+
+Le bandeau rouge, lui, disparaît au bout de quelques secondes. Il restait
+une phrase rassurante devant un écran qui n'avait **rien pu lire**.
+
+> **Un travail qui n'a pas pu se faire ne doit jamais ressembler à un
+> travail fait.** Même famille que le ménage de compte des pièces jointes,
+> qui répondait `{"retires":0}` sans erreur en laissant le fichier en
+> place, et que le « X est prévenu » du 01/10.
+
+L'écran dit maintenant « Lecture impossible », explique que ce n'est pas
+qu'il n'y en a pas, et propose un vrai bouton.
+
+**Et le bouton est un BOUTON, pas un mot souligné dans le paragraphe.** Le
+premier essai posait « Réessayer » dans le texte : au navigateur, le clic
+ne partait pas — et viser un mot au pouce, c'est le défaut que le lot 5 a
+passé une journée à corriger. `EmptyState` sait déjà porter une `action`.
+Mesuré après : **98 × 44**.
+
+#### `mes_demandes_recues()` rendait TOUT, pour toujours
+
+Le fil a une borne, la Place des pros 200, les demandes 200 depuis le
+matin. Cette fonction-là, rien — alors que l'écran écrit lui-même dans ses
+commentaires qu'« un artisan qui travaille depuis six mois en a des
+centaines ».
+
+**Mais poser une limite seule aurait fait PERDRE DU TRAVAIL**, et c'est le
+point de ce lot :
+
+> **La borne ne devient honnête qu'avec le tri.** `order by (statut en
+> attente) desc, created_at desc limit 200`. Sans le premier critère, 200
+> demandes closes plus récentes poussent dehors un devis encore en
+> attente — et l'artisan ne le sait pas.
+
+Mesuré sur un vrai PostgreSQL, avec 1 devis en attente vieux de 400 jours
+et 250 demandes closes du jour :
+
+| | devis en attente gardés |
+|---|---|
+| `order by created_at desc limit 200` | **0** |
+| `order by (en attente) desc, created_at desc limit 200` | **1, en tête** |
+
+Et **la troncature se dit** : un pied de liste apparaît à 200. Une liste
+coupée en silence, c'est la règle des « 3 annonces sans lieu précisé ne
+sont pas affichées ».
+
+Le piège de PostgreSQL rencontré au passage : **un `union` ne se trie pas
+sur une expression** (« Only result column names can be used »). Il faut
+envelopper l'union dans un `from (…) d` — et nommer explicitement les
+colonnes du PREMIER membre, sinon `d.statut` et `d.created_at` ne
+s'appellent pas forcément ainsi.
+
+#### Le tri côté écran avait le même défaut, en plus petit
+
+`trierDemandes` n'avait que deux rangs : l'urgence en attente, puis la
+date. Un devis **refusé ce matin** passait donc devant un devis **en
+attente d'hier** — sur un écran qui ne sert QU'À savoir qui attend. Trois
+rangs désormais : l'urgence en attente, tout ce qui attend, le reste.
+
+#### Et trois politiques étaient créées à DEUX endroits de `schema.sql`
+
+`creation devis`, `creation rappel`, `creation sos` : une première fois
+sans le blocage, une seconde fois avec (section 18). Le fichier reste
+rejouable — la seconde gagne — mais c'est exactement ce que la section 30
+venait d'interdire la veille :
+
+> **Une politique ne se crée qu'à UN endroit.** C'est la première des deux
+> qui se fait oublier le jour où la règle change.
+
+#### Ce que cet audit confirme, et qu'il ne faut pas défaire
+
+Vérifié avant de toucher à quoi que ce soit, parce que ça aurait été grave :
+`'termine'` est bien accepté par les trois contraintes `check`, et
+`calcule_client_verifie()` compte `'termine'` autant qu'`'accepte'` —
+**clore un chantier ne retire pas au client son avis « client vérifié »**.
+Et `notifie_demande()` se tait sur le passage en « terminé », à dessein :
+le client était là, il le sait.
+
+#### Couper UNE route pour éprouver un état d'échec
+
+Nouveau, et réutilisable. Pour voir l'écran d'échec il faut faire échouer
+une requête, et une seule :
+
+```js
+await poserRelais(page, { hote: HOTE });          // le relais d'abord
+let couper = false;
+await page.route('**/rpc/mes_demandes_recues**', async (route) => {
+  if (couper) { await route.abort('failed'); return; }
+  await route.fallback();                          // sinon, on repasse au relais
+});
+```
+
+L'ordre compte : Playwright donne la main au **dernier** gestionnaire
+inscrit, et `route.fallback()` rend la main au précédent.
+
+Deux pièges à ne pas redécouvrir :
+
+1. **le bandeau d'erreur RECOUVRE le haut de l'écran.** `getByText(…)` a
+   d'abord attrapé le bandeau, qui contient le même mot, et le clic est
+   tombé dessus. Viser par le RÔLE (`getByRole('button', …)`) ;
+2. un écran qui affiche le bon texte ne prouve pas que le bouton marche —
+   **on compte les appels réseau**, et c'est ce comptage qui a montré que
+   le premier « Réessayer » ne partait pas.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un vrai PostgreSQL. Les 30 contrôles
+passent (11 nouveaux dans `verifier-demandes`), `npx expo export --platform
+ios` passe. Puis sur la VRAIE base, avec un compte professionnel jetable
+supprimé dans la même session (0 ligne restante, vérifié table par table) :
+
+| | relevé |
+|---|---|
+| l'ordre rendu par l'API | **devis en attente du 30/08/2025 en 1er**, puis 3 rappels clos du jour |
+| l'en-tête | « 1 demande à traiter » |
+| la troncature à 4 demandes | ne se dit pas |
+| la route coupée | « Lecture impossible », plus « Aucune demande » |
+| « Réessayer » | **un 3ᵉ appel part**, la liste revient |
+
+**Ce qui n'a PAS été vérifié** : la page sur un vrai iPhone, et une liste
+réellement à 200 — le pied de troncature n'a été lu que dans le code, pas
+à l'écran.
+
+#### Ce qui reste, et qui est un CHOIX à faire
+
+Sur la capture, les trois demandes **closes** portent un bandeau orange
+aussi fort que la demande en attente. Le tri les a descendues ; leur
+couleur, elle, crie toujours autant. Faire reculer le bandeau d'une
+demande traitée est trois lignes — mais c'est du goût, et l'orange est
+l'identité : à trancher avec le propriétaire, pas tout seul.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

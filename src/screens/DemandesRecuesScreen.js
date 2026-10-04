@@ -85,6 +85,10 @@ const EN_ATTENTE = ['en_attente', 'envoyee'];
 const ACCEPTEE = ['accepte', 'acceptee'];
 const REFUSEE = ['refuse', 'refusee'];
 
+/* Ce que `mes_demandes_recues()` rend au plus — la même valeur qu'en base.
+   Les deux doivent rester d'accord : `npm run verifier-demandes` le tient. */
+export const PLAFOND = 200;
+
 const estEnAttente = (d) => EN_ATTENTE.includes(d.statut);
 const estAcceptee = (d) => ACCEPTEE.includes(d.statut);
 const estRefusee = (d) => REFUSEE.includes(d.statut);
@@ -94,23 +98,67 @@ export function compterEnAttente(demandes = []) {
 }
 
 /**
- * Le tri, isolé pour être contrôlable par `npm run verifier-demandes` :
- * une urgence en attente d'abord, le reste par date décroissante.
+ * Le tri, isolé pour être contrôlable par `npm run verifier-demandes`.
+ *
+ * TROIS RANGS, ET LE DEUXIÈME A ÉTÉ AJOUTÉ LE 04/10/2026
+ * ------------------------------------------------------
+ * Il n'y en avait que deux : l'urgence en attente, puis la date. Un devis
+ * refusé ce matin passait donc devant un devis en attente d'hier — et cet
+ * écran ne sert QU'À SAVOIR QUI ATTEND. Il fallait lire chaque carte pour
+ * trouver le travail, ce qui est exactement ce que le titre annonce déjà
+ * en chiffres (« 2 demandes à traiter »).
+ *
+ * C'est aussi ce qui rend honnête la borne de 200 posée en base le même
+ * jour : la base trie elle-même ce qui attend en premier, donc la limite
+ * ne coupe jamais que du traité.
  */
 export function trierDemandes(demandes = []) {
-  const urgent = (d) => (d.genre === 'sos' && estEnAttente(d) ? 0 : 1);
+  const rang = (d) => {
+    if (!estEnAttente(d)) return 2;
+    return d.genre === 'sos' ? 0 : 1;
+  };
   return [...demandes].sort((a, b) => {
-    const u = urgent(a) - urgent(b);
-    if (u !== 0) return u;
+    const r = rang(a) - rang(b);
+    if (r !== 0) return r;
     return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
   });
 }
 
 export default function DemandesRecuesScreen({
-  demandes = [], chargement = false, onRepondre, onAppeler, onVoirProfil,
+  demandes = [], chargement = false, echec = false, onReessayer,
+  onRepondre, onAppeler, onVoirProfil,
 }) {
   if (chargement) {
     return <EmptyState>Chargement de vos demandes…</EmptyState>;
+  }
+  /**
+   * L'ÉCHEC NE DOIT PAS RESSEMBLER À UNE BOÎTE VIDE — trouvé le 04/10/2026.
+   *
+   * `demandesRecuesEtat` valait déjà 'echec' dans `OpusApp` ; il n'était
+   * simplement pas passé ici. Un chargement raté affichait donc « Aucune
+   * demande pour le moment », c'est-à-dire une bonne nouvelle. Le bandeau
+   * rouge, lui, disparaît au bout de quelques secondes.
+   *
+   * Même famille que le ménage de compte des pièces jointes, qui répondait
+   * « retires: 0 » sans erreur en laissant le fichier en place : un travail
+   * qui n'a pas pu se faire ne doit jamais ressembler à un travail fait.
+   */
+  if (echec) {
+    return (
+      <EmptyState
+        icone={AlertTriangle}
+        titre="Lecture impossible"
+        /* UN BOUTON, PAS UN MOT SOULIGNÉ DANS UN PARAGRAPHE. Le premier
+           essai posait « Réessayer » dans le texte ; au navigateur, le
+           clic ne partait pas, et sur un chantier viser un mot au pouce
+           est de toute façon le défaut que le lot 5 a passé une journée à
+           corriger. `EmptyState` sait déjà porter une action. */
+        action={onReessayer ? { label: 'Réessayer', onPress: onReessayer } : null}
+      >
+        Vos demandes n'ont pas pu être chargées. Ce n'est pas qu'il n'y en a
+        pas — c'est qu'on n'a pas réussi à les lire.
+      </EmptyState>
+    );
   }
   if (!demandes.length) {
     return (
@@ -136,6 +184,16 @@ export default function DemandesRecuesScreen({
       maxToRenderPerBatch={6}
       windowSize={5}
       contentContainerStyle={{ paddingBottom: 32 }}
+      /* LA BORNE SE DIT. La base en rend 200 au plus (section 24), les plus
+         récentes et tout ce qui attend. Une liste tronquée en silence
+         laisserait croire qu'il n'y a rien avant — c'est la règle du
+         « 3 annonces sans lieu précisé ne sont pas affichées ». */
+      ListFooterComponent={liste.length >= PLAFOND ? (
+        <Text style={s.borne}>
+          Les {PLAFOND} demandes les plus récentes. Tout ce qui attend une
+          réponse est au-dessus.
+        </Text>
+      ) : null}
       ListHeaderComponent={(
         <SectionLabel>
           {enAttente > 0
@@ -310,7 +368,6 @@ const s = StyleSheet.create({
   corps: { padding: S.md, gap: S.sm },
   client: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 40 },
   nom: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
-  meta: { fontFamily: F.inter, fontSize: T.petit, color: C.muted },
 
   titre: {
     fontFamily: F.inter6, fontSize: T.corps, color: C.ink,
@@ -327,6 +384,11 @@ const s = StyleSheet.create({
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
   btnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent, letterSpacing: 0.3 },
   etat: { fontFamily: F.inter5, fontSize: T.petit, color: C.muted },
+  borne: {
+    fontFamily: F.inter, fontSize: T.micro, color: C.muted,
+    textAlign: 'center', paddingHorizontal: GOUTTIERE, paddingTop: S.md,
+    lineHeight: interligne(T.micro),
+  },
 
   aide: {
     fontFamily: F.inter, fontSize: T.micro, color: C.muted,

@@ -121,17 +121,72 @@ console.log('\nLe téléphone du COMPTE ne passe pas par cette porte');
     `colonnes lues : ${[...new Set(corps.match(/\bu\.\w+/g) || [])].join(', ')}`);
 }
 
-console.log('\nUne urgence passe devant le reste');
+console.log('\nCe qui ATTEND passe devant le reste');
 {
   const ecran = lire('src/screens/DemandesRecuesScreen.js');
   verifier('le tri est une fonction isolée, donc contrôlable',
     /export function trierDemandes/.test(ecran));
-  verifier('une urgence EN ATTENTE remonte en tête',
-    /d\.genre === 'sos' && estEnAttente\(d\)/.test(ecran));
+  /* TROIS rangs depuis le 04/10/2026, et pas deux. Avec deux, un devis
+     refusé ce matin passait devant un devis en attente d'hier — sur un
+     écran qui ne sert QU'À savoir qui attend. */
+  verifier('une urgence en attente d’abord, PUIS tout ce qui attend',
+    /const rang = \(d\) => \{[\s\S]{0,160}!estEnAttente\(d\)\) return 2;[\s\S]{0,120}'sos' \? 0 : 1/
+      .test(ecran),
+    'deux rangs seulement laissaient une demande traitée devant une '
+    + 'demande en attente');
   verifier('le métier d’une urgence ne passe pas par `nomMetier`',
     /METIERS_SOS/.test(ecran),
     'sos_requests.metier_key porte « plomberie », pas « plombier » — '
     + 'une clé affichée brute ressemble à une faute de frappe');
+
+  /* ====================================================================
+     TROUVÉ LE 04/10/2026, EN AUDITANT LE DERNIER ONGLET DE DÉCOUVRIR.
+     Trois défauts, et aucun ne faisait planter quoi que ce soit.
+     ==================================================================== */
+  verifier('un chargement raté ne dit pas « aucune demande »',
+    /echec = false/.test(ecran)
+    && /echec=\{demandesRecuesEtat === 'echec'\}/.test(lire('src/OpusApp.js')),
+    'l’état valait déjà « echec » dans OpusApp et n’était pas transmis : '
+    + 'l’écran annonçait une bonne nouvelle. Même famille que le ménage '
+    + 'de compte qui répondait « retires: 0 » sans erreur');
+
+  verifier('…et il propose de réessayer',
+    /onReessayer/.test(ecran) && /onReessayer=\{\(\) => chargerDemandesRecues\(\)\}/
+      .test(lire('src/OpusApp.js')),
+    'une impasse sans sortie, c’est le défaut du clavier de l’iPhone');
+
+  /* La borne : la base en rend 200 au plus. Les DEUX valeurs doivent
+     rester d'accord, sinon l'écran annonce une troncature qui n'existe
+     pas — ou se tait sur une troncature réelle. */
+  const plafond = /export const PLAFOND = (\d+);/.exec(ecran);
+  const limiteSql = /order by \(d\.statut in \('en_attente', 'envoyee'\)\) desc, d\.created_at desc\s*\n\s*limit (\d+)/
+    .exec(schema);
+  verifier('`mes_demandes_recues()` est BORNÉE',
+    !!limiteSql,
+    'elle rendait TOUT, pour toujours — alors que l’écran dit lui-même '
+    + 'qu’un artisan en aura des centaines');
+  verifier('…et la borne ne coupe jamais que du TRAITÉ',
+    !!limiteSql,
+    'sans `order by (statut en attente) desc`, 200 demandes closes plus '
+    + 'récentes pousseraient dehors un devis en attente');
+  verifier('l’écran et la base sont d’accord sur le plafond',
+    !!plafond && !!limiteSql && plafond[1] === limiteSql[1],
+    `écran ${plafond ? plafond[1] : '?'} / base ${limiteSql ? limiteSql[1] : '?'}`);
+  verifier('…et la troncature se DIT',
+    /ListFooterComponent=\{liste\.length >= PLAFOND/.test(ecran),
+    'une liste tronquée en silence, c’est la règle des « 3 annonces sans '
+    + 'lieu précisé » qu’on applique déjà ailleurs');
+
+  /* `schema.sql` ne doit créer une politique qu'à UN endroit — la règle
+     posée en section 30, que le contrôle avait raison d'imposer. Les
+     trois « creation … » étaient créées deux fois : une version sans le
+     blocage, puis la bonne. C'est la première qui se fait oublier. */
+  for (const mot of ['devis', 'rappel', 'sos']) {
+    const n = (schema.match(new RegExp(`create policy "creation ${mot}"`, 'g')) || []).length;
+    verifier(`« creation ${mot} » n’est créée qu’une fois`, n === 1,
+      `créée ${n} fois — et c’est la version SANS blocage qui vient en `
+      + 'premier dans le fichier');
+  }
 }
 
 console.log('\nUne demande déjà vue, une demande pourvue, et une liste bornée');

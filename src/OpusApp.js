@@ -2445,6 +2445,11 @@ export default function OpusApp() {
                       <DemandesRecuesScreen
                         demandes={demandesRecues}
                         chargement={demandesRecuesEtat === 'charge'}
+                        /* L'échec était calculé et jamais transmis : l'écran
+                           annonçait « aucune demande » quand il n'avait rien
+                           pu lire. Corrigé le 04/10/2026. */
+                        echec={demandesRecuesEtat === 'echec'}
+                        onReessayer={() => chargerDemandesRecues()}
                         onRepondre={repondreDemandeRecue}
                         onAppeler={appeler}
                         onVoirProfil={viewProfile}

@@ -1083,9 +1083,10 @@ create policy "mes reviews" on public.reviews
 drop policy if exists "lecture mes devis" on public.quote_requests;
 create policy "lecture mes devis" on public.quote_requests
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
-drop policy if exists "creation devis" on public.quote_requests;
-create policy "creation devis" on public.quote_requests
-  for insert with check (auth.uid() = client_id);
+-- La politique « creation devis » n'est PAS créée ici : la section 18 la
+-- crée avec le blocage (`not est_masque(professional_id)`). Deux
+-- créations pour une politique, c'est la première qui se fait oublier
+-- le jour où la règle change.
 drop policy if exists "le pro traite le devis" on public.quote_requests;
 create policy "le pro traite le devis" on public.quote_requests
   for update using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
@@ -1093,9 +1094,10 @@ create policy "le pro traite le devis" on public.quote_requests
 drop policy if exists "lecture mes rappels" on public.callback_requests;
 create policy "lecture mes rappels" on public.callback_requests
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
-drop policy if exists "creation rappel" on public.callback_requests;
-create policy "creation rappel" on public.callback_requests
-  for insert with check (auth.uid() = client_id);
+-- La politique « creation rappel » n'est PAS créée ici : la section 18 la
+-- crée avec le blocage (`not est_masque(professional_id)`). Deux
+-- créations pour une politique, c'est la première qui se fait oublier
+-- le jour où la règle change.
 drop policy if exists "le pro traite le rappel" on public.callback_requests;
 create policy "le pro traite le rappel" on public.callback_requests
   for update using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
@@ -1172,9 +1174,10 @@ create policy "ma dispo sos" on public.sos_availability
 drop policy if exists "lecture mes sos" on public.sos_requests;
 create policy "lecture mes sos" on public.sos_requests
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
-drop policy if exists "creation sos" on public.sos_requests;
-create policy "creation sos" on public.sos_requests
-  for insert with check (auth.uid() = client_id);
+-- La politique « creation sos » n'est PAS créée ici : la section 18 la
+-- crée avec le blocage (`not est_masque(professional_id)`). Deux
+-- créations pour une politique, c'est la première qui se fait oublier
+-- le jour où la règle change.
 drop policy if exists "le pro traite le sos" on public.sos_requests;
 create policy "le pro traite le sos" on public.sos_requests
   for update using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
@@ -3787,11 +3790,24 @@ stable
 security definer
 set search_path = public
 as $$
-  select q.id, 'devis'::text, q.statut, q.created_at, q.client_id,
-         coalesce(nullif(btrim(q.nom), ''), nullif(btrim(u.nom), ''), 'Un client'),
-         nullif(btrim(q.telephone), ''),
-         q.metier, nullif(btrim(q.description), ''), null::text,
-         q.ville, q.budget, null::text, null::numeric, null::numeric, u.avatar_url
+  -- UN `union` NE SE TRIE PAS SUR UNE EXPRESSION — PostgreSQL le refuse
+  -- (« Only result column names can be used »). D'où l'enveloppe, et les
+  -- noms de colonnes posés explicitement sur le premier membre : sans eux,
+  -- `d.statut` et `d.created_at` ne s'appelleraient pas forcément ainsi.
+  select d.id, d.genre, d.statut, d.created_at, d.client_id, d.nom,
+         d.telephone, d.metier, d.titre, d.details, d.ville, d.budget,
+         d.creneau, d.prix_min, d.prix_max, d.avatar_url
+    from (
+
+  select q.id as id, 'devis'::text as genre, q.statut as statut,
+         q.created_at as created_at, q.client_id as client_id,
+         coalesce(nullif(btrim(q.nom), ''), nullif(btrim(u.nom), ''), 'Un client') as nom,
+         nullif(btrim(q.telephone), '') as telephone,
+         q.metier as metier, nullif(btrim(q.description), '') as titre,
+         null::text as details,
+         q.ville as ville, q.budget as budget, null::text as creneau,
+         null::numeric as prix_min, null::numeric as prix_max,
+         u.avatar_url as avatar_url
     from public.quote_requests q join public.users u on u.id = q.client_id
    where auth.uid() is not null and q.professional_id = auth.uid()
 
@@ -3816,7 +3832,13 @@ as $$
     from public.sos_requests s join public.users u on u.id = s.client_id
    where auth.uid() is not null and s.professional_id = auth.uid()
 
-  order by created_at desc
+    ) d
+  -- CE QUI ATTEND D'ABORD, et c'est ce qui rend la borne honnête.
+  -- Sans elle, 200 demandes closes plus récentes pousseraient dehors un
+  -- devis encore en attente : l'artisan perdrait du travail sans le
+  -- savoir. Avec elle, la borne ne coupe jamais que du traité.
+  order by (d.statut in ('en_attente', 'envoyee')) desc, d.created_at desc
+  limit 200
 $$;
 
 -- Elle est faite pour être appelée : on lui rend donc explicitement le
