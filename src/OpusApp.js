@@ -2121,6 +2121,7 @@ export default function OpusApp() {
             bottomInset={videoMode ? navHeight : 0}
             rappel={canPublish && pros[myProId] ? (
               <RappelVerification
+                pro={pros[myProId]}
                 statut={pros[myProId].verificationStatut}
                 note={pros[myProId].verificationNote}
                 onAction={() => setScreen('profilEdit')}

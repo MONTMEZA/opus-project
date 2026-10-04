@@ -29,6 +29,7 @@ import {
 import { EtatVerificationPublic } from '../components/RappelVerification';
 import {
   detailDocument, detailRge, VALIDE, ATTENTE, REFUSE, ABSENT,
+  pieceExistence, pieceAssurance,
 } from '../lib/verification';
 import { avgReviews } from '../data/demo';
 import { aiSummarizeReviews } from '../lib/ai';
@@ -220,12 +221,12 @@ export default function ProfilProScreen({
       <View style={s.verifBlock}>
         <VerifRow
           etat={assuranceDetail.etat}
-          label="Assurance décennale"
+          label={pieceAssurance(pro).nom}
           value={assuranceDetail.valeur}
         />
         <VerifRow
           etat={kbisDetail.etat}
-          label="Extrait Kbis"
+          label={pieceExistence().court}
           value={kbisDetail.valeur}
         />
         {/* Trois états, pas deux. « Déclarée, en cours de vérification »

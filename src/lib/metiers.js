@@ -118,6 +118,24 @@ export function categorieDe(cle) {
 }
 
 /**
+ * La CLÉ de la catégorie, et non son nom.
+ *
+ * `categorieDe()` rend « Conseil, juridique, assurance, finance » — ce qui
+ * s'affiche. Pour raisonner (quelles pièces justificatives demander, par
+ * exemple), il faut `conseil`. Les deux se ressemblent assez pour qu'on
+ * prenne l'une pour l'autre : constaté le 04/10/2026 en écrivant
+ * `pieces-justificatives.js`, où la comparaison échouait en silence et
+ * réclamait une décennale à un avocat.
+ *
+ * Même famille que la règle du catalogue : une fiche range `macon`, jamais
+ * « Maçon ». La clé sert à décider, le nom à afficher.
+ */
+export function cleCategorieDe(cle) {
+  const m = MAP_METIERS[cle];
+  return m ? m.categorie || '' : '';
+}
+
+/**
  * Tous les mots par lesquels on peut trouver ce métier : son nom, ses
  * synonymes, et le nom de ses spécialités.
  *

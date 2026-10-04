@@ -5,6 +5,7 @@
  * le nom de son entreprise, son métier et sa ville, pour que sa fiche publique
  * existe dès l'inscription.
  */
+import { pieceExistence } from '../lib/verification';
 import React, { useState, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, ActivityIndicator,
@@ -253,8 +254,9 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
                   <Text style={s.encartTitre}>Le badge vérifié, en deux étapes</Text>
                   <Text style={s.encartTexte}>
                     Vous entrez tout de suite et pouvez publier. Ensuite, depuis votre
-                    profil, vous enverrez votre <Text style={s.gras}>extrait Kbis</Text> et
-                    votre <Text style={s.gras}>attestation d'assurance décennale</Text>.
+                    profil, vous enverrez votre
+                    {' '}<Text style={s.gras}>{pieceExistence().nom.toLowerCase()}</Text> et
+                    {' '}<Text style={s.gras}>votre attestation d&apos;assurance</Text>.
                     Après contrôle, le badge vérifié apparaît sur votre profil — sans lui,
                     les particuliers voient que vos justificatifs n'ont pas été fournis.
                   </Text>

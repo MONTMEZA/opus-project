@@ -49,6 +49,9 @@ import {
   ShieldCheck, FileText, Flag, Clock, AlertTriangle, Check,
 } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
+/* Les deux pièces ne s'appellent pas pareil selon le métier : un
+   micro-entrepreneur n'a pas de Kbis, un avocat pas de décennale. */
+import { EXISTENCE, assuranceAttendue, complementairesDe } from '../data/pieces-justificatives.js';
 import * as api from '../lib/api';
 import * as retour from '../lib/retour';
 import { messageClair } from '../lib/erreurs';
@@ -230,10 +233,12 @@ function FileVerifications({ pros, chargement, onActe, onErreur }) {
 
 const CarteVerification = React.memo(function CarteVerification({ pro, onActe, onErreur }) {
   const [kbis, setKbis] = useState(pro.kbisValide);
-  const [assurance, setAssurance] = useState(pro.assuranceValide);
+  const [assuranceOk, setAssuranceOk] = useState(pro.assuranceValide);
   const [rge, setRge] = useState(pro.rge);
   const [envoi, setEnvoi] = useState(null);
   const note = useRef(null);
+  const assurance = assuranceAttendue(pro.metiers || []);
+  const complementaires = complementairesDe(pro.metiers || []);
 
   const agir = async (quoi) => {
     if (envoi) return;
@@ -245,7 +250,7 @@ const CarteVerification = React.memo(function CarteVerification({ pro, onActe, o
         await api.refuserPro({ id: pro.id, note: texte });
       } else {
         await api.verifierPro({
-          id: pro.id, kbis, assurance, rge, note: texte || null,
+          id: pro.id, kbis, assurance: assuranceOk, rge, note: texte || null,
         });
       }
       retour.reussite();
@@ -289,13 +294,13 @@ const CarteVerification = React.memo(function CarteVerification({ pro, onActe, o
           nom et l'adresse du dirigeant. */}
       <View style={s.documents}>
         <Document
-          libelle="Extrait Kbis"
+          libelle={EXISTENCE.nom}
           complement={pro.kbisMaj}
           present={!!pro.kbisUrl}
-          onOuvrir={() => ouvrir(pro.kbisUrl, 'extrait Kbis')}
+          onOuvrir={() => ouvrir(pro.kbisUrl, EXISTENCE.court.toLowerCase())}
         />
         <Document
-          libelle="Assurance décennale"
+          libelle={assurance.nom}
           complement={pro.assuranceExpire}
           present={!!pro.assuranceUrl}
           onOuvrir={() => ouvrir(pro.assuranceUrl, 'attestation d’assurance')}
@@ -328,9 +333,23 @@ const CarteVerification = React.memo(function CarteVerification({ pro, onActe, o
         </View>
       ) : (
         <>
+          {!!complementaires.length && (
+            /* CE QU'IL FAUT DEMANDER EN PLUS, selon le métier. Ces pièces ne
+               commandent PAS le badge — il dit « cette entreprise existe et
+               elle est assurée », pas « elle a tous les agréments de sa
+               profession ». Mais sans ce rappel, personne ne penserait à
+               réclamer son immatriculation ORIAS à un courtier. */
+            <View style={s.complementaires}>
+              <Text style={s.complementairesTitre}>À demander aussi, pour ce métier</Text>
+              {complementaires.map((c) => (
+                <Text key={c.cle} style={s.complementaire}>• {c.nom} — {c.aide}</Text>
+              ))}
+            </View>
+          )}
+
           <View style={s.cases}>
-            <Case libelle="Kbis contrôlé" on={kbis} onPress={() => setKbis(!kbis)} />
-            <Case libelle="Assurance contrôlée" on={assurance} onPress={() => setAssurance(!assurance)} />
+            <Case libelle={`${EXISTENCE.court} contrôlée`} on={kbis} onPress={() => setKbis(!kbis)} />
+            <Case libelle={`${assurance.court} contrôlée`} on={assuranceOk} onPress={() => setAssuranceOk(!assuranceOk)} />
             {/* Le RGE n'entre PAS dans le badge « vérifié » : un carreleur
                 n'a aucune raison d'être RGE, et il serait absurde qu'il
                 paraisse moins sérieux pour autant. */}
@@ -647,6 +666,18 @@ const s = StyleSheet.create({
   documentOuvrable: { borderColor: C.bordChamp },
   documentTexte: { fontFamily: F.inter5, fontSize: T.courant, color: C.accentTexte },
   documentAbsent: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
+
+  complementaires: {
+    backgroundColor: C.okBg, borderWidth: 1, borderColor: C.line,
+    borderRadius: R.vif, padding: S.sm, gap: S.xs,
+  },
+  complementairesTitre: {
+    fontFamily: F.oswald6, fontSize: T.petit, color: C.ink, letterSpacing: 0.3,
+  },
+  complementaire: {
+    fontFamily: F.inter, fontSize: T.micro, color: C.muted,
+    lineHeight: interligne(T.micro),
+  },
 
   cases: { gap: S.xs, paddingTop: S.xs },
   case: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44 },

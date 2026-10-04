@@ -221,6 +221,7 @@ export default function ProfilOwnScreen({
       <FicheContactPro pro={me} estMoi onEdit={onEdit} />
 
       <RappelVerification
+        pro={me}
         statut={me.verificationStatut}
         note={me.verificationNote}
         onAction={onEdit}

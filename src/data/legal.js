@@ -288,12 +288,21 @@ export const CGU = [
   },
   {
     titre: 'Le badge vérifié',
-    texte: "Le badge n'est accordé qu'après contrôle humain d'un extrait Kbis "
-      + "et d'une attestation d'assurance décennale en cours de validité. Il "
-      + "dit que ces documents ont été vus, et rien d'autre : il ne garantit "
-      + "ni la qualité d'un chantier, ni le respect d'un délai. Un badge "
-      + 'obtenu avec de faux documents entraîne la fermeture immédiate du '
-      + 'compte.',
+    /* CE TEXTE A ÉTÉ CORRIGÉ LE 04/10/2026, et c'était une vraie
+       incohérence : il promettait un badge « après contrôle d'un Kbis et
+       d'une décennale ». Un micro-entrepreneur n'a pas de Kbis, un avocat
+       pas de décennale — les CGU excluaient donc du badge des gens que
+       l'application accepte d'inscrire. Deux documents, oui ; mais lesquels
+       dépend du métier (`src/data/pieces-justificatives.js`). */
+    texte: "Le badge n'est accordé qu'après contrôle humain de deux pièces : "
+      + "un justificatif d'existence légale de l'entreprise (extrait Kbis, ou "
+      + 'avis de situation au répertoire SIRENE pour un micro-entrepreneur) '
+      + "et une attestation d'assurance adaptée au métier exercé — garantie "
+      + 'décennale pour les activités de construction, responsabilité civile '
+      + "professionnelle pour les activités de conseil. Il dit que ces "
+      + "documents ont été vus, et rien d'autre : il ne garantit ni la "
+      + "qualité d'un chantier, ni le respect d'un délai. Un badge obtenu "
+      + 'avec de faux documents entraîne la fermeture immédiate du compte.',
   },
   {
     titre: 'Ce que vous publiez',
@@ -379,8 +388,8 @@ export const CONFIDENTIALITE = [
       + 'votre commune — celles de la mairie, pas de votre domicile — qui '
       + 'servent au tri par distance. Votre téléphone, si vous le renseignez. '
       + 'Vos photos, vidéos, textes, commentaires, avis, messages, demandes et '
-      + 'annonces. Pour un compte professionnel : votre extrait Kbis et votre '
-      + 'attestation d’assurance.',
+      + 'annonces. Pour un compte professionnel : votre justificatif '
+      + 'd’existence légale et votre attestation d’assurance.',
   },
   {
     titre: 'Ce que nous ne collectons pas',

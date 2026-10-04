@@ -5,6 +5,7 @@
  * c'est ici que l'artisan déclare qu'il répond aux urgences et renseigne
  * ses trois chiffres (déplacement, tarif horaire, majoration).
  */
+import { pieceExistence, pieceAssurance } from '../lib/verification';
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Switch, ActivityIndicator, StyleSheet } from 'react-native';
 import {
@@ -423,8 +424,16 @@ export default function ProfilEditScreen({
                 badge vérifié l'est.
               </Text>
 
+              <Text style={s.docIntro}>{pieceExistence().aide}</Text>
+              <Text style={s.docIntro}>{pieceAssurance(profil).aide}</Text>
+
+              {/* LES DEUX LIBELLÉS SUIVENT LE MÉTIER, et ce n'est pas
+                  cosmétique : un micro-entrepreneur n'a pas de Kbis, et un
+                  avocat ne peut pas avoir de décennale. Les deux
+                  cherchaient un document qui n'existe pas, puis
+                  renonçaient. Voir `src/data/pieces-justificatives.js`. */}
               <LigneDocument
-                titre="Extrait Kbis"
+                titre={pieceExistence().nom}
                 detail="PDF ou photo, de moins de 3 mois"
                 fichier={kbis}
                 dejaEnvoye={!!profil.kbisPath}
@@ -437,7 +446,7 @@ export default function ProfilEditScreen({
               />
 
               <LigneDocument
-                titre="Attestation d'assurance décennale"
+                titre={`Attestation — ${pieceAssurance(profil).nom.toLowerCase()}`}
                 detail="PDF ou photo, en cours de validité"
                 fichier={assurance}
                 dejaEnvoye={!!profil.assurancePath}

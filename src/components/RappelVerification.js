@@ -11,15 +11,21 @@ import {
   C, F, T,
 } from '../theme';
 import { ShieldCheck, ShieldX, FileText, ChevronRight } from './icons';
-import { toutValide, etatKbis, etatAssurance, ATTENTE, VALIDE } from '../lib/verification';
+import {
+  toutValide, etatKbis, etatAssurance, ATTENTE, VALIDE,
+  pieceExistence, pieceAssurance,
+} from '../lib/verification';
 
 const ETATS = {
   non_soumis: {
     couleur: C.accent,
     Icone: FileText,
     titre: 'Obtenez le badge vérifié',
-    texte: "Envoyez votre extrait Kbis et votre attestation d'assurance décennale. "
-      + "Les particuliers font deux fois plus confiance à un profil vérifié.",
+    /* Le texte dépend du MÉTIER (un avocat n'a pas de décennale), donc il
+       se calcule. La table ne garde que ce qui est vraiment commun. */
+    texte: (pro) => `Envoyez votre ${pieceExistence().nom.toLowerCase()} et votre `
+      + `attestation — ${pieceAssurance(pro).nom.toLowerCase()}. `
+      + 'Les particuliers font deux fois plus confiance à un profil vérifié.',
     action: 'Envoyer mes documents',
   },
   en_attente: {
@@ -40,11 +46,15 @@ const ETATS = {
   },
 };
 
-export default function RappelVerification({ statut, note, onAction, style }) {
+export default function RappelVerification({ statut, note, onAction, style, pro = null }) {
   // Profil vérifié : plus rien à rappeler.
   if (!statut || statut === 'verifie') return null;
 
   const e = ETATS[statut] || ETATS.non_soumis;
+  /* Certains textes dépendent du métier — un avocat n'a pas de décennale.
+     `pro` peut manquer (un appel ancien) : `pieceAssurance(null)` rend alors
+     la décennale, qui est le bon défaut dans une application du bâtiment. */
+  const texte = typeof e.texte === 'function' ? e.texte(pro) : e.texte;
 
   return (
     <Pressable style={[s.carte, { borderLeftColor: e.couleur }, style]} onPress={onAction}>
@@ -52,7 +62,7 @@ export default function RappelVerification({ statut, note, onAction, style }) {
         <e.Icone size={16} color={e.couleur} />
         <Text style={[s.titre, { color: e.couleur }]}>{e.titre}</Text>
       </View>
-      <Text style={s.texte}>{e.texte}</Text>
+      <Text style={s.texte}>{texte}</Text>
       {!!note && <Text style={s.note}>Motif : {note}</Text>}
       <View style={s.action}>
         <Text style={[s.actionTexte, { color: e.couleur }]}>{e.action}</Text>
@@ -77,7 +87,7 @@ export function EtatVerificationPublic({ pro }) {
         <View style={{ flex: 1 }}>
           <Text style={[s.publicTitre, { color: C.ok }]}>Profil vérifié par Opus</Text>
           <Text style={s.publicTexte}>
-            Extrait Kbis et attestation d'assurance contrôlés
+            {pieceExistence().court} et {pieceAssurance(pro).court.toLowerCase()} contrôlés
             {pro.verifieLe ? ` le ${formatDate(pro.verifieLe)}` : ''}.
           </Text>
         </View>
@@ -117,8 +127,8 @@ export function EtatVerificationPublic({ pro }) {
 /** Ne nomme que les justificatifs réellement manquants. */
 function manquantsDe(pro) {
   const liste = [];
-  if (etatKbis(pro) !== VALIDE) liste.push('son extrait Kbis');
-  if (etatAssurance(pro) !== VALIDE) liste.push("son attestation d'assurance décennale");
+  if (etatKbis(pro) !== VALIDE) liste.push(`son ${pieceExistence().nom.toLowerCase()}`);
+  if (etatAssurance(pro) !== VALIDE) liste.push(`son attestation — ${pieceAssurance(pro).nom.toLowerCase()}`);
   return liste;
 }
 
