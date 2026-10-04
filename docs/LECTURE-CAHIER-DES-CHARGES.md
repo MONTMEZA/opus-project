@@ -157,6 +157,73 @@ sinon il décevra, et il faut le construire **après** la brique 1, pas dedans.
 
 ---
 
+### 3.4 Le dossier de sous-traitance n'est PAS dans le Dashboard
+
+Question du propriétaire, le 04/10/2026 : « le dossier de sous-traitance et
+autres devraient se trouver dans le futur Dashboard qu'on doit créer, comme
+indiqué dans le cahier des charges ? »
+
+**Non — et le document le dit lui-même, en toutes lettres.**
+
+> §8 : « Le Dashboard est le cockpit de l'entreprise. Il ne doit pas
+> remplacer l'Agent : le Dashboard **montre visuellement** les données ;
+> l'Agent permet de les interroger et d'agir dessus. »
+
+Le Dashboard est un endroit où l'on REGARDE. Tout ce qu'il énumère — CA,
+devis en attente, factures impayées, chantiers actifs, graphiques — sont
+des **vues** sur des données qui vivent ailleurs. Le §8.2 est encore plus
+net : « Les graphiques sont alimentés automatiquement par la base de
+données. L'artisan ne doit pas saisir manuellement les statistiques. »
+
+**Le dossier de sous-traitance appartient au CHANTIER (§12).** Deux
+preuves, dans le document :
+
+1. la liste du §12 — « Un chantier doit devenir un **dossier central** qui
+   rassemble toutes les informations utiles » — contient *client, adresse,
+   devis lié, montant, acompte, dates, avancement, prestations, matériaux,
+   plans, photos/vidéos, temps passé, équipe, **sous-traitants**, dépenses,
+   factures, documents, marge, historique des décisions, rapport final* ;
+2. le §18 « Sous-traitance entre professionnels » **commence** par
+   « Création d'un **dossier chantier** ».
+
+Autrement dit : on ne sous-traite pas dans l'abstrait. On sous-traite un
+morceau d'un chantier qu'on a. Et la deuxième ligne du §18 — « photos,
+plans, description vocale, prestations, prix et délais » — est
+mot pour mot ce que le chantier porte déjà.
+
+> **Construire un « dossier de sous-traitance » avant le chantier
+> fabriquerait un cinquième objet flottant**, avec ses photos, ses plans,
+> ses prix et ses dates à ressaisir à la main. C'est précisément ce que le
+> §28 interdit : « si elle oblige l'artisan à remplir plusieurs écrans
+> alors qu'Opus possède déjà l'information, l'expérience doit être
+> simplifiée. »
+
+**Le partage du travail, à retenir :**
+
+| | |
+|---|---|
+| **Place des pros** (fait) | la porte d'entrée — on se rencontre |
+| **Chantier** (§12, phase 6) | le dossier — qui fait quoi, à quel prix, avec quels plans |
+| **Dashboard** (§8, phase 2) | la vue — « 3 chantiers actifs », « une réponse attend » |
+| **Agent** (§19-21) | l'action — « décale Martin à jeudi » |
+
+#### Et le chantier est le premier objet qui force la question « entreprise »
+
+C'est le lien avec le §3.1 ci-dessus, et il faut le voir venir : la liste du
+§12 contient **« Équipe »** et **« Sous-traitants »**. Aujourd'hui, dans
+Opus, tout appartient à une PERSONNE — un compte, une fiche, des
+publications. Un chantier avec une équipe, non.
+
+> **Avant la première ligne de code d'un chantier, il faut trancher : un
+> chantier appartient-il à un artisan, ou à une entreprise ?** Si c'est à
+> une entreprise, toutes les règles RLS sont à réécrire — ce que ce
+> document signale depuis le 29/09 comme LE point dur.
+
+Le cahier des charges a d'ailleurs tranché : sa **phase 1** est
+« Base de données + authentification + **entreprises + rôles** ».
+
+---
+
 ## 4. Ce qui n'est PAS perdu
 
 Rien de ce qui a été construit n'est à jeter, et deux morceaux tombent même
