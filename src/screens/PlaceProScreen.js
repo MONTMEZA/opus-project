@@ -27,7 +27,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import {
-  C, F, T, S, APPUI, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
+  C, F, T, S, R, APPUI, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
@@ -40,6 +40,10 @@ import {
 import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
 } from '../data/annonces';
+import {
+  versISO, jourCourant, chevauche, estTerminee, libelleProximite,
+  creneauSemaine, creneauMois,
+} from '../lib/formats';
 import { ChampMetier } from '../components/SelecteurMetiers';
 import { nomMetier , libelleMetiers } from '../lib/metiers';
 import { distanceKm, libelleDistance } from '../lib/adresse';
@@ -47,17 +51,11 @@ import { correspond, texteDe } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
 import { EcrireReponse, ListeReponses } from '../components/ReponsesAnnonce';
 
-/** Une date au format que la base attend : 2026-10-12. */
-function versISO(saisie) {
-  const m = String(saisie || '').trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
-  if (!m) return null;
-  const jour = Number(m[1]);
-  const mois = Number(m[2]);
-  if (jour < 1 || jour > 31 || mois < 1 || mois > 12) return null;
-  let annee = m[3] ? Number(m[3]) : new Date().getFullYear();
-  if (annee < 100) annee += 2000;
-  return `${annee}-${String(mois).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
-}
+/* `versISO` VIT DANS `lib/formats.js` DEPUIS LE 04/10/2026. Elle était
+   écrite ici, donc `node` ne pouvait pas l'ouvrir — ce fichier charge React
+   Native — et aucun contrôle ne la faisait tourner. C'est du découpage de
+   date écrit à la main : exactement le genre de code qui se casse en
+   silence. Même leçon que `cloudinary-adresses.js` et `cadre.js`. */
 
 /**
  * La barre de recherche, dans SON composant — et ce n'est pas un rangement.
@@ -113,6 +111,12 @@ export default function PlaceProScreen({
      défiler la liste publique en espérant la reconnaître. Or c'est là qu'on
      revient — pour lire les réponses. */
   const [miennesSeulement, setMiennesSeulement] = useState(false);
+  /* QUAND — le filtre qui n'existait pas, alors que l'en-tête de ce fichier
+     en fait depuis le début la différence d'Opus face aux groupes
+     Facebook. `null` = pas de contrainte de dates. */
+  const [creneau, setCreneau] = useState(null);         // 'semaine' | 'mois' | 'precises'
+  const [creneauDu, setCreneauDu] = useState('');
+  const [creneauAu, setCreneauAu] = useState('');
   /* Les deux feuilles portent l'annonce concernée, pas un booléen : il faut
      savoir à LAQUELLE on répond, et de laquelle on lit les réponses. */
   const [aRepondre, setARepondre] = useState(null);
@@ -130,6 +134,32 @@ export default function PlaceProScreen({
   const [unite, setUnite] = useState('total');
 
   const reglages = typeAnnonce(type);
+
+  /* LE JOUR EST FIGÉ POUR TOUT LE RENDU. Appeler `jourCourant()` dans
+     chaque carte le recalculerait des centaines de fois, et — pire — deux
+     cartes pourraient tomber de part et d'autre de minuit. */
+  const jour = useMemo(() => jourCourant(), []);
+
+  /* LES BORNES DU FILTRE, calculées depuis le mode choisi.
+     « Dates précises » sans rien de saisi ne filtre RIEN : on n'invente pas
+     un créneau à partir d'un champ vide, et la liste ne doit pas se vider
+     entre le moment où l'on ouvre les champs et celui où l'on écrit. */
+  const bornes = useMemo(() => {
+    if (creneau === 'semaine') return creneauSemaine();
+    if (creneau === 'mois') return creneauMois();
+    if (creneau === 'precises') {
+      const debut = versISO(creneauDu);
+      const fin = versISO(creneauAu);
+      if (!debut && !fin) return null;
+      return { debut, fin };
+    }
+    return null;
+  }, [creneau, creneauDu, creneauAu]);
+
+  const choisirCreneau = (mode) => {
+    setCreneau(mode);
+    if (mode !== 'precises') { setCreneauDu(''); setCreneauAu(''); }
+  };
 
   const liste = useMemo(() => {
     const avecDistance = annonces.map((a) => {
@@ -150,6 +180,17 @@ export default function PlaceProScreen({
       .filter((a) => (!filtreMetier || a.metier === filtreMetier))
       .filter((a) => (!verifiesSeulement || (a.auteur && a.auteur.verifie)))
       .filter((a) => (!miennesSeulement || a.aMoi))
+      /* UNE ANNONCE DONT LE CHANTIER EST PASSÉ SORT DE LA LISTE — mais
+         elle reste visible à SON AUTEUR. La faire disparaître de son côté
+         aussi, sans un mot, lui ferait croire qu'elle a été supprimée ;
+         il doit pouvoir la retirer ou la reposter en connaissance de
+         cause. */
+      .filter((a) => (a.aMoi || !estTerminee(a.dateFin, jour)))
+      /* LE FILTRE PAR DATES. Une annonce SANS dates passe toujours : une
+         bétonnière à vendre est disponible n'importe quand, et la retirer
+         d'une recherche par créneau ferait disparaître du matériel qui
+         n'a jamais cessé d'être à vendre. */
+      .filter((a) => (!bornes || chevauche(a.dateDebut, a.dateFin, bornes.debut, bornes.fin)))
       /* À distance connue, le plus proche d'abord : un chantier à 150 km
          n'intéresse personne. Les annonces sans coordonnées restent à leur
          place plutôt que d'être reléguées à la fin. */
@@ -157,7 +198,8 @@ export default function PlaceProScreen({
         if (a.km === null || b.km === null) return 0;
         return a.km - b.km;
       });
-  }, [annonces, recherche, filtreType, filtreMetier, verifiesSeulement, miennesSeulement, moi]);
+  }, [annonces, recherche, filtreType, filtreMetier, verifiesSeulement,
+    miennesSeulement, bornes, jour, moi]);
 
   /* Combien d'annonces sont à moi : la puce ne s'affiche que si j'en ai. */
   const nbMiennes = useMemo(() => annonces.filter((a) => a.aMoi).length, [annonces]);
@@ -366,6 +408,8 @@ export default function PlaceProScreen({
         {recherche.trim() ? ` pour « ${recherche.trim()} »` : ''}
       </SectionLabel>
 
+      <Text style={s.axe}>Quoi ?</Text>
+
       <View style={s.chipRow}>
         {TYPES_ANNONCE.map((t) => (
           <Chip
@@ -376,6 +420,57 @@ export default function PlaceProScreen({
           />
         ))}
       </View>
+
+      {/* LES DEUX AXES SE NOMMENT, parce qu'ils se ressemblaient trop.
+          Mesuré au navigateur : six puces de TYPE sur deux rangées, puis
+          trois puces de DATES sur une troisième — neuf puces identiques,
+          et rien pour dire que « Cette semaine » et « Fournisseur » ne
+          répondent pas à la même question. */}
+      <Text style={s.axe}>Quand ?</Text>
+
+      {/* QUAND — LE FILTRE QUI NOUS DISTINGUE.
+          Un plaquiste a un trou dans son planning du 12 au 20 ; il veut
+          voir ce qui TOMBE DEDANS, pas tout ce qui existe. Les deux
+          raccourcis couvrent le cas courant ; les deux champs servent
+          quand on connaît ses dates. */}
+      <View style={s.chipRow}>
+        <Chip
+          label="Cette semaine"
+          on={creneau === 'semaine'}
+          onPress={() => choisirCreneau(creneau === 'semaine' ? null : 'semaine')}
+        />
+        <Chip
+          label="Ce mois-ci"
+          on={creneau === 'mois'}
+          onPress={() => choisirCreneau(creneau === 'mois' ? null : 'mois')}
+        />
+        <Chip
+          label="Dates précises"
+          on={creneau === 'precises'}
+          onPress={() => choisirCreneau(creneau === 'precises' ? null : 'precises')}
+        />
+      </View>
+
+      {creneau === 'precises' && (
+        <View style={s.rangeeDates}>
+          <View style={{ flex: 1 }}>
+            <Field
+              value={creneauDu}
+              onChangeText={setCreneauDu}
+              placeholder="Du 12/10"
+              keyboardType="numbers-and-punctuation"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field
+              value={creneauAu}
+              onChangeText={setCreneauAu}
+              placeholder="Au 20/10"
+              keyboardType="numbers-and-punctuation"
+            />
+          </View>
+        </View>
+      )}
 
       {/* MES ANNONCES — elle n'apparaît que si j'en ai. Une puce qui ne
           filtre jamais rien est du bruit, et elle apprend à ne plus
@@ -428,6 +523,7 @@ export default function PlaceProScreen({
       renderItem={({ item: a }) => (
         <Annonce
           annonce={a}
+          jour={jour}
           onRepondre={() => setARepondre(a)}
           onLireReponses={() => setALire(a)}
           onFermer={() => onFermer(a)}
@@ -465,9 +561,15 @@ export default function PlaceProScreen({
   );
 }
 
-function Annonce({ annonce: a, onRepondre, onLireReponses, onFermer, onVoirProfil, onSignaler }) {
+function Annonce({
+  annonce: a, jour, onRepondre, onLireReponses, onFermer, onVoirProfil, onSignaler,
+}) {
   const t = typeAnnonce(a.type);
   const dates = libelleDates(a.dateDebut, a.dateFin);
+  /* « DANS 3 JOURS » PLUTÔT QUE « DU 12 AU 20 ». La date brute oblige à
+     calculer de tête, et sur un chantier on ne calcule pas. Les deux
+     cohabitent : la proximité fait agir, la date dit quoi noter. */
+  const proche = libelleProximite(a.dateDebut, a.dateFin, jour);
   const prix = libellePrix(a.prix, a.unite);
   const auteur = a.auteur;
 
@@ -489,6 +591,13 @@ function Annonce({ annonce: a, onRepondre, onLireReponses, onFermer, onVoirProfi
         <Text style={s.titre}>{a.titre}</Text>
 
         <View style={s.reperes}>
+          {!!proche && (
+            <View style={[s.pastilleDate, s[`date_${proche.etat}`]]}>
+              <Text style={[s.pastilleDateTexte, s[`dateTexte_${proche.etat}`]]}>
+                {proche.texte}
+              </Text>
+            </View>
+          )}
           {!!dates && (
             <View style={s.repere}>
               <Calendar size={11} color={C.accent} />
@@ -629,6 +738,31 @@ const s = StyleSheet.create({
   formTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
   label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginTop: 12, marginBottom: 6 },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginTop: 6 },
+  rangeeDates: { flexDirection: 'row', gap: S.sm, marginTop: S.sm },
+  /* Il NOMME un axe de filtre, il ne crie pas : c'est un repère qu'on lit
+     une fois, pas un titre de section. */
+  axe: {
+    fontFamily: F.inter6, fontSize: T.micro, color: C.muted,
+    marginTop: S.md, marginBottom: S.xs, textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  /* UNE PASTILLE FLOTTE au-dessus de la carte : elle s'arrondit, alors que
+     la carte garde son angle vif. Règle des bords, `src/theme.js`.
+     Les trois états ne se valent pas, et leur couleur le dit :
+       bientôt  — orange de signature, c'est ce qui fait agir ;
+       en cours — bleu : l'information est utile, l'urgence est passée ;
+       terminée — gris : l'annonce n'est plus visible que de son auteur. */
+  pastilleDate: {
+    paddingVertical: S.xs, paddingHorizontal: S.sm, borderRadius: R.gelule,
+  },
+  pastilleDateTexte: { fontFamily: F.oswald6, fontSize: T.micro },
+  date_bientot: { backgroundColor: C.accent },
+  dateTexte_bientot: { color: C.surAccent },
+  date_encours: { backgroundColor: C.accent2 },
+  dateTexte_encours: { color: '#fff' },
+  date_terminee: { backgroundColor: C.line },
+  dateTexte_terminee: { color: C.ink },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   deuxChamps: { flexDirection: 'row', gap: 8 },
   formBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 14 },

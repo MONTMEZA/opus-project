@@ -1631,6 +1631,115 @@ message ET le nom de B.
 main », qui ne demande pas de métier. Le sélecteur de métier d'une annonce
 de sous-traitance n'est pas couvert par cet essai.
 
+### Les dates de la Place des pros (04/10/2026)
+
+L'en-tête de `PlaceProScreen` revendique depuis le début :
+
+> « Un chantier se joue sur une semaine précise. "Je cherche un plaquiste du
+> 12 au 20 octobre" est une information exploitable ; "je cherche un
+> plaquiste" ne l'est pas. Aucune des places de marché existantes ne fait
+> correspondre les annonces sur les dates — c'est ce qui nous distingue le
+> plus sûrement. »
+
+**Et ce n'était pas construit.** Les dates étaient AFFICHÉES, jamais
+utilisées : ni pour filtrer, ni pour faire sortir de la liste une annonce
+dont le chantier est passé. « Plaquiste du 12 au 20 octobre » restait en
+tête de liste en décembre.
+
+Tout le calcul vit dans `src/lib/formats.js`, **qui n'importe rien**, et
+`npm run verifier-annonces` le fait tourner sur trente-cinq cas. C'est la
+quatrième application de la leçon de `cloudinary-adresses.js` — et
+`versISO()`, le découpage de « 12/10 » écrit à la main, a quitté l'écran
+pour la même raison : `node` ne pouvait pas l'ouvrir, donc rien ne
+l'éprouvait.
+
+#### Les dates se comparent comme des CHAÎNES
+
+`date_debut` et `date_fin` sont des colonnes `date` : la base rend
+« 2026-10-12 », sans heure. `new Date('2026-10-12')` est interprété à
+**minuit UTC** — donc le 11 octobre à 19 h pour qui vit à New York, et
+`getDate()` rend 11.
+
+> **Une comparaison de chaînes « AAAA-MM-JJ » est exacte partout, et ne
+> coûte rien.** Le projet est français, donc le piège ne mord pas
+> aujourd'hui ; c'est exactement pour ça qu'il passerait inaperçu.
+
+Et pour compter des jours, `Date.UTC` sur les trois nombres : un contrôle
+franchit exprès le changement d'heure d'octobre, où une soustraction
+naïve rend 15,96 jours au lieu de 16.
+
+#### Ce qui chevauche, et ce qui ne se devine pas
+
+Le cœur du filtre tient en trois lignes, et toute la subtilité est dans les
+bornes ABSENTES :
+
+> **Une annonce sans aucune date chevauche TOUT.** Une bétonnière à vendre
+> est disponible n'importe quand ; la retirer d'une recherche par créneau
+> ferait disparaître du matériel qui n'a jamais cessé d'être à vendre.
+
+Même principe pour la péremption : **`fin` seule décide.** « À partir du
+12 octobre », sans fin, ne se termine jamais tout seul — on ne devine pas à
+la place de celui qui l'a écrite. Et une annonce qui finit **aujourd'hui**
+n'est pas terminée : un chantier se finit le jour même.
+
+#### Une annonce terminée reste visible à SON AUTEUR
+
+Elle sort de la liste publique, mais pas de la sienne — avec une pastille
+grise « Terminée ». La faire disparaître des deux côtés sans un mot lui
+ferait croire qu'elle a été supprimée ; il doit pouvoir la retirer ou la
+reposter en connaissance de cause.
+
+Conséquence assumée : les annonces terminées voyagent quand même sur le
+réseau (la requête en charge 200 au plus). Le jour où ça pèsera, la parade
+est un `statut = 'expiree'` posé par un travail planifié côté base — pas un
+filtre dans la requête, qui les cacherait aussi à leur auteur.
+
+#### « Cette semaine » est GLISSANTE, et c'est un défaut trouvé au navigateur
+
+La première version allait **jusqu'au dimanche**, « parce que c'est la
+semaine telle qu'on la dit en France ». Essayée un dimanche : le filtre ne
+couvrait plus que la journée, et un chantier qui commençait trois jours
+plus tard disparaissait.
+
+Or le dimanche soir est exactement le moment où l'on prépare la semaine.
+
+> **Un raccourci qui ne veut plus rien dire un jour sur sept n'est pas un
+> raccourci.** « Cette semaine » = aujourd'hui et les sept jours qui
+> suivent, tous les jours de l'année.
+
+**« Ce mois-ci » reste du calendrier**, lui, et rétrécit en fin de mois :
+le 29 octobre, « ce mois-ci » n'est pas novembre, et personne n'est
+surpris. Les deux ne se définissent donc pas pareil, à dessein.
+
+#### « Dans 3 jours » plutôt que « du 12 au 20 »
+
+La date brute oblige à calculer de tête, et sur un chantier on ne calcule
+pas. Les deux cohabitent sur la carte : la pastille fait agir, la date dit
+quoi noter. Au-delà de dix jours, on se tait — un bandeau sur chaque
+annonce finirait par ne plus rien dire.
+
+#### Deux axes de filtre qui se ressemblent n'en font qu'un
+
+Mesuré au navigateur : six puces de TYPE sur deux rangées, puis trois
+puces de DATES sur une troisième. Neuf puces identiques, et rien pour dire
+que « Cette semaine » et « Fournisseur » ne répondent pas à la même
+question. D'où **« QUOI ? »** et **« QUAND ? »**, deux repères discrets.
+
+#### Vérifié, et comment
+
+Trente-cinq cas de calcul dans `verifier-annonces`, puis au navigateur sur
+la VRAIE base avec deux comptes professionnels jetables : un pro pose
+quatre annonces (dans 3 jours, terminée, dans deux mois, sans dates), un
+AUTRE pro regarde.
+
+| | l'auteur | un autre pro |
+|---|---|---|
+| sans filtre | **6** (la terminée comprise) | **5** |
+| cette semaine | 3 | **3** — dans 3 jours + sans dates |
+| du 01/12 au 31/12 | 4 | **4** — dans deux mois + sans dates |
+
+La terminée disparaît bien pour les autres et reste pour son auteur.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

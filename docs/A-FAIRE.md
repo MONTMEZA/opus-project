@@ -750,6 +750,36 @@ désormais qu'entre les deux personnes concernées.
 Vérifié sur votre vraie base avec deux comptes professionnels jetables,
 supprimés dans la même session, de bout en bout.
 
+### 2.1 sexies Les dates de la Place des pros ✅ FAIT le 04/10/2026
+
+Ce que le projet revendiquait depuis le début sans l'avoir construit :
+faire correspondre les annonces **sur les dates**. Elles étaient affichées,
+et c'est tout — « Plaquiste du 12 au 20 octobre » serait resté en tête de
+liste en décembre.
+
+Désormais :
+
+- une rangée **« QUAND ? »** avec trois raccourcis : *Cette semaine*,
+  *Ce mois-ci*, *Dates précises* (deux champs, « 12/10 ») ;
+- **une annonce dont le chantier est passé sort de la liste** — mais reste
+  visible à son auteur, marquée « Terminée », pour qu'il puisse la retirer
+  ou la reposter ;
+- **une pastille « Dans 3 jours »** sur la carte : la date brute oblige à
+  calculer de tête, et sur un chantier on ne calcule pas.
+
+**Une annonce sans dates reste toujours visible**, quel que soit le filtre :
+une bétonnière à vendre est disponible n'importe quand.
+
+Et un défaut trouvé en l'essayant, un dimanche : « Cette semaine » allait
+jusqu'au dimanche, donc ce jour-là elle ne couvrait plus que la journée —
+alors que le dimanche soir est précisément le moment où l'on prépare la
+semaine. Elle couvre maintenant sept jours glissants.
+
+Vérifié sur votre base avec deux comptes jetables supprimés dans la même
+session : un pro pose quatre annonces (dans 3 jours, terminée, dans deux
+mois, sans dates), un autre pro regarde — la terminée disparaît bien pour
+lui et reste pour son auteur.
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des
