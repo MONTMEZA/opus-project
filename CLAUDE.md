@@ -789,10 +789,51 @@ appui long suivi d'un déplacement, tout cela se teste et doit être testé —
 c'est ainsi qu'a été trouvé le point de départ qui se recalculait à chaque
 mouvement et faisait filer la photo hors de l'écran.
 
-Ce qu'il ne reproduit pas : le **défilement au doigt** (sur ordinateur, une
-zone défilante répond à la molette, pas au glissement). L'arbitrage entre un
-glissement horizontal et un défilement vertical ne peut donc **pas** être
-vérifié ici. À dire explicitement.
+#### CETTE SECTION DISAIT FAUX DEPUIS LE LOT 5 — corrigé le 04/10/2026
+
+Elle affirmait : « Playwright ne reproduit pas le défilement au doigt ;
+l'arbitrage entre un glissement horizontal et un défilement vertical ne peut
+donc **pas** être vérifié ici. » C'est vrai **de la souris** — sur
+ordinateur, une zone défilante répond à la molette, pas au glissement. Ce
+n'est pas vrai du navigateur.
+
+Le propriétaire me l'a rappelé après avoir trouvé un défaut de geste sur son
+iPhone : « n'oublie pas que toi aussi tu peux tester réellement Opus ». Il
+avait raison.
+
+> **Le protocole de Chrome envoie de VRAIS événements tactiles** —
+> `Input.dispatchTouchEvent` : un `touchStart`, une série de `touchMove`
+> espacés dans le temps, un `touchEnd`. Le navigateur arbitre alors tout
+> seul, exactement comme un téléphone. `scripts/gestes-tactiles.mjs`,
+> `npm run gestes-tactiles`.
+
+Deux portes, et **une seule marche** :
+
+| | résultat |
+|---|---|
+| `Input.synthesizeScrollGesture` (geste « tout fait », avec inertie) | **ne déplace rien** |
+| `Input.dispatchTouchEvent` posé à la main | **marche** |
+
+Et il faut espacer les `touchMove` de quelques millisecondes : un geste
+instantané ne ressemble à rien, et le navigateur l'ignore.
+
+**Mesuré le 04/10 sur les trois pages de Découvrir** : un doigt vers la
+gauche passe à la page suivante et tombe exactement dessus, la pastille
+suit, la liste ne défile pas ; un doigt vers le haut fait défiler la liste
+de 361 px **sans** changer de page. C'est exactement l'arbitrage que cette
+section déclarait invérifiable.
+
+#### Ce qui reste vrai, et qu'il ne faut pas confondre
+
+**Chromium n'est pas iOS.** L'accrochage des pages y est fait par le
+navigateur (`scroll-snap`), pas par la pagination d'iOS. Le défaut du
+04/10 — « j'arrive entre deux pages » — venait précisément de cette
+différence : **ce contrôle ne l'aurait pas attrapé**, et il ne l'attrapera
+pas davantage demain.
+
+> **Ce qui se vérifie désormais : QUEL geste gagne, et où il tombe.**
+> Ce qui ne se vérifie toujours pas : ce que l'accrochage natif d'iOS fait
+> de ce geste, et ce que le doigt RESSENT. Les deux restent à l'iPhone.
 
 ### Ce que le navigateur de test ne sait PAS faire
 
@@ -2436,13 +2477,31 @@ au même doigt. En pratique la carte occupe une grande partie de l'écran —
 donc pour changer de page, on glisse sur une marge, un en-tête, ou on touche
 la pastille du haut, qui reste là pour ça.
 
-#### Ce qui n'a PAS été vérifié
+#### Le geste, finalement vérifié — mais pas tout le geste
 
-**Le geste lui-même.** Sur ordinateur, une zone défilante répond à la
-molette, pas au glissement : l'arbitrage réel entre « je fais défiler la
-liste » et « je change de page » ne se juge que sur le téléphone. C'est
-écrit dans ce document depuis le lot 5, et c'est ce que ce lot-ci touche de
-plus près.
+Ce paragraphe disait d'abord : « le geste lui-même ne se juge que sur le
+téléphone ». Le propriétaire a répondu « n'oublie pas que toi aussi tu peux
+tester réellement Opus », et il avait raison : le protocole de Chrome envoie
+de vrais événements tactiles. La doctrine du projet a été corrigée plus haut
+(« Ce qui se vérifie au navigateur »), et `npm run gestes-tactiles` mesure
+désormais :
+
+| | mesuré |
+|---|---|
+| doigt vers la gauche | page suivante, offset **780**, exactement dessus |
+| la pastille | suit (« Demandes ») |
+| la liste pendant ce geste | **ne défile pas** |
+| doigt vers le haut | liste à **361 px**, page **inchangée** |
+| doigt parti d'une zone imbriquée | la page **ne change pas** |
+
+Le dernier cas éteint une affirmation que j'avais écrite sans la mesurer —
+« un glissement qui démarre sur un carrousel déplace le carrousel, pas la
+page ». Elle est juste pour la moitié qui compte : la page ne change pas.
+
+**Ce qui reste hors de portée**, et il ne faut pas le confondre avec ce qui
+précède : Chromium accroche les pages avec `scroll-snap`, iOS avec sa propre
+pagination. Le défaut du 04/10 venait de cette différence — **ce contrôle ne
+l'aurait pas attrapé**. Et le RESSENTI au pouce ne se mesure nulle part.
 
 Ce qui SE vérifie, et qui a été vérifié **à la molette**, c'est-à-dire par
 un vrai défilement d'utilisateur et non par une position posée par

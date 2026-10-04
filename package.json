@@ -37,6 +37,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "verifier": "node scripts/verifier.mjs",
+    "gestes-tactiles": "node scripts/gestes-tactiles.mjs",
     "lint": "eslint .",
     "verifier-adresse": "node scripts/verifier-adresse.mjs",
     "verifier-montage": "node scripts/verifier-montage.mjs",
