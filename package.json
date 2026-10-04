@@ -64,7 +64,8 @@
     "verifier-echelles": "node scripts/verifier-echelles.mjs",
     "verifier-atelier": "node scripts/verifier-atelier.mjs",
     "verifier-backoffice": "node scripts/verifier-backoffice.mjs",
-    "verifier-pieces": "node scripts/verifier-pieces.mjs"
+    "verifier-pieces": "node scripts/verifier-pieces.mjs",
+    "verifier-dependances": "node scripts/verifier-dependances.mjs"
   },
   "private": true,
   "devDependencies": {

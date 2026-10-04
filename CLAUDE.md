@@ -124,39 +124,61 @@ défaut, donc elle ne déclenche rien.
 
 ### `npm audit fix --force` DÉTRUIRAIT le projet
 
-Constaté le 30/09/2026. `npm install` affiche « 11 vulnerabilities » et
-propose deux commandes. La seconde est un piège :
+Le propriétaire lance `npm install`, lit « 26 vulnerabilities » en rouge,
+et npm lui propose deux commandes. **La seconde détruirait le projet.**
 
-```
-npm audit fix --force
-→ Will install expo@46.0.21, which is a breaking change
-→ added 471 packages, removed 57 packages
-```
+**Le nombre monte tout seul, et ça ne veut rien dire :**
 
-**Expo 57 redescendrait en 46.** C'est npm qui « corrige » une faille en
-ramenant la dépendance à une version antérieure : il ne sait pas qu'Expo 46
-ne fait plus tourner ce projet.
-
-Ce que disent réellement ces alertes, une fois les doublons écartés — il
-n'y a que DEUX causes, pas onze :
-
-| paquet | d'où il vient | ce qu'il sert |
+| | alertes | ce que `--force` installerait |
 |---|---|---|
-| `brace-expansion` | expo → @expo/fingerprint → minimatch | lire des motifs de fichiers |
-| `uuid` | expo → @expo/config-plugins → **xcode** | générer un projet iOS natif |
+| 30/09/2026 | 11 | expo@46.0.21 |
+| **04/10/2026** | **26** (19 hautes) | **expo@44.0.6** |
 
-Les deux sont **des dépendances d'Expo lui-même**, utilisées par les outils
-qui tournent sur l'ordinateur pendant `npm start`. **Aucune ne part dans
-l'application installée sur le téléphone.** Et `xcode` ne sert qu'au
+Pas une ligne du projet n'a changé entre les deux : ce sont de NOUVEAUX
+avis publiés sur des paquets déjà installés. Et la « correction » proposée
+empire — Expo 44 est une version de 2021.
+
+> **La bonne question n'est jamais « combien ? ».** C'est : **est-ce que ce
+> paquet part sur le téléphone ?**
+
+Les 26 alertes du 04/10 se ramènent à **trois causes**, et les trois
+vivent dans les outils d'Expo qui tournent sur l'ORDINATEUR pendant
+`npm start` :
+
+```
+expo > @expo/cli > @expo/code-signing-certificates > node-forge
+expo > @expo/cli > @expo/metro-file-map > micromatch > braces
+expo > @expo/cli > node-forge
+expo > @expo/config-plugins > xcode > uuid
+```
+
+Aucune n'entre dans l'application installée. `@expo/cli`, c'est le serveur
+de développement et le surveillant de fichiers ; `xcode` ne sert qu'au
 `prebuild`, que ce projet ne fait jamais puisqu'il tourne dans Expo Go.
 
-> **`npm audit fix` tout court : oui.** Vérifié — il n'a touché qu'une
-> ligne du verrou (`brace-expansion` 5.0.9 → 5.0.12), n'a pas modifié
-> `package.json`, a supprimé la seule alerte « high », et
-> `npx expo install --check` répond toujours « up to date ».
+**Et il n'y a RIEN à faire** — mesuré le 04/10 : `npm audit fix` tout court
+ne corrige **aucune** des 26 (`--dry-run` ne propose rien), parce qu'elles
+demandent toutes un changement cassant. Expo est déjà à la dernière version
+publiée (57.0.26) et `npx expo install --check` répond « up to date ». La
+seule action possible est destructrice.
+
+> **`npm audit fix` tout court : sans danger, mais inutile aujourd'hui.**
+> Le 30/09 il corrigeait une ligne du verrou ; le 04/10 il ne corrige plus
+> rien.
 >
-> **`npm audit fix --force` : jamais.** Les dix alertes « moderate » qui
-> restent ne se corrigent qu'en attendant qu'Expo mette à jour `xcode`.
+> **`npm audit fix --force` : JAMAIS.** Ces alertes se corrigeront quand
+> Expo mettra ses propres outils à jour, pas avant.
+
+`npm run verifier-dependances` tient les deux bouts, et il a été éprouvé en
+simulant la panne :
+
+1. **Expo n'a pas été ramené en arrière** — le garde-fou contre un
+   `--force` lancé un jour de fatigue. Il tourne même sans réseau ;
+2. **aucune alerte ne touche un paquet qui part sur le téléphone.** Tant
+   que tout passe par `@expo/cli` ou `@expo/config-plugins`, il n'y a rien
+   à faire. Le jour où une alerte apparaît ailleurs — `react-native`,
+   `@supabase/supabase-js`, `expo-image` —, il rougit, **et là il faut
+   agir**.
 
 ### Les versions de paquets Expo se désalignent toutes seules
 
