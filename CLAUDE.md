@@ -1761,6 +1761,80 @@ AUTRE pro regarde.
 
 La terminée disparaît bien pour les autres et reste pour son auteur.
 
+### Le clavier de l'iPhone enferme une feuille posée en bas (04/10/2026)
+
+Signalé par le propriétaire en répondant à une annonce depuis son iPhone :
+
+> « Le clavier de l'iPhone cache la partie où on écrit le texte et en même
+> temps la croix pour le fermer. Et même si j'écris un texte et que je
+> valide avec le clavier de l'iPhone, la fenêtre ne se ferme pas, donc je
+> suis bloqué. »
+
+**Trois défauts en une phrase**, et le troisième explique les deux autres :
+
+1. une feuille collée en bas de l'écran **ne bouge pas** quand le clavier
+   s'ouvre ; il la recouvre, champ compris ;
+2. la croix de fermeture est en haut de la feuille, donc elle passe sous le
+   clavier elle aussi — **il n'y a plus de sortie** ;
+3. sur un champ **multiligne**, la touche « Entrée » insère un retour à la
+   ligne. Elle ne valide rien, et elle ne peut pas : c'est le comportement
+   d'un champ de plusieurs lignes, partout.
+
+> **L'application a l'air plantée alors qu'elle fonctionne.** C'est le pire
+> genre de défaut : celui qui donne tort au programme. Et il ne se voit
+> JAMAIS au navigateur — `react-native-web` ne rend aucun clavier, et
+> `KeyboardAvoidingView` y est un composant vide.
+
+#### `src/components/FeuilleBas.js` — une brique, pas trois copies
+
+Le défaut était à **deux** endroits le jour où il a été trouvé : la réponse
+à une annonce, et le **signalement** — c'est-à-dire le chemin par lequel on
+demande de l'aide. `QuoteModal` et `CommentsSheet`, eux, géraient déjà le
+clavier, chacun à leur façon.
+
+La brique garantit quatre choses, et aucune n'est cosmétique :
+
+- elle **monte avec le clavier** (`KeyboardAvoidingView`, `padding` sur iOS,
+  rien sur Android qui s'en charge seul) ;
+- **le voile ferme la feuille** : quoi qu'il arrive à la mise en page, il
+  reste une bande sombre à toucher au-dessus. C'est la sortie de secours ;
+- le contenu **défile** — sur un petit écran avec un grand clavier, une
+  feuille qui ne défile pas cache son propre bouton ;
+- `keyboardShouldPersistTaps="handled"`, et ce n'est pas un détail : **sans
+  lui, le premier appui sur un bouton alors que le clavier est ouvert ne
+  fait que refermer le clavier.** On appuie, « rien ne se passe », on
+  recommence.
+
+Et `pointerEvents="box-none"` sur l'ancrage : il occupe tout l'écran pour
+pousser la feuille vers le bas, mais il ne doit RIEN intercepter — sinon il
+avale les touches destinées au voile, et la sortie de secours disparaît.
+
+#### `defile={false}` : une liste virtualisée ne va pas dans un ScrollView
+
+React Native le dit — « VirtualizedLists should never be nested inside
+plain ScrollViews with the same orientation » — et ça ne se voit qu'au
+doigt. Une feuille dont le contenu apporte sa propre liste s'efface donc et
+laisse la liste défiler. `Signaler` est dans le même cas avec son formulaire.
+
+#### Le contrôle a trouvé une troisième feuille — et il avait tort
+
+`npm run verifier-feuilles` a immédiatement accusé `SelecteurMetiers`. Or
+c'est une fenêtre **plein écran** (`transparent={false}`) dont la croix est
+en HAUT : le clavier monte du bas, il ne peut enfermer personne.
+
+> **Ce n'est pas « toute fenêtre avec un champ ».** Le risque a une forme
+> précise : une feuille **transparente, collée au bas de l'écran**. Un champ
+> caché par le clavier dans une liste plein écran, on le fait défiler ; une
+> feuille posée en bas, non.
+
+#### Ce qui ne se vérifie PAS ici
+
+Le comportement du clavier lui-même. Il n'y en a pas dans le navigateur de
+test, et `KeyboardAvoidingView` y est inerte. **Ce qui a été vérifié au
+navigateur, c'est que le remaniement n'a rien cassé** : les deux feuilles
+s'ouvrent, le voile les ferme, le message part. Le reste se juge sur
+l'iPhone, et nulle part ailleurs.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

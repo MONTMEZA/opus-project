@@ -29,42 +29,19 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Modal, View, Text, Pressable, FlatList, StyleSheet, ActivityIndicator,
+  View, Text, Pressable, FlatList, StyleSheet, ActivityIndicator,
 } from 'react-native';
-import { C, F, T, S, R, APPUI, interligne, viser } from '../theme';
+import { C, F, T, S, R, APPUI, interligne } from '../theme';
 import { Avatar, BtnMain, BtnMini, TextArea, EmptyState } from './ui';
-import { X, BadgeCheck, MessageCircle } from './icons';
+import { BadgeCheck, MessageCircle } from './icons';
+/* LA FEUILLE EST UNE BRIQUE PARTAGÉE depuis le 04/10/2026 : elle monte
+   avec le clavier, et le voile la ferme toujours. Elle était écrite ici,
+   et le clavier de l'iPhone recouvrait le champ ET la croix. */
+import FeuilleBas from './FeuilleBas';
 import { libelleMetiers } from '../lib/metiers';
 import { reponsesAnnonce } from '../lib/api';
 import { messageClair } from '../lib/erreurs';
 import * as retour from '../lib/retour';
-
-/* La feuille est la même partout dans le projet : voir `Signaler` et
-   `ChoixPiece`. Un fond sombre qui ferme au toucher, une surface blanche
-   collée en bas, et le titre à gauche avec la croix à droite. */
-function Feuille({ titre, onFermer, children }) {
-  return (
-    <Modal visible transparent animationType="slide" onRequestClose={onFermer}>
-      <Pressable style={s.fond} onPress={onFermer} accessibilityLabel="Fermer" />
-      <View style={s.ancrage}>
-        <View style={s.feuille}>
-          <View style={s.haut}>
-            <Text style={s.titre} numberOfLines={2}>{titre}</Text>
-            <Pressable
-              onPress={onFermer}
-              hitSlop={viser(24)}
-              accessibilityRole="button"
-              accessibilityLabel="Fermer"
-            >
-              <X size={18} color={C.muted} />
-            </Pressable>
-          </View>
-          {children}
-        </View>
-      </View>
-    </Modal>
-  );
-}
 
 /* --------------------------------------------------------------------- */
 
@@ -83,20 +60,20 @@ export function EcrireReponse({ annonce, onEnvoyer, onFermer }) {
   const envoyer = async () => {
     if (enCours || !texte.trim()) return;
     setEnCours(true);
-    try {
-      /* ON VIBRE POUR CE QU'ON NE REGARDE PAS : le message part, et
-         l'écran change juste après. `decision()` est la secousse des gestes
-         qu'on valide — la doctrine est dans `src/lib/retour.js`, et il n'y
-         a qu'une porte vers le vibreur. */
-      retour.decision();
-      await onEnvoyer(texte.trim());
-    } finally {
-      setEnCours(false);
-    }
+    /* ON VIBRE POUR CE QU'ON NE REGARDE PAS : le message part, et l'écran
+       change juste après. `decision()` est la secousse des gestes qu'on
+       valide — la doctrine est dans `src/lib/retour.js`, et il n'y a qu'une
+       porte vers le vibreur. */
+    retour.decision();
+    /* PAS DE `finally` QUI REMET L'ÉTAT : `onEnvoyer` ferme cette feuille,
+       donc ce composant n'existe plus quand la promesse revient. Poser un
+       état sur un composant démonté ne sert à rien et brouille les
+       avertissements utiles. */
+    await onEnvoyer(texte.trim());
   };
 
   return (
-    <Feuille titre="Répondre" onFermer={onFermer}>
+    <FeuilleBas titre="Répondre" onFermer={onFermer}>
       <Text style={s.aide}>
         Dites ce qui compte en trois lignes : vos disponibilités, votre prix,
         ce que vous apportez. Votre message part directement dans la
@@ -117,7 +94,7 @@ export function EcrireReponse({ annonce, onEnvoyer, onFermer }) {
           : <MessageCircle size={14} color={C.surAccent} />}
         <Text style={s.btnTexte}>{enCours ? 'Envoi…' : 'Envoyer'}</Text>
       </BtnMain>
-    </Feuille>
+    </FeuilleBas>
   );
 }
 
@@ -160,7 +137,12 @@ export function ListeReponses({ annonce, onEcrire, onVoirProfil, onFermer, onErr
   if (!annonce) return null;
 
   return (
-    <Feuille titre={`Réponses à « ${annonce.titre} »`} onFermer={onFermer}>
+    <FeuilleBas
+      titre={`Réponses à « ${annonce.titre} »`}
+      onFermer={onFermer}
+      /* La liste apporte son propre défilement : voir `FeuilleBas`. */
+      defile={false}
+    >
       {enCours ? (
         <EmptyState>Chargement…</EmptyState>
       ) : charge.liste.length === 0 ? (
@@ -175,7 +157,9 @@ export function ListeReponses({ annonce, onEcrire, onVoirProfil, onFermer, onErr
         <FlatList
           data={charge.liste}
           keyExtractor={(r) => String(r.id)}
-          style={{ maxHeight: 420 }}
+          /* Sans lui, le premier appui sur « Écrire » alors que le clavier
+             est ouvert ne fait que refermer le clavier. */
+          keyboardShouldPersistTaps="handled" 
           initialNumToRender={6}
           maxToRenderPerBatch={6}
           windowSize={5}
@@ -185,7 +169,7 @@ export function ListeReponses({ annonce, onEcrire, onVoirProfil, onFermer, onErr
           )}
         />
       )}
-    </Feuille>
+    </FeuilleBas>
   );
 }
 
@@ -226,17 +210,6 @@ const Ligne = React.memo(function Ligne({ r, onEcrire, onVoirProfil }) {
 });
 
 const s = StyleSheet.create({
-  fond: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  ancrage: { flex: 1, justifyContent: 'flex-end' },
-  feuille: {
-    backgroundColor: C.surface, width: '100%',
-    padding: S.lg, paddingBottom: S.xl, gap: S.sm,
-  },
-  haut: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: S.sm,
-  },
-  titre: { flex: 1, minWidth: 0, fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
   aide: {
     fontFamily: F.inter, fontSize: T.courant, color: C.muted,
     lineHeight: interligne(T.courant),

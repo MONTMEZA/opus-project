@@ -541,9 +541,19 @@ export default function PlaceProScreen({
       <EcrireReponse
         annonce={aRepondre}
         onFermer={() => setARepondre(null)}
+        /* LA FEUILLE SE FERME AVANT D'AGIR, et ce n'est pas du confort.
+           Répondre OUVRE LA CONVERSATION : l'écran change sous la feuille.
+           En la fermant seulement après, elle reste posée par-dessus
+           pendant toute la navigation et tout l'envoi — et sur iPhone, une
+           `Modal` qu'on démonte alors que l'écran a changé dessous laisse
+           un voile invisible qui avale les touches. L'application a l'air
+           figée alors qu'elle fonctionne.
+           On ferme, PUIS on agit. L'annonce est copiée d'abord, parce que
+           `aRepondre` vaut déjà `null` à la ligne suivante. */
         onEnvoyer={async (texte) => {
-          await onRepondre(aRepondre, texte);
+          const annonce = aRepondre;
           setARepondre(null);
+          await onRepondre(annonce, texte);
         }}
       />
     )}

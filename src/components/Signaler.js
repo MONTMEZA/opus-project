@@ -21,12 +21,13 @@
  */
 import React, { useState } from 'react';
 import {
-  Modal, View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet,
+  View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet,
 } from 'react-native';
-import { C, F, T, S, R, viser } from '../theme';
+import { C, F, T, S, R } from '../theme';
+import FeuilleBas from './FeuilleBas';
 import { messageClair } from '../lib/erreurs';
 import { BtnMain, BtnMini, TextArea } from './ui';
-import { X, Check, Flag, EyeOff } from './icons';
+import { Check, Flag, EyeOff } from './icons';
 import { MOTIFS, cibleDe, DELAI_EXAMEN_HEURES } from '../data/moderation';
 
 export default function Signaler({
@@ -78,22 +79,20 @@ export default function Signaler({
   };
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={fermer}>
-      <View style={s.fond}>
-        <View style={s.feuille}>
-          <View style={s.haut}>
-            <Text style={s.titre}>
-              {fait ? 'C’est fait' : `Signaler ${cible.label}`}
-            </Text>
-            <Pressable
-              onPress={fermer}
-              hitSlop={viser(24)}
-              accessibilityRole="button"
-              accessibilityLabel="Fermer"
-            >
-              <X size={18} color={C.muted} />
-            </Pressable>
-          </View>
+    /* LA FEUILLE EST UNE BRIQUE PARTAGÉE depuis le 04/10/2026.
+       Elle était écrite ici, et elle ne montait pas avec le clavier : sur
+       iPhone, celui-ci recouvrait le champ « détails » ET la croix de
+       fermeture. On se retrouvait enfermé dans le signalement — c'est-à-dire
+       dans le chemin par lequel on demande de l'aide. Trouvé par le
+       propriétaire sur une AUTRE feuille, le même jour. */
+    <FeuilleBas
+      titre={fait ? 'C’est fait' : `Signaler ${cible.label}`}
+      onFermer={fermer}
+      /* Le formulaire apporte SON défilement : deux zones défilantes
+         imbriquées se disputeraient le doigt. */
+      defile={false}
+    >
+      <>
 
           {fait === 'signale' && (
             <View style={s.confirmation}>
@@ -194,20 +193,12 @@ export default function Signaler({
               )}
             </ScrollView>
           )}
-        </View>
-      </View>
-    </Modal>
+      </>
+    </FeuilleBas>
   );
 }
 
 const s = StyleSheet.create({
-  fond: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  feuille: {
-    backgroundColor: C.surface, width: '100%',
-    padding: S.lg, paddingBottom: 26, gap: S.sm,
-  },
-  haut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  titre: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
 
   aide: { fontFamily: F.inter, fontSize: T.courant, color: C.muted, lineHeight: 18, marginTop: S.xs },
 
