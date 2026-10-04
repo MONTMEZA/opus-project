@@ -129,6 +129,45 @@ console.log('\nCe qu’on écrit est LU quelque part');
     + 'la sienne');
 }
 
+console.log('\nLes photos d’une annonce — écrites ET lues');
+{
+  /* LE DÉFAUT DU 01/10 VU DANS L'AUTRE SENS, relevé par le propriétaire le
+     04/10/2026 : « sur les annonces on pourrait afficher des photos ».
+     `annonces_pro.medias` existait en base, `publierAnnonce` l'acceptait,
+     et la carte savait l'afficher — mais AUCUN écran ne la remplissait.
+     Du code qui LIT ce que personne n'écrit : aussi mort qu'un `insert`
+     que personne ne relit, et tout aussi silencieux. */
+  verifier('la colonne existe en base',
+    /alter table public\.annonces_pro[\s\S]{0,200}medias|medias\s+text\[\]/.test(sql));
+
+  verifier('le formulaire SAIT en choisir',
+    /choisirImage/.test(ecran) && /setPhotos/.test(ecran),
+    'c’est ce qui manquait : la colonne était lue, jamais écrite');
+
+  verifier('…et il les transmet à la publication',
+    /medias: photos/.test(ecran));
+
+  /* Ce qui est rangé en base, ce sont des ADRESSES. Une adresse qui pointe
+     encore sur le téléphone ne s'affiche chez personne. */
+  verifier('les photos partent AVANT l’annonce',
+    /bucket: 'publications', nom: 'annonce'/.test(app)
+    && /estFichierLocal\(uri\)/.test(app),
+    'sinon on range le chemin local du téléphone, que personne d’autre '
+    + 'ne peut ouvrir');
+
+  verifier('…et republier ne les renvoie pas deux fois',
+    /estFichierLocal\(uri\)[\s\S]{0,160}: uri/.test(app),
+    'ce qui est déjà en ligne reste tel quel');
+
+  /* La carte en affichait au plus DEUX, empilées : les suivantes
+     n'existaient pour personne. */
+  verifier('la carte les montre TOUTES',
+    /<Carrousel medias=\{a\.medias\}/.test(ecran)
+    && !/medias \|\| \[\]\)\.slice\(0, 2\)/.test(ecran),
+    'un carrousel ne monte que la photo affichée et ses voisines : c’est '
+    + 'ce qui le rend sûr dans une liste');
+}
+
 console.log('\nUne réponse n’est plus un brouillon qu’on abandonne');
 {
   /* C'EST LE POINT LE PLUS IMPORTANT DE CE LOT. Avant, répondre posait une

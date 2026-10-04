@@ -1835,6 +1835,95 @@ navigateur, c'est que le remaniement n'a rien cassé** : les deux feuilles
 s'ouvrent, le voile les ferme, le message part. Le reste se juge sur
 l'iPhone, et nulle part ailleurs.
 
+### Des photos sur les annonces — du code qui LIT ce que personne n'écrit (04/10/2026)
+
+Relevé par le propriétaire :
+
+> « Dans la Place des pros on peut déposer des annonces pour vendre ou louer,
+> etc., mais pour ça je pense que sur les annonces on pourrait afficher des
+> photos qui seraient visibles sur l'annonce. »
+
+Il a raison, et le défaut était plus profond que « ça manque ». **Tout était
+déjà là sauf le début :**
+
+| | état au 04/10 avant ce lot |
+|---|---|
+| `annonces_pro.medias text[]` | **existait en base** |
+| `api.publierAnnonce({ medias })` | **l'acceptait** |
+| la carte d'annonce | **en affichait deux** |
+| un écran qui en choisisse | **aucun** |
+
+C'est **le défaut du 01/10 vu dans l'autre sens.** Ce jour-là, trois tables
+étaient écrites et jamais relues (« X est prévenu »). Ici, une colonne est
+LUE et personne ne l'écrit. Les deux sont la même panne : un bout de chaîne
+qui ne touche rien, et rien pour le signaler — aucune erreur, aucun écran
+cassé, aucun contrôle rouge. La carte affichait simplement un tableau vide
+sur les trois annonces réelles de la base, dont **« Vente d'une
+bétonnière »**.
+
+> **Chercher qui LIT ce qu'on écrit ne suffit pas : il faut aussi chercher
+> qui ÉCRIT ce qu'on lit.** Les deux sens du même contrôle.
+> `npm run verifier-place` tient maintenant les deux.
+
+#### Quatre photos pour une annonce, trois pour une demande
+
+Ce n'est pas un chiffre rond pris au hasard, et la différence avec les
+demandes (3) est volontaire :
+
+> **Une demande montre un PROBLÈME, une annonce montre un OBJET qu'on achète
+> sans l'avoir vu.** Une fissure se photographie une fois. Une bétonnière
+> d'occasion se regarde sous quatre angles — la cuve, le moteur, les roues,
+> l'ensemble — et c'est exactement ce qui décide d'un achat entre artisans.
+
+#### Ce qui est rangé en base, c'est une ADRESSE
+
+Le piège, et il est silencieux : `choisirImage()` rend
+`file:///…/IMG_0042.jpg` sur le téléphone. Ranger ça dans `medias`
+« fonctionne » — aucune erreur, et l'auteur voit même sa photo, puisqu'elle
+est sur SON appareil. Personne d'autre ne voit rien.
+
+`publierAnnonce` envoie donc chaque photo dans l'espace `publications`
+AVANT d'écrire la ligne, exactement comme les photos de demande (`nom:
+'demande'` depuis le lot 2). Et `estFichierLocal(uri)` garde la porte :
+reposter une annonce ne renvoie pas ce qui est déjà en ligne.
+
+#### L'espace `publications` est PUBLIC — à savoir avant d'y mettre autre chose
+
+Mesuré sur la vraie base : `avatars`, `bannieres` et `publications` sont
+publics ; `documents` et `pieces-jointes` ne le sont pas.
+
+> **Une annonce n'est visible que des professionnels (RLS), mais sa photo
+> est lisible par quiconque en connaît l'adresse.** Ce n'est pas nouveau —
+> c'est vrai depuis le premier jour pour les photos du fil et de profil, et
+> c'est cohérent : une adresse de 40 caractères aléatoires ne se devine pas.
+>
+> Mais il faut le dire, parce que le jour où une annonce portera un plan ou
+> un devis, **ça ne conviendra plus** : ces pièces-là passent par
+> `pieces-jointes` et des adresses signées, comme en messagerie. Rendre les
+> photos d'annonce privées est un lot à part, pas une ligne à changer.
+
+#### Et le ménage de compte les emporte déjà
+
+Vérifié en supprimant le compte d'essai par le chemin de l'application :
+`{"espace":"publications","retires":2}`. Les photos d'annonce tombent dans
+l'espace que la fonction Edge nettoie déjà — contrairement au trou RGPD des
+pièces jointes du matin, où le chemin était trop profond pour être trouvé.
+
+#### Vérifié, et comment
+
+Les 30 contrôles passent, `npx expo export --platform ios` passe. Puis au
+navigateur, sur la VRAIE base, avec un compte professionnel jetable supprimé
+dans la même session : le bouton « Galerie » apparaît, deux photos entrent
+dans le formulaire, **les deux `POST /storage/v1/object/publications/…`
+répondent 200**, l'annonce se publie, et **après rechargement complet de la
+page** la carte montre le carrousel et son indicateur « 1/2 » — donc les
+adresses rangées en base sont bien servies par Supabase, pas lues depuis la
+mémoire du navigateur.
+
+**Ce qui n'a PAS été vérifié :** le bouton « Photographier ». Il n'y a pas
+d'appareil photo dans ce conteneur, et il n'y en aura jamais — ce chemin se
+juge sur l'iPhone, comme pour les pièces jointes.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

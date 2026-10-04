@@ -1760,16 +1760,34 @@ export default function OpusApp() {
   /* ---------- la Place des pros ---------- */
   const publierAnnonce = async (annonce) => {
     let id = `local-${Date.now()}`;
+    /* LES PHOTOS PARTENT AVANT L'ANNONCE, exactement comme pour une demande
+       de particulier : ce qui est rangé en base, ce sont des ADRESSES, et
+       une adresse qui pointe encore sur le téléphone ne s'affiche chez
+       personne. `estFichierLocal` laisse passer ce qui est déjà en ligne —
+       sans quoi republier renverrait les mêmes photos une seconde fois. */
+    let medias = annonce.medias || [];
+    setLoading(true);
     try {
-      const ligne = await api.publierAnnonce(annonce);
+      const uid = api.getUserId();
+      const envoyees = [];
+      for (const uri of medias) {
+        envoyees.push(estFichierLocal(uri)
+          ? await envoyerFichier({ uri, bucket: 'publications', nom: 'annonce', userId: uid })
+          : uri);
+      }
+      medias = envoyees.filter(Boolean);
+      const ligne = await api.publierAnnonce({ ...annonce, medias });
       if (ligne) id = ligne.id;
     } catch (e) {
+      setLoading(false);
       showErreur(messageClair(e, 'Publication impossible'));
       return;
     }
+    setLoading(false);
     const moi = pros[myProId] || {};
     setAnnonces((as) => [{
       ...annonce,
+      medias,
       id,
       time: "À l'instant",
       reponses: 0,

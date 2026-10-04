@@ -780,6 +780,59 @@ session : un pro pose quatre annonces (dans 3 jours, terminée, dans deux
 mois, sans dates), un autre pro regarde — la terminée disparaît bien pour
 lui et reste pour son auteur.
 
+### 2.1 septies Le clavier de l'iPhone n'enferme plus ✅ FAIT le 04/10/2026
+
+Vous l'avez trouvé en répondant à une annonce depuis votre iPhone : le
+clavier recouvrait à la fois le champ de saisie **et** la croix pour
+fermer — donc plus aucune sortie, et l'application avait l'air plantée
+alors qu'elle fonctionnait.
+
+Le défaut était à **deux** endroits, dont le **signalement** : c'est-à-dire
+le chemin par lequel on demande de l'aide. Les deux passent maintenant par
+une brique commune (`src/components/FeuilleBas.js`) qui garantit quatre
+choses : la feuille monte avec le clavier, le voile sombre la ferme (la
+sortie de secours), le contenu défile, et le premier appui sur un bouton
+n'est plus avalé par la fermeture du clavier.
+
+**À revérifier sur votre iPhone** : il n'y a pas de clavier dans le
+navigateur de test, et le composant qui gère cela y est inerte. Ce qui a été
+vérifié ici, c'est que le remaniement n'a rien cassé.
+
+### 2.1 octies Des photos sur les annonces ✅ FAIT le 04/10/2026
+
+Votre remarque : « sur les annonces on pourrait afficher des photos qui
+seraient visibles sur l'annonce ». Vous aviez raison, et le défaut était
+plus profond qu'un manque.
+
+**Tout était déjà construit sauf le début.** La colonne existait en base, la
+fonction de publication l'acceptait, la carte savait afficher les photos —
+mais **aucun écran ne permettait d'en choisir**. Du code qui lit ce que
+personne n'écrit : exactement le défaut du 01/10 (« X est prévenu » pour une
+demande que personne ne relisait), vu dans l'autre sens.
+
+Désormais, dans le formulaire d'annonce : **« Photographier »** et
+**« Galerie »**, jusqu'à **quatre** photos, avec un aperçu qu'on peut
+retirer. Sur la carte, un carrousel. Quatre et non trois comme pour les
+demandes, parce qu'une demande montre un *problème* (une fissure se
+photographie une fois) et une annonce un *objet qu'on achète sans l'avoir
+vu* — une bétonnière d'occasion se regarde sous quatre angles.
+
+Vérifié sur votre base avec un compte professionnel jetable supprimé dans la
+même session : les photos partent bien vers Supabase (deux envois, deux
+200), et après rechargement complet de la page la carte les affiche — donc
+ce sont bien les adresses rangées en base qui sont servies.
+
+**Pas vérifié** : le bouton « Photographier ». Il n'y a pas d'appareil photo
+dans le conteneur où je travaille, ce chemin ne se juge que sur l'iPhone.
+
+**Un point à savoir pour plus tard** : les photos d'annonce vont dans le même
+espace de stockage que celles du fil, qui est **public** — l'annonce n'est
+visible que des professionnels, mais sa photo est lisible par quiconque en
+connaît l'adresse (40 caractères aléatoires, qui ne se devinent pas). C'est
+ainsi depuis le premier jour pour le fil et les photos de profil. Le jour où
+une annonce devra porter un plan ou un devis, il faudra passer par l'espace
+privé et des adresses signées, comme en messagerie : c'est un lot à part.
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

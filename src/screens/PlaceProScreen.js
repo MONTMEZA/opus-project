@@ -35,7 +35,7 @@ import {
 import Media from '../components/Media';
 import ChampVille from '../components/ChampVille';
 import {
-  MapPin, BadgeCheck, MessageCircle, Calendar, Check, X, Plus, Search, Flag,
+  MapPin, BadgeCheck, MessageCircle, Calendar, Check, X, Plus, Search, Flag, Camera,
 } from '../components/icons';
 import {
   TYPES_ANNONCE, UNITES, typeAnnonce, libelleDates, libellePrix,
@@ -49,7 +49,20 @@ import { nomMetier , libelleMetiers } from '../lib/metiers';
 import { distanceKm, libelleDistance } from '../lib/adresse';
 import { correspond, texteDe } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
+import { choisirImage } from '../lib/media';
+import Carrousel from '../components/Carrousel';
+
 import { EcrireReponse, ListeReponses } from '../components/ReponsesAnnonce';
+
+/**
+ * QUATRE PHOTOS, et pas trois comme une demande de particulier.
+ *
+ * Une demande montre un PROBLÈME — une fuite, une fissure : trois angles
+ * suffisent. Une annonce de matériel montre un OBJET qu'on achète sans
+ * l'avoir vu : la bétonnière de face, son moteur, sa cuve, son état réel.
+ * C'est la différence entre décrire et vendre.
+ */
+const PHOTOS_ANNONCE = 4;
 
 /* `versISO` VIT DANS `lib/formats.js` DEPUIS LE 04/10/2026. Elle était
    écrite ici, donc `node` ne pouvait pas l'ouvrir — ce fichier charge React
@@ -132,6 +145,22 @@ export default function PlaceProScreen({
   const [au, setAu] = useState('');
   const [prix, setPrix] = useState('');
   const [unite, setUnite] = useState('total');
+  /* LES PHOTOS D'UNE ANNONCE. La colonne `medias` existait en base, l'API
+     l'acceptait, et la carte savait l'afficher — mais AUCUN écran ne la
+     remplissait. C'est le défaut du 01/10 vu dans l'autre sens : du code
+     qui LIT ce que personne n'écrit. Relevé par le propriétaire le
+     04/10/2026 : « pour ça je pense que sur les annonces on pourrait
+     afficher des photos ». */
+  const [photos, setPhotos] = useState([]);
+
+  const ajouterPhoto = async (camera) => {
+    try {
+      const uri = await choisirImage({ camera, usage: 'photo' });
+      if (uri) setPhotos((p) => [...p, uri].slice(0, PHOTOS_ANNONCE));
+    } catch (e) {
+      if (onErreur) onErreur(e.message || String(e));
+    }
+  };
 
   const reglages = typeAnnonce(type);
 
@@ -235,9 +264,10 @@ export default function PlaceProScreen({
       dateFin,
       prix: reglages.avecPrix && prix.trim() ? Number(prix.replace(',', '.')) : null,
       unite: reglages.avecUnite ? unite : 'total',
+      medias: photos,
     });
 
-    setTitre(''); setTexte(''); setDu(''); setAu(''); setPrix('');
+    setTitre(''); setTexte(''); setDu(''); setAu(''); setPrix(''); setPhotos([]);
     setFormOuvert(false);
   };
 
@@ -381,7 +411,43 @@ export default function PlaceProScreen({
             </>
           )}
 
-          <View style={s.formBtns}>
+          {/* UNE PHOTO VEND, UN TEXTE DÉCRIT. « Bétonnière 160 L, bon état »
+          n'engage personne ; la photo de la cuve, si. C'est encore plus
+          vrai entre professionnels, qui savent lire l'usure sur une
+          image. */}
+      <Text style={s.label}>Photos</Text>
+      {photos.length > 0 && (
+        <View style={s.apercus}>
+          {photos.map((uri, i) => (
+            <View key={`${uri}-${i}`}>
+              <Media media={uri} style={s.apercu} />
+              <Pressable
+                style={s.retirer}
+                hitSlop={viser(TOUCHE)}
+                onPress={() => setPhotos((p) => p.filter((_, k) => k !== i))}
+                accessibilityRole="button"
+                accessibilityLabel={`Retirer la photo ${i + 1}`}
+              >
+                <X size={11} color="#fff" />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+      <View style={s.photoBtns}>
+        <BtnMini outline onPress={() => ajouterPhoto(true)} disabled={photos.length >= PHOTOS_ANNONCE}>
+          <Camera size={12} color={C.ink} />
+          <Text style={s.photoBtnTexte}>Photographier</Text>
+        </BtnMini>
+        <BtnMini
+          outline
+          label="Galerie"
+          onPress={() => ajouterPhoto(false)}
+          disabled={photos.length >= PHOTOS_ANNONCE}
+        />
+      </View>
+
+      <View style={s.formBtns}>
             <BtnMini outline label="Annuler" onPress={() => setFormOuvert(false)} />
             <BtnMain label="Publier l'annonce" disabled={manque} onPress={publier} />
           </View>
@@ -631,9 +697,14 @@ function Annonce({
 
         <Text style={s.texte}>{a.texte}</Text>
 
-        {(a.medias || []).slice(0, 2).map((m, i) => (
-          <Media key={i} media={m} style={s.media} />
-        ))}
+        {/* TOUTES LES PHOTOS, PAS DEUX. La carte en affichait au plus deux,
+            empilées — les suivantes n'existaient pour personne. Le
+            carrousel du lot 0 les montre toutes, et il ne MONTE que celle
+            qu'on regarde et ses voisines : c'est ce qui le rend sûr dans
+            une liste. */}
+        {(a.medias || []).length > 0 && (
+          <Carrousel medias={a.medias} style={s.media} />
+        )}
 
         {auteur && (
           <Pressable style={s.auteur} onPress={() => onVoirProfil && onVoirProfil(auteur.id)}>
@@ -749,6 +820,18 @@ const s = StyleSheet.create({
   label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginTop: 12, marginBottom: 6 },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginTop: 6 },
   rangeeDates: { flexDirection: 'row', gap: S.sm, marginTop: S.sm },
+
+  /* Les aperçus du formulaire, repris de l'écran des demandes : même
+     geste, même forme, pour que ça s'apprenne une seule fois. */
+  apercus: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.sm },
+  apercu: { width: 72, height: 72 },
+  retirer: {
+    position: 'absolute', top: -6, right: -6,
+    width: 22, height: 22, borderRadius: R.gelule, backgroundColor: C.ink,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  photoBtns: { flexDirection: 'row', gap: S.sm, marginTop: S.sm },
+  photoBtnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.ink },
   /* Il NOMME un axe de filtre, il ne crie pas : c'est un repère qu'on lit
      une fois, pas un titre de section. */
   axe: {
