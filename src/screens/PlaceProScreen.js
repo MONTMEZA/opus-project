@@ -25,9 +25,11 @@
  * plus sûrement.
  */
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import {
-  C, F, T, S, R, APPUI, TOUCHE, viser, surFond, GOUTTIERE, CARTE,
+  View, Text, FlatList, Pressable, ScrollView, StyleSheet, RefreshControl,
+} from 'react-native';
+import {
+  C, F, T, S, R, APPUI, TOUCHE, viser, surFond, GOUTTIERE, CARTE, interligne,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, Field, TextArea, EmptyState, SectionLabel,
@@ -42,11 +44,10 @@ import {
 } from '../data/annonces';
 import {
   jourCourant, jourCourt, chevauche, estTerminee, libelleProximite,
-  creneauSemaine, creneauMois,
 } from '../lib/formats';
 import { ChampMetier } from '../components/SelecteurMetiers';
 import { nomMetier , libelleMetiers } from '../lib/metiers';
-import { distanceKm, libelleDistance } from '../lib/adresse';
+import { distanceKm, libelleDistance, dansSecteur } from '../lib/adresse';
 import { correspond, texteDe } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
 import { choisirImage } from '../lib/media';
@@ -54,6 +55,10 @@ import Carrousel from '../components/Carrousel';
 
 import { EcrireReponse, ListeReponses } from '../components/ReponsesAnnonce';
 import FeuilleDates, { ChampDate } from '../components/Calendrier';
+import {
+  PastilleFiltre, PastilleBascule, FeuilleQuoi, FeuilleOu, FeuilleQuand,
+  libelleSecteur, libelleQuand,
+} from '../components/FiltresPlace';
 
 /**
  * QUATRE PHOTOS, et pas trois comme une demande de particulier.
@@ -134,15 +139,23 @@ export default function PlaceProScreen({
   const [miennesSeulement, setMiennesSeulement] = useState(false);
   /* QUAND — le filtre qui n'existait pas, alors que l'en-tête de ce fichier
      en fait depuis le début la différence d'Opus face aux groupes
-     Facebook. `null` = pas de contrainte de dates. */
-  const [creneau, setCreneau] = useState(null);         // 'semaine' | 'mois' | 'precises'
-  /* Les deux champs portent des « AAAA-MM-JJ », posés par le calendrier.
-     `creneauOuvert` dit si sa feuille est ouverte — un seul calendrier
-     pour les deux bornes, parce qu'on choisit un CRÉNEAU, pas deux dates
-     sans rapport. */
+     Facebook.
+
+     `creneau` ne porte plus qu'une ÉTIQUETTE ('semaine' | 'mois' | null) :
+     les bornes réelles sont TOUJOURS dans `creneauDu` / `creneauAu`, quel
+     que soit le chemin par lequel on les a posées. Avant, trois modes se
+     partageaient le travail et « Dates précises » faisait apparaître deux
+     champs SOUS la rangée — donc la mise en page sautait de 52 px au
+     moment précis où l'on cherchait à lire. */
+  const [creneau, setCreneau] = useState(null);
   const [creneauDu, setCreneauDu] = useState('');
   const [creneauAu, setCreneauAu] = useState('');
-  const [creneauOuvert, setCreneauOuvert] = useState(false);
+  /* OÙ — le filtre demandé le 04/10/2026 : « une annonce de bétonnière
+     n'intéressera pas quelqu'un de Marseille alors que la bétonnière est à
+     Paris ». `null` = partout en France. */
+  const [secteur, setSecteur] = useState(null);
+  /* Un seul panneau ouvert à la fois : 'quoi' | 'ou' | 'quand' | null. */
+  const [panneau, setPanneau] = useState(null);
   /* Les deux feuilles portent l'annonce concernée, pas un booléen : il faut
      savoir à LAQUELLE on répond, et de laquelle on lit les réponses. */
   const [aRepondre, setARepondre] = useState(null);
@@ -188,19 +201,28 @@ export default function PlaceProScreen({
      un créneau à partir d'un champ vide, et la liste ne doit pas se vider
      entre le moment où l'on ouvre les champs et celui où l'on écrit. */
   const bornes = useMemo(() => {
-    if (creneau === 'semaine') return creneauSemaine();
-    if (creneau === 'mois') return creneauMois();
-    if (creneau === 'precises') {
-      if (!creneauDu && !creneauAu) return null;
-      return { debut: creneauDu || null, fin: creneauAu || null };
-    }
-    return null;
-  }, [creneau, creneauDu, creneauAu]);
+    if (!creneauDu && !creneauAu) return null;
+    return { debut: creneauDu || null, fin: creneauAu || null };
+  }, [creneauDu, creneauAu]);
 
-  const choisirCreneau = (mode) => {
-    setCreneau(mode);
-    if (mode !== 'precises') { setCreneauDu(''); setCreneauAu(''); }
+  /* `moi` porte les coordonnées de celui qui cherche. Sans elles, « autour
+     de moi » ne peut rien faire — et le panneau le DIT au lieu de griser
+     un bouton sans raison. */
+  const monLieu = useMemo(() => ({
+    ville: moi ? moi.ville : null,
+    latitude: moi ? moi.latitude : null,
+    longitude: moi ? moi.longitude : null,
+  }), [moi]);
+
+  const toutEffacer = () => {
+    setFiltreType(null); setFiltreMetier(null);
+    setCreneau(null); setCreneauDu(''); setCreneauAu('');
+    setSecteur(null); setVerifiesSeulement(false); setMiennesSeulement(false);
   };
+
+  const nbFiltres = (filtreType ? 1 : 0) + (secteur ? 1 : 0)
+    + (creneauDu || creneauAu ? 1 : 0) + (verifiesSeulement ? 1 : 0)
+    + (miennesSeulement ? 1 : 0);
 
   const liste = useMemo(() => {
     const avecDistance = annonces.map((a) => {
@@ -232,6 +254,16 @@ export default function PlaceProScreen({
          d'une recherche par créneau ferait disparaître du matériel qui
          n'a jamais cessé d'être à vendre. */
       .filter((a) => (!bornes || chevauche(a.dateDebut, a.dateFin, bornes.debut, bornes.fin)))
+      /* LE FILTRE PAR SECTEUR, et il NE SE COMPORTE PAS comme celui des
+         dates. « Pas de dates » veut dire disponible n'importe quand ;
+         « pas de coordonnées » veut dire qu'on ne sait pas où. Prétendre
+         qu'une annonce est à 10 km serait inventer, donc elle sort — et
+         l'écran compte celles qui sortent pour cette raison et le dit. */
+      .filter((a) => dansSecteur(
+        a.latitude ?? (a.auteur ? a.auteur.latitude : null),
+        a.longitude ?? (a.auteur ? a.auteur.longitude : null),
+        secteur,
+      ))
       /* À distance connue, le plus proche d'abord : un chantier à 150 km
          n'intéresse personne. Les annonces sans coordonnées restent à leur
          place plutôt que d'être reléguées à la fin. */
@@ -240,7 +272,19 @@ export default function PlaceProScreen({
         return a.km - b.km;
       });
   }, [annonces, recherche, filtreType, filtreMetier, verifiesSeulement,
-    miennesSeulement, bornes, jour, moi]);
+    miennesSeulement, bornes, secteur, jour, moi]);
+
+  /* COMBIEN D'ANNONCES LE SECTEUR A ÉCARTÉES FAUTE DE LIEU.
+     Un filtrage incomplet ne doit pas ressembler à un filtrage fait —
+     c'est la leçon du ménage de compte des pièces jointes, où un trou RGPD
+     s'était présenté comme un succès. */
+  const sansLieu = useMemo(() => {
+    if (!secteur) return 0;
+    return annonces.filter((a) => {
+      const la = a.latitude ?? (a.auteur ? a.auteur.latitude : null);
+      return typeof la !== 'number';
+    }).length;
+  }, [annonces, secteur]);
 
   /* Combien d'annonces sont à moi : la puce ne s'affiche que si j'en ai. */
   const nbMiennes = useMemo(() => annonces.filter((a) => a.aMoi).length, [annonces]);
@@ -483,100 +527,78 @@ export default function PlaceProScreen({
           avant de savoir dans quelle catégorie ça a été rangé. */}
       <BarreRecherche valeur={recherche} onChange={setRecherche} />
 
-      {/* --- filtres --- */}
-      <SectionLabel>
-        {liste.length} {liste.length > 1 ? 'annonces' : 'annonce'}
-        {recherche.trim() ? ` pour « ${recherche.trim()} »` : ''}
-      </SectionLabel>
+      {/* --- LES FILTRES, SUR UNE SEULE LIGNE ---
+          Mesuré au navigateur avant ce lot : la zone de filtres prenait
+          233 px (285 avec « Dates précises » ouvert) sur une fenêtre de
+          900, donc il ne restait que 131 px de la première annonce. Une
+          rangée « OÙ ? » de plus l'aurait poussée entièrement sous
+          l'écran. Quatre rangées de puces sont devenues quatre pastilles
+          qui tiennent sur une ligne, et chacune AFFICHE son choix : on lit
+          « Matériel », « 50 km », « Cette semaine » sans rien ouvrir. */}
+      <View style={s.ligneCompte}>
+        <SectionLabel style={{ marginBottom: 0 }}>
+          {liste.length} {liste.length > 1 ? 'annonces' : 'annonce'}
+          {recherche.trim() ? ` pour « ${recherche.trim()} »` : ''}
+        </SectionLabel>
 
-      <Text style={s.axe}>Quoi ?</Text>
-
-      <View style={s.chipRow}>
-        {TYPES_ANNONCE.map((t) => (
-          <Chip
-            key={t.cle}
-            label={t.label}
-            on={filtreType === t.cle}
-            onPress={() => setFiltreType(filtreType === t.cle ? null : t.cle)}
-          />
-        ))}
-      </View>
-
-      {/* LES DEUX AXES SE NOMMENT, parce qu'ils se ressemblaient trop.
-          Mesuré au navigateur : six puces de TYPE sur deux rangées, puis
-          trois puces de DATES sur une troisième — neuf puces identiques,
-          et rien pour dire que « Cette semaine » et « Fournisseur » ne
-          répondent pas à la même question. */}
-      <Text style={s.axe}>Quand ?</Text>
-
-      {/* QUAND — LE FILTRE QUI NOUS DISTINGUE.
-          Un plaquiste a un trou dans son planning du 12 au 20 ; il veut
-          voir ce qui TOMBE DEDANS, pas tout ce qui existe. Les deux
-          raccourcis couvrent le cas courant ; les deux champs servent
-          quand on connaît ses dates. */}
-      <View style={s.chipRow}>
-        <Chip
-          label="Cette semaine"
-          on={creneau === 'semaine'}
-          onPress={() => choisirCreneau(creneau === 'semaine' ? null : 'semaine')}
-        />
-        <Chip
-          label="Ce mois-ci"
-          on={creneau === 'mois'}
-          onPress={() => choisirCreneau(creneau === 'mois' ? null : 'mois')}
-        />
-        <Chip
-          label="Dates précises"
-          on={creneau === 'precises'}
-          onPress={() => choisirCreneau(creneau === 'precises' ? null : 'precises')}
-        />
-      </View>
-
-      {creneau === 'precises' && (
-        <View style={s.rangeeDates}>
-          <View style={{ flex: 1 }}>
-            <ChampDate
-              valeur={jourCourt(creneauDu)}
-              placeholder="Du 12/10"
-              onPress={() => setCreneauOuvert(true)}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <ChampDate
-              valeur={jourCourt(creneauAu)}
-              placeholder="Au 20/10"
-              onPress={() => setCreneauOuvert(true)}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* MES ANNONCES — elle n'apparaît que si j'en ai. Une puce qui ne
-          filtre jamais rien est du bruit, et elle apprend à ne plus
-          regarder cette rangée. */}
-      {nbMiennes > 0 && (
-        <View style={s.chipRow}>
-          <Chip
+        {/* « MES ANNONCES » N'EST PAS UN FILTRE, C'EST UNE VUE : on y va
+            pour lire ses réponses, pas pour affiner une recherche. Elle
+            reste donc à côté du compte, et pas dans la ligne des
+            pastilles. Et elle n'apparaît que si j'en ai — une puce qui ne
+            filtre jamais rien apprend à ne plus regarder la rangée. */}
+        {nbMiennes > 0 && (
+          <PastilleBascule
             label={`Mes annonces (${nbMiennes})`}
             on={miennesSeulement}
             onPress={() => setMiennesSeulement((v) => !v)}
           />
-        </View>
-      )}
+        )}
+      </View>
 
-      <Pressable
-        style={[s.verifies, verifiesSeulement && s.verifiesOn]}
-        onPress={() => setVerifiesSeulement((v) => !v)}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.pastilles}
+        /* Une liste horizontale dans une liste verticale : les orientations
+           diffèrent, donc rien ne se dispute le geste. */
       >
-        <View style={[s.case, verifiesSeulement && s.caseOn]}>
-          {verifiesSeulement && <Check size={11} color="#fff" />}
-        </View>
-        <BadgeCheck size={14} color={verifiesSeulement ? C.verif : C.muted} />
-        <Text style={[s.verifiesTexte, verifiesSeulement && { color: C.ink }]}>
-          Artisans vérifiés uniquement
-        </Text>
-      </Pressable>
+        <PastilleFiltre
+          label="Quoi"
+          valeur={filtreType ? typeAnnonce(filtreType).label : null}
+          onPress={() => setPanneau('quoi')}
+        />
+        <PastilleFiltre
+          label="Où"
+          icone={MapPin}
+          valeur={libelleSecteur(secteur)}
+          onPress={() => setPanneau('ou')}
+        />
+        <PastilleFiltre
+          label="Quand"
+          valeur={libelleQuand(creneauDu, creneauAu, creneau)}
+          onPress={() => setPanneau('quand')}
+        />
+        <PastilleBascule
+          label="Vérifiés"
+          icone={BadgeCheck}
+          on={verifiesSeulement}
+          onPress={() => setVerifiesSeulement((v) => !v)}
+        />
+        {nbFiltres > 0 && (
+          <Pressable
+            onPress={toutEffacer}
+            style={({ pressed }) => [s.effacer, pressed && { opacity: 0.55 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Tout effacer, ${nbFiltres} filtre${nbFiltres > 1 ? 's' : ''} actif${nbFiltres > 1 ? 's' : ''}`}
+          >
+            <Text style={s.effacerTexte}>Tout effacer</Text>
+          </Pressable>
+        )}
+      </ScrollView>
 
+      {/* LE MÉTIER NE TIENT PAS DANS UNE PASTILLE : il n'a de sens que
+          pour la sous-traitance, et son sélecteur est une fenêtre entière.
+          Il n'apparaît donc que quand il sert. */}
       {filtreType && typeAnnonce(filtreType).avecMetier && (
         <ChampMetier
           valeur={filtreMetier}
@@ -587,15 +609,45 @@ export default function PlaceProScreen({
           style={{ marginTop: 10 }}
         />
       )}
+
+      {/* CE QUE LE SECTEUR A ÉCARTÉ FAUTE DE LIEU. Les faire disparaître
+          sans un mot ferait croire qu'elles n'existent pas. */}
+      {sansLieu > 0 && (
+        <Text style={s.note}>
+          {sansLieu} annonce{sansLieu > 1 ? 's' : ''} sans lieu précisé
+          {sansLieu > 1 ? ' ne sont pas affichées' : ' n’est pas affichée'}.
+        </Text>
+      )}
         </>
       )}
+      /* LE MESSAGE DE LISTE VIDE DOIT DIRE LAQUELLE DES DEUX RAISONS.
+         Trouvé à l'écran le 04/10/2026, en cherchant à 50 km de Lille : la
+         liste affichait « Aucune annonce pour le moment, posez la
+         première » alors que la base en contenait quatre, toutes dans les
+         Bouches-du-Rhône. Un message qui donne tort à l'application : on
+         croit que la Place des pros est déserte, et on n'y revient pas. Le
+         filtre le plus restrictif parle en premier — mais SEULEMENT s'il
+         est seul. Mesuré au navigateur avec quatre filtres posés : le
+         message accusait « aucune annonce d'artisan vérifié », alors que
+         trois autres filtres pouvaient tout aussi bien être en cause. Un
+         message précis et faux est pire qu'un message général et juste.
+
+         ET LE COMMENTAIRE EST AU-DESSUS, pas sous la parenthèse : un
+         commentaire JSX juste après `(` n'est pas du JSX, et Babel
+         s'arrête sans dire pourquoi. Déjà rencontré au lot 4. */
       ListEmptyComponent={(
           <EmptyState>
-            {recherche.trim()
-              ? `Rien pour « ${recherche.trim()} ». Essayez un mot plus court, ou le nom que les artisans emploient sur le chantier.`
-              : verifiesSeulement
-                ? 'Aucune annonce d’artisan vérifié pour ce filtre.'
-                : 'Aucune annonce pour le moment. Posez la première.'}
+            {nbFiltres > 1
+              ? 'Aucune annonce ne correspond à tous ces filtres. Touchez « Tout effacer » pour tout revoir.'
+              : secteur
+                ? `Aucune annonce à ${secteur.rayonKm} km de ${secteur.affichage}. Élargissez le rayon, ou cherchez partout en France.`
+                : recherche.trim()
+                  ? `Rien pour « ${recherche.trim()} ». Essayez un mot plus court, ou le nom que les artisans emploient sur le chantier.`
+                  : verifiesSeulement
+                    ? 'Aucune annonce d’artisan vérifié pour le moment.'
+                    : nbFiltres > 0
+                      ? 'Aucune annonce ne correspond à ce filtre. Touchez « Tout effacer » pour tout revoir.'
+                      : 'Aucune annonce pour le moment. Posez la première.'}
           </EmptyState>
       )}
       ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -661,16 +713,40 @@ export default function PlaceProScreen({
       />
     )}
 
-    {/* LE CALENDRIER DU FILTRE — sans minimum, lui. Un filtre est une
-        question, pas un engagement : l'auteur d'une annonce terminée doit
-        pouvoir la retrouver, puisqu'elle lui reste visible. */}
-    {creneauOuvert && (
-      <FeuilleDates
-        titre="Chercher sur ces dates"
+    {/* LES TROIS PANNEAUX DE RECHERCHE. Un seul à la fois : `panneau` est
+        une chaîne, pas trois booléens — avec trois booléens, deux peuvent
+        être vrais en même temps, et deux feuilles empilées laissent un
+        voile invisible qui avale les touches. */}
+    {panneau === 'quoi' && (
+      <FeuilleQuoi
+        types={TYPES_ANNONCE}
+        valeur={filtreType}
+        onChoisir={(cle) => { setFiltreType(cle); if (!cle) setFiltreMetier(null); }}
+        onFermer={() => setPanneau(null)}
+      />
+    )}
+
+    {panneau === 'ou' && (
+      <FeuilleOu
+        secteur={secteur}
+        moi={monLieu}
+        onChoisir={setSecteur}
+        onFermer={() => setPanneau(null)}
+      />
+    )}
+
+    {/* SANS MINIMUM, lui : un filtre est une question, pas un engagement,
+        et l'auteur d'une annonce terminée doit pouvoir la retrouver
+        puisqu'elle lui reste visible. */}
+    {panneau === 'quand' && (
+      <FeuilleQuand
         debut={creneauDu}
         fin={creneauAu}
-        onValider={(d, f) => { setCreneauDu(d || ''); setCreneauAu(f || ''); }}
-        onFermer={() => setCreneauOuvert(false)}
+        mode={creneau}
+        onChoisir={(d, f, m) => {
+          setCreneauDu(d || ''); setCreneauAu(f || ''); setCreneau(m || null);
+        }}
+        onFermer={() => setPanneau(null)}
       />
     )}
     </>
@@ -859,7 +935,6 @@ const s = StyleSheet.create({
   formTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
   label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginTop: 12, marginBottom: 6 },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginTop: 6 },
-  rangeeDates: { flexDirection: 'row', gap: S.sm, marginTop: S.sm },
 
   /* Les aperçus du formulaire, repris de l'écran des demandes : même
      geste, même forme, pour que ça s'apprenne une seule fois. */
@@ -874,11 +949,6 @@ const s = StyleSheet.create({
   photoBtnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.ink },
   /* Il NOMME un axe de filtre, il ne crie pas : c'est un repère qu'on lit
      une fois, pas un titre de section. */
-  axe: {
-    fontFamily: F.inter6, fontSize: T.micro, color: C.muted,
-    marginTop: S.md, marginBottom: S.xs, textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
 
   /* UNE PASTILLE FLOTTE au-dessus de la carte : elle s'arrondit, alors que
      la carte garde son angle vif. Règle des bords, `src/theme.js`.
@@ -897,21 +967,32 @@ const s = StyleSheet.create({
   date_terminee: { backgroundColor: C.line },
   dateTexte_terminee: { color: C.ink },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+
+  /* LE COMPTE ET « MES ANNONCES » SUR LA MÊME LIGNE : le compte dit ce
+     qu'on regarde, la pastille dit d'où on le regarde. */
+  ligneCompte: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: S.sm, marginBottom: S.sm,
+  },
+  /* La rangée défile horizontalement : une pastille réglée porte un texte
+     long (« Aix-en-Provence · 50 km ») et ne doit pas repousser les
+     autres sur une seconde ligne — ce serait le désordre qu'on vient de
+     retirer. */
+  pastilles: { flexDirection: 'row', gap: S.sm, paddingRight: S.lg },
+  effacer: {
+    minHeight: TOUCHE, paddingHorizontal: S.sm, justifyContent: 'center',
+  },
+  effacerTexte: {
+    fontFamily: F.inter5, fontSize: T.courant, color: C.accentTexte,
+    textDecorationLine: 'underline',
+  },
+  note: {
+    fontFamily: F.inter, fontSize: T.petit, color: C.muted,
+    lineHeight: interligne(T.petit), marginTop: S.sm,
+  },
   deuxChamps: { flexDirection: 'row', gap: 8 },
   formBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 14 },
 
-  verifies: {
-    flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10,
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
-    paddingVertical: 9, paddingHorizontal: 11,
-  },
-  verifiesOn: { borderColor: C.verif },
-  case: {
-    width: 17, height: 17, borderWidth: 1.5, borderColor: C.line,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  caseOn: { backgroundColor: C.verif, borderColor: C.verif },
-  verifiesTexte: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
 
   carte: { ...CARTE },
   bandeau: {

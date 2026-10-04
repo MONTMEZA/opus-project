@@ -878,6 +878,67 @@ sur un écran d'iPhone courant — au-dessus des 44 recommandés par Apple —
 mais cela se juge au pouce, pas à la souris.
 
 
+### 2.1 decies Chercher par secteur, et une recherche plus propre ✅ 04/10/2026
+
+Vos deux remarques, et les deux étaient justes.
+
+**1. Le filtre par secteur.** « Une annonce de bétonnière n'intéressera pas
+quelqu'un de Marseille alors que la bétonnière est à Paris. » La pastille
+**« Où »** propose maintenant : partout en France, autour de votre ville, ou
+autour d'une autre ville — avec un rayon de 25, 50, 100 ou 200 km.
+
+**Mais ça ne pouvait pas marcher, et c'est le vrai sujet.** Relevé sur votre
+base avant de construire quoi que ce soit :
+
+| | coordonnées enregistrées |
+|---|---|
+| vos 4 annonces | **0 sur 4** |
+| les 7 fiches pro | **1 sur 7** — la vôtre |
+
+Les colonnes existaient, le calcul de distance était écrit, la liste se
+disait triée par proximité : **presque rien ne les remplissait.** La cause :
+le champ ville ne garde les coordonnées que si on touche une suggestion
+dans la liste. Or dans le formulaire d'annonce il est pré-rempli depuis
+votre profil — donc personne ne touche jamais rien.
+
+C'est corrigé des deux côtés (annonce et fiche pro) : les coordonnées sont
+retrouvées **au moment d'enregistrer**, automatiquement. Et vos lignes déjà
+en base ont été rattrapées, au niveau de la **commune** que chacun a
+déclarée — jamais une adresse précise. Résultat : 4 annonces sur 4 et
+7 fiches sur 7.
+
+Conséquence visible tout de suite : les distances s'affichent enfin sur les
+annonces (« dans votre commune », « à 12 km »), ce qui ne marchait pour
+personne.
+
+**2. Le désordre.** Vous aviez raison, et c'est mesuré. La zone de filtres
+prenait **233 px** sur un écran de 900 — il ne restait que 131 px de la
+première annonce, et 79 px quand les champs de dates étaient ouverts. Une
+rangée « Où ? » de plus l'aurait poussée **entièrement sous l'écran**.
+
+Les quatre rangées de puces sont devenues **quatre pastilles sur une seule
+ligne** : Quoi, Où, Quand, Vérifiés. Chacune ouvre un petit panneau et
+**affiche ensuite votre choix** — on lit « Matériel », « Lille (59) ·
+50 km », « Cette semaine » sans rien ouvrir. La zone passe de 233 à
+**104 px**, et il reste **339 px** de la première annonce.
+
+Trois choses à savoir :
+
+- **« Cette semaine » remplit maintenant le calendrier** au lieu de rester
+  une puce muette : on voit enfin ce que le raccourci veut dire ;
+- **une annonce sans lieu enregistré sort du filtre par secteur**, et
+  l'écran vous le dit (« 2 annonces sans lieu précisé ne sont pas
+  affichées »). Elle ne disparaît pas en silence ;
+- **« Mes annonces » reste à côté du compte**, pas dans la ligne des
+  pastilles : ce n'est pas un filtre, c'est l'endroit où vous allez lire vos
+  réponses.
+
+**Pas vérifié** : le défilement de la rangée au doigt. Avec les quatre
+pastilles réglées, elle dépasse un peu l'écran et se fait glisser — or un
+ordinateur répond à la molette, pas au glissement. **À essayer sur votre
+iPhone.**
+
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

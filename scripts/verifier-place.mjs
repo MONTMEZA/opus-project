@@ -218,12 +218,16 @@ console.log('\nLes dates se choisissent, elles ne se tapent plus');
     'une fonction que personne n’appelle est le « bouton §18 » : du code '
     + 'qui a l’air de servir, qu’un contrôle couvre, et qui ne fait rien');
 
-  verifier('les deux bornes passent par UN SEUL calendrier',
-    (ecran.match(/<FeuilleDates/g) || []).length === 2
-    && (ecran.match(/setDatesOuvertes\(true\)/g) || []).length === 2
-    && (ecran.match(/setCreneauOuvert\(true\)/g) || []).length === 2,
+  verifier('les deux bornes du formulaire passent par UN SEUL calendrier',
+    (ecran.match(/<FeuilleDates/g) || []).length === 1
+    && (ecran.match(/setDatesOuvertes\(true\)/g) || []).length === 2,
     'on choisit un créneau, pas deux dates sans rapport : c’est la DURÉE '
     + 'qui décide un artisan');
+
+  verifier('…et le filtre par le même calendrier, dans son panneau',
+    /<Calendrier debut=\{sel\.debut\} fin=\{sel\.fin\}/.test(
+      sansCommentaires(lire('src/components/FiltresPlace.js'))),
+    'deux grilles de calendrier différentes finiraient par diverger');
 
   /* LE FORMULAIRE interdit le passé, le FILTRE ne l'interdit pas. Ce n'est
      pas une incohérence : un filtre est une question, pas un engagement, et
@@ -263,6 +267,90 @@ console.log('\nLes dates se choisissent, elles ne se tapent plus');
     /width: TOUCHE, height: TOUCHE/.test(cal),
     'ce sont les cibles les plus utilisées : les rater change de mois dans '
     + 'le mauvais sens');
+}
+
+console.log('\nUne ligne de recherche au lieu de quatre rangées');
+{
+  /* DEMANDÉ PAR LE PROPRIÉTAIRE LE 04/10/2026 : « si on ajoute "où ?" je
+     trouve que ça va faire beaucoup et désordonné ».
+
+     MESURÉ AU NAVIGATEUR, fenêtre d'iPhone 390 × 900 :
+
+       avant  | filtres repliés           | 233 px | 131 px de la 1re annonce
+       avant  | « Dates précises » ouvert | 285 px |  79 px
+       après  | les quatre pastilles      | 104 px | 339 px
+
+     Et la mesure du pire cas, les quatre réglées : UNE rangée, 44 px. */
+  const filtres = sansCommentaires(lire('src/components/FiltresPlace.js'));
+
+  verifier('les quatre axes tiennent sur une ligne qui défile',
+    /<ScrollView[\s\S]{0,120}horizontal/.test(ecran)
+    && (ecran.match(/<PastilleFiltre/g) || []).length === 3
+    && (ecran.match(/<PastilleBascule/g) || []).length === 2,
+    'trois pastilles à menu (quoi, où, quand), deux bascules (vérifiés, '
+    + 'mes annonces)');
+
+  verifier('plus aucun titre d’axe « QUOI ? » / « QUAND ? »',
+    !/s\.axe/.test(ecran),
+    'ils ne servaient qu’à départager quatre rangées de puces identiques');
+
+  /* UNE PASTILLE AFFICHE SON CHOIX. C'est ce qui distingue cette solution
+     d'un bouton « Filtrer » unique : un filtre qu'on ne voit pas est un
+     filtre qu'on oublie d'enlever, et on cherche ensuite pendant cinq
+     minutes pourquoi « il n'y a rien ». Même famille que le voyant du
+     04/10 — un signal doit dire OÙ. */
+  verifier('une pastille réglée AFFICHE sa valeur, pas son nom',
+    /\{valeur \|\| label\}/.test(filtres),
+    '« Quoi : Matériel » prend deux fois la place pour la même information');
+
+  verifier('…et « Tout effacer » n’apparaît que s’il y a quelque chose à effacer',
+    /nbFiltres > 0 && \(/.test(ecran));
+
+  /* UN SEUL PANNEAU À LA FOIS. Avec trois booléens, deux peuvent être vrais
+     ensemble — et sur iPhone, deux `Modal` empilées laissent un voile
+     invisible qui avale les touches. C'est le défaut qui a fait dire « je
+     suis bloqué » le matin même. */
+  verifier('un seul panneau ouvert à la fois',
+    /const \[panneau, setPanneau\] = useState\(null\)/.test(ecran)
+    && !/useState\(false\);\s*\/\/ ?quoi/.test(ecran));
+
+  console.log('\n  Le filtre par secteur');
+
+  verifier('le calcul vit dans un fichier qui n’importe RIEN',
+    /export function dansSecteur\(/.test(sansCommentaires(lire('src/lib/adresse.js'))));
+
+  verifier('l’écran l’applique aux annonces',
+    /\.filter\(\(a\) => dansSecteur\(/.test(ecran));
+
+  /* LE PIÈGE DE CE FILTRE : il ressemble à celui des dates et ne se comporte
+     pas pareil. « Pas de dates » = disponible n'importe quand, ça passe.
+     « Pas de coordonnées » = on ne sait pas où, ça sort. */
+  verifier('une annonce sans lieu SORT du secteur, et l’écran le dit',
+    /sansLieu/.test(ecran) && /sans lieu précisé/.test(ecran),
+    'un filtrage incomplet ne doit pas ressembler à un filtrage fait — '
+    + 'c’est la leçon du ménage de compte des pièces jointes');
+
+  /* LES COORDONNÉES N'EXISTAIENT PRESQUE PAS : 0 annonce sur 4 et 1 fiche
+     sur 7 en portaient, le 04/10/2026, sur la vraie base. Sans elles, ce
+     filtre ne trouve rien pour personne. */
+  verifier('les coordonnées se retrouvent À L’ENREGISTREMENT',
+    (app.match(/completerLieu\(/g) || []).length >= 2,
+    'une pour l’annonce, une pour la fiche pro — le champ ville est '
+    + 'pré-rempli, donc personne ne choisit jamais de suggestion');
+
+  verifier('…et un échec de géocodage ne bloque RIEN',
+    /catch \{ lieu = annonce; \}/.test(app)
+    && /catch \{ lieuPro = profil; \}/.test(app),
+    'un réseau coupé ne doit pas empêcher de publier — même règle que le '
+    + 'vibreur de `retour.js`');
+
+  /* TROUVÉ À L'ÉCRAN, pas en relisant : la liste vide annonçait « Aucune
+     annonce pour le moment, posez la première » alors que la base en
+     contenait quatre, toutes dans un autre département. */
+  verifier('la liste vide dit POURQUOI elle est vide',
+    /Aucune annonce à \$\{secteur\.rayonKm\} km/.test(ecran)
+    && /nbFiltres > 1/.test(ecran),
+    'un message précis et faux est pire qu’un message général et juste');
 }
 
 console.log('');

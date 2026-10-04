@@ -8,7 +8,10 @@
  *
  *   node scripts/verifier-adresse.mjs
  */
-const { chercher, distanceKm, libelleDistance } = await import('../src/lib/adresse.js');
+const {
+  chercher, distanceKm, libelleDistance,
+  dansSecteur, decouperAffichage, RAYONS_KM,
+} = await import('../src/lib/adresse.js');
 
 const CAS = [
   { titre: 'Ville — Marseille',            texte: 'marseille',                         type: 'municipality', attendu: 'Marseille' },
@@ -89,6 +92,66 @@ for (const [titre, valeur] of [['inconnue', null], ['undefined', undefined], ['a
   const zero = CAS_DISTANCE.every(([km]) => libelleDistance(km) !== 'à 0 km');
   if (!zero) echecs += 1;
   console.log(`${zero ? '  OK  ' : 'ECHEC '} « à 0 km » ne s'écrit jamais`);
+}
+
+/* ==========================================================================
+   LE SECTEUR — « une bétonnière à Paris n'intéresse pas Marseille »
+   --------------------------------------------------------------------------
+   Demandé par le propriétaire le 04/10/2026. Et le vrai piège de ce filtre
+   n'est pas le calcul de distance, qui est éprouvé au-dessus : c'est le cas
+   SANS COORDONNÉES, qui ressemble au cas « sans dates » et n'a rien à voir.
+
+     - « pas de dates »       = disponible n'importe quand  → ça passe
+     - « pas de coordonnées » = on ne sait pas où           → ça sort
+
+   Se tromper de règle là-dessus ne lèverait aucune erreur : la liste
+   contiendrait simplement des annonces qui n'ont rien à y faire, et
+   personne ne saurait dire pourquoi.
+   ========================================================================== */
+{
+  const LAMBESC = { latitude: 43.648937, longitude: 5.258868 };
+  const PELISSANNE = [43.628277, 5.159767];   // ~9 km
+  const MARSEILLE = [43.282, 5.405];          // ~41 km
+  const LILLE = [50.630951, 3.045391];        // ~800 km
+
+  const cas = [
+    ['sans secteur, tout passe', [null, null, null], true],
+    ['la commune voisine, à 25 km', [...PELISSANNE, { ...LAMBESC, rayonKm: 25 }], true],
+    ['Marseille, à 25 km : non', [...MARSEILLE, { ...LAMBESC, rayonKm: 25 }], false],
+    ['Marseille, à 50 km : oui', [...MARSEILLE, { ...LAMBESC, rayonKm: 50 }], true],
+    ['Lille, à 200 km : non', [...LILLE, { ...LAMBESC, rayonKm: 200 }], false],
+    /* LE CAS QUI COMPTE. */
+    ['sans coordonnées, l’annonce SORT', [null, null, { ...LAMBESC, rayonKm: 50 }], false],
+    ['…et un secteur sans centre ne filtre rien',
+      [43.0, 5.0, { latitude: null, longitude: null, rayonKm: 50 }], true],
+  ];
+  for (const [titre, [la, lo, sect], attendu] of cas) {
+    const ok = dansSecteur(la, lo, sect) === attendu;
+    if (!ok) echecs += 1;
+    console.log(`${ok ? '  OK  ' : 'ECHEC '} ${titre}`);
+  }
+
+  /* LE NUMÉRO ENTRE PARENTHÈSES DÉPARTAGE : il y a une Sainte-Marie dans
+     quinze départements. Le perdre placerait un artisan à six cents
+     kilomètres de chez lui, sans la moindre alerte. */
+  const decoupes = [
+    ['Lambesc (13)', 'Lambesc', '13'],
+    ['Aix-en-Provence (13)', 'Aix-en-Provence', '13'],
+    ['Ajaccio (2A)', 'Ajaccio', '2A'],
+    ['Marseille', 'Marseille', null],
+    ['', '', null],
+  ];
+  for (const [brut, nom, dep] of decoupes) {
+    const d = decouperAffichage(brut);
+    const ok = d.nom === nom && d.departement === dep;
+    if (!ok) echecs += 1;
+    console.log(`${ok ? '  OK  ' : 'ECHEC '} « ${brut} » → ${d.nom} / ${d.departement}`);
+  }
+
+  const rayonsOk = RAYONS_KM.length >= 3 && RAYONS_KM.every((k) => Number.isInteger(k) && k > 0)
+    && RAYONS_KM.every((k, i) => i === 0 || k > RAYONS_KM[i - 1]);
+  if (!rayonsOk) echecs += 1;
+  console.log(`${rayonsOk ? '  OK  ' : 'ECHEC '} les rayons sont croissants : ${RAYONS_KM.join(', ')} km`);
 }
 
 console.log(echecs === 0 ? '\nTout est bon.' : `\n${echecs} vérification(s) en échec.`);

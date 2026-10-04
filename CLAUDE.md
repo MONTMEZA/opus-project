@@ -2085,6 +2085,188 @@ de métier : le sélecteur de métier d'une annonce de sous-traitance n'est
 toujours pas couvert, comme au lot précédent. Le bloc des dates, lui, est
 le même pour les deux.
 
+### Chercher par secteur — et une ligne au lieu de quatre rangées (04/10/2026)
+
+Deux remarques du propriétaire, dans la même phrase, et les deux justes :
+
+> « Quand il y aura beaucoup de monde de toute la France, une annonce de
+> bétonnière n'intéressera pas quelqu'un de Marseille alors que la
+> bétonnière est à Paris. Il faudrait ajouter un filtre pour le secteur.
+> Par contre là on a "quoi ?" avec les propositions de choix en dessous,
+> "quand ?" avec les propositions… si on ajoute "où ?" je trouve que ça va
+> faire beaucoup et désordonné. »
+
+#### L'encombrement, mesuré avant de toucher quoi que ce soit
+
+Au navigateur, fenêtre d'iPhone 390 × 900 :
+
+| | hauteur des filtres | visible de la 1re annonce |
+|---|---|---|
+| avant, filtres repliés | **233 px** | 131 px |
+| avant, « Dates précises » ouvert | **285 px** | **79 px** |
+| **après, les quatre pastilles** | **104 px** | **339 px** |
+
+Une rangée « OÙ ? » de plus (≈ 85 px) aurait poussé la première annonce
+**entièrement sous l'écran**. Et le pire cas, les quatre pastilles réglées :
+toujours **une** rangée, de 44 px.
+
+#### Mais le filtre ne pouvait PAS fonctionner — troisième fois, même famille
+
+Avant d'écrire une ligne d'interface, le relevé sur la vraie base :
+
+| | coordonnées GPS |
+|---|---|
+| `annonces_pro` | **0 sur 4** |
+| `professional_profiles` | **1 sur 7** — celle du propriétaire |
+
+Les colonnes existaient, `publierAnnonce` les envoyait, `distanceKm` était
+écrite, et la liste se disait triée par proximité. **Presque rien ne les
+remplissait.** Aucune distance ne s'affichait sur les annonces des autres,
+et le tri ne triait rien — sans la moindre erreur, puisque `distanceKm`
+rend simplement `null`.
+
+> **La cause : `ChampVille` ne rend les coordonnées QUE si l'on touche une
+> suggestion.** Taper sa ville à la main renvoie `{ affichage }` tout
+> court — et c'est volontaire, une suggestion qui n'arrive pas ne doit
+> jamais bloquer personne. Mais dans le formulaire d'annonce le champ est
+> **pré-rempli depuis le profil** : personne ne le touche, donc personne ne
+> choisit de suggestion, donc aucune annonce n'a jamais eu de coordonnées.
+
+La parade est `completerLieu()` (`src/lib/adresse.js`), appelée **au moment
+d'enregistrer** — l'annonce et la fiche pro —, là où il y a déjà une attente
+visible et un contexte asynchrone. Pas dans le champ : compléter en
+arrière-plan pendant la frappe ferait bouger la valeur du parent sans que
+personne ne l'ait demandé.
+
+Trois règles, et chacune a sa raison :
+
+1. **un lieu qui a déjà des coordonnées n'est pas retouché** — elles
+   viennent d'une suggestion choisie, donc d'un point précis ;
+2. **on ne devine jamais la commune.** Pas de réponse de la Base Adresse
+   Nationale, ou rien dans le bon département : on rend le lieu tel quel.
+   Une annonce sans coordonnées est gênante ; une annonce placée dans la
+   mauvaise ville est pire, et personne ne s'en apercevrait ;
+3. **l'échec ne bloque RIEN.** Un réseau coupé n'empêche pas de publier —
+   même règle que le vibreur de `retour.js`.
+
+> **Le numéro entre parenthèses n'est pas décoratif : il DÉPARTAGE.** Il y
+> a une Sainte-Marie dans quinze départements. `decouperAffichage()` sort
+> le « (13) » de « Lambesc (13) » et ne retient qu'un résultat dont le code
+> postal commence pareil. Sans ça, un artisan atterrit à six cents
+> kilomètres de chez lui, sans la moindre alerte.
+>
+> Et le cas de la **Corse** : le département « 2A » a des codes postaux en
+> **20**. La comparaison littérale échouerait, et la fonction rendrait le
+> lieu sans coordonnées, en silence.
+
+**Les lignes déjà en base ont été rattrapées**, sur décision du
+propriétaire : coordonnées du **centre de la commune** que chacun a
+lui-même déclarée, jamais une adresse précise — la règle posée avec la
+carte le 30/09. Après : **4 annonces sur 4** et **7 fiches sur 7**.
+
+#### Ce filtre ressemble à celui des dates et ne se comporte PAS pareil
+
+C'est le piège de ce lot, et il ne lèverait aucune erreur :
+
+> **« Pas de dates » veut dire disponible n'importe quand** — une
+> bétonnière à vendre l'est vraiment, elle passe.
+> **« Pas de coordonnées » veut dire qu'on ne sait pas où** — prétendre
+> qu'elle est à 10 km serait inventer, elle sort.
+
+Et l'écran le DIT : « 3 annonces sans lieu précisé ne sont pas affichées ».
+Un filtrage incomplet ne doit pas ressembler à un filtrage fait — c'est la
+leçon du ménage de compte des pièces jointes, où un trou RGPD s'était
+présenté comme un succès.
+
+#### Pourquoi des pastilles, et pas un bouton « Filtrer »
+
+Le standard des sites d'annonces est un bouton unique qui ouvre tout. Il a
+été écarté :
+
+> **Un filtre qu'on ne voit pas est un filtre qu'on oublie d'enlever.** On
+> cherche ensuite pendant cinq minutes pourquoi « il n'y a rien ». Même
+> famille que le voyant du 04/10 : un signal doit dire OÙ.
+
+Donc quatre pastilles — **Quoi, Où, Quand, Vérifiés** — et chacune
+**affiche son choix** à la place de son nom : on lit « Matériel »,
+« Lille (59) · 50 km », « Cette semaine » sans rien ouvrir. « Quoi : Matériel »
+prendrait deux fois la place pour la même information, et la place est
+exactement ce qui manquait.
+
+Trois détails qui ne sont pas cosmétiques :
+
+1. **« Mes annonces » n'est pas un filtre, c'est une VUE** : on y va pour
+   lire ses réponses, pas pour affiner une recherche. Elle reste donc à
+   côté du compte, pas dans la ligne des pastilles ;
+2. **un seul panneau à la fois**, tenu par une chaîne (`panneau`) et non par
+   trois booléens. Avec trois booléens, deux peuvent être vrais ensemble —
+   et deux `Modal` empilées laissent sur iPhone un voile invisible qui
+   avale les touches. C'est le défaut qui a fait dire « je suis bloqué » le
+   matin même ;
+3. **les raccourcis et le calendrier sont dans le MÊME panneau.** Avant,
+   « Dates précises » faisait apparaître deux champs sous la rangée : la
+   mise en page sautait de 52 px au moment précis où l'on cherchait à lire.
+   Maintenant, toucher « Cette semaine » remplit la grille — **on voit ce
+   que le raccourci veut dire**, ce qu'aucune puce ne disait.
+
+Et `creneau` ne porte plus qu'une ÉTIQUETTE (`'semaine' | 'mois' | null`) :
+les bornes réelles sont toujours dans `creneauDu` / `creneauAu`, quel que
+soit le chemin par lequel on les a posées. Trois modes se partageaient le
+travail, il n'en reste qu'un.
+
+#### Un message de liste vide qui donne tort à l'application
+
+Trouvé à l'écran, pas en relisant : en cherchant à 50 km de Lille, la liste
+affichait **« Aucune annonce pour le moment. Posez la première. »** alors
+que la base en contenait quatre, toutes dans les Bouches-du-Rhône. On en
+conclut que la Place des pros est déserte, et on n'y revient pas.
+
+Elle dit maintenant « Aucune annonce à 50 km de Lille (59). Élargissez le
+rayon, ou cherchez partout en France. »
+
+> **Mais seulement quand ce filtre est SEUL.** Mesuré avec quatre filtres
+> posés : le message accusait « aucune annonce d'artisan vérifié », alors
+> que trois autres pouvaient tout aussi bien être en cause. **Un message
+> précis et faux est pire qu'un message général et juste.**
+
+#### La Base Adresse Nationale ne part pas non plus du conteneur
+
+Comme les tuiles de l'IGN : sans rien faire, le navigateur d'essai répond
+`ERR_CERT_AUTHORITY_INVALID` et le champ ville tourne indéfiniment. Ça
+ressemble beaucoup à un défaut du code. La parade est la même —
+`poserRelais(page, { hote: 'api-adresse.data.gouv.fr' })`, en plus de celui
+de Supabase. **Deux relais sur la même page fonctionnent.**
+
+#### Vérifié, et comment
+
+Les 30 contrôles passent — 13 nouveaux sur l'écran et le secteur, 13 sur les
+calculs purs (`verifier-adresse`). `npx expo export --platform ios` passe.
+Puis au navigateur, sur la VRAIE base, avec un compte professionnel jetable
+supprimé dans la même session :
+
+| | résultat |
+|---|---|
+| la ligne | **4 pastilles, 1 rangée, 44 px** |
+| zone de filtres | **104 px** (contre 233) |
+| « Où » → ma ville reconnue | Lambesc (13) |
+| 25 km autour de moi | 4 annonces (toutes dans le 13) |
+| **50 km autour de Lille** | **0 annonce** — le filtre filtre |
+| la pastille | « Lille (59) · 50 km » |
+| « Quand » → Cette semaine | la grille se remplit du 4 au 11 oct. |
+| « Quoi » → À vendre | 2 annonces |
+| « Tout effacer » | 4 annonces, et la pastille disparaît |
+
+**Ce qui n'a PAS été vérifié** : le défilement horizontal de la rangée au
+doigt. Sur ordinateur, une zone défilante répond à la molette, pas au
+glissement — c'est écrit dans ce document depuis le lot 5, et ça vaut ici.
+Avec quatre pastilles réglées la rangée dépasse l'écran : **c'est à juger
+sur l'iPhone.**
+
+Et un rappel : `verifier-adresse` appelle la vraie Base Adresse Nationale à
+travers le mandataire, qui coupe environ une connexion sur cinq. **Un échec
+isolé de ce contrôle n'est pas un défaut du code** — il faut le relancer
+avant de chercher ailleurs. C'est arrivé une fois pendant ce lot.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

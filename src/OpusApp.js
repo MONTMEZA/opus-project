@@ -56,6 +56,7 @@ import {
 } from './lib/cloudinary';
 import { aiMatchPros } from './lib/ai';
 import { partagerPost } from './lib/partage';
+import { completerLieu } from './lib/adresse';
 
 /**
  * Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie.
@@ -1505,7 +1506,28 @@ export default function OpusApp() {
       }
     }
 
-    complet = { ...profil, avatarUrl, bannerUrl };
+    /* MÊME RATTRAPAGE POUR LA FICHE PRO, et c'est celui qui compte le plus :
+       sans MES coordonnées, aucun filtre « autour de moi » ne peut
+       fonctionner, quelles que soient les coordonnées des autres. Relevé le
+       04/10/2026 : 1 fiche sur 7 en avait. */
+    let lieuPro = profil;
+    try {
+      lieuPro = await completerLieu({
+        affichage: profil.ville, codePostal: profil.codePostal,
+        codeInsee: profil.codeInsee,
+        latitude: profil.latitude, longitude: profil.longitude,
+      });
+    } catch { lieuPro = profil; }
+
+    complet = {
+      ...profil,
+      avatarUrl,
+      bannerUrl,
+      codePostal: lieuPro.codePostal || null,
+      codeInsee: lieuPro.codeInsee || null,
+      latitude: lieuPro.latitude || null,
+      longitude: lieuPro.longitude || null,
+    };
 
     try {
       await api.updateProfile({ userType, profil: complet });
@@ -1766,6 +1788,7 @@ export default function OpusApp() {
        personne. `estFichierLocal` laisse passer ce qui est déjà en ligne —
        sans quoi republier renverrait les mêmes photos une seconde fois. */
     let medias = annonce.medias || [];
+    let lieu = annonce;
     setLoading(true);
     try {
       const uid = api.getUserId();
@@ -1776,7 +1799,26 @@ export default function OpusApp() {
           : uri);
       }
       medias = envoyees.filter(Boolean);
-      const ligne = await api.publierAnnonce({ ...annonce, medias });
+      /* LES COORDONNÉES, RETROUVÉES AU MOMENT D'ENREGISTRER.
+         Le champ ville du formulaire est PRÉ-REMPLI depuis le profil :
+         personne ne le touche, donc personne ne choisit de suggestion,
+         donc aucune annonce n'avait jamais de coordonnées — relevé le
+         04/10/2026, 0 sur 4 sur la vraie base. Sans elles, le filtre par
+         secteur ne trouve rien et le tri par proximité ne trie rien.
+         L'échec ne bloque pas : la ligne part sans, et le prochain
+         enregistrement la complétera. */
+      try {
+        lieu = await completerLieu({
+          affichage: annonce.ville, codePostal: annonce.codePostal,
+          latitude: annonce.latitude, longitude: annonce.longitude,
+        });
+      } catch { lieu = annonce; }   // jamais de publication refusée pour ça
+      const ligne = await api.publierAnnonce({
+        ...annonce, medias,
+        codePostal: lieu.codePostal || null,
+        latitude: lieu.latitude || null,
+        longitude: lieu.longitude || null,
+      });
       if (ligne) id = ligne.id;
     } catch (e) {
       setLoading(false);
@@ -1787,6 +1829,9 @@ export default function OpusApp() {
     const moi = pros[myProId] || {};
     setAnnonces((as) => [{
       ...annonce,
+      codePostal: lieu.codePostal || null,
+      latitude: lieu.latitude || null,
+      longitude: lieu.longitude || null,
       medias,
       id,
       time: "À l'instant",
