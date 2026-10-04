@@ -52,3 +52,30 @@ export function cadrePhoto(rapport) {
   if (!(rapport > 0)) return 1;
   return Math.max(PLUS_HAUT, Math.min(PLUS_LARGE, rapport));
 }
+
+/**
+ * LA TAILLE D'UNE PHOTO DANS UNE BULLE DE CONVERSATION.
+ *
+ * Ajouté le 04/10/2026, quand le propriétaire a demandé que les photos se
+ * voient directement dans la conversation.
+ *
+ * POURQUOI CE N'EST PAS LE MÊME CALCUL QUE LE FIL
+ * -----------------------------------------------
+ * Dans le fil, une photo haute coûte un geste de défilement. Dans une
+ * conversation, elle pousse hors de l'écran les messages qui l'entourent —
+ * et on perd le fil de ce qui vient d'être dit. D'où une hauteur maximale,
+ * qui n'a pas de sens dans le fil.
+ *
+ * Les deux bornes de `cadrePhoto` s'appliquent d'abord : une panoramique ne
+ * devient pas une bande, une capture d'écran ne devient pas un mur.
+ *
+ * `largeurMax` est la largeur de référence d'une bulle, `hauteurMax` ce
+ * qu'on s'autorise en hauteur. Le résultat tient TOUJOURS dans les deux,
+ * quelle que soit la photo — c'est ce que le contrôle vérifie, sur des
+ * rapports absurdes.
+ */
+export function cadreApercuMessage(rapport, largeurMax, hauteurMax) {
+  const cadre = cadrePhoto(rapport);
+  const largeur = Math.min(largeurMax, hauteurMax * cadre);
+  return { cadre, largeur, hauteur: largeur / cadre };
+}

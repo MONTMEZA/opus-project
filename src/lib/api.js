@@ -2194,6 +2194,18 @@ export const envoyerMessage = hasSupabase ? envoyerMessageSupabase : envoyerMess
  */
 const DUREE_LIEN_PIECE = 300;
 
+/**
+ * POUR AFFICHER, C'EST PLUS LONG — et ce n'est pas un relâchement.
+ *
+ * Les cinq minutes ci-dessus valent pour le lien qu'on REMET AU TÉLÉPHONE
+ * quand on touche une pièce : il part dans le visualiseur du système, donc
+ * dans un historique, donc il peut traîner. Une vignette affichée DANS
+ * l'application ne traîne nulle part — et si elle expirait pendant qu'on
+ * lit la conversation, la photo disparaîtrait sous les yeux de son
+ * destinataire.
+ */
+const DUREE_APERCU = 3600;
+
 async function urlPieceDemo() { return null; }
 
 async function urlPieceSupabase(chemin) {
@@ -2206,3 +2218,41 @@ async function urlPieceSupabase(chemin) {
 }
 
 export const urlPiece = hasSupabase ? urlPieceSupabase : urlPieceDemo;
+
+/**
+ * LES APERÇUS DE TOUTE UNE CONVERSATION, EN UNE SEULE REQUÊTE.
+ *
+ * C'est le point qui décide si montrer les photos est raisonnable ou non.
+ * Une adresse signée par photo, demandée au montage de chaque bulle,
+ * ferait vingt requêtes sur une conversation de vingt photos — et sur un
+ * chantier, en 4G, ça se sent. `createSignedUrls` (au pluriel) en fait
+ * UNE.
+ *
+ * Elle rend un tableau dans l'ORDRE DEMANDÉ, avec une entrée par chemin ;
+ * une entrée peut porter une erreur — fichier retiré, droit refusé — sans
+ * que les autres échouent. On range donc par chemin, et ce qui manque
+ * manque : la bulle retombe alors sur la ligne « nom + poids », qui reste
+ * parfaitement utilisable.
+ */
+async function urlsPiecesDemo() { return {}; }
+
+async function urlsPiecesSupabase(chemins) {
+  const liste = [...new Set((chemins || []).filter(Boolean))];
+  if (liste.length === 0) return {};
+
+  const { data, error } = await supabase.storage
+    .from('pieces-jointes')
+    .createSignedUrls(liste, DUREE_APERCU);
+  if (error) throw error;
+
+  const par = {};
+  (data || []).forEach((entree, i) => {
+    /* `entree.path` n'est pas toujours rendu : on garde l'indice, qui l'est
+       toujours. */
+    const chemin = entree.path || liste[i];
+    if (entree.signedUrl) par[chemin] = entree.signedUrl;
+  });
+  return par;
+}
+
+export const urlsPieces = hasSupabase ? urlsPiecesSupabase : urlsPiecesDemo;

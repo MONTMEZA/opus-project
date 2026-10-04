@@ -25,6 +25,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { typeDeFichier, morceauDeChemin } from '../src/lib/types-fichiers.js';
+import { cadreApercuMessage } from '../src/lib/cadre.js';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -222,6 +223,70 @@ console.log('\nL’extension se lit dans le NOM, pas dans l’adresse');
       !m.includes('/') && !m.includes(':') && m.length > 0,
       `« ${entree} » → « ${m} »`);
   });
+}
+
+console.log('\nUne photo se VOIT, un document se nomme');
+{
+  /* Demandé par le propriétaire le 04/10/2026 : « je préfère que la photo
+     se voie directement sur la conversation ». Un nom comme
+     « photo-2026-10-04-1530.jpg » ne porte aucune information ; sur un
+     chantier, la photo EST le message. */
+  verifier('une photo s’affiche, un PDF garde son nom',
+    /estPhoto\(piece\) && apercu/.test(ecran) && /ApercuPhoto/.test(ecran),
+    'un PDF n’a pas de vignette, et son nom dit tout');
+
+  /* LE POINT QUI DÉCIDE SI C'EST RAISONNABLE. Une adresse signée par bulle
+     ferait vingt requêtes sur une conversation de vingt photos — en 4G, sur
+     un chantier, ça se sent. `createSignedUrls` au PLURIEL en fait une. */
+  verifier('les adresses sont signées EN UNE SEULE requête',
+    /createSignedUrls\(/.test(api) && /urlsPieces/.test(ecran),
+    'une requête par bulle serait vingt requêtes sur vingt photos');
+
+  verifier('…et on ne redemande que ce qu’on n’a pas',
+    /!apercus\[m\.piece\.chemin\]/.test(ecran),
+    'sinon l’effet repart à chaque adresse reçue, en boucle');
+
+  /* `Bulle` est mémorisée. Lui passer le dictionnaire entier la ferait
+     redessiner pour les vingt bulles à chaque adresse reçue — le piège du
+     lot 4, déjà rencontré avec `jyAiRepondu`. */
+  verifier('la bulle reçoit une CHAÎNE, pas le dictionnaire',
+    /apercu=\{item\.piece \? apercus\[item\.piece\.chemin\] : undefined\}/.test(ecran),
+    'React.memo ne sert à rien si on lui passe un objet recréé');
+
+  /* La durée d'affichage est plus longue que celle du lien remis au
+     système : une vignette ne traîne dans aucun historique, et une photo
+     qui disparaîtrait au milieu d'une lecture serait incompréhensible. */
+  verifier('la durée d’un aperçu est distincte de celle d’un lien ouvert',
+    /DUREE_APERCU/.test(api) && /DUREE_LIEN_PIECE/.test(api)
+    && /createSignedUrl\(chemin, DUREE_LIEN_PIECE\)/.test(api),
+    'le lien remis à iOS part dans un historique, pas la vignette');
+
+  /* Le cadre vient de `cadre.js`, comme le fil : une fissure est
+     verticale, un mur horizontal, aucun cadre fixe ne convient aux deux. */
+  verifier('le cadre suit la photo, entre les mêmes bornes que le fil',
+    /cadreApercuMessage\(/.test(ecran) && /HAUTEUR_MAX_APERCU/.test(ecran),
+    'et une hauteur maximale, sinon une photo pousse la conversation hors '
+    + 'de l’écran');
+
+  /* CE BLOC FAIT TOURNER LE CALCUL sur des photos absurdes — une
+     panoramique de chantier, une capture d'écran de téléphone, une image
+     dont les dimensions n'ont pas pu être lues. Aucune ne doit pouvoir
+     dépasser le cadre : une seule photo chasserait alors de l'écran tout ce
+     qui vient d'être dit. */
+  const debordent = [
+    ['panoramique 4:1', 4], ['capture 9:21', 9 / 21], ['carrée', 1],
+    ['inconnue', null], ['absurde', 0], ['négative', -3],
+  ].filter(([, r]) => {
+    const { largeur, hauteur } = cadreApercuMessage(r, 220, 260);
+    return !(largeur > 0) || !(hauteur > 0) || largeur > 220 || hauteur > 260;
+  }).map(([nom]) => nom);
+
+  verifier('aucune photo ne déborde du cadre, même absurde',
+    debordent.length === 0, debordent.join(', '));
+
+  verifier('une vignette qui manque n’est pas une panne',
+    /if \(!apercu\) return null;/.test(ecran),
+    'la bulle doit retomber sur la ligne « nom + poids », toujours ouvrable');
 }
 
 console.log('\nLe ménage de compte descend jusqu’aux pièces');

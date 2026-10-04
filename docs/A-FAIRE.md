@@ -673,11 +673,24 @@ l'iPhone :
   s'intercepte pas depuis ce conteneur) : elles apparaissent au
   rechargement de la conversation.
 
-**Ce qui n'est pas fait, et qui se verra :** une photo jointe s'affiche
-avec une icône de document, pas avec un aperçu de la photo. C'est
-faisable, mais ça demande une adresse signée par vignette — une requête de
-plus par bulle d'image, et des liens qui expirent au bout de cinq minutes.
-À décider ensemble avant de le construire.
+**Les photos se voient directement dans la conversation** — fait le
+04/10/2026, à votre demande. Une photo s'affiche, un PDF garde son nom :
+« photo-2026-10-04-1530.jpg » ne dit rien, « devis-cuisine-dupont.pdf »
+dit tout.
+
+Mon objection d'avant était à moitié fausse, et je le note : Supabase sait
+signer **toutes** les adresses d'une conversation en **un seul appel**.
+Mesuré, conversation rechargée : 1 requête de signature, quel que soit le
+nombre de photos.
+
+Ce qui reste vrai : votre projet est en plan **gratuit**, donc Supabase ne
+sait pas servir une version réduite à la volée (c'est payant). Chaque
+vignette télécharge donc la photo entière. Elles sont déjà ramenées à
+1600 px avant l'envoi et mises en cache sur le téléphone, donc c'est une
+fois, pas à chaque fois qu'on remonte la conversation. **Si un jour une
+conversation chargée de photos devient lourde en 4G, dites-le-moi** : la
+parade est de ranger une seconde copie réduite à côté, et ça se fait sans
+rien casser.
 
 `npm run verifier-pieces-jointes` tient l'ensemble — et il **fait tourner**
 le calcul d'extension sur l'adresse qui a cassé, au lieu de relire le code.

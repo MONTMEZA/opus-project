@@ -1455,6 +1455,63 @@ planter quoi que ce soit :
 > l'ancienne valeur restait. Un chemin de secours qui ne secourt rien est
 > pire que pas de chemin du tout.
 
+#### Une photo se VOIT, un document se nomme
+
+Demandé par le propriétaire le 04/10/2026 : « je préfère que la photo se
+voie directement sur la conversation ». Il a raison, et la raison n'est pas
+esthétique : **« photo-2026-10-04-1530.jpg » ne porte aucune
+information.** Sur un chantier, la photo EST le message — « regarde cette
+fissure ». Un devis en PDF, lui, se reconnaît à son nom : il garde donc sa
+ligne.
+
+> **L'objection qui tombe, et celle qui reste.** J'avais avancé « une
+> requête signée par bulle, donc vingt sur vingt photos ». C'était à moitié
+> faux : `createSignedUrls` (au PLURIEL) les signe **toutes en un seul
+> appel**. Mesuré au navigateur, conversation rechargée : **1 POST de
+> signature**, quel que soit le nombre de photos.
+>
+> Ce qui reste, et qu'il faut savoir : le projet est en plan **gratuit**
+> (vérifié), donc Supabase **ne sait pas servir une version réduite à la
+> volée** — c'est une option payante. Chaque vignette télécharge donc la
+> photo entière. Elles sont déjà ramenées à 1600 px avant l'envoi et
+> `expo-image` les garde en cache disque, donc c'est une fois, pas à chaque
+> défilement. Le jour où une conversation chargée pèse, la parade est une
+> **seconde copie réduite** rangée dans le même dossier — pas une
+> transformation à la volée.
+
+Quatre points à ne pas redécouvrir :
+
+1. **La bulle reçoit une CHAÎNE, pas le dictionnaire des adresses.**
+   `Bulle` est mémorisée ; lui passer l'objet entier la ferait redessiner
+   pour les vingt bulles à chaque adresse reçue. C'est exactement le piège
+   du lot 4 avec `jyAiRepondu` ;
+2. **deux durées, et ce n'est pas un relâchement.** Cinq minutes pour le
+   lien qu'on REMET AU TÉLÉPHONE quand on touche — il part dans le
+   visualiseur, donc dans un historique. Une heure pour la vignette
+   affichée DANS l'application, qui ne traîne nulle part, et qui
+   disparaîtrait sous les yeux de son lecteur si elle expirait ;
+3. **une vignette qui manque n'est pas une panne.** La bulle retombe sur la
+   ligne « nom + poids », toujours ouvrable. Un trou gris ressemblerait à
+   un défaut du programme ;
+4. **le cadre suit la photo** (`cadreApercuMessage`, dans `cadre.js` qui
+   n'importe rien) : une fissure est verticale, un mur horizontal. Plus une
+   hauteur maximale, qui n'a pas de sens dans le fil mais en a une ici —
+   une photo haute y pousserait hors de l'écran ce qui vient d'être dit.
+
+##### `padding: 0` n'annule PAS `paddingVertical`
+
+Trouvé à l'œil, sur une capture : la photo apparaissait au milieu d'un
+cadre sombre épais — une image encadrée, pas une photo envoyée.
+
+> **React Native aplatit les styles par PRÉCISION, pas par ordre.** La
+> forme longue (`paddingVertical`) l'emporte sur la forme courte
+> (`padding`), où qu'elle soit écrite dans le tableau de styles. Pour
+> annuler, il faut annuler **ce qu'on a posé**.
+
+Et `overflow: 'hidden'` va avec : sans lui, l'image dépasse du rayon de la
+bulle et les angles redeviennent vifs — or une bulle flotte, donc elle
+s'arrondit.
+
 #### Ce qui n'a PAS été vérifié
 
 Le choix du fichier passe par l'application **Fichiers** ou **Photos**

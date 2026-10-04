@@ -2,7 +2,7 @@
  * 5b. Messages — détail d'une conversation.
  * Bulles à droite pour moi, à gauche pour l'artisan. (.conv-wrap du prototype)
  */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, Pressable, KeyboardAvoidingView, Platform, Linking, StyleSheet,
 } from 'react-native';
@@ -12,7 +12,9 @@ import ChampLocal from '../components/ChampLocal';
 import { Send, Flag, AlertTriangle, FileText, Paperclip, X } from '../components/icons';
 import { choisirPieceJointe } from '../lib/media';
 import ChoixPiece from '../components/ChoixPiece';
-import { refusPiece, urlPiece } from '../lib/api';
+import Media from '../components/Media';
+import { cadreApercuMessage } from '../lib/cadre';
+import { refusPiece, urlPiece, urlsPieces } from '../lib/api';
 import * as retour from '../lib/retour';
 import { messageClair } from '../lib/erreurs';
 
@@ -31,7 +33,67 @@ export function poidsLisible(octets) {
  * minutes. Une adresse éternelle posée dans une conversation finirait par
  * circuler toute seule.
  */
-function PieceJointe({ piece, clair, onErreur }) {
+export function estPhoto(piece) {
+  return !!piece && typeof piece.type === 'string' && piece.type.startsWith('image/');
+}
+
+/**
+ * UNE PHOTO SE VOIT, ELLE NE SE LIT PAS.
+ *
+ * Demandé par le propriétaire le 04/10/2026 : « je préfère que la photo se
+ * voie directement sur la conversation ». Et c'est juste : un nom de
+ * fichier comme « photo-2026-10-04-1530.jpg » ne porte AUCUNE information.
+ * Sur un chantier, la photo EST le message — « regarde cette fissure » —,
+ * alors qu'un devis en PDF, lui, se reconnaît à son nom.
+ *
+ * LA FORME SUIT LA PHOTO, entre deux bornes (`cadrePhoto`, la même règle
+ * que le fil) : une fissure est verticale, un mur est horizontal, et aucun
+ * cadre fixe ne convient aux deux. Tant que l'image n'est pas chargée, le
+ * carré — la forme la plus fréquente, donc celle qui bougera le moins.
+ *
+ * ET UNE HAUTEUR MAXIMALE, qui n'est pas dans `cadre.js` : dans le fil, une
+ * photo haute coûte un geste de défilement ; dans une conversation, elle
+ * pousse hors de l'écran les messages qui l'entourent, et on perd le fil de
+ * ce qui se dit.
+ */
+const HAUTEUR_MAX_APERCU = 260;
+
+function ApercuPhoto({ piece, apercu, clair, onOuvrir, ouverture }) {
+  const [rapport, setRapport] = useState(null);
+  const mesurer = useCallback((r) => setRapport(r), []);
+
+  /* Tant que l'adresse signée n'est pas arrivée — ou si elle n'arrive
+     jamais, fichier retiré, droit refusé —, on garde la ligne « nom +
+     poids ». Elle reste parfaitement utilisable : on peut toujours toucher
+     pour ouvrir. Un trou gris, lui, ressemblerait à une panne. */
+  if (!apercu) return null;
+
+  const { cadre, largeur } = cadreApercuMessage(
+    rapport, LARGEUR_PIECE + 2 * S.md, HAUTEUR_MAX_APERCU,
+  );
+
+  return (
+    <Pressable
+      onPress={onOuvrir}
+      accessibilityRole="imagebutton"
+      accessibilityLabel={`Photo ${piece.nom || ''} — toucher pour l’agrandir`}
+      style={({ pressed }) => [pressed && APPUI.plein]}
+    >
+      <Media
+        media={apercu}
+        onRatio={mesurer}
+        style={{ width: largeur, aspectRatio: cadre }}
+      />
+      {!!ouverture && (
+        <Text style={[s.piecePoids, s.enCours, clair && { color: 'rgba(255,255,255,0.75)' }]}>
+          Ouverture…
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
+function PieceJointe({ piece, apercu, clair, onErreur }) {
   const [ouverture, setOuverture] = useState(false);
 
   const ouvrir = async () => {
@@ -46,6 +108,21 @@ function PieceJointe({ piece, clair, onErreur }) {
       if (onErreur) onErreur(messageClair(e));
     } finally { setOuverture(false); }
   };
+
+  /* UNE PHOTO SE MONTRE, UN DOCUMENT SE NOMME. Le nom d'une photo ne dit
+     rien, celui d'un devis dit tout — et un PDF n'a de toute façon pas de
+     vignette. */
+  if (estPhoto(piece) && apercu) {
+    return (
+      <ApercuPhoto
+        piece={piece}
+        apercu={apercu}
+        clair={clair}
+        ouverture={ouverture}
+        onOuvrir={ouvrir}
+      />
+    );
+  }
 
   return (
     <Pressable
@@ -74,7 +151,15 @@ function PieceJointe({ piece, clair, onErreur }) {
  * l'écran se redessine. `memo` l'en empêche tant que le message n'a pas
  * changé — ce qui, pour un message déjà envoyé, n'arrive jamais.
  */
-const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocuteur, onErreur }) {
+const Bulle = React.memo(function Bulle({
+  m, apercu, onRenvoyer, onSignaler, interlocuteur, onErreur,
+}) {
+  /* UNE BULLE-PHOTO N'A PAS DE MARGE. Avec le remplissage ordinaire, la
+     photo apparaissait au milieu d'un cadre sombre épais : on dirait une
+     image encadrée, pas une photo envoyée. Le texte, lui, garde sa marge —
+     collé au bord, il serait illisible. */
+  const photoVisible = estPhoto(m.piece) && !!apercu;
+
   return (
     <View style={s.rangee}>
       {/* `flex: 1` N'EST PAS DÉCORATIF ICI. Sans lui, ce bloc se dimensionne
@@ -88,16 +173,28 @@ const Bulle = React.memo(function Bulle({ m, onRenvoyer, onSignaler, interlocute
       }}>
         <View style={[
           s.bubble, m.from === 'moi' && s.bubbleMoi,
+          photoVisible && s.bubblePhoto,
           m.etat === 'echec' && s.bubbleEchec,
         ]}>
           {!!m.piece && (
-            <PieceJointe piece={m.piece} clair={m.from === 'moi'} onErreur={onErreur} />
+            <PieceJointe
+              piece={m.piece}
+              apercu={apercu}
+              clair={m.from === 'moi'}
+              onErreur={onErreur}
+            />
           )}
           {/* Un message qui ne porte QU'un fichier n'a pas de texte : la
               base l'autorise (section 28), et une ligne vide laisserait un
               blanc sous la pièce. */}
           {!!(m.texte || '').trim() && (
-            <Text style={[s.bubbleText, m.from === 'moi' && { color: '#fff' }]}>{m.texte}</Text>
+            <Text style={[
+              s.bubbleText,
+              photoVisible && s.texteSousPhoto,
+              m.from === 'moi' && { color: '#fff' },
+            ]}>
+              {m.texte}
+            </Text>
           )}
         </View>
 
@@ -200,6 +297,43 @@ export default function ConversationScreen({
       setEnvoiEnCours(false);
     }
   };
+  /* LES APERÇUS DES PHOTOS, EN UNE SEULE REQUÊTE POUR TOUTE LA
+     CONVERSATION.
+     L'espace est privé : une photo ne s'affiche qu'avec une adresse
+     signée. Une par bulle ferait vingt requêtes sur une conversation de
+     vingt photos — sur un chantier en 4G, ça se sent. `urlsPieces()` les
+     signe toutes d'un coup.
+     On ne redemande QUE ce qu'on n'a pas : la liste des chemins manquants
+     ne change pas tant qu'aucune photo n'arrive, donc l'effet ne repart
+     pas en boucle. */
+  const [apercus, setApercus] = useState({});
+  const aSigner = useMemo(() => {
+    const vus = new Set();
+    (conversation.messages || []).forEach((m) => {
+      if (estPhoto(m.piece) && m.piece.chemin && !apercus[m.piece.chemin]) {
+        vus.add(m.piece.chemin);
+      }
+    });
+    return [...vus].sort().join('|');
+  }, [conversation.messages, apercus]);
+
+  useEffect(() => {
+    if (!aSigner) return undefined;
+    let vivant = true;
+    urlsPieces(aSigner.split('|'))
+      .then((par) => {
+        /* Un écran démonté pendant la requête ne doit pas poser son état :
+           c'est l'avertissement React qu'on voit sinon en quittant vite une
+           conversation. */
+        if (vivant && Object.keys(par).length) setApercus((a) => ({ ...a, ...par }));
+      })
+      /* UNE VIGNETTE QUI MANQUE N'EST PAS UNE PANNE : la bulle retombe sur
+         la ligne « nom + poids », et on peut toujours toucher pour ouvrir.
+         Un bandeau rouge, lui, ferait croire que le message est perdu. */
+      .catch(() => {});
+    return () => { vivant = false; };
+  }, [aSigner]);
+
   /* La liste est INVERSÉE : on lui donne donc les messages à l'envers, du
      plus récent au plus ancien. `useMemo` pour ne pas refabriquer ce
      tableau à chaque frappe — ce serait reprendre d'une main ce que le
@@ -237,6 +371,12 @@ export default function ConversationScreen({
         renderItem={({ item }) => (
           <Bulle
             m={item}
+            /* ON PASSE UNE CHAÎNE, PAS LE DICTIONNAIRE. `Bulle` est
+               mémorisée : lui donner l'objet entier la ferait redessiner à
+               chaque nouvelle adresse signée, pour les vingt bulles à la
+               fois. C'est le piège du lot 4, rencontré avec
+               `jyAiRepondu`. */
+            apercu={item.piece ? apercus[item.piece.chemin] : undefined}
             onRenvoyer={onRenvoyer}
             onSignaler={onSignaler}
             interlocuteur={interlocuteur}
@@ -330,6 +470,18 @@ const s = StyleSheet.create({
     maxWidth: '75%', alignSelf: 'flex-start',
   },
   bubbleMoi: { backgroundColor: C.ink, alignSelf: 'flex-end', borderColor: C.ink },
+  /* DEUX PIÈGES DANS CES TROIS VALEURS, et les deux se voient à l'œil.
+
+     1. `padding: 0` N'ANNULE PAS `paddingVertical`. React Native aplatit
+        les styles par PRÉCISION, pas par ordre : la forme longue l'emporte
+        sur la forme courte, où qu'elle soit écrite. Une bulle-photo gardait
+        donc son cadre sombre de 8 × 12 px, et la photo avait l'air encadrée
+        plutôt qu'envoyée. Il faut annuler ce qu'on a posé.
+     2. `overflow: 'hidden'` fait suivre les coins de la bulle à la photo.
+        Sans lui, l'image dépasse du rayon et les angles redeviennent
+        vifs — or une bulle flotte, donc elle s'arrondit. */
+  bubblePhoto: { paddingVertical: 0, paddingHorizontal: 0, overflow: 'hidden' },
+  texteSousPhoto: { paddingVertical: S.sm, paddingHorizontal: S.md },
   bubbleText: { fontSize: T.corps, color: C.ink, fontFamily: F.inter },
   inputRow: {
     flexDirection: 'row', gap: 8, paddingVertical: 10, paddingHorizontal: 12,
