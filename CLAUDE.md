@@ -3639,6 +3639,162 @@ Rien de ce qui demande un navigateur ou un téléphone n'y est, et c'est dit
 exprès : les captures, les gestes au doigt et la fluidité réelle restent à la
 main.
 
+### Où se passe une publication — le socle du fil (05/10/2026)
+
+Section 32 de `schema.sql`, `npm run verifier-lieu`. Premier lot de la
+refonte de la recherche et du divertissement, décidée avec le propriétaire.
+
+**Le fil n'avait aucun filtre.** Pas « un filtre perfectible » :
+
+```js
+supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(20)
+```
+
+Tant qu'il y a sept artisans, personne ne s'en aperçoit. À mille, un
+particulier de Marseille regarde les chantiers de Lille. Et le relevé sur la
+vraie base disait que **rien ne pourrait fonctionner même en écrivant
+l'écran parfaitement** :
+
+| | avant ce lot |
+|---|---|
+| colonnes de coordonnées sur `posts` | **aucune** |
+| particuliers localisés | **1 sur 5** |
+| un artisan qui vient de s'inscrire | **aucune coordonnée** |
+
+> **Un filtre sans coordonnées est le « bouton §18 »** : un écran qui a
+> l'air de servir et qui ne peut rien rendre. On pose le LIEU d'abord.
+
+#### `ChampVille` n'était demandé qu'aux artisans
+
+Il vivait dans la branche `estPro ? (…) : (…)` du formulaire : un
+particulier ne donnait **que son nom**. Il est sorti de la branche, et il
+est devenu **obligatoire pour les deux** — ce document met en garde contre
+l'allongement de ce formulaire, et c'est pourquoi le téléphone n'y est
+toujours pas ; la ville, elle, est le champ qui rend l'application utile dès
+la première seconde.
+
+#### PostgreSQL ne sait pas appeler la Base Adresse Nationale
+
+C'est tout le raisonnement de ce lot, et il explique le trou connu depuis le
+05/10 au matin : `completerLieu()` ne tournait qu'à l'enregistrement du
+PROFIL, donc un artisan qui venait de s'inscrire n'apparaissait dans
+**aucune** recherche par secteur tant qu'il n'avait pas ouvert « Modifier mon
+profil » une fois.
+
+> **`handleSignUp` complète le lieu AVANT de créer le compte**, et range les
+> coordonnées dans les métadonnées, que le déclencheur voit au moment
+> d'insérer les deux fiches. Même endroit et même raison que l'annonce et le
+> profil : là où il y a déjà une attente visible.
+>
+> **Et l'échec ne bloque rien.** Un réseau coupé ne doit pas empêcher de
+> créer un compte — même règle que le vibreur de `retour.js`. Sans
+> coordonnées on n'apparaît pas dans une recherche par secteur ; sans compte,
+> on n'apparaît nulle part.
+
+**Vérifié au navigateur, sur la VRAIE base, en TAPANT la ville à la main** —
+c'est-à-dire sans toucher aucune suggestion, le cas qui ne donnait jamais de
+coordonnées : `ville = Lambesc`, `code_postal = 13410`,
+`latitude = 43.648937`, `longitude = 5.258868`, et **zéro écriture vers
+`users` par l'application**.
+
+#### Une coordonnée illisible ne coûte pas un compte
+
+Ces métadonnées sont écrites par le CLIENT. Un `::double precision` posé sur
+« nulle part » lèverait une erreur, et cette erreur **ferait échouer la
+création du compte** — pour une métadonnée malformée. `coord_ou_null()` rend
+`null`, jamais une erreur. Même règle que les métiers inventés de la
+section 31.
+
+> **La borne compte autant que le format.** 500 est un nombre parfaitement
+> valide et n'est pas une latitude. Vérifié sur la vraie base :
+> `coord_ou_null('43.6508', 90)` → 43.6508, `'quelque part'` → null,
+> `'500'` → null.
+
+Et **les deux coordonnées ou aucune**, des deux côtés : une latitude seule ne
+situe rien, et laisserait une ligne qui a l'air placée.
+
+#### `posts.ville` ne peut PAS servir à filtrer
+
+Elle existe depuis le premier jour, et c'est un champ de **texte libre** du
+formulaire de publication, **vide par défaut**. Filtrer à 20 km sur ce que
+quelqu'un a tapé à la main, ce n'est pas filtrer. D'où deux colonnes, et pas
+une jointure sur la fiche de l'auteur :
+
+> **Un artisan qui déménage ne déplace pas ses anciens chantiers.** La
+> publication dit où le travail a été fait, à ce moment-là. Une jointure les
+> ferait tous bouger ensemble.
+
+Le champ est maintenant **pré-rempli depuis la fiche** et **ne se vide plus
+après une publication** : on publie trois photos du même chantier à la
+suite, et un champ qu'on retape est un champ qu'on finit par laisser vide.
+
+#### Le déclencheur est le PLANCHER, pas le mécanisme
+
+`pose_le_lieu_du_post()` fait hériter la publication de la commune déclarée
+par son auteur quand l'application n'a pas pu la placer : réseau coupé, BAN
+muette, vieille version, insertion depuis l'éditeur SQL. Vérifié sur la
+vraie base, les trois cas :
+
+| publication envoyée | résultat |
+|---|---|
+| sans rien | Aix-en-Provence (13), 43.5297 / 5.4474 — héritées |
+| avec ses propres coordonnées | **Lille (59), 50.6292 / 3.0573 — intactes** |
+| avec une seule coordonnée | on repart de la fiche |
+
+**Une publicité reste sans lieu, et c'est voulu pour l'instant.**
+`is_ad = true` n'a pas d'auteur : il n'y a rien à hériter. Elle sortira d'un
+fil filtré par secteur, exactement comme une annonce sans coordonnées sort
+de la Place des pros — « pas de coordonnées » veut dire « on ne sait pas
+où ». **Le jour où il y aura de vrais annonceurs, ça ne conviendra plus** :
+une marque nationale voudra être vue partout, et ce sera une DÉCISION, avec
+son lot. Aujourd'hui il y a deux lignes de démonstration et aucun annonceur.
+
+#### Le rattrapage, et pourquoi il n'est pas optionnel
+
+Seize publications sans coordonnées. **Sans rattrapage, poser le filtre
+ferait disparaître tout le contenu de la base** — et ça ressemblerait trait
+pour trait à un filtre cassé. Appliqué sur la vraie base : **14 publications
+sur 16 placées** (les 2 restantes sont les publicités), et `ville` passée de
+8 à 14.
+
+#### Un contrôle qui ne vise pas la bonne occurrence
+
+Deux fois dans ce lot, et c'est la même famille que le
+`insert into … \);` de la veille :
+
+1. `mode === 'inscription'` apparaît **neuf fois** dans `AuthScreen` ; la
+   première est dans `valider()`, loin au-dessus du formulaire. Le contrôle
+   cherchait `<ChampVille` dans du code de validation ;
+2. `update public.posts p` apparaît **deux fois** dans `schema.sql` — le
+   rattrapage des compteurs de commentaires le fait déjà.
+
+Les deux fois, le contrôle a crié au défaut alors que le code était juste.
+Dans l'autre sens, cinq fois déjà, il a passé au vert sans rien éprouver.
+
+> **Et un contrôle se vérifie EN CASSANT ce qu'il surveille.** Le premier
+> jet disait « le champ ville vient APRÈS la branche réservée aux pros ».
+> Éprouvé en remettant le défaut à la main — un `{estPro && …}` posé juste
+> après la branche —, **il passait au vert** : le champ était bien après, et
+> toujours réservé aux pros. Il regarde désormais ce qu'il y a ENTRE les
+> deux.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un vrai PostgreSQL 16, les onze cas de
+`supabase/essais-section-32.sql`, les 32 contrôles,
+`npx expo export --platform ios`. Puis sur la VRAIE base : la migration
+appliquée par le connecteur, les trois comportements du déclencheur, et une
+inscription complète **au navigateur**, avec trois comptes jetables
+supprimés dans la même session (0 restant, base revenue à 13 comptes /
+7 fiches / 16 publications).
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone, et le
+clavier qui s'ouvre sous le champ ville du formulaire d'inscription — il n'y
+a pas de clavier dans ce navigateur. Et **il reste à construire ce à quoi ce
+lieu sert** : le filtre lui-même. Une colonne remplie que personne ne lit
+est exactement le défaut du 01/10 ; celui-ci ne durera que le temps du lot
+suivant.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

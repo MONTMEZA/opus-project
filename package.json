@@ -60,6 +60,7 @@
     "verifier-retour": "node scripts/verifier-retour.mjs",
     "verifier-demandes": "node scripts/verifier-demandes.mjs",
     "verifier-etats": "node scripts/verifier-etats.mjs",
+    "verifier-lieu": "node scripts/verifier-lieu.mjs",
     "verifier-listes": "node scripts/verifier-listes.mjs",
     "verifier-cibles": "node scripts/verifier-cibles.mjs",
     "verifier-echelles": "node scripts/verifier-echelles.mjs",

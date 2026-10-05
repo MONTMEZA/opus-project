@@ -1311,6 +1311,44 @@ drop policy if exists "suppression de mes fichiers" on storage.objects;
 create policy "suppression de mes fichiers" on storage.objects
   for delete using ((storage.foldername(name))[1] = auth.uid()::text);
 
+-- --------------------------------------------------------------------------
+--  UNE COORDONNÉE, OU RIEN — et surtout pas une erreur
+--
+--  Les coordonnées d'une inscription arrivent dans les métadonnées du
+--  compte, donc écrites par le CLIENT. Un `::double precision` posé
+--  directement sur « abc » lèverait une erreur, et cette erreur ferait
+--  ÉCHOUER LA CRÉATION DU COMPTE — pour une métadonnée malformée.
+--
+--  C'est exactement la règle déjà tenue pour les métiers inventés : on
+--  retombe sur une valeur sûre au lieu de coûter un compte à quelqu'un.
+--  `null` est cette valeur sûre : un lieu sans coordonnées n'apparaît pas
+--  dans une recherche par secteur, ce qui est gênant ; une inscription
+--  refusée est pire.
+--
+--  La borne compte autant que le format. 500 est un nombre parfaitement
+--  valide et n'est pas une latitude ; la laisser entrer placerait quelqu'un
+--  nulle part, et les calculs de distance ne s'en plaindraient pas.
+-- --------------------------------------------------------------------------
+create or replace function public.coord_ou_null(brut text, borne double precision)
+returns double precision
+language sql immutable set search_path = public as $$
+  select case
+    when brut is null then null
+    when btrim(brut) !~ '^-?[0-9]{1,3}(\.[0-9]{1,15})?$' then null
+    when abs(btrim(brut)::double precision) > borne then null
+    else btrim(brut)::double precision
+  end
+$$;
+
+comment on function public.coord_ou_null(text, double precision) is
+  'Lit une coordonnée écrite par le client. Rend null — jamais une erreur — '
+  'si ce n''est pas un nombre, ou s''il sort des bornes : une métadonnée '
+  'malformée ne doit pas faire échouer une inscription.';
+
+grant execute on function public.coord_ou_null(text, double precision)
+  to anon, authenticated;
+
+
 -- ==========================================================================
 --  13. CRÉATION AUTOMATIQUE DES FICHES, À L'INSCRIPTION
 --
@@ -1330,10 +1368,44 @@ declare
   le_type     text;
   la_cgu      text;
   mes_metiers text[];
+  la_ville    text;
+  le_cp       text;
+  la_lat      double precision;
+  la_lon      double precision;
 begin
   meta    := coalesce(new.raw_user_meta_data, '{}'::jsonb);
   le_type := coalesce(meta ->> 'type', 'particulier');
   la_cgu  := nullif(btrim(coalesce(meta ->> 'cgu', '')), '');
+
+  -- LE LIEU VOYAGE AUSSI, ET POUR TOUT LE MONDE — 05/10/2026.
+  --
+  -- Un particulier ne donnait que son nom à l'inscription : il n'avait donc
+  -- ni commune ni coordonnées, et aucune recherche « autour de moi » ne
+  -- pouvait fonctionner pour lui. Mesuré avant ce lot : 1 particulier sur 5
+  -- avait des coordonnées.
+  --
+  -- Et les coordonnées ne peuvent PAS être calculées ici : PostgreSQL ne
+  -- sait pas appeler la Base Adresse Nationale. C'est l'application qui
+  -- appelle `completerLieu()` AVANT de créer le compte et qui les range
+  -- dans les métadonnées.
+  --
+  -- Elles sont donc écrites par le CLIENT, comme le reste de ce formulaire.
+  -- Ce que ça permet, et c'est acceptable : se déclarer ailleurs qu'où l'on
+  -- est — exactement ce qu'on pouvait déjà faire en tapant une autre ville.
+  -- Ce que ça ne permet pas : obtenir un droit. `coord_ou_null()` refuse ce
+  -- qui n'est pas un nombre dans les bornes, en rendant `null` plutôt qu'en
+  -- faisant ÉCHOUER la création du compte. Même règle que les métiers
+  -- inventés : une métadonnée malformée ne doit pas coûter un compte.
+  la_ville := coalesce(meta ->> 'ville', '');
+  le_cp    := nullif(btrim(coalesce(meta ->> 'code_postal', '')), '');
+  la_lat   := public.coord_ou_null(meta ->> 'latitude', 90);
+  la_lon   := public.coord_ou_null(meta ->> 'longitude', 180);
+  -- Les deux ou aucune : une latitude seule ne situe rien, et laisserait une
+  -- ligne à moitié placée que tout calcul de distance ignorerait en silence.
+  if la_lat is null or la_lon is null then
+    la_lat := null;
+    la_lon := null;
+  end if;
 
   -- 1. La fiche utilisateur, pour tout le monde.
   --
@@ -1341,14 +1413,20 @@ begin
   --    enregistrait APRÈS l'inscription, donc jamais quand la confirmation
   --    par e-mail était demandée. Une trace légale perdue en silence.
   --    Ici, l'acceptation est enregistrée au moment même où le compte naît.
-  insert into public.users (id, type, nom, email, cgu_version, cgu_acceptees_le)
+  insert into public.users
+    (id, type, nom, email, cgu_version, cgu_acceptees_le,
+     ville, code_postal, latitude, longitude)
   values (
     new.id,
     le_type,
     coalesce(meta ->> 'nom', 'Vous'),
     new.email,
     la_cgu,
-    case when la_cgu is not null then now() end
+    case when la_cgu is not null then now() end,
+    nullif(la_ville, ''),
+    le_cp,
+    la_lat,
+    la_lon
   )
   on conflict (id) do nothing;
 
@@ -1373,15 +1451,19 @@ begin
     end if;
 
     insert into public.professional_profiles
-      (id, nom, entreprise, metier, metiers, ville, verification_statut)
+      (id, nom, entreprise, metier, metiers, ville, verification_statut,
+       code_postal, latitude, longitude)
     values (
       new.id,
       coalesce(meta ->> 'nom', ''),
       coalesce(nullif(btrim(coalesce(meta ->> 'entreprise', '')), ''), 'Mon entreprise'),
       mes_metiers[1],
       mes_metiers,
-      coalesce(meta ->> 'ville', ''),
-      'non_soumis'
+      la_ville,
+      'non_soumis',
+      le_cp,
+      la_lat,
+      la_lon
     )
     on conflict (id) do nothing;
   end if;
@@ -5472,3 +5554,171 @@ comment on function public.fiche_pro_indestructible() is
   'tables en dépendent en cascade, dont les avis écrits par des TIERS. '
   'Laisse passer la cascade venue de la suppression de compte, reconnue à '
   'l''absence de la ligne parente dans public.users.';
+
+
+-- ==========================================================================
+--  32. OÙ SE PASSE UNE PUBLICATION — 05/10/2026
+--
+--  LE CONSTAT
+--  ----------
+--  Le fil n'a aucun filtre. Pas « un filtre perfectible » : la requête est
+--
+--      select * from posts order by created_at desc limit 20
+--
+--  Tant qu'il y a sept artisans, personne ne s'en aperçoit. À mille, un
+--  particulier de Marseille regarde les chantiers de Lille.
+--
+--  Et avant d'écrire le moindre écran de recherche, le relevé sur la vraie
+--  base dit que RIEN ne pourrait fonctionner :
+--
+--      posts : aucune colonne de coordonnées
+--      1 particulier sur 5 a des coordonnées
+--      un artisan qui vient de s'inscrire n'en a aucune
+--
+--  C'est la même famille que les trois tables du 01/10 écrites et jamais
+--  relues, et que `annonces_pro.medias` du 04/10 lue et jamais écrite : un
+--  bout de chaîne qui ne touche rien, et aucune erreur pour le dire.
+--
+--  CE QUE CETTE SECTION POSE, ET RIEN DE PLUS
+--  ------------------------------------------
+--  Le LIEU. Le filtre vient après : un filtre sans coordonnées est un
+--  écran qui ne peut rien rendre, et c'est précisément le genre de
+--  « bouton §18 » que ce projet retire avant de le livrer.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  32.1  Une publication porte son lieu
+--
+--  POURQUOI DES COLONNES, ET PAS UNE JOINTURE SUR LA FICHE DE L'AUTEUR
+--  -------------------------------------------------------------------
+--  Ce n'est pas une optimisation, c'est une question de sens : un artisan
+--  qui déménage ne déplace pas ses anciens chantiers. La publication dit
+--  où le travail a été fait, à ce moment-là. Une jointure, elle, les
+--  ferait tous bouger ensemble le jour où il change de commune.
+--
+--  ET PAS DE `posts.ville` POUR FILTRER
+--  ------------------------------------
+--  Elle existe depuis le début, et c'est un champ de TEXTE LIBRE du
+--  formulaire de publication, vide par défaut (`createVille` vaut `''`).
+--  Filtrer à 20 km sur ce que quelqu'un a tapé à la main ne filtre rien.
+--
+--  CE QUE CES COLONNES NE SONT PAS
+--  -------------------------------
+--  Une adresse. Ce sont les coordonnées du CENTRE DE LA COMMUNE que
+--  l'artisan a lui-même déclarée — la règle posée avec la carte le
+--  30/09/2026, et c'est pour la même raison : beaucoup d'artisans
+--  déclarent l'adresse de leur maison.
+-- --------------------------------------------------------------------------
+alter table public.posts add column if not exists latitude  double precision;
+alter table public.posts add column if not exists longitude double precision;
+
+-- La latitude d'abord : c'est elle qui coupe le plus (la France fait 8°
+-- de haut et 12° de large, mais un degré de longitude y vaut 0,73 degré de
+-- latitude en kilomètres). Le filtre à venir pose un cadre sur les deux.
+create index if not exists idx_posts_lieu on public.posts (latitude, longitude)
+  where latitude is not null;
+
+-- Le métier avec la date : c'est l'autre moitié du filtre, et l'ordre
+-- compte — on cherche « les maçons, du plus récent au plus ancien ».
+create index if not exists idx_posts_metier_date
+  on public.posts (metier, created_at desc) where metier is not null;
+
+
+-- --------------------------------------------------------------------------
+--  32.2  Le lieu est posé par la BASE, pas par l'écran
+--
+--  L'application envoie bien des coordonnées — elle appelle
+--  `completerLieu()` au moment de publier, comme elle le fait déjà pour
+--  une annonce depuis le 04/10. Mais ce déclencheur est le PLANCHER :
+--  réseau coupé, Base Adresse Nationale muette, vieille version de
+--  l'application, insertion depuis l'éditeur SQL — dans tous ces cas la
+--  publication hérite de la fiche de son auteur au lieu de n'être nulle
+--  part.
+--
+--  C'est la règle du projet : les règles métier sont tenues par la base.
+--
+--  UNE PUBLICITÉ N'A PAS DE LIEU, ET C'EST VOULU POUR L'INSTANT
+--  -----------------------------------------------------------
+--  `is_ad = true` n'a pas d'auteur (la contrainte
+--  `post_a_un_auteur_ou_est_une_pub` l'exige), donc rien à hériter. Elle
+--  sortira d'un fil filtré par secteur, exactement comme une annonce sans
+--  coordonnées sort de la Place des pros : « pas de coordonnées » veut
+--  dire « on ne sait pas où », et prétendre qu'elle est à 10 km serait
+--  inventer.
+--
+--  LE JOUR OÙ IL Y AURA DE VRAIS ANNONCEURS, ÇA NE CONVIENDRA PLUS — une
+--  marque nationale voudra être vue partout. Ce sera une DÉCISION, avec
+--  son lot : une publicité qui déclare « toute la France » plutôt qu'une
+--  publicité qu'on oublie de filtrer. Aujourd'hui il y a deux lignes de
+--  démonstration et aucun annonceur : on ne construit pas la moitié d'un
+--  mécanisme pour personne.
+-- --------------------------------------------------------------------------
+create or replace function public.pose_le_lieu_du_post()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare fiche record;
+begin
+  -- Une publicité n'a pas d'auteur : il n'y a rien à hériter.
+  if new.author_id is null then
+    return new;
+  end if;
+
+  -- Déjà placée par l'application, avec les deux coordonnées : on n'y
+  -- touche pas. Une seule des deux ne situe rien — on repart de la fiche.
+  if new.latitude is not null and new.longitude is not null then
+    return new;
+  end if;
+
+  select pp.latitude, pp.longitude, pp.ville, pp.code_postal
+    into fiche
+    from public.professional_profiles pp
+   where pp.id = new.author_id;
+
+  if fiche.latitude is not null and fiche.longitude is not null then
+    new.latitude  := fiche.latitude;
+    new.longitude := fiche.longitude;
+  end if;
+
+  -- Et la commune AFFICHÉE suit, quand le formulaire l'a laissée vide :
+  -- une publication placée à 43,6° / 5,3° et qui n'affiche aucune ville
+  -- est illisible, alors que l'information est là.
+  if nullif(btrim(coalesce(new.ville, '')), '') is null then
+    new.ville := nullif(btrim(coalesce(fiche.ville, '')), '');
+  end if;
+
+  return new;
+end; $$;
+
+-- `create or replace trigger` et non `drop` + `create` : le connecteur
+-- Supabase refuse tout ordre qui COMMENCE par `drop` (section 24), et
+-- cette forme est de toute façon meilleure — il n'existe aucun instant
+-- où le déclencheur serait absent, donc aucune publication déposée à cet
+-- instant-là ne resterait sans lieu.
+create or replace trigger trg_pose_le_lieu_du_post
+  before insert on public.posts
+  for each row execute function public.pose_le_lieu_du_post();
+
+comment on function public.pose_le_lieu_du_post() is
+  'Place une publication sur la commune déclarée par son auteur quand '
+  'l''application n''a pas pu le faire. Ne touche jamais une publicité '
+  '(is_ad), qui n''a pas d''auteur.';
+
+
+-- --------------------------------------------------------------------------
+--  32.3  Le rattrapage des publications déjà en base
+--
+--  Seize publications existaient avant ce lot, aucune n'avait de
+--  coordonnées. Sans ce rattrapage, le filtre par secteur ferait
+--  disparaître TOUT le contenu de la base le jour où il est posé — et ça
+--  ressemblerait très exactement à un filtre cassé.
+--
+--  `where latitude is null` fait de cet ordre un no-op au second passage :
+--  `schema.sql` est rejouable, toujours.
+-- --------------------------------------------------------------------------
+update public.posts p
+   set latitude  = pp.latitude,
+       longitude = pp.longitude,
+       ville     = coalesce(nullif(btrim(coalesce(p.ville, '')), ''), pp.ville)
+  from public.professional_profiles pp
+ where pp.id = p.author_id
+   and p.latitude is null
+   and pp.latitude is not null;

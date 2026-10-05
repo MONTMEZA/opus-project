@@ -406,11 +406,38 @@ export default function OpusApp() {
    * qu'à envoyer le formulaire.
    */
   const handleSignUp = async ({
-    email, motDePasse, nom, entreprise, metiers, ville, cguVersion,
+    email, motDePasse, nom, entreprise, metiers, cguVersion,
+    ville, codePostal, codeInsee, latitude, longitude,
   }) => {
+    /* LE LIEU SE COMPLÈTE AVANT DE CRÉER LE COMPTE — 05/10/2026.
+       PostgreSQL ne sait pas appeler la Base Adresse Nationale, donc le
+       déclencheur qui crée les deux fiches ne peut pas placer le compte sur
+       une carte. C'était le trou connu : un artisan qui venait de
+       s'inscrire n'apparaissait dans AUCUNE recherche par secteur tant
+       qu'il n'avait pas ouvert « Modifier mon profil » une fois.
+
+       Même endroit et même raison que l'enregistrement du profil et la
+       publication d'une annonce : là où il y a déjà une attente visible.
+
+       ET L'ÉCHEC NE BLOQUE RIEN. Un réseau coupé ne doit pas empêcher de
+       créer un compte — même règle que le vibreur de `retour.js` et que
+       `publierAnnonce`. Sans coordonnées, la personne n'apparaît pas dans
+       une recherche par secteur ; sans compte, elle n'apparaît nulle part. */
+    let lieu = { ville, codePostal, codeInsee, latitude, longitude };
+    if (ville) {
+      try {
+        lieu = await completerLieu({
+          affichage: ville, codePostal, codeInsee, latitude, longitude,
+        });
+      } catch { /* on crée le compte sans coordonnées */ }
+    }
+
     const { session } = await api.signUp({
       email, password: motDePasse, userType: typeChoisi, nom,
-      entreprise, metiers, ville, cguVersion,
+      entreprise, metiers, cguVersion,
+      ville, codePostal: lieu.codePostal || codePostal || null,
+      latitude: lieu.latitude || null,
+      longitude: lieu.longitude || null,
     });
     if (!session) return { confirmationRequise: true };
     await start(typeChoisi);
@@ -1137,9 +1164,27 @@ export default function OpusApp() {
       }
 
       if (versLeFil) {
+        /* OÙ SE PASSE CETTE PUBLICATION — 05/10/2026.
+           `createVille` est un champ de TEXTE LIBRE : il ne porte aucune
+           coordonnée. On le complète ici, au moment de publier, exactement
+           comme `publierAnnonce` le fait depuis le 04/10 — et pas dans le
+           champ, où compléter en arrière-plan pendant la frappe ferait
+           bouger la valeur sans que personne ne l'ait demandé.
+
+           Un échec ne bloque pas la publication : le déclencheur
+           `pose_le_lieu_du_post()` (section 32) fait alors hériter la
+           publication de la commune déclarée sur la fiche. Il y a donc deux
+           filets, et le second est tenu par la base. */
+        let lieuPost = {};
+        if (createVille.trim()) {
+          try { lieuPost = await completerLieu({ affichage: createVille }); }
+          catch { lieuPost = {}; }
+        }
         const row = await api.createPost({
           type: createType, texte, media: couverture, medias: envoyes,
           musique: urlMusique, montageUrl, metier: createMetier, ville: createVille,
+          latitude: lieuPost.latitude || null,
+          longitude: lieuPost.longitude || null,
         });
         if (row) id = row.id;
       }
@@ -1168,7 +1213,12 @@ export default function OpusApp() {
         : ps));
     }
 
-    setCreateVille(''); setMedias([]); setMusique(null);
+    /* LA VILLE NE SE VIDE PLUS APRÈS UNE PUBLICATION — 05/10/2026.
+       On publie trois photos du même chantier à la suite ; la vider
+       obligeait à la retaper chaque fois, et c'est elle qui place la
+       publication sur la carte. Un champ qu'on retape est un champ
+       qu'on finit par laisser vide. */
+    setMedias([]); setMusique(null);
     // Le fil des vidéos ne montre que des vidéos : on y renvoie l'artisan
     // quand c'est là que sa publication vient d'atterrir.
     if (versLeFil) setFeedMode(FORMATS_VIDEO.has(createType) ? 'video' : 'classic');

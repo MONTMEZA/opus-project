@@ -11,10 +11,10 @@
  *   - la DESTINATION dit où elle va. Un artisan ne veut pas toujours publier :
  *     parfois il veut juste enrichir son portfolio.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import {
-  C, F, T, viser, S, GOUTTIERE,
+  C, F, T, viser, S, GOUTTIERE, interligne,
 } from '../theme';
 import { BtnMain, BtnMini, Field } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
@@ -70,6 +70,21 @@ export default function CreerScreen({
   envoi, erreur, onPublish, onErreur,
 }) {
   const [occupe, setOccupe] = useState(false);
+
+  /* LA VILLE EST PRÉ-REMPLIE DEPUIS LA FICHE — 05/10/2026.
+     Elle était vide par défaut, et c'est elle qui place la publication sur
+     la carte : vide, le chantier n'apparaissait dans aucune recherche par
+     secteur. Or personne ne retape sa ville à chaque photo.
+
+     Une seule fois par ouverture de l'écran (`villePosee`) : sans ce
+     verrou, effacer le champ volontairement le remplirait à nouveau au
+     rendu suivant, et on ne pourrait plus publier sans ville. */
+  const villePosee = useRef(false);
+  useEffect(() => {
+    if (villePosee.current || !moi || !moi.ville) return;
+    villePosee.current = true;
+    if (!createVille.trim()) setCreateVille(moi.ville);
+  }, [moi, createVille, setCreateVille]);
 
   /* LA DESCRIPTION NE VIT PLUS DANS `OpusApp`.
      Elle y était, et chaque lettre redessinait donc toute l'application —
@@ -359,7 +374,12 @@ export default function CreerScreen({
         placeholder="Choisir un métier..."
       />
 
+      <Text style={s.label}>Ville du chantier</Text>
       <Field placeholder="Ville" value={createVille} onChangeText={setCreateVille} />
+      <Text style={s.aide}>
+        Elle place la publication sur la carte, pour qu'on la trouve en
+        cherchant autour de cette commune. Pré-remplie avec la vôtre.
+      </Text>
 
       {manques.length > 0 && (
         <View style={s.manques}>
@@ -426,6 +446,9 @@ const s = StyleSheet.create({
   typeOn: { backgroundColor: C.ink, borderColor: C.ink },
   typeText: { fontSize: T.petit, color: C.muted, fontFamily: F.oswald },
   label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink, marginBottom: 6, marginTop: 6 },
+  /* Pourquoi on demande ce champ. Un champ sans raison reste vide — et
+     celui-ci place la publication sur la carte. */
+  aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, marginTop: S.xs, lineHeight: interligne(T.petit) },
 
   vide: {
     height: 120, marginVertical: 10, alignItems: 'center', justifyContent: 'center', gap: 7,

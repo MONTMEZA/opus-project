@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F, T, S, GRAD_160 } from '../theme';
+import { C, F, T, S, GRAD_160, interligne } from '../theme';
 /* La traduction des erreurs vivait ICI, enfermée : partout ailleurs dans
    l'application, le même défaut sortait en anglais. Elle est devenue
    `src/lib/erreurs.js`, et elle sait aussi reconnaître une perte de réseau —
@@ -67,6 +67,17 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
       }
       if (!estPro && !nom.trim()) {
         setErreur('Indiquez votre nom.');
+        return;
+      }
+      /* OBLIGATOIRE, ET C'EST UN CHOIX — 05/10/2026.
+         Ce document met en garde contre l'allongement de ce formulaire, et
+         c'est pour ça que le téléphone n'y est pas. La ville, elle, est le
+         champ qui rend l'application utile dès la première seconde : sans
+         elle, le fil montre les chantiers de toute la France, et « autour
+         de moi » ne peut rien rendre. Un champ, avec des propositions dès
+         la troisième lettre. */
+      if (!lieu.affichage.trim()) {
+        setErreur('Indiquez votre ville : elle sert à vous montrer ce qui se passe près de chez vous.');
         return;
       }
       if (!conditions) {
@@ -159,23 +170,36 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
               ))}
             </View>
 
-            {mode === 'inscription' && (estPro ? (
+            {mode === 'inscription' && (
               <>
-                <Text style={s.label}>Nom de l'entreprise</Text>
-                <Field value={entreprise} onChangeText={setEntreprise} placeholder="Belaïd Maçonnerie" />
+                {estPro ? (
+                  <>
+                    <Text style={s.label}>Nom de l'entreprise</Text>
+                    <Field value={entreprise} onChangeText={setEntreprise} placeholder="Belaïd Maçonnerie" />
 
-                <Text style={s.label}>Vos métiers</Text>
-                <ChoixMetiers valeurs={metiers} onChange={setMetiers} />
+                    <Text style={s.label}>Vos métiers</Text>
+                    <ChoixMetiers valeurs={metiers} onChange={setMetiers} />
+                  </>
+                ) : (
+                  <>
+                    <Text style={s.label}>Votre nom</Text>
+                    <Field value={nom} onChangeText={setNom} placeholder="Dylan M." />
+                  </>
+                )}
 
+                {/* LA VILLE EST DEMANDÉE AUX DEUX — 05/10/2026.
+                    Elle ne l'était qu'aux artisans : un particulier n'avait
+                    donc ni commune ni coordonnées, et aucune recherche
+                    « autour de moi » ne pouvait fonctionner pour lui. */}
                 <Text style={s.label}>Ville</Text>
                 <ChampVille valeur={lieu.affichage} onChange={setLieu} />
+                <Text style={s.aide}>
+                  {estPro
+                    ? "Elle place votre fiche sur la carte, au centre de la commune — jamais à votre adresse."
+                    : "Elle sert à vous montrer les artisans près de chez vous. On ne demande jamais votre adresse."}
+                </Text>
               </>
-            ) : (
-              <>
-                <Text style={s.label}>Votre nom</Text>
-                <Field value={nom} onChangeText={setNom} placeholder="Dylan M." />
-              </>
-            ))}
+            )}
 
             <Text style={s.label}>Email</Text>
             <Field
@@ -323,6 +347,10 @@ const s = StyleSheet.create({
   ongletText: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted },
 
   label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginTop: 14, marginBottom: 6 },
+  /* Pourquoi on demande ce champ. Un formulaire qui réclame sans
+     expliquer fait abandonner — et `C.muted` est la seule encre grise
+     qui tienne le contraste depuis le lot 5. */
+  aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, marginTop: S.xs, lineHeight: interligne(T.petit) },
 
   erreur: {
     fontSize: T.courant, color: C.bad, marginTop: 12, lineHeight: 16,

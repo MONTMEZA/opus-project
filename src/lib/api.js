@@ -128,16 +128,41 @@ export async function sessionLocale() {
  * sur le premier du catalogue au lieu de faire échouer l'inscription.
  */
 export async function signUp({
-  email, password, userType, nom, entreprise, metiers, ville, cguVersion,
+  email, password, userType, nom, entreprise, metiers, cguVersion,
+  ville, codePostal, latitude, longitude,
 }) {
   if (!hasSupabase) { currentUserId = 'demo-user'; return { session: true }; }
 
   const metadonnees = { type: userType, nom: nom.trim() };
   if (cguVersion) metadonnees.cgu = cguVersion;
+
+  /* LE LIEU, POUR TOUT LE MONDE — 05/10/2026.
+     Il n'était emporté que pour un artisan : un particulier ne donnait que
+     son nom, donc il n'avait ni commune ni coordonnées, et aucune recherche
+     « autour de moi » ne pouvait fonctionner pour lui. Mesuré avant ce lot :
+     1 particulier sur 5 avait des coordonnées. */
+  if (ville) metadonnees.ville = ville;
+  if (codePostal) metadonnees.code_postal = codePostal;
+
+  /* LES COORDONNÉES ARRIVENT DÉJÀ COMPLÉTÉES.
+     PostgreSQL ne sait pas appeler la Base Adresse Nationale : le
+     déclencheur `cree_fiche_utilisateur()` ne peut donc PAS les calculer.
+     C'est `handleSignUp` qui appelle `completerLieu()` juste avant, au même
+     endroit et pour la même raison que l'enregistrement du profil et la
+     publication d'une annonce — là où il y a déjà une attente visible.
+
+     Les deux ou aucune : une latitude seule ne situe rien, et laisserait
+     une ligne à moitié placée que tout calcul de distance ignorerait en
+     silence. La base tient la même règle, et c'est voulu — elle reçoit
+     aussi d'autres clients que cette application. */
+  if (latitude != null && longitude != null) {
+    metadonnees.latitude = latitude;
+    metadonnees.longitude = longitude;
+  }
+
   if (userType === 'pro') {
     if (entreprise) metadonnees.entreprise = entreprise.trim();
     if (metiers && metiers.length) metadonnees.metiers = metiers.slice(0, 4);
-    if (ville) metadonnees.ville = ville;
   }
 
   const { data, error } = await supabase.auth.signUp({
@@ -993,11 +1018,17 @@ export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
 
 export const createPost = !hasSupabase ? noop : async ({
   type, texte, media, medias = [], musique = null, montageUrl = null, metier, ville,
+  latitude = null, longitude = null,
 }) => {
   const { data, error } = await supabase.from('posts')
     .insert({
       author_id: currentUserId, type, texte, media,
       medias, musique, montage_url: montageUrl, metier, ville,
+      /* Les deux ou aucune. Avec une seule, le déclencheur
+         `pose_le_lieu_du_post()` repart de la fiche — une latitude seule ne
+         situe rien et ressemblerait pourtant à un lieu. */
+      latitude: (latitude != null && longitude != null) ? latitude : null,
+      longitude: (latitude != null && longitude != null) ? longitude : null,
     })
     .select().single();
   if (error) throw error;
