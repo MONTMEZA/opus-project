@@ -14,12 +14,13 @@ import Commentaires, { nbCommentairesDe } from './Commentaires';
 import { nomMetier } from '../lib/metiers';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
-  MessageCircle, Phone, FileText, User, Maximize, Flag,
+  MessageCircle, Phone, FileText, User, Maximize, Flag, Lightbulb, Volume2,
 } from './icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Media, { EtiquetteVideo } from './Media';
 import Carrousel from './Carrousel';
 import DoubleAppui from './DoubleAppui';
+import { porteUnVisuel } from '../lib/formats-publication';
 
 /** Les formats qui se regardent aussi en plein écran dans le fil « Vidéos ». */
 const EST_VIDEO = new Set(['video', 'montage']);
@@ -47,6 +48,34 @@ const PostCard = React.memo(function PostCard({
   const photos = (post.medias && post.medias.length)
     ? post.medias
     : (post.media ? [post.media] : []);
+
+  /* UNE PUBLICATION SANS VISUEL — le format « Texte », gardé à la demande du
+     propriétaire le 05/10/2026. Il existait depuis le premier jour et
+     personne ne s'en était jamais servi (zéro ligne sur seize), donc
+     personne n'avait vu ce qu'il donnait : `media` étant vide, la carte
+     affichait un carré de dégradé VIDE, avec la barre d'actions posée
+     dessus. Un bloc de couleur au milieu d'un fil de chantiers.
+
+     Sans visuel, la barre redescend donc sous le texte, en encre sombre :
+     elle n'a plus de photo sur laquelle se poser, donc plus de voile pour
+     la rendre lisible.
+
+     ET C'EST LE FORMAT QUI TRANCHE, pas le contenu de `media` : une
+     publication sans visuel recevait un DÉGRADÉ de couverture, donc un
+     `media` non vide, donc un cadre d'image vide. Les publications de
+     démonstration, elles, portent de vrais dégradés comme photos : on ne
+     peut donc pas trancher sur « est-ce un vrai fichier ». */
+  const sansVisuel = !estVideo && (!porteUnVisuel(post.format) || photos.length === 0);
+
+  /* L'encre des commandes dépend de CE QU'IL Y A DERRIÈRE. Sur une photo,
+     blanc sur le voile ; sur le fond clair de la carte, l'encre sombre. Un
+     blanc sur blanc ne lève aucune erreur et ne se voit qu'à l'écran. */
+  const encre = sansVisuel ? C.ink : C.surface;
+
+  /* L'ÉTIQUETTE, pas le format (section 34). Un conseil peut être une
+     vidéo, une photo, un avant/après ou du texte : il se repère à ce
+     bandeau, où qu'il soit. */
+  const estConseil = !!post.conseil;
 
   /* --- publication sponsorisée --- */
   if (post.type === 'ad') {
@@ -148,6 +177,19 @@ const PostCard = React.memo(function PostCard({
         </View>
       </View>
 
+      {/* AU-DESSUS DU TEXTE, et pas sur la photo. Un conseil se reconnaît
+          avant d'être lu — c'est tout ce qu'achète l'étiquette : une photo
+          de chantier vaut sa journée, un conseil vaut trois ans. Et le
+          marine n'est pas l'orange : dans cette application, l'orange veut
+          dire « il y a du neuf » ou « appuie ici ». Un conseil n'est ni
+          l'un ni l'autre, c'est une INFORMATION. */}
+      {estConseil && (
+        <View style={s.conseil}>
+          <Lightbulb size={12} color={C.surface} />
+          <Text style={s.conseilTexte}>Conseil de pro</Text>
+        </View>
+      )}
+
       <Text style={s.postText}>{post.texte}</Text>
       {/* DEUX APPUIS POUR AIMER. Le cœur s'envole même si c'était déjà
           aimé — sinon le geste a l'air de n'avoir rien fait et on
@@ -186,7 +228,9 @@ const PostCard = React.memo(function PostCard({
            JSX — le piège est déjà consigné dans CLAUDE.md.) */
         <View
           accessibilityRole="button"
-          accessibilityLabel="Voir la vidéo en plein écran"
+          accessibilityLabel={estConseil
+            ? 'Écouter ce conseil en plein écran'
+            : 'Voir la vidéo en plein écran'}
         >
           <Media
             media={post.media}
@@ -195,13 +239,22 @@ const PostCard = React.memo(function PostCard({
             muet
           >
             <EtiquetteVideo />
+            {/* LE FIL CLASSIQUE EST MUET — `muet` juste au-dessus, et ce
+                n'est pas négociable : une liste qui parle toute seule en
+                défilant se coupe au bout de dix secondes.
+
+                Mais un conseil en vidéo, c'est une VOIX qui explique. Sans
+                le dire, on regarde des lèvres bouger et on passe. Le plein
+                écran, lui, a le son (`Visionneuse`, `muet={false}`). */}
             <View style={s.indicePleinEcran} pointerEvents="none">
-              <Maximize size={12} color="#fff" />
-              <Text style={s.indicePleinEcranTexte}>Voir en plein écran</Text>
+              {estConseil ? <Volume2 size={12} color="#fff" /> : <Maximize size={12} color="#fff" />}
+              <Text style={s.indicePleinEcranTexte}>
+                {estConseil ? 'Conseil — touchez pour écouter' : 'Voir en plein écran'}
+              </Text>
             </View>
           </Media>
         </View>
-      ) : (
+      ) : sansVisuel ? null : (
         /* Une photo, ou plusieurs qu'on fait défiler au doigt. Avec une seule
            image, le carrousel se retire complètement : ni points, ni
            compteur. */
@@ -221,13 +274,21 @@ const PostCard = React.memo(function PostCard({
           mur blanc disparaît. Le dégradé garantit un fond sombre sous les
           commandes, quelle que soit la photo. C'est le même `Scrim` que le
           fil vidéo, pour la même raison. */}
-      <View style={s.barreSurPhoto} pointerEvents="box-none">
-        <LinearGradient
-          colors={['transparent', 'rgba(26,27,25,0.22)', 'rgba(26,27,25,0.78)']}
-          locations={[0, 0.35, 1]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+      <View
+        style={sansVisuel ? s.barreSousTexte : s.barreSurPhoto}
+        pointerEvents="box-none"
+      >
+        {/* Le voile n'a de sens que s'il y a une image dessous. Posé sur le
+            fond clair de la carte, il n'assombrirait rien et grignoterait
+            juste le texte au-dessus. */}
+        {!sansVisuel && (
+          <LinearGradient
+            colors={['transparent', 'rgba(26,27,25,0.22)', 'rgba(26,27,25,0.78)']}
+            locations={[0, 0.35, 1]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        )}
         <View style={s.actions}>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
@@ -239,13 +300,13 @@ const PostCard = React.memo(function PostCard({
             : `J'aime cette publication. ${post.likes} j'aime`}
           aria-selected={!!post.liked}
         >
-            <Heart size={17} filled={post.liked} color={post.liked ? C.accent : C.surface} />
+            <Heart size={17} filled={post.liked} color={post.liked ? C.accent : encre} />
             {/* Le NOMBRE reste blanc, seul le cœur devient orange. Le voile
                 n'est qu'à 78 % : sur une photo claire, un chiffre orange
                 deviendrait illisible, et sa lisibilité dépendrait alors de
                 la photo — ce qui n'est pas une règle, c'est un hasard.
                 Un cœur rempli dit déjà « c'est aimé ». */}
-            <Text style={s.actionText}>{post.likes}</Text>
+            <Text style={[s.actionText, sansVisuel && s.actionTexteSombre]}>{post.likes}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
@@ -255,8 +316,8 @@ const PostCard = React.memo(function PostCard({
           accessibilityLabel={`Commentaires, ${nbCommentairesDe(post)}`}
           aria-expanded={!!commentsOpen}
         >
-            <MessageSquare size={17} color={C.surface} />
-            <Text style={s.actionText}>{nbCommentairesDe(post)}</Text>
+            <MessageSquare size={17} color={encre} />
+            <Text style={[s.actionText, sansVisuel && s.actionTexteSombre]}>{nbCommentairesDe(post)}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
@@ -265,8 +326,8 @@ const PostCard = React.memo(function PostCard({
           accessibilityRole="button"
           accessibilityLabel="Partager cette publication"
         >
-            <Share2 size={16} color={C.surface} />
-            <Text style={s.actionText}>Partager</Text>
+            <Share2 size={16} color={encre} />
+            <Text style={[s.actionText, sansVisuel && s.actionTexteSombre]}>Partager</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [s.action, pressed && APPUI.discret]}
@@ -278,7 +339,7 @@ const PostCard = React.memo(function PostCard({
             : 'Enregistrer cette publication'}
           aria-selected={!!saved}
         >
-            <Bookmark size={16} filled={saved} color={saved ? C.accent : C.surface} />
+            <Bookmark size={16} filled={saved} color={saved ? C.accent : encre} />
         </Pressable>
           <View style={s.contactWrap}>
             <BtnMini label="Contacter" onPress={() => onToggleContact(post.id)} />
@@ -342,12 +403,32 @@ function ContactItem({ icon, label, onPress, last }) {
 
 const s = StyleSheet.create({
   /* Posé sur l'image, donc flottant, donc arrondi (règle dans theme.js). */
+  /* EN HAUT À DROITE, ET PLUS EN BAS — 05/10/2026, vu sur une capture.
+     Il était à `bottom: 10`, c'est-à-dire exactement sur la rangée de la
+     barre d'actions : le bouton « Contacter », calé à droite, lui passait
+     dessus et on lisait « Voi… ». Ça ne lève aucune erreur, et personne ne
+     l'avait regardé depuis que la barre est passée SUR la photo, le
+     02/10. Le libellé plus long d'un conseil l'a rendu évident.
+
+     En face de l'étiquette « Vidéo », qui est en haut à GAUCHE : les deux
+     se partagent la bande du haut, où rien d'autre ne vient. */
   indicePleinEcran: {
-    position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center',
-    gap: 4, backgroundColor: 'rgba(26,27,25,0.72)',
-    paddingVertical: 4, paddingHorizontal: S.sm, borderRadius: R.gelule,
+    position: 'absolute', right: S.sm, top: S.sm, flexDirection: 'row', alignItems: 'center',
+    gap: S.xs, backgroundColor: 'rgba(26,27,25,0.72)',
+    paddingVertical: S.xs, paddingHorizontal: S.sm, borderRadius: R.gelule,
   },
   indicePleinEcranTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: '#fff' },
+  /* L'étiquette « Conseil de pro ». Arrondie : elle FLOTTE au-dessus du
+     contenu, elle ne le porte pas (voir « Les bords » dans CLAUDE.md).
+     Le marine #1B4B6B donne 9,27 : 1 avec du blanc — mesuré au lot 5. */
+  conseil: {
+    flexDirection: 'row', alignItems: 'center', gap: S.xs,
+    alignSelf: 'flex-start', marginLeft: S.md, marginTop: S.sm,
+    backgroundColor: C.accent2, borderRadius: R.gelule,
+    paddingVertical: S.xs, paddingHorizontal: S.sm,
+  },
+  conseilTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surface },
+
   avantApres: { flexDirection: 'row', gap: 2 },
   etiquetteAA: {
     position: 'absolute', left: S.sm, top: S.sm,
@@ -377,6 +458,11 @@ const s = StyleSheet.create({
      conteneur : le voile ne doit pas intercepter le double-appui, seuls
      les boutons reçoivent la touche. */
   barreSurPhoto: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  /* SANS PHOTO, la barre n'a rien sur quoi se poser : elle reprend sa place
+     dans le flux, sous le texte, avec un filet pour la détacher. Un trait
+     VIF — c'est de la structure, pas quelque chose qui flotte. */
+  barreSousTexte: { borderTopWidth: 1, borderTopColor: C.line },
+  actionTexteSombre: { color: C.ink },
   actions: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingVertical: 10, paddingHorizontal: 12,

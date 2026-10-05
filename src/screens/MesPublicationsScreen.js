@@ -12,7 +12,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import {
-  C, F, T, CARTE,
+  C, F, T, R, S, CARTE,
 } from '../theme';
 import { BtnMini, EmptyState, SectionLabel, TextArea } from '../components/ui';
 import Media from '../components/Media';
@@ -20,7 +20,7 @@ import { apercuDe } from '../lib/cloudinary';
 import { nbCommentairesDe } from '../components/Commentaires';
 import {
   Heart, MessageSquare, Share2, Trash, RefreshCw, Grid, VideoIcon, Layers, TypeIcon,
-  Edit,
+  Edit, Lightbulb,
 } from '../components/icons';
 
 const ICONE_FORMAT = {
@@ -28,6 +28,10 @@ const ICONE_FORMAT = {
   texte: TypeIcon, conseil: TypeIcon,
 };
 
+/* `conseil` reste dans les deux tables ci-dessus, et il le faut : c'était un
+   FORMAT jusqu'au 05/10/2026 (section 34), et des lignes anciennes peuvent
+   encore le porter. Un libellé retiré afficherait « Publication » à la place,
+   sans erreur et sans que personne ne comprenne pourquoi. */
 const NOM_FORMAT = {
   photo: 'Photo', video: 'Vidéo', montage: 'Montage',
   avantapres: 'Avant/Après', texte: 'Texte', conseil: 'Conseil',
@@ -75,6 +79,17 @@ export default function MesPublicationsScreen({
                   <View style={s.formatLigne}>
                     <Icone size={12} color={C.muted} />
                     <Text style={s.format}>{NOM_FORMAT[p.format] || 'Publication'}</Text>
+                    {/* L'ÉTIQUETTE SE VOIT ICI AUSSI. C'est l'écran où
+                        l'artisan relit ce qu'il a publié : si rien ne
+                        distingue un conseil d'une photo de chantier, la case
+                        cochée dix minutes plus tôt n'a laissé aucune trace
+                        visible, et on arrête de la cocher. */}
+                    {!!p.conseil && (
+                      <View style={s.conseil}>
+                        <Lightbulb size={10} color={C.surface} />
+                        <Text style={s.conseilTexte}>Conseil</Text>
+                      </View>
+                    )}
                     <Text style={s.temps}>· {p.time}</Text>
                   </View>
 
@@ -188,6 +203,15 @@ const s = StyleSheet.create({
   infos: { flex: 1, minWidth: 0 },
   formatLigne: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   format: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
+  /* La même étiquette que dans le fil, en plus petit : même couleur, même
+     forme. Deux dessins pour la même chose, et on ne reconnaît ni l'un ni
+     l'autre. */
+  conseil: {
+    flexDirection: 'row', alignItems: 'center', gap: S.xs,
+    backgroundColor: C.accent2, borderRadius: R.gelule,
+    paddingHorizontal: S.xs,
+  },
+  conseilTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surface },
   temps: { fontSize: T.petit, color: C.muted, fontFamily: F.inter },
   texte: { fontSize: T.corps, color: C.ink, fontFamily: F.inter, lineHeight: 18, marginTop: 4 },
   chiffres: { flexDirection: 'row', gap: 14, marginTop: 6 },

@@ -30,6 +30,9 @@ export const Send = mk(Feather, 'send');
 export const Grid = mk(Feather, 'grid');
 export const Play = mk(Feather, 'play');
 export const Maximize = mk(Feather, 'maximize');
+/* Pour DIRE qu'il y a du son. Le fil classique est muet : sans ce
+   repère, un conseil en voix off ressemble à des lèvres qui bougent. */
+export const Volume2 = mk(Feather, 'volume-2');
 export const Move = mk(Feather, 'move');
 export const Lock = mk(Feather, 'lock');
 export const Calendar = mk(Feather, 'calendar');

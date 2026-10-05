@@ -55,7 +55,12 @@ const PLAFOND = {
      Les 18 qui restent demandent un arbitrage par endroit : 14, 16, 17,
      19, 20, 21, 22 et deux 9. Le cliquet les empêche de se multiplier. */
   fontSize: 18,
-  'espacement hors grille de 4': 359,
+  /* 359 → 354 le 05/10/2026, en posant l'étiquette « conseil » (lot C). Le
+     cliquet a d'abord REFUSÉ le lot : six valeurs écrites à la main
+     (`gap: 3`, `paddingVertical: 1`, `marginTop: 2`…) le faisaient passer à
+     360. Remises sur la grille, le compte est descendu sous le plafond
+     d'avant — c'est exactement ce que ce fichier est censé provoquer. */
+  'espacement hors grille de 4': 354,
   lineHeight: 56,
   borderRadius: 21,
 };

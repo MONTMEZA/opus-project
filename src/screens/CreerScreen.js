@@ -14,7 +14,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import {
-  C, F, T, viser, S, GOUTTIERE, interligne,
+  C, F, T, viser, S, R, GOUTTIERE, interligne, APPUI, TOUCHE,
 } from '../theme';
 import { BtnMain, BtnMini, Field } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
@@ -22,28 +22,53 @@ import AmeliorerTexte, { MINIMUM as MINIMUM_RELECTURE } from '../components/Amel
 import Media from '../components/Media';
 import {
   Camera, VideoIcon, TypeIcon, Layers, Lightbulb, Grid, Send, Music, X, Plus,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Check,
 } from '../components/icons';
 import { ChampMetier } from '../components/SelecteurMetiers';
 import {
   choisirImage, choisirPhotos, choisirVideo, choisirClips, choisirMusique,
   CLIPS_MAX, DUREE_CLIP_MAX, PHOTOS_MAX,
 } from '../lib/media';
+/* Les formats ne vivent plus dans cet écran : `OpusApp` et `PostCard`
+   devaient importer un ÉCRAN pour savoir ce qu'est une photo. */
+import { FORMATS_VISUELS } from '../lib/formats-publication';
 
+/*
+ * LE FORMAT DIT LE SUPPORT, PLUS JAMAIS L'INTENTION — 05/10/2026.
+ *
+ * « Conseil » était ici, sixième bouton, à côté de « Photo » et « Vidéo ».
+ * Relevé sur la vraie base ce jour-là : **zéro** publication de ce type sur
+ * seize, y compris de la part du propriétaire, qui est le seul vrai artisan
+ * de cette base.
+ *
+ * La bonne question n'était donc pas « comment améliorer l'écriture d'un
+ * conseil » — j'allais livrer un meilleur formulaire pour un bouton que
+ * personne ne touche. C'était : pourquoi personne n'appuie dessus ? Et le
+ * propriétaire a donné la réponse :
+ *
+ *   « Tu penses que les gens qui regardent ne préfèrent pas voir une image
+ *     ou une vidéo avec une voix off qui explique, plutôt que juste du texte
+ *     simple ? »
+ *
+ * Il a raison, et ses seize publications le prouvent : toutes visuelles.
+ * Choisir « Conseil » obligeait à RENONCER à la photo ou à la vidéo —
+ * c'est-à-dire à renoncer à ce qui fait regarder. Personne ne fait ce
+ * marché.
+ *
+ * Le conseil est devenu une CASE À COCHER, disponible sur tous les formats
+ * (section 34 de schema.sql). On filme comme d'habitude, et on coche.
+ *
+ * « Texte » reste, à la demande du propriétaire — « on garde le texte sans
+ * image ». Il sert à ce qui n'a rien à montrer : une mise en garde, une
+ * date de réglementation.
+ */
 const TYPES = [
   ['photo', Camera, 'Photo'],
   ['video', VideoIcon, 'Vidéo'],
   ['montage', Layers, 'Montage'],
   ['avantapres', Grid, 'Avant/Après'],
   ['texte', TypeIcon, 'Texte'],
-  ['conseil', Lightbulb, 'Conseil'],
 ];
-
-/** Les formats qui produisent une image ou une vidéo, donc bons pour le portfolio. */
-export const FORMATS_VISUELS = new Set(['photo', 'video', 'montage', 'avantapres']);
-
-/** Ceux qui alimentent le fil « Vidéos ». */
-export const FORMATS_VIDEO = new Set(['video', 'montage']);
 
 /**
  * Combien de médias chaque format attend.
@@ -66,6 +91,7 @@ export default function CreerScreen({
   createType, setCreateType,
   createMetier, setCreateMetier, createVille, setCreateVille,
   createDestination, setCreateDestination,
+  createConseil, setCreateConseil,
   medias, setMedias, musique, setMusique,
   envoi, erreur, onPublish, onErreur,
 }) {
@@ -366,6 +392,44 @@ export default function CreerScreen({
         onRemplacer={(t) => legende.current && legende.current.ecrire(t)}
       />
 
+      {/* « C'EST UN CONSEIL » — une étiquette, et pas un format.
+          Section 34 de schema.sql, et la décision du propriétaire du
+          05/10/2026 : « ok pour l'étiquette ».
+
+          ELLE N'APPARAÎT PAS POUR LE PORTFOLIO, et c'est le piège de ce
+          lot : une publication envoyée au seul portfolio ne crée AUCUNE
+          ligne dans `posts`. La case se cocherait, l'écran dirait oui, et
+          la colonne n'existerait nulle part. C'est exactement le « bouton
+          §18 » — une commande qui a l'air de servir et ne touche rien. */}
+      {dansLeFil && (
+        <Pressable
+          onPress={() => setCreateConseil(!createConseil)}
+          accessibilityRole="checkbox"
+          accessibilityLabel="C'est un conseil"
+          aria-checked={!!createConseil}
+          style={({ pressed }) => [
+            s.conseil, createConseil && s.conseilOn, pressed && APPUI.discret,
+          ]}
+        >
+          <View style={[s.boite, createConseil && s.boiteOn]}>
+            {!!createConseil && <Check size={13} color={C.surAccent} />}
+          </View>
+          <Lightbulb size={16} color={createConseil ? C.accentTexte : C.muted} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[s.conseilTitre, createConseil && { color: C.accentTexte }]}>
+              C'est un conseil
+            </Text>
+            {/* POURQUOI cocher, et pas seulement quoi. Une case sans raison
+                reste décochée. */}
+            <Text style={s.conseilDetail}>
+              Il sera rangé dans « Ses conseils » sur votre fiche, et repéré
+              dans le fil. Une photo de chantier vaut sa journée ; un conseil
+              vaut encore dans trois ans.
+            </Text>
+          </View>
+        </Pressable>
+      )}
+
       <Text style={s.label}>Métier</Text>
       <ChampMetier
         valeur={createMetier}
@@ -472,6 +536,30 @@ const s = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0,
     flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6, paddingVertical: 4,
     backgroundColor: 'rgba(26,27,25,0.55)',
+  },
+
+  /* La case « C'est un conseil ». Angle VIF : c'est un bloc qui PORTE une
+     information, pas une pastille qui flotte (voir « Les bords »). Toute la
+     rangée est la cible — viser une boîte de 20 px au pouce, non. */
+  conseil: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm,
+    minHeight: TOUCHE, paddingVertical: S.sm, paddingHorizontal: S.sm,
+    marginTop: S.sm,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+  },
+  conseilOn: { borderColor: C.accent },
+  /* La boîte, elle, s'arrondit à peine : c'est la seule chose de ce bloc sur
+     laquelle l'œil cherche une coche. */
+  boite: {
+    width: 20, height: 20, borderRadius: R.vif,
+    borderWidth: 1.5, borderColor: C.bordChamp,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  boiteOn: { backgroundColor: C.accent, borderColor: C.accent },
+  conseilTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
+  conseilDetail: {
+    fontFamily: F.inter, fontSize: T.petit, color: C.muted,
+    lineHeight: interligne(T.petit), marginTop: S.xs,
   },
 
   boutonsMedia: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

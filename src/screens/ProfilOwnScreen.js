@@ -17,6 +17,7 @@ import {
 import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
+import ConseilsPro from '../components/ConseilsPro';
 import FicheContactPro from '../components/FicheContactPro';
 import { BadgeCheck, Lock, ChevronRight, ShieldCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
@@ -236,6 +237,18 @@ export default function ProfilOwnScreen({
         Portfolio de chantiers
       </SectionLabel>
       <PortfolioGrid items={me.portfolio} />
+
+      {/* MES conseils, exactement comme les voient mes clients — c'est le
+          même composant, et c'est ce qui garantit qu'il n'y a pas deux
+          vérités. Sans ce bloc, cocher « C'est un conseil » n'aurait aucun
+          effet VISIBLE pour celui qui coche : il n'irait jamais vérifier sur
+          sa propre fiche publique. */}
+      {(me.conseils || []).length > 0 && (
+        <>
+          <SectionLabel>Mes conseils</SectionLabel>
+          <ConseilsPro items={me.conseils} />
+        </>
+      )}
 
       {/* Le fil mêle nos publications à celles des autres : pour retrouver la
           sienne d'il y a trois semaines, il faut un endroit à part. */}

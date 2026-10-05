@@ -20,6 +20,7 @@ import {
 import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAuto';
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
+import ConseilsPro from '../components/ConseilsPro';
 import { SqueletteAvis, SquelettePortfolio } from '../components/Squelette';
 import FicheContactPro from '../components/FicheContactPro';
 import {
@@ -252,6 +253,25 @@ export default function ProfilProScreen({
       {charge
         ? <PortfolioGrid items={pro.portfolio} />
         : <SquelettePortfolio />}
+
+      {/* --- ses conseils --- (section 34, lot C du 05/10/2026)
+
+          LE BLOC NE S'AFFICHE QUE S'IL Y A QUELQUE CHOSE DEDANS, et c'est
+          un choix, pas un oubli. Un « Ses conseils — aucun pour le moment »
+          sur chacune des sept fiches de la base reprocherait à l'artisan de
+          ne pas avoir fait une chose dont il n'a jamais entendu parler. Le
+          jour où il en publie un, le bloc apparaît.
+
+          Il vient APRÈS les réalisations parce qu'un client vient d'abord
+          voir le travail. Il vient AVANT les avis parce qu'un conseil dit
+          ce que l'artisan sait, et c'est ce qui donne du poids à la note
+          qui suit. */}
+      {charge && (pro.conseils || []).length > 0 && (
+        <>
+          <SectionLabel>Ses conseils</SectionLabel>
+          <ConseilsPro items={pro.conseils} />
+        </>
+      )}
 
       {/* --- avis --- */}
       <SectionLabel

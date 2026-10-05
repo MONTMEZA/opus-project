@@ -5845,3 +5845,87 @@ comment on function public.fil_filtre(
 grant execute on function public.fil_filtre(
   text, double precision, double precision, int, numeric, boolean, boolean,
   boolean, timestamptz, int) to anon, authenticated;
+
+
+-- ==========================================================================
+--  34. « C'EST UN CONSEIL » — une ÉTIQUETTE, pas un format — 05/10/2026
+--
+--  CE QUI A ÉTÉ TROUVÉ EN REGARDANT
+--  --------------------------------
+--  Le type `conseil` existe dans la contrainte depuis le PREMIER JOUR, le
+--  bouton est dans l'écran de publication, « Mes publications » sait
+--  l'afficher — et sur la vraie base :
+--
+--      photo       13
+--      montage      2
+--      avantapres   1
+--      texte        0
+--      conseil      0
+--
+--  Zéro, y compris de la part du propriétaire, qui est le seul vrai artisan
+--  de cette base. Et la longueur moyenne d'une légende est de 57
+--  caractères : un titre, pas un savoir.
+--
+--  LA QUESTION N'ÉTAIT DONC PAS « COMMENT AJOUTER LES CONSEILS »
+--  -------------------------------------------------------------
+--  C'était : pourquoi personne n'appuie sur ce bouton ? Et le propriétaire
+--  a donné la réponse :
+--
+--    « Tu penses que les gens qui regardent ne préfèrent pas voir une image
+--      ou une vidéo avec une voix off qui explique, plutôt que juste du
+--      texte simple ? Peut-être que la même chose peut être faite avec ce
+--      qui existe déjà ? »
+--
+--  Il a raison, et ses propres chiffres le prouvent : 16 publications,
+--  TOUTES visuelles. J'allais livrer un meilleur formulaire d'écriture —
+--  c'est-à-dire une version mieux dessinée d'un bouton que personne ne
+--  touche. Le « bouton §18 », encore.
+--
+--  L'ERREUR DE CONCEPTION ÉTAIT DANS LA COLONNE `type`
+--  ---------------------------------------------------
+--  Elle mélange le SUPPORT (photo, video, montage, avantapres, texte) et
+--  l'INTENTION (conseil). « Conseil » occupait donc une case de format,
+--  alors qu'un conseil peut être une vidéo, une photo, ou un avant/après.
+--
+--  > **Le support reste dans `type`. L'intention vit dans `conseil`.**
+--  > On filme comme d'habitude, et on coche. Les deux se combinent.
+--
+--  CE QUE L'ÉTIQUETTE ACHÈTE, ET QUI EST TOUT L'INTÉRÊT
+--  ----------------------------------------------------
+--  Une photo de chantier vaut sa journée ; un conseil vaut trois ans. Les
+--  traiter pareil, c'est garantir que personne n'en fera un second.
+--  L'étiquette le rend RETROUVABLE (sur la fiche de l'artisan, à côté du
+--  portfolio) et REPÉRABLE dans le fil.
+--
+--  ET ON NE TOUCHE PAS À `fil_filtre()` — c'est le piège de ce lot.
+--  Éprouvé sur PostgreSQL 16 avant d'écrire une ligne :
+--
+--      create or replace function f(a int default 1)        -- 1 fonction
+--      create or replace function f(a int default 1, b …)   -- 2 FONCTIONS
+--      select f();  -- ERROR: function f() is not unique
+--
+--  Ajouter un paramètre ne REMPLACE pas : ça SURCHARGE. La fonction d'avant
+--  reste, et l'appel sans argument — exactement ce que fait PostgREST —
+--  devient ambigu. Le fil tomberait d'un coup. Et le connecteur Supabase
+--  refuse `drop function`, donc on ne pourrait pas réparer.
+--
+--  > **Une fonction appelée par l'application ne change pas de signature.**
+--  > Ici ce n'est pas une gêne : `fil_filtre()` rend `setof public.posts`,
+--  > donc la colonne `conseil` voyage toute seule, sans rien changer.
+--  > Le jour où il faudra VRAIMENT un paramètre de plus, ce sera son propre
+--  > lot, avec le `drop` fait par le propriétaire depuis l'éditeur SQL.
+-- ==========================================================================
+
+alter table public.posts add column if not exists conseil boolean not null default false;
+
+-- La fiche d'un artisan montre ses conseils à côté de son portfolio : cet
+-- index sert cette requête-là, et elle seule. Partiel, donc minuscule —
+-- il ne contient que les lignes qui valent `true`.
+create index if not exists idx_posts_conseils
+  on public.posts (author_id, created_at desc) where conseil;
+
+comment on column public.posts.conseil is
+  'Une INTENTION, pas un support : ce savoir vaut encore dans trois ans. '
+  'Se combine avec n''importe quel `type` — une vidéo-conseil, une '
+  'photo-conseil. Le type `conseil` de la contrainte reste accepté pour '
+  'les lignes anciennes, mais l''écran ne le propose plus.';

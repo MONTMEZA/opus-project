@@ -3979,6 +3979,189 @@ Un refus de la base n'accuse pas toujours la base.
 **Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone, et le
 défilement de la feuille au doigt.
 
+### « C'est un conseil » — une étiquette, pas un format (05/10/2026)
+
+Section 34 de `schema.sql`, `src/components/ConseilsPro.js`,
+`src/lib/formats-publication.js`, `npm run verifier-conseil`.
+
+#### La bonne question n'était pas « comment ajouter les conseils »
+
+Le type `conseil` existait **depuis le premier jour** : dans la contrainte,
+dans l'écran de publication, dans « Mes publications ». Relevé sur la vraie
+base :
+
+| | |
+|---|---|
+| photo | 13 |
+| montage | 2 |
+| avantapres | 1 |
+| texte | **0** |
+| conseil | **0** |
+
+Zéro, y compris de la part du propriétaire, qui est le seul vrai artisan de
+cette base. J'allais livrer un meilleur formulaire d'écriture — c'est-à-dire
+une version mieux dessinée d'un bouton que personne ne touche. C'est lui qui
+a donné la réponse :
+
+> « Tu penses que les gens qui regardent ne préfèrent pas voir une image ou
+> une vidéo avec une voix off qui explique, plutôt que juste du texte
+> simple ? Peut-être que la même chose peut être faite avec ce qui existe
+> déjà ? »
+
+Il a raison, et ses seize publications le prouvent : **toutes visuelles**.
+Choisir « Conseil » obligeait à RENONCER à la photo ou à la vidéo,
+c'est-à-dire à renoncer à ce qui fait regarder. Personne ne fait ce marché.
+
+> **L'erreur était dans la colonne `type`** : elle mélangeait le SUPPORT
+> (photo, vidéo, montage, avant/après, texte) et l'INTENTION (conseil).
+> Le support reste dans `type`, l'intention vit dans `conseil`. On filme
+> comme d'habitude, et on coche.
+
+Et « Texte » reste, à sa demande — « on garde le texte sans image ».
+
+#### Une fonction appelée par l'application ne change JAMAIS de signature
+
+C'est le piège de ce lot, éprouvé sur PostgreSQL 16 **avant** d'écrire une
+ligne :
+
+```sql
+create or replace function f(a int default 1)          -- 1 fonction
+create or replace function f(a int default 1, b int)   -- 2 FONCTIONS
+select f();   -- ERROR: function f() is not unique
+```
+
+Ajouter un paramètre ne REMPLACE pas : ça **surcharge**. L'ancienne reste,
+et l'appel sans argument — exactement ce que fait PostgREST — devient
+ambigu. Le fil tomberait d'un coup, et **le connecteur Supabase refuse
+`drop function`** : on ne pourrait pas réparer depuis une session de
+travail.
+
+> Ici ce n'est pas une gêne : `fil_filtre()` rend `setof public.posts`, donc
+> la colonne voyage toute seule. **Vérifié** (cas 2 des essais) : la
+> fonction n'a pas été touchée et `conseil` arrive quand même. Et
+> `nb_fil_filtre = 1` sur le serveur d'essai comme sur la vraie base.
+
+#### LE DÉFAUT QUE SEULE LA PUBLICATION RÉELLE A TROUVÉ
+
+Un conseil au format « Texte » publié sur la VRAIE base s'affichait avec une
+**vignette grise et une pastille « agrandir »**, comme s'il portait une
+photo. La cause tenait en une ligne d'`OpusApp` :
+
+```js
+const couverture = envoyes[0] || POST_GRADIENTS[0];
+```
+
+Faute de fichier, un **dégradé de démonstration**. Une publication sans
+image en recevait donc une fausse, rangée en base pour toujours, et tout ce
+qui lit `media` en concluait « il y a un visuel ».
+
+> **En mode démonstration, le défaut n'existait pas** : les conseils
+> d'exemple portent `media: null`, écrit à la main. L'écran était donc juste
+> là où je l'avais regardé, et faux là où le propriétaire l'aurait vu. Les
+> 34 contrôles passaient, `expo export` passait, le linter se taisait.
+
+Deux corrections, et la seconde répare aussi la ligne déjà écrite :
+
+1. plus de fausse couverture pour un format sans visuel ;
+2. **c'est le FORMAT qui décide, pas le contenu de `media`**
+   (`porteUnVisuel`, dans `src/lib/formats-publication.js`, qui n'importe
+   rien — septième application de la leçon de `cloudinary-adresses.js`). On
+   ne peut pas trancher sur « est-ce un vrai fichier » : les publications de
+   démonstration portent de vrais dégradés **comme photos**.
+
+Ces deux listes vivaient d'ailleurs dans `src/screens/CreerScreen.js`, et
+`OpusApp` devait importer un ÉCRAN pour savoir ce qu'est une photo.
+
+#### Le format « Texte » n'avait jamais été regardé
+
+Puisque personne ne s'en était servi, personne n'avait vu ce qu'il donnait :
+`media` vide, donc **un carré de dégradé vide avec la barre d'actions posée
+dessus**. Sans visuel, la barre redescend désormais sous le texte, avec un
+filet, et **en encre sombre** — elle n'a plus de voile pour la rendre
+lisible. Du blanc sur blanc ne lève aucune erreur.
+
+#### Trouvé sur une capture, et pas en relisant
+
+« Voir en plein écran » était à `bottom: 10`, c'est-à-dire **sur la rangée
+de la barre d'actions** : le bouton « Contacter », calé à droite, lui
+passait dessus et on lisait « Voi… ». Vrai depuis que la barre est passée
+SUR la photo, le 02/10. Le libellé plus long d'un conseil l'a rendu évident.
+Il est maintenant en haut à droite, en face de l'étiquette « Vidéo ».
+
+#### Le son : un fil muet doit DIRE qu'il y a une voix
+
+Le fil classique est muet, et ça ne se négocie pas — une liste qui parle
+toute seule en défilant se coupe au bout de dix secondes. Mais un conseil en
+vidéo, **c'est une voix off qui explique**. Sans le dire, on regarde des
+lèvres bouger et on passe.
+
+> Un conseil en vidéo affiche donc « **Conseil — touchez pour écouter** », et
+> le plein écran (`Visionneuse`, `muet={false}`) est le seul endroit de
+> l'application où la voix d'un artisan s'entend.
+
+#### Et quelqu'un LIT ce qu'on écrit
+
+Une case à cocher sans lecteur serait la panne silencieuse favorite de ce
+projet. D'où **« Ses conseils »** sur la fiche de l'artisan (et « Mes
+conseils » sur la sienne, même composant), entre les réalisations et les
+avis.
+
+Ce n'est **pas** la grille du portfolio, et la différence est le tout : une
+réalisation se regarde, un conseil **se lit**. Une rangée par conseil, le
+texte **entier** — pas de « … lire la suite », un conseil tronqué ne
+conseille rien. Une rangée sans visuel ne s'appuie pas : rien à ouvrir en
+grand, et une cible qui ne répond pas est pire que pas de cible.
+
+Deux détails à ne pas redécouvrir :
+
+1. **la visionneuse ne reçoit QUE les conseils qui ont un visuel.** Avec la
+   liste entière, le premier conseil en texte décale tous les index et on
+   ouvre la photo du voisin ;
+2. **un conseil publié apparaît TOUT DE SUITE** dans « Mes conseils ».
+   `chargerProfilPro()` ne repasse pas — `portfolioCharge` est déjà vrai —,
+   il aurait fallu relancer l'application pour voir son propre conseil.
+
+#### Deux défauts de plus, trouvés en passant
+
+- **En mode démonstration, le squelette des réalisations tournait POUR
+  TOUJOURS** sur chaque fiche : `chargerProfilPro()` rend `null` (tout est
+  en mémoire), donc `portfolioCharge` restait indéfini.
+- **`local-prelude.sql` n'était pas rejouable lui-même** : les rôles sont à
+  l'échelle de la GRAPPE, donc `create role anon` échoue au second serveur,
+  et `ON_ERROR_STOP` arrête tout **avant** le schéma. On croit alors que
+  c'est le schéma qui est cassé.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un PostgreSQL 16 neuf, les huit cas de
+`supabase/essais-section-34.sql`, les 34 contrôles, `npx expo export
+--platform ios`. Le contrôle a été **éprouvé en cassant ce qu'il
+surveille** : quatre défauts remis à la main (la requête de la fiche, la
+case restée visible pour le portfolio, le cœur redevenu blanc, la
+visionneuse recevant tout), les quatre refusés.
+
+Puis au navigateur, en démonstration **et** sur la VRAIE base, avec deux
+comptes professionnels jetables supprimés dans la même session (0 restant,
+base revenue à 13 comptes / 7 fiches / 16 publications) :
+
+| | relevé |
+|---|---|
+| boutons de format | **5** — « Conseil » est parti, « Texte » est resté |
+| la case, rangée appuyable | **358 × 87** |
+| publication | `POST /rest/v1/posts → 201` |
+| en base | `type texte`, `conseil true`, **`media null`** |
+| **après rechargement complet** | le bandeau « Conseil de pro » est là |
+| la carte sans visuel | 358 × 234, barre sous le texte, encre `rgb(26,27,25)` |
+| le conseil vidéo | « Conseil — touchez pour écouter », **sans chevauchement** |
+| « Ses conseils » | entre Réalisations et Avis, texte entier |
+| un conseil sans image | une ampoule, **pas** une vignette grise |
+| « Mes publications » | l'étiquette « Conseil » y est |
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone. Le son
+d'un conseil en vidéo n'a pas pu être entendu — ce navigateur n'a pas les
+codecs, aucune vidéo du projet ne s'y lit. Et aucun artisan réel n'a encore
+coché cette case : la vraie base compte **0 conseil**.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

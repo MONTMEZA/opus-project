@@ -22,7 +22,7 @@ import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import DecouvrirScreen from './screens/DecouvrirScreen';
 import PlaceProScreen from './screens/PlaceProScreen';
-import CreerScreen, { FORMATS_VISUELS, FORMATS_VIDEO } from './screens/CreerScreen';
+import CreerScreen from './screens/CreerScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import ConversationScreen from './screens/ConversationScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
@@ -42,6 +42,7 @@ import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
 import AdminScreen from './screens/AdminScreen';
 import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier , metiersDe } from './lib/metiers';
+import { FORMATS_VISUELS, FORMATS_VIDEO } from './lib/formats-publication';
 import * as api from './lib/api';
 import * as retour from './lib/retour';
 import { useMouvementReduit } from './lib/retour';
@@ -220,6 +221,12 @@ export default function OpusApp() {
      que cet écran-là. Rien d'autre ne les lisait. */
 
   const [createType, setCreateType] = useState('photo');
+  /* « C'est un conseil » — une ÉTIQUETTE qui se combine à n'importe quel
+     format (section 34). Elle se REMET À FAUX après chaque publication, à la
+     différence de la ville : un conseil est exceptionnel, et une case restée
+     cochée étiquetterait la photo de chantier suivante sans que personne ne
+     l'ait demandé. */
+  const [createConseil, setCreateConseil] = useState(false);
   // Où va la publication : le fil, le portfolio, ou les deux.
   const [createDestination, setCreateDestination] = useState('deux');
   // Fichiers choisis pour la publication en cours, et sa bande-son.
@@ -1273,7 +1280,18 @@ export default function OpusApp() {
       }
 
       // La vignette est le premier média : c'est elle que montrent les listes.
-      const couverture = envoyes[0] || POST_GRADIENTS[0];
+      /* PAS DE FAUSSE COUVERTURE POUR UNE PUBLICATION SANS VISUEL — 05/10/2026.
+         Cette ligne valait `envoyes[0] || POST_GRADIENTS[0]` : faute de
+         fichier, un DÉGRADÉ de démonstration. Un conseil au format « Texte »
+         publié sur la vraie base recevait donc une fausse image, rangée en
+         base pour toujours, et tout ce qui lit `media` en concluait « il y a
+         un visuel » — vignette grise et pastille « agrandir » sur un texte.
+
+         Trouvé en publiant pour de vrai, pas en relisant : en mode
+         démonstration les conseils d'exemple portent `media: null`, écrit à
+         la main. L'écran était juste là où je l'avais regardé, et faux là où
+         le propriétaire l'aurait vu. */
+      const couverture = envoyes[0] || (aUnVisuel ? POST_GRADIENTS[0] : null);
 
       /* Le montage assemblé : une seule adresse, que Cloudinary fabriquera au
          premier visionnage puis gardera en cache. Un montage d'un seul clip
@@ -1304,6 +1322,13 @@ export default function OpusApp() {
           musique: urlMusique, montageUrl, metier: createMetier, ville: createVille,
           latitude: lieuPost.latitude || null,
           longitude: lieuPost.longitude || null,
+          /* `versLeFil` est vrai ici par construction — on est dans sa
+             branche. L'étiquette n'existe donc que pour ce qui part dans le
+             fil, et la case elle-même disparaît pour le portfolio seul
+             (voir CreerScreen) : les deux disent la même chose, et c'est
+             voulu. Une seule des deux gardes suffirait, et c'est justement
+             pour ça qu'il y en a deux. */
+          conseil: createConseil,
         });
         if (row) id = row.id;
       }
@@ -1318,10 +1343,11 @@ export default function OpusApp() {
     }
     setEnvoi(null);
 
-    const couverture = envoyes[0] || POST_GRADIENTS[0];
+    const couverture = envoyes[0] || (aUnVisuel ? POST_GRADIENTS[0] : null);
     if (versLeFil) {
       setPosts((ps) => [{
         id, type: 'post', format: createType, proId: myProId, time: "À l'instant",
+        conseil: createConseil,
         texte, media: couverture, medias: envoyes, musique: urlMusique, montageUrl,
         likes: 0, liked: false, comments: [],
       }, ...ps]);
@@ -1331,13 +1357,33 @@ export default function OpusApp() {
         ? { ...ps, [myProId]: { ...ps[myProId], portfolio: [...ps[myProId].portfolio, ...envoyes] } }
         : ps));
     }
+    /* UN CONSEIL APPARAÎT TOUT DE SUITE DANS « Ses conseils ».
+       Sans ça, l'artisan coche la case, publie, ouvre sa fiche — et ne voit
+       rien. `chargerProfilPro()` ne repasse pas : `portfolioCharge` est déjà
+       vrai, c'est tout l'intérêt de ce drapeau. Il faudrait fermer puis
+       relancer l'application pour voir son propre conseil, et entre-temps on
+       conclut que la case ne sert à rien. */
+    if (versLeFil && createConseil && myProId) {
+      setPros((ps) => (ps[myProId]
+        ? {
+          ...ps,
+          [myProId]: {
+            ...ps[myProId],
+            conseils: [
+              { id, format: createType, texte, media: couverture, time: "À l'instant" },
+              ...(ps[myProId].conseils || []),
+            ],
+          },
+        }
+        : ps));
+    }
 
     /* LA VILLE NE SE VIDE PLUS APRÈS UNE PUBLICATION — 05/10/2026.
        On publie trois photos du même chantier à la suite ; la vider
        obligeait à la retaper chaque fois, et c'est elle qui place la
        publication sur la carte. Un champ qu'on retape est un champ
        qu'on finit par laisser vide. */
-    setMedias([]); setMusique(null);
+    setMedias([]); setMusique(null); setCreateConseil(false);
     // Le fil des vidéos ne montre que des vidéos : on y renvoie l'artisan
     // quand c'est là que sa publication vient d'atterrir.
     if (versLeFil) setFeedMode(FORMATS_VIDEO.has(createType) ? 'video' : 'classic');
@@ -2725,6 +2771,7 @@ export default function OpusApp() {
           <CreerScreen
             moi={pros[myProId] || null}
             createType={createType} setCreateType={setCreateType}
+            createConseil={createConseil} setCreateConseil={setCreateConseil}
             createDestination={createDestination} setCreateDestination={setCreateDestination}
             medias={medias} setMedias={setMedias}
             musique={musique} setMusique={setMusique}

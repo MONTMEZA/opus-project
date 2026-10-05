@@ -33,9 +33,21 @@
 -- ==========================================================================
 create extension if not exists pgcrypto;
 
-create role anon          nologin;
-create role authenticated nologin;
-create role service_role  nologin;
+-- LES RÔLES SONT À L'ÉCHELLE DE LA GRAPPE, PAS DE LA BASE — 05/10/2026.
+-- Ce prélude existe pour qu'on puisse rejouer `schema.sql` hors de Supabase.
+-- Il n'était lui-même pas rejouable : sur un serveur où il a déjà tourné une
+-- fois, « create role anon » échoue par « role already exists », et
+-- ON_ERROR_STOP arrête tout AVANT le schéma. On croit alors que c'est le
+-- schéma qui est cassé.
+do $$
+declare r text;
+begin
+  foreach r in array array['anon', 'authenticated', 'service_role'] loop
+    if not exists (select 1 from pg_roles where rolname = r) then
+      execute format('create role %I nologin', r);
+    end if;
+  end loop;
+end $$;
 
 create schema if not exists auth;
 create table if not exists auth.users (

@@ -424,6 +424,29 @@ export function relativeTime(iso) {
 }
 
 /**
+ * LES CONSEILS D'UN ARTISAN — version démonstration.
+ *
+ * `function` et non `const` : ce fichier a déjà livré un écran blanc le
+ * 04/10/2026 pour une `const` lue mille lignes au-dessus de sa déclaration
+ * (« Cannot access 'noop' before initialization »), que ni le linter ni
+ * `expo export` n'avaient signalée. Une fonction déclarée, elle, est
+ * hissée : elle se lit d'où qu'on l'appelle.
+ *
+ * Ils se DÉDUISENT des publications de démonstration, ils ne sont pas
+ * recopiés à côté. Une liste écrite à la main se désaligne au premier
+ * conseil ajouté, et personne ne s'en aperçoit — le défaut du 01/10 vu
+ * dans sa version la plus bête.
+ */
+function conseilsDemoDe(proId) {
+  return initialPosts
+    .filter((p) => p.type !== 'ad' && p.conseil && p.proId === proId)
+    .map((p) => ({
+      id: p.id, format: p.format || 'photo', texte: p.texte,
+      media: p.media || null, time: p.time,
+    }));
+}
+
+/**
  * Charge tout ce dont l'app a besoin au démarrage.
  * Retourne toujours la même forme, quel que soit le mode.
  */
@@ -434,6 +457,13 @@ export async function loadAll() {
     const pros = JSON.parse(JSON.stringify(demoPros));
     Object.values(pros).forEach((p) => {
       p.verificationStatut = p.verifie ? 'verifie' : 'non_soumis';
+      /* EN DÉMONSTRATION, LA FICHE EST DÉJÀ COMPLÈTE — et personne ne le
+         disait. `chargerProfilPro()` rend `null` ici (tout est en mémoire),
+         donc `portfolioCharge` restait indéfini et le squelette des
+         réalisations tournait POUR TOUJOURS sur chaque fiche. Trouvé en
+         posant le bloc des conseils, qui dépend du même drapeau. */
+      p.portfolioCharge = true;
+      p.conseils = conseilsDemoDe(p.id);
     });
     return {
       pros,
@@ -682,6 +712,19 @@ export async function loadAll() {
 }
 
 /**
+ * Combien de conseils une fiche montre.
+ *
+ * Douze, soit deux ou trois écrans : au-delà on ne lit plus, on cherche —
+ * et chercher dans les conseils de quelqu'un est un autre écran, à faire
+ * le jour où il y aura de quoi chercher.
+ *
+ * Déclarée ICI, juste au-dessus de son unique lecteur, et pas à mille
+ * lignes de là avec les autres bornes : c'est le genre de distance qui a
+ * déjà coûté un écran blanc dans ce fichier le 04/10/2026.
+ */
+const TAILLE_CONSEILS = 12;
+
+/**
  * La fiche COMPLÈTE d'un artisan, à l'ouverture de son profil : sa
  * présentation, ses réalisations, et ses avis.
  *
@@ -690,10 +733,22 @@ export async function loadAll() {
  * portfolios pour en regarder un.
  */
 async function profilProDeSupabase(id) {
-  const [ficheRes, avisRes] = await Promise.all([
+  const [ficheRes, avisRes, conseilsRes] = await Promise.all([
     supabase.from('professional_profiles').select('*').eq('id', id).maybeSingle(),
     supabase.from('reviews').select('*, users:author_id(nom)')
       .eq('professional_id', id).order('created_at', { ascending: false }),
+    /* SES CONSEILS — une requête ordinaire, pas une fonction de plus.
+       La politique « lecture posts » applique déjà le blocage, et
+       `idx_posts_conseils` (section 34) sert exactement cette requête.
+
+       BORNÉE, comme tout le reste depuis le 04/10 : un artisan qui publie
+       un conseil par semaine pendant trois ans en a cent cinquante, et une
+       fiche n'est pas une archive. Les plus récents d'abord. */
+    supabase.from('posts')
+      .select('id, type, texte, media, created_at')
+      .eq('author_id', id).eq('conseil', true)
+      .order('created_at', { ascending: false })
+      .limit(TAILLE_CONSEILS),
   ]);
   if (ficheRes.error) throw ficheRes.error;
   if (!ficheRes.data) return null;
@@ -705,7 +760,14 @@ async function profilProDeSupabase(id) {
        toujours là. */
     auteur: r.auteur_supprime ? 'Compte supprimé' : (r.users ? r.users.nom : 'Client'),
   }));
-  return { fiche: ficheRes.data, avis };
+  /* Une erreur sur les conseils ne coûte pas la fiche : on affiche ce
+     qu'on a. Un bloc absent se remarque beaucoup moins qu'une page
+     vide. */
+  const conseils = (conseilsRes.error ? [] : (conseilsRes.data || [])).map((c) => ({
+    id: c.id, format: c.type || 'photo', texte: c.texte,
+    media: c.media || null, time: relativeTime(c.created_at),
+  }));
+  return { fiche: ficheRes.data, avis, conseils };
 }
 
 async function profilProDeDemo() { return null; }
@@ -723,6 +785,7 @@ export const chargerProfilPro = hasSupabase
       bio: complet.fiche.bio || '',
       portfolio: complet.fiche.portfolio || [],
       reviews: complet.avis,
+      conseils: complet.conseils,
     };
   }
   : profilProDeDemo;
@@ -783,6 +846,10 @@ function rowToPost(p, likedSet, commentaires = null) {
     // dit ce qu'on regarde. Les deux étaient confondus, si bien qu'une
     // photo se retrouvait dans le fil des vidéos.
     format: p.type || 'photo',
+    /* L'INTENTION, à côté du SUPPORT. `type` dit ce qu'on regarde (photo,
+       vidéo, montage) ; `conseil` dit pourquoi c'est là. Les deux se
+       combinent — une vidéo-conseil est les deux à la fois. */
+    conseil: !!p.conseil,
     texte: p.texte, media: p.media,
     medias: (p.medias && p.medias.length) ? p.medias : (p.media ? [p.media] : []),
     musique: p.musique || null,
@@ -1066,12 +1133,13 @@ export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
 
 export const createPost = !hasSupabase ? noop : async ({
   type, texte, media, medias = [], musique = null, montageUrl = null, metier, ville,
-  latitude = null, longitude = null,
+  latitude = null, longitude = null, conseil = false,
 }) => {
   const { data, error } = await supabase.from('posts')
     .insert({
       author_id: currentUserId, type, texte, media,
       medias, musique, montage_url: montageUrl, metier, ville,
+      conseil: !!conseil,
       /* Les deux ou aucune. Avec une seule, le déclencheur
          `pose_le_lieu_du_post()` repart de la fiche — une latitude seule ne
          situe rien et ressemblerait pourtant à un lieu. */

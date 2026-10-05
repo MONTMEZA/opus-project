@@ -219,6 +219,30 @@ export const initialPosts = [
   { id: 5, type: 'post', format: 'avantapres', proId: 5, time: 'Il y a 2 j',
     texte: "Charpente traditionnelle posée en 3 jours, ossature chêne massif.",
     media: '#4b4b2f,#9a9a5a', likes: 176, liked: false, comments: [] },
+
+  /* DEUX CONSEILS, ET LES DEUX CAS QUI COMPTENT — ajoutés le 05/10/2026
+     avec l'étiquette (section 34). Sans eux, ni le bandeau du fil, ni le
+     bloc « Ses conseils », ni le repère de son ne se vérifieraient ici :
+     la vraie base en contient ZÉRO, et on ne livre pas un écran qu'on n'a
+     jamais vu.
+
+     Le premier est une VIDÉO : c'est le cas qui porte une voix off, donc
+     celui qui doit afficher « Conseil — touchez pour écouter ». Le second
+     est un TEXTE sans image — le format que le propriétaire a demandé de
+     garder, et dont personne ne s'était jamais servi : c'est lui qui a
+     révélé que la carte affichait alors un carré de dégradé vide. */
+  { id: 7, type: 'post', format: 'video', proId: 2, time: 'Il y a 3 j',
+    conseil: true,
+    texte: "Avant de percer un mur, coupez au disjoncteur ET vérifiez au "
+      + "détecteur de tension. Une gaine passe rarement là où on l'imagine : "
+      + "sur une rénovation, je trouve encore des fils sans gaine du tout.",
+    media: '#1b4b6b,#4d7f9e', likes: 418, liked: false, comments: [] },
+  { id: 8, type: 'post', format: 'texte', proId: 1, time: 'Il y a 4 j',
+    conseil: true,
+    texte: "On ne coule pas une dalle en dessous de 5 °C : le béton ne prend "
+      + "pas, il gèle. Et au-dessus de 30 °C, il faut l'arroser pendant trois "
+      + "jours sinon il fissure. Le thermomètre fait partie des outils.",
+    media: null, likes: 263, liked: false, comments: [] },
 ];
 
 export const initialConversations = [
