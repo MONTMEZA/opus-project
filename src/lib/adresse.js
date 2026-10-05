@@ -256,4 +256,9 @@ export function dansSecteur(latitude, longitude, secteur) {
 }
 
 /** Les rayons proposés. Au-delà de 200 km, on ne se déplace plus : on vend. */
-export const RAYONS_KM = [25, 50, 100, 200];
+/* UNE SEULE ÉCHELLE DE RAYONS, pour la Place des pros ET pour le fil.
+   Deux listes séparées finiraient par diverger — c'est exactement ce qui
+   excluait les montages du fil vidéo, et ce qui a désaligné les voyants le
+   04/10. 10 et 20 km sont entrés le 05/10 avec la loupe du fil : le
+   propriétaire a demandé « maçon à 20 km », et 25 était le plus petit. */
+export const RAYONS_KM = [10, 20, 50, 100, 200];

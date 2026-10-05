@@ -3795,6 +3795,149 @@ lieu sert** : le filtre lui-même. Une colonne remplie que personne ne lit
 est exactement le défaut du 01/10 ; celui-ci ne durera que le temps du lot
 suivant.
 
+### La loupe du fil — un filtre DUR, tenu par la base (05/10/2026)
+
+Section 33 de `schema.sql`, `src/components/FeuilleRecherche.js`,
+`src/lib/filtre-fil.js`, `npm run verifier-filtre`.
+
+#### Le propriétaire avait raison contre moi
+
+> « Si par contre il met sur son filtre maçon à 20 km, il lui montre sur le
+> fil que des posts de maçon à 20 km, mais le filtre doit se régler à la
+> main. »
+
+J'avais proposé l'inverse — un fil qui « pencherait » sans rien retirer.
+Son objection le dit mieux que moi : **un filtre qui laisse passer autre
+chose ne se VÉRIFIE pas.** On pose « maçon », on voit un couvreur, on en
+conclut que le réglage ne marche pas, et on ne s'en sert plus. Un réglage
+dont personne ne se sert est pire qu'un réglage absent.
+
+Ce qui le rend acceptable n'est pas sa douceur, c'est qu'il **se voit** et
+**s'enlève d'un appui** — la règle du 04/10 : « un filtre qu'on ne voit pas
+est un filtre qu'on oublie d'enlever ».
+
+> **Le SECTEUR survit à la fermeture, le MÉTIER non.** C'est la réponse
+> exacte à sa crainte — « si un jour il a besoin d'un couvreur il faut pas
+> qu'il soit bloqué que sur des maçons ». Les deux n'ont pas la même durée
+> de vie : le secteur est l'endroit où l'on habite, il ne change pas ; le
+> métier est un besoin du moment. À la réouverture, il n'y a plus que le
+> secteur.
+
+#### Une loupe, et rien d'autre sur le fil
+
+> « Je ne veux pas des grosses pastilles, je veux que l'écran du fil reste
+> simple ; peut-être juste une icône de loupe, et quand on clique on arrive
+> sur une fenêtre où on paramètre notre recherche. »
+
+Il a raison, et pas seulement par goût : **le fil est le seul écran d'Opus
+où l'on vient pour REGARDER.** La Place des pros et les Demandes portent une
+rangée de pastilles parce qu'on y vient pour CHERCHER ; ici, afficher la
+question en permanence reviendrait à répondre à une question que personne ne
+pose.
+
+Et un seul panneau, pas quatre : là-bas on affine un critère à la fois, ici
+on règle « ce que je veux voir » d'un bloc.
+
+#### Le défaut qui était DÉJÀ là : `feedAbonnements` filtrait à l'écran
+
+```js
+const feedAbonnements = feedTab === 'abonnements'
+  ? visiblePosts.filter((p) => p.type === 'ad' || followingIds.has(p.proId))
+  : visiblePosts;
+```
+
+Il filtrait **les vingt publications déjà téléchargées**. Avec trois
+abonnements et seize publications, personne ne le voit. Avec mille artisans,
+les vingt dernières publications de toute la France n'en contiennent
+AUCUNE : l'onglet affiche une page vide, et la suivante aussi.
+
+> **Les deux partent ensemble**, sinon on obtient le pire des deux : un
+> filtre appliqué dans la base ET un filtre appliqué sur son résultat.
+> `fil_filtre()` est la SEULE porte du fil — métier, secteur, note, badge,
+> abonnements, vidéos —, et `changerCeQuOnVoit` la seule qui la lui demande.
+
+#### `security invoker`, et ce n'est pas un détail
+
+Une fonction `security definer` rendrait ici les publications des personnes
+qu'on a **bloquées** — et personne ne s'en apercevrait, puisqu'elle rendrait
+des publications parfaitement normales. Éprouvé (cas 8 de
+`essais-section-33.sql`, `set local role` hors d'un bloc `do`) : le client
+voit 4 publications, bloque le maçon, en voit **2**, et `p_metier => 'macon'`
+lui en rend **0**.
+
+#### Tout filtre retire les PUBLICITÉS, et c'est voulu
+
+Une publicité n'a ni auteur, ni métier, ni lieu, ni badge : elle ne peut
+satisfaire aucun critère. Demander « les maçons vérifiés à 20 km » et
+recevoir une publicité est exactement ce qui fait perdre confiance dans un
+fil. Elle revient dès qu'on enlève le filtre.
+
+**Sauf dans « Abonnements »**, où elle reste : c'est le contrat passé avec
+l'annonceur, il ne dépend de personne. La retirer reviendrait à ne la
+montrer qu'à ceux qui ne suivent personne.
+
+#### Le piège de la note, mesuré avant de l'écrire
+
+**4 artisans sur 7 n'ont AUCUN avis.** Un filtre « minimum 3/5 » les écarte
+tous — donc tous les nouveaux inscrits, pour toujours. On ne peut pas faire
+autrement (on ne va pas leur prêter une note), mais **l'écran le DIT** :
+« Les artisans qui n'ont encore aucun avis n'apparaîtront pas : sans avis,
+il n'y a pas de note — ce n'est pas une mauvaise note. » Même règle que les
+« 3 annonces sans lieu précisé ne sont pas affichées ».
+
+#### Une seule échelle de rayons
+
+`RAYONS_KM` passe de `[25, 50, 100, 200]` à **`[10, 20, 50, 100, 200]`**, et
+sert à la Place des pros comme au fil. Le propriétaire a demandé « maçon à
+20 km » et 25 était le plus petit ; deux listes séparées auraient divergé,
+comme les deux listes de formats vidéo du lot 4.
+
+#### Et le calcul vit dans un fichier qui ne charge rien
+
+`src/lib/filtre-fil.js` — sixième application de la leçon de
+`cloudinary-adresses.js`. `verifier-filtre` **fait tourner** `correspond()`
+sur les mêmes cas que `essais-section-33.sql` : les deux écritures de la
+règle (SQL pour la vraie base, JavaScript pour le mode démonstration) sont
+éprouvées sur le même jeu. Écrire deux fois la même règle est un risque
+assumé et borné — il n'y a pas de base en mode démonstration, et une loupe
+qui ne filtrerait rien sans fichier `.env` ne se vérifierait pas ici.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur PostgreSQL 16, les onze cas de
+`supabase/essais-section-33.sql`, les 33 contrôles,
+`npx expo export --platform ios`. Puis au navigateur, en mode
+démonstration :
+
+| | relevé |
+|---|---|
+| la loupe | **40 × 44**, comme la cloche |
+| le fil sans filtre | 3 publications visibles, **aucune ligne de rappel** |
+| la feuille | Métier, Où, Note, Vérifiés, « Voir tout le fil », « Tout effacer » |
+| les rayons | n'apparaissent qu'une fois un centre choisi |
+| note 4/5 | l'avertissement « sans avis » apparaît |
+| après « Maçon » + validation | **1 publication**, « Filtre : Maçon. Modifier », **312 × 44** |
+| la loupe | orange, avec son point |
+| la croix | 3 publications, ligne partie, loupe au repos |
+
+#### CE QUI N'A PAS ÉTÉ VÉRIFIÉ, ET C'EST GRAVE CE COUP-CI
+
+**Le connecteur Supabase s'est déconnecté au milieu du lot.** La section 33
+n'est donc **pas appliquée sur la vraie base**, et l'application l'appelle
+pour tout le fil : tant qu'elle n'y est pas, le fil ne charge rien.
+
+C'est exactement « l'application prend de l'avance sur la base », le défaut
+que ce document garde en tête depuis les six commits qui tournaient contre
+une base ignorant `metiers` et `budget`.
+
+> **La parade : `supabase/a-appliquer/section-33-fil-filtre.sql`**, à coller
+> dans Supabase → SQL Editor. Rejouable, sans aucun ordre destructeur,
+> éprouvé deux fois sur PostgreSQL 16. **À appliquer avant de lancer cette
+> version contre la vraie base.**
+
+Et le reste, comme d'habitude : rien sur un vrai iPhone, et le défilement
+horizontal de la feuille au doigt.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

@@ -7,16 +7,17 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, RefreshControl, ActivityIndicator,
+  View, Text, FlatList, RefreshControl, ActivityIndicator, Pressable,
   StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  C, F, T, S, GOUTTIERE,
+  C, F, T, S, GOUTTIERE, TOUCHE, R,
 } from '../theme';
 import { PillToggle, EmptyState } from '../components/ui';
 import PostCard from '../components/PostCard';
 import VideoSlide from '../components/VideoSlide';
+import { Search, X } from '../components/icons';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
 
@@ -46,6 +47,45 @@ function BasDuFil({ chargement, fin, vide }) {
   }
   return <View style={{ height: 20 }} />;
 }
+/**
+ * LA LIGNE QUI DIT CE QUI EST FILTRÉ.
+ *
+ * Le propriétaire ne voulait pas de rangée de pastilles sur le fil, et il a
+ * raison : c'est le seul écran d'Opus où l'on vient pour REGARDER. Mais un
+ * filtre DUR qui ne se voit pas est un piège — on cherche ensuite pendant
+ * cinq minutes pourquoi « il n'y a rien ». C'est la règle du 04/10 : un
+ * filtre qu'on ne voit pas est un filtre qu'on oublie d'enlever.
+ *
+ * D'où une seule ligne, qui n'existe QUE quand un filtre est posé : elle
+ * NOMME le réglage (« Maçon · 20 km autour de Lambesc (13) »), elle ouvre
+ * la feuille si on la touche, et sa croix l'enlève. Trois gestes en 44 px
+ * de haut, et rien du tout le reste du temps.
+ */
+function RappelFiltre({ resume, onOuvrir, onEffacer }) {
+  if (!resume) return null;
+  return (
+    <View style={s.rappelFiltre}>
+      <Pressable
+        onPress={onOuvrir}
+        style={({ pressed }) => [s.rappelTouche, pressed && s.rappelPressee]}
+        accessibilityRole="button"
+        accessibilityLabel={`Filtre : ${resume}. Modifier`}
+      >
+        <Search size={14} color={C.accentTexte} />
+        <Text style={s.rappelTexte} numberOfLines={1}>{resume}</Text>
+      </Pressable>
+      <Pressable
+        onPress={onEffacer}
+        style={({ pressed }) => [s.rappelCroix, pressed && s.rappelPressee]}
+        accessibilityRole="button"
+        accessibilityLabel="Enlever le filtre"
+      >
+        <X size={16} color={C.accentTexte} />
+      </Pressable>
+    </View>
+  );
+}
+
 const TABS = [
   { key: 'pourvous', label: 'Pour vous' },
   { key: 'abonnements', label: 'Abonnements' },
@@ -59,6 +99,7 @@ export default function HomeScreen({
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
   onOuvrirVideo, onVoirDepuisVideo, onSignaler,
   onChargerPlus, chargePage = false, finDuFil = false,
+  resumeFiltre = '', onEffacerFiltre, onOuvrirFiltre,
   rafraichit = false, onRafraichir, onSupprimerCommentaire, onModifierCommentaire, moiId,
 }) {
   const { height: windowHeight } = useWindowDimensions();
@@ -174,14 +215,47 @@ export default function HomeScreen({
         <PillToggle small value={feedTab} onChange={setFeedTab} options={TABS} />
       </View>
 
+      <RappelFiltre
+        resume={resumeFiltre}
+        onOuvrir={onOuvrirFiltre}
+        onEffacer={onEffacerFiltre}
+      />
+
       <View style={{ flex: 1 }}>
         <FlatList
           data={posts}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={s.classicContent}
           ListHeaderComponent={rappel || null}
+          /* UN MESSAGE DE LISTE VIDE QUI DONNE TORT À L'APPLICATION.
+             Celui d'avant disait « Suis des professionnels pour voir leurs
+             publications ici » — y compris dans « Pour vous », où il n'y
+             avait rien à suivre, et désormais y compris avec un filtre qui
+             écarte tout. On en conclut qu'Opus est désert, et on n'y revient
+             pas. C'est le défaut trouvé le 04/10 sur la Place des pros, à
+             l'identique.
+
+             Et il NOMME le filtre, parce qu'un filtre dur qui ne dit pas
+             qu'il filtre est un piège. Avec plusieurs réglages posés, on
+             reste général : « un message précis et faux est pire qu'un
+             message général et juste ». */
           ListEmptyComponent={
-            <EmptyState>Suis des professionnels pour voir leurs publications ici.</EmptyState>
+            resumeFiltre ? (
+              <EmptyState
+                titre="Rien avec ce filtre"
+                action={onEffacerFiltre ? { label: 'Tout voir', onPress: onEffacerFiltre } : null}
+              >
+                {`Aucune publication pour « ${resumeFiltre} ». Élargissez le rayon, `
+                 + 'changez de métier, ou enlevez le filtre.'}
+              </EmptyState>
+            ) : feedTab === 'abonnements' ? (
+              <EmptyState>
+                Vous ne suivez personne pour l’instant. Abonnez-vous à des
+                artisans pour retrouver leurs publications ici.
+              </EmptyState>
+            ) : (
+              <EmptyState>Aucune publication pour le moment.</EmptyState>
+            )
           }
           viewabilityConfig={reglesVisibilite.current}
           onViewableItemsChanged={surVisibilite.current}
@@ -243,6 +317,35 @@ export default function HomeScreen({
 }
 
 const s = StyleSheet.create({
+  /* ANGLE VIF : cette ligne est de la STRUCTURE — elle PORTE l'information
+     « voilà ce que vous regardez », elle ne flotte pas. Les deux zones
+     appuyables qu'elle contient, elles, sont arrondies. */
+  rappelFiltre: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: GOUTTIERE, marginBottom: S.sm,
+    backgroundColor: C.accentBg,
+    borderWidth: 1, borderColor: C.accentTexte,
+  },
+  rappelTouche: {
+    flex: 1, minWidth: 0, minHeight: TOUCHE,
+    flexDirection: 'row', alignItems: 'center', gap: S.sm,
+    paddingHorizontal: S.md,
+  },
+  /* `flex: 1, minWidth: 0` sur la zone de texte : sans lui, un long résumé
+     POUSSE la croix hors de l'écran au lieu de se couper. Leçon du lot 5. */
+  rappelTexte: {
+    flex: 1, minWidth: 0,
+    fontFamily: F.oswald6, fontSize: T.petit, color: C.ink,
+  },
+  /* 44 points, et une boîte pleine : c'est la sortie de secours d'un filtre
+     dur, elle ne doit pas se rater. */
+  rappelCroix: {
+    width: TOUCHE, height: TOUCHE,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: R.gelule,
+  },
+  rappelPressee: { opacity: 0.7 },
+
   bas: { alignItems: 'center', justifyContent: 'center', paddingVertical: 22, gap: 8 },
   basTexte: { fontFamily: F.inter, fontSize: T.courant, color: C.muted },
   wrap: { flex: 1 },

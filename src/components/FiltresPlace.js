@@ -93,8 +93,12 @@ export function PastilleBascule({ label, on, onPress, icone: Icone = null }) {
   );
 }
 
+/* EXPORTÉES — la feuille de recherche du fil s'en sert, et recopier ces
+   deux briques ferait diverger deux panneaux qui doivent se ressembler.
+   La Place des pros, les Demandes et le fil parlent la même langue. */
+
 /** Une ligne de choix dans un panneau : plus lisible qu'une puce de plus. */
-function Ligne({ texte, aide, choisi, onPress }) {
+export function Ligne({ texte, aide, choisi, onPress }) {
   return (
     <Pressable
       onPress={onPress}
@@ -112,8 +116,8 @@ function Ligne({ texte, aide, choisi, onPress }) {
   );
 }
 
-/** Les rayons : des puces, parce qu'on en compare quatre d'un coup d'œil. */
-function Rayons({ valeur, onChange, ferme = false }) {
+/** Les rayons : des puces, parce qu'on les compare d'un coup d'œil. */
+export function Rayons({ valeur, onChange, ferme = false }) {
   return (
     <View style={s.rangee}>
       {RAYONS_KM.map((km) => (

@@ -58,6 +58,22 @@ import { aiMatchPros } from './lib/ai';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import FeuilleRecherche from './components/FeuilleRecherche';
+import {
+  FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
+} from './lib/filtre-fil';
+
+/* LE SECTEUR SURVIT À LA FERMETURE, LE MÉTIER NON — et c'est la réponse
+   exacte à la crainte du propriétaire : « si un jour il a besoin d'un
+   couvreur il faut pas qu'il soit bloqué que sur des maçons ».
+
+   Les deux n'ont pas la même durée de vie. Le secteur, c'est l'endroit où
+   l'on habite : il ne change pas, et le redemander tous les matins serait
+   absurde. Le métier, c'est un besoin du moment : il change. À la
+   réouverture de l'application, il n'y a donc plus que le secteur — et
+   personne ne peut rester enfermé sur un métier sans l'avoir voulu. */
+const CLE_SECTEUR = 'opus.fil.secteur';
 
 /**
  * Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie.
@@ -100,6 +116,12 @@ export default function OpusApp() {
   // Vidéo sur laquelle ouvrir le plein écran, quand on y arrive depuis le fil.
   const [videoCible, setVideoCible] = useState(null);
   const [feedTab, setFeedTab] = useState('pourvous');
+
+  /* Le filtre du fil, et la feuille qui le règle. Posé par la LOUPE de la
+     barre du haut — le propriétaire ne voulait pas de rangée de pastilles
+     sur le fil, qui est le seul écran d'Opus où l'on vient pour regarder. */
+  const [filtreFil, setFiltreFil] = useState(FILTRE_VIDE);
+  const [loupeOuverte, setLoupeOuverte] = useState(false);
 
   const [pros, setPros] = useState({});
   const [posts, setPosts] = useState([]);
@@ -469,12 +491,6 @@ export default function OpusApp() {
     setFeedMode('video');
   };
 
-  /* Bascule manuelle Fil / Vidéos : on oublie la vidéo visée, sinon le fil
-     rouvrirait toujours au même endroit. */
-  const changerFeedMode = (mode) => {
-    setVideoCible(null);
-    setFeedMode(mode);
-  };
 
   /* ---------- actions publication ---------- */
   const toggleLike = (id) => {
@@ -512,7 +528,12 @@ export default function OpusApp() {
 
     setChargePage(true);
     try {
-      const { posts: suite, fin } = await api.chargerPageFil({ curseur: dernier.curseur });
+      const { posts: suite, fin } = await api.chargerPageFil({
+        curseur: dernier.curseur,
+        filtre: argumentsDuFil(filtreFil, {
+          abonnements: feedTab === 'abonnements', videos: feedMode === 'video',
+        }),
+      });
       /* On écarte ce qu'on a déjà : si quelqu'un publie entre deux pages, la
          même publication peut revenir. Mieux vaut un doublon écarté qu'un
          doublon affiché. */
@@ -531,7 +552,11 @@ export default function OpusApp() {
   const rafraichirFil = async () => {
     setRafraichit(true);
     try {
-      const { posts: page, fin } = await api.chargerPageFil({});
+      const { posts: page, fin } = await api.chargerPageFil({
+        filtre: argumentsDuFil(filtreFil, {
+          abonnements: feedTab === 'abonnements', videos: feedMode === 'video',
+        }),
+      });
       setPosts(page);
       setFinDuFil(fin);
     } catch (e) {
@@ -539,6 +564,100 @@ export default function OpusApp() {
     }
     setRafraichit(false);
   };
+
+  /**
+   * LA SEULE PORTE QUI CHANGE CE QU'ON VOIT DANS LE FIL.
+   *
+   * Filtre, « Fil / Vidéos », « Pour vous / Abonnements » : les trois
+   * passent par ici, parce que les trois sont la même chose — une question
+   * posée à la base. Avant, les deux derniers filtraient À L'ÉCRAN les
+   * vingt publications déjà téléchargées : avec mille artisans, les vingt
+   * dernières publications de toute la France n'en contiennent AUCUNE de
+   * vos abonnements, et l'onglet affiche une page vide.
+   *
+   * On passe les trois valeurs en ARGUMENT plutôt que de lire l'état :
+   * `setFeedTab(x)` puis `rechargerFil()` lirait l'ANCIEN onglet — un état
+   * React ne change pas dans la foulée de l'appel qui l'a posé. C'est
+   * exactement le piège de la réponse à une annonce, le 04/10.
+   */
+  const changerCeQuOnVoit = async ({
+    filtre = filtreFil, mode = feedMode, tab = feedTab,
+  } = {}) => {
+    setFiltreFil(filtre);
+    setFeedMode(mode);
+    setFeedTab(tab);
+    if (mode !== feedMode) setVideoCible(null);
+
+    setChargePage(true);
+    try {
+      const { posts: page, fin } = await api.chargerPageFil({
+        filtre: argumentsDuFil(filtre, {
+          abonnements: tab === 'abonnements', videos: mode === 'video',
+        }),
+      });
+      setPosts(page);
+      setFinDuFil(fin);
+    } catch (e) {
+      showErreur(messageClair(e, 'Le fil n’a pas pu être chargé.'));
+    }
+    setChargePage(false);
+  };
+
+  /* LES TROIS ENVELOPPES SONT DÉCLARÉES ICI, ET PAS PLUS HAUT.
+     Elles appellent `changerCeQuOnVoit` : écrites au-dessus, elles liraient
+     une `const` avant sa déclaration. Ça fonctionne — elles ne sont
+     appelées qu'au doigt —, et ce projet a quand même perdu deux écrans
+     blancs sur cette famille d'erreur (`noop`, puis les trois voyants).
+     L'ordre du fichier est la seule chose qui l'empêche vraiment. */
+
+  /* Bascule manuelle Fil / Vidéos : on oublie la vidéo visée, sinon le fil
+     rouvrirait toujours au même endroit. Et on repasse par la porte unique,
+     parce que « Vidéos » est un filtre comme les autres depuis le
+     05/10/2026 : il est appliqué par la base, pas sur ce qui revient. */
+  const changerFeedMode = (mode) => { changerCeQuOnVoit({ mode }); };
+
+  /* Même raison pour « Pour vous » / « Abonnements ». Deux façons d'arriver
+     au même écran doivent faire exactement le même travail — c'est la leçon
+     du glissement de Découvrir, le 04/10. */
+  const changerFeedTab = (tab) => { changerCeQuOnVoit({ tab }); };
+
+  /* Et le filtre de la loupe. Seul le SECTEUR est enregistré : à la
+     réouverture, le métier a disparu, donc personne ne reste enfermé sur
+     des maçons le jour où il cherche un couvreur. */
+  const appliquerFiltre = (filtre) => {
+    changerCeQuOnVoit({ filtre });
+    const secteur = filtre && filtre.secteur;
+    (secteur && secteur.rayonKm
+      ? AsyncStorage.setItem(CLE_SECTEUR, JSON.stringify(secteur))
+      : AsyncStorage.removeItem(CLE_SECTEUR)).catch(() => {});
+  };
+
+  /**
+   * Le secteur enregistré, relu au démarrage.
+   *
+   * `try`/`catch` autour de CHAQUE accès : un stockage illisible — première
+   * installation, mémoire pleine, navigateur en navigation privée — ne doit
+   * pas empêcher le fil de s'afficher. Même règle que le vibreur de
+   * `retour.js`.
+   */
+  useEffect(() => {
+    let vivant = true;
+    AsyncStorage.getItem(CLE_SECTEUR)
+      .then((brut) => {
+        if (!vivant || !brut) return;
+        const secteur = JSON.parse(brut);
+        if (!secteur || !secteur.rayonKm) return;
+        setFiltreFil((f) => ({ ...f, secteur }));
+        return api.chargerPageFil({ filtre: argumentsDuFil({ secteur }) })
+          .then(({ posts: page, fin }) => {
+            if (!vivant) return;
+            setPosts(page);
+            setFinDuFil(fin);
+          });
+      })
+      .catch(() => {});
+    return () => { vivant = false; };
+  }, []);
 
   /**
    * Tirer vers le bas, sur les autres écrans.
@@ -2135,9 +2254,16 @@ export default function OpusApp() {
 
   /* ---------- dérivés ---------- */
   const visiblePosts = posts.filter((p) => !hiddenIds.has(p.id));
-  const feedAbonnements = feedTab === 'abonnements'
-    ? visiblePosts.filter((p) => p.type === 'ad' || followingIds.has(p.proId))
-    : visiblePosts;
+  /* LE FIL NE SE REFILTRE PLUS À L'ÉCRAN — 05/10/2026.
+     `feedAbonnements` retenait ici les publications de mes abonnements
+     PARMI LES VINGT DÉJÀ TÉLÉCHARGÉES. Avec trois abonnements et seize
+     publications, personne ne le voit. Avec mille artisans, les vingt
+     dernières publications de toute la France n'en contiennent aucune :
+     l'onglet affiche une page vide, et la suivante aussi.
+     `fil_filtre()` (section 33 de schema.sql) le fait dans la base, et
+     `changerCeQuOnVoit` est la seule porte qui le lui demande.
+     Il ne reste ici que « masquer cette publication », qui est un geste de
+     lecture, immédiat, et qui ne doit pas coûter une requête. */
   /**
    * Le fil « Vidéos » ne retient que ce qui se regarde en plein écran — les
    * vidéos ET les montages — et pas les publicités, qui n'en sont pas. Le fil
@@ -2148,9 +2274,7 @@ export default function OpusApp() {
    * renvoyer après une publication. Deux listes séparées finiraient par
    * diverger : c'est exactement ce qui excluait les montages d'ici.
    */
-  const feedFiltered = feedMode === 'video'
-    ? feedAbonnements.filter((p) => p.type === 'post' && FORMATS_VIDEO.has(p.format))
-    : feedAbonnements;
+  const feedFiltered = visiblePosts;
 
   /**
    * L'interlocuteur d'une conversation. C'est un professionnel quand un
@@ -2400,7 +2524,16 @@ export default function OpusApp() {
           }}
         />
       ) : (
-        <TopBrand unreadCount={unreadCount} onBell={() => setScreen('notifications')} />
+        <TopBrand
+          unreadCount={unreadCount}
+          onBell={() => setScreen('notifications')}
+          /* La loupe n'apparaît QUE sur le fil : c'est le fil qu'elle
+             filtre. Sur Découvrir, Messages ou Profil, elle ouvrirait une
+             feuille qui ne changerait rien à ce qu'on regarde. */
+          onLoupe={screen === 'home' ? () => setLoupeOuverte(true) : null}
+          filtreActif={filtreActif(filtreFil)}
+          resumeFiltre={resumeFiltre(filtreFil)}
+        />
       ))}
 
       <View style={[s.body, videoMode && { backgroundColor: C.dark }]}>
@@ -2445,7 +2578,10 @@ export default function OpusApp() {
             feedMode={feedMode} setFeedMode={changerFeedMode}
             videoCible={videoCible} onOuvrirVideo={ouvrirVideoEnGrand}
             onVoirDepuisVideo={(proId) => viewProfile(proId, 'filVideo')}
-            feedTab={feedTab} setFeedTab={setFeedTab}
+            feedTab={feedTab} setFeedTab={changerFeedTab}
+            resumeFiltre={resumeFiltre(filtreFil)}
+            onEffacerFiltre={() => appliquerFiltre(FILTRE_VIDE)}
+            onOuvrirFiltre={() => setLoupeOuverte(true)}
             followingIds={followingIds} savedIds={savedIds}
             openCommentsId={openCommentsId} openContactId={openContactId}
             bottomInset={videoMode ? navHeight : 0}
@@ -2787,6 +2923,22 @@ export default function OpusApp() {
           }
         }}
       />
+
+      {/* LA FEUILLE DE RECHERCHE DU FIL.
+          Montée seulement quand elle est ouverte : `FeuilleBas` est un
+          `Modal`, et un `Modal` fermé reste un nœud de plus dans l'arbre —
+          avec, ici, un sélecteur de métiers de 92 lignes derrière lui. */}
+      {loupeOuverte && (
+        <FeuilleRecherche
+          filtre={filtreFil}
+          /* Mes coordonnées viennent de MA fiche pro quand j'en ai une,
+             de mon compte sinon. Un particulier n'a pas de fiche, et c'est
+             précisément lui qui cherche « autour de moi ». */
+          moi={(userType === 'pro' && pros[myProId]) ? pros[myProId] : monProfil}
+          onValider={appliquerFiltre}
+          onFermer={() => setLoupeOuverte(false)}
+        />
+      )}
 
       <Signaler
         ouvert={!!aSignaler}

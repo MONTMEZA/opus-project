@@ -5722,3 +5722,126 @@ update public.posts p
  where pp.id = p.author_id
    and p.latitude is null
    and pp.latitude is not null;
+
+
+-- ==========================================================================
+--  33. LE FIL SE FILTRE DANS LA BASE — 05/10/2026
+--
+--  LA RÈGLE DU PROPRIÉTAIRE, ET POURQUOI ELLE EST JUSTE
+--  ----------------------------------------------------
+--  « Si par contre il met sur son filtre maçon à 20 km, il lui montre sur
+--  le fil que des posts de maçon à 20 km, mais le filtre doit se régler à
+--  la main. »
+--
+--  J'avais proposé l'inverse — un filtre qui ferait seulement « pencher »
+--  le fil. C'était faux, et son objection le dit mieux que moi : un filtre
+--  qui laisse passer autre chose ne se VÉRIFIE pas. On pose « maçon »,
+--  on voit un couvreur, on en conclut que le réglage ne marche pas, et on
+--  ne s'en sert plus. Un réglage dont personne ne se sert est pire qu'un
+--  réglage absent.
+--
+--  Donc : FILTRE DUR. Ce qui le rend acceptable, ce n'est pas sa douceur,
+--  c'est qu'il se voit en permanence et s'enlève d'un appui — la règle
+--  déjà écrite ici le 04/10 : « un filtre qu'on ne voit pas est un filtre
+--  qu'on oublie d'enlever ».
+--
+--  ET IL EST TENU PAR LA BASE, CE QUI N'EST PAS UN DÉTAIL
+--  -------------------------------------------------------
+--  `feedAbonnements` filtrait À L'ÉCRAN, sur les vingt publications déjà
+--  téléchargées. Avec trois abonnements et seize publications, personne ne
+--  le voit. Avec mille artisans, les vingt dernières publications de toute
+--  la France ne contiennent AUCUN de vos abonnements : l'onglet
+--  « Abonnements » affiche une page vide, et la suivante aussi.
+--
+--  C'est le même défaut que celui qu'on vient corriger, déjà présent. Les
+--  deux partent ensemble, sinon on obtiendrait le pire des deux : un
+--  filtre appliqué dans la base ET un filtre appliqué sur son résultat.
+--
+--  > **`fil_filtre()` est la SEULE porte du fil.** Métier, secteur, note,
+--  > badge, abonnements, vidéos : tout se décide ici, et rien ne se
+--  > refiltre après.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  33.1  La requête
+--
+--  `security invoker`, et c'est obligatoire : les règles RLS de `posts`
+--  doivent s'appliquer, à commencer par le BLOCAGE. Une fonction
+--  `security definer` rendrait ici les publications des personnes qu'on a
+--  bloquées — et personne ne s'en apercevrait, puisqu'elle rendrait des
+--  publications parfaitement normales.
+--
+--  TOUT FILTRE RETIRE LES PUBLICITÉS, et c'est voulu.
+--  Une publicité n'a ni auteur, ni métier, ni lieu, ni badge : elle ne
+--  peut satisfaire aucun critère. Demander « les maçons vérifiés à 20 km »
+--  et recevoir une publicité serait exactement ce qui fait perdre
+--  confiance dans un fil. Elle revient dès qu'on enlève le filtre.
+--
+--  LE PIÈGE DE LA NOTE, mesuré avant de l'écrire : **4 artisans sur 7
+--  n'ont AUCUN avis**. Un filtre « minimum 3/5 » les écarte tous — donc
+--  tous les nouveaux inscrits, pour toujours, et sans rien dire. On ne
+--  peut pas faire autrement (on ne va pas leur prêter une note), mais
+--  l'ÉCRAN doit le dire. C'est la règle des « 3 annonces sans lieu précisé
+--  ne sont pas affichées ».
+-- --------------------------------------------------------------------------
+create or replace function public.fil_filtre(
+  p_metier      text default null,
+  p_lat         double precision default null,
+  p_lon         double precision default null,
+  p_rayon_km    int default null,
+  p_note_min    numeric default null,
+  p_verifies    boolean default false,
+  p_abonnements boolean default false,
+  p_videos      boolean default false,
+  p_avant       timestamptz default null,
+  p_limite      int default 20
+) returns setof public.posts
+language sql stable security invoker set search_path = public as $$
+  select p.*
+    from public.posts p
+    left join public.professional_profiles pp on pp.id = p.author_id
+   where (p_avant is null or p.created_at < p_avant)
+
+     -- Le fil « Vidéos » ne retient que ce qui se regarde en plein écran.
+     -- Une publicité n'en est pas une, même quand elle porte une vidéo.
+     and (not p_videos
+          or (p.is_ad = false and p.type in ('video', 'montage')))
+
+     -- « Abonnements » : les miens, plus les publicités, qui sont le
+     -- contrat passé avec l'annonceur et ne dépendent de personne.
+     and (not p_abonnements
+          or p.is_ad
+          or exists (select 1 from public.follows f
+                      where f.follower_id = auth.uid()
+                        and f.following_id = p.author_id))
+
+     and (p_metier is null or p.metier = p_metier)
+     and (not p_verifies or coalesce(pp.verifie, false))
+
+     -- `avis_count > 0` : sans avis, il n'y a pas de note — et pas de note
+     -- n'est pas « une mauvaise note ». On écarte, et l'écran le DIT.
+     and (p_note_min is null
+          or (coalesce(pp.avis_count, 0) > 0
+              and (pp.note_delais + pp.note_qualite + pp.note_tarif) / 3.0 >= p_note_min))
+
+     -- « Pas de coordonnées » veut dire « on ne sait pas où » : prétendre
+     -- que c'est à 10 km serait inventer. Même règle que les annonces.
+     and (p_rayon_km is null or p_lat is null or p_lon is null
+          or (p.latitude is not null and p.longitude is not null
+              and public.distance_km(p_lat, p_lon, p.latitude, p.longitude) <= p_rayon_km))
+
+   order by p.created_at desc, p.id desc
+   limit least(coalesce(p_limite, 20), 50)
+$$;
+
+comment on function public.fil_filtre(
+  text, double precision, double precision, int, numeric, boolean, boolean,
+  boolean, timestamptz, int) is
+  'La SEULE porte du fil. Filtre dur, appliqué dans la base — filtrer à '
+  'l''écran les vingt publications déjà téléchargées rend une page vide '
+  'dès qu''il y a du monde. security invoker : les règles RLS, et donc le '
+  'blocage, doivent s''appliquer.';
+
+grant execute on function public.fil_filtre(
+  text, double precision, double precision, int, numeric, boolean, boolean,
+  boolean, timestamptz, int) to anon, authenticated;

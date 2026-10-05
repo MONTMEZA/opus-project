@@ -14,6 +14,8 @@ import {
   initialDemandes, initialAnnonces, initialDemandesRecues,
 } from '../data/demo';
 import { METIER_PAR_DEFAUT } from './metiers';
+import { correspond } from './filtre-fil';
+
 /* En HAUT, jamais en `await import()` : la règle du 01/10 — Metro découpe
    alors le paquet et va chercher le morceau manquant auprès du serveur de
    développement, au moment où la ligne s'exécute. */
@@ -22,6 +24,15 @@ import { morceauDeChemin } from './types-fichiers';
 import { reduireImage, TAILLE_MAX_MO } from './media';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
+
+/* LES ABONNEMENTS DU MODE DÉMONSTRATION, À UN SEUL ENDROIT : le chargement
+   initial les rend à l'écran, et le filtre « Abonnements » s'en sert. Deux
+   listes séparées se contrediraient, et l'onglet paraîtrait cassé.
+
+   Et déclarée ICI, tout en haut : ce projet a déjà perdu deux écrans
+   blancs sur une `const` lue avant sa déclaration (`noop`, puis les trois
+   voyants). */
+export const ABONNEMENTS_DEMO = [4];
 
 /* ------------------------------------------------------------------ */
 /*  Session                                                            */
@@ -459,7 +470,7 @@ export async function loadAll() {
       demandesVuesLe: new Date(Date.now() - 24 * 3600e3).toISOString(),
       mesSos: null,
       notifications: initialNotifications.map((n) => ({ ...n })),
-      followingIds: [4],
+      followingIds: ABONNEMENTS_DEMO,
       savedIds: [],
       monCompte: { nom: 'Vous', ville: '', telephone: '', avatarUrl: null },
       // En démo, une demande en attente pour montrer le mécanisme.
@@ -489,8 +500,13 @@ export async function loadAll() {
        dans les listes vient de `avis_count` / `note_*`, tenus par un
        trigger. Les avis eux-mêmes arrivent à l'ouverture d'un profil. */
     supabase.from('professional_partners').select('*'),
-    supabase.from('posts').select('*')
-      .order('created_at', { ascending: false }).limit(TAILLE_PAGE_FIL),
+    /* LE FIL PASSE PAR `fil_filtre()`, MÊME SANS FILTRE — 05/10/2026.
+       Une seule porte. Deux requêtes différentes pour la même liste —
+       l'une ici, l'autre dans `chargerPageFil` — finiraient par ne plus
+       rendre la même chose, et la première page du fil ne ressemblerait
+       plus aux suivantes. Sans argument, la fonction rend exactement ce
+       que rendait ce `select`. */
+    supabase.rpc('fil_filtre', { p_limite: TAILLE_PAGE_FIL }),
     supabase.from('post_likes').select('post_id').eq('user_id', uid),
     supabase.from('saved_posts').select('post_id').eq('user_id', uid),
     supabase.from('follows').select('following_id').eq('follower_id', uid),
@@ -813,13 +829,30 @@ function rowToPost(p, likedSet, commentaires = null) {
  * ça construit.
  */
 
-/** Le fil en mode démonstration : on découpe la liste en mémoire. */
+/**
+ * Le fil en mode démonstration : on découpe la liste en mémoire.
+ *
+ * ET LE FILTRE S'Y APPLIQUE AUSSI — règle du projet depuis le 01/10 : le
+ * mode démonstration doit faire VIVRE le mécanisme. Une loupe qui ne
+ * filtrerait rien sans fichier `.env` ne se vérifierait pas ici, et c'est
+ * précisément ce qu'on vient corriger ailleurs.
+ *
+ * `correspond()` tient la même règle que `fil_filtre()` en SQL. Écrire deux
+ * fois la même chose est un risque assumé et borné : il n'y a pas de base
+ * en démonstration, et `verifier-filtre` éprouve les deux sur les mêmes cas.
+ */
 async function pageFilDemo(options = {}) {
   const depart = options.curseur ? Number(options.curseur) : 0;
-  const page = initialPosts
+  const f = options.filtre || {};
+  const abonnements = f.abonnements ? new Set(ABONNEMENTS_DEMO) : null;
+
+  const retenus = initialPosts.filter(
+    (p) => correspond(p, demoPros[p.proId], f, { abonnements, videos: !!f.videos }));
+
+  const page = retenus
     .slice(depart, depart + TAILLE_PAGE_FIL)
     .map((p, i) => postDemo(p, depart + i + 1));
-  return { posts: page, fin: depart + TAILLE_PAGE_FIL >= initialPosts.length };
+  return { posts: page, fin: depart + TAILLE_PAGE_FIL >= retenus.length };
 }
 
 /**
@@ -832,12 +865,27 @@ async function pageFilDemo(options = {}) {
  */
 async function pageFilSupabase(options = {}) {
   const curseur = options.curseur || null;
-  let requete = supabase.from('posts').select('*')
-    .order('created_at', { ascending: false })
-    .limit(TAILLE_PAGE_FIL);
-  if (curseur) requete = requete.lt('created_at', curseur);
+  const f = options.filtre || {};
 
-  const reponse = await requete;
+  /* LE FILTRE EST APPLIQUÉ PAR LA BASE, JAMAIS SUR CE QUI REVIENT.
+     C'est tout le lot du 05/10/2026, et le défaut était déjà là :
+     `feedAbonnements` filtrait À L'ÉCRAN, sur les vingt publications déjà
+     téléchargées. Avec trois abonnements et seize publications, personne
+     ne le voit. Avec mille artisans, les vingt dernières publications de
+     toute la France n'en contiennent AUCUN : l'onglet affiche une page
+     vide, et la suivante aussi. */
+  const reponse = await supabase.rpc('fil_filtre', {
+    p_metier: f.metier || null,
+    p_lat: f.latitude != null ? f.latitude : null,
+    p_lon: f.longitude != null ? f.longitude : null,
+    p_rayon_km: f.rayonKm || null,
+    p_note_min: f.noteMin || null,
+    p_verifies: !!f.verifies,
+    p_abonnements: !!f.abonnements,
+    p_videos: !!f.videos,
+    p_avant: curseur || null,
+    p_limite: TAILLE_PAGE_FIL,
+  });
   if (reponse.error) throw reponse.error;
 
   const lignes = reponse.data || [];
