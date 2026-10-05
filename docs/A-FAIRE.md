@@ -1310,10 +1310,31 @@ façon pas être ouverte au public.
 
 ## 5. Points de vigilance
 
-- **Un profil incomplet en base** (`d23e1784-…`) : un compte porte un nom mais
-  pas d'entreprise, sans doute une inscription interrompue. À nettoyer, et à
-  empêcher : la fiche professionnelle devrait être créée en même temps que le
-  compte, ou pas du tout.
+- **Le compte sans fiche** (`d23e1784-…`) — ÉLUCIDÉ le 05/10/2026, et ce
+  n'était pas ce qu'on croyait. Ce n'est pas une inscription interrompue :
+  `auth.users.is_anonymous = true`, aucune adresse e-mail, aucune
+  métadonnée, créé et connecté **à la même seconde le 14/09/2026 à
+  19:17:52**, jamais revu. C'est une **connexion anonyme** — la
+  fonctionnalité de Supabase qui ouvre une session sans e-mail ni mot de
+  passe.
+
+  **Deux bonnes nouvelles.** D'abord, rien dans `src/` ne l'appelle : ce
+  n'est pas l'application qui l'a créé. Ensuite, vérifié le 05/10 en
+  essayant pour de vrai : le projet répond
+  `422 anonymous_provider_disabled`. **La porte est fermée, le cas ne peut
+  plus se reproduire.**
+
+  Le compte ne porte rien — 0 publication, 0 demande, 0 message, 0 avis,
+  0 notification, aucune fiche professionnelle. Et depuis le 05/10 il se
+  réparerait tout seul si quelqu'un s'y reconnectait, ce qui est
+  impossible : une session anonyme perdue ne se retrouve pas.
+
+  ⏳ **Il reste à le supprimer, et c'est à VOUS** : Supabase →
+  Authentication → Users → la ligne sans e-mail (`d23e1784-…`) →
+  « Delete user ». Je ne peux pas le faire d'ici, et c'est une protection,
+  pas une limite : le connecteur refuse tout ordre destructeur sans qu'un
+  humain confirme. Essayé le 05/10, l'appel expire sans rien appliquer —
+  vérifié après coup, le compte était intact.
 - **Aucun test automatique d'interface.** Sept scripts de vérification
   (`npm run verifier-*`) couvrent le SQL, les listes et les formats, mais
   aucun ne rejoue les écrans. Les tests Playwright sont écrits à la main à

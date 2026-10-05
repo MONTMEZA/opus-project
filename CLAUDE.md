@@ -2998,6 +2998,65 @@ comptes jetables supprimés dans la même session (0 restant) :
   désormais tout seul à la première reconnexion, et il ne porte aucun
   contenu. C'est au propriétaire de décider s'il le garde.
 
+### Un compte sans e-mail n'est pas une inscription ratée (05/10/2026)
+
+Le compte « fantôme » du 14/09, que j'avais présenté le matin même comme une
+inscription interrompue, ne l'était pas. **Je l'ai écrit avant de l'avoir
+regardé.**
+
+En le relisant avant de le supprimer, comme le demande ce document :
+
+| | |
+|---|---|
+| `auth.users.is_anonymous` | **true** |
+| adresse e-mail | **aucune** |
+| `raw_user_meta_data` | `{}` |
+| créé / connecté | **à la même seconde**, 14/09 19:17:52 |
+| reconnexions | aucune |
+
+C'est une **connexion anonyme** — la fonctionnalité de Supabase qui ouvre
+une session sans e-mail ni mot de passe. Et **rien dans `src/` n'appelle
+`signInAnonymously`** : ce n'est pas l'application qui l'a créée.
+
+> **Avant de nettoyer une ligne, demander ce qu'elle EST.** « Un compte pro
+> sans fiche » et « une session anonyme ouverte une fois » ne se corrigent
+> pas du tout au même endroit — et la première lecture menait à chercher un
+> défaut d'inscription qui n'existait pas.
+
+Et la vraie question à poser dans ce cas n'est pas « comment l'effacer »
+mais **« est-ce que ça peut recommencer ? »**. Éprouvé pour de vrai plutôt
+que lu dans un tableau de bord :
+
+```
+POST /auth/v1/signup  {}
+→ 422  anonymous_provider_disabled
+```
+
+La porte est fermée. S'il avait répondu un jeton, c'était un trou béant —
+n'importe qui, avec la clé publiable, aurait pu fabriquer des comptes sans
+limite.
+
+#### Et le garde-fou du connecteur a tenu, une fois de plus
+
+Le propriétaire a autorisé la suppression, explicitement. L'appel a quand
+même **expiré au bout de la minute**, sans rien appliquer — vérifié juste
+après : compte intact, 13 lignes comme avant.
+
+> **Son autorisation à moi ne vaut pas la confirmation que le connecteur
+> attend.** Ce sont deux choses différentes, et c'est très bien ainsi : une
+> session de travail ne doit pas pouvoir détruire une ligne de la base de
+> quelqu'un, même avec son accord écrit dans la conversation.
+>
+> **Et on n'essaie pas de contourner** — ni en cachant le mot dans une
+> chaîne, ni en créant une fonction `security definer` « juste pour cette
+> fois ». La seconde serait pire : elle laisserait dans la base une porte
+> permanente pour supprimer n'importe quel compte, construite pour effacer
+> une ligne vide.
+
+La suppression passe donc par Supabase → Authentication → Users, en deux
+clics, et elle lui appartient — comme la protection contre les mots de
+passe compromis.
+
 ### Trois remarques du propriétaire, et ce qu'elles ont coûté (05/10/2026)
 
 Trois points relevés en se servant de l'application, et il a demandé une
