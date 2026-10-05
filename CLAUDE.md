@@ -3920,23 +3920,64 @@ démonstration :
 | la loupe | orange, avec son point |
 | la croix | 3 publications, ligne partie, loupe au repos |
 
-#### CE QUI N'A PAS ÉTÉ VÉRIFIÉ, ET C'EST GRAVE CE COUP-CI
+#### Le connecteur est tombé au milieu du lot — et ce qu'on en retient
 
-**Le connecteur Supabase s'est déconnecté au milieu du lot.** La section 33
-n'est donc **pas appliquée sur la vraie base**, et l'application l'appelle
-pour tout le fil : tant qu'elle n'y est pas, le fil ne charge rien.
+`fil_filtre()` n'a pas pu être posée sur la vraie base ce soir-là, alors que
+l'application l'appelait déjà pour TOUT le fil. Pendant une heure, le dépôt
+était dans l'état que ce document redoute depuis les six commits qui
+tournaient contre une base ignorant `metiers` : **l'application en avance sur
+la base**, et un fil qui ne charge rien.
 
-C'est exactement « l'application prend de l'avance sur la base », le défaut
-que ce document garde en tête depuis les six commits qui tournaient contre
-une base ignorant `metiers` et `budget`.
+> **Un lot dont la moitié BASE n'est pas appliquée n'est pas fini**, même
+> quand tous les contrôles passent. Ce qui a été fait en attendant, et qui
+> est la bonne réaction : écrire la migration dans un fichier à coller dans
+> Supabase → SQL Editor, le dire en tête de réponse et dans le message de
+> commit, plutôt que de laisser quelqu'un lancer la version et conclure que
+> le fil est cassé.
+>
+> Le fichier a été retiré dès la migration appliquée : un fichier que
+> personne n'a plus à ouvrir est le « bouton §18 » sous une autre forme.
 
-> **La parade : `supabase/a-appliquer/section-33-fil-filtre.sql`**, à coller
-> dans Supabase → SQL Editor. Rejouable, sans aucun ordre destructeur,
-> éprouvé deux fois sur PostgreSQL 16. **À appliquer avant de lancer cette
-> version contre la vraie base.**
+#### Appliqué et vérifié sur la VRAIE base
 
-Et le reste, comme d'habitude : rien sur un vrai iPhone, et le défilement
-horizontal de la feuille au doigt.
+Le connecteur est revenu, la migration est passée. Puis **par le chemin de
+l'application** (clé publiable + jeton d'un compte jetable, PostgREST),
+c'est-à-dire exactement ce que fait Opus :
+
+| | publications rendues |
+|---|---|
+| sans filtre | **16** (dont les 2 publicités) |
+| `metier = macon` | 7 |
+| 20 km autour de Lambesc | 10 |
+| **20 km autour de Lille** | **0** — le filtre filtre |
+| vérifiés seulement | 3 |
+| vidéos | 2 |
+| abonnements (compte neuf) | **2** — les deux publicités, et rien d'autre |
+| note ≥ 3/5 | 11 |
+| `p_limite = 100000` | 16 (plafonné) |
+
+**Et le blocage, qui est la raison d'être du `security invoker` :** le
+compte d'essai bloque l'artisan aux 9 publications, par le chemin de
+l'application.
+
+| | avant | après |
+|---|---|---|
+| sans filtre | 16 | **7** |
+| `metier = macon` | 7 | **1** |
+| 20 km autour de Lambesc | 10 | **1** |
+
+Un filtre ne contourne donc pas le blocage. Compte jetable supprimé dans la
+même session : 0 restant, base revenue à 13 comptes / 7 fiches /
+16 publications, et le seul blocage encore en base est celui du 29/09, qui
+n'est pas le mien.
+
+Un détail au passage, et c'était MA faute : le premier appel a reçu un
+**403** en posant le blocage, parce que j'avais omis `bloqueur_id`. La
+politique exige `auth.uid() = bloqueur_id`, et `api.bloquer` l'envoie bien.
+Un refus de la base n'accuse pas toujours la base.
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone, et le
+défilement de la feuille au doigt.
 
 ## Dépendances : vérifier avant de proposer
 
