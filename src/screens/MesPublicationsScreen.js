@@ -17,10 +17,11 @@ import {
 import { BtnMini, EmptyState, SectionLabel, TextArea } from '../components/ui';
 import Media from '../components/Media';
 import { apercuDe } from '../lib/cloudinary';
+import { porteUnVisuel } from '../lib/formats-publication';
 import { nbCommentairesDe } from '../components/Commentaires';
 import {
   Heart, MessageSquare, Share2, Trash, RefreshCw, Grid, VideoIcon, Layers, TypeIcon,
-  Edit, Lightbulb,
+  Edit, Lightbulb, Eye,
 } from '../components/icons';
 
 const ICONE_FORMAT = {
@@ -73,7 +74,20 @@ export default function MesPublicationsScreen({
           return (
             <View key={String(p.id)} style={s.carte}>
               <Pressable style={s.haut} onPress={() => onOuvrir && onOuvrir(p)}>
-                <Media media={apercuDe(p.media)} style={s.vignette} />
+                {/* UNE PUBLICATION SANS VISUEL N'A PAS DE VIGNETTE — vu
+                    sur une capture le 05/10/2026, en relisant « Mes
+                    publications » avec une publication « Texte » : elle
+                    affichait un carré gris, c'est-à-dire l'image d'une
+                    image qui n'existe pas. C'est le même défaut que le fil
+                    du lot C, à un autre endroit : le FORMAT décide, pas le
+                    contenu de `media`. */}
+                {porteUnVisuel(p.format)
+                  ? <Media media={apercuDe(p.media)} style={s.vignette} />
+                  : (
+                    <View style={[s.vignette, s.vignetteTexte]}>
+                      <Icone size={18} color={C.muted} />
+                    </View>
+                  )}
 
                 <View style={s.infos}>
                   <View style={s.formatLigne}>
@@ -106,6 +120,20 @@ export default function MesPublicationsScreen({
                     <View style={s.chiffre}>
                       <MessageSquare size={12} color={C.muted} />
                       <Text style={s.chiffreTexte}>{nbCommentairesDe(p)}</Text>
+                    </View>
+                    {/* LES VUES — le chiffre le plus utile, et le seul qui
+                        manquait. Relevé sur la vraie base le 05/10/2026 :
+                        14 publications pour 5 j'aime et 5 commentaires. Un
+                        artisan publiait et n'apprenait RIEN — « 5 j'aime »
+                        ne dit pas si on l'a regardé.
+
+                        Il n'apparaît QUE sur cet écran, qui est le sien :
+                        un compteur de vues sur chaque carte du fil
+                        transformerait le fil en classement, et c'est
+                        exactement ce que ce lot refuse de faire. */}
+                    <View style={s.chiffre}>
+                      <Eye size={12} color={C.muted} />
+                      <Text style={s.chiffreTexte}>{p.vues || 0}</Text>
                     </View>
                   </View>
                 </View>
@@ -201,6 +229,10 @@ const s = StyleSheet.create({
   haut: { flexDirection: 'row', gap: 10, padding: 10 },
   vignette: { width: 64, height: 80, backgroundColor: C.line },
   infos: { flex: 1, minWidth: 0 },
+  vignetteTexte: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.bg, borderWidth: 1, borderColor: C.line, borderStyle: 'dashed',
+  },
   formatLigne: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   format: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
   /* La même étiquette que dans le fil, en plus petit : même couleur, même

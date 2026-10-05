@@ -18,6 +18,8 @@ import { PillToggle, EmptyState } from '../components/ui';
 import PostCard from '../components/PostCard';
 import VideoSlide from '../components/VideoSlide';
 import { Search, X } from '../components/icons';
+import useCompteurDeVues from '../lib/compteur-vues';
+import { vuesPossibles } from '../lib/vues';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
 
@@ -101,6 +103,7 @@ export default function HomeScreen({
   onChargerPlus, chargePage = false, finDuFil = false,
   resumeFiltre = '', onEffacerFiltre, onOuvrirFiltre,
   rafraichit = false, onRafraichir, onSupprimerCommentaire, onModifierCommentaire, moiId,
+  onVues,
 }) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -124,9 +127,36 @@ export default function HomeScreen({
 
   const [visibles, setVisibles] = useState(() => new Set());
   const reglesVisibilite = useRef({ itemVisiblePercentThreshold: 65 });
+
+  /* LES VUES (section 35). `signaler` n'écrit QUE dans une référence : on
+     est appelé plusieurs fois par seconde pendant qu'on fait défiler, et
+     poser un état ici redessinerait le fil à chaque fois. C'est le calcul
+     de `src/lib/vues.js` qui décide ensuite ce qui a vraiment été regardé —
+     une publication traversée en descendant n'est pas une vue. */
+  const signalerVues = useCompteurDeVues({ envoyer: onVues, actif: !!onVues });
+
   const surVisibilite = useRef(({ viewableItems }) => {
     setVisibles(new Set(viewableItems.map((v) => v.item.id)));
   });
+
+  /* `surVisibilite` est une RÉFÉRENCE figée au premier rendu — une
+     `FlatList` refuse qu'on change `onViewableItemsChanged` en cours de
+     route. Elle ne peut donc pas voir `signalerVues`, ni `posts`. D'où un
+     effet séparé, qui suit l'ensemble visible et la liste. */
+  useEffect(() => {
+    if (feedMode === 'video') return;
+    signalerVues(vuesPossibles(posts.filter((p) => visibles.has(p.id)), moiId));
+  }, [visibles, posts, moiId, signalerVues, feedMode]);
+
+  /* LE FIL VIDÉO N'A PAS D'ENSEMBLE VISIBLE : il n'y a qu'une diapositive à
+     l'écran, et c'est `slideActive`. Une vidéo qu'on laisse tourner une
+     seconde est bien plus sûrement « vue » qu'une carte aperçue en
+     descendant. */
+  useEffect(() => {
+    if (feedMode !== 'video') return;
+    const courant = posts[slideActive];
+    signalerVues(courant ? vuesPossibles([courant], moiId) : []);
+  }, [feedMode, slideActive, posts, moiId, signalerVues]);
 
   /* ---------- mode vidéo : plein écran ---------- */
   if (feedMode === 'video') {

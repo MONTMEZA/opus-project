@@ -1977,44 +1977,18 @@ end $$;
 --  Emprunter des privilèges serait inutile — et dangereux, puisque la
 --  fonction est publiée en API REST.
 -- --------------------------------------------------------------------------
-create or replace function public.mes_donnees()
-returns jsonb
-language sql
-stable
-security invoker
-set search_path = public
-as $$
-  select jsonb_build_object(
-    'export_du', now(),
-    /* Passe par mon_compte() (section 18) et non par un `to_jsonb(u)`
-       direct : `mes_donnees()` s'exécute avec les droits de l'appelant, et
-       depuis que les colonnes sensibles de `public.users` lui sont fermées,
-       lire la ligne entière échouerait — l'export RGPD reviendrait vide ou
-       en erreur, pour la meilleure des raisons. */
-    'compte',    (select to_jsonb(public.mon_compte())),
-    'fiche_professionnelle',
-                 (select to_jsonb(p) from public.professional_profiles p where p.id = auth.uid()),
-    'publications',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.posts x where x.author_id = auth.uid()), '[]'::jsonb),
-    'commentaires',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.comments x where x.author_id = auth.uid()), '[]'::jsonb),
-    'avis_laisses',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.reviews x where x.author_id = auth.uid()), '[]'::jsonb),
-    'demandes',  coalesce((select jsonb_agg(to_jsonb(x)) from public.demandes x where x.client_id = auth.uid()), '[]'::jsonb),
-    'annonces',  coalesce((select jsonb_agg(to_jsonb(x)) from public.annonces_pro x where x.auteur_id = auth.uid()), '[]'::jsonb),
-    'devis',     coalesce((select jsonb_agg(to_jsonb(x)) from public.quote_requests x
-                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
-    'rappels',   coalesce((select jsonb_agg(to_jsonb(x)) from public.callback_requests x
-                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
-    'messages',  coalesce((select jsonb_agg(to_jsonb(x)) from public.messages x where x.sender_id = auth.uid()), '[]'::jsonb),
-    'abonnements',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.follows x where x.follower_id = auth.uid()), '[]'::jsonb),
-    'personnes_bloquees',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.blocages x where x.bloqueur_id = auth.uid()), '[]'::jsonb),
-    'signalements_deposes',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.signalements x where x.auteur_id = auth.uid()), '[]'::jsonb)
-  )
-$$;
+/* `mes_donnees()` — L'EXPORT RGPD A DÉMÉNAGÉ EN SECTION 35, le 05/10/2026.
+   Il doit connaître TOUTES les tables du projet, donc il ne peut pas être
+   écrit avant la dernière. Tant qu'il vivait ici, chaque table ajoutée plus
+   bas était un oubli silencieux de l'export — et le jour où `post_vues` est
+   née, la fonction ne pouvait littéralement plus se créer à cet endroit :
+   PostgreSQL contrôle le corps d'une fonction SQL à sa CRÉATION, et la
+   table n'existe pas encore ici.
+
+   Il n'y a donc pas deux versions : il n'y en a qu'une, tout à la fin.
+   C'est la règle posée le 05/10 avec `cree_fiche_utilisateur` — une règle
+   ne s'écrit qu'à UN endroit, et c'est la PREMIÈRE des deux qui se fait
+   oublier le jour où elle change. */
 
 -- --------------------------------------------------------------------------
 --  13.8  QUI A LE DROIT D'APPELER QUOI
@@ -2039,8 +2013,12 @@ declare f text;
 begin
   foreach f in array array[
     'public.est_masque(uuid)',
-    'public.preparer_suppression_compte()',
-    'public.mes_donnees()'
+    'public.preparer_suppression_compte()'
+    /* `mes_donnees()` n'est plus ici : elle naît en section 35, donc après
+       ce bloc. Ce `foreach` avale `undefined_function` — le droit aurait
+       donc été passé SOUS SILENCE sur une base neuve, et accordé seulement
+       au second rejouage. Un export RGPD qui ne marche qu'une fois sur
+       deux. Son droit est posé avec elle. */
   ] loop
     begin
       execute format('grant execute on function %s to authenticated', f);
@@ -5929,3 +5907,287 @@ comment on column public.posts.conseil is
   'Se combine avec n''importe quel `type` — une vidéo-conseil, une '
   'photo-conseil. Le type `conseil` de la contrainte reste accepté pour '
   'les lignes anciennes, mais l''écran ne le propose plus.';
+
+
+-- ==========================================================================
+--  35. LES VUES — un signal, et quelqu'un qui le LIT — 05/10/2026
+--
+--  POURQUOI CE LOT EXISTE, ET POURQUOI IL A FAILLI ÊTRE UNE FAUTE
+--  --------------------------------------------------------------
+--  L'intention de départ était « enregistrer les signaux maintenant, pour
+--  pouvoir classer le fil plus tard » : une donnée qu'on ne garde pas est
+--  perdue pour toujours, et un moteur de recommandation sans historique ne
+--  recommande rien.
+--
+--  Sauf que c'est MOT POUR MOT le défaut que ce projet traque depuis le
+--  01/10/2026 : une table qu'on écrit sans jamais la lire est une panne
+--  silencieuse. Trois tables de demandes avaient dormi ainsi pendant des
+--  semaines pendant que l'application affichait « X est prévenu ».
+--
+--  > **Un signal enregistré « pour plus tard » n'a pas de lecteur, donc
+--  > rien ne dit s'il est juste.** Il peut compter double, compter zéro,
+--  > compter les mauvaises lignes : personne ne le saura avant le jour où
+--  > on s'en servira — c'est-à-dire trop tard.
+--
+--  D'où la forme retenue : le signal a un lecteur DÈS AUJOURD'HUI, et ce
+--  lecteur est l'artisan lui-même. Relevé sur la vraie base avant d'écrire
+--  une ligne :
+--
+--      14 publications · 5 j'aime · 5 commentaires · 0 enregistrement
+--
+--  Autrement dit, un artisan publie et n'apprend RIEN. « 5 j'aime sur
+--  14 publications » ne dit pas si on l'a regardé ; « 47 vues » le dit.
+--  C'est le chiffre le plus utile qu'on puisse lui donner aujourd'hui, et
+--  c'est accessoirement la matière première du classement de demain.
+--
+--  CE QUE CETTE SECTION NE FAIT PAS, ET C'EST VOULU
+--  ------------------------------------------------
+--  Elle ne classe rien. Le fil reste trié par date, et le filtre du lot B
+--  reste la seule façon de choisir ce qu'on voit. Poser un classement
+--  aujourd'hui, avec quatorze publications, reviendrait à régler une
+--  machine sur du vide.
+--
+--  LA VIE PRIVÉE N'EST PAS UNE OPTION DE CE LOT
+--  ---------------------------------------------
+--  « Qui a regardé quoi » est une donnée personnelle, et c'est aussi la
+--  chose qui ferait fuir un particulier : savoir qu'un artisan voit qu'on a
+--  regardé sa fiche trois fois change le comportement de tout le monde.
+--
+--  > **L'artisan voit COMBIEN, jamais QUI.** Le détail n'est lisible que
+--  > par celui qui l'a produit — c'est ce que la politique de lecture
+--  > ci-dessous dit, et c'est tout ce qu'elle dit. Il n'existe aucune
+--  > fonction, aucune vue, aucun écran qui rende la liste des spectateurs.
+-- ==========================================================================
+
+create table if not exists public.post_vues (
+  post_id       uuid not null references public.posts(id) on delete cascade,
+  spectateur_id uuid not null references public.users(id) on delete cascade,
+  created_at    timestamptz not null default clock_timestamp(),
+  /* LA CLÉ PRIMAIRE EST LA RÈGLE : une vue par personne et par
+     publication. Sans elle, descendre et remonter le fil dix fois
+     compterait dix vues, et le chiffre ne voudrait plus rien dire — c'est
+     exactement ce qui rend les compteurs de vues d'ailleurs irréels.
+     Elle sert aussi d'index pour le `on conflict do nothing`. */
+  primary key (post_id, spectateur_id)
+);
+
+/* L'autre sens de la lecture : « ce que J'AI regardé », pour l'export
+   RGPD. Sans cet index, `mes_donnees()` parcourt toute la table. */
+create index if not exists idx_post_vues_spectateur
+  on public.post_vues (spectateur_id, created_at desc);
+
+alter table public.post_vues enable row level security;
+
+alter table public.posts add column if not exists vues_count int not null default 0;
+
+comment on column public.posts.vues_count is
+  'Combien de personnes DIFFÉRENTES ont vu cette publication. Ne diminue '
+  'jamais : une vue a eu lieu, et la suppression du compte de celui qui a '
+  'regardé ne la fait pas ne pas avoir eu lieu. Voir la section 35.';
+
+-- --------------------------------------------------------------------------
+--  35.1 Qui lit, qui écrit
+--
+--  TROIS politiques et pas quatre : il n'y a ni `update` ni `delete`. Une
+--  vue ne se retire pas et ne se corrige pas — même raison qu'une pièce
+--  jointe envoyée (section 28) et qu'une ligne du journal d'administration
+--  (section 25) : ce qui ne peut pas être récrit est ce qui vaut quelque
+--  chose.
+--
+--  LA LECTURE EST LA PLUS IMPORTANTE DES TROIS, et c'est celle qu'on
+--  pourrait croire oubliée : **personne ne lit les lignes d'un autre.**
+--  L'artisan n'a accès qu'au compteur, qui est sur `posts`. Ouvrir cette
+--  table « juste pour les statistiques » rendrait la liste de ceux qui ont
+--  regardé — c'est la porte à ne jamais entrouvrir.
+-- --------------------------------------------------------------------------
+drop policy if exists "lecture mes vues" on public.post_vues;
+create policy "lecture mes vues" on public.post_vues
+  for select to authenticated using (spectateur_id = auth.uid());
+
+/* L'ÉCRITURE POSE LES TROIS QUESTIONS, comme les pièces jointes :
+   est-ce bien moi, ai-je le droit de voir cette publication, et n'est-ce
+   pas la mienne. En oublier une ne lève aucune erreur :
+
+   - sans `spectateur_id = auth.uid()`, on gonfle le compteur de n'importe
+     qui au nom de n'importe qui ;
+   - sans `est_masque`, on « regarde » la publication de quelqu'un qu'on a
+     bloqué, et le blocage cesse d'être symétrique ;
+   - sans `author_id is distinct from auth.uid()`, un artisan qui relit sa
+     propre publication se compte lui-même. Le chiffre devient alors une
+     mesure de sa propre anxiété.
+
+   `est_masque(null)` rend `false` : une PUBLICITÉ n'a pas d'auteur, elle
+   compte donc ses vues comme le reste. Le jour où il y aura de vrais
+   annonceurs, ce chiffre sera ce qu'on leur doit. */
+drop policy if exists "enregistrer une vue" on public.post_vues;
+create policy "enregistrer une vue" on public.post_vues
+  for insert to authenticated with check (
+    spectateur_id = auth.uid()
+    and exists (
+      select 1 from public.posts p
+       where p.id = post_id
+         and p.author_id is distinct from auth.uid()
+         and not public.est_masque(p.author_id)
+    )
+  );
+
+-- --------------------------------------------------------------------------
+--  35.2 Le compteur — il ne fait que MONTER, et c'est une décision
+--
+--  `maj_likes_count()` et `maj_comments_count()` décrémentent : on retire
+--  son j'aime, le compteur redescend. Celui-ci ne le fait pas, parce que
+--  rien ne retire une vue — on ne « dé-regarde » pas.
+--
+--  Reste le seul cas où une ligne disparaît : la suppression d'un compte,
+--  qui emporte les lignes de celui qui a regardé (`on delete cascade`).
+--
+--  > **Une vue a EU LIEU.** Le compte de celui qui a regardé n'existe plus,
+--  > et c'est juste — c'est une donnée personnelle, elle part. Mais la
+--  > publication, elle, a bien été vue ce jour-là. Faire redescendre le
+--  > chiffre ferait disparaître des vues sous les yeux de l'artisan, sans
+--  > qu'aucune explication ne soit possible.
+--
+--  Conséquence assumée, et il faut la connaître : **le compteur et le
+--  nombre de lignes peuvent diverger**, et le compteur est le plus grand
+--  des deux. Le rattrapage ci-dessous ne fait donc jamais DESCENDRE un
+--  compteur — ce qui veut dire aussi qu'il ne peut pas réparer un compteur
+--  trop haut. C'est le prix de l'autre garantie.
+--
+--  `create or replace trigger` (PostgreSQL 14+) plutôt que la paire
+--  `drop` + `create` : le connecteur Supabase refuse tout ordre qui
+--  commence par `drop` (section 24), et c'est de toute façon meilleur — il
+--  n'existe aucun instant où le déclencheur serait absent.
+-- --------------------------------------------------------------------------
+create or replace function public.maj_vues_count()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  update public.posts set vues_count = vues_count + 1 where id = new.post_id;
+  return null;
+end; $$;
+
+create or replace trigger trg_vues_count
+  after insert on public.post_vues
+  for each row execute function public.maj_vues_count();
+
+/* Le rattrapage. `greatest` : voir ci-dessus. Et il est REJOUABLE — c'est
+   la règle du fichier —, donc il recalcule au lieu d'incrémenter. */
+update public.posts p
+   set vues_count = greatest(
+         p.vues_count,
+         coalesce((select count(*) from public.post_vues v where v.post_id = p.id), 0))
+ where p.vues_count < coalesce(
+         (select count(*) from public.post_vues v where v.post_id = p.id), 0);
+
+-- --------------------------------------------------------------------------
+--  35.3 La porte d'entrée : un seul appel pour tout un écran
+--
+--  Le fil monte une vingtaine de publications. Une requête par publication,
+--  ce sont vingt allers-retours pendant qu'on fait défiler — sur un
+--  chantier en 4G, c'est l'application qui rame.
+--
+--  `security invoker`, et ce n'est PAS un détail : le `select` sur
+--  `public.posts` est alors filtré par la politique « lecture posts », donc
+--  par le blocage. Une publication qu'on n'a pas le droit de voir ne sort
+--  pas du `select`, donc elle n'entre pas dans l'`insert`. Le filtrage est
+--  gratuit, et il est tenu par la même règle que le reste de
+--  l'application.
+--
+--  ET C'EST POUR ÇA QU'ON PRÉ-FILTRE AU LIEU DE LAISSER LA POLITIQUE
+--  REFUSER : un `insert … select` dont UNE ligne viole la politique échoue
+--  ENTIÈREMENT (42501). Un seul identifiant d'un auteur bloqué ferait donc
+--  perdre les dix-neuf autres. La politique reste l'autorité — elle garde
+--  la porte contre un appel direct —, mais l'usage normal ne la heurte
+--  jamais.
+--
+--  La borne de cinquante n'est pas décorative : ces identifiants viennent
+--  du CLIENT. Sans elle, un envoi de dix mille identifiants ferait le
+--  travail de dix mille insertions.
+-- --------------------------------------------------------------------------
+create or replace function public.enregistrer_vues(p_ids uuid[])
+returns int
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare n int;
+begin
+  if auth.uid() is null or p_ids is null or array_length(p_ids, 1) is null then
+    return 0;
+  end if;
+
+  insert into public.post_vues (post_id, spectateur_id)
+  select p.id, auth.uid()
+    from public.posts p
+   where p.id = any (p_ids[1:50])
+     and p.author_id is distinct from auth.uid()
+  on conflict do nothing;
+
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+revoke all on function public.enregistrer_vues(uuid[]) from public, anon;
+grant execute on function public.enregistrer_vues(uuid[]) to authenticated;
+
+-- --------------------------------------------------------------------------
+--  35.4 L'export RGPD doit les contenir
+--
+--  « Ce que j'ai regardé » est une donnée personnelle sur MOI, donc elle
+--  entre dans l'export de l'article 15. `mes_donnees()` est `security
+--  invoker` : elle ne lit que ce que la politique « lecture mes vues »
+--  laisse passer, c'est-à-dire mes lignes et rien d'autre.
+--
+--  Et c'est écrit ICI plutôt qu'en section 13 pour la raison déjà apprise
+--  le 05/10 avec `cree_fiche_utilisateur` : **une règle ne s'écrit qu'à UN
+--  endroit.** La fonction est donc remplacée en entier, et sa version de la
+--  section 13 n'existe plus.
+-- --------------------------------------------------------------------------
+create or replace function public.mes_donnees()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'export_du', now(),
+    /* Passe par mon_compte() (section 18) et non par un `to_jsonb(u)`
+       direct : `mes_donnees()` s'exécute avec les droits de l'appelant, et
+       depuis que les colonnes sensibles de `public.users` lui sont fermées,
+       lire la ligne entière échouerait — l'export RGPD reviendrait vide ou
+       en erreur, pour la meilleure des raisons. */
+    'compte',    (select to_jsonb(public.mon_compte())),
+    'fiche_professionnelle',
+                 (select to_jsonb(p) from public.professional_profiles p where p.id = auth.uid()),
+    'publications',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.posts x where x.author_id = auth.uid()), '[]'::jsonb),
+    'commentaires',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.comments x where x.author_id = auth.uid()), '[]'::jsonb),
+    'avis_laisses',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.reviews x where x.author_id = auth.uid()), '[]'::jsonb),
+    'demandes',  coalesce((select jsonb_agg(to_jsonb(x)) from public.demandes x where x.client_id = auth.uid()), '[]'::jsonb),
+    'annonces',  coalesce((select jsonb_agg(to_jsonb(x)) from public.annonces_pro x where x.auteur_id = auth.uid()), '[]'::jsonb),
+    'devis',     coalesce((select jsonb_agg(to_jsonb(x)) from public.quote_requests x
+                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
+    'rappels',   coalesce((select jsonb_agg(to_jsonb(x)) from public.callback_requests x
+                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
+    'messages',  coalesce((select jsonb_agg(to_jsonb(x)) from public.messages x where x.sender_id = auth.uid()), '[]'::jsonb),
+    'abonnements',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.follows x where x.follower_id = auth.uid()), '[]'::jsonb),
+    'personnes_bloquees',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.blocages x where x.bloqueur_id = auth.uid()), '[]'::jsonb),
+    'signalements_deposes',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.signalements x where x.auteur_id = auth.uid()), '[]'::jsonb),
+    'publications_vues',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.post_vues x where x.spectateur_id = auth.uid()), '[]'::jsonb)
+  )
+$$;
+
+/* Son droit est posé ICI, avec elle, et pas dans le `foreach` de la
+   section 13.8 : ce bloc-là avale `undefined_function`, donc le droit
+   aurait été passé sous silence sur une base neuve et accordé seulement au
+   second rejouage. Un export RGPD qui ne marche qu'une fois sur deux est
+   exactement le genre de panne que ce fichier traque. */
+revoke all on function public.mes_donnees() from public, anon;
+grant execute on function public.mes_donnees() to authenticated;

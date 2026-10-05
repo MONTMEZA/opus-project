@@ -231,14 +231,31 @@ console.log('\nLa ville du chantier ne se retape pas à chaque photo');
 
 console.log('\nLe rattrapage des publications déjà en base');
 {
-  /* `update public.posts p` apparaît DEUX fois : le rattrapage des
-     compteurs de commentaires (section 20) le fait déjà. On prend le
-     dernier — celui de la section 32. Le premier jet prenait le premier, et
-     accusait donc le mauvais ordre SQL. */
-  const i = sqlNu.lastIndexOf('update public.posts p');
-  const ordre = i === -1 ? '' : sqlNu.slice(i, sqlNu.indexOf(';', i));
+  /* `update public.posts p` apparaît PLUSIEURS fois : le rattrapage des
+     compteurs de commentaires (section 20) le fait déjà, et celui des vues
+     (section 35) aussi. On vise donc par le CONTENU, et non par le rang.
 
-  verifier('il existe', i !== -1,
+     TROISIÈME FOIS DANS CE PROJET QU'UN CONTRÔLE PERD SA CIBLE. Le premier
+     jet prenait le PREMIER et accusait les compteurs de commentaires ; on
+     est passé au DERNIER, ce qui a tenu exactement un lot — le 05/10/2026,
+     le rattrapage des vues est devenu le dernier, et ce contrôle a crié au
+     défaut sur un code parfaitement juste.
+
+     > **Un contrôle qui vise par le rang vise une place, pas une chose.**
+     > La place bouge au lot suivant. On vise ce que l'ordre FAIT : celui-ci
+     > est le seul qui pose une latitude. */
+  const ordres = [...sqlNu.matchAll(/update public\.posts p\b/g)]
+    .map((m) => sqlNu.slice(m.index, sqlNu.indexOf(';', m.index)))
+    .filter((o) => /latitude/.test(o));
+  const ordre = ordres.length === 1 ? ordres[0] : '';
+
+  verifier('on a trouvé UN rattrapage du lieu, et un seul',
+    ordres.length === 1,
+    `${ordres.length} ordre(s) \`update public.posts p\` posent une latitude. `
+    + 'Zéro : le rattrapage a disparu. Deux : on ne sait plus lequel on '
+    + 'contrôle — et c\'est la panne que ce contrôle vient de connaître.');
+
+  verifier('il existe', ordres.length === 1,
     'seize publications sans coordonnées existaient : sans rattrapage, poser '
     + 'le filtre ferait disparaître TOUT le contenu, et ça ressemblerait à un '
     + 'filtre cassé');

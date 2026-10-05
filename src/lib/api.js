@@ -856,6 +856,9 @@ function rowToPost(p, likedSet, commentaires = null) {
     // Le montage assemblé en un seul fichier, quand Cloudinary l'a fabriqué.
     montageUrl: p.montage_url || null,
     likes: p.likes_count || 0,
+    /* COMBIEN DE PERSONNES ONT VU (section 35). Jamais QUI : la table du
+       détail n'est lisible que par celui qui a regardé. */
+    vues: p.vues_count || 0,
     liked: likedSet.has(p.id),
     comments: commentaires,
     nbCommentaires: p.comments_count || 0,
@@ -1149,6 +1152,27 @@ export const createPost = !hasSupabase ? noop : async ({
     .select().single();
   if (error) throw error;
   return data;
+};
+
+/**
+ * ENREGISTRER LES PUBLICATIONS QU'ON VIENT DE REGARDER.
+ *
+ * Un seul appel pour tout un paquet : une requête par publication, ce
+ * serait vingt allers-retours pendant qu'on fait défiler. La fonction
+ * `enregistrer_vues` (section 35) est `security invoker`, donc le blocage
+ * et la règle « pas ma propre publication » s'appliquent dans la base — ce
+ * que l'écran envoie n'a pas besoin d'être propre, il a juste besoin
+ * d'être court.
+ *
+ * `noop` en mode démonstration : il n'y a pas de base, et un compteur de
+ * vues qui monterait sans rien enregistrer serait exactement le mensonge
+ * que la bande noire « MODE DÉMONSTRATION » sert à éviter.
+ */
+export const enregistrerVues = !hasSupabase ? noop : async (ids) => {
+  if (!ids || ids.length === 0) return 0;
+  const { data, error } = await supabase.rpc('enregistrer_vues', { p_ids: ids });
+  if (error) throw error;
+  return data || 0;
 };
 
 /**

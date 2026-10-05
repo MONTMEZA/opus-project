@@ -4162,6 +4162,171 @@ d'un conseil en vidéo n'a pas pu être entendu — ce navigateur n'a pas les
 codecs, aucune vidéo du projet ne s'y lit. Et aucun artisan réel n'a encore
 coché cette case : la vraie base compte **0 conseil**.
 
+### Les vues — un signal, et quelqu'un qui le LIT (05/10/2026)
+
+Section 35 de `schema.sql`, `src/lib/vues.js`, `src/lib/compteur-vues.js`,
+`npm run verifier-vues`.
+
+#### Ce lot a FAILLI être une faute
+
+L'intention de départ était « enregistrer les signaux maintenant, pour
+pouvoir classer le fil plus tard ». C'est mot pour mot le défaut que ce
+document traque depuis le 01/10 : **une table qu'on écrit sans jamais la
+lire est une panne silencieuse.**
+
+> **Un signal enregistré « pour plus tard » n'a pas de lecteur, donc rien ne
+> dit s'il est juste.** Il peut compter double, compter l'auteur lui-même,
+> compter quelqu'un qu'on a bloqué : personne ne le saura avant le jour où
+> l'on s'en servira — c'est-à-dire trop tard.
+
+D'où la forme retenue : le lecteur existe DÈS AUJOURD'HUI, et c'est
+l'artisan. Relevé sur la vraie base avant d'écrire une ligne :
+
+| | |
+|---|---|
+| publications | 14 |
+| j'aime | **5** |
+| commentaires | **5** |
+| publications enregistrées | **0** |
+
+Un artisan publie et n'apprend RIEN. « 5 j'aime sur 14 publications » ne dit
+pas si on l'a regardé ; « 47 vues » le dit. C'est accessoirement la matière
+première du classement de demain.
+
+**Et ce lot ne classe rien.** Le fil reste trié par date. Régler un
+classement sur quatorze publications, c'est régler une machine sur du vide.
+
+#### L'artisan voit COMBIEN, jamais QUI
+
+« Qui a regardé quoi » est une donnée personnelle, et c'est aussi la chose
+qui ferait fuir un particulier : savoir qu'un artisan voit qu'on a regardé
+sa fiche trois fois change le comportement de tout le monde.
+
+> La politique de lecture de `post_vues` dit `spectateur_id = auth.uid()`,
+> et c'est tout ce qu'elle dit. Il n'existe aucune fonction, aucune vue,
+> aucun écran qui rende la liste des spectateurs.
+
+**Vérifié sur la VRAIE base, par le chemin de l'application** : un compte
+publie, un autre enregistre une vue, et l'auteur lit `vues_count = 1` et
+`[]` sur le détail. Et « ce que j'ai regardé » entre dans l'export RGPD —
+c'est une donnée personnelle sur MOI.
+
+#### Le compteur ne fait que MONTER — et ça s'est vu en vrai
+
+`maj_likes_count()` décrémente : on retire son j'aime, le compteur
+redescend. Celui-ci ne le fait pas, parce que rien ne retire une vue.
+
+Reste le seul cas où une ligne disparaît : la suppression d'un compte, qui
+emporte les lignes de celui qui a regardé.
+
+> **Une vue a EU LIEU.** La ligne est une donnée personnelle, elle part. La
+> publication, elle, a bien été vue ce jour-là. Faire redescendre le chiffre
+> ferait disparaître des vues sous les yeux de l'artisan, sans qu'aucune
+> explication ne soit possible.
+
+Constaté à la fin du lot, après la suppression des comptes jetables :
+**0 ligne dans `post_vues`, 6 publications avec un compteur à 1.** Le
+rattrapage ne fait donc jamais DESCENDRE un compteur (`greatest`) — ce qui
+veut dire aussi qu'il ne peut pas réparer un compteur trop haut. C'est le
+prix de l'autre garantie.
+
+#### Une publication traversée en descendant n'est pas une vue
+
+`onViewableItemsChanged` se déclenche plusieurs fois par seconde. Compter à
+chaque passage donnerait un chiffre qui ne veut rien dire.
+
+> **Une vue, c'est une seconde D'AFFILÉE.** Ce qui sort de l'écran oublie
+> son horloge — sinon trois passages de 400 ms finiraient par en faire une,
+> alors que personne n'a rien regardé. Et vingt publications ne font pas
+> vingt requêtes : on accumule, et on envoie par paquets.
+
+**Mesuré au navigateur, sur la vraie base** : traverser le fil à 120 ms par
+cran → **0 envoi**. S'arrêter 2,5 s par écran → 4 envois, tous en 200.
+
+Trois moments d'envoi, et le troisième est celui qu'on oublie : le paquet
+plein, le délai écoulé, et **le départ de l'écran** — sans lui, les
+dernières publications regardées avant de changer d'onglet seraient
+perdues, et ce sont celles qu'on a regardées le plus longtemps.
+
+Tout le calcul vit dans `src/lib/vues.js`, **qui n'importe rien** — huitième
+application de la leçon de `cloudinary-adresses.js`, et elle est
+indispensable ici : une règle de TEMPS ne se juge ni à l'œil ni à l'écran.
+Le crochet est à part (`compteur-vues.js`) parce qu'il importe React, et
+qu'un contrôle qui PLANTE ne vérifie rien.
+
+#### Le piège du lot : un `insert … select` échoue EN ENTIER
+
+Un `insert … select` dont UNE ligne viole la politique échoue entièrement
+(42501). Un seul identifiant d'un auteur bloqué ferait donc perdre les
+dix-neuf autres, sans que rien ne le dise.
+
+> **On PRÉ-FILTRE au lieu de laisser la politique refuser.** Et comme
+> `enregistrer_vues()` est `security invoker`, le `select` sur `posts` est
+> déjà filtré par « lecture posts », donc par le blocage : le filtrage est
+> gratuit et tenu par la même règle que le reste. La politique reste
+> l'autorité — elle garde la porte contre un appel direct —, mais l'usage
+> normal ne la heurte jamais.
+
+#### `mes_donnees()` a déménagé, et c'est la même règle qu'hier
+
+L'export RGPD doit connaître TOUTES les tables du projet, donc il ne peut
+pas être écrit avant la dernière. Tant qu'il vivait en section 13, chaque
+table ajoutée plus bas était un oubli silencieux — et le jour où
+`post_vues` est née, la fonction ne pouvait littéralement plus se créer là :
+**PostgreSQL contrôle le corps d'une fonction SQL à sa CRÉATION.**
+
+Et son droit est posé AVEC elle : le `foreach` de la section 13.8 avale
+`undefined_function`, donc le droit aurait été passé sous silence sur une
+base neuve et accordé seulement au second rejouage. **Un export RGPD qui ne
+marche qu'une fois sur deux.**
+
+#### Un contrôle qui vise par le RANG vise une place, pas une chose
+
+`verifier-lieu` a refusé ce lot, sur du code parfaitement juste. Il prenait
+le **dernier** `update public.posts p` du fichier, en supposant que c'était
+le rattrapage du lieu. Ça a tenu exactement un lot : celui des vues en a
+ajouté un après.
+
+> **Troisième fois dans ce projet qu'un contrôle perd sa cible.** Le premier
+> jet prenait le PREMIER et accusait les compteurs de commentaires ; on est
+> passé au DERNIER ; il vise maintenant ce que l'ordre FAIT — il est le seul
+> à poser une latitude —, et il refuse d'en trouver deux.
+
+#### Et le contrôle m'a eu, lui aussi
+
+Éprouvé en cassant ce qu'il surveille, comme l'exige ce document : sur
+quatre défauts remis à la main, **il en a laissé passer un**. Un `return;`
+glissé juste après `clearInterval` rendait `vider()` inatteignable, et le
+contrôle cherchait la PRÉSENCE du texte, pas s'il était atteignable.
+Corrigé : il regarde désormais ce qu'il y a ENTRE les deux.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un PostgreSQL 16 neuf, les douze cas
+de `supabase/essais-section-35.sql`, les 35 contrôles, `npx expo export
+--platform ios`. Migration appliquée sur la vraie base. Puis au navigateur,
+sur la VRAIE base, avec deux comptes jetables supprimés dans la même session
+(0 restant, base revenue à 13 comptes / 7 fiches / 16 publications) :
+
+| | relevé |
+|---|---|
+| traversée rapide du fil | **0 envoi** |
+| lecture posée, 2,5 s par écran | 4 envois, **200** |
+| une vue, deux fois, trois fois | compteur à **1** |
+| l'auteur se compte lui-même | **0 inséré** |
+| l'auteur lit le détail | **`[]`** |
+| après un blocage | les publications de l'auteur bloqué **ne comptent plus** |
+| « Mes publications » | ♡ 0 · 💬 0 · **👁 1** |
+| export RGPD du spectateur | 1 ligne |
+| après suppression des comptes | **0 ligne, 6 compteurs intacts** |
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone — et en
+particulier le `setInterval` de 500 ms quand l'application passe en
+arrière-plan, qui ne se comporte pas pareil qu'au navigateur. Et une
+publication réelle du propriétaire porte désormais **1 vue** : la mienne, au
+moment où le fil s'est affiché pendant l'essai. C'est une vraie vue, et elle
+ne peut pas être retirée — c'est exactement la règle ci-dessus.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

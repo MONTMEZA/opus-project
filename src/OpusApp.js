@@ -2620,6 +2620,15 @@ export default function OpusApp() {
         >
         {screen === 'home' && (
           <HomeScreen
+            /* LES VUES (section 35). On passe la fonction d'API telle
+               quelle : le compte à rebours, le regroupement en paquets et
+               l'envoi vivent dans `src/lib/compteur-vues.js`, pour qu'un
+               défilement ne redessine jamais cet écran-ci. En mode
+               démonstration `api.enregistrerVues` est un `noop` — il n'y a
+               pas de base, et un compteur qui monterait sans rien
+               enregistrer serait le mensonge que la bande noire sert à
+               éviter. */
+            onVues={api.enregistrerVues}
             posts={feedFiltered} pros={pros}
             feedMode={feedMode} setFeedMode={changerFeedMode}
             videoCible={videoCible} onOuvrirVideo={ouvrirVideoEnGrand}

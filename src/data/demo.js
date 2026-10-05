@@ -170,10 +170,21 @@ export function avgReviews(pro) {
 // « format » dit ce qu'on regarde (photo, vidéo…) ; « type » dit s'il s'agit
 // d'une publication ou d'une publicité. Le fil des vidéos ne retient que les
 // publications dont le format est 'video'.
+/* LES VUES DE DÉMONSTRATION — ajoutées le 05/10/2026 avec la section 35.
+   Elles sont une quinzaine de fois plus nombreuses que les j'aime, parce
+   que c'est l'ordre de grandeur réel : on regarde beaucoup, on aime peu.
+   Des chiffres du même ordre que les j'aime auraient donné une fausse idée
+   de ce que le compteur raconte.
+
+   ELLES NE MONTENT PAS EN MODE DÉMONSTRATION, et c'est voulu :
+   `api.enregistrerVues` y est un `noop`, puisqu'il n'y a pas de base. Un
+   compteur qui grimperait sans que rien ne soit enregistré serait
+   exactement le mensonge que la bande noire « MODE DÉMONSTRATION » sert à
+   éviter. L'incrément se vérifie sur la vraie base, et nulle part ailleurs. */
 export const initialPosts = [
   { id: 1, type: 'post', format: 'photo', proId: 1, time: 'Il y a 2 h',
     texte: "Fondations coulées ce matin, dalle prévue vendredi. Chantier villa R+1.",
-    media: '#3a3a38,#8a8578', likes: 214, liked: false,
+    media: '#3a3a38,#8a8578', likes: 214, vues: 3120, liked: false,
     comments: [
       { id: 1, auteurId: 'demo-julie', auteur: 'Julie M.', auteurType: 'particulier',
         texte: 'Superbe avancée, bravo !', time: 'Il y a 1 h',
@@ -188,13 +199,13 @@ export const initialPosts = [
     ] },
   { id: 2, type: 'post', format: 'video', proId: 2, time: 'Il y a 4 h',
     texte: "Tableau électrique aux normes NF C 15-100, mise en service demain matin.",
-    media: '#1b4b6b,#4d7f9e', likes: 132, liked: false, comments: [] },
+    media: '#1b4b6b,#4d7f9e', likes: 132, vues: 1870, liked: false, comments: [] },
   { id: 'ad1', type: 'ad', annonceur: 'BricoPro Matériaux',
     accroche: "-15% sur les sacs de ciment ce mois-ci pour les pros inscrits.",
     cta: "Voir l'offre", media: '#2b2b2b,#555555' },
   { id: 3, type: 'post', format: 'video', proId: 3, time: 'Hier',
     texte: "Pose grand format 120x60 en salle de bain, jointoiement fini cette semaine. Rendu au top.",
-    media: '#6b4226,#b98255', likes: 341, liked: false,
+    media: '#6b4226,#b98255', likes: 341, vues: 5240, liked: false,
     comments: [
       { id: 2, auteurId: 'demo-antoine', auteur: 'Antoine R.', auteurType: 'particulier',
         texte: 'Magnifique travail, vous intervenez sur Toulouse centre ?',
@@ -207,7 +218,7 @@ export const initialPosts = [
     texte: "Remplacement chaudière + purge complète du circuit. Client satisfait, garantie 2 ans.",
     media: '#1b4b6b,#2f4b3a',
     medias: ['#1b4b6b,#2f4b3a', '#3a3a38,#8a8578', '#6b4226,#b98255', '#2f4b3a,#6a9a7a'],
-    likes: 87, liked: false, comments: [] },
+    likes: 87, vues: 940, liked: false, comments: [] },
   { id: 'ad2', type: 'ad', annonceur: 'AssurBTP',
     accroche: "Assurance décennale dès 39€/mois pour les artisans du bâtiment.",
     cta: 'En savoir plus', media: '#111111,#3a3a38' },
@@ -215,10 +226,10 @@ export const initialPosts = [
     texte: "Chantier en trois temps : saignées, passage des gaines, tableau fini.",
     media: '#2f4b3a,#6a9a7a',
     medias: ['#2f4b3a,#6a9a7a', '#1b4b6b,#4d7f9e', '#4b4b2f,#9a9a5a'],
-    musique: null, likes: 96, liked: false, comments: [] },
+    musique: null, likes: 96, vues: 1310, liked: false, comments: [] },
   { id: 5, type: 'post', format: 'avantapres', proId: 5, time: 'Il y a 2 j',
     texte: "Charpente traditionnelle posée en 3 jours, ossature chêne massif.",
-    media: '#4b4b2f,#9a9a5a', likes: 176, liked: false, comments: [] },
+    media: '#4b4b2f,#9a9a5a', likes: 176, vues: 2080, liked: false, comments: [] },
 
   /* DEUX CONSEILS, ET LES DEUX CAS QUI COMPTENT — ajoutés le 05/10/2026
      avec l'étiquette (section 34). Sans eux, ni le bandeau du fil, ni le
@@ -236,13 +247,13 @@ export const initialPosts = [
     texte: "Avant de percer un mur, coupez au disjoncteur ET vérifiez au "
       + "détecteur de tension. Une gaine passe rarement là où on l'imagine : "
       + "sur une rénovation, je trouve encore des fils sans gaine du tout.",
-    media: '#1b4b6b,#4d7f9e', likes: 418, liked: false, comments: [] },
+    media: '#1b4b6b,#4d7f9e', likes: 418, vues: 7650, liked: false, comments: [] },
   { id: 8, type: 'post', format: 'texte', proId: 1, time: 'Il y a 4 j',
     conseil: true,
     texte: "On ne coule pas une dalle en dessous de 5 °C : le béton ne prend "
       + "pas, il gèle. Et au-dessus de 30 °C, il faut l'arroser pendant trois "
       + "jours sinon il fissure. Le thermomètre fait partie des outils.",
-    media: null, likes: 263, liked: false, comments: [] },
+    media: null, likes: 263, vues: 4410, liked: false, comments: [] },
 ];
 
 export const initialConversations = [

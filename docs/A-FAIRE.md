@@ -401,6 +401,88 @@ prévenu ». C'est le lot 2.
 
 ---
 
+## 1 quater. La refonte « recherche et divertissement » — en cours
+
+Décidée avec le propriétaire le 05/10/2026, après le constat qui ouvre tout :
+**le fil n'avait aucun filtre.** Six lots, dans cet ordre, et l'ordre n'est
+pas négociable — chacun pose le socle du suivant.
+
+| | lot | état |
+|---|---|---|
+| **A** | Le LIEU d'une publication (section 32) | ✅ 05/10/2026 |
+| **B** | La loupe : un filtre DUR, tenu par la base (section 33) | ✅ 05/10/2026 |
+| **C** | « C'est un conseil » : une étiquette, pas un format (section 34) | ✅ 05/10/2026 |
+| **D** | Enregistrer les SIGNAUX, sans classer | à faire |
+| **E** | Le fil de chantier | à faire |
+| **F** | Les concours | **après immatriculation** |
+
+**Le lot F ne se construit pas avant.** Le propriétaire l'a posé lui-même :
+« bien sûr pour les jeux Opus sera immatriculé avant de lancer ces
+choses-là ». Un jeu-concours engage juridiquement celui qui l'organise, et
+`src/data/legal.js` porte `STATUT = 'essai'` — voir le §1.0 ci-dessus.
+
+### Et après : le MONTAGE, avec des gabarits
+
+Demandé par le propriétaire, et **gardé pour plus tard, volontairement** —
+c'est écrit ici pour que ça ne se perde pas entre deux sessions :
+
+> « Je ne veux pas concurrencer CapCut. Je veux que les artisans puissent
+> poster des vidéos qui mettent en avant leur travail et qui donnent envie
+> au particulier de les regarder — un système de montage photo ou vidéo très
+> simple à utiliser. Si il faut intégrer une API existante on peut le faire. »
+
+Puis, en tranchant la forme :
+
+> « On laissera le choix de créer seuls nos posts, et on proposera pour le
+> moment **3 vidéos, 3 montages avant/après et 3 posts** avec un beau design
+> — et l'artisan a juste à remplir avec sa vidéo ou son texte, et c'est prêt
+> à poster. »
+
+**Neuf gabarits, et le libre reste libre.** C'est le point à ne pas
+réinterpréter : un gabarit ne REMPLACE pas la publication ordinaire, il
+s'ajoute à côté. Qui veut poser sa photo et écrire deux lignes continue
+exactement comme aujourd'hui.
+
+#### Ce qu'on a DÉJÀ, et qui rend ce lot beaucoup plus petit qu'il n'en a l'air
+
+Vérifié dans le code le 05/10/2026, avant d'en parler :
+
+| | état |
+|---|---|
+| le format vertical 9:16 | **déjà exact** — 720 × 1280 dans `cloudinary-adresses.js`, c'est celui de TikTok |
+| coller les clips bout à bout | **déjà fait** (`fl_splice`, `urlMontage`) |
+| poser une musique par-dessus | **déjà fait** (`ac_none` + `l_audio:`) |
+| la vignette de couverture | **déjà fait**, mais prise à la 2ᵉ seconde, au hasard |
+| du texte incrusté dans l'image | Cloudinary sait le faire (`l_text:`), **pas branché, pas essayé** |
+| des sous-titres automatiques | demanderait une API de transcription — **la seule vraie nouveauté** |
+
+> **L'API qu'il nous faut, on l'a déjà.** Ce qui manque n'est pas de la
+> technique : c'est du RYTHME (un clip peut faire 20 s, le rythme
+> d'Instagram est de 1,5 à 3 s par plan), du TEXTE à l'écran (la moitié des
+> gens regardent sans le son), et une COUVERTURE choisie plutôt que tirée au
+> hasard.
+
+#### Et la raison du gabarit, qui est tout le lot
+
+> **Une timeline, c'est du travail.** Personne n'ouvre une timeline ; tout
+> le monde choisit un modèle. **Un gabarit, c'est un montage DÉJÀ FAIT dont
+> il ne reste que les trous à remplir** — trois clips, trois coupes calées,
+> trois titres incrustés, une musique, une couverture. L'artisan ne monte
+> rien, il remplit.
+
+**Ce qui est ÉCARTÉ pour l'instant, et pourquoi :** les sous-titres
+automatiques. Ils coûtent une API payante à la minute de vidéo, pour un
+bénéfice qui ne se verra que le jour où il y aura du monde. À reprendre
+quand il y aura du monde, pas avant.
+
+**Et le piège à ne pas redécouvrir :** une dépendance native imposerait un
+*development build*, donc la sortie d'Expo Go — aujourd'hui le seul moyen
+d'essai du propriétaire. Les gabarits se construisent en calcul d'adresses
+Cloudinary, **sans aucune dépendance nouvelle**, comme la carte (`tuiles.js`)
+et le calendrier (`Calendrier.js`) avant eux.
+
+---
+
 ## 2. Important — la plateforme ne tient pas à l'échelle sans ça
 
 ### 2.0 Le référentiel des métiers — ✅ FAIT le 30/09/2026
