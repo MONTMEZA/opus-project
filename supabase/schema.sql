@@ -1312,23 +1312,80 @@ create policy "suppression de mes fichiers" on storage.objects
   for delete using ((storage.foldername(name))[1] = auth.uid()::text);
 
 -- ==========================================================================
---  13. CRÉATION AUTOMATIQUE DE LA FICHE UTILISATEUR
+--  13. CRÉATION AUTOMATIQUE DES FICHES, À L'INSCRIPTION
 --
 --  À chaque inscription, une ligne est créée dans public.users à partir des
 --  informations du formulaire. Évite que l'application ait à le faire, et
 --  garantit qu'aucun compte ne reste sans fiche.
+--
+--  DEPUIS LE 05/10/2026, ELLE CRÉE AUSSI LA FICHE PROFESSIONNELLE, et
+--  enregistre l'acceptation des conditions. Le pourquoi — un compte
+--  d'artisan trouvé en deux moitiés sur la vraie base — est raconté en
+--  SECTION 31. Il faut l'avoir lu avant de toucher à cette fonction.
 -- ==========================================================================
 create or replace function public.cree_fiche_utilisateur()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  meta        jsonb;
+  le_type     text;
+  la_cgu      text;
+  mes_metiers text[];
 begin
-  insert into public.users (id, type, nom, email)
+  meta    := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  le_type := coalesce(meta ->> 'type', 'particulier');
+  la_cgu  := nullif(btrim(coalesce(meta ->> 'cgu', '')), '');
+
+  -- 1. La fiche utilisateur, pour tout le monde.
+  --
+  --    LES CGU PARTENT AVEC, et c'est nouveau : l'application les
+  --    enregistrait APRÈS l'inscription, donc jamais quand la confirmation
+  --    par e-mail était demandée. Une trace légale perdue en silence.
+  --    Ici, l'acceptation est enregistrée au moment même où le compte naît.
+  insert into public.users (id, type, nom, email, cgu_version, cgu_acceptees_le)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data ->> 'type', 'particulier'),
-    coalesce(new.raw_user_meta_data ->> 'nom', 'Vous'),
-    new.email
+    le_type,
+    coalesce(meta ->> 'nom', 'Vous'),
+    new.email,
+    la_cgu,
+    case when la_cgu is not null then now() end
   )
   on conflict (id) do nothing;
+
+  -- 2. Et la fiche PROFESSIONNELLE, pour un artisan. Sans elle, le compte
+  --    existe et ne sert à rien.
+  if le_type = 'pro' then
+    -- Les métiers du formulaire, dans leur ordre (le premier est le métier
+    -- principal), quatre au maximum comme l'exige `pro_metiers_check`.
+    select array_agg(m order by n)
+      into mes_metiers
+      from jsonb_array_elements_text(
+             case when jsonb_typeof(meta -> 'metiers') = 'array'
+                  then meta -> 'metiers'
+                  else '[]'::jsonb end
+           ) with ordinality as t(m, n)
+     where n <= 4;
+
+    -- La MÊME validation que la contrainte. Un métier inventé retombe sur
+    -- le premier du catalogue plutôt que de faire échouer l'inscription.
+    if not public.metiers_connus(mes_metiers) then
+      mes_metiers := array['macon'];
+    end if;
+
+    insert into public.professional_profiles
+      (id, nom, entreprise, metier, metiers, ville, verification_statut)
+    values (
+      new.id,
+      coalesce(meta ->> 'nom', ''),
+      coalesce(nullif(btrim(coalesce(meta ->> 'entreprise', '')), ''), 'Mon entreprise'),
+      mes_metiers[1],
+      mes_metiers,
+      coalesce(meta ->> 'ville', ''),
+      'non_soumis'
+    )
+    on conflict (id) do nothing;
+  end if;
+
   return new;
 end; $$;
 
@@ -2355,7 +2412,36 @@ begin
   end if;
 
   -- 3. Le verrou. Uniquement quand c'est le professionnel lui-même qui
-  --    modifie sa fiche depuis l'application.
+  --    écrit sa fiche depuis l'application.
+  --
+  --    LA PORTE RESTÉE OUVERTE JUSQU'AU 05/10/2026 : ce verrou ne regardait
+  --    que `UPDATE`. Or la politique « ecriture mon profil » est `for all`,
+  --    donc un client modifié pouvait CRÉER sa propre fiche avec
+  --    `kbis_valide = true, assurance_valide = true` — et
+  --    `synchronise_verification`, qui s'exécute juste avant, en tirait
+  --    consciencieusement `verifie = true`.
+  --
+  --    Prouvé sur PostgreSQL 16 : `INSERT 0 1`, aucune erreur, et la fiche
+  --    ressortait `verifie = t, verification_statut = verifie`. C'est la
+  --    faille du 29/09 — « le badge ne se décerne pas soi-même » — refermée
+  --    pour la modification et laissée grande ouverte à la création.
+  if tg_op = 'INSERT' and auth.uid() is not null and auth.uid() = new.id then
+    new.verifie           := false;
+    new.verifie_le        := null;
+    new.kbis_valide       := false;
+    new.kbis_maj          := null;
+    new.assurance_valide  := false;
+    new.assurance_expire  := null;
+    new.rge               := false;
+    new.verification_note := null;
+
+    -- Déposer ses documents dès la création reste permis : c'est dire
+    -- « voici mes justificatifs », pas « je suis vérifié ».
+    if coalesce(new.verification_statut, 'non_soumis') not in ('non_soumis', 'en_attente') then
+      new.verification_statut := 'non_soumis';
+    end if;
+  end if;
+
   if tg_op = 'UPDATE' and auth.uid() is not null and auth.uid() = new.id then
     new.verifie           := old.verifie;
     new.verifie_le        := old.verifie_le;
@@ -5242,3 +5328,147 @@ comment on column public.demandes.statut is
   'ouverte | pourvue | fermee. « pourvue » est posé par l''AUTEUR quand il a '
   'trouvé : la demande sort de la liste des artisans et lui reste visible. '
   'Lu par l''application depuis le 04/10/2026 — avant, personne ne le lisait.';
+
+
+-- ==========================================================================
+--  31. UN COMPTE D'ARTISAN NE SE CRÉE PLUS À MOITIÉ — 05/10/2026
+--
+--  CE QUI A ÉTÉ CONSTATÉ, SUR LA VRAIE BASE
+--  ----------------------------------------
+--  Un compte y dort depuis le 14/09/2026 : `users.type = 'pro'`, et AUCUNE
+--  ligne dans `professional_profiles`. Il ne peut rien faire — il n'apparaît
+--  pas dans la Place des pros, ne publie pas, ne reçoit aucune demande. Et
+--  rien ne le signale : ni erreur, ni écran cassé, ni contrôle rouge.
+--
+--  LA CAUSE : LES DEUX MOITIÉS NE VENAIENT PAS DU MÊME ENDROIT
+--  -----------------------------------------------------------
+--  La ligne `users` vient de la section 13, un déclencheur sur `auth.users` :
+--  elle existe TOUJOURS. La fiche professionnelle, elle, venait de
+--  l'application (`ensureProProfile`), et seulement si `signUp()` rendait une
+--  session :
+--
+--      const { session } = await api.signUp({ … });
+--      if (!session) return { confirmationRequise: true };   // ← on sort ICI
+--      if (typeChoisi === 'pro') await api.ensureProProfile({ … });
+--
+--  Avec la confirmation par e-mail activée — et il FAUDRA l'activer avant
+--  d'ouvrir au public —, `signUp()` ne rend aucune session. La fiche n'est
+--  donc jamais créée, l'acceptation des CGU n'est jamais enregistrée, et
+--  comme `ensureProProfile` n'est appelée nulle part ailleurs, le trou ne se
+--  rebouche jamais tout seul.
+--
+--  Et il ne POUVAIT pas se reboucher à cet instant : sans session, la règle
+--  RLS « chacun sa fiche » refuse l'écriture. Les informations du formulaire
+--  (entreprise, métiers, ville) sont perdues dès que l'artisan ferme
+--  l'application pour aller lire son courriel.
+--
+--  LA PARADE : LA BASE CRÉE LES DEUX MOITIÉS
+--  -----------------------------------------
+--  `signUp()` range le formulaire dans les métadonnées du compte, que
+--  PostgreSQL voit au moment de l'insertion dans `auth.users`. Le déclencheur
+--  de la section 13 crée donc les deux lignes d'un coup, sans session et sans
+--  RLS puisqu'il est `security definer`.
+--
+--  C'est la doctrine du projet appliquée à la lettre : « les règles métier
+--  sont tenues par la base, pas par l'écran ».
+--
+--  CE QUE LES MÉTADONNÉES NE PEUVENT PAS FAIRE, ET POURQUOI C'EST SÛR
+--  ------------------------------------------------------------------
+--  Elles sont écrites par le CLIENT au moment de l'inscription : un client
+--  modifié peut y mettre n'importe quoi. D'où deux gardes :
+--
+--    1. l'insertion nomme ses colonnes une par une. `verifie`,
+--       `kbis_valide`, `assurance_valide`, `rge` n'y sont pas — elles
+--       gardent leur valeur par défaut, quoi que disent les métadonnées ;
+--    2. les métiers sont validés par `metiers_connus()`, la MÊME fonction
+--       que la contrainte `pro_metiers_check`. Un métier inventé ne fait pas
+--       échouer l'inscription — il retombe sur `macon`, et l'artisan corrige
+--       dans « Modifier mon profil ». Faire échouer la création du compte
+--       pour une métadonnée malformée serait pire que le défaut qu'on
+--       corrige.
+-- ==========================================================================
+
+-- La fonction elle-même vit avec les autres, en SECTION 13 — une règle ne
+-- s'écrit qu'à UN endroit. C'est ce que la section 30 a posé pour les
+-- politiques, et le contrôle `verifier-compte` vient de l'imposer ici pour
+-- une fonction : écrite deux fois, c'est la PREMIÈRE qui se fait oublier le
+-- jour où la règle change.
+
+-- --------------------------------------------------------------------------
+--  31.2  Le badge ne se décerne pas non plus À LA CRÉATION
+--
+--  Le verrou vit avec les autres, dans `tient_le_profil_pro()` (section 17.3)
+--  — une règle ne s'écrit qu'à UN endroit. Il ne regardait que `UPDATE` ;
+--  il regarde maintenant `INSERT` aussi. Le détail et la preuve sont dans le
+--  commentaire de la fonction.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  31.3  UNE FICHE PROFESSIONNELLE NE SE SUPPRIME PAS
+--
+--  C'est la plus grave des deux failles de la journée, et elle n'a rien à
+--  voir avec le badge.
+--
+--  La politique « ecriture mon profil » est `for all` : elle autorise donc
+--  aussi la SUPPRESSION de sa propre fiche. Or onze tables pointent sur
+--  `professional_profiles` en `on delete cascade`, et parmi elles :
+--
+--    - `reviews`        — les avis écrits SUR lui par ses clients ;
+--    - `quote_requests`, `callback_requests`, `sos_requests` — les demandes
+--      que des clients lui ont adressées ;
+--    - `annonces_pro`, `annonce_reponses`, `professional_partners`…
+--
+--  Mesuré sur PostgreSQL 16 : un avis une étoile, « Chantier abandonné » ;
+--  le professionnel supprime SA fiche ; **0 avis restant**, et son compte
+--  toujours là. Il recrée sa fiche et repart à neuf.
+--
+--  C'est exactement ce que la règle RGPD du projet interdit :
+--
+--  > **Ce qui concerne des TIERS s'anonymise, il ne se supprime pas.**
+--
+--  Un avis appartient à son auteur et à ceux qui le liront, pas à celui
+--  qu'il note. C'est pour cette raison que la suppression de COMPTE anonymise
+--  les avis (`preparer_suppression_compte`) au lieu de les effacer — et cette
+--  porte-là contournait tout ce travail en silence.
+--
+--  POURQUOI UN DÉCLENCHEUR, ET PAS UNE POLITIQUE RÉÉCRITE
+--  ------------------------------------------------------
+--  Retirer le droit de suppression demanderait de remplacer « ecriture mon
+--  profil » par deux politiques, donc un `drop policy` — que le connecteur
+--  Supabase refuse (il expire au bout d'une minute, voir la section 24). Un
+--  déclencheur passe par `create or replace`, et il est de toute façon
+--  meilleur : une politique rend « 0 ligne supprimée » sans un mot, là où
+--  celui-ci DIT pourquoi.
+--
+--  ET LA CASCADE DOIT PASSER, elle. Supprimer son compte reste un droit, et
+--  `preparer_suppression_compte()` finit par `delete from public.users`, ce
+--  qui emporte la fiche en cascade. On distingue les deux cas par la ligne
+--  parente : si `public.users` n'a plus de ligne pour cet identifiant, c'est
+--  que le compte entier est en train de partir — on laisse faire.
+-- --------------------------------------------------------------------------
+create or replace function public.fiche_pro_indestructible()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  -- Le compte parent est déjà parti : c'est la cascade d'une suppression de
+  -- compte, pas la suppression d'une fiche. On laisse passer.
+  if not exists (select 1 from public.users u where u.id = old.id) then
+    return old;
+  end if;
+
+  raise exception
+    'Une fiche professionnelle ne se supprime pas tant que le compte existe : '
+    'elle emporterait les avis que vos clients ont écrits sur vous, et les '
+    'demandes qu''ils vous ont adressées. Pour fermer le compte entier, '
+    'passez par Profil → Supprimer mon compte.'
+    using errcode = 'check_violation';
+end; $$;
+
+create or replace trigger trg_fiche_pro_indestructible
+  before delete on public.professional_profiles
+  for each row execute function public.fiche_pro_indestructible();
+
+comment on function public.fiche_pro_indestructible() is
+  'Refuse la suppression d''une fiche pro tant que son compte existe : onze '
+  'tables en dépendent en cascade, dont les avis écrits par des TIERS. '
+  'Laisse passer la cascade venue de la suppression de compte, reconnue à '
+  'l''absence de la ligne parente dans public.users.';

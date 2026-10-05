@@ -70,7 +70,8 @@
     "verifier-pieces-jointes": "node scripts/verifier-pieces-jointes.mjs",
     "verifier-voyants": "node scripts/verifier-voyants.mjs",
     "verifier-place": "node scripts/verifier-place.mjs",
-    "verifier-feuilles": "node scripts/verifier-feuilles.mjs"
+    "verifier-feuilles": "node scripts/verifier-feuilles.mjs",
+    "verifier-compte": "node scripts/verifier-compte.mjs"
   },
   "private": true,
   "devDependencies": {

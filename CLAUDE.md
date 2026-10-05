@@ -2834,6 +2834,170 @@ couleur, elle, crie toujours autant. Faire reculer le bandeau d'une
 demande traitée est trois lignes — mais c'est du goût, et l'orange est
 l'identité : à trancher avec le propriétaire, pas tout seul.
 
+### Un compte d'artisan ne se crée plus à moitié (05/10/2026)
+
+Relevé sur la vraie base en cherchant quoi avancer un jour où le compte
+Apple n'était toujours pas validé. Un compte y dormait depuis le
+**14/09/2026** :
+
+| | |
+|---|---|
+| `users.type` | **pro** |
+| `users.nom` | « Mon entreprise » |
+| ligne dans `professional_profiles` | **aucune** |
+| publications, demandes, messages, avis | 0 |
+
+Il ne pouvait rien faire : invisible dans la Place des pros, incapable de
+publier ou de recevoir une demande. Et **rien ne le signalait** — ni
+erreur, ni écran cassé, ni contrôle rouge.
+
+#### Les deux moitiés ne venaient pas du même endroit
+
+```js
+const { session } = await api.signUp({ … });
+if (!session) return { confirmationRequise: true };   // ← on sort ICI
+if (typeChoisi === 'pro') await api.ensureProProfile({ … });
+```
+
+La ligne `users` vient d'un **déclencheur** (section 13) : elle existe
+toujours. La fiche professionnelle venait de l'**application**, et
+seulement si `signUp()` rendait une session — ce qu'elle ne fait PAS quand
+la confirmation par e-mail est demandée. L'acceptation des CGU tombait
+dans le même trou, et c'est une trace légale.
+
+Et le trou ne se rebouchait jamais : `ensureProProfile` n'était appelée
+nulle part ailleurs.
+
+> **Ce qui est garanti par la base et ce qui est garanti par l'écran ne
+> sont pas la même chose.** Deux moitiés d'une même donnée créées par deux
+> mécanismes différents finiront par se désaligner — c'est une question de
+> temps, pas de chance.
+
+**Et il ne POUVAIT pas se reboucher à cet instant** : sans session, la
+règle RLS « chacun sa fiche » refuse l'écriture. Les informations du
+formulaire sont perdues dès que l'artisan ferme l'application pour aller
+lire son courriel.
+
+La parade : **`signUp()` les range dans les métadonnées du compte**, que
+PostgreSQL voit au moment d'insérer la ligne. Le déclencheur crée les deux
+moitiés d'un coup, sans session et sans RLS.
+
+Deux gardes, parce que **ces métadonnées sont écrites par le CLIENT** :
+
+1. l'insertion **nomme ses colonnes une par une**. `verifie`,
+   `kbis_valide`, `assurance_valide`, `rge` n'y sont pas ;
+2. les métiers passent par **`metiers_connus()`**, la même fonction que la
+   contrainte `pro_metiers_check`. Un métier inventé retombe sur `macon` —
+   **faire échouer la création du compte pour une métadonnée malformée
+   serait pire que le défaut qu'on corrige**.
+
+#### Et en cherchant comment réparer, DEUX FAILLES
+
+Les deux prouvées sur PostgreSQL 16 avant d'écrire une ligne de
+correction, puis sur la vraie base après.
+
+**1. Le badge se décernait à la CRÉATION.** Le verrou de
+`tient_le_profil_pro()` ne regardait que `UPDATE` ; la politique
+« ecriture mon profil » est `for all`. Un client modifié insérait sa fiche
+avec `kbis_valide = true, assurance_valide = true`, et
+`synchronise_verification` — qui s'exécute juste avant — en tirait
+`verifie = true`. Mesuré : `INSERT 0 1`, aucune erreur, fiche `verifie = t`.
+
+> C'est la faille du 29/09 — « le badge ne se décerne pas soi-même » —
+> **refermée d'un côté et laissée grande ouverte de l'autre.** Une règle
+> qui ne couvre qu'un verbe SQL ne couvre rien : `for all`, c'est quatre
+> portes.
+
+**2. Un pro pouvait effacer les avis écrits SUR LUI.** C'est la plus grave,
+et elle n'a rien à voir avec le badge. `for all` autorise aussi le
+`DELETE`, et **onze tables** dépendent de `professional_profiles` en
+`on delete cascade` — dont `reviews`, `quote_requests`,
+`callback_requests`, `sos_requests`.
+
+Mesuré : un avis une étoile « Chantier abandonné » ; le pro supprime SA
+fiche ; **0 avis restant**, compte toujours là. Il recrée sa fiche et
+repart à neuf.
+
+> **Ce qui concerne des TIERS s'anonymise, il ne se supprime pas.** La
+> suppression de COMPTE anonymise les avis depuis le 21/09 ; cette
+> porte-là contournait tout ce travail en silence.
+
+#### Un déclencheur plutôt qu'une politique réécrite — et la cascade
+
+Retirer le droit de suppression demanderait de remplacer « ecriture mon
+profil » par deux politiques, donc un `drop policy` que le connecteur
+Supabase refuse. `create or replace trigger` passe, et il est meilleur :
+
+> **Une politique rend « 0 ligne supprimée » sans un mot. Un déclencheur
+> DIT pourquoi.** Vérifié sur la vraie base : `400`, code `23514`, et le
+> message complet en français.
+
+**Mais la cascade doit passer**, elle : `preparer_suppression_compte()`
+finit par `delete from public.users`, et supprimer son compte reste un
+droit. On distingue les deux cas par **la ligne parente** : si
+`public.users` n'a plus de ligne pour cet identifiant, c'est le compte
+entier qui part.
+
+Ce discriminant a été choisi après en avoir écarté un autre, et c'est le
+genre d'erreur qui ne se voit qu'en lisant : « bloquer quand
+`auth.uid() = old.id` » aurait **cassé la suppression de compte**, puisque
+`preparer_suppression_compte()` est `security definer` appelée par
+l'utilisateur lui-même.
+
+#### Le contrôle m'a attrapé en train de refaire la faute de la veille
+
+`verifier-compte` a immédiatement échoué sur `cree_fiche_utilisateur` :
+j'avais écrit la nouvelle version en section 31 **sans retirer l'ancienne
+de la section 13**. Le fichier restait rejouable — la seconde gagne — mais
+c'est exactement ce que la section 30 avait posé la veille pour les
+politiques.
+
+> **Une règle ne s'écrit qu'à UN endroit, fonction comprise.** C'est la
+> PREMIÈRE des deux qui se fait oublier le jour où la règle change.
+
+Et le contrôle lui-même est tombé dans le piège qu'il traque : son premier
+motif, `insert into … [\s\S]*?\);`, ne correspondait à rien — **il n'y a
+aucun `);` dans cet ordre SQL**, qui se termine par `on conflict`. Les
+quatre vérifications « la fiche ne naît jamais avec `verifie` » passaient
+donc… en n'éprouvant rien. **Un contrôle qui ne trouve pas sa cible rend
+le bon résultat pour la mauvaise raison** — c'est le défaut que ce
+document traque depuis `verifier-montage`. Et il retire désormais les
+commentaires `--` du SQL : cinquième fois qu'un contrôle risque d'accuser
+la documentation qui explique le défaut.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un vrai PostgreSQL, les onze cas de
+`supabase/essais-section-31.sql`, les 31 contrôles,
+`npx expo export --platform ios`. Puis sur la VRAIE base, avec trois
+comptes jetables supprimés dans la même session (0 restant) :
+
+| | résultat |
+|---|---|
+| inscription par `/auth/v1/signup` **seul** | fiche pro créée, entreprise, deux métiers, ville, CGU datées |
+| toutes les colonnes de vérification | `false` |
+| le pro supprime sa fiche | **400, code 23514**, message complet |
+| le pro se décerne le badge par `UPDATE` | `verifie = false` |
+| …et par `INSERT` | `verifie = false`, `statut = non_soumis` |
+| inscription complète **au navigateur** | l'écran arrive sur le Fil |
+| POST vers `professional_profiles` par l'application | **0** |
+
+#### Ce qui n'a PAS été fait, et qu'il faut savoir
+
+- **La confirmation par e-mail n'est pas activée** sur le projet
+  aujourd'hui, donc le défaut ne mord pas encore. Il mordrait à 100 % le
+  jour où elle le sera — et il faudra l'activer avant d'ouvrir au public.
+  Je n'ai donc pas pu éprouver ce chemin-là en vrai.
+- **Un artisan qui vient de s'inscrire n'a pas de coordonnées GPS.**
+  `completerLieu()` est appelée à l'enregistrement du PROFIL, pas à
+  l'inscription, et PostgreSQL ne peut pas appeler la Base Adresse
+  Nationale. Il n'apparaît donc pas dans une recherche par secteur tant
+  qu'il n'a pas ouvert « Modifier mon profil » une fois. C'était déjà vrai
+  avant ce lot ; ça reste à traiter.
+- **Le compte fantôme du 14/09 n'a pas été supprimé** : il se répare
+  désormais tout seul à la première reconnexion, et il ne porte aucun
+  contenu. C'est au propriétaire de décider s'il le garde.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

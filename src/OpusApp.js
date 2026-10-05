@@ -299,6 +299,24 @@ export default function OpusApp() {
       /* Une demande de modification des métiers déjà déposée doit réapparaître
          à la reconnexion, sinon l'artisan la redépose et la base la refuse. */
       if (type === 'pro') {
+        /* UN COMPTE PRO SANS FICHE SE RÉPARE ICI, ET NULLE PART AILLEURS.
+           C'est le seul endroit par lequel passent TOUS les chemins —
+           inscription, connexion, réouverture de l'application. Un compte
+           créé avant le 05/10/2026, ou sur une base où la section 31 n'a
+           pas encore été rejouée, retrouve donc sa fiche à la première
+           ouverture. La détection ne coûte rien : `loadAll()` vient de
+           rendre les fiches, on regarde simplement si la mienne y est. */
+        if (!data.pros[api.getUserId()]) {
+          try {
+            const reparee = await api.reparerFichePro();
+            if (reparee) setPros((ps) => ({ ...ps, [api.getUserId()]: reparee }));
+          } catch (e) {
+            /* On le dit, sans bloquer l'entrée : un artisan qui ne peut pas
+               entrer du tout ne peut rien corriger non plus. */
+            showErreur(messageClair(e, "Votre fiche professionnelle n'a pas pu être créée"));
+          }
+        }
+
         /* MA fiche complète : mon portfolio et ma présentation s'affichent
            sur mon propre profil, qui n'est pas la page publique. */
         try {
@@ -371,25 +389,29 @@ export default function OpusApp() {
     setTypeChoisi(type);
   };
 
+  /**
+   * Inscription.
+   *
+   * CE QUI A CHANGÉ LE 05/10/2026, ET POURQUOI C'EST PLUS COURT
+   * -----------------------------------------------------------
+   * Cette fonction créait elle-même la fiche professionnelle et
+   * enregistrait les CGU — après le `return` du cas « confirmation par
+   * e-mail ». Les deux étaient donc perdus dès que la confirmation était
+   * demandée, et l'artisan se retrouvait avec un demi-compte : un compte
+   * `pro` sans fiche, qui n'apparaît nulle part et ne reçoit rien.
+   *
+   * Les deux moitiés viennent maintenant de la BASE, qui les crée ensemble
+   * à partir des métadonnées (section 31 de `schema.sql`). Il ne reste ici
+   * qu'à envoyer le formulaire.
+   */
   const handleSignUp = async ({
-    email, motDePasse, nom, entreprise, metier, metiers, ville, cguVersion,
+    email, motDePasse, nom, entreprise, metiers, ville, cguVersion,
   }) => {
     const { session } = await api.signUp({
       email, password: motDePasse, userType: typeChoisi, nom,
+      entreprise, metiers, ville, cguVersion,
     });
     if (!session) return { confirmationRequise: true };
-
-    if (typeChoisi === 'pro') {
-      await api.ensureProProfile({ entreprise, metier, metiers, ville, nom });
-    }
-    /* La trace de l'acceptation, avec sa VERSION. Si elle échoue, le compte
-       existe quand même : refuser l'inscription entière pour ça serait pire.
-       On le consigne dans les journaux plutôt que de bloquer quelqu'un. */
-    if (cguVersion) {
-      try { await api.accepterConditions(cguVersion); } catch (e) {
-        console.warn('Acceptation des conditions non enregistrée :', e);
-      }
-    }
     await start(typeChoisi);
     return {};
   };

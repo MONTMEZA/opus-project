@@ -105,13 +105,45 @@ export async function sessionLocale() {
  * Renvoie { session } — session vaut null quand Supabase exige une
  * confirmation par email avant d'ouvrir le compte.
  */
-export async function signUp({ email, password, userType, nom }) {
+/**
+ * Création de compte.
+ *
+ * LE FORMULAIRE PART AVEC LE COMPTE, ET C'EST TOUT LE LOT DU 05/10/2026.
+ * ---------------------------------------------------------------------
+ * Avant, la fiche professionnelle était créée par l'application, juste
+ * après, et SEULEMENT si `signUp()` rendait une session. Avec la
+ * confirmation par e-mail — qu'il faudra activer avant d'ouvrir au
+ * public — il n'y a pas de session : l'artisan se retrouvait avec un
+ * demi-compte, et les informations qu'il venait de saisir étaient perdues
+ * dès qu'il fermait l'application pour aller lire son courriel.
+ *
+ * Elles voyagent donc dans les MÉTADONNÉES du compte, que PostgreSQL voit
+ * au moment d'insérer la ligne : le déclencheur `cree_fiche_utilisateur()`
+ * (section 31 de `schema.sql`) crée les deux moitiés d'un coup, sans
+ * session et sans RLS.
+ *
+ * Ce qu'on y met ne donne AUCUN droit : un client modifié peut écrire ce
+ * qu'il veut dans ces métadonnées, mais le déclencheur nomme ses colonnes
+ * une par une et `verifie` n'en fait pas partie. Un métier inventé retombe
+ * sur le premier du catalogue au lieu de faire échouer l'inscription.
+ */
+export async function signUp({
+  email, password, userType, nom, entreprise, metiers, ville, cguVersion,
+}) {
   if (!hasSupabase) { currentUserId = 'demo-user'; return { session: true }; }
+
+  const metadonnees = { type: userType, nom: nom.trim() };
+  if (cguVersion) metadonnees.cgu = cguVersion;
+  if (userType === 'pro') {
+    if (entreprise) metadonnees.entreprise = entreprise.trim();
+    if (metiers && metiers.length) metadonnees.metiers = metiers.slice(0, 4);
+    if (ville) metadonnees.ville = ville;
+  }
 
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password,
-    options: { data: { type: userType, nom: nom.trim() } },
+    options: { data: metadonnees },
   });
   if (error) throw error;
 
@@ -145,8 +177,17 @@ export async function ensureProProfile({
 }) {
   if (!hasSupabase) return null;
 
+  /* La ligne ENTIÈRE, et pas seulement `id` : `reparerFichePro()` la rend
+     aux écrans par `rowToPro()`, qui a besoin de toutes les colonnes. Avec
+     un `select('id')`, une fiche déjà présente ressortait comme une fiche
+     vide — sans erreur, ce qui est le pire des deux.
+
+     `'*'` et non `COLONNES_PRO_LISTE` : cette constante est déclarée plus
+     bas dans le fichier, et ce projet a déjà perdu une soirée sur un écran
+     blanc pour une `const` lue avant sa déclaration. C'est MA fiche, une
+     seule ligne, sur un chemin de rattrapage : le poids ne compte pas. */
   const { data: existante } = await supabase.from('professional_profiles')
-    .select('id').eq('id', currentUserId).maybeSingle();
+    .select('*').eq('id', currentUserId).maybeSingle();
   if (existante) return existante;
 
   const { data, error } = await supabase.from('professional_profiles').insert({
@@ -191,6 +232,34 @@ export async function submitDocuments({ kbisPath, assurancePath, rgePath, rge })
   const { error } = await supabase.from('professional_profiles')
     .update(patch).eq('id', currentUserId);
   if (error) throw error;
+}
+
+/**
+ * Recrée la fiche professionnelle d'un compte qui n'en a pas.
+ *
+ * POUR QUI : les comptes créés AVANT le lot du 05/10/2026, et ceux d'une
+ * base où la section 31 n'a pas encore été rejouée — « l'application peut
+ * prendre de l'avance sur la base », et c'est déjà arrivé six fois.
+ *
+ * Les informations sont lues dans les métadonnées du compte, là où
+ * `signUp()` les a rangées. Un compte plus ancien n'en a pas : la fiche
+ * naît alors avec les valeurs par défaut, et l'artisan la complète dans
+ * « Modifier mon profil ». Une fiche à compléter vaut mieux qu'un compte
+ * qui n'existe nulle part.
+ */
+export async function reparerFichePro() {
+  if (!hasSupabase) return null;
+  const { data } = await supabase.auth.getUser();
+  const meta = (data && data.user && data.user.user_metadata) || {};
+  const liste = Array.isArray(meta.metiers) ? meta.metiers.slice(0, 4) : null;
+  const ligne = await ensureProProfile({
+    entreprise: meta.entreprise,
+    metiers: liste,
+    metier: liste ? liste[0] : null,
+    ville: meta.ville,
+    nom: meta.nom,
+  });
+  return ligne ? rowToPro(ligne) : null;
 }
 
 export function getUserId() { return currentUserId; }
@@ -1736,17 +1805,19 @@ export const supprimerMonCompte = !hasSupabase
   };
 
 /**
- * Consigner l'acceptation des conditions, avec leur VERSION.
+ * `accepterConditions()` A ÉTÉ RETIRÉE LE 05/10/2026, et c'est volontaire.
  *
- * Sans la version, la trace ne vaut rien : des conditions modifiées après
- * coup ne prouvent pas ce que la personne a accepté ce jour-là.
+ * Elle écrivait `cgu_version` et `cgu_acceptees_le` APRÈS l'inscription,
+ * donc jamais quand la confirmation par e-mail était demandée — une trace
+ * légale perdue sans que rien ne le dise. L'acceptation est désormais
+ * enregistrée par la base, au moment même où le compte naît (section 31 de
+ * `schema.sql`), à partir des métadonnées.
+ *
+ * Elle n'avait plus aucun appelant : une fonction que personne n'appelle
+ * est le « bouton §18 » — du code qui a l'air de servir et qui ne fait
+ * rien. Le jour où les conditions changeront et qu'il faudra les faire
+ * ré-accepter, ce sera un écran et une fonction neufs, pas celle-ci.
  */
-export const accepterConditions = !hasSupabase ? noop : async (version) => {
-  const { error } = await supabase.from('users')
-    .update({ cgu_version: version, cgu_acceptees_le: new Date().toISOString() })
-    .eq('id', currentUserId);
-  if (error) throw error;
-};
 
 /**
  * Supprimer un commentaire.

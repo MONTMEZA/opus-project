@@ -1072,6 +1072,67 @@ lignes — mais l'orange est votre identité, donc je ne le fais pas sans vous
 demander.
 
 
+### 2.1 quaterdecies Un compte d'artisan naît entier ✅ FAIT le 05/10/2026
+
+En cherchant quoi avancer pendant que le compte Apple se valide, j'ai relu
+la création de compte. **Un compte fantôme dormait dans votre base depuis le
+14 septembre** : marqué « professionnel », sans fiche professionnelle. Il ne
+pouvait rien faire — invisible dans la Place des pros, incapable de publier
+ou de recevoir une demande —, et rien ne le signalait.
+
+**La cause.** Les deux moitiés d'un compte d'artisan n'étaient pas créées
+par le même mécanisme : la première par la base (donc toujours), la seconde
+par l'application, et seulement si l'inscription rendait une session tout de
+suite. Avec la **confirmation par e-mail** — qu'il faudra activer avant
+d'ouvrir au public — il n'y a pas de session : la fiche n'était jamais
+créée, **et l'acceptation des conditions d'utilisation non plus**, ce qui est
+une trace légale.
+
+C'est maintenant la base qui crée les deux, à partir des informations que
+l'inscription lui transmet. Vérifié sur votre vraie base : une inscription
+brute, sans que l'application écrive une seule ligne, produit la fiche
+complète — entreprise, deux métiers, ville, conditions acceptées et datées.
+
+**Et en cherchant comment réparer, DEUX FAILLES**, les deux prouvées avant
+d'être corrigées :
+
+1. **Un artisan pouvait se décerner le badge vérifié en créant sa fiche.**
+   Le verrou posé le 29 septembre ne surveillait que la MODIFICATION ;
+   la création passait à côté. Mesuré : aucune erreur, et la fiche
+   ressortait « vérifiée ».
+2. **Un artisan pouvait effacer les avis écrits sur lui.** En supprimant sa
+   propre fiche : onze tables en dépendent, dont les avis, les demandes de
+   devis, les demandes de rappel et les urgences. Mesuré : un avis une
+   étoile, le pro supprime sa fiche, zéro avis restant, compte toujours là.
+   Il recrée sa fiche et repart à neuf.
+
+   C'est la plus grave des deux, et elle contournait en silence tout le
+   travail du 21 septembre — où l'on a décidé que **ce qui concerne des
+   tiers s'anonymise et ne se supprime pas**.
+
+Une fiche professionnelle ne se supprime donc plus tant que le compte
+existe, avec un message qui l'explique. **Supprimer son compte entier reste
+possible**, et c'est vérifié : c'est un autre chemin.
+
+**Vérifié** : le schéma rejoué deux fois sur un vrai PostgreSQL, onze essais
+de sécurité, les 31 contrôles, le paquet iOS, puis votre vraie base avec
+trois comptes jetables supprimés dans la foulée — dont une inscription
+complète menée au navigateur.
+
+**Pas vérifié** : la confirmation par e-mail elle-même, qui n'est pas encore
+activée sur votre projet.
+
+**Deux choses restent, et elles sont pour vous :**
+
+- **le compte fantôme du 14 septembre est toujours là.** Il se répare tout
+  seul à la prochaine connexion et ne porte aucun contenu — à vous de dire
+  si on le garde ou si on le supprime ;
+- **un artisan qui vient de s'inscrire n'a pas encore de coordonnées**, donc
+  il n'apparaît pas dans une recherche par secteur tant qu'il n'a pas ouvert
+  « Modifier mon profil » une fois. C'était déjà le cas avant ; c'est à
+  traiter à part.
+
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des
