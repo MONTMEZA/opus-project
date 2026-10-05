@@ -1133,6 +1133,68 @@ activée sur votre projet.
   traiter à part.
 
 
+### 2.1 quindecies Vos trois remarques du 05/10/2026 ✅ FAIT
+
+**1. Les demandes déjà traitées ne noient plus les nouvelles.**
+
+Vous aviez raison, et je l'ai chiffré avant de commencer : **6 demandes
+traitées sur 8** dans votre base, après trois semaines. Dans un an, c'est
+95 % de la liste.
+
+« Pour moi » a désormais une ligne de pastilles, la même que la Place des
+pros et les Demandes — **À traiter · En cours · Terminées**, chacune avec
+son nombre. On arrive toujours sur « À traiter ».
+
+**Trois états et pas deux, et c'est le point important** : une demande
+acceptée n'est pas réglée, c'est un chantier en cours — et c'est là que se
+trouve le téléphone du client. La ranger avec les terminées la ferait
+disparaître au moment précis où vous en avez besoin. Le bouton « Marquer
+terminé », qui existait depuis le début et ne servait à rien de visible,
+sert maintenant à faire passer une demande de « En cours » à « Terminées ».
+
+**2. L'adresse e-mail se reprend d'un appui — mais pas toute seule.**
+
+J'ai vérifié avant de répondre : à l'inscription, Opus demande l'entreprise,
+les métiers, la ville, l'e-mail et le mot de passe. **Pas de téléphone, pas
+d'adresse postale.** L'entreprise, la ville et les métiers *sont* bien
+repris dans « Modifier mon profil ». Le téléphone, lui, n'a jamais été
+demandé : il n'y a rien à reprendre.
+
+L'e-mail est le vrai sujet, et c'est pour ça que je ne l'ai pas rempli tout
+seul : il y a **deux adresses différentes**. Celle de votre compte, qui a
+été fermée au public le 29 septembre parce qu'elle fuitait, et celle de
+votre fiche, que vous remplissez *pour* qu'elle s'affiche. Les confondre
+republierait votre adresse personnelle au premier « Enregistrer » distrait.
+
+Donc : un bouton sous le champ, **« Utiliser l'adresse de mon compte
+(votre@adresse) »**. Un appui, c'est rempli, et vous avez vu ce qui va être
+publié. Il disparaît une fois le champ rempli.
+
+**3. On voit maintenant où l'on est dans la barre du bas.**
+
+Mesuré : le seul signal était la couleur de l'icône, et l'écart entre
+l'inactive et l'active valait **3,02 sur 1** — le minimum réglementaire.
+Perceptible, et rien de plus.
+
+Vous avez choisi l'anneau orange, et vous aviez raison sur un point que
+j'avais sous-estimé : **votre photo de profil le faisait déjà**. Les quatre
+autres icônes font donc pareil désormais. Les icônes ne changent pas, seul
+un contour orange apparaît sur la page où vous êtes.
+
+Vérifié : la barre fait **69 pixels de haut avant comme après** — la boîte
+de l'anneau a une taille fixe, seule sa couleur change. Sans ça, toute la
+barre sauterait de deux pixels à chaque changement de page.
+
+**Vérifié** : les 31 contrôles, le paquet iOS, et au navigateur — les trois
+pastilles et leurs nombres, le passage « Marquer terminé » qui déplace la
+demande, l'anneau qui suit la page, et le bouton d'adresse éprouvé sur votre
+vraie base avec un compte jetable supprimé dans la foulée.
+
+**Pas vérifié** : les trois sur votre iPhone. Et l'anneau en mode vidéo n'a
+été relu que dans le code — le fil vidéo ne se lit pas dans le navigateur
+de test, faute de codecs.
+
+
 ### 2.2 Notifications push — en cours depuis le 02/10/2026
 
 La base les enregistre déjà (table `notifications`, alimentée par des

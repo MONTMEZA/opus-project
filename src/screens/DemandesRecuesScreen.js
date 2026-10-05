@@ -32,12 +32,13 @@
  */
 import React, { useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, Linking, StyleSheet,
+  View, Text, FlatList, Pressable, Linking, StyleSheet, ScrollView,
 } from 'react-native';
 import {
   C, F, T, S, APPUI, interligne, surFond, CARTE, GOUTTIERE,
 } from '../theme';
-import { Avatar, BtnMini, EmptyState, SectionLabel } from '../components/ui';
+import { Avatar, BtnMini, EmptyState } from '../components/ui';
+import { PastilleBascule } from '../components/FiltresPlace';
 import { Phone, Check, X, Clock, AlertTriangle } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
 import { libelleBudget } from '../data/annonces';
@@ -93,8 +94,49 @@ const estEnAttente = (d) => EN_ATTENTE.includes(d.statut);
 const estAcceptee = (d) => ACCEPTEE.includes(d.statut);
 const estRefusee = (d) => REFUSEE.includes(d.statut);
 
-export function compterEnAttente(demandes = []) {
-  return demandes.filter(estEnAttente).length;
+/**
+ * LES TROIS ÉTATS D'UNE DEMANDE — 05/10/2026
+ *
+ * POURQUOI TROIS, ET PAS DEUX
+ * ---------------------------
+ * Relevé sur la vraie base ce jour-là : **6 demandes traitées sur 8**, après
+ * trois semaines. Dans un an, c'est 95 % de la liste. Le tri de la veille
+ * les descend en bas, mais il faut toujours les faire défiler pour arriver
+ * au bout — et la page ne sert QU'À savoir qui attend.
+ *
+ * Le propriétaire : « si tout simplement une demande déjà faite ou répondue
+ * partait dans une page "mes demandes à jour", ça éviterait d'avoir des
+ * pages et des pages à parcourir pour trouver les nouvelles ».
+ *
+ * Mais deux états ne suffisent pas, et c'est le point de ce lot : une
+ * demande ACCEPTÉE n'est pas réglée, c'est un chantier en cours — et c'est
+ * là que vit le numéro de téléphone du client. La ranger avec les terminées
+ * la ferait disparaître au moment précis où on en a besoin.
+ *
+ * `'termine'` existe dans les trois contraintes `check` depuis le premier
+ * jour, et le bouton « Marquer terminé » aussi. Personne ne s'en servait,
+ * faute de voir à quoi il sert : il sert à ça.
+ *
+ * ET UN REFUS EST RANGÉ AVEC LES TERMINÉES. Pour l'artisan, c'est la même
+ * chose : il n'y a plus rien à faire. Lui donner sa propre pastille
+ * ajouterait une quatrième colonne pour l'état le moins consulté de tous.
+ */
+export const VUES = [
+  { cle: 'attente', label: 'À traiter' },
+  { cle: 'cours', label: 'En cours' },
+  { cle: 'finies', label: 'Terminées' },
+];
+
+export function etatDe(d) {
+  if (estEnAttente(d)) return 'attente';
+  if (estAcceptee(d)) return 'cours';
+  return 'finies';
+}
+
+export function compterParEtat(demandes = []) {
+  const compte = { attente: 0, cours: 0, finies: 0 };
+  demandes.forEach((d) => { compte[etatDe(d)] += 1; });
+  return compte;
 }
 
 /**
@@ -128,6 +170,14 @@ export default function DemandesRecuesScreen({
   demandes = [], chargement = false, echec = false, onReessayer,
   onRepondre, onAppeler, onVoirProfil,
 }) {
+  /* LE CHOIX DE VUE VIT ICI, et c'est la règle du lot 4 : un filtre posé
+     dans `OpusApp` ferait redessiner toute l'application à chaque appui. */
+  const [vue, setVue] = useState('attente');
+
+  /* ET LES CROCHETS PASSENT AVANT LES SORTIES ANTICIPÉES. React exige
+     qu'ils soient appelés dans le même ordre à chaque rendu : un `useState`
+     écrit sous un `if (chargement) return …` ne serait appelé qu'une fois
+     sur deux, et l'écran se casserait au moment où les données arrivent. */
   if (chargement) {
     return <EmptyState>Chargement de vos demandes…</EmptyState>;
   }
@@ -170,8 +220,10 @@ export default function DemandesRecuesScreen({
     );
   }
 
-  const liste = trierDemandes(demandes);
-  const enAttente = compterEnAttente(liste);
+  const toutes = trierDemandes(demandes);
+  const compte = compterParEtat(toutes);
+  const liste = toutes.filter((d) => etatDe(d) === vue);
+  const vueCourante = VUES.find((v) => v.cle === vue) || VUES[0];
 
   return (
     <FlatList
@@ -183,7 +235,11 @@ export default function DemandesRecuesScreen({
       initialNumToRender={4}
       maxToRenderPerBatch={6}
       windowSize={5}
-      contentContainerStyle={{ paddingBottom: 32 }}
+      /* LA MARGE VA DANS LE CONTENEUR DU CONTENU, pas sur les cartes :
+         c'est la règle du lot 7, et c'est elle qui fait que l'en-tête, les
+         pastilles et les cartes tombent sur la même verticale sans qu'on
+         ait à le régler trois fois. */
+      contentContainerStyle={{ paddingHorizontal: GOUTTIERE, paddingBottom: S.xl }}
       /* LA BORNE SE DIT. La base en rend 200 au plus (section 24), les plus
          récentes et tout ce qui attend. Une liste tronquée en silence
          laisserait croire qu'il n'y a rien avant — c'est la règle du
@@ -194,12 +250,48 @@ export default function DemandesRecuesScreen({
           réponse est au-dessus.
         </Text>
       ) : null}
+      ListHeaderComponentStyle={{ marginBottom: S.sm }}
+      /* LA MÊME LIGNE DE PASTILLES QUE LA PLACE DES PROS ET LES DEMANDES.
+         Les trois pages de Découvrir sont jumelles : elles doivent se
+         ressembler, et on ne réinvente pas un troisième motif de filtre. */
       ListHeaderComponent={(
-        <SectionLabel>
-          {enAttente > 0
-            ? `${enAttente} demande${enAttente > 1 ? 's' : ''} à traiter`
-            : 'Tout est traité'}
-        </SectionLabel>
+        <View>
+          <View style={s.ligneCompte}>
+            <Text style={s.compte}>
+              {toutes.length} demande{toutes.length > 1 ? 's' : ''}
+              {compte.attente > 0
+                ? ` · ${compte.attente} à traiter`
+                : ' · tout est traité'}
+            </Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.pastilles}
+          >
+            {VUES.map((v) => (
+              <PastilleBascule
+                key={v.cle}
+                /* LE NOMBRE EST DANS LA PASTILLE, et c'est ce qui rend la
+                   ligne utile sans rien ouvrir : on voit d'un coup s'il y
+                   a quelque chose à aller voir ailleurs. */
+                label={`${v.label} (${compte[v.cle]})`}
+                on={vue === v.cle}
+                onPress={() => setVue(v.cle)}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      )}
+      /* UNE VUE VIDE DIT LAQUELLE, ET OÙ EST LE RESTE. « Aucune demande »
+         tout court ferait croire que la page est cassée alors qu'on vient
+         justement de ranger les autres ailleurs. */
+      ListEmptyComponent={(
+        <EmptyState>
+          {vue === 'attente'
+            ? 'Rien n’attend de réponse. Tout ce que vous avez accepté est dans « En cours ».'
+            : `Aucune demande dans « ${vueCourante.label} ».`}
+        </EmptyState>
       )}
       renderItem={({ item }) => (
         <Demande
@@ -352,10 +444,7 @@ const s = StyleSheet.create({
   pad: { flex: 1, backgroundColor: C.bg },
 
   /* Une carte PORTE l'information : angle vif, comme partout ailleurs. */
-  carte: {
-    ...CARTE,
-    marginHorizontal: GOUTTIERE, marginBottom: S.md,
-  },
+  carte: { ...CARTE, marginBottom: S.md },
   bandeau: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm - 2,
     paddingVertical: S.sm - 2, paddingHorizontal: S.md,
@@ -384,9 +473,17 @@ const s = StyleSheet.create({
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
   btnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent, letterSpacing: 0.3 },
   etat: { fontFamily: F.inter5, fontSize: T.petit, color: C.muted },
+  /* Repris à l'identique de `DemandesScreen` : les deux pages sont
+     jumelles, elles ne doivent pas se décaler d'un pixel. */
+  ligneCompte: { marginBottom: S.sm },
+  compte: {
+    fontFamily: F.oswald6, fontSize: T.petit, color: C.muted, letterSpacing: 0.6,
+  },
+  pastilles: { flexDirection: 'row', gap: S.sm, paddingRight: S.lg, paddingBottom: S.sm },
+
   borne: {
     fontFamily: F.inter, fontSize: T.micro, color: C.muted,
-    textAlign: 'center', paddingHorizontal: GOUTTIERE, paddingTop: S.md,
+    textAlign: 'center', paddingTop: S.md,
     lineHeight: interligne(T.micro),
   },
 

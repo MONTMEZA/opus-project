@@ -163,7 +163,8 @@ export default function OpusApp() {
 
   /* Compte : profil du particulier, et disponibilité SOS du professionnel. */
   const [monProfil, setMonProfil] = useState({
-    nom: 'Vous', ville: '', telephone: '', avatarUrl: null, bannerUrl: null,
+    nom: 'Vous', ville: '', telephone: '', email: '',
+    avatarUrl: null, bannerUrl: null,
   });
   // Partenariats en cours : reçus d'un côté, envoyés de l'autre.
   const [demandesPartenariat, setDemandesPartenariat] = useState([]);
@@ -2602,6 +2603,9 @@ export default function OpusApp() {
           <ProfilEditScreen
             userType={userType}
             profil={userType === 'pro' ? (pros[myProId] || {}) : monProfil}
+            /* L'adresse du COMPTE, pour la proposer d'un appui — elle n'est
+               pas dans `pros[]`, qui est public. */
+            emailCompte={monProfil.email || ''}
             sos={mesSos}
             onSave={enregistrerProfil}
             onEnvoyerDocuments={envoyerDocuments}

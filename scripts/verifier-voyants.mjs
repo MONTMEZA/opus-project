@@ -154,6 +154,55 @@ console.log('\nUn point de 7 px doit se VOIR — contraste recalculé');
 
   verifier('le composant choisit l’encre selon le fond',
     /pillDotOn/.test(ui) && /backgroundColor: C\.accentTexte/.test(ui));
+
+  /* L'ANNEAU DE L'ONGLET ACTIF est lui aussi un élément graphique : il lui
+     faut 3 : 1 sur le fond de la barre. Posé ici, et pas dans le bloc
+     suivant, parce que c'est ici que vivent `contraste` et `couleur` — et
+     que tous les contrastes recalculés de ce contrôle doivent se lire
+     ensemble. */
+  const anneauSurBarre = contraste(couleur('accent'), couleur('surface'));
+  verifier(`l’anneau orange sur la barre : ${anneauSurBarre.toFixed(2)} : 1`,
+    anneauSurBarre >= SEUIL,
+    'si la palette change et que ce chiffre passe sous 3, l’anneau cesse '
+    + 'de se voir — et le signal disparaît sans que rien ne le dise');
+}
+
+console.log('\nLa barre du bas dit AUSSI où l’on se trouve');
+{
+  /* ====================================================================
+     DEMANDÉ PAR LE PROPRIÉTAIRE LE 05/10/2026 : « quand on va dans
+     Découvrir ou dans le menu, on ne voit pas forcément où on est ».
+
+     Il avait raison, et c'était mesurable : le seul signal était la
+     couleur de l'icône, et le contraste entre l'inactive (`muted`) et
+     l'active (`ink`) vaut 3,02 : 1 — le minimum pour un élément
+     graphique. Perceptible, et c'est tout.
+
+     L'onglet Profil, lui, avait DÉJÀ son anneau orange. Ce lot l'étend
+     aux quatre autres, avec UNE seule règle.
+     ==================================================================== */
+  verifier('l’anneau de l’onglet actif est calculé UNE fois',
+    /const anneau = on \? \(dark \? '#fff' : C\.accent\) : 'transparent'/.test(nav),
+    'deux façons de dire « vous êtes ici » dans la même barre finiraient '
+    + 'par se contredire — c’est exactement le défaut des voyants du 04/10');
+
+  verifier('…et la photo de profil s’en sert, elle aussi',
+    /ringColor=\{anneau\}/.test(nav),
+    'elle avait sa propre formule : c’est la première à avoir eu l’anneau, '
+    + 'elle ne doit pas rester à part');
+
+  verifier('…comme les quatre autres icônes',
+    /style=\{\[s\.anneau, \{ borderColor: anneau \}\]\}/.test(nav));
+
+  /* Une bordure qui APPARAÎT décalerait l'icône de deux pixels à chaque
+     changement d'onglet, et toute la barre sauterait. La boîte a donc une
+     taille fixe, et seule la couleur bouge. Mesuré au navigateur : 69 px
+     de haut avant comme après. */
+  verifier('la boîte a une taille fixe, seule la COULEUR change',
+    /anneau: \{\s*width: 30, height: 30, borderRadius: R\.gelule, borderWidth: 2,/
+      .test(nav),
+    'une bordure posée seulement quand l’onglet est actif ferait sauter '
+    + 'la barre de deux pixels à chaque changement de page');
 }
 
 console.log('');

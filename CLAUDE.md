@@ -2998,6 +2998,141 @@ comptes jetables supprimés dans la même session (0 restant) :
   désormais tout seul à la première reconnexion, et il ne porte aucun
   contenu. C'est au propriétaire de décider s'il le garde.
 
+### Trois remarques du propriétaire, et ce qu'elles ont coûté (05/10/2026)
+
+Trois points relevés en se servant de l'application, et il a demandé une
+réponse AVANT que je construise quoi que ce soit. Les trois étaient justes,
+mais pas toujours pour la raison qu'il croyait — et c'est ça qui compte.
+
+#### 1. « Les demandes déjà traitées devraient partir ailleurs »
+
+Chiffré sur la vraie base avant de répondre : **6 demandes traitées sur 8**,
+après trois semaines. Dans un an, c'est 95 % de la liste. Le tri de la
+veille les descendait en bas ; il fallait toujours les faire défiler.
+
+Ce qui a été ÉCARTÉ : une page de plus dans la barre du bas. La Place des
+pros et les Demandes ont chacune une **ligne de pastilles**, posée les deux
+jours précédents. Les trois pages de Découvrir sont jumelles.
+
+> **TROIS états, et pas deux.** Une demande ACCEPTÉE n'est pas réglée :
+> c'est un chantier en cours, et **c'est là que vit le numéro de téléphone
+> du client**. La ranger avec les terminées la ferait disparaître au moment
+> précis où on en a besoin.
+
+`'termine'` existait dans les trois contraintes `check` depuis le premier
+jour, et le bouton « Marquer terminé » aussi. Personne ne s'en servait,
+faute de voir à quoi il sert : il sert à ça.
+
+Et un refus est rangé avec les terminées — pour l'artisan, c'est la même
+chose : il n'y a plus rien à faire. Lui donner sa propre pastille
+ajouterait une quatrième colonne pour l'état le moins consulté.
+
+Au passage, `DemandesRecuesScreen` posait sa gouttière **sur les cartes**
+et non dans `contentContainerStyle` — la règle du lot 7, qu'il violait
+depuis le début. Corrigé : c'est ce qui fait tomber l'en-tête, les
+pastilles et les cartes sur la même verticale sans la régler trois fois.
+
+**Et un crochet ne se met pas sous une sortie anticipée.** L'écran
+commençait par `if (chargement) return …` ; y ajouter un `useState` en
+dessous, et React n'appelle plus le même nombre de crochets d'un rendu à
+l'autre. L'écran se casserait **au moment où les données arrivent** —
+c'est-à-dire jamais pendant qu'on le développe.
+
+#### 2. « Les informations du compte ne se retrouvent pas dans la fiche »
+
+**Vérifié avant de répondre, et il se trompait à moitié** — ce qui valait
+mieux que de le croire sur parole :
+
+| | demandé à l'inscription ? | repris dans la fiche ? |
+|---|---|---|
+| entreprise | oui | **oui** |
+| ville | oui | **oui** |
+| métiers | oui | **oui** |
+| téléphone | **non** | rien à reprendre |
+| e-mail | oui (celui du COMPTE) | **surtout pas** |
+
+Le téléphone n'est jamais demandé à l'inscription : il n'y a rien à
+recopier. Et allonger le formulaire d'inscription pour le réclamer ferait
+abandonner des gens le soir où ils s'inscrivent.
+
+L'e-mail, lui, est le vrai sujet, et c'est un piège :
+
+> **`users.email` est l'adresse du COMPTE**, fermée à tout le monde le
+> 29/09 parce qu'elle fuitait. **`email_pro` est une adresse de CONTACT**,
+> que le professionnel renseigne POUR qu'elle s'affiche.
+>
+> Préremplir la seconde avec la première, et il suffit de toucher
+> « Enregistrer » sans y penser pour republier son adresse personnelle.
+> **C'est la même porte, rouverte par le côté confort.**
+
+D'où un bouton qui **MONTRE l'adresse avant de la poser** : « Utiliser
+l'adresse de mon compte (dylan…@gmail.com) ». Plus rien à retaper, et on
+voit ce qu'on s'apprête à publier. Il disparaît dès que le champ est
+rempli — une proposition qui reste après coup n'est plus une aide.
+
+L'adresse arrive par `mon_compte()`, la seule porte encore ouverte sur sa
+propre ligne, et elle n'entre jamais dans `pros[]`, qui est public.
+
+#### 3. « On ne voit pas forcément où on est »
+
+Mesuré avant de répondre : le seul signal était la **couleur de l'icône**.
+
+| | contraste |
+|---|---|
+| icône inactive `muted` vs active `ink` | **3,02 : 1** |
+
+C'est exactement le minimum pour un élément graphique. Perceptible, et
+c'est tout.
+
+**Et l'onglet Profil avait DÉJÀ son anneau orange** depuis que la photo est
+entrée dans la barre. Ce lot n'invente donc rien : il étend aux quatre
+autres ce que le cinquième faisait seul.
+
+J'avais soulevé une objection — dans cette barre, l'orange veut déjà dire
+« il y a du neuf » — et proposé la pastille sombre de Découvrir en
+alternative. **Le propriétaire a tranché pour l'anneau orange**, et il a
+raison sur un point que j'avais sous-estimé : la photo de profil le faisait
+déjà, donc l'ambiguïté existait de toute façon. Mieux vaut une règle
+appliquée partout que deux façons de dire « vous êtes ici » dans dix
+centimètres de barre.
+
+> **`anneau` est calculé UNE fois** et sert à la photo comme aux icônes.
+> C'est la leçon des voyants du 04/10 : deux formules pour une seule vérité
+> finissent toujours par se contredire.
+
+Deux détails qui ne sont pas cosmétiques :
+
+1. **la boîte fait 30 × 30 quoi qu'il arrive**, et seule la COULEUR de la
+   bordure change. Une bordure qui apparaît décalerait l'icône de deux
+   pixels à chaque changement d'onglet, et toute la barre sauterait.
+   Mesuré : **69 px de haut avant comme après** ;
+2. **l'anneau est blanc en mode vidéo**, comme la photo — un orange sur le
+   voile sombre du fil vidéo ne se verrait pas pareil.
+
+#### Vérifié, et comment
+
+Les 31 contrôles (dont 7 nouveaux dans `verifier-demandes`, 4 dans
+`verifier-voyants`, 5 dans `verifier-compte`), `npx expo export --platform
+ios`. Au navigateur, en mode démonstration pour les deux premiers et sur la
+VRAIE base pour le troisième, avec un compte jetable supprimé dans la même
+session :
+
+| | relevé |
+|---|---|
+| les trois pastilles | « À traiter (2) », « En cours (1) », « Terminées (0) » |
+| leur boîte réelle | **81 × 44**, comme celles des Demandes |
+| « En cours » | montre la demande acceptée ET son téléphone |
+| « Marquer terminé » | fait passer la demande de « En cours (0) » à « Terminées (1) » |
+| l'anneau sur Accueil | `rgb(232, 92, 31)`, et `transparent` sur les trois autres |
+| …après un appui sur Découvrir | l'anneau a suivi, l'ancien est parti |
+| hauteur de la barre | **69 px avant, 69 px après** |
+| le bouton d'adresse | **358 × 44**, l'adresse écrite en entier |
+| un appui | le champ se remplit, le bouton disparaît |
+
+**Ce qui n'a PAS été vérifié** : les trois sur un vrai iPhone. Et l'anneau
+en mode vidéo n'a été lu que dans le code — le fil vidéo ne se lit pas dans
+ce navigateur, faute de codecs.
+
 ### Un voyant qui promet doit dire OÙ (04/10/2026)
 
 Relevé par le propriétaire en s'en servant :

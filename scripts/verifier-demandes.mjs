@@ -134,6 +134,51 @@ console.log('\nCe qui ATTEND passe devant le reste');
       .test(ecran),
     'deux rangs seulement laissaient une demande traitée devant une '
     + 'demande en attente');
+  /* ====================================================================
+     LE 05/10/2026, LE PROPRIÉTAIRE : « si une demande déjà faite ou
+     répondue partait dans une page "mes demandes à jour", ça éviterait
+     d'avoir des pages et des pages à parcourir pour trouver les
+     nouvelles ».
+
+     Chiffré sur la vraie base le jour même : 6 demandes traitées sur 8,
+     après trois semaines. Dans un an, c'est 95 % de la liste.
+     ==================================================================== */
+  verifier('les trois états sont isolés, donc contrôlables',
+    /export function etatDe/.test(ecran) && /export function compterParEtat/.test(ecran));
+
+  verifier('une demande ACCEPTÉE n’est pas rangée avec les terminées',
+    /if \(estAcceptee\(d\)\) return 'cours';/.test(ecran),
+    'c’est un chantier en cours, et c’est là que vit le téléphone du '
+    + 'client : la ranger avec les finies la ferait disparaître au moment '
+    + 'où on en a besoin');
+
+  verifier('la ligne de pastilles est la MÊME que sur les deux pages voisines',
+    /import \{ PastilleBascule \} from '\.\.\/components\/FiltresPlace'/.test(ecran),
+    'les trois pages de Découvrir sont jumelles — on ne réinvente pas un '
+    + 'troisième motif de filtre');
+
+  verifier('…et chaque pastille porte son COMPTE',
+    /label=\{`\$\{v\.label\} \(\$\{compte\[v\.cle\]\}\)`\}/.test(ecran),
+    'sans le nombre, il faut ouvrir chaque vue pour savoir s’il y a '
+    + 'quelque chose à aller voir');
+
+  verifier('le choix de vue vit DANS l’écran, pas dans OpusApp',
+    /const \[vue, setVue\] = useState\('attente'\)/.test(ecran)
+    && !/setVue/.test(lire('src/OpusApp.js')),
+    'un filtre posé dans OpusApp redessinerait toute l’application à '
+    + 'chaque appui — c’est la règle du lot 4');
+
+  verifier('une vue vide dit LAQUELLE, et où est le reste',
+    /Aucune demande dans « \$\{vueCourante\.label\} »/.test(ecran)
+    && /Tout ce que vous avez accepté est dans « En cours »/.test(ecran),
+    '« Aucune demande » tout court ferait croire que la page est cassée '
+    + 'alors qu’on vient de ranger les autres ailleurs');
+
+  verifier('la marge de la liste est dans `contentContainerStyle`',
+    /contentContainerStyle=\{\{ paddingHorizontal: GOUTTIERE/.test(ecran),
+    'c’est la règle du lot 7 — et c’est elle qui fait tomber l’en-tête, '
+    + 'les pastilles et les cartes sur la même verticale');
+
   verifier('le métier d’une urgence ne passe pas par `nomMetier`',
     /METIERS_SOS/.test(ecran),
     'sos_requests.metier_key porte « plomberie », pas « plombier » — '

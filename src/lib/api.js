@@ -609,6 +609,13 @@ export async function loadAll() {
       nom: moi.nom || '',
       ville: moi.ville || '',
       telephone: moi.telephone || '',
+      /* L'ADRESSE DU COMPTE, et elle ne sort pas d'ici. Elle vient de
+         `mon_compte()`, qui ne rend que MA ligne — c'est la seule porte
+         restée ouverte depuis le 29/09, où `users.email` a été fermée à
+         tout le monde. Elle sert à UNE chose : proposer à l'artisan de la
+         recopier dans son e-mail PUBLIC, en lui montrant laquelle. Elle ne
+         s'affiche nulle part ailleurs, et surtout pas sur une fiche. */
+      email: moi.email || '',
       avatarUrl: moi.avatar_url || null,
       codePostal: moi.code_postal || null,
       latitude: moi.latitude || null,

@@ -7,9 +7,11 @@
  */
 import { pieceExistence, pieceAssurance } from '../lib/verification';
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Switch, ActivityIndicator, StyleSheet } from 'react-native';
 import {
-  C, F, T,
+  View, Text, ScrollView, Switch, ActivityIndicator, StyleSheet, Pressable,
+} from 'react-native';
+import {
+  C, F, T, S, R, APPUI, TOUCHE,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Field, TextArea, ProfileBanner, SectionLabel,
@@ -43,7 +45,7 @@ function metierSosDe(metiers = []) {
 
 export default function ProfilEditScreen({
   userType, profil, sos, onSave, onEnvoyerDocuments, onErreur,
-  onDemanderMetiers, demandeMetiers, onProposerSpecialite,
+  onDemanderMetiers, demandeMetiers, onProposerSpecialite, emailCompte = '',
 }) {
   const estPro = userType === 'pro';
 
@@ -348,6 +350,39 @@ export default function ProfilEditScreen({
               même titre que votre téléphone. Ce n'est pas l'adresse de votre
               compte Opus, qui elle reste invisible.
             </Text>
+            {/* ===================================================
+                UN APPUI PLUTÔT QU'UNE RECOPIE — 05/10/2026.
+
+                Le propriétaire : « quand on crée un compte pro on
+                renseigne une adresse e-mail, mais quand on veut
+                modifier notre fiche ces informations ne sont pas
+                mises automatiquement ».
+
+                Il a raison sur la gêne, et on ne peut pourtant PAS
+                recopier tout seul : `users.email` a été fermée à
+                tout le monde le 29/09 parce qu'elle fuitait. La
+                préremplir ici et laisser quelqu'un toucher
+                « Enregistrer » sans y penser la rendrait publique
+                par une autre porte — exactement ce que ce travail a
+                fermé.
+
+                D'où un bouton qui MONTRE l'adresse avant de la
+                poser : il n'y a plus à la retaper, et on voit ce
+                qu'on s'apprête à publier. Il disparaît dès que le
+                champ est rempli : une proposition qui reste après
+                coup n'est plus une aide, c'est du bruit. */}
+            {!emailPro.trim() && !!emailCompte && (
+              <Pressable
+                onPress={() => setEmailPro(emailCompte)}
+                accessibilityRole="button"
+                accessibilityLabel={`Utiliser l'adresse de mon compte, ${emailCompte}`}
+                style={({ pressed }) => [s.reprendre, pressed && APPUI.plein]}
+              >
+                <Text style={s.reprendreTexte} numberOfLines={2}>
+                  Utiliser l'adresse de mon compte ({emailCompte})
+                </Text>
+              </Pressable>
+            )}
 
             {/* À ne pas confondre avec le rayon SOS, plus bas : celui-ci
                 ne concerne que les urgences, et seulement quatre métiers.
@@ -690,6 +725,21 @@ const s = StyleSheet.create({
 
   pad: { paddingHorizontal: 16 },
   aide: { fontSize: T.petit, color: C.muted, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 6 },
+
+  /* Un bouton qui FLOTTE au-dessus du formulaire : il s'arrondit (règle des
+     bords), et il fait 44 points de haut comme tout ce qu'on vise au doigt
+     — c'est la mesure d'Apple, et un maçon en gants n'a pas un doigt de
+     7 mm. L'orange de TEXTE, pas celui de remplissage : sur blanc, `accent`
+     ne donne que 3,51 : 1 pour du texte, `accentTexte` 5,74. */
+  reprendre: {
+    alignSelf: 'flex-start', justifyContent: 'center',
+    minHeight: TOUCHE, borderRadius: R.gelule, borderWidth: 1,
+    borderColor: C.accentTexte, paddingHorizontal: S.md,
+    marginTop: 2, marginBottom: S.sm,
+  },
+  reprendreTexte: {
+    fontFamily: F.inter6, fontSize: T.petit, color: C.accentTexte,
+  },
   banniereBarre: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 10, paddingHorizontal: 16, paddingVertical: 10,

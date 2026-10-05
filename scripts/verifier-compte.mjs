@@ -228,6 +228,47 @@ console.log('\nUn compte déjà cassé se répare à l’ouverture');
     + 'non plus');
 }
 
+console.log('\nL’adresse du COMPTE ne devient publique que par un geste');
+{
+  /* ====================================================================
+     DEMANDÉ PAR LE PROPRIÉTAIRE LE 05/10/2026 : « quand on crée un
+     compte pro on renseigne une adresse e-mail, mais quand on veut
+     modifier notre fiche ces informations ne sont pas mises
+     automatiquement. On ne pourrait pas les faire rentrer directement ? »
+
+     Il a raison sur la gêne. Mais la recopier TOUTE SEULE rendrait
+     publique, par une autre porte, l'adresse que le 29/09 a fermée à
+     tout le monde : il suffirait de toucher « Enregistrer » sans y
+     penser. D'où un bouton qui MONTRE l'adresse avant de la poser.
+     ==================================================================== */
+  const edit = sansCommentaires(lire('src/screens/ProfilEditScreen.js'));
+
+  verifier('l’e-mail pro n’est JAMAIS prérempli avec celui du compte',
+    /useState\(profil\.emailPro \|\| ''\)/.test(edit)
+    && !/useState\(profil\.emailPro \|\| emailCompte/.test(edit),
+    'le champ part vide, et il doit partir vide : `email_pro` est une '
+    + 'adresse qu’on renseigne POUR qu’elle s’affiche');
+
+  verifier('…mais un bouton la propose, en la MONTRANT',
+    /onPress=\{\(\) => setEmailPro\(emailCompte\)\}/.test(edit)
+    && /Utiliser l'adresse de mon compte \(\{emailCompte\}\)/.test(edit),
+    'sans l’adresse écrite dessus, on appuie sans savoir ce qu’on publie');
+
+  verifier('…et il disparaît une fois le champ rempli',
+    /!emailPro\.trim\(\) && !!emailCompte/.test(edit),
+    'une proposition qui reste après coup n’est plus une aide');
+
+  verifier('l’adresse du compte vient de `mon_compte()`, pas d’une lecture publique',
+    /email: moi\.email \|\| ''/.test(api),
+    '`users.email` est fermée à tout le monde depuis le 29/09 ; '
+    + '`mon_compte()` est la seule porte, et elle ne rend QUE ma ligne');
+
+  verifier('…et elle n’arrive à l’écran que par cette porte',
+    /emailCompte=\{monProfil\.email \|\| ''\}/.test(app)
+    && !/pros\[myProId\][^\n]*\.email\b/.test(app),
+    '`pros[]` est public : l’adresse du compte ne doit jamais y entrer');
+}
+
 console.log('\nEt ce qui ne sert plus a été RETIRÉ');
 {
   verifier('`accepterConditions()` n’existe plus',

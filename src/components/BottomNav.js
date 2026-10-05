@@ -70,6 +70,23 @@ export default function BottomNav({
     >
       {tabs.map(({ key, label, annonce, Icon, sos }) => {
         const on = screen === key || (key === 'profil' && screen === 'profilPro');
+        /**
+         * L'ANNEAU DE L'ONGLET ACTIF — 05/10/2026, demandé par le
+         * propriétaire : « on ne voit pas forcément où on est ».
+         *
+         * Il avait raison, et c'était mesurable : le SEUL signal était la
+         * couleur de l'icône, `C.muted` quand on n'y est pas, `C.ink`
+         * quand on y est. Calculé, ça fait **3,02 : 1** entre les deux —
+         * exactement le minimum pour un élément graphique. Perceptible,
+         * et c'est tout.
+         *
+         * Et l'onglet Profil, lui, avait DÉJÀ son anneau orange depuis que
+         * la photo est entrée dans la barre. Ce lot ne fait donc
+         * qu'étendre aux quatre autres ce que le cinquième faisait seul —
+         * UNE seule règle, écrite une fois, plutôt que deux façons de dire
+         * « vous êtes ici » dans la même barre.
+         */
+        const anneau = on ? (dark ? '#fff' : C.accent) : 'transparent';
         /* La pastille est une information, pas une décoration : sans cela,
            « Messages » et « Messages, nouveautés » s'annoncent pareil. */
         const etiquette = (annonce || label) + (dots[key] ? ', nouveautés' : '');
@@ -96,12 +113,16 @@ export default function BottomNav({
                   nom={avatarNom}
                   seed={avatarSeed}
                   ring={2}
-                  ringColor={on ? (dark ? '#fff' : C.accent) : 'transparent'}
+                  ringColor={anneau}
                 />
                 {dots[key] && <View style={s.dot} />}
               </View>
             ) : (
-              <View>
+              /* LA BOÎTE FAIT TOUJOURS 30 × 30, anneau ou pas : seule la
+                 COULEUR de la bordure change. Une bordure qui apparaît
+                 décalerait l'icône de deux pixels à chaque changement
+                 d'onglet, et toute la barre sauterait. */
+              <View style={[s.anneau, { borderColor: anneau }]}>
                 <Icon size={20} color={on ? active : idle} />
                 {dots[key] && <View style={s.dot} />}
               </View>
@@ -141,6 +162,13 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   sosText: { fontFamily: F.oswald7, fontSize: T.corps, color: '#fff', letterSpacing: 0.5 },
+
+  /* L'anneau de l'onglet actif. 30 de haut comme le bouton « Publier » :
+     la barre garde exactement la même hauteur qu'avant. */
+  anneau: {
+    width: 30, height: 30, borderRadius: R.gelule, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   /* le « voyant » : un point orange quand de nouvelles demandes arrivent */
   dot: {
