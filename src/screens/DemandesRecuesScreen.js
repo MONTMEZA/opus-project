@@ -169,10 +169,13 @@ export function trierDemandes(demandes = []) {
 export default function DemandesRecuesScreen({
   demandes = [], chargement = false, echec = false, onReessayer,
   onRepondre, onAppeler, onVoirProfil,
+  /* La demande qu'une notification désigne (section 37), et le moyen de
+     dire qu'on l'a consommée. */
+  demandeCible = null, onCibleConsommee,
 }) {
   /* LE CHOIX DE VUE VIT ICI, et c'est la règle du lot 4 : un filtre posé
      dans `OpusApp` ferait redessiner toute l'application à chaque appui. */
-  const [vue, setVue] = useState('attente');
+  const [vueChoisie, setVueChoisie] = useState('attente');
 
   /* ET LES CROCHETS PASSENT AVANT LES SORTIES ANTICIPÉES. React exige
      qu'ils soient appelés dans le même ordre à chaque rendu : un `useState`
@@ -222,8 +225,31 @@ export default function DemandesRecuesScreen({
 
   const toutes = trierDemandes(demandes);
   const compte = compterParEtat(toutes);
+
+  /* UNE NOTIFICATION OUVRE LA BONNE PASTILLE, et c'est un état DÉRIVÉ —
+     pas un `setVue` posé dans un effet. Recopier une prop dans un état,
+     c'est deux vérités pour une seule chose, et le linter du projet le
+     refuse (`react-hooks/set-state-in-effect`).
+
+     La demande ciblée décide donc de la vue AFFICHÉE, tant que personne
+     n'a touché une pastille. « Melina a accepté votre demande » n'ouvre
+     pas « À traiter » : elle ouvre « En cours », là où la demande est
+     VRAIMENT — et c'est tout l'intérêt, puisque c'est là que vit le
+     numéro de téléphone du client. */
+  const ciblee = demandeCible
+    ? toutes.find((d) => String(d.id) === String(demandeCible.id)
+      && d.genre === demandeCible.origine) || null
+    : null;
+  const vue = ciblee ? etatDe(ciblee) : vueChoisie;
   const liste = toutes.filter((d) => etatDe(d) === vue);
   const vueCourante = VUES.find((v) => v.cle === vue) || VUES[0];
+
+  /* Toucher une pastille REND la cible : sans ça, on serait ramené sur la
+     vue de la notification à chaque appui, et l'écran paraîtrait bloqué. */
+  const choisirVue = (k) => {
+    setVueChoisie(k);
+    if (onCibleConsommee) onCibleConsommee();
+  };
 
   return (
     <FlatList
@@ -277,7 +303,7 @@ export default function DemandesRecuesScreen({
                    a quelque chose à aller voir ailleurs. */
                 label={`${v.label} (${compte[v.cle]})`}
                 on={vue === v.cle}
-                onPress={() => setVue(v.cle)}
+                onPress={() => choisirVue(v.cle)}
               />
             ))}
           </ScrollView>
@@ -296,6 +322,10 @@ export default function DemandesRecuesScreen({
       renderItem={({ item }) => (
         <Demande
           d={item}
+          /* LA demande dont on vient de toucher la notification. Le neuf —
+             ou l'important — se marque au BORD : règle du 04/10. */
+          visee={!!ciblee && String(item.id) === String(ciblee.id)
+            && item.genre === ciblee.genre}
           onRepondre={onRepondre}
           onAppeler={onAppeler}
           onVoirProfil={onVoirProfil}
@@ -305,7 +335,7 @@ export default function DemandesRecuesScreen({
   );
 }
 
-function Demande({ d, onRepondre, onAppeler, onVoirProfil }) {
+function Demande({ d, onRepondre, onAppeler, onVoirProfil, visee = false }) {
   /* Le verrou contre le double appui : accepter deux fois une urgence
      enverrait deux fois l'artisan. Même famille de défaut que le bouton
      « Choisir » du SOS. */
@@ -320,7 +350,7 @@ function Demande({ d, onRepondre, onAppeler, onVoirProfil }) {
   };
 
   return (
-    <View style={s.carte}>
+    <View style={[s.carte, visee && s.carteVisee]}>
       {/* Rouge brique pour une urgence, bleu pour un devis, ORANGE pour un
           rappel : trois fonds, donc une encre calculée. En blanc fixe, le
           bandeau « Demande de rappel » tombait à 3,51 : 1. */}
@@ -445,6 +475,11 @@ const s = StyleSheet.create({
 
   /* Une carte PORTE l'information : angle vif, comme partout ailleurs. */
   carte: { ...CARTE, marginBottom: S.md },
+  /* LA demande désignée par une notification. Un trait au bord, pas un
+     fond : le fond du bandeau porte déjà le genre de la demande (bleu,
+     orange, rouge brique), et un second fond ne voudrait plus rien dire.
+     Même règle que le « Nouveau » des demandes de travaux, le 04/10. */
+  carteVisee: { borderLeftWidth: 3, borderLeftColor: C.accent },
   bandeau: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm - 2,
     paddingVertical: S.sm - 2, paddingHorizontal: S.md,

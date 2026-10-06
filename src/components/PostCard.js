@@ -34,7 +34,7 @@ const HAUTEUR_BARRE = 56;
    n'ont pas changé d'un pixel. */
 const PostCard = React.memo(function PostCard({
   post, pro, pros = {}, following, actif = false,
-  chantier = null, onOuvrirChantier,
+  chantier = null, onOuvrirChantier, commentaireCible = null,
   onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
@@ -393,6 +393,7 @@ const PostCard = React.memo(function PostCard({
             <Text style={s.chargement}>Chargement des commentaires…</Text>
           )}
           <Commentaires
+            cibleId={commentaireCible}
             commentaires={post.comments || []}
             pros={pros}
             onVoirProfil={onVoirCommentateur}

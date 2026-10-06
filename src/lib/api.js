@@ -718,10 +718,24 @@ export async function loadAll() {
     demandesVuesLe: vuesRes && vuesRes.data ? vuesRes.data.demandes_vues_le : null,
     demandesPartenariat: demandesRecues,
     partenariatsEnvoyes: demandesEnvoyees,
+    /* `acteurNom` EST LA LIGNE QUI MANQUAIT, et elle valait douze ronds
+       beiges vides. La requête va chercher `acteur:acteur_id(nom,
+       avatar_url)` depuis le début ; seule l'adresse de la photo était
+       reportée. Or `Avatar` affiche les INITIALES quand il n'a pas
+       d'image — mesuré sur la vraie base le 06/10/2026 : 13 acteurs sur
+       13 ont un nom, 1 seul a une photo.
+
+       Et les quatre identifiants de cible (section 37) : sans eux,
+       toucher onze notifications sur quinze ne faisait rien. */
     notifications: (notifRes.data || []).map((n) => ({
       id: n.id, texte: n.texte, lue: n.lue, type: n.type || 'info',
       postId: n.post_id || null, commentId: n.comment_id || null,
+      annonceId: n.annonce_id || null,
+      devisId: n.devis_id || null,
+      rappelId: n.rappel_id || null,
+      sosId: n.sos_id || null,
       acteurId: n.acteur_id || null,
+      acteurNom: n.acteur ? n.acteur.nom : null,
       avatarUrl: n.acteur ? n.acteur.avatar_url : null,
       time: relativeTime(n.created_at),
     })),
@@ -1268,6 +1282,34 @@ export const publicationsDuChantier = !hasSupabase
       .limit(100);
     if (error) throw error;
     return (data || []).map((p) => rowToPost(p, new Set(), null));
+  };
+
+/**
+ * UNE PUBLICATION PAR SON IDENTIFIANT.
+ *
+ * Sert aux notifications (section 37), et c'est sa seule raison d'être.
+ * `ouvrirNotification` cherchait la publication dans `posts` — la page du
+ * fil déjà chargée, vingt lignes au plus, et filtrée par la loupe depuis
+ * le lot B. Un commentaire du 21/09 répondait donc « Cette publication
+ * n'est plus disponible » alors qu'elle existait parfaitement.
+ *
+ * > **La politique de lecture reste l'autorité.** Cette fonction ne
+ * > contourne rien : un `select` ordinaire, donc filtré par « lecture
+ * > posts », donc par le BLOCAGE. Si la publication vient de quelqu'un
+ * > qu'on a bloqué entre-temps, elle ne revient pas — et le message « plus
+ * > disponible » est alors exactement vrai.
+ *
+ * `maybeSingle()` et pas `single()` : une publication absente est un cas
+ * NORMAL ici (supprimée, masquée, bloquée), pas une erreur à remonter.
+ */
+export const publicationParId = !hasSupabase
+  ? async (id) => initialPosts.map((p, i) => postDemo(p, i))
+    .find((p) => String(p.id) === String(id)) || null
+  : async (id) => {
+    const { data, error } = await supabase.from('posts').select('*')
+      .eq('id', id).maybeSingle();
+    if (error) throw error;
+    return data ? rowToPost(data, new Set(), null) : null;
   };
 
 /**

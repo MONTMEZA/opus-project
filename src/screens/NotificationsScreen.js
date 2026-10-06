@@ -2,8 +2,24 @@
  * 6. Notifications — point orange tant que la notification n'est pas lue.
  * (.notif-row du prototype)
  *
- * Une notification qui ne mène nulle part ne sert à rien : toucher une ligne
- * ouvre la publication concernée, commentaires dépliés, et la marque lue.
+ * Une notification qui ne mène nulle part ne sert à rien : toucher une
+ * ligne ouvre EXACTEMENT là où elle s'est passée, et la marque lue.
+ *
+ * LE CHEVRON MENTAIT, ET LA VOIX AVEC LUI — trouvé sur une capture, pas
+ * en relisant. Il ne s'affichait que `si n.postId`, alors que depuis la
+ * section 37 une notification peut aussi mener à une annonce, à une
+ * demande ou à une fiche. Sur les trois lignes de l'essai, UNE SEULE
+ * portait le chevron : les deux autres avaient l'air d'être de simples
+ * informations. On n'appuie pas sur ce qui a l'air de ne rien faire.
+ *
+ * > C'ÉTAIT UN TROISIÈME ENDROIT QUI RÉINVENTAIT LA MÊME VÉRITÉ, après la
+ * > barre du bas et le routage — exactement le défaut des voyants du
+ * > 04/10. `destinationNotif` est la seule qui sait où mène une
+ * > notification ; cet écran la lui demande, il ne devine plus.
+ *
+ * Et VoiceOver disait « Ouvrir la publication » pour toutes. Quelqu'un qui
+ * ne voit pas l'écran s'attendait donc à une publication et tombait sur la
+ * Place des pros.
  */
 import React from 'react';
 import { View, Text, Pressable, FlatList, StyleSheet, RefreshControl } from 'react-native';
@@ -11,6 +27,7 @@ import {
   C, F, T, APPUI, S, GOUTTIERE,
 } from '../theme';
 import { Avatar, EmptyState, BtnMini } from '../components/ui';
+import { destinationNotif } from '../lib/notifications';
 import {
   MessageSquare, CornerDownRight, Bell, ChevronRight,
   Phone, Clock, AlertTriangle, Check, X, Megaphone,
@@ -47,17 +64,27 @@ const COULEURS = { sos: C.sos };
  * n'ont pas bougé d'un pixel. `memo` lui dit de n'en rien faire tant que
  * la notification elle-même est la même ligne.
  */
+/* Ce que la voix annonce, selon l'endroit où l'on va. Un libellé qui
+   promet autre chose que ce qui arrive est pire que pas de libellé. */
+const OUVRIR = {
+  post: '. Ouvrir la publication',
+  annonce: '. Ouvrir l\u2019annonce',
+  demande: '. Ouvrir la demande',
+  profil: '. Ouvrir ma fiche',
+};
+
 const Ligne = React.memo(function Ligne({ n, onOuvrir }) {
   const Icone = ICONES[n.type] || Bell;
   const teinte = COULEURS[n.type] || C.muted;
-  const menuQuelquePart = !!n.postId;
+  const ou = destinationNotif(n);
+  const menuQuelquePart = ou.quoi !== 'rien';
   return (
     <Pressable
       style={({ pressed }) => [s.row, pressed && APPUI.discret]}
       onPress={() => onOuvrir(n)}
       accessibilityRole="button"
       accessibilityLabel={`${n.lue ? '' : 'Non lue. '}${n.texte}`
-        + (menuQuelquePart ? '. Ouvrir la publication' : '')}
+        + (OUVRIR[ou.quoi] || '')}
     >
       {!n.lue && <View style={s.dot} />}
 

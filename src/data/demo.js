@@ -338,12 +338,48 @@ export const initialConversations = [
   { id: 2, proId: 2, messages: [{ from: 'pro', texte: 'Photos du tableau envoyées ✅', heure: 'hier' }] },
 ];
 
+/* LES NOTIFICATIONS DE DÉMONSTRATION PORTENT LEUR CIBLE, et c'est ce qui
+   rend le lot 37 vérifiable sans fichier `.env`.
+
+   Avant, deux sur quatre n'avaient qu'un `postId` et les deux autres
+   étaient des `info` sans destination. Le routage par type ne s'éprouvait
+   donc nulle part ici — et c'est exactement le défaut que ce fichier a déjà
+   eu deux fois : les demandes sans date de dépôt (04/10), et les conseils
+   sans `media` (05/10).
+
+   `acteurNom` est écrit À LA MAIN, parce qu'en démonstration il n'y a pas
+   de jointure pour l'apporter. C'est lui qui donne les INITIALES de
+   l'avatar — le rond beige vide que le propriétaire a vu venait
+   précisément de son absence sur la vraie base. */
 export const initialNotifications = [
   { id: 1, type: 'commentaire', texte: 'Julie M. a commenté votre publication',
-    acteurId: 'demo-julie', postId: 1, lue: false, time: 'Il y a 1 h' },
+    acteurId: 'demo-julie', acteurNom: 'Julie M.',
+    postId: 1, commentId: 1, lue: false, time: 'Il y a 1 h' },
   { id: 2, type: 'reponse', texte: 'Julie M. a répondu à votre commentaire',
-    acteurId: 'demo-julie', postId: 1, lue: false, time: 'Il y a 30 min' },
-  { id: 3, type: 'info', texte: 'Marc Dubreuil vous suit désormais', lue: true, time: 'Hier' },
+    acteurId: 'demo-julie', acteurNom: 'Julie M.',
+    postId: 1, commentId: 11, lue: false, time: 'Il y a 30 min' },
+  /* Une réponse à une annonce : le cas que le propriétaire a nommé le
+     06/10/2026 — « on clique dessus, rien ne se passe ». `a3` est une
+     annonce du pro de démonstration, donc la feuille de ses réponses
+     s'ouvre vraiment. */
+  { id: 5, type: 'annonce', texte: 'Renaud Élec a répondu à « Bétonnière 160 L »',
+    acteurId: 3, acteurNom: 'Renaud Élec',
+    annonceId: 'a3', lue: false, time: 'Il y a 2 h' },
+  /* Une demande de devis EN ATTENTE : elle ouvre la pastille « À traiter ». */
+  { id: 6, type: 'devis', texte: 'Marc Dubreuil vous demande un devis',
+    acteurId: 'u-marc', acteurNom: 'Marc Dubreuil',
+    devisId: 'dr-devis-1', lue: false, time: 'Il y a 3 h' },
+  /* Un rappel ACCEPTÉ : il ouvre « En cours », et pas « À traiter ». C'est
+     tout l'intérêt de viser la demande et pas la page — c'est là que vit le
+     numéro de téléphone du client. */
+  { id: 7, type: 'rappel_accepte', texte: 'Vous avez accepté un rappel',
+    acteurId: 'u-julie', acteurNom: 'Julie M.',
+    rappelId: 'dr-rappel-1', lue: true, time: 'Hier' },
+  /* Et une qui mène à SA PROPRE FICHE. */
+  { id: 8, type: 'partenaire_demande', texte: 'YC Carrelage vous propose un partenariat',
+    acteurId: 6, acteurNom: 'YC Carrelage', lue: false, time: 'Il y a 5 h' },
+  { id: 3, type: 'info', texte: 'Marc Dubreuil vous suit désormais',
+    acteurId: 'u-marc', acteurNom: 'Marc Dubreuil', lue: true, time: 'Hier' },
   { id: 4, type: 'info', texte: 'Votre publication a été enregistrée par 3 personnes',
     lue: true, time: 'Il y a 2 j' },
 ];

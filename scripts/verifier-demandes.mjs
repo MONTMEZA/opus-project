@@ -162,11 +162,24 @@ console.log('\nCe qui ATTEND passe devant le reste');
     'sans le nombre, il faut ouvrir chaque vue pour savoir s’il y a '
     + 'quelque chose à aller voir');
 
+  /* CE CONTRÔLE VISAIT UN NOM, PAS UN COMPORTEMENT. Il exigeait
+     littéralement `const [vue, setVue] = useState('attente')` ; le lot G a
+     renommé cet état `vueChoisie`, parce que `vue` est désormais DÉRIVÉE
+     (la vue suit la demande que la cloche désigne). Le contrôle a donc
+     refusé du code parfaitement juste — sixième fois dans ce projet qu'un
+     contrôle vise une PLACE au lieu de viser ce que le code FAIT. */
   verifier('le choix de vue vit DANS l’écran, pas dans OpusApp',
-    /const \[vue, setVue\] = useState\('attente'\)/.test(ecran)
+    /const \[vue[A-Za-z]*, setVue[A-Za-z]*\] = useState\('attente'\)/.test(ecran)
     && !/setVue/.test(lire('src/OpusApp.js')),
     'un filtre posé dans OpusApp redessinerait toute l’application à '
     + 'chaque appui — c’est la règle du lot 4');
+
+  verifier('…et la vue affichée est DÉRIVÉE de la demande visée',
+    /const vue = ciblee \? etatDe\(ciblee\) : vueChoisie/.test(ecran)
+    && !/useEffect\([^)]*setVue/.test(ecran),
+    'recopier la cible dans un état par un effet est exactement ce que le '
+    + 'linter refuse (react-hooks/set-state-in-effect) : la pastille '
+    + 'sauterait d’une vue à l’autre sous les yeux de celui qui ouvre');
 
   verifier('une vue vide dit LAQUELLE, et où est le reste',
     /Aucune demande dans « \$\{vueCourante\.label\} »/.test(ecran)

@@ -31,6 +31,7 @@ import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
 import ChantierScreen from './screens/ChantierScreen';
 import NouveauChantier from './components/NouveauChantier';
+import { destinationNotif } from './lib/notifications';
 import ProfilPublicScreen from './screens/ProfilPublicScreen';
 import ConfidentialiteScreen from './screens/ConfidentialiteScreen';
 import LegalScreen, { TITRES_LEGAUX } from './screens/LegalScreen';
@@ -159,6 +160,15 @@ export default function OpusApp() {
   const [savedIds, setSavedIds] = useState(new Set());
   const [hiddenIds, setHiddenIds] = useState(new Set());
   const [openCommentsId, setOpenCommentsId] = useState(null);
+  /* LES TROIS CIBLES D'UNE NOTIFICATION (section 37). Elles vivent ici
+     parce qu'elles traversent des écrans : la cloche est dans la barre du
+     haut, et la destination est trois écrans plus loin. Chacune se REMET À
+     NULL dès que l'écran visé l'a consommée — une cible qui traîne
+     rouvrirait la même chose au prochain passage, et on croirait à un
+     écran qui se bloque. */
+  const [commentaireCible, setCommentaireCible] = useState(null);
+  const [annonceCible, setAnnonceCible] = useState(null);
+  const [demandeCible, setDemandeCible] = useState(null);
   const [openContactId, setOpenContactId] = useState(null);
 
   const [conversations, setConversations] = useState([]);
@@ -858,21 +868,43 @@ export default function OpusApp() {
    * c'est la première fois. Depuis que le fil se charge par pages, ils ne
    * sont plus téléchargés d'avance.
    */
-  const toggleComments = async (id) => {
-    const ouvre = openCommentsId !== id;
-    setOpenCommentsId(ouvre ? id : null);
-    if (!ouvre) return;
+  /* OUVRIR, ET ALLER CHERCHER — une seule porte, parce qu'il y en a DEUX
+     qui y mènent : le bouton « commentaires » de la carte, et la cloche.
 
-    const post = posts.find((p) => p.id === id);
+     Le lot G a d'abord posé `setOpenCommentsId(...)` à la main dans
+     `ouvrirNotification`. Le panneau s'ouvrait donc VIDE : depuis que le
+     fil se charge par pages, `post.comments` n'existe pas tant que
+     personne ne l'a demandé, et c'était `toggleComments` — et lui seul —
+     qui allait le chercher.
+
+     Vérifié au navigateur, sur la vraie base : le bon post arrivait bien à
+     l'écran, et le commentaire n'apparaissait pas. C'est-à-dire le défaut
+     exact que le propriétaire a signalé — « ça me ramène sur le fil » —
+     corrigé à moitié.
+
+     > DEUX FAÇONS D'ARRIVER AU MÊME ÉCRAN DOIVENT FAIRE EXACTEMENT LE MÊME
+     > TRAVAIL. C'est la règle écrite le 04/10 pour `changerOngletDecouvrir`,
+     > et je venais de la violer dans l'autre sens : là, un état changeait
+     > sans le travail qui va avec ; ici, un panneau s'ouvrait sans son
+     > contenu. */
+  const ouvrirCommentaires = async (id) => {
+    setOpenCommentsId(id);
+
+    const post = posts.find((p) => String(p.id) === String(id));
     if (!post || Array.isArray(post.comments)) return;
 
     try {
       const liste = await api.chargerCommentaires(id);
-      setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, comments: liste } : p)));
+      setPosts((ps) => ps.map((p) => (String(p.id) === String(id) ? { ...p, comments: liste } : p)));
     } catch (e) {
       showErreur('Les commentaires n’ont pas pu être chargés.');
-      setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, comments: [] } : p)));
+      setPosts((ps) => ps.map((p) => (String(p.id) === String(id) ? { ...p, comments: [] } : p)));
     }
+  };
+
+  const toggleComments = async (id) => {
+    if (openCommentsId === id) { setOpenCommentsId(null); return; }
+    await ouvrirCommentaires(id);
   };
   const toggleContact = (id) => setOpenContactId((c) => (c === id ? null : id));
 
@@ -1731,18 +1763,104 @@ export default function OpusApp() {
    * l'onglet « Pour vous », sinon la publication resterait invisible derrière
    * le filtre « Abonnements ».
    */
-  const ouvrirNotification = (n) => {
+  /**
+   * TOUCHER UNE NOTIFICATION MÈNE EXACTEMENT LÀ OÙ ÇA SE PASSE.
+   *
+   * Demandé par le propriétaire le 06/10/2026, après l'avoir essayée sur
+   * son iPhone : « si je reçois "Melina a commenté votre publication", je
+   * voudrais que ça nous redirige sur le post en question et que ça ouvre
+   * le commentaire en question — et pareil pour toutes les autres ».
+   *
+   * CE QU'IL Y AVAIT AVANT, et ce que ça valait, mesuré sur la vraie base :
+   *
+   *     if (!n.postId) return;   // ← 11 notifications sur 15
+   *
+   * Annonce, partenariat, badge vérifié, devis, rappel, demande refusée :
+   * onze sur quinze étaient des CULS-DE-SAC. On appuyait, l'écran ne
+   * bougeait pas. C'est ce que ce projet interdit depuis le lot 5 — « une
+   * cible qui ne répond pas est pire que pas de cible » — et c'était dans
+   * le code pendant tout ce temps.
+   *
+   * > **UNE SEULE PORTE, et une destination par TYPE.** Même procédé que
+   * > `changerOngletDecouvrir` : deux façons d'arriver au même écran
+   * > doivent faire le même travail, et un type qu'on ajoute demain doit
+   * > se voir refuser par un contrôle s'il ne sait pas où il mène.
+   */
+  const ouvrirNotification = async (n) => {
     readNotification(n.id);
-    if (!n.postId) return;
-    if (!posts.some((p) => p.id === n.postId)) {
-      showBanner("Cette publication n'est plus disponible.");
+    const ou = destinationNotif(n);
+
+    /* 1. UNE PUBLICATION — et elle se cherche EN BASE si elle n'est pas
+       dans la page chargée. Avant, `posts.some(...)` ne regardait que les
+       vingt publications du fil courant (filtrées par la loupe depuis le
+       lot B) : un commentaire du 21/09 répondait « Cette publication n'est
+       plus disponible » alors qu'elle existait. Un message précis et faux
+       est pire qu'un message général et juste — la leçon de la liste vide
+       du 04/10. */
+    if (ou.quoi === 'post') {
+      let presente = posts.some((p) => String(p.id) === String(ou.postId));
+      if (!presente) {
+        try {
+          const trouve = await api.publicationParId(ou.postId);
+          if (trouve) { setPosts((liste) => [trouve, ...liste]); presente = true; }
+        } catch (e) { /* on retombe sur le message ci-dessous */ }
+      }
+      if (!presente) {
+        showBanner("Cette publication n'est plus disponible.");
+        return;
+      }
+      setFeedMode('classic');
+      setFeedTab('pourvous');
+      setHiddenIds((h) => { const c = new Set(h); c.delete(ou.postId); return c; });
+      /* `ouvrirCommentaires` et PAS `setOpenCommentsId` : c'est elle qui va
+         chercher le fil de discussion. Voir son commentaire — le panneau
+         s'ouvrait vide, et on revoyait exactement le défaut signalé. */
+      ouvrirCommentaires(ou.postId);
+      /* LE commentaire, pas le panneau. `comment_id` est rempli par
+         `notifie_commentaire()` depuis le premier jour et n'était lu par
+         PERSONNE — le défaut du 01/10 dans sa forme la plus pure, puisque
+         l'écran en avait précisément besoin. */
+      setCommentaireCible(ou.commentId);
+      setScreen('home');
       return;
     }
-    setFeedMode('classic');
-    setFeedTab('pourvous');
-    setHiddenIds((h) => { const c = new Set(h); c.delete(n.postId); return c; });
-    setOpenCommentsId(n.postId);
-    setScreen('home');
+
+    /* 2. UNE ANNONCE DE LA PLACE DES PROS → ses réponses. C'est le cas que
+       le propriétaire a nommé : « quand c'est des notifications de réponse
+       à la Place des pros et que l'on clique dessus, rien ne se passe ». */
+    if (ou.quoi === 'annonce') {
+      setCommentaireCible(null);
+      if (!changerOngletDecouvrir('artisans')) return;
+      setAnnonceCible(ou.annonceId);
+      setScreen('decouvrir');
+      return;
+    }
+
+    /* 3. UNE DEMANDE → « Pour moi », sur CETTE demande. Les trois colonnes
+       de la section 37 disent aussi QUELLE sorte, donc quelle pastille
+       ouvrir : l'écran n'a pas à interpréter le texte du type. */
+    if (ou.quoi === 'demande') {
+      setCommentaireCible(null);
+      if (!changerOngletDecouvrir('pourmoi')) return;
+      setDemandeCible({ id: ou.id, origine: ou.origine });
+      setScreen('decouvrir');
+      return;
+    }
+
+    /* 4. CE QUI SE PASSE SUR MA PROPRE FICHE : une demande de partenariat,
+       un badge accordé ou refusé, des métiers acceptés. */
+    if (ou.quoi === 'profil') {
+      setCommentaireCible(null);
+      setScreen('profil');
+      return;
+    }
+
+    /* 5. ET CE QUI NE MÈNE NULLE PART LE DIT. Une notification dont la
+       cible a disparu — la base passe en `on delete cascade`, mais une
+       vieille ligne peut rester — ne doit pas laisser croire à une panne :
+       on l'explique, au lieu de ne rien faire. `verifier-notifications`
+       refuse qu'un type CONNU tombe ici. */
+    showBanner('Cette notification n\u2019a plus rien à montrer.');
   };
 
   /**
@@ -2620,6 +2738,24 @@ export default function OpusApp() {
    * personne ne l'aurait remarqué, puisque l'écran, lui, s'affiche.
    */
   const changerOngletDecouvrir = (k) => {
+    /* UNE CLÉ INCONNUE NE DOIT PAS RETOMBER SUR LA PREMIÈRE PAGE EN
+       SILENCE. C'est le défaut du lot G, trouvé au navigateur : la cloche
+       appelait `changerOngletDecouvrir('pros')`, et la clé de la Place des
+       pros est `'artisans'`. `indexDecouvrir` fait
+       `Math.max(0, findIndex(...))`, donc −1 devenait 0 : on atterrissait
+       sur « Pour moi », AUCUNE pastille n'était active — l'onglet demandé
+       ne correspondait à rien —, et rien n'a levé la moindre alerte.
+       « Pour moi » marchait, lui, par pur hasard : c'est la page de repli.
+
+       Et le cas qui reste, qui n'est pas une faute de frappe : un
+       PARTICULIER n'a pas d'onglet « Pour moi ». Une notification « a
+       accepté votre demande » lui est pourtant destinée. Il n'existe
+       aujourd'hui aucun écran « mes demandes envoyées » : on le dit, au
+       lieu de le poser sur une page au hasard. */
+    if (!ongletsDecouvrir.some((o) => o.key === k)) {
+      showBanner('Cet écran n’existe pas encore pour votre compte.');
+      return false;
+    }
     setDecouvrirTab(k);
     if (k === 'demandes') {
       /* Le POINT s'éteint tout de suite ; les badges « Nouveau », eux,
@@ -2642,6 +2778,7 @@ export default function OpusApp() {
          notifications. */
       marquerDemandesVues();
     }
+    return true;
   };
 
   /** Le post dont on regarde les commentaires dans le fil vidéo. */
@@ -2819,6 +2956,12 @@ export default function OpusApp() {
             onOuvrirFiltre={() => setLoupeOuverte(true)}
             followingIds={followingIds} savedIds={savedIds}
             openCommentsId={openCommentsId} openContactId={openContactId}
+            /* LE commentaire qu'une notification désigne (section 37) :
+               il se repère à un trait orange, parce qu'ouvrir le panneau
+               et laisser chercher, c'est ce que faisait l'application
+               avant — et le propriétaire l'a dit : « ça me ramène sur le
+               fil », alors qu'il voulait arriver SUR le commentaire. */
+            commentaireCible={commentaireCible}
             bottomInset={videoMode ? navHeight : 0}
             rappel={canPublish && pros[myProId] ? (
               <RappelVerification
@@ -2888,6 +3031,12 @@ export default function OpusApp() {
                     return (
                       <DemandesRecuesScreen
                         demandes={demandesRecues}
+                        /* La demande qu'une notification désigne — elle
+                           décide aussi de la PASTILLE ouverte, puisque
+                           « a accepté votre demande » vit dans « En
+                           cours » et pas dans « À traiter » (section 37). */
+                        demandeCible={demandeCible}
+                        onCibleConsommee={() => setDemandeCible(null)}
                         chargement={demandesRecuesEtat === 'charge'}
                         /* L'échec était calculé et jamais transmis : l'écran
                            annonçait « aucune demande » quand il n'avait rien
@@ -2905,6 +3054,11 @@ export default function OpusApp() {
                       <PlaceProScreen
                         onRafraichir={rafraichirEcran} rafraichit={rafraichit}
                         annonces={annonces}
+                        /* L'annonce qu'une notification désigne, et le
+                           moyen de rendre la cible une fois consommée
+                           (section 37). */
+                        annonceCible={annonceCible}
+                        onCibleConsommee={() => setAnnonceCible(null)}
                         moi={pros[myProId] || null}
                         onPublier={publierAnnonce}
                         onRepondre={repondreAnnonce}

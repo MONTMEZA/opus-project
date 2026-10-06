@@ -95,7 +95,8 @@ const TABS = [
 
 export default function HomeScreen({
   posts, pros, feedMode, setFeedMode, feedTab, setFeedTab,
-  followingIds, savedIds, openCommentsId, openContactId, bottomInset = 0, rappel,
+  followingIds, savedIds, openCommentsId, openContactId, commentaireCible = null,
+  bottomInset = 0, rappel,
   videoCible,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
   onSave, onToggleContact, onContact, onShare, onComment, onVoirCommentateur,
@@ -127,6 +128,41 @@ export default function HomeScreen({
 
   const [visibles, setVisibles] = useState(() => new Set());
   const reglesVisibilite = useRef({ itemVisiblePercentThreshold: 65 });
+
+  /* AMENER LE POST VISÉ EN HAUT DE L'ÉCRAN — sinon on arrive au bon
+     endroit sans RIEN VOIR.
+
+     Mesuré au navigateur, sur la vraie base, en touchant « a commenté » :
+     le panneau s'ouvrait bien et le commentaire visé tombait à **y = 816**
+     sur une fenêtre de 844. Techniquement visible ; en pratique **sous la
+     barre d'onglets**, qui fait 69 px. C'est-à-dire, du point de vue du
+     propriétaire, exactement ce qu'il a signalé : « ça me ramène sur le
+     fil ».
+
+     On défile donc jusqu'à la PUBLICATION, pas jusqu'au commentaire : un
+     commentaire n'a ni index ni hauteur connue dans cette liste, alors que
+     le post en a un. Le post calé en haut, ses commentaires suivent juste
+     en dessous.
+
+     `viewPosition: 0` le pose en haut ; `animated` est laissé à faux, parce
+     qu'on anime ce qui est prêt, pas ce qui arrive (theme.js). */
+  const liste = useRef(null);
+  const dejaVise = useRef(null);
+  useEffect(() => {
+    if (!commentaireCible || !openCommentsId) { dejaVise.current = null; return; }
+    if (dejaVise.current === openCommentsId) return;
+    const i = posts.findIndex((p) => String(p.id) === String(openCommentsId));
+    if (i < 0 || !liste.current) return;
+    dejaVise.current = openCommentsId;
+    /* La liste doit avoir eu le temps de monter la carte : un
+       `scrollToIndex` sur un élément pas encore rendu ne fait rien. */
+    const t = setTimeout(() => {
+      try {
+        liste.current.scrollToIndex({ index: i, viewPosition: 0, animated: false });
+      } catch (e) { /* la liste a changé entre-temps : tant pis, on reste */ }
+    }, 180);
+    return () => clearTimeout(t);
+  }, [commentaireCible, openCommentsId, posts]);
 
   /* LES VUES (section 35). `signaler` n'écrit QUE dans une référence : on
      est appelé plusieurs fois par seconde pendant qu'on fait défiler, et
@@ -253,10 +289,24 @@ export default function HomeScreen({
 
       <View style={{ flex: 1 }}>
         <FlatList
+          ref={liste}
           data={posts}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={s.classicContent}
           ListHeaderComponent={rappel || null}
+          /* Les cartes n'ont pas toutes la même hauteur (le cadre suit la
+             photo depuis le 02/10), donc `scrollToIndex` peut tomber sur un
+             élément pas encore mesuré. Sans ce rattrapage, il lève une
+             erreur et ne défile nulle part. */
+          onScrollToIndexFailed={(info) => {
+            setTimeout(() => {
+              try {
+                liste.current?.scrollToIndex({
+                  index: info.index, viewPosition: 0, animated: false,
+                });
+              } catch (e) { /* on renonce : mieux vaut rester que sauter */ }
+            }, 200);
+          }}
           /* UN MESSAGE DE LISTE VIDE QUI DONNE TORT À L'APPLICATION.
              Celui d'avant disait « Suis des professionnels pour voir leurs
              publications ici » — y compris dans « Pour vous », où il n'y
@@ -337,6 +387,11 @@ export default function HomeScreen({
               chantier={p.chantierId ? chantiers[p.chantierId] || null : null}
               onOuvrirChantier={onOuvrirChantier}
               commentsOpen={openCommentsId === p.id}
+              /* `PostCard` est MÉMORISÉE : on ne lui passe la cible que
+                 pour la publication concernée, sinon les vingt cartes se
+                 redessineraient à chaque notification touchée. C'est le
+                 piège du lot 4 avec `jyAiRepondu`. */
+              commentaireCible={openCommentsId === p.id ? commentaireCible : null}
               onToggleComments={onToggleComments}
               onAddComment={onAddComment}
               saved={savedIds.has(p.id)}

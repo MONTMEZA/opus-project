@@ -51,7 +51,7 @@ export function nbCommentairesDe(post) {
  */
 export default function Commentaires({
   commentaires = [], pros = {}, onEnvoyer, onVoirProfil, onSignaler,
-  onSupprimer, onModifier, moiId = null, style, scroll,
+  onSupprimer, onModifier, moiId = null, style, scroll, cibleId = null,
 }) {
   /* LE BROUILLON NE REDESSINE PLUS TOUS LES COMMENTAIRES.
      Il vivait ici, donc chaque lettre redessinait la liste entière — les
@@ -116,6 +116,7 @@ export default function Commentaires({
               c={c}
               pros={pros}
               moiId={moiId}
+              vise={!!cibleId && String(c.id) === String(cibleId)}
               /* Figé dès la première réponse — c'est la base qui tient la
                  règle (section 20.1 bis de schema.sql) ; ici on ne fait
                  que cacher un bouton qui serait refusé. */
@@ -151,6 +152,7 @@ export default function Commentaires({
                 reponse
                 pros={pros}
                 moiId={moiId}
+                vise={!!cibleId && String(r.id) === String(cibleId)}
                 fige={i < reponses.length - 1}
                 onVoirProfil={onVoirProfil}
                 onSignaler={onSignaler}
@@ -235,7 +237,7 @@ export default function Commentaires({
  * modifié se ferait renvoyer.
  */
 function Ligne({
-  c, reponse, pros, moiId, fige = false,
+  c, reponse, pros, moiId, fige = false, vise = false,
   onVoirProfil, onSignaler, onSupprimer, onModifier, onRepondre,
 }) {
   /* La correction se fait SUR PLACE : ouvrir une fenêtre pour changer
@@ -254,7 +256,12 @@ function Ligne({
   const ouvrir = () => cliquable && onVoirProfil(c);
 
   return (
-    <View style={[s.ligne, reponse && s.ligneReponse]}>
+    /* `vise` : LE commentaire dont on vient de toucher la notification.
+       Le neuf — ou l'important — se marque au BORD, pas au fond : c'est la
+       règle posée le 04/10 avec le badge « Nouveau » des demandes. Un fond
+       teinté derrière le texte le rendrait moins lisible, et c'est
+       justement ce texte qu'on vient lire. */
+    <View style={[s.ligne, reponse && s.ligneReponse, vise && s.ligneVisee]}>
       {/* L'avatar et le nom mènent au même endroit : un lecteur d'écran
           annoncerait deux fois la même chose. On efface donc l'avatar et on
           laisse parler le nom, juste à côté. */}
@@ -418,6 +425,14 @@ const s = StyleSheet.create({
   ligneReponse: {
     marginLeft: S.lg, paddingLeft: S.md,
     borderLeftWidth: 2, borderLeftColor: C.line,
+  },
+  /* LE commentaire visé par une notification. Le même trait, en orange :
+     une réponse porte déjà un filet gris, donc le repère se lit comme
+     « celui-là » sans ajouter une seconde forme. 3 px plutôt que 2, parce
+     qu'il doit se trouver en descendant — comme le « Nouveau » des
+     demandes. */
+  ligneVisee: {
+    paddingLeft: S.md, borderLeftWidth: 3, borderLeftColor: C.accent,
   },
   corps: { flex: 1, minWidth: 0 },
 

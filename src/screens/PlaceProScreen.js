@@ -127,6 +127,9 @@ function BarreRecherche({ valeur, onChange }) {
 export default function PlaceProScreen({
   annonces = [], moi, onPublier, onRepondre, onFermer, onVoirProfil, onErreur, onSignaler,
   onEcrire, onRafraichir, rafraichit = false,
+  /* L'annonce dont une notification demande d'ouvrir les réponses
+     (section 37), et le moyen de dire qu'on l'a consommée. */
+  annonceCible = null, onCibleConsommee,
 }) {
   const [recherche, setRecherche] = useState('');
   const [filtreType, setFiltreType] = useState(null);
@@ -160,6 +163,34 @@ export default function PlaceProScreen({
      savoir à LAQUELLE on répond, et de laquelle on lit les réponses. */
   const [aRepondre, setARepondre] = useState(null);
   const [aLire, setALire] = useState(null);
+
+  /* UNE NOTIFICATION OUVRE LES RÉPONSES DE SON ANNONCE — et c'est un état
+     DÉRIVÉ, pas un effet qui recopie.
+ 
+     Le premier jet posait `setALire(...)` dans un `useEffect`. Le linter
+     l'a refusé (`react-hooks/set-state-in-effect`) et il avait raison :
+     recopier une prop dans un état, c'est deux vérités pour une seule
+     chose — exactement ce que ce projet traque depuis les voyants du
+     04/10. Ici la feuille à lire se CALCULE : celle qu'on a touchée, ou
+     celle que la notification désigne.
+ 
+     Pas trouvée dans la liste : l'annonce a été fermée ou supprimée. On ne
+     dit rien — la notification disparaît avec elle (`on delete cascade`,
+     section 37), donc ce cas ne vient que d'une liste pas encore
+     rechargée. */
+  const lecture = aLire
+    || (annonceCible
+      ? annonces.find((x) => String(x.id) === String(annonceCible)) || null
+      : null);
+
+  /* Fermer rend la cible : sans ça, revenir sur la Place des pros
+     rouvrirait la même feuille indéfiniment. On fermerait, elle
+     reviendrait, et on croirait l'écran bloqué — le défaut que le
+     propriétaire a décrit le 04/10 avec deux fenêtres empilées. */
+  const fermerLecture = () => {
+    setALire(null);
+    if (onCibleConsommee) onCibleConsommee();
+  };
 
   /* --- le formulaire --- */
   const [type, setType] = useState(TYPES_ANNONCE[0].cle);
@@ -689,12 +720,12 @@ export default function PlaceProScreen({
       />
     )}
 
-    {!!aLire && (
+    {!!lecture && (
       <ListeReponses
-        annonce={aLire}
-        onFermer={() => setALire(null)}
-        onVoirProfil={(id) => { setALire(null); onVoirProfil(id); }}
-        onEcrire={(pro) => { setALire(null); onEcrire(pro); }}
+        annonce={lecture}
+        onFermer={fermerLecture}
+        onVoirProfil={(id) => { fermerLecture(); onVoirProfil(id); }}
+        onEcrire={(pro) => { fermerLecture(); onEcrire(pro); }}
         onErreur={onErreur}
       />
     )}

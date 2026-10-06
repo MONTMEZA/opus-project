@@ -5281,12 +5281,17 @@ begin
   -- LE TITRE DE L'ANNONCE EST DANS LE TEXTE, et ce n'est pas décoratif : un
   -- artisan qui a trois annonces en cours doit savoir LAQUELLE a bougé sans
   -- ouvrir l'application.
-  insert into public.notifications (user_id, type, texte, acteur_id)
+  /* `annonce_id` depuis la section 37 : sans lui, toucher cette
+     notification ne faisait RIEN — le propriétaire l'a constaté sur son
+     iPhone le 06/10/2026. Le titre dans le texte dit LAQUELLE a bougé ;
+     l'identifiant, lui, permet d'y ALLER. */
+  insert into public.notifications (user_id, type, texte, acteur_id, annonce_id)
   values (
     auteur,
     'annonce',
     nom_pro || ' a répondu à « ' || coalesce(nullif(btrim(titre), ''), 'votre annonce') || ' »',
-    new.professional_id);
+    new.professional_id,
+    new.annonce_id);
 
   return null;
 end; $$;
@@ -6466,8 +6471,302 @@ grant execute on function public.chantiers_du_pro(uuid, int) to anon, authentica
 --  jour où il le voudra — ce qui demandera un écran, donc un autre lot.
 -- --------------------------------------------------------------------------
 
+-- ==========================================================================
+--  37. LA CLOCHE — une notification est une ADRESSE, pas une information
+--
+--  CE QUE LE PROPRIÉTAIRE A VU SUR SON IPHONE (06/10/2026)
+--  -------------------------------------------------------
+--    « Toutes les notifications n'ont pas de photo de profil des
+--      émetteurs, il y a juste un rond beige. Quand c'est des
+--      notifications de réponse à la Place des pros et que l'on clique
+--      dessus, rien ne se passe. Et quand on clique sur une notification
+--      qui contient un commentaire, ça me ramène sur le fil — alors que
+--      je voudrais que ça nous emmène exactement où se passe la
+--      notification : si je reçois "Melina a commenté votre publication",
+--      ça devrait ouvrir LE post et LE commentaire en question. »
+--
+--  Les trois, mesurés sur la vraie base avant d'écrire une ligne :
+--
+--      notifications                                            15
+--      dont l'acteur a un NOM                            13 sur 13
+--      dont l'acteur a une PHOTO                          1 sur 13
+--      qui ne mènent nulle part (post_id is null)        11 sur 15
+--      qui portent un comment_id jamais lu                 4 sur 4
+--
+--  > LE ROND BEIGE N'ÉTAIT PAS UN MANQUE DE PHOTO : c'était un nom jamais
+--  > transmis. `Avatar` affiche les initiales quand il n'a pas d'image —
+--  > mais `api.js` allait chercher `acteur:acteur_id(nom, avatar_url)` et
+--  > ne reportait que l'adresse de la photo. Douze ronds vides sur treize,
+--  > pour une ligne manquante dans un mappage.
+--
+--  Et `comment_id` existait DEPUIS LE DÉBUT, rempli par
+--  `notifie_commentaire()`, lu par personne. C'est le défaut du 01/10 —
+--  une colonne qu'on écrit sans jamais la relire — dans sa forme la plus
+--  pure, puisque l'écran en avait précisément besoin.
+--
+--  CE QUE CETTE SECTION AJOUTE, ET POURQUOI UNE COLONNE PAR CIBLE
+--  --------------------------------------------------------------
+--  Pour mener « exactement où ça se passe », il faut l'identifiant de la
+--  cible. `post_id` et `comment_id` étaient là ; manquaient l'annonce et
+--  les trois sortes de demande.
+--
+--  On aurait pu poser une paire générique (`cible_type`, `cible_id`). Elle
+--  a été ÉCARTÉE, et la raison est celle qui tient tout ce fichier :
+--
+--  > UNE COLONNE GÉNÉRIQUE NE PEUT PAS PORTER DE CLÉ ÉTRANGÈRE. La base ne
+--  > garantirait plus que la cible existe, et ne nettoierait plus derrière :
+--  > une demande supprimée laisserait une notification qui pointe dans le
+--  > vide, et l'écran dirait « introuvable » à quelqu'un qui n'a rien fait
+--  > de mal. Quatre colonnes nommées coûtent quatre lignes ; l'intégrité,
+--  > elle, ne se rattrape pas.
+--
+--  Les trois demandes vivent dans trois tables (`quote_requests`,
+--  `callback_requests`, `sos_requests`), donc trois colonnes — et c'est
+--  aussi ce qui dit à l'écran QUELLE pastille de « Pour moi » ouvrir, sans
+--  qu'il ait à interpréter le `type`.
+-- ==========================================================================
+
+alter table public.notifications add column if not exists annonce_id uuid
+  references public.annonces_pro(id) on delete cascade;
+alter table public.notifications add column if not exists devis_id uuid
+  references public.quote_requests(id) on delete cascade;
+alter table public.notifications add column if not exists rappel_id uuid
+  references public.callback_requests(id) on delete cascade;
+alter table public.notifications add column if not exists sos_id uuid
+  references public.sos_requests(id) on delete cascade;
+
+/* `on delete cascade` et pas `set null` : une notification qui a perdu sa
+   cible n'a plus rien à dire. « Melina a commenté votre publication »,
+   quand la publication n'existe plus, est une ligne qui ne peut mener
+   nulle part — exactement le cul-de-sac que cette section corrige. C'est
+   déjà le choix fait pour `post_id` et `comment_id`. */
+
+comment on column public.notifications.annonce_id is
+  'L''annonce de la Place des pros à ouvrir en touchant la notification. '
+  'Remplie par notifie_reponse_annonce(). Section 37.';
+comment on column public.notifications.devis_id is
+  'La demande de devis à mettre en évidence dans « Pour moi ». Remplie par '
+  'notifie_demande(). Section 37.';
+
 -- --------------------------------------------------------------------------
---  37. L'EXPORT RGPD — et pourquoi il est le DERNIER
+--  37.1 Les déclencheurs remplissent la cible
+--
+--  Deux fonctions à reprendre, et AUCUNE ne change de signature : ce sont
+--  des déclencheurs, l'application ne les appelle pas — le piège de la
+--  surcharge (section 34) ne s'applique donc pas ici. Les déclencheurs
+--  eux-mêmes restent attachés, seules les fonctions changent.
+--
+--  Une colonne ajoutée qui resterait vide serait le « bouton §18 » : une
+--  colonne qui a l'air de servir. `npm run verifier-notifications` exige
+--  donc que chaque type de notification sache où il mène.
+-- --------------------------------------------------------------------------
+create or replace function public.notifie_demande()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  genre      text;
+  accepte    text;
+  nom_pro    text;
+  nom_client text;
+begin
+  -- Les trois tables n'emploient pas les mêmes mots : 'accepte' pour un
+  -- devis et un rappel, 'acceptee' pour une urgence. On ne les aligne PAS
+  -- ici : des lignes existent déjà avec ces valeurs, et la contrainte
+  -- `check` de chaque table les impose. On traduit, c'est tout.
+  if tg_table_name = 'quote_requests' then
+    genre := 'devis';    accepte := 'accepte';
+  elsif tg_table_name = 'callback_requests' then
+    genre := 'rappel';   accepte := 'accepte';
+  else
+    genre := 'sos';      accepte := 'acceptee';
+  end if;
+
+  select coalesce(nullif(btrim(entreprise), ''), 'Un professionnel') into nom_pro
+    from public.professional_profiles where id = new.professional_id;
+  select coalesce(nullif(btrim(nom), ''), 'Un client') into nom_client
+    from public.users where id = new.client_id;
+
+  if tg_op = 'INSERT' then
+    insert into public.notifications
+      (user_id, type, texte, acteur_id, devis_id, rappel_id, sos_id)
+    values (
+      new.professional_id,
+      genre,
+      case genre
+        when 'devis'  then nom_client || ' vous demande un devis'
+        when 'rappel' then nom_client || ' souhaite être rappelé'
+        else                nom_client || ' a besoin de vous EN URGENCE'
+      end,
+      new.client_id,
+      case when genre = 'devis'  then new.id end,
+      case when genre = 'rappel' then new.id end,
+      case when genre = 'sos'    then new.id end);
+
+  elsif tg_op = 'UPDATE' and new.statut is distinct from old.statut then
+    -- Le client n'a que faire d'un passage en « terminé » : il le sait, il
+    -- était là. Seules la réponse et le refus l'intéressent.
+    if new.statut = accepte then
+      insert into public.notifications
+        (user_id, type, texte, acteur_id, devis_id, rappel_id, sos_id)
+      values (new.client_id, genre || '_accepte',
+              nom_pro || ' a accepté votre demande', new.professional_id,
+              case when genre = 'devis'  then new.id end,
+              case when genre = 'rappel' then new.id end,
+              case when genre = 'sos'    then new.id end);
+    elsif new.statut in ('refuse', 'refusee') then
+      insert into public.notifications
+        (user_id, type, texte, acteur_id, devis_id, rappel_id, sos_id)
+      values (new.client_id, 'demande_refusee',
+              nom_pro || ' ne peut pas donner suite', new.professional_id,
+              case when genre = 'devis'  then new.id end,
+              case when genre = 'rappel' then new.id end,
+              case when genre = 'sos'    then new.id end);
+    end if;
+  end if;
+
+  return null;
+end; $$;
+
+
+-- --------------------------------------------------------------------------
+--  37.2 LE RATTRAPAGE — sans lui, ce lot ne corrige rien de ce qui EXISTE
+--
+--  Relevé sur la vraie base le 06/10/2026, AVANT de l'écrire :
+--
+--      notifications                                            15
+--      qui mènent déjà quelque part (post_id)                    4
+--      qui mènent à une fiche (partenaire, vérification)          4
+--      qui ne mènent NULLE PART                                   7
+--
+--  Les sept sont précisément celles que le propriétaire a touchées sur son
+--  iPhone. Poser les colonnes sans les remplir laisserait son écran dans
+--  l'état exact qu'il a signalé — « on clique dessus, rien ne se passe » —
+--  pendant que tous les contrôles passeraient au vert. C'est la leçon du
+--  lot A : « sans rattrapage, poser le filtre ferait disparaître tout le
+--  contenu de la base, et ça ressemblerait trait pour trait à un filtre
+--  cassé ».
+--
+--  ET ON NE DEVINE PAS. C'est la règle de `completerLieu()` : « une annonce
+--  sans coordonnées est gênante ; une annonce placée dans la mauvaise ville
+--  est pire, et personne ne s'en apercevrait ». Une notification qui ouvre
+--  LA MAUVAISE demande serait du même ordre, en pire : elle montrerait à
+--  quelqu'un le dossier d'un autre.
+--
+--  > ON NE REMPLIT QUE QUAND IL N'Y A QU'UN SEUL CANDIDAT. Zéro ou deux, on
+--  > laisse `null`, et l'écran dira honnêtement qu'il ne sait pas où aller.
+--
+--  Ce qui rend le lien SÛR, et ce n'est pas une approximation : la
+--  notification est écrite PAR le déclencheur, dans la MÊME transaction que
+--  la ligne qui la provoque. Les deux `created_at` valent donc le même
+--  `now()`, à la microseconde. Mesuré sur les deux notifications d'annonce
+--  de la vraie base : écart **0,000000 s**, et le titre de l'annonce est
+--  dans le texte. Deux critères indépendants qui concordent.
+--
+--  REJOUABLE : il ne regarde que ce qui est encore `null`, donc le relancer
+--  ne change plus rien. `schema.sql` est rejoué deux fois, toujours.
+-- --------------------------------------------------------------------------
+do $rattrapage$
+declare
+  n       record;
+  genre   text;
+  cible   uuid;
+  combien int;
+  faits   int := 0;
+  laisses int := 0;
+begin
+  for n in
+    select id, user_id, acteur_id, type, created_at
+      from public.notifications
+     where acteur_id is not null
+       and post_id    is null and annonce_id is null
+       and devis_id   is null and rappel_id  is null and sos_id is null
+       and type in ('annonce', 'devis', 'devis_accepte', 'rappel',
+                    'rappel_accepte', 'sos', 'sos_accepte', 'demande_refusee')
+  loop
+    genre := null; cible := null; combien := 0;
+
+    if n.type = 'annonce' then
+      -- L'HORODATAGE EST LE LIEN CAUSAL. Le couple (auteur, répondant) ne
+      -- suffit pas : le même artisan peut avoir répondu à deux annonces du
+      -- même auteur — c'est exactement le cas de cette base.
+      -- `(array_agg(x))[1]` ET PAS `min(x)` : il n'existe pas de `min(uuid)`
+      -- dans PostgreSQL. Le bloc se crée quand même — un `do` n'est
+      -- analysé qu'à l'exécution —, et comme il ne boucle sur RIEN sur une
+      -- base neuve, `schema.sql` passait deux fois sans un mot. L'erreur
+      -- vivait dans un chemin que rien n'empruntait, et seul un jeu
+      -- d'essai avec de vraies lignes l'a sortie.
+      select count(*), (array_agg(a.id))[1] into combien, cible
+        from public.annonce_reponses r
+        join public.annonces_pro a
+          on a.id = r.annonce_id and a.auteur_id = n.user_id
+       where r.professional_id = n.acteur_id
+         and r.created_at = n.created_at;
+
+      if combien = 1 then
+        update public.notifications set annonce_id = cible where id = n.id;
+      end if;
+
+    else
+      -- Une demande reçue va du client vers le pro ; une réponse revient en
+      -- sens inverse. On cherche donc dans LES DEUX SENS, et le « un seul
+      -- candidat » fait le tri.
+      --
+      -- `demande_refusee` ne dit pas de LAQUELLE des trois tables il
+      -- s'agit : on compte alors les candidats des trois ensemble, et on ne
+      -- remplit que s'il n'y en a qu'un en tout.
+      with candidats as (
+        select 'devis'::text as genre, q.id
+          from public.quote_requests q
+         where (q.professional_id = n.user_id and q.client_id       = n.acteur_id)
+            or (q.client_id       = n.user_id and q.professional_id = n.acteur_id)
+        union all
+        select 'rappel', cb.id
+          from public.callback_requests cb
+         where (cb.professional_id = n.user_id and cb.client_id       = n.acteur_id)
+            or (cb.client_id       = n.user_id and cb.professional_id = n.acteur_id)
+        union all
+        select 'sos', so.id
+          from public.sos_requests so
+         where (so.professional_id = n.user_id and so.client_id       = n.acteur_id)
+            or (so.client_id       = n.user_id and so.professional_id = n.acteur_id)
+      ), retenus as (
+        select c.genre, c.id from candidats c
+         where n.type = 'demande_refusee'
+            or c.genre = case
+                 when n.type in ('devis',  'devis_accepte')  then 'devis'
+                 when n.type in ('rappel', 'rappel_accepte') then 'rappel'
+                 else 'sos' end
+      )
+      select count(*), (array_agg(r.genre))[1], (array_agg(r.id))[1]
+        into combien, genre, cible
+        from retenus r;
+
+      -- Prendre le PREMIER de deux candidats rendrait une valeur
+      -- ARBITRAIRE : c'est `combien = 1` qui la rend sûre, et rien
+      -- d'autre.
+      if combien = 1 then
+        if    genre = 'devis'  then
+          update public.notifications set devis_id  = cible where id = n.id;
+        elsif genre = 'rappel' then
+          update public.notifications set rappel_id = cible where id = n.id;
+        else
+          update public.notifications set sos_id    = cible where id = n.id;
+        end if;
+      end if;
+    end if;
+
+    if combien = 1 then faits := faits + 1; else laisses := laisses + 1; end if;
+  end loop;
+
+  raise notice 'Rattrapage des notifications : % remplie(s), % laissee(s) sans cible.',
+    faits, laisses;
+end $rattrapage$;
+
+-- --------------------------------------------------------------------------
+--  38. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
 --  « Ce que j'ai regardé » et « mes chantiers » sont des données
 --  personnelles sur MOI, donc elles entrent dans l'export de l'article 15.

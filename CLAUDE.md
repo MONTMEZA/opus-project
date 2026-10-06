@@ -4641,6 +4641,230 @@ fonctionnalité manque. Elle se construira avec le journal d'audit et les
 permissions du §21, comme l'exige ce document : « ne plus ajouter d'action
 IA à la main dans la fonction Edge `ai` ».
 
+### La cloche — une notification est une ADRESSE (06/10/2026)
+
+Section 37 de `schema.sql`, `src/lib/notifications.js`,
+`npm run verifier-notifications`. Trois défauts relevés par le propriétaire
+sur son iPhone, et sa demande, qui est la bonne :
+
+> « Si je reçois une notification "Melina Meinhard a commenté votre
+> publication", je voudrais que si on clique dessus ça nous redirige sur le
+> post en question et que ça ouvre le commentaire en question. Et pareil
+> pour toutes les autres notifications. »
+
+Relevé sur la vraie base AVANT d'écrire une ligne :
+
+| | |
+|---|---|
+| notifications | 15 |
+| dont l'acteur a un **nom** | **13 sur 13** |
+| dont l'acteur a une **photo** | **1 sur 13** |
+| qui ne menaient nulle part (`post_id is null`) | **11 sur 15** |
+| portant un `comment_id` que personne ne lisait | 4 sur 4 |
+
+#### Le rond beige n'était pas un manque de photo
+
+C'est une ligne manquante dans un mappage. `api.js` demandait
+`acteur:acteur_id(nom, avatar_url)` depuis le début et ne reportait que
+l'adresse de la photo. Or `Avatar` affiche les **initiales** quand il n'a
+pas d'image.
+
+> **Douze ronds vides sur treize, pour un `acteurNom` oublié.** Et rien ne
+> le signalait : un rond beige ressemble à un compte sans photo.
+
+#### Et `comment_id` était rempli depuis le premier jour, lu par personne
+
+`notifie_commentaire()` l'écrit depuis toujours. C'est le défaut du 01/10 —
+une colonne qu'on écrit sans jamais la relire — dans sa forme la plus pure,
+puisque l'écran en avait précisément besoin.
+
+#### Une colonne par cible, et pas une paire générique
+
+Manquaient l'annonce et les trois sortes de demande. On aurait pu poser
+`(cible_type, cible_id)`. Écarté :
+
+> **Une colonne générique ne peut pas porter de clé étrangère.** La base ne
+> garantirait plus que la cible existe, et ne nettoierait plus derrière :
+> une demande supprimée laisserait une notification qui pointe dans le
+> vide, et l'écran dirait « introuvable » à quelqu'un qui n'a rien fait de
+> mal. Quatre colonnes nommées coûtent quatre lignes ; l'intégrité, elle,
+> ne se rattrape pas.
+
+`on delete cascade` et pas `set null`, comme `post_id` : une notification
+qui a perdu sa cible n'a plus rien à dire.
+
+Et les trois demandes vivent dans trois tables, donc trois colonnes — ce
+qui dit aussi à l'écran QUELLE pastille de « Pour moi » ouvrir, sans qu'il
+ait à interpréter le `type`.
+
+#### Le rattrapage n'était pas optionnel
+
+Sans lui, le lot ne corrigeait que les notifications à VENIR : les sept que
+le propriétaire a touchées seraient restées muettes pendant que les
+37 contrôles passaient au vert.
+
+Ce qui rend le lien SÛR, et ce n'est pas une approximation : la
+notification est écrite PAR le déclencheur, dans la MÊME transaction que la
+ligne qui la provoque. Les deux `created_at` valent donc le même `now()`.
+Mesuré sur les deux notifications d'annonce : écart **0,000000 s**, et le
+titre de l'annonce est dans le texte — deux critères indépendants qui
+concordent.
+
+> **On ne remplit que quand il n'y a qu'UN SEUL candidat.** C'est la règle
+> de `completerLieu()` : une notification qui ouvre LA MAUVAISE demande
+> montrerait à quelqu'un le dossier d'un autre.
+
+Appliqué : **les 15 notifications mènent quelque part**, et un contrôle
+croisé indépendant le confirme — un « ne peut pas donner suite » pointe
+bien une demande au statut `refuse`.
+
+#### `min(uuid)` n'existe pas, et `schema.sql` passait quand même
+
+Le rattrapage est un bloc `do`. **Un bloc `do` n'est analysé qu'à
+l'EXÉCUTION** : avec `min(a.id)` il se crée sans un mot, et comme il ne
+boucle sur rien sur une base neuve, le schéma rejoué deux fois ne disait
+rien du tout.
+
+> **L'erreur vivait dans un chemin que rien n'empruntait.** Seul un jeu
+> d'essai avec de VRAIES lignes l'a sortie. C'est `(array_agg(x))[1]` qu'il
+> faut — et `combien = 1` qui rend la valeur sûre, pas l'agrégat.
+
+#### LE DÉFAUT QUE SEUL LE NAVIGATEUR A TROUVÉ — une clé d'onglet inventée
+
+Le plus coûteux du lot, et il n'a rien levé. La cloche appelait
+`changerOngletDecouvrir('pros')` ; la clé de la Place des pros est
+**`'artisans'`**.
+
+```js
+const indexDecouvrir = Math.max(0, ongletsDecouvrir.findIndex(...));  // -1 -> 0
+```
+
+On atterrissait donc sur « Pour moi », **aucune pastille n'était active**
+— l'onglet demandé ne correspondait à rien —, et la feuille de l'annonce
+s'ouvrait quand même par-dessus, parce que c'est une `Modal` et que la page
+voisine est montée au repos. Donc : le bon contenu, la mauvaise page. En
+fermant la feuille, on était perdu.
+
+> **Et la destination « demande » marchait, par pur HASARD** : « Pour moi »
+> est justement la page de repli. Un contrôle vert pour la mauvaise raison,
+> une fois de plus.
+
+Deux corrections, et la seconde est la vraie :
+
+1. la bonne clé ;
+2. **`changerOngletDecouvrir` REFUSE une clé inconnue** et rend `false`, au
+   lieu de retomber sur la première page en silence. `verifier-notifications`
+   compare désormais les clés demandées à celles qui existent.
+
+Et le cas qui reste, qui n'est pas une faute de frappe : **un particulier
+n'a pas d'onglet « Pour moi »**, et il reçoit pourtant « a accepté votre
+demande ». Il n'existe aujourd'hui aucun écran « mes demandes envoyées ».
+On le DIT, au lieu de le poser sur une page au hasard.
+
+#### Le panneau s'ouvrait VIDE
+
+`ouvrirNotification` posait `setOpenCommentsId(...)` à la main. Mais depuis
+que le fil se charge par pages (lot 4), `post.comments` n'existe pas tant
+que personne ne l'a demandé — et c'était `toggleComments`, et lui seul, qui
+allait le chercher.
+
+> **Deux façons d'arriver au même écran doivent faire exactement le même
+> travail.** C'est la règle écrite le 04/10 pour `changerOngletDecouvrir`,
+> et je venais de la violer dans l'autre sens : là, un état changeait sans
+> le travail qui va avec ; ici, un panneau s'ouvrait sans son contenu.
+
+`ouvrirCommentaires(id)` est la porte unique. `toggleComments` BASCULE : la
+cloche ne peut pas l'appeler, elle refermerait le panneau déjà ouvert sur
+ce post.
+
+#### Arriver au bon endroit ne suffit pas : il faut le VOIR
+
+Mesuré au navigateur, fenêtre de 844 : le commentaire visé tombait à
+**y = 816**. Techniquement visible ; en pratique **sous la barre d'onglets**,
+qui fait 69 px. Du point de vue du propriétaire, c'est encore « ça me ramène
+sur le fil ».
+
+Le fil défile donc jusqu'à la PUBLICATION — pas jusqu'au commentaire, qui
+n'a ni index ni hauteur connue dans cette liste, alors que le post en a un.
+Mesuré après : **y = 666**, au-dessus de la barre. Et
+`onScrollToIndexFailed` est obligatoire : les cartes n'ont pas toutes la
+même hauteur depuis le 02/10 (le cadre suit la photo), donc
+`scrollToIndex` peut tomber sur un élément pas encore mesuré.
+
+#### Le chevron mentait, et la voix avec lui
+
+Trouvé **sur une capture**, pas en relisant. `menuQuelquePart = !!n.postId` :
+sur les trois lignes de l'essai, UNE SEULE portait le chevron. Les deux
+autres avaient l'air d'être de simples informations — et on n'appuie pas
+sur ce qui a l'air de ne rien faire.
+
+> **C'était un TROISIÈME endroit qui réinventait la même vérité**, après la
+> barre du bas et le routage — exactement le défaut des voyants du 04/10.
+> `destinationNotif` est la seule qui sait où mène une notification.
+
+Et VoiceOver annonçait « Ouvrir la publication » pour toutes : on
+s'attendait à une publication et on tombait sur la Place des pros.
+
+#### Le calcul vit dans un fichier qui n'importe rien
+
+`src/lib/notifications.js` — neuvième application de la leçon de
+`cloudinary-adresses.js`. Le contrôle **fait tourner** `destinationNotif`
+sur chacun des quinze types avec la cible que la base y met, et refuse
+celui qui ne mène nulle part. Un type ajouté demain sans destination sera
+refusé.
+
+Et deux listes pour une seule vérité ne peuvent pas se contredire :
+`NOTIFS_PROFIL` (« ce type n'a pas de cible ») et `CIBLE_ATTENDUE` (« ce
+type porte telle colonne ») sont comparées à chaque passage.
+
+#### Un contrôle qui compte les gardes ne garde rien
+
+Éprouvé en cassant ce qu'il surveille, comme toujours. Sur six défauts
+remis à la main, **il en a laissé passer un** : il comptait les
+`if combien = 1 then` et exigeait au moins deux ; il y en a trois (les deux
+branches, plus le décompte final), donc en retirer une passait. Il regarde
+maintenant les DEUX CHEMINS D'ÉCRITURE, chacun entre le début de sa branche
+et son premier `update`. Éprouvé branche par branche : les deux refusés.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un PostgreSQL 16 neuf, les neuf cas de
+`supabase/essais-section-37.sql`, le rattrapage éprouvé sur un jeu
+contenant à la fois le cas unique et le cas AMBIGU (3 remplies, 2 laissées,
+puis 0 et 2 au second passage — donc rejouable), les 37 contrôles,
+`npx expo export --platform ios`. Migration appliquée sur la vraie base.
+
+Puis au navigateur, sur la VRAIE base, avec deux comptes professionnels
+jetables supprimés dans la même session (0 restant, base revenue à
+13 comptes / 7 fiches / 17 publications / 1 chantier / 15 notifications) :
+
+| | relevé |
+|---|---|
+| la cloche | **40 × 44** |
+| les trois avatars | **initiales**, plus un rond vide |
+| le nom de l'acteur | écrit à l'écran |
+| « a commenté » | **le bon post**, panneau ouvert, **le commentaire visé** |
+| son repère | `3px rgb(232,92,31)`, fond **transparent** |
+| sa position | **y = 666** sur 844 — au-dessus de la barre |
+| « a répondu à … » | **Place des pros**, l'annonce, la réponse lisible |
+| la pastille | « Place des pros », encre blanche, cadre à **390** |
+| « vous demande un devis » | **« Pour moi »**, sur cette demande-là |
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone — ni le
+défilement au doigt jusqu'au commentaire, ni le ressenti de l'arrivée. Et
+les notifications de **partenariat** et de **vérification** mènent à la
+fiche : c'est écrit et contrôlé, mais la vraie base n'en contient aucune
+qui soit adressée à un compte que je puisse ouvrir.
+
+#### Et un point laissé ouvert, exprès
+
+`PagesGlissantes` porte `const place = useRef(false)` **écrit et lu nulle
+part** : un garde-fou qui ne garde rien. Je l'ai branché en croyant tenir la
+cause du mauvais onglet, puis mesuré qu'il n'y changeait rien — la cause
+était la clé inventée. Je l'ai donc **retiré** : livrer un garde qu'on ne
+peut pas éprouver est exactement ce que ce document refuse. Reste à trancher
+s'il protégeait un cas iOS que le navigateur ne montre pas.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :
