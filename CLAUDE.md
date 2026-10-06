@@ -528,6 +528,75 @@ vraie base du projet — schéma, contraintes, données, fichiers du stockage,
 journaux et alertes de sécurité. **S'en servir pour vérifier** plutôt que de
 lui faire coller des résultats de requêtes.
 
+### Le projet ne doit PAS vivre dans OneDrive (06/10/2026)
+
+Signalé par le propriétaire : Expo Go ne s'ouvrait plus, et son terminal
+affichait **ceci**, puis le serveur mourait :
+
+```
+Error: TreeFS: Failed to make parent directory entry for
+       node_modules\expo\node_modules\negotiator\lib\charset.js
+    at TreeFS.addOrModify (…/@expo/metro-file-map/build/lib/TreeFS.js:376)
+    at Timeout.emitChange (…/@expo/metro-file-map/build/index.js:580)
+```
+
+**Ce n'est pas le code d'Opus.** `TreeFS` est l'arbre de fichiers du
+surveillant de Metro, et `emitChange` dit tout : Metro a reçu un
+événement de CHANGEMENT sur un fichier de `node_modules`, puis n'a pas
+retrouvé le dossier parent de ce fichier dans son arbre. Autrement dit,
+**quelque chose déplaçait les fichiers sous ses pieds pendant qu'il
+tournait.**
+
+Et ce quelque chose est dans le chemin de l'erreur :
+
+```
+C:\Users\dylan\OneDrive\opus-project nouveau\opus-project
+```
+
+> **OneDrive synchronise `node_modules` en continu** — plus de 40 000
+> fichiers —, crée des « fichiers à la demande » qui sont des *placeholders*
+> et non de vrais dossiers, et les remplace pendant l'exécution. Metro, qui
+> tient un arbre en mémoire, ne peut pas suivre. C'est une incompatibilité
+> connue entre OneDrive et tout outil qui surveille des fichiers, pas un
+> défaut d'Expo.
+
+**La parade, et c'est la seule vraie : sortir le projet de OneDrive.**
+`C:\dev\opus-project`, par exemple. Pas « exclure node_modules de la
+synchronisation » — OneDrive ne sait pas le faire proprement sur un
+sous-dossier —, et pas « mettre la synchro en pause », qui est un pansement
+qu'on oublie de remettre.
+
+#### Et un second défaut, MESURÉ au passage
+
+Windows refuse historiquement les chemins de plus de 260 caractères. Compté
+sur le `node_modules` réel du projet, selon l'endroit où il vit :
+
+| emplacement | longueur du préfixe | fichiers au-delà de 260 |
+|---|---|---|
+| `C:\Users\dylan\OneDrive\opus-project nouveau\opus-project` | 57 | **21** |
+| `C:\dev\opus-project` | 19 | **2** |
+| `C:\dev\opus` | 11 | **0** |
+
+Les fichiers en cause sont les `prebuilds` d'`expo-image-manipulator`
+(`SDWebImageWebPCoder.xcframework/…/dSYMs/…`). Ils ne servent qu'aux
+constructions natives, donc ils ne cassent rien tout de suite — mais un
+`npm install` qui n'arrive pas à les écrire laisse un `node_modules`
+incomplet, et ça ressemble alors à n'importe quoi.
+
+> **Le chemin le plus court gagne, et ce n'est pas du confort : c'est du
+> budget de caractères.** `C:\dev\opus` fait tomber le compteur à zéro.
+
+#### Ce qu'il faut lui dire, et dans cet ordre
+
+1. fermer le serveur (Ctrl+C) et l'éditeur ;
+2. supprimer `node_modules` AVANT de déplacer — c'est ce qui est lourd, et
+   il se réinstalle ;
+3. déplacer le dossier hors de OneDrive ;
+4. `npm install`, puis `npx expo start -c` (le `-c` vide le cache de Metro,
+   qui contient encore les anciens chemins).
+
+Le `.env` et le dossier `.git` voyagent avec le dossier : rien n'est perdu.
+
 ## Comment vérifier
 
 ```bash
