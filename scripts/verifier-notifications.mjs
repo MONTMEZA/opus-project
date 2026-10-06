@@ -231,7 +231,21 @@ verifier('`destinationNotif` est la SEULE porte du routage',
    lignes portait le chevron, parce que l'ecran calculait `!!n.postId`
    dans son coin — un TROISIEME endroit qui reinvente la meme verite,
    apres la barre du bas et le routage. */
+/* LA PHOTO D'ABORD, LES INITIALES SEULEMENT A DEFAUT. `Avatar` affiche
+   l'image des que `uri` est fourni, et retombe sur les initiales sinon.
+   Le lot G a corrige le NOM ; il ne faudrait pas qu'un jour quelqu'un
+   retire `uri` en croyant que les initiales sont le comportement voulu.
+   Mesure sur la vraie base le 06/10/2026, avec un compte portant une vraie
+   photo : 1 <img> rendue depuis l'espace `avatars`, 0 initiale,
+   alt="Photo de Melina Meinhard". */
 const ecranNotifs = sansCommentaires(lire('src/screens/NotificationsScreen.js'));
+verifier('la cloche passe la PHOTO de l\'acteur, pas seulement son nom',
+  /<Avatar[^>]*uri=\{n\.avatarUrl\}[^>]*nom=\{n\.acteurNom\}/.test(ecranNotifs),
+  'Les initiales ne sont pas le comportement voulu : c\'est le repli quand '
+  + 'il n\'y a pas de photo. Sans `uri`, tout le monde redeviendrait un '
+  + 'rond a initiales, et ca ressemblerait au defaut qu\'on vient de '
+  + 'corriger.');
+
 verifier('le chevron suit la DESTINATION, pas seulement `postId`',
   /destinationNotif\(n\)/.test(ecranNotifs)
   && !/menuQuelquePart = !!n\.postId/.test(ecranNotifs),

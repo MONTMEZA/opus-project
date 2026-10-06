@@ -4843,12 +4843,33 @@ jetables supprimés dans la même session (0 restant, base revenue à
 | la cloche | **40 × 44** |
 | les trois avatars | **initiales**, plus un rond vide |
 | le nom de l'acteur | écrit à l'écran |
+| **un acteur AVEC photo** | **sa photo**, 0 initiale, `alt="Photo de Melina Meinhard"` |
 | « a commenté » | **le bon post**, panneau ouvert, **le commentaire visé** |
 | son repère | `3px rgb(232,92,31)`, fond **transparent** |
 | sa position | **y = 666** sur 844 — au-dessus de la barre |
 | « a répondu à … » | **Place des pros**, l'annonce, la réponse lisible |
 | la pastille | « Place des pros », encre blanche, cadre à **390** |
 | « vous demande un devis » | **« Pour moi »**, sur cette demande-là |
+
+##### Les initiales sont le REPLI, pas le comportement voulu
+
+Question du propriétaire en lisant le compte rendu : « si la personne qui
+envoie une notification a une photo de profil, il faut sa photo à la place
+des initiales ? » Oui — et je ne l'avais **pas vérifié** : mes deux comptes
+d'essai n'avaient pas de photo, donc je n'avais mesuré que le repli.
+
+Éprouvé le jour même sur la vraie base, avec un compte portant une VRAIE
+photo envoyée dans l'espace `avatars` : **1 `<img>` rendue**, **0 initiale**,
+et `alt="Photo de Melina Meinhard"` pour VoiceOver. `Avatar` affiche l'image
+dès que `uri` est fourni ; les initiales n'arrivent qu'à défaut.
+
+> **Et c'est devenu un contrôle**, parce que c'est précisément le genre de
+> ligne qu'on retire un jour en croyant bien faire : sans `uri`, tout le
+> monde redeviendrait un rond à initiales, et ça ressemblerait trait pour
+> trait au défaut qu'on vient de corriger.
+
+Au passage, le ménage de compte a bien emporté les **2 fichiers** d'avatar
+du compte jetable (`{"espace":"avatars","retires":2}`).
 
 **Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone — ni le
 défilement au doigt jusqu'au commentaire, ni le ressenti de l'arrivée. Et
