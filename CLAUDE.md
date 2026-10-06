@@ -4566,11 +4566,14 @@ même session (0 restant, base revenue à 13 comptes / 7 fiches /
 | créer un chantier depuis l'écran Publier | `POST /rest/v1/chantiers → 201`, choisi aussitôt |
 | publier dedans | `POST /rest/v1/posts → 201`, compteur à **1** |
 
-**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone — ni le
-défilement de la bande au doigt, ni le ressenti. Aucun artisan réel n'a
-encore de chantier : la vraie base en compte **0**. Et le temps réel ne
-s'intercepte pas depuis ce conteneur (`ERR_TUNNEL_CONNECTION_FAILED` sur le
-WebSocket, attendu).
+**VÉRIFIÉ SUR L'IPHONE le 06/10/2026**, par le propriétaire : « j'ai testé
+aussi sur mon iPhone, tout fonctionne ». Il n'y a donc plus rien à reporter
+au téléphone sur ce lot, à une exception près : **aucun artisan réel n'a
+encore de chantier**, la vraie base en compte **0**. Le jour où il y en aura
+vingt, la bande et son défilement horizontal se jugeront à nouveau.
+
+Et le temps réel ne s'intercepte pas depuis ce conteneur
+(`ERR_TUNNEL_CONNECTION_FAILED` sur le WebSocket, attendu).
 
 #### Deux remarques de l'iPhone, le lendemain — et un défaut que j'avais CRÉÉ
 
@@ -4623,6 +4626,12 @@ plus aucun bouton au-dessus de l'étape photo, l'indicateur affiche **1/2**,
 et un doigt vers la gauche le fait passer à **2/2**. Une étape de
 démonstration porte désormais deux photos — sans elle, ce carrousel ne se
 vérifiait nulle part.
+
+**Puis sur l'IPHONE, par le propriétaire** : « j'ai testé et ça fonctionne
+parfaitement ». Les deux corrections tiennent donc au doigt, et pas
+seulement sous un événement tactile fabriqué — c'est la première fois dans
+ce projet qu'un geste est éprouvé **des deux côtés** avant d'être déclaré
+bon.
 
 #### Ce qui vient ensuite, et qui est le but
 
