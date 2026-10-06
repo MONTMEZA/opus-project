@@ -17,7 +17,7 @@
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
-    "expo-image-manipulator": "~57.0.20",
+    "expo-image-manipulator": "~57.0.21",
     "expo-image-picker": "~57.0.20",
     "expo-linear-gradient": "~57.0.2",
     "expo-status-bar": "~57.0.1",
@@ -75,7 +75,8 @@
     "verifier-feuilles": "node scripts/verifier-feuilles.mjs",
     "verifier-compte": "node scripts/verifier-compte.mjs",
     "verifier-conseil": "node scripts/verifier-conseil.mjs",
-    "verifier-vues": "node scripts/verifier-vues.mjs"
+    "verifier-vues": "node scripts/verifier-vues.mjs",
+    "verifier-chantier": "node scripts/verifier-chantier.mjs"
   },
   "private": true,
   "devDependencies": {

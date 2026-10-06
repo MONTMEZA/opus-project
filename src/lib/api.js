@@ -11,7 +11,7 @@
 import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
-  initialDemandes, initialAnnonces, initialDemandesRecues,
+  initialDemandes, initialAnnonces, initialDemandesRecues, initialChantiers,
 } from '../data/demo';
 import { METIER_PAR_DEFAUT } from './metiers';
 import { correspond } from './filtre-fil';
@@ -437,6 +437,26 @@ export function relativeTime(iso) {
  * conseil ajouté, et personne ne s'en aperçoit — le défaut du 01/10 vu
  * dans sa version la plus bête.
  */
+/**
+ * LES CHANTIERS D'UN ARTISAN — version démonstration.
+ *
+ * `function` et non `const`, comme `conseilsDemoDe` : une fonction
+ * déclarée est hissée, donc elle se lit d'où qu'on l'appelle. Ce fichier a
+ * déjà livré un écran blanc pour une `const` lue trop tôt.
+ */
+function chantiersDemoDe(proId) {
+  return initialChantiers
+    /* Comparaison par chaîne : l'identifiant du pro connecté vient de
+       `Object.keys(pros)`, donc c'est une chaîne, et les chantiers
+       d'exemple portent un nombre. Voir `mesChantiers` dans OpusApp. */
+    .filter((c) => String(c.proId) === String(proId))
+    /* Le même ordre que `chantiers_du_pro()` en base : les chantiers EN
+       COURS passent devant. Deux tris différents pour la même liste
+       feraient que la démonstration ne montre pas l'application. */
+    .sort((a, b) => (a.statut === 'en_cours' ? 0 : 1) - (b.statut === 'en_cours' ? 0 : 1))
+    .map((c) => ({ ...c }));
+}
+
 function conseilsDemoDe(proId) {
   return initialPosts
     .filter((p) => p.type !== 'ad' && p.conseil && p.proId === proId)
@@ -850,6 +870,13 @@ function rowToPost(p, likedSet, commentaires = null) {
        vidéo, montage) ; `conseil` dit pourquoi c'est là. Les deux se
        combinent — une vidéo-conseil est les deux à la fois. */
     conseil: !!p.conseil,
+    /* LE CHANTIER AUQUEL ELLE APPARTIENT (section 36), ou `null`. Le TITRE
+       ne voyage pas ici : il vit dans la table `chantiers`, et l'écran le
+       lit dans le dictionnaire que `chantiersDeCesPosts()` remplit. Le
+       recopier sur chaque publication ferait deux sources pour une seule
+       vérité — et un chantier renommé laisserait l'ancien nom dans le
+       fil, pour toujours. */
+    chantierId: p.chantier_id || null,
     texte: p.texte, media: p.media,
     medias: (p.medias && p.medias.length) ? p.medias : (p.media ? [p.media] : []),
     musique: p.musique || null,
@@ -1136,13 +1163,14 @@ export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
 
 export const createPost = !hasSupabase ? noop : async ({
   type, texte, media, medias = [], musique = null, montageUrl = null, metier, ville,
-  latitude = null, longitude = null, conseil = false,
+  latitude = null, longitude = null, conseil = false, chantierId = null,
 }) => {
   const { data, error } = await supabase.from('posts')
     .insert({
       author_id: currentUserId, type, texte, media,
       medias, musique, montage_url: montageUrl, metier, ville,
       conseil: !!conseil,
+      chantier_id: chantierId || null,
       /* Les deux ou aucune. Avec une seule, le déclencheur
          `pose_le_lieu_du_post()` repart de la fiche — une latitude seule ne
          situe rien et ressemblerait pourtant à un lieu. */
@@ -1152,6 +1180,172 @@ export const createPost = !hasSupabase ? noop : async ({
     .select().single();
   if (error) throw error;
   return data;
+};
+
+/* ------------------------------------------------------------------ */
+/*  LES CHANTIERS (section 36)                                          */
+/* ------------------------------------------------------------------ */
+
+/** Une ligne de `chantiers` devient un chantier de l'application. */
+function rowToChantier(c) {
+  return {
+    id: c.id,
+    proId: c.pro_id,
+    titre: c.titre,
+    ville: c.ville || null,
+    statut: c.statut || 'en_cours',
+    nbPublications: c.nb_publications || 0,
+    couverture: c.couverture || null,
+    debut: c.debut || null,
+    fin: c.fin || null,
+  };
+}
+
+/**
+ * LES CHANTIERS D'UN ARTISAN — la bande de sa fiche.
+ *
+ * `security invoker` côté base : le blocage s'applique. Un artisan qu'on a
+ * bloqué n'a pas de chantiers.
+ */
+export const chantiersDuPro = !hasSupabase
+  ? async (proId) => chantiersDemoDe(proId)
+  : async (proId) => {
+    const { data, error } = await supabase.rpc('chantiers_du_pro', { p_pro: proId });
+    if (error) throw error;
+    return (data || []).map(rowToChantier);
+  };
+
+/**
+ * LES CHANTIERS DES PUBLICATIONS QU'ON VIENT DE CHARGER.
+ *
+ * UNE SEULE REQUÊTE pour toute une page de fil, et seulement pour les
+ * publications qui appartiennent à un chantier — c'est-à-dire presque
+ * aucune au début. C'est le même procédé que `pros` : l'écran a besoin du
+ * TITRE, la publication ne porte que l'identifiant.
+ *
+ * Et surtout : **on ne touche pas à `fil_filtre()`**. Lui ajouter une
+ * jointure voudrait dire changer sa signature, donc la SURCHARGER — et le
+ * fil tomberait sur « is not unique », sans réparation possible depuis une
+ * session de travail. C'est la leçon du lot C, éprouvée sur PostgreSQL 16.
+ */
+export const chantiersDeCesPosts = !hasSupabase
+  ? async (posts) => {
+    const ids = new Set((posts || []).map((p) => p.chantierId).filter(Boolean));
+    return initialChantiers.filter((c) => ids.has(c.id)).map((c) => ({ ...c }));
+  }
+  : async (posts) => {
+    const ids = [...new Set((posts || []).map((p) => p.chantierId).filter(Boolean))];
+    if (ids.length === 0) return [];
+    const { data, error } = await supabase.from('chantiers').select('*').in('id', ids);
+    if (error) throw error;
+    return (data || []).map(rowToChantier);
+  };
+
+/**
+ * LES PUBLICATIONS D'UN CHANTIER, dans l'ordre où elles ont été faites.
+ *
+ * Du plus ancien au plus récent : c'est une HISTOIRE, elle se lit dans le
+ * sens où elle s'est passée. Tout le reste d'Opus trie du plus récent au
+ * plus ancien, et c'est le seul endroit où ce serait un contresens.
+ */
+export const publicationsDuChantier = !hasSupabase
+  ? async (chantierId) => initialPosts
+    .filter((p) => p.chantierId === chantierId)
+    /* DU PLUS ANCIEN AU PLUS RÉCENT, comme la requête ci-dessous. En
+       démonstration, les publications sortaient dans l'ordre du FICHIER —
+       le fil les y range du plus récent au plus ancien, donc la page du
+       chantier commençait par la dernière étape. Mesuré au navigateur : la
+       pose de la charpente s'affichait avant la dépose de la couverture.
+       Deux tris pour une même liste, et la démonstration ne montrait pas
+       l'application. */
+    .slice()
+    .sort((a, b) => new Date(a.publieLe || 0) - new Date(b.publieLe || 0))
+    .map((p, i) => postDemo(p, i))
+  : async (chantierId) => {
+    const { data, error } = await supabase.from('posts').select('*')
+      .eq('chantier_id', chantierId)
+      .order('created_at', { ascending: true })
+      .limit(100);
+    if (error) throw error;
+    return (data || []).map((p) => rowToPost(p, new Set(), null));
+  };
+
+/**
+ * CRÉER UN CHANTIER, ou retrouver celui qui porte déjà ce nom.
+ *
+ * L'index unique de la section 36 fait qu'on ne peut pas en créer deux du
+ * même nom. Plutôt que de rendre une erreur à l'artisan qui vient de
+ * retaper « Toiture Charleval », **on lui rend le sien**. Le refus de la
+ * base est une garde, pas un message d'accueil.
+ */
+/**
+ * EN DÉMONSTRATION, le chantier existe VRAIMENT — en mémoire.
+ *
+ * `noop` refermait la feuille sans rien créer : on tapait « Toiture
+ * Rognes », on validait, et il ne se passait rien. Mesuré au navigateur.
+ * C'est la famille de défaut que la bande noire « MODE DÉMONSTRATION »
+ * sert à éviter, et ici elle ne suffisait pas : l'écran ne mentait pas,
+ * il se taisait. Un mécanisme qu'on ne peut pas essayer sans fichier
+ * `.env` ne se vérifie nulle part.
+ *
+ * Le doublon est refusé ICI comme la base le refuse (index unique sur
+ * `(pro_id, lower(btrim(titre)))`) : on rend le chantier existant, pas
+ * une erreur. Deux comportements différents pour le même geste et la
+ * démonstration ne montrerait pas l'application.
+ */
+async function creerChantierDemo({ titre, ville = null }) {
+  const propre = String(titre || '').trim();
+  if (!propre) throw new Error('Donnez un nom à ce chantier.');
+  const monPro = Object.keys(demoPros)[0];
+  const deja = initialChantiers.find((c) => String(c.proId) === String(monPro)
+    && c.titre.trim().toLowerCase() === propre.toLowerCase());
+  if (deja) return { ...deja };
+  const neuf = {
+    id: `ch-demo-${Date.now()}`, proId: monPro, titre: propre, ville,
+    statut: 'en_cours', nbPublications: 0, couverture: null,
+    debut: null, fin: null,
+  };
+  initialChantiers.push(neuf);
+  return { ...neuf };
+}
+
+export const creerChantier = !hasSupabase ? creerChantierDemo : async ({ titre, ville = null }) => {
+  const propre = String(titre || '').trim();
+  if (!propre) throw new Error('Donnez un nom à ce chantier.');
+
+  const { data, error } = await supabase.from('chantiers')
+    .insert({ pro_id: currentUserId, titre: propre, ville })
+    .select().single();
+
+  if (error) {
+    /* 23505 : l'index unique. Le chantier existe déjà — on le rend. */
+    if (error.code === '23505') {
+      const { data: deja, error: e2 } = await supabase.from('chantiers')
+        .select('*').eq('pro_id', currentUserId).ilike('titre', propre).maybeSingle();
+      if (e2) throw e2;
+      if (deja) return rowToChantier(deja);
+    }
+    throw error;
+  }
+  return rowToChantier(data);
+};
+
+async function changerStatutChantierDemo(chantierId, statut) {
+  const c = initialChantiers.find((x) => x.id === chantierId);
+  if (!c) throw new Error('Ce chantier n\'existe plus.');
+  c.statut = statut;
+  return { ...c };
+}
+
+/** Marquer un chantier terminé, ou le rouvrir. */
+export const changerStatutChantier = !hasSupabase
+  ? changerStatutChantierDemo
+  : async (chantierId, statut) => {
+  const { data, error } = await supabase.from('chantiers')
+    .update({ statut }).eq('id', chantierId).eq('pro_id', currentUserId)
+    .select().single();
+  if (error) throw error;
+  return rowToChantier(data);
 };
 
 /**

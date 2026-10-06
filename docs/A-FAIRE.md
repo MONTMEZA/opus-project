@@ -412,9 +412,20 @@ pas négociable — chacun pose le socle du suivant.
 | **A** | Le LIEU d'une publication (section 32) | ✅ 05/10/2026 |
 | **B** | La loupe : un filtre DUR, tenu par la base (section 33) | ✅ 05/10/2026 |
 | **C** | « C'est un conseil » : une étiquette, pas un format (section 34) | ✅ 05/10/2026 |
-| **D** | Enregistrer les SIGNAUX, sans classer | à faire |
-| **E** | Le fil de chantier | à faire |
+| **D** | Les vues : un signal, et quelqu'un qui le LIT (section 35) | ✅ 05/10/2026 |
+| **E** | Le chantier : coudre les publications (section 36) | ✅ 06/10/2026 |
 | **F** | Les concours | **après immatriculation** |
+
+**Ce que le lot E laisse ouvert, et qui est le but** : la place du récit
+écrit par l'IA est posée sur la page du chantier, vide, et visible du seul
+artisan. Elle se construit avec le journal d'audit et les permissions du
+§21 — jamais « à la main » dans la fonction Edge `ai`, c'est la règle du
+cahier des charges. C'est le prochain lot naturel, avant les gabarits.
+
+**Et le rangement des anciennes publications** : les seize déjà en base
+n'appartiennent à aucun chantier, et personne ne peut deviner lesquelles
+vont ensemble. Le verrou de la section 20.1 laisse désormais passer
+`chantier_id`, donc l'écran est possible ; il reste à l'écrire.
 
 **Le lot F ne se construit pas avant.** Le propriétaire l'a posé lui-même :
 « bien sûr pour les jeux Opus sera immatriculé avant de lancer ces

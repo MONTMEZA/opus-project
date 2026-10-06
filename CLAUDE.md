@@ -4327,6 +4327,190 @@ publication réelle du propriétaire porte désormais **1 vue** : la mienne, au
 moment où le fil s'est affiché pendant l'essai. C'est une vraie vue, et elle
 ne peut pas être retirée — c'est exactement la règle ci-dessus.
 
+### Le chantier — coudre les publications ensemble (06/10/2026)
+
+Section 36 de `schema.sql`, `src/screens/ChantierScreen.js`,
+`src/components/BandeChantiers.js`, `npm run verifier-chantier`.
+
+Demandé par le propriétaire : « on créé 10 post pour le même chantier par
+exemple toiture Charleval, ça créé un dossier visible en appuyant sur la
+phrase du post ou visible depuis notre page pro ».
+
+#### Ce qu'une photo de chantier fini ne peut pas faire
+
+Elle se regarde UNE fois. Relevé sur la vraie base avant d'écrire une
+ligne : le propriétaire publie surtout le RÉSULTAT — mais pas toujours. Le
+21/09, « pose de l'isolation, avant le placo » et « chantier fini » sont
+deux étapes du MÊME travail, et rien dans Opus ne le disait.
+
+> **L'habitude n'était pas à créer, elle était à RANGER.**
+
+#### Deux choses s'appellent « chantier », et les confondre serait l'erreur
+
+Le §12 du cahier des charges, c'est le DOSSIER DE GESTION — client, devis,
+montant, marge. Celui-ci est l'HISTOIRE d'un chantier dans le fil : un
+titre, une commune, des dates, des publications cousues.
+
+> **Celui-ci est le petit, et il est fait pour être ABSORBÉ** le jour où le
+> §12 arrive. D'où ce qu'on n'écrit PAS : aucun client, aucun montant.
+
+#### Le nom ne doit pas être celui du client
+
+Le propriétaire proposait « Chantier Martin ». Or ce titre s'affiche
+PUBLIQUEMENT sur chaque publication : « Monsieur Martin, à Charleval, a
+fait refaire sa toiture. » Ce client n'a jamais accepté ça et n'est même
+pas sur Opus. **La base ne peut pas deviner un nom de famille** : c'est
+l'écran qui le dit, sous le champ, et qui propose « Toiture Charleval ».
+
+#### `est_mon_entreprise()` naît ici, et c'était attendu
+
+`docs/LECTURE-CAHIER-DES-CHARGES.md` l'exigeait depuis le 04/10 :
+l'appartenance passe par une FONCTION, et elle « naîtra avec la première
+table de chantier ». Elle rend aujourd'hui exactement `auth.uid() = pro_id`.
+
+> **Ce n'est pas une couche inutile : c'est le seul endroit à changer** le
+> jour où un patron voudra donner un accès à ses compagnons. Sans elle, ce
+> serait les 56 règles qui disent `auth.uid() = …`.
+
+#### LE DÉFAUT QUE SEULE LA VRAIE BASE A TROUVÉ — un verrou qui se tait
+
+Ranger une publication déjà en ligne dans un chantier répondait **204 et ne
+changeait RIEN**. La cause : `tient_le_texte()` (section 20.1), qui remet
+TOUTES les colonnes à leur ancienne valeur sauf le texte.
+
+Et l'essai 10 de `essais-section-36.sql` passait **au vert** — il tournait
+sans jeton, donc `auth.uid()` vide, donc le verrou ne s'appliquait pas.
+
+> **Un essai sans jeton n'éprouve pas un verrou qui dépend de
+> `auth.uid()`.** Sixième fois dans ce projet qu'un contrôle passe au vert
+> sans rien prouver. L'essai se fait désormais avec `set local role` et
+> `set local request.jwt.claim.sub`, chacun dans son propre ordre — jamais
+> dans un bloc `do`.
+
+Le verrou laisse donc passer `chantier_id`, et **rien d'autre** : vérifié
+sur la vraie base, `media` et `likes_count` restent intacts pendant que le
+texte change. `trg_chantier_du_post` garde déjà la porte avec `OP002`.
+C'est aussi ce qui rendra possible le lot « ranger mes anciennes
+publications » — les seize déjà en base n'ont aucun chantier, et personne
+ne peut deviner lesquelles vont ensemble.
+
+#### `===` entre un nombre et une chaîne : trois fois dans le même lot
+
+`myProId` vient de `Object.keys(pros)[0]`, qui rend **toujours une
+chaîne** ; les chantiers de démonstration portent un **nombre**. Un `===`
+strict rendait donc une liste vide, et le bloc « Mes chantiers » ne
+s'affichait **jamais** sans fichier `.env` — ni la bande, ni la place du
+récit, ni le bouton « Terminer ». Trouvé au navigateur, pas en relisant.
+
+`mesPublications` tenait déjà cette garde depuis le lot 4 ; les chantiers
+non, à trois endroits. `verifier-chantier` REFAIT le calcul sur les données
+de démonstration au lieu de lire le code.
+
+#### Deux ordres pour une seule page
+
+Mesuré au navigateur : la bande arrivait **après** le portfolio chez son
+auteur et **avant** sur la fiche publique.
+
+> **L'artisan doit voir sa page comme ses clients la voient** — c'est le
+> seul endroit où il peut la vérifier. Même composant, même ORDRE.
+
+#### Une cible de 24 points qui ouvre une page entière
+
+La ligne du chantier sur la carte mesurait **332 × 24**. C'est une cible
+qui ouvre une PAGE : la règle du lot 5 vaut pour elle. `minHeight: TOUCHE`,
+et **pas** `paddingVertical` — React Native aplatit par précision, la forme
+longue l'emporte. Mesurée après : **332 × 44**.
+
+#### Terminer un chantier se DÉFAIT
+
+Le bouton disparaissait une fois le chantier terminé : un appui par erreur,
+et plus aucune porte. Un seul bouton, qui bascule « Terminer » / « Rouvrir ».
+
+#### La couverture est le RÉSULTAT, pas le début
+
+Personne n'a envie de commencer par une toiture arrachée. C'est la
+publication la plus RÉCENTE qui porte une image. Et le déclencheur
+**RECALCULE** au lieu d'incrémenter : une publication peut changer de
+chantier, disparaître, ou arriver avec une date antérieure. Vérifié dans
+les deux sens — on retire la dernière, la couverture redescend.
+
+#### Ce qui n'a PAS de rattrapage, et c'est voulu
+
+Aucune publication existante n'appartient à un chantier, et **personne ne
+peut deviner lesquelles vont ensemble**. Les deux publications du 21/09 à
+Lambesc sont probablement le même travail — « probablement » n'est pas une
+base pour écrire dans la base de quelqu'un. Même règle que
+`completerLieu()`.
+
+#### En démonstration, créer un chantier FAISAIT quelque chose… non
+
+`creerChantier` valait `noop` : on tapait un nom, on validait, la feuille
+se refermait et **il ne se passait rien**. L'écran ne mentait pas, il se
+taisait — et le mécanisme ne s'essayait nulle part sans fichier `.env`. Il
+vit maintenant en mémoire, **et refuse le doublon du même côté qu'en base**
+(`lower(btrim(titre))`).
+
+Même famille : en démonstration les étapes sortaient dans l'ordre du
+FICHIER — donc la dernière d'abord, puisque le fil range du plus récent au
+plus ancien. Elles portent une vraie date (`publieLe`) et se trient comme
+la requête.
+
+#### `mes_donnees()` est la DERNIÈRE fonction du fichier, pour de bon
+
+PostgreSQL contrôle le corps d'une fonction SQL à sa CRÉATION : elle ne
+peut pas nommer une table née plus bas. **Toute section qui ajoute une
+table ajoute sa ligne dans l'export RGPD**, et cet export reste à la fin.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un PostgreSQL 16 neuf, les douze cas
+de `supabase/essais-section-36.sql`, les 36 contrôles, `npx expo export
+--platform ios`. Le contrôle a été éprouvé **en cassant ce qu'il
+surveille** : sept défauts remis à la main, les sept refusés.
+
+Puis sur la VRAIE base, migration appliquée par le connecteur (aucun ordre
+qui commence par `drop` — les politiques sont créées sous condition dans un
+bloc `do`), avec deux comptes professionnels jetables supprimés dans la
+même session (0 restant, base revenue à 13 comptes / 7 fiches /
+16 publications / 0 chantier) :
+
+| | résultat |
+|---|---|
+| A crée un chantier | 201 |
+| le même nom une seconde fois | **23505** |
+| B le crée au nom de A | **42501** |
+| un titre vide | **23514** |
+| trois étapes publiées | compteur **3**, couverture = la plus récente |
+| B accroche sa publication au chantier de A | **OP002**, message en français |
+| la bande vue par B, puis par un visiteur | 1 chantier, 3 publications |
+| après que B a bloqué A | **0 chantier lu** |
+| A termine puis rouvre | `termine` → `en_cours` |
+| B tente de terminer | **0 ligne modifiée** |
+| l'export RGPD de A | son chantier, et lui seul |
+| A supprime son chantier | **3 publications restantes, 3 décousues** |
+| ranger une publication en ligne | 3 / 3 cousues, compteur à 3 |
+| …et `media` / `likes_count` | **intacts** |
+| **au navigateur** : la ligne du fil | **332 × 44**, « Voir le chantier Toiture Charleval, 3 publications » |
+| ouvrir le chantier | **une seule requête** |
+| la page | 3 étapes dans l'ordre, « Bientôt : le récit », bouton « Terminer » |
+| ma fiche | « Mes chantiers » avant le portfolio, carte **164 × 164**, pastille « En cours » |
+| créer un chantier depuis l'écran Publier | `POST /rest/v1/chantiers → 201`, choisi aussitôt |
+| publier dedans | `POST /rest/v1/posts → 201`, compteur à **1** |
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone — ni le
+défilement de la bande au doigt, ni le ressenti. Aucun artisan réel n'a
+encore de chantier : la vraie base en compte **0**. Et le temps réel ne
+s'intercepte pas depuis ce conteneur (`ERR_TUNNEL_CONNECTION_FAILED` sur le
+WebSocket, attendu).
+
+#### Ce qui vient ensuite, et qui est le but
+
+**Le récit écrit par l'IA.** La place est là, vide, et elle ne s'affiche
+qu'à l'artisan — personne d'autre n'a besoin de savoir qu'une
+fonctionnalité manque. Elle se construira avec le journal d'audit et les
+permissions du §21, comme l'exige ce document : « ne plus ajouter d'action
+IA à la main dans la fonction Edge `ai` ».
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

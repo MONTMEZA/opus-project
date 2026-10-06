@@ -92,6 +92,7 @@ export default function CreerScreen({
   createMetier, setCreateMetier, createVille, setCreateVille,
   createDestination, setCreateDestination,
   createConseil, setCreateConseil,
+  mesChantiers = [], createChantier, setCreateChantier, onNouveauChantier,
   medias, setMedias, musique, setMusique,
   envoi, erreur, onPublish, onErreur,
 }) {
@@ -430,6 +431,68 @@ export default function CreerScreen({
         </Pressable>
       )}
 
+      {/* LE CHANTIER (section 36). Il ne s'affiche que pour ce qui part
+          dans le fil : une publication rangée au seul portfolio ne crée
+          AUCUNE ligne dans `posts`, donc elle ne peut rejoindre aucun
+          chantier. Même garde que la case « conseil » juste au-dessus —
+          une commande qui a l'air de servir et ne touche rien, c'est le
+          « bouton §18 ». */}
+      {dansLeFil && (
+        <>
+          <Text style={s.label}>Chantier (facultatif)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.types}>
+            {/* « Aucun » EN PREMIER, et sélectionné par défaut. La plupart
+                des publications n'appartiennent à rien, et la position de
+                repos doit être celle qu'on choisit le plus souvent. */}
+            <Pressable
+              style={[s.chantier, !createChantier && s.chantierOn]}
+              onPress={() => setCreateChantier(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Aucun chantier"
+              aria-selected={!createChantier}
+            >
+              <Text style={[s.chantierTexte, !createChantier && { color: '#fff' }]}>Aucun</Text>
+            </Pressable>
+
+            {/* ON NE RETAPE JAMAIS UN NOM. « Toiture Charleval » tapé deux
+                fois à un espace près, ce sont deux chantiers — la base le
+                refuse (index unique), mais c'est ici que ça se joue : on
+                CHOISIT dans la liste. */}
+            {mesChantiers.map((c) => {
+              const on = createChantier === c.id;
+              return (
+                <Pressable
+                  key={c.id}
+                  style={[s.chantier, on && s.chantierOn]}
+                  onPress={() => setCreateChantier(c.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Chantier ${c.titre}`}
+                  aria-selected={on}
+                >
+                  <Text style={[s.chantierTexte, on && { color: '#fff' }]} numberOfLines={1}>
+                    {c.titre}
+                  </Text>
+                </Pressable>
+              );
+            })}
+
+            <Pressable
+              style={[s.chantier, s.chantierNeuf]}
+              onPress={onNouveauChantier}
+              accessibilityRole="button"
+              accessibilityLabel="Créer un chantier"
+            >
+              <Plus size={12} color={C.accentTexte} />
+              <Text style={[s.chantierTexte, { color: C.accentTexte }]}>Nouveau</Text>
+            </Pressable>
+          </ScrollView>
+          <Text style={s.aide}>
+            Les publications d&apos;un même chantier se suivent : on les lit
+            comme une histoire, de la première à la dernière.
+          </Text>
+        </>
+      )}
+
       <Text style={s.label}>Métier</Text>
       <ChampMetier
         valeur={createMetier}
@@ -561,6 +624,20 @@ const s = StyleSheet.create({
     fontFamily: F.inter, fontSize: T.petit, color: C.muted,
     lineHeight: interligne(T.petit), marginTop: S.xs,
   },
+
+  /* Les puces de chantier : elles FLOTTENT et on appuie dessus, donc
+     elles s'arrondissent (voir « Les bords »). Les boutons de FORMAT
+     au-dessus gardent l'angle vif : ils forment une barre d'outils. */
+  chantier: {
+    flexDirection: 'row', alignItems: 'center', gap: S.xs,
+    maxWidth: 190, minHeight: TOUCHE,
+    paddingVertical: S.sm, paddingHorizontal: S.md,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+    borderRadius: R.gelule,
+  },
+  chantierOn: { backgroundColor: C.ink, borderColor: C.ink },
+  chantierNeuf: { borderColor: C.accent, borderStyle: 'dashed' },
+  chantierTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted },
 
   boutonsMedia: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   boutonTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.ink },

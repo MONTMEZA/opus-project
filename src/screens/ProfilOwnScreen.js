@@ -18,6 +18,7 @@ import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAut
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import ConseilsPro from '../components/ConseilsPro';
+import BandeChantiers from '../components/BandeChantiers';
 import FicheContactPro from '../components/FicheContactPro';
 import { BadgeCheck, Lock, ChevronRight, ShieldCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
@@ -93,6 +94,7 @@ export default function ProfilOwnScreen({
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
   onConfidentialite, admin = null, onAdmin,
+  mesChantiers = [], onOuvrirChantier,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -228,6 +230,19 @@ export default function ProfilOwnScreen({
         onAction={onEdit}
         style={{ marginHorizontal: 16, marginTop: 10 }}
       />
+
+      {/* MES chantiers, exactement comme les voient mes clients — c'est le
+          même composant ET le même ORDRE. Mesuré au navigateur : la bande
+          arrivait APRÈS le portfolio chez son auteur et AVANT sur la fiche
+          publique. Deux ordres pour une seule page, c'est la dérive que ce
+          projet traque depuis les voyants du 04/10 — et c'est l'auteur qui
+          ne verrait pas ce que voient ses clients. */}
+      {(mesChantiers || []).length > 0 && (
+        <>
+          <SectionLabel>Mes chantiers</SectionLabel>
+          <BandeChantiers chantiers={mesChantiers} onOuvrir={onOuvrirChantier} />
+        </>
+      )}
 
       <SectionLabel
         right={me.portfolio.length > 0

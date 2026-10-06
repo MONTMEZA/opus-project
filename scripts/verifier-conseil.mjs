@@ -100,8 +100,18 @@ verifier('…et elle DISPARAÎT quand la publication ne va qu\'au portfolio',
 verifier('`createPost` envoie la colonne',
   /conseil: !!conseil,/.test(api) && /conseil = false,/.test(api));
 
-verifier('…et `OpusApp` la lui passe',
-  /conseil: createConseil,\s*\}\);/.test(app));
+/* ON VISE L'APPEL, PAS LA LIGNE QUI LE SUIT. Le premier jet exigeait
+   `conseil: createConseil,` immédiatement suivi de `});` — donc il a
+   refusé le lot du chantier, qui a simplement ajouté un argument après.
+   Un contrôle qui vise une POSITION casse au lot suivant ; on vise ce que
+   l'appel contient. */
+{
+  const i = app.indexOf('api.createPost({');
+  const appel = i === -1 ? '' : app.slice(i, app.indexOf('});', i));
+  verifier('…et `OpusApp` la lui passe',
+    /conseil: createConseil,/.test(appel),
+    'elle doit partir dans l\'appel à `createPost`, pas ailleurs.');
+}
 
 verifier('la case se remet à faux après chaque publication',
   /setCreateConseil\(false\);/.test(app),

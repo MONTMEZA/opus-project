@@ -2904,8 +2904,24 @@ begin
      and auth.uid() = new.author_id
      and pg_trigger_depth() = 1
   then
-    -- tout revient à l'ancienne valeur, sauf le texte
-    new := jsonb_populate_record(new, to_jsonb(old) - 'texte');
+    /* TOUT revient à l'ancienne valeur, sauf le texte — et sauf
+       `chantier_id`, ajouté le 06/10/2026 avec la section 36.
+
+       CE VERROU A ÉTÉ TROUVÉ SUR LA VRAIE BASE, pas ici. Ranger une
+       publication déjà en ligne dans un chantier répondait `204` et ne
+       changeait RIEN : ce déclencheur remettait `chantier_id` à son
+       ancienne valeur, en silence. Et l'essai 10 de
+       `essais-section-36.sql` passait au vert, parce qu'il tournait sans
+       jeton — `auth.uid()` vide, donc le verrou ne s'applique pas. Un
+       essai qui ne prouve rien, cinquième fois dans ce projet.
+
+       Laisser passer `chantier_id` ne relâche rien : le déclencheur
+       `trg_chantier_du_post` (section 36.4) refuse déjà, avec le code
+       OP002, tout chantier qui n'appartient pas à l'auteur. Et c'est ce
+       qui rendra possible le lot « ranger mes anciennes publications » —
+       les seize déjà en base n'ont aucun chantier, et personne ne peut
+       deviner lesquelles vont ensemble. */
+    new := jsonb_populate_record(new, to_jsonb(old) - 'texte' - 'chantier_id');
 
     if new.texte is distinct from old.texte then
       /* Un commentaire auquel on a répondu ne se récrit plus. La
@@ -6130,13 +6146,340 @@ $$;
 revoke all on function public.enregistrer_vues(uuid[]) from public, anon;
 grant execute on function public.enregistrer_vues(uuid[]) to authenticated;
 
--- --------------------------------------------------------------------------
---  35.4 L'export RGPD doit les contenir
+
+-- ==========================================================================
+--  36. LE CHANTIER — coudre les publications ensemble — 05/10/2026
 --
---  « Ce que j'ai regardé » est une donnée personnelle sur MOI, donc elle
---  entre dans l'export de l'article 15. `mes_donnees()` est `security
---  invoker` : elle ne lit que ce que la politique « lecture mes vues »
---  laisse passer, c'est-à-dire mes lignes et rien d'autre.
+--  CE QU'UNE PHOTO DE CHANTIER FINI NE PEUT PAS FAIRE
+--  ---------------------------------------------------
+--  Elle se regarde UNE fois. On ne revient pas la voir. C'est pour ça qu'un
+--  fil d'artisans s'essouffle : chaque publication est un cul-de-sac.
+--
+--  Relevé sur la vraie base avant d'écrire une ligne — les neuf
+--  publications du propriétaire, le seul vrai artisan de cette base :
+--
+--      « Chantier fini, en photo. »          Lambesc,   21/09
+--      « Pose de l'isolation, avant le placo. » Lambesc, 21/09
+--      « Rénovation d'une toiture… »          Mallemort, 29/09
+--      « Réfection complète d'une toiture… »  Charleval, 02/10
+--      « Création d'une piscine… »            Rogne,     02/10
+--
+--  Deux choses en sortent, et la seconde décide de ce lot :
+--
+--    1. il publie surtout le RÉSULTAT, une publication par chantier ;
+--    2. **mais pas seulement** — le 21/09, « pose de l'isolation, avant le
+--       placo » puis « chantier fini » sont deux étapes du MÊME travail, et
+--       rien dans Opus ne dit qu'elles vont ensemble.
+--
+--  L'habitude n'est donc pas à créer, elle est à RANGER.
+--
+--  DEUX CHOSES S'APPELLENT « CHANTIER » DANS CE PROJET
+--  ---------------------------------------------------
+--  Et les confondre serait l'erreur de conception de ce lot.
+--
+--    - le §12 du cahier des charges : le DOSSIER DE GESTION — client,
+--      devis, montant, acompte, matériaux, temps passé, équipe,
+--      sous-traitants, dépenses, factures, marge. Phase 6, et il force la
+--      question « entreprises et rôles », qui est LE point dur du projet ;
+--    - ici : l'HISTOIRE d'un chantier dans le fil. Un titre, une commune,
+--      des dates, et des publications cousues ensemble.
+--
+--  > **Celui-ci est le petit, et il est fait pour être ABSORBÉ.** Le jour
+--  > où le §12 arrive, il reprend cette table et lui ajoute le reste. Pas
+--  > l'inverse. D'où ce qu'on n'écrit PAS ici : aucun client, aucun
+--  > montant, aucune marge.
+--
+--  ET LE NOM NE DOIT PAS ÊTRE CELUI DU CLIENT
+--  -------------------------------------------
+--  Le propriétaire a proposé « Chantier Martin ». Or ce titre s'affiche
+--  PUBLIQUEMENT, sur chaque publication du chantier : « Monsieur Martin, à
+--  Charleval, a fait refaire sa toiture. » Ce client n'a jamais accepté ça
+--  et n'est même pas sur Opus.
+--
+--  C'est la règle du 21/09 — ce qui concerne des TIERS ne se publie pas à
+--  la légère. La base ne peut pas deviner un nom de famille ; l'ÉCRAN le
+--  dit, sous le champ, et propose « Toiture Charleval ». Le jour où le §12
+--  arrive, « Martin » sera à sa place : dans le dossier, en privé.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  36.1 L'APPARTENANCE PASSE PAR UNE FONCTION — et c'est ici qu'elle naît
+--
+--  `docs/LECTURE-CAHIER-DES-CHARGES.md` l'attend depuis le 04/10 :
+--
+--    « Pour tout ce qui sera construit à partir de maintenant — chantiers,
+--      devis, factures, clients —, l'appartenance passe par une FONCTION,
+--      jamais par une comparaison écrite à la main. Elle naîtra avec la
+--      première table de chantier : une fonction que personne n'appelle
+--      serait le "bouton §18" retiré avant d'être livré. »
+--
+--  Nous y sommes. Elle rend AUJOURD'HUI exactement `auth.uid() = p_pro`,
+--  parce que le propriétaire a tranché le 04/10 : **un compte = un artisan
+--  = une entreprise**, et une fiche professionnelle EST une entreprise.
+--
+--  > **Ce n'est donc pas une couche inutile : c'est le seul endroit à
+--  > changer** le jour où un patron voudra donner un accès à ses
+--  > compagnons. Sans elle, ce serait les 56 règles qui disent
+--  > `auth.uid() = …` dans ce fichier. Les 56 ne bougent pas — avec « un
+--  > compte = une entreprise », elles sont justes.
+--
+--  `security invoker` et aucune lecture de table : elle ne donne accès à
+--  rien, et elle reste donc exécutable par `authenticated` — la règle du
+--  30/09, apprise avec `horaires_valides()` révoquée « par prudence », qui
+--  avait fait échouer TOUS les enregistrements d'horaires.
+-- --------------------------------------------------------------------------
+create or replace function public.est_mon_entreprise(p_entreprise uuid)
+returns boolean
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select p_entreprise is not null and auth.uid() = p_entreprise
+$$;
+
+revoke all on function public.est_mon_entreprise(uuid) from public;
+grant execute on function public.est_mon_entreprise(uuid) to anon, authenticated;
+
+comment on function public.est_mon_entreprise(uuid) is
+  'Est-ce que cette entreprise est la mienne ? Rend aujourd''hui '
+  'auth.uid() = p_entreprise, parce qu''un compte EST une entreprise '
+  '(décision du 04/10/2026). Le jour où un salarié aura son propre accès, '
+  'c''est CETTE fonction qui change, et elle seule. Section 36.1.';
+
+-- --------------------------------------------------------------------------
+--  36.2 La table
+-- --------------------------------------------------------------------------
+create table if not exists public.chantiers (
+  id          uuid primary key default gen_random_uuid(),
+  pro_id      uuid not null references public.professional_profiles(id) on delete cascade,
+  titre       text not null,
+  ville       text,
+  statut      text not null default 'en_cours' check (statut in ('en_cours', 'termine')),
+  /* Tenus par un déclencheur, comme `likes_count` et `nb_reponses` : la
+     bande de la fiche les affiche sans aller chercher les publications. */
+  nb_publications int not null default 0,
+  couverture  text,
+  debut       timestamptz,
+  fin         timestamptz,
+  created_at  timestamptz not null default now(),
+  constraint chantier_titre_non_vide check (btrim(titre) <> ''),
+  constraint chantier_titre_court    check (char_length(titre) <= 80)
+);
+
+/* DEUX FOIS LE MÊME NOM NE FONT QU'UN SEUL CHANTIER.
+   C'est la garde la plus importante de ce lot. Le propriétaire décrivait
+   ainsi son usage : « je remets chantier Martin ». Or « Toiture
+   Charleval », « toiture charleval » et « Toiture Charleval » avec une
+   espace à la fin sont TROIS chaînes différentes — donc trois chantiers
+   d'une publication chacun, et rien à l'écran pour dire pourquoi.
+
+   L'écran propose la liste des chantiers en cours, donc on n'y retape
+   jamais un nom. Cet index est ce qui tient la promesse même quand
+   l'appel vient d'ailleurs. */
+create unique index if not exists idx_chantiers_titre_unique
+  on public.chantiers (pro_id, lower(btrim(titre)));
+
+create index if not exists idx_chantiers_pro
+  on public.chantiers (pro_id, created_at desc);
+
+alter table public.chantiers enable row level security;
+
+alter table public.posts add column if not exists chantier_id uuid
+  references public.chantiers(id) on delete set null;
+
+/* `on delete set null` et pas `cascade` : supprimer un chantier défait la
+   couture, il ne détruit pas neuf publications avec leurs j'aime et leurs
+   commentaires. */
+create index if not exists idx_posts_chantier
+  on public.posts (chantier_id, created_at) where chantier_id is not null;
+
+-- --------------------------------------------------------------------------
+--  36.3 Qui lit, qui écrit
+--
+--  Les deux politiques de lecture, comme pour les publications (section 18)
+--  et pour la raison écrite là-bas : une policy qui appelle une fonction
+--  interdite à l'appelant ÉCHOUE au lieu de filtrer, donc le visiteur non
+--  connecté a sa propre règle, qui n'appelle pas `est_masque()`. Il n'a
+--  bloqué personne : il n'a rien à masquer.
+--
+--  Un chantier est PUBLIC, comme une publication : c'est la vitrine de
+--  l'artisan, elle est faite pour être vue. Ce n'est pas une demande de
+--  particulier (section 30), qui, elle, s'est refermée sur les pros.
+-- --------------------------------------------------------------------------
+drop policy if exists "lecture chantiers" on public.chantiers;
+create policy "lecture chantiers" on public.chantiers
+  for select to authenticated using (not public.est_masque(pro_id));
+
+drop policy if exists "lecture chantiers visiteur" on public.chantiers;
+create policy "lecture chantiers visiteur" on public.chantiers
+  for select to anon using (true);
+
+/* ET C'EST ICI QUE LA FONCTION SERT. Écrire `auth.uid() = pro_id` aurait
+   marché à l'identique aujourd'hui — et aurait été une 57e règle à
+   retrouver le jour où la réponse change. */
+drop policy if exists "ecriture mes chantiers" on public.chantiers;
+create policy "ecriture mes chantiers" on public.chantiers
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+-- --------------------------------------------------------------------------
+--  36.4 Une publication ne rejoint QUE mon chantier
+--
+--  La politique d'écriture des publications dit `auth.uid() = author_id`.
+--  Elle ne regarde pas `chantier_id` — rien n'empêcherait donc d'accrocher
+--  sa publication au chantier de quelqu'un d'autre, et d'apparaître dans
+--  son dossier.
+--
+--  > **Un déclencheur DIT pourquoi, une politique rend « 0 ligne » sans un
+--  > mot.** C'est la leçon du 05/10 avec la fiche professionnelle : on
+--  > refuse le geste avec une phrase, on ne le contourne pas en silence.
+--
+--  `create or replace trigger` (PostgreSQL 14+) : le connecteur Supabase
+--  refuse tout ordre qui commence par `drop` (section 24), et il n'existe
+--  ainsi aucun instant où le verrou serait absent.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_chantier_du_post()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare proprietaire uuid;
+begin
+  if new.chantier_id is null then return new; end if;
+
+  select c.pro_id into proprietaire
+    from public.chantiers c where c.id = new.chantier_id;
+
+  if proprietaire is null or proprietaire is distinct from new.author_id then
+    raise exception
+      'Cette publication ne peut pas rejoindre ce chantier : il appartient à quelqu''un d''autre.'
+      using errcode = 'OP002';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_chantier_du_post
+  before insert or update of chantier_id, author_id on public.posts
+  for each row execute function public.tient_le_chantier_du_post();
+
+-- --------------------------------------------------------------------------
+--  36.5 Les compteurs du chantier
+--
+--  LA COUVERTURE EST LE RÉSULTAT, PAS LE DÉBUT. Personne n'a envie de
+--  commencer par une toiture arrachée : on veut voir ce que c'est devenu,
+--  et ensuite comment on y est arrivé. C'est donc la publication la plus
+--  RÉCENTE qui porte une image — et pas la première.
+--
+--  Et le déclencheur RECALCULE au lieu d'incrémenter : une publication
+--  peut changer de chantier, être supprimée, ou arriver avec une date
+--  antérieure. Trois compteurs incrémentés à la main se seraient
+--  désalignés sans que rien ne le signale.
+-- --------------------------------------------------------------------------
+create or replace function public.recalcule_chantier(p_chantier uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.chantiers c set
+    nb_publications = (select count(*) from public.posts p where p.chantier_id = c.id),
+    debut = (select min(p.created_at) from public.posts p where p.chantier_id = c.id),
+    fin   = (select max(p.created_at) from public.posts p where p.chantier_id = c.id),
+    couverture = (
+      select p.media from public.posts p
+       where p.chantier_id = c.id and p.media is not null
+       order by p.created_at desc limit 1
+    )
+  where c.id = p_chantier
+$$;
+
+create or replace function public.maj_chantier()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') and old.chantier_id is not null then
+    perform public.recalcule_chantier(old.chantier_id);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') and new.chantier_id is not null then
+    perform public.recalcule_chantier(new.chantier_id);
+  end if;
+  return null;
+end;
+$$;
+
+create or replace trigger trg_maj_chantier
+  after insert or delete or update of chantier_id, media, created_at on public.posts
+  for each row execute function public.maj_chantier();
+
+-- --------------------------------------------------------------------------
+--  36.6 La bande de la fiche — une seule requête
+--
+--  `security invoker` : la lecture passe donc par « lecture chantiers »,
+--  donc par le blocage. Un artisan qu'on a bloqué n'a pas de chantiers.
+--
+--  ET ELLE REND LES CHANTIERS VIDES AUSSI. Un chantier créé puis dont la
+--  publication a été supprimée afficherait sinon une bande avec un trou —
+--  c'est à l'ÉCRAN de décider de le cacher, pas à la base de mentir sur
+--  ce qu'elle contient.
+-- --------------------------------------------------------------------------
+create or replace function public.chantiers_du_pro(p_pro uuid, p_limite int default 20)
+returns setof public.chantiers
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select c.* from public.chantiers c
+   where c.pro_id = p_pro
+   order by (c.statut = 'en_cours') desc, coalesce(c.fin, c.created_at) desc
+   limit least(coalesce(p_limite, 20), 50)
+$$;
+
+revoke all on function public.chantiers_du_pro(uuid, int) from public;
+grant execute on function public.chantiers_du_pro(uuid, int) to anon, authenticated;
+
+/* L'ORDRE N'EST PAS LA DATE SEULE : les chantiers EN COURS passent devant.
+   C'est la même règle que `mes_demandes_recues()` du 05/10 — ce qui
+   demande encore quelque chose passe avant ce qui est réglé. Un chantier
+   en cours est celui dont la suite va arriver, donc celui qu'on suit. */
+
+-- --------------------------------------------------------------------------
+--  36.7 Le rattrapage — il n'y en a pas, et c'est voulu
+--
+--  Aucune publication existante n'appartient à un chantier, et PERSONNE ne
+--  peut deviner lesquelles vont ensemble. Les deux publications du 21/09 à
+--  Lambesc sont probablement le même travail « probablement » n'est pas
+--  une base pour écrire dans la base de quelqu'un.
+--
+--  > **On ne devine jamais à la place de celui qui a écrit.** Même règle
+--  > que `completerLieu()` du 04/10, qui rend le lieu tel quel plutôt que
+--  > de placer une annonce dans la mauvaise commune.
+--
+--  Le propriétaire pourra rattacher ses anciennes publications à la main le
+--  jour où il le voudra — ce qui demandera un écran, donc un autre lot.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  37. L'EXPORT RGPD — et pourquoi il est le DERNIER
+--
+--  « Ce que j'ai regardé » et « mes chantiers » sont des données
+--  personnelles sur MOI, donc elles entrent dans l'export de l'article 15.
+--  `mes_donnees()` est `security invoker` : elle ne lit que ce que les
+--  politiques laissent passer, c'est-à-dire mes lignes et rien d'autre.
+--
+--  Et cette fonction est la DERNIÈRE du fichier, pour de bon : PostgreSQL
+--  contrôle le corps d'une fonction SQL à sa CRÉATION, donc elle ne peut
+--  pas nommer une table née plus bas. Tant qu'elle vivait en section 13,
+--  chaque table ajoutée ensuite était un oubli silencieux — `post_vues`
+--  l'a rendu impossible, `chantiers` le confirme. **Toute section qui
+--  ajoute une table ajoute sa ligne ICI.**
 --
 --  Et c'est écrit ICI plutôt qu'en section 13 pour la raison déjà apprise
 --  le 05/10 avec `cree_fiche_utilisateur` : **une règle ne s'écrit qu'à UN
@@ -6180,7 +6523,8 @@ as $$
     'signalements_deposes',
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.signalements x where x.auteur_id = auth.uid()), '[]'::jsonb),
     'publications_vues',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.post_vues x where x.spectateur_id = auth.uid()), '[]'::jsonb)
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.post_vues x where x.spectateur_id = auth.uid()), '[]'::jsonb),
+    'chantiers', coalesce((select jsonb_agg(to_jsonb(x)) from public.chantiers x where x.pro_id = auth.uid()), '[]'::jsonb)
   )
 $$;
 

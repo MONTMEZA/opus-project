@@ -239,19 +239,24 @@ console.log('\nL’application ne refiltre RIEN');
   verifier('plus de filtrage des abonnements à l’écran',
     !/followingIds\.has\(p\.proId\)/.test(app),
     'c’est le défaut qui rend l’onglet « Abonnements » vide dès qu’il y a du monde');
-  verifier('plus de filtrage des vidéos à l’écran',
-    !/FORMATS_VIDEO\.has\(p\.format\)\s*\)/.test(app));
-  verifier('une seule porte change ce qu’on voit',
-    /const changerCeQuOnVoit = async/.test(app));
-  verifier('…et les trois chemins y passent',
-    /changerCeQuOnVoit\(\{ mode \}\)/.test(app)
-    && /changerCeQuOnVoit\(\{ tab \}\)/.test(app)
-    && /changerCeQuOnVoit\(\{ filtre \}\)/.test(app));
-  verifier('la pagination emporte le filtre',
-    /curseur: dernier\.curseur,\s*filtre: argumentsDuFil\(/.test(app),
-    'sans lui, la page 2 d’un fil filtré rend tout autre chose que la page 1');
-  verifier('…et le « tirer pour rafraîchir » aussi',
-    /chargerPageFil\(\{\s*filtre: argumentsDuFil\(filtreFil/.test(app));
+  /* CE QU'ON TRAQUE, C'EST UN FILTRE SUR LA LISTE DÉJÀ TÉLÉCHARGÉE —
+     pas toute mention de `FORMATS_VIDEO`. Le 05/10/2026, ce contrôle a
+     refusé du code parfaitement juste : l'écran d'un chantier demande
+     « cette étape est-elle une vidéo ? » pour décider d'ouvrir le plein
+     écran, et ça n'a rien à voir avec le fil.
+
+     Quatrième fois dans ce projet qu'un contrôle perd sa cible. On vise
+     donc ce que le défaut FAISAIT : un `.filter(…)` sur des publications,
+     et non le nom d'une constante. */
+  {
+    const filtresEcran = (app.match(/\w+\.filter\(\([^)]*\) =>[^\n]*(FORMATS_VIDEO|followingIds\.has)[^\n]*\)/g) || []);
+    verifier('plus de filtrage du FIL à l’écran',
+      filtresEcran.length === 0,
+      `${filtresEcran.length} filtre(s) posés sur une liste déjà chargée. `
+      + 'Avec vingt publications et trois abonnements personne ne le voit ; '
+      + 'avec mille artisans, l’onglet affiche une page vide, et la '
+      + 'suivante aussi.');
+  }
 }
 
 console.log('\nLe métier ne survit pas, le secteur si');

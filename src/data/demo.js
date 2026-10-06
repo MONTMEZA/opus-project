@@ -5,6 +5,18 @@
  * et de seed pour la base (voir supabase/seed.sql).
  */
 
+/* UNE DATE RELATIVE, ET ELLE EST DÉCLARÉE TOUT EN HAUT.
+   Elle vivait au milieu du fichier, juste au-dessus de son premier
+   appelant. Le 05/10/2026, en posant les chantiers de démonstration plus
+   haut, elle devenait lue AVANT sa déclaration — c'est-à-dire un
+   `ReferenceError` au chargement du module, donc un écran blanc. Ce projet
+   l'a déjà connu deux fois (`noop`, puis les trois voyants), et les deux
+   fois ni le linter ni `expo export` n'avaient rien dit.
+
+   Une fonction utilitaire se déclare en haut : il n'y a alors plus de
+   « plus haut » possible. */
+const ilYA = (heures) => new Date(Date.now() - heures * 3600e3).toISOString();
+
 
 export const proProfiles = {
   1: { id: 1, nom: 'Karim Belaïd', entreprise: 'Belaïd Maçonnerie', metier: 'macon',
@@ -183,6 +195,7 @@ export function avgReviews(pro) {
    éviter. L'incrément se vérifie sur la vraie base, et nulle part ailleurs. */
 export const initialPosts = [
   { id: 1, type: 'post', format: 'photo', proId: 1, time: 'Il y a 2 h',
+    chantierId: 'ch-villa', publieLe: ilYA(2),
     texte: "Fondations coulées ce matin, dalle prévue vendredi. Chantier villa R+1.",
     media: '#3a3a38,#8a8578', likes: 214, vues: 3120, liked: false,
     comments: [
@@ -228,8 +241,47 @@ export const initialPosts = [
     medias: ['#2f4b3a,#6a9a7a', '#1b4b6b,#4d7f9e', '#4b4b2f,#9a9a5a'],
     musique: null, likes: 96, vues: 1310, liked: false, comments: [] },
   { id: 5, type: 'post', format: 'avantapres', proId: 5, time: 'Il y a 2 j',
+    chantierId: 'ch-toiture', publieLe: ilYA(2 * 24),
     texte: "Charpente traditionnelle posée en 3 jours, ossature chêne massif.",
     media: '#4b4b2f,#9a9a5a', likes: 176, vues: 2080, liked: false, comments: [] },
+
+  /* LE CHANTIER DU PRO DE DÉMONSTRATION — deux étapes de plus, pour qu'il
+     en ait TROIS. En dessous de trois, la place du récit ne s'affiche pas,
+     et c'est la seule fiche qu'on puisse ouvrir en tant qu'auteur sans
+     fichier `.env` : sans ces deux lignes, ce bloc n'était visible nulle
+     part. Les textes sont ceux qu'un MAÇON écrirait, puisque c'est son
+     métier — « terrassement », « élévation des murs ». */
+  { id: 13, type: 'post', format: 'photo', proId: 1, time: 'Il y a 3 j',
+    chantierId: 'ch-villa', publieLe: ilYA(3 * 24),
+    texte: "Terrassement terminé. Le sol est bon, pas besoin de reprise en sous-œuvre.",
+    media: '#6b4226,#b98255', likes: 63, vues: 940, liked: false, comments: [] },
+  { id: 14, type: 'post', format: 'photo', proId: 1, time: 'Il y a 1 j',
+    chantierId: 'ch-villa', publieLe: ilYA(24),
+    texte: "Semelles filantes ferraillées et coffrées. On coule dès que le contrôle est passé.",
+    media: '#3a3a38,#8a8578', likes: 88, vues: 1180, liked: false, comments: [] },
+
+  /* UN CHANTIER RACONTÉ EN QUATRE ÉTAPES — ajouté le 05/10/2026 avec la
+     section 36. Sans lui, ni la bande de la fiche, ni la page du chantier,
+     ni la ligne sous une publication ne se vérifieraient ici : la vraie
+     base n'en contient aucun, et on ne livre pas un écran qu'on n'a
+     jamais vu.
+
+     Les textes sont CEUX QU'UN COUVREUR ÉCRIRAIT — « dépose de la
+     couverture », « pose des chevrons ». C'est exactement la matière dont
+     l'histoire écrite aura besoin plus tard : des étapes nommées, dans
+     l'ordre. Un « Ggggggg » ne raconterait rien. */
+  { id: 10, type: 'post', format: 'photo', proId: 5, time: 'Il y a 6 j',
+    chantierId: 'ch-toiture', publieLe: ilYA(6 * 24),
+    texte: "Dépose de l'ancienne couverture. Les tuiles réutilisables sont mises de côté.",
+    media: '#6b4226,#b98255', likes: 54, vues: 810, liked: false, comments: [] },
+  { id: 11, type: 'post', format: 'photo', proId: 5, time: 'Il y a 5 j',
+    chantierId: 'ch-toiture', publieLe: ilYA(5 * 24),
+    texte: "Pose des chevrons neufs en douglas. La charpente était saine, on a gardé les pannes.",
+    media: '#4b4b2f,#9a9a5a', likes: 71, vues: 1040, liked: false, comments: [] },
+  { id: 12, type: 'post', format: 'photo', proId: 5, time: 'Il y a 4 j',
+    chantierId: 'ch-toiture', publieLe: ilYA(4 * 24),
+    texte: "Écran sous-toiture et liteaux. C'est lui qui protège de la condensation.",
+    media: '#2f4b3a,#6a9a7a', likes: 48, vues: 760, liked: false, comments: [] },
 
   /* DEUX CONSEILS, ET LES DEUX CAS QUI COMPTENT — ajoutés le 05/10/2026
      avec l'étiquette (section 34). Sans eux, ni le bandeau du fil, ni le
@@ -254,6 +306,26 @@ export const initialPosts = [
       + "pas, il gèle. Et au-dessus de 30 °C, il faut l'arroser pendant trois "
       + "jours sinon il fissure. Le thermomètre fait partie des outils.",
     media: null, likes: 263, vues: 4410, liked: false, comments: [] },
+];
+
+/**
+ * LES CHANTIERS DE DÉMONSTRATION (section 36).
+ *
+ * `nbPublications` et `couverture` sont RECOPIÉS ici alors qu'en base ils
+ * sont tenus par un déclencheur. C'est volontaire et c'est borné : en mode
+ * démonstration il n'y a pas de base pour les calculer, et une bande qui
+ * afficherait « 0 publication » ne montrerait pas ce qu'on veut vérifier.
+ * `npm run verifier-chantier` recompte depuis `initialPosts` et refuse
+ * qu'ils divergent — sinon ces deux nombres deviendraient faux au premier
+ * exemple ajouté.
+ */
+export const initialChantiers = [
+  { id: 'ch-toiture', proId: 5, titre: 'Toiture Charleval', ville: 'Charleval (13)',
+    statut: 'termine', nbPublications: 4, couverture: '#4b4b2f,#9a9a5a',
+    debut: ilYA(6 * 24), fin: ilYA(2 * 24) },
+  { id: 'ch-villa', proId: 1, titre: 'Villa R+1 Marseille', ville: 'Marseille (13)',
+    statut: 'en_cours', nbPublications: 3, couverture: '#3a3a38,#8a8578',
+    debut: ilYA(3 * 24), fin: ilYA(2) },
 ];
 
 export const initialConversations = [
@@ -281,7 +353,6 @@ export const initialNotifications = [
    serait « nouvelle » le premier jour puis plus jamais. Le mode démo doit
    montrer le mécanisme, sinon personne ne le voit jamais fonctionner —
    celui qui lance Opus sans fichier `.env` n'a que lui. */
-const ilYA = (heures) => new Date(Date.now() - heures * 3600e3).toISOString();
 
 export const initialDemandes = [
   { id: 1, auteurId: 'p-camille', auteur: 'Camille R.', metier: 'carreleur', ville: 'Toulouse (31)',

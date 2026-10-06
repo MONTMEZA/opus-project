@@ -5,7 +5,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import {
-  C, F, T, S, R, SH, interligne, APPUI, viser, CARTE,
+  C, F, T, S, R, SH, interligne, APPUI, viser, TOUCHE, CARTE,
 } from '../theme';
 import {
   Gradient, AvatarSuivre, BtnMain, BtnMini, IconBtn,
@@ -14,7 +14,7 @@ import Commentaires, { nbCommentairesDe } from './Commentaires';
 import { nomMetier } from '../lib/metiers';
 import {
   BadgeCheck, EyeOff, Heart, MessageSquare, Share2, Bookmark,
-  MessageCircle, Phone, FileText, User, Maximize, Flag, Lightbulb, Volume2,
+  MessageCircle, Phone, FileText, User, Maximize, Flag, Lightbulb, Volume2, Layers,
 } from './icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Media, { EtiquetteVideo } from './Media';
@@ -34,6 +34,7 @@ const HAUTEUR_BARRE = 56;
    n'ont pas changé d'un pixel. */
 const PostCard = React.memo(function PostCard({
   post, pro, pros = {}, following, actif = false,
+  chantier = null, onOuvrirChantier,
   onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
@@ -188,6 +189,31 @@ const PostCard = React.memo(function PostCard({
           <Lightbulb size={12} color={C.surface} />
           <Text style={s.conseilTexte}>Conseil de pro</Text>
         </View>
+      )}
+
+      {/* LA LIGNE DU CHANTIER (section 36). Elle ne s'affiche que si le
+          titre est CONNU : la publication ne porte que l'identifiant, et
+          le titre vient du dictionnaire rempli par `chantiersDeCesPosts`.
+          Afficher « Chantier » sans son nom ne dirait rien, et un nom
+          recopié sur la publication serait faux le jour d'un renommage. */}
+      {!!chantier && (
+        <Pressable
+          onPress={onOuvrirChantier ? () => onOuvrirChantier(chantier) : null}
+          disabled={!onOuvrirChantier}
+          hitSlop={viser(32)}
+          accessibilityRole="button"
+          accessibilityLabel={`Voir le chantier ${chantier.titre}, ${
+            chantier.nbPublications} publications`}
+          style={({ pressed }) => [s.chantier, pressed && APPUI.discret]}
+        >
+          <Layers size={12} color={C.accentTexte} />
+          <Text style={s.chantierTexte} numberOfLines={1}>
+            {chantier.titre}
+          </Text>
+          <Text style={s.chantierNombre}>
+            · {chantier.nbPublications} publication{chantier.nbPublications > 1 ? 's' : ''}
+          </Text>
+        </Pressable>
       )}
 
       <Text style={s.postText}>{post.texte}</Text>
@@ -428,6 +454,22 @@ const s = StyleSheet.create({
     paddingVertical: S.xs, paddingHorizontal: S.sm,
   },
   conseilTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surface },
+
+  /* La ligne du chantier : au-dessus du texte, discrète, et c'est une
+     ligne de STRUCTURE — angle vif, pas une pastille. Elle dit « ceci
+     fait partie d'une suite », elle ne réclame pas qu'on appuie. */
+  chantier: {
+    flexDirection: 'row', alignItems: 'center', gap: S.xs,
+    marginHorizontal: S.md, marginTop: S.sm,
+    paddingHorizontal: S.sm,
+    /* 44 points, et pas `paddingVertical` : mesuré au navigateur, la ligne
+       faisait 332 × 24 — c'est une cible qui ouvre une PAGE ENTIÈRE, elle
+       ne peut pas être plus fine qu'un doigt. La règle du lot 5. */
+    minHeight: TOUCHE,
+    backgroundColor: C.bg, borderLeftWidth: 2, borderLeftColor: C.accent,
+  },
+  chantierTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accentTexte, flexShrink: 1 },
+  chantierNombre: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, flexShrink: 0 },
 
   avantApres: { flexDirection: 'row', gap: 2 },
   etiquetteAA: {

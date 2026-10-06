@@ -6,7 +6,7 @@
  * puis on écrit dans Supabase en arrière-plan via src/lib/api.js.
  * Sans .env, l'écriture Supabase ne fait rien : l'app tourne en mode démo.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -29,6 +29,8 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import SqueletteFil from './components/Squelette';
 import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
+import ChantierScreen from './screens/ChantierScreen';
+import NouveauChantier from './components/NouveauChantier';
 import ProfilPublicScreen from './screens/ProfilPublicScreen';
 import ConfidentialiteScreen from './screens/ConfidentialiteScreen';
 import LegalScreen, { TITRES_LEGAUX } from './screens/LegalScreen';
@@ -126,6 +128,33 @@ export default function OpusApp() {
 
   const [pros, setPros] = useState({});
   const [posts, setPosts] = useState([]);
+  /* LES CHANTIERS (section 36), par identifiant. Un dictionnaire, comme
+     `pros` : la publication ne porte que l'identifiant, et c'est l'écran
+     qui a besoin du TITRE. Il se remplit de deux côtés — les chantiers des
+     publications affichées, et les miens, que je dois voir même quand ils
+     ne portent encore aucune publication. */
+  const [chantiers, setChantiers] = useState({});
+  const [chantierOuvert, setChantierOuvert] = useState(null);
+  const [publicationsChantier, setPublicationsChantier] = useState([]);
+  const [chantierCharge, setChantierCharge] = useState(false);
+  const [createChantier, setCreateChantier] = useState(null);
+  const [feuilleChantier, setFeuilleChantier] = useState(false);
+
+  /* RANGE DES CHANTIERS DANS LE DICTIONNAIRE, sans écraser les autres.
+     Déclarée ICI, au-dessus de tout ce qui l'appelle — le démarrage s'en
+     sert dès la première page du fil. Posée plus bas, c'était une
+     `const` lue avant sa déclaration : ce fichier a déjà livré un écran
+     blanc pour ça, deux fois, sans que le linter ni `expo export` ne
+     disent quoi que ce soit. */
+  const rangerChantiers = useCallback((liste) => {
+    if (!liste || liste.length === 0) return;
+    setChantiers((d) => {
+      const suite = { ...d };
+      liste.forEach((c) => { suite[c.id] = c; });
+      return suite;
+    });
+  }, []);
+
   const [followingIds, setFollowingIds] = useState(new Set());
   const [savedIds, setSavedIds] = useState(new Set());
   const [hiddenIds, setHiddenIds] = useState(new Set());
@@ -316,6 +345,12 @@ export default function OpusApp() {
       setPros(data.pros);
       setPosts(data.posts);
       setFinDuFil(!!data.finDuFil);
+      /* LES CHANTIERS DES PUBLICATIONS CHARGÉES — une seule requête pour
+         toute la page, et aucune tant qu'aucune publication n'appartient à
+         un chantier. On ne touche PAS à `fil_filtre()` : lui ajouter une
+         jointure voudrait dire changer sa signature, donc la surcharger, et
+         le fil tomberait sur « is not unique » (leçon du lot C). */
+      api.chantiersDeCesPosts(data.posts).then(rangerChantiers).catch(() => {});
       setConversations(data.conversations);
       setDemandes(data.demandes || []);
       setDemandesVuesLe(data.demandesVuesLe || null);
@@ -480,6 +515,123 @@ export default function OpusApp() {
 
   /** Mon compte professionnel : le mien s'il existe, sinon le premier de la liste. */
   const myProId = pros[api.getUserId()] ? api.getUserId() : Object.keys(pros)[0];
+
+  /**
+   * MES CHANTIERS EN COURS — ceux que l'écran de publication propose.
+   *
+   * Dérivés du dictionnaire, jamais recopiés dans un second état : deux
+   * listes pour une seule vérité finissent toujours par se contredire,
+   * c'est la leçon des voyants du 04/10.
+   */
+  const mesChantiers = useMemo(
+    () => Object.values(chantiers)
+      /* `String(…)` des DEUX côtés, et ce n'est pas de la prudence : en mode
+         démonstration `myProId` vient de `Object.keys(pros)[0]`, qui rend
+         TOUJOURS une chaîne, alors que les chantiers d'exemple portent un
+         identifiant numérique. Un `===` strict rendait donc une liste vide,
+         et le bloc « Mes chantiers » ne s'affichait JAMAIS sans fichier
+         `.env` — trouvé au navigateur, pas en relisant. `mesPublications`
+         tenait déjà cette garde. */
+      .filter((c) => String(c.proId) === String(myProId))
+      .sort((a, b) => (a.statut === 'en_cours' ? 0 : 1) - (b.statut === 'en_cours' ? 0 : 1)),
+    [chantiers, myProId],
+  );
+  const mesChantiersEnCours = mesChantiers.filter((c) => c.statut === 'en_cours');
+
+  /**
+   * LES CHANTIERS D'UN ARTISAN, à l'ouverture de sa fiche.
+   *
+   * Une requête de plus, et seulement quand on ouvre une fiche — pas au
+   * démarrage. La règle du fil : on ne télécharge pas cinq cents dossiers
+   * pour en regarder un.
+   */
+  const chargerChantiersDuPro = useCallback(async (proId) => {
+    if (!proId) return;
+    try { rangerChantiers(await api.chantiersDuPro(proId)); }
+    catch { /* la fiche reste utilisable sans sa bande */ }
+  }, [rangerChantiers]);
+
+  /**
+   * CRÉER UN CHANTIER, et le choisir aussitôt.
+   *
+   * L'enchaînement compte : on vient de le nommer parce qu'on s'apprête à
+   * publier dedans. Le laisser à « Aucun » obligerait à le rechoisir juste
+   * après, et c'est exactement le genre de pas de plus qu'on oublie.
+   */
+  const creerChantier = async ({ titre, ville }) => {
+    try {
+      const c = await api.creerChantier({ titre, ville });
+      if (c) {
+        rangerChantiers([c]);
+        setCreateChantier(c.id);
+      }
+      setFeuilleChantier(false);
+      showBanner(hasSupabase ? 'Chantier créé.' : 'Chantier créé (démonstration).');
+    } catch (e) {
+      showErreur(messageClair(e));
+    }
+  };
+
+  /**
+   * TERMINER UN CHANTIER, OU LE ROUVRIR — un seul chemin pour les deux.
+   *
+   * Il reste visible dans les deux cas : il cesse seulement d'être « en
+   * cours », donc l'écran de publication ne le propose plus. Et la bascule
+   * est volontaire : terminer d'un appui sans pouvoir revenir en arrière
+   * laisserait un chantier clos par erreur, sans aucune porte.
+   */
+  const basculerStatutChantier = async (chantier) => {
+    const vers = chantier.statut === 'en_cours' ? 'termine' : 'en_cours';
+    try {
+      const c = await api.changerStatutChantier(chantier.id, vers);
+      if (c) {
+        rangerChantiers([c]);
+        setChantierOuvert(c);
+      }
+      showBanner(vers === 'termine'
+        ? 'Chantier marqué terminé.'
+        : 'Chantier rouvert : il revient dans « en cours ».');
+    } catch (e) {
+      showErreur(messageClair(e));
+    }
+  };
+
+  /**
+   * OUVRIR UN CHANTIER. Les publications arrivent dans l'ordre où elles
+   * ont été faites — c'est le seul écran d'Opus qui remonte le temps à
+   * l'endroit, parce qu'une histoire ne se raconte pas à l'envers.
+   */
+  const ouvrirChantier = async (chantier) => {
+    if (!chantier) return;
+    setChantierOuvert(chantier);
+    setPublicationsChantier([]);
+    setChantierCharge(false);
+    setScreen('chantier');
+    try {
+      setPublicationsChantier(await api.publicationsDuChantier(chantier.id));
+    } catch (e) {
+      showErreur(messageClair(e));
+    } finally {
+      setChantierCharge(true);
+    }
+  };
+
+  /* MES CHANTIERS, dès que je suis identifié. Ils ne viennent pas du fil :
+     un chantier tout neuf, sans aucune publication, doit quand même
+     apparaître dans l'écran de publication — sinon on le crée et on ne le
+     retrouve pas. */
+  useEffect(() => {
+    if (!myProId || userType !== 'pro') return undefined;
+    /* `vivant` : si l'écran est démonté pendant la requête — on se
+       déconnecte, on ferme —, on ne pose plus rien. Poser un état après le
+       démontage ne casse rien de visible, et c'est exactement pour ça que
+       ça traîne longtemps avant d'être remarqué. */
+    let vivant = true;
+    api.chantiersDuPro(myProId)
+      .then((liste) => { if (vivant) rangerChantiers(liste); })
+      .catch(() => { /* la liste reste vide, on ne bloque pas l'écran */ });
+    return () => { vivant = false; };
+  }, [myProId, userType, rangerChantiers]);
 
   /** Ma photo, d'où qu'elle vienne : fiche pro pour un artisan, compte sinon. */
   const monAvatar = userType === 'pro' && pros[myProId]
@@ -909,6 +1061,14 @@ export default function OpusApp() {
     setScreen('profilPro');
     setOpenContactId(null);
 
+    /* LES CHANTIERS SE CHARGENT AVANT LA SORTIE ANTICIPÉE — et il a fallu
+       s'en apercevoir. Posés en dessous, ils n'étaient JAMAIS demandés en
+       mode démonstration, où `portfolioCharge` vaut vrai dès le départ : la
+       bande serait restée vide sur toutes les fiches, sans erreur et sans
+       que rien ne le dise. Ils ont leur propre requête, donc leur propre
+       raison de partir. */
+    chargerChantiersDuPro(proId);
+
     const connu = pros[proId];
     /* `portfolioCharge` distingue « pas encore demandé » de « demandé, et
        il est vide ». Sans lui, on redemanderait à chaque ouverture le
@@ -1329,6 +1489,10 @@ export default function OpusApp() {
              voulu. Une seule des deux gardes suffirait, et c'est justement
              pour ça qu'il y en a deux. */
           conseil: createConseil,
+          /* LE CHANTIER. Comme la case « conseil », il n'existe que pour
+             ce qui part dans le fil — une publication rangée au seul
+             portfolio ne crée aucune ligne dans `posts`. */
+          chantierId: createChantier,
         });
         if (row) id = row.id;
       }
@@ -1347,7 +1511,7 @@ export default function OpusApp() {
     if (versLeFil) {
       setPosts((ps) => [{
         id, type: 'post', format: createType, proId: myProId, time: "À l'instant",
-        conseil: createConseil,
+        conseil: createConseil, chantierId: createChantier,
         texte, media: couverture, medias: envoyes, musique: urlMusique, montageUrl,
         likes: 0, liked: false, comments: [],
       }, ...ps]);
@@ -1384,6 +1548,19 @@ export default function OpusApp() {
        publication sur la carte. Un champ qu'on retape est un champ
        qu'on finit par laisser vide. */
     setMedias([]); setMusique(null); setCreateConseil(false);
+    /* LE CHANTIER RESTE CHOISI, à la différence de la case « conseil ».
+       On publie deux ou trois étapes du même chantier dans la journée ; le
+       remettre à « Aucun » obligerait à le rechoisir à chaque fois, et un
+       réglage qu'on retape est un réglage qu'on finit par ne plus poser.
+       C'est le même raisonnement que la ville, qui ne se vide plus depuis
+       le 05/10.
+
+       Et on RELIT le chantier : son compteur et sa couverture viennent de
+       changer côté base (déclencheur de la section 36). Sans ça, la bande
+       afficherait « 3 publications » sur un chantier qui en a quatre. */
+    if (versLeFil && createChantier) {
+      api.chantiersDuPro(myProId).then(rangerChantiers).catch(() => {});
+    }
     // Le fil des vidéos ne montre que des vidéos : on y renvoie l'artisan
     // quand c'est là que sa publication vient d'atterrir.
     if (versLeFil) setFeedMode(FORMATS_VIDEO.has(createType) ? 'video' : 'classic');
@@ -2629,6 +2806,9 @@ export default function OpusApp() {
                enregistrer serait le mensonge que la bande noire sert à
                éviter. */
             onVues={api.enregistrerVues}
+            /* LE DICTIONNAIRE DES CHANTIERS, pas la liste : la carte n'a
+               besoin que du sien, et elle le trouve par son identifiant. */
+            chantiers={chantiers} onOuvrirChantier={ouvrirChantier}
             posts={feedFiltered} pros={pros}
             feedMode={feedMode} setFeedMode={changerFeedMode}
             videoCible={videoCible} onOuvrirVideo={ouvrirVideoEnGrand}
@@ -2781,6 +2961,9 @@ export default function OpusApp() {
             moi={pros[myProId] || null}
             createType={createType} setCreateType={setCreateType}
             createConseil={createConseil} setCreateConseil={setCreateConseil}
+            mesChantiers={mesChantiersEnCours}
+            createChantier={createChantier} setCreateChantier={setCreateChantier}
+            onNouveauChantier={() => setFeuilleChantier(true)}
             createDestination={createDestination} setCreateDestination={setCreateDestination}
             medias={medias} setMedias={setMedias}
             musique={musique} setMusique={setMusique}
@@ -2877,6 +3060,7 @@ export default function OpusApp() {
 
         {screen === 'profil' && (
           <ProfilOwnScreen
+            mesChantiers={mesChantiers} onOuvrirChantier={ouvrirChantier}
             userType={userType} pros={pros} myProId={myProId} monProfil={monProfil}
             followingIds={followingIds} savedIds={savedIds}
             demandesPartenariat={demandesPartenariat}
@@ -2918,6 +3102,28 @@ export default function OpusApp() {
           />
         )}
 
+        {screen === 'chantier' && chantierOuvert && (
+          <ChantierScreen
+            chantier={chantierOuvert}
+            publications={publicationsChantier}
+            chargement={!chantierCharge}
+            pro={pros[chantierOuvert.proId] || null}
+            estLeMien={String(chantierOuvert.proId) === String(myProId)}
+            onRetour={() => setScreen(
+              String(chantierOuvert.proId) === String(myProId) ? 'profil' : 'profilPro')}
+            onBasculerStatut={basculerStatutChantier}
+            /* Toucher une étape ouvre la publication dans le fil vidéo si
+               c'en est une ; sinon on reste dans l'histoire. Un appui qui
+               ne fait rien serait pire que pas d'appui du tout. */
+            onOuvrirPublication={(p) => {
+              if (!FORMATS_VIDEO.has(p.format)) return;
+              setFeedMode('video');
+              setVideoCible(p.id);
+              setScreen('home');
+            }}
+          />
+        )}
+
         {screen === 'profilPublic' && (
           <ProfilPublicScreen
             profil={profilPublic}
@@ -2943,6 +3149,9 @@ export default function OpusApp() {
               setScreen('home');
               setOrigineProfil(null);
             } : null}
+            chantiers={Object.values(chantiers)
+              .filter((c) => String(c.proId) === String(viewedProId))}
+            onOuvrirChantier={ouvrirChantier}
             following={followingIds.has(viewedProId)}
             onFollow={toggleFollow} onContact={handleContact}
             onViewProfile={viewProfile} onSubmitReview={submitReview}
@@ -2993,6 +3202,14 @@ export default function OpusApp() {
           moi={(userType === 'pro' && pros[myProId]) ? pros[myProId] : monProfil}
           onValider={appliquerFiltre}
           onFermer={() => setLoupeOuverte(false)}
+        />
+      )}
+
+      {feuilleChantier && (
+        <NouveauChantier
+          villeParDefaut={createVille || (pros[myProId] ? pros[myProId].ville : '')}
+          onFermer={() => setFeuilleChantier(false)}
+          onCreer={creerChantier}
         />
       )}
 

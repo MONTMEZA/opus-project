@@ -103,7 +103,7 @@ export default function HomeScreen({
   onChargerPlus, chargePage = false, finDuFil = false,
   resumeFiltre = '', onEffacerFiltre, onOuvrirFiltre,
   rafraichit = false, onRafraichir, onSupprimerCommentaire, onModifierCommentaire, moiId,
-  onVues,
+  onVues, chantiers = {}, onOuvrirChantier,
 }) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -329,6 +329,13 @@ export default function HomeScreen({
               onSupprimerCommentaire={onSupprimerCommentaire}
               onModifierCommentaire={onModifierCommentaire}
               moiId={moiId}
+              /* LE CHANTIER DE CETTE CARTE, ou `null`. On passe l'OBJET et
+                 pas le dictionnaire : `PostCard` est mémorisée, et lui
+                 donner le dictionnaire entier la ferait redessiner pour
+                 toutes les cartes dès qu'un chantier arrive. C'est le piège
+                 du lot 4 avec `jyAiRepondu`, à l'identique. */
+              chantier={p.chantierId ? chantiers[p.chantierId] || null : null}
+              onOuvrirChantier={onOuvrirChantier}
               commentsOpen={openCommentsId === p.id}
               onToggleComments={onToggleComments}
               onAddComment={onAddComment}

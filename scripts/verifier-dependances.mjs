@@ -62,13 +62,36 @@ const verifier = (nom, ok, detail = '') => {
    ce que `npm audit fix --force` propose. */
 const EXPO_MINIMUM = 57;
 
-/* LES DEUX PORTES D'ENTRÉE DES OUTILS. Tout ce qui ne passe QUE par l'une
+/* LES PORTES D'ENTRÉE DES OUTILS. Tout ce qui ne passe QUE par l'une
    d'elles tourne sur l'ordinateur, jamais sur le téléphone :
      - `@expo/cli` : le serveur de développement, le surveillant de
        fichiers, la signature du paquet de développement ;
      - `@expo/config-plugins` : la génération d'un projet natif
-       (`prebuild`), que ce projet ne fait jamais — il tourne dans Expo Go. */
-const OUTILS = ['@expo/cli', '@expo/config-plugins'];
+       (`prebuild`), que ce projet ne fait jamais — il tourne dans Expo Go ;
+     - `@expo/metro` : le bundler lui-même, ajouté le 06/10/2026.
+
+   POURQUOI `@expo/metro` a été AJOUTÉ, et comment ça a été prouvé.
+   Expo 57.0.27 a réorganisé ses paquets : `metro-file-map` — le scanner de
+   fichiers du bundler — passait par `@expo/cli > @expo/metro-file-map`, il
+   passe maintenant par `@expo/metro`. Le contrôle a donc rougi sur
+   `expo > @expo/metro > metro-file-map > micromatch > braces`, le MÊME
+   paquet que ce document décrit depuis le 04/10 comme un outil. Un
+   renommage de chemin, pas un changement de nature.
+
+   Et ça ne se croit pas, ça se MESURE. Sur le paquet iOS exporté
+   (`npx expo export --platform ios`, 4,7 Mo de bytecode Hermes) :
+
+     metro-file-map   0 occurrence
+     micromatch       0 occurrence
+     braces           2 occurrences — et ce sont des NOMS D'ICÔNES
+                      (`application-braces-outline`, `code-block-braces`),
+                      la table de `@expo/vector-icons`.
+
+   Le bundler construit le paquet ; il n'entre pas dedans. La règle de ce
+   contrôle est inchangée : **la bonne question n'est jamais « combien ? »,
+   c'est « est-ce que ce paquet part sur le téléphone ? »** — et on y
+   répond en regardant le paquet, pas en raisonnant sur un nom. */
+const OUTILS = ['@expo/cli', '@expo/config-plugins', '@expo/metro'];
 
 console.log('\nExpo n’a pas été ramené en arrière');
 {

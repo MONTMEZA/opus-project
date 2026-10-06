@@ -21,6 +21,7 @@ import EnteteProfilAuto, { NOM_DANS_ENTETE } from '../components/EnteteProfilAut
 import ArtisanRow from '../components/ArtisanRow';
 import PortfolioGrid from '../components/PortfolioGrid';
 import ConseilsPro from '../components/ConseilsPro';
+import BandeChantiers from '../components/BandeChantiers';
 import { SqueletteAvis, SquelettePortfolio } from '../components/Squelette';
 import FicheContactPro from '../components/FicheContactPro';
 import {
@@ -83,7 +84,7 @@ function VerifRow({ etat, label, value, neutre }) {
 
 export default function ProfilProScreen({
   pro, pros, following, onFollow, onContact, onViewProfile, onSubmitReview, onSignaler,
-  charge = true, onRetourFilVideo = null,
+  charge = true, onRetourFilVideo = null, chantiers = [], onOuvrirChantier,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [rDelais, setRDelais] = useState(5);
@@ -247,6 +248,22 @@ export default function ProfilProScreen({
           composant sert sur « mon profil » : c'est ce qui garantit que
           l'artisan voit exactement ce que voient ses clients. */}
       <FicheContactPro pro={pro} />
+
+      {/* --- ses chantiers --- (section 36)
+
+          AVANT les réalisations, et c'est l'ordre qui compte : **un
+          chantier RACONTE, la grille PROUVE.** On lit l'histoire, puis on
+          regarde le catalogue.
+
+          Et comme « Ses conseils », le bloc n'existe pas s'il est vide :
+          sur les sept fiches de la base, personne ne lit « Ses chantiers —
+          aucun pour le moment ». */}
+      {charge && chantiers.length > 0 && (
+        <>
+          <SectionLabel>Ses chantiers</SectionLabel>
+          <BandeChantiers chantiers={chantiers} onOuvrir={onOuvrirChantier} />
+        </>
+      )}
 
       {/* --- réalisations --- */}
       <SectionLabel>Réalisations</SectionLabel>
