@@ -36,7 +36,7 @@ import { BtnMini, EmptyState, SectionLabel } from '../components/ui';
 import Media from '../components/Media';
 import Carrousel from '../components/Carrousel';
 import { ArrowLeft, Layers } from '../components/icons';
-import { porteUnVisuel } from '../lib/formats-publication';
+import { porteUnVisuel, FORMATS_VIDEO } from '../lib/formats-publication';
 import { joursEntre } from '../lib/formats';
 
 /**
@@ -193,12 +193,31 @@ const Etape = React.memo(function Etape({ post, rang, total, onOuvrir }) {
     </View>
   );
 
-  if (!onOuvrir) return contenu;
+  /* ON N'ENVELOPPE QUE CE QUI S'OUVRE VRAIMENT, et c'est l'écran qui en
+     décide — pas le parent, qui passait une fonction se contentant de
+     `return` pour une photo.
+
+     Deux défauts en un, trouvés par le propriétaire sur son iPhone le
+     06/10/2026 : « dans le dossier du chantier on voit bien les photos
+     mais on ne peut pas les faire défiler ».
+
+       1. **le `Pressable` avalait le geste du carrousel.** Une zone
+          appuyable posée AU-DESSUS d'un défilement horizontal gagne
+          toujours : le doigt part de côté, le parent croit à un appui.
+          C'est la famille du `PanResponder` au-dessus d'une vue native ;
+       2. **et cette cible ne faisait RIEN sur une photo.** Mon propre
+          commentaire, dans OpusApp, disait « un appui qui ne fait rien
+          serait pire que pas d'appui du tout ». Je l'ai écrit et violé
+          dans le même lot.
+
+     Une vidéo, elle, est seule dans son étape — il n'y a aucun carrousel
+     à avaler, et l'appui ouvre le fil vidéo. */
+  if (!onOuvrir || !FORMATS_VIDEO.has(post.format)) return contenu;
   return (
     <Pressable
       onPress={onOuvrir}
       accessibilityRole="button"
-      accessibilityLabel={`Étape ${rang} sur ${total} : ${post.texte || 'sans description'}`}
+      accessibilityLabel={`Étape ${rang} sur ${total}, voir la vidéo : ${post.texte || 'sans description'}`}
       style={({ pressed }) => [pressed && APPUI.discret]}
     >
       {contenu}

@@ -173,6 +173,24 @@ verifier('…dans le MÊME ordre sur les deux fiches',
   + 'auteur et avant sur la fiche publique. L\'artisan ne verrait pas ce que '
   + 'voient ses clients, et c\'est le seul endroit où il peut le vérifier.');
 
+verifier('la ligne du chantier n\'est QUE du texte',
+  !/chantier: \{[^}]*backgroundColor/.test(carte)
+  && !/chantier: \{[^}]*borderLeft/.test(carte),
+  'Un bloc teinté se lit comme une ÉTIQUETTE — une information posée là. '
+  + 'Or cette ligne est un CHEMIN : elle ouvre un dossier. Relevé par le '
+  + 'propriétaire sur son iPhone : « un carré beige ».');
+
+verifier('…et elle garde son icône de calques',
+  /<Layers size=\{12\} color=\{C\.accentTexte\} \/>/.test(carte),
+  'Sans fond ni bordure, c\'est l\'icône qui dit « il y a une suite » et '
+  + 'l\'encre orange qui dit « on peut appuyer ».');
+
+verifier('une étape n\'est appuyable QUE si c\'est une vidéo',
+  /if \(!onOuvrir \|\| !FORMATS_VIDEO\.has\(post\.format\)\) return contenu;/.test(page),
+  'Le `Pressable` posé sur toute l\'étape avalait le geste du carrousel — '
+  + 'les photos multiples ne défilaient plus dans le dossier. Et sur une '
+  + 'photo il ne faisait RIEN, ce que ce projet interdit depuis le lot 5.');
+
 verifier('la ligne du chantier fait 44 points de haut',
   /minHeight: TOUCHE/.test(carte) && !/paddingVertical[^,}]*,[\s\S]{0,120}borderLeftColor/.test(carte),
   'Mesurée au navigateur, elle faisait 332 × 24. Elle ouvre une PAGE '

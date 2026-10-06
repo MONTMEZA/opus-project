@@ -274,10 +274,15 @@ export const initialPosts = [
     chantierId: 'ch-toiture', publieLe: ilYA(6 * 24),
     texte: "Dépose de l'ancienne couverture. Les tuiles réutilisables sont mises de côté.",
     media: '#6b4226,#b98255', likes: 54, vues: 810, liked: false, comments: [] },
+  /* DEUX photos sur une seule étape : sans ça, le carrousel du dossier ne
+     se vérifie nulle part — c'est exactement le défaut que le propriétaire
+     a trouvé sur son iPhone le 06/10/2026. */
   { id: 11, type: 'post', format: 'photo', proId: 5, time: 'Il y a 5 j',
     chantierId: 'ch-toiture', publieLe: ilYA(5 * 24),
     texte: "Pose des chevrons neufs en douglas. La charpente était saine, on a gardé les pannes.",
-    media: '#4b4b2f,#9a9a5a', likes: 71, vues: 1040, liked: false, comments: [] },
+    media: '#4b4b2f,#9a9a5a',
+    medias: ['#4b4b2f,#9a9a5a', '#6b4226,#b98255'],
+    likes: 71, vues: 1040, liked: false, comments: [] },
   { id: 12, type: 'post', format: 'photo', proId: 5, time: 'Il y a 4 j',
     chantierId: 'ch-toiture', publieLe: ilYA(4 * 24),
     texte: "Écran sous-toiture et liteaux. C'est lui qui protège de la condensation.",

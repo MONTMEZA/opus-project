@@ -4572,6 +4572,58 @@ encore de chantier : la vraie base en compte **0**. Et le temps réel ne
 s'intercepte pas depuis ce conteneur (`ERR_TUNNEL_CONNECTION_FAILED` sur le
 WebSocket, attendu).
 
+#### Deux remarques de l'iPhone, le lendemain — et un défaut que j'avais CRÉÉ
+
+Le propriétaire, après avoir essayé le lot sur son téléphone : « tout
+fonctionne, j'ai deux petites remarques ».
+
+**1. « Le nom du chantier est entouré d'un carré beige, on pourrait
+peut-être garder que l'écriture. »** Il a raison, et pas par goût : un bloc
+teinté se lit comme une ÉTIQUETTE, donc comme une information posée là. Or
+cette ligne est un **chemin** — elle ouvre un dossier. L'icône de calques
+dit « il y a une suite », l'encre orange dit « on peut appuyer », et ça
+suffit. Mesuré après : fond `rgba(0,0,0,0)`, bordure gauche `0px`, et la
+boîte toujours **332 × 44** — ce sont ces 44 points qui portent l'air
+autour du texte, d'où plus aucune marge au-dessus.
+
+**2. « Dans le dossier du chantier on voit bien les photos mais on ne peut
+pas les faire défiler. »** Là, c'était un vrai défaut, et **deux en un** :
+
+```js
+// ChantierScreen
+if (!onOuvrir) return contenu;   // ← `onOuvrir` est TOUJOURS une fonction
+// OpusApp
+onOuvrirPublication={(p) => { if (!FORMATS_VIDEO.has(p.format)) return; … }}
+```
+
+Chaque étape était donc enveloppée dans un `Pressable`, et :
+
+- **il avalait le geste du carrousel.** Une zone appuyable posée AU-DESSUS
+  d'un défilement horizontal gagne toujours : le doigt part de côté, le
+  parent croit à un appui. C'est la famille du `PanResponder` au-dessus
+  d'une vue native ;
+- **et sur une photo il ne faisait RIEN.** Mon propre commentaire, deux
+  lignes plus haut dans `OpusApp`, disait « un appui qui ne fait rien serait
+  pire que pas d'appui du tout ». Je l'ai écrit et violé dans le même lot.
+
+> **C'est l'ÉCRAN qui décide s'il y a une cible, jamais le parent qui passe
+> une fonction se contentant de `return`.** Une fonction existe toujours ;
+> ce qu'elle FAIT, le composant ne peut pas le savoir. Une vidéo, elle, est
+> seule dans son étape — aucun carrousel à avaler, et l'appui ouvre le fil
+> vidéo.
+
+Et sa question — « on les fait défiler, ou on les délie et on les affiche
+une par une ? » — se tranche ainsi : **on les fait défiler.** Les délier
+ferait quatre étapes là où il y en a une. Une publication EST une étape ;
+ses quatre photos sont quatre angles du même moment, et le carrousel du
+lot 0 sait déjà les montrer.
+
+**Vérifié au navigateur, avec de VRAIS événements tactiles** (`Input.dispatchTouchEvent`) :
+plus aucun bouton au-dessus de l'étape photo, l'indicateur affiche **1/2**,
+et un doigt vers la gauche le fait passer à **2/2**. Une étape de
+démonstration porte désormais deux photos — sans elle, ce carrousel ne se
+vérifiait nulle part.
+
 #### Ce qui vient ensuite, et qui est le but
 
 **Le récit écrit par l'IA.** La place est là, vide, et elle ne s'affiche

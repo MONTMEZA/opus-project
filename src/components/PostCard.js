@@ -455,18 +455,22 @@ const s = StyleSheet.create({
   },
   conseilTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surface },
 
-  /* La ligne du chantier : au-dessus du texte, discrète, et c'est une
-     ligne de STRUCTURE — angle vif, pas une pastille. Elle dit « ceci
-     fait partie d'une suite », elle ne réclame pas qu'on appuie. */
+  /* La ligne du chantier : au-dessus du texte, et RIEN QUE DU TEXTE.
+     Le propriétaire l'a vue sur son iPhone le 06/10/2026 : « on voit bien
+     écrit le nom du chantier mais il est entouré d'un carré beige, on
+     pourrait peut-être garder que l'écriture ». Il a raison, et la raison
+     n'est pas esthétique : un bloc teinté se lit comme une ÉTIQUETTE, donc
+     comme une information posée là. Or cette ligne est un CHEMIN — elle
+     ouvre un dossier. L'icône de calques dit « il y a une suite », l'encre
+     orange dit « on peut appuyer », et c'est tout ce qu'il faut.
+
+     La hauteur, elle, ne bouge pas : 44 points, parce qu'elle ouvre une
+     page entière (la règle du lot 5). Ce sont ces 44 points qui portent
+     l'air autour du texte — d'où plus aucune marge au-dessus. */
   chantier: {
     flexDirection: 'row', alignItems: 'center', gap: S.xs,
-    marginHorizontal: S.md, marginTop: S.sm,
-    paddingHorizontal: S.sm,
-    /* 44 points, et pas `paddingVertical` : mesuré au navigateur, la ligne
-       faisait 332 × 24 — c'est une cible qui ouvre une PAGE ENTIÈRE, elle
-       ne peut pas être plus fine qu'un doigt. La règle du lot 5. */
+    marginHorizontal: S.md,
     minHeight: TOUCHE,
-    backgroundColor: C.bg, borderLeftWidth: 2, borderLeftColor: C.accent,
   },
   chantierTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accentTexte, flexShrink: 1 },
   chantierNombre: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, flexShrink: 0 },
