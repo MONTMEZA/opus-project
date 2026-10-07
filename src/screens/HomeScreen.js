@@ -5,7 +5,7 @@
  * En mode "Vidéos", les diapositives occupent toute la hauteur de l'écran et
  * la bascule Fil/Vidéos flotte par-dessus, comme sur TikTok.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, RefreshControl, ActivityIndicator, Pressable,
   StyleSheet, useWindowDimensions,
@@ -96,7 +96,6 @@ const TABS = [
 export default function HomeScreen({
   posts, pros, feedMode, setFeedMode, feedTab, setFeedTab,
   followingIds, savedIds, openCommentsId, openContactId, commentaireCible = null,
-  postCible = null,
   bottomInset = 0, rappel,
   videoCible,
   onLike, onFollow, onView, onHide, onToggleComments, onAddComment,
@@ -130,86 +129,16 @@ export default function HomeScreen({
   const [visibles, setVisibles] = useState(() => new Set());
   const reglesVisibilite = useRef({ itemVisiblePercentThreshold: 65 });
 
-  /* AMENER LE POST VISÉ EN HAUT DE L'ÉCRAN — sinon on arrive au bon
-     endroit sans RIEN VOIR.
+  /* LE DÉFILEMENT JUSQU'À LA PUBLICATION VISÉE A ÉTÉ RETIRÉ le 07/10.
+     Il a été tenté deux fois et a échoué deux fois sur l'iPhone, pour une
+     raison de fond : `scrollToIndex` ne sait pas sauter à une carte qui
+     n'est pas montée, et ce fil n'en monte que deux au départ. Une
+     notification ouvre désormais `PublicationScreen` — la publication
+     seule sur sa page —, donc il n'y a plus rien à chercher dans le fil.
+     Son en-tête porte le raisonnement complet.
 
-     Mesuré au navigateur, sur la vraie base, en touchant « a commenté » :
-     le panneau s'ouvrait bien et le commentaire visé tombait à **y = 816**
-     sur une fenêtre de 844. Techniquement visible ; en pratique **sous la
-     barre d'onglets**, qui fait 69 px. C'est-à-dire, du point de vue du
-     propriétaire, exactement ce qu'il a signalé : « ça me ramène sur le
-     fil ».
-
-     On défile donc jusqu'à la PUBLICATION, pas jusqu'au commentaire : un
-     commentaire n'a ni index ni hauteur connue dans cette liste, alors que
-     le post en a un. Le post calé en haut, ses commentaires suivent juste
-     en dessous.
-
-     `viewPosition: 0` le pose en haut ; `animated` est laissé à faux, parce
-     qu'on anime ce qui est prêt, pas ce qui arrive (theme.js). */
-  const liste = useRef(null);
-  const dejaVise = useRef(null);
-  const rattrapage = useRef(null);
-
-  /* CE QUI NE MARCHAIT PAS, ET POURQUOI MON ESSAI NE L'A PAS VU.
-     Le propriétaire, le 07/10 : « quand on clique sur les notifications de
-     commentaire ça ouvre bien l'emplacement mais ça ne m'emmène pas
-     directement sur le post en question ».
-
-     `scrollToIndex` ne sait PAS sauter à un élément qui n'est pas encore
-     monté — et cette liste n'en monte que deux au départ (lot 4, et ce
-     réglage ne bouge pas : c'est lui qui a débloqué l'iPhone au démarrage).
-     Mesuré sur la vraie base : les cinq commentaires existants visent des
-     publications aux rangs **3, 3, 3, 6 et 6**. Toutes au-delà de deux.
-
-     Mon essai, lui, portait sur une publication créée à l'instant, donc en
-     TÊTE du fil — le seul rang qui ne pouvait pas échouer. C'est la même
-     faute que « mesurer avec sept éléments ne prouve rien » du lot 4 : le
-     jeu d'essai ne ressemblait pas au cas réel.
-
-     Et `onScrollToIndexFailed` refaisait exactement l'appel qui venait
-     d'échouer, donc il échouait pareil. Le motif qui marche se fait en
-     DEUX temps : on saute d'abord à une position APPROCHÉE — ce qui force
-     la liste à monter ce qu'il y a autour —, puis on recale exactement. */
-  const viser = useCallback((i) => {
-    if (i < 0) return;
-    let restants = 4;
-    /* Une DÉCLARATION de fonction, pas une constante fléchée : elle est
-       hissée, donc elle peut se rappeler elle-même sans être lue avant
-       d'être déclarée — le piège que ce projet a déjà rencontré deux fois
-       avec des `const`, et que le linter signale ici à juste titre. */
-    function tenter() {
-      if (!liste.current) return;
-      try {
-        liste.current.scrollToIndex({ index: i, viewPosition: 0, animated: false });
-      } catch (e) {
-        /* `scrollToIndex` lève quand l'index dépasse ce qui est monté.
-           `onScrollToIndexFailed` a déjà sauté à une position approchée :
-           on laisse à la liste le temps de monter, puis on recale. */
-        restants -= 1;
-        if (restants > 0) {
-          clearTimeout(rattrapage.current);
-          rattrapage.current = setTimeout(tenter, 160);
-        }
-      }
-    }
-    tenter();
-    /* Elle ne lit que des références, jamais une propriété ni un état :
-       aucune dépendance, et elle ne se recrée pas à chaque rendu du fil. */
-  }, []);
-
-  useEffect(() => {
-    if (!postCible) { dejaVise.current = null; return; }
-    if (dejaVise.current === postCible) return;
-    const i = posts.findIndex((p) => String(p.id) === String(postCible));
-    /* La publication peut ne pas être encore arrivée dans la liste : elle
-       est cherchée en base quand elle n'est pas dans la page chargée. On
-       ne marque donc rien, et l'effet repassera quand `posts` changera. */
-    if (i < 0) return;
-    dejaVise.current = postCible;
-    const t = setTimeout(() => viser(i), 180);
-    return () => { clearTimeout(t); clearTimeout(rattrapage.current); };
-  }, [postCible, posts, viser]);
+     Et on ne garde pas le code « au cas où » : une fonction que personne
+     n'appelle est le « bouton §18 », du code qui a l'air de servir. */
 
   /* LES VUES (section 35). `signaler` n'écrit QUE dans une référence : on
      est appelé plusieurs fois par seconde pendant qu'on fait défiler, et
@@ -336,34 +265,10 @@ export default function HomeScreen({
 
       <View style={{ flex: 1 }}>
         <FlatList
-          ref={liste}
           data={posts}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={s.classicContent}
           ListHeaderComponent={rappel || null}
-          /* Les cartes n'ont pas toutes la même hauteur (le cadre suit la
-             photo depuis le 02/10), donc `scrollToIndex` peut tomber sur un
-             élément pas encore mesuré. Sans ce rattrapage, il lève une
-             erreur et ne défile nulle part. */
-          /* EN DEUX TEMPS, et c'est tout le correctif du 07/10 : on saute
-             d'abord à une position approchée — ce qui oblige la liste à
-             monter les cartes du voisinage —, puis on recale au pixel.
-             Refaire `scrollToIndex` tout seul, c'est refaire l'appel qui
-             vient d'échouer : il échoue pareil. */
-          onScrollToIndexFailed={(info) => {
-            const moyenne = info.averageItemLength || 420;
-            liste.current?.scrollToOffset({
-              offset: Math.max(0, moyenne * info.index), animated: false,
-            });
-            clearTimeout(rattrapage.current);
-            rattrapage.current = setTimeout(() => {
-              try {
-                liste.current?.scrollToIndex({
-                  index: info.index, viewPosition: 0, animated: false,
-                });
-              } catch (e) { /* on renonce : mieux vaut rester que sauter */ }
-            }, 160);
-          }}
           /* UN MESSAGE DE LISTE VIDE QUI DONNE TORT À L'APPLICATION.
              Celui d'avant disait « Suis des professionnels pour voir leurs
              publications ici » — y compris dans « Pour vous », où il n'y

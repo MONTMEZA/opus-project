@@ -282,23 +282,58 @@ verifier('…et une cle absente de CE compte se DIT, au lieu de retomber sur 0',
   + '« a accepte votre demande ». Le poser sur une page au hasard est pire '
   + 'que de lui dire que l\'ecran n\'existe pas encore.');
 
-/* ARRIVER AU BON ENDROIT NE SUFFIT PAS : IL FAUT LE VOIR. Mesure au
-   navigateur, fenetre de 844 : le commentaire vise tombait a y = 816,
-   c'est-a-dire SOUS la barre d'onglets (69 px). Apres le defilement :
-   y = 666, au-dessus d'elle, avec le post cale en haut. */
-const fil = sansCommentaires(lire('src/screens/HomeScreen.js'));
-verifier('le fil DEFILE jusqu\'a la publication visee',
-  /scrollToIndex\(\{ index: i, viewPosition: 0/.test(fil),
-  'Le panneau s\'ouvrait, et le commentaire tombait sous la barre du bas : '
-  + 'du point de vue de celui qui regarde, « ca me ramene sur le fil ».');
-
-verifier('…et un index pas encore mesure ne fait pas echouer le defilement',
-  /onScrollToIndexFailed=/.test(fil),
-  'Les cartes n\'ont pas toutes la meme hauteur depuis le 02/10 (le cadre '
-  + 'suit la photo) : `scrollToIndex` leve une erreur sur un element pas '
-  + 'encore rendu, et ne defile nulle part.');
-
 const routage = app.slice(app.indexOf('const ouvrirNotification'));
+
+/* UNE PUBLICATION VISEE S'OUVRE SUR SA PROPRE PAGE.
+   Deux tentatives de DEFILEMENT ont echoue sur l'iPhone du proprietaire :
+   `scrollToIndex` ne sait pas sauter a une carte qui n'est pas montee, et
+   ce fil n'en monte que deux (lot 4). Mesure sur la vraie base : les
+   commentaires visent des publications aux rangs 3 a 6. Et ca ne se
+   verifie pas au navigateur — 4 cartes sur 4 y sont montees alors que le
+   reglage en demande 2. On a donc SUPPRIME le probleme : plus de fil a
+   parcourir, plus de rang, plus de virtualisation. */
+const ecranPub = sansCommentaires(lire('src/screens/PublicationScreen.js'));
+const fil = sansCommentaires(lire('src/screens/HomeScreen.js'));
+
+/* ON BORNE A LA BRANCHE, pas « tout ce qui suit la fonction » : `routage`
+   contient aussi le retour generique et deux autres `setScreen('home')`
+   parfaitement legitimes. Un controle qui vise une PLACE vise mal — c'est
+   la lecon repetee de ce projet. */
+const brancheDuPost = routage.slice(
+  routage.indexOf("if (ou.quoi === 'post')"),
+  routage.indexOf("if (ou.quoi === 'annonce')"),
+);
+verifier('la cloche ouvre la PUBLICATION sur sa page, pas le fil',
+  /setScreen\('publication'\)/.test(brancheDuPost)
+  && !/setScreen\('home'\)/.test(brancheDuPost)
+  && brancheDuPost.length > 200,
+  'Ramener sur le fil obligeait a chercher la publication a la main en '
+  + 'descendant — ce que le proprietaire a signale trois fois de suite.');
+
+verifier('…et le fil n\'essaie plus de defiler jusqu\'a elle',
+  !/scrollToIndex\(/.test(fil) && !/onScrollToIndexFailed/.test(fil),
+  'Du code qui a l\'air de servir et qui n\'a plus d\'appelant est le '
+  + '« bouton §18 ». On le retire au lieu de le garder « au cas ou ».');
+
+verifier('la page ouvre le panneau des commentaires d\'office',
+  /commentsOpen/.test(ecranPub),
+  'On y arrive par une notification de commentaire : c\'est precisement '
+  + 'ce qu\'on vient lire.');
+
+verifier('…et elle cherche dans `posts`, jamais dans le fil FILTRE',
+  /post=\{posts\.find\(\(p\) => String\(p\.id\) === String\(postCible\)\)/.test(app),
+  'La loupe ne doit pas pouvoir cacher la publication qu\'une '
+  + 'notification designe : on vient la lire, pas la filtrer.');
+
+verifier('…et le retour ramene a la CLOCHE, d\'ou l\'on vient',
+  /screen === 'publication'\) \{ setPostCible\(null\); setScreen\('notifications'\)/.test(app),
+  'Repartir sur le fil ferait perdre la liste des notifications qu\'on '
+  + 'etait en train de parcourir.');
+
+verifier('…et une publication disparue se DIT',
+  /Publication introuvable/.test(ecranPub),
+  'Un ecran vide ressemblerait a un chargement qui ne finit pas.');
+
 /* LA PHOTO D'UN ARTISAN VIT SUR SA FICHE. Mesure sur la vraie base le
    07/10 : 2 artisans sur 7 ont une photo, et ZERO l'avait sur `users` —
    la table que la cloche lisait. Mon essai de la veille l'avait masque en
@@ -325,30 +360,6 @@ verifier('…et les COMMENTAIRES avaient le meme defaut',
   'Le commentaire d\'un artisan portait un rond vide pour exactement la '
   + 'meme raison. Corriger la cloche seule aurait laisse le defaut visible '
   + 'a cote.');
-
-/* LE DEFILEMENT. Mesure sur la vraie base : les cinq commentaires visent
-   des publications aux rangs 3, 3, 3, 6 et 6, alors que la liste n'en
-   monte que DEUX au depart. `scrollToIndex` echouait donc, et la
-   re-tentative refaisait l'appel qui venait d'echouer. */
-verifier('le fil defile sur une CIBLE explicite, pas sur le commentaire',
-  /setPostCible\(ou\.postId\)/.test(routage)
-  && /if \(!postCible\)/.test(fil),
-  'Lier le defilement a `commentaireCible` le rendait muet pour toute '
-  + 'notification qui mene a une publication sans viser de commentaire.');
-
-verifier('…et il ne saute pas sous le doigt d\'un appui ordinaire',
-  !/postCible/.test(fil.slice(fil.indexOf('const toggleComments')) || '')
-  && /const \[postCible, setPostCible\] = useState\(null\)/.test(app),
-  'Le bouton « commentaires » d\'une carte pose aussi `openCommentsId` : '
-  + 'faire sauter le fil de quelqu\'un deja devant la bonne publication '
-  + 'serait desagreable.');
-
-verifier('…et un index pas encore monte passe par une position APPROCHEE',
-  /scrollToOffset\(\{\s*offset: Math\.max\(0, moyenne \* info\.index\)/.test(fil),
-  'Refaire `scrollToIndex` apres son echec, c\'est refaire l\'appel qui '
-  + 'vient d\'echouer : il echoue pareil. Il faut d\'abord sauter pres de '
-  + 'la cible pour que la liste monte ce qu\'il y a autour.');
-
 
 verifier('la cloche CHARGE les commentaires, elle n\'ouvre pas un panneau vide',
   /ouvrirCommentaires\(ou\.postId\)/.test(routage)

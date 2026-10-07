@@ -4925,7 +4925,73 @@ n'est QUE sur la fiche :
 | photos affichées | **0** | **1** |
 | ronds à initiales | 1 | **0** |
 
-##### 2. `scrollToIndex` ne saute pas à ce qui n'est pas monté
+##### 2. `scrollToIndex` ne saute pas à ce qui n'est pas monté — ET LA CORRECTION A ÉCHOUÉ AUSSI
+
+**Deux tentatives de défilement, deux échecs sur l'iPhone.** Le propriétaire,
+la troisième fois : « ça ouvre bien le post mais ça ne me dirige pas dessus,
+je suis obligé de le chercher à la main en descendant le fil ».
+
+La cause est réelle et mesurée — les commentaires visent des publications
+aux **rangs 3 à 6**, et le fil n'en monte que **deux** au départ (lot 4, et
+ce réglage est celui qui a débloqué l'iPhone au démarrage : il ne bouge
+pas). On peut rattraper le coup en sautant à une position approchée puis en
+recalant. Mais c'est une course contre la virtualisation, et surtout :
+
+> **Ça ne se vérifie PAS au navigateur.** Mesuré : **4 cartes sur 4 montées**
+> alors que `initialNumToRender={2}`. `react-native-web` ne virtualise pas
+> comme iOS, donc `scrollToIndex` n'y échoue jamais, et la correction donne
+> **exactement les mêmes nombres avec et sans** — vérifié en remettant
+> l'ancien code.
+
+**Livrer une troisième correction invérifiable aurait été recommencer la
+même faute.** D'où `src/screens/PublicationScreen.js` :
+
+> **ON SUPPRIME LE PROBLÈME AU LIEU DE LE CONTRÔLER.** Une notification
+> ouvre la publication **seule sur sa page**. Plus de fil à parcourir, plus
+> de rang, plus de virtualisation, plus rien à faire défiler. C'est la règle
+> du calendrier du 04/10 : « le meilleur message d'erreur est celui qu'on ne
+> peut plus déclencher ».
+
+Et c'est ce que font les applications qu'il connaît : toucher une
+notification n'y ramène jamais dans le fil.
+
+Mesuré au navigateur, sur la VRAIE base, avec une publication au rang 3 :
+
+| | relevé |
+|---|---|
+| la publication visée | **y = 142**, en haut |
+| le commentaire visé | **y = 560**, trait orange |
+| une autre publication sur la page | **aucune** |
+| hauteur de la page | **844 px** pour une fenêtre de 844 — rien à défiler |
+| le retour | ramène à la **cloche**, d'où l'on vient |
+
+Trois choses à ne pas redécouvrir :
+
+1. **la page cherche dans `posts`, jamais dans le fil FILTRÉ.** La loupe ne
+   doit pas pouvoir cacher la publication qu'une notification désigne : on
+   vient la lire, pas la filtrer ;
+2. **le panneau des commentaires est ouvert d'office**, et `onToggleComments`
+   n'est pas transmis — il n'y a rien à replier sur une page qui ne contient
+   que ça ;
+3. **le code de défilement a été RETIRÉ du fil**, pas gardé « au cas où » :
+   une fonction que personne n'appelle est le « bouton §18 ».
+
+###### Et le contrôle a planté sans écrire un seul « ✘ »
+
+En retirant les contrôles devenus périmés, j'ai laissé `fil` utilisé mais
+plus déclaré. `verifier-notifications` **plantait** — donc ne vérifiait
+plus rien — et sa sortie ne contenait aucun « ✘ ». C'est `npm run verifier`,
+qui lit le CODE DE SORTIE et distingue un contrôle qui échoue d'un contrôle
+qui n'a pas pu se lancer, qui l'a attrapé. C'est exactement ce pour quoi il
+a été écrit au lot 8.
+
+Et deux fois dans le même lot, j'ai refait des fautes que ce document
+documente déjà : une `const` lue avant sa déclaration (`routage`), et un
+contrôle qui vise une PLACE — « tout ce qui suit la fonction » — au lieu de
+viser la BRANCHE concernée, donc qui attrapait deux `setScreen('home')`
+parfaitement légitimes.
+
+##### Ce qui avait été tenté avant, et pourquoi c'était insuffisant
 
 Relevé sur la vraie base : les cinq commentaires existants visent des
 publications aux rangs **3, 3, 3, 6 et 6**. Or la liste n'en monte que

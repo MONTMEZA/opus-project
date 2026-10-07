@@ -20,6 +20,7 @@ import RappelVerification from './components/RappelVerification';
 import OnboardingScreen from './screens/OnboardingScreen';
 import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
+import PublicationScreen from './screens/PublicationScreen';
 import DecouvrirScreen from './screens/DecouvrirScreen';
 import PlaceProScreen from './screens/PlaceProScreen';
 import CreerScreen from './screens/CreerScreen';
@@ -1816,23 +1817,24 @@ export default function OpusApp() {
         showBanner("Cette publication n'est plus disponible.");
         return;
       }
-      setFeedMode('classic');
-      setFeedTab('pourvous');
       setHiddenIds((h) => { const c = new Set(h); c.delete(ou.postId); return c; });
       /* `ouvrirCommentaires` et PAS `setOpenCommentsId` : c'est elle qui va
-         chercher le fil de discussion. Voir son commentaire — le panneau
-         s'ouvrait vide, et on revoyait exactement le défaut signalé. */
+         CHERCHER le fil de discussion. Le panneau s'ouvrait vide, et on
+         revoyait exactement le défaut signalé. */
       ouvrirCommentaires(ou.postId);
-      /* Et on DEMANDE le défilement. Sans lui on arrive sur le fil, pas sur
-         la publication : mesuré sur la vraie base, les commentaires visent
-         des publications aux rangs 3 à 6. */
-      setPostCible(ou.postId);
       /* LE commentaire, pas le panneau. `comment_id` est rempli par
          `notifie_commentaire()` depuis le premier jour et n'était lu par
          PERSONNE — le défaut du 01/10 dans sa forme la plus pure, puisque
          l'écran en avait précisément besoin. */
       setCommentaireCible(ou.commentId);
-      setScreen('home');
+      /* ON OUVRE LA PUBLICATION SUR SA PROPRE PAGE, au lieu de chercher à
+         faire défiler le fil jusqu'à elle. Deux tentatives de défilement
+         ont échoué sur son iPhone — voir l'en-tête de
+         `PublicationScreen.js` : `scrollToIndex` ne sait pas sauter à une
+         carte qui n'est pas montée, et ça ne se vérifie pas au navigateur.
+         Ici il n'y a plus de rang, plus de fil, plus de virtualisation. */
+      setPostCible(ou.postId);
+      setScreen('publication');
       return;
     }
 
@@ -2855,13 +2857,15 @@ export default function OpusApp() {
     );
   }
 
-  const showBack = screen === 'profilPro' || screen === 'creer' || screen === 'sos'
+  const showBack = screen === 'publication'
+    || screen === 'profilPro' || screen === 'creer' || screen === 'sos'
     || screen === 'profilEdit' || screen === 'profilPublic'
     || screen === 'mesPublications' || screen === 'gererPortfolio'
     || screen === 'confidentialite' || screen === 'legal' || screen === 'admin'
     || (screen === 'messages' && activeConvId);
 
-  const backTitle = screen === 'profilPro'
+  const backTitle = screen === 'publication' ? 'Publication'
+    : screen === 'profilPro'
     ? (pros[viewedProId] ? pros[viewedProId].entreprise : '')
     : screen === 'profilPublic' ? (profilPublic ? profilPublic.nom : 'Profil')
     : screen === 'sos' ? 'SOS — Urgence'
@@ -2886,7 +2890,10 @@ export default function OpusApp() {
         <BackBar
           title={backTitle}
           onBack={() => {
-            if (screen === 'messages') setActiveConvId(null);
+            /* On revient d'où l'on vient : la cloche. Repartir sur le
+               fil ferait perdre la liste qu'on était en train de lire. */
+            if (screen === 'publication') { setPostCible(null); setScreen('notifications'); }
+            else if (screen === 'messages') setActiveConvId(null);
             else if (screen === 'legal') setScreen('confidentialite');
             else if (screen === 'profilEdit' || screen === 'mesPublications'
                      || screen === 'gererPortfolio' || screen === 'admin'
@@ -2973,7 +2980,6 @@ export default function OpusApp() {
                avant — et le propriétaire l'a dit : « ça me ramène sur le
                fil », alors qu'il voulait arriver SUR le commentaire. */
             commentaireCible={commentaireCible}
-            postCible={postCible}
             bottomInset={videoMode ? navHeight : 0}
             rappel={canPublish && pros[myProId] ? (
               <RappelVerification
@@ -2998,6 +3004,37 @@ export default function OpusApp() {
             onSave={toggleSave} onToggleContact={toggleContact}
             onContact={handleContact} onShare={showBanner}
             onComment={(post) => setCommentsPostId(post.id)}
+          />
+        )}
+
+        {screen === 'publication' && (
+          <PublicationScreen
+            /* On la cherche dans `posts` et non dans `feedFiltered` : la
+               loupe ne doit pas pouvoir cacher la publication qu'une
+               notification désigne. On vient la lire, pas la filtrer. */
+            post={posts.find((p) => String(p.id) === String(postCible)) || null}
+            pros={pros}
+            chantiers={chantiers}
+            onOuvrirChantier={ouvrirChantier}
+            commentaireCible={commentaireCible}
+            followingIds={followingIds}
+            savedIds={savedIds}
+            openContactId={openContactId}
+            moiId={api.getUserId()}
+            onLike={toggleLike}
+            onFollow={toggleFollow}
+            onView={viewProfile}
+            onHide={hidePost}
+            onOuvrirVideo={ouvrirVideoEnGrand}
+            onSignaler={ouvrirSignalement}
+            onAddComment={addComment}
+            onVoirCommentateur={voirCommentateur}
+            onSupprimerCommentaire={supprimerCommentaire}
+            onModifierCommentaire={modifierCommentaire}
+            onSave={toggleSave}
+            onToggleContact={toggleContact}
+            onContact={handleContact}
+            onShare={showBanner}
           />
         )}
 
