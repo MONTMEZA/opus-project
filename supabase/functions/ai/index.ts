@@ -12,6 +12,24 @@
  *   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
  *   supabase functions deploy ai
  *
+ * QUI A LE DROIT D'APPELER — ajouté le 07/10/2026, et ce n'était pas un
+ * détail. Mesuré avant de l'écrire, depuis le conteneur de travail et
+ * SANS AUCUN COMPTE, avec la seule clé publiable (celle qui est dans
+ * l'application, donc lisible par quiconque installe Opus) :
+ *
+ *     POST /functions/v1/ai  { action: "summary", … }  ->  200
+ *
+ * Cette fonction ne lisait aucun jeton. N'importe qui pouvait donc faire
+ * tourner la clé Anthropic du propriétaire en boucle, sans limite et sans
+ * trace. Ce n'est pas une fuite de données : c'est une fuite d'ARGENT.
+ *
+ * Désormais, et c'est le §21 du cahier des charges :
+ *   1. l'identité vient du JETON, et de nulle part ailleurs ;
+ *   2. chaque appel est inscrit au journal d'audit (`journal_ia`) ;
+ *   3. une limite par compte et par 24 h, tenue par la BASE — comptage et
+ *      écriture dans le même ordre, sinon deux appels simultanés passent
+ *      tous les deux.
+ *
  * QUATRE ACTIONS :
  *   { action: "match",     besoin, artisans }  -> { recommandations: [...] }
  *   { action: "summary",   entreprise, metier, avis } -> { resume: "..." }
@@ -19,6 +37,7 @@
  *   { action: "ameliorer", texte, contexte, profil } -> { propositions: [...] }
  */
 import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
+import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
 
 const MODEL = 'claude-opus-5';
 
@@ -115,6 +134,14 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS, 'Content-Type': 'application/json' },
   });
 
+/** Ce qu'Anthropic a réellement compté, pour le journal d'audit. */
+function coutDe(message: Anthropic.Message): { entree: number; sortie: number } {
+  return {
+    entree: message.usage?.input_tokens ?? 0,
+    sortie: message.usage?.output_tokens ?? 0,
+  };
+}
+
 /** Récupère le texte de la réponse (on ignore les blocs de réflexion). */
 function textOf(message: Anthropic.Message): string {
   return message.content
@@ -151,6 +178,80 @@ Deno.serve(async (req) => {
     return json({ error: 'Corps de requête invalide.' }, 400);
   }
 
+  /* L'IDENTITÉ VIENT DU JETON, ET DE NULLE PART AILLEURS. C'est le même
+     motif que la fonction `compte`, et c'est tout ce qui sépare « un
+     artisan demande un résumé » de « quelqu'un fait tourner la facture
+     Anthropic de quelqu'un d'autre ». */
+  const urlSupabase = Deno.env.get('SUPABASE_URL');
+  const cleService = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!urlSupabase || !cleService) {
+    return json({ error: 'La fonction n’est pas correctement configurée côté serveur.' }, 500);
+  }
+
+  const autorisation = req.headers.get('Authorization') ?? '';
+  const jeton = autorisation.replace(/^Bearer\s+/i, '').trim();
+  const admin = createClient(urlSupabase, cleService, { auth: { persistSession: false } });
+
+  /* La clé publiable EST un jeton valide, mais elle ne désigne personne :
+     `getUser` ne rend alors aucun utilisateur. C'est précisément ce qui
+     ferme la porte ouverte depuis le premier jour. */
+  const { data: { user } = { user: null } } = jeton
+    ? await admin.auth.getUser(jeton)
+    : { data: { user: null } };
+
+  if (!user) {
+    return json({
+      error: "L'assistant n'est accessible qu'une fois connecté. Reconnectez-vous.",
+    }, 401);
+  }
+
+  const action = String(payload.action || '');
+
+  /* LE JOURNAL ET LA LIMITE SONT LE MÊME ORDRE, et il part AVANT Anthropic :
+     refuser après avoir payé l'appel ne protège rien. */
+  const { data: ligne, error: erreurJournal } = await admin.rpc('enregistrer_appel_ia', {
+    p_user: user.id,
+    p_action: action,
+    p_cible_type: payload.cibleType ? String(payload.cibleType) : null,
+    p_cible_id: payload.cibleId ? String(payload.cibleId) : null,
+  });
+
+  if (erreurJournal) {
+    console.error('journal_ia:', erreurJournal);
+    return json({ error: "L'assistant n'a pas pu être appelé. Réessayez dans un instant." }, 500);
+  }
+
+  /* UN REFUS N'EST PAS UNE PANNE, et il se DIT. Une limite qui mord en
+     silence ressemble à une application cassée — c'est la règle des
+     « 3 annonces sans lieu précisé ne sont pas affichées ». */
+  if (ligne && ligne.resultat === 'refuse') {
+    return json({
+      error: 'Vous avez atteint la limite d’appels à l’assistant pour aujourd’hui. '
+        + 'Elle se remet à zéro 24 h après votre premier appel.',
+    }, 429);
+  }
+
+  /* LE COÛT NE SE CONNAÎT QU'APRÈS. On inscrit la ligne AVANT l'appel —
+     c'est elle qui fait tenir la limite —, puis on y range les jetons
+     qu'Anthropic a réellement comptés. Sans ce second temps,
+     `jetons_entree` et `jetons_sortie` resteraient à zéro pour toujours :
+     deux colonnes écrites et jamais remplies, c'est-à-dire le défaut que
+     ce projet traque depuis le 01/10.
+
+     `service_role` contourne la RLS, donc cet ordre passe là où la table
+     n'accorde aucune écriture à personne. C'est le même privilège qui a
+     permis d'y insérer la ligne. */
+  const noter = async (entree: number, sortie: number, resultat: string) => {
+    if (!ligne || !ligne.id) return;
+    const { error } = await admin.from('journal_ia')
+      .update({ jetons_entree: entree, jetons_sortie: sortie, resultat })
+      .eq('id', ligne.id);
+    /* Un journal qui n'a pas pu se compléter ne doit PAS faire échouer la
+       réponse : l'artisan a sa réponse, c'est l'essentiel. On le dit dans
+       les journaux Supabase, où on le lira en cherchant une panne. */
+    if (error) console.error('journal_ia (mise à jour):', error);
+  };
+
   const client = new Anthropic({ apiKey });
 
   try {
@@ -176,7 +277,9 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
 
       if (aRefuse(message)) return json({ error: "L'assistant a refusé de répondre à cette demande." }, 422);
 
-      const brut = textOf(message).replace(/```json|```/g, '').trim();
+      const { entree, sortie } = coutDe(message);
+    await noter(entree, sortie, 'ok');
+    const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { recommandations?: unknown };
       try {
         parsed = JSON.parse(brut);
@@ -209,6 +312,8 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
       });
 
       if (aRefuse(message)) return json({ error: "L'assistant a refusé de résumer ces avis." }, 422);
+      const { entree, sortie } = coutDe(message);
+      await noter(entree, sortie, 'ok');
       return json({ resume: textOf(message).trim() });
     }
 
@@ -245,7 +350,9 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
 
       if (aRefuse(message)) return json({ error: "L'assistant a refusé d'écrire cette présentation." }, 422);
 
-      const brut = textOf(message).replace(/```json|```/g, '').trim();
+      const { entree, sortie } = coutDe(message);
+    await noter(entree, sortie, 'ok');
+    const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { propositions?: unknown };
       try {
         parsed = JSON.parse(brut);
@@ -320,7 +427,9 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour :
 
       if (aRefuse(message)) return json({ error: "L'assistant a refusé de retravailler ce texte." }, 422);
 
-      const brut = textOf(message).replace(/```json|```/g, '').trim();
+      const { entree, sortie } = coutDe(message);
+    await noter(entree, sortie, 'ok');
+    const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { propositions?: unknown };
       try {
         parsed = JSON.parse(brut);
@@ -336,6 +445,10 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour :
     /* Le détail complet part dans les journaux Supabase, où on peut le lire
        quand on cherche une panne. L'utilisateur, lui, reçoit une phrase. */
     console.error('Erreur Anthropic:', e);
+    /* On note l'ÉCHEC. Sans cela, le journal ne garderait que ce qui a
+       marché — et on chercherait longtemps pourquoi un artisan dit « ça ne
+       répond pas » alors qu'il n'y a aucune ligne pour le montrer. */
+    await noter(0, 0, 'erreur');
     const { texte, statut } = messageLisible(e);
     return json({ error: texte }, statut);
   }
