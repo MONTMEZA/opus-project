@@ -418,6 +418,7 @@ pas négociable — chacun pose le socle du suivant.
 | **G** | La cloche : une notification est une ADRESSE (section 37) | ✅ 07/10/2026, **vérifié sur l'iPhone** |
 | **H** | Le socle de l'agent : qui appelle l'IA, et on le note (section 38) | ✅ 07/10/2026 |
 | **I** | Le récit du chantier, écrit par l'agent (section 39) | ✅ 07/10/2026 |
+| **J** | Nommer son agent : proposer trois fois, puis se taire (section 40) | ✅ 07/10/2026 |
 
 Le lot **G** n'était pas prévu : il vient de trois défauts que le
 propriétaire a trouvés en se servant de la cloche. Il a fallu **trois
@@ -432,6 +433,15 @@ n'importe qui ayant l'application — pouvait faire payer des appels Anthropic
 au propriétaire. La porte est fermée, chaque appel entre au journal d'audit
 du §21, une limite quotidienne est tenue par la base, et **l'artisan lit ce
 journal** dans « Confidentialité et sécurité → Mon agent ».
+
+Le lot **J** vient d'une demande du propriétaire sur la fenêtre de
+présentation de l'agent : « il puisse dire plus tard, mais il faut que de
+temps en temps elle lui re propose pour pas qu'il ne saute cette étape ».
+Les deux moitiés tirent en sens inverse — et c'est un compteur en base,
+borné à trois, qui les tient. Il a aussi fait apparaître un trou du lot H :
+**l'export RGPD de la vraie base ne contenait pas le journal de l'agent**,
+la migration ayant emporté la table mais pas `mes_donnees()`. Corrigé le
+jour même.
 
 **Ce que le lot E laisse ouvert, et qui est le but** : la place du récit
 écrit par l'IA est posée sur la page du chantier, vide, et visible du seul

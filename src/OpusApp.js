@@ -60,12 +60,14 @@ import { envoyerFichier, estFichierLocal } from './lib/storage';
 import {
   aCloudinary, urlMontage, envoyerVideo as envoyerVideoCloudinary,
 } from './lib/cloudinary';
-import { aiMatchPros, aiRecitChantier } from './lib/ai';
+import { aiMatchPros, aiRecitChantier, surTravailAgent } from './lib/ai';
+import { doitProposerLeNom, nomAgent } from './lib/agent';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeuilleRecherche from './components/FeuilleRecherche';
+import FenetreAgent from './components/FenetreAgent';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
 } from './lib/filtre-fil';
@@ -128,6 +130,19 @@ export default function OpusApp() {
      sur le fil, qui est le seul écran d'Opus où l'on vient pour regarder. */
   const [filtreFil, setFiltreFil] = useState(FILTRE_VIDE);
   const [loupeOuverte, setLoupeOuverte] = useState(false);
+  /* LE NOM DE L'AGENT (section 40). `agentATravaille` est le signal qui
+     fait revenir la fenêtre au bon MOMENT plutôt qu'au bout d'un certain
+     temps ; `renommerAgent` est la porte du réglage, ouverte depuis
+     « Confidentialité et sécurité ». */
+  const [agentATravaille, setAgentATravaille] = useState(false);
+  const [renommerAgent, setRenommerAgent] = useState(false);
+  /* L'ÉCRAN OÙ L'AGENT VENAIT DE TRAVAILLER. Trouvé sur une capture, et pas
+     en relisant : la fenêtre s'ouvrait PAR-DESSUS les trois propositions
+     que l'agent venait d'écrire. On demandait « comment voulez-vous
+     l'appeler ? » à quelqu'un qui n'avait pas encore pu lire son travail.
+     Elle attend donc qu'il ait fini — c'est-à-dire qu'il quitte l'écran. */
+  const [ecranAuTravail, setEcranAuTravail] = useState(null);
+  const ecranCourant = useRef('home');
 
   const [pros, setPros] = useState({});
   const [posts, setPosts] = useState([]);
@@ -688,6 +703,19 @@ export default function OpusApp() {
       .catch(() => { /* la liste reste vide, on ne bloque pas l'écran */ });
     return () => { vivant = false; };
   }, [myProId, userType, rangerChantiers]);
+
+  /* « L'AGENT VIENT DE TRAVAILLER » — un seul témoin, posé une seule fois.
+     La porte est dans `src/lib/ai.js` : toutes les actions y passent, et
+     celles qui viendront aussi. Brancher chaque écran aurait voulu dire
+     cinq branchements aujourd'hui et un oubli silencieux au prochain lot.
+
+     `surTravailAgent` rend sa propre fonction de désinscription, donc le
+     tableau de dépendances est vide : il n'y a rien qui change. */
+  useEffect(() => { ecranCourant.current = screen; }, [screen]);
+  useEffect(() => surTravailAgent(() => {
+    setEcranAuTravail(ecranCourant.current);
+    setAgentATravaille(true);
+  }), []);
 
   /** Ma photo, d'où qu'elle vienne : fiche pro pour un artisan, compte sinon. */
   const monAvatar = userType === 'pro' && pros[myProId]
@@ -2752,6 +2780,71 @@ export default function OpusApp() {
   const voyantDecouvrir = voyantPourMoi || voyantDemandes;
 
   /* ------------------------------------------------------------------
+     L'AGENT A-T-IL UN NOM ? — et quand on le demande (section 40)
+
+     Demandé par le propriétaire : « quand la fenetre s'ouvre il puisse
+     dire plus tard mais je pence qu'il faut que de temp en temps elle lui
+     re propose pour pas qu'il ne saute cette etape ».
+
+     Toute la règle vit dans `src/lib/agent.js`, qui n'importe rien, et le
+     contrôle la fait tourner : trois propositions au plus, et la deuxième
+     comme la troisième n'arrivent qu'après que l'agent a VRAIMENT
+     travaillé pour lui. Ici, on ne fait que poser la question et afficher.
+
+     ET CE BLOC EST SOUS `canPublish`, comme les voyants : une `const` lue
+     avant sa déclaration lève un `ReferenceError` au démarrage — pas un
+     avertissement, un écran blanc. Le linter ne le signale pas, et c'est
+     arrivé deux fois dans ce projet.
+     ------------------------------------------------------------------ */
+  const maFichePro = (canPublish && pros[myProId]) ? pros[myProId] : null;
+
+  /* On n'ouvre RIEN pendant le démarrage : `theme.js` l'interdit depuis le
+     lot 1 — on anime, et on interrompt, ce qui est prêt, pas ce qui
+     attend. Une feuille posée par-dessus les barrières de l'ouverture
+     serait aussi la première chose que verrait un artisan d'Opus. */
+  const proposerLeNomAgent = !demarrage && !renommerAgent && doitProposerLeNom({
+    estPro: canPublish,
+    agentNom: maFichePro ? maFichePro.agentNom : null,
+    propositions: maFichePro ? maFichePro.agentPropositions : 0,
+    /* ON ATTEND QU'IL AIT FINI DE LIRE. Le signal part dès que l'agent a
+       répondu, mais le résultat s'affiche à cet instant précis : ouvrir la
+       fenêtre là recouvrirait exactement ce qu'on vient de lui donner. Elle
+       attend donc qu'il quitte l'écran — ce qui, pour un formulaire, veut
+       dire qu'il en a fini. */
+    vientDeTravailler: agentATravaille && screen !== ecranAuTravail,
+  });
+
+  /** Le nom tel qu'on l'écrit dans une phrase : le sien, ou « votre agent ». */
+  const nomDeMonAgent = nomAgent(maFichePro ? maFichePro.agentNom : null);
+
+  const nommerMonAgent = async (nom) => {
+    const pose = await api.nommerAgent(nom);
+    /* On range le nom dans `pros` tout de suite : sans ça, la fenêtre se
+       fermerait et `doitProposerLeNom()` la rouvrirait au rendu suivant,
+       puisque la fiche en mémoire n'aurait toujours pas de nom. */
+    setPros((ps) => (ps[myProId]
+      ? { ...ps, [myProId]: { ...ps[myProId], agentNom: pose || nom } }
+      : ps));
+    setAgentATravaille(false);
+    setEcranAuTravail(null);
+    setRenommerAgent(false);
+    showBanner(`Votre agent s’appelle ${pose || nom}.`);
+  };
+
+  /* « PLUS TARD » — et on COMPTE le refus. Une sortie qui ne le compte pas
+     ferait revenir la fenêtre à chaque démarrage, et annulerait en silence
+     tout le garde-fou contre l'insistance. */
+  const plusTardPourLAgent = async () => {
+    const fait = (maFichePro ? maFichePro.agentPropositions : 0) || 0;
+    setPros((ps) => (ps[myProId]
+      ? { ...ps, [myProId]: { ...ps[myProId], agentPropositions: fait + 1 } }
+      : ps));
+    setAgentATravaille(false);
+    setEcranAuTravail(null);
+    await api.noterRefusAgent();
+  };
+
+  /* ------------------------------------------------------------------
      LES ONGLETS DE « DÉCOUVRIR » — une seule liste, deux lecteurs.
 
      Elle sert à la fois à la rangée de pastilles et aux pages qu'on fait
@@ -3330,6 +3423,10 @@ export default function OpusApp() {
                l'agent ne doit pas pouvoir emporter l'export RGPD ni la
                suppression de compte en tombant. */
             onChargerActionsIA={api.mesActionsIA}
+            nomAgent={nomDeMonAgent}
+            /* Absent pour un particulier : il n'a pas d'agent (§3), et la
+               rangée ne s'affiche donc pas du tout. */
+            onRenommerAgent={canPublish ? () => setRenommerAgent(true) : null}
             onDebloquer={api.debloquer}
             onExporter={api.exporterMesDonnees}
             onSupprimer={supprimerMonCompte}
@@ -3357,6 +3454,7 @@ export default function OpusApp() {
             onRetour={() => setScreen(
               String(chantierOuvert.proId) === String(myProId) ? 'profil' : 'profilPro')}
             onBasculerStatut={basculerStatutChantier}
+            nomAgent={nomDeMonAgent}
             onEcrireRecit={ecrireRecitChantier}
             onEnregistrerRecit={enregistrerRecitChantier}
             onErreur={showErreur}
@@ -3450,6 +3548,25 @@ export default function OpusApp() {
           moi={(userType === 'pro' && pros[myProId]) ? pros[myProId] : monProfil}
           onValider={appliquerFiltre}
           onFermer={() => setLoupeOuverte(false)}
+        />
+      )}
+
+      {/* LA FENÊTRE QUI PROPOSE DE NOMMER L'AGENT (section 40).
+          Montée seulement quand elle est ouverte, comme la loupe : un
+          `Modal` fermé reste un nœud de plus dans l'arbre.
+
+          Deux portes, un seul composant : la PROPOSITION, qui se compte et
+          se tait au bout de trois refus, et le RENOMMAGE, qui vient des
+          réglages et n'a rien à refuser. Deux composants se seraient
+          désalignés le jour où l'on change la validation du nom. */}
+      {(proposerLeNomAgent || renommerAgent) && (
+        <FenetreAgent
+          visible
+          nomActuel={renommerAgent ? (maFichePro ? maFichePro.agentNom : null) : null}
+          vientDeTravailler={agentATravaille}
+          onNommer={nommerMonAgent}
+          onPlusTard={plusTardPourLAgent}
+          onFermer={() => setRenommerAgent(false)}
         />
       )}
 

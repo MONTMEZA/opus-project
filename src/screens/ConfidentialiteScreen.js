@@ -21,7 +21,9 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, ActivityIndicator, Share, StyleSheet,
 } from 'react-native';
-import { C, F, T, S, interligne } from '../theme';
+import {
+  C, F, T, S, APPUI, TOUCHE, interligne,
+} from '../theme';
 import { messageClair } from '../lib/erreurs';
 import {
   Avatar, BtnMain, BtnMini, BtnOutline, Field, EmptyState, SectionLabel,
@@ -42,6 +44,12 @@ const MOT_DE_PASSE_DE_SORTIE = 'SUPPRIMER';
 export default function ConfidentialiteScreen({
   onCharger, onChargerActionsIA, onDebloquer, onExporter, onSupprimer,
   onLire, onErreur,
+  /* LE NOM DE L'AGENT, ET LA PORTE POUR LE CHANGER (section 40). La
+     fenêtre ne se propose que trois fois, puis se tait pour toujours : il
+     faut donc un endroit où l'on puisse revenir, et c'est ici, avec tout
+     ce qui concerne l'agent. `onRenommerAgent` est absent pour un
+     particulier — il n'a pas d'agent. */
+  nomAgent, onRenommerAgent,
 }) {
   const [blocages, setBlocages] = useState([]);
   const [signalements, setSignalements] = useState([]);
@@ -205,6 +213,28 @@ export default function ConfidentialiteScreen({
 
       {/* --- ce que mon agent a fait --- */}
       <SectionLabel>Mon agent</SectionLabel>
+
+      {/* SON NOM, ET LE SEUL ENDROIT OÙ L'ON PEUT EN CHANGER.
+          La fenêtre qui le propose s'arrête après trois refus — le §2
+          interdit d'insister. Sans cette ligne, un artisan qui a touché
+          « Plus tard » trois fois ne pourrait plus JAMAIS nommer son
+          agent : la proposition serait devenue une porte fermée au lieu
+          d'une proposition. */}
+      {onRenommerAgent && (
+        <Pressable
+          onPress={onRenommerAgent}
+          style={({ pressed }) => [s.bloc, s.nomAgent, pressed && APPUI.plein]}
+          accessibilityRole="button"
+          accessibilityLabel={`Changer le nom de votre agent, actuellement ${nomAgent}`}
+        >
+          <Sparkles size={16} color={C.accent2} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nomAgentTexte} numberOfLines={1}>{nomAgent}</Text>
+            <Text style={s.nomAgentAide}>Touchez pour changer son nom</Text>
+          </View>
+        </Pressable>
+      )}
+
       <Text style={s.aide}>
         Chaque fois que l’assistant travaille pour vous, c’est inscrit ici :
         quoi, quand, et si ça a abouti. Ni votre question ni sa réponse ne
@@ -368,6 +398,17 @@ const s = StyleSheet.create({
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
     marginHorizontal: S.lg,
   },
+  /* La rangée du nom de l'agent : c'est une CIBLE, elle ouvre une
+     fenêtre. `minHeight: TOUCHE` et non `paddingVertical` — React Native
+     aplatit les styles par PRÉCISION, et la forme longue l'emporterait sur
+     ce que la rangée pose elle-même (leçon du lot E). */
+  nomAgent: {
+    flexDirection: 'row', alignItems: 'center', gap: S.md,
+    minHeight: TOUCHE, paddingHorizontal: S.md, paddingVertical: S.sm,
+    marginBottom: S.sm,
+  },
+  nomAgentTexte: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
+  nomAgentAide: { fontFamily: F.inter4, fontSize: T.petit, color: C.muted },
   ligne: {
     flexDirection: 'row', alignItems: 'center', gap: S.md,
     paddingVertical: S.md, paddingHorizontal: S.md,

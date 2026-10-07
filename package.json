@@ -79,7 +79,8 @@
     "verifier-chantier": "node scripts/verifier-chantier.mjs",
     "verifier-notifications": "node scripts/verifier-notifications.mjs",
     "verifier-agent": "node scripts/verifier-agent.mjs",
-    "verifier-recit": "node scripts/verifier-recit.mjs"
+    "verifier-recit": "node scripts/verifier-recit.mjs",
+    "verifier-agent-nom": "node scripts/verifier-agent-nom.mjs"
   },
   "private": true,
   "devDependencies": {

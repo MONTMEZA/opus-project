@@ -5401,6 +5401,211 @@ Le jour où l'agent écrira à partir d'étapes mal décrites, ou très
 nombreuses, le texte se jugera à nouveau — c'est la seule chose qu'un essai
 avec des étapes que J'AI écrites ne peut pas dire.
 
+### Nommer son agent — proposer trois fois, puis se taire (07/10/2026)
+
+Section 40 de `schema.sql`, `src/lib/agent.js`,
+`src/components/FenetreAgent.js`, `npm run verifier-agent-nom`.
+
+Demandé par le propriétaire après les lots H et I :
+
+> « quand la fenetre s'ouvre il puisse dire plus tard mais je pence qu'il
+> faut que de temp en temp elle lui re propose pour pas qu'il ne saute
+> cette etape »
+
+Il a raison des deux côtés, **et les deux côtés tirent en sens inverse** :
+une fenêtre toujours refusable se saute pour toujours ; une fenêtre qui
+revient sans fin devient ce que son propre cahier des charges interdit en
+propres termes — « les suggestions de l'IA ne doivent pas être
+insistantes » (§2).
+
+> **D'où un COMPTEUR, en base.** Trois propositions au plus, et la deuxième
+> comme la troisième n'arrivent qu'après que l'agent a vraiment travaillé
+> pour lui. Gardé sur le téléphone, ce compteur repartirait à zéro au
+> prochain démarrage et la fenêtre reviendrait à chaque lancement — c'est
+> exactement le défaut du point orange des Demandes, corrigé le 04/10.
+
+#### Elle revient au bon MOMENT, pas au bout d'un certain temps
+
+Une fenêtre qui s'ouvre parce que trois jours ont passé interrompt
+quelqu'un au milieu d'autre chose. Juste après que l'agent a amélioré un
+texte ou écrit le récit d'un chantier, la question « comment voulez-vous
+l'appeler ? » tombe au seul instant où elle a un sens : on vient de voir à
+quoi il sert.
+
+Le signal est **une seule porte**, et elle est dans `callAiFunction`
+(`src/lib/ai.js`) — le passage obligé des cinq actions, et de celles qui
+viendront (devis, facture, planning). Le brancher sur chaque écran, c'était
+cinq branchements aujourd'hui et un oubli silencieux au prochain lot : la
+règle de `changerOngletDecouvrir` du 04/10.
+
+Et il part **après** la réussite. Une demande refusée ou en panne n'est pas
+un travail fait, et ne doit pas en avoir l'air.
+
+#### LE DÉFAUT QUE SEULE LA CAPTURE A MONTRÉ
+
+La première version fonctionnait, et elle était mauvaise : **la fenêtre
+s'ouvrait par-dessus les trois propositions que l'agent venait d'écrire.**
+On demandait « comment voulez-vous l'appeler ? » à quelqu'un qui n'avait
+pas encore pu lire son travail. Tous les contrôles passaient, toutes les
+mesures étaient justes — c'est la capture de la vraie base qui l'a dit.
+
+> **Elle attend qu'il ait FINI, c'est-à-dire qu'il quitte l'écran.** Le
+> signal retient l'écran où le travail a eu lieu ; tant qu'on y est, la
+> fenêtre se tait. Pour un formulaire, quitter l'écran veut dire qu'on en a
+> fini.
+
+Vérifié sur la vraie base : l'IA répond, « 3 versions de VOTRE texte »
+s'affiche **sans rien par-dessus**, et la fenêtre s'ouvre en arrivant sur
+l'Accueil.
+
+#### Ce qu'on n'a PAS fait, et pourquoi
+
+- **Aucun réglage « laisser l'agent publier tout seul ».** Nommer son agent
+  est un nom, **pas une permission** — vérifié sur la vraie base : on écrit
+  `agent_nom` et `verifie = true` dans le même ordre, le nom passe et le
+  badge reste `false`.
+- **Aucune table nouvelle, aucune politique nouvelle.** Les deux colonnes
+  vivent dans `professional_profiles`, dont les règles sont écrites depuis
+  le premier jour. Un autre professionnel qui tente de renommer mon agent
+  reçoit `[]` — zéro ligne modifiée, vérifié par le chemin de
+  l'application.
+- **Le nom est PUBLIC, et c'est assumé.** Une règle RLS filtre des LIGNES,
+  jamais des COLONNES (section 18) : le rendre privé demanderait des droits
+  de colonne, donc de casser `select *` pour tous les rôles — pour protéger
+  le petit nom qu'un maçon donne à son outil. **Aucun écran d'Opus
+  n'affiche le nom de l'agent de quelqu'un d'autre.** Le jour où l'agent
+  portera des données de chantier, ce ne sera plus la même question — mais
+  ce ne sera plus la même colonne non plus.
+
+#### Le déclencheur est à part, et c'était un piège
+
+`tient_le_profil_pro()` (section 17.3) fait déjà ce nettoyage pour le
+téléphone et l'e-mail professionnel, et la règle du projet est « une règle
+ne s'écrit qu'à UN endroit ». Y ajouter `new.agent_nom` était le premier
+réflexe. **C'est un piège, et il ne se serait pas vu.**
+
+> **Un corps plpgsql n'est PAS analysé à la création, il l'est à
+> l'exécution.** La fonction de la section 17.3 nommerait une colonne née
+> 4 700 lignes plus bas, et le bloc `do` de la section 21 — qui remplace
+> les anciens noms de métier — exécute un vrai
+> `update public.professional_profiles` ENTRE les deux. Sur une base neuve
+> il ne touche aucune ligne : le schéma rejoué deux fois ne dirait RIEN.
+> Sur une base qui a des lignes à corriger, il casserait.
+
+C'est le défaut du matin même, section 37 : « l'erreur vivait dans un
+chemin que rien n'empruntait ». Le déclencheur vit donc avec ses colonnes,
+comme `tient_le_recit()` vit avec le récit. Deux déclencheurs sur la même
+table ne sont pas deux écritures de la même règle : ils gardent des
+colonnes disjointes.
+
+#### Le compteur ne redescend JAMAIS
+
+`greatest`, comme le compteur de vues de la section 35. « On s'arrête après
+trois refus » n'est tenu que si rien ne peut remettre le compteur à zéro :
+une version plus ancienne de l'application qui renvoie la fiche entière
+avec un `0`, un enregistrement de profil qui ne connaît pas cette colonne,
+une faute de frappe. Vérifié par le chemin de l'application : on envoie
+`agent_propositions = 0`, la base répond **1**.
+
+Et l'échappatoire habituelle reste ouverte : `auth.uid()` vide — l'éditeur
+SQL — peut remettre à zéro. Même procédé que `tient_le_profil_pro()` et
+`tient_les_metiers()`.
+
+#### La fenêtre se tait, le réglage reste
+
+C'est le point qu'il ne faut pas perdre en relisant : après trois refus, on
+ne propose plus **jamais**. Sans une autre porte, la proposition serait
+devenue une porte fermée — un artisan qui a touché « Plus tard » trois fois
+ne pourrait plus nommer son agent du tout. D'où la rangée **« Mon agent »**
+dans Confidentialité et sécurité, qui affiche son nom et ouvre la même
+fenêtre, pour toujours.
+
+Et fermer la fenêtre par le voile ou la croix **compte comme un refus** :
+une sortie qui ne le compte pas la fait revenir à chaque démarrage, et
+annule toute la section en silence.
+
+#### Trois détails qui ne sont pas cosmétiques
+
+1. **Le nom par défaut est en minuscules.** Tous les textes le placent au
+   MILIEU d'une phrase — « Faites-le raconter par votre agent » / « …par
+   Léon ». Un repli écrit « Votre agent » donnerait « par Votre agent ».
+   Une seule valeur, dans `src/lib/agent.js`, et le contrôle refuse qu'on
+   la réécrive ailleurs.
+2. **L'en-tête dit la vérité.** À la première ouverture, « il est prêt à
+   travailler pour vous » ; quand elle revient, « il vient de travailler
+   pour vous ». Écrire le second à la première ouverture serait un travail
+   annoncé qui n'a pas eu lieu.
+3. **Trois noms suggérés**, et le contrôle vérifie qu'ils passent leur
+   propre validation : une puce qui propose un nom que le bouton refuserait
+   est le pire des défauts.
+
+#### ET UN TROU TROUVÉ EN PASSANT : l'export RGPD ne contenait pas le journal
+
+En vérifiant `mes_donnees()` sur la vraie base pour voir si le nom de
+l'agent y entrait — il y entre, puisque l'export rend la ligne entière —,
+la clé `journal_ia` **était absente**. Relevé : `a_le_journal = false`.
+
+La migration du lot H avait emporté la table, ses politiques et
+`enregistrer_appel_ia()`, **mais pas `mes_donnees()`**. L'export de
+l'article 15 était donc incomplet depuis la veille au soir, sans la moindre
+erreur : la clé manquait, c'est tout.
+
+> **Une section qui ajoute une table ajoute sa ligne à `mes_donnees()` —
+> et la MIGRATION doit emporter la fonction, pas seulement la table.**
+> C'est le défaut que ce document traque depuis six commits tournant contre
+> une base qui ignorait `metiers` : `schema.sql` en avance sur la base.
+> Il s'est présenté ici dans sa forme la plus discrète, parce qu'un export
+> incomplet ressemble trait pour trait à un export fait.
+
+Et c'est pour cela qu'une COLONNE ne pose pas le même problème : `agent_nom`
+est arrivé tout seul dans l'export, par `to_jsonb(p)`. C'est exactement
+pourquoi cette fonction rend des lignes et pas des listes de colonnes.
+Corrigé et vérifié le jour même.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un PostgreSQL 16 neuf, les douze cas
+de `supabase/essais-section-40.sql`, les 40 contrôles, `npx expo export
+--platform ios`. Le contrôle a été éprouvé **en cassant ce qu'il
+surveille** : **trente-et-un défauts remis à la main, les trente-et-un
+refusés** — dont « on n'arrête jamais d'insister », « on se tait dès le
+premier refus », « le compteur peut redescendre », « fermer la fenêtre ne
+compte pas », « le signal part avant la réussite » et « la fenêtre recouvre
+le travail qu'elle annonce ».
+
+Puis au navigateur en démonstration, et surtout **sur la VRAIE base**
+(migration appliquée par le connecteur), avec trois comptes professionnels
+jetables supprimés dans la même session (0 restant, base revenue à
+13 comptes / 7 fiches / 20 publications / 2 chantiers / 5 lignes de
+journal) :
+
+| | relevé |
+|---|---|
+| la fenêtre à la première connexion | **ouverte**, « il est prêt à travailler » |
+| les puces | **54 × 44** ; le champ et les deux boutons, **358 × 44** |
+| une puce touchée | le champ se remplit |
+| le nom « 12 » | refusé, « un nom contient au moins une lettre » |
+| « Plus tard » | la fenêtre se ferme, **`agent_propositions = 1` en base** |
+| quatre onglets parcourus | **toujours fermée** |
+| l'agent améliore un texte | `POST /functions/v1/ai 200` |
+| …pendant qu'on lit le résultat | **elle attend** |
+| …une fois l'écran quitté | **elle s'ouvre**, « il vient de travailler » |
+| on le nomme | `PATCH /rest/v1/professional_profiles 200`, bandeau |
+| « Mon agent » | **358 × 52**, affiche « Margot », rouvre la fenêtre |
+| le réglage | **sans** « Plus tard » — il n'y a rien à refuser |
+| on renvoie `agent_propositions = 0` | la base répond **1** |
+| un nom de 38 caractères | **23514** |
+| un nom fait de blancs | **`null`** |
+| `agent_nom` + `verifie = true` | nom posé, **badge toujours `false`** |
+| un AUTRE pro tente de le renommer | **`[]`**, le nom ne bouge pas |
+| l'export RGPD | `agent_nom`, `agent_propositions`, et le journal |
+| la page du chantier | « Faites-le raconter par Léon » |
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone — en
+particulier le clavier qui s'ouvre sous le champ de la feuille, qui n'existe
+pas dans ce navigateur. Et **aucun artisan réel n'a encore nommé son
+agent** : la vraie base compte 7 fiches et 0 nom.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

@@ -46,12 +46,20 @@ import ChampLocal from './ChampLocal';
 import {
   peutEcrireLeRecit, recitPerime, etapesPourLeRecit, LONGUEUR_MAX_RECIT,
 } from '../lib/recit';
+import { AGENT_SANS_NOM } from '../lib/agent';
 import { messageClair } from '../lib/erreurs';
 import * as retour from '../lib/retour';
 
 export default function RecitChantier({
   chantier, publications = [], estLeMien = false,
   onEcrire, onEnregistrer, onErreur,
+  /* QUELQU'UN LIT LE NOM DE L'AGENT, et c'est ici. Une colonne qu'on
+     écrit sans jamais la relire est la panne silencieuse favorite de ce
+     projet — le défaut du 01/10, et celui des photos d'annonce du 04/10
+     dans l'autre sens. Le repli (« votre agent ») est calculé par
+     `nomAgent()` dans `src/lib/agent.js` : une seule valeur, un seul
+     endroit. */
+  nomAgent = AGENT_SANS_NOM,
 }) {
   /**
    * LE BROUILLON EST UN TEXTE, PAS UN BOOLÉEN — et c'est une correction.
@@ -227,7 +235,7 @@ export default function RecitChantier({
       <View style={s.bloc}>
         <View style={s.enTete}>
           <Sparkles size={14} color={C.accent2} />
-          <Text style={s.enTeteTexte}>Votre agent peut le raconter</Text>
+          <Text style={s.enTeteTexte}>{`Faites-le raconter par ${nomAgent}`}</Text>
         </View>
         <Text style={s.aide}>
           Il assemble vos étapes en un texte que vos clients liront d’un

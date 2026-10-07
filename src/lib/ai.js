@@ -41,11 +41,39 @@ export class AiNotConfiguredError extends Error {
  * deux actions qui ne visent rien de nommable (`match`, `bio`) n'en envoient
  * pas : inventer une cible serait pire que ne rien dire.
  */
+/**
+ * « L'AGENT VIENT DE TRAVAILLER » — une seule porte, et elle est ICI.
+ *
+ * La fenêtre qui propose de nommer l'agent (section 40) ne revient pas au
+ * bout d'un certain TEMPS, elle revient au bon MOMENT : juste après que
+ * l'agent a fait quelque chose pour l'artisan. Il fallait donc un signal.
+ *
+ * Il est posé dans `callAiFunction`, qui est le seul passage de toutes les
+ * actions — et de celles qui viendront (devis, facture, planning). Le
+ * brancher sur chaque écran aurait voulu dire cinq branchements
+ * aujourd'hui, et un oubli silencieux au prochain lot : c'est la règle de
+ * `changerOngletDecouvrir` du 04/10, « deux façons d'arriver au même
+ * endroit doivent faire exactement le même travail ».
+ *
+ * Et le signal part APRÈS la réussite : une demande refusée ou en panne
+ * n'est pas un travail fait, et ne doit pas en avoir l'air. C'est la règle
+ * du 05/10 sur « Pour moi », et celle qui a fait corriger le journal d'audit
+ * du lot H.
+ */
+const temoinsTravail = new Set();
+
+export function surTravailAgent(f) {
+  if (typeof f !== 'function') return () => {};
+  temoinsTravail.add(f);
+  return () => { temoinsTravail.delete(f); };
+}
+
 async function callAiFunction(payload) {
   if (!hasSupabase) throw new AiNotConfiguredError();
   const { data, error } = await supabase.functions.invoke('ai', { body: payload });
   if (error) throw error;
   if (data && data.error) throw new Error(data.error);
+  temoinsTravail.forEach((f) => { try { f(); } catch (e) { /* un témoin cassé ne casse pas l'IA */ } });
   return data;
 }
 

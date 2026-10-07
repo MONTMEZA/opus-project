@@ -63,6 +63,10 @@ export default function ChantierScreen({
   chantier, publications = [], pro, chargement = false,
   estLeMien = false, onRetour, onBasculerStatut, onOuvrirPublication,
   onEcrireRecit, onEnregistrerRecit, onErreur,
+  /* Le nom que l'artisan a donné à son agent, ou « votre agent » (section
+     40). Il arrive déjà calculé : l'écran n'a pas à connaître la valeur de
+     repli, sinon il y en aurait deux dans le projet. */
+  nomAgent,
 }) {
   if (!chantier) return null;
 
@@ -107,6 +111,7 @@ export default function ChantierScreen({
           chantier={chantier}
           publications={publications}
           estLeMien={estLeMien}
+          nomAgent={nomAgent}
           onEcrire={onEcrireRecit}
           onEnregistrer={onEnregistrerRecit}
           onErreur={onErreur}

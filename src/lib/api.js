@@ -334,6 +334,12 @@ const COLONNES_PRO_LISTE = [
   /* La certification RGE. `rge` est la seule vérifiée ; les trois autres
      sont ce que l'artisan a déclaré, et n'affichent pas de badge. */
   'rge', 'rge_declare', 'rge_numero', 'rge_expire', 'rge_url',
+  /* LE NOM DE L'AGENT voyage avec la fiche, et il est PUBLIC — une règle
+     RLS filtre des lignes, jamais des colonnes (section 18). C'est écrit
+     et assumé en section 40 : aucun écran d'Opus n'affiche le nom de
+     l'agent de quelqu'un d'autre. Il est ici parce que l'artisan doit lire
+     LE SIEN sans une requête de plus au démarrage. */
+  'agent_nom', 'agent_propositions',
 ].join(', ');
 
 function rowToPro(row, reviews = [], partners = []) {
@@ -381,6 +387,11 @@ function rowToPro(row, reviews = [], partners = []) {
     verificationNote: row.verification_note || null,
     /* La note tenue par la base : elle permet d'afficher une moyenne dans
        les listes SANS télécharger les avis. Voir avgReviews(). */
+    /* Le petit nom que l'artisan a donné à son agent, et le nombre de fois
+       où on lui a proposé de le faire. `doitProposerLeNom()` (src/lib/agent.js)
+       est la seule à décider ce qu'on en fait. */
+    agentNom: row.agent_nom || null,
+    agentPropositions: row.agent_propositions || 0,
     avisCount: row.avis_count || 0,
     noteDelais: row.note_delais || 0,
     noteQualite: row.note_qualite || 0,
@@ -1105,6 +1116,73 @@ export const marquerDemandesVues = !hasSupabase ? noop : async () => {
   await supabase.from('professional_profiles')
     .update({ demandes_vues_le: new Date().toISOString() })
     .eq('id', currentUserId);
+};
+
+/**
+ * LE NOM DE L'AGENT — l'artisan le donne, et personne d'autre.
+ *
+ * La politique « ecriture mon profil » exige `auth.uid() = id` : un autre
+ * professionnel qui essaie reçoit zéro ligne modifiée. Vérifié sur la
+ * vraie base (essais 6 et 7 de `supabase/essais-section-40.sql`).
+ *
+ * L'erreur EST remontée, contrairement à `marquerDemandesVues` : éteindre
+ * un point en silence est une chose, laisser croire qu'un nom est
+ * enregistré alors qu'il ne l'est pas en est une autre — c'est le « X est
+ * prévenu » du 01/10, en plus petit.
+ */
+async function nommerAgentDemo(nom) {
+  const fiche = demoPros[currentUserId] || demoPros[Object.keys(demoPros)[0]];
+  if (!fiche) throw new Error("Aucune fiche professionnelle à laquelle donner un agent.");
+  fiche.agentNom = String(nom || '').trim() || null;
+  return fiche.agentNom;
+}
+
+export const nommerAgent = !hasSupabase ? nommerAgentDemo : async (nom) => {
+  const propre = String(nom || '').trim();
+  const { data, error } = await supabase.from('professional_profiles')
+    .update({ agent_nom: propre || null })
+    .eq('id', currentUserId)
+    .select('agent_nom').single();
+  if (error) throw error;
+  return data ? data.agent_nom : null;
+};
+
+/**
+ * « PLUS TARD » — on compte le refus, et c'est ce compteur qui nous fera
+ * nous taire.
+ *
+ * Le propriétaire a demandé que la fenêtre revienne « de temps en temps »
+ * pour qu'on ne saute pas l'étape ; le §2 interdit d'insister. Le compteur
+ * tient les deux, et il est en BASE : gardé sur le téléphone, il repartirait
+ * à zéro au prochain démarrage et la fenêtre reviendrait à chaque
+ * lancement. C'est exactement le défaut du point orange des Demandes,
+ * corrigé le 04/10.
+ *
+ * On lit la valeur AVANT d'écrire — PostgREST ne sait pas incrémenter —, et
+ * `greatest()` dans `tient_l_agent()` (section 40.1) garantit que le
+ * compteur ne redescend jamais, quoi qu'envoie le client.
+ *
+ * L'échec n'est PAS remonté : ne pas réussir à noter un refus ne mérite pas
+ * un message d'erreur à quelqu'un qui vient de toucher « Plus tard ». Le
+ * pire qui arrive, c'est que la question revienne une fois de plus.
+ */
+async function noterRefusAgentDemo() {
+  const fiche = demoPros[currentUserId] || demoPros[Object.keys(demoPros)[0]];
+  if (!fiche) return 0;
+  fiche.agentPropositions = (fiche.agentPropositions || 0) + 1;
+  return fiche.agentPropositions;
+}
+
+export const noterRefusAgent = !hasSupabase ? noterRefusAgentDemo : async () => {
+  const { data: avant } = await supabase.from('professional_profiles')
+    .select('agent_propositions').eq('id', currentUserId).maybeSingle();
+  const suivant = ((avant && avant.agent_propositions) || 0) + 1;
+  const { data, error } = await supabase.from('professional_profiles')
+    .update({ agent_propositions: suivant })
+    .eq('id', currentUserId)
+    .select('agent_propositions').maybeSingle();
+  if (error) return suivant;
+  return data ? data.agent_propositions : suivant;
 };
 
 /**

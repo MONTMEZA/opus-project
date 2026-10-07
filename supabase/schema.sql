@@ -7148,8 +7148,172 @@ comment on column public.chantiers.recit is
 --  la ligne et pas une liste de colonnes.
 -- --------------------------------------------------------------------------
 
+-- ==========================================================================
+--  40. LE NOM DE L'AGENT — et une proposition qui n'insiste pas (07/10/2026)
+--
+--  Demandé par le propriétaire après les lots H et I :
+--
+--    « quand la fenetre s'ouvre il puisse dire plus tard mais je pence
+--      qu'il faut que de temp en temp elle lui re propose pour pas qu'il
+--      ne saute cette etape »
+--
+--  Il a raison des deux côtés, et les deux côtés tirent en sens inverse :
+--  une fenêtre qu'on peut toujours refuser se saute pour toujours, et une
+--  fenêtre qui revient sans fin devient ce que le §2 du cahier des charges
+--  interdit en propres termes — « les suggestions de l'IA ne doivent pas
+--  être insistantes ».
+--
+--  D'où DEUX colonnes, et la seconde est tout l'intérêt de cette section :
+--  on compte les refus, et on s'arrête.
+--
+--  POURQUOI LA FICHE PRO, ET PAS LE COMPTE
+--  ----------------------------------------
+--  Le §3 décrit l'agent comme celui de l'ARTISAN : il rédige ses devis,
+--  tient son planning, raconte ses chantiers. Un particulier n'a rien à
+--  lui faire faire aujourd'hui. Le nom vit donc là où vit l'entreprise —
+--  la fiche professionnelle EST l'entreprise, décidé le 04/10/2026.
+--
+--  ET CE NOM EST PUBLIC, parce qu'une règle RLS filtre des LIGNES, jamais
+--  des COLONNES (section 18) : `professional_profiles` est lisible par
+--  tout le monde. Le rendre privé demanderait des droits de colonne, donc
+--  de casser `select *` pour tous les rôles — pour protéger le petit nom
+--  qu'un maçon donne à son outil. On l'assume et on l'écrit : **aucun
+--  écran d'Opus n'affiche le nom de l'agent de QUELQU'UN D'AUTRE.** Le
+--  jour où l'agent portera des données de chantier, ce ne sera plus la
+--  même question — mais ce ne sera plus la même colonne non plus.
+-- ==========================================================================
+
+alter table public.professional_profiles add column if not exists agent_nom text;
+
+/* Le nombre de fois où la fenêtre a été PROPOSÉE puis refusée. C'est le
+   seul garde-fou contre l'insistance, et il est en base et non à l'écran
+   pour la raison qui vaut dans tout ce fichier : un compteur gardé sur le
+   téléphone repart à zéro au prochain démarrage, et la fenêtre
+   reviendrait à chaque lancement. C'est exactement le défaut du point
+   orange des Demandes, corrigé le 04/10. */
+alter table public.professional_profiles
+  add column if not exists agent_propositions int not null default 0;
+
+/* Les deux contraintes sont créées SOUS CONDITION D'EXISTENCE : le
+   connecteur Supabase refuse tout ordre qui commence par `drop`, donc la
+   paire `drop constraint` + `add constraint` ne passe pas depuis une
+   session de travail. `schema.sql` est rejoué par psql, qui n'a pas ce
+   garde-fou, mais écrire la règle d'une seule façon évite qu'une version
+   diverge de l'autre. */
+do $mig$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.professional_profiles'::regclass
+       and conname = 'pro_agent_nom_check'
+  ) then
+    alter table public.professional_profiles
+      add constraint pro_agent_nom_check
+      check (agent_nom is null or char_length(agent_nom) between 2 and 24);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.professional_profiles'::regclass
+       and conname = 'pro_agent_propositions_check'
+  ) then
+    alter table public.professional_profiles
+      add constraint pro_agent_propositions_check
+      check (agent_propositions between 0 and 100);
+  end if;
+end
+$mig$;
+
 -- --------------------------------------------------------------------------
---  40. L'EXPORT RGPD — et pourquoi il est le DERNIER
+--  40.1 Un déclencheur à part, et POURQUOI il n'est pas dans
+--       `tient_le_profil_pro()`
+--
+--  `tient_le_profil_pro()` (section 17.3) fait déjà exactement ce
+--  nettoyage pour le téléphone et l'e-mail professionnel, et la règle du
+--  projet est « une règle ne s'écrit qu'à UN endroit ». Y ajouter
+--  `new.agent_nom` était donc le premier réflexe. **C'est un piège, et il
+--  ne se serait pas vu.**
+--
+--  Un corps plpgsql n'est PAS analysé à la création : il l'est à
+--  l'exécution. La fonction de la section 17.3 nommerait donc une colonne
+--  née 4 700 lignes plus bas, et le bloc `do` de la section 21 — qui
+--  remplace les anciens noms de métier — exécute un vrai
+--  `update public.professional_profiles` ENTRE les deux. Sur une base
+--  neuve il ne touche aucune ligne, donc le déclencheur ne s'exécute pas
+--  et le schéma rejoué deux fois ne dirait RIEN. Sur une base qui a des
+--  lignes à corriger, il casserait.
+--
+--  > C'est le défaut du 07/10 au matin, dans la section 37 : « l'erreur
+--  > vivait dans un chemin que rien n'empruntait ». On ne refait pas la
+--  > même faute le même jour.
+--
+--  Le déclencheur vit donc ICI, avec ses colonnes, comme `tient_le_recit()`
+--  vit avec le récit. Deux déclencheurs sur la même table ne sont pas deux
+--  écritures de la même règle : ils gardent des colonnes disjointes.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_l_agent()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  /* Un seul nom, et une seule façon de dire « il n'y en a pas ». Un champ
+     vidé redevient `null` plutôt qu'une chaîne vide, sinon l'écran
+     afficherait un agent qui s'appelle « ». Même règle que `email_pro` et
+     que le récit du chantier. */
+  new.agent_nom := nullif(btrim(coalesce(new.agent_nom, '')), '');
+
+  /* LE COMPTEUR NE REDESCEND JAMAIS, et c'est la promesse de la section.
+     « On s'arrête après trois refus » n'est tenu que si rien ne peut
+     remettre le compteur à zéro — une version plus ancienne de
+     l'application qui renvoie la fiche entière avec un `0`, un
+     enregistrement de profil qui ne connaît pas cette colonne, une faute
+     de frappe. Même procédé que le compteur de vues (section 35) :
+     `greatest`, et la question ne se pose plus.
+
+     La contrainte est posée pour l'ARTISAN lui-même, comme toutes celles
+     du projet : `auth.uid()` vide — l'éditeur SQL, une fonction Edge —
+     laisse passer, parce que c'est par là que passerait une remise à zéro
+     décidée par un humain. */
+  if tg_op = 'UPDATE' and auth.uid() is not null and auth.uid() = new.id then
+    new.agent_propositions := greatest(
+      coalesce(new.agent_propositions, 0),
+      coalesce(old.agent_propositions, 0)
+    );
+  end if;
+
+  return new;
+end;
+$$;
+
+/* `create or replace trigger` (PostgreSQL 14+) et non la paire
+   `drop` + `create` : le connecteur Supabase refuse un ordre qui commence
+   par `drop`, et cette forme est de toute façon meilleure — il n'existe
+   aucun instant où la table serait sans son déclencheur. */
+create or replace trigger trg_tient_l_agent
+  before insert or update on public.professional_profiles
+  for each row execute function public.tient_l_agent();
+
+-- --------------------------------------------------------------------------
+--  40.2 Ce que cette section ne pose PAS
+--
+--  Aucune politique nouvelle. Les deux colonnes vivent dans
+--  `professional_profiles`, dont les règles sont écrites depuis le premier
+--  jour : « chacun sa fiche » en écriture, lecture publique. Un artisan
+--  nomme son agent, personne d'autre ne peut le renommer — vérifié
+--  (essais 6 et 7 de `supabase/essais-section-40.sql`), un autre
+--  professionnel obtient zéro ligne modifiée.
+--
+--  Et aucune colonne « l'agent peut publier tout seul ». La section 39 a
+--  écrit pourquoi : une seule action ne fait pas un écran de réglages, et
+--  « l'agent écrit, l'artisan publie » n'est pas négociable tant que ce
+--  qu'il écrit part sur une vitrine publique. Nommer son agent ne lui
+--  donne aucun droit de plus — c'est un nom, pas une permission.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  41. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
 --  « Ce que j'ai regardé » et « mes chantiers » sont des données
 --  personnelles sur MOI, donc elles entrent dans l'export de l'article 15.
