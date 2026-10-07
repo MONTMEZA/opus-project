@@ -6985,9 +6985,18 @@ end; $$;
 -- > C'est exactement le piège du 29/09 sur les colonnes : « `revoke
 -- > select (colonne)` ne retire rien tant que le rôle possède le droit de
 -- > lire la table entière ». Même forme, autre objet.
+-- > **ET IL FAUT RÉVOQUER LES DEUX**, découvert sur la VRAIE base le
+-- > 07/10 juste après avoir appliqué la migration : un appel anonyme a
+-- > répondu `409` — donc la fonction s'était EXÉCUTÉE. Supabase accorde
+-- > `execute` à `anon` et `authenticated` par `alter default privileges`,
+-- > c'est-à-dire par un grant DIRECT que `revoke … from public` ne touche
+-- > pas. La base d'essai, elle, n'accordait rien aux fonctions : l'essai 9
+-- > y passait au vert pendant que la porte était grande ouverte en
+-- > production. `local-prelude.sql` accorde désormais la même chose, pour
+-- > que ce défaut-là soit reproductible.
 revoke all on function public.enregistrer_appel_ia(
   uuid, text, text, text, int, int, text, int
-) from public;
+) from public, anon, authenticated;
 
 grant execute on function public.enregistrer_appel_ia(
   uuid, text, text, text, int, int, text, int

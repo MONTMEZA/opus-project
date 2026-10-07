@@ -92,4 +92,16 @@ grant usage on schema public, auth, storage to anon, authenticated, service_role
 -- donc RIEN. Voir l'en-tête.
 alter default privileges in schema public grant all on tables    to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+/* ET LES FONCTIONS, ajouté le 07/10/2026 — leur absence a laissé passer un
+   défaut réel. Supabase accorde `execute` à ces trois rôles sur toute
+   fonction née dans `public` ; ce prélude ne le faisait pas, donc un
+   `revoke … from public` suffisait ICI et ne suffisait PAS là-bas. La
+   section 38 est passée au vert sur cette base d'essai pendant que, sur la
+   vraie, n'importe qui pouvait appeler `enregistrer_appel_ia`.
+
+   > **Un prélude qui accorde MOINS que la production fait passer des
+   > essais de sécurité pour la mauvaise raison.** C'est la même famille
+   > que le `alter default privileges` sur les tables juste au-dessus, qui
+   > avait coûté deux heures dans l'autre sens. */
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 grant select, insert, update, delete on storage.objects, storage.buckets to anon, authenticated, service_role;
