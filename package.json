@@ -77,7 +77,8 @@
     "verifier-conseil": "node scripts/verifier-conseil.mjs",
     "verifier-vues": "node scripts/verifier-vues.mjs",
     "verifier-chantier": "node scripts/verifier-chantier.mjs",
-    "verifier-notifications": "node scripts/verifier-notifications.mjs"
+    "verifier-notifications": "node scripts/verifier-notifications.mjs",
+    "verifier-agent": "node scripts/verifier-agent.mjs"
   },
   "private": true,
   "devDependencies": {

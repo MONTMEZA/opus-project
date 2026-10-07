@@ -27,20 +27,37 @@ import {
   Avatar, BtnMain, BtnMini, BtnOutline, Field, EmptyState, SectionLabel,
 } from '../components/ui';
 import {
-  Flag, Trash, ChevronRight, Check, AlertTriangle, Scale,
+  Flag, Trash, ChevronRight, Check, AlertTriangle, Scale, Sparkles, WifiOff,
 } from '../components/icons';
 import { motifDe, cibleDe, DELAI_EXAMEN_HEURES } from '../data/moderation';
+import {
+  LIMITE_IA_PAR_JOUR, libelleAction, libelleCible, libelleResultat, estUnEchec,
+} from '../lib/journal-ia';
+import { TAILLE_JOURNAL_IA } from '../lib/api';
 import { TITRES_LEGAUX } from './LegalScreen';
 
 /** Le mot à taper pour supprimer. En majuscules : on ne le tape pas par hasard. */
 const MOT_DE_PASSE_DE_SORTIE = 'SUPPRIMER';
 
 export default function ConfidentialiteScreen({
-  onCharger, onDebloquer, onExporter, onSupprimer, onLire, onErreur,
+  onCharger, onChargerActionsIA, onDebloquer, onExporter, onSupprimer,
+  onLire, onErreur,
 }) {
   const [blocages, setBlocages] = useState([]);
   const [signalements, setSignalements] = useState([]);
   const [chargement, setChargement] = useState(true);
+
+  /* LE JOURNAL DE L'AGENT A SON PROPRE ÉTAT, ET SON PROPRE ÉCHEC.
+     Le ranger dans `onCharger` avec les deux autres le rendrait solidaire :
+     une table absente, un droit manquant, et c'est TOUT cet écran qui
+     tombe — c'est-à-dire l'export RGPD et la suppression de compte avec
+     lui. Un journal d'audit ajouté hier ne doit pas pouvoir fermer la
+     porte de sortie de quelqu'un. */
+  const [actionsIA, setActionsIA] = useState([]);
+  /* Démarré à `false` quand il n'y a rien à charger : poser l'état depuis
+     l'effet déclencherait un rendu en cascade, et le linter le refuse. */
+  const [chargementIA, setChargementIA] = useState(Boolean(onChargerActionsIA));
+  const [echecIA, setEchecIA] = useState(false);
 
   const [exportEnCours, setExportEnCours] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
@@ -61,6 +78,28 @@ export default function ConfidentialiteScreen({
     })();
     return () => { vivant = false; };
   }, []);
+
+  useEffect(() => {
+    if (!onChargerActionsIA) return undefined;
+    let vivant = true;
+    (async () => {
+      try {
+        const lignes = await onChargerActionsIA();
+        if (vivant) setActionsIA(lignes || []);
+      } catch (e) {
+        /* On ne montre PAS de bandeau rouge pour ça : l'écran a d'autres
+           sections qui fonctionnent, et le bandeau recouvre le haut de la
+           page. La section le dit elle-même, là où on la regarde. */
+        if (vivant) setEchecIA(true);
+      }
+      if (vivant) setChargementIA(false);
+    })();
+    return () => { vivant = false; };
+    /* `api.mesActionsIA` est une constante de module : la dépendance est
+       stable, l'effet ne part donc qu'une fois — et le linter n'a rien à
+       signaler. L'effet du dessus, lui, reçoit une fonction fabriquée à
+       chaque rendu ; c'est une des 33 alertes que le cliquet tient. */
+  }, [onChargerActionsIA]);
 
   const debloquer = async (id) => {
     try {
@@ -163,6 +202,74 @@ export default function ConfidentialiteScreen({
           </View>
         ))}
       </View>
+
+      {/* --- ce que mon agent a fait --- */}
+      <SectionLabel>Mon agent</SectionLabel>
+      <Text style={s.aide}>
+        Chaque fois que l’assistant travaille pour vous, c’est inscrit ici :
+        quoi, quand, et si ça a abouti. Ni votre question ni sa réponse ne
+        sont conservées — ce qu’on n’écrit pas ne peut pas fuir. Il peut
+        travailler {LIMITE_IA_PAR_JOUR} fois par jour ; au-delà il vous le
+        dit, et il repart 24 h plus tard.
+      </Text>
+      <View style={s.bloc}>
+        {chargementIA && <ActivityIndicator style={{ margin: S.lg }} color={C.muted} />}
+
+        {/* UN ÉCHEC NE RESSEMBLE PAS À UNE LISTE VIDE. « Votre agent n’a
+            encore rien fait » devant une lecture qui a raté serait une
+            bonne nouvelle annoncée à tort — le défaut de « Pour moi » du
+            05/10. */}
+        {!chargementIA && echecIA && (
+          <EmptyState icone={WifiOff} titre="Lecture impossible">
+            Le journal de votre agent n’a pas pu être lu. Ce n’est pas qu’il
+            n’a rien fait : on n’a pas réussi à le demander.
+          </EmptyState>
+        )}
+
+        {!chargementIA && !echecIA && actionsIA.length === 0 && (
+          <EmptyState>
+            Votre agent n’a encore rien fait pour vous.
+          </EmptyState>
+        )}
+
+        {!echecIA && actionsIA.map((a, i) => {
+          const souci = estUnEchec(a.resultat);
+          const cible = libelleCible(a.cible_type);
+          const souci_texte = libelleResultat(a.resultat);
+          return (
+            <View
+              key={String(a.id)}
+              style={[
+                s.ligne,
+                i === actionsIA.length - 1 && { borderBottomWidth: 0 },
+                /* Le souci se marque au BORD, pas au fond : un fond teinté
+                   derrière le texte le rend moins lisible, et c'est le
+                   texte qu'on vient lire. La règle des cartes « Nouveau »
+                   des Demandes. */
+                souci && { borderLeftWidth: 3, borderLeftColor: C.bad },
+              ]}
+            >
+              <Sparkles size={14} color={souci ? C.bad : C.accent2} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.ligneTexte}>
+                  {libelleAction(a.action)}{cible ? ` ${cible}` : ''}
+                </Text>
+                <Text style={s.ligneMeta}>
+                  {a.time}{souci_texte ? ` · ${souci_texte}` : ''}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      {/* LA TRONCATURE SE DIT. Une liste coupée en silence laisse croire
+          que l'agent n'a rien fait de plus. */}
+      {!echecIA && actionsIA.length >= TAILLE_JOURNAL_IA && (
+        <Text style={s.aide}>
+          Seules les {TAILLE_JOURNAL_IA} dernières actions sont affichées.
+          Toutes sont dans « Récupérer mes données », ci-dessous.
+        </Text>
+      )}
 
       {/* --- récupérer ses données --- */}
       <SectionLabel>Mes données</SectionLabel>

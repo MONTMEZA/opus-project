@@ -5041,6 +5041,197 @@ cause du mauvais onglet, puis mesuré qu'il n'y changeait rien — la cause
 peut pas éprouver est exactement ce que ce document refuse. Reste à trancher
 s'il protégeait un cas iOS que le navigateur ne montre pas.
 
+### Le socle de l'agent — qui appelle l'IA, et on le note (07/10/2026)
+
+Section 38 de `schema.sql`, `src/lib/journal-ia.js`, `npm run verifier-agent`.
+Premier lot de l'agent Opus (§3, §21, §23 du cahier des charges), et il
+commence par une porte qui était grande ouverte.
+
+#### N'IMPORTE QUI pouvait faire payer des appels Anthropic
+
+La fonction Edge `ai` n'a jamais regardé QUI l'appelait. Elle acceptait la
+**clé publiable**, qui est dans le paquet de l'application, donc lisible sur
+n'importe quel téléphone.
+
+> **Une clé publiable EST un jeton valide, mais elle ne désigne personne.**
+> `supabase.auth.getUser(jeton)` ne rend alors aucun utilisateur — et c'est
+> exactement ce test qui ferme la porte. Sans lui, un script pouvait appeler
+> Claude en boucle sur la facture du propriétaire.
+
+Et identifier ne suffit pas : **un seul compte d'essai suffirait à vider le
+budget** en lançant mille fois la même demande. D'où la limite, et elle est
+tenue par la BASE.
+
+#### Le comptage et l'écriture sont le MÊME ordre
+
+C'est tout l'intérêt de `enregistrer_appel_ia()` : compter d'un côté puis
+écrire de l'autre laisse un intervalle où deux appels simultanés passent
+tous les deux. Ici la ligne du journal n'existe que si la limite le permet,
+et dans la même transaction.
+
+> **Et elle part AVANT Anthropic.** Refuser après avoir payé l'appel ne
+> protège rien. Le coût réel, lui, ne se connaît qu'après : la ligne est
+> complétée dans un second temps. Sans ce second temps, `jetons_entree` et
+> `jetons_sortie` resteraient à zéro pour toujours — deux colonnes écrites
+> et jamais remplies.
+
+#### `raise exception` ANNULE la transaction — l'essai l'a démoli en une ligne
+
+Le premier jet levait une exception quand la limite mordait. Donc :
+l'insertion du refus qu'on venait d'écrire **partait avec la transaction**,
+et le journal n'aurait gardé aucune trace des limites atteintes. L'inverse
+exact de ce qu'on voulait, et invisible sans l'exécuter.
+
+> **Un refus n'est pas une panne : la fonction REND toujours une ligne**, et
+> c'est son `resultat` qui dit ce qui s'est passé. L'exception ne reste que
+> pour `p_user is null`, qui n'est pas un cas métier mais une faute de
+> programmation — là, il FAUT que ça casse.
+
+Même raison du côté du comptage : **on ne compte que les appels qui ont
+abouti**. Compter les refus ferait qu'un compte bloqué le reste la journée
+entière à cause de ses propres tentatives.
+
+#### `revoke` : il faut révoquer TROIS choses, et la base d'essai mentait
+
+Le défaut le plus instructif du lot, et il n'a été trouvé que **sur la vraie
+base**, juste après avoir appliqué la migration : un appel anonyme a répondu
+`409` — donc la fonction s'était **exécutée**.
+
+| ce qui est écrit | ce que ça retire |
+|---|---|
+| `revoke … from anon, authenticated` | **rien** — PostgreSQL accorde `execute` à **PUBLIC** sur toute fonction neuve |
+| `revoke … from public` | le droit de PUBLIC, **mais pas** le grant direct que Supabase pose par `alter default privileges` |
+| `revoke … from public, anon, authenticated` | **tout** |
+
+C'est le piège du 29/09 sur les colonnes — « `revoke select (colonne)` ne
+retire rien tant que le rôle possède le droit de lire la table entière » —,
+même forme, autre objet.
+
+> **Et la base d'essai passait au vert pendant que la porte était ouverte en
+> production.** `local-prelude.sql` n'accordait les droits par défaut que
+> sur les TABLES, pas sur les FONCTIONS : l'essai 9 ne pouvait donc pas
+> reproduire le défaut. Il le fait maintenant.
+
+#### Le journal ne contient NI la question NI la réponse
+
+Il note QUE l'IA a été appelée, par QUI, pour QUOI et à quel COÛT.
+
+> **Ce qu'on n'écrit pas ne peut pas fuir.** Le texte d'une demande à l'IA
+> contient le nom d'un client, un prix, parfois une adresse — des données de
+> TIERS que l'artisan n'a pas à voir conservées, et que le RGPD obligerait à
+> purger. Le journal répond aux questions qu'on se pose vraiment sans rien
+> de tout cela.
+
+Même esprit que `journal_admin` (section 25) : **aucune politique
+d'écriture**, pas même pour soi. Seule la fonction Edge, qui détient la clé
+de service, peut y ajouter une ligne. Un journal qu'on peut récrire ne
+prouve rien. Vérifié sur la vraie base : un `insert` direct répond **403**,
+et l'appel direct à la fonction d'écriture **403** aussi.
+
+#### Et QUELQU'UN LE LIT — sinon tout ce qui précède est du décor
+
+C'est le point qui a failli manquer. L'intention de départ était « poser le
+journal maintenant, on le regardera plus tard » : c'est mot pour mot le
+défaut du 01/10, et ce serait un comble pour un journal d'audit.
+
+> **« Confidentialité et sécurité → Mon agent »** montre ce que l'agent a
+> fait, quand, et si ça a abouti. C'est aussi ce que le §23 demande en
+> propres termes : « possibilité de consulter l'historique ».
+
+Quatre décisions à ne pas redécouvrir :
+
+1. **On n'affiche PAS le nombre d'appels restants.** C'est tentant et c'est
+   un piège : ce serait une SECONDE écriture de la règle tenue par
+   `enregistrer_appel_ia()` — qui compte les lignes `ok` des 24 dernières
+   heures **sur l'horloge du serveur** —, et elle se tromperait deux fois :
+   sur une page de résultats qui peut être pleine de refus, et sur l'horloge
+   du téléphone. La base le dit déjà au bon moment, en 429 et en français.
+   L'écran annonce la limite en toutes lettres, et **le contrôle compare le
+   nombre des deux côtés**.
+2. **On n'affiche PAS les jetons.** « 12 483 jetons » ne veut rien dire pour
+   un maçon. Ils sont dans l'export de ses données, là où ils répondent à la
+   seule question qu'ils savent traiter : « pourquoi cette facture
+   monte-t-elle ? »
+3. **On nomme le TYPE de la cible, jamais la chose.** « sur la fiche d'un
+   artisan », pas « sur la fiche de Dupont Maçonnerie » : un journal n'a pas
+   à conserver le nom d'un tiers, et il sert à rendre compte, pas à naviguer.
+4. **Une action INCONNUE s'affiche quand même.** L'agent gagnera des actions
+   (devis, facture, planning) ; une application pas encore mise à jour doit
+   rendre compte de ce qui s'est passé, pas afficher une ligne vide. Un
+   journal d'audit troué par une version en retard ne prouve plus rien.
+   `libelleAction('recit_chantier')` rend « Action « recit_chantier » », et
+   le contrôle le FAIT TOURNER — dixième application de la leçon de
+   `cloudinary-adresses.js`.
+
+Et dans l'autre sens, `cible_type` serait **une colonne lue que personne
+n'écrit** — le défaut des photos d'annonce du 04/10 — si `ai.js` ne la
+remplissait pas. Deux des quatre actions visent quelque chose de nommable,
+les deux autres n'envoient rien : inventer une cible serait pire que se
+taire. Le contrôle compare les deux listes dans les deux sens.
+
+#### Un journal d'audit ne doit pas pouvoir fermer la porte de sortie
+
+Cet écran porte aussi l'export RGPD et la suppression de compte. Ranger la
+lecture du journal avec les deux autres chargements l'aurait rendue
+solidaire : une table absente, un droit manquant, et c'est **tout** cet
+écran qui tombe.
+
+> **Le journal a donc son propre effet, son propre état, et son propre
+> échec** — affiché dans sa section, pas en bandeau rouge sur toute la page.
+
+#### Ce qui NE reste pas dans le dépôt
+
+Les deux fichiers `migration-section-38*.sql`, écrits pour être collés dans
+Supabase → SQL Editor pendant que le connecteur était tombé, ont été retirés
+dès la migration appliquée. **Un fichier que personne n'a plus à ouvrir est
+le « bouton §18 » sous une autre forme** — c'est la règle déjà posée au
+lot B.
+
+#### Vérifié, et comment
+
+Les **douze** cas de `supabase/essais-section-38.sql` sur un PostgreSQL 16
+neuf, `schema.sql` rejoué **deux fois**, les 38 contrôles, `npx expo export
+--platform ios`. Deux de ces cas attendent un REFUS, et il faut le lire :
+l'`insert` direct répond « new row violates row-level security policy », et
+l'appel à la fonction d'écriture « permission denied for function ». Un
+`grep` ancré sur `^ERROR` ne les voit pas — psql préfixe chaque ligne par le
+nom du fichier. Le contrôle a été éprouvé **en cassant ce qu'il
+surveille** : **quatorze défauts remis à la main, les quatorze refusés** —
+dont « on retire le lecteur », « le revoke ne vise plus PUBLIC », « le refus
+lève une exception » et « une action inconnue n'affiche plus rien ».
+
+Puis au navigateur en démonstration, et surtout **sur la VRAIE base**, avec
+deux comptes jetables supprimés dans la même session (0 restant, base revenue
+à 13 comptes / 7 fiches / 17 publications / 15 notifications / 1 chantier) :
+
+| | résultat |
+|---|---|
+| appel avec la clé publiable SEULE | **401**, « L'assistant n'est accessible qu'une fois connecté » |
+| appel avec le jeton du compte | **200**, un vrai résumé d'avis |
+| la ligne au journal | `summary` · `pro` · **191 / 152 jetons** · `ok` |
+| le compte lit SON journal | 1 ligne |
+| **un autre compte** | **`[]`** |
+| `insert` direct dans `journal_ia` | **403** |
+| `rpc/enregistrer_appel_ia` par un connecté | **403** |
+| l'écran, sur la vraie base | « Résumé des avis sur la fiche d'un artisan · Il y a 4 min », **1 seul `GET`** |
+| après suppression des comptes | **0 ligne** — le journal part avec son compte |
+
+En démonstration, les quatre cas se voient d'un coup : une action courante,
+un refus, une erreur, et l'action inconnue. Sans ce jeu, la règle la plus
+importante du lot ne se vérifierait nulle part à l'écran.
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone. Et
+**la limite de 60 par jour n'a pas été atteinte pour de vrai** — il faudrait
+soixante appels payants pour la voir mordre de bout en bout ; elle est
+éprouvée en SQL (essais 4 et 5) et le refus est simulé en démonstration.
+
+#### Ce que cette section ne pose PAS, et pourquoi
+
+Le §4 décrit sept familles d'action réglables (devis, facture, publication,
+profil, planning, dépense, contrat). **Six n'existent pas encore dans
+Opus.** Poser les sept réglages aujourd'hui créerait une table que personne
+ne lit. **Chaque permission naîtra AVEC l'action qu'elle gouverne.**
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

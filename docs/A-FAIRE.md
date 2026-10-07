@@ -416,6 +416,7 @@ pas négociable — chacun pose le socle du suivant.
 | **E** | Le chantier : coudre les publications (section 36) | ✅ 06/10/2026 |
 | **F** | Les concours | **après immatriculation** |
 | **G** | La cloche : une notification est une ADRESSE (section 37) | ✅ 07/10/2026, **vérifié sur l'iPhone** |
+| **H** | Le socle de l'agent : qui appelle l'IA, et on le note (section 38) | ✅ 07/10/2026 |
 
 Le lot **G** n'était pas prévu : il vient de trois défauts que le
 propriétaire a trouvés en se servant de la cloche. Il a fallu **trois
@@ -423,11 +424,19 @@ tentatives** pour le « ça ne me dirige pas sur le post », et la troisième a
 tranché en supprimant le problème au lieu de le rattraper — une publication
 visée s'ouvre désormais seule sur sa page (`PublicationScreen.js`).
 
+Le lot **H** n'était pas prévu non plus, et il était pourtant la condition
+de tout ce qui suit : la fonction Edge `ai` **n'a jamais regardé qui
+l'appelait**. N'importe qui détenant la clé publiable — c'est-à-dire
+n'importe qui ayant l'application — pouvait faire payer des appels Anthropic
+au propriétaire. La porte est fermée, chaque appel entre au journal d'audit
+du §21, une limite quotidienne est tenue par la base, et **l'artisan lit ce
+journal** dans « Confidentialité et sécurité → Mon agent ».
+
 **Ce que le lot E laisse ouvert, et qui est le but** : la place du récit
 écrit par l'IA est posée sur la page du chantier, vide, et visible du seul
-artisan. Elle se construit avec le journal d'audit et les permissions du
-§21 — jamais « à la main » dans la fonction Edge `ai`, c'est la règle du
-cahier des charges. C'est le prochain lot naturel, avant les gabarits.
+artisan. Le socle qu'elle attendait — journal d'audit et identité de
+l'appelant — **existe depuis le lot H**. C'est donc le prochain lot (I),
+avant les gabarits.
 
 **Et le rangement des anciennes publications** : les seize déjà en base
 n'appartiennent à aucun chantier, et personne ne peut deviner lesquelles

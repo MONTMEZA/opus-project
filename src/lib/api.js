@@ -2105,6 +2105,68 @@ export const mesSignalements = !hasSupabase
     return data || [];
   };
 
+/* ------------------------------------------------------------------ */
+/*  Ce que mon agent a fait — le journal d'audit de l'IA (section 38)  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Combien de lignes on charge.
+ *
+ * Il en faut une BORNE, comme le fil, la Place des pros et les demandes :
+ * un artisan qui se sert de l'agent tous les jours en aura des milliers.
+ * Et la troncature SE DIT à l'écran — une liste coupée en silence est la
+ * règle des « 3 annonces sans lieu précisé ne sont pas affichées ».
+ */
+export const TAILLE_JOURNAL_IA = 50;
+
+/**
+ * Le journal de démonstration — et il doit faire VIVRE le mécanisme.
+ *
+ * Sans lui, l'écran serait vide pour qui lance Opus sans fichier `.env`, et
+ * surtout : **rien ne s'y vérifierait ici**. C'est la leçon des badges
+ * « Nouveau » du 04/10 — des dates CALCULÉES, pas figées dans le fichier,
+ * sinon elles sont justes le premier jour et fausses ensuite.
+ *
+ * Les quatre lignes sont choisies pour montrer les quatre cas qui existent :
+ * une action courante, un refus par la limite, une erreur, et **une action
+ * que `journal-ia.js` ne connaît pas** — celle qui prouve qu'une version en
+ * retard rend quand même compte de ce qui s'est passé.
+ */
+function journalIADemo() {
+  const ilYA = (heures) => new Date(Date.now() - heures * 3600 * 1000).toISOString();
+  return [
+    { id: 'demo-ia-1', action: 'ameliorer', cible_type: 'publication', cible_id: null,
+      jetons_entree: 412, jetons_sortie: 260, resultat: 'ok', created_at: ilYA(2) },
+    { id: 'demo-ia-2', action: 'match', cible_type: null, cible_id: null,
+      jetons_entree: 1180, jetons_sortie: 190, resultat: 'ok', created_at: ilYA(5) },
+    { id: 'demo-ia-3', action: 'summary', cible_type: 'pro', cible_id: 'demo-pro',
+      jetons_entree: 0, jetons_sortie: 0, resultat: 'refuse', created_at: ilYA(26) },
+    { id: 'demo-ia-4', action: 'recit_chantier', cible_type: 'chantier', cible_id: 'demo-chantier',
+      jetons_entree: 0, jetons_sortie: 0, resultat: 'erreur', created_at: ilYA(50) },
+  ];
+}
+
+/**
+ * Les actions de MON agent. Celles de personne d'autre.
+ *
+ * La politique de lecture de `journal_ia` dit `user_id = auth.uid()`, et
+ * c'est tout ce qu'elle dit : il n'y a donc pas de filtre à écrire ici, et
+ * surtout aucun à OUBLIER d'écrire. On trie par date, et on borne.
+ */
+export const mesActionsIA = !hasSupabase
+  ? async () => journalIADemo().map((l) => ({ ...l, time: relativeTime(l.created_at) }))
+  : async () => {
+    const { data, error } = await supabase.from('journal_ia')
+      .select('id, action, cible_type, cible_id, jetons_entree, jetons_sortie, resultat, created_at')
+      .order('created_at', { ascending: false })
+      .limit(TAILLE_JOURNAL_IA);
+    if (error) throw error;
+    /* `relativeTime` comme partout ailleurs : « il y a 2 h » se lit, une
+       date ISO non. On garde `created_at` à côté — c'est lui qui se
+       compare, et c'est lui qui part dans l'export. */
+    return (data || []).map((l) => ({ ...l, time: relativeTime(l.created_at) }));
+  };
+
 /**
  * Bloquer quelqu'un. Le masquage est SYMÉTRIQUE et tenu par la base : ce
  * n'est pas l'écran qui cache, ce sont les règles RLS qui refusent.

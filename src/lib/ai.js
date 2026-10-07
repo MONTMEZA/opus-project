@@ -28,6 +28,19 @@ export class AiNotConfiguredError extends Error {
   }
 }
 
+/**
+ * CE QUE LE JOURNAL D'AUDIT VERRA — `cibleType` et `cibleId`.
+ *
+ * La fonction Edge range ces deux champs dans `journal_ia` (section 38), et
+ * « Confidentialité et sécurité → Mon agent » les relit. Les poser ici n'est
+ * donc pas décoratif : sans eux, le journal dirait « Résumé des avis » sans
+ * dire sur quoi, et `cible_type` serait **une colonne lue que personne
+ * n'écrit** — le défaut du 04/10 des photos d'annonce, dans le même sens.
+ *
+ * On nomme le TYPE, et l'identifiant quand il en existe un de stable. Les
+ * deux actions qui ne visent rien de nommable (`match`, `bio`) n'en envoient
+ * pas : inventer une cible serait pire que ne rien dire.
+ */
 async function callAiFunction(payload) {
   if (!hasSupabase) throw new AiNotConfiguredError();
   const { data, error } = await supabase.functions.invoke('ai', { body: payload });
@@ -54,6 +67,8 @@ export async function aiMatchPros(besoin, artisans) {
 export async function aiSummarizeReviews(pro, reviews) {
   const data = await callAiFunction({
     action: 'summary',
+    cibleType: 'pro',
+    cibleId: pro.id,
     entreprise: pro.entreprise,
     metier: pro.metier,
     avis: reviews.map((r) => ({
@@ -104,7 +119,12 @@ export async function aiRedigerPresentation({ profil, reponses }) {
  * Retourne [{ titre, texte }].
  */
 export async function aiAmeliorerTexte({ texte, contexte = 'publication', profil = {} }) {
-  const data = await callAiFunction({ action: 'ameliorer', texte, contexte, profil });
+  /* `contexte` vaut déjà « publication » ou « presentation » : c'est
+     exactement ce que le journal doit dire. Il n'y a pas d'identifiant —
+     le texte n'est pas encore enregistré au moment où on le fait relire. */
+  const data = await callAiFunction({
+    action: 'ameliorer', cibleType: contexte, texte, contexte, profil,
+  });
   const liste = (data && data.propositions) || [];
   return liste
     .filter((p) => p && typeof p.texte === 'string' && p.texte.trim())

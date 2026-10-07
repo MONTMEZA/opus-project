@@ -3288,6 +3288,10 @@ export default function OpusApp() {
               blocages: await api.chargerBlocages(),
               signalements: await api.mesSignalements(),
             })}
+            /* À PART, exprès : voir le commentaire de l'écran. Le journal de
+               l'agent ne doit pas pouvoir emporter l'export RGPD ni la
+               suppression de compte en tombant. */
+            onChargerActionsIA={api.mesActionsIA}
             onDebloquer={api.debloquer}
             onExporter={api.exporterMesDonnees}
             onSupprimer={supprimerMonCompte}
