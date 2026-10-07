@@ -4877,6 +4877,93 @@ les notifications de **partenariat** et de **vérification** mènent à la
 fiche : c'est écrit et contrôlé, mais la vraie base n'en contient aucune
 qui soit adressée à un compte que je puisse ouvrir.
 
+#### DEUX DÉFAUTS SIGNALÉS LE LENDEMAIN — et mon essai les avait MASQUÉS
+
+Le propriétaire, le 07/10 : « les images de profil ne s'affichent toujours
+pas sur les personnes qui font des notifications, et quand on clique sur
+les notifications de commentaire ça ouvre bien l'emplacement mais ça ne
+m'emmène pas directement sur le post en question ».
+
+Les deux étaient justes. Et les deux avaient été « vérifiés » la veille.
+
+##### 1. La photo d'un ARTISAN vit sur sa FICHE, pas sur son compte
+
+Relevé sur la vraie base avant de toucher à quoi que ce soit :
+
+| | |
+|---|---|
+| photo sur `professional_profiles` | **2 artisans sur 7** |
+| photo sur `users` — ce que lisait la cloche | **0 sur 7** |
+
+`updateProfile` écrit dans l'une **ou** dans l'autre selon le type de
+compte, jamais dans les deux. Ce n'est pas un oubli : dupliquer la même
+donnée dans deux tables est exactement le défaut du 05/10 — « deux moitiés
+créées par deux mécanismes différents finiront par se désaligner ».
+
+> **C'est donc la LECTURE qui doit regarder aux deux endroits, pas
+> l'écriture qui doit recopier.** Et la base le faisait DÉJÀ :
+> `notifie_commentaire()` compose le nom de l'acteur avec
+> `coalesce(pp.entreprise, u.nom, …)` et un `left join
+> professional_profiles`. L'application lisait la moitié de ce que le SQL
+> savait depuis le premier jour.
+
+**Et pourquoi mon essai ne l'a pas vu** : j'avais posé la photo du compte
+jetable dans les DEUX tables à la main, ce que l'application ne fait
+jamais. Un jeu d'essai plus généreux que la réalité ne prouve rien — même
+famille que « mesurer avec sept éléments » du lot 4.
+
+`photoActeur()` vit dans `src/lib/notifications.js`, qui n'importe rien, et
+le contrôle la FAIT TOURNER sur sept cas. **Les commentaires avaient le
+même défaut**, pour la même raison : corrigés en même temps, sinon le
+rond vide restait visible juste à côté.
+
+Mesuré au navigateur, sur la vraie base, avec un compte dont la photo
+n'est QUE sur la fiche :
+
+| | sans la jointure | avec |
+|---|---|---|
+| photos affichées | **0** | **1** |
+| ronds à initiales | 1 | **0** |
+
+##### 2. `scrollToIndex` ne saute pas à ce qui n'est pas monté
+
+Relevé sur la vraie base : les cinq commentaires existants visent des
+publications aux rangs **3, 3, 3, 6 et 6**. Or la liste n'en monte que
+**deux** au départ — le réglage du lot 4, qui ne bouge pas, c'est lui qui a
+débloqué l'iPhone au démarrage.
+
+`scrollToIndex` échouait donc, `onScrollToIndexFailed` reprenait la main…
+et **refaisait exactement l'appel qui venait d'échouer**. Il échouait
+pareil.
+
+> **Le motif qui marche se fait en DEUX temps** : on saute d'abord à une
+> position APPROCHÉE (`scrollToOffset`), ce qui oblige la liste à monter
+> les cartes du voisinage, puis on recale au pixel.
+
+Mon essai de la veille portait sur une publication créée à l'instant, donc
+en TÊTE du fil — **le seul rang qui ne pouvait pas échouer**.
+
+Et le défilement ne dépend plus de `commentaireCible` mais d'un `postCible`
+explicite, posé par la cloche seule : `openCommentsId` se pose aussi quand
+on touche le bouton « commentaires » d'une carte, et faire sauter le fil
+sous le doigt de quelqu'un déjà devant la bonne publication serait
+désagréable.
+
+##### Et CE DÉFAUT-LÀ NE SE VÉRIFIE PAS AU NAVIGATEUR
+
+Mesuré, plutôt que supposé : **4 cartes sur 4 sont montées au premier
+affichage** alors que `initialNumToRender={2}`.
+
+> **`react-native-web` ne virtualise pas comme iOS.** `scrollToIndex` ne
+> peut donc jamais y échouer, `onScrollToIndexFailed` n'y est jamais
+> appelé, et la correction donne **exactement les mêmes nombres avec et
+> sans** — vérifié en remettant l'ancien code.
+
+C'est la même famille que « `pagingEnabled` n'est pas la même chose des
+deux côtés » du 04/10 : un défaut réel sur le téléphone, invisible ici par
+construction. La photo, elle, se mesure ; le défilement se juge sur
+l'iPhone, et nulle part ailleurs.
+
 #### Et un point laissé ouvert, exprès
 
 `PagesGlissantes` porte `const place = useRef(false)` **écrit et lu nulle

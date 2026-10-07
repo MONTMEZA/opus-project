@@ -167,6 +167,13 @@ export default function OpusApp() {
      rouvrirait la même chose au prochain passage, et on croirait à un
      écran qui se bloque. */
   const [commentaireCible, setCommentaireCible] = useState(null);
+  /* LA PUBLICATION VERS LAQUELLE LE FIL DOIT DÉFILER. Séparée de
+     `commentaireCible` à dessein : `openCommentsId` se pose aussi
+     quand on touche simplement le bouton « commentaires » d'une carte,
+     et faire sauter le fil sous le doigt de quelqu'un qui est déjà
+     devant la bonne publication serait désagréable. Le défilement
+     n'appartient donc qu'au chemin de la CLOCHE. */
+  const [postCible, setPostCible] = useState(null);
   const [annonceCible, setAnnonceCible] = useState(null);
   const [demandeCible, setDemandeCible] = useState(null);
   const [openContactId, setOpenContactId] = useState(null);
@@ -1816,6 +1823,10 @@ export default function OpusApp() {
          chercher le fil de discussion. Voir son commentaire — le panneau
          s'ouvrait vide, et on revoyait exactement le défaut signalé. */
       ouvrirCommentaires(ou.postId);
+      /* Et on DEMANDE le défilement. Sans lui on arrive sur le fil, pas sur
+         la publication : mesuré sur la vraie base, les commentaires visent
+         des publications aux rangs 3 à 6. */
+      setPostCible(ou.postId);
       /* LE commentaire, pas le panneau. `comment_id` est rempli par
          `notifie_commentaire()` depuis le premier jour et n'était lu par
          PERSONNE — le défaut du 01/10 dans sa forme la plus pure, puisque
@@ -2962,6 +2973,7 @@ export default function OpusApp() {
                avant — et le propriétaire l'a dit : « ça me ramène sur le
                fil », alors qu'il voulait arriver SUR le commentaire. */
             commentaireCible={commentaireCible}
+            postCible={postCible}
             bottomInset={videoMode ? navHeight : 0}
             rappel={canPublish && pros[myProId] ? (
               <RappelVerification

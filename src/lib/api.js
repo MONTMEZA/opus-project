@@ -15,6 +15,7 @@ import {
 } from '../data/demo';
 import { METIER_PAR_DEFAUT } from './metiers';
 import { correspond } from './filtre-fil';
+import { photoActeur } from './notifications';
 
 /* En HAUT, jamais en `await import()` : la règle du 01/10 — Metro découpe
    alors le paquet et va chercher le morceau manquant auprès du serveur de
@@ -564,7 +565,13 @@ export async function loadAll() {
        message et nombre de non-lus. Avant, on téléchargeait TOUS les
        messages de TOUTES les conversations juste pour afficher un aperçu. */
     supabase.rpc('mes_conversations'),
-    supabase.from('notifications').select('*, acteur:acteur_id(nom, avatar_url)').eq('user_id', uid).order('created_at', { ascending: false }),
+    supabase.from('notifications')
+      /* `fiche:professional_profiles(avatar_url)` : la photo d'un ARTISAN
+         vit sur sa fiche, pas sur son compte — voir `photoActeur`. Sans
+         cette jointure, les deux seuls artisans de la base qui ont une
+         photo apparaissaient en rond vide. */
+      .select('*, acteur:acteur_id(nom, avatar_url, fiche:professional_profiles(avatar_url))')
+      .eq('user_id', uid).order('created_at', { ascending: false }),
     /* DEUX CHOSES MANQUAIENT ICI, relevées le 04/10/2026.
        `statut` : la colonne vaut « ouverte » par défaut depuis le premier
        jour, et RIEN ne la lisait — une demande pourvue restait donc en tête
@@ -736,7 +743,7 @@ export async function loadAll() {
       sosId: n.sos_id || null,
       acteurId: n.acteur_id || null,
       acteurNom: n.acteur ? n.acteur.nom : null,
-      avatarUrl: n.acteur ? n.acteur.avatar_url : null,
+      avatarUrl: photoActeur(n.acteur),
       time: relativeTime(n.created_at),
     })),
     followingIds: (followsRes.data || []).map((f) => f.following_id),
@@ -1034,7 +1041,9 @@ export const chargerCommentaires = !hasSupabase
   ? async () => []
   : async (postId) => {
     const { data, error } = await supabase.from('comments')
-      .select('*, users:author_id(nom, avatar_url, type)')
+      /* Même défaut que la cloche, et il se voit tout autant : un
+         commentaire d'artisan portait un rond vide. */
+      .select('*, users:author_id(nom, avatar_url, type, fiche:professional_profiles(avatar_url))')
       .eq('post_id', postId)
       .order('created_at');
     if (error) throw error;
@@ -1054,7 +1063,7 @@ function arbreCommentaires(lignes) {
       auteurId: c.author_id,
       auteur: c.users ? c.users.nom : 'Client',
       auteurType: c.users ? c.users.type : 'particulier',
-      avatarUrl: c.users ? c.users.avatar_url : null,
+      avatarUrl: photoActeur(c.users),
       texte: c.texte,
       time: relativeTime(c.created_at),
       /* Posé par la BASE, jamais par l'application : on ne peut donc pas

@@ -106,3 +106,43 @@ export const CIBLE_ATTENDUE = {
   verification_refusee: null,
   metiers_acceptes: null,
 };
+
+/**
+ * LA PHOTO DE CELUI QUI VOUS ÉCRIT — et pourquoi elle se cherche à DEUX
+ * endroits.
+ *
+ * Signalé par le propriétaire le 07/10/2026 : « les images de profil ne
+ * s'affichent toujours pas sur les personnes qui font des notifications ».
+ * Il avait raison, et mon essai de la veille l'avait MASQUÉ : j'avais
+ * écrit la photo du compte d'essai dans les DEUX tables à la main, ce que
+ * l'application ne fait jamais.
+ *
+ * Mesuré sur la vraie base :
+ *
+ *   photo sur `professional_profiles` ....... 2 artisans sur 7
+ *   photo sur `users` (ce que lisait la cloche) .... 0 sur 7
+ *
+ * > **La photo d'un ARTISAN vit sur sa FICHE, celle d'un particulier sur
+ * > son compte.** `updateProfile` écrit dans l'une ou dans l'autre selon
+ * > le type — jamais dans les deux. Ce n'est pas un oubli : dupliquer la
+ * > même donnée dans deux tables est exactement le défaut du 05/10 (« deux
+ * > moitiés créées par deux mécanismes différents finiront par se
+ * > désaligner »). C'est donc la LECTURE qui doit regarder aux deux
+ * > endroits, pas l'écriture qui doit recopier.
+ *
+ * Et la base le fait déjà : `notifie_commentaire()` compose le nom de
+ * l'acteur avec `coalesce(pp.entreprise, u.nom, 'Quelqu''un')` et un
+ * `left join professional_profiles` — exactement ce raisonnement, écrit en
+ * SQL depuis le premier jour. L'application lisait la moitié de ce que la
+ * base savait déjà.
+ *
+ * `acteur` est la ligne jointe telle que PostgREST la rend. Une relation
+ * un-à-un peut arriver en objet OU en tableau d'un élément selon la façon
+ * dont la requête est écrite : on accepte les deux plutôt que de dépendre
+ * d'un détail qui ne lèvera aucune erreur le jour où il changera.
+ */
+export function photoActeur(acteur) {
+  if (!acteur) return null;
+  const fiche = Array.isArray(acteur.fiche) ? acteur.fiche[0] : acteur.fiche;
+  return (fiche && fiche.avatar_url) || acteur.avatar_url || null;
+}

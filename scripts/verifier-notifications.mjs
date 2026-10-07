@@ -24,7 +24,7 @@
 import { readFileSync } from 'node:fs';
 
 const {
-  destinationNotif, TYPES_CONNUS, CIBLE_ATTENDUE, NOTIFS_PROFIL,
+  destinationNotif, TYPES_CONNUS, CIBLE_ATTENDUE, NOTIFS_PROFIL, photoActeur,
 } = await import('../src/lib/notifications.js');
 const { initialNotifications } = await import('../src/data/demo.js');
 
@@ -299,6 +299,57 @@ verifier('…et un index pas encore mesure ne fait pas echouer le defilement',
   + 'encore rendu, et ne defile nulle part.');
 
 const routage = app.slice(app.indexOf('const ouvrirNotification'));
+/* LA PHOTO D'UN ARTISAN VIT SUR SA FICHE. Mesure sur la vraie base le
+   07/10 : 2 artisans sur 7 ont une photo, et ZERO l'avait sur `users` —
+   la table que la cloche lisait. Mon essai de la veille l'avait masque en
+   ecrivant dans les DEUX tables a la main, ce que l'application ne fait
+   jamais. Le calcul TOURNE, on ne le relit pas. */
+verifier('la photo se cherche sur la FICHE PRO autant que sur le compte',
+  photoActeur({ avatar_url: null, fiche: { avatar_url: 'f.jpg' } }) === 'f.jpg'
+  && photoActeur({ avatar_url: 'u.jpg' }) === 'u.jpg'
+  && photoActeur({ avatar_url: null, fiche: [{ avatar_url: 'f.jpg' }] }) === 'f.jpg'
+  && photoActeur(null) === null,
+  'Un artisan enregistre sa photo dans `professional_profiles` ; un '
+  + 'particulier dans `users`. Lire une seule des deux laisse un rond vide '
+  + 'a tous les artisans — c\'est-a-dire a presque tout le monde ici.');
+
+verifier('…et la requete de la cloche va bien la chercher',
+  /acteur:acteur_id\(nom, avatar_url, fiche:professional_profiles\(avatar_url\)\)/.test(api)
+  && /avatarUrl: photoActeur\(n\.acteur\)/.test(api),
+  'Sans la jointure, la fonction n\'a rien a lire : elle rendrait `null` '
+  + 'sans erreur, et le controle ci-dessus passerait quand meme.');
+
+verifier('…et les COMMENTAIRES avaient le meme defaut',
+  /users:author_id\(nom, avatar_url, type, fiche:professional_profiles\(avatar_url\)\)/.test(api)
+  && /avatarUrl: photoActeur\(c\.users\)/.test(api),
+  'Le commentaire d\'un artisan portait un rond vide pour exactement la '
+  + 'meme raison. Corriger la cloche seule aurait laisse le defaut visible '
+  + 'a cote.');
+
+/* LE DEFILEMENT. Mesure sur la vraie base : les cinq commentaires visent
+   des publications aux rangs 3, 3, 3, 6 et 6, alors que la liste n'en
+   monte que DEUX au depart. `scrollToIndex` echouait donc, et la
+   re-tentative refaisait l'appel qui venait d'echouer. */
+verifier('le fil defile sur une CIBLE explicite, pas sur le commentaire',
+  /setPostCible\(ou\.postId\)/.test(routage)
+  && /if \(!postCible\)/.test(fil),
+  'Lier le defilement a `commentaireCible` le rendait muet pour toute '
+  + 'notification qui mene a une publication sans viser de commentaire.');
+
+verifier('…et il ne saute pas sous le doigt d\'un appui ordinaire',
+  !/postCible/.test(fil.slice(fil.indexOf('const toggleComments')) || '')
+  && /const \[postCible, setPostCible\] = useState\(null\)/.test(app),
+  'Le bouton « commentaires » d\'une carte pose aussi `openCommentsId` : '
+  + 'faire sauter le fil de quelqu\'un deja devant la bonne publication '
+  + 'serait desagreable.');
+
+verifier('…et un index pas encore monte passe par une position APPROCHEE',
+  /scrollToOffset\(\{\s*offset: Math\.max\(0, moyenne \* info\.index\)/.test(fil),
+  'Refaire `scrollToIndex` apres son echec, c\'est refaire l\'appel qui '
+  + 'vient d\'echouer : il echoue pareil. Il faut d\'abord sauter pres de '
+  + 'la cible pour que la liste monte ce qu\'il y a autour.');
+
+
 verifier('la cloche CHARGE les commentaires, elle n\'ouvre pas un panneau vide',
   /ouvrirCommentaires\(ou\.postId\)/.test(routage)
   && !/setOpenCommentsId\(ou\.postId\)/.test(routage),
