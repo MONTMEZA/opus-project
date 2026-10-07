@@ -71,6 +71,11 @@ export const ACTIONS_IA = {
     label: 'Relecture d’un texte',
     detail: 'L’agent a relu votre texte et proposé de le remettre d’aplomb.',
   },
+  recit: {
+    label: 'Récit d’un chantier',
+    detail: 'L’agent a assemblé vos étapes en un texte que vous avez relu '
+      + 'avant de le publier.',
+  },
 };
 
 /**

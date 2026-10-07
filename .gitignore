@@ -46,3 +46,4 @@ yarn-error.*
 
 # Captures d'écran de référence (lourdes, régénérables)
 captures/
+supabase/.temp/

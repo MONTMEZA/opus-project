@@ -46,6 +46,7 @@ import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
 import AdminScreen from './screens/AdminScreen';
 import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier , metiersDe } from './lib/metiers';
+import { etapesPourLeRecit } from './lib/recit';
 import { FORMATS_VISUELS, FORMATS_VIDEO } from './lib/formats-publication';
 import * as api from './lib/api';
 import * as retour from './lib/retour';
@@ -59,7 +60,7 @@ import { envoyerFichier, estFichierLocal } from './lib/storage';
 import {
   aCloudinary, urlMontage, envoyerVideo as envoyerVideoCloudinary,
 } from './lib/cloudinary';
-import { aiMatchPros } from './lib/ai';
+import { aiMatchPros, aiRecitChantier } from './lib/ai';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
@@ -612,6 +613,43 @@ export default function OpusApp() {
     } catch (e) {
       showErreur(messageClair(e));
     }
+  };
+
+  /**
+   * DEMANDER LE RÉCIT À L'AGENT (section 39).
+   *
+   * Il rend un TEXTE, et rien de plus : l'écran le met dans un champ,
+   * l'artisan le lit, et c'est lui qui publie. « L'agent écrit, l'artisan
+   * publie » est la première permission du §4 — rien ne part sur une
+   * vitrine publique sans qu'un humain l'ait relu.
+   *
+   * Le métier part avec : « dépose » et « enduit » n'appartiennent pas au
+   * même chantier, et l'agent doit garder le vocabulaire de celui qui
+   * parle.
+   */
+  const ecrireRecitChantier = async () => {
+    if (!chantierOuvert) return '';
+    const fiche = pros[chantierOuvert.proId] || {};
+    return aiRecitChantier({
+      chantierId: chantierOuvert.id,
+      titre: chantierOuvert.titre,
+      ville: chantierOuvert.ville,
+      metier: nomMetier((fiche.metiers && fiche.metiers[0]) || fiche.metier || ''),
+      etapes: etapesPourLeRecit(publicationsChantier),
+    });
+  };
+
+  /** …et l'enregistrer, une fois qu'il l'a lu. Une chaîne vide le retire. */
+  const enregistrerRecitChantier = async (texte) => {
+    if (!chantierOuvert) return;
+    const c = await api.enregistrerRecit(chantierOuvert.id, texte);
+    if (c) {
+      rangerChantiers([c]);
+      setChantierOuvert(c);
+    }
+    showBanner(texte
+      ? 'Récit publié sur la page du chantier.'
+      : 'Récit retiré.');
   };
 
   /**
@@ -3319,6 +3357,9 @@ export default function OpusApp() {
             onRetour={() => setScreen(
               String(chantierOuvert.proId) === String(myProId) ? 'profil' : 'profilPro')}
             onBasculerStatut={basculerStatutChantier}
+            onEcrireRecit={ecrireRecitChantier}
+            onEnregistrerRecit={enregistrerRecitChantier}
+            onErreur={showErreur}
             /* Toucher une étape ouvre la publication dans le fil vidéo si
                c'en est une ; sinon on reste dans l'histoire. Un appui qui
                ne fait rien serait pire que pas d'appui du tout. */

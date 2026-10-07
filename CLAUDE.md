@@ -5232,6 +5232,170 @@ profil, planning, dépense, contrat). **Six n'existent pas encore dans
 Opus.** Poser les sept réglages aujourd'hui créerait une table que personne
 ne lit. **Chaque permission naîtra AVEC l'action qu'elle gouverne.**
 
+### Le récit du chantier — la PREMIÈRE action de l'agent (07/10/2026)
+
+Section 39 de `schema.sql`, `src/lib/recit.js`,
+`src/components/RecitChantier.js`, `npm run verifier-recit`.
+
+Le lot E avait laissé une place vide sur la page du chantier — « Bientôt :
+le récit de ce chantier ». Le lot H a posé le socle qu'elle attendait : qui
+appelle l'IA, le journal d'audit, la limite. Voici ce qui remplit la place.
+
+#### La permission du §4 naît ICI, et elle n'est pas réglable
+
+> **L'AGENT ÉCRIT, L'ARTISAN PUBLIE.** Le texte que l'agent rend n'est PAS
+> enregistré : il arrive dans un champ, l'artisan le lit, le corrige s'il
+> veut, et c'est son appui sur « Publier » qui l'envoie en base.
+
+C'est le §2 du cahier des charges mot pour mot — « les actions
+irréversibles ou engageantes demandent une validation ». Et ce n'est pas
+qu'une précaution morale, c'est aussi ce qui évite un vrai piège :
+
+> **`chantiers` est une table PUBLIQUE** (section 36.3), et **une règle RLS
+> filtre des LIGNES, jamais des COLONNES** (section 18). Un brouillon rangé
+> dans une colonne de `chantiers` serait donc lisible par n'importe qui, à
+> la seconde où l'agent l'écrit, sans qu'aucune erreur ne le signale. Il
+> aurait fallu des droits de colonne, donc casser `select *` pour tout le
+> monde — **pour protéger un texte qui n'a pas besoin d'exister.**
+
+Le coût est assumé : un brouillon qu'on quitte est perdu, comme dans tous
+les formulaires d'Opus. Le refaire écrire coûte un appel sur les soixante
+de la journée.
+
+**Et aucun réglage « laisser l'agent publier tout seul ».** Une seule
+action ne fait pas un écran de réglages, et un texte public écrit par une
+machine sur la vitrine de quelqu'un est exactement l'action engageante que
+le §2 veut voir validée. Le jour où il y aura sept actions, le réglage
+aura un sens.
+
+#### Un récit s'écrit à partir de MOTS, jamais à partir de photos
+
+C'est la règle qui porte tout le lot, et elle vit dans `src/lib/recit.js`,
+qui n'importe rien — onzième application de la leçon de
+`cloudinary-adresses.js`, et ici elle est indispensable : **ce fichier
+décide si l'agent a le droit d'écrire.**
+
+> Trois publications sans un seul texte, et l'agent n'a rien à raconter.
+> **Un modèle à qui l'on ne donne rien ne répond pas « je ne sais pas » :
+> il produit une jolie phrase creuse**, et cette phrase irait sur la
+> vitrine publique d'un artisan.
+
+Donc : trois étapes au moins, **dont deux décrites** (avec un seul texte,
+l'agent ne fait que le recopier), et quinze caractères minimum pour qu'un
+texte compte — « Fini 💪 » ne dit rien du travail. Et **l'écran DIT
+pourquoi** quand il refuse : un bouton grisé sans explication, on appuie,
+rien ne se passe, et on croit l'application cassée.
+
+La garde est posée **deux fois** : côté application, et côté serveur. La
+fonction Edge est joignable directement.
+
+#### Le récit vieillit, et rien d'autre ne le dirait
+
+On publie trois étapes de plus, et le texte raconte un chantier qui n'est
+plus celui qu'on voit en dessous. Il est toujours là, toujours bien écrit.
+
+D'où `recit_ecrit_le`, comparée à `fin` (que le déclencheur des compteurs
+tient déjà à jour). Et **c'est la BASE qui pose cette date**, par un
+déclencheur : un indicateur de fraîcheur qui dépendrait de l'horloge du
+téléphone pourrait mentir, et c'est le seul service qu'il rend. Vérifié sur
+la vraie base — une date envoyée par le client (2001) est ignorée.
+
+Trois détails du déclencheur, et aucun n'est décoratif : `clock_timestamp()`
+et pas `now()` (la leçon du journal d'administration) ; la date **ne bouge
+pas** quand le récit ne bouge pas, sinon renommer un chantier rajeunirait
+son récit et l'avertissement s'éteindrait tout seul ; et une chaîne de
+blancs devient `null`, pour qu'il n'y ait qu'UNE façon de dire « il n'y en
+a pas ».
+
+#### LE DÉFAUT QUE SEUL LE NAVIGATEUR A TROUVÉ — un champ vide
+
+Le premier jet posait `setBrouillon(true)` puis, dans un `setTimeout(…, 0)`,
+`champ.current.ecrire(texte)`. Mesuré sur la vraie base : **le champ
+arrivait VIDE.**
+
+> **Une référence n'est pas encore attachée à l'instant où le composant
+> vient d'être demandé.** Le minuteur part avant que React n'ait monté le
+> champ.
+
+Et le défaut ne faisait planter personne : on lisait « Relisez avant de
+publier » au-dessus d'un champ vide, et « Publier » ne faisait rien
+(`publier()` sort tout de suite sur un texte vide). **Un écran
+parfaitement calme qui ne fait rien** — exactement ce que ce document
+traque.
+
+La parade : le brouillon est un TEXTE dans l'état, posé AVANT le rendu, et
+`ChampLocal` le reçoit comme valeur initiale (`defaut`). Plus de minuteur,
+plus de référence. Avec une `key` qui change à chaque génération, sinon
+« Recommencer » laisserait l'ancien texte — `defaut` n'est lu qu'au
+montage. Mesuré après : **400 caractères dans le champ.**
+
+Au passage, mon propre essai disait « le texte publié est à l'écran :
+true » — avec un brouillon vide, `includes('')` est toujours vrai. Un
+contrôle vert pour la mauvaise raison, une fois de plus.
+
+#### Et un défaut du lot H, trouvé en lisant le journal d'un VRAI appel
+
+Un appel refusé pour « une seule étape » s'inscrivait au journal **`ok`,
+avec zéro jeton**. L'écran « Mon agent » l'aurait donc affiché comme un
+travail fait, **et il aurait consommé un des soixante appels de la
+journée.**
+
+> **Un travail qui n'a pas pu se faire ne doit jamais ressembler à un
+> travail fait.** C'est la règle de « Pour moi » du 05/10, et elle vaut
+> pour le journal autant que pour un écran.
+
+`refuser()` est désormais la seule porte des refus 400 de la fonction Edge,
+et elle note `erreur`. Ce qui fait les deux : la ligne se voit, et elle ne
+compte plus contre la limite — `enregistrer_appel_ia()` ne compte que les
+`ok`. **Une demande malformée ne doit pas punir celui qui l'envoie.**
+Vérifié sur la vraie base après déploiement : `recit` à une étape →
+`erreur`, action `devis` inconnue → `erreur`, le vrai récit → `ok` avec
+957 jetons.
+
+#### Vérifié, et comment
+
+Les treize cas de `supabase/essais-section-39.sql` sur un PostgreSQL 16
+neuf, `schema.sql` rejoué **deux fois**, les 39 contrôles, `npx expo export
+--platform ios`. Le contrôle a été éprouvé **en cassant ce qu'il
+surveille** : **vingt-et-un défauts remis à la main, les vingt-et-un
+refusés** — dont « on accepte des étapes sans texte », « la consigne
+n'interdit plus d'inventer », « le récit part directement en base », « un
+visiteur voit les boutons » et « le récit de démo invente ».
+
+Deux de ces vingt-et-un ont d'abord PASSÉ, et les deux sont instructifs :
+la vérification de l'heure cherchait `clock_timestamp()` **quelque part**
+dans le déclencheur, donc une branche cassée sur deux lui échappait — la
+faute du lot H, refaite ; et mon essai de rupture ne remplaçait que la
+première ligne du récit de démonstration, donc le reste du vrai texte
+restait et le contrôle avait raison de passer.
+
+Puis, sur la VRAIE base (migration appliquée, fonction Edge déployée en
+version 9), avec deux comptes professionnels jetables supprimés dans la
+même session (0 restant, base revenue à 13 comptes / 7 fiches /
+17 publications / 1 chantier / 0 ligne de journal) :
+
+| | résultat |
+|---|---|
+| une seule étape décrite | **400**, « il faut au moins deux étapes décrites » |
+| les trois étapes | **200**, un récit de 366 caractères |
+| ce qu'il a écrit | **ses mots** : « dépose de l'ancienne couverture », « chevrons neufs en douglas », « écran sous-toiture » |
+| le journal | `recit` · `chantier` · **915 / 156 jetons** · `ok` |
+| la date envoyée par le client (2001) | **ignorée** — la base pose la sienne |
+| une 4ᵉ étape publiée après | **PÉRIMÉ ? OUI** |
+| un AUTRE pro le lit | oui — c'est la vitrine |
+| …et tente de l'écrire | **`[]`** — refusé |
+| un visiteur sans compte | le lit |
+| **au navigateur** : sans récit | « Votre agent peut le raconter », bouton **332 × 44** |
+| on demande | **brouillon de 400 caractères**, 1 appel `/functions/v1/ai 200` |
+| on publie | le texte s'affiche, `PATCH /rest/v1/chantiers 200` |
+| après une étape de plus | **« Vous avez publié depuis que ce récit a été écrit »** |
+
+**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone. Et les
+boutons « Réécrire » / « Retirer » mesurent **80 × 36** au navigateur :
+`BtnMini` atteint les 44 points par `hitSlop`, que `react-native-web`
+ignore — c'est écrit dans ce document depuis le lot 5, et ça ne se vérifie
+qu'au doigt.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

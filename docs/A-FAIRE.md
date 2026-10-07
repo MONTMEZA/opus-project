@@ -417,6 +417,7 @@ pas négociable — chacun pose le socle du suivant.
 | **F** | Les concours | **après immatriculation** |
 | **G** | La cloche : une notification est une ADRESSE (section 37) | ✅ 07/10/2026, **vérifié sur l'iPhone** |
 | **H** | Le socle de l'agent : qui appelle l'IA, et on le note (section 38) | ✅ 07/10/2026 |
+| **I** | Le récit du chantier, écrit par l'agent (section 39) | ✅ 07/10/2026 |
 
 Le lot **G** n'était pas prévu : il vient de trois défauts que le
 propriétaire a trouvés en se servant de la cloche. Il a fallu **trois
@@ -1448,3 +1449,60 @@ façon pas être ouverte au public.
   (`npm run verifier-*`) couvrent le SQL, les listes et les formats, mais
   aucun ne rejoue les écrans. Les tests Playwright sont écrits à la main à
   chaque fois.
+
+---
+
+## Le logiciel de gestion — l'ordre des modules (arrêté le 07/10/2026)
+
+Le propriétaire, deux fois le même jour : « tout ce qu'il doit faire va être
+créé sur Opus, le dashboard du pro, le logiciel de devis facture etc., comme
+écrit dans le document ».
+
+**Oui. Rien n'est écarté.** Ce qui suit n'est pas une sélection, c'est un
+ORDRE — et il est écrit ici pour qu'il ne dépende plus d'une conversation.
+
+### La règle qui décide de l'ordre
+
+> **L'agent ne peut agir que sur ce qui EXISTE.** « Rédiger un devis » n'est
+> pas une action d'IA tant qu'il n'y a ni table `devis`, ni client, ni ligne,
+> ni numéro légal, ni TVA. C'est un MODULE, et l'IA vient après — jamais
+> l'inverse.
+
+C'est pour cette raison que le **récit du chantier** (§12) est la première
+action livrée : sa matière existait déjà en base depuis le lot E. Et c'est
+pour la même raison que le §4 n'a pas posé ses sept réglages d'un coup :
+**chaque permission naît AVEC l'action qu'elle gouverne** (section 38).
+
+### L'ordre, et pourquoi
+
+| | module | §  | pourquoi là |
+|---|---|---|---|
+| 1 | **Clients** | 5, 12 | Rien ne tient sans lui : un devis s'adresse à quelqu'un, une facture aussi, un chantier appartient à un client. C'est la table que les trois suivantes attendent. |
+| 2 | **Devis** | 9 | Le cœur du métier, et le premier document qui ENGAGE. Numérotation, TVA, mentions obligatoires, acceptation. |
+| 3 | **Factures** | 10 | Elles NAISSENT d'un devis accepté : les écrire avant obligerait à tout ressaisir. Facturation électronique obligatoire entre entreprises — à vérifier au moment de le construire, pas de mémoire. |
+| 4 | **Dashboard** | 8 | Il MONTRE ce que les trois précédents ont produit. Avant eux, il n'aurait rien à afficher — ce serait le « bouton §18 » à l'échelle d'un écran. |
+| 5 | **Agenda** | 11 | Il se nourrit des chantiers et des devis acceptés. |
+| 6 | **Dépenses et comptabilité préparatoire** | 13 | Demande les factures pour avoir un « sortant » en face d'un « entrant ». |
+| 7 | **Fournisseurs et prix** | 14, 15 | L'apprentissage des prix suppose des devis et des dépenses à apprendre. |
+
+**Et à chaque module, l'agent gagne son action** — rédiger le devis à partir
+du chantier, relancer une facture impayée, répondre à « combien j'ai
+facturé ce mois-ci ». Chacune avec sa permission (§4), chacune au journal
+d'audit (§21) : c'est le socle du lot H, et c'est précisément pour ça qu'il
+a été posé en premier.
+
+### Ce qui n'est pas dans cette liste, et qui existe déjà
+
+Le **réseau social** (§6, §7, §9 du module 9) est construit : fil, filtre,
+chantiers, place des pros, demandes, messagerie, modération, back-office.
+Le §19 (IA de communication) l'est à moitié — présentation, relecture,
+récit. Le §18 (sous-traitance) marche nativement entre deux SIRET, comme
+l'explique `LECTURE-CAHIER-DES-CHARGES.md`.
+
+### La discipline, rappelée ici parce qu'elle vaut pour les sept
+
+**L'appartenance passe par `est_mon_entreprise()`**, née avec les chantiers
+(section 36), jamais par un `auth.uid() = …` écrit à la main. Un chantier,
+un devis, une facture, un client appartiennent au COMPTE — un compte = un
+artisan = une entreprise. Le jour où un patron voudra donner un accès à ses
+compagnons, il y aura UNE fonction à changer.

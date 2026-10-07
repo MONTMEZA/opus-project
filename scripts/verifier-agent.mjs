@@ -81,13 +81,13 @@ console.log('\nLes LIBELLÉS — on les fait tourner');
      jour doit rendre compte de ce qui s'est passé, pas afficher une ligne
      vide. Un journal d'audit troué par une version en retard ne prouve
      plus rien. */
-  const inconnue = libelleAction('recit_chantier');
+  const inconnue = libelleAction('devis');
   verifier('une action INCONNUE s\'affiche quand même',
-    inconnue.length > 0 && inconnue.includes('recit_chantier'),
-    `libelleAction('recit_chantier') rend « ${inconnue} ».`);
+    inconnue.length > 0 && inconnue.includes('devis'),
+    `libelleAction('devis') rend « ${inconnue} ».`);
 
   verifier('…et elle n\'invente aucune explication',
-    detailAction('recit_chantier') === '');
+    detailAction('devis') === '');
 
   verifier('une action vide ne rend pas une ligne vide',
     libelleAction('').length > 0 && libelleAction(null).length > 0,
@@ -283,6 +283,23 @@ console.log('\nLa fonction EDGE — identifier, puis noter AVANT de payer');
   verifier('…et une panne du modèle aussi',
     /catch[\s\S]{0,400}?noter\(0, 0, 'erreur'\)/.test(edge),
     'Une erreur qui n\'entre pas au journal rend le journal faux.');
+
+  /* TROUVÉ LE 07/10 EN LISANT LE JOURNAL d'un vrai appel : un refus pour
+     demande malformée (« une seule étape ») s'y inscrivait `ok`, avec zéro
+     jeton. L'écran l'aurait montré comme un travail fait, et il aurait
+     consommé un des soixante appels de la journée. */
+  const corps = edge.slice(edge.indexOf('const client = new Anthropic'));
+  const refusNus = [...corps.matchAll(/return json\(\{[\s\S]{0,200}?\}, 400\)/g)];
+  verifier('aucun refus précoce ne passe pour une réussite',
+    refusNus.length === 0 && /const refuser = async/.test(edge),
+    `${refusNus.length} refus rendent un 400 sans passer par refuser(). Un `
+    + 'travail qui n\'a pas pu se faire ne doit jamais ressembler à un '
+    + 'travail fait.');
+
+  verifier('…et un refus ne punit pas celui qui l\'envoie',
+    /const refuser = async[\s\S]{0,200}?await noter\(0, 0, 'erreur'\)/.test(edge),
+    '`enregistrer_appel_ia()` ne compte que les `ok` : marquer `erreur` sort '
+    + 'la ligne du décompte de la limite.');
 
   verifier('un journal incomplet ne fait pas échouer la réponse',
     /if \(error\) console\.error\('journal_ia \(mise à jour\)/.test(edge),

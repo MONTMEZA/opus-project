@@ -1221,6 +1221,11 @@ function rowToChantier(c) {
     couverture: c.couverture || null,
     debut: c.debut || null,
     fin: c.fin || null,
+    /* LE RÉCIT (section 39), et la date que la BASE a posée. Les deux
+       ensemble : sans la date, rien ne peut dire que le texte raconte un
+       chantier qui a bougé depuis. */
+    recit: c.recit || null,
+    recitEcritLe: c.recit_ecrit_le || null,
   };
 }
 
@@ -1398,6 +1403,42 @@ export const changerStatutChantier = !hasSupabase
   if (error) throw error;
   return rowToChantier(data);
 };
+
+/**
+ * ENREGISTRER LE RÉCIT — une fois que l'artisan l'a LU.
+ *
+ * C'est la première permission du §4, et elle est ici, dans ce seul appel :
+ * **l'agent écrit, l'artisan publie.** Le brouillon rendu par
+ * `aiRecitChantier()` ne passe par la base que lorsqu'on arrive ici, et il
+ * n'y a donc rien à protéger : `chantiers` est une table PUBLIQUE, et une
+ * règle RLS filtre des lignes, jamais des colonnes.
+ *
+ * On n'envoie PAS `recit_ecrit_le` : c'est la base qui la pose
+ * (section 39.2). Un indicateur de fraîcheur qui dépendrait de l'horloge
+ * du téléphone pourrait mentir, et c'est le seul service qu'il rend.
+ *
+ * `null` efface le récit — et la date avec, par le même déclencheur.
+ */
+async function enregistrerRecitDemo(chantierId, recit) {
+  const c = initialChantiers.find((x) => String(x.id) === String(chantierId));
+  if (!c) throw new Error('Ce chantier n\'existe plus.');
+  const texte = String(recit || '').trim();
+  c.recit = texte || null;
+  c.recitEcritLe = texte ? new Date().toISOString() : null;
+  return { ...c };
+}
+
+export const enregistrerRecit = !hasSupabase
+  ? enregistrerRecitDemo
+  : async (chantierId, recit) => {
+    const texte = String(recit || '').trim();
+    const { data, error } = await supabase.from('chantiers')
+      .update({ recit: texte || null })
+      .eq('id', chantierId).eq('pro_id', currentUserId)
+      .select().single();
+    if (error) throw error;
+    return rowToChantier(data);
+  };
 
 /**
  * ENREGISTRER LES PUBLICATIONS QU'ON VIENT DE REGARDER.
@@ -2141,7 +2182,7 @@ function journalIADemo() {
       jetons_entree: 1180, jetons_sortie: 190, resultat: 'ok', created_at: ilYA(5) },
     { id: 'demo-ia-3', action: 'summary', cible_type: 'pro', cible_id: 'demo-pro',
       jetons_entree: 0, jetons_sortie: 0, resultat: 'refuse', created_at: ilYA(26) },
-    { id: 'demo-ia-4', action: 'recit_chantier', cible_type: 'chantier', cible_id: 'demo-chantier',
+    { id: 'demo-ia-4', action: 'devis', cible_type: 'chantier', cible_id: 'demo-chantier',
       jetons_entree: 0, jetons_sortie: 0, resultat: 'erreur', created_at: ilYA(50) },
   ];
 }

@@ -30,11 +30,12 @@
  *      écriture dans le même ordre, sinon deux appels simultanés passent
  *      tous les deux.
  *
- * QUATRE ACTIONS :
+ * CINQ ACTIONS :
  *   { action: "match",     besoin, artisans }  -> { recommandations: [...] }
  *   { action: "summary",   entreprise, metier, avis } -> { resume: "..." }
  *   { action: "bio",       profil, reponses }  -> { propositions: [{titre, texte}] }
  *   { action: "ameliorer", texte, contexte, profil } -> { propositions: [...] }
+ *   { action: "recit",     titre, ville, metier, etapes } -> { recit: "..." }
  */
 import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
@@ -252,6 +253,27 @@ Deno.serve(async (req) => {
     if (error) console.error('journal_ia (mise à jour):', error);
   };
 
+  /**
+   * REFUSER UNE DEMANDE MAL FORMÉE, EN LE NOTANT.
+   *
+   * Trouvé le 07/10 en lisant le journal après le premier vrai récit : un
+   * appel refusé pour « une seule étape » s'y inscrivait **`ok`, avec zéro
+   * jeton**. L'écran « Mon agent » l'aurait donc affiché comme un travail
+   * fait, et il aurait consommé un des soixante appels de la journée.
+   *
+   * > **Un travail qui n'a pas pu se faire ne doit jamais ressembler à un
+   * > travail fait.** C'est la règle de « Pour moi » du 05/10, et elle vaut
+   * > pour le journal autant que pour un écran.
+   *
+   * Marquer `erreur` fait les deux : la ligne se voit, et elle ne compte
+   * plus contre la limite — `enregistrer_appel_ia()` ne compte que les
+   * `ok`. Une demande malformée ne doit pas punir celui qui l'envoie.
+   */
+  const refuser = async (texte: string, statut = 400) => {
+    await noter(0, 0, 'erreur');
+    return json({ error: texte }, statut);
+  };
+
   const client = new Anthropic({ apiKey });
 
   try {
@@ -259,7 +281,7 @@ Deno.serve(async (req) => {
     if (payload.action === 'match') {
       const besoin = String(payload.besoin || '').slice(0, 2000);
       const artisans = Array.isArray(payload.artisans) ? payload.artisans.slice(0, 200) : [];
-      if (!besoin.trim()) return json({ error: 'Besoin vide.' }, 400);
+      if (!besoin.trim()) return refuser('Besoin vide.');
 
       const message = await client.messages.create({
         model: MODEL,
@@ -293,7 +315,7 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
     /* ---------------- Résumé des avis (profil d'un pro) ---------------- */
     if (payload.action === 'summary') {
       const avis = Array.isArray(payload.avis) ? payload.avis.slice(0, 100) : [];
-      if (avis.length === 0) return json({ error: 'Aucun avis à résumer.' }, 400);
+      if (avis.length === 0) return refuser('Aucun avis à résumer.');
 
       const lignes = avis.map((r: Record<string, unknown>) =>
         `- (délais ${r.delais}/5, qualité ${r.qualite}/5, tarif ${r.tarif}/5) ${String(r.commentaire || '').slice(0, 600)}`,
@@ -370,7 +392,7 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
       const profil = (payload.profil || {}) as Record<string, unknown>;
 
       if (texte.length < 10) {
-        return json({ error: 'Écrivez d\'abord quelques mots : il faut de la matière à améliorer.' }, 400);
+        return refuser('Écrivez d\'abord quelques mots : il faut de la matière à améliorer.');
       }
 
       const angles = contexte === 'presentation'
@@ -440,7 +462,75 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour :
       return json({ propositions });
     }
 
-    return json({ error: 'Action inconnue.' }, 400);
+    /* ---------------- Le récit d'un chantier (section 39) ---------------- */
+    /* LA PREMIÈRE ACTION DE L'AGENT au sens du §3, et la consigne porte
+       tout le lot : il ASSEMBLE, il ne raconte pas. Les étapes arrivent
+       déjà filtrées et dans l'ordre du chantier (`src/lib/recit.js`) —
+       jamais une étape sans texte, parce qu'un modèle à qui l'on ne donne
+       rien ne répond pas « je ne sais pas » : il produit une jolie phrase
+       creuse, et elle irait sur la vitrine publique d'un artisan. */
+    if (payload.action === 'recit') {
+      const titre = String(payload.titre || '').slice(0, 120);
+      const ville = String(payload.ville || '').slice(0, 80);
+      const metier = String(payload.metier || '').slice(0, 80);
+      const etapes = Array.isArray(payload.etapes) ? payload.etapes.slice(0, 40) : [];
+
+      /* La garde est déjà posée côté application. On la refait ici : cette
+         fonction est joignable directement, et une consigne sans matière
+         est exactement ce qui fait inventer un modèle. */
+      if (etapes.length < 2) {
+        return refuser('Il faut au moins deux étapes décrites pour écrire un récit.');
+      }
+
+      const message = await client.messages.create({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        output_config: EFFORT,
+        system: `Tu assembles les étapes d'un chantier du bâtiment en un récit court, en français, pour la page publique d'un artisan.
+
+RÈGLES ABSOLUES
+- N'invente RIEN. Tu n'as le droit d'utiliser QUE ce qui est écrit dans les étapes. Pas une technique, pas un matériau, pas une durée, pas une difficulté, pas un chiffre qui n'y soit pas. Si les étapes ne disent pas pourquoi une chose a été faite, tu ne le dis pas non plus.
+- Ne nomme JAMAIS le client, et n'invente aucun nom. Si une étape contient un nom de personne, écris "le client".
+- Pas de prix, pas de devis, pas de garantie, pas de label, pas de délai promis. Ce texte est public et il engage l'artisan.
+- GARDE SON VOCABULAIRE DE MÉTIER. "Dépose de la couverture", "pare-pluie", "liteaunage" : ces mots prouvent qu'il est du métier, et c'est ce qu'un lecteur vient chercher. Ne les remplace pas par des mots généraux.
+- Pas de superlatif publicitaire ("sur-mesure", "excellence", "savoir-faire d'exception", "votre satisfaction"). Un artisan qui se relit doit reconnaître sa façon de parler.
+- Le récit suit l'ORDRE des étapes, du début à la fin du chantier.
+- 4 à 8 phrases, 900 caractères au maximum. On le lit d'un coup, sur un téléphone.
+- Emploie "nous" si plusieurs personnes semblent intervenir, "je" si l'artisan parle à la première personne du singulier dans ses étapes. Ne mélange jamais les deux.
+- Pas de titre, pas de liste à puces, pas d'émoji : un seul paragraphe de texte suivi.
+
+Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
+{"recit":"..."}`,
+        messages: [{
+          role: 'user',
+          content: `Chantier : ${titre || '(sans titre)'}\n`
+            + `Commune : ${ville || '(non précisée)'}\n`
+            + `Métier de l'artisan : ${metier || '(non précisé)'}\n\n`
+            + `Les étapes, dans l'ordre :\n${JSON.stringify(etapes)}`,
+        }],
+      });
+
+      if (aRefuse(message)) {
+        return json({ error: "L'assistant a refusé d'écrire ce récit." }, 422);
+      }
+
+      const { entree, sortie } = coutDe(message);
+      await noter(entree, sortie, 'ok');
+      const brut = textOf(message).replace(/```json|```/g, '').trim();
+      let parsed: { recit?: unknown };
+      try {
+        parsed = JSON.parse(brut);
+      } catch {
+        return json({ error: "L'assistant a renvoyé une réponse illisible. Réessayez." }, 502);
+      }
+      const recit = String(parsed.recit || '').trim();
+      if (!recit) {
+        return json({ error: "L'assistant n'a rien écrit. Réessayez." }, 502);
+      }
+      return json({ recit });
+    }
+
+    return refuser('Action inconnue.');
   } catch (e) {
     /* Le détail complet part dans les journaux Supabase, où on peut le lire
        quand on cherche une panne. L'utilisateur, lui, reçoit une phrase. */

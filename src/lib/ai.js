@@ -131,6 +131,36 @@ export async function aiAmeliorerTexte({ texte, contexte = 'publication', profil
     .map((p) => ({ titre: String(p.titre || 'Proposition'), texte: p.texte.trim() }));
 }
 
+/**
+ * LE RÉCIT D'UN CHANTIER — la première action de l'agent (section 39).
+ *
+ * Elle rend un TEXTE, pas une publication : c'est l'artisan qui décide ce
+ * qu'il en fait. « L'agent écrit, l'artisan publie » est la première
+ * permission du §4, et elle n'est pas réglable — un texte public écrit par
+ * une machine sur la vitrine de quelqu'un est exactement l'action
+ * engageante que le §2 veut voir validée.
+ *
+ * Les étapes sont déjà filtrées et ordonnées par `etapesPourLeRecit()` :
+ * ce fichier n'a pas à savoir ce qu'est une étape utilisable, et le
+ * contrôle peut faire tourner cette règle-là tout seul.
+ */
+export async function aiRecitChantier({ chantierId, titre, ville, metier, etapes }) {
+  const data = await callAiFunction({
+    action: 'recit',
+    cibleType: 'chantier',
+    /* L'identifiant entre au journal : c'est SON chantier, pas celui d'un
+       tiers. L'écran ne l'affiche pas — un journal rend compte, il ne sert
+       pas à naviguer — mais il part dans l'export de ses données, là où on
+       trace précisément. */
+    cibleId: chantierId,
+    titre,
+    ville,
+    metier,
+    etapes,
+  });
+  return String((data && data.recit) || '').trim();
+}
+
 /** Utilisé par l'écran de réglages pour expliquer l'état du backend IA. */
 export const aiBackendUrl = hasSupabase ? `${SUPABASE_URL}/functions/v1/ai` : null;
 export const aiBackendReady = Boolean(SUPABASE_ANON_KEY);

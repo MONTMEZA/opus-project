@@ -7006,8 +7006,150 @@ comment on function public.enregistrer_appel_ia(uuid, text, text, text, int, int
   'Écrit une ligne du journal d''audit IA ET applique la limite quotidienne, '
   'dans le même ordre. Réservée à la fonction Edge `ai`. Section 38.';
 
+-- ==========================================================================
+--  39. LE RÉCIT D'UN CHANTIER — la PREMIÈRE action de l'agent (07/10/2026)
+--
+--  Section 36 a cousu les publications ensemble et laissé une place vide
+--  sur la page du chantier : « Bientôt : le récit de ce chantier ».
+--  Section 38 a posé le socle que cette place attendait — qui appelle
+--  l'IA, le journal d'audit, la limite. Voici ce qui remplit la place.
+--
+--  LA PERMISSION DU §4, ET ELLE NAÎT ICI
+--  --------------------------------------
+--  Le cahier des charges demande des niveaux d'autonomie réglables, et la
+--  section 38 a écrit pourquoi on ne les a pas posés d'un coup : « chaque
+--  permission naîtra AVEC l'action qu'elle gouverne ». Voici la première,
+--  et elle n'est pas réglable, à dessein :
+--
+--  > **L'AGENT ÉCRIT, L'ARTISAN PUBLIE.** Rien ne part sur la vitrine
+--  > publique sans qu'un humain l'ait lu. C'est le §2 mot pour mot : « les
+--  > actions irréversibles ou engageantes demandent une validation ».
+--
+--  Et c'est pour cela qu'il n'y a **rien à protéger en base** : le
+--  brouillon n'y entre jamais. Il vit à l'écran de l'artisan, le temps
+--  qu'il le lise et le corrige ; la colonne `recit` ne reçoit que ce qu'il
+--  a validé. C'est la règle de la section 38 appliquée telle quelle — ce
+--  qu'on n'écrit pas ne peut pas fuir —, et elle évite ici un vrai piège :
+--
+--  > **`chantiers` est une table PUBLIQUE** (section 36.3), et **une règle
+--  > RLS filtre des LIGNES, jamais des COLONNES** (section 18). Un
+--  > brouillon rangé dans une colonne de `chantiers` serait donc lisible
+--  > par n'importe qui, immédiatement, sans qu'aucune erreur ne le
+--  > signale. Il aurait fallu des droits de colonne, donc casser
+--  > `select *` pour tout le monde — pour protéger un texte qui n'a pas
+--  > besoin d'exister.
+--
+--  CE QUE CETTE SECTION NE POSE PAS
+--  ---------------------------------
+--  Aucun réglage « laisser l'agent publier tout seul ». Une seule action
+--  ne fait pas un écran de réglages, et surtout : un texte public écrit
+--  par une machine sur la vitrine d'un artisan est exactement l'action
+--  engageante que le §2 veut voir validée. Le jour où il y aura sept
+--  actions, le réglage aura un sens et une page.
+-- ==========================================================================
+
 -- --------------------------------------------------------------------------
---  39. L'EXPORT RGPD — et pourquoi il est le DERNIER
+--  39.1 Deux colonnes, et la seconde n'est pas décorative
+--
+--  `recit_ecrit_le` répond à une question que personne ne se pose avant
+--  qu'elle morde : **le récit raconte-t-il encore le chantier qu'on voit
+--  en dessous ?** On publie trois étapes de plus, et le texte parle d'un
+--  travail qui n'est plus celui-là. Rien ne le signalerait — il est
+--  toujours là, et toujours bien écrit.
+--
+--  La page compare cette date à `fin`, que le déclencheur des compteurs
+--  (section 36.5) tient déjà à jour.
+-- --------------------------------------------------------------------------
+alter table public.chantiers add column if not exists recit text;
+alter table public.chantiers add column if not exists recit_ecrit_le timestamptz;
+
+-- Un récit se lit d'un coup. Au-delà, ce n'est plus un récit, c'est la
+-- page elle-même — et les étapes sont déjà en dessous.
+do $mig$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chantier_recit_court'
+  ) then
+    alter table public.chantiers
+      add constraint chantier_recit_court check (char_length(recit) <= 2000);
+  end if;
+end $mig$;
+
+-- --------------------------------------------------------------------------
+--  39.2 La date du récit ne se déclare pas, elle se CONSTATE
+--
+--  Si l'application envoyait `recit_ecrit_le`, l'indicateur « des étapes
+--  ont été ajoutées depuis » dépendrait de l'horloge du téléphone et de la
+--  bonne volonté du client. Un indicateur qui peut mentir ne sert à rien :
+--  c'est la base qui pose l'heure, au moment où le texte change.
+--
+--  `clock_timestamp()` et pas `now()` : la leçon du journal
+--  d'administration (section 25).
+--
+--  Et un récit effacé remet la date à `null` — sinon « écrit le 7 octobre »
+--  survivrait à un récit qui n'existe plus.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_recit()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  -- Une chaîne de blancs n'est pas un récit : on range `null`, pour qu'il
+  -- n'y ait qu'UNE seule façon de dire « il n'y en a pas ».
+  if btrim(coalesce(new.recit, '')) = '' then
+    new.recit := null;
+  end if;
+
+  if tg_op = 'INSERT' then
+    new.recit_ecrit_le := case when new.recit is null then null
+                               else clock_timestamp() end;
+  elsif new.recit is distinct from old.recit then
+    new.recit_ecrit_le := case when new.recit is null then null
+                               else clock_timestamp() end;
+  else
+    -- Le récit n'a pas bougé : sa date non plus, quoi qu'on envoie.
+    new.recit_ecrit_le := old.recit_ecrit_le;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- `create or replace trigger` (PostgreSQL 14+) : le connecteur Supabase
+-- refuse tout ordre qui commence par `drop`, et il n'existe ainsi aucun
+-- instant où le verrou serait absent.
+create or replace trigger trg_recit_du_chantier
+  before insert or update on public.chantiers
+  for each row execute function public.tient_le_recit();
+
+comment on column public.chantiers.recit is
+  'Le récit du chantier, écrit par l''agent et VALIDÉ par l''artisan avant '
+  'd''arriver ici. Le brouillon ne passe jamais par la base : `chantiers` '
+  'est publique, et une règle RLS filtre des lignes, pas des colonnes. '
+  'Section 39.';
+
+-- --------------------------------------------------------------------------
+--  39.3 Qui peut écrire le récit — personne de plus qu'avant
+--
+--  La politique « ecriture mes chantiers » (section 36.3) est `for all`
+--  avec `est_mon_entreprise(pro_id)` : elle couvre déjà ces deux colonnes,
+--  et c'est juste — c'est l'artisan qui publie son propre récit.
+--
+--  > **Et il n'y a PAS de déclencheur de protection ici**, contrairement à
+--  > `verifie` ou `kbis_valide` (section 18). La règle du projet est
+--  > « toute colonne qu'un HUMAIN doit valider se protège par un
+--  > déclencheur » : ici l'humain qui valide EST celui qui écrit. Le
+--  > verrou n'aurait personne à arrêter.
+--
+--  L'export RGPD, lui, emporte déjà le récit : `mes_donnees()` rend
+--  `to_jsonb(x)` sur la ligne entière du chantier. Une colonne ajoutée ici
+--  y entre toute seule — c'est voulu, et c'est pour ça que l'export rend
+--  la ligne et pas une liste de colonnes.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  40. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
 --  « Ce que j'ai regardé » et « mes chantiers » sont des données
 --  personnelles sur MOI, donc elles entrent dans l'export de l'article 15.

@@ -8,17 +8,18 @@
  * un contresens** — on ne raconte pas une toiture en commençant par les
  * tuiles. C'est le seul écran du projet qui remonte le temps à l'endroit.
  *
- * CE QU'IL NE FAIT PAS ENCORE, ET QUI EST PRÉVU
- * ----------------------------------------------
- * Le bloc du haut porte une place vide pour **l'histoire écrite par
- * l'IA** : « Nous avons commencé par déposer l'ancienne couverture… »,
- * assemblée à partir des textes ci-dessous. C'est le lot suivant, et il
- * ne pouvait pas venir avant celui-ci : il n'y avait rien à raconter tant
- * que les publications n'étaient pas cousues ensemble.
+ * L'HISTOIRE ÉCRITE PAR L'AGENT (section 39)
+ * ------------------------------------------
+ * Le bloc du haut la porte désormais : « Nous avons commencé par déposer
+ * l'ancienne couverture… », assemblée à partir des textes ci-dessous. Elle
+ * ne pouvait pas venir avant la couture des publications, ni avant le
+ * journal d'audit du §21 — c'est la règle du projet : « ne plus ajouter
+ * d'action IA à la main dans la fonction Edge `ai` ».
  *
- * La place est laissée VIDE et non remplie d'un texte provisoire : un faux
- * résumé serait exactement ce que ce projet refuse — une promesse que rien
- * ne tient.
+ * `RecitChantier` décide seul de ce qu'il affiche. **L'écran ne lui
+ * demande rien d'autre que les étapes** : lui seul sait s'il y a de la
+ * matière pour écrire, et c'est `src/lib/recit.js` — qui n'importe rien —
+ * qui en décide.
  *
  * ET LES TEXTES DE L'ARTISAN RESTENT SOUS CHAQUE PHOTO, quoi qu'il arrive.
  * Le jour où l'IA écrira l'introduction, elle n'effacera pas ses mots :
@@ -38,6 +39,8 @@ import Carrousel from '../components/Carrousel';
 import { ArrowLeft, Layers } from '../components/icons';
 import { porteUnVisuel, FORMATS_VIDEO } from '../lib/formats-publication';
 import { joursEntre } from '../lib/formats';
+import { MIN_ETAPES_RECIT } from '../lib/recit';
+import RecitChantier from '../components/RecitChantier';
 
 /**
  * « Six jours » est plus parlant que « du 28/09 au 04/10 ».
@@ -59,6 +62,7 @@ function dureeLisible(debut, fin) {
 export default function ChantierScreen({
   chantier, publications = [], pro, chargement = false,
   estLeMien = false, onRetour, onBasculerStatut, onOuvrirPublication,
+  onEcrireRecit, onEnregistrerRecit, onErreur,
 }) {
   if (!chantier) return null;
 
@@ -91,18 +95,22 @@ export default function ChantierScreen({
         )}
       </View>
 
-      {/* LA PLACE DE L'HISTOIRE ÉCRITE. Elle n'apparaît qu'à l'artisan,
-          et seulement pour dire ce qui arrive — personne d'autre n'a
-          besoin de savoir qu'une fonctionnalité manque. */}
-      {estLeMien && publications.length >= 3 && (
-        <View style={s.aVenir}>
-          <Text style={s.aVenirTitre}>Bientôt : le récit de ce chantier</Text>
-          <Text style={s.aVenirTexte}>
-            Opus pourra assembler vos {publications.length} étapes en un texte
-            que vos clients liront d&apos;un coup — à partir de vos mots, jamais
-            en inventant. Plus vous décrivez en publiant, meilleur il sera.
-          </Text>
-        </View>
+      {/* L'HISTOIRE ÉCRITE (section 39). Le bloc décide lui-même de ce
+          qu'il montre : rien à un visiteur quand il n'y a pas de récit,
+          le texte seul quand il y en a un, et les commandes à l'artisan.
+
+          Il n'apparaît qu'à partir de MIN_ETAPES_RECIT étapes : sur un
+          chantier d'une seule publication, annoncer qu'il en faut trois
+          serait du bruit sur une page qui vient de naître. */}
+      {(publications.length >= MIN_ETAPES_RECIT || (chantier.recit && !estLeMien)) && (
+        <RecitChantier
+          chantier={chantier}
+          publications={publications}
+          estLeMien={estLeMien}
+          onEcrire={onEcrireRecit}
+          onEnregistrer={onEnregistrerRecit}
+          onErreur={onErreur}
+        />
       )}
 
       <SectionLabel>Les étapes</SectionLabel>
@@ -251,15 +259,6 @@ const s = StyleSheet.create({
   },
   pastilleTexte: { fontFamily: F.oswald6, fontSize: T.micro, color: C.surAccent },
 
-  aVenir: {
-    ...CARTE, padding: S.md, marginTop: S.md,
-    borderLeftWidth: 3, borderLeftColor: C.accent2,
-  },
-  aVenirTitre: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2 },
-  aVenirTexte: {
-    fontFamily: F.inter, fontSize: T.petit, color: C.muted,
-    marginTop: S.xs, lineHeight: interligne(T.petit),
-  },
 
   etape: { ...CARTE, overflow: 'hidden' },
   rangLigne: {

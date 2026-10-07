@@ -325,9 +325,29 @@ export const initialPosts = [
  * exemple ajouté.
  */
 export const initialChantiers = [
+  /* CELUI-CI PORTE UN RÉCIT (section 39), et c'est ce qui rend le lot I
+     visible sans fichier `.env` : la génération, elle, passe par la
+     fonction Edge et ne peut pas tourner en démonstration. Sans ce texte,
+     l'affichage d'un récit publié ne se vérifierait nulle part ici.
+
+     Il n'est assemblé QUE des quatre étapes ci-dessous — c'est exactement
+     ce que la consigne serveur impose à l'agent, et un exemple qui
+     inventerait donnerait une fausse idée de ce que fait l'outil.
+
+     Sa date est POSTÉRIEURE à la dernière étape : c'est le cas normal.
+     Celui du récit périmé se voit en publiant une étape de plus, et il est
+     éprouvé par le contrôle, qui fait tourner `recitPerime()`. */
   { id: 'ch-toiture', proId: 5, titre: 'Toiture Charleval', ville: 'Charleval (13)',
     statut: 'termine', nbPublications: 4, couverture: '#4b4b2f,#9a9a5a',
-    debut: ilYA(6 * 24), fin: ilYA(2 * 24) },
+    debut: ilYA(6 * 24), fin: ilYA(2 * 24),
+    recit: "Nous avons commencé par déposer l'ancienne couverture, en mettant "
+      + 'de côté les tuiles réutilisables. La charpente était saine : nous '
+      + 'avons gardé les pannes et posé des chevrons neufs en douglas. '
+      + "L'écran sous-toiture et les liteaux ont été mis en place ensuite — "
+      + "c'est lui qui protège de la condensation. La charpente "
+      + 'traditionnelle, en ossature chêne massif, a été posée en trois '
+      + 'jours.',
+    recitEcritLe: ilYA(2 * 24 - 1) },
   { id: 'ch-villa', proId: 1, titre: 'Villa R+1 Marseille', ville: 'Marseille (13)',
     statut: 'en_cours', nbPublications: 3, couverture: '#3a3a38,#8a8578',
     debut: ilYA(3 * 24), fin: ilYA(2) },

@@ -217,10 +217,22 @@ verifier('terminer un chantier se DÉFAIT',
   + 'erreur, et plus aucune porte. Une action qu\'on atteint d\'un seul '
   + 'appui doit pouvoir se défaire du même endroit.');
 
-verifier('la place du récit IA est VIDE, pas remplie d\'un faux texte',
-  /Bientôt : le récit de ce chantier/.test(page)
-  && !/Nous avons commencé par/.test(page),
-  'Un faux résumé serait une promesse que rien ne tient.');
+/* LE LOT I A REMPLI CETTE PLACE. Le contrôle disait « elle est VIDE, pas
+   remplie d'un faux texte » — il gardait une promesse en attendant qu'elle
+   soit tenue. Elle l'est : `RecitChantier` (section 39) occupe l'endroit, et
+   c'est `verifier-recit` qui en répond maintenant. Ce qui reste ici, c'est
+   le lien entre les deux — un bloc branché sans ses deux gestes afficherait
+   un bouton qui ne fait rien. */
+verifier('la place du récit est tenue par RecitChantier',
+  /<RecitChantier/.test(page) && !/Bientôt : le récit/.test(page),
+  'Et plus par un texte d\'attente : la promesse est tenue.');
+
+verifier('…et il reçoit de quoi écrire ET de quoi enregistrer',
+  /onEcrire=\{onEcrireRecit\}/.test(page)
+  && /onEnregistrer=\{onEnregistrerRecit\}/.test(page)
+  && /onEcrireRecit=\{ecrireRecitChantier\}/.test(app)
+  && /onEnregistrerRecit=\{enregistrerRecitChantier\}/.test(app),
+  'Un bloc branché à moitié afficherait un bouton qui ne fait rien.');
 
 /* ------------------------------------------------------------------ */
 console.log('\nQUI ÉCRIT, QUI LIT');
