@@ -5390,11 +5390,16 @@ même session (0 restant, base revenue à 13 comptes / 7 fiches /
 | on publie | le texte s'affiche, `PATCH /rest/v1/chantiers 200` |
 | après une étape de plus | **« Vous avez publié depuis que ce récit a été écrit »** |
 
-**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone. Et les
-boutons « Réécrire » / « Retirer » mesurent **80 × 36** au navigateur :
-`BtnMini` atteint les 44 points par `hitSlop`, que `react-native-web`
-ignore — c'est écrit dans ce document depuis le lot 5, et ça ne se vérifie
-qu'au doigt.
+**VÉRIFIÉ SUR L'IPHONE le 07/10/2026**, par le propriétaire : « j'ai testé
+et tout fonctionne ». Les boutons « Réécrire » / « Retirer » mesurent
+**80 × 36** au navigateur — `BtnMini` atteint les 44 points par `hitSlop`,
+que `react-native-web` ignore —, et ils se touchent donc bien au doigt.
+
+**Ce qui n'a PAS été vérifié, et qui reste vrai** : **aucun artisan réel n'a
+encore fait écrire un récit**. La vraie base compte 1 chantier et 0 récit.
+Le jour où l'agent écrira à partir d'étapes mal décrites, ou très
+nombreuses, le texte se jugera à nouveau — c'est la seule chose qu'un essai
+avec des étapes que J'AI écrites ne peut pas dire.
 
 ## Dépendances : vérifier avant de proposer
 
