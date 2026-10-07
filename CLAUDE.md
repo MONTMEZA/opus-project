@@ -4871,11 +4871,13 @@ dès que `uri` est fourni ; les initiales n'arrivent qu'à défaut.
 Au passage, le ménage de compte a bien emporté les **2 fichiers** d'avatar
 du compte jetable (`{"espace":"avatars","retires":2}`).
 
-**Ce qui n'a PAS été vérifié** : rien de tout ça sur un vrai iPhone — ni le
-défilement au doigt jusqu'au commentaire, ni le ressenti de l'arrivée. Et
-les notifications de **partenariat** et de **vérification** mènent à la
-fiche : c'est écrit et contrôlé, mais la vraie base n'en contient aucune
-qui soit adressée à un compte que je puisse ouvrir.
+**VÉRIFIÉ SUR L'IPHONE le 07/10/2026**, par le propriétaire : « j'ai testé
+et ça fonctionne parfaitement ». Les photos de profil sont toutes là, et
+toucher une notification ouvre bien la publication, directement.
+
+**Ce qui n'a PAS été vérifié** : les notifications de **partenariat** et de
+**vérification** mènent à la fiche — c'est écrit et contrôlé, mais la vraie
+base n'en contient aucune adressée à un compte que je puisse ouvrir.
 
 #### DEUX DÉFAUTS SIGNALÉS LE LENDEMAIN — et mon essai les avait MASQUÉS
 
