@@ -5606,6 +5606,99 @@ particulier le clavier qui s'ouvre sous le champ de la feuille, qui n'existe
 pas dans ce navigateur. Et **aucun artisan réel n'a encore nommé son
 agent** : la vraie base compte 7 fiches et 0 nom.
 
+#### « Il faut qu'il s'en rende compte » — ce que l'agent sait faire
+
+Demandé par le propriétaire le soir même, après avoir essayé la page :
+
+> « la page marche très bien. Quand on avancera sur les différentes actions
+> que pourra faire l'agent il faudra ajouter sur cette page pour que la
+> personne qui voit cette page comprenne à quoi cet agent va lui servir. Ça
+> va être son plus fidèle assistant et il faut qu'il s'en rende compte. »
+
+Il demandait une addition **pour plus tard**. Elle a été faite tout de
+suite, et pour deux raisons que le relevé a données :
+
+> **Des cinq actions qui marchent aujourd'hui, QUATRE ne sont annoncées
+> nulle part.** Elles existent, elles sont payées à chaque appel, et rien
+> dans Opus ne dit qu'elles existent. Ce n'est pas « il manquera quelque
+> chose demain » : il manque déjà.
+
+Et surtout : **« quand on avancera » est exactement ce qu'on oublie.** Une
+note dans `docs/A-FAIRE.md` se lit un jour sur trois. Ce qui tient, dans ce
+projet, c'est un contrôle qui rougit.
+
+##### Chaque action porte QUATRE champs, et les quatre sont obligatoires
+
+`ACTIONS_IA` (`src/lib/journal-ia.js`) ne porte plus deux champs mais
+quatre : `label`, `detail` (au PASSÉ — c'est une ligne de journal), `sait`
+(au PRÉSENT — c'est une capacité) et **`ou`**.
+
+> **Le dernier est celui qui change tout.** Un artisan ne lit pas un mode
+> d'emploi. Lui dire « il résume les avis » sans dire OÙ, c'est une
+> fonctionnalité qu'il ne trouvera jamais. « Depuis : la fiche d'un
+> artisan », si.
+>
+> Et `npm run verifier-agent` **refuse une action à qui il manque un
+> champ**. Le jour où l'agent apprend à rédiger un devis, sa ligne sur
+> cette page s'écrit DANS LE MÊME LOT — on ne peut pas l'oublier. C'est la
+> mécanique de « toute section qui ajoute une table ajoute sa ligne à
+> `mes_donnees()` », appliquée à l'écran.
+
+Éprouvé en cassant ce qu'il surveille : une sixième action ajoutée **sans**
+sa ligne est refusée.
+
+##### La liste est DÉRIVÉE, jamais recopiée
+
+`savoirFaireAgent()` rend le catalogue tel quel, et l'écran le parcourt.
+Écrite à la main dans le JSX, elle ne suivrait pas la prochaine action — et
+ce serait pire qu'ailleurs : la seconde liste promettrait des choses que la
+première ne fait pas. C'est la leçon des voyants du 04/10, avec un enjeu de
+plus.
+
+##### UNE phrase sur l'avenir, et pas un menu
+
+Le propriétaire veut qu'on comprenne que ce sera « son plus fidèle
+assistant ». La tentation est une liste « bientôt : devis, factures,
+planning ».
+
+> **Une liste de fonctionnalités à venir est le « bouton §18 » en pire** :
+> un menu de promesses que rien ne tient, et qui vieillit mal. Une phrase
+> dit la direction sans promettre de date, et elle est vraie — l'ordre des
+> modules est arrêté dans `docs/A-FAIRE.md`.
+
+Le contrôle tient les deux bouts : `AGENT_PLUS_TARD` doit être **une seule
+phrase**, et **ne contenir aucune date** (« bientôt », « 2027 », « ce
+mois-ci » sont refusés).
+
+##### Et on l'appelle par son NOM
+
+« Ce que **Margot** sait faire aujourd'hui — et où le lui demander. » Puis,
+deux paragraphes plus bas : « Chaque fois que **Margot** travaille pour
+vous… ». Le second a été corrigé **sur la capture** : il disait encore
+« l'assistant », à quinze lignes du premier.
+
+> **Nommer son agent et ne jamais l'appeler par son nom, c'est un réglage
+> qui ne sert à rien.** Le contrôle tient les deux endroits.
+
+##### Vérifié, et comment
+
+Les 40 contrôles (dont 11 nouveaux dans `verifier-agent`),
+`npx expo export --platform ios`. Le contrôle a été éprouvé **en cassant ce
+qu'il surveille** : **onze défauts remis à la main, les onze refusés** —
+dont « une action nouvelle sans sa ligne », « la liste recopiée dans le
+JSX », « l'avenir devient un menu », « une date est promise » et « le
+journal redit l'assistant ».
+
+Au navigateur, en démonstration, sur la page réelle : les **cinq** capacités
+s'affichent avec leur « Depuis : … », l'en-tête porte le nom de l'agent, la
+phrase sur l'avenir est là, et aucune date n'est annoncée.
+
+**Ce qui n'a PAS été vérifié** : la page sur un vrai iPhone. Et c'est
+toujours une page de RÉGLAGES — « Confidentialité et sécurité → Mon agent ».
+Le jour où l'agent aura son tableau de bord (§12), c'est là que cette liste
+devra vivre ; aujourd'hui, la poser ailleurs serait créer un écran pour
+cinq lignes.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

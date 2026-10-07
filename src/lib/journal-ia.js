@@ -47,36 +47,108 @@
 export const LIMITE_IA_PAR_JOUR = 60;
 
 /**
- * Les quatre actions que la fonction Edge sait faire aujourd'hui.
+ * Les actions que la fonction Edge sait faire aujourd'hui.
  *
  * Le libellé est ce que l'artisan LIT. Jamais la clé : « ameliorer » à
  * l'écran ressemble à une faute de frappe, donc personne ne la signale —
  * c'est la règle du catalogue des métiers (`nomMetier`), et elle vaut pour
  * toute clé technique.
+ *
+ * CHAQUE ACTION PORTE QUATRE CHOSES, ET LES QUATRE SERVENT
+ * --------------------------------------------------------
+ *   `label`  le titre, au journal comme dans la liste ;
+ *   `detail` ce qui s'est passé, au PASSÉ — c'est une ligne de journal ;
+ *   `sait`   ce qu'il sait faire, au PRÉSENT — c'est une promesse tenue ;
+ *   `ou`     **OÙ on le lui demande.**
+ *
+ * Le dernier est celui qui change tout, et il vient du propriétaire :
+ *
+ *   « quand on avancera sur les différentes actions il faudra ajouter sur
+ *     cette page pour que la personne qui voit cette page comprenne à quoi
+ *     cet agent va lui servir, ça va être son plus fidèle assistant et il
+ *     faut qu'il s'en rende compte »
+ *
+ * Un artisan ne lit pas un mode d'emploi. Lui dire « il résume les avis »
+ * sans dire où, c'est une fonctionnalité qu'il ne trouvera jamais — et
+ * quatre des cinq actions d'aujourd'hui sont exactement dans ce cas : elles
+ * existent, elles marchent, et rien nulle part ne dit qu'elles existent.
+ *
+ * > **ET C'EST POUR ÇA QUE LES QUATRE CHAMPS SONT OBLIGATOIRES.**
+ * > `npm run verifier-agent` refuse une action à qui il en manque un. Le
+ * > jour où l'agent apprend à rédiger un devis, sa ligne sur cette page
+ * > s'écrit DANS LE MÊME LOT — on ne peut pas l'oublier, le contrôle
+ * > rougit. C'est la même mécanique que « toute section qui ajoute une
+ * > table ajoute sa ligne à `mes_donnees()` ».
  */
 export const ACTIONS_IA = {
   match: {
     label: 'Recherche d’un artisan',
     detail: 'Vous avez décrit un besoin, l’agent a cherché qui pouvait le prendre.',
+    sait: 'Décrivez ce que vous cherchez avec vos mots, il trouve les artisans '
+      + 'qui peuvent le prendre et dit pourquoi.',
+    ou: 'Découvrir',
   },
   summary: {
     label: 'Résumé des avis',
     detail: 'L’agent a lu les avis d’une fiche et les a résumés.',
+    sait: 'Il lit tous les avis d’un artisan et vous en fait trois phrases, '
+      + 'au lieu de les parcourir un par un.',
+    ou: 'La fiche d’un artisan',
   },
   bio: {
     label: 'Proposition de présentation',
     detail: 'L’agent a proposé des textes pour votre fiche, à partir de vos réponses.',
+    sait: 'Répondez à quelques questions sur votre métier, il écrit votre '
+      + 'présentation — en trois versions, vous choisissez.',
+    ou: 'Modifier mon profil',
   },
   ameliorer: {
     label: 'Relecture d’un texte',
     detail: 'L’agent a relu votre texte et proposé de le remettre d’aplomb.',
+    sait: 'Écrivez comme vous parlez, il remet d’aplomb. Il part de VOS mots, '
+      + 'il n’invente rien et n’ajoute rien.',
+    ou: 'Publier, et votre présentation',
   },
   recit: {
     label: 'Récit d’un chantier',
     detail: 'L’agent a assemblé vos étapes en un texte que vous avez relu '
       + 'avant de le publier.',
+    sait: 'Il assemble les étapes d’un chantier en une histoire que vos '
+      + 'clients lisent d’un coup. Vous relisez avant qu’elle paraisse.',
+    ou: 'La page d’un chantier',
   },
 };
+
+/**
+ * CE QU'IL SAIT FAIRE, dans l'ordre où on s'en sert.
+ *
+ * Une liste dérivée d'`ACTIONS_IA`, jamais recopiée : deux listes pour une
+ * seule vérité finissent toujours par se contredire — c'est la leçon des
+ * voyants du 04/10, et ici ce serait pire qu'ailleurs, puisque la seconde
+ * promettrait des choses que la première ne fait pas.
+ *
+ * L'ordre est celui d'`ACTIONS_IA` et il n'est pas alphabétique : on
+ * commence par ce qui sert le plus souvent.
+ */
+export function savoirFaireAgent() {
+  return Object.entries(ACTIONS_IA).map(([cle, a]) => ({
+    cle, label: a.label, sait: a.sait, ou: a.ou,
+  }));
+}
+
+/**
+ * LA SEULE PHRASE QUI PARLE DE L'AVENIR, et elle est pesée.
+ *
+ * Le propriétaire veut que l'artisan comprenne que ce sera « son plus
+ * fidèle assistant ». Une LISTE de fonctionnalités à venir serait le
+ * « bouton §18 » en pire — un menu de promesses que rien ne tient, et qui
+ * vieillit mal. Une phrase, en revanche, dit la direction sans promettre
+ * de date, et elle est vraie : l'ordre des modules est arrêté dans
+ * `docs/A-FAIRE.md`.
+ */
+export const AGENT_PLUS_TARD = 'Il apprendra ensuite vos devis, vos factures '
+  + 'et votre planning : c’est le logiciel de gestion qu’on construit autour '
+  + 'de lui.';
 
 /**
  * Ce que l'action visait, quand elle visait quelque chose.

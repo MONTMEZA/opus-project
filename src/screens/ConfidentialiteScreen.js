@@ -34,6 +34,7 @@ import {
 import { motifDe, cibleDe, DELAI_EXAMEN_HEURES } from '../data/moderation';
 import {
   LIMITE_IA_PAR_JOUR, libelleAction, libelleCible, libelleResultat, estUnEchec,
+  savoirFaireAgent, AGENT_PLUS_TARD,
 } from '../lib/journal-ia';
 import { TAILLE_JOURNAL_IA } from '../lib/api';
 import { TITRES_LEGAUX } from './LegalScreen';
@@ -235,9 +236,49 @@ export default function ConfidentialiteScreen({
         </Pressable>
       )}
 
+      {/* CE QU'IL SAIT FAIRE — demandé par le propriétaire le 07/10/2026 :
+          « il faut que la personne qui voit cette page comprenne à quoi cet
+          agent va lui servir, ça va être son plus fidèle assistant et il
+          faut qu'il s'en rende compte ».
+
+          Il a raison, et le relevé le confirmait : des cinq actions qui
+          marchent aujourd'hui, QUATRE ne sont annoncées nulle part. Elles
+          existent, elles sont payées, et personne ne sait les trouver.
+
+          La liste vient de `savoirFaireAgent()` : elle n'est pas recopiée
+          ici, donc elle ne peut pas se désaligner — et le contrôle refuse
+          une action à qui il manque sa ligne, ce qui oblige le prochain lot
+          à l'écrire. C'est la mécanique de « toute section qui ajoute une
+          table ajoute sa ligne à mes_donnees() ». */}
       <Text style={s.aide}>
-        Chaque fois que l’assistant travaille pour vous, c’est inscrit ici :
-        quoi, quand, et si ça a abouti. Ni votre question ni sa réponse ne
+        {`Ce que ${nomAgent} sait faire aujourd’hui — et où le lui demander.`}
+      </Text>
+      <View style={[s.bloc, { marginBottom: S.sm }]}>
+        {savoirFaireAgent().map((f, i) => (
+          <View
+            key={f.cle}
+            style={[s.ligne, i === savoirFaireAgent().length - 1 && { borderBottomWidth: 0 }]}
+          >
+            <Sparkles size={14} color={C.accent2} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.ligneTexte}>{f.label}</Text>
+              <Text style={s.ligneMeta}>{f.sait}</Text>
+              {/* OÙ, et c'est le plus utile de la rangée : une
+                  fonctionnalité qu'on ne sait pas trouver n'existe pas. */}
+              <Text style={s.savoirOu}>{`Depuis : ${f.ou}`}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+      <Text style={s.aide}>{AGENT_PLUS_TARD}</Text>
+
+      {/* ON L'APPELLE PAR SON NOM ICI AUSSI. Nommer son agent et continuer
+          à écrire « l'assistant » deux paragraphes plus bas, c'est un
+          réglage qui ne sert à rien — et sur la capture, les deux phrases
+          se suivaient. */}
+      <Text style={s.aide}>
+        {`Chaque fois que ${nomAgent} travaille pour vous, c’est inscrit ici :`}
+        {' '}quoi, quand, et si ça a abouti. Ni votre question ni sa réponse ne
         sont conservées — ce qu’on n’écrit pas ne peut pas fuir. Il peut
         travailler {LIMITE_IA_PAR_JOUR} fois par jour ; au-delà il vous le
         dit, et il repart 24 h plus tard.
@@ -409,6 +450,13 @@ const s = StyleSheet.create({
   },
   nomAgentTexte: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
   nomAgentAide: { fontFamily: F.inter4, fontSize: T.petit, color: C.muted },
+  /* « Depuis : Découvrir » — l'encre orange de LECTURE, pas celle qu'on
+     remplit : `C.accent` en texte ne donne que 2,76 : 1 sur ce fond
+     (règle du lot 5). */
+  savoirOu: {
+    fontFamily: F.inter5, fontSize: T.micro, color: C.accentTexte,
+    marginTop: S.xs,
+  },
   ligne: {
     flexDirection: 'row', alignItems: 'center', gap: S.md,
     paddingVertical: S.md, paddingHorizontal: S.md,

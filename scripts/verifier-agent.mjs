@@ -38,6 +38,7 @@ import { readFileSync } from 'node:fs';
 const {
   LIMITE_IA_PAR_JOUR, ACTIONS_IA, CIBLES_IA,
   libelleAction, detailAction, libelleCible, libelleResultat, estUnEchec,
+  savoirFaireAgent, AGENT_PLUS_TARD,
 } = await import('../src/lib/journal-ia.js');
 
 let echecs = 0;
@@ -304,6 +305,82 @@ console.log('\nLa fonction EDGE — identifier, puis noter AVANT de payer');
   verifier('un journal incomplet ne fait pas échouer la réponse',
     /if \(error\) console\.error\('journal_ia \(mise à jour\)/.test(edge),
     'L\'artisan a sa réponse, c\'est l\'essentiel.');
+}
+
+/* ================================================================== */
+console.log('\nL’ARTISAN SAIT CE QUE SON AGENT SAIT FAIRE — et OÙ le lui demander');
+
+/* Demandé par le propriétaire le 07/10/2026 : « il faut que la personne qui
+   voit cette page comprenne à quoi cet agent va lui servir, ça va être son
+   plus fidèle assistant et il faut qu'il s'en rende compte ».
+
+   Le vrai enjeu n'est pas la page d'aujourd'hui, c'est CELLE DE DEMAIN : le
+   jour où l'agent apprend à rédiger un devis, sa ligne doit s'écrire dans le
+   MÊME lot. Ces contrôles-là sont ce qui le force. */
+{
+  const toutes = Object.entries(ACTIONS_IA);
+  const sans = toutes.filter(([, a]) => !a.sait || !a.ou);
+  verifier('CHAQUE action dit ce qu’elle sait faire, et OÙ',
+    sans.length === 0,
+    `Il manque \`sait\` ou \`ou\` à : ${sans.map(([c]) => c).join(', ')}. `
+    + 'Une action qu’on ne sait pas trouver n’existe pas pour celui qui la '
+    + 'cherche — et c’est ce contrôle qui oblige le prochain lot à écrire sa '
+    + 'ligne sur la page « Mon agent ».');
+
+  verifier('…au PRÉSENT, pas au passé comme le journal',
+    toutes.every(([, a]) => !/^(Vous avez|L’agent a|L\'agent a)/.test(a.sait || '')),
+    '`detail` raconte ce qui s’est passé, `sait` dit ce qu’il sait faire. '
+    + 'Recopier l’un dans l’autre donnerait une liste de capacités écrite au '
+    + 'passé, qui se lit comme un historique.');
+
+  verifier('…et assez pour être comprise',
+    toutes.every(([, a]) => (a.sait || '').length > 40 && (a.ou || '').length >= 6));
+
+  /* LA LISTE EST DÉRIVÉE, JAMAIS RECOPIÉE. Deux listes pour une seule
+     vérité se contredisent toujours — et ici la seconde promettrait des
+     choses que la première ne fait pas. */
+  const liste = savoirFaireAgent();
+  verifier('la liste affichée EST le catalogue, pas une copie',
+    liste.length === toutes.length
+    && liste.every((f, i) => f.cle === toutes[i][0] && f.sait === toutes[i][1].sait),
+    'Leçon des voyants du 04/10.');
+
+  verifier('l’écran la rend en la PARCOURANT',
+    /savoirFaireAgent\(\)\.map\(/.test(ecran)
+    && /\{f\.sait\}/.test(ecran) && /Depuis : \$\{f\.ou\}/.test(ecran),
+    'Écrite à la main dans le JSX, elle ne suivrait pas la prochaine action.');
+
+  verifier('…et aucun libellé n’y est recopié en dur',
+    !Object.values(ACTIONS_IA).some((a) => ecran.includes(a.sait)),
+    'Le contrôle ne vaut que si l’écran n’a pas sa propre version.');
+
+  /* UNE SEULE PHRASE SUR L'AVENIR. Une LISTE de fonctionnalités à venir
+     serait le « bouton §18 » en pire : un menu de promesses que rien ne
+     tient, et qui vieillit mal. */
+  verifier('l’avenir tient en UNE phrase, et elle est à l’écran',
+    typeof AGENT_PLUS_TARD === 'string'
+    && AGENT_PLUS_TARD.split('.').filter((x) => x.trim()).length === 1
+    && /\{AGENT_PLUS_TARD\}/.test(ecran),
+    'Une liste de fonctionnalités à venir est un menu de promesses que rien '
+    + 'ne tient.');
+
+  verifier('…et elle ne promet aucune DATE',
+    !/\b(bientôt|prochainement|dans \d|cet? (?:semaine|mois|année)|202\d)\b/i
+      .test(AGENT_PLUS_TARD),
+    'Une date annoncée est une date qu’on tiendra mal.');
+
+  /* Le nom de l'agent sert ICI aussi : « Ce que Margot sait faire » plutôt
+     que « Ce que l'assistant sait faire ». C'est tout l'intérêt de l'avoir
+     nommé. */
+  verifier('le journal aussi l’appelle par son nom',
+    /Chaque fois que \$\{nomAgent\} travaille pour vous/.test(ecran),
+    'Deux paragraphes qui se suivent, l’un disant « Margot » et l’autre '
+    + '« l’assistant » : le réglage ne sert alors à rien.');
+
+  verifier('l’en-tête de la liste appelle l’agent par son nom',
+    /Ce que \$\{nomAgent\} sait faire/.test(ecran),
+    'Nommer son agent et ne jamais l’appeler par son nom, c’est un réglage '
+    + 'qui ne sert à rien.');
 }
 
 /* ================================================================== */

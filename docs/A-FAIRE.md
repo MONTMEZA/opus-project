@@ -419,6 +419,7 @@ pas négociable — chacun pose le socle du suivant.
 | **H** | Le socle de l'agent : qui appelle l'IA, et on le note (section 38) | ✅ 07/10/2026 |
 | **I** | Le récit du chantier, écrit par l'agent (section 39) | ✅ 07/10/2026 |
 | **J** | Nommer son agent : proposer trois fois, puis se taire (section 40) | ✅ 07/10/2026 |
+| **J bis** | « Ce que votre agent sait faire », et le contrôle qui oblige à la tenir | ✅ 07/10/2026 |
 
 Le lot **G** n'était pas prévu : il vient de trois défauts que le
 propriétaire a trouvés en se servant de la cloche. Il a fallu **trois
