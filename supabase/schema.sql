@@ -7385,3 +7385,84 @@ $$;
    exactement le genre de panne que ce fichier traque. */
 revoke all on function public.mes_donnees() from public, anon;
 grant execute on function public.mes_donnees() to authenticated;
+
+-- ==========================================================================
+--  42. LES PORTES DE LA BASE — une fonction de déclencheur n'est appelable
+--      par personne (11/10/2026)
+--
+--  Relevé sur la VRAIE base par les alertes de sécurité de Supabase :
+--  **huit fonctions `security definer` appelables SANS ÊTRE CONNECTÉ**, par
+--  `/rest/v1/rpc/<nom>`. Sept sont des déclencheurs — `maj_chantier`,
+--  `maj_vues_count`, `pose_le_lieu_du_post`, `tient_le_chantier_du_post`,
+--  `fiche_pro_indestructible`, `notifie_reponse_annonce`, `maj_nb_reponses` —
+--  et la huitième, `recalcule_chantier(uuid)`, n'est appelée que par l'un
+--  d'eux.
+--
+--  CE QUI A ÉTÉ MESURÉ AVANT D'Y TOUCHER
+--  --------------------------------------
+--  Ce fichier porte depuis le 30/09 une mise en garde qui a coûté une panne :
+--  `horaires_valides()` avait été révoquée « par prudence », et plus aucun
+--  horaire ne s'enregistrait — **une contrainte `check` s'exécute avec les
+--  droits de CELUI QUI ÉCRIT**. La tentation était donc de ne rien toucher.
+--
+--  Sauf qu'un DÉCLENCHEUR n'est pas une contrainte, et ça s'éprouve. Mesuré
+--  sur PostgreSQL 16, la même journée, dans les deux sens :
+--
+--    | droit `execute` retiré à tout le monde | résultat               |
+--    |----------------------------------------|------------------------|
+--    | fonction de DÉCLENCHEUR                 | **l'écriture passe**   |
+--    | fonction d'une CONTRAINTE `check`       | permission denied      |
+--
+--  > **Le droit d'une fonction de déclencheur est vérifié à la CRÉATION du
+--  > déclencheur, pas à chaque écriture.** PostgreSQL refuse d'ailleurs
+--  > d'appeler une fonction qui rend `trigger` autrement que par un
+--  > déclencheur. Lui laisser `execute`, c'est donc huit portes ouvertes qui
+--  > ne servent à personne.
+--
+--  POURQUOI UN BALAYAGE, ET PAS HUIT LIGNES
+--  -----------------------------------------
+--  Huit `revoke` écrits à la main seraient justes aujourd'hui et faux au
+--  prochain lot : la section suivante ajoutera ses déclencheurs, et personne
+--  ne pensera à venir ici. Le balayage prend **tout ce qui rend `trigger`**,
+--  donc il couvre ce qui n'est pas encore écrit.
+--
+--  Et c'est pour ça qu'il est le DERNIER bloc du fichier : il doit passer
+--  après le dernier `create or replace trigger`. Une section ajoutée demain
+--  s'insère avant l'export RGPD, donc avant lui — `npm run verifier-portes`
+--  refuse qu'on inverse l'ordre.
+--
+--  `revoke` dans un bloc `do` passe par le connecteur Supabase : c'est
+--  mesuré et écrit dans CLAUDE.md. Seuls les ordres qui COMMENCENT par
+--  `drop` ou `delete` sont refusés.
+-- ==========================================================================
+do $portes$
+declare
+  f record;
+begin
+  for f in
+    select p.oid::regprocedure as signature
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prorettype = 'pg_catalog.trigger'::regtype
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', f.signature);
+  end loop;
+end
+$portes$;
+
+/* `recalcule_chantier(uuid)` ne rend pas `trigger` : elle rend `void`, et le
+   balayage ne la voit donc pas. Elle n'a pourtant aucun appelant hors de
+   `maj_chantier()`, qui est `security definer` — l'appel s'y fait avec les
+   droits du propriétaire, pas ceux de l'artisan qui publie. La lui retirer
+   ne casse donc rien, et les essais de la section 36 le prouvent en
+   recalculant un compteur après coup. */
+revoke all on function public.recalcule_chantier(uuid) from public, anon, authenticated;
+
+/* ET CE QU'ON NE TOUCHE SURTOUT PAS, écrit ici pour que ce soit relu avec le
+   balayage : les fonctions appelées par une POLITIQUE ou une CONTRAINTE
+   doivent rester exécutables par `authenticated`, sans quoi la règle ÉCHOUE
+   au lieu de filtrer — « permission denied for function », et c'est la panne
+   du 30/09. Elles sont cinq : est_masque, est_un_pro, est_mon_entreprise,
+   horaires_valides, metiers_connus. `verifier-portes` les recense dans le
+   fichier et refuse que l'une d'elles perde son droit. */

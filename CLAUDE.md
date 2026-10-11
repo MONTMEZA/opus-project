@@ -5699,6 +5699,126 @@ Le jour où l'agent aura son tableau de bord (§12), c'est là que cette liste
 devra vivre ; aujourd'hui, la poser ailleurs serait créer un écran pour
 cinq lignes.
 
+### Les portes de la base — un déclencheur n'est appelable par personne (11/10/2026)
+
+Section 42 de `schema.sql`, `supabase/essais-section-42.sql`,
+`npm run verifier-portes`.
+
+Relevé par les **alertes de sécurité de Supabase** sur la vraie base, en
+ouvrant la session : **huit fonctions `security definer` joignables par
+`/rest/v1/rpc/<nom>` SANS ÊTRE CONNECTÉ.** Sept sont des déclencheurs, la
+huitième — `recalcule_chantier(uuid)` — n'est appelée que par l'un d'eux.
+
+#### Ce document mettait en garde contre exactement ce geste
+
+Et c'est pour ça qu'il fallait mesurer avant d'y toucher. La section sur la
+modération dit, depuis l'incident `horaires_valides` du 30/09 :
+
+> « Toute fonction appelée par une policy ou une contrainte reste exécutable
+> par `authenticated`. » — une contrainte `check` s'exécute avec les droits
+> de CELUI QUI ÉCRIT, et plus aucun horaire ne s'enregistrait.
+
+**Un déclencheur n'est pas une contrainte.** Mesuré sur PostgreSQL 16 le jour
+même, les deux cas côte à côte dans le même fichier :
+
+| droit `execute` retiré à tout le monde | résultat |
+|---|---|
+| fonction de **DÉCLENCHEUR** | **l'écriture passe** — `INSERT 0 1`, le champ est rogné, le drapeau posé |
+| fonction d'une **CONTRAINTE `check`** | **`permission denied for function`** |
+
+> **Le droit d'une fonction de déclencheur est vérifié à la CRÉATION du
+> déclencheur, pas à chaque écriture.** PostgreSQL refuse d'ailleurs
+> d'appeler une fonction qui rend `trigger` autrement que par un
+> déclencheur : lui laisser `execute`, c'est une porte qui ne sert à
+> personne.
+
+#### Un balayage, pas huit lignes
+
+Huit `revoke` écrits à la main seraient justes aujourd'hui et faux au
+prochain lot : la section suivante posera ses déclencheurs, et personne ne
+reviendra ici. Le balayage prend **tout ce qui rend `trigger`** — il couvre
+donc ce qui n'est pas encore écrit.
+
+> **Et il est le DERNIER bloc du fichier**, parce qu'il ne voit que les
+> déclencheurs déjà créés. Une section ajoutée demain s'insère avant
+> l'export RGPD, donc avant lui. `verifier-portes` refuse qu'on inverse
+> l'ordre, et refuse qu'un `create trigger` apparaisse derrière.
+
+#### MON CONTRÔLE A ACCUSÉ DU CODE JUSTE — et c'est la leçon du lot
+
+Le premier jet exigeait un `grant execute … to authenticated` écrit en
+toutes lettres pour chaque fonction gardienne. Il en a refusé **quatre**, et
+les quatre allaient parfaitement bien :
+
+- `est_masque` est accordée dans une **boucle** (section 13.8), par
+  `execute format('grant execute on function %s …', f)` ;
+- `metiers_connus` l'est sur **deux lignes**, et le motif exigeait « to »
+  collé à la parenthèse ;
+- `est_un_pro` et `horaires_valides` ne sont accordées **nulle part** :
+  elles sont `security invoker` et vivent sur le droit que PostgreSQL donne
+  à PUBLIC d'office. C'est l'état normal, pas un oubli.
+
+Vérifié sur le bac à sable — schéma rejoué deux fois — **et** sur la vraie
+base : les deux donnent exactement les mêmes droits.
+
+> **Un contrôle qui exige une SYNTAXE au lieu d'une PROPRIÉTÉ accuse du code
+> juste.** C'est la faute du `insert into … \);` du 05/10, dans l'autre
+> sens : là il passait au vert sans rien trouver, ici il refusait ce qu'il
+> ne savait pas lire.
+
+Il vise désormais le vrai invariant — **rien ne doit RETIRER ce droit** —, y
+compris par la boucle de la section 13.8, qui révoque en masse. Et la vraie
+preuve a changé de fichier : `verifier-portes` lit le texte, `essais-section-42.sql`
+interroge `has_function_privilege` sur une base rejouée. Un fichier `node`
+ne sait pas interroger PostgreSQL ; il ne faut pas lui demander de prouver
+ce qu'il ne peut que supposer.
+
+#### Refermer une porte sans essayer d'entrer, c'est murer la pièce
+
+L'essai qui compte n'est pas le relevé des droits, c'est **l'écriture**.
+`posts` porte quatre déclencheurs — `pose_le_lieu_du_post`,
+`tient_le_chantier_du_post`, `maj_chantier`, `maj_vues_count`. Si le droit
+retiré les empêchait de tourner, cela ne se verrait QUE là.
+
+Et le même essai est refait **avec un jeton** (`set local role` +
+`request.jwt.claim.sub`, chacun dans son propre ordre) : c'est la leçon du
+lot E, où un essai sans jeton passait au vert sans éprouver un verrou qui
+dépend de `auth.uid()`.
+
+#### Et le contrôle m'a eu, pour la NEUVIÈME fois, par un commentaire
+
+Éprouvé en cassant ce qu'il surveille : **dix défauts remis à la main, et un
+est passé.** Commenter l'écriture d'essai — `-- insert into public.posts` —
+le laissait au vert, puisque le texte y était toujours. C'était la première
+fois que le commentaire trompeur était du SQL d'essai et non du code ; le
+contrôle retire désormais les commentaires de ce fichier-là aussi. Après
+correction : les dix refusés.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois** sur un PostgreSQL 16 neuf, les sept cas de
+`supabase/essais-section-42.sql`, les 41 contrôles, `npx expo export
+--platform ios`. Puis la migration appliquée sur la VRAIE base :
+
+| | avant | après |
+|---|---|---|
+| fonctions de déclencheur | 24 | 24 |
+| …dont **appelables** par `anon` ou `authenticated` | 24 | **0** |
+| `recalcule_chantier` appelable par `anon` | oui | **non** |
+| gardiennes qui gardent leur droit | 6 | **6** |
+| alerte Supabase « appelable **sans compte** » | **8** | **0 — la catégorie a disparu** |
+| alerte « appelable par un connecté » | 25 | **17** |
+
+Les 17 qui restent sont voulues et nommées : les onze `admin_*` (qui
+vérifient `est_admin()` à l'intérieur), `est_admin`, `est_masque`,
+`mon_compte`, `mes_demandes_recues`, `preparer_suppression_compte`,
+`marquer_lus`, `a_deja_une_reponse` — toutes appelées pour de vrai par
+l'application ou par une règle.
+
+**Ce qui n'a PAS été vérifié** : l'application sur un iPhone après ce
+changement. Rien de visible ne bouge — aucune de ces fonctions n'était
+appelée par l'application —, mais ça se dit plutôt que ça se suppose.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :
