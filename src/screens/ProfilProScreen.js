@@ -35,6 +35,7 @@ import {
 } from '../lib/verification';
 import { avgReviews } from '../data/demo';
 import { aiSummarizeReviews } from '../lib/ai';
+import { CLAVIER } from '../lib/clavier';
 
 /* --- .crit-row : un critère + sa barre de progression --- */
 function CritereBar({ label, value }) {
@@ -139,8 +140,8 @@ export default function ProfilProScreen({
      tirent horizontalement, comme ce geste. */
   const contenu = (
     <Animated.ScrollView
+      {...CLAVIER}
       style={{ flex: 1 }}
-      keyboardShouldPersistTaps="handled"
       onScroll={suivreDefilement}
       scrollEventThrottle={16}
     >

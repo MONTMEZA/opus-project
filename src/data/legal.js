@@ -474,7 +474,13 @@ export const CONFIDENTIALITE = [
         + 'de son contenu n’apparaît sur votre fiche publique, dans le fil '
         + 'ou dans une notification ; vous pouvez l’exporter et le '
         + 'supprimer à tout moment ; et il part entièrement avec votre '
-        + 'compte.'
+        + 'compte.\n\nUne exception à dire clairement : quand vous tapez '
+        + 'l’adresse d’un client et que l’application vous propose des '
+        + 'suggestions, le texte en cours de saisie est envoyé à la Base '
+        + 'Adresse Nationale, le service public français des adresses. Ce '
+        + 'qui part, c’est l’adresse que vous tapez, et rien d’autre : '
+        + 'jamais le nom de votre client, jamais son téléphone, jamais le '
+        + 'fait que ce soit un client.'
       : 'Le carnet de clients d’un artisan contient des données '
         + 'personnelles sur des tiers. L’artisan en est le responsable du '
         + 'traitement ; l’éditeur d’Opus agit comme sous-traitant au sens '
@@ -485,9 +491,22 @@ export const CONFIDENTIALITE = [
   },
   {
     titre: 'À qui vos données sont transmises',
+    /* LA BASE ADRESSE NATIONALE MANQUAIT À CETTE LISTE depuis le premier
+       jour, et ce n'était déjà pas juste : chaque champ de ville du projet
+       l'interroge — l'inscription, le profil, une annonce, une demande, le
+       SOS. Le lot du 11/10/2026 l'a rendu plus net en faisant proposer
+       l'ADRESSE D'UN CLIENT, c'est-à-dire d'une personne qui n'a pas de
+       compte et qui n'a rien accepté. Une section qui s'appelle « à qui vos
+       données sont transmises » et qui oublie un destinataire ne vaut rien,
+       même quand ce destinataire est un service public français. */
     texte: 'Supabase, pour l’hébergement de la base et des fichiers. '
       + 'Cloudinary, pour la compression des vidéos et le montage — les vidéos '
-      + 'publiées y transitent. Anthropic (États-Unis), UNIQUEMENT quand vous '
+      + 'publiées y transitent. La Base Adresse Nationale '
+      + '(api-adresse.data.gouv.fr), le service public français des adresses, '
+      + 'chaque fois qu’un champ de lieu vous propose des suggestions : seul '
+      + 'le texte que vous êtes en train de taper y est envoyé — jamais votre '
+      + 'nom, jamais celui de votre client, et rien n’y est conservé qui vous '
+      + 'désigne. Anthropic (États-Unis), UNIQUEMENT quand vous '
       + 'appuyez sur « Améliorer avec l’IA » ou sur l’assistant de '
       + 'présentation : le texte que vous avez écrit est alors envoyé pour '
       + 'être relu, et n’est pas utilisé pour entraîner de modèle. Ces '

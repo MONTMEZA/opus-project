@@ -90,6 +90,45 @@ if (STATUT === 'societe') {
 console.log('\nCe que les textes doivent dire, quel que soit le statut');
 const tout = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte).join(' ');
 verifier('l’envoi de texte à l’IA est annoncé', /Anthropic/.test(tout));
+
+/* LE DESTINATAIRE QU'ON OUBLIE PARCE QU'IL EST PUBLIC. Ce contrôle ne
+   réclamait qu'`Anthropic` : une section « à qui vos données sont
+   transmises » qui ne nomme pas la Base Adresse Nationale le satisfaisait,
+   alors que chaque champ de lieu du projet l'interroge depuis le premier
+   jour — et que depuis le 11/10/2026 c'est l'ADRESSE D'UN CLIENT qui y
+   part, celle d'une personne qui n'a pas de compte et n'a rien accepté.
+   Un oubli de bonne foi reste un destinataire non déclaré. */
+/* ET DANS LA BONNE SECTION. Mesuré en cassant : retirer la Base Adresse de
+   « À qui vos données sont transmises » laissait le contrôle VERT, parce
+   que la section du carnet de clients la nomme aussi. Or c'est la section
+   des destinataires qu'on va lire pour savoir à qui ses données partent —
+   un contrôle qui accepte n'importe quel endroit vise une PLACE et non une
+   chose, ce qui est la faute que ce projet documente depuis le 05/10. */
+const destinataires = CONFIDENTIALITE
+  .filter((b) => /transmises/i.test(b.titre))
+  .map((b) => b.texte)
+  .join(' ');
+verifier('la section des destinataires EXISTE',
+  destinataires.length > 50,
+  'Sans elle, la vérification suivante passerait au vert en n’éprouvant '
+  + 'rien — le défaut que ce projet traque depuis `verifier-montage`.');
+verifier('la Base Adresse Nationale y est nommée',
+  /Base Adresse Nationale/.test(destinataires)
+  && /api-adresse\.data\.gouv\.fr/.test(destinataires),
+  'Chaque suggestion de ville ou d’adresse lui envoie le texte en cours de '
+  + 'saisie, depuis le premier jour — et depuis le 11/10 c’est l’adresse '
+  + 'd’un CLIENT, donc d’une personne qui n’a pas de compte. Il faut la '
+  + 'nommer là où on cherche les destinataires.');
+
+/* ET DANS LA MÊME SECTION, pour la même raison, mesurée au même sabotage :
+   la phrase « jamais le nom de votre client » existe aussi dans la section
+   du carnet, donc la chercher dans TOUS les textes laissait le contrôle
+   vert alors que la section des destinataires ne disait plus rien. */
+verifier('…et ce qui part y est dit : le texte tapé, jamais le nom du client',
+  /seul le texte/.test(destinataires)
+  && /jamais celui de votre client/.test(destinataires),
+  'Nommer un destinataire sans dire ce qu’on lui envoie laisse croire au '
+  + 'pire. Ce qui part est le texte en cours de saisie, et rien d’autre.');
 verifier('l’absence de cookies est expliquée, pas passée sous silence',
   /cookie/i.test(tout));
 verifier('la suppression du compte est annoncée', /[Ss]upprimer (mon|votre) compte/.test(tout));

@@ -21,6 +21,7 @@ import {
   METIERS_SOS, PROBLEMES, CRENEAUX_SOS, estimation, estNuitOuWeekend,
 } from '../data/urgences';
 import ChampVille from '../components/ChampVille';
+import { CLAVIER } from '../lib/clavier';
 import { avgReviews } from '../data/demo';
 
 const ICONES = { wrench: Wrench, zap: Zap, key: Key, thermometer: Thermometer };
@@ -66,9 +67,9 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
 
   return (
     <ScrollView
+      {...CLAVIER}
       style={{ flex: 1 }}
       contentContainerStyle={s.pad}
-      keyboardShouldPersistTaps="handled"
     >
       {/* bandeau d'urgence */}
       <View style={s.hero}>

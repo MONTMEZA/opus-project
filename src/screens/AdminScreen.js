@@ -55,6 +55,7 @@ import { EXISTENCE, assuranceAttendue, complementairesDe } from '../data/pieces-
 import * as api from '../lib/api';
 import * as retour from '../lib/retour';
 import { messageClair } from '../lib/erreurs';
+import { CLAVIER } from '../lib/clavier';
 
 /* LES LIBELLÉS VIENNENT DE `src/data/moderation.js`, et le délai promis
    aussi. Recopier « 48 » ici, ou réécrire la liste des motifs, c'est
@@ -227,6 +228,7 @@ function FileVerifications({ pros, chargement, onActe, onErreur }) {
 
   return (
     <FlatList
+      {...CLAVIER}
       style={s.liste}
       data={pros}
       keyExtractor={(p) => p.id}
@@ -501,6 +503,7 @@ function FileSignalements({ signalements, chargement, onActe, onErreur }) {
 
   return (
     <FlatList
+      {...CLAVIER}
       style={s.liste}
       data={signalements}
       keyExtractor={(x) => x.id}
@@ -692,6 +695,7 @@ function FileReferentiel({ demandes, specialites, chargement, onActe, onErreur }
 
   return (
     <FlatList
+      {...CLAVIER}
       style={s.liste}
       data={lignes}
       keyExtractor={(l) => l.id}

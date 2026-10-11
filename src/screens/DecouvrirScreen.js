@@ -15,6 +15,7 @@ import { ChampMetier } from '../components/SelecteurMetiers';
 import { exerce } from '../lib/metiers';
 import { correspond, texteDePro } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
+import { CLAVIER } from '../lib/clavier';
 
 /**
  * L'assistant IA, dans son propre composant — et ce n'est PAS un rangement.
@@ -152,9 +153,9 @@ export default function DecouvrirScreen({
 
   return (
     <ScrollView
+      {...CLAVIER}
       style={{ flex: 1 }}
       contentContainerStyle={s.pad}
-      keyboardShouldPersistTaps="handled"
     >
       <AssistantIA
         askAiMatch={askAiMatch}

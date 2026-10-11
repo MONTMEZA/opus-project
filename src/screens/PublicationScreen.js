@@ -45,6 +45,7 @@ import { C, S, GOUTTIERE } from '../theme';
 import { EmptyState } from '../components/ui';
 import PostCard from '../components/PostCard';
 import { MessageSquare } from '../components/icons';
+import { CLAVIER } from '../lib/clavier';
 
 export default function PublicationScreen({
   post, pros = {}, chantiers = [], commentaireCible = null,
@@ -73,13 +74,13 @@ export default function PublicationScreen({
 
   return (
     <ScrollView
+      /* Le panneau des commentaires est ouvert d'office sur cette page :
+         on y ÉCRIT. `CLAVIER` fait les deux choses qu'il faut — le premier
+         appui sur « Répondre » agit même clavier ouvert, et le champ
+         remonte au-dessus du clavier au lieu de rester dessous. */
+      {...CLAVIER}
       style={{ flex: 1 }}
       contentContainerStyle={s.contenu}
-      /* Sans lui, le premier appui sur « Répondre » alors que le clavier
-         est ouvert ne fait que refermer le clavier. La leçon de
-         `FeuilleBas`, et elle vaut pour tout conteneur défilant qui porte
-         des champs. */
-      keyboardShouldPersistTaps="handled"
     >
       <PostCard
         post={post}

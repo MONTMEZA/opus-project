@@ -10,8 +10,22 @@
 
 const BASE = 'https://api-adresse.data.gouv.fr/search/';
 
-/** Met en forme un résultat brut de l'API. */
-function formater(feature) {
+/**
+ * Met en forme un résultat brut de l'API.
+ *
+ * EXPORTÉE POUR ÊTRE ÉPROUVÉE. `verifier-adresse` la fait tourner sur des
+ * réponses RÉELLES relevées le 11/10/2026 — une par type —, en plus
+ * d'appeler la vraie API. Les deux sont nécessaires : l'appel réel attrape
+ * un paramètre que l'API refuse, le jeu figé attrape un `properties.type`
+ * qu'on aurait mal interprété, et il tourne même quand le mandataire du
+ * conteneur coupe la connexion.
+ *
+ * LES QUATRE TYPES, et non trois : `housenumber`, `street`, `municipality`
+ * et **`locality`** — un lieu-dit, qui est un cas fréquent en zone rurale,
+ * donc chez les clients d'un artisan. Mesuré : `q=paris` rend un `locality`
+ * nommé « Paris » dans la commune de Gonfaron (83590).
+ */
+export function formater(feature) {
   const p = feature.properties;
   const [lon, lat] = feature.geometry.coordinates;
   // context = "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur"
@@ -19,6 +33,18 @@ function formater(feature) {
   return {
     id: p.id,
     label: p.label,                       // "Marseille" ou "12 rue X, 13001 Marseille"
+    /** `housenumber` · `street` · `locality` · `municipality` */
+    genre: p.type || null,
+    /**
+     * LA LIGNE DE RUE, ET SEULEMENT SI C'EN EST UNE.
+     *
+     * `properties.name` ne veut pas dire la même chose selon le type, et
+     * c'est le piège naturel de ce champ : pour un `housenumber` il vaut
+     * « 4 Rue des Acacias » — exactement ce qu'on veut sur une facture —,
+     * mais pour une `municipality` il vaut le NOM DE LA COMMUNE. Le poser
+     * sans regarder le type écrirait « Charleval » dans un champ « rue ».
+     */
+    rue: (p.type === 'housenumber' || p.type === 'street') ? p.name : null,
     ville: p.city || p.name,
     codePostal: p.postcode || '',
     codeInsee: p.citycode || '',
@@ -41,6 +67,37 @@ function formater(feature) {
  */
 const TYPES_VALIDES = ['housenumber', 'street', 'locality', 'municipality'];
 
+/**
+ * UNE COMMUNE N'EST PAS UNE LIGNE D'ADRESSE — et son code postal est un
+ * mensonge.
+ *
+ * Mesuré le 11/10/2026 : le code postal d'un résultat `municipality` est UN
+ * code parmi plusieurs, **le plus petit**. Paris rend 75001, Marseille
+ * 13001, Lyon 69001. Remplir le champ « code postal » d'un client depuis un
+ * résultat de commune donnerait donc 75001 à tous les Parisiens — une
+ * valeur parfaitement formée, jamais signalée, et fausse sur chaque
+ * facture. Le vrai code postal ne s'obtient que d'un numéro ou d'une rue
+ * (`q=10 rue de la paix paris` rend bien 75002).
+ *
+ * Deux autres pièges tombent avec celui-là : les ARRONDISSEMENTS remontent
+ * comme des communes (`q=lyon&type=municipality` rend une « municipality »
+ * dont la ville est « Lyon 3e Arrondissement »), et un `locality` est un
+ * lieu-dit dont le nom n'a aucun rapport avec sa commune.
+ *
+ * MAIS CE FILTRE NE S'APPLIQUE QU'AU PSEUDO-TYPE `'rue'`, ET JAMAIS À
+ * `'address'`. Posé sur les deux, il aurait cassé en silence la chose la
+ * plus urgente du projet : l'écran SOS passe `type="address"` et envoie
+ * `lieu.latitude` / `lieu.longitude` DIRECTEMENT à la recherche d'artisans
+ * disponibles. Ce chemin n'appelle pas `completerLieu()` — vérifié —, donc
+ * les coordonnées ne viennent QUE de la suggestion choisie. Écarter les
+ * communes y aurait laissé quelqu'un taper « Charleval » sans aucune
+ * suggestion, donc sans coordonnées, donc avec une liste d'artisans vide
+ * et pas la moindre erreur à l'écran. Une fuite d'eau à minuit.
+ */
+export function estUneAdresse(lieu) {
+  return !!lieu && (lieu.genre === 'housenumber' || lieu.genre === 'street');
+}
+
 /** `__DEV__` n'existe que dans React Native ; ailleurs (tests, Node) il est absent. */
 function enDeveloppement() {
   return typeof __DEV__ !== 'undefined' && __DEV__;
@@ -48,7 +105,42 @@ function enDeveloppement() {
 
 /**
  * Cherche des villes (`type: 'municipality'`) ou des adresses complètes
- * (`type: 'address'`, qui déclenche une recherche libre).
+ * (`type: 'address'`).
+ *
+ * `'address'` N'EST PAS UN TYPE DE L'API : c'est un mot de ce projet. Il
+ * veut dire deux choses, et la seconde a été apprise le 11/10/2026 en
+ * mesurant les réponses réelles :
+ *
+ *   1. on n'envoie AUCUN paramètre `type`, donc l'API fait une recherche
+ *      libre (en envoyer un qu'elle ne connaît pas rend un HTTP 400, et
+ *      plus aucune suggestion — c'est pour ça que ce contrôle existe) ;
+ *   2. on garde TOUT ce qui situe un lieu — un numéro, une rue, un
+ *      lieu-dit, une commune. C'est ce que veut l'écran SOS : ce qui
+ *      compte, à minuit, c'est d'avoir un point sur la carte.
+ *
+ * ET UN TROISIÈME, `'rue'`, qui est celui d'une LIGNE D'ADRESSE POSTALE —
+ * la facturation d'un client. Même recherche libre, mais on n'y garde
+ * qu'un numéro ou une rue (voir `estUneAdresse`) : une commune n'est pas
+ * une ligne d'adresse, et son code postal est le plus petit de la commune.
+ *
+ * Une recherche libre mélange les quatre types dans une seule liste, triés
+ * par score et par rien d'autre : `q=charleval` rend en PREMIER une rue
+ * nommée « Charleval », et la commune cherchée seulement en deuxième.
+ *
+ * ET LE PIÈGE QUI DÉCIDE DE TOUT CE QUI S'EN SERT : **la Base Adresse
+ * Nationale ne répond JAMAIS « introuvable ». Elle rend une AUTRE
+ * adresse.** Il n'existe aucune « rue des Lilas » à Charleval ;
+ * `q=4 rue des lilas charleval` rend « 4 Rue des Acacias 13350 Charleval »,
+ * parfaitement formée, sans erreur, sans le moindre signal. Le seul
+ * indicateur est `properties.score` : la MÊME ligne vaut 0,954 quand la
+ * requête correspond et 0,590 quand c'est un repli.
+ *
+ * > **Conséquence tenue par l'écran, pas par cette fonction : on ne
+ * > remplit JAMAIS un champ depuis `resultats[0]`.** Une suggestion se
+ * > CHOISIT, et elle s'affiche en entier — « 4 Rue des Acacias 13350
+ * > Charleval » se lit, et on voit que ce n'est pas ce qu'on a tapé.
+ * > Le jour où quelque chose remplira tout seul, il faudra un seuil de
+ * > score, et le dire quand il n'est pas atteint.
  *
  * Renvoie [] plutôt que de lever une erreur : une suggestion qui n'arrive
  * pas ne doit jamais empêcher quelqu'un de taper sa ville à la main. Mais en
@@ -71,7 +163,10 @@ export async function chercher(texte, { type = 'municipality', limite = 6 } = {}
       return [];
     }
     const data = await reponse.json();
-    return (data.features || []).map(formater);
+    const liste = (data.features || []).map(formater);
+    /* Aucun résultat n'est PAS une erreur : une requête fantaisiste rend un
+       HTTP 200 avec `features: []`. Ce qui compte, c'est ce qu'on en garde. */
+    return type === 'rue' ? liste.filter(estUneAdresse) : liste;
   } catch (e) {
     if (enDeveloppement()) console.warn('[adresse] Appel impossible :', e.message);
     return [];

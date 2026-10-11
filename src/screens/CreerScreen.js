@@ -32,6 +32,7 @@ import {
 /* Les formats ne vivent plus dans cet écran : `OpusApp` et `PostCard`
    devaient importer un ÉCRAN pour savoir ce qu'est une photo. */
 import { FORMATS_VISUELS } from '../lib/formats-publication';
+import { CLAVIER } from '../lib/clavier';
 
 /*
  * LE FORMAT DIT LE SUPPORT, PLUS JAMAIS L'INTENTION — 05/10/2026.
@@ -202,9 +203,9 @@ export default function CreerScreen({
 
   return (
     <ScrollView
+      {...CLAVIER}
       style={{ flex: 1 }}
       contentContainerStyle={s.pad}
-      keyboardShouldPersistTaps="handled"
     >
       <Text style={s.label}>Format</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.types}>

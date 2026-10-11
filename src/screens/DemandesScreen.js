@@ -26,6 +26,7 @@ import { PastilleFiltre, PastilleBascule } from '../components/FiltresPlace';
 import { METIER_PAR_DEFAUT, nomMetier } from '../lib/metiers';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
 import { distanceKm, libelleDistance } from '../lib/adresse';
+import { CLAVIER } from '../lib/clavier';
 
 /**
  * UNE DEMANDE, isolée et mémorisée.
@@ -262,8 +263,8 @@ export default function DemandesScreen({
      blocage de l'iPhone du 29/09 qui revient. */
   return (
     <FlatList
+      {...CLAVIER}
       style={{ flex: 1 }}
-      keyboardShouldPersistTaps="handled"
       data={liste}
       keyExtractor={(d) => String(d.id)}
       initialNumToRender={4}

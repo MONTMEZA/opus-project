@@ -24,6 +24,7 @@ import {
 import { BtnMain, Field, EmptyState, Chip } from '../components/ui';
 import { useRechercheDifferee } from '../lib/frappe';
 import { clientsVisibles } from '../lib/clients';
+import { CLAVIER } from '../lib/clavier';
 
 /**
  * LE CHAMP DE RECHERCHE EST SON PROPRE COMPOSANT, avec son texte à lui.
@@ -211,6 +212,7 @@ export default function ClientsScreen({
 
   return (
     <FlatList
+      {...CLAVIER}
       data={liste}
       keyExtractor={(c) => String(c.id)}
       renderItem={({ item }) => <CarteClient client={item} onOuvrir={ouvrir} />}
@@ -228,7 +230,6 @@ export default function ClientsScreen({
          un ScrollView a DEUX boîtes, et une marge dans `style` rétrécit
          AUSSI le cadre qui reçoit le doigt (lot 7). */
       contentContainerStyle={s.contenu}
-      keyboardShouldPersistTaps="handled"
     />
   );
 }

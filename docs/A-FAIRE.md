@@ -423,6 +423,8 @@ pas négociable — chacun pose le socle du suivant.
 | **portes** | Les fonctions de déclencheur ne sont plus appelables (section 43) | ✅ 11/10/2026 |
 | **sortie** | `for all` laissait supprimer sa ligne `users` : raccourci fermé (section 18.2) | ✅ 11/10/2026 |
 | **1 — Clients** | Le carnet de clients, module 1 du logiciel de gestion (section 41) | ✅ 11/10/2026 |
+| **le clavier** | Il recouvrait les champs du bas de DIX-SEPT conteneurs ; un seul les gérait (`src/lib/clavier.js`) | ✅ 11/10/2026 |
+| **l'adresse d'un client** | Elle se propose, et un appui remplit la rue, le code postal et la ville | ✅ 11/10/2026 |
 
 Le lot **G** n'était pas prévu : il vient de trois défauts que le
 propriétaire a trouvés en se servant de la cloche. Il a fallu **trois

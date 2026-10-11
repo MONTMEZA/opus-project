@@ -55,6 +55,7 @@ import Carrousel from '../components/Carrousel';
 
 import { EcrireReponse, ListeReponses } from '../components/ReponsesAnnonce';
 import FeuilleDates, { ChampDate } from '../components/Calendrier';
+import { CLAVIER } from '../lib/clavier';
 import {
   PastilleFiltre, PastilleBascule, FeuilleQuoi, FeuilleOu, FeuilleQuand,
   libelleSecteur, libelleQuand,
@@ -363,8 +364,8 @@ export default function PlaceProScreen({
   return (
     <>
     <FlatList
+      {...CLAVIER}
       style={{ flex: 1 }}
-      keyboardShouldPersistTaps="handled"
       data={liste}
       keyExtractor={(a) => String(a.id)}
       initialNumToRender={4}

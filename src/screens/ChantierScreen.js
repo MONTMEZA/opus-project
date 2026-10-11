@@ -41,6 +41,7 @@ import { porteUnVisuel, FORMATS_VIDEO } from '../lib/formats-publication';
 import { joursEntre } from '../lib/formats';
 import { MIN_ETAPES_RECIT } from '../lib/recit';
 import RecitChantier from '../components/RecitChantier';
+import { CLAVIER } from '../lib/clavier';
 
 /**
  * « Six jours » est plus parlant que « du 28/09 au 04/10 ».
@@ -149,6 +150,7 @@ export default function ChantierScreen({
       </View>
 
       <FlatList
+        {...CLAVIER}
         data={publications}
         keyExtractor={(p) => String(p.id)}
         ListHeaderComponent={entete}

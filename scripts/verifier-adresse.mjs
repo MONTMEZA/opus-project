@@ -11,6 +11,7 @@
 const {
   chercher, distanceKm, libelleDistance,
   dansSecteur, decouperAffichage, RAYONS_KM,
+  formater, estUneAdresse,
 } = await import('../src/lib/adresse.js');
 
 const CAS = [
@@ -152,6 +153,134 @@ for (const [titre, valeur] of [['inconnue', null], ['undefined', undefined], ['a
     && RAYONS_KM.every((k, i) => i === 0 || k > RAYONS_KM[i - 1]);
   if (!rayonsOk) echecs += 1;
   console.log(`${rayonsOk ? '  OK  ' : 'ECHEC '} les rayons sont croissants : ${RAYONS_KM.join(', ')} km`);
+}
+
+/* ==========================================================================
+   CE QUE L'API REND VRAIMENT, FIGÉ — et pourquoi un appel réel ne suffit pas
+   --------------------------------------------------------------------------
+   Les deux sont nécessaires, et ils n'attrapent pas la même faute :
+
+     - l'APPEL RÉEL, au-dessus, attrape un paramètre que l'API refuse. Une
+       version précédente envoyait `type=address`, la BAN répondait 400, et
+       plus aucune suggestion ne s'affichait — sans le moindre message ;
+     - le JEU FIGÉ, ici, attrape un `properties.type` qu'on aurait mal
+       interprété. Il tourne hors réseau, donc même quand le mandataire du
+       conteneur coupe la connexion (environ une sur cinq).
+
+   LES QUATRE RÉPONSES CI-DESSOUS SONT RÉELLES, relevées le 11/10/2026 sur
+   api-adresse.data.gouv.fr. La plus importante est la première :
+
+     **LA BASE ADRESSE NE RÉPOND JAMAIS « INTROUVABLE ». ELLE REND UNE
+     AUTRE ADRESSE.** Il n'existe aucune « rue des Lilas » à Charleval, et
+     `q=4 rue des lilas charleval` rend « 4 Rue des Acacias 13350
+     Charleval » — parfaitement formée, sans erreur, sans signal. Le seul
+     indicateur est le score : la MÊME ligne vaut 0,954 quand la requête
+     correspond, et 0,590 quand c'est un repli.
+
+   D'où la règle que l'écran tient : **on ne remplit jamais un champ depuis
+   `resultats[0]`.** Une suggestion se CHOISIT, et la liste l'affiche en
+   entier — on lit « Acacias », et on sait.
+   ========================================================================== */
+{
+  const REELS = [
+    {
+      titre: 'un NUMÉRO — `name` porte le numéro ET la rue',
+      feature: {
+        properties: {
+          id: '13024_0130_00004', type: 'housenumber', score: 0.5901,
+          name: '4 Rue des Acacias', housenumber: '4', street: 'Rue des Acacias',
+          postcode: '13350', city: 'Charleval', citycode: '13024',
+          label: '4 Rue des Acacias 13350 Charleval',
+          context: "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+        },
+        geometry: { type: 'Point', coordinates: [5.244597, 43.726057] },
+      },
+      attendu: { genre: 'housenumber', rue: '4 Rue des Acacias', ville: 'Charleval', codePostal: '13350', adresse: true },
+    },
+    {
+      titre: 'une RUE sans numéro',
+      feature: {
+        properties: {
+          id: '13024_0245', type: 'street', score: 0.5683,
+          name: 'Rue des Roses', street: 'Rue des Roses',
+          postcode: '13350', city: 'Charleval', citycode: '13024',
+          label: 'Rue des Roses 13350 Charleval',
+          context: "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+        },
+        geometry: { type: 'Point', coordinates: [5.2441, 43.7262] },
+      },
+      attendu: { genre: 'street', rue: 'Rue des Roses', ville: 'Charleval', codePostal: '13350', adresse: true },
+    },
+    {
+      titre: 'une COMMUNE — `name` est le nom de la VILLE, pas une rue',
+      feature: {
+        properties: {
+          id: '13024', type: 'municipality', score: 0.9399,
+          name: 'Charleval', postcode: '13350', city: 'Charleval', citycode: '13024',
+          label: 'Charleval', population: 2800,
+          context: "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+        },
+        geometry: { type: 'Point', coordinates: [5.2446, 43.7141] },
+      },
+      attendu: { genre: 'municipality', rue: null, ville: 'Charleval', codePostal: '13350', adresse: false },
+    },
+    {
+      titre: 'un LIEU-DIT — le QUATRIÈME type, et sa ville n’a aucun rapport',
+      feature: {
+        properties: {
+          id: '83067_xxxx', type: 'locality', score: 0.9452,
+          name: 'Paris', postcode: '83590', city: 'Gonfaron', citycode: '83067',
+          label: 'Paris 83590 Gonfaron',
+          context: '83, Var, Provence-Alpes-Côte d’Azur',
+        },
+        geometry: { type: 'Point', coordinates: [6.2924, 43.3217] },
+      },
+      attendu: { genre: 'locality', rue: null, ville: 'Gonfaron', codePostal: '83590', adresse: false },
+    },
+  ];
+
+  for (const cas of REELS) {
+    const l = formater(cas.feature);
+    const a = cas.attendu;
+    const ok = l.genre === a.genre && l.rue === a.rue && l.ville === a.ville
+      && l.codePostal === a.codePostal && estUneAdresse(l) === a.adresse
+      /* [LONGITUDE, LATITUDE] : l'ordre GeoJSON, l'inverse de l'ordre
+         parlé. Les échanger place le point en Somalie sans lever
+         d'erreur. */
+      && l.latitude === cas.feature.geometry.coordinates[1]
+      && l.longitude === cas.feature.geometry.coordinates[0];
+    if (!ok) echecs += 1;
+    console.log(`${ok ? '  OK  ' : 'ECHEC '} ${cas.titre} → genre ${l.genre}, rue ${JSON.stringify(l.rue)}, `
+      + `${l.codePostal} ${l.ville}${estUneAdresse(l) ? ', ligne d’adresse' : ', PAS une ligne d’adresse'}`);
+  }
+
+  /* ET LE PSEUDO-TYPE QUI A FAILLI CASSER LE SOS.
+     `'rue'` écarte les communes, parce que le code postal d'une commune est
+     le plus petit de cette commune (Paris → 75001) et qu'il finirait sur
+     une facture. Mais `'address'` DOIT les garder : l'écran SOS envoie les
+     coordonnées de la suggestion choisie directement à la recherche
+     d'artisans disponibles, et ce chemin n'appelle pas `completerLieu()`.
+     Les lui retirer aurait laissé quelqu'un taper sa ville sans aucune
+     suggestion, donc sans coordonnées, donc sans artisan — à minuit. */
+  const enAdresse = await chercher('charleval', { type: 'address' });
+  const enRue = await chercher('charleval', { type: 'rue' });
+
+  const sosOk = enAdresse.some((l) => l.genre === 'municipality');
+  if (!sosOk) echecs += 1;
+  console.log(`${sosOk ? '  OK  ' : 'ECHEC '} le SOS garde les communes — `
+    + `${enAdresse.length} suggestion(s), genres : ${[...new Set(enAdresse.map((l) => l.genre))].join(', ') || 'aucun'}`);
+
+  const rueOk = enRue.length > 0 && enRue.every(estUneAdresse);
+  if (!rueOk) echecs += 1;
+  console.log(`${rueOk ? '  OK  ' : 'ECHEC '} une ligne d’adresse n’offre qu’un numéro ou une rue — `
+    + `${enRue.length} suggestion(s), genres : ${[...new Set(enRue.map((l) => l.genre))].join(', ') || 'aucun'}`);
+
+  /* Un repli qui ne secourt rien est pire que pas de repli : `estUneAdresse`
+     doit tenir devant ce qu'on ne lui a pas promis. */
+  const robuste = estUneAdresse(null) === false && estUneAdresse(undefined) === false
+    && estUneAdresse({}) === false;
+  if (!robuste) echecs += 1;
+  console.log(`${robuste ? '  OK  ' : 'ECHEC '} …et rien d’autre n’est pris pour une adresse`);
 }
 
 console.log(echecs === 0 ? '\nTout est bon.' : `\n${echecs} vérification(s) en échec.`);

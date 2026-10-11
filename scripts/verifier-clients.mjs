@@ -40,10 +40,19 @@ const verifier = (nom, ok, detail = '') => {
    un contrôle a accusé la documentation qui expliquait le défaut qu'il
    traque. */
 const sansLignesCommentees = (t) => t.replace(/^\s*(--|\/\/).*$/gm, '');
+/* ET DANS DU JSX, LES COMMENTAIRES SONT DES BLOCS. Celui de `FicheClient`
+   est lu brut depuis le lot précédent, et il affirme `!/FeuilleBas/` : une
+   seule phrase de documentation expliquant « ce n'est PAS une feuille du
+   bas » suffisait à faire échouer le contrôle sur du code juste. Dixième
+   fois dans ce projet qu'un contrôle accuserait la documentation. */
+const sansCommentaires = (c) => c
+  .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '');
 const schema = sansLignesCommentees(readFileSync('supabase/schema.sql', 'utf8'));
 const essais = sansLignesCommentees(readFileSync('supabase/essais-section-41.sql', 'utf8'));
 const ecran = readFileSync('src/screens/ClientsScreen.js', 'utf8');
-const forme = readFileSync('src/components/FicheClient.js', 'utf8');
+const forme = sansCommentaires(readFileSync('src/components/FicheClient.js', 'utf8'));
 const api = readFileSync('src/lib/api.js', 'utf8');
 const appli = readFileSync('src/OpusApp.js', 'utf8');
 
@@ -395,6 +404,57 @@ verifier('…et l’archivage se DÉFAIT',
   /fiche\.archive \? 'Remettre dans ma liste' : 'Archiver'/.test(forme),
   'Un appui par erreur ne doit pas enterrer une fiche — la leçon du bouton '
   + '« Terminer » d’un chantier (lot E).');
+
+/* ================================================================== */
+console.log('\nL’ADRESSE SE PROPOSE — et elle ne se remplit pas toute seule');
+
+verifier('le champ adresse propose des suggestions officielles',
+  /<ChampVille[\s\S]{0,400}type="rue"/.test(forme),
+  'Demandé par le propriétaire le 11/10 : « comme les autres endroits de '
+  + 'l’application ». C’était un `<Field>` nu.');
+
+verifier('…en mode `rue`, et pas en mode `address`',
+  !/<ChampVille[\s\S]{0,400}type="address"/.test(forme),
+  'Le mode `address` garde les COMMUNES, et le code postal d’une commune '
+  + 'est le plus petit de cette commune — Paris rend 75001. Posé sur une '
+  + 'facture, c’est faux à chaque fois.');
+
+verifier('…un appui remplit les TROIS cases',
+  /adresse: lieu\.rue \|\| lieu\.affichage/.test(forme)
+  && /codePostal: lieu\.codePostal \|\| x\.codePostal/.test(forme)
+  && /ville: lieu\.ville \|\| x\.ville/.test(forme),
+  'La rue ici, le code postal et la ville juste en dessous. Et le `||` '
+  + 'n’est pas décoratif : une frappe libre ne rend que `affichage`, donc '
+  + 'sans lui le code postal déjà saisi s’effacerait sous les doigts de '
+  + 'celui qui corrige sa rue.');
+
+verifier('…et la longueur maximale voyage jusqu’au champ',
+  /maxLength=\{LONGUEUR_MAX\.adresse\}/.test(forme),
+  '`validerClient()` REFUSE au-delà de 200 caractères au lieu de '
+  + 'tronquer : un refus pour une longueur qu’aucun compteur n’annonçait '
+  + 'est le genre de message devant lequel on abandonne.');
+
+/* ================================================================== */
+console.log('\nLE CLAVIER NE RECOUVRE PLUS LES CHAMPS DU BAS');
+
+verifier('le conteneur porte la brique du clavier',
+  /\{\.\.\.CLAVIER\}/.test(forme) && /from '\.\.\/lib\/clavier'/.test(forme),
+  'Signalé par le propriétaire le 11/10 depuis son iPhone : « le clavier '
+  + 'bloque un peu les champs du bas du formulaire ». Voir '
+  + 'src/lib/clavier.js, et `npm run verifier-feuilles`.');
+
+verifier('…et « Suivant » va quelque part',
+  /onSubmitEditing=\{\(\) => \{[\s\S]{0,200}\.focus\(\)/.test(forme)
+  && /blurOnSubmit=\{false\}/.test(forme),
+  'Les huit champs portaient `returnKeyType="next"` et AUCUN '
+  + '`onSubmitEditing` : la touche affichait « Suivant » et ne faisait que '
+  + 'refermer le clavier.');
+
+verifier('…et aucun clavier numérique ne promet un « Suivant » qu’il ne peut pas afficher',
+  !/keyboardType="(number-pad|phone-pad)"[^>]{0,200}returnKeyType/.test(forme),
+  'Un clavier `number-pad` ou `phone-pad` d’iOS n’a PAS de touche retour. '
+  + 'Le SIRET, le téléphone et le code postal ne peuvent donc pas '
+  + 'enchaîner, quoi qu’on écrive.');
 
 verifier('l’encre du rouge brique vient de `surFond()`, pas d’une couleur écrite',
   /color: surFond\(C\.bad\)/.test(forme) && !/color: '#fff'/.test(forme),

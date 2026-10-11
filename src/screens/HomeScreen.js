@@ -20,6 +20,7 @@ import VideoSlide from '../components/VideoSlide';
 import { Search, X } from '../components/icons';
 import useCompteurDeVues from '../lib/compteur-vues';
 import { vuesPossibles } from '../lib/vues';
+import { CLAVIER } from '../lib/clavier';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
 
@@ -265,6 +266,7 @@ export default function HomeScreen({
 
       <View style={{ flex: 1 }}>
         <FlatList
+          {...CLAVIER}
           data={posts}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={s.classicContent}

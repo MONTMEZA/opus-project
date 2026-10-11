@@ -47,6 +47,7 @@ import { Search, X, ChevronDown, ChevronRight, Check } from './icons';
 import { CATEGORIES } from '../data/catalogue-metiers';
 import { chercherMetiers, metiersActifs, MAP_METIERS } from '../lib/metiers';
 import { useRechercheDifferee } from '../lib/frappe';
+import { CLAVIER } from '../lib/clavier';
 
 function BarreRecherche({ valeur, onChange }) {
   const [texte, setTexte] = useRechercheDifferee(valeur, onChange);
@@ -211,9 +212,9 @@ export default function SelecteurMetiers({
         )}
 
         <FlatList
+          {...CLAVIER}
           data={donnees}
           keyExtractor={(x) => `${x.type}-${x.cle}`}
-          keyboardShouldPersistTaps="handled"
           /* Une liste de cette longueur ne se monte pas d'un bloc : c'est la
              règle tirée du fil vidéo, où dix éléments montés ensemble
              bloquaient le téléphone quelques secondes. */

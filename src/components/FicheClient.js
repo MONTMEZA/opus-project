@@ -15,13 +15,15 @@
  * avec un grand clavier, il faudrait faire défiler une feuille pour
  * atteindre son propre bouton.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View, Text, Modal, ScrollView, Pressable, StyleSheet, Linking,
 } from 'react-native';
 import { X, Archive, ArchiveRestore, Trash, AlertTriangle } from './icons';
+import ChampVille from './ChampVille';
 import { C, F, T, S, R, TOUCHE, viser, interligne, surFond } from '../theme';
 import { BtnMain, BtnMini, Field, TextArea, PillToggle, SectionLabel } from './ui';
+import { CLAVIER } from '../lib/clavier';
 import {
   TYPES_CLIENT, LONGUEUR_MAX, validerClient, clientsDuMemeNom, siretPropre,
 } from '../lib/clients';
@@ -58,6 +60,38 @@ export default function FicheClient({
   const [erreur, setErreur] = useState(null);
   const [occupe, setOccupe] = useState(false);
   const [confirmeSuppression, setConfirmeSuppression] = useState(false);
+
+  /**
+   * « SUIVANT » DOIT ALLER QUELQUE PART — et il ne pouvait aller nulle part.
+   *
+   * Les huit champs portaient tous `returnKeyType="next"` et AUCUN
+   * `onSubmitEditing`. Donc la touche affichait « Suivant » et ne faisait
+   * que refermer le clavier : on la touche, le clavier tombe, et il faut
+   * viser le champ suivant — celui que le clavier cachait justement.
+   * C'est la moitié invisible du défaut du 11/10.
+   *
+   * ET TROIS DE CES HUIT NE POUVAIENT MÊME PAS L'AFFICHER : un clavier
+   * `number-pad` ou `phone-pad` d'iOS n'a PAS de touche retour. Le SIRET,
+   * le téléphone et le code postal ne peuvent donc pas enchaîner, quoi
+   * qu'on écrive — leur `returnKeyType` a été retiré plutôt que laissé à
+   * mentir. On en sort en touchant le champ suivant, que la brique du
+   * clavier garde désormais visible.
+   *
+   * `blurOnSubmit={false}` sur ceux qui enchaînent : sans lui le clavier
+   * se referme puis se rouvre, et toute la page saute entre les deux.
+   *
+   * Et la lecture de la référence vit DANS le gestionnaire, jamais au
+   * rendu : le linter l'a refusée sous la forme `allerA(refTelephone)`,
+   * et il avait raison — une fonction qui reçoit une référence pendant le
+   * rendu peut en lire la valeur à cet instant, où elle n'est pas encore
+   * attachée. C'est le défaut du champ vide du lot I, en plus discret.
+   */
+  const refSiret = useRef(null);
+  const refTelephone = useRef(null);
+  const refEmail = useRef(null);
+  const refAdresse = useRef(null);
+  const refCodePostal = useRef(null);
+  const refVille = useRef(null);
 
   const poser = (champ) => (valeur) => {
     setV((x) => ({ ...x, [champ]: valeur }));
@@ -128,8 +162,8 @@ export default function FicheClient({
         </View>
 
         <ScrollView
+          {...CLAVIER}
           contentContainerStyle={s.contenu}
-          keyboardShouldPersistTaps="handled"
         >
           {/* CE QUE CE CARNET N'EST PAS. Il porte le nom, le téléphone et
               l'adresse de quelqu'un qui n'est pas sur Opus et qui n'a rien
@@ -163,6 +197,11 @@ export default function FicheClient({
             autoFocus={!fiche}
             maxLength={LONGUEUR_MAX.nom}
             returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => {
+              const suivant = estEntreprise ? refSiret : refTelephone;
+              if (suivant.current) suivant.current.focus();
+            }}
           />
           {messageErreur('nom')}
 
@@ -195,12 +234,12 @@ export default function FicheClient({
             <>
               <Text style={s.label}>SIRET</Text>
               <Field
+                ref={refSiret}
                 placeholder="123 456 789 00012"
                 value={v.siret}
                 onChangeText={poser('siret')}
                 keyboardType="number-pad"
                 maxLength={20}
-                returnKeyType="next"
               />
               <Text style={s.aide}>
                 {siretPropre(v.siret).length > 0
@@ -214,17 +253,18 @@ export default function FicheClient({
           <SectionLabel>Pour le joindre</SectionLabel>
           <Text style={s.label}>Téléphone</Text>
           <Field
+            ref={refTelephone}
             placeholder="06 12 34 56 78"
             value={v.telephone}
             onChangeText={poser('telephone')}
             keyboardType="phone-pad"
             maxLength={LONGUEUR_MAX.telephone}
-            returnKeyType="next"
           />
           {messageErreur('telephone')}
 
           <Text style={s.label}>E-mail</Text>
           <Field
+            ref={refEmail}
             placeholder="client@exemple.fr"
             value={v.email}
             onChangeText={poser('email')}
@@ -233,19 +273,48 @@ export default function FicheClient({
             autoCorrect={false}
             maxLength={LONGUEUR_MAX.email}
             returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => refAdresse.current && refAdresse.current.focus()}
           />
           {messageErreur('email')}
 
           <SectionLabel>Adresse de facturation</SectionLabel>
           {/* UNE SEULE ADRESSE, et c'est celle de FACTURATION. L'adresse du
               chantier appartiendra au chantier de gestion (§12) : en poser
-              une seconde ici, c'est deviner laquelle des deux on écrit. */}
-          <Field
+              une seconde ici, c'est deviner laquelle des deux on écrit.
+
+              ELLE SE PROPOSE, demandé par le propriétaire le 11/10/2026 —
+              « comme les autres endroits de l'application ». Un appui
+              remplit les TROIS cases : la rue ici, le code postal et la
+              ville juste en dessous. Le mode `rue` n'offre qu'un numéro ou
+              une rue : le code postal d'une commune est le plus petit de
+              cette commune (Paris → 75001), donc le remplir depuis une
+              suggestion de commune serait faux sur chaque facture.
+
+              ET ON NE REMPLIT RIEN TOUT SEUL. La Base Adresse ne répond
+              jamais « introuvable » : elle rend une AUTRE adresse, bien
+              formée. Taper « 4 rue des lilas charleval », où cette rue
+              n'existe pas, propose « 4 Rue des Acacias 13350 Charleval » —
+              mesuré. C'est pour ça que la liste montre l'adresse ENTIÈRE
+              et qu'il faut la choisir : on lit « Acacias », et on sait. */}
+          <ChampVille
+            ref={refAdresse}
+            type="rue"
             placeholder="4 rue des Lilas"
-            value={v.adresse}
-            onChangeText={poser('adresse')}
+            valeur={v.adresse}
             maxLength={LONGUEUR_MAX.adresse}
-            returnKeyType="next"
+            onChange={(lieu) => {
+              setV((x) => ({
+                ...x,
+                adresse: lieu.rue || lieu.affichage || '',
+                /* Une frappe libre ne rend que `affichage` : le code postal
+                   et la ville déjà saisis ne doivent PAS s'effacer sous les
+                   doigts de celui qui corrige sa rue. */
+                codePostal: lieu.codePostal || x.codePostal,
+                ville: lieu.ville || x.ville,
+              }));
+              setErreur(null);
+            }}
           />
           {messageErreur('adresse')}
 
@@ -253,22 +322,23 @@ export default function FicheClient({
             <View style={s.cp}>
               <Text style={s.label}>Code postal</Text>
               <Field
+                ref={refCodePostal}
                 placeholder="13350"
                 value={v.codePostal}
                 onChangeText={poser('codePostal')}
                 keyboardType="number-pad"
                 maxLength={5}
-                returnKeyType="next"
               />
             </View>
             <View style={s.villeBoite}>
               <Text style={s.label}>Ville</Text>
               <Field
+                ref={refVille}
                 placeholder="Charleval"
                 value={v.ville}
                 onChangeText={poser('ville')}
                 maxLength={LONGUEUR_MAX.ville}
-                returnKeyType="next"
+                returnKeyType="done"
               />
             </View>
           </View>

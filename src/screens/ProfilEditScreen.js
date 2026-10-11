@@ -29,6 +29,7 @@ import AmeliorerTexte from '../components/AmeliorerTexte';
 import { METIERS_SOS } from '../data/urgences';
 import { METIER_PAR_DEFAUT } from '../lib/metiers';
 import { choisirImage, choisirDocument } from '../lib/media';
+import { CLAVIER } from '../lib/clavier';
 
 /**
  * Le métier d'urgence correspondant aux métiers déclarés, s'il en existe un.
@@ -149,7 +150,7 @@ export default function ProfilEditScreen({
   };
 
   return (
-    <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+    <ScrollView {...CLAVIER} style={{ flex: 1 }}>
       {/* --- bannière (professionnels seulement) ---
            L'aperçu montre exactement ce que verront les visiteurs : la
            bannière choisie si elle existe, sinon la première réalisation. */}

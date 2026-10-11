@@ -38,6 +38,7 @@ import {
 } from '../lib/journal-ia';
 import { TAILLE_JOURNAL_IA } from '../lib/api';
 import { TITRES_LEGAUX } from './LegalScreen';
+import { CLAVIER } from '../lib/clavier';
 
 /** Le mot à taper pour supprimer. En majuscules : on ne le tape pas par hasard. */
 const MOT_DE_PASSE_DE_SORTIE = 'SUPPRIMER';
@@ -150,7 +151,7 @@ export default function ConfidentialiteScreen({
   };
 
   return (
-    <ScrollView style={s.page} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView {...CLAVIER} style={s.page} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* --- les textes légaux --- */}
       <SectionLabel>Les textes</SectionLabel>
       <View style={s.bloc}>

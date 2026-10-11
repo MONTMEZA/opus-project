@@ -216,6 +216,31 @@ réseau social est le module 9. L'original PDF est à côté et **fait foi**.
 
 `docs/LECTURE-CAHIER-DES-CHARGES.md` — mon analyse, à ne pas confondre avec
 le document. **À lire avant de construire quoi que ce soit de nouveau.**
+
+#### Un SECOND cahier des charges, remis le 11/10/2026
+
+`docs/CAHIER-DES-CHARGES-VISITE.md` — « Visite intelligente & préparation
+assistée des devis ». L'original Word est à côté et **fait foi**. Le
+propriétaire l'a remis en disant : « ne t'arrête pas de travailler,
+prends-le en considération et garde-le en mémoire pour quand tu en auras
+besoin ».
+
+> **IL NE SE CONSTRUIT PAS ENCORE**, et le document le dit lui-même en
+> section 22 : « NE COMMENCE PAS PAR CODER. […] ATTENDRE VALIDATION DU
+> PLAN avant toute modification importante. » Un audit de l'existant et un
+> plan passent d'abord.
+
+**Mais il change DÈS MAINTENANT une décision du module suivant**, et c'est
+sa section 19 : le **devis** doit être construit de façon à accepter **une
+source manuelle OU une visite validée**, sans jamais rendre la visite
+obligatoire. Même règle pour le QR, qui ne doit jamais être une condition
+d'accès au devis. À tenir le jour où les devis seront posés.
+
+Et ce qu'il confirme du carnet de clients livré la veille : sa section 13
+sépare `Client` et `ClientLink` — la relation explicite entre un
+professionnel et un particulier, qu'elle vienne d'un QR ou d'une demande.
+C'est exactement pour cela que `clients` n'a **aucun `compte_id`** : ce
+lien naîtra avec le lot qui s'en sert.
 Trois points en sortent, à ne pas redécouvrir :
 
 1. **Un compte = un artisan = UNE ENTREPRISE.** Tranché par le propriétaire
@@ -6288,6 +6313,296 @@ vraie application, et pas par un essai :
 - **Le contrat de sous-traitance n'existe pas**, et c'est le seul point du
   lot qui n'appartient pas au code. `verifier-legal` refuse une mise en
   ligne publique tant que `EDITEUR.contratSousTraitance` est à `false`.
+
+### Le clavier recouvrait ce qu'on écrit (11/10/2026)
+
+`src/lib/clavier.js`, `npm run verifier-feuilles`.
+
+Deux remarques du propriétaire après avoir essayé le carnet de clients sur
+son iPhone :
+
+> « le clavier bloque un peu les champs du bas du formulaire. Petite
+> remarque : j'aimerais que quand on rentre l'adresse du client ça propose
+> comme les autres endroits de l'application. »
+
+#### « Un peu » était SYSTÉMIQUE — relevé avant de toucher à quoi que ce soit
+
+Sur tout `src/` : **dix-sept conteneurs qui défilent portent un champ de
+saisie, et UN SEUL gérait le clavier** — `AuthScreen`. C'est aussi le seul
+formulaire dont il ne s'est jamais plaint, alors qu'il y a créé son compte
+au doigt.
+
+Les douze autres, par gravité : le formulaire client (8 champs),
+« Modifier mon profil » (**18**), la Place des pros, Publier, le SOS, les
+Demandes, la fiche d'un artisan (le texte d'un avis), **Confidentialité**
+(le mot de confirmation de suppression de compte, tout en bas d'une page
+qu'on ne peut plus faire défiler), Mes publications, le récit d'un
+chantier, l'administration, et **le fil** — où l'on écrit un commentaire.
+
+#### Ce que la règle du 04/10 avait à moitié raison de dire
+
+`FeuilleBas` a été écrit contre un défaut plus grave : une feuille
+transparente collée au bas de l'écran se fait recouvrir par le clavier, **la
+croix de fermeture comprise**. Il n'y a alors plus de sortie. Cette règle
+tient toujours.
+
+Mais `verifier-feuilles` en avait tiré une exemption, écrite noir sur
+blanc : « un champ caché par le clavier dans une fenêtre plein écran, on le
+fait défiler ». **Elle est fausse.**
+
+> **On PEUT le faire défiler. RIEN ne le fait.** Vérifié dans le source de
+> React Native 0.86.3 : `scrollResponderScrollNativeHandleToKeyboard`
+> existe (`ScrollView.js:958`) et **n'a aucun appelant** dans toute la
+> bibliothèque — `TextInput.js` ne contient ni `measureLayout`, ni
+> `scrollTo`, ni `ScrollView`. Les quatre abonnements au clavier de
+> `ScrollView` ne font que mémoriser la géométrie.
+
+Le propriétaire a dit « un peu », et c'est exactement ça : ça n'enferme
+pas, ça gêne à chaque fiche.
+
+#### Et le motif éprouvé sur SON téléphone n'était pas le bon
+
+Mon premier jet recopiait `AuthScreen` — un `KeyboardAvoidingView` — dans
+une brique partagée. C'était défendable : c'est le motif qui marche chez
+lui. **Le relevé du source l'a démoli avant la livraison**, et la raison
+vaut d'être retenue :
+
+> Un `KeyboardAvoidingView` réduit le cadre, donc il rend le champ du bas
+> **atteignable**. Quand le formulaire tient dans ce qui reste — cinq
+> champs centrés, `AuthScreen` — on ne voit pas la différence. Sur neuf
+> champs, ou sur dix-huit, il ne tient pas, et le champ qui vient de
+> prendre le focus reste sous le clavier. **Le motif éprouvé ne corrigeait
+> pas la plainte.**
+
+Et ma brique l'annonçait quand même : « c'est ce qui permet à React Native
+d'amener le champ actif ». Rien ne l'amène. **Documenter un comportement
+qu'on n'a pas est pire que l'absence de documentation.**
+
+#### DEUX MÉCANISMES, DEUX FORMES — et on ne les cumule JAMAIS
+
+> **Ce qui est COLLÉ au bas de l'écran doit MONTER.** Une feuille, une
+> barre de saisie de conversation, un formulaire court et centré : c'est le
+> travail d'un `KeyboardAvoidingView`. `FeuilleBas`, `CommentsSheet`,
+> `QuoteModal`, `ConversationScreen` et `AuthScreen` sont dans ce cas et ne
+> changent pas.
+>
+> **Ce qui DÉFILE ne monte pas : c'est son CONTENU qui remonte.** Et c'est
+> `automaticallyAdjustKeyboardInsets`, posé par `src/lib/clavier.js` sur
+> les dix-sept conteneurs.
+
+Ce que la propriété native fait de plus, et qui est tout le sujet
+(`RCTScrollViewComponentView.mm:187-265`) :
+
+1. elle pose l'inset **en coordonnées absolues de fenêtre**
+   (`convertPoint:toView:nil`). Il n'y a donc RIEN à régler : les 69 px de
+   la barre d'onglets, un en-tête, une zone sûre, une fenêtre modale sont
+   pris en compte par construction. Un `KeyboardAvoidingView` ne tombe
+   juste que parce que la barre d'onglets est un frère en flux — le jour où
+   un écran passera sous la barre flottante du mode vidéo, il se tromperait
+   de 69 px en silence ;
+2. **elle DÉFILE jusqu'au champ actif**
+   (`reactUpdateResponderOffsetForScrollView:`), en visant le rectangle du
+   curseur, avec la durée et la courbe du clavier ;
+3. elle garde le `contentInset.bottom` que l'écran s'est posé lui-même.
+
+**Et le cumul compte DEUX FOIS**, prouvé par l'ordre des événements : le
+natif mute `contentInset` **synchronement** dans le callback UIKit ; le
+`KeyboardAvoidingView` passe par un événement **asynchrone** vers
+JavaScript puis un `setState`. Le natif est donc toujours premier, il pose
+l'inset sur la boîte d'AVANT, et **rien ne le recalcule** — un changement
+de mise en page n'émet aucune notification de clavier. Résultat : un vide
+défilable de la hauteur d'un clavier sous le dernier champ, pendant toute
+la saisie. `verifier-feuilles` refuse qu'un fichier porte les deux.
+
+#### CINQ conteneurs n'avaient même pas `keyboardShouldPersistTaps`
+
+Dont **le fil**, où le panneau de commentaires s'ouvre EN LIGNE dans la
+carte (`PostCard`, et non la feuille du fil vidéo). Sans cette propriété,
+le premier appui sur « Envoyer », clavier ouvert, ne fait que refermer le
+clavier. On appuie, « rien ne se passe », on recommence — sur la surface
+d'écriture la plus utilisée de l'application. Les quatre autres :
+l'administration, Mes publications, Confidentialité, le chantier.
+
+Les deux propriétés voyagent donc ENSEMBLE, dans un objet qu'on étale
+(`{...CLAVIER}`) : il se pose aussi bien sur un `ScrollView` que sur une
+`FlatList`, ce qu'un composant enveloppant ne ferait pas sans ajouter une
+vue dans l'arbre du fil.
+
+#### « Suivant » n'allait nulle part — et trois claviers ne peuvent pas l'afficher
+
+Les huit champs du formulaire client portaient `returnKeyType="next"` et
+**aucun `onSubmitEditing`** : la touche affichait « Suivant » et ne faisait
+que refermer le clavier. On la touche, le clavier tombe, et il faut viser
+le champ suivant — celui que le clavier cachait justement.
+
+> **Et un clavier `number-pad` ou `phone-pad` d'iOS n'a PAS de touche
+> retour.** Le SIRET, le téléphone et le code postal ne peuvent donc pas
+> enchaîner, quoi qu'on écrive. Leur `returnKeyType` a été retiré plutôt
+> que laissé à mentir.
+
+Le reste enchaîne, avec `blurOnSubmit={false}` — sans lui le clavier se
+referme puis se rouvre, et la page saute entre les deux. Et la lecture de
+la référence vit DANS le gestionnaire : le linter a refusé
+`allerA(refTelephone)` appelé au rendu, et il avait raison.
+
+### L'adresse d'un client se propose — et le piège qui a failli casser le SOS
+
+`src/lib/adresse.js`, `src/components/ChampVille.js`, `npm run verifier-adresse`.
+
+#### `type="address"` avait DÉJÀ un utilisateur, et c'était l'urgence
+
+J'ai d'abord écrit que ce mode « existait depuis le premier jour et que
+personne ne s'en servait ». **C'était faux, et la vérification l'a attrapé
+avant la livraison** : l'écran **SOS** l'utilise, et il envoie
+`lieu.latitude` / `lieu.longitude` DIRECTEMENT à la recherche d'artisans
+disponibles. Ce chemin n'appelle pas `completerLieu()` — vérifié.
+
+Mon premier jet filtrait les communes hors de `'address'`, parce qu'une
+commune n'est pas une ligne d'adresse de facturation. Posé là, il aurait
+laissé quelqu'un taper sa ville **sans aucune suggestion, donc sans
+coordonnées, donc sans artisan** — à minuit, une fuite d'eau, et pas la
+moindre erreur à l'écran.
+
+> **D'où un TROISIÈME mode, et non un détournement du second :**
+> `municipality` (des communes), `address` (tout ce qui SITUE un lieu, pour
+> le SOS), `rue` (un numéro ou une rue, rien d'autre, pour une ligne
+> d'adresse). Deux besoins qui se ressemblent ne sont pas le même besoin.
+
+#### LA BASE ADRESSE NE RÉPOND JAMAIS « INTROUVABLE » — elle rend une AUTRE adresse
+
+C'est le piège qui décide de toute la conception, et il est mesuré. Il
+n'existe aucune « rue des Lilas » à Charleval. `q=4 rue des lilas
+charleval` rend **« 4 Rue des Acacias 13350 Charleval »** — parfaitement
+formée, sans erreur, sans signal. Le seul indicateur est le score : la MÊME
+ligne vaut **0,954** quand la requête correspond et **0,590** quand c'est
+un repli.
+
+> **Conséquence, tenue par l'écran : on ne remplit JAMAIS un champ depuis
+> `resultats[0]`.** Une suggestion se CHOISIT, et la liste l'affiche en
+> ENTIER — on lit « Acacias », et on sait. Le jour où quelque chose
+> remplira tout seul, il faudra un seuil de score, et dire quand il n'est
+> pas atteint.
+
+Et la commune écrite dans la requête peut être purement ignorée :
+`q=2 bis rue victor hugo lambesc` rend Roubaix, Asnières et Lens — à plus
+de 800 km. Là encore, le libellé entier le dit.
+
+#### Le code postal d'une COMMUNE est le plus petit de la commune
+
+Paris rend **75001**, Marseille **13001**, Lyon **69001**. Remplir le champ
+« code postal » d'un client depuis une suggestion de commune donnerait donc
+75001 à tous les Parisiens — une valeur bien formée, jamais signalée, et
+fausse sur chaque facture. Le vrai code postal ne s'obtient que d'un numéro
+ou d'une rue.
+
+Deux autres pièges tombent avec celui-là : les **arrondissements**
+remontent comme des communes (`q=lyon` rend une commune « Lyon 3e
+Arrondissement »), et il y a **quatre** types et non trois — `locality`,
+le lieu-dit, dont le nom n'a aucun rapport avec sa commune (`q=paris` rend
+un lieu-dit « Paris » à Gonfaron). Un lieu-dit, chez les clients d'un
+artisan, c'est fréquent.
+
+#### Et `properties.name` ne veut pas dire la même chose selon le type
+
+Pour un `housenumber` il vaut « 4 Rue des Acacias » — exactement ce qu'on
+veut sur une facture. Pour une `municipality`, il vaut **le nom de la
+commune**. Le poser sans regarder le type écrirait « Charleval » dans un
+champ « rue ».
+
+#### Ce que le champ garde, et ce que la liste montre
+
+> **La LISTE montre l'adresse entière** — c'est ce qui permet de voir que
+> la suggestion n'est pas ce qu'on a tapé. **Le CHAMP ne garde que la
+> rue** : le code postal et la ville ont leurs propres cases, et les y
+> laisser en double les imprimerait deux fois sur un devis.
+
+Un appui remplit donc les trois, et le `||` de chaque case n'est pas
+décoratif : une frappe libre ne rend que `affichage`, donc sans lui le code
+postal déjà saisi s'effacerait sous les doigts de celui qui corrige sa rue.
+
+#### La Base Adresse Nationale manquait à la liste des destinataires
+
+Trouvé en cherchant ce que ce lot envoie dehors. La section « À qui vos
+données sont transmises » nommait Supabase, Cloudinary et Anthropic — **pas
+la Base Adresse**, que chaque champ de ville interroge depuis le premier
+jour. Le lot l'a rendu plus net : c'est désormais l'adresse d'un CLIENT,
+donc d'une personne qui n'a pas de compte et n'a rien accepté.
+
+> Une section qui s'appelle « à qui vos données sont transmises » et qui
+> oublie un destinataire ne vaut rien, **même quand ce destinataire est un
+> service public français**. Elle dit maintenant ce qui part : le texte en
+> cours de saisie, jamais le nom du client, jamais son téléphone, jamais le
+> fait que ce soit un client.
+
+#### Trois fois un contrôle a visé une PLACE au lieu d'une CHOSE
+
+Les vingt-et-un sabotages ont trouvé trois trous, et les trois sont la même
+faute :
+
+1. **`/KeyboardAvoidingView/` trouvait la ligne d'`import`.** En
+   remplaçant `<KeyboardAvoidingView>` par `<View>` à la main, la feuille
+   ne montait plus du tout et le contrôle restait VERT. Il vise désormais
+   la BALISE ;
+2. **la Base Adresse cherchée dans TOUS les textes légaux** : la retirer de
+   la section des destinataires laissait le contrôle vert, parce que la
+   section du carnet la nomme aussi. Il vise désormais la section ;
+3. idem pour « ce qui part ».
+
+Et deux de mes SABOTAGES étaient faux — un motif qui ne correspondait à
+rien, donc qui n'éprouvait rien. **Un essai qui échoue pour la mauvaise
+raison ne vaut pas mieux qu'un essai qui passe pour la mauvaise raison**, et
+il se corrige pareil : on vérifie que le défaut a bien été posé.
+
+#### Vérifié, et comment
+
+Les 42 contrôles, `npx expo export --platform ios` dont la **sortie** a été
+lue (1 « Exported », 0 « Import stack », 16 Mo). Le contrôle a été éprouvé
+**en cassant ce qu'il surveille** : **vingt-et-un défauts remis à la main,
+les vingt-et-un refusés** après correction des trois ci-dessus — plus
+l'essai inverse, qui vérifie qu'un commentaire nommant `FeuilleBas` ne fait
+PAS rougir le contrôle.
+
+Puis au navigateur, **sur la VRAIE base**, avec un compte professionnel
+jetable supprimé dans la même session (0 restant, base revenue à 13 comptes
+/ 7 fiches / 20 publications / 2 chantiers / **1 client — celui du
+propriétaire, intact**) :
+
+| | relevé |
+|---|---|
+| la Base Adresse interrogée | **200**, 1 appel |
+| les suggestions | « 4 Rue des Acacias 13350 Charleval » et une autre à 08000 |
+| la rangée d'une suggestion | **356 × 50** — au-dessus des 44 points |
+| après un appui : la rue | **« 4 Rue des Acacias »**, sans le code postal ni la ville |
+| …le code postal | **13350** |
+| …la ville | **Charleval** |
+| enregistrement | `POST /rest/v1/clients → 201` |
+| **après rechargement complet** | les trois cases reviennent de la BASE |
+
+#### Ce qui n'a PAS été vérifié
+
+- **Le clavier. Rien du clavier.** `react-native-web` n'en rend aucun,
+  `KeyboardAvoidingView` y est inerte et `automaticallyAdjustKeyboardInsets`
+  y est jetée par liste blanche — sans avertissement, sans casse, et sans
+  effet. Ce qui a été vérifié ici, c'est que le remaniement n'a rien cassé.
+  **Le reste se juge sur l'iPhone, et nulle part ailleurs.**
+- **Une limite honnête, lisible dans le code natif** : le défilement vers le
+  champ actif ne vit que dans `_keyboardWillChangeFrame:`. Passer du champ 3
+  au champ 9 **clavier déjà ouvert** n'émet aucune notification, donc ce
+  code ne tourne pas ; ce qui prend le relais est le recadrage d'UIKit, qui
+  ne s'établit pas depuis `node_modules`. Si l'iPhone montre ce défaut, la
+  parade est un appel à la main à
+  `scrollResponderScrollNativeHandleToKeyboard` sur `onFocus` — **et surtout
+  pas un `KeyboardAvoidingView` par-dessus**, qui doublerait l'inset.
+- **Le mandataire du conteneur a coupé la Base Adresse plusieurs fois**
+  pendant ce lot (`ws_closed_mid_exchange`, jusqu'à 5 échecs d'affilée). Un
+  échec isolé de `verifier-adresse` n'est toujours pas un défaut du code.
+  Et un essai au navigateur doit **attendre la chose, pas un délai** : à
+  travers le mandataire, la réponse met parfois plus de quatre secondes
+  alors qu'elle répond 200.
+- **Le champ « Ville du chantier » de l'écran Publier est un `<Field>` nu**,
+  pas un `ChampVille` : il ne propose rien, alors que six autres écrans le
+  font. Trouvé en relevant les surfaces de saisie, pas corrigé ici — c'est
+  le chemin de la publication, et il mérite son propre lot.
 
 ## Dépendances : vérifier avant de proposer
 

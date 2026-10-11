@@ -1,5 +1,11 @@
 /**
- * LES FEUILLES QUI MONTENT DU BAS — et le clavier qui les recouvre.
+ * LE CLAVIER NE RECOUVRE PLUS CE QU'ON ÉCRIT — les deux formes.
+ *
+ * Ce contrôle s'appelle toujours `verifier-feuilles`, parce que c'est une
+ * feuille du bas qui l'a fait naître le 04/10. Il garde désormais les DEUX
+ * formes du même défaut — et la seconde vient de ce qu'il affirmait, à
+ * tort, pour écarter les fenêtres plein écran. Voir la section
+ * « AUCUN CONTENEUR QUI DÉFILE » plus bas.
  *
  * CE QUI A FAIT NAÎTRE CE CONTRÔLE
  * --------------------------------
@@ -53,8 +59,13 @@ const brique = lire('src/components/FeuilleBas.js');
 console.log('\nLa brique partagée fait les trois choses');
 {
   const c = sansCommentaires(brique);
+  /* LA BALISE, PAS LE MOT — onzième fois dans ce projet qu'un contrôle
+     vise un texte au lieu d'une chose, et celui-ci a été pris la main dans
+     le sac : en remplaçant `<KeyboardAvoidingView>` par `<View>` à la
+     main, la feuille ne montait plus du tout et le contrôle restait VERT.
+     La ligne d'`import` nomme encore le composant. */
   verifier('elle monte avec le clavier',
-    /KeyboardAvoidingView/.test(c) && /behavior=\{Platform\.OS === 'ios' \? 'padding'/.test(c),
+    /<KeyboardAvoidingView/.test(c) && /behavior=\{Platform\.OS === 'ios' \? 'padding'/.test(c),
     'sans elle, le clavier recouvre le champ ET la croix');
 
   verifier('le voile ferme la feuille — la sortie de secours',
@@ -108,7 +119,7 @@ console.log('\nAucune feuille ne réinvente la sienne');
        s'ouvre jamais dessus. `ChoixPiece` est dans ce cas. */
     if (!/<TextArea|<Field|<TextInput|<ChampLocal/.test(c)) return;
 
-    if (/FeuilleBas/.test(c) || /KeyboardAvoidingView/.test(c)) return;
+    if (/<FeuilleBas/.test(c) || /<KeyboardAvoidingView/.test(c)) return;
     fautives.push(f);
   });
 
@@ -133,9 +144,146 @@ console.log('\nUne liste virtualisée ne se met pas dans un ScrollView');
     'une FlatList dans un ScrollView casse le défilement');
 }
 
+/* ======================================================================
+ *  AUCUN CONTENEUR QUI DÉFILE NE LAISSE LE CLAVIER RECOUVRIR SES CHAMPS
+ * ======================================================================
+ *
+ * CE QUE CE CONTRÔLE AFFIRMAIT, ET QUI ÉTAIT FAUX. Il écartait les
+ * fenêtres plein écran avec ce raisonnement, écrit plus haut dans ce
+ * fichier : « un champ caché par le clavier dans une liste plein écran, on
+ * le fait défiler ». Le propriétaire l'a démenti le 11/10/2026, depuis son
+ * iPhone, sur le formulaire client :
+ *
+ *   « le clavier bloque un peu les champs du bas du formulaire »
+ *
+ * On PEUT le faire défiler. RIEN ne le fait : vérifié dans le source de
+ * React Native 0.86.3, `scrollResponderScrollNativeHandleToKeyboard`
+ * n'a aucun appelant.
+ *
+ * La distinction du 04/10 reste juste — une feuille du bas enferme, une
+ * fenêtre plein écran non — mais elle ne rendait pas le second cas
+ * acceptable. D'où `src/lib/clavier.js`, et d'où cette section. */
+console.log('\nLa brique du clavier, et les deux propriétés qu’elle porte');
+{
+  const clavier = lire('src/lib/clavier.js');
+  const c = sansCommentaires(clavier);
+
+  verifier('le premier appui agit, clavier ouvert',
+    /keyboardShouldPersistTaps: 'handled'/.test(c),
+    'sans lui, le premier appui sur un bouton ne fait que refermer le '
+    + 'clavier. On appuie, « rien ne se passe », on recommence.');
+
+  verifier('…et le champ actif REMONTE au-dessus du clavier',
+    /automaticallyAdjustKeyboardInsets: true/.test(c),
+    'c’est la seule des deux approches qui AMÈNE le champ : elle pose '
+    + 'l’inset ET défile jusqu’au premier répondant '
+    + '(RCTScrollViewComponentView.mm). Un KeyboardAvoidingView le rend '
+    + 'seulement atteignable.');
+
+  /* Un fichier de propriétés n'a rien à importer. S'il chargeait React
+     Native, il ne pourrait pas être ouvert par `node` — la leçon de
+     `cloudinary-adresses.js`, et celle de `verifier-montage`. */
+  verifier('…et elle n’importe RIEN',
+    !/^import /m.test(clavier),
+    'un fichier que `node` ne peut pas ouvrir ne peut pas être éprouvé.');
+
+  /* LA RÈGLE QUI COÛTERAIT LE PLUS CHER À REDÉCOUVRIR. Le natif mute
+     `contentInset` synchronement sur la notification UIKit ; le
+     KeyboardAvoidingView passe par un événement ASYNCHRONE vers
+     JavaScript puis un `setState`. Le natif est donc toujours premier, il
+     pose l'inset sur la boîte d'AVANT, et rien ne le recalcule : la
+     hauteur du clavier est comptée DEUX FOIS. */
+  verifier('…et le fichier DIT qu’on ne cumule pas les deux',
+    /DEUX FOIS/.test(clavier) && /KeyboardAvoidingView/.test(clavier),
+    'une brique qui ne dit pas ce qu’elle exclut se fera cumuler avec '
+    + 'l’autre mécanisme au prochain lot.');
+}
+
+console.log('\nTout conteneur qui défile et qui porte un champ est couvert');
+{
+  const fichiers = execFileSync('git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
+    .split('\n')
+    .filter((f) => f.endsWith('.js') && f !== 'src/lib/clavier.js');
+
+  const CHAMPS = /<Field|<TextArea|<TextInput|<ChampLocal|<ChampVille|<ChampMotDePasse/;
+  /* `<Zone` de `Commentaires.js` n'est volontairement PAS ici : ce
+     composant ne possède pas son conteneur, il le reçoit de son hôte
+     (`CommentsSheet`, qui monte avec le clavier, ou `PostCard`, qui vit
+     dans la liste du fil). Un fichier qui n'ouvre aucun conteneur n'a rien
+     à régler. */
+  const OUVRE = /<(ScrollView|FlatList|Animated\.ScrollView|Animated\.FlatList)\b/g;
+
+  const nus = [];
+  const cumulent = [];
+
+  fichiers.forEach((f) => {
+    const c = sansCommentaires(lire(f));
+    if (!CHAMPS.test(c)) return;
+
+    /* CE QUI EST COLLÉ AU BAS DE L'ÉCRAN MONTE, et c'est l'autre
+       mécanisme : une feuille, une barre de saisie de conversation, un
+       formulaire court et centré. Ces fichiers-là sont couverts, et ils ne
+       doivent justement PAS porter `CLAVIER` en plus. */
+    const monte = /<FeuilleBas|<KeyboardAvoidingView/.test(c);
+    const insets = /\{\.\.\.CLAVIER\}/.test(c);
+
+    if (monte && insets) { cumulent.push(f); return; }
+    if (monte) return;
+
+    /* On regarde chaque balise ouvrante, une par une : un fichier peut
+       porter une rangée de pastilles HORIZONTALE, qui n'a rien à voir avec
+       le clavier — le code natif sort lui-même tout de suite sur une liste
+       horizontale. */
+    let m;
+    OUVRE.lastIndex = 0;
+    while ((m = OUVRE.exec(c)) !== null) {
+      const fin = c.indexOf('>', m.index);
+      const balise = c.slice(m.index, fin === -1 ? c.length : fin);
+      if (/\bhorizontal\b/.test(balise)) continue;
+      if (!/\{\.\.\.CLAVIER\}/.test(balise)) {
+        nus.push(`${f} — <${m[1]}> ligne ${c.slice(0, m.index).split('\n').length}`);
+      }
+    }
+  });
+
+  verifier('aucun conteneur vertical n’est laissé nu',
+    nus.length === 0,
+    `${nus.join('\n      ')}\n      → étalez {...CLAVIER} dessus `
+    + '(src/lib/clavier.js), ou passez par <FeuilleBas> si c’est une '
+    + 'feuille collée au bas de l’écran.');
+
+  verifier('…et personne ne cumule les deux mécanismes',
+    cumulent.length === 0,
+    `${cumulent.join('\n      ')}\n      → la hauteur du clavier serait `
+    + 'comptée deux fois. Il faut choisir : ce qui est collé au bas MONTE, '
+    + 'ce qui défile remonte son CONTENU.');
+}
+
+console.log('\nCe qui montait avec le clavier continue de monter');
+{
+  /* Ces quatre-là ne passent pas par `CLAVIER`, et c'est voulu. Le dire
+     ici empêche qu'on leur retire leur `KeyboardAvoidingView` un jour en
+     croyant que la brique du 11/10 l'a remplacé — elle ne remplace que le
+     cas du conteneur qui défile. */
+  const COLLES = {
+    'src/components/FeuilleBas.js': 'la brique des feuilles du bas',
+    'src/components/CommentsSheet.js': 'le panneau des commentaires du fil vidéo',
+    'src/components/QuoteModal.js': 'la demande de devis',
+    'src/screens/ConversationScreen.js': 'la barre de saisie d’une conversation',
+    'src/screens/AuthScreen.js': 'le formulaire centré de connexion',
+  };
+  Object.entries(COLLES).forEach(([f, quoi]) => {
+    verifier(`${quoi} monte toujours`,
+      /<KeyboardAvoidingView/.test(sansCommentaires(lire(f))),
+      `${f} a perdu son KeyboardAvoidingView. Ce qui est collé au bas de `
+      + 'l’écran doit MONTER : l’inset du contenu n’y suffit pas.');
+  });
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);
   process.exit(1);
 }
-console.log('✔ Le clavier ne peut plus enfermer personne dans une feuille.\n');
+console.log('✔ Le clavier n’enferme personne, et ne recouvre plus ce qu’on écrit.\n');

@@ -19,6 +19,7 @@ import Media from '../components/Media';
 import { apercuDe } from '../lib/cloudinary';
 import { porteUnVisuel } from '../lib/formats-publication';
 import { nbCommentairesDe } from '../components/Commentaires';
+import { CLAVIER } from '../lib/clavier';
 import {
   Heart, MessageSquare, Share2, Trash, RefreshCw, Grid, VideoIcon, Layers, TypeIcon,
   Edit, Lightbulb, Eye,
@@ -60,7 +61,7 @@ export default function MesPublicationsScreen({
   }
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }}>
+    <ScrollView {...CLAVIER} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }}>
       <SectionLabel>
         {posts.length} {posts.length > 1 ? 'publications' : 'publication'}
       </SectionLabel>
