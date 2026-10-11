@@ -115,6 +115,23 @@
  * remaniement n'a rien cassé. **Le reste se juge sur l'iPhone, et nulle
  * part ailleurs.**
  *
+ * VÉRIFIÉ SUR L'IPHONE le 11/10/2026, et c'est ce qui tranche ce fichier
+ * ----------------------------------------------------------------------
+ * Le propriétaire, le soir du lot : « j'ai testé sur mon iPhone et ça
+ * marche très bien ».
+ *
+ * > **C'était un pari, et il faut le savoir avant de revenir en arrière.**
+ * > Le seul motif qui avait fait ses preuves sur son téléphone était le
+ * > `KeyboardAvoidingView` d'`AuthScreen` ; ce fichier a livré l'AUTRE
+ * > mécanisme, sur la foi d'une lecture du source de React Native. Son
+ * > iPhone a confirmé. **Remettre un `KeyboardAvoidingView` par-dessus
+ * > annulerait cette preuve et doublerait l'inset.**
+ *
+ * Ce que sa phrase ne couvre PAS : il a essayé ce qu'il avait sous la main,
+ * pas les dix-sept conteneurs — ni les dix-huit champs de « Modifier mon
+ * profil », ni le mot de confirmation de suppression de compte, ni un
+ * commentaire écrit dans le fil.
+ *
  * Et une limite honnête, lisible dans le code natif : ce défilement ne
  * vit que dans `_keyboardWillChangeFrame:`. Passer du champ 3 au champ 9
  * **clavier déjà ouvert** n'émet aucune notification, donc ce code ne

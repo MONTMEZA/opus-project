@@ -6578,21 +6578,42 @@ propriétaire, intact**) :
 | enregistrement | `POST /rest/v1/clients → 201` |
 | **après rechargement complet** | les trois cases reviennent de la BASE |
 
-#### Ce qui n'a PAS été vérifié
+#### VÉRIFIÉ SUR L'IPHONE le 11/10/2026
 
-- **Le clavier. Rien du clavier.** `react-native-web` n'en rend aucun,
-  `KeyboardAvoidingView` y est inerte et `automaticallyAdjustKeyboardInsets`
-  y est jetée par liste blanche — sans avertissement, sans casse, et sans
-  effet. Ce qui a été vérifié ici, c'est que le remaniement n'a rien cassé.
-  **Le reste se juge sur l'iPhone, et nulle part ailleurs.**
-- **Une limite honnête, lisible dans le code natif** : le défilement vers le
-  champ actif ne vit que dans `_keyboardWillChangeFrame:`. Passer du champ 3
-  au champ 9 **clavier déjà ouvert** n'émet aucune notification, donc ce
-  code ne tourne pas ; ce qui prend le relais est le recadrage d'UIKit, qui
-  ne s'établit pas depuis `node_modules`. Si l'iPhone montre ce défaut, la
-  parade est un appel à la main à
+Par le propriétaire, le soir même : **« j'ai testé sur mon iPhone et ça
+marche très bien »**.
+
+C'est la seule preuve qui comptait pour ce lot, et il faut mesurer ce
+qu'elle vaut : **rien de la gestion du clavier ne se vérifie dans ce
+conteneur.** `react-native-web` ne rend aucun clavier,
+`KeyboardAvoidingView` y est un composant inerte, et
+`automaticallyAdjustKeyboardInsets` y est jetée par liste blanche — sans
+avertissement, sans casse, et sans effet. Les 42 contrôles et les captures
+ne disaient donc qu'une chose : le remaniement n'a rien cassé.
+
+> **Et le motif retenu n'était PAS celui qui avait fait ses preuves chez
+> lui.** `AuthScreen` marchait avec un `KeyboardAvoidingView` ; j'ai livré
+> l'autre mécanisme, sur la foi d'une lecture du source de React Native et
+> contre le seul motif éprouvé sur son téléphone. C'était le pari du lot, et
+> son iPhone vient de le trancher.
+
+**Ce qui reste à surveiller, et qui n'est pas couvert par cette phrase :**
+
+- il a essayé ce qu'il avait sous la main, pas les **dix-sept** conteneurs.
+  « Modifier mon profil » et ses dix-huit champs, le mot de confirmation de
+  suppression de compte et le commentaire écrit dans le fil n'ont pas été
+  nommés ;
+- **le cas « champ 3 → champ 9, clavier DÉJÀ ouvert »** reste ouvert : le
+  défilement natif ne vit que dans `_keyboardWillChangeFrame:`, et passer
+  d'un champ à l'autre sans refermer le clavier n'émet aucune notification.
+  Ce qui prend alors le relais est le recadrage d'UIKit, qui ne s'établit
+  pas depuis `node_modules`. Si le défaut réapparaît sous cette forme
+  précise, la parade est un appel à la main à
   `scrollResponderScrollNativeHandleToKeyboard` sur `onFocus` — **et surtout
   pas un `KeyboardAvoidingView` par-dessus**, qui doublerait l'inset.
+
+#### Ce qui n'a PAS été vérifié
+
 - **Le mandataire du conteneur a coupé la Base Adresse plusieurs fois**
   pendant ce lot (`ws_closed_mid_exchange`, jusqu'à 5 échecs d'affilée). Un
   échec isolé de `verifier-adresse` n'est toujours pas un défaut du code.
