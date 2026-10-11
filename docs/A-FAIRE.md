@@ -421,6 +421,7 @@ pas négociable — chacun pose le socle du suivant.
 | **J** | Nommer son agent : proposer trois fois, puis se taire (section 40) | ✅ 07/10/2026 |
 | **J bis** | « Ce que votre agent sait faire », et le contrôle qui oblige à la tenir | ✅ 07/10/2026 |
 | **portes** | Les fonctions de déclencheur ne sont plus appelables (section 42) | ✅ 11/10/2026 |
+| **sortie** | `for all` laissait supprimer sa ligne `users` : raccourci fermé (section 18.2) | ✅ 11/10/2026 |
 
 Le lot **G** n'était pas prévu : il vient de trois défauts que le
 propriétaire a trouvés en se servant de la cloche. Il a fallu **trois

@@ -218,6 +218,99 @@ console.log('\nLA VRAIE PREUVE EST EN SQL — ce fichier ne sait pas interroger 
 }
 
 /* ================================================================== */
+console.log('\nLES PORTES DE TABLE — sortir d’un compte n’est pas un raccourci');
+
+/* Même famille que ci-dessus, autre objet : là c'était `execute` sur une
+   fonction, ici c'est `delete` sur une table. Mesuré le 11/10/2026 sur la
+   vraie base : `anon` ET `authenticated` pouvaient supprimer une ligne de
+   `public.users`, et la politique dit `for all`. Le raccourci sautait donc
+   `preparer_suppression_compte()` : pas de `auteur_supprime`, les fichiers
+   du stockage abandonnés, `auth.users` intacte — un compte qui ne peut
+   plus ni servir, ni se réparer, ni se supprimer. */
+verifier('`delete` est retiré sur `public.users`',
+  /revoke delete on public\.users from anon, authenticated/.test(schema),
+  'Sans lui, `DELETE /rest/v1/users?id=eq.<moi>` répond « DELETE 1 » et '
+  + 'laisse un compte irréparable derrière lui.');
+
+verifier('…et rien ne le rend',
+  !/grant\s+delete[^;]*on public\.users/i.test(schema)
+  && !/grant\s+all[^;]*on public\.users/i.test(schema),
+  'Un `grant all` posé plus bas rouvrirait la porte sans un mot — c’est '
+  + 'exactement ce que `alter default privileges` fait déjà d’office chez '
+  + 'Supabase, et ce que ce `revoke` vient corriger.');
+
+{
+  /* L'ORDRE COMPTE ICI AUSSI : un `revoke` posé avant la table échouerait,
+     et `schema.sql` s'arrête à la première erreur sous `ON_ERROR_STOP`. */
+  const table = schema.indexOf('create table if not exists public.users');
+  const retrait = schema.indexOf('revoke delete on public.users');
+  verifier('…et il passe après la création de la table',
+    retrait > table && table > 0);
+}
+
+/* CE QUI REND CE `revoke` SANS DANGER, et qu'il ne faut pas défaire. */
+verifier('`preparer_suppression_compte()` est toujours `security definer`',
+  /function public\.preparer_suppression_compte\(\)[\s\S]{0,160}security definer/
+    .test(schema),
+  'En `security invoker`, elle se heurterait au `revoke` qu’on vient de '
+  + 'poser : supprimer son compte deviendrait impossible. Le droit de partir '
+  + 'n’est pas négociable — c’est le `revoke` qui doit s’adapter, pas lui.');
+
+verifier('…et c’est bien ELLE qui finit par retirer la ligne',
+  /delete from public\.users where id = moi/.test(schema),
+  'Si cette ligne quitte la fonction, il n’existe plus AUCUN chemin de '
+  + 'suppression : le raccourci est fermé, et le vrai chemin ne supprime '
+  + 'plus rien. Une porte murée des deux côtés.');
+
+{
+  /* L'application ne doit pas emprunter le raccourci : elle appelle la
+     fonction. On relit `src/` plutôt que de le croire. */
+  const api = readFileSync('src/lib/api.js', 'utf8');
+  verifier('l’application ne supprime jamais `users` elle-même',
+    !/from\('users'\)[\s\S]{0,80}\.delete\(/.test(api)
+    && /rpc\('preparer_suppression_compte'\)/.test(api),
+    'Elle doit passer par la fonction : c’est elle qui anonymise ce qui '
+    + 'concerne des tiers, et la fonction Edge qui retire les fichiers.');
+
+  verifier('…et `auteur_supprime` est toujours LU quelque part',
+    /auteur_supprime/.test(api),
+    'Tout le raisonnement de la section 18.2 tient à ce drapeau : il fait '
+    + 'écrire « Compte supprimé » au lieu d’un « Client » anonyme. Personne '
+    + 'pour le lire, et l’anonymisation ne se voit plus — ce serait la panne '
+    + 'silencieuse du 01/10, une table qu’on écrit sans la relire.');
+}
+
+{
+  const essais = readFileSync('supabase/essais-suppression-compte.sql', 'utf8')
+    .replace(/^\s*--.*$/gm, '');
+  verifier('les essais éprouvent le refus, et pas seulement le droit',
+    /* On vise la PROPRIÉTÉ, pas la syntaxe : le rôle peut venir d’une
+       colonne (`r.rolname`) au lieu d’être écrit en clair, et exiger
+       la seconde forme ferait accuser un essai parfaitement juste.
+       C’est la faute que ce fichier documente quarante lignes plus
+       haut, et je viens de la refaire. */
+    /has_table_privilege\([^)]*public\.users[^)]*delete[^)]*\)/.test(essais)
+    && /set local role authenticated/.test(essais)
+    && /delete from public\.users where id = :A/.test(essais),
+    'Lire `has_table_privilege` ne prouve rien tout seul : il faut voir '
+    + 'l’ordre être REFUSÉ, avec un rôle et un jeton, chacun dans son propre '
+    + 'ordre et jamais dans un bloc `do`.');
+
+  verifier('…et qu’une sortie de compte reste possible',
+    /select public\.preparer_suppression_compte\(\)/.test(essais)
+    && /delete from auth\.users/.test(essais),
+    'Les deux vrais chemins — la fonction, et la cascade depuis `auth.users` '
+    + 'par la fonction Edge ou l’administration.');
+
+  verifier('…et que le compte laissé derrière est bien IRRÉPARABLE',
+    /insert into public\.professional_profiles[\s\S]{0,200}23503/.test(essais),
+    'C’est la conséquence la plus lourde, et la seule qui ne se devine pas : '
+    + 'sans ligne parente, la réparation de la fiche échoue sur la clé '
+    + 'étrangère. L’essai doit viser 23503 — au premier jet il tombait sur '
+    + 'une contrainte `not null`, donc il passait pour la mauvaise raison.');
+}
+
+/* ================================================================== */
 if (echecs) {
   console.error(`\n✘ ${echecs} contrôle(s) en échec.\n`);
   process.exit(1);

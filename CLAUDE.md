@@ -5819,6 +5819,141 @@ l'application ou par une règle.
 changement. Rien de visible ne bouge — aucune de ces fonctions n'était
 appelée par l'application —, mais ça se dit plutôt que ça se suppose.
 
+### La quatrième porte de `for all` : sortir d'un compte (11/10/2026)
+
+Section 18.2 de `schema.sql`, `supabase/essais-suppression-compte.sql`,
+`npm run verifier-portes`.
+
+Trouvé en préparant le module Clients, en relisant à qui appartient quoi.
+La règle d'écriture de `public.users` est « chacun sa ligne », toutes
+opérations confondues :
+
+```sql
+create policy "ecriture mon user" on public.users
+  for all using (auth.uid() = id) with check (auth.uid() = id);
+```
+
+**`for all`, c'est QUATRE portes, et la quatrième est `delete`.** Relevé sur
+la vraie base : `has_table_privilege('authenticated', 'public.users',
+'delete')` répondait `true`, et pour `anon` aussi. Donc ceci partait, et ça
+marchait :
+
+```
+DELETE /rest/v1/users?id=eq.<moi>      →  DELETE 1, aucune erreur
+```
+
+C'est la **troisième fois** que `for all` ouvre une porte dans ce projet,
+après le badge à l'`INSERT` et la fiche pro supprimable du 05/10. Une règle
+qui ne couvre qu'un verbe SQL ne couvre rien.
+
+#### Ma première version de ce commentaire disait FAUX
+
+Elle accusait le raccourci de détruire les avis reçus. **Il les détruit — et
+le vrai chemin aussi, parce que c'est voulu** (« ils portaient sur une
+entreprise qui n'existe plus », section 13.6). J'avais écrit la conséquence
+avant de l'avoir mesurée.
+
+Les deux chemins comparés sur le MÊME jeu d'essai, PostgreSQL 16 :
+
+| | `DELETE /rest/v1/users` | `preparer_suppression_compte()` |
+|---|---|---|
+| ligne `public.users` | partie | partie |
+| fiche pro, et ses 11 cascades | parties | parties |
+| avis qu'il a ÉCRITS sur d'autres | gardés | gardés |
+| …et leur `auteur_supprime` | **false** | **true** |
+| fichiers du stockage | **restent** | retirés |
+| `auth.users` | **reste** | retirée |
+
+Trois conséquences, et la troisième est la pire :
+
+1. **`auteur_supprime` n'est jamais posé.** `api.js:813` lit ce drapeau pour
+   écrire « Compte supprimé » sous un avis dont l'auteur est parti ; sans
+   lui, l'avis s'affiche sous un « Client » anonyme, comme si quelqu'un
+   l'avait écrit hier.
+2. **Les fichiers restent dans le stockage, pour toujours** — photo,
+   bannière, publications, pièces jointes, et le **Kbis** et l'**attestation
+   d'assurance**, les deux documents les plus personnels du projet. Seule la
+   fonction Edge `compte` sait les retirer (il faut la clé de service et du
+   HTTP, PostgreSQL ne peut pas), et elle n'est jamais appelée. Pire : la
+   ligne qui disait à qui ils appartenaient vient de disparaître.
+3. **`auth.users` reste, donc le compte existe encore et ne peut plus rien
+   faire.** La session est valable, l'application le croit professionnel
+   (son type est dans les métadonnées), et chaque écriture échoue sur une
+   clé étrangère. **Et il ne se répare pas** : `ensureProProfile()`, appelée
+   à chaque ouverture depuis le 05/10, reçoit `23503 — Key is not present in
+   table "users"`. Le compte ne peut donc ni servir, ni se réparer, ni se
+   supprimer par le chemin de l'application. Il n'y a plus de sortie.
+
+C'est le « compte à moitié » de la section 31 en pire, et fabriqué par un
+seul appel que n'importe qui peut écrire — la clé publiable est dans le
+paquet de l'application, lisible sur n'importe quel téléphone.
+
+#### Un droit de TABLE, parce qu'une politique ne sait pas distinguer
+
+`revoke delete on public.users from anon, authenticated;` — comme les
+colonnes de la section 18.1. Refaire la politique en deux morceaux
+demanderait un `drop policy`, que le connecteur Supabase refuse.
+
+> **Supprimer son compte reste un DROIT, et le `revoke` ne le touche pas :**
+> `preparer_suppression_compte()` est `security definer`, donc elle
+> s'exécute avec les droits de son propriétaire. La cascade depuis
+> `auth.users` — la fonction Edge, et Supabase → Authentication → Users —
+> passe pour la même raison. **Ce qui disparaît, c'est le raccourci.**
+
+Et on retire aussi à `anon` : la politique l'arrête déjà (`auth.uid()` est
+vide, aucune ligne ne correspond), mais un droit qui n'a aucune raison
+d'exister ne doit pas attendre qu'une politique le rattrape. C'est la leçon
+des huit portes du matin même.
+
+#### Un essai qui échoue pour la MAUVAISE raison
+
+Le cas 5 — « le compte laissé derrière est irréparable » — a d'abord échoué
+sur `null value in column "metier"`, puis sur `"ville"`. Deux contraintes
+`not null` traversées avant d'atteindre la clé étrangère : l'essai montrait
+un refus, donc il avait l'air juste, **et il n'éprouvait pas ce qu'il
+annonçait**. C'est le symétrique du défaut habituel de ce projet (passer au
+vert sans rien prouver), et il se corrige pareil : on nomme toutes les
+colonnes obligatoires pour que seul `23503` puisse sortir.
+
+#### Et mon contrôle a refait la faute du matin
+
+`verifier-portes` exigeait `has_table_privilege('<rôle>','public.users',
+'delete')` écrit avec le rôle **en clair**. L'essai, lui, le lit depuis une
+colonne (`r.rolname`), ce qui est mieux — il couvre les deux rôles d'un
+coup. **Un contrôle qui exige une SYNTAXE au lieu d'une PROPRIÉTÉ accuse du
+code juste**, et c'est écrit dix lignes plus haut dans le même fichier.
+
+#### Vérifié, et comment
+
+Le trou d'abord **prouvé** sur PostgreSQL 16 (`DELETE 1`, fiche partie, rien
+d'anonymisé), puis les deux chemins comparés sur le même jeu. `schema.sql`
+rejoué **deux fois** sur une base neuve, les sept cas de
+`essais-suppression-compte.sql`, les 41 contrôles, `npx expo export
+--platform ios`. Le contrôle éprouvé **en cassant ce qu'il surveille** :
+**dix défauts remis à la main, les dix refusés** — dont « on retire le
+revoke », « un `grant all` plus bas rouvre tout », « la fonction passe en
+`security invoker` », « l'application supprime `users` elle-même » et
+« plus personne ne lit `auteur_supprime` ».
+
+Puis sur la VRAIE base, migration appliquée, **par le chemin de
+l'application** (clé publiable + jeton d'un compte jetable supprimé dans la
+même session) :
+
+| | résultat |
+|---|---|
+| `delete` sur `users` pour `anon` et `authenticated` | **false** |
+| le nom reste lisible, l'e-mail non | ✔ |
+| `update (telephone)` | toujours accordé |
+| `DELETE /rest/v1/users` sans compte | **401 · 42501** |
+| …avec un VRAI jeton, sur SA ligne | **403 · 42501** |
+| la fiche juste après | **toujours là** |
+| `rpc/preparer_suppression_compte` | **200** |
+| `/functions/v1/compte {"action":"supprimer"}` | **200** |
+| après | 0 ligne, 0 en `auth.users`, base revenue à 13 / 7 / 20 |
+
+**Ce qui n'a PAS été vérifié** : rien ne change à l'écran — aucun code de
+`src/` ne supprimait `users` —, mais ça se dit plutôt que ça se suppose.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

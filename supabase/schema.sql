@@ -2620,6 +2620,92 @@ end $$;
 -- la règle « ecriture mon user » limite déjà cela à sa propre ligne.
 grant update (email, telephone, latitude, longitude) on public.users to authenticated;
 
+-- --------------------------------------------------------------------------
+--  18.2 ET SUPPRIMER ? LE CHEMIN DE SORTIE N'EST PAS UNE PORTE DÉROBÉE
+--
+--  LE DÉFAUT, MESURÉ LE 11/10/2026
+--  -------------------------------
+--  La règle d'écriture de `public.users` est « chacun sa ligne », toutes
+--  opérations confondues :
+--
+--      create policy "ecriture mon user" on public.users
+--        for all using (auth.uid() = id) with check (auth.uid() = id);
+--
+--  `for all`, c'est QUATRE portes — et la quatrième est `delete`. Relevé
+--  sur la vraie base : `has_table_privilege('authenticated', 'public.users',
+--  'delete')` répond `true`, et pour `anon` aussi. Donc ceci partait, et ça
+--  marchait :
+--
+--      DELETE /rest/v1/users?id=eq.<moi>      -- DELETE 1, aucune erreur
+--
+--  CE QUE CE RACCOURCI FAIT VRAIMENT, ET CE QU'IL NE FAIT PAS
+--  ----------------------------------------------------------
+--  Il fallait le mesurer avant de l'écrire, et la première version de ce
+--  commentaire disait FAUX : elle accusait le raccourci de détruire les
+--  avis reçus. Il les détruit — mais le vrai chemin aussi, et c'est voulu
+--  (« ils portaient sur une entreprise qui n'existe plus », section 13.6).
+--  Les deux chemins comparés sur le MÊME jeu, PostgreSQL 16 :
+--
+--    | | `DELETE /rest/v1/users` | `preparer_suppression_compte()` |
+--    |---|---|---|
+--    | ligne `public.users`          | partie | partie |
+--    | fiche pro, et ses 11 cascades | parties | parties |
+--    | avis qu'il a ÉCRITS sur d'autres | gardés | gardés |
+--    | …et leur `auteur_supprime`    | **false** | **true** |
+--    | fichiers du stockage          | **restent** | retirés |
+--    | `auth.users`                  | **reste** | retirée |
+--
+--  Trois conséquences, et la troisième est la pire :
+--
+--  1. **`auteur_supprime` n'est jamais posé.** `api.js` lit ce drapeau pour
+--     écrire « Compte supprimé » sous un avis dont l'auteur est parti ;
+--     sans lui, `author_id` est vide et l'avis s'affiche sous un « Client »
+--     anonyme, comme si quelqu'un l'avait écrit hier. La transparence que
+--     la section 13.6 promet tombe, sans un mot.
+--  2. **Les fichiers restent dans le stockage, pour toujours.** Photo de
+--     profil, bannière, publications, pièces jointes — et le Kbis et
+--     l'attestation d'assurance, qui sont les deux documents les plus
+--     personnels de tout le projet. Seule la fonction Edge `compte` sait
+--     les retirer (il faut la clé de service et du HTTP, PostgreSQL ne peut
+--     pas), et elle n'est jamais appelée. Pire : la ligne qui disait à qui
+--     ils appartenaient vient de disparaître.
+--  3. **`auth.users` reste, donc le compte existe encore et ne peut plus
+--     rien faire.** La session est valable, l'application le croit
+--     professionnel (son type est dans les métadonnées), et chaque écriture
+--     échoue sur une clé étrangère. Et il ne se répare pas :
+--     `ensureProProfile()`, appelée à chaque ouverture depuis le 05/10,
+--     reçoit `23503 — Key is not present in table "users"`. Vérifié.
+--     Le compte ne peut donc ni servir, ni se réparer, ni se supprimer par
+--     le chemin de l'application. Il n'y a plus de sortie.
+--
+--  C'est le « compte à moitié » de la section 31, en pire, et fabriqué par
+--  un seul appel que n'importe qui peut écrire : la clé publiable est dans
+--  le paquet de l'application, lisible sur n'importe quel téléphone.
+--
+--  LA CORRECTION
+--  -------------
+--  Un droit de TABLE, comme en 18.1 : une politique ne sait pas distinguer
+--  « modifier ma ligne » de « supprimer ma ligne », elle dit `for all`. Et
+--  refaire la politique en deux morceaux demanderait un `drop policy`, que
+--  le connecteur Supabase refuse.
+--
+--  Supprimer son compte reste un DROIT : il passe par
+--  `preparer_suppression_compte()`, qui est `security definer` — elle
+--  s'exécute avec les droits de son propriétaire, et ce `revoke` ne la
+--  touche donc pas. Vérifié : elle marche encore, et elle anonymise.
+--  La cascade depuis `auth.users` — la fonction Edge, et Supabase →
+--  Authentication → Users — marche encore aussi, pour la même raison.
+--  Ce qui disparaît, c'est le raccourci.
+--
+--  Et on retire aussi à `anon` : la politique l'arrête déjà (`auth.uid()`
+--  est vide, aucune ligne ne correspond), mais un droit qui n'a aucune
+--  raison d'exister ne doit pas attendre qu'une politique le rattrape.
+--  C'est la leçon des huit portes du 11/10 au matin.
+--
+--  Les sept cas sont dans `supabase/essais-suppression-compte.sql`.
+-- --------------------------------------------------------------------------
+revoke delete on public.users from anon, authenticated;
+
 -- La fonction `mon_compte()` qui va avec est déclarée plus haut, juste
 -- après la table : une fonction SQL est contrôlée au moment où on la crée,
 -- et `mes_donnees()` — qui s'en sert — vient avant cette section dans le
