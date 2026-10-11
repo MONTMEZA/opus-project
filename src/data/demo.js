@@ -353,6 +353,41 @@ export const initialChantiers = [
     debut: ilYA(3 * 24), fin: ilYA(2) },
 ];
 
+/* ====================================================================== */
+/*  LE CARNET DE CLIENTS (section 41)                                      */
+/*                                                                         */
+/*  TROIS FICHES, et chacune fait vivre un mécanisme qui ne se verrait      */
+/*  nulle part ailleurs sans fichier `.env` :                              */
+/*                                                                         */
+/*    - un PARTICULIER, sans SIRET — le cas le plus fréquent ;             */
+/*    - une ENTREPRISE avec son SIRET, parce que c'est lui qui devra        */
+/*      figurer sur une facture adressée à un professionnel ;              */
+/*    - une fiche ARCHIVÉE, sinon la pastille « Archivés » afficherait      */
+/*      toujours « (0) » et personne ne saurait à quoi elle sert.          */
+/*                                                                         */
+/*  `proId` vaut 1 : c'est `Object.keys(proProfiles)[0]`, c'est-à-dire      */
+/*  « moi » en démonstration. Et les comparaisons passent par `String()`    */
+/*  des deux côtés — un nombre ici, une chaîne là, c'est le piège des      */
+/*  trois `===` du lot E.                                                  */
+/* ====================================================================== */
+export const initialClients = [
+  { id: 'cl-martin', proId: 1, type: 'particulier', nom: 'Mme Martin',
+    siret: null, telephone: '06 12 34 56 78', email: null,
+    adresse: '4 rue des Lilas', codePostal: '13350', ville: 'Charleval',
+    notes: 'Portail à gauche, le chien aboie mais il est gentil.',
+    archive: false, creeLe: ilYA(30 * 24), modifieLe: ilYA(30 * 24) },
+  { id: 'cl-moulin', proId: 1, type: 'entreprise', nom: 'SCI du Moulin',
+    siret: '12345678900012', telephone: '04 90 00 00 00',
+    email: 'contact@sci-moulin.fr',
+    adresse: '12 chemin du Moulin', codePostal: '13410', ville: 'Lambesc',
+    notes: null, archive: false, creeLe: ilYA(12 * 24), modifieLe: ilYA(5 * 24) },
+  { id: 'cl-ancien', proId: 1, type: 'particulier', nom: 'M. Rossi',
+    siret: null, telephone: null, email: null,
+    adresse: null, codePostal: '13090', ville: 'Aix-en-Provence',
+    notes: 'Chantier terminé en 2024, plus de nouvelles.',
+    archive: true, creeLe: ilYA(400 * 24), modifieLe: ilYA(200 * 24) },
+];
+
 export const initialConversations = [
   { id: 1, proId: 4, messages: [{ from: 'pro', texte: 'Je passe lundi matin pour le devis.', heure: '09:12' }] },
   { id: 2, proId: 2, messages: [{ from: 'pro', texte: 'Photos du tableau envoyées ✅', heure: 'hier' }] },

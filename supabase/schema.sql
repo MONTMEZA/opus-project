@@ -7398,8 +7398,299 @@ create or replace trigger trg_tient_l_agent
 --  donne aucun droit de plus — c'est un nom, pas une permission.
 -- --------------------------------------------------------------------------
 
+-- ==========================================================================
+--  41. LE CARNET DE CLIENTS — la première table du logiciel de gestion
+--      (11/10/2026)
+--
+--  C'est le module 1 du cahier des charges (§5), et `docs/A-FAIRE.md` dit
+--  pourquoi il passe en premier :
+--
+--    « Rien ne tient sans lui : un devis s'adresse à quelqu'un, une facture
+--      aussi, un chantier appartient à un client. C'est la table que les
+--      trois suivantes attendent. »
+--
+--  CE QUI CHANGE DE TOUT CE QUI PRÉCÈDE, ET QUI PORTE TOUT LE RISQUE
+--  -----------------------------------------------------------------
+--  Jusqu'ici, Opus ne contenait que des données que ses utilisateurs y
+--  avaient mises SUR EUX-MÊMES. Une publication, une annonce, un avis, un
+--  chantier : c'est toujours quelqu'un qui parle de lui.
+--
+--  **Un carnet de clients, non.** « Mme Martin, 4 rue des Lilas à
+--  Charleval, 06 12 34 56 78 » est une donnée personnelle sur une personne
+--  qui n'a pas de compte Opus, qui n'a rien accepté, et qui ne saura jamais
+--  que cette ligne existe. Trois conséquences, et aucune n'est négociable :
+--
+--  1. **Ce carnet est PRIVÉ, et il n'a AUCUNE politique pour `anon`.**
+--     C'est le modèle de la section 30 (les demandes des particuliers), pas
+--     celui de la section 36 (les chantiers, qui sont une vitrine). Le motif
+--     à deux politiques de la section 18 existe parce qu'une policy qui
+--     appelle une fonction interdite à l'appelant ÉCHOUE au lieu de
+--     filtrer ; il n'a rien à faire ici, où un visiteur doit lire ZÉRO.
+--  2. **Rien de ce carnet ne s'affiche nulle part ailleurs dans Opus.**
+--     Pas sur la fiche publique, pas dans le fil, pas dans une
+--     notification. C'est la leçon du titre de chantier (section 36.2) :
+--     « Chantier Martin » publiait un nom de famille sans le vouloir.
+--  3. **L'artisan en est le responsable de traitement, et Opus son
+--     sous-traitant** (RGPD, article 28). C'est un renversement par rapport
+--     à tout le reste du projet, où Opus est responsable. Le texte de
+--     `src/data/legal.js` ne le dit pas encore, et c'est traité à part :
+--     `npm run verifier-legal` refuse désormais une mise en ligne publique
+--     tant que la clause de sous-traitance n'est pas écrite. Aujourd'hui,
+--     avec `STATUT = 'essai'`, le seul artisan de cette base est aussi
+--     l'éditeur : il n'y a pas encore deux parties à lier par un contrat.
+--
+--  CE QUE CETTE SECTION N'ÉCRIT PAS, ET POURQUOI
+--  ---------------------------------------------
+--  **Aucun lien vers un compte Opus** (pas de `compte_id`). La tentation
+--  est forte : un client qui a demandé un devis EST sur Opus, et la colonne
+--  servirait un jour à lui envoyer son devis par la messagerie. Mais elle
+--  ne servirait que ce jour-là.
+--
+--  > C'est le « bouton §18 » retiré avant d'être livré (section 27.4), et
+--  > la règle de la section 38 : **chaque chose naît avec le lot qui s'en
+--  > sert.** Une colonne que personne ne lit ne peut pas être vérifiée —
+--  > elle peut pointer n'importe où, personne ne le saura avant le jour où
+--  > l'on s'en servira, c'est-à-dire trop tard.
+--
+--  Ce qui remplace ce lien, et qui est le vrai besoin : **un bouton
+--  « Ajouter à mes clients » sur une demande reçue**, qui PRÉ-REMPLIT le
+--  formulaire avec le nom, le téléphone et la commune que le client a
+--  lui-même écrits. Le relevé sur la vraie base disait 8 demandes reçues
+--  dont 6 traitées : le carnet a de quoi se remplir dès le premier jour,
+--  sans qu'on invente un lien que rien ne vérifie.
+--
+--  **Une seule adresse**, celle de FACTURATION. L'adresse du chantier
+--  appartient au chantier de gestion (§12), qui n'existe pas encore ; en
+--  poser une ici serait deviner laquelle des deux on écrit.
+-- ==========================================================================
+
 -- --------------------------------------------------------------------------
---  41. L'EXPORT RGPD — et pourquoi il est le DERNIER
+--  41.1 La table
+--
+--  `type` est posé MAINTENANT, et ce n'est pas de l'anticipation : il
+--  décide des mentions obligatoires d'une facture. Une facture adressée à
+--  un professionnel doit porter son SIRET ; adressée à un particulier,
+--  elle ne doit PAS en porter, et n'en a pas à réclamer. Ajouter cette
+--  distinction après coup voudrait dire relire chaque ligne déjà saisie
+--  pour deviner laquelle est une entreprise.
+--
+--  UN SEUL CHAMP `nom`, et pas « nom » + « prénom ». Deux champs laissent
+--  choisir où écrire quoi, donc ils se remplissent à l'envers une fois sur
+--  trois — et sur une facture, « Jean » dans la case nom ne se corrige plus.
+--  Le libellé de l'écran dit « Nom du client ou de l'entreprise », et c'est
+--  la même case pour « Mme Dupont » et pour « SCI du Moulin ».
+--
+--  TOUTES LES CONTRAINTES SE TERMINENT PAR `_check`, et ce n'est pas une
+--  coquetterie : `src/lib/erreurs.js` extrait le nom de la contrainte avec
+--  `/"([a-z0-9_]+_check)"/i`. Une contrainte nommée autrement rend un
+--  message anonyme — « la base a refusé cette valeur » —, assorti d'une
+--  piste FAUSSE (« schema.sql n'a pas été rejoué ») pour ce qui n'est
+--  qu'une faute de frappe. Mesuré en relisant `erreurs.js` avant d'écrire
+--  cette table.
+-- --------------------------------------------------------------------------
+create table if not exists public.clients (
+  id          uuid primary key default gen_random_uuid(),
+  pro_id      uuid not null references public.professional_profiles(id) on delete cascade,
+  type        text not null default 'particulier',
+  nom         text not null,
+  siret       text,
+  telephone   text,
+  email       text,
+  adresse     text,
+  code_postal text,
+  ville       text,
+  notes       text,
+  /* ARCHIVER, et non pas « statut ». Il n'y a que deux états — je le
+     propose encore, ou je ne le propose plus — et un booléen se lit sans
+     table de correspondance. Un client archivé n'est PAS supprimé : ses
+     devis et ses factures devront continuer de le nommer. */
+  archive     boolean not null default false,
+  created_at  timestamptz not null default now(),
+  modifie_le  timestamptz not null default now(),
+
+  constraint client_type_check  check (type in ('particulier', 'entreprise')),
+  constraint client_nom_check   check (btrim(nom) <> '' and char_length(nom) <= 120),
+  /* Un SIREN fait 9 chiffres, un SIRET 14. Le déclencheur a déjà retiré
+     les espaces, donc ce qui arrive ici est censé n'être que des chiffres :
+     ce qui ne l'est pas n'est pas un numéro, c'est autre chose qu'on vient
+     de coller par erreur. Même raisonnement que `morceauDeChemin()` et que
+     l'extension de fichier de la section 28. */
+  constraint client_siret_check check (siret is null or siret ~ '^[0-9]{9}([0-9]{5})?$'),
+  /* Un PARTICULIER n'a pas de SIRET. Le déclencheur le vide de lui-même
+     quand le type change — on supprime le défaut au lieu de le refuser,
+     la règle du calendrier du 04/10. Cette contrainte est le garde-fou de
+     ce qui n'entre pas par l'écran. */
+  constraint client_siret_particulier_check
+    check (type = 'entreprise' or siret is null),
+  /* La même garde que `pro_email_check` (section 17) : on refuse ce qui ne
+     PEUT PAS être une adresse, on ne prétend pas prouver qu'elle existe.
+     La seule preuve, c'est qu'un message y arrive. */
+  constraint client_email_check check (
+    email is null
+    or (position('@' in email) > 1 and position('.' in split_part(email, '@', 2)) > 1)
+  ),
+  constraint client_code_postal_check check (code_postal is null or code_postal ~ '^[0-9]{5}$'),
+  constraint client_telephone_check    check (telephone is null or char_length(telephone) <= 30),
+  constraint client_notes_check        check (notes is null or char_length(notes) <= 2000),
+  constraint client_adresse_check      check (adresse is null or char_length(adresse) <= 200),
+  constraint client_ville_check        check (ville is null or char_length(ville) <= 120)
+);
+
+/*  AUCUN INDEX UNIQUE SUR LE NOM, et c'est la différence avec un chantier.
+    La section 36.2 en pose un (`pro_id`, `lower(btrim(titre))`) parce qu'un
+    titre de chantier est une ÉTIQUETTE qu'on retape, et que trois « Toiture
+    Charleval » sont trois fois le même dossier.
+
+    Un nom de client est une IDENTITÉ, et deux Martin différents existent
+    pour de bon — dans le même village, il y en a souvent trois. Refuser le
+    second, c'est refuser un vrai client au profit d'une propreté de base de
+    données.
+
+    > **L'écran AVERTIT au lieu de refuser** : si le nom tapé existe déjà, il
+    > montre la fiche en question et laisse décider. C'est le seul endroit
+    > qui connaisse la réponse. */
+create index if not exists idx_clients_pro
+  on public.clients (pro_id, archive, lower(nom));
+
+alter table public.clients enable row level security;
+
+comment on table public.clients is
+  'Le carnet de clients d''une entreprise. PRIVÉ : aucune politique pour '
+  '`anon`, et rien de son contenu ne s''affiche ailleurs dans Opus. '
+  'L''artisan en est le responsable de traitement et Opus le sous-traitant '
+  '(RGPD art. 28) — c''est l''inverse du reste du projet. Section 41.';
+
+-- --------------------------------------------------------------------------
+--  41.2 Qui lit, qui écrit
+--
+--  UNE politique, et une seule. `for all`, et il faut dire pourquoi, parce
+--  que ce fichier porte trois cicatrices de `for all` :
+--
+--    - le badge décerné à l'`INSERT` (section 31) ;
+--    - la fiche pro supprimable, qui emportait les avis reçus (31) ;
+--    - la ligne `public.users` supprimable, qui sautait tout le ménage de
+--      compte (section 18.2, le matin même).
+--
+--  Les trois fois, le défaut était le même : `for all` ouvrait une porte sur
+--  quelque chose qui ENGAGEAIT QUELQU'UN D'AUTRE. Ici, non — et c'est
+--  vérifié plutôt que supposé :
+--
+--  > **Supprimer une ligne de son carnet ne détruit rien qui appartienne à
+--  > un tiers : c'est au contraire la façon dont le droit à l'effacement
+--  > s'exerce.** Une faute de frappe doit pouvoir partir, et un client qui
+--  > demande à être oublié doit pouvoir être oublié. La règle « ce qui
+--  > concerne des TIERS s'anonymise, il ne se supprime pas » (21/09) vise
+--  > ce qui ENGAGE un tiers — un avis, un commentaire —, pas une fiche
+--  > d'adresses privée.
+--
+--  Le jour où une facture pointera ce client, c'est la clé étrangère de la
+--  facture qui refusera la suppression (`on delete restrict`), et ce sera la
+--  bonne raison : la loi impose de conserver dix ans une facture AVEC
+--  l'identité de son destinataire.
+--
+--  Et c'est `est_mon_entreprise()` (section 36.1) qui tient l'appartenance,
+--  pas un `auth.uid() = pro_id` écrit à la main — la discipline posée le
+--  04/10 dans `docs/LECTURE-CAHIER-DES-CHARGES.md`, et c'est le second
+--  appelant de cette fonction.
+-- --------------------------------------------------------------------------
+drop policy if exists "mes clients" on public.clients;
+create policy "mes clients" on public.clients
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+-- --------------------------------------------------------------------------
+--  41.2 bis  `anon` N'A AUCUN DROIT SUR CETTE TABLE
+--
+--  La politique suffirait : `anon` n'en a pas, donc il lit zéro — vérifié
+--  par l'essai 7. Mais Supabase accorde les quatre droits de table
+--  d'office (`alter default privileges`), et la section 18.2, écrite le
+--  matin même, a montré ce que coûte un droit qu'on laisse en comptant sur
+--  une politique pour le rattraper.
+--
+--  CE QUE CELA PROTÈGE, ET QUI N'EST PAS THÉORIQUE : la règle de lecture
+--  des demandes des particuliers était `to anon using (true)` jusqu'au
+--  04/10/2026, et ce n'était pas une inattention — c'était le motif à deux
+--  politiques de la section 18, juste pour une vitrine et faux pour
+--  « fissure dans mon mur ». Le jour où quelqu'un ajoutera une politique
+--  `anon` sur ce carnet « pour afficher quelque chose », le droit de table
+--  absent sera la seconde ligne de défense.
+--
+--  `authenticated` garde tout : « mes clients » limite déjà chacun à ses
+--  propres lignes.
+-- --------------------------------------------------------------------------
+revoke all on public.clients from anon;
+
+-- --------------------------------------------------------------------------
+--  41.3 Le déclencheur — ce qui se nettoie avant d'être refusé
+--
+--  Même rôle que `tient_le_profil_pro()` (section 17.3) pour le téléphone et
+--  l'e-mail professionnel, et il vit AVEC ses colonnes pour la raison
+--  apprise en section 40 : **un corps plpgsql n'est pas analysé à sa
+--  création, il l'est à l'exécution.** Ajouter `new.siret` dans la fonction
+--  de la section 17 nommerait une colonne née 4 800 lignes plus bas, et le
+--  schéma rejoué sur une base neuve ne dirait RIEN — l'erreur vivrait dans
+--  un chemin que rien n'emprunte.
+--
+--  Quatre gestes, et chacun a sa raison :
+--
+--  1. **Les blancs deviennent `null`.** Il ne doit exister qu'UNE façon de
+--     dire « ce champ est vide », sinon l'écran affiche une ligne
+--     « Téléphone » suivie de rien, et le bouton « Appeler » compose une
+--     chaîne d'espaces.
+--  2. **L'e-mail passe en minuscules**, comme `email_pro`.
+--  3. **Le SIRET perd tout ce qui n'est pas un chiffre.** On le lit sur un
+--     Kbis ou on le colle depuis un courriel : « 123 456 789 00012 » et
+--     « 12345678900012 » sont le même numéro, et les refuser l'un sur deux
+--     serait incompréhensible.
+--  4. **Un particulier n'a PAS de SIRET.** Passer « entreprise » à
+--     « particulier » le vide, ici et sans un mot : le numéro ne veut plus
+--     rien dire. L'écran le vide aussi, pour que ça se VOIE — mais c'est
+--     la base qui le garantit.
+--
+--  Et `modifie_le` est posée par la BASE, avec `clock_timestamp()` :
+--  l'horloge d'un téléphone peut mentir, et c'est la leçon du journal
+--  d'administration (section 25) — `now()` rendrait l'heure de DÉBUT DE
+--  TRANSACTION, donc deux écritures de la même transaction porteraient le
+--  même horodatage.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_client()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.nom         := btrim(coalesce(new.nom, ''));
+  new.telephone   := nullif(btrim(coalesce(new.telephone, '')), '');
+  new.email       := lower(nullif(btrim(coalesce(new.email, '')), ''));
+  new.adresse     := nullif(btrim(coalesce(new.adresse, '')), '');
+  new.code_postal := nullif(btrim(coalesce(new.code_postal, '')), '');
+  new.ville       := nullif(btrim(coalesce(new.ville, '')), '');
+  new.notes       := nullif(btrim(coalesce(new.notes, '')), '');
+
+  new.siret := nullif(regexp_replace(coalesce(new.siret, ''), '[^0-9]', '', 'g'), '');
+  if new.type is distinct from 'entreprise' then
+    new.siret := null;
+  end if;
+
+  new.modifie_le := clock_timestamp();
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_client
+  before insert or update on public.clients
+  for each row execute function public.tient_le_client();
+
+comment on function public.tient_le_client() is
+  'Nettoie une fiche client avant écriture : les blancs deviennent null, '
+  'l''e-mail passe en minuscules, le SIRET ne garde que ses chiffres et '
+  'disparaît si le client est un particulier. Pose `modifie_le` avec '
+  'clock_timestamp(). Section 41.3.';
+
+-- --------------------------------------------------------------------------
+--  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
 --  « Ce que j'ai regardé » et « mes chantiers » sont des données
 --  personnelles sur MOI, donc elles entrent dans l'export de l'article 15.
@@ -7460,7 +7751,17 @@ as $$
     -- Ce que MON agent a fait pour moi : c'est une donnée personnelle sur
     -- moi, donc elle entre dans l'export de l'article 15. Et c'est aussi
     -- ce que le §23 appelle « la possibilité de consulter l'historique ».
-    'journal_ia', coalesce((select jsonb_agg(to_jsonb(x)) from public.journal_ia x where x.user_id = auth.uid()), '[]'::jsonb)
+    'journal_ia', coalesce((select jsonb_agg(to_jsonb(x)) from public.journal_ia x where x.user_id = auth.uid()), '[]'::jsonb),
+    /* MON CARNET DE CLIENTS — et ce n'est PAS l'article 15.
+       Ces lignes ne me concernent pas : elles concernent des tiers, dont je
+       suis le responsable de traitement et dont Opus n'est que le
+       sous-traitant. Ce que l'article 28.3.g impose alors, c'est de me les
+       RENDRE — sinon mon carnet est enfermé dans Opus, et c'est exactement
+       la raison pour laquelle on hésite à y écrire son premier client.
+       Deux fondements différents, un seul export : c'est plus honnête que
+       deux boutons dont personne ne comprendrait la différence. */
+    'clients_de_mon_entreprise',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.clients x where x.pro_id = auth.uid()), '[]'::jsonb)
   )
 $$;
 
@@ -7473,7 +7774,7 @@ revoke all on function public.mes_donnees() from public, anon;
 grant execute on function public.mes_donnees() to authenticated;
 
 -- ==========================================================================
---  42. LES PORTES DE LA BASE — une fonction de déclencheur n'est appelable
+--  43. LES PORTES DE LA BASE — une fonction de déclencheur n'est appelable
 --      par personne (11/10/2026)
 --
 --  Relevé sur la VRAIE base par les alertes de sécurité de Supabase :

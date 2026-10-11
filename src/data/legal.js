@@ -88,6 +88,23 @@ export const EDITEUR = {
    * faite (Supabase → Support, ou les informations de facturation du compte).
    */
   identiteRemiseALHebergeur: false,
+  /**
+   * LE CONTRAT DE SOUS-TRAITANCE DU CARNET DE CLIENTS (art. 28 du RGPD).
+   *
+   * À passer à `true` UNIQUEMENT quand l'acte juridique existe vraiment et
+   * qu'il est opposable : les huit obligations de l'article 28.3 écrites,
+   * accessibles à l'artisan, et acceptées par lui.
+   *
+   * POURQUOI UN DRAPEAU ET PAS UNE PHRASE DANS LE TEXTE. Le premier jet de
+   * ce garde-fou vérifiait que les mots « contrat de sous-traitance »
+   * figuraient quelque part. Il est passé au VERT aussitôt — parce que le
+   * texte que je venais d'écrire les contenait. Un contrôle satisfait par
+   * sa propre documentation ne garde rien, et c'est le défaut que ce projet
+   * traque depuis `verifier-montage`. Une phrase n'est pas un contrat ;
+   * seul un humain sait si l'acte existe, et ce drapeau est l'endroit où il
+   * le dit.
+   */
+  contratSousTraitance: false,
   hebergeur: {
     nom: 'Supabase Inc.',
     adresse: '970 Toa Payoh North, #07-04, Singapour 318992',
@@ -420,6 +437,51 @@ export const CONFIDENTIALITE = [
       + 'européenne, mais la Commission européenne a reconnu qu’il offre un '
       + 'niveau de protection équivalent : le transfert est donc autorisé '
       + 'sans formalité supplémentaire.',
+  },
+  {
+    /* LE RENVERSEMENT QUE LE CARNET DE CLIENTS APPORTE (section 41 de
+       `schema.sql`, 11/10/2026).
+
+       Partout ailleurs dans Opus, c'est l'éditeur qui est responsable du
+       traitement : les données sont celles que ses utilisateurs ont écrites
+       SUR EUX-MÊMES. Un carnet de clients, non — il porte le nom, le
+       téléphone et l'adresse de personnes qui n'ont pas de compte et qui
+       n'ont rien accepté. L'artisan en est donc le responsable, et Opus son
+       SOUS-TRAITANT au sens de l'article 28 du RGPD.
+
+       ON NE PEUT PAS ÉCRIRE CE CONTRAT ICI, et il ne faut pas essayer :
+       l'article 28.3 énumère huit obligations à faire figurer dans un acte
+       juridique, et une clause inventée engagerait la responsabilité du
+       propriétaire. CLAUDE.md est formel : « ne jamais lui écrire des
+       mentions légales de société ».
+
+       Ce qu'on fait donc, et c'est honnête : on dit le droit, on dit ce qui
+       manque, et on dit ce qui est VRAI techniquement — vérifié par les
+       seize essais de la section 41. Et `npm run verifier-legal` refuse de
+       passer si le statut quitte « essai » sans que cette clause existe. */
+    titre: 'Les clients que vous enregistrez',
+    texte: !EDITEUR.contratSousTraitance
+      ? 'Si vous êtes artisan, Opus vous permet de tenir un carnet de '
+        + 'clients. Ces informations concernent des personnes qui n’ont pas '
+        + 'de compte Opus : vous en êtes le responsable du traitement, et '
+        + 'Opus n’en est que le sous-traitant (article 28 du RGPD). Le '
+        + 'contrat qui doit encadrer cette relation n’est pas encore '
+        + 'publié : Opus n’est pas ouverte au public, et le seul artisan '
+        + 'qui y tient un carnet est l’auteur de l’application '
+        + 'lui-même.\n\nCe qui est déjà garanti '
+        + 'par la base de données, et vérifié : votre carnet n’est lisible '
+        + 'que de vous — ni par un autre artisan, ni par un visiteur ; rien '
+        + 'de son contenu n’apparaît sur votre fiche publique, dans le fil '
+        + 'ou dans une notification ; vous pouvez l’exporter et le '
+        + 'supprimer à tout moment ; et il part entièrement avec votre '
+        + 'compte.'
+      : 'Le carnet de clients d’un artisan contient des données '
+        + 'personnelles sur des tiers. L’artisan en est le responsable du '
+        + 'traitement ; l’éditeur d’Opus agit comme sous-traitant au sens '
+        + 'de l’article 28 du RGPD, dans les limites fixées par le contrat '
+        + 'de sous-traitance qui lui est opposable. L’éditeur ne traite ces '
+        + 'données que pour fournir le service, ne les transmet à personne '
+        + 'd’autre, et les restitue ou les efface sur demande.',
   },
   {
     titre: 'À qui vos données sont transmises',

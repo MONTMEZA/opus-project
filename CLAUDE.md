@@ -5701,7 +5701,7 @@ cinq lignes.
 
 ### Les portes de la base — un déclencheur n'est appelable par personne (11/10/2026)
 
-Section 42 de `schema.sql`, `supabase/essais-section-42.sql`,
+Section 43 de `schema.sql`, `supabase/essais-section-43.sql`,
 `npm run verifier-portes`.
 
 Relevé par les **alertes de sécurité de Supabase** sur la vraie base, en
@@ -5768,7 +5768,7 @@ base : les deux donnent exactement les mêmes droits.
 
 Il vise désormais le vrai invariant — **rien ne doit RETIRER ce droit** —, y
 compris par la boucle de la section 13.8, qui révoque en masse. Et la vraie
-preuve a changé de fichier : `verifier-portes` lit le texte, `essais-section-42.sql`
+preuve a changé de fichier : `verifier-portes` lit le texte, `essais-section-43.sql`
 interroge `has_function_privilege` sur une base rejouée. Un fichier `node`
 ne sait pas interroger PostgreSQL ; il ne faut pas lui demander de prouver
 ce qu'il ne peut que supposer.
@@ -5797,7 +5797,7 @@ correction : les dix refusés.
 #### Vérifié, et comment
 
 `schema.sql` rejoué **deux fois** sur un PostgreSQL 16 neuf, les sept cas de
-`supabase/essais-section-42.sql`, les 41 contrôles, `npx expo export
+`supabase/essais-section-43.sql`, les 41 contrôles, `npx expo export
 --platform ios`. Puis la migration appliquée sur la VRAIE base :
 
 | | avant | après |
@@ -5953,6 +5953,310 @@ même session) :
 
 **Ce qui n'a PAS été vérifié** : rien ne change à l'écran — aucun code de
 `src/` ne supprimait `users` —, mais ça se dit plutôt que ça se suppose.
+
+### Le carnet de clients — la première table du logiciel de gestion (11/10/2026)
+
+Section 41 de `schema.sql`, `src/lib/clients.js`,
+`src/screens/ClientsScreen.js`, `src/components/FicheClient.js`,
+`npm run verifier-clients`. Module 1 du cahier des charges (§5), et
+`docs/A-FAIRE.md` dit pourquoi il passe en premier : « rien ne tient sans
+lui — un devis s'adresse à quelqu'un, une facture aussi ».
+
+#### Ce qui change de TOUT ce qui précède
+
+Jusqu'ici, Opus ne contenait que des données que ses utilisateurs y avaient
+mises **sur eux-mêmes**. Une publication, une annonce, un avis, un
+chantier : c'est toujours quelqu'un qui parle de lui.
+
+> **Un carnet de clients, non.** « Mme Martin, 4 rue des Lilas à Charleval,
+> 06 12 34 56 78 » est une donnée personnelle sur une personne qui n'a pas
+> de compte, qui n'a rien accepté, et qui ne saura jamais que cette ligne
+> existe.
+
+Trois conséquences, et aucune n'est négociable :
+
+1. **Le carnet est PRIVÉ, et il n'a AUCUNE politique pour `anon`.** C'est le
+   modèle de la section 30 (les demandes des particuliers), pas celui de la
+   section 36 (les chantiers, qui sont une vitrine). Le motif à deux
+   politiques de la section 18 existe parce qu'une policy qui appelle une
+   fonction interdite à l'appelant ÉCHOUE au lieu de filtrer ; il n'a rien
+   à faire ici, où un visiteur doit lire ZÉRO.
+2. **Rien de ce carnet ne s'affiche ailleurs dans Opus** — ni sur la fiche
+   publique, ni dans le fil, ni dans une notification. C'est la leçon du
+   titre de chantier (section 36.2) : « Chantier Martin » publiait un nom de
+   famille sans le vouloir. Le contrôle relit `rowToPro` et
+   `notifications.js` pour s'en assurer.
+3. **L'artisan en est le responsable de traitement, et Opus son
+   sous-traitant** (RGPD, art. 28). C'est un renversement par rapport à tout
+   le reste du projet — voir plus bas, c'est le point le plus lourd du lot.
+
+#### Et `anon` n'a même plus de droit de TABLE
+
+La RLS suffirait : pas de politique, donc zéro ligne. Mais Supabase accorde
+les quatre droits d'office, et la section 18.2 — écrite le matin même —
+venait de montrer ce que coûte un droit qu'on laisse en comptant sur une
+politique pour le rattraper. D'où `revoke all on public.clients from anon`.
+
+> **Ce que ça protège n'est pas théorique** : la règle de lecture des
+> demandes était `to anon using (true)` jusqu'au 04/10. Le jour où
+> quelqu'un ajoutera une politique `anon` sur ce carnet « pour afficher
+> quelque chose », le droit de table absent sera la seconde ligne de
+> défense. Vérifié sur la vraie base, par le chemin de l'application : un
+> visiteur reçoit **401 · 42501**, pas une liste vide.
+
+#### Ce que cette section n'écrit PAS, et pourquoi
+
+**Aucun lien vers un compte Opus** (pas de `compte_id`). La tentation était
+forte : un client qui a demandé un devis EST sur Opus, et la colonne
+servirait un jour à lui envoyer son devis par la messagerie. Mais elle ne
+servirait que ce jour-là.
+
+> C'est le « bouton §18 » retiré avant d'être livré (section 27.4), et la
+> règle de la section 38 : **chaque chose naît avec le lot qui s'en sert.**
+> Une colonne que personne ne lit ne peut pas être vérifiée — elle peut
+> pointer n'importe où, et personne ne le saura avant le jour où l'on s'en
+> servira, c'est-à-dire trop tard.
+
+Ce qui remplace ce lien, et qui est le vrai besoin : **« Ajouter à mes
+clients » sur une demande reçue**, qui pré-remplit le formulaire avec le
+nom, le numéro et la commune que le client a lui-même écrits. Le relevé
+disait 8 demandes reçues dont 6 traitées : le carnet a de quoi se remplir
+dès le premier jour, sans qu'on invente un lien que rien ne vérifie. Le
+bouton n'apparaît qu'à partir de l'ACCEPTATION — avant, on ne sait pas si
+ce sera un client.
+
+**Un seul champ `nom`**, et pas « nom » + « prénom ». Deux champs laissent
+choisir où écrire quoi, donc ils se remplissent à l'envers une fois sur
+trois — et sur une facture, « Jean » dans la case nom ne se corrige plus.
+
+**Une seule adresse**, celle de FACTURATION. L'adresse du chantier
+appartiendra au chantier de gestion (§12) ; en poser une seconde ici, c'est
+deviner laquelle des deux on écrit.
+
+#### `for all` pour la QUATRIÈME fois — et ici c'est juste
+
+Ce fichier porte trois cicatrices de `for all` : le badge décerné à
+l'`INSERT`, la fiche pro supprimable qui emportait ses avis (section 31), et
+la ligne `public.users` supprimable qui sautait tout le ménage de compte
+(section 18.2, le matin même). Les trois fois, la porte donnait sur quelque
+chose qui **engageait quelqu'un d'autre**.
+
+> **Ici, non — et c'est vérifié, pas supposé.** Supprimer une ligne de son
+> carnet ne détruit rien qui appartienne à un tiers : c'est au contraire la
+> façon dont le droit à l'effacement s'exerce. Une faute de frappe doit
+> pouvoir partir, et un client qui demande à être oublié doit pouvoir
+> l'être. La règle « ce qui concerne des TIERS s'anonymise, il ne se
+> supprime pas » vise ce qui ENGAGE un tiers — un avis, un commentaire —,
+> pas une fiche d'adresses privée.
+
+Le jour où une facture pointera ce client, c'est SA clé étrangère qui
+refusera la suppression, et ce sera la bonne raison : la loi impose de
+conserver dix ans une facture avec l'identité de son destinataire.
+
+#### TOUTES les contraintes se terminent par `_check`
+
+Ce n'est pas une coquetterie, et ça a été vérifié en relisant
+`src/lib/erreurs.js` AVANT d'écrire la table :
+
+```js
+const nom = (brut.match(/"([a-z0-9_]+_check)"/i) || [])[1];
+```
+
+> **Une contrainte nommée autrement rend un message anonyme — « la base a
+> refusé cette valeur » — assorti d'une piste FAUSSE :** « le plus souvent,
+> `schema.sql` n'a pas été rejoué ». Pour ce qui n'est qu'une faute de
+> frappe dans un SIRET.
+
+Vérifié sur la vraie base : un SIRET de trois chiffres rend
+`400 · 23514 · client_siret_check`. Et l'écran, lui, refuse AVANT d'envoyer,
+avec un message qui COMPTE les chiffres saisis — « il en faut 14 » sans dire
+combien on en a mis oblige à les compter soi-même.
+
+#### Le doublon s'AVERTIT, il ne se refuse pas
+
+La section 36.2 pose un index unique sur le titre d'un chantier. Ici, aucun,
+et c'est le contraire exprès :
+
+> **Un titre de chantier est une ÉTIQUETTE qu'on retape** — trois « Toiture
+> Charleval » sont trois fois le même dossier. **Un nom de client est une
+> IDENTITÉ**, et dans un village il y a souvent trois Martin. Refuser le
+> second, c'est refuser un vrai client au profit d'une base propre.
+
+L'écran montre donc la fiche existante et laisse décider. Vérifié :
+« mme  MARTIN » reconnaît « Mme Martin » (accents, casse et espaces mis à
+part), nomme sa ville, et le bouton reste actif.
+
+#### Le SIRET d'un particulier se VIDE, des deux côtés
+
+Un particulier n'a pas de SIRET. Le déclencheur `tient_le_client()` le vide,
+`validerClient()` aussi, et **l'écran fait disparaître le champ** quand on
+bascule le type.
+
+> Les trois sont nécessaires. Sans l'écran, on enregistrerait en croyant
+> avoir gardé le numéro et on le retrouverait vide au rechargement sans
+> comprendre pourquoi. C'est la règle du calendrier du 04/10 : on supprime
+> le défaut au lieu de le contrôler.
+
+#### Le formulaire est PLEIN ÉCRAN, et c'est le défaut du 04/10 évité
+
+Neuf champs ne tiennent pas dans une feuille du bas — et surtout, une
+feuille transparente collée au bas de l'écran se fait recouvrir par le
+clavier de l'iPhone, champ ET croix de fermeture. C'est le « je suis
+bloqué » du 04/10. Ici la croix est en HAUT : le clavier monte du bas, il ne
+peut enfermer personne. Exactement ce que `verifier-feuilles` avait constaté
+à propos de `SelecteurMetiers`, en lui donnant tort.
+
+#### LE POINT LE PLUS LOURD : qui est responsable de ces données
+
+`src/data/legal.js` déclarait l'auteur de l'application **seul** responsable
+du traitement, et le mot « sous-traitant » n'y figurait nulle part. Avec un
+carnet de clients, c'est faux pour ces lignes-là.
+
+**On ne peut pas écrire ce contrat, et il ne faut pas essayer** :
+l'article 28.3 du RGPD énumère huit obligations à faire figurer dans un acte
+juridique, et une clause inventée engagerait la responsabilité du
+propriétaire. Ce document est formel depuis le 29/09 : « ne jamais lui
+écrire des mentions légales de société ».
+
+Ce qui a été fait, et qui est honnête : une section de la politique de
+confidentialité **dit le droit, dit ce qui manque, et dit ce qui est vrai
+techniquement** — le carnet n'est lisible que de son auteur, il s'exporte,
+il part avec le compte, et les seize essais le prouvent.
+
+##### Et mon garde-fou PASSAIT AU VERT
+
+Le premier jet de `verifier-legal` vérifiait que les mots « contrat de
+sous-traitance » figuraient dans les textes. Essayé en passant `STATUT` à
+`micro` : **il est passé au vert**, parce que le texte que je venais
+d'écrire les contenait.
+
+> **Un contrôle satisfait par sa propre documentation ne garde rien.** Une
+> phrase n'est pas un contrat. Seul un humain sait si l'acte existe, et
+> c'est donc un DRAPEAU qu'il faut vérifier —
+> `EDITEUR.contratSousTraitance`, sur le modèle de
+> `identiteRemiseALHebergeur` qui existait déjà pour la même raison. Le
+> texte affiché est branché sur ce drapeau, pas sur le statut : sinon il
+> annonce un contrat qui n'existe pas.
+
+Éprouvé : avec `STATUT = 'micro'`, les deux vérifications refusent.
+**`STATUT = 'essai'` ne protège rien en soi** — le premier vrai client
+inscrit dans un carnet est une personne qui n'a rien accepté. Ce qui
+protège aujourd'hui, c'est qu'il n'y a qu'un artisan sur cette base et que
+c'est l'éditeur : il n'y a pas encore deux parties à lier par un contrat.
+
+#### J'AI INVENTÉ UNE DÉPENDANCE — et l'export iOS a rendu ZÉRO
+
+Le défaut le plus instructif du lot. J'ai importé `lucide-react-native`
+dans les deux nouveaux fichiers. **Ce paquet n'est pas une dépendance
+d'Opus** : le projet a son propre `src/components/icons.js`, dont l'en-tête
+dit « équivalents React Native des icônes lucide-react du prototype — on
+garde exactement les mêmes noms ». Je ne l'avais pas lu.
+
+Et rien ne l'a attrapé :
+
+| | |
+|---|---|
+| le linter | se tait — il ne résout pas les modules |
+| les 42 contrôles | passaient |
+| **`npx expo export --platform ios`** | **code de sortie 0**, en affichant pourtant sa pile d'import |
+
+> **Le troisième est le plus grave.** Ce projet lit les codes de sortie
+> depuis le lot 8 précisément pour ne pas se fier au texte, et là c'est le
+> code de sortie qui mentait. Seul `npx expo start --web` l'a dit — en
+> répondant **500** sur le paquet, c'est-à-dire un écran blanc.
+>
+> **La parade est mécanique : `npm run verifier-imports` refuse désormais
+> tout paquet importé dans `src/` qui ne figure pas dans `package.json`.**
+> Ça tourne en une seconde et ça n'attend pas qu'on pense à lancer
+> l'application.
+>
+> **Et pour l'export : lire sa SORTIE, pas son code.** Il doit écrire
+> « Exported », ne contenir aucune « Import stack », et produire `dist/`.
+> Mesuré après correction : 1 / 0 / 16 Mo.
+
+##### Ce nouveau contrôle est d'abord passé au vert sans rien éprouver
+
+Son premier motif exigeait `^import … from '…';` **sur une seule ligne**.
+Or un import de sept icônes s'écrit sur trois. Éprouvé en remettant le
+défaut à la main : **il ne l'a pas vu.** Dixième fois dans ce projet qu'un
+contrôle rend le bon résultat pour la mauvaise raison. Il vise maintenant le
+`from`, quelle que soit la forme — et il attrape les deux.
+
+#### Quatre autres défauts trouvés par les contrôles, pas à l'œil
+
+1. **`clientCorrespond` ne trouvait pas un numéro sans ses espaces.**
+   Chercher « 0612 » ne rendait rien pour « 06 12 34 56 78 ». Personne ne
+   tape les espaces d'un numéro dans une recherche — et ça ne lève aucune
+   erreur, la liste revient simplement vide, ce qui ressemble à un carnet
+   qui ne contient pas ce qu'on cherche. Trouvé parce que
+   `verifier-clients` FAIT TOURNER la fonction.
+2. **Un composant créé pendant le rendu** (`const Erreur = ({ champ }) =>
+   …`). Le linter l'a refusé, et il avait raison : React en fait un TYPE
+   nouveau à chaque lettre tapée, donc il démonte et remonte. Une fonction
+   qui rend du JSX donne le même résultat sans ce coût.
+3. **Le cliquet des échelles a mordu** sur un `marginTop: 2` — hors de la
+   grille de 4. 355 contre un plafond de 354.
+4. **Un sabotage est passé** : mon contrôle cherchait
+   `est_mon_entreprise` « quelque part dans les 300 caractères » suivant la
+   politique. Remplacer la seule clause `using` par un `auth.uid()` écrit à
+   la main le laissait au vert, puisque le `with check` la contenait encore.
+   Il compte maintenant DANS la politique isolée, et exige deux appels et
+   aucun `auth.uid()`.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué **deux fois sur une base PostgreSQL 16 NEUVE** — zéro
+table au départ, zéro erreur aux deux passages —, les **seize** cas de
+`supabase/essais-section-41.sql` (dont cinq refus attendus), les
+**42 contrôles**, et `npx expo export --platform ios` dont la sortie a été
+LUE. Le contrôle a été éprouvé **en cassant ce qu'il surveille** :
+**vingt-et-un défauts remis à la main, les vingt-et-un refusés** après
+correction du vingt-et-unième.
+
+Puis sur la VRAIE base (migration appliquée par le connecteur, aucun ordre
+commençant par `drop` — la politique est créée sous condition dans un bloc
+`do`), avec **deux** comptes professionnels jetables supprimés dans la même
+session :
+
+| | relevé |
+|---|---|
+| colonnes · contraintes `check` · mal nommées | **14 · 10 · 0** |
+| politiques | **1**, `authenticated` seulement |
+| `anon` sur la table | **aucun droit** |
+| le déclencheur appelable par `anon` | **non** |
+| **au navigateur** : le carnet vide | « Votre carnet est vide », 1 seul `GET` |
+| bouton « Nouveau » | **88 × 44** |
+| le formulaire | « Nouveau client », SIRET **caché** pour un particulier |
+| champ nom · bouton | **358 × 44** chacun |
+| enregistrement | `POST /rest/v1/clients → 201`, bandeau |
+| la carte · son bouton « Appeler » | 296 × 56 · **44 × 44** |
+| **après rechargement complet** | Mme Martin est là, avec son numéro et sa ville |
+| saisir un SIRET puis repasser en « Particulier » | **le champ disparaît** |
+| taper « mme  MARTIN » | « Vous avez déjà un client de ce nom (Charleval) », et **ça ne refuse pas** |
+| archiver | `PATCH → 200`, « Ma liste (0) · Archivés (1) » |
+| **par l'API** : B lit le carnet de A | **`[]`** |
+| un visiteur | **401 · 42501** |
+| B écrit dans le carnet de A | **403**, RLS |
+| un SIRET de 3 chiffres | **400 · 23514 · `client_siret_check`** |
+| « 123 456 789 00012 » sur une entreprise | rangé **`12345678900012`** |
+| «   Contact@SCI-Moulin.FR » | rangé **`contact@sci-moulin.fr`** |
+| l'export RGPD | la clé `clients_de_mon_entreprise`, **2 fiches** |
+| après suppression des comptes | **0 client**, base revenue à 13 / 7 / 20 / 2 |
+
+#### Ce qui n'a PAS été vérifié
+
+- **Rien de tout cela sur un vrai iPhone**, et en particulier le clavier
+  sous les neuf champs du formulaire : il n'y en a pas dans ce navigateur.
+- **La bascule Particulier / Entreprise mesure 73 × 38**, pas 44 :
+  `PillToggle` atteint les 44 points par `hitSlop`, que `react-native-web`
+  ignore. C'est le cas déjà relevé au lot I pour `BtnMini` — ça se touche
+  bien au doigt, mais ça se dit plutôt que ça se suppose.
+- **Aucun artisan réel n'a encore de client** : la vraie base en compte
+  **0**. Le jour où il y en aura soixante, la liste et sa recherche se
+  jugeront à nouveau.
+- **Le contrat de sous-traitance n'existe pas**, et c'est le seul point du
+  lot qui n'appartient pas au code. `verifier-legal` refuse une mise en
+  ligne publique tant que `EDITEUR.contratSousTraitance` est à `false`.
 
 ## Dépendances : vérifier avant de proposer
 

@@ -1,9 +1,9 @@
 -- ==========================================================================
---  ESSAIS DE LA SECTION 42 — les portes de la base
+--  ESSAIS DE LA SECTION 43 — les portes de la base
 --
 --  A lancer sur un PostgreSQL ou schema.sql vient d etre rejoue :
 --    psql -f supabase/local-prelude.sql && psql -f supabase/schema.sql
---    psql -f supabase/essais-section-42.sql
+--    psql -f supabase/essais-section-43.sql
 --
 --  CE FICHIER EST LA VRAIE PREUVE. `verifier-portes` lit le texte du
 --  schema ; lui seul peut INTERROGER les droits, et surtout verifier

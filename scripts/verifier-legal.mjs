@@ -97,6 +97,48 @@ verifier('le droit de récupérer ses données est annoncé', /portabilité/i.te
 verifier('la CNIL est citée comme recours', /CNIL/.test(tout));
 verifier('le délai d’examen des signalements est annoncé', /48\s*heures/.test(tout));
 
+/* LE CARNET DE CLIENTS RENVERSE LES RÔLES (section 41, 11/10/2026).
+   Partout ailleurs, l'éditeur est responsable du traitement : les données
+   sont celles que ses utilisateurs ont écrites sur EUX-MÊMES. Un carnet de
+   clients porte le nom et l'adresse de personnes qui n'ont pas de compte :
+   l'artisan en est le responsable, et Opus son SOUS-TRAITANT (art. 28).
+
+   > **`STATUT = 'essai'` ne protège rien ici.** Le premier vrai client
+   > inscrit dans un carnet est une personne qui n'a rien accepté. Mais
+   > aujourd'hui le seul artisan de cette base est aussi l'éditeur : il n'y
+   > a pas encore deux parties à lier par un contrat. D'où deux exigences
+   > de force différente. */
+verifier('le carnet de clients et son régime sont annoncés',
+  /carnet de clients/i.test(tout) && /sous-traitant/i.test(tout),
+  'Une table qui porte des données personnelles sur des TIERS doit être '
+  + 'annoncée dans la politique de confidentialité, et son régime dit. '
+  + 'Sans cela, la seule chose écrite reste « le responsable du traitement '
+  + 'est l’auteur de l’application » — ce qui est faux pour ces lignes-là.');
+
+if (STATUT !== 'essai') {
+  /* ET LÀ, CE N'EST PLUS UNE ANNONCE : il faut l'acte juridique. */
+  /* ON VÉRIFIE UN DRAPEAU, PAS UNE PHRASE. Le premier jet cherchait les
+     mots « contrat de sous-traitance » dans les textes : il est passé au
+     VERT aussitôt, puisque le texte qui ANNONCE le contrat les contient.
+     Un contrôle satisfait par sa propre documentation ne garde rien —
+     c'est, pour la dixième fois, le défaut que ce projet traque depuis
+     `verifier-montage`. Seul un humain sait si l'acte existe. */
+  verifier('un contrat de sous-traitance existe VRAIMENT',
+    EDITEUR.contratSousTraitance === true,
+    'Dès qu’un AUTRE artisan que l’éditeur tient un carnet de clients, '
+    + 'l’article 28.3 du RGPD exige un acte juridique entre eux — huit '
+    + 'obligations nommées. Tant qu’il n’existe pas, on ne quitte pas '
+    + '« essai ». Mettre `EDITEUR.contratSousTraitance` à `true` sans '
+    + 'l’avoir écrit serait une fausse mention légale, et une fausse '
+    + 'mention légale engage la responsabilité de son auteur.');
+
+  verifier('…et le texte ne l’annonce plus au futur',
+    !/n’est pas encore\s*'?\s*\+?\s*'?\s*publié/i.test(tout)
+    && !/sera publié ici/i.test(tout),
+    'Le texte est branché sur le drapeau, pas sur le statut : il doit avoir '
+    + 'changé de branche en même temps.');
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

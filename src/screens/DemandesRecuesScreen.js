@@ -168,7 +168,7 @@ export function trierDemandes(demandes = []) {
 
 export default function DemandesRecuesScreen({
   demandes = [], chargement = false, echec = false, onReessayer,
-  onRepondre, onAppeler, onVoirProfil,
+  onRepondre, onAppeler, onVoirProfil, onAjouterClient,
   /* La demande qu'une notification désigne (section 37), et le moyen de
      dire qu'on l'a consommée. */
   demandeCible = null, onCibleConsommee,
@@ -329,13 +329,16 @@ export default function DemandesRecuesScreen({
           onRepondre={onRepondre}
           onAppeler={onAppeler}
           onVoirProfil={onVoirProfil}
+          onAjouterClient={onAjouterClient}
         />
       )}
     />
   );
 }
 
-function Demande({ d, onRepondre, onAppeler, onVoirProfil, visee = false }) {
+function Demande({
+  d, onRepondre, onAppeler, onVoirProfil, onAjouterClient, visee = false,
+}) {
   /* Le verrou contre le double appui : accepter deux fois une urgence
      enverrait deux fois l'artisan. Même famille de défaut que le bouton
      « Choisir » du SOS. */
@@ -433,6 +436,30 @@ function Demande({ d, onRepondre, onAppeler, onVoirProfil, visee = false }) {
                 label={envoi === 'termine' ? 'Envoi…' : 'Marquer terminé'}
                 disabled={!!envoi}
                 onPress={() => repondre('termine')}
+              />
+            )}
+            {/* AJOUTER CE CLIENT AU CARNET (section 41).
+                Il n'apparaît QU'À PARTIR du moment où la demande est
+                acceptée : avant, on ne sait pas si ce sera un client, et un
+                carnet rempli de gens à qui on n'a jamais répondu ne sert à
+                personne.
+
+                Le formulaire arrive PRÉ-REMPLI avec ce que le client a
+                lui-même écrit dans sa demande — le nom, le numéro, la
+                commune. C'est ce qui remplace le lien vers un compte Opus
+                que la section 41 a refusé d'écrire : un geste utile
+                aujourd'hui plutôt qu'une colonne que personne ne lirait.
+
+                Et le téléphone est celui de la DEMANDE, jamais
+                `users.telephone`, fermé à tout le monde le 29/09 : le
+                remettre à l'écran par cette porte annulerait ce travail
+                sans bruit. */}
+            {(estAcceptee(d) || d.statut === 'termine') && !!onAjouterClient && (
+              <BtnMini
+                outline
+                label="Ajouter à mes clients"
+                accessibilityLabel={`Ajouter ${d.nom} à mon carnet de clients`}
+                onPress={() => onAjouterClient(d)}
               />
             )}
             {estRefusee(d) && <Text style={s.etat}>Refusée</Text>}

@@ -93,6 +93,7 @@ export default function ProfilOwnScreen({
   demandesPartenariat = [], partenariatsEnvoyes = [],
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
+  onClients,
   onConfidentialite, admin = null, onAdmin,
   mesChantiers = [], onOuvrirChantier,
 }) {
@@ -275,6 +276,23 @@ export default function ProfilOwnScreen({
           onPress={onMesPublications}
         />
       </View>
+
+      {/* MES CLIENTS — et pas dans le bloc « Compte ».
+          Ce n'est pas un réglage qu'on ouvre deux fois par an : c'est un
+          OUTIL DE TRAVAIL, au même rang que « Mes publications ». Le
+          ranger avec « Confidentialité » et « Se déconnecter » reviendrait
+          à l'enterrer, et un carnet qu'on ne trouve pas ne se remplit
+          jamais.
+
+          Réservé aux professionnels : un particulier n'a pas de clients.
+          `onClients` est absent pour lui, et la rangée ne s'affiche donc
+          pas du tout — plutôt qu'un bouton grisé dont personne ne
+          comprendrait la raison. */}
+      {!!onClients && (
+        <View style={s.pad}>
+          <BtnOutline label="Mes clients" onPress={onClients} />
+        </View>
+      )}
 
       {/* --- demandes de partenariat reçues --- */}
       {demandesPartenariat.length > 0 && (

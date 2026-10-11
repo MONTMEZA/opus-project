@@ -12,6 +12,7 @@ import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
   initialDemandes, initialAnnonces, initialDemandesRecues, initialChantiers,
+  initialClients,
 } from '../data/demo';
 import { METIER_PAR_DEFAUT } from './metiers';
 import { correspond } from './filtre-fil';
@@ -1517,6 +1518,192 @@ export const enregistrerRecit = !hasSupabase
     if (error) throw error;
     return rowToChantier(data);
   };
+
+
+/* ==================================================================== */
+/*  LE CARNET DE CLIENTS — section 41                                    */
+/*                                                                       */
+/*  PRIVÉ, et c'est la première table d'Opus dont le contenu concerne des */
+/*  TIERS qui n'ont pas de compte. Rien de ce qui est ici ne part dans    */
+/*  `pros[]`, qui est public, ni dans une notification, ni sur une fiche. */
+/* ==================================================================== */
+
+function rowToClient(c) {
+  return {
+    id: c.id,
+    proId: c.pro_id,
+    type: c.type || 'particulier',
+    nom: c.nom,
+    siret: c.siret || null,
+    telephone: c.telephone || null,
+    email: c.email || null,
+    adresse: c.adresse || null,
+    codePostal: c.code_postal || null,
+    ville: c.ville || null,
+    notes: c.notes || null,
+    archive: Boolean(c.archive),
+    creeLe: c.created_at || null,
+    modifieLe: c.modifie_le || null,
+  };
+}
+
+/** Ce que l'écran envoie vers les colonnes de la base. Les valeurs sont
+ *  déjà passées par `validerClient()` : ici on ne fait que renommer. */
+function clientVersBase(v) {
+  return {
+    type: v.type,
+    nom: v.nom,
+    siret: v.siret,
+    telephone: v.telephone,
+    email: v.email,
+    adresse: v.adresse,
+    code_postal: v.codePostal,
+    ville: v.ville,
+    notes: v.notes,
+  };
+}
+
+async function mesClientsDemo() {
+  const monPro = Object.keys(demoPros)[0];
+  /* `String()` DES DEUX CÔTÉS : `Object.keys()` rend toujours une chaîne,
+     et les fiches de démonstration portent un nombre. Un `===` strict
+     rendrait une liste vide, et le carnet paraîtrait vide sans fichier
+     `.env` — exactement le défaut des trois `===` du lot E. */
+  return initialClients.filter((c) => String(c.proId) === String(monPro)).map((c) => ({ ...c }));
+}
+
+/**
+ * MON CARNET.
+ *
+ * Pas de borne : un artisan a des dizaines de clients, pas des milliers,
+ * et la liste se cherche — elle ne se fait pas défiler comme un fil. Le
+ * jour où ça pèsera, c'est la RECHERCHE qui ira dans la base, pas une
+ * limite qui cacherait des clients en silence (la règle des « 3 annonces
+ * sans lieu précisé ne sont pas affichées »).
+ *
+ * `select('*')` est permis ici, contrairement à `public.users` : aucune
+ * colonne de cette table n'est fermée, puisque la politique « mes
+ * clients » ne rend QUE mes lignes. Une règle RLS filtre des lignes ; ici
+ * il n'y a rien à filtrer de plus.
+ */
+async function mesClientsSupabase() {
+  const { data, error } = await supabase.from('clients')
+    .select('*').eq('pro_id', currentUserId).order('nom');
+  if (error) throw error;
+  return (data || []).map(rowToClient);
+}
+
+export const mesClients = hasSupabase ? mesClientsSupabase : mesClientsDemo;
+
+async function enregistrerClientDemo(valeurs, id) {
+  const monPro = Object.keys(demoPros)[0];
+  if (id) {
+    const deja = initialClients.find((c) => String(c.id) === String(id));
+    if (!deja) throw new Error("Cette fiche n'existe plus.");
+    Object.assign(deja, valeurs, { modifieLe: new Date().toISOString() });
+    return { ...deja };
+  }
+  const neuf = {
+    id: `cl-demo-${Date.now()}`,
+    proId: monPro,
+    ...valeurs,
+    archive: false,
+    creeLe: new Date().toISOString(),
+    modifieLe: new Date().toISOString(),
+  };
+  initialClients.push(neuf);
+  return { ...neuf };
+}
+
+/**
+ * CRÉER OU MODIFIER UNE FICHE.
+ *
+ * `valeurs` sort de `validerClient()` (`src/lib/clients.js`), qui a déjà
+ * vidé le SIRET d'un particulier et refusé ce qui ne pouvait pas partir.
+ * Les contraintes de la section 41 restent le garde-fou de ce qui
+ * n'entrerait pas par l'écran.
+ *
+ * On n'envoie PAS `modifie_le` : c'est la base qui la pose, avec
+ * `clock_timestamp()`. L'horloge d'un téléphone peut mentir, et c'est le
+ * seul service que rend cette colonne. Même règle que `recit_ecrit_le`.
+ */
+async function enregistrerClientSupabase(valeurs, id) {
+  const ligne = clientVersBase(valeurs);
+  if (id) {
+    const { data, error } = await supabase.from('clients')
+      .update(ligne).eq('id', id).eq('pro_id', currentUserId)
+      .select().single();
+    if (error) throw error;
+    return rowToClient(data);
+  }
+  const { data, error } = await supabase.from('clients')
+    .insert({ ...ligne, pro_id: currentUserId })
+    .select().single();
+  if (error) throw error;
+  return rowToClient(data);
+}
+
+export const enregistrerClient = hasSupabase
+  ? enregistrerClientSupabase
+  : enregistrerClientDemo;
+
+async function archiverClientDemo(id, archive) {
+  const c = initialClients.find((x) => String(x.id) === String(id));
+  if (!c) throw new Error("Cette fiche n'existe plus.");
+  c.archive = Boolean(archive);
+  c.modifieLe = new Date().toISOString();
+  return { ...c };
+}
+
+/**
+ * ARCHIVER, et le défaire.
+ *
+ * Un client archivé n'est PAS supprimé : ses devis et ses factures devront
+ * continuer de le nommer. Et le geste se défait — un appui par erreur ne
+ * doit pas enterrer une fiche, c'est la leçon du bouton « Terminer » d'un
+ * chantier (lot E).
+ */
+async function archiverClientSupabase(id, archive) {
+  const { data, error } = await supabase.from('clients')
+    .update({ archive: Boolean(archive) }).eq('id', id).eq('pro_id', currentUserId)
+    .select().single();
+  if (error) throw error;
+  return rowToClient(data);
+}
+
+export const archiverClient = hasSupabase ? archiverClientSupabase : archiverClientDemo;
+
+async function supprimerClientDemo(id) {
+  const i = initialClients.findIndex((x) => String(x.id) === String(id));
+  if (i >= 0) initialClients.splice(i, 1);
+  return true;
+}
+
+/**
+ * SUPPRIMER UNE FICHE — et pourquoi c'est permis.
+ *
+ * La politique « mes clients » est `for all`, donc elle ouvre bien la
+ * porte du `delete`. Ce fichier porte trois cicatrices de `for all` (le
+ * badge décerné à l'INSERT, la fiche pro qui emportait ses avis, la ligne
+ * `users` qui sautait tout le ménage de compte) : les trois fois, la porte
+ * donnait sur quelque chose qui ENGAGEAIT QUELQU'UN D'AUTRE.
+ *
+ * Ici, non. Une faute de frappe doit pouvoir partir, et un client qui
+ * demande à être oublié doit pouvoir l'être — c'est la façon dont le droit
+ * à l'effacement s'exerce, et non une façon de le contourner.
+ *
+ * Le jour où une facture pointera ce client, c'est sa clé étrangère qui
+ * refusera la suppression, et ce sera la bonne raison : la loi impose de
+ * conserver dix ans une facture avec l'identité de son destinataire.
+ */
+async function supprimerClientSupabase(id) {
+  const { error } = await supabase.from('clients')
+    .delete().eq('id', id).eq('pro_id', currentUserId);
+  if (error) throw error;
+  return true;
+}
+
+export const supprimerClient = hasSupabase ? supprimerClientSupabase : supprimerClientDemo;
 
 /**
  * ENREGISTRER LES PUBLICATIONS QU'ON VIENT DE REGARDER.

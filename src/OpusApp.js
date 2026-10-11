@@ -31,6 +31,7 @@ import SqueletteFil from './components/Squelette';
 import ProfilOwnScreen from './screens/ProfilOwnScreen';
 import ProfilProScreen from './screens/ProfilProScreen';
 import ChantierScreen from './screens/ChantierScreen';
+import ClientsScreen from './screens/ClientsScreen';
 import NouveauChantier from './components/NouveauChantier';
 import { destinationNotif } from './lib/notifications';
 import ProfilPublicScreen from './screens/ProfilPublicScreen';
@@ -62,12 +63,14 @@ import {
 } from './lib/cloudinary';
 import { aiMatchPros, aiRecitChantier, surTravailAgent } from './lib/ai';
 import { doitProposerLeNom, nomAgent } from './lib/agent';
+import { clientDepuisDemande } from './lib/clients';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeuilleRecherche from './components/FeuilleRecherche';
 import FenetreAgent from './components/FenetreAgent';
+import FicheClient from './components/FicheClient';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
 } from './lib/filtre-fil';
@@ -2817,6 +2820,123 @@ export default function OpusApp() {
   /** Le nom tel qu'on l'écrit dans une phrase : le sien, ou « votre agent ». */
   const nomDeMonAgent = nomAgent(maFichePro ? maFichePro.agentNom : null);
 
+  /* ================================================================== */
+  /*  LE CARNET DE CLIENTS — section 41                                  */
+  /*                                                                     */
+  /*  IL NE SE CHARGE PAS AU DÉMARRAGE, et c'est voulu : la règle du fil  */
+  /*  — on ne télécharge pas ce qu'on n'a pas demandé. Un carnet ne sert  */
+  /*  qu'à qui l'ouvre, et le chemin critique du démarrage est ce qui a   */
+  /*  bloqué l'iPhone plusieurs secondes le 29/09.                       */
+  /*                                                                     */
+  /*  Les crochets sont ICI, c'est-à-dire AVANT les deux sorties          */
+  /*  anticipées de ce composant (`if (demarrage)` et `if (!userType)`).  */
+  /*  Un `useState` posé en dessous ferait que React n'appelle plus le    */
+  /*  même nombre de crochets d'un rendu à l'autre — l'écran casserait au */
+  /*  moment précis où les données arrivent (constaté le 05/10).         */
+  /* ================================================================== */
+  const [clients, setClients] = useState([]);
+  const [clientsEtat, setClientsEtat] = useState('vide');
+  /* `null` = fermée. `{ fiche, depuis }` = ouverte, soit sur une fiche
+     existante, soit vierge avec ce qu'une demande reçue savait déjà. */
+  const [ficheClient, setFicheClient] = useState(null);
+  /* UNE CLÉ QUI CHANGE À CHAQUE OUVERTURE. Le formulaire lit son état de
+     départ au MONTAGE ; sans cette clé, ouvrir une deuxième fiche
+     afficherait la première. C'est le piège de `defaut` sur `ChampLocal`,
+     rencontré au lot I avec le brouillon du récit. */
+  const [cleFiche, setCleFiche] = useState(0);
+
+  const chargerClients = async () => {
+    setClientsEtat('chargement');
+    try {
+      const liste = await api.mesClients();
+      setClients(liste || []);
+      setClientsEtat('ok');
+    } catch (e) {
+      setClientsEtat('echec');
+      showErreur(messageClair(e, "Votre carnet de clients n'a pas pu être lu"));
+    }
+  };
+
+  const ouvrirCarnet = () => {
+    setScreen('clients');
+    if (clientsEtat === 'vide') chargerClients();
+  };
+
+  const ouvrirFicheClient = (fiche = null, depuis = null) => {
+    setCleFiche((k) => k + 1);
+    setFicheClient({ fiche, depuis });
+    /* On peut arriver ici sans être passé par le carnet — depuis une
+       demande reçue. L'avertissement « vous avez déjà un client de ce
+       nom » a besoin de la liste : on la demande, et son absence ne
+       bloque rien. */
+    if (clientsEtat === 'vide') chargerClients();
+  };
+
+  /** Remplace une fiche dans la liste, ou l'ajoute. Une seule porte :
+   *  deux endroits qui rangeraient la même fiche finiraient par se
+   *  contredire (la leçon des voyants du 04/10). */
+  const rangerClient = (fiche) => setClients((liste) => {
+    const i = liste.findIndex((c) => String(c.id) === String(fiche.id));
+    if (i < 0) return [...liste, fiche];
+    const copie = liste.slice();
+    copie[i] = fiche;
+    return copie;
+  });
+
+  const enregistrerFicheClient = async (valeurs, id) => {
+    try {
+      const pose = await api.enregistrerClient(valeurs, id);
+      rangerClient(pose);
+      setFicheClient(null);
+      showBanner(id
+        ? `La fiche de ${pose.nom} est à jour.`
+        : `${pose.nom} est dans votre carnet.`);
+    } catch (e) {
+      showErreur(messageClair(e, "Cette fiche n'a pas pu être enregistrée"));
+    }
+  };
+
+  const archiverFicheClient = async (fiche, archive) => {
+    try {
+      const pose = await api.archiverClient(fiche.id, archive);
+      rangerClient(pose);
+      setFicheClient(null);
+      showBanner(archive
+        ? `${pose.nom} est archivé.`
+        : `${pose.nom} est revenu dans votre liste.`);
+    } catch (e) {
+      showErreur(messageClair(e, "Cette fiche n'a pas pu être archivée"));
+    }
+  };
+
+  const supprimerFicheClient = async (fiche) => {
+    try {
+      await api.supprimerClient(fiche.id);
+      setClients((liste) => liste.filter((c) => String(c.id) !== String(fiche.id)));
+      setFicheClient(null);
+      showBanner('La fiche a été supprimée.');
+    } catch (e) {
+      showErreur(messageClair(e, "Cette fiche n'a pas pu être supprimée"));
+    }
+  };
+
+  /**
+   * AJOUTER À MES CLIENTS, DEPUIS UNE DEMANDE REÇUE.
+   *
+   * C'est ce qui remplace le lien vers un compte Opus que la section 41 a
+   * refusé d'écrire : au lieu d'une colonne que personne ne lirait, un
+   * geste qui PRÉ-REMPLIT le formulaire avec ce que le client a lui-même
+   * écrit dans sa demande.
+   *
+   * On n'ouvre PAS le carnet au passage : le formulaire est une fenêtre
+   * plein écran, donc on la referme et on est toujours devant sa demande.
+   * Changer d'écran sous le doigt de quelqu'un qui n'a rien demandé est
+   * désagréable, et il faudrait ensuite revenir.
+   */
+  const ajouterClientDepuisDemande = (demande) => {
+    ouvrirFicheClient(null, clientDepuisDemande(demande));
+  };
+
   const nommerMonAgent = async (nom) => {
     const pose = await api.nommerAgent(nom);
     /* On range le nom dans `pros` tout de suite : sans ça, la fenêtre se
@@ -2993,6 +3113,7 @@ export default function OpusApp() {
     || screen === 'profilEdit' || screen === 'profilPublic'
     || screen === 'mesPublications' || screen === 'gererPortfolio'
     || screen === 'confidentialite' || screen === 'legal' || screen === 'admin'
+    || screen === 'clients'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'publication' ? 'Publication'
@@ -3005,6 +3126,7 @@ export default function OpusApp() {
     : screen === 'gererPortfolio' ? 'Organiser mes réalisations'
     : screen === 'confidentialite' ? 'Confidentialité et sécurité'
     : screen === 'admin' ? 'Administration'
+    : screen === 'clients' ? 'Mes clients'
     : screen === 'legal' ? (TITRES_LEGAUX[texteLegal] || 'Informations légales')
     : screen === 'creer' ? 'Publier'
     : activeConv && activeConv.contact ? activeConv.contact.titre : '';
@@ -3028,6 +3150,7 @@ export default function OpusApp() {
             else if (screen === 'legal') setScreen('confidentialite');
             else if (screen === 'profilEdit' || screen === 'mesPublications'
                      || screen === 'gererPortfolio' || screen === 'admin'
+                     || screen === 'clients'
                      || screen === 'confidentialite') setScreen('profil');
             else setScreen('home');
           }}
@@ -3222,6 +3345,10 @@ export default function OpusApp() {
                            annonçait « aucune demande » quand il n'avait rien
                            pu lire. Corrigé le 04/10/2026. */
                         echec={demandesRecuesEtat === 'echec'}
+                        /* Le carnet de clients (section 41) : le formulaire
+                           s'ouvre PAR-DESSUS cette page, pré-rempli, et on
+                           revient ici en le fermant. */
+                        onAjouterClient={ajouterClientDepuisDemande}
                         onReessayer={() => chargerDemandesRecues()}
                         onRepondre={repondreDemandeRecue}
                         onAppeler={appeler}
@@ -3404,6 +3531,9 @@ export default function OpusApp() {
             onViewProfile={viewProfile}
             onEdit={() => setScreen('profilEdit')}
             onMesPublications={() => setScreen('mesPublications')}
+            /* Un particulier n'a pas de clients : la rangée n'existe pas
+               pour lui (la règle du §3 appliquée à l'écran). */
+            onClients={canPublish ? ouvrirCarnet : null}
             onGererPortfolio={() => setScreen('gererPortfolio')}
             nbPublications={mesPublications.length}
             onConfidentialite={() => setScreen('confidentialite')}
@@ -3441,6 +3571,17 @@ export default function OpusApp() {
           <AdminScreen
             onRafraichirResume={chargerResumeAdmin}
             onErreur={showErreur}
+          />
+        )}
+
+        {screen === 'clients' && (
+          <ClientsScreen
+            clients={clients}
+            chargement={clientsEtat === 'chargement'}
+            echec={clientsEtat === 'echec'}
+            onRecharger={chargerClients}
+            onOuvrir={(c) => ouvrirFicheClient(c)}
+            onNouveau={() => ouvrirFicheClient(null)}
           />
         )}
 
@@ -3567,6 +3708,25 @@ export default function OpusApp() {
           onNommer={nommerMonAgent}
           onPlusTard={plusTardPourLAgent}
           onFermer={() => setRenommerAgent(false)}
+        />
+      )}
+
+      {/* LE FORMULAIRE EST ICI, et pas dans l'écran du carnet : il doit
+          pouvoir s'ouvrir depuis une demande reçue sans changer d'écran.
+          C'est une fenêtre plein écran, donc on la referme et on est
+          toujours là où on était. */}
+      {!!ficheClient && (
+        <FicheClient
+          key={`fiche-client-${cleFiche}`}
+          ouvert
+          fiche={ficheClient.fiche}
+          depuis={ficheClient.depuis}
+          tousLesClients={clients}
+          onFermer={() => setFicheClient(null)}
+          onEnregistrer={enregistrerFicheClient}
+          onArchiver={archiverFicheClient}
+          onSupprimer={supprimerFicheClient}
+          onOuvrirAutre={(autre) => ouvrirFicheClient(autre)}
         />
       )}
 

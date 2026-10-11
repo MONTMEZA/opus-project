@@ -158,7 +158,7 @@ verifier('…et `horaires_valides` en fait partie — c’est le cas d’école'
 
    Ce fichier ne peut pas interroger PostgreSQL. Il tient donc ce qui se
    lit, et la vraie preuve — `has_function_privilege` sur chacune — vit
-   dans `supabase/essais-section-42.sql`, qui tourne sur une base rejouée. */
+   dans `supabase/essais-section-43.sql`, qui tourne sur une base rejouée. */
 for (const f of [...gardiennes].sort()) {
   /* Le vrai invariant : RIEN ne doit retirer ce droit. Un `revoke` posé un
      jour sur une gardienne, et la règle qui l'appelle échoue au lieu de
@@ -199,7 +199,7 @@ console.log('\nLA VRAIE PREUVE EST EN SQL — ce fichier ne sait pas interroger 
      public.posts`) le laissait passer au VERT, puisque le texte y était
      toujours. Neuvième fois dans ce projet qu'un commentaire trompe un
      contrôle — et la première où c'est du SQL d'essai et non du code. */
-  const essais = readFileSync('supabase/essais-section-42.sql', 'utf8')
+  const essais = readFileSync('supabase/essais-section-43.sql', 'utf8')
     .replace(/^\s*--.*$/gm, '');
   verifier('les essais éprouvent les huit portes refermées',
     /has_function_privilege\('anon'/.test(essais)

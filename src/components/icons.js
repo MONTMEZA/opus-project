@@ -80,6 +80,14 @@ export const Lightbulb = mk(MaterialCommunityIcons, 'lightbulb-outline');
 export const Phone = mk(Feather, 'phone');
 export const FileText = mk(Feather, 'file-text');
 export const Users = mk(Feather, 'users');
+/* LE CARNET DE CLIENTS (section 41). `Building` distingue une entreprise
+   d'un particulier d'un seul regard, et `Archive` dit qu'une fiche sort de
+   la liste sans être supprimée — l'inverse de `Trash`, qui est définitif.
+   Les trois sont des icônes du projet : j'avais d'abord importé
+   `lucide-react-native`, qui n'est PAS une dépendance d'Opus. */
+export const Building = mk(MaterialCommunityIcons, 'office-building-outline');
+export const Archive = mk(Feather, 'archive');
+export const ArchiveRestore = mk(MaterialCommunityIcons, 'archive-arrow-up-outline');
 export const ShieldCheck = mk(MaterialCommunityIcons, 'shield-check');
 export const ShieldX = mk(MaterialCommunityIcons, 'shield-off');
 export const ClipboardCheck = mk(MaterialCommunityIcons, 'clipboard-check-outline');
