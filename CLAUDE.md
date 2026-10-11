@@ -6243,17 +6243,48 @@ session :
 | l'export RGPD | la clé `clients_de_mon_entreprise`, **2 fiches** |
 | après suppression des comptes | **0 client**, base revenue à 13 / 7 / 20 / 2 |
 
+#### Le premier VRAI client — mesuré sans être lu
+
+Le propriétaire a enregistré un client le soir même : « j'ai créé un client
+et ça fonctionne ». La vraie base en compte donc **1**, et c'est une
+personne qui n'a pas de compte Opus, qui n'a rien accepté, et qui ne saura
+jamais que cette ligne existe. C'est toute la prémisse de la section 41, et
+ça change la façon de vérifier :
+
+> **On interroge la FORME de la ligne, jamais son contenu.** Aucune requête
+> de ce projet n'a à rendre le nom, le numéro ou l'adresse d'un client.
+> `char_length(nom)`, `siret is null`, `email = lower(email)` répondent à
+> toutes les questions qu'on se pose vraiment — et ne laissent rien de cette
+> personne dans une conversation de travail.
+
+Relevé ainsi, les garanties du lot tiennent sur une ligne écrite par la
+vraie application, et pas par un essai :
+
+| | relevé |
+|---|---|
+| le type | `particulier` |
+| le nom | 17 caractères, **déjà rogné** |
+| le SIRET | **`null`** — le déclencheur l'a vidé, comme pour un particulier |
+| téléphone · e-mail · adresse · ville | tous les quatre présents |
+| l'e-mail | **en minuscules** |
+| le code postal | cinq chiffres |
+| les notes | vides, donc `null` et non une chaîne blanche |
+| `modifie_le` | **26 ms après** `created_at` — posé par la BASE |
+
 #### Ce qui n'a PAS été vérifié
 
-- **Rien de tout cela sur un vrai iPhone**, et en particulier le clavier
-  sous les neuf champs du formulaire : il n'y en a pas dans ce navigateur.
+- **Sur quel appareil il a essayé.** Il a écrit « j'ai créé un client et ça
+  fonctionne » sans le dire ; aux lots précédents il précisait « j'ai testé
+  sur mon iPhone ». **Le clavier sous les neuf champs du formulaire reste
+  donc à confirmer** — il n'y en a pas dans ce navigateur, et c'est la seule
+  chose de ce lot qui ne se mesure pas ici. On le DEMANDE plutôt que de le
+  supposer : une ligne écrite en base ne dit pas d'où elle vient.
 - **La bascule Particulier / Entreprise mesure 73 × 38**, pas 44 :
   `PillToggle` atteint les 44 points par `hitSlop`, que `react-native-web`
   ignore. C'est le cas déjà relevé au lot I pour `BtnMini` — ça se touche
   bien au doigt, mais ça se dit plutôt que ça se suppose.
-- **Aucun artisan réel n'a encore de client** : la vraie base en compte
-  **0**. Le jour où il y en aura soixante, la liste et sa recherche se
-  jugeront à nouveau.
+- **Le carnet n'en contient qu'UN.** Le jour où il y en aura soixante, la
+  liste, sa recherche et l'avertissement de doublon se jugeront à nouveau.
 - **Le contrat de sous-traitance n'existe pas**, et c'est le seul point du
   lot qui n'appartient pas au code. `verifier-legal` refuse une mise en
   ligne publique tant que `EDITEUR.contratSousTraitance` est à `false`.
