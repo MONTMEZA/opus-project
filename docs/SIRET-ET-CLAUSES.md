@@ -12,9 +12,17 @@
 >    s'il clique sur la petite loupe il peut la lire, et un petit texte lui
 >    explique à quoi elle sert. »**
 >
+> Puis, le même jour, **une troisième décision qui prolonge la première et la
+> durcit** : *« si le numéro de SIRET ne correspond à rien, on ne peut pas lui
+> créer de compte — c'est ce qui va dire qu'Opus valide ses artisans »*. Elle est
+> traitée au **§8**, et elle rebouche un trou qui est OUVERT aujourd'hui : sur
+> les cinq fiches de la vraie base qui portent un SIRET, **aucune ne désigne une
+> entreprise réelle**, et trois portent le badge « vérifié ».
+>
 > Ce document est la réponse : trois recherches, une contre-expertise chargée de
 > les réfuter, et mes propres mesures. **Aucun code n'a été écrit.** Il complète
-> `docs/PLAN-DEVIS.md`, qu'il amende sur deux points nommés au §6.
+> `docs/PLAN-DEVIS.md`, qu'il amende sur deux points nommés au §6, et le §8 en
+> déplace le lot 0.
 
 ---
 
@@ -825,3 +833,377 @@ et celui des **codes de forme juridique retirés** de la nomenclature (un artisa
 installé en 2015 peut porter un code que la liste de 2022 ne sait plus nommer, d'où
 le repli « code inconnu »). Les deux ont été coupés par le mandataire du conteneur,
 qui interrompt environ une connexion sur deux vers ces services.
+
+---
+
+# 8. LA DÉCISION DU 12/10/2026 — le SIRET devient la CONDITION d'inscription
+
+Vos mots, et je les garde entiers parce que c'est une décision de produit, pas
+une préférence d'écran :
+
+> « non je ne suis pas aderent. je comprend quand tu dit que je n'est pas de
+> siret etc mais il faut créé opus dans le sens ou tous les artisans qui vont
+> s'inscrire serons eux bien imatriculer (est justement en allant recuperer leur
+> inforamation sur leur societe et la condition pour s'inscrire en tant que
+> profesionel, si le numero de siret ne corepond a rien on ne peut pas lui créé
+> de compte c'est ce qui va dire que opus valide cest artisan. quand on recupere
+> les information je veut que sa remplis automatiquement tous les champs ou les
+> information sont demander il ne peut pa modifer sont numero de siret etc est
+> avec le code ape on peut deja bloquer le metier principal de l'artisan »
+
+Quatre décisions là-dedans. **Trois sont bonnes et je les construis telles
+quelles. La quatrième — l'APE qui bloque le métier — enfermerait de vrais
+artisans hors de leur propre métier**, et c'est mesuré plus bas, pas supposé.
+
+## 8.1 Votre décision ne prépare pas l'avenir : elle rebouche un trou OUVERT
+
+C'est le point que je n'avais pas vu avant de le mesurer, et il change
+l'urgence du lot. Relevé sur VOTRE base le 12/10 :
+
+| | |
+|---|---|
+| fiches professionnelles | **7** |
+| qui portent un SIRET | **7** (dont 2 une chaîne **vide**, pas `null`) |
+| donc avec un SIRET écrit | **5** |
+| …dont le SIREN existe dans SIRENE | **0 sur 5** |
+| …qui portent le badge **vérifié** | **3** |
+
+Les cinq ont été croisés un par un avec le registre, puis une seconde fois sur
+le SIREN seul (les neuf premiers chiffres) au cas où seul l'établissement
+aurait été faux. **Dix recherches, zéro résultat.** Et pour prouver que ce zéro
+n'est pas une panne du conteneur, le même protocole, dans la même minute, sur
+un SIRET réel : **1 résultat**.
+
+L'un des cinq est `812 345 678 00019`. Comptez les chiffres : 8-1-2-3-4-5-6-7-8.
+
+> **Opus affiche donc aujourd'hui trois badges « vérifié » — qui attestent une
+> ENTREPRISE, c'est écrit dans CLAUDE.md — sur des numéros qui ne désignent
+> aucune entreprise.** C'est exactement le défaut que ce projet traque depuis
+> le 01/10 : une promesse que rien ne tient. Le badge dit « nous avons
+> contrôlé », et rien n'a jamais été contrôlé.
+
+Ce sont des fiches de mise au point, pas des artisans qui vous ont menti —
+elles ont été créées pendant le développement. Mais elles prouvent la chose
+qui compte : **le champ SIRET est aujourd'hui un champ de texte libre, et rien
+dans Opus ne le confronte à quoi que ce soit.** Le premier artisan qui tape
+quatorze chiffres au hasard obtient la même fiche qu'un artisan immatriculé.
+
+Et la colonne elle-même est en l'état :
+
+| | |
+|---|---|
+| format rangé | `123 456 789 00012` — **17 caractères, espaces comprises** |
+| contrainte en base | **aucune** sur le SIRET de `professional_profiles` |
+| chaînes vides | **2**, là où le reste du projet range `null` |
+
+À comparer avec le carnet de clients, écrit la veille : `client_siret_check`
+impose quatorze chiffres, et le déclencheur retire les espaces avant de ranger.
+**La fiche de l'artisan est moins exigeante sur son propre SIRET que sur celui
+de ses clients.**
+
+## 8.2 « si le numéro ne correspond à rien, on ne peut pas lui créer de compte »
+
+Buildable, et la recherche est **exacte** — mesuré :
+
+| | |
+|---|---|
+| recherche sur un SIRET à 14 chiffres | **`total_results: 1`** |
+| l'établissement rendu | celui du SIRET demandé, et lui seul |
+| le service | `recherche-entreprises.api.gouv.fr`, **ouvert, sans clé** |
+
+Donc le mécanisme est franc : quatorze chiffres entrent, une entreprise sort,
+ou rien ne sort. Pas d'approximation, pas de score à interpréter — contrairement
+à la Base Adresse, qui rend « 4 Rue des Acacias » quand on lui demande « 4 rue
+des Lilas » (section 4 du plan devis).
+
+**Mais « correspond à rien » a trois formes, et une seule est celle que vous
+avez en tête.**
+
+### Forme 1 — le numéro ne désigne aucune entreprise. On refuse.
+
+C'est votre cas, et il ne pose aucun problème.
+
+### Forme 2 — le numéro désigne une entreprise RADIÉE. Il FAUT la refuser aussi.
+
+Et ça, il faut le savoir, parce que l'API ne le fait pas pour vous :
+
+| | |
+|---|---|
+| entreprises **cessées** en 43.99C que l'API rend volontiers | **plus de 10 000** |
+| la plus ancienne vue dans l'échantillon | cessée, créée en **2011** |
+| le champ qui le dit | `etat_administratif` = `C` au lieu de `A` |
+
+> **Un SIRET radié en 2011 passerait votre condition.** Il « correspond » à
+> quelque chose : à une entreprise qui n'existe plus. Sans le test de
+> `etat_administratif`, Opus décernerait son badge le plus fort à une
+> entreprise fermée depuis quinze ans — et le ferait avec la bonne foi d'un
+> contrôle réussi.
+
+C'est une ligne de code. Mais c'est une ligne qu'on n'écrit pas si on ne sait
+pas que le registre garde ses morts.
+
+### Forme 3 — l'entreprise existe, est active, et le registre REFUSE de la décrire
+
+C'est le cas qui me gêne, et **je n'ai pas réussi à en fabriquer un** : sur les
+cinquante entreprises interrogées, y compris en demandant explicitement les non
+diffusibles et en me limitant aux entrepreneurs individuels — qui sont
+justement votre population —, **les cinquante sont diffusibles**
+(`statut_diffusion: 'O'`).
+
+> Donc je ne peux pas vous dire ce qu'Opus verrait d'une entreprise non
+> diffusible. Ce que je sais, c'est que le droit permet à une personne physique
+> de demander à ne pas être diffusée, et que le champ existe dans l'API — donc
+> le cas existe. **Un artisan parfaitement immatriculé, qui a exercé ce droit,
+> se verrait refuser son compte**, et le message d'erreur lui dirait que son
+> numéro ne correspond à rien. Ce serait faux, et il n'aurait aucun recours.
+
+La parade ne coûte rien et ne dépend pas de la mesure : **le refus doit nommer
+sa cause**. « Ce numéro ne figure pas au registre » et « ce numéro existe mais
+le registre ne le publie pas » ne sont pas la même phrase, et la seconde doit
+offrir une porte — un envoi de Kbis à la main, qui est de toute façon la file
+du back-office déjà construite en section 25.
+
+### Et une quatrième forme, que je n'ai pas pu mesurer du tout
+
+**Le délai.** Un artisan qui s'immatricule un lundi apparaît-il dans l'API le
+mardi ? J'ai essayé de le mesurer et **les filtres de date de l'API sont
+ignorés** : en demandant les entreprises créées après le 01/09/2026, elle m'a
+rendu des entreprises de 1990. Je n'ai donc aucun chiffre.
+
+> **Pourquoi ça compte quand même** : le moment où un artisan cherche un outil
+> de gestion, c'est la semaine où il s'installe. Si le registre met trois
+> semaines, Opus refuse ses inscrits les plus motivés, à l'heure exacte où ils
+> sont motivés. La porte du Kbis à la main est la même que pour la forme 3 —
+> **une seule porte pour les deux**, et c'est une raison de plus de la poser.
+
+## 8.3 « ça remplit automatiquement tous les champs » — oui, et sept champs arrivent
+
+Mesuré sur une entreprise réelle de maçonnerie, les champs qui remplissent
+vraiment un formulaire :
+
+| le champ Opus | ce que le registre donne | relevé |
+|---|---|---|
+| entreprise | `nom_raison_sociale` | `LSR MACONNERIE` |
+| forme juridique | `nature_juridique` | `5499` → un **code**, pas un nom |
+| adresse du siège | `siege` | complète, avec la commune |
+| ville + code postal | `siege.libelle_commune` | `MALLEMORT` |
+| année de création | `date_creation` | `2022-04-04` |
+| TVA intracommunautaire | `tva` | `["FR29912517935"]` |
+| code APE | `activite_principale` | `43.99C` |
+
+Trois choses à savoir avant de brancher ça sur un formulaire, et les trois sont
+déjà dans les sections 1 et 2 de ce document — je les rappelle parce que votre
+décision les rend obligatoires plutôt qu'optionnelles :
+
+1. **`nature_juridique` est un code numérique**, pas « SARL ». Il faut la table
+   de correspondance, et elle doit avoir un repli — un artisan installé en 2015
+   peut porter un code que la nomenclature d'aujourd'hui ne nomme plus.
+2. **`tva` est une LISTE, et elle peut être vide** — 5 entreprises sur 25 n'ont
+   aucun numéro. C'est la correction que je vous ai dû en section 2 : j'avais
+   écrit que ce numéro était calculé donc toujours présent, et c'était faux.
+   Une liste vide **ne prouve pas** la franchise de TVA, elle ne prouve rien.
+3. **Pour un entrepreneur individuel, le nom de l'entreprise est le nom de la
+   personne.** Mesuré : `nom_complet` = `DAMIEN CHEMIN`. C'est juste
+   légalement, mais ça veut dire que le champ « entreprise » d'Opus affichera
+   un nom civil, et qu'il ne faut pas s'en étonner.
+
+## 8.4 « il ne peut pas modifier son numéro de SIRET » — oui pour le SIRET, NON pour le reste
+
+Votre instinct est juste, et il tient à une propriété du SIRET que les autres
+champs n'ont pas :
+
+> **Un SIRET ne change jamais.** Il est attribué une fois, il meurt avec
+> l'établissement. Le figer, c'est figer un fait.
+>
+> **L'adresse du siège, elle, change.** Un artisan déménage. Et une adresse
+> figée se retrouverait imprimée sur un devis, c'est-à-dire sur un document qui
+> engage — avec la mauvaise adresse, verrouillée, sans moyen de la corriger.
+
+C'est la même distinction que le projet tient déjà pour le badge : `verifie`,
+`kbis_valide`, `assurance_valide` sont verrouillés par un déclencheur parce
+qu'un humain les valide ; le téléphone et l'e-mail professionnel sont libres
+parce qu'ils appartiennent à l'artisan.
+
+| champ | verrouillé ? | pourquoi |
+|---|---|---|
+| **SIRET** | **oui, pour toujours** | ne change jamais ; c'est la preuve |
+| forme juridique | oui | change par un acte, pas par une humeur |
+| année de création | oui | c'est une date passée |
+| TVA intracommunautaire | oui | attribué par la DGFiP |
+| **adresse du siège** | **non** — préremplie, corrigeable | elle part sur un devis |
+| **nom commercial** | **non** | « LSR MACONNERIE » au registre, « LSR » sur le camion |
+| **métiers** | **non** — voir 8.5 | |
+
+Et le verrou se tient par un **déclencheur**, pas par l'écran : c'est la règle
+du projet depuis le 29/09 — « toute colonne qu'un humain doit valider se
+protège par un déclencheur ». Un écran qui grise un champ ne protège rien, la
+clé publiable est dans le paquet de l'application.
+
+## 8.5 LE SEUL POINT QUE JE REFUSE : l'APE ne peut PAS bloquer le métier
+
+Vous écrivez « avec le code ape on peut deja bloquer le metier principal de
+l'artisan ». **Le mot « bloquer » est celui qui fait tout le mal** — et voici
+ce que j'ai mesuré avant de vous répondre.
+
+### Un seul code APE couvre des métiers qui n'ont rien à voir
+
+`43.99C`, le code de l'entreprise de maçonnerie que j'ai prise en exemple.
+Vingt-cinq entreprises qui le portent, prises dans le registre :
+
+```
+SPIE BATIGNOLLES NORD                    → entreprise générale
+RAMERY GENIE CIVIL                       → génie civil
+ALTRAD COFFRAGE ET ETAIEMENT             → coffrage
+ALUMINIUM BOIS PVC MENUISERIE DUNOISE    → MENUISERIE
+CHARPENTIER P M                          → charpente
+TECHNISOL                                → sols
+LSR MACONNERIE                           → maçonnerie
+```
+
+> **Une menuiserie et un terrassier partagent le code d'un maçon.** Bloquer le
+> métier sur ce code, c'est écrire « maçon » sur la fiche d'`ALUMINIUM BOIS PVC
+> MENUISERIE DUNOISE` et lui interdire de le corriger. Le catalogue d'Opus
+> compte **six métiers** dans la seule catégorie gros œuvre — `macon`,
+> `maconnerie-generale`, `macon-patrimoine`, `coffreur-bancheur`,
+> `ferrailleur`, `tailleur-pierre` — et ce code ne sait pas les distinguer.
+
+### Et pour certains métiers, le code est carrément dispersé
+
+Mesuré en interrogeant le registre sur huit métiers, puis en comptant les codes
+APE distincts des vingt-cinq premières entreprises de chaque réponse :
+
+| métier cherché | codes APE distincts sur 25 entreprises | le plus fréquent |
+|---|---|---|
+| architecte | **1** | 71.11Z × 25 |
+| électricien | 4 | 43.21A × 22 |
+| carreleur | 4 | 43.33Z × 21 |
+| plaquiste | 5 | 43.31Z × 21 |
+| plombier | 6 | 43.22A × 19 |
+| menuisier | 7 | 43.32A × 13 |
+| **peintre** | **19** | 46.73B × 4 |
+| **couvreur** | **18** | 43.91B × 4 |
+
+(Le protocole a un biais que je dois dire : une recherche sur le mot
+« couvreur » attrape aussi des sociétés civiles immobilières dont le gérant
+s'appelle Couvreur. Mais le biais ne sauve pas la conclusion : même en
+cherchant « couvreur », le code de la couverture n'arrive qu'en tête avec
+4 occurrences sur 25.)
+
+> Pour un architecte, l'APE est une preuve. **Pour un couvreur, c'est une
+> rumeur.** Et c'est la moitié de votre population.
+
+### Trois raisons de plus, qui ne dépendent d'aucune mesure
+
+1. **Une entreprise a UN code APE. Opus autorise QUATRE métiers.** C'est écrit
+   dans le catalogue depuis le premier jour, et c'est juste : un maçon qui pose
+   aussi du carrelage est un cas normal, pas une fraude. Bloquer sur l'APE
+   ramène quatre à un.
+2. **L'APE est DÉCLARATIF.** Il est posé à l'immatriculation, d'après ce que
+   l'artisan a décrit ce jour-là, et il ne se met presque jamais à jour. Un
+   couvreur qui s'est installé comme auto-entrepreneur en peinture en 2019 et
+   qui fait des toitures depuis 2021 porte encore 43.34Z. Il n'a rien fait de
+   mal ; le registre est en retard, c'est tout.
+3. **Votre propre catalogue le dit déjà.** Les quinze catégories comptent
+   `conseil`, `etudes`, `mesure`, `conception` — 34 métiers sur 92 qui ne sont
+   pas du bâtiment au sens de la section F. Un courtier en assurance
+   construction est en 66.22Z. Si l'APE décide, il n'entre pas.
+
+### CE QUI MARCHE, et qui vous donne ce que vous cherchez
+
+Vous cherchez à ce qu'Opus ne soit pas rempli de gens qui se déclarent n'importe
+quoi. Le SIRET valide fait déjà **tout ce travail** : il prouve qu'il y a une
+entreprise réelle, active, immatriculée, derrière le compte. L'APE n'y ajoute
+rien sur ce plan.
+
+> **L'APE PROPOSE le métier, il ne le bloque pas.** Le sélecteur s'ouvre avec
+> `macon` déjà coché quand le code est 43.99C, avec la phrase « d'après votre
+> code d'activité — corrigez si ce n'est pas le bon ». L'artisan décoche en un
+> geste.
+>
+> Vous gagnez ce que vous voulez vraiment : **un formulaire déjà rempli**, et
+> dans la grande majorité des cas (électricien, plombier, carreleur, plaquiste,
+> architecte) la proposition sera juste du premier coup. Et vous ne payez pas
+> le prix que le blocage coûterait : **un couvreur qui ne peut pas déclarer
+> qu'il est couvreur abandonne l'inscription, et ne revient pas.**
+
+Et il reste une chose que l'APE sait faire sans risque, parce qu'elle ne ferme
+aucune porte : **compter**. Le jour où une fiche déclare `avocat` avec un code
+APE de maçonnerie, ça n'empêche rien, mais ça s'inscrit dans la file du
+back-office — à côté des Kbis. Un humain regarde. C'est exactement le niveau de
+confiance que mérite un champ déclaratif.
+
+## 8.6 Ce que ça fait au badge « vérifié » — deux niveaux, pas un
+
+Attention à ne pas écraser un mécanisme déjà construit. Aujourd'hui, `verifie`
+se déduit de `kbis_valide AND assurance_valide`, et un humain valide les deux
+pièces depuis le back-office. La règle du projet est formelle : **« le badge ne
+se décerne pas soi-même »**.
+
+Votre condition d'inscription ne remplace pas ça — et il ne faut surtout pas
+qu'elle le remplace :
+
+| | ce que ça prouve | qui le vérifie |
+|---|---|---|
+| **SIRET valide** (nouveau) | l'entreprise existe et est active | **la machine**, à l'inscription |
+| **badge vérifié** (existant) | les pièces ont été lues | **un humain**, après |
+
+> Un SIRET actif ne dit **rien** de l'assurance décennale. Et c'est la décennale
+> qui protège le client — c'est tout le sens du travail du 04/10 sur les pièces
+> justificatives par catégorie. Fusionner les deux niveaux donnerait un badge
+> « vérifié » à toute entreprise immatriculée, **c'est-à-dire à un maçon sans
+> assurance**.
+
+Ce que la condition change, en revanche, et c'est un vrai gain : **le
+back-office n'aura plus à vérifier que l'entreprise existe** — c'est fait. Il
+ne lui restera que la question qu'une machine ne sait pas trancher : est-ce que
+cette attestation d'assurance est authentique et à jour.
+
+## 8.7 Et les sept fiches qui sont déjà là
+
+Il n'y a pas de rattrapage possible, et c'est la même règle que
+`completerLieu()` : **on ne devine pas à la place de quelqu'un.** Les cinq
+SIRET inventés ne peuvent pas être corrigés par Opus — personne ne sait quel
+était le vrai.
+
+Ce qui peut se faire, et qui est honnête :
+
+1. **la condition s'applique aux inscriptions NOUVELLES.** Les comptes
+   existants continuent de fonctionner ;
+2. **les trois badges décernés sur un SIRET inexistant sont un vrai problème,
+   et il vous appartient** — ce sont des fiches de votre base. Soit elles sont
+   de mise au point et elles partent, soit elles sont réelles et le badge doit
+   être retiré jusqu'à contrôle. Je ne peux pas trancher ça : le connecteur
+   refuse les suppressions, et surtout ce n'est pas ma décision ;
+3. **un artisan existant qui enregistre son profil passe par la vérification**
+   — comme `completerLieu()` qui complète les coordonnées à l'enregistrement.
+   La base se corrige d'elle-même, au rythme où les gens s'en servent.
+
+## 8.8 Les quatre questions que cette décision ouvre
+
+1. **Un particulier s'inscrit-il toujours sans rien ?** Oui je suppose — la
+   condition ne vise que l'inscription « en tant que professionnel », c'est vos
+   mots. Mais il faut le confirmer : aujourd'hui le choix du type de compte est
+   un simple bouton, et rien n'empêche un artisan de cocher « particulier »
+   pour éviter le contrôle. Il n'aurait alors pas le droit de publier — donc ça
+   se tient.
+
+2. **Que fait Opus si le registre est INJOIGNABLE ?** La Base Adresse tombe
+   régulièrement, et la règle du projet est « l'échec ne bloque rien ». Ici
+   c'est l'inverse : si l'échec ne bloque pas, la condition ne vaut plus rien
+   le jour où le service est en panne. **Je propose qu'on refuse l'inscription
+   avec un message qui dit de réessayer** — mais c'est un choix dur, et il est
+   à vous.
+
+3. **Un artisan qui change d'entreprise** (il ferme son auto-entreprise, il
+   crée une SARL) a un NOUVEAU SIRET. Avec un SIRET verrouillé à vie, il doit
+   créer un second compte et perd ses avis, ses publications, ses chantiers.
+   Le vrai geste est un changement de SIRET **par le back-office**, avec
+   contrôle — mais ce n'est pas le lot d'aujourd'hui, et il faut savoir qu'on
+   le laisse de côté.
+
+4. **Est-ce que je construis ça avant les devis, ou après ?** Mon avis : **avant
+   l'écran du devis, et c'est même le nouveau lot 0.** Parce que les sept
+   champs qu'il remplit sont exactement ceux dont le devis a besoin pour
+   s'imprimer — la raison sociale, la forme juridique, le SIRET, l'adresse, la
+   TVA. Les faire taper à la main dans l'écran du devis, puis les remplacer
+   trois lots plus tard, c'est écrire deux fois le même écran.

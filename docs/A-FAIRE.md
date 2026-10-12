@@ -1494,6 +1494,7 @@ pour la même raison que le §4 n'a pas posé ses sept réglages d'un coup :
 | | module | §  | pourquoi là |
 |---|---|---|---|
 | 1 | **Clients** | 5, 12 | Rien ne tient sans lui : un devis s'adresse à quelqu'un, une facture aussi, un chantier appartient à un client. C'est la table que les trois suivantes attendent. |
+| **1 bis** | **Le SIRET à l'inscription** | 5 | **Décidé le 12/10 par le propriétaire** : un SIRET valide devient la CONDITION de l'inscription professionnelle, et il remplit les sept champs dont le devis a besoin pour s'imprimer. Il passe avant le devis parce que sinon on écrit deux fois le même écran. `docs/SIRET-ET-CLAUSES.md` §8. |
 | 2 | **Devis** | 9 | Le cœur du métier, et le premier document qui ENGAGE. Numérotation, TVA, mentions obligatoires, acceptation. |
 | 3 | **Factures** | 10 | Elles NAISSENT d'un devis accepté : les écrire avant obligerait à tout ressaisir. Facturation électronique obligatoire entre entreprises — à vérifier au moment de le construire, pas de mémoire. |
 | 4 | **Dashboard** | 8 | Il MONTRE ce que les trois précédents ont produit. Avant eux, il n'aurait rien à afficher — ce serait le « bouton §18 » à l'échelle d'un écran. |
