@@ -382,6 +382,57 @@ champs correspondants soient remplis. **À lancer avant toute mise en ligne.**
 L'autre geste qui n'appartient qu'à lui : activer la protection contre les
 mots de passe compromis dans Supabase → Authentication → Policies.
 
+#### L'adresse de contact appartenait à EDF (12/10/2026)
+
+Trouvé en préparant le SIRET à l'inscription, en cherchant par quelle porte un
+artisan refusé pourrait « contacter la plateforme ».
+`EDITEUR.email` valait **`contact@opus-project.fr`** depuis le 21/09, avec le
+commentaire « À VÉRIFIER : cette adresse doit exister et être relevée ».
+
+| relevé au registre du `.fr` | |
+|---|---|
+| titulaire de `opus-project.fr` | **ÉLECTRICITÉ DE FRANCE** |
+| enregistré le | 09/06/2008 |
+| prestataire | Nameshield, et des serveurs de noms `observatoiredesmarques.fr` |
+
+C'est un domaine de **surveillance de marque**. Personne n'aurait jamais relevé
+cette boîte, et personne n'aurait **pu**. Or l'adresse était affichée à **onze
+endroits** des textes légaux, dont celui-ci :
+
+> « Opposition et limitation : écrivez à … **Nous répondons sous un mois.** »
+
+> **Une promesse de réponse sur une adresse injoignable est écrite dans un
+> document qui engage.** C'est la famille du « X est prévenu » du 01/10, sauf
+> qu'ici le texte est opposable.
+
+**Et le contrôle passait au vert** : `verifier-legal` vérifiait
+`EDITEUR.email.includes('@')`. L'adresse était parfaitement bien formée.
+Dixième fois dans ce projet qu'un contrôle vérifie une **syntaxe** au lieu
+d'une **propriété** — et celle-ci ne se vérifie par aucun script : qu'une boîte
+existe et soit **relevée**, seul un humain le sait.
+
+> **D'où `EDITEUR.emailReleve`**, un drapeau sur le modèle
+> d'`identiteRemiseALHebergeur` et de `contratSousTraitance`. Le contrôle
+> refuse une adresse écrite sans que ce drapeau soit coché, refuse le drapeau
+> coché sans adresse, et **exige les deux dès que `STATUT` quitte `'essai'`**.
+
+Les onze usages passent désormais par **`ligneContact()`** et **`parEcrit()`** :
+sans adresse, le texte dit la vérité au lieu d'afficher un trou. Et le garde-fou
+mécanique est ailleurs — **le contrôle relit les textes ENGENDRÉS et refuse d'y
+trouver « null »**, ce qui attrape quiconque remettrait `${EDITEUR.email}` dans
+une phrase. Éprouvé en cassant ce qu'il surveille : six sabotages, les cinq qui
+devaient être refusés le sont.
+
+Ce que ça laisse ouvert, et qui n'appartient qu'à lui : **il a un nom de domaine
+et une marque déposée, mais aucune boîte aux lettres créée.** Tant qu'elle
+n'existe pas, deux droits RGPD — opposition et limitation — ne peuvent pas
+s'exercer par écrit, et les textes le **disent**. Les autres s'exercent déjà par
+un bouton : l'export, la rectification, la suppression de compte.
+
+> **Et c'est pour ça que la porte de secours du SIRET doit vivre DANS Opus** :
+> un formulaire qui dépose la demande dans la file du back-office ne dépend
+> d'aucune boîte aux lettres.
+
 ## Modération : ce qui ne se discute plus
 
 Une règle a été ajoutée au projet le jour où le blocage a été construit, et

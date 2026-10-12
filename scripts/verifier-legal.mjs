@@ -39,8 +39,62 @@ console.log('\nLes trois textes');
     blocs.length > 0 && blocs.every((b) => b.titre && b.texte && b.texte.trim().length > 20),
     (blocs.find((b) => !b.texte || b.texte.trim().length <= 20) || {}).titre);
 });
-verifier('une adresse de contact est donnée',
-  typeof EDITEUR.email === 'string' && EDITEUR.email.includes('@'), EDITEUR.email);
+/* ------------------------------------------------------------------ */
+/*  L'ADRESSE DE CONTACT — et le défaut du 12/10/2026                  */
+/*                                                                     */
+/*  Ce contrôle disait seulement : « il y a un @ ». Il est donc passé   */
+/*  au vert pendant des semaines sur `contact@opus-project.fr` — un     */
+/*  domaine qui appartient à ÉLECTRICITÉ DE FRANCE (vérifié au          */
+/*  registre du .fr). L'adresse était parfaitement bien formée, elle    */
+/*  était affichée à ONZE endroits des textes légaux, et personne       */
+/*  n'aurait jamais pu relever cette boîte.                            */
+/*                                                                     */
+/*  C'est la famille de défauts que ce projet connaît bien : un         */
+/*  contrôle qui vérifie une SYNTAXE au lieu d'une PROPRIÉTÉ. Qu'une    */
+/*  adresse existe et soit RELEVÉE, aucun script ne peut le savoir —    */
+/*  d'où un DRAPEAU que seul un humain coche, sur le modèle             */
+/*  d'`identiteRemiseALHebergeur` et de `contratSousTraitance`.         */
+/* ------------------------------------------------------------------ */
+const aUneAdresse = typeof EDITEUR.email === 'string' && /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(EDITEUR.email);
+
+verifier('si une adresse est écrite, elle est bien formée',
+  EDITEUR.email === null || aUneAdresse,
+  `email = ${JSON.stringify(EDITEUR.email)}`);
+
+verifier('une adresse écrite est confirmée RELEVÉE par un humain',
+  !aUneAdresse || EDITEUR.emailReleve === true,
+  'EDITEUR.email est renseigné mais emailReleve vaut false. Une adresse '
+  + 'publiée dans les textes légaux doit EXISTER et être relevée : c’est '
+  + 'par là qu’on exerce ses droits, et la confidentialité promet une '
+  + 'réponse sous un mois. Le 12/10/2026, l’adresse écrite ici était sur '
+  + 'un domaine appartenant à EDF.');
+
+verifier('le drapeau n’est pas coché sans adresse',
+  !(EDITEUR.emailReleve === true && !aUneAdresse),
+  'emailReleve vaut true alors qu’aucune adresse n’est écrite.');
+
+/* ET LE GARDE-FOU MÉCANIQUE : on relit les textes ENGENDRÉS. Une adresse
+   manquante ne doit jamais se voir à l'écran sous la forme d'un « null » —
+   c'est ce qui arriverait si quelqu'un remettait `${EDITEUR.email}` dans un
+   texte au lieu de passer par `ligneContact()` ou `parEcrit()`. */
+const TOUS_LES_TEXTES = [...MENTIONS, ...CGU, ...CONFIDENTIALITE];
+const TROUS = ['null', 'undefined', '[object'];
+const trouves = TOUS_LES_TEXTES
+  .flatMap((b) => TROUS.filter((t) => String(b.texte).includes(t)).map((t) => `${b.titre} → « ${t} »`));
+verifier('aucun texte légal n’affiche « null » ni « undefined »',
+  trouves.length === 0, trouves.join(' · '));
+
+/* Et dès qu'on quitte l'essai, l'adresse devient OBLIGATOIRE : la loi pour la
+   confiance dans l'économie numérique exige un moyen de contact, et le RGPD
+   une voie pour l'opposition et la limitation — les deux seuls droits qui ne
+   s'exercent pas par un bouton dans Opus. */
+if (STATUT !== 'essai') {
+  verifier('une adresse de contact est donnée (obligatoire hors essai)',
+    aUneAdresse && EDITEUR.emailReleve === true,
+    'Sans elle, les textes annoncent eux-mêmes que l’opposition et la '
+    + 'limitation ne peuvent pas s’exercer — ce qui est vrai, et ce qui ne '
+    + 'peut pas rester vrai une fois ouvert au public.');
+}
 
 console.log('\nCohérence avec le statut');
 verifier('« complet » et « ce qui manque » disent la même chose',

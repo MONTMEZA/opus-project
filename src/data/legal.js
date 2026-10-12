@@ -78,9 +78,32 @@ export const EDITEUR = {
   // Statuts 'micro' et 'societe'
   siren: null,             // SIREN (9 chiffres) ou SIRET (14)
   adresse: null,
-  // Toujours : c'est par là qu'on signale et qu'on exerce ses droits.
-  // À VÉRIFIER : cette adresse doit exister et être relevée.
-  email: 'contact@opus-project.fr',
+  /**
+   * L'ADRESSE DE CONTACT — et pourquoi elle est VIDE.
+   *
+   * Elle valait `contact@opus-project.fr` jusqu'au 12/10/2026. Ce domaine
+   * appartient à **ÉLECTRICITÉ DE FRANCE** : vérifié au registre du .fr,
+   * enregistré en 2008, géré par un prestataire de protection de marques.
+   * Personne n'aurait jamais relevé cette boîte, et personne n'aurait PU.
+   *
+   * Or cette adresse était affichée à ONZE endroits des textes légaux, dont
+   * « Opposition et limitation : écrivez à … Nous répondons sous un mois. »
+   * Une promesse de réponse sur une adresse injoignable, c'est le défaut que
+   * ce projet traque depuis le 01/10 — sauf qu'ici elle est écrite dans un
+   * document qui engage.
+   *
+   * Le propriétaire a un nom de domaine et une marque déposée, mais **aucune
+   * boîte aux lettres créée**. Tant qu'elle n'existe pas, le champ est `null`
+   * et les textes le DISENT, au lieu d'afficher une adresse morte.
+   */
+  email: null,
+  /**
+   * Et le drapeau qui va avec, sur le modèle d'`identiteRemiseALHebergeur` :
+   * une adresse écrite ici est PUBLIÉE. Elle doit donc exister ET être
+   * relevée, et ça, seul un humain le sait. `npm run verifier-legal` refuse
+   * une adresse posée sans que ce drapeau soit coché.
+   */
+  emailReleve: false,
   /**
    * Statut 'particulier' : la loi ne dispense d'afficher son identité que si
    * on l'a REMISE à l'hébergeur. Tant que ce n'est pas fait, la dispense ne
@@ -196,6 +219,69 @@ export function rappelStatut() {
 const ou = (valeur, defaut) => valeur || defaut;
 
 /* ------------------------------------------------------------------ */
+/*  L'ADRESSE DE CONTACT — ou la VÉRITÉ à sa place                     */
+/*                                                                     */
+/*  Le 12/10/2026, onze textes légaux affichaient une adresse sur un    */
+/*  domaine appartenant à ÉLECTRICITÉ DE FRANCE. Aucun de ces onze      */
+/*  endroits n'avait prévu qu'elle puisse manquer — alors que les       */
+/*  autres champs de l'éditeur passent tous par `ou()` depuis le        */
+/*  premier jour.                                                      */
+/*                                                                     */
+/*  D'où ces deux fonctions, et la règle qu'elles tiennent :           */
+/*                                                                     */
+/*    UN TEXTE LÉGAL N'AFFICHE JAMAIS « null », et il ne promet        */
+/*    jamais une réponse à une adresse qui n'existe pas.               */
+/*                                                                     */
+/*  `npm run verifier-legal` relit les textes ENGENDRÉS et refuse d'y  */
+/*  trouver « null » ou « undefined ».                                 */
+/* ------------------------------------------------------------------ */
+
+/** La ligne « Contact : … » des mentions légales. */
+function ligneContact() {
+  if (EDITEUR.email) return `Contact : ${EDITEUR.email}`;
+  if (STATUT === 'essai') {
+    return 'Contact : aucune adresse n’est publiée pour le moment — Opus '
+      + 'n’est pas ouverte au public. Elle le sera avant la première mise en '
+      + 'ligne, en même temps que l’identité de l’éditeur.';
+  }
+  return 'Contact : [à compléter : adresse de contact]';
+}
+
+/**
+ * Une phrase qui dit « écrivez à telle adresse ».
+ *
+ * Quand l'adresse manque, on ne laisse PAS un trou : on dit où aller à la
+ * place. Et il y a presque toujours un chemin DANS l'application — c'est
+ * d'ailleurs le meilleur, puisqu'il ne dépend d'aucune boîte aux lettres.
+ *
+ * @param avec  (adresse) => la phrase quand l'adresse existe
+ * @param sans  la phrase quand elle manque. Elle doit rester VRAIE : si
+ *              aucun chemin n'existe, elle le dit plutôt que de l'inventer.
+ */
+function parEcrit(avec, sans) {
+  return EDITEUR.email ? avec(EDITEUR.email) : sans;
+}
+
+/**
+ * « Pour toute question sur vos données : … » — à trois endroits de la
+ * politique de confidentialité, un par statut.
+ *
+ * Sans adresse, on ne se contente pas de retirer la phrase : on rappelle que
+ * l'essentiel des droits s'exerce DANS l'application, sans écrire à personne.
+ * C'est vrai depuis le 21/09 — l'export, la rectification et la suppression
+ * de compte sont trois boutons — et c'est même mieux qu'une adresse.
+ */
+function questionDonnees() {
+  return parEcrit(
+    (adresse) => `Pour toute question sur vos données : ${adresse}.`,
+    'Vos droits d’accès, de rectification et d’effacement s’exercent '
+      + 'directement dans l’application : Profil → Confidentialité et '
+      + 'sécurité. Aucune adresse de contact n’est encore publiée pour le '
+      + 'reste.',
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  1. MENTIONS LÉGALES                                                */
 /*                                                                     */
 /*  Elles changent AVEC LE STATUT. Une entreprise individuelle n'a ni   */
@@ -212,7 +298,7 @@ function blocEditeur() {
         + "invités.\n\nLes mentions légales complètes — identité de l'éditeur, "
         + 'numéro d’immatriculation, directeur de la publication — seront '
         + "renseignées avant la première mise en ligne publique.\n\n"
-        + `Contact : ${EDITEUR.email}`,
+        + ligneContact(),
     };
   }
 
@@ -224,7 +310,7 @@ function blocEditeur() {
         + 'confiance dans l’économie numérique, son identité n’est pas '
         + 'publiée ici : elle a été communiquée à l’hébergeur, qui la tient '
         + `à la disposition de l’autorité judiciaire.\n\n`
-        + `Contact : ${EDITEUR.email}`,
+        + ligneContact(),
     };
   }
 
@@ -235,7 +321,7 @@ function blocEditeur() {
         + `Entrepreneur individuel (micro-entreprise)\n`
         + `SIRET ${ou(EDITEUR.siren, '[à compléter]')}\n`
         + `${ou(EDITEUR.adresse, '[à compléter : adresse]')}\n`
-        + `Contact : ${EDITEUR.email}`,
+        + ligneContact(),
     };
   }
 
@@ -245,7 +331,7 @@ function blocEditeur() {
       + `${ou(EDITEUR.formeJuridique, '[à compléter : forme juridique]')}\n`
       + `SIREN ${ou(EDITEUR.siren, '[à compléter]')}\n`
       + `${ou(EDITEUR.adresse, '[à compléter : adresse du siège]')}\n`
-      + `Contact : ${EDITEUR.email}`,
+      + ligneContact(),
   };
 }
 
@@ -277,8 +363,12 @@ export const MENTIONS = [
     titre: 'Signaler un contenu',
     texte: "Chaque publication, commentaire, message, profil, demande et "
       + 'annonce porte un bouton de signalement. Les signalements sont '
-      + 'examinés sous 48 heures. Vous pouvez aussi écrire à '
-      + EDITEUR.email + '.',
+      + 'examinés sous 48 heures. '
+      + parEcrit(
+        (adresse) => `Vous pouvez aussi écrire à ${adresse}.`,
+        'Ce bouton est aujourd’hui le seul chemin : aucune adresse de '
+          + 'contact n’est encore publiée.',
+      ),
   },
 ];
 
@@ -342,8 +432,12 @@ export const CGU = [
     texte: 'Tout contenu peut être signalé. Les signalements sont examinés '
       + 'sous 48 heures. Un contenu contraire à ces conditions est retiré, et '
       + "son auteur averti ; en cas de récidive ou de faute grave, le compte "
-      + 'est fermé. Vous pouvez contester une décision en écrivant à '
-      + EDITEUR.email + '.',
+      + 'est fermé. '
+      + parEcrit(
+        (adresse) => `Vous pouvez contester une décision en écrivant à ${adresse}.`,
+        'Aucune adresse de contact n’est encore publiée : une voie de '
+          + 'contestation sera ouverte avant la mise en ligne publique.',
+      ),
   },
   {
     titre: 'Bloquer quelqu’un',
@@ -369,11 +463,14 @@ export const CGU = [
   },
   {
     titre: 'Droit applicable',
-    texte: 'Ces conditions sont soumises au droit français. En cas de '
-      + 'difficulté, adressez-vous d’abord à ' + EDITEUR.email + ' : la plupart '
-      + 'des différends se règlent ainsi. À défaut, les tribunaux français sont '
-      + 'compétents. Un consommateur peut saisir gratuitement un médiateur de '
-      + 'la consommation.',
+    texte: 'Ces conditions sont soumises au droit français. '
+      + parEcrit(
+        (adresse) => `En cas de difficulté, adressez-vous d’abord à ${adresse} : `
+          + 'la plupart des différends se règlent ainsi. À défaut, les ',
+        'En cas de difficulté, les ',
+      )
+      + 'tribunaux français sont compétents. Un consommateur peut saisir '
+      + 'gratuitement un médiateur de la consommation.',
   },
 ];
 
@@ -388,14 +485,14 @@ export const CONFIDENTIALITE = [
       ? "Opus est en cours de développement et n'est pas ouverte au public. "
         + "Le responsable du traitement est l'auteur de l'application ; son "
         + 'identité complète sera publiée ici avant la première mise en ligne '
-        + `publique.\n\nPour toute question sur vos données : ${EDITEUR.email}.`
+        + 'publique.\n\n' + questionDonnees()
       : STATUT === 'particulier'
         ? 'Opus est éditée à titre non professionnel par une personne '
           + 'physique, dont l’identité a été communiquée à l’hébergeur. '
-          + `Pour toute question sur vos données : ${EDITEUR.email}.`
+          + questionDonnees()
         : `${ou(EDITEUR.denomination, '[à compléter : dénomination]')}, `
           + `${ou(EDITEUR.adresse, '[à compléter : adresse]')}. `
-          + `Pour toute question sur vos données : ${EDITEUR.email}.`,
+          + questionDonnees(),
   },
   {
     titre: 'Ce que nous collectons',
@@ -528,8 +625,15 @@ export const CONFIDENTIALITE = [
       + '« Récupérer mes données » vous rend tout ce que nous avons, en '
       + 'JSON. Rectification : Profil → Modifier mon profil. Effacement : '
       + 'Profil → Confidentialité et sécurité → « Supprimer mon compte », '
-      + 'immédiat et sans intermédiaire. Opposition et limitation : écrivez à '
-      + EDITEUR.email + '. Nous répondons sous un mois.',
+      + 'immédiat et sans intermédiaire. '
+      + parEcrit(
+        (adresse) => `Opposition et limitation : écrivez à ${adresse}. `
+          + 'Nous répondons sous un mois.',
+        'Opposition et limitation : aucune adresse de contact n’est encore '
+          + 'publiée, ces deux droits ne peuvent donc pas s’exercer par '
+          + 'écrit aujourd’hui. C’est à corriger avant toute ouverture au '
+          + 'public.',
+      ),
   },
   {
     titre: 'Réclamation',
