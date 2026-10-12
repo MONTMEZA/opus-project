@@ -15,7 +15,7 @@
  * node scripts/verifier-legal.mjs
  */
 import {
-  VERSION, STATUT, EDITEUR, MENTIONS, CGU, CONFIDENTIALITE,
+  VERSION, STATUT, DOMAINE, EDITEUR, MENTIONS, CGU, CONFIDENTIALITE,
   editeurComplet, manquesEditeur, rappelStatut,
 } from '../src/data/legal.js';
 
@@ -60,6 +60,19 @@ const aUneAdresse = typeof EDITEUR.email === 'string' && /^[^@\s]+@[^@\s]+\.[a-z
 verifier('si une adresse est écrite, elle est bien formée',
   EDITEUR.email === null || aUneAdresse,
   `email = ${JSON.stringify(EDITEUR.email)}`);
+
+/* CELLE-CI SE VÉRIFIE MÉCANIQUEMENT, et elle aurait attrapé EDF toute seule :
+   une adresse de contact est sur LE domaine du projet, pas sur un autre. */
+verifier('le domaine du projet est nommé et plausible',
+  typeof DOMAINE === 'string' && /^[a-z0-9-]+\.[a-z]{2,}$/i.test(DOMAINE), DOMAINE);
+
+verifier(`une adresse écrite est SUR le domaine du projet (@${DOMAINE})`,
+  !aUneAdresse || EDITEUR.email.toLowerCase().endsWith(`@${DOMAINE.toLowerCase()}`),
+  `email = ${JSON.stringify(EDITEUR.email)} — attendu un @${DOMAINE}. Le `
+  + '12/10/2026, l’adresse écrite ici était sur opus-project.FR, qui '
+  + 'appartient à ÉLECTRICITÉ DE FRANCE. Une adresse sur un domaine qu’on ne '
+  + 'possède pas ne sera jamais relevée, et les textes légaux promettent une '
+  + 'réponse sous un mois.');
 
 verifier('une adresse écrite est confirmée RELEVÉE par un humain',
   !aUneAdresse || EDITEUR.emailReleve === true,

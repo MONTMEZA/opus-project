@@ -416,6 +416,25 @@ existe et soit **relevée**, seul un humain le sait.
 > refuse une adresse écrite sans que ce drapeau soit coché, refuse le drapeau
 > coché sans adresse, et **exige les deux dès que `STATUT` quitte `'essai'`**.
 
+Mais un drapeau humain n'aurait PAS attrapé ce défaut-là : il suffisait de le
+cocher. Ce qui l'attrape, et qui a été ajouté le même jour quand le
+propriétaire a donné son vrai domaine, c'est une **propriété mesurable** :
+
+> **`legal.js` nomme `DOMAINE = 'opus-project.com'`** — le sien, enregistré
+> chez IONOS le 27/01/2025, vérifié au registre du `.com`. Et le contrôle
+> exige qu'une adresse de contact soit **SUR ce domaine**. L'adresse d'EDF
+> est alors refusée toute seule, drapeau coché ou non ; une adresse Gmail
+> personnelle aussi.
+
+Deux gardes de natures différentes, et il faut les deux : **le domaine se
+mesure, la boîte aux lettres ne se mesure pas.** Éprouvé sur les quatre cas —
+l'adresse d'EDF, une adresse personnelle et un domaine saboté sont refusés, la
+bonne adresse passe.
+
+Et la mesure qui lui dit quoi faire : le domaine porte **déjà** les serveurs de
+courrier d'IONOS (`mx00.ionos.fr`, `mx01.ionos.fr`). Il n'y a rien à configurer
+— créer la boîte dans son espace client suffit, et l'adresse marchera aussitôt.
+
 Les onze usages passent désormais par **`ligneContact()`** et **`parEcrit()`** :
 sans adresse, le texte dit la vérité au lieu d'afficher un trou. Et le garde-fou
 mécanique est ailleurs — **le contrôle relit les textes ENGENDRÉS et refuse d'y

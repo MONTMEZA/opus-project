@@ -66,6 +66,26 @@ export const VERSION = '2026-09-29';
 export const STATUT = 'essai';
 
 /**
+ * LE DOMAINE D'OPUS — et pourquoi il est écrit ici.
+ *
+ * `opus-project.com`, enregistré chez IONOS le 27/01/2025 au nom du
+ * propriétaire. Vérifié au registre du `.com` le 12/10/2026, et ses serveurs
+ * de noms sont bien ceux d'IONOS.
+ *
+ * Il est nommé ici pour une raison précise, et c'est une cicatrice : jusqu'au
+ * 12/10/2026, `EDITEUR.email` valait `contact@opus-project.fr` — un domaine
+ * qui appartient à **ÉLECTRICITÉ DE FRANCE**, enregistré en 2008 et géré par
+ * un prestataire de surveillance de marques. L'adresse était affichée à onze
+ * endroits des textes légaux, dont « nous répondons sous un mois », et
+ * `verifier-legal` la laissait passer parce qu'elle contenait un `@`.
+ *
+ * `npm run verifier-legal` exige désormais qu'une adresse de contact soit SUR
+ * ce domaine. Contrairement à « est-elle relevée », ça se vérifie
+ * mécaniquement — et ça aurait attrapé l'adresse d'EDF tout seul.
+ */
+export const DOMAINE = 'opus-project.com';
+
+/**
  * À remplir selon le STATUT ci-dessus. Les valeurs nulles font apparaître
  * l'avertissement dans l'application.
  */
@@ -92,9 +112,16 @@ export const EDITEUR = {
    * ce projet traque depuis le 01/10 — sauf qu'ici elle est écrite dans un
    * document qui engage.
    *
-   * Le propriétaire a un nom de domaine et une marque déposée, mais **aucune
-   * boîte aux lettres créée**. Tant qu'elle n'existe pas, le champ est `null`
-   * et les textes le DISENT, au lieu d'afficher une adresse morte.
+   * Le propriétaire a un nom de domaine (`opus-project.com`, voir `DOMAINE`)
+   * et une marque déposée, mais **aucune boîte aux lettres créée**. Tant
+   * qu'elle n'existe pas, le champ est `null` et les textes le DISENT, au
+   * lieu d'afficher une adresse morte.
+   *
+   * Mesuré le 12/10/2026, et c'est une bonne nouvelle : le domaine porte
+   * déjà les serveurs de courrier d'IONOS (`mx00.ionos.fr`,
+   * `mx01.ionos.fr`). Il n'y a donc RIEN à configurer techniquement — créer
+   * la boîte dans l'espace client IONOS suffit, et l'adresse fonctionnera
+   * aussitôt. Il reste à l'écrire ici, et à cocher `emailReleve`.
    */
   email: null,
   /**
