@@ -1187,12 +1187,52 @@ Ce qui peut se faire, et qui est honnête :
    pour éviter le contrôle. Il n'aurait alors pas le droit de publier — donc ça
    se tient.
 
-2. **Que fait Opus si le registre est INJOIGNABLE ?** La Base Adresse tombe
-   régulièrement, et la règle du projet est « l'échec ne bloque rien ». Ici
-   c'est l'inverse : si l'échec ne bloque pas, la condition ne vaut plus rien
-   le jour où le service est en panne. **Je propose qu'on refuse l'inscription
-   avec un message qui dit de réessayer** — mais c'est un choix dur, et il est
-   à vous.
+2. **Que fait Opus si le registre est INJOIGNABLE ? — TRANCHÉ le 12/10 :**
+
+   > « on refuse on demande de reessayer ou de contacter la plateforme »
+
+   C'est le bon choix, et il faut dire pourquoi, parce qu'il **renverse une
+   règle du projet**. Partout ailleurs, « l'échec ne bloque rien » : le vibreur
+   absent n'empêche pas de publier, la Base Adresse muette n'empêche pas de
+   créer un compte, un réseau coupé n'empêche pas de poser une annonce.
+
+   > **Ici l'échec DOIT bloquer, et c'est la seule exception du projet.** Une
+   > condition qui s'efface quand le service est en panne n'est pas une
+   > condition : c'est une porte qu'il suffit d'attendre. Et comme elle
+   > s'effacerait **en silence**, personne ne saurait quels comptes sont
+   > passés par là.
+
+   Deux conséquences qu'il faut construire avec, et pas découvrir après :
+
+   **(a) Le message ne doit JAMAIS accuser son numéro.** « Ce numéro ne
+   correspond à rien » alors que c'est le service public qui est tombé est un
+   mensonge, et il est cher : l'artisan croit que son entreprise n'est pas
+   enregistrée. Les six issues d'une saisie de SIRET — mal formé, inexistant,
+   cessé, non diffusible, registre injoignable, tout va bien — doivent donner
+   **six messages différents**, et c'est exactement la discipline du 01/10
+   (« un travail qui n'a pas pu se faire ne doit jamais ressembler à un travail
+   fait »).
+
+   **(b) « Contacter la plateforme » doit mener quelque part.** Mesuré le jour
+   même : `src/data/legal.js` porte `EDITEUR.email = 'contact@opus-project.fr'`,
+   avec ce commentaire écrit le 21/09 — *« À VÉRIFIER : cette adresse doit
+   exister et être relevée. »* Vérifié en interrogeant le DNS :
+
+   | | |
+   |---|---|
+   | le domaine `opus-project.fr` existe | **oui** |
+   | il porte un enregistrement de courrier (MX) | **oui** — `mail.opus-project.fr` |
+   | la boîte `contact@` est-elle **relevée** | **je ne peux pas le savoir** |
+
+   Donc la porte existe techniquement. **La seule chose qui manque est de
+   savoir si vous lisez cette boîte**, et c'est la question que je vous pose
+   plus bas — parce qu'un refus d'inscription qui renvoie vers une adresse
+   morte fait perdre un artisan sans qu'il puisse rien tenter.
+
+   Et un refus n'est pas un cul-de-sac : il doit **laisser une trace** dans la
+   file du back-office déjà construite en section 25, avec le numéro saisi et
+   la raison du refus. Sinon « contactez-nous » oblige l'artisan à tout
+   réexpliquer, et vous à le croire sur parole.
 
 3. **Un artisan qui change d'entreprise** (il ferme son auto-entreprise, il
    crée une SARL) a un NOUVEAU SIRET. Avec un SIRET verrouillé à vie, il doit
@@ -1207,3 +1247,18 @@ Ce qui peut se faire, et qui est honnête :
    s'imprimer — la raison sociale, la forme juridique, le SIRET, l'adresse, la
    TVA. Les faire taper à la main dans l'écran du devis, puis les remplacer
    trois lots plus tard, c'est écrire deux fois le même écran.
+
+5. **LA QUESTION QUI BLOQUE, et elle est à vous seul : relevez-vous
+   `contact@opus-project.fr` ?** Le domaine existe et route le courrier
+   (mesuré), mais je ne peux pas savoir si quelqu'un lit cette boîte. Dès que
+   le registre sera une condition d'inscription, cette adresse devient **la
+   seule porte de secours** d'un artisan immatriculé qu'Opus refuse — parce que
+   sa société n'est pas diffusible, parce qu'elle vient d'être créée, ou parce
+   que le service public est en panne. Trois réponses possibles, et chacune
+   mène à un écran différent :
+   - **oui, je la relève** → le message dit « écrivez-nous à cette adresse » ;
+   - **non, mais je peux** → à faire avant de livrer le lot ;
+   - **non, et je ne veux pas** → alors la porte de secours doit vivre DANS
+     Opus : un formulaire qui dépose la demande dans la file du back-office,
+     avec le numéro saisi. C'est plus de travail, mais ça ne dépend d'aucune
+     boîte aux lettres.
