@@ -19,7 +19,14 @@
 ### Ce qui est décidé, en six phrases
 
 1. **Une fiche « Mon entreprise » d'abord.** Un devis porte l'identité de son
-   émetteur, et **aucune des onze colonnes nécessaires n'existe** aujourd'hui :
+   émetteur, et **rien de ce qu'elle exige n'existe** aujourd'hui. Le §1 en
+   compte **douze FAMILLES**, mais une famille n'est pas une colonne : « assureur »
+   en fait quatre (nom, coordonnées, n° de contrat, couverture géographique),
+   « médiateur » trois (nom, adresse, **site**), « forme juridique » trois. Déplié,
+   avec l'instantané du §3.4, l'attestation, le logo, le devis payant et la durée
+   de validité : **une trentaine de colonnes, et autant de champs à l'écran.**
+   C'est le chiffre sur lequel il faut valider, pas douze — voir le lot 0, qui le
+   déplie. Ce qui manque, concrètement :
    ni l'adresse de rue, ni l'assureur, ni le médiateur, ni le régime de TVA.
    Mesuré : **0 fiche sur 7** réunit même SIRET + téléphone + code postal.
 2. **Tout l'argent est en CENTIMES ENTIERS**, la base recalcule les totaux, et
@@ -58,12 +65,12 @@ décide : au régime réel, le document ne peut pas sortir sans la TVA.
 
 | | la question | ce qu'elle décide |
 |---|---|---|
-| 1 | **Franchise en base, ou réel ? Depuis quand ?** | si le lot 3 remonte avant le lot 2 |
-| 2 | **Avez-vous une attestation décennale ? Son absence doit-elle REFUSER le devis ou le signaler ?** | deux écrans différents ; mesuré : **0 attestation sur 7 fiches**, et **4 déclarent une date d'expiration** d'un document qui n'existe pas |
+| 1 | **Franchise en base, ou régime réel ?** | si le lot 3 remonte avant le lot 2. *« Depuis quand » n'est PAS demandé : sans SIRET il n'y a ni régime ni date. La question se reposera à l'immatriculation* |
+| 2 | **L'absence d'attestation décennale doit-elle REFUSER le devis, ou seulement le signaler ?** | deux écrans différents. *On ne demande PAS s'il en a une : c'est mesuré trois fois dans ce document — 0 sur 7 fiches, et 4 déclarent l'expiration d'un document qui n'existe pas* |
 | 3 | **Êtes-vous adhérent à un organisme de médiation ?** | une information obligatoire, et c'est un **abonnement**, pas une donnée à trouver |
-| 4 | **Retenue de garantie, situations de travaux, révision de prix ?** | **zéro occurrence dans les deux cahiers** — ni exigées ni abandonnées. Des colonnes et un pied de devis différents |
+| 4 | **Avez-vous besoin de retenue de garantie, de situations de travaux ou de révision de prix ?** Les trois en français : garder **5 % du montant pendant un an** après réception ; **facturer à l'avancement** plutôt qu'à la fin ; **indexer le prix sur un indice** entre la signature et les travaux | **zéro occurrence dans les deux cahiers** — ni exigées ni abandonnées. Des colonnes et un pied de devis différents |
 | 5 | **Combien de temps garde-t-on un devis jamais accepté ?** | une durée **choisie**, un nettoyage, et un paragraphe légal que je ne peux pas inventer |
-| 6 | **Vos tarifs (taux horaire, frais de déplacement) s'affichent-ils PUBLIQUEMENT sur votre fiche ?** | **scinder la table `emetteur` ou non.** Posée maintenant : gratuite. Posée après le lot 0 : un déménagement de colonnes |
+| 6 | **Vos tarifs publics (taux horaire, frais de déplacement) : on les affiche MAINTENANT, ou on l'écrit comme une dette ?** | ce n'est **pas** un consentement : l'art. 3 de l'arrêté les veut accessibles en ligne, et une fiche Opus en est un espace. La question est le MOMENT, pas le principe. **Scinder la table `emetteur` ou non** : posée maintenant c'est gratuit, après le lot 0 c'est un déménagement de colonnes |
 | 7 | **Quand vous faites signer, c'est chez le client ou chez vous ?** | si la moitié chère du lot 2 (rétractation, J+7, exemplaire signé) est votre quotidien ou votre cas rare |
 
 ### Les trois choses à ne pas perdre de vue
@@ -1953,7 +1960,27 @@ lot est utile tout seul, même si le devis n'arrivait jamais** : il rend enfin
 saisissables les informations que l'arrêté de 2017 exige déjà d'un artisan, et il
 répond à la moitié de la demande du propriétaire (« ses informations »).
 
-> **C'est le lot « petit et complet »** : une table, une politique, un
+> **CE LOT N'EST PAS PETIT, ET IL FAUT LE DIRE AVANT DE LE VALIDER.** Une
+> relecture indépendante l'a compté contre le module Clients livré le 11/10 :
+>
+> | | Clients (livré) | lot 0 |
+> |---|---|---|
+> | tables | 1 | 1 |
+> | **colonnes** | **14** | **une trentaine** |
+> | **champs de formulaire** | **7** | **une trentaine** |
+> | fonctions SQL | 0 | 1 (`emetteur_incomplet`) |
+> | stockage | aucun | téléversement de l'attestation |
+>
+> C'est **deux fois et demie** le plus gros formulaire de gestion déjà livré, et
+> le formulaire client avait déjà sorti la plainte du clavier. **Deux issues, et
+> c'est au propriétaire de trancher** : le livrer en une fois en acceptant qu'il
+> se vérifie en deux soirées, ou le couper en deux — l'identité qui bloque un
+> devis (adresse, SIRET, forme juridique, assureur) d'abord, puis le confort
+> (logo, modèle, devis payant, durée de validité habituelle, CGV). Je recommande
+> **la coupe** : la première moitié est ce qui rend un devis légal, la seconde ne
+> fait que le rendre plus joli.
+>
+> Ce qui reste vrai, et qui était l'argument : une table, une politique, un
 > déclencheur, un écran, deux lecteurs, zéro espace de stockage créé, zéro
 > fichier hors base touché.
 >
