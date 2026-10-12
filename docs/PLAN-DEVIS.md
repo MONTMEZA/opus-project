@@ -424,10 +424,35 @@ d'habitation **achevés depuis plus de deux ans** (art. 279-0 bis) ; 5,5 % pour
 les matériaux et équipements d'économie d'énergie dans des locaux **achevés
 depuis au moins deux ans** (art. 278-0 bis A).
 
-> **« Plus de deux ans » et « au moins deux ans » ne sont pas la même
-> condition.** Un logement achevé il y a **exactement** deux ans ouvre le 5,5 %
-> et **pas** le 10 %. On stocke donc une DATE d'achèvement, jamais un booléen,
-> et on calcule **par taux**.
+> **ET CETTE ASYMÉTRIE N'EST PAS ÉTABLIE — elle appartient au §2.3, pas ici.**
+> Une relecture indépendante est allée voir les sources, et elles se
+> contredisent :
+>
+> | source | ce qu'elle dit de l'art. 278-0 bis A |
+> |---|---|
+> | `BOI-TVA-LIQ-30-20-90-40` § 80, en vigueur depuis le 09/09/2026 | **plus de deux ans** |
+> | titre de l'arrêté du 9 septembre 2014 pris pour son application | **plus de deux ans** |
+> | `BOI-TVA-LIQ-30-20-95`, chapeau | plus de deux ans |
+> | `BOI-TVA-LIQ-30-20-95`, **I-A § 10** | **au moins deux ans** |
+>
+> C'est le motif exact du §2.3 — « les sources ne concordent pas, irréconciliable
+> en l'état » — et je ne l'avais pas appliqué ici. **Pire : le § 80 que ce plan
+> cite lui-même** pour la certification fait porter **la MÊME** condition
+> d'ancienneté aux deux taux.
+>
+> **Le coût d'une erreur dans ce sens-là est le pire du dossier.** Un contrôle
+> écrit sur l'asymétrie accorderait le 5,5 % à un logement achevé il y a
+> exactement deux ans qui n'y aurait pas droit — palier 3, **non plafonné**, et
+> le contrôle serait VERT. C'est la famille de défaut que ce document traque sur
+> deux mille six cents lignes, retournée contre lui.
+>
+> **Ce qu'on code donc, et ce qu'on ne code pas :** on stocke une **DATE**
+> d'achèvement, jamais un booléen, et on calcule **par taux** — ça, c'est sûr et
+> ça ne coûte rien. **Mais aucun contrôle n'encode la différence d'un jour entre
+> les deux taux**, et le cas limite « achevé il y a exactement deux ans » est
+> écrit dans le jeu d'essai **comme une question ouverte**, pas comme une
+> attente. Il se tranche par le comptable du propriétaire ou par un rescrit, pas
+> par moi.
 
 Restent au taux normal : la production d'un immeuble neuf ou +10 % de surface de
 plancher ; et trois items **distincts** du 2 bis — a) **les travaux de
@@ -833,17 +858,16 @@ fonction d'Opus ne sert UPDATE et DELETE à la fois. Le motif de
 `tient_le_texte()` est juste — **en UPDATE seulement**, et il n'a jamais eu à
 être autre chose.
 
-**LA PARADE, éprouvée sur les quatre mêmes cas :**
+**LA PARADE, ÉPROUVÉE SUR SIX CAS — c'est la forme à écrire :**
 
 ```sql
-/* 1. LA CASCADE D'ABORD : si la fiche pro n'a plus de ligne, c'est le compte
-      entier qui part (section 31). On laisse passer. */
-if not exists (select 1 from public.professional_profiles where id = old.pro_id) then
-  return old;
-end if;
-
-/* 2. LE DELETE, traité À PART — c'est là que le brouillon se trompait. */
+/* 1. LE DELETE, traité À PART — c'est là que le brouillon se trompait.
+      ET LE TEST DE CASCADE VIT ICI, PAS AU-DESSUS : voir plus bas, le
+      mettre avant ce `if` avale silencieusement un UPDATE. */
 if TG_OP = 'DELETE' then
+  if not exists (select 1 from public.professional_profiles where id = old.pro_id) then
+    return old;                      -- la fiche pro a disparu : le compte entier part
+  end if;
   if old.statut <> 'brouillon' then
     raise exception
       'Ce devis est parti chez votre client : il ne peut plus être supprimé. …'
@@ -852,16 +876,17 @@ if TG_OP = 'DELETE' then
   return old;                        -- un brouillon se supprime
 end if;
 
-/* 3. ICI, ET ICI SEULEMENT, on est en UPDATE : la liste blanche a un sens. */
+/* 2. ICI, ET ICI SEULEMENT, on est en UPDATE : la liste blanche a un sens. */
 if old.statut <> 'brouillon' then
   new := jsonb_populate_record(new, to_jsonb(old) - 'statut' - 'signe_le' - …);
 end if;
 return new;
 ```
 
-Mesuré avec cette parade : **le remis refuse avec son message français, le
-brouillon part, le total d'un remis ne bouge pas, la cascade de compte passe.
-Les quatre.**
+> **Ce bloc est le seul SQL de ce document, donc c'est lui qu'on recopiera.**
+> Il porte la forme JUSTE. La forme fausse — le test de cascade placé avant le
+> `if TG_OP` — est décrite juste en dessous pour qu'on sache pourquoi elle est
+> fausse, et elle n'est écrite nulle part en code.
 
 > **ET LA LEÇON DE MÉTHODE, qui est la vraie valeur de cette mesure :**
 >
@@ -938,12 +963,69 @@ new.<propriétaire>`. Recopier ce motif serait **deux fautes à la fois** :
 > puisque les lignes d'un devis remis sont déjà figées et que le recalcul ne s'y
 > exécute jamais.
 
-**Les LIGNES se figent par leur parent**, par un second déclencheur, **et il a
-exactement le même piège** : il sert UPDATE et DELETE, donc il porte la même
-branche `TG_OP`, et ses essais comptent les lignes eux aussi. Geler les colonnes
-du devis sans geler ses lignes laisserait récrire le document entier par le
-dessous — et le PDF et la base diraient deux choses différentes, sans la moindre
-erreur.
+#### `ligne_se_fige()` — le même piège, et un discriminant QUE LE DEVIS NE PEUT PAS LUI PRÊTER
+
+Geler les colonnes du devis sans geler ses lignes laisserait récrire le document
+entier **par le dessous** — et le PDF et la base diraient deux choses
+différentes, sans la moindre erreur. Ce second déclencheur sert donc UPDATE et
+DELETE, et il porte la même branche `TG_OP`.
+
+**Mais le discriminant de cascade du devis lui est INAPPLICABLE**, et c'est un
+trou que la relecture a trouvé : il teste `professional_profiles where id =
+old.pro_id`, et **une ligne de devis n'a pas de `pro_id`** — elle n'a qu'un
+`devis_id`. Sans discriminant, l'enchaînement est celui que le §7 redoute :
+supprimer son compte cascade vers les devis, puis vers leurs lignes ; un verrou
+qui refuse, et **un artisan ayant remis un devis ne peut plus supprimer son
+compte**. Un trou RGPD sur le seul chemin honnête de sortie, exactement comme la
+conception C1 éliminée au §0.
+
+**Ce qu'il fallait mesurer, et qui n'était ni écrit ni évident** : pendant une
+cascade, la ligne du DEVIS existe-t-elle encore quand le déclencheur de sa ligne
+s'exécute ? Mesuré le 12/10 sur PostgreSQL 16.13, par une sonde `raise notice` :
+
+| ce qu'on supprime | le devis parent existe-t-il, vu depuis la ligne ? |
+|---|---|
+| le **devis** (cascade vers ses lignes) | **non** |
+| le **compte** (cascade pro → devis → lignes) | **non** |
+| **une ligne seule** d'un devis remis | **oui**, et son `statut` est lisible — `remis` |
+
+**Les trois cas se séparent donc parfaitement, et le discriminant est le
+statut du parent LU, pas une existence devinée :**
+
+```sql
+select statut from public.devis where id = old.devis_id into v_statut;
+if v_statut is null then
+  return case TG_OP when 'DELETE' then old else new end;   -- cascade : on laisse
+end if;
+if TG_OP = 'DELETE' then
+  if v_statut <> 'brouillon' then
+    raise exception '…' using errcode = 'OP003';
+  end if;
+  return old;
+end if;
+if v_statut <> 'brouillon' then
+  new := jsonb_populate_record(new, to_jsonb(old));         -- tout figé
+end if;
+return new;
+```
+
+Éprouvé sur **six cas**, comme son grand frère :
+
+| | mesuré |
+|---|---|
+| `update` du prix d'une ligne de brouillon | 777 — passe |
+| `update` du prix d'une ligne d'un `remis` | 500 inchangé — figé |
+| `delete` d'une ligne seule d'un brouillon | passe |
+| `delete` d'une ligne seule d'un `remis` | **`OP003`**, **1 ligne reste** |
+| `delete` du devis `remis` entier | ses lignes **partent** |
+| `delete` du **compte** | 0 ligne, 0 devis — **tout part** |
+
+> **Et la raison pour laquelle on LIT le statut au lieu de tester une
+> existence** : les deux questions se posent dans le même `select`. Un
+> `not exists` suivi d'un second `select statut` serait deux allers-retours
+> pour une seule vérité — et surtout deux endroits où se tromper. Le `null`
+> du statut **est** le signal de cascade, et il n'y a rien à tenir
+> ensemble.
 
 **Pourquoi un déclencheur et pas une politique découpée en quatre :** « une
 politique rend 0 ligne modifiée sans un mot, un **déclencheur DIT pourquoi** »
@@ -2096,10 +2178,14 @@ basculer **la totalité** à 20 % et le prestataire en est seul débiteur — en
 3 000 € sur ses propres fonds. **L'écran bloque, il n'avertit pas.**
 
 **COMMENT ON LE VÉRIFIE ICI.** `verifier-devis` fait tourner la ventilation sur
-un devis à trois taux, et **la bascule à deux ans jour pour jour sur les DEUX
-taux** (un logement achevé il y a exactement deux ans ouvre le 5,5 % et pas le
-10 % — un contrôle qui utiliserait le même test pour les deux serait faux sur ce
-cas limite, sans que personne ne le signale). Il refuse le nombre 150 associé au
+un devis à trois taux. **Et il n'encode PAS la différence d'un jour entre le
+10 % et le 5,5 %** : le §2.1 explique pourquoi — les sources se contredisent sur
+« plus de deux ans » contre « au moins deux ans », et un contrôle vert qui
+accorderait le 5,5 % à tort coûterait la totalité de la TVA du devis. Le cas
+limite « achevé il y a exactement deux ans » est donc écrit dans le jeu d'essai
+**en question ouverte**, avec les quatre sources qui divergent en commentaire, et
+il attend l'arbitrage d'un comptable. Les deux taux partagent le même test
+d'ancienneté jusque-là. Il refuse le nombre 150 associé au
 mot « devis » dans tout le dépôt. La table des mentions est lue **par la DATE du
 devis** : un essai pose un devis daté de 2026 et un de 2028 et vérifie qu'ils ne
 portent pas la même référence. Le drapeau par métier est recalculé sur les
@@ -2586,7 +2672,7 @@ ensuite été **remesurées** ici : les deux sont confirmées.
 
 | | correction | où elle vit |
 |---|---|---|
-| **1** | **Le figeage était INVERSÉ** : le motif du brouillon laissait partir un devis remis et annulait silencieusement la suppression d'un brouillon. Remplacé par la parade à branche `TG_OP`, avec le tableau des quatre cas mesurés, le mécanisme (`NEW` nul en DELETE, `jsonb_populate_record(NULL,…)` non nul, un `before delete` qui rend `NULL` annule la ligne), le raffinement **non mesuré** à éprouver, et la leçon de méthode : **un essai de suppression COMPTE LES LIGNES** | **§3.3** en entier ; rappelé en tête du §7 et dans la vérification des lots 2 et 4 |
+| **1** | **Le figeage était INVERSÉ** : le motif du brouillon laissait partir un devis remis et annulait silencieusement la suppression d'un brouillon. Remplacé par la parade à branche `TG_OP`, avec le mécanisme (`NEW` nul en DELETE, `jsonb_populate_record(NULL,…)` non nul, un `before delete` qui rend `NULL` annule la ligne), et la leçon de méthode : **un essai de suppression COMPTE LES LIGNES**. **Puis le même défaut une SECONDE fois, dans la correction de la première** — le test de cascade placé avant la branche `TG_OP` avale l'`update` d'un brouillon dont la fiche parente a disparu : mesuré le 12/10, corrigé, **six cas éprouvés**. Et `ligne_se_fige()` a reçu **son propre** discriminant, mesuré : le parent d'une ligne est le DEVIS, et pendant une cascade il a déjà disparu | **§3.3** en entier ; rappelé en tête du §7 et dans la vérification des lots 2 et 4 |
 | **2** | **Les quatre mentions sans colonne** — garanties, frais de déplacement, délai d'exécution, date de rédaction — plus le SAV et les clauses de droit applicable et de juridiction. Chacune a sa colonne, sa place dans `emetteur_incomplet()` ou dans la contrainte de remise, et sa place dans l'instantané. La date de rédaction est **tranchée** : c'est `remis_le`, posé par la base avec `clock_timestamp()`, et `created_at` ne s'imprime jamais | **§2.0** (nouvelle section), §2.4, §3.4, lot 0, lot 2 |
 | **3** | **Le contrôle qui se satisfaisait de sa propre liste.** `MENTIONS_OBLIGATOIRES` s'écrit depuis le dossier juridique, une entrée par mention avec sa citation et ses `cas` (en LISTE, pour que « les trois listes » soit une donnée) ; un **COMPTE** écrit en dur dans le contrôle ; et le drapeau humain `MENTIONS_RELUES_PAR` / `MENTIONS_RELUES_LE` que `verifier-legal` réclame avant que `STATUT` quitte `'essai'`, sur le modèle exact d'`EDITEUR.contratSousTraitance` | **§3.10** (nouvelle section), §5, §7 |
 | **4** | **La moitié base du lot 2 était inatteignable.** (i) Une branche `Platform.OS === 'web'` qui **n'appelle rien** et dit « le PDF se fabrique sur le téléphone » — mesuré : l'implémentation web de `printToFileAsync` est `window.print()`, donc une boîte modale qui bloque Playwright. (ii) Le **protocole exécutable** en huit étapes : PDF par `page.pdf()`, téléversement en `curl` avec le jeton d'un compte jetable, les deux fonctions appelées par PostgREST. Tout se vérifie sauf WKWebView | **§3.6** et **§3.11** (nouvelles sections), lot 2 |
@@ -2601,10 +2687,6 @@ ensuite été **remesurées** ici : les deux sont confirmées.
 
 ### Ce que cette relecture n'a PAS corrigé, et pourquoi
 
-- **Le raffinement du figeage n'est pas mesuré.** Les quatre cas le sont sur la
-  forme où le discriminant de cascade précède le test `TG_OP` ; la forme qui le
-  range *dans* la branche DELETE est strictement plus sûre et **n'a pas été
-  éprouvée**. C'est écrit comme tel au §3.3, à mesurer avant d'écrire.
 - **Le piège `IMMUTABLE` de `current_date` dans une contrainte `check`** n'a pas
   été mesuré ici. Il est annoncé comme à éprouver au lot 4.
 - **Le nombre exact d'entrées de `MENTIONS_OBLIGATOIRES`** n'est pas fixé : il se
