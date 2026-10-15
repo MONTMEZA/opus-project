@@ -47,6 +47,41 @@ mots de passe compromis.** C'est un interrupteur, et c'est la dernière alerte
 de sécurité du projet. Elle vérifie les mots de passe contre la base des
 fuites connues.
 
+### 1.0 bis Avant d'ouvrir : éprouver Opus comme il sera VRAIMENT utilisé
+
+Décidé avec le propriétaire le 15/10/2026 : « je ne veux pas que le jour où
+Opus est lancé avec des utilisateurs, Opus plante ou rame ». **À faire quand
+Opus sera terminé et prêt à ouvrir, pas avant** — c'est sa décision, et elle
+est juste : mesurer la tenue en charge d'une application qui change encore
+chaque semaine, ce serait la mesurer deux fois.
+
+Ce qui plantera ou ramera ce jour-là ne se voit PAS avec 13 comptes et
+20 publications. Ça se voit avec mille artisans, des photos lourdes et une
+4G faible au fond d'une cave. D'où trois gestes :
+
+1. **Un rapport de plantage.** Aujourd'hui, si Opus plante sur le téléphone
+   de quelqu'un, personne ne le sait — ni l'erreur, ni la ligne, ni
+   l'appareil. Un outil qui prévient, avec la pile d'appels, avant que la
+   personne ait désinstallé. À choisir le moment venu, en vérifiant qu'il
+   fonctionne dans une version construite par EAS.
+2. **Un essai à grande échelle de la base.** Une COPIE remplie de milliers de
+   comptes, de publications, d'annonces et de demandes — jamais la vraie
+   base. Puis mesurer que le fil, la loupe, la Place des pros, les Demandes et
+   l'administration répondent toujours vite. C'est la leçon du lot 4 en grand :
+   « mesurer avec sept éléments ne prouve rien ».
+3. **Une version d'essai donnée à quelques artisans d'abord**, par TestFlight,
+   en mode production. Ils trouveront ce que ni le propriétaire ni moi
+   n'aurons pensé à essayer — et c'est aussi la seule façon de juger la
+   fluidité réelle : la version de développement installée le 15/10 fait
+   tourner le code en mode développement, nettement plus lent que la vraie
+   application.
+
+Et les gestes déjà connus qui tombent au même moment : activer la
+confirmation par e-mail (section 31 de `CLAUDE.md`), créer la boîte aux
+lettres sur `opus-project.com`, signer le contrat de sous-traitance du
+carnet de clients (`EDITEUR.contratSousTraitance`), passer `STATUT` hors de
+`'essai'` et faire passer `npm run verifier-legal`.
+
 ### 1.1 Signalement et blocage — ✅ fait
 
 - tables `signalements` et `blocages`, avec RLS ;
