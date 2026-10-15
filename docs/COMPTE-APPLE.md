@@ -402,6 +402,11 @@ eas init
 
 Répondez « Yes » quand il propose de créer le projet. **Il écrit deux lignes
 dans `app.json`** (votre nom d'utilisateur Expo et un identifiant de projet).
+**Fait le 15/10/2026** : compte Expo `montmeza`, projet `@montmeza/opus-project`,
+identifiant `32996432-49f3-477c-ae9c-ae96cf84edd5` — les deux lignes sont dans le
+dépôt. Avant le `git pull` suivant, il faut donc annuler SA copie locale de
+`app.json` : `git restore app.json`.
+
 **Copiez-moi ce qu'il affiche** : je mets ces deux lignes dans le dépôt, sinon
 votre prochain `git pull` serait bloqué — mesuré, git refuse même quand la
 modification qui arrive est identique à la vôtre. Ces deux valeurs ne sont pas
