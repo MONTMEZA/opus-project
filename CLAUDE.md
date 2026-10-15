@@ -561,6 +561,115 @@ Function, `auth.uid()` est `null` et le verrou laisse passer.
 > Aujourd'hui : `verifie`, `kbis_valide`, `assurance_valide`, `rge`,
 > `verification_note`.
 
+### Être professionnel ne se décide pas soi-même (15/10/2026)
+
+Section 44 de `schema.sql`, `npm run verifier-pro`. Trouvé en préparant le
+SIRET à l'inscription, et c'est le défaut du badge un cran plus haut : le
+badge tenait, mais **le statut de professionnel lui-même se prenait**.
+
+`est_un_pro()` rend « a une ligne dans `professional_profiles` ». Rien ne
+disait qui avait le droit d'en avoir une. Prouvé sur PostgreSQL 16, avec la
+seule clé publiable, un particulier :
+
+1. se déclarait pro — `update users set type = 'pro'` → `UPDATE 1` ;
+2. s'insérait une fiche, et `est_un_pro()` devenait VRAI ;
+3. **lisait les demandes des particuliers** — la commune, le texte, et
+   l'adresse des photos de leur maison ;
+4. publiait dans le fil, posait une annonce, ouvrait un carnet de clients,
+   créait un chantier public.
+
+« Le fil est réservé aux professionnels » n'était tenu que par l'écran
+(`canPublish`). Relevé sur la vraie base avant de corriger : 7 fiches sur 7
+sur un compte pro, aucun contenu écrit par un non-pro. **Le trou n'a jamais
+servi.**
+
+> **Un prédicat qui repose sur l'EXISTENCE d'une ligne a besoin d'une règle
+> sur qui peut CRÉER cette ligne.** Sinon il ne dit rien : il constate ce
+> qu'on lui a donné.
+
+Les deux verrous :
+
+- **`tient_le_type_du_compte()` (OP004)** — le type ne change pas par la
+  main de son titulaire. Un refus qui DIT pourquoi, et pas un retour
+  silencieux comme pour le badge : aucune version de l'application n'envoie
+  un type différent, seul un client modifié le fait. Un type renvoyé
+  INCHANGÉ passe (`is distinct from`) ;
+- **`exige_un_compte_pro()` (OP005)** — une fiche n'existe que sur un compte
+  pro. C'est le verrou qui compte : avec lui, `est_un_pro()` redevient une
+  vérité.
+
+#### La seconde porte, trouvée en écrivant le contrôle
+
+Le premier verrou ne regardait que l'UPDATE. Or `preparer_suppression_compte()`
+efface la ligne `users` de l'appelant, **dont le jeton reste valide** : il
+la recréait avec `type = 'pro'` (« ecriture mon user » est `for all`), puis
+s'insérait une fiche. Prouvé, puis fermé : le verrou porte sur `before
+insert or update of type`, et une ligne recréée par son titulaire naît
+particulier, ou ne naît pas.
+
+> **C'est la leçon de la section 31, refaite à l'identique : `for all`,
+> c'est quatre portes.** Un verrou posé sur un seul verbe SQL ne ferme
+> qu'une porte sur quatre — et rien ne le signale.
+
+Et la ligne d'un compte naît d'un déclencheur sur `auth.users`, où
+`auth.uid()` est **vide**. Vérifié sur la vraie base : une inscription pro
+par `/auth/v1/signup` crée toujours ses deux moitiés. Sans cette mesure,
+le verrou de l'INSERT aurait pu fermer l'inscription elle-même.
+
+#### Fermer ce qui en dépendait — et seulement en ÉCRITURE
+
+Le fil, les annonces et les réponses aux annonces exigent `est_un_pro()`
+dans leur **`with check`**, jamais dans leur `using`. `using` gouverne aussi
+la SUPPRESSION : on retire toujours ce qu'on a posé.
+
+Les clients et les chantiers, eux, n'ont demandé qu'**une ligne** :
+`est_mon_entreprise()` exige désormais `est_un_pro()`. C'est exactement
+pour ce jour-là qu'elle avait été écrite au lieu de 56 comparaisons à la
+main — et `verifier-chantier`, qui exigeait « exactement
+`auth.uid() = p_entreprise` », a rougi comme il devait : la règle changeait,
+on l'a mis à jour en disant pourquoi.
+
+#### Un refus de la base n'accuse pas toujours la règle
+
+Sur la vraie base, cinq essais ont d'abord répondu « permission denied for
+table users ». La cause était MON essai : `Prefer: return=representation`
+demande à la base de RENVOYER la ligne, donc de lire toutes ses colonnes —
+fermées depuis le 29/09. L'application ne le demande jamais
+(`.update(patch).eq()` sans `.select()`).
+
+> **Pour éprouver une écriture sur `users`, `Prefer: return=minimal`,
+> comme l'application.** Sinon on mesure les droits de colonne, pas la
+> règle.
+
+#### Vérifié, et comment
+
+Les 21 cas de `supabase/essais-section-44.sql` sur un PostgreSQL 16 neuf,
+schéma rejoué deux fois, les 43 contrôles, `npx expo export --platform ios`.
+`verifier-pro` éprouvé en cassant ce qu'il surveille : **quatorze sabotages,
+quatorze refus**. Puis sur la VRAIE base, migration appliquée sans aucun
+ordre qui commence par `drop` (`alter policy` pour les trois politiques),
+avec deux comptes jetables supprimés dans la même session (base revenue à
+13 comptes / 7 fiches / 20 publications) :
+
+| | résultat |
+|---|---|
+| inscription pro par `/auth/v1/signup` | les deux moitiés, `verifie = false` |
+| le particulier se déclare pro | **400 OP004** |
+| il s'insère une fiche | **400 OP005** |
+| il lit les demandes | **`[]`** — l'artisan, lui, en lit |
+| il publie, ouvre un client, un chantier, une annonce | **403** ×4 |
+| seconde porte : données effacées, ligne recréée en pro | **400 OP004** |
+| …recréée sans type, puis une fiche | 201, puis **400 OP005** |
+| l'artisan publie, pose une annonce, crée un chantier | 201, et **il les retire** (204) |
+| il enregistre son profil, type inchangé | 204 |
+| il redevient particulier tout seul | **400 OP004** |
+
+**Ce qui n'a PAS été fait, et c'est voulu** : vérifier le SIRET. C'est le
+lot suivant — et il n'aurait rien protégé sans celui-ci : une condition
+posée à l'inscription ne sert à rien si l'on devient pro par un `INSERT`
+juste après. Un particulier qui devient artisan passe par l'administration
+(`auth.uid()` vide), avec un contrôle humain, comme le badge.
+
 ### Un commentaire auquel on a répondu ne se récrit plus
 
 Ajouté le 30/09/2026, à la demande du propriétaire, et c'est la même famille

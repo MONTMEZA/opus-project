@@ -1005,16 +1005,25 @@ $$;
 drop policy if exists "annonces lecture pro" on public.annonces_pro;
 create policy "annonces lecture pro" on public.annonces_pro
   for select using (public.est_un_pro());
+-- L'ÉCRITURE aussi, et c'est un ajout du 15/10/2026 : jusque-là seule la
+-- LECTURE exigeait `est_un_pro()`. Un compte qui s'était déclaré pro tout
+-- seul (section 44) posait donc une annonce sans être artisan.
+--
+-- Le `with check` porte la condition, pas le `using` : `using` gouverne
+-- aussi la SUPPRESSION, et quelqu'un doit toujours pouvoir retirer ce
+-- qu'il a posé. `with check` gouverne ce qui ENTRE.
 drop policy if exists "annonces ecriture auteur" on public.annonces_pro;
 create policy "annonces ecriture auteur" on public.annonces_pro
-  for all using (auth.uid() = auteur_id) with check (auth.uid() = auteur_id);
+  for all using (auth.uid() = auteur_id)
+  with check (auth.uid() = auteur_id and public.est_un_pro());
 
 drop policy if exists "annonce reponses lecture pro" on public.annonce_reponses;
 create policy "annonce reponses lecture pro" on public.annonce_reponses
   for select using (public.est_un_pro());
 drop policy if exists "annonce reponses ecriture" on public.annonce_reponses;
 create policy "annonce reponses ecriture" on public.annonce_reponses
-  for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
+  for all using (auth.uid() = professional_id)
+  with check (auth.uid() = professional_id and public.est_un_pro());
 
 -- Demandes de modification des métiers : strictement privées. Personne
 -- d'autre que l'artisan ne les voit, et lui ne peut pas les trancher —
@@ -1052,10 +1061,23 @@ drop policy if exists "ecriture mon profil" on public.professional_profiles;
 create policy "ecriture mon profil" on public.professional_profiles
   for all using (auth.uid() = id) with check (auth.uid() = id);
 
--- Publications : seul l'auteur crée / modifie / supprime les siennes
+-- Publications : seul l'auteur crée / modifie / supprime les siennes — et
+-- seul un PROFESSIONNEL en crée.
+--
+-- « Le fil d'actualité est réservé aux professionnels » est un principe
+-- écrit dans CLAUDE.md depuis le premier jour. Jusqu'au 15/10/2026, il
+-- n'était tenu QUE par l'écran (`canPublish = userType === 'pro'`) : la
+-- règle de la base disait seulement « chacun les siennes ». Mesuré : un
+-- particulier SANS AUCUNE FICHE publiait dans le fil, `INSERT 0 1`. Un
+-- principe tenu par l'écran n'est pas tenu — la clé publiable est dans le
+-- paquet de l'application, et un client modifié n'a pas d'écran.
+--
+-- La condition est dans `with check` et pas dans `using`, exprès : un
+-- artisan doit toujours pouvoir RETIRER une publication.
 drop policy if exists "ecriture mes posts" on public.posts;
 create policy "ecriture mes posts" on public.posts
-  for all using (auth.uid() = author_id) with check (auth.uid() = author_id);
+  for all using (auth.uid() = author_id)
+  with check (auth.uid() = author_id and public.est_un_pro());
 
 -- J'aime, enregistrés, abonnements : chacun les siens
 drop policy if exists "mes likes" on public.post_likes;
@@ -6314,10 +6336,24 @@ grant execute on function public.enregistrer_vues(uuid[]) to authenticated;
 --  > `auth.uid() = …` dans ce fichier. Les 56 ne bougent pas — avec « un
 --  > compte = une entreprise », elles sont justes.
 --
---  `security invoker` et aucune lecture de table : elle ne donne accès à
---  rien, et elle reste donc exécutable par `authenticated` — la règle du
---  30/09, apprise avec `horaires_valides()` révoquée « par prudence », qui
---  avait fait échouer TOUS les enregistrements d'horaires.
+--  `security invoker` : elle ne lit que ce que l'appelant peut déjà lire,
+--  donc elle ne donne accès à rien, et elle reste exécutable par
+--  `authenticated` — la règle du 30/09, apprise avec `horaires_valides()`
+--  révoquée « par prudence », qui avait fait échouer TOUS les
+--  enregistrements d'horaires.
+--
+--  ET ELLE EXIGE D'ÊTRE UN PROFESSIONNEL — ajouté le 15/10/2026.
+--
+--  Jusque-là elle rendait `auth.uid() = p_entreprise`, c'est-à-dire « c'est
+--  mon identifiant ». Or un identifiant n'est pas une entreprise : un
+--  particulier qui posait `pro_id = lui-même` ouvrait un carnet de clients
+--  et créait un chantier PUBLIC — mesuré, `INSERT 0 1` les deux fois.
+--
+--  `est_un_pro()` lit `professional_profiles`, qui est en lecture publique :
+--  la phrase « elle ne donne accès à rien » reste vraie. Et c'est la preuve
+--  que cette fonction était la bonne idée : UNE ligne ici ferme le carnet,
+--  les chantiers, et toutes les tables qui l'appelleront demain — devis,
+--  factures. Sans elle, il aurait fallu les retrouver une par une.
 -- --------------------------------------------------------------------------
 create or replace function public.est_mon_entreprise(p_entreprise uuid)
 returns boolean
@@ -6326,7 +6362,9 @@ stable
 security invoker
 set search_path = public
 as $$
-  select p_entreprise is not null and auth.uid() = p_entreprise
+  select p_entreprise is not null
+     and auth.uid() = p_entreprise
+     and public.est_un_pro()
 $$;
 
 revoke all on function public.est_mon_entreprise(uuid) from public;
@@ -6334,9 +6372,10 @@ grant execute on function public.est_mon_entreprise(uuid) to anon, authenticated
 
 comment on function public.est_mon_entreprise(uuid) is
   'Est-ce que cette entreprise est la mienne ? Rend aujourd''hui '
-  'auth.uid() = p_entreprise, parce qu''un compte EST une entreprise '
-  '(décision du 04/10/2026). Le jour où un salarié aura son propre accès, '
-  'c''est CETTE fonction qui change, et elle seule. Section 36.1.';
+  'auth.uid() = p_entreprise ET est_un_pro(), parce qu''un compte EST une '
+  'entreprise (décision du 04/10/2026) et qu''un identifiant n''en est pas '
+  'une (15/10/2026). Le jour où un salarié aura son propre accès, c''est '
+  'CETTE fonction qui change, et elle seule. Sections 36.1 et 44.';
 
 -- --------------------------------------------------------------------------
 --  36.2 La table
@@ -7688,6 +7727,168 @@ comment on function public.tient_le_client() is
   'l''e-mail passe en minuscules, le SIRET ne garde que ses chiffres et '
   'disparaît si le client est un particulier. Pose `modifie_le` avec '
   'clock_timestamp(). Section 41.3.';
+
+-- ==========================================================================
+--  44. ÊTRE UN PROFESSIONNEL NE SE DÉCIDE PAS SOI-MÊME (15/10/2026)
+--
+--  Numérotée 44 parce qu'elle arrive après la 43, mais posée ICI parce que
+--  les sections 42 (l'export RGPD) et 43 (le balayage des portes) doivent
+--  rester les deux derniers blocs du fichier : la 42 nomme toutes les
+--  tables, la 43 ne voit que les déclencheurs déjà créés.
+--
+--  LE TROU, trouvé en préparant le SIRET à l'inscription, et MESURÉ sur
+--  PostgreSQL 16 avant d'écrire une ligne de correction :
+--
+--    1. un particulier se déclarait pro :
+--         update users set type = 'pro' where id = auth.uid()   → UPDATE 1
+--    2. il s'insérait une fiche professionnelle                 → INSERT 0 1
+--       et `est_un_pro()` passait de faux à VRAI ;
+--    3. il LISAIT les demandes des particuliers — la commune, le texte, et
+--       l'adresse des photos de leur maison ;
+--    4. il publiait dans le fil, posait une annonce, ouvrait un carnet de
+--       clients et créait un chantier public.
+--
+--  Et une SECONDE porte, trouvée en écrivant le contrôle de cette section :
+--  `preparer_suppression_compte()` efface la ligne `users` de l'appelant,
+--  dont le jeton reste valide. Il pouvait alors la RECRÉER avec
+--  `type = 'pro'` (« ecriture mon user » est `for all`, `insert (type)` est
+--  accordé) puis s'insérer une fiche. Prouvé : `est_un_pro()` vrai, deux
+--  demandes lues. Un verrou posé sur l'UPDATE seul ne fermait donc rien —
+--  la leçon de la section 31 : `for all`, c'est quatre portes.
+--
+--  Le badge, lui, tenait : `verifie` restait à faux. Mais tout ce que la
+--  base réserve aux professionnels s'ouvrait par trois ordres que la clé
+--  publiable suffit à envoyer.
+--
+--  La cause tient en une phrase : `est_un_pro()` rend « a une ligne dans
+--  `professional_profiles` », et RIEN ne disait qui a le droit d'en avoir
+--  une. Les deux verrous de cette section ferment la PROMOTION ; les quatre
+--  règles réécrites à leur place d'origine (annonces, réponses, fil, et
+--  `est_mon_entreprise()`) ferment ce qui en dépendait.
+--
+--  Relevé sur la vraie base AVANT d'appliquer : 7 fiches pro sur 7 sont sur
+--  un compte pro, et AUCUNE publication, aucun client, aucun chantier,
+--  aucune annonce n'a été écrit par un non-pro. Le trou n'a jamais servi,
+--  et ces verrous ne refusent rien de ce qui existe.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  44.1 Le type d'un compte ne change pas par la main de son titulaire
+--
+--  `users.type` est posé UNE fois, à l'inscription, par
+--  `cree_fiche_utilisateur()` qui lit les métadonnées. Aucun écran d'Opus
+--  ne le change ensuite — vérifié dans `src/`. Il était pourtant modifiable
+--  par son titulaire : la politique « ecriture mon user » est `for all`, et
+--  le droit de colonne `update (type)` est accordé à `authenticated`.
+--
+--  POURQUOI UN REFUS, ET PAS UN RETOUR SILENCIEUX À L'ANCIENNE VALEUR.
+--  `tient_le_profil_pro()` remet les colonnes du badge sans rien dire, parce
+--  que l'application renvoie la fiche ENTIÈRE à chaque enregistrement et
+--  qu'un refus casserait l'enregistrement du téléphone. Ici, aucune version
+--  de l'application n'envoie un `type` DIFFÉRENT : seul un client modifié le
+--  fait. Un refus qui DIT pourquoi vaut mieux qu'un `UPDATE 1` qui ment.
+--
+--  Et un `type` renvoyé INCHANGÉ passe : c'est `is distinct from` qui est
+--  testé, pas la présence de la colonne dans l'ordre.
+--
+--  L'INSERT AUSSI, et pas seulement l'UPDATE. La ligne `users` d'un compte
+--  naît d'un déclencheur sur `auth.users`, où `auth.uid()` est vide : son
+--  titulaire n'a jamais besoin de l'insérer lui-même. Il ne le peut que
+--  dans un cas — après `preparer_suppression_compte()`, qui l'a effacée —,
+--  et s'y déclarer pro était la seconde porte. Une ligne recréée par son
+--  titulaire naît donc particulier, ou ne naît pas.
+--
+--  L'échappatoire habituelle reste ouverte : `auth.uid()` vide — l'éditeur
+--  SQL, une fonction Edge — peut corriger un type. Même règle que
+--  `tient_le_profil_pro()` et `tient_les_metiers()`. C'est par là que
+--  passera, le jour venu, un particulier qui devient artisan : avec un
+--  contrôle humain, comme le badge.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_type_du_compte()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if auth.uid() is not null
+     and auth.uid() = new.id
+     and (   (tg_op = 'INSERT' and new.type is distinct from 'particulier')
+          or (tg_op = 'UPDATE' and new.type is distinct from old.type)) then
+    raise exception
+      'Le type de votre compte (professionnel ou particulier) ne se change pas '
+      'depuis l''application : il est fixé à l''inscription. Pour passer d''un '
+      'compte particulier à un compte professionnel, contactez Opus.'
+      using errcode = 'OP004';
+  end if;
+  return new;
+end; $$;
+
+create or replace trigger trg_tient_le_type_du_compte
+  before insert or update of type on public.users
+  for each row execute function public.tient_le_type_du_compte();
+
+-- --------------------------------------------------------------------------
+--  44.2 Une fiche professionnelle n'existe que sur un compte professionnel
+--
+--  C'est le verrou qui compte : avec lui seul, `est_un_pro()` redevient une
+--  vérité. Il porte sur une DONNÉE (le type du compte), pas sur l'identité
+--  de celui qui écrit — il n'a donc pas d'échappatoire, et il n'en a pas
+--  besoin : l'éditeur SQL qui voudrait créer une fiche pour un particulier
+--  change d'abord son type, ce que 44.1 lui permet.
+--
+--  L'ordre de l'inscription le permet, et c'est vérifié dans
+--  `cree_fiche_utilisateur()` : la ligne `users` est insérée AVANT la fiche
+--  pro, dans la même transaction. La fiche d'un vrai professionnel trouve
+--  donc toujours son type à `pro`. Et `ensureProProfile()`, qui répare à
+--  chaque ouverture un compte pro resté sans fiche, passe pour la même
+--  raison.
+--
+--  `security definer`, et c'est voulu : il lit `users.type`, dont les droits
+--  de colonne de la section 18.1 pourraient un jour retirer la lecture. Il
+--  ne lit QUE ça, et n'utilise pas `auth.uid()` — le piège de la section 25
+--  (« `auth.uid()` n'est pas nul dans une fonction `security definer` ») ne
+--  le concerne pas.
+--
+--  INSERT seulement : la fiche ne peut plus être supprimée par son titulaire
+--  (section 31), et l'identifiant d'une ligne ne se modifie pas.
+-- --------------------------------------------------------------------------
+create or replace function public.exige_un_compte_pro()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  le_type text;
+begin
+  select u.type into le_type from public.users u where u.id = new.id;
+  if le_type is distinct from 'pro' then
+    raise exception
+      'Une fiche professionnelle ne peut être créée que pour un compte inscrit '
+      'comme professionnel. Ce compte est un compte particulier.'
+      using errcode = 'OP005';
+  end if;
+  return new;
+end; $$;
+
+create or replace trigger trg_exige_un_compte_pro
+  before insert on public.professional_profiles
+  for each row execute function public.exige_un_compte_pro();
+
+-- --------------------------------------------------------------------------
+--  44.3 Ce que cette section ne fait PAS
+--
+--  - Elle ne SUPPRIME rien. Aucune ligne réelle n'est concernée (relevé
+--    ci-dessus), et si une l'était, on ne devinerait pas à la place de son
+--    titulaire — la règle de `completerLieu()`.
+--  - Elle ne ferme PAS les tables ouvertes aux particuliers, et c'est voulu :
+--    `comments`, `reviews`, `post_likes` et `demandes` restent à tout le
+--    monde. « Les particuliers aiment, commentent, partagent, publient des
+--    demandes — mais ne publient pas. »
+--  - Elle ne vérifie pas le SIRET. C'est le lot suivant, et il n'aurait
+--    servi à rien sans celui-ci : une condition posée à l'inscription ne
+--    protège rien si l'on devient pro par un `INSERT` juste après.
+-- --------------------------------------------------------------------------
 
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER

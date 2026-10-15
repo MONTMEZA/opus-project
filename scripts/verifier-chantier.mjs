@@ -56,10 +56,17 @@ verifier('`est_mon_entreprise()` existe',
   + 'naît avec la première table de chantier, sinon c\'est une fonction que '
   + 'personne n\'appelle.');
 
-verifier('…elle rend aujourd\'hui exactement `auth.uid() = p_entreprise`',
-  /select p_entreprise is not null and auth\.uid\(\) = p_entreprise/.test(schema),
-  'Un compte EST une entreprise (décision du 04/10). Le jour où ça change, '
-  + 'c\'est CETTE fonction, et elle seule.');
+/* Jusqu'au 15/10/2026, elle rendait exactement `auth.uid() = p_entreprise`.
+   Elle exige désormais AUSSI d'être professionnel (section 44) : un
+   particulier pouvait ouvrir un carnet de clients et créer un chantier
+   public. C'est précisément pour ce jour-là qu'elle existe — une ligne
+   changée ici, au lieu de toutes les règles des chantiers et des clients. */
+verifier('…elle rend `auth.uid() = p_entreprise`, et exige d\'être pro',
+  /select p_entreprise is not null\s+and auth\.uid\(\) = p_entreprise\s+and public\.est_un_pro\(\)/
+    .test(schema),
+  'Un compte EST une entreprise (décision du 04/10), et une entreprise est '
+  + 'un compte PRO (section 44). Le jour où ça change, c\'est CETTE '
+  + 'fonction, et elle seule.');
 
 verifier('…et la politique du chantier l\'APPELLE',
   /create policy "ecriture mes chantiers"[\s\S]{0,300}?public\.est_mon_entreprise\(pro_id\)/.test(schema),
