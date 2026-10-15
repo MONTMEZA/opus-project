@@ -1326,6 +1326,14 @@ de test, faute de codecs.
 La base les enregistre déjà (table `notifications`, alimentée par des
 triggers), mais rien n'arrive sur l'écran verrouillé.
 
+> **15/10/2026 — le compte Apple Developer est payé et ACTIF** (courriel
+> d'Apple reçu à 20 h 12). La préparation de la première installation est
+> faite : `expo-dev-client`, `expo-notifications` et `expo-device`
+> installés, le greffon déclaré dans `app.json`, `eas.json` écrit. **Les
+> étapes qui restent sont chez le propriétaire**, commande par commande, dans
+> `docs/COMPTE-APPLE.md` §7 ter. Et dès maintenant : `npx expo start --go`
+> pour garder Expo Go, tant qu'Opus n'est pas installé sur l'iPhone.
+
 **Demande un development build**, donc un **compte Apple Developer** : depuis
 le SDK 53, Expo Go ne reçoit plus les notifications push — Expo prêtait ses
 propres identifiants Apple, cette facilité a été retirée. Aucun contournement

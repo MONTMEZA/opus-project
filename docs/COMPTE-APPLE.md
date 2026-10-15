@@ -342,6 +342,125 @@ Deux endroits, qui disent la même chose :
 
 ---
 
+## 7 ter. La première installation sur votre iPhone — commande par commande
+
+**Le compte est actif depuis le 15/10/2026 à 20 h 12** (le courriel « Welcome
+to the Apple Developer Program » est arrivé). Ce qui est déjà fait de mon côté,
+dans le même envoi que ce paragraphe :
+
+- `expo-dev-client` installé : c'est ce qui fait d'Opus une vraie application,
+  avec son icône ;
+- `expo-notifications` et `expo-device` installés, et `expo-notifications`
+  déclaré dans `plugins` d'`app.json` — **dès la première construction**, pour
+  ne pas avoir à reconstruire et à réattendre Apple le jour où l'on branchera
+  les notifications ;
+- `eas.json` avec un profil `development` ;
+- `ITSAppUsesNonExemptEncryption: false` dans `app.json`. Opus n'utilise que
+  le chiffrement standard (les connexions HTTPS). Sans ce réglage, Expo pose
+  la question pendant la construction et modifie `app.json` chez vous ;
+- `expo` lui-même réaligné de 57.0.27 à 57.0.30, comme l'exige
+  `npx expo install --check`.
+
+### ⚠️ Ce qui change TOUT DE SUITE, avant même l'installation
+
+Avec `expo-dev-client` dans le projet, **`npx expo start` vise désormais
+l'application Opus, plus Expo Go**. Tant qu'Opus n'est pas installé sur votre
+iPhone, lancez le serveur ainsi :
+
+```powershell
+npx expo start --go
+```
+
+(et `npx expo start --go -c` quand il faut vider le cache). Une fois Opus
+installé, `npx expo start` tout court redeviendra la bonne commande.
+
+### Les étapes, dans PowerShell, dans `C:\dev\opus`
+
+**1. Récupérer ce que j'ai préparé**
+
+```powershell
+git pull
+npm install
+```
+
+**2. Un compte Expo.** Ce n'est PAS le compte Apple : c'est celui du service
+qui construit l'application dans le nuage. Gratuit. Si vous n'en avez pas :
+`https://expo.dev/signup`.
+
+**3. L'outil de construction, puis la connexion à Expo**
+
+```powershell
+npm install --global eas-cli
+eas login
+```
+
+**4. Relier le projet à votre compte Expo**
+
+```powershell
+eas init
+```
+
+Répondez « Yes » quand il propose de créer le projet. **Il écrit deux lignes
+dans `app.json`** (votre nom d'utilisateur Expo et un identifiant de projet).
+**Copiez-moi ce qu'il affiche** : je mets ces deux lignes dans le dépôt, sinon
+votre prochain `git pull` serait bloqué — mesuré, git refuse même quand la
+modification qui arrive est identique à la vôtre. Ces deux valeurs ne sont pas
+des secrets.
+
+**5. Enregistrer votre iPhone**
+
+```powershell
+eas device:create
+```
+
+- quand il demande votre identifiant Apple, c'est **vous** qui le tapez, avec
+  le code que reçoit votre iPhone ;
+- à « How would you like to register your devices? », choisissez **Website** ;
+- ouvrez le lien sur l'iPhone (dans Safari), touchez **Download Profile**,
+  puis ouvrez **Réglages** : il propose d'installer le profil → **Installer**.
+
+**6. La construction**
+
+```powershell
+eas build --platform ios --profile development
+```
+
+Les questions, et les réponses :
+
+| la question (en anglais) | répondre |
+|---|---|
+| Do you want to log in to your Apple account? | **Y** |
+| Generate a new Apple Distribution Certificate? | **Y** |
+| Select devices for the ad hoc build | votre iPhone, puis Entrée |
+| une question sur les notifications push (Push Notifications / APNs key) | **Y** |
+
+La construction se fait dans le nuage : 10 à 20 minutes, parfois plus avec la
+file d'attente du compte gratuit d'Expo. Vous pouvez fermer PowerShell
+pendant ce temps : le lien affiché permet de suivre.
+
+> **⚠️ Le délai d'Apple, et il est normal.** Sur un compte tout neuf, Apple
+> peut mettre **24 à 72 heures** à finir d'enregistrer un iPhone, et ce délai
+> ne commence qu'à cette **première construction**. Si elle échoue sur un
+> problème d'appareil ou de profil, **ce n'est pas une panne** : on attend, et
+> on relance la même commande.
+
+**7. Installer.** Sur la page de la construction (le lien affiché), bouton
+**Install** : un code QR. Scannez-le avec l'appareil photo de l'iPhone.
+
+**8. Le Mode développeur — une seule fois.** Touchez l'icône d'Opus : l'iPhone
+dit qu'il faut le Mode développeur → **OK**. Puis **Réglages → Confidentialité
+et sécurité → Mode développeur** → activer → **Redémarrer**. Après le
+redémarrage, touchez **Activer** et tapez votre code.
+
+**9. Ensuite, tous les jours** : `npx expo start`, puis ouvrez Opus sur
+l'iPhone et choisissez le serveur dans « Development servers ».
+
+**Au moindre écran ou message dont vous n'êtes pas sûr : capture, et
+montrez-la-moi.** Surtout pendant l'étape 6, où une mauvaise réponse se
+corrige mais coûte une construction.
+
+---
+
 ## 8. Ce que je n'ai PAS pu vérifier d'ici
 
 À dire, parce que c'est la règle du projet :
@@ -368,3 +487,10 @@ Deux endroits, qui disent la même chose :
 - [Internal distribution — Expo](https://docs.expo.dev/build/internal-distribution/) — « requires a paid Apple Developer account », les UDID, les 100 appareils, les 24–72 h
 - [Push notifications FAQ — Expo](https://docs.expo.dev/push-notifications/faq/) — Expo Go ne fait plus les notifications depuis le SDK 53
 - [Submit to the Apple App Store with EAS Submit — Expo](https://docs.expo.dev/submit/ios/) — la clé d'API App Store Connect plutôt que le mot de passe
+
+Lues le 15/10/2026, pour le §7 ter :
+
+- [Create a development build — Expo](https://docs.expo.dev/develop/development-builds/create-a-build/) — `expo-dev-client`, et « this command targets your development build instead of Expo Go »
+- [Create and run a cloud build for iOS devices — Expo](https://docs.expo.dev/tutorial/eas/ios-development-build-for-devices/) — `eas device:create`, « Website », les questions de la construction, le QR
+- [Internal distribution — Expo](https://docs.expo.dev/build/internal-distribution/) — l'appareil n'est déclaré à Apple qu'à la première construction, puis 24–72 h
+- [iOS Developer Mode — Expo](https://docs.expo.dev/guides/ios-developer-mode/) — Réglages → Confidentialité et sécurité → Mode développeur
