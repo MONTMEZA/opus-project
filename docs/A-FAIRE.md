@@ -1326,6 +1326,11 @@ de test, faute de codecs.
 La base les enregistre déjà (table `notifications`, alimentée par des
 triggers), mais rien n'arrive sur l'écran verrouillé.
 
+> **15/10/2026, le soir — Opus est INSTALLÉ sur l'iPhone du propriétaire**
+> comme vraie application (development build), notifications comprises dans
+> la construction. Il ne reste que le dernier mètre : demander l'autorisation,
+> ranger le jeton de l'appareil, et envoyer depuis la base.
+>
 > **15/10/2026 — le compte Apple Developer est payé et ACTIF** (courriel
 > d'Apple reçu à 20 h 12). La préparation de la première installation est
 > faite : `expo-dev-client`, `expo-notifications` et `expo-device`

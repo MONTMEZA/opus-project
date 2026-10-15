@@ -344,6 +344,19 @@ Deux endroits, qui disent la même chose :
 
 ## 7 ter. La première installation sur votre iPhone — commande par commande
 
+> **FAIT le 15/10/2026, le soir même du courriel d'Apple.** iPhone enregistré
+> (`eas device:create`), construction `development` réussie du premier coup —
+> **le délai d'Apple de 24 à 72 heures ne s'est pas produit** —, Opus installé
+> par le code QR, Mode développeur activé, et l'application ouverte sur le
+> serveur du PC. Désormais : `npx expo start` tout court, puis l'icône
+> d'Opus sur l'iPhone. Expo Go reste là, avec `npx expo start --go`.
+>
+> **À savoir pour la suite** : du code JavaScript se recharge comme avant,
+> en quelques secondes. Un module NATIF ajouté au projet (et seulement
+> celui-là) demande de relancer `eas build --platform ios --profile
+> development` puis de réinstaller par le code QR. Les notifications, déjà
+> présentes dans cette construction, n'en demanderont pas.
+
 **Le compte est actif depuis le 15/10/2026 à 20 h 12** (le courriel « Welcome
 to the Apple Developer Program » est arrivé). Ce qui est déjà fait de mon côté,
 dans le même envoi que ce paragraphe :
