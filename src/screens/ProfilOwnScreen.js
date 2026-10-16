@@ -22,6 +22,7 @@ import BandeChantiers from '../components/BandeChantiers';
 import FicheContactPro from '../components/FicheContactPro';
 import { BadgeCheck, Lock, ChevronRight, ShieldCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
+import CarteDemandePro from '../components/CarteDemandePro';
 import { resumeVerification, toutValide } from '../lib/verification';
 import { avgReviews } from '../data/demo';
 
@@ -96,6 +97,13 @@ export default function ProfilOwnScreen({
   onClients,
   onConfidentialite, admin = null, onAdmin,
   mesChantiers = [], onOuvrirChantier,
+  /* Section 45 : l'entreprise rattachée (un pro), la demande de compte
+     pro (un particulier). Les états disent « pas encore lu » — ce n'est
+     pas « aucune ». */
+  entreprise = null, entrepriseEtat = 'jamais',
+  demandePro = null, demandeProEtat = 'jamais',
+  onRechargerDemandePro, onPasserPro, onJoindreJustificatif, onAnnulerDemandePro,
+  onEntrerEnPro, onErreur,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -109,6 +117,11 @@ export default function ProfilOwnScreen({
   /* --- profil particulier --- */
   if (userType === 'particulier') {
     const followed = [...followingIds];
+    /* « Particulier » tout court mentait à l'artisan qui attend : le sous-
+       titre dit l'attente, tant qu'une demande est ouverte EN BASE. */
+    const enAttente = demandeProEtat === 'pret' && demandePro && demandePro.statut === 'nouvelle';
+    const sousTitre = `${enAttente ? 'Compte professionnel en attente' : 'Particulier'}`
+      + `${monProfil.ville ? ` · ${monProfil.ville}` : ''}`;
     return (
       <Animated.ScrollView
         style={{ flex: 1 }}
@@ -121,15 +134,13 @@ export default function ProfilOwnScreen({
           bannerUrl={monProfil.bannerUrl}
           avatarUrl={monProfil.avatarUrl}
           titre={monProfil.nom || 'Vous'}
-          sousTitre={`Particulier${monProfil.ville ? ` · ${monProfil.ville}` : ''}`}
+          sousTitre={sousTitre}
         />
         <View style={s.head}>
           {!NOM_DANS_ENTETE && (
             <>
               <Text style={[s.name, { marginTop: 10 }]}>{monProfil.nom || 'Vous'}</Text>
-              <Text style={s.metier}>
-                Particulier{monProfil.ville ? ` · ${monProfil.ville}` : ''}
-              </Text>
+              <Text style={s.metier}>{sousTitre}</Text>
             </>
           )}
           <View style={s.stats}>
@@ -137,6 +148,22 @@ export default function ProfilOwnScreen({
             <Stat value={savedIds.size} label="Enregistrés" />
           </View>
           <BtnOutline label="Modifier mon profil" onPress={onEdit} />
+        </View>
+
+        {/* LA DEMANDE DE COMPTE PRO — en tête, avant les abonnements : un
+            artisan qui attend qu'on ouvre son compte n'a rien de plus
+            important à lire ici. */}
+        <View style={s.pad}>
+          <CarteDemandePro
+            demande={demandePro}
+            etat={demandeProEtat}
+            onRecharger={onRechargerDemandePro}
+            onPasserPro={onPasserPro}
+            onJoindre={onJoindreJustificatif}
+            onAnnuler={onAnnulerDemandePro}
+            onEntrerEnPro={onEntrerEnPro}
+            onErreur={onErreur}
+          />
         </View>
 
         <SectionLabel>Professionnels suivis</SectionLabel>
@@ -204,7 +231,10 @@ export default function ProfilOwnScreen({
             plus annoncer « vérifié » pendant que le rappel juste en dessous
             réclame les mêmes justificatifs. */}
         <Text style={[s.sub, !toutValide(me) && { color: C.muted }]}>
-          {resumeVerification(me)}
+          {/* `undefined` tant que l'entreprise n'est pas lue : la ligne ne
+              dit alors rien d'elle, plutôt que « jamais rattaché » à
+              quelqu'un qui l'est. */}
+          {resumeVerification(me, entrepriseEtat === 'pret' ? entreprise : undefined)}
         </Text>
         <View style={s.stats}>
           <Stat value={me.portfolio.length} label="Réalisations" />
@@ -229,6 +259,7 @@ export default function ProfilOwnScreen({
         statut={me.verificationStatut}
         note={me.verificationNote}
         onAction={onEdit}
+        identite={entrepriseEtat === 'pret' ? entreprise : undefined}
         style={{ marginHorizontal: 16, marginTop: 10 }}
       />
 

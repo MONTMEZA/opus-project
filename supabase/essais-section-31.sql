@@ -19,6 +19,18 @@
 \set MOI   '''aaaa0000-0000-4000-8000-00000000aaaa'''
 \set CLIENT '''bbbb0000-0000-4000-8000-00000000bbbb'''
 
+-- --------------------------------------------------------------------------
+--  LA PREUVE DU RÉPERTOIRE — depuis la section 45 (15/10/2026), un compte
+--  pro ne naît qu'avec une preuve FRAÎCHE pour son SIRET. On la pose ici en
+--  superutilisateur, comme la fonction Edge `siret` la poserait, sur un SIRET
+--  FICTIF à clé juste que le répertoire Sirene ne connaît pas (vérifié : 0
+--  résultat). Sans elle, chaque compte pro de ce fichier serait refusé
+--  (OP006), et les cas suivants ne prouveraient plus rien.
+-- --------------------------------------------------------------------------
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000001800010', 'ESSAIS 31 — MOI', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+
 
 -- --------------------------------------------------------------------------
 \echo ''
@@ -29,6 +41,7 @@ insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
   jsonb_build_object(
     'type', 'pro',
+    'siret', '00000001800010',
     'nom', 'Belaid Maconnerie',
     'entreprise', 'Belaid Maconnerie',
     'metiers', jsonb_build_array('macon', 'carreleur'),
@@ -54,7 +67,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Bidon',
+  jsonb_build_object('type', 'pro', 'siret', '00000001800010', 'nom', 'Bidon',
                      'metiers', jsonb_build_array('dresseur-de-licornes'))
 );
 select metier, metiers from public.professional_profiles where id = :MOI;
@@ -70,7 +83,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Tricheur',
+  jsonb_build_object('type', 'pro', 'siret', '00000001800010', 'nom', 'Tricheur',
                      'verifie', true, 'kbis_valide', true,
                      'assurance_valide', true, 'rge', true)
 );
@@ -99,7 +112,21 @@ rollback;
 \echo '=== 5. LE BADGE NE SE DECERNE PAS A LA CREATION (faille du 05/10) ==='
 -- Avant ce lot : INSERT 0 1, aucune erreur, et la fiche ressortait
 -- verifie = t. Le verrou de tient_le_profil_pro() ne regardait que UPDATE.
+--
+-- CE CAS A CHANGÉ DEUX FOIS, et c'est à savoir pour le relire. Depuis la
+-- section 44 (15/10), l'INSERT du client tombait sur OP005 (compte
+-- particulier) AVANT d'atteindre le verrou du badge : l'essai ne prouvait
+-- plus rien sur le badge — il s'arrêtait sur une autre porte. Depuis la
+-- section 45, il tombe sur OP010 : une fiche ne se crée plus du tout depuis
+-- l'application (5a).
+--
+-- Le verrou du badge à la CRÉATION reste pourtant indispensable : les
+-- fiches naissent désormais dans des fonctions `security definer`
+-- appelées par leur titulaire (`devenir_pro`), où `auth.uid()` VAUT ce
+-- titulaire. 5b éprouve exactement ce chemin-là — une écriture faite par la
+-- base pour le compte de quelqu'un, qui essaierait d'y glisser le badge.
 -- --------------------------------------------------------------------------
+\echo '--- 5a. le client s insere une fiche avec le badge (attendu : ERROR OP010)'
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
@@ -111,8 +138,23 @@ set local request.jwt.claim.sub = 'aaaa0000-0000-4000-8000-00000000aaaa';
 insert into public.professional_profiles
   (id, entreprise, metier, metiers, ville, kbis_valide, assurance_valide, verifie)
 values (:MOI, 'Tricheur SARL', 'macon', array['macon'], 'Nulle part', true, true, true);
-reset role;
+rollback;
 
+\echo '--- 5b. une fonction de la base cree la fiche POUR son titulaire, badge glisse dedans (attendu : f | f | f | non_soumis)'
+begin;
+insert into auth.users (id, email, raw_user_meta_data) values (
+  :MOI, 'essai@exemple-opus.test',
+  jsonb_build_object('type', 'particulier', 'nom', 'Tricheur')
+);
+-- Le rôle reste celui du propriétaire, comme dans `devenir_pro()` ; seul
+-- `auth.uid()` désigne le titulaire.
+update public.users set type = 'pro' where id = :MOI;
+set local request.jwt.claim.sub = 'aaaa0000-0000-4000-8000-00000000aaaa';
+insert into public.professional_profiles
+  (id, entreprise, metier, metiers, ville, kbis_valide, assurance_valide, verifie,
+   verification_statut)
+values (:MOI, 'Tricheur SARL', 'macon', array['macon'], 'Nulle part', true, true, true,
+        'verifie');
 select verifie, kbis_valide, assurance_valide, verification_statut
   from public.professional_profiles where id = :MOI;
 rollback;
@@ -127,7 +169,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Honnete',
+  jsonb_build_object('type', 'pro', 'siret', '00000001800010', 'nom', 'Honnete',
                      'metiers', jsonb_build_array('macon'))
 );
 update public.professional_profiles
@@ -145,7 +187,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Belaid',
+  jsonb_build_object('type', 'pro', 'siret', '00000001800010', 'nom', 'Belaid',
                      'metiers', jsonb_build_array('macon'))
 );
 insert into auth.users (id, email, raw_user_meta_data) values (
@@ -172,7 +214,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Belaid',
+  jsonb_build_object('type', 'pro', 'siret', '00000001800010', 'nom', 'Belaid',
                      'metiers', jsonb_build_array('macon'))
 );
 insert into auth.users (id, email, raw_user_meta_data) values (
@@ -202,7 +244,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Qui s en va',
+  jsonb_build_object('type', 'pro', 'siret', '00000001800010', 'nom', 'Qui s en va',
                      'metiers', jsonb_build_array('macon'))
 );
 delete from public.users where id = :MOI;
@@ -218,7 +260,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :MOI, 'essai@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Qui s en va',
+  jsonb_build_object('type', 'pro', 'siret', '00000001800010', 'nom', 'Qui s en va',
                      'metiers', jsonb_build_array('macon'))
 );
 delete from auth.users where id = :MOI;
@@ -237,6 +279,10 @@ insert into auth.users (id, email) values (:MOI, 'essai@exemple-opus.test');
 select type, nom, (cgu_version is null) as sans_cgu from public.users where id = :MOI;
 rollback;
 
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée.
+delete from public.preuves_siret where siret in ('00000001800010');
 
 \echo ''
 \echo '=== FIN DES ESSAIS DE LA SECTION 31 ==='

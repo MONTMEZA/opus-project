@@ -91,9 +91,29 @@ verifier('le drapeau n’est pas coché sans adresse',
    c'est ce qui arriverait si quelqu'un remettait `${EDITEUR.email}` dans un
    texte au lieu de passer par `ligneContact()` ou `parEcrit()`. */
 const TOUS_LES_TEXTES = [...MENTIONS, ...CGU, ...CONFIDENTIALITE];
-const TROUS = ['null', 'undefined', '[object'];
+/* LA SOUS-CHAÎNE, SAUF UN MOT FRANÇAIS QUI CONTINUE — 15/10/2026.
+
+   Un premier relâchement cherchait le MOT « null » (`\bnull\b`), parce que
+   la suite de lettres avait refusé « ne s’affiche nulle part ». La
+   relecture adverse l'a démoli : une valeur absente COLLÉE à un mot
+   (`'Données d’entreprise' + EDITEUR.email`) donne « entreprisenull »,
+   sans frontière de mot, et le contrôle passait au vert — pendant qu'il
+   servait à laisser passer une phrase FAUSSE (« ne s’affiche nulle part »,
+   corrigée depuis dans « Le badge vérifié »). On a tordu le contrôle au
+   lieu de corriger le texte.
+
+   On cherche donc de nouveau la sous-chaîne, n'importe où, et on n'épargne
+   QUE ce qui est un mot français : « null » suivi d'une lettre (« nulle »,
+   « nullement »). « entreprisenull », « null : », « (null) » sont refusés. */
+const TROUS = [
+  ['null', /null(?![a-zàâäéèêëïîôöùûüç])/i],
+  ['undefined', /undefined/i],
+  ['[object', /\[object/],
+  ['NaN', /NaN/],
+];
 const trouves = TOUS_LES_TEXTES
-  .flatMap((b) => TROUS.filter((t) => String(b.texte).includes(t)).map((t) => `${b.titre} → « ${t} »`));
+  .flatMap((b) => TROUS.filter(([, motif]) => motif.test(String(b.texte)))
+    .map(([t]) => `${b.titre} → « ${t} »`));
 verifier('aucun texte légal n’affiche « null » ni « undefined »',
   trouves.length === 0, trouves.join(' · '));
 
@@ -243,6 +263,146 @@ if (STATUT !== 'essai') {
     && !/sera publié ici/i.test(tout),
     'Le texte est branché sur le drapeau, pas sur le statut : il doit avoir '
     + 'changé de branche en même temps.');
+}
+
+/* ==================================================================
+   LE SIRET, CONDITION DE L'INSCRIPTION PROFESSIONNELLE — 15/10/2026
+   (section 45 de `schema.sql`, relecture « droit » du plan, constats 5,
+   9 à 13). Chaque exigence vise la SECTION où l'on va chercher
+   l'information, jamais « quelque part dans les textes » : la leçon de la
+   Base Adresse, que ce fichier a apprise en se laissant tromper.
+   ================================================================== */
+console.log('\nLe SIRET : ce qu’il ouvre, ce qu’il ne prouve pas');
+{
+  const section = (blocs, motif) => blocs.filter((b) => motif.test(b.titre))
+    .map((b) => b.texte).join(' ');
+
+  verifier('la version des textes a changé avec le lot (15/10/2026 au moins)',
+    VERSION >= '2026-10-15',
+    `VERSION = ${VERSION}. Qui peut s’inscrire, la décision automatique, ce qui est `
+    + 'collecté ont changé DE FOND : une acceptation ancienne ne couvre pas ces textes.');
+
+  const destinatairesSiret = section(CONFIDENTIALITE, /transmises/i);
+  verifier('le service de l’État est nommé parmi les destinataires',
+    /recherche-entreprises\.api\.gouv\.fr/.test(destinatairesSiret),
+    'chaque consultation lui envoie un numéro : un destinataire non déclaré, même '
+    + 'public, reste non déclaré');
+  verifier('…et ce qui part y est dit : seul ce numéro',
+    /seul ce numéro/.test(destinatairesSiret),
+    'nommer un destinataire sans dire ce qu’on lui envoie laisse croire au pire');
+
+  const collecte = section(CONFIDENTIALITE, /Ce que nous collectons/);
+  verifier('« Ce que nous collectons » nomme le SIRET',
+    /SIRET/.test(collecte),
+    'il est collecté depuis le premier jour (l’ancien champ libre) ; depuis ce lot, '
+    + 'avec ce que le répertoire en dit');
+  verifier('…et l’empreinte d’adresse IP, sans prétendre que l’adresse n’est jamais vue',
+    /empreinte/.test(collecte) && !/adresse IP n.est jamais conservée/i.test(collecte),
+    'les journaux de l’hébergeur gardent l’IP en clair (mesuré) : « jamais '
+    + 'conservée » serait faux');
+
+  const mentions = MENTIONS.map((b) => b.texte).join(' ');
+  verifier('les mentions citent la source : www.insee.fr et la Licence Ouverte',
+    /www\.insee\.fr/.test(mentions) && /Licence Ouverte/.test(mentions),
+    'la Licence Ouverte 2.0 l’exige pour toute réutilisation de Sirene');
+  verifier('…et disent que ce n’est pas une caution de l’État',
+    /ni agrément ni caution/.test(mentions),
+    'la même licence interdit de suggérer une reconnaissance par l’INSEE');
+
+  /* L'ARTICLE 22 : une décision automatique qui peut refuser un compte doit
+     être annoncée, ET dire comment la faire revoir par un humain — dans la
+     MÊME section, sinon l'une se lit sans l'autre. */
+  const unAutre = CONFIDENTIALITE.some((b) => /automatique/i.test(b.texte) && /humain/i.test(b.texte));
+  verifier('la décision automatique est annoncée, avec son réexamen humain, ensemble',
+    unAutre,
+    'RGPD, article 22 (supposé par la relecture, Légifrance étant injoignable) : '
+    + 'refuser un compte professionnel peut affecter quelqu’un');
+
+  verifier('« Qui peut s’inscrire » dit la règle : répertoire, une entreprise un compte',
+    /répertoire Sirene/.test(section(CGU, /Qui peut/)) && /un seul compte professionnel/.test(section(CGU, /Qui peut/)),
+    '« une activité réellement déclarée » était une déclaration que rien ne '
+    + 'contrôlait, et l’unicité n’y était pas');
+
+  verifier('l’usurpation d’une entreprise et son issue sont écrites',
+    /SIRET d’une entreprise qui n’est pas la sienne/.test(section(CGU, /interdit/))
+    && /retirée du compte/.test(section(CGU, /interdit/)),
+    'vrai depuis `admin_retirer_entreprise` : sans ce texte, le retrait n’a pas de '
+    + 'fondement écrit');
+
+  verifier('le justificatif d’une demande est couvert par « Vos documents professionnels »',
+    /demande d’ouverture de compte/.test(section(CONFIDENTIALITE, /documents professionnels/)),
+    'il vit dans le même espace privé que le Kbis : le texte doit le dire');
+
+  /* LES TROIS PHRASES QUI NE DOIVENT PLUS JAMAIS REVENIR. */
+  verifier('plus de « six mois, comme la loi l’impose » : c’était faux',
+    !/six mois/.test(tout) && !/comme la loi l.impose/.test(tout),
+    'en offre gratuite, Supabase garde ses journaux un jour (mesuré par la '
+    + 'relecture) ; et rien ne fondait « la loi l’impose »');
+  /* AUCUNE DURÉE CHIFFRÉE POUR L'EMPREINTE NI POUR LA CONSULTATION — la
+     première version ne connaissait que « au plus tard » et « sous » : « dans
+     les 24 heures » passait (relecture adverse). On refuse donc tout nombre
+     d'heures ou de jours dans la même phrase que l'empreinte ou que le
+     résultat d'une consultation. */
+  const combien = section(CONFIDENTIALITE, /Combien de temps/);
+  const phrasesDuree = combien.split(/(?<=[.;:])\s+/)
+    .filter((p) => /empreinte|résultat d.une consultation/i.test(p))
+    .filter((p) => /\b\d+\s*(h|heures?|jours?|semaines?|mois|ans?)\b/i.test(p));
+  verifier('aucune durée promise pour l’empreinte d’IP ni pour la consultation : rien ne la tient',
+    phrasesDuree.length === 0,
+    `${phrasesDuree.join(' | ')} — la purge n’a lieu qu’à l’occasion d’une consultation : `
+    + 'sans appel pendant un mois, les lignes restent. Promettre une durée qu’on ne tient '
+    + 'pas est pire que n’en promettre aucune');
+  /* Et aucune promesse sur l'adresse IP elle-même : les journaux de
+     l'hébergeur la gardent en clair. « N'est jamais enregistrée » passait,
+     parce que seul « n'est jamais conservée » était refusé. */
+  verifier('aucune promesse que l’adresse IP ne serait jamais gardée',
+    !/adresse IP[^.]{0,40}jamais\s+(conserv|enregistr|gard|stock|rang)/i.test(tout)
+    && !/jamais[^.]{0,20}(conserv|enregistr|gard|stock)\w*[^.]{0,20}adresse IP/i.test(tout),
+    'les journaux techniques de l’hébergeur contiennent l’adresse IP des appareils');
+
+  /* LE VOCABULAIRE DU BADGE, PARTOUT — la première version ne connaissait
+     que deux expressions exactes : « Entreprise vérifiée au répertoire
+     Sirene » passait (relecture adverse). Le niveau du répertoire ne dit
+     jamais « vérifié(e) » d'une entreprise ou d'un SIRET, ni « vérifié au
+     registre / au répertoire » — section du badge comprise. */
+  verifier('aucune mention « entreprise / SIRET … vérifié(e) » ni « vérifié(e) au registre / au répertoire »',
+    !/(entreprise|siret)[^.]{0,40}v[ée]rifi[ée]/i.test(tout.replace(/vérification à la main/gi, ''))
+    && !/v[ée]rifi[ée]e?s?\s+au\s+(registre|répertoire)/i.test(tout)
+    && !/SIRET actif/i.test(tout),
+    'le plan l’a écartée : obtenue en trente secondes avec le numéro d’un autre, '
+    + 'elle serait un outil d’hameçonnage — et les textes ne décrivent pas ce qui '
+    + 'n’existe pas');
+  verifier('…ni rien qui suggère une caution publique (certifié, agréé, validé par l’État ou l’INSEE)',
+    !/certifi|agré[ée]|validée? par l.(État|INSEE)/i.test(
+      tout.replace(/ni agrément ni (caution|une validation)[^.]*\./gi, '')),
+    'la Licence Ouverte interdit de suggérer une reconnaissance de l’INSEE');
+
+  /* LA CONSULTATION NE S'AFFICHE PAS SUR LA FICHE PUBLIQUE — et c'est tout
+     ce qu'on peut dire : « Mon profil », le rappel de vérification, « Mon
+     entreprise » et l'administration la montrent. « Ne s'affiche nulle
+     part » était faux, dans un texte opposable. */
+  verifier('« Le badge vérifié » dit que la consultation n’apparaît pas sur la fiche PUBLIQUE',
+    /fiche publique/i.test(section(CGU, /badge/i))
+    && !/s.affiche nulle part/i.test(section(CGU, /badge/i)),
+    'elle s’affiche à son titulaire et à l’administration : seule la fiche publique ne la montre pas');
+
+  /* LE NOM COMPLET DU RÉPERTOIRE est recopié dans l'identité privée ; pour
+     un entrepreneur individuel, c'est son nom civil. */
+  verifier('« Ce que nous collectons » nomme le nom complet du répertoire',
+    /nom complet/i.test(section(CONFIDENTIALITE, /Ce que nous collectons/)),
+    'une donnée obtenue auprès d’une autre source que la personne doit être nommée');
+
+  /* LA PORTE QUI N'EXISTE PAS POUR UN PRO : la demande à la main est
+     réservée aux comptes particuliers (et à l'inscription). */
+  verifier('« Ce qui est interdit » ne promet pas la demande à la main à un compte déjà professionnel',
+    /compte déjà professionnel ne peut pas encore/i.test(section(CGU, /interdit/)),
+    'la base refuse la demande d’un pro (`not est_un_pro()`), et l’application le dit');
+
+  /* LA DATE DE MISE À JOUR : là où elle est vraiment écrite, et le
+     répertoire ne la publie pas toujours. */
+  verifier('les Sources ne promettent pas la date « à chaque donnée affichée »',
+    !/chaque donnée affichée/i.test(mentions) && /Mon entreprise/.test(section(MENTIONS, /Sources/)),
+    'le rappel de vérification et la ligne sous le nom n’en portent pas');
 }
 
 console.log('');

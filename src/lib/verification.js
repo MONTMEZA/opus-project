@@ -24,6 +24,7 @@
 
 import { EXISTENCE, assuranceAttendue } from '../data/pieces-justificatives.js';
 import { metiersDe } from './metiers.js';
+import { resumeEntreprise } from './entreprise.js';
 
 export const VALIDE = 'valide';
 export const ATTENTE = 'attente';
@@ -92,13 +93,6 @@ export function detailRge(pro) {
   return { etat: e, valeur: 'Non communiquée', neutre: true };
 }
 
-const MOT_SIRET = {
-  [VALIDE]: 'vérifié',
-  [ATTENTE]: 'en cours de vérification',
-  [REFUSE]: 'non vérifié',
-  [ABSENT]: 'non vérifié',
-};
-
 /**
  * LES DEUX PIÈCES, NOMMÉES POUR CE PROFESSIONNEL-LÀ.
  *
@@ -115,12 +109,22 @@ export function pieceAssurance(pro) {
   return assuranceAttendue(metiersDe(pro));
 }
 
-/** La ligne sous le nom, sur « mon profil ». Jamais en contradiction avec le rappel. */
-export function resumeVerification(pro) {
-  const kbis = etatKbis(pro);
-  const siret = pro.siret
-    ? `SIRET ${pro.siret} ${MOT_SIRET[kbis]}`
-    : 'SIRET non renseigné';
+/**
+ * La ligne sous le nom, sur « mon profil ». Jamais en contradiction avec le rappel.
+ *
+ * DEPUIS LE 15/10/2026 (section 45), ELLE LIT L'ENTREPRISE RATTACHÉE, et
+ * plus jamais l'ancienne colonne `siret` — un champ libre, jamais
+ * contrôlé, inventé sur les cinq fiches de la vraie base. Elle disait
+ * « SIRET non renseigné » à un artisan qui venait de faire consulter le
+ * sien au répertoire : le premier écran après l'inscription se
+ * contredisait.
+ *
+ * `identite` vaut `undefined` tant qu'elle n'est pas lue : la ligne ne dit
+ * alors rien de l'entreprise, plutôt que « jamais rattaché » à quelqu'un
+ * qui l'est. `null` veut dire « lue, et aucune ».
+ */
+export function resumeVerification(pro, identite) {
+  const siret = identite === undefined ? null : resumeEntreprise(identite);
   const nom = pieceAssurance(pro).court;
   const mots = {
     [VALIDE]: `${nom} à jour`,
@@ -128,7 +132,7 @@ export function resumeVerification(pro) {
     [REFUSE]: `${nom} refusée`,
     [ABSENT]: `${nom} non renseignée`,
   };
-  return `${siret} · ${mots[etatAssurance(pro)]}`;
+  return siret ? `${siret} · ${mots[etatAssurance(pro)]}` : mots[etatAssurance(pro)];
 }
 
 /** Tout vert seulement quand les deux documents le sont. */

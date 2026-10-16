@@ -18,11 +18,18 @@
 const ilYA = (heures) => new Date(Date.now() - heures * 3600e3).toISOString();
 
 
+/* LES FICHES NE PORTENT PLUS DE `siret` (15/10/2026, section 45). Les huit
+   numéros qui étaient ici étaient INVENTÉS, et plus rien ne les lisait :
+   l'entreprise d'un professionnel vit désormais à part, rattachée par la
+   base après une consultation du répertoire Sirene. En démonstration, elle
+   vient de `siret-demo.js`, dont les numéros sont fictifs (cinq zéros en
+   tête) — un vrai SIRET affiché en exemple serait l'usurpation que ce lot
+   ferme. */
 export const proProfiles = {
   1: { id: 1, nom: 'Karim Belaïd', entreprise: 'Belaïd Maçonnerie', metier: 'macon',
        metiers: ['macon', 'carreleur'],
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 9,
-       siret: '812 345 678 00019', followers: 1240,
+       followers: 1240,
        horaires: {
          lun: [['08:00', '12:00'], ['14:00', '18:00']],
          mar: [['08:00', '12:00'], ['14:00', '18:00']],
@@ -48,7 +55,7 @@ export const proProfiles = {
        ] },
   2: { id: 2, nom: 'Sophie Renaud', entreprise: 'Renaud Élec', metier: 'electricien',
        ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357, verifie: true, exp: 6,
-       siret: '798 221 044 00027', followers: 860,
+       followers: 860,
        horaires: {
          lun: [['07:30', '17:30']], mar: [['07:30', '17:30']],
          mer: [['07:30', '17:30']], jeu: [['07:30', '17:30']],
@@ -68,7 +75,7 @@ export const proProfiles = {
        ] },
   3: { id: 3, nom: 'Yanis Cortez', entreprise: 'YC Carrelage', metier: 'carreleur',
        ville: 'Toulouse (31)', latitude: 43.6045, longitude: 1.4442, verifie: false, exp: 4,
-       siret: '889 112 004 00013', followers: 410,
+       followers: 410,
        telephone: '05 61 22 33 44', zoneKm: 25,
        specialites: ["Douche à l'italienne", 'Carrelage grand format', 'Faïence salle de bain'],
        bio: "Pose de carrelage grand format, faïence, douches à l'italienne.",
@@ -83,7 +90,7 @@ export const proProfiles = {
   4: { id: 4, nom: 'Marc Dubreuil', entreprise: 'Dubreuil Plomberie', metier: 'plombier',
        metiers: ['plombier', 'chauffagiste'],
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 12,
-       siret: '701 998 332 00041', followers: 990,
+       followers: 990,
        bio: "Plomberie générale, chauffage, dépannage rapide sur Marseille et alentours.",
        partners: [1],
        assurance: { valide: true, expire: '06/2027' },
@@ -96,7 +103,7 @@ export const proProfiles = {
        ] },
   8: { id: 8, nom: 'Léa Sanchez', entreprise: 'Sanchez Plomberie', metier: 'plombier',
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 5,
-       siret: '901 447 226 00014', followers: 380,
+       followers: 380,
        bio: "Dépannage, sanitaire et rénovation de salle de bain. Devis gratuit sous 24 h.",
        partners: [],
        assurance: { valide: true, expire: '03/2027' },
@@ -108,7 +115,7 @@ export const proProfiles = {
        ] },
   6: { id: 6, nom: 'Driss Amrani', entreprise: 'Amrani Serrurerie', metier: 'serrurier',
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 7,
-       siret: '823 554 119 00022', followers: 540,
+       followers: 540,
        bio: "Ouverture de porte, changement de serrure, blindage. Interventions d'urgence 7j/7.",
        partners: [],
        assurance: { valide: true, expire: '08/2027' },
@@ -120,7 +127,7 @@ export const proProfiles = {
        ] },
   7: { id: 7, nom: 'Pierre Nogaret', entreprise: 'Nogaret Chauffage', metier: 'chauffagiste',
        ville: 'Aix-en-Provence (13)', latitude: 43.5297, longitude: 5.4474, verifie: true, exp: 15,
-       siret: '654 220 887 00031', followers: 720,
+       followers: 720,
        bio: "Chaudières gaz et fioul, pompes à chaleur, dépannage et entretien annuel.",
        partners: [4],
        assurance: { valide: true, expire: '11/2026' },
@@ -132,7 +139,7 @@ export const proProfiles = {
        ] },
   5: { id: 5, nom: 'Élodie Faure', entreprise: 'Faure Charpente', metier: 'charpentier',
        ville: 'Aix-en-Provence (13)', latitude: 43.5297, longitude: 5.4474, verifie: true, exp: 8,
-       siret: '845 667 210 00018', followers: 320,
+       followers: 320,
        bio: "Charpente traditionnelle et ossature bois, du neuf à la rénovation.",
        partners: [1],
        assurance: { valide: true, expire: '04/2027' },

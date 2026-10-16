@@ -35,8 +35,28 @@ import { nomMetier } from '../lib/metiers';
 
 export const MAX_METIERS = 4;
 
+/**
+ * LA LISTE PEUT ÊTRE VIDE — 15/10/2026 (lot SIRET).
+ *
+ * Elle ne l'était jamais : l'inscription cochait « Maçon » d'office. Or le
+ * code d'activité du répertoire PROPOSE désormais les métiers, et quand il
+ * ne propose rien (43.29B, 71.12B…), un « Maçon » coché sous des champs
+ * préremplis passait pour une proposition du répertoire — on le validait
+ * sans le lire. C'est l'avertissement d'`ape-metiers.js` : une proposition
+ * inventée coûte plus qu'une absence de proposition.
+ *
+ * Le bloc s'ouvre donc VIDE, avec « Choisissez votre métier », et c'est
+ * l'écran qui refuse d'enregistrer une liste vide (`valider()`), avec un
+ * message — pas ce composant, qui ne sait pas quand on a fini.
+ *
+ * `proposition` : la phrase qui dit D'OÙ viennent les métiers déjà
+ * choisis (« Proposé d'après votre activité déclarée (43.99C) — corrigez si
+ * ce n'est pas le bon »). Absente quand rien n'a été proposé : la dire
+ * au-dessus d'un choix fait à la main serait faux.
+ */
 export default function ChoixMetiers({
   valeurs = [], onChange, verrouille = false, onDemanderModification, demandeEnCours,
+  proposition = null,
 }) {
   const choisis = valeurs.filter(Boolean);
   const [selecteurOuvert, setSelecteurOuvert] = useState(false);
@@ -93,6 +113,12 @@ export default function ChoixMetiers({
   /* --- profil non vérifié : libre --- */
   return (
     <View>
+      {!!proposition && choisis.length > 0 && (
+        <Text style={s.proposition}>{proposition}</Text>
+      )}
+      {choisis.length === 0 && (
+        <Text style={s.vide}>Choisissez votre métier.</Text>
+      )}
       <View style={s.choisisRang}>
         {choisis.map((m, i) => (
           <View key={m} style={[s.pastille, i === 0 && s.pastillePrincipale]}>
@@ -101,8 +127,14 @@ export default function ChoixMetiers({
               onPress={() => mettreEnPrincipal(m)}
               hitSlop={viser(24)}
             >
-              {i === 0 && <Star size={11} color="#fff" />}
-              <Text style={s.pastilleTexte}>{nomMetier(m)}</Text>
+              {/* SUR L'ORANGE, L'ENCRE SOMBRE : le blanc n'y donne que 3,51 : 1
+                  (CLAUDE.md, 02/10/2026). Relevé au navigateur le 15/10 sur
+                  « Passer en compte professionnel », où cette pastille est
+                  la première chose qu'on lit sous le nom de l'entreprise. */}
+              {i === 0 && <Star size={11} color={C.surAccent} />}
+              <Text style={[s.pastilleTexte, i === 0 && s.pastilleTextePrincipale]}>
+                {nomMetier(m)}
+              </Text>
             </Pressable>
             {choisis.length > 1 && (
               <Pressable
@@ -111,21 +143,23 @@ export default function ChoixMetiers({
                 accessibilityRole="button"
                 accessibilityLabel={`Retirer le métier ${nomMetier(m)}`}
               >
-                <X size={12} color="#fff" />
+                <X size={12} color={i === 0 ? C.surAccent : '#fff'} />
               </Pressable>
             )}
           </View>
         ))}
       </View>
 
-      <Text style={s.aide}>
-        {choisis.length > 1
-          ? `Métier principal : ${nomMetier(choisis[0])}. Touchez un autre métier choisi pour en faire le principal.`
-          : 'Ajoutez un deuxième métier si vous en exercez un autre.'}
-        {'\n'}
-        {choisis.length} sur {MAX_METIERS} — vos métiers seront figés le jour où
-        vos documents seront vérifiés.
-      </Text>
+      {choisis.length > 0 && (
+        <Text style={s.aide}>
+          {choisis.length > 1
+            ? `Métier principal : ${nomMetier(choisis[0])}. Touchez un autre métier choisi pour en faire le principal.`
+            : 'Ajoutez un deuxième métier si vous en exercez un autre.'}
+          {'\n'}
+          {choisis.length} sur {MAX_METIERS} — vos métiers seront figés le jour où
+          vos documents seront vérifiés.
+        </Text>
+      )}
 
       {/* Un bouton FLOTTE au-dessus du fond : arrondi, contrairement aux
           pastilles de métier qui, elles, portent l'information. */}
@@ -173,10 +207,21 @@ const s = StyleSheet.create({
   pastillePrincipale: { backgroundColor: C.accent },
   pastilleCorps: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pastilleTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: '#fff' },
+  pastilleTextePrincipale: { color: C.surAccent },
   pastilleFigee: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
   pastilleTexteFige: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
 
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: 16, marginBottom: 8 },
+  /* D'où viennent les métiers déjà cochés. En encre de lecture, pas en
+     orange : c'est une information, pas une action. */
+  proposition: {
+    fontFamily: F.inter, fontSize: T.petit, color: C.accent2,
+    lineHeight: interligne(T.petit), marginBottom: S.sm,
+  },
+  vide: {
+    fontFamily: F.inter6, fontSize: T.courant, color: C.ink,
+    lineHeight: interligne(T.courant), marginBottom: S.sm,
+  },
   limite: {
     fontFamily: F.inter, fontSize: T.petit, color: C.bad,
     lineHeight: interligne(T.petit), marginTop: S.sm,

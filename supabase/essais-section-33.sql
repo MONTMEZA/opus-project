@@ -21,6 +21,19 @@
 \set CLIENT   '''cccc0000-0000-4000-8000-00000000cccc'''
 
 -- --------------------------------------------------------------------------
+--  LA PREUVE DU RÉPERTOIRE — depuis la section 45 (15/10/2026), un compte
+--  pro ne naît qu'avec une preuve FRAÎCHE pour son SIRET. On la pose ici en
+--  superutilisateur, comme la fonction Edge `siret` la poserait, sur un SIRET
+--  FICTIF à clé juste que le répertoire Sirene ne connaît pas (vérifié : 0
+--  résultat). Sans elle, chaque compte pro de ce fichier serait refusé
+--  (OP006), et les cas suivants ne prouveraient plus rien.
+-- --------------------------------------------------------------------------
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000003400017', 'ESSAIS 33 — MACON', 'registre', now() + interval '1 hour'),
+  ('00000004200010', 'ESSAIS 33 — COUVREUR', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+
+-- --------------------------------------------------------------------------
 --  Le jeu d'essai, posé par une fonction pour ne pas le recopier dix fois.
 --
 --  Lambesc (43,65 / 5,26) et Lille (50,63 / 3,06) : 800 km, aucun rayon
@@ -31,11 +44,11 @@ language plpgsql as $$
 begin
   insert into auth.users (id, email, raw_user_meta_data) values
     ('aaaa0000-0000-4000-8000-00000000aaaa', 'macon@exemple-opus.test',
-     jsonb_build_object('type','pro','nom','Macon de Lambesc',
+     jsonb_build_object('type','pro','siret','00000003400017','nom','Macon de Lambesc',
        'entreprise','Macon de Lambesc','metiers',jsonb_build_array('macon'),
        'ville','Lambesc (13)','latitude',43.6508,'longitude',5.2636)),
     ('bbbb0000-0000-4000-8000-00000000bbbb', 'couvreur@exemple-opus.test',
-     jsonb_build_object('type','pro','nom','Couvreur de Lille',
+     jsonb_build_object('type','pro','siret','00000004200010','nom','Couvreur de Lille',
        'entreprise','Couvreur de Lille','metiers',jsonb_build_array('couvreur'),
        'ville','Lille (59)','latitude',50.6292,'longitude',3.0573)),
     ('cccc0000-0000-4000-8000-00000000cccc', 'client@exemple-opus.test',
@@ -244,6 +257,10 @@ select count(*) as total
                          p_rayon_km => 20, p_verifies => true, p_note_min => 3);
 rollback;
 
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée.
+delete from public.preuves_siret where siret in ('00000003400017', '00000004200010');
 
 \echo ''
 \echo '=== FIN DES ESSAIS DE LA SECTION 33 ==='

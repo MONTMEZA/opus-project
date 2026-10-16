@@ -14,7 +14,6 @@ import {
   initialDemandes, initialAnnonces, initialDemandesRecues, initialChantiers,
   initialClients,
 } from '../data/demo';
-import { METIER_PAR_DEFAUT } from './metiers';
 import { correspond } from './filtre-fil';
 import { photoActeur } from './notifications';
 
@@ -24,6 +23,12 @@ import { photoActeur } from './notifications';
 import { envoyerFichier } from './storage';
 import { morceauDeChemin } from './types-fichiers';
 import { reduireImage, TAILLE_MAX_MO } from './media';
+/* Le SIRET (section 45). `siret.js` n'importe rien, `erreurs.js` non plus,
+   et `siret-demo.js` pas davantage : aucun cycle possible avec ce fichier. */
+import { chiffresSeuls, communeLisible, departementDe } from './siret';
+import { NOM_ENTREPRISE_MAX } from './entreprise';
+import { issueDeVerification } from './erreurs';
+import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -35,6 +40,34 @@ export const mode = hasSupabase ? 'supabase' : 'demo';
    blancs sur une `const` lue avant sa déclaration (`noop`, puis les trois
    voyants). */
 export const ABONNEMENTS_DEMO = [4];
+
+/* ------------------------------------------------------------------ */
+/*  L'ENTREPRISE, EN MODE DÉMONSTRATION (section 45)                   */
+/*                                                                     */
+/*  Déclaré ICI, tout en haut, pour la même raison qu'au-dessus : ce   */
+/*  fichier a déjà livré deux écrans blancs pour une `const` lue avant  */
+/*  sa déclaration, et ni le linter ni `expo export` ne l'avaient vu.  */
+/*                                                                     */
+/*  La démonstration doit FAIRE VIVRE « Mon entreprise » et « Passer   */
+/*  en compte professionnel » : sans base, ces deux écrans ne se        */
+/*  verraient nulle part, et ne se vérifieraient pas ici non plus.     */
+/*  Et elle applique les MÊMES refus que la base (OP006 à OP009) —     */
+/*  une démonstration plus aimable que le serveur masquerait ce que    */
+/*  l'artisan rencontrera pour de vrai.                                */
+/* ------------------------------------------------------------------ */
+
+/* Les identités rattachées, par fiche. L'artisan de démonstration (la
+   fiche 1) a déjà la sienne. */
+const entreprisesDemo = {
+  1: { ...IDENTITE_DEMO_DU_PRO, verifie_le: new Date(Date.now() - 20 * 24 * 3600e3).toISOString() },
+};
+/* Les SIRET que la démonstration a « trouvés » pendant la session : la
+   preuve fraîche de la base, en mémoire. Sans elle, rattacher ou devenir
+   pro échoue en OP006 — exactement comme sur la vraie base. */
+const preuvesDemo = new Map();
+/* La fiche créée quand un particulier de démonstration passe pro. */
+const prosAjoutesDemo = {};
+let demandeProDemo = null;
 
 /* ------------------------------------------------------------------ */
 /*  Session                                                            */
@@ -79,7 +112,18 @@ export async function restoreSession() {
   try {
     const { data } = await supabase.from('users').select('type')
       .eq('id', currentUserId).maybeSingle();
-    return { ...locale, userType: (data && data.type) || locale.userType };
+    const enBase = data && data.type;
+    /* LES MÉTADONNÉES SE RÉALIGNENT SUR LA BASE, UNE FOIS — section 45.
+       Un compte qui passe pro par l'administration, ou par `devenir_pro()`,
+       ne change que `users.type`. Le téléphone, lui, lit le type dans les
+       métadonnées de la session : sans ce réalignement, il démarrait en
+       particulier À CHAQUE LANCEMENT, puis basculait en pro — deux
+       chargements complets, et l'interface particulier sans réseau.
+       Mesuré par la relecture du plan. Après ce geste, la bascule n'arrive
+       qu'une fois. Ce champ ne donne aucun droit (la base tient les
+       siens) : on l'écrit sans crainte, et sans attendre la réponse. */
+    if (enBase && enBase !== locale.userType) alignerTypeDuCompte(enBase);
+    return { ...locale, userType: enBase || locale.userType };
   } catch (e) {
     /* Pas de réseau : on garde ce que le téléphone sait déjà. */
     return { ...locale, horsLigne: true };
@@ -142,9 +186,32 @@ export async function sessionLocale() {
  */
 export async function signUp({
   email, password, userType, nom, entreprise, metiers, cguVersion,
-  ville, codePostal, latitude, longitude,
+  ville, codePostal, latitude, longitude, siret = null, demandePro = null,
 }) {
-  if (!hasSupabase) { currentUserId = 'demo-user'; return { session: true }; }
+  if (!hasSupabase) {
+    currentUserId = 'demo-user';
+    /* FIDÈLE à la base : la porte de secours crée un compte PARTICULIER et,
+       dans la même transaction, sa demande (le déclencheur de la section
+       45 la lit dans les métadonnées). Sans cette ligne, la démonstration
+       dirait « passer en compte professionnel » à quelqu'un qui vient de
+       le demander. */
+    if (demandePro && demandePro.siret && !siret) {
+      demandeProDemo = {
+        id: `demo-demande-${Date.now()}`,
+        siret: chiffresSeuls(demandePro.siret),
+        motif: demandePro.motif || 'autre',
+        entreprise: (demandePro.entreprise || '').trim().slice(0, NOM_ENTREPRISE_MAX) || null,
+        metiers: (demandePro.metiers || []).slice(0, 4),
+        message: null,
+        justificatif: null,
+        statut: 'nouvelle',
+        note: null,
+        created_at: new Date().toISOString(),
+        traitee_le: null,
+      };
+    }
+    return { session: true };
+  }
 
   const metadonnees = { type: userType, nom: nom.trim() };
   if (cguVersion) metadonnees.cgu = cguVersion;
@@ -176,6 +243,34 @@ export async function signUp({
   if (userType === 'pro') {
     if (entreprise) metadonnees.entreprise = entreprise.trim();
     if (metiers && metiers.length) metadonnees.metiers = metiers.slice(0, 4);
+    /* LE SIRET, ET C'EST LA BASE QUI DÉCIDE CE QU'IL VAUT — section 45.
+       Ce numéro ne prouve rien par lui-même : le déclencheur cherche une
+       PREUVE fraîche que la fonction Edge `siret` a écrite après avoir
+       interrogé le répertoire Sirene, et refuse le compte sans elle
+       (OP006). L'identité de l'entreprise vient de cette preuve, jamais
+       de ce que ce formulaire prétend. La CLÉ s'appelle `siret`, et
+       `verifier-compte` le tient : une faute de frappe ici, et chaque
+       inscription pro tomberait sur « Database error saving new user ». */
+    metadonnees.siret = chiffresSeuls(siret);
+  } else if (demandePro && demandePro.siret) {
+    /* LA PORTE DE SECOURS : le compte naît PARTICULIER, et la demande
+       avec lui. Seuls ces quatre champs voyagent dans les métadonnées —
+       elles suivent chaque jeton et restent dans `auth.users`, hors de
+       l'export RGPD. Le message et le justificatif s'ajoutent ensuite par
+       `completer_ma_demande_pro()`. Une valeur malformée ici ne coûte
+       jamais le compte : la base l'avale, et la demande se refait depuis
+       le profil.
+
+       Mais « avaler » veut dire PERDRE la demande, sans un mot : d'où la
+       longueur coupée ici au nombre de `demande_pro_entreprise_check`. Un
+       nom de 121 caractères créait le compte et rien d'autre (prouvé sur
+       PostgreSQL le 15/10/2026). */
+    metadonnees.demande_pro = {
+      siret: chiffresSeuls(demandePro.siret),
+      motif: demandePro.motif || 'autre',
+      entreprise: (demandePro.entreprise || '').trim().slice(0, NOM_ENTREPRISE_MAX) || null,
+      metiers: (demandePro.metiers || []).slice(0, 4),
+    };
   }
 
   const { data, error } = await supabase.auth.signUp({
@@ -184,6 +279,17 @@ export async function signUp({
     options: { data: metadonnees },
   });
   if (error) throw error;
+
+  /* UN COMPTE QUI EXISTE DÉJÀ NE LÈVE PAS TOUJOURS D'ERREUR. Avec la
+     confirmation par e-mail activée, Supabase rend un utilisateur SANS
+     identité, et aucun message : l'écran annoncerait « regardez votre
+     boîte » pour un courriel qui ne partira jamais. On le dit comme
+     Supabase le dirait sans la confirmation — `messageClair` sait le
+     traduire. */
+  if (data && data.user && Array.isArray(data.user.identities)
+      && data.user.identities.length === 0) {
+    throw new Error('User already registered');
+  }
 
   if (data.session) currentUserId = data.session.user.id;
   return { session: data.session };
@@ -202,48 +308,36 @@ export async function signIn({ email, password }) {
 
   const { data: fiche } = await supabase.from('users')
     .select('type').eq('id', currentUserId).maybeSingle();
-  return { userType: (fiche && fiche.type) || 'particulier' };
+  const type = (fiche && fiche.type) || 'particulier';
+  /* Même réalignement qu'à la réouverture : sinon le prochain lancement
+     repartirait du type d'avant. */
+  const meta = (data.session.user && data.session.user.user_metadata) || {};
+  if (fiche && fiche.type && meta.type !== fiche.type) alignerTypeDuCompte(fiche.type);
+  return { userType: type };
 }
 
 /**
- * Crée la fiche professionnelle si elle n'existe pas encore.
- * Appelée juste après l'inscription d'un pro : sans elle, l'artisan n'a
- * pas de profil public et n'apparaît nulle part.
+ * Recopie le type de compte dans les métadonnées de la session.
+ *
+ * Une `function` déclarée, et pas une `const` : elle est appelée depuis
+ * plus haut dans ce fichier (`restoreSession`, `signIn`). Le résultat
+ * n'est pas attendu, et un échec n'est pas une panne — la base tient les
+ * droits, et le prochain lancement réalignera.
  */
-export async function ensureProProfile({
-  entreprise, metier, metiers, ville, nom, codePostal, codeInsee, latitude, longitude,
-}) {
-  if (!hasSupabase) return null;
-
-  /* La ligne ENTIÈRE, et pas seulement `id` : `reparerFichePro()` la rend
-     aux écrans par `rowToPro()`, qui a besoin de toutes les colonnes. Avec
-     un `select('id')`, une fiche déjà présente ressortait comme une fiche
-     vide — sans erreur, ce qui est le pire des deux.
-
-     `'*'` et non `COLONNES_PRO_LISTE` : cette constante est déclarée plus
-     bas dans le fichier, et ce projet a déjà perdu une soirée sur un écran
-     blanc pour une `const` lue avant sa déclaration. C'est MA fiche, une
-     seule ligne, sur un chemin de rattrapage : le poids ne compte pas. */
-  const { data: existante } = await supabase.from('professional_profiles')
-    .select('*').eq('id', currentUserId).maybeSingle();
-  if (existante) return existante;
-
-  const { data, error } = await supabase.from('professional_profiles').insert({
-    id: currentUserId,
-    nom: nom || '',
-    entreprise: entreprise || 'Mon entreprise',
-    metier: metier || (metiers && metiers[0]) || METIER_PAR_DEFAUT,
-    metiers: (metiers && metiers.length ? metiers : [metier || METIER_PAR_DEFAUT]),
-    ville: ville || '',
-    code_postal: codePostal || null,
-    code_insee: codeInsee || null,
-    latitude: latitude || null,
-    longitude: longitude || null,
-    verification_statut: 'non_soumis',
-  }).select().single();
-  if (error) throw error;
-  return data;
+export function alignerTypeDuCompte(type) {
+  if (!hasSupabase || (type !== 'pro' && type !== 'particulier')) return Promise.resolve();
+  return supabase.auth.updateUser({ data: { type } })
+    .then(() => undefined)
+    .catch(() => undefined);
 }
+
+/* `ensureProProfile()` A ÉTÉ RETIRÉE LE 15/10/2026 (section 45).
+   Elle insérait la fiche professionnelle DEPUIS L'APPLICATION, sans
+   entreprise. La base refuse désormais cet INSERT (OP010) : toute fiche
+   naît dans une fonction de la base qui exige une entreprise trouvée au
+   répertoire Sirene — l'inscription, `devenir_pro()`, ou l'acceptation
+   d'une demande par l'administration. Une fonction qui ne peut plus
+   aboutir est le « bouton §18 » : `verifier-compte` exige son absence. */
 
 /**
  * Envoi des justificatifs. Le profil passe en « en attente » : c'est VOUS
@@ -272,33 +366,11 @@ export async function submitDocuments({ kbisPath, assurancePath, rgePath, rge })
   if (error) throw error;
 }
 
-/**
- * Recrée la fiche professionnelle d'un compte qui n'en a pas.
- *
- * POUR QUI : les comptes créés AVANT le lot du 05/10/2026, et ceux d'une
- * base où la section 31 n'a pas encore été rejouée — « l'application peut
- * prendre de l'avance sur la base », et c'est déjà arrivé six fois.
- *
- * Les informations sont lues dans les métadonnées du compte, là où
- * `signUp()` les a rangées. Un compte plus ancien n'en a pas : la fiche
- * naît alors avec les valeurs par défaut, et l'artisan la complète dans
- * « Modifier mon profil ». Une fiche à compléter vaut mieux qu'un compte
- * qui n'existe nulle part.
- */
-export async function reparerFichePro() {
-  if (!hasSupabase) return null;
-  const { data } = await supabase.auth.getUser();
-  const meta = (data && data.user && data.user.user_metadata) || {};
-  const liste = Array.isArray(meta.metiers) ? meta.metiers.slice(0, 4) : null;
-  const ligne = await ensureProProfile({
-    entreprise: meta.entreprise,
-    metiers: liste,
-    metier: liste ? liste[0] : null,
-    ville: meta.ville,
-    nom: meta.nom,
-  });
-  return ligne ? rowToPro(ligne) : null;
-}
+/* `reparerFichePro()` A ÉTÉ RETIRÉE LE MÊME JOUR, pour la même raison, et
+   une de plus : elle relisait les MÉTADONNÉES du compte — que le client
+   réécrit à volonté (`PUT /auth/v1/user`) — pour en tirer une fiche. Le
+   seul compte pro sans fiche de la vraie base est la session anonyme du
+   14/09, que le propriétaire supprimera. */
 
 export function getUserId() { return currentUserId; }
 
@@ -322,7 +394,11 @@ export async function signOut() {
  */
 const COLONNES_PRO_LISTE = [
   'id', 'nom', 'entreprise', 'metier', 'metiers', 'ville', 'verifie',
-  'experience_annees', 'siret', 'followers_count',
+  /* `siret` N'Y EST PLUS (section 45) : l'ancien champ libre, jamais
+     contrôlé, était lisible par TOUT LE MONDE — y compris sans compte.
+     Plus aucun écran ne le lit ; l'identité légale vit à part, privée,
+     dans `entreprise_registre`. */
+  'experience_annees', 'followers_count',
   'assurance_valide', 'assurance_expire', 'kbis_valide', 'kbis_maj',
   'avatar_url', 'banner_url', 'kbis_url', 'assurance_url',
   'verification_statut', 'verification_note', 'verifie_le',
@@ -355,7 +431,6 @@ function rowToPro(row, reviews = [], partners = []) {
     ville: row.ville,
     verifie: !!row.verifie,
     exp: row.experience_annees || 0,
-    siret: row.siret || '',
     followers: row.followers_count || 0,
     bio: row.bio || '',
     partners,
@@ -487,7 +562,10 @@ export async function loadAll() {
   if (!hasSupabase) {
     // En démonstration, l'état de vérification découle du drapeau `verifie`
     // des données d'exemple : un pro vérifié n'a pas de rappel à voir.
-    const pros = JSON.parse(JSON.stringify(demoPros));
+    /* La fiche d'un particulier de démonstration passé pro (section 45)
+       rejoint les autres : sans elle, `start('pro')` le ferait atterrir
+       sur la fiche d'un AUTRE artisan. */
+    const pros = JSON.parse(JSON.stringify({ ...demoPros, ...prosAjoutesDemo }));
     Object.values(pros).forEach((p) => {
       p.verificationStatut = p.verifie ? 'verifie' : 'non_soumis';
       /* EN DÉMONSTRATION, LA FICHE EST DÉJÀ COMPLÈTE — et personne ne le
@@ -746,21 +824,49 @@ export async function loadAll() {
 
        Et les quatre identifiants de cible (section 37) : sans eux,
        toucher onze notifications sur quinze ne faisait rien. */
-    notifications: (notifRes.data || []).map((n) => ({
-      id: n.id, texte: n.texte, lue: n.lue, type: n.type || 'info',
-      postId: n.post_id || null, commentId: n.comment_id || null,
-      annonceId: n.annonce_id || null,
-      devisId: n.devis_id || null,
-      rappelId: n.rappel_id || null,
-      sosId: n.sos_id || null,
-      acteurId: n.acteur_id || null,
-      acteurNom: n.acteur ? n.acteur.nom : null,
-      avatarUrl: photoActeur(n.acteur),
-      time: relativeTime(n.created_at),
-    })),
+    notifications: (notifRes.data || []).map(notificationDepuisLigne),
     followingIds: (followsRes.data || []).map((f) => f.following_id),
     savedIds: (savesRes.data || []).map((s) => s.post_id),
     finDuFil,
+  };
+}
+
+/**
+ * UNE LIGNE DE `notifications`, telle que l'écran la lit — et c'est la
+ * SEULE traduction, pour le chargement comme pour le temps réel.
+ *
+ * Le 15/10/2026, la relecture adverse a mesuré ce que coûtaient deux
+ * traductions écrites à deux endroits : celle du temps réel, dans
+ * `OpusApp`, ne recopiait ni `demande_pro_id` ni les autres cibles. Une
+ * notification « votre compte professionnel est ouvert : touchez ici »
+ * arrivée en direct répondait « cette notification n'a plus rien à
+ * montrer » — et le particulier ne passait pas en pro. Après un
+ * rechargement, la même ligne marchait. Deux formules pour une seule
+ * vérité finissent toujours par se contredire : la leçon des voyants du
+ * 04/10.
+ *
+ * `acteurNom` EST LA LIGNE QUI MANQUAIT le 06/10, et elle valait douze
+ * ronds beiges vides : `Avatar` affiche les INITIALES quand il n'a pas
+ * d'image. Une ligne venue du temps réel n'a pas la jointure `acteur` :
+ * elle s'affiche sans nom ni photo jusqu'au prochain chargement — c'est
+ * moins bien, ce n'est pas faux.
+ *
+ * Et les identifiants de cible (sections 37 et 45) : sans eux, toucher
+ * une notification ne mène nulle part.
+ */
+export function notificationDepuisLigne(n) {
+  return {
+    id: n.id, texte: n.texte, lue: !!n.lue, type: n.type || 'info',
+    postId: n.post_id || null, commentId: n.comment_id || null,
+    annonceId: n.annonce_id || null,
+    devisId: n.devis_id || null,
+    rappelId: n.rappel_id || null,
+    sosId: n.sos_id || null,
+    demandeProId: n.demande_pro_id || null,
+    acteurId: n.acteur_id || null,
+    acteurNom: n.acteur ? n.acteur.nom : null,
+    avatarUrl: photoActeur(n.acteur),
+    time: relativeTime(n.created_at),
   };
 }
 
@@ -2012,7 +2118,9 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
       metiers: profil.metiers && profil.metiers.length ? profil.metiers : undefined,
       ville: profil.ville,
       bio: profil.bio,
-      siret: profil.siret,
+      /* `siret` n'est plus envoyé (section 45) : la base le fige de toute
+         façon quand c'est son titulaire qui écrit. Le SIRET se RATTACHE,
+         par « Mon entreprise », avec son propre bouton. */
       experience_annees: profil.exp,
       avatar_url: profil.avatarUrl,
       banner_url: profil.bannerUrl,
@@ -2826,7 +2934,8 @@ async function fileVerificationsSupabase() {
     entreprise: p.entreprise,
     nom: p.nom,
     ville: p.ville,
-    siret: p.siret,
+    /* L'ancien SIRET déclaré n'est plus affiché : la carte montre
+       l'entreprise rattachée, lue par `entrepriseDe()` (section 45). */
     metiers: p.metiers || [],
     specialites: p.specialites || [],
     statut: p.verification_statut,
@@ -3237,3 +3346,523 @@ async function urlsPiecesSupabase(chemins) {
 }
 
 export const urlsPieces = hasSupabase ? urlsPiecesSupabase : urlsPiecesDemo;
+
+/* ==========================================================================
+   LE SIRET ET L'ENTREPRISE  (section 45 de `schema.sql`, 15/10/2026)
+
+   CE QUE LA VÉRIFICATION PROUVE, ET CE QU'ELLE NE PROUVE PAS
+   ----------------------------------------------------------
+   Un SIRET est PUBLIC. Le répertoire Sirene dit qu'une entreprise EXISTE et
+   qu'elle est ACTIVE ; il ne dit jamais que celui qui tape le numéro en est
+   le titulaire. D'où la règle des textes de l'écran : jamais « vérifié »
+   ni « registre » pour ce niveau — ce mot appartient au badge, posé par un
+   humain. Et d'où une identité PRIVÉE, que rien n'affiche sur la fiche
+   publique dans ce lot.
+
+   TOUTES LES ÉCRITURES PASSENT PAR LA BASE. L'application ne crée plus
+   aucune fiche professionnelle (OP010) et n'écrit jamais dans
+   `entreprise_registre` : elle appelle les fonctions qui exigent une
+   preuve fraîche — et la preuve, seule la fonction Edge l'écrit.
+
+   LA FORME DE CE CODE, et ce n'est pas un goût : chaque fonction existe en
+   DEUX versions NOMMÉES, et le choix se fait à la fin
+   (`hasSupabase ? x : xDemo`). La forme `!hasSupabase ? async (o = {}) =>
+   { … } : …` fait échouer la construction de Metro sans dire ni la ligne
+   ni la cause — le piège qui a coûté une heure (CLAUDE.md).
+   ========================================================================== */
+
+/** Quinze secondes : plus que les 8 s du répertoire, plus le réveil à froid de la fonction. */
+export const DELAI_VERIFICATION_SIRET_MS = 15000;
+
+/** Une pause, pour que la démonstration ait le rythme d'un vrai appel. */
+function patienter(ms) {
+  return new Promise((r) => { setTimeout(r, ms); });
+}
+
+/** Une erreur qui porte un code de la base, comme celles que PostgREST rend. */
+function refusDeLaBase(code, message) {
+  const e = new Error(message);
+  e.code = code;
+  return e;
+}
+
+/* --------------------------------------------------------------------------
+   VÉRIFIER UN NUMÉRO.
+
+   Rend TOUJOURS un objet `{ issue, … }`, jamais une exception : un écran
+   qui doit choisir entre un `catch` et une issue finit par oublier l'un
+   des deux. Les trois issues fabriquées ici (`reseau`, `lent`,
+   `service_indisponible`) sont calculées par `issueDeVerification()`
+   (`erreurs.js`), qui n'importe rien et que `verifier-etats` fait tourner.
+   -------------------------------------------------------------------------- */
+/* Le second argument (`{ pourMaFiche }`) n'est PAS lu ici, et ne part pas
+   au serveur : la fonction Edge reconnaît la fiche de l'appelant à son
+   jeton, que `functions.invoke` envoie de lui-même. Il ne sert qu'à la
+   démonstration, qui n'a pas de jeton — c'est l'écran « Mon entreprise »
+   qui le lui dit. */
+async function verifierSiretSupabase(siret) {
+  const debut = Date.now();
+  let reponse;
+  try {
+    reponse = await supabase.functions.invoke('siret', {
+      /* Les chiffres seuls : c'est la forme que la fonction Edge attend,
+         et rien d'autre ne part — ni le nom, ni l'e-mail. */
+      body: { siret: chiffresSeuls(siret) },
+      timeout: DELAI_VERIFICATION_SIRET_MS,
+    });
+  } catch (e) {
+    return issueDeVerification(e, Date.now() - debut, DELAI_VERIFICATION_SIRET_MS);
+  }
+  const { data, error } = reponse || {};
+  if (error) return issueDeVerification(error, Date.now() - debut, DELAI_VERIFICATION_SIRET_MS);
+  /* Une réponse sans issue n'est pas une réponse : on ne devine pas. */
+  if (!data || typeof data !== 'object' || typeof data.issue !== 'string') {
+    return { issue: 'service_indisponible' };
+  }
+  return data;
+}
+
+/** Les SIREN déjà rattachés dans la démonstration — le `deja_utilise` de la base. */
+function sirensPrisDemo() {
+  return Object.values(entreprisesDemo).filter((e) => e && !e.retiree_le).map((e) => e.siren);
+}
+
+/* La fonction Edge ne répond plus « déjà utilisé » à la fiche qui tient
+   l'entreprise (section 45, 15/10). Sans jeton, la démonstration se fie à
+   l'écran : seul « Mon entreprise » dit `pourMaFiche`. */
+async function verifierSiretDemo(siret, { pourMaFiche = false } = {}) {
+  const miens = pourMaFiche && entreprisesDemo[moiEnDemo()]
+    ? [entreprisesDemo[moiEnDemo()].siren] : [];
+  const r = reponseDemo(siret, sirensPrisDemo().filter((x) => !miens.includes(x)));
+  /* « Trop lent » doit se SENTIR : c'est le bouton qui dit ce qu'il
+     attend qu'on veut voir. Pas quinze secondes pour autant. */
+  await patienter(r.issue === 'lent' ? 1500 : 500);
+  if (r.issue === 'ok') preuvesDemo.set(r.identite.siret, r.identite);
+  return r;
+}
+
+export const verifierSiret = hasSupabase ? verifierSiretSupabase : verifierSiretDemo;
+
+/* --------------------------------------------------------------------------
+   MON ENTREPRISE — l'identité rattachée à MA fiche, et elle seule.
+
+   Les colonnes sont NOMMÉES : `nom_complet_registre` n'y est pas. Pour un
+   entrepreneur individuel, c'est son nom civil brut, et il n'a rien à
+   faire à l'écran (section 45.1). L'adresse, elle, y est : « Modifier mon
+   profil » la montre à son titulaire, « visible de vous seul ».
+   -------------------------------------------------------------------------- */
+const COLONNES_ENTREPRISE = [
+  'id', 'siren', 'siret', 'denomination', 'sigle', 'nom_commercial', 'est_ei',
+  'forme_juridique', 'date_creation', 'tva', 'ape', 'naf25', 'est_siege',
+  'adresse', 'code_postal', 'commune', 'code_insee', 'statut_diffusion',
+  'maj_insee', 'source', 'verifie_le',
+];
+
+/** Une identité rendue par une fonction de la base : sans le nom brut, jamais. */
+function sansNomBrut(ligne) {
+  if (!ligne || typeof ligne !== 'object') return null;
+  const { nom_complet_registre: _brut, ...reste } = ligne;
+  return reste;
+}
+
+async function monEntrepriseSupabase() {
+  const { data, error } = await supabase.from('entreprise_registre')
+    .select(COLONNES_ENTREPRISE.join(', '))
+    .eq('pro_id', currentUserId)
+    .is('retiree_le', null)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/** La fiche de démonstration qui est « moi » : celle créée en passant pro, sinon la 1. */
+function moiEnDemo() {
+  return prosAjoutesDemo[currentUserId] ? String(currentUserId) : '1';
+}
+
+async function monEntrepriseDemo() {
+  const e = entreprisesDemo[moiEnDemo()];
+  return e && !e.retiree_le ? { ...e } : null;
+}
+
+export const monEntreprise = hasSupabase ? monEntrepriseSupabase : monEntrepriseDemo;
+
+/* LA DERNIÈRE ENTREPRISE RETIRÉE DE MA FICHE, quand il n'y en a plus
+   d'active — 15/10/2026, relecture adverse.
+
+   Une fiche sans entreprise active, mais avec une identité retirée, n'a
+   pas « jamais rattaché » de SIRET : l'administration la lui a RETIRÉE.
+   Les retraits qui viennent du titulaire (un déménagement, une mise à jour
+   depuis le répertoire) en rattachent une nouvelle dans le même geste ; il
+   ne reste donc sans entreprise active que ce que l'administration a
+   retiré. L'écran ne propose alors plus de la rattacher — la base le
+   refuserait (section 45.3, le gel) —, et dit pourquoi. */
+async function monEntrepriseRetireeSupabase() {
+  const { data, error } = await supabase.from('entreprise_registre')
+    .select('siret, retiree_le, retrait_motif')
+    .eq('pro_id', currentUserId)
+    .not('retiree_le', 'is', null)
+    .order('retiree_le', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/* La démonstration n'administre rien : aucune entreprise n'y est jamais
+   retirée. */
+async function monEntrepriseRetireeDemo() { return null; }
+
+export const monEntrepriseRetiree = hasSupabase
+  ? monEntrepriseRetireeSupabase : monEntrepriseRetireeDemo;
+
+/* L'entreprise d'une AUTRE fiche, pour la carte du badge. Seule
+   l'administration la lit (la règle RLS : sa propre fiche, ou
+   `est_admin()`), et l'adresse n'y est PAS : pour décider d'un badge, elle
+   ne sert à rien. */
+async function entrepriseDeSupabase(proId) {
+  const { data, error } = await supabase.from('entreprise_registre')
+    .select(COLONNES_ENTREPRISE.filter((c) => c !== 'adresse').join(', '))
+    .eq('pro_id', proId)
+    .is('retiree_le', null)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function entrepriseDeDemo(proId) {
+  const e = entreprisesDemo[String(proId)];
+  if (!e || e.retiree_le) return null;
+  const { adresse: _adresse, ...sansAdresse } = e;
+  return sansAdresse;
+}
+
+export const entrepriseDe = hasSupabase ? entrepriseDeSupabase : entrepriseDeDemo;
+
+/* --------------------------------------------------------------------------
+   RATTACHER MON SIRET — un pro inscrit avant ce lot, ou qui a déménagé.
+
+   IMMÉDIAT, et c'est pour ça que « Mon entreprise » a son propre bouton :
+   les dix-huit autres champs de « Modifier mon profil » attendent
+   « Enregistrer ». Un SIRET tapé puis « Enregistrer » ne doit jamais
+   ressembler à un rattachement fait.
+   -------------------------------------------------------------------------- */
+async function rattacherMonSiretSupabase(siret) {
+  const { data, error } = await supabase.rpc('rattacher_mon_siret', {
+    p_siret: chiffresSeuls(siret),
+  });
+  if (error) throw error;
+  return sansNomBrut(data);
+}
+
+/* Les MÊMES refus que la base, dans le même ordre, avec les mêmes mots :
+   la démonstration ne doit pas laisser croire qu'un geste passe alors que
+   la base le refuserait. */
+async function rattacherMonSiretDemo(siret) {
+  await patienter(400);
+  const s = chiffresSeuls(siret);
+  const preuve = preuvesDemo.get(s);
+  if (!preuve) {
+    throw refusDeLaBase('OP006', 'Ce SIRET n’a pas été retrouvé au répertoire Sirene depuis '
+      + 'moins de 24 heures : touchez « Vérifier » à nouveau.');
+  }
+  const moi = moiEnDemo();
+  const actuelle = entreprisesDemo[moi];
+  const fiche = prosAjoutesDemo[moi] || demoPros[moi] || {};
+  if (!actuelle) {
+    if (fiche.verifie) {
+      throw refusDeLaBase('OP009', 'Votre fiche porte le badge « vérifié », accordé avant que les '
+        + 'entreprises soient rattachées : y lier une entreprise ne peut pas se faire '
+        + 'automatiquement, et ne peut pas encore se demander depuis l’application.');
+    }
+    if (sirensPrisDemo().includes(preuve.siren)) {
+      throw refusDeLaBase('OP007', 'Cette entreprise est déjà rattachée à un autre compte Opus.');
+    }
+  } else if (actuelle.siren !== preuve.siren) {
+    throw refusDeLaBase('OP008', 'Ce numéro désigne une autre entreprise que celle de votre '
+      + 'compte. Un compte Opus correspond à une seule entreprise : en changer ne peut pas '
+      + 'encore se faire depuis l’application.');
+  }
+  entreprisesDemo[moi] = { ...preuve, source: 'registre', verifie_le: new Date().toISOString() };
+  return { ...entreprisesDemo[moi] };
+}
+
+export const rattacherMonSiret = hasSupabase ? rattacherMonSiretSupabase : rattacherMonSiretDemo;
+
+/* --------------------------------------------------------------------------
+   PASSER EN COMPTE PROFESSIONNEL — un particulier dont le répertoire
+   connaît l'entreprise.
+
+   La signature de la fonction de la base est FIGÉE (`p jsonb`) : un
+   paramètre de plus créerait une surcharge, que seul un `drop` — refusé
+   par le connecteur — réparerait. On ajoute donc des CLÉS, jamais des
+   arguments.
+
+   APRÈS : on réaligne les métadonnées de la session. Sans ça, l'écran
+   redémarrerait en particulier à chaque lancement, puis basculerait —
+   deux chargements complets, mesurés par la relecture du plan.
+   -------------------------------------------------------------------------- */
+async function devenirProSupabase({ siret, entreprise, metiers, cguVersion }) {
+  const { data, error } = await supabase.rpc('devenir_pro', {
+    p: {
+      siret: chiffresSeuls(siret),
+      entreprise: (entreprise || '').trim() || null,
+      metiers: (metiers || []).slice(0, 4),
+      cgu_version: cguVersion || null,
+    },
+  });
+  if (error) throw error;
+  await alignerTypeDuCompte('pro');
+  return { type: 'pro', identite: sansNomBrut(data && data.identite) };
+}
+
+async function devenirProDemo({ siret, entreprise, metiers }) {
+  await patienter(500);
+  const s = chiffresSeuls(siret);
+  const preuve = preuvesDemo.get(s);
+  if (!preuve) {
+    throw refusDeLaBase('OP006', 'Ce SIRET n’a pas été retrouvé au répertoire Sirene depuis '
+      + 'moins de 24 heures : touchez « Vérifier » à nouveau.');
+  }
+  if (sirensPrisDemo().includes(preuve.siren)) {
+    throw refusDeLaBase('OP007', 'Cette entreprise est déjà rattachée à un autre compte Opus. Si '
+      + 'c’est la vôtre, demandez une vérification à la main : l’administration examinera '
+      + 'votre demande.');
+  }
+  const id = String(currentUserId || 'demo-user');
+  const liste = (metiers || []).filter(Boolean).slice(0, 4);
+  /* Le même repli que la base : un métier manquant retombe sur « maçon »
+     plutôt que de faire échouer le passage. */
+  const mes = liste.length ? liste : ['macon'];
+  const dep = departementDe(preuve.code_insee, preuve.code_postal);
+  const commune = communeLisible(preuve.commune);
+  prosAjoutesDemo[id] = {
+    id,
+    nom: 'Vous',
+    entreprise: (entreprise || '').trim() || 'Mon entreprise',
+    metier: mes[0],
+    metiers: mes,
+    /* En démonstration, le particulier n'a pas de commune : on prend celle
+       de l'établissement. La base, elle, reprend la commune du compte. */
+    ville: commune ? `${commune}${dep ? ` (${dep})` : ''}` : '',
+    verifie: false,
+    exp: 0,
+    followers: 0,
+    bio: '',
+    partners: [],
+    assurance: { valide: false, expire: null },
+    kbis: { valide: false, maj: null },
+    portfolio: [],
+    reviews: [],
+  };
+  entreprisesDemo[id] = { ...preuve, source: 'registre', verifie_le: new Date().toISOString() };
+  if (demandeProDemo && demandeProDemo.statut === 'nouvelle') {
+    demandeProDemo = {
+      ...demandeProDemo,
+      statut: 'acceptee',
+      note: 'Ouverte automatiquement : l’entreprise est active au répertoire Sirene (INSEE).',
+      traitee_le: new Date().toISOString(),
+    };
+  }
+  return { type: 'pro', identite: { ...entreprisesDemo[id] } };
+}
+
+export const devenirPro = hasSupabase ? devenirProSupabase : devenirProDemo;
+
+/* --------------------------------------------------------------------------
+   LA PORTE DE SECOURS — une demande que l'administration examinera.
+
+   L'insertion passe par la POLITIQUE (« envoi de ma demande pro ») : un
+   particulier, pour lui-même, une demande neuve et sans réponse. Le statut,
+   la note et la date de traitement ne s'écrivent que par l'administration.
+   -------------------------------------------------------------------------- */
+const COLONNES_DEMANDE_PRO = 'id, siret, motif, entreprise, metiers, message, justificatif, '
+  + 'statut, note, created_at, traitee_le';
+
+async function demanderCompteProSupabase({ siret, motif, entreprise, metiers, message }) {
+  /* SANS `.select()` À LA SUITE, et ce n'est pas un oubli. Depuis le 15/10,
+     le client n'a sur `demandes_pro` que des droits de COLONNE (section
+     45.4 : la date de dépôt et l'identité de l'administrateur lui sont
+     fermées). Une insertion qui demande à la base de RENVOYER la ligne la
+     relit ; la relire en entier échouerait. On insère sans rien demander
+     en retour (`return=minimal`, la forme par défaut), puis on relit par la
+     liste nommée — la même que la carte du profil. */
+  const { error } = await supabase.from('demandes_pro').insert({
+    compte_id: currentUserId,
+    siret: chiffresSeuls(siret),
+    motif: motif || 'autre',
+    /* Coupé au nombre de la contrainte : sinon la base refuse, et le
+       message parle d'un `schema.sql` pas rejoué — une piste fausse. */
+    entreprise: (entreprise || '').trim().slice(0, NOM_ENTREPRISE_MAX) || null,
+    metiers: (metiers || []).slice(0, 4),
+    message: (message || '').trim() || null,
+  });
+  if (error) throw error;
+  return maDemandePro();
+}
+
+async function demanderCompteProDemo({ siret, motif, entreprise, metiers, message }) {
+  await patienter(400);
+  if (demandeProDemo && demandeProDemo.statut === 'nouvelle') {
+    /* L'index « une seule demande ouverte » de la base, en mémoire — avec
+       le MÊME texte que PostgreSQL : c'est `messageClair` qui le traduit,
+       des deux côtés. Une démonstration plus aimable que la base masquait
+       que la vraie disait « cela existe déjà » (relecture adverse). */
+    throw refusDeLaBase('23505', 'duplicate key value violates unique constraint '
+      + '"idx_demandes_pro_une_ouverte"');
+  }
+  demandeProDemo = {
+    id: `demo-demande-${Date.now()}`,
+    siret: chiffresSeuls(siret),
+    motif: motif || 'autre',
+    entreprise: (entreprise || '').trim().slice(0, NOM_ENTREPRISE_MAX) || null,
+    metiers: (metiers || []).slice(0, 4),
+    message: (message || '').trim() || null,
+    justificatif: null,
+    statut: 'nouvelle',
+    note: null,
+    created_at: new Date().toISOString(),
+    traitee_le: null,
+  };
+  return { ...demandeProDemo };
+}
+
+export const demanderComptePro = hasSupabase ? demanderCompteProSupabase : demanderCompteProDemo;
+
+/* LA DERNIÈRE demande du compte, quel que soit son statut : la carte du
+   profil doit pouvoir dire « refusée, et pourquoi » autant qu'« en
+   attente ». Lue EN BASE, jamais déduite de l'état local : une demande
+   perdue en silence ne doit pas avoir l'air envoyée. */
+async function maDemandeProSupabase() {
+  const { data, error } = await supabase.from('demandes_pro')
+    .select(COLONNES_DEMANDE_PRO)
+    .eq('compte_id', currentUserId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function maDemandeProDemo() {
+  return demandeProDemo ? { ...demandeProDemo } : null;
+}
+
+export const maDemandePro = hasSupabase ? maDemandeProSupabase : maDemandeProDemo;
+
+/* UNE CLÉ ABSENTE GARDE LA VALEUR ACTUELLE (règle de la base) : joindre un
+   justificatif ne doit pas effacer le message. On n'envoie donc que ce
+   qu'on veut changer. */
+function completerDemande(message, justificatif) {
+  const p = {};
+  if (message !== undefined) p.message = message;
+  if (justificatif !== undefined) p.justificatif = justificatif;
+  return p;
+}
+
+async function completerMaDemandeProSupabase({ message, justificatif } = {}) {
+  const { data, error } = await supabase.rpc('completer_ma_demande_pro', {
+    p: completerDemande(message, justificatif),
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function completerMaDemandeProDemo({ message, justificatif } = {}) {
+  await patienter(300);
+  if (!demandeProDemo || demandeProDemo.statut !== 'nouvelle') {
+    throw new Error('Vous n’avez aucune demande de compte professionnel en attente : il n’y '
+      + 'a rien à compléter.');
+  }
+  const p = completerDemande(message, justificatif);
+  demandeProDemo = {
+    ...demandeProDemo,
+    ...(p.message !== undefined ? { message: String(p.message || '').trim() || null } : {}),
+    ...(p.justificatif !== undefined ? { justificatif: p.justificatif || null } : {}),
+  };
+  return { ...demandeProDemo };
+}
+
+export const completerMaDemandePro = hasSupabase
+  ? completerMaDemandeProSupabase : completerMaDemandeProDemo;
+
+async function annulerMaDemandeProSupabase() {
+  const { data, error } = await supabase.rpc('annuler_ma_demande_pro');
+  if (error) throw error;
+  return data;
+}
+
+async function annulerMaDemandeProDemo() {
+  await patienter(300);
+  if (!demandeProDemo || demandeProDemo.statut !== 'nouvelle') {
+    throw new Error('Vous n’avez aucune demande de compte professionnel en attente : il n’y '
+      + 'a rien à annuler.');
+  }
+  demandeProDemo = { ...demandeProDemo, statut: 'annulee', traitee_le: new Date().toISOString() };
+  return { ...demandeProDemo };
+}
+
+export const annulerMaDemandePro = hasSupabase
+  ? annulerMaDemandeProSupabase : annulerMaDemandeProDemo;
+
+/* --------------------------------------------------------------------------
+   L'ADMINISTRATION — trancher une demande, retirer une entreprise.
+
+   Trois `rpc`, comme le reste du back-office : la règle reste dans la
+   base. En démonstration, personne n'administre (voir `resumeAdminDemo`) :
+   la file est vide et les gestes sont refusés.
+   -------------------------------------------------------------------------- */
+async function demandesProAdminSupabase() {
+  const { data, error } = await supabase.rpc('admin_demandes_pro');
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []).map((d) => ({
+    id: d.id,
+    creeLe: d.created_at,
+    statut: d.statut,
+    motif: d.motif,
+    siret: d.siret,
+    entreprise: d.entreprise,
+    metiers: d.metiers || [],
+    message: d.message,
+    justificatif: d.justificatif,
+    note: d.note,
+    traiteeLe: d.traitee_le,
+    /* Le nombre de jours d'attente, calculé ICI, à la lecture : le
+       calculer pendant l'affichage lirait l'horloge à chaque redessin, et
+       deux cartes voisines pourraient ne pas dire la même chose. */
+    jours: d.created_at
+      ? Math.max(0, Math.floor((Date.now() - Date.parse(d.created_at)) / (24 * 3600e3))) : 0,
+    /* `compte`, `preuve` et `detenteur` arrivent tels que la base les
+       compose — et elle n'y met ni e-mail, ni téléphone, ni adresse. */
+    compte: d.compte || null,
+    preuve: d.preuve || null,
+    detenteur: d.detenteur || null,
+    /* L'entreprise a été retirée par l'administration et reste réservée
+       (section 45.3) : celui qui accepte doit savoir qu'il la rend. */
+    reserveeLe: d.reservee_le || null,
+  }));
+}
+
+async function demandesProAdminDemo() { return []; }
+
+export const demandesProAdmin = hasSupabase ? demandesProAdminSupabase : demandesProAdminDemo;
+
+async function traiterDemandeProSupabase(id, decision, note) {
+  const { data, error } = await supabase.rpc('admin_traiter_demande_pro', {
+    p_id: id, p_decision: decision, p_note: note || null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export const traiterDemandePro = hasSupabase ? traiterDemandeProSupabase : refuseEnDemo;
+
+async function retirerEntrepriseSupabase(proId, motif) {
+  const { data, error } = await supabase.rpc('admin_retirer_entreprise', {
+    p_pro: proId, p_motif: motif || null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export const retirerEntreprise = hasSupabase ? retirerEntrepriseSupabase : refuseEnDemo;

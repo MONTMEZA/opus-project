@@ -57,16 +57,21 @@ select p.proname, p.prosecdef as definer,
 -- maj_vues_count. Si le droit retire les empechait de tourner, on le verrait
 -- ici et nulle part ailleurs.
 begin;
-insert into auth.users (id, email) values
-  ('cccc0000-0000-4000-8000-0000000042cc', 'portes@exemple.test')
+-- Le compte pro naît comme GoTrue le crée : par auth.users, avec une
+-- preuve du répertoire (section 45). Jusqu'au 15/10 il était inséré à la
+-- main dans `users` puis `professional_profiles` — et depuis la section 44,
+-- cette fiche tombait sur OP005 (la ligne `users` restait particulier, le
+-- `do update` ne touchant que `nom`) : les cas 5 et 6 répondaient
+-- « current transaction is aborted » et n'éprouvaient plus rien.
+insert into public.preuves_siret (siret, denomination, source, expire_le)
+values ('00000015800014', 'ESSAIS 43 — PORTES', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('cccc0000-0000-4000-8000-0000000042cc', 'portes@exemple.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000015800014', 'nom', 'Portes',
+                      'entreprise', 'Portes SARL', 'metiers', jsonb_build_array('macon'),
+                      'ville', 'Lambesc (13)', 'latitude', 43.6489, 'longitude', 5.2588))
   on conflict (id) do nothing;
-insert into public.users (id, email, nom, type) values
-  ('cccc0000-0000-4000-8000-0000000042cc', 'portes@exemple.test', 'Portes', 'pro')
-  on conflict (id) do update set nom = excluded.nom;
-insert into public.professional_profiles (id, entreprise, metiers, ville, latitude, longitude)
-values ('cccc0000-0000-4000-8000-0000000042cc', 'Portes SARL', array['macon'],
-        'Lambesc (13)', 43.6489, 5.2588)
-  on conflict (id) do update set ville = excluded.ville;
 
 insert into public.chantiers (id, pro_id, titre, ville)
 values ('dddd0000-0000-4000-8000-0000000042dd',
@@ -90,16 +95,21 @@ rollback;
 -- Un essai sans jeton n eprouve pas un verrou qui depend de auth.uid() :
 -- c est la lecon du lot E. `set local role` et `sub`, chacun dans son ordre.
 begin;
-insert into auth.users (id, email) values
-  ('cccc0000-0000-4000-8000-0000000042cc', 'portes@exemple.test')
+-- Le compte pro naît comme GoTrue le crée : par auth.users, avec une
+-- preuve du répertoire (section 45). Jusqu'au 15/10 il était inséré à la
+-- main dans `users` puis `professional_profiles` — et depuis la section 44,
+-- cette fiche tombait sur OP005 (la ligne `users` restait particulier, le
+-- `do update` ne touchant que `nom`) : les cas 5 et 6 répondaient
+-- « current transaction is aborted » et n'éprouvaient plus rien.
+insert into public.preuves_siret (siret, denomination, source, expire_le)
+values ('00000015800014', 'ESSAIS 43 — PORTES', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('cccc0000-0000-4000-8000-0000000042cc', 'portes@exemple.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000015800014', 'nom', 'Portes',
+                      'entreprise', 'Portes SARL', 'metiers', jsonb_build_array('macon'),
+                      'ville', 'Lambesc (13)', 'latitude', 43.6489, 'longitude', 5.2588))
   on conflict (id) do nothing;
-insert into public.users (id, email, nom, type) values
-  ('cccc0000-0000-4000-8000-0000000042cc', 'portes@exemple.test', 'Portes', 'pro')
-  on conflict (id) do update set nom = excluded.nom;
-insert into public.professional_profiles (id, entreprise, metiers, ville, latitude, longitude)
-values ('cccc0000-0000-4000-8000-0000000042cc', 'Portes SARL', array['macon'],
-        'Lambesc (13)', 43.6489, 5.2588)
-  on conflict (id) do update set ville = excluded.ville;
 set local role authenticated;
 set local request.jwt.claim.sub = 'cccc0000-0000-4000-8000-0000000042cc';
 insert into public.chantiers (pro_id, titre, ville)

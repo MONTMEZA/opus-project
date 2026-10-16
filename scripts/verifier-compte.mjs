@@ -37,7 +37,20 @@
  *   3. le badge est verrouillé à la création comme à la modification ;
  *   4. une fiche professionnelle ne se supprime pas, mais la cascade d'une
  *      suppression de compte passe toujours ;
- *   5. un compte déjà cassé se répare à l'ouverture.
+ *   5. (section 45, 15/10/2026) un compte pro ne naît qu'avec une entreprise
+ *      trouvée au répertoire Sirene, et son identité vient de la PREUVE ;
+ *   6. et plus aucune fiche ne se « répare » depuis l'application.
+ *
+ * LE 5 DU 05/10 A ÉTÉ RETIRÉ, ET C'EST VOULU. Ce contrôle exigeait que
+ * `reparerFichePro()` existe et que `start()` l'appelle : un compte pro sans
+ * fiche se réparait à l'ouverture, en relisant les métadonnées du compte.
+ * Or ces métadonnées, le client les réécrit (`PUT /auth/v1/user`), et la
+ * fiche qui en naissait n'avait AUCUNE entreprise. Depuis la section 45,
+ * toute fiche naît dans une fonction de la base qui exige une entreprise, et
+ * l'INSERT du client est refusé (OP010) : la réparation ne pouvait plus
+ * aboutir. Une fonction qui ne peut plus aboutir est le « bouton §18 ». Ce
+ * contrôle exige donc désormais son ABSENCE — et il restera rouge tant que
+ * l'application ne l'a pas retirée : c'est l'ordre de livraison du lot.
  *
  * CE QUI NE SE VÉRIFIE PAS ICI : que la confirmation par e-mail se comporte
  * comme prévu sur un vrai iPhone. Les essais de la base sont dans
@@ -204,28 +217,141 @@ console.log('\nUne fiche professionnelle ne se supprime pas');
     + 'il expire au bout d’une minute sans rien appliquer');
 }
 
-console.log('\nUn compte déjà cassé se répare à l’ouverture');
+console.log('\nUn compte pro naît avec une entreprise trouvée au répertoire (section 45)');
 {
-  verifier('`reparerFichePro()` lit les métadonnées du compte',
-    /export async function reparerFichePro/.test(api)
-    && /supabase\.auth\.getUser\(\)/.test(api),
-    'c’est là que signUp a rangé l’entreprise, les métiers et la ville');
+  const trigger = /create or replace function public\.cree_fiche_utilisateur\(\)[\s\S]*?\$\$;/
+    .exec(sql);
+  const corps = trigger ? trigger[0] : '';
+  const declare = corps.slice(corps.indexOf('declare'), corps.indexOf('begin'));
+  const insertUsers = corps.indexOf('insert into public.users');
 
-  verifier('…et `start()` l’appelle quand MA fiche manque',
-    /if \(!data\.pros\[api\.getUserId\(\)\]\)/.test(app)
-    && /api\.reparerFichePro\(\)/.test(app),
-    'un seul endroit par lequel passent TOUS les chemins : inscription, '
-    + 'connexion, réouverture');
+  /* LA DÉCLARATION, et pas le corps : un corps plpgsql n'est analysé qu'à
+     l'exécution, mais une variable du type d'une table qui n'existe pas
+     encore lève dès la CRÉATION — mesuré. Les tables de la section 45
+     naissent 6 000 lignes plus bas : le premier passage du schéma sur une
+     base neuve échouerait, et le second passerait. */
+  verifier('aucune variable n’a le type d’une table de la section 45',
+    !!declare
+    && !/%rowtype|%type/i.test(declare)
+    && !/public\.(preuves_siret|entreprise_registre|demandes_pro)/.test(declare),
+    '`record` et des variables simples seulement : sinon le schéma ne se '
+    + 'rejoue qu’une fois sur deux');
 
-  verifier('la détection ne coûte aucune requête',
-    /if \(!data\.pros\[api\.getUserId\(\)\]\)/.test(app),
-    '`loadAll()` vient de rendre les fiches — on regarde si la mienne y '
-    + 'est, on ne la redemande pas');
+  /* LA GARDE ENTIÈRE, ANCRÉE — 15/10/2026, relecture adverse. La première
+     version cherchait des MORCEAUX du texte : `p.expire_le > now()` quelque
+     part, `OP006` quelque part. Trois sabotages passaient au vert sans un
+     ✘ : la fraîcheur relâchée (`now() - interval '30 days'`), la source
+     élargie (`p.source is not null or …`) et le refus rendu mort
+     (`if not found and false then`). On exige désormais la garde telle
+     qu'elle doit être, d'un seul tenant : la lecture de la preuve, sa
+     fraîcheur, ses deux seules sources, puis le refus IMMÉDIAT. */
+  const gardePreuve = /select p\.\* into la_preuve\s+from public\.preuves_siret p\s+where p\.siret = le_siret\s+and p\.expire_le > now\(\)\s+and \(p\.source = 'registre'\s+or \(p\.source = 'essai'\s+and p\.pour_email = lower\(coalesce\(new\.email, ''\)\)\)\);\s+if not found then\s+raise exception/;
+  verifier('une inscription pro exige une PREUVE fraîche du répertoire, et la refuse aussitôt sans elle (OP006)',
+    gardePreuve.test(corps)
+    && /if not found then\s+raise exception\s+'Inscription professionnelle impossible[^;]*using errcode = 'OP006';/.test(corps),
+    'sans elle, un compte pro naît de ce que le formulaire DÉCLARE — un '
+    + 'SIRET inventé, celui d’un autre');
 
-  verifier('un échec de réparation ne bloque pas l’entrée',
-    /reparerFichePro\(\)[\s\S]{0,260}catch[\s\S]{0,200}showErreur/.test(app),
-    'un artisan qui ne peut pas entrer du tout ne peut rien corriger '
-    + 'non plus');
+  verifier('…et une preuve `essai` ne vaut que pour l’adresse EXACTE qu’elle nomme',
+    /p\.source = 'essai'\s+and p\.pour_email = lower\(coalesce\(new\.email, ''\)\)/.test(corps)
+    && !/like '%@exemple-opus\.test'/.test(corps)
+    && /constraint preuve_essai_check[\s\S]{0,300}pour_email like '%@exemple-opus\.test'/.test(sql),
+    'les SIRET fictifs des essais sont dans le dépôt, et la confirmation par '
+    + 'e-mail n’est pas activée : un DOMAINE accepte n’importe quelle adresse '
+    + 'inventée (relecture adverse, mesuré). Une preuve d’essai nomme UN compte.');
+
+  verifier('une entreprise déjà rattachée — ou GELÉE par l’administration — est refusée (OP007), par le SIREN',
+    /from public\.entreprise_registre e\s+where e\.siren = la_preuve\.siren and \(e\.retiree_le is null or e\.gele\)\) then\s+raise exception/.test(corps)
+    && /using errcode = 'OP007'/.test(corps),
+    'le SIREN et pas le SIRET : déménager change le SIRET, pas l’entreprise. '
+    + 'Et sans le gel, le squatteur à qui l’administration a retiré une '
+    + 'entreprise la reprenait en ouvrant un compte neuf (section 45.3)');
+
+  verifier('…et les deux refus passent AVANT toute écriture',
+    insertUsers > 0
+    && corps.indexOf("errcode = 'OP006'") > 0 && corps.indexOf("errcode = 'OP006'") < insertUsers
+    && corps.indexOf("errcode = 'OP007'") > 0 && corps.indexOf("errcode = 'OP007'") < insertUsers,
+    'un refus après l’insertion laisserait un compte à moitié — le défaut '
+    + 'exact de la section 31');
+
+  /* L'IDENTITÉ VIENT DE LA PREUVE. Les métadonnées sont écrites par le
+     client : une seule colonne d'identité lue là-bas, et le formulaire
+     décide de ce que dit le répertoire. */
+  const identite = /insert into public\.entreprise_registre[\s\S]*?\);/.exec(corps);
+  verifier('l’identité légale naît DEPUIS LA PREUVE, jamais depuis les métadonnées',
+    !!identite && !/meta\b|->>/.test(identite[0])
+    && /la_preuve\.siren/.test(identite[0])
+    && /la_preuve\.verifiee_le/.test(identite[0]),
+    'le client choisit un numéro ; c’est le répertoire qui dit ce qu’il '
+    + 'désigne, et quand il l’a dit');
+
+  /* La porte de secours : une métadonnée malformée ne coûte JAMAIS un
+     compte. Le bloc qui avale les erreurs ne doit contenir QUE l'insertion
+     de la demande — y glisser OP006 ou OP007 rouvrirait l'inscription pro
+     sans preuve. */
+  const blocDemande = /begin\s+insert into public\.demandes_pro[\s\S]*?exception when others then\s+null;\s+end;/
+    .exec(corps);
+  verifier('la demande de secours est insérée dans son propre bloc qui rattrape tout',
+    !!blocDemande,
+    'une contrainte violée dans ce déclencheur ferait ÉCHOUER la création du '
+    + 'compte : une métadonnée malformée ne doit pas coûter un compte');
+  verifier('…et ce bloc ne contient QUE cette insertion',
+    !!blocDemande && !/OP006|OP007|professional_profiles|entreprise_registre|public\.users/.test(blocDemande[0]),
+    'rattraper OP006 ou OP007 ici rouvrirait l’inscription pro sans preuve');
+
+  /* LES CLÉS DES MÉTADONNÉES SONT UN CONTRAT entre l'application et la
+     base, et rien d'autre ne le tient : une faute de frappe d'un côté, et
+     chaque inscription pro tombe sur OP006 — que GoTrue rend en « Database
+     error saving new user », sans un mot de plus. */
+  verifier('la base lit `siret` et `demande_pro` dans les métadonnées',
+    /meta ->> 'siret'/.test(corps) && /meta -> 'demande_pro'/.test(corps));
+  const i = api.indexOf('export async function signUp');
+  const j = i < 0 ? -1 : api.indexOf('\nexport ', i + 10);
+  const signUp = i < 0 ? '' : api.slice(i, j < 0 ? undefined : j);
+  /* LA BRANCHE, pas la fonction entière — 15/10/2026, relecture adverse.
+     Le NOM DE LA CLÉ, pas la présence du mot : la variable s'appelle aussi
+     `siret`, et un premier jet passait au vert avec
+     `metadonnees.numeroSiret = siret`. Le second passait encore avec
+     `metadonnees.numero_siret = …` : il trouvait `siret:` dans l'objet de
+     la PORTE DE SECOURS (`demande_pro = { siret: … }`), quelques lignes
+     plus bas. Chaque clé se cherche donc dans SA branche : `siret` entre
+     `if (userType === 'pro')` et `else if (demandePro`, `demande_pro` dans
+     la seconde. */
+  const iPro = signUp.indexOf("if (userType === 'pro') {");
+  const iSecours = signUp.indexOf('} else if (demandePro', iPro);
+  const iFin = signUp.indexOf('const { data, error } = await supabase.auth.signUp(', iSecours);
+  const branchePro = iPro >= 0 && iSecours > iPro ? signUp.slice(iPro, iSecours) : '';
+  const brancheSecours = iSecours >= 0 && iFin > iSecours ? signUp.slice(iSecours, iFin) : '';
+  const ecritSiret = /metadonnees(?:\.siret|\[\s*['"]siret['"]\s*\])\s*=/.test(branchePro);
+  const ecritDemande = /metadonnees(?:\.demande_pro|\[\s*['"]demande_pro['"]\s*\])\s*=/.test(brancheSecours);
+  verifier('…et `signUp` les écrit, sous ces noms-là',
+    ecritSiret && ecritDemande,
+    'sans le SIRET, toute inscription pro est refusée (OP006) ; sans la '
+    + 'demande, la porte de secours ouvre un compte particulier SANS demande, '
+    + 'et l’artisan attend une réponse que personne ne lui doit');
+}
+
+console.log('\nPlus aucune fiche ne se « répare » depuis l’application');
+{
+  /* Le contrôle du 05/10 exigeait le contraire, et il avait raison ce
+     jour-là. Voir l'en-tête : la réparation relisait des métadonnées que le
+     client réécrit, et la fiche naissait sans entreprise. */
+  for (const [nom, source] of [['src/lib/api.js', api], ['src/OpusApp.js', app]]) {
+    verifier(`\`ensureProProfile\` a disparu de ${nom}`,
+      !/ensureProProfile/.test(source),
+      'elle insérait la fiche depuis le client : la base la refuse '
+      + 'désormais (OP010), et une fiche sans entreprise est ce que la '
+      + 'section 45 ferme');
+    verifier(`\`reparerFichePro\` a disparu de ${nom}`,
+      !/reparerFichePro/.test(source),
+      'elle relisait les métadonnées du compte, que le client peut réécrire '
+      + 'par PUT /auth/v1/user');
+  }
+
+  verifier('la base refuse toute fiche venue du client (OP010)',
+    /create or replace function public\.exige_un_compte_pro\(\)[\s\S]*?using errcode = 'OP010'/.test(sql),
+    'c’est ce refus qui rend la réparation inutile — et dangereuse si elle '
+    + 'revenait par une autre porte');
 }
 
 console.log('\nL’adresse du COMPTE ne devient publique que par un geste');
@@ -280,6 +406,14 @@ console.log('\nEt ce qui ne sert plus a été RETIRÉ');
     (() => { try { return lire('supabase/essais-section-31.sql').length > 0; }
       catch (e) { return false; } })(),
     'onze cas, chacun dans son `begin … rollback`');
+
+  verifier('…et ceux de la section 45, qui éprouvent la preuve et la porte de secours',
+    (() => {
+      try {
+        const e = lire('supabase/essais-section-45.sql');
+        return /OP006/.test(e) && /OP007/.test(e) && /demande_pro/.test(e);
+      } catch (e) { return false; }
+    })());
 }
 
 console.log('');
@@ -287,5 +421,6 @@ if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);
   process.exit(1);
 }
-console.log('✔ Un compte d’artisan naît entier, le badge ne se prend pas, et '
-  + 'les avis d’un client survivent à l’artisan qu’ils notent.\n');
+console.log('✔ Un compte d’artisan naît entier, avec une entreprise que le '
+  + 'répertoire connaît ; le badge ne se prend pas, et les avis d’un client '
+  + 'survivent à l’artisan qu’ils notent.\n');

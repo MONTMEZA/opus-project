@@ -23,6 +23,19 @@
 \set C '''cccc3333-0000-4000-8000-00000000cccc'''
 \set POST '''dddd3333-0000-4000-8000-00000000dddd'''
 
+-- --------------------------------------------------------------------------
+--  LA PREUVE DU RÉPERTOIRE — depuis la section 45 (15/10/2026), un compte
+--  pro ne naît qu'avec une preuve FRAÎCHE pour son SIRET. On la pose ici en
+--  superutilisateur, comme la fonction Edge `siret` la poserait, sur un SIRET
+--  FICTIF à clé juste que le répertoire Sirene ne connaît pas (vérifié : 0
+--  résultat). Sans elle, chaque compte pro de ce fichier serait refusé
+--  (OP006), et les cas suivants ne prouveraient plus rien.
+-- --------------------------------------------------------------------------
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000013300017', 'ESSAIS SUPPRESSION — A', 'registre', now() + interval '1 hour'),
+  ('00000014100010', 'ESSAIS SUPPRESSION — C', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+
 
 -- --------------------------------------------------------------------------
 \echo ''
@@ -48,7 +61,7 @@ select has_column_privilege('authenticated','public.users','telephone','update')
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :A, 'a@exemple-opus.test',
-  jsonb_build_object('type','pro','nom','A Maconnerie','entreprise','A Maconnerie',
+  jsonb_build_object('type','pro','siret','00000013300017','nom','A Maconnerie','entreprise','A Maconnerie',
                      'metiers', jsonb_build_array('macon'), 'ville','Marseille (13)'));
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -77,8 +90,8 @@ rollback;
 -- --------------------------------------------------------------------------
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values
- (:A,'a@exemple-opus.test',jsonb_build_object('type','pro','nom','A Maconnerie','entreprise','A Maconnerie','metiers',jsonb_build_array('macon'),'ville','Marseille (13)')),
- (:C,'c@exemple-opus.test',jsonb_build_object('type','pro','nom','C Couverture','entreprise','C Couverture','metiers',jsonb_build_array('couvreur'),'ville','Aix (13)')),
+ (:A,'a@exemple-opus.test',jsonb_build_object('type','pro','siret','00000013300017','nom','A Maconnerie','entreprise','A Maconnerie','metiers',jsonb_build_array('macon'),'ville','Marseille (13)')),
+ (:C,'c@exemple-opus.test',jsonb_build_object('type','pro','siret','00000014100010','nom','C Couverture','entreprise','C Couverture','metiers',jsonb_build_array('couvreur'),'ville','Aix (13)')),
  (:B,'b@exemple-opus.test',jsonb_build_object('type','particulier','nom','Client B'));
 -- un avis RECU par A, un avis ECRIT par A sur C, un commentaire ECRIT par A
 insert into public.reviews (professional_id, author_id, delais, qualite, tarif, commentaire)
@@ -105,27 +118,38 @@ rollback;
 \echo ''
 \echo '=== 5. CE QUE LE RACCOURCI LAISSAIT : un compte IRREPARABLE ==='
 -- Sans ligne `public.users`, la réparation de la fiche (`ensureProProfile`,
--- appelée à chaque ouverture depuis le 05/10) échoue sur la clé étrangère.
+-- appelée à chaque ouverture depuis le 05/10) échouait sur la clé étrangère.
 -- Et `auth.users` reste : la session marche encore. Le compte ne peut donc
 -- ni servir, ni se réparer, ni se supprimer par le chemin de l application.
+--
+-- CE QUE CE CAS MONTRE AUJOURD'HUI, et il faut le lire avec son histoire :
+--   - le 11/10, l'insertion tombait sur 23503, la clé étrangère ;
+--   - depuis la section 44 (15/10), elle tombait sur OP005 AVANT d'y
+--     arriver — la ligne `users` absente rend un type vide. L'essai
+--     annonçait toujours « 23503 attendu », et un contrôle qui cherchait ce
+--     nombre dans ce fichier le trouvait… dans le commentaire ;
+--   - depuis la section 45, elle tombe sur OP010 : une fiche ne se crée
+--     plus du tout depuis l'application, et `ensureProProfile` a disparu.
+-- Le compte laissé derrière n'a donc plus AUCUNE réparation possible depuis
+-- l'application : c'est pour ça que le raccourci (cas 2) doit rester fermé.
 -- --------------------------------------------------------------------------
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :A, 'a@exemple-opus.test',
-  jsonb_build_object('type','pro','nom','A Maconnerie','entreprise','A Maconnerie',
+  jsonb_build_object('type','pro','siret','00000013300017','nom','A Maconnerie','entreprise','A Maconnerie',
                      'metiers', jsonb_build_array('macon'), 'ville','Marseille (13)'));
 delete from public.users where id = :A;   -- en superutilisateur : on simule l etat laisse
 select (select count(*) from auth.users where id = :A) as session_encore_valable_attendu_1;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
 /* `entreprise`, `metier` ET `ville` sont `not null` : sans eux, l ordre
-   échouerait sur UNE DE CES
-   contraintes et l essai passerait pour la mauvaise raison — c est arrivé
-   DEUX FOIS au premier jet (`metier`, puis `ville`), et c est le défaut
-   que ce projet traque depuis `verifier-montage`. On veut voir 23503, la
-   clé étrangère, et rien d autre. */
+   échouerait sur UNE DE CES contraintes et l essai passerait pour la
+   mauvaise raison — c est arrivé DEUX FOIS au premier jet (`metier`, puis
+   `ville`). On veut voir OP010, le refus de toute fiche venue de
+   l application, et rien d autre. */
+\echo '    attendu : ERROR OP010, une fiche professionnelle ne se crée pas depuis l application'
 insert into public.professional_profiles (id, entreprise, metier, ville)
-  values (:A, 'A Maconnerie', 'macon', 'Marseille (13)');  -- 23503 attendu
+  values (:A, 'A Maconnerie', 'macon', 'Marseille (13)');
 rollback;
 
 
@@ -139,7 +163,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :A, 'a@exemple-opus.test',
-  jsonb_build_object('type','pro','nom','A Maconnerie','entreprise','A Maconnerie',
+  jsonb_build_object('type','pro','siret','00000013300017','nom','A Maconnerie','entreprise','A Maconnerie',
                      'metiers', jsonb_build_array('macon'), 'ville','Marseille (13)'));
 delete from auth.users where id = :A;
 select (select count(*) from public.users where id = :A)                 as ligne_users_attendu_0,
@@ -162,6 +186,10 @@ update public.users set telephone = '0600000000' where id = :B;
 reset role;
 select telephone as numero_enregistre from public.users where id = :B;
 rollback;
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée.
+delete from public.preuves_siret where siret in ('00000013300017', '00000014100010');
 
 \echo ''
 \echo '############ FIN DES ESSAIS ############'

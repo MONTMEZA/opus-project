@@ -30,7 +30,7 @@ import { Avatar, EmptyState, BtnMini } from '../components/ui';
 import { destinationNotif } from '../lib/notifications';
 import {
   MessageSquare, CornerDownRight, Bell, ChevronRight,
-  Phone, Clock, AlertTriangle, Check, X, Megaphone,
+  Phone, Clock, AlertTriangle, Check, X, Megaphone, Building,
 } from '../components/icons';
 
 /* Une notification qui porte la même cloche que les dix autres ne dit rien.
@@ -50,6 +50,11 @@ const ICONES = {
      cette ligne elle porterait la cloche générique, et une réponse à une
      annonce ressemblerait à un « j'aime ». */
   annonce: Megaphone,
+  /* La porte de secours (section 45) : une entreprise, pas une cloche. */
+  demande_pro_nouvelle: Building,
+  compte_pro_ouvert: Check,
+  demande_pro_refusee: X,
+  entreprise_retiree: X,
 };
 
 /* L'urgence est la seule qui change de couleur : tout mettre en rouge
@@ -71,6 +76,8 @@ const OUVRIR = {
   annonce: '. Ouvrir l\u2019annonce',
   demande: '. Ouvrir la demande',
   profil: '. Ouvrir ma fiche',
+  administration: '. Ouvrir l\u2019administration',
+  compte_pro: '. Entrer dans mon espace d\u2019artisan',
 };
 
 const Ligne = React.memo(function Ligne({ n, onOuvrir }) {

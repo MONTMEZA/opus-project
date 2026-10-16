@@ -281,8 +281,15 @@ verifier('…et c’est bien ELLE qui finit par retirer la ligne',
 }
 
 {
+  /* TOUS les commentaires partent, ceux de FIN DE LIGNE compris — 15/10,
+     relecture adverse. Ne retirer que les lignes entières laissait le
+     contrôle trouver « OP010 attendu » dans `values (…);  -- OP010
+     attendu`, alors même que son propre commentaire affirmait ne plus lire
+     que le code. Et l'essai pouvait répondre OP005 sans un ✘ : retirer le
+     rôle et le jeton du cas 5 le faisait tomber sur un autre refus. */
   const essais = readFileSync('supabase/essais-suppression-compte.sql', 'utf8')
-    .replace(/^\s*--.*$/gm, '');
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--.*$/gm, '');
   verifier('les essais éprouvent le refus, et pas seulement le droit',
     /* On vise la PROPRIÉTÉ, pas la syntaxe : le rôle peut venir d’une
        colonne (`r.rolname`) au lieu d’être écrit en clair, et exiger
@@ -302,12 +309,146 @@ verifier('…et c’est bien ELLE qui finit par retirer la ligne',
     'Les deux vrais chemins — la fonction, et la cascade depuis `auth.users` '
     + 'par la fonction Edge ou l’administration.');
 
-  verifier('…et que le compte laissé derrière est bien IRRÉPARABLE',
-    /insert into public\.professional_profiles[\s\S]{0,200}23503/.test(essais),
-    'C’est la conséquence la plus lourde, et la seule qui ne se devine pas : '
-    + 'sans ligne parente, la réparation de la fiche échoue sur la clé '
-    + 'étrangère. L’essai doit viser 23503 — au premier jet il tombait sur '
-    + 'une contrainte `not null`, donc il passait pour la mauvaise raison.');
+  /* CE CONTRÔLE EXIGEAIT « 23503 », ET IL PASSAIT POUR LA MAUVAISE RAISON.
+     Depuis la section 44 (15/10/2026), l'insertion de l'essai tombait sur
+     OP005 — la ligne `users` absente rend un type vide — AVANT d'atteindre
+     la clé étrangère. La base ne répondait donc plus 23503 ; ce contrôle,
+     lui, trouvait toujours le nombre… dans le commentaire `-- 23503
+     attendu`. Mesuré en rejouant l'essai le jour de la section 45. Depuis,
+     une fiche ne se crée plus du tout depuis l'application (OP010), et
+     l'essai le dit — ce qui rend le compte laissé derrière irréparable par
+     construction : c'est pour ça que le raccourci doit rester fermé. Le
+     motif ne lit plus que le CODE, pas un commentaire. */
+  /* Le BLOC du cas 5, et lui seul : un rôle, un jeton, une annonce, PUIS
+     l'insertion. Sans le rôle ni le jeton, l'ordre passe en
+     superutilisateur et tombe sur OP005 — un refus, donc l'air juste. */
+  const i5 = essais.indexOf("=== 5.");
+  const i6 = essais.indexOf("=== 6.", i5);
+  const cas5 = i5 >= 0 && i6 > i5 ? essais.slice(i5, i6) : '';
+  const iRole = cas5.indexOf('set local role authenticated;');
+  const iJeton = cas5.search(/set local request\.jwt\.claim\.sub = :A;/);
+  const iAnnonce = cas5.search(/\\echo '[^']*OP010/);
+  const iInsert = cas5.indexOf('insert into public.professional_profiles');
+  verifier('…et que le compte laissé derrière ne se répare plus depuis l’application',
+    iRole >= 0 && iJeton > iRole && iAnnonce > iJeton && iInsert > iAnnonce
+    && /using errcode = 'OP010'/.test(schema),
+    'L’essai doit viser OP010 : une fiche ne se crée plus depuis le client. '
+    + 'Au premier jet il tombait sur une contrainte `not null`, puis sur '
+    + 'OP005 en annonçant 23503 — deux fois pour la mauvaise raison.');
+}
+
+/* ================================================================== */
+console.log('\nLA SECTION 45 — des portes nouvelles, fermées dès leur naissance');
+
+/* Les fonctions nouvelles, et ce que chacune doit avoir JUSTE APRÈS elle.
+   Pas dans une boucle plus bas : les boucles de ce fichier avalent
+   `undefined_function`, et un droit passé sous silence sur une base neuve
+   n'apparaît qu'au second rejeu. */
+const NOUVELLES = {
+  completer_ma_demande_pro: 'jsonb',
+  annuler_ma_demande_pro: '',
+  rattacher_mon_siret: 'text',
+  devenir_pro: 'jsonb',
+  admin_demandes_pro: '',
+  admin_traiter_demande_pro: 'uuid, text, text',
+  admin_retirer_entreprise: 'uuid, text',
+};
+const apresFonction = (nom) => {
+  const i = schema.indexOf(`create or replace function public.${nom}(`);
+  if (i < 0) return '';
+  const fin = schema.indexOf('$$;', i);
+  const suivante = schema.indexOf('create or replace function', fin);
+  return schema.slice(fin, suivante < 0 ? undefined : suivante);
+};
+for (const [nom, args] of Object.entries(NOUVELLES)) {
+  const sig = `public\\.${nom}\\(${args.replace(/ /g, '\\s*')}\\)`;
+  const apres = apresFonction(nom);
+  verifier(`\`${nom}\` : retirée à PUBLIC et à \`anon\` juste après elle, rendue à \`authenticated\``,
+    new RegExp(`revoke all on function ${sig} from public, anon;`).test(apres)
+    && new RegExp(`grant execute on function ${sig} to authenticated;`).test(apres),
+    'Une fonction neuve est appelable par PUBLIC, donc SANS COMPTE : l’alerte '
+    + 'Supabase ramenée à zéro le 11/10 reviendrait.');
+}
+
+{
+  /* Le compteur d'appels n'est appelé QUE par la fonction Edge, avec la clé
+     de service. Personne d'autre : un client qui pourrait l'appeler
+     remplirait les compteurs des autres. */
+  const sig = 'public\\.compter_appel_siret\\(text,\\s*timestamptz,\\s*int\\)';
+  verifier('`compter_appel_siret` est retirée à PUBLIC, `anon` ET `authenticated`',
+    new RegExp(`revoke all on function ${sig}\\s+from public, anon, authenticated;`).test(apresFonction('compter_appel_siret')),
+    'Le piège de la section 38 : `from anon, authenticated` seul ne retire RIEN.');
+  verifier('…et rien ne la rend à un client',
+    !/grant[^;]*compter_appel_siret[^;]*to[^;]*(anon|authenticated|public)/i.test(schema));
+}
+
+/* Les tables nouvelles : RLS, et les droits de TABLE retirés explicitement,
+   sans attendre qu'une politique rattrape (la leçon de la section 18.2).
+   Mesuré par la relecture du plan : `siret_limites` créée sans cela se
+   LISAIT et se VIDAIT par `anon`. */
+for (const t of ['preuves_siret', 'siret_limites', 'entreprise_registre', 'demandes_pro']) {
+  verifier(`\`${t}\` a la RLS activée`,
+    new RegExp(`alter table public\\.${t} enable row level security;`).test(schema));
+}
+for (const t of ['preuves_siret', 'siret_limites']) {
+  verifier(`\`${t}\` : aucun droit pour \`anon\` ni \`authenticated\`, et AUCUNE politique`,
+    new RegExp(`revoke all on public\\.${t} from anon, authenticated;`).test(schema)
+    && !new RegExp(`create policy[^;]*on public\\.${t}\\b`).test(schema),
+    'Seule la fonction Edge y écrit, avec la clé de service. Un client qui '
+    + 'écrirait une preuve se fabriquerait une entreprise.');
+}
+verifier('`entreprise_registre` : lecture seule pour `authenticated`, rien pour `anon`',
+  /revoke all on public\.entreprise_registre from anon;/.test(schema)
+  && /revoke insert, update, delete, truncate on public\.entreprise_registre from authenticated;/.test(schema)
+  && !/create policy[^;]*on public\.entreprise_registre\s+for\s+(insert|update|delete|all)/.test(schema),
+  'Une politique d’écriture sur l’identité légale, et un client se rattache '
+  + 'l’entreprise de son choix.');
+verifier('`demandes_pro` : rien pour `anon`, ni modification ni suppression pour le client',
+  /revoke all on public\.demandes_pro from anon;/.test(schema)
+  && /revoke update, delete, truncate on public\.demandes_pro from authenticated;/.test(schema)
+  && !/create policy[^;]*on public\.demandes_pro\s+for\s+(update|delete|all)/.test(schema),
+  'Une demande se complète et s’annule par deux fonctions ; tranchée, elle ne '
+  + 'se récrit plus.');
+verifier('…et le client n’insère qu’une demande NEUVE, sans réponse de l’administration',
+  /create policy "envoi de ma demande pro" on public\.demandes_pro\s+for insert to authenticated\s+with check \(auth\.uid\(\) = compte_id\s+and not public\.est_un_pro\(\)\s+and statut = 'nouvelle'\s+and traitee_le is null\s+and traitee_par is null\s+and note is null\)/
+    .test(schema),
+  'Mesuré par la relecture du plan : sans ces conditions, un client '
+  + 's’insérait une demande « acceptée », signée « Validé par Opus ».');
+/* RIEN NE ROUVRE CES QUATRE TABLES — sauf, depuis le 15/10, DEUX droits de
+   COLONNE sur `demandes_pro`, et ils sont plus étroits que ce qu'ils
+   remplacent (relecture adverse) : le client n'écrit plus la date de dépôt
+   (il passait en tête de la file en antidatant), et ne lit plus
+   `traitee_par` (l'identité de l'administrateur qui l'a refusé). Ces deux
+   ordres-là, EXACTEMENT, et rien d'autre : une colonne de plus dans l'un
+   d'eux rouvrirait ce qu'il ferme. */
+const DROITS_DE_COLONNE_PERMIS = [
+  'grant select (id, compte_id, siret, motif, entreprise, metiers, message, justificatif, statut, note, created_at, traitee_le) on public.demandes_pro to authenticated;',
+  'grant insert (compte_id, siret, motif, entreprise, metiers, message, justificatif) on public.demandes_pro to authenticated;',
+];
+const reouvertures = [...schema.matchAll(
+  /grant\s+(all|insert|update|delete|select)[^;]*on\s+(table\s+)?public\.(preuves_siret|siret_limites|entreprise_registre|demandes_pro)\b[^;]*to[^;]*(anon|authenticated)[^;]*;/gi,
+)].map((m) => m[0].replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim());
+const horsListe = reouvertures.filter((g) => !DROITS_DE_COLONNE_PERMIS.includes(g));
+verifier('…et rien ne rouvre ces quatre tables plus bas — hors les deux droits de colonne de `demandes_pro`',
+  horsListe.length === 0, horsListe.join(' | '));
+verifier('…et ces deux droits de colonne suivent le retrait des droits de TABLE (sinon ils ne retirent rien)',
+  DROITS_DE_COLONNE_PERMIS.every((g) => reouvertures.includes(g))
+  && (() => {
+    const norm = schema.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+    const r = norm.indexOf('revoke select, insert on public.demandes_pro from authenticated;');
+    return r >= 0 && DROITS_DE_COLONNE_PERMIS.every((g) => norm.indexOf(g) > r);
+  })(),
+  '`revoke select (colonne)` ne retire rien tant que le rôle peut lire la table entière '
+  + '(CLAUDE.md, section 18) : il faut retirer la table, PUIS rendre colonne par colonne.');
+
+{
+  const essais45 = readFileSync('supabase/essais-section-45.sql', 'utf8').replace(/^\s*--.*$/gm, '');
+  const manquantes = [...Object.keys(NOUVELLES), 'compter_appel_siret']
+    .filter((f) => !essais45.includes(`'${f}'`));
+  verifier('les essais de la section 45 interrogent le droit de `anon` sur CHACUNE',
+    /has_function_privilege\('anon'/.test(essais45) && manquantes.length === 0,
+    `Manquantes : ${manquantes.join(', ')}. Ce fichier lit le texte ; seule la `
+    + 'base dit si le droit est vraiment retiré.');
 }
 
 /* ================================================================== */

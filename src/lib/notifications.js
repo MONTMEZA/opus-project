@@ -38,6 +38,11 @@ export const TYPES_CONNUS = [
   'partenaire_demande', 'partenaire_accepte',
   'verification_acceptee', 'verification_refusee',
   'metiers_acceptes',
+  /* La porte de secours et les entreprises (section 45, 15/10/2026) :
+     quatre types, et chacun mène quelque part — sinon c'est le défaut du
+     06/10 refait au premier type ajouté. */
+  'demande_pro_nouvelle', 'compte_pro_ouvert', 'demande_pro_refusee',
+  'entreprise_retiree',
 ];
 
 /* CE QUI SE PASSE SUR MA PROPRE FICHE. Un partenariat s'accepte dans le
@@ -48,6 +53,10 @@ export const NOTIFS_PROFIL = new Set([
   'partenaire_demande', 'partenaire_accepte',
   'verification_acceptee', 'verification_refusee',
   'metiers_acceptes',
+  /* Une entreprise retirée par l'administration : la fiche est l'endroit
+     où l'on voit ce qui est rattaché, et ce qui ne l'est plus. Elle n'a
+     pas de cible — l'identité retirée n'est plus la sienne. */
+  'entreprise_retiree',
 ]);
 
 /**
@@ -73,6 +82,18 @@ export function destinationNotif(n) {
   if (n.devisId)  return { quoi: 'demande', id: n.devisId,  origine: 'devis' };
   if (n.rappelId) return { quoi: 'demande', id: n.rappelId, origine: 'rappel' };
   if (n.sosId)    return { quoi: 'demande', id: n.sosId,    origine: 'sos' };
+
+  /* UNE DEMANDE DE COMPTE PRO (section 45) — la même colonne, et trois
+     destinataires qui ne vont pas au même endroit. C'est l'exception à
+     « la cible passe avant le type », et elle est assumée : la cible dit
+     QUELLE demande, le type dit QUI la reçoit. L'administrateur va à la
+     file ; le demandeur, à son profil — ou, si son compte vient d'être
+     ouvert, dans son espace d'artisan. */
+  if (n.demandeProId) {
+    if (n.type === 'compte_pro_ouvert') return { quoi: 'compte_pro', demandeProId: n.demandeProId };
+    if (n.type === 'demande_pro_refusee') return { quoi: 'profil', demandeProId: n.demandeProId };
+    return { quoi: 'administration', demandeProId: n.demandeProId };
+  }
 
   if (NOTIFS_PROFIL.has(n.type)) return { quoi: 'profil' };
 
@@ -105,6 +126,10 @@ export const CIBLE_ATTENDUE = {
   verification_acceptee: null,
   verification_refusee: null,
   metiers_acceptes: null,
+  demande_pro_nouvelle: 'demandeProId',
+  compte_pro_ouvert: 'demandeProId',
+  demande_pro_refusee: 'demandeProId',
+  entreprise_retiree: null,
 };
 
 /**

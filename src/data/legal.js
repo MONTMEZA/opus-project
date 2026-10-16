@@ -29,7 +29,22 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-09-29';
+export const VERSION = '2026-10-15';
+/* 15/10/2026 — le SIRET devient la condition de l'inscription
+   professionnelle (section 45 de `schema.sql`). Ce qui a changé DE FOND :
+   qui peut ouvrir un compte pro, la décision automatique et la façon de la
+   faire revoir, l'usurpation d'une entreprise, ce qui est collecté (le
+   SIRET, ce que le répertoire Sirene en dit, une empreinte d'adresse IP), à
+   qui le numéro est envoyé, et la phrase FAUSSE sur les journaux techniques
+   (« six mois, comme la loi l'impose » : l'offre gratuite de Supabase les
+   garde un jour). Une nouvelle version, parce que ces textes ont changé
+   d'engagement — pas seulement de forme.
+
+   CE QUI NE S'Y TROUVE PAS, et c'est voulu : aucune mention publique
+   « SIRET actif » ou « entreprise vérifiée » sur les fiches. Un SIRET est
+   public ; une mention obtenue en trente secondes avec le numéro d'un autre
+   serait un outil d'hameçonnage. Le plan du lot l'a écartée, et les textes
+   ne doivent pas décrire ce qui n'existe pas. */
 
 /**
  * OÙ EN EST LE PROJET, JURIDIQUEMENT.
@@ -387,6 +402,25 @@ export const MENTIONS = [
       + 'temps qu’ils y sont publiés.',
   },
   {
+    /* LA LICENCE OUVERTE DE L'INSEE L'EXIGE : « www.insee.fr » et la date
+       de dernière mise à jour, et elle interdit de suggérer une caution
+       publique.
+
+       « La date accompagne CHAQUE donnée affichée » était faux (relecture
+       adverse du 15/10) : le rappel de vérification et la ligne sous le nom
+       n'en portent pas, ou portent celle de la CONSULTATION, et le
+       répertoire ne publie pas toujours la sienne. La phrase dit donc OÙ
+       elle accompagne la présentation — la carte de l'inscription et « Mon
+       entreprise » —, et que l'écran le dit quand elle manque. */
+    titre: 'Sources',
+    texte: 'Données d’entreprise : répertoire Sirene de l’INSEE (www.insee.fr), '
+      + 'réutilisées sous Licence Ouverte 2.0 ; numéros de TVA : DGFiP ; via l’API '
+      + 'Recherche d’entreprises. La date de mise à jour du répertoire accompagne la '
+      + 'présentation de l’entreprise, à l’inscription et dans « Mon entreprise » — ou '
+      + 'la mention qu’il n’en publie pas. Cette réutilisation ne vaut ni agrément ni '
+      + 'caution de l’INSEE ou de l’État.',
+  },
+  {
     titre: 'Signaler un contenu',
     texte: "Chaque publication, commentaire, message, profil, demande et "
       + 'annonce porte un bouton de signalement. Les signalements sont '
@@ -415,14 +449,32 @@ export const CGU = [
   },
   {
     titre: 'Qui peut s’inscrire',
-    texte: 'Il faut avoir 18 ans révolus. Un compte professionnel suppose une '
-      + 'activité réellement déclarée : les publications dans le fil sont '
-      + "réservées aux comptes professionnels. Un particulier peut aimer, "
-      + 'commenter, partager et publier des demandes de travaux.',
+    /* RÉÉCRIT LE 15/10/2026 (section 45). « Suppose une activité réellement
+       déclarée » était une DÉCLARATION, que rien ne contrôlait — et
+       l'unicité n'y était pas. Ce texte est celui de la relecture « droit »
+       du plan, adapté : il ne parle d'aucune mention publique, puisqu'il
+       n'y en a pas. */
+    texte: 'Il faut avoir 18 ans révolus. Un compte professionnel s’ouvre pour une '
+      + 'entreprise dont le numéro SIRET correspond à un établissement ouvert d’une '
+      + 'entreprise active au répertoire Sirene de l’INSEE ; une entreprise n’a qu’un '
+      + 'seul compte professionnel. En donnant ce numéro, vous déclarez être le titulaire '
+      + 'de l’entreprise ou habilité à la représenter. Si la consultation automatique '
+      + 'n’aboutit pas, ou si le numéro est déjà rattaché à un autre compte, vous pouvez '
+      + 'demander une vérification à la main depuis l’application ; Opus peut alors vous '
+      + 'demander un justificatif. Les publications dans le fil sont réservées aux '
+      + 'comptes professionnels. Un particulier peut aimer, commenter, partager et '
+      + 'publier des demandes de travaux.',
   },
   {
     titre: 'Le badge vérifié',
-    /* CE TEXTE A ÉTÉ CORRIGÉ LE 04/10/2026, et c'était une vraie
+    /* « CETTE CONSULTATION NE S'AFFICHE NULLE PART » ÉTAIT FAUX — relecture
+       adverse du 15/10, et c'est un texte opposable : « Mon profil », le
+       rappel de vérification, « Mon entreprise » et l'administration
+       l'affichent. Ce qui est vrai, c'est qu'elle n'apparaît pas sur la
+       fiche PUBLIQUE. Et le contrôle avait été relâché pour laisser passer
+       la phrase fausse (`verifier-legal`) : il ne l'est plus.
+
+       CE TEXTE A ÉTÉ CORRIGÉ LE 04/10/2026, et c'était une vraie
        incohérence : il promettait un badge « après contrôle d'un Kbis et
        d'une décennale ». Un micro-entrepreneur n'a pas de Kbis, un avocat
        pas de décennale — les CGU excluaient donc du badge des gens que
@@ -436,7 +488,12 @@ export const CGU = [
       + "professionnelle pour les activités de conseil. Il dit que ces "
       + "documents ont été vus, et rien d'autre : il ne garantit ni la "
       + "qualité d'un chantier, ni le respect d'un délai. Un badge obtenu "
-      + 'avec de faux documents entraîne la fermeture immédiate du compte.',
+      + 'avec de faux documents entraîne la fermeture immédiate du compte. Il est '
+      + 'distinct de la consultation du répertoire Sirene faite à l’ouverture d’un '
+      + 'compte professionnel, qui dit seulement que l’entreprise existait et était '
+      + 'active à cette date : cette consultation n’apparaît jamais sur votre fiche '
+      + 'publique — seuls vous et l’administration d’Opus la voyez —, et elle ne '
+      + 'prouve pas que le compte appartient à l’entreprise.',
   },
   {
     titre: 'Ce que vous publiez',
@@ -448,11 +505,22 @@ export const CGU = [
   },
   {
     titre: 'Ce qui est interdit',
+    /* « Demandez une vérification à la main » est IMPOSSIBLE depuis un
+       compte déjà professionnel (la base réserve la demande aux
+       particuliers, et l'application le dit dans « Mon entreprise ») :
+       relecture adverse du 15/10. Le texte nomme les deux chemins qui
+       existent, et dit celui qui n'existe pas encore. */
     texte: 'Se faire passer pour quelqu’un d’autre ou pour une entreprise qui '
       + "n'est pas la sienne. Proposer des travaux sans assurance ni facture. "
       + 'Insulter, menacer, harceler. Publier du contenu sexuel ou violent. '
       + 'Publier des photos qui ne sont pas les siennes. Collecter les '
-      + 'coordonnées des autres utilisateurs pour les démarcher ailleurs.',
+      + 'coordonnées des autres utilisateurs pour les démarcher ailleurs. Utiliser le '
+      + 'numéro SIRET d’une entreprise qui n’est pas la sienne : l’entreprise est alors '
+      + 'retirée du compte, et le compte peut être fermé. Si votre entreprise est '
+      + 'rattachée à un compte qui n’est pas le vôtre, demandez une vérification à la '
+      + 'main, depuis un compte particulier ou à l’inscription : chacun pourra être '
+      + 'invité à justifier qu’il en est le titulaire. Un compte déjà professionnel ne '
+      + 'peut pas encore la demander depuis l’application.',
   },
   {
     titre: 'Modération',
@@ -523,6 +591,10 @@ export const CONFIDENTIALITE = [
   },
   {
     titre: 'Ce que nous collectons',
+    /* LE NOM COMPLET DU RÉPERTOIRE MANQUAIT À CETTE LISTE (relecture
+       adverse du 15/10) : il est recopié dans l'identité privée, et pour un
+       entrepreneur individuel c'est son nom civil — une donnée obtenue
+       auprès d'une autre source que la personne, qu'il faut nommer. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -530,21 +602,42 @@ export const CONFIDENTIALITE = [
       + 'servent au tri par distance. Votre téléphone, si vous le renseignez. '
       + 'Vos photos, vidéos, textes, commentaires, avis, messages, demandes et '
       + 'annonces. Pour un compte professionnel : votre justificatif '
-      + 'd’existence légale et votre attestation d’assurance.',
+      + 'd’existence légale et votre attestation d’assurance ; le numéro SIRET de '
+      + 'votre entreprise, et ce que le répertoire Sirene de l’INSEE en dit au moment '
+      + 'de la consultation — dénomination, nom commercial, le nom complet tel que le '
+      + 'répertoire le publie (pour un entrepreneur individuel : vos nom et prénoms), '
+      + 'forme juridique, date de création, code d’activité, numéro de TVA s’il en '
+      + 'existe un, commune et adresse de l’établissement. Ces informations sont rangées '
+      + 'à part de votre fiche : '
+      + 'seuls vous et l’administration d’Opus pouvez les lire. Un numéro saisi à la '
+      + 'main dans l’ancien champ « SIRET » de la fiche, avant le 15/10/2026, reste '
+      + 'lisible par l’interface publique d’Opus, même s’il ne s’affiche plus nulle '
+      + 'part dans l’application. Si vous demandez l’ouverture d’un compte '
+      + 'professionnel à la main : le numéro saisi, la raison pour laquelle la '
+      + 'consultation automatique n’a pas abouti, votre message, et le justificatif '
+      + 'que vous choisissez de joindre. Quand un numéro SIRET est consulté au '
+      + 'répertoire, une empreinte chiffrée de l’adresse IP de l’appareil est '
+      + 'enregistrée pour limiter le nombre d’essais ; l’adresse elle-même n’est pas '
+      + 'rangée dans la base d’Opus.',
   },
   {
     titre: 'Ce que nous ne collectons pas',
     texte: 'Aucune publicité ciblée, aucun traceur publicitaire, aucun outil '
       + 'de mesure d’audience tiers. Opus ne vend ni ne loue vos données à '
-      + 'personne. Votre position exacte n’est jamais relevée : seule la '
-      + 'commune que vous saisissez est utilisée.',
+      + 'personne. Votre position n’est jamais relevée par votre téléphone, et la carte '
+      + 'ne connaît que votre commune. Pour un compte professionnel, l’adresse de votre '
+      + 'établissement telle que le répertoire Sirene la publie est conservée dans un '
+      + 'espace privé, lisible par vous et l’administration d’Opus ; elle ne s’affiche '
+      + 'qu’à vous, dans « Mon entreprise ».',
   },
   {
     titre: 'Vos documents professionnels',
-    texte: 'Le Kbis et l’attestation d’assurance sont rangés dans un espace '
-      + 'PRIVÉ, protégé par des règles d’accès côté serveur. Ils ne sont '
-      + 'jamais affichés publiquement et servent uniquement au contrôle du '
-      + 'badge vérifié.',
+    texte: 'Le Kbis, l’extrait d’immatriculation et l’attestation d’assurance sont '
+      + 'rangés dans un espace PRIVÉ, lisible par vous et par l’administration d’Opus '
+      + 'seulement. Ils ne sont jamais affichés publiquement et servent uniquement au '
+      + 'contrôle du badge vérifié, ou à l’examen d’une demande d’ouverture de compte '
+      + 'professionnel — dont le justificatif suit les mêmes règles, et ne passe jamais '
+      + 'par la messagerie.',
   },
   {
     titre: 'Pourquoi, et sur quelle base',
@@ -552,7 +645,28 @@ export const CONFIDENTIALITE = [
       + 'contrat. Modérer les contenus et prévenir les fraudes : intérêt '
       + 'légitime, et obligation légale pour un service en ligne ouvert au '
       + 'public. Contrôler les documents du badge vérifié : votre '
-      + 'consentement, que vous donnez en les envoyant.',
+      + 'consentement, que vous donnez en les envoyant. Consulter le répertoire Sirene '
+      + 'pour un compte professionnel : exécution du contrat — c’est la condition '
+      + 'd’ouverture d’un compte professionnel — et intérêt légitime à prévenir les faux '
+      + 'profils. Examiner une demande d’ouverture à la main : mesures précontractuelles '
+      + 'prises à votre demande. Limiter le nombre de consultations par appareil : '
+      + 'intérêt légitime, protéger le service contre les abus.',
+  },
+  {
+    /* L'ARTICLE 22 DU RGPD — relecture « droit » du plan, constat 5. Refuser
+       un compte professionnel est une décision automatisée qui peut
+       affecter quelqu'un : il faut l'annoncer, et dire comment la faire
+       revoir par un humain. Vrai dès ce lot, puisque la porte de secours
+       existe ; aucun délai n'est promis, parce qu'aucun n'est tenu. */
+    titre: 'Une décision automatique, et comment la faire revoir',
+    texte: 'Quand vous ouvrez un compte professionnel, le numéro SIRET est consulté '
+      + 'automatiquement au répertoire Sirene de l’INSEE : s’il n’y est pas trouvé, si '
+      + 'l’établissement est fermé ou si l’entreprise a cessé son activité, le compte '
+      + 'professionnel n’est pas ouvert. Cette décision peut toujours être revue par un '
+      + 'humain : « Demander une vérification à la main » dépose votre demande dans '
+      + 'l’application, où l’administrateur d’Opus la lit et vous répond par vos '
+      + 'notifications et par la messagerie d’Opus. Vous pouvez y expliquer votre '
+      + 'situation.',
   },
   {
     titre: 'Où vos données sont hébergées',
@@ -625,7 +739,11 @@ export const CONFIDENTIALITE = [
        même quand ce destinataire est un service public français. */
     texte: 'Supabase, pour l’hébergement de la base et des fichiers. '
       + 'Cloudinary, pour la compression des vidéos et le montage — les vidéos '
-      + 'publiées y transitent. La Base Adresse Nationale '
+      + 'publiées y transitent. L’API Recherche d’entreprises de l’État '
+      + '(recherche-entreprises.api.gouv.fr), qui publie le répertoire Sirene de '
+      + 'l’INSEE, quand vous faites consulter un numéro SIRET : seul ce numéro y est '
+      + 'envoyé, depuis les serveurs d’Opus — jamais votre nom, jamais votre adresse '
+      + 'électronique, jamais votre adresse IP. La Base Adresse Nationale '
       + '(api-adresse.data.gouv.fr), le service public français des adresses, '
       + 'chaque fois qu’un champ de lieu vous propose des suggestions : seul '
       + 'le texte que vous êtes en train de taper y est envoyé — jamais votre '
@@ -639,12 +757,29 @@ export const CONFIDENTIALITE = [
   },
   {
     titre: 'Combien de temps',
+    /* « SIX MOIS, COMME LA LOI L'IMPOSE » ÉTAIT FAUX (relecture « droit »,
+       constat 10) : en offre gratuite, Supabase garde ses journaux UN jour,
+       et rien dans le dépôt ne fondait « la loi l'impose ». La phrase dit
+       maintenant ce qui est vrai aujourd'hui. Et l'empreinte d'adresse IP
+       n'a AUCUNE durée promise : le ménage n'a lieu qu'à l'occasion d'une
+       consultation, donc personne ne peut garantir « 24 heures ». */
     texte: 'Vos données sont conservées tant que votre compte existe. À sa '
       + 'suppression, elles sont effacées immédiatement, à trois exceptions '
       + 'près : les avis et commentaires laissés chez d’autres sont conservés '
       + 'sans votre nom ; les signalements sont conservés un an, sans le nom '
-      + 'de celui qui les a déposés ; les journaux techniques de connexion '
-      + 'sont conservés six mois, comme la loi l’impose.',
+      + 'de celui qui les a déposés ; les décisions de l’administration qui vous '
+      + 'concernent restent à son journal — la décision, le motif écrit par '
+      + 'l’administrateur et, pour une entreprise, son numéro SIREN. Une demande '
+      + 'd’ouverture de compte professionnel, '
+      + 'acceptée ou refusée, reste attachée à votre compte, apparaît dans « Récupérer '
+      + 'mes données », et disparaît avec lui. Si elle est refusée, votre compte reste '
+      + 'un compte particulier ; vous pouvez le supprimer à tout moment. Le résultat '
+      + 'd’une consultation du répertoire et l’empreinte d’adresse IP qui l’accompagne '
+      + 'sont effacés une fois leur durée d’usage passée, lors d’une consultation '
+      + 'suivante : ce ménage n’a lieu qu’à cette occasion, aucune durée maximale ne '
+      + 'peut donc être promise. Les journaux techniques de l’hébergeur, qui contiennent '
+      + 'l’adresse IP des appareils, sont effacés par lui au bout d’un jour, selon '
+      + 'l’offre souscrite aujourd’hui.',
   },
   {
     titre: 'Vos droits, et comment les exercer ICI',

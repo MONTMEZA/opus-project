@@ -146,6 +146,37 @@ console.log('\nLe compte naît placé — et c’est l’application qui le plac
     'ces métadonnées sont écrites par le CLIENT : l’insertion nomme ses colonnes');
 }
 
+console.log('\nUn compte qui DEVIENT pro garde son lieu (section 45)');
+{
+  /* Depuis le 15/10/2026, une fiche naît aussi hors de l'inscription : par
+     `devenir_pro()` (le répertoire connaît l'entreprise) et par
+     `admin_traiter_demande_pro()` (l'administration accepte). C'est le
+     piège de ce contrôle depuis le 05/10 vu par une autre porte : une fiche
+     née sans coordonnées n'apparaît dans AUCUNE recherche par secteur, et
+     rien ne le dit. Le particulier a donné sa commune à l'inscription
+     (section 32) ; la fiche doit la reprendre, pas la redemander. */
+  for (const nom of ['devenir_pro', 'admin_traiter_demande_pro']) {
+    const i = sqlNu.indexOf(`create or replace function public.${nom}(`);
+    const fn = i === -1 ? '' : sqlNu.slice(i, sqlNu.indexOf('$$;', i));
+    const insertion = /insert into public\.professional_profiles[\s\S]*?\);/.exec(fn);
+    verifier(`\`${nom}\` crée la fiche AVEC le lieu du compte`,
+      !!insertion
+      && /code_postal, latitude, longitude\)/.test(insertion[0])
+      && /le_compte\.latitude, le_compte\.longitude/.test(insertion[0])
+      && /le_compte\.ville/.test(insertion[0]),
+      'sans coordonnées, l’artisan n’apparaît dans aucune recherche « autour de '
+      + 'moi » — et ce sont les deux portes par lesquelles arrivent ceux que le '
+      + 'chemin automatique n’a pas pu inscrire');
+    verifier(`…et \`${nom}\` lit ce lieu dans \`users\`, la ligne du compte`,
+      /select u\.type, u\.nom, u\.ville, u\.code_postal, u\.latitude, u\.longitude/.test(fn),
+      'la ligne `users` porte la commune choisie à l’inscription ; un lieu '
+      + 'deviné ailleurs placerait l’artisan là où il n’a rien déclaré');
+    verifier(`…et \`${nom}\` ne nomme toujours pas le badge`,
+      !!insertion && !/\b(verifie|kbis_valide|assurance_valide|rge)\b/.test(insertion[0]),
+      'une fiche née par une fonction de la base ne naît pas vérifiée');
+  }
+}
+
 console.log('\nLa ville est demandée aux DEUX, à l’inscription');
 {
   /* Elle était dans la branche `estPro ? (…) : (…)`, donc jamais proposée à

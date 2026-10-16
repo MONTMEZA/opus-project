@@ -17,8 +17,11 @@ import {
   Avatar, BtnMain, BtnMini, Field, TextArea, ProfileBanner, SectionLabel,
 } from '../components/ui';
 import {
-  Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX, Sparkles,
+  Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX, Sparkles, Building,
+  ChevronRight,
 } from '../components/icons';
+import FeuilleEntreprise from '../components/FeuilleEntreprise';
+import { resumeEntreprise } from '../lib/entreprise';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
 import ChampSpecialites from '../components/ChampSpecialites';
@@ -47,6 +50,8 @@ function metierSosDe(metiers = []) {
 export default function ProfilEditScreen({
   userType, profil, sos, onSave, onEnvoyerDocuments, onErreur,
   onDemanderMetiers, demandeMetiers, onProposerSpecialite, emailCompte = '',
+  identiteEntreprise = null, entrepriseRetiree = null, entrepriseEtat = 'jamais',
+  onChargerEntreprise, onRattacherSiret,
 }) {
   const estPro = userType === 'pro';
 
@@ -74,7 +79,9 @@ export default function ProfilEditScreen({
     longitude: profil.longitude || null,
   });
   const [bio, setBio] = useState(profil.bio || '');
-  const [siret, setSiret] = useState(profil.siret || '');
+  /* « Mon entreprise » s'ouvre dans sa propre feuille : le champ SIRET libre
+     a disparu (section 45). */
+  const [feuilleEntreprise, setFeuilleEntreprise] = useState(false);
   const [exp, setExp] = useState(String(profil.exp || ''));
   /* La zone d'intervention ordinaire, à ne pas confondre avec le rayon SOS
      plus bas : celle-ci vaut pour les chantiers normaux, et concerne TOUS
@@ -118,7 +125,7 @@ export default function ProfilEditScreen({
     onSave({
       profil: estPro
         ? {
-            avatarUrl, bannerUrl, entreprise, metiers, metier: metiers[0], bio, siret,
+            avatarUrl, bannerUrl, entreprise, metiers, metier: metiers[0], bio,
             telephone, emailPro, specialites, horaires,
             zoneKm: Number(zoneKm) || null,
             ville: lieu.affichage,
@@ -311,8 +318,29 @@ export default function ProfilEditScreen({
               />
             )}
 
-            <Text style={s.label}>SIRET</Text>
-            <Field value={siret} onChangeText={setSiret} placeholder="812 345 678 00019" />
+            {/* MON ENTREPRISE — une rangée, et pas un champ. Le SIRET ne se
+                TAPE plus ici : il se RATTACHE, après consultation du
+                répertoire, par un geste immédiat qui n'attend pas
+                « Enregistrer ». L'ancien champ était un texte libre, jamais
+                contrôlé, avec un exemple inventé. */}
+            <Text style={s.label}>Mon entreprise</Text>
+            <Pressable
+              onPress={() => {
+                if (entrepriseEtat === 'jamais' && onChargerEntreprise) onChargerEntreprise();
+                setFeuilleEntreprise(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Mon entreprise : voir ou rattacher mon SIRET"
+              style={({ pressed }) => [s.rangee, pressed && APPUI.discret]}
+            >
+              <Building size={16} color={C.accent2} />
+              <Text style={s.rangeeTexte} numberOfLines={2}>
+                {entrepriseEtat === 'pret' ? resumeEntreprise(identiteEntreprise)
+                  : entrepriseEtat === 'echec' ? 'Entreprise illisible pour l’instant — touchez pour réessayer'
+                    : 'Voir mon entreprise'}
+              </Text>
+              <ChevronRight size={15} color={C.muted} />
+            </Pressable>
 
             <Text style={s.label}>Années d'expérience</Text>
             <Field value={exp} onChangeText={setExp} keyboardType="number-pad" placeholder="9" />
@@ -661,6 +689,17 @@ export default function ProfilEditScreen({
       <View style={[s.pad, { paddingBottom: 34 }]}>
         <BtnMain block label="Enregistrer" onPress={enregistrer} />
       </View>
+      {feuilleEntreprise && (
+        <FeuilleEntreprise
+          entreprise={identiteEntreprise}
+          retiree={entrepriseRetiree}
+          badge={!!profil.verifie}
+          etat={entrepriseEtat}
+          onRecharger={onChargerEntreprise}
+          onRattacher={onRattacherSiret}
+          onFermer={() => setFeuilleEntreprise(false)}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -732,6 +771,14 @@ const s = StyleSheet.create({
      — c'est la mesure d'Apple, et un maçon en gants n'a pas un doigt de
      7 mm. L'orange de TEXTE, pas celui de remplissage : sur blanc, `accent`
      ne donne que 3,51 : 1 pour du texte, `accentTexte` 5,74. */
+  /* La rangée « Mon entreprise » : la forme des réglages du compte, et
+     44 points par sa boîte. */
+  rangee: {
+    flexDirection: 'row', alignItems: 'center', gap: S.md, minHeight: TOUCHE,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.bordChamp,
+    paddingVertical: S.sm, paddingHorizontal: S.md,
+  },
+  rangeeTexte: { flex: 1, minWidth: 0, fontFamily: F.inter5, fontSize: T.courant, color: C.ink },
   reprendre: {
     alignSelf: 'flex-start', justifyContent: 'center',
     minHeight: TOUCHE, borderRadius: R.gelule, borderWidth: 1,

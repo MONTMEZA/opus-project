@@ -26,11 +26,24 @@
 \set QUIET on
 \pset pager off
 
+-- --------------------------------------------------------------------------
+--  LA PREUVE DU RÉPERTOIRE — depuis la section 45 (15/10/2026), un compte
+--  pro ne naît qu'avec une preuve FRAÎCHE pour son SIRET. On la pose ici en
+--  superutilisateur, comme la fonction Edge `siret` la poserait, sur un SIRET
+--  FICTIF à clé juste que le répertoire Sirene ne connaît pas (vérifié : 0
+--  résultat). Sans elle, chaque compte pro de ce fichier serait refusé
+--  (OP006), et les cas suivants ne prouveraient plus rien.
+-- --------------------------------------------------------------------------
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000011700010', 'ESSAIS 44 — VRAI PRO', 'registre', now() + interval '1 hour'),
+  ('00000012500013', 'ESSAIS 44 — C10', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+
 -- Le jeu d'essai : créé comme GoTrue le crée, par auth.users, donc par
 -- `cree_fiche_utilisateur()`. Un vrai pro, un particulier, et une demande.
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-00000000000a', 'vraipro@essai.test',
-   '{"type":"pro","nom":"Vrai Maçon","entreprise":"Maçonnerie Vraie","metiers":["macon"],"ville":"Lambesc"}'::jsonb),
+   '{"type":"pro","siret":"00000011700010","nom":"Vrai Maçon","entreprise":"Maçonnerie Vraie","metiers":["macon"],"ville":"Lambesc"}'::jsonb),
   ('b0000000-0000-0000-0000-00000000000b', 'particulier@essai.test',
    '{"type":"particulier","nom":"Julie","ville":"Lambesc"}'::jsonb),
   ('c0000000-0000-0000-0000-00000000000c', 'dupont@essai.test',
@@ -72,7 +85,7 @@ set local request.jwt.claim.sub = 'b0000000-0000-0000-0000-00000000000b';
 update public.users set type = 'pro' where id = auth.uid();
 rollback;
 
-\echo '--- B2. il s''insère une fiche pro, comme ensureProProfile (attendu : ERROR OP005)'
+\echo '--- B2. il s''insère une fiche pro, comme le faisait ensureProProfile (attendu : ERROR OP010 — depuis la section 45 une fiche ne se crée plus depuis l''application ; c''était OP005)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = 'b0000000-0000-0000-0000-00000000000b';
@@ -140,7 +153,7 @@ select public.preparer_suppression_compte() is not null as donnees_effacees;
 insert into public.users (id, type, nom) values (auth.uid(), 'pro', 'Revenu en pro');
 rollback;
 
-\echo '--- B11. …et la fiche qui suivait n''a plus de compte pro où naître (attendu : t, INSERT 0 1, ERROR OP005)'
+\echo '--- B11. …et la fiche qui suivait n''a plus de compte pro où naître (attendu : t, INSERT 0 1, ERROR OP010 — c''était OP005)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = 'b0000000-0000-0000-0000-00000000000b';
@@ -199,11 +212,18 @@ set local request.jwt.claim.sub = 'a0000000-0000-0000-0000-00000000000a';
 delete from public.posts where id = 'd0000000-0000-0000-0000-00000000000d';
 rollback;
 
-\echo '--- C7. un compte pro resté SANS fiche se répare, comme le fait ensureProProfile (attendu : pro | f, puis INSERT 0 1)'
+\echo '--- C7. CHANGÉ PAR LA SECTION 45 : un compte pro resté SANS fiche ne se répare PLUS depuis l''application (attendu : pro | f, puis ERROR OP010 — c''était INSERT 0 1)'
 begin;
 -- Un compte inscrit en particulier (le déclencheur crée la ligne `users`,
 -- pas de fiche), puis passé en pro par l'administration (auth.uid() vide) :
 -- c'est la forme exacte d'un compte pro resté sans fiche.
+--
+-- `ensureProProfile` le réparait en relisant les métadonnées du compte —
+-- que le client peut réécrire — et la fiche naissait SANS entreprise. Elle a
+-- disparu avec la section 45 : une fiche ne naît plus que dans une fonction
+-- de la base, qui exige une entreprise. Le seul compte de la vraie base dans
+-- cet état est la session anonyme du 14/09, sans jeton valable : le
+-- propriétaire la supprime dans Supabase → Authentication → Users.
 insert into auth.users (id, email, raw_user_meta_data) values
   ('e0000000-0000-0000-0000-00000000000e', 'areparer@essai.test',
    '{"type":"particulier","nom":"Compte à réparer"}'::jsonb);
@@ -235,7 +255,11 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values
   ('f0000000-0000-0000-0000-00000000000f', 'nouveaupro@essai.test',
-   '{"type":"pro","nom":"Nouveau","entreprise":"Nouvelle Couverture","metiers":["couvreur"],"ville":"Aix-en-Provence"}'::jsonb);
+   '{"type":"pro","siret":"00000012500013","nom":"Nouveau","entreprise":"Nouvelle Couverture","metiers":["couvreur"],"ville":"Aix-en-Provence"}'::jsonb);
 select u.type, exists (select 1 from public.professional_profiles p where p.id = u.id) as a_une_fiche
   from public.users u where u.id = 'f0000000-0000-0000-0000-00000000000f';
 rollback;
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée.
+delete from public.preuves_siret where siret in ('00000011700010', '00000012500013');

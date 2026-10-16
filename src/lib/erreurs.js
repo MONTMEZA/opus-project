@@ -47,7 +47,59 @@ export function estUnProblemeDeReseau(e) {
     || m.includes('timed out')
     || nom === 'typeerror' && m.includes('fetch')
     || nom === 'aborterror'
+    /* UNE FONCTION EDGE QU'ON N'A PAS PU JOINDRE — 15/10/2026.
+       `supabase.functions.invoke` n'arrive jamais ici avec « Failed to
+       fetch » : il ENVELOPPE l'échec dans une `FunctionsFetchError` dont le
+       message est « Failed to send a request to the Edge Function ».
+       Mesuré par la relecture du lot SIRET en faisant tourner ce fichier :
+       un téléphone sans réseau affichait cette phrase en anglais, au moment
+       précis où il ne fallait SURTOUT PAS laisser croire que le numéro
+       était en cause. */
+    || nom === 'functionsfetcherror'
   );
+}
+
+/**
+ * CE QUE LA VÉRIFICATION D'UN SIRET A RENCONTRÉ, quand ce n'est pas une
+ * réponse du serveur.
+ *
+ * La fonction Edge `siret` rend TOUTES ses issues en HTTP 200 — un numéro
+ * introuvable est une réponse, pas une panne. Une erreur levée par
+ * `functions.invoke` veut donc dire que la réponse n'est PAS arrivée, et
+ * il y a trois façons de ne pas arriver, qui ne se disent pas pareil :
+ *
+ *   reseau                le téléphone n'a pas pu envoyer la demande
+ *                         (`FunctionsFetchError`) ;
+ *   lent                  la demande est partie, rien n'est revenu dans le
+ *                         délai — `invoke` l'interrompt lui-même et la rend
+ *                         en `FunctionsFetchError` aussi, avec une
+ *                         `AbortError` dans `context`. C'est pourquoi on
+ *                         regarde AUSSI le temps écoulé : selon la
+ *                         plateforme, l'interruption ne porte pas toujours
+ *                         son nom ;
+ *   service_indisponible  le serveur a répondu, mais pas en 2xx
+ *                         (`FunctionsHttpError`, `FunctionsRelayError`) :
+ *                         une panne d'Opus.
+ *
+ * Aucune des trois n'accuse le numéro, et c'est toute la raison d'être de
+ * cette fonction. Elle n'importe rien : `verifier-etats` la FAIT TOURNER
+ * sur les trois erreurs de `functions-js`.
+ */
+export function issueDeVerification(erreur, ecouleMs = 0, delaiMs = 15000) {
+  const nom = String((erreur && erreur.name) || '');
+  const contexte = erreur && erreur.context;
+  const interrompue = !!contexte && String(contexte.name || '') === 'AbortError';
+  if (nom === 'FunctionsHttpError' || nom === 'FunctionsRelayError') {
+    return { issue: 'service_indisponible' };
+  }
+  if (interrompue || (Number(ecouleMs) >= Number(delaiMs) && delaiMs > 0)) {
+    return { issue: 'lent' };
+  }
+  if (nom === 'FunctionsFetchError' || estUnProblemeDeReseau(erreur)) {
+    return { issue: 'reseau' };
+  }
+  /* Ce qu'on ne sait pas classer : une panne, pas un numéro faux. */
+  return { issue: 'service_indisponible' };
 }
 
 /** Vrai quand la session a expiré : il faut se reconnecter, rien d'autre. */
@@ -70,6 +122,16 @@ export function messageClair(e, quoi = '') {
   const m = brut.toLowerCase();
   const sujet = quoi ? `${quoi} : ` : '';
 
+  /* LES CODES MAISON DE LA BASE (OP001 à OP010) PORTENT DÉJÀ LEUR PHRASE,
+     en français, et elle dit quoi faire : « touchez « Vérifier » à
+     nouveau », « Profil → Passer en compte professionnel ». La reformuler
+     ici, c'est écrire la même règle à deux endroits — et la première des
+     deux qu'on oublie de corriger est celle qui ment. On la rend telle
+     quelle, AVANT tout le reste : un mot comme « permission » dans l'une
+     d'elles ne doit pas la faire passer pour un droit manquant. */
+  const code = String((e && e.code) || '');
+  if (/^OP\d{3}$/.test(code) && brut) return brut;
+
   /* Le réseau d'abord : c'est le cas le plus fréquent sur un chantier, et
      celui où l'utilisateur n'a rien fait de mal. */
   if (estUnProblemeDeReseau(e)) {
@@ -81,10 +143,37 @@ export function messageClair(e, quoi = '') {
       + 'pour vous reconnecter.';
   }
 
+  /* Une fonction Edge qui a RÉPONDU, mais pas en 2xx : une panne d'Opus,
+     pas une faute de celui qui l'appelle. Sans cette ligne, l'écran
+     affichait « Edge Function returned a non-2xx status code ». */
+  const nomErreur = String((e && e.name) || '');
+  if (nomErreur === 'FunctionsHttpError' || nomErreur === 'FunctionsRelayError') {
+    return `${sujet}le service d’Opus n’a pas répondu correctement. Ce n’est pas `
+      + 'de votre fait : réessayez dans quelques minutes.';
+  }
+
   /* --- l'authentification, reprise d'AuthScreen où elle était enfermée --- */
   if (m.includes('invalid login credentials')) return 'Email ou mot de passe incorrect.';
+
+  /* L'INSCRIPTION REFUSÉE PAR LA BASE — section 45 de `schema.sql`.
+     Quand le déclencheur qui crée le compte lève OP006 ou OP007, GoTrue ne
+     transmet PAS notre texte : il rend « Database error saving new user »,
+     en HTTP 500. L'application revérifie le SIRET juste avant de créer le
+     compte, donc ce cas est rare — il ne tombe que si la vérification a
+     expiré pendant qu'on remplissait le formulaire, ou si quelqu'un vient
+     de prendre l'entreprise. Et c'est exactement la phrase à dire. */
+  if (m.includes('database error saving new user')) {
+    return 'Votre compte n’a pas été créé : la vérification de votre entreprise a '
+      + 'expiré, ou elle vient d’être rattachée à un autre compte. Touchez '
+      + '« Vérifier » à nouveau.';
+  }
   if (m.includes('already registered') || m.includes('already been registered')) {
-    return 'Un compte existe déjà avec cet email. Utilisez « Se connecter ».';
+    /* « Connectez-vous » ne doit pas être la SEULE issue : quelqu'un qui a
+       déjà un compte particulier avec cette adresse peut le faire passer en
+       professionnel depuis son profil, sans en recréer un. */
+    return 'Un compte existe déjà avec cet email. Utilisez « Se connecter » : '
+      + 'si c’est un compte particulier, vous pourrez le passer en compte '
+      + 'professionnel depuis votre profil.';
   }
   if (m.includes('email not confirmed')) {
     return "Votre email n'est pas encore confirmé. Regardez votre boîte mail.";
@@ -111,6 +200,15 @@ export function messageClair(e, quoi = '') {
   if (m.includes('row-level security') || m.includes('violates row-level')) {
     return `${sujet}la base a refusé l’enregistrement : vous n’avez pas le `
       + 'droit d’écrire cette ligne. Ce n’est pas une panne, c’est une règle.';
+  }
+  /* UNE DEMANDE DE COMPTE PRO DÉJÀ OUVERTE — l'index « une seule ouverte
+     par compte » (section 45.4). « Cela existe déjà » ne disait ni quoi, ni
+     quoi faire ; la démonstration le disait mieux que la vraie base
+     (relecture adverse, mesuré). */
+  if (m.includes('idx_demandes_pro_une_ouverte')) {
+    return `${sujet}vous avez déjà une demande de compte professionnel en attente. `
+      + 'Elle se suit sur votre profil, où vous pouvez joindre un justificatif — ou '
+      + 'l’annuler pour en faire une autre.';
   }
   if (m.includes('duplicate key') || m.includes('already exists')) {
     return `${sujet}cela existe déjà.`;
@@ -214,7 +312,8 @@ export function estDefinitif(e) {
     || m.includes('row-level security')
     || m.includes('violates')
     || code.startsWith('23')   // contraintes
-    || code.startsWith('42');  // droits, syntaxe
+    || code.startsWith('42')   // droits, syntaxe
+    || /^OP\d{3}$/.test(code); // un refus écrit par la base : elle a répondu
 }
 
 export async function avecReprise(faire, { pause = PAUSE_REPRISE, quoi = 'La base' } = {}) {

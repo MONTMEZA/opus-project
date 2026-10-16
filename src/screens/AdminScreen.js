@@ -39,16 +39,21 @@ import {
   View, Text, FlatList, Pressable, Linking, StyleSheet,
 } from 'react-native';
 import {
-  C, F, T, S, R, APPUI, interligne, surFond, CARTE, GOUTTIERE, viser,
+  C, F, T, S, R, APPUI, interligne, surFond, CARTE, GOUTTIERE, viser, TOUCHE,
 } from '../theme';
 import {
   BtnMain, BtnMini, EmptyState, PillToggle, SectionLabel,
 } from '../components/ui';
 import ChampLocal from '../components/ChampLocal';
 import {
-  ShieldCheck, FileText, Flag, Clock, AlertTriangle, Check, Hammer,
+  ShieldCheck, FileText, Flag, Clock, AlertTriangle, Check, Hammer, Building,
 } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
+import {
+  formaterSiret, libelleMotif, messageIssue, communeLisible,
+} from '../lib/siret';
+import { formeCourte } from '../data/formes-juridiques';
+import { dateFrancaise, nomDeLEntreprise } from '../lib/entreprise';
 /* Les deux pièces ne s'appellent pas pareil selon le métier : un
    micro-entrepreneur n'a pas de Kbis, un avocat pas de décennale. */
 import { EXISTENCE, assuranceAttendue, complementairesDe } from '../data/pieces-justificatives.js';
@@ -70,8 +75,16 @@ const JOURS_LIMITE = Math.ceil(DELAI_EXAMEN_HEURES / 24);
 /* ==========================================================================
    L'ÉCRAN
    ========================================================================== */
-export default function AdminScreen({ onRafraichirResume, onErreur }) {
+export default function AdminScreen({ onRafraichirResume, onErreur, onEcrire }) {
   const [onglet, setOnglet] = useState('verifications');
+  /* LES COMPTES PRO À OUVRIR (section 45) — avec LEUR effet et LEUR état
+     d'échec, jamais dans le `Promise.all` de `lire()`. Une table absente
+     (la migration pas encore appliquée), un droit manquant, et c'est toute
+     la file des badges qui tomberait avec elle. Même raison que le journal
+     de l'agent dans « Confidentialité » : une file neuve ne doit pas pouvoir
+     emporter celles qui marchent. */
+  const [demandesPro, setDemandesPro] = useState([]);
+  const [demandesProEtat, setDemandesProEtat] = useState('charge');
   const [pros, setPros] = useState([]);
   const [signalements, setSignalements] = useState([]);
   const [demandes, setDemandes] = useState([]);
@@ -144,7 +157,32 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
     if (rafraichirResume.current) rafraichirResume.current();
   }, [lire]);
 
+  useEffect(() => {
+    let vivant = true;
+    api.demandesProAdmin()
+      .then((liste) => {
+        if (!vivant) return;
+        setDemandesPro(liste);
+        setDemandesProEtat('pret');
+      })
+      .catch(() => { if (vivant) setDemandesProEtat('echec'); });
+    return () => { vivant = false; };
+  }, []);
+
+  /* Relire la file des comptes pro, après un acte ou sur « Réessayer ». */
+  const relireDemandesPro = useCallback(async () => {
+    try {
+      setDemandesPro(await api.demandesProAdmin());
+      setDemandesProEtat('pret');
+    } catch (e) {
+      setDemandesProEtat('echec');
+    }
+    if (rafraichirResume.current) rafraichirResume.current();
+  }, []);
+
+
   const nbPros = pros.filter((p) => p.aEnvoye).length;
+  const nbComptesPro = demandesPro.filter((d) => d.statut === 'nouvelle').length;
   const nbSig = signalements.filter((x) => x.statut === 'nouveau' || x.statut === 'en_examen').length;
   const nbRef = demandes.filter((d) => d.statut === 'en_attente').length
     + specialites.filter((x) => x.statut === 'en_attente').length;
@@ -157,7 +195,13 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
           value={onglet}
           onChange={setOnglet}
           options={[
-            { key: 'verifications', label: nbPros ? `Vérifications (${nbPros})` : 'Vérifications' },
+            /* Pas de quatrième onglet : mesuré par la relecture du plan, quatre
+               gélules débordent d'un iPhone de 375 points. Les comptes pro à
+               ouvrir vivent EN TÊTE de cet onglet, et se comptent avec lui. */
+            {
+              key: 'verifications',
+              label: nbPros + nbComptesPro ? `Vérifications (${nbPros + nbComptesPro})` : 'Vérifications',
+            },
             { key: 'signalements', label: nbSig ? `Signalements (${nbSig})` : 'Signalements' },
             { key: 'referentiel', label: nbRef ? `Référentiel (${nbRef})` : 'Référentiel' },
           ]}
@@ -170,6 +214,15 @@ export default function AdminScreen({ onRafraichirResume, onErreur }) {
           chargement={chargement}
           onActe={apresActe}
           onErreur={onErreur}
+          entete={(
+            <ComptesProAOuvrir
+              demandes={demandesPro}
+              etat={demandesProEtat}
+              onRelire={relireDemandesPro}
+              onErreur={onErreur}
+              onEcrire={onEcrire}
+            />
+          )}
         />
       )}
       {onglet === 'signalements' && (
@@ -212,25 +265,17 @@ function PiedDuJournal() {
 /* ==========================================================================
    LA FILE DES VÉRIFICATIONS
    ========================================================================== */
-function FileVerifications({ pros, chargement, onActe, onErreur }) {
-  if (chargement) {
-    return <EmptyState>Chargement de la file…</EmptyState>;
-  }
-  if (!pros.length) {
-    return (
-      <EmptyState icone={ShieldCheck} titre="Aucune fiche à contrôler">
-        Toutes les fiches professionnelles de la base portent leur badge.
-      </EmptyState>
-    );
-  }
-
+function FileVerifications({ pros, chargement, onActe, onErreur, entete = null }) {
+  /* UNE SEULE LISTE, MÊME VIDE : les comptes pro à ouvrir sont posés en
+     TÊTE, et ils doivent se voir même quand aucune fiche n'attend de badge
+     — un artisan qui attend qu'on ouvre son compte n'a rien d'autre. */
   const aContoler = pros.filter((p) => p.aEnvoye).length;
 
   return (
     <FlatList
       {...CLAVIER}
       style={s.liste}
-      data={pros}
+      data={chargement ? [] : pros}
       keyExtractor={(p) => p.id}
       /* Les trois réglages que CLAUDE.md impose à toute liste longue. Avec
          cent artisans, la valeur par défaut en monterait dix d'un coup. */
@@ -241,12 +286,23 @@ function FileVerifications({ pros, chargement, onActe, onErreur }) {
       ListHeaderComponentStyle={{ marginBottom: S.sm }}
       ListFooterComponent={PiedDuJournal}
       ListHeaderComponent={(
-        <SectionLabel>
-          {aContoler > 0
-            ? `${aContoler} fiche${aContoler > 1 ? 's' : ''} avec des documents à contrôler`
-            : 'Aucun document envoyé — rien n’attend de vous'}
-        </SectionLabel>
+        <View>
+          {entete}
+          <SectionLabel>
+            {chargement ? 'Fiches à contrôler'
+              : aContoler > 0
+                ? `${aContoler} fiche${aContoler > 1 ? 's' : ''} avec des documents à contrôler`
+                : 'Aucun document envoyé — rien n’attend de vous'}
+          </SectionLabel>
+        </View>
       )}
+      ListEmptyComponent={chargement
+        ? <EmptyState>Chargement de la file…</EmptyState>
+        : (
+          <EmptyState icone={ShieldCheck} titre="Aucune fiche à contrôler">
+            Toutes les fiches professionnelles de la base portent leur badge.
+          </EmptyState>
+        )}
       renderItem={({ item }) => (
         <CarteVerification pro={item} onActe={onActe} onErreur={onErreur} />
       )}
@@ -309,7 +365,15 @@ const CarteVerification = React.memo(function CarteVerification({ pro, onActe, o
         <Etiquette statut={pro.statut} />
       </View>
 
-      {!!pro.siret && <Text style={s.ligne}>SIRET déclaré : {pro.siret}</Text>}
+      {/* L'ENTREPRISE RATTACHÉE, à la place de l'ancien « SIRET déclaré » —
+          un texte libre, inventé sur les cinq fiches de la vraie base. */}
+      <EntrepriseDuPro
+        proId={pro.id}
+        estMoi={!!pro.estMoi}
+        note={note}
+        onActe={onActe}
+        onErreur={onErreur}
+      />
       {!!pro.note && <Text style={s.noteAncienne}>Dernière note : {pro.note}</Text>}
 
       {/* LES DOCUMENTS. Ils vivent dans l'espace PRIVÉ de Supabase, et
@@ -416,6 +480,364 @@ const CarteVerification = React.memo(function CarteVerification({ pro, onActe, o
           </Text>
         </>
       )}
+    </View>
+  );
+});
+
+/* ==========================================================================
+   L'ENTREPRISE D'UNE FICHE — sur la carte du badge (section 45)
+
+   Ce que le répertoire a dit de l'entreprise rattachée, à côté des pièces :
+   c'est le nom à retrouver sur l'attestation d'assurance. Et la porte pour
+   la RETIRER — un squatteur signalé, une entreprise radiée : sans elle, la
+   fonction de la base n'aurait aucun appelant, et le vrai titulaire resterait
+   dehors.
+   ========================================================================== */
+function EntrepriseDuPro({ proId, estMoi, note, onActe, onErreur }) {
+  const [identite, setIdentite] = useState(undefined);
+  const [echec, setEchec] = useState(false);
+  const [envoi, setEnvoi] = useState(false);
+  /* Ce qu'on vient de faire, dit tel quel : « aucune entreprise » juste
+     après « Retirer » laissait croire que la fiche n'en avait jamais eu. */
+  const [retireeIci, setRetireeIci] = useState(false);
+
+  useEffect(() => {
+    let vivant = true;
+    api.entrepriseDe(proId)
+      .then((e) => { if (vivant) setIdentite(e || null); })
+      .catch(() => { if (vivant) setEchec(true); });
+    return () => { vivant = false; };
+  }, [proId]);
+
+  const retirer = async () => {
+    if (envoi) return;
+    setEnvoi(true);
+    retour.decision();
+    try {
+      await api.retirerEntreprise(proId, note.current ? note.current.lire() : '');
+      retour.reussite();
+      setIdentite(null);
+      setRetireeIci(true);
+      await onActe();
+    } catch (e) {
+      retour.echec();
+      if (onErreur) onErreur(messageClair(e));
+    } finally {
+      setEnvoi(false);
+    }
+  };
+
+  if (echec) return <Text style={s.meta}>L’entreprise rattachée n’a pas pu être lue.</Text>;
+  if (identite === undefined) return <Text style={s.meta}>Lecture de l’entreprise rattachée…</Text>;
+  if (!identite) {
+    /* « Aucune », et pas « jamais vue au répertoire » : une fiche dont
+       l'entreprise vient d'être retirée l'y a bien été (relecture adverse,
+       15/10). */
+    return (
+      <Text style={s.ligne}>
+        {retireeIci
+          ? 'Entreprise retirée. Elle reste réservée : aucune porte automatique ne la '
+            + 'rend, ni à ce compte ni à un autre. Seule l’acceptation d’une demande '
+            + 'examinée à la main la rendra.'
+          : 'Aucune entreprise rattachée.'}
+      </Text>
+    );
+  }
+
+  const le = dateFrancaise(identite.verifie_le);
+  return (
+    <View style={s.entrepriseBloc}>
+      <View style={s.entrepriseHaut}>
+        <Building size={15} color={C.accent2} />
+        <Text style={s.entrepriseNom}>
+          {nomDeLEntreprise(identite) || 'Entreprise sans nom publié'}
+          {formeCourte(identite.forme_juridique) ? ` · ${formeCourte(identite.forme_juridique)}` : ''}
+        </Text>
+      </View>
+      <Text style={s.ligne}>
+        SIREN {identite.siren} · SIRET {formaterSiret(identite.siret)}
+      </Text>
+      <Text style={s.meta}>
+        {identite.source === 'administration'
+          ? `Rattachée à la main par l’administration${le ? ` le ${le}` : ''}, sans consultation du répertoire.`
+          : `Vue au répertoire Sirene le ${le || '—'}.`}
+        {' '}Le nom de l’assuré sur l’attestation doit être celui-ci.
+      </Text>
+      {!estMoi && (
+        <BtnMini
+          outline
+          label={envoi ? 'Retrait…' : 'Retirer l’entreprise de cette fiche'}
+          onPress={retirer}
+          disabled={envoi}
+          style={s.cible}
+        />
+      )}
+    </View>
+  );
+}
+
+/* ==========================================================================
+   LES COMPTES PRO À OUVRIR — la porte de secours, côté administration
+
+   EN TÊTE de l'onglet, avant les badges : c'est la file la plus urgente.
+   Une personne y attend pour TRAVAILLER, et son compte ne peut rien faire
+   d'autre tant qu'elle attend.
+
+   Ce que la carte montre, et dans cet ordre : pourquoi le chemin
+   automatique n'a pas abouti, ce que le répertoire a dit, ce que la
+   personne déclare, qui elle est sur Opus, et — si l'entreprise est déjà
+   tenue — qui la tient. Ce qu'elle ne montre JAMAIS : l'e-mail, le
+   téléphone, les coordonnées, l'adresse du siège. La base ne les rend
+   d'ailleurs pas (`admin_demandes_pro`).
+   ========================================================================== */
+function ComptesProAOuvrir({ demandes, etat, onRelire, onErreur, onEcrire }) {
+  const ouvertes = demandes.filter((d) => d.statut === 'nouvelle');
+  const traitees = demandes.filter((d) => d.statut !== 'nouvelle');
+
+  return (
+    <View style={s.section}>
+      <SectionLabel>
+        {etat === 'charge' ? 'Comptes pro à ouvrir'
+          : `Comptes pro à ouvrir (${ouvertes.length})`}
+      </SectionLabel>
+
+      {etat === 'charge' && <Text style={s.sectionTexte}>Lecture de la file…</Text>}
+
+      {etat === 'echec' && (
+        /* Un échec se DIT, et ne ressemble jamais à « personne n'attend ». */
+        <View style={s.sectionEchec}>
+          <Text style={s.sectionTexte}>
+            La file des comptes pro n’a pas pu être lue. Ce n’est pas qu’elle est
+            vide : réessayez.
+          </Text>
+          <BtnMini outline label="Réessayer" onPress={onRelire} style={s.cible} />
+        </View>
+      )}
+
+      {etat === 'pret' && ouvertes.length === 0 && (
+        <Text style={s.sectionTexte}>Personne n’attend qu’on ouvre son compte.</Text>
+      )}
+
+      {etat === 'pret' && ouvertes.map((d) => (
+        <CarteCompteProAOuvrir
+          key={d.id}
+          d={d}
+          onActe={onRelire}
+          onErreur={onErreur}
+          onEcrire={onEcrire}
+        />
+      ))}
+
+      {etat === 'pret' && traitees.length > 0 && (
+        <Text style={s.sectionTexte}>
+          Dernières décisions : {traitees.slice(0, 5).map((d) => `${formaterSiret(d.siret)} — ${
+            d.statut === 'acceptee' ? 'ouvert' : d.statut === 'refusee' ? 'refusé' : 'annulé'}`).join(' · ')}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/* La consigne pour une entreprise CONTESTÉE. Un Kbis, un avis Sirene, un
+   extrait RNE se téléchargent par n'importe qui : ils ne prouvent rien sur
+   celui qui les envoie. */
+const CONSIGNE_CONTESTATION = 'Un Kbis ou un avis Sirene se télécharge par n’importe qui. '
+  + 'Demandez une pièce que seul le titulaire possède : son attestation d’assurance '
+  + 'nominative, ou son attestation de vigilance URSSAF.';
+
+/* CE QU'UN REFUS NE FAIT PAS — relecture adverse du 15/10, mesuré : la
+   demande de P pour l'entreprise W est refusée (« le Kbis ne porte pas
+   votre nom »), puis P passe pro tout seul avec W, parce que le répertoire
+   la connaît. Aucune décision de l'administration n'est retenue par le
+   chemin automatique, qui ne sait pas qui est titulaire. Le dire à celui
+   qui refuse, et lui dire ce qui tient vraiment : le retrait, qui réserve
+   l'entreprise. */
+const CONSIGNE_REFUS = 'Un refus ne ferme pas le chemin automatique : si le répertoire '
+  + 'connaît l’entreprise, la personne peut ensuite passer pro toute seule avec ce numéro. '
+  + 'Si elle le fait sans en être titulaire, retirez l’entreprise de sa fiche : elle reste '
+  + 'alors réservée, et plus aucune porte automatique ne la rend.';
+
+/* « Revérifier » pour une entreprise déjà rattachée : la fonction Edge ne
+   consulte pas le répertoire, elle répond « déjà utilisé ». Le texte de
+   cette issue s'adresse au DEMANDEUR (« connectez-vous ») ; ici, il faut
+   dire à l'administrateur ce qui s'est passé. */
+const REVERIFICATION_IMPOSSIBLE = 'Le répertoire n’est pas consulté pour une entreprise déjà '
+  + 'rattachée à un compte, ou réservée après un retrait : il n’y a donc pas de réponse fraîche '
+  + 'à reprendre.';
+
+const CarteCompteProAOuvrir = React.memo(function CarteCompteProAOuvrir({
+  d, onActe, onErreur, onEcrire,
+}) {
+  const [envoi, setEnvoi] = useState(null);
+  const [reponse, setReponse] = useState(null);
+  const note = useRef(null);
+  const conteste = !!d.detenteur || d.motif === 'deja_utilise';
+
+  const agir = async (decision) => {
+    if (envoi) return;
+    setEnvoi(decision);
+    retour.decision();
+    try {
+      await api.traiterDemandePro(d.id, decision, note.current ? note.current.lire() : '');
+      retour.reussite();
+      await onActe();
+    } catch (e) {
+      retour.echec();
+      if (onErreur) onErreur(messageClair(e));
+    } finally {
+      setEnvoi(null);
+    }
+  };
+
+  /* REVÉRIFIER : si le répertoire répond « ok », sa preuve fraîche sera
+     reprise à l'ouverture — l'identité naîtra alors DE LA PREUVE (source
+     « registre ») et non du seul numéro. */
+  const reverifier = async () => {
+    if (envoi) return;
+    setEnvoi('reverification');
+    const r = await api.verifierSiret(d.siret);
+    setReponse(r.issue === 'ok'
+      ? 'Le répertoire connaît l’entreprise : ce qu’il a dit servira à l’ouverture du compte.'
+      : r.issue === 'deja_utilise' ? REVERIFICATION_IMPOSSIBLE
+        : (messageIssue(r.issue, r).texte || 'Réponse inattendue du répertoire.'));
+    setEnvoi(null);
+    await onActe();
+  };
+
+  const ouvrirJustificatif = async () => {
+    try {
+      const url = await api.urlDocument(d.justificatif);
+      if (!url) throw new Error('Aucun justificatif n’est joint à cette demande.');
+      Linking.openURL(url).catch(() => {});
+    } catch (e) {
+      if (onErreur) onErreur(messageClair(e));
+    }
+  };
+
+  const p = d.preuve;
+  const compte = d.compte || {};
+  return (
+    <View style={s.carte}>
+      <View style={s.entete}>
+        <View style={s.enteteTexte}>
+          <Text style={s.entreprise} numberOfLines={2}>{libelleMotif(d.motif)}</Text>
+          <Text style={s.meta}>SIRET {formaterSiret(d.siret)}</Text>
+        </View>
+        <View style={[s.etiquette, { backgroundColor: d.jours >= 2 ? C.bad : C.accent2 }]}>
+          <Text style={[s.etiquetteTexte, { color: C.surface }]}>
+            {d.jours === 0 ? 'aujourd’hui' : `depuis ${d.jours} j`}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={s.sousTitre}>Ce que le répertoire a dit</Text>
+      <Text style={s.ligne}>
+        {p
+          ? `${nomDeLEntreprise(p) || 'Sans nom publié'}${formeCourte(p.forme_juridique) ? ` · ${formeCourte(p.forme_juridique)}` : ''}`
+            + `${p.commune ? ` · ${communeLisible(p.commune)}` : ''}`
+            + `${p.est_siege === true ? ' · siège' : p.est_siege === false ? ' · établissement secondaire' : ''}`
+            + ` — consulté le ${dateFrancaise(p.verifiee_le) || '—'}`
+          : 'Aucune réponse récente du répertoire pour ce numéro.'}
+      </Text>
+
+      <Text style={s.sousTitre}>Ce que la personne déclare</Text>
+      <Text style={s.ligne}>
+        {[d.entreprise, (d.metiers || []).map(nomMetier).join(', ')].filter(Boolean).join(' — ')
+          || 'Ni nom d’entreprise ni métier indiqués.'}
+      </Text>
+      {!!d.message && <Text style={s.extrait}>« {d.message} »</Text>}
+
+      <Text style={s.sousTitre}>Le compte</Text>
+      <Text style={s.ligne}>
+        {[compte.nom, compte.inscrit_le ? `inscrit le ${dateFrancaise(compte.inscrit_le)}` : null,
+          compte.ville].filter(Boolean).join(' · ')}
+      </Text>
+
+      <Document
+        libelle="Justificatif joint"
+        present={!!d.justificatif}
+        onOuvrir={ouvrirJustificatif}
+      />
+
+      {!!d.detenteur && (
+        <View style={s.bloqueMoi}>
+          <AlertTriangle size={15} color={C.bad} />
+          <Text style={s.bloqueMoiTexte}>
+            Cette entreprise est déjà rattachée à : {d.detenteur.entreprise}
+            {d.detenteur.inscrit_le ? ` · inscrit le ${dateFrancaise(d.detenteur.inscrit_le)}` : ''}
+            {` · ${d.detenteur.verifie ? 'badge vérifié' : 'sans badge'}`}
+            {` · ${d.detenteur.nb_publications || 0} publication${(d.detenteur.nb_publications || 0) > 1 ? 's' : ''}`}.
+          </Text>
+        </View>
+      )}
+      {!!d.reserveeLe && (
+        <Text style={s.aideBadge}>
+          Cette entreprise a été retirée par l’administration
+          {dateFrancaise(d.reserveeLe) ? ` le ${dateFrancaise(d.reserveeLe)}` : ''} et reste
+          réservée : l’ouvrir à ce demandeur la lui rendra.
+        </Text>
+      )}
+      {conteste && <Text style={s.aideBadge}>{CONSIGNE_CONTESTATION}</Text>}
+
+      {!!reponse && <Text style={s.ligne}>{reponse}</Text>}
+
+      <View style={s.boutons}>
+        <BtnMini
+          outline
+          label="Écrire au demandeur"
+          onPress={() => onEcrire && onEcrire({
+            compteId: compte.id, nom: compte.nom, ville: compte.ville, siret: d.siret,
+          })}
+          style={s.cible}
+        />
+        {/* Pas pour une entreprise déjà tenue : la consultation ne
+            produirait aucune réponse fraîche (`REVERIFICATION_IMPOSSIBLE`). */}
+        {!d.detenteur && (
+          <BtnMini
+            outline
+            label={envoi === 'reverification' ? 'Consultation…' : 'Revérifier au répertoire'}
+            onPress={reverifier}
+            disabled={!!envoi}
+            style={s.cible}
+          />
+        )}
+      </View>
+
+      <ChampLocal
+        ref={note}
+        multiligne
+        placeholder="Note — obligatoire pour refuser ou transférer (dix caractères au moins). La personne la lira."
+        style={s.champ}
+        accessibilityLabel="Note de décision"
+      />
+
+      <View style={s.boutons}>
+        {d.detenteur ? (
+          <BtnMain
+            label={envoi === 'transferer' ? 'Transfert…' : 'Transférer l’entreprise à ce demandeur'}
+            onPress={() => agir('transferer')}
+            disabled={!!envoi}
+          />
+        ) : (
+          <BtnMain
+            label={envoi === 'accepter' ? 'Ouverture…' : 'Ouvrir le compte professionnel'}
+            onPress={() => agir('accepter')}
+            disabled={!!envoi}
+          />
+        )}
+        <BtnMini
+          outline
+          label={envoi === 'refuser' ? 'Refus…' : 'Refuser'}
+          onPress={() => agir('refuser')}
+          disabled={!!envoi}
+          style={s.cible}
+        />
+      </View>
+      <Text style={s.aide}>
+        Chaque décision est écrite au journal et notifiée au demandeur. Un transfert
+        retire aussi l’entreprise au compte qui la détient, et le lui dit.
+      </Text>
+      <Text style={s.aide}>{CONSIGNE_REFUS}</Text>
     </View>
   );
 });
@@ -919,6 +1341,24 @@ const s = StyleSheet.create({
   },
 
   documents: { gap: S.xs },
+
+  /* Les comptes pro à ouvrir : une section EN TÊTE, avec sa propre
+     gouttière (les cartes portent déjà la leur). */
+  section: { gap: S.sm, marginBottom: S.md },
+  sectionTexte: {
+    fontFamily: F.inter, fontSize: T.courant, color: C.muted,
+    lineHeight: interligne(T.courant), paddingHorizontal: GOUTTIERE,
+  },
+  sectionEchec: { gap: S.sm, paddingHorizontal: GOUTTIERE },
+  sousTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.muted, letterSpacing: 0.3 },
+  entrepriseBloc: {
+    gap: S.xs, padding: S.sm, borderWidth: 1, borderColor: C.line, borderRadius: R.vif,
+  },
+  entrepriseHaut: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  entrepriseNom: { flex: 1, minWidth: 0, fontFamily: F.inter6, fontSize: T.courant, color: C.ink },
+  /* 44 points par la BOÎTE : `BtnMini` s'arrête à 36 et compte sur
+     `hitSlop`, que le navigateur ignore. */
+  cible: { minHeight: TOUCHE },
   document: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm,
     minHeight: 44, paddingHorizontal: S.sm,

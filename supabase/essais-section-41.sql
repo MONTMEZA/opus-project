@@ -21,11 +21,24 @@
 \set A '''aaaa4100-0000-4000-8000-00000000aaaa'''
 \set B '''bbbb4100-0000-4000-8000-00000000bbbb'''
 
+-- --------------------------------------------------------------------------
+--  LA PREUVE DU RÉPERTOIRE — depuis la section 45 (15/10/2026), un compte
+--  pro ne naît qu'avec une preuve FRAÎCHE pour son SIRET. On la pose ici en
+--  superutilisateur, comme la fonction Edge `siret` la poserait, sur un SIRET
+--  FICTIF à clé juste que le répertoire Sirene ne connaît pas (vérifié : 0
+--  résultat). Sans elle, chaque compte pro de ce fichier serait refusé
+--  (OP006), et les cas suivants ne prouveraient plus rien.
+-- --------------------------------------------------------------------------
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000009100017', 'ESSAIS 41 — A', 'registre', now() + interval '1 hour'),
+  ('00000010900017', 'ESSAIS 41 — B', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+
 -- Deux artisans, pour tout le fichier.
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values
- (:A,'a4100@exemple-opus.test',jsonb_build_object('type','pro','nom','A Maconnerie','entreprise','A Maconnerie','metiers',jsonb_build_array('macon'),'ville','Lambesc (13)')),
- (:B,'b4100@exemple-opus.test',jsonb_build_object('type','pro','nom','B Couverture','entreprise','B Couverture','metiers',jsonb_build_array('couvreur'),'ville','Aix (13)'));
+ (:A,'a4100@exemple-opus.test',jsonb_build_object('type','pro','siret','00000009100017','nom','A Maconnerie','entreprise','A Maconnerie','metiers',jsonb_build_array('macon'),'ville','Lambesc (13)')),
+ (:B,'b4100@exemple-opus.test',jsonb_build_object('type','pro','siret','00000010900017','nom','B Couverture','entreprise','B Couverture','metiers',jsonb_build_array('couvreur'),'ville','Aix (13)'));
 commit;
 
 
@@ -274,6 +287,10 @@ rollback;
 begin;
 delete from auth.users where id in (:A, :B);
 commit;
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée.
+delete from public.preuves_siret where siret in ('00000009100017', '00000010900017');
 
 \echo ''
 \echo '############ FIN DES ESSAIS DE LA SECTION 41 ############'

@@ -11,7 +11,7 @@
 const {
   chercher, distanceKm, libelleDistance,
   dansSecteur, decouperAffichage, RAYONS_KM,
-  formater, estUneAdresse,
+  formater, estUneAdresse, completerLieu,
 } = await import('../src/lib/adresse.js');
 
 const CAS = [
@@ -281,6 +281,85 @@ for (const [titre, valeur] of [['inconnue', null], ['undefined', undefined], ['a
     && estUneAdresse({}) === false;
   if (!robuste) echecs += 1;
   console.log(`${robuste ? '  OK  ' : 'ECHEC '} …et rien d’autre n’est pris pour une adresse`);
+}
+
+/* ==========================================================================
+   LE CODE INSEE DÉPARTAGE — 15/10/2026 (lot SIRET)
+   --------------------------------------------------------------------------
+   L'inscription professionnelle préremplit la ville depuis le répertoire
+   Sirene, qui donne le CODE INSEE de la commune. `completerLieu` s'en sert :
+   il demande à l'API de filtrer sur ce code (`citycode`), et n'accepte
+   qu'un résultat qui le porte.
+
+   DEUX FAÇONS DE L'ÉPROUVER, et il faut les deux — la leçon déjà écrite
+   plus haut pour `formater` :
+     - une réponse SIMULÉE, hors réseau, qui place le BON résultat en
+       SECOND : un code qui prendrait `resultats[0]` serait attrapé, et ça
+       tourne même quand le mandataire coupe la connexion ;
+     - l'appel RÉEL, qui attrape un paramètre que l'API refuserait. C'est
+       exactement la panne du `type=address` : HTTP 400, aucune suggestion,
+       aucun message — et un test simulé n'y voyait que du feu.
+   ========================================================================== */
+{
+  const vraiFetch = globalThis.fetch;
+  const appels = [];
+  const commune = (nom, citycode, postcode, lon, lat) => ({
+    properties: { type: 'municipality', name: nom, city: nom, citycode, postcode, label: nom },
+    geometry: { type: 'Point', coordinates: [lon, lat] },
+  });
+  /* Deux « Sainte-Marie » dans le même département : le seul départage
+     possible est le code INSEE. Le bon résultat est rangé EN SECOND. */
+  const REPONSES = {
+    avecCode: [commune('Sainte-Marie', '97418', '97438', 55.548, -20.896),
+      commune('Sainte-Marie', '97419', '97438', 55.501, -20.912)],
+    sansCode: [commune('Lambesc', '13050', '13410', 5.258868, 43.648937)],
+  };
+  globalThis.fetch = async (url) => {
+    appels.push(String(url));
+    const u = new URL(String(url));
+    const liste = u.searchParams.get('citycode') ? REPONSES.avecCode : REPONSES.sansCode;
+    return { ok: true, status: 200, json: async () => ({ features: liste }) };
+  };
+  try {
+    const lieu = await completerLieu({ affichage: 'Sainte-Marie (974)', codeInsee: '97419' });
+    const ok1 = appels.length === 1 && /[?&]citycode=97419(&|$)/.test(appels[0]);
+    if (!ok1) echecs += 1;
+    console.log(`${ok1 ? '  OK  ' : 'ECHEC '} le code INSEE part en filtre (citycode) — ${appels[0] || 'aucun appel'}`);
+
+    const ok2 = lieu.codeInsee === '97419' && lieu.longitude === 55.501;
+    if (!ok2) echecs += 1;
+    console.log(`${ok2 ? '  OK  ' : 'ECHEC '} …et c'est le résultat qui PORTE ce code qui est retenu, pas le premier`
+      + ` — ${lieu.codeInsee} / ${lieu.longitude}`);
+
+    appels.length = 0;
+    const sans = await completerLieu({ affichage: 'Lambesc (13)' });
+    const ok3 = appels.length === 1 && !/citycode=/.test(appels[0]) && sans.latitude === 43.648937;
+    if (!ok3) echecs += 1;
+    console.log(`${ok3 ? '  OK  ' : 'ECHEC '} sans code INSEE, la règle du département reste celle d'avant`);
+
+    appels.length = 0;
+    const deja = await completerLieu({ affichage: 'Lambesc (13)', codeInsee: '13050', latitude: 1, longitude: 2 });
+    const ok4 = appels.length === 0 && deja.latitude === 1;
+    if (!ok4) echecs += 1;
+    console.log(`${ok4 ? '  OK  ' : 'ECHEC '} un lieu qui a déjà ses coordonnées n'est pas retouché`);
+
+    appels.length = 0;
+    const faux = await completerLieu({ affichage: 'Lambesc (13)', codeInsee: '2C999' });
+    const ok5 = appels.length === 1 && !/citycode=/.test(appels[0]);
+    if (!ok5) echecs += 1;
+    console.log(`${ok5 ? '  OK  ' : 'ECHEC '} un code qui n'en est pas un n'est jamais envoyé — ${faux.latitude}`);
+  } finally {
+    globalThis.fetch = vraiFetch;
+  }
+
+  /* L'APPEL RÉEL. Lambesc a le code INSEE 13050 (et le code postal 13410 :
+     les deux ne se confondent pas, c'est tout le piège). */
+  const reel = await completerLieu({ affichage: 'Lambesc (13)', codeInsee: '13050' });
+  const okReel = reel.codeInsee === '13050'
+    && typeof reel.latitude === 'number' && Math.abs(reel.latitude - 43.65) < 0.1;
+  if (!okReel) echecs += 1;
+  console.log(`${okReel ? '  OK  ' : 'ECHEC '} l'API accepte le filtre, pour de vrai — `
+    + `${reel.codeInsee || '?'} ${reel.latitude ?? 'sans coordonnées'} / ${reel.longitude ?? ''}`);
 }
 
 console.log(echecs === 0 ? '\nTout est bon.' : `\n${echecs} vérification(s) en échec.`);

@@ -1382,6 +1382,19 @@ grant execute on function public.coord_ou_null(text, double precision)
 --  enregistre l'acceptation des conditions. Le pourquoi — un compte
 --  d'artisan trouvé en deux moitiés sur la vraie base — est raconté en
 --  SECTION 31. Il faut l'avoir lu avant de toucher à cette fonction.
+--
+--  DEPUIS LE 15/10/2026, UN COMPTE PRO NE NAÎT QU'AVEC UNE ENTREPRISE
+--  TROUVÉE AU RÉPERTOIRE SIRENE. Le pourquoi est en SECTION 45 : il faut
+--  l'avoir lu aussi. Ce qui compte ici, et qui ne se voit pas :
+--
+--  AUCUNE VARIABLE N'A LE TYPE D'UNE TABLE DE LA SECTION 45. Les tables
+--  `preuves_siret`, `entreprise_registre` et `demandes_pro` naissent 6 000
+--  lignes plus bas. Un corps plpgsql n'est analysé qu'à l'exécution, mais
+--  ses DÉCLARATIONS sont contrôlées à la création — mesuré : une variable
+--  `public.preuves_siret` lève « type does not exist » dès le PREMIER
+--  passage du schéma sur une base neuve, et le second passe. Un fichier
+--  qui ne se rejoue qu'une fois sur deux est exactement la panne que ce
+--  projet traque. D'où `record` et des variables simples, rien d'autre.
 -- ==========================================================================
 create or replace function public.cree_fiche_utilisateur()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -1394,10 +1407,70 @@ declare
   le_cp       text;
   la_lat      double precision;
   la_lon      double precision;
+  le_siret    text;
+  la_preuve   record;
+  la_demande  jsonb;
+  ses_metiers text[];
 begin
   meta    := coalesce(new.raw_user_meta_data, '{}'::jsonb);
   le_type := coalesce(meta ->> 'type', 'particulier');
   la_cgu  := nullif(btrim(coalesce(meta ->> 'cgu', '')), '');
+
+  -- 0. UN COMPTE PRO EXIGE UNE ENTREPRISE ACTIVE, CONSTATÉE PAR LA BASE
+  --    (section 45.6), et c'est vérifié AVANT toute écriture.
+  --
+  --    Le SIRET vient des métadonnées, donc du client : il ne prouve rien
+  --    par lui-même. Ce qui prouve, c'est qu'une PREUVE fraîche existe pour
+  --    ce numéro — et une preuve n'est écrite que par la fonction Edge
+  --    `siret`, qui a interrogé le répertoire Sirene. Les données
+  --    d'identité de la fiche viendront de cette preuve, jamais de ce que
+  --    le formulaire prétend.
+  --
+  --    Une preuve `essai` (posée à la main pour les comptes jetables) n'est
+  --    acceptée que pour l'adresse EXACTE qu'elle nomme (`pour_email`, une
+  --    adresse d'essai) : sinon, quiconque lit le dépôt s'inscrirait avec un
+  --    SIRET fictif sans passer par le répertoire — et un simple domaine ne
+  --    suffisait pas, puisqu'il accepte n'importe quelle adresse inventée
+  --    (relecture adverse du 15/10, section 45.1).
+  --
+  --    Et un refus ici FAIT ÉCHOUER la création du compte : GoTrue répond
+  --    « Database error saving new user » sans notre texte. L'application
+  --    revérifie donc le SIRET juste avant `signUp`, ce qui rend ces deux
+  --    refus rarissimes — ils ne tombent que si la preuve a expiré pendant
+  --    qu'on remplissait le formulaire, ou si quelqu'un vient de prendre
+  --    l'entreprise.
+  if le_type = 'pro' then
+    le_siret := regexp_replace(coalesce(meta ->> 'siret', ''), '\D', '', 'g');
+
+    select p.* into la_preuve
+      from public.preuves_siret p
+     where p.siret = le_siret
+       and p.expire_le > now()
+       and (p.source = 'registre'
+            or (p.source = 'essai'
+                and p.pour_email = lower(coalesce(new.email, ''))));
+    if not found then
+      raise exception
+        'Inscription professionnelle impossible : votre SIRET n''a pas été '
+        'retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à '
+        'l''étape « Votre entreprise » et touchez « Vérifier ».'
+        using errcode = 'OP006';
+    end if;
+
+    -- UN COMPTE PAR ENTREPRISE. Le SIREN et pas le SIRET : déménager change
+    -- le SIRET (un nouvel établissement), pas l'entreprise.
+    -- Une entreprise GELÉE par l'administration (section 45.3) est prise
+    -- elle aussi : sinon le squatteur à qui on l'a retirée la reprendrait
+    -- en ouvrant un compte neuf.
+    if exists (select 1 from public.entreprise_registre e
+                where e.siren = la_preuve.siren and (e.retiree_le is null or e.gele)) then
+      raise exception
+        'Cette entreprise est déjà rattachée à un compte Opus. Si c''est la '
+        'vôtre, inscrivez-vous en demandant une vérification à la main : '
+        'l''administration examinera votre demande.'
+        using errcode = 'OP007';
+    end if;
+  end if;
 
   -- LE LIEU VOYAGE AUSSI, ET POUR TOUT LE MONDE — 05/10/2026.
   --
@@ -1488,6 +1561,66 @@ begin
       la_lon
     )
     on conflict (id) do nothing;
+
+    -- 3. L'IDENTITÉ LÉGALE, privée, DEPUIS LA PREUVE (section 45.3). Aucune
+    --    colonne ne vient des métadonnées : le client a choisi un numéro,
+    --    c'est le répertoire qui a dit ce qu'il désigne. La date reprise
+    --    est celle où le répertoire a été CONSULTÉ, pas celle d'aujourd'hui.
+    insert into public.entreprise_registre
+      (pro_id, siren, siret, denomination, sigle, nom_commercial,
+       nom_complet_registre, est_ei, forme_juridique, date_creation, tva,
+       ape, naf25, est_siege, adresse, code_postal, commune, code_insee,
+       statut_diffusion, maj_insee, source, verifie_le)
+    values (
+      new.id, la_preuve.siren, la_preuve.siret, la_preuve.denomination,
+      la_preuve.sigle, la_preuve.nom_commercial, la_preuve.nom_complet_registre,
+      la_preuve.est_ei, la_preuve.forme_juridique, la_preuve.date_creation,
+      la_preuve.tva, la_preuve.ape, la_preuve.naf25, la_preuve.est_siege,
+      la_preuve.adresse, la_preuve.code_postal, la_preuve.commune,
+      la_preuve.code_insee, la_preuve.statut_diffusion, la_preuve.maj_insee,
+      la_preuve.source, la_preuve.verifiee_le
+    );
+
+  -- 4. LA PORTE DE SECOURS (section 45.4) : un particulier qui s'inscrit EN
+  --    ATTENDANT que l'administration examine son entreprise. Son compte
+  --    naît particulier — il peut tout regarder et écrire des messages —,
+  --    et sa demande naît avec lui.
+  elsif le_type = 'particulier' and jsonb_typeof(meta -> 'demande_pro') = 'object' then
+    la_demande := meta -> 'demande_pro';
+    le_siret   := regexp_replace(coalesce(la_demande ->> 'siret', ''), '\D', '', 'g');
+
+    -- Les métiers sont NETTOYÉS, pas refusés : un métier inventé ne doit
+    -- pas faire perdre la demande. Même fonction que la contrainte.
+    select array_agg(m order by n)
+      into ses_metiers
+      from jsonb_array_elements_text(
+             case when jsonb_typeof(la_demande -> 'metiers') = 'array'
+                  then la_demande -> 'metiers'
+                  else '[]'::jsonb end
+           ) with ordinality as t(m, n)
+     where n <= 4;
+    if ses_metiers is null or not public.metiers_connus(ses_metiers) then
+      ses_metiers := '{}';
+    end if;
+
+    -- UNE MÉTADONNÉE MALFORMÉE NE COÛTE JAMAIS UN COMPTE. Le motif et la
+    -- longueur de l'entreprise ne sont PAS recopiés ici : ce sont les
+    -- contraintes `demande_pro_motif_check` et `demande_pro_entreprise_check`
+    -- qui les tiennent, et une liste écrite deux fois finit toujours par
+    -- diverger. Leur refus est rattrapé par ce bloc, et SEULEMENT ici :
+    -- OP006 et OP007, plus haut, restent hors de lui et continuent de
+    -- bloquer. Le compte naît alors sans demande, et l'écran « Passer en
+    -- compte professionnel » reste là pour la refaire.
+    if le_siret ~ '^[0-9]{14}$' then
+      begin
+        insert into public.demandes_pro (compte_id, siret, motif, entreprise, metiers)
+        values (new.id, le_siret, la_demande ->> 'motif',
+                nullif(btrim(coalesce(la_demande ->> 'entreprise', '')), ''),
+                ses_metiers);
+      exception when others then
+        null;
+      end;
+    end if;
   end if;
 
   return new;
@@ -4301,6 +4434,17 @@ alter table public.journal_admin alter column created_at set default clock_times
 -- RÈGLE DU PROJET : toute valeur nouvelle envoyée par le code doit être
 -- ajoutée ICI. `add column if not exists` ne touche pas aux contraintes,
 -- donc on la refait explicitement à chaque fois.
+--
+-- `NOT VALID`, AJOUTÉ LE 15/10/2026 — et ce n'est pas un relâchement. Cette
+-- contrainte est refaite PLUS BAS, élargie, en sections 27 et 45 : c'est la
+-- DERNIÈRE qui s'applique (`verifier-backoffice` la lit). Mais rejouer ce
+-- fichier sur une base qui a SERVI repasse d'abord par celle-ci, plus
+-- étroite — et sans `not valid`, elle contrôle les lignes déjà écrites :
+-- une seule ligne `demande_pro_acceptee` au journal, et le fichier s'arrête
+-- ici sur « violates check constraint ». Mesuré. `not valid` ne contrôle
+-- que les lignes NOUVELLES, et il n'en naît aucune entre ici et la
+-- section 45, qui la refait SANS `not valid` : là, toutes les lignes sont
+-- contrôlées, contre la liste complète.
 alter table public.journal_admin drop constraint if exists journal_admin_action_check;
 alter table public.journal_admin add constraint journal_admin_action_check
   check (action in (
@@ -4313,11 +4457,11 @@ alter table public.journal_admin add constraint journal_admin_action_check
     'pro_remis_en_attente',     -- un badge POSÉ a été retiré
     'pro_partiellement_valide', -- une pièce sur deux : pas encore de badge
     'signalement_traite'        -- en_examen / traite / rejete
-  ));
+  )) not valid;
 
 alter table public.journal_admin drop constraint if exists journal_admin_cible_check;
 alter table public.journal_admin add constraint journal_admin_cible_check
-  check (cible_type in ('profil_pro', 'signalement'));
+  check (cible_type in ('profil_pro', 'signalement')) not valid;
 
 create index if not exists idx_journal_admin_date
   on public.journal_admin (created_at desc);
@@ -4448,8 +4592,17 @@ begin
       using errcode = '42501';
   end if;
 
-  select to_jsonb(p) - 'bio' - 'portfolio'
-    into avant
+  /* L'ÉTAT DU BADGE, et rien d'autre (section 45.9). Ce journal copiait
+     la fiche ENTIÈRE — téléphone, SIRET, e-mail, coordonnées — et la
+     gardait après la suppression du compte de l'artisan (mesuré le
+     15/10/2026). Il répond à « qu'est-ce qui a changé ? » avec ces cinq
+     colonnes ; le reste était une donnée personnelle conservée sans
+     raison. */
+  select jsonb_build_object(
+           'verifie', p.verifie, 'kbis_valide', p.kbis_valide,
+           'assurance_valide', p.assurance_valide, 'rge', p.rge,
+           'verification_statut', p.verification_statut), p.entreprise
+    into avant, qui
     from public.professional_profiles p where p.id = p_pro;
   if avant is null then
     raise exception 'Cette fiche professionnelle n''existe pas.' using errcode = 'no_data_found';
@@ -4468,7 +4621,10 @@ begin
     verification_note = nullif(btrim(coalesce(p_note, '')), '')
   where id = p_pro;
 
-  select to_jsonb(p) - 'bio' - 'portfolio'
+  select jsonb_build_object(
+           'verifie', p.verifie, 'kbis_valide', p.kbis_valide,
+           'assurance_valide', p.assurance_valide, 'rge', p.rge,
+           'verification_statut', p.verification_statut)
     into apres
     from public.professional_profiles p where p.id = p_pro;
 
@@ -4483,7 +4639,7 @@ begin
 
   /* On PRÉVIENT l'artisan. Un badge posé sans que personne ne le dise ne
      sert à rien : il ne va pas regarder sa fiche tous les jours. */
-  qui := coalesce(apres->>'entreprise', 'votre entreprise');
+  qui := coalesce(qui, 'votre entreprise');
   insert into public.notifications (user_id, type, texte)
   values (p_pro,
           case when (apres->>'verifie')::boolean then 'verification_acceptee' else 'verification_attente' end,
@@ -4520,7 +4676,11 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  select to_jsonb(p) - 'bio' - 'portfolio'
+  -- L'état du badge seulement : même raison que dans `admin_verifier_pro`.
+  select jsonb_build_object(
+           'verifie', p.verifie, 'kbis_valide', p.kbis_valide,
+           'assurance_valide', p.assurance_valide, 'rge', p.rge,
+           'verification_statut', p.verification_statut)
     into avant from public.professional_profiles p where p.id = p_pro;
   if avant is null then
     raise exception 'Cette fiche professionnelle n''existe pas.' using errcode = 'no_data_found';
@@ -4533,7 +4693,10 @@ begin
     verification_note   = note
   where id = p_pro;
 
-  select to_jsonb(p) - 'bio' - 'portfolio'
+  select jsonb_build_object(
+           'verifie', p.verifie, 'kbis_valide', p.kbis_valide,
+           'assurance_valide', p.assurance_valide, 'rge', p.rge,
+           'verification_statut', p.verification_statut)
     into apres from public.professional_profiles p where p.id = p_pro;
 
   insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
@@ -4544,6 +4707,43 @@ begin
           'Vos documents n''ont pas pu être validés : ' || note);
 end;
 $$;
+
+-- --------------------------------------------------------------------------
+--  LE RATTRAPAGE DU JOURNAL — ce qu'il gardait de trop, il ne le garde plus
+--
+--  Les deux fonctions ci-dessus copiaient la fiche entière dans `avant` et
+--  `apres`. Mesuré le 15/10/2026 sur PostgreSQL 16 : un artisan vérifié qui
+--  supprime son compte disparaît de partout… sauf de ce journal, qui garde
+--  son téléphone, son SIRET, son e-mail professionnel et ses coordonnées.
+--  `anonymise_actes_admin()` (25.8) ne nettoie que l'AUTEUR d'un acte,
+--  jamais la personne visée. Et les textes légaux promettent « effacées
+--  immédiatement, à trois exceptions près » : celle-ci n'en faisait pas
+--  partie.
+--
+--  On ne garde donc, dans les lignes déjà écrites, que les cinq colonnes du
+--  badge — exactement ce que les fonctions écrivent désormais. C'est un
+--  `update` et pas une suppression : la DÉCISION reste tracée, seule la
+--  copie de la fiche part. Et il ne touche que ce qui a encore une clé en
+--  trop, donc le second passage du fichier ne fait rien.
+-- --------------------------------------------------------------------------
+update public.journal_admin j
+   set avant = case when j.avant is null then null else (
+                 select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+                   from jsonb_each(j.avant) e
+                  where e.key in ('verifie', 'kbis_valide', 'assurance_valide',
+                                  'rge', 'verification_statut')) end,
+       apres = case when j.apres is null then null else (
+                 select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+                   from jsonb_each(j.apres) e
+                  where e.key in ('verifie', 'kbis_valide', 'assurance_valide',
+                                  'rge', 'verification_statut')) end
+ where j.cible_type = 'profil_pro'
+   and (   (j.avant is not null
+            and j.avant - array['verifie', 'kbis_valide', 'assurance_valide',
+                                'rge', 'verification_statut'] <> '{}'::jsonb)
+        or (j.apres is not null
+            and j.apres - array['verifie', 'kbis_valide', 'assurance_valide',
+                                'rge', 'verification_statut'] <> '{}'::jsonb));
 
 -- --------------------------------------------------------------------------
 --  Trancher un signalement.
@@ -4573,7 +4773,14 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  select to_jsonb(s) into avant from public.signalements s where s.id = p_signalement;
+  /* LE JOURNAL NE GARDE QUE L'ÉTAT — 15/10/2026. Il copiait la ligne
+     entière (`to_jsonb(s)`) : le texte libre du signaleur et son
+     identifiant, gardés au journal après la suppression de son compte et
+     au-delà de l'« un an » que promettent les textes légaux (relecture
+     adverse, mesuré). La décision, elle, reste : le statut avant, le
+     statut après, et la note de l'administrateur dans `motif`. */
+  select jsonb_build_object('statut', s.statut) into avant
+    from public.signalements s where s.id = p_signalement;
   if avant is null then
     raise exception 'Ce signalement n''existe pas.' using errcode = 'no_data_found';
   end if;
@@ -4587,7 +4794,8 @@ begin
     traite_at  = case when p_statut in ('traite', 'rejete') then now() else null end
   where id = p_signalement;
 
-  select to_jsonb(s) into apres from public.signalements s where s.id = p_signalement;
+  select jsonb_build_object('statut', s.statut) into apres
+    from public.signalements s where s.id = p_signalement;
 
   insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
   values (moi, 'signalement_traite', 'signalement', p_signalement, avant, apres,
@@ -4697,16 +4905,30 @@ $$;
 --  savoir s'il doit afficher le bouton, et faire échouer une requête chez
 --  tous les utilisateurs ordinaires remplirait les journaux d'erreurs qui
 --  n'en sont pas.
+--
+--  EN PLPGSQL DEPUIS LE 15/10/2026, et c'est la seule raison du changement.
+--  Elle compte désormais les demandes de compte professionnel, et
+--  `demandes_pro` naît en section 45, 3 000 lignes plus bas. Une fonction
+--  `language sql` est contrôlée à sa CRÉATION — mesuré : « relation
+--  public.demandes_pro does not exist » au premier passage sur une base
+--  neuve. Un corps plpgsql ne l'est qu'à l'exécution. La déplacer en
+--  section 45 aurait été pire : ses droits sont posés par la boucle
+--  ci-dessous, qui avale `undefined_function`, et une fonction neuve est
+--  appelable par `anon`. Même signature, même forme de résultat : l'écran
+--  ne voit aucune différence.
 -- --------------------------------------------------------------------------
 create or replace function public.admin_resume()
 returns jsonb
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select case when not public.est_admin() then jsonb_build_object('admin', false)
-  else jsonb_build_object(
+begin
+  if not public.est_admin() then
+    return jsonb_build_object('admin', false);
+  end if;
+  return jsonb_build_object(
     'admin', true,
     'verifications', (select count(*) from public.professional_profiles where not verifie
                         and (kbis_url is not null or assurance_url is not null)),
@@ -4716,8 +4938,12 @@ as $$
                                  where statut in ('nouveau', 'en_examen')
                                    and created_at < now() - interval '48 hours'),
     'specialites', (select count(*) from public.specialites_proposees where statut = 'en_attente'),
-    'metiers', (select count(*) from public.metier_demandes where statut = 'en_attente')
-  ) end;
+    'metiers', (select count(*) from public.metier_demandes where statut = 'en_attente'),
+    -- Un artisan qui attend que l'administration ouvre son compte : c'est
+    -- le compteur qui compte le plus, il n'a encore rien d'autre.
+    'demandes_pro', (select count(*) from public.demandes_pro where statut = 'nouvelle')
+  );
+end;
 $$;
 
 -- Les six fonctions que l'application appelle. `admin_exige_droit()` n'en
@@ -4890,12 +5116,15 @@ alter table public.journal_admin add constraint journal_admin_action_check
        fonction qui les écrivait (voir 27.4) : une valeur permise que rien
        n'insère est une porte ouverte sur rien. Elles reviendront avec
        l'écran, le jour où la question du §18 sera tranchée. */
-  ));
+  )) not valid;
 
+-- `not valid` pour la même raison qu'en section 25 : la section 45 la
+-- refait, élargie et validée ; celle-ci ne doit pas refuser au rejeu les
+-- lignes que la 45 permet.
 alter table public.journal_admin drop constraint if exists journal_admin_cible_check;
 alter table public.journal_admin add constraint journal_admin_cible_check
   check (cible_type in ('profil_pro', 'signalement', 'metier_demande',
-                        'specialite', 'metier'));
+                        'specialite', 'metier')) not valid;
 
 -- --------------------------------------------------------------------------
 --  27.2 Les demandes de changement de métier
@@ -4954,7 +5183,11 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  avant := to_jsonb(d);
+  /* L'ÉTAT, pas la ligne (15/10/2026) : `to_jsonb(d)` gardait au journal
+     le motif LIBRE de l'artisan et son identifiant après la suppression de
+     son compte — mesuré. Les textes légaux promettent « la décision, le
+     motif écrit par l'administrateur ». */
+  avant := jsonb_build_object('statut', d.statut);
 
   if p_statut = 'acceptee' then
     -- C'est ICI que la demande sert à quelque chose.
@@ -4967,7 +5200,7 @@ begin
      set statut = p_statut, note = v_note, traite_le = now()
    where id = p_demande;
 
-  select to_jsonb(x) into apres from public.metier_demandes x where x.id = p_demande;
+  apres := jsonb_build_object('statut', p_statut);
 
   insert into public.journal_admin
     (admin_id, action, cible_type, cible_id, avant, apres, motif)
@@ -5038,19 +5271,56 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  select to_jsonb(x) into avant from public.specialites_proposees x where x.id = p_specialite;
+  -- L'état seul (15/10/2026) : la ligne entière gardait au journal le mot
+  -- écrit par l'artisan et son identifiant (`propose_par`).
+  select jsonb_build_object('statut', x.statut) into avant
+    from public.specialites_proposees x where x.id = p_specialite;
   if avant is null then
     raise exception 'Cette proposition n''existe pas.' using errcode = 'no_data_found';
   end if;
 
   update public.specialites_proposees set statut = p_statut where id = p_specialite;
-  select to_jsonb(x) into apres from public.specialites_proposees x where x.id = p_specialite;
+  apres := jsonb_build_object('statut', p_statut);
 
   insert into public.journal_admin
     (admin_id, action, cible_type, cible_id, avant, apres)
   values (moi, 'specialite_traitee', 'specialite', p_specialite, avant, apres);
 end;
 $$;
+
+/* LE MÊME RATTRAPAGE POUR TROIS AUTRES FILES — 15/10/2026, trouvé par la
+   relecture adverse. `admin_traiter_signalement()` (section 25),
+   `admin_traiter_metier_demande()` et `admin_traiter_specialite()`
+   (ci-dessus) copiaient elles aussi la ligne entière : le texte libre d'un
+   signalement et l'identifiant de son auteur, le motif libre d'une demande
+   de métiers, le mot proposé par un artisan. Mesuré sur PostgreSQL 16 : le
+   compte part, la demande part… et le journal garde « je refais aussi les
+   toits de mon voisin ». Les textes légaux, eux, promettent « la décision,
+   le motif écrit par l'administrateur ».
+
+   Les trois fonctions n'écrivent plus que `{statut}`. Les lignes déjà
+   écrites ne gardent que cette clé : la décision reste tracée — qui,
+   quand, quel statut avant et après, et la note de l'administrateur dans
+   `motif`. Rejouable : il ne touche que ce qui a encore une clé en trop.
+
+   POSÉ ICI, après la section 27, et pas avec le rattrapage du badge en
+   section 25 : un `update` est contrôlé par les contraintes en vigueur, et
+   celle des actions du journal ne connaît `metier_demande_traitee` et
+   `specialite_traitee` qu'à partir de la section 27. Mesuré : placé en 25,
+   le rejeu sur une base qui a déjà ces lignes s'arrêtait sur
+   « violates check constraint journal_admin_action_check ». */
+update public.journal_admin j
+   set avant = case when j.avant is null then null
+                    else coalesce((select jsonb_object_agg(e.key, e.value)
+                                     from jsonb_each(j.avant) e
+                                    where e.key = 'statut'), '{}'::jsonb) end,
+       apres = case when j.apres is null then null
+                    else coalesce((select jsonb_object_agg(e.key, e.value)
+                                     from jsonb_each(j.apres) e
+                                    where e.key = 'statut'), '{}'::jsonb) end
+ where j.cible_type in ('signalement', 'metier_demande', 'specialite')
+   and (   (j.avant is not null and j.avant - 'statut' <> '{}'::jsonb)
+        or (j.apres is not null and j.apres - 'statut' <> '{}'::jsonb));
 
 create or replace function public.admin_specialites(p_limite int default 100)
 returns table (
@@ -7800,24 +8070,44 @@ comment on function public.tient_le_client() is
 --
 --  L'échappatoire habituelle reste ouverte : `auth.uid()` vide — l'éditeur
 --  SQL, une fonction Edge — peut corriger un type. Même règle que
---  `tient_le_profil_pro()` et `tient_les_metiers()`. C'est par là que
---  passera, le jour venu, un particulier qui devient artisan : avec un
---  contrôle humain, comme le badge.
+--  `tient_le_profil_pro()` et `tient_les_metiers()`.
+--
+--  ET UNE SECONDE, DEPUIS LE 15/10/2026 (section 45) : `current_user`. Un
+--  particulier qui devient artisan passe désormais par une FONCTION de la
+--  base — `devenir_pro()`, quand le répertoire Sirene connaît son
+--  entreprise, ou `admin_traiter_demande_pro()`, quand l'administration
+--  l'accepte. Dans la première, `auth.uid()` vaut le titulaire lui-même :
+--  le verrou la refusait. Ce qui distingue « le client écrit » de « une
+--  fonction de la base écrit pour lui », c'est le rôle en vigueur. Mesuré
+--  sur PostgreSQL 16 : une écriture directe voit `authenticated` ; la même,
+--  faite dans une fonction `security definer`, voit le propriétaire de la
+--  fonction — y compris dans ce déclencheur, qui reste donc `security
+--  invoker` (en `security definer`, `current_user` vaudrait TOUJOURS le
+--  propriétaire, et le verrou ne fermerait plus rien).
+--
+--  Ce que ça ouvre, et qui est tenu ailleurs : TOUTE fonction `security
+--  definer` passe ce verrou. `verifier-pro` refuse donc qu'une autre que
+--  `cree_fiche_utilisateur`, `devenir_pro` et `admin_traiter_demande_pro`
+--  écrive `users.type`.
+--
+--  Et le message désigne enfin la VRAIE porte : il disait « contactez
+--  Opus », alors qu'Opus n'a aucune boîte aux lettres (CLAUDE.md, 12/10).
 -- --------------------------------------------------------------------------
 create or replace function public.tient_le_type_du_compte()
 returns trigger
 language plpgsql
+security invoker
 set search_path = public
 as $$
 begin
   if auth.uid() is not null
      and auth.uid() = new.id
+     and current_user in ('authenticated', 'anon')
      and (   (tg_op = 'INSERT' and new.type is distinct from 'particulier')
           or (tg_op = 'UPDATE' and new.type is distinct from old.type)) then
     raise exception
-      'Le type de votre compte (professionnel ou particulier) ne se change pas '
-      'depuis l''application : il est fixé à l''inscription. Pour passer d''un '
-      'compte particulier à un compte professionnel, contactez Opus.'
+      'Le type de votre compte ne se change pas directement. Pour passer en '
+      'compte professionnel : Profil → Passer en compte professionnel.'
       using errcode = 'OP004';
   end if;
   return new;
@@ -7839,28 +8129,52 @@ create or replace trigger trg_tient_le_type_du_compte
 --  L'ordre de l'inscription le permet, et c'est vérifié dans
 --  `cree_fiche_utilisateur()` : la ligne `users` est insérée AVANT la fiche
 --  pro, dans la même transaction. La fiche d'un vrai professionnel trouve
---  donc toujours son type à `pro`. Et `ensureProProfile()`, qui répare à
---  chaque ouverture un compte pro resté sans fiche, passe pour la même
---  raison.
---
---  `security definer`, et c'est voulu : il lit `users.type`, dont les droits
---  de colonne de la section 18.1 pourraient un jour retirer la lecture. Il
---  ne lit QUE ça, et n'utilise pas `auth.uid()` — le piège de la section 25
---  (« `auth.uid()` n'est pas nul dans une fonction `security definer` ») ne
---  le concerne pas.
+--  donc toujours son type à `pro`. (`ensureProProfile()`, qui réparait à
+--  chaque ouverture un compte pro resté sans fiche, passait pour la même
+--  raison ; elle a disparu avec la section 45 — voir OP010 ci-dessous.)
 --
 --  INSERT seulement : la fiche ne peut plus être supprimée par son titulaire
 --  (section 31), et l'identifiant d'une ligne ne se modifie pas.
+--
+--  DEPUIS LE 15/10/2026 : UNE FICHE NE SE CRÉE PLUS DEPUIS L'APPLICATION
+--  (OP010, section 45). Toute fiche naît désormais dans une fonction de la
+--  base — l'inscription, `devenir_pro()`, l'acceptation par
+--  l'administration —, et chacune exige une entreprise. Un INSERT envoyé
+--  par le client, même sur un compte pro, créerait une fiche SANS
+--  entreprise : c'est exactement ce que `ensureProProfile` et
+--  `reparerFichePro` faisaient, en relisant des métadonnées que le client
+--  peut réécrire. Elles ont disparu de l'application avec ce lot.
+--
+--  ET CETTE FONCTION A CESSÉ D'ÊTRE `security definer`, ce qui n'était pas
+--  prévu, et c'est la mesure qui l'a imposé. Le refus repose sur
+--  `current_user`, et dans une fonction `security definer`, `current_user`
+--  vaut TOUJOURS son propriétaire — mesuré sur PostgreSQL 16 : la même
+--  écriture directe du client affiche `postgres` dans un déclencheur
+--  `definer` et `authenticated` dans un déclencheur `invoker`. Écrit en
+--  `definer`, OP010 ne serait JAMAIS levé, et rien ne l'aurait dit.
+--
+--  La raison qui la faisait `definer` — lire `users.type` même si les droits
+--  de colonne de la section 18.1 la retiraient un jour — ne tient plus :
+--  le client est refusé AVANT cette lecture. Ne la font plus que la base
+--  elle-même (les fonctions de la section 45, l'éditeur SQL) et la clé de
+--  service, qui lisent tout. Elle n'utilise toujours pas `auth.uid()`.
 -- --------------------------------------------------------------------------
 create or replace function public.exige_un_compte_pro()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
   le_type text;
 begin
+  if current_user in ('authenticated', 'anon') then
+    raise exception
+      'Une fiche professionnelle ne se crée pas depuis l''application : elle '
+      'naît avec votre compte professionnel.'
+      using errcode = 'OP010';
+  end if;
+
   select u.type into le_type from public.users u where u.id = new.id;
   if le_type is distinct from 'pro' then
     raise exception
@@ -7889,6 +8203,1434 @@ create or replace trigger trg_exige_un_compte_pro
 --    servi à rien sans celui-ci : une condition posée à l'inscription ne
 --    protège rien si l'on devient pro par un `INSERT` juste après.
 -- --------------------------------------------------------------------------
+
+-- ==========================================================================
+--  45. LE SIRET DEVIENT LA CONDITION DE L'INSCRIPTION PROFESSIONNELLE
+--      (15/10/2026)
+--
+--  Numérotée 45 et posée ICI, après la 44 et avant l'export RGPD, pour la
+--  raison déjà écrite en tête de la 44 : les sections 42 (l'export, qui
+--  nomme toutes les tables) et 43 (le balayage, qui ne voit que les
+--  déclencheurs déjà créés) restent les deux derniers blocs du fichier.
+--
+--  CE QUE LA SECTION 44 A LAISSÉ À FAIRE, et elle le disait : « elle ne
+--  vérifie pas le SIRET ». Elle a fermé la PROMOTION — personne ne devient
+--  pro par un `update` ou un `insert`. Restait l'inscription elle-même : un
+--  compte pro naissait de ce que le formulaire déclarait, et
+--  `professional_profiles.siret` était un champ libre, jamais contrôlé. Les
+--  cinq SIRET de la vraie base ont tous une clé de contrôle fausse (relevé
+--  du 15/10), dont les trois qui portent le badge.
+--
+--  CE QUE CETTE VÉRIFICATION PROUVE, ET CE QU'ELLE NE PROUVE PAS — la
+--  phrase à relire avant de construire quoi que ce soit dessus :
+--
+--  > **Un SIRET est PUBLIC.** La vérification prouve que l'entreprise
+--  > EXISTE et qu'elle est ACTIVE au répertoire Sirene (INSEE). Elle ne
+--  > prouve JAMAIS que le compte en est le titulaire : n'importe qui peut
+--  > taper le numéro d'un autre. Un Kbis ou un avis Sirene ne le prouve pas
+--  > davantage — ils se téléchargent par n'importe qui. Seul un humain,
+--  > devant une pièce que le titulaire seul possède, donne une présomption.
+--
+--  D'où trois choix, qui tiennent toute la section :
+--
+--    1. l'identité légale est PRIVÉE (45.3) : rien de ce que le répertoire
+--       a dit ne s'affiche sur la fiche publique dans ce lot. Une mention
+--       « entreprise vérifiée » obtenue en trente secondes avec le numéro
+--       d'un autre serait un outil d'hameçonnage ;
+--    2. une entreprise prise par le mauvais compte se RETIRE et se
+--       TRANSFÈRE par l'administration (45.9) — sinon le premier arrivé
+--       enferme le vrai titulaire dehors pour toujours ;
+--    3. la porte de secours (45.4) ne passe pas par la messagerie : le
+--       justificatif vit dans l'espace privé `documents`, comme le Kbis.
+--
+--  ET TOUTE FICHE PRO NAÎT DÉSORMAIS DANS UNE FONCTION DE LA BASE :
+--  l'inscription (`cree_fiche_utilisateur`, section 13), `devenir_pro()`
+--  (45.8) et l'acceptation d'une demande (45.9). L'INSERT envoyé par
+--  l'application est fermé (OP010, section 44.2) : il créait une fiche sans
+--  entreprise.
+--
+--  LES CODES D'ERREUR, en français et qui disent quoi faire :
+--    OP006  inscription ou rattachement sans vérification fraîche ;
+--    OP007  entreprise déjà rattachée à un compte ;
+--    OP008  une AUTRE entreprise que celle du compte ;
+--    OP009  une fiche qui porte déjà le badge, sans entreprise rattachée ;
+--    OP010  une fiche pro ne se crée pas depuis l'application (44.2).
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  45.1 `preuves_siret` — ce que le répertoire a dit, et rien d'autre
+--
+--  Écrite par la fonction Edge `siret` SEULE, avec la clé de service, après
+--  avoir interrogé l'API Recherche d'entreprises. Lue par
+--  `cree_fiche_utilisateur`, `devenir_pro` et `rattacher_mon_siret` : c'est
+--  elle, et pas le formulaire, qui dit ce que désigne un numéro.
+--
+--  Elle EXPIRE (24 heures, posé par la fonction) : un établissement fermé
+--  hier ne doit pas pouvoir ouvrir un compte aujourd'hui sur une réponse
+--  d'avant-hier.
+--
+--  `nom_complet_registre` est le nom BRUT du répertoire. Pour un
+--  entrepreneur individuel, c'est souvent son nom civil composé avec des
+--  parenthèses : il n'est JAMAIS affiché ni recopié sur la fiche publique.
+--  Il est gardé pour un usage futur — un devis doit porter « Nom Prénom
+--  EI » — et seulement comme source.
+--
+--  CE QUE « JAMAIS AFFICHÉ » NE VEUT PAS DIRE, et la première version de ce
+--  commentaire le laissait croire : il est recopié dans `entreprise_registre`
+--  (45.3), et cette table-là se LIT, colonne comprise, par son titulaire et
+--  par l'administration (relecture adverse du 15/10). Aucun écran ne le
+--  demande, et les fonctions de cette section le retirent de ce qu'elles
+--  rendent ; mais un `select` direct le rend. Pour une entreprise
+--  diffusible, c'est ce que le répertoire public publie déjà.
+--
+--  AUCUNE POLITIQUE, et `anon` comme `authenticated` n'ont aucun droit : un
+--  client qui pourrait écrire ici se fabriquerait une preuve.
+--
+--  La source `essai` sert aux comptes jetables (CLAUDE.md, « essayer
+--  l'application sur la vraie base ») : posée à la main, elle n'est acceptée
+--  que pour UNE adresse, nommée dans `pour_email` — et cette adresse est
+--  forcément une adresse `…@exemple-opus.test`.
+--
+--  UNE ADRESSE, PAS UN DOMAINE — 15/10/2026, trouvé par la relecture
+--  adverse. La première version acceptait toute adresse du domaine
+--  d'essai. Or la confirmation par e-mail n'est pas activée, et ce domaine
+--  ne reçoit aucun courrier : n'importe qui pouvait créer
+--  `n.importe.qui@exemple-opus.test` pendant l'heure où une preuve d'essai
+--  vivait, avec un SIRET lu dans les fichiers d'essais du dépôt. Mesuré :
+--  compte pro ouvert. Une preuve liée à l'adresse exacte du compte jetable
+--  ne sert qu'à lui. Il n'y a pas de source
+--  « administration » : une entreprise ouverte à la main naît directement
+--  dans `admin_traiter_demande_pro()`, liée au compte de la demande — une
+--  preuve d'administration valable pour quiconque connaît le numéro serait
+--  une porte.
+-- --------------------------------------------------------------------------
+create table if not exists public.preuves_siret (
+  siret                text primary key,
+  siren                text generated always as (left(siret, 9)) stored,
+  denomination         text,
+  sigle                text,
+  nom_commercial       text,
+  nom_complet_registre text,
+  est_ei               boolean not null default false,
+  forme_juridique      text,
+  date_creation        date,
+  tva                  text,
+  ape                  text,
+  naf25                text,
+  est_siege            boolean,
+  adresse              text,
+  code_postal          text,
+  commune              text,
+  code_insee           text,
+  statut_diffusion     text,
+  maj_insee            date,
+  source               text not null,
+  /* `clock_timestamp()` et non `now()` : la leçon du journal
+     d'administration (25.3). Deux preuves écrites dans la même transaction
+     ne doivent pas porter la même heure. */
+  verifiee_le          timestamptz not null default clock_timestamp(),
+  expire_le            timestamptz not null,
+  -- Pour une preuve `essai` SEULEMENT : l'adresse du compte jetable qu'elle
+  -- sert. Vide pour une preuve du répertoire.
+  pour_email           text
+);
+
+-- La colonne arrive après la table : un `create table if not exists` ne
+-- touche pas une table qui existe déjà.
+alter table public.preuves_siret add column if not exists pour_email text;
+
+-- Les contraintes se refont, elles ne se supposent pas (CLAUDE.md :
+-- `add column if not exists` ne touche jamais aux contraintes). Et elles se
+-- terminent toutes par `_check` : `src/lib/erreurs.js` les reconnaît par ce
+-- suffixe, et une contrainte nommée autrement rend un message anonyme.
+alter table public.preuves_siret drop constraint if exists preuve_siret_check;
+alter table public.preuves_siret add constraint preuve_siret_check
+  check (siret ~ '^[0-9]{14}$');
+alter table public.preuves_siret drop constraint if exists preuve_forme_check;
+alter table public.preuves_siret add constraint preuve_forme_check
+  check (forme_juridique is null or forme_juridique ~ '^[0-9]{4}$');
+/* « O » diffusible, « P » diffusion partielle. Un établissement « P » arrive
+   avec son adresse masquée mais son état lisible : c'est une issue `ok`,
+   pas un refus — refuser quelqu'un parce qu'il a exercé son droit
+   d'opposition n'aurait aucune raison technique. */
+alter table public.preuves_siret drop constraint if exists preuve_diffusion_check;
+alter table public.preuves_siret add constraint preuve_diffusion_check
+  check (statut_diffusion is null or statut_diffusion in ('O', 'P'));
+alter table public.preuves_siret drop constraint if exists preuve_source_check;
+alter table public.preuves_siret add constraint preuve_source_check
+  check (source in ('registre', 'essai'));
+/* Une preuve d'essai NOMME son compte, et ce compte est sur le domaine
+   d'essai ; une preuve du répertoire n'en nomme aucun — elle vaut pour
+   quiconque a tapé ce numéro, c'est toute la règle d'un SIRET public. */
+alter table public.preuves_siret drop constraint if exists preuve_essai_check;
+alter table public.preuves_siret add constraint preuve_essai_check
+  check (case when source = 'essai'
+              then pour_email is not null
+                   and pour_email = lower(pour_email)
+                   and pour_email like '%@exemple-opus.test'
+              else pour_email is null end);
+
+alter table public.preuves_siret enable row level security;
+revoke all on public.preuves_siret from anon, authenticated;
+
+-- --------------------------------------------------------------------------
+--  45.2 `siret_limites` — combien d'appels au répertoire, par qui
+--
+--  Le répertoire limite ses appels, et une inscription pro BLOQUE quand il
+--  ne répond pas. Le faire tomber fermerait donc toutes les inscriptions.
+--  La fonction Edge compte par empreinte d'adresse IP (HMAC, jamais l'IP en
+--  clair) et dans un seau global, une fenêtre à la fois.
+--
+--  Même règle que les preuves : RLS sans aucune politique, et aucun droit
+--  pour `anon` ni `authenticated`. Mesuré par la relecture du plan : une
+--  table publique créée sans cela se LIT et se VIDE par `anon` — chacun
+--  remettrait son propre compteur à zéro.
+-- --------------------------------------------------------------------------
+create table if not exists public.siret_limites (
+  cle     text        not null,
+  fenetre timestamptz not null,
+  n       int         not null default 0,
+  primary key (cle, fenetre)
+);
+
+alter table public.siret_limites enable row level security;
+revoke all on public.siret_limites from anon, authenticated;
+
+/* Le comptage et le refus sont le MÊME ordre : compter d'un côté puis
+   écrire de l'autre laisserait passer deux appels simultanés. C'est la
+   leçon de `enregistrer_appel_ia()` (section 38). */
+create or replace function public.compter_appel_siret(
+  p_cle     text,
+  p_fenetre timestamptz,
+  p_max     int
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_n int;
+begin
+  insert into public.siret_limites (cle, fenetre, n)
+  values (p_cle, p_fenetre, 1)
+  on conflict (cle, fenetre) do update set n = siret_limites.n + 1
+  returning n into v_n;
+  return v_n <= p_max;
+end;
+$$;
+
+/* `from public` d'abord, et c'est le piège de la section 38, mesuré sur la
+   vraie base : PostgreSQL accorde `execute` à PUBLIC sur toute fonction
+   neuve, donc `revoke … from anon, authenticated` seul ne retire RIEN.
+   Seule la fonction Edge l'appelle, avec la clé de service. Le bloc teste
+   l'existence du rôle : `local-prelude.sql` le crée, mais un rejeu
+   ailleurs ne doit pas s'arrêter sur « role does not exist ». */
+revoke all on function public.compter_appel_siret(text, timestamptz, int)
+  from public, anon, authenticated;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant execute on function public.compter_appel_siret(text, timestamptz, int) to service_role';
+  end if;
+end $$;
+
+-- --------------------------------------------------------------------------
+--  45.3 `entreprise_registre` — l'identité légale d'une fiche
+--
+--  PRIVÉE, et c'est pour ça que ce n'est pas une colonne de plus sur
+--  `professional_profiles` : cette table-là est lisible par tout le monde,
+--  colonne par colonne (relevé du 15/10, 45 colonnes sur 45 pour `anon`).
+--  L'adresse du siège d'un entrepreneur individuel, c'est souvent son
+--  DOMICILE ; rangée là-bas, elle serait publique. Et fermer des colonnes
+--  y casserait `select *` partout (la leçon de la section 18).
+--
+--  Lue par son titulaire et par l'administration — TOUTES SES COLONNES,
+--  adresse du siège et nom brut du répertoire compris : une règle RLS
+--  filtre des lignes, pas des colonnes. C'est voulu pour l'adresse (« Mon
+--  entreprise » la montre à son titulaire, « visible de vous seul ») ; le
+--  nom brut n'est demandé par aucun écran. Écrite par AUCUN client : seules
+--  les fonctions de cette section y écrivent.
+--
+--  UNE IDENTITÉ NE SE SUPPRIME JAMAIS, ELLE SE RETIRE (`retiree_le`). Deux
+--  raisons : l'administration doit pouvoir relire « qui a tenu cette
+--  entreprise, et quand » le jour d'une contestation ; et le connecteur
+--  Supabase refuse tout ordre qui commence par `delete`, même dans un corps
+--  de fonction (CLAUDE.md, 03/10). Elle part seulement avec la fiche, quand
+--  le COMPTE entier part (`on delete cascade`).
+--
+--  UN COMPTE PAR ENTREPRISE, et c'est le SIREN, pas le SIRET : déménager
+--  change le SIRET (un nouvel établissement), pas l'entreprise. L'unicité
+--  ne porte que sur les identités ACTIVES — un index partiel —, sinon une
+--  entreprise retirée à un squatteur ne pourrait jamais être rendue.
+-- --------------------------------------------------------------------------
+create table if not exists public.entreprise_registre (
+  id                   uuid primary key default gen_random_uuid(),
+  pro_id               uuid not null references public.professional_profiles(id) on delete cascade,
+  siren                text not null,
+  siret                text not null,
+  denomination         text,
+  sigle                text,
+  nom_commercial       text,
+  nom_complet_registre text,
+  est_ei               boolean,
+  forme_juridique      text,
+  date_creation        date,
+  tva                  text,
+  ape                  text,
+  naf25                text,
+  est_siege            boolean,
+  adresse              text,
+  code_postal          text,
+  commune              text,
+  code_insee           text,
+  statut_diffusion     text,
+  maj_insee            date,
+  source               text not null,
+  -- Quand le répertoire a été CONSULTÉ — la date de la preuve. Pour une
+  -- identité ouverte à la main, quand l'administration l'a ouverte.
+  verifie_le           timestamptz not null,
+  retiree_le           timestamptz,
+  retrait_motif        text,
+  -- Posé par l'ADMINISTRATION quand elle retire une entreprise : voir plus
+  -- bas, « UN RETRAIT DOIT TENIR ».
+  gele                 boolean not null default false,
+  created_at           timestamptz not null default clock_timestamp()
+);
+
+alter table public.entreprise_registre
+  add column if not exists gele boolean not null default false;
+
+alter table public.entreprise_registre drop constraint if exists entreprise_siren_check;
+alter table public.entreprise_registre add constraint entreprise_siren_check
+  check (siren ~ '^[0-9]{9}$');
+-- Le SIRET COMMENCE par le SIREN : une identité qui mélangerait deux
+-- entreprises ne doit pas pouvoir exister, même écrite à la main.
+alter table public.entreprise_registre drop constraint if exists entreprise_siret_check;
+alter table public.entreprise_registre add constraint entreprise_siret_check
+  check (siret ~ '^[0-9]{14}$' and left(siret, 9) = siren);
+/* `administration` : une entreprise ouverte à la main sur une demande,
+   quand le répertoire ne la montre pas (non diffusible, introuvable). Elle
+   ne dit pas « vue au répertoire », et l'écran ne doit jamais l'écrire. */
+alter table public.entreprise_registre drop constraint if exists entreprise_source_check;
+alter table public.entreprise_registre add constraint entreprise_source_check
+  check (source in ('registre', 'administration', 'essai'));
+
+/* UN RETRAIT DOIT TENIR — 15/10/2026, trouvé par la relecture adverse.
+
+   La première version ne retenait le retrait que sur LA LIGNE retirée.
+   Mesuré sur PostgreSQL 16 : l'administration retire une entreprise à un
+   squatteur signalé par le vrai titulaire, et le squatteur la reprend la
+   minute suivante par `rattacher_mon_siret()` — ou un compte neuf par
+   l'inscription. Aucune porte automatique ne regardait ce que
+   l'administration venait de décider : le bouton « Retirer » ne servait à
+   rien.
+
+   D'où `gele` : une entreprise retirée PAR L'ADMINISTRATION reste prise
+   pour toutes les portes automatiques (l'inscription, `devenir_pro()`,
+   `rattacher_mon_siret()` et la fonction Edge, qui répond alors
+   `deja_utilise`). Seule l'administration la rend, en acceptant ou en
+   transférant une demande examinée à la main — c'est le chemin du vrai
+   titulaire, et c'est elle qui lève le gel. Un retrait par le titulaire
+   lui-même (un déménagement, une mise à jour depuis le répertoire) ne gèle
+   rien.
+
+   La règle « l'entreprise est prise » s'écrit donc partout
+   `retiree_le is null or gele` ; l'index d'unicité, lui, ne porte que sur
+   les identités ACTIVES — une identité gelée est retirée, et c'est bien la
+   seule qu'il ne faut pas compter deux fois. */
+create unique index if not exists idx_entreprise_siren_active
+  on public.entreprise_registre (siren) where retiree_le is null;
+create unique index if not exists idx_entreprise_pro_active
+  on public.entreprise_registre (pro_id) where retiree_le is null;
+
+alter table public.entreprise_registre enable row level security;
+
+/* La lecture passe par `est_mon_entreprise()`, pas par un `auth.uid() =
+   pro_id` écrit à la main : c'est la discipline posée le 04/10 pour tout ce
+   qui appartient à une entreprise (section 36.1). AUCUNE politique
+   d'écriture : un client qui écrirait ici se rattacherait l'entreprise de
+   son choix. */
+drop policy if exists "lecture de mon entreprise" on public.entreprise_registre;
+create policy "lecture de mon entreprise" on public.entreprise_registre
+  for select to authenticated
+  using (public.est_mon_entreprise(pro_id) or public.est_admin());
+
+/* Et les droits de TABLE avec, sans attendre qu'une politique rattrape :
+   la leçon de la section 18.2. `authenticated` ne garde que la lecture. */
+revoke all on public.entreprise_registre from anon;
+revoke insert, update, delete, truncate on public.entreprise_registre from authenticated;
+
+-- --------------------------------------------------------------------------
+--  45.4 `demandes_pro` — la porte de secours
+--
+--  Quand le répertoire ne connaît pas l'entreprise (non diffusible,
+--  introuvable, établissement fermé), quand il ne répond pas, ou quand
+--  l'entreprise est déjà prise par un autre compte, l'artisan n'est pas
+--  refusé : son compte s'ouvre EN PARTICULIER, et une demande attend que
+--  l'administration l'examine. Il peut tout regarder et écrire des
+--  messages ; il ne publie pas et ne reçoit pas de demandes tant que son
+--  entreprise n'est pas vérifiée. Accepté, ce même compte devient pro : il
+--  ne perd rien.
+--
+--  Le justificatif vit dans l'espace PRIVÉ `documents`, sous
+--  `<compte>/demande-pro/<fichier>` — jamais dans la messagerie, où une
+--  pièce jointe ne se retire pas et se lit par deux personnes. La politique
+--  « envoi de mes fichiers » (section 12) l'autorise déjà pour un
+--  particulier, et l'administration lit `documents` (25.5).
+--
+--  Le client n'insère qu'une demande NEUVE, pour lui-même, sans réponse : le
+--  statut, la note, la date et l'auteur du traitement ne s'écrivent que par
+--  `admin_traiter_demande_pro()`. Mesuré par la relecture du plan : sans
+--  ces conditions, un client s'insérait une demande « acceptée », signée
+--  « Validé par Opus ».
+-- --------------------------------------------------------------------------
+create table if not exists public.demandes_pro (
+  id           uuid primary key default gen_random_uuid(),
+  compte_id    uuid not null references public.users(id) on delete cascade,
+  siret        text not null,
+  motif        text not null,
+  entreprise   text,
+  metiers      text[] not null default '{}',
+  message      text,
+  justificatif text,
+  statut       text not null default 'nouvelle',
+  note         text,
+  created_at   timestamptz not null default clock_timestamp(),
+  traitee_le   timestamptz,
+  -- `set null` : le départ d'un administrateur ne doit pas emporter, ni
+  -- bloquer, les demandes qu'il a tranchées.
+  traitee_par  uuid references public.users(id) on delete set null
+);
+
+alter table public.demandes_pro drop constraint if exists demande_pro_siret_check;
+alter table public.demandes_pro add constraint demande_pro_siret_check
+  check (siret ~ '^[0-9]{14}$');
+/* Le MOTIF est la raison pour laquelle le chemin automatique n'a pas
+   abouti. `autre` couvre ce que personne n'a prévu : une demande refusée
+   parce que son motif n'est pas dans la liste serait une porte de secours
+   fermée. */
+alter table public.demandes_pro drop constraint if exists demande_pro_motif_check;
+alter table public.demandes_pro add constraint demande_pro_motif_check
+  check (motif in ('introuvable', 'etablissement_ferme', 'cessee', 'non_diffusible',
+                   'deja_utilise', 'injoignable', 'autre'));
+alter table public.demandes_pro drop constraint if exists demande_pro_entreprise_check;
+alter table public.demandes_pro add constraint demande_pro_entreprise_check
+  check (entreprise is null or char_length(entreprise) <= 120);
+/* Vide permis — on ne sait pas toujours encore ce qu'on fera —, sinon la
+   MÊME fonction que `pro_metiers_check` : une demande acceptée doit pouvoir
+   devenir une fiche sans que la contrainte de la fiche la refuse. */
+alter table public.demandes_pro drop constraint if exists demande_pro_metiers_check;
+alter table public.demandes_pro add constraint demande_pro_metiers_check
+  check (cardinality(metiers) = 0 or public.metiers_connus(metiers));
+alter table public.demandes_pro drop constraint if exists demande_pro_message_check;
+alter table public.demandes_pro add constraint demande_pro_message_check
+  check (message is null or char_length(message) <= 500);
+/* Le justificatif est rangé dans le dossier de SON demandeur, sinon une
+   demande pourrait désigner le Kbis de quelqu'un d'autre — que
+   l'administration ouvrirait en croyant lire le sien. */
+alter table public.demandes_pro drop constraint if exists demande_pro_justificatif_check;
+alter table public.demandes_pro add constraint demande_pro_justificatif_check
+  check (justificatif is null or split_part(justificatif, '/', 1) = compte_id::text);
+alter table public.demandes_pro drop constraint if exists demande_pro_statut_check;
+alter table public.demandes_pro add constraint demande_pro_statut_check
+  check (statut in ('nouvelle', 'acceptee', 'refusee', 'annulee'));
+
+-- Une seule demande OUVERTE par compte. Les closes restent, en historique.
+create unique index if not exists idx_demandes_pro_une_ouverte
+  on public.demandes_pro (compte_id) where statut = 'nouvelle';
+create index if not exists idx_demandes_pro_file
+  on public.demandes_pro (statut, created_at);
+
+alter table public.demandes_pro enable row level security;
+
+drop policy if exists "lecture de mes demandes pro" on public.demandes_pro;
+create policy "lecture de mes demandes pro" on public.demandes_pro
+  for select to authenticated
+  using (auth.uid() = compte_id);
+
+/* `not est_un_pro()` : un professionnel n'a rien à demander ici. Et chaque
+   colonne que seule l'administration pose est exigée VIDE : sans cela, le
+   client s'écrivait lui-même une réponse. Depuis le 15/10, ces colonnes ne
+   s'écrivent même plus du tout par le client (droits de colonne,
+   ci-dessous) : cette politique est la seconde ligne de défense. */
+drop policy if exists "envoi de ma demande pro" on public.demandes_pro;
+create policy "envoi de ma demande pro" on public.demandes_pro
+  for insert to authenticated
+  with check (auth.uid() = compte_id
+              and not public.est_un_pro()
+              and statut = 'nouvelle'
+              and traitee_le is null
+              and traitee_par is null
+              and note is null);
+
+/* Ni modification ni suppression par le client : une demande se complète et
+   s'annule par deux fonctions qui ne touchent qu'à ce qui lui appartient,
+   et une demande tranchée ne se récrit plus. */
+revoke all on public.demandes_pro from anon;
+revoke update, delete, truncate on public.demandes_pro from authenticated;
+
+/* DES DROITS DE COLONNE, en lecture comme en écriture — 15/10/2026, deux
+   défauts trouvés par la relecture adverse, et une règle RLS ne pouvait
+   corriger ni l'un ni l'autre : elle filtre des LIGNES, jamais des
+   COLONNES (section 18).
+
+     - LA DATE DE DÉPÔT S'ÉCRIVAIT PAR LE CLIENT. Mesuré : une demande
+       insérée avec `created_at = '2020-01-01'` passait en TÊTE de la file
+       de l'administration (« en attente depuis 2 100 jours »), et elle
+       aurait trompé la limite de notifications plus bas. Le client
+       n'écrit plus que ce qu'il déclare ; l'identifiant, la date, le
+       statut, la note et le traitement ne s'écrivent que par la base.
+     - L'IDENTITÉ DE L'ADMINISTRATEUR se lisait. `traitee_par` rendait au
+       demandeur refusé l'identifiant — donc, par `users`, le nom — de
+       celui qui l'avait refusé, alors que la liste des administrateurs
+       est privée (section 25) et que les notifications de cette section
+       laissent `acteur_id` vide pour cette raison même. Le journal
+       d'administration garde qui a décidé ; le demandeur n'en a pas
+       besoin.
+
+   Et le piège de la section 18, à ne pas redécouvrir : `revoke select
+   (colonne)` ne retire RIEN tant que le rôle a le droit de lire la table
+   entière. On retire la table, PUIS on rend colonne par colonne.
+   Conséquence voulue : `select *` et `to_jsonb(ligne)` ne marchent plus
+   pour un client sur cette table — l'export RGPD nomme donc ses colonnes,
+   et l'application insère sans relire (`return=minimal`) puis relit par
+   une liste nommée. */
+revoke select, insert on public.demandes_pro from authenticated;
+grant select (id, compte_id, siret, motif, entreprise, metiers, message, justificatif,
+              statut, note, created_at, traitee_le)
+  on public.demandes_pro to authenticated;
+grant insert (compte_id, siret, motif, entreprise, metiers, message, justificatif)
+  on public.demandes_pro to authenticated;
+
+-- --------------------------------------------------------------------------
+--  45.5 La notification sait OÙ mener
+--
+--  Une colonne par cible, et pas une paire générique : la section 37 l'a
+--  posé — une colonne nommée porte une clé étrangère, donc la base garantit
+--  que la cible existe et nettoie derrière elle. Une demande supprimée
+--  emporte ses notifications.
+--
+--  Quatre types nouveaux, et `notifications.type` n'a aucune contrainte
+--  `check` (mesuré) : ils sont tenus par `src/lib/notifications.js` et son
+--  contrôle.
+--
+--    demande_pro_nouvelle  aux administrateurs → l'écran d'administration
+--    compte_pro_ouvert     au demandeur → l'application redémarre en pro
+--    demande_pro_refusee   au demandeur → son profil, carte de la demande
+--    entreprise_retiree    au titulaire retiré → son profil
+--
+--  `acteur_id` est le demandeur pour la première, et VIDE pour les trois
+--  autres : l'acteur serait l'administrateur, donc la notification
+--  porterait la photo et le nom de sa fiche d'ARTISAN.
+-- --------------------------------------------------------------------------
+alter table public.notifications
+  add column if not exists demande_pro_id uuid references public.demandes_pro(id) on delete cascade;
+
+/* À l'arrivée d'une demande, CHAQUE administrateur est prévenu. Une file
+   que personne ne regarde est le défaut du 01/10 : « X est prévenu », et
+   personne ne l'était. `security definer` : `notifications` n'a pas de
+   politique qui permette d'écrire chez un autre.
+
+   UNE FOIS PAR JOUR ET PAR COMPTE, pas une fois par ligne — 15/10/2026,
+   mesuré par la relecture adverse. Une demande se dépose, puis s'annule
+   (`annuler_ma_demande_pro()`), puis se redépose : l'index « une seule
+   ouverte » n'empêche pas la boucle. Soixante tours, avec la seule clé
+   publiable, faisaient soixante notifications chez chaque administrateur.
+   Une demande redéposée dans les 24 heures reste dans la file — elle n'est
+   pas perdue —, mais elle ne sonne plus. La date comparée est celle de la
+   BASE : depuis les droits de colonne ci-dessus, le client ne l'écrit
+   plus, donc il ne peut pas la reculer pour se faire sonner à nouveau. */
+create or replace function public.notifie_demande_pro()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if exists (select 1 from public.demandes_pro d
+              where d.compte_id = new.compte_id
+                and d.id <> new.id
+                and d.created_at > clock_timestamp() - interval '24 hours') then
+    return new;
+  end if;
+
+  insert into public.notifications (user_id, type, texte, acteur_id, demande_pro_id)
+  select a.user_id,
+         'demande_pro_nouvelle',
+         'Un compte attend d''être ouvert en professionnel (SIRET '
+           || substr(new.siret, 1, 3) || ' ' || substr(new.siret, 4, 3) || ' '
+           || substr(new.siret, 7, 3) || ' ' || substr(new.siret, 10, 5)
+           || ') : à examiner dans l''administration.',
+         new.compte_id,
+         new.id
+    from public.administrateurs a;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_notifie_demande_pro
+  after insert on public.demandes_pro
+  for each row execute function public.notifie_demande_pro();
+
+-- --------------------------------------------------------------------------
+--  Compléter et annuler SA demande — sans `update` ni `delete` pour le
+--  client, et c'est voulu.
+--
+--  Le message et le justificatif arrivent APRÈS l'inscription : ils ne
+--  voyagent pas dans les métadonnées du compte, qui suivent chaque jeton et
+--  restent dans `auth.users` hors de l'export RGPD. Et une demande mal
+--  tapée doit pouvoir s'annuler, sinon l'index « une seule ouverte » la
+--  bloque jusqu'à ce que l'administration la tranche.
+--
+--  Les deux ne touchent QUE la demande ouverte de leur appelant : ni le
+--  statut d'une autre, ni une demande déjà tranchée. La forme est vérifiée
+--  par les contraintes de la table, qui sont la seule source.
+-- --------------------------------------------------------------------------
+create or replace function public.completer_ma_demande_pro(p jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi       uuid := auth.uid();
+  d         record;
+  v_message text;
+  v_justif  text;
+  resultat  jsonb;
+begin
+  if moi is null then
+    raise exception 'Personne n''est connecté.' using errcode = '42501';
+  end if;
+
+  select * into d from public.demandes_pro
+   where compte_id = moi and statut = 'nouvelle'
+   for update;
+  if not found then
+    raise exception
+      'Vous n''avez aucune demande de compte professionnel en attente : il n''y a rien à compléter.'
+      using errcode = 'no_data_found';
+  end if;
+
+  -- Une clé ABSENTE garde la valeur actuelle ; une clé présente et vide
+  -- l'efface. Joindre un justificatif ne doit pas effacer le message.
+  v_message := case when p ? 'message'
+                    then nullif(btrim(coalesce(p ->> 'message', '')), '')
+                    else d.message end;
+  v_justif  := case when p ? 'justificatif'
+                    then nullif(btrim(coalesce(p ->> 'justificatif', '')), '')
+                    else d.justificatif end;
+
+  update public.demandes_pro
+     set message = v_message, justificatif = v_justif
+   where id = d.id;
+
+  -- Sans `traitee_par` : l'identité de l'administrateur ne sort pas
+  -- (droits de colonne, plus haut).
+  select to_jsonb(x) - 'traitee_par' into resultat from public.demandes_pro x where x.id = d.id;
+  return resultat;
+end;
+$$;
+
+revoke all on function public.completer_ma_demande_pro(jsonb) from public, anon;
+grant execute on function public.completer_ma_demande_pro(jsonb) to authenticated;
+
+create or replace function public.annuler_ma_demande_pro()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi      uuid := auth.uid();
+  resultat jsonb;
+begin
+  if moi is null then
+    raise exception 'Personne n''est connecté.' using errcode = '42501';
+  end if;
+
+  update public.demandes_pro
+     set statut = 'annulee', traitee_le = clock_timestamp()
+   where compte_id = moi and statut = 'nouvelle'
+  returning to_jsonb(demandes_pro) - 'traitee_par' into resultat;
+
+  if resultat is null then
+    raise exception
+      'Vous n''avez aucune demande de compte professionnel en attente : il n''y a rien à annuler.'
+      using errcode = 'no_data_found';
+  end if;
+  return resultat;
+end;
+$$;
+
+revoke all on function public.annuler_ma_demande_pro() from public, anon;
+grant execute on function public.annuler_ma_demande_pro() to authenticated;
+
+-- --------------------------------------------------------------------------
+--  45.6 L'inscription vit en SECTION 13
+--
+--  `cree_fiche_utilisateur()` a été réécrite À SON ENDROIT, pas ici : une
+--  règle ne s'écrit qu'à UN endroit (la leçon du 05/10). Ce qu'elle fait
+--  désormais : une inscription pro exige une preuve fraîche (OP006) et une
+--  entreprise libre (OP007), et l'identité naît DEPUIS LA PREUVE ; une
+--  inscription particulière peut emporter une demande, qui ne fait jamais
+--  échouer le compte.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  45.7 L'ancien SIRET libre se fige
+--
+--  `professional_profiles.siret` était un champ de texte écrit par
+--  l'artisan, jamais contrôlé : les cinq de la vraie base ont une clé
+--  fausse. Il reste pour l'historique — l'administration le relit — mais
+--  son titulaire ne le réécrit plus : un numéro qu'il pourrait changer à
+--  côté de celui que le répertoire a confirmé, ce serait deux vérités, et
+--  l'écran finirait par afficher la mauvaise. L'application cesse de
+--  l'envoyer et de le lire avec ce lot.
+--
+--  Un retour silencieux à l'ancienne valeur, et pas un refus, pour la
+--  raison de `tient_le_profil_pro()` : une version plus ancienne de
+--  l'application renvoie la fiche ENTIÈRE à chaque enregistrement, et un
+--  refus casserait l'enregistrement du téléphone. L'administration
+--  (`auth.uid()` vide, ou un autre compte) le corrige encore.
+-- --------------------------------------------------------------------------
+create or replace function public.fige_le_siret_libre()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if auth.uid() is not null and auth.uid() = new.id then
+    new.siret := old.siret;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_fige_le_siret_libre
+  before update of siret on public.professional_profiles
+  for each row execute function public.fige_le_siret_libre();
+
+-- --------------------------------------------------------------------------
+--  45.8 Les portes pour un compte qui EXISTE
+--
+--  Deux fonctions, et leurs signatures sont FIGÉES : `p jsonb` pour celle
+--  qui pourrait gagner des paramètres. Ajouter un paramètre crée une
+--  SURCHARGE (mesuré en section 34), l'appel de PostgREST devient « not
+--  unique », et seul un `drop function` — que le connecteur refuse —
+--  réparerait.
+--
+--  `security definer` toutes les deux : elles écrivent dans des tables que
+--  le client ne peut pas écrire. Dans une telle fonction, `auth.uid()` vaut
+--  l'APPELANT (piège de la section 25) : c'est ce qui la lie à son compte.
+-- --------------------------------------------------------------------------
+
+/* RATTACHER SON SIRET — un pro inscrit avant ce lot, ou qui a déménagé.
+
+   Trois cas, et chacun a sa raison :
+     - aucune identité, fiche SANS badge : l'entreprise se rattache, si
+       personne d'autre ne la tient (OP007) ;
+     - aucune identité, fiche AVEC le badge : refusé (OP009). Le badge a été
+       posé sans entreprise rattachée — trois fiches de la vraie base, sur
+       des SIRET inventés. Y rattacher automatiquement n'importe quelle
+       entreprise réelle lierait un « vérifié » à une entreprise que
+       personne n'a regardée ;
+     - une identité déjà active : le MÊME SIREN est exigé (OP008). C'est un
+       déménagement — le SIRET change, l'entreprise non. L'ancienne identité
+       est RETIRÉE, pas effacée : l'historique reste à l'administration.
+
+   OP008 et OP009 disaient « passe par l'administration d'Opus » : c'était
+   promettre une porte qui n'existe pas (relecture adverse du 15/10) —
+   aucune boîte aux lettres n'est publiée, la demande à la main est
+   réservée aux particuliers, et aucune fonction d'administration ne
+   rattache une entreprise à une fiche existante. Ils disent maintenant ce
+   qui est vrai : pas encore depuis l'application. */
+create or replace function public.rattacher_mon_siret(p_siret text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi        uuid := auth.uid();
+  le_siret   text := regexp_replace(coalesce(p_siret, ''), '\D', '', 'g');
+  mon_email  text;
+  la_preuve  record;
+  l_actuelle record;
+  le_badge   boolean;
+  la_nouvelle uuid;
+  resultat   jsonb;
+begin
+  if moi is null then
+    raise exception 'Personne n''est connecté.' using errcode = '42501';
+  end if;
+  if not public.est_un_pro() then
+    raise exception
+      'Seul un compte professionnel rattache une entreprise. Pour passer en '
+      'compte professionnel : Profil → Passer en compte professionnel.'
+      using errcode = '42501';
+  end if;
+
+  select u.email into mon_email from auth.users u where u.id = moi;
+  select p.* into la_preuve
+    from public.preuves_siret p
+   where p.siret = le_siret
+     and p.expire_le > now()
+     and (p.source = 'registre'
+          or (p.source = 'essai'
+              and p.pour_email = lower(coalesce(mon_email, ''))));
+  if not found then
+    raise exception
+      'Ce SIRET n''a pas été retrouvé au répertoire Sirene depuis moins de '
+      '24 heures : touchez « Vérifier » à nouveau.'
+      using errcode = 'OP006';
+  end if;
+
+  select e.* into l_actuelle
+    from public.entreprise_registre e
+   where e.pro_id = moi and e.retiree_le is null
+   for update;
+
+  if not found then
+    select p.verifie into le_badge from public.professional_profiles p where p.id = moi;
+    if coalesce(le_badge, false) then
+      raise exception
+        'Votre fiche porte le badge « vérifié », accordé avant que les '
+        'entreprises soient rattachées : y lier une entreprise ne peut pas se '
+        'faire automatiquement, et ne peut pas encore se demander depuis '
+        'l''application.'
+        using errcode = 'OP009';
+    end if;
+    /* Une entreprise GELÉE (45.3) est prise elle aussi — y compris pour la
+       fiche à qui l'administration l'a retirée : c'est exactement le
+       squatteur qui la reprenait la minute suivante. Le message ne dit pas
+       « gelée » : ce serait dire à quiconque tape ce numéro qu'un compte
+       en a été écarté. */
+    if exists (select 1 from public.entreprise_registre e
+                where e.siren = la_preuve.siren and (e.retiree_le is null or e.gele)) then
+      raise exception
+        'Cette entreprise est déjà rattachée à un compte Opus, ou réservée par '
+        'l''administration d''Opus : elle ne peut pas être rattachée '
+        'automatiquement.'
+        using errcode = 'OP007';
+    end if;
+  else
+    if l_actuelle.siren <> la_preuve.siren then
+      raise exception
+        'Ce numéro désigne une autre entreprise que celle de votre compte. Un '
+        'compte Opus correspond à une seule entreprise : en changer ne peut pas '
+        'encore se faire depuis l''application.'
+        using errcode = 'OP008';
+    end if;
+    -- On retire AVANT d'insérer : l'index « une identité active par fiche »
+    -- est contrôlé à chaque ordre.
+    update public.entreprise_registre
+       set retiree_le    = clock_timestamp(),
+           retrait_motif = case when l_actuelle.siret = la_preuve.siret
+                                then 'mise à jour depuis le répertoire'
+                                else 'transfert de siège' end
+     where id = l_actuelle.id;
+  end if;
+
+  insert into public.entreprise_registre
+    (pro_id, siren, siret, denomination, sigle, nom_commercial,
+     nom_complet_registre, est_ei, forme_juridique, date_creation, tva,
+     ape, naf25, est_siege, adresse, code_postal, commune, code_insee,
+     statut_diffusion, maj_insee, source, verifie_le)
+  values (
+    moi, la_preuve.siren, la_preuve.siret, la_preuve.denomination,
+    la_preuve.sigle, la_preuve.nom_commercial, la_preuve.nom_complet_registre,
+    la_preuve.est_ei, la_preuve.forme_juridique, la_preuve.date_creation,
+    la_preuve.tva, la_preuve.ape, la_preuve.naf25, la_preuve.est_siege,
+    la_preuve.adresse, la_preuve.code_postal, la_preuve.commune,
+    la_preuve.code_insee, la_preuve.statut_diffusion, la_preuve.maj_insee,
+    la_preuve.source, la_preuve.verifiee_le
+  )
+  returning id into la_nouvelle;
+
+  -- Le nom brut du répertoire ne sort pas de CETTE fonction (45.1) — il
+  -- reste lisible par son titulaire dans la table elle-même, et c'est dit
+  -- en 45.3 ; aucun écran ne le demande.
+  select to_jsonb(e) - 'nom_complet_registre' into resultat
+    from public.entreprise_registre e where e.id = la_nouvelle;
+  return resultat;
+end;
+$$;
+
+revoke all on function public.rattacher_mon_siret(text) from public, anon;
+grant execute on function public.rattacher_mon_siret(text) to authenticated;
+
+/* DEVENIR PRO — un particulier dont le répertoire connaît l'entreprise.
+
+   C'est la porte que l'ancien message d'OP004 promettait sans l'avoir :
+   « contactez Opus ». Elle exige exactement ce qu'exige l'inscription —
+   une preuve fraîche, une entreprise libre — et crée les mêmes deux
+   moitiés : la fiche, et l'identité DEPUIS LA PREUVE. Le verrou du type
+   (44.1) la laisse passer parce qu'elle est `security definer`, et
+   `verifier-pro` la nomme parmi les trois seules fonctions qui peuvent
+   écrire `users.type`.
+
+   Une demande de secours encore ouverte est close au passage : l'artisan a
+   trouvé le chemin automatique, l'administration n'a plus rien à faire. */
+create or replace function public.devenir_pro(p jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi          uuid := auth.uid();
+  le_siret     text := regexp_replace(coalesce(p ->> 'siret', ''), '\D', '', 'g');
+  la_cgu       text := nullif(btrim(coalesce(p ->> 'cgu_version', '')), '');
+  mon_email    text;
+  le_compte    record;
+  la_preuve    record;
+  mes_metiers  text[];
+  l_entreprise text;
+  resultat     jsonb;
+begin
+  if moi is null then
+    raise exception 'Personne n''est connecté.' using errcode = '42501';
+  end if;
+
+  select u.type, u.nom, u.ville, u.code_postal, u.latitude, u.longitude
+    into le_compte
+    from public.users u where u.id = moi
+   for update;
+  if not found or le_compte.type is distinct from 'particulier' then
+    raise exception
+      'Ce compte est déjà un compte professionnel : il n''y a rien à faire passer.'
+      using errcode = '42501';
+  end if;
+
+  select u.email into mon_email from auth.users u where u.id = moi;
+  select pr.* into la_preuve
+    from public.preuves_siret pr
+   where pr.siret = le_siret
+     and pr.expire_le > now()
+     and (pr.source = 'registre'
+          or (pr.source = 'essai'
+              and pr.pour_email = lower(coalesce(mon_email, ''))));
+  if not found then
+    raise exception
+      'Ce SIRET n''a pas été retrouvé au répertoire Sirene depuis moins de '
+      '24 heures : touchez « Vérifier » à nouveau.'
+      using errcode = 'OP006';
+  end if;
+  -- Prise, ou GELÉE par l'administration (45.3) : même refus.
+  if exists (select 1 from public.entreprise_registre e
+              where e.siren = la_preuve.siren and (e.retiree_le is null or e.gele)) then
+    raise exception
+      'Cette entreprise est déjà rattachée à un autre compte Opus. Si c''est '
+      'la vôtre, demandez une vérification à la main : l''administration '
+      'examinera votre demande.'
+      using errcode = 'OP007';
+  end if;
+
+  -- Les métiers : la MÊME validation que la contrainte, et le même repli
+  -- que l'inscription. Un métier inventé ne doit pas coûter le passage.
+  select array_agg(m order by n)
+    into mes_metiers
+    from jsonb_array_elements_text(
+           case when jsonb_typeof(p -> 'metiers') = 'array'
+                then p -> 'metiers' else '[]'::jsonb end
+         ) with ordinality as t(m, n)
+   where n <= 4;
+  if not public.metiers_connus(mes_metiers) then
+    mes_metiers := array['macon'];
+  end if;
+
+  l_entreprise := coalesce(nullif(btrim(coalesce(p ->> 'entreprise', '')), ''),
+                           nullif(btrim(coalesce(le_compte.nom, '')), ''),
+                           'Mon entreprise');
+
+  -- 1. Le type. Le verrou 44.1 regarde `current_user`, qui vaut ici le
+  --    propriétaire de la fonction : il laisse passer.
+  update public.users
+     set type             = 'pro',
+         cgu_version      = coalesce(la_cgu, cgu_version),
+         cgu_acceptees_le = case when la_cgu is not null then now() else cgu_acceptees_le end
+   where id = moi;
+
+  -- 2. La fiche, avec le lieu DÉJÀ connu du compte : un particulier a donné
+  --    sa commune à l'inscription (section 32), il n'a pas à la retaper.
+  insert into public.professional_profiles
+    (id, nom, entreprise, metier, metiers, ville, verification_statut,
+     code_postal, latitude, longitude)
+  values (moi, le_compte.nom, l_entreprise, mes_metiers[1], mes_metiers,
+          coalesce(le_compte.ville, ''), 'non_soumis',
+          le_compte.code_postal, le_compte.latitude, le_compte.longitude);
+
+  -- 3. L'identité, depuis la preuve.
+  insert into public.entreprise_registre
+    (pro_id, siren, siret, denomination, sigle, nom_commercial,
+     nom_complet_registre, est_ei, forme_juridique, date_creation, tva,
+     ape, naf25, est_siege, adresse, code_postal, commune, code_insee,
+     statut_diffusion, maj_insee, source, verifie_le)
+  values (
+    moi, la_preuve.siren, la_preuve.siret, la_preuve.denomination,
+    la_preuve.sigle, la_preuve.nom_commercial, la_preuve.nom_complet_registre,
+    la_preuve.est_ei, la_preuve.forme_juridique, la_preuve.date_creation,
+    la_preuve.tva, la_preuve.ape, la_preuve.naf25, la_preuve.est_siege,
+    la_preuve.adresse, la_preuve.code_postal, la_preuve.commune,
+    la_preuve.code_insee, la_preuve.statut_diffusion, la_preuve.maj_insee,
+    la_preuve.source, la_preuve.verifiee_le
+  );
+
+  -- 4. La demande de secours éventuelle se ferme. La note ne dit pas
+  --    « vérifiée » : ce niveau ne prouve que l'existence de l'entreprise,
+  --    et ce mot appartient au badge.
+  --
+  --    « ACCEPTÉE » SEULEMENT SI C'EST LA MÊME ENTREPRISE — trouvé par la
+  --    relecture adverse du 15/10. Une demande déposée pour un SIRET que le
+  --    répertoire ne connaît pas, puis un passage pro avec un AUTRE numéro :
+  --    la première version marquait la demande « acceptée — l'entreprise
+  --    est active au répertoire », et l'historique de l'administration
+  --    affirmait qu'une entreprise jamais vue y était active. Elle est
+  --    alors ANNULÉE, et la note dit pourquoi.
+  update public.demandes_pro
+     set statut     = case when left(siret, 9) = la_preuve.siren
+                           then 'acceptee' else 'annulee' end,
+         note       = case when left(siret, 9) = la_preuve.siren
+                           then 'Ouverte automatiquement : l''entreprise est active au répertoire Sirene (INSEE).'
+                           else 'Compte ouvert avec une autre entreprise (SIREN '
+                                || la_preuve.siren || ') : cette demande est close.' end,
+         traitee_le = clock_timestamp()
+   where compte_id = moi and statut = 'nouvelle';
+
+  resultat := jsonb_build_object(
+    'type', 'pro',
+    'identite', (select to_jsonb(e) - 'nom_complet_registre'
+                   from public.entreprise_registre e
+                  where e.pro_id = moi and e.retiree_le is null));
+  return resultat;
+end;
+$$;
+
+revoke all on function public.devenir_pro(jsonb) from public, anon;
+grant execute on function public.devenir_pro(jsonb) to authenticated;
+
+-- ==========================================================================
+--  45.9 L'ADMINISTRATION — trancher une demande, retirer une entreprise
+--
+--  Les mêmes règles que la section 25, sans exception :
+--    - `admin_exige_droit()` en tête de chaque fonction ;
+--    - on ne statue pas sur SA PROPRE demande ;
+--    - un refus, un retrait, un transfert exigent une note d'au moins dix
+--      caractères : la personne doit savoir pourquoi ;
+--    - chaque décision laisse une ligne au journal.
+--
+--  ET LE JOURNAL NE GARDE QUE L'ÉTAT : `{statut, motif, siren}`, calculés
+--  dans des variables avant l'insertion. Jamais le message libre, jamais
+--  le nom de l'entreprise, jamais l'adresse — mesuré le 15/10 : le journal
+--  copiait la fiche entière et la gardait après la suppression du compte.
+--  Le SIREN, lui, désigne une ENTREPRISE, et il est public : c'est ce qu'on
+--  relit le jour d'une contestation.
+--
+--  CE QUE L'ADMINISTRATION DOIT SAVOIR, et l'écran le dit : un Kbis ou un
+--  avis Sirene se télécharge par n'importe qui. Pour trancher une
+--  contestation, il faut une pièce que le titulaire SEUL possède — son
+--  attestation d'assurance nominative, ou son attestation de vigilance
+--  URSSAF.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  Le journal accueille quatre actes de plus et deux cibles. Une contrainte
+--  ne se remplace pas, elle se refait (27.1) — et c'est CELLE-CI, la
+--  dernière du fichier, qui s'applique : elle est validée sur toutes les
+--  lignes, contrairement aux deux précédentes (`not valid`, voir 25.3).
+-- --------------------------------------------------------------------------
+alter table public.journal_admin drop constraint if exists journal_admin_action_check;
+alter table public.journal_admin add constraint journal_admin_action_check
+  check (action in (
+    'pro_verifie',
+    'pro_refuse',
+    'pro_remis_en_attente',
+    'pro_partiellement_valide',
+    'signalement_traite',
+    'metier_demande_traitee',
+    'specialite_traitee',
+    'demande_pro_acceptee',     -- compte ouvert en professionnel
+    'demande_pro_refusee',      -- avec une note d'au moins dix caractères
+    'entreprise_retiree',       -- une identité retirée à son compte
+    'entreprise_transferee'     -- retirée à l'un pour être rendue à l'autre
+  ));
+
+alter table public.journal_admin drop constraint if exists journal_admin_cible_check;
+alter table public.journal_admin add constraint journal_admin_cible_check
+  check (cible_type in ('profil_pro', 'signalement', 'metier_demande',
+                        'specialite', 'metier', 'demande_pro', 'entreprise'));
+
+/* LA FILE. Les demandes ouvertes d'abord, la plus ANCIENNE en tête — c'est
+   celle qui attend depuis le plus longtemps, la règle des signalements. Puis
+   les cinquante dernières tranchées, pour relire ce qu'on a décidé.
+
+   Ce qu'on y met : ce que la personne DÉCLARE, ce que le répertoire a DIT
+   (la preuve fraîche, s'il y en a une), et QUI tient déjà l'entreprise
+   s'il y a quelqu'un. Ce qu'on n'y met PAS : l'e-mail du compte, son
+   téléphone, ses coordonnées, l'adresse du siège. Pour écrire au
+   demandeur, il y a la messagerie ; pour décider, ces données ne servent
+   à rien. */
+create or replace function public.admin_demandes_pro()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  resultat jsonb;
+begin
+  perform public.admin_exige_droit();
+
+  with ouvertes as (
+    select d.*, 0 as rang,
+           row_number() over (order by d.created_at asc) as ordre
+      from public.demandes_pro d
+     where d.statut = 'nouvelle'
+  ),
+  /* « Traitées » veut dire TRANCHÉES : acceptées ou refusées. Une
+     annulation n'est la décision de personne — et mesuré par la relecture
+     adverse, soixante annulations en boucle par un seul compte poussaient
+     hors de ces cinquante lignes les vraies décisions de l'administration,
+     celles qu'on relit le jour d'une contestation. */
+  traitees as (
+    select d.*, 1 as rang,
+           row_number() over (order by coalesce(d.traitee_le, d.created_at) desc) as ordre
+      from public.demandes_pro d
+     where d.statut in ('acceptee', 'refusee')
+     order by coalesce(d.traitee_le, d.created_at) desc
+     limit 50
+  ),
+  file as (
+    select * from ouvertes
+    union all
+    select * from traitees
+  )
+  select coalesce(jsonb_agg(
+           jsonb_build_object(
+             'id', f.id,
+             'created_at', f.created_at,
+             'statut', f.statut,
+             'motif', f.motif,
+             'siret', f.siret,
+             'entreprise', f.entreprise,
+             'metiers', f.metiers,
+             'message', f.message,
+             'justificatif', f.justificatif,
+             'note', f.note,
+             'traitee_le', f.traitee_le,
+             'compte', jsonb_build_object(
+                         'id', u.id, 'nom', u.nom, 'ville', u.ville,
+                         'inscrit_le', u.created_at),
+             'preuve', case when pv.siret is null then null else jsonb_build_object(
+                         'denomination', pv.denomination,
+                         'nom_commercial', pv.nom_commercial,
+                         'forme_juridique', pv.forme_juridique,
+                         'commune', pv.commune,
+                         'est_siege', pv.est_siege,
+                         'verifiee_le', pv.verifiee_le) end,
+             'detenteur', case when dt.pro_id is null then null else jsonb_build_object(
+                         'pro_id', dt.pro_id,
+                         'entreprise', dt.entreprise,
+                         'inscrit_le', dt.inscrit_le,
+                         'verifie', dt.verifie,
+                         'nb_publications', dt.nb_publications) end,
+             /* L'entreprise a été RETIRÉE par l'administration, et reste
+                réservée (45.3) : l'écran le dit, pour que celui qui
+                accepte sache qu'il rend une entreprise déjà contestée. */
+             'reservee_le', (select max(g.retiree_le) from public.entreprise_registre g
+                              where g.siren = left(f.siret, 9) and g.gele)
+           )
+           order by f.rang, f.ordre), '[]'::jsonb)
+    into resultat
+    from file f
+    left join public.users u on u.id = f.compte_id
+    left join lateral (
+      select pr.* from public.preuves_siret pr
+       where pr.siret = f.siret and pr.expire_le > now()
+    ) pv on true
+    left join lateral (
+      select e.pro_id, pp.entreprise, pp.created_at as inscrit_le, pp.verifie,
+             (select count(*) from public.posts po where po.author_id = e.pro_id) as nb_publications
+        from public.entreprise_registre e
+        join public.professional_profiles pp on pp.id = e.pro_id
+       where e.siren = left(f.siret, 9) and e.retiree_le is null
+    ) dt on true;
+
+  return resultat;
+end;
+$$;
+
+revoke all on function public.admin_demandes_pro() from public, anon;
+grant execute on function public.admin_demandes_pro() to authenticated;
+
+/* TRANCHER UNE DEMANDE : `accepter`, `refuser`, `transferer`.
+
+   ACCEPTER APPLIQUE VRAIMENT : le compte devient pro, la fiche naît, et
+   l'identité avec elle — depuis la preuve fraîche si le répertoire connaît
+   l'entreprise (source `registre`), sinon sur le SIRET seul (source
+   `administration`). Un bouton qui passerait seulement la demande à
+   « acceptée » serait un tampon : la leçon de la section 27.2.
+
+   L'ENTREPRISE DÉJÀ TENUE PAR UN AUTRE COMPTE n'est jamais écrasée en
+   silence. `accepter` le refuse, en clair ; `transferer` la retire d'abord
+   au détenteur — avec une note, une ligne au journal et une notification —
+   puis accepte. C'est la seule façon de rendre son entreprise à un vrai
+   titulaire quand un autre l'a prise le premier. */
+create or replace function public.admin_traiter_demande_pro(
+  p_id       uuid,
+  p_decision text,
+  p_note     text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi          uuid := public.admin_exige_droit();
+  v_note       text := nullif(btrim(coalesce(p_note, '')), '');
+  d            record;
+  le_siren     text;
+  le_detenteur record;
+  le_compte    record;
+  la_preuve    record;
+  ses_metiers  text[];
+  l_entreprise text;
+  v_refus      boolean := false;
+  avant        jsonb;
+  apres        jsonb;
+  avant_e      jsonb;
+  apres_e      jsonb;
+begin
+  if p_decision is null or p_decision not in ('accepter', 'refuser', 'transferer') then
+    raise exception 'Décision inconnue : % (accepter, refuser ou transferer).', p_decision
+      using errcode = 'check_violation';
+  end if;
+
+  select * into d from public.demandes_pro where id = p_id for update;
+  if not found then
+    raise exception 'Cette demande n''existe pas.' using errcode = 'no_data_found';
+  end if;
+  if d.statut <> 'nouvelle' then
+    raise exception 'Cette demande a déjà été traitée (%).', d.statut
+      using errcode = 'check_violation';
+  end if;
+  if d.compte_id = moi then
+    raise exception
+      'On ne statue pas sur sa propre demande. Passez par l''éditeur SQL de Supabase si c''est vraiment ce que vous voulez.'
+      using errcode = '42501';
+  end if;
+
+  le_siren := left(d.siret, 9);
+  avant := jsonb_build_object('statut', d.statut, 'motif', d.motif, 'siren', le_siren);
+
+  if p_decision = 'refuser' then
+    if v_note is null or length(v_note) < 10 then
+      raise exception
+        'Un refus demande une note d''au moins dix caractères : la personne doit savoir pourquoi, et quoi faire.'
+        using errcode = 'check_violation';
+    end if;
+
+    update public.demandes_pro
+       set statut = 'refusee', note = v_note,
+           traitee_le = clock_timestamp(), traitee_par = moi
+     where id = p_id;
+    v_refus := true;
+
+    insert into public.notifications (user_id, type, texte, demande_pro_id)
+    values (d.compte_id, 'demande_pro_refusee',
+            'Votre demande de compte professionnel n''a pas été acceptée : ' || v_note,
+            p_id);
+  else
+    select e.id, e.pro_id into le_detenteur
+      from public.entreprise_registre e
+     where e.siren = le_siren and e.retiree_le is null
+     for update;
+
+    if found and p_decision = 'accepter' then
+      raise exception
+        'Cette entreprise est déjà rattachée à un autre compte : retirez d''abord '
+        'l''entreprise du compte qui la détient, ou choisissez « Transférer ».'
+        using errcode = 'OP007';
+    end if;
+    if not found and p_decision = 'transferer' then
+      raise exception
+        'Aucun compte ne détient cette entreprise : il n''y a rien à transférer. '
+        'Choisissez « Ouvrir le compte professionnel ».'
+        using errcode = 'check_violation';
+    end if;
+
+    select u.type, u.nom, u.ville, u.code_postal, u.latitude, u.longitude
+      into le_compte
+      from public.users u where u.id = d.compte_id
+     for update;
+    if le_compte.type is distinct from 'particulier' then
+      raise exception
+        'Ce compte est déjà professionnel : refusez la demande avec une note qui le dit.'
+        using errcode = 'check_violation';
+    end if;
+
+    if p_decision = 'transferer' then
+      if v_note is null or length(v_note) < 10 then
+        raise exception
+          'Un transfert demande une note d''au moins dix caractères : celui qui perd '
+          'l''entreprise doit savoir pourquoi.'
+          using errcode = 'check_violation';
+      end if;
+
+      update public.entreprise_registre
+         set retiree_le = clock_timestamp(), retrait_motif = v_note
+       where id = le_detenteur.id;
+
+      avant_e := jsonb_build_object('statut', 'active', 'siren', le_siren);
+      apres_e := jsonb_build_object('statut', 'retiree', 'siren', le_siren);
+      insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
+      values (moi, 'entreprise_transferee', 'entreprise', le_detenteur.id, avant_e, apres_e, v_note);
+
+      insert into public.notifications (user_id, type, texte)
+      values (le_detenteur.pro_id, 'entreprise_retiree',
+              'L''entreprise rattachée à votre compte a été retirée par l''administration d''Opus : ' || v_note);
+    end if;
+
+    -- L'administration REND l'entreprise : c'est le seul chemin qui lève le
+    -- gel posé par un retrait (45.3). Après examen à la main, elle va au
+    -- compte de cette demande ; tant que personne ne l'a examinée, elle
+    -- restait réservée.
+    update public.entreprise_registre
+       set gele = false
+     where siren = le_siren and gele;
+
+    -- Le compte devient pro. Le verrou 44.1 laisse passer : `auth.uid()`
+    -- est l'administrateur, pas le titulaire.
+    update public.users set type = 'pro' where id = d.compte_id;
+
+    ses_metiers := case when cardinality(d.metiers) > 0 and public.metiers_connus(d.metiers)
+                        then d.metiers else array['macon'] end;
+    l_entreprise := coalesce(nullif(btrim(coalesce(d.entreprise, '')), ''),
+                             nullif(btrim(coalesce(le_compte.nom, '')), ''),
+                             'Mon entreprise');
+
+    insert into public.professional_profiles
+      (id, nom, entreprise, metier, metiers, ville, verification_statut,
+       code_postal, latitude, longitude)
+    values (d.compte_id, le_compte.nom, l_entreprise, ses_metiers[1], ses_metiers,
+            coalesce(le_compte.ville, ''), 'non_soumis',
+            le_compte.code_postal, le_compte.latitude, le_compte.longitude);
+
+    -- L'identité : ce que le répertoire a dit, s'il l'a dit — sinon le
+    -- numéro seul, et une source qui ne prétend pas le contraire.
+    select pr.* into la_preuve
+      from public.preuves_siret pr
+     where pr.siret = d.siret and pr.expire_le > now() and pr.source = 'registre';
+    if found then
+      insert into public.entreprise_registre
+        (pro_id, siren, siret, denomination, sigle, nom_commercial,
+         nom_complet_registre, est_ei, forme_juridique, date_creation, tva,
+         ape, naf25, est_siege, adresse, code_postal, commune, code_insee,
+         statut_diffusion, maj_insee, source, verifie_le)
+      values (
+        d.compte_id, la_preuve.siren, la_preuve.siret, la_preuve.denomination,
+        la_preuve.sigle, la_preuve.nom_commercial, la_preuve.nom_complet_registre,
+        la_preuve.est_ei, la_preuve.forme_juridique, la_preuve.date_creation,
+        la_preuve.tva, la_preuve.ape, la_preuve.naf25, la_preuve.est_siege,
+        la_preuve.adresse, la_preuve.code_postal, la_preuve.commune,
+        la_preuve.code_insee, la_preuve.statut_diffusion, la_preuve.maj_insee,
+        la_preuve.source, la_preuve.verifiee_le
+      );
+    else
+      insert into public.entreprise_registre (pro_id, siren, siret, source, verifie_le)
+      values (d.compte_id, le_siren, d.siret, 'administration', clock_timestamp());
+    end if;
+
+    update public.demandes_pro
+       set statut = 'acceptee', note = v_note,
+           traitee_le = clock_timestamp(), traitee_par = moi
+     where id = p_id;
+
+    insert into public.notifications (user_id, type, texte, demande_pro_id)
+    values (d.compte_id, 'compte_pro_ouvert',
+            'Votre compte professionnel est ouvert : touchez ici pour entrer dans votre espace d''artisan.',
+            p_id);
+  end if;
+
+  apres := jsonb_build_object(
+    'statut', case when v_refus then 'refusee' else 'acceptee' end,
+    'motif', d.motif, 'siren', le_siren);
+  insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
+  values (moi,
+          case when v_refus then 'demande_pro_refusee' else 'demande_pro_acceptee' end,
+          'demande_pro', p_id, avant, apres, v_note);
+
+  return jsonb_build_object('id', p_id, 'compte_id', d.compte_id,
+                            'statut', case when v_refus then 'refusee' else 'acceptee' end);
+end;
+$$;
+
+revoke all on function public.admin_traiter_demande_pro(uuid, text, text) from public, anon;
+grant execute on function public.admin_traiter_demande_pro(uuid, text, text) to authenticated;
+
+/* RETIRER UNE ENTREPRISE à un compte, sans la donner à personne : un
+   squatteur signalé, une entreprise radiée, une erreur. Le compte reste
+   pro — sa fiche est indestructible (section 31) et porte des avis de
+   tiers — mais il n'a plus d'entreprise rattachée.
+
+   ET L'ENTREPRISE RESTE RÉSERVÉE (`gele`, 45.3) : aucune porte automatique
+   ne la rend, ni à ce compte ni à un autre. Sans cela, mesuré : le
+   squatteur la reprenait la minute suivante, et le bouton ne servait à
+   rien. Le vrai titulaire la récupère par une demande, que
+   l'administration accepte — c'est cette acceptation qui lève le gel.
+   Une erreur se répare pareil, ou depuis l'éditeur SQL. */
+create or replace function public.admin_retirer_entreprise(p_pro uuid, p_motif text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi       uuid := public.admin_exige_droit();
+  v_motif   text := nullif(btrim(coalesce(p_motif, '')), '');
+  l_identite record;
+  avant_e   jsonb;
+  apres_e   jsonb;
+begin
+  if v_motif is null or length(v_motif) < 10 then
+    raise exception
+      'Un retrait demande un motif d''au moins dix caractères : celui qui perd '
+      'l''entreprise doit savoir pourquoi.'
+      using errcode = 'check_violation';
+  end if;
+
+  select e.id, e.siren into l_identite
+    from public.entreprise_registre e
+   where e.pro_id = p_pro and e.retiree_le is null
+   for update;
+  if not found then
+    raise exception 'Cette fiche n''a aucune entreprise rattachée.' using errcode = 'no_data_found';
+  end if;
+
+  update public.entreprise_registre
+     set retiree_le = clock_timestamp(), retrait_motif = v_motif, gele = true
+   where id = l_identite.id;
+
+  avant_e := jsonb_build_object('statut', 'active', 'siren', l_identite.siren);
+  apres_e := jsonb_build_object('statut', 'retiree', 'siren', l_identite.siren);
+  insert into public.journal_admin (admin_id, action, cible_type, cible_id, avant, apres, motif)
+  values (moi, 'entreprise_retiree', 'entreprise', l_identite.id, avant_e, apres_e, v_motif);
+
+  insert into public.notifications (user_id, type, texte)
+  values (p_pro, 'entreprise_retiree',
+          'L''entreprise rattachée à votre compte a été retirée par l''administration d''Opus : ' || v_motif);
+
+  return jsonb_build_object('pro_id', p_pro, 'siren', l_identite.siren, 'retiree', true);
+end;
+$$;
+
+revoke all on function public.admin_retirer_entreprise(uuid, text) from public, anon;
+grant execute on function public.admin_retirer_entreprise(uuid, text) to authenticated;
 
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
@@ -7962,7 +9704,28 @@ as $$
        Deux fondements différents, un seul export : c'est plus honnête que
        deux boutons dont personne ne comprendrait la différence. */
     'clients_de_mon_entreprise',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.clients x where x.pro_id = auth.uid()), '[]'::jsonb)
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.clients x where x.pro_id = auth.uid()), '[]'::jsonb),
+    /* MON ENTREPRISE, telle que le répertoire l'a décrite (section 45.3) :
+       TOUTES les lignes de ma fiche, retirées comprises. Une identité
+       retirée me concerne encore — c'est MOI qu'on a désigné comme son
+       ancien titulaire, et je dois pouvoir le lire. */
+    'entreprise_registre',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.entreprise_registre x where x.pro_id = auth.uid()), '[]'::jsonb),
+    /* Mes demandes de compte professionnel, avec leur message libre et la
+       note de l'administration : c'est ce qu'on a écrit sur moi. Colonne
+       par colonne, et pas `to_jsonb(x)` : depuis le 15/10, `traitee_par`
+       (l'identité de l'administrateur) est fermée au client par un droit
+       de colonne, et lire la ligne entière ÉCHOUERAIT — tout l'export
+       avec. C'est le piège de `mon_compte()`, section 18. */
+    'demandes_pro',
+                 coalesce((select jsonb_agg(jsonb_build_object(
+                             'id', x.id, 'siret', x.siret, 'motif', x.motif,
+                             'entreprise', x.entreprise, 'metiers', x.metiers,
+                             'message', x.message, 'justificatif', x.justificatif,
+                             'statut', x.statut, 'note', x.note,
+                             'created_at', x.created_at, 'traitee_le', x.traitee_le)
+                             order by x.created_at)
+                             from public.demandes_pro x where x.compte_id = auth.uid()), '[]'::jsonb)
   )
 $$;
 

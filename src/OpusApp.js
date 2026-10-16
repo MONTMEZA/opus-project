@@ -45,6 +45,7 @@ import SosScreen from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
 import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
 import AdminScreen from './screens/AdminScreen';
+import PasserProScreen from './screens/PasserProScreen';
 import { POST_GRADIENTS, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier , metiersDe } from './lib/metiers';
 import { etapesPourLeRecit } from './lib/recit';
@@ -67,6 +68,8 @@ import { clientDepuisDemande } from './lib/clients';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
+import { chiffresSeuls, formaterSiret } from './lib/siret';
+import { VERSION as VERSION_CGU } from './data/legal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeuilleRecherche from './components/FeuilleRecherche';
 import FenetreAgent from './components/FenetreAgent';
@@ -85,6 +88,19 @@ import {
    réouverture de l'application, il n'y a donc plus que le secteur — et
    personne ne peut rester enfermé sur un métier sans l'avoir voulu. */
 const CLE_SECTEUR = 'opus.fil.secteur';
+
+/* LE MESSAGE D'UNE DEMANDE DE COMPTE PRO, en attente de la première
+   connexion — 15/10/2026, relecture adverse.
+
+   Le message ne voyage pas dans les métadonnées du compte (elles restent
+   dans `auth.users`, hors de l'export RGPD : section 45.4). Il s'ajoute
+   donc APRÈS l'inscription, avec une session. Or quand la confirmation
+   par e-mail est demandée, `signUp()` ne rend PAS de session : le message
+   tapé était perdu sans un mot — exactement le défaut de la section 31,
+   où les CGU tombaient derrière le même `return`. Il attend donc sur CE
+   téléphone, avec l'adresse du compte, et part à la première connexion de
+   ce compte-là. L'écran de confirmation le dit. */
+const CLE_MESSAGE_DEMANDE = 'opus.demandePro.message';
 
 /**
  * Ce qu'on annonce à l'artisan, selon l'endroit où sa publication est partie.
@@ -241,6 +257,25 @@ export default function OpusApp() {
      bouton que presque personne ne verra serait un mauvais échange. */
   const [admin, setAdmin] = useState(null);
   const adminDemande = useRef(false);
+  /* L'ENTREPRISE RATTACHÉE ET LA DEMANDE DE COMPTE PRO (section 45).
+     Même règle que le back-office : chargées à la PREMIÈRE ouverture du
+     profil, jamais au démarrage. 'jamais' tant qu'on n'a pas demandé — et
+     ce n'est PAS « aucune » : « SIRET jamais rattaché » écrit pendant le
+     chargement serait faux pour tous ceux qui en ont un. */
+  const [monEntreprise, setMonEntreprise] = useState(null);
+  /* La dernière entreprise retirée par l'administration, quand il n'y en a
+     plus d'active : « Mon entreprise » dit alors pourquoi, au lieu de
+     proposer un rattachement que la base refuserait. */
+  const [entrepriseRetiree, setEntrepriseRetiree] = useState(null);
+  const [entrepriseEtat, setEntrepriseEtat] = useState('jamais');
+  const [maDemandePro, setMaDemandePro] = useState(null);
+  const [demandeProEtat, setDemandeProEtat] = useState('jamais');
+  /* Le SIRET avec lequel « Passer en compte professionnel » s'ouvre :
+     celui de la demande en attente, quand on vient de « Revérifier ». */
+  const [passerProSiret, setPasserProSiret] = useState('');
+  /* Ouvert depuis une demande DÉJÀ en attente : la porte de secours n'y a
+     plus de sens — une seconde demande serait refusée par la base. */
+  const [passerProEnAttente, setPasserProEnAttente] = useState(false);
   const [demandesRecues, setDemandesRecues] = useState([]);
   const [demandesRecuesEtat, setDemandesRecuesEtat] = useState('jamais');
   /* Un MIROIR de l'état, parce que l'abonnement au temps réel est posé une
@@ -366,6 +401,13 @@ export default function OpusApp() {
       setUserType(type);
       setScreen('home');
       setEchecChargement(null);
+      /* Un changement de compte ou de type remet l'entreprise et la demande
+         à « pas encore lues » : celles d'avant appartenaient à un autre
+         état du compte. */
+      setMonEntreprise(null);
+      setEntrepriseEtat('jamais');
+      setMaDemandePro(null);
+      setDemandeProEtat('jamais');
       /* AVEC UN DÉLAI, et ce n'est pas une précaution théorique : sans lui,
          une base injoignable laissait l'application figée sur son squelette
          de démarrage pour toujours. Une requête qui ne revient jamais
@@ -401,23 +443,14 @@ export default function OpusApp() {
       /* Une demande de modification des métiers déjà déposée doit réapparaître
          à la reconnexion, sinon l'artisan la redépose et la base la refuse. */
       if (type === 'pro') {
-        /* UN COMPTE PRO SANS FICHE SE RÉPARE ICI, ET NULLE PART AILLEURS.
-           C'est le seul endroit par lequel passent TOUS les chemins —
-           inscription, connexion, réouverture de l'application. Un compte
-           créé avant le 05/10/2026, ou sur une base où la section 31 n'a
-           pas encore été rejouée, retrouve donc sa fiche à la première
-           ouverture. La détection ne coûte rien : `loadAll()` vient de
-           rendre les fiches, on regarde simplement si la mienne y est. */
-        if (!data.pros[api.getUserId()]) {
-          try {
-            const reparee = await api.reparerFichePro();
-            if (reparee) setPros((ps) => ({ ...ps, [api.getUserId()]: reparee }));
-          } catch (e) {
-            /* On le dit, sans bloquer l'entrée : un artisan qui ne peut pas
-               entrer du tout ne peut rien corriger non plus. */
-            showErreur(messageClair(e, "Votre fiche professionnelle n'a pas pu être créée"));
-          }
-        }
+        /* LA RÉPARATION DE FICHE A ÉTÉ RETIRÉE LE 15/10/2026 (section 45).
+           Elle recréait une fiche depuis l'application, sans entreprise, en
+           relisant des métadonnées que le client réécrit à volonté. La base
+           refuse désormais cet INSERT (OP010) : toute fiche naît dans une
+           fonction de la base qui exige une entreprise trouvée au
+           répertoire Sirene. Un compte pro sans fiche ne se « répare » donc
+           plus ici — il n'en existe qu'un sur la vraie base, une session
+           anonyme du 14/09 que le propriétaire supprimera. */
 
         /* MA fiche complète : mon portfolio et ma présentation s'affichent
            sur mon propre profil, qui n'est pas la page publique. */
@@ -509,21 +542,29 @@ export default function OpusApp() {
   const handleSignUp = async ({
     email, motDePasse, nom, entreprise, metiers, cguVersion,
     ville, codePostal, codeInsee, latitude, longitude,
+    inscription = 'particulier', siret = null, demandePro = null, message = null,
   }) => {
+    /* LE SIRET SE REVÉRIFIE JUSTE AVANT DE CRÉER LE COMPTE (section 45).
+       La réponse sort du cache de la fonction Edge, sans délai. Elle
+       transforme le message muet de GoTrue — « Database error saving new
+       user », HTTP 500, quand la base refuse le compte — en une issue
+       PRÉCISE : la preuve a expiré pendant qu'on remplissait le formulaire,
+       ou quelqu'un vient de prendre l'entreprise. L'écran revient alors au
+       SIRET et le dit. */
+    if (inscription === 'pro') {
+      const r = await api.verifierSiret(siret);
+      if (!r || r.issue !== 'ok') {
+        return { reverification: { ...(r || { issue: 'service_indisponible' }), pour: chiffresSeuls(siret) } };
+      }
+    }
+
     /* LE LIEU SE COMPLÈTE AVANT DE CRÉER LE COMPTE — 05/10/2026.
        PostgreSQL ne sait pas appeler la Base Adresse Nationale, donc le
        déclencheur qui crée les deux fiches ne peut pas placer le compte sur
-       une carte. C'était le trou connu : un artisan qui venait de
-       s'inscrire n'apparaissait dans AUCUNE recherche par secteur tant
-       qu'il n'avait pas ouvert « Modifier mon profil » une fois.
-
-       Même endroit et même raison que l'enregistrement du profil et la
-       publication d'une annonce : là où il y a déjà une attente visible.
-
-       ET L'ÉCHEC NE BLOQUE RIEN. Un réseau coupé ne doit pas empêcher de
-       créer un compte — même règle que le vibreur de `retour.js` et que
-       `publierAnnonce`. Sans coordonnées, la personne n'apparaît pas dans
-       une recherche par secteur ; sans compte, elle n'apparaît nulle part. */
+       une carte. Même endroit et même raison que l'enregistrement du profil
+       et la publication d'une annonce : là où il y a déjà une attente
+       visible. Et l'échec ne bloque rien : sans coordonnées, on n'apparaît
+       pas dans une recherche par secteur ; sans compte, nulle part. */
     let lieu = { ville, codePostal, codeInsee, latitude, longitude };
     if (ville) {
       try {
@@ -532,16 +573,49 @@ export default function OpusApp() {
         });
       } catch { /* on crée le compte sans coordonnées */ }
     }
-
     const { session } = await api.signUp({
-      email, password: motDePasse, userType: typeChoisi, nom,
-      entreprise, metiers, cguVersion,
+      email, password: motDePasse,
+      /* LE TYPE EFFECTIF, jamais `typeChoisi`. La porte de secours part du
+         bouton « Je suis un professionnel », et crée pourtant un compte
+         PARTICULIER : démarrer en pro sur ce compte affichait, mesuré par
+         la relecture, « Ce compte est un compte particulier » en rouge au
+         premier écran, et une interface pro qui ne pouvait rien faire. */
+      userType: inscription === 'pro' ? 'pro' : 'particulier',
+      nom, entreprise, metiers, cguVersion,
       ville, codePostal: lieu.codePostal || codePostal || null,
       latitude: lieu.latitude || null,
       longitude: lieu.longitude || null,
+      siret: inscription === 'pro' ? siret : null,
+      demandePro: inscription === 'secours' ? demandePro : null,
     });
-    if (!session) return { confirmationRequise: true };
-    await start(typeChoisi);
+    if (!session) {
+      if (inscription === 'secours' && message && message.trim()) {
+        try {
+          await AsyncStorage.setItem(CLE_MESSAGE_DEMANDE, JSON.stringify({
+            email: String(email || '').trim().toLowerCase(),
+            message: message.trim(),
+          }));
+          return { confirmationRequise: true, messageEnAttente: true };
+        } catch {
+          /* Un stockage illisible ne coûte pas le compte : l'écran dira
+             seulement que le message n'est pas parti. */
+          return { confirmationRequise: true, messagePerdu: true };
+        }
+      }
+      return { confirmationRequise: true };
+    }
+
+    /* Le MESSAGE de la demande ne voyage pas dans les métadonnées (elles
+       suivent chaque jeton, hors de l'export RGPD) : il s'ajoute ici, une
+       fois le compte ouvert. Un échec ne coûte pas le compte, et se dit. */
+    if (inscription === 'secours' && message && message.trim()) {
+      try {
+        await api.completerMaDemandePro({ message: message.trim() });
+      } catch (e) {
+        showErreur(messageClair(e, 'Votre message n’a pas pu être joint à la demande'));
+      }
+    }
+    await start(inscription === 'pro' ? 'pro' : 'particulier');
     return {};
   };
 
@@ -866,6 +940,31 @@ export default function OpusApp() {
      au même écran doivent faire exactement le même travail — c'est la leçon
      du glissement de Découvrir, le 04/10. */
   const changerFeedTab = (tab) => { changerCeQuOnVoit({ tab }); };
+
+  /* LE MESSAGE EN ATTENTE part à la première connexion du compte qui l'a
+     écrit — et de lui seul : un téléphone partagé ne doit pas joindre le
+     message de l'un à la demande de l'autre. Sans demande ouverte (elle a
+     été tranchée, ou n'a pas pu naître), il n'a plus nulle part où aller :
+     on le retire. Toute autre panne le garde pour la fois suivante. */
+  useEffect(() => {
+    if (userType !== 'particulier' || !monProfil.email) return undefined;
+    let vivant = true;
+    AsyncStorage.getItem(CLE_MESSAGE_DEMANDE)
+      .then(async (brut) => {
+        if (!vivant || !brut) return;
+        const enAttente = JSON.parse(brut);
+        if (!enAttente || enAttente.email !== String(monProfil.email).toLowerCase()) return;
+        try {
+          await api.completerMaDemandePro({ message: enAttente.message });
+          await AsyncStorage.removeItem(CLE_MESSAGE_DEMANDE);
+          if (vivant) showBanner('Votre message a été joint à votre demande de compte professionnel.');
+        } catch (e) {
+          if (e && e.code === 'P0002') await AsyncStorage.removeItem(CLE_MESSAGE_DEMANDE);
+        }
+      })
+      .catch(() => {});
+    return () => { vivant = false; };
+  }, [userType, monProfil.email]);
 
   /* Et le filtre de la loupe. Seul le SECTEUR est enregistré : à la
      réouverture, le métier a disparu, donc personne ne reste enfermé sur
@@ -1427,12 +1526,12 @@ export default function OpusApp() {
         if (conversationId === activeConvId) api.marquerLus(conversationId).catch(() => {});
       },
       onNotification: (n) => {
+        /* LA MÊME traduction que le chargement (`notificationDepuisLigne`) :
+           celle d'ici oubliait les cibles, et « votre compte professionnel
+           est ouvert : touchez ici » ne menait nulle part tant qu'on
+           n'avait pas relancé l'application (relecture adverse, 15/10). */
         setNotifications((ns) => (ns.some((x) => x.id === n.id) ? ns : [{
-          id: n.id,
-          type: n.type,
-          texte: n.texte,
-          acteurId: n.acteur_id,
-          postId: n.post_id,
+          ...api.notificationDepuisLigne(n),
           lue: false,
           time: "À l'instant",
         }, ...ns]));
@@ -1929,15 +2028,44 @@ export default function OpusApp() {
       return;
     }
 
-    /* 4. CE QUI SE PASSE SUR MA PROPRE FICHE : une demande de partenariat,
-       un badge accordé ou refusé, des métiers acceptés. */
-    if (ou.quoi === 'profil') {
+    /* 4. LA PORTE DE SECOURS (section 45). Une demande de compte pro
+       vient d'arriver : l'administrateur va à la file. */
+    if (ou.quoi === 'administration') {
       setCommentaireCible(null);
-      setScreen('profil');
+      if (!adminDemande.current) { adminDemande.current = true; chargerResumeAdmin(); }
+      setScreen('admin');
       return;
     }
 
-    /* 5. ET CE QUI NE MÈNE NULLE PART LE DIT. Une notification dont la
+    /* Le compte vient d'être ouvert en professionnel par l'administration.
+       La base a changé `users.type` ; la session, elle, croit encore le
+       compte particulier. On réaligne PUIS on redémarre en pro — un
+       `setUserType` seul afficherait l'interface pro sans la fiche. */
+    if (ou.quoi === 'compte_pro') {
+      setCommentaireCible(null);
+      await api.alignerTypeDuCompte('pro');
+      await start('pro');
+      chargerMonEntreprise();
+      setScreen('profil');
+      showBanner('Votre compte professionnel est ouvert : vous pouvez publier.');
+      return;
+    }
+
+    /* 5. CE QUI SE PASSE SUR MA PROPRE FICHE : une demande de partenariat,
+       un badge accordé ou refusé, des métiers acceptés — et, depuis la
+       section 45, une demande de compte pro refusée ou une entreprise
+       retirée. Ces deux-là se RELISENT : la carte du profil doit dire ce
+       que la base vient de décider, pas ce qu'on savait ce matin. */
+    if (ou.quoi === 'profil') {
+      setCommentaireCible(null);
+      if (n.type === 'demande_pro_refusee') chargerMaDemandePro();
+      if (n.type === 'entreprise_retiree') chargerMonEntreprise();
+      setScreen('profil');
+      chargerPourLeProfil();
+      return;
+    }
+
+    /* 6. ET CE QUI NE MÈNE NULLE PART LE DIT. Une notification dont la
        cible a disparu — la base passe en `on delete cascade`, mais une
        vieille ligne peut rester — ne doit pas laisser croire à une panne :
        on l'explique, au lieu de ne rien faire. `verifier-notifications`
@@ -1996,8 +2124,17 @@ export default function OpusApp() {
   const chargerResumeAdmin = async () => {
     try {
       const r = await api.resumeAdmin();
+      /* TOUTES LES FILES, et d'abord celle qui compte le plus : un artisan
+         qui attend qu'on ouvre son compte n'a encore RIEN d'autre (section
+         45). Les deux files du référentiel n'y étaient pas non plus —
+         relevé par la relecture du plan : une pastille qui compte une file
+         sur cinq fait manquer les quatre autres. */
       setAdmin(r && r.admin
-        ? { ...r, aTraiter: (r.verifications || 0) + (r.signalements || 0) }
+        ? {
+          ...r,
+          aTraiter: (r.verifications || 0) + (r.signalements || 0)
+            + (r.demandes_pro || 0) + (r.metiers || 0) + (r.specialites || 0),
+        }
         : null);
     } catch (e) {
       /* Un back-office qui ne répond pas n'est PAS une panne de
@@ -2006,6 +2143,146 @@ export default function OpusApp() {
          presque personne n'utilise. */
       setAdmin(null);
     }
+  };
+
+  /* ---------- l'entreprise et la demande de compte pro (section 45) ---------- */
+
+  /* Lues À LA DEMANDE, comme le résumé d'administration : un appel de plus
+     au démarrage pour une ligne que l'on ne regarde que sur son profil
+     serait un mauvais échange. Un échec ne bloque rien — il se DIT, sur la
+     carte concernée, au lieu de ressembler à « aucune entreprise ». */
+  const chargerMonEntreprise = async () => {
+    setEntrepriseEtat('charge');
+    try {
+      const active = await api.monEntreprise();
+      setMonEntreprise(active);
+      setEntrepriseRetiree(active ? null : await api.monEntrepriseRetiree());
+      setEntrepriseEtat('pret');
+    } catch (e) {
+      setEntrepriseEtat('echec');
+    }
+  };
+
+  const chargerMaDemandePro = async () => {
+    setDemandeProEtat('charge');
+    try {
+      setMaDemandePro(await api.maDemandePro());
+      setDemandeProEtat('pret');
+    } catch (e) {
+      setDemandeProEtat('echec');
+    }
+  };
+
+  /* Ce que le profil doit savoir, la première fois qu'on l'ouvre. */
+  const chargerPourLeProfil = () => {
+    if (userType === 'pro' && entrepriseEtat === 'jamais') chargerMonEntreprise();
+    if (userType === 'particulier' && demandeProEtat === 'jamais') chargerMaDemandePro();
+  };
+
+  /**
+   * PASSER EN COMPTE PROFESSIONNEL — un particulier dont le répertoire
+   * connaît l'entreprise.
+   *
+   * La base fait tout (`devenir_pro`) ; ici, on REDÉMARRE en pro. Pas un
+   * `setUserType('pro')` seul : il faut charger la fiche qui vient de
+   * naître, sinon l'écran pro s'afficherait sur une fiche absente.
+   */
+  const devenirPro = async ({ siret, entreprise, metiers }) => {
+    await api.devenirPro({ siret, entreprise, metiers, cguVersion: VERSION_CGU });
+    await start('pro');
+    /* `start()` remet l'entreprise à « jamais lue » : sans cette lecture,
+       le profil qui s'ouvre ne disait ni l'entreprise ni l'étape 1 du
+       rappel tant qu'on ne retouchait pas l'onglet (relecture adverse).
+       Et pas `chargerPourLeProfil()` : elle lit l'ANCIEN type de compte,
+       celui de sa fermeture. */
+    chargerMonEntreprise();
+    setScreen('profil');
+    showBanner('Votre compte est professionnel. Vous pouvez publier.');
+  };
+
+  /* La porte de secours, depuis un compte particulier déjà ouvert. */
+  const demanderComptePro = async (demande) => {
+    await api.demanderComptePro(demande);
+    await chargerMaDemandePro();
+    setScreen('profil');
+    showBanner('Demande envoyée. Opus vous répondra dans vos notifications.');
+  };
+
+  /* LE JUSTIFICATIF va dans l'espace PRIVÉ `documents`, sous
+     `<compte>/demande-pro/…` — jamais par la messagerie, où une pièce
+     jointe ne se retire pas et se lit à deux. La base refuse d'ailleurs un
+     chemin rangé dans le dossier d'un autre (`demande_pro_justificatif_check`). */
+  const joindreJustificatif = async (doc) => {
+    try {
+      const chemin = await envoyerFichier({
+        uri: doc.uri, bucket: 'documents', nom: 'demande-pro/justificatif',
+        userId: api.getUserId(), nomOrigine: doc.nom || null, typeMime: doc.type || null,
+      });
+      await api.completerMaDemandePro({ justificatif: chemin });
+      await chargerMaDemandePro();
+      showBanner('Justificatif joint à votre demande.');
+    } catch (e) {
+      showErreur(messageClair(e, 'Le justificatif n’a pas pu être joint'));
+    }
+  };
+
+  const annulerDemandePro = async () => {
+    try {
+      await api.annulerMaDemandePro();
+      await chargerMaDemandePro();
+      showBanner('Votre demande est annulée.');
+    } catch (e) {
+      showErreur(messageClair(e, 'La demande n’a pas pu être annulée'));
+    }
+  };
+
+  /* « Revérifier mon SIRET », « Faire une nouvelle demande », « Je suis
+     artisan » : la même porte, ouverte sur le bon numéro. */
+  const ouvrirPasserPro = (siret = '', { demandeEnAttente = false } = {}) => {
+    setPasserProSiret(siret || '');
+    setPasserProEnAttente(!!demandeEnAttente);
+    setScreen('passerPro');
+  };
+
+  /* RATTACHER SON SIRET depuis « Mon entreprise ». Immédiat, avec son
+     propre bouton : rien à voir avec « Enregistrer ». L'écran reçoit
+     l'identité rendue par la base, pas celle qu'il a affichée. */
+  const rattacherMonSiret = async (siret) => {
+    const identite = await api.rattacherMonSiret(siret);
+    setMonEntreprise(identite);
+    setEntrepriseEtat('pret');
+    showBanner('Votre entreprise est rattachée à votre fiche.');
+    return identite;
+  };
+
+  /**
+   * ÉCRIRE AU DEMANDEUR, depuis l'administration.
+   *
+   * La conversation EXISTANTE si elle existe — sinon on en ouvre une —, et
+   * un message PRÉREMPLI qui dit qui écrit et pourquoi. Dans la liste des
+   * conversations, l'administrateur apparaît sous le nom de SA fiche
+   * d'artisan : sans cette phrase, le demandeur recevrait d'un « artisan »
+   * inconnu une question sur son entreprise — le schéma d'hameçonnage
+   * qu'il faudrait au contraire apprendre à refuser. Et on n'y demande
+   * JAMAIS une pièce : elle se joint depuis le profil, dans l'espace privé.
+   */
+  const ecrireAuDemandeur = async ({ compteId, nom, ville, siret }) => {
+    setAmorceMessage('Bonjour, ici l’administration d’Opus, au sujet de votre demande de '
+      + `compte professionnel (SIRET ${formaterSiret(siret)}). `);
+    const existante = conversations.find((c) => (c.autre && String(c.autre.id) === String(compteId))
+      || (c.contact && c.contact.id === `part-${compteId}`));
+    if (existante) {
+      await ouvrirConversation(existante.id);
+      return;
+    }
+    const ouverte = await contacterParticulier({
+      id: compteId, nom: nom || 'Demandeur', ville, avatarUrl: null,
+    });
+    /* L'AMORCE NE SURVIT PAS À UN ÉCHEC (relecture adverse, 15/10). Restée
+       en attente, elle se versait dans le premier champ vide de la
+       conversation SUIVANTE — celle d'un client, par exemple, qui aurait
+       reçu « ici l'administration d'Opus… » avec le SIRET d'un autre. */
+    if (!ouverte) setAmorceMessage('');
   };
 
   const chargerDemandesRecues = async ({ silencieux = false } = {}) => {
@@ -2573,7 +2850,7 @@ export default function OpusApp() {
         if (row) id = row.id;
       } catch (e) {
         showErreur("La conversation n'a pas pu être ouverte.");
-        return;
+        return false;
       }
       conv = {
         id,
@@ -2596,6 +2873,7 @@ export default function OpusApp() {
     }
 
     await ouvrirConversation(conv.id);
+    return true;
   };
 
   /* ---------- SOS : intervention d'urgence ---------- */
@@ -3066,25 +3344,9 @@ export default function OpusApp() {
   }
 
   if (!userType) {
-    /* Un texte légal consulté depuis l'écran d'inscription : il prend tout
-       l'écran, avec son propre retour. On ne perd pas ce qui était déjà
-       saisi, puisqu'AuthScreen reste monté derrière. */
-    if (legalAvantConnexion) {
-      return (
-        <View style={s.app}>
-          <StatusBar style="dark" />
-          <BackBar
-            title={TITRES_LEGAUX[legalAvantConnexion] || 'Informations légales'}
-            onBack={() => setLegalAvantConnexion(null)}
-          />
-          <LegalScreen texte={legalAvantConnexion} />
-        </View>
-      );
-    }
-
     return (
       <>
-        <StatusBar style="light" />
+        <StatusBar style={legalAvantConnexion ? 'dark' : 'light'} />
         {typeChoisi ? (
           <AuthScreen
             userType={typeChoisi}
@@ -3104,6 +3366,22 @@ export default function OpusApp() {
             <SqueletteFil />
           </View>
         )}
+        {/* UN TEXTE LÉGAL LU DEPUIS L'INSCRIPTION se pose PAR-DESSUS, et
+            l'écran d'inscription reste monté dessous. Le commentaire d'ici
+            l'affirmait depuis longtemps ; le code faisait l'inverse — un
+            `return` anticipé qui démontait l'inscription. Mesuré au
+            navigateur le 15/10/2026 : SIRET vérifié, nom, ville et e-mail
+            saisis, un appui sur « conditions d’utilisation », et au retour
+            tout était à refaire, consultation du répertoire comprise. */}
+        {!!legalAvantConnexion && (
+          <View style={s.legalPleinEcran}>
+            <BackBar
+              title={TITRES_LEGAUX[legalAvantConnexion] || 'Informations légales'}
+              onBack={() => setLegalAvantConnexion(null)}
+            />
+            <LegalScreen texte={legalAvantConnexion} />
+          </View>
+        )}
       </>
     );
   }
@@ -3113,7 +3391,7 @@ export default function OpusApp() {
     || screen === 'profilEdit' || screen === 'profilPublic'
     || screen === 'mesPublications' || screen === 'gererPortfolio'
     || screen === 'confidentialite' || screen === 'legal' || screen === 'admin'
-    || screen === 'clients'
+    || screen === 'clients' || screen === 'passerPro'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'publication' ? 'Publication'
@@ -3127,6 +3405,7 @@ export default function OpusApp() {
     : screen === 'confidentialite' ? 'Confidentialité et sécurité'
     : screen === 'admin' ? 'Administration'
     : screen === 'clients' ? 'Mes clients'
+    : screen === 'passerPro' ? 'Passer en compte professionnel'
     : screen === 'legal' ? (TITRES_LEGAUX[texteLegal] || 'Informations légales')
     : screen === 'creer' ? 'Publier'
     : activeConv && activeConv.contact ? activeConv.contact.titre : '';
@@ -3150,7 +3429,7 @@ export default function OpusApp() {
             else if (screen === 'legal') setScreen('confidentialite');
             else if (screen === 'profilEdit' || screen === 'mesPublications'
                      || screen === 'gererPortfolio' || screen === 'admin'
-                     || screen === 'clients'
+                     || screen === 'clients' || screen === 'passerPro'
                      || screen === 'confidentialite') setScreen('profil');
             else setScreen('home');
           }}
@@ -3499,6 +3778,23 @@ export default function OpusApp() {
             demandeMetiers={demandeMetiers}
             onProposerSpecialite={proposerSpecialite}
             onErreur={showErreur}
+            /* « Mon entreprise » (section 45) : l'identité rattachée, et la
+               seule façon de la changer — un geste immédiat, à part. */
+            identiteEntreprise={monEntreprise}
+            entrepriseRetiree={entrepriseRetiree}
+            entrepriseEtat={entrepriseEtat}
+            onChargerEntreprise={chargerMonEntreprise}
+            onRattacherSiret={rattacherMonSiret}
+          />
+        )}
+
+        {screen === 'passerPro' && userType === 'particulier' && (
+          <PasserProScreen
+            siretInitial={passerProSiret}
+            demandeEnAttente={passerProEnAttente}
+            onDevenirPro={devenirPro}
+            onDemander={demanderComptePro}
+            onErreur={showErreur}
           />
         )}
 
@@ -3529,8 +3825,25 @@ export default function OpusApp() {
             onDemanderPartenariat={demanderPartenariat}
             onRepondrePartenariat={repondrePartenariat}
             onViewProfile={viewProfile}
-            onEdit={() => setScreen('profilEdit')}
+            onEdit={() => { chargerPourLeProfil(); setScreen('profilEdit'); }}
             onMesPublications={() => setScreen('mesPublications')}
+            /* La carte de la demande de compte pro, lue EN BASE (section 45),
+               et la ligne sous le nom d'un artisan. */
+            entreprise={monEntreprise}
+            entrepriseEtat={entrepriseEtat}
+            demandePro={maDemandePro}
+            demandeProEtat={demandeProEtat}
+            onRechargerDemandePro={chargerMaDemandePro}
+            onPasserPro={ouvrirPasserPro}
+            onJoindreJustificatif={joindreJustificatif}
+            onAnnulerDemandePro={annulerDemandePro}
+            onEntrerEnPro={async () => {
+              await api.alignerTypeDuCompte('pro');
+              await start('pro');
+              chargerMonEntreprise();
+              setScreen('profil');
+            }}
+            onErreur={showErreur}
             /* Un particulier n'a pas de clients : la rangée n'existe pas
                pour lui (la règle du §3 appliquée à l'écran). */
             onClients={canPublish ? ouvrirCarnet : null}
@@ -3571,6 +3884,7 @@ export default function OpusApp() {
           <AdminScreen
             onRafraichirResume={chargerResumeAdmin}
             onErreur={showErreur}
+            onEcrire={ecrireAuDemandeur}
           />
         )}
 
@@ -3673,6 +3987,7 @@ export default function OpusApp() {
             adminDemande.current = true;
             chargerResumeAdmin();
           }
+          if (key === 'profil') chargerPourLeProfil();
         }}
       />
 
@@ -3787,6 +4102,11 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: C.bg,
     zIndex: 30,
+  },
+  legalPleinEcran: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: C.bg,
+    zIndex: 40,
   },
   loader: {
     ...StyleSheet.absoluteFillObject,

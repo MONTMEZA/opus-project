@@ -98,6 +98,11 @@ export function estUneAdresse(lieu) {
   return !!lieu && (lieu.genre === 'housenumber' || lieu.genre === 'street');
 }
 
+/** Un code INSEE de commune : cinq caractères, « 2A » et « 2B » compris pour la Corse. */
+function estUnCodeInsee(code) {
+  return !!code && /^[0-9][0-9AB][0-9]{3}$/i.test(String(code));
+}
+
 /** `__DEV__` n'existe que dans React Native ; ailleurs (tests, Node) il est absent. */
 function enDeveloppement() {
   return typeof __DEV__ !== 'undefined' && __DEV__;
@@ -147,12 +152,17 @@ function enDeveloppement() {
  * développement, on écrit la raison dans la console, sans quoi une requête
  * mal formée passe inaperçue.
  */
-export async function chercher(texte, { type = 'municipality', limite = 6 } = {}) {
+export async function chercher(texte, { type = 'municipality', limite = 6, citycode = null } = {}) {
   const q = (texte || '').trim();
   if (q.length < 3) return [];
 
   const params = new URLSearchParams({ q, limit: String(limite) });
   if (TYPES_VALIDES.includes(type)) params.set('type', type);
+  /* `citycode` : le code INSEE de la commune, un FILTRE de l'API. Il ne
+     sert que quand on le connaît déjà — c'est le cas d'une commune lue au
+     répertoire Sirene (voir `completerLieu`). Cinq caractères, « 2A » et
+     « 2B » compris ; tout le reste est ignoré plutôt qu'envoyé. */
+  if (estUnCodeInsee(citycode)) params.set('citycode', String(citycode).toUpperCase());
 
   try {
     const reponse = await fetch(`${BASE}?${params.toString()}`);
@@ -303,6 +313,28 @@ export async function completerLieu(lieu) {
 
   const { nom, departement } = decouperAffichage(lieu.affichage || lieu.ville);
   if (nom.length < 3) return lieu;
+
+  /* LE CODE INSEE, QUAND ON LE CONNAÎT, DÉPARTAGE MIEUX QUE TOUT — 15/10/2026.
+     L'inscription pro préremplit la ville depuis le répertoire Sirene, qui
+     donne le code INSEE de la commune : il n'y a alors plus rien à deviner,
+     pas même entre deux Sainte-Marie du même département. On demande à
+     l'API de filtrer sur ce code, et on n'accepte qu'un résultat qui le
+     porte. Une réponse sans lui retombe sur la règle du département —
+     jamais sur le premier résultat venu. */
+  if (estUnCodeInsee(lieu.codeInsee)) {
+    const exacts = await chercher(nom, { type: 'municipality', limite: 6, citycode: lieu.codeInsee });
+    const exact = exacts.find((r) => String(r.codeInsee || '').toUpperCase()
+      === String(lieu.codeInsee).toUpperCase());
+    if (exact) {
+      return {
+        ...lieu,
+        codePostal: lieu.codePostal || exact.codePostal || null,
+        codeInsee: exact.codeInsee,
+        latitude: exact.latitude,
+        longitude: exact.longitude,
+      };
+    }
+  }
 
   const resultats = await chercher(nom, { type: 'municipality', limite: 6 });
   if (!resultats.length) return lieu;

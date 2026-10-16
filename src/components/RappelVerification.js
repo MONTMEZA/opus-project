@@ -8,9 +8,9 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import {
-  C, F, T,
+  C, F, T, S, interligne,
 } from '../theme';
-import { ShieldCheck, ShieldX, FileText, ChevronRight } from './icons';
+import { ShieldCheck, ShieldX, FileText, ChevronRight, Check } from './icons';
 import {
   toutValide, etatKbis, etatAssurance, ATTENTE, VALIDE,
   pieceExistence, pieceAssurance,
@@ -46,7 +46,25 @@ const ETATS = {
   },
 };
 
-export default function RappelVerification({ statut, note, onAction, style, pro = null }) {
+/**
+ * DEPUIS LE 15/10/2026 (section 45), LE RAPPEL A DEUX ÉTAPES.
+ *
+ * Il réclamait « votre extrait Kbis ou avis SIRENE » à un artisan dont
+ * l'entreprise venait d'être trouvée au répertoire : on lui redemandait,
+ * sans dire pourquoi, ce qu'Opus semblait savoir déjà. Les deux ne prouvent
+ * pas la même chose — le répertoire dit que l'entreprise EXISTE, le badge
+ * dit qu'un humain a VU les pièces de celui qui la déclare — et le rappel le
+ * dit désormais, en deux lignes.
+ *
+ * `identite` : l'entreprise rattachée, `null` s'il n'y en a pas, et
+ * `undefined` tant qu'elle n'est pas lue — la première étape ne s'affiche
+ * alors pas, plutôt que de dire « aucune » à tort. Et « aucune », jamais
+ * « jamais » : une entreprise retirée par l'administration a été rattachée
+ * (relecture adverse du 15/10).
+ */
+export default function RappelVerification({
+  statut, note, onAction, style, pro = null, identite,
+}) {
   // Profil vérifié : plus rien à rappeler.
   if (!statut || statut === 'verifie') return null;
 
@@ -62,6 +80,27 @@ export default function RappelVerification({ statut, note, onAction, style, pro 
         <e.Icone size={16} color={e.couleur} />
         <Text style={[s.titre, { color: e.couleur }]}>{e.titre}</Text>
       </View>
+      {identite !== undefined && (
+        <View style={s.etapes}>
+          <View style={s.etape}>
+            {identite ? <Check size={13} color={C.ok} /> : <FileText size={13} color={C.muted} />}
+            <Text style={s.etapeTexte}>
+              {identite
+                ? (identite.source === 'administration'
+                  ? '1. Entreprise rattachée par l’administration d’Opus'
+                  : '1. Entreprise active au répertoire Sirene')
+                : '1. Entreprise : aucune rattachée (Modifier mon profil → Mon entreprise)'}
+            </Text>
+          </View>
+          <View style={s.etape}>
+            <FileText size={13} color={e.couleur} />
+            <Text style={s.etapeTexte}>
+              2. Vos pièces — le répertoire dit que l’entreprise existe ; le badge
+              dit qu’un humain a vu vos documents.
+            </Text>
+          </View>
+        </View>
+      )}
       <Text style={s.texte}>{texte}</Text>
       {!!note && <Text style={s.note}>Motif : {note}</Text>}
       <View style={s.action}>
@@ -151,6 +190,12 @@ const s = StyleSheet.create({
     borderLeftWidth: 4, padding: 12,
   },
   haut: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  etapes: { gap: S.xs, marginTop: S.sm },
+  etape: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm },
+  etapeTexte: {
+    flex: 1, minWidth: 0, fontFamily: F.inter5, fontSize: T.courant, color: C.ink,
+    lineHeight: interligne(T.courant),
+  },
   titre: { fontFamily: F.oswald6, fontSize: T.corps },
   texte: { fontSize: T.courant, color: C.muted, lineHeight: 17, marginTop: 5, fontFamily: F.inter },
   note: { fontSize: T.courant, color: C.bad, lineHeight: 17, marginTop: 5, fontFamily: F.inter6 },

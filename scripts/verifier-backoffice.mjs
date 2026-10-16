@@ -179,14 +179,287 @@ console.log('\nChaque action insérée est dans la contrainte');
   }
 }
 
+console.log('\nLe journal ne garde que l’état — TOUTES les fonctions qui y écrivent');
+{
+  /* POURQUOI UN RELEVÉ DE TOUT LE FICHIER — 15/10/2026, relecture adverse.
+     Le contrôle ne regardait que QUATRE fonctions, et n'y cherchait que
+     `to_jsonb(`. Trois autres copiaient encore la ligne entière (le texte
+     libre d'un signalement et son auteur, le motif libre d'une demande de
+     métiers, le mot proposé par un artisan) pendant que les textes légaux
+     promettaient « la décision, le motif écrit par l'administrateur ». Et
+     dans les quatre, deux sabotages passaient sans un ✘ :
+     `apres := apres || jsonb_build_object('message', d.message)` et
+     `apres := apres || jsonb_strip_nulls(row_to_json(d)::jsonb)`.
+
+     On relève donc TOUTES les fonctions qui écrivent au journal ; une
+     nouvelle doit être rangée dans une famille ICI, en disant ce qu'elle
+     garde. Et dans chacune : chaque état (`avant`, `apres`, `avant_e`,
+     `apres_e`) naît d'un `jsonb_build_object` dont les CLÉS sont dans la
+     liste de sa famille, sans `||` ni copie de ligne, et l'insertion au
+     journal ne passe que ces variables. */
+  const sqlNu = sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '');
+  const DECL = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?"?([a-z_0-9]+)"?\s*\(/gi;
+  const debuts = [...sqlNu.matchAll(DECL)];
+  const parNom = new Map();
+  debuts.forEach((m, i) => {
+    const borne = i + 1 < debuts.length ? debuts[i + 1].index : sqlNu.length;
+    const tranche = sqlNu.slice(m.index, borne);
+    const a = /\bas\s+(\$\w*\$)/i.exec(tranche);
+    if (!a) return;
+    const fin = tranche.indexOf(a[1], a.index + a[0].length);
+    parNom.set(m[1], tranche.slice(a.index + a[0].length, fin < 0 ? undefined : fin));
+  });
+  const BADGE = ['verifie', 'kbis_valide', 'assurance_valide', 'rge', 'verification_statut'];
+  const FAMILLES = {
+    admin_verifier_pro: BADGE,
+    admin_refuser_pro: BADGE,
+    admin_traiter_signalement: ['statut'],
+    admin_traiter_metier_demande: ['statut'],
+    admin_traiter_specialite: ['statut'],
+    admin_traiter_demande_pro: ['statut', 'motif', 'siren'],
+    admin_retirer_entreprise: ['statut', 'motif', 'siren'],
+  };
+  const ecrivains = [...parNom.entries()]
+    .filter(([, corps]) => /insert\s+into\s+public\.journal_admin\b/i.test(corps)).map(([n]) => n);
+  const inconnus = ecrivains.filter((n) => !FAMILLES[n]);
+  verifier(`chaque fonction qui écrit au journal est rangée dans une famille (${ecrivains.length} trouvées)`,
+    inconnus.length === 0 && Object.keys(FAMILLES).every((n) => ecrivains.includes(n)),
+    `${inconnus.length ? `inconnues : ${inconnus.join(', ')}` : 'une fonction attendue n’écrit plus au journal'}`
+    + ' — une fonction nouvelle doit dire ICI ce qu’elle garde');
+
+  /* Les arguments d'un appel, découpés aux virgules de PREMIER niveau. */
+  const argumentsDe = (texte) => {
+    const args = [];
+    let prof = 0;
+    let cour = '';
+    let chaine = false;
+    for (const c of texte) {
+      if (c === "'") chaine = !chaine;
+      if (!chaine && c === '(') prof += 1;
+      if (!chaine && c === ')') prof -= 1;
+      if (!chaine && c === ',' && prof === 0) { args.push(cour.trim()); cour = ''; } else cour += c;
+    }
+    if (cour.trim()) args.push(cour.trim());
+    return args;
+  };
+  /* `jsonb_build_object( … )` en entier, parenthèse fermante comprise. */
+  const appelEntier = (texte, debut) => {
+    let prof = 0;
+    let chaine = false;
+    for (let k = debut; k < texte.length; k += 1) {
+      const c = texte[k];
+      if (c === "'") chaine = !chaine;
+      if (chaine) continue;
+      if (c === '(') prof += 1;
+      if (c === ')') { prof -= 1; if (prof === 0) return texte.slice(debut, k + 1); }
+    }
+    return null;
+  };
+  const COPIE = /\b(to_jsonb|row_to_json|to_json|jsonb_populate_record|jsonb_populate_recordset|json_populate_record|jsonb_strip_nulls|hstore)\s*\(|\|\|/i;
+  const VARS = '(avant|apres|avant_e|apres_e)';
+
+  for (const nom of ecrivains.filter((n) => FAMILLES[n])) {
+    const corps = parNom.get(nom);
+    const permises = FAMILLES[nom];
+    const fautes = [];
+    let etats = 0;
+    const jugerExpression = (expr, ou) => {
+      const e = expr.trim();
+      if (COPIE.test(e)) { fautes.push(`${ou} : copie ou concaténation (${e.slice(0, 60)})`); return; }
+      if (!/^jsonb_build_object\s*\(/i.test(e)) { fautes.push(`${ou} : pas un jsonb_build_object (${e.slice(0, 60)})`); return; }
+      const appel = appelEntier(e, e.indexOf('('));
+      if (!appel || e.slice(e.indexOf('(') + appel.length).trim() !== '') {
+        fautes.push(`${ou} : quelque chose suit le jsonb_build_object (${e.slice(0, 60)})`);
+        return;
+      }
+      const args = argumentsDe(appel.slice(1, -1));
+      args.forEach((a, k) => {
+        if (k % 2 !== 0) return;
+        const cle = (/^'([a-z_]+)'$/.exec(a) || [])[1];
+        if (!cle) fautes.push(`${ou} : une clé qui n’est pas un mot écrit (${a})`);
+        else if (!permises.includes(cle)) fautes.push(`${ou} : clé « ${cle} » hors de la liste`);
+      });
+      etats += 1;
+    };
+    // 1. les affectations : `x := …;` et `x = …;` en tête d'instruction
+    for (const m of corps.matchAll(new RegExp(`(?:^|[;\\n]|\\bthen|\\belse|\\bbegin|\\bloop)\\s*${VARS}\\s*:?=\\s*([^;]*);`, 'gi'))) {
+      jugerExpression(m[2], `${m[1]} :=`);
+    }
+    // 2. les `select … into x`
+    for (const m of corps.matchAll(new RegExp(`select\\s+([\\s\\S]*?)\\s+into\\s+${VARS}\\b`, 'gi'))) {
+      // `select jsonb_build_object(…), p.entreprise into avant, qui` : seul le premier terme va au journal
+      const liste = argumentsDe(m[1]);
+      jugerExpression(liste[0] || '', `select … into ${m[2]}`);
+    }
+    // 3. l'insertion : avant / apres ne reçoivent QUE ces variables
+    const inserts = [...corps.matchAll(/insert\s+into\s+public\.journal_admin\s*\(([^)]*)\)\s*values\s*\(/gi)];
+    inserts.forEach((m) => {
+      const cols = m[1].split(',').map((x) => x.trim());
+      const ouvre = m.index + m[0].length - 1;
+      const valeurs = appelEntier(corps, ouvre);
+      const vals = valeurs ? argumentsDe(valeurs.slice(1, -1)) : [];
+      ['avant', 'apres'].forEach((col) => {
+        const k = cols.indexOf(col);
+        const v = k >= 0 ? (vals[k] || '') : '';
+        if (k >= 0 && !new RegExp(`^${VARS}$`, 'i').test(v)) {
+          fautes.push(`insertion : la colonne ${col} reçoit « ${v.slice(0, 50)} »`);
+        }
+      });
+    });
+    verifier(`\`${nom}\` : ses états ne portent que ${permises.join(', ')}`,
+      fautes.length === 0 && etats >= 2 && inserts.length >= 1,
+      fautes.length ? fautes.join(' ; ') : `${etats} état(s), ${inserts.length} insertion(s)`);
+  }
+
+  /* Et les lignes DÉJÀ écrites par ces trois files : sans rattrapage, le
+     journal de la vraie base garderait pour toujours ce que les fonctions
+     n'écrivent plus. Posé APRÈS la section 27 : un `update` est contrôlé
+     par la contrainte des actions en vigueur, qui ne connaît les actions de
+     la 27 qu'à partir de là (mesuré : placé en 25, le rejeu s'arrêtait). */
+  const iRattrapage = sqlNu.search(/update public\.journal_admin j[\s\S]{0,800}?where j\.cible_type in \('signalement', 'metier_demande', 'specialite'\)/);
+  const iSpecialite = sqlNu.search(/create or replace function public\.admin_traiter_specialite\(/);
+  verifier('les lignes déjà écrites par ces trois files sont rattrapées, après la section 27',
+    iRattrapage > 0 && iSpecialite > 0 && iRattrapage > iSpecialite
+    && /e\.key = 'statut'/.test(sqlNu.slice(iRattrapage, iRattrapage + 800)),
+    'sinon le texte libre d’un signaleur reste au journal de la vraie base, après son départ');
+}
+
+console.log('\nLa porte de secours et les entreprises (section 45)');
+{
+  /* Le corps d'une fonction : de sa déclaration au `$$;` qui la ferme, et
+     ses droits : ce qui suit, jusqu'à la déclaration suivante. Les droits
+     d'une fonction s'écrivent JUSTE APRÈS elle — dans une boucle qui avale
+     `undefined_function`, ils seraient passés sous silence sur une base
+     neuve (la leçon de `mes_donnees`, section 35). */
+  const morceau = (nom) => {
+    const i = section25.indexOf(`create or replace function public.${nom}(`);
+    if (i < 0) return { corps: '', apres: '' };
+    const fin = section25.indexOf('$$;', i);
+    const suivante = section25.indexOf('create or replace function', fin);
+    return {
+      corps: section25.slice(i, fin),
+      apres: section25.slice(fin, suivante < 0 ? undefined : suivante),
+    };
+  };
+  const SIGNATURES = {
+    admin_demandes_pro: '',
+    admin_traiter_demande_pro: 'uuid, text, text',
+    admin_retirer_entreprise: 'uuid, text',
+  };
+  for (const [nom, args] of Object.entries(SIGNATURES)) {
+    const { corps, apres } = morceau(nom);
+    verifier(`\`${nom}\` existe et exige le droit d’administration d’abord`,
+      /(moi\s+uuid := public\.admin_exige_droit\(\)|begin\s+perform public\.admin_exige_droit\(\);)/.test(corps),
+      'sans ce garde en tête, n’importe quel compte connecté ouvrirait des comptes pro');
+    const sig = `public\\.${nom}\\(${args.replace(/ /g, '\\s*')}\\)`;
+    verifier(`…et ses droits sont écrits JUSTE APRÈS elle (\`from public, anon\`, puis \`authenticated\`)`,
+      new RegExp(`revoke all on function ${sig} from public, anon;`).test(apres)
+      && new RegExp(`grant execute on function ${sig} to authenticated;`).test(apres),
+      'PostgreSQL accorde `execute` à PUBLIC sur toute fonction neuve : sans '
+      + '`from public`, elle serait appelable sans compte');
+  }
+
+  /* LE JOURNAL NE GARDE QUE L'ÉTAT. Mesuré le 15/10/2026 : il copiait la
+     fiche entière — téléphone, SIRET, e-mail, coordonnées — et la gardait
+     après la suppression du compte de la personne visée. */
+  for (const nom of ['admin_verifier_pro', 'admin_refuser_pro',
+    'admin_traiter_demande_pro', 'admin_retirer_entreprise']) {
+    verifier(`\`${nom}\` ne recopie aucune ligne entière (\`to_jsonb(\`)`,
+      !!morceau(nom).corps && !/to_jsonb\(/.test(morceau(nom).corps),
+      '`to_jsonb(ligne)` emporte toutes les colonnes, données personnelles '
+      + 'comprises, dans un journal que rien n’efface');
+  }
+  const clesDe = (corps, variables) => {
+    const cles = new Set();
+    const motif = new RegExp(`\\b(?:${variables.join('|')})\\s*:=\\s*jsonb_build_object\\(([\\s\\S]*?)\\);`, 'g');
+    let n = 0;
+    for (const m of corps.matchAll(motif)) {
+      n += 1;
+      // les clés sont les arguments de rang pair : 'cle', valeur, 'cle', valeur…
+      const args = m[1].split(',').map((x) => x.trim());
+      args.forEach((a, k) => { if (k % 2 === 0) cles.add(a.replace(/^'|'$/g, '')); });
+    }
+    return { cles, n };
+  };
+  for (const nom of ['admin_traiter_demande_pro', 'admin_retirer_entreprise']) {
+    const { cles, n } = clesDe(morceau(nom).corps, ['avant', 'apres', 'avant_e', 'apres_e']);
+    const intrus = [...cles].filter((c) => !['statut', 'motif', 'siren'].includes(c));
+    verifier(`\`${nom}\` : \`avant\`/\`apres\` ne portent que statut, motif, siren`,
+      n >= 2 && intrus.length === 0,
+      `${n} état(s) trouvé(s)${intrus.length ? `, clés en trop : ${intrus.join(', ')}` : ''} — `
+      + 'jamais le message libre, l’entreprise ou l’adresse');
+  }
+  for (const nom of ['admin_verifier_pro', 'admin_refuser_pro']) {
+    const corps = morceau(nom).corps;
+    const etats = [...corps.matchAll(/select jsonb_build_object\(([\s\S]*?)\)(?:, [a-z.]+)?\s+into (?:avant|apres)/g)];
+    const cles = new Set();
+    etats.forEach((m) => m[1].split(',').map((x) => x.trim())
+      .forEach((a, k) => { if (k % 2 === 0) cles.add(a.replace(/^'|'$/g, '')); }));
+    const permises = ['verifie', 'kbis_valide', 'assurance_valide', 'rge', 'verification_statut'];
+    verifier(`\`${nom}\` : \`avant\`/\`apres\` ne portent que les colonnes du badge`,
+      etats.length === 2 && [...cles].every((c) => permises.includes(c)),
+      `${etats.length} état(s) lu(s), clés : ${[...cles].join(', ')}`);
+  }
+
+  verifier('les lignes DÉJÀ écrites sont rattrapées (un `update`, rejouable)',
+    /update public\.journal_admin j[\s\S]{0,1500}?where j\.cible_type = 'profil_pro'/.test(section25)
+    && /e\.key in \('verifie', 'kbis_valide', 'assurance_valide',\s*'rge', 'verification_statut'\)/.test(section25),
+    'sans lui, la copie des fiches d’avant ce lot reste au journal pour toujours');
+
+  const traiter = morceau('admin_traiter_demande_pro').corps;
+  verifier('on ne statue pas sur SA PROPRE demande',
+    /if d\.compte_id = moi then\s*raise exception/.test(traiter));
+  verifier('refuser et transférer exigent une note d’au moins dix caractères',
+    (traiter.match(/length\(v_note\) < 10/g) || []).length >= 2
+    && /length\(v_motif\) < 10/.test(morceau('admin_retirer_entreprise').corps),
+    'celui qu’on refuse, ou à qui on retire son entreprise, doit savoir pourquoi');
+  verifier('ACCEPTER ne prend jamais en silence une entreprise tenue par un autre',
+    /if found and p_decision = 'accepter' then\s*raise exception[\s\S]{0,300}?using errcode = 'OP007'/.test(traiter),
+    'c’est `transferer` qui retire, avec une note, une ligne au journal et une '
+    + 'notification — jamais un écrasement sans trace');
+
+  /* Les notifications de l'administration n'ont PAS d'acteur : ce serait
+     l'administrateur, et elles porteraient la photo de sa fiche d'artisan. */
+  const notifs = [...traiter.matchAll(/insert into public\.notifications \(([^)]*)\)/g),
+    ...morceau('admin_retirer_entreprise').corps.matchAll(/insert into public\.notifications \(([^)]*)\)/g)];
+  verifier('les notifications au demandeur et au titulaire n’ont pas d’acteur',
+    notifs.length >= 4 && notifs.every((m) => !/acteur_id/.test(m[1])),
+    `${notifs.length} notification(s) trouvée(s)`);
+
+  /* `admin_resume` compte les demandes nouvelles : elle a dû passer en
+     plpgsql, parce qu'une fonction `language sql` est contrôlée à sa
+     création et que `demandes_pro` naît plus bas. */
+  const resumes = section25.match(/create or replace function public\.admin_resume\(\)/g) || [];
+  const resume = morceau('admin_resume').corps;
+  verifier('`admin_resume` compte les demandes de compte pro, en plpgsql, une seule fois',
+    resumes.length === 1 && /language plpgsql/.test(resume)
+    && /'demandes_pro', \(select count\(\*\) from public\.demandes_pro where statut = 'nouvelle'\)/.test(resume),
+    'en `language sql`, le premier passage du schéma sur une base neuve échoue');
+
+  /* REJOUABLE SUR UNE BASE QUI A SERVI. Les définitions plus étroites qui
+     précèdent la dernière doivent être `not valid` — sinon le rejeu s'arrête
+     sur la première ligne d'un acte plus récent. Mesuré. */
+  const defs = [...section25.matchAll(
+    /journal_admin_action_check\s*\n?\s*check \(action in \([\s\S]*?\)\)\s*(not valid)?\s*;/g)];
+  verifier(`les ${defs.length} définitions de l’action : toutes \`not valid\` sauf la dernière`,
+    defs.length >= 2 && defs.slice(0, -1).every((d) => d[1]) && !defs[defs.length - 1][1],
+    'une définition étroite VALIDÉE refuse au rejeu les actes que la suivante permet');
+  const defsC = [...section25.matchAll(/journal_admin_cible_check\s*\n?\s*check \(cible_type in \([^)]*\)\)\s*(not valid)?\s*;/g)];
+  verifier(`…et les ${defsC.length} définitions de la cible aussi`,
+    defsC.length >= 2 && defsC.slice(0, -1).every((d) => d[1]) && !defsC[defsC.length - 1][1]);
+}
+
 console.log('\nL’application ne contourne pas la base');
 {
   const apiPropre = sansCommentaires(api);
 
   /* Les six appels passent par `rpc` : la règle reste dans la base, là où
      un client modifié ne l'atteint pas. */
+  /* Les trois de la section 45 aussi : une file que l'écran ne lit pas est
+     le défaut du 01/10 — « X est prévenu », et personne ne l'était. */
   ['admin_resume', 'admin_file_verifications', 'admin_signalements',
     'admin_verifier_pro', 'admin_refuser_pro', 'admin_traiter_signalement',
+    'admin_demandes_pro', 'admin_traiter_demande_pro', 'admin_retirer_entreprise',
   ].forEach((f) => {
     verifier(`\`${f}\` est appelée par \`rpc\``,
       new RegExp(`rpc\\('${f}'`).test(apiPropre));

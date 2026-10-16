@@ -13,15 +13,28 @@
 \set COUVREUR '''bbbb0000-0000-4000-8000-00000000bbbb'''
 \set CLIENT   '''cccc0000-0000-4000-8000-00000000cccc'''
 
+-- --------------------------------------------------------------------------
+--  LA PREUVE DU RÉPERTOIRE — depuis la section 45 (15/10/2026), un compte
+--  pro ne naît qu'avec une preuve FRAÎCHE pour son SIRET. On la pose ici en
+--  superutilisateur, comme la fonction Edge `siret` la poserait, sur un SIRET
+--  FICTIF à clé juste que le répertoire Sirene ne connaît pas (vérifié : 0
+--  résultat). Sans elle, chaque compte pro de ce fichier serait refusé
+--  (OP006), et les cas suivants ne prouveraient plus rien.
+-- --------------------------------------------------------------------------
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000007500010', 'ESSAIS 36 — MACON', 'registre', now() + interval '1 hour'),
+  ('00000008300014', 'ESSAIS 36 — COUVREUR', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+
 create or replace function pg_temp.jeu_dessai() returns void
 language plpgsql as $$
 begin
   insert into auth.users (id, email, raw_user_meta_data) values
     ('aaaa0000-0000-4000-8000-00000000aaaa', 'macon@exemple-opus.test',
-     jsonb_build_object('type','pro','nom','Macon','entreprise','Macon',
+     jsonb_build_object('type','pro','siret','00000007500010','nom','Macon','entreprise','Macon',
        'metiers',jsonb_build_array('macon'),'ville','Lambesc (13)')),
     ('bbbb0000-0000-4000-8000-00000000bbbb', 'couvreur@exemple-opus.test',
-     jsonb_build_object('type','pro','nom','Couvreur','entreprise','Couvreur',
+     jsonb_build_object('type','pro','siret','00000008300014','nom','Couvreur','entreprise','Couvreur',
        'metiers',jsonb_build_array('couvreur'),'ville','Charleval (13)')),
     ('cccc0000-0000-4000-8000-00000000cccc', 'client@exemple-opus.test',
      jsonb_build_object('type','particulier','nom','Julie'));
@@ -292,3 +305,7 @@ select jsonb_array_length(public.mes_donnees() -> 'chantiers') as mes_chantiers;
 set local request.jwt.claim.sub = 'aaaa0000-0000-4000-8000-00000000aaaa';
 select jsonb_array_length(public.mes_donnees() -> 'chantiers') as ceux_d_un_autre;
 rollback;
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée.
+delete from public.preuves_siret where siret in ('00000007500010', '00000008300014');

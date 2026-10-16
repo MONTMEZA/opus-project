@@ -18,6 +18,18 @@
 \set PRO    '''aaaa0000-0000-4000-8000-00000000aaaa'''
 \set CLIENT '''bbbb0000-0000-4000-8000-00000000bbbb'''
 
+-- --------------------------------------------------------------------------
+--  LA PREUVE DU RÉPERTOIRE — depuis la section 45 (15/10/2026), un compte
+--  pro ne naît qu'avec une preuve FRAÎCHE pour son SIRET. On la pose ici en
+--  superutilisateur, comme la fonction Edge `siret` la poserait, sur un SIRET
+--  FICTIF à clé juste que le répertoire Sirene ne connaît pas (vérifié : 0
+--  résultat). Sans elle, chaque compte pro de ce fichier serait refusé
+--  (OP006), et les cas suivants ne prouveraient plus rien.
+-- --------------------------------------------------------------------------
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000002600013', 'ESSAIS 32 — PRO', 'registre', now() + interval '1 hour')
+on conflict (siret) do update set expire_le = excluded.expire_le;
+
 
 -- --------------------------------------------------------------------------
 \echo ''
@@ -44,7 +56,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Belaid Maconnerie',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Belaid Maconnerie',
                      'entreprise', 'Belaid Maconnerie',
                      'metiers', jsonb_build_array('macon'),
                      'ville', 'Lambesc (13)', 'code_postal', '13410',
@@ -70,7 +82,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Bidon',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Bidon',
                      'metiers', jsonb_build_array('macon'),
                      'ville', 'Nulle part',
                      'latitude', 'quelque part', 'longitude', '')
@@ -91,7 +103,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Hors bornes',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Hors bornes',
                      'metiers', jsonb_build_array('macon'),
                      'latitude', 500, 'longitude', 5.2636)
 );
@@ -108,7 +120,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'A moitie',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'A moitie',
                      'metiers', jsonb_build_array('macon'),
                      'latitude', 43.6508)
 );
@@ -125,7 +137,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Belaid',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Belaid',
                      'metiers', jsonb_build_array('macon'),
                      'ville', 'Lambesc (13)',
                      'latitude', 43.6508, 'longitude', 5.2636)
@@ -145,7 +157,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Belaid',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Belaid',
                      'metiers', jsonb_build_array('macon'),
                      'ville', 'Lambesc (13)',
                      'latitude', 43.6508, 'longitude', 5.2636)
@@ -164,7 +176,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Belaid',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Belaid',
                      'metiers', jsonb_build_array('macon'),
                      'ville', 'Lambesc (13)',
                      'latitude', 43.6508, 'longitude', 5.2636)
@@ -200,7 +212,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Sans lieu',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Sans lieu',
                      'metiers', jsonb_build_array('macon'))
 );
 insert into public.posts (author_id, type, texte, metier)
@@ -221,7 +233,7 @@ rollback;
 begin;
 insert into auth.users (id, email, raw_user_meta_data) values (
   :PRO, 'pro@exemple-opus.test',
-  jsonb_build_object('type', 'pro', 'nom', 'Belaid',
+  jsonb_build_object('type', 'pro', 'siret', '00000002600013', 'nom', 'Belaid',
                      'metiers', jsonb_build_array('macon'),
                      'ville', 'Lambesc (13)',
                      'latitude', 43.6508, 'longitude', 5.2636)
@@ -255,6 +267,10 @@ update public.posts p
  where pp.id = p.author_id and p.latitude is null and pp.latitude is not null;
 rollback;
 
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée.
+delete from public.preuves_siret where siret in ('00000002600013');
 
 \echo ''
 \echo '=== FIN DES ESSAIS DE LA SECTION 32 ==='

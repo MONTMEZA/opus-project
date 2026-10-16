@@ -86,7 +86,8 @@
     "verifier-recit": "node scripts/verifier-recit.mjs",
     "verifier-agent-nom": "node scripts/verifier-agent-nom.mjs",
     "verifier-portes": "node scripts/verifier-portes.mjs",
-    "verifier-pro": "node scripts/verifier-pro.mjs"
+    "verifier-pro": "node scripts/verifier-pro.mjs",
+    "verifier-siret": "node scripts/verifier-siret.mjs"
   },
   "private": true,
   "devDependencies": {

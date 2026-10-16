@@ -401,6 +401,151 @@ verifier('…et elle est DÉRIVÉE, jamais recopiée dans un état',
   + 'chose. Le linter du projet le refuse (react-hooks/set-state-in-effect).');
 
 /* ------------------------------------------------------------------ */
+console.log('\nLA DEMANDE DE COMPTE PRO (section 45) — une colonne, trois destinataires');
+
+/* La même colonne `demande_pro_id`, et trois personnes qui ne vont pas au
+   même endroit : l'administrateur à sa file, le demandeur refusé à son
+   profil, le demandeur accepté dans son espace d'artisan. Une seule erreur
+   d'aiguillage et l'appui « ne fait rien » — ou pire, ouvre l'écran
+   d'administration à quelqu'un qui n'a rien à y faire. */
+verifier('`notifications.demande_pro_id` existe, avec sa clé étrangère et son nettoyage',
+  /add column if not exists demande_pro_id uuid references public\.demandes_pro\(id\) on delete cascade/.test(schema),
+  'Sans clé étrangère, une demande supprimée laisserait une notification '
+  + 'qui pointe dans le vide.');
+
+for (const t of ['demande_pro_nouvelle', 'compte_pro_ouvert', 'demande_pro_refusee', 'entreprise_retiree']) {
+  verifier(`la base écrit vraiment \`${t}\` dans les notifications`,
+    new RegExp(`insert into public\\.notifications[^;]{0,400}'${t}'`).test(schema),
+    'Un type que l\'écran connaît et que la base n\'écrit jamais est un '
+    + 'aiguillage qui ne sert à personne — et l\'inverse, une notification '
+    + 'qui ne mène nulle part.');
+}
+
+verifier('`demandeProId` arrive jusqu\'à l\'écran',
+  /demandeProId: n\.demande_pro_id \|\| null/.test(api));
+
+/* QUI REÇOIT CHAQUE TYPE — 15/10/2026, relecture adverse. Le contrôle
+   exigeait seulement que le TYPE apparaisse dans un `insert into
+   public.notifications`. Un sabotage changeait la source des destinataires
+   (`from public.administrateurs a` → `from public.users a`) : chaque compte
+   aurait reçu « un compte attend d'être ouvert (SIRET …) » — et pour un
+   entrepreneur individuel, ce SIRET désigne une personne. Trois contrôles
+   passaient au vert. On lit donc, pour chaque ordre qui écrit l'un de ces
+   types, la PREMIÈRE valeur — celle qui va dans `user_id` — et, pour une
+   insertion par `select`, sa source. */
+{
+  const schemaNu = schema.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '');
+  const ordres = [...schemaNu.matchAll(/insert into public\.notifications\s*\(([^)]*)\)\s*([\s\S]*?);/g)]
+    .map((m) => ({ colonnes: m[1].split(',').map((x) => x.trim()), reste: m[2] }));
+  const DESTINATAIRES = {
+    demande_pro_nouvelle: ['select a.user_id from public.administrateurs a'],
+    compte_pro_ouvert: ['d.compte_id'],
+    demande_pro_refusee: ['d.compte_id'],
+    entreprise_retiree: ['le_detenteur.pro_id', 'p_pro'],
+  };
+  for (const [type, attendus] of Object.entries(DESTINATAIRES)) {
+    const vus = ordres.filter((o) => o.reste.includes(`'${type}'`)).map((o) => {
+      if (o.colonnes[0] !== 'user_id') return `(première colonne : ${o.colonnes[0]})`;
+      const sel = /^select\s+([^,]+),[\s\S]*?\bfrom\s+([a-z_.]+\s+[a-z_]+)\s*$/i.exec(o.reste.trim());
+      if (sel) return `select ${sel[1].trim()} from ${sel[2].trim()}`;
+      const val = /^values\s*\(\s*([^,]+),/i.exec(o.reste.trim());
+      return val ? val[1].trim() : `(illisible : ${o.reste.slice(0, 40)})`;
+    });
+    verifier(`\`${type}\` ne va qu'à ${attendus.join(' ou ')}`,
+      vus.length === attendus.length && vus.every((v) => attendus.includes(v))
+      && attendus.every((a) => vus.includes(a)),
+      `lu : ${vus.join(' | ') || '(aucun ordre)'}`);
+  }
+}
+
+/* LE TEMPS RÉEL TRADUIT COMME LE CHARGEMENT — 15/10/2026, relecture
+   adverse, mesuré : `onNotification` recopiait la ligne à la main et
+   oubliait les cibles. « Votre compte professionnel est ouvert : touchez
+   ici » arrivé en direct répondait « plus rien à montrer ». Une seule
+   traduction, et elle porte TOUTES les clés que `CIBLE_ATTENDUE` nomme. */
+{
+  const iT = api.indexOf('export function notificationDepuisLigne(');
+  const traduction = iT >= 0 ? api.slice(iT, api.indexOf('\n}\n', iT)) : '';
+  const cles = [...new Set(Object.values(CIBLE_ATTENDUE).filter(Boolean))];
+  const manquantes = cles.filter((c) => !new RegExp(`\\b${c}:`).test(traduction));
+  verifier('UNE traduction des lignes de notification, qui porte chaque cible',
+    !!traduction && manquantes.length === 0,
+    manquantes.length ? `manquent : ${manquantes.join(', ')}` : 'notificationDepuisLigne introuvable');
+  const iRT = app.indexOf('onNotification: (n) =>');
+  const tempsReel = iRT >= 0 ? app.slice(iRT, app.indexOf('});', iRT)) : '';
+  verifier('…utilisée par le chargement ET par le temps réel, jamais une copie à la main',
+    /notifications: \(notifRes\.data \|\| \[\]\)\.map\(notificationDepuisLigne\)/.test(api)
+    && /\.\.\.api\.notificationDepuisLigne\(n\)/.test(tempsReel)
+    && !/postId:\s*n\.post_id/.test(tempsReel),
+    'deux traductions pour une seule ligne finissent toujours par se contredire');
+}
+
+const aiguillage = {
+  demande_pro_nouvelle: 'administration',
+  compte_pro_ouvert: 'compte_pro',
+  demande_pro_refusee: 'profil',
+};
+const malAiguilles = Object.entries(aiguillage)
+  .filter(([t, q]) => destinationNotif({ type: t, demandeProId: 'd1' }).quoi !== q)
+  .map(([t, q]) => `${t} → ${destinationNotif({ type: t, demandeProId: 'd1' }).quoi} (attendu ${q})`);
+verifier('chaque destinataire va à SON endroit — le calcul TOURNE',
+  malAiguilles.length === 0,
+  malAiguilles.join(' ; '));
+
+verifier('une entreprise retirée mène à la fiche, sans cible',
+  destinationNotif({ type: 'entreprise_retiree' }).quoi === 'profil',
+  'L\'acte vient de l\'administration ; la notification ne porte ni acteur '
+  + 'ni cible, et la seule destination honnête est le profil du titulaire.');
+
+/* Toutes les destinations que le calcul peut rendre, et chacune doit
+   avoir SA branche dans le routage et SA phrase pour VoiceOver. Une
+   destination sans branche tombe dans « n'a plus rien à montrer » : un
+   appui qui ne fait rien, exactement ce que ce contrôle traque. */
+const destinations = new Set(TYPES_CONNUS.map((t) => {
+  const cle = CIBLE_ATTENDUE[t];
+  const n = { type: t };
+  if (cle) n[cle] = 'cible-de-contrôle';
+  return destinationNotif(n).quoi;
+}).filter((q) => q !== 'rien'));
+const sansBranche = [...destinations].filter((q) => !routage.includes(`ou.quoi === '${q}'`));
+verifier('chaque destination a SA branche dans le routage',
+  destinations.size >= 6 && sansBranche.length === 0,
+  `Sans branche : ${sansBranche.join(', ') || '(aucune — mais seulement '
+  + destinations.size + ' destinations lues)'}.`);
+
+const ouvrir = (ecranNotifs.match(/const OUVRIR = \{([\s\S]*?)\};/) || ['', ''])[1];
+const sansVoix = [...destinations].filter((q) => !new RegExp(`\\b${q}:`).test(ouvrir));
+verifier('…et SA phrase pour VoiceOver',
+  !!ouvrir && sansVoix.length === 0,
+  `Sans phrase : ${sansVoix.join(', ')}. Un libellé qui ne dit pas où l'on va `
+  + 'laisse croire à « Ouvrir la publication ».');
+
+const brancheAdmin = routage.slice(routage.indexOf("ou.quoi === 'administration'"),
+  routage.indexOf("ou.quoi === 'compte_pro'"));
+verifier('la file d\'administration s\'ouvre sur l\'écran d\'administration',
+  /setScreen\('admin'\)/.test(brancheAdmin) && /chargerResumeAdmin\(\)/.test(brancheAdmin),
+  'Sans le résumé chargé, l\'écran d\'administration s\'ouvrirait sur ses '
+  + 'squelettes et attendrait pour toujours.');
+
+const branchePro = routage.slice(routage.indexOf("ou.quoi === 'compte_pro'"),
+  routage.indexOf("ou.quoi === 'profil'"));
+const iAligne = branchePro.indexOf("api.alignerTypeDuCompte('pro')");
+const iStart = branchePro.indexOf("start('pro')");
+verifier('un compte ouvert en pro : la session est RÉALIGNÉE, puis l\'application redémarre en pro',
+  iAligne > 0 && iStart > iAligne,
+  'La base a changé `users.type` ; les métadonnées de la session disent '
+  + 'encore « particulier », et c\'est elles que `sessionLocale()` lit au '
+  + 'prochain lancement. Redémarrer sans réaligner rebasculerait le compte '
+  + 'en particulier au démarrage suivant.');
+
+const brancheProfil = routage.slice(routage.indexOf("ou.quoi === 'profil'"));
+verifier('…et un refus ou un retrait RELIT ce que la base vient de décider',
+  /n\.type === 'demande_pro_refusee'\) chargerMaDemandePro\(\)/.test(brancheProfil)
+  && /n\.type === 'entreprise_retiree'\) chargerMonEntreprise\(\)/.test(brancheProfil),
+  'La carte du profil doit dire ce que la base vient de décider, pas ce '
+  + 'qu\'on savait ce matin.');
+
+/* ------------------------------------------------------------------ */
 console.log('\nLE MODE DÉMONSTRATION DOIT FAIRE VIVRE LE MÉCANISME');
 
 verifier('les notifications d\'exemple portent un NOM d\'acteur',
