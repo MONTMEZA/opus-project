@@ -1665,3 +1665,14 @@ Quatre conditions, et la première décide des trois autres :
 Et une protection en retour : le producteur d'une base de données qui a fait
 un investissement substantiel est protégé contre son extraction (CPI L341-1).
 La base d'Opus le serait comme celles qu'elle ne peut pas copier aujourd'hui.
+
+**Tranché par le propriétaire le 17/10 :** « on ne donnera jamais aux autres
+artisans d'Opus d'où vient l'information — on ne dira pas “Dylan à Lambesc
+prend 25 €” ». La règle technique qui en découle, et qui va plus loin que ne
+pas écrire le nom : **aucun chiffre ne doit permettre de DEVINER la source.**
+« Placo à Lambesc : 25 € » désigne Dylan même sans son nom s'il est le seul
+plaquiste d'Opus à Lambesc. D'où quatre gardes, à tenir par la base et non par
+l'écran : un **nombre minimal d'artisans différents** derrière chaque chiffre
+(sinon rien ne s'affiche), une **zone large** (département ou région, jamais
+la commune), une **période de plusieurs mois**, et une **fourchette** plutôt
+qu'un prix exact.
