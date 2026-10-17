@@ -782,10 +782,19 @@ export default function OpusApp() {
       });
       /* On écarte ce qu'on a déjà : si quelqu'un publie entre deux pages, la
          même publication peut revenir. Mieux vaut un doublon écarté qu'un
-         doublon affiché. */
+         doublon affiché.
+
+         Et une page qui n'apporte RIEN laisse la liste telle quelle
+         (15/10/2026) : la même liste plutôt qu'une copie identique. Ce
+         n'est PAS, à lui seul, un rendu évité — une relecture l'a montré :
+         `setFinDuFil` et `setChargePage` redessinent l'application de toute
+         façon, et le fil reçoit un tableau filtré neuf à chaque rendu.
+         Le vrai gain demande des rappels stables et un fil mémorisé
+         (correction 6 du plan du 15/10, pas encore faite). */
       setPosts((ps) => {
         const connus = new Set(ps.map((x) => String(x.id)));
-        return [...ps, ...suite.filter((x) => !connus.has(String(x.id)))];
+        const neuves = suite.filter((x) => !connus.has(String(x.id)));
+        return neuves.length ? [...ps, ...neuves] : ps;
       });
       setFinDuFil(fin);
     } catch (e) {

@@ -16,6 +16,7 @@ import {
 } from '../data/demo';
 import { METIER_PAR_DEFAUT } from './metiers';
 import { correspond } from './filtre-fil';
+import { decouperPage, finDemo } from './page-fil';
 import { photoActeur } from './notifications';
 
 /* En HAUT, jamais en `await import()` : la règle du 01/10 — Metro découpe
@@ -506,7 +507,7 @@ export async function loadAll() {
         nbCommentaires: p.comments ? p.comments.length : 0,
         curseur: String(i + 1),
       })),
-      finDuFil: initialPosts.length <= TAILLE_PAGE_FIL,
+      finDuFil: finDemo(0, TAILLE_PAGE_FIL, initialPosts.length),
       /* Le mode démonstration doit se comporter EXACTEMENT comme la base :
          un dernier message, un nombre de non-lus, et les messages déjà là
          (ici on les garde, il n'y en a que quelques-uns). Sans cela, la
@@ -568,8 +569,11 @@ export async function loadAll() {
        l'une ici, l'autre dans `chargerPageFil` — finiraient par ne plus
        rendre la même chose, et la première page du fil ne ressemblerait
        plus aux suivantes. Sans argument, la fonction rend exactement ce
-       que rendait ce `select`. */
-    supabase.rpc('fil_filtre', { p_limite: TAILLE_PAGE_FIL }),
+       que rendait ce `select`.
+
+       UNE DE PLUS que la page (15/10/2026) : c'est la seule façon de savoir
+       s'il en reste sans aller chercher une page vide — voir `page-fil.js`. */
+    supabase.rpc('fil_filtre', { p_limite: TAILLE_PAGE_FIL + 1 }),
     supabase.from('post_likes').select('post_id').eq('user_id', uid),
     supabase.from('saved_posts').select('post_id').eq('user_id', uid),
     supabase.from('follows').select('following_id').eq('follower_id', uid),
@@ -645,9 +649,14 @@ export async function loadAll() {
   const likedSet = new Set((likesRes.data || []).map((l) => l.post_id));
 
   /* Première page du fil. `null` pour les commentaires : « pas encore
-     chargés », à distinguer de « chargés, aucun ». */
-  const posts = (postsRes.data || []).map((p) => rowToPost(p, likedSet, null));
-  const finDuFil = (postsRes.data || []).length < TAILLE_PAGE_FIL;
+     chargés », à distinguer de « chargés, aucun ».
+
+     `fin` se déduit de la ligne DE TROP, pas d'une page incomplète : avec
+     exactement vingt publications en base, « moins de vingt » répondait
+     non, et le bas du fil partait chercher une page vide. */
+  const premiere = decouperPage(postsRes.data, TAILLE_PAGE_FIL);
+  const posts = premiere.lignes.map((p) => rowToPost(p, likedSet, null));
+  const finDuFil = premiere.fin;
 
   /* Les conversations arrivent déjà résumées par la base. `messages` reste
      vide : on charge le fil d'une conversation quand on l'ouvre, pas avant.
@@ -891,6 +900,13 @@ function rowToPost(p, likedSet, commentaires = null) {
     return {
       id: p.id, type: 'ad', annonceur: p.annonceur, accroche: p.accroche,
       cta: p.cta, media: p.media,
+      /* UNE PUBLICITÉ A AUSSI UN CURSEUR (17/10/2026). Sans lui, une page
+         qui finissait sur une publicité faisait croire au bout du fil :
+         `chargerPlusDeFil` ne savait pas d'où repartir, et posait
+         « fin ». Relevé sur la vraie base : les deux publicités aux rangs
+         16 et 17 — trois publications de plus, et elles fermaient la
+         première page. */
+      curseur: p.created_at,
     };
   }
   return {
@@ -982,7 +998,7 @@ async function pageFilDemo(options = {}) {
   const page = retenus
     .slice(depart, depart + TAILLE_PAGE_FIL)
     .map((p, i) => postDemo(p, depart + i + 1));
-  return { posts: page, fin: depart + TAILLE_PAGE_FIL >= retenus.length };
+  return { posts: page, fin: finDemo(depart, TAILLE_PAGE_FIL, retenus.length) };
 }
 
 /**
@@ -1014,11 +1030,13 @@ async function pageFilSupabase(options = {}) {
     p_abonnements: !!f.abonnements,
     p_videos: !!f.videos,
     p_avant: curseur || null,
-    p_limite: TAILLE_PAGE_FIL,
+    /* Une de plus que la page, comme au chargement : les deux portes du
+       fil doivent répondre pareil à « y en a-t-il d'autres ? ». */
+    p_limite: TAILLE_PAGE_FIL + 1,
   });
   if (reponse.error) throw reponse.error;
 
-  const lignes = reponse.data || [];
+  const { lignes, fin } = decouperPage(reponse.data, TAILLE_PAGE_FIL);
   /* Les « j'aime » UNIQUEMENT pour les publications de cette page. C'est
      tout l'intérêt : on ne redemande plus la totalité de la table. */
   const ids = lignes.filter((p) => !p.is_ad).map((p) => p.id);
@@ -1031,7 +1049,7 @@ async function pageFilSupabase(options = {}) {
 
   return {
     posts: lignes.map((p) => rowToPost(p, likedSet, null)),
-    fin: lignes.length < TAILLE_PAGE_FIL,
+    fin,
   };
 }
 

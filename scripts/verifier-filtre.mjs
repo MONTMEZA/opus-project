@@ -304,8 +304,13 @@ console.log('\nLe mode démonstration fait VIVRE le mécanisme');
     + 'pas ici — et c’est la règle du 01/10');
   verifier('les abonnements de démonstration sont à UN endroit',
     (api.match(/ABONNEMENTS_DEMO/g) || []).length >= 3);
+  /* `+ 1` depuis le 15/10/2026 : les deux portes du fil demandent une
+     ligne de plus que la page, pour savoir s'il en reste sans aller
+     chercher une page vide (`page-fil.js`). Ce contrôle a rougi comme il
+     devait — la forme de l'appel changeait ; la règle qu'il tient, elle,
+     ne bouge pas : le chargement initial passe par `fil_filtre`. */
   verifier('le chargement initial passe par fil_filtre, lui aussi',
-    /supabase\.rpc\('fil_filtre', \{ p_limite: TAILLE_PAGE_FIL \}\)/.test(api),
+    /supabase\.rpc\('fil_filtre', \{ p_limite: TAILLE_PAGE_FIL \+ 1 \}\)/.test(api),
     'deux requêtes pour la même liste finiraient par ne plus rendre la même '
     + 'chose, et la première page du fil ne ressemblerait plus aux suivantes');
 }

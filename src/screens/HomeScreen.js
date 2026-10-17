@@ -21,6 +21,7 @@ import { Search, X } from '../components/icons';
 import useCompteurDeVues from '../lib/compteur-vues';
 import { vuesPossibles } from '../lib/vues';
 import { CLAVIER } from '../lib/clavier';
+import { FORMATS_VIDEO } from '../lib/formats-publication';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
 
@@ -127,7 +128,22 @@ export default function HomeScreen({
     if (feedMode === 'video') setSlideActive(indexCible);
   }, [feedMode, indexCible]);
 
-  const [visibles, setVisibles] = useState(() => new Set());
+  /* CE QUI EST À L'ÉCRAN NE REDESSINE PLUS LE FIL — 15/10/2026.
+     L'ensemble visible était un ÉTAT : chaque carte qui franchissait le
+     seuil de 65 % — vingt fois pour douze gestes — redessinait cet écran,
+     puis la liste, qui refabrique alors chacune de ses cellules, et la
+     carte qui entrait ou sortait en entier, photo comprise. C'était le
+     premier poste de rendu mesuré pendant un défilement (76 ms par commit
+     en développement, processeur bridé quatre fois), et il retardait le
+     montage des cartes suivantes.
+
+     Or une seule chose à l'écran en dépend : QUELLE VIDÉO JOUE. L'ensemble
+     complet vit donc dans une référence, qui sert aux vues ; seules les
+     VIDÉOS visibles restent un état, et on ne l'écrit que quand elles
+     changent. Faire défiler des photos ne redessine plus rien ici. */
+  const visibles = useRef(new Set());
+  const [videosVisibles, setVideosVisibles] = useState(() => new Set());
+  const cleVideos = useRef('');
   const reglesVisibilite = useRef({ itemVisiblePercentThreshold: 65 });
 
   /* LE DÉFILEMENT JUSQU'À LA PUBLICATION VISÉE A ÉTÉ RETIRÉ le 07/10.
@@ -148,18 +164,59 @@ export default function HomeScreen({
      une publication traversée en descendant n'est pas une vue. */
   const signalerVues = useCompteurDeVues({ envoyer: onVues, actif: !!onVues });
 
-  const surVisibilite = useRef(({ viewableItems }) => {
-    setVisibles(new Set(viewableItems.map((v) => v.item.id)));
-  });
-
   /* `surVisibilite` est une RÉFÉRENCE figée au premier rendu — une
      `FlatList` refuse qu'on change `onViewableItemsChanged` en cours de
-     route. Elle ne peut donc pas voir `signalerVues`, ni `posts`. D'où un
-     effet séparé, qui suit l'ensemble visible et la liste. */
-  useEffect(() => {
+     route. Elle ne voit donc ni la liste, ni qui je suis, ni le mode : elle
+     les lit ici, dans une référence qu'on tient à jour.
+
+     Elle part des valeurs du premier rendu, pour qu'un rappel arrivé avant
+     le premier effet lise déjà la vraie liste. Elle est récrite ensuite
+     dans un EFFET, jamais pendant le rendu : le linter de React le refuse,
+     et il a raison — deux rendus ne doivent pas laisser deux valeurs
+     différentes. */
+  const lecture = useRef({ posts, moiId, feedMode, signalerVues });
+
+  /* LA SEULE ÉCRITURE de « ce qui est à l'écran peut compter une vue ».
+     Le rappel la lance quand l'écran change, l'effet ci-dessous quand la
+     LISTE change sous un écran immobile — une page qui arrive, un retour
+     du fil Vidéos. Deux formules pour la même vérité finiraient par se
+     contredire : c'est la leçon des voyants du 04/10.
+
+     Rien ici ne redessine : `signalerVues` n'écrit que dans une référence
+     (`compteur-vues.js`), et c'est le calcul de `vues.js` qui décide
+     ensuite ce qui a vraiment été regardé. */
+  const signalerCeQuiEstAffiche = useRef(() => {
+    const {
+      posts, moiId, feedMode, signalerVues,
+    } = lecture.current;
     if (feedMode === 'video') return;
-    signalerVues(vuesPossibles(posts.filter((p) => visibles.has(p.id)), moiId));
-  }, [visibles, posts, moiId, signalerVues, feedMode]);
+    signalerVues(vuesPossibles(posts.filter((p) => visibles.current.has(p.id)), moiId));
+  });
+
+  const surVisibilite = useRef(({ viewableItems }) => {
+    visibles.current = new Set(viewableItems.map((v) => v.item.id));
+    signalerCeQuiEstAffiche.current();
+
+    /* L'état, seulement quand les VIDÉOS à l'écran changent — et aucun
+       `setState` sinon : un nouvel ensemble est un nouvel objet pour React,
+       même s'il contient les mêmes vidéos, et il redessinerait à chaque
+       fois. On compare donc une CLÉ, qui suit l'ordre de la liste : la même
+       composition donne toujours la même. */
+    const videos = viewableItems
+      .filter((v) => FORMATS_VIDEO.has(v.item.format))
+      .map((v) => v.item.id);
+    const cle = videos.join('|');
+    if (cle === cleVideos.current) return;
+    cleVideos.current = cle;
+    setVideosVisibles(new Set(videos));
+  });
+
+  useEffect(() => {
+    lecture.current = {
+      posts, moiId, feedMode, signalerVues,
+    };
+    signalerCeQuiEstAffiche.current();
+  }, [posts, moiId, feedMode, signalerVues]);
 
   /* LE FIL VIDÉO N'A PAS D'ENSEMBLE VISIBLE : il n'y a qu'une diapositive à
      l'écran, et c'est `slideActive`. Une vidéo qu'on laisse tourner une
@@ -329,7 +386,12 @@ export default function HomeScreen({
           renderItem={({ item: p }) => (
             <PostCard
               post={p}
-              actif={visibles.has(p.id)}
+              /* `actif` ne sert qu'à une VIDÉO : jouer quand elle est à
+                 l'écran, s'arrêter quand elle en sort. Le passer à une
+                 photo faisait céder la mémorisation de sa carte à chaque
+                 franchissement de seuil — elle se redessinait en entier,
+                 double-appui compris, pour rien. */
+              actif={videosVisibles.has(p.id)}
               onOuvrirVideo={onOuvrirVideo}
               pro={p.proId ? pros[p.proId] : null}
               pros={pros}
