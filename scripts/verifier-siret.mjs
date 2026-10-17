@@ -744,7 +744,7 @@ const verifierEdge = () => {
   const pos = [
     ['la clé de contrôle', corps.search(/cleSiretValide\(/)],
     ['les lectures', corps.search(/rpc\('compter_appel_siret',\s*\{\s*p_cle:\s*`lecture:/)],
-    ['« déjà utilisé »', corps.search(/from\('entreprise_registre'\)/)],
+    ['« déjà utilisé »', corps.search(/rpc\('siren_reserve'/)],
     ['le cache', corps.search(/from\('preuves_siret'\)\s*\.select\(/)],
     ['la limite par connexion', corps.search(/rpc\('compter_appel_siret',\s*\{\s*p_cle:\s*`ip:/)],
     ['la limite pour tous', corps.search(/rpc\('compter_appel_siret',\s*\{\s*p_cle:\s*'global'/)],
@@ -762,20 +762,30 @@ const verifierEdge = () => {
     /p_cle:\s*`lecture:\$\{empreinte\}`/.test(corps) && /p_max:\s*LIMITES\.lecture\.max/.test(corps)
     && /debutDeFenetre\(instant,\s*LIMITES\.lecture\.duree_ms\)/.test(corps));
 
-  /* DÉJÀ UTILISÉ : sur une identité ACTIVE ou GELÉE, par le SIREN, sans
-     rien dire. */
+  /* DÉJÀ UTILISÉ : un SIREN RÉSERVÉ par l'administration, ou une identité
+     ACTIVE, sans rien dire. La réserve passe par `siren_reserve()` — la
+     même règle que les portes de la base (section 45.3 bis) —, et AVANT
+     tout le reste. */
   const dejaUtilise = corps.slice(pos[2][1], pos[3][1]);
-  verifier('« déjà utilisé » se juge sur le SIREN, l’identité active OU gelée par l’administration',
+  const iReserve = dejaUtilise.search(/rpc\('siren_reserve'/);
+  const iRegistre = dejaUtilise.search(/from\('entreprise_registre'\)/);
+  verifier('« déjà utilisé » regarde d’abord la RÉSERVE, par `siren_reserve()` et le SIREN',
+    /rpc\('siren_reserve',\s*\{\s*p_siren:\s*siret\.slice\(0,\s*9\)\s*\}\)/.test(dejaUtilise)
+    && /if \(reserve\.data === true\) return await repondre\(\{\s*issue:\s*'deja_utilise'\s*\}\);/.test(dejaUtilise)
+    && iReserve >= 0 && iRegistre > iReserve,
+    'sans la réserve, l’entreprise retirée à un squatteur lui revenait — et, avant le 17/10, il suffisait '
+    + 'de supprimer son compte pour la lever (section 45.3 bis)');
+  verifier('…puis l’identité ACTIVE, par le SIREN — et plus jamais une colonne `gele`',
     /\.eq\('siren',\s*siret\.slice\(0,\s*9\)\)/.test(dejaUtilise)
-    && /\.or\('retiree_le\.is\.null,gele\.is\.true'\)/.test(dejaUtilise)
-    && !/\.is\('retiree_le',\s*null\)/.test(dejaUtilise),
-    'sans le gel, l’entreprise retirée à un squatteur lui revenait la minute suivante (section 45.3)');
+    && /\.is\('retiree_le',\s*null\)/.test(dejaUtilise)
+    && !/gele/.test(dejaUtilise));
   verifier('…et la réponse ne porte QUE l’issue', /repondre\(\{\s*issue:\s*'deja_utilise'\s*\}\)/.test(dejaUtilise));
   /* L'EXCEPTION DE L'APPELANT : sa propre fiche, reconnue par SON jeton —
-     et jamais pour une entreprise gelée. */
-  verifier('…sauf pour la fiche de l’appelant, reconnue par son jeton, et jamais si l’entreprise est gelée',
-    /const gelee = porteurs\.some\(\(p\) => p\.gele\)/.test(dejaUtilise)
-    && /gelee \? null : await appelant\(admin, req\.headers\.get\('Authorization'\)\)/.test(dejaUtilise)
+     et jamais pour une entreprise réservée, puisque la réserve a déjà
+     répondu avant qu'on lise le jeton. */
+  const iAppelant = dejaUtilise.search(/await appelant\(admin, req\.headers\.get\('Authorization'\)\)/);
+  verifier('…sauf pour la fiche de l’appelant, reconnue par son jeton, et jamais si l’entreprise est réservée',
+    iAppelant > iReserve && iReserve >= 0
     && /porteurs\.every\(\(p\) => p\.pro_id === moi\)/.test(dejaUtilise)
     && /admin\.auth\.getUser\(jeton\)/.test(code),
     'un artisan qui a déménagé doit pouvoir faire consulter son nouvel établissement — et un squatteur retiré, jamais');
@@ -907,6 +917,64 @@ const verifierEdge = () => {
 };
 
 /* ================================================================== */
+const verifierReserve = () => {
+  console.log('\nLa réserve d’un SIREN retiré survit au compte (section 45.3 bis)');
+  // Les commentaires SQL (de ligne et de bloc) partent AVANT de chercher :
+  // ce bloc les explique en nommant l'ancienne colonne, et un contrôle qui
+  // accuse sa propre documentation ne vérifie rien.
+  const sql = lire('supabase/schema.sql')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--[^\n]*/g, '');
+  const iTable = sql.indexOf('create table if not exists public.sirens_reserves (');
+  const table = iTable >= 0 ? sql.slice(iTable, sql.indexOf(');', iTable)) : '';
+  verifier('la table `sirens_reserves` existe', table.length > 0);
+  verifier('…et ne référence NI la fiche NI le compte : elle survit à leur suppression',
+    table.length > 0 && !/references/i.test(table),
+    'une clé étrangère en cascade, et supprimer son compte lèverait de nouveau la réserve — le trou du 17/10');
+  verifier('…sans aucune donnée d’identité : ni nom, ni motif, ni adresse',
+    table.length > 0 && !/\b(nom|denomination|motif|adresse|email)\b/.test(table));
+  verifier('…lue et écrite par la base seule : RLS, aucun droit de table, aucune politique',
+    /alter table public\.sirens_reserves enable row level security;/.test(sql)
+    && /revoke all on public\.sirens_reserves from anon, authenticated;/.test(sql)
+    && !/create policy[^;]*on public\.sirens_reserves/.test(sql));
+  verifier('`siren_reserve()` : security definer, fermée aux clients, ouverte à la clé de service',
+    /create or replace function public\.siren_reserve\(p_siren text\)[\s\S]{0,200}security definer/.test(sql)
+    && /revoke execute on function public\.siren_reserve\(text\) from public, anon, authenticated;/.test(sql)
+    && /grant execute on function public\.siren_reserve\(text\) to service_role;/.test(sql)
+    && !/grant execute on function public\.siren_reserve\(text\) to (anon|authenticated)/.test(sql));
+
+  /* Les trois portes automatiques : l'inscription, `devenir_pro()`,
+     `rattacher_mon_siret()`. Toutes par la même règle. */
+  const portes = sql.match(/where e\.siren = la_preuve\.siren and e\.retiree_le is null\)\s+or public\.siren_reserve\(la_preuve\.siren\) then/g) || [];
+  verifier(`les trois portes « prise » consultent \`siren_reserve()\` (${portes.length})`, portes.length === 3);
+  verifier('…et aucune ne lit plus une colonne `gele`', !/\be\.gele\b|\bgele = (true|false)\b|\band gele\b|\bg\.gele\b/.test(sql));
+
+  /* Qui pose, qui lève. Une seule écriture de chaque, et dans la bonne
+     fonction : un second écrivain serait une seconde règle. */
+  const fonctionDe = (i) => {
+    const avant = sql.lastIndexOf('create or replace function public.', i);
+    const m = /create or replace function public\.(\w+)/.exec(sql.slice(avant, avant + 120));
+    return m ? m[1] : '?';
+  };
+  const poses = [...sql.matchAll(/insert into public\.sirens_reserves \(siren, reserve_par\)/g)].map((m) => fonctionDe(m.index));
+  verifier('la réserve n’est POSÉE que par `admin_retirer_entreprise`',
+    poses.length === 1 && poses[0] === 'admin_retirer_entreprise', `trouvée dans : ${poses.join(', ')}`);
+  const levees = [...sql.matchAll(/update public\.sirens_reserves/g)].map((m) => fonctionDe(m.index));
+  verifier('…et n’est LEVÉE que par `admin_traiter_demande_pro` — jamais effacée',
+    levees.length === 1 && levees[0] === 'admin_traiter_demande_pro'
+    && /set leve_le = clock_timestamp\(\), leve_par = moi/.test(sql)
+    && !/delete from public\.sirens_reserves/.test(sql), `levée dans : ${levees.join(', ')}`);
+  verifier('l’ancienne colonne est reprise PUIS retirée, dans cet ordre',
+    sql.indexOf("from public.entreprise_registre where gele") >= 0
+    && sql.indexOf("from public.entreprise_registre where gele") < sql.indexOf('alter table public.entreprise_registre drop column if exists gele;'));
+
+  const essais = sansCommentaires(lire('supabase/essais-section-45-bis.sql'));
+  verifier('l’essai supprime VRAIMENT le compte retiré, puis éprouve les portes',
+    /delete from auth\.users where id = :S;/.test(essais)
+    && essais.indexOf('delete from auth.users where id = :S;') < essais.indexOf("public.devenir_pro('{\"siret\":\"00000024000010\"}'::jsonb)"),
+    'sans la suppression, l’essai éprouverait le gel de la première version, pas le trou du 17/10');
+};
+
 const verifierPaquet = () => {
   console.log('\nLe contrôle est lancé avec les autres');
   const scripts = JSON.parse(lire('package.json')).scripts || {};
@@ -914,7 +982,7 @@ const verifierPaquet = () => {
 };
 
 verifierEmpreinte()
-  .then(() => { verifierEdge(); verifierPaquet(); })
+  .then(() => { verifierEdge(); verifierReserve(); verifierPaquet(); })
   .catch((e) => { echecs += 1; console.error(`  ✘ le contrôle a planté : ${e && e.stack}`); })
   .finally(() => {
     console.log(echecs ? `\n${echecs} échec(s).` : '\nTout est en ordre.');

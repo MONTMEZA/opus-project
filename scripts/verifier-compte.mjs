@@ -260,12 +260,12 @@ console.log('\nUn compte pro naît avec une entreprise trouvée au répertoire (
     + 'e-mail n’est pas activée : un DOMAINE accepte n’importe quelle adresse '
     + 'inventée (relecture adverse, mesuré). Une preuve d’essai nomme UN compte.');
 
-  verifier('une entreprise déjà rattachée — ou GELÉE par l’administration — est refusée (OP007), par le SIREN',
-    /from public\.entreprise_registre e\s+where e\.siren = la_preuve\.siren and \(e\.retiree_le is null or e\.gele\)\) then\s+raise exception/.test(corps)
+  verifier('une entreprise déjà rattachée — ou RÉSERVÉE par l’administration — est refusée (OP007), par le SIREN',
+    /from public\.entreprise_registre e\s+where e\.siren = la_preuve\.siren and e\.retiree_le is null\)\s+or public\.siren_reserve\(la_preuve\.siren\) then\s+raise exception/.test(corps)
     && /using errcode = 'OP007'/.test(corps),
     'le SIREN et pas le SIRET : déménager change le SIRET, pas l’entreprise. '
-    + 'Et sans le gel, le squatteur à qui l’administration a retiré une '
-    + 'entreprise la reprenait en ouvrant un compte neuf (section 45.3)');
+    + 'Et sans la réserve, le squatteur à qui l’administration a retiré une '
+    + 'entreprise la reprenait en ouvrant un compte neuf (section 45.3 bis)');
 
   verifier('…et les deux refus passent AVANT toute écriture',
     insertUsers > 0

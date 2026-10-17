@@ -1475,11 +1475,12 @@ begin
 
     -- UN COMPTE PAR ENTREPRISE. Le SIREN et pas le SIRET : déménager change
     -- le SIRET (un nouvel établissement), pas l'entreprise.
-    -- Une entreprise GELÉE par l'administration (section 45.3) est prise
-    -- elle aussi : sinon le squatteur à qui on l'a retirée la reprendrait
-    -- en ouvrant un compte neuf.
+    -- Une entreprise RÉSERVÉE par l'administration (section 45.3 bis) est
+    -- prise elle aussi : sinon le squatteur à qui on l'a retirée la
+    -- reprendrait en ouvrant un compte neuf.
     if exists (select 1 from public.entreprise_registre e
-                where e.siren = la_preuve.siren and (e.retiree_le is null or e.gele)) then
+                where e.siren = la_preuve.siren and e.retiree_le is null)
+       or public.siren_reserve(la_preuve.siren) then
       raise exception
         'Cette entreprise est déjà rattachée à un compte Opus. Si c''est la '
         'vôtre, inscrivez-vous en demandant une vérification à la main : '
@@ -8508,14 +8509,8 @@ create table if not exists public.entreprise_registre (
   verifie_le           timestamptz not null,
   retiree_le           timestamptz,
   retrait_motif        text,
-  -- Posé par l'ADMINISTRATION quand elle retire une entreprise : voir plus
-  -- bas, « UN RETRAIT DOIT TENIR ».
-  gele                 boolean not null default false,
   created_at           timestamptz not null default clock_timestamp()
 );
-
-alter table public.entreprise_registre
-  add column if not exists gele boolean not null default false;
 
 alter table public.entreprise_registre drop constraint if exists entreprise_siren_check;
 alter table public.entreprise_registre add constraint entreprise_siren_check
@@ -8542,19 +8537,18 @@ alter table public.entreprise_registre add constraint entreprise_source_check
    l'administration venait de décider : le bouton « Retirer » ne servait à
    rien.
 
-   D'où `gele` : une entreprise retirée PAR L'ADMINISTRATION reste prise
-   pour toutes les portes automatiques (l'inscription, `devenir_pro()`,
+   D'où la RÉSERVE (45.3 bis, `siren_reserve()`) : une entreprise retirée
+   PAR L'ADMINISTRATION reste prise pour toutes les portes automatiques (l'inscription, `devenir_pro()`,
    `rattacher_mon_siret()` et la fonction Edge, qui répond alors
    `deja_utilise`). Seule l'administration la rend, en acceptant ou en
    transférant une demande examinée à la main — c'est le chemin du vrai
-   titulaire, et c'est elle qui lève le gel. Un retrait par le titulaire
-   lui-même (un déménagement, une mise à jour depuis le répertoire) ne gèle
-   rien.
+   titulaire, et c'est elle qui lève la réserve. Un retrait par le
+   titulaire lui-même (un déménagement, une mise à jour depuis le
+   répertoire) ne réserve rien.
 
-   La règle « l'entreprise est prise » s'écrit donc partout
-   `retiree_le is null or gele` ; l'index d'unicité, lui, ne porte que sur
-   les identités ACTIVES — une identité gelée est retirée, et c'est bien la
-   seule qu'il ne faut pas compter deux fois. */
+   La règle « l'entreprise est prise » s'écrit donc partout : une identité
+   ACTIVE (`retiree_le is null`), ou `siren_reserve()` ; l'index d'unicité,
+   lui, ne porte que sur les identités actives. */
 create unique index if not exists idx_entreprise_siren_active
   on public.entreprise_registre (siren) where retiree_le is null;
 create unique index if not exists idx_entreprise_pro_active
@@ -8576,6 +8570,91 @@ create policy "lecture de mon entreprise" on public.entreprise_registre
    la leçon de la section 18.2. `authenticated` ne garde que la lecture. */
 revoke all on public.entreprise_registre from anon;
 revoke insert, update, delete, truncate on public.entreprise_registre from authenticated;
+
+-- --------------------------------------------------------------------------
+--  45.3 bis LA RÉSERVE SURVIT AU COMPTE — 17/10/2026
+--
+--  Le gel de la première version vivait SUR LA LIGNE retirée
+--  (`entreprise_registre.gele`). Or cette ligne appartient à la fiche
+--  (`pro_id … on delete cascade`), et la fiche au compte : le squatteur à
+--  qui l'administration retirait un SIREN n'avait qu'à SUPPRIMER SON COMPTE
+--  pour emporter le gel avec lui, puis ouvrir un compte neuf avec le même
+--  numéro. Prouvé sur PostgreSQL 16 avant d'écrire ces lignes : retrait,
+--  suppression, puis inscription → compte pro, entreprise rattachée, aucun
+--  refus. Trouvé par la critique de la mise à jour du plan devis. La vraie
+--  base ne comptait alors aucune entreprise gelée : le trou n'a jamais
+--  servi.
+--
+--  > Ce qui doit survivre au compte ne peut pas vivre dans une ligne qui
+--  > meurt avec lui.
+--
+--  D'où une table à part, qui ne référence NI la fiche NI le compte, et ne
+--  porte que le minimum : le SIREN et des dates. Ni nom, ni motif — le motif
+--  reste au journal de l'administration, comme la décision elle-même. Pour
+--  un entrepreneur individuel, un SIREN est une donnée personnelle : sa
+--  conservation après la suppression du compte est dite dans la politique
+--  de confidentialité (`legal.js`, « Combien de temps »).
+--
+--  Une réserve ne s'efface pas : elle se LÈVE (`leve_le`). L'historique
+--  reste lisible, et aucune fonction n'a besoin d'un ordre de suppression.
+--
+--  `siren_reserve()` est la SEULE écriture de la règle : l'inscription,
+--  `devenir_pro()`, `rattacher_mon_siret()`, la file de l'administration et
+--  la fonction Edge `siret` s'y fient. Personne d'autre ne lit la table.
+-- --------------------------------------------------------------------------
+create table if not exists public.sirens_reserves (
+  siren       text primary key,
+  reserve_le  timestamptz not null default clock_timestamp(),
+  -- L'administrateur qui a retiré, et celui qui a rendu. Sans clé
+  -- étrangère : la réserve doit survivre à tous les comptes, le sien
+  -- compris ; le journal de l'administration garde la trace nominative.
+  reserve_par uuid,
+  leve_le     timestamptz,
+  leve_par    uuid
+);
+
+alter table public.sirens_reserves drop constraint if exists siren_reserve_check;
+alter table public.sirens_reserves add constraint siren_reserve_check
+  check (siren ~ '^[0-9]{9}$');
+
+/* AUCUNE politique, et aucun droit de table pour les clients : seules les
+   fonctions `security definer` y écrivent et la lisent. */
+alter table public.sirens_reserves enable row level security;
+revoke all on public.sirens_reserves from anon, authenticated;
+
+/* REPRISE de l'ancien gel, sur une base qui l'avait encore. Une base neuve
+   n'a jamais eu la colonne : rien à reprendre. */
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'entreprise_registre'
+                and column_name = 'gele') then
+    execute 'insert into public.sirens_reserves (siren, reserve_le)
+             select siren, max(coalesce(retiree_le, clock_timestamp()))
+               from public.entreprise_registre where gele
+              group by siren
+             on conflict (siren) do nothing';
+  end if;
+end $$;
+alter table public.entreprise_registre drop column if exists gele;
+
+create or replace function public.siren_reserve(p_siren text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.sirens_reserves r
+                  where r.siren = p_siren and r.leve_le is null);
+$$;
+
+/* Personne n'appelle cette fonction depuis l'application : les portes qui
+   s'en servent sont des fonctions de la base, et la fonction Edge passe par
+   la clé de service. La laisser ouverte, ce serait dire à quiconque tape un
+   numéro qu'un compte en a été écarté. */
+revoke execute on function public.siren_reserve(text) from public, anon, authenticated;
+grant execute on function public.siren_reserve(text) to service_role;
 
 -- --------------------------------------------------------------------------
 --  45.4 `demandes_pro` — la porte de secours
@@ -9019,13 +9098,14 @@ begin
         'l''application.'
         using errcode = 'OP009';
     end if;
-    /* Une entreprise GELÉE (45.3) est prise elle aussi — y compris pour la
-       fiche à qui l'administration l'a retirée : c'est exactement le
-       squatteur qui la reprenait la minute suivante. Le message ne dit pas
-       « gelée » : ce serait dire à quiconque tape ce numéro qu'un compte
-       en a été écarté. */
+    /* Une entreprise RÉSERVÉE (45.3 bis) est prise elle aussi — y compris
+       pour la fiche à qui l'administration l'a retirée : c'est exactement
+       le squatteur qui la reprenait la minute suivante. Le message ne dit
+       pas « réservée » : ce serait dire à quiconque tape ce numéro qu'un
+       compte en a été écarté. */
     if exists (select 1 from public.entreprise_registre e
-                where e.siren = la_preuve.siren and (e.retiree_le is null or e.gele)) then
+                where e.siren = la_preuve.siren and e.retiree_le is null)
+       or public.siren_reserve(la_preuve.siren) then
       raise exception
         'Cette entreprise est déjà rattachée à un compte Opus, ou réservée par '
         'l''administration d''Opus : elle ne peut pas être rattachée '
@@ -9135,9 +9215,10 @@ begin
       '24 heures : touchez « Vérifier » à nouveau.'
       using errcode = 'OP006';
   end if;
-  -- Prise, ou GELÉE par l'administration (45.3) : même refus.
+  -- Prise, ou RÉSERVÉE par l'administration (45.3 bis) : même refus.
   if exists (select 1 from public.entreprise_registre e
-              where e.siren = la_preuve.siren and (e.retiree_le is null or e.gele)) then
+              where e.siren = la_preuve.siren and e.retiree_le is null)
+     or public.siren_reserve(la_preuve.siren) then
     raise exception
       'Cette entreprise est déjà rattachée à un autre compte Opus. Si c''est '
       'la vôtre, demandez une vérification à la main : l''administration '
@@ -9355,10 +9436,10 @@ begin
                          'verifie', dt.verifie,
                          'nb_publications', dt.nb_publications) end,
              /* L'entreprise a été RETIRÉE par l'administration, et reste
-                réservée (45.3) : l'écran le dit, pour que celui qui
+                réservée (45.3 bis) : l'écran le dit, pour que celui qui
                 accepte sache qu'il rend une entreprise déjà contestée. */
-             'reservee_le', (select max(g.retiree_le) from public.entreprise_registre g
-                              where g.siren = left(f.siret, 9) and g.gele)
+             'reservee_le', (select r.reserve_le from public.sirens_reserves r
+                              where r.siren = left(f.siret, 9) and r.leve_le is null)
            )
            order by f.rang, f.ordre), '[]'::jsonb)
     into resultat
@@ -9512,13 +9593,13 @@ begin
               'L''entreprise rattachée à votre compte a été retirée par l''administration d''Opus : ' || v_note);
     end if;
 
-    -- L'administration REND l'entreprise : c'est le seul chemin qui lève le
-    -- gel posé par un retrait (45.3). Après examen à la main, elle va au
-    -- compte de cette demande ; tant que personne ne l'a examinée, elle
-    -- restait réservée.
-    update public.entreprise_registre
-       set gele = false
-     where siren = le_siren and gele;
+    -- L'administration REND l'entreprise : c'est le seul chemin qui lève la
+    -- réserve posée par un retrait (45.3 bis). Après examen à la main, elle
+    -- va au compte de cette demande ; tant que personne ne l'a examinée,
+    -- elle restait réservée.
+    update public.sirens_reserves
+       set leve_le = clock_timestamp(), leve_par = moi
+     where siren = le_siren and leve_le is null;
 
     -- Le compte devient pro. Le verrou 44.1 laisse passer : `auth.uid()`
     -- est l'administrateur, pas le titulaire.
@@ -9594,7 +9675,7 @@ grant execute on function public.admin_traiter_demande_pro(uuid, text, text) to 
    pro — sa fiche est indestructible (section 31) et porte des avis de
    tiers — mais il n'a plus d'entreprise rattachée.
 
-   ET L'ENTREPRISE RESTE RÉSERVÉE (`gele`, 45.3) : aucune porte automatique
+   ET L'ENTREPRISE RESTE RÉSERVÉE (`sirens_reserves`, 45.3 bis) : aucune porte automatique
    ne la rend, ni à ce compte ni à un autre. Sans cela, mesuré : le
    squatteur la reprenait la minute suivante, et le bouton ne servait à
    rien. Le vrai titulaire la récupère par une demande, que
@@ -9629,8 +9710,16 @@ begin
   end if;
 
   update public.entreprise_registre
-     set retiree_le = clock_timestamp(), retrait_motif = v_motif, gele = true
+     set retiree_le = clock_timestamp(), retrait_motif = v_motif
    where id = l_identite.id;
+
+  -- La réserve vit HORS de la ligne retirée : elle survit à la suppression
+  -- du compte (45.3 bis). Un second retrait du même SIREN la repose.
+  insert into public.sirens_reserves (siren, reserve_par)
+  values (l_identite.siren, moi)
+  on conflict (siren) do update
+     set reserve_le = clock_timestamp(), reserve_par = excluded.reserve_par,
+         leve_le = null, leve_par = null;
 
   avant_e := jsonb_build_object('statut', 'active', 'siren', l_identite.siren);
   apres_e := jsonb_build_object('statut', 'retiree', 'siren', l_identite.siren);

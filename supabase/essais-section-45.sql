@@ -652,7 +652,8 @@ set local request.jwt.claim.sub = :ADMIN;
 select public.admin_retirer_entreprise(:S, 'Squatteur signalé par le vrai titulaire.') is not null as retiree;
 reset role;
 select count(*) filter (where retiree_le is null)          as identites_actives,
-       count(*) filter (where retiree_le is null or gele)  as prise_pour_l_edge
+       (count(*) filter (where retiree_le is null) > 0
+        or public.siren_reserve('000000240'))::int         as prise_pour_l_edge
   from public.entreprise_registre where siren = '000000240';
 rollback;
 
@@ -981,8 +982,8 @@ reset role;
 select u.type as type_de_t,
        (select count(*) from public.entreprise_registre
          where siren = '000000240' and retiree_le is null and pro_id = :T) as active_chez_t,
-       (select count(*) from public.entreprise_registre
-         where siren = '000000240' and gele) as gelees
+       (select count(*) from public.sirens_reserves
+         where siren = '000000240' and leve_le is null) as gelees
   from public.users u where u.id = :T;
 rollback;
 

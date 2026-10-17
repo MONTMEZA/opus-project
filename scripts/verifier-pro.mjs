@@ -359,8 +359,8 @@ console.log('\n5 bis. Seules TROIS fonctions de la base écrivent `users.type`')
       /select pr\.\* into la_preuve\s+from public\.preuves_siret pr\s+where pr\.siret = le_siret\s+and pr\.expire_le > now\(\)\s+and \(pr\.source = 'registre'\s+or \(pr\.source = 'essai'\s+and pr\.pour_email = lower\(coalesce\(mon_email, ''\)\)\)\);\s+if not found then\s+raise exception[^;]*using errcode = 'OP006';/
         .test(avant),
       'sans elle, un particulier passe en pro sans SIRET — la faille même que la section 44 ferme');
-    verifier('…et une entreprise prise ou gelée est refusée (OP007), avant d’écrire le type',
-      /from public\.entreprise_registre e\s+where e\.siren = la_preuve\.siren and \(e\.retiree_le is null or e\.gele\)\) then\s+raise exception[^;]*using errcode = 'OP007';/
+    verifier('…et une entreprise prise ou réservée est refusée (OP007), avant d’écrire le type',
+      /from public\.entreprise_registre e\s+where e\.siren = la_preuve\.siren and e\.retiree_le is null\)\s+or public\.siren_reserve\(la_preuve\.siren\) then\s+raise exception[^;]*using errcode = 'OP007';/
         .test(avant));
     verifier('…et seul un compte PARTICULIER passe par là',
       /if not found or le_compte\.type is distinct from 'particulier' then\s+raise exception/.test(avant));

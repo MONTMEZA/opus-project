@@ -42,6 +42,19 @@ gratuit, en ligne sur le guichet unique des formalités des entreprises
 (formalites.entreprises.gouv.fr). Aucune cotisation tant qu'il n'y a aucune
 recette. À faire quand l'ouverture au public approche, pas avant.
 
+**c) Retirer une colonne devenue inutile — facultatif, sans urgence (17/10).**
+Supabase → SQL Editor, coller cette ligne, puis « Run » :
+
+```sql
+alter table public.entreprise_registre drop column if exists gele;
+```
+
+Elle portait l'ancien verrou des entreprises retirées, remplacé le 17/10 par
+une table à part (CLAUDE.md, « La réserve survit au compte »). Plus rien ne
+la lit ni ne l'écrit, et aucune ligne ne l'utilise : la laisser ne casse
+rien. Le connecteur de Claude refuse de la retirer lui-même — un geste qui
+efface une colonne attend une confirmation humaine, et c'est voulu.
+
 **b) Supabase → Authentication → Policies → activer la protection contre les
 mots de passe compromis.** C'est un interrupteur, et c'est la dernière alerte
 de sécurité du projet. Elle vérifie les mots de passe contre la base des

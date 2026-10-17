@@ -840,6 +840,39 @@ essais SQL seulement.
 4. `siret` et `demande_pro` restent dans les métadonnées de `auth.users`,
    hors de l'export RGPD — comme la ville et les métiers depuis la section 31.
 
+#### La réserve survit au compte — section 45.3 bis (17/10/2026)
+
+Trouvé par la critique de la mise à jour du plan devis, en relisant le
+schéma. Le gel du retrait vivait SUR LA LIGNE retirée
+(`entreprise_registre.gele`), et cette ligne meurt avec le compte
+(`pro_id … on delete cascade`). **Le squatteur à qui l'administration
+retirait un SIREN n'avait qu'à supprimer son compte**, puis s'inscrire de
+nouveau avec le même numéro. Prouvé sur PostgreSQL 16 avant de corriger :
+retrait, suppression, inscription → compte pro, entreprise rattachée, aucun
+refus. La vraie base ne comptait aucune entreprise gelée : le trou n'a
+jamais servi.
+
+> **Ce qui doit survivre au compte ne peut pas vivre dans une ligne qui
+> meurt avec lui.**
+
+D'où `sirens_reserves` — le SIREN et des dates, sans clé étrangère, sans nom
+ni motif — et `siren_reserve()`, seule écriture de la règle, appelée par
+les trois portes de la base et par la fonction Edge. Une réserve se LÈVE
+(`leve_le`), elle ne s'efface pas. Sa conservation après la suppression du
+compte est dite dans la politique de confidentialité.
+
+Vérifié : les quinze cas de `essais-section-45-bis.sql`, les dix-neuf autres
+fichiers d'essais rejoués sur l'ancien et le nouveau schéma (seuls des
+numéros de ligne changent), la migration d'une base qui avait un gel, onze
+sabotages refusés. Sur la vraie base : les six fonctions comparées AVANT
+(identiques une fois les commentaires retirés), migration additive, fonction
+Edge redéployée et relue octet pour octet, appelée pour de vrai.
+
+**Une colonne morte reste sur la vraie base** : `entreprise_registre.gele`.
+Plus rien ne la lit ni ne l'écrit. Le connecteur refuse de la retirer (voir
+« Le connecteur Supabase refuse un `drop` ») : c'est au propriétaire, une
+ligne dans l'éditeur SQL — `docs/A-FAIRE.md` §1.0.
+
 ### Un commentaire auquel on a répondu ne se récrit plus
 
 Ajouté le 30/09/2026, à la demande du propriétaire, et c'est la même famille
@@ -1728,6 +1761,7 @@ de caractères envoyée.
 |---|---|
 | `revoke …`, même dans un `do` | **passe** |
 | `alter table … drop constraint if exists` | **passe** (mesuré le 03/10) |
+| `alter table … drop column if exists` | **expire** (mesuré le 17/10 : retirer une colonne efface des données, et le connecteur attend une confirmation) |
 | `drop policy …` | expire |
 | `execute 'drop policy …'` **dans un `do`** | **expire aussi** |
 | `delete from …`, même dans un corps de fonction | expire |

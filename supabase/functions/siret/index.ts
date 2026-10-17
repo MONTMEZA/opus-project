@@ -28,8 +28,8 @@
  *      question « ce SIREN a-t-il un compte ? » ne se pose plus sans fin
  *      (15/10/2026, relecture adverse — l'étape 2 précède les vraies
  *      limites, et pour un EI le SIREN désigne une personne) ;
- *   2. le SIREN déjà porté par une identité active, ou GELÉ par
- *      l'administration (section 45.3) → `deja_utilise`. AVANT le cache :
+ *   2. le SIREN déjà porté par une identité active, ou RÉSERVÉ par
+ *      l'administration (section 45.3 bis) → `deja_utilise`. AVANT le cache :
  *      une preuve de 24 h ne sait pas qu'une autre personne a pris
  *      l'entreprise entre-temps (relecture 2). Une seule exception : la
  *      fiche de l'APPELANT lui-même — un artisan qui a déménagé doit
@@ -269,11 +269,13 @@ async function traiter(req: Request): Promise<Response> {
        entreprise), pas sur le SIRET (un établissement) : sinon un second
        établissement de la même entreprise ouvrirait un second compte.
 
-       PRIS veut dire : une identité ACTIVE, ou une identité GELÉE par
-       l'administration (section 45.3, 15/10/2026). Sans le gel, mesuré,
+       PRIS veut dire : une identité ACTIVE, ou un SIREN RÉSERVÉ par
+       l'administration (section 45.3 bis). Sans la réserve, mesuré,
        l'entreprise retirée à un squatteur lui revenait la minute suivante
-       — et un compte neuf la prenait aussi bien. La réponse ne dit pas
-       laquelle des deux : `deja_utilise`, et rien d'autre.
+       — et un compte neuf la prenait aussi bien. La réserve vit hors de la
+       ligne retirée depuis le 17/10 : supprimer son compte ne la lève plus.
+       La réponse ne dit pas laquelle des deux : `deja_utilise`, et rien
+       d'autre.
 
        SAUF pour la fiche de l'appelant, identifiée par SON jeton : sans
        cette exception, « Mon entreprise → Mettre à jour » n'avait AUCUN
@@ -281,16 +283,23 @@ async function traiter(req: Request): Promise<Response> {
        « déjà utilisé » à l'artisan qui faisait consulter le nouvel
        établissement de sa propre entreprise. `rattacher_mon_siret()`
        exige ensuite, de son côté, que ce soit bien le même SIREN. */
+    /* La réserve d'abord, et par `siren_reserve()` : c'est la SEULE
+       écriture de la règle, la même que celle des portes de la base. Une
+       entreprise réservée est refusée à tout le monde, y compris au compte
+       à qui elle a été retirée. */
+    const reserve = await admin.rpc('siren_reserve', { p_siren: siret.slice(0, 9) });
+    if (reserve.error) return panne('Lecture des entreprises réservées impossible.', reserve.error);
+    if (reserve.data === true) return await repondre({ issue: 'deja_utilise' });
+
     const porteur = await admin.from('entreprise_registre')
-      .select('pro_id, gele')
+      .select('pro_id')
       .eq('siren', siret.slice(0, 9))
-      .or('retiree_le.is.null,gele.is.true')
+      .is('retiree_le', null)
       .limit(5);
     if (porteur.error) return panne('Lecture des entreprises rattachées impossible.', porteur.error);
-    const porteurs = (porteur.data ?? []) as { pro_id: string; gele: boolean }[];
+    const porteurs = (porteur.data ?? []) as { pro_id: string }[];
     if (porteurs.length > 0) {
-      const gelee = porteurs.some((p) => p.gele);
-      const moi = gelee ? null : await appelant(admin, req.headers.get('Authorization'));
+      const moi = await appelant(admin, req.headers.get('Authorization'));
       const lAppelant = !!moi && porteurs.every((p) => p.pro_id === moi);
       if (!lAppelant) return await repondre({ issue: 'deja_utilise' });
     }
