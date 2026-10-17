@@ -36,6 +36,12 @@
       "expo-audio",
       "expo-image",
       "expo-notifications"
-    ]
+    ],
+    "owner": "montmeza",
+    "extra": {
+      "eas": {
+        "projectId": "32996432-49f3-477c-ae9c-ae96cf84edd5"
+      }
+    }
   }
 }
