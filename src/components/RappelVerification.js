@@ -15,6 +15,7 @@ import {
   toutValide, etatKbis, etatAssurance, ATTENTE, VALIDE,
   pieceExistence, pieceAssurance,
 } from '../lib/verification';
+import { enMilieuDePhrase } from '../lib/texte';
 
 const ETATS = {
   non_soumis: {
@@ -23,8 +24,8 @@ const ETATS = {
     titre: 'Obtenez le badge vérifié',
     /* Le texte dépend du MÉTIER (un avocat n'a pas de décennale), donc il
        se calcule. La table ne garde que ce qui est vraiment commun. */
-    texte: (pro) => `Envoyez votre ${pieceExistence().nom.toLowerCase()} et votre `
-      + `attestation — ${pieceAssurance(pro).nom.toLowerCase()}. `
+    texte: (pro) => `Envoyez votre ${enMilieuDePhrase(pieceExistence().nom)} et votre `
+      + `attestation — ${enMilieuDePhrase(pieceAssurance(pro).nom)}. `
       + 'Les particuliers font deux fois plus confiance à un profil vérifié.',
     action: 'Envoyer mes documents',
   },
@@ -126,7 +127,7 @@ export function EtatVerificationPublic({ pro }) {
         <View style={{ flex: 1 }}>
           <Text style={[s.publicTitre, { color: C.ok }]}>Profil vérifié par Opus</Text>
           <Text style={s.publicTexte}>
-            {pieceExistence().court} et {pieceAssurance(pro).court.toLowerCase()} contrôlés
+            {pieceExistence().court} et {enMilieuDePhrase(pieceAssurance(pro).court)} contrôlés
             {pro.verifieLe ? ` le ${formatDate(pro.verifieLe)}` : ''}.
           </Text>
         </View>
@@ -166,8 +167,8 @@ export function EtatVerificationPublic({ pro }) {
 /** Ne nomme que les justificatifs réellement manquants. */
 function manquantsDe(pro) {
   const liste = [];
-  if (etatKbis(pro) !== VALIDE) liste.push(`son ${pieceExistence().nom.toLowerCase()}`);
-  if (etatAssurance(pro) !== VALIDE) liste.push(`son attestation — ${pieceAssurance(pro).nom.toLowerCase()}`);
+  if (etatKbis(pro) !== VALIDE) liste.push(`son ${enMilieuDePhrase(pieceExistence().nom)}`);
+  if (etatAssurance(pro) !== VALIDE) liste.push(`son attestation — ${enMilieuDePhrase(pieceAssurance(pro).nom)}`);
   return liste;
 }
 

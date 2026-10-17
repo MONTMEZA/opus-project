@@ -207,7 +207,7 @@ export default function PasserProScreen({
           <Text style={s.secoursTexte}>
             Opus va vérifier votre entreprise lui-même. En attendant, votre compte
             reste un compte particulier : vous pouvez tout regarder et écrire des
-            messages. Dès que votre entreprise est vérifiée, ce même compte devient
+            messages. Dès que votre demande est acceptée, ce même compte devient
             professionnel : vous ne perdez rien.
           </Text>
           <Text style={s.secoursRappel}>

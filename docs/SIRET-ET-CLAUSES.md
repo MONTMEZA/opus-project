@@ -1229,6 +1229,16 @@ Ce qui peut se faire, et qui est honnête :
    plus bas — parce qu'un refus d'inscription qui renvoie vers une adresse
    morte fait perdre un artisan sans qu'il puisse rien tenter.
 
+   > **CE PARAGRAPHE ÉTAIT FAUX — corrigé le 17/10/2026.** Le domaine
+   > `opus-project.fr` appartient à **Électricité de France** (surveillance de
+   > marque, relevé au registre du `.fr` le 12/10) : cette boîte n'aurait
+   > jamais été relevée, par personne. Le domaine du propriétaire est
+   > `opus-project.com`, sans boîte créée à ce jour (CLAUDE.md, « L'adresse de
+   > contact appartenait à EDF »). **La porte de secours a donc été construite
+   > DANS Opus** (section 45) : un compte en attente et une demande suivie, que
+   > l'administration voit dans sa file — sans aucune boîte aux lettres. Et le
+   > vocabulaire a changé : « répertoire Sirene », jamais « registre ».
+
    Et un refus n'est pas un cul-de-sac : il doit **laisser une trace** dans la
    file du back-office déjà construite en section 25, avec le numéro saisi et
    la raison du refus. Sinon « contactez-nous » oblige l'artisan à tout
@@ -1248,7 +1258,9 @@ Ce qui peut se faire, et qui est honnête :
    TVA. Les faire taper à la main dans l'écran du devis, puis les remplacer
    trois lots plus tard, c'est écrire deux fois le même écran.
 
-5. **LA QUESTION QUI BLOQUE, et elle est à vous seul : relevez-vous
+5. **(Question close le 17/10/2026 : voir la correction du point 2 — la porte
+   de secours vit dans Opus, et cette adresse n'a jamais été la vôtre.)**
+   **LA QUESTION QUI BLOQUAIT : relevez-vous
    `contact@opus-project.fr` ?** Le domaine existe et route le courrier
    (mesuré), mais je ne peux pas savoir si quelqu'un lit cette boîte. Dès que
    le registre sera une condition d'inscription, cette adresse devient **la

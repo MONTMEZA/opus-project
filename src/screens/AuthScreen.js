@@ -27,6 +27,7 @@
  * PAS `CLAVIER` — les deux mécanismes compteraient le clavier deux fois.
  */
 import { pieceExistence } from '../lib/verification';
+import { enMilieuDePhrase } from '../lib/texte';
 import React, { useState, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, ActivityIndicator,
@@ -63,7 +64,7 @@ import * as retour from '../lib/retour';
    croirait l'application cassée. */
 const TEXTE_SECOURS = 'Opus va vérifier votre entreprise lui-même. En attendant, votre '
   + 'compte est ouvert en attente : vous pouvez tout regarder et écrire des messages, mais '
-  + 'pas encore publier ni recevoir de demandes. Dès que votre entreprise est vérifiée, ce '
+  + 'pas encore publier ni recevoir de demandes. Dès que votre demande est acceptée, ce '
   + 'même compte devient professionnel : vous ne perdez rien.';
 
 /* Un message de 500 caractères au plus : la contrainte de la base
@@ -589,7 +590,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
                       <Text style={s.encartTexte}>
                         Votre entreprise trouvée au répertoire Sirene, vous entrez tout
                         de suite et pouvez publier. Le badge, lui, demande encore votre
-                        {' '}<Text style={s.gras}>{pieceExistence().nom.toLowerCase()}</Text> et
+                        {' '}<Text style={s.gras}>{enMilieuDePhrase(pieceExistence().nom)}</Text> et
                         {' '}<Text style={s.gras}>votre attestation d&apos;assurance</Text>,
                         contrôlés par un humain depuis votre profil — sans lui, les
                         particuliers voient que vos justificatifs n'ont pas été fournis.

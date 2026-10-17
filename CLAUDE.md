@@ -664,11 +664,171 @@ avec deux comptes jetables supprimés dans la même session (base revenue à
 | il enregistre son profil, type inchangé | 204 |
 | il redevient particulier tout seul | **400 OP004** |
 
-**Ce qui n'a PAS été fait, et c'est voulu** : vérifier le SIRET. C'est le
-lot suivant — et il n'aurait rien protégé sans celui-ci : une condition
-posée à l'inscription ne sert à rien si l'on devient pro par un `INSERT`
-juste après. Un particulier qui devient artisan passe par l'administration
-(`auth.uid()` vide), avec un contrôle humain, comme le badge.
+**Ce qui n'a PAS été fait ce jour-là, et c'était voulu** : vérifier le
+SIRET. C'est le lot suivant — et il n'aurait rien protégé sans celui-ci :
+une condition posée à l'inscription ne sert à rien si l'on devient pro par
+un `INSERT` juste après. **Fait le 17/10 : section suivante.**
+
+#### Et cette section a cassé SEPT fichiers d'essais pendant deux jours
+
+Constaté le 15/10 au soir, réparé le 17/10. Les essais 25, 27, 28, 29, 37,
+39, 40 et 43 fabriquaient leurs comptes pro à la main : depuis OP004/OP005,
+la première écriture tombait, puis « current transaction is aborted », et
+chaque cas suivant rendait un résultat VIDE. `verifier-portes`, qui lit le
+TEXTE de l'essai 43, passait au vert pendant ce temps. Pire : 25, 27 et 28
+n'avaient jamais contenu leurs comptes — écrits contre une base qui les
+avait déjà, ils n'éprouvaient rien sur une base neuve depuis le premier
+jour.
+
+> **Un verrou qui ferme une porte se rejoue contre TOUS les fichiers
+> d'essais, pas seulement le sien.** `npm run verifier` ne joue aucun essai
+> SQL (voir A-FAIRE §2.3) : rien d'autre ne le dira. Et un fichier d'essai
+> commence par un « cas 0 » qui prouve que sa donnée EXISTE.
+
+### Le SIRET à l'inscription — lot 1 bis (15-17/10/2026)
+
+Section 45 de `schema.sql`, fonction Edge `supabase/functions/siret/`,
+`src/lib/siret.js` (copié OCTET POUR OCTET dans la fonction — `verifier-siret`
+le compare), `npm run verifier-siret`. Plan, relectures et livraisons dans
+le dossier de travail de la session du 15/10 ; ce qui suit est ce qu'il ne
+faut pas redécouvrir.
+
+#### Ce que ça prouve, et ce que ça ne prouve PAS
+
+Qu'une entreprise **existe** et est **active** au répertoire Sirene de
+l'INSEE. **Jamais** que celui qui tape le numéro en est le titulaire : un
+SIRET est public, comme un Kbis ou un avis de situation, que n'importe qui
+télécharge. Le badge « vérifié » reste un geste humain, sur pièces.
+
+> **Le vocabulaire est une règle, et un contrôle la tient** : « répertoire
+> Sirene (INSEE) », jamais « registre » ; et jamais « vérifié(e) » pour ce
+> niveau-là — ce mot appartient au badge. Une mention « vérifiée » obtenue
+> en trente secondes avec le numéro d'un autre serait un outil
+> d'hameçonnage. D'où, aussi : **aucune mention publique sur la fiche**.
+
+#### La chaîne, et pourquoi chaque maillon est là
+
+1. **La fonction Edge `siret`** interroge `recherche-entreprises.api.gouv.fr`
+   (PostgreSQL ne sait pas appeler un service web : ni `pg_net` ni `http` sur
+   la vraie base). Clé de Luhn d'abord (avec l'exception La Poste, dont le
+   SIREN 356000000 ne passe pas Luhn), puis « SIREN déjà rattaché », puis le
+   cache de 24 h, puis les limites, puis le répertoire (8 s au plus).
+2. Elle range ce qu'elle a lu dans **`preuves_siret`**, que personne d'autre
+   ne peut écrire. **Le déclencheur d'inscription n'accepte un compte pro
+   que sur cette PREUVE** (OP006), jamais sur ce que le téléphone prétend.
+   L'identité de l'entreprise vient de la preuve, pas du formulaire.
+3. Un SIREN — une ENTREPRISE, pas un établissement — ne se rattache qu'à
+   un seul compte (OP007). **`entreprise_registre`** est privée (le
+   titulaire et l'administration), avec historique : un déménagement crée
+   une ligne nouvelle et retire l'ancienne (« transfert de siège »).
+4. **Toute fiche pro naît dans une fonction de la base** : l'inscription,
+   `devenir_pro()`, l'acceptation d'une demande par l'administration.
+   L'INSERT client est fermé (OP010) ; `ensureProProfile` et
+   `reparerFichePro` ont disparu.
+
+Quatre détails qui ont coûté une relecture chacun :
+
+- **Toutes les issues partent en HTTP 200.** `supabase.functions.invoke`
+  transforme toute réponse non-2xx en « Edge Function returned a non-2xx
+  status code » et JETTE le corps français. Un statut d'erreur ne sort que
+  pour une vraie panne d'Opus.
+- **L'adresse IP vient de `cf-connecting-ip` puis `x-real-ip`, JAMAIS de
+  `X-Forwarded-For`**, qui arrive exactement tel que le client l'a écrit
+  (mesuré dans les journaux). On ne range que son empreinte HMAC, et le /64
+  d'une IPv6 (plus un seau par /48) : un abonné en a 2^64 à volonté.
+- **`exige_un_compte_pro()` est passée en `security invoker`.** Dans une
+  fonction `security definer`, `current_user` vaut TOUJOURS le
+  propriétaire : la garde « l'écriture vient d'un client » (OP010) n'aurait
+  jamais mordu. Mesuré : `postgres` en definer, `authenticated` en invoker.
+- **GoTrue rend HTTP 500 « Database error saving new user »** quand le
+  déclencheur lève OP006 ou OP007 : le message français est perdu. D'où la
+  revérification par la fonction JUSTE AVANT `signUp`, et la traduction de
+  ce message dans `erreurs.js`.
+
+#### La porte de secours vit DANS Opus
+
+Le répertoire ne répond pas, l'entreprise est non diffusible, le SIREN est
+déjà pris : on crée un **compte particulier EN ATTENTE** et une ligne de
+`demandes_pro`, suivie dans le profil, notifiée à l'administration, que
+l'artisan complète (message, justificatif dans l'espace PRIVÉ `documents`)
+ou annule. Elle ne dépend d'aucune boîte aux lettres — c'est exactement la
+raison donnée le 12/10.
+
+Trois verrous trouvés par les attaques, et pas à l'œil :
+
+- **la date de dépôt et `traitee_par` sont fermés par des droits de
+  COLONNE** : le client choisissait sa date (et passait en tête de file), et
+  le demandeur lisait l'identité de l'administrateur qui l'avait refusé ;
+- **l'administration n'est prévenue qu'une fois par compte et par 24 h** :
+  une boucle dépôt/annulation l'inondait ;
+- **un RETRAIT gèle l'entreprise** (`entreprise_registre.gele`) : sans le
+  gel, le squatteur à qui l'on retirait un SIREN le reprenait dans la
+  minute, par le même chemin.
+
+#### Les comptes d'essai sur la vraie base — la routine change
+
+> **Une preuve `essai` vaut pour UNE adresse**, écrite en minuscules dans
+> `preuves_siret.pour_email` (`preuve_essai_check`) : une preuve posée pour
+> un domaine entier aurait servi à n'importe quel compte jetable. On la pose
+> par le connecteur, pour l'adresse exacte du compte d'essai, avant
+> l'inscription.
+>
+> **Et la fonction Edge ne sert JAMAIS une preuve `essai`** : l'inscription
+> au navigateur la revérifie juste avant `signUp`. Pour une inscription pro
+> jetable par l'interface, on intercepte donc `/functions/v1/siret`
+> (`page.route`) ; par `curl`, `/auth/v1/signup` suffit. On n'utilise
+> JAMAIS le SIRET d'une vraie entreprise pour créer un compte, même jetable.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur des bases neuves, les 63 cas de
+`essais-section-45.sql` et les 19 fichiers d'essais (sept réparés au
+passage, voir la section précédente), 45 contrôles, 74 sabotages refusés,
+`npx expo export --platform ios` lu. **Avant d'appliquer**, la vraie base a
+été comparée au dépôt objet par objet (empreinte du catalogue) : trois
+restes connus, dont la contrainte `verification_statut_check` qui n'avait
+jamais existé sur elle (posée depuis, sous condition). La migration,
+simulée sur une copie qui imite ces restes, rend exactement l'empreinte
+d'une base neuve. Puis, sur la VRAIE base, par le chemin de l'application :
+
+| | résultat |
+|---|---|
+| un numéro mal formé | `mal_forme`, sans base ni réseau |
+| le siège de La Poste, vrai appel au répertoire | `ok`, l'identité seule ; le second appel sort du cache |
+| une origine web étrangère | **403** |
+| un `X-Forwarded-For` forgé | ignoré — les journaux montrent la clé de l'adresse posée par l'hébergeur |
+| inscription pro AVEC preuve d'essai | compte pro, fiche `verifie = false`, entreprise rattachée, CGU datées |
+| inscription pro SANS preuve | **500 « Database error saving new user »**, aucun compte créé |
+| particulier puis `devenir_pro` | pro, fiche, entreprise rattachée |
+| porte de secours à l'inscription | particulier, demande `nouvelle`, administration prévenue une fois |
+| il se déclare pro / s'insère une fiche | **OP004** / **OP010**, messages complets |
+| il lit `preuves_siret` / `traitee_par` | **403** / **403** — sa demande, elle, se lit |
+| la fonction, SIREN pris, sans jeton / avec celui du titulaire | `deja_utilise` / il passe |
+| **au navigateur**, inscription artisan en deux temps | carte de l'entreprise, métier proposé d'après l'APE, arrivée sur le Fil |
+| …« Modifier mon profil » | « Mon entreprise » en lecture seule, **aucun champ SIRET libre** |
+| …particulier → « Passer en compte professionnel » | `devenir_pro` 200, « Publier » apparaît |
+| …porte de secours, puis annulation | carte « en attente », puis `annulee` en base |
+
+Comptes jetables supprimés par le chemin de l'application ; base revenue à
+13 comptes / 7 fiches / 20 publications, 0 entreprise, 0 demande.
+
+**Ce qui n'a PAS été vérifié** : rien sur l'iPhone (le clavier sous le
+SIRET, le pavé numérique) ; l'inscription avec confirmation par e-mail
+(désactivée sur le projet) ; l'envoi d'un justificatif ; tout le côté
+administration (accepter, refuser, transférer, retirer) — couvert par les
+essais SQL seulement.
+
+#### Ce qui reste ouvert, et qui appartient au propriétaire
+
+1. un REFUS de l'administration ne ferme pas le chemin automatique — seul le
+   retrait (le gel) le fait ;
+2. la porte de secours n'est PAS proposée quand la limite GLOBALE mord
+   (`trop_d_essais` de portée « service ») ;
+3. **un compte PRO n'a aucune porte** pour faire rattacher ou transférer
+   son entreprise (OP008, OP009) : les messages disent « pas encore depuis
+   l'application », sans rien promettre ;
+4. `siret` et `demande_pro` restent dans les métadonnées de `auth.users`,
+   hors de l'export RGPD — comme la ville et les métiers depuis la section 31.
 
 ### Un commentaire auquel on a répondu ne se récrit plus
 
@@ -872,6 +1032,22 @@ C'est la base du propriétaire. **Tout compte créé là existe pour de bon**, e
 il le voit. D'où `adresseEssai()`, qui fabrique une adresse reconnaissable
 (`…@exemple-opus.test`), et la règle : on supprime derrière soi, dans la même
 session.
+
+**Depuis le lot 1 bis, un compte PRO jetable ne naît plus sans preuve** :
+une preuve `essai` posée par le connecteur pour son adresse EXACTE, et
+`/functions/v1/siret` intercepté au navigateur. Voir « Le SIRET à
+l'inscription ».
+
+**Et un compte jetable qui atterrit sur le Fil COMPTE DES VUES** sur les
+publications du propriétaire — définitivement, puisque ce compteur ne
+redescend jamais (section 35). Constaté le 17/10 : quatre secondes sur le
+Fil, une publication passée de 4 à 5 vues. **Neutraliser
+`**/rpc/enregistrer_vues` par `page.route` avant toute connexion**, dans
+chaque essai sur la vraie base.
+
+Et **relancer `npx expo start --web -c` avant chaque essai au navigateur** :
+le surveillant de Metro a déjà servi un paquet périmé, et l'on voit alors
+l'ancien texte en croyant éprouver le nouveau (constaté le 15/10).
 
 > **Pour supprimer un compte d'essai, prendre le chemin de l'application**,
 > pas la base. `delete from auth.users` par le connecteur Supabase **expire**

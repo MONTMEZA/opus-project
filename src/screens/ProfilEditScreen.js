@@ -6,6 +6,7 @@
  * ses trois chiffres (déplacement, tarif horaire, majoration).
  */
 import { pieceExistence, pieceAssurance } from '../lib/verification';
+import { enMilieuDePhrase } from '../lib/texte';
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, Switch, ActivityIndicator, StyleSheet, Pressable,
@@ -510,7 +511,7 @@ export default function ProfilEditScreen({
               />
 
               <LigneDocument
-                titre={`Attestation — ${pieceAssurance(profil).nom.toLowerCase()}`}
+                titre={`Attestation — ${enMilieuDePhrase(pieceAssurance(profil).nom)}`}
                 detail="PDF ou photo, en cours de validité"
                 fichier={assurance}
                 dejaEnvoye={!!profil.assurancePath}
