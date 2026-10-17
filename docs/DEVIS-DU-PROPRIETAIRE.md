@@ -323,3 +323,84 @@ peut la fournir.
   avec son journal, sa permission et sa limite (section 38), et l'artisan qui
   valide. Elle rejoint l'idée du §1.3 (remplir la base à partir de ses anciens
   PDF) : c'est le même travail — lire un devis et en tirer des postes.
+
+---
+
+## 6. Le correcteur, et les prix du marché (17/10/2026)
+
+> « On pourra quand même mettre un correcteur pour qu'il n'y ait pas de faute
+> d'orthographe. Si je télécharge la base des prix du bâtiment et que je
+> l'intègre à Opus, l'agent saura les prix du marché et pourra, si l'artisan
+> le lui demande — une prestation qu'il n'a jamais faite —, lui donner les prix
+> du marché ? »
+
+### 6.1 Le correcteur : oui, en trois couches
+
+1. **Pendant la frappe**, le clavier de l'iPhone souligne déjà les fautes —
+   à condition que le champ le permette (`autoCorrect` et `spellCheck` de
+   `TextInput`). Les champs de description d'un devis doivent le laisser
+   actif ; les champs de quantité et de prix, non.
+2. **Avant l'envoi**, l'agent relit le devis entier, comme il relit déjà les
+   publications, et **propose** ses corrections une par une. L'artisan
+   accepte ou refuse : c'est sa phrase (§5, règle 1).
+3. **Une correction acceptée corrige aussi la BASE.** Le poste corrigé une fois
+   ressort juste à tous les devis suivants. La faute ne se corrige qu'une fois
+   dans la vie de l'artisan.
+
+### 6.2 Les prix du marché : l'idée est juste, la façon de l'obtenir est le point dur
+
+**Le besoin est réel** : une prestation jamais faite, et aucune idée de ce
+qu'on peut demander. C'est exactement là que la base personnelle (§5) ne peut
+rien, puisqu'elle ne contient que ce que l'artisan a déjà chiffré.
+
+**Mais « télécharger la base et l'intégrer à Opus » n'est pas possible tel
+quel, et il faut le savoir avant d'y passer du temps.** Une base de prix du
+bâtiment est une **base de données protégée** : le Code de la propriété
+intellectuelle protège son producteur (articles L341-1 et L342-1 — interdiction
+d'en extraire ou d'en réutiliser une partie substantielle sans son accord).
+Un abonnement donne le droit de **la consulter soi-même**, pas de la **mettre
+dans une application que d'autres utilisent**. L'intégrer sans accord, c'est
+le risque d'une action en contrefaçon contre le propriétaire du projet.
+
+> **La voie honnête : un ACCORD avec l'éditeur** (une licence, souvent par une
+> interface fournie par lui), dont les conditions — prix, nombre
+> d'utilisateurs, droit d'affichage — décident de ce qu'Opus peut montrer. À
+> vérifier source par source, le jour venu, sur les conditions écrites de
+> l'éditeur : **rien n'est intégré avant**. Le propriétaire doit dire de quelle
+> base il parle (nom, lien), pour qu'on lise ses conditions.
+
+Et ce que l'agent ne fera **jamais** : donner un « prix du marché » sorti de sa
+propre mémoire. Un modèle d'IA n'a pas de prix fiables, datés ni régionaux ; il
+produit un nombre plausible. Présenté comme un prix du marché, c'est une
+information fausse qui engage l'artisan.
+
+### 6.3 Ce que l'écran montrera, le jour où une source licenciée existe
+
+Une **fourchette indicative**, jamais un prix posé dans le devis :
+
+> « Pose de parquet flottant : **entre X et Y €/m²**, prix indicatifs
+> [source, date], hors fourniture. Ce n'est pas votre prix : à vous de
+> fixer le vôtre. »
+
+(X et Y, pas des nombres : écrire ici une fourchette chiffrée, ce serait faire
+exactement ce que ce paragraphe interdit — un prix plausible sorti de nulle
+part.)
+
+Trois garde-fous, et aucun n'est négociable :
+
+1. **la source et la date sont toujours écrites** — un prix de 2024 n'est pas
+   un prix de 2027, et un prix parisien n'est pas un prix provençal ;
+2. **la fourchette n'entre jamais seule dans le devis** : l'artisan tape son
+   prix, éventuellement en s'en inspirant ;
+3. **elle ne se mélange jamais à sa base personnelle** : une fois qu'il a fixé
+   son prix, c'est le sien qui revient au devis suivant.
+
+### 6.4 Et une autre voie, qui n'existe qu'avec du monde dedans
+
+Les prix que les artisans d'Opus pratiquent réellement formeraient un jour
+la meilleure base du marché — régionale, datée, vivante. **Mais le §5 pose que
+la base de chacun est privée**, et cette règle tient. Une mise en commun ne
+pourrait être qu'**un choix explicite de chaque artisan** (un consentement,
+retirable), **anonyme**, et affichée seulement quand assez de prix sont réunis
+pour qu'on ne puisse reconnaître personne. C'est une décision du propriétaire,
+pour plus tard ; elle est écrite ici pour qu'on ne la prenne pas par défaut.
