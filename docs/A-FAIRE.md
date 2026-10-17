@@ -1621,6 +1621,64 @@ un devis, une facture, un client appartiennent au COMPTE — un compte = un
 artisan = une entreprise. Le jour où un patron voudra donner un accès à ses
 compagnons, il y aura UNE fonction à changer.
 
+### Le devis — ce qui l'attend en dehors du module (17/10/2026)
+
+Relevé en remettant à jour le plan devis (`docs/PLAN-DEVIS.md` §10, le détail
+de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
+**précèdent**. Ils se cochent ici.
+
+**À décider avant le module — et c'est au propriétaire :**
+
+- [ ] **Son statut** : a-t-il une entreprise immatriculée ? (question du tour 1,
+  plan 10.8). Selon la réponse, corriger CLAUDE.md (« ni société ni SIRET »
+  au 29/09 contre « micro-entrepreneur » au 04/10) et `DONNEES-DES-ARTISANS.md`
+  §7 point 3.
+- [ ] **L'accord de son frère**, dont l'entreprise porte le compte pro de test
+  (plan 10.5). Tant qu'il n'a pas dit oui : aucun devis au nom de cette
+  entreprise, et le badge de cette fiche est à retirer par le back-office
+  (`admin_verifier_pro(…, false, false)`), **jamais** par un retrait
+  d'entreprise, qui réserverait son SIREN pour toujours.
+- [ ] **Qui peut lire les prix des autres artisans**, éditeur SQL compris
+  (`DONNEES-DES-ARTISANS.md` §5.2 et §7, décision 3). Aucun prix d'un autre
+  artisan n'est rangé avant.
+- [ ] La **colonne métier** de la base de postes (plan 10.6, options a et b),
+  avant le lot P ; le **format du numéro** de devis, avant le lot 2.
+- [ ] Le **nom de la base de prix** dont il parle, pour lire sa licence.
+
+**À faire, hors du module :**
+
+- [ ] Garde du badge pour un **second compte de la même personne** :
+  `admin_verifier_pro` ne refuse que sa propre fiche. Décider ouvertement, et
+  l'écrire comme limite connue.
+- [ ] Les **3 fiches vérifiées sans entreprise rattachée** : garder ou retirer
+  ces badges (même geste, aucun SIREN réservé).
+- [ ] Avant toute **remise d'un compte** à quelqu'un d'autre : une porte pour
+  changer l'adresse de connexion et le mot de passe (il n'y en a aucune), et
+  une nouvelle acceptation des CGU par le nouveau titulaire.
+- [ ] **Contrat de sous-traitance RGPD** du carnet de clients, à partir des
+  clauses types de la Commission (décision 2021/915) ; corriger
+  `legal.js:690-694` (« on ne peut pas écrire ce contrat »).
+- [ ] **Registre des traitements** de sous-traitant (RGPD art. 30.2), dû dès
+  aujourd'hui pour le carnet de clients.
+- [ ] Recopier **depuis Légifrance**, avec le navigateur du propriétaire, les
+  textes qui s'imprimeront : arrêté du 24/01/2017 (dont l'art. 3), formulaire
+  de rétractation (annexe à R. 221-1), mention 293 B. Légifrance répond 403
+  depuis le conteneur.
+- [ ] Décider d'une **migration au SDK 58** (sorti le 15/10/2026), avant ou
+  après la reconstruction EAS du lot 2.
+- [ ] Corriger les annexes du plan (CONCURRENCE-DEVIS.md, SIRET-ET-CLAUSES.md)
+  et `DEVIS-DU-PROPRIETAIRE.md:179` (« Acompte à la signature », contraire au
+  droit hors établissement).
+- [ ] **La facture aux particuliers d'abord, ou tout ensemble** : reportée à
+  la fin du lot 4 du devis, échéance du 01/09/2027.
+- [ ] Démarches de l'entreprise qui émettra de **vrais** devis : un médiateur
+  référencé avant le premier devis à un particulier, et une plateforme agréée
+  pour **recevoir** les factures électroniques — obligatoire depuis le
+  01/09/2026, même en franchise. À dire aussi au frère : son entreprise est
+  concernée, Opus ou pas.
+- [ ] **Changer d'entreprise** sur un compte pro (passage de micro à société) :
+  aucune porte (OP008, OP009) ; elle touchera la numérotation des devis.
+
 ---
 
 ## La base de connaissances du BTP — une VISION, en attente de son cahier des charges (17/10/2026)

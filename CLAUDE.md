@@ -154,7 +154,8 @@ expo > @expo/config-plugins > xcode > uuid
 
 Aucune n'entre dans l'application installée. `@expo/cli`, c'est le serveur
 de développement et le surveillant de fichiers ; `xcode` ne sert qu'au
-`prebuild`, que ce projet ne fait jamais puisqu'il tourne dans Expo Go.
+`prebuild`, qui tourne sur les serveurs d'EAS au moment d'un build
+(development ou preview, depuis le 15/10), jamais dans le téléphone.
 
 **Et il n'y a RIEN à faire** — mesuré le 04/10 : `npm audit fix` tout court
 ne corrige **aucune** des 26 (`--dry-run` ne propose rien), parce qu'elles
@@ -788,6 +789,26 @@ Trois verrous trouvés par les attaques, et pas à l'œil :
 > jetable par l'interface, on intercepte donc `/functions/v1/siret`
 > (`page.route`) ; par `curl`, `/auth/v1/signup` suffit. On n'utilise
 > JAMAIS le SIRET d'une vraie entreprise pour créer un compte, même jetable.
+
+#### Le compte pro au vrai SIRET est l'entreprise du FRÈRE (17/10/2026)
+
+Ouvert par le propriétaire lui-même pour essayer le SIRET : « la page est une
+entreprise de mon frère, on pourra tester avec ». La base porte donc le SIRET,
+la pièce d'existence et l'attestation d'assurance d'une entreprise qui n'est
+pas la sienne, et le badge de cette fiche a été posé par lui, administrateur.
+
+> **Un devis engage l'entreprise qu'il nomme.** On construit et on essaie avec
+> ce compte à trois conditions (`docs/PLAN-DEVIS.md` 10.5) : l'accord du
+> frère ; aucun devis réel au nom de cette entreprise sauf s'il l'émet
+> lui-même — tout devis d'essai porte « Document d'essai — sans valeur » ;
+> et s'il veut Opus pour de vrai, on lui REMET ce compte (une entreprise = un
+> compte), avec ses propres CGU.
+
+Deux gestes à ne jamais confondre si ce compte doit partir : la suppression
+par le chemin de l'application **libère** le SIREN ; un retrait par
+l'administration le **réserve pour toujours** (section 45.3 bis). Et le
+badge se retire par `admin_verifier_pro(…, false, false)`, pas par un
+retrait d'entreprise.
 
 #### Vérifié, et comment
 
@@ -7217,6 +7238,11 @@ Deux paquets ont déjà été écartés après vérification sur npm :
 `react-native-video-processing` (aucune version depuis 2022). Toujours
 regarder la date de la dernière publication avant de conseiller un paquet.
 
-Et se rappeler qu'un **module natif impose un development build** : il ne
-fonctionne pas dans Expo Go, ce qui est aujourd'hui le seul moyen de test du
-propriétaire.
+Et se rappeler qu'un **module natif impose de RECONSTRUIRE l'application** :
+depuis le 15/10/2026, le propriétaire essaie Opus dans un **build de
+développement** (`expo-dev-client`, profils `development` et `preview` de
+`eas.json`), plus dans Expo Go. Un module natif ajouté au code n'existe donc
+dans son téléphone qu'après un nouveau `eas build` et une réinstallation —
+et un import statique d'un module absent fait planter l'application **dès le
+démarrage**. L'ordre est toujours : installer, construire, réinstaller, PUIS
+committer le code qui l'importe (`docs/PLAN-DEVIS.md` 10.4).

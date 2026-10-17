@@ -10,7 +10,7 @@
 > douze corrections sont listées, une par une, avec leur endroit, au **§9**.
 >
 > Le §22 du second cahier des charges demande exactement cela : « NE COMMENCE PAS
-> PAR CODER. […] ATTENDRE VALIDATION DU PLAN. »
+> PAR CODER. […] ATTENDRE VALIDATION DU PLAN. » — **Mise à jour du 17/10/2026 : le §10, à la fin, fait foi là où il contredit les §0 à §9** (numéros de ligne inchangés).
 
 ---
 
@@ -2728,3 +2728,620 @@ ensuite été **remesurées** ici : les deux sont confirmées.
   que l'artisan écrit ; l'écran dit ce que la loi demande de couvrir et renvoie
   à la source. C'est la règle du 29/09, et elle ne se négocie pas : une mention
   légale fausse engage celui qui la publie.
+
+---
+
+## 10. MISE À JOUR DU 17/10/2026 — ce qui a bougé depuis le 12/10
+
+Ce plan a été écrit le 12/10 (dernier commit : 09:29), **avant** les sections 44 (15/10), 45 et 45.3 bis (17/10) de `schema.sql`. Quatre choses ont bougé depuis :
+
+- le SIRET demandé à l'inscription a construit la moitié de ce que le lot 0 croyait devoir créer (10.1). Et depuis le commit bd8b47c (section 45.3 bis), la réserve d'un SIREN retiré par l'administration vit dans `sirens_reserves` et **survit à la suppression du compte** ;
+- un compte pro portant un vrai SIRET a été ouvert, et **l'entreprise est celle du FRÈRE du propriétaire** : « la page est une entreprise de mon frère, on pourra tester avec » (10.5) ;
+- le propriétaire a remis ses propres devis (`docs/DEVIS-DU-PROPRIETAIRE.md`) et tranché l'usage des données des artisans (`docs/DONNEES-DES-ARTISANS.md`). Les deux sont commités et **font foi** ; ce qu'ils changent au plan est en 10.6 ;
+- six sujets de droit ont été recherchés, **puis contredits** par une seconde lecture indépendante ; la synthèse a ensuite été relue par une critique, puis par une contre-vérification. À chaque étape, quand la relecture a donné tort, c'est sa correction qui est retenue ici.
+
+> **Cette section ne récrit pas les §0 à §9. Là où elle les contredit, c'est elle qui fait foi : elle est datée après.** Les lignes à corriger le jour où le plan sera reposé sont listées en 10.9.
+
+Méthode, et sa limite :
+
+- relevé du dépôt ;
+- vraie base interrogée en **lecture seule, uniquement par des comptages** : aucun nom, numéro, adresse ni prix n'a été lu ;
+- textes de loi lus dans les données ouvertes LEGI/JORF de la DILA (jusqu'au 16/10/2026 au soir) ou dans leur reproduction `codes.droit.org`, parce que **Légifrance répond 403** depuis le conteneur ;
+- les endroits de `schema.sql` sont désignés par le **nom de l'objet** (« `admin_verifier_pro`, garde `if p_pro = moi` », « le séparateur de la section 42 »), pas par un numéro de ligne. Le commit bd8b47c, fait pendant la relecture de cette section, a décalé de 1 à 89 toutes les lignes au-delà de la ligne 1 475 environ, et le plan a déjà vécu ce problème avec « entre 7692 et 7693 ». Les numéros de ligne des autres fichiers ont été revérifiés le 17/10.
+
+Rien du JO du 17/10 n'est donc couvert. Aucune citation ne s'imprime sur un devis sans avoir été recopiée depuis Légifrance.
+
+### 10.1 Ce que le lot SIRET a déjà construit — le lot 0 rétrécit
+
+Le §1 disait « zéro des colonnes candidates n'existe » (l.143) et, pour l'adresse postale, « la colonne n'existe pas » (l.129). C'est faux depuis le 17/10. La table `entreprise_registre` (section 45.3 de `schema.sql`) porte déjà l'identité lue au répertoire Sirene (INSEE). Elle est **privée**, et seules les fonctions de la base l'écrivent.
+
+| ce que le devis imprime | où ça vit déjà | à savoir |
+|---|---|---|
+| SIREN, SIRET | `siren`, `siret` | 14 chiffres sous `entreprise_siret_check` ; un seul SIREN actif par compte et un seul compte actif par SIREN (index `idx_entreprise_pro_active` et `idx_entreprise_siren_active`) |
+| dénomination d'une société | `denomination` | **vide pour un entrepreneur individuel** |
+| nom civil d'un EI (« Nom Prénom EI ») | `nom_complet_registre` | brut, l'API y recolle parfois le sigle : ne s'imprime **jamais** tel quel |
+| nom commercial | `nom_commercial` | celui de l'établissement saisi |
+| forme juridique, EI ou non | `forme_juridique` (code INSEE), `est_ei` | libellé fourni par `src/data/formes-juridiques.js` ; une EIRL n'est pas un EI, elle a ses propres mentions (C. com. R. 526-17) |
+| date de création, code APE | `date_creation`, `ape`, `naf25` | ceux de l'entreprise, pas de l'établissement |
+| n° de TVA intracommunautaire | `tva` | vient de la liste DGFiP (par `recherche-entreprises`), pas du répertoire Sirene ; présent seulement quand cette liste en donne un ; ne dit **rien** du régime de TVA |
+| adresse | `adresse`, `code_postal`, `commune`, `code_insee`, `est_siege` | c'est l'adresse de l'**établissement** saisi, qui n'est pas forcément le siège ; format exact (rue seule ?) non mesuré |
+| fraîcheur | `statut_diffusion`, `maj_insee`, `source`, `verifie_le` | rien ne reconsulte le répertoire après le rattachement |
+
+> **`emetteur` ne recopie AUCUNE de ces colonnes.** Les recopier ferait deux vérités, et c'est exactement le raisonnement qui a figé l'ancien SIRET libre (section 45.7, `fige_le_siret_libre`). L'instantané `em_` copie ces colonnes depuis la ligne **active** d'`entreprise_registre` au moment de la remise.
+
+Et l'instantané est plus nécessaire que le 12/10 ne le pensait. Une ligne d'`entreprise_registre` se retire, se transfère, **et s'efface avec le compte** : sa colonne `pro_id` référence `professional_profiles` en `on delete cascade`, `professional_profiles.id` référence `users` de la même façon, et aucun déclencheur ne la protège. La section 45.3 bis n'y change rien : ce qui survit au compte, c'est la **réserve** d'un SIREN retiré (`sirens_reserves`, le SIREN et des dates), pas l'identité. Le premier jet de cette section écrivait « jamais effacées » : c'était faux. **Un devis remis ne doit dépendre d'aucune de ces lignes.**
+
+Ce que cela rend obsolète, ou change :
+
+- **Le bouton « Utiliser le SIRET de ma fiche (…) »** (l.1919-1922) n'a plus d'objet. `professional_profiles.siret` est figé (`fige_le_siret_libre`), l'application ne l'envoie plus (`api.js:2139-2141`), et ses cinq valeurs ont une clé de contrôle fausse (en-tête de la section 45). Même sort pour la ligne du §6 sur `updateProfile` (l.2430) et pour la contrainte demandée par SIRET-ET-CLAUSES.md:683-689.
+- **`emetteur_incomplet()` doit exiger une ligne active d'`entreprise_registre`.** Jamais `verifie`, ni `professional_profiles.entreprise`. Mesuré : **3 des 4 fiches vérifiées n'ont aucune entreprise rattachée**. Le badge atteste des pièces vues par un humain, pas l'identité qui s'imprime sur le devis. Et le nom public de la fiche vient d'un champ libre du formulaire (insertion de la fiche par le déclencheur d'inscription). **`emetteur_incomplet()` n'est qu'une partie du contrôle de remise** : l'autorité unique est ailleurs (10.7).
+- **Le nom « Mon entreprise » est déjà pris** par la feuille en lecture seule du lot 1 bis du SIRET — c'est le nom que CLAUDE.md donne au SIRET à l'inscription — (`FeuilleEntreprise.js:107`, ouverte depuis `ProfilEditScreen.js:327-334`). Deux options : le lot 0 l'enrichit (identité Sirene en lecture seule, puis un bloc « Pour mes devis » modifiable), ou il prend un autre nom. Jamais deux écrans du même nom.
+- **Deux adresses, pas une.** Quand l'établissement n'est pas le siège (`est_siege = false`), R. 111-1 1° et R. 221-2 3° demandent aussi l'adresse du siège. Autre point ouvert : l'adresse doit-elle rester corrigeable (SIRET-ET-CLAUSES §8.4), alors que l'identité est en lecture seule ? À trancher en écrivant le lot 0, après avoir **mesuré** le format réel de la colonne.
+- **Fraîcheur.** Une entreprise cessée après son rattachement resterait « active » dans Opus. Il faut choisir : reconsulter le répertoire avant chaque remise, ou imprimer la date de consultation du répertoire Sirene (INSEE). Jamais « date de vérification » : ce mot appartient au badge, et `verifier-siret` le refuse. La Licence Ouverte impose de toute façon de citer la source et la date de sa mise à jour.
+- Le « cadeau » des coordonnées GPS du siège (SIRET-ET-CLAUSES.md:87-94) **n'a pas été construit**.
+
+Ce qui reste VRAIMENT à saisir dans `emetteur`, c'est-à-dire tout ce que Sirene ne donne pas :
+
+| famille | pourquoi elle est due (détail en 10.3) |
+|---|---|
+| registre (RCS, RNE métiers ou aucun) **et ville du greffe** si RCS | R. 111-2 3° ; R. 123-237 2° |
+| capital, ou la mention « à capital variable » | R. 123-238 ; L. 231-2 |
+| assurances : **une liste**, chacune avec assureur, coordonnées, couverture géographique (n° de contrat facultatif, date de validité) | R. 111-2 9° ; L. 243-2 |
+| médiateur : nom, adresse, site, pris dans la liste officielle | R. 111-1 7° ; R. 616-1 ; L. 613-1 |
+| régime de TVA | CGI 293 B (l'option « sur les débits » attend la facture : 10.3) |
+| garanties légales et commerciales, SAV | L. 111-1 5° ; R. 111-1 3°-4° |
+| **modalités de paiement, d'exécution et de traitement des réclamations** (absentes du plan) | R. 111-1 2° ; R. 221-2 4°-5° |
+| taux horaires, décompte du temps, forfaits, frais de déplacement, devis payant et son coût | arrêté du 24/01/2017, art. 2-3 |
+| CGV si l'artisan en utilise ; logo (pour les trois modèles, 10.6), durée de validité habituelle | R. 111-2 7° ; confort |
+
+La coupe du lot 0 en deux (l.1974-1981) tient, mais son contenu change. La moitié « identité » est faite. Ce qui **bloque** un devis devient : assurances, médiateur, régime de TVA, garanties, modalités et frais. Le confort reste le logo, le modèle, les CGV et la durée de validité.
+
+**Le régime de TVA naît « non déclaré », et rien n'est pré-coché.** L'absence de n° de TVA sur la fiche de l'entreprise ne prouve rien (`tva` « ne dit rien du régime ») ; l'écran peut l'écrire en toutes lettres — « votre fiche d'entreprise n'affiche pas de numéro de TVA, ce qui ne prouve rien » —, sans proposer de choix d'avance. Un franchisé présumé à tort émettrait des devis sans TVA, et Opus ne coche jamais à la place de l'artisan.
+
+État du code utile au module, au 17/10 :
+
+| | 12/10 (plan) | 17/10 |
+|---|---|---|
+| appelants de `est_mon_entreprise()` | 2 | **3 politiques** (chantiers, clients, `entreprise_registre`), et la fonction exige `est_un_pro()` : le devis sera le 4e appelant, la base de postes (10.6) le 5e |
+| codes d'erreur maison | OP003 libre | **toujours libre (0 occurrence), et gardé pour le verrou du devis remis**, comme le plan l'écrit (l.840-1026, 1850) : la section 45 l'a sauté. OP004 à OP010 sont pris ; **tout code nouveau du module prend OP011 et suivants** |
+| `erreurs.js` | points 1 à 5 à faire | **le point 5 est fait** (tout code `OPxxx` est rendu tel quel, `erreurs.js:125-133`) ; les points 1 à 4 restent à faire, au lot 0 |
+| point d'insertion du module | entre 7692 et 7693 | **après la section 45 (45.3 bis comprise), avant le séparateur de la section 42**, qui précède `mes_donnees()`. Relevé sur bd8b47c : séparateur à la ligne 9740, titre à 9741, `mes_donnees()` à 9760 — ces numéros bougeront à la prochaine section |
+| clé `'devis'` de `mes_donnees()` | ligne 7737 | ligne 9785 sur bd8b47c, et elle désigne toujours la DEMANDE ; `mes_donnees()` exporte déjà `entreprise_registre` |
+| moyen d'essai | Expo Go | **build de développement** depuis le 15/10 (`expo-dev-client ~57.0.20` dans `package.json`, profils `development` et `preview` dans `eas.json`) |
+| modules natifs du devis | — | `expo-print`, `expo-sharing` et `react-native-svg` **absents** de `package.json` ; `react-native-gesture-handler ~2.32.0` présent |
+
+Une collision que le plan ne voyait pas : `sos_availability.horaire` et `.deplacement` sont un taux horaire et un forfait de déplacement **déjà publics**, à `0` par défaut, et ils servent déjà aux fourchettes SOS (`src/data/urgences.js:92-93`). Cela viole la règle du §2.0, « un `null` n'est pas un `0` ». La réponse à la question des tarifs (10.8, tour 1) dira s'ils deviennent les mêmes chiffres que ceux du devis, ou s'il faut dire lesquels font foi.
+
+### 10.2 Ce qui est TOUJOURS vrai, et toujours manquant
+
+Relevé du 17/10, en comptages :
+
+- Aucune table `devis`, `devis_lignes`, `devis_tva`, `emetteur` ni `factures` ; aucune fonction `emetteur_incomplet` ; aucun espace de stockage `devis`.
+- 6 demandes de devis, dont 4 acceptées. **1 client** dans toute la base (particulier, adresse complète), et il appartient au compte administrateur. 2 chantiers. 0 séquence, 0 type enum. 5 colonnes d'argent, toutes `numeric`.
+- **8 fiches pro (et non 7)**, dont 4 vérifiées, pour 15 comptes. Tous les « sur 7 » du plan sont à relire. **1 administrateur.**
+- **1 pièce d'existence et 1 attestation d'assurance**, sur la même fiche : celle du compte de test (10.5). La pièce est rangée dans la colonne `kbis_url`, que l'écran présente comme « Extrait Kbis ou avis SIRENE » (`pieces-justificatives.js:87`) ; une attestation d'immatriculation RNE n'y est pas nommée, alors que c'est le document que reçoit un artisan EI à son immatriculation. Le nom de la colonne ne dit donc pas la nature de la pièce. L'attestation, la seule réelle, n'a **pas de date de validité** : aucun chemin de l'application ne capture cette date (`admin_verifier_pro` ne prend que des booléens). Les 4 dates d'expiration présentes en base sont sur des fiches qui n'ont pas d'attestation.
+- Ni assureur, ni médiateur, ni garanties, ni régime de TVA, ni RCS/RNE, ni capital, ni logo, nulle part.
+- Une demande de devis ne porte ni adresse ni e-mail. C'est le carnet de clients qui les fournira, et « Ajouter à mes clients » existe déjà sur une demande acceptée (`DemandesRecuesScreen.js:457-463`).
+- `expo-print`, `expo-sharing` et `react-native-svg` sont absents de `package.json`.
+- `pg_cron` et `pg_net` sont **disponibles mais non installés** sur la vraie base : aucun travail planifié n'y tourne aujourd'hui.
+- Sur la vraie base, `sirens_reserves` existe, et la colonne `entreprise_registre.gele` est **encore là** : une colonne morte que plus rien ne lit ni n'écrit, que le connecteur refuse de retirer, et que le propriétaire retirera d'une ligne dans l'éditeur SQL (A-FAIRE.md §1.0).
+- `STATUT = 'essai'`, `contratSousTraitance: false`, `EDITEUR.email: null` (`legal.js:81, 141, 172`).
+- Les briques réutilisables du §1 sont toutes en place : ChampVille en mode `rue`, Calendrier, `{...CLAVIER}`, `surFond()`, `pieces-justificatives.js:103`.
+
+### 10.3 Le droit au 17/10/2026
+
+#### Confirmé, en une ligne chacun
+
+- Seuil de 150 € abrogé : devis dû dès le premier euro, **pour le dépannage, la réparation et l'entretien** (arrêté du 24/01/2017, art. 4 et 7).
+- Les 21 familles de travaux, et les dix mentions de l'art. 4-I.
+- L'information sur les pièces remplacées, due dans les deux cas (annexe 2).
+- L. 111-1, et l'exemplaire daté de L. 221-9.
+- Les délais de 14 jours, 7 jours et 12 mois. La Cour de justice de l'UE a aggravé le risque : sans information sur la rétractation, le client qui se rétracte après la fin du chantier **ne doit rien** (C-97/22, 17/05/2023).
+- L'exception d'urgence (L. 221-28 8°), l'exécution anticipée (L. 221-25), L. 221-3.
+- Plafonds de franchise 85 000 / 37 500 €. Le seuil unique de 25 000 € n'a jamais été appliqué (loi n° 2025-1044), et la LF 2026 n'y touche pas.
+- Certification du client depuis le 16/02/2025.
+- Autoliquidation, et mention « Autoliquidation ».
+- La numérotation est une obligation de **facture**, pas de devis.
+- Le texte de C. com. L. 123-22 (dix ans pour les documents comptables) et de LPF L. 102 B (six ans sous forme électronique). **Le champ de L. 123-22 pour un micro-entrepreneur est rangé dans « Incertain »**.
+- Dénomination « EI » (R. 526-27).
+- Une signature tracée au doigt est une signature électronique **simple**, jamais qualifiée.
+- Calendrier de la facture électronique.
+- Aucun plafond légal d'acompte.
+
+#### Changé, ou faux dans le plan et ses annexes
+
+| le plan disait | le droit au 17/10 | source | effet |
+|---|---|---|---|
+| un drapeau par métier décide du devis obligatoire (l.532-538) ; six informations « pour TOUT devis » (l.351) | le champ de l'arrêté dépend de la **nature** de la prestation (dépannage, réparation, entretien), pas du métier. Hors de ce champ, aucune obligation générale de remettre un devis ; L. 111-1 peut alors être fourni ailleurs | arrêté 2017 art. 1 ; F37370 | le drapeau qui DURCIT reste sûr, mais l'écran n'écrit jamais « devis obligatoire » sur la seule foi du métier |
+| plafond opposable à un artisan : 37 500 € (l.580-583) | s'il fournit les matériaux, son activité est **mixte** : 85 000 € au total ET 37 500 € de services | BOI-TVA-DECLA-40-10-10 § 170 (01/07/2026) | aucune aide ne cite « votre plafond » ; le régime reste une déclaration |
+| dépassement effectif à sa date (l.583-584) | seulement pour le plafond **majoré** (41 250 / 93 500 €) ; dépasser le plafond de base fait sortir de la franchise au 1er janvier suivant | BOI-TVA-DECLA-40-10-20 § 110-170 | le régime figé sur un devis **ne gouverne pas** la facture : elle lira le régime en vigueur le jour du fait générateur |
+| « TVA non applicable, art. 293 B » | **« TVA non applicable, article 293 B du CGI »** (ou 293 B bis, ou art. 284 de la directive 2006/112/CE). Exigée sur la **facture** ; sur un devis, c'est une information | CGI 293 E II | libellé exact dans `mentions-devis.js` |
+| siège de la TVA « irréconciliable », CGI admis jusqu'au 31/12/2027 (l.599-605) | la TVA passe au CIBS le **01/01/2027**. Les renvois au CGI restent valables pour les factures et contrats produisant effet jusqu'au **30/06/2028**. Franchise aux art. **L. 233-3, L. 233-9, L. 233-21** (L. 223-3 traite de l'« intrant mixte ») | ord. 2025-1247 art. 46 et 49, modifiés par l'ord. 2026-671 du 27/07/2026 | `mentions-devis.js` daté avec ces trois bornes |
+| la mention de franchise « change le 01/01/2027 » (SIRET-ET-CLAUSES.md:240) | **non** : le II de l'art. 293 E reste en vigueur jusqu'au décret pris sur L. 216-33 du CIBS, introuvable au 16/10 | ord. 2025-1247 art. 15 | aucun changement de libellé programmé ; état « en attente du décret » |
+| l'écart « plus de deux ans / au moins deux ans » n'est pas établi (l.434-462) | **établi dans la loi** jusqu'au 31/12/2026 : « plus de » pour le 10 %, « au moins » pour le 5,5 % depuis la LF 2023 (art. 65). Le § 80 du BOFiP a gardé l'ancienne formule. Au CIBS : « au moins deux ans » pour les deux taux, apprécié **à la date de début des travaux** (L. 213-245) | CGI 279-0 bis, 278-0 bis A | une certification rédigée « plus de deux ans » couvre les deux taux ; seul le jour anniversaire reste ouvert, pour le 10 %, en 2026 ; en 2027 il faudra la date de **début** des travaux |
+| trois cases de certification (l.2177-2181) | c'est un **choix d'écran** : une phrase qui énumère tout suffit (§ 85, modèles BOI-LETTRE-000280), la partie énergie seulement si une ligne est à 5,5 %. « Seul débiteur » est nuancé par la facture rectificative de bonne foi (§ 230). La certification doit exister **au plus tard au fait générateur** (CE 26/12/2008, n° 308530, § 100). Au 01/01/2027, sa forme passera par un arrêté (L. 216-14) non paru | BOI-TVA-LIQ-30-20-90-40 (09/09/2026) | le module facture bloquera une facture à taux réduit sans certification |
+| autoliquidation : « tous les taux à zéro » (l.2182-2183) | imprimer **« Autoliquidation »** dans la colonne du taux, jamais « 0 % ». Le 10 % ne vaut pas en sous-traitance, mais le **5,5 % oui** si le donneur d'ordre certifie (sinon, par simplification, taux normal). Un sous-traitant en **franchise** n'autoliquide pas | BOI § 20 ; BOI-RES-TVA-000269 Q10 | règle d'exclusion : franchise ⇒ pas d'autoliquidation ; « aucun bloc de certification » n'est juste que sous la simplification |
+| arrondi : « choix technique », BR-CO-10/15 (l.616-620, 1212) | la règle est **BR-CO-17** (avec BR-CO-14). L'arrêté du 27/07/2026 impose les profils EN 16931 : pour une facture électronique, c'est une obligation. Pas de tolérance d'un centime sur la facture (G1.54 supprimée ; G1.53 ne vaut que pour l'e-reporting) | arrêté 27/07/2026 ; spécifications DGFiP v3.2, annexe 7 | `devis_tva` est juste. Mais un taux en millièmes (200, 100, 55) ne sait pas porter **1,05 % ni 1,75 %** (outre-mer). **Décidé : les taux passent en centièmes de point** (2000, 1000, 550, 105, 175), et la formule devient **`(base * taux + 5000) / 10000`**, en SQL ET en JavaScript. Les sept cas appariés du §3.5 (l.1157) sont réécrits, plus un cas à 1,05 % |
+| médiateur : « déduction », palier 5 (l.570-573, 696) | **mention littérale** du devis dans le champ de l'arrêté (art. 4-I + L. 111-1 6° + R. 111-1 7°) et hors établissement (R. 221-2 11° ; amende jusqu'à 15 000 / 75 000 €, L. 242-10). Le médiateur doit être **référencé** par la CECMC. Pas dû entre professionnels, sauf le cas de L. 221-3 | C. conso. | **bloque** un devis adressé à un consommateur ; proposer la liste officielle plutôt qu'une saisie libre |
+| R. 111-2 : « six » points, droit applicable au 7°, juridiction au 8° (l.225-226, 359-360, 1603) | **neuf** points : 7° conditions générales, **8° loi applicable ET juridiction ensemble**, 9° assurance ; 4° (autorisation) et 6° (profession réglementée) sont conditionnels | R. 111-2 (décret 2022-1014) | citations à corriger ; le 6° appliqué à un artisan du bâtiment reste un doute |
+| assurance : obligations « exclusives » (SIRET-ET-CLAUSES.md:294-300) ; l'attestation « tranchée par le droit » (premier jet de cette section) | face à un consommateur, il faut **l'attestation jointe (L. 243-2) ET** assureur, coordonnées et couverture géographique écrits sur le devis (R. 111-2 9°, qui n'exclut pas les constructeurs). Le **n° de contrat n'est exigé par aucun texte** sur le devis : il figure dans l'attestation (A. 243-3). R. 111-2 9° vise **toute** RC pro souscrite. Mais L. 243-2 vise les personnes soumises à la décennale, pour des travaux de **construction** : pour un dépannage ou un entretien sans ouvrage, l'exigence est discutable, et la sous-traitance (F2034) et L. 243-3 (particulier constructeur) restent ouverts | C. assur. ; C. conso. | contrainte croisée du lot 0 : assureur + coordonnées + couverture, n° de contrat facultatif ; une **liste** d'assurances. **Refuser la remise sans attestation, avec une sortie qui explique et laisse une trace, est un CHOIX de conception**, pas une obligation dans tous les cas. Ce qui le déclenche est la **nature des travaux** (une ligne qui relève de la construction), jamais le métier, et la sortie n'écrit jamais « la loi l'exige » quand aucune ligne n'en relève. Attention, deux fiches DILA (F37371, F36008) disent l'inverse du texte |
+| exiger un délai même pour une exécution immédiate est « plus strict que la loi » | **faux hors établissement** : L. 221-5 I 3° ne reprend pas l'exception de L. 111-1 3° | C. conso. | au II, le délai est obligatoire, « exécution immédiate » comprise |
+| `mention_accord` : « les termes sont imposés » (l.2241-2243) | **aucun** texte n'impose « bon pour accord » : l'art. 1376 vise l'engagement d'une seule partie. La seule mention manuscrite imposée est « Lu et approuvé » de l'annexe 2 ; tapée sur le téléphone de l'artisan, elle ne remplit pas l'art. 1174 al. 2 | C. civ. | colonne gardée comme trace, pas comme obligation ; papier pour l'annexe |
+| arrhes présumées par L. 214-1 (l.509-517) | L. 214-3 exclut les « **commandes spéciales sur devis** » : la présomption ne joue probablement pas | C. conso. | `acompte_nature` devient indispensable ; le lexique (CONCURRENCE-DEVIS.md:421-422) est faux sur les deux définitions |
+| « Acompte à la signature » (DEVIS-DU-PROPRIETAIRE.md:179) ; dates d'acompte renvoyées au lot 4 (l.2122-2131) | sur un devis hors établissement, imprimer cette phrase **c'est exiger** un paiement avant 7 jours. Le texte punit le fait d'« exiger **ou** obtenir » : 2 ans et 150 000 € (L. 242-7), et nullité (L. 242-1) | C. conso. | **tout l'acompte passe au lot 2** : montant calculé, « Reste à payer » = TTC − acompte (une soustraction, jamais un second pourcentage), `acompte_nature`, et « au plus tôt le 8e jour après la signature » ; `verifier-devis` refuse « à la signature » hors urgence. « Opus n'encaisse rien » ne protège pas l'artisan : c'est le texte imprimé qui exige |
+| l'urgence lève la rétractation (l.400-405) | elle lève **aussi** l'interdiction de paiement de 7 jours, mais pour les seuls travaux strictement nécessaires | L. 221-10 4° | marqueur d'urgence **par ligne**, pas par devis ; mention « vous ne bénéficiez pas du droit de rétractation » (L. 221-5 10°) ; le lien avec une demande `sos_requests` suit la doctrine de `source` (10.7) |
+| palier 1 : « 2 ans selon les cas » (l.692) | depuis le **27/05/2026**, le formulaire manquant n'est plus puni que de 150 000 € d'amende (loi n° 2026-403, art. 26). L'exemplaire (L. 242-5) et le paiement anticipé (L. 242-7) restent punis de 2 ans. **L. 242-8** ajoute jusqu'à 5 ans d'interdiction d'exercer | C. conso. | aucun texte d'Opus n'attribue de prison au formulaire ; la fiche F23224 est en retard sur le code |
+| clause de juridiction imprimée si l'artisan la déclare | **réputée non écrite** sauf entre commerçants (CPC 48) ; le consommateur saisit le juge de son domicile (R. 631-3) | CPC ; C. conso. | jamais imprimée face à un particulier, ni face à un pro non commerçant |
+| capital (SARL, SA, SAS) | pour une société **à capital variable**, la mention « à capital variable » remplace le montant. Sanction : injonction en référé sous astreinte, à la demande de toute personne intéressée | C. com. L. 231-2, L. 238-3 | `emetteur_incomplet()` exige un montant **ou** cette mention |
+| L. 221-5 « modifié le 06/01/2026, onze points » | seul le 7° a changé (fonctionnalité de rétractation **en ligne**), applicable le **19/06/2026** ; les onze points datent de l'ord. 2021-1734 | ord. 2026-2 ; directive 2023/2673 | rien ne change pour un devis papier |
+| « détachable » | le plan avait raison : le mot n'est ni dans L. 221-9 ni dans l'annexe R. 221-1. Il faut en revanche ajouter « confirmant l'engagement exprès des parties » | C. conso. | phrase du plan gardée |
+| « seule la facture conserve dix ans l'identité de son destinataire » (l.1125-1127) | **faux, et pour deux raisons**. Un devis **accepté par voie électronique**, d'au moins 120 €, avec un consommateur, se conserve **10 ans**, avec accès pour le client « à tout moment » (L. 213-1, D. 213-1, D. 213-2). Un devis portant la **certification de TVA réduite** se conserve « à l'appui de la comptabilité », quel que soit le canal (279-0 bis 3 ; 278-0 bis A IV) | C. conso. ; CGI | pendant la vie du compte, **ces** devis ne se suppriment pas ; à la suppression du compte, Opus propose de les télécharger, puis efface tout. L'obligation de conserver pèse sur l'**artisan**, pas sur Opus (voir « Conservation », plus bas) |
+| devis non accepté : « aucun texte ne fixe sa conservation » (l.639-640) | sauf pour les **services à la personne** (petits travaux de bricolage et de jardinage) : au moins **un an** | arrêté du 17/03/2015, art. 6 (lu par un extrait seulement) | pour ces services, toute purge garde au moins un an |
+| la facture au particulier se fait « sans partenaire » (CONCURRENCE-DEVIS.md:464-465) | vrai jusqu'au 31/08/2027. Ensuite, les ventes aux particuliers font l'objet d'un **e-reporting** par une plateforme agréée, franchisés compris (données agrégées, aucune donnée sur le client) | CGI 290 ; BOI-TVA-DECLA-20-30-50-20 (30/09/2026) | le module 3 aura besoin d'une plateforme pour les particuliers aussi |
+| « 101 plateformes », « ou par celle du client » (CONCURRENCE-DEVIS.md:458-467, 581) | liste du 13/10/2026 : 149 plateformes délivrées et 6 en attente ; 11 autres en attente de tests. La plateforme est celle « **choisie par l'assujetti** » (CGI 289 E). **Il n'existe plus de plateforme publique gratuite pour les factures entre entreprises** : l'État tient l'**annuaire central**. Chorus Pro, qui garde le nom de « portail public de facturation » dans le code de la commande publique (L. 2192-5), reste le canal vers les personnes publiques | DGFiP ; loi n° 2026-103 art. 123 ; CCP L. 2192-5 | reformuler. La « solution dédiée » de l'art. 242 nonies G (décret 2026-677) n'a pas été lue : **on ne peut pas écrire qu'aucun canal gratuit n'existe** (10.10) |
+| ETI : « les sources divergent » (CONCURRENCE-DEVIS.md:453) | tranché par la loi : **01/09/2026** | LFR 2022 art. 26 III | sans effet sur un artisan (PME et micro : 01/09/2027) |
+
+Trois règles sont **plus strictes que la loi**, et le restent par choix ; il faut les présenter comme des choix, pas comme des obligations :
+
+- refuser la remise quand les frais de déplacement sont à `null` (la loi dit « le cas échéant ») ;
+- exiger un délai pour une exécution immédiate, quand le contrat est conclu en établissement ;
+- refuser la remise sans attestation d'assurance quand une ligne relève de la construction (ligne « assurance » ci-dessus).
+
+#### Nouveau : absent du plan
+
+| obligation | texte | ce qu'elle demande au devis | lot |
+|---|---|---|---|
+| **Construction neuve ou transformation importante** : ces contrats sortent du régime hors établissement — pas de formulaire de rétractation, pas de 14 jours, pas de blocage des 7 jours, pas d'amende de L. 242-10 | C. conso. L. 221-2 12° ; directive 2011/83 cons. 26 | une question **par devis**, « construction neuve ou transformation importante ? », **« non » par défaut** (le cas le plus exigeant). « Oui » retire les blocs de rétractation et du 8e jour, après une confirmation qui dit le risque (se tromper ouvre les 12 mois de L. 221-20) et laisse une trace datée. **Cela revoit le §6 (l.2426)**, qui excluait tout interrupteur actionné par l'artisan : la question par devis, « non » par défaut, avec une confirmation qui dit le risque et une trace datée, en est la version encadrée — jamais une déduction | 2 |
+| **Déchets de chantier** : quantité estimée, modalités de tri et d'enlèvement, point(s) de collecte (raison sociale, adresse, type d'installation), coût estimé. Sur tout devis de construction, rénovation, démolition ou jardinage, **quel que soit le client** ; amende jusqu'à 3 000 / 15 000 €. **Exception** : les travaux soumis au diagnostic « produits, équipements, matériaux et déchets » (PEMD, CCH L. 111-10-4) relèvent du IV | C. env. L. 541-21-2-3, D. 541-45-1 | un bloc **par devis**, et un motif de refus de `preparer_remise_devis` pour ces familles de travaux (sauf chantier soumis au PEMD), **décrit** dans `mentions-devis.js` | 1-2 |
+| Main-d'œuvre hors établissement : pour chaque prestation, le taux horaire **et le temps estimé**, ou un forfait | arrêté 2017 art. 4-II | `devis_lignes` distingue une ligne horaire d'un forfait ; refus d'une ligne de main-d'œuvre qui n'a ni l'un ni l'autre | 1 |
+| Modalités de paiement, d'exécution, de traitement des réclamations. Vocabulaire imposé : « garantie légale », et « garantie commerciale » **seulement** si l'artisan en offre une | R. 111-1 ; R. 221-2 (15 rubriques) | colonnes d'`emetteur` ; contrôle du vocabulaire | 0 |
+| **Formulaire type de rétractation** : c'est un texte réglementaire fixe | annexe à R. 221-1 | le reproduire AU MOT, avec un contrôle qui compare le texte imprimé à celui de l'annexe (une propriété, pas une syntaxe). L'avis d'information type (annexe à R. 221-3, version du 05/01/2026) est facultatif | 2 |
+| Information remise avant la signature, sur papier ou, **avec l'accord du client**, sur un support durable ; c'est au pro de prouver qu'il l'a remise | L. 221-7, L. 221-8, L. 111-5 ; C. civ. 1127-4 | accord du client horodaté. Le support durable est le **fichier PDF**, jamais l'adresse signée : elle expire à validité + 30 jours, alors que la rétractation peut courir 12 mois et 14 jours. Garder l'accusé de réception | 2 |
+| Calcul des 14 jours : le jour de la signature ne compte pas ; une échéance qui tombe un samedi, un dimanche ou un jour férié passe au premier jour ouvrable | L. 221-19 | table des jours fériés dans `devis-delais.js` ; un essai avec J+14 tombant un dimanche | 4 |
+| **Le moment de la signature, pas l'endroit.** Accepté par message **juste après** le passage de l'artisan, le contrat reste hors établissement : le recours aux techniques à distance n'a pas été « exclusif » (L. 221-1 2° b). Si l'artisan est venu seulement mesurer et que le client accepte **plusieurs jours plus tard**, de lui-même, le contrat n'est ni hors établissement ni à distance : pas de rétractation. Le régime « à distance » suppose qu'on ne s'est **jamais rencontrés** ; s'il passe un jour par Opus : confirmation (L. 221-13), bouton de commande (L. 221-14), bouton « renoncer au contrat ici » (D. 221-5, depuis le 19/06/2026), C. civ. 1127-1 et 1127-2, et statut de place de marché pour Opus (L. 111-7). Après un démarchage téléphonique : confirmation signée (L. 221-16, depuis le 11/08/2026) | directive 2011/83 cons. 20-21 ; orientations 2021/C 525/01 §4.1 | `lieu_conclusion` à **deux** valeurs, nommées d'après leur régime : « signé le jour de la sollicitation » (hors établissement, **par défaut**) et « signé sans sollicitation le jour même » (en établissement, ou après réflexion : régime de l'art. 4-I, sans rétractation). La question se pose **par devis**, jamais en réglage global, et **le défaut ne dépend pas de la réponse du propriétaire** (l.2659-2665) : Opus sert plusieurs artisans. **Le cas « à distance » existe dès aujourd'hui** — un devis envoyé et accepté par courriel sans s'être jamais rencontrés, sans rien d'Opus : l'artisan garde alors le défaut, qui imprime l'information et le formulaire de rétractation et retarde tout paiement au 8e jour ; ce qu'il ne couvre pas, ce sont les obligations propres à la vente à distance, à commencer par la confirmation du contrat sur support durable (L. 221-13), qui restent à faire par l'artisan. C'est le **régime** « à distance » complet, avec une acceptation dans Opus, qui attend un avis juridique | 2, 4 |
+| Label RGE, pour les travaux d'énergie dont les **aides** exigent le label : dire si on le détient, annexer le justificatif, nommer les sous-traitants et leurs labels. Sanctions : nullité et 15 000 / 75 000 €. Démarchage téléphonique interdit pour ces travaux | L. 224-114, L. 224-115, L. 242-51, L. 223-1 (depuis le 01/07/2025) | mention conditionnelle et pièce jointe, sur le modèle de l'attestation décennale. Ce qui déclenche l'obligation est l'aide, **pas** une ligne à 5,5 % | 2-3 |
+| Clauses présumées abusives (liste grise) : date d'exécution « indicative », acompte conservé sans réciprocité, médiation obligatoire avant le juge (L. 612-4). Sur la liste noire, au-delà du 3° : les 4° à 9° et le 12°. Amende civile pour qui garde une clause déjà jugée abusive (L. 241-1-1, depuis le 02/05/2025) | R. 212-1, R. 212-2 | jamais « délai indicatif » ; liste des sujets interdits de la bibliothèque de clauses | 2, clauses |
+| 5,5 % aussi pour les **bornes de recharge** (avec un installateur qualifié) et le **photovoltaïque jusqu'à 9 kWc** (depuis le 01/10/2025) | CGI 278-0 bis N et P | la liste `taux_justification` s'élargit ; la garde RGE reste limitée à 279-0 bis et 278-0 bis A | 3 |
+| Le 10 % dépend de **qui est facturé** (propriétaire, syndic, locataire, occupant, ou leur représentant) ; le 5,5 % non | CGI 279-0 bis 3 ; BOI § 10 | une question « en quelle qualité commandez-vous ? », jamais déduite de `clients.type` | 3 |
+| Certification établie en **double exemplaire** ; le client garde le sien jusqu'au 31/12 de la 5e année | CGI 278-0 bis A IV | l'exemplaire du client est une obligation | 3 |
+| Travaux d'urgence : une liste officielle dit ce qui ouvre le 10 % quelle que soit l'ancienneté du logement, avec une mention propre, **sur la facture**, et pour le 10 % seulement | BOI-ANNX-000211 ; BOI § 160-180 | branché sur le chemin SOS, au module facture | 3 / facture |
+| Abus de faiblesse en situation d'urgence : 3 ans, 375 000 € | L. 121-9 5°, L. 132-14 | à signaler sur le chemin SOS | 2 |
+| Les mots « artisan » et « maître artisan » sont réservés à qui en a la qualité : 7 500 € | C. artisanat L. 241-1, L. 241-2 | le gabarit ne les imprime jamais comme qualité sans déclaration de l'artisan | 2 |
+| Entreprise au RCS : ville du greffe ; mentions « en liquidation » et « locataire-gérant » le cas échéant | R. 123-237 2°, 4°, 6° | colonnes conditionnelles | 0 |
+| Contrat qui couvre le gros œuvre et la mise hors d'eau et hors d'air d'un logement : contrat écrit avec les mentions a) à g) | CCH L. 232-1 | **hors périmètre**, à écrire au §6 pour ne pas le couvrir par erreur | — |
+
+#### Ce que le devis range pour la facture — seulement ce qu'il IMPRIME ou CONTRÔLE
+
+Le premier jet de cette section voulait ranger dès le lot 1 tout ce que la facture lira, « parce que chaque donnée coûte une colonne aujourd'hui et une migration de devis figés plus tard ». **C'était réintroduire des colonnes sans lecteur**, ce que la règle du projet (« chaque chose naît avec le lot qui s'en sert », d'où l'absence de `compte_id` sur `clients`) et le §3.12 interdisent. Pour deux d'entre elles, la contradiction était même interne : l'option « sur les débits » figée sur le devis ne serait **jamais lue**, puisque la facture lira le régime du jour du fait générateur ; et `cl_pays` n'aurait **aucun écrivain**, `clients` n'ayant pas de colonne pays et imposant un code postal à cinq chiffres (`client_code_postal_check`). Et l'argument de la migration ne tient pas : **au moment de créer une facture, on peut demander ou proposer la valeur.**
+
+Ce que le devis range, parce qu'il l'imprime ou qu'un de ses contrôles le lit :
+
+| donnée | son lecteur | lot |
+|---|---|---|
+| unité en **liste fermée** (m², ml, m³, u, h, forfait…) | imprimée. Choisir des unités qui ont un code UN/ECE rec20 (MTK, MTR, MTQ, HUR, C62, LS… à vérifier dans l'annexe 7) ; la correspondance elle-même s'écrira avec la facture | 1 |
+| main-d'œuvre : taux horaire **et** temps estimé, ou forfait | imprimée ; exigée hors établissement (arrêté 2017 art. 4-II) | 1 |
+| lieu d'exécution structuré (rue, code postal, ville) | imprimé ; c'est aussi lui qui situe un poste dans une région (10.6) | 1 |
+| taux en centièmes de point | la formule, et le pied du devis | 1 |
+| qualité du destinataire : consommateur, non-professionnel, professionnel | décide des mentions imprimées (médiateur pour un consommateur, juridiction jamais face à un consommateur, conditions de paiement entre professionnels). Proposée depuis `clients.type`, confirmée d'un appui ; un non-professionnel (SCI, syndic) traité comme un consommateur par prudence | 1-2 |
+| SIREN d'un client professionnel | `clients.siret` accepte déjà 9 ou 14 chiffres (`client_siret_check`) ; à la remise, **avertir** s'il manque, sans refuser | 2 |
+| régime de TVA figé dans `em_` | imprimé (« TVA non applicable, article 293 B du CGI ») | 2 |
+| `cl_tva_intra` | imprimé, exigé seulement en mode autoliquidation | 3 |
+
+Ce qui attend le **module facture**, par migration additive :
+
+| donnée | pourquoi la facture en aura besoin |
+|---|---|
+| catégorie de l'opération : biens, services ou mixte | 242 nonies A 8° bis, factures de 2027 aux particuliers comprises (« fourniture et pose = services » reste à confirmer par un comptable) |
+| option pour la TVA sur les débits | 242 nonies A 11° bis ; lue sur `emetteur` le jour du fait générateur |
+| en franchise, une ligne `devis_tva` à taux 0 : catégorie **Z sans motif** sans n° de TVA, **E avec le motif VATEX-FR-FRANCHISE** avec | BG-23 ; BR-Z-10 et BR-E-10 |
+| pays du client | BT-40 et BT-55, avec un vrai champ pays dans `clients` et une contrainte de code postal assouplie |
+| canal fiscal complet : assujetti établi en France, non assujetti (une association aussi), étranger, personne publique (SIRET, code service, n° d'engagement, via Chorus Pro, CCP L. 2192-1) | c'est ce canal, et non « particulier / entreprise », qui décide entre facture électronique et e-reporting |
+| répartition de l'acompte par taux | e-reporting des paiements (sauf autoliquidation) ; une règle du **plus fort reste**, pour que la somme tombe juste au centime (l'invariant du plan refuse le centime d'écart, l.35) |
+| `devis_id` sur les factures d'acompte et finale ; référence de commande du client | CGI 289 bis ; C. com. L. 441-9 |
+
+Sanctions de la réforme :
+
+- facture non électronique : 50 € par facture, 15 000 € au plus par an ;
+- pas de plateforme de réception : mise en demeure de 3 mois, puis 500 €, puis 1 000 € par nouvelle période de 3 mois ;
+- e-reporting manqué : 500 € par transmission jusqu'au 31/12/2026, et **250 €** dans le texte applicable au 01/01/2027 (CGI 1788 D). C'est ce second chiffre qui vaudra quand un artisan sera concerné. Un défaut de coordination entre textes est possible : à surveiller.
+
+Les factures stockées à Londres posent en plus la question du lieu de stockage (LPF L. 102 C), à soumettre à un comptable.
+
+#### Conservation et données personnelles
+
+| devis | durée | fondement |
+|---|---|---|
+| accepté **par voie électronique**, d'au moins 120 €, avec un **consommateur** | 10 ans (à compter de la signature, ou de l'exécution si elle est différée), avec accès pour le client | C. conso. L. 213-1, D. 213-2 |
+| portant la **certification de TVA réduite**, quel que soit le canal | à l'appui de la comptabilité : 6 ans sous forme électronique (LPF L. 102 B) ; 10 ans au titre de L. 123-22, **si ce texte s'applique à l'artisan** (« Incertain ») | CGI 279-0 bis 3, 278-0 bis A IV |
+| ouvrage (construction) | la preuve sert à l'artisan jusqu'à 10 ans après la réception — un intérêt, pas une obligation de conservation | C. civ. 1792-4-3 |
+| dépannage ou réparation sans ouvrage | 5 ans à compter de la connaissance des faits, dans la limite d'un délai butoir de 20 ans | C. civ. 2224, 2232 |
+| jamais accepté | 1 an (exemple CNIL d'une serrurerie, base 6.1.b) ; au moins 1 an pour les **seuls** services à la personne ; 3 ans seulement pour relancer, c'est-à-dire pour la prospection | CNIL 07/02/2022 ; arrêté du 17/03/2015 |
+
+**« 10 ans » ne vaut donc pas pour « les devis acceptés » en général** : seulement pour les deux premières lignes.
+
+> **Deux temps, et il ne faut pas les confondre.**
+>
+> **Pendant la vie du compte**, un devis que la loi oblige à garder (les deux premières lignes) ne se supprime pas : il part en **archive**, séparée des données courantes comme le demande la CNIL (base 6.1.c ou 6.1.f). Le droit à l'effacement cède devant une obligation légale ou la défense en justice (RGPD 17.3 b et e), mais **pas** pour un devis jamais accepté.
+>
+> **À la suppression du compte**, l'obligation de conserver pèse sur l'**artisan**, pas sur Opus. Opus, sous-traitant, doit **renvoyer ou effacer, au choix de l'artisan** (art. 28.3.g) : la suppression propose de télécharger les PDF et la trace d'acceptation (que l'export JSON ne contient pas), puis **efface tout** — devis, lignes, et fichiers du futur espace `devis`, à ajouter à `ESPACES` (`supabase/functions/compte/index.ts:46`). Une copie gardée après la fin du contrat est l'un des trois manquements sanctionnés chez MOBIUS (CNIL, 11/12/2025 ; `DONNEES-DES-ARTISANS.md` §2.4). **La politique de confidentialité ne promettra jamais qu'Opus garde des devis dix ans.**
+
+**Aucun mécanisme de purge n'existe** : `pg_cron` et `pg_net` sont disponibles mais non installés sur la vraie base, PostgreSQL n'y appelle aucun service web, et un PDF du stockage ne s'efface pas par une ligne SQL — il faut l'API du stockage, comme le fait la fonction Edge `compte`. Le mécanisme est une **décision du lot 4** : installer `pg_cron` et `pg_net`, ou une tâche planifiée extérieure qui appelle une fonction Edge.
+
+Sur les données des clients, l'artisan est responsable du traitement et Opus son sous-traitant (RGPD art. 28). `legal.js` écrit : « on ne peut pas écrire ce contrat » (`legal.js:690-694`). Ce n'est plus exact : les clauses types de la Commission (décision 2021/915, toujours en vigueur) sont réputées conformes. Il reste à remplir leurs annexes I à IV, qui sont des faits : parties, description du traitement, mesures de sécurité, sous-traitants ultérieurs. Le choix reste celui du propriétaire, à commencer par la question de savoir qui est le sous-traitant, puisque l'éditeur est aujourd'hui un particulier.
+
+Obligations propres d'Opus comme sous-traitant :
+
+- sous-traitants ultérieurs listés et autorisés par l'artisan (28.2) : Supabase toujours ; la Base Adresse Nationale quand l'artisan tape une adresse de client (sa qualification reste discutée) ; Anthropic **dès qu'une action IA lira un devis** — la relecture et l'étage de la compréhension de la base de postes (10.6) en seront ;
+- à la fin, récupérer ou effacer au choix de l'artisan (28.3.g), ci-dessus ;
+- registre des traitements (30.2), dû **dès aujourd'hui** pour le carnet de clients, et notification des violations à l'artisan (33.2) ;
+- toute réutilisation du contenu des devis pour les fins d'Opus (des statistiques de prix, par exemple) fait d'Opus un responsable de traitement pour cet usage (28.10) : c'est la raison pour laquelle la base commune se construit **sans** les données des clients (10.6).
+
+La décision d'adéquation du Royaume-Uni a été renouvelée le 21/12/2025 : l'hébergement à Londres reste possible sans encadrement supplémentaire. La phrase de `legal.js:707-709` est vraie aujourd'hui, et deviendra fausse dès qu'un second artisan enregistrera un client ou un devis.
+
+#### Incertain, et dit comme tel
+
+- **Fourniture et pose : vente ou service ?** La Commission range les fenêtres et portes posées dans la vente (délai de rétractation compté depuis la **réception** du bien) et la rénovation dans le service (délai compté depuis la **signature**). Mais la lettre de L. 221-1 II assimile tout contrat mixte à une vente. Conséquence : ne pas imprimer UNE date de fin de rétractation sur un devis de fourniture et pose ; à défaut, retenir la plus tardive.
+- **« Transformation importante » (L. 221-2 12°)** : le texte ne la définit pas ; le considérant 26 la compare à une construction neuve. D'où le « non » par défaut.
+- **Commencer les travaux pendant les 7 jours**, à la demande expresse du client, est **licite** selon le texte actuel : L. 221-10 n'interdit que de *recevoir* un paiement, L. 221-25 organise cette demande, et la directive l'impose (art. 9 §3). La fiche F23224 dit le contraire, mais c'est une survivance de l'ancien L. 121-26. Dans tous les cas, aucun paiement avant le 8e jour.
+- L'attestation décennale sur un devis de **dépannage sans ouvrage**, ou de **sous-traitance** : le sous-traitant n'est pas tenu à la décennale (F2034), mais L. 243-2 vise des personnes, pas des opérations.
+- Le jour anniversaire des deux ans, pour le 10 %, en 2026.
+- **Une fiche Opus compte-t-elle comme « l'espace de communication en ligne dédié » de l'art. 3 de l'arrêté de 2017 ?** Si oui, un artisan de dépannage qui n'y affiche pas ses tarifs n'est pas en règle, **même s'il les affiche sur son propre site** : l'art. 3 vise « tout espace ». C'est ce qui pèse sur la question des tarifs (10.8, tour 1).
+- R. 111-2 6° (profession réglementée) s'applique-t-il à un artisan du bâtiment, dont l'activité est soumise à qualification ?
+- Un client « non-professionnel » (SCI, syndic) : par prudence, le traiter comme un particulier.
+- Un dépannage est-il une « rénovation » au sens de l'obligation sur les déchets ?
+- Le franchisé et l'e-reporting des **paiements** à partir du 01/01/2027 (L. 216-48 vise les opérations dont il est « redevable »).
+- L. 123-22 (dix ans) s'applique-t-il à un micro-entrepreneur ? « Fourniture et pose » est-elle une prestation de services pour la catégorie d'opération ?
+
+#### L'effet sur chaque lot, résumé
+
+| lot | ce qui change |
+|---|---|
+| 0 | lit `entreprise_registre` (ligne active) ; liste d'assurances ; médiateur, bloquant pour un consommateur ; modalités de paiement, d'exécution et de réclamation ; capital ou « capital variable » ; ville du greffe ; régime de TVA « non déclaré » sans rien de pré-coché ; logo ; tarifs rangés selon la réponse du tour 1 ; points 1 à 4 d'`erreurs.js` |
+| 1 | la forme d'une ligne (10.6) ; unité en liste fermée ; main-d'œuvre horaire avec temps estimé, ou forfait ; lieu d'exécution structuré ; taux en centièmes de point et nouvelle formule ; qualité du destinataire ; gros chantiers selon la réponse ; correcteur du clavier sur les descriptions |
+| P | la base de postes : prix de référence, écart signalé, ajout d'un appui (10.6) |
+| 2 | reconstruction EAS d'abord (10.4) ; question L. 221-2 12° ; bloc déchets (exception PEMD) ; formulaire au mot ; accord pour le support durable et PDF remis avant la signature ; tout l'acompte, « au plus tôt le 8e jour », jamais « à la signature » ; urgence par ligne et lien SOS ; délai obligatoire au II ; `lieu_conclusion` à deux valeurs ; juridiction jamais imprimée pour un consommateur ; RGE conditionnel ; avertissement sur le SIREN du client ; « Document d'essai — sans valeur » tant que `STATUT = 'essai'` (10.5) ; la fonction des motifs de refus (10.7) |
+| 3 | phrase unique de certification ; qualité du preneur ; « Autoliquidation » imprimé, 5,5 % possible en sous-traitance ; franchise ⇒ pas d'autoliquidation ; bornes de recharge et photovoltaïque ; double exemplaire ; bornes CIBS datées ; `cl_tva_intra` |
+| 4 | L. 221-19 et jours fériés ; archive des devis à conserver pendant la vie du compte ; suppression de compte ⇒ téléchargement proposé, puis tout effacé ; purge des devis jamais acceptés **et son mécanisme** ; la question des factures reposée |
+| 5 | **trois** modèles (10.6) ; tailles en pt ou en mm ; Oswald dans un module engendré au build ; fonds par `print-color-adjust` |
+
+### 10.4 La technique : PDF, partage, signature
+
+Revérifiée en lisant le code natif publié (`expo-print@57.0.2`, `expo-sharing@57.0.23`) et en mesurant dans le Chromium du projet. Le choix `expo-print` / `expo-sharing` tient. Voici ce qui change :
+
+| | le plan | revérifié le 17/10 | conséquence |
+|---|---|---|---|
+| moyen d'essai | « essayable sans development build » (l.1251-1257) ; `expo-print` « fourni dans Expo Go » (l.39) | le propriétaire utilise un **build de développement** depuis le 15/10. `expo-print` et `expo-sharing` ne sont **pas dans l'application installée**. Avec `inlineRequires: false` et sans `await import` (interdit dans `src/`), un import statique d'un module natif absent fait planter l'application **dès le démarrage** (« Cannot find native module 'ExpoPrint' ») | étape écrite au lot 2, dans cet ordre : `npx expo install` **dans le conteneur**, puis `--check` (app.json change : `expo-sharing` y ajoute son greffon, à laisser sans option) ; commit ; `eas build` development **et** preview ; réinstallation par le propriétaire. Tout cela **avant** qu'un commit qui importe `expo-print` n'atteigne son téléphone. Une garde `requireOptionalNativeModule('ExpoPrint')` **ne protège rien** si un fichier de `src/` importe `expo-print` en haut : si le JS du paquet appelle `requireNativeModule` au chargement, l'application tombe avant que la garde ne s'exécute (non vérifié : le paquet n'est pas installé). Deux parades : un **seul** fichier enveloppe qui appelle le module natif par `requireOptionalNativeModule` sans importer `expo-print`, et un contrôle qui refuse tout autre import du paquet ; ou bien dire que **seule la reconstruction faite AVANT le commit** protège |
+| version du SDK | 57 | **SDK 58 sorti le 15/10/2026** ; la prochaine Expo Go des stores ne prendra que le SDK 58 ; version attendue d'`expo-sharing` : ~57.0.23 | si le projet migre avant le lot 2 : versions 58.x, et `File.write()` devient asynchrone |
+| taille de page | `printToFileAsync({ html })` | sur iOS, le format par défaut est le **US Letter** (612 × 792 pt), et `@page { size }` n'y change rien | passer `width: 595.28, height: 841.89` ; `verifier-devis` refuse un appel sans ces deux options ; l'essai Playwright reste en A4 |
+| marges | règle `@page` obligatoire | sur iOS, seule l'option `margins` compte (zéro par défaut) | `margins` dans l'appel ; la règle `@page` reste pour Android et Playwright |
+| PDF vide | « on compte pages et octets » | `numberOfPages` est fourni par le module. Si la donnée manque, la promesse est **résolue** avec un objet d'exception, sans `uri`. Le rendu attend la fin du chargement, mais jamais `document.fonts.ready` | tester `typeof r?.uri === 'string' && r.numberOfPages > 0` ; lire les octets par `new File(uri).size` |
+| en-tête de tableau répété, « page n / N » | « un `<thead>` répète son en-tête » (l.1702) | vrai dans Chromium, **pas dans WebKit** (bogue 17205, toujours ouvert) ; Safari ne gère pas les boîtes de marge `@top-*` / `@bottom-*` | ne rien promettre ; refuser les boîtes de marge et `counter(page)` ; s'attendre à « non » sur l'iPhone. **Deux choses que les devis du propriétaire faisaient — l'en-tête répété à chaque page, « Page 2 of 4 » — ne peuvent donc pas être promises sur iPhone** (10.6) |
+| sauts de page | les deux syntaxes | confirmé ; Safari ne gère pas `avoid-page` | refuser `avoid-page` |
+| fonds de couleur | la bande de chantier devient « 2 objets /Image » | non reproduit. Surtout, `page.pdf()` n'imprime **aucun fond** par défaut (mesuré : 0 pixel orange) | `print-color-adjust: exact` (et sa forme `-webkit-`) sur un **conteneur**, pas sur `body` ; `printBackground: true` dans l'essai ; ajouter « la bande et les lignes alternées sont-elles visibles ? » aux questions posées sur l'iPhone |
+| Oswald (lot 5) | police en base64 | le module n'attend pas le chargement des polices ; `expo-asset` est absent de `package.json` | un module JS **engendré** au build, qui porte la chaîne base64 |
+| version web | « boîte modale qui bloque Playwright » | sans interface, `window.print()` rend la main en 7 ms ; ce qui casse vraiment, c'est le résultat `undefined` | décision gardée, raison corrigée |
+| envoi « en deux pièces » | une seule feuille de partage (l.1393-1398) | `shareAsync` ne partage **qu'un fichier**, et se résout à la fermeture de la feuille sans dire si l'envoi a eu lieu | deux feuilles successives, ou un autre montage. L'attestation, rangée dans l'espace privé `documents`, doit d'abord être téléchargée sur le téléphone. `remis` signifie « PDF produit et archivé », **jamais** « envoyé au client » |
+| unités | — | qu'un px CSS vaille 1 pt sur iPhone et 0,75 pt dans Chromium n'est pas tranché | tailles du gabarit en **pt ou en mm**, jamais en px |
+
+Les éliminations du plan restent confirmées. `react-native-html-to-pdf` n'a rien publié depuis le 04/09/2025 ; l'argument « inessayable » tombe avec le build de développement, mais l'élimination tient pour les autres raisons. `react-native-webview` reste écarté.
+
+**Signature au doigt.** La **capture** du tracé se fait sans nouveau module : `react-native-gesture-handler` (~2.32.0) est déjà dans l'application, et le tracé se range comme un chemin SVG écrit dans le HTML du PDF ; elle se vérifie ici par de vrais événements tactiles. **L'affichage du trait pendant qu'on signe, lui, demande `react-native-svg` (ou Skia), absent de `package.json`** : c'est un module natif, à mettre dans la **même** reconstruction EAS que `expo-print` et `expo-sharing`. L'autre voie, sans module, dessine le trait en segments de `View` ; sa fluidité est à mesurer avant de la retenir.
+
+Juridiquement (10.3), c'est une signature électronique **simple** :
+
+- un juge ne peut pas l'écarter au seul motif qu'elle est électronique (eIDAS art. 25 §1, inchangé par eIDAS 2) ;
+- mais seule la signature qualifiée vaut une signature manuscrite (25 §2) et profite de la présomption de l'art. 1367 ;
+- si elle est contestée, c'est à l'artisan de prouver l'identification **et** l'intégrité (C. civ. 1366, CPC 287). Un dessin collé dans un PDF se recopie.
+
+> **Hors établissement, le papier signé en deux exemplaires reste la voie sûre** (C. civ. 1375 al. 4, 1174). Le tracé est une trace, pas une preuve, et on n'écrit toujours NULLE PART « signé électroniquement ». À rouvrir en 2027 : le portefeuille européen d'identité doit offrir aux particuliers une signature **qualifiée gratuite** (règlement 2024/1183, art. 5 bis ; échéance vers fin décembre 2026, date française non vérifiée).
+
+### 10.5 Le compte de test : l'entreprise du FRÈRE du propriétaire
+
+Relevé en comptages, sans lire l'identité :
+
+- **1** entreprise rattachée, de source `'registre'` — c'est-à-dire lue au répertoire Sirene (INSEE), et non ouverte à la main —, active, non gelée au relevé, donc sans réserve dans `sirens_reserves` (qui ne reprend que les anciens gels) ;
+- c'est un **entrepreneur individuel** (code 1000), **sans n° de TVA** ;
+- sur la même fiche : 1 pièce d'existence, 1 attestation d'assurance, et le badge ;
+- ce compte **n'est pas** le compte administrateur et n'a aucun client ;
+- **le badge a été décerné par le seul administrateur, par le back-office** : `journal_admin` porte une ligne `pro_verifie` sur ce compte, écrite par le seul compte présent dans `administrateurs`. Mesuré par la critique, en comptages ; ce n'est plus « non vérifié ».
+
+Le propriétaire l'a dit lui-même : « la page est une entreprise de mon frère, on pourra tester avec ». Le premier jet de cette section raisonnait « si c'est la sienne / si ce n'est pas la sienne » ; la question est tranchée, et ce qui suit est **la conduite à tenir pour ce cas**.
+
+> **Un SIRET prouve qu'une entreprise existe, jamais qui en est le titulaire** (en-tête de la section 45, « Un SIRET est PUBLIC »), et un Kbis ou un avis Sirene se télécharge par n'importe qui. **Un devis engage l'entreprise qu'il nomme** : émettre un devis au nom de l'entreprise d'un autre, c'est se faire passer pour elle — même un frère, même pour rendre service.
+
+**On construit et on essaie le module avec ce compte, à trois conditions, déjà dites au propriétaire :**
+
+1. **L'accord du frère.** Son SIRET, sa pièce d'existence et son attestation sont dans la base, et le badge s'affiche publiquement sur sa fiche (voir « Le badge », plus bas).
+2. **Aucun devis ne part chez un vrai client au nom de cette entreprise, sauf si c'est le frère lui-même qui l'émet.** Les devis d'essai portent **« Document d'essai — sans valeur »**. La forme la plus simple, proposée : l'appelant lit `STATUT` dans `legal.js` et le **passe en paramètre** au gabarit — `devis-html.js` reste sans aucun import (l.2507) —, qui imprime la mention sur chaque devis tant que `STATUT = 'essai'` ; aucune colonne. `verifier-devis` exige qu'elle figure dans le texte extrait de chaque modèle et de chaque gabarit. Conséquence à dire maintenant : **le jour où le frère émet un vrai devis, Opus a son premier utilisateur réel.** `STATUT` doit alors quitter `'essai'`, et `verifier-legal` le refuse tant que le contrat de sous-traitance (`contratSousTraitance`), l'adresse de contact relevée (`emailReleve`) et, quand le module existera, les mentions relues (§3.10) ne sont pas là. Ce n'est pas un réglage technique : c'est la date à laquelle Opus devient un service.
+3. **S'il veut utiliser Opus pour de vrai, on lui TRANSMET ce compte** (adresse de connexion et mot de passe), on n'en crée pas un autre : une entreprise = un compte, et son SIREN est pris (OP007). Trois choses à régler **avant** cette remise :
+   - aucun écran de l'application ne permet de changer l'adresse de connexion ni le mot de passe (relevé : aucun `updateUser` pour l'un ou l'autre dans `src/`, aucune réinitialisation) ;
+   - l'acceptation des CGU portée par ce compte (`users.cgu_version`, `cgu_acceptees_le`) et la preuve SIRET de l'inscription sont celles du **propriétaire**, pas du frère : à la remise, **le frère accepte lui-même les CGU**, et une nouvelle date d'acceptation est enregistrée ;
+   - une fois le compte remis, **le propriétaire ne s'y connecte plus** — il lirait les prix d'un autre artisan, ce que `DONNEES-DES-ARTISANS.md` §5.2 interdit, administrateur compris.
+
+**Le badge.** Il a été décerné par le propriétaire, administrateur, sur un compte qu'il a lui-même ouvert, avec des pièces qu'il a lui-même déposées, pour l'entreprise de son frère, sans que celui-ci y soit pour rien. **Ce n'est pas l'usage prévu du back-office** : un humain y contrôle des pièces envoyées par le TITULAIRE. Ici, celui qui a validé est celui qui a ouvert le compte et déposé les pièces ; le badge public atteste seulement que le propriétaire a regardé ce qu'il avait lui-même déposé. Ce n'est pas non plus un badge qu'il s'est décerné à lui-même — l'entreprise n'est pas la sienne —, mais **la garde « le badge ne se décerne pas soi-même » (`admin_verifier_pro`, `if p_pro = moi`) n'aurait rien vu si elle l'avait été**, puisqu'elle ne reconnaît pas un second compte de la même personne. C'est une tâche hors devis, pas une correction à faire en douce.
+
+> **Décision proposée : retirer le badge jusqu'à l'accord du frère**, par `admin_verifier_pro(p_pro, false, false)` — un geste du back-office, inscrit au journal — et **surtout pas** par un retrait d'entreprise, qui réserverait son SIREN (plus bas). Le retirer ne gêne aucun essai : `emetteur_incomplet()` ne lit jamais `verifie`. À son accord, il pourra être reposé, de préférence sur des pièces que le frère aura lui-même envoyées ou confirmées, et le lien familial entre celui qui valide et le titulaire est dit ouvertement (rien ne l'interdit, le journal le montre). L'autre voie — le garder en le disant — laisse s'afficher chez tout le monde une attestation que son titulaire n'a pas demandée. C'est au propriétaire de faire ce geste, ou de choisir l'autre voie.
+
+**La pièce.** Un EI qui n'est **qu'**artisan reçoit une attestation d'immatriculation RNE, pas un Kbis. L'écran présente la colonne `kbis_url` comme « Extrait Kbis ou avis SIRENE » ; une attestation RNE n'y est pas nommée, mais rien n'empêche d'y avoir déposé un tel fichier. Savoir si l'entreprise est au RCS — et doit alors porter « RCS » suivi de la ville du greffe (R. 123-237) — se lit **sur la pièce**, pas sur le nom de la colonne. Non vérifié.
+
+**Si le frère ne veut pas.** On supprime ce compte **par le chemin de l'application** (`preparer_suppression_compte`, puis la fonction Edge `compte`) : la cascade efface la ligne d'`entreprise_registre`, et une suppression par le titulaire **ne réserve rien** — son SIREN redevient donc libre pour lui —, et la fiche, le badge et les deux pièces de l'espace `documents` partent avec. **Surtout pas par un retrait de l'administration** (`admin_retirer_entreprise`), qui **réserve** le SIREN dans `sirens_reserves` : la réserve survit au compte (section 45.3 bis), elle bloquerait toutes les portes automatiques le jour où lui voudra s'inscrire, et seule l'administration pourrait la lever, en traitant une demande à la main. Le premier jet classait « quel chemin libère le SIREN sans le réserver » en « non vérifié » : cela se tranche à la lecture du schéma.
+
+**Un trou signalé par le premier jet, fermé depuis.** La même cascade effaçait autrefois le gel d'un SIREN retiré (`entreprise_registre.gele`) : un squatteur à qui l'administration retirait une entreprise n'avait qu'à supprimer son compte pour la reprendre. **Ce trou a été fermé le 17/10 (section 45.3 bis, commit bd8b47c)** : la réserve vit dans `sirens_reserves`, sans clé étrangère, et survit au compte ; `siren_reserve()` en est la seule lecture. Pour le frère, rien ne change : une suppression par le chemin de l'application ne réserve rien.
+
+**Le statut du propriétaire lui-même reste ouvert**, et c'est la première question du tour 1. Son compte principal n'a aucune entreprise rattachée ; le seul SIRET d'Opus est celui de son frère. Ses deux devis portent un nom d'entreprise et des dates de septembre 2026 (peut-être une formule de date du tableur), alors que CLAUDE.md dit « ni société ni SIRET » au 29/09 et « micro-entrepreneur » au 04/10. Les phrases « ni SIRET ni assurance décennale » (l.79, 679, 2671) attendent sa réponse :
+
+- **s'il a une entreprise active**, `rattacher_mon_siret()` existe déjà pour la rattacher à l'un de ses comptes — lequel, c'est la question « Quel compte » du tour 2. Sur son compte principal, le badge ne pourra pas passer par le back-office (il ne valide pas sa propre fiche) mais par l'éditeur SQL, ouvertement. Et des obligations courent déjà pour lui — recevoir les factures électroniques par une plateforme agréée depuis le 01/09/2026, même en franchise (plus d'une dizaine de plateformes sont gratuites, et la DGFiP annonce une phase de démarrage sans sanction), puis un médiateur référencé avant son premier devis réel à un particulier. Pour que ses devis soient de vrais devis, Opus devra d'abord sortir de l'essai (condition 2) ;
+- **sinon**, rien ne change à la conduite ci-dessus : on construit, on essaie, on n'émet pas. Rien ne change non plus pour l'**éditeur** d'Opus (`legal.js`, `STATUT = 'essai'`) : être artisan ne fait pas de lui l'éditeur d'une application ; c'est une autre décision.
+
+Une information à transmettre au frère, qui ne dépend pas d'Opus : son entreprise est elle aussi concernée par la réception des factures électroniques depuis le 01/09/2026, et l'absence de n° de TVA rend sa franchise probable, pas certaine.
+
+### 10.6 Ce que les devis du propriétaire changent au plan
+
+`docs/DEVIS-DU-PROPRIETAIRE.md` (commité, fait foi) garde la **forme** de deux devis réels de rénovation (quatre pages chacun, 57 154 € et 110 191 € HT), sans aucune donnée personnelle. **La conformité ne vient pas de ces devis** — le propriétaire l'a dit, « pas aux normes, juste pour la mise en forme » — : elle vient du plan. Ce qu'ils apportent est ce que le plan ne savait pas : **comment un artisan chiffre vraiment.**
+
+#### La forme d'une ligne se décide AVANT le lot 1
+
+Trois de ses habitudes changent ce qu'est une ligne de `devis_lignes`, donc elles se décident avant de créer la table, pas après :
+
+| ce que fait l'artisan | ce que la ligne doit savoir | son lecteur |
+|---|---|---|
+| le devis se lit **par pièce** : un titre de zone (« R+1 », « Extérieur »), puis un titre de pièce (« Cuisine »), puis les lignes chiffrées | des **lignes de titre à deux niveaux**, sans quantité, sans prix, sans taux, ignorées par le total | le PDF ; l'écran de saisie, qui se remplit **pièce par pièce, une carte par ligne** (« une LISTE qui se lit, une CARTE qui s'édite ») |
+| des **réserves** dans le tableau, à l'endroit du problème (« Non relevé : les cotes ne sont pas sur les plans ») | une ligne **« réserve »** : du texte seul, ignoré par le total | le PDF, qui l'imprime précédée du mot **« Réserve : »** en plus du rouge — un devis se photocopie en noir et blanc, et **la couleur ne porte jamais l'information seule** |
+| le geste commercial s'écrit **« Offert »** | une ligne à **zéro centime + un drapeau** | le PDF, qui imprime « Offert » au lieu de « 0,00 € », qui laisse croire à un oubli |
+| « carrelage **non fourni** » — la moitié du prix | **fourniture comprise / non comprise**, par ligne : une case qui écrit la mention, plutôt qu'une parenthèse qu'on oublie une fois sur dix | le PDF |
+| « 24,5M2 », « 105ML » tapés dans une case | une **quantité nombre** et une **unité en liste fermée** | déjà dans le plan |
+
+Ce qui reste à trancher en écrivant le lot 1, et c'est dit plutôt que décidé ici : le nom et les valeurs exactes de la colonne de type de ligne (les « options, non comprises » du plan, l.2030, y entrent) ; une ligne de pure fourniture a-t-elle besoin d'une troisième valeur « sans objet » pour la fourniture ; une ligne appartient-elle à sa pièce **par l'ordre** (le plus simple) ou par une clé vers la ligne de titre. Et une contrainte nommée en `_check` interdit une quantité, un prix ou un taux sur un titre ou une réserve. Le **sous-total par zone ou par pièce**, que le §10 laissait ouvert, se calcule depuis les titres sans aucune colonne : l'imprimer ou non se décide au lot 1.
+
+#### Les surfaces de la pièce
+
+Dans la chambre 1 de ses devis : 17 m² de sol, mais 42,5 m² de contre-cloison — la surface des murs. Il retape ces surfaces à chaque ligne. **La ligne de titre de pièce porte ses surfaces (sol, murs), et une ligne au m² les reprend.** Deux règles :
+
+- **copie, pas lien** : la surface remplit la quantité au moment où la ligne est créée. C'est la quantité qui s'imprime et que le client vérifie ; changer une surface ne modifie aucune ligne en silence (au plus, l'écran le propose) ;
+- **tapée à la main, jamais exigée** : le jour où la Visite existera, elle pourra remplir ces surfaces, mais elle reste facultative (§19 du second cahier, §3.7 de ce plan). Son lecteur est l'écran de saisie.
+
+#### L'acompte et le reste à payer
+
+Ses devis écrivaient « 30 % avant le début des travaux » et un « solde dû » égal au TTC : l'acompte n'était qu'une phrase. **Opus le calcule** : montant en centimes, puis « Reste à payer » = TTC − acompte, par soustraction — la somme tombe juste par construction. Et la formulation suit 10.3 : hors établissement, **jamais « Acompte à la signature »**, toujours « au plus tôt le 8e jour après la signature ». Tout l'acompte passe au lot 2.
+
+#### La base de postes : la décision « pas de table d'ouvrages » est REVUE
+
+Il faut le dire franchement. Le plan a écarté « une table `ouvrages` / un catalogue de prix » (l.2033, l.2419), parce qu'« une table de prix sans historique ni taux par défaut est une table qu'on remplit à la main pour rien », et l'a remplacée par la relecture de ses propres `devis_lignes`. **Les devis du propriétaire démolissent la première moitié de cet argument** :
+
+- le même faux plafond non isolé vaut 50 €/m² dans un devis et 70 €/m² dans l'autre, et ce n'était pas toujours voulu : « je n'avais pas non plus de base de prix ». Sans base, le même ouvrage glisse d'un chantier à l'autre sans que personne l'ait décidé ;
+- le remède qu'il décrit est un **prix de référence que l'artisan FIXE lui-même**. Ce n'est ni une moyenne, ni le dernier prix pratiqué : c'est une valeur qu'il choisit, donc **elle ne se déduit d'aucune ligne existante. Elle a besoin d'une table.**
+
+Et la table n'est plus « remplie à la main pour rien » : elle se remplit **d'un appui** depuis ses propres lignes, et elle a deux lecteurs dès le premier jour.
+
+Elle naît au **lot P** (comme « postes »), juste après le lot 1. **Pas « lot 1 bis »** : ce nom est déjà celui du SIRET à l'inscription dans CLAUDE.md, et deux « lot 1 bis » à quelques lignes d'écart se confondraient.
+
+| étage | qui le fait | ce qu'il fait | quand |
+|---|---|---|---|
+| **la mémoire** | la base, sans IA | chaque ligne qu'il a écrite ressort quand il tape (« chape » → **sa** phrase, **son** prix, et le devis d'où ils viennent). C'est le lecteur n° 5 du lot 1 (l.2032-2034), gardé, avec une précision : **jamais de moyenne** — 50 € et 70 € ne font pas 60 €, ce sont deux situations ; on montre les derniers prix avec leur devis d'origine | lot 1 |
+| **la base de postes** | la base, sans IA | une table privée de postes : la phrase **mot pour mot**, l'unité, la fourniture, le **prix de référence** en centimes (vide tant qu'il ne l'a pas fixé : un `null` n'est pas un `0`). Elle se remplit **d'un appui** — « Ajouter à ma base » sur une ligne qu'il a écrite : son geste à lui, jamais un ajout automatique. Ses lecteurs : la suggestion pendant la frappe, qui propose ce prix ; et **l'écart signalé sur la carte de la ligne** — « votre prix de référence est 50 €/m², vous mettez 70 € — c'est voulu ? » —, une phrase discrète, **jamais une fenêtre, jamais un refus** : le prix de la ligne est le sien | **lot P**, juste après le lot 1 : il ne sort rien, donc il n'engage personne, et il se vérifie entièrement ici |
+| **la compréhension** | l'agent | reconnaître deux formulations du même poste, comprendre une dictée (« chape dans le salon, 27 m² »), **repérer un poste nouveau et proposer de l'ajouter** (« 3 postes de ce devis ne sont pas dans votre base — les ajouter ? »), remplir la base à partir de ses anciens PDF | **après le module**, comme toute action de l'agent : avec son journal, sa permission et sa limite (section 38). Le §0 point 6 — « aucune action IA dans ce module » — tient |
+
+**Pourquoi la proposition des postes nouveaux attend l'agent.** Le premier jet la plaçait au lot 2, sans IA. Or sans IA on ne compare que le **texte exact** : chaque variante d'un même poste (« chape sèche avant carrelage collé », « création d'une chape sèche pour futur pose de carrelage ») serait proposée comme « nouvelle », et la base se remplirait exactement des variantes que la règle veut éviter. `DEVIS-DU-PROPRIETAIRE.md` §5 range cette proposition dans l'étage de l'agent ; elle y reste. Ce qui vaut dès le lot P, sans IA : **un poste nouveau ne s'ajoute jamais tout seul.**
+
+Les règles qui la gardent « fidèle à l'artisan » (DEVIS-DU-PROPRIETAIRE.md §5) :
+
+- **la phrase est rangée mot pour mot** ; l'agent ne la réécrit jamais en silence ;
+- **la base est PRIVÉE** : `est_mon_entreprise()`, aucune politique pour `anon`, aucune lecture par l'administration ; elle entre dans `mes_donnees()` (c'est son tarif, donc une donnée sur lui pour un EI) et part avec le compte ;
+- **elle ne contient aucune donnée de client** : ni nom, ni adresse, ni lien vers le carnet. Le lien vers le devis d'origine, nullable et en `on delete set null`, ne sert qu'à afficher « 50 €/m², devis 087 » ;
+- si un poste porte un jour un taux par défaut, il ne s'applique qu'à l'**ajout** d'une ligne, jamais à un devis figé (§3.4, point 4).
+
+Le §6 du plan (« L'agent qui RÉDIGE un devis : il n'existe aucune source de prix », l.2418) change aussi : la base de postes **sera** cette source — les prix de l'artisan, et eux seuls. L'agent qui propose une ligne viendra avec l'étage de la compréhension.
+
+#### Le correcteur, en trois couches
+
+1. **Pendant la frappe** : `autoCorrect` et `spellCheck` **actifs** sur les champs de description, **inactifs** sur les quantités et les prix ; `verifier-devis` le contrôle. Lot 1.
+2. **Avant l'envoi**, l'agent relit le devis et **propose** ses corrections une par une. C'est une action IA : elle vient avec l'étage de la compréhension.
+3. **Une correction acceptée corrige aussi la base** : la faute ne se corrige qu'une fois dans la vie de l'artisan. Avec la couche 2.
+
+#### Les prix du marché : jamais dans ce module
+
+L'agent ne donnera **jamais** un « prix du marché » tiré de la mémoire du modèle : un modèle n'a pas de prix fiables, datés ni régionaux, il produit un nombre plausible qui engagerait l'artisan. Une base de prix du bâtiment est une base de données protégée (CPI L341-1, L342-1) : rien ne s'intègre sans une **licence** de son éditeur, lue source par source ; le propriétaire doit nommer la base dont il parle. Le jour où elle existe : une **fourchette indicative**, sourcée et datée, **jamais insérée seule** dans un devis, jamais mélangée à la base personnelle.
+
+#### Ce que `DONNEES-DES-ARTISANS.md` impose au devis
+
+Ce document (commité, fait foi) porte sur une base commune future. Quatre de ses règles touchent **dès maintenant** la façon de construire le devis :
+
+1. **Ranger de façon réutilisable, séparé du texte libre et des données du client** (RGPD art. 89.1 ; A-FAIRE.md, dernière section). C'est déjà la forme des colonnes que le devis imprime : quantité en nombre, unité en liste fermée, prix en centimes, date de remise, code postal du lieu d'exécution (qui donne la région).
+   **Un conflit entre deux règles écrites, sur la catégorie de métier, et il appartient au propriétaire.** A-FAIRE.md (dernière section, point 1) fait une **exigence** de ranger un poste avec son unité, son prix, sa date, sa région **et sa catégorie de métier** ; `DONNEES-DES-ARTISANS.md` (§2.1, §7) cite aussi le métier. La règle du projet, elle, refuse une colonne sans lecteur. Deux options :
+   - **(a) aucune colonne** : le métier se déduira plus tard des métiers de la fiche, avec le cahier des charges de la base. Simple, mais approximatif pour un artisan qui a plusieurs métiers ;
+   - **(b) une colonne métier sur la ligne de la base de postes**, qui a un lecteur dès le premier jour : le filtre de la suggestion pendant la frappe, pour un artisan qui a plusieurs métiers.
+   À trancher avec lui avant le lot P (10.8, « À trancher plus tard »). Le premier jet tranchait pour (a) sans le dire : c'est corrigé.
+2. **Jamais de prix conseillé.** L'agent peut montrer à l'artisan **ses propres** prix ; il n'écrit jamais « le prix à mettre est X », ne propose jamais de « s'aligner », ne pré-remplit jamais un devis avec le prix d'un autre (lignes directrices horizontales 2023, points 397 et 402). Un devis n'affiche jamais le prix d'un autre artisan.
+3. **Les données des clients ne servent jamais pour le compte d'Opus.** Opus en est le sous-traitant (10.3) : un prix signé est une donnée du client, et le réutiliser pour une base, même « anonymisé », est exactement ce que la CNIL a sanctionné le 11/12/2025.
+4. **Le propriétaire, du métier, ne doit pas lire les prix individuels des autres artisans**, administrateur compris : aucune fonction `admin_*` ne lit `devis`, `devis_lignes`, `devis_tva` ni la base de postes, et `verifier-devis` le refuse. **Limite à dire** : le propriétaire détient l'éditeur SQL de Supabase, qui lit tout ; la « séparation réelle » de §5.2 n'est pas tenue par ce module. `DONNEES-DES-ARTISANS.md` §7 (décision 3) veut qu'elle se décide **avant le module devis** : elle devient un préalable (10.7).
+
+#### Trois modèles au lieu de cinq
+
+> « On pourrait proposer au client trois sortes de mise en page et il choisit, insérer son logo, etc. »
+
+Le §5 en prévoyait **cinq**. **Trois, c'est mieux pour commencer** : chaque modèle se vérifie, s'imprime et s'entretient, et un quatrième s'ajoute le jour où un artisan le demande. La règle ne change pas : **un seul contenu, trois habillages**, aucun ne peut retirer une mention, et `verifier-devis` compare le texte extrait des **trois** modèles sur les **deux** gabarits (`etablissement`, `hors_etablissement`).
+
+| | modèle | à qui il parle |
+|---|---|---|
+| 1 | **Classique** — inspiré de ses devis : logo au centre, tableau à quatre colonnes, bandeaux gris, lignes alternées, titres de pièce centrés | l'artisan qui veut retrouver ce qu'il faisait |
+| 2 | **Épuré** — beaucoup de blanc, un seul filet sous chaque pièce, les totaux en grand | la rénovation haut de gamme |
+| 3 | **Compact** — petites marges, descriptions sur toute la largeur | les gros devis : cinquante lignes en deux pages au lieu de quatre |
+
+Le **logo** s'envoie une fois, dans « Mon entreprise » (lot 0), et s'imprime sur les trois. Les bandeaux et lignes alternées du Classique sont des **fonds** : ils dépendent de `print-color-adjust` (10.4) et se jugent sur l'iPhone. L'en-tête répété à chaque page et « Page 2 sur 4 », que ses devis portaient, **ne peuvent pas être promis sur iPhone** (WebKit, 10.4). Ce que ses devis faisaient mal, Opus le rend impossible : un montant jamais coupé en « ##### », toujours deux décimales, « Total HT » écrit, un tableau par taux, « Page … sur … » en français quand il existe.
+
+À trancher plus tard, pas maintenant : une **couleur d'accent** au choix (et comment la garder lisible en noir et blanc) et Oswald en base64, au lot 5 ; le **format du numéro**, avant le lot 2 — le plan dit `DEV-2026-0001`, stocké et non configurable (l.784) ; ses devis utilisaient « 087/026 ». Un format unique pour tous, jamais un format au choix de chaque artisan.
+
+### 10.7 L'ordre des lots, corrigé, et les amendements intégrés
+
+**Avant tout**, trois préalables. Ils ne changent pas l'ordre des lots ; ils décident **sur quel compte** on essaie, **si un devis réel** pourra un jour sortir, et **qui peut lire quoi** :
+
+1. les deux premières questions du tour 1 (10.8) — le statut du propriétaire et l'accord du frère ;
+2. le sort du badge du compte de test en attendant cet accord (10.5 : retrait proposé) ;
+3. **la séparation de `DONNEES-DES-ARTISANS.md` §5.2** : qui peut lire les prix individuels, éditeur SQL compris, et qui fera tourner un jour le calcul des fourchettes. Ce document veut qu'elle se décide **avant le module devis** (§7, décision 3). Elle n'est pas posée comme une question à choix dans 10.8 — c'est une décision d'organisation, pas quatre options —, mais **aucun prix d'un autre artisan n'est rangé avant qu'elle soit prise**. Le seul autre artisan, aujourd'hui, est son frère.
+
+Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) **tient** ; le régime de TVA et le moment de la signature (tour 2) décident toujours de l'inversion des lots 2 et 3. Ce qui bouge :
+
+- **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
+- **Lot 1** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
+- **Lot P — la base de postes** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier s'y tranche avant (10.6).
+- **Lot 2** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
+- **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
+- **Lot 5** : trois modèles au lieu de cinq.
+
+**Une seule autorité pour ce qui bloque une remise.** Le premier jet répartissait les refus entre `emetteur_incomplet()` (SQL), `mentions-devis.js` (JS) et `verifier-devis`. Or plusieurs nouveaux blocages ne dépendent pas de l'émetteur : le médiateur dépend du **client** (consommateur ou non), les déchets de la **nature des travaux**, le délai obligatoire du **moment de conclusion**, l'attestation des **lignes**. Ils ne peuvent pas vivre dans `emetteur_incomplet()`. Et la première correction proposait un « miroir JS » de la règle, ce qui la faisait écrire deux fois dans la phrase même qui l'interdisait.
+
+> **L'autorité est la base, et la règle s'y écrit UNE fois.** Une fonction de lecture des motifs — `motifs_refus_remise(uuid)`, par exemple — rend la liste de ce qui manque dans **une seule** valeur (`text[]` ou `jsonb`) ; `emetteur_incomplet()` en est une partie. `preparer_remise_devis(uuid)` l'appelle et **refuse** avec un message qui nomme ce qui manque, champ par champ, comme le plan l'écrit (l.793-795). L'écran interroge la même fonction pour dire « prêt » ou non avant l'appui : il ne recopie pas la règle — deux écritures « se désaligneraient », et l'écran dirait « prêt » devant un refus (l.1933-1937).
+>
+> **Jamais une colonne par motif.** La signature de `preparer_remise_devis` est déclarée définitive (l.2464) : une colonne de retour par motif rendrait impossible l'ajout d'un motif au lot 3 sans `drop function`, que le connecteur refuse. Une liste dans une seule valeur s'allonge sans changer de forme.
+>
+> **Un miroir JS n'existe que pour le mode démonstration**, où il n'y a pas de base — c'est la seule raison qui justifie celui de `verifier-filtre`. Il est dit comme tel, et éprouvé sur les mêmes cas que les essais SQL. `mentions-devis.js` décrit les mentions, il ne décide de rien.
+
+**Le lien avec une urgence (SOS)** suit la doctrine de `source` (§3.7) : `'urgence'` ajoutée à `devis_source_check` (l.1421-1428) ; `sos_request_id` nullable, en `on delete set null` ; écrit par « Faire le devis » sur une urgence ; lu dès le premier jour par la liste des devis (« depuis une urgence du … ») et par le contrôle du marqueur d'urgence par ligne. **Il n'est jamais exigé pour marquer une ligne urgente** : une urgence peut arriver par téléphone. La propriété de `verifier-devis` tient : aucune colonne `not null` autre que `pro_id` et `client_id`.
+
+**Le lot des clauses** (idée 2, après le lot 2) entre dans le plan avec ses amendements, désormais **décidés** :
+
+- le §2.0 est amendé : son « aucune formule à cocher » vise l'**obligatoire**. Une bibliothèque de clauses **facultatives** est permise, avec un champ `obligatoire` toujours `false` et contrôlé, un catalogue JS sans import, et un drapeau `EDITEUR.clausesRelues` qui reste à `false` tant que personne n'a relu ;
+- au §3.4, les clauses retenues partent dans une **table fille `devis_clauses`** (clé, version, titre, texte entier), une ligne par clause, figée avec le devis et ajoutée à `mes_donnees()`. Jamais une colonne de l'instantané ;
+- l'avenant est livré avec les clauses ; la liste des sujets interdits couvre toute la liste noire et toute la liste grise (10.3) ; les pénalités de retard et l'indemnité de 40 € suivent la qualité du destinataire, pas une clause.
+
+**La contrainte sur le SIRET** demandée par SIRET-ET-CLAUSES.md:683-689 est **dépassée** par la section 45.
+
+**Écran de saisie** (CONCURRENCE-DEVIS §4 ; le plan reste prioritaire en cas de conflit). Adopté :
+
+- lire en liste, éditer en carte, **pièce par pièce** ; aucun tableau, aucun défilement horizontal (contrôlé) ;
+- Inter `tabular-nums` aligné à droite pour tout chiffre. Revérifié dans les `.ttf` : Oswald n'a ni chiffres tabulaires ni espace fine U+202F ;
+- virgule et point acceptés dans les montants.
+
+À concilier sur cet écran :
+
+- total « qui court » pendant la frappe (l.2025-2026) ou total recalculé quand on quitte un champ : **le second**, pour ne pas redessiner l'écran à chaque chiffre ;
+- `montants.js` ou `devis.js` : **un seul fichier**, `src/lib/devis.js`, qui pose le séparateur de milliers lui-même ;
+- le sous-total par zone ou par pièce : calculé depuis les titres (10.6), imprimé ou non selon la décision du lot 1.
+
+« En faire un devis » ne préremplit que la description (le plan l'emporte sur CONCURRENCE-DEVIS.md:158-166) ; l'adresse vient du carnet de clients.
+
+Erreurs à corriger dans les annexes :
+
+- l'icône `Info` **est** utilisée (`LegalScreen.js:19, 73`) ;
+- le n° de TVA est verrouillé, puisqu'il vit dans `entreprise_registre`, et non « modifiable à la main » ;
+- « dès le premier euro » ne vaut que pour le dépannage, la réparation et l'entretien.
+
+### 10.8 Les questions au propriétaire, en deux tours
+
+Elles remplacent les listes du §8, de SIRET-ET-CLAUSES §7 et de CONCURRENCE-DEVIS §11. **On ne lui demande plus si l'entreprise du compte de test est la sienne** : il a répondu, c'est celle de son frère. Quatre questions au plus par tour, et celles qui débloquent le travail d'abord.
+
+**Tour 1, maintenant :**
+
+1. **Son statut** : a-t-il lui-même une entreprise immatriculée aujourd'hui ? Ses deux devis portent un nom d'entreprise et sont datés de septembre 2026 ; les notes du projet se contredisent. Elle décide si Opus pourra un jour préparer **ses** vrais devis — une fois sorti de l'essai.
+2. **Son frère** : est-il d'accord, et utilisera-t-il ce compte lui-même ? Elle décide si l'on essaie avec son entreprise, si l'on prépare la remise du compte (avec ses CGU à lui), et ce que devient le badge en attendant.
+3. **Les tarifs de dépannage** : affichés sur la fiche Opus, au choix de l'artisan, ou jamais ? C'est la seule réponse qui décide si des données sont **publiques ou privées**, donc la seule à obtenir avant le lot 0. Chaque option dit sa conséquence si une fiche Opus compte comme « espace en ligne » de l'artisan (10.3, « Incertain »).
+4. **Les gros chantiers** (plusieurs réponses) : retenue de garantie, facturation à l'avancement, prix indexé sur un indice, ou aucune. Elle décide de la forme de la table `devis` avant le lot 1.
+
+**Tour 2, selon les réponses :**
+
+5. **Le régime de TVA** de l'entreprise dont on prépare les devis — la sienne si elle est active, sinon celle de son frère si celui-ci est d'accord (à lui demander). Sans « depuis quand » : la base date la déclaration. Rien n'est pré-coché.
+6. **Quel compte** porte son entreprise, seulement s'il en a une active : son compte principal (le badge passera par l'éditeur SQL), ou un compte à part (client à retaper, badge à se décerner soi-même par le back-office).
+7. **Le moment de la signature** : le jour du passage sur papier, le jour du passage par message, plus tard après réflexion, ou sans s'être déplacé. Sa réponse décide de la **priorité** entre les lots 2 et 3, **jamais du défaut**, qui reste le cas le plus protecteur, posé par devis.
+8. **La conservation d'un devis jamais accepté** : un an, trois ans pour relancer, ou tant que le compte existe.
+
+**Reportée** : la facture aux particuliers d'abord, ou tout ensemble. Sa réponse ne change rien au module devis (le principe du §8, l.2522) ; elle se repose à la fin du lot 4, quand l'ordre des modules se décidera, et reste dans A-FAIRE.md avec son échéance (01/09/2027).
+
+**Retirées :**
+
+- l'ancienne question 2 (attestation) : la première moitié est mesurée (une attestation, sur le compte de test) ; la seconde devient un **choix de conception** — refuser, avec une sortie qui explique et laisse une trace, quand une ligne relève de la construction (10.3) —, et non une obligation « tranchée par le droit » ;
+- l'ancienne question 3 (médiateur) : le droit tranche, la mention est obligatoire sur un devis à un consommateur. Ce qui reste, adhérer à un médiateur référencé, est une démarche de l'entreprise qui émettra des devis réels, pas une question.
+
+**Ne sont pas des questions au propriétaire**, mais des questions **par devis**, posées à l'artisan dans l'écran : le moment de conclusion (`lieu_conclusion`) et « construction neuve ou transformation importante ? » (10.3), toutes deux avec le cas le plus exigeant par défaut.
+
+**À trancher plus tard, avec lui** : la colonne métier de la base de postes (10.6, options a et b — avant le lot P) ; le format du numéro (avant le lot 2) ; la couleur d'accent et Oswald en base64 (lot 5) ; le nom de la base de prix dont il parle (avant toute lecture de ses conditions) ; et la séparation de `DONNEES-DES-ARTISANS.md` §5.2, préalable du module (10.7).
+
+### 10.9 Lignes à corriger quand le plan sera reposé
+
+La liste reprend **aussi** les lignes déjà citées dans les tableaux de 10.3, pour qu'elle suffise seule le jour où le plan sera reposé.
+
+Dans ce plan :
+
+- l.31, 69, 141-152, 161-162, 656, 1956, 2547 (« … sur 7 », « 0 attestation sur 7 ») : 8 fiches et non 7, et une attestation existe, sur le compte de test ;
+- l.39-40 (`expo-print` « fourni dans Expo Go ») et l.1251-1257 (Expo Go) ;
+- l.42, 58, 2293-2295, 2315-2410 (« cinq modèles » → trois) ;
+- l.53 (« 0 des 11 colonnes ») ;
+- l.64-74 et l.2520-2667 (les questions, remplacées par 10.8) ; l.68-69 contre l.2526 et l.2545 (questions 1 et 2 contradictoires) ;
+- l.79, 679, 2671 (« ni SIRET ni assurance décennale ») : à reformuler selon le statut du propriétaire (tour 1) ; aujourd'hui, le seul SIRET d'Opus est celui de son frère ;
+- l.129-143 (colonnes du §1) ;
+- l.188-190, 1792-1795, 2466 (point d'insertion : « entre 7692 et 7693 » → avant le séparateur de la section 42) ;
+- l.225-226, 359-360, 1603 (R. 111-2) ;
+- l.315-323 et l.2086-2087 (« `lieu_conclusion` ne doit pas avoir ce défaut-là » ; « défaut `hors_etablissement`, à confirmer par la question 7 ») : le défaut ne dépend plus de la réponse du propriétaire, il reste le cas le plus protecteur, posé par devis ;
+- l.351 et l.532-538 (« six informations pour TOUT devis » ; un drapeau par métier décide du devis obligatoire) ;
+- l.400-405 (urgence : elle lève aussi l'interdiction de paiement de 7 jours, par ligne) ;
+- l.434-462 (« plus de / au moins deux ans » : établi dans la loi) ;
+- l.509-517 (arrhes) ;
+- l.570-573 et 696 (médiateur) ;
+- l.580-584 (franchise) ;
+- l.599-608 (CIBS) ;
+- l.616-620 et 1212 (arrondi) ; l.1157 et 2040-2043 (formule en millièmes → centièmes de point, sept cas réécrits, plus un cas à 1,05 %) ;
+- l.639-640 (devis non accepté : au moins un an pour les services à la personne) ;
+- l.692 (palier 1) ;
+- l.784 (format du numéro, à trancher) ;
+- l.1125-1127 (conservation) ;
+- l.1270-1276 et 2481 (raison de la branche web) ;
+- l.1393-1398 (envoi en deux pièces) ;
+- l.1421-1428 (`devis_source_check` reçoit `'urgence'`, et `sos_request_id`) ;
+- l.1702 (`thead`) ;
+- l.1919-1922 (bouton SIRET) ;
+- l.1974-1981 (contenu de la coupe du lot 0 : l'identité est faite, ce qui bloque change) ;
+- l.2025-2026 (total « qui court » → recalculé quand on quitte un champ) ;
+- l.2032-2034 et l.2419 (pas de table `ouvrages`) → la base de postes, lot P (10.6) ; l.2418 (l'agent qui rédige : « aucune source de prix ») ;
+- l.2122-2131 (acompte, désormais au lot 2) ;
+- l.2177-2181 (trois cases de certification → une phrase) ;
+- l.2182-2185 (autoliquidation) ;
+- l.2241-2243 (`mention_accord`) ;
+- l.2426 (exclusion de la construction neuve) → une question par devis, « non » par défaut, qui revoit cette exclusion (10.3) ;
+- l.2430 (§6, `siret`) ;
+- l.2589-2599 (question 5) ;
+- l.2668-2686 (« Et une chose qui n'est pas une question ») : à récrire pour le compte du frère, les trois conditions et le badge de 10.5.
+
+Dans les annexes :
+
+- SIRET-ET-CLAUSES.md:240-247, 294-300, 530-531, 683-689 ;
+- CONCURRENCE-DEVIS.md:421-422, 441-443, 453, 458-467, 520-521, 581 ;
+- DEVIS-DU-PROPRIETAIRE.md:179 (« Acompte à la signature ») : contraire au droit hors établissement (10.3).
+
+### 10.10 Ce qui n'a PAS été vérifié
+
+- **Le statut du propriétaire** (entreprise active, en création, fermée, ou jamais immatriculée) et **l'accord de son frère** : posés, sans réponse au 17/10.
+- **La nature de la pièce d'existence** du compte de test (Kbis, avis Sirene ou attestation RNE) : la colonne ne le dit pas.
+- **Aucun texte n'a été lu sur Légifrance** (403). Les codes viennent des données LEGI/JORF de la DILA, jusqu'au 16/10/2026 au soir, ou de `codes.droit.org` (non officiel) ; rien du JO du 17/10. L'art. 6 de l'arrêté du 17/03/2015 n'est connu que par un extrait de moteur de recherche. Les arrêts de la Cour de cassation du 20/12/2023 et du 05/03/2026 ne sont connus que par des commentaires. Les fiches DGCCRF n'ont pas pu être lues du tout (403).
+- Non trouvés au 16/10 : le décret de l'art. L. 216-33 et l'arrêté de l'art. L. 216-14. Aucun décret de report de la facture électronique n'a été trouvé, sans qu'on puisse l'exclure. Le PLF 2027 n'a pas été lu. Les 250 € d'e-reporting de 2027 peuvent être corrigés par une loi. **Le contenu de la « solution dédiée » de l'art. 242 nonies G (décret 2026-677)** n'a pas été lu.
+- Les normes AFNOR XP Z12-012 à 014, payantes, n'ont pas été lues ; les codes rec20 sont à vérifier dans l'annexe 7 des spécifications.
+- **Rien n'a été essayé sur l'iPhone** : la taille réelle de page, l'en-tête répété, les fonds (bande, lignes alternées du Classique), les polices en base64 et l'échelle px/pt ont été lus dans le code natif, jamais exécutés.
+- **Le comportement d'`expo-print` au chargement** (appelle-t-il `requireNativeModule` dès l'import ?) : le paquet n'est pas installé. Et la fluidité d'un trait de signature dessiné en segments de `View`, à mesurer si l'on écarte `react-native-svg`.
+- **Le mécanisme de purge n'existe pas** : `pg_cron` et `pg_net` sont disponibles mais non installés ; rien n'a été choisi.
+- Le format de `entreprise_registre.adresse` ; la date de fin de la décision d'adéquation britannique ; la date française du portefeuille européen d'identité ; l'existence d'une convention d'assistance mutuelle France–Royaume-Uni au sens de LPF L. 102 C.
+- La forme exacte de la ligne de devis (valeurs du type de ligne, fourniture « sans objet », rattachement à la pièce) : à trancher en écrivant le lot 1, pas ici.
+- **La séparation exigée par `DONNEES-DES-ARTISANS.md` §5.2** n'est pas tenue contre l'éditeur SQL de Supabase, que le propriétaire détient : seul l'accès par l'application est fermé. C'est un préalable (10.7), pas encore décidé.
+- La fonction des motifs de refus (10.7) est un principe : son nom et la forme exacte de sa valeur (`text[]` ou `jsonb`) se décident au lot 2.
+- Les numéros de ligne de `schema.sql` cités ici l'ont été sur le commit bd8b47c ; ils bougeront à la prochaine section — d'où les noms d'objets.
+- Les questions à poser à un comptable (fourniture et pose = services ; plafond en activité mixte ; jour anniversaire ; L. 123-22 pour un micro-entrepreneur) et à un juriste (10.3, « Incertain », dont « transformation importante », l'attestation pour un dépannage, l'« espace en ligne dédié » et le régime « à distance »).
+- Les chiffres de la vraie base sont des comptages du 17/10, ceux de la critique et de la contre-vérification compris (administrateurs, `journal_admin`, extensions, `sirens_reserves`, colonne `gele`) ; aucun contenu n'a été lu.
+
+### 10.11 Ce qui sort du devis, et attend ailleurs
+
+Trouvé en écrivant cette mise à jour, mais hors du module. Chaque point est aussi reporté dans `docs/A-FAIRE.md` (« Le devis — ce qui l'attend en dehors du module ») ; c'est là qu'il se coche.
+
+1. Badge du compte de test (entreprise du frère) : il a été décerné par le seul administrateur via le back-office (journal_admin : 1 ligne pro_verifie), sur des pièces que l'administrateur a lui-même déposées depuis un compte qu'il a ouvert, sans le titulaire. Décision proposée : le retirer jusqu'à l'accord du frère par admin_verifier_pro(p_pro, false, false), jamais par admin_retirer_entreprise (qui réserverait le SIREN dans sirens_reserves) ; ou le garder en le disant ouvertement. Le retrait ne gêne aucun essai (emetteur_incomplet() ne lit pas verifie).
+2. Garde du badge pour un second compte de la même personne : admin_verifier_pro (garde if p_pro = moi) ne voit pas un second compte. Décider ouvertement si une règle est nécessaire, et l'écrire dans CLAUDE.md comme limite connue.
+3. Mettre à jour CLAUDE.md : « Expo Go, seul moyen de test du propriétaire » (l.7186-7187) et « prebuild, que ce projet ne fait jamais puisqu'il tourne dans Expo Go » (l.157) sont faux depuis le 15/10 (build de développement, expo-dev-client, eas.json development et preview) ; ajouter que l'entreprise du compte pro de test est celle du frère du propriétaire, avec les trois conditions (accord, aucun devis réel sauf émis par le frère, transmission du compte avec ses propres CGU) et le sort du badge.
+4. Mettre à jour CLAUDE.md « Le propriétaire n'a PAS de société ni de SIRET » (29/09) contre « micro-entrepreneur » (04/10), dès sa réponse au tour 1 sur son statut ; corriger aussi DONNEES-DES-ARTISANS.md §7 point 3 en conséquence.
+5. Avant toute remise du compte de test au frère : aucun écran ne permet de changer l'adresse de connexion ni le mot de passe (aucun updateUser pour l'e-mail ou le mot de passe dans src/, aucune réinitialisation) ; et l'acceptation des CGU du compte (users.cgu_version, cgu_acceptees_le) est celle du propriétaire. Construire cette porte, prévoir que le frère accepte lui-même les CGU (nouvelle date), ou décider comment la remise se fait.
+6. Les 3 fiches vérifiées sans aucune entreprise rattachée (badges posés sur des SIRET jamais lus au répertoire Sirene) : retirer ou garder ces badges. Le retrait passe par admin_verifier_pro(p_pro, false, false) ; aucune entreprise n'étant rattachée, aucun SIREN n'est réservé (admin_retirer_entreprise refuserait d'ailleurs : « Cette fiche n'a aucune entreprise rattachée »).
+7. Contrat de sous-traitance RGPD du carnet de clients (art. 28) à partir des clauses types de la Commission (décision 2021/915), annexes I à IV, et corriger legal.js:690-694 (« on ne peut pas écrire ce contrat ») ; décider qui est le sous-traitant tant que l'éditeur est un particulier.
+8. Registre des traitements de sous-traitant (RGPD art. 30.2), dû dès aujourd'hui pour le carnet de clients (modèles publiés par la CNIL).
+9. Réécrire et faire relire, avant les premiers vrais utilisateurs, les passages de legal.js listés par DONNEES-DES-ARTISANS.md §4.2 (l.626, 754, 397-402, 499-503, 643-653), et apprendre ce nouvel état à verifier-legal.
+10. Préalable du module devis (DONNEES-DES-ARTISANS.md §7, décision 3) : décider comment tenir la séparation exigée par §5.2 (le propriétaire, du métier, ne doit pas lire les prix individuels des autres artisans) alors qu'il détient l'éditeur SQL de Supabase, et qui fera tourner le calcul des fourchettes. Aucun prix d'un autre artisan (aujourd'hui, celui du frère) n'est rangé avant.
+11. Recopier mot pour mot depuis Légifrance, avec le navigateur du propriétaire, les citations prioritaires avant qu'elles s'affichent : arrêté du 24/01/2017 (dont l'art. 3, « tout espace de communication en ligne dédié »), annexe à R. 221-1 (formulaire de rétractation), arrêté du 17/03/2015 art. 6, mention 293 B ; lire aussi le contenu de la « solution dédiée » de l'art. 242 nonies G (décret 2026-677).
+12. Décider d'une migration au SDK 58 (sorti le 15/10/2026), avant ou après la reconstruction EAS du module devis.
+13. Corriger les annexes : CONCURRENCE-DEVIS.md (lexique acompte/arrhes l.421-422, plateformes l.458-467 et 581, ETI l.453, icône Info, n° de TVA verrouillé, « dès le premier euro ») et SIRET-ET-CLAUSES.md (l.240-247, 294-300, 530-531, 683-689) ; et DEVIS-DU-PROPRIETAIRE.md:179 (« Acompte à la signature », contraire au droit hors établissement).
+14. Mettre à jour docs/A-FAIRE.md : la question des factures (particuliers d'abord ou tout ensemble) est reportée à la fin du lot 4, avec l'échéance du 01/09/2027 ; et le conflit sur la catégorie de métier (exigence de la dernière section contre « pas de colonne sans lecteur ») est à trancher avec le propriétaire avant la base de postes.
+15. Démarches de l'entreprise qui émettra de vrais devis (celle du propriétaire s'il en a une active, sinon celle du frère s'il utilise Opus) : adhérer à un médiateur référencé par la CECMC avant le premier devis réel à un particulier ; choisir une plateforme agréée de réception des factures électroniques (obligatoire depuis le 01/09/2026, même en franchise) — à dire aussi au frère, puisque son entreprise est concernée indépendamment d'Opus.
+16. Demander au propriétaire le nom et le lien de la base de prix du bâtiment dont il parle (DEVIS-DU-PROPRIETAIRE.md §6.2), pour lire ses conditions de licence avant toute intégration.
+17. Changement d'entreprise d'un compte pro (nouveau SIREN, par exemple passage d'une micro-entreprise à une société) : aucune porte n'existe (OP008/OP009) ; cela touchera la numérotation et l'instantané des devis.
