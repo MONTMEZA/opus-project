@@ -7026,6 +7026,101 @@ se voyait pas. **Pas vérifié** : le bouton « Administration » lui-même
 après un changement de compte, qui demande le seul compte administrateur
 de la vraie base — c'est au propriétaire, sur son iPhone.
 
+### Les saccades pendant l'ÉLAN du fil (17/10/2026)
+
+`npm run verifier-fil` (sections 6 à 9). Le build « preview », qui tourne à
+la vraie vitesse, les a confirmées sur l'iPhone 16 du propriétaire : ce
+n'était pas le mode développement. Et son indice a tout dit : « en gardant
+le doigt sur l'écran, ça ne saccade pas ». Le doigt posé avance lentement ;
+l'élan traverse plusieurs écrans par seconde, donc monte plusieurs cartes à
+la file — et l'élan est animé par le MÊME fil principal qui monte les cartes.
+
+Établi par la lecture du code natif (expo-image, SDWebImage 5.21.7,
+expo-video, React Native 0.86) et mesuré au navigateur, jamais sur l'iPhone :
+
+1. **expo-image réduit chaque photo sur le fil principal**
+   (`UIGraphicsImageRenderer`), et quand l'image est déjà en mémoire, EN
+   LIGNE, pendant le montage de la carte. Aucune copie réduite n'est gardée :
+   chaque remontage recommence.
+2. **La liste montait 11 à 14 cartes pendant chaque élan**, trois par bloc —
+   et un `gap` dans le conteneur laissait des trous entre les cellules
+   mesurées : le fenêtrage tombait dedans et remontait des cartes DÉJÀ
+   DÉPASSÉES, à contresens. Rejoué avec le vrai code de
+   `@react-native/virtualized-lists`.
+3. **Les deux lecteurs vidéo étaient détruits puis recréés à chaque passage**
+   (une `VideoView` crée un AVPlayerViewController à sa naissance).
+
+> **Une liste ne s'espace JAMAIS par un `gap` dans `contentContainerStyle`.**
+> L'espace va DANS la cellule : `ItemSeparatorComponent`, déclaré au niveau
+> du module (une fonction fléchée serait un type neuf à chaque rendu). Le
+> contrôle le vérifie pour TOUTES les listes du projet.
+
+Ce qui a été fait, et ce qu'on a écarté :
+
+- `maxToRenderPerBatch={1}`, `updateCellsBatchingPeriod={50}` : une carte
+  par bloc. **`windowSize` reste à 5** — une fenêtre plus large ne réduit
+  pas les montages d'un fil long, et retient plus d'images entières ;
+- **`pleineResolution`** (`Media` → `Carrousel` → `PostCard` seulement) :
+  `allowDownscaling={false}` sur **iPhone seulement** — sur Android, Glide
+  réduit hors du fil principal. La puce graphique met l'image à l'échelle.
+  **`enforceEarlyResizing` est écarté** : sa miniature TIENT dans le cadre,
+  donc une photo verticale en `cover` serait agrandie de 42 %, floue ;
+- **le lecteur vidéo naît au REPOS** : un compteur d'arrêts (`repos`, dans
+  `HomeScreen`) monte quand les `onScroll` cessent depuis 200 ms ; une carte
+  vidéo n'arme son lecteur qu'au premier arrêt qui suit son montage, et ne
+  le désarme jamais — sinon la vidéo repartirait du début à chaque passage.
+  En attendant, l'affiche Cloudinary, ou un fond sombre pour une vidéo
+  rangée chez Supabase ;
+- **`estVideo` prenait la vignette d'une vidéo pour une vidéo** (le chemin
+  `/video/upload/` reste dans l'adresse du JPEG) : la grille du portfolio,
+  les chantiers et les conseils ouvraient un lecteur sur une image. Une
+  extension d'image l'emporte désormais (`src/lib/types-media.js`, qui
+  n'importe que `cloudinary-adresses.js`, pour qu'un contrôle le FASSE
+  TOURNER).
+
+**Écartés pour l'instant, avec leur raison** : les dégradés
+d'expo-linear-gradient sont dessinés par le PROCESSEUR sur le fil principal
+(`LinearGradientLayer.swift`) — le voile de chaque photo et les 7
+publications « dégradé » de démonstration de la vraie base. React Native 0.86
+sait les confier à la puce graphique (`experimental_backgroundImage`), mais
+l'API est expérimentale et ne se juge que sur l'iPhone : c'est le lot suivant
+s'il reste des saccades. Les rappels instables d'OpusApp : **mesuré 0 rendu
+pendant le défilement**, ce n'est pas la cause.
+
+#### L'instrument : un compteur d'images perdues
+
+`src/components/CompteurImages.js`, monté seulement si
+`EXPO_PUBLIC_MESURE_FIL === '1'`, posé dans `eas.json` > `build.preview.env`
+et NULLE PART ailleurs. Un rappel Reanimated à chaque image, sur le fil
+principal ; il ne se redessine qu'au toucher (sinon il mesurerait son propre
+bruit). Il ne voit PAS une image perdue par la puce graphique : s'il dit 0
+pendant une saccade visible, la cause est ailleurs.
+
+> **À RETIRER quand le diagnostic est fini** — le composant, sa ligne dans
+> `HomeScreen`, la variable de `eas.json` et la section 9 du contrôle. C'est
+> écrit dans `docs/A-FAIRE.md`.
+
+#### Vérifié, et comment
+
+`verifier-fil` éprouvé en cassant ce qu'il surveille : **33 défauts remis à
+la main, les 33 refusés, chacun par la bonne vérification** — dont l'auto-
+épreuve (le balayage du vrai fenêtrage DOIT voir un trou de 10 pt). Les 46
+contrôles, les paquets iOS et Android lus. Au navigateur, avant et après sur
+les mêmes données gonflées (20 publications, vraies photos, deux WebM) :
+
+| | avant | après |
+|---|---|---|
+| mise en page, 18 publications | — | **identique au pixel** |
+| conversation de 4 bulles | — | **identique** |
+| lecteurs `<video>` nés PENDANT le mouvement | 2 + 2 | **0 + 0** |
+| arrêt sur une vidéo : à l'instant / 1 s après | 2 / 2 | **0 / 2** |
+
+**Ce qui n'est PAS vérifié, et c'est l'essentiel** : la fluidité elle-même,
+la netteté des photos mises à l'échelle par la puce graphique, et le délai
+de démarrage d'une vidéo après l'arrêt. Tout cela se juge sur l'iPhone, avec
+le compteur. Et la vidéo d'essai déborde de son cadre au NAVIGATEUR — avant
+comme après, c'est le lecteur web.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

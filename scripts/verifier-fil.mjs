@@ -32,7 +32,9 @@
  *
  *   npm run verifier-fil
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -433,6 +435,357 @@ console.log('\n5. Le bas du fil ne va pas chercher une page vide');
     /setChargePage\(true\)/.test(plus) && /setChargePage\(false\)/.test(plus)
     && /chargement=\{chargePage\}/.test(sansCommentaires(lire('src/screens/HomeScreen.js'))),
     'un verrou en référence ferait taire le pied du fil pendant qu’une page arrive');
+}
+
+/* ================================================================== */
+/* LES SACCADES PENDANT L'ÉLAN — 17/10/2026                           */
+/* Le build « preview » (la vraie vitesse) les a confirmées sur        */
+/* l'iPhone 16 : le doigt posé ne saccade pas, l'élan si. Cause lue    */
+/* dans le code natif : chaque carte montée PENDANT l'élan fait du     */
+/* travail lourd sur le fil principal (réduction de photos, lecteur    */
+/* vidéo), et la liste en montait trop, par paquets, et à contresens.  */
+/* ================================================================== */
+
+/** Tous les fichiers JavaScript de `src/`. */
+const fichiersSrc = (dossier = 'src') => readdirSync(dossier).flatMap((n) => {
+  const chemin = path.join(dossier, n);
+  if (statSync(chemin).isDirectory()) return fichiersSrc(chemin);
+  return chemin.endsWith('.js') ? [chemin] : [];
+});
+
+/** La balise ouvrante d'un élément JSX, accolades équilibrées. */
+const baliseOuvrante = (texte, debut) => {
+  let profondeur = 0;
+  for (let i = debut; i < texte.length; i += 1) {
+    const c = texte[i];
+    if (c === '{') profondeur += 1;
+    else if (c === '}') profondeur -= 1;
+    else if (c === '>' && profondeur === 0 && texte[i - 1] !== '=') return texte.slice(debut, i + 1);
+  }
+  return '';
+};
+
+/** L'expression entre accolades qui suit `attribut=`. */
+const valeurAttribut = (balise, attribut) => {
+  const i = balise.search(new RegExp(`\\b${attribut}=\\{`));
+  if (i < 0) return null;
+  const ouvre = balise.indexOf('{', i);
+  let profondeur = 0;
+  for (let j = ouvre; j < balise.length; j += 1) {
+    if (balise[j] === '{') profondeur += 1;
+    else if (balise[j] === '}') {
+      profondeur -= 1;
+      if (profondeur === 0) return balise.slice(ouvre + 1, j);
+    }
+  }
+  return null;
+};
+
+/** Le corps `{ … }` d'un style nommé dans le `StyleSheet.create` du fichier. */
+const styleNomme = (texte, nom) => {
+  const debut = texte.search(new RegExp(`\\n\\s*${nom}:\\s*\\{`));
+  if (debut < 0) return null;
+  const ouvre = texte.indexOf('{', debut);
+  let profondeur = 0;
+  for (let j = ouvre; j < texte.length; j += 1) {
+    if (texte[j] === '{') profondeur += 1;
+    else if (texte[j] === '}') {
+      profondeur -= 1;
+      if (profondeur === 0) return texte.slice(ouvre, j + 1);
+    }
+  }
+  return null;
+};
+
+console.log('\n6. Les cartes du fil sont contiguës, et la liste avance d’une carte à la fois');
+{
+  /* 6a. Un `gap` dans le conteneur d'une liste laisse des TROUS entre les
+     cellules mesurées, et le fenêtrage de React Native tombe dedans : il
+     monte alors des cartes déjà dépassées, à contresens de l'élan. Pour
+     TOUTES les listes du projet, pas seulement le fil. */
+  let listes = 0;
+  const fautifs = [];
+  const aveugles = [];
+  for (const f of fichiersSrc()) {
+    const texte = sansCommentaires(lire(f));
+    const re = /<(FlatList|SectionList|VirtualizedList)\b/g;
+    let m;
+    while ((m = re.exec(texte))) {
+      const balise = baliseOuvrante(texte, m.index);
+      const expr = valeurAttribut(balise, 'contentContainerStyle');
+      if (expr == null) continue;
+      listes += 1;
+      const morceaux = [];
+      const refs = [...expr.matchAll(/\b(?:s|styles)\.(\w+)/g)].map((r) => r[1]);
+      for (const nom of refs) {
+        const corps = styleNomme(texte, nom);
+        if (corps == null) aveugles.push(`${f} : style « ${nom} » introuvable`);
+        else morceaux.push(corps);
+      }
+      morceaux.push(expr.replace(/\b(?:s|styles)\.\w+/g, ''));
+      if (!refs.length && !/\{/.test(expr)) aveugles.push(`${f} : contentContainerStyle={${expr.trim()}} non résolu`);
+      if (morceaux.some((c) => /\b(gap|rowGap|columnGap)\s*:/.test(c))) fautifs.push(f);
+    }
+  }
+  verifier(`des listes à contenu stylé ont été trouvées (${listes})`, listes >= 2,
+    'aucune liste trouvée : le contrôle est devenu aveugle, il ne vérifie plus rien');
+  verifier('…et toutes leurs styles ont été RÉSOLUS', aveugles.length === 0,
+    `${aveugles.join(' ; ')} — un contrôle qui ne trouve pas sa cible ne passe jamais au vert.`);
+  verifier('aucune n’espace ses cellules par un `gap` (le séparateur va DANS la cellule)',
+    fautifs.length === 0, `trouvé dans : ${fautifs.join(', ')}`);
+
+  /* 6b. Le séparateur du fil : déclaré au niveau du module, jamais en
+     fonction fléchée — un type neuf à chaque rendu remonterait tout. */
+  const home = sansCommentaires(lire('src/screens/HomeScreen.js'));
+  /* La liste du fil CLASSIQUE se reconnaît à son pied, `BasDuFil`, qui
+     n'appartient qu'à elle — pas à son style, qu'on doit pouvoir changer
+     sans que tout ce qui suit perde sa cible. */
+  const iClassique = home.indexOf('<BasDuFil');
+  const debutListe = iClassique >= 0 ? home.lastIndexOf('<FlatList', iClassique) : -1;
+  const balise = debutListe >= 0 ? baliseOuvrante(home, debutListe) : '';
+  verifier('le fil classique a un séparateur `Intervalle`',
+    /ItemSeparatorComponent=\{Intervalle\}/.test(balise));
+  verifier('…déclaré au niveau du module', /^function Intervalle\(\)/m.test(home));
+  verifier('…qui porte les 10 pt d’avant', /intervalle:\s*\{\s*height:\s*S\.md - 2\s*\}/.test(home));
+  /* Le fil et la conversation seulement : cinq autres listes déclarent
+     encore leur séparateur en fonction fléchée (Place des pros, Demandes,
+     Clients, Chantier, réponses aux annonces). C'est un coût de RENDU, pas
+     de défilement, et ce lot ne les touche pas — les accuser ici serait
+     faire passer un défaut ancien pour celui-ci. */
+  const flechees = ['src/screens/HomeScreen.js', 'src/screens/ConversationScreen.js']
+    .filter((f) => /ItemSeparatorComponent=\{\s*\(/.test(sansCommentaires(lire(f))));
+  verifier('ni le fil ni la conversation n’ont de séparateur en fonction fléchée',
+    flechees.length === 0, `trouvé dans : ${flechees.join(', ')}`);
+  verifier('…et le bord sous l’en-tête et au-dessus du pied est reproduit',
+    /ListHeaderComponentStyle=\{s\.enteteListe\}/.test(balise) && /ListFooterComponentStyle=\{s\.piedListe\}/.test(balise));
+
+  /* 6d. Les réglages exacts. */
+  const reglage = (nom) => (balise.match(new RegExp(`\\b${nom}=\\{([^}]*)\\}`)) || [])[1];
+  verifier('deux cartes au premier affichage', reglage('initialNumToRender') === '2');
+  verifier('UNE carte par montage (`maxToRenderPerBatch={1}`)', reglage('maxToRenderPerBatch') === '1',
+    'trois cartes dans le même montage, c’est trois fois le travail dans la même image : l’élan saccade.');
+  verifier('…toutes les 50 ms', reglage('updateCellsBatchingPeriod') === '50');
+  verifier('`windowSize` reste à 5', reglage('windowSize') === '5',
+    'chaque photo du fil garde son image ENTIÈRE (pleineResolution) : une fenêtre plus large en tiendrait davantage en mémoire, sans réduire les montages d’un fil long.');
+  verifier('`removeClippedSubviews` écrit FAUX en toutes lettres', reglage('removeClippedSubviews') === 'false');
+
+  /* 6c. FAIRE TOURNER le vrai fenêtrage de React Native, transpilé en
+     mémoire depuis node_modules, sur vingt cartes aux hauteurs de la vraie
+     base. Deux exigences pendant un balayage aller-retour : jamais plus de
+     cartes neuves par pas que `maxToRenderPerBatch`, et jamais une carte
+     DÉJÀ DÉPASSÉE remontée à contresens de l'élan. Et l'auto-épreuve : le
+     même balayage avec un trou de 10 pt DOIT voir le défaut. */
+  let lance = false;
+  try {
+    const req = createRequire(path.resolve('package.json'));
+    const babel = req('@babel/core');
+    const NM = path.resolve('node_modules');
+    const drapeau = (/fixVirtualizeListCollapseWindowSize: Getter<boolean> = createJavaScriptFlagGetter\('fixVirtualizeListCollapseWindowSize', (true|false)\)/
+      .exec(lire(`${NM}/react-native/src/private/featureflags/ReactNativeFeatureFlags.js`)) || [])[1];
+    if (drapeau == null) throw new Error('drapeau fixVirtualizeListCollapseWindowSize introuvable');
+    const greffons = ['babel-plugin-syntax-hermes-parser', '@babel/plugin-transform-flow-strip-types',
+      '@babel/plugin-transform-modules-commonjs'].map((g) => req.resolve(g));
+    const modules = {};
+    const charger = (nom) => {
+      if (modules[nom]) return modules[nom].exports;
+      const { code } = babel.transformSync(
+        lire(`${NM}/@react-native/virtualized-lists/Lists/${nom}.js`),
+        { filename: `${nom}.js`, babelrc: false, configFile: false, plugins: greffons },
+      );
+      const module = { exports: {} };
+      modules[nom] = module;
+      const exiger = (q) => {
+        if (q === 'react-native/src/private/featureflags/ReactNativeFeatureFlags') {
+          return { fixVirtualizeListCollapseWindowSize: () => drapeau === 'true' };
+        }
+        if (q === 'invariant') return req('invariant');
+        if (q.startsWith('./')) return charger(q.slice(2));
+        throw new Error(`module inattendu : ${q}`);
+      };
+      new Function('exports', 'require', 'module', code)(module.exports, exiger, module);
+      return module.exports;
+    };
+    const { computeWindowedRenderLimits } = charger('VirtualizeUtils');
+    const Mesures = charger('ListMetricsAggregator').default;
+    lance = true;
+
+    const lot = Number(reglage('maxToRenderPerBatch'));
+    const fenetre = Number(reglage('windowSize'));
+    const gapFil = /\bgap\s*:/.test(styleNomme(home, 'classicContent') || '') ? 10 : 0;
+    const hauteurs = [613, 631, 613, 631, 569, 551, 551, 461, 444, 533, 533, 444, 324, 462, 462, 260, 260, 462, 462, 462];
+    const balayer = ({ trou, separateur }) => {
+      const donnees = hauteurs.map((_, i) => ({ id: `p${i}` }));
+      const props = {
+        data: donnees, getItemCount: (d) => d.length, getItem: (d, i) => d[i], keyExtractor: (p) => p.id,
+      };
+      const mesures = new Mesures();
+      let y = 12;
+      donnees.forEach((p, i) => {
+        const h = hauteurs[i] + (i < hauteurs.length - 1 ? separateur : 0);
+        mesures.notifyCellLayout({
+          cellIndex: i, cellKey: p.id, orientation: { horizontal: false, rtl: false },
+          layout: { x: 0, y, width: 356, height: h },
+        });
+        y += h + trou;
+      });
+      const visible = 590;
+      const fautes = [];
+      let prec = { first: 0, last: 1 };
+      const pas = (offset, velocity) => computeWindowedRenderLimits(props, lot, fenetre, prec, mesures, {
+        offset, velocity, visibleLength: visible, dt: 16, zoomScale: 1,
+      });
+      const passe = (de, a, saut) => {
+        for (let o = de; saut > 0 ? o <= a : o >= a; o += saut) {
+          const n = pas(o, saut / 33);
+          const neuves = Math.max(0, prec.first - n.first) + Math.max(0, n.last - prec.last);
+          const aContresens = saut > 0 ? n.first < prec.first : n.last > prec.last;
+          if (neuves > lot || aContresens) fautes.push(`${o} pt : [${prec.first},${prec.last}]→[${n.first},${n.last}]`);
+          prec = n;
+        }
+      };
+      for (const saut of [33, 66, 132]) {
+        for (let k = 0; k < 30; k += 1) prec = pas(0, 0);
+        passe(0, y - visible, saut);
+        passe(y - visible, 0, -saut);
+      }
+      return fautes;
+    };
+    const reel = balayer({ trou: gapFil, separateur: gapFil ? 0 : 10 });
+    verifier(`le vrai fenêtrage, réglages lus (lot ${lot}, fenêtre ${fenetre}) : aucune carte à contresens, au plus ${lot} par pas`,
+      reel.length === 0, `${reel.length} faute(s), dont ${reel.slice(0, 3).join(' | ')}`);
+    const epreuve = balayer({ trou: 10, separateur: 0 });
+    verifier('…et ce balayage SAIT voir le défaut (auto-épreuve avec un trou de 10 pt)', epreuve.length > 0,
+      'avec un trou, il devrait trouver des cartes montées à contresens : le contrôle ne sait plus voir ce qu’il surveille.');
+  } catch (e) {
+    verifier(lance ? 'le balayage du fenêtrage s’est déroulé' : 'le fenêtrage de React Native a pu être chargé', false,
+      `${e.message} — le contrôle N’A PAS PU SE LANCER, ce n’est pas un succès. Il transpile `
+      + '@react-native/virtualized-lists avec @babel/core et trois greffons, dépendances d’Expo : '
+      + 'après une mise à jour, vérifier qu’ils existent toujours dans node_modules.');
+  }
+}
+
+console.log('\n7. Une photo du fil n’est plus réduite par le processeur (iPhone)');
+{
+  const media = sansCommentaires(lire('src/components/Media.js'));
+  verifier('`Media` accepte `pleineResolution`, faux par défaut', /pleineResolution = false/.test(media));
+  verifier('…et la passe à expo-image, sur iPhone SEULEMENT',
+    /allowDownscaling=\{Platform\.OS !== 'ios' \|\| !pleineResolution\}/.test(media),
+    'sur Android, Glide réduit hors du fil principal : rien à gagner, de la mémoire à perdre. Et l’inverse (`={pleineResolution}`) réduirait justement les photos du fil.');
+  verifier('…sans perdre le cache disque ni la clé de recyclage',
+    /cachePolicy="memory-disk"/.test(media) && /recyclingKey=\{media\}/.test(media));
+
+  const carrousel = sansCommentaires(lire('src/components/Carrousel.js'));
+  const balisesMedia = [...carrousel.matchAll(/<Media\b/g)].map((m) => baliseOuvrante(carrousel, m.index));
+  verifier('le Carrousel la transmet à ses DEUX photos (seule, et en série)',
+    balisesMedia.length === 2 && balisesMedia.every((b) => /pleineResolution=\{pleineResolution\}/.test(b)),
+    `${balisesMedia.length} balise(s) <Media> trouvée(s)`);
+  verifier('…fausse par défaut : le chantier et la Place des pros gardent la réduction',
+    /pleineResolution = false/.test(carrousel));
+
+  const passeurs = fichiersSrc()
+    .filter((f) => !['src/components/Media.js', 'src/components/Carrousel.js'].includes(f))
+    .filter((f) => /\bpleineResolution\b/.test(sansCommentaires(lire(f))));
+  verifier('seule la carte du FIL la demande', passeurs.length === 1 && passeurs[0] === 'src/components/PostCard.js',
+    `trouvé dans : ${passeurs.join(', ') || '(aucun)'} — une image entière pour une petite case de grille, c’est de la mémoire pour rien.`);
+  verifier('`enforceEarlyResizing` n’apparaît nulle part',
+    fichiersSrc().every((f) => !/enforceEarlyResizing/.test(sansCommentaires(lire(f)))),
+    'sa miniature TIENT dans le cadre : une photo verticale serait agrandie de 42 %, floue — et rangée sous la clé de l’original.');
+
+  const natif = process.env.EXPO_IMAGE_IOS || 'node_modules/expo-image/ios';
+  verifier('la bibliothèque honore toujours la propriété (code natif lu)',
+    /Prop\("allowDownscaling"\)/.test(lire(`${natif}/ImageModule.swift`))
+    && /if allowDownscaling && shouldDownscale\(/.test(lire(`${natif}/ImageView.swift`)),
+    'une mise à jour d’expo-image qui renommerait la propriété la rendrait muette, sans aucune erreur.');
+}
+
+console.log('\n8. Aucun lecteur vidéo ne naît pendant un élan');
+{
+  const media = sansCommentaires(lire('src/components/Media.js'));
+  const appels = media.match(/useVideoPlayer\(/g) || [];
+  const debutLecteur = media.indexOf('function LecteurVideo(');
+  const corpsLecteur = debutLecteur >= 0 ? media.slice(debutLecteur, media.indexOf('\n}\n', debutLecteur)) : '';
+  verifier('`useVideoPlayer` n’est appelé qu’une fois, dans `LecteurVideo`',
+    appels.length === 1 && /useVideoPlayer\(/.test(corpsLecteur));
+  verifier('…qui garde `pointerEvents="none"` sur la vue native',
+    /<VideoView[\s\S]*?pointerEvents="none"[\s\S]*?\/>/.test(corpsLecteur),
+    'sans lui, la vue native garde la touche : plus de double-appui pour aimer, plus d’appui pour le plein écran.');
+  const debutVideo = media.indexOf('function VideoMedia(');
+  const corpsVideo = debutVideo >= 0 ? media.slice(debutVideo, debutLecteur) : '';
+  verifier('le lecteur n’est rendu qu’une fois ARMÉ', /\{arme && \(\s*<LecteurVideo/.test(corpsVideo));
+  verifier('…armé tout de suite sans compteur, sinon au premier arrêt APRÈS le montage',
+    /const differe = repos !== undefined;/.test(corpsVideo)
+    && /const \[reposAuMontage\] = useState\(repos\);/.test(corpsVideo)
+    && /const arme = !differe \|\| repos !== reposAuMontage;/.test(corpsVideo),
+    'un lecteur qu’on désarme est détruit puis recréé : la vidéo repart du début à chaque passage (en-tête de Media.js).');
+  verifier('l’affiche ne passe jamais par <Media> (elle serait prise pour une vidéo)',
+    !/<Media\b/.test(corpsVideo));
+
+  const types = lire('src/lib/types-media.js');
+  const imports = [...types.matchAll(/^import .* from '([^']+)';/gm)].map((m) => m[1]);
+  verifier('`types-media.js` n’importe que `cloudinary-adresses.js`',
+    imports.length === 1 && imports[0] === './cloudinary-adresses.js');
+  const { estVideo, afficheVideo } = await import(path.resolve('src/lib/types-media.js'));
+  const cloud = 'https://res.cloudinary.com/opus/video/upload/c_fill,h_1280,w_720/clip.mp4';
+  const supa = 'https://x.supabase.co/storage/v1/object/public/publications/u/clip.mov';
+  verifier('une vidéo Cloudinary a pour affiche une IMAGE de la 2e seconde',
+    afficheVideo(cloud) === 'https://res.cloudinary.com/opus/video/upload/so_2,c_fill,h_1280,w_720/clip.jpg');
+  verifier('…qui n’est PAS prise pour une vidéo (le défaut des grilles du portfolio)',
+    estVideo(afficheVideo(cloud)) === false && estVideo(cloud) === true);
+  verifier('une vidéo rangée chez Supabase n’a pas d’affiche (et pas le clip à sa place)',
+    afficheVideo(supa) === null && estVideo(supa) === true);
+  verifier('ni ce qui n’est pas une adresse', afficheVideo(42) === null && afficheVideo(null) === null
+    && estVideo('#1b4b6b,#4d7f9e') === false);
+
+  const home = sansCommentaires(lire('src/screens/HomeScreen.js'));
+  const setters = home.match(/setRepos\(/g) || [];
+  const debutArmer = home.indexOf('const armerRepos = useCallback(');
+  const armer = debutArmer >= 0 ? home.slice(debutArmer, home.indexOf('}, []);', debutArmer)) : '';
+  verifier('le compteur d’arrêts ne fait que MONTER, dans `armerRepos` seulement',
+    setters.length === 1 && /setRepos\(\(n\) => n \+ 1\)/.test(armer),
+    'un compteur qui redescendrait pourrait retrouver la valeur d’un montage et désarmer un lecteur.');
+  verifier('…et l’attente est remise à zéro AVANT d’être reposée',
+    armer.indexOf('clearTimeout') >= 0 && armer.indexOf('clearTimeout') < armer.indexOf('setTimeout'),
+    'sans elle, un minuteur posé en début d’élan partirait EN PLEIN élan.');
+  verifier('…armée par chaque défilement et chaque fin d’élan',
+    /onScroll=\{armerRepos\}/.test(home) && /onMomentumScrollEnd=\{armerRepos\}/.test(home));
+  verifier('…et quand la liste change sous un fil immobile',
+    /useEffect\(\(\) => \{ armerRepos\(\); \}, \[posts, feedMode, armerRepos\]\);/.test(home),
+    'sans lui, une vidéo visible dès l’ouverture attendrait qu’on fasse défiler pour naître.');
+  verifier('le compteur ne va qu’aux cartes VIDÉO (les photos gardent leur mémorisation)',
+    /repos=\{FORMATS_VIDEO\.has\(p\.format\) \? repos : undefined\}/.test(home));
+
+  const carte = sansCommentaires(lire('src/components/PostCard.js'));
+  verifier('la carte transmet le compteur et l’affiche à sa vidéo',
+    /repos=\{repos\}/.test(carte) && /affiche=\{repos !== undefined \? afficheVideo\(post\.media\) : null\}/.test(carte));
+  verifier('…et n’a PAS de compteur par défaut (la page d’une publication joue tout de suite)',
+    /^\s*repos,$/m.test(carte) && !/repos = /.test(carte));
+  verifier('`PublicationScreen` ne passe pas de compteur',
+    !/\brepos=/.test(sansCommentaires(lire('src/screens/PublicationScreen.js'))));
+}
+
+console.log('\n9. Le compteur d’images perdues n’existe que dans le build de diagnostic');
+{
+  const avecCadence = fichiersSrc().filter((f) => /useFrameCallback/.test(sansCommentaires(lire(f))));
+  verifier('`useFrameCallback` ne vit que dans `CompteurImages.js`',
+    avecCadence.length === 1 && avecCadence[0] === 'src/components/CompteurImages.js',
+    `trouvé dans : ${avecCadence.join(', ')}`);
+  const compteur = sansCommentaires(lire('src/components/CompteurImages.js'));
+  verifier('il ne s’allume que sur `EXPO_PUBLIC_MESURE_FIL === \'1\'`',
+    /export const MESURE_ACTIVE = process\.env\.EXPO_PUBLIC_MESURE_FIL === '1';/.test(compteur));
+  const debutRappel = compteur.indexOf('useFrameCallback(');
+  const rappel = corpsDe(compteur, debutRappel);
+  verifier('…et ne redessine RIEN pendant qu’on fait défiler (aucun état dans le rappel)',
+    rappel.length > 0 && !/set[A-Z]\w*\(|runOnJS/.test(rappel),
+    'un état mis à jour à chaque image serait un montage de plus : l’instrument mesurerait son propre bruit.');
+  const home = sansCommentaires(lire('src/screens/HomeScreen.js'));
+  verifier('le fil ne le monte que sous condition', /\{MESURE_ACTIVE && <CompteurImages \/>\}/.test(home)
+    && (home.match(/<CompteurImages\b/g) || []).length === 1);
+  const eas = JSON.parse(lire('eas.json'));
+  const profils = Object.entries(eas.build || {})
+    .filter(([, p]) => p && p.env && 'EXPO_PUBLIC_MESURE_FIL' in p.env).map(([n]) => n);
+  verifier('la variable n’est posée que dans le profil « preview »',
+    profils.length === 1 && profils[0] === 'preview',
+    `profils : ${profils.join(', ') || '(aucun)'} — un instrument qui partirait dans la version publiée.`);
 }
 
 console.log('');

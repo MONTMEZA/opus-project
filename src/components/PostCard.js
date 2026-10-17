@@ -25,6 +25,7 @@ import DoubleAppui from './DoubleAppui';
    à l'une seulement ne jouerait jamais dans le fil, et rien ne le dirait.
    `HomeScreen` lit la même pour décider quelle carte doit jouer. */
 import { porteUnVisuel, FORMATS_VIDEO } from '../lib/formats-publication';
+import { afficheVideo } from '../lib/types-media';
 
 /* Ce que la barre d'actions occupe en bas de la photo. Les points du
    carrousel s'en écartent d'autant. */
@@ -36,6 +37,11 @@ const HAUTEUR_BARRE = 56;
 const PostCard = React.memo(function PostCard({
   post, pro, pros = {}, following, actif = false,
   chantier = null, onOuvrirChantier, commentaireCible = null,
+  /* Le compteur d'arrêts du fil (HomeScreen), pour une carte VIDÉO
+     seulement : son lecteur naît au repos, jamais pendant un élan (voir
+     Media.js). Absent ailleurs — la page d'une publication veut sa vidéo
+     tout de suite. */
+  repos,
   onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
@@ -264,6 +270,8 @@ const PostCard = React.memo(function PostCard({
             style={{ width: '100%', aspectRatio: 4 / 5, backgroundColor: C.dark }}
             lecture={actif}
             muet
+            repos={repos}
+            affiche={repos !== undefined ? afficheVideo(post.media) : null}
           >
             <EtiquetteVideo />
             {/* LE FIL CLASSIQUE EST MUET — `muet` juste au-dessus, et ce
@@ -285,7 +293,7 @@ const PostCard = React.memo(function PostCard({
         /* Une photo, ou plusieurs qu'on fait défiler au doigt. Avec une seule
            image, le carrousel se retire complètement : ni points, ni
            compteur. */
-        <Carrousel medias={photos} basReserve={HAUTEUR_BARRE} />
+        <Carrousel medias={photos} basReserve={HAUTEUR_BARRE} pleineResolution />
       )}
 
       {/* LA BARRE D'ACTIONS EST POSÉE SUR LA PHOTO — demandé par le

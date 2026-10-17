@@ -44,6 +44,11 @@ const VOISINES_MONTEES = 1;
  */
 export default function Carrousel({
   medias = [], style, aspectRatio = 1, enfant, basReserve = 0,
+  /* Transmis tel quel à chaque photo : voir `Media.js`. Seul le FIL le
+     demande (PostCard) ; le chantier et la Place des pros gardent la
+     réduction, qui libère la mémoire d'une photo vue au tiers dans un
+     cadre forcé. */
+  pleineResolution = false,
 }) {
   const [largeur, setLargeur] = useState(0);
   const [index, setIndex] = useState(0);
@@ -78,6 +83,7 @@ export default function Carrousel({
         media={medias[0]}
         style={[{ width: '100%', aspectRatio: cadre }, style]}
         onRatio={mesurer}
+        pleineResolution={pleineResolution}
       >
         {enfant}
       </Media>
@@ -141,6 +147,7 @@ export default function Carrousel({
                    photos n'ont pas toutes la même forme, et un cadre qui
                    changerait à chaque glissement serait insupportable. */
                 onRatio={i === 0 ? mesurer : undefined}
+                pleineResolution={pleineResolution}
               />
             )}
           </View>

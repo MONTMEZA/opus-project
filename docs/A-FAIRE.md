@@ -47,6 +47,28 @@ mots de passe compromis.** C'est un interrupteur, et c'est la dernière alerte
 de sécurité du projet. Elle vérifie les mots de passe contre la base des
 fuites connues.
 
+### 1.0 ter La fluidité du fil — diagnostic EN COURS (17/10/2026)
+
+Les saccades pendant l'élan ont été corrigées sur trois causes lues dans le
+code natif (CLAUDE.md, « Les saccades pendant l'ÉLAN du fil »). Le build
+« preview » porte un **compteur d'images perdues** pour juger au chiffre et
+non à l'impression.
+
+1. **Le propriétaire reconstruit le build preview** et relève le compteur :
+   vers le bas, vers le haut, et à l'arrêt sur les deux vidéos de montage.
+2. **S'il reste des saccades** : les dégradés dessinés par le processeur
+   (le voile de chaque photo, et les 7 publications « dégradé » de
+   démonstration de la vraie base — que le propriétaire peut aussi décider
+   de supprimer, puisque ce sont des données d'essai).
+3. **Quand c'est fini : RETIRER le compteur** — `CompteurImages.js`, sa ligne
+   dans `HomeScreen.js`, `EXPO_PUBLIC_MESURE_FIL` dans `eas.json`, et la
+   section 9 de `verifier-fil`. Un instrument oublié finit dans la version
+   publiée.
+
+Relevé au passage, pas traité : cinq listes déclarent leur séparateur en
+fonction fléchée (Place des pros, Demandes, Clients, Chantier, réponses aux
+annonces), et la Visionneuse monte jusqu'à dix lecteurs vidéo d'un coup.
+
 ### 1.0 bis Avant d'ouvrir : éprouver Opus comme il sera VRAIMENT utilisé
 
 Décidé avec le propriétaire le 15/10/2026 : « je ne veux pas que le jour où

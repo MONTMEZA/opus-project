@@ -58,6 +58,16 @@ export function estPhoto(piece) {
  */
 const HAUTEUR_MAX_APERCU = 260;
 
+/* L'ESPACE ENTRE DEUX BULLES VIT DANS LA CELLULE — 17/10/2026.
+   C'était un `gap` du conteneur de la liste : il laisse des trous entre
+   les cellules mesurées, et le fenêtrage de la liste tombe dedans (le
+   raisonnement complet est dans HomeScreen.js, où il faisait saccader le
+   fil). Déclaré hors du composant : une fonction fléchée en prop serait un
+   type neuf à chaque rendu, et React remonterait tous les séparateurs. */
+function Espace() {
+  return <View style={s.espace} />;
+}
+
 function ApercuPhoto({ piece, apercu, clair, onOuvrir, ouverture }) {
   const [rapport, setRapport] = useState(null);
   const mesurer = useCallback((r) => setRapport(r), []);
@@ -364,6 +374,11 @@ export default function ConversationScreen({
         data={messagesInverses}
         keyExtractor={(m, i) => String(m.cle || m.id || i)}
         inverted
+        ItemSeparatorComponent={Espace}
+        /* Les 8 pt que le `gap` mettait aussi entre la bulle la plus
+           ancienne et le pied (« Chargement… », « Dites bonjour ») — en
+           haut de l'écran, puisque la liste est inversée. */
+        ListFooterComponentStyle={s.piedListe}
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={7}
@@ -461,7 +476,9 @@ export default function ConversationScreen({
 const LARGEUR_PIECE = 196;
 
 const s = StyleSheet.create({
-  scroll: { padding: 14, gap: 8 },
+  scroll: { padding: 14 },
+  espace: { height: 8 },
+  piedListe: { marginTop: 8 },
   rangee: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   signaler: { paddingVertical: 4, paddingHorizontal: 2 },
   bubble: {

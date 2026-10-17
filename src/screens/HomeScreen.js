@@ -5,7 +5,7 @@
  * En mode "Vidéos", les diapositives occupent toute la hauteur de l'écran et
  * la bascule Fil/Vidéos flotte par-dessus, comme sur TikTok.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, RefreshControl, ActivityIndicator, Pressable,
   StyleSheet, useWindowDimensions,
@@ -22,8 +22,14 @@ import useCompteurDeVues from '../lib/compteur-vues';
 import { vuesPossibles } from '../lib/vues';
 import { CLAVIER } from '../lib/clavier';
 import { FORMATS_VIDEO } from '../lib/formats-publication';
+import CompteurImages, { MESURE_ACTIVE } from '../components/CompteurImages';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
+
+/* Combien de temps sans le moindre défilement avant de dire « au repos ».
+   Assez pour qu'un élan soit vraiment fini, assez peu pour qu'une vidéo
+   arrêtée sous les yeux démarre sans qu'on attende. */
+const ATTENTE_REPOS = 200;
 
 /**
  * Le bas du fil : il dit toujours quelque chose.
@@ -95,6 +101,24 @@ const TABS = [
   { key: 'abonnements', label: 'Abonnements' },
 ];
 
+/* L'ESPACE ENTRE DEUX CARTES VIT DANS LA CELLULE — 17/10/2026.
+   Il était un `gap` du conteneur de la liste. Or la liste mesure chaque
+   cellule par son `onLayout` : un `gap` laisse donc des TROUS de 10 pt
+   entre deux cellules mesurées. Quand un bord de la fenêtre de rendu
+   tombe dans un trou, il ne correspond à aucune carte, et la fenêtre
+   retombe sur la première ou la dernière (VirtualizeUtils.js, rejoué avec
+   le vrai code de React Native 0.86) : des cartes lointaines montées puis
+   démontées pendant l'élan, et au repos une fenêtre qui court jusqu'au
+   bout de la liste pour tout démonter d'un coup au geste suivant.
+
+   Un séparateur, lui, est dessiné DANS la cellule mesurée : plus de trou.
+   Déclaré ici, hors du composant : une fonction fléchée passée en prop
+   serait un TYPE neuf à chaque rendu, et React remonterait les vingt
+   séparateurs. */
+function Intervalle() {
+  return <View style={s.intervalle} />;
+}
+
 export default function HomeScreen({
   posts, pros, feedMode, setFeedMode, feedTab, setFeedTab,
   followingIds, savedIds, openCommentsId, openContactId, commentaireCible = null,
@@ -143,6 +167,35 @@ export default function HomeScreen({
      changent. Faire défiler des photos ne redessine plus rien ici. */
   const visibles = useRef(new Set());
   const [videosVisibles, setVideosVisibles] = useState(() => new Set());
+
+  /* LE COMPTEUR D'ARRÊTS — 17/10/2026. Il monte chaque fois que le fil
+     s'immobilise, et seulement là. Une carte vidéo le reçoit, et son lecteur
+     ne naît qu'au premier arrêt qui suit son montage (Media.js) : jamais
+     pendant un élan, où un contrôleur de lecture d'iOS créé sur le fil
+     principal fait saccader le défilement.
+
+     « S'immobiliser » se mesure en attendant que les événements de
+     défilement CESSENT, et pas sur une « fin d'élan » : c'est la leçon de
+     `PagesGlissantes` (04/10). Un glissement lent finit sans élan, et le
+     navigateur n'en émet aucune à la molette ; une attente remise à zéro à
+     chaque `onScroll`, elle, marche partout.
+
+     Et le minuteur part aussi quand la LISTE change sous un fil immobile
+     (ouverture, rafraîchissement, retour du fil Vidéos) : sinon une vidéo
+     visible dès l'ouverture attendrait qu'on fasse défiler pour naître. */
+  const [repos, setRepos] = useState(0);
+  const minuteurRepos = useRef(null);
+  const armerRepos = useCallback(() => {
+    if (minuteurRepos.current) clearTimeout(minuteurRepos.current);
+    minuteurRepos.current = setTimeout(() => {
+      minuteurRepos.current = null;
+      setRepos((n) => n + 1);
+    }, ATTENTE_REPOS);
+  }, []);
+  useEffect(() => { armerRepos(); }, [posts, feedMode, armerRepos]);
+  useEffect(() => () => {
+    if (minuteurRepos.current) clearTimeout(minuteurRepos.current);
+  }, []);
   const cleVideos = useRef('');
   const reglesVisibilite = useRef({ itemVisiblePercentThreshold: 65 });
 
@@ -322,12 +375,20 @@ export default function HomeScreen({
       />
 
       <View style={{ flex: 1 }}>
+        {/* L'instrument du diagnostic des saccades : absent de toute
+            version qui n'a pas `EXPO_PUBLIC_MESURE_FIL` (CompteurImages.js). */}
+        {MESURE_ACTIVE && <CompteurImages />}
         <FlatList
           {...CLAVIER}
           data={posts}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={s.classicContent}
+          ItemSeparatorComponent={Intervalle}
           ListHeaderComponent={rappel || null}
+          /* Les deux bords que le `gap` donnait aussi : sous l'en-tête et
+             au-dessus du pied. Le séparateur ne passe qu'ENTRE deux cartes. */
+          ListHeaderComponentStyle={s.enteteListe}
+          ListFooterComponentStyle={s.piedListe}
           /* UN MESSAGE DE LISTE VIDE QUI DONNE TORT À L'APPLICATION.
              Celui d'avant disait « Suis des professionnels pour voir leurs
              publications ici » — y compris dans « Pour vous », où il n'y
@@ -365,15 +426,37 @@ export default function HomeScreen({
              assez tard pour ne pas charger ce que personne ne lira. */
           onEndReached={onChargerPlus}
           onEndReachedThreshold={0.5}
+          onScroll={armerRepos}
+          onMomentumScrollEnd={armerRepos}
           /* Même raison que pour le fil vidéo : par défaut, dix cartes se
              montaient ensemble — mesuré à 5,8 écrans de contenu au premier
-             affichage, photos comprises. On en monte deux, puis trois par
-             trois pendant que le doigt descend. Rien ne change à l'écran :
-             ce qui change, c'est que l'écran répond tout de suite. */
+             affichage, photos comprises. On en monte deux au départ.
+
+             UNE PAR UNE ENSUITE — 17/10/2026. Elles se montaient trois par
+             trois, toutes les 80 ms. Or un montage s'exécute en UN bloc sur
+             le fil principal du téléphone (RCTMountingManager.mm), celui qui
+             anime aussi l'élan : trois cartes dans le même bloc, c'est trois
+             fois le travail dans la même image, et l'élan saccade. Mesuré au
+             navigateur ce jour-là : 11 à 14 cartes montées PENDANT chaque
+             élan vers le bas. Une par bloc, toutes les 50 ms (la valeur par
+             défaut), cela fait encore 20 cartes par seconde — plus qu'un
+             lancer n'en traverse.
+
+             `windowSize` RESTE À 5, et c'est voulu : depuis le même jour,
+             une photo du fil garde son image ENTIÈRE (`pleineResolution`,
+             voir Media.js). Une fenêtre plus large tiendrait davantage de
+             ces images en mémoire, sans réduire le nombre de montages sur un
+             fil long : chaque carte franchie en monte une devant et en
+             démonte une derrière.
+
+             Et `removeClippedSubviews` reste FAUX, écrit en toutes lettres :
+             il ne retire aucun montage, il ajoute des détachements de vues
+             sur le fil principal à chaque déplacement. */
           initialNumToRender={2}
-          maxToRenderPerBatch={3}
-          updateCellsBatchingPeriod={80}
+          maxToRenderPerBatch={1}
+          updateCellsBatchingPeriod={50}
           windowSize={5}
+          removeClippedSubviews={false}
           refreshControl={onRafraichir ? (
             <RefreshControl
               refreshing={rafraichit}
@@ -392,6 +475,10 @@ export default function HomeScreen({
                  franchissement de seuil — elle se redessinait en entier,
                  double-appui compris, pour rien. */
               actif={videosVisibles.has(p.id)}
+              /* Le compteur d'arrêts aux seules cartes VIDÉO : passé à une
+                 photo, il ferait céder sa mémorisation à chaque arrêt du
+                 fil. Même raison que `actif` juste au-dessus. */
+              repos={FORMATS_VIDEO.has(p.format) ? repos : undefined}
               onOuvrirVideo={onOuvrirVideo}
               pro={p.proId ? pros[p.proId] : null}
               pros={pros}
@@ -483,6 +570,11 @@ const s = StyleSheet.create({
      12 px du bord et les autres écrans à 16 (32 par le défaut doublé).
      On changeait d'onglet et le contenu sautait de côté. */
   classicContent: {
-    paddingTop: S.md, paddingHorizontal: GOUTTIERE, paddingBottom: S.lg, gap: S.md - 2,
+    paddingTop: S.md, paddingHorizontal: GOUTTIERE, paddingBottom: S.lg,
   },
+  /* Les 10 pt qu'apportait le `gap`, au même endroit au pixel près :
+     entre deux cartes, sous l'en-tête, au-dessus du pied. */
+  intervalle: { height: S.md - 2 },
+  enteteListe: { marginBottom: S.md - 2 },
+  piedListe: { marginTop: S.md - 2 },
 });
