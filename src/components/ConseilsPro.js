@@ -36,10 +36,11 @@ import Media from './Media';
 import Visionneuse from './Visionneuse';
 import { apercuDe } from '../lib/cloudinary';
 import { Lightbulb, Volume2, Maximize } from './icons';
-import { porteUnVisuel } from '../lib/formats-publication';
+import { porteUnVisuel, FORMATS_VIDEO } from '../lib/formats-publication';
 
-/** Les formats qui portent une voix : on le DIT, sinon on ne l'écoute pas. */
-const AVEC_SON = new Set(['video', 'montage']);
+/* Les formats qui portent une voix sont les formats VIDÉO — la liste de
+   `formats-publication.js`, pas une copie : on le DIT, sinon on ne
+   l'écoute pas. */
 
 export default function ConseilsPro({ items = [] }) {
   /* L'index du conseil ouvert en grand, ou `null`. La visionneuse ne reçoit
@@ -61,7 +62,7 @@ export default function ConseilsPro({ items = [] }) {
       <View style={s.liste}>
         {items.map((c) => {
           const aUnVisuel = porteUnVisuel(c.format) && !!c.media;
-          const avecSon = AVEC_SON.has(c.format);
+          const avecSon = FORMATS_VIDEO.has(c.format);
           /* Le rang DANS LA LISTE DES VISUELS, pas dans la liste complète. */
           const rang = aUnVisuel ? visuels.indexOf(c) : -1;
 

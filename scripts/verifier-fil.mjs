@@ -32,7 +32,7 @@
  *
  *   npm run verifier-fil
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -226,6 +226,27 @@ console.log('\n3. Une seule liste des formats vidéo');
     /import \{[^}]*\bFORMATS_VIDEO\b[^}]*\} from '\.\.\/lib\/formats-publication'/.test(carte)
     && /FORMATS_VIDEO\.has\(post\.format\)/.test(carte));
   const accueil = sansCommentaires(lire('src/screens/HomeScreen.js'));
+  /* Et nulle part ailleurs. La relecture du 17/10/2026 en a trouvé DEUX
+     autres copies identiques — dans le bloc des conseils, et dans le filtre
+     du fil, commentée « la même liste ». Une liste recopiée finit par
+     diverger : on cherche donc la FORME d'une liste de formats vidéo dans
+     tout `src/`, et on n'en tolère qu'une. */
+  const copies = [];
+  const parcourir = (dossier) => {
+    for (const nom of readdirSync(dossier, { withFileTypes: true })) {
+      const chemin = `${dossier}/${nom.name}`;
+      if (nom.isDirectory()) parcourir(chemin);
+      else if (/\.js$/.test(nom.name)
+        && /new Set\(\[\s*'(video|montage)'/.test(sansCommentaires(readFileSync(chemin, 'utf8')))) {
+        copies.push(chemin.replace(/^.*?\/src\//, 'src/'));
+      }
+    }
+  };
+  parcourir(new URL('../src', import.meta.url).pathname);
+  verifier('une SEULE liste des formats vidéo dans tout `src/`',
+    copies.length === 1 && copies[0] === 'src/lib/formats-publication.js',
+    `listes trouvées : ${copies.join(', ') || 'aucune'}`);
+
   verifier('`HomeScreen` décide quelle carte joue avec la MÊME liste',
     /import \{[^}]*\bFORMATS_VIDEO\b[^}]*\} from '\.\.\/lib\/formats-publication'/.test(accueil)
     && /FORMATS_VIDEO\.has\(v\.item\.format\)/.test(accueil)

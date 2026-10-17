@@ -38,6 +38,7 @@
  */
 import { distanceKm } from './adresse.js';
 import { nomMetier } from './metiers.js';
+import { FORMATS_VIDEO } from './formats-publication.js';
 
 /** Aucun filtre. Le fil montre tout, et c'est l'état par défaut. */
 export const FILTRE_VIDE = {
@@ -120,7 +121,7 @@ export function argumentsDuFil(f = {}, { abonnements = false, videos = false } =
 export function correspond(post, pro, f = {}, { abonnements = null, videos = false } = {}) {
   const estPub = post.type === 'ad';
 
-  if (videos && (estPub || !FORMATS_PLEIN_ECRAN.has(post.format))) return false;
+  if (videos && (estPub || !FORMATS_VIDEO.has(post.format))) return false;
 
   /* « Abonnements » garde les publicités : c'est le contrat passé avec
      l'annonceur, il ne dépend de personne. Les retirer reviendrait à ne les
@@ -160,7 +161,8 @@ export function correspond(post, pro, f = {}, { abonnements = null, videos = fal
   return true;
 }
 
-/* La même liste que celle qui décide vers quel fil renvoyer après une
-   publication. Deux listes séparées finiraient par diverger — c'est
-   exactement ce qui excluait les montages du fil vidéo. */
-const FORMATS_PLEIN_ECRAN = new Set(['video', 'montage']);
+/* « Les formats vidéo » viennent de `formats-publication.js`, et de nulle
+   part ailleurs. Il y avait ici une copie, commentée « la même liste » :
+   deux listes séparées finissent par diverger — c'est exactement ce qui
+   excluait les montages du fil vidéo. `verifier-fil` refuse désormais
+   toute autre copie (17/10/2026). */
