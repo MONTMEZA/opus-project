@@ -12,31 +12,56 @@
 \set pro   '''aaaa0000-0000-4000-8000-00000000aaaa'''
 \set client '''bbbb0000-0000-4000-8000-00000000bbbb'''
 
+-- --------------------------------------------------------------------------
+--  LES COMPTES NAISSENT COMME GOTRUE LES CRÉE — 16/10/2026.
+--
+--  Le jeu d'essai fabriquait le pro à la main : `public.users` réécrite en
+--  `type = 'pro'` par le superutilisateur, puis la fiche insérée
+--  directement. Ça passait encore — l'éditeur SQL a l'échappatoire de la
+--  section 44 —, mais le SECOND pro de l'essai 4 était inséré en
+--  `on conflict do nothing` : la ligne `users`, déjà créée PARTICULIER par
+--  le déclencheur `cree_fiche_utilisateur`, le restait, sa fiche tombait
+--  sur OP005, et l'essai 4 — « on clique dessus, rien ne se passe », le cas
+--  que le propriétaire a nommé — répondait « current transaction is
+--  aborted » au lieu d'éprouver quoi que ce soit.
+--
+--  Les deux pros naissent donc par `auth.users`, avec les métadonnées de
+--  l'inscription et une preuve du répertoire (section 45), sur des SIRET
+--  FICTIFS à clé juste que le répertoire Sirene ne connaît pas (vérifié le
+--  17/10/2026, témoin réel à l appui : 0 résultat pour chaque SIRET et chaque SIREN). Et le NOM
+--  vient des métadonnées : l'essai 7 lit « Melina Meinhard » et non le
+--  « Vous » par défaut — c'était la raison du `do update` d'avant.
+-- --------------------------------------------------------------------------
+\set QUIET on
+delete from auth.users where id in ('aaaa0000-0000-4000-8000-00000000aaaa',
+  'bbbb0000-0000-4000-8000-00000000bbbb', 'cccc0000-0000-4000-8000-00000000cccc');
+delete from public.preuves_siret where siret in ('00000038000014', '00000039800016');
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000038000014', 'ESSAIS 37 — COUVREUR', 'registre', now() + interval '1 hour'),
+  ('00000039800016', 'ESSAIS 37 — PLAQUISTE', 'registre', now() + interval '1 hour');
+\set QUIET off
+
 create or replace function pg_temp.jeu_dessai() returns void
 language plpgsql as $$
 begin
-  insert into auth.users (id, email) values
-    ('aaaa0000-0000-4000-8000-00000000aaaa', 'pro37@exemple.test'),
-    ('bbbb0000-0000-4000-8000-00000000bbbb', 'client37@exemple.test')
-  on conflict (id) do nothing;
-  -- `do update`, et PAS `do nothing` : la ligne `public.users` est deja
-  -- creee par le declencheur `cree_fiche_utilisateur` (section 31) au
-  -- moment de l insertion dans `auth.users`, avec le nom par defaut
-  -- « Vous ». Un `do nothing` laissait donc l essai 7 lire « Vous » et
-  -- conclure au vert sans avoir rien prouve.
-  insert into public.users (id, email, nom, type) values
-    ('aaaa0000-0000-4000-8000-00000000aaaa', 'pro37@exemple.test', 'Essai Couvreur', 'pro'),
-    ('bbbb0000-0000-4000-8000-00000000bbbb', 'client37@exemple.test', 'Melina Meinhard', 'particulier')
-  on conflict (id) do update
-    set nom = excluded.nom, type = excluded.type, email = excluded.email;
-  -- `entreprise`, `metier` et `ville` sont NOT NULL : un jeu d'essai qui les
-  -- omet échoue sur la contrainte et AUCUN cas ne s'exécute. Le fichier
-  -- affiche alors onze erreurs qui n'ont rien à voir avec ce qu'on éprouve.
-  insert into public.professional_profiles (id, entreprise, metier, ville, metiers)
-  values ('aaaa0000-0000-4000-8000-00000000aaaa', 'Essai Couverture',
-          'couvreur', 'Charleval', array['couvreur'])
+  insert into auth.users (id, email, raw_user_meta_data) values
+    ('aaaa0000-0000-4000-8000-00000000aaaa', 'pro37@exemple.test',
+     jsonb_build_object('type', 'pro', 'siret', '00000038000014', 'nom', 'Essai Couvreur',
+                        'entreprise', 'Essai Couverture', 'metiers', jsonb_build_array('couvreur'),
+                        'ville', 'Charleval')),
+    ('bbbb0000-0000-4000-8000-00000000bbbb', 'client37@exemple.test',
+     jsonb_build_object('type', 'particulier', 'nom', 'Melina Meinhard'))
   on conflict (id) do nothing;
 end $$;
+
+\echo '=== 0. LE JEU D ESSAI EST BIEN CE QU IL PRETEND ETRE ==='
+\echo '-- attendu : Essai Couvreur | pro | couvreur | t ; Melina Meinhard | particulier | | f'
+begin;
+select pg_temp.jeu_dessai();
+select u.nom, u.type, p.metier, p.id is not null as a_une_fiche
+  from public.users u left join public.professional_profiles p on p.id = u.id
+ where u.id in (:pro, :client) order by u.nom;
+rollback;
 
 -- --------------------------------------------------------------------------
 \echo '=== 1. UN DEVIS REMPLIT devis_id, ET LUI SEUL ==='
@@ -92,15 +117,11 @@ rollback;
 -- --------------------------------------------------------------------------
 begin;
 select pg_temp.jeu_dessai();
-insert into auth.users (id, email) values
-  ('cccc0000-0000-4000-8000-00000000cccc', 'pro2-37@exemple.test')
-on conflict (id) do nothing;
-insert into public.users (id, email, nom, type) values
-  ('cccc0000-0000-4000-8000-00000000cccc', 'pro2-37@exemple.test', 'Essai Plaquiste', 'pro')
-on conflict (id) do nothing;
-insert into public.professional_profiles (id, entreprise, metier, ville, metiers)
-values ('cccc0000-0000-4000-8000-00000000cccc', 'Essai Platrerie',
-        'plaquiste', 'Lambesc', array['plaquiste'])
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('cccc0000-0000-4000-8000-00000000cccc', 'pro2-37@exemple.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000039800016', 'nom', 'Essai Plaquiste',
+                      'entreprise', 'Essai Platrerie', 'metiers', jsonb_build_array('plaquiste'),
+                      'ville', 'Lambesc'))
 on conflict (id) do nothing;
 insert into public.annonces_pro (id, auteur_id, type, titre, texte)
 values ('44440000-0000-4000-8000-000000004444', :pro,
@@ -193,6 +214,12 @@ set local request.jwt.claim.sub = 'aaaa0000-0000-4000-8000-00000000aaaa';
 select count(*) as ce_que_le_pro_lit from public.notifications;
 reset role;
 rollback;
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée (chaque cas, lui, finit par `rollback`).
+\set QUIET on
+delete from public.preuves_siret where siret in ('00000038000014', '00000039800016');
+\set QUIET off
 
 \echo ''
 \echo '=== FIN DES ESSAIS DE LA SECTION 37 ==='

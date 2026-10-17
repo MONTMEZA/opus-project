@@ -42,24 +42,57 @@
 \set P '''dddddddd-0000-4000-8000-00000000000d'''
 \set AN '''99999999-0000-4000-8000-000000000029'''
 
+--  LES COMPTES NAISSENT COMME GOTRUE LES CRÉE — 16/10/2026.
+--
+--  Le jeu d'essai insérait `auth.users` sans métadonnées, puis
+--  `public.users` avec `type = 'pro'` en `on conflict do nothing`. Or la
+--  ligne `users` naît du déclencheur `cree_fiche_utilisateur` (section 31) :
+--  le `do nothing` la laissait PARTICULIER, et depuis la section 44 la
+--  fiche pro tombait sur OP005. L'annonce tombait à son tour sur sa clé
+--  étrangère, et les onze cas n'éprouvaient plus rien — le cas 9, « un
+--  tiers ne lit rien », affichait 0, le bon résultat, parce qu'il n'y
+--  avait rien à lire. Exactement le défaut que l'en-tête de ce fichier
+--  raconte, revenu par une autre porte.
+--
+--  Depuis la section 45, un compte pro ne naît qu'avec une preuve du
+--  répertoire : on la pose en superutilisateur, comme la fonction Edge
+--  `siret`, sur trois SIRET FICTIFS à clé juste, d'entreprises distinctes
+--  (une entreprise = un compte), que le répertoire Sirene ne connaît pas
+--  (vérifié le 17/10/2026, témoin réel à l appui : 0 résultat pour chaque SIRET et chaque SIREN).
+\set QUIET on
+-- Ménage d'un passage précédent interrompu : le fichier se rejoue.
+delete from auth.users where id in (:A, :B, :C, :P);
+delete from public.preuves_siret where siret in ('00000035600014', '00000036400018', '00000037200011');
+
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000035600014', 'ESSAIS 29 — A', 'registre', now() + interval '1 hour'),
+  ('00000036400018', 'ESSAIS 29 — B', 'registre', now() + interval '1 hour'),
+  ('00000037200011', 'ESSAIS 29 — C', 'registre', now() + interval '1 hour');
+\set QUIET off
+
 \echo '=== jeu d essai ==='
-insert into auth.users (id, email) values
-  (:A, 'a@exemple-opus.test'), (:B, 'b@exemple-opus.test'),
-  (:C, 'c@exemple-opus.test'), (:P, 'p@exemple-opus.test')
-on conflict do nothing;
+\echo '-- attendu : INSERT 0 4, puis 3 pros avec fiche et 1 particulier sans, puis INSERT 0 1 et « depart | 0 »'
+insert into auth.users (id, email, raw_user_meta_data) values
+  (:A, 'a@exemple-opus.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000035600014', 'nom', 'A Maçonnerie',
+                      'entreprise', 'A Maçonnerie', 'metiers', jsonb_build_array('macon'),
+                      'ville', 'Lambesc (13)')),
+  (:B, 'b@exemple-opus.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000036400018', 'nom', 'B Plomberie',
+                      'entreprise', 'B Plomberie', 'metiers', jsonb_build_array('plombier'),
+                      'ville', 'Aix-en-Provence (13)')),
+  (:C, 'c@exemple-opus.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000037200011', 'nom', 'C Peinture',
+                      'entreprise', 'C Peinture', 'metiers', jsonb_build_array('peintre-en-batiment'),
+                      'ville', 'Salon-de-Provence (13)')),
+  (:P, 'p@exemple-opus.test',
+   jsonb_build_object('type', 'particulier', 'nom', 'Un particulier'));
 
-insert into public.users (id, nom, type) values
-  (:A, 'A Maçonnerie', 'pro'), (:B, 'B Plomberie', 'pro'),
-  (:C, 'C Peinture', 'pro'),   (:P, 'Un particulier', 'particulier')
-on conflict do nothing;
-
--- `entreprise`, `metier` et `ville` sont `not null` et sans valeur par
--- défaut : une fiche pro sans eux n'existe pas.
-insert into public.professional_profiles (id, entreprise, metier, ville) values
-  (:A, 'A Maçonnerie', 'macon',    'Lambesc (13)'),
-  (:B, 'B Plomberie',  'plombier', 'Aix-en-Provence (13)'),
-  (:C, 'C Peinture',   'peintre-en-batiment', 'Salon-de-Provence (13)')
-on conflict do nothing;
+-- La donnée EXISTE avant qu'on prétende la protéger : sans ces quatre
+-- lignes, le « 0 » du cas 9 ne vaudrait rien.
+select u.nom, u.type, p.metier, p.id is not null as a_une_fiche
+  from public.users u left join public.professional_profiles p on p.id = u.id
+ where u.id in (:A, :B, :C, :P) order by u.nom;
 
 insert into public.annonces_pro (id, auteur_id, type, titre, texte)
 values (:AN, :A, 'sous_traitance_cherche',
@@ -174,6 +207,8 @@ rollback;
 \echo '=== menage ==='
 delete from public.annonce_reponses where annonce_id = :AN;
 delete from public.annonces_pro where id = :AN;
-delete from public.professional_profiles where id in (:A, :B, :C);
-delete from public.users where id in (:A, :B, :C, :P);
+-- Par `auth.users`, et plus fiche par fiche : depuis la section 31, une
+-- fiche pro ne se supprime pas tant que son compte existe. La cascade
+-- emporte `users`, la fiche et l'identité de l'entreprise.
 delete from auth.users where id in (:A, :B, :C, :P);
+delete from public.preuves_siret where siret in ('00000035600014', '00000036400018', '00000037200011');

@@ -22,7 +22,51 @@
 \set C '''cccccccc-0000-0000-0000-000000000003'''
 \set CONV '''99999999-0000-4000-8000-000000000099'''
 
-\echo '=== jeu d essai : une conversation entre A et B ==='
+-- --------------------------------------------------------------------------
+--  LES COMPTES — ajoutés le 16/10/2026, et c'est la cause de la panne.
+--
+--  Ce fichier ne créait aucun des trois comptes : ils l'étaient à la main,
+--  avant de le lancer, sur la base où il a été écrit (les mêmes
+--  identifiants que `essais-section-25.sql`). Rejoué sur une base NEUVE, la
+--  conversation tombait sur sa clé étrangère, et les huit cas mentaient :
+--  l'essai 1 (« une bulle vide est refusée ») était refusé par la RLS — il
+--  n'y avait pas de conversation — et non par `messages_contenu_check` ;
+--  les essais 2 et 3, qui DOIVENT passer, étaient refusés ; les essais 6
+--  et 7 lisaient 0 parce qu'il n'y avait rien à lire, et l'essai 8
+--  tombait sur la clé étrangère du blocage avant de lire quoi que ce soit.
+--  Les refus des essais 4 et 5 n'étaient crédibles que si l'essai 3, le
+--  même chemin dans son propre dossier, passait — il ne passait pas.
+--
+--  Et on ne peut plus créer un pro « à la main » : section 44 (OP005) puis
+--  section 45 (OP006). B, l'artisan, naît comme GoTrue le crée — par
+--  `auth.users`, avec les métadonnées et un SIRET FICTIF à clé juste que le
+--  répertoire Sirene ne connaît pas (vérifié le 17/10/2026, témoin réel à l appui : 0 résultat
+--  pour le SIRET et pour le SIREN). C, le client, et A, le tiers, sont des
+--  particuliers.
+-- --------------------------------------------------------------------------
+\set QUIET on
+-- Ménage d'un passage précédent interrompu : le fichier se rejoue.
+delete from storage.objects where bucket_id = 'pieces-jointes'
+   and name like '%/99999999-0000-4000-8000-000000000099/%';
+delete from auth.users where id in (:A, :B, :C);
+delete from public.preuves_siret where siret in ('00000034900019');
+
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000034900019', 'ESSAIS 28 — ARTISAN', 'registre', now() + interval '1 hour');
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  (:A, 'tiers28@exemple-opus.test',
+   jsonb_build_object('type', 'particulier', 'nom', 'Un Tiers')),
+  (:B, 'artisan28@exemple-opus.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000034900019', 'nom', 'Pro Carreleur',
+                      'entreprise', 'Carrelage du Sud', 'metiers', jsonb_build_array('carreleur'),
+                      'ville', 'Aix-en-Provence (13)')),
+  (:C, 'client28@exemple-opus.test',
+   jsonb_build_object('type', 'particulier', 'nom', 'Le Client'));
+\set QUIET off
+
+\echo '=== jeu d essai : une conversation entre C (le client) et B (l artisan) ==='
+\echo '-- attendu : INSERT 0 1, INSERT 0 1, puis la ligne « conversation | C | B »'
 insert into public.conversations (id, client_id, professional_id)
 values (:CONV, :C, :B) on conflict do nothing;
 insert into storage.objects (bucket_id, name, owner)
@@ -87,3 +131,15 @@ begin;
   set local request.jwt.claim.sub = 'bbbbbbbb-0000-0000-0000-000000000002';
   select 'celui qui est bloqué' as qui, count(*) from storage.objects where bucket_id = 'pieces-jointes';
 rollback;
+
+-- --------------------------------------------------------------------------
+--  Ménage : la base ressort comme elle est entrée. Les fichiers d'abord —
+--  la base ne les emporte pas, c'est la fonction Edge `compte` qui le fait
+--  en vrai —, puis les comptes, qui emportent la conversation en cascade.
+-- --------------------------------------------------------------------------
+\set QUIET on
+delete from storage.objects where bucket_id = 'pieces-jointes'
+   and name like '%/99999999-0000-4000-8000-000000000099/%';
+delete from auth.users where id in (:A, :B, :C);
+delete from public.preuves_siret where siret in ('00000034900019');
+\set QUIET off

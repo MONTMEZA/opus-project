@@ -18,21 +18,54 @@
 \set moi   '''aaaa0000-0000-4000-8000-0000000040aa'''
 \set autre '''bbbb0000-0000-4000-8000-0000000040bb'''
 
+-- --------------------------------------------------------------------------
+--  LES COMPTES NAISSENT COMME GOTRUE LES CRÉE — 16/10/2026.
+--
+--  Le jeu d'essai fabriquait les deux pros à la main : `public.users` en
+--  `type = 'pro'`… avec un `do update` qui ne touchait que `nom`. La ligne,
+--  déjà créée PARTICULIER par le déclencheur `cree_fiche_utilisateur`, le
+--  restait, et depuis la section 44 la fiche tombait sur OP005. `jeu()`
+--  échouait donc dans CHAQUE cas, et les douze répondaient « current
+--  transaction is aborted » — y compris le 9, « le compteur ne redescend
+--  jamais », le verrou de la section, et le 11, « nommer son agent ne
+--  donne aucun droit de plus ».
+--
+--  Les deux pros naissent donc par `auth.users`, avec les métadonnées de
+--  l'inscription et une preuve du répertoire (section 45), sur deux SIRET
+--  FICTIFS à clé juste, d'entreprises distinctes, que le répertoire Sirene
+--  ne connaît pas (vérifié le 17/10/2026, témoin réel à l appui : 0 résultat pour chaque SIRET et
+--  chaque SIREN).
+-- --------------------------------------------------------------------------
+\set QUIET on
+delete from auth.users where id in (:moi, :autre);
+delete from public.preuves_siret where siret in ('00000042200014', '00000043000017');
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000042200014', 'ESSAIS 40 — MOI',   'registre', now() + interval '1 hour'),
+  ('00000043000017', 'ESSAIS 40 — AUTRE', 'registre', now() + interval '1 hour');
+\set QUIET off
+
 create or replace function pg_temp.jeu() returns void language plpgsql as $$
 begin
-  insert into auth.users (id, email) values
-    ('aaaa0000-0000-4000-8000-0000000040aa', 'moi40@exemple.test'),
-    ('bbbb0000-0000-4000-8000-0000000040bb', 'autre40@exemple.test')
+  insert into auth.users (id, email, raw_user_meta_data) values
+    ('aaaa0000-0000-4000-8000-0000000040aa', 'moi40@exemple.test',
+     jsonb_build_object('type', 'pro', 'siret', '00000042200014', 'nom', 'Moi',
+                        'entreprise', 'Moi SARL', 'metiers', jsonb_build_array('macon'),
+                        'ville', 'Lambesc')),
+    ('bbbb0000-0000-4000-8000-0000000040bb', 'autre40@exemple.test',
+     jsonb_build_object('type', 'pro', 'siret', '00000043000017', 'nom', 'Autre',
+                        'entreprise', 'Autre SARL', 'metiers', jsonb_build_array('macon'),
+                        'ville', 'Lambesc'))
   on conflict (id) do nothing;
-  insert into public.users (id, email, nom, type) values
-    ('aaaa0000-0000-4000-8000-0000000040aa', 'moi40@exemple.test', 'Moi', 'pro'),
-    ('bbbb0000-0000-4000-8000-0000000040bb', 'autre40@exemple.test', 'Autre', 'pro')
-  on conflict (id) do update set nom = excluded.nom;
-  insert into public.professional_profiles (id, entreprise, metiers, ville) values
-    ('aaaa0000-0000-4000-8000-0000000040aa', 'Moi SARL',   array['macon'], 'Lambesc'),
-    ('bbbb0000-0000-4000-8000-0000000040bb', 'Autre SARL', array['macon'], 'Lambesc')
-  on conflict (id) do update set entreprise = excluded.entreprise;
 end $$;
+
+\echo '=== 0. LE JEU D ESSAI EST BIEN CE QU IL PRETEND ETRE ==='
+\echo '-- attendu : Autre | pro | t | f ; Moi | pro | t | f'
+begin;
+select pg_temp.jeu();
+select u.nom, u.type, p.id is not null as a_une_fiche, p.verifie
+  from public.users u left join public.professional_profiles p on p.id = u.id
+ where u.id in (:moi, :autre) order by u.nom;
+rollback;
 
 \echo '=== 1. UNE FICHE NAIT SANS AGENT NOMME, ET A ZERO PROPOSITION ==='
 begin;
@@ -166,3 +199,9 @@ set local request.jwt.claim.sub = 'aaaa0000-0000-4000-8000-0000000040aa';
 select public.mes_donnees() -> 'fiche_professionnelle' -> 'agent_nom' as dans_l_export;
 reset role;
 rollback;
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée (chaque cas, lui, finit par `rollback`).
+\set QUIET on
+delete from public.preuves_siret where siret in ('00000042200014', '00000043000017');
+\set QUIET off

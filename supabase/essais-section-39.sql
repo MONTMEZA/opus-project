@@ -18,21 +18,45 @@
 \set moi   '''aaaa0000-0000-4000-8000-00000000aaaa'''
 \set autre '''bbbb0000-0000-4000-8000-00000000bbbb'''
 
+-- --------------------------------------------------------------------------
+--  LES COMPTES NAISSENT COMME GOTRUE LES CRÉE — 16/10/2026.
+--
+--  Le jeu d'essai fabriquait les deux pros à la main : `public.users` en
+--  `type = 'pro'`… avec un `do update` qui ne touchait que `nom`. La ligne,
+--  déjà créée PARTICULIER par le déclencheur `cree_fiche_utilisateur`, le
+--  restait, et depuis la section 44 la fiche tombait sur OP005. `jeu()`
+--  échouait donc dans CHAQUE cas, la variable `chantier` restait vide, et
+--  les treize répondaient « syntax error at or near ":" » puis « current
+--  transaction is aborted », y compris le 9 — « un autre pro ne peut pas
+--  écrire mon récit », LE CAS QUI COMPTE.
+--
+--  Les deux pros naissent donc par `auth.users`, avec les métadonnées de
+--  l'inscription et une preuve du répertoire (section 45), sur deux SIRET
+--  FICTIFS à clé juste, d'entreprises distinctes, que le répertoire Sirene
+--  ne connaît pas (vérifié le 17/10/2026, témoin réel à l appui : 0 résultat pour chaque SIRET et
+--  chaque SIREN).
+-- --------------------------------------------------------------------------
+\set QUIET on
+delete from auth.users where id in (:moi, :autre);
+delete from public.preuves_siret where siret in ('00000040600017', '00000041400011');
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000040600017', 'ESSAIS 39 — MOI',   'registre', now() + interval '1 hour'),
+  ('00000041400011', 'ESSAIS 39 — AUTRE', 'registre', now() + interval '1 hour');
+\set QUIET off
+
 create or replace function pg_temp.jeu() returns uuid language plpgsql as $$
 declare c uuid;
 begin
-  insert into auth.users (id, email) values
-    ('aaaa0000-0000-4000-8000-00000000aaaa', 'moi39@exemple.test'),
-    ('bbbb0000-0000-4000-8000-00000000bbbb', 'autre39@exemple.test')
+  insert into auth.users (id, email, raw_user_meta_data) values
+    ('aaaa0000-0000-4000-8000-00000000aaaa', 'moi39@exemple.test',
+     jsonb_build_object('type', 'pro', 'siret', '00000040600017', 'nom', 'Moi',
+                        'entreprise', 'Moi SARL', 'metiers', jsonb_build_array('macon'),
+                        'ville', 'Lambesc')),
+    ('bbbb0000-0000-4000-8000-00000000bbbb', 'autre39@exemple.test',
+     jsonb_build_object('type', 'pro', 'siret', '00000041400011', 'nom', 'Autre',
+                        'entreprise', 'Autre SARL', 'metiers', jsonb_build_array('macon'),
+                        'ville', 'Lambesc'))
   on conflict (id) do nothing;
-  insert into public.users (id, email, nom, type) values
-    ('aaaa0000-0000-4000-8000-00000000aaaa', 'moi39@exemple.test', 'Moi', 'pro'),
-    ('bbbb0000-0000-4000-8000-00000000bbbb', 'autre39@exemple.test', 'Autre', 'pro')
-  on conflict (id) do update set nom = excluded.nom;
-  insert into public.professional_profiles (id, entreprise, metiers, ville) values
-    ('aaaa0000-0000-4000-8000-00000000aaaa', 'Moi SARL',   array['macon'], 'Lambesc'),
-    ('bbbb0000-0000-4000-8000-00000000bbbb', 'Autre SARL', array['macon'], 'Lambesc')
-  on conflict (id) do update set entreprise = excluded.entreprise;
 
   insert into public.chantiers (pro_id, titre, ville)
   values ('aaaa0000-0000-4000-8000-00000000aaaa', 'Toiture Charleval', 'Charleval')
@@ -40,6 +64,16 @@ begin
   returning id into c;
   return c;
 end $$;
+
+\echo '=== 0. LE JEU D ESSAI EST BIEN CE QU IL PRETEND ETRE ==='
+\echo '-- attendu : Autre | pro | t ; Moi | pro | t ; puis un chantier a Moi'
+begin;
+select pg_temp.jeu() as chantier \gset
+select u.nom, u.type, p.id is not null as a_une_fiche
+  from public.users u left join public.professional_profiles p on p.id = u.id
+ where u.id in (:moi, :autre) order by u.nom;
+select pro_id = :moi as chantier_a_moi from public.chantiers where id = :'chantier';
+rollback;
 
 \echo '=== 1. UN CHANTIER NAIT SANS RECIT ==='
 begin;
@@ -172,6 +206,12 @@ select count(*) as publications_restantes from public.posts
 select count(*) as publications_decousues from public.posts
  where author_id = 'aaaa0000-0000-4000-8000-00000000aaaa' and chantier_id is null;
 rollback;
+
+-- Les preuves posées en tête de fichier partent avec lui : la base ressort
+-- comme elle est entrée (chaque cas, lui, finit par `rollback`).
+\set QUIET on
+delete from public.preuves_siret where siret in ('00000040600017', '00000041400011');
+\set QUIET off
 
 \echo ''
 \echo '=== FIN DES ESSAIS DE LA SECTION 39 ==='

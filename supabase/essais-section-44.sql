@@ -260,6 +260,14 @@ select u.type, exists (select 1 from public.professional_profiles p where p.id =
   from public.users u where u.id = 'f0000000-0000-0000-0000-00000000000f';
 rollback;
 
--- Les preuves posées en tête de fichier partent avec lui : la base ressort
--- comme elle est entrée.
+-- Le jeu d'essai part avec lui, PUIS les preuves : la base ressort comme
+-- elle est entrée. Jusqu'au 17/10/2026, seules les preuves partaient — ce
+-- commentaire l'affirmait quand même, et le fichier laissait trois comptes,
+-- une fiche, une demande et l'identité d'entreprise du vrai pro (relecture
+-- adverse). Par `auth.users`, comme ailleurs : la cascade emporte `users`,
+-- la fiche, l'identité de l'entreprise et la demande de Monsieur Dupont.
+\set QUIET on
+delete from auth.users where id in ('a0000000-0000-0000-0000-00000000000a',
+  'b0000000-0000-0000-0000-00000000000b', 'c0000000-0000-0000-0000-00000000000c');
 delete from public.preuves_siret where siret in ('00000011700010', '00000012500013');
+\set QUIET off

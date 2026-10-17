@@ -23,8 +23,76 @@
 -- ==========================================================================
 \set ADM '''aaaaaaaa-0000-0000-0000-000000000001'''
 \set PRO '''bbbbbbbb-0000-0000-0000-000000000002'''
+\set TIERS '''cccccccc-0000-0000-0000-000000000003'''
+
+-- --------------------------------------------------------------------------
+--  LES COMPTES — ajoutés le 16/10/2026, et c'est la cause de la panne.
+--
+--  Ce fichier ne créait ni l'administrateur, ni l'artisan, ni le tiers :
+--  ils l'étaient à la main, avant de le lancer, sur la base où il a été
+--  écrit (les mêmes identifiants que `essais-section-25.sql`). Rejoué sur
+--  une base NEUVE, la demande de métiers et la spécialité proposée
+--  tombaient sur leur clé étrangère, ADM n'était pas administrateur, et
+--  aucun des huit cas n'éprouvait rien : les cas 2 à 5 et 7 répondaient
+--  « Cette action est réservée à l'administration » puis « current
+--  transaction is aborted », le 6 tombait sur la clé étrangère de sa
+--  propre demande avant d'atteindre le verrou, et le 8 affichait
+--  « UPDATE 0 » et une ligne vide. Le cas 1 — « un tiers ne lit pas les
+--  files » — était refusé pour la bonne raison par hasard : personne
+--  n'était administrateur.
+--
+--  Et on ne peut plus créer un pro « à la main » : section 44 (OP005) puis
+--  section 45 (OP006). Les deux pros naissent comme GoTrue les crée — par
+--  `auth.users`, avec les métadonnées et un SIRET FICTIF à clé juste, que
+--  le répertoire Sirene ne connaît pas (vérifié le 17/10/2026, témoin réel à l appui : 0 résultat
+--  pour le SIRET et pour le SIREN). La preuve est posée en
+--  superutilisateur, comme la fonction Edge `siret` la poserait.
+--
+--  ADM est administrateur ET professionnel (maçon) : sans fiche, il ne
+--  pourrait pas déposer la demande de l'essai 6, et le refus qu'on y lit
+--  viendrait de la clé étrangère au lieu de « on ne tranche pas sa propre
+--  demande ».
+-- --------------------------------------------------------------------------
+\set QUIET on
+-- Ménage d'un passage précédent interrompu : le fichier se rejoue.
+delete from public.specialites_proposees where id = 'ffffffff-0000-0000-0000-000000000006';
+delete from auth.users where id in (:ADM, :PRO, :TIERS);
+delete from public.preuves_siret where siret in ('00000032300014', '00000033100017');
+
+insert into public.preuves_siret (siret, denomination, source, expire_le) values
+  ('00000032300014', 'ESSAIS 27 — ADMIN', 'registre', now() + interval '1 hour'),
+  ('00000033100017', 'ESSAIS 27 — PRO',   'registre', now() + interval '1 hour');
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  (:ADM, 'admin27@exemple-opus.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000032300014', 'nom', 'Admin Opus',
+                      'entreprise', 'Maconnerie de l Admin', 'metiers', jsonb_build_array('macon'),
+                      'ville', 'Lambesc (13)')),
+  (:PRO, 'pro27@exemple-opus.test',
+   jsonb_build_object('type', 'pro', 'siret', '00000033100017', 'nom', 'Pro Carreleur',
+                      'entreprise', 'Carrelage du Sud', 'metiers', jsonb_build_array('carreleur'),
+                      'ville', 'Aix-en-Provence (13)')),
+  (:TIERS, 'tiers27@exemple-opus.test',
+   jsonb_build_object('type', 'particulier', 'nom', 'Un Tiers'));
+
+-- La seule entrée de cette table est l'éditeur SQL (25.1) : c'est ici.
+insert into public.administrateurs (user_id, note) values (:ADM, 'essais section 27');
+
+-- PRO est VÉRIFIÉ, et c'est ce qui donne son sens à l'essai 3 (relecture
+-- adverse du 17/10/2026). Le verrou `tient_les_metiers()` ne mord que sur
+-- une fiche vérifiée (`old.verifie`) : avec un PRO non vérifié — ce que
+-- donnait la première réparation —, l'essai 3 passait sans que le verrou
+-- soit sur le chemin, et il ne prouvait pas ce que la section 27 affirme :
+-- « l'artisan vérifié ne peut pas le faire lui-même ; l'administrateur,
+-- lui, passe ». Posé ici en superutilisateur (`auth.uid()` vide), comme le
+-- ferait l'administration.
+update public.professional_profiles
+   set kbis_valide = true, assurance_valide = true
+ where id = :PRO;
+\set QUIET off
 
 \echo '=== jeu d essai ==='
+\echo '-- attendu : INSERT 0 1, INSERT 0 1, puis « fiche avant | {carreleur} | t »'
 insert into public.metier_demandes (id, professional_id, metiers_actuels, metiers_voulus, motif)
 values ('eeeeeeee-0000-0000-0000-000000000005', :PRO, array['carreleur'],
         array['carreleur','plaquiste'], 'Je pose aussi des cloisons depuis deux ans.')
@@ -96,3 +164,14 @@ begin;
   select 'téléphone enregistré malgré le métier désactivé' as constat, telephone
     from public.professional_profiles where id = :PRO;
 rollback;
+
+-- --------------------------------------------------------------------------
+--  Ménage : la base ressort comme elle est entrée. La spécialité proposée
+--  survit à son auteur (`on delete set null`, c'est voulu) : elle part à
+--  la main. Le reste suit les comptes en cascade.
+-- --------------------------------------------------------------------------
+\set QUIET on
+delete from public.specialites_proposees where id = 'ffffffff-0000-0000-0000-000000000006';
+delete from auth.users where id in (:ADM, :PRO, :TIERS);
+delete from public.preuves_siret where siret in ('00000032300014', '00000033100017');
+\set QUIET off
