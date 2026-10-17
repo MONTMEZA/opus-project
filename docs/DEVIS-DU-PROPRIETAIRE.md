@@ -83,6 +83,31 @@ prix), remplie toute seule à chaque devis émis ; et, plus tard, l'agent qui
 propose « faux plafond non isolé — 50 €/m² sur le devis 087, 70 €/m² sur le
 devis 057 », jamais un prix sorti de nulle part.
 
+#### Et la raison que le propriétaire a donnée lui-même
+
+> « Ça dépend des fois du chantier, les prix changent des fois — mais parce que
+> je n'avais pas non plus de base de prix. »
+
+**L'écart de 50 à 70 € n'était donc pas toujours voulu.** Sans base, chaque
+devis repart de la mémoire du moment, et le même ouvrage glisse d'un chantier à
+l'autre sans que personne l'ait décidé. C'est un vrai service à rendre, et il
+précise la règle ci-dessus :
+
+1. **Un PRIX DE RÉFÉRENCE par ouvrage, que l'artisan fixe lui-même** dans sa
+   bibliothèque — pas une moyenne calculée, une valeur qu'il a choisie et qu'il
+   peut changer. C'est elle qui se propose quand il ajoute l'ouvrage à un devis.
+2. **Il garde le droit de s'en écarter**, ligne par ligne : un accès difficile,
+   un petit chantier, un geste commercial. Le prix de la ligne est le sien.
+3. **L'écart se SIGNALE, il ne se bloque pas** : « votre prix de référence est
+   50 €/m², vous mettez 70 € — c'est voulu ? ». Une phrase discrète, pas une
+   fenêtre. Le but est que l'écart soit une décision, plus un oubli.
+4. **Pour remplir la base le premier jour**, sans rien retaper : l'agent pourra
+   lire les anciens devis de l'artisan (ses PDF, comme ces deux-là) et lui
+   PROPOSER une base — libellés, unités, prix. Il valide ligne par ligne. C'est
+   une action d'IA, donc elle naîtra **avec son journal et sa permission**
+   (règle de la section 38 de `schema.sql`), et **après** le module devis lui-même :
+   l'agent ne peut agir que sur ce qui existe.
+
 ### 1.4 Des descriptions très détaillées, avec « y compris » et « non fourni »
 
 « Création d'une contre-cloison en placo **y compris** pose de l'ossature
@@ -234,7 +259,9 @@ déjà retenue : « une LISTE qui se lit, une CARTE qui s'édite ».
    signalée par un mot en plus de la couleur.
 5. **Ligne « offerte »** : zéro centime et un drapeau, affichée « Offert ».
 6. **Bibliothèque d'ouvrages personnelle**, nourrie par les devis émis — la
-   seule source de prix que l'agent aura le droit de proposer.
+   seule source de prix que l'agent aura le droit de proposer — avec un **prix
+   de référence** que l'artisan fixe, et un écart signalé sans être bloqué.
+   Plus tard, une action d'IA pour la remplir à partir de ses anciens devis.
 7. **Acompte calculé** et « reste à payer », au lieu d'une phrase.
 8. **Trois modèles** au lieu de cinq, dont un « Classique » inspiré de ces devis.
 
