@@ -33,7 +33,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { C, F, T, S, R } from '../theme';
 import Media from './Media';
-import { cadrePhoto } from '../lib/cadre';
+import { cadreConnu, retenirCadre } from '../lib/cadres-connus';
 
 /** Combien de photos on monte de part et d'autre de celle qu'on regarde. */
 const VOISINES_MONTEES = 1;
@@ -49,12 +49,24 @@ export default function Carrousel({
   const [index, setIndex] = useState(0);
   /* `aspectRatio` n'est plus qu'un POINT DE DÉPART : le carré, qui est la
      forme la plus fréquente, donc celle qui bouge le moins au chargement.
-     La vraie forme arrive avec la photo. */
-  const [cadre, setCadre] = useState(aspectRatio);
+     La vraie forme arrive avec la photo.
 
+     SAUF SI ON L'A DÉJÀ MESURÉE (15/10/2026). Le fil démonte une carte
+     qui s'éloigne, mais lui garde la place de sa VRAIE photo ; repartir du
+     carré au remontage la faisait naître plus courte que sa place, et le
+     contenu reculait sous le doigt puis revenait — le « petit blocage » en
+     remontant. Le raisonnement complet est dans `cadres-connus.js`. */
+  const [cadre, setCadre] = useState(() => cadreConnu(medias[0]) ?? aspectRatio);
+
+  /* LA CLÉ EST L'ADRESSE DE LA PHOTO QUI DONNE LE CADRE, et `onRatio` ne
+     transmet que le rapport : on la tient donc ici. C'est `medias[0]` dans
+     les deux cas — la photo seule, ou la PREMIÈRE du carrousel, la seule
+     qui reçoive `mesurer` — et c'est la valeur de CE rendu, celle-là même
+     que `Media` affiche. */
+  const premiere = medias[0];
   const mesurer = (r) => {
     if (!(r > 0)) return;
-    const borne = cadrePhoto(r);
+    const borne = retenirCadre(premiere, r);
     setCadre((ancien) => (Math.abs(ancien - borne) < 0.005 ? ancien : borne));
   };
 
@@ -102,13 +114,26 @@ export default function Carrousel({
             apparaissait, alors qu'une seule est visible. Les emplacements,
             eux, restent tous là — sinon le carrousel ne saurait plus où
             s'arrêter. La voisine est toujours prête avant qu'on l'atteigne,
-            donc le glissement ne montre jamais de vide. */}
+            donc le glissement ne montre jamais de vide.
+
+            ET PAS AVANT D'AVOIR UNE LARGEUR (15/10/2026). Au premier rendu,
+            les emplacements font 1 pt de large, le temps que `onLayout`
+            réponde. Une photo montée là, expo-image la charge et la
+            redessine pour une vue de 1 pt — puis la largeur arrive, la
+            taille change, et il recommence tout, sur le fil principal du
+            téléphone. On n'y perd qu'une image : avant la largeur, ces
+            emplacements n'étaient de toute façon qu'une bande de 1 pt, et
+            dans le fil la carte est montée deux écrans avant qu'on la voie.
+
+            `onLayout` reste la seule source de la largeur, et surtout pas
+            la fenêtre : dans un chantier ou une annonce, le cadre n'a pas
+            la largeur de l'écran (la leçon de `PagesGlissantes`, le 04/10). */}
         {medias.map((m, i) => (
           <View
             key={`${i}-${String(m).slice(0, 24)}`}
             style={{ width: largeur || 1, height: '100%' }}
           >
-            {Math.abs(i - index) <= VOISINES_MONTEES && (
+            {largeur > 0 && Math.abs(i - index) <= VOISINES_MONTEES && (
               <Media
                 media={m}
                 style={{ width: '100%', height: '100%' }}

@@ -20,10 +20,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Media, { EtiquetteVideo } from './Media';
 import Carrousel from './Carrousel';
 import DoubleAppui from './DoubleAppui';
-import { porteUnVisuel } from '../lib/formats-publication';
-
-/** Les formats qui se regardent aussi en plein écran dans le fil « Vidéos ». */
-const EST_VIDEO = new Set(['video', 'montage']);
+/* `FORMATS_VIDEO` et pas une liste à soi. Il y en avait une ici,
+   identique à celle de `formats-publication.js` : un format vidéo ajouté
+   à l'une seulement ne jouerait jamais dans le fil, et rien ne le dirait.
+   `HomeScreen` lit la même pour décider quelle carte doit jouer. */
+import { porteUnVisuel, FORMATS_VIDEO } from '../lib/formats-publication';
 
 /* Ce que la barre d'actions occupe en bas de la photo. Les points du
    carrousel s'en écartent d'autant. */
@@ -41,7 +42,7 @@ const PostCard = React.memo(function PostCard({
   onSupprimerCommentaire, onModifierCommentaire, moiId,
 }) {
 
-  const estVideo = EST_VIDEO.has(post.format);
+  const estVideo = FORMATS_VIDEO.has(post.format);
 
   /* Les photos de la publication. `medias` porte la série complète ; `media`
      reste la première, gardée pour les anciennes publications et pour les
