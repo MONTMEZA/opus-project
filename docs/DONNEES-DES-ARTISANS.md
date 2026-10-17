@@ -906,11 +906,11 @@ Ce sont des idées à trancher par vous, **pas des règles vérifiées**.
    (recommandé), ou décider un jour de la procédure lourde du §2.4.
 2. **La base légale** pour les données des artisans : le consentement, déjà
    prévu par vos documents, est le plus solide. À confirmer avec l'avocat.
-3. **Votre statut, et la séparation.** `CLAUDE.md` dit au 29/09 que vous
-   n'avez « PAS de société ni de SIRET », puis au 04/10 que vous êtes
-   micro-entrepreneur. Il faut le préciser. Dans les deux cas, vous êtes
-   artisan dans le 13 : qui fait tourner le calcul des fourchettes, et qui peut
-   lire quoi, se décide avant le module devis (§5.2).
+3. **Votre statut, et la séparation.** Précisé par vous le 17/10/2026 : vous
+   avez eu une entreprise, aujourd'hui fermée. Vous restez du métier, et le
+   premier autre artisan d'Opus sera votre frère : qui fait tourner le calcul
+   des fourchettes, et qui peut lire quoi — éditeur SQL compris —, se décide
+   toujours avant le module devis (§5.2).
 4. **La liste des acheteurs acceptables** de l'API.
 5. **Les seuils** : nombre minimal d'artisans par chiffre, maille, durée,
    arrondi. Aucun chiffre officiel n'existe : il faut les fixer et écrire
@@ -1010,5 +1010,5 @@ Ce sont des idées à trancher par vous, **pas des règles vérifiées**.
 17. **Le secret des correspondances** pour une éventuelle réutilisation de la
     messagerie : non étudié. La messagerie est de toute façon hors de ce
     projet de base.
-18. **Votre statut exact** (sans SIRET ou micro-entrepreneur) : `CLAUDE.md` se
-    contredit, à préciser par vous.
+18. **Votre statut exact** : précisé le 17/10/2026 — une entreprise que vous
+    avez eue, aujourd'hui fermée ; aucune entreprise active.

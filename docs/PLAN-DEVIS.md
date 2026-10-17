@@ -3345,3 +3345,85 @@ Trouvé en écrivant cette mise à jour, mais hors du module. Chaque point est a
 15. Démarches de l'entreprise qui émettra de vrais devis (celle du propriétaire s'il en a une active, sinon celle du frère s'il utilise Opus) : adhérer à un médiateur référencé par la CECMC avant le premier devis réel à un particulier ; choisir une plateforme agréée de réception des factures électroniques (obligatoire depuis le 01/09/2026, même en franchise) — à dire aussi au frère, puisque son entreprise est concernée indépendamment d'Opus.
 16. Demander au propriétaire le nom et le lien de la base de prix du bâtiment dont il parle (DEVIS-DU-PROPRIETAIRE.md §6.2), pour lire ses conditions de licence avant toute intégration.
 17. Changement d'entreprise d'un compte pro (nouveau SIREN, par exemple passage d'une micro-entreprise à une société) : aucune porte n'existe (OP008/OP009) ; cela touchera la numérotation et l'instantané des devis.
+
+### 10.12 Les réponses du propriétaire (17/10/2026, le soir même)
+
+Posées par l'outil de questions, dans l'ordre de 10.8. La question « Quel
+compte » est tombée : elle supposait une entreprise active.
+
+| question | réponse | ce qu'elle décide |
+|---|---|---|
+| **Son statut** | « Plus maintenant, fermée » | Il **a eu** une entreprise ; il n'en a plus. Ses deux devis ne servent que de modèle de mise en page (`DEVIS-DU-PROPRIETAIRE.md`), et aucun vrai devis ne partira à son nom. Les notes contradictoires (« ni société ni SIRET » au 29/09, « micro-entrepreneur » au 04/10) sont corrigées dans `CLAUDE.md`. Rien ne change pour l'**éditeur** d'Opus : `STATUT = 'essai'`. |
+| **Son frère** | « D'accord, il l'utilisera » | Les trois conditions de 10.5 deviennent un **calendrier** : on construit et on essaie avec ce compte, puis on le lui **remet**. Le badge reste (le titulaire est d'accord) ; à la remise, le frère confirme lui-même ses pièces. **Et le jour où il s'en sert pour de vrai, Opus a son premier utilisateur réel** — voir plus bas. |
+| **Les tarifs de dépannage** | « Au choix de l'artisan » | Lot 0 : un interrupteur « afficher mes tarifs sur ma fiche », éteint par défaut ; tant qu'il est éteint, les tarifs ne servent qu'aux devis. L'écran dit, à l'artisan qui fait du dépannage, que la fiche Opus pourrait compter comme une de ses pages en ligne (10.3, « Incertain »). **Une seule liste de tarifs** : le taux horaire et le déplacement du SOS (`sos_availability.horaire`, `.deplacement`) deviennent les mêmes chiffres, et leur `0` par défaut devient `null` — un `null` n'est pas un `0` (§2.0). |
+| **Les gros chantiers** | « Retenue de garantie » et « Facturer à l'avancement » | Lot 1, avant de créer la table `devis` : la retenue de garantie est **imprimée** (son taux, et quand la somme est rendue) — elle a donc un lecteur dès le lot 2. La facturation à l'avancement, elle, se lit sur les **factures** (situations successives) : le devis n'en porte rien de plus que ce qu'il imprime, et le reste naît avec le module facture, comme le veut 10.3. Le plafond légal de la retenue (5 %, loi n° 71-584 du 16/07/1971) et son remplacement possible par une caution sont **à relire sur Légifrance** avant d'écrire la moindre phrase. Le prix indexé n'est pas demandé : rien n'est construit pour lui. |
+| **Le régime de TVA** (de l'entreprise du frère) | « Non, franchise en base » | Ses devis sortent sans TVA, avec « TVA non applicable, article 293 B du CGI ». **L'ordre 0 → 1 → P → 2 → 3 est confirmé** : le document peut sortir avant la gestion complète de la TVA. Le régime reste une **déclaration** de l'artisan dans « Mon entreprise », jamais une déduction : le jour de la remise, c'est le frère qui la fait. |
+| **Le moment de la signature** | réponse libre, citée plus bas | Décrit ci-dessous : elle change la priorité de deux choses. |
+| **La conservation d'un devis jamais accepté** | « Un an, puis effacé » | Lot 4 : purge à un an, et son mécanisme reste à construire (10.3) ; le paragraphe de la politique de confidentialité le dira. |
+
+#### Comment ça se passe vraiment chez un artisan
+
+> « On rencontre le client sur place, on fait un relevé de ce que veut le
+> client. Plus tard on lui fait le devis, très souvent envoyé par e-mail. Très
+> souvent le client qui accepte le retourne signé par e-mail. Des fois ça
+> arrive de le faire en papier et le faire signer sur place, mais c'est très
+> rare. »
+
+C'est **exactement** le cas que le considérant 21 de la directive 2011/83 met
+à part : une visite faite **seulement** pour mesurer, sans engagement, puis un
+contrat conclu **plus tard**, à distance, sur la base du devis. Ce contrat
+n'est **pas** hors établissement (le client a eu le temps de réfléchir), et il
+n'est pas non plus à distance (la visite rompt l'« usage exclusif » des
+techniques à distance, L. 221-1 1°). Conséquence, sous réserve d'un avis
+juridique (10.10) : **pas de délai de rétractation, pas d'interdiction de
+paiement avant le 8e jour** ; l'information de l'arrêté de 2017 (art. 4-I) et
+de L. 111-1 reste due.
+
+Ce que cela change au plan, **sans toucher au défaut** :
+
+1. **Le moment se connaît à la REMISE, pas à la signature.** Ce qui compte,
+   c'est que le devis soit préparé APRÈS la visite et envoyé plus tard ; la
+   vitesse à laquelle le client signe ensuite n'y change rien. La question par
+   devis (`lieu_conclusion`, 10.3) se pose donc au moment de remettre le devis.
+   Le défaut reste le plus protecteur (« signé le jour de la sollicitation ») ;
+   chez cet artisan, la réponse la plus fréquente sera l'autre, d'un appui,
+   avec une trace datée. Le défaut ne dépend toujours pas de cette réponse :
+   Opus sert plusieurs artisans, et le jour où le frère fait signer sur place,
+   le cas protecteur doit être là.
+2. **L'acceptation arrive par courriel, presque toujours.** Le lot 4 doit
+   savoir écrire « accepté le …, par courriel » (ou « sur papier »), et
+   **ranger la copie signée** que le client renvoie — c'est un document du
+   client, donc un espace privé, comme `documents`. C'est cette copie, pas un
+   tracé au doigt, qui sera la preuve habituelle.
+3. **La signature au doigt passe au second plan.** Elle ne sert que dans le
+   cas « très rare » du papier sur place, où le papier signé en deux
+   exemplaires reste de toute façon la voie sûre (10.4). **`react-native-svg`
+   n'entre donc PAS dans la reconstruction du lot 2** : un module natif de
+   moins, `expo-print` et `expo-sharing` seulement.
+4. **Ces devis acceptés par voie électronique se conservent dix ans** quand
+   ils dépassent 120 € et s'adressent à un particulier (L. 213-1, 10.3,
+   « Conservation ») : c'est désormais le cas **ordinaire**, pas l'exception.
+   L'archive du lot 4 et le téléchargement proposé à la suppression du compte
+   ne sont plus des détails.
+
+#### Le premier utilisateur réel, et ce qu'il déclenche
+
+Le frère va se servir d'Opus. Le jour où il enregistre un vrai client dans
+son carnet ou remet un vrai devis, **Opus cesse d'être un essai** — et ce
+n'est pas un réglage technique :
+
+- le propriétaire devient **sous-traitant RGPD** des données des clients du
+  frère (art. 28) : contrat de sous-traitance, registre des traitements
+  (30.2), notification des violations. Son entreprise étant fermée, c'est
+  **un particulier** qui tiendra ce rôle, et c'est à lui de décider s'il le
+  tient tel quel ou s'il s'immatricule d'abord ;
+- `STATUT` doit quitter `'essai'`, et `verifier-legal` refusera tant que le
+  contrat (`contratSousTraitance`) et une adresse de contact relevée
+  (`emailReleve`, la boîte IONOS) ne sont pas là ;
+- la **remise du compte** demande deux portes qui n'existent pas : changer
+  l'adresse de connexion et le mot de passe, et une nouvelle acceptation des
+  CGU par le frère (10.5, condition 3).
+
+Ces trois points rejoignent `docs/A-FAIRE.md` (« Le devis — ce qui l'attend
+en dehors du module ») ; ils doivent être réglés **avant** la remise, pas
+après.

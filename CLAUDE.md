@@ -381,6 +381,11 @@ pas Opus.
 
 ### Le propriétaire n'a PAS de société ni de SIRET (constaté le 29/09/2026)
 
+**Précisé par lui le 17/10/2026 : il a eu une entreprise, aujourd'hui
+FERMÉE.** Aucune entreprise active à son nom. La mention « micro-entrepreneur »
+écrite plus bas le 04/10 décrivait ce qu'il était, pas ce qu'il est. Ses deux
+anciens devis ne servent que de modèle de mise en page.
+
 Ne jamais lui écrire des mentions légales de société : ce serait faux, et une
 mention légale fausse engage sa responsabilité. `src/data/legal.js` porte un
 champ **`STATUT`** (`essai` · `particulier` · `micro` · `societe`) qui décide
@@ -803,6 +808,13 @@ pas la sienne, et le badge de cette fiche a été posé par lui, administrateur.
 > lui-même — tout devis d'essai porte « Document d'essai — sans valeur » ;
 > et s'il veut Opus pour de vrai, on lui REMET ce compte (une entreprise = un
 > compte), avec ses propres CGU.
+
+**Le frère est d'accord et s'en servira lui-même** (réponse du propriétaire,
+17/10). Le badge reste donc ; à la remise du compte, le frère confirme ses
+pièces et accepte lui-même les CGU. **Le jour où il enregistre un vrai client
+ou remet un vrai devis, Opus a son premier utilisateur réel** : `STATUT` doit
+quitter `'essai'`, et le propriétaire devient sous-traitant RGPD des clients
+de son frère (`docs/PLAN-DEVIS.md` 10.12). À régler AVANT la remise.
 
 Deux gestes à ne jamais confondre si ce compte doit partir : la suppression
 par le chemin de l'application **libère** le SIREN ; un retrait par
@@ -3777,7 +3789,8 @@ construite, et ça fermait deux portes :
 - **un avocat ne pouvait JAMAIS obtenir le badge.** La base exige
   `kbis_valide AND assurance_valide` ; sans décennale, c'est définitif ;
 - **« extrait Kbis » est faux pour un micro-entrepreneur**, qui n'en a pas
-  (c'est l'avis de situation SIRENE). Le propriétaire est dans ce cas.
+  (c'est l'avis de situation SIRENE). Le propriétaire était dans ce cas
+  (son entreprise est fermée, précisé le 17/10).
 
 > **Il y a toujours DEUX pièces, et le schéma ne bouge pas.** C'est leur
 > NATURE qui dépend du métier : l'existence légale (Kbis **ou** avis
