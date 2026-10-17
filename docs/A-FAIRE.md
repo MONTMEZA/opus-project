@@ -57,8 +57,8 @@ perdues a été retiré le même jour, sans avoir été lu.
 
 Ce qui reste, et qui n'est pas urgent :
 
-1. **La netteté des photos** du fil (mises à l'échelle par la puce graphique
-   au lieu du processeur) : à confirmer à l'œil par le propriétaire.
+1. ~~La netteté des photos~~ — **confirmée** par le propriétaire le 17/10 :
+   « toujours aussi nettes ».
 2. **Si une saccade revient** : les dégradés dessinés par le processeur (le
    voile de chaque photo, et les 7 publications « dégradé » de démonstration
    de la vraie base — que le propriétaire peut aussi décider de supprimer,

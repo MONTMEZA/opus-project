@@ -7123,8 +7123,8 @@ revient.
 
 **Ce qui n'est PAS vérifié** : aucun chiffre — le compteur n'a pas été lu,
 c'est un jugement au doigt, et c'est celui qui compte. La **netteté** des
-photos mises à l'échelle par la puce graphique n'a pas été commentée : à
-confirmer. Et la vidéo d'essai déborde de son cadre au NAVIGATEUR — avant
+photos mises à l'échelle par la puce graphique est **confirmée le même jour**
+par le propriétaire : « les photos sont toujours aussi nettes ». Et la vidéo d'essai déborde de son cadre au NAVIGATEUR — avant
 comme après, c'est le lecteur web.
 
 ## Dépendances : vérifier avant de proposer
