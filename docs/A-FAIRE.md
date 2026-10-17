@@ -104,6 +104,19 @@ lettres sur `opus-project.com`, signer le contrat de sous-traitance du
 carnet de clients (`EDITEUR.contratSousTraitance`), passer `STATUT` hors de
 `'essai'` et faire passer `npm run verifier-legal`.
 
+Et deux de plus, trouvés le 17/10 (`docs/DONNEES-DES-ARTISANS.md`) :
+
+- **le registre des traitements faits POUR le compte des artisans**
+  (RGPD art. 30.2) — Opus est sous-traitant du carnet de clients, et la
+  dispense des moins de 250 salariés ne joue pas pour un traitement qui
+  n'est pas occasionnel. La CNIL publie des modèles ; c'est l'un des trois
+  manquements de la sanction MOBIUS du 11/12/2025 ;
+- **réécrire `legal.js` sur trois points** avant toute base commune ou
+  toute API : « Opus ne vend ni ne loue vos données » (l. 626), « n'est pas
+  utilisé pour entraîner de modèle » (l. 754), et la licence limitée à
+  l'affichage (l. 397-402, 499-503). Puis apprendre ce nouvel état à
+  `verifier-legal`.
+
 ### 1.1 Signalement et blocage — ✅ fait
 
 - tables `signalements` et `blocages`, avec RLS ;
