@@ -1594,3 +1594,39 @@ l'explique `LECTURE-CAHIER-DES-CHARGES.md`.
 un devis, une facture, un client appartiennent au COMPTE — un compte = un
 artisan = une entreprise. Le jour où un patron voudra donner un accès à ses
 compagnons, il y aura UNE fonction à changer.
+
+---
+
+## La base de connaissances du BTP — une VISION, en attente de son cahier des charges (17/10/2026)
+
+Le propriétaire, en parlant des prix du marché :
+
+> « Au-delà d'Opus, je voudrais créer une base de données spéciale pour le BTP,
+> avec toutes les informations croisées dans Opus, pour que nos agents
+> deviennent imbattables sur le BTP : qu'ils connaissent toutes les lois, les
+> DTU, les façons de faire, les étapes d'un chantier, les prix… Pour que, si on
+> veut créer une nouvelle application sur le bâtiment, on utilise cette base
+> avec une API. Je te donnerai un futur cahier des charges qui expliquera ce que
+> je veux que ça devienne. »
+
+**Rien ne se construit avant ce cahier des charges** — c'est la règle tenue
+pour le second (« attendre validation du plan »). Mais trois choses se décident
+DÈS MAINTENANT, parce qu'elles coûteraient cher à rattraper :
+
+1. **Ranger les données d'Opus de façon RÉUTILISABLE.** Un poste de devis
+   rangé avec son unité, son prix, sa date, sa région et sa catégorie de
+   métier sert un jour à une base ; un poste rangé en texte libre ne servira
+   jamais à rien. C'est déjà la direction du plan devis (quantité en nombre,
+   unité en liste, centimes) ; elle devient une exigence.
+2. **Les données des artisans ne sont PAS à Opus.** Leurs prix sont leur
+   secret commercial, leurs clients sont des tiers. Une base commune ne pourra
+   naître que de contributions **consenties, retirables et anonymes** — jamais
+   d'une copie silencieuse de ce qu'ils ont saisi. Écrit dans
+   `docs/DEVIS-DU-PROPRIETAIRE.md` §5 et §6.
+3. **Une base de connaissances ne se remplit qu'avec ce qu'on a le DROIT d'y
+   mettre.** Les lois et décrets sont librement réutilisables ; les normes (les
+   NF DTU sont des normes AFNOR vendues), les bases de prix commerciales et les
+   guides professionnels ont chacun leurs conditions. La recherche du 17/10
+   (`docs/SOURCES-DONNEES-BTP.md`) fait le tour de ce qui existe et de ce
+   qu'on peut en faire — pour préparer ce cahier des charges, pas pour le
+   remplacer.

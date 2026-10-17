@@ -217,6 +217,16 @@ réseau social est le module 9. L'original PDF est à côté et **fait foi**.
 `docs/LECTURE-CAHIER-DES-CHARGES.md` — mon analyse, à ne pas confondre avec
 le document. **À lire avant de construire quoi que ce soit de nouveau.**
 
+#### Un TROISIÈME cahier des charges est ANNONCÉ (17/10/2026)
+
+Le propriétaire veut, au-delà d'Opus, une **base de connaissances du BTP**
+(lois, DTU, façons de faire, étapes de chantier, prix) qui rende ses agents
+« imbattables », servie par une API à d'autres applications. Il enverra un
+cahier des charges : **rien ne se construit avant**. Ce qui se décide dès
+maintenant — données rangées de façon réutilisable, données des artisans qui
+ne sont pas à Opus, licences de ce qu'on y met — est dans `docs/A-FAIRE.md`,
+dernière section.
+
 #### Un SECOND cahier des charges, remis le 11/10/2026
 
 `docs/CAHIER-DES-CHARGES-VISITE.md` — « Visite intelligente & préparation
