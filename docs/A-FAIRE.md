@@ -1676,3 +1676,10 @@ l'écran : un **nombre minimal d'artisans différents** derrière chaque chiffre
 (sinon rien ne s'affiche), une **zone large** (département ou région, jamais
 la commune), une **période de plusieurs mois**, et une **fourchette** plutôt
 qu'un prix exact.
+
+**Et deux précisions du même jour.** Le propriétaire : « il faut que les prix
+correspondent à chaque région » — **la fourchette est donc régionale**, pas
+nationale (un prix de Paris n'est pas un prix de Provence). Et un chiffre
+porte sur un **poste précis**, jamais sur un mot : dans ses propres devis, « le
+placo » vaut 48 €/m² en contre-cloison simple, 58 € en cloison isolée et 72 €
+en faux plafond isolé. « Placo : 25 € » serait faux même anonyme.
