@@ -98,6 +98,12 @@ await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(9000);
 const pro = page.getByText('JE SUIS UN PROFESSIONNEL').first();
 if (await pro.count()) { await pro.click(); await page.waitForTimeout(3500); }
+/* La fenêtre « Votre agent a besoin d'un nom » (section 40) s'ouvre à la
+   première entrée d'un pro, par-dessus la barre d'onglets : sans la
+   refermer, le clic sur « Découvrir » tombe sur elle, et ce contrôle
+   échouait en croyant les gestes cassés (constaté le 17/10/2026). */
+const plusTard = page.getByText('Plus tard').first();
+if (await plusTard.count()) { await plusTard.click(); await page.waitForTimeout(1500); }
 await page.getByText('Découvrir', { exact: false }).first().click();
 await page.waitForTimeout(3500);
 
