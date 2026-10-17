@@ -763,31 +763,6 @@ console.log('\n8. Aucun lecteur vidéo ne naît pendant un élan');
     !/\brepos=/.test(sansCommentaires(lire('src/screens/PublicationScreen.js'))));
 }
 
-console.log('\n9. Le compteur d’images perdues n’existe que dans le build de diagnostic');
-{
-  const avecCadence = fichiersSrc().filter((f) => /useFrameCallback/.test(sansCommentaires(lire(f))));
-  verifier('`useFrameCallback` ne vit que dans `CompteurImages.js`',
-    avecCadence.length === 1 && avecCadence[0] === 'src/components/CompteurImages.js',
-    `trouvé dans : ${avecCadence.join(', ')}`);
-  const compteur = sansCommentaires(lire('src/components/CompteurImages.js'));
-  verifier('il ne s’allume que sur `EXPO_PUBLIC_MESURE_FIL === \'1\'`',
-    /export const MESURE_ACTIVE = process\.env\.EXPO_PUBLIC_MESURE_FIL === '1';/.test(compteur));
-  const debutRappel = compteur.indexOf('useFrameCallback(');
-  const rappel = corpsDe(compteur, debutRappel);
-  verifier('…et ne redessine RIEN pendant qu’on fait défiler (aucun état dans le rappel)',
-    rappel.length > 0 && !/set[A-Z]\w*\(|runOnJS/.test(rappel),
-    'un état mis à jour à chaque image serait un montage de plus : l’instrument mesurerait son propre bruit.');
-  const home = sansCommentaires(lire('src/screens/HomeScreen.js'));
-  verifier('le fil ne le monte que sous condition', /\{MESURE_ACTIVE && <CompteurImages \/>\}/.test(home)
-    && (home.match(/<CompteurImages\b/g) || []).length === 1);
-  const eas = JSON.parse(lire('eas.json'));
-  const profils = Object.entries(eas.build || {})
-    .filter(([, p]) => p && p.env && 'EXPO_PUBLIC_MESURE_FIL' in p.env).map(([n]) => n);
-  verifier('la variable n’est posée que dans le profil « preview »',
-    profils.length === 1 && profils[0] === 'preview',
-    `profils : ${profils.join(', ') || '(aucun)'} — un instrument qui partirait dans la version publiée.`);
-}
-
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

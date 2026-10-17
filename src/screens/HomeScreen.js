@@ -22,7 +22,6 @@ import useCompteurDeVues from '../lib/compteur-vues';
 import { vuesPossibles } from '../lib/vues';
 import { CLAVIER } from '../lib/clavier';
 import { FORMATS_VIDEO } from '../lib/formats-publication';
-import CompteurImages, { MESURE_ACTIVE } from '../components/CompteurImages';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
 
@@ -375,9 +374,6 @@ export default function HomeScreen({
       />
 
       <View style={{ flex: 1 }}>
-        {/* L'instrument du diagnostic des saccades : absent de toute
-            version qui n'a pas `EXPO_PUBLIC_MESURE_FIL` (CompteurImages.js). */}
-        {MESURE_ACTIVE && <CompteurImages />}
         <FlatList
           {...CLAVIER}
           data={posts}

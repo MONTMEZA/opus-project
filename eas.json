@@ -16,9 +16,6 @@
       "environment": "preview",
       "ios": {
         "simulator": false
-      },
-      "env": {
-        "EXPO_PUBLIC_MESURE_FIL": "1"
       }
     }
   }

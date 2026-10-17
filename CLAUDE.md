@@ -7087,18 +7087,18 @@ l'API est expérimentale et ne se juge que sur l'iPhone : c'est le lot suivant
 s'il reste des saccades. Les rappels instables d'OpusApp : **mesuré 0 rendu
 pendant le défilement**, ce n'est pas la cause.
 
-#### L'instrument : un compteur d'images perdues
+#### L'instrument — posé, puis retiré sans avoir servi
 
-`src/components/CompteurImages.js`, monté seulement si
-`EXPO_PUBLIC_MESURE_FIL === '1'`, posé dans `eas.json` > `build.preview.env`
-et NULLE PART ailleurs. Un rappel Reanimated à chaque image, sur le fil
-principal ; il ne se redessine qu'au toucher (sinon il mesurerait son propre
-bruit). Il ne voit PAS une image perdue par la puce graphique : s'il dit 0
-pendant une saccade visible, la cause est ailleurs.
+Un compteur d'images perdues (un rappel Reanimated à chaque image, sur le fil
+principal) a vécu le temps d'un build « preview », allumé par une variable
+de `eas.json`. Le propriétaire a jugé au doigt avant de le lire, et le verdict
+était sans appel : il a été **retiré le même jour** — composant, ligne du
+fil, variable et section du contrôle.
 
-> **À RETIRER quand le diagnostic est fini** — le composant, sa ligne dans
-> `HomeScreen`, la variable de `eas.json` et la section 9 du contrôle. C'est
-> écrit dans `docs/A-FAIRE.md`.
+> **Un instrument de diagnostic oublié finit dans la version publiée.** Il
+> se retire dans le commit qui clôt le diagnostic, pas « plus tard ». Si un
+> jour il faut remesurer, il se reconstruit en dix minutes — il est dans
+> l'historique (commit a08d751).
 
 #### Vérifié, et comment
 
@@ -7115,10 +7115,16 @@ les mêmes données gonflées (20 publications, vraies photos, deux WebM) :
 | lecteurs `<video>` nés PENDANT le mouvement | 2 + 2 | **0 + 0** |
 | arrêt sur une vidéo : à l'instant / 1 s après | 2 / 2 | **0 / 2** |
 
-**Ce qui n'est PAS vérifié, et c'est l'essentiel** : la fluidité elle-même,
-la netteté des photos mises à l'échelle par la puce graphique, et le délai
-de démarrage d'une vidéo après l'arrêt. Tout cela se juge sur l'iPhone, avec
-le compteur. Et la vidéo d'essai déborde de son cadre au NAVIGATEUR — avant
+**VÉRIFIÉ SUR L'IPHONE 16 le 17/10/2026**, en build « preview », par le
+propriétaire : « ça marche très bien, plus de saccades, les vidéos démarrent
+quand on est dessus, tout fonctionne très bien ». Les dégradés n'ont donc pas
+eu besoin d'être touchés ; ils restent le premier suspect si une saccade
+revient.
+
+**Ce qui n'est PAS vérifié** : aucun chiffre — le compteur n'a pas été lu,
+c'est un jugement au doigt, et c'est celui qui compte. La **netteté** des
+photos mises à l'échelle par la puce graphique n'a pas été commentée : à
+confirmer. Et la vidéo d'essai déborde de son cadre au NAVIGATEUR — avant
 comme après, c'est le lecteur web.
 
 ## Dépendances : vérifier avant de proposer
