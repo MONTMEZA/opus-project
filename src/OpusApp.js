@@ -120,7 +120,12 @@ const MESSAGE_PUBLICATION = api.mode === 'demo' ? {
   deux: 'En ligne, et ajouté à votre portfolio.',
 };
 
-export default function OpusApp() {
+/**
+ * `onSortie` et `messageInitial` viennent d'`App.js` : se déconnecter
+ * REMONTE ce composant entier, au lieu d'en vider les états un par un.
+ * Le raisonnement est écrit là-bas.
+ */
+export default function OpusApp({ onSortie, messageInitial = null }) {
   const [userType, setUserType] = useState(null);
   const [loading, setLoading] = useState(false);
   const [demarrage, setDemarrage] = useState(true);   // reprise de session
@@ -303,7 +308,12 @@ export default function OpusApp() {
   const [mesReponsesDemandes, setMesReponsesDemandes] = useState(new Set());
 
   const [quote, setQuote] = useState({ open: false, pro: null, mode: 'devis' });
-  const [banner, setBanner] = useState(null);
+  /* Le bandeau peut ARRIVER avec le composant : « Votre compte a été
+     supprimé » est dit par l'instance qui part et lu par celle qui naît
+     (voir `deconnexion`). */
+  const [banner, setBanner] = useState(
+    () => (messageInitial ? { texte: messageInitial, erreur: false } : null),
+  );
   const bannerTimer = useRef(null);
 
   const [aiMatches, setAiMatches] = useState(null);
@@ -378,6 +388,17 @@ export default function OpusApp() {
   const showErreur = (msg) => showBanner(msg, true);
 
   useEffect(() => () => { if (bannerTimer.current) clearTimeout(bannerTimer.current); }, []);
+
+  /* Le message hérité de l'instance précédente : posé dès le premier
+     rendu par `useState`, il lui faut encore sa minuterie et sa voix pour
+     VoiceOver. `messageInitial` ne change pas pendant la vie de cette
+     instance — la suivante naîtra avec le sien —, donc cet effet ne court
+     qu'une fois. */
+  useEffect(() => {
+    if (!messageInitial) return;
+    retour.annoncer(messageInitial);
+    bannerTimer.current = setTimeout(() => setBanner(null), 3000);
+  }, [messageInitial]);
 
   /* ---------- chargement (démo ou Supabase) ---------- */
   /**
@@ -2518,33 +2539,24 @@ export default function OpusApp() {
     }
   };
 
-  /** Déconnexion : on repart de l'écran d'accueil, l'état est remis à zéro. */
-  const deconnexion = async () => {
+  /**
+   * DÉCONNEXION : on rend la main à `App.js`, qui REMONTE ce composant.
+   *
+   * Cette fonction vidait vingt-cinq états à la main ; il y en a
+   * quatre-vingt-dix. Constaté le 17/10/2026 en changeant de compte sur
+   * l'iPhone : « Administration » ne revenait pas (`admin` et
+   * `adminDemande` n'étaient pas dans la liste), et surtout le carnet de
+   * clients, les demandes reçues et un brouillon de publication du compte
+   * d'avant restaient à l'écran pour le suivant. Un remontage n'oublie
+   * rien, et n'oubliera pas non plus l'état qu'on ajoutera demain.
+   *
+   * `message` : ce que la nouvelle instance doit afficher en arrivant.
+   */
+  const deconnexion = async (message = null) => {
     try { await api.signOut(); } catch (e) { /* rien à faire de plus */ }
-    setUserType(null);
-    setTypeChoisi(null);
-    setScreen('home');
-    setPros({});
-    setPosts([]);
-    setFinDuFil(false);
-    setConversations([]);
-    setNotifications([]);
-    setFollowingIds(new Set());
-    setSavedIds(new Set());
-    setHiddenIds(new Set());
-    setActiveConvId(null);
-    setViewedProId(null);
-    setCommentsPostId(null);
-    setDecouvrirTab('artisans');
-    setDemandesVuesLe(null); setDemandesVuesMaj(false);
-    setMonProfil({ nom: 'Vous', ville: '', telephone: '', avatarUrl: null, bannerUrl: null });
-    setDemandesPartenariat([]); setPartenariatsEnvoyes([]);
-    setMesSos(null);
-    setDemandeMetiers(null);
-    setAnnonces([]);
-    setMesReponsesDemandes(new Set());
-    setFeedMode('classic');
-    setFeedTab('pourvous');
+    /* Seul un TEXTE passe : un événement d'appui glissé là par erreur
+       ferait planter le bandeau de l'instance suivante. */
+    onSortie(typeof message === 'string' ? message : null);
   };
 
   /* ---------- modération et droits des personnes ---------- */
@@ -2560,15 +2572,15 @@ export default function OpusApp() {
   const supprimerMonCompte = async () => {
     try {
       await api.supprimerMonCompte();
-      await deconnexion();
-      showBanner('Votre compte a été supprimé. Merci d’être passé par Opus.');
+      /* Le message passe PAR la déconnexion : posé ici avec `showBanner`,
+         il s'afficherait sur une instance qui est en train de partir. */
+      await deconnexion('Votre compte a été supprimé. Merci d’être passé par Opus.');
     } catch (e) {
       /* Cas particulier : les données sont parties mais le compte de
          connexion subsiste. On le DIT, au lieu de laisser croire à un
          échec complet — et on déconnecte quand même. */
       if (e && e.partiel) {
-        await deconnexion();
-        showBanner(e.message);
+        await deconnexion(e.message);
         return;
       }
       throw e;
@@ -3391,6 +3403,17 @@ export default function OpusApp() {
             <LegalScreen texte={legalAvantConnexion} />
           </View>
         )}
+        {/* LE BANDEAU EXISTE AUSSI AVANT LA CONNEXION — 17/10/2026.
+            Il ne vivait que dans l'application connectée. Or le seul
+            message qui s'adresse à quelqu'un de DÉCONNECTÉ est le plus
+            important de tous : « Votre compte a été supprimé ». Il était
+            écrit, annoncé à VoiceOver… et jamais affiché. Trouvé en
+            essayant la déconnexion au navigateur. */}
+        <ConfirmBanner
+          msg={banner && banner.texte}
+          erreur={!!(banner && banner.erreur)}
+          onClose={() => setBanner(null)}
+        />
       </>
     );
   }
@@ -3861,7 +3884,10 @@ export default function OpusApp() {
             onConfidentialite={() => setScreen('confidentialite')}
             admin={admin}
             onAdmin={() => setScreen('admin')}
-            onLogout={deconnexion}
+            /* Une flèche, et pas `deconnexion` tout court : un `Pressable`
+               passe son ÉVÉNEMENT en premier argument, qui deviendrait le
+               « message » affiché par l'instance suivante. */
+            onLogout={() => deconnexion()}
           />
         )}
 

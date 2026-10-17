@@ -39,6 +39,31 @@ export default function App() {
   const [ouvert, setOuvert] = React.useState(false);
   const sansMouvement = useMouvementReduit();
 
+  /* SE DÉCONNECTER, C'EST REPARTIR DE ZÉRO — 17/10/2026.
+     Trouvé par le propriétaire en changeant de compte sur son iPhone :
+     « Administration » avait disparu de son profil. L'application ne
+     demande « suis-je administrateur ? » qu'une fois, et elle avait posé
+     la question pour le compte d'AVANT. En cherchant, pire : le carnet de
+     clients, les demandes reçues, un brouillon de publication restaient en
+     mémoire, et le compte suivant pouvait les voir à l'écran. La base ne
+     laissait rien passer ; l'écran, si.
+
+     La déconnexion vidait une liste de vingt-cinq états à la main, et il y
+     en a quatre-vingt-dix. Une liste écrite à la main oublie toujours le
+     prochain. D'où l'inverse : `generation` change à chaque sortie, et
+     React démonte puis remonte OpusApp ENTIER — chaque état, chaque
+     référence, chaque abonnement. Exactement comme une application qu'on
+     relance, sans l'animation d'ouverture (elle ne vit qu'ici).
+
+     `messageSortie` porte le seul mot qui doit survivre au passage :
+     « Votre compte a été supprimé ». */
+  const [generation, setGeneration] = React.useState(0);
+  const [messageSortie, setMessageSortie] = React.useState(null);
+  const sortir = React.useCallback((message = null) => {
+    setMessageSortie(message);
+    setGeneration((g) => g + 1);
+  }, []);
+
   /* GestureHandlerRootView doit envelopper toute l'application : c'est elle
      qui reçoit les touches AVANT les vues natives (le lecteur vidéo, les
      listes qui défilent) et qui décide ensuite qui gagne. Sans elle, aucun
@@ -50,7 +75,9 @@ export default function App() {
             chaque texte s'afficherait d'abord dans la police du système,
             puis sauterait. Mais elle est montée AVANT la fin de
             l'ouverture : les barrières couvrent son premier rendu. */}
-        {fontsLoaded ? <OpusApp /> : <View style={{ flex: 1, backgroundColor: C.ink }} />}
+        {fontsLoaded
+          ? <OpusApp key={generation} onSortie={sortir} messageInitial={messageSortie} />
+          : <View style={{ flex: 1, backgroundColor: C.ink }} />}
         {!ouvert && (
           <Ouverture
             pret={fontsLoaded}

@@ -48,7 +48,7 @@ const verifier = (nom, ok, detail = '') => {
 const lire = (f) => readFileSync(f, 'utf8');
 
 /* Le cliquet du linter. On le REDESCEND quand on a réparé, jamais l'inverse. */
-const PLAFOND_LINT = 33;
+const PLAFOND_LINT = 32;
 
 console.log('\nUne seule commande pour tout vérifier');
 {

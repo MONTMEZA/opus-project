@@ -6980,6 +6980,52 @@ ne disaient donc qu'une chose : le remaniement n'a rien cassé.
   font. Trouvé en relevant les surfaces de saisie, pas corrigé ici — c'est
   le chemin de la publication, et il mérite son propre lot.
 
+### Se déconnecter, c'est REPARTIR DE ZÉRO (17/10/2026)
+
+`App.js`, `npm run verifier-sortie`. Signalé par le propriétaire sur son
+iPhone : il crée un second compte pro pour essayer le SIRET, s'en
+déconnecte, revient sur son compte principal — le seul administrateur — et
+« Administration » a disparu de son profil.
+
+La cause : on ne demande « suis-je administrateur ? » qu'une fois par
+session (`adminDemande`), et `deconnexion()` ne remettait pas ce drapeau à
+zéro. Elle vidait **vingt-cinq** états à la main ; OpusApp en compte
+**quatre-vingt-dix**. En les comparant un par un, pire que le bouton :
+
+- **le carnet de clients** du compte d'avant restait en mémoire, et il ne se
+  recharge que s'il est « vide » : le compte suivant voyait les noms,
+  numéros et adresses des clients d'un autre ;
+- les demandes reçues s'affichaient le temps du rechargement ;
+- un brouillon de publication (photos, ville) passait au compte suivant.
+
+La base n'a rien laissé passer ; c'est l'écran qui montrait ce qu'il avait
+gardé.
+
+> **Une liste écrite à la main oublie toujours le prochain état.** `App.js`
+> donne à OpusApp une CLÉ qui change à chaque sortie : React démonte et
+> remonte le composant entier — états, références, abonnements. C'est une
+> application qu'on relance, sans l'animation d'ouverture.
+
+Deux pièges trouvés en le faisant :
+
+1. **`onPress={deconnexion}` passe l'ÉVÉNEMENT d'appui en premier
+   argument.** Avec un paramètre `message`, cet objet devenait le texte du
+   bandeau de l'instance suivante. D'où `() => deconnexion()` et une garde
+   `typeof message === 'string'`.
+2. **Le bandeau n'existait que dans l'application connectée.** « Votre
+   compte a été supprimé » — le seul message adressé à quelqu'un de
+   déconnecté — était écrit, annoncé à VoiceOver, et **jamais affiché**,
+   depuis le premier jour. Il passe désormais d'une instance à l'autre
+   (`messageInitial`) et l'écran d'accueil sait l'afficher.
+
+**Vérifié** : 13 défauts remis à la main, les 13 refusés par le contrôle ;
+au navigateur, un filtre posé avant la déconnexion a disparu après, et le
+bandeau de suppression s'affiche. **Et l'ancienne version, rejouée avec le
+même essai, échoue aux trois points** — le filtre survivait, le bandeau ne
+se voyait pas. **Pas vérifié** : le bouton « Administration » lui-même
+après un changement de compte, qui demande le seul compte administrateur
+de la vraie base — c'est au propriétaire, sur son iPhone.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

@@ -78,6 +78,7 @@
     "verifier-place": "node scripts/verifier-place.mjs",
     "verifier-feuilles": "node scripts/verifier-feuilles.mjs",
     "verifier-compte": "node scripts/verifier-compte.mjs",
+    "verifier-sortie": "node scripts/verifier-sortie.mjs",
     "verifier-conseil": "node scripts/verifier-conseil.mjs",
     "verifier-vues": "node scripts/verifier-vues.mjs",
     "verifier-clients": "node scripts/verifier-clients.mjs",
