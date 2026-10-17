@@ -64,9 +64,10 @@ Ce qui reste, et qui n'est pas urgent :
    de la vraie base — que le propriétaire peut aussi décider de supprimer,
    puisque ce sont des données d'essai).
 
-Relevé au passage, pas traité : cinq listes déclarent leur séparateur en
-fonction fléchée (Place des pros, Demandes, Clients, Chantier, réponses aux
-annonces), et la Visionneuse monte jusqu'à dix lecteurs vidéo d'un coup.
+Les deux restes relevés pendant le diagnostic sont **traités le 17/10**
+(CLAUDE.md, « Les restes du diagnostic ») : les cinq séparateurs fléchés, la
+visionneuse qui montait dix lecteurs — et, trouvé en chemin, la grille du
+portfolio qui en créait un par vidéo sans aperçu.
 
 ### 1.0 bis Avant d'ouvrir : éprouver Opus comme il sera VRAIMENT utilisé
 

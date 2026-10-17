@@ -40,8 +40,7 @@ import {
 import {
   C, F, T, S, R, GOUTTIERE, APPUI, interligne,
 } from '../theme';
-import Media from './Media';
-import { apercuDe } from '../lib/cloudinary';
+import Vignette from './Vignette';
 import { Layers } from './icons';
 
 /* Assez large pour qu'une photo de chantier se lise, assez étroit pour que
@@ -71,7 +70,7 @@ export default function BandeChantiers({ chantiers = [], onOuvrir }) {
             style={({ pressed }) => [s.carte, pressed && APPUI.plein]}
           >
             {c.couverture ? (
-              <Media media={apercuDe(c.couverture)} style={s.image} />
+              <Vignette media={c.couverture} style={s.image} />
             ) : (
               /* Un chantier sans aucune photo : l'icône plutôt qu'un carré
                  gris, qui ressemblerait à une image qui n'a pas chargé.

@@ -15,8 +15,7 @@ import {
   C, F, T, R, S, CARTE,
 } from '../theme';
 import { BtnMini, EmptyState, SectionLabel, TextArea } from '../components/ui';
-import Media from '../components/Media';
-import { apercuDe } from '../lib/cloudinary';
+import Vignette from '../components/Vignette';
 import { porteUnVisuel } from '../lib/formats-publication';
 import { nbCommentairesDe } from '../components/Commentaires';
 import { CLAVIER } from '../lib/clavier';
@@ -83,7 +82,7 @@ export default function MesPublicationsScreen({
                     du lot C, à un autre endroit : le FORMAT décide, pas le
                     contenu de `media`. */}
                 {porteUnVisuel(p.format)
-                  ? <Media media={apercuDe(p.media)} style={s.vignette} />
+                  ? <Vignette media={p.media} style={s.vignette} />
                   : (
                     <View style={[s.vignette, s.vignetteTexte]}>
                       <Icone size={18} color={C.muted} />

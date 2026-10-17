@@ -7127,6 +7127,45 @@ photos mises à l'échelle par la puce graphique est **confirmée le même jour*
 par le propriétaire : « les photos sont toujours aussi nettes ». Et la vidéo d'essai déborde de son cadre au NAVIGATEUR — avant
 comme après, c'est le lecteur web.
 
+#### Les restes du diagnostic — la visionneuse et les vignettes (17/10/2026)
+
+Deux défauts relevés pendant le diagnostic, et un troisième trouvé en les
+corrigeant. Les trois créaient des lecteurs vidéo que personne ne regardait.
+
+1. **La visionneuse plein écran montait DIX pages d'un coup** — sa liste
+   n'avait aucun réglage. Elle monte désormais trois pages au plus
+   (`initialNumToRender={1}`, `windowSize={3}`), et une vidéo n'y crée son
+   lecteur qu'au REPOS, par le même compteur d'arrêts que le fil.
+2. **La grille du portfolio créait un lecteur par vidéo sans aperçu.**
+   `apercuDe()` ne rend une image que pour une vidéo Cloudinary ; pour une
+   vidéo rangée chez Supabase, il rend la vidéo elle-même. Mesuré sur la
+   vraie base : **2 vidéos de portfolio sur 58 médias** sont dans ce cas.
+   Cinq écrans faisaient la même chose (grille, gestion du portfolio, bande
+   des chantiers, conseils, « Mes publications »).
+
+   > **Une vignette passe par `src/components/Vignette.js`, jamais par
+   > `<Media media={apercuDe(…)}>`.** Elle fige le compteur d'arrêts : le
+   > lecteur ne naît jamais, la case montre un fond sombre et le triangle de
+   > lecture. `verifier-fil` refuse l'autre forme.
+3. **Cinq listes déclaraient leur séparateur en fonction fléchée** — un type
+   neuf à chaque rendu, donc tous les séparateurs démontés et remontés. Le
+   contrôle couvre désormais TOUTES les listes du projet, pas seulement le
+   fil et la conversation.
+
+Mesuré au navigateur, avant et après, sur un portfolio de démonstration
+gonflé à dix réalisations dont six vidéos sans aperçu :
+
+| | avant | après |
+|---|---|---|
+| grille des réalisations | 6 lecteurs | **0** |
+| visionneuse, à l'ouverture | 12 lecteurs | **0** |
+| …au repos | 12 | **1** |
+| pages montées | 10 | **2** |
+
+Contrôles éprouvés en cassant : **seize défauts remis à la main, les seize
+refusés**. **Pas vérifié** : le glissement de la visionneuse au doigt sur
+l'iPhone, et le délai de démarrage d'une vidéo après qu'on s'y est posé.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

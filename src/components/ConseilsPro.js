@@ -32,9 +32,8 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import {
   C, F, T, S, R, GOUTTIERE, interligne, APPUI, viser,
 } from '../theme';
-import Media from './Media';
+import Vignette from './Vignette';
 import Visionneuse from './Visionneuse';
-import { apercuDe } from '../lib/cloudinary';
 import { Lightbulb, Volume2, Maximize } from './icons';
 import { porteUnVisuel, FORMATS_VIDEO } from '../lib/formats-publication';
 
@@ -86,10 +85,10 @@ export default function ConseilsPro({ items = [] }) {
             <Rangee key={c.id} {...proprietes}>
               {aUnVisuel ? (
                 <View style={s.vignetteBoite}>
-                  {/* `apercuDe` : une image, pas un lecteur vidéo. Six
+                  {/* `Vignette` : une image, jamais un lecteur vidéo. Six
                       lecteurs montés pour six images fixes, c'est 4,7 Mo
                       au lieu de 270 Ko — mesuré au lot du portfolio. */}
-                  <Media media={apercuDe(c.media)} style={s.vignette} />
+                  <Vignette media={c.media} style={s.vignette} />
                   <View style={s.pastille}>
                     {avecSon
                       ? <Volume2 size={11} color={C.surface} />

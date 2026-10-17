@@ -682,7 +682,7 @@ export default function PlaceProScreen({
                       : 'Aucune annonce pour le moment. Posez la première.'}
           </EmptyState>
       )}
-      ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+      ItemSeparatorComponent={Intervalle}
       renderItem={({ item: a }) => (
         <Annonce
           annonce={a}
@@ -933,7 +933,15 @@ function Annonce({
   );
 }
 
+/* Le séparateur, déclaré ICI et non en fonction fléchée dans la liste :
+   une fonction écrite dans le rendu est un TYPE de composant neuf à chaque
+   fois, et React démonte puis remonte tous les séparateurs. */
+function Intervalle() {
+  return <View style={s.intervalle} />;
+}
+
 const s = StyleSheet.create({
+  intervalle: { height: 10 },
   pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
 
   /* La barre de recherche : une seule ligne, la loupe à gauche, la croix à

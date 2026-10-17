@@ -219,7 +219,7 @@ export default function ClientsScreen({
       ListHeaderComponent={entete}
       ListHeaderComponentStyle={s.enteteBoite}
       ListEmptyComponent={vide}
-      ItemSeparatorComponent={() => <View style={{ height: S.sm }} />}
+      ItemSeparatorComponent={Intervalle}
       /* LES TROIS RÉGLAGES, la règle du lot 4 : une FlatList monte DIX
          éléments d'un coup par défaut, et c'est ce qui bloquait l'iPhone
          plusieurs secondes au démarrage. */
@@ -234,7 +234,15 @@ export default function ClientsScreen({
   );
 }
 
+/* Le séparateur, déclaré ICI et non en fonction fléchée dans la liste :
+   une fonction écrite dans le rendu est un TYPE de composant neuf à chaque
+   fois, et React démonte puis remonte tous les séparateurs. */
+function Intervalle() {
+  return <View style={s.intervalle} />;
+}
+
 const s = StyleSheet.create({
+  intervalle: { height: S.sm },
   contenu: { padding: GOUTTIERE, paddingBottom: S.xxl * 2 },
   enteteBoite: { marginBottom: S.md },
 

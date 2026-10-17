@@ -547,15 +547,30 @@ console.log('\n6. Les cartes du fil sont contiguës, et la liste avance d’une 
     /ItemSeparatorComponent=\{Intervalle\}/.test(balise));
   verifier('…déclaré au niveau du module', /^function Intervalle\(\)/m.test(home));
   verifier('…qui porte les 10 pt d’avant', /intervalle:\s*\{\s*height:\s*S\.md - 2\s*\}/.test(home));
-  /* Le fil et la conversation seulement : cinq autres listes déclarent
-     encore leur séparateur en fonction fléchée (Place des pros, Demandes,
-     Clients, Chantier, réponses aux annonces). C'est un coût de RENDU, pas
-     de défilement, et ce lot ne les touche pas — les accuser ici serait
-     faire passer un défaut ancien pour celui-ci. */
-  const flechees = ['src/screens/HomeScreen.js', 'src/screens/ConversationScreen.js']
-    .filter((f) => /ItemSeparatorComponent=\{\s*\(/.test(sansCommentaires(lire(f))));
-  verifier('ni le fil ni la conversation n’ont de séparateur en fonction fléchée',
-    flechees.length === 0, `trouvé dans : ${flechees.join(', ')}`);
+  /* TOUTES les listes du projet : un séparateur écrit en fonction fléchée
+     est un TYPE de composant neuf à chaque rendu, et React démonte puis
+     remonte tous les séparateurs. Cinq listes le faisaient encore jusqu'au
+     17/10 (Place des pros, Demandes, Clients, Chantier, réponses aux
+     annonces). Et le nom passé doit être une fonction du MODULE : un nom
+     déclaré dans le composant serait le même défaut sous un autre habit. */
+  const flechees = [];
+  const nonModule = [];
+  let separateurs = 0;
+  for (const f of fichiersSrc()) {
+    const texte = sansCommentaires(lire(f));
+    for (const m of texte.matchAll(/ItemSeparatorComponent=\{([^}]*)\}/g)) {
+      separateurs += 1;
+      const expr = m[1].trim();
+      if (!/^[A-Z]\w*$/.test(expr)) { flechees.push(`${f} : ${expr.slice(0, 30)}`); continue; }
+      if (!new RegExp(`^function ${expr}\\(`, 'm').test(texte)) nonModule.push(`${f} : ${expr}`);
+    }
+  }
+  verifier(`des séparateurs de liste ont été trouvés (${separateurs})`, separateurs >= 7,
+    'moins de sept : le contrôle a perdu sa cible, il ne vérifie plus rien');
+  verifier('aucun n’est écrit en fonction fléchée', flechees.length === 0,
+    `trouvé dans : ${flechees.join(' ; ')}`);
+  verifier('…et chacun est une fonction déclarée au niveau du MODULE', nonModule.length === 0,
+    `trouvé dans : ${nonModule.join(' ; ')}`);
   verifier('…et le bord sous l’en-tête et au-dessus du pied est reproduit',
     /ListHeaderComponentStyle=\{s\.enteteListe\}/.test(balise) && /ListFooterComponentStyle=\{s\.piedListe\}/.test(balise));
 
@@ -761,6 +776,52 @@ console.log('\n8. Aucun lecteur vidéo ne naît pendant un élan');
     /^\s*repos,$/m.test(carte) && !/repos = /.test(carte));
   verifier('`PublicationScreen` ne passe pas de compteur',
     !/\brepos=/.test(sansCommentaires(lire('src/screens/PublicationScreen.js'))));
+
+  /* La visionneuse plein écran : sans réglage, une liste monte DIX
+     éléments d'un coup — dix lecteurs vidéo nés ensemble à l'ouverture
+     d'un portfolio. Trois pages au plus, et le même compteur d'arrêts que
+     le fil. */
+  const vis = sansCommentaires(lire('src/components/Visionneuse.js'));
+  const iListe = vis.indexOf('<FlatList');
+  const baliseVis = iListe >= 0 ? baliseOuvrante(vis, iListe) : '';
+  verifier('la visionneuse ne monte que trois pages (la précédente, l’affichée, la suivante)',
+    valeurAttribut(baliseVis, 'initialNumToRender') === '1'
+    && valeurAttribut(baliseVis, 'maxToRenderPerBatch') === '1'
+    && valeurAttribut(baliseVis, 'windowSize') === '3',
+    'sans ces trois réglages, ouvrir un portfolio de dix vidéos crée dix lecteurs ensemble.');
+  const settersVis = vis.match(/setRepos\(/g) || [];
+  const dArmerVis = vis.indexOf('const armerRepos = useCallback(');
+  const armerVis = dArmerVis >= 0 ? vis.slice(dArmerVis, vis.indexOf('}, []);', dArmerVis)) : '';
+  verifier('…son compteur d’arrêts ne fait que MONTER, dans `armerRepos` seulement',
+    settersVis.length === 1 && /setRepos\(\(n\) => n \+ 1\)/.test(armerVis)
+    && armerVis.indexOf('clearTimeout') >= 0 && armerVis.indexOf('clearTimeout') < armerVis.indexOf('setTimeout'));
+  verifier('…armé par chaque mouvement, chaque page où l’on se pose, et l’ouverture',
+    valeurAttribut(baliseVis, 'onScroll') === 'armerRepos'
+    && /onMomentumScrollEnd=\{\(e\) => \{[\s\S]*?armerRepos\(\);[\s\S]*?\}\}/.test(baliseVis)
+    && /useEffect\(\(\) => \{\s*armerRepos\(\);/.test(vis),
+    'sans l’ouverture, la vidéo affichée attendrait qu’on fasse glisser pour naître.');
+  /* Les vignettes : une vidéo rangée chez Supabase n'a pas d'image
+     d'aperçu, `apercuDe()` rend la vidéo elle-même, et `Media` créait un
+     lecteur par case de la grille (2 sur 58 médias de portfolio de la vraie
+     base, le 17/10). Une seule porte, `Vignette`, qui fige le compteur. */
+  const vignette = sansCommentaires(lire('src/components/Vignette.js'));
+  verifier('`Vignette` fige le compteur d’arrêts des vidéos sans aperçu (le lecteur ne naît jamais)',
+    /const JAMAIS = 0;/.test(vignette)
+    && /const image = apercuDe\(media\);/.test(vignette)
+    && /repos=\{estVideo\(image\) \? JAMAIS : undefined\}/.test(vignette)
+    && !/JAMAIS\s*(\+\+|\+=|=[^=])/.test(vignette.replace('const JAMAIS = 0;', '')),
+    'un compteur qui bougerait armerait un lecteur dans chaque case de la grille.');
+  const directes = fichiersSrc().filter((f) => f !== 'src/components/Vignette.js'
+    && /<Media\b[^>]*media=\{apercuDe\(/.test(sansCommentaires(lire(f))));
+  verifier('aucun écran ne passe `apercuDe()` à `<Media>` lui-même (une vignette passe par `Vignette`)',
+    directes.length === 0, `trouvé dans : ${directes.join(', ')}`);
+  const utilisatrices = fichiersSrc().filter((f) => /<Vignette\b/.test(sansCommentaires(lire(f))));
+  verifier(`…et les cinq vignettes du projet l’utilisent (${utilisatrices.length})`, utilisatrices.length >= 5,
+    `seulement : ${utilisatrices.join(', ')}`);
+
+  verifier('…et il ne va qu’aux VIDÉOS, avec leur affiche',
+    /repos=\{estVideo\(item\) \? repos : undefined\}/.test(vis)
+    && /affiche=\{estVideo\(item\) \? afficheVideo\(item\) : null\}/.test(vis));
 }
 
 console.log('');

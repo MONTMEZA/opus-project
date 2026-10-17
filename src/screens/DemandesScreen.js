@@ -445,7 +445,7 @@ export default function DemandesScreen({
                 : 'Aucune demande de particulier pour le moment. Elles arriveront ici, et le point orange vous préviendra.'}
           </EmptyState>
       )}
-      ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+      ItemSeparatorComponent={Intervalle}
       renderItem={({ item: d }) => (
         /* LES PROPRIÉTÉS SONT DES VALEURS, PAS DES FONCTIONS.
            Passer `jyAiRepondu` et `estPourMoi` tels quels aurait annulé le
@@ -471,7 +471,15 @@ export default function DemandesScreen({
   );
 }
 
+/* Le séparateur, déclaré ICI et non en fonction fléchée dans la liste :
+   une fonction écrite dans le rendu est un TYPE de composant neuf à chaque
+   fois, et React démonte puis remonte tous les séparateurs. */
+function Intervalle() {
+  return <View style={s.intervalle} />;
+}
+
 const s = StyleSheet.create({
+  intervalle: { height: 10 },
   pad: { paddingTop: S.md, paddingHorizontal: GOUTTIERE },
 
   encart: {

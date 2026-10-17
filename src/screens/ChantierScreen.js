@@ -155,7 +155,7 @@ export default function ChantierScreen({
         keyExtractor={(p) => String(p.id)}
         ListHeaderComponent={entete}
         contentContainerStyle={s.liste}
-        ItemSeparatorComponent={() => <View style={{ height: S.md }} />}
+        ItemSeparatorComponent={Intervalle}
         ListEmptyComponent={chargement ? null : (
           <EmptyState icone={Layers} titre="Ce chantier est vide">
             Publiez une photo en la rattachant à ce chantier, et elle
@@ -240,7 +240,15 @@ const Etape = React.memo(function Etape({ post, rang, total, onOuvrir }) {
   );
 });
 
+/* Le séparateur, déclaré ICI et non en fonction fléchée dans la liste :
+   une fonction écrite dans le rendu est un TYPE de composant neuf à chaque
+   fois, et React démonte puis remonte tous les séparateurs. */
+function Intervalle() {
+  return <View style={s.intervalle} />;
+}
+
 const s = StyleSheet.create({
+  intervalle: { height: S.md },
   barre: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm,
     paddingHorizontal: GOUTTIERE, paddingVertical: S.sm,

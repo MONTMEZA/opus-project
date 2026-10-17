@@ -6,8 +6,7 @@
  */
 import React, { useState } from 'react';
 import { View, Pressable, useWindowDimensions } from 'react-native';
-import Media from './Media';
-import { apercuDe } from '../lib/cloudinary';
+import Vignette from './Vignette';
 import Visionneuse from './Visionneuse';
 
 export default function PortfolioGrid({ items = [] }) {
@@ -27,7 +26,7 @@ export default function PortfolioGrid({ items = [] }) {
           >
             {/* Une vignette dans la grille : ces réalisations ne se lisent
                 jamais ici, il est inutile d'y ouvrir un lecteur vidéo. */}
-            <Media media={apercuDe(g)} style={{ width: cell, height: cell }} />
+            <Vignette media={g} style={{ width: cell, height: cell }} />
           </Pressable>
         ))}
       </View>

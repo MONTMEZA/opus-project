@@ -163,7 +163,7 @@ export function ListeReponses({ annonce, onEcrire, onVoirProfil, onFermer, onErr
           initialNumToRender={6}
           maxToRenderPerBatch={6}
           windowSize={5}
-          ItemSeparatorComponent={() => <View style={s.trait} />}
+          ItemSeparatorComponent={Trait}
           renderItem={({ item: r }) => (
             <Ligne r={r} onEcrire={onEcrire} onVoirProfil={onVoirProfil} />
           )}
@@ -208,6 +208,13 @@ const Ligne = React.memo(function Ligne({ r, onEcrire, onVoirProfil }) {
     </View>
   );
 });
+
+/* Le séparateur, déclaré ICI et non en fonction fléchée dans la liste :
+   une fonction écrite dans le rendu est un TYPE de composant neuf à chaque
+   fois, et React démonte puis remonte tous les séparateurs. */
+function Trait() {
+  return <View style={s.trait} />;
+}
 
 const s = StyleSheet.create({
   aide: {

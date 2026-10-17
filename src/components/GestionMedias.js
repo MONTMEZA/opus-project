@@ -35,8 +35,7 @@ import {
   C, F, T, RESSORT_PORTE, viser,
 } from '../theme';
 import { decision } from '../lib/retour';
-import Media from './Media';
-import { apercuDe } from '../lib/cloudinary';
+import Vignette from './Vignette';
 import { X, Move } from './icons';
 
 const COLONNES = 2;
@@ -220,7 +219,7 @@ function Case({
   return (
     <GestureDetector gesture={geste}>
       <Animated.View style={[s.case, { width: cote, height: hauteur }, style]}>
-        <Media media={apercuDe(media)} style={{ width: cote, height: hauteur }} />
+        <Vignette media={media} style={{ width: cote, height: hauteur }} />
 
         <View style={s.rang}><Text style={s.rangTexte}>{rang}</Text></View>
 

@@ -190,8 +190,12 @@ verifier('la visionneuse ne reçoit QUE les conseils qui ont un visuel',
   'Avec la liste entière, le premier conseil en texte décale tous les '
   + 'index et on ouvre la photo du voisin.');
 
-verifier('la vignette est une IMAGE, pas un lecteur vidéo',
-  /apercuDe\(c\.media\)/.test(bloc),
+/* Le 17/10, la vignette est passée par `Vignette` : `apercuDe()` seul ne
+   rendait une image que pour une vidéo Cloudinary, et créait un lecteur
+   pour une vidéo rangée chez Supabase. `Vignette` fige le lecteur dans les
+   deux cas, et c'est `verifier-fil` (section 8) qui la tient. */
+verifier('la vignette est une IMAGE, pas un lecteur vidéo (elle passe par `Vignette`)',
+  /<Vignette media=\{c\.media\}/.test(bloc) && !/<Media\b/.test(bloc),
   'Mesuré au lot du portfolio : 45 Ko contre 780 Ko par vignette.');
 
 verifier('`ConseilsPro` n\'affiche rien quand il n\'y a rien',
