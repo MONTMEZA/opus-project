@@ -104,6 +104,22 @@ alter table public.professional_profiles add column if not exists verifie_le    
 alter table public.professional_profiles add column if not exists verification_statut text
   not null default 'non_soumis';
 
+-- La contrainte écrite dans le `create table` n'existe QUE sur une base
+-- neuve : une base créée avant cette colonne l'a reçue par l'ordre
+-- ci-dessus, et `add column if not exists` ne touche pas aux contraintes.
+-- Relevé sur la vraie base le 17/10/2026, en la comparant objet par objet à
+-- ce fichier : elle n'avait pas cette contrainte. On la pose donc à part,
+-- sous condition, avec le nom que PostgreSQL donne à celle du
+-- `create table` — pour qu'il n'y en ait jamais deux.
+do $statut$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'professional_profiles_verification_statut_check') then
+    alter table public.professional_profiles
+      add constraint professional_profiles_verification_statut_check
+      check (verification_statut in ('non_soumis', 'en_attente', 'verifie', 'refuse'));
+  end if;
+end $statut$;
+
 -- Localisation, renseignée par le champ ville à suggestions (Base Adresse
 -- Nationale). Les coordonnées servent à trier les artisans par distance
 -- lors d'une urgence.
