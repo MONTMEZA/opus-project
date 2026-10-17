@@ -268,3 +268,58 @@ déjà retenue : « une LISTE qui se lit, une CARTE qui s'édite ».
 Rien de cette liste ne contredit le plan ; les points 1, 4 et 5 changent la
 **forme d'une ligne** (`devis_lignes`), donc ils se décident **avant** le lot 1,
 pas après.
+
+---
+
+## 5. L'idée du propriétaire : une base qui se remplit TOUTE SEULE (17/10/2026)
+
+> « L'IA pourrait, à chaque devis créé, voir et comprendre les postes. Si c'est
+> un nouveau poste, elle récupère la phrase — comment l'artisan explique ce
+> poste — et son prix, et les intègre dans une base de données fidèle à
+> l'artisan. Quand il refait un devis avec la même prestation, l'IA lui écrit
+> sa phrase et donne son prix. Ça évite de relire chaque fois tous les devis. »
+
+**C'est la bonne idée, et c'est le cœur de ce qui rendra Opus meilleur que les
+autres** : leurs bibliothèques sont des catalogues génériques (Obat annonce
+30 000 libellés), écrits par quelqu'un d'autre, avec des prix moyens. Celle-ci
+est écrite **par l'artisan, avec ses mots et ses prix**. Personne d'autre ne
+peut la fournir.
+
+### Deux étages, et le premier n'a pas besoin d'IA
+
+| | qui le fait | ce qu'il fait |
+|---|---|---|
+| **1. La mémoire** | la base de données, sans IA | chaque ligne d'un devis **émis** est rangée telle quelle : la phrase **mot pour mot**, l'unité, le prix, et le devis d'où elle vient. Quand l'artisan tape « chape », Opus lui propose **sa** phrase et **son** prix |
+| **2. La compréhension** | l'agent | il reconnaît que « Création d'une chape sèche pour futur pose de carrelage » et « chape sèche avant carrelage collé » sont **le même poste** ; il comprend une dictée (« chape dans le salon, 27 m² ») et retrouve le poste dans la base ; il repère un poste **nouveau** et propose de l'ajouter |
+
+> **Pourquoi deux étages :** le premier est gratuit, instantané, marche sans
+> réseau au fond d'une cave, et ne peut pas se tromper — il ne fait que
+> ressortir ce que l'artisan a écrit. Le second coûte un appel d'IA et peut se
+> tromper, donc il **propose** et ne décide jamais. Si l'IA est en panne, la
+> mémoire marche toujours.
+
+### Quatre règles, pour que la base reste « fidèle à l'artisan »
+
+1. **La phrase est rangée MOT POUR MOT.** L'agent ne la réécrit jamais en
+   silence — c'est sa façon d'expliquer, ses clients la connaissent. S'il voit
+   une faute de frappe, il la **propose**, l'artisan accepte ou non.
+2. **Le prix vient de ses devis, avec sa source** (« 50 €/m², devis 087 »). Pas
+   de moyenne (§1.3), et le prix de référence reste celui qu'il fixe.
+3. **Un poste nouveau se PROPOSE, il ne s'ajoute pas tout seul.** « 3 postes de
+   ce devis ne sont pas dans votre base — les ajouter ? » Sinon la base se
+   remplit de variantes d'un même poste, et elle devient aussi illisible que la
+   pile de vieux devis qu'elle remplace.
+4. **La base est PRIVÉE, et n'appartient qu'à lui.** Ses prix sont son secret
+   commercial : jamais montrés à un autre artisan, jamais utilisés pour
+   « aider » un concurrent, jamais mélangés dans une moyenne du réseau. Même
+   règle que le carnet de clients (section 41 de `schema.sql`) : lisible de son
+   seul auteur, et l'appartenance passe par `est_mon_entreprise()`.
+
+### Dans quel ordre
+
+- **La mémoire (étage 1) naît avec le module devis** — elle n'est qu'une table
+  et une recherche dans le champ de saisie. Elle sert dès le deuxième devis.
+- **La compréhension (étage 2) vient ensuite**, comme toute action de l'agent :
+  avec son journal, sa permission et sa limite (section 38), et l'artisan qui
+  valide. Elle rejoint l'idée du §1.3 (remplir la base à partir de ses anciens
+  PDF) : c'est le même travail — lire un devis et en tirer des postes.
