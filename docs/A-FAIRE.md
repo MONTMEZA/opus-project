@@ -1630,3 +1630,38 @@ DÈS MAINTENANT, parce qu'elles coûteraient cher à rattraper :
    (`docs/SOURCES-DONNEES-BTP.md`) fait le tour de ce qui existe et de ce
    qu'on peut en faire — pour préparer ce cahier des charges, pas pour le
    remplacer.
+
+### Et le modèle économique qu'il y voit (17/10/2026)
+
+> « Si l'IA analyse tout ce qui se passe sur Opus — chaque poste, chaque terme
+> employé, chaque tarif — on aura la plus grosse base de données spécialisée
+> dans le BTP, et on pourra un jour faire une clé API et faire payer cette
+> base. »
+
+**C'est cohérent, et c'est le modèle des grandes bases étrangères** (RSMeans
+aux États-Unis, BCIS au Royaume-Uni). Ce qu'Opus aurait de plus qu'elles, et
+qu'aucune base française n'a : **les prix des devis ACCEPTÉS**. Une base
+classique publie des prix estimés ; Opus saurait quels prix les clients ont
+réellement signés, et lesquels ils ont refusés. C'est le vrai prix du marché.
+
+Quatre conditions, et la première décide des trois autres :
+
+1. **La confiance des artisans EST la base.** Si un artisan découvre que ses
+   données sont vendues sans qu'il l'ait compris, il part, et ses collègues
+   avec lui : la base cesse d'être alimentée et meurt. D'où la transparence,
+   le consentement et la contrepartie (`docs/DEVIS-DU-PROPRIETAIRE.md` §6.4,
+   `docs/DONNEES-DES-ARTISANS.md`).
+2. **Seuls des agrégats anonymes se vendent** — jamais un prix rattachable à
+   un artisan, jamais une donnée d'un de ses clients.
+3. **Le volume vient d'abord.** Une base vaut par le nombre d'artisans actifs
+   et sa fraîcheur. L'ordre est donc : rendre Opus indispensable, et la base
+   naît en chemin — pas l'inverse.
+4. **À qui on la vend se décide.** Des prix du marché vendus à un assureur
+   pour baisser ses remboursements, ou à une plateforme pour tirer les prix
+   vers le bas, se retourneraient contre les artisans qui les ont fournis.
+   La liste des acheteurs acceptables est une décision du propriétaire, à
+   écrire dans le futur cahier des charges.
+
+Et une protection en retour : le producteur d'une base de données qui a fait
+un investissement substantiel est protégé contre son extraction (CPI L341-1).
+La base d'Opus le serait comme celles qu'elle ne peut pas copier aujourd'hui.
