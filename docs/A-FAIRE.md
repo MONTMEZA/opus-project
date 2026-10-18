@@ -1529,9 +1529,15 @@ placo et on voit toutes les nouveautés »).
 profil, les règles RLS et la modération doubleraient — et sans signalement,
 suppression de compte ni mentions légales, l'application ne peut de toute
 façon pas être ouverte au public. **Cette condition est remplie** depuis le
-21/09 : le compte fournisseur attend désormais la décision du propriétaire
-(le garder pour la Place des pros, ou le ranger au module 7 — question
-« Négoces » de `COMPARATEUR-MATERIAUX.md` §1).
+21/09. **Tranché par le propriétaire le 18/10 : on attend le module 7, en
+le sachant.** Opus n'est pas ouvert au public, donc personne d'inconnu ne
+peut s'inscrire aujourd'hui.
+
+- [ ] **AVANT l'ouverture au public** : fermer la porte des négoces qui
+  s'inscrivent comme artisans — par le compte fournisseur, ou à défaut par
+  une alerte au back-office sur les codes d'activité 46 et 47 (sans rien
+  bloquer, décision du 12/10). Re-mesurer d'abord : la mesure du 18/10 ne
+  vaut que pour ce jour-là.
 
 ---
 
@@ -1700,9 +1706,22 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
 ### Fournisseurs et prix (module 7) — à trancher à son ouverture
 
 L'étude `docs/COMPARATEUR-MATERIAUX.md` (17/10/2026) a rangé ses décisions
-selon leur moment. Deux se prennent maintenant (la neutralité, et les
-négoces inscriptibles comme artisans — §1). Les autres attendent leur
-module, et on ne les tranche PAS avant :
+selon leur moment. Les deux qui se posaient tout de suite ont reçu leur
+réponse le 18/10 :
+
+- **les négoces inscriptibles comme artisans** : on attend, en le sachant
+  (section « Les fournisseurs » plus haut) ;
+- **la neutralité** reste OUVERTE, parce qu'elle dépend d'une question plus
+  large. Réponse du propriétaire : « je ne sais pas encore comment me
+  rémunérer sur Opus, mais je pense que les pros devront payer quelque
+  chose ». **Le modèle économique d'Opus est donc à décider**, et la
+  neutralité avec lui. Ce qui reste recommandé quel que soit le modèle :
+  **un fournisseur peut acheter de la visibilité marquée « Annonce »,
+  jamais un rang dans la liste des prix.** À trancher AVANT toute
+  conversation avec un négoce ou un fabricant — une promesse faite au
+  premier ne se reprend pas.
+
+Les autres attendent leur module, et on ne les tranche PAS avant :
 
 - [ ] **une plateforme de facture électronique partenaire, ou non** — à
   l'ouverture du module 3 (factures) ;

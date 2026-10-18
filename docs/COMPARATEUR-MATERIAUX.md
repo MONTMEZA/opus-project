@@ -82,6 +82,8 @@ Le reste est tenu par la base de données, sans intervention humaine : un prix s
 
    **Aucun négoce n'est donc inscrit aujourd'hui.** Il reste à choisir entre attendre le module fournisseurs en le sachant, ou avancer le compte fournisseur (§5).
 
+> **Vos réponses du 18/10/2026.** Négoces : **on attend le module fournisseurs, en le sachant** — Opus n'est pas ouvert au public, et la porte doit être fermée AVANT qu'il le soit (`A-FAIRE.md`). Neutralité : **ouverte** — « je ne sais pas encore comment me rémunérer sur Opus, mais je pense que les pros devront payer quelque chose ». Elle se tranchera avec le modèle économique, et toujours avant de parler à un premier négoce.
+
 Tout le reste se décide au début des modules 3, 6 et 7. Les questions sont rangées au §5, avec leur moment.
 
 ---
@@ -433,8 +435,8 @@ Ce qui manque au gros œuvre : les codes-barres, absents pour le vrac (sable, gr
 
 | décision | quand | ce qu'elle change |
 |---|---|---|
-| **un fournisseur peut-il payer pour être mieux placé ?** (neutralité) | **maintenant** — question 1 | ce qu'un fournisseur peut acheter : de la visibilité marquée, jamais un rang |
-| **les négoces qui peuvent aujourd'hui s'inscrire comme artisans** | **maintenant** — question 2 (mesuré le 18/10 : aucun inscrit) | attendre le module 7 en le sachant, ou avancer le compte fournisseur |
+| **un fournisseur peut-il payer pour être mieux placé ?** (neutralité) | avec le modèle économique d'Opus, **avant toute discussion avec un négoce** — question 1, ouverte le 18/10 | ce qu'un fournisseur peut acheter : de la visibilité marquée, jamais un rang |
+| **les négoces qui peuvent aujourd'hui s'inscrire comme artisans** | **tranché le 18/10** : on attend le module 7 en le sachant (aucun inscrit) | la porte se ferme AVANT l'ouverture au public |
 | qui peut lire les prix, éditeur SQL compris | déjà ouverte dans `A-FAIRE.md`, avant le module devis | elle vaut aussi pour les prix d'achat |
 | une plateforme de facture électronique partenaire, ou non | à l'ouverture du module 3 | l'arrivée des factures d'achat en fichier, et l'émission des factures |
 | comment mesurer la lecture des factures | au début du module 6 | recommandation : vos anciennes factures, adresses masquées ; puis les corrections que votre frère fera lui-même, dont vous ne verrez que le nombre. Aucune promesse de fiabilité avant |
