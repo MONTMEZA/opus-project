@@ -2,7 +2,7 @@
 
 > Votre question, le 17/10/2026 : « c'est sur le comparateur de matériaux qu'il faudra savoir comment le créer et le gérer pour que ça fonctionne ».
 
-**Si vous ne lisez que trois parties : le §1 (en une page), le §3 (comment le gérer) et le §5 (vos décisions).** La seconde moitié (§6 à §10) explique le pourquoi : le marché, les sources de prix, les données, le droit et l'argent. Les mots techniques sont expliqués à la fin (annexe A). Les noms de fichiers, de fonctions et de sections du code sont rangés à part, pour celui qui construira (annexe B).
+**Si vous ne lisez que trois parties : le §1 (en une page), le §3 (comment le gérer) et le §5 (vos décisions).** La seconde moitié (§6 à §10) explique le pourquoi ; le §11 examine votre idée du 18/10 (brancher ses comptes fournisseurs) : le marché, les sources de prix, les données, le droit et l'argent. Les mots techniques sont expliqués à la fin (annexe A). Les noms de fichiers, de fonctions et de sections du code sont rangés à part, pour celui qui construira (annexe B).
 
 Cette étude date du 17/10/2026. Elle s'appuie sur :
 
@@ -46,7 +46,8 @@ Chaque prix porte sa date, sa source et son unité. Ce qui manque est dit en cla
 | un comparateur de tous les négoces de France | personne ne le fait en France pour le second œuvre : les **prix nets** (ceux que chaque artisan a négociés) restent derrière le compte de chacun (§6) |
 | une boutique | Opus n'achète, ne stocke, ne livre et n'encaisse rien. Plusieurs places de marché qui l'ont fait se sont restructurées (§6, annexe C) |
 | une source de « prix du marché » | les prix d'un artisan ne sont jamais montrés à un autre, et l'agent ne sort jamais un prix de sa mémoire |
-| un robot qui lit les sites des négoces | interdit : l'atteinte au droit du producteur d'une base de données est punie de 3 ans de prison et 300 000 € d'amende (§9) |
+| un robot qui lit les sites des négoces | interdit : l'atteinte au droit du producteur d'une base de données est punie de 3 ans de prison et 300 000 € d'amende (CPI L342-1 et L343-4 ; §9 et §11.2) |
+| un agent qui se connecte aux comptes négoces de l'artisan avec ses identifiants (votre idée du 18/10) | exclu : le maître du site est le négoce, et l'accord de l'artisan ne suffit pas. La voie licite : ses propres fichiers, la demande de prix, puis un connecteur accordé par un négoce (§11) |
 | un conseil de prix de vente | il montre un coût d'achat ; le prix du devis reste celui que l'artisan écrit |
 
 ### Pourquoi il arrive en dernier — et pourquoi ce n'est pas un retard
@@ -437,7 +438,7 @@ Ce qui manque au gros œuvre : les codes-barres, absents pour le vrac (sable, gr
 |---|---|---|
 | **un fournisseur peut-il payer pour être mieux placé ?** (neutralité) | avec le modèle économique d'Opus, **avant toute discussion avec un négoce** — question 1, ouverte le 18/10 | ce qu'un fournisseur peut acheter : de la visibilité marquée, jamais un rang |
 | **les négoces qui peuvent aujourd'hui s'inscrire comme artisans** | **tranché le 18/10** : on attend le module 7 en le sachant (aucun inscrit) | la porte se ferme AVANT l'ouverture au public |
-| qui peut lire les prix, éditeur SQL compris | déjà ouverte dans `A-FAIRE.md`, avant le module devis | elle vaut aussi pour les prix d'achat |
+| qui peut lire les prix, éditeur SQL compris | **tranché le 18/10 : par un engagement écrit** (aucun écran ne les montre ; l'éditeur s'engage à ne pas les lire par l'éditeur SQL) | il vaut aussi pour les prix d'achat |
 | une plateforme de facture électronique partenaire, ou non | à l'ouverture du module 3 | l'arrivée des factures d'achat en fichier, et l'émission des factures |
 | comment mesurer la lecture des factures | au début du module 6 | recommandation : vos anciennes factures, adresses masquées ; puis les corrections que votre frère fera lui-même, dont vous ne verrez que le nombre. Aucune promesse de fiabilité avant |
 | le geste séparé « retrouver mes prix dans mes factures » | au début du module 6 | recommandé ; son caractère obligatoire est une question d'avocat |
@@ -476,7 +477,8 @@ Ces questions, sauf les deux premières, sont à ranger dans `A-FAIRE.md`, sous 
 - la couverture du gros œuvre par ETIM, et le coût de sa version française ;
 - toute mesure de fiabilité de lecture **sur des factures françaises de négoce** : aucune n'a été trouvée ;
 - la taille de chaque négoce au sens de la réforme, et la façon dont un achat au comptoir devient une facture électronique ;
-- l'existence de clauses de confidentialité dans les conditions de compte des grands négoces ;
+- les clauses des conditions de compte des grands négoces : relevées le 18/10 chez Chausson, Sonepar, Rexel et Gedimat (§11.3) ; non lues chez Point.P, Cedeo et SIMC ;
+- pour l'idée du 18/10 (brancher les comptes fournisseurs) : l'état actuel du téléchargement des tarifs chez Point.P et la clause qui accompagne un fichier de tarif ; le mécanisme du connecteur Tolteck ; l'usage de l'API Rexel par un éditeur tiers ; ce que verrait un téléphone face aux barrières anti-robot (§11.11) ;
 - sur le marché : Leroy Merlin Pro, le modèle économique et la fixation des prix de Materials Market, MoonBTP, Bricofuté, la liquidation de mesmateriaux.com, l'investissement du distributeur Wesco dans Kojo, les 1 200 tarifs de HerculePro ;
 - les chiffres que les entreprises donnent sur elles-mêmes (Koncrete, Kojo, hemea…) : rapportés comme leurs affirmations, sans validation.
 
@@ -602,6 +604,8 @@ Une facture papier contenait déjà légalement la même matière : la quantité
 | se brancher sur la plateforme que l'artisan a déjà | il existe 155 plateformes agréées au 13/10/2026 : seulement pour 2 ou 3 plateformes dominantes, si elles l'acceptent |
 | devenir soi-même plateforme agréée | **hors de portée** : il faut une certification de sécurité (ISO 27001), un hébergement qualifié par l'État (SecNumCloud) et aucune donnée hors de l'Union européenne |
 
+**Une source voisine, relevée le 18/10 : le fichier du tarif net que l'artisan télécharge lui-même** sur son compte. Chez Chausson, il est réservé aux clients « en compte », en Excel ou CSV, tarif net ou public, pour les seuls produits vendus en ligne par son agence de rattachement (chausson.fr/pages/faq) [certain] ; chez Point.P, une fonction décrite en 2014 (Batirama, 05/03/2014), état actuel [NON VÉRIFIÉ]. C'est un fichier, pas un mot de passe. Réserves : la clause de confidentialité qui l'accompagne est à lire, avec un avocat, avant le module 6 ; importé chez de nombreux artisans, il relève des règles 5, 7 et 11 du §9 (§11.8).
+
 **Son étiquette à l'écran** : « **acheté le 12/09/2026** (date de la facture) — [négoce], agence de [commune] ». Tant qu'une ligne lue n'est pas validée : « **observé dans vos documents** — à confirmer ».
 
 ### 7.2 La demande de prix aux fournisseurs de l'artisan : la source n° 2
@@ -685,6 +689,8 @@ Par défaut, la demande ne contient **que la commune du chantier**, jamais le no
 
 Les modèles existants : Tolteck lit le compte Point.P ou Cedeo de l'artisan ; Everwin commande chez Sonepar par échange informatisé ; Handoff lit les prix du magasin Home Depot le plus proche du chantier. Tous reposent sur un **accord**. Tolteck appartient majoritairement à Saint-Gobain, qui possède aussi Point.P et Cedeo. Qu'un logiciel concurrent obtienne le même accès est **inconnu**.
 
+Une porte relevée le 18/10 : **l'API client de Rexel**, « Pack APIs Découverte » marqué « OFFERT » (stocks, délais, tarifs, commandes, devis… ; électricité ; usage par un éditeur tiers au nom de ses clients NON VÉRIFIÉ). Tarifeo n'en est pas une pour Opus : ses conditions écartent les éditeurs concurrents (§7.5). Ce qu'Opus demanderait à un négoce : une autorisation limitée à la lecture des prix et du stock, révocable par l'artisan, **jamais un mot de passe** ; et un connecteur ne couvre que son négoce (§11.8).
+
 **L'étiquette** : « **prix de votre compte [négoce]**, lu le… ».
 
 ### 7.7 Un complément qui n'est pas un prix : les indices de l'Insee
@@ -699,8 +705,8 @@ Il ne faut **jamais** en tirer un « prix actuel » recalculé. Et **jamais** ut
 
 | exclu | la raison |
 |---|---|
-| **lire les sites des négoces avec un programme** | c'est extraire une base protégée (Code de la propriété intellectuelle, L342-1 et L342-2), un délit puni de 3 ans de prison et 300 000 € d'amende (L343-4). Même un catalogue non protégé peut être interdit par contrat (arrêt Ryanair de la Cour de justice de l'Union, 2015) [certain] |
-| **une extension qui capture la page d'un fournisseur** (comme celle d'Obat) | **ajout de cette étude**, appuyé sur `SOURCES-DONNEES-BTP.md` §3.1 : chez un concurrent, c'est l'utilisateur qui capture et porte le risque ; chez Opus, la même capture répétée sur tous ses artisans deviendrait une extraction répétée et systématique de la base du négoce au profit d'Opus (L342-2). Exclue sans accord du négoce [avocat pour la qualification] |
+| **lire les sites des négoces avec un programme** | c'est extraire ou réutiliser une partie substantielle d'une base protégée (Code de la propriété intellectuelle, L342-1), un délit puni de 3 ans de prison et 300 000 € d'amende (L343-4, qui ne vise que L342-1). L'extraction répétée de petites parties (L342-2), prise seule, pourrait ne relever que du juge civil ; mais un service qui interroge le moteur du négoce en temps réel peut être vu comme une réutilisation substantielle (arrêt Innoweb, Cour de justice de l'Union, 2013), donc L342-1 et L343-4 ; et contourner une protection anti-robot ajoute le risque de l'article 323-1 du Code pénal. Même un catalogue non protégé peut être interdit par contrat (arrêt Ryanair, 2015) [certain sur les textes ; avocat sur la portée]. **Avec les identifiants de l'artisan : voir §11** |
+| **une extension qui capture la page d'un fournisseur** (comme celle d'Obat) | **ajout de cette étude**, appuyé sur `SOURCES-DONNEES-BTP.md` §3.1 : chez un concurrent, c'est l'utilisateur qui capture et porte le risque ; chez Opus, la même capture répétée sur tous ses artisans deviendrait une extraction répétée et systématique de la base du négoce au profit d'Opus (L342-2). Exclue sans accord du négoce [avocat pour la qualification] Un navigateur intégré à l'application (variante (b) du §11) est la même capture, et la règle 5.2.2 d'Apple exige de toute façon l'autorisation du service visé : seulement avec l'autorisation écrite du négoce, puis l'avis d'un avocat (§11.7) |
 | **un prix tiré de la mémoire de l'IA** | un modèle n'a pas de prix fiables, datés ni régionaux : il produit un nombre plausible, qui engagerait l'artisan (`DEVIS-DU-PROPRIETAIRE.md` §6.2) |
 | **le prix d'un artisan montré à un autre**, même sans nom | ce sont des coûts et des prix d'achat échangés entre concurrents (droit de la concurrence), et très probablement un secret des affaires (§9) |
 | **un flux d'affiliation** (un site marchand qui paie une commission par vente) | il ne permet de publier les produits que « pour la promotion de l'annonceur », et il contredit la neutralité (§10) |
@@ -786,7 +792,7 @@ Une règle tient en une phrase, avec sa raison, qui la fait respecter, et son st
 | 5 | **Jamais le prix d'achat d'un artisan montré à un autre**, même sans nom, même en moyenne, sans avis d'avocat. | Ce sont des coûts et des prix d'achat échangés entre acheteurs concurrents, par une plateforme : une entente possible. Sur un marché local, même une moyenne révèle qui s'écarte | les règles de lecture de la base | avocat |
 | 6 | **Jamais une information sur ses concurrents donnée à un fournisseur** : leurs prix, leurs volumes chez tel artisan, un « positionnement marché ». | C'est le pivot de l'accord « en étoile », où la plateforme fait circuler l'information entre concurrents | les règles de lecture ; aucune statistique par fournisseur | interprétation prudente |
 | 7 | **Les prix nets d'un artisan ne sont traités que pour lui**, et les conditions d'Opus disent qu'il les traite comme prestataire, sous confidentialité. | La loi sépare elle-même le tarif public, qui doit être communiqué à un acheteur pro qui le demande, des conditions particulières, qui n'ont pas à l'être. Le juge peut ordonner la destruction de tout fichier dont un secret « peut être déduit » | la base ; la clause, écrite au module 6 | certain sur les textes ; avocat sur les clauses de chaque négoce |
-| 8 | **Aucun programme ne lit les sites des négoces.** | C'est extraire une base protégée, et un catalogue non protégé peut aussi être interdit par contrat. Contourner une protection anti-robot ajoute un risque pénal | vous : ne jamais le construire | certain ; avocat pour l'anti-robot |
+| 8 | **Aucun programme ne lit les sites des négoces.** | C'est extraire une base protégée, et un catalogue non protégé peut aussi être interdit par contrat. Contourner une protection anti-robot ajoute un risque pénal. L'accord de l'artisan ne suffit pas : seul celui du négoce lèverait l'interdiction (§11) | vous : ne jamais le construire | certain ; avocat pour l'anti-robot |
 | 9 | **La Place des pros reste réservée aux professionnels. Un compte fournisseur y publie, mais ne lit pas les offres des autres.** | Le règlement européen dit « P2B » ne vise que les plateformes qui servent des **consommateurs**, et les règles françaises sur les comparateurs ne sont dues qu'« au consommateur » : ouvrir les offres aux particuliers ferait entrer les deux. Et un fournisseur ne peut voir les prix publics de ses concurrents que si ce n'est ni plus détaillé ni plus fréquent que ce que le marché voit déjà (point 389, tel que le résume le rapport sur le droit) | les règles de lecture de la base | certain pour P2B ; interprétation solide pour les comparateurs ; interprétation prudente pour la lecture du fournisseur |
 | 10 | **Jamais de prix conseillé.** Jamais de prix de revente imposé par un fournisseur. Jamais d'exigence, envers un fournisseur, de garantir sur Opus son meilleur prix tous canaux confondus. | Imposer un prix de revente minimal est puni de 15 000 € d'amende ; cette exigence de « parité large » est exclue de l'exemption européenne ; un barème diffusé avec une « police des prix » a valu 1,5 M€ d'amende à l'Ordre des architectes | vous, dans les contrats ; l'agent n'écrit jamais de prix dans le devis | certain |
 | 11 | **L'administration, vous compris, ne lit aucun prix individuel.** | Vous êtes du métier : celui qui reçoit l'information d'un concurrent « sera supposé avoir tenu compte » de cette information | les règles de la base ; la question de l'éditeur SQL reste ouverte | interprétation ; décision ouverte |
@@ -805,7 +811,7 @@ Une règle tient en une phrase, avec sa raison, qui la fait respecter, et son st
 5. Lignes directrices de 2023, points 281, 385, 391, 401 et 402.
 6. Lignes directrices de 2023, point 402.
 7. Code de commerce, L151-1, L441-1 III, L152-3.
-8. Code de la propriété intellectuelle, L342-1, L342-2, L343-4 ; arrêt Ryanair (CJUE, 2015) ; Code pénal, 323-1.
+8. Code de la propriété intellectuelle, L342-1 et L342-2 ; L343-4, qui ne punit que l'atteinte aux droits de L342-1 ; L343-2 (référé, y compris contre les intermédiaires) ; L343-7 (peines doublées pour qui est ou a été lié à la partie lésée par convention — l'artisan l'est) ; arrêt Innoweb (CJUE, 19/12/2013, C-202/12) ; arrêt Ryanair (CJUE, 2015) ; Code pénal, 323-1. Le CPI a été relu le 18/10/2026 sur codes.droit.org, fichier dont la dernière modification date du 05/08/2026 (chaque code du miroir porte sa propre date ; le Code de la consommation est au 10/10/2026).
 9. Règlement 2019/1150, art. 1(2) ; Code de la consommation, L111-7 et D111-7 ; lignes directrices de 2023, point 389.
 10. Code de commerce, L442-6 ; règlement 2022/720, art. 5(1)(d) ; décision 19-D-19.
 11. Lignes directrices de 2023, point 397 ; `DONNEES-DES-ARTISANS.md` §5.2.
@@ -824,7 +830,8 @@ Une règle tient en une phrase, avec sa raison, qui la fait respecter, et son st
 - l'extension qui capture une page — **ajout de cette étude**, qui ne figure pas dans la liste du rapport sur le droit ;
 - le contrat avec une plateforme agréée partenaire, y compris les transferts hors de l'Union vers le fournisseur du modèle d'IA ;
 - l'équilibre de la licence de données au regard du Data Act ;
-- le caractère obligatoire du geste séparé « retrouver mes prix dans mes factures ».
+- le caractère obligatoire du geste séparé « retrouver mes prix dans mes factures » ;
+- l'agent connecté aux comptes des artisans (§11.10) : protection des prix nets comme base, application de l'arrêt Innoweb, accord du titulaire du compte face au refus du négoce, condition « mise à la disposition du public » de L342-3 pour un espace client fermé, lecture par l'IA d'une page affichée par l'artisan (extraction, sous-traitance, transferts hors de l'Union), clause de confidentialité du fichier de tarif téléchargé, contrat d'un connecteur officiel.
 
 Et un point du rapport sur le droit, **hors du comparateur** mais à ne pas perdre : le règlement P2B s'applique probablement à l'autre face d'Opus, celle où les artisans reçoivent des demandes de particuliers, et son article 7 obligerait à décrire tout traitement différencié — or vous êtes vous-même artisan inscrit sur Opus.
 
@@ -860,6 +867,149 @@ Ne jamais acheter, stocker, livrer ni encaisser pour revendre. Trois raisons :
 3. **les partenaires.** Un Opus marchand deviendrait le concurrent des négoces dont il a besoin pour les connecteurs et les demandes de prix [interprétation].
 
 **La commande se passe chez le fournisseur de l'artisan**, comme aujourd'hui. Opus prépare la liste, rien de plus.
+
+---
+
+## 11. L'idée du 18/10 : brancher ses comptes fournisseurs
+
+> Votre idée, le 18/10/2026 : « si les pro aurez le moyen de connecter leur compte point p simc etc et que notre agent peut aller chercher sur les sites pour comparais […] notre agent parcour les compte fournisseur de l'artisant recupere les prix et lui dit la cest dispo et moin cher etc ? »
+
+Cette section examine **un cas que le §7 n'avait pas traité** : un tiers (Opus) qui se connecte au compte professionnel qu'un artisan détient chez un négoce, avec l'accord de l'artisan et avec ses identifiants, pour y lire ses prix nets et la disponibilité. Le §7.8 excluait déjà « lire les sites des négoces avec un programme » et « une extension qui capture la page d'un fournisseur », mais sans examiner le compte de l'artisan ni son accord. Ce qui suit dit ce que l'accord de l'artisan change — et ce qu'il ne change pas.
+
+**Ce n'est pas un avis d'avocat.** Toutes les pages ont été lues le 18/10/2026. Aucun compte n'a été ouvert, aucun identifiant saisi, aucune protection contournée : une seule requête ordinaire par page d'accueil, puis des pages publiques (conditions, mentions légales, aide, décisions, textes de loi). Les pages utiles sont rangées dans le dossier de travail de la session. Marques : **[certain]** lu à la source ; **[interprétation]** mon raisonnement ; **[NON VÉRIFIÉ]** souvenir, source secondaire, ou page qui n'a pas pu être ouverte.
+
+> **Rien de cette section ne se construit avant les modules 6 (dépenses) et 7 (fournisseurs).** Et rien ne se négocie avec un négoce avant la décision sur la neutralité, encore ouverte avec le modèle économique (§1, §5) : « une promesse faite au premier ne se reprend pas ».
+
+### 11.1 En bref
+
+**Le besoin est juste** : comparer SES prix nets chez SES négoces, et savoir où c'est disponible. Le §6.1 l'a établi : personne ne le sert en France. **La manière proposée ne se construit pas telle quelle**, parce que le maître du site est le négoce, pas l'artisan. Quatre protections s'y opposent — le contrat du compte, le droit du producteur de base de données, le pénal, et la règle 5.2.2 d'Apple — et toutes passent par la volonté du négoce, pas par celle de l'artisan.
+
+| variante | verdict |
+|---|---|
+| **(a)** les serveurs d'Opus se connectent avec les identifiants stockés de l'artisan | **exclue.** Faute contractuelle de l'artisan chez les négoces dont on a lu les conditions, risque pénal dès que le négoce s'y oppose ou qu'une barrière est contournée, contraire à la recommandation de la CNIL, interdite sur iPhone sans autorisation du négoce. **Avec l'accord d'un négoce, on construit (c), jamais (a).** |
+| **(b)** un navigateur dans l'application ; l'artisan se connecte lui-même ; Opus lit la page affichée | **seulement avec l'autorisation écrite du négoce, puis l'avis d'un avocat.** C'est l'extension exclue au §7.8, sous forme d'application ; la règle 5.2.2 d'Apple exige de toute façon cette autorisation. Et une fois l'autorisation obtenue, (c) est plus solide que (b) |
+| **(c)** un connecteur accordé par le négoce | **permis**, dans les limites du contrat. C'est le cas de Tolteck chez Point.P et Cedeo, dont le mécanisme exact n'est pas public. À exiger : une autorisation limitée à la lecture, révocable par l'artisan (type OAuth), jamais un mot de passe. C'est la DSP2 refaite par contrat, négoce par négoce |
+| **(d)** l'artisan importe lui-même ses données : factures, réponses à ses demandes de prix, **et le fichier de son tarif net qu'il télécharge** | **permis** pour les factures et les réponses, déjà prévus (§7.1, §7.2). **Permis sous réserve** pour le fichier de tarif : clause de confidentialité à lire, avec un avocat, avant le module 6 (§11.8) |
+
+L'ordre à construire : **(d) d'abord ; (c) plus tard, négoce par négoce, après la décision sur la neutralité ; (b) seulement avec une autorisation écrite et l'avis d'un avocat ; (a) jamais.**
+
+### 11.2 Ce que cette section change ou précise dans les §7.6 et §7.8
+
+- **§7.8, ligne « lire les sites des négoces avec un programme » : la raison est à préciser, pas à affaiblir.** Relu le 18/10 sur codes.droit.org (fichier du Code de la propriété intellectuelle dont la dernière modification date du 05/08/2026 ; sur ce miroir, chaque code porte sa propre date — le Code de la consommation est au 10/10/2026, d'où la date citée ailleurs dans l'étude) : **L343-4 ne punit que l'atteinte aux droits « tels que définis à l'article L. 342-1 »** (partie substantielle), pas L342-2 (extraction répétée de parties non substantielles). L342-2, pris seul, pourrait donc ne relever que du juge civil (interprétation stricte de la loi pénale, Code pénal art. 111-4). [certain sur le texte ; interprétation sur la portée ; avocat] **Mais** un service qui interroge en temps réel le moteur du négoce peut être vu par la Cour de justice comme une **réutilisation de la totalité ou d'une partie substantielle** (arrêt Innoweb, §11.3), c'est-à-dire L342-1, donc L343-4. Et le risque de l'article 323-1 du Code pénal, en cas de contournement d'une protection, reste entier. La même précision vaut pour la règle 8 du §9 et pour `SOURCES-DONNEES-BTP.md` §1.3.
+- **Le §7.8 se confirme et s'étend.** « Lire les sites avec un programme » et « une extension qui capture la page » restent exclus sans accord du négoce. Cette section ajoute que **l'accord de l'ARTISAN ne lève pas l'exclusion — seul celui du NÉGOCE le ferait** —, et que le navigateur intégré de la variante (b) est la même capture, sous forme d'application.
+- **§7.6 (« les connecteurs officiels, plus tard ») reste juste** : c'est la seule voie « en direct » licite. Cette section le complète d'une porte non citée, **l'API client de Rexel** (électricité ; usage par un éditeur tiers NON VÉRIFIÉ, §11.8), et précise que **le téléchargement du tarif net par l'artisan** est une source de type (d), à ranger au §7.1, pas un connecteur. Tarifeo, lui, est déjà au §7.5, et ses conditions écartent les éditeurs concurrents : ce n'est pas une porte pour Opus.
+
+### 11.3 Le droit, avec ses sources
+
+Textes lus le 18/10/2026 sur codes.droit.org (miroir des données de Légifrance, qui répond 403 depuis le conteneur) ; arrêts de la Cour de justice lus sur eur-lex.europa.eu ; arrêts français lus sur juricaf.org.
+
+**Le droit du producteur de base de données.**
+
+- La base du négoce est **probablement protégée pour son catalogue** (désignations, fiches, classification, moteur de recherche : des éléments recherchés et rassemblés), mais **discutable pour les prix nets**, que le négoce CRÉE client par client — comme le « système de gestion commerciale » écarté de l'investissement protégé dans l'affaire Ryanair c. Opodo (Cass. com., 10/02/2015, n° 12-26.023). La règle vient de l'arrêt British Horseracing Board (CJUE, 09/11/2004, C-203/02) : l'investissement protégé exclut la création des données. [certain sur les arrêts ; interprétation sur l'application ; avocat]
+- **L'artisan est un « utilisateur licite »** (BHB, point 58). **Opus ne l'est pas en son nom propre** : son accès ne repose pas sur le consentement du négoce, et un mandat ne donne pas plus de droits que n'en a le mandant, dont le mot de passe est personnel. [interprétation ; avocat]
+- **Une liste de trois articles est une partie non substantielle**, et la consulter pour préparer un devis est une exploitation normale (BHB, points 54-55). L342-3 1° déclare nulle la clause qui l'interdit — **mais seulement pour une base « mise à la disposition du public par le titulaire des droits »**, condition à apprécier pour un espace client fermé. [certain sur le texte ; avocat sur l'application]
+- **La même lecture faite par Opus, pour des milliers d'artisans, tous les jours, ressemble au « métamoteur » de l'arrêt Innoweb** (CJUE, 19/12/2013, C-202/12). Le dispositif y pose **trois conditions cumulatives** : un formulaire offrant en substance les mêmes fonctionnalités que celui de la base ; la traduction « en temps réel » des requêtes dans le moteur de la base ; une présentation des résultats sous l'apparence du site du métamoteur, « dans un ordre fondé sur des critères qui sont comparables » à ceux du moteur de la base. Et l'exploitant d'un tel service « n'est aucunement intéressé par les données » : il ne « consulte » donc pas (point 47). [certain] **Opus remplirait probablement le temps réel et la présentation sous son apparence ; la troisième condition, non, s'il trie par prix ramené à l'unité.** Le critère décisif reste le risque pour l'amortissement de l'investissement du producteur (CV-Online Latvia, CJUE, 03/06/2021, C-762/19), incertain tant que le négoce continue de vendre. [interprétation ; avocat]
+- **Faire passer le contenu par Opus, c'est déjà extraire.** Le transfert « permanent ou temporaire » vers un autre support, même pour une simple visualisation sur écran, est une extraction (Directmedia, CJUE, 2008, C-304/07, points 47 et 53). C'est la question française — « qui extrait ? » —, et elle compte pour la variante (b) dès que la page part vers un serveur (§11.7). [certain sur l'arrêt ; interprétation sur l'application]
+- **Base non protégée : le contrat décide quand même.** Ryanair c. PR Aviation (CJUE, 15/01/2015, C-30/14) : une base non protégée peut être fermée par contrat. [certain]
+- Recours civils du négoce : **référé contre l'auteur « ou des intermédiaires dont il utilise les services »** (L343-2), saisie-contrefaçon (L343-1). Et **L343-7 double les peines** de L343-4 quand l'auteur « est ou a été lié à la partie lésée par convention » : c'est le cas de l'artisan, lié par l'ouverture de son compte. [certain]
+
+**Le contrat — chaque négoce avec sa propre formule.** Relevé le 18/10 :
+
+- Chausson (chausson.fr/pages/cgv, mise à jour du 03/09/2026), partie « Acheteurs professionnels », art. 4 : « Le mot de passe lui est strictement personnel. » Art. 7.2 : le client en compte peut « affecter […] le montant de sa commande à son encours de crédit autorisé » ; un compte bloqué ne peut plus commander en ligne. Art. 15 : reproduction interdite sans autorisation écrite. (Le « prélèvement SEPA » ne figure que dans la partie consommateurs.) [certain]
+- Sonepar (conditions d'utilisation de sonepar.fr, mise à jour du 20/07/2026) : « Ne pas les communiquer à des tiers ni les partager entre Utilisateurs » ; toute opération depuis un compte rattaché « est réputée réalisée par lui-même […] en ce compris les obligations financières correspondantes ». [certain]
+- Rexel (rexel.fr/frx/mentions-legales, 29/08/2025) : codes « strictement personnels […] vous êtes responsable de toute utilisation de vos codes ». [certain]
+- Gedimat (gedimat.fr/article-mentions-legales-64.htm) : « usage autre que privé […] formellement interdite ». [certain]
+- Tout Faire (toutfaire.fr) : les conditions de sa **place de marché** — qui vend à des « clients consommateurs », payables comptant — interdisent le « web-scraping » et permettent de supprimer le compte « sans préavis ni indemnité » si les identifiants sont divulgués. **Elles ne disent rien du compte professionnel d'un artisan.** [certain]
+- **Point.P, Cedeo et SIMC : conditions NON VÉRIFIÉES** (403, ou mur anti-robot sur materiaux-simc.fr ; simc.fr se dit « pas un site marchand »). La faute de l'artisan n'est donc établie que chez les négoces dont on a lu les conditions.
+
+Conséquences : l'artisan qui confie ses identifiants manque à son contrat ; le droit de résilier vient du contrat et du Code civil (art. 1224 à 1226, NON VÉRIFIÉ ici : non relus), et la règle sur la rupture brutale « ne fait pas obstacle à la faculté de résiliation sans préavis, en cas d'inexécution » (Code de commerce, L442-1, II, dernier alinéa, dans sa version issue de la loi n° 2026-796) [certain]. **Il risque son compte et son crédit fournisseur** (Chausson art. 7.2, Sonepar) — c'est le premier argument à lui donner. Opus, qui connaît ces clauses, pourrait être recherché pour avoir aidé à les enfreindre (complicité de la violation d'un contrat par un tiers — formule lue seulement dans des moyens soumis à la Cour de cassation, [NON VÉRIFIÉ]) ou pour parasitisme, défini comme le fait de « se placer dans le sillage d'un autre afin de tirer indûment profit de ses efforts » (Cass. com., 23/09/2026, n° 25-14.331) [certain sur la définition ; interprétation sur l'application ; avocat].
+
+**Le pénal.** Code pénal 323-1 (accès ou maintien frauduleux : 3 ans et 100 000 €), 323-3 (extraction frauduleuse : 5 ans et 150 000 €), 323-3-1 (le programme conçu pour), 323-7 (la tentative). [certain] « Frauduleusement » suppose qu'on sache ne pas être autorisé (Cass. crim., 16/01/2018, n° 16-87.168) [certain] ; l'arrêt dit « Bluetouff » (Cass. crim., 20/05/2015, n° 14-81.336) retient le maintien de celui qui avait conscience que les données étaient protégées [lu sur une reproduction d'un cabinet d'avocat, pas sur Légifrance]. Les barrières anti-robot déjà en place pourraient être ce signal ; les contourner exposerait au pénal [interprétation ; avocat].
+
+**La règle d'Apple — un fait, pas une question d'avocat.** App Store Review Guidelines, règle 5.2.2 (developer.apple.com/app-store/review/guidelines, « Last Updated: October 16, 2026 ») : « If your app uses, accesses, monetizes access to, or displays content from a third-party service, ensure that you are specifically permitted to do so under the service's terms of use. Authorization must be provided upon request. » [certain] Pour Opus, sur iPhone, (a) comme (b) supposent donc l'autorisation écrite du négoce, quoi que dise le droit français [interprétation solide].
+
+### 11.4 Les précédents : le seul arrêt favorable repose sur le contraire de l'idée
+
+- **Amazon c. Perplexity** (9e circuit, 04/08/2026, n° 26-1444 ; cdn.ca9.uscourts.gov ; réexamen refusé le 10/09/2026) : l'agent est « a tool, not a person », et c'est l'utilisateur qui accède, parce que « Perplexity itself does not directly communicate with Amazon's servers » (p. 14). La cour admet même que Perplexity « may receive screenshots of the user's browser » sans avoir pour autant « accédé » (p. 15). Elle réserve expressément l'autre cas : « We do not address whether, on a different record or new facts, Perplexity may exercise control over the Assistant in such a way as to gain entry to Amazon's servers » (p. 15), et laisse intactes les conditions d'utilisation d'Amazon. [certain pour l'arrêt ; droit américain] **Le fondement est donc QUI communique avec les serveurs du site** — pas l'endroit où est rangé le mot de passe, idée qui vient du billet de Perplexity. **La variante (a) est le cas que la cour « n'examine pas »** : des serveurs d'Opus qui se connectent eux-mêmes. [interprétation] L'expression « server-to-server » ne figure pas dans l'arrêt : elle vient du résumé du cabinet Pearl Cohen [NON VÉRIFIÉ comme lecture de la cour]. **Et cet arrêt ne répond pas à la question française**, qui est « qui extrait ? » (Directmedia, §11.3), pas « qui envoie les requêtes ? ».
+- La suite : selon la presse (The Next Web), la plainte modifiée d'Amazon (21/09/2026) viserait Comet sur iPhone [NON VÉRIFIÉ, presse ; CourtListener refusé] ; le 14/10/2026, Perplexity a demandé le rejet de cette plainte modifiée (MLex, mlex.com/mlex/articles/2537838, titre lu dans un moteur de recherche, article non ouvert) [NON VÉRIFIÉ] ; aucune décision connue au 18/10.
+- **Facebook c. Power Ventures** (9e circuit, 2016) : la permission des utilisateurs ne suffisait plus après la lettre de mise en demeure, et les manœuvres techniques ou le recours à un tiers n'excusent rien. Des serveurs d'Opus utilisant les identifiants de l'artisan ressemblent à ce cas, pas à Perplexity. [certain pour l'arrêt ; interprétation pour la comparaison]
+- **La banque, la répétition générale.** Les agrégateurs de comptes faisaient exactement l'idée : identifiants confiés, lecture d'écran. Il a fallu la DSP2 (directive 2015/2366, art. 67 : un droit du client, **sans contrat** avec la banque, mais l'agrégateur « s'identifie » à chaque session, et les données de sécurité « ne sont pas accessibles à d'autres ») et son règlement 2018/389 (une interface où le tiers s'identifie ; fin de la lecture d'écran anonyme au 14/09/2019). **Rien d'équivalent pour un négoce** : ni le Data Act (chapitre II limité aux produits connectés), ni le DMA (seuils à 7,5 Md€) n'oblige un négoce à ouvrir un accès. [certain]
+
+### 11.5 La sécurité des identifiants : les deux exigences se contredisent
+
+Pour se reconnecter à la place de l'artisan, Opus devrait garder son mot de passe sous une forme **qu'il peut relire** (chiffrement réversible) : le hachage, qui protège les comptes Opus, est alors impossible. La CNIL (délibération 2022-100 du 21/07/2022, point 51) limite ce stockage, dans une application, aux gestionnaires de mots de passe chiffrés et déverrouillés par l'utilisateur ; « dans les autres cas, un mécanisme de jeton à durée de vie limitée et révocable à tout moment par l'utilisateur est conseillé » — c'est-à-dire la variante (c), que seul le négoce peut délivrer. [certain]
+
+Supabase Vault chiffre les secrets, « but anyone that has access to the view has access to decrypted secrets » (supabase.com/docs/guides/database/vault) : la clé de service, et l'administrateur par l'éditeur SQL, liraient tout [certain sur la documentation]. Ce serait bien au-delà de l'engagement de méthode de `DONNEES-DES-ARTISANS.md` §5.2 et d'`A-FAIRE.md` (prix nets lus par l'artisan seul, administrateur compris), que vous avez choisi le 18/10 de tenir par un **engagement écrit** — aucun écran, et l'éditeur s'engage à ne pas les lire par l'éditeur SQL (§9, règle 11). Des mots de passe relisibles par l'éditeur SQL rendraient cet engagement intenable. Et un compte pro commande **à crédit** (Chausson, partie professionnelle, art. 7.2) : une fuite chez Opus deviendrait une fraude à la commande chez tous les négoces de tous les artisans. [interprétation]
+
+**Le nœud** [interprétation] : si l'artisan détient la clé de déverrouillage (comme le veut la CNIL), l'agent ne peut plus travailler en son absence. « En arrière-plan » et « en sécurité » ne tiennent pas ensemble.
+
+**La même exigence vaut pour une clé d'interface** (variante (c), API de Rexel) : le « Pack APIs Découverte » de Rexel couvre aussi les **commandes** (§11.8). Une clé gardée par Opus doit donc être limitée à la lecture des prix et du stock, rangée côté serveur (jamais dans l'application), révocable par l'artisan, et jamais écrite dans `journal_ia` (section 38 du schéma). [interprétation]
+
+### 11.6 Technique et coût
+
+- **Les sites se défendent.** Mesuré le 18/10, une requête ordinaire par page d'accueil, **depuis un centre de données** (Virginie, d'après l'en-tête `cf-ray …-IAD`) : **403 Cloudflare** chez Point.P (« Please contact the site owner for access. »), Cedeo, Dispano ; **403 CloudFront** chez BigMat ; **page de défi Imperva** chez Samse, Doras, materiaux-simc.fr ; **DataDome** chez Rexel ; défi JavaScript chez Raboni. Chausson, Gedimat, Tout Faire répondent (reCAPTCHA sur leurs formulaires). [certain] Un refus peut viser l'adresse du centre de données autant que le programme : **ce que verrait un téléphone n'est pas mesuré.**
+- **Un agent qui navigue échoue souvent et coûte cher.** Sur de vrais sites, les seules mesures publiées portent sur des agents de **2025** : 61,3 % et 56,3 % pour les deux meilleurs agents commerciaux mesurés (OpenAI, Anthropic) sur Online-Mind2Web, qui **écarte justement les sites protégés par captcha** (arXiv 2504.01382) [certain] ; meilleur score du classement HAL à 42,33 % (août 2025) [relevé par la relecture, NON VÉRIFIÉ par moi]. Rien de comparable pour les modèles de 2026 sur de vrais sites ; sur OSWorld-Verified, un autre banc d'essai qui comprend Chrome, les meilleurs modèles de 2026 dépassent 83 % (fichier de résultats publié, lu le 18/10) [certain]. Mes estimations — 54 à 102 actions et 2 à 42 $ d'IA pour 3 articles chez 3 négoces, soit 230 à 4 900 fois le coût d'un récit de chantier (915/156 jetons le 07/10) — reposent sur les taux de 2025 et sur une durée d'action supposée [interprétation]. **L'obstacle décisif n'est de toute façon pas le taux de réussite : ce sont les barrières et le contrat.**
+- Une fonction Edge Supabase (256 Mo, 400 s au plus) ne fait pas tourner un navigateur [certain]. Et chaque capture d'écran enverrait au modèle TOUTE la page — prix, historique, adresses de chantier —, contre la règle « uniquement le contexte nécessaire » (cahier des charges §22) et contre l'encadré du §2 (« le modèle d'IA n'a pas besoin de voir les prix ») [interprétation].
+- **Le « moins cher » serait faux sans normalisation.** Relevé le 18/10 : au catalogue Gedimat, des chevrons de section 50×70 et 50×75, en longueurs de 3 à 7 m (le sens exact de « 5/7 » est à demander à l'artisan) ; chez Fabemi, au moins huit blocs 20×20×50 différents, à 60 ou 70 par palette ; chez Eqiom, le ciment en sacs de 25 kg (64 par palette) ou de 35 kg (42 par palette). [certain] Une comparaison n'est juste qu'à article équivalent, ramenée à une unité, arrondie au conditionnement, livraison comprise — c'est l'étage 1 du §2, pas un agent qui lit des pages. Et la règle 2 du §9 tient même avec un connecteur : « N prix connus, liste non exhaustive », jamais « le moins cher ».
+- **« C'est dispo » ne pourrait vouloir dire que** « le site l'affichait, pour cette agence, à telle heure ». Chausson donne sa disponibilité « à titre indicatif » (partie professionnelle, art. 8.1) ; même Tolteck renvoie à la page du négoce pour le stock. Promettre plus serait la famille du « X est prévenu » du 01/10. [certain] **Le seul prix actuel avec la disponibilité, aujourd'hui, c'est la demande de prix** (§7.2).
+
+### 11.7 La variante (b), navigateur dans l'application
+
+`react-native-webview` est fourni au SDK 57 (13.16.1) mais absent de `package.json` : c'est un module natif, donc un `eas build` avant de committer l'import (règle de CLAUDE.md) [certain]. Il faut distinguer deux cas, qui n'ont pas du tout le même statut :
+
+- **(b1) une lecture par l'application, sur le téléphone, sans IA ni envoi au serveur.** Les requêtes partent du téléphone de l'artisan, et les données y restent. Reste que c'est techniquement la capture exclue au §7.8, répétée chez tous les artisans par un script écrit par Opus. [interprétation]
+- **(b2) une lecture par l'agent.** Le contenu de la page, ou sa capture, part alors vers la fonction Edge d'Opus puis chez Anthropic : prix nets, historique des commandes, adresses de chantier, c'est-à-dire des données des clients de l'artisan. **Ce n'est plus « pour lui seul ».** C'est Opus qui transfère, donc qui extrait (Directmedia, §11.3) ; cela touche la règle 7 (secret des affaires) et la règle 12 (adresse du chantier) du §9, le statut de sous-traitant d'Opus (RGPD art. 28, alors que `EDITEUR.contratSousTraitance` vaut `false`) et le transfert hors de l'Union. [interprétation ; avocat]
+
+Dans les deux cas :
+
+- la RFC 8252, §8.12, rappelle qu'une application hôte « peut enregistrer chaque frappe […] et copier les cookies de session » ; ni le négoce ni l'artisan ne peuvent vérifier qu'Opus s'en abstient, et Google bloque sa propre connexion dans ces vues pour cette raison [certain sur la RFC] ;
+- il faudrait imposer la navigation privée (sans quoi la vue intégrée conserverait vraisemblablement les témoins de session dans l'application [NON VÉRIFIÉ]), avec son coût : l'artisan se reconnecte à chaque fois ;
+- l'agent devrait être **en lecture seule** et ne cliquer sur aucune action : la page est celle d'un compte qui commande à crédit, et un agent peut suivre des instructions trouvées dans une page [relevé par le rapport technique, NON VÉRIFIÉ ici] ;
+- Chausson bloque un compte après trois mots de passe erronés (chausson.fr/pages/faq) [certain] ;
+- **la règle 5.2.2 d'Apple impose l'autorisation du négoce** (§11.3).
+
+Verdict unique : **seulement avec l'autorisation écrite du négoce, puis l'avis d'un avocat — et, une fois l'autorisation obtenue, (c) vaut mieux que (b).**
+
+### 11.8 Les portes officielles, pour Opus
+
+1. **Le fichier du tarif net téléchargé par l'artisan lui-même** — une source de type (d), **à ajouter au §7.1**. Chez Chausson (chausson.fr/pages/faq) : « Affichage des tarifs en prix net et téléchargeables », avantage réservé aux clients « En compte » ; formats Excel ou CSV, tarif net ou public ; tarifs de l'agence de rattachement seulement ; « Les tarifs sont ceux de nos produits Internet gérés par votre agence commerciale » ; « vous ne pourrez pas les recevoir par email ». [certain] Chez Point.P : une fonction de téléchargement des tarifs nets décrite en 2014 (Batirama, 05/03/2014) et une page visible dans des résultats de recherche ; **état actuel NON VÉRIFIÉ**. Réserves : la clause de confidentialité qui accompagne ce fichier est à lire (avocat, avant le module 6) ; le fichier entier est la grille nette complète de l'artisan, pas trois lignes — importé chez des centaines d'artisans, il réunirait chez Opus les grilles de tous les négoces, ce qui relève des règles 5, 7 et 11 du §9 [interprétation].
+2. **La demande de prix** à SES négoces (§7.2) : le seul prix actuel avec la disponibilité, sans accord préalable. C'est aussi la seule voie réaliste chez les petits négoces locaux, qui n'ont pas forcément d'espace client en ligne [interprétation].
+3. **L'API client de Rexel** (plaquette « Présentation des APIs », rexel.fr) : un « Pack APIs Découverte » marqué « OFFERT », qui donne accès « aux APIs stocks, délais, informations CEE, données réglementaires, tarifs, dérogations, commandes, devis, bons de livraisons et fiches clients », pensé pour la « solution d'achat ou ERP » du client [certain]. Électricité seulement. Qu'un éditeur tiers puisse s'en servir au nom de ses clients : **NON VÉRIFIÉ**. Et une clé qui permet de commander doit être restreinte à la lecture (§11.5).
+4. **Tarifeo chez Sonepar** (module BS2I, 20 € HT par mois et par utilisateur, dans Batigest, Codial, Everwin et Optim'BTP ; prix négociés et « stocks disponibles en temps réel » ; « réservé aux clients professionnels disposant d'un compte client Sonepar ») [certain]. **Déjà cité au §7.5 : ses conditions précisent qu'« un prestataire ne peut pas être un éditeur concurrent » (art. 6 h)** ; Opus, logiciel de devis, en serait un. À demander par écrit ; refus probable [interprétation].
+5. **Un accord du type Tolteck.** Ce que l'aide de Tolteck décrit (30/07/2026) : « Connectez-vous à votre compte fournisseur dans la fenêtre qui s'ouvre » — rien sur le mécanisme [certain]. Ce qui rend ce modèle licite, c'est l'**accord** avec le négoce (Tolteck est majoritairement détenu par Saint-Gobain depuis 2018, Batiweb 22/10/2020, comme Point.P et Cedeo), pas la fenêtre. Ce qu'on demanderait : une autorisation limitée et révocable, sur le modèle d'UCP / OAuth 2.0 « sans partager les identifiants » [certain sur le modèle publié]. Peu probable chez Saint-Gobain, qui a déjà Tolteck [interprétation].
+
+**Qui, à Lambesc** (recherche-entreprises.api.gouv.fr, 18/10, code d'activité 46.73A, commerce de gros de bois et de matériaux de construction) : COMASUD (POINT P), grande entreprise ; **MATERIAUX SIMC**, entreprise de taille intermédiaire, siège à Manosque ; ATELIER DE LA TOITURE, PME ; BATECO PROVENCE. [certain] **SIMC n'est pas un petit indépendant** : c'est une enseigne régionale du **groupe Samse** — « au travers des enseignes SAMSE, DORAS, M+ Matériaux, VM Matériaux, SIMC et Plattard Négoce » —, indépendant de Saint-Gobain ; 22 agences, 529 collaborateurs et 160 M€ selon le rapport annuel 2024 du groupe (copie enregistrée ; groupe-samse.fr sert aujourd'hui un défi), 31 points de vente et près de 600 collaborateurs selon simc.fr ; rapprochée du groupe en 1992 « tout en préservant une indépendance » (simc.fr/historique). [certain] Un accord s'y déciderait probablement au niveau du groupe [interprétation]. Les vrais indépendants sont les adhérents de groupements (Gedimat, BigMat, Tout Faire) et les négoces locaux.
+
+### 11.9 Ordre de construction
+
+Il ne change pas l'ordre des modules. **(d)** s'installe avec les modules 6 (dépenses) et 7 (fournisseurs), déjà prévus ; le fichier de tarif téléchargé s'y ajoute, après lecture de sa clause de confidentialité. **(c)** se négocie au module 7, négoce par négoce, **après** la décision sur la neutralité. **(b)** seulement si un négoce l'autorise par écrit sans vouloir fournir d'interface, et après avocat — et alors (c) reste préférable. **(a) jamais.** Comme toute action d'IA, elle naît avec le journal d'audit et les permissions du §21 (règle de CLAUDE.md : « ne plus ajouter d'action IA à la main dans la fonction Edge `ai` »), et le journal n'y écrit ni prix ni fournisseur (règle 4 du §9 ; section 38 du schéma). Les secrets — clé d'interface, jeton — vivent côté serveur, jamais dans l'application.
+
+### 11.10 Ce qui demande un avocat
+
+- la protection des prix nets comme base de données ;
+- l'application d'Innoweb à (a), et en particulier sa troisième condition ;
+- le pénal de L342-2 seul, et le retour de L343-4 par la réutilisation substantielle ;
+- l'accord du titulaire du compte face au refus du maître du système (aucune décision française trouvée) ;
+- une barrière anti-robot est-elle une « mesure technique efficace » (CPI L331-5, L342-3-1, L335-4-1) ;
+- la condition « mise à la disposition du public » de L342-3 pour un espace client fermé ;
+- en (b2), la lecture par l'IA d'une page affichée par l'artisan : extraction par Opus, sous-traitance (RGPD art. 28) et transferts hors de l'Union vers le fournisseur du modèle ;
+- les clauses de confidentialité des comptes pros et du fichier de tarif téléchargé, envers un prestataire informatique ;
+- le contrat d'un connecteur officiel.
+
+La règle 5.2.2 d'Apple n'est pas dans cette liste : c'est un fait, relu mot pour mot (§11.3).
+
+### 11.11 Ce qui n'a PAS été vérifié
+
+- les conditions de Point.P, Cedeo, BigMat et du site marchand de SIMC (pages refusées à un programme) ; l'existence chez SIMC d'un espace client en ligne avec prix nets ;
+- que les refus visent tout visiteur, et pas seulement l'adresse d'un centre de données ;
+- l'état actuel du téléchargement des tarifs chez Point.P, et la clause de confidentialité qui accompagne un fichier de tarif, chez Chausson comme ailleurs ;
+- le mécanisme exact du connecteur Tolteck (jeton OAuth, vue intégrée ou autre) ;
+- les conditions d'usage de l'API Rexel et d'un partenariat Tarifeo par un éditeur tiers ;
+- le contenu de la plainte modifiée d'Amazon (presse seulement) et la requête en rejet de Perplexity (titre MLex seulement) ;
+- le comportement par défaut de `react-native-webview` pour les témoins de session ;
+- les articles 1224 à 1226 du Code civil (cités, non relus) ; la formule « aider autrui à enfreindre » un contrat (lue seulement dans des moyens) ; l'arrêt Bluetouff sur Légifrance ;
+- le meilleur score HAL d'Online-Mind2Web (relevé par la relecture) ; la durée d'une action d'agent (hypothèse) ;
+- le format d'adresse de recherche de chaque négoce pour le bouton « Chercher chez [négoce] ».
 
 ---
 

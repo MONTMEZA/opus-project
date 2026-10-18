@@ -1661,9 +1661,18 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
   `STATUT` qui quitte `'essai'`, et la décision de tenir ce rôle en
   particulier ou de s'immatriculer d'abord. Plus les deux portes de la remise
   (adresse et mot de passe, CGU), plus bas.
-- [ ] **Qui peut lire les prix des autres artisans**, éditeur SQL compris
-  (`DONNEES-DES-ARTISANS.md` §5.2 et §7, décision 3). Aucun prix d'un autre
-  artisan n'est rangé avant.
+- [x] **Qui peut lire les prix des autres artisans**, éditeur SQL compris
+  (`DONNEES-DES-ARTISANS.md` §5.2 et §7, décision 3). **Tranché le 18/10 :
+  par un engagement écrit.** Aucun écran d'Opus ne les montre, et l'éditeur
+  s'engage dans les conditions d'Opus à ne pas les lire par l'éditeur SQL —
+  un engagement, pas une impossibilité technique : le propriétaire d'un
+  projet Supabase peut toujours lire sa base. Les prix d'un artisan (frère
+  compris) peuvent donc être enregistrés, par lui.
+- [ ] **Plus tard, quand il y aura du monde** : allumer un journal des
+  lectures sur les tables de prix (extension `pgaudit`, disponible sur la
+  vraie base, non installée au 18/10). Une trace, pas un verrou :
+  l'administrateur pourrait l'éteindre, et le plan gratuit garde peu de
+  temps les journaux.
 - [ ] La **colonne métier** de la base de postes (plan 10.6, options a et b),
   avant le lot P ; le **format du numéro** de devis, avant le lot 2.
 - [ ] Le **nom de la base de prix** dont il parle, pour lire sa licence.
@@ -1735,7 +1744,15 @@ Les autres attendent leur module, et on ne les tranche PAS avant :
 - [ ] **le sort des réponses et des annonces « fournisseur »** quand un
   fournisseur supprime son compte — au module 7 ;
 - [ ] **les prix d'achat dans la future base vendue par API** — avec le
-  troisième cahier des charges, jamais sans avocat.
+  troisième cahier des charges, jamais sans avocat ;
+- [ ] **brancher les comptes fournisseurs des artisans** (votre idée du 18/10,
+  `COMPARATEUR-MATERIAUX.md` §11) — au module 7. Les serveurs d'Opus qui se
+  connectent avec les identifiants de l'artisan : **EXCLU**. Voie licite :
+  d'abord ses propres fichiers (factures, tarif net téléchargé, réponses aux
+  demandes de prix), puis un connecteur accordé par un négoce, négoce par
+  négoce, en lecture seule et révocable — après la décision sur la
+  neutralité. Un navigateur intégré : seulement avec l'autorisation écrite
+  du négoce (règle 5.2.2 d'Apple) et l'avis d'un avocat.
 
 > **Engagement de méthode, dès maintenant : les prix d'achat d'un artisan
 > seront traités pour lui seul**, sous confidentialité, administrateur

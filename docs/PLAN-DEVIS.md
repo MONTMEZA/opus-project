@@ -3427,3 +3427,15 @@ n'est pas un réglage technique :
 Ces trois points rejoignent `docs/A-FAIRE.md` (« Le devis — ce qui l'attend
 en dehors du module ») ; ils doivent être réglés **avant** la remise, pas
 après.
+
+### 10.13 Les réponses du 18/10/2026, sur le lot 0a
+
+Posées par le cahier de réalisation du lot 0a (relu deux fois), avant de
+construire :
+
+| question | réponse | ce qu'elle change |
+|---|---|---|
+| la liste unique des tarifs (devis et SOS), dans le 0a ou à part ? | **à part, juste après le 0a** | le 0a range les frais de déplacement du devis dans `tarifs_pro`, privée, et ne touche pas le SOS ; deux chiffres de déplacement coexistent le temps de l'écart, et l'écran le dit. La fiche SOS à 0 € (« 0 – 0 € » affiché à un particulier) attend ce lot |
+| la séparation du `DONNEES-DES-ARTISANS.md` §5.2 | **un engagement écrit** | aucun écran ne montre les prix d'un artisan à un autre ; l'éditeur s'engage, dans les conditions d'Opus, à ne pas les lire par l'éditeur SQL. La condition « aucun vrai prix d'un autre artisan » tombe : le frère pourra saisir les siens, lui-même |
+| les trois règles plus strictes que la loi (cahier §1.5) | **seule la relecture du SIRET chaque année** est gardée | pas d'assurance exigée en général (la décennale due selon la ligne relève des lots 1-2) ; téléphone, e-mail, garanties, modalités, mention de l'assurance et n° de TVA au réel ne bloquent que face à un consommateur (motifs `conso_`) |
+| le libellé quand l'artisan ne facture pas le déplacement | **« Déplacement offert »** | à la place de « Frais de déplacement : non facturés » |

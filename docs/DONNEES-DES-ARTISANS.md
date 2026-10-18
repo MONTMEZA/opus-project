@@ -764,6 +764,15 @@ créeriez et contrôleriez formerait avec vous une unité économique.
 > indépendant (points 407 et 408 : chaque participant n'accède qu'à ses
 > propres données et aux agrégats des autres).
 
+**Tranché par le propriétaire le 18/10/2026 : la séparation se tient par un
+ENGAGEMENT ÉCRIT.** Aucun écran d'Opus ne montre les prix d'un artisan à un
+autre, administrateur compris, et l'éditeur s'engage dans les conditions
+d'Opus à ne pas les lire par l'éditeur SQL. C'est un engagement, pas une
+impossibilité : rien n'empêche techniquement le propriétaire d'un projet
+Supabase de lire sa base. Un journal des lectures (`pgaudit`) pourra s'y
+ajouter quand il y aura du monde (`A-FAIRE.md`). Le calcul des fourchettes,
+lui, reste à faire DANS la base, comme dit ci-dessus.
+
 ### 5.3 Ce qui réduit le risque
 
 Ce sont des **facteurs**, pas une zone de sécurité : l'appréciation se fait

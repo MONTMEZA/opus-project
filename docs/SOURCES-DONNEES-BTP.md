@@ -421,15 +421,22 @@ Trois règles, qui valent pour toutes les sources :
 
 > **Moissonner un site marchand, c'est extraire sa base** (CPI L342-1 et
 > L342-2), et l'atteinte au droit du producteur est un délit (CPI L343-4 :
-> trois ans et 300 000 €, sept ans et 750 000 € en bande organisée — relu le
-> 17/10/2026 sur codes.droit.org, miroir des données de Légifrance, édition
-> du 10/10/2026). Contourner une protection anti-robot ajouterait un second
-> risque pénal : l'article 323-1 du Code pénal (accès ou maintien frauduleux
-> dans un système informatique : trois ans et 100 000 €, relu sur le même
-> miroir), que la Cour de cassation a appliqué au téléchargement de données
-> malgré une protection connue (chambre criminelle, 20/05/2015, affaire dite
-> « Bluetouff »). L'arrêt reste cité de mémoire, non relu : **à faire
-> confirmer par un avocat**.
+> trois ans et 300 000 €, sept ans et 750 000 € en bande organisée). Précisé
+> le 18/10 (`COMPARATEUR-MATERIAUX.md` §11.2) : L343-4 ne punit que
+> l'atteinte aux droits définis à **L342-1** (partie substantielle), pas
+> L342-2 (petites parties répétées), loi pénale d'interprétation stricte
+> (Code pénal 111-4) — mais interroger en temps réel le moteur d'un site
+> peut être une réutilisation substantielle (arrêt Innoweb, CJUE,
+> 19/12/2013, C-202/12), donc L342-1 et L343-4. CPI relu le 18/10/2026 sur
+> codes.droit.org, miroir des données de Légifrance, fichier dont la
+> dernière modification date du 05/08/2026. Contourner une protection
+> anti-robot ajouterait un second risque pénal : l'article 323-1 du Code
+> pénal (accès ou maintien frauduleux dans un système informatique : trois
+> ans et 100 000 €, relu sur le même miroir), que la Cour de cassation a
+> appliqué au téléchargement de données malgré une protection connue
+> (chambre criminelle, 20/05/2015, affaire dite « Bluetouff » ; lu le
+> 18/10/2026 sur la reproduction d'un cabinet d'avocat, pas sur
+> Légifrance) : **à faire confirmer par un avocat**.
 
 > **L'exception de fouille de textes ne permet pas de construire une base.**
 > Elle existe deux fois : pour le droit d'auteur (CPI L122-5-3) et pour le
