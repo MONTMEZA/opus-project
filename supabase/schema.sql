@@ -9738,6 +9738,765 @@ revoke all on function public.admin_retirer_entreprise(uuid, text) from public, 
 grant execute on function public.admin_retirer_entreprise(uuid, text) to authenticated;
 
 -- --------------------------------------------------------------------------
+--  46. MON ENTREPRISE POUR MES DEVIS — ce qui rend un devis légal (lot 0a)
+--      (18/10/2026)
+--
+--  Un devis porte des mentions que la loi impose : le nom de celui qui
+--  l'émet et sa forme, son immatriculation, son capital, ses coordonnées,
+--  son régime de TVA, son médiateur, ses garanties, ses conditions, ses
+--  frais de déplacement. Une partie vient déjà du répertoire Sirene (INSEE)
+--  par `entreprise_registre` (section 45.3). Le reste, Opus ne peut pas le
+--  deviner : cette section le fait SAISIR, et dit ce qui manque.
+--
+--  CE QU'ELLE POSE
+--  ---------------
+--    - trois tables PRIVÉES : `emetteur` (une ligne par entreprise),
+--      `emetteur_assurances` (une liste), `tarifs_pro` (les frais de
+--      déplacement du devis) ;
+--    - trois déclencheurs de NETTOYAGE, qui vivent avec leurs colonnes ;
+--    - une fonction de lecture, `emetteur_incomplet()`, qui rend ce qui
+--      manque — chaque élément « cle: phrase ».
+--
+--  CE QU'ELLE NE POSE PAS, et pourquoi
+--  -----------------------------------
+--    - ni logo, ni conditions générales de vente : c'est le lot 0b, le
+--      confort (décision du propriétaire, 17/10) ;
+--    - aucune clause de droit applicable ni de juridiction : elles sont
+--      « éventuelles » (R. 111-2 8°), rien n'est dû quand il n'y en a pas,
+--      et ce qu'on peut y écrire dépend du destinataire — c'est le lot des
+--      clauses ;
+--    - aucun autre tarif, et RIEN QUI TOUCHE LE SOS. Les tarifs des
+--      urgences se règlent encore dans « Modifier mon profil », et leur
+--      réunion avec ceux du devis est un lot à part, juste après (réponse
+--      du propriétaire du 18/10 : « juste après, à part »). Le SOS est une
+--      fonction publique qui marche : ce lot ne la touche pas, et pendant
+--      l'écart deux chiffres de déplacement coexistent — celui du devis,
+--      privé, et celui du SOS, public. L'écran le dit sous le champ ;
+--    - aucune colonne de devis (lot 1) ;
+--    - aucun lien vers `professional_profiles.siret`, figé depuis 45.7.
+--
+--  `emetteur` NE RECOPIE AUCUNE COLONNE D'`entreprise_registre`. Deux
+--  écritures de la même identité finissent par diverger, et c'est le
+--  répertoire qui dit ce qu'un numéro désigne. Les deux adresses qu'on peut
+--  saisir ne servent QUE quand Opus ne les a pas : l'établissement dont le
+--  titulaire s'est opposé à la diffusion, et le siège quand l'établissement
+--  n'en est pas un (Opus ne l'enregistre pas encore : une dette datée,
+--  écrite dans `docs/A-FAIRE.md`). Quand le répertoire donne l'adresse,
+--  C'EST LUI QUI GAGNE, partout.
+--
+--  `tarifs_pro` EST FAITE POUR DEVENIR PUBLIQUE, LIGNE PAR LIGNE. Les
+--  tarifs s'afficheront « au choix de l'artisan » (plan 10.12), et une
+--  règle RLS filtre des LIGNES, jamais des COLONNES (section 18) : un tarif
+--  rangé dans `emetteur` ne pourrait jamais devenir public sans rendre
+--  public tout le reste. D'où la règle écrite en tête de cette table :
+--  ON N'Y RANGE JAMAIS RIEN QUI DOIVE RESTER PRIVÉ.
+--
+--  PERSONNE D'AUTRE NE LIT CES TROIS TABLES — et ce qu'il faut en dire
+--  honnêtement. Aucune politique, aucune fonction `admin_*`, aucun écran ne
+--  donne à l'administration d'Opus la lecture des informations de devis
+--  d'un artisan ni de ses tarifs : le propriétaire, du métier, ne lit pas
+--  les prix des autres artisans (`DONNEES-DES-ARTISANS.md` §5.2). MAIS
+--  L'ÉDITEUR SQL DE SUPABASE RESTE UN ACCÈS OUVERT à toute la base, et
+--  aucune règle ne le ferme. Le propriétaire a choisi le 18/10 un
+--  ENGAGEMENT ÉCRIT, publié dans les textes légaux (`src/data/legal.js`) :
+--  c'est un engagement, pas une impossibilité technique, et ce commentaire
+--  ne doit pas laisser croire le contraire. Les FICHIERS d'attestation,
+--  eux, vivent dans l'espace `documents`, que l'administration lit déjà
+--  par sa politique de stockage, comme les autres pièces professionnelles.
+--
+--  CE QUE LE PROPRIÉTAIRE A GARDÉ, ET CE QU'IL A REFUSÉ (18/10/2026)
+--  -----------------------------------------------------------------
+--    - GARDÉ : l'identité doit avoir été lue au répertoire il y a moins
+--      d'un an (motif `entreprise_ancienne`). C'est une règle d'Opus, et sa
+--      phrase le dit comme telle ;
+--    - GARDÉ, et déjà décidé par le plan (10.3) : les frais de déplacement
+--      se déclarent pour tout devis, même « je n'en facture pas » ;
+--    - REFUSÉ : exiger une assurance. AUCUNE n'est exigée en général ; la
+--      table reste, l'assurance est facultative, et `emetteur_incomplet()`
+--      ne la regarde pas. Ce qui est dû selon les travaux d'un devis (la
+--      décennale jointe pour un ouvrage) relève des lots 1 et 2 ;
+--    - REFUSÉ : imposer à tout devis ce que seul le code de la
+--      CONSOMMATION exige. Ces motifs portent le préfixe `conso_` : ils ne
+--      bloquent qu'un devis à un particulier, et le filtrage par
+--      destinataire viendra au lot 2. Ce que le code de COMMERCE exige est
+--      dû sur tout document, ce n'est pas un choix : la mention EI
+--      (R. 526-27), le capital d'une SARL ou d'une société par actions
+--      (R. 123-238), et pour une entreprise immatriculée au RCS la mention
+--      RCS, la ville du greffe et le lieu du siège (R. 123-237, qui ne vise
+--      que le RCS — relu le 18/10/2026 : un artisan inscrit au seul RNE ne
+--      doit son adresse qu'au particulier, `conso_`).
+--
+--  RIEN N'EST `not null` SAUF LES CLÉS. Une fiche se remplit en plusieurs
+--  fois, et c'est au moment de REMETTRE un devis que sa complétude se juge,
+--  pas à chaque enregistrement. Toutes les contraintes sont posées après
+--  coup, nommées, et terminées par `_check` : `src/lib/erreurs.js` les
+--  reconnaît par ce suffixe et donne à chacune une phrase qui dit quoi
+--  corriger (`MESSAGES_CONTRAINTE`). Aucune n'est anonyme : une contrainte
+--  en ligne s'appellerait `emetteur_registre_check1` le jour où l'on en
+--  ajoute une seconde sur la même colonne.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  46.1 `emetteur` — une ligne par entreprise
+--
+--  La clé est la fiche professionnelle : un compte = un artisan = UNE
+--  entreprise (décision du 04/10). Pas de `created_at` : personne ne le
+--  lirait. Pas de colonne de tarif : ils vivent dans `tarifs_pro` (46.3).
+-- --------------------------------------------------------------------------
+create table if not exists public.emetteur (
+  pro_id                     uuid primary key references public.professional_profiles(id) on delete cascade,
+  -- Le nom d'un entrepreneur individuel, ÉCRIT PAR LUI, suivi de « EI »
+  -- (C. com. R. 526-27). Jamais composé depuis le nom brut du répertoire.
+  denomination_ei            text,
+  registre                   text,
+  greffe_ville               text,
+  -- En CENTIMES, dans un entier : un montant ne passe jamais par un nombre
+  -- à virgule (35,1 × 100 ne fait pas 3 510 en virgule flottante).
+  capital_centimes           bigint,
+  capital_variable           boolean,
+  en_liquidation             boolean default false,
+  locataire_gerant           boolean default false,
+  etablissement_adresse      text,
+  etablissement_code_postal  text,
+  etablissement_ville        text,
+  siege_adresse              text,
+  siege_code_postal          text,
+  siege_ville                text,
+  telephone                  text,
+  email                      text,
+  regime_tva                 text,
+  -- Posée par la BASE (46.4), jamais par le téléphone.
+  regime_tva_declare_le      timestamptz,
+  mediateur_nom              text,
+  mediateur_adresse          text,
+  mediateur_site             text,
+  garantie_legale_texte      text,
+  garantie_commerciale_texte text,
+  sav_texte                  text,
+  modalites_paiement_texte   text,
+  modalites_execution_texte  text,
+  reclamations_texte         text,
+  -- Posée par la BASE (46.4).
+  modifie_le                 timestamptz
+);
+
+/* « EI », « EIRL » ou « entrepreneur individuel » — le dernier couvre
+   aussi « entrepreneur individuel à responsabilité limitée ». `\m` et `\M`
+   sont les bornes d'un mot : « DupontEI » et « Société EIffel » ne passent
+   pas.
+   ET UN NOM À CÔTÉ : la mention seule (« EI », « entrepreneur individuel »)
+   passait, et l'en-tête s'imprimait « EI » (relecture du 18/10/2026).
+   R. 526-27 demande le NOM suivi de la mention : une fois la mention
+   retirée, il doit rester au moins deux caractères qui ne sont ni une
+   ponctuation, ni un chiffre, ni un blanc. Les lettres accentuées de « à
+   responsabilité limitée » sont écrites `.` et les séparateurs sont nommés
+   un par un : aucune expression ne dépend de la casse d'une lettre
+   accentuée ni de la collation de la base. Une chaîne ordinaire, et pas
+   `E'…'` : `\t`, `\u00a0` sont lus par le moteur d'expressions de
+   PostgreSQL, et l'apostrophe se double — un `\'` dans le fichier
+   tromperait les contrôles qui lisent `schema.sql` en suivant les chaînes.
+   Le miroir (`nomSansLaMention`, `src/lib/emetteur.js`) porte la même
+   règle. */
+alter table public.emetteur drop constraint if exists emetteur_denomination_ei_check;
+alter table public.emetteur add constraint emetteur_denomination_ei_check
+  check (denomination_ei is null
+         or (denomination_ei ~* '\m(EI|EIRL)\M|entrepreneur individuel'
+             and char_length(regexp_replace(
+                   regexp_replace(denomination_ei,
+                                  '\m(EI|EIRL)\M|entrepreneur individuel( . responsabilit. limit.e)?', '', 'gi'),
+                   '[ \t\r\n0-9,.;:''’"«»()/&+–—\u00a0\u202f-]', '', 'g')) >= 2));
+alter table public.emetteur drop constraint if exists emetteur_registre_check;
+alter table public.emetteur add constraint emetteur_registre_check
+  check (registre is null or registre in ('rcs', 'rne', 'aucun'));
+/* Un RCS se dit avec la ville de son greffe (R. 123-237 2°). Le
+   déclencheur vide le greffe quand le registre n'est pas le RCS : cette
+   contrainte ne refuse donc qu'un RCS sans greffe. */
+alter table public.emetteur drop constraint if exists emetteur_greffe_check;
+alter table public.emetteur add constraint emetteur_greffe_check
+  check ((registre = 'rcs' and greffe_ville is not null)
+         or (registre is distinct from 'rcs' and greffe_ville is null));
+/* La borne est celle de `versCentimes()` : quinze chiffres de centimes, et
+   un nombre JavaScript reste exact jusque-là. */
+alter table public.emetteur drop constraint if exists emetteur_capital_check;
+alter table public.emetteur add constraint emetteur_capital_check
+  check (capital_centimes is null or capital_centimes between 1 and 999999999999999);
+alter table public.emetteur drop constraint if exists emetteur_capital_variable_check;
+alter table public.emetteur add constraint emetteur_capital_variable_check
+  check (not (coalesce(capital_variable, false) and capital_centimes is not null));
+alter table public.emetteur drop constraint if exists emetteur_tva_check;
+alter table public.emetteur add constraint emetteur_tva_check
+  check (regime_tva is null or regime_tva in ('franchise', 'reel'));
+-- La même garde que `client_email_check` (section 41) : on refuse ce qui ne
+-- PEUT PAS être une adresse, on ne prétend pas prouver qu'elle existe.
+alter table public.emetteur drop constraint if exists emetteur_email_check;
+alter table public.emetteur add constraint emetteur_email_check
+  check (email is null
+         or (position('@' in email) > 1 and position('.' in split_part(email, '@', 2)) > 1));
+alter table public.emetteur drop constraint if exists emetteur_telephone_check;
+alter table public.emetteur add constraint emetteur_telephone_check
+  check (telephone is null
+         or (char_length(telephone) <= 30
+             and char_length(regexp_replace(telephone, '\D', '', 'g')) between 6 and 15));
+alter table public.emetteur drop constraint if exists emetteur_code_postal_check;
+alter table public.emetteur add constraint emetteur_code_postal_check
+  check ((etablissement_code_postal is null or etablissement_code_postal ~ '^[0-9]{5}$')
+         and (siege_code_postal is null or siege_code_postal ~ '^[0-9]{5}$'));
+/* LA CROISÉE N° 1 : un médiateur s'écrit en entier, ou pas du tout. Un nom
+   sans adresse ni site ne permet à personne de le saisir, et une mention
+   incomplète laisserait croire que l'obligation est remplie. */
+alter table public.emetteur drop constraint if exists emetteur_mediateur_check;
+alter table public.emetteur add constraint emetteur_mediateur_check
+  check ((mediateur_nom is null and mediateur_adresse is null and mediateur_site is null)
+         or (mediateur_nom is not null and mediateur_adresse is not null and mediateur_site is not null));
+alter table public.emetteur drop constraint if exists emetteur_mediateur_site_check;
+alter table public.emetteur add constraint emetteur_mediateur_site_check
+  check (mediateur_site is null
+         or mediateur_site ~* '^(https?://)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(/[^[:space:]]*)?$');
+/* UNE seule contrainte de longueur, et les nombres sont ceux de
+   `LONGUEUR_MAX` (`src/lib/emetteur.js`) : le formulaire pose les mêmes en
+   `maxLength`, donc ce refus ne vient que d'un client modifié.
+   `verifier-emetteur` compare les deux côtés. Le téléphone (30) est tenu
+   par `emetteur_telephone_check`, les codes postaux, le registre et le
+   régime par leur propre contrainte. */
+alter table public.emetteur drop constraint if exists emetteur_longueurs_check;
+alter table public.emetteur add constraint emetteur_longueurs_check
+  check (coalesce(char_length(denomination_ei), 0) <= 160
+         and coalesce(char_length(greffe_ville), 0) <= 80
+         and coalesce(char_length(etablissement_adresse), 0) <= 200
+         and coalesce(char_length(siege_adresse), 0) <= 200
+         and coalesce(char_length(etablissement_ville), 0) <= 120
+         and coalesce(char_length(siege_ville), 0) <= 120
+         and coalesce(char_length(email), 0) <= 254
+         and coalesce(char_length(mediateur_nom), 0) <= 160
+         and coalesce(char_length(mediateur_adresse), 0) <= 300
+         and coalesce(char_length(mediateur_site), 0) <= 200
+         and coalesce(char_length(garantie_legale_texte), 0) <= 2000
+         and coalesce(char_length(garantie_commerciale_texte), 0) <= 2000
+         and coalesce(char_length(sav_texte), 0) <= 1000
+         and coalesce(char_length(modalites_paiement_texte), 0) <= 1000
+         and coalesce(char_length(modalites_execution_texte), 0) <= 1000
+         and coalesce(char_length(reclamations_texte), 0) <= 1000);
+
+comment on table public.emetteur is
+  'Ce qui rend un devis légal et que le répertoire Sirene ne dit pas : '
+  'immatriculation, capital, coordonnées, régime de TVA, médiateur, '
+  'garanties, conditions. PRIVÉE : lisible par son seul titulaire, aucune '
+  'politique pour l''administration ni pour `anon`. Ne recopie aucune '
+  'colonne d''`entreprise_registre`. Section 46.';
+
+-- --------------------------------------------------------------------------
+--  46.2 `emetteur_assurances` — une LISTE, et facultative
+--
+--  Une entreprise peut avoir une décennale ET une responsabilité civile
+--  professionnelle, chez deux assureurs : une table fille, jamais un `jsonb`
+--  qu'aucune contrainte ne saurait garder. La clé étrangère va vers la
+--  fiche professionnelle et non vers `emetteur` : on peut déclarer une
+--  assurance avant d'avoir enregistré le reste.
+--
+--  AUCUNE ASSURANCE N'EST EXIGÉE en général (réponse du propriétaire du
+--  18/10) : une assurance déclarée s'imprime sur les devis, et l'écran
+--  rappelle seulement que celles qu'on a souscrites se déclarent.
+--
+--  LE FICHIER D'UNE ATTESTATION RETIRÉE OU REMPLACÉE RESTE dans l'espace
+--  `documents` jusqu'à la suppression du compte (la fonction Edge `compte`
+--  vide cet espace) : le même fichier peut être celui du badge, et le lot 2
+--  doit d'abord décider si un devis remis copie l'attestation ou la
+--  désigne. Écrit dans `docs/A-FAIRE.md`.
+-- --------------------------------------------------------------------------
+create table if not exists public.emetteur_assurances (
+  id                   uuid primary key default gen_random_uuid(),
+  pro_id               uuid not null references public.professional_profiles(id) on delete cascade,
+  nature               text,
+  libelle              text,
+  assureur_nom         text,
+  assureur_coordonnees text,
+  couverture           text,
+  -- FACULTATIF : aucun texte ne l'exige sur un devis, il figure sur
+  -- l'attestation.
+  numero_contrat       text,
+  valide_jusquau       date,
+  attestation_chemin   text,
+  -- Son lecteur : l'ordre de la liste et de l'en-tête imprimé.
+  created_at           timestamptz default clock_timestamp()
+);
+
+create index if not exists idx_emetteur_assurances_pro
+  on public.emetteur_assurances (pro_id);
+
+alter table public.emetteur_assurances drop constraint if exists emetteur_assurance_nature_check;
+alter table public.emetteur_assurances add constraint emetteur_assurance_nature_check
+  check (nature is null or nature in ('decennale', 'rc_pro', 'autre'));
+/* LA CROISÉE N° 2 : ce que le devis doit porter d'une assurance (R. 111-2
+   9°) — sa nature, l'assureur, ses coordonnées, la couverture
+   géographique. Le n° de contrat n'y figure PAS, exprès. Un `check` nommé
+   plutôt que des `not null` : un `not null` violé rend un message anonyme
+   (23502), sans phrase qui dise quoi corriger. */
+alter table public.emetteur_assurances drop constraint if exists emetteur_assurance_complete_check;
+alter table public.emetteur_assurances add constraint emetteur_assurance_complete_check
+  check (nature is not null and assureur_nom is not null
+         and assureur_coordonnees is not null and couverture is not null);
+alter table public.emetteur_assurances drop constraint if exists emetteur_assurance_libelle_check;
+alter table public.emetteur_assurances add constraint emetteur_assurance_libelle_check
+  check (nature is distinct from 'autre' or libelle is not null);
+/* UN SEUL NIVEAU, DANS SON DOSSIER : `<uid>/<nom>-<horodatage>.<ext>`, la
+   forme que fabrique `envoyerFichier` — y compris pour l'attestation du
+   badge, qu'on peut donc reprendre sans renvoyer le fichier. Un chemin
+   dans le dossier d'un autre désignerait sa pièce ; un niveau de plus
+   échapperait au ménage de compte (la leçon des pièces jointes, 04/10). */
+alter table public.emetteur_assurances drop constraint if exists emetteur_assurance_chemin_check;
+alter table public.emetteur_assurances add constraint emetteur_assurance_chemin_check
+  check (attestation_chemin is null or attestation_chemin ~ ('^' || pro_id::text || '/[^/]+$'));
+alter table public.emetteur_assurances drop constraint if exists emetteur_assurance_longueurs_check;
+alter table public.emetteur_assurances add constraint emetteur_assurance_longueurs_check
+  check (coalesce(char_length(libelle), 0) <= 80
+         and coalesce(char_length(assureur_nom), 0) <= 160
+         and coalesce(char_length(assureur_coordonnees), 0) <= 300
+         and coalesce(char_length(couverture), 0) <= 120
+         and coalesce(char_length(numero_contrat), 0) <= 60
+         and coalesce(char_length(attestation_chemin), 0) <= 300);
+
+comment on table public.emetteur_assurances is
+  'Les assurances professionnelles qu''un artisan déclare pour ses devis. '
+  'FACULTATIVES (décision du propriétaire, 18/10/2026) ; le n° de contrat '
+  'aussi. PRIVÉE, comme `emetteur`. Section 46.';
+
+-- --------------------------------------------------------------------------
+--  46.3 `tarifs_pro` — privée aujourd'hui, publique PAR LIGNE plus tard
+--
+--  >>> ON N'Y RANGE JAMAIS RIEN QUI DOIVE RESTER PRIVÉ. <<<
+--  Le jour où un artisan choisira d'afficher ses tarifs, c'est sa LIGNE qui
+--  deviendra lisible, toutes colonnes comprises.
+--
+--  Une ligne par entreprise, comme l'application lit déjà le SOS (un seul
+--  métier d'urgence par artisan, mesuré le 18/10). Aujourd'hui, une seule
+--  information : les frais de déplacement du DEVIS, la seule mention de
+--  prix des trois listes de l'arrêté du 24 janvier 2017 (art. 2, 4-I et
+--  4-II). Trois états, et ils ne se ressemblent pas :
+--
+--    `null`  non déclaré — un motif le réclame ;
+--    `0`     « Je ne facture pas de frais de déplacement », écrit par CET
+--            interrupteur seulement, et imprimé « Déplacement offert » ;
+--    > 0     un montant, avec ou sans conditions — ou des conditions seules.
+--
+--  Les tarifs du SOS n'y sont PAS : la réunion des deux est le lot suivant.
+-- --------------------------------------------------------------------------
+create table if not exists public.tarifs_pro (
+  pro_id                     uuid primary key references public.professional_profiles(id) on delete cascade,
+  frais_deplacement_centimes bigint,
+  frais_deplacement_texte    text
+);
+
+alter table public.tarifs_pro drop constraint if exists tarif_frais_check;
+alter table public.tarifs_pro add constraint tarif_frais_check
+  check (frais_deplacement_centimes is null or frais_deplacement_centimes between 0 and 1000000);
+/* 0 ET DES CONDITIONS, C'EST REFUSÉ — pour de vrai. « 0 » et « gratuit
+   jusqu'à 20 km, puis 0,50 €/km » ferait imprimer « Déplacement offert »,
+   ce qui est faux. Aucun déclencheur ne vide le texte en silence : la base
+   refuse, et sa phrase dit quoi faire (laisser le montant vide, ou toucher
+   l'interrupteur). */
+alter table public.tarifs_pro drop constraint if exists tarif_frais_zero_check;
+alter table public.tarifs_pro add constraint tarif_frais_zero_check
+  check (frais_deplacement_centimes is distinct from 0 or frais_deplacement_texte is null);
+alter table public.tarifs_pro drop constraint if exists tarif_frais_texte_check;
+alter table public.tarifs_pro add constraint tarif_frais_texte_check
+  check (frais_deplacement_texte is null or char_length(frais_deplacement_texte) <= 300);
+
+comment on table public.tarifs_pro is
+  'Les tarifs d''un artisan. Aujourd''hui : les frais de déplacement du devis '
+  '(null = non déclaré, 0 = non facturés). PRIVÉE, mais faite pour devenir '
+  'publique LIGNE PAR LIGNE au choix de l''artisan : on n''y range jamais '
+  'rien qui doive rester privé. Les tarifs du SOS n''y sont pas encore. '
+  'Section 46.';
+
+-- --------------------------------------------------------------------------
+--  46.4 Les trois déclencheurs — ils vivent AVEC leurs colonnes
+--
+--  Rien n'est greffé sur `tient_le_profil_pro()` ni sur `tient_le_client()` :
+--  un corps plpgsql n'est analysé qu'à l'EXÉCUTION (section 40), et y
+--  nommer une colonne née ici ne dirait rien sur une base neuve.
+--
+--  LE ROGNAGE retire espaces, tabulations ET retours à la ligne :
+--  `btrim(x, E' \t\r\n')`, et pas `btrim(x)` seul. Une garantie faite d'un
+--  seul retour à la ligne — ce que laisse un champ multiligne touché par
+--  erreur — ne doit pas compter comme une garantie écrite. Le miroir de la
+--  démonstration (`nettoyerEmetteur`, `src/lib/emetteur.js`) fait la même
+--  chose, au caractère près.
+--
+--  Les trois fonctions rendent `trigger` : le balayage de la section 43,
+--  qui passe après elles, leur retire `execute`. Personne ne peut les
+--  appeler autrement que par une écriture.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_l_emetteur()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  -- 1. Les blancs deviennent `null` : il n'y a qu'UNE façon de dire « vide ».
+  new.denomination_ei            := nullif(btrim(coalesce(new.denomination_ei, ''), E' \t\r\n'), '');
+  new.registre                   := nullif(btrim(coalesce(new.registre, ''), E' \t\r\n'), '');
+  new.greffe_ville               := nullif(btrim(coalesce(new.greffe_ville, ''), E' \t\r\n'), '');
+  new.etablissement_adresse      := nullif(btrim(coalesce(new.etablissement_adresse, ''), E' \t\r\n'), '');
+  new.etablissement_code_postal  := nullif(btrim(coalesce(new.etablissement_code_postal, ''), E' \t\r\n'), '');
+  new.etablissement_ville        := nullif(btrim(coalesce(new.etablissement_ville, ''), E' \t\r\n'), '');
+  new.siege_adresse              := nullif(btrim(coalesce(new.siege_adresse, ''), E' \t\r\n'), '');
+  new.siege_code_postal          := nullif(btrim(coalesce(new.siege_code_postal, ''), E' \t\r\n'), '');
+  new.siege_ville                := nullif(btrim(coalesce(new.siege_ville, ''), E' \t\r\n'), '');
+  new.telephone                  := nullif(btrim(coalesce(new.telephone, ''), E' \t\r\n'), '');
+  new.email                      := nullif(btrim(coalesce(new.email, ''), E' \t\r\n'), '');
+  new.regime_tva                 := nullif(btrim(coalesce(new.regime_tva, ''), E' \t\r\n'), '');
+  new.mediateur_nom              := nullif(btrim(coalesce(new.mediateur_nom, ''), E' \t\r\n'), '');
+  new.mediateur_adresse          := nullif(btrim(coalesce(new.mediateur_adresse, ''), E' \t\r\n'), '');
+  new.mediateur_site             := nullif(btrim(coalesce(new.mediateur_site, ''), E' \t\r\n'), '');
+  new.garantie_legale_texte      := nullif(btrim(coalesce(new.garantie_legale_texte, ''), E' \t\r\n'), '');
+  new.garantie_commerciale_texte := nullif(btrim(coalesce(new.garantie_commerciale_texte, ''), E' \t\r\n'), '');
+  new.sav_texte                  := nullif(btrim(coalesce(new.sav_texte, ''), E' \t\r\n'), '');
+  new.modalites_paiement_texte   := nullif(btrim(coalesce(new.modalites_paiement_texte, ''), E' \t\r\n'), '');
+  new.modalites_execution_texte  := nullif(btrim(coalesce(new.modalites_execution_texte, ''), E' \t\r\n'), '');
+  new.reclamations_texte         := nullif(btrim(coalesce(new.reclamations_texte, ''), E' \t\r\n'), '');
+
+  -- 2. L'e-mail en minuscules, comme `email_pro` et le carnet de clients.
+  new.email := lower(new.email);
+
+  -- 3. « À capital variable » REMPLACE le montant. L'écran fait disparaître
+  --    le champ, pour que ça se voie ; la base le garantit.
+  if new.capital_variable is true then
+    new.capital_centimes := null;
+  end if;
+
+  -- 4. Hors RCS, ni greffe, ni « en liquidation », ni « locataire-gérant » :
+  --    ces mentions n'existent que pour une immatriculation au RCS
+  --    (R. 123-237). L'écran vide les mêmes champs.
+  if new.registre is distinct from 'rcs' then
+    new.greffe_ville     := null;
+    new.en_liquidation   := false;
+    new.locataire_gerant := false;
+  end if;
+
+  -- 5. Deux interrupteurs : vrai ou faux, jamais « on ne sait pas ».
+  new.en_liquidation   := coalesce(new.en_liquidation, false);
+  new.locataire_gerant := coalesce(new.locataire_gerant, false);
+
+  -- 6. LA DATE DU RÉGIME DE TVA EST POSÉE PAR LA BASE, DANS LES DEUX
+  --    BRANCHES. « Déclaré le … » ne doit dépendre d'aucune horloge de
+  --    téléphone : toute valeur envoyée par le client est ignorée. À la
+  --    création, si un régime est choisi ; à la mise à jour, seulement s'il
+  --    CHANGE — sinon l'ancienne date reste, et renvoyer la fiche entière ne
+  --    la rajeunit pas. `clock_timestamp()` et non `now()` : la leçon du
+  --    journal d'administration (section 25).
+  if tg_op = 'INSERT' then
+    new.regime_tva_declare_le := case when new.regime_tva is not null then clock_timestamp() end;
+  elsif new.regime_tva is distinct from old.regime_tva then
+    new.regime_tva_declare_le := case when new.regime_tva is not null then clock_timestamp() end;
+  else
+    new.regime_tva_declare_le := old.regime_tva_declare_le;
+  end if;
+
+  -- 7. La date de modification, par la base elle aussi.
+  new.modifie_le := clock_timestamp();
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_l_emetteur
+  before insert or update on public.emetteur
+  for each row execute function public.tient_l_emetteur();
+
+comment on function public.tient_l_emetteur() is
+  'Nettoie une fiche d''émetteur avant écriture : blancs (espaces, '
+  'tabulations, retours à la ligne) → null, e-mail en minuscules, capital '
+  'variable sans montant, greffe vidé hors RCS, et pose elle-même la date '
+  'du régime de TVA et la date de modification. Section 46.4.';
+
+create or replace function public.tient_l_assurance()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.nature               := nullif(btrim(coalesce(new.nature, ''), E' \t\r\n'), '');
+  new.libelle              := nullif(btrim(coalesce(new.libelle, ''), E' \t\r\n'), '');
+  new.assureur_nom         := nullif(btrim(coalesce(new.assureur_nom, ''), E' \t\r\n'), '');
+  new.assureur_coordonnees := nullif(btrim(coalesce(new.assureur_coordonnees, ''), E' \t\r\n'), '');
+  new.couverture           := nullif(btrim(coalesce(new.couverture, ''), E' \t\r\n'), '');
+  new.numero_contrat       := nullif(btrim(coalesce(new.numero_contrat, ''), E' \t\r\n'), '');
+  new.attestation_chemin   := nullif(btrim(coalesce(new.attestation_chemin, ''), E' \t\r\n'), '');
+
+  -- Un libellé ne sert qu'à nommer une assurance « autre » : ailleurs, il
+  -- s'imprimerait à côté d'un nom qui dit déjà tout.
+  if new.nature is distinct from 'autre' then
+    new.libelle := null;
+  end if;
+
+  -- L'ORDRE DE LA LISTE NE SE RÉCRIT PAS : la date de création est
+  -- l'heure de la BASE à la création, quoi que le client envoie, puis elle
+  -- ne bouge plus. Une date forcée à l'insertion faisait passer une
+  -- assurance en tête de la liste et de l'en-tête (relecture du
+  -- 18/10/2026). Le miroir de démonstration fait la même chose.
+  if tg_op = 'UPDATE' then
+    new.created_at := old.created_at;
+  else
+    new.created_at := clock_timestamp();
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_l_assurance
+  before insert or update on public.emetteur_assurances
+  for each row execute function public.tient_l_assurance();
+
+comment on function public.tient_l_assurance() is
+  'Nettoie une assurance déclarée avant écriture : blancs → null, libellé '
+  'effacé hors « autre », date de création posée par la base puis gardée. '
+  'Section 46.4.';
+
+/* LE ROGNAGE, ET RIEN D'AUTRE. La première version de ce lot vidait les
+   conditions dès que le montant valait 0 : un artisan qui tapait « 0 » et
+   « gratuit jusqu'à 20 km, puis 0,50 €/km » perdait ses conditions sans un
+   mot, et son devis aurait imprimé « Déplacement offert ». C'est
+   `tarif_frais_zero_check` qui refuse, et le formulaire refuse « 0 » tapé
+   avant même l'envoi. */
+create or replace function public.tient_les_tarifs()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.frais_deplacement_texte := nullif(btrim(coalesce(new.frais_deplacement_texte, ''), E' \t\r\n'), '');
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_les_tarifs
+  before insert or update on public.tarifs_pro
+  for each row execute function public.tient_les_tarifs();
+
+comment on function public.tient_les_tarifs() is
+  'Rogne le texte des frais de déplacement, et rien d''autre : un 0 avec '
+  'des conditions est REFUSÉ par tarif_frais_zero_check, jamais vidé en '
+  'silence. Section 46.4.';
+
+-- --------------------------------------------------------------------------
+--  46.5 Qui lit, qui écrit
+--
+--  UNE politique par table, `for all`, et il faut dire pourquoi c'est juste
+--  ICI, puisque ce fichier porte trois cicatrices de `for all` (le badge à
+--  l'`INSERT`, la fiche pro supprimable, la ligne `users` supprimable) :
+--  les trois fois, la porte donnait sur quelque chose qui ENGAGEAIT
+--  QUELQU'UN D'AUTRE. Supprimer sa fiche d'émetteur, une assurance ou ses
+--  frais n'engage aucun tiers : un devis remis copiera ce qu'il imprime
+--  (lot 2).
+--
+--  `est_mon_entreprise()` des deux côtés — elle exige `est_un_pro()` —, et
+--  aucun `auth.uid() = …` écrit à la main (la discipline du 04/10). Elle
+--  est `security invoker` et garde son `execute` pour `anon` et
+--  `authenticated` : une politique qui appelle une fonction interdite à
+--  l'appelant ÉCHOUE au lieu de filtrer.
+--
+--  AUCUNE POLITIQUE POUR L'ADMINISTRATION. Voir l'en-tête : c'est un
+--  engagement écrit, et l'éditeur SQL reste ouvert.
+-- --------------------------------------------------------------------------
+alter table public.emetteur            enable row level security;
+alter table public.emetteur_assurances enable row level security;
+alter table public.tarifs_pro          enable row level security;
+
+drop policy if exists "mes informations de devis" on public.emetteur;
+create policy "mes informations de devis" on public.emetteur
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+drop policy if exists "mes assurances" on public.emetteur_assurances;
+create policy "mes assurances" on public.emetteur_assurances
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+drop policy if exists "mes tarifs" on public.tarifs_pro;
+create policy "mes tarifs" on public.tarifs_pro
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+/* LES DROITS DE TABLE, sans attendre qu'une politique rattrape — la leçon
+   de la section 18.2. `anon` n'a rien : un visiteur reçoit « permission
+   denied », pas une liste vide. Et `authenticated` perd `truncate`, que
+   Supabase accorde d'office et qu'AUCUNE politique RLS ne filtre : un
+   `truncate` ignore la RLS. Aucun écran ne s'en sert ; c'est un droit qui
+   n'a aucune raison d'exister, comme pour `entreprise_registre`. */
+revoke all on public.emetteur            from anon;
+revoke all on public.emetteur_assurances from anon;
+revoke all on public.tarifs_pro          from anon;
+revoke truncate on public.emetteur, public.emetteur_assurances, public.tarifs_pro from authenticated;
+
+-- --------------------------------------------------------------------------
+--  46.6 `emetteur_incomplet(p_pro)` — ce qui manque à MES devis
+--
+--  Elle rend un tableau de chaînes « cle: phrase », dans l'ordre où l'écran
+--  les affiche. UNE liste dans UNE valeur, et sa signature est DÉFINITIVE :
+--  un motif nouveau est un élément de plus, jamais un paramètre (une
+--  fonction appelée par l'application ne change jamais de signature —
+--  section 34). Et c'est SA phrase que l'écran affiche : une version de
+--  l'application en retard sur la base montre quand même un motif qu'elle
+--  ne connaît pas.
+--
+--  LES PHRASES SONT CELLES DE `MOTIFS` (`src/lib/emetteur.js`), À L'OCTET.
+--  Le miroir de démonstration les reprend, et `verifier-emetteur` compare
+--  les deux écritures : mêmes clés, même ordre, même texte. L'apostrophe est
+--  la typographique ’, jamais la droite. Les motifs `conso_` ne visent que
+--  le devis à un particulier (le code de la consommation) : le lot 2 les
+--  filtrera selon le destinataire, sans réécrire cette fonction.
+--
+--  `security invoker` : elle lit avec les droits de l'appelant, donc à
+--  travers les politiques — et SA PREMIÈRE INSTRUCTION refuse quiconque
+--  n'est pas le titulaire (OP011). `is not true` et pas `not` : sans jeton
+--  (l'éditeur SQL, une fonction Edge), `est_mon_entreprise()` vaut `null`,
+--  et un `if not null` ne refuserait rien.
+--
+--  UN SEUL `select`, et ses jointures sont écrites ici : un corps plpgsql
+--  n'est analysé qu'à l'exécution, et une colonne mal nommée ne se verrait
+--  qu'au premier appel. Les essais de la section 46 l'appellent sur chaque
+--  forme d'entreprise.
+--
+--  CE QU'ELLE NE LIT JAMAIS : `professional_profiles.verifie` (le badge
+--  n'est pas une mention de devis) ni `professional_profiles.entreprise`
+--  (le nom PUBLIC, libre, qui n'est pas l'identité légale). De la fiche
+--  pro, elle ne prend que les métiers. Et l'identité lue est l'identité
+--  ACTIVE (`retiree_le is null`) : une identité retirée ne prête pas son
+--  numéro de TVA à la suivante.
+--
+--  Une condition qui vaut `null` ne produit PAS de motif : une forme
+--  juridique inconnue ne réclame ni capital ni nom d'EI. Le miroir suit la
+--  même logique à trois valeurs.
+--
+--  Notations (le `lateral` les nomme une fois) :
+--    ei          coalesce(r.est_ei, r.forme_juridique = '1000') — une EIRL
+--                est rangée sous le même code 1000, et ne se distingue pas.
+--                Une identité de nature INCONNUE (ouverte par
+--                l'administration, SIREN et SIRET seuls) réclame un nom par
+--                `identite` : `ei is not true`, pas `not ei` ;
+--    capital_du  une SARL (54) ou une société par actions — SA (55, 56),
+--                SAS (57), SE (58), sociétés en commandite PAR ACTIONS
+--                (5308, 5309, 5370, 5385) : R. 123-238 3° et 4°. Une SNC
+--                ou une SCS indique sa forme, pas son capital. Tableau
+--                IDENTIQUE à `CAPITAL_DU_PREFIXES` / `CAPITAL_DU_FORMES` ;
+--    rcs_oblige  catégories 5 ET 6 : la catégorie 6 compte des personnes
+--                morales immatriculées au RCS (SCI, SCM, GIE, SCP
+--                d'architectes 6578 et de géomètres experts 6577) ;
+--    rcs         immatriculée au RCS : la forme l'impose (`rcs_oblige`) ou
+--                l'artisan l'a déclaré. Vrai ou faux, jamais `null`. Il
+--                décide si l'adresse du siège est due sur tout devis
+--                (R. 123-237, qui ne vise que le RCS) ou seulement face à un
+--                particulier (`conso_adresse_etablissement`,
+--                `conso_adresse_siege`) ;
+--    reglemente  un métier dont l'appartenance à une profession réglementée
+--                ne fait pas de doute (R. 111-2 6°). La liste est IDENTIQUE
+--                à `METIERS_PROFESSION_REGLEMENTEE`, et le contrôle compare
+--                les deux. Elle est à confirmer avec un juriste.
+-- --------------------------------------------------------------------------
+create or replace function public.emetteur_incomplet(p_pro uuid)
+returns text[]
+language plpgsql
+stable
+security invoker
+set search_path = public
+as $$
+declare
+  motifs text[];
+begin
+  if public.est_mon_entreprise(p_pro) is not true then
+    raise exception 'Ces informations ne sont pas les vôtres : seul le titulaire d’une fiche professionnelle peut savoir ce qui manque à ses devis.'
+      using errcode = 'OP011';
+  end if;
+
+  select array_remove(array[
+           case when r.id is null
+                then 'entreprise: Aucune entreprise n’est rattachée à votre compte. Un devis porte le nom, l’adresse et le SIRET de l’entreprise qui l’émet : le bloc « Votre entreprise » dit comment la rattacher.' end,
+           case when r.id is not null and n.ei is not true and r.denomination is null
+                then 'identite: Le nom légal de votre entreprise manque à l’entreprise rattachée à votre compte : il doit figurer sur un devis. Si votre entreprise a été lue au répertoire Sirene (INSEE), « Mettre à jour » la relit (votre SIRET vous sera redemandé) ; sinon, cela ne peut pas encore se corriger depuis l’application.' end,
+           case when r.id is not null and r.adresse is null and r.est_siege is true and n.rcs
+                 and (e.etablissement_adresse is null or e.etablissement_code_postal is null
+                      or e.etablissement_ville is null)
+                then 'adresse_etablissement: L’adresse de votre établissement, qui est aussi le siège de votre entreprise, n’a pas été transmise — c’est le cas quand son titulaire s’est opposé à sa diffusion. Une entreprise immatriculée au registre du commerce et des sociétés porte le lieu de son siège sur tous ses devis (code de commerce, R. 123-237) : écrivez-la. Elle ne s’affiche que sur vos devis.' end,
+           case when r.id is not null and r.adresse is null and (r.est_siege is not true or not n.rcs)
+                 and (e.etablissement_adresse is null or e.etablissement_code_postal is null
+                      or e.etablissement_ville is null)
+                then 'conso_adresse_etablissement: Pour un devis à un particulier : l’adresse de votre établissement n’a pas été transmise — c’est le cas quand son titulaire s’est opposé à sa diffusion —, et la loi demande de l’écrire sur le devis (code de la consommation, L. 111-1). Écrivez-la : elle ne s’affiche que sur vos devis.' end,
+           case when r.source in ('registre', 'essai') and r.verifie_le < now() - interval '365 days'
+                then 'entreprise_ancienne: Votre entreprise a été lue au répertoire Sirene (INSEE) il y a plus d’un an : une entreprise déménagée ou cessée depuis imprimerait une identité fausse. Touchez « Mettre à jour » dans « Votre entreprise » pour la relire (votre SIRET vous sera redemandé). C’est une règle d’Opus, pas une obligation de la loi.' end,
+           case when n.ei and e.denomination_ei is null
+                then 'nom_ei: Vous êtes entrepreneur individuel : votre devis doit porter votre nom suivi de « EI » ou de « entrepreneur individuel » (code de commerce, R. 526-27) ; une EIRL écrit « EIRL » ou « entrepreneur individuel à responsabilité limitée ». Écrivez-le tel qu’il doit s’imprimer : Opus ne le compose pas à votre place.' end,
+           case when r.id is not null and r.est_siege is false and n.rcs
+                 and (e.siege_adresse is null or e.siege_code_postal is null or e.siege_ville is null)
+                then 'adresse_siege: Votre établissement n’est pas le siège de votre entreprise : une entreprise immatriculée au registre du commerce et des sociétés porte aussi le lieu de son siège sur tous ses devis (code de commerce, R. 123-237). Opus ne l’a pas encore enregistrée : écrivez-la telle qu’elle figure sur votre extrait d’immatriculation.' end,
+           case when r.id is not null and r.est_siege is false and not n.rcs
+                 and (e.siege_adresse is null or e.siege_code_postal is null or e.siege_ville is null)
+                then 'conso_adresse_siege: Pour un devis à un particulier : votre établissement n’est pas le siège de votre entreprise, et la loi demande d’indiquer aussi l’adresse du siège (code de la consommation, R. 111-1). Opus ne l’a pas encore enregistrée : écrivez-la telle qu’elle figure sur votre attestation d’immatriculation.' end,
+           case when e.registre is null or (n.rcs_oblige and e.registre is distinct from 'rcs')
+                then 'registre: Dites où votre entreprise est immatriculée : au registre du commerce et des sociétés (RCS) avec la ville du greffe, au registre national des entreprises (RNE) seulement, ou nulle part. Une entreprise immatriculée au RCS doit l’écrire sur ses devis, avec la ville du greffe (code de commerce, R. 123-237) : Opus a besoin de le savoir. Pour une société, commerciale ou civile, c’est le RCS.' end,
+           case when n.capital_du and e.capital_centimes is null and e.capital_variable is not true
+                then 'capital: Une SARL ou une société par actions (SA, SAS, société en commandite par actions) indique son capital social sur ses devis, ou « à capital variable » si c’est son cas (code de commerce, R. 123-238 et L. 231-2).' end,
+           case when e.telephone is null
+                then 'conso_telephone: Pour un devis à un particulier : indiquez un numéro de téléphone, pour que le client puisse vous joindre ; la loi demande de l’écrire sur le devis (code de la consommation, L. 111-1).' end,
+           case when e.email is null
+                then 'conso_email: Pour un devis à un particulier : indiquez une adresse e-mail de contact ; la loi demande des coordonnées électroniques sur le devis (code de la consommation, L. 111-1). Elle ne s’affiche pas sur votre fiche publique.' end,
+           case when e.regime_tva is null
+                then 'regime_tva: Déclarez votre régime de TVA. En franchise, vos devis porteront « TVA non applicable, article 293 B du CGI » ; au régime réel, la TVA de chaque ligne. Opus ne peut pas le deviner : votre chiffre d’affaires n’est pas dans Opus.' end,
+           case when e.regime_tva = 'reel' and r.id is not null and r.tva is null
+                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA intracommunautaire pour votre entreprise. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus le fait en l’imprimant sur le devis, et ne l’invente pas. Touchez « Mettre à jour » dans « Votre entreprise » pour le relire (votre SIRET vous sera redemandé) ; s’il manque toujours, ou si votre entreprise a été rattachée par l’administration d’Opus, cela ne peut pas encore se corriger depuis l’application.' end,
+           case when e.mediateur_nom is null
+                then 'conso_mediateur: Pour un devis à un particulier : indiquez le médiateur de la consommation auquel vous adhérez, avec son nom, son adresse et son site (code de la consommation, L. 111-1 et R. 111-1). Ce n’est pas une information à trouver : il faut adhérer à un médiateur référencé. Un devis à un professionnel n’en a généralement pas besoin, sauf pour un petit professionnel démarché hors de son activité principale.' end,
+           case when e.garantie_legale_texte is null
+                then 'conso_garantie_legale: Pour un devis à un particulier : décrivez, en vos mots, les garanties légales qui couvrent vos travaux ; la loi demande de les rappeler sur le devis (code de la consommation, L. 111-1). Opus ne rédige pas cette mention à votre place.' end,
+           case when e.modalites_paiement_texte is null
+                then 'conso_modalites_paiement: Pour un devis à un particulier : indiquez vos modalités de paiement, c’est-à-dire quand et comment le client paie (code de la consommation, R. 111-1). L’acompte et sa date se fixeront sur chaque devis.' end,
+           case when e.modalites_execution_texte is null
+                then 'conso_modalites_execution: Pour un devis à un particulier : indiquez vos modalités d’exécution des travaux (code de la consommation, R. 111-1). Le délai, lui, s’écrira sur chaque devis.' end,
+           case when e.reclamations_texte is null
+                then 'conso_reclamations: Pour un devis à un particulier : indiquez comment un client peut vous adresser une réclamation, et comment vous la traitez (code de la consommation, R. 111-1).' end,
+           case when t.frais_deplacement_centimes is null and t.frais_deplacement_texte is null
+                then 'frais_deplacement: Déclarez vos frais de déplacement : un montant, vos conditions, ou « je n’en facture pas ». Pour un dépannage, une réparation ou un entretien chez un particulier, la loi demande de les écrire sur le devis quand vous en facturez (arrêté du 24 janvier 2017) ; Opus demande que vous le disiez pour tous vos devis, parce qu’un champ vide et « aucun » ne se distinguent pas.' end,
+           case when n.reglemente
+                then 'conso_profession_reglementee: Votre métier est une profession réglementée : pour un devis à un particulier, la loi demande de communiquer au client votre titre professionnel, l’État où il vous a été délivré et l’ordre ou l’organisme auquel vous appartenez (code de la consommation, R. 111-2). Opus les imprimerait sur le devis, mais ne sait pas encore les écrire : vos devis à des particuliers attendront qu’il le sache.' end
+         ]::text[], null)
+    into motifs
+    from (select p_pro as id) moi
+    left join public.professional_profiles p on p.id = moi.id
+    left join public.entreprise_registre r on r.pro_id = moi.id and r.retiree_le is null
+    left join public.emetteur e on e.pro_id = moi.id
+    left join public.tarifs_pro t on t.pro_id = moi.id
+   cross join lateral (
+     select coalesce(r.est_ei, r.forme_juridique = '1000') as ei,
+            left(r.forme_juridique, 2) in ('54', '55', '56', '57', '58')
+              or r.forme_juridique in ('5308', '5309', '5370', '5385') as capital_du,
+            left(r.forme_juridique, 1) in ('5', '6')        as rcs_oblige,
+            e.registre is not distinct from 'rcs'
+              or coalesce(left(r.forme_juridique, 1) in ('5', '6'), false) as rcs,
+            p.metiers && array['architecte', 'geometre-expert', 'avocat-construction',
+                               'avocat-immobilier', 'expert-comptable-btp']::text[] as reglemente
+   ) n;
+
+  return coalesce(motifs, '{}');
+end;
+$$;
+
+/* Retirée à PUBLIC ET à `anon` — PostgreSQL accorde `execute` à PUBLIC sur
+   toute fonction neuve, et Supabase l'accorde aussi à `anon` directement
+   (le piège de la section 38). Un visiteur n'a pas d'entreprise. */
+revoke all on function public.emetteur_incomplet(uuid) from public, anon;
+grant execute on function public.emetteur_incomplet(uuid) to authenticated;
+
+comment on function public.emetteur_incomplet(uuid) is
+  'Ce qui manque aux devis de l''entreprise p_pro : un tableau de « cle: '
+  'phrase », vide quand tout est là. Réservée au titulaire (OP011). Les '
+  'motifs conso_ ne valent que pour un devis à un particulier. Phrases '
+  'identiques à MOTIFS (src/lib/emetteur.js). Section 46.6.';
+
+-- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
 --  « Ce que j'ai regardé » et « mes chantiers » sont des données
@@ -9816,6 +10575,22 @@ as $$
        ancien titulaire, et je dois pouvoir le lire. */
     'entreprise_registre',
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.entreprise_registre x where x.pro_id = auth.uid()), '[]'::jsonb),
+    /* MES INFORMATIONS DE DEVIS (section 46) — et c'est l'article 15 : ce
+       sont des données sur MOI. Pour un entrepreneur individuel, son
+       assureur, ses conditions et ses tarifs sont des données personnelles.
+       Des clés qui ne se confondent avec rien : `mes_assurances_
+       professionnelles` et non `assurances`, que le lot 2 emploiera pour
+       les assurances figées d'un devis remis ; `mes_tarifs` et non
+       `tarifs`, qui désignera un jour les tarifs PUBLICS. Et la clé
+       `devis`, plus haut, désigne encore les DEMANDES de devis : elle ne
+       se renomme qu'au lot 1, avec la table des devis. */
+    'mon_entreprise',
+                 (select to_jsonb(x) from public.emetteur x where x.pro_id = auth.uid()),
+    'mes_assurances_professionnelles',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at)
+                             from public.emetteur_assurances x where x.pro_id = auth.uid()), '[]'::jsonb),
+    'mes_tarifs',
+                 (select to_jsonb(x) from public.tarifs_pro x where x.pro_id = auth.uid()),
     /* Mes demandes de compte professionnel, avec leur message libre et la
        note de l'administration : c'est ce qu'on a écrit sur moi. Colonne
        par colonne, et pas `to_jsonb(x)` : depuis le 15/10, `traitee_par`

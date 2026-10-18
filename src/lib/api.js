@@ -30,6 +30,14 @@ import { chiffresSeuls, communeLisible, departementDe } from './siret';
 import { NOM_ENTREPRISE_MAX } from './entreprise';
 import { issueDeVerification } from './erreurs';
 import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
+/* « Mon entreprise » pour les devis (section 46). `emetteur.js` et
+   `emetteur-demo.js` n'importent que des fichiers purs : aucun cycle avec
+   ce fichier, et `verifier-emetteur` peut les faire tourner. */
+import {
+  pourLaBase, nettoyerEmetteur, nettoyerAssurance, nettoyerTarifs,
+  validerEmetteur, validerAssurance, validerTarifs, motifsEmetteur, lireMotifs,
+} from './emetteur';
+import { fabriquerEmetteurDemo, PRO_DEMO_EMETTEUR } from '../data/emetteur-demo';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -69,6 +77,19 @@ const preuvesDemo = new Map();
 /* La fiche créée quand un particulier de démonstration passe pro. */
 const prosAjoutesDemo = {};
 let demandeProDemo = null;
+
+/* « MON ENTREPRISE » POUR LES DEVIS, EN DÉMONSTRATION (section 46).
+   Déclaré ICI, en haut, pour la même raison que les deux blocs du dessus.
+
+   Par fiche, `{ emetteur, assurances, tarifs }` aux noms de la base. La
+   fiche 1 part de `fabriquerEmetteurDemo()` — à moitié remplie EXPRÈS :
+   cinq manques, pour que le mécanisme vive sans fichier `.env` et s'y
+   vérifie. Fabriquée à la PREMIÈRE lecture, et pas au chargement du
+   module : ses dates se calculent depuis l'heure où l'on regarde. Les
+   identifiants sont des CHAÎNES (`String()`) : `Object.keys()` en rend, et
+   les fiches de démonstration portent des nombres — le défaut des trois
+   `===` du lot E. */
+const emetteursDemo = {};
 
 /* ------------------------------------------------------------------ */
 /*  Session                                                            */
@@ -1828,6 +1849,253 @@ async function supprimerClientSupabase(id) {
 }
 
 export const supprimerClient = hasSupabase ? supprimerClientSupabase : supprimerClientDemo;
+
+/* ==========================================================================
+   « MON ENTREPRISE » POUR LES DEVIS — ce qui rend un devis légal
+   (section 46 de `schema.sql`, lot 0a du module devis)
+
+   Trois tables PRIVÉES — `emetteur`, `emetteur_assurances`, `tarifs_pro` —
+   que seul leur titulaire lit et écrit (`est_mon_entreprise()`), et une
+   fonction qui dit ce qui manque (`emetteur_incomplet()`).
+
+   LA FORME DE CE CODE, et ce n'est pas un goût : chaque fonction existe en
+   DEUX versions NOMMÉES, et le choix se fait à la fin. La forme
+   `!hasSupabase ? async (o = {}) => { … } : …` fait échouer Metro sans
+   dire ni la ligne ni la cause (CLAUDE.md).
+
+   LA DÉMONSTRATION REFUSE AVEC LES MOTS DE LA BASE : les miroirs des
+   déclencheurs (`nettoyer*`) puis des contraintes (`valider*`), et un
+   refus lève l'erreur EXACTE de PostgreSQL (`refusDeLaBase`). C'est
+   `messageClair` qui la traduit, des deux côtés — une démonstration plus
+   aimable que la base masquerait ce que l'artisan rencontrera pour de vrai.
+   ========================================================================== */
+
+/** La fiche « devis » de démonstration de cette fiche pro, créée à la première lecture. */
+function ficheEmetteurDemo(moi) {
+  const cle = String(moi);
+  if (!emetteursDemo[cle]) {
+    emetteursDemo[cle] = cle === String(PRO_DEMO_EMETTEUR)
+      ? fabriquerEmetteurDemo(new Date())
+      : { emetteur: null, assurances: [], tarifs: null };
+  }
+  return emetteursDemo[cle];
+}
+
+/** Le refus d'une contrainte `check`, au mot près de PostgreSQL 16. */
+function refusDeContrainte(table, contrainte) {
+  return refusDeLaBase('23514',
+    `new row for relation "${table}" violates check constraint "${contrainte}"`);
+}
+
+const copieEmetteur = (f) => ({
+  emetteur: f.emetteur ? { ...f.emetteur } : null,
+  assurances: f.assurances.map((a) => ({ ...a })),
+  tarifs: f.tarifs ? { ...f.tarifs } : null,
+});
+
+/* --------------------------------------------------------------------------
+   LIRE MA FICHE — trois lectures en parallèle.
+
+   UNE ERREUR EST LEVÉE, jamais avalée : l'écran affiche alors l'état
+   d'échec, et surtout PAS un formulaire vide. Un formulaire vide après un
+   échec de lecture ferait croire que rien n'est enregistré — et un
+   « Enregistrer » touché là effacerait ce qui l'était (cahier 9.1-29).
+   -------------------------------------------------------------------------- */
+async function monEmetteurSupabase() {
+  const [e, a, t] = await Promise.all([
+    supabase.from('emetteur').select('*').eq('pro_id', currentUserId).maybeSingle(),
+    supabase.from('emetteur_assurances').select('*').eq('pro_id', currentUserId)
+      .order('created_at', { ascending: true }),
+    supabase.from('tarifs_pro').select('*').eq('pro_id', currentUserId).maybeSingle(),
+  ]);
+  for (const r of [e, a, t]) if (r.error) throw r.error;
+  return { emetteur: e.data || null, assurances: a.data || [], tarifs: t.data || null };
+}
+
+async function monEmetteurDemo() {
+  return copieEmetteur(ficheEmetteurDemo(moiEnDemo()));
+}
+
+export const monEmetteur = hasSupabase ? monEmetteurSupabase : monEmetteurDemo;
+
+/* --------------------------------------------------------------------------
+   ENREGISTRER MA FICHE ET MES FRAIS.
+
+   `emetteur` sort de `fusionnerFormulaire()` : il part de la ligne CHARGÉE,
+   pour qu'une section que l'écran n'affiche pas ne s'efface pas. Puis
+   `pourLaBase()` ne garde que les colonnes que le client a le droit
+   d'envoyer — jamais `pro_id` (posé ici, depuis la session), jamais
+   `regime_tva_declare_le` ni `modifie_le` (posées par la BASE).
+
+   Deux tables, donc deux écritures. Si la seconde échoue, la première est
+   faite : l'erreur le DIT (`e.etape = 'tarifs'`), et l'écran aussi.
+   -------------------------------------------------------------------------- */
+async function enregistrerEmetteurSupabase({ emetteur, tarifs } = {}) {
+  const { data: e, error: refus } = await supabase.from('emetteur')
+    .upsert({ ...pourLaBase('emetteur', emetteur || {}), pro_id: currentUserId }, { onConflict: 'pro_id' })
+    .select().single();
+  if (refus) throw refus;
+  let t = null;
+  if (tarifs !== undefined) {
+    const { data, error } = await supabase.from('tarifs_pro')
+      .upsert({ ...pourLaBase('tarifs_pro', tarifs || {}), pro_id: currentUserId }, { onConflict: 'pro_id' })
+      .select().single();
+    if (error) { error.etape = 'tarifs'; throw error; }
+    t = data;
+  }
+  return { emetteur: e, tarifs: t };
+}
+
+async function enregistrerEmetteurDemo({ emetteur, tarifs } = {}) {
+  const moi = moiEnDemo();
+  const f = ficheEmetteurDemo(moi);
+  /* L'upsert de la base : les colonnes envoyées remplacent, les autres restent. */
+  const ligne = { ...(f.emetteur || {}), ...pourLaBase('emetteur', emetteur || {}) };
+  const refus = validerEmetteur(ligne);
+  if (!refus.ok) throw refusDeContrainte('emetteur', refus.contrainte);
+  f.emetteur = { ...nettoyerEmetteur(ligne, f.emetteur, new Date()), pro_id: moi };
+  if (tarifs !== undefined) {
+    const lt = { ...(f.tarifs || {}), ...pourLaBase('tarifs_pro', tarifs || {}) };
+    const refusT = validerTarifs(lt);
+    if (!refusT.ok) {
+      const e = refusDeContrainte('tarifs_pro', refusT.contrainte);
+      e.etape = 'tarifs';
+      throw e;
+    }
+    f.tarifs = { ...nettoyerTarifs(lt), pro_id: moi };
+  }
+  return { emetteur: { ...f.emetteur }, tarifs: f.tarifs ? { ...f.tarifs } : null };
+}
+
+export const enregistrerEmetteur = hasSupabase ? enregistrerEmetteurSupabase : enregistrerEmetteurDemo;
+
+/* --------------------------------------------------------------------------
+   CE QUI MANQUE — la base le dit, au mot près.
+
+   C'est la phrase DE LA BASE qui s'affiche (`lireMotifs`) : une version de
+   l'application en retard sur `emetteur_incomplet()` montre quand même un
+   motif qu'elle ne connaît pas. La démonstration fait tourner son miroir,
+   `motifsEmetteur()`, sur les mêmes données — y compris les MÉTIERS de la
+   fiche, seule chose qu'on lit de `professional_profiles`.
+   -------------------------------------------------------------------------- */
+async function emetteurIncompletSupabase() {
+  const { data, error } = await supabase.rpc('emetteur_incomplet', { p_pro: currentUserId });
+  if (error) throw error;
+  return lireMotifs(Array.isArray(data) ? data : []);
+}
+
+async function emetteurIncompletDemo() {
+  const moi = moiEnDemo();
+  const f = ficheEmetteurDemo(moi);
+  const fiche = prosAjoutesDemo[moi] || demoPros[moi] || {};
+  return lireMotifs(motifsEmetteur({
+    entreprise: entreprisesDemo[moi] || null,
+    emetteur: f.emetteur,
+    tarifs: f.tarifs,
+    metiers: fiche.metiers || [],
+    maintenant: new Date(),
+  }));
+}
+
+export const emetteurIncomplet = hasSupabase ? emetteurIncompletSupabase : emetteurIncompletDemo;
+
+/* --------------------------------------------------------------------------
+   UNE ASSURANCE — la liste est une table fille : une décennale ET une RC
+   pro chez deux assureurs, ça existe.
+
+   L'ATTESTATION D'ABORD, LA LIGNE ENSUITE : c'est l'écran qui envoie le
+   fichier (`envoyerAttestation`) puis enregistre la ligne avec son chemin.
+   Une ligne qui pointerait un fichier pas encore arrivé serait un lien mort.
+   -------------------------------------------------------------------------- */
+async function enregistrerAssuranceSupabase(valeurs, id = null) {
+  const ligne = pourLaBase('emetteur_assurances', valeurs || {});
+  if (id) {
+    const { data, error } = await supabase.from('emetteur_assurances')
+      .update(ligne).eq('id', id).eq('pro_id', currentUserId)
+      .select().single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await supabase.from('emetteur_assurances')
+    .insert({ ...ligne, pro_id: currentUserId })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function enregistrerAssuranceDemo(valeurs, id = null) {
+  const moi = moiEnDemo();
+  const f = ficheEmetteurDemo(moi);
+  const ancien = id ? f.assurances.find((a) => String(a.id) === String(id)) : null;
+  if (id && !ancien) throw new Error('Cette assurance n’existe plus : rechargez l’écran.');
+  const ligne = { ...(ancien || {}), ...pourLaBase('emetteur_assurances', valeurs || {}) };
+  /* `moiEnDemo()` et pas `currentUserId` (« demo-user ») : la contrainte
+     du chemin d'attestation compare au dossier de la FICHE. */
+  const refus = validerAssurance(ligne, moi);
+  if (!refus.ok) throw refusDeContrainte('emetteur_assurances', refus.contrainte);
+  const propre = {
+    ...nettoyerAssurance(ligne, ancien, new Date()),
+    id: ancien ? ancien.id : `demo-assurance-${Date.now()}`,
+    pro_id: moi,
+  };
+  if (ancien) f.assurances = f.assurances.map((a) => (String(a.id) === String(id) ? propre : a));
+  else f.assurances = [...f.assurances, propre];
+  return { ...propre };
+}
+
+export const enregistrerAssurance = hasSupabase ? enregistrerAssuranceSupabase : enregistrerAssuranceDemo;
+
+/* RETIRER UNE ASSURANCE — et le fichier RESTE dans `documents`, exprès :
+   il peut être aussi l'attestation du badge, et le lot 2 doit d'abord
+   décider si un devis remis copie l'attestation ou la référence. La
+   suppression du compte, elle, vide cet espace. */
+async function retirerAssuranceSupabase(id) {
+  const { error } = await supabase.from('emetteur_assurances')
+    .delete().eq('id', id).eq('pro_id', currentUserId);
+  if (error) throw error;
+  return true;
+}
+
+async function retirerAssuranceDemo(id) {
+  const f = ficheEmetteurDemo(moiEnDemo());
+  f.assurances = f.assurances.filter((a) => String(a.id) !== String(id));
+  return true;
+}
+
+export const retirerAssurance = hasSupabase ? retirerAssuranceSupabase : retirerAssuranceDemo;
+
+/* L'ATTESTATION, dans l'espace PRIVÉ `documents`, sous
+   `<compte>/attestation-assurance-<horodatage>.<ext>` : un seul niveau, dans
+   son dossier — exactement la forme qu'exige `emetteur_assurance_chemin_check`. */
+async function envoyerAttestationSupabase(doc) {
+  if (!doc || !doc.uri) return null;
+  return envoyerFichier({
+    uri: doc.uri, bucket: 'documents', nom: 'attestation-assurance', userId: currentUserId,
+    nomOrigine: doc.nom || null, typeMime: doc.type || null,
+  });
+}
+
+/* En démonstration, `envoyerFichier` rendrait l'adresse LOCALE du fichier,
+   que la contrainte du chemin refuse. On fabrique donc un chemin dans le
+   dossier de la fiche — `moiEnDemo()`, jamais « demo-user » —, qui passe le
+   miroir de la contrainte comme passerait le vrai. */
+async function envoyerAttestationDemo(doc) {
+  if (!doc) return null;
+  return `${moiEnDemo()}/attestation-assurance-demo-${Date.now()}.pdf`;
+}
+
+export const envoyerAttestation = hasSupabase ? envoyerAttestationSupabase : envoyerAttestationDemo;
+
+/* « Voir l'attestation » : une adresse SIGNÉE de cinq minutes, comme tous
+   les documents privés. En démonstration, il n'y a pas de fichier : `null`,
+   et l'écran n'affiche pas le bouton. */
+async function lienAttestationSupabase(chemin) {
+  return urlDocumentSupabase(chemin);
+}
+
+async function lienAttestationDemo() { return null; }
+
+export const lienAttestation = hasSupabase ? lienAttestationSupabase : lienAttestationDemo;
 
 /**
  * ENREGISTRER LES PUBLICATIONS QU'ON VIENT DE REGARDER.
@@ -3601,7 +3869,22 @@ async function rattacherMonSiretDemo(siret) {
       + 'compte. Un compte Opus correspond à une seule entreprise : en changer ne peut pas '
       + 'encore se faire depuis l’application.');
   }
-  entreprisesDemo[moi] = { ...preuve, source: 'registre', verifie_le: new Date().toISOString() };
+  /* L'ADRESSE DE RUE NE SE PERD PAS À LA RELECTURE — 18/10/2026, lot 0a.
+     En base, la preuve garde l'adresse CÔTÉ SERVEUR (`preuves_siret.adresse`,
+     que la fonction Edge n'envoie jamais au téléphone), et
+     `rattacher_mon_siret()` la recopie. Ici, la preuve est l'identité du
+     TÉLÉPHONE, sans adresse : relire son propre SIRET effaçait donc
+     l'adresse, et « Mon entreprise » inventait un manque (« l'adresse de
+     votre établissement n'a pas été transmise ») que la base n'aurait pas —
+     sur le chemin même que le motif « relire le SIRET chaque année »
+     conseille. Le même SIRET désigne le même établissement, donc la même
+     adresse : on la garde. Un AUTRE établissement repart sans, comme une
+     démonstration qui ne connaît pas sa rue. */
+  const memeEtablissement = actuelle && actuelle.siret === preuve.siret && actuelle.adresse
+    ? { adresse: actuelle.adresse } : {};
+  entreprisesDemo[moi] = {
+    ...preuve, ...memeEtablissement, source: 'registre', verifie_le: new Date().toISOString(),
+  };
   return { ...entreprisesDemo[moi] };
 }
 

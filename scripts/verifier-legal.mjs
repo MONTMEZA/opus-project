@@ -14,6 +14,8 @@
  *
  * node scripts/verifier-legal.mjs
  */
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import {
   VERSION, STATUT, DOMAINE, EDITEUR, MENTIONS, CGU, CONFIDENTIALITE,
   editeurComplet, manquesEditeur, rappelStatut,
@@ -403,6 +405,205 @@ console.log('\nLe SIRET : ce qu’il ouvre, ce qu’il ne prouve pas');
   verifier('les Sources ne promettent pas la date « à chaque donnée affichée »',
     !/chaque donnée affichée/i.test(mentions) && /Mon entreprise/.test(section(MENTIONS, /Sources/)),
     'le rappel de vérification et la ligne sous le nom n’en portent pas');
+}
+
+/* ==================================================================
+   LES TARIFS D'UN ARTISAN — l'engagement écrit du 18/10/2026
+   (lot 0a du devis, section 46 de `schema.sql`).
+
+   Le propriétaire a tranché le préalable de `DONNEES-DES-ARTISANS.md` §5.2
+   — « personne ne lit les prix d'un autre artisan, éditeur SQL compris » —
+   par un ENGAGEMENT ÉCRIT. Un engagement se vérifie de deux façons, et il
+   faut les deux :
+
+     - LE TEXTE dit vrai : c'est un engagement, PAS une impossibilité
+       technique (l'éditeur pourrait lire la base avec les outils de
+       l'hébergeur), et il ne promet aucun journal des lectures, qui
+       n'existe pas encore ;
+     - LE CODE rend vraie la phrase « aucun écran d'Opus ne les montre à un
+       autre » : seuls les fichiers de « Mon entreprise » nomment les
+       tarifs, l'API ne les lit que pour le compte connecté, et la base ne
+       les ouvre qu'à leur titulaire — aucune politique pour `anon` ni pour
+       l'administration, aucune fonction `admin_` ne les lit. Le jour où un
+       écran d'administration les afficherait, le texte opposable
+       deviendrait faux : c'est CE contrôle qui doit rougir, pas un lecteur
+       des conditions six mois plus tard.
+
+   Les phrases sont cherchées DANS LEUR SECTION, jamais « quelque part » :
+   la leçon de la Base Adresse.
+   ================================================================== */
+console.log('\nLes tarifs d’un artisan : un engagement écrit, et le code qui le rend vrai');
+{
+  const section = (blocs, motif) => blocs.filter((b) => motif.test(b.titre))
+    .map((b) => b.texte).join(' ');
+  const engagement = section(CGU, /tarifs et vos prix/i);
+
+  verifier('la version des textes a changé avec l’engagement (18/10/2026 au moins)',
+    VERSION >= '2026-10-18',
+    `VERSION = ${VERSION}. Un engagement nouveau de l’éditeur est un changement de fond : une `
+    + 'acceptation ancienne ne le couvre pas.');
+  verifier('les conditions portent l’engagement de l’éditeur sur les prix des artisans',
+    engagement.length > 0 && /s’engage à ne pas les consulter/.test(engagement)
+    && /outils d’administration/.test(engagement),
+    'section « Vos tarifs et vos prix » introuvable, ou sans l’engagement de ne pas consulter '
+    + 'les prix par les outils d’administration de la base');
+  verifier('…dit que c’est un ENGAGEMENT, pas une impossibilité technique',
+    /pas une impossibilité technique/.test(engagement),
+    'l’éditeur peut lire la base avec les outils de l’hébergeur : écrire le contraire dans un '
+    + 'texte opposable serait une fausse promesse, qui engage son auteur');
+  const sansAveu = tout.replace(/pas une impossibilité technique/g, '');
+  verifier('…et aucun texte ne prétend que l’éditeur NE PEUT PAS lire les prix',
+    !/ne (peut|pourra|pourrait|sait)\s+(pas|jamais|en aucun cas)[^.]{0,80}(prix|tarif)/i.test(sansAveu)
+    && !/impossib[^.]{0,80}(prix|tarif)/i.test(sansAveu),
+    'c’est le seul mensonge qu’on serait tenté d’écrire, et le plus grave');
+  /* NI UN JOURNAL QUI EXISTERAIT, NI UN JOURNAL QUI VIENDRAIT. « Aucun
+     journal n'enregistre ENCORE une telle lecture » laissait attendre un
+     journal dans un texte opposable, et « un journal viendra en 2027 »
+     passait ce contrôle (relecture du 18/10/2026, éprouvé). Le journal est
+     « pour plus tard, quand il y aura du monde » : une note dans
+     `docs/A-FAIRE.md`, jamais une promesse aux artisans. */
+  const futur = /(encore|viendra|sera|seront|prévu|prévue|bientôt|prochainement|à venir|\b20\d\d\b)(?![\p{L}])/iu;
+  const phrasesJournal = engagement.split(/(?<=\.)\s+/).filter((ph) => /journal|registre des lectures/i.test(ph));
+  verifier('…ni qu’un journal enregistre les lectures, ni qu’il en viendra un : il n’existe pas',
+    /aucun journal/.test(engagement)
+    && !/(chaque|toute) lecture[^.]{0,40}(est|sera) (enregistrée|journalisée|tracée|consignée)/i.test(tout)
+    && phrasesJournal.length > 0 && phrasesJournal.every((ph) => !futur.test(ph)),
+    `${phrasesJournal.filter((ph) => futur.test(ph)).join(' | ') || 'aucune phrase sur le journal'} — `
+    + 'le journal des lectures est « pour plus tard, quand il y aura du monde » (docs/A-FAIRE.md), '
+    + 'pas une promesse');
+  /* LA SOURCE DU N° DE TVA (cahier 5.8, a) : c'est la liste de la DGFiP,
+     par l'annuaire des entreprises — le répertoire Sirene ne le publie pas.
+     L'ancienne phrase le rangeait dans « ce que le répertoire Sirene de
+     l'INSEE en dit » : on vise l'énumération du répertoire elle-même. */
+  const collecte = section(CONFIDENTIALITE, /Ce que nous collectons/);
+  const iSirene = collecte.indexOf('ce que le répertoire Sirene de l’INSEE en dit');
+  const enumeration = iSirene < 0 ? '' : collecte.slice(iSirene, collecte.indexOf(' — ;', iSirene));
+  verifier('« Ce que nous collectons » attribue le n° de TVA à la DGFiP, jamais au répertoire Sirene',
+    enumeration.length > 40 && !/TVA/.test(enumeration)
+    && /numéro de TVA intracommunautaire que publie la DGFiP/.test(collecte),
+    'le répertoire Sirene ne publie aucun numéro de TVA : le lui attribuer est faux, et c’est '
+    + 'l’attribution que la Licence Ouverte demande d’écrire juste');
+  verifier('« Vos documents professionnels » dit que l’attestation accompagne aussi les devis',
+    /accompagner vos devis/.test(section(CONFIDENTIALITE, /documents professionnels/)),
+    'une finalité nouvelle s’annonce : l’attestation jointe dans « Mon entreprise » part avec les devis');
+  verifier('la politique de confidentialité y renvoie, depuis « Ce que nous collectons »',
+    /« Vos tarifs et vos prix »/.test(section(CONFIDENTIALITE, /Ce que nous collectons/)),
+    'la collecte des frais de déplacement doit nommer l’engagement qui les protège');
+
+  /* --- ce que le texte promet, le CODE le tient --- */
+  const sansCommentairesJs = (c) => c.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const fichiers = execFileSync('git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
+    .split('\n').filter((f) => f.endsWith('.js'));
+  /* Les seuls fichiers qui ont le droit de nommer les tarifs : l'API (pour
+     le compte connecté), le calcul pur, la démonstration, et les écrans de
+     « Mon entreprise » — que seul le titulaire ouvre. */
+  const PERMIS = ['src/lib/api.js', 'src/lib/emetteur.js', 'src/data/emetteur-demo.js',
+    'src/components/MonEntreprise.js', 'src/components/FicheEmetteur.js',
+    'src/components/ApercuEntete.js', 'src/components/PretAEmettre.js'];
+  const nomment = fichiers.filter((f) => /tarifs_pro|frais_deplacement/.test(sansCommentairesJs(readFileSync(f, 'utf8'))));
+  const intrus = nomment.filter((f) => !PERMIS.includes(f));
+  verifier(`« aucun écran d’Opus » : seuls les fichiers de « Mon entreprise » nomment les tarifs (${nomment.length} trouvés)`,
+    nomment.length >= 3 && intrus.length === 0,
+    intrus.length ? `${intrus.join(', ')} : un écran de plus qui lit les tarifs rendrait faux le `
+      + 'texte opposable « Vos tarifs et vos prix ».' : 'moins de trois fichiers trouvés : ce contrôle a perdu sa cible');
+
+  const api = sansCommentairesJs(readFileSync('src/lib/api.js', 'utf8'));
+  const appels = [...api.matchAll(/from\('tarifs_pro'\)[\s\S]*?;/g)].map((m) => m[0]);
+  verifier(`…l’API ne les lit et ne les écrit que pour le compte connecté (${appels.length} appels)`,
+    appels.length >= 2 && appels.every((a) => /currentUserId/.test(a)),
+    'un `from(\'tarifs_pro\')` qui ne désigne pas `currentUserId` lirait les prix d’un autre');
+
+  const sql = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '');
+  const politiques = [...sql.matchAll(/create policy "[^"]+" on public\.tarifs_pro[\s\S]*?;/g)].map((m) => m[0]);
+  verifier('…la base ne les ouvre qu’à leur titulaire : une politique, `est_mon_entreprise`, rien pour `anon` ni l’administration',
+    politiques.length === 1 && /for all to authenticated/.test(politiques[0])
+    && (politiques[0].match(/public\.est_mon_entreprise\(pro_id\)/g) || []).length === 2
+    && !/est_admin|\banon\b|auth\.uid\(\)/.test(politiques[0])
+    && /revoke all on public\.tarifs_pro\s+from anon;/.test(sql),
+    `${politiques.length} politique(s) sur tarifs_pro. Une lecture pour l’administration ferait `
+    + 'mentir « ni dans l’espace d’administration ».');
+  /* UNE PROPRIÉTÉ, PAS UN NOM — relecture du 18/10/2026. Ce contrôle ne
+     regardait que les fonctions nommées `admin_…` : une fonction `security
+     definer` sous un autre nom (`frais_d_un_artisan`), accordée à `anon`,
+     rendait les frais de n'importe quel artisan à un visiteur, et les 47
+     contrôles restaient verts (éprouvé). Il vise désormais CE QUI LIT :
+       - toute fonction de `schema.sql` qui nomme une des trois tables, quel
+         que soit son nom, doit être dans une liste FERMÉE — les trois
+         déclencheurs, `emetteur_incomplet`, `mes_donnees` — et AUCUNE ne
+         peut être `security definer` (elle lirait par-dessus les
+         politiques) ;
+       - aucune vue ne les nomme ;
+       - aucune fonction Edge ne les nomme : avec la clé de service, elle
+         lirait tout, sans aucune politique.
+     LA LISTE DES TABLES S'ALLONGERA : au lot 1, les prix des lignes de devis
+     (`devis_lignes`) entreront dans la promesse « les tarifs et les prix que
+     vous enregistrez pour vos devis » — et dans `PRIVEES` ci-dessous.
+
+     Le SQL est lu SANS SES COMMENTAIRES, par un lecteur qui respecte les
+     chaînes (y compris `E'…\'…'`) : un nom de table cité dans un commentaire
+     ne compte pas, un nom caché dans un `execute $q$…$q$` compte. */
+  const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
+  const PERMISES = ['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs', 'emetteur_incomplet',
+    'mes_donnees'];
+  const sansCommentairesSql = (t) => {
+    let sortie = '';
+    let i = 0;
+    while (i < t.length) {
+      const c = t[i];
+      const suite = t[i + 1];
+      if (c === '-' && suite === '-') { while (i < t.length && t[i] !== '\n') i += 1; continue; }
+      if (c === '/' && suite === '*') {
+        const fin = t.indexOf('*/', i + 2);
+        i = fin < 0 ? t.length : fin + 2;
+        sortie += ' ';
+        continue;
+      }
+      if (c === "'") {
+        const echappe = /[eE]/.test(t[i - 1] || '') && !/[\w$]/.test(t[i - 2] || '');
+        let j = i + 1;
+        while (j < t.length) {
+          if (echappe && t[j] === '\\') { j += 2; continue; }
+          if (t[j] === "'" && t[j + 1] === "'") { j += 2; continue; }
+          if (t[j] === "'") break;
+          j += 1;
+        }
+        sortie += t.slice(i, j + 1);
+        i = j + 1;
+        continue;
+      }
+      sortie += c;
+      i += 1;
+    }
+    return sortie;
+  };
+  const sqlNu = sansCommentairesSql(readFileSync('supabase/schema.sql', 'utf8'));
+  const fonctions = [...sqlNu.matchAll(
+    /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?(\w+)\s*\(([\s\S]*?)\bas\s+(\$\w*\$)([\s\S]*?)\3/gi,
+  )].map((m) => ({ nom: m[1], attributs: m[2], corps: m[4] }));
+  /* 78 fonctions le 18/10/2026 (deux « create function » de plus dans le
+     fichier ne sont que des exemples écrits en commentaire). Moins de 60 :
+     le lecteur a perdu sa cible, et le contrôle le dit au lieu de passer. */
+  const lisent = fonctions.filter((f) => PRIVEES.test(f.corps));
+  const horsListe = [...new Set(lisent.filter((f) => !PERMISES.includes(f.nom)).map((f) => f.nom))];
+  const definer = [...new Set(lisent.filter((f) => /security\s+definer/i.test(f.attributs)).map((f) => f.nom))];
+  verifier(`…aucune fonction hors d’une liste fermée ne lit ces tables, quel que soit son nom (${fonctions.length} fonctions lues, ${lisent.length} les nomment)`,
+    fonctions.length >= 60 && lisent.length >= 2 && horsListe.length === 0,
+    horsListe.length ? `${horsListe.join(', ')} : une fonction de plus qui lit les tarifs ferait mentir `
+      + '« Vos tarifs et vos prix ». Si elle est légitime, elle entre dans la liste, avec sa raison.'
+      : 'le lecteur ne trouve plus les fonctions, ou plus celles qui lisent ces tables : il est devenu aveugle');
+  verifier('…et aucune de celles qui les lisent n’est `security definer` (elle lirait par-dessus les politiques)',
+    lisent.length >= 2 && definer.length === 0, definer.join(', '));
+  const vues = [...sqlNu.matchAll(/create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+[\s\S]*?;/gi)]
+    .map((m) => m[0]).filter((v) => PRIVEES.test(v));
+  verifier('…aucune vue ne les nomme', vues.length === 0, vues.map((v) => v.slice(0, 80)).join(' | '));
+  const edge = execFileSync('git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', 'supabase/functions'], { encoding: 'utf8' })
+    .split('\n').filter((f) => /\.(ts|js|mjs)$/.test(f));
+  const edgeQuiLisent = edge.filter((f) => PRIVEES.test(sansCommentairesJs(readFileSync(f, 'utf8'))));
+  verifier(`…et aucune fonction Edge ne les nomme (${edge.length} fichiers lus) : la clé de service lirait tout`,
+    edge.length >= 3 && edgeQuiLisent.length === 0,
+    edgeQuiLisent.length ? edgeQuiLisent.join(', ') : 'moins de trois fichiers de fonctions Edge : le contrôle a perdu sa cible');
 }
 
 console.log('');

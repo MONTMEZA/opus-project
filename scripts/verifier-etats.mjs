@@ -290,8 +290,12 @@ console.log('\nUne consultation qui n’aboutit pas n’accuse jamais le numéro
   verifier('messageClair ne rend jamais l’anglais de functions-js',
     [sansReseau, panne, relais].every((e) => !anglais.test(messageClair(e, 'Vérification'))),
     [sansReseau, panne, relais].map((e) => messageClair(e, 'Vérification')).join(' | '));
+  /* Insensible à la casse depuis le 18/10/2026 : appelée SANS sujet, la
+     phrase prend désormais sa majuscule (« Pas de connexion. »), au lieu
+     d'ouvrir une phrase par une minuscule. Ce qui est vérifié ici, c'est
+     qu'on parle de RÉSEAU, pas la casse de la première lettre. */
   verifier('…et une fonction injoignable est reconnue comme une perte de réseau',
-    /pas de connexion/.test(messageClair(sansReseau)));
+    /pas de connexion/i.test(messageClair(sansReseau)));
 
   const gotrue = messageClair(new Error('Database error saving new user'));
   verifier('« Database error saving new user » dit quoi faire, en français',
@@ -370,6 +374,25 @@ console.log('\nLa démonstration fait vivre CHAQUE issue, sans un vrai SIRET');
     + 'pour tout autre — et jamais l’adresse, que la fonction Edge ne rend pas');
 }
 
+/* LE MOT « VÉRIFIÉ », ENFIN VU — corrigé avec « Mon entreprise » (lot 0a
+   du devis, 18/10/2026).
+
+   Le motif d'avant, `/v[ée]rifi[ée]e?s?\b/i`, NE VOYAIT PAS « vérifié » :
+   `\b` est une limite de mot au sens ASCII, et « é » n'y est pas une
+   lettre. Mesuré : `/v[ée]rifi[ée]e?s?\b/i.test('le badge « vérifié »')`
+   rend `false`. Ce contrôle passait donc au vert depuis le 15/10 sur le
+   mot même qu'il devait interdire — la onzième fois dans ce projet qu'un
+   contrôle rend le bon résultat pour la mauvaise raison.
+
+   Le motif juste borne le mot par « ce qui n'est ni une lettre ni un
+   souligné » (`(?![\p{L}_])`, avec le drapeau `u`) : « Vérifier », nom
+   d'un bouton, et « vérification » restent permis ; `verifie_le`, nom de
+   colonne, aussi. UNE SEULE exception, écrite : « badge « vérifié » », le
+   NOM du badge, qu'emploie `IdentiteEntreprise.js` pour dire qu'une fiche
+   badgée n'a pas de porte. */
+const VERIFIE = /v[ée]rifi[ée]e?s?(?![\p{L}_])/iu;
+const sansNomDuBadge = (t) => String(t).replace(/badge « vérifié »/g, '');
+
 console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée », jamais « registre »');
 {
   const ent = await import('../src/lib/entreprise.js');
@@ -384,7 +407,7 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
     ent.resumeEntreprise({ source: 'administration', verifie_le: '2026-10-15' })]);
   /* « vérifié(e) » est le mot du BADGE ; « Vérifier », le nom d'un bouton,
      reste permis. Le motif vise le statut, pas le verbe. */
-  const interdites = phrases.filter((t) => /v[ée]rifi[ée]e?s?\b/i.test(t) || /registre/i.test(t));
+  const interdites = phrases.filter((t) => VERIFIE.test(sansNomDuBadge(t)) || /registre/i.test(t));
   verifier('aucune phrase ne dit « vérifié(e) » ni « registre »',
     phrases.length > 15 && interdites.length === 0, interdites.join(' | '));
   /* Ni « certifié », « agréé » ou « validé par l'État » — sauf dans la
@@ -428,14 +451,64 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
 
   /* Les fichiers d'écran du niveau « répertoire ». Les textes de la porte
      de secours (« Opus va vérifier votre entreprise… ») parlent d'un
-     HUMAIN, et vivent ailleurs, exprès. */
-  const ecrans = ['src/components/SaisieSiret.js', 'src/components/FeuilleEntreprise.js',
+     HUMAIN, et vivent ailleurs, exprès.
+
+     `FeuilleEntreprise.js` a disparu avec le lot 0a du devis : son contenu
+     vit dans `IdentiteEntreprise.js`, un bloc de « Mon entreprise ». La
+     cible change, la règle non — un contrôle qui garderait l'ancien nom
+     planterait, et un contrôle qui plante ne vérifie rien. */
+  const ecrans = ['src/components/SaisieSiret.js', 'src/components/IdentiteEntreprise.js',
     'src/components/CarteDemandePro.js', 'src/lib/entreprise.js'];
   const fautifs = ecrans.filter((f) => {
     const c = sansCommentaires(lire(f));
-    return /v[ée]rifi[ée]e?s?\b/i.test(c) || /registre/i.test(c);
+    return VERIFIE.test(sansNomDuBadge(c)) || /registre/i.test(c);
   });
   verifier('…ni dans les écrans qui parlent du répertoire', fautifs.length === 0, fautifs.join(', '));
+
+  /* LES ÉCRANS DU DEVIS, eux, ont le droit d'écrire « registre » — mais
+     seulement dans ses deux noms complets, « registre du commerce et des
+     sociétés » et « registre national des entreprises », qui sont la loi.
+     Jamais « registre Sirene », jamais « registre de l'INSEE » : le
+     répertoire n'est pas un registre. On lit les TEXTES (chaînes et texte
+     JSX, recollées quand elles sont coupées par un `+`) : `registre` est
+     aussi un nom de colonne, et l'accuser serait accuser du code juste. */
+  const textesDe = (code) => {
+    const recolle = code.replace(/(['`])\s*\+\s*(['`])/g, '');
+    const chaines = [
+      ...recolle.matchAll(/'((?:[^'\\\n]|\\.)*)'/g),
+      ...recolle.matchAll(/"((?:[^"\\\n]|\\.)*)"/g),
+      ...recolle.matchAll(/`([^`]*)`/g),
+      /* Le texte JSX : entre la fin d'une balise et la suivante — mais pas
+         le `>` d'une flèche `=>`, qui a d'abord fait accuser `REGISTRES`,
+         un nom de constante. */
+      ...recolle.matchAll(/(?<![=\-])>([^<>{}=;]+)</g),
+    ].map((m) => m[1]);
+    /* Un texte HUMAIN a une espace ; `'registre'` seul est une valeur. */
+    return chaines.filter((t) => /\s/.test(t.trim()));
+  };
+  const DEVIS = ['src/components/FicheEmetteur.js', 'src/components/PretAEmettre.js',
+    'src/components/ApercuEntete.js', 'src/lib/emetteur.js'];
+  const fautifsDevis = [];
+  DEVIS.forEach((f) => {
+    const c = sansCommentaires(lire(f));
+    if (VERIFIE.test(sansNomDuBadge(c))) fautifsDevis.push(`${f} : « vérifié »`);
+    textesDe(c).forEach((t) => {
+      if (/registre(?! du commerce et des sociétés| national des entreprises)/i.test(t)) {
+        fautifsDevis.push(`${f} : « ${t.slice(0, 70)} »`);
+      }
+    });
+  });
+  verifier('…ni dans les écrans du devis : « registre » seulement pour le RCS et le RNE',
+    fautifsDevis.length === 0, fautifsDevis.join(' | '));
+
+  /* Le motif lui-même, éprouvé : s'il redevenait aveugle à l'accent, tout
+     ce qui précède passerait au vert sans rien voir. */
+  verifier('le motif voit « vérifié », « vérifiée », « VÉRIFIÉS » — et laisse « Vérifier », « vérification », `verifie_le`',
+    ['le badge « vérifié » est', 'Entreprise vérifié', 'entreprise vérifiée', 'SIRET VÉRIFIÉS']
+      .every((t) => VERIFIE.test(t))
+    && ['Touchez « Vérifier »', 'une vérification à la main', 'r.verifie_le']
+      .every((t) => !VERIFIE.test(t))
+    && !VERIFIE.test(sansNomDuBadge('porte le badge « vérifié », accordé')));
 }
 
 console.log('\nLe champ SIRET ne coupe rien, et la porte de secours ne démarre pas en pro');

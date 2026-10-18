@@ -34,6 +34,115 @@
  * est survenue » tout seul ne vaut rien.
  */
 
+/**
+ * CE QUE CHAQUE CONTRAINTE DE LA BASE VEUT DIRE, À L'ÉCRAN — 18/10/2026.
+ *
+ * POURQUOI UNE TABLE, ET PAS UNE PHRASE GÉNÉRALE
+ * ----------------------------------------------
+ * Jusqu'ici, toute contrainte `check` refusée rendait la même phrase : « la
+ * base a refusé cette valeur (contrainte « x »). Le plus souvent,
+ * `schema.sql` n'a pas été rejoué. » C'était juste pour la panne du format
+ * « montage » (une valeur que l'APPLICATION envoie sans l'avoir déclarée) ;
+ * c'est FAUX pour une contrainte qui garde ce qu'un artisan tape. Un médiateur
+ * à moitié rempli, un nom d'entrepreneur individuel sans « EI » : ce n'est ni
+ * un schéma oublié ni une panne, c'est une saisie à corriger — et la phrase
+ * l'envoyait chercher dans un fichier qu'il n'ouvrira jamais.
+ *
+ * Une contrainte qui garde une SAISIE a donc sa phrase ici, qui dit quoi
+ * corriger. La piste « schema.sql » ne reste que pour une contrainte
+ * INCONNUE de cette table, c'est-à-dire une faute de développeur.
+ *
+ * Les phrases commencent par une minuscule : `messageClair` les pose après
+ * « Vos informations de devis : », et `messageDeContrainte` leur met la
+ * majuscule quand elles s'affichent seules, sous un champ.
+ *
+ * LES NOMS SONT CEUX DE LA BASE, au caractère près. `verifier-emetteur` et
+ * `verifier-clients` le comparent : une phrase rangée sous un nom qui
+ * n'existe pas ne s'afficherait jamais, et rien ne le dirait.
+ */
+const TEXTE_TROP_LONG = 'un de vos textes dépasse la longueur prévue : le formulaire indique la '
+  + 'limite de chaque champ.';
+export const MESSAGES_CONTRAINTE = Object.freeze({
+  /* --- « Mon entreprise » pour les devis : section 46 de `schema.sql` --- */
+  emetteur_denomination_ei_check: 'votre nom d’entrepreneur individuel s’écrit avec votre nom suivi '
+    + 'de « EI » ou de « entrepreneur individuel » (« EIRL » pour une EIRL) : la mention seule ne '
+    + 'suffit pas, c’est la règle du code de commerce (R. 526-27).',
+  emetteur_registre_check: 'choisissez où votre entreprise est immatriculée : RCS, RNE seulement, '
+    + 'ou aucun registre.',
+  emetteur_greffe_check: 'une entreprise immatriculée au RCS indique la ville de son greffe : '
+    + 'écrivez-la, ou choisissez un autre registre.',
+  emetteur_capital_check: 'le capital s’écrit comme un montant positif.',
+  emetteur_capital_variable_check: 'une société à capital variable n’indique pas de montant : '
+    + '« à capital variable » le remplace.',
+  emetteur_tva_check: 'choisissez la franchise en base ou le régime réel.',
+  emetteur_email_check: 'cette adresse e-mail n’en est pas une : il manque l’arobase, ou le point '
+    + 'du domaine.',
+  emetteur_telephone_check: 'ce numéro de téléphone n’a pas le bon nombre de chiffres.',
+  emetteur_code_postal_check: 'un code postal fait cinq chiffres.',
+  emetteur_mediateur_check: 'un médiateur s’indique en entier (son nom, son adresse et son site) '
+    + 'ou pas du tout : une mention incomplète vaut moins qu’une absence.',
+  emetteur_mediateur_site_check: 'le site du médiateur doit être une adresse web, qui commence '
+    + 'par « https:// » ou « www. ».',
+  emetteur_longueurs_check: TEXTE_TROP_LONG,
+  emetteur_assurance_nature_check: 'choisissez décennale, responsabilité civile professionnelle, '
+    + 'ou autre.',
+  emetteur_assurance_complete_check: 'une assurance s’écrit avec sa nature, le nom de l’assureur, '
+    + 'ses coordonnées et sa couverture géographique : c’est ce que le devis doit porter. Le '
+    + 'numéro de contrat, lui, est facultatif.',
+  emetteur_assurance_libelle_check: 'nommez cette assurance : « autre » ne dit rien au client.',
+  emetteur_assurance_chemin_check: 'cette attestation n’est pas rangée dans votre espace : '
+    + 'envoyez-la depuis ce formulaire.',
+  emetteur_assurance_longueurs_check: TEXTE_TROP_LONG,
+  tarif_frais_check: 'les frais de déplacement s’écrivent comme un montant entre 0 et 10 000 €.',
+  tarif_frais_zero_check: 'vous avez indiqué 0 € et des conditions. Si vous facturez selon des '
+    + 'conditions, laissez le montant vide et écrivez-les ; si vous ne facturez jamais de '
+    + 'déplacement, touchez « Je ne facture pas de frais de déplacement ».',
+  tarif_frais_texte_check: TEXTE_TROP_LONG,
+
+  /* --- Le carnet de clients : section 41 ---
+     Ces contraintes gardent elles aussi une SAISIE. Le formulaire refuse
+     avant d'envoyer (`validerClient`), donc ces phrases ne sortent que
+     d'une version en retard de l'application ou d'un client modifié — mais
+     ce jour-là, « schema.sql n'a pas été rejoué » serait une piste fausse
+     pour une faute de frappe dans un SIRET. */
+  client_type_check: 'choisissez « particulier » ou « entreprise » pour ce client.',
+  client_nom_check: 'le nom du client est obligatoire, et ne dépasse pas 120 caractères.',
+  client_siret_check: 'un SIREN fait 9 chiffres, un SIRET 14 : le numéro saisi n’a pas cette '
+    + 'longueur.',
+  client_siret_particulier_check: 'un particulier n’a pas de SIRET : passez ce client en '
+    + '« entreprise », ou retirez le numéro.',
+  client_email_check: 'cette adresse e-mail n’en est pas une : il manque l’arobase, ou le point '
+    + 'du domaine.',
+  client_code_postal_check: 'un code postal fait cinq chiffres.',
+  client_telephone_check: TEXTE_TROP_LONG,
+  client_notes_check: TEXTE_TROP_LONG,
+  client_adresse_check: TEXTE_TROP_LONG,
+  client_ville_check: TEXTE_TROP_LONG,
+});
+
+/* « Vos informations de devis : » suivi de la phrase, ou la phrase seule
+   avec sa majuscule. */
+function phrase(sujet, message) {
+  if (sujet) return `${sujet}${message}`;
+  return message.charAt(0).toUpperCase() + message.slice(1);
+}
+
+/**
+ * La phrase d'une contrainte, prête à s'afficher SEULE sous un champ.
+ *
+ * L'écran l'appelle avec le nom que lui rend un validateur de démonstration
+ * ou de formulaire (`validerEmetteur`, `validerTarifs`…), qui sont les
+ * miroirs des contraintes de la base : les deux côtés disent ainsi la même
+ * chose avec les mêmes mots. Un nom inconnu est une faute de développeur —
+ * `verifier-emetteur` refuse qu'il en existe —, mais il ne doit jamais
+ * laisser un champ en rouge sans explication.
+ */
+export function messageDeContrainte(nom) {
+  const m = MESSAGES_CONTRAINTE[nom];
+  if (m) return phrase('', m);
+  return `Cette valeur n’est pas acceptée (règle « ${String(nom)} »).`;
+}
+
 /** Vrai quand l'erreur vient manifestement du réseau, pas du programme. */
 export function estUnProblemeDeReseau(e) {
   const m = String((e && e.message) || e || '').toLowerCase();
@@ -122,7 +231,8 @@ export function messageClair(e, quoi = '') {
   const m = brut.toLowerCase();
   const sujet = quoi ? `${quoi} : ` : '';
 
-  /* LES CODES MAISON DE LA BASE (OP001 à OP010) PORTENT DÉJÀ LEUR PHRASE,
+  /* LES CODES MAISON DE LA BASE (OP001 et suivants — OP011 naît avec la
+     section 46, OP003 reste réservé au devis remis) PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler
      ici, c'est écrire la même règle à deux endroits — et la première des
@@ -134,13 +244,16 @@ export function messageClair(e, quoi = '') {
 
   /* Le réseau d'abord : c'est le cas le plus fréquent sur un chantier, et
      celui où l'utilisateur n'a rien fait de mal. */
+  /* `phrase()` partout où le message commence par une minuscule : appelé
+     SANS sujet, « pas de connexion. » ouvrait une phrase par une minuscule
+     (relecture du 18/10/2026, sous le champ des frais de déplacement). */
   if (estUnProblemeDeReseau(e)) {
-    return `${sujet}pas de connexion. Vérifiez votre réseau — `
-      + 'ce qui est déjà affiché reste lisible, et vous pourrez réessayer.';
+    return phrase(sujet, 'pas de connexion. Vérifiez votre réseau — '
+      + 'ce qui est déjà affiché reste lisible, et vous pourrez réessayer.');
   }
   if (estUneSessionExpiree(e)) {
-    return `${sujet}votre session a expiré. Fermez et rouvrez l'application `
-      + 'pour vous reconnecter.';
+    return phrase(sujet, 'votre session a expiré. Fermez et rouvrez l\'application '
+      + 'pour vous reconnecter.');
   }
 
   /* Une fonction Edge qui a RÉPONDU, mais pas en 2xx : une panne d'Opus,
@@ -148,8 +261,54 @@ export function messageClair(e, quoi = '') {
      affichait « Edge Function returned a non-2xx status code ». */
   const nomErreur = String((e && e.name) || '');
   if (nomErreur === 'FunctionsHttpError' || nomErreur === 'FunctionsRelayError') {
-    return `${sujet}le service d’Opus n’a pas répondu correctement. Ce n’est pas `
-      + 'de votre fait : réessayez dans quelques minutes.';
+    return phrase(sujet, 'le service d’Opus n’a pas répondu correctement. Ce n’est pas '
+      + 'de votre fait : réessayez dans quelques minutes.');
+  }
+
+  /* --- TROIS REFUS DE LA BASE QUI SORTAIENT EN ANGLAIS — 18/10/2026 ---
+     Lus par le CODE d'abord (PostgREST le transmet, la démonstration le
+     pose), puis par le texte. Les textes ci-dessous sont ceux de
+     PostgreSQL 16, relevés tels quels ; `verifier-emetteur` fait tourner
+     cette fonction dessus. */
+
+  /* 23503 — une clé étrangère. Deux sens, qui ne se disent pas pareil :
+     on écrit une ligne qui désigne quelque chose qui a disparu, ou l'on
+     supprime quelque chose que d'autres lignes désignent encore. */
+  if (code === '23503' || m.includes('violates foreign key constraint')) {
+    if (m.includes('update or delete on table')) {
+      return phrase(sujet, 'cet enregistrement est encore utilisé ailleurs (par exemple sur '
+        + 'un devis) : il ne peut pas être supprimé.');
+    }
+    return phrase(sujet, 'cet enregistrement désigne quelque chose qui n’existe plus (une '
+      + 'fiche, un client) : rechargez l’écran.');
+  }
+  /* 22003 — un nombre trop grand pour sa colonne. JAMAIS « out of range »
+     seul : la date impossible du 22008 (« date/time field value out of
+     range », le 31 février du 04/10) le contient aussi, et elle n'a rien à
+     voir avec un zéro de trop. */
+  if (code === '22003' || m.includes('numeric field overflow')
+    || m.includes('out of range for type') || /\b(big|small)?int(eger)? out of range/.test(m)) {
+    return phrase(sujet, 'ce nombre est trop grand pour être enregistré : il y a sans doute un '
+      + 'zéro de trop.');
+  }
+  /* 23502 — une colonne obligatoire laissée vide. Ce n'est jamais la faute
+     de celui qui tape : le formulaire aurait dû la demander. */
+  if (code === '23502' || m.includes('violates not-null constraint')) {
+    const colonne = (brut.match(/column "([^"]+)"/i) || [])[1];
+    return phrase(sujet, 'une information obligatoire manque'
+      + (colonne ? ` (« ${colonne} »)` : '')
+      + '. Le formulaire aurait dû la demander : c’est un défaut d’Opus, pas le vôtre.');
+  }
+  /* PGRST116 — PostgREST rend cette erreur quand `.single()` attend UNE
+     ligne et n'en reçoit aucune : on modifie ce qu'un autre appareil vient
+     de retirer (une assurance, par exemple). Elle sortait en anglais, alors
+     que la démonstration disait déjà « n’existe plus : rechargez l’écran »
+     (relecture du 18/10/2026) — une démonstration plus aimable que la base,
+     la première règle de CLAUDE.md. */
+  if (code === 'PGRST116' || m.includes('multiple (or no) rows returned')
+    || m.includes('cannot coerce the result to a single json object')) {
+    return phrase(sujet, 'cet enregistrement n’existe plus, ou il vient de changer depuis un '
+      + 'autre appareil : rechargez l’écran.');
   }
 
   /* --- l'authentification, reprise d'AuthScreen où elle était enfermée --- */
@@ -192,7 +351,18 @@ export function messageClair(e, quoi = '') {
      `posts_type_check`. La base refusait, le mode démo n'y voyait rien, et
      le message ne parlait que de contrainte. */
   if (m.includes('violates check constraint') || m.includes('check constraint')) {
-    const nom = (brut.match(/"([a-z0-9_]+_check)"/i) || [])[1];
+    /* `_check\d*` : une contrainte qu'on n'a pas nommée reçoit de
+       PostgreSQL le nom `<table>_<colonne>_check`, puis `…_check1`,
+       `…_check2` pour les suivantes (mesuré). Sans le `\d*`, elle sortait
+       sans aucun nom. */
+    const nom = (brut.match(/"([a-z0-9_]+_check\d*)"/i) || [])[1];
+    /* Une contrainte qui garde une SAISIE dit quoi corriger, sans parler de
+       schéma : ce n'est pas une panne. */
+    if (nom && MESSAGES_CONTRAINTE[nom]) return phrase(sujet, MESSAGES_CONTRAINTE[nom]);
+    /* Sinon, la piste d'aujourd'hui, et elle ne vaut plus que pour une
+       contrainte INCONNUE de la table ci-dessus : une valeur que
+       l'application envoie sans l'avoir déclarée à la base, c'est-à-dire
+       une faute de développeur. */
     return `${sujet}la base a refusé cette valeur`
       + (nom ? ` (contrainte « ${nom} »)` : '')
       + '. Le plus souvent, `supabase/schema.sql` n’a pas été rejoué.';
@@ -210,8 +380,15 @@ export function messageClair(e, quoi = '') {
       + 'Elle se suit sur votre profil, où vous pouvez joindre un justificatif — ou '
       + 'l’annuler pour en faire une autre.';
   }
-  if (m.includes('duplicate key') || m.includes('already exists')) {
-    return `${sujet}cela existe déjà.`;
+  /* 23505 — « cela existe déjà » ne disait ni quoi, ni quoi faire. Une
+     contrainte d'unicité qui garde une saisie aura sa phrase dans
+     `MESSAGES_CONTRAINTE` ; sinon, le cas le plus fréquent : la même ligne
+     enregistrée deux fois, depuis deux appareils ou par un double appui. */
+  if (code === '23505' || m.includes('duplicate key') || m.includes('already exists')) {
+    const nom = (brut.match(/constraint "([a-z0-9_]+)"/i) || [])[1];
+    if (nom && MESSAGES_CONTRAINTE[nom]) return phrase(sujet, MESSAGES_CONTRAINTE[nom]);
+    return phrase(sujet, 'cet enregistrement existe déjà : il a sans doute été créé '
+      + 'entre-temps, depuis un autre appareil. Rechargez l’écran.');
   }
   if (m.includes('permission denied for function')) {
     const nom = (brut.match(/function ([a-z0-9_]+)/i) || [])[1];
@@ -312,6 +489,12 @@ export function estDefinitif(e) {
     || m.includes('row-level security')
     || m.includes('violates')
     || code.startsWith('23')   // contraintes
+    /* La classe 22, « donnée invalide » : un nombre trop grand (22003), une
+       date impossible (22008), un texte qui n'est pas un nombre (22P02).
+       Ce code ne commence ni par 23 ni par 42, et sans cette ligne
+       `avecReprise` retentait un zéro de trop deux secondes et demie plus
+       tard — pour la même réponse. */
+    || code.startsWith('22')
     || code.startsWith('42')   // droits, syntaxe
     || /^OP\d{3}$/.test(code); // un refus écrit par la base : elle a répondu
 }

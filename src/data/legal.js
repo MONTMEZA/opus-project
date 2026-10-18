@@ -29,7 +29,20 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-15';
+export const VERSION = '2026-10-18';
+/* 18/10/2026 — « Mon entreprise » pour les devis (lot 0a, section 46 de
+   `schema.sql`). Ce qui a changé DE FOND : ce qui est collecté pour les
+   devis (immatriculation, assurances et attestations, médiateur,
+   garanties, conditions, frais de déplacement) ; la SOURCE du n° de TVA,
+   qui n'est pas le répertoire Sirene mais la liste de la DGFiP ; la
+   finalité de l'attestation d'assurance, qui accompagne désormais les
+   devis ; et un ENGAGEMENT nouveau de l'éditeur, opposable : il ne
+   consulte pas les tarifs et les prix qu'un artisan enregistre pour ses
+   devis (réponse du propriétaire, 18/10/2026). Un engagement de plus est un
+   changement de fond : une acceptation ancienne ne le couvre pas.
+
+   LA VERSION D'AVANT, et pourquoi elle est gardée en mémoire ci-dessous :
+   le 15/10, le SIRET devenait la condition de l'inscription pro. */
 /* 15/10/2026 — le SIRET devient la condition de l'inscription
    professionnelle (section 45 de `schema.sql`). Ce qui a changé DE FOND :
    qui peut ouvrir un compte pro, la décision automatique et la façon de la
@@ -504,6 +517,45 @@ export const CGU = [
       + "un motif de signalement à part entière.",
   },
   {
+    /* L'ENGAGEMENT DE L'ÉDITEUR SUR LES PRIX DES ARTISANS — réponse du
+       propriétaire du 18/10/2026 au préalable de `DONNEES-DES-ARTISANS.md`
+       §5.2 : « personne ne lit les prix d'un autre artisan, éditeur SQL
+       compris ». Il a choisi l'ENGAGEMENT ÉCRIT.
+
+       DANS LES CONDITIONS, ET PAS DANS LA POLITIQUE DE CONFIDENTIALITÉ :
+       c'est une promesse de l'éditeur envers l'artisan, sur des données
+       d'entreprise autant que personnelles — un contrat, donc. La politique
+       de confidentialité y renvoie, depuis « Ce que nous collectons ».
+
+       CE QU'IL DIT, ET CE QU'IL NE DIT PAS — et `verifier-legal` le tient :
+         - aucun écran d'Opus ne montre ces prix à un autre que l'artisan :
+           c'est VRAI dans le code, et le contrôle vérifie qu'aucun écran,
+           aucune politique ni aucune fonction d'administration ne lit
+           `tarifs_pro` ;
+         - l'éditeur PEUT techniquement les lire avec les outils de
+           l'hébergeur : il s'engage à ne pas le faire. Un engagement, PAS
+           une impossibilité technique — le dire autrement serait faux, et
+           un texte opposable qui ment engage son auteur ;
+         - aucun journal des lectures n'existe : le texte ne le promet
+           pas, et ne dit pas « encore », qui laisserait attendre un
+           journal dans un texte opposable (« plus tard, quand il y aura du
+           monde » : `docs/A-FAIRE.md`, pas une promesse) ;
+         - rien d'autre n'est promis — ni statistique, ni usage futur : ce
+           n'est pas la question qui a été tranchée. */
+    titre: 'Vos tarifs et vos prix',
+    texte: 'Les tarifs et les prix que vous enregistrez pour vos devis — aujourd’hui vos '
+      + 'frais de déplacement — ne sont montrés à personne d’autre que vous par aucun écran '
+      + 'd’Opus : ni à un autre artisan, ni à un visiteur, ni dans l’espace '
+      + 'd’administration. Seuls les devis que vous adressez vous-même à un client les '
+      + 'portent, pour ce client. La base de données le garantit pour les autres utilisateurs. '
+      + 'L’éditeur d’Opus, qui administre cette base, pourrait techniquement les lire avec '
+      + 'les outils d’administration de l’hébergeur : il s’engage à ne pas les consulter. '
+      + 'C’est un engagement, pas une impossibilité technique, et aucun journal n’enregistre '
+      + 'une telle lecture. Pour faire fonctionner le service, il peut compter les '
+      + 'lignes ou vérifier la structure de la base sans lire vos prix. Seule une obligation '
+      + 'légale pourrait l’amener à les communiquer.',
+  },
+  {
     titre: 'Ce qui est interdit',
     /* « Demandez une vérification à la main » est IMPOSSIBLE depuis un
        compte déjà professionnel (la base réserve la demande aux
@@ -606,8 +658,9 @@ export const CONFIDENTIALITE = [
       + 'votre entreprise, et ce que le répertoire Sirene de l’INSEE en dit au moment '
       + 'de la consultation — dénomination, nom commercial, le nom complet tel que le '
       + 'répertoire le publie (pour un entrepreneur individuel : vos nom et prénoms), '
-      + 'forme juridique, date de création, code d’activité, numéro de TVA s’il en '
-      + 'existe un, commune et adresse de l’établissement. Ces informations sont rangées '
+      + 'forme juridique, date de création, code d’activité, commune et adresse de '
+      + 'l’établissement — ; et le numéro de TVA intracommunautaire que publie la DGFiP, '
+      + 's’il en existe un. Ces informations sont rangées '
       + 'à part de votre fiche : '
       + 'seuls vous et l’administration d’Opus pouvez les lire. Un numéro saisi à la '
       + 'main dans l’ancien champ « SIRET » de la fiche, avant le 15/10/2026, reste '
@@ -618,7 +671,14 @@ export const CONFIDENTIALITE = [
       + 'que vous choisissez de joindre. Quand un numéro SIRET est consulté au '
       + 'répertoire, une empreinte chiffrée de l’adresse IP de l’appareil est '
       + 'enregistrée pour limiter le nombre d’essais ; l’adresse elle-même n’est pas '
-      + 'rangée dans la base d’Opus.',
+      + 'rangée dans la base d’Opus. Si vous êtes professionnel, pour vos devis : votre '
+      + 'immatriculation, votre capital, vos assurances et leurs attestations, votre '
+      + 'médiateur, vos garanties, vos conditions de paiement, d’exécution et de '
+      + 'réclamation, vos frais de déplacement. Aucun écran d’Opus ne les montre à '
+      + 'quelqu’un d’autre que vous ; les attestations jointes, comme vos autres documents '
+      + 'professionnels, sont aussi lisibles par l’administration d’Opus. Pour vos tarifs '
+      + 'et vos prix, l’éditeur prend en plus un engagement écrit dans les conditions '
+      + 'd’utilisation (« Vos tarifs et vos prix »).',
   },
   {
     titre: 'Ce que nous ne collectons pas',
@@ -634,10 +694,11 @@ export const CONFIDENTIALITE = [
     titre: 'Vos documents professionnels',
     texte: 'Le Kbis, l’extrait d’immatriculation et l’attestation d’assurance sont '
       + 'rangés dans un espace PRIVÉ, lisible par vous et par l’administration d’Opus '
-      + 'seulement. Ils ne sont jamais affichés publiquement et servent uniquement au '
-      + 'contrôle du badge vérifié, ou à l’examen d’une demande d’ouverture de compte '
-      + 'professionnel — dont le justificatif suit les mêmes règles, et ne passe jamais '
-      + 'par la messagerie.',
+      + 'seulement. Ils ne sont jamais affichés publiquement et servent au contrôle du '
+      + 'badge vérifié, à l’examen d’une demande d’ouverture de compte professionnel — '
+      + 'dont le justificatif suit les mêmes règles, et ne passe jamais par la '
+      + 'messagerie — et, pour l’attestation d’assurance que vous joignez dans « Mon '
+      + 'entreprise », à accompagner vos devis.',
   },
   {
     titre: 'Pourquoi, et sur quelle base',

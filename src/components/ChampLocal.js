@@ -87,12 +87,21 @@ const ChampLocal = forwardRef(function ChampLocal({
     }
   }, [surSeuil, seuilLong]);
 
+  /* LE CHAMP LUI-MÊME, pour « Suivant » — ajouté avec « Mon entreprise »
+     (lot 0a du devis). La touche « Suivant » d'un clavier doit AMENER au
+     champ d'après, sinon elle ne fait que refermer le clavier (le défaut
+     du 11/10). Seul un champ d'une ligne en a besoin : `TextArea` n'est
+     pas une `forwardRef`, et un retour à la ligne n'enchaîne jamais. */
+  const interieur = useRef(null);
+
   useImperativeHandle(ref, () => ({
     /** Le texte exact, à l'instant où on le demande. */
     lire: () => vif.current,
     /** Écrire depuis l'écran — l'assistant de relecture s'en sert. */
     ecrire: (t) => changer(t || ''),
     vider: () => changer(''),
+    /** Donner la main à ce champ — la touche « Suivant » du champ d'avant. */
+    focus: () => { if (interieur.current && interieur.current.focus) interieur.current.focus(); },
   }), [changer]);
 
   /* L'AMORCE — un texte que l'écran pose DANS le champ au moment où il
@@ -109,9 +118,11 @@ const ChampLocal = forwardRef(function ChampLocal({
     if (onAmorceUtilisee) onAmorceUtilisee();
   }, [amorce, changer, onAmorceUtilisee]);
 
-  const Composant = multiligne ? TextArea : Field;
+  if (multiligne) {
+    return <TextArea value={texte} onChangeText={changer} style={style} {...reste} />;
+  }
   return (
-    <Composant value={texte} onChangeText={changer} style={style} {...reste} />
+    <Field ref={interieur} value={texte} onChangeText={changer} style={style} {...reste} />
   );
 });
 

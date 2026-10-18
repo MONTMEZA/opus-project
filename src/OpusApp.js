@@ -74,6 +74,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeuilleRecherche from './components/FeuilleRecherche';
 import FenetreAgent from './components/FenetreAgent';
 import FicheClient from './components/FicheClient';
+import MonEntreprise from './components/MonEntreprise';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
 } from './lib/filtre-fil';
@@ -273,6 +274,13 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      proposer un rattachement que la base refuserait. */
   const [entrepriseRetiree, setEntrepriseRetiree] = useState(null);
   const [entrepriseEtat, setEntrepriseEtat] = useState('jamais');
+  /* « MON ENTREPRISE », la fenêtre plein écran (lot 0a du devis). Montée
+     UNE fois, à la racine, avec une `key` qui change à chaque ouverture :
+     elle repart toujours de ce qui est en base. `section` est l'ancre où
+     elle s'ouvre (`null` : en haut). Déclarés ICI, avec l'entreprise —
+     une `const` lue avant sa déclaration, c'est l'écran blanc. */
+  const [entrepriseOuverte, setEntrepriseOuverte] = useState(false);
+  const [ouvertureEntreprise, setOuvertureEntreprise] = useState({ cle: 0, section: null });
   const [maDemandePro, setMaDemandePro] = useState(null);
   const [demandeProEtat, setDemandeProEtat] = useState('jamais');
   /* Le SIRET avec lequel « Passer en compte professionnel » s'ouvre :
@@ -2193,6 +2201,22 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     }
   };
 
+  /**
+   * OUVRIR « MON ENTREPRISE » — la même porte pour « Mon profil » et pour
+   * « Modifier mon profil ». Deux façons d'arriver au même écran doivent
+   * faire exactement le même travail (la règle de `changerOngletDecouvrir`) :
+   * lire l'entreprise si elle ne l'a pas encore été — ou si la lecture
+   * avait échoué —, puis monter la fenêtre sur une clé neuve.
+   *
+   * `section` doit être une CHAÎNE : passée telle quelle à un `onPress`,
+   * cette fonction recevrait l'événement d'appui comme ancre.
+   */
+  const ouvrirMonEntreprise = (section = null) => {
+    if (entrepriseEtat === 'jamais' || entrepriseEtat === 'echec') chargerMonEntreprise();
+    setOuvertureEntreprise((o) => ({ cle: o.cle + 1, section: typeof section === 'string' ? section : null }));
+    setEntrepriseOuverte(true);
+  };
+
   const chargerMaDemandePro = async () => {
     setDemandeProEtat('charge');
     try {
@@ -3810,13 +3834,13 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             demandeMetiers={demandeMetiers}
             onProposerSpecialite={proposerSpecialite}
             onErreur={showErreur}
-            /* « Mon entreprise » (section 45) : l'identité rattachée, et la
-               seule façon de la changer — un geste immédiat, à part. */
+            /* « Mon entreprise » : la rangée résume l'identité rattachée et
+               ouvre la fenêtre plein écran — la même que depuis « Mon
+               profil ». Une flèche : l'événement d'appui ne doit pas
+               devenir une ancre. */
             identiteEntreprise={monEntreprise}
-            entrepriseRetiree={entrepriseRetiree}
             entrepriseEtat={entrepriseEtat}
-            onChargerEntreprise={chargerMonEntreprise}
-            onRattacherSiret={rattacherMonSiret}
+            onOuvrirEntreprise={() => ouvrirMonEntreprise()}
           />
         )}
 
@@ -3879,6 +3903,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             /* Un particulier n'a pas de clients : la rangée n'existe pas
                pour lui (la règle du §3 appliquée à l'écran). */
             onClients={canPublish ? ouvrirCarnet : null}
+            /* « Mon entreprise », sous « Mes clients » : un particulier n'a
+               pas d'entreprise, la rangée n'existe pas pour lui. Une flèche,
+               pour que l'événement d'appui ne devienne pas une ancre. */
+            onEntreprise={canPublish ? () => ouvrirMonEntreprise() : null}
             onGererPortfolio={() => setScreen('gererPortfolio')}
             nbPublications={mesPublications.length}
             onConfidentialite={() => setScreen('confidentialite')}
@@ -4077,6 +4105,32 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           onArchiver={archiverFicheClient}
           onSupprimer={supprimerFicheClient}
           onOuvrirAutre={(autre) => ouvrirFicheClient(autre)}
+        />
+      )}
+
+      {/* « MON ENTREPRISE » EST ICI, à la racine, et pas dans un écran : ses
+          deux portes (« Mon profil », « Modifier mon profil ») ouvrent la
+          MÊME fenêtre. Réservée aux professionnels : un particulier n'a ni
+          entreprise ni devis. */}
+      {entrepriseOuverte && canPublish && (
+        <MonEntreprise
+          key={`mon-entreprise-${ouvertureEntreprise.cle}`}
+          sectionInitiale={ouvertureEntreprise.section}
+          onFermer={() => setEntrepriseOuverte(false)}
+          entreprise={monEntreprise}
+          entrepriseRetiree={entrepriseRetiree}
+          badge={!!(pros[myProId] && pros[myProId].verifie)}
+          entrepriseEtat={entrepriseEtat}
+          onChargerEntreprise={chargerMonEntreprise}
+          onRattacherSiret={rattacherMonSiret}
+          proId={myProId}
+          metiers={(pros[myProId] && pros[myProId].metiers) || []}
+          telephoneFiche={(pros[myProId] && pros[myProId].telephone) || ''}
+          emailFiche={(pros[myProId] && pros[myProId].emailPro) || ''}
+          /* L'adresse du COMPTE, proposée d'un appui et MONTRÉE avant d'être
+             posée : elle ne va que sur les devis, jamais sur la fiche. */
+          emailCompte={monProfil.email || ''}
+          attestationBadge={(pros[myProId] && pros[myProId].assurancePath) || null}
         />
       )}
 

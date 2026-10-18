@@ -1613,6 +1613,7 @@ pour la même raison que le §4 n'a pas posé ses sept réglages d'un coup :
 | 1 | **Clients** | 5, 12 | Rien ne tient sans lui : un devis s'adresse à quelqu'un, une facture aussi, un chantier appartient à un client. C'est la table que les trois suivantes attendent. |
 | ✅ | **Personne ne devient pro par lui-même** — fait le 15/10/2026 | 5 | **Le préalable du SIRET, et une faille réelle.** Un particulier pouvait se déclarer pro (`update users set type`), s'insérer une fiche, puis lire les demandes des particuliers, publier, ouvrir un carnet de clients, créer un chantier. Une seconde porte passait par la suppression de compte. Fermées par la base (section 44, OP004 et OP005), vérifiées sur la vraie base avec deux comptes jetables supprimés. Le trou n'avait jamais servi : 7 fiches sur 7 sont sur un compte pro. Sans cette correction, vérifier le SIRET à l'inscription n'aurait rien protégé. `npm run verifier-pro`. |
 | ✅ | **Le SIRET à l'inscription** — fait le 17/10/2026 | 5 | **Décidé le 12/10 par le propriétaire.** Un compte pro ne naît plus qu'avec un SIRET trouvé ACTIF au répertoire Sirene (INSEE), consulté par la fonction Edge `siret` qui range une preuve ; inscription en deux temps (le répertoire préremplit le nom, la forme, la commune, propose le métier), SIRET verrouillé, une entreprise = un compte, porte de secours DANS Opus (compte en attente + demande suivie, administration prévenue), « Passer en compte professionnel » pour un particulier, « Mon entreprise » dans le profil, file des demandes en administration. Section 45, appliquée sur la vraie base et éprouvée par curl et au navigateur avec des comptes jetables supprimés. **Il ne prouve PAS qu'on est le titulaire** : le badge reste humain. Restent au propriétaire : voir CLAUDE.md, « Le SIRET à l'inscription », « Ce qui reste ouvert ». `npm run verifier-siret`. |
+| ✅ | **Devis, lot 0a : « Mon entreprise »** — fait le 18/10/2026 | 9 | **Ce que l'entreprise doit porter sur chaque devis pour qu'il soit légal**, avant qu'aucun devis n'existe : registre et greffe, capital, régime de TVA (date posée par la base), assurances (une liste, attestation dans l'espace privé `documents`), médiateur choisi dans la liste officielle, garanties, modalités, réclamations, frais de déplacement (« Déplacement offert » est un choix, pas un champ vide). L'identité se LIT dans `entreprise_registre`, rien n'est ressaisi. Trois tables privées (section 46), `emetteur_incomplet()` dit ce qui manque en 21 motifs dont les `conso_` (seulement pour un particulier). Appliqué sur la vraie base, éprouvé par l'API et au navigateur avec trois comptes jetables supprimés. `npm run verifier-emetteur`. Ce qui reste : plus bas, « Après le lot 0a ». |
 | 2 | **Devis** | 9 | Le cœur du métier, et le premier document qui ENGAGE. Numérotation, TVA, mentions obligatoires, acceptation. |
 | 3 | **Factures** | 10 | Elles NAISSENT d'un devis accepté : les écrire avant obligerait à tout ressaisir. Facturation électronique obligatoire entre entreprises, vérifiée le 17/10/2026 (FAQ officielle d'août 2026) : **réception** obligatoire pour toutes depuis le 01/09/2026 ; **émission** par les grandes entreprises et les ETI depuis la même date, par les PME, TPE et micro-entreprises au plus tard le 01/09/2027. À relire au moment de le construire. |
 | 4 | **Dashboard** | 8 | Il MONTRE ce que les trois précédents ont produit. Avant eux, il n'aurait rien à afficher — ce serait le « bouton §18 » à l'échelle d'un écran. |
@@ -1710,6 +1711,57 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
   concernée, Opus ou pas.
 - [ ] **Changer d'entreprise** sur un compte pro (passage de micro à société) :
   aucune porte (OP008, OP009) ; elle touchera la numérotation des devis.
+
+### Après le lot 0a — ce qui reste (18/10/2026)
+
+Le détail est dans CLAUDE.md, « Mon entreprise pour les devis — lot 0a ».
+
+**À essayer sur l'iPhone — au propriétaire :**
+
+- [ ] Le champ actif reste au-dessus du clavier dans « Mon entreprise »
+  (une vingtaine de champs).
+- [ ] La virgule du pavé décimal (capital, frais de déplacement) est
+  acceptée.
+- [ ] Joindre une attestation par la Photothèque, Fichiers et l'Appareil
+  photo.
+- [ ] La croix reste atteignable clavier ouvert.
+- [ ] La liste des médiateurs défile et se choisit au pouce.
+
+**Le lot suivant, décidé le 18/10 (« juste après, à part ») :**
+
+- [ ] **Les tarifs du SOS** rejoignent `tarifs_pro`. Aujourd'hui deux chiffres
+  de déplacement coexistent, et une fiche SOS à 0 € affiche « 0 – 0 € ».
+
+**À faire relire par un juriste, avant le premier vrai devis :**
+
+- [ ] R. 123-237 (lieu du siège) face à un artisan au seul RNE ; les
+  coopératives (formes 51xx) et l'EIRL, traitées au plus prudent.
+- [ ] La phrase sur L. 243-2 au §10.3 de `PLAN-DEVIS.md`, à corriger avant le
+  lot 2 : l'attestation de décennale est due quel que soit le client.
+
+**Dettes connues, datées :**
+
+- [ ] **L'adresse du siège** quand l'établissement n'est pas le siège : saisie
+  à la main, parce que la preuve SIRET ne la garde pas. Le remède est de la
+  ranger dans la preuve (section 45 et fonction Edge). Aucune entreprise
+  active n'est dans ce cas au 18/10.
+- [ ] Un artisan **au régime réel sans n° de TVA** transmis par la DGFiP : le
+  motif le dit, mais il n'a aucune porte pour le donner (le numéro est
+  verrouillé dans `entreprise_registre`).
+- [ ] Une **attestation remplacée** reste dans l'espace `documents` jusqu'à la
+  suppression du compte.
+- [ ] La démonstration ne montre ni `adresse_siege` ni `entreprise_ancienne`
+  (pas d'horloge réglable) : ces deux cas ne sont prouvés qu'en SQL et par le
+  contrôle.
+- [ ] Une identité dont on ignore si l'établissement est le siège
+  (`est_siege` vide) reçoit le motif `conso_` au lieu de celui de tout devis.
+  Volontairement prudent, à revoir avec le juriste.
+- [ ] **Relever la liste des médiateurs chaque année**
+  (`src/data/mediateurs.js`, data.economie.gouv.fr). L'âge de la liste est un
+  avis à l'écran, pas un échec de contrôle.
+- [ ] Deux **preuves SIRET « essai »** de l'essai du 18/10 restent en base,
+  expirées et inutilisables : le connecteur refuse un `delete`. Une ligne dans
+  l'éditeur SQL, au propriétaire.
 
 
 ### Fournisseurs et prix (module 7) — à trancher à son ouverture

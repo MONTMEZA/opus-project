@@ -21,7 +21,6 @@ import {
   Camera, AlertTriangle, FileText, Check, ShieldCheck, ShieldX, Sparkles, Building,
   ChevronRight,
 } from '../components/icons';
-import FeuilleEntreprise from '../components/FeuilleEntreprise';
 import { resumeEntreprise } from '../lib/entreprise';
 import ChampVille from '../components/ChampVille';
 import ChoixMetiers from '../components/ChoixMetiers';
@@ -51,8 +50,7 @@ function metierSosDe(metiers = []) {
 export default function ProfilEditScreen({
   userType, profil, sos, onSave, onEnvoyerDocuments, onErreur,
   onDemanderMetiers, demandeMetiers, onProposerSpecialite, emailCompte = '',
-  identiteEntreprise = null, entrepriseRetiree = null, entrepriseEtat = 'jamais',
-  onChargerEntreprise, onRattacherSiret,
+  identiteEntreprise = null, entrepriseEtat = 'jamais', onOuvrirEntreprise,
 }) {
   const estPro = userType === 'pro';
 
@@ -80,9 +78,6 @@ export default function ProfilEditScreen({
     longitude: profil.longitude || null,
   });
   const [bio, setBio] = useState(profil.bio || '');
-  /* « Mon entreprise » s'ouvre dans sa propre feuille : le champ SIRET libre
-     a disparu (section 45). */
-  const [feuilleEntreprise, setFeuilleEntreprise] = useState(false);
   const [exp, setExp] = useState(String(profil.exp || ''));
   /* La zone d'intervention ordinaire, à ne pas confondre avec le rayon SOS
      plus bas : celle-ci vaut pour les chantiers normaux, et concerne TOUS
@@ -323,15 +318,18 @@ export default function ProfilEditScreen({
                 TAPE plus ici : il se RATTACHE, après consultation du
                 répertoire, par un geste immédiat qui n'attend pas
                 « Enregistrer ». L'ancien champ était un texte libre, jamais
-                contrôlé, avec un exemple inventé. */}
+                contrôlé, avec un exemple inventé.
+
+                Elle ouvre la fenêtre plein écran « Mon entreprise » (lot 0a
+                du devis), la MÊME que depuis « Mon profil » : c'est
+                `OpusApp` qui la monte, et qui lit l'entreprise au passage.
+                L'ancienne feuille du bas a disparu — elle ne pouvait pas
+                porter les informations de devis sans enfermer le clavier. */}
             <Text style={s.label}>Mon entreprise</Text>
             <Pressable
-              onPress={() => {
-                if (entrepriseEtat === 'jamais' && onChargerEntreprise) onChargerEntreprise();
-                setFeuilleEntreprise(true);
-              }}
+              onPress={() => { if (onOuvrirEntreprise) onOuvrirEntreprise(); }}
               accessibilityRole="button"
-              accessibilityLabel="Mon entreprise : voir ou rattacher mon SIRET"
+              accessibilityLabel="Mon entreprise : identité et informations de devis"
               style={({ pressed }) => [s.rangee, pressed && APPUI.discret]}
             >
               <Building size={16} color={C.accent2} />
@@ -690,17 +688,6 @@ export default function ProfilEditScreen({
       <View style={[s.pad, { paddingBottom: 34 }]}>
         <BtnMain block label="Enregistrer" onPress={enregistrer} />
       </View>
-      {feuilleEntreprise && (
-        <FeuilleEntreprise
-          entreprise={identiteEntreprise}
-          retiree={entrepriseRetiree}
-          badge={!!profil.verifie}
-          etat={entrepriseEtat}
-          onRecharger={onChargerEntreprise}
-          onRattacher={onRattacherSiret}
-          onFermer={() => setFeuilleEntreprise(false)}
-        />
-      )}
     </ScrollView>
   );
 }

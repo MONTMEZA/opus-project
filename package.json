@@ -82,6 +82,7 @@
     "verifier-conseil": "node scripts/verifier-conseil.mjs",
     "verifier-vues": "node scripts/verifier-vues.mjs",
     "verifier-clients": "node scripts/verifier-clients.mjs",
+    "verifier-emetteur": "node scripts/verifier-emetteur.mjs",
     "verifier-chantier": "node scripts/verifier-chantier.mjs",
     "verifier-notifications": "node scripts/verifier-notifications.mjs",
     "verifier-agent": "node scripts/verifier-agent.mjs",

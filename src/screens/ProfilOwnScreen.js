@@ -94,7 +94,7 @@ export default function ProfilOwnScreen({
   demandesPartenariat = [], partenariatsEnvoyes = [],
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
-  onClients,
+  onClients, onEntreprise,
   onConfidentialite, admin = null, onAdmin,
   mesChantiers = [], onOuvrirChantier,
   /* Section 45 : l'entreprise rattachée (un pro), la demande de compte
@@ -322,6 +322,23 @@ export default function ProfilOwnScreen({
       {!!onClients && (
         <View style={s.pad}>
           <BtnOutline label="Mes clients" onPress={onClients} />
+        </View>
+      )}
+
+      {/* MON ENTREPRISE — juste sous « Mes clients », et pour la même
+          raison : c'est un outil de travail. Elle porte ce qui rend un devis
+          légal (lot 0a), et un artisan qui doit fouiller « Modifier mon
+          profil » pour la trouver ne la remplira jamais. Absente pour un
+          particulier : `onEntreprise` vaut alors `null`, et la rangée
+          n'existe pas — plutôt qu'un bouton dont personne ne comprendrait
+          la raison. */}
+      {!!onEntreprise && (
+        <View style={s.pad}>
+          <BtnOutline
+            label="Mon entreprise"
+            accessibilityLabel="Mon entreprise : identité et informations de devis"
+            onPress={onEntreprise}
+          />
         </View>
       )}
 

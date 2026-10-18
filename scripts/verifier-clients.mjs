@@ -28,6 +28,7 @@ import {
   TYPES_CLIENT, LONGUEUR_MAX,
 } from '../src/lib/clients.js';
 import { initialClients, proProfiles } from '../src/data/demo.js';
+import { messageClair, MESSAGES_CONTRAINTE } from '../src/lib/erreurs.js';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -195,14 +196,47 @@ verifier('la table existe et porte `pro_id` en cascade',
   verifier('toutes les contraintes se terminent par `_check`',
     contraintes.length >= 8 && contraintes.every((c) => c.endsWith('_check')),
     `Trouvées : ${contraintes.join(', ') || '(aucune)'}. `
-    + '`src/lib/erreurs.js` extrait le nom avec /"([a-z0-9_]+_check)"/i : une '
-    + 'contrainte nommée autrement rend « la base a refusé cette valeur » '
-    + 'PLUS une piste fausse — « schema.sql n’a pas été rejoué » — pour ce '
-    + 'qui n’est qu’une faute de frappe.');
+    + '`src/lib/erreurs.js` ne reconnaît une contrainte qu’à son suffixe '
+    + '`_check` : une contrainte nommée autrement rend « la base a refusé '
+    + 'cette valeur » PLUS une piste fausse — « schema.sql n’a pas été '
+    + 'rejoué » — pour ce qui n’est qu’une faute de frappe.');
 
-  verifier('…et `erreurs.js` lit bien ce motif-là',
-    /"\(\[a-z0-9_\]\+_check\)"/.test(readFileSync('src/lib/erreurs.js', 'utf8')),
-    'Si ce motif change, la règle ci-dessus ne protège plus rien.');
+  /* LA RÈGLE A CHANGÉ LE 18/10/2026, ET CE CONTRÔLE AVEC ELLE.
+     Il exigeait jusqu'ici le TEXTE `"([a-z0-9_]+_check)"` dans
+     `erreurs.js`. C'était une syntaxe, pas une propriété : le lot 0a du
+     devis a élargi ce motif à `_check\d*` (pour reconnaître `…_check1`, le
+     nom qu'une contrainte anonyme reçoit de PostgreSQL) et ce contrôle
+     rougissait sur du code juste — la faute que `verifier-chantier` avait
+     faite le 15/10, et corrigée de la même façon. Il FAIT TOURNER la
+     traduction, sur des erreurs écrites exactement comme PostgreSQL 16 les
+     écrit (relevées le 18/10), et vérifie ce que l'artisan LIRA : */
+  const refus = (nom) => Object.assign(new Error(
+    `new row for relation "clients" violates check constraint "${nom}"`), { code: '23514' });
+
+  /* 1. chaque contrainte du carnet a sa phrase, et aucune ne parle de
+        schéma : ce sont des fautes de saisie, pas des pannes. */
+  const muettes = contraintes.filter((c) => !MESSAGES_CONTRAINTE[c]
+    || /schema\.sql/.test(messageClair(refus(c), 'Le client')));
+  verifier('chaque contrainte du carnet DIT quoi corriger, sans parler de schéma',
+    contraintes.length >= 8 && muettes.length === 0,
+    `Sans phrase, ou renvoyant à schema.sql : ${muettes.join(', ')}. Une contrainte qui garde `
+    + 'ce qu’un artisan TAPE n’est ni un schéma oublié ni une panne : la phrase doit dire '
+    + 'quoi corriger (`MESSAGES_CONTRAINTE`, src/lib/erreurs.js).');
+
+  /* 2. le cas nommé par le cahier du lot 0a : un SIRET mal formé. */
+  const siret = messageClair(refus('client_siret_check'), 'Le client');
+  verifier('…dont un SIRET mal formé, en clair',
+    /SIRET/.test(siret) && /14/.test(siret) && !/schema\.sql/.test(siret)
+    && siret.startsWith('Le client : '), siret);
+
+  /* 3. une contrainte anonyme (`…_check1`) est NOMMÉE dans le message ;
+     4. une contrainte inconnue garde la piste « schema.sql » : elle ne vaut
+        plus que pour une faute de développeur, mais là, elle est juste. */
+  const anonyme = messageClair(refus('devis_tva_check1'));
+  const inconnue = messageClair(refus('foo_check'));
+  verifier('une contrainte anonyme `…_check1` est nommée, une inconnue garde sa piste',
+    /devis_tva_check1/.test(anonyme) && /schema\.sql/.test(inconnue) && /foo_check/.test(inconnue),
+    `devis_tva_check1 → ${anonyme}\n      foo_check → ${inconnue}`);
 }
 
 verifier('le carnet est PRIVÉ : aucune politique pour `anon`',

@@ -7250,6 +7250,234 @@ Contrôles éprouvés en cassant : **seize défauts remis à la main, les seize
 refusés**. **Pas vérifié** : le glissement de la visionneuse au doigt sur
 l'iPhone, et le délai de démarrage d'une vidéo après qu'on s'y est posé.
 
+### Mon entreprise pour les devis — lot 0a (18/10/2026)
+
+Section 46 de `schema.sql`, `src/lib/emetteur.js`,
+`src/components/MonEntreprise.js`, `npm run verifier-emetteur`. Premier lot
+du module devis (`docs/PLAN-DEVIS.md`) : **ce que l'entreprise doit porter
+sur chaque devis pour qu'il soit légal**, posé AVANT qu'un seul devis
+n'existe. Aucun devis ne s'émet encore.
+
+#### Ce qui est posé
+
+- **Trois tables PRIVÉES** : `emetteur` (une ligne par entreprise),
+  `emetteur_assurances` (une LISTE, parce qu'une entreprise peut avoir une
+  décennale et une RC pro chez deux assureurs) et `tarifs_pro` (les frais de
+  déplacement du devis). `est_mon_entreprise()` des deux côtés, aucune
+  politique `anon`, et `revoke all … from anon` en plus : la leçon des
+  sections 18.2 et 41.
+- **L'identité ne se ressaisit pas** : raison sociale, SIRET, adresse et
+  n° de TVA se LISENT dans `entreprise_registre` (section 45). Deux écritures
+  du même objet finissent par diverger.
+- **`emetteur_incomplet(p_pro) returns text[]`**, 21 motifs en
+  `'cle: phrase'`. Ceux qui ne valent que pour un particulier portent le
+  préfixe `conso_` : le lot 2 filtrera selon le destinataire sans réécrire la
+  règle. **OP011** pour qui demande la fiche d'un autre. Le miroir JS
+  (`MOTIFS`) est identique à l'octet, et le contrôle le compare.
+- **Une seule fenêtre « Mon entreprise »**, plein écran, ouverte par deux
+  portes (le profil et « Modifier mon profil »). Elle remplace
+  `FeuilleEntreprise.js` : jamais deux écrans du même nom, et une feuille du
+  bas ne porte pas vingt champs sans enfermer le clavier (04/10).
+
+#### Les décisions du propriétaire, le 18/10
+
+| question | réponse |
+|---|---|
+| qui peut lire les prix d'un autre artisan (`DONNEES-DES-ARTISANS.md` §5.2) | **un engagement écrit** : aucun écran ne les montre, et l'éditeur s'engage dans les CGU à ne pas les lire par l'éditeur SQL. Un engagement, pas une impossibilité : le propriétaire d'un projet Supabase peut toujours lire sa base |
+| le libellé quand on ne facture pas le déplacement | **« Déplacement offert »** |
+| les règles plus strictes que la loi | **une seule : relire le SIRET chaque année** (motif `entreprise_ancienne`), présentée comme un choix d'Opus |
+| les tarifs du SOS | **juste après, dans un lot à part** |
+| les négoces | **attendre**, en le sachant |
+
+#### Un tarif ne vit jamais dans `emetteur`
+
+**Une règle RLS filtre des LIGNES, jamais des COLONNES** (section 18). Or un
+tarif est fait pour devenir public un jour — l'arrêté du 24/01/2017 (art. 3)
+demande d'afficher ses tarifs sur ses pages en ligne. `tarifs_pro` est donc
+sa propre table, privée aujourd'hui, publique **par ligne** demain. Rangé
+dans `emetteur`, le premier tarif publié aurait ouvert toute la fiche.
+
+#### La garantie « tarifs privés » ne tenait qu'au NOM d'une fonction
+
+Trouvé par un sabotage. Le contrôle refusait qu'une fonction `admin_*` lise
+les tarifs. Une fonction `security definer` sous un autre nom, une vue, ou
+une fonction Edge munie de la clé de service les lisait **sans que rien ne
+rougisse**.
+
+> **Un contrôle qui vise un NOM garde une porte, pas la pièce.**
+> `verifier-emetteur` et `verifier-legal` tiennent désormais la propriété :
+> une liste FERMÉE de fonctions a le droit de nommer ces trois tables
+> (`tient_l_emetteur`, `tient_l_assurance`, `tient_les_tarifs`,
+> `emetteur_incomplet`, `mes_donnees`), aucune n'est `security definer`,
+> aucune vue ne les nomme, aucun fichier de `supabase/functions` non plus. Et
+> le cas 26 bis de l'essai relève le catalogue d'une base rejouée.
+
+#### `not x` vaut `null` quand `x` est `null` — et la fiche ne réclamait rien
+
+`identite` testait `not n.ei`. Pour une identité ouverte par
+l'administration (SIREN et SIRET seuls), la nature est inconnue : `not null`
+vaut `null`, la condition est fausse, et la fiche ne réclamait **aucun
+nom**. Aucune erreur, juste un motif absent.
+
+> **En SQL, une condition sur une valeur qui peut manquer s'écrit
+> `is not true` / `is true`**, jamais `not x`. Même forme pour OP011, et dans
+> le miroir JS.
+
+#### Opus ne compose aucune mention, et il dit « pour un particulier »
+
+Les relectures de droit ont trouvé quatre phrases qui disaient l'inverse de
+la loi :
+
+| texte | ce qu'il dit vraiment | ce que faisait le code |
+|---|---|---|
+| R. 123-237 | le lieu du siège n'est dû sur tout devis que par une entreprise **au RCS** | il le réclamait à tous |
+| R. 123-238 | le capital n'est dû que par une **SARL ou une société par actions** | il le réclamait à toute la catégorie 5, SNC comprises |
+| L. 243-2 | l'attestation de décennale est due **quel que soit le client** | il la disait due « pour un particulier » |
+| R. 111-2 | des informations à **communiquer** au client | « l'écrire sur le devis » |
+
+> **Une obligation du code de la consommation se dit « pour un particulier »,
+> et un choix d'Opus se dit comme un choix.** L'aperçu de l'en-tête marque
+> « [pour un particulier : …] » ce qu'un devis à un professionnel n'a pas à
+> porter. Un `[à compléter]` sur chaque devis aurait fait croire à un
+> artisan qui ne travaille qu'avec des professionnels qu'il lui manque
+> quelque chose.
+
+#### Un `0` n'est pas un vide
+
+« Je ne facture pas de déplacement » et « je n'ai rien répondu » ne se
+distinguent pas dans un champ vide. D'où :
+
+- **seul l'interrupteur écrit `0`** (« Déplacement offert ») ;
+- **un `0` tapé est refusé**, par le formulaire et par la base
+  (`tarif_frais_zero_check`), avec une phrase qui dit quoi toucher ;
+- **aucune base ne vide un texte en silence** : `0` plus des conditions
+  écrites est refusé, pas « nettoyé ».
+
+Et l'essai sur la vraie base a montré un défaut de plus : **un artisan qui
+enregistrait sa fiche sans rien dire de ses frais créait une ligne de tarifs
+VIDE** (`POST /rest/v1/tarifs_pro → 201`). Une ligne vide ne coûte rien
+aujourd'hui, mais le jour où les tarifs deviendront publics par ligne, elle
+sera un tarif « publié » qui ne dit rien. **Une ligne vide ne s'écrit plus**
+(`MonEntreprise.enregistrer`) ; une ligne qui EXISTE se met à jour même vers
+rien, et c'est ainsi qu'on retire ses frais.
+
+#### L'orange de signature ne fait pas un filet sur le fond
+
+Le bloc « Il manque … » portait un filet `C.accent`. Un filet est un élément
+graphique : il lui faut **3 : 1**. Mesuré au navigateur : **2,76** sur le fond
+de l'application. En `C.accentTexte` : **4,52**. C'est la règle du lot 5,
+appliquée à un trait au lieu d'un texte.
+
+#### Les dates appartiennent à la BASE
+
+`regime_tva_declare_le`, `modifie_le` et la date de création d'une assurance
+sont posées par les déclencheurs, par `clock_timestamp()`. Vérifié sur la
+vraie base : des dates de 1999 et de 2001 envoyées par le client sont
+ignorées. Renvoyer la fiche entière avec le MÊME régime ne déplace pas la
+date de déclaration ; changer de régime en pose une nouvelle. Une date que le
+téléphone peut écrire ne prouve rien — et celle-là s'imprimera un jour sur
+une facture.
+
+#### Une migration se PROUVE par empreinte, pas par lecture
+
+La vraie base a reçu la section 46 sans un seul ordre qui commence par `drop`
+ou `delete` : contraintes et politiques créées sous condition dans des blocs
+`do`, texte envoyé sans commentaires (par un découpeur qui respecte les
+chaînes `'…'`, `E'…'`, les `$tag$` et les commentaires imbriqués).
+
+> **L'équivalence ne se lit pas, elle se mesure** : une empreinte normalisée
+> du catalogue (fonctions, contraintes, politiques, déclencheurs, colonnes,
+> droits, index), comparée entre la vraie base et une base neuve rejouée.
+> Deux écarts, tous deux connus et sans effet : PostgreSQL 17 ajoute le droit
+> `m` (MAINTAIN) aux droits de table, et le connecteur, qui passe par du
+> JSON, transforme l'écriture ` ` en vrai caractère — équivalent dans
+> une expression régulière, vérifié en l'exécutant.
+
+#### `\b` ne voit pas une lettre accentuée — et un contrôle était aveugle
+
+`verifier-etats` cherchait le mot interdit par `/v[ée]rifi[ée]e?s?\b/i`.
+Mesuré : `.test('le badge « vérifié »')` rend **`false`**. Pour JavaScript,
+« é » n'est pas une lettre de mot, donc il n'y a pas de frontière après lui,
+et le contrôle n'a **jamais** vu le mot qu'il devait refuser.
+
+> **Dans un projet écrit en français, une frontière de mot se pose à la
+> main** — `(?![\p{L}_])` avec le drapeau `u` —, jamais par `\b`. Et un
+> contrôle de vocabulaire s'éprouve en lui donnant le mot interdit.
+
+#### L'index git est PARTAGÉ — et un fichier supprimé y reste
+
+Deux leçons du même fichier, `FeuilleEntreprise.js`.
+
+1. **Un commit lancé sans chemins emporte ce qu'un AUTRE travail a mis dans
+   l'index.** Le commit de documentation `ff4f655` a embarqué un
+   `git rm --cached` laissé là : sur `origin`, `ProfilEditScreen` importait
+   un fichier absent, et le dépôt ne se construisait plus. Réparé par
+   `67cbf2a`. **On commite avec des chemins nommés, un par un.**
+2. **Un fichier effacé du disque mais pas de l'index fait PLANTER quatre
+   contrôles** : ils listent les fichiers par `git ls-files`, puis les
+   ouvrent. `npm run verifier` l'a dit — « N'A PAS PU SE LANCER », pas
+   « ✘ ». C'est exactement ce pourquoi il distingue les deux depuis le
+   lot 8. Une suppression passe par `git rm`.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur une base neuve, les **48 cas** de
+`supabase/essais-section-46.sql`, les **47 contrôles**, le linter (32
+problèmes, tous antérieurs), les paquets iOS et Android dont la **sortie** a
+été lue. La dernière série de sabotages : **31 défauts remis à la main, les
+31 refusés par la bonne vérification**. Les relectures ont été REPRODUITES
+sur l'arbre d'avant chaque correction : sept défauts d'écran sur huit, en
+démonstration, avant ; huit sur huit corrects après.
+
+Puis sur la VRAIE base, migration appliquée, avec deux comptes pro et un
+compte particulier jetables (preuve `essai` posée pour leur adresse exacte,
+`enregistrer_vues` neutralisé), supprimés par le chemin de l'application :
+
+| | résultat |
+|---|---|
+| A, fiche vide | **11 motifs** |
+| A enregistre sa fiche, ses frais, une décennale | 201 ×3, **1 motif restant** (le médiateur) |
+| dates envoyées par le client (1999, 2001) | **ignorées** |
+| « 0 » plus des conditions | **400 · `tarif_frais_zero_check`** |
+| un nom d'entrepreneur individuel réduit à « EI » | **400 · `emetteur_denomination_ei_check`** |
+| un médiateur sans adresse ; le RCS sans greffe | **400** ×2 |
+| B lit la fiche, les assurances, les tarifs de A | **`[]`** ×3 |
+| B écrit au nom de A, ou y déplace sa propre fiche | **403** ×4 |
+| B modifie ou supprime chez A | 204, **0 ligne** : la fiche de A est intacte |
+| B demande ce qui manque à A ; le particulier demande le sien | **OP011** ×2 |
+| un visiteur sans compte | **401**, tables et fonction |
+| l'export RGPD de B | **rien de A** |
+| **au navigateur** : après enregistrement | « Oui : vos informations d'entreprise sont complètes » |
+| …après rechargement complet | idem, relu de la base |
+| l'aperçu | « Déplacement offert », le médiateur avec son adresse, « répertoire Sirene (INSEE) … consultée le 18/10/2026 » |
+| « registre » hors RCS/RNE · « vérifi » | **0** · **0** |
+| cibles sous 44 points en édition | **0** |
+| une attestation PDF | envoyée dans `documents` (200), lien signé (200) |
+| le particulier | aucune rangée « Mon entreprise », **0 appel** |
+
+Base revenue à 15 comptes / 8 fiches / 21 publications / 1 entreprise /
+1 client, et **0** fiche émetteur, assurance ou tarif. Deux preuves `essai`
+restent, expirées et inutilisables : le connecteur refuse un `delete`.
+
+**Ce qui n'a PAS été vérifié** : rien sur l'iPhone — le clavier sous une
+vingtaine de champs, la virgule du pavé décimal, la Photothèque et
+l'Appareil photo pour l'attestation, la croix clavier ouvert, la liste des
+médiateurs au pouce. Le chemin « nom d'entrepreneur individuel » n'a été
+éprouvé que par l'API. La démonstration ne montre ni l'adresse du siège ni
+le motif d'un an. Et **aucun vrai artisan n'a encore rempli sa fiche** — le
+frère la remplira lui-même, après la remise de son compte et ses propres
+CGU.
+
+#### Ce qui reste ouvert
+
+Dans `docs/A-FAIRE.md`, « Après le lot 0a » : les tarifs du SOS (le lot
+suivant ; une fiche SOS à 0 € affiche encore « 0 – 0 € »), trois points à
+faire relire par un juriste (R. 123-237 face au RNE, les coopératives et
+l'EIRL, la phrase L. 243-2 du plan), l'adresse du siège à ranger dans la
+preuve, l'artisan au régime réel sans n° de TVA transmis, les attestations
+remplacées qui restent dans `documents`, et la liste des médiateurs à
+relever chaque année.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :
