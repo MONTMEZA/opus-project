@@ -450,14 +450,17 @@ franchise, et la mention d'autoliquidation en sous-traitance.
 |---|---|
 | **1er septembre 2026** (en vigueur) | **réception** obligatoire pour toutes les entreprises assujetties à la TVA |
 | **1er septembre 2027** | **émission** + e-reporting pour les PME, TPE et micro-entreprises |
-| les ETI | **les sources divergent toujours** — ne pas trancher |
+| les ETI | **émission depuis le 1er septembre 2026**, comme les grandes entreprises — tranché par la FAQ officielle d'août 2026 (vérifié le 17/10/2026) |
 
 Le mécanisme : une facture entre professionnels doit passer par une
 **plateforme agréée**. La page officielle est explicite : une « solution
 compatible » qui n'est pas immatriculée **ne peut ni transmettre ni recevoir**.
-Le chiffre officiel de plateformes immatriculées est **101** (liste du
-16/01/2026 sur impots.gouv.fr) — pas 149 ni 166, qui viennent d'annuaires
-privés mélangeant les dossiers en attente.
+Le chiffre officiel de plateformes agréées est **155** (liste du
+13/10/2026 sur impots.gouv.fr, tests d'interopérabilité compris), plus 11 en
+attente de tests, qui ne sont PAS agréées. Il valait 101 le 16/01/2026 et
+150 le 01/08/2026 : il bouge, il faut le relire. Et l'ancien « 166 » des
+annuaires privés n'était pas juste pour autant : il mélangeait les dossiers
+en attente.
 
 **Ce que ça veut dire pour Opus**, et c'est le point du §3 coup 4 :
 
@@ -578,7 +581,7 @@ Je les écris parce que vous auriez décidé sur elles.
 | 2 | « les coordonnées d'assurance décennale sont déjà en base » | **Faux.** La base ne porte qu'un booléen `assurance_valide`. Ni assureur, ni n° de contrat, ni couverture — c'est-à-dire **aucune** des mentions que l'arrêté du 05/01/2016 impose. En suivant ce rapport, on sautait une mention obligatoire **en croyant la posséder** |
 | 3 | avis en ligne : « décret 2024-753, art. D.111-10 » | **Décret 2017-1436, art. D. 111-16 et D. 111-17**, en vigueur depuis le **1er janvier 2018**. Le contenu était juste, la source fausse — et la conséquence plus lourde : le trou de conformité n'a pas deux ans, il en a **neuf** |
 | 4 | « les artisans ne veulent payer que 5 €/mois » | Étude OpinionWay **pour Tiime**, et la question portait sur **une mise en conformité subie**, pas sur un outil de travail. Les artisans **paient** 19 € (Tolteck) à 39 € (Obat). Ce chiffre ne doit pas fixer le prix d'Opus |
-| 5 | « 166 plateformes agréées » | **101**, liste officielle du 16/01/2026 |
+| 5 | « 166 plateformes agréées » | **101** dans la liste officielle du 16/01/2026 ; **155** dans celle du 13/10/2026 (plus 11 en attente, non agréées). Le chiffre bouge : le relire |
 | 6 | Costructor « Business+ 300 € » / « 30 € » et « signature incluse » / « 0,90 € l'unité » | **Deux rapports, deux Costructor.** À revérifier avant toute comparaison — c'est le concurrent désigné comme le plus dangereux |
 
 Et **une erreur de méthode, qui est la mienne** : je n'ai pas dit aux huit

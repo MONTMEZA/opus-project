@@ -344,7 +344,7 @@ table pour le troisième :
 | **Batiprix** (Groupe Moniteur) | ~28 000 ouvrages tous corps d'état en déboursé sec, **moyennes nationales** (refuse de régionaliser) | la **visualisation à l'écran et l'impression** pour les devis de l'abonné, par ses **salariés**. Rien d'autre | une **API REST pour éditeurs**, « installation gratuite », clé utilisateur + clé logicielle | Batiprix Data : **279 € HT** (lot Gros œuvre, millésime 2027) et **789 € HT** (pack tous corps d'état, base actualisée), pour un utilisateur ; durée non écrite sur la fiche, abonnements de 12 à 36 mois selon les CGV (relevé 17/10/2026) |
 | **BatiChiffrage** (Batiactu Groupe) | plus de 47 000 travaux fourni-posé pour les logiciels partenaires (80 000 dans son propre logiciel) ; **des fabricants y paient leur présence** | les devis du titulaire, sur ses propres projets. **Interdit nommément** : « les services d'intermédiation entre un porteur de projet et une entreprise », « les logiciels ou bases de données » | « des licences spécifiques de mise à disposition […] existent » (info@batichiffrage.com) ; référencement comme logiciel compatible | dès **224 € HT** l'édition 2026 |
 | **Artiprix** (BIP / Batirama) | 27 000 ouvrages en 3 bordereaux, temps nationaux, deux taux horaires selon le département | **aucune licence écrite** : donc rien au-delà de la consultation (le droit du producteur s'applique sans clause) | aucune offre trouvée : écrire à l'éditeur | 183,89 € HT un bordereau · 373,46 € HT les trois |
-| **Tarifeo** (BS2I, groupe SYDEV) | tarifs **publics** de ~800 fabricants et distributeurs (électricité, génie climatique, sanitaire) ; gère les remises de chaque client | l'intégration dans **le propre système** du client ; jamais les « Données Riches » (photos, notices) ; **un prestataire ne peut pas être un éditeur concurrent** (art. 6 h) | API éditeurs « disponible sur demande », « accords commerciaux » | sur devis |
+| **Tarifeo** (BS2I, groupe SYDEV) | tarifs **publics** de « plus de 750 référentiels constructeurs et distributeurs » (plaquette d'EBP, juillet 2024 ; le chiffre bouge) (électricité, génie climatique, sanitaire) ; gère les remises de chaque client | l'intégration dans **le propre système** du client ; jamais les « Données Riches » (photos, notices) ; **un prestataire ne peut pas être un éditeur concurrent** (art. 6 h) | API éditeurs « disponible sur demande », « accords commerciaux » | sur devis |
 | **FAB-DIS** (format fabricants-distributeurs) | un **format**, pas une base : le fichier produit d'un fabricant (référence, code-barres, tarif public). Les prix nets passent par un autre fichier, confidentiel | réservé aux fabricants et distributeurs, usage « strictement personnel et incessible » | accord avec FAB-DIS SAS, **puis** avec chaque fabricant | FAB-DIS Connect : le « KIT FAB-DIS » à **240 € HT/an** (fabricants et distributeurs) ; l'offre FAB, réservée aux **fabricants**, de **900 à 4 500 € HT/an** selon le nombre de références (paliers en vigueur depuis le 01/10/2026) ; l'offre DIS, réservée aux **distributeurs**, gratuite jusqu'au 01/01/2027 puis incluse dans le KIT. Opus n'étant ni fabricant ni distributeur, il n'est éligible à aucune : il lui faut l'accord de chaque fabricant |
 | **Tarifs des fabricants** (Hager 7 256 références, Legrand 20 823 références) | le tarif public HT, le code-barres ; chez Legrand, la famille de remise et l'empreinte carbone | téléchargement libre, mais reproduction interdite sans autorisation (Hager), usage « personnel et privé dans un but non commercial » (Legrand) | une autorisation écrite — un fabricant a **intérêt** à être dans un logiciel de devis | gratuit |
 | **Négoces par le compte de l'artisan** (Sonepar via le logiciel Everwin GX-BTP, Point.P et Cedeo via le logiciel Tolteck, Rexel ; la plaquette EBP de juillet 2024 ne nomme que Tarifeo) | le **prix net négocié** de l'artisan, la disponibilité en agence | rien de public ; aucune API ouverte | un connecteur partenaire, artisan par artisan | inconnu |
@@ -421,18 +421,23 @@ Trois règles, qui valent pour toutes les sources :
 
 > **Moissonner un site marchand, c'est extraire sa base** (CPI L342-1 et
 > L342-2), et l'atteinte au droit du producteur est un délit (CPI L343-4 :
-> trois ans et 300 000 € selon le texte reproduit par un cabinet d'avocats,
-> non relu sur Légifrance). Contourner une protection anti-robot ajouterait
-> un second risque pénal : le texte probablement visé est l'article 323-1
-> du Code pénal (accès ou maintien frauduleux dans un système
-> informatique), que la Cour de cassation a appliqué au téléchargement de
-> données malgré une protection connue (chambre criminelle, 20/05/2015,
-> affaire dite « Bluetouff »). L'article et l'arrêt sont cités de mémoire
-> par le contradicteur, non relus : **à faire confirmer par un avocat**.
+> trois ans et 300 000 €, sept ans et 750 000 € en bande organisée — relu le
+> 17/10/2026 sur codes.droit.org, miroir des données de Légifrance, édition
+> du 10/10/2026). Contourner une protection anti-robot ajouterait un second
+> risque pénal : l'article 323-1 du Code pénal (accès ou maintien frauduleux
+> dans un système informatique : trois ans et 100 000 €, relu sur le même
+> miroir), que la Cour de cassation a appliqué au téléchargement de données
+> malgré une protection connue (chambre criminelle, 20/05/2015, affaire dite
+> « Bluetouff »). L'arrêt reste cité de mémoire, non relu : **à faire
+> confirmer par un avocat**.
 
 > **L'exception de fouille de textes ne permet pas de construire une base.**
 > Elle existe deux fois : pour le droit d'auteur (CPI L122-5-3) et pour le
-> droit du producteur de base (CPI L342-3, non relu ici) — et c'est surtout
+> droit du producteur de base (CPI L342-3, relu le 17/10/2026 sur le même
+> miroir : une clause qui interdit à un utilisateur licite d'extraire une
+> partie non substantielle, ou de faire de la fouille, est nulle — mais une
+> base NON protégée peut quand même être fermée par contrat, arrêt Ryanair,
+> CJUE, 15/01/2015, C-30/14) — et c'est surtout
 > le second qui protège une base de prix. Elle exige que les copies soient
 > « détruites à l'issue de la fouille » (L122-5-3, III, relu en vigueur le
 > 17/10/2026) : une base que l'agent garde et consulte n'est jamais
@@ -737,8 +742,10 @@ saisie, qu'on peut décocher à tout moment ; refuser ne change rien au service
 > Le premier n'est pas un consentement au sens du RGPD. Le second pourrait
 > tomber sous le règlement européen sur les données (Data Act, art. 13), qui
 > rend sans effet une clause abusive imposée par une entreprise à une autre
-> sur l'usage des données — champ et date d'application à vérifier au
-> Journal officiel.
+> sur l'usage des données. Vérifié sur EUR-Lex le 17/10/2026 : son article 50
+> l'applique aux contrats conclus après le 12/09/2025, et à partir du
+> 12/09/2027 aux contrats plus anciens à durée indéterminée ou qui expirent
+> au moins dix ans après le 11/01/2024.
 
 **L'anonymat.** Retirer le nom ne suffit pas : « placo à Lambesc, 25 € »
 désigne Dylan s'il est le seul plaquiste d'Opus à Lambesc. Vous l'avez tranché
@@ -842,14 +849,26 @@ un consentement « libre » n'est **pas vérifiée** (`DONNEES-DES-ARTISANS.md`
 ### 4.6 Une source massive et licite que personne ne cite : les factures d'achat électroniques
 
 Depuis le 01/09/2026, toute entreprise assujettie à la TVA doit pouvoir **recevoir**
-des factures électroniques ; les grands négoces émettent déjà les leurs
-(SAMSE l'écrit à ses clients :
+des factures électroniques ; les grandes entreprises et les ETI (entreprises
+de taille intermédiaire) émettent déjà les leurs depuis la même date, selon la
+FAQ officielle d'août 2026 — les PME, au plus tard le 01/09/2027 (SAMSE l'écrit
+à ses clients :
 <https://www.samse.fr/media/wysiwyg/upload/CourrierReformeFacturationElectronique.pdf> ;
-calendrier : <https://www.impots.gouv.fr/professionnel/je-passe-la-facturation-electronique>,
-et `CONCURRENCE-DEVIS.md` §6, qui note que les sources divergent pour les
-ETI, les entreprises de taille intermédiaire). Ces factures arrivent
-**structurées**, ligne par ligne : désignation, référence, quantité, prix
-unitaire **net**.
+calendrier : <https://www.impots.gouv.fr/professionnel/je-passe-la-facturation-electronique>).
+Ces factures arrivent **structurées**, ligne par ligne : désignation, quantité,
+prix unitaire net.
+
+**Mais une ligne de facture n'est pas une fiche produit**, et il faut le savoir
+avant d'en attendre un comparateur (`COMPARATEUR-MATERIAUX.md`) :
+
+- la référence du vendeur et le code-barres y sont **facultatifs** ; un
+  Factur-X des profils les plus pauvres (MINIMUM, BASIC WL) n'a même **aucune
+  ligne** — lesquels la réforme accepte : non vérifié ;
+- aucune case n'est prévue pour le **conditionnement** ;
+- les **remises différées** (fin d'année) n'y figurent jamais : le prix facturé
+  n'est pas le prix d'achat effectif au sens du Code de commerce (L442-5) ;
+- l'**adresse de livraison**, obligatoire quand elle diffère, est souvent celle
+  du chantier, donc une donnée du client de l'artisan.
 
 C'est la seule source de vrais prix d'achat, régionaux, frais. Elle appartient
 à l'artisan, et Opus peut l'importer **pour lui** avec son accord.

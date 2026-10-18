@@ -603,6 +603,12 @@ servi.**
 > sur qui peut CRÉER cette ligne.** Sinon il ne dit rien : il constate ce
 > qu'on lui a donné.
 
+**Et le futur compte FOURNISSEUR ne devra jamais rendre `est_un_pro()`
+vrai** : ce prédicat ouvre la lecture des demandes des particuliers, et un
+négoce n'a rien à y lire. Aujourd'hui un négoce peut s'inscrire comme
+artisan (le code d'activité ne bloque rien) ; mesuré le 18/10, aucun ne
+l'a fait (`docs/COMPARATEUR-MATERIAUX.md` §1, question « Négoces »).
+
 Les deux verrous :
 
 - **`tient_le_type_du_compte()` (OP004)** — le type ne change pas par la

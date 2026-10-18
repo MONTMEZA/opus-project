@@ -2918,7 +2918,7 @@ Ce que le devis range, parce qu'il l'imprime ou qu'un de ses contrôles le lit :
 
 | donnée | son lecteur | lot |
 |---|---|---|
-| unité en **liste fermée** (m², ml, m³, u, h, forfait…) | imprimée. Choisir des unités qui ont un code UN/ECE rec20 (MTK, MTR, MTQ, HUR, C62, LS… à vérifier dans l'annexe 7) ; la correspondance elle-même s'écrira avec la facture | 1 |
+| unité en **liste fermée** (m², ml, m³, u, h, forfait…) | imprimée. Choisir des unités qui ont un code UN/ECE rec20 (MTK, MTR, MTQ et C62 sont dans la liste Peppol, révision 11, vérifiée le 17/10 ; leur présence dans l'annexe 7 française, qui peut restreindre la liste, reste à vérifier, comme HUR et LS) ; la correspondance elle-même s'écrira avec la facture | 1 |
 | main-d'œuvre : taux horaire **et** temps estimé, ou forfait | imprimée ; exigée hors établissement (arrêté 2017 art. 4-II) | 1 |
 | lieu d'exécution structuré (rue, code postal, ville) | imprimé ; c'est aussi lui qui situe un poste dans une région (10.6) | 1 |
 | taux en centièmes de point | la formule, et le pied du devis | 1 |

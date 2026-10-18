@@ -1509,14 +1509,29 @@ placo et on voit toutes les nouveautés »).
   existent déjà. Un produit déguisé en publication d'artisan ferait perdre
   la confiance dans tout le fil, et elle ne revient pas ;
 - ce qui ferait vraiment la différence : **le stock et la distance** —
-  « disponible aujourd'hui à 12 km de votre chantier ». Personne ne le fait
-  bien dans le bâtiment. Mais ça suppose des données de stock côté
-  fournisseur ; en v1 c'est le fournisseur qui saisit ses annonces.
+  « disponible aujourd'hui à 12 km de votre chantier ». Nuancé le 17/10
+  (`COMPARATEUR-MATERIAUX.md`) : le **stock** en temps réel est rarement
+  tenu par personne (Tolteck renvoie à la page du négoce ; les interfaces
+  temps réel annoncées par Roobeo ne sont jamais devenues publiques), alors
+  que le **transport** est à portée pour le gros œuvre. En v1 c'est le
+  fournisseur qui saisit ses annonces.
+
+> **Le futur compte fournisseur ne doit JAMAIS rendre `est_un_pro()` vrai.**
+> Cette fonction ouvre la lecture des demandes des particuliers — leur
+> commune, leur texte, les photos de leur maison. Et l'exposition existe
+> déjà : un négoce dont le SIRET est actif peut s'inscrire aujourd'hui comme
+> artisan, le code d'activité ne bloquant rien (décision du 12/10).
+> **Mesuré le 18/10, en nombres seulement : aucun ne l'a fait** — 0 annonce
+> « fournisseur », une seule entreprise rattachée, de code 43 (travaux du
+> bâtiment), et aucun métier de négoce dans le catalogue.
 
 **Le type de compte ne passe pas avant la section 1.** L'inscription, le
 profil, les règles RLS et la modération doubleraient — et sans signalement,
 suppression de compte ni mentions légales, l'application ne peut de toute
-façon pas être ouverte au public.
+façon pas être ouverte au public. **Cette condition est remplie** depuis le
+21/09 : le compte fournisseur attend désormais la décision du propriétaire
+(le garder pour la Place des pros, ou le ranger au module 7 — question
+« Négoces » de `COMPARATEUR-MATERIAUX.md` §1).
 
 ---
 
@@ -1593,7 +1608,7 @@ pour la même raison que le §4 n'a pas posé ses sept réglages d'un coup :
 | ✅ | **Personne ne devient pro par lui-même** — fait le 15/10/2026 | 5 | **Le préalable du SIRET, et une faille réelle.** Un particulier pouvait se déclarer pro (`update users set type`), s'insérer une fiche, puis lire les demandes des particuliers, publier, ouvrir un carnet de clients, créer un chantier. Une seconde porte passait par la suppression de compte. Fermées par la base (section 44, OP004 et OP005), vérifiées sur la vraie base avec deux comptes jetables supprimés. Le trou n'avait jamais servi : 7 fiches sur 7 sont sur un compte pro. Sans cette correction, vérifier le SIRET à l'inscription n'aurait rien protégé. `npm run verifier-pro`. |
 | ✅ | **Le SIRET à l'inscription** — fait le 17/10/2026 | 5 | **Décidé le 12/10 par le propriétaire.** Un compte pro ne naît plus qu'avec un SIRET trouvé ACTIF au répertoire Sirene (INSEE), consulté par la fonction Edge `siret` qui range une preuve ; inscription en deux temps (le répertoire préremplit le nom, la forme, la commune, propose le métier), SIRET verrouillé, une entreprise = un compte, porte de secours DANS Opus (compte en attente + demande suivie, administration prévenue), « Passer en compte professionnel » pour un particulier, « Mon entreprise » dans le profil, file des demandes en administration. Section 45, appliquée sur la vraie base et éprouvée par curl et au navigateur avec des comptes jetables supprimés. **Il ne prouve PAS qu'on est le titulaire** : le badge reste humain. Restent au propriétaire : voir CLAUDE.md, « Le SIRET à l'inscription », « Ce qui reste ouvert ». `npm run verifier-siret`. |
 | 2 | **Devis** | 9 | Le cœur du métier, et le premier document qui ENGAGE. Numérotation, TVA, mentions obligatoires, acceptation. |
-| 3 | **Factures** | 10 | Elles NAISSENT d'un devis accepté : les écrire avant obligerait à tout ressaisir. Facturation électronique obligatoire entre entreprises — à vérifier au moment de le construire, pas de mémoire. |
+| 3 | **Factures** | 10 | Elles NAISSENT d'un devis accepté : les écrire avant obligerait à tout ressaisir. Facturation électronique obligatoire entre entreprises, vérifiée le 17/10/2026 (FAQ officielle d'août 2026) : **réception** obligatoire pour toutes depuis le 01/09/2026 ; **émission** par les grandes entreprises et les ETI depuis la même date, par les PME, TPE et micro-entreprises au plus tard le 01/09/2027. À relire au moment de le construire. |
 | 4 | **Dashboard** | 8 | Il MONTRE ce que les trois précédents ont produit. Avant eux, il n'aurait rien à afficher — ce serait le « bouton §18 » à l'échelle d'un écran. |
 | 5 | **Agenda** | 11 | Il se nourrit des chantiers et des devis acceptés. |
 | 6 | **Dépenses et comptabilité préparatoire** | 13 | Demande les factures pour avoir un « sortant » en face d'un « entrant ». |
@@ -1680,6 +1695,34 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
   concernée, Opus ou pas.
 - [ ] **Changer d'entreprise** sur un compte pro (passage de micro à société) :
   aucune porte (OP008, OP009) ; elle touchera la numérotation des devis.
+
+
+### Fournisseurs et prix (module 7) — à trancher à son ouverture
+
+L'étude `docs/COMPARATEUR-MATERIAUX.md` (17/10/2026) a rangé ses décisions
+selon leur moment. Deux se prennent maintenant (la neutralité, et les
+négoces inscriptibles comme artisans — §1). Les autres attendent leur
+module, et on ne les tranche PAS avant :
+
+- [ ] **une plateforme de facture électronique partenaire, ou non** — à
+  l'ouverture du module 3 (factures) ;
+- [ ] **comment mesurer la lecture des factures**, et le geste séparé
+  « retrouver mes prix dans mes factures » — au début du module 6 ;
+- [ ] **le compte fournisseur à part, et ses offres** — au module 7, sauf si
+  la question « Négoces » l'avance ;
+- [ ] **le premier lot de matériaux** (recommandation : le métier du frère,
+  puisque c'est lui qui aura des factures) et **l'âge à partir duquel un
+  prix passe « à vérifier »** (proposition : 3 mois) — au module 7 ;
+- [ ] **le sort des réponses et des annonces « fournisseur »** quand un
+  fournisseur supprime son compte — au module 7 ;
+- [ ] **les prix d'achat dans la future base vendue par API** — avec le
+  troisième cahier des charges, jamais sans avocat.
+
+> **Engagement de méthode, dès maintenant : les prix d'achat d'un artisan
+> seront traités pour lui seul**, sous confidentialité, administrateur
+> compris (`DONNEES-DES-ARTISANS.md` §5.2). Il n'est PAS écrit dans les
+> textes légaux : ils décriraient un traitement qui n'existe pas encore. Il
+> y entrera avec le module 6.
 
 ---
 

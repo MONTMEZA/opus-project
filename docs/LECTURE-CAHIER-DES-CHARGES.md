@@ -295,7 +295,11 @@ pile :
 
 - la **Place des pros** correspond au §18 (sous-traitance entre
   professionnels, phase 10) — déjà à moitié construite ;
-- le type d'annonce **fournisseur** correspond au §14 (phase 8) ;
+- le type d'annonce **fournisseur** ne correspond qu'**en partie** aux « prix
+  fournisseurs disponibles » du §14 (phase 8) : une annonce n'a ni unité de
+  vente (seulement « au total, par jour, par semaine, par mois »), ni
+  conditionnement, ni date de fin de validité. Le cœur du §14, les factures
+  d'achat, n'existe pas encore (`COMPARATEUR-MATERIAUX.md`, 17/10/2026) ;
 - le **signalement, le blocage et les droits RGPD** sont exigés par le §23 ;
 - le **badge vérifié** est le « Certifications et documents vérifiés » du §6 ;
 - l'**IA qui améliore un texte** est le §19.
