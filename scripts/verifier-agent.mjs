@@ -256,8 +256,15 @@ console.log('\nLa fonction EDGE — identifier, puis noter AVANT de payer');
     /auth\.getUser\(jeton\)/.test(edge),
     'La clé publiable EST un jeton valide, mais elle ne désigne personne.');
 
-  verifier('…et refuse en 401 sans utilisateur',
-    /if \(!user\)[\s\S]{0,300}?401/.test(edge));
+  /* EN 200, AVEC SA PHRASE — 18/10/2026. Ces deux contrôles exigeaient
+     un 401 et un 429. Or `supabase.functions.invoke` jette le corps de
+     toute réponse non-2xx : l'écran affichait « Edge Function returned a
+     non-2xx status code » (mesuré avec le vrai paquet, sans compte). La
+     règle a changé, et ils changent avec elle, comme `verifier-chantier`
+     le 15/10. */
+  verifier('…et refuse sans utilisateur, en 200 avec sa phrase',
+    /if \(!user\) \{\s*return issue\(/.test(edge),
+    'Un 401 arrive à l’écran en anglais : invoke() ne lit pas le corps.');
 
   /* L'ORDRE EST LE SUJET : refuser après avoir payé l'appel ne protège
      rien. */
@@ -268,9 +275,22 @@ console.log('\nLa fonction EDGE — identifier, puis noter AVANT de payer');
     'Refuser après avoir payé l\'appel ne protège rien.');
 
   const entreLesDeux = edge.slice(posJournal, posAnthropic);
-  verifier('un refus s\'arrête là, en 429',
-    /resultat === 'refuse'[\s\S]{0,400}?429/.test(entreLesDeux),
-    'Et il se DIT : une limite qui mord en silence ressemble à une panne.');
+  verifier('un refus s\'arrête là, en 200 avec sa phrase',
+    /resultat === 'refuse'\) \{\s*return issue\(/.test(entreLesDeux),
+    'Et il se DIT : une limite qui mord en silence ressemble à une panne — '
+    + 'et une limite annoncée en anglais aussi.');
+
+  verifier('`issue()` rend un 200',
+    /const issue = \(texte: string\) => json\(\{ error: texte \}\);/.test(edge));
+
+  /* Ce qui concerne la PERSONNE ne sort jamais en 401, 422, 429 ou 502 :
+     ce sont les quatre statuts que la fonction rendait avant le 18/10 pour
+     un refus, une limite, un refus du modèle ou une réponse illisible. Une
+     panne d'Opus (secret absent, journal, compte Anthropic) garde le sien. */
+  const statutsPersonne = edge.match(/\}, (401|422|429|502)\)/g) || [];
+  verifier('aucune issue de la personne ne sort en non-2xx',
+    statutsPersonne.length === 0,
+    `${statutsPersonne.join(' ')} : l’écran afficherait l’anglais de functions-js.`);
 
   verifier('le coût réel est inscrit après coup',
     /\.from\('journal_ia'\)[\s\S]{0,200}?\.update\(\{ jetons_entree/.test(edge),
@@ -298,9 +318,44 @@ console.log('\nLa fonction EDGE — identifier, puis noter AVANT de payer');
     + 'travail fait.');
 
   verifier('…et un refus ne punit pas celui qui l\'envoie',
-    /const refuser = async[\s\S]{0,200}?await noter\(0, 0, 'erreur'\)/.test(edge),
+    /const refuser = async \(texte: string, entree = 0, sortie = 0\) => \{\s*await noter\(entree, sortie, 'erreur'\);\s*return issue\(texte\);/.test(edge),
     '`enregistrer_appel_ia()` ne compte que les `ok` : marquer `erreur` sort '
     + 'la ligne du décompte de la limite.');
+
+  /* UN ÉCHEC PAYÉ RESTE UN ÉCHEC — 18/10/2026. Un refus du modèle
+     n'appelait pas `noter` (la ligne gardait le `ok` par défaut, avec zéro
+     jeton) ; une réponse illisible était notée `ok` AVANT d'être lue. */
+  const refusModele = (edge.match(/if \(aRefuse\(message\)\) \{\s*return refuser\([^;]*?entree, sortie\)/g) || []).length;
+  const aRefuseTotal = (edge.match(/aRefuse\(message\)/g) || []).length;
+  verifier('un refus du modèle est noté `erreur`, avec ce qu’il a coûté',
+    aRefuseTotal === 5 && refusModele === 5,
+    `${refusModele} sur ${aRefuseTotal} passent par refuser(…, entree, sortie).`);
+  const actions = edge.split(/if \(payload\.action === '/).slice(1);
+  const okAvantLecture = actions.filter((a) => {
+    const ok = a.indexOf("await noter(entree, sortie, 'ok')");
+    const lu = a.indexOf('JSON.parse(brut)');
+    return lu >= 0 && ok >= 0 && ok < lu;
+  }).length;
+  verifier('…et une réponse n’est notée `ok` qu’une fois LUE',
+    actions.length === 5 && okAvantLecture === 0,
+    `${okAvantLecture} action(s) notent « ok » avant d’avoir lu la réponse.`);
+
+  verifier('le texte brut d’une panne d’Anthropic ne va pas dans la phrase',
+    !/\$\{brut\}/.test(edge),
+    'Il s’afficherait en anglais, maintenant que l’application lit le corps '
+    + 'des réponses non-2xx. Le détail est dans les journaux Supabase.');
+
+  verifier('l’application ne laisse passer AUCUNE erreur brute de l’assistant',
+    /if \(error\) throw new ErreurAssistant\(await messageDeFonctionEdge\(error\)\);/.test(clientIA)
+    && /if \(data && data\.error\) throw new ErreurAssistant\(/.test(clientIA)
+    && !/throw error;/.test(clientIA),
+    'Trois écrans affichent `e.message` tel quel.');
+
+  verifier('…et l’écran de présentation dit la RAISON, pas « pas joignable »',
+    /catch \(e\) \{[\s\S]{0,200}?e\.message/.test(
+      sansCommentaires(lire('src/components/AssistantPresentation.js'))),
+    'Une limite atteinte annoncée comme une panne de réseau fait chercher '
+    + 'au mauvais endroit.');
 
   verifier('un journal incomplet ne fait pas échouer la réponse',
     /if \(error\) console\.error\('journal_ia \(mise à jour\)/.test(edge),

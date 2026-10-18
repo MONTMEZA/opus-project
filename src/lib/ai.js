@@ -12,6 +12,24 @@
  */
 import { supabase, hasSupabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
 import { reponsesLisibles } from './presentation';
+import { messageDeFonctionEdge } from './erreurs';
+
+/**
+ * UNE ERREUR DE L'ASSISTANT EST DÉJÀ EN FRANÇAIS — 18/10/2026.
+ *
+ * Trois écrans affichent `e.message` tel quel (améliorer un texte, le
+ * résumé des avis, la recherche de l'assistant). Ils montraient
+ * « Edge Function returned a non-2xx status code » dès que la fonction `ai`
+ * refusait — pas connecté, limite du jour atteinte. Toute erreur qui sort
+ * d'ici a donc DÉJÀ sa phrase, et `messageClair()` la rend telle quelle en
+ * reconnaissant ce nom.
+ */
+export class ErreurAssistant extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ErreurAssistant';
+  }
+}
 
 /**
  * Erreur lisible quand l'application tourne SANS Supabase.
@@ -21,7 +39,7 @@ import { reponsesLisibles } from './presentation';
  * l'application qui n'est reliée à rien, faute de fichier `.env`. Un message
  * qui désigne le mauvais coupable coûte plus cher que pas de message.
  */
-export class AiNotConfiguredError extends Error {
+export class AiNotConfiguredError extends ErreurAssistant {
   constructor() {
     super("L'application tourne en mode démonstration, sans connexion à "
       + 'Supabase : ajoutez un fichier .env pour joindre l\'assistant IA.');
@@ -71,8 +89,8 @@ export function surTravailAgent(f) {
 async function callAiFunction(payload) {
   if (!hasSupabase) throw new AiNotConfiguredError();
   const { data, error } = await supabase.functions.invoke('ai', { body: payload });
-  if (error) throw error;
-  if (data && data.error) throw new Error(data.error);
+  if (error) throw new ErreurAssistant(await messageDeFonctionEdge(error));
+  if (data && data.error) throw new ErreurAssistant(String(data.error));
   temoinsTravail.forEach((f) => { try { f(); } catch (e) { /* un témoin cassé ne casse pas l'IA */ } });
   return data;
 }

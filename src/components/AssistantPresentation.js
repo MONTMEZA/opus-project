@@ -65,9 +65,15 @@ export default function AssistantPresentation({ profil, onUtiliser, onFermer }) 
       const mieux = await aiRedigerPresentation({ profil, reponses });
       if (mieux.length) { setPropositions(mieux); setParIA(true); }
     } catch (e) {
+      /* LA RAISON, PAS « PAS JOIGNABLE » — 18/10/2026. La phrase disait
+         toujours que l'assistant était injoignable, y compris quand la
+         limite du jour était atteinte ou la session expirée : on cherchait
+         alors une panne de réseau qui n'existait pas. L'erreur arrive déjà
+         en français (`ErreurAssistant`, `src/lib/ai.js`). */
+      const raison = (e && e.message) ? e.message : "L'assistant IA n'est pas joignable.";
       setNoteIA(
-        "L'assistant IA n'est pas joignable — voici les textes écrits par "
-        + "l'application. Ils sont modifiables, comme les autres.",
+        `${raison} Voici les textes écrits par l'application : ils sont `
+        + 'modifiables, comme les autres.',
       );
     } finally {
       setEnCours(false);

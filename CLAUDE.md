@@ -5609,8 +5609,10 @@ Quatre décisions à ne pas redécouvrir :
    `enregistrer_appel_ia()` — qui compte les lignes `ok` des 24 dernières
    heures **sur l'horloge du serveur** —, et elle se tromperait deux fois :
    sur une page de résultats qui peut être pleine de refus, et sur l'horloge
-   du téléphone. La base le dit déjà au bon moment, en 429 et en français.
-   L'écran annonce la limite en toutes lettres, et **le contrôle compare le
+   du téléphone. La base le dit déjà au bon moment, en français.
+   *(Cette phrase disait « en 429 et en français » : le 429 n'arrivait
+   jamais à l'écran autrement qu'en anglais. Corrigé le 18/10, voir « Les
+   erreurs de l'assistant arrivaient en anglais ».)* L'écran annonce la limite en toutes lettres, et **le contrôle compare le
    nombre des deux côtés**.
 2. **On n'affiche PAS les jetons.** « 12 483 jetons » ne veut rien dire pour
    un maçon. Ils sont dans l'export de ses données, là où ils répondent à la
@@ -7477,6 +7479,108 @@ l'EIRL, la phrase L. 243-2 du plan), l'adresse du siège à ranger dans la
 preuve, l'artisan au régime réel sans n° de TVA transmis, les attestations
 remplacées qui restent dans `documents`, et la liste des médiateurs à
 relever chaque année.
+
+### Les erreurs de l'assistant arrivaient en anglais (18/10/2026)
+
+`supabase/functions/ai/index.ts`, `src/lib/ai.js`,
+`messageDeFonctionEdge()` dans `src/lib/erreurs.js`, contrôlés par
+`verifier-agent` et `verifier-etats`.
+
+#### Le défaut, reproduit avant d'être corrigé
+
+`supabase.functions.invoke` transforme toute réponse non-2xx en
+`FunctionsHttpError`, dont le message est « Edge Function returned a non-2xx
+status code », et **il ne lit pas le corps**. La fonction `ai` rendait
+pourtant ses refus en français, mais avec un statut d'erreur : 401 (pas
+connecté), 429 (limite du jour), 422 (refus du modèle), 502 (réponse
+illisible). Mesuré avec le vrai paquet `functions-js` du projet, sur la
+vraie fonction, sans compte (donc sans rien payer) :
+
+| | ce que la fonction rendait | ce que l'application affichait |
+|---|---|---|
+| corps | « L'assistant n'est accessible qu'une fois connecté. » | **« Edge Function returned a non-2xx status code »** |
+
+Trois écrans affichent `e.message` tel quel : améliorer un texte, le résumé
+des avis, la recherche de l'assistant. La page du chantier, elle, passait
+par `messageClair()` et annonçait « le service d'Opus n'a pas répondu
+correctement » — une **panne** là où il n'y avait qu'une **limite**. Et la
+présentation assistée disait toujours « pas joignable ».
+
+> **C'était la règle déjà écrite pour la fonction `siret`** (« toutes les
+> issues partent en HTTP 200 »), et elle n'avait pas été appliquée à `ai`.
+> Une règle écrite pour UNE fonction ne protège pas la suivante.
+
+#### La correction, des DEUX côtés
+
+1. **La fonction** : ce qui concerne la personne sort en 200 avec
+   `{ error }` (`issue()`). Seule une panne d'Opus — secret absent, journal
+   injoignable, compte Anthropic — garde un statut d'erreur.
+2. **L'application lit le corps quand même** (`messageDeFonctionEdge`) :
+   la phrase du serveur si elle existe ; pour un 401 sans phrase, la
+   session ; sinon `messageClair()`. Toute erreur sortie de
+   `callAiFunction` est une `ErreurAssistant`, déjà en français, que
+   `messageClair()` rend telle quelle.
+
+> **Les deux, et pas l'un ou l'autre.** Le côté application a été éprouvé
+> sur la fonction ENCORE en version 9 : la phrase française arrivait déjà.
+> Une fonction pas encore redéployée, ou une version de l'application en
+> retard, ne remet donc pas l'anglais à l'écran. Et la **passerelle** de
+> Supabase refuse un jeton invalide avant que la fonction ne tourne, en
+> anglais (`{"code":"UNAUTHORIZED_LEGACY_JWT","message":"Invalid JWT"}`,
+> relevé tel quel) : aucune modification de la fonction ne l'aurait
+> attrapé, seul le côté application le traduit (« votre session a
+> expiré »).
+
+#### Deux défauts du journal, trouvés sur le même chemin
+
+- **Un refus du MODÈLE restait noté `ok`**, avec zéro jeton : `aRefuse`
+  sortait sans appeler `noter`, et la ligne gardait sa valeur par défaut.
+  C'est le défaut du 07/10 (« un refus s'inscrivait `ok` ») par une autre
+  porte.
+- **Une réponse illisible était notée `ok` AVANT d'être lue.**
+
+Les deux passent par `refuser(texte, entree, sortie)` : l'échec est noté
+`erreur`, **avec les jetons réellement payés**. Et `ok` ne s'écrit plus
+qu'une fois la réponse LUE, dans les cinq actions.
+
+#### Ce que l'application lit maintenant, elle l'aurait affiché
+
+Le repli de `messageLisible` recopiait l'erreur brute d'Anthropic entre
+parenthèses — « (Connection error.) ». Invisible tant que l'application ne
+lisait pas le corps ; depuis qu'elle le lit, ce serait de l'anglais à
+l'écran. Retiré de la phrase : le détail est déjà dans les journaux
+Supabase.
+
+> **Réparer la lecture d'un canal rend visible tout ce qui y passait
+> déjà.** Avant de brancher un lecteur sur un texte que personne ne
+> lisait, relire ce texte.
+
+#### Vérifié, et comment
+
+`verifier-agent` et `verifier-etats` FONT TOURNER la traduction sur les
+vraies classes de `functions-js` et de vraies `Response` (dont le corps
+exact de la passerelle) ; **onze défauts remis à la main, les onze
+refusés**. Les 47 contrôles, le linter (32, tous antérieurs), les paquets
+iOS et Android lus. Le compilateur TypeScript rend les mêmes dix erreurs
+d'environnement (Deno, modules `npm:`) avant et après.
+
+La fonction déployée en **version 10**, `verify_jwt` inchangé, puis relue :
+**identique au dépôt octet pour octet** (même empreinte SHA-256). Sur la
+vraie base, avec un compte particulier jetable supprimé par le chemin de
+l'application :
+
+| | résultat |
+|---|---|
+| sans compte | **200**, « L'assistant n'est accessible qu'une fois connecté » |
+| un jeton invalide (passerelle) | 401 en anglais → **« Votre session a expiré »** à l'écran |
+| un récit à une seule étape | **200** et sa phrase ; au journal **`erreur`, 0 jeton** |
+| améliorer un texte | **200**, trois propositions ; au journal **`ok`, 1 337 / 153 jetons** |
+| après le ménage | reconnexion refusée, 0 compte jetable, base revenue à 15 / 8 / 21 |
+
+**Ce qui n'a PAS été vérifié** : la limite du jour pour de vrai (il
+faudrait soixante appels payants) ; un refus du modèle et une réponse
+illisible ne se provoquent pas à la demande — ces deux chemins ne sont
+tenus que par le contrôle. Et rien sur l'iPhone.
 
 ## Dépendances : vérifier avant de proposer
 

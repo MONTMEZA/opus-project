@@ -211,6 +211,46 @@ export function issueDeVerification(erreur, ecouleMs = 0, delaiMs = 15000) {
   return { issue: 'service_indisponible' };
 }
 
+/**
+ * CE QU'UNE FONCTION EDGE A RÉPONDU, MÊME EN NON-2xx — 18/10/2026.
+ *
+ * `supabase.functions.invoke` transforme toute réponse non-2xx en
+ * `FunctionsHttpError` dont le message est « Edge Function returned a
+ * non-2xx status code », et ne lit PAS le corps. Mesuré ce jour-là avec le
+ * vrai paquet, sans compte, sur la fonction `ai` : le corps disait
+ * « L'assistant n'est accessible qu'une fois connecté », l'écran affichait
+ * l'anglais. Le corps reste pourtant lisible, dans `context`.
+ *
+ * Rend une phrase en français, toujours :
+ *   1. la phrase du serveur (`{ error }`), quand il en a écrit une ;
+ *   2. pour un 401 sans phrase — la passerelle de Supabase refuse un jeton
+ *      expiré avant que la fonction ne tourne, en anglais —, la session ;
+ *   3. sinon `messageClair()` : le réseau, ou une panne d'Opus.
+ *
+ * `quoi` sert au troisième cas seulement : la phrase du serveur est déjà
+ * complète, la préfixer la rendrait bancale.
+ */
+export async function messageDeFonctionEdge(erreur, quoi = '') {
+  const nom = String((erreur && erreur.name) || '');
+  const reponse = erreur && erreur.context;
+  if ((nom === 'FunctionsHttpError' || nom === 'FunctionsRelayError')
+    && reponse && typeof reponse.text === 'function') {
+    let corps = null;
+    try {
+      corps = JSON.parse(await reponse.text());
+    } catch (e) {
+      corps = null;
+    }
+    const phraseServeur = corps && typeof corps.error === 'string' ? corps.error.trim() : '';
+    if (phraseServeur) return phraseServeur;
+    if (reponse.status === 401) {
+      return phrase(quoi ? `${quoi} : ` : '', 'votre session a expiré. Fermez et rouvrez '
+        + 'l\'application pour vous reconnecter.');
+    }
+  }
+  return messageClair(erreur, quoi);
+}
+
 /** Vrai quand la session a expiré : il faut se reconnecter, rien d'autre. */
 export function estUneSessionExpiree(e) {
   const m = String((e && e.message) || e || '').toLowerCase();
@@ -241,6 +281,13 @@ export function messageClair(e, quoi = '') {
      d'elles ne doit pas la faire passer pour un droit manquant. */
   const code = String((e && e.code) || '');
   if (/^OP\d{3}$/.test(code) && brut) return brut;
+
+  /* Même raison pour l'ASSISTANT (`ErreurAssistant`, `src/lib/ai.js`) : son
+     message a déjà été traduit, une fois, par `messageDeFonctionEdge`. Le
+     repasser ici le ferait relire par les règles du réseau — « connexion »
+     ou « délai » dans une phrase du serveur ne disent pas que le téléphone
+     est hors ligne. */
+  if (String((e && e.name) || '') === 'ErreurAssistant' && brut) return brut;
 
   /* Le réseau d'abord : c'est le cas le plus fréquent sur un chantier, et
      celui où l'utilisateur n'a rien fait de mal. */

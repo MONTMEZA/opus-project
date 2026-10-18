@@ -297,6 +297,44 @@ console.log('\nUne consultation qui n’aboutit pas n’accuse jamais le numéro
   verifier('…et une fonction injoignable est reconnue comme une perte de réseau',
     /pas de connexion/i.test(messageClair(sansReseau)));
 
+  /* LE CORPS D'UNE RÉPONSE NON-2xx — 18/10/2026. `invoke()` ne le lit pas :
+     la fonction `ai` disait « L'assistant n'est accessible qu'une fois
+     connecté », l'écran affichait « Edge Function returned a non-2xx status
+     code ». On le fait tourner sur de VRAIES réponses HTTP (`Response`,
+     celle de Node), enveloppées par les vraies classes du paquet. */
+  const { messageDeFonctionEdge } = await import('../src/lib/erreurs.js');
+  const reponse = (statut, corps) => new FunctionsHttpError(new Response(corps, { status: statut }));
+  const phraseServeur = "L'assistant n'est accessible qu'une fois connecté. Reconnectez-vous.";
+  const lus = {
+    francais: await messageDeFonctionEdge(reponse(401, JSON.stringify({ error: phraseServeur }))),
+    limite: await messageDeFonctionEdge(reponse(429, JSON.stringify({ error: 'Vous avez atteint la limite' }))),
+    /* Le corps EXACT relevé le 18/10 sur la vraie passerelle, avec un jeton
+       invalide : elle refuse avant que la fonction ne tourne. */
+    passerelle: await messageDeFonctionEdge(reponse(401,
+      JSON.stringify({ code: 'UNAUTHORIZED_LEGACY_JWT', message: 'Invalid JWT' }))),
+    pasDuJson: await messageDeFonctionEdge(reponse(500, '<html>Internal Server Error</html>')),
+    reseau: await messageDeFonctionEdge(sansReseau),
+  };
+  verifier('la phrase du serveur arrive à l’écran, même en 401',
+    lus.francais === phraseServeur, lus.francais);
+  verifier('…et en 429', lus.limite === 'Vous avez atteint la limite', lus.limite);
+  verifier('un 401 de la passerelle (jeton expiré, en anglais) → la session',
+    /session a expiré/.test(lus.passerelle) && !/Invalid JWT/.test(lus.passerelle), lus.passerelle);
+  verifier('un corps illisible → une panne d’Opus, en français',
+    /service d’Opus/.test(lus.pasDuJson) && !anglais.test(lus.pasDuJson), lus.pasDuJson);
+  verifier('…et sans réseau → « pas de connexion »', /pas de connexion/i.test(lus.reseau), lus.reseau);
+  verifier('aucune des cinq ne rend l’anglais de functions-js',
+    Object.values(lus).every((m) => !anglais.test(m) && !/Invalid JWT|Internal Server/.test(m)));
+
+  /* Et une erreur de l'assistant, déjà traduite, ne repasse pas par les
+     règles du réseau : « timeout » dans une phrase du serveur ne dit pas
+     que le téléphone est hors ligne. */
+  const dejaTraduite = Object.assign(new Error('Le service a dépassé son délai (timeout). Réessayez.'),
+    { name: 'ErreurAssistant' });
+  verifier('messageClair rend telle quelle une erreur de l’assistant',
+    messageClair(dejaTraduite, "L'agent n'a pas pu écrire ce récit") === dejaTraduite.message,
+    messageClair(dejaTraduite, "L'agent n'a pas pu écrire ce récit"));
+
   const gotrue = messageClair(new Error('Database error saving new user'));
   verifier('« Database error saving new user » dit quoi faire, en français',
     /n’a pas été créé/.test(gotrue) && /« Vérifier »/.test(gotrue), gotrue);

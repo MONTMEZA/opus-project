@@ -30,6 +30,10 @@
  *      écriture dans le même ordre, sinon deux appels simultanés passent
  *      tous les deux.
  *
+ * CE QUE VOIT L'APPLICATION — 18/10/2026. Ce qui concerne la PERSONNE
+ * (pas connectée, limite atteinte, demande incomplète, refus du modèle,
+ * réponse illisible) sort en HTTP 200 avec `{ error }`. Voir `issue()`.
+ *
  * CINQ ACTIONS :
  *   { action: "match",     besoin, artisans }  -> { recommandations: [...] }
  *   { action: "summary",   entreprise, metier, avis } -> { resume: "..." }
@@ -120,7 +124,16 @@ function messageLisible(e: unknown): { texte: string; statut: number } {
       statut: 500,
     };
   }
-  return { texte: `L'assistant IA n'a pas pu répondre (${brut}).`, statut: 502 };
+  /* LE DÉTAIL BRUT NE VA PLUS À L'ÉCRAN — 18/10/2026. Il y allait entre
+     parenthèses (« (Connection error.) », en anglais), invisible tant que
+     l'application ne lisait pas le corps d'un non-2xx ; depuis qu'elle le
+     lit, il s'afficherait. Il est déjà dans les journaux Supabase
+     (`console.error` ci-dessous), là où on le cherche. */
+  return {
+    texte: "L'assistant IA n'a pas pu répondre. Ce n'est pas de votre fait : "
+      + 'réessayez dans quelques minutes.',
+    statut: 502,
+  };
 }
 
 const CORS = {
@@ -134,6 +147,26 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   });
+
+/**
+ * UNE ISSUE QUI CONCERNE LA PERSONNE PART EN HTTP 200 — 18/10/2026.
+ *
+ * `supabase.functions.invoke` transforme toute réponse non-2xx en
+ * « Edge Function returned a non-2xx status code », sans lire le corps.
+ * Mesuré le 18/10 avec le vrai paquet `functions-js`, sans compte : cette
+ * fonction rendait « L'assistant n'est accessible qu'une fois connecté » en
+ * 401, et l'application affichait la phrase anglaise. Une limite atteinte
+ * (429) donnait la même phrase — ou, sur la page du chantier, « le service
+ * d'Opus n'a pas répondu correctement », c'est-à-dire une panne annoncée là
+ * où il n'y avait qu'une limite.
+ *
+ * C'est la règle déjà tenue par la fonction `siret` : seule une panne
+ * d'OPUS (secret absent, journal injoignable, compte Anthropic) garde un
+ * statut d'erreur. Et l'application lit le corps dans les deux cas
+ * (`messageDeFonctionEdge`, `src/lib/erreurs.js`) : une version de cette
+ * fonction pas encore redéployée ne remet donc pas l'anglais à l'écran.
+ */
+const issue = (texte: string) => json({ error: texte });
 
 /** Ce qu'Anthropic a réellement compté, pour le journal d'audit. */
 function coutDe(message: Anthropic.Message): { entree: number; sortie: number } {
@@ -201,9 +234,7 @@ Deno.serve(async (req) => {
     : { data: { user: null } };
 
   if (!user) {
-    return json({
-      error: "L'assistant n'est accessible qu'une fois connecté. Reconnectez-vous.",
-    }, 401);
+    return issue("L'assistant n'est accessible qu'une fois connecté. Reconnectez-vous.");
   }
 
   const action = String(payload.action || '');
@@ -226,10 +257,8 @@ Deno.serve(async (req) => {
      silence ressemble à une application cassée — c'est la règle des
      « 3 annonces sans lieu précisé ne sont pas affichées ». */
   if (ligne && ligne.resultat === 'refuse') {
-    return json({
-      error: 'Vous avez atteint la limite d’appels à l’assistant pour aujourd’hui. '
-        + 'Elle se remet à zéro 24 h après votre premier appel.',
-    }, 429);
+    return issue('Vous avez atteint la limite d’appels à l’assistant pour aujourd’hui. '
+      + 'Elle se remet à zéro 24 h après votre premier appel.');
   }
 
   /* LE COÛT NE SE CONNAÎT QU'APRÈS. On inscrit la ligne AVANT l'appel —
@@ -268,10 +297,17 @@ Deno.serve(async (req) => {
    * Marquer `erreur` fait les deux : la ligne se voit, et elle ne compte
    * plus contre la limite — `enregistrer_appel_ia()` ne compte que les
    * `ok`. Une demande malformée ne doit pas punir celui qui l'envoie.
+   *
+   * ET LE MODÈLE PEUT ÉCHOUER APRÈS AVOIR ÉTÉ PAYÉ — 18/10/2026. Un refus
+   * du modèle (`aRefuse`) n'appelait pas `noter` : la ligne gardait le
+   * `ok` par défaut, avec zéro jeton, c'est-à-dire le défaut du 07/10 par
+   * une autre porte. Une réponse illisible, elle, était notée `ok` AVANT
+   * qu'on essaie de la lire. Les deux passent désormais ici, avec les jetons
+   * réellement comptés : le coût se voit, et l'échec aussi.
    */
-  const refuser = async (texte: string, statut = 400) => {
-    await noter(0, 0, 'erreur');
-    return json({ error: texte }, statut);
+  const refuser = async (texte: string, entree = 0, sortie = 0) => {
+    await noter(entree, sortie, 'erreur');
+    return issue(texte);
   };
 
   const client = new Anthropic({ apiKey });
@@ -297,17 +333,18 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
         }],
       });
 
-      if (aRefuse(message)) return json({ error: "L'assistant a refusé de répondre à cette demande." }, 422);
-
       const { entree, sortie } = coutDe(message);
-    await noter(entree, sortie, 'ok');
-    const brut = textOf(message).replace(/```json|```/g, '').trim();
+      if (aRefuse(message)) {
+        return refuser("L'assistant a refusé de répondre à cette demande.", entree, sortie);
+      }
+      const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { recommandations?: unknown };
       try {
         parsed = JSON.parse(brut);
       } catch {
-        return json({ error: "L'assistant IA a renvoyé une réponse illisible. Réessayez." }, 502);
+        return refuser("L'assistant a renvoyé une réponse illisible. Réessayez.", entree, sortie);
       }
+      await noter(entree, sortie, 'ok');
       const recommandations = Array.isArray(parsed.recommandations) ? parsed.recommandations : [];
       return json({ recommandations });
     }
@@ -333,10 +370,14 @@ Trie du plus pertinent au moins pertinent. N'utilise que des proId présents dan
         }],
       });
 
-      if (aRefuse(message)) return json({ error: "L'assistant a refusé de résumer ces avis." }, 422);
       const { entree, sortie } = coutDe(message);
+      if (aRefuse(message)) {
+        return refuser("L'assistant a refusé de résumer ces avis.", entree, sortie);
+      }
+      const resume = textOf(message).trim();
+      if (!resume) return refuser("L'assistant n'a rien écrit. Réessayez.", entree, sortie);
       await noter(entree, sortie, 'ok');
-      return json({ resume: textOf(message).trim() });
+      return json({ resume });
     }
 
     /* -------- Présentation d'un artisan (écran Modifier mon profil) -------- */
@@ -370,17 +411,18 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
         }],
       });
 
-      if (aRefuse(message)) return json({ error: "L'assistant a refusé d'écrire cette présentation." }, 422);
-
       const { entree, sortie } = coutDe(message);
-    await noter(entree, sortie, 'ok');
-    const brut = textOf(message).replace(/```json|```/g, '').trim();
+      if (aRefuse(message)) {
+        return refuser("L'assistant a refusé d'écrire cette présentation.", entree, sortie);
+      }
+      const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { propositions?: unknown };
       try {
         parsed = JSON.parse(brut);
       } catch {
-        return json({ error: "L'assistant a renvoyé une réponse illisible. Réessayez." }, 502);
+        return refuser("L'assistant a renvoyé une réponse illisible. Réessayez.", entree, sortie);
       }
+      await noter(entree, sortie, 'ok');
       const propositions = Array.isArray(parsed.propositions) ? parsed.propositions : [];
       return json({ propositions });
     }
@@ -447,17 +489,18 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour :
         }],
       });
 
-      if (aRefuse(message)) return json({ error: "L'assistant a refusé de retravailler ce texte." }, 422);
-
       const { entree, sortie } = coutDe(message);
-    await noter(entree, sortie, 'ok');
-    const brut = textOf(message).replace(/```json|```/g, '').trim();
+      if (aRefuse(message)) {
+        return refuser("L'assistant a refusé de retravailler ce texte.", entree, sortie);
+      }
+      const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { propositions?: unknown };
       try {
         parsed = JSON.parse(brut);
       } catch {
-        return json({ error: "L'assistant a renvoyé une réponse illisible. Réessayez." }, 502);
+        return refuser("L'assistant a renvoyé une réponse illisible. Réessayez.", entree, sortie);
       }
+      await noter(entree, sortie, 'ok');
       const propositions = Array.isArray(parsed.propositions) ? parsed.propositions : [];
       return json({ propositions });
     }
@@ -510,23 +553,22 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte autour, de la forme exacte :
         }],
       });
 
-      if (aRefuse(message)) {
-        return json({ error: "L'assistant a refusé d'écrire ce récit." }, 422);
-      }
-
       const { entree, sortie } = coutDe(message);
-      await noter(entree, sortie, 'ok');
+      if (aRefuse(message)) {
+        return refuser("L'assistant a refusé d'écrire ce récit.", entree, sortie);
+      }
       const brut = textOf(message).replace(/```json|```/g, '').trim();
       let parsed: { recit?: unknown };
       try {
         parsed = JSON.parse(brut);
       } catch {
-        return json({ error: "L'assistant a renvoyé une réponse illisible. Réessayez." }, 502);
+        return refuser("L'assistant a renvoyé une réponse illisible. Réessayez.", entree, sortie);
       }
       const recit = String(parsed.recit || '').trim();
       if (!recit) {
-        return json({ error: "L'assistant n'a rien écrit. Réessayez." }, 502);
+        return refuser("L'assistant n'a rien écrit. Réessayez.", entree, sortie);
       }
+      await noter(entree, sortie, 'ok');
       return json({ recit });
     }
 
