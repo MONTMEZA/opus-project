@@ -292,8 +292,9 @@ peut la fournir.
 | **1. La mémoire** | la base de données, sans IA | chaque ligne d'un devis **émis** est rangée telle quelle : la phrase **mot pour mot**, l'unité, le prix, et le devis d'où elle vient. Quand l'artisan tape « chape », Opus lui propose **sa** phrase et **son** prix |
 | **2. La compréhension** | l'agent | il reconnaît que « Création d'une chape sèche pour futur pose de carrelage » et « chape sèche avant carrelage collé » sont **le même poste** ; il comprend une dictée (« chape dans le salon, 27 m² ») et retrouve le poste dans la base ; il repère un poste **nouveau** et propose de l'ajouter |
 
-> **Pourquoi deux étages :** le premier est gratuit, instantané, marche sans
-> réseau au fond d'une cave, et ne peut pas se tromper — il ne fait que
+> **Pourquoi deux étages :** le premier est gratuit, instantané, n'appelle
+> pas l'IA (il lui faut quand même le réseau pour joindre la base : le
+> hors-ligne est écarté, `PLAN-DEVIS.md` §3.1 et §6), et ne peut pas se tromper — il ne fait que
 > ressortir ce que l'artisan a écrit. Le second coûte un appel d'IA et peut se
 > tromper, donc il **propose** et ne décide jamais. Si l'IA est en panne, la
 > mémoire marche toujours.

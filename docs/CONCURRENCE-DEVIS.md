@@ -157,13 +157,14 @@ recoupement des vingt-sept outils relevés :
 
 ### Coup 1 — La demande reçue devient un devis. C'est le seul inimitable.
 
-Opus détient, pour un artisan : **8 demandes de devis reçues**, **un carnet de
+Opus détient, pour un artisan : **8 demandes reçues** (6 de devis, 2 de rappel), **un carnet de
 clients**, **des chantiers avec leurs photos et leurs dates**. Tous les
 concurrents partent d'une page blanche.
 
 Le geste : sur une demande acceptée, un bouton **« En faire un devis »**. Le
-client, sa commune, son téléphone, le texte de sa demande et ses photos sont
-déjà là. Il reste à chiffrer.
+client, sa commune et son téléphone sont déjà là, et le texte de sa demande
+quand il en a écrit un (il est facultatif ; une demande de devis ne porte
+aucune photo — corrigé le 18/10). Il reste à chiffrer.
 
 > **Et c'est aussi la faiblesse, il faut le dire :** la vraie base contient
 > **1 client et 1 chantier**. Ce coup ne vaut rien tant qu'Opus est vide — donc
@@ -525,7 +526,8 @@ recherches, et écartées après vérification.
 8. **Le mode hors ligne comme argument de vente.** Le marketing dit « la place
    la plus libre du marché » (1 concurrent sur 27 le fait). Les clients disent
    autre chose : **zéro plainte sur 92 avis négatifs** ne porte sur le
-   hors-ligne. On garde le brouillon local, on n'en fait pas une promesse.
+   hors-ligne. On n'en fait pas une promesse — et le brouillon vit en base,
+   pas sur le téléphone (`PLAN-DEVIS.md` §3.1 fait foi, corrigé le 18/10).
 
 ---
 

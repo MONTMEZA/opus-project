@@ -598,7 +598,7 @@ chiffre.
 | **Costructor** | **Batiprix en option** (« ouvrages Batiprix ») ; en formule Business+, « demandes de prix et bons de commandes » et import des factures d'achats. Une extension de capture de la page produit, relevée par une première recherche, **n'apparaît ni sur son accueil ni sur ses tarifs** au 17/10/2026 | Pro 12,50 € HT/mois en annuel (<https://costructor.co/tarifs/>) |
 | **Tolteck** (lancé en 2017 ; Saint-Gobain Distribution Bâtiment France en a pris la majorité en 2018, d'après Batiweb du 22/10/2020) | les **prix négociés Point.P et Cedeo** de l'artisan, lus par son compte | 19 € HT/mois en annuel (<https://www.tolteck.com/fr-fr/tarifs/>) |
 | **Extrabat** | une « base article fournisseurs » (page des tarifs, relue le 17/10/2026) ; les « 1 800 bibliothèques via HerculePro » d'une première recherche n'y figurent pas, et HerculePro revendique environ 1 200 tarifs de fabricants de menuiserie (non vérifié) | dès 49 € HT/mois (<https://www.extrabat.com/tarifs/>) |
-| **Renalto** | « vos prix, ou des prix du marché si vous n'en avez pas » (accueil, relu le 17/10/2026) ; on y importe ses anciens devis pour en extraire ses prix. La mention « Prix non vérifié » sur chaque ligne, relevée par une première recherche, **n'apparaît pas sur ses pages publiques** : à revérifier dans l'application | 20 € HT/mois en annuel (<https://www.renalto.fr/tarifs>) |
+| **Renalto** | « vos prix, ou des prix du marché si vous n'en avez pas » (accueil, relu le 17/10/2026) ; on y importe ses anciens devis pour en extraire ses prix. La mention « Prix non vérifié » figure mot pour mot dans son centre d'aide public (aide.renalto.fr, article mis à jour le 11/10/2026, relevé le 18/10 par `CONCURRENCE-IA-DEVIS.md`), pas sur ses pages commerciales | 20 € HT/mois en annuel (<https://www.renalto.fr/tarifs>) |
 | **Cegid Boby** | « l'IA est capable de vous générer une bibliothèque de prix sur mesure » — **aucune source citée** | non relevé |
 
 > **Les extensions de capture de prix ne se copient pas.** Celle d'Obat (et,
@@ -648,10 +648,11 @@ boutique, relevé le 17/10/2026,
    presque tous passent par BatiChiffrage ou Batiprix, en option payante.
 2. **Le schéma s'est imposé partout avec l'IA** : 1) les prix de l'artisan,
    2) la bibliothèque de l'éditeur, 3) une estimation du modèle. **Aucun
-   éditeur relu ne montre, sur ses pages publiques, la source de chaque
-   ligne** (Renalto distingue « vos prix » et « des prix du marché » ; qu'il
-   marque chaque ligne reste à vérifier dans l'application). C'est la
-   discipline d'Opus, et c'est aussi un argument de vente.
+   éditeur relu ne montre, sur ses pages commerciales, la source de chaque
+   ligne** — avec deux nuances relevées le 18/10 (`CONCURRENCE-IA-DEVIS.md`) :
+   ATTIX marque chaque ligne d'un badge d'origine (code public de son
+   application), et Renalto écrit « Prix non vérifié » dans son centre
+   d'aide. C'est la discipline d'Opus, et c'est aussi un argument de vente.
 3. **« Apprendre vos prix » ne veut pas dire entraîner un modèle** : c'est
    importer les anciens devis, suggérer les postes déjà écrits, retenir les
    favoris. C'est exactement l'idée de votre §5 — et elle ne demande aucune
