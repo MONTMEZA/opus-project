@@ -262,16 +262,17 @@ Ce qu'il en ressort, à ne pas redécouvrir :
    obligatoire — ni par une case, ni par une contrainte, ni comme motif de
    refus de remise ; et une clé `on delete set null` sur un devis REMIS doit
    pouvoir passer à vide malgré le figeage, sinon elle pointe une ligne qui
-   n'existe plus, sans erreur (mesuré, avec sa parade). Elles entrent dans
-   `docs/PLAN-DEVIS.md` quand le propriétaire l'aura validé.
+   n'existe plus, sans erreur (mesuré, avec sa parade). **Validées par le
+   propriétaire le 19/10 : `docs/PLAN-DEVIS.md` §10.15.**
 3. **Quatre défauts qui existent DÉJÀ**, trouvés en cherchant quoi
    réutiliser, revérifiés sur la vraie base : les règles générales du
    stockage (voir « Les pièces jointes en messagerie ») ; les partenariats
    entre pros (une demande en attente se lit sans compte, et celui qui la
    reçoit peut en changer l'AUTEUR en l'acceptant) ; `demande_reponses`
    lisible sans compte ; le nom, la ville et le code postal de chaque compte
-   lisibles sans compte. **Aucun n'est corrigé** : chacun demande un lot
-   mesuré, et une décision du propriétaire.
+   lisibles sans compte. **Aucun n'est corrigé** : décidé le 19/10, un petit
+   lot de sécurité (« S ») les traite AVANT le lot 2 du devis, le stockage
+   d'abord. La ville visible y reste une décision à lui poser.
 
 > **Une brique qu'on s'apprête à réutiliser se relit comme un défaut
 > possible.** Les partenariats devaient servir de modèle à la relation

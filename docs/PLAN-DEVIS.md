@@ -3300,6 +3300,15 @@ Dans ce plan :
 - l.2589-2599 (question 5) ;
 - l.2668-2686 (« Et une chose qui n'est pas une question ») : à récrire pour le compte du frère, les trois conditions et le badge de 10.5.
 
+Ajoutées le 19/10/2026, par l'audit de l'addendum QR (10.15) :
+
+- l.888 (le figeage) : une clé `on delete set null` doit pouvoir passer **à vide** sur un devis remis, et à rien d'autre (D11) ;
+- l.1400-1406 (l'espace `devis` « sans politique `update` ni `delete` ») : faux tant que les deux règles générales du stockage existent — le lot sécurité (S) les referme d'abord (D7) ;
+- l.1427 et l.3288 (`demande_id`) → `quote_request_id` (D2) ;
+- l.1462-1464 et l.3199 (la propriété de `verifier-devis`) → la règle en trois parties de D4 ;
+- l.2297-2313 (lot 6, « tarifs publics, conditionnel ») : remplacé par le lot T (10.14) ;
+- l.3396 (« un espace privé, comme `documents` ») → « dans l'espace `devis` » (D8).
+
 Dans les annexes :
 
 - SIRET-ET-CLAUSES.md:240-247, 294-300, 530-531, 683-689 ;
@@ -3439,3 +3448,60 @@ construire :
 | la séparation du `DONNEES-DES-ARTISANS.md` §5.2 | **un engagement écrit** | aucun écran ne montre les prix d'un artisan à un autre ; l'éditeur s'engage, dans les conditions d'Opus, à ne pas les lire par l'éditeur SQL. La condition « aucun vrai prix d'un autre artisan » tombe : le frère pourra saisir les siens, lui-même |
 | les trois règles plus strictes que la loi (cahier §1.5) | **seule la relecture du SIRET chaque année** est gardée | pas d'assurance exigée en général (la décennale due selon la ligne relève des lots 1-2) ; téléphone, e-mail, garanties, modalités, mention de l'assurance et n° de TVA au réel ne bloquent que face à un consommateur (motifs `conso_`) |
 | le libellé quand l'artisan ne facture pas le déplacement | **« Déplacement offert »** | à la place de « Frais de déplacement : non facturés » |
+
+### 10.14 Les décisions du 19/10/2026 — l'addendum QR, et le lot des tarifs
+
+Le propriétaire a remis ce jour-là un addendum au cahier Visite, « QR &
+Dossier Travaux Particulier » (`docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md`, audité
+dans `docs/AUDIT-ADDENDUM-QR.md`), avec une consigne : « Ne refais pas le
+module devis à cause de ce document. »
+
+| question | réponse | ce qu'elle décide |
+|---|---|---|
+| l'ordre | **finir le devis d'abord** | l'addendum ne s'ouvre qu'après le module devis ; le devis n'a besoin de rien de lui (audit §2) |
+| les douze règles de l'audit | **les écrire avant le chiffrage** | 10.15, ci-dessous : du texte, aucune colonne |
+| les quatre défauts existants (stockage, partenariats, `demande_reponses`, ville visible) | **un petit lot à part, avant le PDF** | un lot **S** (sécurité) entre P et 2 : le stockage d'abord, puisque l'espace `devis` en hériterait (D7). La ville et le code postal visibles restent une décision à lui poser à ce moment-là |
+| répondre aux urgences sans afficher ses tarifs ? | **non : afficher est obligatoire** | un artisan n'apparaît dans le SOS que si ses tarifs sont affichés et suffisent à une estimation |
+| qui lit les tarifs affichés ? | **les particuliers seulement** | une règle de lecture qui exige `not est_un_pro()` : aucun artisan ne lit ceux d'un autre par l'application — l'éditeur non plus, son compte est pro. **Limite dite au propriétaire** : un artisan peut ouvrir un second compte particulier avec une autre adresse ; c'est une barrière, pas un verrou |
+| l'avis d'un avocat sur l'affichage | **un simple rappel**, pas un blocage | il rejoint la liste des questions au juriste (`A-FAIRE.md`), sans drapeau contrôlé |
+| les forfaits d'un dépanneur | **plus tard** | ce lot ne range qu'un taux horaire, un décompte, une majoration, le prix du devis et les frais |
+| la majoration de nuit et de week-end | **comme aujourd'hui** | 20 h – 7 h et le week-end, sur le déplacement comme sur les heures ; la carte le dit en toutes lettres |
+
+L'ordre devient donc **T → 1 → P → S → 2 → 3 → 4 → 5**. Le lot T (les tarifs
+réunis, devis et SOS) **remplace** le lot 6 conditionnel : la réponse du
+17/10 (« au choix de l'artisan ») l'a rendu certain.
+
+Et l'engagement du 18/10 (10.13) **tient tel quel** : « aucun écran ne montre
+les prix d'un artisan à un autre ». Les tarifs affichés vont aux particuliers,
+jamais aux autres artisans.
+
+### 10.15 Les douze règles venues de l'addendum (D1 à D12) — à tenir dès le lot 1
+
+Le détail, les preuves et les mesures sont dans `docs/AUDIT-ADDENDUM-QR.md`
+§2 ; les scripts qui les prouvent, dans `docs/audit-addendum/`. **Aucune ne
+crée de colonne** : « aucune colonne sans lecteur » (3.12) vaut aussi pour
+l'avenir. Ce qu'elles font, c'est garantir qu'**aucune décision du devis ne
+ferme la porte** au QR, au Dossier Travaux ni à la Visite — et ces décisions
+se prennent avant d'écrire la table.
+
+| | la règle | lot | pourquoi, en une ligne |
+|---|---|---|---|
+| **D1** | le client d'un devis est **une fiche du carnet**, jamais un compte ; pas de `compte_id` ni de `particulier_id` « pour plus tard » | 1 | le client sans compte est aujourd'hui le cas ordinaire ; le QR particulier reliera la fiche à un compte, à côté |
+| **D2** | le lien vers une demande de devis s'appelle **`quote_request_id`**, pas `demande_id` | 1 | `demande_reponses.demande_id` pointe déjà `demandes`, l'« annonce » de l'addendum : même nom, deux choses, aucune alerte. Va avec `sos_request_id` |
+| **D3** | **le QR n'est jamais une origine** : `source` dit le geste qui a ouvert le brouillon (`'manuelle'` pour un client scanné hier) ; les liens d'origine sont facultatifs et indépendants. **Aucune contrainte « origine = demande ⇒ lien présent »** | 1, 2 | mesuré : la demande supprimée, la base vide le lien, la contrainte refuse, et **la suppression de compte du particulier échoue** à cause du devis d'un pro |
+| **D4** | **l'indépendance en trois parties**, contrôlée par `verifier-devis` livré avec la table : (a) aucune clé étrangère obligatoire, sauf vers l'entreprise, sauf le lien d'une ligne vers son devis, sauf le client **à la remise** ; (b) aucune contrainte ne rend obligatoire un lien d'origine ; (c) **aucun motif de refus de remise ne nomme une origine** | 1 | la formule de l.1462-1464 laisse passer une contrainte nommée « à la remise, il faut un dossier » ; celle de l.3199 refuserait `statut`. Et aucun index unique sur (pro, client) : un client a plusieurs projets |
+| **D5** | un rattachement posé **après** la remise ne vit **pas** dans la ligne `devis` (il vit sur l'autre objet ou dans une table de liaison) ; **aucune règle d'accès ne découle d'un lien posé sur un devis** | écrite maintenant, tenue au 2 | le figeage remet toute case nouvelle à l'ancienne valeur, **sans erreur** : le précédent de `posts.chantier_id` (« 204 et rien ne change ») |
+| **D6** | **le particulier ne lit jamais la ligne `devis`** : il reçoit une **copie** du document, posée par un geste du pro, et plus tard une fonction qui lui rend le seul **statut** (numéro, date, statut, entreprise). Aucune règle sur `devis`, `devis_lignes`, `devis_tva` ni sur l'espace `devis` ne passe par une relation ou un partage | 1 à 4 | une règle RLS ouvre toute la ligne ; Opus efface tout au départ du pro ; et les conditions d'utilisation promettent que les prix ne vont qu'au client à qui le devis est adressé |
+| **D7** | **avant l'espace `devis`**, refermer les deux règles générales du stockage, espace par espace, après mesure (lot S) ; puis un contrôle : aucune règle ne permet de modifier ou supprimer un fichier de l'espace `devis` | S, avant 2 | les règles s'additionnent : l'absence de politique sur l'espace ne ferme rien tant qu'une règle générale la couvre |
+| **D8** | le PDF et la copie signée vont **dans l'espace `devis`**, jamais dans `documents` ; tout nouvel espace entre dans la liste du ménage de compte (`supabase/functions/compte/index.ts`) | 2, 4 | l'administration lit tout `documents`, pour les Kbis |
+| **D9** | aucune valeur d'un futur dossier n'entre dans le **statut** du devis ; un écran de particulier ne traduit jamais `remis` par « reçu » tant qu'Opus ne livre pas lui-même le document | 4 | « retenu » est une décision du particulier ; `accepte` est un fait juridique tracé par le pro |
+| **D10** | « Refaire » recopie les liens d'origine sur la version 2 | 4 | sinon la version 2 perd sa demande ou son urgence d'origine |
+| **D11** | dans le figeage, **une clé dont la nouvelle valeur est vide sort de la garde** : sur un devis remis, une clé `on delete set null` peut passer à vide, et à rien d'autre. Un essai **compte les clés pendantes** après suppression de la fiche, de la demande et du compte du particulier | écrite maintenant, tenue au 2 | mesuré sans elle : un devis remis garde une fiche et une demande qui n'existent plus, sans erreur, et une restauration de sauvegarde échoue. Avec elle : vide, total intact, redirection ignorée |
+| **D12** | ce dont dépend un devis remis ou une acceptation (copie signée, plan) est **copié** dans l'espace du pro au moment où ça compte | 2, 4 | la suppression de compte du particulier emporte ses conversations et ses fichiers ; ce qui doit rester reste **parce qu'il a été copié**, pas parce qu'un accès survit |
+
+**Ce qui n'est PAS décidé ici**, et attend l'ouverture de l'addendum (audit
+§5) : le vocabulaire et une seule orthographe des états (`accepte`, jamais
+`acceptee`, dans les nouvelles tables), le jeton du QR, la relation et son
+journal, et le repointage d'un devis remis vers une autre fiche lors d'une
+fusion de doublons — D11 l'interdit aujourd'hui ; l'ouvrir serait un choix
+explicite, plus tard, avec son essai.

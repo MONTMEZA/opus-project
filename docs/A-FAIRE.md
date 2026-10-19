@@ -1743,8 +1743,12 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
 
 **Le lot suivant, décidé le 18/10 (« juste après, à part ») :**
 
-- [ ] **Les tarifs du SOS** rejoignent `tarifs_pro`. Aujourd'hui deux chiffres
-  de déplacement coexistent, et une fiche SOS à 0 € affiche « 0 – 0 € ».
+- [ ] **Les tarifs du SOS** rejoignent `tarifs_pro` (lot T). Aujourd'hui deux
+  chiffres de déplacement coexistent, et une fiche SOS à 0 € affiche
+  « 0 – 0 € ». Décidé le 19/10 (`PLAN-DEVIS.md` §10.14) : répondre aux
+  urgences exige des tarifs affichés ; ils ne sont lus QUE par les
+  particuliers ; pas de forfaits dans ce lot ; la majoration reste comme
+  aujourd'hui.
 
 **À faire relire par un juriste, avant le premier vrai devis :**
 
@@ -1752,6 +1756,10 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
   coopératives (formes 51xx) et l'EIRL, traitées au plus prudent.
 - [ ] La phrase sur L. 243-2 au §10.3 de `PLAN-DEVIS.md`, à corriger avant le
   lot 2 : l'attestation de décennale est due quel que soit le client.
+- [ ] **L'affichage des tarifs aux particuliers** (lot T) : la mise en garde
+  de `DONNEES-DES-ARTISANS.md` §5 sur des prix lus par des concurrents. Le
+  risque est réduit (les artisans ne les lisent pas), pas nul (un second
+  compte particulier). Simple rappel, sans blocage, décidé le 19/10.
 
 **Dettes connues, datées :**
 
@@ -1783,17 +1791,17 @@ Le document : `docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md` (le PDF fait foi).
 L'audit : `docs/AUDIT-ADDENDUM-QR.md`. **Le propriétaire veut finir le devis
 d'abord**, et rien ne se refond sans sa validation. Ce qui en sort :
 
-**Pour le devis — à inscrire dans `PLAN-DEVIS.md` avant le lot 1, s'il le
-valide (V1) :**
+**Pour le devis — validé le 19/10, inscrit dans `PLAN-DEVIS.md` §10.15 :**
 
-- [ ] Les douze règles D1 à D12 de l'audit (le client est une fiche du
+- [x] Les douze règles D1 à D12 de l'audit (le client est une fiche du
   carnet ; aucun lien d'origine obligatoire ; le lien vers une demande de
   devis s'appelle `quote_request_id` ; une clé `on delete set null` peut
   passer à vide sur un devis remis ; rien de ce qui est posé après la remise
   ne vit dans la ligne `devis` ; le PDF jamais dans `documents`…).
 
-**Défauts qui existent DÉJÀ, revérifiés sur la vraie base le 19/10 — chacun
-son petit lot mesuré, après décision :**
+**Défauts qui existent DÉJÀ, revérifiés sur la vraie base le 19/10 — décidé
+le 19/10 : un petit lot « S » (sécurité), mesuré, AVANT le lot 2 du devis
+(ordre T → 1 → P → S → 2) :**
 
 - [ ] **Stockage** (D7, R1) : les règles générales de remplacement et de
   suppression n'ont aucun filtre d'espace. **Avant le lot 2 du devis**, qui
