@@ -1716,16 +1716,30 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
 
 Le détail est dans CLAUDE.md, « Mon entreprise pour les devis — lot 0a ».
 
-**À essayer sur l'iPhone — au propriétaire :**
+**À essayer sur l'iPhone — essayé par le propriétaire le 19/10, dans Expo
+Go : « tout fonctionne très bien ».** Les cinq points n'ont pas été cités un
+par un, et l'essai s'est fait dans Expo Go, pas dans le build de
+développement (voir plus bas) : ils sont cochés sur cette réponse globale.
 
-- [ ] Le champ actif reste au-dessus du clavier dans « Mon entreprise »
+- [x] Le champ actif reste au-dessus du clavier dans « Mon entreprise »
   (une vingtaine de champs).
-- [ ] La virgule du pavé décimal (capital, frais de déplacement) est
+- [x] La virgule du pavé décimal (capital, frais de déplacement) est
   acceptée.
-- [ ] Joindre une attestation par la Photothèque, Fichiers et l'Appareil
+- [x] Joindre une attestation par la Photothèque, Fichiers et l'Appareil
   photo.
-- [ ] La croix reste atteignable clavier ouvert.
-- [ ] La liste des médiateurs défile et se choisit au pouce.
+- [x] La croix reste atteignable clavier ouvert.
+- [x] La liste des médiateurs défile et se choisit au pouce.
+
+**L'icône Opus de son iPhone est la version « preview » du 17/10** (relevé le
+19/10 : elle ne montrait aucun changement, Expo Go si). Les profils
+`development` et `preview` de `eas.json` portent la MÊME identité
+(`com.opusproject.app`) : installer la « preview » a remplacé le build de
+développement, sans prévenir, et elle contient le code du 17/10 figé.
+
+- [ ] Donner au build de développement sa propre identité (« Opus Dev »,
+  `com.opusproject.app.dev`, par une variable dans un `app.config.js`), pour
+  que les deux applications vivent côte à côte. Demande un nouveau build de
+  développement. Proposé au propriétaire le 19/10, pas encore décidé.
 
 **Le lot suivant, décidé le 18/10 (« juste après, à part ») :**
 

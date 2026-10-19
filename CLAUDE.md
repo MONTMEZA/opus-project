@@ -7461,10 +7461,23 @@ Base revenue à 15 comptes / 8 fiches / 21 publications / 1 entreprise /
 1 client, et **0** fiche émetteur, assurance ou tarif. Deux preuves `essai`
 restent, expirées et inutilisables : le connecteur refuse un `delete`.
 
-**Ce qui n'a PAS été vérifié** : rien sur l'iPhone — le clavier sous une
-vingtaine de champs, la virgule du pavé décimal, la Photothèque et
-l'Appareil photo pour l'attestation, la croix clavier ouvert, la liste des
-médiateurs au pouce. Le chemin « nom d'entrepreneur individuel » n'a été
+**ESSAYÉ SUR L'IPHONE le 19/10/2026**, par le propriétaire, **dans Expo
+Go** : « tout fonctionne très bien ». Sans détailler les cinq points (le
+clavier sous une vingtaine de champs, la virgule du pavé décimal, la
+Photothèque et l'Appareil photo pour l'attestation, la croix clavier
+ouvert, la liste des médiateurs au pouce) ; Expo Go convient ici, le lot
+n'ajoute aucun module natif.
+
+> **L'icône Opus de son iPhone ne montrait AUCUN changement, et c'était
+> attendu** : c'est la version « preview » du 17/10, dont le code est figé
+> à la construction. Les profils `development` et `preview` portent la
+> même identité (`com.opusproject.app`), donc installer l'une remplace
+> l'autre sans prévenir. Avant de conclure « ça ne marche pas sur le
+> téléphone », demander QUELLE application il a ouverte : la version de
+> développement s'ouvre sur une page de lancement, la « preview »
+> directement sur Opus.
+
+**Ce qui n'a PAS été vérifié** : le chemin « nom d'entrepreneur individuel » n'a été
 éprouvé que par l'API. La démonstration ne montre ni l'adresse du siège ni
 le motif d'un an. Et **aucun vrai artisan n'a encore rempli sa fiche** — le
 frère la remplira lui-même, après la remise de son compte et ses propres
