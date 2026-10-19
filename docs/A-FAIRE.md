@@ -1777,6 +1777,40 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
   expirées et inutilisables : le connecteur refuse un `delete`. Une ligne dans
   l'éditeur SQL, au propriétaire.
 
+### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
+
+Le document : `docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md` (le PDF fait foi).
+L'audit : `docs/AUDIT-ADDENDUM-QR.md`. **Le propriétaire veut finir le devis
+d'abord**, et rien ne se refond sans sa validation. Ce qui en sort :
+
+**Pour le devis — à inscrire dans `PLAN-DEVIS.md` avant le lot 1, s'il le
+valide (V1) :**
+
+- [ ] Les douze règles D1 à D12 de l'audit (le client est une fiche du
+  carnet ; aucun lien d'origine obligatoire ; le lien vers une demande de
+  devis s'appelle `quote_request_id` ; une clé `on delete set null` peut
+  passer à vide sur un devis remis ; rien de ce qui est posé après la remise
+  ne vit dans la ligne `devis` ; le PDF jamais dans `documents`…).
+
+**Défauts qui existent DÉJÀ, revérifiés sur la vraie base le 19/10 — chacun
+son petit lot mesuré, après décision :**
+
+- [ ] **Stockage** (D7, R1) : les règles générales de remplacement et de
+  suppression n'ont aucun filtre d'espace. **Avant le lot 2 du devis**, qui
+  crée l'espace des PDF. Mesurer d'abord par une vraie écriture.
+- [ ] **Partenariats entre pros** (R28) : une demande en attente se lit sans
+  compte ; celui qui la reçoit peut en changer l'auteur en l'acceptant.
+- [ ] **`demande_reponses`** (R23) : lisible sans compte. Aujourd'hui une
+  réponse, aucun message.
+- [ ] **Nom, ville, code postal de chaque compte** lisibles sans compte
+  (R29) : une DÉCISION, à prendre avant tout écran de consentement.
+
+**L'addendum lui-même, après le devis**, dans l'ordre de son §21 : relation
+client ↔ pro, QR professionnel (attend la publication sur l'App Store et une
+page lisible sans l'application), QR particulier (attend la caméra, donc une
+reconstruction, et les notifications sur l'écran verrouillé), Dossier
+Travaux, partage. Les dix-huit points à valider sont au §5 de l'audit.
+
 
 ### Fournisseurs et prix (module 7) — à trancher à son ouverture
 

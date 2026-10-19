@@ -228,6 +228,56 @@ maintenant — données rangées de façon réutilisable, données des artisans 
 ne sont pas à Opus, licences de ce qu'on y met — est dans `docs/A-FAIRE.md`,
 dernière section.
 
+#### Un ADDENDUM au cahier Visite, remis le 19/10/2026
+
+`docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md` — « QR & Dossier Travaux
+Particulier », transcription ; le PDF à côté **fait foi**. Il précise le
+cahier Visite (ci-dessous) : un **QR professionnel** permanent qui mène à la
+page du pro ; un **QR particulier**, carte client que le pro scanne DANS Opus,
+après quoi le particulier accepte et une fiche client est créée ou reliée —
+**jamais** un devis ni une visite ; et un **Dossier Travaux**, espace privé du
+particulier, partageable avec plusieurs pros, document par document.
+
+Les consignes du propriétaire en le remettant, mot pour mot :
+« Ne refais pas le module devis à cause de ce document. » — « Ne développe
+pas automatiquement l'intégralité du Dossier Travaux ou du système QR
+maintenant. » — « Pour le moment, notre priorité reste de terminer
+correctement la partie devis. » — « Ne commence aucune refonte importante
+sans ma validation. »
+
+> **IL NE SE CONSTRUIT PAS ENCORE.** L'audit que demande son §21 est fait :
+> `docs/AUDIT-ADDENDUM-QR.md`. **À relire avant le lot 1 du devis**, et
+> avant de toucher au carnet de clients, au stockage ou aux partenariats.
+
+Ce qu'il en ressort, à ne pas redécouvrir :
+
+1. **Rien à refondre.** Le carnet `clients` est déjà la « fiche client »
+   de l'addendum ; le QR particulier sera son lien vers un compte, ajouté à
+   côté — c'est exactement la raison pour laquelle `clients` n'a pas de
+   `compte_id`.
+2. **Douze règles pour le devis (D1 à D12)**, gratuites aujourd'hui et
+   coûteuses une fois la table `devis` écrite. Les trois qui comptent : le
+   client d'un devis est une FICHE du carnet, jamais un compte ; aucun lien
+   d'origine (demande, urgence, visite, dossier, QR) n'est jamais
+   obligatoire — ni par une case, ni par une contrainte, ni comme motif de
+   refus de remise ; et une clé `on delete set null` sur un devis REMIS doit
+   pouvoir passer à vide malgré le figeage, sinon elle pointe une ligne qui
+   n'existe plus, sans erreur (mesuré, avec sa parade). Elles entrent dans
+   `docs/PLAN-DEVIS.md` quand le propriétaire l'aura validé.
+3. **Quatre défauts qui existent DÉJÀ**, trouvés en cherchant quoi
+   réutiliser, revérifiés sur la vraie base : les règles générales du
+   stockage (voir « Les pièces jointes en messagerie ») ; les partenariats
+   entre pros (une demande en attente se lit sans compte, et celui qui la
+   reçoit peut en changer l'AUTEUR en l'acceptant) ; `demande_reponses`
+   lisible sans compte ; le nom, la ville et le code postal de chaque compte
+   lisibles sans compte. **Aucun n'est corrigé** : chacun demande un lot
+   mesuré, et une décision du propriétaire.
+
+> **Une brique qu'on s'apprête à réutiliser se relit comme un défaut
+> possible.** Les partenariats devaient servir de modèle à la relation
+> client ↔ pro : leurs règles ont deux défauts mesurés. On reprend l'idée
+> (`en_attente` / `accepte` / `refuse`), pas les règles.
+
 #### Un SECOND cahier des charges, remis le 11/10/2026
 
 `docs/CAHIER-DES-CHARGES-VISITE.md` — « Visite intelligente & préparation
@@ -1929,6 +1979,18 @@ erreur et laisse lire les devis de tout le monde.
 pas. Même raison qu'un commentaire auquel on a répondu — ce qui engage
 quelqu'un d'autre se ferme —, plus une seconde : la retirer laisserait un
 lien mort dans la conversation.
+
+> **CE PARAGRAPHE N'EST PAS TENU PAR LA BASE — relevé le 19/10/2026.**
+> L'espace n'a pas de politique `update` ni `delete` À LUI, mais deux règles
+> GÉNÉRALES de la section 13 (« remplacement de mes fichiers », « suppression
+> de mes fichiers ») s'appliquent à TOUS les espaces, sans filtre : elles ne
+> demandent que « le premier dossier du chemin est le mien ». L'expéditeur
+> d'une pièce jointe peut donc la retirer ou la remplacer — et un Kbis déjà
+> validé peut être remplacé sous le même nom. **Des règles RLS
+> s'additionnent : une absence ne ferme rien si une règle plus large existe
+> déjà.** Lu dans les règles, pas encore éprouvé par une écriture ; à
+> corriger dans un lot mesuré, espace par espace, AVANT l'espace des PDF de
+> devis (`docs/AUDIT-ADDENDUM-QR.md`, D7 et R1).
 
 #### L'extension d'un fichier se lit dans son NOM, pas dans son adresse
 

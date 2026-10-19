@@ -1,0 +1,332 @@
+# Addendum fonctionnel - QR & Dossier Travaux Particulier
+
+Transcription de `docs/ADDENDUM-QR-DOSSIER-TRAVAUX.pdf` — l'original fait foi.
+
+Remis le 19/10/2026.
+
+---
+
+**OPUS-PROJECT**
+
+**Addendum fonctionnel**\
+**QR & Dossier Travaux Particulier**
+
+Précisions au cahier des charges existant\
+« Visite intelligente & Préparation des devis V1 »
+
+**VERSION 1.0 • OCTOBRE 2026**
+
+> **STATUT DU DOCUMENT**
+>
+> Ce document ne remplace pas le cahier des charges existant. Il le complète et précise le fonctionnement des QR codes, de la relation Client <-> Professionnel et du nouveau Dossier Travaux côté particulier. Toute implémentation doit préserver l’existant.
+
+*Objectif produit : faire d’Opus le point central de la mise en relation et du suivi des travaux dans le BTP.*
+
+## 1. Objet de l’addendum
+
+Le cahier des charges initial reste la référence pour la visite intelligente, la préparation des devis et les mécanismes déjà définis. Le présent addendum apporte des précisions fonctionnelles afin de simplifier l’usage du QR code particulier et d’introduire un espace privé « Dossier Travaux ».
+
+> **PRINCIPE IMPÉRATIF POUR CLAUDE CODE**
+>
+> Avant toute modification : auditer l’architecture et les fonctionnalités déjà présentes. Réutiliser les modèles, services et composants existants lorsque cela est pertinent. Ne supprimer, ne renommer et ne réécrire aucun flux fonctionnel existant sans nécessité démontrée. Proposer un plan d’intégration avant de coder.
+
+## 2. Ancien principe et précision retenue
+
+| Élément | Règle retenue |
+|---|---|
+| Cahier des charges existant | Le QR particulier permet d’identifier le particulier, de créer la relation Client <-> Professionnel et de faciliter la préparation d’une visite/devis. Le QR reste indépendant du devis. |
+| Précision V1.0 | Le scan du QR particulier ne lance plus automatiquement une visite ni un devis. Il crée ou relie d’abord une fiche client dans l’espace du professionnel. |
+| Après création de la relation | Le professionnel ouvre la fiche client et choisit librement l’action : devis, visite, rendez-vous, note, photo, message, etc. |
+| Nouveau complément | Si le particulier possède un Dossier Travaux, il peut choisir de le partager avec le professionnel au moment du scan ou plus tard. |
+
+## 3. Les deux QR Opus
+
+### 3.1 QR professionnel permanent
+
+Chaque compte professionnel dispose d’un QR code unique et permanent lié à son identité Opus.
+
+- Rediriger vers la page professionnelle Opus.
+- Permettre au particulier de consulter les informations publiques, métiers, réalisations, avis et moyens de contact autorisés.
+- Permettre une prise de contact ou une demande de devis selon les fonctions disponibles.
+- Pouvoir être utilisé sur carte de visite, véhicule, chantier, document commercial ou support imprimé.
+- Faire découvrir Opus à une personne qui ne possède pas encore de compte.
+
+### 3.2 QR particulier permanent
+
+Le QR particulier agit comme une carte client Opus numérique. Sa fonction première est la mise en relation sécurisée avec un professionnel.
+
+- Le professionnel scanne le QR depuis Opus.
+- Opus identifie le particulier sans donner accès à son compte privé.
+- Le particulier confirme la mise en relation et les données à partager.
+- Opus crée une nouvelle fiche client ou relie la personne à une fiche déjà existante afin d’éviter les doublons.
+- Aucune visite et aucun devis ne sont créés automatiquement.
+- Après la relation, le professionnel décide lui-même de l’action à effectuer.
+
+> **RÈGLE DE SÉCURITÉ**
+>
+> Le QR particulier n’est jamais une clé d’accès au compte du particulier. Il ne transmet que les données nécessaires et explicitement autorisées. Les données privées non partagées restent invisibles au professionnel.
+
+## 4. Parcours de scan du QR particulier
+
+1. Le professionnel choisit « Scanner un QR Opus ».
+2. Il scanne le QR du particulier.
+3. Opus vérifie si une relation/fiche client existe déjà entre les deux comptes.
+4. Opus affiche au particulier l’identité de l’entreprise/professionnel qui demande la connexion.
+5. Le particulier valide ou refuse la mise en relation.
+6. En cas d’acceptation, les données de base autorisées sont transmises et la fiche client est créée ou reliée.
+7. Si des Dossiers Travaux existent, Opus propose au particulier de partager zéro, un ou plusieurs dossiers pertinents. Aucun partage automatique.
+8. Le professionnel retrouve le client dans son espace et choisit l’action suivante.
+
+## 5. Fiche client côté professionnel
+
+La fiche client devient le point d’entrée professionnel. Elle doit être indépendante d’un projet précis afin de conserver l’historique dans le temps.
+
+| Élément | Règle retenue |
+|---|---|
+| Identité / coordonnées | Informations autorisées : nom, prénom, téléphone, e-mail et autres données utiles selon consentement. |
+| Projets / Dossiers partagés | Liste des Dossiers Travaux que ce particulier a explicitement partagés avec ce professionnel. |
+| Rendez-vous | Rendez-vous liés au client et, si possible, au projet concerné. |
+| Visites | Historique des visites classiques ou intelligentes. |
+| Devis | Devis créés pour ce client, avec rattachement au projet lorsque pertinent. |
+| Factures | Factures liées au client/projet selon les fonctions déjà présentes dans Opus. |
+| Documents / médias | Documents et photos partagés ou ajoutés dans le cadre de la relation. |
+| Actions | Créer un devis, démarrer une visite, ajouter une note/photo, planifier un rendez-vous, envoyer un message, etc. |
+
+## 6. Nouveau module : Dossier Travaux Particulier
+
+Le Dossier Travaux est un espace privé permettant au particulier de préparer, centraliser et conserver la vie complète d’un projet. Il ne doit pas être confondu avec une annonce publique.
+
+### 6.1 Contenu cible d’un dossier
+
+- Titre du projet : ex. « Rénovation toiture ».
+- Description libre du besoin et objectifs.
+- Adresse du chantier, distincte de l’adresse personnelle si nécessaire.
+- Photos et vidéos du projet.
+- Plans, études, diagnostics et documents utiles.
+- Notes personnelles.
+- Professionnels contactés ou liés au dossier.
+- Rendez-vous et visites liés au projet.
+- Devis reçus et statut de chacun.
+- Devis accepté / professionnel retenu.
+- Factures et documents de paiement lorsque disponibles.
+- Documents administratifs utiles.
+- Photos avant / pendant / après.
+- Historique des événements et échanges importants.
+
+### 6.2 Structure métier recommandée
+
+> **MODÈLE CONCEPTUEL**
+>
+> Particulier -> peut posséder plusieurs Dossiers Travaux -> chaque dossier peut être partagé avec plusieurs professionnels -> chaque professionnel peut avoir des rendez-vous/visites/devis liés à ce dossier -> le dossier conserve l’historique global du particulier.
+
+Exemple : un même client peut avoir un dossier « Rénovation toiture » en 2026, « Création Velux » en 2028 et « Réparation infiltration » en 2030. Il ne doit pas être recréé comme client à chaque nouveau projet.
+
+## 7. Annonce publique ≠ Dossier Travaux privé
+
+| Élément | Règle retenue |
+|---|---|
+| Annonce | Objet de mise en relation : publier un besoin afin que des professionnels puissent le découvrir et répondre. Contenu potentiellement visible selon les règles du réseau. |
+| Dossier Travaux | Espace privé de gestion : rendez-vous, documents, devis, factures, photos, historique et professionnels liés. |
+| Lien entre les deux | Une annonce peut servir de point de départ à un Dossier Travaux. Les données pertinentes peuvent être copiées/référencées pour éviter la ressaisie. |
+| Sens inverse | Depuis un Dossier Travaux, le particulier peut choisir « Publier une demande » afin de créer une annonce à partir d’informations sélectionnées. |
+
+> **CONFIDENTIALITÉ**
+>
+> La publication d’une annonce ne rend jamais publics les devis, factures, rendez-vous, documents privés ou autres informations du Dossier Travaux. Le particulier choisit ce qui est publié.
+
+## 8. Partage d’un Dossier Travaux via QR
+
+Après le scan et la création de la relation, Opus peut proposer le partage d’un projet existant.
+
+9. Opus indique au particulier qu’il possède un ou plusieurs Dossiers Travaux.
+10. Le particulier choisit le dossier concerné.
+11. Une vue de confirmation présente les catégories de données qui seront partagées.
+12. Le particulier valide le partage.
+13. Le professionnel voit le dossier dans la fiche client avec uniquement les éléments autorisés.
+14. Le particulier peut ultérieurement modifier ou révoquer les droits lorsque cela est compatible avec les obligations de conservation des documents déjà contractuels.
+
+## 9. Plusieurs professionnels sur un même dossier
+
+Un particulier doit pouvoir consulter plusieurs entreprises pour le même projet. Le Dossier Travaux peut donc être relié à plusieurs professionnels sans exposer leurs informations confidentielles entre eux.
+
+- Chaque professionnel possède sa propre relation et ses propres autorisations.
+- Un professionnel ne voit pas automatiquement les devis d’un concurrent.
+- Un professionnel ne voit pas les notes privées du particulier.
+- Les documents communs au projet ne sont visibles que s’ils sont explicitement partagés.
+- Lorsque le particulier choisit un professionnel, Opus peut marquer ce professionnel comme « retenu » sans supprimer l’historique des autres consultations.
+- Les règles de confidentialité doivent fonctionner au niveau relation/projet/document, pas uniquement au niveau du compte.
+
+## 10. Rendez-vous, visites, devis et factures
+
+Le Dossier Travaux doit progressivement devenir la chronologie privée du projet. Il ne doit cependant pas dupliquer inutilement les modules professionnels existants : il affiche ou référence les objets déjà créés lorsqu’ils sont partagés avec le particulier.
+
+| Élément | Règle retenue |
+|---|---|
+| Rendez-vous | Créés depuis le particulier ou le professionnel selon les fonctions disponibles ; rattachables au Dossier Travaux. |
+| Visite | Le professionnel peut démarrer une visite depuis la fiche client ou le dossier partagé. La visite intelligente reste facultative. |
+| Devis | Le professionnel peut créer un devis avec ou sans QR, avec ou sans Dossier Travaux, avec ou sans visite intelligente. |
+| Facture | Une facture issue du flux professionnel peut être visible dans le Dossier Travaux du particulier lorsque les règles métier le permettent. |
+| Historique | Conserver les événements clés du projet : mise en relation, rendez-vous, visite, envoi/acceptation de devis, facturation, documents, etc. |
+
+> **RÈGLE DE NON-DÉPENDANCE**
+>
+> Aucun module critique ne doit dépendre du QR. Un professionnel doit toujours pouvoir créer manuellement un client, un rendez-vous, une visite ou un devis. Le QR accélère et fiabilise la mise en relation ; il ne doit jamais bloquer le fonctionnement d’Opus.
+
+## 11. Cas où le particulier n’a pas de Dossier Travaux
+
+Le QR doit rester utile même si le particulier n’a jamais préparé de projet. Dans ce cas, le scan crée simplement la relation et la fiche client. Le professionnel peut ensuite travailler normalement. Opus peut proposer au particulier de créer un Dossier Travaux ultérieurement, sans l’imposer.
+
+## 12. Cas où le particulier n’a pas encore de compte Opus
+
+Le cahier des charges technique devra prévoir un parcours d’invitation simple si un professionnel souhaite créer une relation avec une personne non inscrite. Ce parcours ne doit pas être inventé ou codé sans audit de l’onboarding actuel. Claude Code doit d’abord identifier les mécanismes d’invitation/authentification existants et proposer l’intégration la moins disruptive.
+
+## 13. Permissions, consentement et confidentialité
+
+- Consentement explicite avant la création d’une relation via QR lorsque des données personnelles sont partagées.
+- Affichage clair de l’identité du professionnel/entreprise demandeur.
+- Principe de minimisation : ne partager que les données nécessaires.
+- Gestion des droits par relation et par Dossier Travaux.
+- Possibilité de retirer un partage futur, sous réserve des documents qui doivent légalement rester conservés.
+- Journaliser les événements sensibles : création de relation, partage/révocation de dossier, accès à certains documents lorsque pertinent.
+- Ne jamais exposer automatiquement les devis concurrents, factures privées, documents personnels ou notes privées.
+- Respecter les règles RGPD et les politiques de conservation définies pour Opus.
+
+## 14. Gestion des doublons
+
+Le scan ne doit pas créer une nouvelle fiche client à chaque fois. Avant création, Opus doit rechercher une relation existante via les identifiants internes fiables. En cas de correspondance, le professionnel est redirigé vers la fiche existante et peut rattacher un nouveau projet.
+
+## 15. États fonctionnels recommandés
+
+| Objet | États indicatifs |
+|---|---|
+| Relation | demande_en_attente / active / refusée / archivée ou équivalent selon conventions existantes. |
+| Partage dossier | non_partagé / invitation_envoyée / partagé / accès_révoqué. |
+| Dossier Travaux | brouillon / actif / terminé / archivé. |
+| Professionnel sur projet | contacté / rendez-vous / devis_reçu / retenu / non_retenu / terminé, à adapter à l’existant. |
+
+Ces noms sont indicatifs : Claude Code ne doit pas imposer ces valeurs si des statuts équivalents existent déjà dans le code ou la base. L’audit doit privilégier la cohérence avec l’architecture existante.
+
+## 16. Compatibilité avec la Visite intelligente
+
+Le présent addendum ne modifie pas le principe de la Visite intelligente défini précédemment. Il précise seulement son point d’entrée.
+
+- La visite peut être démarrée depuis une fiche client.
+- Si un Dossier Travaux est partagé, la visite peut être rattachée à ce dossier.
+- Les notes, photos, mesures et autres informations collectées suivent les règles déjà prévues.
+- L’analyse IA et les statuts de validation définis dans le cahier des charges existant restent applicables.
+- Les informations destinées au devis doivent toujours être validées selon les règles existantes avant utilisation.
+
+## 17. Compatibilité avec le module Devis
+
+> **IMPORTANT - MODULE EN COURS DE CONSTRUCTION**
+>
+> La structure du devis doit être compatible avec un client et, optionnellement, un Dossier Travaux / projet. Toutefois, le développement du devis ne doit pas être bloqué par l’implémentation complète du Dossier Travaux. Prévoir les points d’extension nécessaires sans forcer une refonte prématurée.
+
+- Devis créé manuellement pour un client : autorisé.
+- Devis créé après scan QR : autorisé.
+- Devis créé depuis un Dossier Travaux partagé : autorisé.
+- Devis créé après une Visite intelligente : autorisé.
+- Aucun de ces parcours ne doit être obligatoire pour les autres.
+
+## 18. Architecture fonctionnelle cible
+
+Schéma logique simplifié :
+
+```text
+                  PARTICULIER
+                       v
+          DOSSIER(S) TRAVAUX PRIVÉ(S)
+               v partage autorisé
+       RELATION CLIENT <-> PROFESSIONNEL
+                       v
+                FICHE CLIENT PRO
+                       v
+Rendez-vous • Visite • Notes • Photos • Messages
+                       v
+                     DEVIS
+                       v
+         FACTURES / SUIVI / HISTORIQUE
+```
+
+Le QR est un raccourci de mise en relation vers cette architecture, pas le cœur obligatoire de l’architecture.
+
+## 19. Exigences UX
+
+- Le scan doit être compréhensible en quelques secondes.
+- Éviter les écrans techniques et les demandes de permissions ambiguës.
+- Toujours indiquer au particulier ce qu’il partage et avec qui.
+- Après scan, le professionnel doit arriver rapidement sur la fiche client.
+- Les actions principales doivent être visibles : devis, visite, rendez-vous, note/photo, message.
+- Le Dossier Travaux doit présenter une timeline simple et non un stockage de fichiers désorganisé.
+- Sur mobile, privilégier des actions courtes et adaptées à l’usage chantier.
+- Conserver le design Opus existant et moderniser uniquement dans le respect du design system déjà présent.
+
+## 20. Ce que Claude Code doit auditer avant développement
+
+- Modèles utilisateurs et distinction particulier / professionnel.
+- Structure actuelle des clients/contacts professionnels.
+- Existence éventuelle de QR codes ou de services de génération/scan.
+- Structure actuelle des annonces particuliers.
+- Structure du module devis en cours.
+- Rendez-vous, agenda et relations existantes.
+- Stockage des photos/documents et règles d’accès.
+- Messagerie et notifications.
+- RLS / permissions / règles de sécurité si Supabase ou système équivalent.
+- Gestion actuelle des identifiants, invitations et doublons.
+- Design system et composants UI réutilisables.
+
+## 21. Ordre d’intégration recommandé
+
+1. AUDIT uniquement : cartographier l’existant et les écarts avec cet addendum.
+2. Présenter un plan d’intégration sans code destructif.
+3. Sécuriser le modèle Client <-> Professionnel et la prévention des doublons.
+4. S’assurer que le module devis peut référencer correctement un client et, plus tard, un projet.
+5. Implémenter/adapter le QR professionnel si nécessaire.
+6. Implémenter le QR particulier comme mécanisme de relation/fiche client.
+7. Créer le Dossier Travaux particulier de façon modulaire.
+8. Relier annonce <-> dossier sans fusionner les deux objets.
+9. Ajouter le partage sélectif de dossier avec plusieurs professionnels.
+10. Relier progressivement rendez-vous, visites, devis, factures et historique.
+11. Tester permissions, sécurité, révocation, doublons et parcours mobiles.
+
+## 22. Critères d’acceptation principaux
+
+- [ ] Scanner le QR d’un particulier ne crée jamais automatiquement un devis ou une visite.
+- [ ] Le scan peut créer ou retrouver une fiche client sans doublon.
+- [ ] Le particulier voit quelle entreprise demande la relation et peut refuser.
+- [ ] Aucune donnée privée non autorisée n’est transmise.
+- [ ] Le professionnel peut travailler avec un client sans QR.
+- [ ] Le particulier peut créer plusieurs Dossiers Travaux.
+- [ ] Un Dossier Travaux reste privé par défaut.
+- [ ] Une annonce et un Dossier Travaux restent deux objets distincts.
+- [ ] Une annonce peut alimenter un Dossier Travaux sans ressaisie inutile.
+- [ ] Un Dossier Travaux peut générer une annonce à partir d’informations sélectionnées.
+- [ ] Un dossier peut être partagé avec plusieurs professionnels.
+- [ ] Chaque professionnel dispose de permissions isolées.
+- [ ] Les devis concurrents ne sont pas visibles entre professionnels par défaut.
+- [ ] Un devis peut exister sans Dossier Travaux et sans Visite intelligente.
+- [ ] Les fonctionnalités existantes continuent de fonctionner après intégration.
+
+## 23. Hors périmètre de cet addendum
+
+- Refonte complète du module devis.
+- Refonte complète de la Visite intelligente.
+- Modification générale de l’algorithme du réseau social.
+- Refonte de la messagerie, des paiements ou de la facturation.
+- Définition exhaustive de la future IA BTP / BTP Intelligence.
+- Modification des abonnements ou du modèle économique Opus.
+- Suppression ou remplacement des fonctionnalités déjà validées.
+
+## 24. Instruction finale à transmettre à Claude Code
+
+> **À LIRE AVANT TOUTE IMPLÉMENTATION**
+>
+> Ce document est un ADDENDUM. Il complète le cahier des charges « Visite intelligente & Préparation des devis V1 » et ne l’annule pas. Commence par auditer l’existant et compare le code actuel avec les exigences ci-dessus. Identifie ce qui existe déjà, ce qui peut être réutilisé, ce qui manque et les éventuels conflits. Présente ensuite un plan d’intégration par étapes. Ne code aucune refonte destructive, ne supprime aucune fonctionnalité existante et ne casse aucun parcours déjà fonctionnel. Le module devis actuellement en cours doit rester fonctionnel et simplement être préparé à recevoir ces extensions.
+
+## 25. Résumé de la décision produit
+
+Le QR particulier devient avant tout un outil simple de création de relation et de fiche client. Le professionnel garde le contrôle de l’action suivante. Le particulier dispose en complément d’un Dossier Travaux privé capable de centraliser son projet et de partager sélectivement les informations utiles avec un ou plusieurs professionnels. Cette évolution renforce la continuité Opus : trouver un professionnel, préparer son projet, se rencontrer, recevoir des devis, suivre les rendez-vous, conserver les factures et garder l’historique du chantier dans un même écosystème.
+
+---
+
+**FIN DE L’ADDENDUM - VERSION 1.0**
