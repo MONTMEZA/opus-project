@@ -60,6 +60,29 @@ mots de passe compromis.** C'est un interrupteur, et c'est la dernière alerte
 de sécurité du projet. Elle vérifie les mots de passe contre la base des
 fuites connues.
 
+**d) Ajouter le connecteur Supabase EN LECTURE SEULE — décidé le 19/10/2026.**
+Pour que Claude lise la base sans vous demander, et vous demande toujours
+avant d'écrire (`docs/AUDIT-PERMISSIONS-SUPABASE.md`). Dans claude.ai →
+Paramètres → Connecteurs → ajouter un connecteur personnalisé :
+
+- nom : `SupabaseLecture` ;
+- adresse :
+  `https://mcp.supabase.com/mcp?project_ref=lqzqdoiiqgqapqldrewg&read_only=true&features=database,debugging,development,docs,functions,storage`
+- puis se connecter à Supabase quand la fenêtre le demande.
+
+**Ne retirez pas le connecteur Supabase actuel** : c'est par lui que passent
+les écritures, avec votre accord. Ensuite, une NOUVELLE session (les
+connecteurs se lisent au démarrage) :
+
+- [ ] le connecteur `SupabaseLecture` ajouté dans claude.ai ;
+- [ ] dans la nouvelle session : relever le vrai nom de ses outils, écrire et
+  commiter `.claude/settings.json` (lectures autorisées une par une ;
+  « toujours demander » sur `execute_sql` et les outils d'écriture du
+  connecteur d'origine — CLAUDE.md, « Les permissions Supabase ») ;
+- [ ] l'éprouver : une lecture par le connecteur de lecture passe seule, une
+  écriture par lui est REFUSÉE par la base, et une écriture par le
+  connecteur d'origine demande votre accord.
+
 ### 1.0 ter La fluidité du fil — ✅ RÉGLÉ (17/10/2026)
 
 Les saccades pendant l'élan ont été corrigées sur trois causes lues dans le

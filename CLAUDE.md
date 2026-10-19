@@ -1025,6 +1025,57 @@ vraie base du projet — schéma, contraintes, données, fichiers du stockage,
 journaux et alertes de sécurité. **S'en servir pour vérifier** plutôt que de
 lui faire coller des résultats de requêtes.
 
+### Les permissions Supabase — décidé le 19/10/2026
+
+Demandé par le propriétaire : que les LECTURES Supabase passent sans lui
+demander à chaque fois, et que TOUTE écriture garde sa validation. Audit
+complet : `docs/AUDIT-PERMISSIONS-SUPABASE.md`.
+
+> **`mcp__Supabase__execute_sql` est INDIVISIBLE.** Une règle de permission
+> vise le NOM d'un outil MCP, jamais le texte de sa requête (une règle
+> `mcp__…` avec parenthèses est ignorée au chargement). L'autoriser, c'est
+> laisser passer sans humain INSERT, UPDATE, CREATE, ALTER — la confirmation
+> propre à Supabase ne voit que DROP, DELETE, TRUNCATE et l'UPDATE sans
+> condition. **Ne jamais mettre en `allow` `mcp__Supabase__execute_sql`,
+> `mcp__Supabase` ni `mcp__Supabase__*`.** Et pas de hook qui « devinerait »
+> une lecture dans le texte SQL : `SELECT ma_fonction()`, `SELECT … INTO`,
+> `WITH … DELETE … RETURNING` écrivent tous en commençant par « SELECT ».
+
+La décision, « les deux pièces » :
+
+1. **Un second connecteur en lecture seule**, `SupabaseLecture`, que le
+   propriétaire ajoute lui-même dans claude.ai (connecteur personnalisé,
+   `https://mcp.supabase.com/mcp?project_ref=lqzqdoiiqgqapqldrewg&read_only=true&features=database,debugging,development,docs,functions,storage`).
+   Son `execute_sql` tourne sous `supabase_read_only_user` : la barrière est
+   un RÔLE, pas une analyse de texte. Relevé sur la vraie base : aucun droit
+   d'écriture, aucune fonction `security definer` exécutable par ce rôle, ni
+   `dblink` ni `pg_net`.
+2. **`.claude/settings.json`, commité**, dans une NOUVELLE session (les
+   connecteurs se lisent au démarrage), après avoir relevé le vrai nom des
+   outils du nouveau connecteur : `allow` sur ses outils, NOMMÉS UN PAR UN,
+   et sur les outils du connecteur d'origine qui ne font que lire
+   (`list_tables`, `list_extensions`, `list_migrations`, `get_advisors`,
+   `query_logs`, `search_docs`, `get_project`, `get_project_url`,
+   `list_projects`, `get_organization`, `list_organizations`,
+   `list_branches`, `list_edge_functions`, `get_edge_function`,
+   `generate_typescript_types`) ; `ask` sur `execute_sql`, `apply_migration`,
+   `deploy_edge_function`, `create_edge_function_secret`, les cinq outils de
+   branche, `create_project`, `pause_project`, `restore_project`. **Une règle
+   `ask` force la confirmation même en mode Auto** — c'est elle qui garantit
+   la validation de chaque écriture.
+
+Et la discipline qui va avec :
+
+- **lire par `SupabaseLecture`, écrire par `Supabase`** ;
+- **le rôle de lecture lit TOUT, RLS ignorée** (`bypassrls`,
+  `pg_read_all_data`) : `auth.users`, le carnet de clients, les demandes. La
+  règle « on interroge la FORME, jamais le contenu » n'a plus de regard
+  humain pour la tenir : elle ne tient que par moi ;
+- **toute nouvelle fonction `security definer` qui écrit révoque `PUBLIC`** :
+  si l'API de Supabase ne forçait pas chaque requête en transaction READ ONLY
+  (NON ÉTABLI), une telle fonction laissée à PUBLIC deviendrait une porte
+  d'écriture pour le connecteur de lecture.
+
 ### Le projet ne doit PAS vivre dans OneDrive (06/10/2026)
 
 Signalé par le propriétaire : Expo Go ne s'ouvrait plus, et son terminal
