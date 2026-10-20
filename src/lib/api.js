@@ -36,7 +36,6 @@ import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
 import {
   pourLaBase, nettoyerEmetteur, nettoyerAssurance, nettoyerTarifs,
   validerEmetteur, validerAssurance, validerTarifs, motifsEmetteur, lireMotifs,
-  tvaIntraDuSiren, MESSAGE_TVA_PAS_LA_VOTRE,
 } from './emetteur';
 import { fabriquerEmetteurDemo, PRO_DEMO_EMETTEUR } from '../data/emetteur-demo';
 /* Les tarifs réunis (section 47, lot T). `tarifs.js` n'importe que
@@ -1982,17 +1981,6 @@ async function enregistrerEmetteurDemo({ emetteur, tarifs } = {}) {
   const f = ficheEmetteurDemo(moi);
   /* L'upsert de la base : les colonnes envoyées remplacent, les autres restent. */
   const ligne = { ...(f.emetteur || {}), ...pourLaBase('emetteur', emetteur || {}) };
-  /* LE DÉCLENCHEUR AVANT LES CONTRAINTES, comme en base : un n° de TVA
-     écrit ou changé doit être celui du SIREN rattaché (OP013, 20/10/2026).
-     Un numéro déjà en place et inchangé passe, même devenu étranger. */
-  const tvaNette = nettoyerEmetteur(ligne).tva_intra;
-  const tvaAvant = f.emetteur ? (f.emetteur.tva_intra == null ? null : f.emetteur.tva_intra) : undefined;
-  if (tvaNette != null && tvaNette !== tvaAvant) {
-    const active = await monEntrepriseDemo();
-    if (!active || tvaNette !== tvaIntraDuSiren(active.siren)) {
-      throw refusDeLaBase('OP013', MESSAGE_TVA_PAS_LA_VOTRE);
-    }
-  }
   const refus = validerEmetteur(ligne);
   if (!refus.ok) throw refusDeContrainte('emetteur', refus.contrainte);
   f.emetteur = { ...nettoyerEmetteur(ligne, f.emetteur, new Date()), pro_id: moi };

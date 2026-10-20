@@ -75,9 +75,6 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   emetteur_capital_variable_check: 'une société à capital variable n’indique pas de montant : '
     + '« à capital variable » le remplace.',
   emetteur_tva_check: 'choisissez la franchise en base ou le régime réel.',
-  emetteur_tva_intra_check: 'ce numéro de TVA n’a pas la forme d’un numéro français : « FR », une '
-    + 'clé de deux chiffres et un SIREN. Dans la section « TVA », touchez « C’est bien mon '
-    + 'numéro » : Opus l’écrit à partir de votre SIREN.',
   emetteur_email_check: 'cette adresse e-mail n’en est pas une : il manque l’arobase, ou le point '
     + 'du domaine.',
   emetteur_telephone_check: 'ce numéro de téléphone n’a pas le bon nombre de chiffres.',
@@ -305,8 +302,6 @@ export function messageClair(e, quoi = '') {
   /* LES CODES MAISON DE LA BASE (OP001 et suivants — OP011 naît avec la
      section 46, OP012 avec la section 47 : une version ancienne de
      l'application qui écrit encore des tarifs dans `sos_availability` ;
-     OP013 le 20/10/2026, un n° de TVA qui n'est pas celui du SIREN
-     rattaché ;
      OP003 reste réservé au devis remis) PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler

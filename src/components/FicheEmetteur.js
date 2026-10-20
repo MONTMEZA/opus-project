@@ -55,7 +55,7 @@ import {
   tarifsDepuisFormulaire, pourcentDepuisSaisie,
   MESSAGE_TAUX_ZERO, MESSAGE_MAJORATION_ZERO, MESSAGE_DEVIS_ZERO,
   versCentimes, estEI, estSocieteCommerciale, rcsOblige, mediateurDeLaListe,
-  parleDUnPaiementALaSignature, avisEmetteur, tvaIntraDuSiren, tvaIntraLisible,
+  parleDUnPaiementALaSignature, avisEmetteur,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { MEDIATEURS_RELEVES_LE, ADRESSE_A_RECOPIER } from '../data/mediateurs';
@@ -92,7 +92,6 @@ export const SECTION_DU_CHAMP = Object.freeze({
   telephone: 'contact',
   email: 'contact',
   regime_tva: 'tva',
-  tva_intra: 'tva',
   mediateur_nom: 'mediateur',
   mediateur_adresse: 'mediateur',
   mediateur_site: 'mediateur',
@@ -163,11 +162,6 @@ export function etatDepuis(reference) {
        drapeaux du dessus, lu sur la ligne chargée — pas un choix. Éteint par
        défaut (décision du 17/10/2026). */
     afficheTarifs: t.affiche === true,
-    /* LE N° DE TVA CONFIRMÉ (20/10/2026), tel qu'il est enregistré. Ce
-       n'est ni un champ ni un choix : l'interrupteur « C'est bien mon
-       numéro » le pose ou le retire, et il ne vaut que s'il est celui du
-       SIREN rattaché — l'écran le compare, il ne le recopie pas. */
-    tvaIntra: e.tva_intra != null ? e.tva_intra : null,
     mediateur,
   };
 }
@@ -182,9 +176,6 @@ export function memeEtat(a, b) {
     /* Normalisé comme les deux drapeaux : allumer puis éteindre ne fait pas
        apparaître une fausse bande « Quitter sans enregistrer ». */
     afficheTarifs: !!(x && x.afficheTarifs),
-    /* Toucher « C'est bien mon numéro » sans enregistrer fait apparaître
-       « Quitter sans enregistrer » ; le toucher deux fois, non. */
-    tvaIntra: (x && x.tvaIntra) || null,
     mediateur: (x && x.mediateur) || {},
   });
   return norm(a) === norm(b);
@@ -315,8 +306,6 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
   const [telVide, setTelVide] = useState(!init.textes.telephone.trim());
   const [emailVide, setEmailVide] = useState(!init.textes.email.trim());
   const [afficheTarifs, setAfficheTarifs] = useState(init.afficheTarifs);
-  /* Un brouillon gardé par une version d'avant n'a pas cette clé : `null`. */
-  const [tvaIntra, setTvaIntra] = useState(init.tvaIntra == null ? null : init.tvaIntra);
   /* LES REFUS EN LIGNE des quatre montants de tarifs, posés à la sortie du
      champ (`onBlur`) : un « 0 » tapé ou un montant illisible se voit AVANT
      tout envoi, sous SON champ. */
@@ -329,23 +318,12 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
   const champs = useRef({});
   const rues = useRef({ etablissement_adresse: init.textes.etablissement_adresse, siege_adresse: init.textes.siege_adresse });
 
-  /* LE N° DE TVA QUE L'ANNUAIRE N'A PAS TRANSMIS (20/10/2026). Opus le
-     calcule depuis le SIREN ; l'artisan le confirme. Le bloc ne se montre
-     que là où il sert : pas de numéro transmis, un SIREN lisible, et le
-     régime réel — ou un numéro déjà confirmé, pour pouvoir le retirer.
-     C'est la ligne CHARGÉE qui décide de ce second cas, pas l'état : sinon
-     décocher en franchise ferait disparaître le bloc sous le doigt. */
-  const tvaCalculee = entreprise && !entreprise.tva ? tvaIntraDuSiren(entreprise.siren) : null;
-  const tvaChargee = ((reference && reference.emetteur) || {}).tva_intra || null;
-
   const montre = {
     identite: estEI(entreprise),
     capital: estSocieteCommerciale(entreprise),
     etablissement: !!entreprise && entreprise.adresse == null,
     siege: !!entreprise && entreprise.est_siege !== true,
-    tvaIntra: !!tvaCalculee && (choix.regime_tva === 'reel' || tvaChargee != null),
   };
-  const tvaConfirmee = !!tvaCalculee && tvaIntra === tvaCalculee;
 
   /** Le texte du moment, champ par champ ; `undefined` pour un champ non monté. */
   const lireTextes = () => {
@@ -381,7 +359,6 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
     enLiquidation,
     locataireGerant,
     afficheTarifs,
-    tvaIntra,
     mediateur,
   });
 
@@ -431,11 +408,6 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
     }
 
     lu.regime_tva = choix.regime_tva;
-    /* Le numéro que l'écran a CALCULÉ, jamais celui qu'il a chargé : un
-       numéro confirmé pour une entreprise d'avant repart vide, au lieu de
-       se faire refuser (OP013). Bloc caché → `undefined` → la valeur
-       chargée reste, comme pour toute section cachée. */
-    if (montre.tvaIntra) lu.tva_intra = tvaConfirmee ? tvaCalculee : null;
 
     if (mediateur.mode === 'liste') {
       lu.mediateur_nom = mediateur.nom;
@@ -847,36 +819,6 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
         )}
         {!!ref0.regime_tva_declare_le && choix.regime_tva === ref0.regime_tva && (
           <Text style={s.declare}>{`Déclaré le ${dateFrancaise(ref0.regime_tva_declare_le)}`}</Text>
-        )}
-        {montre.tvaIntra && (
-          <>
-            <Text style={s.label}>Votre numéro de TVA intracommunautaire</Text>
-            <Aide>
-              Pour une entreprise française, il se compose de « FR », d’une clé de deux chiffres et
-              du SIREN. Opus l’a calculé à partir du vôtre : il ne l’invente pas, mais il ne peut pas
-              savoir s’il vous a été attribué.
-            </Aide>
-            <Interrupteur
-              actif={tvaConfirmee}
-              libelle={`C’est bien mon numéro : ${tvaIntraLisible(tvaCalculee)}`}
-              aide="Comparez-le d’abord avec celui de votre espace professionnel sur impots.gouv.fr, ou d’une facture que vous avez émise. Il s’imprimera sur vos devis."
-              onPress={() => {
-                setTvaIntra(tvaConfirmee ? null : tvaCalculee);
-                if (onEffacerErreur) onEffacerErreur();
-              }}
-            />
-            {sous('tva_intra')}
-            {!!tvaChargee && tvaChargee !== tvaCalculee && (
-              <Aide>
-                {`Le numéro confirmé auparavant (${tvaIntraLisible(tvaChargee)}) n’est pas celui de `
-                  + 'l’entreprise rattachée aujourd’hui : il ne s’imprime plus.'}
-              </Aide>
-            )}
-            <Aide>
-              Si vous ne le retrouvez nulle part, ne cochez pas : seul votre service des impôts des
-              entreprises attribue ce numéro, à une entreprise assujettie à la TVA.
-            </Aide>
-          </>
         )}
       </Section>
 
