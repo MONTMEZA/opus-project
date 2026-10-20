@@ -9,6 +9,13 @@
 >   documents de travail de la session : ils ne sont PAS dans le dépôt ;
 > - les numéros de ligne (`schema.sql:…`, `api.js:…`) sont ceux d'AVANT le
 >   lot : le code a bougé depuis ;
+> - deux relevés ont été retirés à l'archivage parce qu'ils situaient des
+>   personnes réelles (la commune près de laquelle vivent deux particuliers) ;
+> - **deux points de ce cahier ont changé** : le taux horaire n'a que DEUX
+>   états (`null` ou un montant — pas de 0, contrairement à ce que dit le
+>   §1.3), et la façon dont le devis passe du TTC au HT au régime réel se
+>   tranche avec le juriste avant le lot 2 (le lot 1 ne fait que proposer une
+>   valeur modifiable) ;
 > - **ce qui a été réellement construit, les écarts avec ce cahier, et ce qui
 >   a été vérifié sur la vraie base** sont dans CLAUDE.md, section « Les
 >   tarifs réunis — lot T ». En cas de désaccord, c'est CLAUDE.md et le code
@@ -28,7 +35,7 @@
 > - `artisans_urgence(text, double precision, double precision)` : `TABLE(professional_id uuid, entreprise text, metier text, ville text, avatar_url text, verifie boolean, deplacement numeric, horaire numeric, majoration integer, delai_minutes integer, distance double precision)`, `language sql stable`, **sans** `security definer`, exécutable aujourd'hui par `anon` et `authenticated` (un DROIT mesuré : l'application ne l'appelle jamais sans session, §2.5) ;
 > - `est_masque(uuid)` : exécutable par `authenticated`, **pas** par `anon` ;
 > - **`users.cgu_version`** : `2026-09-29` × 2, `2026-10-15` × 2, **`null` × 11** ; **aucun compte n'a accepté `2026-10-18`**, la version qui porte l'engagement du 18/10 ;
-> - **6 particuliers**, dont 2 localisés, **les 2 à moins de 40 km d'Aix-en-Provence** ; **0 compte et 0 fiche à moins de 60 km de Brest** (et de Lille, et de Strasbourg) ;
+> - **6 particuliers**, dont 2 localisés, **tous deux dans la zone que la version 1 prévoyait pour l'essai** ; **0 compte et 0 fiche à moins de 60 km de Brest** (et de Lille, et de Strasbourg) ;
 > - noms libres : les colonnes `taux_horaire_centimes`, `majoration_pct`, `decompte_temps_texte`, `prix_devis_centimes`, `affiche`, `affiche_le` ; les contraintes `tarif_taux_horaire_check`, `tarif_majoration_check`, `tarif_decompte_texte_check`, `tarif_devis_check`, `tarif_affiche_check`, `sos_rayon_check`, `sos_delai_check` ; les fonctions `metier_du_sos`, `tient_les_tarifs_publics`, `refuse_les_colonnes_mortes_du_sos` et leurs déclencheurs ; la politique `"tarifs affiches"` ; le code `OP012` (le schéma s'arrête à `OP011`). **À refaire juste avant d'appliquer** : une base change.
 >
 > **Ce que le propriétaire a déjà décidé, et qui n'est pas remis en question ici** :
@@ -1157,7 +1164,7 @@ Le fichier dit, en tête de chaque cas touché : « attendu changé par la secti
 
 ### 8.3 Les comptes jetables
 
-- A (pro, **plombier**), B (pro concurrent, électricien — **l'artisan jetable qui ne doit RIEN lire** des tarifs de A), P (particulier — **le particulier jetable qui les lit**), **tous placés à Brest** — mesuré : aucun compte ni aucune fiche réels à moins de 60 km. Placés à Aix-en-Provence comme le prévoyait la version 1, A aurait été visible, pendant l'essai, des **deux** particuliers réels localisés, tous deux à moins de 40 km d'Aix : l'un d'eux aurait pu lui envoyer une vraie urgence, qui aurait disparu au ménage (`sos_requests.professional_id … on delete cascade`, `schema.sql:857` ; relecture base, 12).
+- A (pro, **plombier**), B (pro concurrent, électricien — **l'artisan jetable qui ne doit RIEN lire** des tarifs de A), P (particulier — **le particulier jetable qui les lit**), **tous placés à Brest** — mesuré : aucun compte ni aucune fiche réels à moins de 60 km. Placés là où le prévoyait la version 1, A aurait été visible, pendant l'essai, des **deux** particuliers réels localisés, tous deux dans cette zone : l'un d'eux aurait pu lui envoyer une vraie urgence, qui aurait disparu au ménage (`sos_requests.professional_id … on delete cascade`, `schema.sql:857` ; relecture base, 12).
 - Adresses `tarifs-a-<horodatage>@exemple-opus.test` et suivantes, **une preuve `essai` pour chaque adresse EXACTE** de pro, posée par le connecteur avant l'inscription ; **SIRET fictifs à clé juste, vérifiés inconnus du répertoire Sirene** (relecture droit, m15 : la formule « libres de toute entreprise active » de la version 1 aurait laissé passer le numéro d'une vraie entreprise fermée, que CLAUDE.md interdit). Inscription par `curl` `POST /auth/v1/signup`.
 - **Ni le compte de l'entreprise du frère, ni le compte du propriétaire ne servent à cet essai.**
 - Ménage : par le chemin de l'application (`token`, `preparer_suppression_compte`, `/functions/v1/compte`) ; base revenue à ses comptages ; **puis `sos_requests` relue : 0 ligne hors des comptes jetables** (donc 0 ligne en tout aujourd'hui).
@@ -1345,7 +1352,7 @@ Chaque constat a été **revérifié** sur le dépôt (`be4b530`) ou sur la vrai
 | **base 8** — la `NOTICE` non éprouvée sur la vraie base | relevé de forme avant et après la migration | §2.2, 8.2-4, -6 |
 | **base 10**, **application m19** — deux contrôles de syntaxe | aucun agrégat en mot entier ; colonnes mortes relevées dans `pg_proc` ; aucun `select` JS de ces colonnes | §6.1-25, -30, 7.1 (18, 20), sabotage 28 |
 | **base 11** — le cas 19 n'éprouvait que l'`update` | `insert` et `update`, refusés ; un `insert` à 0 accepté | §7.1 (19) |
-| **base 12** — l'artisan jetable à Aix, près de deux vrais particuliers | les comptes jetables à Brest (mesuré : 0 compte à 60 km) ; `sos_requests` relue après le ménage | §8.1, 8.3 |
+| **base 12** — l'artisan jetable près de deux vrais particuliers | les comptes jetables à Brest (mesuré : 0 compte à 60 km) ; `sos_requests` relue après le ménage | §8.1, 8.3 |
 | **application B1** — « Modifier mon profil » éteignait le SOS | `reglageInitialSos`, fonction pure, que le contrôle fait tourner | §4.2, 5.2, 6.1-8, -32, sabotage 48 |
 | **application I2** — l'aperçu « Ce que verraient vos clients » toujours vide | la garde `affiche` passe chez les deux appelants publics | §5.4, 6.1-34, sabotages 53-54 |
 | **application I3** — « majoration incluse » à 0 % | `majore` exige `pct > 0` ; le bandeau ne parle plus de majoration | §4.2, 5.3, 6.1-1, sabotage 38 |

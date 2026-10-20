@@ -3474,9 +3474,17 @@ réunis, devis et SOS) **remplace** le lot 6 conditionnel : la réponse du
 **Le lot T est FAIT le 20/10/2026** : construit, migré sur la vraie base,
 essayé par le chemin de l'application (CLAUDE.md, « Les tarifs réunis —
 lot T » ; le cahier qui l'a guidé : `docs/CAHIER-LOT-T.md`). Ce que le
-lot 1 en attend est au §1.3 de ce cahier : le taux horaire est rangé en
-centimes, **TTC**, à trois états, et le lot 1 le COPIE comme une valeur
-proposée — jamais un lien.
+lot 1 en attend est au §1.3 de ce cahier, **à deux corrections près** :
+
+- le taux horaire est rangé en centimes, **TTC**, à **DEUX** états : `null`
+  (non déclaré) ou un montant de 1 € à 1 000 €. Un taux n'a pas de 0,
+  contrairement aux frais, à la majoration et au prix du devis, qui en ont
+  trois. Le lot 1 le COPIE comme une valeur proposée et modifiable — jamais
+  un lien ;
+- la façon dont le DEVIS passe du TTC au HT au régime réel (et ce qu'il
+  imprime en franchise) **se tranche avec le juriste avant le lot 2**
+  (`A-FAIRE.md`, « Après le lot T »). D'ici là, le lot 1 propose une valeur
+  et le dit sous le champ ; il ne fixe aucune règle de conversion.
 
 Et l'engagement du 18/10 (10.13) **tient tel quel** : « aucun écran ne montre
 les prix d'un artisan à un autre ». Les tarifs affichés vont aux particuliers,

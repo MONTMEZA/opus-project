@@ -7,6 +7,13 @@
 --      psql -h /tmp -p 5433 -U postgres -d opus_essai \
 --           -v ON_ERROR_STOP=0 -f supabase/essais-section-47.sql
 --
+--  LES SIRET DE CES ESSAIS SONT FICTIFS, et vérifiés. Ils ne servent qu'à
+--  cette base d'essai, jamais à une inscription sur la vraie base. Leurs
+--  SIREN (000047001, 000047100, 000047209) ont une clé de Luhn juste et ont
+--  été cherchés au répertoire Sirene (recherche-entreprises.api.gouv.fr) le
+--  20/10/2026 : aucun résultat. CLAUDE.md interdit le SIRET d'une vraie
+--  entreprise, même pour un essai.
+--
 --  DES CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de sécurité qui
 --  ne montre aucun refus n'éprouve rien. psql préfixe chaque ligne d'erreur
 --  par le nom du fichier et le numéro de ligne : un `grep '^ERROR'` ne les

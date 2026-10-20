@@ -1610,8 +1610,10 @@ peut s'inscrire aujourd'hui.
   impossible : une session anonyme perdue ne se retrouve pas.
 
   **Depuis le lot T (20/10), ce n'est plus seulement du ménage** : pour la
-  base, un compte « pro » sans fiche compte comme un particulier, donc il
-  LIRAIT les tarifs qu'un artisan affiche (aucun ne l'est encore).
+  base, un compte « pro » sans fiche compte comme un particulier. Une session
+  de ce compte, si quelqu'un détient encore son jeton du 14/09, LIRAIT les
+  tarifs qu'un artisan affiche (aucun ne l'est encore). Personne ne peut plus
+  en ouvrir une nouvelle, mais rien ne prouve que l'ancienne soit perdue.
 
   ⏳ **Il reste à le supprimer, et c'est à VOUS** : Supabase →
   Authentication → Users → la ligne sans e-mail (`d23e1784-…`) →
@@ -1835,9 +1837,10 @@ Le détail est dans CLAUDE.md, « Les tarifs réunis — lot T ».
 **À faire par vous, et c'est devenu plus qu'une propreté :**
 
 - [ ] **Supprimer le compte anonyme du 14/09** (§5, plus bas). Pour la base,
-  « particulier » veut dire « toute session sans fiche pro » : ce compte
-  lirait donc les tarifs qu'un artisan affiche. Il ne lit rien aujourd'hui
-  (aucun tarif n'est affiché), mais il lirait le premier.
+  « particulier » veut dire « toute session sans fiche pro ». Personne ne
+  peut plus ouvrir de session sur ce compte, mais rien ne prouve que son
+  jeton du 14/09 soit perdu : une session qui survivrait quelque part lirait
+  les tarifs qu'un artisan affiche (aucun ne l'est encore).
 - [ ] **Votre ligne d'urgence « Électricité » a été éteinte** par la
   migration : aucun de vos métiers n'est un métier d'urgence. Rien à faire,
   c'est pour que vous ne soyez pas surpris de ne plus la voir allumée.

@@ -55,15 +55,15 @@ export const NOM_ENTREPRISE_MAX = 120;
 /**
  * « 2026-09-02 » ou un horodatage → « 02/09/2026 ». Rien d'inventé sinon.
  *
- * DEUX CAS, ET ILS NE SE LISENT PAS PAREIL (trouvé sur la vraie base le
- * 20/10/2026, à 1 h 18 du matin) :
+ * DEUX CAS, ET ILS NE SE LISENT PAS PAREIL (trouvé sur la vraie base dans la
+ * nuit du 19 au 20/10/2026, vers 1 h 20) :
  *   - une colonne `date` (« 2026-09-02 ») se lit COMME UNE CHAÎNE. Passée
  *     par `new Date()`, elle tomberait à minuit UTC, donc la veille pour qui
- *     vit à l'ouest de Greenwich (CLAUDE.md, « Les dates de la Place des
- *     pros ») ;
+ *     vit à l'ouest de Greenwich — les Antilles comprises (CLAUDE.md, « Les
+ *     dates de la Place des pros ») ;
  *   - un HORODATAGE (« 2026-10-19T23:18:21.5+00:00 ») est un instant, que la
  *     base rend en UTC. Lu comme une chaîne, ses dix premiers caractères
- *     donnaient « 19/10/2026 » pour des tarifs affichés le 20 à 1 h 18 en
+ *     donnaient « 19/10/2026 » pour des tarifs affichés le 20 vers 1 h 20 en
  *     France : toute la nuit, de minuit à 1 h ou 2 h, la date était celle de
  *     la VEILLE. Il se lit donc à l'heure du téléphone.
  * Un horodatage que le téléphone ne sait pas lire retombe sur sa date
@@ -73,12 +73,8 @@ export function dateFrancaise(valeur) {
   const s = String(valeur == null ? '' : valeur);
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
-  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s)) {
-    // La forme ISO que tous les moteurs lisent : « T », trois décimales au
-    // plus (PostgREST en rend six), un fuseau « +00:00 » et non « +00 ».
-    const iso = s.replace(' ', 'T')
-      .replace(/(\.\d{3})\d+/, '$1')
-      .replace(/([+-]\d{2})$/, '$1:00');
+  const iso = isoLisible(s);
+  if (iso) {
     const t = Date.parse(iso);
     if (Number.isFinite(t)) {
       const d = new Date(t);
@@ -87,6 +83,33 @@ export function dateFrancaise(valeur) {
     }
   }
   return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/**
+ * Un horodatage, réécrit dans LA forme que la spécification de JavaScript
+ * oblige tous les moteurs à lire : « AAAA-MM-JJTHH:MM:SS.sss±hh:mm ». Rend
+ * `null` pour ce qui n'est pas un horodatage (une date seule, un texte).
+ *
+ * Pourquoi la réécrire : `node` (le moteur des contrôles) est tolérant,
+ * Hermes (celui de l'iPhone) l'est moins, et en dehors de cette forme un
+ * moteur est libre de répondre NaN. PostgREST rend six décimales, PostgreSQL
+ * en texte écrit un espace au lieu du « T » et « +00 » au lieu de
+ * « +00:00 », et il RETIRE les zéros de fin (« .5 »). D'où, en une fois :
+ * « T », EXACTEMENT trois décimales, un fuseau « ±hh:mm ». Un horodatage
+ * sans fuseau reste sans fuseau : c'est une heure murale, lue à l'heure du
+ * téléphone. `verifier-tarifs` (vérification 49) exige cette forme pour
+ * chaque entrée, parce que `node` ne peut pas juger ce que Hermes lit.
+ */
+export function isoLisible(valeur) {
+  const s = String(valeur == null ? '' : valeur).trim();
+  const r = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/i);
+  if (!r) return null;
+  const [, jour, hm, sec = '00', frac = '', fuseau = ''] = r;
+  const millis = (frac + '000').slice(0, 3);
+  let tz = fuseau.toUpperCase();
+  if (/^[+-]\d{2}$/.test(tz)) tz += ':00';
+  else if (/^[+-]\d{4}$/.test(tz)) tz = `${tz.slice(0, 3)}:${tz.slice(3)}`;
+  return `${jour}T${hm}:${sec}.${millis}${tz}`;
 }
 
 /**

@@ -7506,8 +7506,9 @@ chaînes `'…'`, `E'…'`, les `$tag$` et les commentaires imbriqués).
 > droits, index), comparée entre la vraie base et une base neuve rejouée.
 > Deux écarts, tous deux connus et sans effet : PostgreSQL 17 ajoute le droit
 > `m` (MAINTAIN) aux droits de table, et le connecteur, qui passe par du
-> JSON, transforme l'écriture ` ` en vrai caractère — équivalent dans
-> une expression régulière, vérifié en l'exécutant.
+> JSON, transforme l'écriture `\u00a0` (barre oblique inverse, u, 00a0) en vrai
+> caractère U+00A0 — équivalent dans une expression régulière, vérifié en
+> l'exécutant.
 
 #### `\b` ne voit pas une lettre accentuée — et un contrôle était aveugle
 
@@ -7741,15 +7742,20 @@ fiche SOS à 0 € affichait « 0 – 0 € ». Il n'y a plus qu'**une liste, da
 #### Ce que « particulier » veut dire pour la base
 
 Pas « un compte de type particulier » : **toute session sans fiche pro**.
-Trois cas lisent donc une ligne affichée, et ils sont écrits en 47.5 et
-éprouvés (essais 5 quater et 5 quinquies) : un particulier ; un compte
-`type = 'pro'` SANS fiche ; une session dont la ligne `users` a été effacée
-par `preparer_suppression_compte()`.
+Outre les particuliers, trois cas lisent donc une ligne affichée, et ils
+sont écrits en 47.5 et éprouvés : un compte `type = 'pro'` SANS fiche (essai
+5 quinquies a) ; une session dont la ligne `users` a été effacée par
+`preparer_suppression_compte()`, tant que son jeton vit (5 quinquies b) ; un
+ADMINISTRATEUR dont le compte serait particulier (5 quater). Aujourd'hui le
+seul administrateur est un compte pro — c'est ce qui rend vrai « l'éditeur
+non plus ».
 
 > **Le deuxième cas existe sur la vraie base** : le compte anonyme du 14/09
-> (`docs/A-FAIRE.md` §5). Il ne lit rien aujourd'hui — aucune ligne n'est
-> affichée —, mais il lirait le premier tarif affiché. **Le supprimer est au
-> propriétaire**, et c'est devenu plus qu'une propreté.
+> (`docs/A-FAIRE.md` §5). Personne ne peut plus ouvrir de session sur lui,
+> mais rien ne prouve que son jeton du 14/09 soit perdu : une session qui
+> survivrait quelque part lirait le premier tarif affiché (aucun ne l'est
+> encore). **Le supprimer est au propriétaire**, et c'est devenu plus qu'une
+> propreté.
 
 #### Trois états partout, et un `0` qui n'est jamais tapé
 
@@ -7815,10 +7821,10 @@ du propriétaire a été éteinte** — aucun de ses métiers n'est un métier
 d'urgence, et la promesse « un métier retiré n'apparaît plus » n'était tenue
 par rien.
 
-#### Une DATE d'horodatage se lit à l'heure du téléphone — trouvé à 1 h 18
+#### Une DATE d'horodatage se lit à l'heure du téléphone — trouvé vers 1 h 20
 
 « Affichés sur votre fiche depuis le **19**/10/2026 », alors qu'il était
-1 h 18 le 20 à Paris. `dateFrancaise()` (`src/lib/entreprise.js`) prenait
+1 h 20 le 20 à Paris. `dateFrancaise()` (`src/lib/entreprise.js`) prenait
 les dix premiers caractères de la chaîne ; or PostgREST rend un
 `timestamptz` en UTC. **Toute la nuit, de minuit à 1 h ou 2 h, la date était
 celle de la veille** — sur « Affichés depuis », « Dernière modification »,
@@ -7830,17 +7836,36 @@ celle de la veille** — sur « Affichés depuis », « Dernière modification �
 > et `verifier-tarifs` (vérification 49) la FAIT TOURNER à l'heure de Paris
 > sur les deux bords de minuit. Éprouvé en cassant : refusé.
 
-Il n'aurait été vu ni de jour, ni en démonstration (la date de démo est
-`new Date().toISOString()`, et de jour la date UTC est la bonne) : **seul un
-essai sur la vraie base, la nuit,** l'a montré.
+Il n'aurait été vu dans aucun essai fait de jour, démonstration comprise :
+ses dates sont aussi des `toISOString()` en UTC, et la nuit elles auraient
+montré la même veille. Les essais au navigateur avaient en plus leur horloge
+fixée à 14 h ou 22 h. **Il a fallu un essai sur la vraie base, où c'est le
+SERVEUR qui date, à l'heure réelle d'une nuit.**
+
+Et la vérification 49 tourne dans TROIS fuseaux (Paris en été et en hiver,
+les Antilles, Kiritimati) : la relecture a montré qu'un seul fuseau, à l'est
+de Greenwich, laissait passer « une date seule lue comme un instant » — qui
+ne recule d'un jour qu'à l'OUEST, aux Antilles par exemple. La 49 bis exige
+que chaque horodatage soit réécrit, avant `Date.parse`, dans LA forme que la
+spécification de JavaScript oblige tout moteur à lire (`isoLisible()`) :
+`node` est plus tolérant que Hermes, il ne peut pas en être juge. Six
+sabotages, six refus.
+
+> **Et un contrôle de dates se lance dans plusieurs fuseaux.** Lancés aux
+> Antilles, les 48 contrôles ont trouvé un défaut PLUS ANCIEN, de la même
+> famille : `libelleDates()` (la Place des pros) lisait « 2026-03-12 » par
+> `new Date()`, donc « du 12 au 20 mars » s'affichait « du 11 au 19 mars »
+> en Martinique — le piège que CLAUDE.md décrit depuis le 04/10, dans le
+> fichier même qui le décrit. Corrigé, et `verifier-annonces` le vérifie
+> désormais dans trois fuseaux.
 
 #### Le transport du connecteur change aussi MES requêtes
 
-Le connecteur passe par du JSON, et une écriture ` ` dans le TEXTE
-envoyé devient un vrai caractère — déjà noté au lot 0a pour les migrations.
+Le connecteur passe par du JSON, et une écriture `\u00a0` (barre oblique
+inverse, u, 00a0) dans le TEXTE envoyé devient le vrai caractère U+00A0 — déjà noté au lot 0a pour les migrations.
 **Ça vaut aussi pour une requête de vérification** : comparant les corps de
-fonction, `replace(prosrc, ' ', …)` remplaçait un caractère par
-lui-même, et deux fonctions du lot T semblaient DIFFÉRENTES de la base
+fonction, `replace(prosrc, '\u00a0', …)` remplaçait le caractère U+00A0
+par lui-même, et deux fonctions du lot T semblaient DIFFÉRENTES de la base
 neuve. Le relevé octet par octet (`encode(convert_to(…), 'hex')`) a montré
 que la base portait exactement les six caractères attendus.
 
@@ -7852,9 +7877,11 @@ que la base portait exactement les six caractères attendus.
 
 `page.clock.setFixedTime` règle l'heure du navigateur, pas celle du serveur.
 Fixée **après** l'expiration du jeton, supabase-js croit la session expirée
-et la rafraîchit en boucle ; fixée **avant** l'heure réelle (le même jour à
-14 h puis 22 h, alors qu'il était 1 h du matin), le jeton reste valable et
-l'estimation se calcule à l'heure voulue. Le serveur, lui, date tout à
+et la rafraîchit en boucle ; fixée **avant** l'heure réelle (la veille, le
+19/10 à 14 h puis à 22 h, alors qu'il était 1 h du matin le 20), le jeton
+reste valable et l'estimation se calcule à l'heure voulue. Le navigateur se
+croyait donc le 19 : « Affichés depuis le 19/10 » paraissait cohérent à
+l'écran — c'est l'heure du serveur, relevée à part, qui a trahi le défaut. Le serveur, lui, date tout à
 l'heure réelle — c'est ce qui a fait voir le défaut de date ci-dessus.
 
 #### Vérifié, et comment
@@ -7869,8 +7896,8 @@ d'être corrigés**, puis **132 sabotages, chacun refusé par la vérification
 visée**.
 
 La migration simulée sur la base « d'avant » rend l'empreinte d'une base
-neuve, puis appliquée sur la VRAIE base le 19/10 au soir, avec l'accord du
-propriétaire, sans un ordre qui commence par `drop` ou `delete`. **Empreinte
+neuve, puis appliquée sur la VRAIE base dans la nuit du 19 au 20/10 (vers
+1 h, heure de Paris), avec l'accord du propriétaire, sans un ordre qui commence par `drop` ou `delete`. **Empreinte
 comparée après coup** : les 79 fonctions identiques à une base neuve une
 fois les commentaires, les blancs et les échappements du transport mis à
 part ; le reste n'est que des restes connus (`entreprise_registre.gele`,
@@ -7886,7 +7913,7 @@ répertoire Sirene, `enregistrer_vues` neutralisé, supprimés à la fin :
 | | relevé |
 |---|---|
 | A, « Mon entreprise » en lecture | « Non affichés… vous n'apparaissez pas dans les urgences » |
-| les champs · les interrupteurs | 358 × 44 (décompte 358 × 70) · 44 de haut, pavé décimal sans touche retour |
+| les champs · les interrupteurs | 358 × 44 (décompte 358 × 70) · 44 à 53 de haut ; pavé décimal pour les frais, le taux et le devis, numérique pour la majoration, aucun avec une touche retour |
 | un taux tapé, puis fermer | « Quitter sans enregistrer » ; allumer puis éteindre, fermer : **rien** |
 | « 0 » dans le taux · afficher sans tarif | refusés à l'écran, **aucune requête** |
 | 45 / 62,50 / décompte / 40 % / devis gratuit, affiché | `POST emetteur 201`, `POST tarifs_pro 201` |
@@ -7902,13 +7929,13 @@ répertoire Sirene, `enregistrer_vues` neutralisé, supprimés à la fin :
 | …et le réglage SOS de A | « Vous n'apparaîtrez pas dans les urgences : vos tarifs ne sont pas affichés » |
 | A rallume, « je ne majore pas », « déplacement offert » ; P de nuit | « 63 – 125 € TTC », « Déplacement offert · 62,50 €/h · sans majoration la nuit ni le week-end » |
 | la route `artisans_urgence` coupée | « La recherche d'artisans : pas de connexion… », **aucun anglais** |
-| P « Choisir » | `POST sos_requests 201`, `prix_min/max` **63 / 125** relus en base, A la reçoit dans « Pour moi » |
+| P « Choisir » | `POST sos_requests 201` ; relus par l'API : `prix_min/max` **63 / 125** côté P, et la demande dans `mes_demandes_recues` de A |
 | un visiteur : `tarifs_pro` · `artisans_urgence` | **401 · 42501** · **401 · 42501** |
 | **B, juste après que P a lu la ligne** | **`[]`** · **`[]`** |
 | P modifie / supprime la ligne de A | 204, **rien de changé** (relu par A) ; au nom de A : **403** |
 | A écrit l'ancienne colonne · un rayon de 100 000 km | **400 OP012** (message complet) · **400 `sos_rayon_check`** |
 | P bloque A | `tarifs_pro` **`[]`**, `artisans_urgence` **`[]`** ; débloqué : 1 ligne |
-| l'export RGPD | A : les six clés nouvelles, `ma_disponibilite_urgences` 1, `urgences` 1 ; P : `urgences` 1 |
+| l'export RGPD (`rpc/mes_donnees`) | A : les six clés nouvelles, `ma_disponibilite_urgences` 1, `urgences` 1 ; P : `urgences` 1 |
 
 Base revenue à 15 comptes / 8 fiches / 21 publications, 0 tarif, 0 demande
 SOS, 0 ligne SOS active. Les deux preuves `essai` du 18/10 ont été

@@ -2,6 +2,12 @@
 --  ESSAI DU RATTRAPAGE DE LA SECTION 47 (lot T) — sur la base que le
 --  propriétaire a RÉELLEMENT
 --
+--  LES SIRET DE CES ESSAIS SONT FICTIFS, et vérifiés. Ils ne servent qu'à
+--  cette base d'essai, jamais à une inscription sur la vraie base. Leurs
+--  SIREN (000047407, 000047506, 000047605, 000047704, 000047803, 000047902)
+--  ont une clé de Luhn juste et ont été cherchés au répertoire Sirene
+--  (recherche-entreprises.api.gouv.fr) le 20/10/2026 : aucun résultat.
+--
 --  Le rattrapage de 47.2 ne tourne qu'UNE fois (sa garde est l'absence de la
 --  colonne `taux_horaire_centimes`). Il ne s'éprouve donc pas sur une base
 --  neuve au nouveau schéma — il n'y aurait rien à rattraper —, mais sur la

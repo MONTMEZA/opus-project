@@ -19,10 +19,24 @@ const MOIS = [
   'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
 ];
 
-/** « du 12 au 20 mars », « du 28 févr. au 3 mars », « à partir du 12 mars ». */
+/**
+ * « du 12 au 20 mars », « du 28 févr. au 3 mars », « à partir du 12 mars ».
+ *
+ * `date_debut` et `date_fin` sont des colonnes `date` : « 2026-03-12 », sans
+ * heure. Elles se lisent par leurs trois NOMBRES, jamais par
+ * `new Date('2026-03-12')`, qui tombe à minuit UTC : aux Antilles (UTC-4),
+ * « du 12 au 20 mars » s'affichait « du 11 au 19 mars ». Trouvé le
+ * 20/10/2026 en lançant les contrôles dans d'autres fuseaux ; c'était le
+ * piège que l'en-tête des créneaux, plus bas, décrit lui-même.
+ */
+function jourDe(valeur) {
+  const m = String(valeur).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+}
+
 export function libelleDates(debut, fin) {
-  const d = debut ? new Date(debut) : null;
-  const f = fin ? new Date(fin) : null;
+  const d = debut ? jourDe(debut) : null;
+  const f = fin ? jourDe(fin) : null;
   if (!d && !f) return null;
   if (d && !f) return `à partir du ${d.getDate()} ${MOIS[d.getMonth()]}`;
   if (!d && f) return `jusqu'au ${f.getDate()} ${MOIS[f.getMonth()]}`;

@@ -484,8 +484,19 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
     identites.some((id) => ent.propositionMetiers(id).metiers.length === 0)
     && identites.filter((id) => ent.propositionMetiers(id).metiers.length === 0)
       .every((id) => ent.propositionMetiers(id).phrase === null));
+  /* `verifie_le` est un horodatage : depuis le 20/10, `dateFrancaise` le lit
+     à l'heure du téléphone. Le contrôle fixe donc son fuseau, sinon il
+     rougirait selon la machine qui le lance, sans qu'aucun code ait changé. */
+  const tzAvant = process.env.TZ;
+  let resumeDate;
+  try {
+    process.env.TZ = 'Europe/Paris';
+    resumeDate = ent.resumeEntreprise({ source: 'registre', verifie_le: '2026-10-15T10:00:00Z' });
+  } finally {
+    if (tzAvant === undefined) delete process.env.TZ; else process.env.TZ = tzAvant;
+  }
   verifier('une ligne sans date n’existe pas : la date est toujours écrite',
-    /\(vu le 15\/10\/2026\)/.test(ent.resumeEntreprise({ source: 'registre', verifie_le: '2026-10-15T10:00:00Z' })));
+    /\(vu le 15\/10\/2026\)/.test(resumeDate));
 
   /* Les fichiers d'écran du niveau « répertoire ». Les textes de la porte
      de secours (« Opus va vérifier votre entreprise… ») parlent d'un

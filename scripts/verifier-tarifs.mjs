@@ -39,7 +39,7 @@ import { execFileSync } from 'node:child_process';
 import * as T from '../src/lib/tarifs.js';
 import * as E from '../src/lib/emetteur.js';
 import * as U from '../src/data/urgences.js';
-import { dateFrancaise } from '../src/lib/entreprise.js';
+import { dateFrancaise, isoLisible } from '../src/lib/entreprise.js';
 import { TARIFS_DEMO, MES_SOS_DEMO } from '../src/data/tarifs-demo.js';
 import { proProfiles } from '../src/data/demo.js';
 import { messageClair, MESSAGES_CONTRAINTE } from '../src/lib/erreurs.js';
@@ -1550,22 +1550,57 @@ const lecteursEnTrop = (texte) => propositionsDe(texte)
 
 {
   /* 49. LA DATE D'UN HORODATAGE se lit à l'heure du téléphone (trouvé sur la
-     vraie base le 20/10/2026 à 1 h 18 : « Affichés depuis le 19/10 »). La
-     base rend `affiche_le` en UTC ; ses dix premiers caractères donnaient la
-     veille toute la nuit. Une colonne `date`, elle, reste une chaîne. On FAIT
-     TOURNER la fonction, à l'heure de Paris. */
+     vraie base dans la nuit du 19 au 20/10/2026, vers 1 h 20 : « Affichés
+     depuis le 19/10 »). La base rend `affiche_le` en UTC ; ses dix premiers
+     caractères donnaient la veille toute la nuit. Une colonne `date`, elle,
+     reste une chaîne. On FAIT TOURNER la fonction dans TROIS fuseaux : Paris
+     (été ET hiver), les Antilles (à l'ouest de Greenwich, là où une date lue
+     comme un instant tomberait la veille) et Kiritimati (UTC+14). Un seul
+     fuseau laissait passer deux défauts plausibles (relecture du 20/10). */
+  const CAS = {
+    'Europe/Paris': [
+      ['2026-10-19T23:18:21.716617+00:00', '20/10/2026'],
+      ['2026-10-19 23:18:21+00', '20/10/2026'],
+      ['2026-10-19T21:59:59.999+00:00', '19/10/2026'],
+      ['2026-12-19T22:30:00Z', '19/12/2026'],
+      ['2026-12-19T23:30:00Z', '20/12/2026'],
+    ],
+    'America/Martinique': [
+      ['2026-10-20T02:30:00+00:00', '19/10/2026'],
+      ['2026-10-19 23:18:21-05', '20/10/2026'],
+    ],
+    'Pacific/Kiritimati': [
+      ['2026-10-19T09:59:00Z', '19/10/2026'],
+      ['2026-10-19T10:00:00Z', '20/10/2026'],
+    ],
+  };
+  // Les mêmes dans tous les fuseaux : une date seule, une heure murale.
+  const PARTOUT = [['2026-09-02', '02/09/2026'], ['2026-10-19T23:18:21', '19/10/2026'], [null, null], ['demain', null]];
   const avant = process.env.TZ;
-  process.env.TZ = 'Europe/Paris';
-  const cas = [
-    ['2026-10-19T23:18:21.123456+00:00', '20/10/2026'],
-    ['2026-10-19 23:18:21+00', '20/10/2026'],
-    ['2026-10-19T21:59:59.999+00:00', '19/10/2026'],
-    ['2026-09-02', '02/09/2026'],
-    [null, null],
-  ];
-  const faux = cas.filter(([v, att]) => dateFrancaise(v) !== att).map(([v]) => `${v} → ${dateFrancaise(v)}`);
-  if (avant === undefined) delete process.env.TZ; else process.env.TZ = avant;
-  verifier('49. `dateFrancaise` lit un horodatage à l’heure de Paris, et une date comme une chaîne', !faux.length, faux.join(' ; '));
+  const faux = [];
+  try {
+    for (const [tz, cas] of Object.entries(CAS)) {
+      process.env.TZ = tz;
+      for (const [v, att] of cas.concat(PARTOUT)) {
+        if (dateFrancaise(v) !== att) faux.push(`${tz} : ${v} → ${dateFrancaise(v)}, attendu ${att}`);
+      }
+    }
+  } finally {
+    if (avant === undefined) delete process.env.TZ; else process.env.TZ = avant;
+  }
+  verifier('49. `dateFrancaise` lit un horodatage à l’heure du téléphone (Paris été et hiver, Antilles, '
+    + 'Kiritimati), et une date ou une heure murale comme elles sont écrites', !faux.length, faux.join(' ; '));
+
+  /* …et la forme passée à `Date.parse` est celle que la spécification
+     OBLIGE tout moteur à lire. `node` est plus tolérant que Hermes : il ne
+     peut pas servir de juge, la forme si. */
+  const STRICTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}(Z|[+-]\d{2}:\d{2})?$/;
+  const FORMES = ['2026-10-19T23:18:21.716617+00:00', '2026-10-19 23:18:21+00', '2026-10-19T23:18:21.5+00:00',
+    '2026-10-19T23:18:21Z', '2026-10-19 23:18:21-05', '2026-10-19T23:18:21', '2026-10-19T23:18:21+0530',
+    '2026-10-19 23:18'];
+  const horsForme = FORMES.filter((f) => !STRICTE.test(isoLisible(f) || '')).map((f) => `${f} → ${isoLisible(f)}`);
+  verifier('49 bis. Chaque forme d’horodatage est réécrite en « AAAA-MM-JJTHH:MM:SS.sss±hh:mm » avant Date.parse',
+    !horsForme.length && isoLisible('2026-09-02') === null, horsForme.join(' ; '));
 }
 
 console.log('');

@@ -72,6 +72,27 @@ const {
   console.log('\nDates');
   verifier('même mois abrégé', libelleDates('2026-03-12', '2026-03-20') === 'du 12 au 20 mars',
     libelleDates('2026-03-12', '2026-03-20'));
+
+  /* Une colonne `date` se lit par ses nombres, dans TOUS les fuseaux. Lue par
+     `new Date('2026-03-12')`, elle tombe à minuit UTC : aux Antilles (UTC-4)
+     le libellé reculait d'un jour, et ce contrôle passait quand même sur une
+     machine réglée à Paris (trouvé le 20/10/2026). On fixe donc le fuseau. */
+  {
+    const avant = process.env.TZ;
+    const lus = {};
+    try {
+      for (const tz of ['America/Martinique', 'Europe/Paris', 'Pacific/Kiritimati']) {
+        process.env.TZ = tz;
+        lus[tz] = [libelleDates('2026-03-12', '2026-03-20'), libelleDates('2026-03-01', null),
+          libelleDates(null, '2026-02-28')].join(' · ');
+      }
+    } finally {
+      if (avant === undefined) delete process.env.TZ; else process.env.TZ = avant;
+    }
+    const attendu = 'du 12 au 20 mars · à partir du 1 mars · jusqu\'au 28 févr.';
+    verifier('les dates d’une annonce ne reculent d’un jour dans aucun fuseau (Antilles, Paris, Kiritimati)',
+      Object.values(lus).every((x) => x === attendu), JSON.stringify(lus));
+  }
   verifier('à cheval sur deux mois',
     libelleDates('2026-02-28', '2026-03-03') === 'du 28 févr. au 3 mars',
     libelleDates('2026-02-28', '2026-03-03'));
