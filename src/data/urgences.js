@@ -1,14 +1,28 @@
 /**
- * SOS — interventions d'urgence.
+ * SOS — interventions d'urgence : les DONNÉES, et rien d'autre.
  *
- * Principe tarifaire, volontairement simple et honnête :
- * l'artisan renseigne trois chiffres une seule fois
- *   - un forfait de déplacement
- *   - un tarif horaire
- *   - une majoration nuit et week-end (en %)
- * Chaque type de problème porte une durée moyenne (min / max heures).
- * L'app en déduit une FOURCHETTE ESTIMÉE, jamais un prix ferme :
- * l'artisan n'a pas encore vu le chantier.
+ * Ce fichier dit quels métiers relèvent d'une urgence domestique, quels
+ * problèmes on peut signaler, combien de temps ils prennent en moyenne, et
+ * quand une heure compte comme « la nuit ou le week-end ». Il ne contient
+ * plus AUCUN tarif, et plus aucun calcul de prix — depuis le lot T
+ * (19/10/2026) :
+ *
+ *   - les tarifs d'un artisan vivent dans `tarifs_pro`, une seule liste pour
+ *     ses devis et pour le SOS, réglée dans « Mon entreprise » et affichée
+ *     au choix de l'artisan (décision du 17/10/2026). Les trois chiffres
+ *     qu'on saisissait ici une seule fois (`sos_availability.deplacement`,
+ *     `.horaire`, `.majoration`) sont des colonnes MORTES ;
+ *   - l'estimation et la liste des artisans disponibles en démonstration
+ *     vivent dans `src/lib/tarifs.js`, en centimes, sur les tarifs AFFICHÉS.
+ *
+ * Le principe reste le même, volontairement simple et honnête : chaque
+ * problème porte une durée moyenne (min / max heures), et l'app en déduit
+ * une FOURCHETTE ESTIMÉE, jamais un prix ferme — l'artisan n'a pas encore
+ * vu le chantier.
+ *
+ * CE FICHIER N'IMPORTE RIEN : `verifier-metiers` et `verifier-tarifs`
+ * l'ouvrent avec `node`, et `tarifs.js` l'importe. Un import dans l'autre
+ * sens ferait une boucle.
  */
 
 /** Les quatre métiers qui relèvent d'une vraie urgence domestique. */
@@ -21,7 +35,9 @@ export const METIERS_SOS = [
 
 /**
  * Types de problème par métier, avec la durée d'intervention moyenne.
- * Ce sont ces durées qui transforment trois chiffres en fourchette de prix.
+ * Ce sont ces durées qui transforment les tarifs affichés d'un artisan en
+ * fourchette de prix (`estimationSos`, src/lib/tarifs.js). Ce sont des
+ * durées MOYENNES d'Opus, et la carte le dit.
  */
 export const PROBLEMES = {
   plomberie: [
@@ -59,55 +75,40 @@ export const CRENEAUX_SOS = [
 ];
 
 /**
- * Disponibilité et grille tarifaire des artisans, en démonstration.
- * En vrai, ces lignes viennent de la table `sos_availability` remplie
- * par l'artisan depuis son profil.
- *   deplacement : forfait fixe en euros
- *   horaire     : tarif horaire en euros
- *   majoration  : % appliqué la nuit et le week-end
+ * Disponibilité des artisans, en démonstration — SANS leurs tarifs.
+ * En vrai, ces lignes viennent de la table `sos_availability`, remplie par
+ * l'artisan depuis « Modifier mon profil » ; leurs tarifs viennent de
+ * `tarifs_pro` (en démonstration : `src/data/tarifs-demo.js`).
  *   distanceKm  : distance simulée (calculée par géolocalisation en vrai)
  *   delaiMin    : délai d'arrivée annoncé, en minutes
+ *
+ * Un artisan n'apparaît dans une recherche que si ses tarifs sont AFFICHÉS
+ * et complets (lot T, réponse du propriétaire du 19/10/2026 : répondre aux
+ * urgences demande d'afficher ses tarifs). La fiche 8 ne les affiche pas :
+ * elle a une ligne ici, et n'apparaît nulle part — c'est voulu.
  */
 export const SOS_ARTISANS = [
-  { proId: 4, metierKey: 'plomberie',   deplacement: 45, horaire: 62, majoration: 40, distanceKm: 2.4, delaiMin: 25, actif: true },
-  { proId: 2, metierKey: 'electricite', deplacement: 39, horaire: 58, majoration: 35, distanceKm: 4.1, delaiMin: 40, actif: true },
-  { proId: 6, metierKey: 'serrurerie',  deplacement: 55, horaire: 70, majoration: 50, distanceKm: 1.8, delaiMin: 20, actif: true },
-  { proId: 7, metierKey: 'chauffage',   deplacement: 49, horaire: 65, majoration: 30, distanceKm: 6.7, delaiMin: 55, actif: true },
+  { proId: 4, metierKey: 'plomberie',   distanceKm: 2.4, delaiMin: 25, actif: true },
+  { proId: 2, metierKey: 'electricite', distanceKm: 4.1, delaiMin: 40, actif: true },
+  { proId: 6, metierKey: 'serrurerie',  distanceKm: 1.8, delaiMin: 20, actif: true },
+  { proId: 7, metierKey: 'chauffage',   distanceKm: 6.7, delaiMin: 55, actif: true },
   // Un même métier peut avoir plusieurs artisans disponibles : c'est le
   // principe même de l'app, le client compare et choisit lui-même.
   // Un artisan ne peut être disponible que sur SON métier : un maçon
   // n'apparaît jamais dans les plombiers d'urgence.
-  { proId: 8, metierKey: 'plomberie',   deplacement: 35, horaire: 55, majoration: 25, distanceKm: 5.2, delaiMin: 45, actif: true },
+  { proId: 8, metierKey: 'plomberie',   distanceKm: 5.2, delaiMin: 45, actif: true },
 ];
 
 /**
- * Calcule la fourchette estimée pour un artisan et un problème donnés.
- * Retourne { min, max, majore } en euros entiers.
+ * Vrai entre 20 h et 7 h, ou le samedi et le dimanche : les heures où Opus
+ * applique la majoration de nuit et de week-end d'un artisan dans
+ * l'estimation des urgences. C'est une convention d'OPUS, pas celle de
+ * l'artisan, qui ne déclare qu'un pourcentage : sa fiche ne la montre pas.
+ * `HEURES_MAJOREES` (src/lib/tarifs.js) la dit en mots, et `verifier-tarifs`
+ * compare les deux.
  */
-export function estimation(artisan, probleme, nuitOuWeekend = false) {
-  if (!artisan || !probleme) return { min: 0, max: 0, majore: false };
-  const coef = nuitOuWeekend ? 1 + artisan.majoration / 100 : 1;
-  const [hMin, hMax] = probleme.h;
-  return {
-    min: Math.round((artisan.deplacement + artisan.horaire * hMin) * coef),
-    max: Math.round((artisan.deplacement + artisan.horaire * hMax) * coef),
-    majore: nuitOuWeekend,
-  };
-}
-
-/** Vrai entre 20 h et 7 h, ou le samedi et le dimanche. */
 export function estNuitOuWeekend(date = new Date()) {
   const h = date.getHours();
   const j = date.getDay();
   return h >= 20 || h < 7 || j === 0 || j === 6;
-}
-
-/**
- * Les artisans disponibles pour un métier, triés du plus proche au plus loin.
- * En production, le tri se fait sur la distance réelle calculée par PostGIS.
- */
-export function artisansDisponibles(metierKey) {
-  return SOS_ARTISANS
-    .filter((a) => a.actif && a.metierKey === metierKey)
-    .sort((a, b) => a.distanceKm - b.distanceKm);
 }

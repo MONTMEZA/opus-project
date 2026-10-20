@@ -2,8 +2,16 @@
  * Modifier mon profil — pro ou particulier.
  *
  * Côté professionnel, l'écran contient aussi le miroir du bouton SOS :
- * c'est ici que l'artisan déclare qu'il répond aux urgences et renseigne
- * ses trois chiffres (déplacement, tarif horaire, majoration).
+ * c'est ici que l'artisan déclare qu'il répond aux urgences, dans quel
+ * rayon et en combien de temps.
+ *
+ * SES TARIFS NE S'ÉCRIVENT PLUS ICI (lot T, section 47 de `schema.sql`). Il
+ * n'y a qu'UNE liste, pour ses devis et pour le SOS, et une seule porte pour
+ * l'écrire : « Mon entreprise ». Deux formulaires pour les mêmes chiffres
+ * finiraient par dire deux choses différentes. Le réglage d'urgence les
+ * MONTRE, dit en une phrase si l'artisan apparaît ou non dans les urgences
+ * et pourquoi (`etatReglageSos`, la même phrase que dans « Mon
+ * entreprise »), et RENVOIE à « Mon entreprise » pour les changer.
  */
 import { pieceExistence, pieceAssurance } from '../lib/verification';
 import { enMilieuDePhrase } from '../lib/texte';
@@ -12,7 +20,7 @@ import {
   View, Text, ScrollView, Switch, ActivityIndicator, StyleSheet, Pressable,
 } from 'react-native';
 import {
-  C, F, T, S, R, APPUI, TOUCHE,
+  C, F, T, S, R, APPUI, TOUCHE, interligne,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Field, TextArea, ProfileBanner, SectionLabel,
@@ -29,28 +37,20 @@ import ChampHoraires from '../components/ChampHoraires';
 import CarteZone from '../components/CarteZone';
 import AssistantPresentation from '../components/AssistantPresentation';
 import AmeliorerTexte from '../components/AmeliorerTexte';
-import { METIERS_SOS } from '../data/urgences';
 import { METIER_PAR_DEFAUT } from '../lib/metiers';
+import {
+  metierSosDeLaFiche, reglageInitialSos, etatReglageSos, reglageSosDepuisSaisie, lignesTarifs,
+} from '../lib/tarifs';
 import { choisirImage, choisirDocument } from '../lib/media';
 import { CLAVIER } from '../lib/clavier';
-
-/**
- * Le métier d'urgence correspondant aux métiers déclarés, s'il en existe un.
- * On les parcourt dans l'ordre : un plombier-chauffagiste peut répondre aux
- * urgences, et c'est son métier principal qui décide lequel.
- */
-function metierSosDe(metiers = []) {
-  for (const m of metiers) {
-    const trouve = METIERS_SOS.find((x) => x.metier === m);
-    if (trouve) return trouve;
-  }
-  return null;
-}
 
 export default function ProfilEditScreen({
   userType, profil, sos, onSave, onEnvoyerDocuments, onErreur,
   onDemanderMetiers, demandeMetiers, onProposerSpecialite, emailCompte = '',
   identiteEntreprise = null, entrepriseEtat = 'jamais', onOuvrirEntreprise,
+  /* Lot T : MES tarifs (`mesTarifs` d'`OpusApp`, ou `{ echec: true }`), et
+     si ma fiche a une position. `sos` vaut `{ lignes }` ou `{ echec: true }`. */
+  tarifs = null, aDesCoordonnees = false,
 }) {
   const estPro = userType === 'pro';
 
@@ -93,18 +93,46 @@ export default function ProfilEditScreen({
   const [rgeExpire, setRgeExpire] = useState(profil.rgeExpire || '');
   const [rgeFichier, setRgeFichier] = useState(null);
 
-  const [sosActif, setSosActif] = useState(!!(sos && sos.actif));
-  const [deplacement, setDeplacement] = useState(String((sos && sos.deplacement) || ''));
-  const [horaire, setHoraire] = useState(String((sos && sos.horaire) || ''));
-  const [majoration, setMajoration] = useState(String((sos && sos.majoration) || ''));
-  const [rayonKm, setRayonKm] = useState(String((sos && sos.rayonKm) || '20'));
-  const [delaiMinutes, setDelaiMinutes] = useState(String((sos && sos.delaiMinutes) || '45'));
+  /* L'ÉTAT DE DÉPART DU RÉGLAGE D'URGENCE — et c'est le point qui aurait
+     éteint le SOS de tout artisan qui enregistre son profil. `mesSos` est
+     une LISTE de lignes depuis le lot T : lire `sos.actif` dessus rendrait
+     `undefined`, donc un interrupteur éteint, et « Enregistrer » enverrait
+     `actif: false` — se retirer des urgences en changeant sa présentation,
+     sans un mot. `reglageInitialSos` choisit la ligne du métier d'urgence de
+     la fiche, et `verifier-tarifs` la fait tourner. Les métiers de départ
+     sont ceux du formulaire : une fiche d'avant les métiers multiples n'a
+     que `metier`, et sans lui sa ligne active ne serait pas retrouvée — puis
+     éteinte à l'enregistrement. */
+  const metiersDeDepart = profil.metiers && profil.metiers.length
+    ? profil.metiers : [profil.metier || METIER_PAR_DEFAUT];
+  const depart = reglageInitialSos(sos, metiersDeDepart);
+  const [sosActif, setSosActif] = useState(depart.actif);
+  const [rayonKm, setRayonKm] = useState(depart.rayon);
+  const [delaiMinutes, setDelaiMinutes] = useState(depart.delai);
 
   const [kbis, setKbis] = useState(null);
   const [assurance, setAssurance] = useState(null);
   const [envoiDocs, setEnvoiDocs] = useState(false);
 
-  const sosMetier = metierSosDe(metiers);
+  const sosMetier = metierSosDeLaFiche(metiers);
+  /* UNE SEULE PHRASE pour dire si l'artisan apparaît dans les urgences, et
+     pourquoi — écrite UNE fois, dans `tarifs.js`, et appelée aussi par « Mon
+     entreprise ». La position : celle de la fiche, ou celle qu'on vient de
+     choisir dans ce formulaire. */
+  const etatSos = etatReglageSos({
+    sos,
+    sosMetier,
+    /* Le métier d'urgence de la fiche TELLE QU'ENREGISTRÉE : s'il vient
+       d'être retiré dans le formulaire, rien n'est encore fait, et la
+       phrase le dit au futur — jamais « vous n'y apparaissez plus » tant
+       que la fiche en base le porte. */
+    sosMetierEnBase: metierSosDeLaFiche(metiersDeDepart),
+    interrupteur: sosActif,
+    enregistre: !!(depart.ligne && depart.ligne.actif && sosMetier && depart.ligne.metierKey === sosMetier.key),
+    tarifs,
+    aDesCoordonnees: aDesCoordonnees || (lieu.latitude != null && lieu.longitude != null),
+  });
+  const lectureSosEchouee = etatSos.cle === 'sos_echec';
 
   const prendre = async (usage, camera) => {
     try {
@@ -117,7 +145,39 @@ export default function ProfilEditScreen({
     }
   };
 
+  /* CE QUE L'ENREGISTREMENT FAIT DE MA DISPONIBILITÉ AUX URGENCES :
+       - `null` (n'y touche pas) si la lecture a échoué — on ne réécrit pas ce
+         qu'on n'a pas pu lire —, ou s'il n'y a ni métier d'urgence ni ligne
+         active ;
+       - sinon la ligne de mon métier d'urgence, et l'extinction des autres
+         (`metierKey: null` les éteint toutes : la ligne orpheline). */
+  const sosAEnvoyer = () => {
+    if (!estPro || !depart.lisible || lectureSosEchouee) return { ok: true, valeurs: null };
+    const actives = sos.lignes.filter((l) => l && l.actif === true);
+    if (!sosMetier && actives.length === 0) return { ok: true, valeurs: null };
+    const r = reglageSosDepuisSaisie({
+      actif: sosMetier ? sosActif : false,
+      rayon: rayonKm,
+      delai: delaiMinutes,
+      ligne: depart.ligne,
+    });
+    if (!r.ok) return r;
+    return {
+      ok: true,
+      valeurs: {
+        metierKey: sosMetier ? sosMetier.key : null,
+        actif: sosMetier ? sosActif : false,
+        rayonKm: r.valeurs.rayonKm,
+        delaiMinutes: r.valeurs.delaiMinutes,
+      },
+    };
+  };
+
   const enregistrer = () => {
+    /* Un rayon ou un délai refusé n'enregistre RIEN : ni la fiche, ni la
+       disponibilité. Et on ne le remplace jamais en silence par 20 ou 45. */
+    const sosLu = sosAEnvoyer();
+    if (!sosLu.ok) { onErreur(sosLu.message); return; }
     onSave({
       profil: estPro
         ? {
@@ -138,19 +198,22 @@ export default function ProfilEditScreen({
             latitude: lieu.latitude,
             longitude: lieu.longitude,
           },
-      sos: estPro && sosMetier
-        ? {
-            actif: sosActif,
-            metierKey: sosMetier.key,
-            deplacement: Number(deplacement) || 0,
-            horaire: Number(horaire) || 0,
-            majoration: Number(majoration) || 0,
-            rayonKm: Number(rayonKm) || 20,
-            delaiMinutes: Number(delaiMinutes) || 45,
-          }
-        : null,
+      sos: sosLu.valeurs,
     });
   };
+
+  /* Une rangée qui ouvre « Mon entreprise » sur la bonne section. */
+  const versMesTarifs = (libelle, section) => (
+    <Pressable
+      onPress={() => { if (onOuvrirEntreprise) onOuvrirEntreprise(section); }}
+      accessibilityRole="button"
+      accessibilityLabel={`${libelle}, dans « Mon entreprise »`}
+      style={({ pressed }) => [s.rangee, s.rangeeSos, pressed && APPUI.discret]}
+    >
+      <Text style={s.rangeeTexte}>{libelle}</Text>
+      <ChevronRight size={15} color={C.muted} />
+    </Pressable>
+  );
 
   return (
     <ScrollView {...CLAVIER} style={{ flex: 1 }}>
@@ -623,64 +686,86 @@ export default function ProfilEditScreen({
         </>
       )}
 
-      {/* --- disponibilité SOS (professionnels des 4 métiers d'urgence) --- */}
+      {/* --- disponibilité SOS (professionnels des 4 métiers d'urgence) ---
+
+          ELLE MONTRE, ELLE RENVOIE : aucun tarif ne s'écrit ici. La ligne
+          d'état dit la vérité, quel que soit l'interrupteur — on peut
+          l'allumer avant d'avoir affiché ses tarifs, et elle dit alors
+          qu'on n'apparaît pas encore, et pourquoi. */}
       {estPro && (
         <>
           <SectionLabel>Interventions d'urgence</SectionLabel>
           <View style={s.pad}>
-            {sosMetier ? (
-              <View style={s.sosBloc}>
+            <View style={s.sosBloc}>
+              {sosMetier && (
                 <View style={s.sosLigne}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.sosTitre}>Je réponds aux urgences</Text>
-                    <Text style={s.sosDetail}>
-                      Vous apparaîtrez dans les demandes SOS « {sosMetier.label} » près de chez vous.
-                    </Text>
-                  </View>
+                  <Text style={[s.sosTitre, { flex: 1 }]}>Je réponds aux urgences</Text>
                   <Switch
                     value={sosActif}
                     onValueChange={setSosActif}
+                    disabled={lectureSosEchouee}
                     trackColor={{ false: C.line, true: C.sos }}
                     thumbColor="#fff"
+                    accessibilityLabel={`Je réponds aux urgences « ${sosMetier.label} »`}
                   />
                 </View>
+              )}
 
-                {sosActif && (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={s.label}>Forfait de déplacement (€)</Text>
-                    <Field value={deplacement} onChangeText={setDeplacement} keyboardType="decimal-pad" placeholder="45" />
+              <Text style={s.sosDetail}>{etatSos.phrase}</Text>
 
-                    <Text style={s.label}>Tarif horaire (€/h)</Text>
-                    <Field value={horaire} onChangeText={setHoraire} keyboardType="decimal-pad" placeholder="62" />
+              {etatSos.cle === 'pret' && (
+                <View style={s.sosTarifs}>
+                  {lignesTarifs(tarifs).map((l) => (
+                    <Text key={l.cle} style={s.sosTarif}>
+                      {l.libelle ? `${l.libelle} : ${l.valeur}` : l.valeur}
+                    </Text>
+                  ))}
+                </View>
+              )}
 
-                    <Text style={s.label}>Majoration nuit et week-end (%)</Text>
-                    <Field value={majoration} onChangeText={setMajoration} keyboardType="number-pad" placeholder="40" />
+              {!!etatSos.avertissement && <Text style={s.sosAEteindre}>{etatSos.avertissement}</Text>}
 
-                    <Text style={s.label}>Rayon d'intervention (km)</Text>
-                    <Field value={rayonKm} onChangeText={setRayonKm} keyboardType="number-pad" placeholder="20" />
+              {etatSos.cle === 'tarifs_echec' && versMesTarifs('Ouvrir mes tarifs', 'frais')}
+              {etatSos.cle === 'non_affiches' && versMesTarifs('Afficher mes tarifs', 'affiche')}
+              {etatSos.cle === 'incomplets' && versMesTarifs('Compléter mes tarifs', 'frais')}
+              {etatSos.cle === 'pret' && versMesTarifs('Modifier mes tarifs', 'frais')}
 
-                    <Text style={s.label}>Délai d'arrivée habituel (minutes)</Text>
-                    <Field value={delaiMinutes} onChangeText={setDelaiMinutes} keyboardType="number-pad" placeholder="45" />
+              {/* Le rayon et le délai ne sont lus que si l'interrupteur est
+                  allumé : un champ qu'on ne voit plus ne peut pas bloquer
+                  l'enregistrement du profil. Des pavés numériques, donc sans
+                  touche retour : l'annoncer serait mentir. */}
+              {sosMetier && sosActif && !lectureSosEchouee && (
+                <View style={s.sosChamps}>
+                  <Text style={s.label}>Rayon d'intervention (km)</Text>
+                  <Field
+                    value={rayonKm}
+                    onChangeText={setRayonKm}
+                    keyboardType="number-pad"
+                    placeholder="20"
+                    accessibilityLabel="Rayon d'intervention, en kilomètres"
+                  />
 
-                    <View style={s.avert}>
-                      <AlertTriangle size={14} color={C.sos} />
-                      <Text style={s.avertText}>
-                        Ces chiffres servent à calculer une fourchette affichée au client
-                        avant votre déplacement. Ce n'est pas un devis : vous restez libre
-                        de chiffrer sur place après diagnostic.
-                      </Text>
-                    </View>
+                  <Text style={s.label}>Délai d'arrivée habituel (minutes)</Text>
+                  <Field
+                    value={delaiMinutes}
+                    onChangeText={setDelaiMinutes}
+                    keyboardType="number-pad"
+                    placeholder="45"
+                    accessibilityLabel="Délai d'arrivée habituel, en minutes"
+                  />
+
+                  <View style={s.avert}>
+                    <AlertTriangle size={14} color={C.sos} />
+                    <Text style={s.avertText}>
+                      Ces tarifs servent à calculer une estimation affichée au particulier avant
+                      votre déplacement. Ce n’est pas un devis : après diagnostic, pour un
+                      dépannage, une réparation ou un entretien, un devis écrit reste dû dès le
+                      premier euro.
+                    </Text>
                   </View>
-                )}
-              </View>
-            ) : (
-              <View style={s.sosBloc}>
-                <Text style={s.sosDetail}>
-                  Les urgences concernent la plomberie, l'électricité, la serrurerie et le
-                  chauffage. Votre métier n'est pas concerné par le bouton SOS.
-                </Text>
-              </View>
-            )}
+                </View>
+              )}
+            </View>
           </View>
         </>
       )}
@@ -819,7 +904,15 @@ const s = StyleSheet.create({
   statutNote: { fontSize: T.petit, color: C.muted, marginTop: 3, lineHeight: 15, fontFamily: F.inter },
 
   btnText: { fontFamily: F.oswald6, fontSize: T.corps, color: '#fff' },
-  sosLigne: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  sosLigne: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: S.sm },
+  sosTarifs: { gap: S.xs, marginTop: S.sm },
+  sosTarif: { fontFamily: F.inter6, fontSize: T.courant, color: C.ink },
+  sosAEteindre: {
+    fontFamily: F.inter, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit),
+    marginTop: S.sm, paddingLeft: S.sm, borderLeftWidth: S.xs, borderLeftColor: C.sos,
+  },
+  sosChamps: { marginTop: S.sm },
+  rangeeSos: { marginTop: S.sm },
   sosTitre: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink },
   sosDetail: { fontSize: T.courant, color: C.muted, marginTop: 3, lineHeight: 16, fontFamily: F.inter },
 

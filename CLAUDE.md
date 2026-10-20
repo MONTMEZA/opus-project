@@ -7709,6 +7709,230 @@ faudrait soixante appels payants) ; un refus du modèle et une réponse
 illisible ne se provoquent pas à la demande — ces deux chemins ne sont
 tenus que par le contrôle. Et rien sur l'iPhone.
 
+### Les tarifs réunis — lot T (19-20/10/2026)
+
+Section 47 de `schema.sql`, `src/lib/tarifs.js`, `src/components/TarifsPublics.js`,
+`npm run verifier-tarifs`. Le cahier qui l'a guidé : `docs/CAHIER-LOT-T.md`
+(archivé tel qu'il a servi ; en cas de désaccord, c'est cette section et le
+code qui disent vrai). Premier lot de l'ordre **T → 1 → P → S → 2**
+(`docs/PLAN-DEVIS.md` §10.14).
+
+**Avant ce lot, deux chiffres de déplacement coexistaient** : celui des
+devis (`tarifs_pro`, lot 0a) et celui du SOS (`sos_availability`), et une
+fiche SOS à 0 € affichait « 0 – 0 € ». Il n'y a plus qu'**une liste, dans
+`tarifs_pro`**, qui sert au devis, à la fiche et au SOS.
+
+#### Les décisions du propriétaire, le 19/10
+
+| question | réponse |
+|---|---|
+| répondre aux urgences sans afficher ses tarifs ? | **non** : `artisans_urgence` ne rend qu'un artisan dont la ligne a `affiche is true` et qui suffit à une estimation (déplacement ou « offert », taux horaire, majoration ou « je ne majore pas ») |
+| qui lit une ligne affichée ? | **les particuliers connectés seulement** — `affiche is true and not est_un_pro() and not est_masque(pro_id)`. Aucun droit pour `anon` |
+| l'avis d'un avocat | **un simple rappel**, aucun contrôle bloquant |
+| les forfaits | **plus tard** |
+| la majoration | **comme aujourd'hui** : de 20 h à 7 h, le samedi et le dimanche, sur le déplacement comme sur les heures |
+
+> **« Aucun écran d'Opus ne montre les prix d'un artisan à un autre »**
+> (l'engagement du 18/10) **reste vrai tel quel** — l'éditeur non plus, son
+> compte est pro. **Mais c'est une barrière, pas un verrou**, et les textes
+> le disent : un artisan peut ouvrir un second compte particulier avec une
+> autre adresse, et Opus ne vérifie pas l'identité des particuliers.
+
+#### Ce que « particulier » veut dire pour la base
+
+Pas « un compte de type particulier » : **toute session sans fiche pro**.
+Trois cas lisent donc une ligne affichée, et ils sont écrits en 47.5 et
+éprouvés (essais 5 quater et 5 quinquies) : un particulier ; un compte
+`type = 'pro'` SANS fiche ; une session dont la ligne `users` a été effacée
+par `preparer_suppression_compte()`.
+
+> **Le deuxième cas existe sur la vraie base** : le compte anonyme du 14/09
+> (`docs/A-FAIRE.md` §5). Il ne lit rien aujourd'hui — aucune ligne n'est
+> affichée —, mais il lirait le premier tarif affiché. **Le supprimer est au
+> propriétaire**, et c'est devenu plus qu'une propreté.
+
+#### Trois états partout, et un `0` qui n'est jamais tapé
+
+`null` = non déclaré ; `0` = un CHOIX (« Déplacement offert », « Je ne
+majore pas », « Mes devis sont gratuits »), **écrit par un interrupteur
+seulement** ; un montant. **Un taux horaire n'a pas de 0.** Tout est en
+centimes, et TTC : c'est ce que paie le client et ce qu'il lit. Le lot 2
+décidera comment le DEVIS imprime ces montants (HT sur une ligne au régime
+réel).
+
+Afficher exige **au moins un tarif** — un dépanneur au forfait doit pouvoir
+afficher ses frais et son prix de devis sans taux horaire —, et la base le
+tient (`tarif_affiche_check`) : un bloc affiché n'est jamais vide.
+
+#### Quatre pièges trouvés par les relectures, et pas à l'œil
+
+1. **PostgreSQL contrôle la ligne PROPOSÉE d'un `INSERT … ON CONFLICT`**,
+   avant de fusionner. Un upsert partiel `{affiche: true}` est refusé par
+   `tarif_affiche_check` même quand la ligne existante porte des tarifs —
+   alors que la démonstration l'acceptait. **On envoie la ligne entière,
+   toujours**, et la démonstration valide désormais les deux lignes comme
+   la base (essais 6 bis a/b).
+2. **Un caractère invisible satisfaisait « jamais vide »** : un U+200B seul
+   passait la contrainte, et la fiche montrait un bloc « Ses tarifs » vide.
+   `tient_les_tarifs()` (du lot 0a) et `tient_les_tarifs_publics()` rognent
+   une classe de blancs Unicode (U+00A0, U+200B/C/D, U+2060, U+FEFF) ; le
+   miroir JavaScript est `BLANCS_TARIFS`, et le contrôle compare les deux.
+   **Conséquence : la migration du lot T emporte aussi une fonction du
+   lot 0a.**
+3. **`artisans_urgence()` garde EXACTEMENT sa signature et son type de
+   retour** — une fonction appelée par l'application ne change jamais de
+   signature (section 34). Elle déménage en section 47, lit `tarifs_pro`,
+   reste `security invoker` (donc filtrée par le blocage) et n'est plus
+   exécutable que par `authenticated`. Le prix du devis, le décompte et les
+   conditions de déplacement arrivent par une SECONDE lecture, sur les lignes
+   affichées.
+4. **Les colonnes `sos_availability.deplacement`, `.horaire`, `.majoration`
+   sont MORTES** : remises à 0, et **une écriture non nulle est REFUSÉE**
+   (`OP012`, avec une phrase qui dit de mettre l'application à jour). Un
+   refus qui dit pourquoi vaut mieux qu'une remise à 0 silencieuse : l'icône
+   « preview » du 17/10 écrit encore ces colonnes. Les retirer demande un
+   `drop column`, que le connecteur refuse : un lot de nettoyage, plus tard.
+
+Et `rayon_km` / `delai_minutes` sont enfin bornés par la base (1-200 km,
+5-600 min) : `"ma dispo sos"` est `for all`, et un client modifié qui écrivait
+100 000 km apparaissait dans la recherche de tous les particuliers.
+
+#### La nuit se juge à l'heure d'ARRIVÉE
+
+« Tout de suite » : maintenant + le délai annoncé. « Dans la journée » et
+« Demain » : estimation **non majorée**, et la carte dit « +40 % si
+l'intervention a lieu la nuit ou le week-end ». Avant, « Demain » choisi à
+21 h affichait une estimation majorée pour une intervention de jour.
+
+#### Le rattrapage n'allume jamais rien
+
+Il ne tourne qu'UNE fois (gardé par l'absence de la colonne) : copie des
+valeurs SOS strictement positives, **sans jamais écraser** une valeur
+déclarée, **sans jamais allumer `affiche`**. Publier reste un geste de
+l'artisan, et c'est la BASE qui le date (`affiche_le`). Sur la vraie base :
+rien à copier (la seule ligne valait 0 / 0 / 0), et **la ligne « Électricité »
+du propriétaire a été éteinte** — aucun de ses métiers n'est un métier
+d'urgence, et la promesse « un métier retiré n'apparaît plus » n'était tenue
+par rien.
+
+#### Une DATE d'horodatage se lit à l'heure du téléphone — trouvé à 1 h 18
+
+« Affichés sur votre fiche depuis le **19**/10/2026 », alors qu'il était
+1 h 18 le 20 à Paris. `dateFrancaise()` (`src/lib/entreprise.js`) prenait
+les dix premiers caractères de la chaîne ; or PostgREST rend un
+`timestamptz` en UTC. **Toute la nuit, de minuit à 1 h ou 2 h, la date était
+celle de la veille** — sur « Affichés depuis », « Dernière modification »,
+« consultée le » (qui s'imprimera sur un devis), « inscrit le »…
+
+> **Une colonne `date` se lit comme une chaîne** (la leçon des dates de la
+> Place des pros : `new Date('2026-10-12')` tombe à minuit UTC). **Un
+> horodatage se lit à l'heure du téléphone.** La fonction distingue les deux,
+> et `verifier-tarifs` (vérification 49) la FAIT TOURNER à l'heure de Paris
+> sur les deux bords de minuit. Éprouvé en cassant : refusé.
+
+Il n'aurait été vu ni de jour, ni en démonstration (la date de démo est
+`new Date().toISOString()`, et de jour la date UTC est la bonne) : **seul un
+essai sur la vraie base, la nuit,** l'a montré.
+
+#### Le transport du connecteur change aussi MES requêtes
+
+Le connecteur passe par du JSON, et une écriture ` ` dans le TEXTE
+envoyé devient un vrai caractère — déjà noté au lot 0a pour les migrations.
+**Ça vaut aussi pour une requête de vérification** : comparant les corps de
+fonction, `replace(prosrc, ' ', …)` remplaçait un caractère par
+lui-même, et deux fonctions du lot T semblaient DIFFÉRENTES de la base
+neuve. Le relevé octet par octet (`encode(convert_to(…), 'hex')`) a montré
+que la base portait exactement les six caractères attendus.
+
+> **Dans une requête envoyée par le connecteur, une séquence `\u…` s'écrit
+> `chr(92) || 'u00a0'`.** Et une différence d'empreinte s'explique en
+> lisant les OCTETS, pas en relisant le texte.
+
+#### Essayer le jour et la nuit sur la vraie base : une horloge PLUS TÔT
+
+`page.clock.setFixedTime` règle l'heure du navigateur, pas celle du serveur.
+Fixée **après** l'expiration du jeton, supabase-js croit la session expirée
+et la rafraîchit en boucle ; fixée **avant** l'heure réelle (le même jour à
+14 h puis 22 h, alors qu'il était 1 h du matin), le jeton reste valable et
+l'estimation se calcule à l'heure voulue. Le serveur, lui, date tout à
+l'heure réelle — c'est ce qui a fait voir le défaut de date ci-dessus.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur une base neuve, les essais 47 (18 refus,
+tous attendus) et le rattrapage (`essais-section-47-rattrapage.sql`) par le
+schéma comme par la migration, les 21 autres fichiers d'essais comparés à
+leur relevé d'avant (trois écarts attendus), les **48 contrôles**, le
+linter (32, tous antérieurs), les paquets iOS et Android dont la sortie a
+été lue. Trois relectures adverses : **25 problèmes, tous reproduits avant
+d'être corrigés**, puis **132 sabotages, chacun refusé par la vérification
+visée**.
+
+La migration simulée sur la base « d'avant » rend l'empreinte d'une base
+neuve, puis appliquée sur la VRAIE base le 19/10 au soir, avec l'accord du
+propriétaire, sans un ordre qui commence par `drop` ou `delete`. **Empreinte
+comparée après coup** : les 79 fonctions identiques à une base neuve une
+fois les commentaires, les blancs et les échappements du transport mis à
+part ; le reste n'est que des restes connus (`entreprise_registre.gele`,
+`admin_basculer_metier` — exécutable par personne d'autre que `postgres` et
+`service_role` —, la politique « lecture demandes visiteur » réduite à
+`using (false)`, des commentaires sans accents).
+
+Puis par le chemin de l'application, avec un artisan plombier A, un
+concurrent électricien B et un particulier P **placés à Brest** (aucun compte
+réel à moins de 60 km), SIRET fictifs à clé juste vérifiés inconnus du
+répertoire Sirene, `enregistrer_vues` neutralisé, supprimés à la fin :
+
+| | relevé |
+|---|---|
+| A, « Mon entreprise » en lecture | « Non affichés… vous n'apparaissez pas dans les urgences » |
+| les champs · les interrupteurs | 358 × 44 (décompte 358 × 70) · 44 de haut, pavé décimal sans touche retour |
+| un taux tapé, puis fermer | « Quitter sans enregistrer » ; allumer puis éteindre, fermer : **rien** |
+| « 0 » dans le taux · afficher sans tarif | refusés à l'écran, **aucune requête** |
+| 45 / 62,50 / décompte / 40 % / devis gratuit, affiché | `POST emetteur 201`, `POST tarifs_pro 201` |
+| après rechargement | « Mes tarifs » sur le profil, avec « Visibles des particuliers connectés seulement » |
+| « Je réponds aux urgences » | le futur, puis `POST sos_availability 201`, puis le présent |
+| A change sa présentation | l'interrupteur reste allumé, la ligne SOS reste active |
+| **P**, SOS Plomberie, de jour | **1 carte, « 108 – 170 € TTC »**, « Déplacement 45 € · 62,50 €/h », « Devis : gratuit » |
+| …de nuit (22 h) | **« 151 – 238 € TTC »**, « majoration de nuit et de week-end incluse » |
+| …« Demain », de nuit | « 108 – 170 € TTC », « +40 % si l'intervention a lieu la nuit ou le week-end » |
+| P ouvre la fiche de A | `GET tarifs_pro 200`, « Ses tarifs », cinq lignes, « +40 % » sans heures |
+| **B** ouvre la fiche de A (par « Mes partenaires ») | **aucun bloc, et AUCUNE requête vers `tarifs_pro`** |
+| A éteint ; P rouvre la fiche SANS recharger | aucun bloc ; le SOS : « Aucun artisan disponible » |
+| …et le réglage SOS de A | « Vous n'apparaîtrez pas dans les urgences : vos tarifs ne sont pas affichés » |
+| A rallume, « je ne majore pas », « déplacement offert » ; P de nuit | « 63 – 125 € TTC », « Déplacement offert · 62,50 €/h · sans majoration la nuit ni le week-end » |
+| la route `artisans_urgence` coupée | « La recherche d'artisans : pas de connexion… », **aucun anglais** |
+| P « Choisir » | `POST sos_requests 201`, `prix_min/max` **63 / 125** relus en base, A la reçoit dans « Pour moi » |
+| un visiteur : `tarifs_pro` · `artisans_urgence` | **401 · 42501** · **401 · 42501** |
+| **B, juste après que P a lu la ligne** | **`[]`** · **`[]`** |
+| P modifie / supprime la ligne de A | 204, **rien de changé** (relu par A) ; au nom de A : **403** |
+| A écrit l'ancienne colonne · un rayon de 100 000 km | **400 OP012** (message complet) · **400 `sos_rayon_check`** |
+| P bloque A | `tarifs_pro` **`[]`**, `artisans_urgence` **`[]`** ; débloqué : 1 ligne |
+| l'export RGPD | A : les six clés nouvelles, `ma_disponibilite_urgences` 1, `urgences` 1 ; P : `urgences` 1 |
+
+Base revenue à 15 comptes / 8 fiches / 21 publications, 0 tarif, 0 demande
+SOS, 0 ligne SOS active. Les deux preuves `essai` du 18/10 ont été
+**réutilisées** (mises à jour pour les nouvelles adresses, plutôt que d'en
+créer deux de plus que le connecteur ne saura pas supprimer) ; elles ont
+expiré depuis.
+
+**Ce qui n'a PAS été vérifié** : rien sur l'iPhone — la virgule du pavé
+décimal, le clavier sous « Vos tarifs », les interrupteurs au doigt, la
+carte SOS au pouce (il faut un compte PARTICULIER : celui du propriétaire
+est pro et n'ouvre pas l'écran SOS). Le bandeau « Estimation … € TTC » après
+« Choisir » n'a été lu que dans le code (il avait disparu à la capture) :
+le prix rangé en base, lui, est mesuré. Et **aucun vrai artisan n'a encore
+affiché ses tarifs**.
+
+#### Ce qui reste ouvert
+
+Dans `docs/A-FAIRE.md`, « Après le lot T » : le compte anonyme à supprimer,
+la ré-acceptation des CGU (`VERSION` a changé, rien ne fait ré-accepter),
+les colonnes mortes et la lecture publique de `sos_availability`, l'unité
+des montants sur le devis (lot 2, avec un juriste), les états que la
+démonstration ne montre pas, les quatre lectures de démarrage sans délai,
+et le contraste de `C.bad` sur le fond (4,37).
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

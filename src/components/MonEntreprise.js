@@ -36,6 +36,14 @@
  * LES MESSAGES VIVENT DANS LA FENÊTRE. Le bandeau d'`OpusApp` est SOUS
  * elle : un message posé là ne se verrait qu'une fois la fenêtre fermée.
  *
+ * SES TARIFS (lot T, section 47) : « Mon entreprise » est la SEULE porte qui
+ * les écrit. En lecture, un bloc « Vos tarifs » dit s'ils sont affichés, les
+ * MONTRE tels que les particuliers les voient (ou les verraient), et dit ce
+ * que devient le réglage d'urgence — la phrase d'`etatReglageSos`, reçue
+ * d'`OpusApp`, jamais réécrite ici. Chaque lecture et chaque enregistrement
+ * de la fiche remonte les tarifs à `OpusApp` (`onTarifs`) : le réglage
+ * d'urgence et « Mes tarifs » lisent la même ligne.
+ *
  * UN ÉCHEC DE LECTURE N'OUVRE JAMAIS UN FORMULAIRE VIDE : il ferait croire
  * que rien n'est enregistré, et un « Enregistrer » touché là effacerait ce
  * qui l'était. Le bouton est désactivé tant que la lecture n'a pas répondu,
@@ -58,7 +66,11 @@ import {
   validerEmetteur, validerTarifs, avisEmetteur, chercherMediateur,
 } from '../lib/emetteur';
 import { dateFrancaise } from '../lib/entreprise';
+import {
+  QUI_VOIT_LES_TARIFS, QUI_VERRAIT_LES_TARIFS, TARIFS_NON_AFFICHES, lignesTarifs,
+} from '../lib/tarifs';
 import IdentiteEntreprise from './IdentiteEntreprise';
+import TarifsPublics from './TarifsPublics';
 import PretAEmettre from './PretAEmettre';
 import ApercuEntete from './ApercuEntete';
 import FicheEmetteur, { etatDepuis, memeEtat, SECTION_DU_CHAMP } from './FicheEmetteur';
@@ -71,11 +83,15 @@ const FICHE_EN_LECTURE = { etat: 'charge', emetteur: null, assurances: [], tarif
 const MANQUES_EN_LECTURE = { etat: 'charge', liste: [] };
 
 /* LES DEUX LECTURES, hors du composant : elles ne posent leur résultat
-   qu'APRÈS la réponse, jamais pendant le rendu ni au début d'un effet. */
-async function lireFiche(poser) {
+   qu'APRÈS la réponse, jamais pendant le rendu ni au début d'un effet.
+   `surTarifs` reçoit les tarifs lus : `OpusApp` garde ainsi `mesTarifs` à
+   jour, et un réglage d'urgence qui disait « vos tarifs n'ont pas pu être
+   lus » se corrige dès qu'ils l'ont été ici. */
+async function lireFiche(poser, surTarifs = null) {
   try {
     const d = await api.monEmetteur();
     poser({ etat: 'pret', ...d });
+    if (surTarifs) surTarifs(d.tarifs || null);
     return d;
   } catch (e) {
     poser({ ...FICHE_EN_LECTURE, etat: 'echec' });
@@ -94,6 +110,27 @@ async function lireManques(poser) {
   }
 }
 
+/* Les colonnes DÉCLARÉES d'une ligne de tarifs : sans aucune, et sans
+   « Afficher », la ligne est vide — et une ligne vide ne s'écrit pas. */
+const TARIFS_DECLARES = [
+  'frais_deplacement_centimes', 'frais_deplacement_texte', 'taux_horaire_centimes',
+  'majoration_pct', 'decompte_temps_texte', 'prix_devis_centimes',
+];
+
+/* Le champ d'un refus de la BASE sur `tarifs_pro`, d'après le nom de la
+   contrainte : le message va sous le bon champ, et l'écran y défile. Un
+   refus qui n'en nomme aucune (une règle, le réseau) ne vise aucun champ. */
+const CHAMP_DE_LA_CONTRAINTE = {
+  tarif_affiche_check: 'affiche',
+  tarif_taux_horaire_check: 'taux_horaire_centimes',
+  tarif_majoration_check: 'majoration_pct',
+  tarif_devis_check: 'prix_devis_centimes',
+  tarif_decompte_texte_check: 'decompte_temps_texte',
+  tarif_frais_check: 'frais_deplacement_centimes',
+  tarif_frais_texte_check: 'frais_deplacement_texte',
+  tarif_frais_zero_check: 'frais_deplacement_texte',
+};
+
 /* Le séparateur de la liste des médiateurs, déclaré au niveau du MODULE :
    écrit en fonction fléchée, ce serait un type de composant neuf à chaque
    rendu, et React démonterait puis remonterait tous les séparateurs. Et
@@ -111,6 +148,10 @@ export default function MonEntreprise({
   onChargerEntreprise, onRattacherSiret,
   proId = null, metiers = [], telephoneFiche = '', emailFiche = '', emailCompte = '',
   attestationBadge = null,
+  /* Lot T : ce que dit le réglage d'urgence (`etatReglageSos`, calculé par
+     `OpusApp`), ou `null` s'il n'y a rien à en dire ; et la remontée des
+     tarifs lus ou enregistrés. */
+  etatSos = null, onTarifs = null,
 }) {
   const [mode, setMode] = useState('lecture');
   const [donnees, setDonnees] = useState(FICHE_EN_LECTURE);
@@ -142,7 +183,7 @@ export default function MonEntreprise({
   useEffect(() => {
     if (sectionInitiale === 'entreprise') cible.current = 'entreprise';
     (async () => {
-      const d = await lireFiche(setDonnees);
+      const d = await lireFiche(setDonnees, onTarifs);
       if (d && sectionInitiale && sectionInitiale !== 'entreprise') {
         cible.current = sectionInitiale;
         setCleFiche((k) => k + 1);
@@ -150,7 +191,7 @@ export default function MonEntreprise({
       }
     })();
     lireManques(setManques);
-  }, [sectionInitiale]);
+  }, [sectionInitiale, onTarifs]);
 
   const reference = { emetteur: donnees.emetteur, tarifs: donnees.tarifs };
   const demo = api.mode === 'demo';
@@ -343,13 +384,16 @@ export default function MonEntreprise({
          feraient qu'apparaître vides dans l'export de ses données (relevé
          sur la vraie base le 18/10). Une ligne qui EXISTE, elle, se met à
          jour même vers rien : c'est ainsi qu'on retire ses frais. */
-      const tarifsVides = !lu.tarifs || (lu.tarifs.frais_deplacement_centimes == null
-        && !lu.tarifs.frais_deplacement_texte);
+      /* Lot T : vide = les SIX valeurs non déclarées ET « Afficher » éteint.
+         Un 0 n'est pas un vide : c'est un interrupteur touché. */
+      const tarifsVides = !lu.tarifs || (TARIFS_DECLARES
+        .every((c) => lu.tarifs[c] == null || lu.tarifs[c] === '') && lu.tarifs.affiche !== true);
       const tarifs = tarifsVides && !donnees.tarifs ? undefined : lu.tarifs;
       const r = await api.enregistrerEmetteur({ emetteur: lu.emetteur, tarifs });
       setDonnees((d) => ({
         ...d, etat: 'pret', emetteur: r.emetteur || d.emetteur, tarifs: r.tarifs || d.tarifs,
       }));
+      if (onTarifs) onTarifs(r.tarifs || donnees.tarifs || null);
       setBrouillon(null);
       setQuitter(false);
       setMode('lecture');
@@ -360,13 +404,14 @@ export default function MonEntreprise({
     } catch (e) {
       retour.echec();
       if (e && e.etape === 'tarifs') {
-        /* LA FICHE EST PARTIE, LES FRAIS NON — et l'écran le dit, au lieu
+        /* LA FICHE EST PARTIE, LES TARIFS NON — et l'écran le dit, au lieu
            de laisser croire que rien ne l'est. On relit, pour que le
            formulaire compare désormais à ce qui est vraiment en base. */
-        lireFiche(setDonnees);
-        const texte = 'Vos informations de devis sont enregistrées, mais pas vos frais de '
-          + `déplacement. ${messageClair(e)}`;
-        setErreur({ champ: 'frais_deplacement_centimes', message: messageClair(e, 'Vos frais de déplacement') });
+        lireFiche(setDonnees, onTarifs);
+        const texte = `Vos informations de devis sont enregistrées, mais pas vos tarifs. ${messageClair(e)}`;
+        const nom = (String((e && e.message) || '').match(/"(tarif_[a-z_]+_check)"/) || [])[1];
+        const champ = nom ? CHAMP_DE_LA_CONTRAINTE[nom] : null;
+        setErreur(champ ? { champ, message: messageClair(e, 'Vos tarifs') } : null);
         afficher(texte, 'erreur');
       } else {
         afficher(messageClair(e, 'Vos informations de devis'), 'erreur');
@@ -445,8 +490,14 @@ export default function MonEntreprise({
     return identite;
   };
 
-  const reessayerFiche = () => { setDonnees(FICHE_EN_LECTURE); lireFiche(setDonnees); };
+  const reessayerFiche = () => { setDonnees(FICHE_EN_LECTURE); lireFiche(setDonnees, onTarifs); };
   const reessayerManques = () => { setManques(MANQUES_EN_LECTURE); lireManques(setManques); };
+
+  /* Le bloc « Vos tarifs » de la lecture. */
+  const tarifsLus = donnees.tarifs || null;
+  const tarifsAffiches = !!(tarifsLus && tarifsLus.affiche === true);
+  const afficheLe = tarifsAffiches && tarifsLus.affiche_le ? dateFrancaise(tarifsLus.affiche_le) : null;
+  const aDesTarifs = lignesTarifs(tarifsLus).length > 0;
 
   const titreBouton = manques.etat === 'pret' && manques.liste.length === 0 && donnees.emetteur
     ? 'Modifier mes informations de devis'
@@ -542,6 +593,45 @@ export default function MonEntreprise({
                     assurances={donnees.assurances}
                     tarifs={donnees.tarifs}
                   />
+                )}
+                {/* VOS TARIFS (lot T) — SEULEMENT une fois la fiche LUE : pendant
+                    la lecture ou après un échec, `tarifs` vaut `null`, et le
+                    bloc dirait « Non affichés » de tarifs qu'on n'a pas lus. */}
+                {donnees.etat === 'pret' && (
+                  <View style={s.blocTarifs}>
+                    <Text style={s.titreBloc} accessibilityRole="header">Vos tarifs</Text>
+                    <Text style={s.texte}>
+                      {tarifsAffiches
+                        ? `Affichés sur votre fiche${afficheLe ? ` depuis le ${afficheLe}` : ''}.`
+                        : `Non affichés. ${TARIFS_NON_AFFICHES}`}
+                    </Text>
+                    {/* Le réglage d'urgence, en une phrase : celle de
+                        `etatReglageSos`, la même que dans « Modifier mon
+                        profil ». */}
+                    {!!etatSos && <Text style={s.texte}>{etatSos.phrase}</Text>}
+                    {/* ON MONTRE AVANT DE PUBLIER, ET À QUI : l'aperçu est le
+                        bloc exact de la fiche, avec la phrase qui dit que seuls
+                        les particuliers le voient — au CONDITIONNEL quand ils
+                        ne sont pas affichés : sous « Ce que verraient… », le
+                        présent « Visibles des particuliers » disait faux
+                        (relecture du 19/10/2026). */}
+                    {aDesTarifs && (
+                      <TarifsPublics
+                        tarifs={donnees.tarifs}
+                        titre={tarifsAffiches ? 'Ce que voient les particuliers' : 'Ce que verraient les particuliers'}
+                        quiLesVoit={tarifsAffiches ? QUI_VOIT_LES_TARIFS : QUI_VERRAIT_LES_TARIFS}
+                        dansUnePage={false}
+                      />
+                    )}
+                    <Pressable
+                      onPress={() => entrerEnEdition('frais')}
+                      accessibilityRole="button"
+                      accessibilityLabel={aDesTarifs ? 'Modifier mes tarifs' : 'Déclarer mes tarifs'}
+                      style={({ pressed }) => [s.rangee, pressed && APPUI.discret]}
+                    >
+                      <Text style={s.rangeeTexte}>{aDesTarifs ? 'Modifier mes tarifs' : 'Déclarer mes tarifs'}</Text>
+                    </Pressable>
+                  </View>
                 )}
                 {donnees.etat === 'echec' ? (
                   <View style={s.echec}>
@@ -666,4 +756,16 @@ const s = StyleSheet.create({
   enregistrer: { marginTop: S.lg },
   pied: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, textAlign: 'center' },
   cible: { minHeight: TOUCHE, alignSelf: 'flex-start' },
+  /* Le bloc « Vos tarifs » PORTE l'information : angle vif. */
+  blocTarifs: {
+    gap: S.sm, padding: S.md, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+    borderRadius: R.vif,
+  },
+  titreBloc: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
+  /* Une rangée de réglage : 44 points par sa boîte, jamais un `hitSlop`. */
+  rangee: {
+    flexDirection: 'row', alignItems: 'center', minHeight: TOUCHE,
+    paddingHorizontal: S.md, borderWidth: 1, borderColor: C.bordChamp, backgroundColor: C.surface,
+  },
+  rangeeTexte: { flex: 1, fontFamily: F.inter6, fontSize: T.courant, color: C.accent2 },
 });

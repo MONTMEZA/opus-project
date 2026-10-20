@@ -24,6 +24,7 @@ import ConseilsPro from '../components/ConseilsPro';
 import BandeChantiers from '../components/BandeChantiers';
 import { SqueletteAvis, SquelettePortfolio } from '../components/Squelette';
 import FicheContactPro from '../components/FicheContactPro';
+import TarifsPublics from '../components/TarifsPublics';
 import {
   BadgeCheck, ShieldCheck, ShieldX, FileText, Sparkles, ClipboardCheck, MessageCircle, Flag,
   Play, ChevronLeft,
@@ -86,6 +87,9 @@ function VerifRow({ etat, label, value, neutre }) {
 export default function ProfilProScreen({
   pro, pros, following, onFollow, onContact, onViewProfile, onSubmitReview, onSignaler,
   charge = true, onRetourFilVideo = null, chantiers = [], onOuvrirChantier,
+  /* Ses tarifs AFFICHÉS (section 47, lot T) — remplis par `OpusApp` pour un
+     PARTICULIER seulement ; `null` pour tout autre compte. */
+  tarifs = null,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [rDelais, setRDelais] = useState(5);
@@ -249,6 +253,18 @@ export default function ProfilProScreen({
           composant sert sur « mon profil » : c'est ce qui garantit que
           l'artisan voit exactement ce que voient ses clients. */}
       <FicheContactPro pro={pro} />
+
+      {/* --- ses tarifs --- (section 47, lot T)
+
+          JUSTE APRÈS LE CONTACT, et sur sa propre page à la même place :
+          l'artisan voit sa fiche dans l'ordre où la voient les particuliers.
+
+          Seulement s'ils sont AFFICHÉS, et seulement pour un PARTICULIER
+          connecté (réponse du propriétaire du 19/10/2026) : `OpusApp` ne
+          transmet rien à un autre compte. Et AUCUN texte de remplacement :
+          à un autre artisan, « aucun tarif » ou « prix non communiqués »
+          serait faux — ils existent peut-être, ils ne sont pas pour lui. */}
+      {tarifs && tarifs.affiche === true && <TarifsPublics tarifs={tarifs} titre="Ses tarifs" />}
 
       {/* --- ses chantiers --- (section 36)
 

@@ -38,6 +38,11 @@ import {
   validerEmetteur, validerAssurance, validerTarifs, motifsEmetteur, lireMotifs,
 } from './emetteur';
 import { fabriquerEmetteurDemo, PRO_DEMO_EMETTEUR } from '../data/emetteur-demo';
+/* Les tarifs réunis (section 47, lot T). `tarifs.js` n'importe que
+   `emetteur.js` et `urgences.js`, `tarifs-demo.js` rien du tout : aucun
+   cycle avec ce fichier, et `verifier-tarifs` peut les faire tourner. */
+import { depuisLaRecherche } from './tarifs';
+import { TARIFS_DEMO, MES_SOS_DEMO } from '../data/tarifs-demo';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -631,7 +636,13 @@ export async function loadAll() {
          jamais pour qui lance Opus sans fichier `.env` — et il ne se
          vérifierait pas non plus ici. */
       demandesVuesLe: new Date(Date.now() - 24 * 3600e3).toISOString(),
-      mesSos: null,
+      /* LE RÉGLAGE D'URGENCE DE LA FICHE 1, tel qu'il est sur la vraie base
+         le 19/10/2026 : une ligne « Électricité » active sur un compte dont
+         aucun métier n'est d'urgence — une ligne ORPHELINE. Sans elle, le
+         réglage de « Modifier mon profil » ne montrerait aucun de ses états
+         sans fichier `.env`. Une copie : l'écran la remplace après un
+         enregistrement, et le fichier de démonstration reste intact. */
+      mesSos: { lignes: MES_SOS_DEMO.lignes.map((l) => ({ ...l })) },
       notifications: initialNotifications.map((n) => ({ ...n })),
       followingIds: ABONNEMENTS_DEMO,
       savedIds: [],
@@ -701,7 +712,15 @@ export async function loadAll() {
       .order('created_at', { ascending: false })
       .limit(TAILLE_PAGE_DEMANDES),
     supabase.from('demande_reponses').select('demande_id'),
-    supabase.from('sos_availability').select('*').eq('professional_id', uid).maybeSingle(),
+    /* MA DISPONIBILITÉ AUX URGENCES — TOUTES mes lignes, une par métier
+       d'urgence (la clé de la table est `(professional_id, metier_key)`).
+       `maybeSingle()` plantait dès qu'il y en avait deux, et l'écran ne
+       voyait jamais une ligne restée active sur un AUTRE métier. Et
+       seulement ces quatre colonnes : `deplacement`, `horaire` et
+       `majoration` sont MORTES depuis la section 47 — les tarifs vivent
+       dans `tarifs_pro`. */
+    supabase.from('sos_availability')
+      .select('metier_key, actif, rayon_km, delai_minutes').eq('professional_id', uid),
     /* Ma propre fiche, avec mon téléphone — que `select *` ne sait plus
        lire depuis que ces colonnes sont fermées à tout le monde (section
        18 de schema.sql). La fonction, elle, ne renvoie QUE ma ligne. */
@@ -804,16 +823,20 @@ export async function loadAll() {
     urgence: d.urgence || 'quand_possible',
   }));
 
-  const ligne = masosRes.data;
-  const mesSos = ligne ? {
-    actif: ligne.actif,
-    metierKey: ligne.metier_key,
-    deplacement: Number(ligne.deplacement),
-    horaire: Number(ligne.horaire),
-    majoration: ligne.majoration,
-    rayonKm: ligne.rayon_km,
-    delaiMinutes: ligne.delai_minutes,
-  } : null;
+  /* UN ÉCHEC DE LECTURE N'EST PAS « RIEN D'ENREGISTRÉ ». `null` voulait
+     dire les deux : un artisan dont la lecture avait échoué voyait son
+     interrupteur éteint, et « Enregistrer » l'aurait retiré des urgences.
+     `{ echec: true }` le dit, et le réglage ne touche alors à rien. */
+  const mesSos = masosRes.error
+    ? { echec: true }
+    : {
+      lignes: (masosRes.data || []).map((l) => ({
+        metierKey: l.metier_key,
+        actif: l.actif === true,
+        rayonKm: l.rayon_km,
+        delaiMinutes: l.delai_minutes,
+      })),
+    };
 
   const moi = moiRes.data || {};
 
@@ -1937,6 +1960,13 @@ async function enregistrerEmetteurSupabase({ emetteur, tarifs } = {}) {
   if (refus) throw refus;
   let t = null;
   if (tarifs !== undefined) {
+    /* LA LIGNE ENTIÈRE, TOUJOURS. PostgreSQL vérifie les contraintes sur la
+       ligne PROPOSÉE d'un `insert … on conflict`, AVANT de résoudre le
+       conflit : un envoi partiel (`{ affiche: true }` seul) serait refusé
+       par `tarif_affiche_check` même si la ligne en base porte des prix
+       (mesuré le 19/10/2026). `MonEntreprise` envoie les sept colonnes de
+       `tarifsDepuisFormulaire`, et `verifier-tarifs` le tient ; la
+       démonstration fait la même vérification, plus bas. */
     const { data, error } = await supabase.from('tarifs_pro')
       .upsert({ ...pourLaBase('tarifs_pro', tarifs || {}), pro_id: currentUserId }, { onConflict: 'pro_id' })
       .select().single();
@@ -1955,19 +1985,88 @@ async function enregistrerEmetteurDemo({ emetteur, tarifs } = {}) {
   if (!refus.ok) throw refusDeContrainte('emetteur', refus.contrainte);
   f.emetteur = { ...nettoyerEmetteur(ligne, f.emetteur, new Date()), pro_id: moi };
   if (tarifs !== undefined) {
-    const lt = { ...(f.tarifs || {}), ...pourLaBase('tarifs_pro', tarifs || {}) };
-    const refusT = validerTarifs(lt);
+    /* COMME POSTGRESQL : d'abord la ligne PROPOSÉE, seule — c'est elle que
+       la base vérifie avant de voir qu'une ligne existe déjà —, puis la
+       ligne qui resterait. Valider seulement la fusion acceptait ici un
+       envoi partiel que la vraie base refuse : exactement le mode
+       démonstration qui masque une erreur de la base (CLAUDE.md). */
+    const proposee = pourLaBase('tarifs_pro', tarifs || {});
+    const lt = { ...(f.tarifs || {}), ...proposee };
+    const refusP = validerTarifs(proposee);
+    const refusT = refusP.ok ? validerTarifs(lt) : refusP;
     if (!refusT.ok) {
       const e = refusDeContrainte('tarifs_pro', refusT.contrainte);
       e.etape = 'tarifs';
       throw e;
     }
-    f.tarifs = { ...nettoyerTarifs(lt), pro_id: moi };
+    /* LA DATE DU GESTE « Afficher », comme la pose `tient_les_tarifs_publics()`
+       (section 47) : elle naît quand `affiche` passe à vrai, se garde tant
+       qu'il le reste, s'efface quand il s'éteint. Ici, c'est cette fonction
+       qui joue le rôle de la base — jamais l'écran, jamais `nettoyerTarifs`,
+       qui ne fabrique pas de date. */
+    const avant = f.tarifs || null;
+    const n = nettoyerTarifs(lt);
+    let afficheLe = null;
+    if (n.affiche) afficheLe = avant && avant.affiche === true ? avant.affiche_le : new Date().toISOString();
+    f.tarifs = { ...n, affiche_le: afficheLe, pro_id: moi };
   }
   return { emetteur: { ...f.emetteur }, tarifs: f.tarifs ? { ...f.tarifs } : null };
 }
 
 export const enregistrerEmetteur = hasSupabase ? enregistrerEmetteurSupabase : enregistrerEmetteurDemo;
+
+/* --------------------------------------------------------------------------
+   MES TARIFS — et ceux qu'un artisan AFFICHE (section 47, lot T).
+
+   `mesTarifs()` : ma propre ligne, affichée ou non. Le réglage d'urgence de
+   « Modifier mon profil », « Mes tarifs » sur ma page et « Mon entreprise »
+   la lisent : UNE source pour les trois, sinon ils finiraient par dire des
+   choses différentes. `OpusApp` ne l'appelle que pour un compte pro — un
+   particulier n'a pas de tarifs, et la lecture ne part pas pour lui.
+
+   `tarifsAffichesDe(proId)` : la ligne d'un AUTRE artisan, s'il l'affiche.
+   `.eq('affiche', true)` n'est pas une précaution : sans lui, un artisan
+   qui s'ouvrirait sa propre fiche lirait sa ligne NON affichée (« mes
+   tarifs » la lui rend toujours), et la croirait publique. La politique
+   « tarifs affiches » ne rend une ligne affichée qu'aux PARTICULIERS
+   (réponse du propriétaire du 19/10/2026) : un compte pro reçoit `null`,
+   et `OpusApp` ne l'appelle de toute façon que pour un particulier.
+
+   Une erreur est LEVÉE, jamais avalée : « je n'ai pas pu lire » et « il
+   n'y en a pas » ne se disent pas pareil.
+   -------------------------------------------------------------------------- */
+async function mesTarifsSupabase() {
+  const { data, error } = await supabase.from('tarifs_pro')
+    .select('*').eq('pro_id', currentUserId).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function mesTarifsDemo() {
+  const t = ficheEmetteurDemo(moiEnDemo()).tarifs;
+  return t ? { ...t } : null;
+}
+
+export const mesTarifs = hasSupabase ? mesTarifsSupabase : mesTarifsDemo;
+
+async function tarifsAffichesDeSupabase(proId) {
+  const { data, error } = await supabase.from('tarifs_pro')
+    .select('*').eq('pro_id', proId).eq('affiche', true).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/* En démonstration : la ligne enregistrée dans « Mon entreprise » pendant
+   la session si cette fiche en a une, sinon celle du jeu de démonstration —
+   et seulement si elle est AFFICHÉE, comme la base. Les clés sont des
+   CHAÎNES (`String(proId)`) : un `===` entre `4` et `'4'` rend faux. */
+async function tarifsAffichesDeDemo(proId) {
+  const enSession = emetteursDemo[String(proId)];
+  const t = enSession && enSession.tarifs ? enSession.tarifs : TARIFS_DEMO[String(proId)];
+  return t && t.affiche === true ? { ...t } : null;
+}
+
+export const tarifsAffichesDe = hasSupabase ? tarifsAffichesDeSupabase : tarifsAffichesDeDemo;
 
 /* --------------------------------------------------------------------------
    CE QUI MANQUE — la base le dit, au mot près.
@@ -2438,23 +2537,46 @@ export const updateProfile = !hasSupabase ? noop : async ({ userType, profil }) 
 };
 
 /**
- * Disponibilité aux urgences d'un artisan : l'interrupteur « je réponds aux
- * urgences » et les trois chiffres qui servent à calculer la fourchette.
+ * Disponibilité aux urgences d'un artisan : `{ metierKey | null, actif,
+ * rayonKm, delaiMinutes }`.
+ *
+ * PLUS AUCUN TARIF ICI (section 47, lot T). Les trois colonnes
+ * `deplacement`, `horaire`, `majoration` de `sos_availability` sont MORTES :
+ * la base REFUSE toute valeur non nulle (OP012), et les tarifs se règlent
+ * dans « Mon entreprise » (`tarifs_pro`). Et plus d'`updated_at` venu de
+ * l'horloge du téléphone : une date que le client écrit ne prouve rien.
+ * Depuis le lot T, PERSONNE ne tient plus cette colonne — elle garde la date
+ * de création de la ligne, ou celle qu'une version plus ancienne a envoyée,
+ * et la base le dit dans son commentaire de colonne (section 47.7). Un seul
+ * lecteur, et il ne tourne qu'une fois : le rattrapage de la section 47.2,
+ * qui s'en sert pour départager deux lignes d'un même artisan.
+ *
+ * DEUX TEMPS :
+ *   1. si un métier d'urgence est sur la fiche, sa ligne est écrite ;
+ *   2. TOUJOURS, les AUTRES lignes encore actives sont éteintes. Opus ne
+ *      gère qu'un métier d'urgence à la fois, et une ligne restée active
+ *      sur un métier qui n'est plus sur la fiche (« orpheline ») ne pouvait
+ *      plus être éteinte par l'application — c'était le cas, sur la vraie
+ *      base, de la ligne « Électricité » du propriétaire. `metierKey: null`
+ *      les éteint toutes. L'écran le DIT avant l'enregistrement.
  */
 export const updateSosAvailability = !hasSupabase ? noop : async (sos) => {
   if (!sos) return;
-  const { error } = await supabase.from('sos_availability').upsert({
-    professional_id: currentUserId,
-    metier_key: sos.metierKey,
-    actif: sos.actif,
-    deplacement: sos.deplacement,
-    horaire: sos.horaire,
-    majoration: sos.majoration,
-    rayon_km: sos.rayonKm,
-    delai_minutes: sos.delaiMinutes || 45,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'professional_id,metier_key' });
-  if (error) throw error;
+  if (sos.metierKey) {
+    const { error } = await supabase.from('sos_availability').upsert({
+      professional_id: currentUserId,
+      metier_key: sos.metierKey,
+      actif: sos.actif === true,
+      rayon_km: sos.rayonKm,
+      delai_minutes: sos.delaiMinutes,
+    }, { onConflict: 'professional_id,metier_key' });
+    if (error) throw error;
+  }
+  let autres = supabase.from('sos_availability').update({ actif: false })
+    .eq('professional_id', currentUserId).eq('actif', true);
+  if (sos.metierKey) autres = autres.neq('metier_key', sos.metierKey);
+  const { error: refus } = await autres;
+  if (refus) throw refus;
 };
 
 /** Publication d'une demande par un particulier. */
@@ -2667,9 +2789,26 @@ export const mesReponsesDemandes = !hasSupabase ? async () => [] : async () => {
 };
 
 /**
- * Les artisans disponibles autour d'une urgence.
- * Le tri par distance et le filtrage par rayon d'intervention sont faits
- * par la base (fonction artisans_urgence), pas par le téléphone.
+ * Les artisans disponibles autour d'une urgence — `{ artisans, nonAffichables }`.
+ *
+ * Le tri par distance, le rayon d'intervention, le métier sur la fiche et
+ * les tarifs AFFICHÉS et complets sont tenus par la base
+ * (`artisans_urgence()`, section 47), pas par le téléphone.
+ *
+ * LES TARIFS ARRIVENT EN EUROS (la signature de la fonction ne peut pas
+ * changer) : `depuisLaRecherche` les relit en centimes, jamais par
+ * `x * 100`. Une ligne illisible n'est PAS jetée en silence : elle est
+ * COMPTÉE, et l'écran dit combien d'artisans disponibles n'ont pas pu
+ * s'afficher. Si AUCUNE ne l'est, c'est une erreur, pas « aucun
+ * artisan » : un particulier en urgence ne doit pas croire qu'il n'y a
+ * personne quand il y a quelqu'un.
+ *
+ * UNE SECONDE LECTURE, sur les seuls artisans rendus : le prix du devis, le
+ * décompte du temps et les conditions de déplacement, que la signature
+ * figée d'`artisans_urgence` ne peut pas transporter. Ce qu'un particulier
+ * doit savoir AVANT de choisir. Filtrée par « tarifs affiches », avec
+ * `.eq('affiche', true)` écrit en plus. En échec, l'estimation reste, et la
+ * carte dit que ces compléments n'ont pas pu être lus (`complements`).
  */
 export const chercherArtisansUrgence = !hasSupabase ? noop : async (
   { metierKey, latitude, longitude },
@@ -2680,16 +2819,65 @@ export const chercherArtisansUrgence = !hasSupabase ? noop : async (
     p_lon: longitude,
   });
   if (error) throw error;
-  return (data || []).map((a) => ({
-    proId: a.professional_id,
-    metierKey,
-    deplacement: Number(a.deplacement),
-    horaire: Number(a.horaire),
-    majoration: a.majoration,
-    delaiMin: a.delai_minutes,
-    distanceKm: a.distance,
-    actif: true,
-  }));
+  const lignes = data || [];
+  let nonAffichables = 0;
+  const lues = [];
+  lignes.forEach((a) => {
+    const tarifs = depuisLaRecherche(a);
+    if (tarifs) lues.push({ a, tarifs });
+    else nonAffichables += 1;
+  });
+  if (lignes.length > 0 && lues.length === 0) {
+    /* Minuscule en tête : l'écran la préfixe de « La recherche d'artisans : ». */
+    throw new Error('des artisans sont disponibles, mais leurs tarifs n’ont pas pu être lus. '
+      + 'Réessayez dans un instant.');
+  }
+
+  const complementsDe = {};
+  let complementsLus = lues.length === 0;
+  if (lues.length > 0) {
+    const { data: comp, error: refus } = await supabase.from('tarifs_pro')
+      .select('pro_id, frais_deplacement_texte, decompte_temps_texte, prix_devis_centimes')
+      .in('pro_id', lues.map(({ a }) => a.professional_id))
+      .eq('affiche', true);
+    if (!refus) {
+      complementsLus = true;
+      (comp || []).forEach((c) => { complementsDe[c.pro_id] = c; });
+    }
+  }
+
+  const artisans = lues.map(({ a, tarifs }) => {
+    const c = complementsDe[a.professional_id] || null;
+    return {
+      proId: a.professional_id,
+      metierKey,
+      /* CE QUE LA RECHERCHE REND DE LA FICHE : un artisan inscrit (ou
+         devenu disponible) APRÈS le démarrage de l'application du
+         particulier n'est pas dans `pros`. Sans ceci, sa carte ne pouvait
+         pas s'afficher, et « Réessayer » relançait une recherche qui
+         rendait le même artisan, toujours inconnu (relecture application
+         du 19/10/2026). */
+      fiche: {
+        entreprise: a.entreprise || null,
+        ville: a.ville || null,
+        avatarUrl: a.avatar_url || null,
+        verifie: a.verifie === true,
+      },
+      tarifs: {
+        ...tarifs,
+        frais_deplacement_texte: c ? c.frais_deplacement_texte : null,
+        decompte_temps_texte: c ? c.decompte_temps_texte : null,
+        prix_devis_centimes: c ? c.prix_devis_centimes : null,
+      },
+      /* « non lus » aussi pour un artisan absent de la seconde lecture (il
+         vient d'éteindre ses tarifs entre les deux) : on ne sait pas, donc
+         on ne dit pas « rien de déclaré ». */
+      complements: complementsLus && c ? 'ok' : 'echec',
+      delaiMin: a.delai_minutes,
+      distanceKm: a.distance,
+    };
+  });
+  return { artisans, nonAffichables };
 };
 
 /**

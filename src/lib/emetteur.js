@@ -45,6 +45,14 @@
  *      c'est le choix déjà fait par le plan (10.3), et la phrase le dit.
  *   4. Ce qui s'imprime quand l'artisan touche « Je ne facture pas de frais
  *      de déplacement » : « Déplacement offert ».
+ *
+ * LE LOT T (19/10/2026) Y AJOUTE LE FORMULAIRE DES TARIFS RÉUNIS — taux
+ * horaire, décompte du temps, majoration de nuit et de week-end, prix du
+ * devis, et l'interrupteur « Afficher mes tarifs sur ma fiche » —, écrit
+ * en TTC, à trois états (`null` non déclaré, `0` écrit par un interrupteur
+ * seulement, un montant). Le côté PUBLIC de ces tarifs — ce que voient les
+ * particuliers, l'estimation des urgences — vit à part, dans
+ * `src/lib/tarifs.js`.
  */
 import { dateFrancaise } from './entreprise.js';
 import { formeCourte } from '../data/formes-juridiques.js';
@@ -80,7 +88,19 @@ export const COLONNES_ECRITES = Object.freeze({
     'nature', 'libelle', 'assureur_nom', 'assureur_coordonnees', 'couverture',
     'numero_contrat', 'valide_jusquau', 'attestation_chemin',
   ]),
-  tarifs_pro: Object.freeze(['frais_deplacement_centimes', 'frais_deplacement_texte']),
+  /* Chaque colonne de cette liste devient lisible par tous les particuliers
+     connectés pour l'artisan qui affiche ses tarifs (section 47 : une règle
+     RLS filtre des LIGNES, jamais des colonnes). Un prix interne — marge,
+     prix d'achat, prix de référence du lot P — n'y entre JAMAIS : il vivra
+     dans une table à lui. `affiche_le` n'y est pas : c'est la BASE qui la
+     pose, au moment où l'artisan allume « Afficher mes tarifs sur ma
+     fiche ». `verifier-tarifs` compare cette liste aux colonnes de la table,
+     dans les deux sens. */
+  tarifs_pro: Object.freeze([
+    'frais_deplacement_centimes', 'frais_deplacement_texte',
+    'taux_horaire_centimes', 'majoration_pct', 'decompte_temps_texte', 'prix_devis_centimes',
+    'affiche',
+  ]),
 });
 
 /** Une chaîne vide ou faite de blancs ne dit rien : `null`. Il n'y a qu'UNE façon de dire « vide ». */
@@ -123,36 +143,56 @@ export function fusionnerFormulaire(charge, lu) {
 }
 
 /** Les choix du formulaire — des `Option`, jamais des champs texte. */
-export const CHOIX_DU_FORMULAIRE = Object.freeze(['registre', 'regime_tva', 'capital', 'frais']);
+export const CHOIX_DU_FORMULAIRE = Object.freeze([
+  'registre', 'regime_tva', 'capital', 'frais', 'majoration', 'devis',
+]);
 
 /**
  * LES CHOIX DE DÉPART — et RIEN de pré-coché.
  *
- * Une ligne `null` (fiche jamais enregistrée) donne les quatre choix à
+ * Une ligne `null` (fiche jamais enregistrée) donne les six choix à
  * `null`. C'est la règle du plan (10.1) : un franchisé présumé à tort
  * émettrait des devis sans TVA, et Opus ne coche jamais à la place de
  * l'artisan. Les deux drapeaux « en liquidation » et « locataire-gérant »
- * ne sont pas des choix mais des interrupteurs, lus sur la ligne chargée.
+ * ne sont pas des choix mais des interrupteurs, lus sur la ligne chargée —
+ * et « Afficher mes tarifs sur ma fiche » (`affiche`) non plus : c'est un
+ * interrupteur, ÉTEINT par défaut (décision du 17/10/2026), que l'écran lit
+ * sur la ligne de tarifs comme il lit `en_liquidation`.
  *
- *   capital   'montant' | 'variable' | null
- *   frais     'aucun' (« Je ne facture pas de frais de déplacement »)
- *             | 'facture' (un montant ou des conditions) | null
+ *   capital     'montant' | 'variable' | null
+ *   frais       'aucun' (« Je ne facture pas de frais de déplacement »)
+ *               | 'facture' (un montant ou des conditions) | null
+ *   majoration  'aucune' (« Je ne majore pas la nuit ni le week-end »)
+ *               | 'taux' (un pourcentage) | null
+ *   devis       'gratuit' (« Mes devis sont gratuits ») | 'payant' | null
+ *
+ * Le 0 enregistré veut dire « l'artisan a touché l'interrupteur », et rien
+ * d'autre : c'est pourquoi il redevient ici le choix, jamais un chiffre.
  */
 export function etatInitialFormulaire(emetteur, tarifs = null) {
   const e = emetteur || null;
+  const t = tarifs || null;
   let capital = null;
   if (e && e.capital_variable === true) capital = 'variable';
   else if (e && e.capital_centimes != null) capital = 'montant';
   let frais = null;
-  if (tarifs && tarifs.frais_deplacement_centimes === 0) frais = 'aucun';
-  else if (tarifs && (tarifs.frais_deplacement_centimes != null || tarifs.frais_deplacement_texte != null)) {
+  if (t && t.frais_deplacement_centimes === 0) frais = 'aucun';
+  else if (t && (t.frais_deplacement_centimes != null || t.frais_deplacement_texte != null)) {
     frais = 'facture';
   }
+  let majoration = null;
+  if (t && t.majoration_pct === 0) majoration = 'aucune';
+  else if (t && t.majoration_pct > 0) majoration = 'taux';
+  let devis = null;
+  if (t && t.prix_devis_centimes === 0) devis = 'gratuit';
+  else if (t && t.prix_devis_centimes > 0) devis = 'payant';
   return {
     registre: e && e.registre != null ? e.registre : null,
     regime_tva: e && e.regime_tva != null ? e.regime_tva : null,
     capital,
     frais,
+    majoration,
+    devis,
   };
 }
 
@@ -194,7 +234,9 @@ export const LONGUEUR_MAX = Object.freeze({
     numero_contrat: 60,
     attestation_chemin: 300,
   }),
-  tarifs_pro: Object.freeze({ frais_deplacement_texte: 300 }),
+  /* Deux textes, deux contraintes : `tarif_frais_texte_check` et
+     `tarif_decompte_texte_check` (section 47). */
+  tarifs_pro: Object.freeze({ frais_deplacement_texte: 300, decompte_temps_texte: 200 }),
 });
 
 /** Où l'entreprise est immatriculée. « Registre » ne désigne ici que le RCS et le RNE. */
@@ -359,8 +401,9 @@ export function soumisAuRcs(entreprise, emetteur) {
  * « 35 », « 35,50 », « 1 234.5 », « 10 000 € » → des centimes ENTIERS.
  *
  * Le calcul se fait SUR LA CHAÎNE : les euros et les centimes sont recollés
- * en texte avant de devenir un nombre. `35.1 * 100` vaut 3509.9999999999995
- * en JavaScript ; une facture ne s'arrondit pas au hasard. Virgule ou point
+ * en texte avant de devenir un nombre. `8.2 * 100` vaut 819.9999999999999
+ * en JavaScript (mesuré le 19/10/2026 ; `35.1 * 100`, l'exemple qu'on
+ * citait ici, tombe juste) ; une facture ne s'arrondit pas au hasard. Virgule ou point
  * (un seul), espaces, espaces insécables (U+00A0, U+202F) et « € » sont
  * acceptés ; deux séparateurs (« 1.000,50 ») sont refusés plutôt que
  * devinés. Une chaîne vide rend `{ ok: true, centimes: null }` : « non
@@ -431,6 +474,105 @@ export function fraisDepuisFormulaire({ aucun, montant, texte } = {}) {
   return {
     ok: true,
     valeurs: { frais_deplacement_centimes: m.centimes, frais_deplacement_texte: t },
+    message: null,
+  };
+}
+
+/* Les phrases du « 0 » tapé dans les trois autres champs de tarifs. Chacune
+   dit ce que le 0 aurait voulu dire, et où le dire : un interrupteur, ou
+   un champ vide. */
+export const MESSAGE_TAUX_ZERO = '0 € de l’heure n’est pas un taux : si vous ne travaillez qu’au '
+  + 'forfait, laissez le champ vide.';
+export const MESSAGE_MAJORATION_ZERO = 'Pour dire que vous ne majorez pas, touchez « Je ne majore pas '
+  + 'la nuit ni le week-end ».';
+export const MESSAGE_DEVIS_ZERO = 'Pour dire que vos devis sont gratuits, touchez « Mes devis sont '
+  + 'gratuits ».';
+
+/**
+ * « 40 », « 40 % », « 40% », «  40  » → 40. Vide → `null` (non renseigné).
+ *
+ * Un entier seulement : une majoration de 40,5 % ne se lirait sur aucune
+ * fiche, et un nombre à virgule n'entre pas dans un calcul de prix. Les
+ * bornes (0 à 200) ne sont pas vérifiées ici : c'est le travail du miroir
+ * de `tarif_majoration_check`, qui a sa phrase.
+ */
+export function pourcentDepuisSaisie(texte) {
+  const brut = String(texte == null ? '' : texte).replace(/[\s\u00a0\u202f]/g, '').replace(/%$/, '');
+  if (brut === '') return { ok: true, valeur: null, message: null };
+  if (!/^\d+$/.test(brut)) {
+    return { ok: false, valeur: null, message: 'Écrivez un pourcentage en chiffres, par exemple 40.' };
+  }
+  return { ok: true, valeur: Number(brut), message: null };
+}
+
+/**
+ * LES TARIFS, tels que le formulaire les rend à la base — section 47.
+ *
+ *   frais       { aucun, montant, texte } — passé à `fraisDepuisFormulaire`,
+ *               qui reste le seul à écrire le 0 des frais ;
+ *   taux        le texte du taux horaire TTC ;
+ *   decompte    le texte du décompte du temps (la base le rogne) ;
+ *   majoration  { aucune, pct } ;
+ *   devis       { gratuit, montant } ;
+ *   affiche     l'interrupteur « Afficher mes tarifs sur ma fiche ».
+ *
+ * Rend `{ ok, champ, valeurs, message }` ; `valeurs` porte TOUTES les
+ * colonnes écrites de `tarifs_pro`.
+ *
+ * CETTE FONCTION EST LE SEUL ENDROIT QUI ÉCRIT LES DEUX AUTRES 0 — la
+ * majoration (« Je ne majore pas ») et le prix du devis (« Mes devis sont
+ * gratuits ») ; celui des frais reste à `fraisDepuisFormulaire`, qu'elle
+ * appelle. `verifier-tarifs` refuse qu'un écran en écrive un ailleurs.
+ * Un 0 TAPÉ est refusé partout, avec la phrase qui renvoie à
+ * l'interrupteur — et un taux horaire n'a PAS de 0 : « 0 € de l'heure »
+ * donnerait une estimation « 0 – 0 € » devant une urgence. Un `null` n'est
+ * pas un `0` : un champ vide reste « non déclaré ».
+ */
+export function tarifsDepuisFormulaire({
+  frais = {}, taux = '', decompte = null, majoration = {}, devis = {}, affiche = false,
+} = {}) {
+  const refus = (champ, message) => ({ ok: false, champ, valeurs: null, message });
+
+  const f = fraisDepuisFormulaire(frais || {});
+  if (!f.ok) return refus(f.champ, f.message);
+
+  const t = versCentimes(taux);
+  if (!t.ok) return refus('taux_horaire_centimes', t.message);
+  if (t.centimes === 0) return refus('taux_horaire_centimes', MESSAGE_TAUX_ZERO);
+
+  const maj = majoration || {};
+  let majorationPct = null;
+  if (maj.aucune === true) {
+    majorationPct = 0;
+  } else {
+    const p = pourcentDepuisSaisie(maj.pct);
+    if (!p.ok) return refus('majoration_pct', p.message);
+    if (p.valeur === 0) return refus('majoration_pct', MESSAGE_MAJORATION_ZERO);
+    majorationPct = p.valeur;
+  }
+
+  const dev = devis || {};
+  let prixDevis = null;
+  if (dev.gratuit === true) {
+    prixDevis = 0;
+  } else {
+    const d = versCentimes(dev.montant);
+    if (!d.ok) return refus('prix_devis_centimes', d.message);
+    if (d.centimes === 0) return refus('prix_devis_centimes', MESSAGE_DEVIS_ZERO);
+    prixDevis = d.centimes;
+  }
+
+  return {
+    ok: true,
+    champ: null,
+    valeurs: {
+      ...f.valeurs,
+      taux_horaire_centimes: t.centimes,
+      majoration_pct: majorationPct,
+      decompte_temps_texte: videEnNull(decompte == null ? null : String(decompte)),
+      prix_devis_centimes: prixDevis,
+      affiche: affiche === true,
+    },
     message: null,
   };
 }
@@ -513,18 +655,46 @@ export function nettoyerAssurance(a, ancien = null, maintenant = new Date()) {
   return n;
 }
 
+/* LES BLANCS DES TARIFS : ceux de `rogner`, PLUS les caractères qu'on ne
+   voit pas — l'espace insécable, les espaces de largeur nulle, le
+   joint de mot et l'indicateur d'ordre des octets. Trouvé par la relecture
+   du 19/10/2026 : des conditions faites d'un seul U+200B passaient
+   `tarif_affiche_check` sans aucun prix (`trim()` ne le retire pas), et la
+   fiche montrait aux particuliers un bloc « Ses tarifs » vide. Ces textes
+   s'AFFICHENT : un tarif invisible n'est pas un tarif déclaré.
+   `tient_les_tarifs()` et `tient_les_tarifs_publics()` rognent le MÊME
+   jeu, et `verifier-tarifs` compare les trois écritures. */
+export const BLANCS_TARIFS = ' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff';
+const BORDS_TARIFS = new RegExp(`^[${BLANCS_TARIFS}]+|[${BLANCS_TARIFS}]+$`, 'g');
+function rognerTarif(v) {
+  if (v == null) return null;
+  const r = String(v).replace(BORDS_TARIFS, '');
+  return r === '' ? null : r;
+}
+
 /**
- * Miroir de `tient_les_tarifs()` : le rognage du texte, RIEN D'AUTRE.
+ * Miroir de `tient_les_tarifs()` (section 46) ET de
+ * `tient_les_tarifs_publics()` (section 47) : le rognage des deux textes,
+ * `affiche` qui ne vaut jamais `null`, et les montants absents qui
+ * deviennent `null` — RIEN D'AUTRE.
  *
  * Il ne vide surtout pas les conditions quand le montant vaut 0 : la
  * version précédente le faisait, et un artisan qui tapait « 0 » et
  * « gratuit jusqu'à 20 km, puis 0,50 €/km » perdait ses conditions sans un
  * mot. C'est la contrainte qui refuse, avec une phrase qui dit quoi faire.
+ *
+ * Il ne pose PAS `affiche_le` : cette date est celle d'un geste, et seule
+ * la base la pose (`clock_timestamp()`). Un miroir qui la fabriquerait
+ * depuis l'horloge du téléphone dirait une date que rien ne garantit.
  */
 export function nettoyerTarifs(t) {
   const n = { ...(t || {}) };
-  n.frais_deplacement_texte = rogner(n.frais_deplacement_texte);
-  if (n.frais_deplacement_centimes === undefined) n.frais_deplacement_centimes = null;
+  n.frais_deplacement_texte = rognerTarif(n.frais_deplacement_texte);
+  n.decompte_temps_texte = rognerTarif(n.decompte_temps_texte);
+  n.affiche = n.affiche === true;
+  for (const c of ['frais_deplacement_centimes', 'taux_horaire_centimes', 'majoration_pct', 'prix_devis_centimes']) {
+    if (n[c] === undefined) n[c] = null;
+  }
   return n;
 }
 
@@ -566,7 +736,8 @@ function emailAcceptable(email) {
 }
 
 /**
- * Les contraintes de la section 46, une par NOM de la base.
+ * Les contraintes des sections 46 et 47 (le lot T y ajoute celles des
+ * tarifs réunis), une par NOM de la base.
  *
  * Chacune rend `null` quand la ligne passe, sinon la COLONNE fautive — pour
  * que l'écran défile jusqu'à elle. Elles reproduisent la logique de
@@ -633,13 +804,44 @@ export const CONTRAINTES = Object.freeze({
       ? null : 'nature'),
   }),
   tarifs_pro: Object.freeze({
+    /* UN BLOC AFFICHÉ N'EST JAMAIS VIDE (section 47) : au moins UN prix —
+       des frais (montant, « offert » ou conditions), un taux horaire ou un
+       prix de devis. La majoration et le décompte modifient un taux : seuls,
+       ils ne disent pas un prix. Un dépanneur au forfait peut donc afficher
+       ses frais et son prix de devis sans taux horaire. */
+    tarif_affiche_check: (t) => (t.affiche === true
+      && t.frais_deplacement_centimes == null && t.frais_deplacement_texte == null
+      && t.taux_horaire_centimes == null && t.prix_devis_centimes == null
+      ? 'affiche' : null),
+    tarif_decompte_texte_check: (t) => tropLong(t,
+      { decompte_temps_texte: LONGUEUR_MAX.tarifs_pro.decompte_temps_texte }),
+    /* 0 = « Mes devis sont gratuits », écrit par l'interrupteur seulement. */
+    tarif_devis_check: (t) => (t.prix_devis_centimes == null
+      || (Number.isInteger(t.prix_devis_centimes)
+        && t.prix_devis_centimes >= 0 && t.prix_devis_centimes <= 100000)
+      ? null : 'prix_devis_centimes'),
     tarif_frais_check: (t) => (t.frais_deplacement_centimes == null
       || (Number.isInteger(t.frais_deplacement_centimes)
         && t.frais_deplacement_centimes >= 0 && t.frais_deplacement_centimes <= 1000000)
       ? null : 'frais_deplacement_centimes'),
-    tarif_frais_texte_check: (t) => tropLong(t, LONGUEUR_MAX.tarifs_pro),
+    /* Le texte des FRAIS seulement : avec tout `LONGUEUR_MAX.tarifs_pro`,
+       un décompte trop long aurait été refusé sous le nom des frais, et
+       l'écran aurait défilé jusqu'au mauvais champ. */
+    tarif_frais_texte_check: (t) => tropLong(t,
+      { frais_deplacement_texte: LONGUEUR_MAX.tarifs_pro.frais_deplacement_texte }),
     tarif_frais_zero_check: (t) => (t.frais_deplacement_centimes === 0 && t.frais_deplacement_texte != null
       ? 'frais_deplacement_texte' : null),
+    /* 0 = « Je ne majore pas la nuit ni le week-end », par l'interrupteur
+       seulement ; 200 %, la borne de la majoration du SOS (section 10). */
+    tarif_majoration_check: (t) => (t.majoration_pct == null
+      || (Number.isInteger(t.majoration_pct) && t.majoration_pct >= 0 && t.majoration_pct <= 200)
+      ? null : 'majoration_pct'),
+    /* De 1 € à 1 000 € TTC de l'heure. PAS DE 0 : la borne basse garantit
+       qu'une estimation d'urgence ne vaut jamais « 0 – 0 € ». */
+    tarif_taux_horaire_check: (t) => (t.taux_horaire_centimes == null
+      || (Number.isInteger(t.taux_horaire_centimes)
+        && t.taux_horaire_centimes >= 100 && t.taux_horaire_centimes <= 100000)
+      ? null : 'taux_horaire_centimes'),
   }),
 });
 

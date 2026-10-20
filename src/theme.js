@@ -71,6 +71,13 @@ export const C = {
 
   verif: '#4FA9E0',    // pastille "vérifié"
   ok: '#1F7A4D',       // information vérifiée valide
+  /* LE VERT QUAND IL EST DU TEXTE posé sur le fond beige (« Déclaré le … »,
+     « Affichés depuis le … » de « Mon entreprise »). `ok` n'y donnait que
+     4,19 : 1 (relecture du 19/10/2026). Le MÊME ton (150° de teinte),
+     assombri juste assez : 4,78 sur le fond, 6,08 sur blanc. Même règle que
+     `accentTexte` : `ok` pour ce qu'on remplit ou qu'on dessine, `okTexte`
+     pour ce qu'on lit sur le fond. */
+  okTexte: '#1C7046',
   okBg: '#E7F3EC',     // fond du badge "Client vérifié"
   bad: '#B4432B',      // information manquante / erreur
   dark: '#111111',     // fond du fil vidéo

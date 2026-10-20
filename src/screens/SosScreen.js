@@ -4,29 +4,61 @@
  * Quatre étapes : métier → problème → lieu et créneau → choix de l'artisan.
  * Le client compare distance, délai et fourchette de prix, puis CHOISIT.
  * C'est la différence avec les plateformes qui imposent un intervenant.
+ *
+ * LES PRIX VIENNENT DES TARIFS AFFICHÉS DE CHAQUE ARTISAN (lot T, section 47
+ * de `schema.sql`) : une seule liste, réglée dans « Mon entreprise », en
+ * centimes et toutes taxes comprises. Un artisan n'apparaît ici que s'il a
+ * choisi de les afficher (réponse du propriétaire du 19/10/2026). Tout le
+ * calcul vit dans `src/lib/tarifs.js`, que `verifier-tarifs` fait tourner :
+ * jamais « null € », jamais « 0 – 0 € », jamais « +0 % », et jamais
+ * « majoration incluse » pour un artisan qui ne majore pas.
+ *
+ * LA NUIT SE JUGE ARTISAN PAR ARTISAN, à son HEURE D'ARRIVÉE pour « Tout de
+ * suite » : chercher à 19 h 40 un artisan qui arrive à 20 h 05, c'est une
+ * intervention de nuit. Pour « Dans la journée » et « Demain », l'heure
+ * n'est pas connue : l'estimation n'est pas majorée, et la carte dit
+ * « +X % si l'intervention a lieu la nuit ou le week-end ».
  */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import {
-  C, F, T, CARTE_PLEINE, S, GOUTTIERE,
+  C, F, T, CARTE_PLEINE, S, GOUTTIERE, TOUCHE, surFond,
 } from '../theme';
 import {
-  Avatar, BtnMain, BtnMini, TextArea, EmptyState,
+  Avatar, BtnMain, BtnMini, BtnOutline, TextArea, EmptyState,
 } from '../components/ui';
 import {
   Wrench, Zap, Key, Thermometer, AlertTriangle, Clock, Navigation,
   BadgeCheck, Star, ChevronLeft,
 } from '../components/icons';
+import { METIERS_SOS, PROBLEMES, CRENEAUX_SOS } from '../data/urgences';
 import {
-  METIERS_SOS, PROBLEMES, CRENEAUX_SOS, estimation, estNuitOuWeekend,
-} from '../data/urgences';
+  estimationSos, detailSos, conditionsSos, noteSos, majorationSos,
+} from '../lib/tarifs';
+import { messageClair } from '../lib/erreurs';
 import ChampVille from '../components/ChampVille';
 import { CLAVIER } from '../lib/clavier';
 import { avgReviews } from '../data/demo';
 
 const ICONES = { wrench: Wrench, zap: Zap, key: Key, thermometer: Thermometer };
 
-export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
+/**
+ * UNE ADRESSE TAPÉE SANS CHOISIR DE SUGGESTION N'A PAS DE POSITION, et la
+ * recherche d'artisans en a besoin. La phrase est écrite ICI, une fois :
+ * l'écran la montre sous le champ, et `OpusApp` la lève en filet.
+ *
+ * Avant (relecture application du 19/10/2026), elle sortait comme une
+ * erreur de recherche : « La recherche d'artisans : Choisissez… », deux
+ * deux-points, et un bouton « Réessayer » qui relançait EXACTEMENT la même
+ * erreur, puisque l'adresse n'avait pas changé.
+ */
+export const ADRESSE_SANS_POSITION = 'Choisissez votre adresse dans la liste de suggestions : sans '
+  + 'elle, Opus ne connaît pas la position de l’intervention et ne peut pas trouver les artisans '
+  + 'les plus proches.';
+
+export default function SosScreen({
+  pros, onEnvoyer, onChercherArtisans, exigeCoordonnees = false,
+}) {
   const [etape, setEtape] = useState('metier');
   const [metier, setMetier] = useState(null);
   const [probleme, setProbleme] = useState(null);
@@ -35,29 +67,84 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
   const [creneau, setCreneau] = useState('immediat');
 
   const [artisans, setArtisans] = useState([]);
+  /* Les artisans que la base a rendus mais dont les tarifs étaient
+     illisibles : COMPTÉS, pas jetés. Un particulier en urgence ne doit pas
+     croire qu'il n'y a personne quand il y a quelqu'un. */
+  const [nonAffichables, setNonAffichables] = useState(0);
+  /* L'heure de LA RECHERCHE, gardée : c'est d'elle que part l'heure
+     d'arrivée de chaque artisan. Relire l'horloge à chaque rendu ferait
+     changer une estimation sous les yeux de celui qui la lit. */
+  const [heureRecherche, setHeureRecherche] = useState(() => Date.now());
   const [recherche, setRecherche] = useState(false);
   const [erreur, setErreur] = useState(null);
-
-  const majore = estNuitOuWeekend();
+  /* Le refus de l'ADRESSE, sous son champ — pas une erreur de recherche :
+     on reste sur l'étape où l'on peut le corriger. */
+  const [erreurAdresse, setErreurAdresse] = useState(null);
+  const sansPosition = typeof lieu.latitude !== 'number' || typeof lieu.longitude !== 'number';
 
   /** Cherche les artisans disponibles puis passe à l'étape du choix. */
   const chercherArtisans = async () => {
+    if (exigeCoordonnees && sansPosition) {
+      setErreurAdresse(ADRESSE_SANS_POSITION);
+      setEtape('lieu');
+      return;
+    }
+    setErreurAdresse(null);
     setRecherche(true);
     setErreur(null);
     setEtape('artisans');
+    setHeureRecherche(Date.now());
     try {
-      const liste = await onChercherArtisans({
+      const r = await onChercherArtisans({
         metierKey: metier.key,
         latitude: lieu.latitude,
         longitude: lieu.longitude,
       });
-      setArtisans(liste || []);
+      setArtisans((r && r.artisans) || []);
+      setNonAffichables((r && r.nonAffichables) || 0);
     } catch (e) {
-      setErreur(e.message || "La recherche d'artisans a échoué.");
+      /* L'adresse, refusée par le filet d'`OpusApp` : retour au champ, avec
+         la phrase telle quelle — la relancer ne changerait rien. */
+      if (e && e.champ === 'adresse') {
+        setErreurAdresse(e.message);
+        setArtisans([]);
+        setNonAffichables(0);
+        setRecherche(false);
+        setEtape('lieu');
+        return;
+      }
+      /* `messageClair`, jamais `e.message` brut : c'était l'anglais de
+         PostgREST à l'écran d'un particulier en urgence. */
+      setErreur(messageClair(e, "La recherche d'artisans"));
       setArtisans([]);
+      setNonAffichables(0);
     }
     setRecherche(false);
   };
+
+  /* LA LISTE VISIBLE, calculée AVANT le rendu : un artisan dont
+     l'estimation ne se calcule pas ne s'affiche pas — et c'est elle, pas la
+     réponse brute, qui décide de l'état vide. Sinon une carte invisible
+     ferait taire « Aucun artisan… » sans rien montrer à la place.
+
+     UNE FICHE ABSENTE DE `pros` N'EMPÊCHE PLUS LA CARTE (relecture
+     application du 19/10/2026) : un artisan inscrit, ou devenu disponible,
+     après le démarrage de l'application n'y est pas, et `pros` ne se
+     recharge qu'au démarrage. La recherche rend son nom, sa ville, sa
+     photo et son badge (`a.fiche`) : la carte s'affiche avec eux, sans
+     note — on ne la connaît pas, et « 0 avis » serait faux. */
+  const visibles = (etape === 'artisans' && probleme ? artisans : []).map((a) => {
+    const connue = pros[a.proId] || null;
+    const pro = connue || (a.fiche && a.fiche.entreprise ? { id: a.proId, ...a.fiche } : null);
+    if (!pro) return null;
+    const majoration = majorationSos({ creneau, maintenant: heureRecherche, delaiMin: a.delaiMin });
+    const prix = estimationSos(a.tarifs, probleme, majoration);
+    return prix ? {
+      a, pro, connue: !!connue, majoration, prix,
+    } : null;
+  }).filter(Boolean);
+  const rendus = artisans.length + nonAffichables;
+  const caches = rendus - visibles.length;
 
   const retour = () => {
     if (etape === 'probleme') { setEtape('metier'); setProbleme(null); }
@@ -76,16 +163,19 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
         <AlertTriangle size={18} color="#fff" />
         <View style={{ flex: 1 }}>
           <Text style={s.heroTitle}>Intervention d'urgence</Text>
+          {/* Le bandeau ne dépend plus de l'heure : la majoration se dit sur
+              CHAQUE carte, à l'heure d'arrivée de chaque artisan. */}
           <Text style={s.heroSub}>
-            {majore
-              ? 'Nuit ou week-end — une majoration s’applique, elle est comprise dans les prix affichés.'
-              : 'Les prix affichés sont des estimations avant diagnostic.'}
+            Les prix affichés sont des estimations avant diagnostic, toutes taxes comprises.
           </Text>
         </View>
       </View>
 
+      {/* 44 points de haut, comme toute cible (lot 5) : mesurée au
+          navigateur le 19/10/2026, cette rangée n'en faisait que 15 — et
+          c'est la seule façon de corriger un choix sans tout recommencer. */}
       {etape !== 'metier' && (
-        <Pressable style={s.retour} onPress={retour}>
+        <Pressable style={s.retour} onPress={retour} accessibilityRole="button">
           <ChevronLeft size={14} color={C.accent2} />
           <Text style={s.retourText}>Étape précédente</Text>
         </Pressable>
@@ -146,8 +236,9 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
             type="address"
             placeholder="Adresse complète de l'intervention"
             valeur={lieu.affichage}
-            onChange={setLieu}
+            onChange={(l) => { setLieu(l); setErreurAdresse(null); }}
           />
+          {!!erreurAdresse && <Text style={s.erreur}>{erreurAdresse}</Text>}
           <TextArea
             placeholder="Précisez la situation (étage, code, ce que vous constatez)..."
             value={details}
@@ -199,14 +290,23 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
             </View>
           )}
 
-          {!!erreur && <Text style={s.erreur}>{erreur}</Text>}
+          {/* L'ÉCHEC SE DIT, ET IL SE RÉPARE D'UN APPUI : la phrase dit
+              « vous pourrez réessayer » — un mot dans un paragraphe ne se
+              touche pas au pouce, un bouton si. Sans lui, il fallait revenir
+              à l'étape précédente et relancer la recherche. */}
+          {!!erreur && (
+            <View style={s.erreurBloc}>
+              <Text style={s.erreur}>{erreur}</Text>
+              <BtnOutline label="Réessayer" onPress={chercherArtisans} />
+            </View>
+          )}
 
           <View style={{ gap: 10, paddingBottom: 30 }}>
-            {artisans.map((a) => {
-              const pro = pros[a.proId];
-              if (!pro) return null;
-              const prix = estimation(a, probleme, majore);
-              const note = avgReviews(pro);
+            {visibles.map(({
+              a, pro, connue, majoration, prix,
+            }) => {
+              const note = connue ? avgReviews(pro) : null;
+              const conditions = conditionsSos(a.tarifs);
               return (
                 <View key={a.proId} style={s.artisan}>
                   <View style={s.artisanHaut}>
@@ -217,10 +317,14 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
                         {pro.verifie && <BadgeCheck size={13} color={C.verif} />}
                       </View>
                       <View style={s.metaRow}>
-                        <Star size={11} color={C.accent} />
-                        <Text style={s.meta}>
-                          {note.count ? note.global.toFixed(1) : '—'} ({note.count})
-                        </Text>
+                        {!!note && (
+                          <>
+                            <Star size={11} color={C.accent} />
+                            <Text style={s.meta}>
+                              {note.count ? note.global.toFixed(1) : '—'} ({note.count})
+                            </Text>
+                          </>
+                        )}
                         <Navigation size={11} color={C.muted} />
                         <Text style={s.meta}>{a.distanceKm} km</Text>
                         <Clock size={11} color={C.muted} />
@@ -231,16 +335,19 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
 
                   <View style={s.prixBloc}>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.prix}>{prix.min} – {prix.max} €</Text>
-                      <Text style={s.prixNote}>
-                        Estimation avant diagnostic{prix.majore ? ' · majoration incluse' : ''}
-                      </Text>
+                      <Text style={s.prix}>{prix.min} – {prix.max} € TTC</Text>
+                      <Text style={s.prixNote}>{noteSos(a.tarifs, prix.majore)}</Text>
                     </View>
+                    {/* L'ENCRE DU ROUGE BRIQUE EST LE BLANC (`surFond`) : le
+                        presque-noir de `BtnMini` n'y donnait que 3,11 : 1,
+                        mesuré au navigateur le 19/10/2026. Et la boîte fait
+                        44 points : c'est LE geste d'une urgence. */}
                     <BtnMini
                       label="Choisir"
-                      style={{ backgroundColor: C.sos }}
+                      style={s.choisir}
                       onPress={() => onEnvoyer({
                         proId: a.proId,
+                        entreprise: pro.entreprise,
                         metierKey: metier.key,
                         metier: metier.label,
                         problemeKey: probleme.key,
@@ -254,21 +361,47 @@ export default function SosScreen({ pros, onEnvoyer, onChercherArtisans }) {
                         prixMin: prix.min,
                         prixMax: prix.max,
                       })}
-                    />
+                    >
+                      <Text style={s.choisirTexte}>Choisir</Text>
+                    </BtnMini>
                   </View>
 
-                  <Text style={s.detailTarif}>
-                    Déplacement {a.deplacement} € · {a.horaire} €/h
-                    {majore ? ` · +${a.majoration} % nuit/week-end` : ''}
-                  </Text>
+                  <Text style={s.detailTarif}>{detailSos(a.tarifs, majoration)}</Text>
+                  {/* CE QU'IL FAUT SAVOIR AVANT DE CHOISIR, et que la
+                      fourchette ne dit pas : le prix du devis, la façon de
+                      compter le temps, les conditions de déplacement. */}
+                  {a.complements === 'echec' ? (
+                    <Text style={s.detailTarif}>
+                      Prix du devis et conditions non lus : demandez-les-lui quand il vous appelle.
+                    </Text>
+                  ) : conditions.map((ligne) => (
+                    <Text key={ligne} style={s.detailTarif}>{ligne}</Text>
+                  ))}
                 </View>
               );
             })}
 
-            {!recherche && !erreur && artisans.length === 0 && (
+            {!recherche && !erreur && visibles.length > 0 && caches > 0 && (
+              <Text style={s.caches}>
+                {caches > 1
+                  ? `${caches} artisans disponibles n’ont pas pu être affichés.`
+                  : '1 artisan disponible n’a pas pu être affiché.'}
+              </Text>
+            )}
+
+            {!recherche && !erreur && rendus === 0 && (
               <EmptyState>
                 Aucun artisan disponible pour ce métier autour de cette adresse.
                 Essayez une demande de devis classique depuis Découvrir.
+              </EmptyState>
+            )}
+
+            {/* La base a rendu des artisans, et aucun ne s'affiche : ce n'est
+                PAS « aucun artisan », et l'écran ne doit pas le laisser
+                croire. */}
+            {!recherche && !erreur && rendus > 0 && visibles.length === 0 && (
+              <EmptyState action={{ label: 'Réessayer', onPress: chercherArtisans }}>
+                Des artisans sont disponibles, mais leur fiche n’a pas pu être affichée. Réessayez.
               </EmptyState>
             )}
           </View>
@@ -289,7 +422,10 @@ const s = StyleSheet.create({
   heroTitle: { fontFamily: F.oswald6, fontSize: 14, color: '#fff' },
   heroSub: { fontSize: T.petit, color: 'rgba(255,255,255,0.9)', marginTop: 3, lineHeight: 15, fontFamily: F.inter },
 
-  retour: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 10 },
+  retour: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 10,
+    minHeight: TOUCHE, alignSelf: 'flex-start',
+  },
   retourText: { color: C.accent2, fontSize: T.courant, fontFamily: F.inter6 },
 
   question: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink, marginBottom: 4 },
@@ -315,6 +451,7 @@ const s = StyleSheet.create({
 
   chargement: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 16 },
   chargementTexte: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
+  erreurBloc: { alignItems: 'flex-start', gap: S.sm, marginBottom: S.md },
   erreur: {
     fontSize: T.courant, color: C.bad, lineHeight: 16, marginBottom: 10,
     borderLeftWidth: 3, borderLeftColor: C.bad, paddingLeft: 8, fontFamily: F.inter,
@@ -332,6 +469,9 @@ const s = StyleSheet.create({
     marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line,
   },
   prix: { fontFamily: F.oswald6, fontSize: 17, color: C.ink },
+  choisir: { backgroundColor: C.sos, minHeight: TOUCHE, paddingHorizontal: S.lg },
+  choisirTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: surFond(C.sos) },
   prixNote: { fontSize: T.micro, color: C.muted, marginTop: 1, fontFamily: F.inter },
-  detailTarif: { fontSize: T.micro, color: C.muted, marginTop: 8, fontFamily: F.inter },
+  detailTarif: { fontSize: T.micro, color: C.muted, marginTop: S.sm, fontFamily: F.inter },
+  caches: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
 });

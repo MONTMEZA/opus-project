@@ -38,6 +38,13 @@
  * l'engagement « Vos tarifs et vos prix » vise une PROPRIÉTÉ (qui lit ces
  * tables), jamais un nom de fonction.
  *
+ * LE LOT T (19/10/2026) a réuni les tarifs du devis et ceux du SOS dans
+ * `tarifs_pro` (section 47) : les contraintes se relèvent désormais dans les
+ * sections 46 ET 47, `tarifs_pro` a une seconde politique — de lecture, pour
+ * les particuliers seulement —, `artisans_urgence()` entre dans la liste
+ * fermée de cette seule table, et la liste de ses colonnes est tenue par
+ * `verifier-tarifs`. Chaque règle changée dit pourquoi, là où elle est.
+ *
  * Il retire les commentaires avant de lire un texte (NEUF fois dans ce projet
  * un contrôle a accusé la documentation qui expliquait le défaut), et il ne
  * rougit JAMAIS avec le temps : l'âge de la liste des médiateurs est un avis
@@ -85,14 +92,19 @@ const SUJET = 'Vos informations de devis';
     'Il est chargé par `verifier-etats`, `verifier-clients` et ce contrôle : un import qui '
     + 'tire React Native le ferait planter, et un contrôle qui plante ne vérifie rien.');
 
-  const duLot = Object.keys(MESSAGES_CONTRAINTE).filter((n) => /^(emetteur_|tarif_)/.test(n));
-  const fautives = duLot.filter((n) => {
+  /* LES CONTRAINTES SONT RELEVÉES DANS LE SCHÉMA, pas comptées : le lot 0a
+     en posait 20 sur les trois tables, la section 47 (lot T) en ajoute cinq
+     sur `tarifs_pro`. Un nombre écrit ici rougirait à chaque lot ; une
+     liste lue dans `schema.sql` suit le schéma, et le plancher (25) garde
+     contre un lecteur devenu aveugle. */
+  const duSchema = contraintesDesTroisTables();
+  const fautives = duSchema.filter((n) => {
     const m = messageClair(refusCheck(n), SUJET);
-    return m !== `${SUJET} : ${MESSAGES_CONTRAINTE[n]}` || /schema\.sql/.test(m);
+    return !MESSAGES_CONTRAINTE[n] || m !== `${SUJET} : ${MESSAGES_CONTRAINTE[n]}` || /schema\.sql/.test(m);
   });
-  verifier('chaque contrainte de la section 46 a SA phrase, sans piste « schema.sql »',
-    duLot.length === 20 && fautives.length === 0,
-    `${duLot.length} contrainte(s) du lot dans MESSAGES_CONTRAINTE (20 attendues) ; `
+  verifier('chaque contrainte `_check` des trois tables, relevée dans le schéma, a SA phrase, sans piste « schema.sql »',
+    duSchema.length >= 25 && fautives.length === 0,
+    `${duSchema.length} contrainte(s) relevée(s) dans les sections 46 et 47 (25 au moins) ; `
     + `mal traduites : ${fautives.join(', ') || 'aucune'}. Une contrainte qui garde une SAISIE `
     + 'n’est pas une panne : « schema.sql n’a pas été rejoué » enverrait l’artisan chercher dans '
     + 'un fichier qu’il n’ouvrira jamais.');
@@ -515,8 +527,10 @@ if (E && M && D) {
 
     const noms = Object.keys(E.CONTRAINTES).flatMap((t) => Object.keys(E.CONTRAINTES[t]));
     const duLot = Object.keys(MESSAGES_CONTRAINTE).filter((n) => /^(emetteur_|tarif_)/.test(n));
+    /* 25 au moins, et plus 20 : la section 47 (lot T) pose cinq contraintes
+       de plus sur `tarifs_pro`, et leurs miroirs vivent dans `emetteur.js`. */
     verifier('les contraintes du miroir = les phrases de `erreurs.js`, dans les deux sens, toutes en `_check`',
-      noms.length === 20 && egalEnsembles(noms, duLot) && noms.every((n) => n.endsWith('_check'))
+      noms.length >= 25 && egalEnsembles(noms, duLot) && noms.every((n) => n.endsWith('_check'))
       && !noms.includes('emetteur_paiement_check'),
       `miroir : ${noms.length}, phrases : ${duLot.length}. « à la signature » n’est PAS une contrainte en `
       + '0a : la règle se décide devis par devis au lot 2.');
@@ -564,7 +578,12 @@ if (E && M && D) {
       ok('35', 3500) && ok('35,5', 3550) && ok('35,50', 3550) && ok('35.05', 3505) && ok('1 234,56', 123456)
       && ok('1 234', 123400) && ok('1 234,5', 123450) && ok('10 000 €', 1000000) && ok('007', 700)
       && ok('0,10', 10) && ok('0', 0));
-    verifier('35,1 fait 3 510 centimes, pas 3 509,999… : le calcul se fait sur la chaîne', ok('35.1', 3510) && ok('0,29', 29));
+    /* `35.1 * 100` vaut EXACTEMENT 3510 en JavaScript : ce cas seul ne
+       détecterait pas un calcul en flottant. `8.2 * 100` vaut 819,999…,
+       `19.99 * 100` 1998,999… et `64.35 * 100` 6434,999… (mesuré le 19/10,
+       lot T) : avec eux, un `Math.trunc(x * 100)` ou un `parseInt` rougit. */
+    verifier('8,2 fait 820 centimes, pas 819,999… : le calcul se fait sur la chaîne',
+      ok('35.1', 3510) && ok('0,29', 29) && ok('8,2', 820) && ok('19,99', 1999) && ok('64.35', 6435));
     verifier('vide → `null` (non renseigné), jamais 0',
       c('').ok && c('').centimes === null && c('   ').centimes === null && c(null).centimes === null);
     verifier('négatif, deux séparateurs, trois décimales, lettres, seize chiffres : refusés avec une phrase',
@@ -603,8 +622,14 @@ if (E && M && D) {
       !('pro_id' in p) && !('regime_tva_declare_le' in p) && !('modifie_le' in p) && !('inconnue' in p)
       && p.capital_centimes === 100000);
     const init = E.etatInitialFormulaire(null);
-    verifier('`etatInitialFormulaire(null)` : les quatre choix à `null`',
-      egalEnsembles(Object.keys(init), E.CHOIX_DU_FORMULAIRE) && Object.values(init).every((x) => x === null),
+    /* SIX choix depuis le lot T (`majoration` et `devis` s'ajoutent), et
+       `affiche` n'en est PAS un : c'est un interrupteur, éteint par défaut,
+       lu sur la ligne chargée — comme « en liquidation ». Rangé parmi les
+       choix, allumer puis éteindre ferait croire à une modification. */
+    verifier('`etatInitialFormulaire(null)` : les SIX choix à `null`, et `affiche` n’en est pas un',
+      E.CHOIX_DU_FORMULAIRE.length === 6
+      && egalEnsembles(Object.keys(init), E.CHOIX_DU_FORMULAIRE) && Object.values(init).every((x) => x === null)
+      && !('affiche' in init) && !E.CHOIX_DU_FORMULAIRE.includes('affiche'),
       JSON.stringify(init));
     verifier('…et une fiche enregistrée retrouve ses choix',
       E.etatInitialFormulaire({ registre: 'rcs', regime_tva: 'reel', capital_variable: true },
@@ -899,6 +924,31 @@ function sqlSansCommentaires(sql) {
   return sortie;
 }
 
+/* Le texte d'une section numérotée de `schema.sql`, de son en-tête au
+   PROCHAIN en-tête de section numérotée (`--  NN. `), commentaires
+   retirés. La fin n'est plus « l'export RGPD » : depuis le lot T, la
+   section 47 suit la 46, et la 46 s'arrête là où la 47 commence. */
+function sectionDuSchema(brut, tete) {
+  const i = brut.indexOf(tete);
+  if (i < 0) return '';
+  const suite = /^--  \d+\. /gm;
+  suite.lastIndex = i + tete.length;
+  const m = suite.exec(brut);
+  return sqlSansCommentaires(brut.slice(i, m ? m.index : undefined));
+}
+
+/* Les contraintes `add constraint` des trois tables d'« Mon entreprise »,
+   relevées dans les sections 46 ET 47 — la 47 (lot T) en pose cinq sur
+   `tarifs_pro`. Une déclaration de fonction (et non une `const`) : la
+   partie 1 l'appelle, avant que le schéma ne soit lu plus bas. */
+function contraintesDesTroisTables() {
+  const brut = readFileSync('supabase/schema.sql', 'utf8');
+  const texte = sectionDuSchema(brut, '--  46. MON ENTREPRISE POUR MES DEVIS')
+    + sectionDuSchema(brut, '--  47. LES TARIFS RÉUNIS');
+  return [...texte.matchAll(/alter table public\.(?:emetteur|emetteur_assurances|tarifs_pro)\s+add constraint (\w+)/g)]
+    .map((m) => m[1]);
+}
+
 /* ================================================================== */
 /*  PARTIE 3 — LE SCHÉMA : la section 46 de `schema.sql`               */
 /* ================================================================== */
@@ -906,18 +956,22 @@ console.log('\n3. LE SCHÉMA — la section 46, lue comme des propriétés');
 
 const SCHEMA_BRUT = lire('supabase/schema.sql');
 const TETE_46 = '--  46. MON ENTREPRISE POUR MES DEVIS';
+const TETE_47 = '--  47. LES TARIFS RÉUNIS';
 const TETE_42 = '--  42. L\'EXPORT RGPD';
 const DERNIER_DE_45 = 'grant execute on function public.admin_retirer_entreprise(uuid, text) to authenticated;';
 const TABLES_46 = ['emetteur', 'emetteur_assurances', 'tarifs_pro'];
 const iTete46 = SCHEMA_BRUT.indexOf(TETE_46);
 const iTete42 = SCHEMA_BRUT.indexOf(TETE_42);
-/* La section s'arrête à ce qui la SUIT vraiment — l'export RGPD, ou le
-   balayage si elle a été déplacée après lui : sans cela, une section mal
-   placée donnerait un morceau vide, et toutes les vérifications
-   rougiraient en cascade, noyant celle qui dit où est le défaut. */
-const FIN_46 = [iTete42, SCHEMA_BRUT.indexOf('--  43. LES PORTES DE LA BASE')]
-  .filter((i) => i > iTete46).sort((x, y) => x - y)[0];
-const SECTION_46 = iTete46 < 0 ? '' : sqlSansCommentaires(SCHEMA_BRUT.slice(iTete46, FIN_46));
+/* La section s'arrête au PROCHAIN en-tête de section numérotée — la 47
+   depuis le lot T, l'export RGPD ou le balayage si elle a été déplacée :
+   sans cela, une section mal placée donnerait un morceau vide, et toutes
+   les vérifications rougiraient en cascade, noyant celle qui dit où est
+   le défaut. */
+const SECTION_46 = sectionDuSchema(SCHEMA_BRUT, TETE_46);
+/* La section 47 (lot T) ajoute à `tarifs_pro` cinq colonnes déclarées, une
+   date posée par la base, et cinq contraintes : ce contrôle les lit AVEC la
+   46, puisque les miroirs (`CONTRAINTES`, `LONGUEUR_MAX`) les portent. */
+const SECTION_47 = sectionDuSchema(SCHEMA_BRUT, TETE_47);
 const SCHEMA = sqlSansCommentaires(SCHEMA_BRUT);
 
 /* Un morceau isolé : du début trouvé jusqu'à sa fin. Une propriété se
@@ -931,7 +985,7 @@ const morceau = (texte, debut, fin) => {
   return texte.slice(i, j < 0 ? undefined : j + fin.length);
 };
 const fonction = (nom) => morceau(SECTION_46, `create or replace function public.${nom}(`, '$$;');
-const contrainte = (nom) => morceau(SECTION_46, `add constraint ${nom}\n`, ';');
+const contrainte = (nom) => morceau(SECTION_46 + SECTION_47, `add constraint ${nom}\n`, ';');
 const table = (nom) => morceau(SECTION_46, `create table if not exists public.${nom} (`, ');');
 const politiques = (t) => [...SCHEMA.matchAll(new RegExp(`create policy "([^"]+)" on public\\.${t}\\b[^;]*;`, 'g'))]
   .map((m) => m[0]);
@@ -983,19 +1037,30 @@ if (!E) {
 
   /* --- 6.2-16 : les noms des contraintes --- */
   {
-    const noms = [...SECTION_46.matchAll(/add constraint (\w+)/g)].map((m) => m[1]);
+    /* Les ordres `add constraint` DES TROIS TABLES, relevés dans les
+       sections 46 et 47 : la 47 (lot T) en pose cinq sur `tarifs_pro`, et
+       aussi deux sur `sos_availability` (le rayon et le délai), qui ne sont
+       pas d'« Mon entreprise » et n'ont pas de miroir ici — d'où un relevé
+       par TABLE, et non tout ce que contient la section. */
+    const ORDRE = /alter table public\.(?:emetteur|emetteur_assurances|tarifs_pro)\s+add constraint (\w+)([^;]*);/g;
+    const ordres = [...(SECTION_46 + SECTION_47).matchAll(ORDRE)];
+    const noms = ordres.map((m) => m[1]);
     const miroir = Object.keys(E.CONTRAINTES).flatMap((t) => Object.keys(E.CONTRAINTES[t]));
     const sansPhrase = noms.filter((n) => !MESSAGES_CONTRAINTE[n]);
-    verifier('les contraintes de la section 46 = celles du miroir, et chacune a sa phrase dans `erreurs.js`',
-      noms.length === 20 && egalEnsembles(noms, miroir) && sansPhrase.length === 0,
+    verifier('les contraintes des trois tables (sections 46 et 47) = celles du miroir, et chacune a sa phrase dans `erreurs.js`',
+      noms.length >= 25 && egalEnsembles(noms, miroir) && sansPhrase.length === 0,
       `SQL : ${noms.length} ; miroir : ${miroir.length} ; sans phrase : ${sansPhrase.join(', ') || 'aucune'}. `
       + 'Une contrainte renommée d’un seul côté rend un refus anonyme, avec une piste fausse.');
     verifier('…toutes nommées en `_check`, aucune `check (` anonyme, et pas d’`emetteur_paiement_check`',
       noms.every((n) => /_check$/.test(n))
-      /* `with check (` est la clause d'écriture d'une POLITIQUE, pas une
-         contrainte : le premier jet les comptait, et accusait trois
-         politiques justes. */
-      && (SECTION_46.match(/(?<!with )\bcheck\s*\(/g) || []).length === noms.length
+      /* Le nombre de `check (` se compte DANS ces mêmes ordres : la
+         section 47 porte aussi `sos_rayon_check` et `sos_delai_check`, qui
+         ne sont pas des trois tables. Et `with check (` est la clause
+         d'écriture d'une POLITIQUE, pas une contrainte : le premier jet les
+         comptait, et accusait trois politiques justes. */
+      && ordres.every((m) => (m[2].match(/(?<!with )\bcheck\s*\(/g) || []).length === 1)
+      && (SECTION_46.match(/(?<!with )\bcheck\s*\(/g) || []).length
+        === ordres.filter((m) => SECTION_46.includes(m[0])).length
       && TABLES_46.every((t) => !/\b(check|constraint)\b/.test(table(t)))
       && !/emetteur_paiement_check/.test(SCHEMA),
       '`erreurs.js` reconnaît une contrainte à son suffixe `_check` ; une contrainte en ligne dans '
@@ -1007,11 +1072,13 @@ if (!E) {
   {
     const paires = (txt) => Object.fromEntries([...txt.matchAll(/char_length\((\w+)\)(?:,\s*0\))?\s*<=\s*(\d+)/g)]
       .map((m) => [m[1], Number(m[2])]));
-    const sql = {
-      emetteur: { ...paires(contrainte('emetteur_longueurs_check')), ...paires(contrainte('emetteur_telephone_check')) },
-      emetteur_assurances: paires(contrainte('emetteur_assurance_longueurs_check')),
-      tarifs_pro: paires(contrainte('tarif_frais_texte_check')),
-    };
+    /* Les longueurs relevées dans TOUTES les contraintes des trois tables,
+       où qu'elles soient : `decompte_temps_texte: 200` vient de
+       `tarif_decompte_texte_check`, posée en section 47. */
+    const sql = { emetteur: {}, emetteur_assurances: {}, tarifs_pro: {} };
+    for (const m of (SECTION_46 + SECTION_47).matchAll(
+      /alter table public\.(emetteur|emetteur_assurances|tarifs_pro)\s+add constraint \w+([^;]*);/g,
+    )) Object.assign(sql[m[1]], paires(m[2]));
     const ecarts = Object.keys(E.LONGUEUR_MAX).flatMap((t) => {
       const a = E.LONGUEUR_MAX[t];
       const b = sql[t] || {};
@@ -1028,21 +1095,35 @@ if (!E) {
     const POSEES_PAR_LA_BASE = ['pro_id', 'id', 'created_at', 'modifie_le', 'regime_tva_declare_le'];
     const colonnes = (t) => [...table(t).matchAll(/^\s*(\w+)\s+(uuid|text|bigint|boolean|date|timestamptz)\b/gm)]
       .map((m) => m[1]);
-    const ecarts = TABLES_46.flatMap((t) => {
+    /* `tarifs_pro` n'est plus comparée ICI : depuis le lot T, ses colonnes
+       vivent aussi dans les `add column` de la section 47, et chacune
+       devient lisible par les particuliers quand l'artisan affiche ses
+       tarifs. `verifier-tarifs` (partie B) tient sa liste FERMÉE, toutes
+       formes du fichier comprises. Deux contrôles pour la même liste
+       finiraient par dire deux choses. */
+    const TABLES_ICI = ['emetteur', 'emetteur_assurances'];
+    const ecarts = TABLES_ICI.flatMap((t) => {
       const ecrites = colonnes(t).filter((c) => !POSEES_PAR_LA_BASE.includes(c));
       const js = E.COLONNES_ECRITES[t] || [];
       return [...ecrites.filter((c) => !js.includes(c)).map((c) => `${t}.${c} n’est écrite par personne`),
         ...js.filter((c) => !ecrites.includes(c)).map((c) => `${t}.${c} est envoyée sans exister`)];
     });
-    verifier('`COLONNES_ECRITES` ↔ les trois `create table`, dans les deux sens',
-      TABLES_46.every((t) => colonnes(t).length > 0) && ecarts.length === 0, ecarts.join(' ; '));
+    verifier('`COLONNES_ECRITES` ↔ les `create table` d’`emetteur` et d’`emetteur_assurances`, dans les deux sens',
+      TABLES_ICI.every((t) => colonnes(t).length > 0) && ecarts.length === 0, ecarts.join(' ; '));
+    verifier('…et `tarifs_pro` a toujours son `create table` en section 46, avec sa clé',
+      /^\s*pro_id\s+uuid primary key/m.test(table('tarifs_pro')),
+      'Ses colonnes de prix sont comparées par `verifier-tarifs`, la liste fermée des tarifs affichés.');
   }
 
   /* --- 6.3-21 : qui lit, qui écrit --- */
   for (const t of TABLES_46) {
-    const pols = politiques(t);
+    /* `tarifs_pro` a, depuis le lot T, une SECONDE politique — de lecture
+       seulement, pour les particuliers (vérifiée juste après) : « mes
+       tarifs » reste la SEULE qui n'est pas `for select`, donc la seule qui
+       écrive. */
+    const pols = politiques(t).filter((x) => !/\bfor select\b/.test(x));
     const p = pols[0] || '';
-    verifier(`\`${t}\` : RLS activée, UNE politique, \`est_mon_entreprise(pro_id)\` des deux côtés et aucun \`auth.uid()\``,
+    verifier(`\`${t}\` : RLS activée, UNE politique d’écriture, \`est_mon_entreprise(pro_id)\` des deux côtés et aucun \`auth.uid()\``,
       new RegExp(`alter table public\\.${t}\\s+enable row level security;`).test(SECTION_46)
       && pols.length === 1 && /for all to authenticated/.test(p)
       && (p.match(/public\.est_mon_entreprise\(pro_id\)/g) || []).length === 2
@@ -1055,9 +1136,36 @@ if (!E) {
       new RegExp(`revoke all on public\\.${t}\\s+from anon;`).test(SECTION_46)
       && new RegExp(`revoke truncate on [^;]*public\\.${t}\\b[^;]*from authenticated;`).test(SECTION_46)
       && !new RegExp(`grant [^;]*on [^;]*public\\.${t}\\b[^;]*to [^;]*\\banon\\b`).test(SCHEMA)
-      && pols.every((x) => !/\bto\s+(anon|public)\b/.test(x) && !/est_admin\(/.test(x)),
+      && politiques(t).every((x) => !/\bto\s+(anon|public)\b/.test(x) && !/est_admin\(/.test(x)),
       'Un visiteur reçoit « permission denied », pas une liste vide ; et l’administration ne lit pas '
       + 'les prix d’un artisan (engagement écrit du propriétaire, 18/10).');
+    /* LES TARIFS AFFICHÉS NE VONT QU'AUX PARTICULIERS — réponse du
+       propriétaire du 19/10 (lot T). Toute politique qui n'est pas « mes
+       tarifs » est `for select to authenticated`, et son `using`, normalisé,
+       est EXACTEMENT la conjonction des trois termes, dans n'importe quel
+       ordre, sans `or` ni autre terme ; et il y en a UNE au plus. Les
+       politiques `select` s'additionnent en OU : une seconde, plus large,
+       posée « à côté » rouvrirait aux artisans ce que la première ferme.
+       La même propriété est tenue par `verifier-tarifs` (29 bis) et par
+       `verifier-legal` : les trois contrôles relisent ces politiques. */
+    const lecture = politiques(t).filter((x) => /\bfor select\b/.test(x));
+    if (t === 'tarifs_pro') {
+      const conjonction = (x) => {
+        const u = (x.match(/\busing\s*\(([\s\S]*)\)\s*;\s*$/) || [])[1];
+        if (u == null || /\bor\b/i.test(u) || /\bwith check\b/i.test(x)) return null;
+        return u.replace(/\s+/g, ' ').trim().split(/\s+and\s+/i).map((terme) => terme.trim()).sort();
+      };
+      const ATTENDUS = ['affiche is true', 'not public.est_masque(pro_id)', 'not public.est_un_pro()'].sort();
+      verifier('`tarifs_pro` : UNE politique de lecture publique, `for select to authenticated`, pour les PARTICULIERS seulement',
+        lecture.length === 1
+        && lecture.every((x) => /for select to authenticated\s+using/.test(x)
+          && JSON.stringify(conjonction(x)) === JSON.stringify(ATTENDUS)),
+        `${lecture.length} politique(s) de lecture. Les tarifs affichés ne sont lus que par les particuliers `
+        + '(décision du 19/10) : une politique qui ne dit pas `not est_un_pro()` les ouvre aux autres artisans.');
+    } else {
+      verifier(`\`${t}\` : aucune politique de lecture publique`, lecture.length === 0,
+        'Personne d’autre que le titulaire ne lit ces informations : elles ne s’affichent nulle part.');
+    }
   }
   /* UNE PROPRIÉTÉ, PAS UN NOM (relecture du 18/10/2026). La première
      version ne regardait que les fonctions `admin_*` : une fonction
@@ -1068,14 +1176,23 @@ if (!E) {
      (clé de service) sont tenues par `verifier-legal`, qui garde le texte
      opposable « Vos tarifs et vos prix ». */
   {
+    /* DEUX LISTES depuis le lot T : `artisans_urgence()` lit `tarifs_pro`
+       (à travers « tarifs affiches », en `security invoker`), et elle n'a
+       rien à faire dans `emetteur` ni dans `emetteur_assurances`, qui ne
+       s'affichent nulle part. Une liste commune l'aurait autorisée partout. */
     const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
-    const PERMISES = ['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs', 'emetteur_incomplet',
-      'mes_donnees'];
+    const LISTES = [
+      { tables: /\b(emetteur_assurances|emetteur)\b/,
+        permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees'] },
+      { tables: /\btarifs_pro\b/,
+        permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence'] },
+    ];
     const fonctions = [...SCHEMA.matchAll(
       /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?(\w+)\s*\(([\s\S]*?)\bas\s+(\$\w*\$)([\s\S]*?)\3/gi,
     )].map((m) => ({ nom: m[1], attributs: m[2], corps: m[4] }));
     const lisent = fonctions.filter((f) => PRIVEES.test(f.corps));
-    const horsListe = [...new Set(lisent.filter((f) => !PERMISES.includes(f.nom)).map((f) => f.nom))];
+    const horsListe = [...new Set(LISTES.flatMap((l) => fonctions
+      .filter((f) => l.tables.test(f.corps) && !l.permises.includes(f.nom)).map((f) => f.nom)))];
     const definer = [...new Set(lisent.filter((f) => /security\s+definer/i.test(f.attributs)).map((f) => f.nom))];
     const vues = [...SCHEMA.matchAll(/create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+[\s\S]*?;/gi)]
       .filter((m) => PRIVEES.test(m[0]));
@@ -1091,6 +1208,12 @@ if (!E) {
   {
     const nonNuls = TABLES_46.flatMap((t) => table(t).split('\n')
       .filter((l) => /\bnot null\b/i.test(l)).map((l) => `${t}.${l.trim().split(/\s+/)[0]}`));
+    /* …ni dans les `add column` de la section 47 (lot T), et pas davantage
+       un `set not null` posé après coup. */
+    for (const m of (SECTION_46 + SECTION_47).matchAll(/add column (?:if not exists )?(\w+)([^,;]*)/gi)) {
+      if (/\bnot null\b/i.test(m[2])) nonNuls.push(`add column ${m[1]}`);
+    }
+    for (const m of (SECTION_46 + SECTION_47).matchAll(/alter column (\w+) set not null/gi)) nonNuls.push(`set not null ${m[1]}`);
     verifier('rien n’est `not null` sauf les clés',
       nonNuls.join() === 'emetteur_assurances.pro_id',
       `Trouvés : ${nonNuls.join(', ') || 'aucun'}. Une fiche se remplit en plusieurs fois : c’est à la `
@@ -1196,10 +1319,19 @@ if (!E) {
       + 'garantie faite d’un seul retour à la ligne ne doit pas compter comme écrite, et le miroir de '
       + 'démonstration rogne le même jeu de caractères.');
     const t = fonction('tient_les_tarifs');
-    const affectations = [...t.matchAll(/new\.frais_deplacement_texte\s*:=\s*([^;]+);/g)].map((m) => m[1].trim());
+    const affectations = [...t.matchAll(/new\.frais_deplacement_texte\s*:=\s*([^;]+);/g)]
+      .map((m) => m[1].replace(/\s+/g, ' ').trim());
+    /* LE JEU DE BLANCS S'EST ÉLARGI AU LOT T (relecture du 19/10/2026) : ce
+       texte s'affiche aux particuliers, et des conditions faites d'un seul
+       U+200B passaient `tarif_affiche_check` sans aucun prix. Il rogne
+       donc AUSSI les blancs invisibles — le même jeu que
+       `tient_les_tarifs_publics()` et que `BLANCS_TARIFS`, comparés par
+       `verifier-tarifs` (41). Ce qui ne change pas, et que ce contrôle
+       garde : il ROGNE, et ne vide jamais selon le montant. */
     verifier('`tient_les_tarifs` ROGNE le texte des frais, et ne le vide jamais selon le montant',
       affectations.length === 1
-      && affectations[0] === 'nullif(btrim(coalesce(new.frais_deplacement_texte, \'\'), E\' \\t\\r\\n\'), \'\')'
+      && affectations[0] === 'nullif(btrim(coalesce(new.frais_deplacement_texte, \'\'), '
+        + 'E\' \\t\\r\\n\\u00a0\\u200b\\u200c\\u200d\\u2060\\ufeff\'), \'\')'
       && !/frais_deplacement_centimes/.test(t),
       'Vider les conditions quand le montant vaut 0 ferait imprimer « Déplacement offert » à un '
       + 'artisan qui facture selon la distance — sans un mot. C’est la contrainte qui refuse.');
@@ -1245,27 +1377,12 @@ if (!E) {
       + 'table née plus bas.');
   }
 
-  /* --- 6.3-28 : le SOS n'est pas touché (version de base) --- */
-  {
-    const DU_LOT = ['supabase/essais-section-46.sql', 'src/lib/emetteur.js', 'src/data/emetteur-demo.js',
-      'src/data/mediateurs.js', 'src/components/MonEntreprise.js', 'src/components/IdentiteEntreprise.js',
-      'src/components/PretAEmettre.js', 'src/components/ApercuEntete.js', 'src/components/FicheEmetteur.js',
-      'src/components/FicheAssurance.js', 'src/components/ListeMediateurs.js'];
-    let lus = 0;
-    const nomment = [];
-    if (iTete46 >= 0 && /sos_availability/.test(SCHEMA_BRUT.slice(iTete46, FIN_46))) nomment.push('schema.sql (section 46)');
-    for (const f of DU_LOT) {
-      let texte = null;
-      try { texte = lire(f); } catch { texte = null; }
-      if (texte == null) continue;
-      lus += 1;
-      if (/sos_availability/.test(texte)) nomment.push(f);
-    }
-    verifier(`aucun fichier du lot ne nomme \`sos_availability\` (${lus + 1} lus)`,
-      nomment.length === 0,
-      `${nomment.join(', ')}. Réponse du propriétaire (18/10) : la réunion des tarifs avec le SOS est `
-      + 'un lot à part, juste après. Le SOS est une fonction publique qui marche : ce lot ne la touche pas.');
-  }
+  /* --- 6.3-28 : « le SOS n'est pas touché » — RETIRÉE au lot T (19/10/2026).
+     Elle refusait qu'un fichier du lot 0a nomme `sos_availability` : elle
+     protégeait l'ÉCART entre les tarifs du devis et ceux du SOS, que le lot
+     T ferme en les réunissant. Ce qui garde désormais `sos_availability`
+     est dans `verifier-tarifs` : ses colonnes mortes, ses droits, ses
+     bornes, et ce que l'API en lit ou en écrit. */
 }
 
 /* ================================================================== */
@@ -1584,32 +1701,47 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     suivantsVides.length === 0, suivantsVides.join(' | '));
 
   const fe = code.FicheEmetteur;
-  verifier('« Je ne facture pas de frais de déplacement » passe par `fraisDepuisFormulaire` — le seul qui écrit le 0',
+  /* LOT T (19/10/2026) — CE QUI A CHANGÉ, ET POURQUOI : les frais de
+     déplacement ne sont plus seuls. Le formulaire rend TOUS les tarifs par
+     `tarifsDepuisFormulaire`, qui passe les frais à `fraisDepuisFormulaire`
+     — toujours le seul à écrire leur 0. La propriété tenue est la même :
+     aucun écran n'écrit le 0 des frais lui-même. */
+  verifier('« Je ne facture pas de frais de déplacement » passe par `tarifsDepuisFormulaire`, donc par `fraisDepuisFormulaire` — le seul qui écrit le 0',
     /libelle="Je ne facture pas de frais de déplacement"/.test(fe)
-    && /fraisDepuisFormulaire\(\{\s*aucun: choix\.frais === 'aucun',/.test(fe)
+    && /tarifsDepuisFormulaire\(\{\s*frais: \{\s*aucun: choix\.frais === 'aucun',/.test(fe)
+    && /fraisDepuisFormulaire\(/.test(sansCommentaires(lire('src/lib/emetteur.js')).slice(
+      sansCommentaires(lire('src/lib/emetteur.js')).indexOf('export function tarifsDepuisFormulaire(')))
     && !ECRANS.some((n) => /frais_deplacement_centimes:\s*0\b/.test(code[n])),
     'un 0 écrit ailleurs ferait imprimer « Déplacement offert » à côté de conditions — faux');
   verifier('…et ce qui s’imprime alors est « Déplacement offert », lu dans `LIBELLES_IMPRIMES`',
     /LIBELLES_IMPRIMES\.fraisNonFactures/.test(fe)
     && !ECRANS.some((n) => /non factur/i.test(code[n])),
     'réponse du propriétaire du 18/10 : « Déplacement offert », et non « Frais de déplacement : non facturés »');
-  verifier('…et la phrase du SOS est sous le champ : la réunion des tarifs est un lot à part',
-    fe.includes('Les tarifs de vos urgences (SOS) se règlent encore à part, dans « Modifier mon profil ».'),
-    'réponse du propriétaire du 18/10 : « juste après, à part ». Deux chiffres de déplacement '
-    + 'coexistent pendant l’écart, et l’écran doit le dire');
-  /* LES TARIFS DU SOS SONT PUBLICS (`SosScreen` les affiche) : la phrase
-     « ne sont montrés à personne d'autre que vous » ne vise que ceux du
-     DEVIS, et l'écran dit que ceux du SOS s'affichent (relecture du
-     18/10/2026 : lues ensemble, les deux phrases laissaient croire que tous
-     les frais étaient privés). */
+  /* L'ÉCART EST FERMÉ (lot T) : il n'y a plus deux chiffres de déplacement,
+     l'un privé pour les devis, l'autre public pour le SOS. Les trois phrases
+     qui le disaient sont RETIRÉES — elles décriraient un état qui n'existe
+     plus, et la seconde renverrait à « Modifier mon profil », qui n'écrit
+     plus aucun tarif. À leur place : quatre interrupteurs, les seuls à
+     écrire un 0 (frais, majoration, devis), et celui qui affiche. */
   const aidesFrais = fe.replace(/\s+/g, ' ');
-  verifier('…et elle dit que les tarifs du SOS, eux, s’affichent aux particuliers',
-    /Ces frais-ci, ceux de vos devis, ne sont montrés à personne d’autre que vous/.test(aidesFrais)
-    && /Ceux-là s’affichent aux particuliers qui cherchent une urgence\./.test(aidesFrais)
-    && !/(?<!Ces frais-ci, ceux de vos devis, ne sont montrés à personne d’autre que vous[^.]*)Vos frais ne sont montrés à personne/.test(aidesFrais),
-    'L’engagement « Vos tarifs et vos prix » couvre les tarifs du devis, pas ceux du SOS, qui sont publics.');
-  verifier('…et la phrase de l’arrêté (art. 3) dit qu’Opus ne les affiche pas encore',
-    /arrêté du 24 janvier 2017, art\. 3/.test(fe) && /Opus ne les y affiche pas encore\./.test(fe));
+  const INTERRUPTEURS = ['Je ne facture pas de frais de déplacement', 'Je ne majore pas la nuit ni le week-end',
+    'Mes devis sont gratuits', 'Afficher mes tarifs sur ma fiche'];
+  verifier('« Vos tarifs » porte les QUATRE interrupteurs (frais, majoration, devis, affichage)',
+    INTERRUPTEURS.every((l) => new RegExp(`<Interrupteur[^>]*libelle="${l}"`).test(aidesFrais)),
+    'seul un interrupteur écrit un 0 ; « Afficher mes tarifs sur ma fiche » est le seul geste qui publie');
+  verifier('…et aucune des trois phrases de l’écart du 18/10 : il est fermé',
+    !/Ces frais-ci, ceux de vos devis, ne sont montrés à personne/.test(aidesFrais)
+    && !/se règlent encore à part/.test(aidesFrais)
+    && !/Ceux-là s’affichent aux particuliers qui cherchent une urgence/.test(aidesFrais),
+    'les tarifs du devis et du SOS sont UNE liste depuis le lot T ; « Modifier mon profil » n’en écrit plus');
+  /* LA PHRASE DE L'ARRÊTÉ (art. 3), sans conseil de « prudence » ni
+     « pages en ligne » (le plan cite « tout espace en ligne »), et qui dit
+     ce qu'on ne sait pas : si la fiche Opus est un tel espace. L'ancienne
+     « Opus ne les y affiche pas encore » est fausse depuis le lot T. */
+  verifier('…et la phrase de l’arrêté (art. 3) dit ce qu’on ne sait pas, sans conseil de prudence',
+    /arrêté du 24 janvier 2017 \(art\. 3\)/.test(aidesFrais)
+    && /On ne sait pas encore si votre fiche Opus en est un\./.test(aidesFrais)
+    && !/prudent|pages en ligne|Opus ne les y affiche pas encore/.test(aidesFrais));
   const villes = balises(fe, 'ChampVille');
   verifier('les adresses se proposent par `ChampVille type="rue"`',
     villes.length >= 1 && villes.every((v) => /type="rue"/.test(v.texte)),
@@ -1738,10 +1870,17 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   verifier('…et `OpusApp` la passe sous `canPublish ?`, par une flèche',
     /onEntreprise=\{canPublish \? \(\) => ouvrirMonEntreprise\(\) : null\}/.test(app),
     'passée telle quelle, la fonction recevrait l’ÉVÉNEMENT d’appui comme ancre');
+  /* LOT T : « Modifier mon profil » ouvre aussi « Mon entreprise » SUR UNE
+     SECTION (« Afficher mes tarifs », « Compléter mes tarifs ») : `OpusApp`
+     lui passe une flèche qui transmet l'ANCRE. Ce qui reste tenu : la
+     rangée « Mon entreprise » appelle sans argument, et
+     `ouvrirMonEntreprise` ignore tout ce qui n'est pas une chaîne — jamais
+     l'événement d'appui comme ancre. */
   verifier('« Modifier mon profil » : la rangée ouvre la MÊME fenêtre',
     /onPress=\{\(\) => \{ if \(onOuvrirEntreprise\) onOuvrirEntreprise\(\); \}\}/.test(edit)
-    && /onOuvrirEntreprise=\{\(\) => ouvrirMonEntreprise\(\)\}/.test(app),
-    'deux portes, le même travail — la règle de `changerOngletDecouvrir`');
+    && /onOuvrirEntreprise=\{\(section\) => ouvrirMonEntreprise\(section\)\}/.test(app)
+    && /section: typeof section === 'string' \? section : null/.test(app),
+    'deux portes, le même travail — la règle de `changerOngletDecouvrir` ; et l’ancre n’est qu’une chaîne');
   const iEtat = app.indexOf('const [entrepriseOuverte, setEntrepriseOuverte] = useState(false);');
   const iOuv = app.indexOf('const [ouvertureEntreprise, setOuvertureEntreprise] = useState(');
   const iFn = app.indexOf('const ouvrirMonEntreprise = (section = null) => {');

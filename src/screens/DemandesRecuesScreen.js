@@ -388,8 +388,11 @@ function Demande({
           {!!d.ville && <Info>{d.ville}</Info>}
           {!!d.budget && <Info>Budget {libelleBudget(d.budget)}</Info>}
           {!!d.creneau && <Info>{libelleCreneau(d.creneau)}</Info>}
+          {/* « TTC » : la fourchette a été calculée sur des tarifs déclarés
+              toutes taxes comprises (section 47, lot T) — la même unité que
+              celle que le particulier a vue avant de vous choisir. */}
           {d.prixMin != null && d.prixMax != null && (
-            <Info>Estimation {d.prixMin}–{d.prixMax} €</Info>
+            <Info>Estimation {d.prixMin}–{d.prixMax} € TTC</Info>
           )}
         </View>
 

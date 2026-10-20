@@ -41,7 +41,7 @@ import Signaler from './components/Signaler';
 import ProfilEditScreen from './screens/ProfilEditScreen';
 import MesPublicationsScreen from './screens/MesPublicationsScreen';
 import GererPortfolioScreen from './screens/GererPortfolioScreen';
-import SosScreen from './screens/SosScreen';
+import SosScreen, { ADRESSE_SANS_POSITION } from './screens/SosScreen';
 import DemandesScreen from './screens/DemandesScreen';
 import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
 import AdminScreen from './screens/AdminScreen';
@@ -57,7 +57,12 @@ import {
   messageClair, estUnProblemeDeReseau, avecDelai, avecReprise,
 } from './lib/erreurs';
 import { hasSupabase } from './lib/supabase';
-import { artisansDisponibles as artisansDisponiblesDemo } from './data/urgences';
+import { SOS_ARTISANS } from './data/urgences';
+/* Les tarifs réunis (lot T) : l'état du réglage d'urgence, une seule
+   écriture partagée avec « Modifier mon profil », et la recherche SOS de
+   démonstration, qui lit les tarifs AFFICHÉS comme la base. */
+import { artisansDisponiblesDemo, etatReglageSos, metierSosDeLaFiche } from './lib/tarifs';
+import { TARIFS_DEMO } from './data/tarifs-demo';
 import { envoyerFichier, estFichierLocal } from './lib/storage';
 import {
   aCloudinary, urlMontage, envoyerVideo as envoyerVideoCloudinary,
@@ -307,6 +312,26 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   const [demandesPartenariat, setDemandesPartenariat] = useState([]);
   const [partenariatsEnvoyes, setPartenariatsEnvoyes] = useState([]);
   const [mesSos, setMesSos] = useState(null);
+  /* MES TARIFS (section 47, lot T) : `null` (rien de déclaré, ou pas encore
+     lu), la ligne, ou `{ echec: true }` — « je n'ai pas pu lire » ne se dit
+     pas comme « il n'y en a pas ». Une seule source pour le réglage
+     d'urgence, « Mes tarifs » et « Mon entreprise ». Lus pour un compte pro
+     seulement. */
+  const [mesTarifs, setMesTarifs] = useState(null);
+  /* LA GÉNÉRATION DE « MES TARIFS » : chaque lecture de démarrage en prend
+     une, et chaque écriture venue de « Mon entreprise » (`recevoirMesTarifs`)
+     en prend une nouvelle. Une réponse dont la génération n'est plus la
+     dernière est JETÉE. Sans elle (relecture application du 19/10/2026),
+     une lecture de démarrage lente revenait APRÈS un enregistrement et
+     rendait à l'écran des tarifs que l'artisan venait de retirer. */
+  const generationMesTarifs = useRef(0);
+  /* LES TARIFS AFFICHÉS DES AUTRES ARTISANS, par fiche, relus à chaque
+     ouverture d'une fiche — pour un PARTICULIER seulement (réponse du
+     propriétaire du 19/10/2026). Une clé absente : rien à montrer. */
+  const [tarifsAffiches, setTarifsAffiches] = useState({});
+  /* Même garde, fiche par fiche : deux ouvertures rapprochées de la même
+     fiche, et seule la DERNIÈRE lecture a le droit d'écrire. */
+  const generationTarifsDe = useRef({});
   /* La demande de modification des métiers en cours d'examen, s'il y en a
      une. Elle empêche d'en déposer une seconde — la base le refuse aussi. */
   const [demandeMetiers, setDemandeMetiers] = useState(null);
@@ -437,6 +462,16 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       setEntrepriseEtat('jamais');
       setMaDemandePro(null);
       setDemandeProEtat('jamais');
+      /* Même règle pour les tarifs : ceux lus en particulier ne doivent pas
+         rester à l'écran d'un compte devenu pro, ni l'inverse. Et pour un
+         pro, l'état dit dès MAINTENANT qu'ils sont en cours de lecture :
+         l'écran s'ouvre avant `loadAll`, et `null` voudrait dire « rien de
+         déclaré » à qui ouvrirait « Modifier mon profil » entre-temps. Une
+         génération nouvelle : une lecture de la session d'avant ne peut
+         plus rien écrire. */
+      generationMesTarifs.current += 1;
+      setMesTarifs(type === 'pro' ? { chargement: true } : null);
+      setTarifsAffiches({});
       /* AVEC UN DÉLAI, et ce n'est pas une précaution théorique : sans lui,
          une base injoignable laissait l'application figée sur son squelette
          de démarrage pour toujours. Une requête qui ne revient jamais
@@ -492,6 +527,33 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           }
         } catch (e) { /* la fiche légère suffit à afficher l'écran */ }
 
+        /* MES TARIFS — dans la branche PRO seulement : un particulier n'en a
+           pas, et la lecture ne part pas pour lui. Une requête de plus au
+           démarrage d'un artisan ; aucune pour un particulier. Un échec est
+           DIT (`{ echec: true }`), jamais confondu avec « aucun tarif ».
+
+           ET ELLE N'EST PAS ATTENDUE (relecture application du 19/10/2026) :
+           le démarrage n'a pas besoin de mes tarifs pour ouvrir l'écran, et
+           une requête qui ne revient jamais laissait l'artisan sur le
+           squelette de démarrage POUR TOUJOURS — l'incident du 01/10. Elle
+           part donc à côté, AVEC un délai, et pendant qu'elle court l'état
+           le DIT (`{ chargement: true }`) : `null` voudrait dire « rien de
+           déclaré », et le réglage d'urgence affirmait « vos tarifs ne sont
+           pas affichés » d'un artisan dont les tarifs l'étaient. */
+        {
+          generationMesTarifs.current += 1;
+          const generation = generationMesTarifs.current;
+          const recevoir = (t) => { if (generationMesTarifs.current === generation) setMesTarifs(t); };
+          setMesTarifs({ chargement: true });
+          const lecture = api.mesTarifs();
+          /* La réponse, MÊME TARDIVE, corrige l'écran : au bout du délai on
+             dit « n'ont pas pu être lus », et si elle arrive ensuite — sans
+             qu'une écriture soit passée entre-temps —, c'est elle qui a
+             raison. */
+          lecture.then((t) => recevoir(t)).catch(() => {});
+          avecDelai(lecture, 8000, 'La base').catch(() => recevoir({ echec: true }));
+        }
+
         try { setDemandeMetiers(await api.chargerDemandeMetiers()); }
         catch (e) { setDemandeMetiers(null); }
         try { setAnnonces(await api.chargerAnnonces()); }
@@ -510,6 +572,12 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
          DEDANS, et c'est le contenu qui manque — pas le compte. */
       setEchecChargement(estUnProblemeDeReseau(e) ? 'reseau' : 'autre');
       showErreur(messageClair(e, 'Chargement impossible'));
+      /* La lecture de mes tarifs n'est jamais partie : « en cours » ne
+         serait plus vrai. On dit qu'elle n'a pas pu se faire. */
+      if (type === 'pro') {
+        generationMesTarifs.current += 1;
+        setMesTarifs({ echec: true });
+      }
     }
     setLoading(false);
   }, []);
@@ -690,6 +758,53 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     try { rangerChantiers(await api.chantiersDuPro(proId)); }
     catch { /* la fiche reste utilisable sans sa bande */ }
   }, [rangerChantiers]);
+
+  /**
+   * LES TARIFS AFFICHÉS D'UN ARTISAN, à CHAQUE ouverture de sa fiche.
+   *
+   * Comme ses chantiers, et pas comme son portfolio : `portfolioCharge`
+   * empêcherait toute relecture, et un artisan qui éteint ses tarifs
+   * resterait affiché, pour la session, chez qui avait déjà ouvert sa
+   * fiche — pendant que la carte SOS, relue à chaque recherche, dirait le
+   * contraire. Succès : la ligne, ou `null`. Échec : la clé est RETIRÉE —
+   * aucun bloc, et jamais un ancien tarif.
+   *
+   * Appelée pour un PARTICULIER seulement (`viewProfile` le garde) : la
+   * base ne rend rien à un compte pro, et la démonstration ne doit pas
+   * montrer à un artisan ce que la vraie base lui refuse.
+   */
+  const chargerTarifsDuPro = useCallback(async (proId) => {
+    if (!proId) return;
+    const retirer = () => setTarifsAffiches((m) => {
+      if (!(proId in m)) return m;
+      const reste = { ...m };
+      delete reste[proId];
+      return reste;
+    });
+    /* LA CLÉ PART DÈS L'OUVERTURE, pas à la réponse (relecture application
+       du 19/10/2026) : sinon la fiche montrait l'ANCIEN tarif pendant
+       toute la relecture — et pour toujours si elle ne revenait pas — d'un
+       artisan qui venait peut-être de cesser de les afficher. Pas de bloc
+       tant que la réponse n'est pas là ; un délai pour qu'elle arrive. */
+    retirer();
+    const generation = (generationTarifsDe.current[proId] || 0) + 1;
+    generationTarifsDe.current[proId] = generation;
+    const derniere = () => generationTarifsDe.current[proId] === generation;
+    try {
+      const t = await avecDelai(api.tarifsAffichesDe(proId), 8000, 'La base');
+      if (derniere()) setTarifsAffiches((m) => ({ ...m, [proId]: t }));
+    } catch {
+      if (derniere()) retirer();
+    }
+  }, []);
+
+  /* CE QUE « MON ENTREPRISE » VIENT DE LIRE OU D'ÉCRIRE de mes tarifs. Une
+     génération NOUVELLE : la lecture de démarrage, si elle traîne encore,
+     ne pourra plus écraser cette valeur fraîche. */
+  const recevoirMesTarifs = useCallback((t) => {
+    generationMesTarifs.current += 1;
+    setMesTarifs(t);
+  }, []);
 
   /**
    * CRÉER UN CHANTIER, et le choisir aussitôt.
@@ -1314,6 +1429,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
        que rien ne le dise. Ils ont leur propre requête, donc leur propre
        raison de partir. */
     chargerChantiersDuPro(proId);
+    /* SES TARIFS, même raison, même place — et pour un particulier
+       seulement : les tarifs affichés ne vont qu'aux particuliers (réponse
+       du propriétaire du 19/10/2026). */
+    if (userType === 'particulier') chargerTarifsDuPro(proId);
 
     const connu = pros[proId];
     /* `portfolioCharge` distingue « pas encore demandé » de « demandé, et
@@ -2512,7 +2631,24 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     } else {
       setMonProfil((p) => ({ ...p, ...complet }));
     }
-    if (sos) setMesSos(sos);
+    /* `mesSos` est une LISTE de lignes : celle qu'on vient d'écrire, et les
+       autres ÉTEINTES — exactement ce que `updateSosAvailability` vient de
+       faire en base. Sans ce recalcul, l'écran garderait la forme d'avant
+       et dirait qu'une disponibilité éteinte est toujours active. */
+    if (sos) {
+      setMesSos((m) => {
+        const avant = m && Array.isArray(m.lignes) ? m.lignes : [];
+        const autres = avant
+          .filter((l) => l.metierKey !== sos.metierKey)
+          .map((l) => ({ ...l, actif: false }));
+        const ecrite = sos.metierKey
+          ? [{
+            metierKey: sos.metierKey, actif: sos.actif, rayonKm: sos.rayonKm, delaiMinutes: sos.delaiMinutes,
+          }]
+          : [];
+        return { lignes: [...ecrite, ...autres] };
+      });
+    }
 
     setScreen('profil');
     showBanner('Profil enregistré.');
@@ -2930,18 +3066,23 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * les disponibilités d'exemple et leurs distances simulées.
    */
   const chercherArtisansUrgence = async ({ metierKey, latitude, longitude }) => {
-    if (!hasSupabase) return artisansDisponiblesDemo(metierKey);
+    if (!hasSupabase) {
+      return artisansDisponiblesDemo(metierKey, { sos: SOS_ARTISANS, tarifs: TARIFS_DEMO, pros });
+    }
     if (typeof latitude !== 'number' || typeof longitude !== 'number') {
-      throw new Error(
-        "Choisissez votre adresse dans la liste de suggestions : sans coordonnées, "
-        + 'impossible de trouver les artisans les plus proches.',
-      );
+      /* Le FILET : l'écran SOS refuse déjà, sous le champ, une adresse sans
+         position (`exigeCoordonnees`). S'il laissait passer, l'erreur
+         porte `champ: 'adresse'` et l'écran ramène au champ — jamais un
+         « Réessayer » qui relancerait la même recherche sans fin. */
+      throw Object.assign(new Error(ADRESSE_SANS_POSITION), { champ: 'adresse' });
     }
     return api.chercherArtisansUrgence({ metierKey, latitude, longitude });
   };
 
   const envoyerSos = async (demande) => {
-    const pro = pros[demande.proId];
+    /* La fiche connue, ou, pour un artisan inscrit après le démarrage, ce
+       que la recherche a rendu de lui : le bandeau le nomme quand même. */
+    const pro = pros[demande.proId] || (demande.entreprise ? { entreprise: demande.entreprise } : null);
     try {
       /* Le nom et le numéro partent avec la demande : une urgence sans
          numéro ne sert à rien, l'artisan ne peut même pas dire qu'il
@@ -2966,7 +3107,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     showBanner(
       pro
         ? `Votre demande est partie à ${pro.entreprise}. Vous serez prévenu dès qu'il répond. `
-          + `Estimation ${demande.prixMin}–${demande.prixMax} €.`
+          + `Estimation ${demande.prixMin}–${demande.prixMax} € TTC.`
         : 'Votre demande d\'urgence est partie.',
     );
   };
@@ -3066,6 +3207,35 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
   /** Le fil d'actualité est réservé aux professionnels. */
   const canPublish = userType === 'pro';
+
+  /* CE QUE DIT LE RÉGLAGE D'URGENCE DE MA FICHE, pour le bloc « Vos tarifs »
+     de « Mon entreprise » (lot T) — la phrase d'`etatReglageSos`, la même
+     que dans « Modifier mon profil » : deux écrans, une seule formule.
+     `null` quand il n'y a rien à dire : ni métier d'urgence, ni ligne
+     restée active sur un autre (une ligne « orpheline »). Si la lecture de
+     ma disponibilité a échoué, la phrase le dit — rien n'est affirmé.
+     Déclaré APRÈS `canPublish`, `mesSos` et `mesTarifs` : une `const` lue
+     avant sa déclaration, c'est un écran blanc au démarrage. */
+  const etatSosDeMaFiche = (() => {
+    if (!canPublish) return null;
+    const fiche = pros[myProId] || {};
+    const sosMetier = metierSosDeLaFiche(fiche.metiers && fiche.metiers.length ? fiche.metiers : [fiche.metier]);
+    const lignes = mesSos && Array.isArray(mesSos.lignes) ? mesSos.lignes : [];
+    if (!sosMetier && !lignes.some((l) => l.actif === true)) return null;
+    const ligne = sosMetier ? lignes.find((l) => l.metierKey === sosMetier.key) : null;
+    return etatReglageSos({
+      sos: mesSos,
+      sosMetier,
+      interrupteur: !!(ligne && ligne.actif === true),
+      enregistre: true,
+      tarifs: mesTarifs,
+      aDesCoordonnees: fiche.latitude != null && fiche.longitude != null,
+      /* La phrase s'affiche dans « Mon entreprise », où « Enregistrer »
+         n'éteint aucune disponibilité et où l'interrupteur n'est pas : elle
+         dit donc OÙ agir (« Modifier mon profil »). */
+      ecran: 'entreprise',
+    });
+  })();
 
   /* ------------------------------------------------------------------
      LES DEUX VOYANTS DE « DÉCOUVRIR », ÉCRITS UNE SEULE FOIS
@@ -3828,6 +3998,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                pas dans `pros[]`, qui est public. */
             emailCompte={monProfil.email || ''}
             sos={mesSos}
+            /* Lot T : le réglage d'urgence MONTRE mes tarifs et renvoie à
+               « Mon entreprise » pour les changer ; il n'en écrit aucun. */
+            tarifs={mesTarifs}
+            aDesCoordonnees={!!(pros[myProId] && pros[myProId].latitude != null
+              && pros[myProId].longitude != null)}
             onSave={enregistrerProfil}
             onEnvoyerDocuments={envoyerDocuments}
             onDemanderMetiers={demanderMetiers}
@@ -3840,7 +4015,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                devenir une ancre. */
             identiteEntreprise={monEntreprise}
             entrepriseEtat={entrepriseEtat}
-            onOuvrirEntreprise={() => ouvrirMonEntreprise()}
+            /* L'ANCRE vient de l'écran (`'frais'`, `'affiche'`) ou n'est pas
+               là ; `ouvrirMonEntreprise` ignore tout ce qui n'est pas une
+               chaîne, donc jamais l'événement d'appui. */
+            onOuvrirEntreprise={(section) => ouvrirMonEntreprise(section)}
           />
         )}
 
@@ -3859,6 +4037,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             pros={pros}
             onEnvoyer={envoyerSos}
             onChercherArtisans={chercherArtisansUrgence}
+            /* Sur la vraie base, la recherche a besoin d'une position : une
+               adresse tapée sans choisir de suggestion est refusée sous le
+               champ, AVANT de chercher. La démonstration n'en a pas besoin. */
+            exigeCoordonnees={hasSupabase}
           />
         )}
 
@@ -3874,6 +4056,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         {screen === 'profil' && (
           <ProfilOwnScreen
             mesChantiers={mesChantiers} onOuvrirChantier={ouvrirChantier}
+            /* « Mes tarifs » : la même source que le réglage d'urgence et
+               « Mon entreprise ». */
+            tarifs={mesTarifs}
             userType={userType} pros={pros} myProId={myProId} monProfil={monProfil}
             followingIds={followingIds} savedIds={savedIds}
             demandesPartenariat={demandesPartenariat}
@@ -4016,6 +4201,13 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             chantiers={Object.values(chantiers)
               .filter((c) => String(c.proId) === String(viewedProId))}
             onOuvrirChantier={ouvrirChantier}
+            /* SES TARIFS AFFICHÉS, pour un PARTICULIER seulement (réponse du
+               19/10/2026). La garde est ICI aussi, et pas seulement à la
+               lecture : un particulier qui devient pro dans la session
+               (`devenirPro` relance `start('pro')` sans remonter ce
+               composant) ne garde pas à l'écran ce qu'il a lu en
+               particulier. */
+            tarifs={userType === 'particulier' ? tarifsAffiches[viewedProId] : null}
             following={followingIds.has(viewedProId)}
             onFollow={toggleFollow} onContact={handleContact}
             onViewProfile={viewProfile} onSubmitReview={submitReview}
@@ -4131,6 +4323,13 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
              posée : elle ne va que sur les devis, jamais sur la fiche. */
           emailCompte={monProfil.email || ''}
           attestationBadge={(pros[myProId] && pros[myProId].assurancePath) || null}
+          /* Lot T : ce que dit le réglage d'urgence, pour le bloc « Vos
+             tarifs » — la phrase d'`etatReglageSos`, jamais réécrite. Et
+             chaque lecture ou enregistrement de mes tarifs remonte ici :
+             le réglage qui disait « vos tarifs n'ont pas pu être lus » se
+             corrige dès que « Mon entreprise » les a lus. */
+          etatSos={etatSosDeMaFiche}
+          onTarifs={recevoirMesTarifs}
         />
       )}
 

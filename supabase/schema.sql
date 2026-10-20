@@ -830,9 +830,17 @@ create index if not exists idx_annonce_reponses
 
 -- --------------------------------------------------------------------------
 --  10. SOS — INTERVENTIONS D'URGENCE
---     L'artisan renseigne trois chiffres une fois pour toutes ; chaque type
---     de problème porte une durée moyenne, et l'app en déduit une FOURCHETTE.
---     Jamais un prix ferme : l'artisan n'a pas encore vu le chantier.
+--     Chaque type de problème porte une durée moyenne, et l'app en déduit
+--     une FOURCHETTE à partir des tarifs de l'artisan. Jamais un prix ferme :
+--     l'artisan n'a pas encore vu le chantier.
+--
+--     DEPUIS LA SECTION 47 (lot T, 19/10/2026), LES TARIFS NE VIVENT PLUS
+--     ICI : ils sont dans `tarifs_pro`, une seule liste pour les devis et
+--     pour le SOS, affichée au choix de l'artisan. `deplacement`, `horaire`
+--     et `majoration` sont des colonnes MORTES : toujours 0, toute autre
+--     valeur refusée (OP012). Elles restent tant que leur retrait n'a pas
+--     été fait ici ET sur la vraie base ensemble (le connecteur refuse
+--     `drop column`).
 -- --------------------------------------------------------------------------
 create table if not exists public.sos_availability (
   professional_id uuid not null references public.professional_profiles(id) on delete cascade,
@@ -1239,8 +1247,9 @@ create policy "mes notifications" on public.notifications
 --  d'être écrit ici.
 --
 --  Les fonctions réellement destinées à être appelées — ajoute_au_portfolio,
---  artisans_urgence, distance_km — gardent leurs droits, accordés
---  explicitement juste après.
+--  distance_km — gardent leurs droits, accordés explicitement juste après.
+--  `artisans_urgence` en était : elle vit désormais en section 47, parce
+--  qu'elle lit `tarifs_pro`, et ses droits sont posés avec elle, là-bas.
 -- --------------------------------------------------------------------------
 do $$
 declare f text;
@@ -1268,13 +1277,12 @@ begin
   end loop;
 end $$;
 
--- Les trois fonctions que l'application appelle vraiment.
+-- Les deux fonctions que l'application appelle vraiment, et qui vivent ici.
 do $$
 declare f text;
 begin
   foreach f in array array[
     'public.ajoute_au_portfolio(text)',
-    'public.artisans_urgence(text, double precision, double precision)',
     'public.distance_km(double precision, double precision, double precision, double precision)'
   ] loop
     begin
@@ -1695,34 +1703,7 @@ language sql immutable set search_path = public as $$
   end
 $$;
 
-drop function if exists public.artisans_urgence(text, double precision, double precision);
-
-/**
- * Les artisans disponibles pour une urgence, du plus proche au plus loin.
- * On ne garde que ceux dont le rayon d'intervention couvre la distance.
- */
-create or replace function public.artisans_urgence(
-  p_metier_key text, p_lat double precision, p_lon double precision
-) returns table (
-  professional_id uuid, entreprise text, metier text, ville text,
-  avatar_url text, verifie boolean,
-  deplacement numeric, horaire numeric, majoration int, delai_minutes int,
-  distance double precision
-)
-language sql stable set search_path = public as $$
-  select
-    pp.id, pp.entreprise, pp.metier, pp.ville,
-    pp.avatar_url, pp.verifie,
-    sa.deplacement, sa.horaire, sa.majoration, sa.delai_minutes,
-    public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) as distance
-  from public.sos_availability sa
-  join public.professional_profiles pp on pp.id = sa.professional_id
-  where sa.actif
-    and sa.metier_key = p_metier_key
-    and public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) is not null
-    and public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) <= sa.rayon_km
-  order by distance asc
-$$;
+-- `artisans_urgence()` vit en section 47 : elle lit `tarifs_pro` (lot T).
 
 -- ==========================================================================
 --  13. MODÉRATION, BLOCAGE, ET DROITS DES PERSONNES
@@ -9765,13 +9746,12 @@ grant execute on function public.admin_retirer_entreprise(uuid, text) to authent
 --      « éventuelles » (R. 111-2 8°), rien n'est dû quand il n'y en a pas,
 --      et ce qu'on peut y écrire dépend du destinataire — c'est le lot des
 --      clauses ;
---    - aucun autre tarif, et RIEN QUI TOUCHE LE SOS. Les tarifs des
---      urgences se règlent encore dans « Modifier mon profil », et leur
---      réunion avec ceux du devis est un lot à part, juste après (réponse
---      du propriétaire du 18/10 : « juste après, à part »). Le SOS est une
---      fonction publique qui marche : ce lot ne la touche pas, et pendant
---      l'écart deux chiffres de déplacement coexistent — celui du devis,
---      privé, et celui du SOS, public. L'écran le dit sous le champ ;
+--    - aucun autre tarif, et RIEN QUI TOUCHE LE SOS. La réunion des tarifs
+--      du devis et de ceux des urgences était un lot à part, juste après
+--      (réponse du propriétaire du 18/10 : « juste après, à part ») : c'est
+--      la section 47 (lot T), qui ajoute à `tarifs_pro` le taux horaire, la
+--      majoration, le décompte, le prix du devis et l'interrupteur
+--      « Afficher mes tarifs sur ma fiche » ;
 --    - aucune colonne de devis (lot 1) ;
 --    - aucun lien vers `professional_profiles.siret`, figé depuis 45.7.
 --
@@ -9795,7 +9775,10 @@ grant execute on function public.admin_retirer_entreprise(uuid, text) to authent
 --  honnêtement. Aucune politique, aucune fonction `admin_*`, aucun écran ne
 --  donne à l'administration d'Opus la lecture des informations de devis
 --  d'un artisan ni de ses tarifs : le propriétaire, du métier, ne lit pas
---  les prix des autres artisans (`DONNEES-DES-ARTISANS.md` §5.2). MAIS
+--  les prix des autres artisans (`DONNEES-DES-ARTISANS.md` §5.2). La seule
+--  exception est posée en section 47 : une ligne de `tarifs_pro` que
+--  l'artisan choisit d'AFFICHER devient lisible par les particuliers
+--  connectés — jamais par un autre compte pro, administration comprise. MAIS
 --  L'ÉDITEUR SQL DE SUPABASE RESTE UN ACCÈS OUVERT à toute la base, et
 --  aucune règle ne le ferme. Le propriétaire a choisi le 18/10 un
 --  ENGAGEMENT ÉCRIT, publié dans les textes légaux (`src/data/legal.js`) :
@@ -10078,7 +10061,10 @@ comment on table public.emetteur_assurances is
 --            interrupteur seulement, et imprimé « Déplacement offert » ;
 --    > 0     un montant, avec ou sans conditions — ou des conditions seules.
 --
---  Les tarifs du SOS n'y sont PAS : la réunion des deux est le lot suivant.
+--  Depuis la section 47 (lot T), la table porte AUSSI le taux horaire, la
+--  majoration, le décompte du temps et le prix du devis — une seule liste
+--  pour les devis et pour le SOS —, et l'interrupteur `affiche`, qui rend
+--  la ligne lisible par les particuliers connectés.
 -- --------------------------------------------------------------------------
 create table if not exists public.tarifs_pro (
   pro_id                     uuid primary key references public.professional_profiles(id) on delete cascade,
@@ -10102,11 +10088,13 @@ alter table public.tarifs_pro add constraint tarif_frais_texte_check
   check (frais_deplacement_texte is null or char_length(frais_deplacement_texte) <= 300);
 
 comment on table public.tarifs_pro is
-  'Les tarifs d''un artisan. Aujourd''hui : les frais de déplacement du devis '
-  '(null = non déclaré, 0 = non facturés). PRIVÉE, mais faite pour devenir '
-  'publique LIGNE PAR LIGNE au choix de l''artisan : on n''y range jamais '
-  'rien qui doive rester privé. Les tarifs du SOS n''y sont pas encore. '
-  'Section 46.';
+  'Les tarifs d''un artisan, toutes taxes comprises : frais de déplacement, '
+  'taux horaire et son décompte, majoration de nuit et de week-end, prix du '
+  'devis (null = non déclaré ; 0 = un choix, écrit par un interrupteur). '
+  'PRIVÉE tant que `affiche` est faux ; lisible LIGNE PAR LIGNE par les '
+  'particuliers connectés — jamais par un autre compte pro — quand l''artisan '
+  'l''allume, et `affiche_le` date ce geste : on n''y range jamais rien qui '
+  'doive rester privé. Sections 46 et 47.';
 
 -- --------------------------------------------------------------------------
 --  46.4 Les trois déclencheurs — ils vivent AVEC leurs colonnes
@@ -10121,6 +10109,13 @@ comment on table public.tarifs_pro is
 --  erreur — ne doit pas compter comme une garantie écrite. Le miroir de la
 --  démonstration (`nettoyerEmetteur`, `src/lib/emetteur.js`) fait la même
 --  chose, au caractère près.
+--
+--  Les deux textes des TARIFS (les conditions de déplacement, et le
+--  décompte du temps de la section 47) rognent EN PLUS les blancs
+--  invisibles — insécable, largeurs nulles, U+FEFF —, depuis la relecture
+--  du lot T (19/10/2026) : ces textes s'affichent aux particuliers, et un
+--  tarif fait d'un caractère invisible n'est pas un tarif déclaré. Leur
+--  miroir est `BLANCS_TARIFS`.
 --
 --  Les trois fonctions rendent `trigger` : le balayage de la section 43,
 --  qui passe après elles, leur retire `execute`. Personne ne peut les
@@ -10266,7 +10261,16 @@ security invoker
 set search_path = public
 as $$
 begin
-  new.frais_deplacement_texte := nullif(btrim(coalesce(new.frais_deplacement_texte, ''), E' \t\r\n'), '');
+  /* Les blancs INVISIBLES aussi (insécable, largeurs nulles, U+FEFF) :
+     ce texte s'AFFICHE depuis le lot T. Des conditions faites d'un seul
+     U+200B passaient `tarif_affiche_check` sans aucun prix, et la fiche
+     montrait un bloc « Ses tarifs » vide (relecture du 19/10/2026). Le
+     même jeu que `tient_les_tarifs_publics()` et que le miroir de la
+     démonstration (`BLANCS_TARIFS`). Ce commentaire vit DANS le corps,
+     que le catalogue relit : il ne nomme aucune table, pour ne pas fausser
+     les listes fermées des essais 46 et 47. */
+  new.frais_deplacement_texte := nullif(btrim(coalesce(new.frais_deplacement_texte, ''),
+                                              E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), '');
   return new;
 end;
 $$;
@@ -10497,6 +10501,629 @@ comment on function public.emetteur_incomplet(uuid) is
   'identiques à MOTIFS (src/lib/emetteur.js). Section 46.6.';
 
 -- --------------------------------------------------------------------------
+--  47. LES TARIFS RÉUNIS — devis, fiche et SOS (lot T) (19/10/2026)
+--
+--  Jusqu'ici, un artisan avait DEUX listes de tarifs : les frais de
+--  déplacement de ses devis, privés (section 46), et trois chiffres saisis
+--  pour le SOS dans « Modifier mon profil », lisibles de tous
+--  (`sos_availability`, section 10). Deux formulaires pour les mêmes
+--  chiffres finissent par diverger : le propriétaire a décidé le 17/10 qu'il
+--  n'y en aurait qu'UNE, `tarifs_pro`, réglée dans « Mon entreprise », et
+--  affichée « au choix de l'artisan ».
+--
+--  CE QU'ELLE POSE
+--  ---------------
+--    - six colonnes de `tarifs_pro` : cinq que l'artisan déclare (taux
+--      horaire, majoration de nuit et de week-end, décompte du temps, prix
+--      du devis, l'interrupteur `affiche`) et une date que la BASE pose
+--      (`affiche_le`) ;
+--    - cinq contraintes sur `tarifs_pro` et deux sur `sos_availability`
+--      (le rayon et le délai, qui n'avaient aucune borne) ;
+--    - deux déclencheurs : le nettoyage des tarifs et la date d'affichage ;
+--      le refus des colonnes mortes du SOS (OP012) ;
+--    - UNE politique de LECTURE, pour les particuliers connectés ;
+--    - `metier_du_sos()`, et `artisans_urgence()` déménagée ici et réécrite
+--      sur `tarifs_pro`, sans changer de signature ;
+--    - un rattrapage qui ne tourne qu'UNE fois, et des droits retirés sur
+--      `sos_availability`.
+--
+--  LES DÉCISIONS QUI LA GOUVERNENT
+--  -------------------------------
+--    - « au choix de l'artisan » (17/10) : rien n'est lisible par un autre
+--      tant qu'il n'a pas allumé « Afficher mes tarifs sur ma fiche », et
+--      AUCUNE migration ne l'allume à sa place ;
+--    - RÉPONDRE AUX URGENCES EXIGE D'AFFICHER SES TARIFS (réponse du
+--      propriétaire du 19/10, question 1 : « Oui, c'est obligatoire ») : un
+--      particulier en urgence choisit avec des prix sous les yeux ;
+--    - LES TARIFS AFFICHÉS NE SONT LUS QUE PAR LES PARTICULIERS (question 2,
+--      19/10) : ni par un autre artisan, ni par l'administration — le compte
+--      du propriétaire est un compte pro.
+--
+--  LA RÈGLE DE `tarifs_pro`, INCHANGÉE ET DEVENUE RÉELLE : on n'y range
+--  jamais rien qui doive rester privé. Une règle RLS filtre des LIGNES,
+--  jamais des COLONNES (section 18) : une ligne affichée est lisible TOUTES
+--  COLONNES COMPRISES par tout particulier connecté. Un prix interne (marge,
+--  prix d'achat, prix de référence du lot P) vivra dans une table à lui.
+--
+--  QUI LIT
+--  -------
+--  Les particuliers connectés, et eux seuls. Le titulaire lit TOUJOURS sa
+--  propre ligne, affichée ou non (« mes tarifs », section 46.5). `anon` n'a
+--  toujours rien : la 46.5 reste vraie, aucun écran ne s'ouvre sans session.
+--  ET LA LIMITE, DITE TELLE QUELLE : un artisan peut ouvrir un second
+--  compte, en particulier, avec une autre adresse e-mail. Opus ne vérifie
+--  pas l'identité des particuliers. C'est une BARRIÈRE, PAS UN VERROU — les
+--  textes opposables le disent (`src/data/legal.js`), et rien ici ne
+--  prétend le contraire.
+--
+--  CE QU'ELLE NE POSE PAS, et pourquoi
+--  -----------------------------------
+--    - aucun forfait (« plus tard », réponse du 19/10, question 3) : une
+--      liste, donc une table fille, le jour du lot qui les lira ;
+--    - aucun tarif PAR MÉTIER d'urgence : une seule liste, et aucune fiche
+--      réelle ne porte deux métiers d'urgence (mesuré le 19/10) ;
+--    - aucune colonne HT : les cinq valeurs sont TOUTES TAXES COMPRISES,
+--      c'est ce que paie le client et ce qu'il lit. Le devis décidera au
+--      lot 2 comment il les imprime ;
+--    - aucun agrégat, aucun prix conseillé, aucune moyenne : chaque
+--      fonction lit UNE ligne (`docs/DONNEES-DES-ARTISANS.md`) ;
+--    - aucune colonne pour le QR, la relation ni le Dossier Travaux.
+--
+--  LES COLONNES MORTES de `sos_availability` (`deplacement`, `horaire`,
+--  `majoration`) RESTENT, à 0. Le connecteur Supabase refuse `drop column`
+--  (mesuré le 17/10), et leur retrait doit toucher ce fichier ET la vraie
+--  base ensemble : c'est un lot de nettoyage. D'ici là elles ne sont ni lues
+--  ni écrites par l'application, et toute écriture non nulle est REFUSÉE
+--  (47.7) — elles restent lisibles de tous (« lecture dispo sos »), et une
+--  colonne morte d'une table publique n'est pas une colonne inoffensive.
+--
+--  RIEN DE NOUVEAU N'EST `not null`, et toutes les contraintes sont
+--  nommées en `_check` : la règle de la section 46.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  47.1 `metier_du_sos(p_cle)` — de la clé d'urgence au métier du catalogue
+--
+--  `sos_availability.metier_key` n'est PAS une clé du catalogue : c'est une
+--  clé d'URGENCE (`plomberie`, pas `plombier` — le piège de la section 24).
+--  Les quatre paires sont celles de `METIERS_SOS` (`src/data/urgences.js`),
+--  et les quatre clés celles de `sos_availability.metier_key` ;
+--  `verifier-tarifs` compare les trois. Elle naît AVANT le rattrapage, qui
+--  l'appelle.
+-- --------------------------------------------------------------------------
+create or replace function public.metier_du_sos(p_cle text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select case p_cle
+    when 'plomberie'   then 'plombier'
+    when 'electricite' then 'electricien'
+    when 'serrurerie'  then 'serrurier'
+    when 'chauffage'   then 'chauffagiste'
+  end
+$$;
+
+/* `authenticated` seulement : `artisans_urgence()` est `security invoker`
+   et n'est plus appelée que par un compte connecté (47.6). Retirée à
+   PUBLIC ET à `anon` : PostgreSQL accorde `execute` à PUBLIC sur toute
+   fonction neuve, et Supabase l'accorde en plus à `anon` (section 38). */
+revoke all on function public.metier_du_sos(text) from public, anon;
+grant execute on function public.metier_du_sos(text) to authenticated;
+
+comment on function public.metier_du_sos(text) is
+  'Le métier du catalogue d''une clé d''urgence (plomberie → plombier…), '
+  'null pour une clé inconnue. Les mêmes paires que METIERS_SOS '
+  '(src/data/urgences.js). Section 47.1.';
+
+-- --------------------------------------------------------------------------
+--  47.2 Les colonnes, et le rattrapage, qui ne tournent qu'UNE fois
+--
+--  POURQUOI « UNE FOIS ». Ce fichier se rejoue — par `psql` en essai, et
+--  par le propriétaire dans l'éditeur SQL. Un rattrapage rejoué
+--  ressusciterait un taux horaire que l'artisan a retiré depuis. La garde
+--  est l'ABSENCE de la colonne `taux_horaire_centimes` : elle n'est vraie
+--  qu'au premier passage.
+--
+--  CE QUE LE RATTRAPAGE FAIT, et chaque règle a sa raison :
+--    (a) il copie, de la ligne SOS la plus parlante de chaque artisan
+--        (active d'abord, puis la plus récente : la clé de `sos_availability`
+--        permet plusieurs lignes, `tarifs_pro` n'en a qu'une), les seules
+--        valeurs STRICTEMENT POSITIVES et dans les bornes de 47.3 — un 0 du
+--        SOS ne prouve rien, le formulaire l'écrivait pour un champ vide
+--        (`Number(x) || 0`), et la décision du 17/10 en fait un `null` ;
+--        il N'ÉCRASE JAMAIS une valeur déjà déclarée (elle l'a été avec les
+--        trois états), et des frais déjà déclarés en conditions seules ne
+--        reçoivent pas de montant : « 45 € » collé à « gratuit jusqu'à
+--        20 km » ferait une phrase que l'artisan n'a jamais écrite ;
+--    (b) il COMPTE ce qui n'est pas arrivé — un conflit, des conditions
+--        seules, une valeur hors bornes ou négative, une ligne non retenue —
+--        par une comparaison ligne à ligne. Un nombre, jamais une valeur ;
+--    (c) il remet les colonnes mortes à 0, AVANT l'extinction (d) : aucune
+--        ligne n'est jamais réécrite avec un chiffre non nul ;
+--    (d) il éteint toute disponibilité sur un métier qui n'est pas sur la
+--        fiche : on n'est disponible en urgence que sur un métier de SA
+--        fiche. La promesse était écrite (`urgences.js`), rien ne la tenait.
+--
+--  ET IL N'ALLUME JAMAIS `affiche` : rendre public est un geste de
+--  l'artisan, pas d'une migration. Mesuré le 19/10 sur la vraie base : la
+--  seule ligne SOS vaut 0 / 0 / 0 — rien n'est copié, une ligne est éteinte.
+--
+--  LES BORNES sont celles des contraintes de 47.3, écrites une seconde fois
+--  ICI parce que les contraintes n'existent pas encore ; `verifier-tarifs`
+--  compare les deux.
+--
+--  UN CORPS plpgsql N'EST PLANIFIÉ QU'À L'EXÉCUTION : l'`insert` nomme des
+--  colonnes qui n'existent qu'après l'`alter table` du même bloc, et c'est
+--  ce qui le rend possible. L'essai du rattrapage le prouve.
+-- --------------------------------------------------------------------------
+do $tarifs_47$
+declare
+  nb_copiees      int := 0;
+  nb_non_copiees  int := 0;
+  nb_eteintes     int := 0;
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'tarifs_pro'
+                and column_name = 'taux_horaire_centimes') then
+    return;   -- déjà fait : rejouer ne refait RIEN
+  end if;
+
+  /* `if not exists` sur CHACUNE : une base où une seule des autres existe
+     déjà (un brouillon, un essai interrompu) ne fait pas échouer le bloc,
+     donc tout le schéma sous ON_ERROR_STOP. La garde du rattrapage, elle,
+     reste sur `taux_horaire_centimes`. */
+  alter table public.tarifs_pro
+    add column if not exists taux_horaire_centimes bigint,
+    add column if not exists majoration_pct        integer,
+    add column if not exists decompte_temps_texte  text,
+    add column if not exists prix_devis_centimes   bigint,
+    add column if not exists affiche               boolean default false,
+    add column if not exists affiche_le            timestamptz;
+
+  -- (a) ce qui se copie : la ligne SOS la plus parlante de chaque artisan,
+  --     et seulement des valeurs STRICTEMENT positives et dans les bornes
+  --     des contraintes de 47.3 (posées APRÈS ce bloc).
+  create temporary table sos_a_copier on commit drop as
+  select distinct on (sa.professional_id)
+         sa.professional_id as pro_id,
+         case when sa.deplacement > 0 and sa.deplacement <= 10000
+              then round(sa.deplacement * 100)::bigint end as frais,
+         case when sa.horaire >= 1 and sa.horaire <= 1000
+              then round(sa.horaire * 100)::bigint end     as taux,
+         case when sa.majoration between 1 and 200
+              then sa.majoration end                         as maj
+    from public.sos_availability sa
+   order by sa.professional_id, sa.actif desc, sa.updated_at desc;
+
+  insert into public.tarifs_pro as t
+         (pro_id, frais_deplacement_centimes, taux_horaire_centimes, majoration_pct)
+  select pro_id, frais, taux, maj from sos_a_copier
+   where frais is not null or taux is not null or maj is not null
+  on conflict (pro_id) do update set
+    frais_deplacement_centimes = case
+      when t.frais_deplacement_centimes is null and t.frais_deplacement_texte is null
+      then excluded.frais_deplacement_centimes
+      else t.frais_deplacement_centimes end,
+    taux_horaire_centimes = coalesce(t.taux_horaire_centimes, excluded.taux_horaire_centimes),
+    majoration_pct        = coalesce(t.majoration_pct, excluded.majoration_pct);
+  get diagnostics nb_copiees = row_count;
+
+  -- (b) ce qui n'est PAS arrivé, compté : toute ligne SOS dont une valeur non
+  --     nulle ne se retrouve pas telle quelle dans tarifs_pro — conflit avec
+  --     une valeur déjà déclarée, conditions seules, hors bornes, négative, ou
+  --     ligne non retenue par `distinct on`. Un compte, jamais une valeur.
+  select count(*) into nb_non_copiees
+    from public.sos_availability sa
+    left join public.tarifs_pro t on t.pro_id = sa.professional_id
+   where (sa.deplacement <> 0
+          and t.frais_deplacement_centimes is distinct from round(sa.deplacement * 100)::bigint)
+      or (sa.horaire <> 0
+          and t.taux_horaire_centimes is distinct from round(sa.horaire * 100)::bigint)
+      or (sa.majoration <> 0 and t.majoration_pct is distinct from sa.majoration);
+
+  -- (c) les colonnes MORTES ne gardent rien : elles restent lisibles de tous
+  --     (« lecture dispo sos »). AVANT l'extinction (d), pour qu'aucune ligne
+  --     ne soit jamais réécrite avec un chiffre non nul.
+  update public.sos_availability
+     set deplacement = 0, horaire = 0, majoration = 0
+   where deplacement <> 0 or horaire <> 0 or majoration <> 0;
+
+  -- (d) on n'est disponible en urgence que sur un métier de SA fiche
+  update public.sos_availability sa
+     set actif = false
+   where sa.actif
+     and not exists (select 1 from public.professional_profiles pp
+                      where pp.id = sa.professional_id
+                        and pp.metiers @> array[public.metier_du_sos(sa.metier_key)]);
+  get diagnostics nb_eteintes = row_count;
+
+  raise notice 'Section 47 : % ligne(s) de tarifs créées ou complétées ; % ligne(s) SOS dont une valeur n''a pas été copiée ; % ligne(s) SOS éteinte(s).',
+               nb_copiees, nb_non_copiees, nb_eteintes;
+end
+$tarifs_47$;
+
+comment on column public.tarifs_pro.taux_horaire_centimes is
+  'Taux horaire TTC, en centimes : null = non déclaré ; de 100 à 100 000. '
+  'Pas de 0 : un taux à 0 € ferait une estimation « 0 – 0 € ». Section 47.';
+comment on column public.tarifs_pro.majoration_pct is
+  'Majoration de nuit et de week-end, en % : null = non déclarée ; 0 = « Je '
+  'ne majore pas », écrit par l''interrupteur seulement ; jusqu''à 200. Elle '
+  'ne sert qu''à l''estimation des urgences. Section 47.';
+comment on column public.tarifs_pro.decompte_temps_texte is
+  'Comment l''artisan compte le temps passé (« toute heure commencée est due »…), '
+  '200 caractères au plus. Section 47.';
+comment on column public.tarifs_pro.prix_devis_centimes is
+  'Prix d''un devis TTC, en centimes : null = non déclaré ; 0 = « Mes devis '
+  'sont gratuits », écrit par l''interrupteur seulement ; jusqu''à 100 000. '
+  'Section 47.';
+comment on column public.tarifs_pro.affiche is
+  'L''interrupteur « Afficher mes tarifs sur ma fiche », éteint par défaut : '
+  'allumé, la ligne ENTIÈRE est lisible par les particuliers connectés, '
+  'jamais par un autre compte pro. Jamais allumé par une migration. Section 47.';
+comment on column public.tarifs_pro.affiche_le is
+  'Quand l''artisan a allumé « Afficher mes tarifs sur ma fiche » : posée '
+  'par la BASE (clock_timestamp), toute valeur du client est ignorée ; vidée '
+  'quand il éteint. Section 47.4.';
+
+-- --------------------------------------------------------------------------
+--  47.3 Les contraintes — toutes en `_check`, chacune avec sa phrase
+--
+--  `src/lib/erreurs.js` reconnaît une contrainte à son suffixe et donne à
+--  chacune une phrase qui dit quoi corriger ; `src/lib/emetteur.js` en tient
+--  le miroir (`CONTRAINTES.tarifs_pro`, aux mêmes bornes), pour que la
+--  démonstration et la vraie base refusent la MÊME ligne avec la MÊME phrase.
+--
+--  `tarif_affiche_check` REFUSE, elle ne vide rien : tout retirer pendant
+--  que les tarifs sont affichés est refusé, avec une phrase qui dit
+--  d'éteindre d'abord l'interrupteur. Un bloc affiché n'est jamais vide :
+--  au moins UN prix — des frais (montant, « offert » ou conditions), un taux
+--  ou un prix de devis. La majoration et le décompte modifient un taux :
+--  seuls, ils ne disent pas un prix. Un dépanneur au forfait peut donc
+--  afficher ses frais et son prix de devis sans taux horaire.
+--
+--  Les deux contraintes du SOS : un client modifié qui écrit un rayon de
+--  100 000 km apparaîtrait dans la recherche de tous les particuliers
+--  (« ma dispo sos » est `for all`) ; un délai de 0 ou négatif s'afficherait
+--  devant une urgence. Mesuré le 19/10 : 0 ligne réelle hors des bornes.
+--  Si une ligne les violait, l'ordre échouerait BRUYAMMENT, et c'est voulu :
+--  on ne corrige pas en silence le rayon de quelqu'un.
+-- --------------------------------------------------------------------------
+alter table public.tarifs_pro drop constraint if exists tarif_taux_horaire_check;
+alter table public.tarifs_pro add constraint tarif_taux_horaire_check
+  check (taux_horaire_centimes is null or taux_horaire_centimes between 100 and 100000);
+alter table public.tarifs_pro drop constraint if exists tarif_majoration_check;
+alter table public.tarifs_pro add constraint tarif_majoration_check
+  check (majoration_pct is null or majoration_pct between 0 and 200);
+alter table public.tarifs_pro drop constraint if exists tarif_devis_check;
+alter table public.tarifs_pro add constraint tarif_devis_check
+  check (prix_devis_centimes is null or prix_devis_centimes between 0 and 100000);
+alter table public.tarifs_pro drop constraint if exists tarif_decompte_texte_check;
+alter table public.tarifs_pro add constraint tarif_decompte_texte_check
+  check (decompte_temps_texte is null or char_length(decompte_temps_texte) <= 200);
+alter table public.tarifs_pro drop constraint if exists tarif_affiche_check;
+alter table public.tarifs_pro add constraint tarif_affiche_check
+  check (affiche is not true
+         or frais_deplacement_centimes is not null or frais_deplacement_texte is not null
+         or taux_horaire_centimes is not null or prix_devis_centimes is not null);
+
+alter table public.sos_availability drop constraint if exists sos_rayon_check;
+alter table public.sos_availability add constraint sos_rayon_check
+  check (rayon_km between 1 and 200);
+alter table public.sos_availability drop constraint if exists sos_delai_check;
+alter table public.sos_availability add constraint sos_delai_check
+  check (delai_minutes between 5 and 600);
+
+-- --------------------------------------------------------------------------
+--  47.4 Le déclencheur des tarifs publics — le nettoyage, et la DATE du geste
+--
+--  Il ne se greffe pas sur `tient_les_tarifs()` (46.4) : un corps plpgsql
+--  n'est analysé qu'à l'exécution, et les colonnes qu'il nommerait naissent
+--  ICI (la leçon de la section 40). Les deux gardent des colonnes
+--  DISJOINTES, et PostgreSQL les déclenche dans l'ordre de leur nom.
+--
+--  POURQUOI CETTE DATE. Le changement des conditions ne fait ré-accepter
+--  aucun compte existant : ce qui le rend honnête, c'est que la seule
+--  publicité nouvelle passe par un GESTE explicite, l'interrupteur, avec sa
+--  phrase sous les yeux. Sans date, rien en base ne dirait quand ce geste a
+--  eu lieu. Elle est posée par la BASE, par `clock_timestamp()` et non
+--  `now()` (la leçon du journal d'administration, section 25) : une date
+--  que le téléphone peut écrire ne prouve rien.
+--
+--  Il n'éteint jamais `affiche` quand la ligne devient vide : la contrainte
+--  refuse. Et il rend `trigger` : le balayage de la section 43 lui retire
+--  `execute`.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_les_tarifs_publics()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  /* Le même jeu de blancs que `tient_les_tarifs()`, invisibles compris :
+     un décompte fait d'un U+200B ne doit pas s'afficher comme un tarif. */
+  new.decompte_temps_texte := nullif(btrim(coalesce(new.decompte_temps_texte, ''),
+                                           E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), '');
+  new.affiche := coalesce(new.affiche, false);
+  /* LA DATE DU GESTE, posée par la base, jamais par le téléphone : une date
+     envoyée par le client est remplacée. Elle naît quand `affiche` passe à
+     vrai, se garde tant qu'il le reste, et s'efface quand il s'éteint. */
+  if not new.affiche then
+    new.affiche_le := null;
+  elsif tg_op = 'UPDATE' and old.affiche is true then
+    new.affiche_le := old.affiche_le;
+  else
+    new.affiche_le := clock_timestamp();
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_les_tarifs_publics
+  before insert or update on public.tarifs_pro
+  for each row execute function public.tient_les_tarifs_publics();
+
+comment on function public.tient_les_tarifs_publics() is
+  'Rogne le décompte du temps, ramène affiche à vrai ou faux, et pose '
+  'affiche_le : la date du geste « Afficher mes tarifs », jamais celle du '
+  'téléphone. Section 47.4.';
+
+-- --------------------------------------------------------------------------
+--  47.5 Qui lit — les PARTICULIERS, et eux seuls
+-- --------------------------------------------------------------------------
+/* L'ÉCRITURE NE CHANGE PAS : "mes tarifs" (section 46.5) reste la seule
+   politique qui permet insert, update ou delete. Celle-ci est `for select`
+   et ne s'ajoute qu'à la LECTURE, en OU avec "mes tarifs" — c'est par
+   "mes tarifs" que le titulaire lit TOUJOURS sa propre ligne, affichée ou
+   non, bien qu'il soit un compte pro. D'où la règle de tout lecteur
+   public : il filtre `affiche is true` EXPLICITEMENT (`artisans_urgence`,
+   la fiche d'un artisan, le complément de la carte SOS).
+
+   LES PARTICULIERS SEULEMENT — décision du propriétaire du 19/10/2026.
+   Les tarifs affichés servent au particulier qui choisit un artisan : sur
+   sa fiche, et dans l'estimation du bouton SOS. Un autre artisan n'en a
+   pas besoin, et sur un marché étroit il y lirait les prix de ses
+   concurrents. `not est_un_pro()` le lui refuse, administrateur compris :
+   le compte du propriétaire est un compte pro. L'engagement du 18/10,
+   « aucun écran ne montre les prix d'un artisan à un autre », reste vrai.
+   Un compte particulier « en attente » (porte de secours SIRET) n'a pas
+   de fiche : c'est un particulier, il lit.
+
+   UNE BARRIÈRE, PAS UN VERROU — et les textes opposables le disent : un
+   artisan peut ouvrir un second compte, en particulier, avec une autre
+   adresse e-mail. Opus ne vérifie pas l'identité des particuliers, et
+   cette politique ne prétend pas le faire.
+
+   CE QUE « PARTICULIER » VEUT DIRE ICI, exactement (relecture du
+   19/10/2026, mesuré sur PostgreSQL 16) : TOUTE SESSION CONNECTÉE SANS
+   FICHE PRO, puisque `est_un_pro()` ne regarde que la fiche. Lisent donc
+   aussi, et c'est su :
+     - un compte de type « pro » SANS fiche — il en reste un sur la vraie
+       base, la session anonyme du 14/09 (aucune connexion anonyme n'est
+       plus possible, mesuré le 05/10) : le propriétaire la supprime dans
+       Supabase → Authentication → Users avant la migration, et le relevé
+       de forme le compte (`users.type = 'pro'` sans fiche = 0) ;
+     - une session dont la ligne `users` vient d'être effacée par
+       `preparer_suppression_compte()`, tant que son jeton vit encore — le
+       temps que la fonction Edge `compte` supprime le compte ;
+     - un ADMINISTRATEUR dont le compte serait particulier. L'exclusion de
+       l'administration tient au TYPE DE COMPTE de chaque administrateur,
+       pas à son rôle : aujourd'hui le seul est un compte pro. Le jour où
+       un second administrateur est nommé, on revoit cette phrase — et la
+       CGU, qui dit que l'éditeur ne les voit pas « depuis son compte, qui
+       est professionnel ».
+   Rien de cela n'ouvre les tarifs à un ARTISAN qui a sa fiche : la
+   décision du 19/10 tient. Les essais de la section 47 (cas 5 quater et
+   5 quinquies) mesurent ces limites au lieu de les taire.
+
+   UNE SEULE politique de lecture publique : les politiques `select`
+   s'additionnent en OU, et une seconde plus large posée « à côté »
+   rouvrirait ce que celle-ci ferme. `verifier-tarifs` le tient.
+
+   `est_un_pro()` et `est_masque()` sont appelées par une politique : elles
+   RESTENT exécutables par `authenticated` (une politique qui appelle une
+   fonction interdite à l'appelant échoue au lieu de filtrer). On ne
+   révoque rien ici. Et `est_masque()` fait du blocage une règle de la
+   base : un particulier qui a bloqué un artisan, ou qui a été bloqué par
+   lui, ne lit plus ses tarifs.
+
+   LES COMPTES CONNECTÉS SEULEMENT. Aucun écran d'Opus ne s'ouvre sans
+   session : un droit pour `anon` n'aurait aucun lecteur, et rendrait les
+   tarifs de tous les artisans qui les affichent à une seule requête sans
+   compte. La 46.5 (« `anon` n'a rien ») reste vraie : aucun `grant` ici. */
+drop policy if exists "tarifs affiches" on public.tarifs_pro;
+create policy "tarifs affiches" on public.tarifs_pro
+  for select to authenticated
+  using (affiche is true and not public.est_un_pro() and not public.est_masque(pro_id));
+
+-- --------------------------------------------------------------------------
+--  47.6 `artisans_urgence()` — et pourquoi elle DÉMÉNAGE ici
+--
+--  Elle vivait en section 14. Une fonction `language sql` est contrôlée à
+--  sa CRÉATION, et elle nomme désormais `tarifs_pro`, née en section 46 :
+--  elle ne peut plus être créée avant. Ses droits sont posés avec elle,
+--  ici, et le `foreach` de la section 11 bis ne la nomme plus.
+--
+--  Ce qui a été pesé :
+--    - `join`, pas `left join` : un artisan sans ligne de tarifs n'a rien à
+--      montrer, et ses `null` deviendraient des `0` par `Number(null)` ;
+--    - `t.affiche is true` écrit DANS la fonction : le titulaire lit sa
+--      propre ligne non affichée (47.5) ;
+--    - les trois `is not null` : la condition de la question 1 — sans un
+--      montant de déplacement (ou « offert »), un taux et une majoration
+--      (ou « je ne majore pas »), aucune estimation n'est calculable ; des
+--      frais en conditions seules ne donnent pas d'estimation ;
+--    - le métier d'urgence doit être sur la FICHE : la promesse de
+--      `urgences.js` (« un maçon n'apparaît jamais dans les plombiers
+--      d'urgence ») est enfin tenue par la base ;
+--    - plus d'`anon` : le droit mesuré le 19/10 n'avait aucun appelant —
+--      l'écran SOS est réservé aux comptes connectés qui ne publient pas.
+-- --------------------------------------------------------------------------
+/* LA SIGNATURE ET LE TYPE DE RETOUR NE CHANGENT PAS, colonne pour colonne :
+   l'application l'appelle — y compris l'icône « preview » figée du 17/10,
+   qui lit encore `deplacement`, `horaire`, `majoration` —, et le connecteur
+   refuse le `drop function` qu'un changement de type exigerait. Les tarifs
+   viennent de `tarifs_pro`, en centimes, rendus en EUROS avec deux décimales.
+
+   SECURITY INVOKER, et c'est ce qui tient la décision du 19/10 : elle lit
+   `tarifs_pro` à travers « tarifs affiches ». Un particulier y trouve les
+   artisans qui affichent leurs tarifs ; un artisan n'y trouve aucun autre
+   artisan — au plus lui-même, par « mes tarifs ». Et un particulier qui a
+   bloqué un artisan, ou qui a été bloqué, ne le voit plus dans la
+   recherche, sans une ligne de plus.
+
+   Le `drop function if exists` ne sert qu'à une base ancienne ; la
+   migration de la vraie base ne l'envoie pas : `create or replace` suffit,
+   le type est identique (mesuré le 19/10). */
+drop function if exists public.artisans_urgence(text, double precision, double precision);
+
+create or replace function public.artisans_urgence(
+  p_metier_key text, p_lat double precision, p_lon double precision
+) returns table (
+  professional_id uuid, entreprise text, metier text, ville text,
+  avatar_url text, verifie boolean,
+  deplacement numeric, horaire numeric, majoration int, delai_minutes int,
+  distance double precision
+)
+language sql stable set search_path = public as $$
+  select
+    pp.id, pp.entreprise, pp.metier, pp.ville,
+    pp.avatar_url, pp.verifie,
+    round(t.frais_deplacement_centimes::numeric / 100, 2),
+    round(t.taux_horaire_centimes::numeric / 100, 2),
+    t.majoration_pct,
+    sa.delai_minutes,
+    public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) as distance
+  from public.sos_availability sa
+  join public.professional_profiles pp on pp.id = sa.professional_id
+  join public.tarifs_pro t            on t.pro_id = sa.professional_id
+  where sa.actif
+    and sa.metier_key = p_metier_key
+    and pp.metiers @> array[public.metier_du_sos(sa.metier_key)]
+    and t.affiche is true
+    and t.frais_deplacement_centimes is not null
+    and t.taux_horaire_centimes is not null
+    and t.majoration_pct is not null
+    and public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) is not null
+    and public.distance_km(p_lat, p_lon, pp.latitude, pp.longitude) <= sa.rayon_km
+  order by distance asc
+$$;
+
+revoke all on function public.artisans_urgence(text, double precision, double precision)
+  from public, anon;
+grant execute on function public.artisans_urgence(text, double precision, double precision)
+  to authenticated;
+
+comment on function public.artisans_urgence(text, double precision, double precision) is
+  'Les artisans disponibles pour une urgence, du plus proche au plus loin : '
+  'métier d''urgence sur la fiche, ligne active, rayon couvert, tarifs '
+  'AFFICHÉS et complets (déplacement, taux, majoration). Lit tarifs_pro à '
+  'travers « tarifs affiches » (security invoker) : seul un particulier y '
+  'trouve d''autres artisans. Signature inchangée. Section 47.6.';
+
+-- --------------------------------------------------------------------------
+--  47.7 `sos_availability` : les colonnes MORTES, et des droits retirés
+-- --------------------------------------------------------------------------
+/* LES COLONNES MORTES N'ACCEPTENT QUE 0, et c'est un REFUS qui le dit.
+   Une version ancienne de l'application (l'icône « preview » du 17/10
+   écrit encore ces trois colonnes) ou un client modifié y écrirait des
+   chiffres, lisibles de tous par « lecture dispo sos » : un tarif public
+   que personne n'a choisi d'afficher. Les remettre à 0 en silence ferait
+   dire « enregistré » à cette version pendant que rien n'est gardé : un
+   travail qui n'a pas pu se faire ressemblerait à un travail fait.
+
+   UN CODE `OP`, ET PAS UNE CONTRAINTE : une contrainte rendrait 23514 sous
+   un nom que l'ancienne application ne connaît pas, avec la piste fausse
+   « schema.sql n'a pas été rejoué ». Un code OP est rendu TEL QUEL par
+   `messageClair` (src/lib/erreurs.js), et ce passage existe depuis le
+   16/10 — donc dans l'icône « preview » : la phrase française arrive à
+   l'écran de l'ancienne version. OP012 est libre (le fichier s'arrêtait à
+   OP011) ; OP003 reste réservé au devis remis.
+
+   LE CORPS LIT LA LIGNE PAR `to_jsonb(new)`, pas `new.deplacement` : une
+   fonction plpgsql ne crée aucune dépendance sur une colonne, et le jour où
+   ces colonnes seront retirées, `new.deplacement` ferait échouer TOUTE
+   écriture sur la table. Une clé absente rend `null`, donc rien à refuser.
+
+   Ce que la nouvelle application envoie : jamais ces colonnes. Une ligne
+   neuve prend leur défaut (0), et un `upsert` ne réécrit que les colonnes
+   envoyées. Le déclencheur ne mord donc que sur une version ancienne ou un
+   client modifié. */
+create or replace function public.refuse_les_colonnes_mortes_du_sos()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  ligne jsonb := to_jsonb(new);
+begin
+  if coalesce((ligne ->> 'deplacement')::numeric, 0) <> 0
+     or coalesce((ligne ->> 'horaire')::numeric, 0) <> 0
+     or coalesce((ligne ->> 'majoration')::numeric, 0) <> 0 then
+    raise exception using
+      errcode = 'OP012',
+      message = 'Vos tarifs d’urgence ne se règlent plus ici : mettez à jour l’application Opus, '
+             || 'puis réglez-les dans « Mon entreprise ». Votre disponibilité n’a pas été enregistrée.';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_refuse_les_colonnes_mortes_du_sos
+  before insert or update on public.sos_availability
+  for each row execute function public.refuse_les_colonnes_mortes_du_sos();
+
+comment on function public.refuse_les_colonnes_mortes_du_sos() is
+  'Refuse (OP012) toute valeur non nulle dans les colonnes mortes de '
+  'sos_availability (deplacement, horaire, majoration) : les tarifs vivent '
+  'dans tarifs_pro. Lit la ligne par to_jsonb(new), et survit donc au '
+  'retrait de ces colonnes. Section 47.7.';
+
+/* Les commentaires de colonne, SOUS CONDITION : un `comment on column`
+   sur une colonne absente échouerait, et le schéma ne se rejouerait plus
+   sur une base où elles auront été retirées. */
+do $mortes_47$
+declare
+  c text;
+begin
+  foreach c in array array['deplacement', 'horaire', 'majoration'] loop
+    if exists (select 1 from information_schema.columns
+                where table_schema = 'public' and table_name = 'sos_availability'
+                  and column_name = c) then
+      execute format('comment on column public.sos_availability.%I is %L', c,
+        'MORTE depuis la section 47 (lot T) : ni lue ni écrite par l’application. Les tarifs vivent dans '
+        || 'tarifs_pro. Toujours 0 ; toute autre valeur est refusée (OP012, refuse_les_colonnes_mortes_du_sos).');
+    end if;
+  end loop;
+end
+$mortes_47$;
+
+/* `updated_at` : PLUS PERSONNE NE LA TIENT, et la base le dit plutôt que de
+   laisser croire le contraire (relecture du 19/10/2026). L'application
+   l'envoyait depuis l'horloge du téléphone — une date que le client écrit
+   ne prouve rien —, et elle a cessé au lot T. La colonne garde donc la
+   date de création de la ligne, ou celle qu'une version plus ancienne a
+   envoyée ; elle reste lisible de tous (« lecture dispo sos ») et part dans
+   l'export RGPD sous ce nom. Son seul lecteur est le rattrapage de 47.2,
+   qui ne tourne qu'une fois. Un déclencheur qui la poserait n'aurait
+   aujourd'hui aucun lecteur : on ne l'écrit pas. */
+comment on column public.sos_availability.updated_at is
+  'NON TENUE depuis la section 47 (lot T) : ni l''application ni la base ne la mettent à jour. '
+  'Date de création de la ligne, ou date envoyée par une version plus ancienne de l''application '
+  '— jamais une date de dernière modification fiable.';
+
+/* LES DROITS DE TABLE, sans attendre qu'une politique rattrape — la leçon
+   de la section 18.2. `anon` garde `select` (« lecture dispo sos ») et perd
+   le reste : un visiteur n'a aucune disponibilité à écrire. `authenticated`
+   perd `truncate`, qu'AUCUNE politique RLS ne filtre — un seul `truncate`
+   viderait les disponibilités de tous les artisans. */
+revoke insert, update, delete, truncate on public.sos_availability from anon;
+revoke truncate on public.sos_availability from authenticated;
+
+-- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
 --  « Ce que j'ai regardé » et « mes chantiers » sont des données
@@ -10591,6 +11218,20 @@ as $$
                              from public.emetteur_assurances x where x.pro_id = auth.uid()), '[]'::jsonb),
     'mes_tarifs',
                  (select to_jsonb(x) from public.tarifs_pro x where x.pro_id = auth.uid()),
+    /* MA DISPONIBILITÉ AUX URGENCES (section 10) — l'article 15 : mon métier
+       d'urgence, mon rayon, mon délai, et trois colonnes mortes, toujours à 0.
+       Mes TARIFS sont dans `mes_tarifs`, colonnes de la section 47 comprises. */
+    'ma_disponibilite_urgences',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.metier_key)
+                             from public.sos_availability x
+                            where x.professional_id = auth.uid()), '[]'::jsonb),
+    /* MES URGENCES, des deux côtés — comme 'devis' et 'rappels' plus haut :
+       pour le particulier, c'est SA demande (adresse, détails, coordonnées) ;
+       pour l'artisan, ce qu'on lui a adressé. Elles manquaient depuis le
+       premier jour. `sos_requests` n'a aucun droit de colonne : `to_jsonb(x)`
+       ne tombe pas dans le piège de `mon_compte()`. */
+    'urgences',  coalesce((select jsonb_agg(to_jsonb(x)) from public.sos_requests x
+                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
     /* Mes demandes de compte professionnel, avec leur message libre et la
        note de l'administration : c'est ce qu'on a écrit sur moi. Colonne
        par colonne, et pas `to_jsonb(x)` : depuis le 15/10, `traitee_par`

@@ -99,6 +99,34 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
     + 'déplacement, touchez « Je ne facture pas de frais de déplacement ».',
   tarif_frais_texte_check: TEXTE_TROP_LONG,
 
+  /* --- Les tarifs réunis — devis, fiche et SOS : section 47 (lot T) ---
+     Ce sont aussi des SAISIES : un taux horaire à 0 €, une majoration à
+     250 %, des tarifs affichés sans aucun prix. Le formulaire refuse avant
+     d'envoyer (`tarifsDepuisFormulaire`, `validerTarifs`) ; ces phrases ne
+     sortent donc que d'une version en retard ou d'un client modifié, et
+     ce jour-là elles doivent dire quoi toucher, pas « schema.sql ». */
+  tarif_affiche_check: 'pour afficher vos tarifs, déclarez au moins vos frais de déplacement, '
+    + 'votre taux horaire ou le prix de vos devis. Pour tout retirer, éteignez d’abord « Afficher '
+    + 'mes tarifs sur ma fiche ».',
+  tarif_taux_horaire_check: 'un taux horaire s’écrit comme un montant entre 1 € et 1 000 € TTC de '
+    + 'l’heure. Si vous ne travaillez qu’au forfait, laissez-le vide.',
+  tarif_majoration_check: 'la majoration de nuit et de week-end s’écrit en pourcentage, entre 0 et '
+    + '200 %.',
+  tarif_devis_check: 'le prix d’un devis s’écrit comme un montant entre 0 et 1 000 € TTC.',
+  tarif_decompte_texte_check: TEXTE_TROP_LONG,
+
+  /* --- La disponibilité aux urgences : sections 10 et 47 ---
+     Le rayon et le délai n'avaient AUCUNE borne jusqu'au lot T : un client
+     modifié qui écrivait 100 000 km apparaissait dans la recherche de tous
+     les particuliers. Les deux anciennes contraintes de la section 10
+     n'avaient pas de phrase non plus : elles sortaient avec la piste
+     « schema.sql », fausse pour une saisie. */
+  sos_rayon_check: 'votre rayon d’intervention s’écrit en kilomètres, entre 1 et 200.',
+  sos_delai_check: 'votre délai d’arrivée habituel s’écrit en minutes, entre 5 et 600.',
+  sos_availability_majoration_check: 'la majoration s’écrit en pourcentage, entre 0 et 200 %.',
+  sos_availability_metier_key_check: 'ce métier n’a pas d’urgence dans Opus : choisissez plomberie, '
+    + 'électricité, serrurerie ou chauffage.',
+
   /* --- Le carnet de clients : section 41 ---
      Ces contraintes gardent elles aussi une SAISIE. Le formulaire refuse
      avant d'envoyer (`validerClient`), donc ces phrases ne sortent que
@@ -272,7 +300,9 @@ export function messageClair(e, quoi = '') {
   const sujet = quoi ? `${quoi} : ` : '';
 
   /* LES CODES MAISON DE LA BASE (OP001 et suivants — OP011 naît avec la
-     section 46, OP003 reste réservé au devis remis) PORTENT DÉJÀ LEUR PHRASE,
+     section 46, OP012 avec la section 47 : une version ancienne de
+     l'application qui écrit encore des tarifs dans `sos_availability` ;
+     OP003 reste réservé au devis remis) PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler
      ici, c'est écrire la même règle à deux endroits — et la première des
@@ -356,6 +386,21 @@ export function messageClair(e, quoi = '') {
     || m.includes('cannot coerce the result to a single json object')) {
     return phrase(sujet, 'cet enregistrement n’existe plus, ou il vient de changer depuis un '
       + 'autre appareil : rechargez l’écran.');
+  }
+
+  /* PGRST204 et 42703 — UNE COLONNE QUE LA BASE N'A PAS : l'application est
+     en avance sur la base, `schema.sql` n'a pas été rejoué (la panne des six
+     commits qui tournaient contre une base ignorant `metiers`, CLAUDE.md).
+     Le message de PostgREST sortait tel quel, en anglais — « Could not find
+     the 'affiche' column of 'tarifs_pro' in the schema cache » — sous
+     « … mais pas vos tarifs » (relecture du 19/10/2026, lot T). */
+  if (code === 'PGRST204' || code === '42703' || m.includes('in the schema cache')
+    || /column "?[a-z0-9_.]+"? does not exist/.test(m)) {
+    const colonne = (brut.match(/the '([a-z0-9_]+)' column/i)
+      || brut.match(/column "?(?:[a-z0-9_]+\.)?([a-z0-9_]+)"? does not exist/i) || [])[1];
+    return phrase(sujet, 'la base d’Opus n’a pas encore reçu la mise à jour de l’application'
+      + (colonne ? ` (la colonne « ${colonne} » lui manque)` : '')
+      + ' : ce n’est pas de votre fait. Le plus souvent, `supabase/schema.sql` n’a pas été rejoué.');
   }
 
   /* --- l'authentification, reprise d'AuthScreen où elle était enfermée --- */

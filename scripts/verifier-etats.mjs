@@ -531,7 +531,11 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
     const c = sansCommentaires(lire(f));
     if (VERIFIE.test(sansNomDuBadge(c))) fautifsDevis.push(`${f} : « vérifié »`);
     textesDe(c).forEach((t) => {
-      if (/registre(?! du commerce et des sociétés| national des entreprises)/i.test(t)) {
+      /* « registre » en MOT ENTIER : « quand vous enregistrerez » contient
+         les lettres r-e-g-i-s-t-r-e, et la phrase du lot T (19/10/2026)
+         s'est fait accuser pour un verbe. Une frontière posée à la main —
+         `\b` ne voit pas une lettre accentuée. */
+      if (/(^|[^\p{L}])registres?(?![\p{L}])(?! du commerce et des sociétés| national des entreprises)/iu.test(t)) {
         fautifsDevis.push(`${f} : « ${t.slice(0, 70)} »`);
       }
     });

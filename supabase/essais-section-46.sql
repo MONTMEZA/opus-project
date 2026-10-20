@@ -854,6 +854,13 @@ select t, has_table_privilege('anon', t, 'select') as anon_select_attendu_f,
 -- fonction `security definer` sous n'importe quel nom, ou une vue, les
 -- ouvrirait à un visiteur sans qu'aucune politique ne soit touchée — le
 -- contrôle ne peut pas viser un NOM (`admin_…`), il vise le catalogue.
+--
+-- ATTENDU CHANGÉ PAR LA SECTION 47 (lot T) : `artisans_urgence()` lit
+-- désormais `tarifs_pro`, et entre dans la liste fermée. Elle reste
+-- `security invoker` — elle ne lit qu'à travers « tarifs affiches », qui
+-- réserve les lignes affichées aux particuliers — et l'attendu se lit par
+-- ENSEMBLE, pas par un nombre : un nom remplacé par un autre ne garderait
+-- pas le compte juste pour une mauvaise raison.
 -- --------------------------------------------------------------------------
 select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
          as hors_liste_attendu_aucune
@@ -861,9 +868,12 @@ select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
  where ns.nspname = 'public'
    and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M'
    and p.proname <> all (array['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs',
-                               'emetteur_incomplet', 'mes_donnees']);
+                               'emetteur_incomplet', 'mes_donnees', 'artisans_urgence']);
 select count(*) filter (where p.prosecdef) as definer_attendu_0,
-       count(*) as les_nomment_attendu_2
+       string_agg(p.proname, ', ' order by p.proname)
+         as les_nomment,
+       string_agg(p.proname, ', ' order by p.proname)
+         = 'artisans_urgence, emetteur_incomplet, mes_donnees' as liste_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M';
 select (select count(*) from pg_views
@@ -917,11 +927,14 @@ rollback;
 -- --------------------------------------------------------------------------
 \echo ''
 \echo '=== 29. Les contraintes : toutes nommees en _check, aucune anonyme, pas de emetteur_paiement_check ==='
+-- ATTENDU CHANGÉ PAR LA SECTION 47 (lot T) : 25 et non plus 20. La
+-- section 47 pose cinq contraintes de plus sur `tarifs_pro` (le taux
+-- horaire, la majoration, le prix du devis, le décompte, l'affichage).
 -- --------------------------------------------------------------------------
 select count(*) filter (where conname !~ '_check$') as mal_nommees_attendu_0,
        count(*) filter (where conname ~ '_check[0-9]+$') as anonymes_attendu_0,
        count(*) filter (where conname = 'emetteur_paiement_check') as paiement_attendu_0,
-       count(*) as contraintes_check_attendu_20
+       count(*) as contraintes_check_attendu_25
   from pg_constraint
  where contype = 'c'
    and conrelid in ('public.emetteur'::regclass, 'public.emetteur_assurances'::regclass,

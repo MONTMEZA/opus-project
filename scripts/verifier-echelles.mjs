@@ -59,8 +59,10 @@ const PLAFOND = {
      cliquet a d'abord REFUSÉ le lot : six valeurs écrites à la main
      (`gap: 3`, `paddingVertical: 1`, `marginTop: 2`…) le faisaient passer à
      360. Remises sur la grille, le compte est descendu sous le plafond
-     d'avant — c'est exactement ce que ce fichier est censé provoquer. */
-  'espacement hors grille de 4': 354,
+     d'avant — c'est exactement ce que ce fichier est censé provoquer.
+     354 → 353 le 19/10/2026 (lot T) : mesuré à 353 avant même les écrans
+     du lot, qui n'ajoutent aucune valeur hors grille. On redescend. */
+  'espacement hors grille de 4': 353,
   lineHeight: 56,
   borderRadius: 21,
 };

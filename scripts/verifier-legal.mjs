@@ -421,32 +421,50 @@ console.log('\nLe SIRET : ce qu’il ouvre, ce qu’il ne prouve pas');
        l'hébergeur), et il ne promet aucun journal des lectures, qui
        n'existe pas encore ;
      - LE CODE rend vraie la phrase « aucun écran d'Opus ne les montre à un
-       autre » : seuls les fichiers de « Mon entreprise » nomment les
-       tarifs, l'API ne les lit que pour le compte connecté, et la base ne
-       les ouvre qu'à leur titulaire — aucune politique pour `anon` ni pour
-       l'administration, aucune fonction `admin_` ne les lit. Le jour où un
-       écran d'administration les afficherait, le texte opposable
-       deviendrait faux : c'est CE contrôle qui doit rougir, pas un lecteur
-       des conditions six mois plus tard.
+       autre » : l'API ne les lit que pour le compte connecté, ou ne lit
+       que des lignes AFFICHÉES ; la base ne les ouvre en écriture qu'à leur
+       titulaire et, depuis le lot T (19/10/2026), en lecture aux seuls
+       PARTICULIERS pour l'artisan qui choisit de les afficher — aucune
+       politique pour `anon` ni pour l'administration, aucune fonction hors
+       d'une liste fermée ne les lit. Le jour où un écran d'administration
+       les afficherait, le texte opposable deviendrait faux : c'est CE
+       contrôle qui doit rougir, pas un lecteur des conditions six mois
+       plus tard.
 
    Les phrases sont cherchées DANS LEUR SECTION, jamais « quelque part » :
    la leçon de la Base Adresse.
    ================================================================== */
 console.log('\nLes tarifs d’un artisan : un engagement écrit, et le code qui le rend vrai');
+/* LES PROPOSITIONS d'un texte : bornées par . ; : ? ! (l'espace français
+   avant les deux-points compris) ou par un tiret long. Une négation, un
+   « artisan » ou « éditeur », un verbe de lecture — chacun en mot entier :
+   dans un texte français, `\b` ne voit pas une lettre accentuée. */
+const propositionsDe = (texte) => String(texte || '').split(/\s*[.;:!?](?:\s+|$)|\s+—\s+/).filter(Boolean);
+const NEGATION = /(^|[^\p{L}])(ne|ni|jamais|aucune?|personne)(?![\p{L}])|(^|[^\p{L}])n’/u;
+const ARTISAN_OU_EDITEUR = /(^|[^\p{L}])(artisans?|éditeur)(?![\p{L}])/u;
+const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|consult\p{L}*|affich\p{L}*|montr\p{L}*)(?![\p{L}])/u;
 {
   const section = (blocs, motif) => blocs.filter((b) => motif.test(b.titre))
     .map((b) => b.texte).join(' ');
   const engagement = section(CGU, /tarifs et vos prix/i);
 
-  verifier('la version des textes a changé avec l’engagement (18/10/2026 au moins)',
-    VERSION >= '2026-10-18',
-    `VERSION = ${VERSION}. Un engagement nouveau de l’éditeur est un changement de fond : une `
-    + 'acceptation ancienne ne le couvre pas.');
-  verifier('les conditions portent l’engagement de l’éditeur sur les prix des artisans',
-    engagement.length > 0 && /s’engage à ne pas les consulter/.test(engagement)
+  /* LE LOT T (19/10/2026) A CHANGÉ CE QUI EST PRIVÉ : des tarifs peuvent
+     devenir lisibles par les particuliers, au choix de l'artisan. C'est un
+     changement de fond, donc une version nouvelle. */
+  verifier('la version des textes a changé avec les tarifs réunis (19/10/2026 au moins)',
+    VERSION >= '2026-10-19',
+    `VERSION = ${VERSION}. Des tarifs qui peuvent devenir lisibles par les particuliers, c’est un `
+    + 'changement de fond : une acceptation ancienne ne le couvre pas.');
+  /* L'ENGAGEMENT PORTE SUR CE QUI N'EST PAS AFFICHÉ — les tarifs affichés,
+     tout particulier connecté les lit déjà. « il s'engage à ne pas les
+     consulter », l'ancienne formule, promettrait de ne pas regarder ce que
+     n'importe quel particulier voit. */
+  verifier('les conditions portent l’engagement de l’éditeur sur les prix QU’UN ARTISAN N’AFFICHE PAS',
+    engagement.length > 0 && /s’engage à ne pas consulter ceux que vous n’affichez pas/.test(engagement)
+    && !/s’engage à ne pas les consulter/.test(engagement)
     && /outils d’administration/.test(engagement),
-    'section « Vos tarifs et vos prix » introuvable, ou sans l’engagement de ne pas consulter '
-    + 'les prix par les outils d’administration de la base');
+    'section « Vos tarifs et vos prix » introuvable, ou sans l’engagement restreint aux tarifs non '
+    + 'affichés, par les outils d’administration de la base');
   verifier('…dit que c’est un ENGAGEMENT, pas une impossibilité technique',
     /pas une impossibilité technique/.test(engagement),
     'l’éditeur peut lire la base avec les outils de l’hébergeur : écrire le contraire dans un '
@@ -471,6 +489,116 @@ console.log('\nLes tarifs d’un artisan : un engagement écrit, et le code qui 
     `${phrasesJournal.filter((ph) => futur.test(ph)).join(' | ') || 'aucune phrase sur le journal'} — `
     + 'le journal des lectures est « pour plus tard, quand il y aura du monde » (docs/A-FAIRE.md), '
     + 'pas une promesse');
+  /* ------------------------------------------------------------------
+     LE TEXTE SUIT LE SCHÉMA — lot T, réponses du propriétaire du 19/10.
+
+     Une promesse se vérifie contre ce qui la tient : les POLITIQUES de
+     `tarifs_pro` et le `where` d'`artisans_urgence()`. Dans les DEUX sens :
+     un texte qui annonce l'affichage devant une base qui ne le permet pas
+     ment autant qu'une base qui affiche devant un texte qui le tait.
+       - une lecture publique existe (une politique `for select` autre que
+         « mes tarifs ») ⇔ le texte dit « Afficher mes tarifs sur ma
+         fiche », « Opus enregistre la date » et l'engagement restreint ;
+       - cette lecture exige `not public.est_un_pro()` ⇔ le texte dit « les
+         particuliers qui ont un compte Opus », « Ils ne s’affichent pas aux
+         autres artisans » ET la LIMITE : « pas un verrou », « Opus ne
+         vérifie pas l’identité des particuliers ». La limite est EXIGÉE,
+         pas seulement permise : sans elle, le texte promettrait un verrou ;
+       - le `where` d'`artisans_urgence` exige `t.affiche is true` ⇔ « Répondre
+         aux urgences demande de les afficher ».
+     Une phrase à MOITIÉ là rougit aussi : sans la politique, le texte ne
+     doit en contenir AUCUNE.
+     ------------------------------------------------------------------ */
+  const schemaSansCommentaires = readFileSync('supabase/schema.sql', 'utf8')
+    .replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const lecturesPubliques = [...schemaSansCommentaires
+    .matchAll(/create policy "([^"]+)" on public\.tarifs_pro[\s\S]*?;/g)]
+    .filter((m) => m[1] !== 'mes tarifs' && /\bfor select\b/.test(m[0]));
+  const publique = lecturesPubliques.length > 0;
+  const particuliersSeuls = publique && lecturesPubliques.every((m) => /not public\.est_un_pro\(\)/.test(m[0]));
+  const suit = (vrai, phrases) => (vrai
+    ? phrases.every((x) => engagement.includes(x))
+    : phrases.every((x) => !engagement.includes(x)));
+  const PHRASES_AFFICHAGE = ['« Afficher mes tarifs sur ma fiche »', 'Opus enregistre la date',
+    's’engage à ne pas consulter ceux que vous n’affichez pas'];
+  verifier('…le texte suit le schéma : il annonce l’affichage SI ET SEULEMENT SI une lecture publique existe',
+    suit(publique, PHRASES_AFFICHAGE),
+    `${publique ? 'une' : 'aucune'} lecture publique sur \`tarifs_pro\` ; le texte doit `
+    + `${publique ? 'contenir' : 'ne contenir aucune de'} : ${PHRASES_AFFICHAGE.join(' · ')}`);
+  /* LA LIMITE EN ENTIER, et pas ses mots-clés : la relecture droit du
+     19/10/2026 a gardé « pas un verrou » et « Opus ne vérifie pas
+     l’identité des particuliers » en écrivant juste après « et pourtant
+     aucun artisan ne peut les lire » — le contrôle restait vert devant une
+     promesse de verrou. C'est la PROPOSITION qui est exigée. */
+  const LIMITE = 'un artisan compris, peut les lire';
+  /* Et L'ÉDITEUR « DEPUIS SON COMPTE » : « dans l'application » disait plus
+     que la vérité — il peut ouvrir un compte particulier, et le cahier lui
+     demande justement d'essayer la carte SOS ainsi (relecture droit du
+     19/10/2026). C'est son COMPTE qui est professionnel, pas lui. */
+  const PHRASES_PARTICULIERS = ['les particuliers qui ont un compte Opus',
+    'Ils ne s’affichent pas aux autres artisans', 'pas un verrou',
+    'Opus ne vérifie pas l’identité des particuliers', LIMITE,
+    'l’éditeur d’Opus ne les voit pas non plus depuis son compte, qui est professionnel'];
+  verifier('…il dit « les particuliers seulement », ET LA LIMITE du second compte, SI ET SEULEMENT SI la base exige `not est_un_pro()`',
+    suit(particuliersSeuls, PHRASES_PARTICULIERS),
+    particuliersSeuls
+      ? 'la base réserve les tarifs affichés aux particuliers : le texte doit le dire, et dire que '
+        + 'c’est une barrière, pas un verrou — Opus ne vérifie pas l’identité des particuliers.'
+      : 'la base n’exige pas `not est_un_pro()` : promettre « les particuliers seulement » serait faux.');
+  const urgence = (schemaSansCommentaires.match(/create or replace function public\.artisans_urgence\([\s\S]*?\$\$;/) || [''])[0];
+  const whereUrgence = (urgence.match(/\bwhere\b([\s\S]*?)\border by\b/) || [])[1] || '';
+  verifier('…« Répondre aux urgences demande de les afficher » SI ET SEULEMENT SI `artisans_urgence` exige `t.affiche is true`',
+    urgence.length > 0
+    && /\bt\.affiche is true\b/.test(whereUrgence) === engagement.includes('Répondre aux urgences demande de les afficher'),
+    'réponse du propriétaire du 19/10 (question 1) : répondre aux urgences exige d’afficher ses tarifs.');
+
+  /* LES FORMES QUI REVIENDRAIENT PAR MÉGARDE — celles de la version 2 du
+     cahier, écartées le 19/10 : « lisibles par toute personne qui a un
+     compte », « y compris les autres artisans / l'éditeur ». Viser la FORME
+     attrape aussi ses variantes. Et ni « sans compte » ni « visiteur »
+     comme LECTEUR des tarifs affichés : aucun visiteur ne lit une ligne de
+     tarifs (la base n'accorde rien à `anon`). */
+  const phrasesEngagement = engagement.split(/(?<=[.!?])\s+/);
+  const lecteursInterdits = phrasesEngagement.filter((ph) => /(lisibles? par|peuvent les lire|peut les lire)/.test(ph)
+    && /(sans compte|visiteur)/.test(ph));
+  const yCompris = phrasesEngagement.filter((ph) => /y compris[^.]*(artisan|l’éditeur)/.test(ph));
+  verifier('…ni « toute personne qui a un compte », ni « y compris » un artisan ou l’éditeur, ni un visiteur parmi les lecteurs',
+    !/toute personne qui a un compte/.test(engagement) && yCompris.length === 0 && lecteursInterdits.length === 0
+    && !/ne les voit pas non plus dans l’application/.test(engagement),
+    [...yCompris, ...lecteursInterdits].join(' | ') || '« toute personne qui a un compte » : la formule de la '
+      + 'version 2, écartée le 19/10 — les tarifs affichés ne vont qu’aux particuliers.');
+  /* QUI LIT, PROPOSITION PAR PROPOSITION — relecture droit du 19/10/2026.
+     Viser deux formes (« toute personne qui a un compte », « y compris »)
+     laissait passer toutes les autres : « Les autres artisans et l’éditeur
+     peuvent aussi les lire depuis leur compte. » restait vert, et la suite
+     complète aussi. La PROPRIÉTÉ : dans une proposition (bornée par . ; :
+     ou un tiret), « artisan » ou « éditeur » ne voisine jamais un verbe
+     de lecture — lire, voir, consulter, afficher, montrer, lisible — SANS
+     négation. Deux propositions sont permises, et seulement elles : la
+     limite (« un artisan compris, peut les lire ») et l'aveu sur les
+     outils de l'hébergeur, qui porte sur les tarifs NON affichés. */
+  const lecteursEnTrop = (texte) => propositionsDe(texte).filter((p) => ARTISAN_OU_EDITEUR.test(p)
+    && LIRE_OU_VOIR.test(p) && !NEGATION.test(p)
+    && ![LIMITE, 'pourrait techniquement les lire avec les outils d’administration de l’hébergeur']
+      .some((permise) => p.includes(permise)));
+  const enTropCgu = lecteursEnTrop(engagement);
+  verifier('…et aucune proposition ne range un artisan ou l’éditeur parmi les lecteurs, sans négation',
+    enTropCgu.length === 0,
+    `${enTropCgu.join(' | ')} — les tarifs affichés ne vont qu’aux particuliers (réponse du 19/10) ; `
+    + 'seule la limite du second compte dit qu’un artisan peut les lire.');
+  /* LA MAJORATION NE SERT À AUCUN DEVIS — par PROPOSITION (bornée par . ou
+     ;), et pas par phrase : « …le prix de vos devis serviront à préparer
+     vos devis, et la majoration aussi à l’estimation des urgences »
+     passait, puisque « estimation des urgences » suivait dans la même
+     phrase (relecture droit du 19/10/2026). Une proposition qui nomme la
+     majoration dit l'estimation des urgences, et JAMAIS les devis. */
+  const propositionsMajoration = engagement.split(/[.;]/).filter((ph) => /majoration/.test(ph));
+  verifier('…et la majoration n’est jamais rangée parmi ce qui sert aux devis',
+    propositionsMajoration.length > 0
+    && propositionsMajoration.every((ph) => /estimation des urgences/.test(ph)
+      && !/(préparer vos devis|serv\p{L}* (à|aux) (vos )?devis)/u.test(ph)),
+    propositionsMajoration.join(' | ') || 'aucune phrase ne nomme la majoration : elle est collectée, elle se dit');
+
   /* LA SOURCE DU N° DE TVA (cahier 5.8, a) : c'est la liste de la DGFiP,
      par l'annuaire des entreprises — le répertoire Sirene ne le publie pas.
      L'ancienne phrase le rangeait dans « ce que le répertoire Sirene de
@@ -489,40 +617,84 @@ console.log('\nLes tarifs d’un artisan : un engagement écrit, et le code qui 
   verifier('la politique de confidentialité y renvoie, depuis « Ce que nous collectons »',
     /« Vos tarifs et vos prix »/.test(section(CONFIDENTIALITE, /Ce que nous collectons/)),
     'la collecte des frais de déplacement doit nommer l’engagement qui les protège');
+  /* LOT T : la collecte dit QUI lit les tarifs affichés — les particuliers,
+     et la limite — et dit enfin la disponibilité aux urgences, lisible de
+     tous depuis le premier jour et dite nulle part. */
+  /* Relecture droit du 19/10/2026 : la collecte disait « par eux seuls —
+     ni par les autres artisans », puis, une phrase plus loin, qu'un
+     artisan peut les lire — sans « pas un verrou » ; et la disponibilité
+     aux urgences ne se disait que pour qui « répond » encore, alors qu'une
+     ligne éteinte reste lisible de tous. La LIMITE en entier, comme dans la
+     CGU ; « par eux seuls » refusé ; aucune proposition qui range un
+     artisan ou l'éditeur parmi les lecteurs. */
+  const EXIGES_COLLECTE = ['Si vous répondez ou avez répondu aux urgences',
+    'même après avoir cessé d’y répondre', 'lisibles par les particuliers qui ont un compte Opus',
+    'pas un verrou', 'Opus ne vérifie pas l’identité des particuliers', LIMITE];
+  const enTropCollecte = lecteursEnTrop(collecte);
+  verifier('« Ce que nous collectons » : les tarifs affichés vont aux particuliers, la limite est dite EN ENTIER, et les urgences aussi',
+    EXIGES_COLLECTE.every((x) => collecte.includes(x))
+    && !/lisibles par toute personne qui a un compte Opus/.test(collecte)
+    && !/par eux seuls/.test(collecte) && enTropCollecte.length === 0,
+    `${EXIGES_COLLECTE.filter((x) => !collecte.includes(x)).map((x) => `« ${x} » manque`).join(' · ')}`
+    + `${enTropCollecte.length ? ` ${enTropCollecte.join(' | ')}` : ''} — « par eux seuls » promettrait un `
+    + 'verrou ; la disponibilité aux urgences reste lisible de tous après qu’on a cessé d’y répondre.');
 
   /* --- ce que le texte promet, le CODE le tient --- */
   const sansCommentairesJs = (c) => c.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const fichiers = execFileSync('git',
-    ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
-    .split('\n').filter((f) => f.endsWith('.js'));
-  /* Les seuls fichiers qui ont le droit de nommer les tarifs : l'API (pour
-     le compte connecté), le calcul pur, la démonstration, et les écrans de
-     « Mon entreprise » — que seul le titulaire ouvre. */
-  const PERMIS = ['src/lib/api.js', 'src/lib/emetteur.js', 'src/data/emetteur-demo.js',
-    'src/components/MonEntreprise.js', 'src/components/FicheEmetteur.js',
-    'src/components/ApercuEntete.js', 'src/components/PretAEmettre.js'];
-  const nomment = fichiers.filter((f) => /tarifs_pro|frais_deplacement/.test(sansCommentairesJs(readFileSync(f, 'utf8'))));
-  const intrus = nomment.filter((f) => !PERMIS.includes(f));
-  verifier(`« aucun écran d’Opus » : seuls les fichiers de « Mon entreprise » nomment les tarifs (${nomment.length} trouvés)`,
-    nomment.length >= 3 && intrus.length === 0,
-    intrus.length ? `${intrus.join(', ')} : un écran de plus qui lit les tarifs rendrait faux le `
-      + 'texte opposable « Vos tarifs et vos prix ».' : 'moins de trois fichiers trouvés : ce contrôle a perdu sa cible');
+  /* LA LISTE `PERMIS` — « seuls les fichiers de Mon entreprise nomment les
+     tarifs » — EST RETIRÉE au lot T (19/10/2026). Elle restait verte
+     pendant que `SosScreen.js` affichait des tarifs publics sans jamais
+     nommer `tarifs_pro` : elle vérifiait un NOM de fichier, pas ce qui est
+     montré. Et depuis le lot T, des écrans montrent légitimement les tarifs
+     AFFICHÉS aux particuliers (la fiche, la carte SOS). Ce qui garde la
+     pièce : la BASE (les politiques, plus bas, et `verifier-emetteur`),
+     l'API (juste dessous) et le texte opposable, qui suit le schéma. */
 
+  /* L'API : tout `from('tarifs_pro')` désigne SOIT le compte connecté
+     (`currentUserId` — lire et écrire « Mon entreprise »), SOIT des lignes
+     AFFICHÉES (`.eq('affiche', true)`), et alors il ne fait que LIRE. Un
+     appel qui ne dit ni l'un ni l'autre lirait les prix privés d'un autre :
+     le titulaire, lui, lit sa propre ligne non affichée par « mes tarifs »,
+     et c'est exactement pour ça que la lecture publique doit filtrer
+     `affiche` elle-même. */
   const api = sansCommentairesJs(readFileSync('src/lib/api.js', 'utf8'));
   const appels = [...api.matchAll(/from\('tarifs_pro'\)[\s\S]*?;/g)].map((m) => m[0]);
-  verifier(`…l’API ne les lit et ne les écrit que pour le compte connecté (${appels.length} appels)`,
-    appels.length >= 2 && appels.every((a) => /currentUserId/.test(a)),
-    'un `from(\'tarifs_pro\')` qui ne désigne pas `currentUserId` lirait les prix d’un autre');
+  const fautifs = appels.filter((a) => !(/currentUserId/.test(a)
+    || (/\.eq\(\s*'affiche'\s*,\s*true\s*\)/.test(a) && !/\.(upsert|insert|update|delete)\s*\(/.test(a))));
+  verifier(`…l’API ne les lit et ne les écrit que pour le compte connecté, ou ne LIT que des lignes affichées (${appels.length} appels)`,
+    /* Cinq depuis le lot T : lire et écrire « Mon entreprise »,
+       `mesTarifs`, `tarifsAffichesDe`, le complément de la carte SOS. */
+    appels.length >= 5 && fautifs.length === 0,
+    fautifs.length ? `${fautifs.map((a) => a.replace(/\s+/g, ' ').slice(0, 100)).join(' | ')} — un \`from('tarifs_pro')\` `
+      + 'qui ne désigne ni `currentUserId` ni `.eq(\'affiche\', true)` lirait les prix d’un autre.'
+      : 'moins de cinq appels trouvés : ce contrôle a perdu sa cible');
 
-  const sql = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '');
+  const sql = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const politiques = [...sql.matchAll(/create policy "[^"]+" on public\.tarifs_pro[\s\S]*?;/g)].map((m) => m[0]);
-  verifier('…la base ne les ouvre qu’à leur titulaire : une politique, `est_mon_entreprise`, rien pour `anon` ni l’administration',
-    politiques.length === 1 && /for all to authenticated/.test(politiques[0])
-    && (politiques[0].match(/public\.est_mon_entreprise\(pro_id\)/g) || []).length === 2
-    && !/est_admin|\banon\b|auth\.uid\(\)/.test(politiques[0])
+  /* DEPUIS LE LOT T, DEUX POLITIQUES : « mes tarifs », la seule qui écrit,
+     pour le titulaire ; et UNE lecture publique pour les PARTICULIERS —
+     `using` exactement `affiche is true and not est_un_pro() and not
+     est_masque(pro_id)`, sans `or` (réponse du propriétaire du 19/10). Un
+     autre artisan ne lit pas, l'administration non plus (son compte est
+     pro), un visiteur non plus. La même propriété est tenue par
+     `verifier-emetteur` et `verifier-tarifs`. */
+  const ecriture = politiques.filter((x) => !/\bfor select\b/.test(x));
+  const lecture = politiques.filter((x) => /\bfor select\b/.test(x));
+  const termes = (x) => {
+    const u = (x.match(/\busing\s*\(([\s\S]*)\)\s*;\s*$/) || [])[1];
+    if (u == null || /\bor\b/i.test(u)) return null;
+    return u.replace(/\s+/g, ' ').trim().split(/\s+and\s+/i).map((t) => t.trim()).sort().join(' & ');
+  };
+  const ATTENDUS = ['affiche is true', 'not public.est_masque(pro_id)', 'not public.est_un_pro()'].sort().join(' & ');
+  verifier('…la base ne les ouvre en écriture qu’à leur titulaire, en lecture qu’aux PARTICULIERS — rien pour `anon` ni l’administration',
+    ecriture.length === 1 && /for all to authenticated/.test(ecriture[0])
+    && (ecriture[0].match(/public\.est_mon_entreprise\(pro_id\)/g) || []).length === 2
+    && lecture.length <= 1 && lecture.every((x) => /for select to authenticated\s+using/.test(x) && termes(x) === ATTENDUS)
+    && politiques.every((x) => !/est_admin|\banon\b|\bto public\b|auth\.uid\(\)/.test(x))
     && /revoke all on public\.tarifs_pro\s+from anon;/.test(sql),
-    `${politiques.length} politique(s) sur tarifs_pro. Une lecture pour l’administration ferait `
-    + 'mentir « ni dans l’espace d’administration ».');
+    `${politiques.length} politique(s) sur tarifs_pro (${lecture.length} de lecture). Une lecture pour `
+    + 'l’administration ferait mentir « ni dans l’espace d’administration » ; une lecture sans '
+    + '`not est_un_pro()` montrerait les prix d’un artisan à ses concurrents.');
   /* UNE PROPRIÉTÉ, PAS UN NOM — relecture du 18/10/2026. Ce contrôle ne
      regardait que les fonctions nommées `admin_…` : une fonction `security
      definer` sous un autre nom (`frais_d_un_artisan`), accordée à `anon`,
@@ -544,8 +716,16 @@ console.log('\nLes tarifs d’un artisan : un engagement écrit, et le code qui 
      chaînes (y compris `E'…\'…'`) : un nom de table cité dans un commentaire
      ne compte pas, un nom caché dans un `execute $q$…$q$` compte. */
   const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
-  const PERMISES = ['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs', 'emetteur_incomplet',
-    'mes_donnees'];
+  /* DEUX LISTES depuis le lot T : `artisans_urgence()` lit `tarifs_pro` — à
+     travers « tarifs affiches », en `security invoker` — et elle seule de
+     plus. Elle n'a rien à faire dans `emetteur` ni `emetteur_assurances`,
+     qui ne s'affichent nulle part : une liste commune l'y aurait admise. */
+  const LISTES = [
+    { tables: /\b(emetteur_assurances|emetteur)\b/,
+      permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees'] },
+    { tables: /\btarifs_pro\b/,
+      permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence'] },
+  ];
   const sansCommentairesSql = (t) => {
     let sortie = '';
     let i = 0;
@@ -585,7 +765,8 @@ console.log('\nLes tarifs d’un artisan : un engagement écrit, et le code qui 
      fichier ne sont que des exemples écrits en commentaire). Moins de 60 :
      le lecteur a perdu sa cible, et le contrôle le dit au lieu de passer. */
   const lisent = fonctions.filter((f) => PRIVEES.test(f.corps));
-  const horsListe = [...new Set(lisent.filter((f) => !PERMISES.includes(f.nom)).map((f) => f.nom))];
+  const horsListe = [...new Set(LISTES.flatMap((l) => fonctions
+    .filter((f) => l.tables.test(f.corps) && !l.permises.includes(f.nom)).map((f) => f.nom)))];
   const definer = [...new Set(lisent.filter((f) => /security\s+definer/i.test(f.attributs)).map((f) => f.nom))];
   verifier(`…aucune fonction hors d’une liste fermée ne lit ces tables, quel que soit son nom (${fonctions.length} fonctions lues, ${lisent.length} les nomment)`,
     fonctions.length >= 60 && lisent.length >= 2 && horsListe.length === 0,

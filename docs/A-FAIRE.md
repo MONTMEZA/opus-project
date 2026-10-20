@@ -49,10 +49,24 @@ Supabase → SQL Editor, coller cette ligne, puis « Run » :
 alter table public.entreprise_registre drop column if exists gele;
 ```
 
-Elle portait l'ancien verrou des entreprises retirées, remplacé le 17/10 par
-une table à part (CLAUDE.md, « La réserve survit au compte »). Plus rien ne
-la lit ni ne l'écrit, et aucune ligne ne l'utilise : la laisser ne casse
-rien. Le connecteur de Claude refuse de la retirer lui-même — un geste qui
+Et deux autres restes, relevés le 20/10 en comparant la vraie base au dépôt,
+aussi inoffensifs et aussi facultatifs :
+
+```sql
+drop function if exists public.admin_basculer_metier(text, boolean, text);
+drop policy if exists "lecture demandes visiteur" on public.demandes;
+```
+
+La fonction est l'ancien bouton « désactiver un métier », retiré avant
+d'être livré : personne d'autre que l'administration de Supabase ne peut
+l'appeler, et rien ne l'appelle. La politique ne laisse plus rien lire
+(`using (false)`) : quand la lecture des demandes a été fermée, elle a été
+neutralisée plutôt que retirée, le connecteur refusant un `drop`.
+
+La colonne `gele`, elle, portait l'ancien verrou des entreprises retirées,
+remplacé le 17/10 par une table à part (CLAUDE.md, « La réserve survit au
+compte »). Plus rien ne la lit ni ne l'écrit, et aucune ligne ne l'utilise :
+la laisser ne casse rien. Le connecteur de Claude refuse de la retirer lui-même — un geste qui
 efface une colonne attend une confirmation humaine, et c'est voulu.
 
 **b) Supabase → Authentication → Policies → activer la protection contre les
@@ -1595,6 +1609,10 @@ peut s'inscrire aujourd'hui.
   réparerait tout seul si quelqu'un s'y reconnectait, ce qui est
   impossible : une session anonyme perdue ne se retrouve pas.
 
+  **Depuis le lot T (20/10), ce n'est plus seulement du ménage** : pour la
+  base, un compte « pro » sans fiche compte comme un particulier, donc il
+  LIRAIT les tarifs qu'un artisan affiche (aucun ne l'est encore).
+
   ⏳ **Il reste à le supprimer, et c'est à VOUS** : Supabase →
   Authentication → Users → la ligne sans e-mail (`d23e1784-…`) →
   « Delete user ». Je ne peux pas le faire d'ici, et c'est une protection,
@@ -1766,9 +1784,11 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
 
 **Le lot suivant, décidé le 18/10 (« juste après, à part ») :**
 
-- [ ] **Les tarifs du SOS** rejoignent `tarifs_pro` (lot T). Aujourd'hui deux
-  chiffres de déplacement coexistent, et une fiche SOS à 0 € affiche
-  « 0 – 0 € ». Décidé le 19/10 (`PLAN-DEVIS.md` §10.14) : répondre aux
+- [x] **Les tarifs du SOS** rejoignent `tarifs_pro` (lot T) — **FAIT le
+  20/10/2026**, migration appliquée et essayée sur la vraie base (CLAUDE.md,
+  « Les tarifs réunis — lot T » ; ce qui reste : plus bas, « Après le
+  lot T »). Il y avait deux chiffres de déplacement, et une fiche SOS à 0 €
+  affichait « 0 – 0 € ». Décidé le 19/10 (`PLAN-DEVIS.md` §10.14) : répondre aux
   urgences exige des tarifs affichés ; ils ne sont lus QUE par les
   particuliers ; pas de forfaits dans ce lot ; la majoration reste comme
   aujourd'hui.
@@ -1807,6 +1827,71 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
 - [ ] Deux **preuves SIRET « essai »** de l'essai du 18/10 restent en base,
   expirées et inutilisables : le connecteur refuse un `delete`. Une ligne dans
   l'éditeur SQL, au propriétaire.
+
+### Après le lot T — ce qui reste (20/10/2026)
+
+Le détail est dans CLAUDE.md, « Les tarifs réunis — lot T ».
+
+**À faire par vous, et c'est devenu plus qu'une propreté :**
+
+- [ ] **Supprimer le compte anonyme du 14/09** (§5, plus bas). Pour la base,
+  « particulier » veut dire « toute session sans fiche pro » : ce compte
+  lirait donc les tarifs qu'un artisan affiche. Il ne lit rien aujourd'hui
+  (aucun tarif n'est affiché), mais il lirait le premier.
+- [ ] **Votre ligne d'urgence « Électricité » a été éteinte** par la
+  migration : aucun de vos métiers n'est un métier d'urgence. Rien à faire,
+  c'est pour que vous ne soyez pas surpris de ne plus la voir allumée.
+
+**À essayer sur l'iPhone — dans Expo Go ou le build de développement,
+JAMAIS dans l'icône « preview » du 17/10** (elle contient le code d'avant) :
+
+- [ ] dans « Mon entreprise » → « Vos tarifs » : la virgule du pavé décimal
+  passe-t-elle (« 62,50 ») ?
+- [ ] le champ actif remonte-t-il au-dessus du clavier, tout en bas de
+  « Vos tarifs » ?
+- [ ] les interrupteurs se touchent-ils sans viser ?
+- [ ] « Mes tarifs » apparaît-il sur « Mon profil » après l'enregistrement,
+  et disparaît-il quand vous éteignez « Afficher » ?
+- [ ] les phrases sous « Afficher mes tarifs sur ma fiche » se
+  comprennent-elles sans relire ?
+- [ ] **la carte SOS au pouce** : il faut un compte PARTICULIER (le vôtre est
+  pro et n'ouvre pas l'écran SOS). Sinon, elle n'aura été vérifiée qu'au
+  navigateur.
+
+Essayer avec des valeurs **fictives** (« essai » dans le décompte), puis les
+remettre à vide **et éteindre l'interrupteur** : une ligne affichée est
+lisible par tous les particuliers connectés pendant ce temps-là.
+
+**Laissé ouvert, et daté :**
+
+- [ ] **Faire ré-accepter les conditions** : `VERSION` est passée au
+  `2026-10-19`, et rien dans l'application ne compare la version acceptée à
+  la version en vigueur (11 comptes sur 15 n'en ont même aucune). À
+  construire **avant** que `STATUT` quitte `'essai'`.
+- [ ] **L'unité des montants sur le devis** (lot 2, avec le juriste) : les
+  tarifs sont rangés TTC ; le devis décidera comment il les imprime (HT sur
+  une ligne au régime réel, mention en franchise). L'aperçu de l'en-tête
+  n'indique pas d'unité : incomplet, pas faux.
+- [ ] **Les colonnes mortes de `sos_availability`** (`deplacement`,
+  `horaire`, `majoration`) : à 0, et toute écriture non nulle est refusée
+  (OP012). Les retirer demande un `drop column` dans `schema.sql` ET sur la
+  vraie base ensemble — un lot de nettoyage.
+- [ ] **`sos_availability` reste lisible sans compte** (`"lecture dispo sos"`,
+  `using (true)`). Elle ne porte plus aucun prix ; la refermer aux connectés
+  est une question de cohérence.
+- [ ] **La démonstration ne montre pas la plupart des nouveaux états** du
+  réglage SOS (éteint, non affichés, non lus) : seul un commentaire le dit,
+  dans `src/data/tarifs-demo.js`.
+- [ ] **Quatre lectures du démarrage pro restent sans délai**
+  (`chargerProfilPro`, `chargerDemandeMetiers`, `chargerAnnonces`,
+  `mesReponsesDemandes`) ; seule celle du lot T porte `avecDelai`.
+- [ ] **`C.bad` donne 4,37 : 1 sur le fond** — sous 4,5 pour un texte. Un
+  choix de palette, à trancher.
+- [ ] **Les heures de la majoration** (de 20 h à 7 h, samedi et dimanche) ne
+  sont pas montrées aux particuliers : la fiche dit « +40 % » sans heures,
+  pour ne pas prêter à l'artisan une convention d'Opus. À trancher.
+- [ ] Le motif de `verifier-etats` ne voit pas `e.message ||` : élargi, il
+  rougirait sur huit endroits hors du lot T.
 
 ### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
 

@@ -80,7 +80,7 @@ console.log('\nCe qu’on lit dehors — le contraste, calculé sur la palette d
 {
   const C = Object.fromEntries(['ink', 'bg', 'surface', 'line', 'accent',
     'accent2', 'muted', 'bad', 'bordChamp', 'accentTexte', 'surAccent', 'sos',
-    'accentBg']
+    'accentBg', 'okTexte']
     .map((n) => [n, couleur(n)]));
 
   const cas = [
@@ -90,6 +90,10 @@ console.log('\nCe qu’on lit dehors — le contraste, calculé sur la palette d
     ['le texte secondaire sur blanc', C.muted, C.surface, 4.5],
     ['le texte orange sur blanc', C.accentTexte, C.surface, 4.5],
     ['le texte orange sur le fond', C.accentTexte, C.bg, 4.5],
+    /* LE VERT LU SUR LE FOND (lot T, relecture du 19/10/2026) : `ok` n'y
+       donnait que 4,19 : 1 sous « Déclaré le … » et « Affichés depuis le … ». */
+    ['le texte vert sur le fond', C.okTexte, C.bg, 4.5],
+    ['le texte vert sur blanc', C.okTexte, C.surface, 4.5],
     ['le texte principal sur le fond', C.ink, C.bg, 4.5],
     ['le bleu sur blanc', C.accent2, C.surface, 4.5],
     /* LE CHIFFRE D'UN JOUR POSÉ SUR L'INTERVALLE CHOISI (calendrier,

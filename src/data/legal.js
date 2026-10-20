@@ -29,7 +29,39 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-18';
+export const VERSION = '2026-10-19';
+/* 19/10/2026 — LES TARIFS RÉUNIS (lot T, section 47 de `schema.sql`). Ce
+   qui a changé DE FOND :
+     - des tarifs peuvent devenir LISIBLES, au choix de l'artisan, par les
+       PARTICULIERS qui ont un compte Opus, et par eux seuls — ni par les
+       autres artisans, ni par l'espace d'administration (réponse du
+       propriétaire du 19/10/2026) ; la base DATE ce geste (`affiche_le`) ;
+     - répondre aux urgences demande de les afficher (réponse du 19/10) ;
+     - LA LIMITE EST DITE, dans le texte opposable lui-même : Opus ne vérifie
+       pas l'identité des particuliers, et un artisan qui ouvre un second
+       compte, en particulier, lit ce qu'un particulier lit. Une barrière,
+       pas un verrou ;
+     - l'engagement de l'éditeur de ne pas consulter les prix porte sur ceux
+       que l'artisan N'AFFICHE PAS — les autres, tout particulier connecté
+       les lit déjà ;
+     - la majoration de nuit et de week-end est dite pour ce qu'elle sert :
+       l'estimation des urgences, aucun devis ;
+     - la collecte s'allonge : taux horaire et son décompte, majoration,
+       prix du devis ; et la disponibilité aux urgences (métier, rayon,
+       délai), lisible de tous depuis le premier jour et dite nulle part.
+
+   LA LIMITE DE CE CHANGEMENT, et elle se dit : AUCUN écran ne fait
+   ré-accepter un compte existant. Mesuré le 19/10/2026 : 11 comptes sur 15
+   n'ont aucune version enregistrée, aucun n'a accepté celle du 18/10. Ce
+   qui rend ce lot honnête quand même : la seule publicité nouvelle passe
+   par un geste explicite, l'interrupteur « Afficher mes tarifs sur ma
+   fiche », avec la phrase sous les yeux, et la base date ce geste. Le
+   mécanisme de ré-acceptation est à construire avant que `STATUT` quitte
+   `'essai'` (docs/A-FAIRE.md).
+
+   L'AVIS D'UN AVOCAT sur des tarifs affichés dans un petit marché est un
+   simple RAPPEL (réponse du 19/10) : il vit dans `docs/A-FAIRE.md`, pas
+   ici, et aucun contrôle n'en fait une condition. */
 /* 18/10/2026 — « Mon entreprise » pour les devis (lot 0a, section 46 de
    `schema.sql`). Ce qui a changé DE FOND : ce qui est collecté pour les
    devis (immatriculation, assurances et attestations, médiateur,
@@ -527,33 +559,63 @@ export const CGU = [
        d'entreprise autant que personnelles — un contrat, donc. La politique
        de confidentialité y renvoie, depuis « Ce que nous collectons ».
 
-       CE QU'IL DIT, ET CE QU'IL NE DIT PAS — et `verifier-legal` le tient :
-         - aucun écran d'Opus ne montre ces prix à un autre que l'artisan :
-           c'est VRAI dans le code, et le contrôle vérifie qu'aucun écran,
-           aucune politique ni aucune fonction d'administration ne lit
-           `tarifs_pro` ;
-         - l'éditeur PEUT techniquement les lire avec les outils de
-           l'hébergeur : il s'engage à ne pas le faire. Un engagement, PAS
-           une impossibilité technique — le dire autrement serait faux, et
-           un texte opposable qui ment engage son auteur ;
-         - aucun journal des lectures n'existe : le texte ne le promet
-           pas, et ne dit pas « encore », qui laisserait attendre un
-           journal dans un texte opposable (« plus tard, quand il y aura du
-           monde » : `docs/A-FAIRE.md`, pas une promesse) ;
-         - rien d'autre n'est promis — ni statistique, ni usage futur : ce
-           n'est pas la question qui a été tranchée. */
+       LE LOT T (19/10/2026) A CHANGÉ CE QUI EST PRIVÉ, et la clause le suit
+       — `verifier-legal` compare ce texte au schéma, dans les deux sens :
+         - « ne sont montrés à personne d'autre que vous » ne vise plus que
+           ce qui N'EST PAS affiché, et la liste nomme « ni à un
+           particulier », puisque les tarifs affichés, eux, vont aux
+           particuliers ;
+         - LES LECTEURS DES TARIFS AFFICHÉS sont les particuliers qui ont un
+           compte (réponse du 19/10) : ils ne s'affichent ni aux autres
+           artisans, ni dans l'espace d'administration, et l'éditeur ne les
+           voit pas DEPUIS SON COMPTE, qui est professionnel. « dans
+           l'application » disait plus que la vérité (relecture du
+           19/10/2026) : l'éditeur peut ouvrir un compte particulier — pour
+           essayer la carte SOS, justement —, et la phrase suivante, la
+           limite, le couvre. L'engagement du 18/10, « aucun écran ne montre
+           les prix d'un artisan à un autre », reste vrai TEL QUEL ;
+         - LA LIMITE EST DITE, ici même : Opus ne vérifie pas l'identité des
+           particuliers, et un second compte particulier lit ce qu'un
+           particulier lit. Une barrière, pas un verrou — l'écrire autrement
+           serait faux, et un texte opposable qui ment engage son auteur ;
+         - l'engagement de ne pas consulter porte sur « ceux que vous
+           n'affichez pas » : il protège ce que personne d'autre ne lit ;
+         - « personnes sans compte » n'y est PAS : aucun visiteur ne lit une
+           ligne de tarifs (la base n'accorde rien à `anon`) ;
+         - la majoration n'est plus rangée parmi ce qui « sert aux devis » :
+           aucun devis ne la porte ;
+         - « Répondre aux urgences demande de les afficher » suit la réponse
+           du 19/10 à la question 1.
+
+       CE QUI NE CHANGE PAS : l'éditeur PEUT techniquement les lire avec les
+       outils de l'hébergeur — un engagement, PAS une impossibilité
+       technique ; aucun journal des lectures n'existe, et le texte ne dit
+       pas « encore » ; rien d'autre n'est promis. */
     titre: 'Vos tarifs et vos prix',
-    texte: 'Les tarifs et les prix que vous enregistrez pour vos devis — aujourd’hui vos '
-      + 'frais de déplacement — ne sont montrés à personne d’autre que vous par aucun écran '
-      + 'd’Opus : ni à un autre artisan, ni à un visiteur, ni dans l’espace '
-      + 'd’administration. Seuls les devis que vous adressez vous-même à un client les '
-      + 'portent, pour ce client. La base de données le garantit pour les autres utilisateurs. '
-      + 'L’éditeur d’Opus, qui administre cette base, pourrait techniquement les lire avec '
-      + 'les outils d’administration de l’hébergeur : il s’engage à ne pas les consulter. '
-      + 'C’est un engagement, pas une impossibilité technique, et aucun journal n’enregistre '
-      + 'une telle lecture. Pour faire fonctionner le service, il peut compter les '
-      + 'lignes ou vérifier la structure de la base sans lire vos prix. Seule une obligation '
-      + 'légale pourrait l’amener à les communiquer.',
+    texte: 'Les tarifs que vous enregistrez dans « Mon entreprise » ne sont utilisés que par '
+      + 'vous tant que vous ne choisissez pas de les afficher : vos frais de déplacement, votre '
+      + 'taux horaire et son décompte, et le prix de vos devis serviront à préparer vos devis ; '
+      + 'votre majoration de nuit et de week-end ne sert qu’à l’estimation des urgences, donc '
+      + 'seulement si vous les affichez. Si vous touchez « Afficher mes tarifs sur ma fiche », '
+      + 'ils deviennent lisibles par les particuliers qui ont un compte Opus : ils s’affichent '
+      + 'sur votre fiche et, si vous répondez aux urgences, servent à l’estimation que le '
+      + 'bouton SOS montre aux particuliers. Ils ne s’affichent pas aux autres artisans, ni dans '
+      + 'l’espace d’administration : l’éditeur d’Opus ne les voit pas non plus depuis son '
+      + 'compte, qui est professionnel. C’est une barrière, pas un verrou : '
+      + 'Opus ne vérifie pas l’identité des particuliers, et quelqu’un qui ouvre un compte '
+      + 'particulier avec une autre adresse e-mail, un artisan compris, peut les lire. Répondre '
+      + 'aux urgences demande de les afficher. Opus enregistre la date à laquelle vous les '
+      + 'affichez. Vous pouvez cesser de les afficher à tout moment. Les tarifs que vous '
+      + 'n’affichez pas, et les autres prix que vous enregistrez pour vos devis, ne sont montrés '
+      + 'à personne d’autre que vous par aucun écran d’Opus : ni à un autre artisan, ni à un '
+      + 'particulier, ni à un visiteur, ni dans l’espace d’administration. Vos devis portent '
+      + 'ceux qui leur servent, pour le client à qui vous les adressez. La base de données le '
+      + 'garantit pour les autres utilisateurs. L’éditeur d’Opus, qui administre cette base, '
+      + 'pourrait techniquement les lire avec les outils d’administration de l’hébergeur : il '
+      + 's’engage à ne pas consulter ceux que vous n’affichez pas. C’est un engagement, pas une '
+      + 'impossibilité technique, et aucun journal n’enregistre une telle lecture. Pour faire '
+      + 'fonctionner le service, il peut compter les lignes ou vérifier la structure de la base '
+      + 'sans lire vos prix. Seule une obligation légale pourrait l’amener à les communiquer.',
   },
   {
     titre: 'Ce qui est interdit',
@@ -646,7 +708,15 @@ export const CONFIDENTIALITE = [
     /* LE NOM COMPLET DU RÉPERTOIRE MANQUAIT À CETTE LISTE (relecture
        adverse du 15/10) : il est recopié dans l'identité privée, et pour un
        entrepreneur individuel c'est son nom civil — une donnée obtenue
-       auprès d'une autre source que la personne, qu'il faut nommer. */
+       auprès d'une autre source que la personne, qu'il faut nommer.
+
+       LES TARIFS AFFICHÉS, relecture du 19/10/2026 (lot T) : le texte
+       disait « par eux seuls — ni par les autres artisans », puis, une
+       phrase plus loin, qu'un artisan peut les lire. Il dit maintenant ce
+       qui est vrai, dans le même ordre que la CGU : ils ne S'AFFICHENT pas
+       aux autres artisans, c'est une barrière, pas un verrou. Et la
+       disponibilité aux urgences reste lisible de tous APRÈS qu'on a cessé
+       d'y répondre — une ligne éteinte n'est pas supprimée : on le dit. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -674,11 +744,20 @@ export const CONFIDENTIALITE = [
       + 'rangée dans la base d’Opus. Si vous êtes professionnel, pour vos devis : votre '
       + 'immatriculation, votre capital, vos assurances et leurs attestations, votre '
       + 'médiateur, vos garanties, vos conditions de paiement, d’exécution et de '
-      + 'réclamation, vos frais de déplacement. Aucun écran d’Opus ne les montre à '
-      + 'quelqu’un d’autre que vous ; les attestations jointes, comme vos autres documents '
-      + 'professionnels, sont aussi lisibles par l’administration d’Opus. Pour vos tarifs '
-      + 'et vos prix, l’éditeur prend en plus un engagement écrit dans les conditions '
-      + 'd’utilisation (« Vos tarifs et vos prix »).',
+      + 'réclamation, et vos tarifs (frais de déplacement, taux horaire et son décompte, '
+      + 'majoration de nuit et de week-end, prix du devis). Aucun écran d’Opus ne les montre '
+      + 'à quelqu’un d’autre que vous, sauf vos tarifs si vous choisissez de les afficher : ils '
+      + 'deviennent alors lisibles par les particuliers qui ont un compte Opus ; ils ne '
+      + 's’affichent ni aux autres artisans, ni dans l’espace d’administration, et la date à '
+      + 'laquelle vous les affichez est enregistrée. C’est une barrière, pas un verrou : Opus ne '
+      + 'vérifie pas l’identité des particuliers, et quelqu’un qui ouvre un compte particulier, '
+      + 'un artisan compris, peut les lire. Les attestations jointes, comme vos autres documents '
+      + 'professionnels, sont aussi lisibles par l’administration d’Opus. Si vous répondez ou '
+      + 'avez répondu aux urgences : votre métier d’urgence, votre rayon d’intervention et votre '
+      + 'délai d’arrivée habituel, lisibles par tous, même après avoir cessé d’y répondre ; ce '
+      + 'délai s’affiche avec vos tarifs aux personnes qui cherchent une urgence près de chez '
+      + 'elles. Pour vos tarifs et vos prix, l’éditeur prend en plus un engagement '
+      + 'écrit dans les conditions d’utilisation (« Vos tarifs et vos prix »).',
   },
   {
     titre: 'Ce que nous ne collectons pas',

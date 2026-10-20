@@ -4,7 +4,11 @@
  * Tout ce qui rend un devis légal et que le répertoire Sirene (INSEE) ne
  * donne pas : l'immatriculation, le capital, les adresses qu'Opus n'a pas,
  * les coordonnées, le régime de TVA, les assurances, le médiateur, les
- * garanties, les conditions, les frais de déplacement (section 46).
+ * garanties, les conditions (section 46) — et ses TARIFS (lot T, section 47) :
+ * frais de déplacement, taux horaire et son décompte, majoration de nuit et
+ * de week-end, prix du devis, et l'interrupteur « Afficher mes tarifs sur
+ * ma fiche ». C'est la SEULE porte qui les écrit : le réglage d'urgence de
+ * « Modifier mon profil » les montre et renvoie ici.
  *
  * CE QUE LE FORMULAIRE NE FAIT JAMAIS, et le contrôle le tient
  * ------------------------------------------------------------
@@ -48,9 +52,12 @@ import { dateFrancaise } from '../lib/entreprise';
 import {
   REGISTRES, REGISTRE_D_UNE_SOCIETE, REGIMES_TVA, NATURES_ASSURANCE, LONGUEUR_MAX,
   LIBELLES_IMPRIMES, etatInitialFormulaire, fusionnerFormulaire, fraisDepuisFormulaire,
+  tarifsDepuisFormulaire, pourcentDepuisSaisie,
+  MESSAGE_TAUX_ZERO, MESSAGE_MAJORATION_ZERO, MESSAGE_DEVIS_ZERO,
   versCentimes, estEI, estSocieteCommerciale, rcsOblige, mediateurDeLaListe,
   parleDUnPaiementALaSignature, avisEmetteur,
 } from '../lib/emetteur';
+import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { MEDIATEURS_RELEVES_LE, ADRESSE_A_RECOPIER } from '../data/mediateurs';
 
 const L = LONGUEUR_MAX.emetteur;
@@ -96,6 +103,12 @@ export const SECTION_DU_CHAMP = Object.freeze({
   reclamations_texte: 'conditions',
   frais_deplacement_centimes: 'frais',
   frais_deplacement_texte: 'frais',
+  /* Les tarifs réunis (lot T) : un refus fait défiler jusqu'à SA section. */
+  taux_horaire_centimes: 'frais',
+  majoration_pct: 'frais',
+  decompte_temps_texte: 'frais',
+  prix_devis_centimes: 'frais',
+  affiche: 'affiche',
 });
 
 /** 350000 → « 3500 » ; 350050 → « 3500,50 » : ce qu'on retape, pas ce qu'on imprime. */
@@ -127,6 +140,13 @@ export function etatDepuis(reference) {
      pas », et c'est l'interrupteur qui le porte. */
   textes.frais_montant = t.frais_deplacement_centimes > 0 ? montantEnSaisie(t.frais_deplacement_centimes) : '';
   textes.frais_texte = texteDe(t.frais_deplacement_texte);
+  /* LES TARIFS RÉUNIS (lot T) : même règle, le 0 ne s'écrit jamais dans un
+     champ. « Je ne majore pas » et « Mes devis sont gratuits » sont des
+     interrupteurs ; un taux horaire n'a pas de 0. */
+  textes.taux_montant = t.taux_horaire_centimes > 0 ? montantEnSaisie(t.taux_horaire_centimes) : '';
+  textes.decompte = texteDe(t.decompte_temps_texte);
+  textes.majoration_pct = t.majoration_pct > 0 ? String(t.majoration_pct) : '';
+  textes.devis_montant = t.prix_devis_centimes > 0 ? montantEnSaisie(t.prix_devis_centimes) : '';
   const liste = mediateurDeLaListe(e.mediateur_nom, e.mediateur_site);
   let mediateur = { mode: 'aucun', nom: null, site: null };
   if (liste) mediateur = { mode: 'liste', nom: e.mediateur_nom, site: e.mediateur_site };
@@ -138,6 +158,10 @@ export function etatDepuis(reference) {
     choix: etatInitialFormulaire(reference && reference.emetteur, reference && reference.tarifs),
     enLiquidation: e.en_liquidation === true,
     locataireGerant: e.locataire_gerant === true,
+    /* « Afficher mes tarifs sur ma fiche » : un INTERRUPTEUR, comme les deux
+       drapeaux du dessus, lu sur la ligne chargée — pas un choix. Éteint par
+       défaut (décision du 17/10/2026). */
+    afficheTarifs: t.affiche === true,
     mediateur,
   };
 }
@@ -149,6 +173,9 @@ export function memeEtat(a, b) {
     choix: (x && x.choix) || {},
     enLiquidation: !!(x && x.enLiquidation),
     locataireGerant: !!(x && x.locataireGerant),
+    /* Normalisé comme les deux drapeaux : allumer puis éteindre ne fait pas
+       apparaître une fausse bande « Quitter sans enregistrer ». */
+    afficheTarifs: !!(x && x.afficheTarifs),
     mediateur: (x && x.mediateur) || {},
   });
   return norm(a) === norm(b);
@@ -278,7 +305,12 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
   const [mediateur, setMediateur] = useState(init.mediateur);
   const [telVide, setTelVide] = useState(!init.textes.telephone.trim());
   const [emailVide, setEmailVide] = useState(!init.textes.email.trim());
-  const [erreurFrais, setErreurFrais] = useState(null);
+  const [afficheTarifs, setAfficheTarifs] = useState(init.afficheTarifs);
+  /* LES REFUS EN LIGNE des quatre montants de tarifs, posés à la sortie du
+     champ (`onBlur`) : un « 0 » tapé ou un montant illisible se voit AVANT
+     tout envoi, sous SON champ. */
+  const [erreursLocales, setErreursLocales] = useState({});
+  const poserErreur = (cle, message) => setErreursLocales((x) => ({ ...x, [cle]: message || null }));
 
   /* Une référence par champ, posée par le champ lui-même au montage et
      retirée au démontage : un champ caché rend `undefined`, jamais une
@@ -308,6 +340,12 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
     lu.capital = monte('capital') ? monte('capital').lire() : undefined;
     lu.frais_montant = monte('frais_montant') ? monte('frais_montant').lire() : undefined;
     lu.frais_texte = monte('frais_texte') ? monte('frais_texte').lire() : undefined;
+    /* Sans ces quatre lectures, `aDesChangements()` ne verrait pas un taux
+       tapé, et fermer la fenêtre perdrait la saisie sans prévenir. */
+    lu.taux_montant = monte('taux_montant') ? monte('taux_montant').lire() : undefined;
+    lu.decompte = monte('decompte') ? monte('decompte').lire() : undefined;
+    lu.majoration_pct = monte('majoration_pct') ? monte('majoration_pct').lire() : undefined;
+    lu.devis_montant = monte('devis_montant') ? monte('devis_montant').lire() : undefined;
     return lu;
   };
 
@@ -320,6 +358,7 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
     choix,
     enLiquidation,
     locataireGerant,
+    afficheTarifs,
     mediateur,
   });
 
@@ -379,15 +418,27 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
       lu.mediateur_site = null;
     }
 
-    const frais = fraisDepuisFormulaire({
-      aucun: choix.frais === 'aucun',
-      montant: t.frais_montant,
-      texte: t.frais_texte,
+    /* LES TARIFS, TOUTES LES COLONNES ÉCRITES — et c'est
+       `tarifsDepuisFormulaire` seule qui écrit un 0 : pour les frais, elle
+       passe par `fraisDepuisFormulaire` ; pour la majoration et le devis,
+       elle ne l'écrit que si l'interrupteur est touché. Un « 0 » tapé est
+       refusé, avec la phrase qui renvoie à l'interrupteur. */
+    const tarifs = tarifsDepuisFormulaire({
+      frais: {
+        aucun: choix.frais === 'aucun',
+        montant: t.frais_montant,
+        texte: t.frais_texte,
+      },
+      taux: t.taux_montant,
+      decompte: t.decompte,
+      majoration: { aucune: choix.majoration === 'aucune', pct: t.majoration_pct },
+      devis: { gratuit: choix.devis === 'gratuit', montant: t.devis_montant },
+      affiche: afficheTarifs,
     });
-    if (!frais.ok) return { ok: false, champ: frais.champ, message: frais.message };
+    if (!tarifs.ok) return { ok: false, champ: tarifs.champ, message: tarifs.message };
 
     const base = (reference && reference.emetteur) || {};
-    return { ok: true, emetteur: fusionnerFormulaire(base, lu), tarifs: frais.valeurs };
+    return { ok: true, emetteur: fusionnerFormulaire(base, lu), tarifs: tarifs.valeurs };
   };
 
   useImperativeHandle(ref, () => ({
@@ -407,12 +458,42 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
     if (onEffacerErreur) onEffacerErreur();
   };
 
+  /* Le refus en ligne d'un champ de tarif l'emporte : il vient d'être
+     posé, à la sortie du champ. */
+  const LOCALE_DU_CHAMP = {
+    frais_deplacement_centimes: 'frais',
+    taux_horaire_centimes: 'taux',
+    majoration_pct: 'majoration',
+    prix_devis_centimes: 'devis',
+  };
   const sous = (champ) => {
-    if (champ === 'frais_deplacement_centimes' && erreurFrais) {
-      return <Text style={s.erreur}>{erreurFrais}</Text>;
-    }
+    const locale = LOCALE_DU_CHAMP[champ] ? erreursLocales[LOCALE_DU_CHAMP[champ]] : null;
+    if (locale) return <Text style={s.erreur}>{locale}</Text>;
     return erreur && erreur.champ === champ ? <Text style={s.erreur}>{erreur.message}</Text> : null;
   };
+
+  /* Ce qu'un champ contient au moment où on le quitte. */
+  const lireChamp = (cle) => (champs.current[cle] ? champs.current[cle].lire() : '');
+
+  /* Les refus à la sortie d'un champ — les mêmes phrases qu'à
+     l'enregistrement, et AUCUNE requête. */
+  const verifierTaux = () => {
+    const r = versCentimes(lireChamp('taux_montant'));
+    poserErreur('taux', !r.ok ? r.message : (r.centimes === 0 ? MESSAGE_TAUX_ZERO : null));
+  };
+  const verifierMajoration = () => {
+    const r = pourcentDepuisSaisie(lireChamp('majoration_pct'));
+    poserErreur('majoration', !r.ok ? r.message : (r.valeur === 0 ? MESSAGE_MAJORATION_ZERO : null));
+  };
+  const verifierDevis = () => {
+    const r = versCentimes(lireChamp('devis_montant'));
+    poserErreur('devis', !r.ok ? r.message : (r.centimes === 0 ? MESSAGE_DEVIS_ZERO : null));
+  };
+
+  /* La date du geste « Afficher », telle que la BASE l'a posée. */
+  const tarifsCharges = (reference && reference.tarifs) || null;
+  const afficheLe = tarifsCharges && tarifsCharges.affiche === true && tarifsCharges.affiche_le
+    ? dateFrancaise(tarifsCharges.affiche_le) : null;
 
   /* Une ancre par section, rapportée à « Mon entreprise » qui défile. */
   const pos = onPosition;
@@ -955,40 +1036,41 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
         </Aide>
       </Section>
 
-      {/* 11. — LES FRAIS DE DÉPLACEMENT : un champ vide et « aucun » ne se
-          ressemblent pas. SEUL l'interrupteur écrit le 0. */}
-      <Section ancre="frais" titre="Frais de déplacement" onPosition={pos}>
+      {/* 11. — VOS TARIFS (lot T) : UNE liste, pour vos devis et — si vous les
+          affichez — pour votre fiche et l'estimation du bouton SOS. Toutes
+          taxes comprises : c'est ce que paie le client, et ce qu'il lit.
+          Trois états partout : un champ vide (non déclaré), un interrupteur
+          (le 0 d'un choix), un montant. SEULS les interrupteurs écrivent 0.
+          L'ancre reste `frais` : le motif `frais_deplacement` y mène. */}
+      <Section ancre="frais" titre="Vos tarifs" onPosition={pos}>
+        <Text style={s.label}>Frais de déplacement</Text>
         <Interrupteur
           actif={choix.frais === 'aucun'}
           libelle="Je ne facture pas de frais de déplacement"
           aide={`Vos devis porteront « ${LIBELLES_IMPRIMES.fraisNonFactures} ».`}
           onPress={() => {
             /* L'interrupteur ne fait que changer le CHOIX : c'est
-               `fraisDepuisFormulaire`, à l'enregistrement, qui en tire le 0 —
-               le seul endroit qui l'écrit. */
-            setErreurFrais(null);
+               `tarifsDepuisFormulaire`, à l'enregistrement, qui en tire le
+               0 — par `fraisDepuisFormulaire`, le seul endroit qui l'écrit. */
+            poserErreur('frais', null);
             choisir('frais', choix.frais === 'aucun' ? 'facture' : 'aucun');
           }}
         />
         {choix.frais !== 'aucun' && (
           <>
-            <Text style={s.label}>Montant</Text>
+            <Text style={s.label}>Montant TTC</Text>
             <ChampLocal
               ref={(r) => { champs.current.frais_montant = r; }}
               defaut={init.textes.frais_montant}
               placeholder="En euros, par exemple 35"
               keyboardType="decimal-pad"
-              accessibilityLabel="Frais de déplacement, en euros"
+              accessibilityLabel="Frais de déplacement, en euros toutes taxes comprises"
               /* `onBlur`, et pas `onEndEditing`, que `react-native-web` ne
                  connaît pas (mesuré le 18/10) : le refus doit se voir des
                  deux côtés, avant tout envoi. */
               onBlur={() => {
-                const r = fraisDepuisFormulaire({
-                  aucun: false,
-                  montant: champs.current.frais_montant ? champs.current.frais_montant.lire() : '',
-                  texte: '',
-                });
-                setErreurFrais(r.ok ? null : r.message);
+                const r = fraisDepuisFormulaire({ aucun: false, montant: lireChamp('frais_montant'), texte: '' });
+                poserErreur('frais', r.ok ? null : r.message);
               }}
             />
             {sous('frais_deplacement_centimes')}
@@ -1004,25 +1086,142 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
           </>
         )}
         <Aide>Un champ vide et « aucun » ne se ressemblent pas : dites-le.</Aide>
-        {/* DEUX CHIFFRES DE DÉPLACEMENT COEXISTENT jusqu'au lot des tarifs :
-            celui du devis, privé, et celui du SOS, PUBLIC — `SosScreen` les
-            affiche aux particuliers. Sans la dernière phrase, l'artisan
-            croyait que l'engagement « Vos tarifs et vos prix » couvrait aussi
-            ses tarifs d'urgence (relecture du 18/10/2026). La phrase du
-            propriétaire reste telle quelle, au milieu. */}
+
+        <Text style={s.label}>Taux horaire TTC</Text>
+        <ChampLocal
+          ref={(r) => { champs.current.taux_montant = r; }}
+          defaut={init.textes.taux_montant}
+          placeholder="En euros de l’heure, par exemple 62"
+          keyboardType="decimal-pad"
+          accessibilityLabel="Taux horaire, en euros de l’heure toutes taxes comprises"
+          onBlur={verifierTaux}
+        />
+        {sous('taux_horaire_centimes')}
+        <Aide>Si vous ne travaillez qu’au forfait, laissez-le vide.</Aide>
+
+        <Text style={s.label}>Décompte du temps</Text>
+        <ChampLocal
+          ref={(r) => { champs.current.decompte = r; }}
+          multiligne
+          defaut={init.textes.decompte}
+          placeholder="Par exemple : toute heure commencée est due ; au quart d’heure après la première heure"
+          maxLength={LONGUEUR_MAX.tarifs_pro.decompte_temps_texte}
+        />
+        {sous('decompte_temps_texte')}
+        <Aide>Comment vous comptez le temps passé : il accompagne votre taux horaire.</Aide>
+
+        <Text style={s.label}>Majoration de nuit et de week-end</Text>
+        <Interrupteur
+          actif={choix.majoration === 'aucune'}
+          libelle="Je ne majore pas la nuit ni le week-end"
+          onPress={() => {
+            poserErreur('majoration', null);
+            choisir('majoration', choix.majoration === 'aucune' ? 'taux' : 'aucune');
+          }}
+        />
+        {choix.majoration !== 'aucune' && (
+          <>
+            <Text style={s.label}>Majoration, en pourcentage</Text>
+            <ChampLocal
+              ref={(r) => { champs.current.majoration_pct = r; }}
+              defaut={init.textes.majoration_pct}
+              placeholder="Par exemple 40"
+              keyboardType="number-pad"
+              accessibilityLabel="Majoration de nuit et de week-end, en pourcentage"
+              onBlur={verifierMajoration}
+            />
+            {sous('majoration_pct')}
+          </>
+        )}
         <Aide>
-          Ces frais-ci, ceux de vos devis, ne sont montrés à personne d’autre que vous : ils ne
-          s’impriment que sur vos devis.
+          {`Elle ne sert qu’à l’estimation des urgences. Opus l’applique ${HEURES_MAJOREES}, au `
+            + 'déplacement comme aux heures. Votre fiche n’affiche que le pourcentage.'}
         </Aide>
+
+        <Text style={s.label}>Prix du devis</Text>
+        <Interrupteur
+          actif={choix.devis === 'gratuit'}
+          libelle="Mes devis sont gratuits"
+          onPress={() => {
+            poserErreur('devis', null);
+            choisir('devis', choix.devis === 'gratuit' ? 'payant' : 'gratuit');
+          }}
+        />
+        {choix.devis !== 'gratuit' && (
+          <>
+            <Text style={s.label}>Prix du devis TTC</Text>
+            <ChampLocal
+              ref={(r) => { champs.current.devis_montant = r; }}
+              defaut={init.textes.devis_montant}
+              placeholder="En euros, par exemple 30"
+              keyboardType="decimal-pad"
+              accessibilityLabel="Prix du devis, en euros toutes taxes comprises"
+              onBlur={verifierDevis}
+            />
+            {sous('prix_devis_centimes')}
+          </>
+        )}
+
+        {/* L'ARRÊTÉ DU 24 JANVIER 2017, sans guillemets : le texte n'a pas
+            été relu sur Légifrance (le propriétaire ne l'a pas recopié, le
+            19/10). On dit ce que demande l'art. 3 tel que le plan le cite,
+            et ce qu'on ne sait pas — sans conseiller de « prudence ». */}
         <Aide>
-          Les tarifs de vos urgences (SOS) se règlent encore à part, dans « Modifier mon profil ».
-          Ceux-là s’affichent aux particuliers qui cherchent une urgence.
+          Si vous faites du dépannage, de la réparation ou de l’entretien, l’arrêté du 24 janvier
+          2017 (art. 3) demande que vos tarifs soient accessibles sur tout espace en ligne
+          consacré à votre activité, même si votre site les affiche déjà. On ne sait pas encore si
+          votre fiche Opus en est un. Vos tarifs n’y apparaissent que si vous choisissez de les
+          afficher.
         </Aide>
-        <Aide>
-          Si vous faites du dépannage, de la réparation ou de l’entretien, la loi demande aussi
-          d’afficher vos tarifs sur vos pages en ligne (arrêté du 24 janvier 2017, art. 3), et
-          votre fiche Opus pourrait en être une. Opus ne les y affiche pas encore.
-        </Aide>
+      </Section>
+
+      {/* 12. — AFFICHER MES TARIFS : un interrupteur, ÉTEINT par défaut
+          (« au choix de l'artisan », 17/10/2026). Toucher ne fait que
+          changer le formulaire ; c'est « Enregistrer » qui écrit, et la
+          BASE qui date le geste. Sa propre section, et sa propre ancre : la
+          rangée « Afficher mes tarifs » du réglage d'urgence y mène droit. */}
+      <Section ancre="affiche" titre="Afficher mes tarifs" onPosition={pos}>
+        <Interrupteur
+          actif={afficheTarifs}
+          libelle="Afficher mes tarifs sur ma fiche"
+          onPress={() => {
+            garder();
+            setAfficheTarifs((a) => !a);
+            if (onEffacerErreur) onEffacerErreur();
+          }}
+        />
+        {afficheTarifs ? (
+          <>
+            <Aide>
+              Vos tarifs s’affichent sur votre fiche et servent, si vous répondez aux urgences, à
+              l’estimation du bouton SOS.
+            </Aide>
+            {/* QUI LES VOIT — la phrase de `tarifs.js`, jamais réécrite ici :
+                les particuliers connectés seulement (réponse du propriétaire
+                du 19/10/2026). « depuis son compte » dit la barrière, sans
+                promettre un verrou. */}
+            <Aide>{QUI_VOIT_LES_TARIFS}</Aide>
+            <Aide>Vous pouvez les retirer à tout moment.</Aide>
+          </>
+        ) : (
+          /* La phrase de `tarifs.js` : elle disait « ils ne servent qu'à
+             préparer vos devis », alors que la majoration ne sert à aucun
+             devis (relecture droit du 19/10/2026). */
+          <Aide>{`Vos tarifs ne s’affichent nulle part. ${TARIFS_NON_AFFICHES}`}</Aide>
+        )}
+        {/* LA DATE DIT L'ÉTAT EN BASE, et elle le dit avec le formulaire :
+            l'interrupteur éteint sans enregistrer, « Affichés depuis le … »
+            seul contredisait la phrase juste au-dessus (relecture du
+            19/10/2026). Ce qui est vrai : ils le sont encore, jusqu'à
+            l'enregistrement. */}
+        {!!afficheLe && (
+          <Text style={s.declare}>
+            {afficheTarifs
+              ? `Affichés depuis le ${afficheLe}.`
+              : `Affichés depuis le ${afficheLe} : ils cesseront de l’être quand vous enregistrerez.`}
+          </Text>
+        )}
+        {sous('affiche')}
       </Section>
     </View>
   );
@@ -1048,7 +1247,9 @@ const s = StyleSheet.create({
     fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit),
     borderLeftWidth: S.xs, borderLeftColor: C.accent2, paddingLeft: S.sm, marginTop: S.xs,
   },
-  declare: { fontFamily: F.inter6, fontSize: T.petit, color: C.ok, marginTop: S.xs },
+  /* `okTexte`, pas `ok` : le vert posé en texte sur le fond beige ne donnait
+     que 4,19 : 1 (relecture du 19/10/2026). Même règle que `accentTexte`. */
+  declare: { fontFamily: F.inter6, fontSize: T.petit, color: C.okTexte, marginTop: S.xs },
   options: { gap: S.xs },
   /* UNE OPTION est une rangée de formulaire : angle VIF, et la bordure des
      champs, qui dit OÙ APPUYER (3,85 : 1 sur blanc). 44 points au moins. */

@@ -3471,6 +3471,13 @@ L'ordre devient donc **T → 1 → P → S → 2 → 3 → 4 → 5**. Le lot T (
 réunis, devis et SOS) **remplace** le lot 6 conditionnel : la réponse du
 17/10 (« au choix de l'artisan ») l'a rendu certain.
 
+**Le lot T est FAIT le 20/10/2026** : construit, migré sur la vraie base,
+essayé par le chemin de l'application (CLAUDE.md, « Les tarifs réunis —
+lot T » ; le cahier qui l'a guidé : `docs/CAHIER-LOT-T.md`). Ce que le
+lot 1 en attend est au §1.3 de ce cahier : le taux horaire est rangé en
+centimes, **TTC**, à trois états, et le lot 1 le COPIE comme une valeur
+proposée — jamais un lien.
+
 Et l'engagement du 18/10 (10.13) **tient tel quel** : « aucun écran ne montre
 les prix d'un artisan à un autre ». Les tarifs affichés vont aux particuliers,
 jamais aux autres artisans.

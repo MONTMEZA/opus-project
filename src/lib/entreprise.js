@@ -52,10 +52,41 @@ import { metiersProposes } from '../data/ape-metiers.js';
  */
 export const NOM_ENTREPRISE_MAX = 120;
 
-/** « 2026-09-02 » ou un horodatage → « 02/09/2026 ». Rien d'inventé sinon. */
+/**
+ * « 2026-09-02 » ou un horodatage → « 02/09/2026 ». Rien d'inventé sinon.
+ *
+ * DEUX CAS, ET ILS NE SE LISENT PAS PAREIL (trouvé sur la vraie base le
+ * 20/10/2026, à 1 h 18 du matin) :
+ *   - une colonne `date` (« 2026-09-02 ») se lit COMME UNE CHAÎNE. Passée
+ *     par `new Date()`, elle tomberait à minuit UTC, donc la veille pour qui
+ *     vit à l'ouest de Greenwich (CLAUDE.md, « Les dates de la Place des
+ *     pros ») ;
+ *   - un HORODATAGE (« 2026-10-19T23:18:21.5+00:00 ») est un instant, que la
+ *     base rend en UTC. Lu comme une chaîne, ses dix premiers caractères
+ *     donnaient « 19/10/2026 » pour des tarifs affichés le 20 à 1 h 18 en
+ *     France : toute la nuit, de minuit à 1 h ou 2 h, la date était celle de
+ *     la VEILLE. Il se lit donc à l'heure du téléphone.
+ * Un horodatage que le téléphone ne sait pas lire retombe sur sa date
+ * écrite : approximative d'un jour la nuit, jamais inventée.
+ */
 export function dateFrancaise(valeur) {
-  const m = String(valeur == null ? '' : valeur).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+  const s = String(valeur == null ? '' : valeur);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s)) {
+    // La forme ISO que tous les moteurs lisent : « T », trois décimales au
+    // plus (PostgREST en rend six), un fuseau « +00:00 » et non « +00 ».
+    const iso = s.replace(' ', 'T')
+      .replace(/(\.\d{3})\d+/, '$1')
+      .replace(/([+-]\d{2})$/, '$1:00');
+    const t = Date.parse(iso);
+    if (Number.isFinite(t)) {
+      const d = new Date(t);
+      const deux = (n) => String(n).padStart(2, '0');
+      return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()}`;
+    }
+  }
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 /**

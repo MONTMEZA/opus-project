@@ -20,6 +20,8 @@ import PortfolioGrid from '../components/PortfolioGrid';
 import ConseilsPro from '../components/ConseilsPro';
 import BandeChantiers from '../components/BandeChantiers';
 import FicheContactPro from '../components/FicheContactPro';
+import TarifsPublics from '../components/TarifsPublics';
+import { QUI_VOIT_LES_TARIFS } from '../lib/tarifs';
 import { BadgeCheck, Lock, ChevronRight, ShieldCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
 import CarteDemandePro from '../components/CarteDemandePro';
@@ -104,6 +106,9 @@ export default function ProfilOwnScreen({
   demandePro = null, demandeProEtat = 'jamais',
   onRechargerDemandePro, onPasserPro, onJoindreJustificatif, onAnnulerDemandePro,
   onEntrerEnPro, onErreur,
+  /* MES tarifs (section 47, lot T) : `mesTarifs` d'`OpusApp`, la même source
+     que le réglage d'urgence et « Mon entreprise ». */
+  tarifs = null,
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
@@ -253,6 +258,18 @@ export default function ProfilOwnScreen({
       {/* Exactement le bloc que voient vos clients — et, s'il est vide, la
           seule invitation de tout l'écran à le remplir. */}
       <FicheContactPro pro={me} estMoi onEdit={onEdit} />
+
+      {/* MES TARIFS, à la place exacte de « Ses tarifs » sur la fiche que
+          voient les particuliers, et seulement s'ils sont affichés — le même
+          composant, le même ordre, la même garde.
+
+          AVEC LA PHRASE QUI DIT QUI LES VOIT : ses confrères ne voient pas
+          ce bloc (réponse du propriétaire du 19/10/2026). Sans elle, voir sa
+          page « comme ses clients » lui ferait croire que tout le monde le
+          voit. */}
+      {tarifs && tarifs.affiche === true && (
+        <TarifsPublics tarifs={tarifs} titre="Mes tarifs" quiLesVoit={QUI_VOIT_LES_TARIFS} />
+      )}
 
       <RappelVerification
         pro={me}
