@@ -42,13 +42,16 @@ select has_function_privilege('anon', 'public.recalcule_chantier(uuid)', 'execut
 -- memes fonctions.
 -- `authentifie` doit valoir t PARTOUT. Un f ici, et la regle echoue au lieu
 -- de filtrer.
+-- tva_intra_du_siren (20/10/2026) : appelee par emetteur_tva_intra_check.
+-- `anon` y vaut f, et c est voulu : un visiteur n ecrit jamais dans
+-- `emetteur` (aucun droit de table, section 46.5).
 select p.proname, p.prosecdef as definer,
        has_function_privilege('anon', p.oid, 'execute') as anon,
        has_function_privilege('authenticated', p.oid, 'execute') as authentifie
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public'
    and p.proname in ('est_admin', 'est_masque', 'est_un_pro', 'est_mon_entreprise',
-                     'horaires_valides', 'metiers_connus')
+                     'horaires_valides', 'metiers_connus', 'tva_intra_du_siren')
  order by 1;
 
 \echo '=== 5. ET UNE ECRITURE PASSE ENCORE — les declencheurs travaillent ==='

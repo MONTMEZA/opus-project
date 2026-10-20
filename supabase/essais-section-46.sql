@@ -650,6 +650,139 @@ rollback;
 
 -- --------------------------------------------------------------------------
 \echo ''
+\echo '=== 18 bis. Le calcul du n° de TVA : cinq SIREN dont le numero est connu, et ce qui n est pas un SIREN ==='
+-- La Poste (356000000) : FR39356000000 sur la liste de la DGFiP, relevé le
+-- 20/10/2026 par l'API Recherche d'entreprises. 404833048 et 552032534 :
+-- les exemples publiés des calculateurs, refaits à la main. Les mêmes que
+-- `verifier-emetteur` passe à `tvaIntraDuSiren` : les deux écritures de la
+-- règle tournent sur le même jeu. Le dernier a une clé à UN chiffre (2) :
+-- c'est lui qui prouve le zéro devant (`lpad`), les quatre autres ne le
+-- pourraient pas.
+-- --------------------------------------------------------------------------
+select public.tva_intra_du_siren('356000000') = 'FR39356000000'
+     and public.tva_intra_du_siren('404833048') = 'FR83404833048'
+     and public.tva_intra_du_siren('552032534') = 'FR27552032534'
+     and public.tva_intra_du_siren('000046011') = 'FR14000046011'
+     and public.tva_intra_du_siren('000000029') = 'FR02000000029' as cinq_numeros_attendu_t,
+       public.tva_intra_du_siren('12345678') is null
+     and public.tva_intra_du_siren('1234567890') is null
+     and public.tva_intra_du_siren('12345678a') is null
+     and public.tva_intra_du_siren(null) is null as le_reste_attendu_t;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 18 ter. B au reel, sans numero transmis, CONFIRME le sien : ecrit en vrac, range propre, et le motif se leve ==='
+-- C'est le défaut du 20/10/2026 : un artisan au régime réel que l'annuaire
+-- laissait sans numéro n'avait aucune porte. Le numéro est envoyé comme un
+-- humain le recopierait — minuscules, espaces, point, tiret, espace
+-- insécable — et la base le range sans un séparateur.
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur (pro_id, regime_tva) values (:B, 'reel');
+select bool_or(m like 'conso_tva_intra: %') as avant_attendu_t from unnest(public.emetteur_incomplet(:B)) m;
+update public.emetteur set tva_intra = E' fr 14\u00a0000.046-011 ' where pro_id = :B;
+select tva_intra, tva_intra = 'FR14000046011' as range_propre_attendu_t from public.emetteur where pro_id = :B;
+select coalesce(bool_or(m like 'conso_tva_intra: %'), false) as apres_attendu_f
+  from unnest(public.emetteur_incomplet(:B)) m;
+-- En franchise, le numéro confirmé reste : un franchisé peut en avoir un.
+update public.emetteur set regime_tva = 'franchise' where pro_id = :B;
+select tva_intra is not null as garde_en_franchise_attendu_t from public.emetteur where pro_id = :B;
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 18 quater. B ecrit le numero de A, juste mais pas le sien -> OP013 (ERREUR attendue) ==='
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+\set VERBOSITY verbose
+insert into public.emetteur (pro_id, regime_tva, tva_intra) values (:B, 'reel', 'FR87000046003');
+\set VERBOSITY default
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 18 quinquies. B ecrit son SIREN avec une cle fausse -> OP013 aussi (ERREUR attendue) ==='
+-- Le déclencheur passe AVANT la contrainte : un numéro qui n'est pas celui
+-- du SIREN rattaché est refusé avec la phrase qui dit quoi toucher.
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur (pro_id, regime_tva, tva_intra) values (:B, 'reel', 'FR00000046011');
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 18 sexies. L entreprise rattachee change : le numero d avant ne compte plus, et ne bloque rien ==='
+-- Un numéro confirmé pour l'ancienne entreprise ne doit ni s'imprimer pour
+-- la nouvelle (le motif revient), ni empêcher d'enregistrer le téléphone.
+-- Le nouveau SIREN est fictif, propre à ce cas.
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur (pro_id, regime_tva, tva_intra) values (:B, 'reel', 'FR14000046011');
+reset role;
+update public.entreprise_registre set retiree_le = now() where pro_id = :B and retiree_le is null;
+insert into public.entreprise_registre
+  (pro_id, siren, siret, est_ei, forme_juridique, est_siege, adresse, code_postal, commune, source, verifie_le)
+values
+  (:B, '000046110', '00004611000010', true, '1000', true, '3 CHEMIN DES ESSAIS 13410 LAMBESC', '13410',
+   'LAMBESC', 'registre', now());
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+select bool_or(m like 'conso_tva_intra: %') as motif_revient_attendu_t from unnest(public.emetteur_incomplet(:B)) m;
+update public.emetteur set telephone = '04 42 00 00 00' where pro_id = :B;
+select telephone is not null and tva_intra = 'FR14000046011' as telephone_passe_attendu_t
+  from public.emetteur where pro_id = :B;
+update public.emetteur set tva_intra = public.tva_intra_du_siren('000046110') where pro_id = :B;
+select coalesce(bool_or(m like 'conso_tva_intra: %'), false) as nouveau_confirme_attendu_f
+  from unnest(public.emetteur_incomplet(:B)) m;
+update public.emetteur set tva_intra = null where pro_id = :B;
+select bool_or(m like 'conso_tva_intra: %') as retire_attendu_t from unnest(public.emetteur_incomplet(:B)) m;
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 18 septies. Sans entreprise rattachee, aucun numero ne s ecrit -> OP013 (ERREUR attendue) ==='
+-- --------------------------------------------------------------------------
+begin;
+update public.entreprise_registre set retiree_le = now() where pro_id = :B and retiree_le is null;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur (pro_id, regime_tva, tva_intra) values (:B, 'reel', 'FR14000046011');
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 18 octies. La contrainte elle-meme, declencheurs coupes : une cle fausse -> emetteur_tva_intra_check (ERREUR attendue) ==='
+-- Le déclencheur refuse avant elle : on le coupe (superutilisateur,
+-- `session_replication_role`) pour éprouver la contrainte seule, qui garde
+-- la FORME même si une écriture contournait le déclencheur.
+-- --------------------------------------------------------------------------
+begin;
+set local session_replication_role = replica;
+insert into public.emetteur (pro_id, tva_intra) values (:D, 'FR00000046037');
+rollback;
+begin;
+set local session_replication_role = replica;
+insert into public.emetteur (pro_id, tva_intra) values (:D, 'FR3700004603');
+rollback;
+\echo '(les deux refus ci-dessus sont attendus : une cle fausse, puis douze chiffres au lieu de onze)'
+
+
+-- --------------------------------------------------------------------------
+\echo ''
 \echo '=== 19. Fraicheur : lue il y a 400 jours -> entreprise_ancienne ; 300 -> rien ; 400 par l administration -> rien ==='
 -- La relecture annuelle est une règle d'Opus, et elle ne vise que ce qui
 -- vient du répertoire : une identité ouverte par l'administration n'y a
@@ -840,6 +973,11 @@ select f, r, has_function_privilege(r, f, 'execute') as execute_attendu_f
 select has_function_privilege('anon', 'public.emetteur_incomplet(uuid)', 'execute') as anon_attendu_f,
        has_function_privilege('authenticated', 'public.emetteur_incomplet(uuid)', 'execute')
          as authenticated_attendu_t;
+-- Le calcul du n° de TVA : appelé par une CONTRAINTE, donc exécutable par
+-- qui écrit (`authenticated`) ; personne d'autre n'en a besoin.
+select has_function_privilege('anon', 'public.tva_intra_du_siren(text)', 'execute') as tva_anon_attendu_f,
+       has_function_privilege('authenticated', 'public.tva_intra_du_siren(text)', 'execute')
+         as tva_authenticated_attendu_t;
 select t, has_table_privilege('anon', t, 'select') as anon_select_attendu_f,
        has_table_privilege('authenticated', t, 'truncate') as truncate_attendu_f
   from unnest(array['public.emetteur', 'public.emetteur_assurances', 'public.tarifs_pro']) t
@@ -930,11 +1068,13 @@ rollback;
 -- ATTENDU CHANGÉ PAR LA SECTION 47 (lot T) : 25 et non plus 20. La
 -- section 47 pose cinq contraintes de plus sur `tarifs_pro` (le taux
 -- horaire, la majoration, le prix du devis, le décompte, l'affichage).
+-- PUIS 26 le 20/10/2026 : `emetteur_tva_intra_check`, le n° de TVA confirmé.
 -- --------------------------------------------------------------------------
 select count(*) filter (where conname !~ '_check$') as mal_nommees_attendu_0,
        count(*) filter (where conname ~ '_check[0-9]+$') as anonymes_attendu_0,
        count(*) filter (where conname = 'emetteur_paiement_check') as paiement_attendu_0,
-       count(*) as contraintes_check_attendu_25
+       count(*) filter (where conname = 'emetteur_tva_intra_check') as tva_intra_attendu_1,
+       count(*) as contraintes_check_attendu_26
   from pg_constraint
  where contype = 'c'
    and conrelid in ('public.emetteur'::regclass, 'public.emetteur_assurances'::regclass,

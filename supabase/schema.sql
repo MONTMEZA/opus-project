@@ -9850,6 +9850,11 @@ create table if not exists public.emetteur (
   regime_tva                 text,
   -- Posée par la BASE (46.4), jamais par le téléphone.
   regime_tva_declare_le      timestamptz,
+  -- Le n° de TVA intracommunautaire QUAND L'ANNUAIRE N'EN A TRANSMIS
+  -- AUCUN (20/10/2026) : déduit du SIREN par Opus, CONFIRMÉ par l'artisan.
+  -- Ce n'est pas une recopie d'`entreprise_registre.tva` : il n'existe
+  -- que là où celle-ci est vide. Voir `tva_intra_du_siren()` juste après.
+  tva_intra                  text,
   mediateur_nom              text,
   mediateur_adresse          text,
   mediateur_site             text,
@@ -9862,6 +9867,61 @@ create table if not exists public.emetteur (
   -- Posée par la BASE (46.4).
   modifie_le                 timestamptz
 );
+
+/* La colonne née APRÈS la table (20/10/2026) : sur une base où la section
+   46 est déjà passée, le `create table if not exists` ne fait rien. */
+alter table public.emetteur add column if not exists tva_intra text;
+
+/* LE N° DE TVA INTRACOMMUNAUTAIRE D'UNE ENTREPRISE FRANÇAISE SE DÉDUIT DE
+   SON SIREN (20/10/2026). « FR », une clé de deux chiffres, le SIREN ; la
+   clé vaut (12 + 3 × (SIREN modulo 97)) modulo 97. Vérifié sur une liste de
+   la DGFiP : le siège de La Poste, SIREN 356000000, y porte FR39356000000,
+   et la formule rend 39.
+
+   POURQUOI ON EN A BESOIN. L'annuaire des entreprises ne transmet que les
+   numéros que la liste de la DGFiP donne pour « actifs », et cette liste
+   est incomplète : le 20/10/2026, une société active depuis des années,
+   déclarée au régime réel, n'en portait aucun, même relue. Le motif `conso_tva_intra`
+   ne pouvait alors JAMAIS se lever : l'artisan n'avait aucune porte pour
+   le donner (le numéro de l'annuaire est verrouillé dans
+   `entreprise_registre`).
+
+   CE QUE LE CALCUL NE PROUVE PAS : qu'un numéro a été ATTRIBUÉ. Seul le
+   service des impôts des entreprises l'attribue, à une entreprise
+   assujettie. D'où le geste de l'artisan, « C'est bien mon numéro », qui
+   seul l'écrit dans `emetteur.tva_intra` — Opus calcule, l'artisan
+   confirme. Le service européen VIES n'est pas interrogé : saturé à
+   l'essai (« MS_MAX_CONCURRENT_REQ »), il ferait d'un devis une affaire de
+   réseau.
+
+   UNE fonction, appelée par la contrainte ci-dessous, par le déclencheur
+   (46.4) et par `emetteur_incomplet()` (46.6) : la règle ne s'écrit qu'à
+   UN endroit. Elle ne lit aucune table. Son miroir est `tvaIntraDuSiren`
+   (`src/lib/emetteur.js`), et les deux tournent sur les mêmes SIREN
+   (essais de la section 46, `verifier-emetteur`).
+
+   Elle garde son `execute` pour `authenticated` : une contrainte s'exécute
+   avec les droits de CELUI QUI ÉCRIT (l'incident `horaires_valides` du
+   30/09). */
+create or replace function public.tva_intra_du_siren(p_siren text)
+returns text
+language sql
+immutable
+security invoker
+set search_path = public
+as $$
+  select case when p_siren ~ '^[0-9]{9}$'
+              then 'FR' || lpad(((12 + 3 * (p_siren::bigint % 97)) % 97)::text, 2, '0') || p_siren
+         end;
+$$;
+
+revoke all on function public.tva_intra_du_siren(text) from public, anon;
+grant execute on function public.tva_intra_du_siren(text) to authenticated;
+
+comment on function public.tva_intra_du_siren(text) is
+  'Le n° de TVA intracommunautaire que porte une entreprise française de ce '
+  'SIREN, si elle en a un : FR + clé + SIREN. Un calcul, pas une preuve '
+  'd''attribution. null pour autre chose que neuf chiffres. Section 46.1.';
 
 /* « EI », « EIRL » ou « entrepreneur individuel » — le dernier couvre
    aussi « entrepreneur individuel à responsabilité limitée ». `\m` et `\M`
@@ -9909,6 +9969,19 @@ alter table public.emetteur add constraint emetteur_capital_variable_check
 alter table public.emetteur drop constraint if exists emetteur_tva_check;
 alter table public.emetteur add constraint emetteur_tva_check
   check (regime_tva is null or regime_tva in ('franchise', 'reel'));
+/* LE N° DE TVA CONFIRMÉ a la forme d'un numéro français ET sa clé est
+   juste : il vaut exactement ce que `tva_intra_du_siren()` rend pour les
+   neuf chiffres qu'il porte. Que ces neuf chiffres soient le SIREN de
+   l'entreprise RATTACHÉE, une contrainte ne peut pas le savoir (elle ne lit
+   pas une autre table) : c'est le déclencheur qui le refuse (46.4, OP013).
+   Un `case` et non un `and` : PostgreSQL ne promet pas l'ordre d'un `and`. */
+alter table public.emetteur drop constraint if exists emetteur_tva_intra_check;
+alter table public.emetteur add constraint emetteur_tva_intra_check
+  check (tva_intra is null
+         or case when tva_intra ~ '^FR[0-9]{11}$'
+                 then tva_intra = public.tva_intra_du_siren(substr(tva_intra, 5))
+                 else false
+            end);
 -- La même garde que `client_email_check` (section 41) : on refuse ce qui ne
 -- PEUT PAS être une adresse, on ne prétend pas prouver qu'elle existe.
 alter table public.emetteur drop constraint if exists emetteur_email_check;
@@ -10127,6 +10200,8 @@ language plpgsql
 security invoker
 set search_path = public
 as $$
+declare
+  tva_attendue text;
 begin
   -- 1. Les blancs deviennent `null` : il n'y a qu'UNE façon de dire « vide ».
   new.denomination_ei            := nullif(btrim(coalesce(new.denomination_ei, ''), E' \t\r\n'), '');
@@ -10150,6 +10225,18 @@ begin
   new.modalites_paiement_texte   := nullif(btrim(coalesce(new.modalites_paiement_texte, ''), E' \t\r\n'), '');
   new.modalites_execution_texte  := nullif(btrim(coalesce(new.modalites_execution_texte, ''), E' \t\r\n'), '');
   new.reclamations_texte         := nullif(btrim(coalesce(new.reclamations_texte, ''), E' \t\r\n'), '');
+
+  -- 1 bis. LE N° DE TVA s'écrit sans aucun séparateur et en majuscules :
+  --    « fr 39 356.000-000 » est le même numéro que « FR39356000000 ». Les
+  --    blancs invisibles aussi (insécable, espace fine, largeurs nulles),
+  --    comme les tarifs : un numéro recopié d'un PDF en porte souvent. Une
+  --    chaîne ordinaire, pas `E'…'` : `\t`, `\u00a0` sont lus par le moteur
+  --    d'expressions de PostgreSQL. Les blancs sont NOMMÉS un par un, et
+  --    pas `[[:space:]]` : sa liste dépend de la locale de la base, et le
+  --    miroir (`nettoyerEmetteur`, `src/lib/emetteur.js`) doit retirer
+  --    exactement les mêmes.
+  new.tva_intra := nullif(upper(regexp_replace(coalesce(new.tva_intra, ''),
+                     '[ \t\n\v\f\r.\u00a0\u202f\u200b\u200c\u200d\u2060\ufeff-]', '', 'g')), '');
 
   -- 2. L'e-mail en minuscules, comme `email_pro` et le carnet de clients.
   new.email := lower(new.email);
@@ -10188,7 +10275,37 @@ begin
     new.regime_tva_declare_le := old.regime_tva_declare_le;
   end if;
 
-  -- 7. La date de modification, par la base elle aussi.
+  -- 7. LE N° DE TVA EST CELUI DU SIREN RATTACHÉ, OU IL N'EST PAS
+  --    (20/10/2026). La contrainte `emetteur_tva_intra_check` sait qu'un
+  --    numéro est bien formé ; elle ne sait pas À QUI il est. Un numéro
+  --    juste, mais d'une autre entreprise, s'imprimerait sur les devis de
+  --    celle-ci sans que rien ne le dise. D'où la lecture de l'identité
+  --    ACTIVE — avec les droits de l'appelant, donc à travers « lecture de
+  --    mon entreprise » : il ne lit que la sienne.
+  --
+  --    SEULEMENT QUAND LE NUMÉRO EST ÉCRIT OU CHANGE. Un numéro déjà en
+  --    place, devenu étranger parce que l'entreprise rattachée a changé, ne
+  --    doit pas bloquer l'enregistrement du téléphone ou des garanties :
+  --    il ne s'imprime plus (`emetteur_incomplet()` et l'en-tête exigent
+  --    l'égalité), et l'écran le renvoie vide à la prochaine écriture.
+  --
+  --    Un REFUS qui dit pourquoi (OP013), et pas un vidage silencieux :
+  --    aucune version de l'application n'envoie un autre numéro que celui
+  --    qu'elle a calculé, seul un client modifié le fait.
+  if new.tva_intra is not null
+     and (tg_op = 'INSERT' or new.tva_intra is distinct from old.tva_intra) then
+    select public.tva_intra_du_siren(r.siren)
+      into tva_attendue
+      from public.entreprise_registre r
+     where r.pro_id = new.pro_id
+       and r.retiree_le is null;
+    if tva_attendue is null or new.tva_intra is distinct from tva_attendue then
+      raise exception 'Ce numéro de TVA n’est pas celui de l’entreprise rattachée à votre compte : un numéro de TVA français se compose de « FR », d’une clé et du SIREN de l’entreprise. Dans la section « TVA », touchez « C’est bien mon numéro » : Opus l’écrit à partir de votre SIREN.'
+        using errcode = 'OP013';
+    end if;
+  end if;
+
+  -- 8. La date de modification, par la base elle aussi.
   new.modifie_le := clock_timestamp();
   return new;
 end;
@@ -10201,8 +10318,10 @@ create or replace trigger trg_tient_l_emetteur
 comment on function public.tient_l_emetteur() is
   'Nettoie une fiche d''émetteur avant écriture : blancs (espaces, '
   'tabulations, retours à la ligne) → null, e-mail en minuscules, capital '
-  'variable sans montant, greffe vidé hors RCS, et pose elle-même la date '
-  'du régime de TVA et la date de modification. Section 46.4.';
+  'variable sans montant, greffe vidé hors RCS, n° de TVA sans séparateur, '
+  'refusé (OP013) s''il n''est pas celui du SIREN rattaché, et pose '
+  'elle-même la date du régime de TVA et la date de modification. '
+  'Section 46.4.';
 
 create or replace function public.tient_l_assurance()
 returns trigger
@@ -10400,7 +10519,11 @@ revoke truncate on public.emetteur, public.emetteur_assurances, public.tarifs_pr
 --    reglemente  un métier dont l'appartenance à une profession réglementée
 --                ne fait pas de doute (R. 111-2 6°). La liste est IDENTIQUE
 --                à `METIERS_PROFESSION_REGLEMENTEE`, et le contrôle compare
---                les deux. Elle est à confirmer avec un juriste.
+--                les deux. Elle est à confirmer avec un juriste ;
+--    tva_du_siren le n° de TVA que porterait l'entreprise ACTIVE
+--                (`tva_intra_du_siren`, 46.1). Un numéro confirmé ne lève
+--                `conso_tva_intra` que s'il lui est ÉGAL : celui d'une
+--                identité d'avant ne se prête pas à la suivante (20/10/2026).
 -- --------------------------------------------------------------------------
 create or replace function public.emetteur_incomplet(p_pro uuid)
 returns text[]
@@ -10451,7 +10574,8 @@ begin
            case when e.regime_tva is null
                 then 'regime_tva: Déclarez votre régime de TVA. En franchise, vos devis porteront « TVA non applicable, article 293 B du CGI » ; au régime réel, la TVA de chaque ligne. Opus ne peut pas le deviner : votre chiffre d’affaires n’est pas dans Opus.' end,
            case when e.regime_tva = 'reel' and r.id is not null and r.tva is null
-                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA intracommunautaire pour votre entreprise. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus le fait en l’imprimant sur le devis, et ne l’invente pas. Touchez « Mettre à jour » dans « Votre entreprise » pour le relire (votre SIRET vous sera redemandé) ; s’il manque toujours, ou si votre entreprise a été rattachée par l’administration d’Opus, cela ne peut pas encore se corriger depuis l’application.' end,
+                 and (e.tva_intra is null or e.tva_intra is distinct from n.tva_du_siren)
+                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA intracommunautaire pour votre entreprise. La loi demande de le communiquer au client (code de la consommation, R. 111-2), et Opus l’imprime sur le devis. Pour une entreprise française, ce numéro se déduit du SIREN : dans la section « TVA », relisez celui qu’Opus a calculé, puis touchez « C’est bien mon numéro ».' end,
            case when e.mediateur_nom is null
                 then 'conso_mediateur: Pour un devis à un particulier : indiquez le médiateur de la consommation auquel vous adhérez, avec son nom, son adresse et son site (code de la consommation, L. 111-1 et R. 111-1). Ce n’est pas une information à trouver : il faut adhérer à un médiateur référencé. Un devis à un professionnel n’en a généralement pas besoin, sauf pour un petit professionnel démarché hors de son activité principale.' end,
            case when e.garantie_legale_texte is null
@@ -10481,7 +10605,8 @@ begin
             e.registre is not distinct from 'rcs'
               or coalesce(left(r.forme_juridique, 1) in ('5', '6'), false) as rcs,
             p.metiers && array['architecte', 'geometre-expert', 'avocat-construction',
-                               'avocat-immobilier', 'expert-comptable-btp']::text[] as reglemente
+                               'avocat-immobilier', 'expert-comptable-btp']::text[] as reglemente,
+            public.tva_intra_du_siren(r.siren)                    as tva_du_siren
    ) n;
 
   return coalesce(motifs, '{}');

@@ -1312,9 +1312,12 @@ if (!E) {
     const echapper = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const rognee = (c) => new RegExp(`new\\.${c}\\s*:=\\s*${echapper(
       `nullif(btrim(coalesce(new.${c}, ''), E' \\t\\r\\n'), '');`)}`);
-    const nonRognees = colonnesTexte.filter((c) => !rognee(c).test(f));
+    /* `tva_intra` (20/10/2026) n'est pas un texte libre : elle perd TOUS
+       ses séparateurs, pas seulement ceux des bords. Sa règle est vérifiée
+       dans la partie 6, avec celle de son miroir. */
+    const nonRognees = colonnesTexte.filter((c) => c !== 'tva_intra' && !rognee(c).test(f));
     verifier('toutes les colonnes texte d’`emetteur` sont rognées — espaces, tabulations ET retours à la ligne',
-      colonnesTexte.length === 21 && nonRognees.length === 0,
+      colonnesTexte.length === 22 && colonnesTexte.includes('tva_intra') && nonRognees.length === 0,
       `${colonnesTexte.length} colonnes texte ; non rognées : ${nonRognees.join(', ') || 'aucune'}. Une `
       + 'garantie faite d’un seul retour à la ligne ne doit pas compter comme écrite, et le miroir de '
       + 'démonstration rogne le même jeu de caractères.');
@@ -1918,6 +1921,151 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     titres.length === 1 && titres[0] === 'src/components/MonEntreprise.js', titres.join(', ') || 'aucun');
 }
 
+
+/* ================================================================== */
+/*  PARTIE 6 — LE N° DE TVA QUE L'ANNUAIRE N'A PAS TRANSMIS (20/10/2026) */
+/* ================================================================== */
+/* Le défaut : un artisan au régime réel dont l'annuaire ne donnait aucun
+   numéro voyait « il manque 1 chose pour un devis à un particulier », et
+   n'avait AUCUNE porte pour le lever. Opus calcule le numéro depuis le
+   SIREN, l'artisan le confirme. Ce qui doit rester vrai : une seule règle
+   de calcul (deux écritures qui tournent sur les mêmes SIREN), un numéro
+   qui n'est jamais celui d'une autre entreprise, un geste humain avant
+   qu'il ne s'imprime, et un motif qui se lève — et seulement alors. */
+console.log('\n6. LE N° DE TVA CONFIRMÉ — calculé par Opus, confirmé par l’artisan');
+{
+  /* Les mêmes SIREN que l'essai 18 bis. */
+  const JEU = [['356000000', 'FR39356000000'], ['404833048', 'FR83404833048'],
+    ['552032534', 'FR27552032534'], ['000046011', 'FR14000046011'], ['000000029', 'FR02000000029']];
+  const PAS_UN_SIREN = ['12345678', '1234567890', '12345678a', '', null, undefined];
+  if (E) {
+    verifier('`tvaIntraDuSiren` rend les numéros connus, et rien pour ce qui n’est pas un SIREN',
+      JEU.every(([s, t]) => E.tvaIntraDuSiren(s) === t) && PAS_UN_SIREN.every((x) => E.tvaIntraDuSiren(x) === null),
+      JEU.map(([s]) => `${s} → ${E.tvaIntraDuSiren(s)}`).join(', '));
+    /* LE ZÉRO DEVANT UNE CLÉ À UN CHIFFRE. Le premier jet regardait les
+       deux caractères après « FR » : sans le zéro, ils valaient la clé
+       ET le premier chiffre du SIREN — deux chiffres quand même, et le
+       contrôle passait (sabotage du 20/10/2026). On vise la PROPRIÉTÉ :
+       treize caractères, le SIREN entier à la fin, et la clé recalculée ici
+       à part, sur des SIREN dont la clé vaut 0 à 9. */
+    const petites = [];
+    for (let n = 100000000; petites.length < 10 && n < 100100000; n += 1) {
+      const cle = (12 + 3 * (n % 97)) % 97;
+      if (cle < 10 && !petites.some((x) => x.cle === cle)) petites.push({ siren: String(n), cle });
+    }
+    verifier('…la clé a TOUJOURS deux chiffres : un zéro devant les clés 0 à 9',
+      petites.length === 10 && petites.every(({ siren, cle }) => {
+        const t = E.tvaIntraDuSiren(siren);
+        return t === `FR0${cle}${siren}` && t.length === 13;
+      }), petites.map(({ siren }) => E.tvaIntraDuSiren(siren)).join(', '));
+    const n = E.nettoyerEmetteur({ tva_intra: ' fr 14 000.046-011​ ' }).tva_intra;
+    verifier('le miroir range un numéro recopié « en vrac » sans un séparateur, en majuscules',
+      n === 'FR14000046011' && E.nettoyerEmetteur({ tva_intra: ' \t ' }).tva_intra === null, String(n));
+    const K = E.CONTRAINTES.emetteur.emetteur_tva_intra_check;
+    verifier('`emetteur_tva_intra_check` (miroir) : forme ET clé, `null` passe',
+      K({ tva_intra: null }) === null && K({ tva_intra: 'FR14000046011' }) === null
+      && K({ tva_intra: 'FR00000046011' }) === 'tva_intra' && K({ tva_intra: 'FR1400004601' }) === 'tva_intra'
+      && K({ tva_intra: 'BE0123456789' }) === 'tva_intra');
+
+    /* LE MOTIF : présent sans numéro, absent avec LE BON, présent avec
+       celui d'une autre entreprise, absent quand l'annuaire en donne un. */
+    const r = { siren: '000046011', siret: '00004601100011', tva: null, est_ei: true, forme_juridique: '1000',
+      est_siege: true, adresse: 'x', source: 'registre', verifie_le: new Date().toISOString() };
+    const a = (entreprise, emetteur) => E.motifsEmetteur({ entreprise, emetteur })
+      .some((m) => m.startsWith('conso_tva_intra: '));
+    verifier('`conso_tva_intra` : levé par le numéro du SIREN, et par lui seul',
+      a(r, { regime_tva: 'reel' }) === true
+      && a(r, { regime_tva: 'reel', tva_intra: 'FR14000046011' }) === false
+      && a(r, { regime_tva: 'reel', tva_intra: 'FR87000046003' }) === true
+      && a({ ...r, tva: 'FR14000046011' }, { regime_tva: 'reel' }) === false
+      && a(r, { regime_tva: 'franchise' }) === false);
+    const motif = E.MOTIFS.find((m) => m.cle === 'conso_tva_intra');
+    verifier('…sa phrase mène au geste, dans la section « TVA », et ne renvoie plus à « Mettre à jour »',
+      !!motif && motif.section === 'tva' && /« C’est bien mon numéro »/.test(motif.phrase)
+      && !/Mettre à jour/.test(motif.phrase) && !/ne peut pas encore se corriger/.test(motif.phrase));
+    const imprime = (entreprise, emetteur) => E.enteteImprime({ entreprise, emetteur, tarifs: {} }).identite
+      .find((l) => /^N° de TVA intracommunautaire : /.test(l)) || null;
+    verifier('l’en-tête imprime le numéro confirmé du SIREN, jamais celui d’une autre entreprise',
+      imprime(r, { regime_tva: 'reel', tva_intra: 'FR14000046011' }) === 'N° de TVA intracommunautaire : FR14000046011'
+      && imprime(r, { regime_tva: 'reel', tva_intra: 'FR87000046003' }) === null
+      && imprime({ ...r, tva: 'FR14000046011' }, { regime_tva: 'reel' }) === 'N° de TVA intracommunautaire : FR14000046011');
+    verifier('…et `ligneSource` n’attribue PAS à la DGFiP un numéro que l’artisan a confirmé',
+      !/DGFiP/.test(E.ligneSource({ ...r }) || '') && /DGFiP/.test(E.ligneSource({ ...r, tva: 'FR14000046011' }) || ''));
+    verifier('`tva_intra` est une colonne ÉCRITE par l’application',
+      E.COLONNES_ECRITES.emetteur.includes('tva_intra'));
+  }
+
+  /* LA BASE */
+  const calc = morceau(SECTION_46, 'create or replace function public.tva_intra_du_siren(', '$$;');
+  verifier('`tva_intra_du_siren` : la formule, neuf chiffres seulement, `immutable`, aucune table lue',
+    /'FR' \|\| lpad\(\(\(12 \+ 3 \* \(p_siren::bigint % 97\)\) % 97\)::text, 2, '0'\) \|\| p_siren/.test(calc)
+    && /p_siren ~ '\^\[0-9\]\{9\}\$'/.test(calc) && /\bimmutable\b/.test(calc)
+    && !/security definer/i.test(calc) && !/\bfrom\b/i.test(calc.slice(calc.indexOf('$$'))));
+  verifier('…exécutable par `authenticated` seulement : une contrainte l’appelle avec les droits de qui écrit',
+    /revoke all on function public\.tva_intra_du_siren\(text\) from public, anon;/.test(SECTION_46)
+    && /grant execute on function public\.tva_intra_du_siren\(text\) to authenticated;/.test(SECTION_46)
+    && SECTION_46.indexOf('create or replace function public.tva_intra_du_siren(')
+      < SECTION_46.indexOf('add constraint emetteur_tva_intra_check'),
+    'déclarée AVANT la contrainte qui l’appelle : une contrainte est contrôlée à sa création');
+  const k = contrainte('emetteur_tva_intra_check');
+  verifier('`emetteur_tva_intra_check` : la forme ET la clé, par la fonction, dans un `case`',
+    /case when tva_intra ~ '\^FR\[0-9\]\{11\}\$'/.test(k)
+    && /then tva_intra = public\.tva_intra_du_siren\(substr\(tva_intra, 5\)\)/.test(k) && /else false/.test(k));
+  const d = fonction('tient_l_emetteur');
+  const CLASSE = '[ \\t\\n\\v\\f\\r.\\u00a0\\u202f\\u200b\\u200c\\u200d\\u2060\\ufeff-]';
+  const srcE = E ? sansCommentaires(lire('src/lib/emetteur.js')) : '';
+  verifier('le déclencheur et son miroir retirent EXACTEMENT les mêmes séparateurs',
+    d.includes(`regexp_replace(coalesce(new.tva_intra, ''),\n                     '${CLASSE}', '', 'g')`)
+    && /new\.tva_intra := nullif\(upper\(/.test(d) && srcE.includes(`.replace(/${CLASSE}/g, '')`),
+    'deux listes de blancs pour une seule règle : le numéro passerait en démonstration et serait refusé en base');
+  const iSi = d.indexOf("if new.tva_intra is not null\n     and (tg_op = 'INSERT' or new.tva_intra is distinct from old.tva_intra) then");
+  const bloc = iSi < 0 ? '' : d.slice(iSi, d.indexOf('end if;\n  end if;', iSi));
+  verifier('le déclencheur refuse (OP013) un numéro qui n’est pas celui du SIREN ACTIF — seulement quand il est écrit ou change',
+    iSi > 0 && /from public\.entreprise_registre r\s+where r\.pro_id = new\.pro_id\s+and r\.retiree_le is null;/.test(bloc)
+    && /select public\.tva_intra_du_siren\(r\.siren\)/.test(bloc)
+    && /if tva_attendue is null or new\.tva_intra is distinct from tva_attendue then/.test(bloc)
+    && /using errcode = 'OP013';/.test(bloc)
+    && d.indexOf('new.tva_intra := nullif(upper(') < iSi,
+    'nettoyer AVANT de comparer : sinon « fr 14 000… » serait refusé');
+  const msgSql = (bloc.match(/raise exception '([^']+)'/) || [])[1];
+  verifier('…et sa phrase est `MESSAGE_TVA_PAS_LA_VOTRE`, à l’octet',
+    !!E && msgSql === E.MESSAGE_TVA_PAS_LA_VOTRE, String(msgSql).slice(0, 60));
+  const inc = fonction('emetteur_incomplet');
+  verifier('`emetteur_incomplet` lève `conso_tva_intra` par le numéro du SIREN actif, et par lui seul',
+    /and \(e\.tva_intra is null or e\.tva_intra is distinct from n\.tva_du_siren\)/.test(inc)
+    && /public\.tva_intra_du_siren\(r\.siren\)\s+as tva_du_siren/.test(inc));
+
+  /* L'ESSAI */
+  const essaiBrut = (() => { try { return lire('supabase/essais-section-46.sql'); } catch { return ''; } })();
+  verifier('l’essai 46 éprouve le MÊME jeu de SIREN, le refus OP013 et la contrainte seule',
+    JEU.every(([s, t]) => essaiBrut.includes(`public.tva_intra_du_siren('${s}') = '${t}'`))
+    && /'FR87000046003'\);\s*\n\\set VERBOSITY default/.test(essaiBrut)
+    && /set local session_replication_role = replica;\s*\ninsert into public\.emetteur \(pro_id, tva_intra\)/.test(essaiBrut)
+    && /contraintes_check_attendu_26/.test(essaiBrut));
+
+  /* L'APPLICATION */
+  const fiche = sansCommentaires(lireSiExiste('src/components/FicheEmetteur.js') || '');
+  verifier('l’écran n’écrit QUE le numéro qu’il a calculé, ou rien — jamais celui qu’il a chargé',
+    /if \(montre\.tvaIntra\) lu\.tva_intra = tvaConfirmee \? tvaCalculee : null;/.test(fiche)
+    && (fiche.match(/lu\.tva_intra\s*=/g) || []).length === 1
+    && /const tvaCalculee = entreprise && !entreprise\.tva \? tvaIntraDuSiren\(entreprise\.siren\) : null;/.test(fiche));
+  verifier('…par un interrupteur « C’est bien mon numéro », éteint tant qu’on n’y a pas touché',
+    /libelle=\{`C’est bien mon numéro : \$\{tvaIntraLisible\(tvaCalculee\)\}`\}/.test(fiche)
+    && /const tvaConfirmee = !!tvaCalculee && tvaIntra === tvaCalculee;/.test(fiche)
+    && /tvaIntra: e\.tva_intra != null \? e\.tva_intra : null,/.test(fiche)
+    && /tvaIntra: \(x && x\.tvaIntra\) \|\| null,/.test(fiche));
+  verifier('…dans un bloc que la ligne CHARGÉE garde visible, pas l’état (sinon il disparaît sous le doigt)',
+    /tvaIntra: !!tvaCalculee && \(choix\.regime_tva === 'reel' \|\| tvaChargee != null\),/.test(fiche));
+  const api = sansCommentaires(lire('src/lib/api.js'));
+  const demo = api.slice(api.indexOf('async function enregistrerEmetteurDemo('),
+    api.indexOf('const refus = validerEmetteur(ligne);', api.indexOf('async function enregistrerEmetteurDemo(')));
+  verifier('la démonstration refuse comme la base (OP013, même phrase), AVANT les contraintes',
+    /throw refusDeLaBase\('OP013', MESSAGE_TVA_PAS_LA_VOTRE\);/.test(demo)
+    && /tvaNette !== tvaIntraDuSiren\(active\.siren\)/.test(demo) && /tvaNette !== tvaAvant/.test(demo));
+  verifier('`MESSAGES_CONTRAINTE` a sa phrase pour `emetteur_tva_intra_check`',
+    typeof MESSAGES_CONTRAINTE.emetteur_tva_intra_check === 'string'
+    && /« C’est bien mon numéro »/.test(MESSAGES_CONTRAINTE.emetteur_tva_intra_check));
+}
 
 console.log('');
 if (echecs) {

@@ -432,6 +432,21 @@ pas Opus.
 
 ### Le propriétaire n'a PAS de société ni de SIRET (constaté le 29/09/2026)
 
+> **CE TITRE N'EST PLUS VRAI — confirmé par lui le 20/10/2026 : il a une
+> SARL ACTIVE, rattachée à son compte principal (celui d'administrateur).**
+> Constaté en relevant la FORME de la base pour le défaut du n° de TVA, puis
+> demandé, pas déduit. Ce qui change, et ce qui ne change pas :
+>
+> - « ne jamais lui écrire des mentions légales de société : ce serait
+>   faux » ne vaut plus pour CETTE société. Mais ses mentions se remplissent
+>   AVEC LUI, depuis ses pièces — jamais déduites de la base ni du
+>   répertoire, et son identité (nom, SIREN) n'entre dans aucun document du
+>   dépôt ;
+> - que cette SARL soit l'ÉDITEUR d'Opus est une décision à lui poser le
+>   jour de la mise en ligne, pas une conséquence : `STATUT` reste `'essai'`
+>   tant qu'Opus n'est pas ouvert au public ;
+> - les paragraphes ci-dessous décrivent la situation d'avant le 20/10.
+
 **Précisé par lui le 17/10/2026 : il a eu une entreprise, aujourd'hui
 FERMÉE.** Aucune entreprise active à son nom. La mention « micro-entrepreneur »
 écrite plus bas le 04/10 décrivait ce qu'il était, pas ce qu'il est. Ses deux

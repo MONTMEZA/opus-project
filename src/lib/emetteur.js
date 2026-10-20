@@ -79,7 +79,7 @@ export const COLONNES_ECRITES = Object.freeze({
     'en_liquidation', 'locataire_gerant',
     'etablissement_adresse', 'etablissement_code_postal', 'etablissement_ville',
     'siege_adresse', 'siege_code_postal', 'siege_ville',
-    'telephone', 'email', 'regime_tva',
+    'telephone', 'email', 'regime_tva', 'tva_intra',
     'mediateur_nom', 'mediateur_adresse', 'mediateur_site',
     'garantie_legale_texte', 'garantie_commerciale_texte', 'sav_texte',
     'modalites_paiement_texte', 'modalites_execution_texte', 'reclamations_texte',
@@ -275,6 +275,75 @@ export const REGIMES_TVA = Object.freeze([
     aide: 'Chaque ligne de vos devis portera son taux de TVA.',
   }),
 ]);
+
+/* ================================================================== */
+/*  LE N° DE TVA QUE L'ANNUAIRE N'A PAS TRANSMIS — 20/10/2026          */
+/* ================================================================== */
+
+/**
+ * Le n° de TVA intracommunautaire que porte une entreprise française de ce
+ * SIREN, si elle en a un : « FR », une clé de deux chiffres, le SIREN. La
+ * clé vaut (12 + 3 × (SIREN modulo 97)) modulo 97. `null` pour autre chose
+ * que neuf chiffres.
+ *
+ * MIROIR DE `tva_intra_du_siren()` (section 46.1 de `schema.sql`), et les
+ * deux tournent sur les mêmes SIREN : La Poste (FR39356000000, tel que la
+ * liste de la DGFiP le publie), 404833048 et 552032534. Le reste de 97 se
+ * calcule sur un nombre entier exact : neuf chiffres tiennent dans un
+ * nombre JavaScript sans arrondi.
+ *
+ * UN CALCUL, PAS UNE PREUVE : seul le service des impôts des entreprises
+ * ATTRIBUE un numéro, à une entreprise assujettie. C'est pourquoi l'écran
+ * ne l'écrit qu'après « C'est bien mon numéro ».
+ */
+export function tvaIntraDuSiren(siren) {
+  const s = siren == null ? '' : String(siren);
+  if (!/^[0-9]{9}$/.test(s)) return null;
+  const cle = (12 + 3 * (Number(s) % 97)) % 97;
+  return `FR${String(cle).padStart(2, '0')}${s}`;
+}
+
+/** « FR14000046011 » → « FR 14 000 046 011 » : ce qu'on relit, pas ce qu'on imprime. */
+export function tvaIntraLisible(numero) {
+  const n = numero == null ? '' : String(numero);
+  const m = n.match(/^(FR)([0-9]{2})([0-9]{3})([0-9]{3})([0-9]{3})$/);
+  return m ? m.slice(1).join(' ') : n;
+}
+
+/**
+ * LE N° DE TVA QUI S'IMPRIME, et d'où il vient : `{ numero, source }`.
+ *
+ *   'dgfip'    celui que l'annuaire a transmis (`entreprise.tva`) — il
+ *              l'emporte toujours ;
+ *   'confirme' sinon, celui que l'artisan a confirmé (`emetteur.tva_intra`),
+ *              SEULEMENT s'il est celui du SIREN de l'entreprise ACTIVE : un
+ *              numéro confirmé pour une entreprise d'avant ne se prête pas à
+ *              la suivante — la règle de `emetteur_incomplet()` ;
+ *   null       aucun.
+ *
+ * `entreprise` est l'identité active, ou la liste des identités (seule
+ * l'active compte), comme pour `motifsEmetteur`.
+ */
+export function tvaImprimee(entreprise, emetteur) {
+  const identites = Array.isArray(entreprise) ? entreprise : [entreprise];
+  const r = identites.find((x) => x && x.retiree_le == null) || null;
+  const e = emetteur || {};
+  if (r && r.tva) return { numero: r.tva, source: 'dgfip' };
+  const attendu = r ? tvaIntraDuSiren(r.siren) : null;
+  if (attendu && e.tva_intra === attendu) return { numero: attendu, source: 'confirme' };
+  return { numero: null, source: null };
+}
+
+/**
+ * La phrase du refus OP013, à l'octet près celle du déclencheur
+ * `tient_l_emetteur()` — `verifier-emetteur` compare les deux. La
+ * démonstration la lève quand un numéro n'est pas celui du SIREN rattaché :
+ * les deux refusent la même ligne avec la même phrase.
+ */
+export const MESSAGE_TVA_PAS_LA_VOTRE = 'Ce numéro de TVA n’est pas celui de l’entreprise rattachée '
+  + 'à votre compte : un numéro de TVA français se compose de « FR », d’une clé et du SIREN de '
+  + 'l’entreprise. Dans la section « TVA », touchez « C’est bien mon numéro » : Opus l’écrit à '
+  + 'partir de votre SIREN.';
 
 /**
  * La nature d'une assurance. « Autre » demande un libellé : il ne dit rien au client.
@@ -617,6 +686,13 @@ export function nettoyerEmetteur(v, ancien = null, maintenant = new Date()) {
   const n = { ...(v || {}) };
   for (const c of TEXTES_EMETTEUR) n[c] = rogner(n[c]);
   if (n.email) n.email = n.email.toLowerCase();
+  /* LE N° DE TVA sans aucun séparateur, en majuscules — les MÊMES blancs
+     que le déclencheur, nommés un par un (pas `\s`, qui en compte plus). */
+  if (n.tva_intra !== undefined) {
+    const t = n.tva_intra == null ? ''
+      : String(n.tva_intra).replace(/[ \t\n\v\f\r.\u00a0\u202f\u200b\u200c\u200d\u2060\ufeff-]/g, '').toUpperCase();
+    n.tva_intra = t === '' ? null : t;
+  }
   if (n.capital_variable === true) n.capital_centimes = null;
   if (n.registre !== 'rcs') {
     n.greffe_ville = null;
@@ -784,6 +860,11 @@ export const CONTRAINTES = Object.freeze({
     },
     emetteur_tva_check: (e) => (e.regime_tva == null || ['franchise', 'reel'].includes(e.regime_tva)
       ? null : 'regime_tva'),
+    /* La forme ET la clé ; à qui est le numéro, c'est le déclencheur (OP013),
+       que la démonstration rejoue dans `enregistrerEmetteurDemo`. */
+    emetteur_tva_intra_check: (e) => (e.tva_intra == null
+      || (/^FR[0-9]{11}$/.test(e.tva_intra) && e.tva_intra === tvaIntraDuSiren(e.tva_intra.slice(4)))
+      ? null : 'tva_intra'),
   }),
   emetteur_assurances: Object.freeze({
     /* La croisée n° 2 : nature, assureur, coordonnées, couverture. Le n° de
@@ -1034,15 +1115,17 @@ export const MOTIFS = Object.freeze([
   }),
   Object.freeze({
     cle: 'conso_tva_intra',
-    section: 'entreprise',
+    /* La section « TVA » depuis le 20/10/2026 : c'est là que vit le geste
+       qui lève ce motif, « C'est bien mon numéro ». Avant, il renvoyait à
+       « Mettre à jour », qui relit le même annuaire et rapportait le même
+       vide — une porte qui ne menait nulle part. */
+    section: 'tva',
     phrase: 'Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des '
       + 'entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA intracommunautaire pour '
       + 'votre entreprise. La loi demande de le communiquer au client (code de la consommation, '
-      + 'R. 111-2) ; Opus le fait en l’imprimant sur le devis, et ne l’invente pas. Touchez « Mettre à '
-      + 'jour » dans « Votre entreprise » pour le relire (votre SIRET vous sera redemandé) ; s’il '
-      + 'manque toujours, ou si votre entreprise '
-      + 'a été rattachée par l’administration d’Opus, cela ne peut pas encore se corriger depuis '
-      + 'l’application.',
+      + 'R. 111-2), et Opus l’imprime sur le devis. Pour une entreprise française, ce numéro se '
+      + 'déduit du SIREN : dans la section « TVA », relisez celui qu’Opus a calculé, puis touchez '
+      + '« C’est bien mon numéro ».',
   }),
   Object.freeze({
     cle: 'conso_mediateur',
@@ -1153,7 +1236,8 @@ export function motifsEmetteur({
     conso_telephone: e.telephone == null,
     conso_email: e.email == null,
     regime_tva: e.regime_tva == null,
-    conso_tva_intra: e.regime_tva === 'reel' && !!r && r.tva == null,
+    conso_tva_intra: e.regime_tva === 'reel' && !!r && r.tva == null
+      && (e.tva_intra == null || e.tva_intra !== tvaIntraDuSiren(r.siren)),
     conso_mediateur: e.mediateur_nom == null,
     conso_garantie_legale: e.garantie_legale_texte == null,
     conso_modalites_paiement: e.modalites_paiement_texte == null,
@@ -1436,10 +1520,14 @@ export function enteteImprime({ entreprise = null, emetteur = null, assurances =
      R. 111-2 5° vise tout assujetti identifié, et un franchisé peut avoir
      un numéro. En franchise, la mention 293 B s'ajoute, elle ne le remplace
      pas. */
-  if (r && r.tva) identite.push(`N° de TVA intracommunautaire : ${r.tva}`);
+  /* Celui de l'annuaire, sinon celui que l'artisan a CONFIRMÉ pour le
+     SIREN de cette entreprise (20/10/2026) — `tvaImprimee`, la même règle
+     que le motif `conso_tva_intra`. */
+  const tva = tvaImprimee(r, e).numero;
+  if (tva) identite.push(`N° de TVA intracommunautaire : ${tva}`);
   if (e.regime_tva === 'franchise') identite.push(LIBELLES_IMPRIMES.franchise);
   else if (e.regime_tva == null) identite.push(manque('votre régime de TVA'));
-  else if (e.regime_tva === 'reel' && r && !r.tva) {
+  else if (e.regime_tva === 'reel' && r && !tva) {
     identite.push(manqueParticulier('votre numéro de TVA intracommunautaire'));
   }
 
