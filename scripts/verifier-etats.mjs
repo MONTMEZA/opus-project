@@ -506,8 +506,11 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
      vit dans `IdentiteEntreprise.js`, un bloc de « Mon entreprise ». La
      cible change, la règle non — un contrôle qui garderait l'ancien nom
      planterait, et un contrôle qui plante ne vérifie rien. */
+  /* `SaisieTva.js` et `tva.js` (20/10/2026) : VIES n'est pas un registre
+     non plus, et ce qu'il reconnaît ne fait pas un artisan « vérifié ». */
   const ecrans = ['src/components/SaisieSiret.js', 'src/components/IdentiteEntreprise.js',
-    'src/components/CarteDemandePro.js', 'src/lib/entreprise.js'];
+    'src/components/CarteDemandePro.js', 'src/lib/entreprise.js', 'src/components/SaisieTva.js',
+    'src/lib/tva.js'];
   const fautifs = ecrans.filter((f) => {
     const c = sansCommentaires(lire(f));
     return VERIFIE.test(sansNomDuBadge(c)) || /registre/i.test(c);

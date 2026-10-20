@@ -27,6 +27,7 @@ import { reduireImage, TAILLE_MAX_MO } from './media';
 /* Le SIRET (section 45). `siret.js` n'importe rien, `erreurs.js` non plus,
    et `siret-demo.js` pas davantage : aucun cycle possible avec ce fichier. */
 import { chiffresSeuls, communeLisible, departementDe } from './siret';
+import { analyserNumeroTva, ESSAIS_VIES } from './tva';
 import { NOM_ENTREPRISE_MAX } from './entreprise';
 import { issueDeVerification } from './erreurs';
 import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
@@ -79,6 +80,9 @@ const entreprisesDemo = {
    preuve fraîche de la base, en mémoire. Sans elle, rattacher ou devenir
    pro échoue en OP006 — exactement comme sur la vraie base. */
 const preuvesDemo = new Map();
+/* Les n° de TVA « reconnus par VIES » pendant la session (section 48), par
+   fiche : la ligne de `preuves_tva`, en mémoire. */
+const preuvesTvaDemo = {};
 /* La fiche créée quand un particulier de démonstration passe pro. */
 const prosAjoutesDemo = {};
 let demandeProDemo = null;
@@ -1925,18 +1929,42 @@ const copieEmetteur = (f) => ({
    « Enregistrer » touché là effacerait ce qui l'était (cahier 9.1-29).
    -------------------------------------------------------------------------- */
 async function monEmetteurSupabase() {
-  const [e, a, t] = await Promise.all([
+  /* La quatrième : le n° de TVA reconnu par VIES (section 48). Elle se lit
+     avec les trois autres, parce que l'en-tête et ce qui manque en
+     dépendent ; et elle échoue avec elles — un numéro qu'on n'a pas pu
+     lire ne doit pas ressembler à un numéro absent. */
+  const [e, a, t, v] = await Promise.all([
     supabase.from('emetteur').select('*').eq('pro_id', currentUserId).maybeSingle(),
     supabase.from('emetteur_assurances').select('*').eq('pro_id', currentUserId)
       .order('created_at', { ascending: true }),
     supabase.from('tarifs_pro').select('*').eq('pro_id', currentUserId).maybeSingle(),
+    supabase.from('preuves_tva').select('siren, numero, reconnu_le').eq('pro_id', currentUserId)
+      .maybeSingle(),
   ]);
   for (const r of [e, a, t]) if (r.error) throw r.error;
-  return { emetteur: e.data || null, assurances: a.data || [], tarifs: t.data || null };
+  /* UNE SEULE ERREUR N'EN EST PAS UNE : la table qui n'existe pas encore.
+     Sur une base où la section 48 n'est pas posée, il n'y a AUCUN numéro
+     reconnu — c'est vrai, et la fiche doit se lire quand même. Le
+     20/10/2026, une version en avance sur la base (311f739) avait cassé
+     « Mon entreprise » entière. Toute autre erreur lève. */
+  if (v.error && !tableAbsente(v.error)) throw v.error;
+  return {
+    emetteur: e.data || null,
+    assurances: a.data || [],
+    tarifs: t.data || null,
+    preuveTva: v.error ? null : (v.data || null),
+  };
+}
+
+/** « Cette table n'existe pas » : PGRST205 (PostgREST récent) ou 42P01 (PostgreSQL). */
+function tableAbsente(erreur) {
+  return !!erreur && (erreur.code === 'PGRST205' || erreur.code === '42P01');
 }
 
 async function monEmetteurDemo() {
-  return copieEmetteur(ficheEmetteurDemo(moiEnDemo()));
+  const moi = moiEnDemo();
+  const preuve = preuvesTvaDemo[String(moi)];
+  return { ...copieEmetteur(ficheEmetteurDemo(moi)), preuveTva: preuve ? { ...preuve } : null };
 }
 
 export const monEmetteur = hasSupabase ? monEmetteurSupabase : monEmetteurDemo;
@@ -2093,6 +2121,7 @@ async function emetteurIncompletDemo() {
     tarifs: f.tarifs,
     metiers: fiche.metiers || [],
     maintenant: new Date(),
+    preuveTva: preuvesTvaDemo[String(moi)] || null,
   }));
 }
 
@@ -3916,6 +3945,65 @@ async function verifierSiretDemo(siret, { pourMaFiche = false } = {}) {
 }
 
 export const verifierSiret = hasSupabase ? verifierSiretSupabase : verifierSiretDemo;
+
+/* --------------------------------------------------------------------------
+   FAIRE CONTRÔLER SON N° DE TVA PAR VIES — section 48, 20/10/2026.
+
+   Le même contrat que `verifierSiret` : TOUJOURS `{ issue, … }`, jamais une
+   exception. Seul le numéro part — ni le nom, ni l'e-mail : la fonction
+   Edge reconnaît l'appelant à son jeton, que `functions.invoke` envoie.
+
+   Soixante secondes : la fonction se donne 45 s pour VIES (une réponse
+   réussie en met 8 à 13, et la France est souvent saturée), plus le réveil
+   à froid. En deçà, l'écran dirait « trop lent » à une réponse en route.
+   -------------------------------------------------------------------------- */
+export const DELAI_CONTROLE_TVA_MS = ESSAIS_VIES.budget_ms + 15000;
+
+async function controlerTvaSupabase(numero) {
+  const debut = Date.now();
+  let reponse;
+  try {
+    reponse = await supabase.functions.invoke('tva', {
+      body: { numero: analyserNumeroTva(numero).numero },
+      timeout: DELAI_CONTROLE_TVA_MS,
+    });
+  } catch (e) {
+    return issueDeVerification(e, Date.now() - debut, DELAI_CONTROLE_TVA_MS);
+  }
+  const { data, error } = reponse || {};
+  if (error) return issueDeVerification(error, Date.now() - debut, DELAI_CONTROLE_TVA_MS);
+  if (!data || typeof data !== 'object' || typeof data.issue !== 'string') {
+    return { issue: 'service_indisponible' };
+  }
+  return data;
+}
+
+/* LA DÉMONSTRATION fait vivre les trois réponses de VIES, sans réseau :
+   une clé de deux CHIFFRES juste est reconnue ; une clé en lettres
+   commençant par « Z » trouve VIES saturé ; toute autre clé en lettres est
+   refusée. Le reste — la forme, la clé, le SIREN, le numéro déjà publié —
+   suit les mêmes règles que la fonction Edge, dans le même ordre. */
+async function controlerTvaDemo(numero) {
+  const saisie = analyserNumeroTva(numero);
+  if (saisie.etat === 'cle_fausse') return { issue: 'cle_fausse' };
+  if (saisie.etat !== 'pret') return { issue: 'mal_forme' };
+  const moi = String(moiEnDemo());
+  const r = entreprisesDemo[moi];
+  if (!r || r.retiree_le) return { issue: 'sans_entreprise' };
+  if (r.tva) return { issue: 'deja_publie', numero: r.tva };
+  if (analyserNumeroTva(saisie.numero, r.siren).etat !== 'pret') return { issue: 'autre_siren' };
+  await patienter(1500);
+  const cle = saisie.numero.slice(2, 4);
+  if (/^\d{2}$/.test(cle)) {
+    preuvesTvaDemo[moi] = { siren: r.siren, numero: saisie.numero, reconnu_le: new Date().toISOString() };
+    return { issue: 'reconnu', numero: saisie.numero, reconnu_le: preuvesTvaDemo[moi].reconnu_le };
+  }
+  if (cle.startsWith('Z')) return { issue: 'indisponible' };
+  if (preuvesTvaDemo[moi] && preuvesTvaDemo[moi].numero === saisie.numero) delete preuvesTvaDemo[moi];
+  return { issue: 'refuse', numero: saisie.numero };
+}
+
+export const controlerTva = hasSupabase ? controlerTvaSupabase : controlerTvaDemo;
 
 /* --------------------------------------------------------------------------
    MON ENTREPRISE — l'identité rattachée à MA fiche, et elle seule.

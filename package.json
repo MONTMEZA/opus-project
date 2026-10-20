@@ -91,7 +91,8 @@
     "verifier-portes": "node scripts/verifier-portes.mjs",
     "verifier-pro": "node scripts/verifier-pro.mjs",
     "verifier-siret": "node scripts/verifier-siret.mjs",
-    "verifier-tarifs": "node scripts/verifier-tarifs.mjs"
+    "verifier-tarifs": "node scripts/verifier-tarifs.mjs",
+    "verifier-tva": "node scripts/verifier-tva.mjs"
   },
   "private": true,
   "devDependencies": {

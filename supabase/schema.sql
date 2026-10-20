@@ -10450,8 +10450,8 @@ begin
                 then 'conso_email: Pour un devis à un particulier : indiquez une adresse e-mail de contact ; la loi demande des coordonnées électroniques sur le devis (code de la consommation, L. 111-1). Elle ne s’affiche pas sur votre fiche publique.' end,
            case when e.regime_tva is null
                 then 'regime_tva: Déclarez votre régime de TVA. En franchise, vos devis porteront « TVA non applicable, article 293 B du CGI » ; au régime réel, la TVA de chaque ligne. Opus ne peut pas le deviner : votre chiffre d’affaires n’est pas dans Opus.' end,
-           case when e.regime_tva = 'reel' and r.id is not null and r.tva is null
-                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA intracommunautaire pour votre entreprise. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus le fait en l’imprimant sur le devis, et ne l’invente pas. Touchez « Mettre à jour » dans « Votre entreprise » pour le relire (votre SIRET vous sera redemandé) ; s’il manque toujours, ou si votre entreprise a été rattachée par l’administration d’Opus, cela ne peut pas encore se corriger depuis l’application.' end,
+           case when e.regime_tva = 'reel' and r.id is not null and r.tva is null and v.pro_id is null
+                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des entreprises (liste de la DGFiP) ne publie aucun numéro de TVA intracommunautaire actif pour votre entreprise. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus l’imprime sur le devis, et n’imprime qu’un numéro actif. Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler par VIES, le service de la Commission européenne. S’il y est refusé, c’est votre service des impôts des entreprises qui peut dire pourquoi, et l’activer.' end,
            case when e.mediateur_nom is null
                 then 'conso_mediateur: Pour un devis à un particulier : indiquez le médiateur de la consommation auquel vous adhérez, avec son nom, son adresse et son site (code de la consommation, L. 111-1 et R. 111-1). Ce n’est pas une information à trouver : il faut adhérer à un médiateur référencé. Un devis à un professionnel n’en a généralement pas besoin, sauf pour un petit professionnel démarché hors de son activité principale.' end,
            case when e.garantie_legale_texte is null
@@ -10473,6 +10473,12 @@ begin
     left join public.entreprise_registre r on r.pro_id = moi.id and r.retiree_le is null
     left join public.emetteur e on e.pro_id = moi.id
     left join public.tarifs_pro t on t.pro_id = moi.id
+    /* Le n° de TVA reconnu par VIES (section 48), pour le SIREN ACTIF
+       seulement : une preuve faite pour une autre entreprise ne vaut rien
+       ici. La table naît plus bas ; un corps plpgsql ne se résout qu'à
+       l'exécution, et cette fonction n'est jamais exécutée pendant que le
+       schéma se rejoue. */
+    left join public.preuves_tva v on v.pro_id = moi.id and v.siren = r.siren
    cross join lateral (
      select coalesce(r.est_ei, r.forme_juridique = '1000') as ei,
             left(r.forme_juridique, 2) in ('54', '55', '56', '57', '58')
@@ -11123,6 +11129,136 @@ comment on column public.sos_availability.updated_at is
 revoke insert, update, delete, truncate on public.sos_availability from anon;
 revoke truncate on public.sos_availability from authenticated;
 
+-- ==========================================================================
+--  48. LE N° DE TVA QUE L'ANNUAIRE NE PUBLIE PAS — écrit par l'artisan,
+--      reconnu par VIES (20/10/2026)
+--
+--  Le n° de TVA intracommunautaire d'une entreprise vient de l'annuaire
+--  des entreprises, qui recopie la liste des numéros ACTIFS de la DGFiP
+--  (`entreprise_registre.tva`, section 45). Quand l'annuaire n'en publie
+--  aucun, un artisan au régime réel ne pouvait plus émettre de devis à un
+--  particulier (motif `conso_tva_intra`, section 46), et rien ne lui
+--  permettait de l'écrire.
+--
+--  POURQUOI PAS UN SIMPLE CHAMP — mesuré le 20/10/2026
+--  ---------------------------------------------------
+--  Le numéro d'une société se CALCULE depuis son SIREN : « FR » + une clé
+--  de deux chiffres + le SIREN. Un champ libre aurait donc presque toujours
+--  reçu le numéro calculé. Or calculer n'est pas attribuer : les numéros
+--  absents de la liste de la DGFiP sont REFUSÉS par VIES, le service de la
+--  Commission européenne, et celui de la société du propriétaire l'était
+--  ce jour-là. L'imprimer sur un devis, c'est imprimer un numéro que
+--  l'administration ne reconnaît pas. Le propriétaire a décidé : on l'écrit
+--  à la main, et Opus ne le garde que si VIES le reconnaît.
+--
+--  CE QUI EST POSÉ
+--  ---------------
+--    - `preuves_tva` : le numéro, le SIREN qu'il désigne et la DATE à
+--      laquelle VIES l'a reconnu. Une ligne par compte. Seule la fonction
+--      Edge `tva` y écrit, avec la clé de service : AUCUNE politique
+--      d'écriture, sinon un client modifié s'écrirait le numéro de son
+--      choix. Le nom et l'adresse que VIES renvoie ne sont JAMAIS gardés ;
+--    - la date se pose par la BASE (`tient_la_preuve_tva`) : une date que
+--      le téléphone peut écrire ne prouve rien ;
+--    - `emetteur_incomplet()` (section 46) ne réclame plus le numéro quand
+--      une preuve existe POUR LE SIREN ACTIF. Un compte qui change
+--      d'entreprise perd donc l'effet de sa preuve sans qu'on l'efface ;
+--    - l'export RGPD (`mes_donnees`, plus bas) la contient.
+--
+--  L'ANNUAIRE GARDE LE DERNIER MOT : quand il publie un numéro, c'est lui
+--  qui s'imprime, et la fonction Edge refuse d'en contrôler un autre.
+--
+--  Et aucune date d'expiration : le propriétaire a décidé le 18/10 qu'Opus
+--  n'aurait qu'UNE règle plus stricte que la loi, relire le SIRET chaque
+--  année. Le devis imprime la date du contrôle : son âge se lit. Un numéro
+--  soumis de nouveau et refusé par VIES, lui, est retiré par la fonction.
+-- ==========================================================================
+
+create table if not exists public.preuves_tva (
+  pro_id     uuid primary key references public.professional_profiles(id) on delete cascade,
+  siren      text not null,
+  numero     text not null,
+  reconnu_le timestamptz not null default clock_timestamp(),
+  vies_le    timestamptz,
+  source     text not null default 'vies'
+);
+
+/* Toutes en `_check` : `messageClair()` ne reconnaît une contrainte qu'à
+   ce nom (section 41). Et les trois se refont : `add column if not exists`
+   ne touche pas aux contraintes. */
+alter table public.preuves_tva drop constraint if exists preuve_tva_siren_check;
+alter table public.preuves_tva add constraint preuve_tva_siren_check
+  check (siren ~ '^[0-9]{9}$');
+
+/* La forme, et le SIREN : les neuf derniers chiffres DÉSIGNENT
+   l'entreprise. Un numéro qui en désigne une autre n'a rien à faire sur la
+   fiche de celle-ci. La clé peut être faite de lettres (74 numéros actifs
+   commencent par « K » dans la liste de la DGFiP, relevé du 20/10) : on
+   n'exige deux chiffres nulle part. */
+alter table public.preuves_tva drop constraint if exists preuve_tva_numero_check;
+alter table public.preuves_tva add constraint preuve_tva_numero_check
+  check (numero ~ '^FR[0-9A-Z]{2}[0-9]{9}$' and substr(numero, 5) = siren);
+
+/* Une clé de DEUX CHIFFRES, elle, a une formule publique :
+   (12 + 3 × (SIREN mod 97)) mod 97. Un numéro à clé chiffrée fausse
+   n'existe pas, et la base refuse de le garder quoi qu'en dise l'appelant. */
+alter table public.preuves_tva drop constraint if exists preuve_tva_cle_check;
+alter table public.preuves_tva add constraint preuve_tva_cle_check
+  check (substr(numero, 3, 2) !~ '^[0-9]{2}$'
+         or substr(numero, 3, 2)::int = (12 + 3 * (siren::bigint % 97)) % 97);
+
+/* `essai` : une ligne posée par le connecteur pour un compte jetable, le
+   temps d'un essai sur la vraie base. Elle part avec le compte (la clé
+   étrangère est en cascade). La fonction Edge n'écrit que `vies`. */
+alter table public.preuves_tva drop constraint if exists preuve_tva_source_check;
+alter table public.preuves_tva add constraint preuve_tva_source_check
+  check (source in ('vies', 'essai'));
+
+comment on table public.preuves_tva is
+  'Le n° de TVA intracommunautaire écrit par l''artisan quand l''annuaire n''en publie '
+  'aucun, et la date à laquelle VIES (Commission européenne) l''a reconnu. Écrite par '
+  'la fonction Edge tva seulement ; lue par le titulaire. Section 48.';
+comment on column public.preuves_tva.reconnu_le is
+  'Posée par la base (tient_la_preuve_tva), à chaque écriture : la date du contrôle '
+  'qui s''imprime sur le devis.';
+comment on column public.preuves_tva.vies_le is
+  'La date de la réponse, telle que VIES l''a écrite (requestDate). Gardée comme '
+  'trace ; ce n''est pas elle qui s''imprime.';
+
+/* La date du contrôle : posée par la BASE, à l'insertion COMME à la mise à
+   jour. Une préparation `upsert` qui ne l'envoie pas garderait sinon la
+   date du premier contrôle, et un numéro recontrôlé aujourd'hui
+   s'imprimerait avec la date de l'an dernier. */
+create or replace function public.tient_la_preuve_tva()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.reconnu_le := clock_timestamp();
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_la_preuve_tva
+  before insert or update on public.preuves_tva
+  for each row execute function public.tient_la_preuve_tva();
+
+alter table public.preuves_tva enable row level security;
+
+/* La lecture, par `est_mon_entreprise()` comme tout ce qui appartient à
+   une entreprise (section 36.1). Aucune politique d'écriture. */
+drop policy if exists "lecture de ma preuve de tva" on public.preuves_tva;
+create policy "lecture de ma preuve de tva" on public.preuves_tva
+  for select to authenticated
+  using (public.est_mon_entreprise(pro_id));
+
+/* Les droits de TABLE, sans attendre qu'une politique rattrape (section
+   18.2) : `authenticated` ne garde que la lecture, `anon` rien. */
+revoke all on public.preuves_tva from anon;
+revoke insert, update, delete, truncate on public.preuves_tva from authenticated;
+
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
@@ -11218,6 +11354,10 @@ as $$
                              from public.emetteur_assurances x where x.pro_id = auth.uid()), '[]'::jsonb),
     'mes_tarifs',
                  (select to_jsonb(x) from public.tarifs_pro x where x.pro_id = auth.uid()),
+    /* MON N° DE TVA reconnu par VIES (section 48) : pour un entrepreneur
+       individuel, c'est une donnée personnelle — il désigne une personne. */
+    'mon_numero_de_tva',
+                 (select to_jsonb(x) from public.preuves_tva x where x.pro_id = auth.uid()),
     /* MA DISPONIBILITÉ AUX URGENCES (section 10) — l'article 15 : mon métier
        d'urgence, mon rayon, mon délai, et trois colonnes mortes, toujours à 0.
        Mes TARIFS sont dans `mes_tarifs`, colonnes de la section 47 comprises. */

@@ -1812,9 +1812,24 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
   à la main, parce que la preuve SIRET ne la garde pas. Le remède est de la
   ranger dans la preuve (section 45 et fonction Edge). Aucune entreprise
   active n'est dans ce cas au 18/10.
-- [ ] Un artisan **au régime réel sans n° de TVA** transmis par la DGFiP : le
-  motif le dit, mais il n'a aucune porte pour le donner (le numéro est
-  verrouillé dans `entreprise_registre`).
+- [x] Un artisan **au régime réel sans n° de TVA** transmis par la DGFiP :
+  **fait le 20/10/2026** (section 48). Il l'écrit dans « Mon entreprise →
+  Votre entreprise », et Opus ne le garde que si VIES le reconnaît. Mesuré ce
+  jour-là : un numéro calculé depuis le SIREN n'est pas un numéro actif, et
+  celui de la société du propriétaire est REFUSÉ par VIES.
+- [ ] **Geste du propriétaire, pour sa propre société** : faire activer son
+  n° de TVA intracommunautaire — son espace professionnel sur impots.gouv.fr
+  le montre, son service des impôts des entreprises l'active. Une fois actif,
+  « Écrire mon numéro de TVA » le fait reconnaître par VIES. Tant qu'il ne
+  l'est pas, ses devis à des particuliers ne peuvent pas porter de numéro.
+- [ ] **VIES n'a pas de date d'expiration dans Opus** (décision du 18/10 :
+  une seule règle plus stricte que la loi). Un numéro désactivé après sa
+  reconnaissance s'imprime encore, avec la date du contrôle. À reposer si un
+  cas réel se présente.
+- [ ] **L'avertissement juridique de VIES** n'autorise que l'usage « d'un
+  utilisateur légitime (par exemple : établir ses propres factures) ».
+  Contrôler son propre numéro pour ses propres devis paraît y entrer : à
+  faire confirmer par un juriste avec les autres points ci-dessus.
 - [ ] Une **attestation remplacée** reste dans l'espace `documents` jusqu'à la
   suppression du compte.
 - [ ] La démonstration ne montre ni `adresse_siege` ni `entreprise_ancienne`

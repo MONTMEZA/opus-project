@@ -55,7 +55,7 @@ import {
   tarifsDepuisFormulaire, pourcentDepuisSaisie,
   MESSAGE_TAUX_ZERO, MESSAGE_MAJORATION_ZERO, MESSAGE_DEVIS_ZERO,
   versCentimes, estEI, estSocieteCommerciale, rcsOblige, mediateurDeLaListe,
-  parleDUnPaiementALaSignature, avisEmetteur,
+  parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { MEDIATEURS_RELEVES_LE, ADRESSE_A_RECOPIER } from '../data/mediateurs';
@@ -289,7 +289,7 @@ const ChampPaiement = forwardRef(function ChampPaiement({ defaut }, ref) {
 /* ==================================================================== */
 
 const FicheEmetteur = forwardRef(function FicheEmetteur({
-  entreprise = null, reference, depart = null, assurances = [],
+  entreprise = null, preuveTva = null, reference, depart = null, assurances = [],
   onAjouterAssurance, onOuvrirAssurance, onChoisirMediateur,
   telephoneFiche = '', emailFiche = '', emailCompte = '',
   erreur = null, onEffacerErreur, onPosition,
@@ -500,7 +500,9 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
 
   const registres = rcsOblige(entreprise) ? REGISTRES.filter((r) => r.cle === 'rcs') : REGISTRES;
   const ref0 = (reference && reference.emetteur) || {};
-  const tva = entreprise && entreprise.tva;
+  /* Le n° de TVA qui s'imprimera, et d'où il vient : l'annuaire, ou VIES
+     pour un numéro écrit dans « Votre entreprise » (section 48). */
+  const tva = numeroTvaImprime(entreprise, preuveTva);
   const avisPaiementTexte = init.textes.modalites_paiement_texte;
 
   return (
@@ -809,12 +811,21 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
         {sous('regime_tva')}
         {!!entreprise && (
           <Aide>
-            {tva
+            {tva && tva.origine === 'annuaire'
               ? `Numéro de TVA intracommunautaire transmis par l’annuaire des entreprises (liste de la `
-                + `DGFiP) : ${tva} — il s’imprimera sur vos devis, quel que soit votre régime.`
-              : 'L’annuaire des entreprises (liste de la DGFiP) n’affiche pas de numéro de TVA '
-                + 'intracommunautaire pour votre entreprise. Cela ne prouve rien sur votre régime : '
-                + 'c’est à vous de le dire.'}
+                + `DGFiP) : ${tva.numero} — il s’imprimera sur vos devis, quel que soit votre régime.`
+              : null}
+            {tva && tva.origine === 'vies'
+              ? `Numéro de TVA intracommunautaire écrit par vous et reconnu par VIES (Commission `
+                + `européenne)${dateFrancaise(tva.reconnu_le) ? ` le ${dateFrancaise(tva.reconnu_le)}` : ''} : `
+                + `${tva.numero} — il s’imprimera sur vos devis, quel que soit votre régime.`
+              : null}
+            {!tva
+              ? 'L’annuaire des entreprises (liste de la DGFiP) ne publie aucun numéro de TVA '
+                + 'intracommunautaire actif pour votre entreprise. Cela ne prouve rien sur votre '
+                + 'régime : c’est à vous de le dire. Si vous en avez un, écrivez-le dans « Votre '
+                + 'entreprise » : Opus le fera contrôler par VIES.'
+              : null}
           </Aide>
         )}
         {!!ref0.regime_tva_declare_le && choix.regime_tva === ref0.regime_tva && (

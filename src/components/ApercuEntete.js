@@ -27,9 +27,11 @@ function Ligne({ texte }) {
 }
 
 export default function ApercuEntete({
-  entreprise = null, emetteur = null, assurances = [], tarifs = null,
+  entreprise = null, emetteur = null, assurances = [], tarifs = null, preuveTva = null,
 }) {
-  const { identite, mentions, source } = enteteImprime({ entreprise, emetteur, assurances, tarifs });
+  const { identite, mentions, source } = enteteImprime({
+    entreprise, emetteur, assurances, tarifs, preuveTva,
+  });
   return (
     <View style={s.carte}>
       <Text style={s.titre}>Votre en-tête de devis</Text>

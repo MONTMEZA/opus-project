@@ -57,6 +57,7 @@
 import { dateFrancaise } from './entreprise.js';
 import { formeCourte } from '../data/formes-juridiques.js';
 import { formaterSiret } from './siret.js';
+import { FORME_TVA } from './tva.js';
 import { MEDIATEURS, MEDIATEURS_RELEVES_LE } from '../data/mediateurs.js';
 import { DECENNALE, RC_PRO } from '../data/pieces-justificatives.js';
 
@@ -1036,13 +1037,13 @@ export const MOTIFS = Object.freeze([
     cle: 'conso_tva_intra',
     section: 'entreprise',
     phrase: 'Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des '
-      + 'entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA intracommunautaire pour '
-      + 'votre entreprise. La loi demande de le communiquer au client (code de la consommation, '
-      + 'R. 111-2) ; Opus le fait en l’imprimant sur le devis, et ne l’invente pas. Touchez « Mettre à '
-      + 'jour » dans « Votre entreprise » pour le relire (votre SIRET vous sera redemandé) ; s’il '
-      + 'manque toujours, ou si votre entreprise '
-      + 'a été rattachée par l’administration d’Opus, cela ne peut pas encore se corriger depuis '
-      + 'l’application.',
+      + 'entreprises (liste de la DGFiP) ne publie aucun numéro de TVA intracommunautaire actif '
+      + 'pour votre entreprise. La loi demande de le communiquer au client (code de la '
+      + 'consommation, R. 111-2) ; Opus l’imprime sur le devis, et n’imprime qu’un numéro actif. '
+      + 'Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, '
+      + 'écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler par VIES, le '
+      + 'service de la Commission européenne. S’il y est refusé, c’est votre service des impôts '
+      + 'des entreprises qui peut dire pourquoi, et l’activer.',
   }),
   Object.freeze({
     cle: 'conso_mediateur',
@@ -1099,6 +1100,37 @@ export const MOTIFS = Object.freeze([
   }),
 ]);
 
+/**
+ * LE N° DE TVA RECONNU PAR VIES (section 48) — la preuve, si elle vaut pour
+ * CETTE entreprise, ou null.
+ *
+ * Elle ne vaut que pour le SIREN de l'identité ACTIVE, comme la jointure de
+ * `emetteur_incomplet()` : une preuve faite pour une autre entreprise (le
+ * compte en a changé) ne prête pas son numéro. Et elle doit avoir la forme
+ * d'un numéro qui DÉSIGNE ce SIREN — la base l'exige déjà ; l'écran ne
+ * l'imprime pas sans l'avoir relu.
+ */
+export function preuveTvaPour(entreprise, preuveTva) {
+  const r = entreprise || null;
+  const p = preuveTva || null;
+  if (!r || !p || !r.siren || p.siren !== r.siren) return null;
+  const numero = String(p.numero || '');
+  if (!FORME_TVA.test(numero) || numero.slice(4) !== r.siren) return null;
+  return p;
+}
+
+/**
+ * LE N° DE TVA QUI S'IMPRIME, et d'où il vient : `{ numero, origine }` ou
+ * null. L'ANNUAIRE GARDE LE DERNIER MOT : quand il publie un numéro, c'est
+ * lui, même si une preuve VIES existe.
+ */
+export function numeroTvaImprime(entreprise, preuveTva) {
+  const r = entreprise || null;
+  if (r && r.tva) return { numero: r.tva, origine: 'annuaire' };
+  const p = preuveTvaPour(r, preuveTva);
+  return p ? { numero: p.numero, origine: 'vies', reconnu_le: p.reconnu_le || null } : null;
+}
+
 /** Chaque clé de motif → l'ancre de l'écran qui permet de le compléter. */
 export const SECTION_DU_MOTIF = Object.freeze(Object.fromEntries(MOTIFS.map((m) => [m.cle, m.section])));
 
@@ -1115,12 +1147,14 @@ const tempsDe = (valeur) => (valeur instanceof Date ? valeur.getTime() : new Dat
  * seule chose qu'on y lit : jamais `verifie`, jamais `entreprise` (le nom
  * public, libre). `nbAssurances` n'est plus lu pour bloquer — aucune
  * assurance n'est exigée (réponse du 18/10) — et reste accepté pour que les
- * appelants n'aient pas à changer.
+ * appelants n'aient pas à changer. `preuveTva` est la ligne de
+ * `preuves_tva` (section 48) : elle ne compte que pour le SIREN actif.
  *
  * Rend des chaînes « cle: phrase », dans l'ordre de `MOTIFS`.
  */
 export function motifsEmetteur({
   entreprise = null, emetteur = null, tarifs = null, metiers = null, maintenant = new Date(),
+  preuveTva = null,
 } = {}) {
   const identites = Array.isArray(entreprise) ? entreprise : [entreprise];
   const r = identites.find((x) => x && x.retiree_le == null) || null;
@@ -1153,7 +1187,7 @@ export function motifsEmetteur({
     conso_telephone: e.telephone == null,
     conso_email: e.email == null,
     regime_tva: e.regime_tva == null,
-    conso_tva_intra: e.regime_tva === 'reel' && !!r && r.tva == null,
+    conso_tva_intra: e.regime_tva === 'reel' && !!r && r.tva == null && !preuveTvaPour(r, preuveTva),
     conso_mediateur: e.mediateur_nom == null,
     conso_garantie_legale: e.garantie_legale_texte == null,
     conso_modalites_paiement: e.modalites_paiement_texte == null,
@@ -1331,20 +1365,34 @@ export function adresseImprimee(entreprise, emetteur) {
  * C'est la date de CONSULTATION du répertoire (`verifie_le`), jamais une
  * « date de vérification » : ce mot appartient au badge. La Licence
  * Ouverte demande la source et la date de mise à jour de la fiche. Le n° de
- * TVA a une autre source — la liste de la DGFiP, par l'annuaire des
- * entreprises — et la ligne le dit dès qu'il est imprimé. Une identité
- * ouverte par l'administration (`administration`) ne vient pas du
- * répertoire : rien n'est imprimé.
+ * TVA a une autre source, et la ligne la dit dès qu'il est imprimé : la
+ * liste de la DGFiP, par l'annuaire des entreprises — ou, quand l'annuaire
+ * n'en publie aucun, l'entreprise elle-même, et VIES qui l'a reconnu, avec
+ * la DATE de ce contrôle (VIES ne confirme que pour le jour même : la date
+ * dit l'âge de la preuve). Une identité ouverte par l'administration
+ * (`administration`) ne vient pas du répertoire : seule la source du n° de
+ * TVA s'imprime, s'il y en a un.
  */
-export function ligneSource(entreprise) {
+export function ligneSource(entreprise, preuveTva = null) {
   const r = entreprise || null;
-  if (!r || !['registre', 'essai'].includes(r.source)) return null;
+  if (!r) return null;
+  const tva = numeroTvaImprime(r, preuveTva);
+  let sourceTva = null;
+  if (tva && tva.origine === 'annuaire') sourceTva = 'n° de TVA : liste de la DGFiP, par l’annuaire des entreprises';
+  if (tva && tva.origine === 'vies') {
+    const le = dateFrancaise(tva.reconnu_le);
+    sourceTva = 'n° de TVA : écrit par l’entreprise, reconnu par VIES (Commission européenne)'
+      + (le ? ` le ${le}` : '');
+  }
+  if (!['registre', 'essai'].includes(r.source)) {
+    return sourceTva ? `N${sourceTva.slice(1)}` : null;
+  }
   const maj = dateFrancaise(r.maj_insee);
   const vu = dateFrancaise(r.verifie_le);
   return 'Identité : répertoire Sirene (INSEE), '
     + (maj ? `fiche mise à jour le ${maj}` : 'date de mise à jour non publiée')
     + (vu ? `, consultée le ${vu}` : '')
-    + (r.tva ? ' ; n° de TVA : liste de la DGFiP, par l’annuaire des entreprises' : '');
+    + (sourceTva ? ` ; ${sourceTva}` : '');
 }
 
 const libelleNature = (a) => {
@@ -1364,7 +1412,9 @@ const libelleNature = (a) => {
  * garantie ». Aucune assurance n'est réclamée : celles qui sont déclarées
  * s'impriment, aucune ligne « à compléter » n'en tient lieu.
  */
-export function enteteImprime({ entreprise = null, emetteur = null, assurances = [], tarifs = null } = {}) {
+export function enteteImprime({
+  entreprise = null, emetteur = null, assurances = [], tarifs = null, preuveTva = null,
+} = {}) {
   const r = entreprise || null;
   const e = emetteur || {};
   const t = tarifs || {};
@@ -1435,11 +1485,13 @@ export function enteteImprime({ entreprise = null, emetteur = null, assurances =
   /* LE N° DE TVA S'IMPRIME DÈS QU'IL EXISTE, quel que soit le régime :
      R. 111-2 5° vise tout assujetti identifié, et un franchisé peut avoir
      un numéro. En franchise, la mention 293 B s'ajoute, elle ne le remplace
-     pas. */
-  if (r && r.tva) identite.push(`N° de TVA intracommunautaire : ${r.tva}`);
+     pas. Celui de l'annuaire d'abord ; sinon celui que VIES a reconnu
+     (section 48), pour le SIREN actif seulement. */
+  const tva = numeroTvaImprime(r, preuveTva);
+  if (tva) identite.push(`N° de TVA intracommunautaire : ${tva.numero}`);
   if (e.regime_tva === 'franchise') identite.push(LIBELLES_IMPRIMES.franchise);
   else if (e.regime_tva == null) identite.push(manque('votre régime de TVA'));
-  else if (e.regime_tva === 'reel' && r && !r.tva) {
+  else if (e.regime_tva === 'reel' && r && !tva) {
     identite.push(manqueParticulier('votre numéro de TVA intracommunautaire'));
   }
 
@@ -1476,7 +1528,7 @@ export function enteteImprime({ entreprise = null, emetteur = null, assurances =
     mentions.push(manque('vos frais de déplacement'));
   }
 
-  return { identite, mentions, source: ligneSource(r), manques };
+  return { identite, mentions, source: ligneSource(r, preuveTva), manques };
 }
 
 /* ================================================================== */

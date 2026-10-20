@@ -234,8 +234,10 @@ if (E && M && D) {
        vit le NOM d'une assurance, et `verifier-pieces` refuse qu'on le
        recopie. Il n'importe lui-même que `lib/metiers.js` et le catalogue,
        qui sont des données. */
+    /* `tva.js` (20/10/2026) : la forme d'un n° de TVA, pour ne pas imprimer
+       une preuve mal formée. Il n'importe RIEN — `verifier-tva` le tient. */
     const permis = ['./entreprise.js', '../data/formes-juridiques.js', './siret.js', '../data/mediateurs.js',
-      '../data/pieces-justificatives.js'];
+      '../data/pieces-justificatives.js', './tva.js'];
     verifier('`emetteur.js` n’importe que des fichiers purs, et seulement ceux-là',
       imports.length > 0 && imports.every((i) => permis.includes(i)) && !/\brequire\(|import\(/.test(src),
       `Trouvés : ${imports.join(', ')}. Jamais \`erreurs.js\`, \`theme.js\` ni rien qui charge React `
@@ -333,6 +335,17 @@ if (E && M && D) {
       reelSansTva.join() === 'conso_tva_intra' && franchiseB.length === 0
       && !cles({ entreprise: A, emetteur: COMPLETE, tarifs: FRAIS }).includes('conso_tva_intra'),
       `réel : ${reelSansTva.join(', ')} ; franchise : ${franchiseB.join(', ')}`);
+    /* LE N° RECONNU PAR VIES (section 48) : il éteint le motif — pour le
+       SIREN ACTIF seulement, comme la jointure de `emetteur_incomplet()`. */
+    const sansTvaB = { ...COMPLETE, denomination_ei: 'B EI', siege_adresse: '1 rue', siege_code_postal: '13000',
+      siege_ville: 'Marseille', registre: 'rne' };
+    const preuveB = { siren: B.siren, numero: `FR26${B.siren}`, reconnu_le: '2026-10-20T13:51:01.000Z' };
+    verifier('une preuve VIES pour le SIREN actif éteint `conso_tva_intra` ; pour un autre SIREN, non',
+      cles({ entreprise: B, emetteur: sansTvaB, tarifs: FRAIS, preuveTva: preuveB }).length === 0
+      && cles({ entreprise: B, emetteur: sansTvaB, tarifs: FRAIS,
+        preuveTva: { ...preuveB, siren: '000048009', numero: 'FR91000048009' } }).join() === 'conso_tva_intra'
+      && cles({ entreprise: B, emetteur: sansTvaB, tarifs: FRAIS,
+        preuveTva: { ...preuveB, numero: 'FR91000048009' } }).join() === 'conso_tva_intra');
     const age = (jours, source) => cles({ entreprise: { ...A, verifie_le: ilYA(jours), source },
       emetteur: COMPLETE, tarifs: FRAIS });
     verifier('fraîcheur : 400 jours → `entreprise_ancienne` ; 300 → rien ; 400 en `administration` → rien',
@@ -728,7 +741,30 @@ if (E && M && D) {
       /consultée le \d{2}\/\d{2}\/\d{4}/.test(src) && !/v[ée]rifi/i.test(src) && /répertoire Sirene \(INSEE\)/.test(src)
       && /DGFiP/.test(src) && !/DGFiP/.test(E.ligneSource({ ...A, tva: null })), src);
     verifier('…et `null` pour une identité ouverte par l’administration (rien ne vient du répertoire)',
-      E.ligneSource({ ...A, source: 'administration' }) === null && E.ligneSource(null) === null);
+      E.ligneSource({ ...A, tva: null, source: 'administration' }) === null && E.ligneSource(null) === null);
+    /* LE N° RECONNU PAR VIES (section 48) : sa source est DITE, avec la date
+       du contrôle — VIES ne confirme que pour le jour même. La DGFiP n'est
+       nommée que pour un numéro de l'annuaire. */
+    const sansTva = { ...A, tva: null };
+    const preuve = { siren: A.siren, numero: A.tva, reconnu_le: '2026-10-20T13:51:01.000Z' };
+    const srcVies = E.ligneSource(sansTva, preuve) || '';
+    verifier('`ligneSource` d’un numéro reconnu par VIES : « écrit par l’entreprise, reconnu par VIES » et la date, sans la DGFiP',
+      /écrit par l’entreprise, reconnu par VIES \(Commission européenne\) le 20\/10\/2026/.test(srcVies)
+      && !/DGFiP/.test(srcVies) && !/v[ée]rifi|registre(?! du commerce)/i.test(srcVies), srcVies);
+    verifier('…l’annuaire garde le dernier mot : avec un numéro publié, la DGFiP, et VIES n’est pas nommé',
+      /DGFiP/.test(E.ligneSource(A, preuve)) && !/VIES/.test(E.ligneSource(A, preuve)));
+    verifier('…une identité de l’administration avec une preuve : la seule source du numéro, en phrase',
+      /^N° de TVA : écrit par l’entreprise, reconnu par VIES/.test(E.ligneSource({ ...sansTva, source: 'administration' }, preuve) || ''));
+    verifier('…et une preuve faite pour un AUTRE SIREN ne s’imprime nulle part',
+      E.ligneSource({ ...sansTva, source: 'administration' }, { ...preuve, siren: '000048009', numero: 'FR91000048009' }) === null
+      && !/VIES/.test(E.ligneSource(sansTva, { ...preuve, siren: '000048009', numero: 'FR91000048009' }) || ''));
+    const reel = h({ entreprise: sansTva, emetteur: COMPLETE, tarifs: FRAIS, preuveTva: preuve });
+    verifier('l’en-tête imprime le numéro reconnu par VIES, et ne le réclame plus',
+      reel.identite.includes(`N° de TVA intracommunautaire : ${A.tva}`)
+      && !lignes(reel).some((x) => /numéro de TVA intracommunautaire\]/.test(x)));
+    verifier('…et sans preuve, au réel, il le réclame pour un particulier',
+      lignes(h({ entreprise: sansTva, emetteur: COMPLETE, tarifs: FRAIS }))
+        .some((x) => /\[pour un particulier : votre numéro de TVA intracommunautaire\]/.test(x)));
     const vide = h({ entreprise: A });
     verifier('une fiche vide : chaque manque est UNE ligne « [à compléter : … ] » à sa place',
       vide.manques.length >= 8 && lignes(vide).filter(E.estUnManque).length === vide.manques.length
@@ -1608,7 +1644,12 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   verifier('…et ce texte se traduit par la même phrase que celui de la vraie base',
     messageClair(leve, SUJET) === `${SUJET} : ${MESSAGES_CONTRAINTE.emetteur_mediateur_check}`);
   verifier('`monEmetteur()` LÈVE une erreur de lecture : jamais une fiche vide après un échec',
-    /for \(const r of \[e, a, t\]\) if \(r\.error\) throw r\.error;/.test(corps(api, 'async function monEmetteurSupabase(')));
+    /for \(const r of \[e, a, t\]\) if \(r\.error\) throw r\.error;/.test(corps(api, 'async function monEmetteurSupabase('))
+    /* La preuve de TVA (section 48) LÈVE aussi, sauf quand sa table n'existe
+       pas encore : sur une base sans la section 48, il n'y a aucune preuve. */
+    && /if \(v\.error && !tableAbsente\(v\.error\)\) throw v\.error;/.test(corps(api, 'async function monEmetteurSupabase('))
+    && /erreur\.code === 'PGRST205' \|\| erreur\.code === '42P01'/.test(api)
+    && /from\('preuves_tva'\)\.select\('siren, numero, reconnu_le'\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function monEmetteurSupabase(')));
   verifier('l’assurance et son retrait ne visent que la fiche du compte connecté',
     /\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function enregistrerAssuranceSupabase('))
     && /\.delete\(\)\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function retirerAssuranceSupabase(')));
@@ -1617,9 +1658,9 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   /*  5b. LES ÉCRANS — 6.5-31                                            */
   /* ------------------------------------------------------------------ */
   const ECRANS = ['MonEntreprise', 'IdentiteEntreprise', 'PretAEmettre', 'ApercuEntete', 'FicheEmetteur',
-    'FicheAssurance', 'ListeMediateurs'];
+    'FicheAssurance', 'ListeMediateurs', 'SaisieTva'];
   const absents = ECRANS.filter((n) => lireSiExiste(`src/components/${n}.js`) == null);
-  verifier('les sept composants de « Mon entreprise » existent', absents.length === 0, absents.join(', '));
+  verifier('les huit composants de « Mon entreprise » existent', absents.length === 0, absents.join(', '));
 
   const code = Object.fromEntries(ECRANS.map((n) => [n, sansCommentaires(lireSiExiste(`src/components/${n}.js`) || '')]));
   const me = code.MonEntreprise;

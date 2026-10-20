@@ -29,7 +29,23 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-19';
+export const VERSION = '2026-10-20';
+/* 20/10/2026 — LE N° DE TVA QUE L'ANNUAIRE NE PUBLIE PAS (section 48 de
+   `schema.sql`). Ce qui a changé DE FOND :
+     - un DESTINATAIRE nouveau : VIES, le service de la Commission
+       européenne, reçoit le numéro de TVA que l'artisan écrit — ce numéro
+       seul, depuis les serveurs d'Opus ;
+     - la collecte s'allonge : ce numéro, et la date à laquelle VIES l'a
+       reconnu. Pour un entrepreneur individuel, il désigne une personne ;
+     - une réponse automatique de plus, dite pour ce qu'elle est : un
+       numéro que VIES ne reconnaît pas ne s'imprime pas, et seul le service
+       des impôts des entreprises peut changer cette réponse.
+
+   LA MÊME LIMITE QUE LE 19/10, et elle se dit encore : aucun écran ne fait
+   ré-accepter un compte existant. Ce qui rend ce lot honnête quand même :
+   le numéro ne part à VIES que par un geste explicite, « Faire contrôler
+   par VIES », avec la phrase « Seul ce numéro est envoyé à VIES » sous les
+   yeux. */
 /* 19/10/2026 — LES TARIFS RÉUNIS (lot T, section 47 de `schema.sql`). Ce
    qui a changé DE FOND :
      - des tarifs peuvent devenir LISIBLES, au choix de l'artisan, par les
@@ -460,7 +476,9 @@ export const MENTIONS = [
     titre: 'Sources',
     texte: 'Données d’entreprise : répertoire Sirene de l’INSEE (www.insee.fr), '
       + 'réutilisées sous Licence Ouverte 2.0 ; numéros de TVA : DGFiP ; via l’API '
-      + 'Recherche d’entreprises. La date de mise à jour du répertoire accompagne la '
+      + 'Recherche d’entreprises. Un numéro de TVA que cette API ne publie pas, écrit par '
+      + 'l’entreprise elle-même, n’est gardé que si VIES, le service de la Commission '
+      + 'européenne, le reconnaît, et la date de ce contrôle l’accompagne. La date de mise à jour du répertoire accompagne la '
       + 'présentation de l’entreprise, à l’inscription et dans « Mon entreprise » — ou '
       + 'la mention qu’il n’en publie pas. Cette réutilisation ne vaut ni agrément ni '
       + 'caution de l’INSEE ou de l’État.',
@@ -730,7 +748,8 @@ export const CONFIDENTIALITE = [
       + 'répertoire le publie (pour un entrepreneur individuel : vos nom et prénoms), '
       + 'forme juridique, date de création, code d’activité, commune et adresse de '
       + 'l’établissement — ; et le numéro de TVA intracommunautaire que publie la DGFiP, '
-      + 's’il en existe un. Ces informations sont rangées '
+      + 's’il en existe un — sinon, celui que vous écrivez vous-même, et la date à laquelle '
+      + 'VIES, le service de la Commission européenne, l’a reconnu. Ces informations sont rangées '
       + 'à part de votre fiche : '
       + 'seuls vous et l’administration d’Opus pouvez les lire. Un numéro saisi à la '
       + 'main dans l’ancien champ « SIRET » de la fiche, avant le 15/10/2026, reste '
@@ -806,7 +825,10 @@ export const CONFIDENTIALITE = [
       + 'humain : « Demander une vérification à la main » dépose votre demande dans '
       + 'l’application, où l’administrateur d’Opus la lit et vous répond par vos '
       + 'notifications et par la messagerie d’Opus. Vous pouvez y expliquer votre '
-      + 'situation.',
+      + 'situation. Quand VIES, le service de la Commission européenne, ne reconnaît pas '
+      + 'le numéro de TVA que vous écrivez, Opus ne l’imprime pas sur vos devis : ce n’est '
+      + 'pas une décision d’Opus, c’est la réponse de l’administration fiscale, que seul '
+      + 'votre service des impôts des entreprises peut changer.',
   },
   {
     titre: 'Où vos données sont hébergées',
@@ -888,7 +910,12 @@ export const CONFIDENTIALITE = [
       + 'chaque fois qu’un champ de lieu vous propose des suggestions : seul '
       + 'le texte que vous êtes en train de taper y est envoyé — jamais votre '
       + 'nom, jamais celui de votre client, et rien n’y est conservé qui vous '
-      + 'désigne. Anthropic (États-Unis), UNIQUEMENT quand vous '
+      + 'désigne. VIES (ec.europa.eu), le service de la Commission européenne qui dit '
+      + 'si un numéro de TVA est actif, quand vous faites contrôler le numéro de TVA de '
+      + 'votre entreprise que l’annuaire ne publie pas : seul ce numéro y est envoyé, '
+      + 'depuis les serveurs d’Opus — jamais votre nom, jamais votre adresse '
+      + 'électronique, jamais votre adresse IP ; Opus ne garde de sa réponse que '
+      + '« reconnu » et sa date, jamais le nom ni l’adresse qu’elle renvoie. Anthropic (États-Unis), UNIQUEMENT quand vous '
       + 'appuyez sur « Améliorer avec l’IA » ou sur l’assistant de '
       + 'présentation : le texte que vous avez écrit est alors envoyé pour '
       + 'être relu, et n’est pas utilisé pour entraîner de modèle. Ces '
@@ -921,7 +948,8 @@ export const CONFIDENTIALITE = [
       + 'd’une consultation du répertoire et l’empreinte d’adresse IP qui l’accompagne '
       + 'sont effacés une fois leur durée d’usage passée, lors d’une consultation '
       + 'suivante : ce ménage n’a lieu qu’à cette occasion, aucune durée maximale ne '
-      + 'peut donc être promise. Les journaux techniques de l’hébergeur, qui contiennent '
+      + 'peut donc être promise. Le numéro de TVA que VIES a reconnu, et la date de ce '
+      + 'contrôle, restent attachés à votre compte et partent avec lui. Les journaux techniques de l’hébergeur, qui contiennent '
       + 'l’adresse IP des appareils, sont effacés par lui au bout d’un jour, selon '
       + 'l’offre souscrite aujourd’hui.',
   },

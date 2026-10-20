@@ -79,7 +79,9 @@ import {
   EnteteMediateurs, RangeeMediateur, PiedMediateurs, AucunMediateur,
 } from './ListeMediateurs';
 
-const FICHE_EN_LECTURE = { etat: 'charge', emetteur: null, assurances: [], tarifs: null };
+const FICHE_EN_LECTURE = {
+  etat: 'charge', emetteur: null, assurances: [], tarifs: null, preuveTva: null,
+};
 const MANQUES_EN_LECTURE = { etat: 'charge', liste: [] };
 
 /* LES DEUX LECTURES, hors du composant : elles ne posent leur résultat
@@ -490,6 +492,24 @@ export default function MonEntreprise({
     return identite;
   };
 
+  /* Faire contrôler son n° de TVA par VIES (section 48). La fonction Edge a
+     DÉJÀ écrit (ou retiré) la preuve quand elle répond : l'écran pose ce
+     qu'elle a dit, puis relit ce qui manque — c'est la base qui décide si
+     le motif `conso_tva_intra` s'éteint. */
+  const controlerTva = async (numero) => {
+    const r = await api.controlerTva(numero);
+    if (r.issue === 'reconnu' && entreprise) {
+      setDonnees((d) => ({
+        ...d, preuveTva: { siren: entreprise.siren, numero: r.numero, reconnu_le: r.reconnu_le || null },
+      }));
+      lireManques(setManques);
+    } else if (r.issue === 'refuse') {
+      setDonnees((d) => (d.preuveTva && d.preuveTva.numero === r.numero ? { ...d, preuveTva: null } : d));
+      lireManques(setManques);
+    }
+    return r;
+  };
+
   const reessayerFiche = () => { setDonnees(FICHE_EN_LECTURE); lireFiche(setDonnees, onTarifs); };
   const reessayerManques = () => { setManques(MANQUES_EN_LECTURE); lireManques(setManques); };
 
@@ -585,6 +605,9 @@ export default function MonEntreprise({
                   onRecharger={onChargerEntreprise}
                   onRattacher={rattacher}
                   onLayout={(e) => { positions.current.identite = e.nativeEvent.layout.y; tenterDefilement(); }}
+                  preuveTva={donnees.etat === 'pret' ? donnees.preuveTva : null}
+                  regimeTva={donnees.etat === 'pret' && donnees.emetteur ? donnees.emetteur.regime_tva : null}
+                  onControlerTva={donnees.etat === 'pret' ? controlerTva : null}
                 />
                 {donnees.etat === 'pret' && entrepriseEtat === 'pret' && (
                   <ApercuEntete
@@ -592,6 +615,7 @@ export default function MonEntreprise({
                     emetteur={donnees.emetteur}
                     assurances={donnees.assurances}
                     tarifs={donnees.tarifs}
+                    preuveTva={donnees.preuveTva}
                   />
                 )}
                 {/* VOS TARIFS (lot T) — SEULEMENT une fois la fiche LUE : pendant
@@ -669,6 +693,7 @@ export default function MonEntreprise({
                     key={`fiche-${cleFiche}`}
                     ref={fiche}
                     entreprise={entrepriseEtat === 'pret' ? entreprise : null}
+                    preuveTva={donnees.preuveTva}
                     reference={reference}
                     depart={brouillon}
                     assurances={donnees.assurances}

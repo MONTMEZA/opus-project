@@ -25,7 +25,9 @@
  * individuel, l'adresse de l'établissement est souvent son domicile — elle
  * ne s'affiche que sur ses devis, et la base le garantit (section 45.3). Le
  * n° de TVA s'y lit AVEC SA SOURCE : la liste de la DGFiP, par l'annuaire
- * des entreprises — jamais le répertoire Sirene, qui ne le publie pas.
+ * des entreprises — jamais le répertoire Sirene, qui ne le publie pas. Et
+ * quand l'annuaire n'en publie aucun, c'est ici qu'on l'écrit, pour le
+ * faire contrôler par VIES (`SaisieTva`, section 48).
  */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
@@ -34,6 +36,7 @@ import {
 } from '../theme';
 import { BtnMain, BtnMini } from './ui';
 import SaisieSiret from './SaisieSiret';
+import SaisieTva from './SaisieTva';
 import { formaterSiret } from '../lib/siret';
 import { nomFormeJuridique } from '../data/formes-juridiques';
 import {
@@ -74,6 +77,7 @@ function Ligne({ libelle, valeur, note }) {
 
 export default function IdentiteEntreprise({
   entreprise, retiree = null, badge = false, etat, onRecharger, onRattacher, onLayout,
+  preuveTva = null, regimeTva = null, onControlerTva = null,
 }) {
   const [saisie, setSaisie] = useState(false);
   const [aRattacher, setARattacher] = useState(null);
@@ -152,6 +156,17 @@ export default function IdentiteEntreprise({
                 + '(liste de la DGFiP). Il s’imprime sur vos devis, quel que soit votre régime.'
               : null}
           />
+          {/* SANS NUMÉRO PUBLIÉ : l'écrire, et le faire contrôler par VIES.
+              Seulement quand la fiche « devis » a été lue — sans elle, on ne
+              sait ni le régime ni si un numéro a déjà été reconnu. */}
+          {!entreprise.tva && !!onControlerTva && (
+            <SaisieTva
+              entreprise={entreprise}
+              preuveTva={preuveTva}
+              regimeTva={regimeTva}
+              onControler={onControlerTva}
+            />
+          )}
           <Text style={s.source}>
             {entreprise.source === 'administration'
               ? `Rattachée par l’administration d’Opus${vuLe ? ` le ${vuLe}` : ''}.`
