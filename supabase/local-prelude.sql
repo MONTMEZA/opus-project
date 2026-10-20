@@ -49,6 +49,13 @@ begin
   end loop;
 end $$;
 
+-- Sur Supabase, la clé de SERVICE ignore la RLS (`rolbypassrls`) : c'est
+-- ainsi qu'une fonction Edge écrit une table qu'aucun client ne peut écrire.
+-- Sans cette ligne, un essai qui joue la fonction Edge en `service_role`
+-- serait refusé par une politique qui ne s'applique pas en production
+-- (essais de la section 48, 20/10/2026).
+alter role service_role bypassrls;
+
 create schema if not exists auth;
 create table if not exists auth.users (
   id                 uuid primary key default gen_random_uuid(),

@@ -33,11 +33,18 @@
  *   5. une preuve de moins de 24 h pour CE numéro → `reconnu`, sans appeler
  *      VIES : ses conditions d'usage rangent parmi les abus « la validation
  *      multiple du même numéro dans la journée » ;
- *   6. les limites — seuls les VRAIS appels à VIES comptent ;
- *   7. VIES : 4 essais au plus, et seulement après une saturation ;
+ *   5 bis. un REFUS de moins de trois heures pour ce compte et CE numéro →
+ *      `refuse`, sans rappeler VIES, et l'heure où il pourra l'être ;
+ *   6. les limites, avant CHAQUE requête à VIES, reprises comprises
+ *      (`compter_essai_tva`, section 48 : le compte et tout Opus, dans un
+ *      seul ordre SQL) ;
+ *   7. VIES : 4 essais au plus, des pauses croissantes, et seulement après
+ *      une saturation ;
  *   8. si `reconnu`, la preuve, écrite AVANT de répondre ; si `refuse`, la
- *      preuve de CE numéro est retirée : un numéro que VIES ne reconnaît
- *      plus ne doit plus s'imprimer ;
+ *      preuve de CE numéro est retirée — un numéro que VIES ne reconnaît
+ *      plus ne doit plus s'imprimer — et le refus est retenu ; tout ce qui
+ *      n'est ni l'un ni l'autre est écrit au JOURNAL, avec les codes de
+ *      VIES (jamais un nom ni une adresse) ;
  *   9. la purge des compteurs `tva-` de plus d'un jour, après un appel
  *      compté seulement.
  *
@@ -71,8 +78,10 @@ import {
   reponsePubliqueTva,
   ligneDePreuveTva,
   LIMITES_TVA,
+  REFUS_RETENU_MS,
   ESSAIS_VIES,
   debutDeFenetre,
+  empreinte,
   origineAutorisee,
 } from './tva.js';
 
@@ -181,7 +190,15 @@ async function essaiVies(numero: string, delaiMs: number): Promise<Resultat> {
       await reponse.body?.cancel();
       return { etat: 'indisponible' };
     }
-    return lireReponseVies(await reponse.json(), numero) as Resultat;
+    const lu = lireReponseVies(await reponse.json(), numero) as Resultat;
+    /* Ce qui n'est ni reconnu ni refusé laisse une TRACE : un blocage
+       durable par VIES ressemblait trait pour trait à une saturation, à
+       l'écran comme dans le journal (relecture du 20/10/2026). Les codes
+       seulement — jamais une valeur de la réponse. */
+    if (lu.etat !== 'reconnu' && lu.etat !== 'refuse') {
+      console.error(`VIES : ${String(lu.etat)} (${((lu.codes as string[]) || []).join(', ')})`);
+    }
+    return lu;
   } catch (e) {
     console.error('VIES injoignable :', e instanceof Error ? e.message : e);
     return { etat: 'indisponible' };
@@ -252,49 +269,66 @@ async function traiter(req: Request): Promise<Response> {
     const deja = ((recente.data ?? []) as { numero: string; reconnu_le: string }[])[0];
     if (deja) return await repondre({ issue: 'reconnu', numero: deja.numero, reconnu_le: deja.reconnu_le });
 
-    /* (6) LES LIMITES. À partir d'ici, l'appel est COMPTÉ. */
-    compte = true;
-    const instant = Date.now();
-    const heure = debutDeFenetre(instant, LIMITES_TVA.compte.duree_ms);
-    const parCompte = await admin.rpc('compter_appel_siret', {
-      p_cle: `tva-compte:${moi}`,
-      p_fenetre: heure,
-      p_max: LIMITES_TVA.compte.max,
-    });
-    if (parCompte.error) return panne('Compteur d’appels illisible.', parCompte.error);
-    if (parCompte.data !== true) {
+    /* (5 bis) UN REFUS RETENU POUR CE COMPTE ET CE NUMÉRO : VIES n'est pas
+       rappelé. Les clés sont des EMPREINTES : une ligne de compteur ne
+       désigne personne. */
+    const cleCompte = `tva-compte:${await empreinte(cleService, moi)}`;
+    const cleRefus = `tva-refus:${await empreinte(cleService, `${moi}:${numero}`)}`;
+    const refusRetenu = await admin.from('siret_limites')
+      .select('fenetre')
+      .eq('cle', cleRefus)
+      .gt('fenetre', new Date(Date.now() - REFUS_RETENU_MS).toISOString())
+      .order('fenetre', { ascending: false })
+      .limit(1);
+    if (refusRetenu.error) return panne('Lecture des refus retenus impossible.', refusRetenu.error);
+    const refuse = ((refusRetenu.data ?? []) as { fenetre: string }[])[0];
+    if (refuse) {
       return await repondre({
-        issue: 'trop_d_essais',
-        portee: 'compte',
-        reessayer_a: finDeFenetre(heure, LIMITES_TVA.compte.duree_ms),
-      });
-    }
-    const minute = debutDeFenetre(instant, LIMITES_TVA.global.duree_ms);
-    const pourTous = await admin.rpc('compter_appel_siret', {
-      p_cle: 'tva-global',
-      p_fenetre: minute,
-      p_max: LIMITES_TVA.global.max,
-    });
-    if (pourTous.error) return panne('Compteur d’appels illisible.', pourTous.error);
-    if (pourTous.data !== true) {
-      return await repondre({
-        issue: 'trop_d_essais',
-        portee: 'service',
-        reessayer_a: finDeFenetre(minute, LIMITES_TVA.global.duree_ms),
+        issue: 'refuse',
+        numero,
+        reessayer_a: new Date(Date.parse(refuse.fenetre) + REFUS_RETENU_MS).toISOString(),
       });
     }
 
-    /* (7) VIES — de nouveaux essais après une SATURATION seulement, et
-       jamais au-delà du budget : l'application n'attend que 60 s. */
+    /* (6) ET (7) LES LIMITES, PUIS VIES — une limite avant CHAQUE requête,
+       reprises comprises : ce sont les requêtes que VIES compte, pas les
+       appuis. Le compte et tout Opus se comptent dans le MÊME ordre SQL :
+       si l'un refuse, l'autre n'est pas consommé. */
+    const compterEssai = async () => {
+      const instant = Date.now();
+      const heure = debutDeFenetre(instant, LIMITES_TVA.compte.duree_ms);
+      const minute = debutDeFenetre(instant, LIMITES_TVA.global.duree_ms);
+      const r = await admin.rpc('compter_essai_tva', {
+        p_compte: cleCompte,
+        p_heure: heure,
+        p_max_compte: LIMITES_TVA.compte.max,
+        p_minute: minute,
+        p_max_global: LIMITES_TVA.global.max,
+      });
+      if (r.error) return { panne: r.error };
+      if (r.data === 'compte') return { refus: { portee: 'compte', reessayer_a: finDeFenetre(heure, LIMITES_TVA.compte.duree_ms) } };
+      if (r.data === 'service') return { refus: { portee: 'service', reessayer_a: finDeFenetre(minute, LIMITES_TVA.global.duree_ms) } };
+      if (r.data !== 'ok') return { panne: `réponse inattendue : ${String(r.data)}` };
+      return {};
+    };
+
+    const premier = await compterEssai();
+    if (premier.panne) return panne('Compteur d’appels illisible.', premier.panne);
+    if (premier.refus) return await repondre({ issue: 'trop_d_essais', ...premier.refus });
+    compte = true;
+
     const debut = Date.now();
-    let lu: Resultat = { etat: 'indisponible' };
-    for (let n = 1; n <= ESSAIS_VIES.max; n += 1) {
-      if (n > 1) {
-        if (Date.now() - debut + ESSAIS_VIES.pause_ms + ESSAIS_VIES.delai_ms > ESSAIS_VIES.budget_ms) break;
-        await patienter(ESSAIS_VIES.pause_ms);
-      }
+    let lu: Resultat = await essaiVies(numero, ESSAIS_VIES.delai_ms);
+    for (let n = 2; n <= ESSAIS_VIES.max && lu.etat === 'sature'; n += 1) {
+      const pause = ESSAIS_VIES.pauses_ms[n - 2];
+      if (Date.now() - debut + pause + ESSAIS_VIES.delai_ms > ESSAIS_VIES.budget_ms) break;
+      await patienter(pause);
+      const suivant = await compterEssai();
+      if (suivant.panne) return panne('Compteur d’appels illisible.', suivant.panne);
+      /* Une limite qui mord pendant les reprises arrête les reprises : la
+         saturation reste la cause à dire. */
+      if (suivant.refus) break;
       lu = await essaiVies(numero, ESSAIS_VIES.delai_ms);
-      if (lu.etat !== 'sature') break;
     }
 
     /* (8) CE QUE VIES A DIT. */
@@ -318,10 +352,18 @@ async function traiter(req: Request): Promise<Response> {
          reconnu. */
       const retiree = await admin.from('preuves_tva').delete().eq('pro_id', moi).eq('numero', numero);
       if (retiree.error) return panne('La preuve refusée n’a pas pu être retirée.', retiree.error);
+      /* Le refus est RETENU : la même question ne repart pas à VIES avant
+         trois heures. Un échec de cette écriture n'empêche pas de dire ce
+         que VIES a répondu. */
+      const retenu = await admin.rpc('compter_appel_siret', {
+        p_cle: cleRefus, p_fenetre: new Date(Date.now()).toISOString(), p_max: 1000,
+      });
+      if (retenu.error) console.error('Refus non retenu :', retenu.error.message);
       return await repondre({ issue: 'refuse', numero });
     }
     if (lu.etat === 'mal_forme') return await repondre({ issue: 'mal_forme' });
-    return await repondre({ issue: 'indisponible' });
+    if (lu.etat === 'bloque') return await repondre({ issue: 'bloque' });
+    return await repondre({ issue: 'indisponible', cause: lu.etat === 'sature' ? 'sature' : 'panne' });
   } catch (e) {
     return panne('Erreur inattendue dans la fonction tva.', e instanceof Error ? e.message : e);
   }

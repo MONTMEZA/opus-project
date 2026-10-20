@@ -1036,14 +1036,14 @@ export const MOTIFS = Object.freeze([
   Object.freeze({
     cle: 'conso_tva_intra',
     section: 'entreprise',
-    phrase: 'Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des '
-      + 'entreprises (liste de la DGFiP) ne publie aucun numéro de TVA intracommunautaire actif '
-      + 'pour votre entreprise. La loi demande de le communiquer au client (code de la '
-      + 'consommation, R. 111-2) ; Opus l’imprime sur le devis, et n’imprime qu’un numéro actif. '
-      + 'Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, '
-      + 'écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler par VIES, le '
-      + 'service de la Commission européenne. S’il y est refusé, c’est votre service des impôts '
-      + 'des entreprises qui peut dire pourquoi, et l’activer.',
+    phrase: 'Pour un devis à un particulier : vous avez déclaré le régime réel, mais Opus n’a aucun '
+      + 'numéro de TVA intracommunautaire pour votre entreprise : l’annuaire des entreprises '
+      + '(liste de la DGFiP) ne lui en a transmis aucun, et VIES n’en a reconnu aucun. La loi '
+      + 'demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus l’imprime '
+      + 'sur le devis. Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « '
+      + 'TVA ». Sinon, écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler '
+      + 'par VIES, le service de la Commission européenne. S’il y est refusé, c’est votre service '
+      + 'des impôts des entreprises qui peut dire pourquoi, et l’activer.',
   }),
   Object.freeze({
     cle: 'conso_mediateur',
@@ -1114,6 +1114,7 @@ export function preuveTvaPour(entreprise, preuveTva) {
   const r = entreprise || null;
   const p = preuveTva || null;
   if (!r || !p || !r.siren || p.siren !== r.siren) return null;
+  if (p.source != null && !['vies', 'essai'].includes(p.source)) return null;
   const numero = String(p.numero || '');
   if (!FORME_TVA.test(numero) || numero.slice(4) !== r.siren) return null;
   return p;
@@ -1128,7 +1129,10 @@ export function numeroTvaImprime(entreprise, preuveTva) {
   const r = entreprise || null;
   if (r && r.tva) return { numero: r.tva, origine: 'annuaire' };
   const p = preuveTvaPour(r, preuveTva);
-  return p ? { numero: p.numero, origine: 'vies', reconnu_le: p.reconnu_le || null } : null;
+  if (!p) return null;
+  /* Une preuve « essai » est posée par le connecteur, sans aucun appel à
+     VIES : elle ne se dit jamais « reconnue par VIES ». */
+  return { numero: p.numero, origine: p.source === 'essai' ? 'essai' : 'vies', reconnu_le: p.reconnu_le || null };
 }
 
 /** Chaque clé de motif → l'ancre de l'écran qui permet de le compléter. */
@@ -1365,13 +1369,21 @@ export function adresseImprimee(entreprise, emetteur) {
  * C'est la date de CONSULTATION du répertoire (`verifie_le`), jamais une
  * « date de vérification » : ce mot appartient au badge. La Licence
  * Ouverte demande la source et la date de mise à jour de la fiche. Le n° de
- * TVA a une autre source, et la ligne la dit dès qu'il est imprimé : la
- * liste de la DGFiP, par l'annuaire des entreprises — ou, quand l'annuaire
- * n'en publie aucun, l'entreprise elle-même, et VIES qui l'a reconnu, avec
- * la DATE de ce contrôle (VIES ne confirme que pour le jour même : la date
- * dit l'âge de la preuve). Une identité ouverte par l'administration
- * (`administration`) ne vient pas du répertoire : seule la source du n° de
- * TVA s'imprime, s'il y en a un.
+ * TVA de l'annuaire a une autre source, la liste de la DGFiP, réutilisée
+ * sous Licence Ouverte : la ligne la dit dès qu'il est imprimé.
+ *
+ * UN NUMÉRO RECONNU PAR VIES NE PORTE PAS SA PROVENANCE SUR LE DEVIS
+ * (relecture du 20/10/2026). R. 111-2 demande le numéro, pas d'où il vient ;
+ * aucune licence n'oblige à citer VIES ; et son avertissement juridique
+ * interdit de retransmettre son contenu au-delà de ce qu'il faut à
+ * l'utilisateur pour ses propres factures, la Commission « n'assumant
+ * aucune responsabilité » sur des données qui viennent des administrations
+ * fiscales. La date du contrôle reste dans « Mon entreprise » et dans
+ * l'export. Une preuve d'ESSAI, elle, se dit pour ce qu'elle est.
+ *
+ * Une identité ouverte par l'administration (`administration`) ne vient
+ * pas du répertoire : seule la source du n° de TVA s'imprime, s'il y en a
+ * une à dire.
  */
 export function ligneSource(entreprise, preuveTva = null) {
   const r = entreprise || null;
@@ -1379,11 +1391,7 @@ export function ligneSource(entreprise, preuveTva = null) {
   const tva = numeroTvaImprime(r, preuveTva);
   let sourceTva = null;
   if (tva && tva.origine === 'annuaire') sourceTva = 'n° de TVA : liste de la DGFiP, par l’annuaire des entreprises';
-  if (tva && tva.origine === 'vies') {
-    const le = dateFrancaise(tva.reconnu_le);
-    sourceTva = 'n° de TVA : écrit par l’entreprise, reconnu par VIES (Commission européenne)'
-      + (le ? ` le ${le}` : '');
-  }
+  if (tva && tva.origine === 'essai') sourceTva = 'n° de TVA : preuve d’essai posée par Opus, non soumise à VIES';
   if (!['registre', 'essai'].includes(r.source)) {
     return sourceTva ? `N${sourceTva.slice(1)}` : null;
   }

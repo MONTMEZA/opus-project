@@ -10451,7 +10451,7 @@ begin
            case when e.regime_tva is null
                 then 'regime_tva: Déclarez votre régime de TVA. En franchise, vos devis porteront « TVA non applicable, article 293 B du CGI » ; au régime réel, la TVA de chaque ligne. Opus ne peut pas le deviner : votre chiffre d’affaires n’est pas dans Opus.' end,
            case when e.regime_tva = 'reel' and r.id is not null and r.tva is null and v.pro_id is null
-                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais l’annuaire des entreprises (liste de la DGFiP) ne publie aucun numéro de TVA intracommunautaire actif pour votre entreprise. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus l’imprime sur le devis, et n’imprime qu’un numéro actif. Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler par VIES, le service de la Commission européenne. S’il y est refusé, c’est votre service des impôts des entreprises qui peut dire pourquoi, et l’activer.' end,
+                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais Opus n’a aucun numéro de TVA intracommunautaire pour votre entreprise : l’annuaire des entreprises (liste de la DGFiP) ne lui en a transmis aucun, et VIES n’en a reconnu aucun. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus l’imprime sur le devis. Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler par VIES, le service de la Commission européenne. S’il y est refusé, c’est votre service des impôts des entreprises qui peut dire pourquoi, et l’activer.' end,
            case when e.mediateur_nom is null
                 then 'conso_mediateur: Pour un devis à un particulier : indiquez le médiateur de la consommation auquel vous adhérez, avec son nom, son adresse et son site (code de la consommation, L. 111-1 et R. 111-1). Ce n’est pas une information à trouver : il faut adhérer à un médiateur référencé. Un devis à un professionnel n’en a généralement pas besoin, sauf pour un petit professionnel démarché hors de son activité principale.' end,
            case when e.garantie_legale_texte is null
@@ -11184,28 +11184,35 @@ create table if not exists public.preuves_tva (
 );
 
 /* Toutes en `_check` : `messageClair()` ne reconnaît une contrainte qu'à
-   ce nom (section 41). Et les trois se refont : `add column if not exists`
-   ne touche pas aux contraintes. */
-alter table public.preuves_tva drop constraint if exists preuve_tva_siren_check;
-alter table public.preuves_tva add constraint preuve_tva_siren_check
-  check (siren ~ '^[0-9]{9}$');
+   ce nom (section 41). Et elles se refont : `add column if not exists` ne
+   touche pas aux contraintes.
 
-/* La forme, et le SIREN : les neuf derniers chiffres DÉSIGNENT
-   l'entreprise. Un numéro qui en désigne une autre n'a rien à faire sur la
-   fiche de celle-ci. La clé peut être faite de lettres (74 numéros actifs
-   commencent par « K » dans la liste de la DGFiP, relevé du 20/10) : on
-   n'exige deux chiffres nulle part. */
+   LA FORME, ET LE SIREN : les neuf derniers chiffres DÉSIGNENT
+   l'entreprise, et un numéro qui en désigne une autre n'a rien à faire sur
+   la fiche de celle-ci. Cette seule règle dit AUSSI que le SIREN a neuf
+   chiffres : une contrainte `siren ~ '^[0-9]{9}$'` à part ne pourrait
+   jamais être celle qui refuse — relecture du 20/10/2026, elle a été
+   retirée plutôt que gardée comme du code mort. La clé peut être faite de
+   lettres (74 numéros actifs commencent par « K » dans la liste de la
+   DGFiP, relevé du 20/10), mais JAMAIS de I ni de O : aucune clé française
+   ne les emploie, et VIES rejette « FR4O… » sans interroger la France. */
+alter table public.preuves_tva drop constraint if exists preuve_tva_siren_check;
 alter table public.preuves_tva drop constraint if exists preuve_tva_numero_check;
 alter table public.preuves_tva add constraint preuve_tva_numero_check
-  check (numero ~ '^FR[0-9A-Z]{2}[0-9]{9}$' and substr(numero, 5) = siren);
+  check (numero ~ '^FR[0-9A-HJ-NP-Z]{2}[0-9]{9}$' and substr(numero, 5) = siren);
 
 /* Une clé de DEUX CHIFFRES, elle, a une formule publique :
    (12 + 3 × (SIREN mod 97)) mod 97. Un numéro à clé chiffrée fausse
-   n'existe pas, et la base refuse de le garder quoi qu'en dise l'appelant. */
+   n'existe pas, et la base refuse de le garder quoi qu'en dise l'appelant.
+   Le `case` garde la conversion : PostgreSQL contrôle les contraintes dans
+   l'ordre de leur NOM, celle-ci passe avant la précédente, et un SIREN mal
+   formé échouait sur une erreur de conversion (22P02) qui ne nomme aucune
+   contrainte — `messageClair()` ne pouvait pas la lire. */
 alter table public.preuves_tva drop constraint if exists preuve_tva_cle_check;
 alter table public.preuves_tva add constraint preuve_tva_cle_check
-  check (substr(numero, 3, 2) !~ '^[0-9]{2}$'
-         or substr(numero, 3, 2)::int = (12 + 3 * (siren::bigint % 97)) % 97);
+  check (case when siren ~ '^[0-9]{9}$' and substr(numero, 3, 2) ~ '^[0-9]{2}$'
+              then substr(numero, 3, 2)::int = (12 + 3 * (siren::bigint % 97)) % 97
+              else true end);
 
 /* `essai` : une ligne posée par le connecteur pour un compte jetable, le
    temps d'un essai sur la vraie base. Elle part avec le compte (la clé
@@ -11219,16 +11226,30 @@ comment on table public.preuves_tva is
   'aucun, et la date à laquelle VIES (Commission européenne) l''a reconnu. Écrite par '
   'la fonction Edge tva seulement ; lue par le titulaire. Section 48.';
 comment on column public.preuves_tva.reconnu_le is
-  'Posée par la base (tient_la_preuve_tva), à chaque écriture : la date du contrôle '
-  'qui s''imprime sur le devis.';
+  'Posée par la base (tient_la_preuve_tva) à chaque CONTRÔLE : l''insertion, ou une '
+  'écriture de la fonction Edge ; aucune autre écriture ne la déplace. Affichée dans '
+  '« Mon entreprise » ; elle ne s''imprime pas sur le devis.';
 comment on column public.preuves_tva.vies_le is
-  'La date de la réponse, telle que VIES l''a écrite (requestDate). Gardée comme '
-  'trace ; ce n''est pas elle qui s''imprime.';
+  'La date de la réponse, telle que VIES l''a écrite (requestDate). Gardée comme trace.';
 
-/* La date du contrôle : posée par la BASE, à l'insertion COMME à la mise à
-   jour. Une préparation `upsert` qui ne l'envoie pas garderait sinon la
-   date du premier contrôle, et un numéro recontrôlé aujourd'hui
-   s'imprimerait avec la date de l'an dernier. */
+/* LA DATE DU CONTRÔLE, posée par la BASE — et seulement quand un contrôle
+   a eu lieu : à l'insertion, et à la mise à jour faite par la fonction Edge
+   (le rôle `service_role`), qui ne réécrit la ligne qu'après une réponse de
+   VIES. L'`upsert` de la fonction n'envoie pas la date : sans ce
+   déclencheur, un numéro recontrôlé garderait celle du premier contrôle.
+
+   Toute AUTRE mise à jour garde la date d'avant (relecture du 20/10/2026) :
+   une correction faite par l'éditeur SQL, le remplissage d'une colonne
+   ajoutée plus tard, même un `set source = source`, aurait sinon daté un
+   contrôle qui n'a pas eu lieu — et la preuve de moins de 24 h aurait
+   dispensé de rappeler VIES.
+
+   ET UNE PREUVE « ESSAI » NE VAUT QUE POUR UN COMPTE JETABLE : celui dont
+   l'adresse finit par `@exemple-opus.test`, le modèle de
+   `preuve_essai_check` (section 45.1). Posée par erreur sur un vrai compte,
+   elle éteindrait le motif d'un numéro que VIES n'a jamais vu. Seuls le
+   connecteur et l'éditeur SQL écrivent une preuve d'essai ; ils lisent
+   `auth.users`. */
 create or replace function public.tient_la_preuve_tva()
 returns trigger
 language plpgsql
@@ -11236,7 +11257,17 @@ security invoker
 set search_path = public
 as $$
 begin
-  new.reconnu_le := clock_timestamp();
+  if tg_op = 'INSERT' or current_user = 'service_role' then
+    new.reconnu_le := clock_timestamp();
+  else
+    new.reconnu_le := old.reconnu_le;
+  end if;
+  if new.source = 'essai' and not exists (
+       select 1 from auth.users u
+        where u.id = new.pro_id and lower(u.email) like '%@exemple-opus.test') then
+    raise exception 'Une preuve de TVA « essai » ne se pose que sur un compte d’essai (adresse en @exemple-opus.test).'
+      using errcode = '23514';
+  end if;
   return new;
 end;
 $$;
@@ -11258,6 +11289,64 @@ create policy "lecture de ma preuve de tva" on public.preuves_tva
    18.2) : `authenticated` ne garde que la lecture, `anon` rien. */
 revoke all on public.preuves_tva from anon;
 revoke insert, update, delete, truncate on public.preuves_tva from authenticated;
+
+/* LES LIMITES DES CONTRÔLES, DANS UN SEUL ORDRE — relecture du 20/10/2026.
+
+   La fonction Edge compte, avant CHAQUE requête à VIES (reprises
+   comprises), le compte qui demande et tout Opus. Les compter en deux
+   appels laissait le premier consommé quand le second refusait : un
+   artisan qui réessayait pendant que la limite de tout Opus était pleine
+   épuisait la sienne sans avoir rien envoyé, puis lisait « vous avez fait
+   beaucoup d'essais ». Ici, les deux lignes sont VERROUILLÉES dans un ordre
+   fixe (le compte, puis tout Opus), et ne montent que si chacune a encore
+   de la place. Rend 'ok', 'compte' ou 'service'.
+
+   Les compteurs vivent dans `siret_limites` (section 45.2), sous des clés
+   `tva-` ; la clé d'un compte est une EMPREINTE de son identifiant, posée
+   par la fonction Edge. Seule elle appelle cette fonction. */
+create or replace function public.compter_essai_tva(
+  p_compte     text,
+  p_heure      timestamptz,
+  p_max_compte int,
+  p_minute     timestamptz,
+  p_max_global int
+)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n_compte int;
+  n_global int;
+begin
+  if p_compte is null or p_compte not like 'tva-compte:%' then
+    raise exception 'compter_essai_tva : clé de compte inattendue.';
+  end if;
+  insert into public.siret_limites (cle, fenetre, n) values (p_compte, p_heure, 0)
+    on conflict (cle, fenetre) do nothing;
+  insert into public.siret_limites (cle, fenetre, n) values ('tva-global', p_minute, 0)
+    on conflict (cle, fenetre) do nothing;
+  select n into n_compte from public.siret_limites
+   where cle = p_compte and fenetre = p_heure for update;
+  select n into n_global from public.siret_limites
+   where cle = 'tva-global' and fenetre = p_minute for update;
+  if n_compte >= p_max_compte then return 'compte'; end if;
+  if n_global >= p_max_global then return 'service'; end if;
+  update public.siret_limites set n = n + 1 where cle = p_compte and fenetre = p_heure;
+  update public.siret_limites set n = n + 1 where cle = 'tva-global' and fenetre = p_minute;
+  return 'ok';
+end;
+$$;
+
+revoke all on function public.compter_essai_tva(text, timestamptz, int, timestamptz, int)
+  from public, anon, authenticated;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant execute on function public.compter_essai_tva(text, timestamptz, int, timestamptz, int) to service_role';
+  end if;
+end $$;
 
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER

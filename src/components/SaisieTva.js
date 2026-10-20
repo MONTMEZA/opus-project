@@ -1,5 +1,5 @@
 /**
- * LE N° DE TVA QUE L'ANNUAIRE NE PUBLIE PAS — l'écrire, et le faire
+ * LE N° DE TVA QUE L'ANNUAIRE NE TRANSMET PAS — l'écrire, et le faire
  * contrôler par VIES (section 48, 20/10/2026). Un morceau du bloc « Votre
  * entreprise » (`IdentiteEntreprise.js`).
  *
@@ -19,11 +19,15 @@
  * été contrôlé.
  *
  * TROIS RÉPONSES, ET ELLES NE SE CONFONDENT PAS : VIES reconnaît, VIES
- * refuse, VIES n'a PAS répondu — et dans ce dernier cas, on n'accuse jamais
- * le numéro (`messageTva`, dans `src/lib/tva.js`, la même phrase que la
- * fonction Edge).
+ * refuse, VIES n'a PAS contrôlé — et dans ce dernier cas, on n'accuse
+ * jamais le numéro (`messageTva`, dans `src/lib/tva.js`, la même phrase que
+ * la fonction Edge).
+ *
+ * ET LE CONTRÔLE EN VOL SE DIT AU-DESSUS : `onOccupe` le remonte à « Mon
+ * entreprise », qui refuse de se fermer ou de passer en édition tant que
+ * VIES n'a pas répondu (relecture du 20/10/2026).
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ActivityIndicator, Keyboard, StyleSheet,
 } from 'react-native';
@@ -37,52 +41,87 @@ import { analyserNumeroTva, messageTva } from '../lib/tva';
 import { preuveTvaPour } from '../lib/emetteur';
 import { dateFrancaise } from '../lib/entreprise';
 
-/* Les états de saisie qui méritent d'être dits PENDANT la frappe : une
-   faute qu'on peut voir tout de suite. « Incomplet » se tait — on n'a pas
-   fini d'écrire. */
-const A_DIRE_PENDANT = ['mal_forme', 'cle_fausse', 'autre_siren'];
+/* Les états de saisie qui se disent en ROUGE pendant la frappe : une faute
+   qu'on peut voir tout de suite. « Incomplet » se dit en gris — on n'a pas
+   fini d'écrire, ce n'est pas une faute. */
+const FAUTES = ['mal_forme', 'cle_fausse', 'autre_siren'];
 
-export default function SaisieTva({ entreprise, preuveTva = null, regimeTva = null, onControler }) {
+/* « Refusé » et « déjà publié » ne sont pas des pannes : pas de vibration
+   d'échec pour un numéro que l'annuaire publie déjà. */
+const SANS_ECHEC = ['reconnu', 'deja_publie'];
+
+export default function SaisieTva({
+  entreprise, preuveTva = null, regimeTva = null, onControler, onOccupe = null,
+}) {
   const [ouvert, setOuvert] = useState(false);
   const [texte, setTexte] = useState('');
   const [enCours, setEnCours] = useState(false);
   const [reponse, setReponse] = useState(null);
+  /* Un appui sur « Envoyer » (ou Entrée) quand le numéro n'est pas prêt :
+     on DIT pourquoi, au lieu de ne rien faire en silence. */
+  const [motif, setMotif] = useState(null);
   /* Le garde du VOL, dans une référence : deux appuis arrivés dans la même
      image verraient encore tous les deux `enCours` à faux, et deux
      contrôles partiraient (le motif de `SaisieSiret`). */
   const enVol = useRef(false);
+  /* Ce composant peut disparaître pendant le vol (le numéro de l'annuaire
+     arrive, la fiche se relit) : on ne vibre ni n'annonce plus rien après. */
+  const monte = useRef(true);
+  useEffect(() => () => { monte.current = false; }, []);
 
   if (!entreprise || entreprise.tva) return null;
 
   const preuve = preuveTvaPour(entreprise, preuveTva);
   const saisie = analyserNumeroTva(texte, entreprise.siren);
   const pret = saisie.etat === 'pret';
-  const aide = A_DIRE_PENDANT.includes(saisie.etat)
-    ? messageTva(saisie.etat, { siren: entreprise.siren }).texte : null;
-  const dit = reponse ? messageTva(reponse.issue, { ...reponse, siren: entreprise.siren }) : null;
+  const details = { siren: entreprise.siren, regime: regimeTva };
+  const faute = FAUTES.includes(saisie.etat) ? messageTva(saisie.etat, details).texte : null;
+  const aide = !faute && saisie.etat === 'incomplet' ? messageTva('incomplet', details).texte : null;
+  const dit = reponse ? messageTva(reponse.issue, { ...reponse, ...details }) : null;
+  const leControle = preuve ? dateFrancaise(preuve.reconnu_le) : null;
 
   const controler = async () => {
-    if (!pret || enVol.current) return;
+    if (enVol.current) return;
+    if (!pret) {
+      /* Le bouton grisé et Entrée muette laissaient croire l'application
+         cassée : on dit ce qui manque. */
+      const m = messageTva(saisie.etat, details).texte;
+      setMotif(m);
+      if (m) retour.annoncer(m);
+      return;
+    }
     enVol.current = true;
     Keyboard.dismiss();
+    setMotif(null);
     setEnCours(true);
     setReponse(null);
-    const r = await onControler(saisie.numero);
-    enVol.current = false;
+    if (onOccupe) onOccupe(true);
+    let r;
+    try {
+      r = await onControler(saisie.numero);
+    } catch (e) {
+      /* `controlerTva` ne lève pas ; si l'écran au-dessus le fait, c'est une
+         panne d'Opus, pas un numéro faux. */
+      r = { issue: 'service_indisponible' };
+    } finally {
+      enVol.current = false;
+      if (onOccupe) onOccupe(false);
+    }
+    if (!monte.current) return;
     setEnCours(false);
     setReponse(r);
-    const m = messageTva(r.issue, { ...r, siren: entreprise.siren });
+    const m = messageTva(r.issue, { ...r, ...details });
     if (r.issue === 'reconnu') {
       retour.reussite();
       setOuvert(false);
       setTexte('');
-    } else {
+    } else if (!SANS_ECHEC.includes(r.issue)) {
       retour.echec();
     }
     if (m.texte) retour.annoncer(m.texte);
   };
 
-  const fermer = () => { setOuvert(false); setTexte(''); setReponse(null); };
+  const fermer = () => { setOuvert(false); setTexte(''); setReponse(null); setMotif(null); };
 
   return (
     <View style={s.bloc}>
@@ -91,19 +130,21 @@ export default function SaisieTva({ entreprise, preuveTva = null, regimeTva = nu
           <Text style={s.libelle}>N° de TVA intracommunautaire</Text>
           <Text style={s.valeur}>{preuve.numero}</Text>
           <Text style={s.note}>
-            {`Écrit par vous, reconnu par VIES (Commission européenne)${
-              dateFrancaise(preuve.reconnu_le) ? ` le ${dateFrancaise(preuve.reconnu_le)}` : ''}. `
-              + 'Il s’imprime sur vos devis, avec la date de ce contrôle.'}
+            {preuve.source === 'essai'
+              ? 'Preuve d’essai posée par Opus : ce numéro n’a pas été soumis à VIES.'
+              : `Écrit par vous. VIES l’a reconnu${leControle ? ` le ${leControle}` : ''}, d’après `
+                + 'l’administration fiscale française. Il s’imprime sur vos devis.'}
           </Text>
         </View>
       )}
 
       {!preuve && !ouvert && (
         <Text style={s.texte}>
-          L’annuaire des entreprises (liste de la DGFiP) ne publie aucun numéro de TVA
-          intracommunautaire actif pour votre entreprise.
+          L’annuaire des entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA
+          intracommunautaire pour votre entreprise.
           {regimeTva === 'reel'
-            ? ' Au régime réel, vos devis à des particuliers doivent le porter : écrivez-le, '
+            ? ' Au régime réel, la loi demande de le communiquer à vos clients particuliers '
+              + '(code de la consommation, R. 111-2) ; Opus l’imprime sur vos devis. Écrivez-le : '
               + 'Opus le fera contrôler par VIES, le service de la Commission européenne.'
             : ' Si vous en avez un, écrivez-le : Opus le fera contrôler par VIES, le service de '
               + 'la Commission européenne, avant de l’imprimer.'}
@@ -133,7 +174,7 @@ export default function SaisieTva({ entreprise, preuveTva = null, regimeTva = nu
           <Text style={s.libelle}>N° de TVA intracommunautaire</Text>
           <Field
             value={texte}
-            onChangeText={(t) => { setTexte(t); if (reponse) setReponse(null); }}
+            onChangeText={(t) => { setTexte(t); setMotif(null); if (reponse) setReponse(null); }}
             placeholder="FR 00 123456789"
             autoCapitalize="characters"
             autoCorrect={false}
@@ -145,14 +186,16 @@ export default function SaisieTva({ entreprise, preuveTva = null, regimeTva = nu
             editable={!enCours}
             accessibilityLabel="Numéro de TVA intracommunautaire"
           />
-          {!!aide && <Text style={s.erreur}>{aide}</Text>}
-          {!aide && !texte && <Text style={s.note}>{messageTva('vide').texte}</Text>}
+          {!!faute && <Text style={s.erreur}>{faute}</Text>}
+          {!faute && !!motif && <Text style={s.erreur} accessibilityLiveRegion="polite">{motif}</Text>}
+          {!faute && !motif && !!aide && <Text style={s.note}>{aide}</Text>}
+          {!faute && !motif && !texte && <Text style={s.note}>{messageTva('vide').texte}</Text>}
           <BtnMain
             block
             ton="sombre"
             label="Faire contrôler par VIES"
             accessibilityLabel={enCours ? 'Contrôle auprès de VIES en cours' : 'Faire contrôler par VIES'}
-            disabled={!pret || enCours}
+            disabled={enCours}
             onPress={controler}
           >
             {enCours ? (
@@ -170,7 +213,7 @@ export default function SaisieTva({ entreprise, preuveTva = null, regimeTva = nu
           )}
           {enCours && (
             <Text style={s.note} accessibilityLiveRegion="polite">
-              VIES met souvent de 10 à 30 secondes à répondre. Restez sur cet écran.
+              VIES met souvent de 10 à 30 secondes à répondre : la fenêtre attend sa réponse.
             </Text>
           )}
           {api.mode === 'demo' && (

@@ -1813,10 +1813,19 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
   ranger dans la preuve (section 45 et fonction Edge). Aucune entreprise
   active n'est dans ce cas au 18/10.
 - [x] Un artisan **au régime réel sans n° de TVA** transmis par la DGFiP :
-  **fait le 20/10/2026** (section 48). Il l'écrit dans « Mon entreprise →
-  Votre entreprise », et Opus ne le garde que si VIES le reconnaît. Mesuré ce
-  jour-là : un numéro calculé depuis le SIREN n'est pas un numéro actif, et
-  celui de la société du propriétaire est REFUSÉ par VIES.
+  **fait le 20/10/2026** (section 48), relu, puis **installé sur la vraie
+  base et déployé** (fonction `tva`, version 1) le même jour. Il l'écrit dans
+  « Mon entreprise → Votre entreprise », et Opus ne le garde que si VIES le
+  reconnaît. Mesuré ce jour-là : un numéro calculé depuis le SIREN n'est pas
+  un numéro actif, et celui de la société du propriétaire est REFUSÉ par
+  VIES. Le détail est dans CLAUDE.md, « Le n° de TVA écrit à la main ».
+- [ ] **AVANT LA MISE EN LIGNE : une révision par un humain des refus de
+  VIES.** Ne pas imprimer un numéro refusé, et à terme refuser la remise d'un
+  devis à un particulier faute de numéro, est une décision automatique (RGPD,
+  art. 22) : les textes légaux disent aujourd'hui, honnêtement, qu'aucune
+  vérification humaine n'existe encore. Le modèle existe — la porte de
+  secours du SIRET (`demandes_pro`). À construire avant que `STATUT` quitte
+  `'essai'`.
 - [ ] **Geste du propriétaire, pour sa propre société** : faire activer son
   n° de TVA intracommunautaire — son espace professionnel sur impots.gouv.fr
   le montre, son service des impôts des entreprises l'active. Une fois actif,
@@ -1829,7 +1838,11 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
 - [ ] **L'avertissement juridique de VIES** n'autorise que l'usage « d'un
   utilisateur légitime (par exemple : établir ses propres factures) ».
   Contrôler son propre numéro pour ses propres devis paraît y entrer : à
-  faire confirmer par un juriste avec les autres points ci-dessus.
+  faire confirmer par un juriste avec les autres points ci-dessus — ou
+  directement auprès de TAXUD-VIESWEB, le service de VIES. L'enjeu n'est pas
+  théorique : un usage jugé abusif fait bloquer l'adresse d'Opus
+  (`IP_BLOCKED`), et ce serait VIES coupé pour TOUS les artisans. D'ici là,
+  la provenance « VIES » ne s'imprime pas sur le devis.
 - [ ] Une **attestation remplacée** reste dans l'espace `documents` jusqu'à la
   suppression du compte.
 - [ ] La démonstration ne montre ni `adresse_siege` ni `entreprise_ancienne`
@@ -1841,9 +1854,10 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
 - [ ] **Relever la liste des médiateurs chaque année**
   (`src/data/mediateurs.js`, data.economie.gouv.fr). L'âge de la liste est un
   avis à l'écran, pas un échec de contrôle.
-- [ ] Deux **preuves SIRET « essai »** de l'essai du 18/10 restent en base,
-  expirées et inutilisables : le connecteur refuse un `delete`. Une ligne dans
-  l'éditeur SQL, au propriétaire.
+- [x] Les deux **preuves SIRET « essai »** du 18/10 sont parties d'elles-mêmes
+  (constaté le 20/10). Deux autres, posées pour l'essai du 20/10, expirent
+  deux heures après et partiront de même ; les compteurs `tva-` de cet essai
+  (cinq lignes, sous empreinte) partent à la purge, plus d'un jour après.
 
 ### Après le lot T — ce qui reste (20/10/2026)
 
@@ -1851,11 +1865,13 @@ Le détail est dans CLAUDE.md, « Les tarifs réunis — lot T ».
 
 **À faire par vous, et c'est devenu plus qu'une propreté :**
 
-- [ ] **Supprimer le compte anonyme du 14/09** (§5, plus bas). Pour la base,
+- [x] **Supprimer le compte anonyme du 14/09** (§5, plus bas). Pour la base,
   « particulier » veut dire « toute session sans fiche pro ». Personne ne
   peut plus ouvrir de session sur ce compte, mais rien ne prouve que son
   jeton du 14/09 soit perdu : une session qui survivrait quelque part lirait
-  les tarifs qu'un artisan affiche (aucun ne l'est encore).
+  les tarifs qu'un artisan affiche (aucun ne l'est encore). **Constaté le
+  20/10 au soir : la base ne compte plus AUCUN compte anonyme** (14 comptes,
+  0 anonyme) — il a été supprimé entre le lot T et le lot VIES.
 - [ ] **Votre ligne d'urgence « Électricité » a été éteinte** par la
   migration : aucun de vos métiers n'est un métier d'urgence. Rien à faire,
   c'est pour que vous ne soyez pas surpris de ne plus la voir allumée.

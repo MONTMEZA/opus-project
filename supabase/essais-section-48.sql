@@ -184,7 +184,7 @@ rollback;
 
 -- --------------------------------------------------------------------------
 \echo ''
-\echo '=== 8. Les contraintes : six refus attendus, chacun nomme sa contrainte ==='
+\echo '=== 8. Les contraintes : huit refus attendus, chacun nomme sa contrainte ==='
 -- --------------------------------------------------------------------------
 -- (a) un numéro qui désigne une AUTRE entreprise (clé en lettres, pour que
 --     seule la règle du SIREN puisse refuser)
@@ -203,13 +203,25 @@ rollback;
 begin;
 insert into public.preuves_tva (pro_id, siren, numero, source) values (:B, '000048017', 'FR18000048017', 'annuaire');
 rollback;
--- (e) un SIREN mal formé
+-- (e) un SIREN mal formé : c'est preuve_tva_numero_check qui le nomme
+--     (« les 9 chiffres = le SIREN »), pas une contrainte à part
 begin;
 insert into public.preuves_tva (pro_id, siren, numero) values (:B, '48017', 'FR18000048017');
 rollback;
 -- (f) un numéro trop court
 begin;
 insert into public.preuves_tva (pro_id, siren, numero) values (:B, '000048017', 'FR1800048017');
+rollback;
+-- (g) un SIREN qui n'est pas fait de chiffres : un refus qui NOMME sa
+--     contrainte, et pas une erreur de conversion (22P02) que
+--     `messageClair()` ne saurait pas lire — la clé chiffrée est contrôlée
+--     avant, dans l'ordre des noms, et garde sa conversion
+begin;
+insert into public.preuves_tva (pro_id, siren, numero) values (:B, 'ABCDEFGHI', 'FR18ABCDEFGHI');
+rollback;
+-- (h) une clé avec I ou O : aucune clé française ne les emploie
+begin;
+insert into public.preuves_tva (pro_id, siren, numero) values (:B, '000048017', 'FRIO000048017');
 rollback;
 
 
@@ -229,24 +241,43 @@ rollback;
 
 -- --------------------------------------------------------------------------
 \echo ''
-\echo '=== 10. Un nouveau controle (upsert de la fonction) RAFRAICHIT la date ==='
--- La fonction n'envoie pas la date : sans le déclencheur, un numéro
--- recontrôlé aujourd'hui garderait la date du premier contrôle.
+\echo '=== 9 bis. Une preuve ESSAI sur un VRAI compte : refus attendu (23514, compte d essai) ==='
+-- Posée par erreur sur un compte réel, elle éteindrait le motif d'un numéro
+-- que VIES n'a jamais vu. B devient ici, le temps de la transaction, un
+-- compte dont l'adresse n'est pas une adresse d'essai.
 -- --------------------------------------------------------------------------
 begin;
-update public.preuves_tva set reconnu_le = '2001-01-01' where pro_id = :A;  -- le déclencheur la repose
-select bool_and(reconnu_le > now() - interval '1 minute') as meme_un_update_ne_vieillit_pas_attendu_t
-  from public.preuves_tva where pro_id = :A;
+update auth.users set email = 'b4800@exemple.fr' where id = :B;
+insert into public.preuves_tva (pro_id, siren, numero, source) values (:B, '000048017', 'FR18000048017', 'essai');
 rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 10. La date du controle : un nouveau controle la RAFRAICHIT, une autre ecriture ne la touche PAS ==='
+-- La fonction Edge n'envoie pas la date : sans le déclencheur, un numéro
+-- recontrôlé garderait la date du premier contrôle. Mais une mise à jour
+-- qui n'est PAS un contrôle (l'éditeur SQL, le remplissage d'une colonne)
+-- ne doit pas dater un contrôle qui n'a pas eu lieu — sinon la preuve « de
+-- moins de 24 h » dispenserait de rappeler VIES (relecture du 20/10/2026).
+-- --------------------------------------------------------------------------
 begin;
--- forcer une vieille date en contournant le déclencheur, puis rejouer l'upsert
+-- une date ancienne, posée en contournant le déclencheur
 alter table public.preuves_tva disable trigger trg_tient_la_preuve_tva;
 update public.preuves_tva set reconnu_le = '2025-01-01' where pro_id = :A;
 alter table public.preuves_tva enable trigger trg_tient_la_preuve_tva;
+-- (a) une écriture de maintenance, en superutilisateur : la date ne bouge pas
+update public.preuves_tva set source = source where pro_id = :A;
+update public.preuves_tva set reconnu_le = now() where pro_id = :A;
+select bool_and(reconnu_le = '2025-01-01') as maintenance_garde_la_date_attendu_t
+  from public.preuves_tva where pro_id = :A;
+-- (b) l'upsert de la fonction Edge, sous la clé de SERVICE : un contrôle
+set local role service_role;
 insert into public.preuves_tva (pro_id, siren, numero, vies_le)
 values (:A, '000048009', 'FR91000048009', now())
 on conflict (pro_id) do update set siren = excluded.siren, numero = excluded.numero, vies_le = excluded.vies_le;
-select bool_and(reconnu_le > now() - interval '1 minute') as upsert_rafraichit_attendu_t
+reset role;
+select bool_and(reconnu_le > now() - interval '1 minute') as controle_rafraichit_attendu_t
   from public.preuves_tva where pro_id = :A;
 rollback;
 
@@ -340,6 +371,48 @@ delete from auth.users where id = :A;
 select count(*) as preuves_de_A_apres_suppression_attendu_0 from public.preuves_tva where pro_id = :A;
 rollback;
 select count(*) as et_rien_n_est_perdu_hors_essai_attendu_1 from public.preuves_tva where pro_id = :A;
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 17. Les compteurs : le compte et tout Opus dans UN ordre ; si l un refuse, l autre ne monte pas ==='
+-- --------------------------------------------------------------------------
+begin;
+set local role service_role;
+select public.compter_essai_tva('tva-compte:e48', '2026-10-20 12:00+00', 2, '2026-10-20 12:34+00', 3) as premier_attendu_ok,
+       public.compter_essai_tva('tva-compte:e48', '2026-10-20 12:00+00', 2, '2026-10-20 12:34+00', 3) as second_attendu_ok,
+       public.compter_essai_tva('tva-compte:e48', '2026-10-20 12:00+00', 2, '2026-10-20 12:34+00', 3) as troisieme_attendu_compte;
+-- le refus du compte n'a PAS consommé la place de tout Opus : 2, pas 3
+reset role;
+select n as global_apres_refus_du_compte_attendu_2 from public.siret_limites
+ where cle = 'tva-global' and fenetre = '2026-10-20 12:34+00';
+set local role service_role;
+-- un autre compte prend la dernière place de tout Opus, puis la limite de tous mord
+select public.compter_essai_tva('tva-compte:e48b', '2026-10-20 12:00+00', 5, '2026-10-20 12:34+00', 3) as autre_compte_attendu_ok,
+       public.compter_essai_tva('tva-compte:e48b', '2026-10-20 12:00+00', 5, '2026-10-20 12:34+00', 3) as tout_opus_attendu_service;
+reset role;
+select n as autre_compte_apres_refus_global_attendu_1 from public.siret_limites
+ where cle = 'tva-compte:e48b' and fenetre = '2026-10-20 12:00+00';
+rollback;
+-- une clé qui n'est pas celle d'un compte : refus attendu
+begin;
+set local role service_role;
+select public.compter_essai_tva('global', '2026-10-20 12:00+00', 2, '2026-10-20 12:34+00', 3);
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 18. Les compteurs : appelables par la seule cle de service ==='
+-- --------------------------------------------------------------------------
+select has_function_privilege('anon', 'public.compter_essai_tva(text, timestamptz, int, timestamptz, int)', 'execute') as anon_attendu_f,
+       has_function_privilege('authenticated', 'public.compter_essai_tva(text, timestamptz, int, timestamptz, int)', 'execute') as connecte_attendu_f,
+       has_function_privilege('service_role', 'public.compter_essai_tva(text, timestamptz, int, timestamptz, int)', 'execute') as service_attendu_t;
+-- et un connecté qui l'appelle est refusé (permission denied) : refus attendu
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+select public.compter_essai_tva('tva-compte:e48', '2026-10-20 12:00+00', 100000, '2026-10-20 12:34+00', 100000);
+rollback;
 
 -- Ménage de queue : rien ne reste de ce fichier.
 delete from auth.users where id::text like 'a4800000-%';

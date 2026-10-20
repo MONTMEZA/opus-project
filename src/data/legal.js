@@ -37,9 +37,13 @@ export const VERSION = '2026-10-20';
        seul, depuis les serveurs d'Opus ;
      - la collecte s'allonge : ce numéro, et la date à laquelle VIES l'a
        reconnu. Pour un entrepreneur individuel, il désigne une personne ;
-     - une réponse automatique de plus, dite pour ce qu'elle est : un
-       numéro que VIES ne reconnaît pas ne s'imprime pas, et seul le service
-       des impôts des entreprises peut changer cette réponse.
+     - une DÉCISION AUTOMATIQUE de plus, et c'est une règle d'Opus, pas
+       « la réponse de l'administration » : un numéro que VIES ne reconnaît
+       pas ne s'imprime pas, et un devis à un particulier en dépendra. Aucune
+       révision par un humain n'existe encore pour elle, et le texte le DIT
+       (`docs/A-FAIRE.md` : à ouvrir avant la mise en ligne publique) ;
+     - une base légale de plus (le contrôle), et deux compteurs sous
+       empreinte, dont la durée se dit comme celle du SIRET.
 
    LA MÊME LIMITE QUE LE 19/10, et elle se dit encore : aucun écran ne fait
    ré-accepter un compte existant. Ce qui rend ce lot honnête quand même :
@@ -478,10 +482,11 @@ export const MENTIONS = [
       + 'réutilisées sous Licence Ouverte 2.0 ; numéros de TVA : DGFiP ; via l’API '
       + 'Recherche d’entreprises. Un numéro de TVA que cette API ne publie pas, écrit par '
       + 'l’entreprise elle-même, n’est gardé que si VIES, le service de la Commission '
-      + 'européenne, le reconnaît, et la date de ce contrôle l’accompagne. La date de mise à jour du répertoire accompagne la '
+      + 'européenne qui interroge l’administration fiscale de chaque pays, le reconnaît, '
+      + 'et la date de ce contrôle l’accompagne. La date de mise à jour du répertoire accompagne la '
       + 'présentation de l’entreprise, à l’inscription et dans « Mon entreprise » — ou '
       + 'la mention qu’il n’en publie pas. Cette réutilisation ne vaut ni agrément ni '
-      + 'caution de l’INSEE ou de l’État.',
+      + 'caution de l’INSEE, de l’État ou de la Commission européenne.',
   },
   {
     titre: 'Signaler un contenu',
@@ -809,7 +814,12 @@ export const CONFIDENTIALITE = [
       + 'd’ouverture d’un compte professionnel — et intérêt légitime à prévenir les faux '
       + 'profils. Examiner une demande d’ouverture à la main : mesures précontractuelles '
       + 'prises à votre demande. Limiter le nombre de consultations par appareil : '
-      + 'intérêt légitime, protéger le service contre les abus.',
+      + 'intérêt légitime, protéger le service contre les abus. Faire contrôler par VIES '
+      + 'le numéro de TVA que vous écrivez, et le garder : exécution du contrat — c’est ce '
+      + 'qui permet de l’imprimer sur vos devis — et intérêt légitime à ce qu’un devis ne '
+      + 'porte pas un numéro qu’aucune administration ne reconnaît. Limiter le nombre de '
+      + 'ces contrôles par compte : intérêt légitime, protéger le service et VIES contre '
+      + 'les abus.',
   },
   {
     /* L'ARTICLE 22 DU RGPD — relecture « droit » du plan, constat 5. Refuser
@@ -825,10 +835,18 @@ export const CONFIDENTIALITE = [
       + 'humain : « Demander une vérification à la main » dépose votre demande dans '
       + 'l’application, où l’administrateur d’Opus la lit et vous répond par vos '
       + 'notifications et par la messagerie d’Opus. Vous pouvez y expliquer votre '
-      + 'situation. Quand VIES, le service de la Commission européenne, ne reconnaît pas '
-      + 'le numéro de TVA que vous écrivez, Opus ne l’imprime pas sur vos devis : ce n’est '
-      + 'pas une décision d’Opus, c’est la réponse de l’administration fiscale, que seul '
-      + 'votre service des impôts des entreprises peut changer.',
+      + 'situation. Le numéro de TVA que vous écrivez suit une autre règle, et c’est une '
+      + 'règle d’Opus : Opus le fait contrôler par VIES, le service de la Commission '
+      + 'européenne qui interroge l’administration fiscale française, et ne le garde que '
+      + 'si VIES le reconnaît. S’il ne le reconnaît pas, Opus ne l’imprime pas sur vos '
+      + 'devis ; au régime réel de TVA, « Mon entreprise » vous signale alors qu’il manque '
+      + 'une information pour vos devis à des particuliers, et, quand Opus permettra de '
+      + 'remettre des devis, il ne vous laissera pas en remettre un à un particulier tant '
+      + 'qu’elle manque. Aucune vérification par un humain n’existe encore pour cette '
+      + 'décision : seul votre service des impôts des entreprises peut activer ou corriger '
+      + 'votre numéro auprès de l’administration fiscale, et vous pouvez le faire contrôler '
+      + 'de nouveau dès qu’il l’a fait. Si vous relevez en réalité de la franchise en base '
+      + 'de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé.',
   },
   {
     titre: 'Où vos données sont hébergées',
@@ -910,12 +928,13 @@ export const CONFIDENTIALITE = [
       + 'chaque fois qu’un champ de lieu vous propose des suggestions : seul '
       + 'le texte que vous êtes en train de taper y est envoyé — jamais votre '
       + 'nom, jamais celui de votre client, et rien n’y est conservé qui vous '
-      + 'désigne. VIES (ec.europa.eu), le service de la Commission européenne qui dit '
-      + 'si un numéro de TVA est actif, quand vous faites contrôler le numéro de TVA de '
-      + 'votre entreprise que l’annuaire ne publie pas : seul ce numéro y est envoyé, '
-      + 'depuis les serveurs d’Opus — jamais votre nom, jamais votre adresse '
-      + 'électronique, jamais votre adresse IP ; Opus ne garde de sa réponse que '
-      + '« reconnu » et sa date, jamais le nom ni l’adresse qu’elle renvoie. Anthropic (États-Unis), UNIQUEMENT quand vous '
+      + 'désigne. VIES (ec.europa.eu), le service de la Commission européenne qui '
+      + 'interroge l’administration fiscale de chaque pays, quand vous faites contrôler le '
+      + 'numéro de TVA de votre entreprise que l’annuaire ne publie pas : seul ce numéro y '
+      + 'est envoyé, depuis les serveurs d’Opus — jamais votre nom, jamais votre adresse '
+      + 'électronique, jamais votre adresse IP. C’est l’administration fiscale française '
+      + 'qui y répond ; Opus ne garde de sa réponse que « reconnu » ou « refusé », et sa '
+      + 'date, jamais le nom ni l’adresse qu’elle renvoie. Anthropic (États-Unis), UNIQUEMENT quand vous '
       + 'appuyez sur « Améliorer avec l’IA » ou sur l’assistant de '
       + 'présentation : le texte que vous avez écrit est alors envoyé pour '
       + 'être relu, et n’est pas utilisé pour entraîner de modèle. Ces '
@@ -949,7 +968,13 @@ export const CONFIDENTIALITE = [
       + 'sont effacés une fois leur durée d’usage passée, lors d’une consultation '
       + 'suivante : ce ménage n’a lieu qu’à cette occasion, aucune durée maximale ne '
       + 'peut donc être promise. Le numéro de TVA que VIES a reconnu, et la date de ce '
-      + 'contrôle, restent attachés à votre compte et partent avec lui. Les journaux techniques de l’hébergeur, qui contiennent '
+      + 'contrôle, restent attachés à votre compte et partent avec lui. Pour limiter les '
+      + 'contrôles auprès de VIES, Opus compte ceux de chaque compte, et retient quelques '
+      + 'heures qu’un numéro vient d’être refusé, sous une empreinte qui ne laisse lire ni '
+      + 'le compte ni le numéro ; ces compteurs sont effacés lors d’un contrôle suivant, '
+      + 'plus d’un jour après, y compris si le compte a été supprimé entre-temps : comme '
+      + 'pour la consultation du répertoire, aucune durée maximale ne peut donc être '
+      + 'promise. Les journaux techniques de l’hébergeur, qui contiennent '
       + 'l’adresse IP des appareils, sont effacés par lui au bout d’un jour, selon '
       + 'l’offre souscrite aujourd’hui.',
   },

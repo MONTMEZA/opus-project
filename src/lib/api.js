@@ -1938,7 +1938,7 @@ async function monEmetteurSupabase() {
     supabase.from('emetteur_assurances').select('*').eq('pro_id', currentUserId)
       .order('created_at', { ascending: true }),
     supabase.from('tarifs_pro').select('*').eq('pro_id', currentUserId).maybeSingle(),
-    supabase.from('preuves_tva').select('siren, numero, reconnu_le').eq('pro_id', currentUserId)
+    supabase.from('preuves_tva').select('siren, numero, reconnu_le, source').eq('pro_id', currentUserId)
       .maybeSingle(),
   ]);
   for (const r of [e, a, t]) if (r.error) throw r.error;
@@ -3995,10 +3995,12 @@ async function controlerTvaDemo(numero) {
   await patienter(1500);
   const cle = saisie.numero.slice(2, 4);
   if (/^\d{2}$/.test(cle)) {
-    preuvesTvaDemo[moi] = { siren: r.siren, numero: saisie.numero, reconnu_le: new Date().toISOString() };
+    preuvesTvaDemo[moi] = {
+      siren: r.siren, numero: saisie.numero, reconnu_le: new Date().toISOString(), source: 'vies',
+    };
     return { issue: 'reconnu', numero: saisie.numero, reconnu_le: preuvesTvaDemo[moi].reconnu_le };
   }
-  if (cle.startsWith('Z')) return { issue: 'indisponible' };
+  if (cle.startsWith('Z')) return { issue: 'indisponible', cause: 'sature' };
   if (preuvesTvaDemo[moi] && preuvesTvaDemo[moi].numero === saisie.numero) delete preuvesTvaDemo[moi];
   return { issue: 'refuse', numero: saisie.numero };
 }

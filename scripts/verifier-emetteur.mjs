@@ -453,6 +453,25 @@ if (E && M && D) {
         && !/(écrire|l’écrire) sur le devis|doit porter/.test(m.phrase)),
       r1112.filter((m) => !/communiquer/.test(m.phrase) || /(écrire|l’écrire) sur le devis|doit porter/.test(m.phrase))
         .map((m) => m.cle).join(', '));
+    /* …et la même règle hors des motifs : l'écran du n° de TVA, sa fiche,
+       et les messages de tva.js (relecture du 20/10/2026, « vos devis
+       doivent le porter »). Et aucune phrase ne promet « qu'un numéro
+       actif » : l'annuaire est un instantané, et VIES ne répond que pour le
+       jour même — la règle voulue, c'est le numéro AVEC sa source. */
+    /* Dans emetteur.js, la seule phrase du n° de TVA : la mention « EI »,
+       elle, DOIT figurer sur le devis (code de commerce), et la phrase qui
+       le dit est juste. */
+    const textesTva = ['src/components/SaisieTva.js', 'src/components/FicheEmetteur.js', 'src/lib/tva.js',
+      'src/data/legal.js']
+      .map((f) => [f, readFileSync(f, 'utf8').replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ')])
+      .concat([['motif conso_tva_intra', (P.find((m) => m.cle === 'conso_tva_intra') || {}).phrase || '']]);
+    const doitPorter = /\b(doi(?:t|vent)|devez|devra(?:ient)?) (?:le |la |les )?porter\b/i;
+    verifier('aucun texte du n° de TVA ne dit qu’un devis « doit le porter » (R. 111-2 : le communiquer)',
+      textesTva.every(([, t]) => !doitPorter.test(t)),
+      textesTva.filter(([, t]) => doitPorter.test(t)).map(([f]) => f).join(', '));
+    const actif = /n’imprime qu’un numéro actif|qu’un numéro (de TVA )?actif/;
+    verifier('…ni qu’Opus « n’imprime qu’un numéro actif » (une promesse que rien ne tient)',
+      [...textesTva, ['supabase/schema.sql', readFileSync('supabase/schema.sql', 'utf8')]].every(([, t]) => !actif.test(t)));
     const ancienne = P.find((m) => m.cle === 'entreprise_ancienne');
     verifier('la relecture annuelle du SIRET se dit comme une règle d’Opus, PAS comme la loi',
       ancienne && /règle d’Opus, pas une obligation de la loi/.test(ancienne.phrase));
@@ -742,19 +761,30 @@ if (E && M && D) {
       && /DGFiP/.test(src) && !/DGFiP/.test(E.ligneSource({ ...A, tva: null })), src);
     verifier('…et `null` pour une identité ouverte par l’administration (rien ne vient du répertoire)',
       E.ligneSource({ ...A, tva: null, source: 'administration' }) === null && E.ligneSource(null) === null);
-    /* LE N° RECONNU PAR VIES (section 48) : sa source est DITE, avec la date
-       du contrôle — VIES ne confirme que pour le jour même. La DGFiP n'est
-       nommée que pour un numéro de l'annuaire. */
+    /* LE N° RECONNU PAR VIES (section 48) NE PORTE PAS SA PROVENANCE SUR LE
+       DEVIS (relecture du 20/10/2026) : R. 111-2 demande le numéro, pas
+       d'où il vient, et l'avertissement juridique de VIES interdit de
+       retransmettre son contenu au-delà des propres factures de
+       l'utilisateur. La DGFiP n'est nommée que pour un numéro de l'annuaire,
+       et une preuve d'ESSAI se dit pour ce qu'elle est. */
     const sansTva = { ...A, tva: null };
-    const preuve = { siren: A.siren, numero: A.tva, reconnu_le: '2026-10-20T13:51:01.000Z' };
+    const preuve = { siren: A.siren, numero: A.tva, reconnu_le: '2026-10-20T13:51:01.000Z', source: 'vies' };
     const srcVies = E.ligneSource(sansTva, preuve) || '';
-    verifier('`ligneSource` d’un numéro reconnu par VIES : « écrit par l’entreprise, reconnu par VIES » et la date, sans la DGFiP',
-      /écrit par l’entreprise, reconnu par VIES \(Commission européenne\) le 20\/10\/2026/.test(srcVies)
-      && !/DGFiP/.test(srcVies) && !/v[ée]rifi|registre(?! du commerce)/i.test(srcVies), srcVies);
+    verifier('`ligneSource` d’un numéro reconnu par VIES : l’identité seule — ni VIES, ni la DGFiP, ni une date de contrôle',
+      srcVies === E.ligneSource(sansTva) && !/VIES|DGFiP|Commission/.test(srcVies), srcVies);
     verifier('…l’annuaire garde le dernier mot : avec un numéro publié, la DGFiP, et VIES n’est pas nommé',
       /DGFiP/.test(E.ligneSource(A, preuve)) && !/VIES/.test(E.ligneSource(A, preuve)));
-    verifier('…une identité de l’administration avec une preuve : la seule source du numéro, en phrase',
-      /^N° de TVA : écrit par l’entreprise, reconnu par VIES/.test(E.ligneSource({ ...sansTva, source: 'administration' }, preuve) || ''));
+    verifier('…une identité de l’administration avec une preuve VIES : aucune ligne de source à inventer',
+      E.ligneSource({ ...sansTva, source: 'administration' }, preuve) === null);
+    const essai = { ...preuve, source: 'essai' };
+    verifier('…une preuve d’ESSAI se dit pour ce qu’elle est : « non soumise à VIES », jamais « reconnu »',
+      /preuve d’essai posée par Opus, non soumise à VIES/.test(E.ligneSource(sansTva, essai) || '')
+      && /^N° de TVA : preuve d’essai posée par Opus, non soumise à VIES$/.test(E.ligneSource({ ...sansTva, source: 'administration' }, essai) || '')
+      && !/reconnu/.test(E.ligneSource(sansTva, essai) || ''));
+    verifier('…et `numeroTvaImprime` dit l’origine : annuaire, vies ou essai',
+      E.numeroTvaImprime(A, preuve).origine === 'annuaire' && E.numeroTvaImprime(sansTva, preuve).origine === 'vies'
+      && E.numeroTvaImprime(sansTva, essai).origine === 'essai'
+      && E.numeroTvaImprime(sansTva, { ...preuve, source: 'autre' }) === null);
     verifier('…et une preuve faite pour un AUTRE SIREN ne s’imprime nulle part',
       E.ligneSource({ ...sansTva, source: 'administration' }, { ...preuve, siren: '000048009', numero: 'FR91000048009' }) === null
       && !/VIES/.test(E.ligneSource(sansTva, { ...preuve, siren: '000048009', numero: 'FR91000048009' }) || ''));
@@ -1649,7 +1679,7 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
        pas encore : sur une base sans la section 48, il n'y a aucune preuve. */
     && /if \(v\.error && !tableAbsente\(v\.error\)\) throw v\.error;/.test(corps(api, 'async function monEmetteurSupabase('))
     && /erreur\.code === 'PGRST205' \|\| erreur\.code === '42P01'/.test(api)
-    && /from\('preuves_tva'\)\.select\('siren, numero, reconnu_le'\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function monEmetteurSupabase(')));
+    && /from\('preuves_tva'\)\.select\('siren, numero, reconnu_le, source'\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function monEmetteurSupabase(')));
   verifier('l’assurance et son retrait ne visent que la fiche du compte connecté',
     /\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function enregistrerAssuranceSupabase('))
     && /\.delete\(\)\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function retirerAssuranceSupabase(')));

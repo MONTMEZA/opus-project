@@ -66,6 +66,7 @@ import {
   validerEmetteur, validerTarifs, avisEmetteur, chercherMediateur,
 } from '../lib/emetteur';
 import { dateFrancaise } from '../lib/entreprise';
+import { messageTva } from '../lib/tva';
 import {
   QUI_VOIT_LES_TARIFS, QUI_VERRAIT_LES_TARIFS, TARIFS_NON_AFFICHES, lignesTarifs,
 } from '../lib/tarifs';
@@ -170,6 +171,21 @@ export default function MonEntreprise({
      par `onOccupe`) : pendant ce temps, fermer ne doit pas proposer de
      « quitter sans enregistrer » — l'écriture est déjà partie. */
   const [occupeAssurance, setOccupeAssurance] = useState(false);
+  /* Un contrôle de n° de TVA en vol (section 48) : VIES met souvent 10 à
+     30 secondes. Fermer la fenêtre ne l'annulerait pas — la fonction Edge
+     écrirait quand même la preuve —, et rouvrir montrait un écran qui
+     disait le contraire de ce qui se passait, puis laissait partir un
+     second contrôle (relecture du 20/10/2026). On attend, comme pour un
+     enregistrement. */
+  const [occupeTva, setOccupeTva] = useState(false);
+  /* Un message « attendez » ne survit pas à ce qu'il fait attendre : resté
+     affiché après la réponse de VIES, il disait « en cours » au-dessus d'un
+     numéro déjà reconnu (capture du 20/10/2026). Il part au moment même où
+     le contrôle se termine — dans le rappel, pas dans un effet. */
+  const occuperTva = (enCours) => {
+    setOccupeTva(enCours);
+    if (!enCours) setMessage((m) => (m && m.ton === 'attente' ? null : m));
+  };
   /* Le garde du RETRAIT, dans une référence : deux appuis arrivés dans la
      même image verraient encore tous les deux l'ancien état. */
   const retraitEnCours = useRef(false);
@@ -230,6 +246,10 @@ export default function MonEntreprise({
     if (donnees.etat !== 'pret') {
       afficher('Vos informations de devis n’ont pas pu être lues : réessayez avant de les compléter.',
         'erreur');
+      return;
+    }
+    if (occupeTva) {
+      afficher('Contrôle auprès de VIES en cours : attendez sa réponse.', 'attente');
       return;
     }
     setBrouillon(null);
@@ -326,6 +346,10 @@ export default function MonEntreprise({
     if (occupe || occupeAssurance) {
       afficher('Enregistrement en cours : attendez qu’il se termine. L’interrompre ne '
         + 'l’annulerait pas.');
+      return;
+    }
+    if (occupeTva) {
+      afficher('Contrôle auprès de VIES en cours : attendez sa réponse. Fermer ne l’annulerait pas.', 'attente');
       return;
     }
     if (!quitter && aDesChangements()) {
@@ -500,12 +524,22 @@ export default function MonEntreprise({
     const r = await api.controlerTva(numero);
     if (r.issue === 'reconnu' && entreprise) {
       setDonnees((d) => ({
-        ...d, preuveTva: { siren: entreprise.siren, numero: r.numero, reconnu_le: r.reconnu_le || null },
+        ...d,
+        preuveTva: { siren: entreprise.siren, numero: r.numero, reconnu_le: r.reconnu_le || null, source: 'vies' },
       }));
       lireManques(setManques);
     } else if (r.issue === 'refuse') {
       setDonnees((d) => (d.preuveTva && d.preuveTva.numero === r.numero ? { ...d, preuveTva: null } : d));
       lireManques(setManques);
+    } else if (r.issue === 'deja_publie') {
+      /* La base a déjà le numéro de l'annuaire, et l'écran ne l'avait pas
+         (une revérification par l'administration, un autre appareil) : on
+         RELIT l'entreprise — sans redemander le SIRET — et ce qui manque.
+         Le bloc de saisie disparaît avec l'arrivée du numéro : le message
+         vit dans la bande de la fenêtre. */
+      if (onChargerEntreprise) onChargerEntreprise();
+      lireManques(setManques);
+      afficher(messageTva('deja_publie').texte);
     }
     return r;
   };
@@ -550,7 +584,9 @@ export default function MonEntreprise({
         )}
 
         {!!message && (
-          <View style={[s.message, message.ton === 'erreur' && s.messageErreur]}>
+          <View style={[s.message, message.ton === 'erreur' && s.messageErreur,
+            message.ton === 'attente' && s.messageAttente]}
+          >
             <Text style={s.messageTexte}>{message.texte}</Text>
             <Pressable
               onPress={() => setMessage(null)}
@@ -608,6 +644,7 @@ export default function MonEntreprise({
                   preuveTva={donnees.etat === 'pret' ? donnees.preuveTva : null}
                   regimeTva={donnees.etat === 'pret' && donnees.emetteur ? donnees.emetteur.regime_tva : null}
                   onControlerTva={donnees.etat === 'pret' ? controlerTva : null}
+                  onOccupeTva={occuperTva}
                 />
                 {donnees.etat === 'pret' && entrepriseEtat === 'pret' && (
                   <ApercuEntete
@@ -764,6 +801,8 @@ const s = StyleSheet.create({
     borderLeftWidth: S.xs, borderLeftColor: C.ok,
   },
   messageErreur: { borderLeftColor: C.bad },
+  /* Ni une réussite (vert) ni une erreur : une attente. */
+  messageAttente: { borderLeftColor: C.accent2 },
   messageTexte: {
     flex: 1, minWidth: 0, paddingVertical: S.sm, fontFamily: F.inter, fontSize: T.courant,
     color: C.ink, lineHeight: interligne(T.courant),

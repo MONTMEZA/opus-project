@@ -77,7 +77,7 @@ function Ligne({ libelle, valeur, note }) {
 
 export default function IdentiteEntreprise({
   entreprise, retiree = null, badge = false, etat, onRecharger, onRattacher, onLayout,
-  preuveTva = null, regimeTva = null, onControlerTva = null,
+  preuveTva = null, regimeTva = null, onControlerTva = null, onOccupeTva = null,
 }) {
   const [saisie, setSaisie] = useState(false);
   const [aRattacher, setARattacher] = useState(null);
@@ -165,6 +165,7 @@ export default function IdentiteEntreprise({
               preuveTva={preuveTva}
               regimeTva={regimeTva}
               onControler={onControlerTva}
+              onOccupe={onOccupeTva}
             />
           )}
           <Text style={s.source}>

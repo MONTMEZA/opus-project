@@ -816,15 +816,19 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
                 + `DGFiP) : ${tva.numero} — il s’imprimera sur vos devis, quel que soit votre régime.`
               : null}
             {tva && tva.origine === 'vies'
-              ? `Numéro de TVA intracommunautaire écrit par vous et reconnu par VIES (Commission `
-                + `européenne)${dateFrancaise(tva.reconnu_le) ? ` le ${dateFrancaise(tva.reconnu_le)}` : ''} : `
+              ? `Numéro de TVA intracommunautaire écrit par vous ; VIES l’a reconnu`
+                + `${dateFrancaise(tva.reconnu_le) ? ` le ${dateFrancaise(tva.reconnu_le)}` : ''} : `
                 + `${tva.numero} — il s’imprimera sur vos devis, quel que soit votre régime.`
               : null}
+            {tva && tva.origine === 'essai'
+              ? `Numéro de TVA intracommunautaire ${tva.numero} : preuve d’essai posée par Opus, `
+                + 'non soumise à VIES.'
+              : null}
             {!tva
-              ? 'L’annuaire des entreprises (liste de la DGFiP) ne publie aucun numéro de TVA '
-                + 'intracommunautaire actif pour votre entreprise. Cela ne prouve rien sur votre '
-                + 'régime : c’est à vous de le dire. Si vous en avez un, écrivez-le dans « Votre '
-                + 'entreprise » : Opus le fera contrôler par VIES.'
+              ? 'L’annuaire des entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA '
+                + 'intracommunautaire pour votre entreprise. Cela ne prouve rien sur votre régime : '
+                + 'c’est à vous de le dire. Si vous en avez un, enregistrez d’abord ces informations, '
+                + 'puis écrivez-le dans « Votre entreprise » : Opus le fera contrôler par VIES.'
               : null}
           </Aide>
         )}

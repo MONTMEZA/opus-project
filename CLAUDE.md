@@ -7975,6 +7975,193 @@ des montants sur le devis (lot 2, avec un juriste), les états que la
 démonstration ne montre pas, les quatre lectures de démarrage sans délai,
 et le contraste de `C.bad` sur le fond (4,37).
 
+### Le n° de TVA écrit à la main, contrôlé par VIES — section 48 (20/10/2026)
+
+Section 48 de `schema.sql`, fonction Edge `supabase/functions/tva/`,
+`src/lib/tva.js` (copié OCTET POUR OCTET dans la fonction — `verifier-tva` le
+compare), `src/components/SaisieTva.js`, `npm run verifier-tva`.
+
+Signalé par le propriétaire en remplissant « Mon entreprise » : son n° de TVA
+n'était pas importé, il ne pouvait pas l'écrire, et la fiche disait qu'il
+manquait quelque chose pour les devis à des particuliers. Sa demande : « si
+il ne le trouve pas on peut juste donner le moyen a la personne de l'ecrire a
+la main dans opus ». Son choix, parmi trois : **à la main, contrôlé par
+VIES**.
+
+#### Calculer n'est pas attribuer — mesuré, pas supposé
+
+Le n° de TVA d'une entreprise française se CALCULE depuis son SIREN
+(clé = (12 + 3 × (SIREN mod 97)) mod 97). C'était la tentation : le remplir
+tout seul. Mesuré le 20/10 :
+
+- le numéro de la société du propriétaire, calculé juste, **est absent de la
+  liste ouverte de la DGFiP et REFUSÉ par VIES** ;
+- **des clés en LETTRE existent et sont actives** (`K…`), et un même SIREN
+  peut porter DEUX numéros actifs. La formule ne les produit jamais.
+
+> **Un numéro bien formé n'est pas un numéro attribué.** C'est le service
+> des impôts des entreprises qui l'active ; tant qu'il ne l'a pas fait,
+> l'imprimer sur un devis serait écrire un faux. D'où un contrôle, et pas un
+> calcul — et la phrase n'en dit jamais plus : « numéro actif » est refusé
+> par le contrôle, Opus dit « reconnu par VIES ».
+
+#### VIES, mesuré avant d'écrire une ligne
+
+| | relevé |
+|---|---|
+| statut HTTP | **toujours 200**, erreurs comprises |
+| une réponse de la France | **8 à 13 s** (9,1 · 9,8 · 12,6 · 11,2) |
+| la France saturée (`MS_MAX_CONCURRENT_REQ`) | **16 appels sur 19**, réponse en moins de 2 s |
+| …pendant que `check-status` annonçait | « Available » — ce statut ne prédit rien |
+| le site web (`GET`) quand la France est saturée | **`isValid: false`** : un refus apparent qui n'a rien vérifié |
+
+> **Seul le code d'erreur dit la vérité, jamais `valid` seul.** Trois états,
+> comme pour le SIRET : reconnu, refusé, et « je n'ai pas pu vérifier ». Et
+> le délai de 8 s de la fonction `siret` aurait coupé TOUTES les réponses de
+> la France : la fonction `tva` attend 20 s par essai.
+
+#### La chaîne, et pourquoi chaque maillon est là
+
+1. **La fonction Edge `tva`** (`verify_jwt` faux, comme `siret` : elle lit le
+   jeton elle-même et répond en français). Toutes les issues partent en
+   **HTTP 200** — la leçon de `ai` du 18/10. Dans l'ordre, sans jamais
+   toucher VIES avant la fin : forme, clé, le compte, l'entreprise
+   rattachée, « l'annuaire en publie déjà un » (`deja_publie`), « ce numéro
+   est celui de VOTRE SIREN » (`autre_siren`), une preuve de moins de 24 h
+   (`reconnu` sans rappel), un refus retenu, les limites, puis VIES —
+   **quatre essais au plus** (pauses de 2, 5 et 10 s, 20 s par essai, 45 s
+   en tout).
+2. **`preuves_tva`** : une ligne par entreprise, que **personne d'autre que
+   la fonction n'écrit** (aucun droit d'écriture pour `authenticated`).
+   Lisible par son titulaire seul (`est_mon_entreprise`), rien pour `anon`.
+   `emetteur_incomplet()` ne retire le motif `conso_tva_intra` que si la
+   preuve existe ET porte le SIREN de l'entreprise rattachée.
+3. **`compter_essai_tva()`** compte et décide dans le MÊME ordre : verrou du
+   compte, puis de la ligne globale (24 par heure et par compte, 20 par
+   minute pour tout Opus). **Les limites comptent les requêtes à VIES, pas
+   les appuis** : un appui peut en coûter quatre, et c'est VIES qu'on
+   ménage. Exécutable par `service_role` seul.
+4. **Un refus est RETENU trois heures** (`tva-refus:`) : la même question ne
+   repart pas. Les conditions de VIES rangent parmi les abus la répétition
+   d'une même demande, et un abus fait bloquer l'adresse d'Opus
+   (`IP_BLOCKED`) — c'est-à-dire VIES coupé pour TOUS les artisans.
+5. **Les clés des compteurs sont des empreintes HMAC** : ni l'identifiant du
+   compte, ni le numéro n'y sont en clair. Vérifié sur la vraie base.
+6. **La date `reconnu_le` appartient à la BASE** (`tient_la_preuve_tva()`) :
+   posée à l'insertion, et à chaque nouveau CONTRÔLE par la fonction
+   (`current_user = 'service_role'`), jamais par un client. Une date envoyée
+   à 2001 est ignorée.
+7. **Une preuve `essai`** (pour les essais au navigateur) n'est acceptée que
+   pour un compte `@exemple-opus.test`, et elle **s'imprime comme telle** :
+   « preuve d'essai posée par Opus, non soumise à VIES ».
+
+Et `local-prelude.sql` donne désormais `bypassrls` à `service_role`, comme
+Supabase : sans lui, un essai de la fonction sur un PostgreSQL nu mesurait
+la RLS au lieu de la fonction.
+
+#### Ce qui s'imprime, et ce qui ne s'imprime PAS
+
+Le numéro, oui. **La provenance « VIES », non** : l'avertissement juridique
+de VIES ne couvre que l'usage « d'un utilisateur légitime (par exemple :
+établir ses propres factures) », et rien n'établit encore qu'un devis imprimé
+par un tiers y entre. À faire confirmer par un juriste, ou par TAXUD-VIESWEB
+(`docs/A-FAIRE.md`).
+
+#### Quatre défauts trouvés par la relecture, et pas à l'œil
+
+1. **Le contrôle LISAIT la fonction, il ne la faisait pas tourner.** Sur
+   23 failles remises à la main dans la fonction Edge, **22 passaient au
+   vert** : le texte attendu y était toujours. `verifier-tva` lance désormais
+   la VRAIE fonction dans un processus enfant (`--banc`), avec un faux VIES
+   et une fausse base, et mesure ce qu'elle RÉPOND. Puis 90 sabotages, les
+   90 refusés.
+   > **Un contrôle qui lit le code d'une fonction réseau ne sait rien de ce
+   > qu'elle répond.** Celui-ci est le premier du projet à exécuter une
+   > fonction Edge.
+2. **Les textes légaux disaient « ce n'est pas une décision d'Opus, c'est la
+   réponse de l'administration fiscale ».** C'était faux : ne pas imprimer un
+   numéro que VIES ne reconnaît pas est une RÈGLE D'OPUS, prise sur la
+   réponse de VIES. Ils le disent maintenant, avec son effet sur les devis à
+   des particuliers, et la phrase qu'il faut : **« Aucune vérification par un
+   humain n'existe encore pour cette décision »** (RGPD, art. 22). Construire
+   cette vérification est écrit dans `docs/A-FAIRE.md`, **avant que `STATUT`
+   quitte `'essai'`**.
+3. **Le quatrième essai à VIES était inatteignable** : les pauses et le
+   délai dépassaient le budget avant lui. Un réglage qui promet quatre essais
+   et en fait trois ; le banc l'a compté.
+4. **Le bandeau « VIES met souvent de 10 à 30 secondes » restait affiché
+   après la réponse.** Il est éteint par `occuperTva(false)`, et le contrôle
+   le vérifie. (Un `useEffect` faisait la même chose et faisait monter le
+   cliquet du linter : refusé.)
+
+#### Deux pièges du déploiement, à ne pas redécouvrir
+
+- **Aucune séquence `\u…` dans un fichier qu'on déploie par le connecteur.**
+  Son transport JSON la change en vrai caractère : le fichier relu n'est plus
+  celui du dépôt. `tva.js` construit ses séparateurs par
+  `String.fromCharCode`, et `verifier-tva` refuse toute séquence `\u` dans les
+  deux fichiers de la fonction.
+- **La relecture octet pour octet se fait depuis le transcript**, pas en
+  recopiant le fichier : la fonction relue par `get_edge_function` est
+  comparée par empreinte SHA-256 au dépôt. Identique pour `index.ts` et
+  `tva.js`.
+
+Et un faux positif de mon propre contrôle : il cherchait « une écriture dans
+`preuves_tva` » par `update`, et trouvait `for update` (le verrou de
+`compter_essai_tva`). Il vise désormais `\bupdate public\.`.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur une base neuve, **46 valeurs attendues sur
+46** dans `essais-section-48.sql` (15 refus, tous attendus), les autres
+fichiers d'essais identiques à leur relevé d'avant, les **49 contrôles**, le
+linter (32, tous antérieurs), les paquets iOS et Android lus. Le parcours en
+démonstration au navigateur : les trois réponses de VIES (reconnu, saturé,
+refusé), sans réseau.
+
+Puis la migration appliquée sur la VRAIE base (sans un ordre qui commence
+par `drop` ou `delete`), la fonction déployée en **version 1** et relue
+identique, et deux comptes pro jetables à des SIREN fictifs (A, sans numéro
+publié ; C, avec), supprimés par le chemin de l'application :
+
+| | résultat |
+|---|---|
+| la clé publiable seule | **200**, `sans_compte` |
+| une origine étrangère | **403** |
+| saisie incomplète · clé fausse | `mal_forme` · `cle_fausse`, **sans VIES** |
+| A demande le numéro d'une autre entreprise | `autre_siren` |
+| C demande le numéro que l'annuaire publie déjà | `deja_publie` |
+| **A, VIES pour de vrai** | **`refuse`, en 11,2 s** |
+| …le même numéro, aussitôt | `refuse` en 1,6 s, `reessayer_a` trois heures plus tard — VIES n'est pas rappelé |
+| les compteurs | trois lignes `tva-`, clés en **empreinte**, aucun identifiant en clair |
+| A lit sa preuve / s'en écrit une / la modifie / la supprime | `[]` / **403** ×3 |
+| un visiteur lit · appelle le compteur | **401** · **401** |
+| C appelle le compteur · le déclencheur | **403** · introuvable |
+| une preuve `essai` posée avec une date de 2001 | **date posée par la base** |
+| ce qui manque à A, avant · après la preuve | 11 motifs dont `conso_tva_intra` · 10, sans lui |
+| C lit la preuve de A · ce qui manque à A | `[]` · **OP011** |
+| l'export RGPD de A · de C | `mon_numero_de_tva` · `null` |
+| **au navigateur** : la fiche | « Preuve d'essai posée par Opus : ce numéro n'a pas été soumis à VIES » |
+| …un autre numéro, « Faire contrôler par VIES » | le bandeau d'attente, puis **« VIES ne reconnaît pas ce numéro aujourd'hui »** ; la preuve d'essai reste |
+| les journaux de la fonction | démarrages et arrêts seulement, aucun nom |
+
+Ménage : 0 compte jetable, 0 preuve TVA, 0 entreprise d'essai. Restent deux
+preuves SIRET `essai` (elles expirent d'elles-mêmes) et cinq compteurs `tva-`
+sous empreinte (purgés plus d'un jour après).
+
+**Ce qui n'a PAS été vérifié** :
+
+- **le chemin `reconnu` par le vrai VIES.** Il faudrait un vrai numéro
+  valide, et on n'en utilise jamais un pour un compte, même jetable. Il est
+  tenu par le banc et par la démonstration ;
+- rien sur l'iPhone ;
+- **la vérification par un humain d'un refus** : elle n'existe pas encore.
+
+**Et le numéro du propriétaire reste REFUSÉ par VIES.** Ce n'est pas un
+défaut d'Opus : c'est à lui de le faire activer par son service des impôts
+des entreprises (ou de le lire dans son espace professionnel), puis de
+l'écrire dans « Mon entreprise → Votre entreprise ».
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :
