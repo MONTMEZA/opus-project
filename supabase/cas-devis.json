@@ -1,0 +1,502 @@
+{
+  "description": "Les cas d’argent du lot 1 du module devis (cahier §3.5). Les attendus sont écrits UNE fois, ici : `npm run verifier-devis` les joue en JavaScript (src/lib/devis.js) à chaque passage, et `supabase/essais-section-49.sql` (cas 30) les joue en PostgreSQL, ligne par ligne, déclencheurs et contraintes compris. Les deux se comparent aux MÊMES attendus.",
+  "format": {
+      "operations": "Une suite d’opérations sur UN devis neuf : « ajouter » une ligne (sa clé locale et ses colonnes), « modifier » des colonnes d’une ligne déjà ajoutée, « retirer » une ligne. Les noms de colonnes sont ceux de `devis_lignes`. L’ordre d’une ligne ajoutée vaut 1 000 × son rang parmi les « ajouter » du cas. Une colonne absente prend le défaut de la table : `type` vaut « poste », les trois booléens valent faux, le reste est vide. La première opération refusée arrête le cas.",
+      "attendu": "HT|TVA|TTC|ventilation|options, en centimes. La ventilation : « taux:base:tva:nb » pour chaque taux à `nb_lignes > 0`, du plus fort au plus faible, séparés par des virgules, ou « — ». Les options : « taux:total » dans l’ordre des lignes, ou « — ». Ou bien « REFUS:<nom de la contrainte> ».",
+      "fonctions": "Des appels aux deux fonctions de calcul, `devis_total_ligne(quantité, prix)` et `devis_tva_de(base, taux)`, et ce qu’elles doivent rendre (`null` compris). Le miroir JavaScript de `devis_total_ligne` s’arrête au plafond : ces appels restent en dessous."
+  },
+  "nombre": 44,
+  "cas": [
+    {
+      "id": "C01",
+      "titre": "3 × 33,33 € HT à 10 % — le cas qui prouve la méthode (ligne par ligne : 999 c de TVA)",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"Poste C","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "9999|1000|10999|1000:9999:1000:3|—"
+    },
+    {
+      "id": "C02",
+      "titre": "demi-centime exact : 0,05 € à 10 % → 0,5 c de TVA, le demi monte",
+      "fonctions": [
+        {"nom":"devis_tva_de","args":[5,1000],"attendu":1}
+      ],
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Petite fourniture","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":5,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "5|1|6|1000:5:1:1|—"
+    },
+    {
+      "id": "C02b",
+      "titre": "3,00 € à 5,5 % → 16,5 c de TVA",
+      "fonctions": [
+        {"nom":"devis_tva_de","args":[300,550],"attendu":17}
+      ],
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Fourniture","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":300,"taux_tva_centiemes":550}}
+      ],
+      "attendu": "300|17|317|550:300:17:1|—"
+    },
+    {
+      "id": "C02c",
+      "titre": "1,05 % : sur la FONCTION seule ; une LIGNE à 105 est refusée au lot 1",
+      "fonctions": [
+        {"nom":"devis_tva_de","args":[1000,105],"attendu":11}
+      ],
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Taux d’outre-mer","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":105}}
+      ],
+      "attendu": "REFUS:devis_ligne_taux_check"
+    },
+    {
+      "id": "C02d",
+      "titre": "1,75 %, sur la fonction seule : 3,5 c → 4",
+      "fonctions": [
+        {"nom":"devis_tva_de","args":[200,175],"attendu":4}
+      ]
+    },
+    {
+      "id": "C03",
+      "titre": "2,5 m² à 33,33 € à 20 % : la ligne vaut 83,325 € → 83,33 € (en flottants : 83,32 €)",
+      "fonctions": [
+        {"nom":"devis_total_ligne","args":[2500,3333],"attendu":8333}
+      ],
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Peinture","quantite_milliemes":2500,"unite":"m2","prix_unitaire_centimes":3333,"taux_tva_centiemes":2000}}
+      ],
+      "attendu": "8333|1667|10000|2000:8333:1667:1|—"
+    },
+    {
+      "id": "C04",
+      "titre": "trois taux, un titre de zone et une réserve (ignorés par les totaux)",
+      "operations": [
+        {"op":"ajouter","ligne":"z","valeurs":{"type":"zone","designation":"R+1"}},
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Gros œuvre","quantite_milliemes":1000,"unite":"forfait","prix_unitaire_centimes":245000,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Rénovation","quantite_milliemes":1000,"unite":"forfait","prix_unitaire_centimes":33750,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"Isolation","quantite_milliemes":12500,"unite":"m2","prix_unitaire_centimes":1975,"taux_tva_centiemes":550}},
+        {"op":"ajouter","ligne":"r","valeurs":{"type":"reserve","designation":"Sous réserve de l’état du support"}}
+      ],
+      "attendu": "303438|53733|357171|2000:245000:49000:1,1000:33750:3375:1,550:24688:1358:1|—"
+    },
+    {
+      "id": "C05",
+      "titre": "un poste et une option de 33,33 € à 10 % : l’option n’entre dans AUCUN total",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"o","valeurs":{"type":"option","designation":"Option","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "3333|333|3666|1000:3333:333:1|1000:3333"
+    },
+    {
+      "id": "C05b",
+      "titre": "le piège : les deux en postes — ce que le lot 2 calculera SUR L’UNION (7 333, pas 3 666 + 3 666 = 7 332)",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Ex-option","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "6666|667|7333|1000:6666:667:2|—"
+    },
+    {
+      "id": "C06",
+      "titre": "100 postes à 0,01 € à 20 % (ligne par ligne : 0 c de TVA)",
+      "operations": [
+        {"op":"ajouter","ligne":"p001","valeurs":{"type":"poste","designation":"Vis 1","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p002","valeurs":{"type":"poste","designation":"Vis 2","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p003","valeurs":{"type":"poste","designation":"Vis 3","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p004","valeurs":{"type":"poste","designation":"Vis 4","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p005","valeurs":{"type":"poste","designation":"Vis 5","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p006","valeurs":{"type":"poste","designation":"Vis 6","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p007","valeurs":{"type":"poste","designation":"Vis 7","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p008","valeurs":{"type":"poste","designation":"Vis 8","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p009","valeurs":{"type":"poste","designation":"Vis 9","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p010","valeurs":{"type":"poste","designation":"Vis 10","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p011","valeurs":{"type":"poste","designation":"Vis 11","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p012","valeurs":{"type":"poste","designation":"Vis 12","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p013","valeurs":{"type":"poste","designation":"Vis 13","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p014","valeurs":{"type":"poste","designation":"Vis 14","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p015","valeurs":{"type":"poste","designation":"Vis 15","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p016","valeurs":{"type":"poste","designation":"Vis 16","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p017","valeurs":{"type":"poste","designation":"Vis 17","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p018","valeurs":{"type":"poste","designation":"Vis 18","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p019","valeurs":{"type":"poste","designation":"Vis 19","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p020","valeurs":{"type":"poste","designation":"Vis 20","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p021","valeurs":{"type":"poste","designation":"Vis 21","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p022","valeurs":{"type":"poste","designation":"Vis 22","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p023","valeurs":{"type":"poste","designation":"Vis 23","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p024","valeurs":{"type":"poste","designation":"Vis 24","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p025","valeurs":{"type":"poste","designation":"Vis 25","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p026","valeurs":{"type":"poste","designation":"Vis 26","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p027","valeurs":{"type":"poste","designation":"Vis 27","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p028","valeurs":{"type":"poste","designation":"Vis 28","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p029","valeurs":{"type":"poste","designation":"Vis 29","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p030","valeurs":{"type":"poste","designation":"Vis 30","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p031","valeurs":{"type":"poste","designation":"Vis 31","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p032","valeurs":{"type":"poste","designation":"Vis 32","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p033","valeurs":{"type":"poste","designation":"Vis 33","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p034","valeurs":{"type":"poste","designation":"Vis 34","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p035","valeurs":{"type":"poste","designation":"Vis 35","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p036","valeurs":{"type":"poste","designation":"Vis 36","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p037","valeurs":{"type":"poste","designation":"Vis 37","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p038","valeurs":{"type":"poste","designation":"Vis 38","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p039","valeurs":{"type":"poste","designation":"Vis 39","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p040","valeurs":{"type":"poste","designation":"Vis 40","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p041","valeurs":{"type":"poste","designation":"Vis 41","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p042","valeurs":{"type":"poste","designation":"Vis 42","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p043","valeurs":{"type":"poste","designation":"Vis 43","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p044","valeurs":{"type":"poste","designation":"Vis 44","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p045","valeurs":{"type":"poste","designation":"Vis 45","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p046","valeurs":{"type":"poste","designation":"Vis 46","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p047","valeurs":{"type":"poste","designation":"Vis 47","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p048","valeurs":{"type":"poste","designation":"Vis 48","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p049","valeurs":{"type":"poste","designation":"Vis 49","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p050","valeurs":{"type":"poste","designation":"Vis 50","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p051","valeurs":{"type":"poste","designation":"Vis 51","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p052","valeurs":{"type":"poste","designation":"Vis 52","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p053","valeurs":{"type":"poste","designation":"Vis 53","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p054","valeurs":{"type":"poste","designation":"Vis 54","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p055","valeurs":{"type":"poste","designation":"Vis 55","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p056","valeurs":{"type":"poste","designation":"Vis 56","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p057","valeurs":{"type":"poste","designation":"Vis 57","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p058","valeurs":{"type":"poste","designation":"Vis 58","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p059","valeurs":{"type":"poste","designation":"Vis 59","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p060","valeurs":{"type":"poste","designation":"Vis 60","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p061","valeurs":{"type":"poste","designation":"Vis 61","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p062","valeurs":{"type":"poste","designation":"Vis 62","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p063","valeurs":{"type":"poste","designation":"Vis 63","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p064","valeurs":{"type":"poste","designation":"Vis 64","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p065","valeurs":{"type":"poste","designation":"Vis 65","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p066","valeurs":{"type":"poste","designation":"Vis 66","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p067","valeurs":{"type":"poste","designation":"Vis 67","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p068","valeurs":{"type":"poste","designation":"Vis 68","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p069","valeurs":{"type":"poste","designation":"Vis 69","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p070","valeurs":{"type":"poste","designation":"Vis 70","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p071","valeurs":{"type":"poste","designation":"Vis 71","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p072","valeurs":{"type":"poste","designation":"Vis 72","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p073","valeurs":{"type":"poste","designation":"Vis 73","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p074","valeurs":{"type":"poste","designation":"Vis 74","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p075","valeurs":{"type":"poste","designation":"Vis 75","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p076","valeurs":{"type":"poste","designation":"Vis 76","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p077","valeurs":{"type":"poste","designation":"Vis 77","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p078","valeurs":{"type":"poste","designation":"Vis 78","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p079","valeurs":{"type":"poste","designation":"Vis 79","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p080","valeurs":{"type":"poste","designation":"Vis 80","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p081","valeurs":{"type":"poste","designation":"Vis 81","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p082","valeurs":{"type":"poste","designation":"Vis 82","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p083","valeurs":{"type":"poste","designation":"Vis 83","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p084","valeurs":{"type":"poste","designation":"Vis 84","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p085","valeurs":{"type":"poste","designation":"Vis 85","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p086","valeurs":{"type":"poste","designation":"Vis 86","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p087","valeurs":{"type":"poste","designation":"Vis 87","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p088","valeurs":{"type":"poste","designation":"Vis 88","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p089","valeurs":{"type":"poste","designation":"Vis 89","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p090","valeurs":{"type":"poste","designation":"Vis 90","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p091","valeurs":{"type":"poste","designation":"Vis 91","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p092","valeurs":{"type":"poste","designation":"Vis 92","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p093","valeurs":{"type":"poste","designation":"Vis 93","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p094","valeurs":{"type":"poste","designation":"Vis 94","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p095","valeurs":{"type":"poste","designation":"Vis 95","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p096","valeurs":{"type":"poste","designation":"Vis 96","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p097","valeurs":{"type":"poste","designation":"Vis 97","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p098","valeurs":{"type":"poste","designation":"Vis 98","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p099","valeurs":{"type":"poste","designation":"Vis 99","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"p100","valeurs":{"type":"poste","designation":"Vis 100","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}}
+      ],
+      "attendu": "100|20|120|2000:100:20:100|—"
+    },
+    {
+      "id": "C07",
+      "titre": "un total AU plafond, en franchise",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Au plafond","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":9999999999,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "9999999999|0|9999999999|0:9999999999:0:1|—"
+    },
+    {
+      "id": "C07b",
+      "titre": "une ligne au-dessus du plafond",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Trop grande","quantite_milliemes":2000,"unite":"u","prix_unitaire_centimes":9999999999,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "REFUS:devis_ligne_total_check"
+    },
+    {
+      "id": "C07c",
+      "titre": "HT sous le plafond, TTC au-dessus (20 %)",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Presque","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":9000000000,"taux_tva_centiemes":2000}}
+      ],
+      "attendu": "REFUS:devis_plafond_check"
+    },
+    {
+      "id": "C07d",
+      "titre": "deux lignes sous le plafond, leur somme au-dessus : refus à la seconde",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Moitié","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":6000000000,"taux_tva_centiemes":0}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Autre moitié","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":6000000000,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "REFUS:devis_plafond_check"
+    },
+    {
+      "id": "C07e",
+      "titre": "quantité et prix au maximum (produit ≈ 1e18, au-delà de 2^53)",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Tout au maximum","quantite_milliemes":99999999,"unite":"u","prix_unitaire_centimes":9999999999,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "REFUS:devis_ligne_total_check"
+    },
+    {
+      "id": "C07f",
+      "titre": "quantité au maximum, prix 0,01 €",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Quantité maximale","quantite_milliemes":99999999,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":2000}}
+      ],
+      "attendu": "100000|20000|120000|2000:100000:20000:1|—"
+    },
+    {
+      "id": "C07g",
+      "titre": "à la borne : 1,351 × 74 019 245,00 € → plafond + 1 c, par l’arrondi",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Un centime de trop","quantite_milliemes":1351,"unite":"u","prix_unitaire_centimes":7401924500,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "REFUS:devis_ligne_total_check"
+    },
+    {
+      "id": "C07h",
+      "titre": "à la borne : 1,001 × 99 900 099,89 € → arrondi AU plafond",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Juste au plafond","quantite_milliemes":1001,"unite":"u","prix_unitaire_centimes":9990009989,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "9999999999|0|9999999999|0:9999999999:0:1|—"
+    },
+    {
+      "id": "C08",
+      "titre": "quantité négative",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Négative","quantite_milliemes":-1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_quantite_check"
+    },
+    {
+      "id": "C08b",
+      "titre": "quantité nulle",
+      "fonctions": [
+        {"nom":"devis_total_ligne","args":[0,100],"attendu":null}
+      ],
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Nulle","quantite_milliemes":0,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_quantite_check"
+    },
+    {
+      "id": "C08c",
+      "titre": "quantité au-delà du maximum",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Trop","quantite_milliemes":100000000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_quantite_check"
+    },
+    {
+      "id": "C09",
+      "titre": "prix nul SANS « Offert »",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Gratuit ?","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":0,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_offert_check"
+    },
+    {
+      "id": "C09b",
+      "titre": "prix nul AVEC « Offert » à 20 %, et un poste de 10 € à 10 % : le taux de l’« Offert » apparaît à base 0",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Offert sans valeur","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":0,"taux_tva_centiemes":2000,"offert":true}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "1000|100|1100|2000:0:0:1,1000:1000:100:1|—"
+    },
+    {
+      "id": "C09c",
+      "titre": "« Offert » sur un prix de 10 € à 10 %, et un poste de 10 € à 10 % : accepté, la valeur est gardée",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Offert valeur 10","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000,"offert":true}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste 10","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "1000|100|1100|1000:1000:100:2|—"
+    },
+    {
+      "id": "C09d",
+      "titre": "la même, « Offert » éteint : le prix revient tout seul",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Offert valeur 10","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000,"offert":true}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste 10","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}},
+        {"op":"modifier","ligne":"a","valeurs":{"offert":false}}
+      ],
+      "attendu": "2000|200|2200|1000:2000:200:2|—"
+    },
+    {
+      "id": "C09e",
+      "titre": "« Offert » dont la VALEUR dépasse le plafond",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Valeur trop grande","quantite_milliemes":99999999,"unite":"u","prix_unitaire_centimes":9999999999,"taux_tva_centiemes":1000,"offert":true}}
+      ],
+      "attendu": "REFUS:devis_ligne_total_check"
+    },
+    {
+      "id": "C10",
+      "titre": "prix négatif (une « remise » en ligne négative)",
+      "fonctions": [
+        {"nom":"devis_tva_de","args":[-6,1000],"attendu":null},
+        {"nom":"devis_total_ligne","args":[1000,-1],"attendu":null}
+      ],
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Remise","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":-1,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_prix_check"
+    },
+    {
+      "id": "C11",
+      "titre": "franchise : tout à 0",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Peinture","quantite_milliemes":2500,"unite":"m2","prix_unitaire_centimes":3333,"taux_tva_centiemes":0}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Petite fourniture","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":5,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "8338|0|8338|0:8338:0:2|—"
+    },
+    {
+      "id": "C12",
+      "titre": "taux 1 960 (l’ancien taux normal)",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Ancien taux","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1960}}
+      ],
+      "attendu": "REFUS:devis_ligne_taux_check"
+    },
+    {
+      "id": "C12b",
+      "titre": "taux 105 sur une ligne",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Outre-mer","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":105}}
+      ],
+      "attendu": "REFUS:devis_ligne_taux_check"
+    },
+    {
+      "id": "C13",
+      "titre": "un titre qui porte un prix",
+      "operations": [
+        {"op":"ajouter","ligne":"z","valeurs":{"type":"zone","designation":"R+1","prix_unitaire_centimes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_forme_check"
+    },
+    {
+      "id": "C14",
+      "titre": "on retire une ligne : le total redescend",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"C","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"retirer","ligne":"b"}
+      ],
+      "attendu": "6666|667|7333|1000:6666:667:2|—"
+    },
+    {
+      "id": "C14b",
+      "titre": "une ligne change de taux : l’ancien taux sort de la ventilation",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":5000,"taux_tva_centiemes":2000}},
+        {"op":"modifier","ligne":"b","valeurs":{"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "8333|833|9166|1000:8333:833:2|—"
+    },
+    {
+      "id": "C14c",
+      "titre": "tout est retiré",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":5000,"taux_tva_centiemes":2000}},
+        {"op":"retirer","ligne":"a"},
+        {"op":"retirer","ligne":"b"}
+      ],
+      "attendu": "0|0|0|—|—"
+    },
+    {
+      "id": "C15",
+      "titre": "56,82 € de l’heure × 1,5 h à 10 % (le taux HT écrit à la main)",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Main-d’œuvre","quantite_milliemes":1500,"unite":"h","prix_unitaire_centimes":5682,"taux_tva_centiemes":1000,"main_oeuvre":true}}
+      ],
+      "attendu": "8523|852|9375|1000:8523:852:1|—"
+    },
+    {
+      "id": "C16",
+      "titre": "la double faute : quantité 0 ET prix 0 sans « Offert » — l’ordre alphabétique nomme offert",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Double faute","quantite_milliemes":0,"unite":"u","prix_unitaire_centimes":0,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_offert_check"
+    },
+    {
+      "id": "C17",
+      "titre": "quantité 3 000 000 000 : la contrainte nommée, jamais un 22003",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Énorme","quantite_milliemes":3000000000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_quantite_check"
+    },
+    {
+      "id": "C18",
+      "titre": "type inconnu",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"remise","designation":"Remise","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_type_check"
+    },
+    {
+      "id": "C19",
+      "titre": "une ligne chiffrée sans taux",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Sans taux","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_forme_check"
+    },
+    {
+      "id": "C20",
+      "titre": "main-d’œuvre au m², 42 €/m² × 17 m² à 10 % : accepté (un prix au m² est un prix forfaitaire)",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Pose de carrelage","quantite_milliemes":17000,"unite":"m2","prix_unitaire_centimes":4200,"taux_tva_centiemes":1000,"main_oeuvre":true}}
+      ],
+      "attendu": "71400|7140|78540|1000:71400:7140:1|—"
+    },
+    {
+      "id": "C21",
+      "titre": "unité « ml »",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Plinthes","quantite_milliemes":1000,"unite":"ml","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_unite_check"
+    },
+    {
+      "id": "C22",
+      "titre": "une désignation faite d’un U+200B",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"\u200b","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}}
+      ],
+      "attendu": "REFUS:devis_ligne_designation_check"
+    },
+    {
+      "id": "C23",
+      "titre": "des surfaces sur un poste",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Sol","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000,"surface_sol_milliemes":17000}}
+      ],
+      "attendu": "REFUS:devis_ligne_forme_check"
+    },
+    {
+      "id": "C24",
+      "titre": "une surface de 0 sur une pièce",
+      "operations": [
+        {"op":"ajouter","ligne":"s","valeurs":{"type":"piece","designation":"Cuisine","surface_sol_milliemes":0}}
+      ],
+      "attendu": "REFUS:devis_ligne_surfaces_check"
+    }
+  ]
+}

@@ -229,17 +229,27 @@ if (E && M && D) {
 
   {
     const src = sansCommentaires(lire('src/lib/emetteur.js'));
-    const imports = [...src.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    /* Toutes les formes, l'import NU compris (`import './x.js';`, qui ne
+       nomme rien et charge quand même le fichier) : relecture des étapes
+       0-2 du lot 1, I3. */
+    const imports = [...src.matchAll(/\bfrom\s+['"]([^'"]+)['"]|\bimport\s*['"]([^'"]+)['"]/g)].map((m) => m[1] || m[2]);
     /* `pieces-justificatives.js` s'ajoute aux quatre du cahier : c'est là que
        vit le NOM d'une assurance, et `verifier-pieces` refuse qu'on le
        recopie. Il n'importe lui-même que `lib/metiers.js` et le catalogue,
        qui sont des données. */
     /* `tva.js` (20/10/2026) : la forme d'un n° de TVA, pour ne pas imprimer
        une preuve mal formée. Il n'importe RIEN — `verifier-tva` le tient. */
+    /* `centimes.js` (21/10/2026, lot 1 du module devis) : `versCentimes()`
+       et `centimesLisibles()` y ont DÉMÉNAGÉ, et `emetteur.js` les importe
+       et les réexporte. Un fichier permis doit être pur : celui-ci n'importe
+       RIEN, et la condition ci-dessous le vérifie dans la même ligne (une
+       liste qui s'allonge sans vérifier ce qu'elle admet ne garde plus rien). */
     const permis = ['./entreprise.js', '../data/formes-juridiques.js', './siret.js', '../data/mediateurs.js',
-      '../data/pieces-justificatives.js', './tva.js'];
+      '../data/pieces-justificatives.js', './tva.js', './centimes.js'];
+    const centimesPur = !/\bfrom\s+['"]|\bimport\s*['"(]|^\s*import\b|\brequire\s*\(/m.test(sansCommentaires(lire('src/lib/centimes.js')));
     verifier('`emetteur.js` n’importe que des fichiers purs, et seulement ceux-là',
-      imports.length > 0 && imports.every((i) => permis.includes(i)) && !/\brequire\(|import\(/.test(src),
+      imports.length > 0 && imports.every((i) => permis.includes(i)) && !/\brequire\(|import\(/.test(src)
+      && centimesPur,
       `Trouvés : ${imports.join(', ')}. Jamais \`erreurs.js\`, \`theme.js\` ni rien qui charge React `
       + 'Native.');
     const sansImport = ['src/data/mediateurs.js', 'src/data/emetteur-demo.js']

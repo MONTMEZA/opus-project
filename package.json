@@ -92,7 +92,8 @@
     "verifier-pro": "node scripts/verifier-pro.mjs",
     "verifier-siret": "node scripts/verifier-siret.mjs",
     "verifier-tarifs": "node scripts/verifier-tarifs.mjs",
-    "verifier-tva": "node scripts/verifier-tva.mjs"
+    "verifier-tva": "node scripts/verifier-tva.mjs",
+    "verifier-devis": "node scripts/verifier-devis.mjs"
   },
   "private": true,
   "devDependencies": {
