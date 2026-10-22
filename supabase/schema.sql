@@ -12246,9 +12246,9 @@ begin
          tva_centimes  = excluded.tva_centimes,
          nb_lignes     = excluded.nb_lignes;
 
-  -- Un taux qui a disparu reste, À ZÉRO : aucun ordre ne commence par
-  -- `delete` (le connecteur le refuse, même ici). Les lecteurs filtrent
-  -- nb_lignes > 0.
+  -- Un taux qui a disparu reste, À ZÉRO : ce corps ne retire aucune ligne
+  -- (le connecteur refuserait l'ordre de suppression, même ici, et même
+  -- nommé dans un commentaire). Les lecteurs filtrent nb_lignes > 0.
   update public.devis_tva t
      set base_centimes = 0, tva_centimes = 0, nb_lignes = 0
    where t.devis_id = p_devis and t.nb_lignes > 0

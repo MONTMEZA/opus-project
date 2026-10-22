@@ -947,8 +947,22 @@ update public.devis set lieu_code_postal = E'13\u00a0410', generation = 3 where 
 select lieu_code_postal as cp_nbsp_attendu_13410 from public.devis where id = :DX;
 update public.devis set lieu_code_postal = E'13\u202f410', generation = 4 where id = :DX;
 select lieu_code_postal as cp_espace_fine_attendu_13410 from public.devis where id = :DX;
+\echo '-- la tabulation VERTICALE est retirée : 13410 (relecture de la migration, 22/10)'
+-- Pourquoi ce témoin, et le suivant : la classe du code postal est la SEULE
+-- ligne de schema.sql écrite avec deux barres obliques inverses. Qu'une
+-- barre se perde en route — un transport, un copier-coller — et la classe
+-- contiendrait la LETTRE v au lieu de la tabulation verticale. Les espaces
+-- ci-dessus passeraient pareil ; ces deux cas, non.
+update public.devis set lieu_code_postal = E'13\x0b410', generation = 5 where id = :DX;
+select lieu_code_postal as cp_tab_verticale_attendu_13410 from public.devis where id = :DX;
 \echo '-- U+2002 n est PAS dans la liste (JavaScript non plus) → devis_lieu_code_postal_check'
-update public.devis set lieu_code_postal = E'13\u2002410', generation = 5 where id = :DX;
+update public.devis set lieu_code_postal = E'13\u2002410', generation = 6 where id = :DX;
+rollback;
+
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.devis (id, pro_id, generation) values (:DX, :A, 1);
+\echo '-- la LETTRE v n est pas un blanc : 13v410 → devis_lieu_code_postal_check'
+update public.devis set lieu_code_postal = '13v410', generation = 2 where id = :DX;
 rollback;
 
 
