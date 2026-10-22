@@ -80,6 +80,12 @@ import FeuilleRecherche from './components/FeuilleRecherche';
 import FenetreAgent from './components/FenetreAgent';
 import FicheClient from './components/FicheClient';
 import MonEntreprise from './components/MonEntreprise';
+/* Le chiffrage d'un devis (lot 1) : la liste, la saisie, et les deux façons
+   d'ouvrir un brouillon pré-rempli (depuis une fiche, depuis une demande). */
+import DevisScreen from './screens/DevisScreen';
+import SaisieDevisScreen from './screens/SaisieDevisScreen';
+import { devisDepuisClient, devisDepuisDemande, trierDevis } from './lib/devis';
+import { dateDeDemandeDemo } from './data/devis-demo';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
 } from './lib/filtre-fil';
@@ -2120,6 +2126,8 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * > se voir refuser par un contrôle s'il ne sait pas où il mène.
    */
   const ouvrirNotification = async (n) => {
+    /* Une notification ouverte depuis la saisie d'un devis passe par sa garde. */
+    if (!(await quitterSaisieDevis())) return;
     readNotification(n.id);
     const ou = destinationNotif(n);
 
@@ -2713,6 +2721,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * `message` : ce que la nouvelle instance doit afficher en arrivant.
    */
   const deconnexion = async (message = null) => {
+    /* Rien de tapé dans un devis ne se perd sans le dire : la garde AVANT de
+       fermer la session. */
+    if (!(await quitterSaisieDevis())) return;
     try { await api.signOut(); } catch (e) { /* rien à faire de plus */ }
     /* Seul un TEXTE passe : un événement d'appui glissé là par erreur
        ferait planter le bandeau de l'instance suivante. */
@@ -3355,9 +3366,17 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     if (clientsEtat === 'vide') chargerClients();
   };
 
-  const ouvrirFicheClient = (fiche = null, depuis = null) => {
+  /* `apres` : ce qu'il faut faire de la fiche une fois CRÉÉE — la saisie d'un
+     devis s'en sert (« Pour qui ? → Nouveau client » : la fiche créée devient
+     le client du devis). Une référence, pas un état : ce n'est pas quelque
+     chose qu'on affiche. Et la fiche ouverte depuis la saisie ne propose ni
+     « Ses devis » ni « Faire un devis » : quitter la saisie ne se fait que
+     par sa garde. */
+  const apresFicheClient = useRef(null);
+  const ouvrirFicheClient = (fiche = null, depuis = null, apres = null) => {
+    apresFicheClient.current = apres;
     setCleFiche((k) => k + 1);
-    setFicheClient({ fiche, depuis });
+    setFicheClient({ fiche, depuis, depuisLaSaisie: !!apres });
     /* On peut arriver ici sans être passé par le carnet — depuis une
        demande reçue. L'avertissement « vous avez déjà un client de ce
        nom » a besoin de la liste : on la demande, et son absence ne
@@ -3381,6 +3400,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       const pose = await api.enregistrerClient(valeurs, id);
       rangerClient(pose);
       setFicheClient(null);
+      const apres = apresFicheClient.current;
+      apresFicheClient.current = null;
+      if (apres && !id) apres(pose);
       showBanner(id
         ? `La fiche de ${pose.nom} est à jour.`
         : `${pose.nom} est dans votre carnet.`);
@@ -3429,6 +3451,218 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   const ajouterClientDepuisDemande = (demande) => {
     ouvrirFicheClient(null, clientDepuisDemande(demande));
   };
+
+  /* ================================================================== */
+  /*  LES DEVIS — lot 1 du module devis (22/10/2026)                     */
+  /*                                                                     */
+  /*  Chargés À LA DEMANDE, à l'ouverture de « Mes devis » ou d'une      */
+  /*  saisie, jamais au démarrage : le carnet de clients a montré la     */
+  /*  voie. Et les crochets sont ICI, avant les deux sorties anticipées. */
+  /* ================================================================== */
+  const [devis, setDevis] = useState([]);
+  const [devisEtat, setDevisEtat] = useState('vide');
+  const [devisTronque, setDevisTronque] = useState(false);
+  const [devisEnRetard, setDevisEnRetard] = useState(false);
+  /* LA LISTE A-T-ELLE DÉJÀ ÉTÉ LUE, une fois au moins ? Une relecture ratée
+     (au retour d'un devis, sur un chantier où le réseau va et vient) ne doit
+     pas VIDER l'écran de travail : les cartes déjà lues restent, sous une
+     rangée « Liste non actualisée — Réessayer ». « Lecture impossible »
+     plein écran, seulement quand rien n'a jamais été lu (relecture « écran »
+     des étapes 4 à 7, B3). */
+  const [devisLus, setDevisLus] = useState(false);
+  /* Le devis ouvert dans la saisie : `{ devisId }` pour un brouillon en
+     base, `{ valeurs, demande, urgence, demandeSource, client }` pour un
+     brouillon neuf pré-rempli. */
+  const [devisOuvert, setDevisOuvert] = useState(null);
+  /* UN COMPTEUR qui change à chaque devis ouvert — jamais l'identifiant du
+     devis : rouvrir le même devis doit remonter l'écran, avec sa file. */
+  const [cleDevis, setCleDevis] = useState(0);
+  /* D'où l'on vient, pour y revenir : la liste, le carnet, « Pour moi ». */
+  const [origineDevis, setOrigineDevis] = useState('devis');
+  /* Le titre de la pièce quand une carte de ligne est ouverte (le titre du
+     retour). */
+  const [titreCarteDevis, setTitreCarteDevis] = useState(null);
+  /* LE RÉGIME DE TVA, À CINQ ÉTATS : `undefined` (pas encore lu),
+     `{ chargement }`, `{ echec }`, `'franchise'`, `'reel'`, ou `null` (lu,
+     et non déclaré). Un échec n'est JAMAIS « non déclaré ». */
+  const [monRegime, setMonRegime] = useState(undefined);
+  const generationRegime = useRef(0);
+  /* LA GARDE DE SORTIE : ce que la saisie y inscrit (`sortir`,
+     `enregistrerTout`) pour qu'aucune porte ne la démonte sans avoir lu ce
+     qui est tapé. */
+  const gardeSortie = useRef(null);
+
+  const chargerDevis = async () => {
+    setDevisEtat('chargement');
+    try {
+      const r = await api.mesDevis();
+      setDevis(r.devis || []);
+      setDevisTronque(!!r.tronque);
+      setDevisEnRetard(false);
+      setDevisLus(true);
+      setDevisEtat('ok');
+    } catch (e) {
+      /* « Lecture impossible », JAMAIS « Aucun devis » : un travail qui n'a
+         pas pu se faire ne ressemble pas à un travail fait. */
+      setDevisEnRetard(!!(e && e.baseEnRetard));
+      setDevisEtat('echec');
+      /* La phrase du réseau ne promet « ce qui est affiché reste lisible »
+         que si une liste a DÉJÀ été lue — sinon, il n'y a rien d'affiché. */
+      showErreur(messageClair(e, "Vos devis n'ont pas pu être lus", { rienAffiche: !devisLus }));
+    }
+  };
+
+  /**
+   * LE RÉGIME DE TVA — lu par `monRegime()`, avec un délai et une
+   * génération (le modèle de `mesTarifs`) : une lecture lente qui revient
+   * après un enregistrement dans « Mon entreprise » ne peut plus écraser ce
+   * qui vient d'y être déclaré. `discret` : une relecture qui ne fait pas
+   * repasser l'écran par « en lecture » quand une valeur est déjà connue.
+   */
+  const lireRegime = useCallback(({ discret = false } = {}) => {
+    generationRegime.current += 1;
+    const g = generationRegime.current;
+    if (!discret) setMonRegime({ chargement: true });
+    const lecture = api.monRegime();
+    lecture.then((r) => { if (generationRegime.current === g) setMonRegime(r == null ? null : r); }).catch(() => {});
+    avecDelai(lecture, 8000, 'La lecture de votre régime de TVA')
+      .catch(() => { if (generationRegime.current === g) setMonRegime({ echec: true }); });
+  }, []);
+
+  /* CE QUE « MON ENTREPRISE » VIENT DE LIRE OU D'ÉCRIRE — `surEmetteur`, sur
+     le modèle de `recevoirMesTarifs`. Sans lui, l'artisan envoyé dans « Mon
+     entreprise » par le bandeau du régime y déclarait son régime… et
+     retrouvait le bandeau. */
+  const recevoirEmetteur = useCallback((emetteur) => {
+    generationRegime.current += 1;
+    setMonRegime(emetteur && emetteur.regime_tva != null ? emetteur.regime_tva : null);
+  }, []);
+
+  const ouvrirMesDevis = () => {
+    setScreen('devis');
+    if (devisEtat === 'vide' || devisEtat === 'echec') chargerDevis();
+    lireRegime({ discret: typeof monRegime === 'string' });
+  };
+
+  /**
+   * UNE SEULE PORTE POUR OUVRIR UN DEVIS — la liste, la fiche d'un client et
+   * « Pour moi » l'appellent toutes. Deux façons d'arriver au même écran
+   * doivent faire exactement le même travail (la règle de
+   * `changerOngletDecouvrir`) : une clé neuve, l'origine retenue, le régime
+   * relu.
+   *
+   * `quoi` : un devis en base (`{ id }`), ou un brouillon neuf
+   * (`{ valeurs, demande, urgence, demandeSource, client }`).
+   */
+  const ouvrirDevis = async (quoi, depuis = 'devis') => {
+    if (!quoi) return;
+    /* UNE SIXIÈME PORTE, trouvée par la relecture « écran » des étapes 4 à 7
+       (bloquant A1) : depuis la saisie, « Nouveau client » → un nom déjà
+       pris → « Ouvrir sa fiche » → « Faire un devis » changeait la clé de
+       la saisie SANS passer par la garde, et deux lignes incomplètes
+       disparaissaient sans un mot. La garde est donc ICI, dans la seule
+       porte qui ouvre un devis : quel que soit le chemin, une saisie en
+       cours ne se démonte pas sans avoir été lue. `verifier-devis` (E-28)
+       exige que toute fonction qui change la clé ou pose la saisie l'attende
+       d'abord — la propriété, plus une liste de noms. */
+    if (!(await quitterSaisieDevis())) return;
+    setOrigineDevis(depuis);
+    setCleDevis((k) => k + 1);
+    setTitreCarteDevis(null);
+    setDevisOuvert(quoi.id ? { devisId: quoi.id } : { ...quoi, devisId: null });
+    setScreen('devisSaisie');
+    lireRegime({ discret: typeof monRegime === 'string' });
+  };
+
+  /** Une seule porte pour RANGER un devis dans « Mes devis » — le modèle de
+   *  `rangerClient`. `retire` : il n'existe plus. */
+  const rangerDevis = useCallback((d, { retire = false } = {}) => setDevis((liste) => {
+    const autres = liste.filter((x) => String(x.id) !== String(d.id));
+    if (retire) return autres;
+    const avant = liste.find((x) => String(x.id) === String(d.id)) || {};
+    /* L'heure de la BASE quand on la connaît (les totaux relus la portent) ;
+       sinon celle du téléphone, jusqu'à la prochaine lecture de la liste. */
+    return trierDevis([{ ...avant, ...d, modifieLe: d.modifieLe || new Date().toISOString() }, ...autres]);
+  }), []);
+
+  /* Revenir d'où l'on vient — APRÈS la garde. */
+  const revenirDuDevis = () => {
+    setTitreCarteDevis(null);
+    if (origineDevis === 'clients') setScreen('clients');
+    else if (origineDevis === 'decouvrir') setScreen('decouvrir');
+    else {
+      setScreen('devis');
+      /* La liste est relue : ce que la base a gardé fait foi (une écriture
+         peut encore finir derrière nous). */
+      if (devisEtat !== 'chargement') chargerDevis();
+    }
+  };
+
+  /**
+   * LA GARDE DE SORTIE — UNE seule porte pour quitter la saisie d'un devis.
+   *
+   * Le retour, la barre du bas, la cloche, l'ouverture d'une notification
+   * et la déconnexion passent TOUS par elle quand l'écran est la saisie :
+   * chaque changement d'écran démonte le bloc entier (`key={screen}`), et un
+   * texte qui n'est que dans un champ démonté est perdu. Elle rend `true`
+   * quand on peut partir : tout est en base, ou l'artisan a choisi de
+   * quitter sans ce qui n'a pas pu l'être. `parLeRetour` : une carte de
+   * ligne ouverte se FERME (elle s'enregistre) au lieu de quitter l'écran.
+   */
+  const quitterSaisieDevis = async ({ parLeRetour = false } = {}) => {
+    if (screen !== 'devisSaisie' || !gardeSortie.current) return true;
+    return gardeSortie.current.sortir({ parLeRetour });
+  };
+
+  /* La saisie s'inscrit ici (et se désinscrit en partant). */
+  const inscrireGarde = useCallback((g) => { gardeSortie.current = g; }, []);
+
+  /* Un brouillon supprimé depuis la saisie : il sort de la liste, et l'on
+     revient d'où l'on venait — SANS la garde, il n'y a plus rien à garder. */
+  const devisSupprime = (id) => {
+    rangerDevis({ id }, { retire: true });
+    showBanner('Le brouillon a été supprimé.');
+    revenirDuDevis();
+  };
+
+  /** « Faire un devis » sur une demande ou une urgence acceptée : un
+   *  brouillon NEUF (la description, le lien d'origine, ni client ni lieu),
+   *  ou celui qu'on reprend. */
+  const faireDevisDepuisDemande = (demande, { devisId = null } = {}) => {
+    if (devisId) { ouvrirDevis({ id: devisId }, 'decouvrir'); return; }
+    const valeurs = devisDepuisDemande(demande);
+    if (!valeurs) return;
+    const date = demande.createdAt || (api.mode === 'demo' ? dateDeDemandeDemo(demande.id) : null);
+    ouvrirDevis({
+      valeurs,
+      demande: demande.genre === 'devis' ? { createdAt: date, budget: demande.budget || null } : null,
+      urgence: demande.genre === 'sos' ? { createdAt: date } : null,
+      demandeSource: demande,
+    }, 'decouvrir');
+  };
+
+  /* Depuis la fiche d'un client : la fiche se FERME, puis le devis s'ouvre —
+     jamais deux fenêtres empilées. */
+  const faireDevisDepuisFiche = (fiche) => {
+    setFicheClient(null);
+    ouvrirDevis({ valeurs: devisDepuisClient(fiche), client: { nom: fiche.nom, ville: fiche.ville || null } }, screen);
+  };
+  const ouvrirDevisDepuisFiche = (d) => {
+    setFicheClient(null);
+    ouvrirDevis({ id: d.id }, screen);
+  };
+  /* LA FICHE D'UN AUTRE CLIENT, OUVERTE DEPUIS LA SAISIE (l'avertissement
+     « vous avez déjà un client de ce nom ») : elle hérite de la saisie — ni
+     « Ses devis » ni « Faire un devis », mais « Choisir ce client pour ce
+     devis », qui fait ce que le geste cherchait. La référence se lit au
+     moment de l'appui, jamais pendant le rendu. */
+  const choisirFichePourLeDevis = (f) => {
+    const apres = apresFicheClient.current;
+    apresFicheClient.current = null;
+    setFicheClient(null);
+    if (apres && f) apres(f);
+  };
+  const ouvrirAutreFiche = (autre) => ouvrirFicheClient(autre, null, apresFicheClient.current);
 
   const nommerMonAgent = async (nom) => {
     const pose = await api.nommerAgent(nom);
@@ -3618,6 +3852,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     || screen === 'mesPublications' || screen === 'gererPortfolio'
     || screen === 'confidentialite' || screen === 'legal' || screen === 'admin'
     || screen === 'clients' || screen === 'passerPro'
+    || screen === 'devis' || screen === 'devisSaisie'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'publication' ? 'Publication'
@@ -3631,6 +3866,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     : screen === 'confidentialite' ? 'Confidentialité et sécurité'
     : screen === 'admin' ? 'Administration'
     : screen === 'clients' ? 'Mes clients'
+    : screen === 'devis' ? 'Mes devis'
+    /* En saisie, le titre de la PIÈCE quand une carte de ligne est ouverte :
+       on ne voit plus les lignes voisines, le titre dit où l'on est. */
+    : screen === 'devisSaisie'
+    ? (titreCarteDevis || (devisOuvert && devisOuvert.devisId ? 'Devis' : 'Nouveau devis'))
     : screen === 'passerPro' ? 'Passer en compte professionnel'
     : screen === 'legal' ? (TITRES_LEGAUX[texteLegal] || 'Informations légales')
     : screen === 'creer' ? 'Publier'
@@ -3648,6 +3888,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         <BackBar
           title={backTitle}
           onBack={() => {
+            /* LA SAISIE D'UN DEVIS PASSE PAR SA GARDE : une carte ouverte se
+               ferme (elle s'enregistre) ; sinon tout est lu et envoyé avant
+               le démontage, et ce qui n'a pas pu l'être se DIT. */
+            if (screen === 'devisSaisie') {
+              quitterSaisieDevis({ parLeRetour: true }).then((ok) => { if (ok) revenirDuDevis(); });
+              return;
+            }
+            if (screen === 'devis') { setScreen('profil'); return; }
             /* On revient d'où l'on vient : la cloche. Repartir sur le
                fil ferait perdre la liste qu'on était en train de lire. */
             if (screen === 'publication') { setPostCible(null); setScreen('notifications'); }
@@ -3663,7 +3911,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       ) : (
         <TopBrand
           unreadCount={unreadCount}
-          onBell={() => setScreen('notifications')}
+          onBell={() => quitterSaisieDevis().then((ok) => { if (ok) setScreen('notifications'); })}
           /* La loupe n'apparaît QUE sur le fil : c'est le fil qu'elle
              filtre. Sur Découvrir, Messages ou Profil, elle ouvrirait une
              feuille qui ne changerait rien à ce qu'on regarde. */
@@ -3854,6 +4102,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                            s'ouvre PAR-DESSUS cette page, pré-rempli, et on
                            revient ici en le fermant. */
                         onAjouterClient={ajouterClientDepuisDemande}
+                        /* « Faire un devis » sur une demande acceptée : la
+                           MÊME porte que les autres (`ouvrirDevis`). */
+                        onFaireDevis={canPublish ? faireDevisDepuisDemande : null}
                         onReessayer={() => chargerDemandesRecues()}
                         onRepondre={repondreDemandeRecue}
                         onAppeler={appeler}
@@ -4088,6 +4339,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             /* Un particulier n'a pas de clients : la rangée n'existe pas
                pour lui (la règle du §3 appliquée à l'écran). */
             onClients={canPublish ? ouvrirCarnet : null}
+            /* « Mes devis » : un particulier n'en écrit pas, la rangée
+               n'existe pas pour lui. */
+            onDevis={canPublish ? ouvrirMesDevis : null}
             /* « Mon entreprise », sous « Mes clients » : un particulier n'a
                pas d'entreprise, la rangée n'existe pas pour lui. Une flèche,
                pour que l'événement d'appui ne devienne pas une ancre. */
@@ -4144,6 +4398,40 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onRecharger={chargerClients}
             onOuvrir={(c) => ouvrirFicheClient(c)}
             onNouveau={() => ouvrirFicheClient(null)}
+          />
+        )}
+
+        {screen === 'devis' && (
+          <DevisScreen
+            devis={devis}
+            etat={devisEtat}
+            lus={devisLus}
+            tronque={devisTronque}
+            enRetard={devisEnRetard}
+            regime={monRegime}
+            onRecharger={chargerDevis}
+            onOuvrir={(id) => ouvrirDevis({ id }, 'devis')}
+            onNouveau={() => ouvrirDevis({ valeurs: { source: 'manuelle' } }, 'devis')}
+          />
+        )}
+
+        {screen === 'devisSaisie' && !!devisOuvert && (
+          <SaisieDevisScreen
+            key={`devis-${cleDevis}`}
+            ouverture={devisOuvert}
+            regime={monRegime}
+            tarifs={mesTarifs}
+            clients={clients}
+            clientsEtat={clientsEtat}
+            onGarde={inscrireGarde}
+            onRelireRegime={() => lireRegime()}
+            onMonEntreprise={(section) => ouvrirMonEntreprise(section)}
+            onChargerClients={chargerClients}
+            onNouveauClient={(depuis, apres) => ouvrirFicheClient(null, depuis, apres)}
+            onCarte={setTitreCarteDevis}
+            onRanger={rangerDevis}
+            onSupprime={devisSupprime}
+            onErreur={showErreur}
           />
         )}
 
@@ -4233,7 +4521,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           messages: messagesNonLus > 0,
         }}
         onLayout={(e) => setNavHeight(e.nativeEvent.layout.height)}
-        onNavigate={(key) => {
+        onNavigate={async (key) => {
+          /* La saisie d'un devis ne se démonte pas sans sa garde. */
+          if (!(await quitterSaisieDevis())) return;
           setScreen(key);
           setActiveConvId(null);
           /* Une seule fois par session : le droit d'administrer ne change
@@ -4292,11 +4582,19 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           fiche={ficheClient.fiche}
           depuis={ficheClient.depuis}
           tousLesClients={clients}
-          onFermer={() => setFicheClient(null)}
+          onFermer={() => { apresFicheClient.current = null; setFicheClient(null); }}
           onEnregistrer={enregistrerFicheClient}
           onArchiver={archiverFicheClient}
           onSupprimer={supprimerFicheClient}
-          onOuvrirAutre={(autre) => ouvrirFicheClient(autre)}
+          /* L'autre fiche HÉRITE de la saisie (`apres`) : ouverte depuis
+             elle, elle n'offre ni « Ses devis » ni « Faire un devis ». */
+          onOuvrirAutre={ouvrirAutreFiche}
+          /* « Ses devis » et « Faire un devis » (lot 1) — jamais depuis la
+             saisie d'un devis : la quitter ne se fait que par sa garde. */
+          lireSesDevis={canPublish && !ficheClient.depuisLaSaisie ? api.devisDuClient : null}
+          onOuvrirDevis={canPublish && !ficheClient.depuisLaSaisie ? ouvrirDevisDepuisFiche : null}
+          onFaireDevis={canPublish && !ficheClient.depuisLaSaisie ? faireDevisDepuisFiche : null}
+          onChoisirPourLeDevis={ficheClient.depuisLaSaisie && !!ficheClient.fiche ? choisirFichePourLeDevis : null}
         />
       )}
 
@@ -4330,6 +4628,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
              corrige dès que « Mon entreprise » les a lus. */
           etatSos={etatSosDeMaFiche}
           onTarifs={recevoirMesTarifs}
+          /* Lot 1 du devis : la fiche lue ou enregistrée remonte, et avec
+             elle le régime de TVA de la saisie — sans recharger. */
+          surEmetteur={recevoirEmetteur}
         />
       )}
 

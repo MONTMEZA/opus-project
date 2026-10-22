@@ -62,6 +62,11 @@
  */
 const TEXTE_TROP_LONG = 'un de vos textes dépasse la longueur prévue : le formulaire indique la '
   + 'limite de chaque champ.';
+/* Une valeur que CETTE version de l'application n'envoie jamais : la
+   contrainte existe, c'est l'envoi qui ne vient pas d'ici. La piste juste
+   est la mise à jour, pas le schéma. */
+const APPLICATION_EN_RETARD = 'la base a reçu une valeur que cette version d’Opus n’envoie jamais : mettez '
+  + 'l’application à jour, puis réessayez. Rien n’a été enregistré.';
 export const MESSAGES_CONTRAINTE = Object.freeze({
   /* --- « Mon entreprise » pour les devis : section 46 de `schema.sql` --- */
   emetteur_denomination_ei_check: 'votre nom d’entrepreneur individuel s’écrit avec votre nom suivi '
@@ -146,6 +151,115 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   client_notes_check: TEXTE_TROP_LONG,
   client_adresse_check: TEXTE_TROP_LONG,
   client_ville_check: TEXTE_TROP_LONG,
+
+  /* --- Le chiffrage d'un devis : section 49 (lot 1 du module devis) ---
+     LES VINGT-TROIS, et pas seulement celles qu'on tape. L'écran refuse
+     AVANT d'envoyer (`validerLigne`, `validerDevis`, dans `devis.js`, avec
+     les mêmes noms) : ces phrases sortent donc d'une version en retard,
+     d'un client modifié — ou de la base qui voit ce que l'écran ne voit
+     pas, comme le plafond d'un devis atteint par la somme de lignes toutes
+     recevables. Celles que l'application n'envoie JAMAIS (la source, le
+     statut, les totaux, le type d'une ligne, la ventilation qu'aucun client
+     n'écrit) disent « mettez Opus à jour », et surtout pas « schema.sql n'a
+     pas été rejoué » : la contrainte existe, c'est la valeur reçue qui ne
+     vient pas de cette version. `verifier-devis` compare cette liste aux
+     contraintes de la section 49, dans les deux sens. */
+  devis_delai_check: TEXTE_TROP_LONG,
+  devis_lieu_adresse_check: TEXTE_TROP_LONG,
+  devis_lieu_code_postal_check: 'un code postal fait cinq chiffres.',
+  devis_lieu_ville_check: TEXTE_TROP_LONG,
+  devis_objet_check: TEXTE_TROP_LONG,
+  devis_plafond_check: 'ce devis dépasserait 99\u00a0999\u00a0999,99\u00a0€ : il y a sans doute un zéro de trop dans '
+    + 'une ligne. Rien n’a été enregistré pour cette ligne.',
+  /* LES DEUX BORNES, et le moyen de ne pas en mettre : « au plus 5 % »
+     seul serait FAUX pour un « 0 » tapé, que la base refuse aussi (la
+     retenue va de 0,01 % à 5 %). Sans retenue, le champ reste vide —
+     relecture des étapes 0-2 du lot 1, mineur 9. */
+  devis_retenue_check: 'une retenue de garantie s’écrit entre 0,01\u00a0% et 5\u00a0% (loi n°\u00a071-584 du 16/07/1971, '
+    + 'art. 1er). Si vous n’en prévoyez pas, laissez le champ vide.',
+  devis_source_check: APPLICATION_EN_RETARD,
+  devis_statut_check: APPLICATION_EN_RETARD,
+  devis_totaux_check: APPLICATION_EN_RETARD,
+  devis_ligne_designation_check: 'écrivez ce que comprend cette ligne (2\u00a0000 caractères au plus).',
+  devis_ligne_forme_check: 'une ligne chiffrée a une quantité, une unité, un prix et un taux de TVA ; un titre ou '
+    + 'une réserve n’en a pas.',
+  devis_ligne_offert_check: 'un prix de 0 s’écrit avec l’interrupteur « Offert » : sinon, écrivez le prix.',
+  devis_ligne_prix_check: 'un prix ne peut pas être négatif ; au-delà de 99\u00a0999\u00a0999,99\u00a0€, il y a un zéro '
+    + 'de trop.',
+  devis_ligne_quantite_check: 'une quantité est plus grande que zéro, et au plus 99\u00a0999,999.',
+  devis_ligne_surfaces_check: 'une surface est plus grande que zéro, et au plus 99\u00a0999,999\u00a0m².',
+  devis_ligne_taux_check: 'choisissez un taux de TVA de la liste : 20\u00a0%, 10\u00a0% ou 5,5\u00a0% (aucun en '
+    + 'franchise).',
+  devis_ligne_total_check: 'le total de cette ligne (ou la valeur offerte) dépasse 99\u00a0999\u00a0999,99\u00a0€ : il '
+    + 'y a sans doute un zéro de trop dans la quantité ou le prix.',
+  devis_ligne_type_check: APPLICATION_EN_RETARD,
+  devis_ligne_unite_check: 'choisissez une unité dans la liste.',
+  devis_tva_arrondi_check: APPLICATION_EN_RETARD,
+  devis_tva_nb_check: APPLICATION_EN_RETARD,
+  devis_tva_taux_check: APPLICATION_EN_RETARD,
+});
+
+/**
+ * LES REFUS QUE LA BASE ÉCRIT ELLE-MÊME POUR UN DEVIS (section 49.6 de
+ * `schema.sql`), AU MOT PRÈS — OP013 à OP017.
+ *
+ * `messageClair` rend la phrase de la base TELLE QUELLE (un code `OP…` porte
+ * déjà son français) : pour la vraie base, ces copies ne servent à rien.
+ * Elles servent à la DÉMONSTRATION (`src/data/devis-demo.js`), qui doit
+ * refuser avec les mots exacts de la base — une démonstration plus aimable
+ * que le serveur masquerait ce que l'artisan rencontrera pour de vrai (la
+ * première règle de CLAUDE.md). Deux écritures d'une même phrase ne valent
+ * que tenues ensemble : `verifier-devis` les compare à `schema.sql`, octet
+ * pour octet (les `''` du SQL y deviennent `'`, et le `%` d'OP017 le
+ * plafond écrit à côté, 20).
+ *
+ * Les apostrophes sont DROITES ici, contrairement au reste de ce fichier :
+ * ce sont celles que la base écrit.
+ */
+export const REFUS_DEVIS = Object.freeze({
+  OP013_client: "Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.",
+  OP013_demande: "Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres "
+    + 'demandes.',
+  OP013_urgence: "Cette urgence ne vous a pas été adressée : un devis ne se rattache qu'à vos propres urgences.",
+  OP014: 'Un devis porte au plus 500 lignes : celui-ci est plein. Commencez-en un second, ou regroupez des lignes.',
+  OP015_devis: 'Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. '
+    + "Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est "
+    + "enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.",
+  OP015_ligne: 'Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. '
+    + "Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui "
+    + "est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.",
+  OP016_devis: "Cette version d'Opus n'envoie pas de numéro d'écriture valable pour ce devis : rien n'a été "
+    + "enregistré. Mettez l'application à jour, puis réessayez.",
+  OP016_ligne: "Cette version d'Opus n'envoie pas de numéro d'écriture valable pour cette ligne : rien n'a été "
+    + "enregistré. Mettez l'application à jour, puis réessayez.",
+  OP017_demande: "Vous avez déjà 20 devis pour cette demande : supprimez un brouillon dont vous n'avez plus besoin "
+    + "avant d'en commencer un autre.",
+  OP017_urgence: "Vous avez déjà 20 devis pour cette urgence : supprimez un brouillon dont vous n'avez plus besoin "
+    + "avant d'en commencer un autre.",
+});
+
+/**
+ * UNE SUPPRESSION QUI N'A RIEN SUPPRIMÉ PARCE QU'UN AUTRE APPAREIL A ÉCRIT
+ * PLUS TARD — et ça, ce n'est PAS la base qui l'écrit.
+ *
+ * Une suppression de devis ou de ligne part avec une CONDITION (« si son
+ * numéro d'écriture est plus ancien que le mien », section 49.5 bis) : elle
+ * ne porte pas de valeur, donc la base ne peut pas la refuser — elle ne
+ * supprime simplement rien. Laissée là, la file d'écriture croirait la
+ * ligne partie alors qu'elle est toujours en base, retouchée ailleurs : un
+ * échec qui ressemble à un succès. `api.js` RELIT donc après une
+ * suppression qui n'a touché aucune ligne, et si la ligne est toujours là,
+ * lève cette phrase avec le code OP015 — celui de l'horloge, pour que la
+ * file relise l'horloge du devis et que « Réessayer » reparte au-dessus.
+ * Effacer ce que l'autre appareil vient d'écrire reste le choix de
+ * l'artisan, jamais celui de la file.
+ */
+export const SUPPRESSION_DEPASSEE = Object.freeze({
+  devis: 'Ce devis a été modifié entre-temps — peut-être depuis un autre appareil : il n’a pas été supprimé, pour '
+    + 'ne pas effacer la modification la plus récente. Rouvrez-le pour voir sa dernière version, puis réessayez.',
+  ligne: 'Cette ligne a été modifiée entre-temps — peut-être depuis un autre appareil : elle n’a pas été supprimée, '
+    + 'pour ne pas effacer la modification la plus récente. Rouvrez le devis pour voir sa dernière version, puis '
+    + 'réessayez.',
 });
 
 /* « Vos informations de devis : » suivi de la phrase, ou la phrase seule
@@ -195,6 +309,11 @@ export function estUnProblemeDeReseau(e) {
   if (estUneRequeteArreteeParLaBase(e)) return false;
   return (
     m.includes('failed to fetch')
+    /* Une requête ANNULÉE (par le délai du téléphone) : `postgrest-js` la
+       rend sous la forme `{ message: 'AbortError: …', code: '' }`, sans
+       `name` — elle sortait telle quelle, en anglais (relecture « données »
+       des étapes 4 à 7). */
+    || m.startsWith('aborterror')
     || m.includes('network request failed')
     || m.includes('load failed')
     || m.includes('networkerror')
@@ -300,10 +419,42 @@ export async function messageDeFonctionEdge(erreur, quoi = '') {
 /** Vrai quand la session a expiré : il faut se reconnecter, rien d'autre. */
 export function estUneSessionExpiree(e) {
   const m = String((e && e.message) || e || '').toLowerCase();
-  return m.includes('jwt expired')
+  /* PGRST301 à PGRST303 : PostgREST n'a pas pu valider le jeton (expiré,
+     illisible, « JWT issued at future » quand les horloges divergent). Le
+     message sortait en anglais (relecture « données » des étapes 4 à 7). */
+  return /^PGRST30\d$/.test(String((e && e.code) || ''))
+    || m.includes('jwt expired')
     || m.includes('invalid refresh token')
     || m.includes('refresh_token_not_found')
     || m.includes('aucune session ouverte');
+}
+
+/**
+ * LE SERVICE D'OPUS N'A PAS RÉPONDU CORRECTEMENT — 22/10/2026.
+ *
+ * Relevé par la relecture « données » des étapes 4 à 7 en faisant tourner
+ * `messageClair` sur les formes que PostgREST, PostgreSQL et la passerelle
+ * de Supabase rendent PENDANT UNE PANNE : toutes sortaient en anglais sur
+ * chaque rangée d'un devis — « Could not query the database for the schema
+ * cache. Retrying. », « An invalid response was received from the upstream
+ * server », une page HTML de Cloudflare entière. C'est exactement la panne
+ * vécue le 02/10 (la couche API qui redémarre). Et `PGRST003` (« Timed out
+ * acquiring connection from connection pool ») passait pour une coupure du
+ * TÉLÉPHONE : la faute était mise sur le réseau de l'artisan.
+ *
+ * Lu par le CODE d'abord : PGRST000 à PGRST009 (PostgREST ne joint pas la
+ * base), 08xxx (connexion perdue), 53xxx (ressources épuisées), 57P0x (la
+ * base s'arrête ou redémarre), 40001 et 55P03 (une transaction annulée ou un
+ * verrou pas obtenu : rien n'a été écrit) ; puis par le TEXTE, pour ce qui
+ * arrive sans code — une passerelle (« upstream », une page HTML,
+ * « bad gateway », « service unavailable »), « too many requests ».
+ */
+export function estUnePanneDuService(e) {
+  const code = String((e && e.code) || '');
+  const m = String((e && e.message) || e || '').toLowerCase();
+  if (/^PGRST00\d$/.test(code) || /^08[0-9A-Z]{3}$/.test(code) || /^53[0-9A-Z]{3}$/.test(code)
+    || /^57P0\d$/.test(code) || code === '40001' || code === '55P03' || code === '429') return true;
+  return /too many requests|upstream|<!doctype|<html|bad gateway|service unavailable|gateway time-?out|\berror 52\d\b/.test(m);
 }
 
 /**
@@ -311,8 +462,13 @@ export function estUneSessionExpiree(e) {
  *
  * `quoi` dit ce qu'on était en train de faire — « Votre publication »,
  * « Votre profil ». Sans lui, « Impossible » ne dit pas impossible de quoi.
+ *
+ * `rienAffiche` : l'écran n'a RIEN à montrer (une première lecture ratée).
+ * La phrase du réseau ne promet alors pas que « ce qui est déjà affiché
+ * reste lisible » — c'était faux sous « Lecture impossible » (relecture
+ * « écran » des étapes 4 à 7, C9).
  */
-export function messageClair(e, quoi = '') {
+export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
   const brut = String((e && e.message) || e || '').trim();
   const m = brut.toLowerCase();
   const sujet = quoi ? `${quoi} : ` : '';
@@ -346,12 +502,20 @@ export function messageClair(e, quoi = '') {
       + 'Ce n’est pas votre connexion, et rien n’a été enregistré : réessayez dans quelques minutes.');
   }
 
+  /* LE SERVICE D'OPUS EN PANNE — avant le réseau : `PGRST003` contient
+     « timed out », et ce n'est pas le téléphone qui a lâché. */
+  if (estUnePanneDuService(e)) {
+    return phrase(sujet, 'le service d’Opus n’a pas répondu correctement. Ce n’est ni de votre fait ni de '
+      + 'votre connexion : réessayez dans un instant.');
+  }
+
   /* Le réseau d'abord : c'est le cas le plus fréquent sur un chantier, et
      celui où l'utilisateur n'a rien fait de mal. */
   /* `phrase()` partout où le message commence par une minuscule : appelé
      SANS sujet, « pas de connexion. » ouvrait une phrase par une minuscule
      (relecture du 18/10/2026, sous le champ des frais de déplacement). */
   if (estUnProblemeDeReseau(e)) {
+    if (rienAffiche) return phrase(sujet, 'pas de connexion. Vérifiez votre réseau, puis réessayez.');
     return phrase(sujet, 'pas de connexion. Vérifiez votre réseau — '
       + 'ce qui est déjà affiché reste lisible, et vous pourrez réessayer.');
   }
@@ -415,18 +579,50 @@ export function messageClair(e, quoi = '') {
       + 'autre appareil : rechargez l’écran.');
   }
 
+  /* 22P02 ET PGRST1xx — UNE REQUÊTE MAL FORMÉE (une valeur qui n'a pas la
+     forme de sa colonne, un JSON vide) : c'est l'application qui a envoyé
+     de travers, jamais celui qui tape. Elles sortaient en anglais
+     (« invalid input syntax for type uuid », « Empty or invalid json »).
+     PGRST116 (« n'existe plus ») est traité juste au-dessus. */
+  if (code === '22P02' || /^PGRST1\d\d$/.test(code)) {
+    return phrase(sujet, 'l’application a envoyé une valeur que la base ne sait pas lire. C’est un défaut '
+      + 'd’Opus, pas le vôtre : réessayez, et si cela revient, signalez-le.');
+  }
+
+  /* 40P01 — UN INTERBLOCAGE : deux enregistrements se sont attendus l'un
+     l'autre, et PostgreSQL a annulé l'un des deux EN ENTIER (« deadlock
+     detected », en anglais). Rien n'est perdu — la transaction annulée n'a
+     rien écrit, ce qui était enregistré l'est toujours, et ce qui est à
+     l'écran y reste. La file d'écriture d'un devis le retente une fois
+     d'elle-même (`file-ecriture.js`) : cette phrase ne sort qu'au second
+     échec, c'est-à-dire, avec le verrou `for no key update` de la section
+     49.6, presque seulement de deux appareils à la fois. */
+  if (code === '40P01' || m.includes('deadlock detected')) {
+    return phrase(sujet, 'deux enregistrements se sont croisés au même instant, et la base a annulé '
+      + 'celui-ci. Rien n’est perdu : réessayez.');
+  }
+
   /* PGRST204 et 42703 — UNE COLONNE QUE LA BASE N'A PAS : l'application est
      en avance sur la base, `schema.sql` n'a pas été rejoué (la panne des six
      commits qui tournaient contre une base ignorant `metiers`, CLAUDE.md).
      Le message de PostgREST sortait tel quel, en anglais — « Could not find
      the 'affiche' column of 'tarifs_pro' in the schema cache » — sous
      « … mais pas vos tarifs » (relecture du 19/10/2026, lot T). */
-  if (code === 'PGRST204' || code === '42703' || m.includes('in the schema cache')
-    || /column "?[a-z0-9_.]+"? does not exist/.test(m)) {
+  /* PGRST205 et 42P01 — UNE TABLE QUE LA BASE N'A PAS, même famille : la
+     base où la section 49 (les devis) n'est pas encore posée. « relation
+     "public.devis" does not exist » sortait tel quel, en anglais ; et
+     surtout, une liste de devis qui ne peut pas se lire ne doit jamais
+     ressembler à « Aucun devis » (lot 1 du module devis). */
+  if (code === 'PGRST204' || code === '42703' || code === 'PGRST205' || code === '42P01'
+    || m.includes('in the schema cache')
+    || /column "?[a-z0-9_.]+"? does not exist/.test(m) || /relation "?[a-z0-9_.]+"? does not exist/.test(m)) {
     const colonne = (brut.match(/the '([a-z0-9_]+)' column/i)
       || brut.match(/column "?(?:[a-z0-9_]+\.)?([a-z0-9_]+)"? does not exist/i) || [])[1];
+    const table = colonne ? null : (brut.match(/the table '(?:[a-z0-9_]+\.)?([a-z0-9_]+)'/i)
+      || brut.match(/relation "?(?:[a-z0-9_]+\.)?([a-z0-9_]+)"? does not exist/i) || [])[1];
     return phrase(sujet, 'la base d’Opus n’a pas encore reçu la mise à jour de l’application'
       + (colonne ? ` (la colonne « ${colonne} » lui manque)` : '')
+      + (table ? ` (la table « ${table} » lui manque)` : '')
       + ' : ce n’est pas de votre fait. Le plus souvent, `supabase/schema.sql` n’a pas été rejoué.');
   }
 

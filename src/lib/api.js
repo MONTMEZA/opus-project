@@ -29,7 +29,7 @@ import { reduireImage, TAILLE_MAX_MO } from './media';
 import { chiffresSeuls, communeLisible, departementDe } from './siret';
 import { analyserNumeroTva, ESSAIS_VIES } from './tva';
 import { NOM_ENTREPRISE_MAX } from './entreprise';
-import { issueDeVerification } from './erreurs';
+import { issueDeVerification, avecDelai, REFUS_DEVIS, SUPPRESSION_DEPASSEE } from './erreurs';
 import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
 /* « Mon entreprise » pour les devis (section 46). `emetteur.js` et
    `emetteur-demo.js` n'importent que des fichiers purs : aucun cycle avec
@@ -44,6 +44,17 @@ import { fabriquerEmetteurDemo, PRO_DEMO_EMETTEUR } from '../data/emetteur-demo'
    cycle avec ce fichier, et `verifier-tarifs` peut les faire tourner. */
 import { depuisLaRecherche } from './tarifs';
 import { TARIFS_DEMO, MES_SOS_DEMO } from '../data/tarifs-demo';
+/* Le chiffrage d'un devis (section 49, lot 1 du module devis). Les quatre
+   fichiers n'importent que des fichiers purs — `devis.js` (`centimes.js`,
+   `entreprise.js`), `file-ecriture.js` et `identifiant.js` rien du tout,
+   `devis-demo.js` les deux premiers, `erreurs.js` et `demo.js` : aucun
+   cycle avec ce fichier, et `verifier-devis` peut les faire tourner. */
+import { creerFileEcriture, DELAI_ECRITURE } from './file-ecriture';
+import { nouvelIdentifiant } from './identifiant';
+import {
+  choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
+} from './devis';
+import { creerBaseDevisDemo } from '../data/devis-demo';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -99,6 +110,17 @@ let demandeProDemo = null;
    les fiches de démonstration portent des nombres — le défaut des trois
    `===` du lot E. */
 const emetteursDemo = {};
+
+/* LE CHIFFRAGE D'UN DEVIS, EN DÉMONSTRATION (section 49, lot 1). Déclaré
+   ICI, en haut, pour la même raison que les blocs du dessus. La base de
+   devis en mémoire (`src/data/devis-demo.js`) naît à la PREMIÈRE lecture :
+   ses dates partent de l'heure où l'on regarde. */
+let baseDevisDemo = null;
+/* LES FILES D'ÉCRITURE OUVERTES — UNE PAR DEVIS, gardées ici et nulle part
+   ailleurs (`fileDuDevis`). Deux files pour le même devis — l'écran de
+   saisie, et la liste qui le supprime — enverraient chacune « une requête
+   à la fois », donc deux à la fois : exactement ce que la file empêche. */
+const filesDevis = new Map();
 
 /* ------------------------------------------------------------------ */
 /*  Session                                                            */
@@ -409,6 +431,11 @@ export function getUserId() { return currentUserId; }
 export async function signOut() {
   if (hasSupabase && supabase) await supabase.auth.signOut();
   currentUserId = null;
+  /* Les files d'écriture des devis appartiennent au compte qui s'en va :
+     le suivant n'a rien à y trouver (la leçon du carnet resté en mémoire,
+     17/10/2026). La garde de sortie d'`OpusApp` a déjà dit ce qui n'était
+     pas enregistré. */
+  filesDevis.clear();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1736,7 +1763,13 @@ function clientVersBase(v) {
 }
 
 async function mesClientsDemo() {
-  const monPro = Object.keys(demoPros)[0];
+  /* LE MÊME PROPRIÉTAIRE QUE LES DEVIS DE DÉMONSTRATION (`moiEnDemo()`) :
+     avec `Object.keys(demoPros)[0]`, un compte passé professionnel en
+     démonstration voyait le carnet d'un AUTRE, et choisir une de ses fiches
+     pour un devis rendait OP013 (relecture « données » des étapes 4 à 7,
+     mineur 3). Pour le compte de démonstration ordinaire, rien ne change :
+     les deux valent « 1 ». */
+  const monPro = moiEnDemo();
   /* `String()` DES DEUX CÔTÉS : `Object.keys()` rend toujours une chaîne,
      et les fiches de démonstration portent un nombre. Un `===` strict
      rendrait une liste vide, et le carnet paraîtrait vide sans fichier
@@ -1768,7 +1801,7 @@ async function mesClientsSupabase() {
 export const mesClients = hasSupabase ? mesClientsSupabase : mesClientsDemo;
 
 async function enregistrerClientDemo(valeurs, id) {
-  const monPro = Object.keys(demoPros)[0];
+  const monPro = moiEnDemo();
   if (id) {
     const deja = initialClients.find((c) => String(c.id) === String(id));
     if (!deja) throw new Error("Cette fiche n'existe plus.");
@@ -2389,10 +2422,18 @@ async function demandesRecuesSupabase() {
 /** Tout ce qu'on m'a adressé, les trois origines mêlées, du plus récent. */
 export const chargerDemandesRecues = hasSupabase ? demandesRecuesSupabase : demandesRecuesDemo;
 
+/* LA DÉMONSTRATION REND LE MOT DE LA BASE, comme Supabase (`valeur`) —
+   lot 1 du devis, trouvé par `mesure-devis` le 22/10/2026. Elle rendait le
+   mot de l'APPLICATION (« accepte ») : une urgence acceptée en
+   démonstration portait donc « accepte » au lieu de « acceptee », et
+   `peutFaireUnDevis()`, qui lit le mot de la base genre par genre, ne lui
+   proposait pas « Faire un devis ». Deux formes pour une même réponse se
+   contredisent toujours un jour. */
 async function repondreDemandeDemo(genre, id, statut) {
+  const valeur = (GENRES_DEMANDE[genre] || {})[statut] || statut;
   const d = DEMANDES_RECUES_DEMO.find((x) => x.id === id);
-  if (d) d.statut = (GENRES_DEMANDE[genre] || {})[statut] || statut;
-  return { id, statut };
+  if (d) d.statut = valeur;
+  return { id, statut: valeur };
 }
 
 async function repondreDemandeSupabase(genre, id, statut) {
@@ -2422,6 +2463,594 @@ async function repondreDemandeSupabase(genre, id, statut) {
  * (déclencheur `calcule_client_verifie`). Ce n'est pas un bouton anodin.
  */
 export const repondreDemandeRecue = hasSupabase ? repondreDemandeSupabase : repondreDemandeDemo;
+
+/* ==========================================================================
+   LE CHIFFRAGE D'UN DEVIS — section 49 de `schema.sql`, lot 1 du module devis
+   (étape 4, 22/10/2026)
+
+   Trois tables PRIVÉES — `devis` (un brouillon), `devis_lignes`, `devis_tva`
+   (la ventilation, que seule la base écrit). Ce qui suit les lit, et les
+   écrit PAR LA FILE D'ÉCRITURE (`file-ecriture.js`), JAMAIS autrement :
+   une requête à la fois par devis, des identifiants choisis par le
+   téléphone, un délai sur chaque écriture — et la parade de la requête
+   tardive (49.5 bis : un numéro d'écriture qui ne fait que monter, une
+   condition sur chaque suppression).
+
+   LA FORME DE CE CODE, et ce n'est pas un goût : chaque fonction existe en
+   DEUX versions NOMMÉES, et le choix se fait à la fin. La forme
+   `!hasSupabase ? async (o = {}) => { … } : …` fait échouer Metro sans dire
+   ni la ligne ni la cause (CLAUDE.md). Et tout ce bloc vit APRÈS
+   `const noop` : une `const` lue avant sa déclaration, c'est un écran blanc
+   que ni le linter ni l'export ne signalent.
+
+   LES ERREURS DE LA BASE REMONTENT TELLES QUELLES à la file : son code
+   (23505, 40P01, OP015…) et le nom de la contrainte. Une erreur déjà
+   traduite perdrait son code — un 23505 ne serait plus reconnu comme
+   « déjà enregistré » (un doublon affiché), un 40P01 ne serait plus
+   retenté. La phrase de l'écran se fait APRÈS, par `messageClair()`.
+
+   LA DÉMONSTRATION écrit dans une base EN MÉMOIRE (`src/data/devis-demo.js`)
+   qui refuse avec les mots de la base, par la MÊME file : les états
+   « enregistrement… » et « non enregistrée » se voient sans `.env`.
+   ========================================================================== */
+
+/* Un nombre de la base (un `bigint` arrive en nombre JSON, exact jusqu'à
+   2^53 — les montants s'arrêtent à 10^10, les numéros d'écriture à 2^53 − 1). */
+const nombreOuNul = (v) => (v === null || v === undefined ? null : Number(v));
+
+/** Un devis de la base, aux noms de l'application — avec ce que la requête y
+ *  a joint : le nom du client, la date et le budget de la demande, la date
+ *  de l'urgence. */
+function rowToDevis(d) {
+  if (!d) return null;
+  return {
+    id: d.id,
+    proId: d.pro_id,
+    clientId: d.client_id ?? null,
+    quoteRequestId: d.quote_request_id ?? null,
+    sosRequestId: d.sos_request_id ?? null,
+    source: d.source,
+    statut: d.statut,
+    objet: d.objet ?? null,
+    lieuAdresse: d.lieu_adresse ?? null,
+    lieuCodePostal: d.lieu_code_postal ?? null,
+    lieuVille: d.lieu_ville ?? null,
+    delaiExecution: d.delai_execution ?? null,
+    retenueGarantieCentiemes: nombreOuNul(d.retenue_garantie_centiemes),
+    totalHtCentimes: nombreOuNul(d.total_ht_centimes),
+    totalTvaCentimes: nombreOuNul(d.total_tva_centimes),
+    totalTtcCentimes: nombreOuNul(d.total_ttc_centimes),
+    generation: nombreOuNul(d.generation),
+    createdAt: d.created_at ?? null,
+    modifieLe: d.modifie_le ?? null,
+    client: d.client ? { nom: d.client.nom ?? null } : null,
+    demande: d.demande ? { createdAt: d.demande.created_at ?? null, budget: d.demande.budget ?? null } : null,
+    urgence: d.urgence ? { createdAt: d.urgence.created_at ?? null } : null,
+  };
+}
+
+/** Une ligne de la base, aux noms de l'application. Les nombres en nombres et
+ *  les booléens en booléens : la file compare ce qu'on veut à ce que la base
+ *  a gardé (`Object.is`), et `4500` n'est pas `'4500'`. */
+function rowToLigne(l) {
+  if (!l) return null;
+  const x = {
+    id: l.id,
+    devisId: l.devis_id ?? null,
+    ordre: nombreOuNul(l.ordre),
+    type: l.type ?? 'poste',
+    designation: l.designation ?? null,
+    quantiteMilliemes: nombreOuNul(l.quantite_milliemes),
+    unite: l.unite ?? null,
+    prixUnitaireCentimes: nombreOuNul(l.prix_unitaire_centimes),
+    tauxTvaCentiemes: nombreOuNul(l.taux_tva_centiemes),
+    totalCentimes: nombreOuNul(l.total_centimes),
+    offert: l.offert === true,
+    mainOeuvre: l.main_oeuvre === true,
+    fournitureNonComprise: l.fourniture_non_comprise === true,
+    surfaceSolMilliemes: nombreOuNul(l.surface_sol_milliemes),
+    surfaceMursMilliemes: nombreOuNul(l.surface_murs_milliemes),
+    generation: nombreOuNul(l.generation),
+    modifieLe: l.modifie_le ?? null,
+  };
+  if (l.devis) {
+    x.devis = {
+      id: l.devis.id, objet: l.devis.objet ?? null, source: l.devis.source ?? null, modifieLe: l.devis.modifie_le ?? null,
+    };
+  }
+  return x;
+}
+
+/**
+ * CE QUE LE TÉLÉPHONE ENVOIE D'UN DEVIS — la liste FERMÉE, et rien d'autre.
+ *
+ * Jamais les totaux (la base les RELIT dans `devis_tva`), jamais les dates
+ * (`clock_timestamp()`), jamais le statut (son défaut), jamais le numéro
+ * d'écriture (il voyage à côté, et `ecrireDevisSupabase` le pose). L'id,
+ * l'entreprise et la `source` partent à la CRÉATION seulement : la source
+ * est le geste qui a ouvert le brouillon, et la base la fige (D3).
+ *
+ * Une clé ABSENTE n'est pas envoyée (ne rien dire n'est pas « vider »).
+ * Cette fonction ne lit RIEN d'autre que ses arguments : `verifier-devis` la
+ * fait tourner telle qu'elle est écrite ici, et la compare à `CHAMPS_DEVIS`.
+ */
+function devisVersBase(v, { creation = false, proId = null } = {}) {
+  const r = {};
+  const poser = (colonne, cle) => {
+    if (v && Object.prototype.hasOwnProperty.call(v, cle) && v[cle] !== undefined) r[colonne] = v[cle];
+  };
+  poser('client_id', 'clientId');
+  poser('quote_request_id', 'quoteRequestId');
+  poser('sos_request_id', 'sosRequestId');
+  poser('objet', 'objet');
+  poser('lieu_adresse', 'lieuAdresse');
+  poser('lieu_code_postal', 'lieuCodePostal');
+  poser('lieu_ville', 'lieuVille');
+  poser('delai_execution', 'delaiExecution');
+  poser('retenue_garantie_centiemes', 'retenueGarantieCentiemes');
+  if (creation) {
+    poser('id', 'id');
+    poser('source', 'source');
+    r.pro_id = proId;
+  }
+  return r;
+}
+
+/**
+ * CE QUE LE TÉLÉPHONE ENVOIE D'UNE LIGNE — la liste FERMÉE.
+ *
+ * Jamais le total (le déclencheur le pose : 0 pour une ligne offerte, la
+ * valeur sinon), jamais la date, jamais le numéro (à côté). À la CRÉATION, la
+ * ligne part ENTIÈRE — l'id, le devis, et chaque colonne, `null` ou `false`
+ * quand l'écran n'a rien dit — puis elle ne se MODIFIE que par ce qui a
+ * changé. Jamais d'« upsert » : PostgreSQL juge la ligne PROPOSÉE avant de
+ * la fusionner (le piège du lot T), et un upsert arrivé en retard après une
+ * suppression RECRÉERAIT la ligne (49.5 bis).
+ *
+ * Elle ne lit rien d'autre que ses arguments : `verifier-devis` la fait
+ * tourner telle qu'elle est écrite ici.
+ */
+function ligneVersBase(v, { creation = false } = {}) {
+  const r = {};
+  const colonnes = [
+    ['ordre', 'ordre'], ['type', 'type'], ['designation', 'designation'],
+    ['quantite_milliemes', 'quantiteMilliemes'], ['unite', 'unite'],
+    ['prix_unitaire_centimes', 'prixUnitaireCentimes'], ['taux_tva_centiemes', 'tauxTvaCentiemes'],
+    ['offert', 'offert'], ['main_oeuvre', 'mainOeuvre'], ['fourniture_non_comprise', 'fournitureNonComprise'],
+    ['surface_sol_milliemes', 'surfaceSolMilliemes'], ['surface_murs_milliemes', 'surfaceMursMilliemes'],
+  ];
+  colonnes.forEach(([colonne, cle]) => {
+    if (v && Object.prototype.hasOwnProperty.call(v, cle) && v[cle] !== undefined) r[colonne] = v[cle];
+  });
+  if (creation) {
+    if (v && v.id !== undefined) r.id = v.id;
+    if (v && v.devisId !== undefined) r.devis_id = v.devisId;
+    /* ENTIÈRE : une colonne que l'écran n'a pas dite part vide — sauf
+       l'ordre, que l'écran doit toujours donner (sans lui, la base refuse,
+       et c'est un défaut de l'écran qu'il faut voir). */
+    const booleens = ['offert', 'main_oeuvre', 'fourniture_non_comprise'];
+    colonnes.forEach(([colonne]) => {
+      if (colonne === 'ordre' || Object.prototype.hasOwnProperty.call(r, colonne)) return;
+      if (colonne === 'type') r.type = 'poste';
+      else r[colonne] = booleens.includes(colonne) ? false : null;
+    });
+  }
+  return r;
+}
+
+/* Un numéro d'écriture que la base accepte (49.5 bis, OP016) : un entier de
+   1 à 2^53 − 1. */
+const numeroEcritureValable = (g) => Number.isSafeInteger(g) && g >= 1 && g <= 9007199254740991;
+
+/* Une modification qui n'a touché AUCUNE ligne. PostgREST rend 204, sans un
+   mot : la ligne n'existe plus (retirée depuis un autre appareil), ou la
+   règle d'accès ne la montre pas. La laisser passer ferait croire la ligne
+   enregistrée — un échec qui ressemble à un succès. Le code PGRST116 est
+   celui que `messageClair()` traduit par « cet enregistrement n'existe plus,
+   ou il vient de changer depuis un autre appareil : rechargez l'écran ». */
+function ligneIntrouvable() {
+  const e = refusDeLaBase('PGRST116', 'JSON object requested, multiple (or no) rows returned');
+  e.details = 'La ligne visée n’existe plus en base : aucune ligne modifiée.';
+  return e;
+}
+
+/* La ventilation telle que la base l'a calculée : les taux qui ont des
+   lignes (un taux disparu reste à zéro dans `devis_tva`, faute de pouvoir
+   y écrire `delete`), du plus fort au plus faible. */
+function totauxDepuisBase(d) {
+  return {
+    ht: nombreOuNul(d.total_ht_centimes),
+    tva: nombreOuNul(d.total_tva_centimes),
+    ttc: nombreOuNul(d.total_ttc_centimes),
+    generation: nombreOuNul(d.generation),
+    /* L'heure de la BASE, pour ranger la carte dans « Mes devis » : sans
+       elle, la carte était datée à l'heure du téléphone (relecture
+       « données » des étapes 4 à 7, mineur 6). */
+    modifieLe: d.modifie_le ?? null,
+    ventilation: (d.devis_tva || [])
+      .filter((t) => Number(t.nb_lignes) > 0)
+      .map((t) => ({
+        taux: Number(t.taux_tva_centiemes), base: Number(t.base_centimes),
+        tva: Number(t.tva_centimes), nbLignes: Number(t.nb_lignes),
+      }))
+      .sort((a, b) => b.taux - a.taux),
+  };
+}
+
+/* UNE LECTURE PORTE UN DÉLAI ET S'ANNULE, comme une écriture : une requête
+   qui ne revient jamais n'atteint jamais le `catch` (l'incident du 01/10),
+   et l'écran resterait sur son squelette. Le délai est celui des écritures
+   (8 s) — la borne que la vraie base impose elle-même à une requête. */
+async function lectureDevis(quoi, construire) {
+  const controle = typeof AbortController === 'function' ? new AbortController() : null;
+  try {
+    return await avecDelai(Promise.resolve().then(() => construire(controle ? controle.signal : null)),
+      DELAI_ECRITURE, quoi);
+  } catch (e) {
+    if (controle) {
+      try { controle.abort(); } catch (x) { /* rien à annuler */ }
+    }
+    throw e;
+  }
+}
+const avecSignal = (requete, signal) => (signal ? requete.abortSignal(signal) : requete);
+
+/* Une lecture qui échoue LÈVE, jamais ne rend une liste vide : « je n'ai
+   pas pu lire » et « il n'y en a pas » ne se disent pas pareil. Une base où
+   la section 49 n'est pas encore posée le dit (`baseEnRetard`) : l'écran
+   affiche « Lecture impossible — la base n'est pas à jour », jamais
+   « Aucun devis ». */
+function leverLecture(error) {
+  if (tableAbsente(error)) error.baseEnRetard = true;
+  throw error;
+}
+
+/* --------------------------------------------------------------------------
+   ÉCRIRE — le contrat de `file-ecriture.js` (son en-tête, points 1 à 15)
+
+   `op` : `{ quoi: 'devis' | 'ligne', action: 'inserer' | 'modifier' |
+   'supprimer', id, valeurs, signal, generation, generationMax }`.
+     - `signal` part avec la requête (`.abortSignal`) : c'est lui qui
+       annule une requête hors délai — sans lui, une écriture « perdue »
+       pouvait arriver APRÈS la suivante ;
+     - `generation` (insérer, modifier) part dans la colonne du même nom,
+       AVEC les valeurs ; une modification du devis sans valeur (la
+       « levée » de l'horloge) n'envoie que lui ;
+     - `generationMax` (supprimer) devient une CONDITION :
+       `generation < N`. Une suppression partie tard ne supprime rien de
+       ce qui a été retouché depuis ;
+     - UN ORDRE = UNE LIGNE : chaque requête vise une ligne par son `id`.
+   Rien ne s'écrit sur `devis` ni `devis_lignes` ailleurs que dans cette
+   fonction : `verifier-devis` le tient.
+   -------------------------------------------------------------------------- */
+async function ecrireDevisSupabase(op) {
+  const { quoi, action, id, valeurs = {}, signal = null, generation, generationMax } = op || {};
+  if (quoi !== 'devis' && quoi !== 'ligne') throw new Error(`Écriture de devis inconnue : ${quoi}.`);
+  const table = quoi === 'devis' ? 'devis' : 'devis_lignes';
+  let requete;
+  if (action === 'inserer') {
+    const ligne = quoi === 'devis'
+      ? devisVersBase(valeurs, { creation: true, proId: currentUserId })
+      : ligneVersBase(valeurs, { creation: true });
+    requete = supabase.from(table).insert({ ...ligne, id, generation });
+  } else if (action === 'modifier') {
+    const changements = quoi === 'devis' ? devisVersBase(valeurs) : ligneVersBase(valeurs);
+    /* `.select('id')` : pour SAVOIR qu'une ligne a été modifiée. */
+    requete = supabase.from(table).update({ ...changements, generation }).eq('id', id).select('id');
+  } else if (action === 'supprimer') {
+    /* Une suppression sans condition passerait par-dessus une écriture
+       plus récente : cette version de l'application écrirait mal, et elle
+       doit le voir (le même refus que la base pour un numéro hors bornes). */
+    if (!numeroEcritureValable(generationMax)) {
+      throw refusDeLaBase('OP016', quoi === 'devis' ? REFUS_DEVIS.OP016_devis : REFUS_DEVIS.OP016_ligne);
+    }
+    requete = supabase.from(table).delete().eq('id', id).lt('generation', generationMax).select('id');
+  } else {
+    throw new Error(`Écriture de devis inconnue : ${action}.`);
+  }
+  if (signal) requete = requete.abortSignal(signal);
+  const { data, error } = await requete;
+  /* L'erreur de PostgREST TELLE QUELLE : son code et sa contrainte. */
+  if (error) throw error;
+  if (action === 'modifier' && !(Array.isArray(data) && data.length)) throw ligneIntrouvable();
+  if (action === 'supprimer' && !(Array.isArray(data) && data.length)) {
+    /* Rien de supprimé : déjà parti — c'était fait —, ou retouché depuis
+       par une écriture plus récente. Le second cas se DIT (OP015 : la file
+       relit l'horloge, et « Réessayer » repart au-dessus). */
+    const encore = await relireUnDevisSupabase({ quoi, id });
+    if (encore) throw refusDeLaBase('OP015', quoi === 'devis' ? SUPPRESSION_DEPASSEE.devis : SUPPRESSION_DEPASSEE.ligne);
+  }
+  return true;
+}
+
+/* La démonstration : la base en mémoire, qui refuse avec les mots de la
+   base. Une écriture y prend un tiers de seconde : sans ce temps, les états
+   « enregistrement… » ne se verraient jamais, et ne se vérifieraient pas ici. */
+const PAUSE_ECRITURE_DEMO = 300;
+function demandeRecueDemo(genre, id) {
+  return DEMANDES_RECUES_DEMO.find((d) => d.genre === genre && d.id === id) || null;
+}
+function baseDevisDeDemo() {
+  if (!baseDevisDemo) {
+    baseDevisDemo = creerBaseDevisDemo({ demandeDe: demandeRecueDemo, pauseMs: PAUSE_ECRITURE_DEMO });
+  }
+  return baseDevisDemo;
+}
+async function ecrireDevisDemo(op) {
+  return baseDevisDeDemo().ecrire(moiEnDemo(), op);
+}
+
+const ecrireDevis = hasSupabase ? ecrireDevisSupabase : ecrireDevisDemo;
+
+/* RELIRE UN OBJET PAR SON IDENTIFIANT — après un 23505 (« déjà
+   enregistré ? »), pour l'horloge après un refus OP015, et après une
+   suppression qui n'a rien supprimé. `null` : il n'existe pas, ou il n'est
+   pas à moi (la règle d'accès le cache). */
+async function relireUnDevisSupabase({ quoi, id }) {
+  if (quoi === 'devis') {
+    const { data, error } = await supabase.from('devis').select('*').eq('id', id).maybeSingle();
+    if (error) throw error;
+    return rowToDevis(data);
+  }
+  const { data, error } = await supabase.from('devis_lignes').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return rowToLigne(data);
+}
+async function relireUnDevisDemo(q) {
+  return baseDevisDeDemo().relireUn(moiEnDemo(), q);
+}
+const relireUnDevis = hasSupabase ? relireUnDevisSupabase : relireUnDevisDemo;
+
+/* LES TOTAUX QUE LA BASE A CALCULÉS, et sa ventilation, EN UNE requête.
+   L'écran affiche CEUX-LÀ, pas ceux du téléphone. */
+async function relireTotauxDevisSupabase(devisId) {
+  const { data, error } = await supabase.from('devis')
+    .select('total_ht_centimes, total_tva_centimes, total_ttc_centimes, generation, modifie_le, '
+      + 'devis_tva(taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)')
+    .eq('id', devisId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? totauxDepuisBase(data) : null;
+}
+async function relireTotauxDevisDemo(devisId) {
+  return baseDevisDeDemo().relireTotaux(moiEnDemo(), devisId);
+}
+const relireTotauxDevis = hasSupabase ? relireTotauxDevisSupabase : relireTotauxDevisDemo;
+
+/* --------------------------------------------------------------------------
+   LA FILE D'UN DEVIS — une par devis, et l'écran n'écrit que par elle.
+
+   `fileDuDevis({ devisId, devis, devisEnBase, lignesEnBase, horloge })` rend
+   la file de ce devis — la MÊME si elle existe déjà : une liste qui
+   supprime un brouillon pendant que sa saisie enregistre encore une ligne
+   passe par la même file, donc après elle. Ses méthodes sont celles de
+   `file-ecriture.js` — `devis()`, `ligne()`, `modifierLigne()`,
+   `retirerLigne()`, `marquerLocale()`, `reessayer()`, `supprimerDevis()`,
+   `etatDe()`, `enAttente()`, `attendre()`, `abonner()`… — et ce qui y entre
+   est d'abord réduit à ce que l'artisan écrit (`CHAMPS_DEVIS`,
+   `CHAMPS_LIGNE`) : un total ou une date recopiés de l'écran feraient
+   partir une écriture pour rien.
+
+   `horloge` : le numéro d'écriture du devis lu à l'ouverture
+   (`devis.generation`), 0 pour un brouillon neuf. L'identifiant d'un
+   brouillon neuf vient de `nouvelIdentifiant()` (`identifiant.js`) — et
+   s'il rend `null`, l'écran le dit (`IDENTIFIANT_IMPOSSIBLE`) au lieu
+   d'enregistrer de travers.
+   -------------------------------------------------------------------------- */
+export function fileDuDevis({ devisId, devis = {}, devisEnBase = false, lignesEnBase = [], horloge = 0 } = {}) {
+  if (!devisId) throw new Error('Un devis s’enregistre avec son identifiant.');
+  const deja = filesDevis.get(devisId);
+  if (deja) return deja;
+  const file = creerFileEcriture({
+    devisId,
+    devis: choisirChamps(devis, CHAMPS_DEVIS),
+    devisEnBase,
+    lignesEnBase: (lignesEnBase || []).map((l) => ({
+      ...choisirChamps(l, CHAMPS_LIGNE), id: l.id, devisId: l.devisId || devisId,
+    })),
+    ecrire: ecrireDevis,
+    relireUn: relireUnDevis,
+    relireTotaux: relireTotauxDevis,
+    avecDelai,
+    nouvelIdentifiant,
+    horloge: Number(horloge) || 0,
+  });
+  const enveloppe = {
+    ...file,
+    devis: (v) => file.devis(choisirChamps(v, CHAMPS_DEVIS)),
+    ligne: (v) => file.ligne({ ...choisirChamps(v, CHAMPS_LIGNE), id: v ? v.id : undefined }),
+    modifierLigne: (id, changements) => file.modifierLigne(id, choisirChamps(changements, CHAMPS_LIGNE)),
+    marquerLocale: (id, v = null) => file.marquerLocale(id, v ? choisirChamps(v, CHAMPS_LIGNE) : null),
+  };
+  let cle = devisId;
+  file.abonner((ev) => {
+    /* Le brouillon n'existe plus : sa file non plus. */
+    if (ev.type === 'supprimee' && ev.cle === 'devis' && filesDevis.get(cle) === enveloppe) filesDevis.delete(cle);
+    /* L'identifiant était pris ailleurs (en pratique jamais) : la file suit. */
+    if (ev.type === 'renomme' && ev.quoi === 'devis' && filesDevis.get(cle) === enveloppe) {
+      filesDevis.delete(cle);
+      cle = ev.nouveau;
+      filesDevis.set(cle, enveloppe);
+    }
+  });
+  filesDevis.set(devisId, enveloppe);
+  return enveloppe;
+}
+
+/** L'écran de saisie se ferme : sa file est oubliée dès qu'elle n'a plus
+ *  rien en vol ni en attente — pas avant. Une écriture partie finit, et
+ *  rouvrir le devis entre-temps retrouve la MÊME file. */
+export function laisserFileDuDevis(devisId) {
+  const f = filesDevis.get(devisId);
+  if (!f) return;
+  const oublier = () => {
+    if (filesDevis.get(devisId) === f && f.vide()) filesDevis.delete(devisId);
+  };
+  if (f.vide()) oublier();
+  else f.attendre().then(oublier);
+}
+
+/** La file de ce devis, SI ELLE EXISTE ENCORE — sans en créer une. Rouvrir un
+ *  devis dont la file écrit encore (on l'a quitté par « Quitter sans elles »,
+ *  ou la garde n'a pas attendu la fin) : l'écran attend qu'elle finisse, et
+ *  se construit sur ce qu'elle VEUT, jamais sur une photo de la base prise
+ *  pendant qu'elle écrit (relecture « données » des étapes 4 à 7, I2).
+ *
+ *  (`supprimerDevis(d)`, exporté ici jusqu'au 22/10, n'avait AUCUN appelant :
+ *  la saisie supprime par SA file. Utilisée un jour depuis la liste, elle
+ *  aurait inscrit une file sans ses lignes qu'aucun `laisserFileDuDevis` ne
+ *  retirait après un échec — retirée plutôt que laissée à mentir.) */
+export function fileExistante(devisId) {
+  return (devisId && filesDevis.get(devisId)) || null;
+}
+
+/* --------------------------------------------------------------------------
+   LIRE
+
+   « Mes devis » : bornée à 200, triée par date — il n'y a qu'un statut au
+   lot 1. 201 lignes demandées pour SAVOIR s'il y en a plus de 200 : la
+   liste le DIT (`tronque`), une liste coupée en silence cache du travail.
+   Le jour où un second statut existe, ce qui attend passe devant, côté
+   base — `verifier-devis` l'exigera.
+   -------------------------------------------------------------------------- */
+const LIENS_DU_DEVIS = '*, client:client_id(nom), demande:quote_request_id(created_at, budget), '
+  + 'urgence:sos_request_id(created_at)';
+
+async function mesDevisSupabase() {
+  const { data, error } = await lectureDevis('La lecture de vos devis', (signal) => avecSignal(
+    supabase.from('devis')
+      .select(LIENS_DU_DEVIS)
+      .eq('pro_id', currentUserId)
+      .order('modifie_le', { ascending: false })
+      .order('id')
+      .limit(PLAFOND_LISTE + 1), signal));
+  if (error) leverLecture(error);
+  return decouperListe((data || []).map(rowToDevis));
+}
+async function mesDevisDemo() {
+  return decouperListe(await baseDevisDeDemo().liste(moiEnDemo()));
+}
+export const mesDevis = hasSupabase ? mesDevisSupabase : mesDevisDemo;
+
+/** Un devis, ses lignes et sa ventilation — EN UNE SEULE requête, donc un
+ *  seul instantané. Trois lectures parallèles étaient trois transactions :
+ *  une ligne écrite entre la première et les deux autres donnait « Total HT
+ *  100,00 € » au-dessus de deux taux qui faisaient 300,00 € (relecture
+ *  « données » des étapes 4 à 7, I3, prouvé sur PostgreSQL 16). La forme est
+ *  celle de `relireTotauxDevisSupabase`, qui l'était déjà.
+ *  `null` s'il n'existe plus (ou n'est pas à moi). Les lignes sont rangées
+ *  par `ordre`, PUIS par `id` : sans le second critère, deux lignes au même
+ *  rang se rangeraient selon l'ordre physique, et une ligne changerait de
+ *  pièce selon l'écran qui la lit. */
+async function unDevisSupabase(id) {
+  const { data, error } = await lectureDevis('La lecture de ce devis', (signal) => avecSignal(
+    supabase.from('devis')
+      .select(`${LIENS_DU_DEVIS}, devis_lignes(*), `
+        + 'devis_tva(taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)')
+      .eq('id', id)
+      .order('ordre', { referencedTable: 'devis_lignes' })
+      .order('id', { referencedTable: 'devis_lignes' })
+      .maybeSingle(), signal));
+  if (error) leverLecture(error);
+  if (!data) return null;
+  const { devis_lignes: lignes, ...devis } = data;
+  return {
+    devis: rowToDevis(devis),
+    lignes: (lignes || []).map(rowToLigne),
+    ventilation: totauxDepuisBase(data).ventilation,
+  };
+}
+async function unDevisDemo(id) {
+  return baseDevisDeDemo().un(moiEnDemo(), id);
+}
+export const unDevis = hasSupabase ? unDevisSupabase : unDevisDemo;
+
+/** Les devis d'une fiche du carnet — 21 au plus : la fiche en montre 20, et
+ *  dit qu'il y en a d'autres. */
+async function devisDuClientSupabase(clientId) {
+  const { data, error } = await lectureDevis('La lecture des devis de ce client', (signal) => avecSignal(
+    supabase.from('devis')
+      .select(LIENS_DU_DEVIS)
+      .eq('pro_id', currentUserId)
+      .eq('client_id', clientId)
+      .order('modifie_le', { ascending: false })
+      .order('id')
+      .limit(21), signal));
+  if (error) leverLecture(error);
+  return (data || []).map(rowToDevis);
+}
+async function devisDuClientDemo(clientId) {
+  return baseDevisDeDemo().duClient(moiEnDemo(), clientId);
+}
+export const devisDuClient = hasSupabase ? devisDuClientSupabase : devisDuClientDemo;
+
+/** Les brouillons déjà ouverts depuis une demande ou une urgence — pour
+ *  « Reprendre » au lieu d'en commencer un second sans le savoir. 5 au plus. */
+async function devisDeLaDemandeSupabase(genre, id) {
+  const colonne = genre === 'sos' ? 'sos_request_id' : 'quote_request_id';
+  const { data, error } = await lectureDevis('La lecture des devis de cette demande', (signal) => avecSignal(
+    supabase.from('devis')
+      .select('id, objet, modifie_le')
+      .eq('pro_id', currentUserId)
+      .eq(colonne, id)
+      .order('modifie_le', { ascending: false })
+      .order('id')
+      .limit(5), signal));
+  if (error) leverLecture(error);
+  return (data || []).map((d) => ({ id: d.id, objet: d.objet ?? null, modifieLe: d.modifie_le ?? null }));
+}
+async function devisDeLaDemandeDemo(genre, id) {
+  return baseDevisDeDemo().deLaDemande(moiEnDemo(), genre, id);
+}
+export const devisDeLaDemande = hasSupabase ? devisDeLaDemandeSupabase : devisDeLaDemandeDemo;
+
+/**
+ * LA MÉMOIRE — les postes et options de MES devis, brouillons compris, la plus
+ * récente d'abord, avec leur devis d'origine. La recherche se fait sur le
+ * téléphone (`memoireDesLignes` de `devis.js`) : aucune fonction SQL de plus.
+ *
+ * FILTRÉE PAR MES DEVIS CÔTÉ BASE (`!inner` et `devis.pro_id`), jamais par la
+ * seule règle d'accès : mesuré par la relecture « base » du cahier, la règle
+ * seule faisait lire TOUTES les lignes de TOUS les artisans pour en garder
+ * 21 (306 ms sur 200 000 lignes, contre 2,9 ms filtrée) — et la vraie base
+ * coupe à 8 s. Triée par date, et non par `ordre` : elle ne range pas les
+ * lignes d'un devis, elle cherche ce qu'on a écrit le plus récemment.
+ */
+async function memoireDesLignesSupabase() {
+  const { data, error } = await lectureDevis('La lecture de vos prix déjà écrits', (signal) => avecSignal(
+    supabase.from('devis_lignes')
+      .select('id, type, designation, unite, prix_unitaire_centimes, offert, main_oeuvre, '
+        + 'fourniture_non_comprise, modifie_le, devis:devis_id!inner(id, objet, source, modifie_le)')
+      .eq('devis.pro_id', currentUserId)
+      .in('type', ['poste', 'option'])
+      .order('modifie_le', { ascending: false })
+      .order('id')
+      .limit(MEMOIRE_MAX), signal));
+  if (error) leverLecture(error);
+  return (data || []).map(rowToLigne);
+}
+async function memoireDesLignesDemo() {
+  return baseDevisDeDemo().memoire(moiEnDemo());
+}
+export const memoireDesLignes = hasSupabase ? memoireDesLignesSupabase : memoireDesLignesDemo;
+
+/**
+ * MON RÉGIME DE TVA — `'franchise'`, `'reel'`, ou `null` (non déclaré). Lu
+ * par la fonction qui lit déjà « Mon entreprise » : aucune lecture nouvelle
+ * des tables de l'émetteur, aucune fonction SQL qui les lise.
+ *
+ * UNE ERREUR LÈVE : l'écran tient cinq états, et un régime qu'on n'a pas pu
+ * lire n'est JAMAIS « non déclaré » (`tauxProposes` rend `null`, pas `[]`).
+ */
+async function monRegimeSupabase() {
+  const f = await monEmetteurSupabase();
+  return f && f.emetteur ? (f.emetteur.regime_tva ?? null) : null;
+}
+async function monRegimeDemo() {
+  const f = await monEmetteurDemo();
+  return f && f.emetteur ? (f.emetteur.regime_tva ?? null) : null;
+}
+export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
 
 export const markNotificationRead = !hasSupabase ? noop : async (id) => {
   await supabase.from('notifications').update({ lue: true }).eq('id', id);

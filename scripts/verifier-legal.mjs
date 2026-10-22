@@ -953,6 +953,218 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
     edgeQuiLisent.length ? edgeQuiLisent.join(', ') : 'moins de trois fichiers de fonctions Edge : le contrôle a perdu sa cible');
 }
 
+/* ==================================================================
+   LE CHIFFRAGE D'UN DEVIS — lot 1, 22/10/2026 (section 49 de
+   `schema.sql`, cahier du lot 1, §5).
+
+   Un devis porte souvent l'ADRESSE DES TRAVAUX, c'est-à-dire le domicile
+   d'une personne qui n'a pas de compte. Ce que les textes en disent se
+   vérifie ici, PROPRIÉTÉ par propriété, et chacune dans SA section :
+     - les devis entrent dans « Les clients que vous enregistrez », avec la
+       même promesse que le carnet — et aucune phrase de cette section ne
+       suggère une anonymisation qui n'a pas lieu (la v1 du cahier écrivait
+       « sans son nom » : supprimer une fiche DÉTACHE ses devis, elle ne les
+       efface pas) ;
+     - la vérité sur l'effacement est dite dans les DEUX branches du texte
+       (avec et sans contrat de sous-traitance) : l'autre branche est FAITE
+       TOURNER sur une copie de `legal.js`, drapeau basculé — sinon elle
+       disparaîtrait sans bruit le jour où le contrat existera ;
+     - « Combien de temps » n'annonce plus le NOMBRE de ses exceptions, et
+       dit que ce qu'un artisan a repris d'une demande relève de lui ;
+     - aucune durée de conservation d'un devis n'est promise : la purge à un
+       an est une décision du 17/10 dont le mécanisme est au lot 4.
+   ================================================================== */
+console.log('\nLe chiffrage d’un devis : ce que les textes en disent (lot 1)');
+{
+  const section = (blocs, motif) => blocs.filter((b) => motif.test(b.titre))
+    .map((b) => b.texte).join(' ');
+  const clients = section(CONFIDENTIALITE, /clients que vous enregistrez/i);
+  const combien = section(CONFIDENTIALITE, /Combien de temps/);
+  const collecte = section(CONFIDENTIALITE, /Ce que nous collectons/);
+
+  verifier('la version des textes a changé avec le chiffrage (22/10/2026 au moins)',
+    VERSION >= '2026-10-22',
+    `VERSION = ${VERSION}. Des devis qui portent l’adresse des travaux et ce qui survit à `
+    + 'une suppression : c’est un changement de fond, une acceptation ancienne ne le couvre pas.');
+
+  verifier('« Les clients que vous enregistrez » EXISTE et nomme les devis, et l’adresse des travaux',
+    clients.length > 200 && /préparer des devis/.test(clients) && /adresse des travaux/.test(clients),
+    'un devis rattache une fiche du carnet et porte le domicile du client : la section qui dit '
+    + 'les rôles (responsable, sous-traitant) doit les couvrir');
+  verifier('…et dit que personne d’autre ne les voit : ni votre client, ni l’espace d’administration',
+    /aucun écran d’Opus ne les montre/.test(clients) && /ni à votre client/.test(clients)
+    && /ni dans l’espace d’administration/.test(clients),
+    'l’essai 49 le prouve (cas 12, 28, 33f : aucun administrateur ne lit un devis) ; le texte '
+    + 'doit le dire sans rien omettre');
+
+  /* « SANS SON NOM » — sabotage 59. Aucune proposition de la section ne
+     suggère qu'une donnée y est anonymisée : il n'y a aucune anonymisation
+     d'un devis ni d'une fiche. La forme, pas la chaîne : « sans le nom du
+     client », « sans nom de client », « anonymisé » sont refusés aussi. */
+  const ANONYMISATION = /sans\s+(?:(?:son|leur|le|les|aucun|ses)\s+)?noms?(?![\p{L}])|anonym/iu;
+  const fautesAnonymes = propositionsDe(clients).filter((p) => ANONYMISATION.test(p));
+  verifier('…et ne suggère aucune anonymisation (« sans son nom », « sans nom de client »…)',
+    fautesAnonymes.length === 0,
+    `${fautesAnonymes.join(' | ')} — supprimer la fiche d’un client détache ses devis, elle ne les `
+    + 'efface pas : ils gardent l’adresse des travaux et l’objet, qui suffisent souvent à '
+    + 'reconnaître quelqu’un');
+  const VERITE_EFFACEMENT = (texte) => /Supprimer la fiche d’un client ne supprime pas ses devis/.test(texte)
+    && /adresse des travaux/.test(texte) && /supprimez aussi ses devis/.test(texte);
+  verifier('…et dit ce qu’une suppression de fiche n’efface pas, et comment l’effacer',
+    VERITE_EFFACEMENT(clients),
+    '« Supprimer la fiche d’un client ne supprime pas ses devis : ils restent, avec l’adresse des '
+    + 'travaux… Pour effacer les données de ce client, supprimez aussi ses devis. »');
+
+  /* L'AUTRE BRANCHE, FAITE TOURNER — `legal.js` n'importe rien : une copie
+     dont le drapeau `contratSousTraitance` est basculé s'importe telle
+     quelle. Lire le source et y chercher un nom de constante viserait une
+     ÉCRITURE ; on vérifie ce que la branche AFFICHE. */
+  {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { pathToFileURL } = await import('node:url');
+    const source = readFileSync('src/data/legal.js', 'utf8');
+    const drapeau = /contratSousTraitance:\s*(true|false)\s*,/;
+    const valeur = (source.match(drapeau) || [])[1];
+    let autre = '';
+    let pose = false;
+    if (valeur) {
+      const dossier = mkdtempSync(join(tmpdir(), 'legal-autre-branche-'));
+      const fichier = join(dossier, 'legal.mjs');
+      writeFileSync(fichier, source.replace(drapeau,
+        `contratSousTraitance: ${valeur === 'true' ? 'false' : 'true'},`));
+      try {
+        const m = await import(pathToFileURL(fichier).href);
+        pose = m.EDITEUR.contratSousTraitance !== EDITEUR.contratSousTraitance;
+        autre = m.CONFIDENTIALITE.filter((b) => /clients que vous enregistrez/i.test(b.titre))
+          .map((b) => b.texte).join(' ');
+      } finally {
+        rmSync(dossier, { recursive: true, force: true });
+      }
+    }
+    const fautesAutre = propositionsDe(autre).filter((p) => ANONYMISATION.test(p));
+    /* …ET SON EXCEPTION : « ne les transmet à personne d'autre » s'étend
+       aux devis, dont le lieu des travaux part à la Base Adresse — dite dans
+       la branche actuelle seulement (relecture « conformité » des étapes 4
+       à 7, mineur 2). */
+    verifier('…dans l’AUTRE branche aussi (celle du contrat de sous-traitance), faite tourner — exception de la Base '
+      + 'Adresse comprise',
+      pose && autre !== clients && /devis/.test(autre) && VERITE_EFFACEMENT(autre)
+      && fautesAutre.length === 0 && /Base Adresse Nationale/.test(autre) && /lieu des travaux d’un devis/.test(autre),
+      !pose ? 'le drapeau `contratSousTraitance` est introuvable ou n’a pas basculé : le contrôle a '
+        + 'perdu sa cible'
+        : 'le jour où le contrat existera, la branche affichée sera celle-là : elle doit nommer les '
+          + 'devis et dire ce qu’une suppression de fiche n’efface pas');
+  }
+
+  /* « À TROIS EXCEPTIONS PRÈS » — sabotage 59. Une énumération qui annonce
+     son nombre se trompe le jour où elle s'allonge — et elle venait de
+     s'allonger. Partout, et sous toutes ses formes. */
+  const nombreAnnonce = /(?:^|[^\p{L}])(?:deux|trois|quatre|cinq|six|sept|huit|\d+)\s+exceptions?(?![\p{L}])/iu;
+  verifier('aucun texte n’annonce le NOMBRE de ses exceptions (« à trois exceptions près »)',
+    !nombreAnnonce.test(tout),
+    `${(tout.match(/[^.]{0,60}exceptions?[^.]{0,30}/gi) || []).join(' | ')} — la liste des `
+    + 'exceptions s’est allongée avec les devis ; un nombre écrit à côté finit faux');
+  const phraseReprise = combien.split(/(?<=[.])\s+/).find((ph) => /relève de lui/.test(ph)) || '';
+  verifier('« Combien de temps » dit que ce qu’un artisan a repris d’une demande relève de lui, et à qui s’adresser',
+    /demande/.test(phraseReprise) && /devis/.test(phraseReprise) && /carnet/.test(phraseReprise)
+    && /ne l’efface pas/.test(phraseReprise) && /adressez-vous à lui/.test(phraseReprise),
+    phraseReprise || 'aucune phrase « relève de lui » : le texte d’une demande recopié dans un devis '
+      + 'survit à la suppression du compte du particulier (essai 49, cas 23) — il faut le dire');
+
+  /* LES GENRES DE DEMANDE QUI Y SONT NOMMÉS, TIRÉS DU CODE — et pas d'une
+     liste écrite ici. « Ajouter à mes clients » est offert sur TOUTE demande
+     reçue acceptée ou terminée, rappels compris, et la phrase disait « de
+     devis ou d'urgence » : le texte opposable disait moins que la vérité,
+     et ce contrôle passait (relecture « conformité » des étapes 4 à 7,
+     important 1). On lit la GARDE de chacun des deux boutons qui RECOPIENT
+     une demande (« Ajouter à mes clients », « Faire un devis ») : sans
+     condition de genre, ce sont les trois ; sinon, ceux qu'elle nomme. */
+  {
+    const DR = readFileSync('src/screens/DemandesRecuesScreen.js', 'utf8')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const devisJs = readFileSync('src/lib/devis.js', 'utf8');
+    const TOUS = ['devis', 'rappel', 'sos'];
+    const MOT = { devis: 'de devis', rappel: 'de rappel', sos: 'd’urgence' };
+    /* La garde d'un bouton : du `{` qui ouvre sa condition jusqu'à son
+       `<BtnMini` — le libellé peut être une expression (« Vérification… »
+       pendant une lecture), on le cherche donc comme CHAÎNE dans la balise. */
+    const gardeDe = (libelle) => {
+      const i = Math.max(DR.indexOf(`"${libelle}"`), DR.indexOf(`'${libelle}'`));
+      if (i < 0) return null;
+      const iBouton = DR.lastIndexOf('<BtnMini', i);
+      if (iBouton < 0) return null;
+      const j = DR.lastIndexOf('{', iBouton);
+      return j < 0 ? null : DR.slice(j, iBouton);
+    };
+    const genresDe = (garde) => {
+      if (!garde) return [];
+      if (/peutFaireUnDevis\(/.test(garde)) {
+        const bloc = (devisJs.match(/const STATUTS_QUI_OUVRENT = Object\.freeze\(\{([\s\S]*?)\}\);/) || [])[1] || '';
+        return TOUS.filter((g) => new RegExp(`\\b${g}:`).test(bloc));
+      }
+      const nommes = TOUS.filter((g) => new RegExp(`genre\\s*===\\s*'${g}'`).test(garde));
+      return nommes.length ? nommes : TOUS;
+    };
+    const gardeAjouter = gardeDe('Ajouter à mes clients');
+    const gardeFaire = gardeDe('Faire un devis');
+    const genres = [...new Set([...genresDe(gardeAjouter), ...genresDe(gardeFaire)])];
+    const manquent = genres.filter((g) => !phraseReprise.includes(MOT[g]));
+    verifier('…et y nomme CHAQUE genre de demande qu’un bouton recopie dans un carnet ou un devis — liste tirée du code '
+      + '(« Ajouter à mes clients », « Faire un devis »)',
+    !!gardeAjouter && !!gardeFaire && genres.length >= 2 && manquent.length === 0,
+    `${genres.map((g) => MOT[g]).join(', ')} attendus ; manquent : ${manquent.map((g) => MOT[g]).join(', ') || '—'}`);
+  }
+  verifier('…et que les devis en préparation partent avec le compte de l’artisan, sans autre durée',
+    /devis en préparation sont conservés tant que vous ne les supprimez pas/.test(combien)
+    && /partent avec votre compte/.test(combien),
+    'la seule durée vraie aujourd’hui : jusqu’à ce que l’artisan les supprime, ou son compte');
+
+  /* AUCUNE DURÉE DE CONSERVATION D'UN DEVIS — par PROPOSITION, partout : une
+     proposition qui nomme un devis ne porte aucun nombre de jours, de mois
+     ou d'années. Le mécanisme de la purge n'existe pas (lot 4). */
+  const DUREE = /(?:^|[^\p{L}\d])(?:\d+|un|une|deux|trois|quatre|cinq|six|dix|douze)\s+(?:ans?|années?|mois|semaines?|jours?)(?![\p{L}])/iu;
+  const dureesDevis = propositionsDe(tout).filter((p) => /devis/i.test(p) && DUREE.test(p));
+  verifier('aucune durée de conservation d’un devis n’est promise',
+    dureesDevis.length === 0,
+    `${dureesDevis.join(' | ')} — la purge à un an est une décision du 17/10 dont le mécanisme est `
+    + 'au lot 4 : promettre une durée qu’aucun code ne tient serait faux');
+
+  /* LA COLLECTE NOMME LES DEVIS, colonne par colonne de la section 49. */
+  /* Par PHRASE et non par proposition (l'énumération suit un deux-points),
+     et à partir de « devis en préparation » seulement : le début de la même
+     phrase énumère les TARIFS (« prix du devis »), qui satisferaient
+     « prix » à la place des lignes. */
+  const phraseDevis = collecte.split(/(?<=[.!?])\s+/).find((p) => /devis en préparation/.test(p)) || '';
+  const propDevis = phraseDevis.slice(Math.max(0, phraseDevis.indexOf('devis en préparation')));
+  const COMPOSANTS = ['objet', 'le lieu', 'délai des travaux', 'retenue de garantie', 'lignes', 'prix',
+    'totaux', 'client de votre carnet', 'demande ou l’urgence'];
+  verifier('« Ce que nous collectons » nomme les devis en préparation et ce qu’ils portent',
+    COMPOSANTS.every((x) => propDevis.includes(x)),
+    `${COMPOSANTS.filter((x) => !propDevis.includes(x)).map((x) => `« ${x} » manque`).join(' · ') || ''}`
+    + ' — une donnée collectée qui n’est pas nommée n’est pas annoncée');
+
+  /* LA PROMESSE DES PRIX COUVRE LES LIGNES — inchangée, et elle doit le
+     rester : « Vos tarifs et vos prix » dit déjà que les autres prix d'un
+     devis ne sont montrés à personne. */
+  verifier('« Vos tarifs et vos prix » couvre toujours les prix des devis',
+    /les autres prix que vous enregistrez pour vos devis, ne sont montrés à personne d’autre que vous/
+      .test(section(CGU, /tarifs et vos prix/i)),
+    'les prix des lignes d’un devis sont « les autres prix que vous enregistrez pour vos devis »');
+
+  /* LE LIEU DES TRAVAUX PART À LA BASE ADRESSE PAR LE MÊME CHAMP — sinon
+     le destinataire nommé ne serait pas le bon. Le texte dit « le lieu des
+     travaux d'un devis » : le code doit passer par `ChampVille`. */
+  const entete = readFileSync('src/components/EnteteDevis.js', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  verifier('…et le lieu des travaux passe par le même champ que les autres lieux (`ChampVille`)',
+    /<ChampVille\b/.test(entete) && /lieu des travaux d’un devis/.test(clients)
+    && !/api-adresse|data\.gouv/.test(entete),
+    'la section des destinataires dit la Base Adresse « chaque fois qu’un champ de lieu vous propose '
+    + 'des suggestions » : un autre chemin vers elle serait un destinataire non relu');
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

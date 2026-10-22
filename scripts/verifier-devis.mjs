@@ -48,7 +48,8 @@
  *   A. CE QU'IL FAIT TOURNER (étapes 1 et 2) — les cas d'argent de
  *      `supabase/cas-devis.json`, les conversions, la mémoire, les phrases
  *      de la loi, les dates dans trois fuseaux, la file d'écriture et
- *      l'identifiant. (A-7, la démonstration, arrive avec elle à l'étape 4.)
+ *      l'identifiant ; A-7, la démonstration (étape 4) : ses données
+ *      refaites, et sa base en mémoire mise à l'épreuve.
  *   B. LE SCHÉMA (étape 3) — la section 49 lue sans ses commentaires : la
  *      liste FERMÉE des colonnes, D4, les 23 contraintes, les miroirs de
  *      `devis.js`, les formules, les politiques, les droits, les
@@ -60,7 +61,26 @@
  *      accusé du code juste (relecture « base » du cahier, B1 et B2).
  *   C. L'ESSAI (étape 3) — ce que `supabase/essais-section-49.sql` doit
  *      contenir ; le JOUER est l'affaire de PostgreSQL, à la main.
- *   D à F viennent avec l'application et les écrans (étapes 4 et 5).
+ *   D. L'API (étape 4) — `api.js` LU (il charge Supabase, que `node`
+ *      n'ouvre pas) : la forme des fonctions, la liste fermée de ce qui
+ *      part — `devisVersBase` et `ligneVersBase`, elles, FAITES TOURNER —,
+ *      le seul écrivain, la file, la mémoire, le tri ; puis la base de
+ *      démonstration FAITE TOURNER par la vraie file, et ses refus
+ *      comparés, mot pour mot, à ceux que la section 49 lève.
+ *   E. LES ÉCRANS (étape 5) — les sept fichiers de la saisie LUS (ils
+ *      chargent React Native) : le bandeau, les claviers (un nombre a SON
+ *      champ, `ChampMontant`), `CLAVIER` sans `KeyboardAvoidingView`, aucun
+ *      calcul de totaux dans React ni aucune somme de deux totaux, une seule
+ *      porte pour écrire un montant (`Montant`), les pastilles, un échec du
+ *      régime qui ne dit jamais « non déclaré », la garde de sortie aux CINQ
+ *      portes d'`OpusApp`, « Mes devis », la fiche client, « Pour moi », et
+ *      les jetons de thème qui existent. Ce que ces écrans FONT au
+ *      navigateur, c'est `mesure-devis` (étape 7) qui le mesure.
+ *   F. QUI LIT, QUI ÉCRIT (étape 5) — pour chaque colonne du SCHÉMA, un
+ *      écrivain et un lecteur ; pour chaque table, une relecture dans
+ *      `api.js` ET un appelant à l'écran. Les deux sens du même contrôle :
+ *      le 01/10, des tables écrites que personne ne lisait ; le 04/10, une
+ *      colonne lue que personne n'écrivait.
  *
  * CE QU'IL NE PEUT PAS DIRE
  * -------------------------
@@ -350,7 +370,7 @@ function importsDe(src) {
     .map((m) => ({ de: m[2], noms: (m[1] || '').split(',').map((x) => x.trim()).filter(Boolean).sort() }));
 }
 
-let D; let C; let E; let ERR; let F; let I; let ENT; let CAS;
+let D; let C; let E; let ERR; let F; let I; let ENT; let CAS; let DEMO;
 try {
   D = await import('../src/lib/devis.js');
   C = await import('../src/lib/centimes.js');
@@ -359,6 +379,7 @@ try {
   ERR = await import('../src/lib/erreurs.js');
   F = await import('../src/lib/file-ecriture.js');
   I = await import('../src/lib/identifiant.js');
+  DEMO = await import('../src/data/devis-demo.js');
   CAS = JSON.parse(lire('supabase/cas-devis.json'));
 } catch (e) {
   console.error(`  ✘ les fichiers du chiffrage s’ouvrent dans node\n      ${e && e.stack}`);
@@ -501,12 +522,16 @@ console.log('\n  2. chaque borne est éprouvée, exactement');
 console.log('\n  3. ce qu’on tape, ce qu’on lit');
 {
   const m = (s) => D.versMilliemes(s);
+  /* « ,5 » vaut 0,5 : sur un pavé décimal on tape la virgule d'abord — il
+     était refusé avec « une seule virgule » (relecture « écran » des étapes
+     4 à 7, C7). Une virgule seule, non. */
   const mOk = [['2,5', 2500], ['2.5', 2500], ['2,500', 2500], ['1 000', 1000000], ['99999,999', 99999999], ['', null],
-    ['  ', null], ['0,001', 1], ['007', 7000]];
-  const mKo = ['2,5000', '-1', '100000', '1.000,5', 'deux', '2,5,1'];
+    ['  ', null], ['0,001', 1], ['007', 7000], [',5', 500], ['.25', 250], ['5,', 5000]];
+  const mKo = ['2,5000', '-1', '100000', '1.000,5', 'deux', '2,5,1', ',', '.', ',,5', ',0005'];
   const fauxM = mOk.filter(([s, v]) => !(m(s).ok && m(s).milliemes === v)).map(([s]) => `${json(s)} → ${json(m(s))}`)
     .concat(mKo.filter((s) => m(s).ok).map((s) => `${json(s)} accepté`));
-  verifier('`versMilliemes` : « 2,5 » et « 2.5 » → 2500 ; quatre décimales, négatif, six chiffres refusés ; vide → null',
+  verifier('`versMilliemes` : « 2,5 » et « 2.5 » → 2500, « ,5 » → 500 ; quatre décimales, négatif, six chiffres, une virgule '
+    + 'seule refusés ; vide → null',
     fauxM.length === 0, fauxM.join(' ; '));
   const c = (s) => D.versCentiemes(s);
   const cOk = [['5', 500], ['2,5', 250], ['5 %', 500], ['5%', 500], ['0,01', 1], ['', null]];
@@ -581,7 +606,7 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
     return {
       id: `l${String(n).padStart(2, '0')}`, type: 'poste', designation, unite: 'm2', prixUnitaireCentimes: prix,
       modifieLe: `2026-10-${String(n).padStart(2, '0')}T10:00:00Z`,
-      devis: { id: `d${n}`, objet: `Devis ${n}`, modifieLe: `2026-10-${String(n).padStart(2, '0')}T10:00:00Z` }, ...plus,
+      devis: { id: `d${n}`, objet: `Devis ${n}`, source: 'manuelle', modifieLe: `2026-10-${String(n).padStart(2, '0')}T10:00:00Z` }, ...plus,
     };
   };
   const deux = [L('Chape sèche', 5000), L('Chape sèche', 7000)];
@@ -600,6 +625,31 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
     quatre.length === 3 && egalListes(quatre.map((s) => s.prixUnitaireCentimes), [4000, 3000, 2000])
     && quatre[0].origine.objet === 'Devis 11' && /^\d{2}\/10\/2026$/.test(quatre[0].origine.date || ''),
     json(quatre.map((s) => [s.prixUnitaireCentimes, s.origine])));
+  /* L'ORIGINE D'UNE SUGGESTION, MONTRÉE PENDANT QU'ON CHIFFRE LE DEVIS D'UN
+     AUTRE CLIENT : l'objet d'un devis ouvert depuis une demande ou une
+     urgence est le texte du PARTICULIER — il ne sort jamais de ses devis ;
+     une source inconnue se tait de même ; l'objet d'un devis ouvert à la
+     main se montre, réduit à quatre mots (relecture « données » des étapes
+     4 à 7, I5). */
+  const LE = '2026-10-12T10:00:00Z';
+  const oDemande = D.memoireDesLignes([L('Carrelage', 4000, { devis: { id: 'dd', objet: 'Fuite chez moi au 4 rue des Lilas, code 1234', source: 'demande', modifieLe: LE } })], 'carrelage')[0];
+  const oUrgence = D.memoireDesLignes([L('Carrelage', 4000, { devis: { id: 'du', objet: 'Dégât des eaux chez Mme X', source: 'urgence', modifieLe: LE } })], 'carrelage')[0];
+  const oInconnue = D.memoireDesLignes([L('Carrelage', 4000, { devis: { id: 'di', objet: 'Chez M. Y', modifieLe: LE } })], 'carrelage')[0];
+  const oMain = D.memoireDesLignes([L('Carrelage', 4000, { devis: { id: 'dm', objet: 'Rénovation de la salle de bains du haut', source: 'manuelle', modifieLe: LE } })], 'carrelage')[0];
+  const texteDe = (s) => json(s && s.origine);
+  verifier('l’origine d’une suggestion : un devis ouvert depuis une DEMANDE, une URGENCE ou de source inconnue se nomme par sa '
+    + 'DATE (« votre devis du 12/10/2026 »), jamais par le texte du client ; un devis ouvert à la main par quatre mots de son objet',
+    oDemande && oDemande.origine.objet === null && oDemande.origine.libelle === 'votre devis du 12/10/2026'
+    && !/Lilas|Fuite|1234/.test(texteDe(oDemande)) && oUrgence && !/Mme|Dégât/.test(texteDe(oUrgence))
+    && oInconnue && !/M\. Y|Chez/.test(texteDe(oInconnue)) && oMain && oMain.origine.libelle === 'Rénovation de la salle…',
+    [oDemande, oUrgence, oInconnue, oMain].map(texteDe).join(' | '));
+  const CD = sansCommentairesJs(lire('src/components/ChampDesignation.js'));
+  verifier('…et `ChampDesignation` n’affiche l’origine que par `origine.libelle` — jamais `origine.objet` directement',
+    /origine\.libelle/.test(CD) && !/origine\.objet/.test(CD) && !/\.devis\.objet/.test(CD));
+  const longue = D.devisDepuisDemande({ id: 'q', genre: 'devis', titre: `${'a'.repeat(1200)}` });
+  verifier('l’objet pré-rempli depuis une demande tient dans `devis_objet_check` (1 000 caractères) : au-delà, le brouillon ne se '
+    + 'créerait pas', longue && [...longue.objet].length === D.LONGUEURS.objet && D.validerDevis({ ...longue }).ok,
+  `${longue && [...longue.objet].length} caractères`);
   const melange = [
     L('Chape', 4500, { id: 'courante' }), L('Chape', 4600, { type: 'zone' }), L('Chape', 4700, { type: 'reserve' }),
     L('Chape', 4800, { type: 'option' }), L('Pose', 9900),
@@ -790,17 +840,41 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
     && /sans retard injustifié/.test(pourquoi) && /conclusion du contrat/.test(pourquoi) && /L\.\u00a0216-1/.test(pourquoi),
     pourquoi);
   /* LA DURÉE JAMAIS SANS SA RÉSERVE : toute phrase du module qui dit « un
-     an » dit aussi « opposition » (loi n° 71-584, art. 2). On relit toutes
-     les chaînes de `devis.js`, et toutes ses constantes exportées. */
-  const chaines = [...sansCommentairesJs(lire('src/lib/devis.js')).matchAll(/'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)]
-    .map((m) => m[1] ?? m[2]);
-  const concat = sansCommentairesJs(lire('src/lib/devis.js')).replace(/'\s*\+\s*'/g, '');
-  const phrasesAn = [...concat.matchAll(/'([^']*\bun an\b[^']*)'/g)].map((m) => m[1]);
+     an » dit aussi « opposition » (loi n° 71-584, art. 2).
+
+     LE MODULE, C'EST AUSSI SES ÉCRANS (cahier §6.1-32) — et le premier jet ne
+     relisait que `devis.js` : l'aide de l'interrupteur « Retenue de
+     garantie » (`SaisieDevisScreen`, un ATTRIBUT JSX) disait « rendus un an
+     après la réception » sans l'opposition, s'affichait SEULE quand la
+     retenue était éteinte, et ce contrôle passait au vert (relecture
+     « conformité » des étapes 4 à 7, bloquant 1). On relit donc les chaînes
+     de chaque fichier du module, écrans compris : les littéraux ('…', "…" —
+     donc les attributs JSX —, les textes de gabarit), RECOUSUS quand ils sont
+     concaténés par `+`, et le texte JSX entre deux balises. Sans les
+     commentaires : une explication qui cite la faute ne la commet pas. */
+  const FICHIERS_DU_MODULE = ['src/lib/devis.js', 'src/lib/centimes.js', 'src/lib/file-ecriture.js',
+    'src/data/devis-demo.js', 'src/screens/SaisieDevisScreen.js', 'src/screens/DevisScreen.js',
+    'src/components/CarteLigne.js', 'src/components/EnteteDevis.js', 'src/components/ChampDesignation.js',
+    'src/components/ChoixClientDevis.js', 'src/components/ChampMontant.js'];
+  const UN_AN = /(?<![\p{L}\d])un an(?![\p{L}])/u;
+  const phrasesDe = (src) => {
+    const recousu = sansCommentairesJs(src).replace(/(['"`])\s*\+\s*(['"`])/g, '');
+    const litteraux = [...recousu.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)]
+      .map((m) => m[1] ?? m[2] ?? m[3]);
+    const textesJsx = [...recousu.matchAll(/>([^<>{}=;()]*[\p{L}][^<>{}=;()]*)</gu)].map((m) => m[1]);
+    return [...litteraux, ...textesJsx];
+  };
+  const phrasesModule = FICHIERS_DU_MODULE.flatMap((f) => phrasesDe(lire(f)).map((p) => ({ f, p })));
   const exportees = Object.values(D).flatMap((v) => (typeof v === 'string' ? [v] : (v && typeof v === 'object' ? Object.values(v) : [])))
-    .filter((v) => typeof v === 'string');
-  const sansReserve = [...phrasesAn, ...exportees].filter((s) => /\bun an\b/.test(s) && !/opposition/.test(s));
-  verifier('toute phrase du module qui dit « un an » dit aussi « opposition » — jamais la durée sans sa réserve',
-    chaines.length > 30 && sansReserve.length === 0 && /\bun an\b/.test(D.PHRASE_RETENUE), sansReserve.join(' | '));
+    .filter((v) => typeof v === 'string').map((p) => ({ f: 'devis.js (export)', p }));
+  const sansReserve = [...phrasesModule, ...exportees].filter(({ p }) => UN_AN.test(p) && !/opposition/.test(p));
+  const ecransLus = FICHIERS_DU_MODULE.filter((f) => /screens|components/.test(f))
+    .every((f) => phrasesDe(lire(f)).length > 3);
+  verifier('toute phrase du module — ses ÉCRANS compris, attributs JSX et texte entre balises — qui dit « un an » dit aussi '
+    + '« opposition » : jamais la durée sans sa réserve',
+    phrasesModule.length > 300 && ecransLus && sansReserve.length === 0 && UN_AN.test(D.PHRASE_RETENUE)
+    && phrasesDe(lire('src/screens/SaisieDevisScreen.js')).some((p) => UN_AN.test(p)),
+    sansReserve.map(({ f, p }) => `${f} : « ${p.slice(0, 90)} »`).join(' | ') || `${phrasesModule.length} phrases lues`);
   verifier('`PHRASE_RETENUE` : au plus 5 %, le consignataire, la caution d’une « société de caution mutuelle » — pas une '
     + 'caution « bancaire » seule', /5\u00a0%/.test(D.PHRASE_RETENUE) && /consignataire/.test(D.PHRASE_RETENUE)
     && /société de caution mutuelle/.test(D.PHRASE_RETENUE) && /établissement financier habilité/.test(D.PHRASE_RETENUE)
@@ -864,16 +938,111 @@ console.log('\n  6. `validerLigne` nomme la MÊME contrainte que la base');
      disait que \u00ab au plus 5 % \u00bb, elle serait FAUSSE pour un 0 (relecture 0-2,
      mineur 9). Ce contr\u00f4le la tient d\u00e8s qu'elle existe. */
   const phraseRetenue = (ERR.MESSAGES_CONTRAINTE || {}).devis_retenue_check || null;
-  verifier('\u00ab 0 \u00bb est refus\u00e9 comme \u00ab 6 % \u00bb (`devis_retenue_check`) \u2014 et sa phrase, quand le lot 4 l\u2019\u00e9crira, dira les DEUX '
+  verifier('\u00ab 0 \u00bb est refus\u00e9 comme \u00ab 6 % \u00bb (`devis_retenue_check`) \u2014 et sa phrase (`erreurs.js`, \u00e9tape 4) dit les DEUX '
     + 'bornes (0,01 % et 5 %) et \u00ab laissez vide \u00bb pour une retenue absente',
   D.versCentiemes('0').centiemes === 0 && D.validerDevis({ retenueGarantieCentiemes: 0 }).contrainte === 'devis_retenue_check'
-    && (phraseRetenue === null || (/0,01/.test(phraseRetenue) && /5\u00a0?%/.test(phraseRetenue) && /vide/i.test(phraseRetenue))),
-  phraseRetenue || '(pas encore \u00e9crite : lot 4)');
+    && phraseRetenue !== null && /0,01\u00a0?%/.test(phraseRetenue) && /\b5\u00a0?%/.test(phraseRetenue) && /vide/i.test(phraseRetenue),
+  phraseRetenue || '(absente : `MESSAGES_CONTRAINTE.devis_retenue_check` manque)');
   verifier('`ESPACES_CODE_POSTAL` : les espaces ASCII, U+00A0 et U+202F, et RIEN d\u2019autre \u2014 retir\u00e9s si et seulement s\u2019ils sont '
     + 'dans la classe (\u00ab 13 410 \u00bb en U+2002 est refus\u00e9, comme la base le refusera)',
     D.ESPACES_CODE_POSTAL === CLASSE && ecarts.length === 0
     && D.validerDevis({ lieuCodePostal: '13\u2002410' }).contrainte === 'devis_lieu_code_postal_check',
     `classe ${json(D.ESPACES_CODE_POSTAL)} ; \u00e9carts ${ecarts.join(', ') || '\u2014'}`);
+}
+
+console.log('\n  7. la démonstration — elle fait VIVRE le mécanisme, sans `.env`');
+{
+  /* Le cahier, §4.3 et §6.1-7 : sans fichier `.env`, la démonstration est
+     le SEUL endroit où l'écran de saisie s'essaie ici. Si elle ne portait
+     ni deux taux, ni option, ni « Offert », ni de quoi nourrir la mémoire,
+     ces chemins ne se verraient nulle part — et ne se vérifieraient pas.
+     On REFAIT le calcul sur ses données, et on fait tourner sa base. */
+  const maintenant = new Date();
+  const jeu = DEMO.fabriquerDevisDemo(maintenant);
+  const srcDemo = sansCommentairesJs(lire('src/data/devis-demo.js'));
+  const fabrique = corpsDeFonction(srcDemo, 'fabriquerDevisDemo') || '';
+  const totauxEcrits = [
+    ...jeu.devis.flatMap((d) => Object.keys(d).filter((k) => /total/i.test(k)).map((k) => `${d.objet}.${k}`)),
+    ...jeu.lignes.flatMap((l) => Object.keys(l).filter((k) => /total/i.test(k)).map((k) => `${l.designation}.${k}`)),
+  ];
+  verifier('aucun total n’est écrit dans les données de démonstration : ni dans ce que `fabriquerDevisDemo` rend, ni dans son texte',
+    fabrique.length > 500 && totauxEcrits.length === 0 && !/total/i.test(fabrique), totauxEcrits.join(', ') || '—');
+  const parDevis = jeu.devis.map((d) => ({ d, t: D.totauxDevis(jeu.lignes.filter((l) => l.devisId === d.id)) }));
+  verifier('chaque devis de démonstration est recevable, et son total N’EST PAS nul (`totauxDevis`, refait ici)',
+    parDevis.length >= 2 && parDevis.every(({ t }) => t.ok && t.ttc > 0),
+    parDevis.map(({ d, t }) => `${d.objet} : ${t.ok ? `${t.ht} | ${t.tva} | ${t.ttc}` : t.contrainte}`).join(' ; '));
+  const deuxTaux = parDevis.filter(({ t }) => t.ok && t.ventilation.filter((v) => v.nbLignes > 0).length >= 2);
+  const offerts = jeu.lignes.filter((l) => l.offert === true && D.valeurLigne(l) > 0 && D.totalLigne(l) === 0);
+  const options = jeu.lignes.filter((l) => l.type === 'option' && D.valeurLigne(l) > 0);
+  const titres = ['zone', 'piece', 'reserve'].filter((ty) => jeu.lignes.some((l) => l.type === ty));
+  const piece = jeu.lignes.find((l) => l.type === 'piece');
+  verifier('…à DEUX taux, avec une option, un « Offert » QUI GARDE SA VALEUR (total 0, valeur > 0), une zone, une pièce '
+    + 'avec ses surfaces, une réserve, une main-d’œuvre à l’heure et une « fourniture non comprise »',
+  deuxTaux.length >= 1 && offerts.length >= 1 && options.length >= 1 && titres.length === 3
+    && piece && piece.surfaceSolMilliemes > 0 && piece.surfaceMursMilliemes > 0
+    && jeu.lignes.some((l) => l.mainOeuvre === true && l.unite === 'h')
+    && jeu.lignes.some((l) => l.fournitureNonComprise === true),
+  `deux taux : ${deuxTaux.length} devis ; offerts : ${offerts.map((l) => D.valeurLigne(l)).join(', ')} ; options : ${options.length} ; titres : ${titres.join(', ')}`);
+  /* La mémoire, sur « chape » : deux prix (45 € et 52 €), et la variante
+     sans la fourniture (38 €) — TROIS entrées, et aucune ne vaut la
+     moyenne de deux autres. */
+  const base = DEMO.creerBaseDevisDemo({ maintenant: () => maintenant });
+  const memoire = await base.memoire('1');
+  const chape = D.memoireDesLignes(memoire, 'chape');
+  const prixChape = chape.map((s) => `${s.prixUnitaireCentimes}${s.fournitureNonComprise ? '/sans fourniture' : ''}`).sort();
+  verifier('la mémoire de démonstration, sur « chape », rend TROIS entrées : deux prix, et la variante « fourniture non comprise » '
+    + '— jamais une moyenne', chape.length === 3 && json(prixChape) === json(['3800/sans fourniture', '4500', '5200'])
+    && !chape.some((s) => s.prixUnitaireCentimes === 4850) && chape.every((s) => s.origine && s.origine.objet && s.origine.date),
+  json(prixChape));
+  /* « moi » vaut 1 (un nombre) dans les données et '1' (une chaîne) pour
+     `Object.keys()` : la base de démonstration compare par `String()`. */
+  const l1 = await base.liste(1);
+  const l1s = await base.liste('1');
+  const autre = await base.liste('2');
+  verifier('les `proId` se comparent par `String()` : `1` et `\'1\'` voient les mêmes devis, une autre fiche n’en voit aucun',
+    l1.length === jeu.devis.length && l1s.length === l1.length && autre.length === 0
+    && /String\(\s*d\.proId\s*\)\s*===\s*String\(\s*proId\s*\)/.test(srcDemo),
+  `1 → ${l1.length}, '1' → ${l1s.length}, '2' → ${autre.length}`);
+  const ecarts = [];
+  for (const d of l1) {
+    const t = await base.relireTotaux('1', d.id);
+    const refait = D.totauxDevis(jeu.lignes.filter((l) => l.devisId === d.id));
+    if (!(t && t.ht === refait.ht && t.tva === refait.tva && t.ttc === refait.ttc
+      && json(t.ventilation) === json(refait.ventilation.filter((v) => v.nbLignes > 0)))) ecarts.push(d.objet);
+  }
+  verifier('les totaux que la base de démonstration rend sont ceux que `totauxDevis` REFAIT sur ses lignes (ventilation comprise)',
+    ecarts.length === 0, ecarts.join(', '));
+  const martin = jeu.devis.find((d) => d.clientId === 'cl-martin');
+  const fiche = (await import('../src/data/demo.js')).initialClients.find((c) => c.id === 'cl-martin');
+  verifier('un devis est LIÉ à une fiche du carnet (Mme Martin), le lieu des travaux COPIÉ de son adresse ; un autre est sans client',
+    Boolean(martin && fiche && martin.lieuAdresse === fiche.adresse && martin.lieuCodePostal === fiche.codePostal
+      && martin.lieuVille === fiche.ville && martin.source === 'manuelle')
+    && jeu.devis.some((d) => d.clientId === null) && (l1.find((d) => d.clientId === 'cl-martin') || {}).client?.nom === fiche.nom);
+  /* La demande se lie par le GESTE : elle est « en attente » dans les
+     données, « Faire un devis » n'apparaît qu'une fois acceptée, et la
+     base de démonstration vérifie qu'elle vous est adressée (OP013). */
+  const demandes = (await import('../src/data/demo.js')).initialDemandesRecues;
+  const dr = demandes.find((d) => d.id === 'dr-devis-1');
+  const acceptee = dr ? { ...dr, statut: 'accepte' } : null;
+  const base2 = DEMO.creerBaseDevisDemo({ maintenant: () => maintenant, demandeDe: (g, id) => (acceptee && g === 'devis' && id === acceptee.id ? acceptee : null) });
+  const ouverture = acceptee ? D.devisDepuisDemande(acceptee) : null;
+  let lien = null;
+  if (ouverture) {
+    await base2.ecrire('1', { quoi: 'devis', action: 'inserer', id: 'de0000ff-0000-4000-8000-000000000001', valeurs: { ...ouverture }, generation: Date.now() });
+    lien = (await base2.liste('1')).find((d) => d.id === 'de0000ff-0000-4000-8000-000000000001');
+  }
+  verifier('la demande de démonstration se lie PAR LE GESTE : « en attente » dans les données (aucun lien truqué), « Faire un devis » '
+    + 'une fois acceptée, et le brouillon dit « depuis une demande du … » avec une date calculée',
+  Boolean(dr && dr.statut === 'en_attente' && !D.peutFaireUnDevis(dr) && D.peutFaireUnDevis(acceptee)
+    && lien && lien.quoteRequestId === 'dr-devis-1' && /^depuis une demande du \d{2}\/\d{2}\/\d{4}$/.test(D.origineLisible(lien) || ''))
+    && !jeu.devis.some((d) => d.quoteRequestId || d.sosRequestId),
+  lien ? D.origineLisible(lien) : '(pas de brouillon)');
+  /* Des dates CALCULÉES : un jeu fabriqué à deux heures différentes ne
+     porte pas les mêmes dates — une date figée vieillirait. */
+  const plusTard = DEMO.fabriquerDevisDemo(new Date(maintenant.getTime() + 3600e3));
+  verifier('les dates de démonstration sont CALCULÉES depuis l’heure où l’on regarde, jamais écrites en dur',
+    jeu.devis.every((d, i) => d.modifieLe !== plusTard.devis[i].modifieLe)
+    && !/['"]20\d\d-\d\d-\d\dT/.test(fabrique));
 }
 
 console.log('\n  8. une seule écriture des montants');
@@ -1537,6 +1706,27 @@ process.on('unhandledRejection', (e) => { plantagesDeLaFile.push((e && e.stack) 
     json(apres) === json(['echec', 'OP015', 99999]) && essais.length === 2 && essais[0].generation === 11
       && essais[1].generation === 100000 && f.etatDe('A') === 'enregistree' && b.lignes.get('A').prixUnitaireCentimes === 5000,
     `${json(apres)} ${json(essais.map((o) => o.generation))}`);
+  });
+  /* bb. un refus OP015 de la SUPPRESSION du brouillon : comme pour une ligne,
+     la file relit l'horloge — sans elle, « Supprimer » échouait de nouveau
+     tant qu'on n'avait pas rouvert le devis (relecture « données » des
+     étapes 4 à 7, mineur 1). */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    b.devis.set('D1', { source: 'manuelle', generation: 88888 });
+    b.commandes.push({ quand: (op) => op.quoi === 'devis' && op.action === 'supprimer',
+      erreur: Object.assign(new Error('Ce devis a reçu entre-temps une modification plus récente'), { code: 'OP015' }) });
+    const f = fabriquer(b, { devisEnBase: true, horloge: 10, horlogeTelephone: () => 0 });
+    let erreur = null;
+    try { await f.supprimerDevis(); } catch (e) { erreur = e; }
+    const plancher = f.horloge().plancher;
+    let secondeFois = null;
+    try { await f.supprimerDevis(); } catch (e) { secondeFois = e; }
+    const sup = b.journal.filter((o) => o.quoi === 'devis' && o.action === 'supprimer');
+    verifier('un refus OP015 de la SUPPRESSION du brouillon : la file RELIT l’horloge (88 888) ; la seconde suppression part '
+      + 'au-dessus (88 889) et passe', erreur && erreur.code === 'OP015' && plancher === 88888 && !secondeFois
+      && sup.length === 2 && sup[1].generationMax > 88888 && f.devisEnBase() === false,
+    `${erreur && erreur.code} plancher ${plancher} ; ${json(sup.map((o) => o.generationMax))} ; ${secondeFois && secondeFois.message}`);
   });
   /* cc. un refus OP016 (numéro absent ou hors bornes, 49.5 bis point 7 —
      relecture de l'étape 3) n'est PAS un autre appareil : « echec », et la
@@ -2471,19 +2661,813 @@ console.log('\n  26. l’essai et le témoin');
   verifier('…et JAMAIS dans `schema.sql`', !/S_attente|temoin_attente_essai_49/.test(SQL));
 }
 
+/* ================================================================== */
+/*  D. L'API — `src/lib/api.js`, lu sans ses commentaires              */
+/* ================================================================== */
+console.log('\nD. L’API — par la file, et rien que par elle');
+
+console.log('\n  27. `api.js` : la forme, la liste fermée, la file, la mémoire, le tri');
+{
+  /* `api.js` charge Supabase et React Native : `node` ne sait pas l'ouvrir.
+     Ce qui s'y vérifie se LIT — sauf la traduction vers la base
+     (`devisVersBase`, `ligneVersBase`), écrite pour ne dépendre que de ses
+     arguments : on la FAIT TOURNER telle qu'elle est écrite. */
+  const API = sansCommentairesJs(lire('src/lib/api.js'));
+  const iNoop = API.search(/\bconst\s+noop\s*=/);
+  /* Les fonctions du devis, et les choix « deux fonctions nommées ». */
+  const estDuDevis = (nom) => /devis/i.test(nom) || /^(memoireDesLignes|monRegime|rowToLigne|ligneVersBase)/.test(nom);
+  const decls = [...API.matchAll(/(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/g)]
+    .map((m) => ({ nom: m[1], i: m.index })).filter((d) => estDuDevis(d.nom));
+  const choix = [...API.matchAll(/(?:^|\n)\s*(?:export\s+)?const\s+(\w+)\s*=\s*(!?)\s*hasSupabase\s*\?([\s\S]*?);/g)]
+    .map((m) => ({ nom: m[1], i: m.index, nie: m[2] === '!', reste: m[3] })).filter((d) => estDuDevis(d.nom));
+  const avant = [...decls, ...choix].filter((d) => iNoop < 0 || d.i < iNoop).map((d) => d.nom);
+  verifier('toute fonction du devis est déclarée APRÈS `const noop` (une `const` lue avant sa déclaration : un écran blanc)',
+    iNoop > 0 && decls.length >= 20 && avant.length === 0, avant.join(', ') || `${decls.length} fonctions, ${choix.length} choix`);
+  const nomsDecl = new Set([...API.matchAll(/(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/g)].map((m) => m[1]));
+  const malFaits = choix.filter((c) => {
+    const m = /^\s*(\w+)\s*:\s*(\w+)\s*$/.exec(c.reste);
+    return c.nie || !m || !nomsDecl.has(m[1]) || !nomsDecl.has(m[2]) || m[1] === 'noop' || m[2] === 'noop'
+      || !/Supabase$/.test(m[1]) || !/Demo$/.test(m[2]);
+  }).map((c) => c.nom);
+  const exportes = ['mesDevis', 'unDevis', 'devisDuClient', 'devisDeLaDemande', 'memoireDesLignes', 'monRegime'];
+  const manquants = exportes.filter((n) => !choix.some((c) => c.nom === n && /^\s*export/.test(API.slice(c.i, c.i + 40).replace(/^\n/, ''))));
+  verifier('chaque choix du devis a ses DEUX fonctions nommées (`xSupabase`, `xDemo`) et le choix à la fin — aucune forme '
+    + '`!hasSupabase ? …`, aucun `noop` (la démonstration doit VIVRE)', choix.length >= 9 && malFaits.length === 0 && manquants.length === 0,
+  `mal faits : ${malFaits.join(', ') || '—'} ; exports manquants : ${manquants.join(', ') || '—'}`);
+
+  const mesDevis = corpsDeFonction(API, 'mesDevisSupabase') || '';
+  /* LA BORNE N'EST HONNÊTE QU'AVEC LE TRI, et le tri AVANT elle : sans
+     `.order('modifie_le', …)`, la borne garde 200 devis au hasard de l'`id`
+     et le pied « les plus anciens ne sont pas affichés » ment (relecture
+     « conformité » des étapes 4 à 7, I3 : le sabotage passait). */
+  const iTri = mesDevis.search(/\.order\(\s*'modifie_le'\s*,\s*\{\s*ascending:\s*false\s*\}\s*\)\s*\.order\(\s*'id'\s*\)/);
+  const iBorne = mesDevis.search(/\.limit\(\s*(?:201|PLAFOND_LISTE\s*\+\s*1)\s*\)/);
+  verifier('`mesDevis` demande 201 lignes TRIÉES — `.order(\'modifie_le\', { ascending: false })` PUIS `.order(\'id\')` AVANT '
+    + '`limit(PLAFOND_LISTE + 1)` — et les découpe par `decouperListe()`, la démonstration aussi : pour SAVOIR s’il y en a plus '
+    + 'de 200, et le dire', D.PLAFOND_LISTE === 200 && iTri >= 0 && iBorne > iTri
+    && /decouperListe\(/.test(mesDevis) && /decouperListe\(/.test(corpsDeFonction(API, 'mesDevisDemo') || ''),
+  `tri à ${iTri}, borne à ${iBorne}`);
+
+  /* LA LISTE FERMÉE, FAITE TOURNER. */
+  const fonctionComplete = (src, nom) => {
+    const m = new RegExp(`function\\s+${nom}\\s*\\(`).exec(src);
+    const corps = corpsDeFonction(src, nom);
+    if (!m || !corps) return null;
+    const fin = src.indexOf(corps, m.index) + corps.length;
+    return src.slice(m.index, fin);
+  };
+  let versBaseD = null;
+  let versBaseL = null;
+  try {
+    versBaseD = new Function(`${fonctionComplete(API, 'devisVersBase')}\nreturn devisVersBase;`)();
+    versBaseL = new Function(`${fonctionComplete(API, 'ligneVersBase')}\nreturn ligneVersBase;`)();
+  } catch (e) {
+    versBaseD = null;
+  }
+  const snake = (k) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  const tout = {
+    id: 'i', devisId: 'd', proId: 'p', statut: 'remis', generation: 99, createdAt: 'x', modifieLe: 'y',
+    totalHtCentimes: 1, totalTvaCentimes: 1, totalTtcCentimes: 2, totalCentimes: 5, client: { nom: 'n' },
+  };
+  [...D.CHAMPS_DEVIS, ...D.CHAMPS_LIGNE].forEach((k) => { tout[k] = k === 'offert' ? true : `v-${k}`; });
+  const interdits = /^(total_|created_at$|modifie_le$|statut$|generation$|client$)/;
+  let det = '';
+  let okListe = false;
+  try {
+    const dm = Object.keys(versBaseD(tout)).sort();
+    const dc = Object.keys(versBaseD(tout, { creation: true, proId: 'p' })).sort();
+    const lm = Object.keys(versBaseL(tout)).sort();
+    const lc = Object.keys(versBaseL(tout, { creation: true })).sort();
+    const attDm = D.CHAMPS_DEVIS.filter((k) => k !== 'source').map(snake).sort();
+    const attDc = [...D.CHAMPS_DEVIS.map(snake), 'id', 'pro_id'].sort();
+    const attLm = D.CHAMPS_LIGNE.map(snake).sort();
+    const attLc = [...attLm, 'id', 'devis_id'].sort();
+    const partiel = versBaseD({ objet: 'x', clientId: undefined });
+    const entiere = versBaseL({ id: 'i', devisId: 'd', ordre: 1000 }, { creation: true });
+    okListe = json(dm) === json(attDm) && json(dc) === json(attDc) && json(lm) === json(attLm) && json(lc) === json(attLc)
+      && ![...dm, ...dc, ...lm, ...lc].some((k) => interdits.test(k))
+      && json(Object.keys(partiel)) === json(['objet'])
+      && versBaseD(tout, { creation: true, proId: 'p' }).pro_id === 'p'
+      && Object.keys(entiere).length === attLc.length && entiere.type === 'poste' && entiere.offert === false
+      && entiere.main_oeuvre === false && entiere.designation === null && entiere.ordre === 1000;
+    det = `devis modifié ${json(dm)} ; créé ${json(dc)} ; ligne modifiée ${json(lm)} ; créée ${json(lc)}`;
+  } catch (e) {
+    det = `la traduction ne tourne pas seule : ${e && e.message}`;
+  }
+  verifier('`devisVersBase` et `ligneVersBase`, FAITES TOURNER : la liste fermée (`CHAMPS_DEVIS`, `CHAMPS_LIGNE`), l’id, l’entreprise, '
+    + 'la source et le devis à la CRÉATION seulement, jamais un total, une date, le statut ni le numéro ; une clé absente n’est pas '
+    + 'envoyée ; une ligne créée part ENTIÈRE', okListe, det);
+
+  /* LE SEUL ÉCRIVAIN. Chaque appel d'écriture (`insert`, `update`,
+     `delete`, `upsert`) précédé, dans la même instruction, d'un `from(…)` :
+     sur une table du devis — nommée, ou par une variable dans une fonction
+     qui nomme ces tables —, il doit vivre dans `ecrireDevisSupabase`. */
+  const tables = /^['"`](devis|devis_lignes|devis_tva)['"`]$/;
+  const fonctions = [...API.matchAll(/(?:^|\n)(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(|(?:^|\n)(?:export\s+)?const\s+(\w+)\s*=/g)]
+    .map((m) => ({ nom: m[1] || m[2], i: m.index }));
+  const fonctionA = (pos) => fonctions.filter((f) => f.i <= pos).pop() || { nom: '?', i: 0 };
+  const finDe = (f) => { const k = fonctions.indexOf(f); return k >= 0 && k + 1 < fonctions.length ? fonctions[k + 1].i : API.length; };
+  const ecrivain = fonctions.find((f) => f.nom === 'ecrireDevisSupabase');
+  /* L'appel de `creerFileEcriture(…)`, parenthèses COMPTÉES : un motif
+     paresseux s'arrêterait au premier « }) » de son contenu. */
+  const appelFile = (() => {
+    const i = API.indexOf('creerFileEcriture(');
+    if (i < 0) return '';
+    let p = 0;
+    for (let k = i + 'creerFileEcriture'.length; k < API.length; k += 1) {
+      if (API[k] === '(') p += 1;
+      else if (API[k] === ')') { p -= 1; if (p === 0) return API.slice(i, k + 1); }
+    }
+    return '';
+  })();
+  const horsFile = [];
+  const upserts = [];
+  for (const m of API.matchAll(/\.(insert|update|delete|upsert)\s*\(/g)) {
+    const debutInstr = Math.max(API.lastIndexOf(';', m.index), API.lastIndexOf('{\n', m.index));
+    const instr = API.slice(debutInstr, m.index);
+    const from = [...instr.matchAll(/\.from\(\s*([^)]*?)\s*\)/g)].pop();
+    if (!from) continue;
+    const f = fonctionA(m.index);
+    const corps = API.slice(f.i, finDe(f));
+    const visee = tables.test(from[1]) || (/^\w+$/.test(from[1]) && /['"`](devis|devis_lignes|devis_tva)['"`]/.test(corps));
+    if (!visee) continue;
+    if (m[1] === 'upsert') upserts.push(`${f.nom} : .upsert(`);
+    if (f.nom !== 'ecrireDevisSupabase') horsFile.push(`${f.nom} : .${m[1]}( sur ${from[1]}`);
+  }
+  verifier('AUCUN `.upsert(` sur les trois tables du devis — un upsert partiel est jugé sur la ligne PROPOSÉE, et arrivé en retard '
+    + 'il recréerait une ligne retirée', upserts.length === 0, upserts.join(' | '));
+  verifier('aucune écriture sur `devis` ni `devis_lignes` hors de la file : `ecrireDevisSupabase` est le SEUL écrivain, et '
+    + 'c’est lui que la file reçoit', horsFile.length === 0 && Boolean(ecrivain)
+    && /\bconst\s+ecrireDevis\s*=\s*hasSupabase\s*\?\s*ecrireDevisSupabase\s*:\s*ecrireDevisDemo\s*;/.test(API)
+    && /\becrire:\s*ecrireDevis\s*,/.test(appelFile), horsFile.join(' | '));
+  const corpsEcrivain = corpsDeFonction(API, 'ecrireDevisSupabase') || '';
+  verifier('la file reçoit `avecDelai` (celui d’`erreurs.js`), `relireUn` et `relireTotaux` — chaque écriture porte un délai',
+    /\bavecDelai\b/.test(appelFile) && /\brelireUn:\s*relireUnDevis\b/.test(appelFile) && /\brelireTotaux:\s*relireTotauxDevis\b/.test(appelFile)
+    && /import\s*\{[^}]*\bavecDelai\b[^}]*\}\s*from\s*['"]\.\/erreurs['"]/.test(API)
+    && /\bdelai\(\s*Promise\.resolve\(\)\.then\(\(\)\s*=>\s*ecrire\(requete\)\)\)/.test(sansCommentairesJs(lire('src/lib/file-ecriture.js'))));
+  verifier('l’écrivain tient le contrat de la file : le `signal` part avec la requête (`.abortSignal`), le numéro part AVEC '
+    + 'l’insertion et la modification, une suppression porte sa CONDITION (`.lt(\'generation\'`), l’erreur remonte TELLE QUELLE',
+  /requete\s*=\s*requete\.abortSignal\(\s*signal\s*\)/.test(corpsEcrivain)
+    && /\.insert\(\{[^}]*\bgeneration\b[^}]*\}\)/.test(corpsEcrivain)
+    && /\.update\(\{[^}]*\bgeneration\b[^}]*\}\)/.test(corpsEcrivain)
+    && /\.delete\(\)[\s\S]{0,40}\.lt\(\s*'generation'\s*,\s*generationMax\s*\)/.test(corpsEcrivain)
+    && /if\s*\(\s*error\s*\)\s*throw\s+error\s*;/.test(corpsEcrivain) && !/messageClair\(/.test(corpsEcrivain));
+  verifier('…et une modification ou une suppression qui n’a touché AUCUNE ligne n’a pas l’air d’un travail fait (`.select(\'id\')`, '
+    + 'puis « n’existe plus » ou, encore là, OP015)', /\.update\([\s\S]{0,80}\.select\(\s*'id'\s*\)/.test(corpsEcrivain)
+    && /\.lt\([\s\S]{0,60}\.select\(\s*'id'\s*\)/.test(corpsEcrivain) && /ligneIntrouvable\(\)/.test(corpsEcrivain)
+    && /SUPPRESSION_DEPASSEE/.test(corpsEcrivain));
+
+  const memoire = corpsDeFonction(API, 'memoireDesLignesSupabase') || '';
+  verifier('`memoireDesLignes` est filtrée par MES devis côté base : `!inner` et `.eq(\'devis.pro_id\'` (jamais la règle d’accès '
+    + 'seule : 306 ms contre 2,9 ms sur 200 000 lignes, et la vraie base coupe à 8 s)',
+  /devis:devis_id!inner\(/.test(memoire) && /\.eq\(\s*'devis\.pro_id'\s*,\s*currentUserId\s*\)/.test(memoire)
+    && /\.in\(\s*'type'\s*,\s*\[\s*'poste'\s*,\s*'option'\s*\]\s*\)/.test(memoire) && /\.limit\(\s*MEMOIRE_MAX\s*\)/.test(memoire));
+
+  /* LE TRI DES LIGNES : par `ordre`, PUIS par `id` (CR-B I7). Toute lecture
+     de `devis_lignes` qui rend les lignes d'un devis le dit ; la mémoire,
+     qui ne range pas un devis, trie par date puis `id` ; une relecture par
+     l'identifiant ne rend qu'une ligne. */
+  const lectures = [...API.matchAll(/\.from\(\s*'devis_lignes'\s*\)([\s\S]*?);/g)].map((m) => m[1])
+    .filter((c) => !/\.(insert|update|delete|upsert)\s*\(/.test(c));
+  /* Les lignes EMBARQUÉES dans la lecture d'un devis (`devis_lignes(*)`, un
+     seul instantané) : triées par `ordre` PUIS `id` dans la table liée
+     (`referencedTable`). */
+  const unDevisLu = corpsDeFonction(API, 'unDevisSupabase') || '';
+  const embarqueTriee = /devis_lignes\(\*\)/.test(unDevisLu)
+    && /\.order\(\s*'ordre'\s*,\s*\{\s*referencedTable:\s*'devis_lignes'\s*\}\s*\)\s*\.order\(\s*'id'\s*,\s*\{\s*referencedTable:\s*'devis_lignes'\s*\}\s*\)/.test(unDevisLu)
+    && !/\.from\(\s*'devis_(lignes|tva)'\s*\)/.test(unDevisLu);
+  const malTriees = lectures.filter((c) => {
+    if (/\.eq\(\s*'id'\s*,/.test(c) && /\.maybeSingle\(\)/.test(c)) return false;
+    if (/!inner/.test(c)) return !/\.order\(\s*'modifie_le'\s*,\s*\{\s*ascending:\s*false\s*\}\s*\)\s*\.order\(\s*'id'\s*\)/.test(c);
+    return !/\.order\(\s*'ordre'\s*\)\s*\.order\(\s*'id'\s*\)/.test(c);
+  }).map((c) => c.replace(/\s+/g, ' ').slice(0, 90));
+  const ordresSeuls = [...API.matchAll(/\.order\(\s*'ordre'[^)]*\)(?!\s*\.order\(\s*'id'\s*[,)])/g)].length;
+  verifier('toute lecture de `devis_lignes` est triée par `ordre` PUIS `id` (la mémoire par date puis `id` ; une relecture par '
+    + 'l’identifiant ne rend qu’une ligne) — et UN DEVIS SE LIT EN UNE REQUÊTE, ses lignes et sa ventilation embarquées (un seul '
+    + 'instantané : trois lectures parallèles étaient trois transactions)',
+  lectures.length >= 2 && malTriees.length === 0 && ordresSeuls === 0 && embarqueTriee,
+  `${lectures.length} lecture(s) ; mal triées : ${malTriees.join(' | ') || '—'} ; « ordre » sans « id » : ${ordresSeuls} ; `
+    + `embarquée et triée : ${embarqueTriee}`);
+
+  verifier('une lecture du devis qui échoue LÈVE (jamais « Aucun devis ») — et une base sans la section 49 le dit (`baseEnRetard`)',
+    ['mesDevisSupabase', 'unDevisSupabase', 'devisDuClientSupabase', 'devisDeLaDemandeSupabase', 'memoireDesLignesSupabase']
+      .every((n) => /leverLecture\(/.test(corpsDeFonction(API, n) || '') && /lectureDevis\(/.test(corpsDeFonction(API, n) || ''))
+    && /tableAbsente\(\s*error\s*\)\)\s*error\.baseEnRetard\s*=\s*true/.test(corpsDeFonction(API, 'leverLecture') || ''));
+
+  const blocDevis = decls.map((d) => corpsDeFonction(API, d.nom) || '').join('\n');
+  verifier('aucune fonction SQL nouvelle ne lit l’émetteur ni les tarifs : pas de `.rpc(` dans les fonctions du devis, le régime passe '
+    + 'par `monEmetteur…`, et la section 49 ne nomme ni `emetteur` ni `tarifs_pro`',
+  !/\.rpc\(/.test(blocDevis) && /monEmetteurSupabase\(\)/.test(corpsDeFonction(API, 'monRegimeSupabase') || '')
+    && /monEmetteurDemo\(\)/.test(corpsDeFonction(API, 'monRegimeDemo') || '')
+    && !/\bpublic\.(emetteur|tarifs_pro)\b/.test(S49) && !/\b(from|join)\s+(public\.)?(emetteur|tarifs_pro)\b/.test(S49));
+
+  verifier('la démonstration écrit dans la base de démonstration (`creerBaseDevisDemo`), par la MÊME file — et la déconnexion '
+    + 'oublie les files du compte qui s’en va',
+  /baseDevisDeDemo\(\)\.ecrire\(\s*moiEnDemo\(\)\s*,\s*op\s*\)/.test(corpsDeFonction(API, 'ecrireDevisDemo') || '')
+    && /creerBaseDevisDemo\(/.test(corpsDeFonction(API, 'baseDevisDeDemo') || '')
+    && /filesDevis\.clear\(\)/.test(corpsDeFonction(API, 'signOut') || '')
+    && /filesDevis\.get\(\s*devisId\s*\)/.test(corpsDeFonction(API, 'fileDuDevis') || ''));
+}
+
+console.log('\n  27 bis. la base de démonstration refuse AVEC LES MOTS DE LA BASE — faite tourner, par la vraie file');
+{
+  const T0 = Date.now();
+  const demandes = { 'devis:dr-devis-1': { id: 'dr-devis-1', genre: 'devis', budget: null }, 'sos:dr-sos-1': { id: 'dr-sos-1', genre: 'sos' } };
+  const base = DEMO.creerBaseDevisDemo({ demandeDe: (g, id) => demandes[`${g}:${id}`] || null });
+  const essayer = async (f) => { try { await f(); return null; } catch (e) { return e; } };
+  const vaut = (e, code, texte) => Boolean(e && e.code === code && (texte === undefined || e.message === texte));
+  const ecrire = (op, moi = '1') => base.ecrire(moi, op);
+  const ID = (n) => `de0000ee-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  /* Les numéros d'écriture de l'essai : toujours au-dessus de l'horloge du
+     devis — relue après ce que la file a écrit (`resynchroniser`). */
+  let g = T0;
+  const n = () => { g += 1; return g; };
+  const resynchroniser = async () => {
+    const d = await base.relireUn('1', { quoi: 'devis', id: ID(1) });
+    if (d && d.generation > g) g = d.generation;
+  };
+  const poste = (plus) => ({ type: 'poste', designation: 'Poste', quantiteMilliemes: 1000, unite: 'u', prixUnitaireCentimes: 1000, tauxTvaCentiemes: 1000, ...plus });
+
+  /* a. un brouillon neuf et deux lignes, PAR LA VRAIE FILE. */
+  const file = F.creerFileEcriture({
+    devisId: ID(1), devis: { objet: 'Essai', source: 'manuelle' }, devisEnBase: false,
+    ecrire: (op) => base.ecrire('1', op), relireUn: (q) => base.relireUn('1', q),
+    relireTotaux: (id) => base.relireTotaux('1', id), avecDelai: ERR.avecDelai, nouvelIdentifiant: I.nouvelIdentifiant,
+  });
+  const totaux = [];
+  file.abonner((ev) => { if (ev.type === 'totaux') totaux.push(ev.totaux); });
+  file.ligne({ id: ID(11), ordre: 1000, ...poste({ prixUnitaireCentimes: 3333 }) });
+  file.ligne({ id: ID(12), ordre: 2000, ...poste({ prixUnitaireCentimes: 5000, tauxTvaCentiemes: 2000 }) });
+  await file.attendre(5000);
+  await resynchroniser();
+  const lu = await base.un('1', ID(1));
+  const dernier = totaux[totaux.length - 1];
+  verifier('a. par la vraie file : le brouillon, puis ses deux lignes ; tout « enregistrée » ; les totaux relus sont ceux de la base',
+    file.etatDe('devis') === 'enregistree' && file.etatDe(ID(11)) === 'enregistree' && file.etatDe(ID(12)) === 'enregistree'
+    && file.enAttente() === 0 && lu && lu.lignes.length === 2 && dernier && dernier.ht === 8333 && dernier.tva === 1333
+    && dernier.ttc === 9666 && dernier.ventilation.length === 2,
+  dernier ? `${dernier.ht} | ${dernier.tva} | ${dernier.ttc}` : '(aucune relecture)');
+
+  /* b. les refus : la contrainte, au mot de PostgreSQL ; et la phrase. */
+  const e1 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(13), valeurs: { devisId: ID(1), ordre: 3000, ...poste({ prixUnitaireCentimes: 0 }) }, generation: n() }));
+  verifier('b. un prix de 0 sans « Offert » : 23514 `devis_ligne_offert_check`, au mot de PostgreSQL — et `messageClair` dit '
+    + 'quoi faire', vaut(e1, '23514', 'new row for relation "devis_lignes" violates check constraint "devis_ligne_offert_check"')
+    && ERR.messageClair(e1, 'Cette ligne') === `Cette ligne : ${ERR.MESSAGES_CONTRAINTE.devis_ligne_offert_check}`, e1 && e1.message);
+  const e2 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(14), valeurs: { devisId: ID(1), ordre: 3000, ...poste() }, generation: 0 }));
+  const e3 = await essayer(() => ecrire({ quoi: 'ligne', action: 'modifier', id: ID(11), valeurs: { designation: 'Vieux' }, generation: T0 }));
+  const e4 = await essayer(() => ecrire({ quoi: 'devis', action: 'modifier', id: ID(1), valeurs: { objet: 'Vieux' }, generation: T0 }));
+  verifier('c. OP016 (numéro hors bornes) et OP015 (plus ancien que l’horloge), d’une ligne comme du devis — les phrases de '
+    + '`REFUS_DEVIS`, et rien n’a bougé', vaut(e2, 'OP016', ERR.REFUS_DEVIS.OP016_ligne) && vaut(e3, 'OP015', ERR.REFUS_DEVIS.OP015_ligne)
+    && vaut(e4, 'OP015', ERR.REFUS_DEVIS.OP015_devis) && lu.lignes[0].designation === 'Poste'
+    && (await base.relireUn('1', { quoi: 'devis', id: ID(1) })).objet === 'Essai');
+  const e5 = await essayer(() => ecrire({ quoi: 'devis', action: 'inserer', id: ID(2), valeurs: { clientId: 'cl-inconnue' }, generation: n() }));
+  const e6 = await essayer(() => ecrire({ quoi: 'devis', action: 'inserer', id: ID(2), valeurs: { quoteRequestId: 'dr-autre' }, generation: n() }));
+  const e7 = await essayer(() => ecrire({ quoi: 'devis', action: 'inserer', id: ID(2), valeurs: { sosRequestId: 'dr-autre' }, generation: n() }));
+  verifier('d. OP013 : une fiche, une demande, une urgence qui ne sont pas à vous — les trois phrases de la base',
+    vaut(e5, 'OP013', ERR.REFUS_DEVIS.OP013_client) && vaut(e6, 'OP013', ERR.REFUS_DEVIS.OP013_demande)
+    && vaut(e7, 'OP013', ERR.REFUS_DEVIS.OP013_urgence) && (await base.relireUn('1', { quoi: 'devis', id: ID(2) })) === null);
+  for (let k = 0; k < D.DEVIS_PAR_DEMANDE_MAX; k += 1) {
+    await ecrire({ quoi: 'devis', action: 'inserer', id: ID(100 + k), valeurs: { source: 'demande', quoteRequestId: 'dr-devis-1' }, generation: n() });
+  }
+  const e8 = await essayer(() => ecrire({ quoi: 'devis', action: 'inserer', id: ID(200), valeurs: { source: 'demande', quoteRequestId: 'dr-devis-1' }, generation: n() }));
+  verifier(`e. OP017 : le ${D.DEVIS_PAR_DEMANDE_MAX + 1}e devis pour une même demande est refusé, avec la phrase de la base`,
+    vaut(e8, 'OP017', ERR.REFUS_DEVIS.OP017_demande) && (await base.deLaDemande('1', 'devis', 'dr-devis-1')).length === 5);
+  const e9 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(15), valeurs: { devisId: ID(1), ordre: 4000, ...poste({ quantiteMilliemes: 1000, prixUnitaireCentimes: 9999999999 }) }, generation: n() }));
+  verifier('f. deux lignes recevables dont la SOMME dépasse le plafond : 23514 `devis_plafond_check` sur le DEVIS, comme la base',
+    vaut(e9, '23514', 'new row for relation "devis" violates check constraint "devis_plafond_check"')
+    && /99\u00a0999\u00a0999,99/.test(ERR.messageClair(e9)), e9 && e9.message);
+  const e10 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(11), valeurs: { devisId: ID(1), ordre: 1000, ...poste() }, generation: n() }));
+  const e11 = await essayer(() => ecrire({ quoi: 'ligne', action: 'modifier', id: ID(99), valeurs: { designation: 'x' }, generation: n() }));
+  verifier('g. une clé déjà prise : 23505 sur `devis_lignes_pkey` (la file la RELIT) ; une ligne qui n’existe plus : « n’existe '
+    + 'plus… rechargez l’écran »', vaut(e10, '23505') && /devis_lignes_pkey/.test(e10.message) && vaut(e11, 'PGRST116')
+    && /n’existe plus/.test(ERR.messageClair(e11)));
+  const e12 = await essayer(() => ecrire({ quoi: 'ligne', action: 'supprimer', id: ID(11), generationMax: T0 }));
+  const avantSuppr = (await base.un('1', ID(1))).lignes.length;
+  await ecrire({ quoi: 'ligne', action: 'supprimer', id: ID(12), generationMax: n() });
+  const apresSuppr = await base.un('1', ID(1));
+  const e13 = await essayer(() => ecrire({ quoi: 'ligne', action: 'supprimer', id: ID(12), generationMax: n() }));
+  verifier('h. une suppression partie TARD (sa condition dépassée) ne supprime rien, et le DIT (OP015) ; à jour, elle supprime et '
+    + 'les totaux redescendent ; déjà faite, elle passe', vaut(e12, 'OP015', ERR.SUPPRESSION_DEPASSEE.ligne) && avantSuppr === 2
+    && apresSuppr.lignes.length === 1 && e13 === null && (await base.relireTotaux('1', ID(1))).ht === 3333);
+  const controle = new AbortController();
+  controle.abort();
+  const e14 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(16), valeurs: { devisId: ID(1), ordre: 5000, ...poste() }, generation: n(), signal: controle.signal }));
+  verifier('i. une requête ANNULÉE (le délai de la file) n’écrit rien', Boolean(e14 && e14.name === 'AbortError')
+    && (await base.relireUn('1', { quoi: 'ligne', id: ID(16) })) === null);
+  const e15 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(17), valeurs: { devisId: ID(1), ordre: 6000, ...poste() }, generation: n() }, '2'));
+  verifier('j. un AUTRE artisan ne lit rien et n’écrit rien dans ce devis : 42501 à l’insertion, rien à la lecture',
+    vaut(e15, '42501') && (await base.un('2', ID(1))) === null && (await base.liste('2')).length === 0
+    && (await base.memoire('2')).length === 0 && (await base.relireUn('2', { quoi: 'devis', id: ID(1) })) === null);
+  await ecrire({ quoi: 'devis', action: 'modifier', id: ID(1), valeurs: { source: 'urgence', objet: 'Essai 2' }, generation: n() });
+  const fige = await base.relireUn('1', { quoi: 'devis', id: ID(1) });
+  verifier('k. la `source` ne se récrit pas (D3) ; l’en-tête change, l’horloge monte', fige.source === 'manuelle' && fige.objet === 'Essai 2'
+    && fige.generation === g);
+  /* l. le 501e : OP014. */
+  const plein = ID(3);
+  await ecrire({ quoi: 'devis', action: 'inserer', id: plein, valeurs: {}, generation: n() });
+  for (let k = 1; k <= D.LIGNES_MAX; k += 1) {
+    await ecrire({ quoi: 'ligne', action: 'inserer', id: `de0000ef-0000-4000-8000-${String(k).padStart(12, '0')}`, valeurs: { devisId: plein, ordre: k * 10, ...poste({ prixUnitaireCentimes: 1 }) }, generation: n() });
+  }
+  const e16 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: 'de0000ef-0000-4000-8000-999999999999', valeurs: { devisId: plein, ordre: 99999, ...poste() }, generation: n() }));
+  verifier(`l. la ${D.LIGNES_MAX + 1}e ligne : OP014, la phrase de la base`, vaut(e16, 'OP014', ERR.REFUS_DEVIS.OP014)
+    && (await base.un('1', plein)).lignes.length === D.LIGNES_MAX);
+  /* m. le renvoi après un délai : la file ne crée JAMAIS de doublon. Une
+     écriture qui PASSE puis dont la réponse se perd (issue inconnue). */
+  let perdre = true;
+  const file2 = F.creerFileEcriture({
+    devisId: ID(1), devis: { objet: 'Essai 2', source: 'manuelle' }, devisEnBase: true, horloge: g,
+    ecrire: async (op) => {
+      await base.ecrire('1', op);
+      if (perdre && op.quoi === 'ligne' && op.action === 'inserer') { perdre = false; throw Object.assign(new Error('Failed to fetch'), { name: 'TypeError' }); }
+      return true;
+    },
+    relireUn: (q) => base.relireUn('1', q), relireTotaux: (id) => base.relireTotaux('1', id), avecDelai: ERR.avecDelai,
+  });
+  file2.ligne({ id: ID(18), ordre: 7000, ...poste({ prixUnitaireCentimes: 700 }) });
+  await file2.attendre(5000);
+  const etatPerdu = file2.etatDe(ID(18));
+  file2.reessayer(ID(18));
+  await file2.attendre(5000);
+  const lignes18 = (await base.un('1', ID(1))).lignes.filter((l) => l.id === ID(18));
+  verifier('m. une insertion PASSÉE dont la réponse se perd, puis « Réessayer » : la base de démonstration rend 23505, la file '
+    + 'relit — une seule ligne, « enregistrée », aucun message', etatPerdu === 'echec' && file2.etatDe(ID(18)) === 'enregistree'
+    && lignes18.length === 1 && file2.erreurDe(ID(18)) === null, `${etatPerdu} → ${file2.etatDe(ID(18))}, ${lignes18.length} ligne(s)`);
+  await resynchroniser();
+  const e17 = await essayer(() => ecrire({ quoi: 'devis', action: 'supprimer', id: ID(1), generationMax: T0 }));
+  await ecrire({ quoi: 'devis', action: 'supprimer', id: ID(1), generationMax: n() });
+  verifier('n. la suppression du brouillon : partie tard, elle ne supprime rien et le dit ; à jour, elle emporte ses lignes',
+    vaut(e17, 'OP015', ERR.SUPPRESSION_DEPASSEE.devis) && (await base.un('1', ID(1))) === null
+    && (await base.relireUn('1', { quoi: 'ligne', id: ID(11) })) === null && !(await base.liste('1')).some((d) => d.id === ID(1)));
+  /* Les phrases de `REFUS_DEVIS` sont-elles CELLES de la base ? */
+  const raises = [...sansCommentairesSql(SCHEMA.slice(iS49, iS42)).matchAll(/raise\s+exception\s+'((?:[^']|'')*)'(?:\s*,\s*v_plafond)?\s+using\s+errcode\s*=\s*'(OP01\d)'/gi)]
+    .map((m) => ({ code: m[2], texte: m[1].replace(/''/g, '\'') }));
+  const plafondSql = Number((/v_plafond\s+constant\s+integer\s*:=\s*(\d+)/i.exec(SCHEMA) || [])[1]);
+  const textesBase = raises.map((r) => (r.code === 'OP017' ? r.texte.replace('%', String(plafondSql)) : r.texte));
+  const copies = Object.values(ERR.REFUS_DEVIS);
+  const sansCopie = textesBase.filter((t) => !copies.includes(t));
+  const copieSansBase = copies.filter((t) => !textesBase.includes(t));
+  verifier('les phrases de `REFUS_DEVIS` (erreurs.js) sont EXACTEMENT celles que la section 49 lève — octet pour octet, dans les '
+    + 'deux sens — et le plafond par demande est le même des deux côtés',
+  raises.length === 10 && sansCopie.length === 0 && copieSansBase.length === 0 && plafondSql === D.DEVIS_PAR_DEMANDE_MAX,
+  `${raises.length} phrase(s) dans la section 49 ; sans copie : ${sansCopie.join(' | ') || '—'} ; copie sans base : ${copieSansBase.join(' | ') || '—'}`);
+
+  /* o. LA TRONCATURE, FAITE TOURNER : une base de démonstration de 201 devis
+     (des dates toutes différentes), lue comme « Mes devis » la lit. Le pied
+     « Vos 200 devis les plus récents » n'était tenu par rien qui la fasse
+     tourner — la démonstration n'a que deux devis (relecture « conformité »
+     des étapes 4 à 7, I3). */
+  {
+    const T = Date.UTC(2026, 9, 1);
+    const devis201 = Array.from({ length: 201 }, (_, i) => ({
+      id: `de0000ee-0000-4000-8000-${String(900 + i).padStart(12, '0')}`, proId: '1', source: 'manuelle', statut: 'brouillon',
+      objet: `Devis ${i}`, generation: 1, createdAt: new Date(T + i * 60000).toISOString(),
+      modifieLe: new Date(T + i * 60000).toISOString(),
+    }));
+    const base201 = DEMO.creerBaseDevisDemo({ donnees: { devis: devis201, lignes: [] } });
+    const lus = await base201.liste('1');
+    const r = D.decouperListe(lus);
+    const deux = D.decouperListe(await DEMO.creerBaseDevisDemo().liste('1'));
+    verifier('o. 201 devis lus comme « Mes devis » : 200 gardés, `tronque` VRAI, et c’est le plus ANCIEN qui sort ; deux devis : '
+      + '`tronque` faux', lus.length === 201 && r.devis.length === 200 && r.tronque === true
+      && !r.devis.some((d) => d.objet === 'Devis 0') && r.devis[0].objet === 'Devis 200'
+      && deux.tronque === false && deux.devis.length === 2,
+    `${lus.length} lus, ${r.devis.length} gardés, tronque ${r.tronque} ; le premier : ${r.devis[0] && r.devis[0].objet}`);
+  }
+
+  /* p. ROUVRIR UN DEVIS DONT LA FILE ÉCRIT ENCORE — le scénario prouvé par la
+     relecture « données » des étapes 4 à 7 (I2), avec la VRAIE file et la
+     base de démonstration lente : un prix changé, une ligne ajoutée, l'écran
+     quitté, puis rouvert aussitôt. L'écran se construit sur
+     `fusionnerAvecLaFile` : pendant que la file écrit, il montre ce qu'elle
+     VEUT ; une fois la file vide, ce que la base a — et les deux coïncident. */
+  {
+    const baseLente = DEMO.creerBaseDevisDemo({ pauseMs: 150 });
+    const id = DEMO.DEVIS_DEMO_IDS.renovation;
+    const r1 = await baseLente.un(DEMO.PRO_DEMO_DEVIS, id);
+    let k = 0;
+    const fileLente = F.creerFileEcriture({
+      devisId: id, devis: r1.devis, devisEnBase: true, lignesEnBase: r1.lignes, horloge: r1.devis.generation,
+      ecrire: (op) => baseLente.ecrire(DEMO.PRO_DEMO_DEVIS, op), relireUn: (q) => baseLente.relireUn(DEMO.PRO_DEMO_DEVIS, q),
+      relireTotaux: (d) => baseLente.relireTotaux(DEMO.PRO_DEMO_DEVIS, d), avecDelai: ERR.avecDelai,
+      nouvelIdentifiant: () => { k += 1; return `de0000ee-0000-4000-8000-${String(700 + k).padStart(12, '0')}`; },
+    });
+    const chape = r1.lignes.find((l) => /Chape/.test(l.designation || ''));
+    fileLente.modifierLigne(chape.id, { prixUnitaireCentimes: 9900 });
+    const neuve = { id: 'de0000ee-0000-4000-8000-0000000007aa', devisId: id, ordre: 99000, type: 'poste',
+      designation: 'Plinthes carrelées', quantiteMilliemes: 12000, unite: 'm', prixUnitaireCentimes: 1500, tauxTvaCentiemes: 1000 };
+    fileLente.ligne(neuve);
+    const pendant = D.fusionnerAvecLaFile(await baseLente.un(DEMO.PRO_DEMO_DEVIS, id), fileLente.entreesVoulues());
+    const vuePendant = { chape: (pendant.lignes.find((l) => l.id === chape.id) || {}).prixUnitaireCentimes, neuve: pendant.lignes.some((l) => l.id === neuve.id) };
+    await fileLente.attendre(8000);
+    const r2 = await baseLente.un(DEMO.PRO_DEMO_DEVIS, id);
+    const apres = D.fusionnerAvecLaFile(r2, fileLente.entreesVoulues());
+    const memes = json(D.trierLignes(apres.lignes).map((l) => [l.id, l.prixUnitaireCentimes]))
+      === json(D.trierLignes(r2.lignes).map((l) => [l.id, l.prixUnitaireCentimes]));
+    const ttcRangees = D.totauxDevis(apres.lignes).ttc;
+    verifier('p. rouvrir un devis dont la file écrit encore : PENDANT, l’écran montre ce que la file veut (la chape à 99 €, la ligne '
+      + 'ajoutée) ; APRÈS, ce que la base a — mêmes lignes, et le total des rangées = le total de la base',
+    vuePendant.chape === 9900 && vuePendant.neuve && fileLente.vide() && memes && ttcRangees === r2.devis.totalTtcCentimes,
+    `pendant : ${json(vuePendant)} ; après : mêmes lignes ${memes}, TTC rangées ${ttcRangees} / base ${r2.devis.totalTtcCentimes}`);
+    /* …et une ligne RETIRÉE dont la suppression n'est pas faite disparaît de
+       l'écran ; une ligne « enregistrée » prend la valeur de la BASE. */
+    const fusion = D.fusionnerAvecLaFile({ devis: { id: 'd', objet: 'Base' }, lignes: [{ id: 'a', prixUnitaireCentimes: 1 }, { id: 'b', prixUnitaireCentimes: 2 }] }, [
+      { cle: 'devis', voulu: { objet: 'Voulu' }, etat: 'echec' },
+      { cle: 'a', voulu: { id: 'a', prixUnitaireCentimes: 9 }, etat: 'enregistree' },
+      { cle: 'b', voulu: { id: 'b', prixUnitaireCentimes: 2 }, etat: 'echec', retire: true },
+    ]);
+    verifier('…`fusionnerAvecLaFile` : l’en-tête en échec reprend ce qui est voulu, une ligne enregistrée garde la base, une ligne '
+      + 'retirée disparaît', fusion.devis.objet === 'Voulu' && fusion.lignes.length === 1 && fusion.lignes[0].prixUnitaireCentimes === 1,
+    json(fusion));
+  }
+}
+
+console.log('\nE. LES ÉCRANS — ce que la saisie promet, lu dans le code (sans ses commentaires)');
+/* LES FICHIERS DU MODULE : les sept du cahier (§6.1-E). Ils chargent React
+   Native : `node` ne les ouvre pas, ils se LISENT — ce qu'ils FONT au
+   navigateur, c'est `npm run mesure-devis` (étape 7) qui le mesure. */
+const ECRANS_DEVIS = {
+  saisie: 'src/screens/SaisieDevisScreen.js',
+  carte: 'src/components/CarteLigne.js',
+  entete: 'src/components/EnteteDevis.js',
+  designation: 'src/components/ChampDesignation.js',
+  choix: 'src/components/ChoixClientDevis.js',
+  liste: 'src/screens/DevisScreen.js',
+  montant: 'src/components/ChampMontant.js',
+};
+const lireSiExiste = (f) => { try { return lire(f); } catch (e) { return null; } };
+const ECR = Object.fromEntries(Object.entries(ECRANS_DEVIS).map(([k, f]) => [k, sansCommentairesJs(lireSiExiste(f) || '')]));
+const TOUS_ECRANS = Object.values(ECR);
+/* La balise ouvrante d'un élément, de `<Nom` à son `>` — en sautant les `>`
+   des flèches (`=>`) et ceux des accolades. */
+function baliseOuvrante(src, i) {
+  let prof = 0;
+  for (let j = i + 1; j < src.length; j += 1) {
+    const c = src[j];
+    if (c === '{') prof += 1;
+    else if (c === '}') prof -= 1;
+    else if (c === '>' && prof === 0 && src[j - 1] !== '=') return src.slice(i, j + 1);
+  }
+  return src.slice(i);
+}
+const balises = (src, nom) => {
+  const r = [];
+  const re = new RegExp(`<${nom}\\b`, 'g');
+  let m;
+  while ((m = re.exec(src))) r.push(baliseOuvrante(src, m.index));
+  return r;
+};
+/* Les appels d'une fonction, parenthèses comptées : `useEffect(…)` entier. */
+function appels(src, nom) {
+  const r = [];
+  const re = new RegExp(`\\b${nom}\\s*\\(`, 'g');
+  let m;
+  while ((m = re.exec(src))) {
+    let p = 0;
+    let j = m.index + m[0].length - 1;
+    for (; j < src.length; j += 1) {
+      if (src[j] === '(') p += 1;
+      else if (src[j] === ')') { p -= 1; if (p === 0) break; }
+    }
+    r.push(src.slice(m.index, j + 1));
+  }
+  return r;
+}
+/* Le corps d'une fonction fléchée qui commence après `debut` : de son `=> {`
+   à l'accolade qui le ferme. */
+function corpsFleche(src, debut) {
+  const i = src.indexOf(debut);
+  if (i < 0) return '';
+  const a = src.indexOf('=> {', i);
+  if (a < 0) return '';
+  let p = 0;
+  for (let j = a + 3; j < src.length; j += 1) {
+    if (src[j] === '{') p += 1;
+    else if (src[j] === '}') { p -= 1; if (p === 0) return src.slice(a, j + 1); }
+  }
+  return '';
+}
+
+console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte, les montants, le régime, la garde');
+{
+  verifier('les sept fichiers du module existent', Object.values(ECRANS_DEVIS).every((f) => lireSiExiste(f) != null),
+    Object.values(ECRANS_DEVIS).filter((f) => lireSiExiste(f) == null).join(', '));
+  verifier('le bandeau « Chiffrage — ce brouillon ne part pas encore. » est écrit, et AFFICHÉ par l’en-tête',
+    /'Chiffrage — ce brouillon ne part pas encore\.'/.test(ECR.entete) && /\{BANDEAU_CHIFFRAGE\}/.test(ECR.entete)
+    && /ListHeaderComponent=\{entete\}/.test(ECR.saisie) && /<EnteteDevis\b/.test(ECR.saisie));
+  /* LA DÉSIGNATION : corrigée et relue — c'est le texte que le client lira.
+     UN NOMBRE : ni correction, ni orthographe. */
+  const champDes = balises(ECR.designation, 'TextInput')[0] || '';
+  verifier('`ChampDesignation` : `autoCorrect` et `spellCheck` VRAIS',
+    /\bautoCorrect(?!\s*=\s*\{\s*false)/.test(champDes) && /\bspellCheck(?!\s*=\s*\{\s*false)/.test(champDes)
+    && !/autoCorrect=\{false\}|spellCheck=\{false\}/.test(ECR.designation), champDes.slice(0, 200));
+  verifier('`ChampMontant` : `autoCorrect={false}`, `spellCheck={false}`, le pavé DÉCIMAL, et AUCUN `returnKeyType` (le pavé '
+    + 'décimal d’iOS n’a pas de touche retour)',
+    /autoCorrect=\{false\}/.test(ECR.montant) && /spellCheck=\{false\}/.test(ECR.montant)
+    && /keyboardType="decimal-pad"/.test(ECR.montant) && !/returnKeyType/.test(ECR.montant));
+  /* UNE SEULE EXCEPTION, NOMMÉE : le code postal du lieu des travaux, en
+     pavé numérique comme celui du carnet (`FicheClient`) — cinq chiffres ne
+     se tapent pas sur le clavier des lettres (relecture « écran » des étapes
+     4 à 7, C1). Elle est cherchée sur SA balise : un `keyboardType` ailleurs
+     dans l'en-tête rougit. */
+  const balisesCp = balises(ECR.entete, 'ChampLocal').filter((b) => /ref=\{refCp\}/.test(b));
+  const autresClaviers = Object.entries(ECRANS_DEVIS).filter(([k]) => k !== 'montant')
+    .flatMap(([k, f]) => [...ECR[k].matchAll(/keyboardType\s*=\s*(\{[^}]*\}|"[^"]*"|'[^']*')/g)]
+      .filter((m) => !(k === 'entete' && balisesCp.some((b) => b.includes(m[0])) && m[1] === '"number-pad"'))
+      .map((m) => `${f} : ${m[0]}`));
+  verifier('`keyboardType=` ne s’écrit QUE dans `ChampMontant` (un nombre a un champ, et un seul) — et sur le code postal du '
+    + 'lieu, `number-pad`, comme le carnet', autresClaviers.length === 0 && balisesCp.length === 1
+    && /keyboardType="number-pad"/.test(balisesCp[0] || ''), autresClaviers.join(', ') || `${balisesCp.length} balise(s) du code postal`);
+  verifier('aucun défilement horizontal dans les écrans du devis (`horizontal`)', TOUS_ECRANS.every((t) => !/\bhorizontal\b/.test(t)));
+  const liste = balises(ECR.saisie, 'FlatList')[0] || '';
+  const defile = balises(ECR.carte, 'ScrollView')[0] || '';
+  verifier('la liste des lignes ET la carte portent `{...CLAVIER}` et `keyboardDismissMode="on-drag"` (glisser referme le pavé '
+    + 'décimal, qui n’a aucune touche pour le faire)',
+    [liste, defile].every((b) => /\{\.\.\.CLAVIER\}/.test(b) && /keyboardDismissMode="on-drag"/.test(b)),
+    `liste : ${liste.slice(0, 120)} | carte : ${defile.slice(0, 120)}`);
+  verifier('aucun `KeyboardAvoidingView` dans les écrans du devis (avec `CLAVIER`, l’inset compterait DEUX FOIS)',
+    TOUS_ECRANS.every((t) => !/KeyboardAvoidingView/.test(t)));
+  /* JAMAIS `onChangeText` À `ChampLocal` : la propriété de l'appelant passe
+     par `...reste` APRÈS la sienne, et l'écraserait — le champ ne se
+     mettrait plus à jour. Dans TOUT `src/`. */
+  {
+    const tousSrc = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { cwd: RACINE, encoding: 'utf8' })
+      .stdout.split('\n').filter((f) => f.endsWith('.js'));
+    const fautifs = tousSrc.filter((f) => balises(sansCommentairesJs(lire(f)), 'ChampLocal').some((b) => /\bonChangeText\s*=/.test(b)));
+    verifier('aucun `onChangeText` passé à `ChampLocal`, nulle part dans `src/`', tousSrc.length > 50 && fautifs.length === 0,
+      fautifs.join(', '));
+  }
+  const effetsTotaux = TOUS_ECRANS.flatMap((t) => appels(t, 'useEffect')).filter((a) => /totauxDevis\s*\(/.test(a));
+  verifier('aucun `useEffect` ne calcule les totaux : le calcul est pur, hors de React', effetsTotaux.length === 0,
+    effetsTotaux.map((a) => a.slice(0, 80)).join(' | '));
+  verifier('aucun `libellePrix(` dans les écrans du devis', TOUS_ECRANS.every((t) => !/\blibellePrix\s*\(/.test(t)));
+  const zero = TOUS_ECRANS.flatMap((t) => [...t.matchAll(/(?<![\d,])0(?:\s|\\u00a0| )?%|TVA 0\b/g)].map((m) => m[0]));
+  verifier('aucune chaîne « 0 % » ni « TVA 0 » : une ligne sans TVA ne dit pas « 0 % »', zero.length === 0, zero.join(' | '));
+  verifier('la mention de franchise vient de `MENTION_FRANCHISE`, jamais écrite en dur',
+    /\{MENTION_FRANCHISE\}/.test(ECR.saisie) && TOUS_ECRANS.every((t) => !/TVA non applicable|293\s?B/.test(t)));
+  verifier('« Options, non comprises » est écrit', /Options, non comprises/.test(ECR.saisie));
+  const sommes = TOUS_ECRANS.flatMap((t) => [...t.matchAll(/\b(?:[\w$]+\.)*(ht|tva|ttc|total\w*)\b\s*\+\s*(?:[\w$]+\.)*(ht|tva|ttc|total\w*)\b/gi)]
+    .map((m) => m[0]));
+  verifier('aucune somme de deux totaux dans les écrans (`ht + tva`…) : le TTC « option comprise » se calcule par `totauxDevis()` '
+    + 'sur l’union des lignes', sommes.length === 0, sommes.join(' | '));
+  /* UNE SEULE PORTE D'AFFICHAGE D'UN MONTANT. */
+  const formateurs = TOUS_ECRANS.flatMap((t) => [...t.matchAll(/\b(montantDevis|centimesLisibles)\s*\(/g)].map((m) => m[1]));
+  const UI = sansCommentairesJs(lire('src/components/ui.js'));
+  const corpsMontant = corpsDeFonction(UI, 'Montant') || '';
+  const horsMontant = (UI.match(/\b(montantDevis|centimesLisibles)\s*\(/g) || []).length
+    - (corpsMontant.match(/\b(montantDevis|centimesLisibles)\s*\(/g) || []).length;
+  verifier('`montantDevis(` et `centimesLisibles(` ne sont appelés QUE dans `Montant` (`ui.js`) — chiffres tabulaires, Inter, '
+    + 'aligné à droite', formateurs.length === 0 && corpsMontant.length > 50 && /centimesLisibles\(/.test(corpsMontant)
+    && horsMontant === 0 && /fontVariant: \['tabular-nums'\]/.test(UI), `${formateurs.join(', ')} ; hors Montant dans ui.js : ${horsMontant}`);
+  const dixCar = TOUS_ECRANS.flatMap((t) => [...t.matchAll(/\.(slice|substring|substr)\(\s*0\s*,\s*10\s*\)/g)].map((m) => m[0]));
+  verifier('aucune date lue par ses dix premiers caractères : `dateFrancaise()` ou `depuisLisible()`', dixCar.length === 0,
+    dixCar.join(', '));
+  verifier('les UNITÉS et les TAUX sont des `Pastille` (44 points par leur boîte)',
+    /UNITES\.map\(\(u\) => \(\s*<Pastille\b/.test(ECR.carte) && /tauxProposes\.map\(\(t\) => \(\s*<Pastille\b/.test(ECR.carte));
+  const ajouts = ['poste', 'piece', 'zone', 'reserve', 'option'].filter((k) => !balises(ECR.saisie, 'Pastille')
+    .some((b) => new RegExp(`onAjouter\\('${k}'\\)`).test(b)));
+  verifier('la barre « Ajouter » : cinq `Pastille` (Poste, Pièce, Zone, Réserve, Option)', ajouts.length === 0, ajouts.join(', '));
+  /* LE RÉGIME : un échec n'est JAMAIS « non déclaré ». */
+  const iEchec = ECR.entete.indexOf("avisRegime.type === 'echec' && (");
+  const brancheEchec = iEchec >= 0 ? ECR.entete.slice(iEchec, ECR.entete.indexOf('</View>', iEchec)) : '';
+  verifier('la branche d’ÉCHEC du régime ne dit ni « non déclaré » ni « pas déclaré », et propose « Réessayer »',
+    brancheEchec.length > 80 && !/d[ée]clar/i.test(brancheEchec) && /Réessayer/.test(brancheEchec)
+    && /if \(regimeEnEchec\) avisRegime = \{ type: 'echec' \};/.test(ECR.saisie), brancheEchec.slice(0, 200));
+  /* LA GARDE DE SORTIE, aux CINQ portes d'`OpusApp`. */
+  const APP = sansCommentairesJs(lire('src/OpusApp.js'));
+  const iBack = APP.indexOf('title={backTitle}');
+  const portes = {
+    'le retour (`BackBar`)': iBack >= 0 ? corpsFleche(APP.slice(iBack), 'onBack={') : '',
+    'la barre du bas (`onNavigate`)': corpsFleche(APP, 'onNavigate={'),
+    'la cloche (`onBell`)': (APP.match(/onBell=\{[^\n]*\n?[^\n]*/) || [''])[0],
+    'l’ouverture d’une notification': corpsFleche(APP, 'const ouvrirNotification = '),
+    'la déconnexion': corpsFleche(APP, 'const deconnexion = '),
+  };
+  const premierEffet = (c) => {
+    const i = c.search(/\bsetScreen\(|api\.signOut\(|readNotification\(|setActiveConvId\(/);
+    return i < 0 ? Infinity : i;
+  };
+  const ratees = Object.entries(portes).filter(([, c]) => !c || !/quitterSaisieDevis\(/.test(c)
+    || c.indexOf('quitterSaisieDevis(') > premierEffet(c)).map(([k]) => k);
+  const garde = corpsFleche(APP, 'const quitterSaisieDevis = ');
+  /* La garde ne laisse partir SANS la consulter que lorsqu'on n'est pas dans
+     la saisie (ou qu'aucune saisie n'est inscrite) : sa première ligne,
+     exactement. « … || screen) return true; » passait au vert, la garde
+     neutralisée (relecture « conformité » des étapes 4 à 7, sabotage I3 —
+     seul `mesure-devis` le voyait). */
+  verifier('le retour, la barre du bas, la cloche, une notification et la déconnexion passent par `quitterSaisieDevis` AVANT de '
+    + 'changer d’écran — et elle consulte la garde quand l’écran est la saisie',
+    ratees.length === 0 && /^\{\s*if \(screen !== 'devisSaisie' \|\| !gardeSortie\.current\) return true;\s*return gardeSortie\.current\.sortir\(\{ parLeRetour \}\);\s*\}$/.test(garde.replace(/^=>\s*/, ''))
+    && /onGarde=\{inscrireGarde\}/.test(APP), `portes ratées : ${ratees.join(', ') || '—'}`);
+  verifier('…et la saisie lit TOUT avant de partir : la carte ouverte, l’en-tête, la retenue, puis attend la file',
+    /const enregistrerTout = async \([^)]*\) => \{[\s\S]{0,400}fermerCarte\(\)[\s\S]{0,200}refEntete\.current\.enregistrer\(\)[\s\S]{0,200}refBas\.current\.enregistrer\(\)[\s\S]{0,240}\.attendre\(DELAI_ECRITURE\)/
+      .test(ECR.saisie));
+  /* LA SIXIÈME PORTE (relecture « écran » des étapes 4 à 7, bloquant A1) :
+     la liste des cinq portes ne voyait pas « l'autre fiche → Faire un
+     devis », qui changeait la clé de la saisie sans la garde. On tient
+     désormais la PROPRIÉTÉ : toute fonction d'`OpusApp` qui change la clé de
+     la saisie ou la pose attend `quitterSaisieDevis(` AVANT. */
+  {
+    const fonctions = [...APP.matchAll(/const (\w+) = (?:async )?\([^)]*\) => \{/g)]
+      .map((m) => ({ nom: m[1], corps: corpsFleche(APP.slice(m.index), `const ${m[1]} = `) }))
+      .filter((x) => /\bsetCleDevis\(|setScreen\(\s*'devisSaisie'\s*\)/.test(x.corps));
+    const sansGarde = fonctions.filter((x) => {
+      const iGarde = x.corps.indexOf('quitterSaisieDevis(');
+      const iEffet = x.corps.search(/\bsetCleDevis\(|setScreen\(\s*'devisSaisie'\s*\)/);
+      return iGarde < 0 || iGarde > iEffet || !/await quitterSaisieDevis\(/.test(x.corps);
+    }).map((x) => x.nom);
+    const pose = (APP.match(/setCleDevis\(/g) || []).length;
+    verifier('toute fonction d’`OpusApp` qui change la clé de la saisie (`setCleDevis`) ou la pose (`setScreen(\'devisSaisie\')`) '
+      + 'ATTEND `quitterSaisieDevis(` avant — la propriété, pas une liste de portes',
+    fonctions.length >= 1 && pose >= 1 && sansGarde.length === 0
+      && fonctions.some((x) => x.nom === 'ouvrirDevis'), `sans garde : ${sansGarde.join(', ') || '—'} (${fonctions.length} fonction(s))`);
+    const autre = (APP.match(/const ouvrirAutreFiche = [^\n]*/) || [''])[0];
+    verifier('…et l’autre fiche ouverte depuis la saisie (l’avertissement de doublon) HÉRITE de la saisie (`apresFicheClient`) : '
+      + 'ni « Ses devis » ni « Faire un devis », mais « Choisir ce client pour ce devis »',
+    /ouvrirFicheClient\(\s*autre\s*,\s*null\s*,\s*apresFicheClient\.current\s*\)/.test(autre)
+      && /onOuvrirAutre=\{ouvrirAutreFiche\}/.test(APP)
+      && /onChoisirPourLeDevis=\{ficheClient\.depuisLaSaisie/.test(APP)
+      && /onChoisirPourLeDevis\(fiche\)/.test(sansCommentairesJs(lire('src/components/FicheClient.js'))),
+    autre.slice(0, 120));
+  }
+  /* L'APPUI SE VOIT (B4) : la bande « Enregistrement avant de partir… »
+     paraît AVANT l'attente de la file, avec « Rester ». */
+  verifier('la garde se VOIT au moment de l’appui : `enregistrerTout` appelle `pendantLAttente` AVANT d’attendre la file, et la '
+    + 'bande « Enregistrement avant de partir… » propose « Rester »',
+  /if \(f && !f\.vide\(\) && pendantLAttente\) pendantLAttente\(\);\s*if \(f\) await f\.attendre\(DELAI_ECRITURE\)/.test(ECR.saisie)
+    && /enregistrerTout\(\{ pendantLAttente: enAttente \}\)/.test(ECR.saisie)
+    && /garde\.phase === 'attente'[\s\S]{0,600}Enregistrement avant de partir[\s\S]{0,300}label="Rester"/.test(ECR.saisie));
+  /* L'EN-TÊTE REFUSÉ (I1) : la garde le compte, l'écran le dit, et ce qui
+     est recevable part quand même. */
+  const bilanCorps = corpsFleche(ECR.saisie, 'const bilan = ');
+  const entCorps = corpsFleche(ECR.saisie, 'const enregistrerEntete = ');
+  verifier('un champ de l’en-tête REFUSÉ par l’écran retient la garde : `bilan()` compte `enteteRefuse`, la bande le nomme '
+    + '(« Corriger » / « Quitter sans l’enregistrer »), et les autres champs partent quand même',
+  /enteteRefuse = Object\.keys\(refusEntete\.current\)/.test(bilanCorps)
+    /* CHAQUE `ok:` du bilan — avec la file et sans elle — le compte : il y en
+       a deux, et n'en tenir qu'un laissait la garde partir quand la file
+       existe (sabotage S09 des corrections des étapes 4 à 7). */
+    && (bilanCorps.match(/\bok: /g) || []).length >= 2
+    && (bilanCorps.match(/\bok: /g) || []).length === (bilanCorps.match(/\bok: [^\n]*!enteteRefuse\.length/g) || []).length
+    && /delete recevables\[v\.champ\]/.test(entCorps) && /return \{ ok, refus \}/.test(entCorps)
+    && /garde\.enteteRefuse\.length > 0/.test(ECR.saisie) && /label="Corriger"/.test(ECR.saisie)
+    && /label="Quitter sans l’enregistrer"/.test(ECR.saisie)
+    && /poserRefusEntete\(\['retenueGarantieCentiemes'\]/.test(corpsFleche(ECR.saisie, 'const changerRetenue = ')));
+  /* ROUVRIR UN DEVIS DONT LA FILE ÉCRIT ENCORE (I2) ; « RELIRE » PAR LA FILE (I3). */
+  const ouverture = ECR.saisie.slice(ECR.saisie.indexOf('if (ouverture.devisId) {'), ECR.saisie.indexOf('fileRef.current = f;'));
+  verifier('rouvrir un devis dont la file écrit encore : on ATTEND la file (`fileExistante`, `attendre`) AVANT `unDevis`, et '
+    + 'l’écran se construit sur `fusionnerAvecLaFile` — jamais sur la seule photo de la base',
+  ouverture.indexOf('api.fileExistante(') >= 0 && ouverture.indexOf('.attendre(DELAI_ECRITURE)') > ouverture.indexOf('api.fileExistante(')
+    && ouverture.indexOf('api.unDevis(') > ouverture.indexOf('.attendre(DELAI_ECRITURE)')
+    && /fusionnerAvecLaFile\(\{ devis: r\.devis, lignes: r\.lignes \}, f\.entreesVoulues\(\)\)/.test(ouverture)
+    && /lignesRef\.current = vue\.lignes/.test(ouverture));
+  verifier('« Relire » passe par la FILE (`relireLesTotaux`) — jamais `api.unDevis` à côté d’elle',
+    /f\.relireLesTotaux\(\)/.test(corpsFleche(ECR.saisie, 'const relireTotaux = '))
+    && !/api\.unDevis\(/.test(corpsFleche(ECR.saisie, 'const relireTotaux = ')));
+  /* LES PETITS ÉCRANS ET LES DÉFAUTS DU TOUCHER (B1, B5, B7, C2, C3, C4, C8, C9, C10). */
+  verifier('une ligne EXISTANTE s’ouvre sans suggestion : `ChampDesignation` part de `useState(defaut || null)` (la mémoire '
+    + 'répond à une frappe, jamais à l’ouverture)', /const \[choisi, setChoisi\] = useState\(defaut \|\| null\)/.test(ECR.designation));
+  verifier('un devis VIDE porte « + Poste » dans le pied fixe — le premier poste sans glisser',
+    /lignes\.length === 0 && chiffrerPossible && \(\s*<Pastille label="\+ Poste"[^>]*onPress=\{\(\) => ajouter\('poste'\)\}/.test(ECR.saisie));
+  verifier('un poste reprend le taux du dernier POSTE, une option celui de la dernière OPTION (`tauxPour(ordre, type)`)',
+    /const tauxPour = \(avantOrdre, type = 'poste'\)/.test(ECR.saisie) && /\.filter\(\(l\) => l\.type === type &&/.test(ECR.saisie)
+    && /tauxPour\(ordre, type\)/.test(ECR.saisie));
+  verifier('« Total TTC » au régime RÉEL seulement — le pied et la ventilation disent « Total » quand le régime n’est pas connu',
+    /\{reel \? 'Total TTC' : 'Total'\}/.test(ECR.saisie) && !/franchise \? 'Total' : 'Total TTC'/.test(ECR.saisie)
+    && /\{!franchise && !reel \? \(/.test(ECR.saisie));
+  /* Et sa phrase ne dit pas « aucune suggestion » : les lignes du devis
+     ouvert restent proposées (`memoireComplete`), et une phrase qui annonce
+     zéro au-dessus de deux suggestions dément l'écran — mesuré sur une copie
+     en panne pendant les corrections des étapes 4 à 7. */
+  verifier('une mémoire illisible se DIT et se REDEMANDE (`setMemoire(\'echec\')`, `memoireEchec`, « Réessayer »), sans annoncer « aucune suggestion »',
+    /\.catch\(\(\) => setMemoire\('echec'\)\)/.test(ECR.saisie) && /memoireEchec=\{memoire === 'echec'\}/.test(ECR.saisie)
+    && /memoireEchec && \(/.test(ECR.designation) && /onPress=\{onRelireMemoire\}/.test(ECR.designation)
+    && !/aucune suggestion/i.test(ECR.designation));
+  verifier('la carte est MODALE pour VoiceOver, et le bas de la saisie (pied, bandes) caché quand elle est ouverte',
+    /<View style=\{s\.ecran\} accessibilityViewIsModal>/.test(ECR.carte)
+    && (ECR.saisie.match(/importantForAccessibility=\{carte \? 'no-hide-descendants' : 'auto'\}/g) || []).length >= 2);
+  verifier('sur une OPTION, le bouton dit « Option suivante » ; un régime en lecture ou en échec dit pourquoi « Poste » et « Option » '
+    + 'sont grisés ; « Lecture impossible » ne promet pas « ce qui est affiché reste lisible »',
+    /ligne\.type === 'option' \? 'Option suivante' : 'Poste suivant'/.test(ECR.carte)
+    && /propositions === null && \(/.test(ECR.saisie) && /messageClair\(e, 'Ce devis', \{ rienAffiche: true \}\)/.test(ECR.saisie));
+  verifier('l’aide de « Main-d’œuvre » dit qu’un prix au m² ou au mètre est un prix FORFAITAIRE (CR-D B1 — tenu jusqu’ici par '
+    + '`mesure-devis` seul)', /Un prix au m² ou au mètre est un prix forfaitaire/.test(ECR.carte));
+  /* « MON ENTREPRISE » REMONTE LE RÉGIME, sans recharger. */
+  const ME = sansCommentairesJs(lire('src/components/MonEntreprise.js'));
+  verifier('`MonEntreprise` reçoit `surEmetteur`, l’appelle après la LECTURE et après l’ENREGISTREMENT, et `OpusApp` le lui donne',
+    /surEmetteur = null/.test(ME) && /if \(surEmetteur\) surEmetteur\(d\.emetteur/.test(ME)
+    && /if \(surEmetteur\) surEmetteur\(r\.emetteur/.test(ME) && /surEmetteur=\{recevoirEmetteur\}/.test(APP));
+}
+
+console.log('\n  29. « Mes devis » : la pastille, la troncature, l’échec');
+{
+  const APP29 = sansCommentairesJs(lire('src/OpusApp.js'));
+  verifier('la pastille « Brouillon » prend son encre par `surFond(` — et aucun blanc écrit à la main',
+    /color: surFond\(FOND_BROUILLON\)/.test(ECR.liste) && !/'#fff'|'#FFFFFF'|'#ffffff'/i.test(ECR.liste));
+  /* LA TRONCATURE SE DIT DE CE QUE LA LECTURE A RENDU (`tronque`), jamais
+     d'un compte de cartes — et le sabotage « `const pied = false && …` »
+     passait (relecture « conformité » des étapes 4 à 7, I3). */
+  verifier('le pied de troncature dépend de `tronque` (ce que la lecture a rendu), et le DIT avec `PLAFOND_LISTE`',
+    /const pied = tronque\s*\?/.test(ECR.liste) && /PLAFOND_LISTE/.test(ECR.liste)
+    && /Les plus anciens ne sont pas affichés/.test(ECR.liste) && /ListFooterComponent=\{pied\}/.test(ECR.liste));
+  const iVide = ECR.liste.indexOf("const vide = etat === 'echec'");
+  const iSecond = iVide >= 0 ? ECR.liste.indexOf('<EmptyState', ECR.liste.indexOf('<EmptyState', iVide) + 5) : -1;
+  const branche = iVide >= 0 && iSecond > iVide ? ECR.liste.slice(iVide, iSecond) : '';
+  verifier('« Lecture impossible » est un état À PART, avec un vrai bouton — et JAMAIS « Aucun devis » dans la branche d’échec',
+    branche.length > 50 && /titre="Lecture impossible"/.test(branche) && /action=\{onRecharger/.test(branche)
+    && !/Aucun devis/i.test(branche), branche.slice(0, 160));
+  /* « 0 BROUILLON » AU-DESSUS DE « LECTURE IMPOSSIBLE » disait « Aucun
+     devis » par un autre chemin (relecture « écran » des étapes 4 à 7, B2) ;
+     et une relecture ratée VIDAIT la liste déjà lue (B3). */
+  verifier('le compte de brouillons ne se dit QUE d’une lecture réussie (`etat === \'ok\'`) ; une relecture ratée GARDE la liste '
+    + 'déjà lue, sous « Liste non actualisée » et un vrai « Réessayer » ; et `OpusApp` dit si une liste a déjà été lue — '
+    + 'au bandeau aussi (`rienAffiche: !devisLus` : sans liste à l’écran, il ne promet pas « ce qui est affiché reste lisible »)',
+  /\{etat === 'ok' \? `\$\{devis\.length\}/.test(ECR.liste) && /const garderLaListe = echec && lus;/.test(ECR.liste)
+    && /data=\{echec && !garderLaListe \? \[\] : devis\}/.test(ECR.liste) && /Liste non actualisée/.test(ECR.liste)
+    && /garderLaListe && \([\s\S]{0,700}label="Réessayer"/.test(ECR.liste) && /lus=\{devisLus\}/.test(APP29)
+    && /setDevisLus\(true\)/.test(APP29)
+    && /messageClair\(e, "Vos devis n'ont pas pu être lus", \{ rienAffiche: !devisLus \}\)/.test(APP29));
+}
+
+console.log('\n  30. la fiche d’un client, « Pour moi », « Pour qui ? »');
+{
+  const FC = sansCommentairesJs(lire('src/components/FicheClient.js'));
+  /* LES DEUX BRANCHES qui suivent `confirmeSuppression` — ses devis LUS, et
+     ses devis ILLISIBLES : l'une et l'autre disent que l'adresse des
+     travaux reste. La seconde n'était tenue par rien (relecture
+     « conformité » des étapes 4 à 7, I4 : le sabotage passait). */
+  const branchesSupp = [...FC.matchAll(/\{confirmeSuppression && !!sesDevis && sesDevis\.etat (===|!==) 'ok'[\s\S]*?\n {14}\)\}/g)]
+    .map((m) => ({ op: m[1], texte: m[0] }));
+  const lue = branchesSupp.find((b) => b.op === '===');
+  const illisible = branchesSupp.find((b) => b.op === '!==');
+  verifier('la fiche d’un client montre « Ses devis », et sa suppression dit « l’adresse des travaux » DANS LES DEUX BRANCHES (devis '
+    + 'lus, et devis illisibles) — jamais « sans nom de client »',
+  /Ses devis/.test(FC) && branchesSupp.length === 2 && !!lue && !!illisible
+    && /adresse des travaux/.test(lue.texte) && /adresse des\s+travaux/.test(illisible.texte) && /pas pu être lus/.test(illisible.texte)
+    && !/sans nom de client/i.test(FC), `${branchesSupp.length} branche(s)`);
+  const DR = sansCommentairesJs(lire('src/screens/DemandesRecuesScreen.js'));
+  const boutons = balises(DR, 'BtnMini').filter((b) => /Faire un devis/.test(b));
+  const gardes = boutons.every((b) => /\{peutFaireUnDevis\(d\) && !!onFaireDevis && \(\s*$/.test(DR.slice(Math.max(0, DR.indexOf(b) - 120), DR.indexOf(b))));
+  verifier('« Faire un devis » n’apparaît que par `peutFaireUnDevis(` (jamais sur un rappel)', boutons.length === 1 && gardes);
+  const faire = corpsFleche(DR, 'const faireUnDevis = ');
+  verifier('…et l’appui lit `devisDeLaDemande(` AVANT d’ouvrir la saisie ; « Reprendre » existe',
+    faire.length > 50 && faire.indexOf('devisDeLaDemande(') > 0 && faire.indexOf('devisDeLaDemande(') < faire.indexOf('onFaireDevis(')
+    && /label="Reprendre"/.test(DR));
+  verifier('`ChoixClientDevis` est une `<FeuilleBas` — et ne porte PAS `{...CLAVIER}`',
+    /<FeuilleBas\b/.test(ECR.choix) && !/\{\.\.\.CLAVIER\}/.test(ECR.choix) && /keyboardShouldPersistTaps="handled"/.test(ECR.choix));
+  /* Sa liste porte les trois réglages du projet (cahier §4.4) — ils
+     n'étaient tenus par rien (relecture « conformité », mineur 4). */
+  const listeChoix = balises(ECR.choix, 'FlatList')[0] || '';
+  verifier('…et sa liste porte `initialNumToRender`, `maxToRenderPerBatch` et `windowSize`',
+    /initialNumToRender=\{\d+\}/.test(listeChoix) && /maxToRenderPerBatch=\{\d+\}/.test(listeChoix) && /windowSize=\{\d+\}/.test(listeChoix),
+    listeChoix.slice(0, 160));
+  verifier('depuis la saisie, la fiche d’un client EXISTANT propose « Choisir ce client pour ce devis » (jamais un autre devis)',
+    /!!fiche && !!onChoisirPourLeDevis && \(/.test(FC) && /label="Choisir ce client pour ce devis"/.test(FC));
+}
+
+console.log('\n  31. les jetons de thème existent, et aucune arithmétique sur une taille');
+{
+  const THEME = await import('../src/theme.js');
+  const fichiersJetons = [...Object.values(ECRANS_DEVIS), 'src/components/FicheClient.js'];
+  const inconnus = [];
+  const calculs = [];
+  for (const f of fichiersJetons) {
+    const t = sansCommentairesJs(lireSiExiste(f) || '');
+    for (const m of t.matchAll(/\b([TSR])\.(\w+)/g)) {
+      if (!Object.prototype.hasOwnProperty.call(THEME[m[1]], m[2])) inconnus.push(`${f} : ${m[0]}`);
+    }
+    for (const m of t.matchAll(/\bT\.\w+\s*[-+*/]\s*[\w.]+|\b[SR]\.\w+\s*[-+]\s*\d/g)) calculs.push(`${f} : ${m[0]}`);
+  }
+  verifier('tout `T.x`, `S.x`, `R.x` des écrans du devis et de `FicheClient` existe dans `theme.js`', inconnus.length === 0,
+    inconnus.join(' | '));
+  /* …ET LE BON CRAN : `T.micro` (10, « étiquettes posées sur une image »)
+     avait rapetissé TOUTES les aides et TOUTES les erreurs de la fiche, dont
+     l'avertissement de suppression que le droit a fait ajouter (relecture
+     « écran » des étapes 4 à 7, B6). */
+  {
+    const FCs = sansCommentairesJs(lire('src/components/FicheClient.js'));
+    const styleDe = (nom) => (FCs.match(new RegExp(`\\n  ${nom}: \\{([^}]*)\\}`)) || [])[1] || '';
+    verifier('la fiche d’un client écrit ses aides en `T.petit` et ses erreurs (l’avertissement de suppression compris) en '
+      + '`T.corps` — jamais en `T.micro`', /fontSize: T\.petit\b/.test(styleDe('aide')) && /fontSize: T\.corps\b/.test(styleDe('erreur')),
+    `aide : ${styleDe('aide').replace(/\s+/g, ' ')} | erreur : ${styleDe('erreur').replace(/\s+/g, ' ')}`);
+  }
+  verifier('…et aucune arithmétique sur un jeton (`T.sousTitre + 1`, `S.sm - 2`) : une taille hors de l’échelle', calculs.length === 0,
+    calculs.join(' | '));
+}
+
 console.log('\n  32. dans les fichiers du calcul : une seule orthographe, jamais une moyenne, jamais un arrondi flottant');
 {
   /* TOUT LE MODULE, et pas `devis.js` seul (le cahier, §6.1-32 ; relecture
      des étapes 0-2, M2) : les quatre fichiers que `node` fait tourner. Les
      écrans et la section 49 s'y ajouteront avec leurs étapes. */
-  const MODULE = ['src/lib/devis.js', 'src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js'];
+  const MODULE = ['src/lib/devis.js', 'src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js',
+    'src/data/devis-demo.js', ...Object.values(ECRANS_DEVIS)];
   const textes = MODULE.map((f) => [f, sansCommentairesJs(lire(f))]);
   verifier('…ni dans la section 49 (le schéma du devis ne lit aucun statut de `sos_requests`)', S49.length > 5000
     && !/\b(acceptee|refusee)\b/.test(S49));
   const accordees = textes.flatMap(([f, t]) => t.split('\n')
     .filter((l) => /\b(acceptee|refusee)\b/.test(l) && !(f === 'src/lib/devis.js' && /^\s*sos:\s*Object\.freeze\(\[/.test(l)))
     .map((l) => `${f} : ${l.trim()}`));
-  verifier('`acceptee` / `refusee` n’apparaissent dans le module (devis, centimes, file, identifiant) que pour LIRE '
+  verifier('`acceptee` / `refusee` n’apparaissent dans le module (devis, centimes, file, identifiant, démonstration) que pour LIRE '
     + '`sos_requests` (D9)', accordees.length === 0, accordees.join(' | '));
   /* La règle du cahier (§3.1), tenue enfin : jamais `Math.round`, `toFixed`
      ni `parseFloat` sur de l'argent. Elle ne se voit pas toujours dans un
@@ -2498,6 +3482,113 @@ console.log('\n  32. dans les fichiers du calcul : une seule orthographe, jamais
   const memoire = corpsDeFonction(src, 'memoireDesLignes') || '';
   verifier('`memoireDesLignes` ne calcule ni moyenne, ni médiane, ni minimum, ni maximum',
     memoire.length > 200 && !/moyenne|m[ée]diane|\bavg\(|Math\.(min|max)\(|\/\s*prix\.length|\.reduce\(/i.test(memoire));
+}
+
+
+console.log('\nF. QUI LIT, QUI ÉCRIT — dans les deux sens (le défaut du 01/10 et celui du 04/10)');
+
+console.log('\n  33. chaque colonne a un ÉCRIVAIN et un LECTEUR');
+{
+  /* LES COLONNES SONT CELLES DU SCHÉMA (`colonnesDe`), pas une liste écrite
+     ici : une colonne ajoutée à la table ET à la liste fermée de B-12 doit
+     encore trouver son écrivain et son lecteur, sinon elle rougit ici. */
+  const API = sansCommentairesJs(lire('src/lib/api.js'));
+  const fonctionComplete = (src, nom) => {
+    const m = new RegExp(`function\\s+${nom}\\s*\\(`).exec(src);
+    const corps = corpsDeFonction(src, nom);
+    if (!m || !corps) return null;
+    return src.slice(m.index, src.indexOf(corps, m.index) + corps.length);
+  };
+  /* L'ÉCRIVAIN « application » : la traduction FAITE TOURNER, à la création. */
+  let ecritesParLApp = { devis: [], devis_lignes: [] };
+  try {
+    const vd = new Function(`${fonctionComplete(API, 'devisVersBase')}\nreturn devisVersBase;`)();
+    const vl = new Function(`${fonctionComplete(API, 'ligneVersBase')}\nreturn ligneVersBase;`)();
+    const tout = { id: 'i', devisId: 'd' };
+    [...D.CHAMPS_DEVIS, ...D.CHAMPS_LIGNE].forEach((k) => { tout[k] = `v-${k}`; });
+    ecritesParLApp = {
+      devis: Object.keys(vd(tout, { creation: true, proId: 'p' })),
+      devis_lignes: Object.keys(vl(tout, { creation: true })),
+    };
+  } catch (e) { /* le contrôle le dira : aucune colonne écrite */ }
+  /* Le numéro d'écriture part À CÔTÉ des valeurs, posé par `ecrireDevisSupabase`. */
+  const ecrit = corpsDeFonction(API, 'ecrireDevisSupabase') || '';
+  if (/insert\(\{\s*\.\.\.ligne,\s*id,\s*generation\s*\}\)/.test(ecrit)) {
+    ['devis', 'devis_lignes'].forEach((t) => ecritesParLApp[t].push('generation'));
+  }
+  /* L'ÉCRIVAIN « base » : un déclencheur ou une fonction de la section 49 qui
+     pose `new.colonne :=`, un `default` de la table, ou la liste d'un
+     `insert into … (…)` / d'un `update … set` de la section. */
+  const ecritParLaBase = (table, col) => {
+    const def = (colonnesDe(table) || []).find((c) => c.nom === col);
+    if (def && /\bdefault\b/i.test(def.texte)) return true;
+    if (new RegExp(`\\bnew\\.${col}\\s*:=`).test(S49)) return true;
+    const inserts = [...S49.matchAll(new RegExp(`insert\\s+into\\s+public\\.${table}(?:\\s+as\\s+\\w+)?\\s*\\(([^)]*)\\)`, 'gi'))]
+      .map((m) => m[1]);
+    if (inserts.some((l) => new RegExp(`\\b${col}\\b`).test(l))) return true;
+    const updates = [...S49.matchAll(new RegExp(`update\\s+public\\.${table}\\b[\\s\\S]*?\\bset\\b([\\s\\S]*?)\\bwhere\\b`, 'gi'))]
+      .map((m) => m[1]);
+    return updates.some((l) => new RegExp(`\\b${col}\\s*=`).test(l));
+  };
+  /* LE LECTEUR : son nom en camelCase dans `devis.js`, la file, ou un écran
+     du devis — jamais le simple passage d'`api.js`. La ventilation lit les
+     colonnes de `devis_tva` sous des noms courts (`v.base`, `v.tva`,
+     `nbLignes`), et trois colonnes ne sont lues que par la BASE (les
+     politiques) : c'est la table « qui lit » du cahier, §2.2-2.4. */
+  const LECTEURS = ['src/lib/devis.js', 'src/lib/file-ecriture.js', ...Object.values(ECRANS_DEVIS),
+    'src/components/FicheClient.js', 'src/screens/DemandesRecuesScreen.js']
+    .map((f) => sansCommentairesJs(lireSiExiste(f) || '')).join('\n');
+  const camel = (c) => c.replace(/_([a-z])/g, (x, l) => l.toUpperCase());
+  const ALIAS = { 'devis_tva.base_centimes': /\.base\b/, 'devis_tva.tva_centimes': /\.tva\b/, 'devis_tva.taux_tva_centiemes': /\.taux\b/ };
+  const POLITIQUES = [...S49.matchAll(/create\s+policy[\s\S]*?;/gi)].map((m) => m[0]).join('\n');
+  const LUES_PAR_LA_BASE = ['devis.pro_id', 'devis_lignes.devis_id', 'devis_tva.devis_id'];
+  const sansEcrivain = [];
+  const sansLecteur = [];
+  for (const t of TABLES49) {
+    for (const c of colonnesDe(t) || []) {
+      const nom = `${t}.${c.nom}`;
+      const parLApp = (ecritesParLApp[t] || []).includes(c.nom);
+      if (!parLApp && !ecritParLaBase(t, c.nom)) sansEcrivain.push(nom);
+      const lu = ALIAS[nom] ? ALIAS[nom].test(LECTEURS) : new RegExp(`\\b${camel(c.nom)}\\b`).test(LECTEURS);
+      const luParLaBase = LUES_PAR_LA_BASE.includes(nom) && new RegExp(`\\b${c.nom}\\b`).test(POLITIQUES);
+      if (!lu && !luParLaBase) sansLecteur.push(nom);
+    }
+  }
+  const nbColonnes = TABLES49.reduce((n, t) => n + (colonnesDe(t) || []).length, 0);
+  verifier(`chacune des ${nbColonnes} colonnes a un ÉCRIVAIN (la traduction d’\`api.js\`, ou la base : un déclencheur, un défaut)`,
+    nbColonnes >= 41 && ecritesParLApp.devis.length >= 12 && sansEcrivain.length === 0,
+    `sans écrivain : ${sansEcrivain.join(', ') || '—'} — une colonne lue que personne n’écrit (le défaut des photos d’annonce du 04/10)`);
+  verifier('…et un LECTEUR (son nom dans `devis.js`, la file ou un écran du devis — ou, pour trois clés, les politiques)',
+    nbColonnes >= 41 && sansLecteur.length === 0,
+    `sans lecteur : ${sansLecteur.join(', ') || '—'} — une colonne écrite que personne ne lit est une panne silencieuse (01/10) : `
+    + 'une colonne naît avec son lecteur');
+}
+
+console.log('\n  34. chaque table écrite est RELUE — et quelqu’un appelle la lecture');
+{
+  const API = sansCommentairesJs(lire('src/lib/api.js'));
+  const lit = (fonction, table) => {
+    const c = corpsDeFonction(API, fonction) || '';
+    return new RegExp(`from\\('${table}'\\)[\\s\\S]{0,200}?\\.select\\(`).test(c);
+  };
+  const APP = sansCommentairesJs(lire('src/OpusApp.js'));
+  const ECRAN = ECR.saisie;
+  const DR = sansCommentairesJs(lire('src/screens/DemandesRecuesScreen.js'));
+  const relues = {
+    '`devis` — « Mes devis » (`mesDevis`)': lit('mesDevisSupabase', 'devis') && /api\.mesDevis\(\)/.test(APP),
+    '`devis` — un devis (`unDevis`)': lit('unDevisSupabase', 'devis') && /api\.unDevis\(/.test(ECRAN),
+    '`devis` — « Ses devis » (`devisDuClient`)': lit('devisDuClientSupabase', 'devis') && /api\.devisDuClient\b/.test(APP),
+    '`devis` — « Reprendre » (`devisDeLaDemande`)': lit('devisDeLaDemandeSupabase', 'devis') && /api\.devisDeLaDemande\(/.test(DR),
+    /* EMBARQUÉES dans la lecture du devis (un seul instantané, relecture
+       « données » des étapes 4 à 7, I3) : `devis_lignes(*)` et `devis_tva(…)`
+       dans le `select` de `devis`. */
+    '`devis_lignes` — les lignes d’un devis': /\bdevis_lignes\(\*\)/.test(corpsDeFonction(API, 'unDevisSupabase') || ''),
+    '`devis_lignes` — la mémoire': lit('memoireDesLignesSupabase', 'devis_lignes') && /api\.memoireDesLignes\(\)/.test(ECRAN),
+    '`devis_tva` — la ventilation': /\bdevis_tva\(taux_tva_centiemes/.test(corpsDeFonction(API, 'unDevisSupabase') || ''),
+  };
+  const manquent = Object.entries(relues).filter(([, ok]) => !ok).map(([k]) => k);
+  verifier('`devis`, `devis_lignes` et `devis_tva` sont RELUES par `api.js`, et chaque lecture a son appelant à l’écran',
+    manquent.length === 0, `manquent : ${manquent.join(' ; ')} — une table qu’on écrit sans jamais la lire est une panne silencieuse`);
 }
 
 console.log('');

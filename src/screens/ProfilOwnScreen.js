@@ -96,7 +96,7 @@ export default function ProfilOwnScreen({
   demandesPartenariat = [], partenariatsEnvoyes = [],
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
-  onClients, onEntreprise,
+  onClients, onDevis = null, onEntreprise,
   onConfidentialite, admin = null, onAdmin,
   mesChantiers = [], onOuvrirChantier,
   /* Section 45 : l'entreprise rattachée (un pro), la demande de compte
@@ -339,6 +339,20 @@ export default function ProfilOwnScreen({
       {!!onClients && (
         <View style={s.pad}>
           <BtnOutline label="Mes clients" onPress={onClients} />
+        </View>
+      )}
+
+      {/* MES DEVIS (lot 1 du devis) — juste sous « Mes clients » : un devis
+          s'adresse à l'un d'eux. Réservé aux professionnels, pour la même
+          raison que le carnet : `onDevis` vaut `null` pour un particulier,
+          et la rangée n'existe pas. */}
+      {!!onDevis && (
+        <View style={s.pad}>
+          <BtnOutline
+            label="Mes devis"
+            accessibilityLabel="Mes devis : les brouillons de chiffrage"
+            onPress={onDevis}
+          />
         </View>
       )}
 

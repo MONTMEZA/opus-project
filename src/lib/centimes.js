@@ -45,14 +45,17 @@ export function versCentimes(texte) {
   if (brut.startsWith('-')) {
     return { ok: false, centimes: null, message: 'Un montant ne peut pas être négatif.' };
   }
-  const m = brut.match(/^(\d+)(?:[.,](\d*))?$/);
-  if (!m) {
+  /* « ,50 » vaut 0,50 € : sur un pavé décimal, on tape la virgule d'abord
+     (relecture « écran » des étapes 4 à 7, C7, le même défaut que la
+     quantité). Une virgule SEULE reste refusée. */
+  const m = brut.match(/^(\d*)(?:[.,](\d*))?$/);
+  if (!m || !/\d/.test(brut)) {
     return {
       ok: false, centimes: null,
       message: 'Écrivez un montant en euros, avec une seule virgule : par exemple 35 ou 35,50.',
     };
   }
-  const euros = m[1].replace(/^0+(?=\d)/, '');
+  const euros = (m[1] || '0').replace(/^0+(?=\d)/, '');
   const decimales = m[2] || '';
   if (decimales.length > 2) {
     return { ok: false, centimes: null, message: 'Un montant s’écrit avec deux chiffres après la virgule au plus.' };

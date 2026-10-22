@@ -619,7 +619,9 @@ if (E && M && D) {
     verifier('virgule, point, espaces, U+00A0, U+202F et « € »',
       ok('35', 3500) && ok('35,5', 3550) && ok('35,50', 3550) && ok('35.05', 3505) && ok('1 234,56', 123456)
       && ok('1 234', 123400) && ok('1 234,5', 123450) && ok('10 000 €', 1000000) && ok('007', 700)
-      && ok('0,10', 10) && ok('0', 0));
+      && ok('0,10', 10) && ok('0', 0)
+      /* « ,50 » : la virgule d'abord, sur un pavé décimal (lot 1 du devis, relecture « écran » C7). */
+      && ok(',50', 50) && ok('.5', 50));
     /* `35.1 * 100` vaut EXACTEMENT 3510 en JavaScript : ce cas seul ne
        détecterait pas un calcul en flottant. `8.2 * 100` vaut 819,999…,
        `19.99 * 100` 1998,999… et `64.35 * 100` 6434,999… (mesuré le 19/10,
@@ -629,7 +631,7 @@ if (E && M && D) {
     verifier('vide → `null` (non renseigné), jamais 0',
       c('').ok && c('').centimes === null && c('   ').centimes === null && c(null).centimes === null);
     verifier('négatif, deux séparateurs, trois décimales, lettres, seize chiffres : refusés avec une phrase',
-      ['-5', '1.000,50', '35,555', 'abc', '12345678901234567'].every((s) => c(s).ok === false && c(s).message));
+      ['-5', '1.000,50', '35,555', 'abc', '12345678901234567', ',', '.'].every((s) => c(s).ok === false && c(s).message));
     verifier('« 10 000,00 € », avec des espaces insécables',
       E.centimesLisibles(1000000) === '10 000,00 €' && E.centimesLisibles(5) === '0,05 €'
       && E.centimesLisibles(0) === '0,00 €' && E.centimesLisibles(null) === null);
@@ -1848,7 +1850,14 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     /* …et `aria-checked`, que `react-native-web` ne tire pas de
        `accessibilityState` : sans lui, aucun choix ne s'entend au
        navigateur (mesuré le 18/10). */
-    && /aria-checked=\{!!choisi\}/.test(fe) && /aria-checked=\{!!actif\}/.test(fe)
+    && /aria-checked=\{!!choisi\}/.test(fe)
+    /* L'INTERRUPTEUR a déménagé dans `ui.js` au lot 1 du devis (le devis
+       s'en sert aussi) : c'est LUI qui doit porter `aria-checked`, et
+       `FicheEmetteur` doit l'importer de là — pas en garder une copie. */
+    && (/aria-checked=\{!!actif\}/.test(fe)
+      || (/import \{[^}]*\bInterrupteur\b[^}]*\} from '\.\/ui'/.test(fe)
+        && /export function Interrupteur\([\s\S]{0,1200}?aria-checked=\{!!actif\}/
+          .test(sansCommentaires(lireSiExiste('src/components/ui.js') || ''))))
     && /\n\s*option:\s*\{[^}]*minHeight: TOUCHE/.test(fe)
     && !ECRANS.some((n) => /PillToggle/.test(code[n])),
     '`PillToggle` atteint les 44 points par `hitSlop`, que le navigateur ignore');

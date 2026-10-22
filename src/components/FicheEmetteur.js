@@ -43,10 +43,10 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import {
   C, F, T, S, R, TOUCHE, APPUI, interligne, rond,
 } from '../theme';
-import { BtnMini, TextArea } from './ui';
+import { BtnMini, TextArea, Interrupteur } from './ui';
 import ChampLocal from './ChampLocal';
 import ChampVille from './ChampVille';
-import { Check, ChevronDown, ChevronRight, Plus } from './icons';
+import { ChevronDown, ChevronRight, Plus } from './icons';
 import { useRechercheDifferee } from '../lib/frappe';
 import { dateFrancaise } from '../lib/entreprise';
 import {
@@ -214,26 +214,9 @@ export function Option({ choisi, libelle, aide, onPress }) {
   );
 }
 
-function Interrupteur({ actif, libelle, aide, onPress }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: !!actif }}
-      aria-checked={!!actif}
-      accessibilityLabel={aide ? `${libelle}. ${aide}` : libelle}
-      style={({ pressed }) => [s.option, actif && s.optionChoisie, pressed && APPUI.discret]}
-    >
-      <View style={[s.case_, actif && s.caseCochee]}>
-        {actif && <Check size={14} color={C.surface} />}
-      </View>
-      <View style={s.optionTexte}>
-        <Text style={s.optionLibelle}>{libelle}</Text>
-        {!!aide && <Text style={s.optionAide}>{aide}</Text>}
-      </View>
-    </Pressable>
-  );
-}
+/* `Interrupteur` a déménagé dans `ui.js` (lot 1 du devis, 22/10/2026) : le
+   devis en a besoin aussi, et deux copies se seraient désalignées. C'est
+   le MÊME composant, au pixel près. */
 
 function Section({ ancre, titre, onPosition, children }) {
   return (
@@ -1282,11 +1265,6 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: C.bordChamp,
   },
   rondPlein: { borderColor: C.accent2, borderWidth: 6 },
-  case_: {
-    width: S.lg + S.xs, height: S.lg + S.xs, borderWidth: 2, borderColor: C.bordChamp,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  caseCochee: { backgroundColor: C.accent2, borderColor: C.accent2 },
   replie: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: TOUCHE },
   replieTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accent2 },
   ligneCp: { flexDirection: 'row', gap: S.md },

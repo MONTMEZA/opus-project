@@ -789,6 +789,12 @@ export function creerFileEcriture({
           try {
             await envoyer({ quoi: 'devis', action: 'supprimer', id: d.voulu.id, generationMax: prochainNumero() });
           } catch (err) {
+            /* Un autre appareil a écrit dans ce devis avec un numéro plus
+               grand (OP015) : on reprend son horloge, comme pour une ligne
+               (14) — sans elle, « Supprimer » échouait de nouveau tant
+               qu'on n'avait pas rouvert le devis (relecture « données »
+               des étapes 4 à 7, mineur 1). */
+            if (estDepassee(err)) await relireHorloge();
             if (!issueInconnue(err)) throw err;
             /* Le délai dépassé : la suppression a PU passer. On relit. */
             let encore = null;
@@ -858,6 +864,24 @@ export function creerFileEcriture({
     },
     /** Plus rien en vol ni en attente ? */
     vide: estVide,
+    /** Relire les totaux PAR LA FILE (le bouton « Relire » de l'écran) : une
+     *  relecture partie avant une écriture est jetée par la génération, comme
+     *  les autres — appelée à côté de la file, sa réponse écrasait l'événement
+     *  `totaux` plus récent (relecture « données » des étapes 4 à 7, I3). */
+    relireLesTotaux() {
+      relire();
+    },
+    /** Ce que la file VEUT pour chaque objet, avec son état — pour un écran
+     *  qui ROUVRE un devis dont la file n'a pas fini : il se construit sur ce
+     *  qui est voulu, pas sur une photo de la base prise pendant que la file
+     *  écrit encore (relecture « données », I2). Des copies. */
+    entreesVoulues() {
+      const r = [];
+      entrees.forEach((e, c) => {
+        r.push({ cle: c, voulu: { ...e.voulu }, etat: e.etat, retire: Boolean(e.retire), locale: Boolean(e.locale) });
+      });
+      return r;
+    },
     /** Une promesse qui se résout à `true` quand la file est vide, ou à
      *  `false` au bout de `ms` — la garde de sortie attend 8 s au plus. */
     attendre,

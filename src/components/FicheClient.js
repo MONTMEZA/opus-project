@@ -15,18 +15,26 @@
  * avec un grand clavier, il faudrait faire défiler une feuille pour
  * atteindre son propre bouton.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Modal, ScrollView, Pressable, StyleSheet, Linking,
 } from 'react-native';
 import { X, Archive, ArchiveRestore, Trash, AlertTriangle } from './icons';
 import ChampVille from './ChampVille';
 import { C, F, T, S, R, TOUCHE, viser, interligne, surFond } from '../theme';
-import { BtnMain, BtnMini, Field, TextArea, PillToggle, SectionLabel } from './ui';
+import {
+  BtnMain, BtnMini, BtnOutline, Field, TextArea, PillToggle, SectionLabel, Montant,
+} from './ui';
 import { CLAVIER } from '../lib/clavier';
 import {
   TYPES_CLIENT, LONGUEUR_MAX, validerClient, clientsDuMemeNom, siretPropre,
 } from '../lib/clients';
+import { depuisLisible } from '../lib/devis';
+
+/* « Ses devis » en montre 20 au plus : la lecture en demande 21, pour SAVOIR
+   qu'il y en a d'autres. Une boucle, pas une liste virtualisée : on est dans
+   le `ScrollView` de la fiche, et vingt éléments ne pèsent rien. */
+const SES_DEVIS_MAX = 20;
 
 const VIDE = {
   type: 'particulier', nom: '', siret: '', telephone: '', email: '',
@@ -36,6 +44,14 @@ const VIDE = {
 export default function FicheClient({
   ouvert, fiche = null, depuis = null, tousLesClients = [],
   onFermer, onEnregistrer, onArchiver, onSupprimer, onOuvrirAutre,
+  /* Lot 1 du devis : « Ses devis » (la lecture, puis l'ouverture d'un devis)
+     et « Faire un devis ». Absents — un particulier, ou la fiche ouverte
+     depuis la saisie d'un devis —, la section n'existe pas. */
+  lireSesDevis = null, onOuvrirDevis = null, onFaireDevis = null,
+  /* Une fiche EXISTANTE ouverte depuis la saisie d'un devis (« vous avez déjà
+     un client de ce nom ») : on la choisit pour ce devis, d'un appui —
+     c'est ce que le geste cherchait. Absent partout ailleurs. */
+  onChoisirPourLeDevis = null,
 }) {
   /* `depuis` pré-remplit le formulaire avec ce qu'une demande reçue sait
      déjà du client. La `key` du composant est changée par l'appelant à
@@ -60,6 +76,25 @@ export default function FicheClient({
   const [erreur, setErreur] = useState(null);
   const [occupe, setOccupe] = useState(false);
   const [confirmeSuppression, setConfirmeSuppression] = useState(false);
+
+  /* « SES DEVIS » — le premier lecteur du carnet qui ne soit pas son propre
+     écran. Lus à l'ouverture d'une fiche existante ; un échec se DIT, et ne
+     cache pas ce qu'une suppression laisserait derrière elle. */
+  const [sesDevis, setSesDevis] = useState(() => (fiche && lireSesDevis ? { etat: 'lecture', liste: [] } : null));
+  const [tentativeDevis, setTentativeDevis] = useState(0);
+  useEffect(() => {
+    if (!fiche || !lireSesDevis) return undefined;
+    let vivant = true;
+    (async () => {
+      try {
+        const liste = await lireSesDevis(fiche.id);
+        if (vivant) setSesDevis({ etat: 'ok', liste: liste || [] });
+      } catch (e) {
+        if (vivant) setSesDevis({ etat: 'echec', liste: [] });
+      }
+    })();
+    return () => { vivant = false; };
+  }, [tentativeDevis]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * « SUIVANT » DOIT ALLER QUELQUE PART — et il ne pouvait aller nulle part.
@@ -178,6 +213,18 @@ export default function FicheClient({
                 un autre artisan.
               </Text>
             </View>
+          )}
+
+          {/* DEPUIS LA SAISIE D'UN DEVIS, la fiche d'un client existant ne
+              mène pas à un AUTRE devis (la garde de la saisie ne le
+              permettrait pas sans la lire) : elle se choisit pour celui
+              qu'on est en train d'écrire. */}
+          {!!fiche && !!onChoisirPourLeDevis && (
+            <BtnMain
+              label="Choisir ce client pour ce devis"
+              accessibilityLabel={`Choisir ${fiche.nom} pour le devis en cours`}
+              onPress={() => onChoisirPourLeDevis(fiche)}
+            />
           )}
 
           <SectionLabel>Qui est-ce ?</SectionLabel>
@@ -344,6 +391,52 @@ export default function FicheClient({
           </View>
           {messageErreur('codePostal')}
 
+          {!!sesDevis && (
+            <>
+              <SectionLabel>Ses devis</SectionLabel>
+              {!!onFaireDevis && !fiche.archive && (
+                <BtnOutline
+                  label="Faire un devis"
+                  accessibilityLabel={`Faire un devis pour ${fiche.nom}`}
+                  onPress={() => onFaireDevis(fiche)}
+                />
+              )}
+              {sesDevis.etat === 'lecture' && <Text style={s.aide}>Lecture de ses devis…</Text>}
+              {sesDevis.etat === 'echec' && (
+                <View style={s.sesDevisEchec}>
+                  <Text style={s.erreur}>
+                    Ses devis n&apos;ont pas pu être lus. Ce n&apos;est pas qu&apos;il n&apos;en a pas.
+                  </Text>
+                  <BtnOutline label="Réessayer" onPress={() => {
+                    setSesDevis({ etat: 'lecture', liste: [] });
+                    setTentativeDevis((k) => k + 1);
+                  }} />
+                </View>
+              )}
+              {sesDevis.etat === 'ok' && sesDevis.liste.length === 0 && (
+                <Text style={s.aide}>Aucun devis pour ce client.</Text>
+              )}
+              {sesDevis.etat === 'ok' && sesDevis.liste.slice(0, SES_DEVIS_MAX).map((d) => (
+                <Pressable
+                  key={d.id}
+                  style={s.unDevis}
+                  onPress={() => onOuvrirDevis && onOuvrirDevis(d)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ouvrir le devis ${d.objet || 'sans objet'}`}
+                >
+                  <View style={s.unDevisTextes}>
+                    <Text style={s.unDevisObjet} numberOfLines={2}>{d.objet || 'Sans objet'}</Text>
+                    <Text style={s.aide}>{`Brouillon · modifié ${depuisLisible(d.modifieLe)}`}</Text>
+                  </View>
+                  <Montant centimes={d.totalTtcCentimes} />
+                </Pressable>
+              ))}
+              {sesDevis.etat === 'ok' && sesDevis.liste.length > SES_DEVIS_MAX && (
+                <Text style={s.aide}>Et d&apos;autres : voir « Mes devis ».</Text>
+              )}
+            </>
+          )}
+
           <SectionLabel>Ce qu&apos;il faut se rappeler</SectionLabel>
           <TextArea
             placeholder="Portail à gauche. Prévenir la veille."
@@ -435,6 +528,25 @@ export default function FicheClient({
                   Définitif. Pour garder la fiche sans la voir, archivez-la.
                 </Text>
               )}
+              {/* LA SUPPRESSION DIT CE QUI RESTE (la critique « droit », I5) :
+                  un devis garde l'adresse des travaux — souvent le domicile —
+                  et ce que l'artisan y a écrit. Le taire, ce serait laisser
+                  croire que les données de ce client sont parties. Et un
+                  échec de lecture ne cache pas ce risque. */}
+              {confirmeSuppression && !!sesDevis && sesDevis.etat === 'ok' && sesDevis.liste.length > 0 && (
+                <Text style={s.erreur}>
+                  {`Ce client a ${sesDevis.liste.length > SES_DEVIS_MAX ? `plus de ${SES_DEVIS_MAX}` : sesDevis.liste.length} `
+                    + `devis : ${sesDevis.liste.length > 1 ? 'ils resteront, détachés' : 'il restera, détaché'} de sa fiche, `
+                    + 'avec l’adresse des travaux et ce que vous y avez écrit. Pour effacer ses données, supprimez '
+                    + 'aussi ces devis — ou archivez la fiche pour garder le lien.'}
+                </Text>
+              )}
+              {confirmeSuppression && !!sesDevis && sesDevis.etat !== 'ok' && (
+                <Text style={s.erreur}>
+                  Ses devis n&apos;ont pas pu être lus : s&apos;il en a, ils resteront, avec l&apos;adresse des
+                  travaux.
+                </Text>
+              )}
             </View>
           )}
         </ScrollView>
@@ -451,7 +563,9 @@ const s = StyleSheet.create({
     paddingHorizontal: S.lg, paddingBottom: S.md,
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  titre: { flex: 1, fontFamily: F.oswald6, fontSize: T.sousTitre + 1, color: C.ink },
+  /* Un cran de l'échelle, et pas `T.sousTitre + 1` : une arithmétique sur un
+     jeton fabrique une taille que l'échelle n'a pas (lot 1 du devis). */
+  titre: { flex: 1, fontFamily: F.oswald6, fontSize: T.titre, color: C.ink },
 
   contenu: { padding: S.lg, paddingBottom: S.xxl * 2 },
 
@@ -459,14 +573,31 @@ const s = StyleSheet.create({
     fontFamily: F.oswald6, fontSize: T.petit, color: C.ink,
     marginTop: S.md, marginBottom: S.xs,
   },
+  /* `T.minuscule` n'existait pas dans `theme.js` : la taille valait
+     `undefined` — donc le défaut de React Native, 14 — et l'interligne
+     `NaN`, sans erreur (relevé par la critique « écran » du lot 1). Le
+     premier correctif avait pris `T.micro` (10, « étiquettes posées sur une
+     image ») : il rapetissait de quatre points TOUTES les aides et TOUTES
+     les erreurs de la fiche, dont la phrase que le droit a fait ajouter à la
+     suppression (relecture « écran » des étapes 4 à 7, B6). Une aide se lit
+     en `T.petit`, comme dans la saisie d'un devis ; une erreur et un
+     avertissement de suppression en `T.corps` — c'est ce qu'on doit lire
+     avant d'appuyer. */
   aide: {
-    fontFamily: F.inter, fontSize: T.minuscule, color: C.muted,
-    marginTop: S.xs, lineHeight: interligne(T.minuscule),
+    fontFamily: F.inter, fontSize: T.petit, color: C.muted,
+    marginTop: S.xs, lineHeight: interligne(T.petit),
   },
   erreur: {
-    fontFamily: F.inter, fontSize: T.minuscule, color: C.bad,
-    marginTop: S.xs, lineHeight: interligne(T.minuscule),
+    fontFamily: F.inter, fontSize: T.corps, color: C.bad,
+    marginTop: S.xs, lineHeight: interligne(T.corps),
   },
+  sesDevisEchec: { gap: S.sm },
+  unDevis: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: TOUCHE,
+    paddingVertical: S.sm, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+  unDevisTextes: { flex: 1, minWidth: 0 },
+  unDevisObjet: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
 
   /* Angle VIF : ces blocs PORTENT l'information, ils ne flottent pas. */
   garde: {

@@ -29,7 +29,38 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-20';
+export const VERSION = '2026-10-22';
+/* 22/10/2026 — LE CHIFFRAGE D'UN DEVIS (lot 1 du module devis, section 49
+   de `schema.sql`). Ce qui a changé DE FOND :
+     - la collecte s'allonge : les devis en préparation d'un artisan — leur
+       objet, le lieu et le délai des travaux, une retenue de garantie,
+       leurs lignes, leurs prix et leurs totaux, le client du carnet auquel
+       ils se rattachent, la demande ou l'urgence d'où ils viennent ;
+     - ces devis portent souvent l'ADRESSE DES TRAVAUX, c'est-à-dire le
+       domicile d'une personne qui n'a pas de compte : ils entrent dans
+       « Les clients que vous enregistrez », avec les mêmes rôles (l'artisan
+       responsable, Opus sous-traitant) et les mêmes garanties ;
+     - LA VÉRITÉ SUR L'EFFACEMENT, dans les deux sens (critique « droit » du
+       cahier, I5 et I6) : supprimer la fiche d'un client NE supprime PAS
+       ses devis — la v1 du cahier écrivait « sans son nom », qui faisait
+       croire à une anonymisation qui n'a pas lieu ; et ce qu'un particulier
+       a écrit dans une demande, et qu'un artisan a repris dans un devis ou
+       dans son carnet, SURVIT à la suppression du compte du particulier —
+       c'est voulu (un devis ne perd pas son objet), et c'était déjà vrai du
+       carnet depuis la section 41. Le texte le dit, et dit à qui
+       s'adresser ;
+     - « à trois exceptions près » est retiré : une énumération qui annonce
+       son nombre se trompe le jour où elle s'allonge, et elle venait de
+       s'allonger.
+
+   CE QUI N'EST PAS ÉCRIT, ET POURQUOI : aucune durée de conservation d'un
+   devis (la purge à un an est une décision du 17/10, son MÉCANISME est au
+   lot 4 — promettre une durée qu'aucun code ne tient serait faux) ; aucune
+   clause de sous-traitance (l'acte de l'article 28.3 n'existe pas).
+
+   LA MÊME LIMITE QUE LES 19 ET 20/10 : aucun écran ne fait ré-accepter un
+   compte existant. Elle doit être construite avant que `STATUT` quitte
+   « essai » (`docs/A-FAIRE.md`, « Après le lot T »). */
 /* 20/10/2026 — LE N° DE TVA QUE L'ANNUAIRE NE PUBLIE PAS (section 48 de
    `schema.sql`). Ce qui a changé DE FOND :
      - un DESTINATAIRE nouveau : VIES, le service de la Commission
@@ -710,6 +741,20 @@ export const CGU = [
 /*  3. POLITIQUE DE CONFIDENTIALITÉ                                    */
 /* ------------------------------------------------------------------ */
 
+/* CE QU'UNE SUPPRESSION DE FICHE N'EFFACE PAS — lot 1 du devis, 22/10/2026.
+   La clé `devis.client_id` est `on delete set null` (section 49) : supprimer
+   la fiche d'un client détache ses devis, elle ne les efface pas, et ils
+   gardent l'adresse des travaux et l'objet. La v1 du cahier écrivait « sans
+   son nom », qui faisait croire à une anonymisation : il n'y en a aucune, et
+   l'objet ou l'adresse suffisent souvent à reconnaître quelqu'un. La phrase
+   est écrite UNE fois et servie aux DEUX branches de « Les clients que vous
+   enregistrez » : le jour où le contrat de sous-traitance existera, cette
+   vérité ne doit pas disparaître avec l'ancienne branche.
+   `npm run verifier-legal` refuse « sans son nom » dans cette section. */
+const CE_QUI_RESTE_D_UN_CLIENT = 'Supprimer la fiche d’un client ne supprime pas ses '
+  + 'devis : ils restent, avec l’adresse des travaux et ce que vous y avez écrit. Pour '
+  + 'effacer les données de ce client, supprimez aussi ses devis.';
+
 export const CONFIDENTIALITE = [
   {
     titre: 'Qui traite vos données',
@@ -739,7 +784,14 @@ export const CONFIDENTIALITE = [
        qui est vrai, dans le même ordre que la CGU : ils ne S'AFFICHENT pas
        aux autres artisans, c'est une barrière, pas un verrou. Et la
        disponibilité aux urgences reste lisible de tous APRÈS qu'on a cessé
-       d'y répondre — une ligne éteinte n'est pas supprimée : on le dit. */
+       d'y répondre — une ligne éteinte n'est pas supprimée : on le dit.
+
+       LES DEVIS EN PRÉPARATION, lot 1 (22/10/2026) : ce qui est collecté
+       est nommé colonne par colonne de la section 49 — l'objet, le lieu et
+       le délai, la retenue de garantie, les lignes et leurs prix, les
+       totaux que la base calcule, la fiche du carnet et la demande d'origine.
+       « Aucun écran d'Opus ne les montre » couvre ces devis aussi : la
+       section « Les clients que vous enregistrez » le dit en entier. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -769,7 +821,11 @@ export const CONFIDENTIALITE = [
       + 'immatriculation, votre capital, vos assurances et leurs attestations, votre '
       + 'médiateur, vos garanties, vos conditions de paiement, d’exécution et de '
       + 'réclamation, et vos tarifs (frais de déplacement, taux horaire et son décompte, '
-      + 'majoration de nuit et de week-end, prix du devis). Aucun écran d’Opus ne les montre '
+      + 'majoration de nuit et de week-end, prix du devis) ; et vos devis en préparation '
+      + 'eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de '
+      + 'garantie, leurs lignes, leurs prix et leurs totaux, le client de votre carnet auquel ils '
+      + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Aucun '
+      + 'écran d’Opus ne les montre '
       + 'à quelqu’un d’autre que vous, sauf vos tarifs si vous choisissez de les afficher : ils '
       + 'deviennent alors lisibles par les particuliers qui ont un compte Opus ; ils ne '
       + 's’affichent ni aux autres artisans, ni dans l’espace d’administration, et la date à '
@@ -878,34 +934,63 @@ export const CONFIDENTIALITE = [
        seize essais de la section 41. Et `npm run verifier-legal` refuse de
        passer si le statut quitte « essai » sans que cette clause existe. */
     titre: 'Les clients que vous enregistrez',
+    /* LES DEVIS ENTRENT ICI — lot 1, 22/10/2026. Un devis rattache une fiche
+       du carnet et porte souvent l'adresse des travaux, c'est-à-dire le
+       domicile du client : les mêmes rôles (l'artisan responsable, Opus
+       sous-traitant), les mêmes garanties — vérifiées par l'essai 49 : aucun
+       autre artisan, aucun visiteur, aucun compte sans fiche, AUCUN
+       administrateur ne lit un devis (cas 12, 28, 33). « Ni à votre client »
+       est vrai par construction : une fiche du carnet n'a aucun lien vers un
+       compte Opus (pas de `compte_id`, section 41).
+
+       « Le seul artisan qui y tient un carnet ou y prépare des devis » :
+       relevé par la forme le 21/10 (1 ligne dans `clients`, aucun devis — la
+       section 49 n'est pas encore sur la vraie base). À RELIRE sur la vraie
+       base avant d'appliquer (étape 9 du lot 1), par le nombre de `pro_id`
+       distincts dans `clients` ET dans `devis` : le frère du propriétaire
+       peut l'avoir rendue fausse. « Ou y prépare des devis » ajouté le 22/10
+       (relecture « conformité » des étapes 4 à 7, mineur 3) : la phrase ne
+       parlait que du carnet. */
     texte: !EDITEUR.contratSousTraitance
       ? 'Si vous êtes artisan, Opus vous permet de tenir un carnet de '
-        + 'clients. Ces informations concernent des personnes qui n’ont pas '
-        + 'de compte Opus : vous en êtes le responsable du traitement, et '
+        + 'clients et de préparer des devis. Un devis se rattache à une fiche '
+        + 'de votre carnet et porte souvent l’adresse des travaux, c’est-à-dire '
+        + 'le domicile de votre client. Ces informations concernent des personnes qui, le '
+        + 'plus souvent, n’ont pas de compte Opus : vous en êtes le responsable du traitement, et '
         + 'Opus n’en est que le sous-traitant (article 28 du RGPD). Le '
         + 'contrat qui doit encadrer cette relation n’est pas encore '
         + 'publié : Opus n’est pas ouverte au public, et le seul artisan '
-        + 'qui y tient un carnet est l’auteur de l’application '
-        + 'lui-même.\n\nCe qui est déjà garanti '
-        + 'par la base de données, et vérifié : votre carnet n’est lisible '
-        + 'que de vous — ni par un autre artisan, ni par un visiteur ; rien '
-        + 'de son contenu n’apparaît sur votre fiche publique, dans le fil '
-        + 'ou dans une notification ; vous pouvez l’exporter et le '
-        + 'supprimer à tout moment ; et il part entièrement avec votre '
-        + 'compte.\n\nUne exception à dire clairement : quand vous tapez '
-        + 'l’adresse d’un client et que l’application vous propose des '
+        + 'qui y tient un carnet ou y prépare des devis est l’auteur de '
+        + 'l’application lui-même.\n\nCe qui est déjà garanti '
+        + 'par la base de données, et vérifié : parmi les utilisateurs d’Opus, '
+        + 'votre carnet et vos devis ne sont lisibles que de vous ; aucun écran '
+        + 'd’Opus ne les montre à '
+        + 'quelqu’un d’autre — ni à un autre artisan, ni à votre client, ni à '
+        + 'un visiteur, ni dans l’espace d’administration ; rien de leur '
+        + 'contenu n’apparaît sur votre fiche publique, dans le fil ou dans '
+        + 'une notification ; vous pouvez les exporter et les supprimer à '
+        + 'tout moment ; et ils partent entièrement avec votre compte.\n\n'
+        + CE_QUI_RESTE_D_UN_CLIENT
+        + '\n\nUne exception à dire clairement : quand vous tapez '
+        + 'l’adresse d’un client, ou le lieu des travaux d’un devis, et que '
+        + 'l’application vous propose des '
         + 'suggestions, le texte en cours de saisie est envoyé à la Base '
         + 'Adresse Nationale, le service public français des adresses. Ce '
         + 'qui part, c’est l’adresse que vous tapez, et rien d’autre : '
         + 'jamais le nom de votre client, jamais son téléphone, jamais le '
         + 'fait que ce soit un client.'
-      : 'Le carnet de clients d’un artisan contient des données '
+      : 'Le carnet de clients d’un artisan, et les devis qu’il prépare, '
+        + 'contiennent des données '
         + 'personnelles sur des tiers. L’artisan en est le responsable du '
         + 'traitement ; l’éditeur d’Opus agit comme sous-traitant au sens '
         + 'de l’article 28 du RGPD, dans les limites fixées par le contrat '
         + 'de sous-traitance qui lui est opposable. L’éditeur ne traite ces '
         + 'données que pour fournir le service, ne les transmet à personne '
-        + 'd’autre, et les restitue ou les efface sur demande.',
+        + 'd’autre — sauf l’adresse tapée dans un champ de lieu (l’adresse d’un '
+        + 'client, le lieu des travaux d’un devis), envoyée à la Base Adresse '
+        + 'Nationale pour proposer des suggestions —, et les restitue ou les '
+        + 'efface sur demande. '
+        + CE_QUI_RESTE_D_UN_CLIENT,
   },
   {
     titre: 'À qui vos données sont transmises',
@@ -948,14 +1033,40 @@ export const CONFIDENTIALITE = [
        et rien dans le dépôt ne fondait « la loi l'impose ». La phrase dit
        maintenant ce qui est vrai aujourd'hui. Et l'empreinte d'adresse IP
        n'a AUCUNE durée promise : le ménage n'a lieu qu'à l'occasion d'une
-       consultation, donc personne ne peut garantir « 24 heures ». */
+       consultation, donc personne ne peut garantir « 24 heures ».
+
+       LOT 1 DU DEVIS (22/10/2026), critique « droit » I6 : le texte d'une
+       demande est recopié dans l'objet d'un devis (`devisDepuisDemande`), et
+       le nom, le téléphone et la commune d'un demandeur dans un carnet
+       (« Ajouter à mes clients », section 41). Ces copies SURVIVENT à la
+       suppression du compte du particulier — c'est voulu (l'essai 49, cas
+       23, l'exige : un devis ne perd pas son objet), et elles relèvent de
+       l'artisan, responsable de son carnet. Le texte le dit, et dit à qui
+       s'adresser. « À trois exceptions près » est retiré : une énumération
+       qui annonce son nombre se trompe le jour où elle s'allonge. Et AUCUNE
+       durée de conservation d'un devis n'est promise : la purge à un an est
+       une décision du 17/10 dont le mécanisme est au lot 4.
+
+       LES TROIS GENRES DE DEMANDE, et pas deux (relecture « conformité » des
+       étapes 4 à 7, important 1) : « Ajouter à mes clients » est offert sur
+       TOUTE demande reçue acceptée ou terminée, rappels compris — et une
+       demande de rappel porte le nom et le téléphone écrits par le
+       particulier. « De devis ou d'urgence » disait moins que la vérité ;
+       `verifier-legal` tire désormais la liste des genres du CODE. */
     texte: 'Vos données sont conservées tant que votre compte existe. À sa '
-      + 'suppression, elles sont effacées immédiatement, à trois exceptions '
-      + 'près : les avis et commentaires laissés chez d’autres sont conservés '
+      + 'suppression, elles sont effacées immédiatement, sauf ce qui '
+      + 'suit : les avis et commentaires laissés chez d’autres sont conservés '
       + 'sans votre nom ; les signalements sont conservés un an, sans le nom '
       + 'de celui qui les a déposés ; les décisions de l’administration qui vous '
       + 'concernent restent à son journal — la décision, le motif écrit par '
-      + 'l’administrateur et, pour une entreprise, son numéro SIREN. Si '
+      + 'l’administrateur et, pour une entreprise, son numéro SIREN ; et ce que '
+      + 'vous avez écrit à un artisan dans une demande — de devis, de rappel ou '
+      + 'd’urgence — et '
+      + 'qu’il a repris dans son carnet de clients ou dans un devis, relève de lui : '
+      + 'la suppression de votre compte ne l’efface pas de ses documents — pour '
+      + 'cela, adressez-vous à lui. Si vous êtes artisan, vos devis en préparation '
+      + 'sont conservés tant que vous ne les supprimez pas, et partent avec votre '
+      + 'compte. Si '
       + 'l’administration a retiré une entreprise à votre compte, son numéro SIREN '
       + 'reste en outre réservé, sans aucune autre information, jusqu’à ce que son '
       + 'titulaire en obtienne le rattachement : sans cela, il suffirait de '

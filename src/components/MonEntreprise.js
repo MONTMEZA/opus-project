@@ -90,11 +90,15 @@ const MANQUES_EN_LECTURE = { etat: 'charge', liste: [] };
    `surTarifs` reçoit les tarifs lus : `OpusApp` garde ainsi `mesTarifs` à
    jour, et un réglage d'urgence qui disait « vos tarifs n'ont pas pu être
    lus » se corrige dès qu'ils l'ont été ici. */
-async function lireFiche(poser, surTarifs = null) {
+async function lireFiche(poser, surTarifs = null, surEmetteur = null) {
   try {
     const d = await api.monEmetteur();
     poser({ etat: 'pret', ...d });
     if (surTarifs) surTarifs(d.tarifs || null);
+    /* LOT 1 DU DEVIS : la fiche lue remonte aussi, pour le RÉGIME DE TVA de
+       la saisie. Sans elle, l'artisan envoyé ici par le bandeau « régime non
+       déclaré » y déclarait son régime… et retrouvait le bandeau. */
+    if (surEmetteur) surEmetteur(d.emetteur || null);
     return d;
   } catch (e) {
     poser({ ...FICHE_EN_LECTURE, etat: 'echec' });
@@ -155,6 +159,9 @@ export default function MonEntreprise({
      `OpusApp`), ou `null` s'il n'y a rien à en dire ; et la remontée des
      tarifs lus ou enregistrés. */
   etatSos = null, onTarifs = null,
+  /* Lot 1 du devis : la fiche (et donc le régime de TVA) lue ou
+     enregistrée, remontée à `OpusApp` — sur le modèle d'`onTarifs`. */
+  surEmetteur = null,
 }) {
   const [mode, setMode] = useState('lecture');
   const [donnees, setDonnees] = useState(FICHE_EN_LECTURE);
@@ -201,7 +208,7 @@ export default function MonEntreprise({
   useEffect(() => {
     if (sectionInitiale === 'entreprise') cible.current = 'entreprise';
     (async () => {
-      const d = await lireFiche(setDonnees, onTarifs);
+      const d = await lireFiche(setDonnees, onTarifs, surEmetteur);
       if (d && sectionInitiale && sectionInitiale !== 'entreprise') {
         cible.current = sectionInitiale;
         setCleFiche((k) => k + 1);
@@ -209,7 +216,7 @@ export default function MonEntreprise({
       }
     })();
     lireManques(setManques);
-  }, [sectionInitiale, onTarifs]);
+  }, [sectionInitiale, onTarifs, surEmetteur]);
 
   const reference = { emetteur: donnees.emetteur, tarifs: donnees.tarifs };
   const demo = api.mode === 'demo';
@@ -420,6 +427,7 @@ export default function MonEntreprise({
         ...d, etat: 'pret', emetteur: r.emetteur || d.emetteur, tarifs: r.tarifs || d.tarifs,
       }));
       if (onTarifs) onTarifs(r.tarifs || donnees.tarifs || null);
+      if (surEmetteur) surEmetteur(r.emetteur || donnees.emetteur || null);
       setBrouillon(null);
       setQuitter(false);
       setMode('lecture');
@@ -433,7 +441,7 @@ export default function MonEntreprise({
         /* LA FICHE EST PARTIE, LES TARIFS NON — et l'écran le dit, au lieu
            de laisser croire que rien ne l'est. On relit, pour que le
            formulaire compare désormais à ce qui est vraiment en base. */
-        lireFiche(setDonnees, onTarifs);
+        lireFiche(setDonnees, onTarifs, surEmetteur);
         const texte = `Vos informations de devis sont enregistrées, mais pas vos tarifs. ${messageClair(e)}`;
         const nom = (String((e && e.message) || '').match(/"(tarif_[a-z_]+_check)"/) || [])[1];
         const champ = nom ? CHAMP_DE_LA_CONTRAINTE[nom] : null;
@@ -544,7 +552,7 @@ export default function MonEntreprise({
     return r;
   };
 
-  const reessayerFiche = () => { setDonnees(FICHE_EN_LECTURE); lireFiche(setDonnees, onTarifs); };
+  const reessayerFiche = () => { setDonnees(FICHE_EN_LECTURE); lireFiche(setDonnees, onTarifs, surEmetteur); };
   const reessayerManques = () => { setManques(MANQUES_EN_LECTURE); lireManques(setManques); };
 
   /* Le bloc « Vos tarifs » de la lecture. */

@@ -701,6 +701,50 @@ console.log('\nUne demande de compte pro ne se perd pas pour un nom trop long');
       .test(api));
 }
 
+console.log('\nUne panne du SERVICE se dit en français, et n’accuse ni l’artisan ni son réseau');
+{
+  /* LES FORMES RENDUES PENDANT UNE PANNE — PostgREST, PostgreSQL, la
+     passerelle de Supabase. Relevées par la relecture « données » des étapes
+     4 à 7 du devis en faisant tourner `messageClair` : toutes sortaient en
+     anglais sur chaque rangée d'un devis, dont la panne du 02/10 (la couche
+     API qui redémarre) ; et `PGRST003` passait pour une coupure du
+     téléphone. On FAIT TOURNER la fonction sur chacune. */
+  const { messageClair: traduire, estUnePanneDuService } = await import('../src/lib/erreurs.js');
+  const SERVICE = /service d’Opus n’a pas répondu correctement/;
+  const formes = [
+    ['passerelle 502 (Kong)', { message: 'An invalid response was received from the upstream server' }, SERVICE],
+    ['passerelle 503 (Envoy)', { message: 'upstream connect error or disconnect/reset before headers. reset reason: connection failure' }, SERVICE],
+    ['Cloudflare 520 (HTML)', { message: '<!DOCTYPE html><html><head><title>Error 520</title></head></html>' }, SERVICE],
+    ['429', { message: 'Too Many Requests' }, SERVICE],
+    ['PGRST000', { code: 'PGRST000', message: 'Could not connect with the database due to an incorrect db-uri or due to the database being unavailable' }, SERVICE],
+    ['PGRST001', { code: 'PGRST001', message: 'Database client error. Retrying the connection.' }, SERVICE],
+    ['PGRST002', { code: 'PGRST002', message: 'Could not query the database for the schema cache. Retrying.' }, SERVICE],
+    ['PGRST003 (« timed out »)', { code: 'PGRST003', message: 'Timed out acquiring connection from connection pool.' }, SERVICE],
+    ['08006', { code: '08006', message: 'connection to server was lost' }, SERVICE],
+    ['53300', { code: '53300', message: 'sorry, too many clients already' }, SERVICE],
+    ['57P01', { code: '57P01', message: 'terminating connection due to administrator command' }, SERVICE],
+    ['40001', { code: '40001', message: 'could not serialize access due to concurrent update' }, SERVICE],
+    ['55P03', { code: '55P03', message: 'could not obtain lock on row in relation "devis"' }, SERVICE],
+    ['abandon postgrest', { code: '', message: 'AbortError: Aborted' }, /pas de connexion/],
+    ['PGRST303', { code: 'PGRST303', message: 'JWT issued at future' }, /session a expiré/],
+    ['22P02', { code: '22P02', message: 'invalid input syntax for type uuid: "null"' }, /défaut d’Opus, pas le vôtre/],
+    ['PGRST102', { code: 'PGRST102', message: 'Empty or invalid json' }, /défaut d’Opus, pas le vôtre/],
+  ];
+  const ANGLAIS = /\b(the|could|error|failed|invalid|upstream|connection|database|retrying|too many|lock|serialize|aborted|jwt)\b|<!doctype|<html/i;
+  const fautes = formes.map(([nom, e, attendu]) => [nom, traduire(e, 'Cette ligne'), attendu])
+    .filter(([, m, attendu]) => !attendu.test(m) || ANGLAIS.test(m))
+    .map(([nom, m]) => `${nom} → ${m}`);
+  verifier('dix-sept formes de panne → une phrase FRANÇAISE, et la bonne (service, réseau, session, défaut d’Opus)',
+    fautes.length === 0, fautes.join(' | '));
+  verifier('…et une vraie coupure du téléphone reste « pas de connexion », jamais « le service »',
+    /pas de connexion/.test(traduire({ message: 'TypeError: Network request failed' }, 'x'))
+    && !estUnePanneDuService({ message: 'TypeError: Network request failed' })
+    && !estUnePanneDuService({ code: '23514', message: 'new row violates check constraint "devis_ligne_offert_check"' }));
+  verifier('…et quand RIEN n’est affiché, la phrase du réseau ne promet pas que « ce qui est affiché reste lisible »',
+    !/reste lisible/.test(traduire({ message: 'Failed to fetch' }, 'Ce devis', { rienAffiche: true }))
+    && /reste lisible/.test(traduire({ message: 'Failed to fetch' }, 'Ce devis')));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

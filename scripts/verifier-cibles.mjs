@@ -187,7 +187,12 @@ console.log('\nCe qu’on vise avec un gant');
 
   [['btnMain', 'TOUCHE'], ['btnOutline', 'TOUCHE'], ['field', 'TOUCHE'],
     ['iconBtn', 'TOUCHE'], ['btnMini', '36'], ['chip', '40'], ['chipFollow', '40'],
-    ['pillBtn', '38']].forEach(([brique, attendu]) => {
+    ['pillBtn', '38'],
+    /* Lot 1 du devis : la PASTILLE et l'INTERRUPTEUR (sorti de « Mon
+       entreprise ») atteignent 44 points PAR LEUR BOÎTE — aucune des
+       briques du dessus ne le fait, toutes comptent sur `hitSlop`, que le
+       navigateur ignore. */
+    ['pastille', 'TOUCHE'], ['interrupteur', 'TOUCHE']].forEach(([brique, attendu]) => {
     const m = ui.match(new RegExp(`\\n  ${brique}: \\{([\\s\\S]*?)\\n  \\},`));
     verifier(`${brique} déclare sa hauteur minimale`,
       !!m && new RegExp(`minHeight: ${attendu}`).test(m[1]),

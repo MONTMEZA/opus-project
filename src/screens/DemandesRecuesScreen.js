@@ -35,7 +35,7 @@ import {
   View, Text, FlatList, Pressable, Linking, StyleSheet, ScrollView,
 } from 'react-native';
 import {
-  C, F, T, S, APPUI, interligne, surFond, CARTE, GOUTTIERE,
+  C, F, T, S, APPUI, interligne, surFond, CARTE, GOUTTIERE, TOUCHE,
 } from '../theme';
 import { Avatar, BtnMini, EmptyState } from '../components/ui';
 import { PastilleBascule } from '../components/FiltresPlace';
@@ -43,6 +43,10 @@ import { Phone, Check, X, Clock, AlertTriangle } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
 import { libelleBudget } from '../data/annonces';
 import { METIERS_SOS } from '../data/urgences';
+/* Lot 1 du devis : « Faire un devis » lit, au moment de l'appui, si un
+   brouillon existe déjà pour cette demande. */
+import * as api from '../lib/api';
+import { peutFaireUnDevis, depuisLisible } from '../lib/devis';
 
 /**
  * LE MÉTIER NE SE NOMME PAS PAREIL SELON L'ORIGINE, et c'est un piège réel :
@@ -169,6 +173,8 @@ export function trierDemandes(demandes = []) {
 export default function DemandesRecuesScreen({
   demandes = [], chargement = false, echec = false, onReessayer,
   onRepondre, onAppeler, onVoirProfil, onAjouterClient,
+  /* « Faire un devis » (lot 1) : absent pour un particulier. */
+  onFaireDevis = null,
   /* La demande qu'une notification désigne (section 37), et le moyen de
      dire qu'on l'a consommée. */
   demandeCible = null, onCibleConsommee,
@@ -330,6 +336,7 @@ export default function DemandesRecuesScreen({
           onAppeler={onAppeler}
           onVoirProfil={onVoirProfil}
           onAjouterClient={onAjouterClient}
+          onFaireDevis={onFaireDevis}
         />
       )}
     />
@@ -337,8 +344,26 @@ export default function DemandesRecuesScreen({
 }
 
 function Demande({
-  d, onRepondre, onAppeler, onVoirProfil, onAjouterClient, visee = false,
+  d, onRepondre, onAppeler, onVoirProfil, onAjouterClient, onFaireDevis = null, visee = false,
 }) {
+  /* « FAIRE UN DEVIS » NE RECRÉE PAS UN BROUILLON QUI EXISTE (la critique
+     « écran », I10). L'appui lit `devisDeLaDemande()` À CE MOMENT-LÀ —
+     aucune requête de plus au démarrage. S'il y en a un, la carte le dit
+     SUR PLACE (pas de fenêtre) : « Reprendre » ou « Nouveau devis ».
+     Plusieurs devis pour une même demande restent permis ; on ne les crée
+     plus sans le savoir. `null` : rien demandé ; `{ etat }` sinon. */
+  const [brouillons, setBrouillons] = useState(null);
+  const faireUnDevis = async () => {
+    if (brouillons && brouillons.etat === 'lecture') return;
+    setBrouillons({ etat: 'lecture' });
+    try {
+      const liste = await api.devisDeLaDemande(d.genre, d.id);
+      if (!liste || !liste.length) { setBrouillons(null); onFaireDevis(d); return; }
+      setBrouillons({ etat: 'trouve', liste });
+    } catch (e) {
+      setBrouillons({ etat: 'echec' });
+    }
+  };
   /* Le verrou contre le double appui : accepter deux fois une urgence
      enverrait deux fois l'artisan. Même famille de défaut que le bouton
      « Choisir » du SOS. */
@@ -465,8 +490,68 @@ function Demande({
                 onPress={() => onAjouterClient(d)}
               />
             )}
+            {/* FAIRE UN DEVIS, à côté d'« Ajouter à mes clients » : deux
+                cibles voisines, jamais imbriquées. Une demande de devis ou
+                une urgence ACCEPTÉE (ou terminée) — jamais un rappel, qui
+                n'a pas de lien d'origine : après un rappel, on passe par
+                « Ajouter à mes clients », puis « Faire un devis » sur la
+                fiche. Un `BtnMini` comme ses voisins, pour que la rangée
+                reste d'une hauteur (36 de boîte, 40 de visée). */}
+            {peutFaireUnDevis(d) && !!onFaireDevis && (
+              <BtnMini
+                outline
+                label={brouillons && brouillons.etat === 'lecture' ? 'Vérification…' : 'Faire un devis'}
+                accessibilityLabel={`Faire un devis pour la demande de ${d.nom}`}
+                disabled={!!brouillons && brouillons.etat === 'lecture'}
+                onPress={faireUnDevis}
+              />
+            )}
             {estRefusee(d) && <Text style={s.etat}>Refusée</Text>}
             {d.statut === 'termine' && <Text style={s.etat}>Terminée</Text>}
+          </View>
+        )}
+
+        {!!brouillons && brouillons.etat === 'trouve' && (
+          <View style={s.brouillon}>
+            <Text style={s.brouillonTexte}>
+              {`${brouillons.liste.length > 1 ? `${brouillons.liste.length} brouillons en cours` : 'Brouillon en cours'}, `
+                + `modifié ${depuisLisible(brouillons.liste[0].modifieLe)}`}
+            </Text>
+            <View style={s.boutons}>
+              {/* 44 points PAR LA BOÎTE (`s.cible`) : cette rangée est à elle,
+                  aucune voisine dont il faudrait garder la hauteur — la seule
+                  exception nommée du lot est « Faire un devis », à côté
+                  d'« Ajouter à mes clients ». Mesuré par `mesure-devis` le
+                  22/10/2026 : 36 de haut avant. */}
+              <BtnMini
+                label="Reprendre"
+                accessibilityLabel="Reprendre le brouillon le plus récent pour cette demande"
+                style={s.cible}
+                onPress={() => { const id = brouillons.liste[0].id; setBrouillons(null); onFaireDevis(d, { devisId: id }); }}
+              />
+              <BtnMini
+                outline
+                label="Nouveau devis"
+                style={s.cible}
+                onPress={() => { setBrouillons(null); onFaireDevis(d); }}
+              />
+            </View>
+          </View>
+        )}
+        {!!brouillons && brouillons.etat === 'echec' && (
+          <View style={s.brouillon}>
+            <Text style={s.brouillonTexte}>
+              Je n’ai pas pu vérifier s’il existe déjà un brouillon pour cette demande.
+            </Text>
+            <View style={s.boutons}>
+              <BtnMini label="Réessayer" style={s.cible} onPress={faireUnDevis} />
+              <BtnMini
+                outline
+                label="Nouveau devis quand même"
+                style={s.cible}
+                onPress={() => { setBrouillons(null); onFaireDevis(d); }}
+              />
+            </View>
           </View>
         )}
 
@@ -536,6 +621,11 @@ const s = StyleSheet.create({
   info: { fontFamily: F.inter5, fontSize: T.petit, color: C.accent2 },
 
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
+  /* Le brouillon déjà ouvert : dit SUR PLACE, au bord, comme la demande
+     visée. */
+  brouillon: { marginTop: S.sm, paddingLeft: S.sm, borderLeftWidth: 3, borderLeftColor: C.accent2, gap: S.xs },
+  brouillonTexte: { fontFamily: F.inter, fontSize: T.petit, color: C.ink },
+  cible: { minHeight: TOUCHE },
   btnTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.surAccent, letterSpacing: 0.3 },
   etat: { fontFamily: F.inter5, fontSize: T.petit, color: C.muted },
   /* Repris à l'identique de `DemandesScreen` : les deux pages sont

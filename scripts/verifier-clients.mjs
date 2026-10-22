@@ -440,6 +440,38 @@ verifier('…et l’archivage se DÉFAIT',
   + '« Terminer » d’un chantier (lot E).');
 
 /* ================================================================== */
+console.log('\nSES DEVIS — le premier lecteur du carnet qui ne soit pas son propre écran (lot 1 du devis)');
+
+verifier('la fiche reçoit `lireSesDevis`, `onOuvrirDevis` et `onFaireDevis`, et `OpusApp` les lui donne pour un pro seulement',
+  /lireSesDevis = null, onOuvrirDevis = null, onFaireDevis = null/.test(forme)
+  && /lireSesDevis=\{canPublish && !ficheClient\.depuisLaSaisie \? api\.devisDuClient : null\}/.test(appli)
+  && /onFaireDevis=\{canPublish && !ficheClient\.depuisLaSaisie \? faireDevisDepuisFiche : null\}/.test(appli),
+  'Depuis la saisie d’un devis, la fiche ne propose ni « Ses devis » ni « Faire un devis » : quitter la saisie ne se fait '
+  + 'que par sa garde.');
+
+verifier('« Ses devis » existe, au plus 20, et un échec de lecture se DIT',
+  /<SectionLabel>Ses devis<\/SectionLabel>/.test(forme) && /SES_DEVIS_MAX = 20/.test(forme)
+  && /n&apos;ont pas pu être lus/.test(forme),
+  'Une lecture ratée qui afficherait « aucun devis » laisserait supprimer la fiche sans savoir ce qui reste.');
+
+verifier('« Faire un devis » : pour une fiche existante et NON archivée',
+  /!!onFaireDevis && !fiche\.archive && \(/.test(forme));
+
+{
+  /* LA SUPPRESSION DIT CE QUI RESTE (critique « droit » I5) : l'adresse des
+     travaux et le texte de l'artisan restent dans ses devis. */
+  const bloc = forme.slice(forme.indexOf('confirmeSuppression && !!sesDevis'), forme.indexOf('confirmeSuppression && !!sesDevis') + 1200);
+  verifier('la suppression d’une fiche qui a des devis dit « l’adresse des travaux », et jamais « sans nom de client »',
+    bloc.length > 200 && /adresse des travaux/.test(bloc) && !/sans nom de client/i.test(forme)
+    && /archivez la fiche pour garder le lien/.test(bloc),
+    'Les devis gardent le lieu des travaux — souvent le domicile — et ce que l’artisan y a écrit.');
+}
+
+verifier('les jetons de la fiche existent : `T.micro` et non `T.minuscule`, et aucune arithmétique sur une taille',
+  !/T\.minuscule/.test(forme) && !/\bT\.\w+\s*[-+*/]/.test(forme),
+  '`T.minuscule` n’existe pas : la taille valait `undefined` et l’interligne `NaN`, sans erreur.');
+
+/* ================================================================== */
 console.log('\nL’ADRESSE SE PROPOSE — et elle ne se remplit pas toute seule');
 
 verifier('le champ adresse propose des suggestions officielles',

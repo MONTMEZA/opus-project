@@ -21,6 +21,10 @@ import {
 } from '../theme';
 import { Check, AlertTriangle, WifiOff, Eye, EyeOff } from './icons';
 import { useMouvementReduit } from '../lib/retour';
+/* L'écriture d'un montant, la seule du projet (`centimes.js` n'importe rien) :
+   `Montant`, plus bas, est la seule porte qui l'appelle dans les écrans du
+   devis. */
+import { centimesLisibles } from '../lib/centimes';
 
 /* --- dégradé (remplace les linear-gradient CSS) --- */
 export function Gradient({ media, angle = 160, style, children }) {
@@ -788,6 +792,114 @@ export function PillToggle({ options, value, onChange, small }) {
   );
 }
 
+/* --- la pastille du devis (lot 1, 22/10/2026) --- */
+/**
+ * UNE PASTILLE QU'ON CHOISIT : une unité (« m² », « jour »), un taux
+ * (« 10 % »), une sorte de ligne à ajouter (« Poste », « Pièce »).
+ *
+ * POURQUOI UNE BRIQUE DE PLUS : aucune de celles qui existent n'atteint
+ * 44 points PAR SA BOÎTE — `BtnMini` en fait 36, `PillToggle` 38, `Chip`
+ * 40 (relevé le 21/10). Elles comptent sur `hitSlop`, que le navigateur
+ * ignore : un devis se tape avec un pouce, parfois ganté, et la saisie
+ * d'une ligne enchaîne quatre ou cinq de ces appuis. Celle-ci fait 44 de
+ * haut ET de large par sa boîte (`TOUCHE`) : ça se voit, et ça se mesure.
+ *
+ * `nom` est ce que lit VoiceOver — « mètre linéaire » quand la pastille
+ * affiche « m linéaire » —, et l'état choisi va dans `selected`, jamais
+ * dans l'étiquette : le lecteur d'écran le dit lui-même.
+ *
+ * Arrondie : elle FLOTTE au-dessus de la carte, on appuie dessus (la règle
+ * des bords).
+ */
+export function Pastille({
+  label, nom, choisie = false, onPress, disabled = false, style,
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={nom || label}
+      accessibilityState={{ selected: !!choisie, disabled: !!disabled }}
+      aria-selected={!!choisie}
+      aria-disabled={!!disabled}
+      style={({ pressed }) => [
+        s.pastille, choisie && s.pastilleChoisie, disabled && { opacity: 0.5 }, style,
+        pressed && !disabled && APPUI.plein,
+      ]}
+    >
+      <Text style={[s.pastilleTexte, choisie && s.pastilleTexteChoisie]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/* --- l'interrupteur (sorti de « Mon entreprise » au lot 1 du devis) --- */
+/**
+ * UNE CASE QU'ON COCHE, avec son libellé et son aide : « Déplacement
+ * offert » dans « Mon entreprise », « Offert », « Main-d'œuvre » ou
+ * « Fourniture non comprise » sur une ligne de devis.
+ *
+ * Elle vivait DANS `FicheEmetteur.js`, locale. Le devis en a besoin à son
+ * tour : deux copies se seraient désalignées le jour où l'on change la
+ * hauteur de l'une. Une règle à un seul endroit — et c'est le même
+ * composant, au pixel près, qu'avant le déménagement (`verifier-emetteur`
+ * et `verifier-tarifs` le rejouent).
+ *
+ * C'est une RANGÉE de 44 points par sa boîte, et un `switch` pour VoiceOver.
+ */
+export function Interrupteur({ actif, libelle, aide, onPress, disabled = false }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: !!actif, disabled: !!disabled }}
+      aria-checked={!!actif}
+      accessibilityLabel={aide ? `${libelle}. ${aide}` : libelle}
+      style={({ pressed }) => [
+        s.interrupteur, actif && s.interrupteurActif, disabled && { opacity: 0.5 },
+        pressed && !disabled && APPUI.discret,
+      ]}
+    >
+      <View style={[s.interrupteurCase, actif && s.interrupteurCaseCochee]}>
+        {actif && <Check size={14} color={C.surface} />}
+      </View>
+      <View style={s.interrupteurTexte}>
+        <Text style={s.interrupteurLibelle}>{libelle}</Text>
+        {!!aide && <Text style={s.interrupteurAide}>{aide}</Text>}
+      </View>
+    </Pressable>
+  );
+}
+
+/* --- un montant de devis --- */
+/**
+ * LA SEULE PORTE D'AFFICHAGE D'UN MONTANT DANS LES ÉCRANS DU DEVIS.
+ *
+ * Trois raisons, et aucune n'est cosmétique :
+ *   - les chiffres TABULAIRES (`tabular-nums`) : dans une colonne de
+ *     totaux, « 1 111,11 » et « 8 888,88 » doivent occuper la même largeur,
+ *     sinon les virgules ne s'alignent pas et l'œil compare mal. Inter les
+ *     porte (mesuré dans les polices embarquées) ; Oswald, la police des
+ *     titres, NON — d'où un sous-total jamais écrit dans un titre ;
+ *   - l'écriture UNIQUE d'un montant : `centimesLisibles` (espaces
+ *     insécables, « € » collé par une insécable) — un montant ne se coupe
+ *     pas en fin de ligne ;
+ *   - `null` s'écrit « — », jamais « 0,00 € » : « je ne sais pas » ne se
+ *     dit pas comme « zéro ».
+ *
+ * `enLigne` : posé DANS une phrase (« 45,00 €/m² »), il ne s'aligne pas à
+ * droite.
+ */
+export function Montant({ centimes, style, enLigne = false, fort = false }) {
+  const texte = centimes == null ? '—' : centimesLisibles(centimes);
+  return (
+    <Text style={[s.montant, fort && s.montantFort, enLigne && s.montantEnLigne, style]}>
+      {texte}
+    </Text>
+  );
+}
+
 /* --------------------------------------------------------------------------
  *  LA RÈGLE DES BORDS, appliquée ici une fois pour toutes
  *
@@ -982,6 +1094,43 @@ const s = StyleSheet.create({
     width: 7, height: 7, borderRadius: R.gelule, backgroundColor: C.accentTexte,
   },
   pillDotOn: { backgroundColor: C.accent },
+
+  /* La pastille du devis : 44 PAR SA BOÎTE, en hauteur ET en largeur
+     (`TOUCHE`) — la seule brique qui ne compte pas sur `hitSlop`. Arrondie :
+     elle flotte, on appuie dessus. */
+  pastille: {
+    minHeight: TOUCHE, minWidth: TOUCHE, paddingHorizontal: S.md,
+    borderRadius: R.gelule, borderWidth: 1, borderColor: C.bordChamp,
+    backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center',
+  },
+  pastilleChoisie: { backgroundColor: C.ink, borderColor: C.ink },
+  pastilleTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
+  pastilleTexteChoisie: { color: surFond(C.ink) },
+
+  /* L'interrupteur, tel qu'il était dans `FicheEmetteur` (même rangée, même
+     case, mêmes couleurs) : une rangée de STRUCTURE, angle vif, 44 points. */
+  interrupteur: {
+    flexDirection: 'row', alignItems: 'center', gap: S.md, minHeight: TOUCHE,
+    paddingVertical: S.sm, paddingHorizontal: S.md,
+    borderWidth: 1, borderColor: C.bordChamp, backgroundColor: C.surface,
+  },
+  interrupteurActif: { borderColor: C.accent2, borderWidth: 2 },
+  interrupteurCase: {
+    width: S.lg + S.xs, height: S.lg + S.xs, borderWidth: 2, borderColor: C.bordChamp,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  interrupteurCaseCochee: { backgroundColor: C.accent2, borderColor: C.accent2 },
+  interrupteurTexte: { flex: 1, minWidth: 0, gap: S.xs },
+  interrupteurLibelle: { fontFamily: F.inter6, fontSize: T.courant, color: C.ink },
+  interrupteurAide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
+
+  /* Un montant : Inter, chiffres TABULAIRES, aligné à droite. */
+  montant: {
+    fontFamily: F.inter5, fontSize: T.corps, color: C.ink,
+    fontVariant: ['tabular-nums'], textAlign: 'right',
+  },
+  montantFort: { fontFamily: F.inter6 },
+  montantEnLigne: { textAlign: 'left' },
 });
 
 export const uiStyles = s;

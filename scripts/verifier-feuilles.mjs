@@ -206,7 +206,11 @@ console.log('\nTout conteneur qui défile et qui porte un champ est couvert');
     .split('\n')
     .filter((f) => f.endsWith('.js') && f !== 'src/lib/clavier.js');
 
-  const CHAMPS = /<Field|<TextArea|<TextInput|<ChampLocal|<ChampVille|<ChampMotDePasse/;
+  /* `ChampMontant` et `ChampDesignation` (lot 1 du devis) : ce sont des
+     champs, et un fichier qui les pose dans un conteneur qui défile a les
+     mêmes devoirs. Sans eux, la carte d'une ligne de devis — six champs —
+     échappait à ce contrôle. */
+  const CHAMPS = /<Field|<TextArea|<TextInput|<ChampLocal|<ChampVille|<ChampMotDePasse|<ChampMontant|<ChampDesignation/;
   /* `<Zone` de `Commentaires.js` n'est volontairement PAS ici : ce
      composant ne possède pas son conteneur, il le reçoit de son hôte
      (`CommentsSheet`, qui monte avec le clavier, ou `PostCard`, qui vit

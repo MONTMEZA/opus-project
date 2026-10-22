@@ -1200,7 +1200,11 @@ const RECUES = sansCommentaires(lire('src/screens/DemandesRecuesScreen.js'));
     'pendant la lecture, `tarifs` vaut `null` : le bloc dirait « Non affichés » de tarifs qu’on n’a pas lus');
   verifier('33. …et `onTarifs` remonte les tarifs après la LECTURE et après l’ENREGISTREMENT',
     /if \(surTarifs\) surTarifs\(d\.tarifs \|\| null\);/.test(ENTREPRISE)
-    && /lireFiche\(setDonnees, onTarifs\)/.test(ENTREPRISE)
+    /* `onTarifs` en SECOND argument, quel que soit ce qui suit : le lot 1 du
+       devis y ajoute `surEmetteur` (le régime de TVA de la saisie). Le
+       motif exigeait la parenthèse fermante juste après — une SYNTAXE, pas
+       la propriété « les tarifs lus remontent ». */
+    && /lireFiche\(setDonnees, onTarifs\b/.test(ENTREPRISE)
     && /if \(onTarifs\) onTarifs\(r\.tarifs/.test(ENTREPRISE),
     'sans elle, le réglage d’urgence garderait « vos tarifs n’ont pas pu être lus » après une lecture réussie');
 }

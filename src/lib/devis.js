@@ -208,6 +208,84 @@ export const PLAFOND_LISTE = 200;
 /** La mémoire relit les 500 lignes les plus récentes de ses devis. */
 export const MEMOIRE_MAX = 500;
 
+/** Vingt devis d'une entreprise au plus pour une même demande, vingt pour
+ *  une même urgence (`OP017`, section 49.6 — relecture sécurité de
+ *  l'étape 3 : sans borne, un particulier ne pouvait plus supprimer son
+ *  compte). Le miroir de `v_plafond` dans `tient_le_devis()` ; la
+ *  démonstration refuse le vingt-et-unième, comme la base. */
+export const DEVIS_PAR_DEMANDE_MAX = 20;
+
+/**
+ * CE QUE L'ARTISAN ÉCRIT — les seules colonnes que le téléphone envoie, en
+ * camelCase (étape 4 du lot 1, 22/10/2026).
+ *
+ * Tout le reste est posé par la BASE : les totaux (relus dans `devis_tva`),
+ * les dates (`clock_timestamp()`), le statut (son défaut), le total d'une
+ * ligne (le déclencheur) ; et le numéro d'écriture voyage à côté des
+ * valeurs (49.5 bis). L'entreprise (`pro_id`), l'identifiant, la `source`
+ * et le devis d'une ligne (`devis_id`) ne partent qu'à la CRÉATION : la
+ * source est le geste qui a ouvert le brouillon (D3), et une ligne ne
+ * change pas de devis par la file d'écriture.
+ *
+ * `api.js` traduit ces noms vers ceux de la base (`devisVersBase`,
+ * `ligneVersBase`) ; la démonstration et la file s'y limitent aussi : une
+ * clé de plus — un total recopié, une date — ferait partir une écriture
+ * pour rien, ou mentirait sur ce que la base a gardé. `verifier-devis` fait
+ * tourner la traduction et la compare à ces deux listes.
+ */
+export const CHAMPS_DEVIS = Object.freeze([
+  'clientId', 'quoteRequestId', 'sosRequestId', 'source', 'objet', 'lieuAdresse', 'lieuCodePostal',
+  'lieuVille', 'delaiExecution', 'retenueGarantieCentiemes',
+]);
+export const CHAMPS_LIGNE = Object.freeze([
+  'ordre', 'type', 'designation', 'quantiteMilliemes', 'unite', 'prixUnitaireCentimes', 'tauxTvaCentiemes',
+  'offert', 'mainOeuvre', 'fournitureNonComprise', 'surfaceSolMilliemes', 'surfaceMursMilliemes',
+]);
+
+/** Les valeurs d'un objet réduites à une liste de champs — seulement ceux
+ *  qu'il PORTE : une clé absente reste absente (ne rien dire n'est pas
+ *  « vider »). */
+export function choisirChamps(v, champs) {
+  const r = {};
+  if (!v || typeof v !== 'object') return r;
+  champs.forEach((c) => { if (Object.prototype.hasOwnProperty.call(v, c) && v[c] !== undefined) r[c] = v[c]; });
+  return r;
+}
+
+/**
+ * ROUVRIR UN DEVIS DONT LA FILE N'A PAS FINI — ce que l'écran doit montrer.
+ *
+ * La file d'un devis survit à son écran tant qu'elle écrit (une ligne quittée
+ * par « Quitter sans elles », une écriture lente). Rouvrir le devis lisait la
+ * BASE et s'y fiait : la ligne ajoutée n'était pas à l'écran, le prix changé
+ * montrait l'ancien, et l'artisan qui retapait ce qui « manquait » créait un
+ * doublon (relecture « données » des étapes 4 à 7, I2, prouvé par la vraie
+ * file sur la base de démonstration).
+ *
+ * Ce qui fait foi, objet par objet : ce que la base a si la file le dit
+ * « enregistrée » ; ce que la file VEUT sinon (en cours, en échec, locale) ;
+ * rien pour ce que la file retire. `entrees` : `file.entreesVoulues()`.
+ * Une fonction pure : `verifier-devis` la fait tourner.
+ */
+export function fusionnerAvecLaFile({ devis = {}, lignes = [] } = {}, entrees = []) {
+  const parId = new Map((lignes || []).map((l) => [l.id, { ...l }]));
+  let d = { ...devis };
+  (entrees || []).forEach((e) => {
+    if (!e || !e.voulu) return;
+    const enAttente = e.locale || e.etat !== 'enregistree';
+    if (e.cle === 'devis') {
+      if (enAttente) d = { ...d, ...choisirChamps(e.voulu, CHAMPS_DEVIS) };
+      return;
+    }
+    if (e.retire) { parId.delete(e.cle); return; }
+    if (enAttente) {
+      const avant = parId.get(e.cle) || { id: e.cle, devisId: d.id ?? null };
+      parId.set(e.cle, { ...avant, ...choisirChamps(e.voulu, CHAMPS_LIGNE), id: e.cle });
+    }
+  });
+  return { devis: d, lignes: [...parId.values()] };
+}
+
 /* ================================================================== */
 /*  LES OUTILS                                                          */
 /* ================================================================== */
@@ -339,14 +417,17 @@ export function versMilliemes(texte) {
   if (brut.startsWith('-')) {
     return { ok: false, milliemes: null, message: 'Une quantité ne peut pas être négative.' };
   }
-  const m = brut.match(/^(\d+)(?:[.,](\d*))?$/);
-  if (!m) {
+  /* « ,5 » vaut 0,5 : sur un pavé décimal, on tape la virgule d'abord. Il
+     était refusé avec « une seule virgule » — il n'y en a qu'une (relecture
+     « écran » des étapes 4 à 7, C7). Une virgule SEULE reste refusée. */
+  const m = brut.match(/^(\d*)(?:[.,](\d*))?$/);
+  if (!m || !/\d/.test(brut)) {
     return {
       ok: false, milliemes: null,
       message: 'Écrivez une quantité avec une seule virgule : par exemple 2 ou 2,5.',
     };
   }
-  const unites = m[1].replace(/^0+(?=\d)/, '');
+  const unites = (m[1] || '0').replace(/^0+(?=\d)/, '');
   const decimales = m[2] || '';
   if (decimales.length > 3) {
     return { ok: false, milliemes: null, message: 'Une quantité s’écrit avec trois chiffres après la virgule au plus.' };
@@ -372,6 +453,38 @@ export function milliemesLisibles(q) {
   const s = String(Math.abs(v)).padStart(4, '0');
   const decimales = s.slice(-3).replace(/0+$/, '');
   return `${signe}${milliers(s.slice(0, -3))}${decimales ? `,${decimales}` : ''}`;
+}
+
+/**
+ * CE QU'ON RETAPE, pas ce qu'on imprime (étape 5, 22/10/2026) : un prix en
+ * centimes remis dans son champ — 4500 → « 45 », 4550 → « 45,50 », sans
+ * « € » ni séparateur de milliers, pour que `versCentimes` relise exactement
+ * ce qu'il avait lu. L'AFFICHAGE d'un montant, lui, ne passe que par
+ * `centimesLisibles` (le composant `Montant`). `''` pour ce qui n'est pas
+ * un entier positif ou nul.
+ */
+export function centimesEnSaisie(c) {
+  if (!entier(c) || c < 0) return '';
+  const euros = Math.floor(c / 100);
+  const reste = c % 100;
+  return reste ? `${euros},${String(reste).padStart(2, '0')}` : String(euros);
+}
+
+/** Une quantité (ou une surface) en millièmes, remise dans son champ :
+ *  2500 → « 2,5 », sans séparateur de milliers. `''` sinon. */
+export function milliemesEnSaisie(q) {
+  if (!entier(q) || q < 0) return '';
+  const s = String(q).padStart(4, '0');
+  const decimales = s.slice(-3).replace(/0+$/, '');
+  return `${s.slice(0, -3).replace(/^0+(?=\d)/, '')}${decimales ? `,${decimales}` : ''}`;
+}
+
+/** Un taux en centièmes de point remis dans son champ : 500 → « 5 »,
+ *  250 → « 2,5 ». `''` sinon. */
+export function centiemesEnSaisie(c) {
+  if (!entier(c) || c < 0) return '';
+  const decimales = String(c % 100).padStart(2, '0').replace(/0+$/, '');
+  return `${Math.floor(c / 100)}${decimales ? `,${decimales}` : ''}`;
 }
 
 /**
@@ -770,6 +883,36 @@ export function titreQuiRecoit(lignes, idTitre) {
   return null;
 }
 
+/**
+ * La PIÈCE qui contient une ligne (le titre `piece` dont elle fait partie),
+ * ou `null`. C'est elle qui donne à la carte d'une ligne son titre et son
+ * sous-total en tête, et ses surfaces aux deux appuis « Sol » / « Murs ».
+ */
+export function pieceDeLaLigne(lignes, id) {
+  const tri = trierLignes(lignes);
+  const i = tri.findIndex((l) => l.id === id);
+  if (i < 0) return null;
+  for (let j = i - 1; j >= 0; j -= 1) {
+    if (tri[j].type === 'piece') return lignesDeLaPiece(tri, tri[j].id).some((l) => l.id === id) ? tri[j] : null;
+    if (tri[j].type === 'zone') return null;
+  }
+  return null;
+}
+
+/**
+ * Une ligne NEUVE dont on n'a rien écrit : aucune désignation, aucun
+ * nombre, aucun interrupteur. Fermer sa carte la fait disparaître sans un
+ * mot — elle n'a jamais rien été. Une ligne à moitié écrite, elle, reste
+ * « incomplète », et la garde de sortie le dit.
+ */
+export function ligneVierge(l) {
+  if (!l) return true;
+  return !texteNet(l.designation)
+    && ['quantiteMilliemes', 'unite', 'prixUnitaireCentimes', 'surfaceSolMilliemes', 'surfaceMursMilliemes']
+      .every((c) => !present(l[c]))
+    && !vrai(l.offert) && !vrai(l.mainOeuvre) && !vrai(l.fournitureNonComprise);
+}
+
 /* Le plus grand `ordre` qu'une colonne `integer` accepte. */
 const ORDRE_MAX = 2_147_483_647;
 /** Le pas entre deux lignes, à la création et à la renumérotation. */
@@ -864,6 +1007,42 @@ function plusRecentDAbord(a, b) {
  * origine: { devisId, objet, date } }`. Ce qu'un appui RECOPIE :
  * `valeursDeLaSuggestion()`.
  */
+/* Les mots de l'objet d'un devis qu'on montre sous une suggestion : quatre au
+   plus, puis « … ». */
+const MOTS_ORIGINE = 4;
+
+/**
+ * D'OÙ VIENT UNE SUGGESTION — ce qu'on en montre SOUS LE CHAMP, pendant
+ * qu'on chiffre le devis d'un AUTRE client, peut-être devant lui.
+ *
+ * L'objet d'un devis ouvert depuis une DEMANDE ou une URGENCE, c'est le texte
+ * que le particulier a écrit lui-même (« fuite chez moi au 4 rue …, code de
+ * la porte … »), sans limite de longueur : il ne doit JAMAIS sortir de ses
+ * devis (relecture « données » des étapes 4 à 7, I5). Une telle origine se
+ * nomme par sa DATE — « votre devis du 12/10/2026 ». L'objet d'un devis que
+ * l'artisan a ouvert LUI-MÊME (`manuelle`) se montre, réduit à quelques mots :
+ * c'est son étiquette de travail. Une source inconnue (une ligne lue sans
+ * elle) se traite comme une demande : dans le doute, on se tait.
+ *
+ * TRANCHÉ ICI, à confirmer avec le propriétaire : le cahier dit « avec leur
+ * devis d'origine », sans dire comment le nommer.
+ */
+export function origineDeSuggestion(d) {
+  const date = dateFrancaise(d && d.modifieLe);
+  const objet = d && d.source === 'manuelle' ? texteNet(d.objet) : null;
+  let court = null;
+  if (objet) {
+    const mots = objet.split(/\s+/);
+    court = mots.length > MOTS_ORIGINE ? `${mots.slice(0, MOTS_ORIGINE).join(' ')}…` : objet;
+  }
+  return {
+    devisId: (d && d.id) ?? null,
+    objet: court,
+    date,
+    libelle: court || (date ? `votre devis du ${date}` : 'un de vos devis'),
+  };
+}
+
 export function memoireDesLignes(lignes, texte, { idLigne = null } = {}) {
   const cherche = pourChercher(texte).trim();
   if (!cherche) return [];
@@ -890,11 +1069,7 @@ export function memoireDesLignes(lignes, texte, { idLigne = null } = {}) {
       mainOeuvre: vrai(l.mainOeuvre),
       prixUnitaireCentimes: l.prixUnitaireCentimes ?? null,
       offert: vrai(l.offert),
-      origine: {
-        devisId: (l.devis && l.devis.id) ?? null,
-        objet: (l.devis && texteNet(l.devis.objet)) || null,
-        date: dateFrancaise(l.devis && l.devis.modifieLe),
-      },
+      origine: origineDeSuggestion(l.devis),
     });
   }
   /* Toutes les suggestions, la plus récente d'abord : le groupe ne sert
@@ -951,10 +1126,23 @@ export function devisDepuisClient(c) {
  * (D1) — l'artisan la choisit, ou la crée. `null` pour un rappel, qui n'a
  * pas de lien d'origine.
  */
+/* La description d'une demande devient l'OBJET du brouillon : elle n'a pas de
+   limite de longueur (le formulaire du particulier n'en pose pas), l'objet en
+   a une (`devis_objet_check`, 1 000 caractères). Au-delà, le brouillon ne se
+   créait pas, et toutes ses lignes passaient en échec (relecture « données »
+   des étapes 4 à 7, I5) : on la coupe à la borne, au caractère près — comme
+   la base les compte. */
+const objetDeDemande = (titre) => {
+  const net = texteNet(titre);
+  if (!net) return net;
+  const c = [...net];
+  return c.length > LONGUEURS.objet ? `${c.slice(0, LONGUEURS.objet - 1).join('')}…` : net;
+};
+
 export function devisDepuisDemande(d) {
   if (!d || !d.id) return null;
-  if (d.genre === 'devis') return { source: 'demande', quoteRequestId: d.id, objet: texteNet(d.titre) };
-  if (d.genre === 'sos') return { source: 'urgence', sosRequestId: d.id, objet: texteNet(d.titre) };
+  if (d.genre === 'devis') return { source: 'demande', quoteRequestId: d.id, objet: objetDeDemande(d.titre) };
+  if (d.genre === 'sos') return { source: 'urgence', sosRequestId: d.id, objet: objetDeDemande(d.titre) };
   return null;
 }
 
@@ -1039,6 +1227,20 @@ export function trierDevis(liste) {
     if (d !== 0 && Number.isFinite(d)) return d;
     return comparerIds(a.id, b.id);
   });
+}
+
+/**
+ * LA BORNE DE « MES DEVIS », écrite UNE fois : la lecture demande
+ * `PLAFOND_LISTE + 1` devis, DÉJÀ TRIÉS (la base par `modifie_le` puis `id`,
+ * la démonstration par `trierDevis`) ; on en garde `PLAFOND_LISTE`, et
+ * `tronque` dit qu'il en existait d'autres. La Supabase et la démonstration
+ * passent toutes deux par ici — et `verifier-devis` la FAIT TOURNER sur 201
+ * devis : le pied « Les plus anciens ne sont pas affichés » n'était tenu par
+ * rien qui la fasse tourner (relecture « conformité » des étapes 4 à 7, I3).
+ */
+export function decouperListe(lus) {
+  const liste = Array.isArray(lus) ? lus : [];
+  return { devis: liste.slice(0, PLAFOND_LISTE), tronque: liste.length > PLAFOND_LISTE };
 }
 
 /* ================================================================== */

@@ -63,6 +63,10 @@ const LISTES = {
   'src/screens/NotificationsScreen.js': 'les notifications',
   'src/screens/ConversationScreen.js': 'les messages',
   'src/screens/DemandesRecuesScreen.js': 'les demandes reçues',
+  /* Le chiffrage d'un devis (lot 1) : « Mes devis » est bornée à 200, et
+     un devis porte jusqu'à 500 lignes — deux listes qui grandissent. */
+  'src/screens/DevisScreen.js': 'les devis',
+  'src/screens/SaisieDevisScreen.js': 'les lignes d’un devis',
 };
 
 console.log('\nToute liste qui grandit est virtualisée');
@@ -90,6 +94,8 @@ console.log('\nCe qui vit dans une liste est mémorisé');
     ['src/screens/MessagesScreen.js', 'la conversation'],
     ['src/screens/ConversationScreen.js', 'la bulle'],
     ['src/screens/DemandesScreen.js', 'la demande'],
+    ['src/screens/DevisScreen.js', 'la carte d’un devis'],
+    ['src/screens/SaisieDevisScreen.js', 'la rangée d’une ligne de devis'],
   ].forEach(([f, quoi]) => {
     verifier(`${quoi}`, /React\.memo\(/.test(lire(f)), f);
   });
