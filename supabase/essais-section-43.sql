@@ -40,6 +40,15 @@ select has_function_privilege('anon', 'public.recalcule_chantier(uuid)', 'execut
 -- est_admin a ete AJOUTEE ici parce que le controle l a reclamee : il releve
 -- les gardiennes dans le schema, et les deux fichiers doivent parler des
 -- memes fonctions.
+-- devis_total_ligne et devis_tva_de (section 49.1, lot 1 du devis, 21/10/2026)
+-- y entrent de la meme facon : deux contraintes les appellent
+-- (devis_ligne_total_check, devis_tva_arrondi_check), et une contrainte
+-- s execute avec les droits de CELUI QUI ECRIT. Elles, en revanche, n ont
+-- RIEN a faire pour anon : `anon` doit valoir f sur ces deux-la (un visiteur
+-- n ecrit aucune ligne de devis).
+-- mes_entreprises (section 49.7, relecture de l etape 3 du lot 1) aussi : les
+-- trois politiques du devis l appellent en sous-requete non correlee. t pour
+-- authentifie, f pour anon (les politiques sont `to authenticated`).
 -- `authentifie` doit valoir t PARTOUT. Un f ici, et la regle echoue au lieu
 -- de filtrer.
 select p.proname, p.prosecdef as definer,
@@ -48,7 +57,8 @@ select p.proname, p.prosecdef as definer,
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public'
    and p.proname in ('est_admin', 'est_masque', 'est_un_pro', 'est_mon_entreprise',
-                     'horaires_valides', 'metiers_connus')
+                     'horaires_valides', 'metiers_connus',
+                     'devis_total_ligne', 'devis_tva_de', 'mes_entreprises')
  order by 1;
 
 \echo '=== 5. ET UNE ECRITURE PASSE ENCORE — les declencheurs travaillent ==='

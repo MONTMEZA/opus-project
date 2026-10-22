@@ -66,11 +66,50 @@
  *      reprend son état et la file repart. Une fois supprimé, plus rien ne
  *      s'y écrit.
  *
- * LE RISQUE QUI RESTE, DIT : l'annulation n'arrête que ce que le serveur n'a
- * pas encore reçu. Une requête déjà reçue, mais dont la réponse se perd,
- * s'exécute quand même — et si elle passe APRÈS la suivante, la base garde
- * la valeur la plus ancienne. Ce cas ne se ferme que côté base (une version
- * de ligne comparée à chaque écriture) ; la file ne fait que le rendre rare.
+ * LA REQUÊTE TARDIVE, ET CE QUI LA FERME (section 49.5 bis de `schema.sql`,
+ * 21/10/2026). L'annulation n'arrête que ce que le serveur n'a pas encore
+ * reçu. Une requête déjà reçue, mais dont la réponse se perd, s'exécute
+ * quand même — et si elle passe APRÈS la suivante, une ancienne valeur
+ * gagne, une ligne retirée revient, une ligne remise repart. Un ordre de
+ * passage ne se répare que là où les requêtes passent : dans la BASE. La
+ * file y met ce qu'il faut :
+ *  11. chaque écriture porte un NUMÉRO (`generation`) qui ne fait que
+ *      monter — le plus grand entre le précédent + 1, l'horloge du devis lue
+ *      à l'ouverture (`horloge`) + 1, et l'heure du téléphone en
+ *      millisecondes, pour qu'une application relancée reparte au-dessus de
+ *      tout ce qu'elle avait pu envoyer. La base REFUSE (OP015) une écriture
+ *      dont le numéro ne dépasse pas l'horloge du devis : la tardive, plus
+ *      ancienne, ne passe plus. Le numéro voyage À CÔTÉ des valeurs
+ *      (`op.generation`), jamais parmi elles : ce n'est pas une donnée de
+ *      l'écran, et `ecrire` le pose sur la ligne envoyée ;
+ *  12. une SUPPRESSION ne porte pas de valeur : elle porte une CONDITION
+ *      (`op.generationMax` — `ecrire` filtre `generation < N`). Arrivée
+ *      après que la ligne a été retouchée, ou le devis, elle ne supprime
+ *      rien ;
+ *  13. une ligne dont une INSERTION est partie sans réponse (délai, réseau)
+ *      n'existe peut-être pas encore quand on la retire : sa suppression ne
+ *      trouverait rien, puis l'insertion arriverait. La file fait d'abord
+ *      MONTER l'horloge du devis (`lever` : une modification du devis sans
+ *      valeur, avec un numéro), puis supprime : l'insertion en retard, plus
+ *      ancienne que l'horloge, est refusée quand elle arrive ;
+ *  14. un refus OP015 de l'écriture EN COURS veut dire qu'un autre appareil
+ *      a écrit avec un numéro plus grand : la file RELIT l'horloge, la ligne
+ *      passe en échec, et « Réessayer » repart au-dessus — écraser ce que
+ *      l'autre vient d'enregistrer est un choix de l'artisan, pas de la file ;
+ *  15. un refus OP016 — numéro absent, nul, négatif, ou au-delà de
+ *      `NUMERO_MAX` — n'est PAS un autre appareil : c'est cette version de
+ *      l'application qui écrit mal. La ligne passe en échec, et la file NE
+ *      relit PAS l'horloge (la relire ne réparerait rien).
+ * Ce qui reste, et la base le dit aussi :
+ *   - la CRÉATION d'un brouillon arrivée après sa suppression le fait
+ *     réapparaître (rien au-dessus d'un devis ne porte d'horloge) — VIDE le
+ *     plus souvent, mais pas toujours : une ligne partie sans réponse qui
+ *     arrive APRÈS cette création en retard y entre (relecture de l'étape
+ *     3). Il se voit dans « Mes devis » et se supprime ;
+ *   - l'HEURE DU TÉLÉPHONE qui RECULE entre deux sessions (réglage à la
+ *     main, correction par le réseau) : une requête de la session d'avant,
+ *     encore en route, peut porter un numéro plus grand que ceux de la
+ *     nouvelle, et passer après elle. Fenêtre de quelques secondes.
  *
  * CE FICHIER N'IMPORTE RIEN. Il reçoit tout ce qu'il appelle : les
  * écritures (`ecrire`), les relectures (`relireUn`, `relireTotaux`), le
@@ -92,6 +131,13 @@
 /** Le délai de chaque requête : 8 secondes, la borne que la vraie base
  *  impose elle-même à une requête (`statement_timeout`). */
 export const DELAI_ECRITURE = 8000;
+
+/** LE PLUS GRAND NUMÉRO D'ÉCRITURE (section 49.5 bis, point 7) : 2^53 − 1.
+ *  La base refuse au-delà (OP016) — c'est la même borne, et `verifier-devis`
+ *  les compare. Pourquoi celle-là : un nombre JavaScript n'est exact que
+ *  jusque-là ; une horloge plus grande, la file ne saurait plus la dépasser
+ *  d'une unité. */
+export const NUMERO_MAX = 9007199254740991;
 
 /** Les quatre états d'une ligne, tels que l'écran les affiche. Ce que la file
  *  ne connaît plus (une ligne retirée, le devis supprimé) n'a pas d'état :
@@ -117,14 +163,32 @@ function estUneCleDejaPrise(e) {
 
 const estUnInterblocage = (e) => Boolean(e && e.code === '40P01');
 
+/* OP015 : la base a refusé une écriture plus ancienne que l'horloge du
+   devis (section 49.5 bis). Pour l'écriture EN COURS, cela veut dire qu'un
+   autre appareil a écrit avec un numéro plus grand. */
+const estDepassee = (e) => Boolean(e && e.code === 'OP015');
+
+/* Une horloge que la file sait dépasser : un entier, de 0 à NUMERO_MAX. Au-
+   delà — ce que la base n'accepte plus (OP016) —, la file repart de l'heure
+   du téléphone, et la base dira le reste. */
+const horlogeLisible = (h) => Number.isSafeInteger(h) && h >= 0 && h <= NUMERO_MAX;
+
+/* Les valeurs d'une ligne SANS le numéro qu'une relecture a pu y laisser. */
+const sansNumero = (v) => {
+  const { generation, ...reste } = v || {};
+  return reste;
+};
+
 /* Ce qui a changé entre ce qu'on veut et ce que la base a confirmé. Une
    valeur `undefined` ne dit rien (elle n'est pas « vider ») ; une colonne
    que la base n'a pas rendue vaut `null` ; l'identifiant ne se modifie
-   jamais. */
+   jamais ; et le NUMÉRO d'écriture (`generation`) n'est pas une valeur de
+   l'écran : il voyage à côté (49.5 bis). Une ligne relue en base le porte —
+   le comparer ferait renvoyer un ANCIEN numéro, que la base refuserait. */
 function changements(voulu, confirme) {
   const diff = {};
   Object.keys(voulu).forEach((c) => {
-    if (c === 'id' || voulu[c] === undefined) return;
+    if (c === 'id' || c === 'generation' || voulu[c] === undefined) return;
     const avant = confirme && confirme[c] !== undefined ? confirme[c] : null;
     if (!Object.is(voulu[c], avant)) diff[c] = voulu[c];
   });
@@ -160,6 +224,29 @@ const issueInconnue = (e) => !(e && e.code) || (e && e.name === 'AbortError');
  * @param {Function} o.avecDelai      (promesse, ms, quoi) → Promise : celui de `erreurs.js`
  * @param {Function} [o.nouvelIdentifiant] pour le cas, en pratique jamais vu, d'un identifiant pris ailleurs
  * @param {number} [o.delaiMs]
+ * @param {number} [o.horloge]        l'horloge du devis lue à l'ouverture (`devis.generation`) ; 0 pour un devis neuf
+ * @param {Function} [o.horlogeTelephone] l'heure du téléphone en millisecondes (`Date.now` ; remplaçable pour les contrôles)
+ *
+ * LE CONTRAT DU NUMÉRO, que `api.js` doit tenir (vérifié au lot 4, D-27) :
+ *   - `inserer` et `modifier` portent `op.generation` : `ecrire` l'envoie
+ *     dans la colonne `generation`, AVEC les valeurs ; une modification du
+ *     devis dont `op.valeurs` est vide (`op.lever`) n'envoie que lui ;
+ *   - `supprimer` porte `op.generationMax` : `ecrire` ajoute le filtre
+ *     `.lt('generation', op.generationMax)` ;
+ *   - `relireUn({ quoi: 'devis' })` rend la colonne `generation` : c'est par
+ *     elle que la file reprend l'horloge après un refus OP015 ;
+ *   - UN ORDRE = UNE LIGNE : jamais deux lignes écrites par la même requête
+ *     au même numéro (un PATCH filtré par `devis_id`, une renumérotation d'un
+ *     coup, un « dupliquer » en une fois) — la base refuse la seconde
+ *     (OP015). Une écriture en lot devra porter un numéro distinct par
+ *     ligne, croissant dans l'ordre d'écriture ;
+ *   - UNE LIGNE SE MODIFIE PAR `update`, JAMAIS PAR `upsert` : un
+ *     `insert … on conflict do update` arrivé en retard après une
+ *     suppression RECRÉERAIT la ligne (la file ne lève l'horloge que pour
+ *     une INSERTION d'issue inconnue) ;
+ *   - une ligne ne CHANGE PAS DE DEVIS par cette file. Si un écran le fait un
+ *     jour, la base juge le déplacement sur les deux horloges (49.5 bis,
+ *     point 6) : la file devra lire les deux.
  */
 export function creerFileEcriture({
   devisId,
@@ -172,6 +259,8 @@ export function creerFileEcriture({
   avecDelai,
   nouvelIdentifiant = null,
   delaiMs = DELAI_ECRITURE,
+  horloge = 0,
+  horlogeTelephone = () => Date.now(),
 } = {}) {
   /* Sans délai, une requête qui ne revient jamais laisserait la ligne « en
      cours » pour toujours : la file refuse de naître sans lui. */
@@ -215,6 +304,16 @@ export function creerFileEcriture({
   const attente = [];
   let enVol = null;
   let generation = 0;
+  /* L'HORLOGE (49.5 bis) : le dernier numéro envoyé, et le plancher que la
+     base impose — l'horloge du devis lue à l'ouverture, relue après un refus
+     OP015. */
+  let dernierNumero = 0;
+  let plancher = horlogeLisible(Number(horloge)) ? Number(horloge) : 0;
+  const prochainNumero = () => {
+    const t = Math.floor(Number(horlogeTelephone()));
+    dernierNumero = Math.max(dernierNumero + 1, plancher + 1, Number.isSafeInteger(t) ? t : 0);
+    return dernierNumero;
+  };
   let enRelecture = 0;
   let aRelire = false;
   let enPause = false;
@@ -278,9 +377,11 @@ export function creerFileEcriture({
       /* Une ligne jamais insérée (et dont aucune insertion n'est restée en
          suspens) n'a rien à supprimer en base. */
       if (!e.confirme && !e.peutEtreInseree) return null;
-      return { quoi, action: 'supprimer', id: e.voulu.id };
+      /* Une insertion partie SANS RÉPONSE peut arriver après la
+         suppression : l'horloge du devis monte d'abord (13). */
+      return { quoi, action: 'supprimer', id: e.voulu.id, lever: quoi === 'ligne' && Boolean(e.insertionSansReponse) };
     }
-    if (!e.confirme) return { quoi, action: 'inserer', id: e.voulu.id, valeurs: { ...e.voulu } };
+    if (!e.confirme) return { quoi, action: 'inserer', id: e.voulu.id, valeurs: sansNumero(e.voulu) };
     const diff = changements(e.voulu, e.confirme);
     if (!Object.keys(diff).length) return null;
     return { quoi, action: 'modifier', id: e.voulu.id, valeurs: diff };
@@ -395,9 +496,21 @@ export function creerFileEcriture({
 
     enVol = cle;
     poser(e, 'en_cours');
+    /* LE NUMÉRO, au dernier moment (11, 12) : une écriture porte le sien,
+       une suppression la condition qui l'empêche de passer après une
+       écriture plus récente. */
+    if (op.action === 'supprimer') {
+      if (op.lever) op.leverA = prochainNumero();
+      op.generationMax = prochainNumero();
+    } else {
+      op.generation = prochainNumero();
+    }
     let fini = false;
     let dejaEnBase = false;
     try {
+      if (op.lever) {
+        await envoyer({ quoi: 'devis', action: 'modifier', id: entrees.get(DEVIS).voulu.id, valeurs: {}, generation: op.leverA, lever: true });
+      }
       await envoyer(op);
       fini = true;
     } catch (err) {
@@ -417,14 +530,18 @@ export function creerFileEcriture({
           poser(e, 'echec', err2);
         }
       } else {
+        /* Un autre appareil a écrit avec un numéro plus grand : on reprend
+           l'horloge de la base, et « Réessayer » repartira au-dessus (14). */
+        if (estDepassee(err)) await relireHorloge();
         if (issueInconnue(err)) {
           /* Le délai dépassé, le réseau coupé : l'écriture a PU passer. Les
              totaux se reliront ; une insertion reste à renvoyer comme une
              INSERTION (le 23505 dira si elle était faite), et une suppression
-             de ce qui a peut-être été inséré reste à faire ; les colonnes
+             de ce qui a peut-être été inséré reste à faire — APRÈS avoir
+             levé l'horloge, car elle peut encore arriver (13) ; les colonnes
              d'une modification deviennent INCONNUES — elles repartiront. */
           aRelire = true;
-          if (op.action === 'inserer') e.peutEtreInseree = true;
+          if (op.action === 'inserer') { e.peutEtreInseree = true; e.insertionSansReponse = true; }
           if (op.action === 'modifier') {
             const c = { ...(e.confirme || {}) };
             Object.keys(op.valeurs).forEach((k) => { c[k] = INCONNU; });
@@ -448,6 +565,9 @@ export function creerFileEcriture({
              disparaîtrait de la base ET de la file, sans un mot. */
           e.confirme = null;
           e.peutEtreInseree = false;
+          /* L'horloge a été levée avant cette suppression s'il le fallait :
+             une insertion encore en route est désormais refusée. */
+          e.insertionSansReponse = false;
           if (!attente.includes(e.cle)) attente.push(e.cle);
         }
       } else {
@@ -489,6 +609,17 @@ export function creerFileEcriture({
       .then((totaux) => { if (g === generation) prevenir({ type: 'totaux', totaux }); })
       .catch((err) => { if (g === generation) prevenir({ type: 'totaux_illisibles', erreur: err }); })
       .finally(() => { enRelecture -= 1; verifierFermetures(); });
+  }
+
+  /* L'horloge du devis, relue après un refus OP015. Si la relecture échoue,
+     le plancher reste : la prochaine écriture repart de l'heure du
+     téléphone, et un nouveau refus relira encore. */
+  async function relireHorloge() {
+    try {
+      const d = await delai(Promise.resolve().then(() => relireUn({ quoi: 'devis', id: entrees.get(DEVIS).voulu.id })));
+      const h = d ? Number(d.generation) : NaN;
+      if (horlogeLisible(h) && h > plancher) plancher = h;
+    } catch (x) { /* la relecture n'a pas répondu : la prochaine écriture le dira */ }
   }
 
   function attendre(ms = DELAI_ECRITURE) {
@@ -656,7 +787,7 @@ export function creerFileEcriture({
           enVol = DEVIS;
           poser(d, 'en_cours');
           try {
-            await envoyer({ quoi: 'devis', action: 'supprimer', id: d.voulu.id });
+            await envoyer({ quoi: 'devis', action: 'supprimer', id: d.voulu.id, generationMax: prochainNumero() });
           } catch (err) {
             if (!issueInconnue(err)) throw err;
             /* Le délai dépassé : la suppression a PU passer. On relit. */
@@ -735,9 +866,14 @@ export function creerFileEcriture({
       abonnes.add(f);
       return () => abonnes.delete(f);
     },
-    /** Le compteur de génération (pour les contrôles). */
+    /** Le compteur de génération des relectures (pour les contrôles). */
     generation() {
       return generation;
+    },
+    /** L'horloge de la file : le dernier numéro envoyé, et le plancher que
+     *  la base impose (pour les contrôles). */
+    horloge() {
+      return { dernier: dernierNumero, plancher };
     },
   };
 }

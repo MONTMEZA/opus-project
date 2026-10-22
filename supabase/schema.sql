@@ -7895,6 +7895,15 @@ comment on table public.clients is
 --  bonne raison : la loi impose de conserver dix ans une facture AVEC
 --  l'identité de son destinataire.
 --
+--  DEPUIS LE LOT 1 DU DEVIS (section 49, 21/10/2026), un DEVIS la référence
+--  déjà : `devis.client_id`, en `on delete set null` (D3, D11). Supprimer une
+--  fiche reste donc possible, mais il faut dire ce que cela fait, et ne pas
+--  le dire mieux que ce n'est : SUPPRIMER UNE FICHE NE SUPPRIME PAS LES
+--  DONNÉES DE CE CLIENT. Ses devis restent, détachés de la fiche, AVEC
+--  l'adresse des travaux et tout ce que l'artisan y a écrit — aucune
+--  anonymisation n'a lieu. L'écran le dit au second appui, et propose
+--  l'archivage, qui garde la fiche sans la proposer.
+--
 --  Et c'est `est_mon_entreprise()` (section 36.1) qui tient l'appartenance,
 --  pas un `auth.uid() = pro_id` écrit à la main — la discipline posée le
 --  04/10 dans `docs/LECTURE-CAHIER-DES-CHARGES.md`, et c'est le second
@@ -11348,6 +11357,1096 @@ begin
   end if;
 end $$;
 
+-- ==========================================================================
+--  49. LE CHIFFRAGE — le devis en brouillon, ses lignes, sa TVA (lot 1)
+--      (21/10/2026)
+--
+--  Un artisan tape son chiffrage pièce par pièce : des titres de zone et de
+--  pièce, des lignes chiffrées, des réserves, des options, des lignes
+--  « Offert ». Chaque ligne s'enregistre quand il la quitte, et le total —
+--  HT, la TVA PAR TAUX, TTC — est celui que la BASE a calculé, jamais celui
+--  du téléphone. Rien ne sort encore : aucun numéro, aucun PDF, aucune
+--  remise au client (lot 2). C'est un brouillon, et il le dit.
+--
+--  UNE DEMANDE N'EST PAS UN DEVIS
+--  ------------------------------
+--  `quote_requests` est une DEMANDE (un particulier écrit à un artisan) ;
+--  `devis` est un DOCUMENT (l'artisan chiffre). Le mot « devis » désigne
+--  aujourd'hui une demande dans une dizaine d'endroits : l'index
+--  `idx_devis_pro`, trois politiques, `notifications.devis_id` et le type
+--  'devis', `GENRES_DEMANDE.devis` dans l'application. D'où des noms qui ne
+--  se confondent avec rien : `quote_request_id`, `idx_devis_emis_*`,
+--  « mes devis emis ». Et JAMAIS `idx_devis_pro` ici : un
+--  `create index if not exists` du même nom ne créerait RIEN, sans un mot.
+--
+--  CE QU'ELLE POSE
+--  ---------------
+--    - trois tables PRIVÉES : `devis` (statut 'brouillon' seul), `devis_lignes`,
+--      `devis_tva` (la ventilation, une ligne par taux) ;
+--    - deux fonctions de calcul, UNE PAR ARRONDI, écrites une seule fois ;
+--    - trois déclencheurs NOMMÉS — et leur ordre réel (49.6) — et une
+--      fonction de recalcul, `recalcule_devis()` ;
+--    - trois politiques, une fonction qui ÉNUMÈRE les entreprises du compte
+--      (`mes_entreprises()`, 49.7), des droits de table posés un par un,
+--      cinq index ;
+--    - deux colonnes `generation` : la parade de la REQUÊTE TARDIVE (49.5 bis) ;
+--    - un PLAFOND de devis par demande et par urgence (OP017, 49.6) : sans
+--      lui, un artisan rattachait des dizaines de milliers de brouillons à
+--      la demande d'un particulier, et ce particulier ne pouvait plus
+--      supprimer son compte.
+--
+--  L'ARGENT, EN ENTIERS, ET LA RUPTURE AVEC `annonces_pro.prix`
+--  -----------------------------------------------------------
+--  Tout montant est en CENTIMES (`bigint`), toute quantité en MILLIÈMES de
+--  l'unité, tout taux en CENTIÈMES DE POINT (2000 = 20 %). `annonces_pro.prix`
+--  est un `numeric(10,2)` : ne PAS « réharmoniser ». Un `numeric` arrive en
+--  JavaScript comme un nombre à virgule (`8,2 × 100` y vaut 819,9999…), et
+--  `numeric(10,2)` déborde à 100 000 000 sur une erreur 22003, EN ANGLAIS.
+--  Ici, tout refus sort d'une contrainte nommée ou d'un code `OP`.
+--
+--  POURQUOI LA TVA A SA TABLE
+--  --------------------------
+--  Trois postes à 33,33 € HT à 10 % : 9,99 € de TVA si l'on arrondit ligne
+--  par ligne, 10,00 € si l'on arrondit UNE FOIS sur la somme des bases d'un
+--  taux. Arrondir par taux est la règle BR-CO-17 de la norme EN 16931,
+--  imposée à la facture électronique : pour un DEVIS, c'est un choix
+--  conforme à la norme, pas une obligation du code. Et « le demi monte »
+--  est un choix aussi : aucune règle n'a été trouvée qui le fixe.
+--
+--  LE SENS D'UN TAUX `0`
+--  --------------------
+--  « Aucune TVA facturée sur cette ligne. » La RAISON — la franchise
+--  aujourd'hui, l'autoliquidation au lot 3 — est portée par le régime de
+--  l'entreprise, que le lot 2 FIGERA sur le devis remis ; jamais par la ligne.
+--
+--  LES RÈGLES DU DEVIS, VALIDÉES PAR LE PROPRIÉTAIRE LE 19/10 (PLAN 10.15)
+--  ---------------------------------------------------------------------
+--    D1  le client d'un devis est une FICHE du carnet, jamais un compte :
+--        aucun `compte_id`, aucun `particulier_id` ;
+--    D2  le lien vers une demande s'appelle `quote_request_id`, et va avec
+--        `sos_request_id` ;
+--    D3  `source` dit le GESTE qui a ouvert le brouillon, et ne se récrit
+--        plus ; les liens sont facultatifs et indépendants : aucune
+--        contrainte « origine ⇒ lien » ;
+--    D4  rien n'est obligatoire hors l'entreprise : ni client, ni demande,
+--        ni lieu — et aucun index unique sur (entreprise, client),
+--        (entreprise, demande), (entreprise, lieu) : un client a plusieurs
+--        projets ;
+--    D5  une colonne du devis naît avant le figeage du lot 2 ;
+--    D6  le particulier ne lit JAMAIS un devis par ces tables : aucune
+--        politique ne passe par une relation, un partage ou l'administration ;
+--    D11 les trois liens sont `on delete set null` : une fiche, une demande
+--        ou une urgence qui disparaît laisse le devis — et au lot 2, un
+--        devis REMIS devra pouvoir voir ce lien passer à vide malgré le
+--        figeage, sinon il pointerait une ligne qui n'existe plus.
+--
+--  AUCUN `delete` DANS UN CORPS DE FONCTION
+--  ---------------------------------------
+--  Le connecteur Supabase refuse tout ordre qui COMMENCE par `delete`, même
+--  dans le corps d'une fonction (CLAUDE.md). Un taux qui disparaît d'un
+--  devis garde donc sa ligne dans `devis_tva`, REMISE À ZÉRO
+--  (`nb_lignes = 0`), et tout lecteur filtre `nb_lignes > 0`.
+--
+--  CE QU'ELLE NE POSE PAS (lot 2 et suivants) : statut autre que
+--  'brouillon', numéro, figeage, instantané de l'émetteur et du client
+--  (dont le régime de TVA), PDF, qualité du destinataire, caractère payant
+--  du devis, déchets, marqueur « construction » ou « urgence » par ligne,
+--  acompte, remise sur le total (décidée le 21/10, construite au lot 2,
+--  avant le PDF — et `devis_tva`, recalculée en entier à chaque écriture,
+--  l'accueillera sans réécrire un devis), certification du preneur, taux
+--  d'outre-mer, signature.
+--
+--  LES PRIX D'UN ARTISAN NE SE LISENT PAS PAR UN AUTRE. Aucune fonction
+--  `admin_*` ne nomme ces tables ; la liste FERMÉE des fonctions qui les
+--  nomment est tenue par `verifier-devis` et `verifier-legal`. L'éditeur SQL
+--  de Supabase reste un accès ouvert : c'est un ENGAGEMENT écrit (18/10),
+--  pas une impossibilité, et ce commentaire ne doit pas laisser croire le
+--  contraire.
+--
+--  LES RÉFÉRENCES AUX TROIS TABLES SONT TOUJOURS QUALIFIÉES (`public.devis`,
+--  `public.devis_lignes`, `public.devis_tva`) dans les corps de fonction :
+--  c'est ce qui permet aux contrôles de les relever sans confondre la table
+--  avec le MOT « devis », présent dans les chaînes de cinq fonctions.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  49.1 Les deux arrondis, écrits UNE fois
+--
+--  Elles naissent AVANT les tables : deux contraintes les appellent, et une
+--  contrainte est contrôlée à sa création. Elles restent exécutables par
+--  `authenticated` : une contrainte s'exécute avec les droits de CELUI QUI
+--  ÉCRIT (la panne `horaires_valides` du 30/09).
+--
+--  DES NOMBRES POSITIFS SEULEMENT : PostgreSQL tronque une division entière
+--  VERS ZÉRO, donc `(n + 500) / 1000` n'arrondit juste qu'un nombre positif
+--  ou nul. Hors des bornes, elles rendent NULL — jamais une erreur 22003 en
+--  anglais : c'est la contrainte nommée qui refuse. Aucun `round()`, aucun
+--  `numeric`, aucun flottant : `round(double precision)` arrondit au pair.
+--
+--  LE TAUX DE `devis_tva_de` EST BORNÉ À 9 000 (90 %) — relecture des
+--  étapes 0-2, 21/10/2026 : `devis_tva_de(999999999999999, 9224)` dépassait
+--  un `bigint` et rendait 22003 en anglais. Aucun taux réel n'en approche ;
+--  le miroir JavaScript (`tvaDe`, `TAUX_CALCUL_MAX`) a la même borne de
+--  TAUX. Pas tout à fait la même borne de PRODUIT, et c'est dit (relecture
+--  de l'étape 3, 21/10/2026 : 1 383 écarts sur 12 000 tirages, TOUS là) :
+--  au-delà de 2^53 pour `base × taux`, un nombre JavaScript n'est plus
+--  exact, et `tvaDe` rend `null` là où cette fonction rend encore la
+--  valeur. Ça n'arrive qu'au-dessus du plafond (une base de devis ne
+--  dépasse pas 9 999 999 999 c, refusée bien avant tout calcul de TVA).
+-- --------------------------------------------------------------------------
+create or replace function public.devis_total_ligne(p_quantite bigint, p_prix bigint)
+returns bigint
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when p_quantite between 1 and 99999999 and p_prix between 0 and 9999999999
+    then (p_quantite * p_prix + 500) / 1000
+  end
+$$;
+
+create or replace function public.devis_tva_de(p_base bigint, p_taux integer)
+returns bigint
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when p_base between 0 and 999999999999999 and p_taux between 0 and 9000
+    then (p_base * p_taux + 5000) / 10000
+  end
+$$;
+
+revoke all on function public.devis_total_ligne(bigint, bigint) from public, anon;
+grant execute on function public.devis_total_ligne(bigint, bigint) to authenticated;
+revoke all on function public.devis_tva_de(bigint, integer) from public, anon;
+grant execute on function public.devis_tva_de(bigint, integer) to authenticated;
+
+comment on function public.devis_total_ligne(bigint, bigint) is
+  'Le total d''une ligne : quantité en millièmes × prix unitaire en centimes, ramené au '
+  'centime, demi vers le haut. NULL hors des bornes (jamais une erreur 22003). Section 49.1.';
+comment on function public.devis_tva_de(bigint, integer) is
+  'La TVA d''un taux : base en centimes × taux en centièmes de point, ramenée au centime, '
+  'demi vers le haut, arrondie UNE fois par taux. NULL hors des bornes. Section 49.1.';
+
+-- --------------------------------------------------------------------------
+--  49.2 `public.devis` — le document, en brouillon
+--
+--  `client_id` est vide tant que brouillon : « il tape ses lignes d'abord,
+--  il dit pour qui ensuite ». L'identifiant est CHOISI PAR LE TÉLÉPHONE à
+--  l'ouverture d'un brouillon : une création renvoyée après un délai rend
+--  23505 au lieu d'un second devis. Le défaut `gen_random_uuid()` reste
+--  pour l'éditeur SQL et les essais.
+--
+--  CE QUE 23505 DIT À UN AUTRE, et c'est dit plutôt que promis (relecture
+--  sécurité de l'étape 3) : un artisan qui envoie l'identifiant d'un devis
+--  d'AUTRUI reçoit 23505 aussi — il apprend que cet identifiant EXISTE, et
+--  rien d'autre (ni à qui, ni quoi). C'est un oracle d'existence d'un
+--  UUID v4, qui ne se devine pas. « Aucun oracle » (49.6, OP013) ne vaut
+--  que pour les LIENS : la fiche, la demande, l'urgence.
+-- --------------------------------------------------------------------------
+create table if not exists public.devis (
+  id                          uuid primary key default gen_random_uuid(),
+  pro_id                      uuid not null references public.professional_profiles(id) on delete cascade,
+  client_id                   uuid references public.clients(id) on delete set null,
+  quote_request_id            uuid references public.quote_requests(id) on delete set null,
+  sos_request_id              uuid references public.sos_requests(id) on delete set null,
+  source                      text not null default 'manuelle',
+  statut                      text not null default 'brouillon',
+  objet                       text,
+  lieu_adresse                text,
+  lieu_code_postal            text,
+  lieu_ville                  text,
+  delai_execution             text,
+  retenue_garantie_centiemes  integer,
+  total_ht_centimes           bigint not null default 0,
+  total_tva_centimes          bigint not null default 0,
+  total_ttc_centimes          bigint not null default 0,
+  generation                  bigint not null default 0,
+  created_at                  timestamptz not null default now(),
+  modifie_le                  timestamptz not null default now()
+);
+
+-- --------------------------------------------------------------------------
+--  49.3 `public.devis_lignes` — une ligne du chiffrage
+--
+--  Cinq TYPES : `zone` et `piece` (deux niveaux de titre), `poste` (une
+--  ligne chiffrée), `option` (chiffrée, hors des totaux), `reserve` (une
+--  phrase). « Offert » n'est pas un type : c'est un drapeau sur un poste.
+--  Une ligne appartient au dernier titre de pièce qui la précède dans le tri
+--  `ordre, id` — et le second critère n'est pas décoratif : deux lignes au
+--  même `ordre` (deux appareils, une renumérotation interrompue) se
+--  rangeraient sinon selon l'ordre physique, différent entre PostgREST et
+--  JavaScript. Aucune clé vers la ligne de titre, aucun index unique
+--  `(devis_id, ordre)` : une renumérotation ligne par ligne heurterait ses
+--  propres valeurs intermédiaires.
+-- --------------------------------------------------------------------------
+create table if not exists public.devis_lignes (
+  id                        uuid primary key default gen_random_uuid(),
+  devis_id                  uuid not null references public.devis(id) on delete cascade,
+  ordre                     integer not null,
+  type                      text not null default 'poste',
+  designation               text,
+  quantite_milliemes        bigint,
+  unite                     text,
+  prix_unitaire_centimes    bigint,
+  taux_tva_centiemes        integer,
+  total_centimes            bigint,
+  offert                    boolean not null default false,
+  main_oeuvre               boolean not null default false,
+  fourniture_non_comprise   boolean not null default false,
+  surface_sol_milliemes     bigint,
+  surface_murs_milliemes    bigint,
+  generation                bigint not null default 0,
+  modifie_le                timestamptz not null default now()
+);
+
+-- --------------------------------------------------------------------------
+--  49.4 `public.devis_tva` — la ventilation, une ligne par taux
+--
+--  Recalculée EN ENTIER par la base à chaque écriture d'une ligne ; aucune
+--  écriture client. Les OPTIONS n'y entrent pas : un « total avec options »
+--  n'est pas une somme (une option de 33,33 € à 10 % coûte 3 666 c seule,
+--  mais 3 667 c de plus sur le devis qui la comprend). Le lot 2 imprimera,
+--  face à un consommateur, le TTC du devis option comprise, calculé sur
+--  l'UNION des lignes — jamais par addition.
+-- --------------------------------------------------------------------------
+create table if not exists public.devis_tva (
+  devis_id            uuid not null references public.devis(id) on delete cascade,
+  taux_tva_centiemes  integer not null,
+  base_centimes       bigint not null default 0,
+  tva_centimes        bigint not null default 0,
+  nb_lignes           integer not null default 0,
+  primary key (devis_id, taux_tva_centiemes)
+);
+
+-- --------------------------------------------------------------------------
+--  49.5 Les contraintes — vingt-trois, toutes en `_check`
+--
+--  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
+--  donne à chacune une phrase qui dit QUOI FAIRE (`MESSAGES_CONTRAINTE`).
+--  Aucune n'est anonyme. Et elles se REFONT : `add column if not exists`
+--  ne touche pas aux contraintes.
+--
+--  L'ORDRE ALPHABÉTIQUE DE LEURS NOMS EST UNE DONNÉE : quand une ligne en
+--  viole plusieurs, PostgreSQL nomme la PREMIÈRE dans cet ordre (mesuré).
+--  `validerLigne()` teste dans le même ordre (`CONTRAINTES_LIGNE`).
+--
+--  UN NULL NE DOIT JAMAIS SATISFAIRE UNE CONTRAINTE PAR ACCIDENT : une
+--  contrainte `check` passe quand son expression vaut NULL. Les deux qui
+--  comparent à une fonction de calcul gardent donc le RÉSULTAT DE LA
+--  FONCTION par `public.devis_…(…) is not null and` — pas la colonne
+--  comparée. La première version de `devis_tva_arrondi_check` gardait
+--  `tva_centimes is not null` (déjà `not null` par la colonne) : hors des
+--  bornes de `devis_tva_de`, `tva = NULL` valait NULL et la contrainte
+--  PASSAIT (relecture de l'étape 3 : une ventilation à 10^15 c et une TVA
+--  quelconque, insérées en superutilisateur, acceptées). Inatteignable par
+--  le recalcul aujourd'hui ; c'est pour le jour où une écriture viendra
+--  d'ailleurs que ce garde-fou existe.
+-- --------------------------------------------------------------------------
+alter table public.devis drop constraint if exists devis_delai_check;
+alter table public.devis add constraint devis_delai_check
+  check (delai_execution is null or char_length(delai_execution) <= 200);
+alter table public.devis drop constraint if exists devis_lieu_adresse_check;
+alter table public.devis add constraint devis_lieu_adresse_check
+  check (lieu_adresse is null or char_length(lieu_adresse) <= 200);
+alter table public.devis drop constraint if exists devis_lieu_code_postal_check;
+alter table public.devis add constraint devis_lieu_code_postal_check
+  check (lieu_code_postal is null or lieu_code_postal ~ '^[0-9]{5}$');
+alter table public.devis drop constraint if exists devis_lieu_ville_check;
+alter table public.devis add constraint devis_lieu_ville_check
+  check (lieu_ville is null or char_length(lieu_ville) <= 120);
+alter table public.devis drop constraint if exists devis_objet_check;
+alter table public.devis add constraint devis_objet_check
+  check (objet is null or char_length(objet) <= 1000);
+alter table public.devis drop constraint if exists devis_plafond_check;
+alter table public.devis add constraint devis_plafond_check
+  check (total_ht_centimes between 0 and 9999999999
+         and total_tva_centimes >= 0
+         and total_ttc_centimes <= 9999999999);
+/* La retenue de garantie : loi n° 71-584 du 16/07/1971, art. 1er — « au
+   plus 5 p. 100 ». En centièmes de point, comme un taux de TVA : une seule
+   unité de pourcentage dans le module. `null` = aucune retenue stipulée. */
+alter table public.devis drop constraint if exists devis_retenue_check;
+alter table public.devis add constraint devis_retenue_check
+  check (retenue_garantie_centiemes is null or retenue_garantie_centiemes between 1 and 500);
+alter table public.devis drop constraint if exists devis_source_check;
+alter table public.devis add constraint devis_source_check
+  check (source in ('manuelle', 'demande', 'urgence'));
+/* UNE valeur : quatre statuts que rien ne produit seraient quatre valeurs
+   mortes. La contrainte se refait au lot 2. */
+alter table public.devis drop constraint if exists devis_statut_check;
+alter table public.devis add constraint devis_statut_check
+  check (statut in ('brouillon'));
+/* Un garde-fou : `tient_le_devis()` la rend vraie par construction. */
+alter table public.devis drop constraint if exists devis_totaux_check;
+alter table public.devis add constraint devis_totaux_check
+  check (total_ttc_centimes = total_ht_centimes + total_tva_centimes);
+
+alter table public.devis_lignes drop constraint if exists devis_ligne_designation_check;
+alter table public.devis_lignes add constraint devis_ligne_designation_check
+  check (designation is not null and char_length(designation) between 1 and 2000);
+/* La forme : une ligne CHIFFRÉE a une quantité, une unité, un prix et un
+   taux, et pas de surfaces ; un TITRE ou une RÉSERVE n'a rien de tout cela,
+   et seule une pièce porte des surfaces. Un type inconnu passe ICI : c'est
+   `devis_ligne_type_check` qui le nomme. */
+alter table public.devis_lignes drop constraint if exists devis_ligne_forme_check;
+alter table public.devis_lignes add constraint devis_ligne_forme_check
+  check (case
+    when type in ('poste', 'option') then
+      quantite_milliemes is not null and unite is not null and prix_unitaire_centimes is not null
+      and taux_tva_centiemes is not null and surface_sol_milliemes is null and surface_murs_milliemes is null
+    when type in ('zone', 'piece', 'reserve') then
+      quantite_milliemes is null and unite is null and prix_unitaire_centimes is null
+      and taux_tva_centiemes is null and total_centimes is null
+      and not offert and not main_oeuvre and not fourniture_non_comprise
+      and (type = 'piece' or (surface_sol_milliemes is null and surface_murs_milliemes is null))
+    else true
+  end);
+/* « UN PRIX DE 0 SEULEMENT AVEC OFFERT » — et rien de plus. Écrite `> 0`,
+   comme le disait le cahier, elle volait le refus d'un prix NÉGATIF :
+   elle passe avant `devis_ligne_prix_check` dans l'alphabet, et opposait
+   « un prix de 0 s'écrit avec Offert » à un prix de −1. Prouvé sur
+   PostgreSQL 16 le 21/10/2026 (étapes 0-2, écart n° 1). */
+alter table public.devis_lignes drop constraint if exists devis_ligne_offert_check;
+alter table public.devis_lignes add constraint devis_ligne_offert_check
+  check (prix_unitaire_centimes is null or prix_unitaire_centimes <> 0 or offert);
+alter table public.devis_lignes drop constraint if exists devis_ligne_prix_check;
+alter table public.devis_lignes add constraint devis_ligne_prix_check
+  check (prix_unitaire_centimes is null or prix_unitaire_centimes between 0 and 9999999999);
+alter table public.devis_lignes drop constraint if exists devis_ligne_quantite_check;
+alter table public.devis_lignes add constraint devis_ligne_quantite_check
+  check (quantite_milliemes is null or quantite_milliemes between 1 and 99999999);
+alter table public.devis_lignes drop constraint if exists devis_ligne_surfaces_check;
+alter table public.devis_lignes add constraint devis_ligne_surfaces_check
+  check ((surface_sol_milliemes is null or surface_sol_milliemes between 1 and 99999999)
+         and (surface_murs_milliemes is null or surface_murs_milliemes between 1 and 99999999));
+/* La liste du lot 1 : ce que l'écran produit, et rien de plus. 1,05 %,
+   1,75 %, 2,10 %, 8,50 % existent en outre-mer : les centièmes de point les
+   portent, la contrainte se refait au lot 3. */
+alter table public.devis_lignes drop constraint if exists devis_ligne_taux_check;
+alter table public.devis_lignes add constraint devis_ligne_taux_check
+  check (taux_tva_centiemes is null or taux_tva_centiemes in (0, 550, 1000, 2000));
+/* Le total d'une ligne chiffrée est celui de la BASE : 0 pour une ligne
+   offerte, la valeur sinon — et la VALEUR est jugée même offerte : une
+   valeur offerte au-delà du plafond est refusée. */
+alter table public.devis_lignes drop constraint if exists devis_ligne_total_check;
+alter table public.devis_lignes add constraint devis_ligne_total_check
+  check (case
+    when type in ('poste', 'option') then
+      public.devis_total_ligne(quantite_milliemes, prix_unitaire_centimes) is not null
+      and public.devis_total_ligne(quantite_milliemes, prix_unitaire_centimes) <= 9999999999
+      and total_centimes is not null
+      and total_centimes = case when offert then 0
+                                else public.devis_total_ligne(quantite_milliemes, prix_unitaire_centimes) end
+    else total_centimes is null
+  end);
+alter table public.devis_lignes drop constraint if exists devis_ligne_type_check;
+alter table public.devis_lignes add constraint devis_ligne_type_check
+  check (type in ('zone', 'piece', 'poste', 'option', 'reserve'));
+/* SEPT unités, en liste fermée (réponse du propriétaire du 21/10 : « jour »
+   ajoutée). L'écran montre « m linéaire » et « unité » ; « ml » ne
+   s'affiche jamais, et ne s'enregistre pas. */
+alter table public.devis_lignes drop constraint if exists devis_ligne_unite_check;
+alter table public.devis_lignes add constraint devis_ligne_unite_check
+  check (unite is null or unite in ('m2', 'm', 'm3', 'u', 'h', 'jour', 'forfait'));
+
+alter table public.devis_tva drop constraint if exists devis_tva_arrondi_check;
+alter table public.devis_tva add constraint devis_tva_arrondi_check
+  check (base_centimes >= 0
+         and public.devis_tva_de(base_centimes, taux_tva_centiemes) is not null
+         and tva_centimes = public.devis_tva_de(base_centimes, taux_tva_centiemes));
+alter table public.devis_tva drop constraint if exists devis_tva_nb_check;
+alter table public.devis_tva add constraint devis_tva_nb_check
+  check (nb_lignes >= 0);
+alter table public.devis_tva drop constraint if exists devis_tva_taux_check;
+alter table public.devis_tva add constraint devis_tva_taux_check
+  check (taux_tva_centiemes in (0, 550, 1000, 2000));
+
+comment on table public.devis is
+  'Un devis en BROUILLON (lot 1) : un DOCUMENT, à ne pas confondre avec quote_requests, '
+  'qui est une DEMANDE. Privé : lu et écrit par son entreprise seule. Section 49.';
+comment on table public.devis_lignes is
+  'Les lignes d''un devis : titres (zone, pièce), postes chiffrés, options, réserves. '
+  'Le total de chaque ligne est posé par la base. Une demande n''est pas un devis. Section 49.';
+comment on table public.devis_tva is
+  'La ventilation de la TVA d''un devis, une ligne par taux, arrondie UNE fois par taux. '
+  'Écrite par la base seule (recalcule_devis) ; un taux disparu reste à zéro (nb_lignes = 0). Section 49.';
+comment on column public.devis.client_id is
+  'Une FICHE du carnet de l''entreprise (public.clients), JAMAIS un compte Opus (D1). Vide tant '
+  'que brouillon ; refusée (OP013) si elle n''est pas dans le carnet de cette entreprise.';
+comment on column public.devis.quote_request_id is
+  'La demande de devis qui a ouvert ce brouillon (une DEMANDE, pas un document), ou vide (D2, D3).';
+comment on column public.devis.source is
+  'Le GESTE qui a ouvert le brouillon : manuelle, demande ou urgence. Figée après la création (D3).';
+comment on column public.devis.retenue_garantie_centiemes is
+  'La retenue de garantie stipulée, en CENTIÈMES DE POINT (500 = 5 %), de 1 à 500 ; vide = aucune. '
+  'Aucun montant rangé : il dépend des paiements réels.';
+comment on column public.devis.total_ht_centimes is
+  'En CENTIMES. Relu par la base dans devis_tva (tient_le_devis) ; une valeur envoyée est ignorée.';
+comment on column public.devis.total_tva_centimes is
+  'En CENTIMES. La somme des TVA de devis_tva, chacune arrondie une fois par taux.';
+comment on column public.devis.total_ttc_centimes is
+  'En CENTIMES. HT + TVA, posé par la base.';
+comment on column public.devis.generation is
+  'L''HORLOGE du devis : le plus grand numéro d''écriture appliqué à ce devis ou à l''une de ses '
+  'lignes. Elle ne recule jamais ; une écriture plus ancienne est refusée (OP015). Section 49.5 bis.';
+comment on column public.devis_lignes.quantite_milliemes is
+  'En MILLIÈMES de l''unité (2,5 m² = 2500), de 1 à 99 999 999.';
+comment on column public.devis_lignes.prix_unitaire_centimes is
+  'En CENTIMES, HT au régime réel. 0 seulement avec « Offert ». Sur une ligne offerte, la VALEUR '
+  'offerte (gardée : le prix avant la réduction, BOFiP BOI-TVA-DECLA-30-20-20-10 §220).';
+comment on column public.devis_lignes.taux_tva_centiemes is
+  'En CENTIÈMES DE POINT (550 = 5,5 %). 0 = aucune TVA facturée sur cette ligne ; la raison '
+  '(franchise, autoliquidation) est portée par le régime, figé sur le devis au lot 2.';
+comment on column public.devis_lignes.total_centimes is
+  'En CENTIMES, posé par la base : 0 pour une ligne offerte, devis_total_ligne(q, p) sinon, vide pour un titre.';
+comment on column public.devis_lignes.offert is
+  '« Offert » met le TOTAL à 0 et GARDE le prix : éteint, le prix revient tout seul.';
+comment on column public.devis_lignes.surface_sol_milliemes is
+  'En MILLIÈMES de m², sur une ligne « piece » seulement. Copiée dans une quantité par un appui, jamais liée.';
+comment on column public.devis_lignes.surface_murs_milliemes is
+  'En MILLIÈMES de m², sur une ligne « piece » seulement.';
+comment on column public.devis_lignes.generation is
+  'Le numéro de la DERNIÈRE écriture de cette ligne, posé par le téléphone. Une écriture dont le '
+  'numéro ne dépasse pas l''horloge du devis est refusée (OP015). Section 49.5 bis.';
+comment on column public.devis_tva.base_centimes is
+  'En CENTIMES : la somme des totaux des POSTES de ce taux (les options n''y entrent pas).';
+comment on column public.devis_tva.tva_centimes is
+  'En CENTIMES : devis_tva_de(base, taux), arrondie UNE fois.';
+comment on column public.devis_tva.taux_tva_centiemes is
+  'En CENTIÈMES DE POINT. 0 = aucune TVA facturée.';
+
+-- --------------------------------------------------------------------------
+--  49.5 bis LA REQUÊTE TARDIVE — deux colonnes `generation`, et une règle
+--           tenue par la BASE (21/10/2026)
+--
+--  LE DÉFAUT, DIT PAR LA RELECTURE DES ÉTAPES 0-2
+--  ---------------------------------------------
+--  La file d'écriture du téléphone n'envoie qu'une requête à la fois, et
+--  ANNULE celle qui dépasse son délai. Mais l'annulation n'arrête que ce que
+--  le serveur n'a pas encore reçu. Une requête REÇUE dont la réponse se perd
+--  (le téléphone en veille, le Wi-Fi qui change) s'exécute quand même — et
+--  si elle passe APRÈS la suivante :
+--    - une modification ancienne écrase la nouvelle (la base garde 50 €,
+--      l'écran affiche 45 € « enregistrée ») ;
+--    - une insertion arrive après que l'artisan a retiré la ligne : la ligne
+--      revient en base, comptée dans les totaux, absente de l'écran ;
+--    - une suppression arrive après que la ligne a été remise : elle part.
+--  Aucune erreur, aucun écran cassé. Un ordre de passage, ça ne se répare
+--  que là où les requêtes passent : dans la base.
+--
+--  LA PARADE : UNE HORLOGE PAR DEVIS
+--  --------------------------------
+--  Chaque écriture du téléphone porte un NUMÉRO (`generation`) qui ne fait
+--  que monter : le plus grand entre le précédent + 1, l'horloge du devis
+--  lue à l'ouverture + 1, et l'heure du téléphone en millisecondes — pour
+--  qu'une application relancée reparte au-dessus de tout ce qu'elle avait
+--  pu envoyer avant. Et :
+--    1. `devis.generation` est l'HORLOGE du devis : le plus grand numéro
+--       APPLIQUÉ au devis ou à l'une de ses lignes ;
+--    2. une ligne insérée ou modifiée dont le numéro NE DÉPASSE PAS
+--       l'horloge est REFUSÉE (OP015) — par `recalcule_devis()`, SOUS SON
+--       VERROU (49.6) : deux écritures qui se croisent passent l'une après
+--       l'autre, et la plus ancienne arrivée la dernière est refusée ;
+--    3. une écriture DIRECTE du devis lui-même (l'en-tête : objet, lieu,
+--       client…) doit faire MONTER l'horloge, sinon elle est refusée
+--       (OP015, `tient_le_devis()`). « Directe » se reconnaît à
+--       `pg_trigger_depth() = 1` : le déclencheur tourne pour l'ordre que
+--       quelqu'un a envoyé. L'écriture que fait le RECALCUL (profondeur 2,
+--       sous le déclencheur d'une ligne) et celle d'une CASCADE (`set null`
+--       quand une fiche ou une demande disparaît, profondeur 2 aussi) ne
+--       portent pas de numéro neuf : elles passent, l'horloge ne recule
+--       jamais. `auth.uid()` ne sert PAS à distinguer : pendant une cascade,
+--       c'est celui de QUELQU'UN D'AUTRE ;
+--    3 bis. il n'y a PAS d'écriture sans numéro : une ligne écrite avec le
+--       numéro par défaut (0) ne dépasse jamais l'horloge, elle est refusée.
+--       L'éditeur SQL et les essais écrivent donc un numéro, comme le
+--       téléphone — une règle qui laisserait passer « pas de numéro »
+--       laisserait passer, en silence, une version de l'application qui
+--       l'oublierait ;
+--    4. une SUPPRESSION ne porte pas de valeur — PostgREST ne lui envoie
+--       aucun corps — : le téléphone la CONDITIONNE (`generation < N`). Une
+--       suppression arrivée après qu'une ligne a été remise, ou après que le
+--       devis a été retouché, ne trouve plus rien à supprimer ;
+--    5. une ligne dont l'insertion est d'issue inconnue n'existe peut-être
+--       pas encore quand on la retire : la supprimer ne laisserait aucune
+--       trace. Le téléphone fait alors MONTER L'HORLOGE d'abord (une écriture
+--       du devis, `generation` seul), puis supprime : l'insertion en retard,
+--       plus ancienne que l'horloge, est refusée quand elle arrive ;
+--    6. une ligne qui CHANGE DE DEVIS est jugée sur les DEUX horloges — celle
+--       du devis qu'elle quitte et celle du devis qu'elle rejoint — et les
+--       fait avancer toutes les deux. La première version ne regardait que
+--       le devis d'arrivée : un déplacement tardif (n° 15) écrasait une
+--       retouche plus récente de la même ligne (n° 20), et le numéro de la
+--       ligne RECULAIT (relecture de l'étape 3, prouvé à deux sessions).
+--       Aucun écran du lot 1 ne déplace une ligne ; la politique, elle, le
+--       permet, et le lot qui l'offrira aurait hérité du trou ;
+--    7. le numéro est BORNÉ, de 1 à 2^53 − 1 (9 007 199 254 740 991), par
+--       les deux déclencheurs `before` : absent (NULL), nul, négatif ou
+--       au-delà, l'écriture est refusée par `OP016`, qui dit « mettez Opus à
+--       jour » — et pas « un autre appareil » (`OP015`), qui serait faux.
+--       Pourquoi ces bornes : un devis né à −1 laissait passer une ligne SANS
+--       numéro (0 dépassait son horloge) ; un devis né à 2^63 − 1 ne
+--       s'écrivait plus, ni ne se supprimait par la file ; et au-delà de
+--       2^53, le téléphone ne sait plus compter juste (un nombre JavaScript
+--       n'est exact que jusque-là). `NUMERO_MAX` (`src/lib/file-ecriture.js`)
+--       est la même borne, et `verifier-devis` les compare.
+--
+--  LE CONTRAT, POUR TOUT CE QUI ÉCRIRA DANS CES TABLES (relecture de l'étape
+--  3 : il n'était écrit nulle part, et le lot 2 l'aurait rencontré) :
+--    - UN ORDRE = UNE LIGNE, ou un numéro DISTINCT par ligne, croissant dans
+--      l'ordre où PostgreSQL les écrit. Deux lignes au même numéro dans un
+--      seul ordre — un PATCH filtré par `devis_id`, une renumérotation d'un
+--      coup, un « dupliquer le devis » en `insert … select` — : la seconde
+--      est refusée (OP015), mesuré ;
+--    - UNE FONCTION OU UNE MIGRATION QUI RÉCRIT UN DEVIS fait monter son
+--      horloge (`generation = generation + 1`) : une écriture directe sans
+--      numéro neuf est refusée (OP015), d'où qu'elle vienne ;
+--    - UNE LIGNE SE MODIFIE PAR `update`, JAMAIS PAR `upsert` : un
+--      `insert … on conflict do update` arrivé en retard après une
+--      suppression RECRÉE la ligne, comme une insertion sans levée (la file
+--      ne lève l'horloge que pour une INSERTION d'issue inconnue) ;
+--    - L'INVARIANT DE LA PROFONDEUR : `tient_le_devis()` reconnaît une
+--      écriture « directe » à `pg_trigger_depth() = 1`. C'est sûr parce que
+--      les SEULS chemins qui écrivent `public.devis` plus profond sont le
+--      recalcul (`modifie_le` et `generation`, colonnes fixes) et les
+--      cascades `set null`. Le jour où un déclencheur du lot 2 écrira
+--      `devis`, il passera sans numéro : la liste FERMÉE des fonctions qui
+--      nomment ces tables (`verifier-devis`, `verifier-legal`) le fera
+--      voir, et c'est à ce moment-là qu'il faudra revoir cette règle.
+--
+--  CE QUE ÇA NE COUVRE PAS, ET C'EST DIT : la CRÉATION du devis en retard
+--  après sa suppression. Il n'y a rien au-dessus d'un devis pour porter une
+--  horloge : un brouillon peut réapparaître dans « Mes devis » — VIDE le
+--  plus souvent, mais pas toujours (relecture de l'étape 3) : si une ligne
+--  partie sans réponse arrive APRÈS la création en retard, elle y entre,
+--  parce que son numéro dépasse l'horloge du devis recréé. Il faut pour cela
+--  DEUX requêtes en retard, la première création comprise. Il se voit, et se
+--  supprime de nouveau.
+--
+--  ET L'HEURE DU TÉLÉPHONE QUI RECULE (relecture de l'étape 3, à DIRE, pas à
+--  corriger) : une application relancée repart au-dessus de l'horloge LUE à
+--  l'ouverture et de son heure. Si l'heure a été reculée entre les deux
+--  sessions (réglage à la main, correction par le réseau), une requête de la
+--  session d'avant ENCORE EN ROUTE peut porter un numéro plus grand que ceux
+--  de la nouvelle, et passer après elle. Fenêtre de quelques secondes.
+--
+--  ET DEUX APPAREILS — ce que la parade fait, sans le dire mieux que ce
+--  n'est. Chacun numérote à partir de l'horloge lue à l'ouverture ET de
+--  l'heure de son téléphone : deux téléphones à l'heure écrivent donc l'un
+--  après l'autre, et le dernier gagne, comme sans la parade. Elle ne mord
+--  que si un numéro est DÉPASSÉ — l'autre a écrit avec un numéro plus grand
+--  (un téléphone en avance, ou les deux à la même milliseconde) : l'écriture
+--  est alors refusée (OP015) au lieu d'écraser ce que l'autre vient
+--  d'enregistrer. La file relit l'horloge, la ligne passe en échec, et
+--  « Réessayer » repart au-dessus : c'est un choix de l'artisan, pas de la
+--  base. Et une SUPPRESSION conditionnée, partie d'un téléphone alors que
+--  l'autre a retouché la ligne avec un numéro plus grand, ne supprime rien
+--  — sans erreur : DELETE répond 204 même sur zéro ligne. La ligne revient
+--  à la réouverture du devis. C'est rare (deux appareils sur le même
+--  brouillon, au même moment) ; c'est dit.
+--
+--  CE QUE ÇA COÛTE : `recalcule_devis(uuid, bigint)` prend le numéro de
+--  l'écriture en second paramètre — le cahier l'écrivait `(uuid)`. Rien
+--  d'autre ne l'appelle que son déclencheur.
+-- --------------------------------------------------------------------------
+
+-- --------------------------------------------------------------------------
+--  49.6 Les déclencheurs, leurs NOMS, et leur ordre réel
+--
+--  Ils vivent avec leurs colonnes, jamais greffés sur `tient_le_client()` :
+--  un corps plpgsql n'est analysé qu'à l'EXÉCUTION (section 40). Et ils sont
+--  NOMMÉS, parce que deux déclencheurs du même moment s'exécutent dans
+--  l'ordre ALPHABÉTIQUE DE LEURS NOMS, déclencheurs de clé étrangère
+--  `RI_ConstraintTrigger_…` compris (un `R` majuscule passe avant `t`).
+--  Le lot 2 ajoutera sur `devis` un déclencheur de figeage dont l'ordre par
+--  rapport à `trg_tient_le_devis` comptera.
+--
+--  L'ORDRE RÉEL D'UNE INSERTION DE LIGNE, une seule chaîne, une seule
+--  transaction : `trg_tient_la_ligne_de_devis` (avant) → les contraintes de
+--  la ligne → la ligne est écrite → `RI_ConstraintTrigger_c_…` (après : la
+--  clé `devis_id` pose FOR KEY SHARE sur le devis) → `trg_recalcule_devis`
+--  (après) → `recalcule_devis()` (FOR NO KEY UPDATE sur le devis, puis,
+--  sous ce verrou : l'horloge, le plafond de lignes, la ventilation) →
+--  l'écriture du devis → `trg_tient_le_devis` (avant : relit les totaux) →
+--  les contraintes du devis. Tout réussit, ou rien.
+--
+--  UN INTERBLOCAGE QUI RESTE, ET IL EST DIT (relecture de l'étape 3, mesuré
+--  à deux sessions) : modifier ou supprimer une LIGNE verrouille la ligne,
+--  PUIS le devis (le recalcul) ; supprimer le DEVIS verrouille le devis,
+--  PUIS ses lignes (la cascade). Ordre inverse : si les deux se croisent,
+--  PostgreSQL en annule un (40P01, « deadlock detected »). Un déclencheur
+--  `before` ne peut pas prendre le verrou du devis d'abord : la ligne est
+--  verrouillée AVANT qu'il ne tourne. Rien n'est perdu — l'annulée l'est en
+--  entier —, et la file d'écriture retente un 40P01 UNE fois (son point 9) ;
+--  la phrase française de 40P01 arrive avec `erreurs.js` (étape 4). D'un
+--  seul téléphone, il faut une modification déjà hors délai ENCORE en cours
+--  au serveur quand la suppression part ; à deux appareils, c'est plus
+--  simple.
+--
+--  LA CLASSE DE BLANCS est celle de la section 47, écrite en séquences
+--  `\u…` et jamais en caractères invisibles ; `verifier-devis` compare ses
+--  copies à celle de la section 47 et à `BLANCS` (`src/lib/devis.js`).
+-- --------------------------------------------------------------------------
+
+/* 1. LE DEVIS — `security invoker`. Il ne lit JAMAIS `auth.uid()` : il
+   tourne aussi pendant une cascade (`set null` quand une fiche, une demande
+   ou un compte de particulier disparaît), où `auth.uid()` est celui de
+   QUELQU'UN D'AUTRE — mesuré : pendant le `set null`, `current_user` vaut
+   `postgres` et `auth.uid()` celui qui a déclenché la suppression. */
+create or replace function public.tient_le_devis()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_ht      bigint;
+  v_tva     bigint;
+  v_plafond constant integer := 20;   -- devis d'une entreprise par demande, et par urgence (OP017)
+begin
+  -- 1. Les textes : un blanc n'est pas une valeur (la classe de la section 47).
+  new.objet := nullif(btrim(coalesce(new.objet, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), '');
+  new.lieu_adresse := nullif(btrim(coalesce(new.lieu_adresse, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), '');
+  new.lieu_ville := nullif(btrim(coalesce(new.lieu_ville, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), '');
+  new.delai_execution := nullif(btrim(coalesce(new.delai_execution, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), '');
+  -- Le code postal perd ses espaces, en liste EXPLICITE et jamais par `\s` :
+  -- ce que `\s` retire dépend de la locale du serveur (mesuré le 21/10 : il
+  -- garde U+00A0 et U+202F, retire U+2002). La même classe que
+  -- `ESPACES_CODE_POSTAL` (src/lib/devis.js).
+  new.lieu_code_postal := nullif(regexp_replace(coalesce(new.lieu_code_postal, ''),
+                                                E'[ \\t\\n\\v\\f\\r\\u00a0\\u202f]', '', 'g'), '');
+
+  -- 2. Le NUMÉRO d'écriture (49.5 bis, point 7) : présent, et dans ses
+  --    bornes, d'où qu'on écrive. Une cascade ou le recalcul le gardent ou
+  --    le reçoivent d'une ligne déjà bornée : ils passent toujours.
+  if new.generation is null or new.generation not between 1 and 9007199254740991 then
+    raise exception 'Cette version d''Opus n''envoie pas de numéro d''écriture valable pour ce devis : rien n''a été enregistré. Mettez l''application à jour, puis réessayez.'
+      using errcode = 'OP016';
+  end if;
+
+  -- Ce que la base pose, et que le téléphone ne choisit pas.
+  if tg_op = 'INSERT' then
+    new.created_at := clock_timestamp();
+  else
+    new.created_at := old.created_at;
+    new.source     := old.source;          -- le geste qui a ouvert le brouillon (D3)
+    -- L'HORLOGE DU DEVIS (49.5 bis). Une écriture DIRECTE — l'ordre que
+    -- quelqu'un a envoyé, `pg_trigger_depth() = 1` — doit la faire MONTER :
+    -- une écriture plus ancienne qu'une autre déjà appliquée, ou qui ne
+    -- porte pas de numéro, est refusée. Le recalcul (sous le déclencheur
+    -- d'une ligne) et une cascade (`set null`) tournent plus profond et ne
+    -- portent pas de numéro neuf : ils passent, mais l'horloge ne recule
+    -- JAMAIS, d'où qu'on écrive.
+    if (pg_trigger_depth() = 1 and new.generation <= old.generation)
+       or new.generation < old.generation then
+      raise exception 'Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n''a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n''est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.'
+        using errcode = 'OP015';
+    end if;
+  end if;
+  new.modifie_le := clock_timestamp();
+
+  -- 3. Un lien d'origine désigne MA fiche, MA demande, MON urgence (OP013).
+  --    Une vérification de clé étrangère IGNORE la RLS : sans cette garde,
+  --    l'artisan rattacherait la fiche d'un autre (mesuré : INSERT 0 1). Et
+  --    « pas à vous » comme « n'existe pas » rendent le MÊME refus — aucun
+  --    oracle par l'erreur 23503. Elle lit en `security invoker` : la RLS de
+  --    `clients`, « lecture mes devis » et « lecture mes sos » ne montrent à
+  --    l'artisan que ce qui est à lui. Elle ne joue que quand le lien CHANGE
+  --    et qu'il n'est pas vide : un lien qui passe à vide passe toujours
+  --    (D3, D11), et un lien inchangé ne se revérifie pas — sinon chaque
+  --    recalcul, qui réécrit le devis à chaque ligne, referait trois
+  --    lectures, et une cascade pourrait buter dessus.
+  if new.client_id is not null
+     and (tg_op = 'INSERT' or new.client_id is distinct from old.client_id)
+     and not exists (select 1 from public.clients c
+                      where c.id = new.client_id and c.pro_id = new.pro_id) then
+    raise exception 'Cette fiche n''est pas dans votre carnet : un devis ne se rattache qu''à vos propres clients.'
+      using errcode = 'OP013';
+  end if;
+  if new.quote_request_id is not null
+     and (tg_op = 'INSERT' or new.quote_request_id is distinct from old.quote_request_id)
+     and not exists (select 1 from public.quote_requests q
+                      where q.id = new.quote_request_id and q.professional_id = new.pro_id) then
+    raise exception 'Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu''à vos propres demandes.'
+      using errcode = 'OP013';
+  end if;
+  if new.sos_request_id is not null
+     and (tg_op = 'INSERT' or new.sos_request_id is distinct from old.sos_request_id)
+     and not exists (select 1 from public.sos_requests s
+                      where s.id = new.sos_request_id and s.professional_id = new.pro_id) then
+    raise exception 'Cette urgence ne vous a pas été adressée : un devis ne se rattache qu''à vos propres urgences.'
+      using errcode = 'OP013';
+  end if;
+
+  -- 3 bis. LE PLAFOND PAR DEMANDE ET PAR URGENCE (OP017) — relecture
+  --    sécurité de l'étape 3, mesuré : un artisan à qui un particulier a
+  --    écrit rattachait, par un client modifié, 100 000 brouillons à SA
+  --    demande et à SON urgence ; quand ce particulier supprimait son
+  --    compte, chaque devis passait à vide (`set null`), et la suppression
+  --    dépassait les 8 s de la vraie base — le droit à l'effacement bloqué
+  --    par un tiers, et un message qui parlait de réseau.
+  --    D4 interdit l'UNICITÉ (un client a plusieurs projets, un artisan
+  --    plusieurs versions d'un devis), pas une borne : VINGT devis d'une
+  --    entreprise pour une même demande, vingt pour une même urgence. C'est
+  --    un nombre à confirmer avec le propriétaire, et il est écrit UNE fois,
+  --    ici. Compté SOUS UN VERROU — un verrou consultatif par demande, posé
+  --    dans la transaction : sans lui, deux créations simultanées à 19
+  --    comptent chacune 19 (la leçon d'OP014). Il ne joue que quand le lien
+  --    CHANGE et n'est pas vide, comme OP013 : une cascade qui vide un lien
+  --    ne prend aucun verrou et ne compte rien. Le compte passe par la RLS
+  --    (`security invoker`) : l'artisan ne compte que SES devis, et c'est
+  --    exactement ce qu'on borne.
+  if new.quote_request_id is not null
+     and (tg_op = 'INSERT' or new.quote_request_id is distinct from old.quote_request_id) then
+    perform pg_advisory_xact_lock(hashtextextended('devis:demande:' || new.quote_request_id::text, 0));
+    if (select count(*) from public.devis d
+         where d.quote_request_id = new.quote_request_id and d.pro_id = new.pro_id and d.id <> new.id) >= v_plafond then
+      raise exception 'Vous avez déjà % devis pour cette demande : supprimez un brouillon dont vous n''avez plus besoin avant d''en commencer un autre.', v_plafond
+        using errcode = 'OP017';
+    end if;
+  end if;
+  if new.sos_request_id is not null
+     and (tg_op = 'INSERT' or new.sos_request_id is distinct from old.sos_request_id) then
+    perform pg_advisory_xact_lock(hashtextextended('devis:urgence:' || new.sos_request_id::text, 0));
+    if (select count(*) from public.devis d
+         where d.sos_request_id = new.sos_request_id and d.pro_id = new.pro_id and d.id <> new.id) >= v_plafond then
+      raise exception 'Vous avez déjà % devis pour cette urgence : supprimez un brouillon dont vous n''avez plus besoin avant d''en commencer un autre.', v_plafond
+        using errcode = 'OP017';
+    end if;
+  end if;
+
+  -- 4. Les totaux sont RELUS dans devis_tva : une valeur envoyée est
+  --    ignorée. Sans cette relecture, des totaux faux mais cohérents entre
+  --    eux passeraient `devis_totaux_check` (mesuré), et la politique est
+  --    `for all` : l'artisan récrirait son total. `sum(bigint)` rend un
+  --    `numeric`, et `sum` sur zéro ligne rend NULL : d'où le `::bigint` et
+  --    les `coalesce`.
+  select coalesce(sum(t.base_centimes), 0)::bigint, coalesce(sum(t.tva_centimes), 0)::bigint
+    into v_ht, v_tva
+    from public.devis_tva t
+   where t.devis_id = new.id;
+  new.total_ht_centimes  := v_ht;
+  new.total_tva_centimes := v_tva;
+  new.total_ttc_centimes := v_ht + v_tva;
+  return new;
+end;
+$$;
+
+/* 2. LA LIGNE — `security invoker`. Le total posé par la base (une valeur
+   envoyée est remplacée ; pas une colonne GÉNÉRÉE, qui refuserait la valeur
+   envoyée par une erreur EN ANGLAIS, mesuré) et la date.
+
+   LE PLAFOND DE LIGNES N'EST PLUS ICI — il est dans `recalcule_devis()`,
+   sous son verrou (21/10/2026, étape 3 du lot 1). Le cahier le posait
+   dans ce déclencheur ; deux mesures l'en ont sorti :
+     - ici, le compte des lignes passe par la RLS (`security invoker`) :
+       la politique est évaluée LIGNE PAR LIGNE, donc 500 lignes insérées
+       d'un coup avec le jeton d'un artisan prenaient 9,7 s — au-delà du
+       délai de 8 s de la vraie base, c'est-à-dire exactement l'erreur
+       anglaise que la borne devait éviter. Sous le verrou, en `definer`,
+       les mêmes 500 lignes prennent moins d'une demi-seconde ;
+     - et hors du verrou, deux insertions SIMULTANÉES dans un devis à 499
+       lignes comptaient chacune 499 et passaient toutes les deux : 501
+       lignes en base (mesuré, deux sessions). Sous le verrou, la seconde
+       compte 501, et elle est refusée. */
+create or replace function public.tient_la_ligne_de_devis()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  -- Le NUMÉRO d'écriture (49.5 bis, point 7), la même borne que le devis.
+  -- Ici, AVANT les contraintes : une colonne `not null` refuserait un NULL
+  -- par 23502, EN ANGLAIS (relecture de l'étape 3) ; et un 0 ou un nombre
+  -- négatif dirait « un autre appareil » (OP015), ce qui serait faux.
+  if new.generation is null or new.generation not between 1 and 9007199254740991 then
+    raise exception 'Cette version d''Opus n''envoie pas de numéro d''écriture valable pour cette ligne : rien n''a été enregistré. Mettez l''application à jour, puis réessayez.'
+      using errcode = 'OP016';
+  end if;
+  -- Un texte vide devient `null`, et c'est la contrainte qui le refuse.
+  new.designation := nullif(btrim(coalesce(new.designation, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), '');
+  if new.type in ('poste', 'option') then
+    new.total_centimes := case when new.offert then 0
+                               else public.devis_total_ligne(new.quantite_milliemes, new.prix_unitaire_centimes) end;
+  else
+    new.total_centimes := null;
+  end if;
+  new.modifie_le := clock_timestamp();
+  return new;
+end;
+$$;
+
+/* 3. LE RECALCUL — `security definer` : il écrit `devis_tva`, qui n'a
+   AUCUNE politique d'écriture. Complet à chaque fois, jamais un incrément.
+
+   LE VERROU D'ABORD — et c'est FOR NO KEY UPDATE, pas FOR UPDATE. Une
+   insertion de ligne passe d'abord par la vérification de sa clé
+   étrangère, qui pose FOR KEY SHARE sur la ligne du devis. FOR UPDATE est
+   incompatible avec FOR KEY SHARE : deux insertions dans le même devis
+   s'attendaient l'une l'autre — « deadlock detected » (40P01), mesuré.
+   FOR NO KEY UPDATE ne gêne pas FOR KEY SHARE et sérialise quand même deux
+   recalculs entre eux : sans lui, deux lignes au même taux enregistrées en
+   même temps donnent une base qui en oublie une (mesuré : 2 lignes, HT 1000).
+
+   L'HORLOGE (49.5 bis) se lit SOUS ce verrou : la plus ancienne de deux
+   écritures croisées, si elle arrive la seconde, trouve l'horloge déjà
+   avancée, et elle est refusée. `p_generation` est le numéro de l'écriture
+   de LIGNE qui déclenche le recalcul ; il est vide pour une suppression,
+   qui ne porte pas de valeur.
+
+   La cascade : un devis supprimé emporte ses lignes ; leur recalcul trouve
+   le devis absent et ne fait rien. */
+create or replace function public.recalcule_devis(p_devis uuid, p_generation bigint)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_horloge bigint;
+begin
+  select d.generation into v_horloge
+    from public.devis d
+   where d.id = p_devis
+     for no key update;
+  if not found then
+    return;
+  end if;
+  if p_generation is not null and p_generation <= v_horloge then
+    raise exception 'Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n''a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n''est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.'
+      using errcode = 'OP015';
+  end if;
+
+  -- LE PLAFOND DE LIGNES (OP014), sous le MÊME verrou : sans borne, un
+  -- client modifié qui insère 10 000 lignes ferait tourner le recalcul
+  -- complet jusqu'au délai de 8 s, et l'artisan lirait une erreur anglaise.
+  -- 500, c'est trois fois le plus long devis plausible. Compté ICI et non
+  -- dans le déclencheur de la ligne : sous le verrou, deux insertions
+  -- simultanées ne comptent plus chacune 499 (voir 49.6, point 2). Une
+  -- suppression (`p_generation` vide) n'est jamais refusée.
+  if p_generation is not null
+     and (select count(*) from public.devis_lignes l where l.devis_id = p_devis) > 500 then
+    raise exception 'Un devis porte au plus 500 lignes : celui-ci est plein. Commencez-en un second, ou regroupez des lignes.'
+      using errcode = 'OP014';
+  end if;
+
+  insert into public.devis_tva as t
+         (devis_id, taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)
+  select p_devis, l.taux_tva_centiemes, sum(l.total_centimes)::bigint,
+         public.devis_tva_de(sum(l.total_centimes)::bigint, l.taux_tva_centiemes), count(*)
+    from public.devis_lignes l
+   where l.devis_id = p_devis and l.type = 'poste'
+   group by l.taux_tva_centiemes
+  on conflict (devis_id, taux_tva_centiemes) do update
+     set base_centimes = excluded.base_centimes,
+         tva_centimes  = excluded.tva_centimes,
+         nb_lignes     = excluded.nb_lignes;
+
+  -- Un taux qui a disparu reste, À ZÉRO : aucun ordre ne commence par
+  -- `delete` (le connecteur le refuse, même ici). Les lecteurs filtrent
+  -- nb_lignes > 0.
+  update public.devis_tva t
+     set base_centimes = 0, tva_centimes = 0, nb_lignes = 0
+   where t.devis_id = p_devis and t.nb_lignes > 0
+     and not exists (select 1 from public.devis_lignes l
+                      where l.devis_id = p_devis and l.type = 'poste'
+                        and l.taux_tva_centiemes = t.taux_tva_centiemes);
+
+  -- Les totaux : c'est tient_le_devis() qui les relit. Cette écriture le
+  -- réveille — une seule écriture de la règle — et avance l'horloge.
+  update public.devis
+     set modifie_le = clock_timestamp(),
+         generation = coalesce(p_generation, generation)
+   where id = p_devis;
+end;
+$$;
+
+/* Elle rend `void` : le balayage de la section 43 ne la voit pas. Son seul
+   appelant est la fonction de déclencheur ci-dessous, `security definer` :
+   l'appel s'y fait avec les droits du propriétaire. La retirer à tout
+   client, JUSTE APRÈS ELLE, ne casse donc rien — et une fonction `security
+   definer` qui nomme une table de prix ne doit être exécutable par aucun
+   client (`verifier-legal`). */
+revoke all on function public.recalcule_devis(uuid, bigint) from public, anon, authenticated;
+
+/* 4. LE DÉCLENCHEUR DU RECALCUL — `security definer`, sur le modèle de
+   celui des chantiers (section 36). Il ne nomme AUCUNE table : il appelle
+   le recalcul, dans l'ordre des identifiants quand une ligne change de
+   devis, pour que deux déplacements croisés ne s'interbloquent pas. Le
+   DELETE n'est pas inversé : un déclencheur `after` qui rend `null`.
+
+   UN DÉPLACEMENT PORTE SON NUMÉRO AUX DEUX DEVIS (49.5 bis, point 6) : le
+   devis QUITTÉ reçoit `new.generation` comme celui qu'elle rejoint — il est
+   donc jugé sur son horloge (une retouche plus récente de cette ligne l'y a
+   portée), et son horloge avance. Seule la SUPPRESSION passe sans numéro :
+   elle ne porte pas de valeur. */
+create or replace function public.recalcule_apres_ligne_de_devis()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    perform public.recalcule_devis(old.devis_id, null);
+  elsif tg_op = 'INSERT' or new.devis_id = old.devis_id then
+    perform public.recalcule_devis(new.devis_id, new.generation);
+  elsif old.devis_id < new.devis_id then
+    perform public.recalcule_devis(old.devis_id, new.generation);
+    perform public.recalcule_devis(new.devis_id, new.generation);
+  else
+    perform public.recalcule_devis(new.devis_id, new.generation);
+    perform public.recalcule_devis(old.devis_id, new.generation);
+  end if;
+  return null;
+end;
+$$;
+
+create or replace trigger trg_tient_le_devis
+  before insert or update on public.devis
+  for each row execute function public.tient_le_devis();
+
+create or replace trigger trg_tient_la_ligne_de_devis
+  before insert or update on public.devis_lignes
+  for each row execute function public.tient_la_ligne_de_devis();
+
+create or replace trigger trg_recalcule_devis
+  after insert or update or delete on public.devis_lignes
+  for each row execute function public.recalcule_apres_ligne_de_devis();
+
+comment on function public.tient_le_devis() is
+  'Nettoie un devis (blancs, code postal), pose ses dates, fige sa source, refuse un numéro '
+  'd''écriture absent ou hors bornes (OP016), une écriture plus ancienne que son horloge (OP015), '
+  'un lien vers la fiche ou la demande d''un autre (OP013), un 21e devis pour une même demande ou '
+  'urgence (OP017), et RELIT ses totaux dans devis_tva. Section 49.6.';
+comment on function public.tient_la_ligne_de_devis() is
+  'Refuse un numéro d''écriture absent ou hors bornes (OP016), nettoie une ligne (le blanc n''est '
+  'pas une valeur), pose son total et sa date. Section 49.6.';
+comment on function public.recalcule_devis(uuid, bigint) is
+  'Recalcule EN ENTIER la ventilation d''un devis, sous FOR NO KEY UPDATE, après avoir refusé une '
+  'écriture de ligne plus ancienne que l''horloge du devis (OP015) et la 501e ligne (OP014). Exécutable par '
+  'aucun client. Section 49.6.';
+comment on function public.recalcule_apres_ligne_de_devis() is
+  'Après chaque écriture d''une ligne : appelle recalcule_devis(), dans l''ordre des identifiants. Section 49.6.';
+
+-- --------------------------------------------------------------------------
+--  49.7 Qui lit, qui écrit
+--
+--  `est_mon_entreprise()` DÉCIDE — elle exige `est_un_pro()` —, jamais un
+--  `auth.uid() = pro_id` écrit à la main (la discipline du 04/10). Aucune
+--  politique `anon`, et les droits de TABLE posés un par un (la leçon de la
+--  section 18.2). Aucune politique ne passe par une relation, un partage, un
+--  blocage ou l'administration (D6).
+--
+--  `for all`, QUATRE PORTES, tranchées une par une : `select` — les siens ;
+--  `insert` — dans un devis à soi seulement ; `update` — les siens, et une
+--  ligne ne passe pas dans le devis d'un autre ; `delete` — supprimer un
+--  brouillon ou une ligne est un DROIT au lot 1 (le figeage du lot 2
+--  refermera cette porte pour un devis remis). Rien de ce qu'on supprime ici
+--  n'engage un tiers.
+--
+--  SUR `devis_tva`, AUCUNE PORTE D'ÉCRITURE — et c'est le DROIT DE TABLE qui
+--  refuse, avant la RLS : un `insert`, un `update` ou un `delete` direct
+--  rendent « permission denied for table devis_tva » (42501). La lecture,
+--  elle, est indispensable : sans elle, `mes_donnees()` — qui est
+--  `security invoker` — rendrait une ventilation VIDE, sans erreur.
+--
+--  `mes_entreprises()` — POURQUOI UNE SECONDE FONCTION (relecture sécurité de
+--  l'étape 3, MESURÉ) : écrites `est_mon_entreprise(pro_id)`, les politiques
+--  appelaient la fonction POUR CHAQUE LIGNE — deux fois par ligne de devis
+--  (la politique des lignes, puis celle du devis qu'elle relit), et une
+--  fonction qui porte `set search_path` n'est jamais « dépliée » dans la
+--  requête : un appel complet, avec sa propre lecture de
+--  `professional_profiles`. L'étape 3 n'avait mesuré que les lignes des
+--  AUTRES ; avec 100 000 lignes À SOI (2 000 devis de 50 lignes, quelques
+--  années d'un artisan actif), l'export RGPD prenait 10,6 s et la mémoire
+--  des prix 7,6 s — au-delà des 8 s de la vraie base, l'export ÉCHOUAIT en
+--  entier. `pro_id in (select public.mes_entreprises())` est une
+--  sous-requête NON CORRÉLÉE : PostgreSQL la calcule UNE FOIS par requête.
+--  LA RÈGLE RESTE UNE : `mes_entreprises()` ÉNUMÈRE les entreprises du compte
+--  — aujourd'hui une seule, la sienne — en demandant à `est_mon_entreprise()`
+--  si c'en est une ; c'est toujours elle qui DÉCIDE. Le jour où un compte
+--  tiendra plusieurs entreprises, `mes_entreprises()` énumérera ses
+--  candidates, et `est_mon_entreprise()` continuera de trancher. Les
+--  politiques de `clients` et de `chantiers` gardent la forme d'avant : leur
+--  volume ne le demande pas aujourd'hui.
+--  Elle est appelée par trois politiques : elle reste exécutable par
+--  `authenticated` (la panne `horaires_valides` du 30/09), et seulement par
+--  lui — les politiques sont `to authenticated`.
+-- --------------------------------------------------------------------------
+create or replace function public.mes_entreprises()
+returns setof uuid
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select auth.uid() where public.est_mon_entreprise(auth.uid())
+$$;
+
+revoke all on function public.mes_entreprises() from public, anon;
+grant execute on function public.mes_entreprises() to authenticated;
+
+comment on function public.mes_entreprises() is
+  'Les entreprises du compte connecté — aujourd''hui la sienne, si est_mon_entreprise() le dit. '
+  'Appelée en sous-requête NON corrélée par les politiques du devis : une fois par requête, et non '
+  'une fois par ligne. Section 49.7.';
+
+alter table public.devis        enable row level security;
+alter table public.devis_lignes enable row level security;
+alter table public.devis_tva    enable row level security;
+
+drop policy if exists "mes devis emis" on public.devis;
+create policy "mes devis emis" on public.devis
+  for all to authenticated
+  using (pro_id in (select public.mes_entreprises()))
+  with check (pro_id in (select public.mes_entreprises()));
+
+drop policy if exists "lignes de mes devis" on public.devis_lignes;
+create policy "lignes de mes devis" on public.devis_lignes
+  for all to authenticated
+  using (devis_id in (select d.id from public.devis d where d.pro_id in (select public.mes_entreprises())))
+  with check (devis_id in (select d.id from public.devis d where d.pro_id in (select public.mes_entreprises())));
+
+drop policy if exists "ventilation de mes devis" on public.devis_tva;
+create policy "ventilation de mes devis" on public.devis_tva
+  for select to authenticated
+  using (devis_id in (select d.id from public.devis d where d.pro_id in (select public.mes_entreprises())));
+
+/* LES DROITS DE TABLE, posés UN PAR UN, sans attendre qu'une politique
+   rattrape. Supabase accorde TOUT d'office (`alter default privileges`) :
+   on retire tout, puis on rend ce qui sert. `anon` n'a rien : un visiteur
+   reçoit « permission denied », pas une liste vide. `authenticated` n'a ni
+   `truncate` (qu'AUCUNE politique RLS ne filtre), ni `references`, ni
+   `trigger` — inutilisables sans un ordre de définition que PostgREST
+   n'émet pas, mais un droit sans raison n'attend pas qu'on lui en trouve
+   une ; ni, sur PostgreSQL 17, `maintain` (relecture sécurité de l'étape
+   3). Et sur la ventilation, la lecture seule. */
+revoke all on public.devis, public.devis_lignes, public.devis_tva from anon, authenticated;
+grant select, insert, update, delete on public.devis, public.devis_lignes to authenticated;
+grant select on public.devis_tva to authenticated;
+
+-- --------------------------------------------------------------------------
+--  49.8 Les index
+--
+--  `idx_devis_emis_pro` sert la liste « Mes devis » (triée par date de
+--  modification) ET la mémoire des prix, que l'application filtre par
+--  `devis.pro_id` côté base — mesuré : 2,9 ms au lieu de 306 ms avec
+--  200 000 lignes d'un autre artisan. Les trois index des liens servent la
+--  cascade `set null`, « Ses devis » sur une fiche et « Reprendre » sur
+--  une demande. Celui des lignes porte `id` en troisième colonne : il sert
+--  le tri `ordre, id`.
+-- --------------------------------------------------------------------------
+create index if not exists idx_devis_emis_pro     on public.devis (pro_id, modifie_le desc);
+create index if not exists idx_devis_emis_client  on public.devis (client_id);
+create index if not exists idx_devis_emis_demande on public.devis (quote_request_id);
+create index if not exists idx_devis_emis_urgence on public.devis (sos_request_id);
+create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_id, ordre, id);
+
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
@@ -11393,7 +12492,15 @@ as $$
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.reviews x where x.author_id = auth.uid()), '[]'::jsonb),
     'demandes',  coalesce((select jsonb_agg(to_jsonb(x)) from public.demandes x where x.client_id = auth.uid()), '[]'::jsonb),
     'annonces',  coalesce((select jsonb_agg(to_jsonb(x)) from public.annonces_pro x where x.auteur_id = auth.uid()), '[]'::jsonb),
-    'devis',     coalesce((select jsonb_agg(to_jsonb(x)) from public.quote_requests x
+    /* LES DEMANDES DE DEVIS, DES DEUX CÔTÉS — et c'est pour cela que la clé
+       a changé de nom au lot 1 (21/10/2026). Elle s'appelait `devis` : or
+       elle ne porte pas des devis, elle porte des DEMANDES (`quote_requests`),
+       celles que le particulier a ENVOYÉES et celles que l'artisan a REÇUES,
+       exactement comme `rappels` et `urgences`. Le nom proposé par le plan,
+       « demandes reçues », aurait écrit une chose fausse dans l'export d'un
+       particulier. Les devis eux-mêmes sont plus bas, sous `devis_emis`. */
+    'demandes_de_devis',
+                 coalesce((select jsonb_agg(to_jsonb(x)) from public.quote_requests x
                             where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
     'rappels',   coalesce((select jsonb_agg(to_jsonb(x)) from public.callback_requests x
                             where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
@@ -11414,11 +12521,13 @@ as $$
     /* MON CARNET DE CLIENTS — et ce n'est PAS l'article 15.
        Ces lignes ne me concernent pas : elles concernent des tiers, dont je
        suis le responsable de traitement et dont Opus n'est que le
-       sous-traitant. Ce que l'article 28.3.g impose alors, c'est de me les
-       RENDRE — sinon mon carnet est enfermé dans Opus, et c'est exactement
-       la raison pour laquelle on hésite à y écrire son premier client.
-       Deux fondements différents, un seul export : c'est plus honnête que
-       deux boutons dont personne ne comprendrait la différence. */
+       sous-traitant. Ce que l'article 28 impose alors à Opus, c'est de
+       m'AIDER à répondre aux demandes de ces personnes (28.3.e) et de me
+       RENDRE leurs données au terme (28.3.g) — sinon mon carnet est enfermé
+       dans Opus, et c'est exactement la raison pour laquelle on hésite à y
+       écrire son premier client. Deux fondements différents, un seul
+       export : c'est plus honnête que deux boutons dont personne ne
+       comprendrait la différence. */
     'clients_de_mon_entreprise',
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.clients x where x.pro_id = auth.uid()), '[]'::jsonb),
     /* MON ENTREPRISE, telle que le répertoire l'a décrite (section 45.3) :
@@ -11433,9 +12542,8 @@ as $$
        Des clés qui ne se confondent avec rien : `mes_assurances_
        professionnelles` et non `assurances`, que le lot 2 emploiera pour
        les assurances figées d'un devis remis ; `mes_tarifs` et non
-       `tarifs`, qui désignera un jour les tarifs PUBLICS. Et la clé
-       `devis`, plus haut, désigne encore les DEMANDES de devis : elle ne
-       se renomme qu'au lot 1, avec la table des devis. */
+       `tarifs`, qui désignera un jour les tarifs PUBLICS. (Les DEMANDES de
+       devis sont plus haut, sous `demandes_de_devis` : renommée au lot 1.) */
     'mon_entreprise',
                  (select to_jsonb(x) from public.emetteur x where x.pro_id = auth.uid()),
     'mes_assurances_professionnelles',
@@ -11454,7 +12562,7 @@ as $$
                  coalesce((select jsonb_agg(to_jsonb(x) order by x.metier_key)
                              from public.sos_availability x
                             where x.professional_id = auth.uid()), '[]'::jsonb),
-    /* MES URGENCES, des deux côtés — comme 'devis' et 'rappels' plus haut :
+    /* MES URGENCES, des deux côtés — comme 'demandes_de_devis' et 'rappels' plus haut :
        pour le particulier, c'est SA demande (adresse, détails, coordonnées) ;
        pour l'artisan, ce qu'on lui a adressé. Elles manquaient depuis le
        premier jour. `sos_requests` n'a aucun droit de colonne : `to_jsonb(x)`
@@ -11475,7 +12583,33 @@ as $$
                              'statut', x.statut, 'note', x.note,
                              'created_at', x.created_at, 'traitee_le', x.traitee_le)
                              order by x.created_at)
-                             from public.demandes_pro x where x.compte_id = auth.uid()), '[]'::jsonb)
+                             from public.demandes_pro x where x.compte_id = auth.uid()), '[]'::jsonb),
+    /* MES DEVIS (section 49), leurs lignes et leur ventilation — DEUX
+       fondements, dits justes. Pour ce qui concerne l'artisan PERSONNE
+       PHYSIQUE (un entrepreneur individuel), ses prix et ses brouillons sont
+       des données sur lui : l'article 15. Pour une société, ses prix ne sont
+       pas des données personnelles : l'export reste alors un engagement
+       d'Opus. Et pour ce qui concerne ses CLIENTS — la fiche qu'un devis
+       désigne, un lieu d'exécution qui est souvent un domicile —, c'est
+       l'article 28 : aider l'artisan à répondre aux demandes de ces
+       personnes (28.3.e) et lui rendre leurs données au terme (28.3.g).
+       La ventilation sort EN ENTIER, ses lignes à zéro comprises : elles
+       existent en base (un taux disparu reste à zéro), et un export ne
+       trie pas ce qu'il rend. Les lignes dans l'ordre du devis : `ordre`,
+       puis `id`, la seule façon de les ranger. */
+    'devis_emis',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.devis x where x.pro_id = auth.uid()), '[]'::jsonb),
+    'devis_lignes',
+                 coalesce((select jsonb_agg(to_jsonb(l) order by l.devis_id, l.ordre, l.id)
+                             from public.devis_lignes l
+                             join public.devis d on d.id = l.devis_id
+                            where d.pro_id = auth.uid()), '[]'::jsonb),
+    'devis_tva',
+                 coalesce((select jsonb_agg(to_jsonb(t) order by t.devis_id, t.taux_tva_centiemes desc)
+                             from public.devis_tva t
+                             join public.devis d on d.id = t.devis_id
+                            where d.pro_id = auth.uid()), '[]'::jsonb)
   )
 $$;
 
@@ -11560,10 +12694,21 @@ $portes$;
    recalculant un compteur après coup. */
 revoke all on function public.recalcule_chantier(uuid) from public, anon, authenticated;
 
+/* `recalcule_devis(uuid, bigint)` (section 49.6) est dans le même cas : elle
+   rend `void`, son seul appelant est un déclencheur `security definer`, et
+   elle est retirée à la main — JUSTE APRÈS ELLE, en section 49, parce qu'une
+   fonction `security definer` qui nomme une table de prix ne doit être
+   exécutable par aucun client, et que `verifier-legal` le lit à cet endroit.
+   Ses trois fonctions de déclencheur, elles, sont prises par le balayage
+   ci-dessus. */
+
 /* ET CE QU'ON NE TOUCHE SURTOUT PAS, écrit ici pour que ce soit relu avec le
    balayage : les fonctions appelées par une POLITIQUE ou une CONTRAINTE
    doivent rester exécutables par `authenticated`, sans quoi la règle ÉCHOUE
    au lieu de filtrer — « permission denied for function », et c'est la panne
-   du 30/09. Elles sont cinq : est_masque, est_un_pro, est_mon_entreprise,
-   horaires_valides, metiers_connus. `verifier-portes` les recense dans le
-   fichier et refuse que l'une d'elles perde son droit. */
+   du 30/09. Elles sont huit : est_masque, est_un_pro, est_mon_entreprise,
+   horaires_valides, metiers_connus, et depuis le lot 1 du devis devis_total_ligne
+   et devis_tva_de (section 49.1), que deux contraintes appellent, et
+   mes_entreprises (section 49.7), que les trois politiques du devis appellent.
+   `verifier-portes` les recense dans le fichier et refuse que l'une d'elles
+   perde son droit. */

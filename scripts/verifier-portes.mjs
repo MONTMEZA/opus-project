@@ -22,6 +22,19 @@
  * La seconde règle est écrite dans CLAUDE.md depuis un an et **rien ne la
  * tenait**. Elle est tenue ici.
  *
+ * ET CE QU'IL NE PEUT PAS TENIR SEUL : UN CONTRÔLE QUI LIT DU TEXTE NE PEUT
+ * PAS VOIR TOUTES LES FORMES QU'UN SQL PEUT PRENDRE ; LA PREUVE DE SÉCURITÉ
+ * EST L'ESSAI, QUI INTERROGE LE CATALOGUE DE LA BASE REJOUÉE. Pour
+ * `recalcule_devis` (lot 1 du devis), ce fichier lit qui l'appelle et qui la
+ * rend ; la 2e relecture des essais de l'étape 3 a posé sur une copie une
+ * `definer` accordée qui l'appelait SANS `public.` (N6) : ce contrôle ne la
+ * voyait pas, et B figeait le devis de A (prouvé). Le motif accepte
+ * désormais l'appel non qualifié ; mais c'est `supabase/essais-section-49.sql`
+ * qui tient la propriété, par le catalogue — cas 26 (`has_function_privilege`
+ * de `recalcule_devis` pour PUBLIC, `anon`, `authenticated`) et cas 27b-27c
+ * (les fonctions `security definer`, appelables ou non, en deux listes
+ * FERMÉES : une de plus, quels que soient son nom et son corps, rougit).
+ *
  *   npm run verifier-portes
  */
 import { readFileSync } from 'node:fs';
@@ -106,6 +119,84 @@ verifier('`recalcule_chantier` est retirée à la main — elle ne rend pas `tri
     'En `security invoker`, l’appel interne serait contrôlé contre l’artisan '
     + 'qui publie — qui n’a plus le droit. Le compteur de publications d’un '
     + 'chantier cesserait de monter, sans erreur visible.');
+}
+
+/* LE MÊME CAS, AU LOT 1 DU DEVIS (section 49, 21/10/2026) : `recalcule_devis`
+   rend `void`, le balayage ne la voit pas. Elle est `security definer` —
+   elle seule écrit `devis_tva`, qui n'a aucune politique d'écriture — et
+   elle nomme des tables de PRIX : appelable par `/rest/v1/rpc`, elle
+   recalculerait le devis de n'importe qui. D'où le `revoke` à la main. */
+{
+  /* TOUS les commentaires partent ici, ceux de FIN DE LIGNE compris, par un
+     lecteur qui respecte les chaînes — relecture des essais de l'étape 3 du
+     lot 1 (M3) : `revoke … ;  -- son seul appelant : public.recalcule_devis(…)`
+     comptait pour un appelant de plus, et ce contrôle ACCUSAIT la
+     documentation. Dixième fois dans ce projet. */
+  const sansCommentaires = (txt) => {
+    let sortie = '';
+    let i = 0;
+    while (i < txt.length) {
+      const c = txt[i];
+      const suite = txt[i + 1];
+      if (c === '-' && suite === '-') { while (i < txt.length && txt[i] !== '\n') i += 1; continue; }
+      if (c === '/' && suite === '*') { const fin = txt.indexOf('*/', i + 2); i = fin < 0 ? txt.length : fin + 2; sortie += ' '; continue; }
+      if (c === "'") {
+        const echappe = /[eE]/.test(txt[i - 1] || '') && !/[\w$]/.test(txt[i - 2] || '');
+        let j = i + 1;
+        while (j < txt.length) {
+          if (echappe && txt[j] === '\\') { j += 2; continue; }
+          if (txt[j] === "'" && txt[j + 1] === "'") { j += 2; continue; }
+          if (txt[j] === "'") break;
+          j += 1;
+        }
+        sortie += txt.slice(i, j + 1);
+        i = j + 1;
+        continue;
+      }
+      sortie += c;
+      i += 1;
+    }
+    return sortie;
+  };
+  const nu = sansCommentaires(brut);
+  /* Les RÔLES se lisent comme un ENSEMBLE (relecture des essais, M4) :
+     `from anon, authenticated, public` retire exactement la même chose, et
+     l'ancien motif l'accusait. */
+  const roles = (/revoke\s+all\s+on\s+function\s+public\.recalcule_devis\(uuid,\s*bigint\)\s+from\s+([\w\s,]+?)\s*;/i.exec(nu) || [])[1] || '';
+  verifier('`recalcule_devis` est retirée à la main, à PUBLIC, `anon` ET `authenticated` (dans n’importe quel ordre) — elle ne rend '
+    + 'pas `trigger`',
+  [...new Set(roles.split(',').map((r) => r.trim().toLowerCase()).filter(Boolean))].sort().join(',') === 'anon,authenticated,public',
+  'Le piège de la section 38 : `from anon, authenticated` seul ne retire RIEN — PostgreSQL accorde '
+    + '`execute` à PUBLIC sur toute fonction neuve.');
+  /* QUALIFIÉ OU NON (2e relecture des essais, N6) : `perform
+     recalcule_devis(p, …)` dans une autre fonction est un appelant aussi.
+     Compté dans le texte SANS SES CHAÎNES : le `comment on` du déclencheur
+     dit « appelle recalcule_devis() » en toutes lettres, et ce n'est pas un
+     appel. */
+  const nuSansChaines = nu.replace(/'(?:[^']|'')*'/g, "''");
+  const appels = (nuSansChaines.match(/\brecalcule_devis\s*\(/g) || []).length;
+  const i = nuSansChaines.indexOf('function public.recalcule_apres_ligne_de_devis()');
+  const corps = i > 0 ? nuSansChaines.slice(i, nuSansChaines.indexOf('$$;', i)) : '';
+  const dedans = (corps.match(/\brecalcule_devis\s*\(/g) || []).length;
+  verifier('…et elle n’a aucun appelant hors de `recalcule_apres_ligne_de_devis()`',
+    dedans >= 4 && appels === dedans + 3,
+    `${appels} mention(s) dans le code, dont ${dedans} dans le déclencheur (les trois autres : sa déclaration, sa `
+    + 'révocation, son `comment on`). Un appelant de plus, et la révocation le casserait.');
+  verifier('…dont l’appelant est bien `security definer`',
+    /function public\.recalcule_apres_ligne_de_devis\(\)[\s\S]{0,120}security definer/.test(nu),
+    'En `security invoker`, l’appel interne serait contrôlé contre l’artisan, qui n’a pas le droit : plus '
+    + 'aucune ligne de devis ne s’enregistrerait.');
+  /* …ET RIEN NE LA REND, même sans la nommer (relecture des essais, I-4,
+     prouvé : un autre artisan figeait le devis de A, l'horloge poussée au
+     maximum, par `grant execute on all functions in schema public`). */
+  const iRevoke = nu.search(/revoke\s+all\s+on\s+function\s+public\.recalcule_devis\(/i);
+  const enMasse = [...nu.matchAll(/grant\s+[^;]*\bon\s+all\s+(functions|routines|procedures)\s+in\s+schema\b[^;]*;/gi)]
+    .filter((m) => m.index > iRevoke).map((m) => m[0].replace(/\s+/g, ' '));
+  const parDefaut = [...nu.matchAll(/alter\s+default\s+privileges\b[^;]*\bgrant\b[^;]*\bon\s+(functions|routines)\b[^;]*;/gi)].map((m) => m[0].replace(/\s+/g, ' '));
+  verifier('…et rien ne la rend à un client — ni en la nommant, ni par `grant … on all functions in schema` posé après elle, ni '
+    + 'par `alter default privileges … on functions`',
+  iRevoke > 0 && !/grant[^;]*recalcule_devis[^;]*to[^;]*(anon|authenticated|public)/i.test(nu)
+    && enMasse.length === 0 && parDefaut.length === 0, [...enMasse, ...parDefaut].join(' | '));
 }
 
 /* ================================================================== */

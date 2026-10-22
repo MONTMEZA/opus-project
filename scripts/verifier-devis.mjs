@@ -1,6 +1,40 @@
 /**
  * LE CHIFFRAGE D'UN DEVIS — lot 1 du module devis (21/10/2026).
  *
+ * À LIRE AVANT TOUT : UN CONTRÔLE QUI LIT DU TEXTE NE PEUT PAS VOIR TOUTES
+ * LES FORMES QU'UN SQL PEUT PRENDRE ; LA PREUVE DE SÉCURITÉ EST L'ESSAI
+ * (`supabase/essais-section-49.sql`), QUI INTERROGE LE CATALOGUE DE LA BASE
+ * REJOUÉE. Les parties B et C de ce fichier lisent `schema.sql` et l'essai
+ * comme du TEXTE : elles attrapent vite et tôt les fautes ordinaires, elles
+ * ne PROUVENT rien. Deux relectures de l'étape 3 l'ont montré sur des copies
+ * sabotées, dommages à l'appui : au 1er tour, quatre formes passaient
+ * (guillemets, `begin atomic`, jointure à virgule, `grant` en masse sur les
+ * fonctions) ; corrigées ici par des motifs, et le 2e tour en a trouvé
+ * treize de plus. Ce qu'un motif n'attrape pas, c'est l'essai qui le tient,
+ * par le catalogue — et ces formes-là, nommées, ne sont gardées QUE par lui
+ * quand le motif ci-dessous les manque encore :
+ *   - les DROITS, quelle que soit leur écriture (`grant` sans `public.`, en
+ *     masse sur les TABLES, par COLONNE, à PUBLIC) : essai, cas 26
+ *     (`has_table_privilege` et `has_any_column_privilege`, rôle par rôle) —
+ *     sabotages N5, N5b (B vidait les lignes de tous par `truncate`), N12 ;
+ *   - toute fonction `security definer`, quels que soient son nom, son corps
+ *     (`$…$`, apostrophes, `begin atomic`, `return`), son genre (fonction ou
+ *     PROCÉDURE) et la façon d'écrire la table (`public . x`, guillemets,
+ *     sans `public.`, `insert into x (cols)`) : essai, cas 27b et 27c, deux
+ *     listes FERMÉES relevées dans le catalogue — sabotages N6, N7, N7b,
+ *     N7c, N8, N9 (un déclencheur `definer` écrivait dans le devis d'un
+ *     autre), N10, N11 ;
+ *   - les politiques, quel que soit leur nom ou la façon d'écrire la table :
+ *     essai, cas 12 et 28 (`pg_policies`) — sabotages N1 à N4 ;
+ *   - les vues et les RÈGLES qui lisent ou écrivent les tables, les
+ *     déclencheurs posés sur elles : essai, cas 27e et 27f — sabotage N14
+ *     (une règle posée sur `clients` écrivait dans le devis d'un autre ;
+ *     B-22 refuse aussi toute `create rule`, le schéma n'en a aucune) ;
+ *   - une unité refusée alors que la liste écrite est intacte : essai, cas 4
+ *     quater (les sept unités INSÉRÉES) — sabotage N13.
+ * L'ESSAI, LUI, NE PEUT PAS SE GARDER : ce qu'il doit contenir est la partie
+ * C (et c'est du texte, faute de mieux — E1, E2 l'ont éprouvée).
+ *
  * CE QUE CE CONTRÔLE GARDE
  * ------------------------
  * Le chiffrage manie de l'ARGENT : un centime de travers sur un devis est
@@ -15,13 +49,18 @@
  *      `supabase/cas-devis.json`, les conversions, la mémoire, les phrases
  *      de la loi, les dates dans trois fuseaux, la file d'écriture et
  *      l'identifiant. (A-7, la démonstration, arrive avec elle à l'étape 4.)
- *   B. LE SCHÉMA — dès l'étape 0, les vérifications qui lisent l'EXISTANT
- *      (D4-c : aucune fonction de motifs ne nomme une origine ; la liste
- *      FERMÉE des fonctions qui nomment les tables du devis ; l'ordre des
- *      contraintes ; la classe de blancs). Elles passent sur le schéma
- *      d'avant la section 49 — sinon elles accuseraient du code juste
- *      (relecture « base » du cahier, B1 et B2). Le reste de B, et C à F,
- *      viennent avec la section 49 et les écrans (étapes 3 à 5).
+ *   B. LE SCHÉMA (étape 3) — la section 49 lue sans ses commentaires : la
+ *      liste FERMÉE des colonnes, D4, les 23 contraintes, les miroirs de
+ *      `devis.js`, les formules, les politiques, les droits, les
+ *      déclencheurs sous leurs noms, la parade de la requête tardive
+ *      (49.5 bis), la liste fermée des fonctions qui nomment les tables, la
+ *      place de la section, l'export. Les vérifications qui lisent
+ *      l'EXISTANT (D4-c, la liste qualifiée) ont d'abord été lancées sur le
+ *      schéma d'avant la section 49, à l'étape 0 — sinon elles auraient
+ *      accusé du code juste (relecture « base » du cahier, B1 et B2).
+ *   C. L'ESSAI (étape 3) — ce que `supabase/essais-section-49.sql` doit
+ *      contenir ; le JOUER est l'affaire de PostgreSQL, à la main.
+ *   D à F viennent avec l'application et les écrans (étapes 4 et 5).
  *
  * CE QU'IL NE PEUT PAS DIRE
  * -------------------------
@@ -1403,6 +1442,136 @@ process.on('unhandledRejection', (e) => { plantagesDeLaFile.push((e && e.stack) 
       && f3.etatDe(NOUVEAU) === 'enregistree' && b3.lignes.get(NOUVEAU).devisId === 'D1' && b3.lignes.get('A').devisId === 'AUTRE',
     `${fini} ${json([...new Set(evenements)])} ; ${f2.etatDe('A')} ; ${json(renommes)}`);
   });
+  /* ---- la requête tardive (section 49.5 bis, étape 3) : le NUMÉRO ---- */
+  /* x. chaque écriture porte un numéro qui MONTE, au-dessus de l'horloge lue
+     à l'ouverture et de l'heure du téléphone ; jamais parmi les valeurs ;
+     une suppression porte la condition, plus grande que tout ce qui précède. */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    let heure = 1000;
+    const f = fabriquer(b, { horloge: 5000, horlogeTelephone: () => heure });
+    f.ligne(ligne('A'));
+    f.ligne(ligne('B', { ordre: 2000 }));
+    await f.attendre(300);
+    heure = 9000;
+    f.modifierLigne('A', { prixUnitaireCentimes: 4600 });
+    await f.attendre(300);
+    f.retirerLigne('B');
+    await f.attendre(300);
+    const nums = b.journal.map((o) => (o.action === 'supprimer' ? o.generationMax : o.generation));
+    const b2 = fausseBase();
+    const f2 = fabriquer(b2, { horlogeTelephone: () => 7000 });
+    f2.ligne(ligne('A'));
+    await f2.attendre(300);
+    verifier('chaque écriture porte un NUMÉRO qui monte : au-dessus de l’horloge lue à l’ouverture (5001, 5002, 5003), puis de '
+      + 'l’heure du téléphone (9000, 9001) ; une suppression porte sa CONDITION, plus grande que tout ce qui précède ; jamais parmi les valeurs',
+    json(resume(b)) === json(['inserer devis', 'inserer ligne A', 'inserer ligne B', 'modifier ligne A', 'supprimer ligne B'])
+      && json(nums) === json([5001, 5002, 5003, 9000, 9001])
+      && b.journal.every((o) => !o.valeurs || !('generation' in o.valeurs))
+      && b.journal.filter((o) => o.action !== 'supprimer').every((o) => Number.isSafeInteger(o.generation))
+      && f.horloge().dernier === 9001
+      && json(b2.journal.map((o) => o.generation)) === json([7000, 7001]),
+    `${json(resume(b))} ${json(nums)} ; ${json(b2.journal.map((o) => o.generation))}`);
+  });
+  /* y. une ligne relue en base PORTE son numéro : il ne repart jamais comme
+     une valeur (la base refuserait l'ancien numéro). */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    const f = fabriquer(b, { devisEnBase: true, horloge: 40, lignesEnBase: [ligne('A', { generation: 40 })], horlogeTelephone: () => 0 });
+    f.modifierLigne('A', { designation: 'Chape fluide' });
+    await f.attendre(300);
+    const m = b.journal[0];
+    verifier('une ligne relue en base porte son numéro : la modification n’envoie QUE ce qui change, et un numéro neuf (41) à côté',
+      b.journal.length === 1 && json(m.valeurs) === json({ designation: 'Chape fluide' }) && m.generation === 41,
+      json(b.journal.map((o) => ({ v: o.valeurs, g: o.generation }))));
+  });
+  /* z. une ligne dont l'INSERTION est partie sans réponse, puis retirée :
+     l'horloge du devis MONTE d'abord (une modification du devis, sans
+     valeur), puis la suppression part, conditionnée au-dessus — l'insertion
+     en retard est alors refusée par la base. Une ligne CONFIRMÉE puis
+     retirée : pas de levée. */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    b.commandes.push({ quand: (op) => op.id === 'A' && op.action === 'inserer', pendre: true });
+    const f = fabriquer(b, { devisEnBase: true, horlogeTelephone: () => 0 });
+    f.ligne(ligne('A'));
+    await f.attendre(300);
+    const apres = f.etatDe('A');
+    f.retirerLigne('A');
+    await f.attendre(300);
+    const lev = b.journal.find((o) => o.lever);
+    const sup = b.journal.find((o) => o.action === 'supprimer');
+    const ins = b.journal.find((o) => o.action === 'inserer');
+    const b2 = fausseBase();
+    const f2 = fabriquer(b2, { devisEnBase: true });
+    f2.ligne(ligne('A'));
+    await f2.attendre(300);
+    f2.retirerLigne('A');
+    await f2.attendre(300);
+    verifier('une insertion SANS RÉPONSE puis la ligne retirée : la file LÈVE l’horloge (modifier le devis, sans valeur, n° plus '
+      + 'grand), PUIS supprime au-dessus ; une ligne confirmée puis retirée : aucune levée',
+    apres === 'echec' && json(resume(b)) === json(['inserer ligne A', 'modifier devis', 'supprimer ligne A'])
+      && lev && lev.quoi === 'devis' && json(lev.valeurs) === json({}) && lev.generation > ins.generation
+      && sup && sup.generationMax > lev.generation && f.etatDe('A') === null
+      && json(resume(b2)) === json(['inserer ligne A', 'supprimer ligne A']),
+    `${apres} ${json(resume(b))} ; ${json(resume(b2))}`);
+  });
+  /* aa. un refus OP015 de l'écriture EN COURS : un autre appareil a écrit
+     plus haut. La file relit l'horloge, la ligne est « echec » (avec
+     l'erreur), et « Réessayer » repart AU-DESSUS de l'horloge relue. */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    b.devis.set('D1', { source: 'manuelle', generation: 99999 });
+    b.lignes.set('A', { ...ligne('A'), devisId: 'D1' });
+    b.commandes.push({ quand: (op) => op.id === 'A' && op.action === 'modifier',
+      erreur: Object.assign(new Error('Ce devis a reçu entre-temps une modification plus récente'), { code: 'OP015' }) });
+    const f = fabriquer(b, { devisEnBase: true, horloge: 10, lignesEnBase: [ligne('A')], horlogeTelephone: () => 0 });
+    f.modifierLigne('A', { prixUnitaireCentimes: 5000 });
+    await f.attendre(300);
+    const apres = [f.etatDe('A'), f.erreurDe('A') && f.erreurDe('A').code, f.horloge().plancher];
+    f.reessayer('A');
+    await f.attendre(300);
+    const essais = b.journal.filter((o) => o.id === 'A');
+    verifier('un refus OP015 : la file RELIT l’horloge (99 999), la ligne est « echec » ; « Réessayer » repart au-dessus (100 000) '
+      + 'et s’enregistre — écraser l’autre appareil est un choix de l’artisan, pas de la file',
+    json(apres) === json(['echec', 'OP015', 99999]) && essais.length === 2 && essais[0].generation === 11
+      && essais[1].generation === 100000 && f.etatDe('A') === 'enregistree' && b.lignes.get('A').prixUnitaireCentimes === 5000,
+    `${json(apres)} ${json(essais.map((o) => o.generation))}`);
+  });
+  /* cc. un refus OP016 (numéro absent ou hors bornes, 49.5 bis point 7 —
+     relecture de l'étape 3) n'est PAS un autre appareil : « echec », et la
+     file ne relit PAS l'horloge ; et une horloge lue au-delà de NUMERO_MAX
+     n'est pas un plancher (la base ne l'accepte plus). */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    b.devis.set('D1', { source: 'manuelle', generation: 99999 });
+    b.lignes.set('A', { ...ligne('A'), devisId: 'D1' });
+    b.commandes.push({ quand: (op) => op.id === 'A' && op.action === 'modifier',
+      erreur: Object.assign(new Error('Cette version d’Opus n’envoie pas de numéro d’écriture valable'), { code: 'OP016' }) });
+    const f = fabriquer(b, { devisEnBase: true, horloge: 10, lignesEnBase: [ligne('A')], horlogeTelephone: () => 0 });
+    f.modifierLigne('A', { prixUnitaireCentimes: 5000 });
+    await f.attendre(300);
+    const apres = [f.etatDe('A'), f.erreurDe('A') && f.erreurDe('A').code, f.horloge().plancher];
+    const auBord = fabriquer(fausseBase(), { horloge: F.NUMERO_MAX }).horloge().plancher;
+    const auDela = fabriquer(fausseBase(), { horloge: F.NUMERO_MAX + 2 }).horloge().plancher;
+    verifier('un refus OP016 : la ligne est « echec », et l’horloge N’EST PAS relue (le plancher reste 10, pas 99 999) ; une horloge '
+      + 'au-delà de `NUMERO_MAX` (2^53 − 1) n’est pas un plancher',
+    json(apres) === json(['echec', 'OP016', 10]) && F.NUMERO_MAX === Number.MAX_SAFE_INTEGER
+      && auBord === F.NUMERO_MAX && auDela === 0, `${json(apres)} ; bord ${auBord} ; au-delà ${auDela}`);
+  });
+  /* bb. la suppression du brouillon porte sa condition. */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    b.devis.set('D1', { source: 'manuelle' });
+    const f = fabriquer(b, { devisEnBase: true, horloge: 70, horlogeTelephone: () => 0 });
+    f.devis({ objet: 'Cuisine' });
+    await f.attendre(300);
+    await f.supprimerDevis();
+    const m = b.journal.find((o) => o.action === 'modifier');
+    const s = b.journal.find((o) => o.action === 'supprimer');
+    verifier('l’en-tête porte son numéro (71), et la suppression du brouillon sa condition (72) : partie tard, après une retouche, '
+      + 'elle ne supprime rien', m && m.generation === 71 && s && s.generationMax === 72, json(b.journal.map((o) => [o.action, o.generation, o.generationMax])));
+  });
   /* w. la file n'annonce que les quatre états que l'écran connaît. */
   verifier('tous les états annoncés par la file sont dans `ETATS` (ce qu’elle ne connaît plus a l’événement `supprimee`)',
     etatsAnnonces.size >= 4 && [...etatsAnnonces].every((x) => F.ETATS.includes(x)), json([...etatsAnnonces]));
@@ -1431,27 +1600,215 @@ console.log('\n  11. l’identifiant d’une ligne, choisi par le téléphone');
 }
 
 /* ================================================================== */
-/*  B. LE SCHÉMA — ce qui se juge dès aujourd'hui                       */
+/*  B. LE SCHÉMA — la section 49, lue sans ses commentaires            */
 /* ================================================================== */
-console.log('\nB. LE SCHÉMA — les vérifications qui lisent l’EXISTANT (le reste vient avec la section 49)');
+console.log('\nB. LE SCHÉMA — la section 49 (texte sans commentaires), `mes_donnees()`, et ce qui les entoure');
 const SCHEMA = lire('supabase/schema.sql');
-const SQL = sansCommentairesSql(SCHEMA);
-const FONCTIONS = [...SQL.matchAll(
-  /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?(\w+)\s*\(([\s\S]*?)\bas\s+(\$\w*\$)([\s\S]*?)\3/gi,
-)].map((m) => ({ nom: m[1], attributs: m[2], corps: m[4] }));
+/* LES IDENTIFIANTS ENTRE GUILLEMETS SONT « DÉPLIÉS » avant toute recherche —
+   relecture des essais de l'étape 3 (I-2) : `public."devis_lignes"` est la
+   même table que `public.devis_lignes`, et une fonction qui l'écrivait ainsi
+   lisait les prix d'un autre artisan sans un ✘ (prouvé : B lisait 86 545 c,
+   la somme des prix de A). Seuls les noms en minuscules sont dépliés : un
+   nom entre guillemets avec une majuscule est un AUTRE objet. */
+const deplier = (t) => t.replace(/"([a-z_][a-z0-9_]*)"/g, '$1');
+/* Le SQL sans ses chaînes (contenu remplacé par des blancs) : pour chercher
+   une référence NON qualifiée après une virgule, sans tomber sur une phrase
+   française (« Votre demande, devis… »). */
+const sansChaines = (t) => t.replace(/'(?:[^']|'')*'/g, (m) => `'${' '.repeat(Math.max(0, m.length - 2))}'`);
+const SQL = deplier(sansCommentairesSql(SCHEMA));
+/* LES FONCTIONS, SOUS LEURS TROIS FORMES DE CORPS (relecture des essais de
+   l'étape 3, I-2) : `as $…$ … $…$`, et les deux corps SQL STANDARD
+   (PostgreSQL 14+) — `begin atomic … end` et `return …;`. Le premier lecteur
+   ne connaissait que la première : une fonction `begin atomic` qui lisait
+   les prix lui échappait entièrement (prouvé). Et dans N'IMPORTE QUEL
+   schéma : un nom en trop dans la liste fermée rougit, d'où qu'il vienne. */
+/* …PUIS UNE QUATRIÈME FORME, ET LES PROCÉDURES (relecture des essais de
+   l'étape 3, 2e tour) : un corps entre APOSTROPHES (`as 'select …'`, la forme
+   d'avant les dollars, toujours acceptée) et une `create procedure` passaient
+   ce lecteur — une `definer` de l'une ou l'autre forme rendait à B les prix
+   de A (N7c, N8, prouvé : 86 545 c). Et `public . nom`, espacé autour du
+   point, est le même nom. Ce lecteur n'en sera jamais complet : c'est l'essai
+   (cas 27) qui tient la propriété, par le catalogue. */
+function lireFonctions(sql) {
+  const res = [];
+  const debut = /create\s+(?:or\s+replace\s+)?(?:function|procedure)\s+((?:\w+\s*\.\s*)?\w+)\s*\(/gi;
+  let m;
+  while ((m = debut.exec(sql))) {
+    const base = m.index + m[0].length;
+    const apres = sql.slice(base);
+    const dollar = /\bas\s+(\$\w*\$)/i.exec(apres);
+    const atomique = /\bbegin\s+atomic\b/i.exec(apres);
+    const retour = /\breturn\s/i.exec(apres);
+    const apostrophe = /\bas\s+([eE]?)'/.exec(apres);
+    const qualifie = m[1].replace(/\s+/g, '');
+    const nom = qualifie.split('.').pop();
+    const schema = qualifie.includes('.') ? qualifie.split('.')[0] : 'public';
+    const premier = [dollar, atomique, retour, apostrophe].filter(Boolean).sort((a, b) => a.index - b.index)[0];
+    if (!premier) continue;
+    let corps; let fin;
+    if (premier === apostrophe) {
+      /* La chaîne lue jusqu'à son apostrophe fermante (`''` est une
+         apostrophe écrite ; `\'` aussi dans un `E'…'`), puis dédoublée. */
+      const echappe = apostrophe[1] !== '';
+      let j = apostrophe.index + apostrophe[0].length;
+      const cDebut = j;
+      while (j < apres.length) {
+        if (echappe && apres[j] === '\\') { j += 2; continue; }
+        if (apres[j] === "'" && apres[j + 1] === "'") { j += 2; continue; }
+        if (apres[j] === "'") break;
+        j += 1;
+      }
+      corps = apres.slice(cDebut, j).replace(/''/g, "'"); fin = j + 1;
+    } else if (premier === dollar) {
+      const cDebut = dollar.index + dollar[0].length;
+      const cFin = apres.indexOf(dollar[1], cDebut);
+      if (cFin < 0) continue;
+      corps = apres.slice(cDebut, cFin); fin = cFin + dollar[1].length;
+    } else if (premier === atomique) {
+      const cDebut = atomique.index + atomique[0].length;
+      const mots = /\b(case|begin|end)\b/gi; mots.lastIndex = cDebut;
+      let p = 1; let w; fin = apres.length;
+      while ((w = mots.exec(apres))) {
+        if (/^end$/i.test(w[1])) { p -= 1; if (p === 0) { fin = w.index + w[0].length; break; } } else p += 1;
+      }
+      corps = apres.slice(cDebut, fin);
+    } else {
+      fin = apres.indexOf(';', retour.index); if (fin < 0) fin = apres.length;
+      corps = apres.slice(retour.index, fin);
+    }
+    res.push({ nom, schema, attributs: apres.slice(0, premier.index), corps, index: m.index, fin: base + fin });
+    debut.lastIndex = base + fin;
+  }
+  return res;
+}
+const FONCTIONS = lireFonctions(SQL);
 const TABLES_CREEES = /create\s+table\s+(if\s+not\s+exists\s+)?public\.devis\s*\(/i.test(SQL);
+const corpsDe = (nom) => FONCTIONS.filter((f) => f.nom === nom).map((f) => f.corps).join('\n');
+const fonctionDe = (nom) => FONCTIONS.find((f) => f.nom === nom) || null;
+const sansEspaces = (t) => (t || '').replace(/\s+/g, ' ').trim();
 
-console.log('\n  14. D4-c — aucun motif de refus ne nomme une ORIGINE');
+/* LA SECTION 49, ET ELLE SEULE : du titre « 49. LE CHIFFRAGE » au titre de
+   la section 42 (l'export), relevés dans le texte brut — les titres sont des
+   commentaires —, puis lue sans ses commentaires. */
+const iS48 = SCHEMA.search(/^--\s+48\.\s/m);
+const iS49 = SCHEMA.search(/^--\s+49\.\s+LE CHIFFRAGE/m);
+const iS42 = SCHEMA.search(/^--\s+42\.\s+L'EXPORT RGPD/m);
+const S49 = iS49 >= 0 && iS42 > iS49 ? deplier(sansCommentairesSql(SCHEMA.slice(iS49, iS42))) : '';
+const TABLES49 = ['devis', 'devis_lignes', 'devis_tva'];
+/* Les fonctions que la section 49 CRÉE, par leur nom. */
+const NOMS49 = [...new Set([...S49.matchAll(/create\s+or\s+replace\s+function\s+public\.(\w+)\s*\(/gi)].map((m) => m[1]))];
+
+/* Les colonnes d'une table, lues dans son `create table` : nom, type, et
+   « not null » (une clé primaire l'est aussi). */
+function colonnesDe(table) {
+  const m = new RegExp(`create\\s+table\\s+if\\s+not\\s+exists\\s+public\\.${table}\\s*\\(([\\s\\S]*?)\\n\\);`, 'i').exec(S49);
+  if (!m) return null;
+  return m[1].split('\n').map((l) => l.trim().replace(/,$/, '')).filter((l) => /^[a-z_]+\s/.test(l) && !/^primary\s+key/i.test(l))
+    .map((l) => {
+      const [nom, type] = l.split(/\s+/);
+      return { nom, type, obligatoire: /\bnot\s+null\b|\bprimary\s+key\b/i.test(l), texte: l };
+    });
+}
+/* Les contraintes `check` posées par la section : `{ table, nom, regle }`. */
+const CHECKS49 = [...S49.matchAll(/alter\s+table\s+public\.(\w+)\s+add\s+constraint\s+(\w+)\s+check\s*\(([\s\S]*?)\);\s*(?=alter|comment|create|revoke|grant|drop|$)/gi)]
+  .map((m) => ({ table: m[1], nom: m[2], regle: m[3] }));
+const regleDe = (nom) => (CHECKS49.find((c) => c.nom === nom) || {}).regle || '';
+const listeDe = (nom, colonne) => {
+  const m = new RegExp(`${colonne}\\s+in\\s*\\(([^)]*)\\)`, 'i').exec(regleDe(nom));
+  return m ? m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')) : null;
+};
+
+console.log('\n  12. les colonnes — une liste FERMÉE');
 {
-  /* LES FONCTIONS DE MOTIFS, NOMMÉES : une liste, pas une sélection par
-     type de retour, qui ramasserait `admin_traiter_demande_pro`,
+  /* Le cahier §2.2-2.4, plus `generation` (49.5 bis, la parade de la
+     requête tardive : son écrivain est la file d'écriture, son lecteur la
+     base — `recalcule_devis()` et `tient_le_devis()` — et la file, qui
+     relit l'horloge). « + » : obligatoire (`not null` ou clé primaire). */
+  const FERMEE = {
+    devis: ['id uuid +', 'pro_id uuid +', 'client_id uuid', 'quote_request_id uuid', 'sos_request_id uuid', 'source text +',
+      'statut text +', 'objet text', 'lieu_adresse text', 'lieu_code_postal text', 'lieu_ville text', 'delai_execution text',
+      'retenue_garantie_centiemes integer', 'total_ht_centimes bigint +', 'total_tva_centimes bigint +',
+      'total_ttc_centimes bigint +', 'generation bigint +', 'created_at timestamptz +', 'modifie_le timestamptz +'],
+    devis_lignes: ['id uuid +', 'devis_id uuid +', 'ordre integer +', 'type text +', 'designation text', 'quantite_milliemes bigint',
+      'unite text', 'prix_unitaire_centimes bigint', 'taux_tva_centiemes integer', 'total_centimes bigint', 'offert boolean +',
+      'main_oeuvre boolean +', 'fourniture_non_comprise boolean +', 'surface_sol_milliemes bigint', 'surface_murs_milliemes bigint',
+      'generation bigint +', 'modifie_le timestamptz +'],
+    devis_tva: ['devis_id uuid +', 'taux_tva_centiemes integer +', 'base_centimes bigint +', 'tva_centimes bigint +', 'nb_lignes integer +'],
+  };
+  verifier('la section 49 est trouvée, entre la 48 et l’export (42)', S49.length > 5000, `${S49.length} caractères`);
+  for (const t of TABLES49) {
+    const cols = colonnesDe(t);
+    const lues = cols ? cols.map((c) => `${c.nom} ${c.type}${c.obligatoire ? ' +' : ''}`) : [];
+    const enTrop = lues.filter((c) => !FERMEE[t].includes(c));
+    const enMoins = FERMEE[t].filter((c) => !lues.includes(c));
+    verifier(`\`${t}\` : exactement ses ${FERMEE[t].length} colonnes, types et « not null » compris`,
+      !!cols && enTrop.length === 0 && enMoins.length === 0 && egalListes(lues, FERMEE[t]),
+      `en trop : ${enTrop.join(', ') || '—'} ; en moins : ${enMoins.join(', ') || '—'} — une colonne naît avec son lecteur : `
+      + 'ajoutez-le à la liste et à la table « qui lit » du cahier');
+  }
+  /* PAS SEULEMENT `add column` : `alter table … add if not exists x text`
+     (sans le mot `column`) ajoute une colonne aussi — et passait au vert
+     (relecture des essais de l'étape 3, M1). Sur ces trois tables, dans TOUT
+     le fichier, le seul `add` permis est `add constraint <nom> check`. */
+  const ajouts = [...SQL.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?public\.devis(?:_lignes|_tva)?\b([^;]*);/gi)]
+    .flatMap((m) => [...m[1].matchAll(/\badd\b(?!\s+constraint\s+\w+\s+check\b)\s*[^,;]*/gi)].map((a) => sansEspaces(a[0])));
+  verifier('…et rien ne s’y ajoute plus bas : sur ces tables, le seul `add` est `add constraint <nom> check` (ni `add column`, ni '
+    + '`add if not exists`, ni une contrainte anonyme)', ajouts.length === 0, ajouts.join(' | '));
+}
+
+console.log('\n  13. les colonnes interdites, et aucun `numeric`');
+{
+  const INTERDITES = ['compte_id', 'particulier_id', 'demande_id', 'visite_id', 'dossier_id', 'nature', 'date_redaction',
+    'taux_justification', 'regime_tva'];
+  const toutes = TABLES49.flatMap((t) => (colonnesDe(t) || []).map((c) => ({ ...c, table: t })));
+  const fautes = toutes.filter((c) => INTERDITES.includes(c.nom)).map((c) => `${c.table}.${c.nom}`);
+  verifier('aucune des colonnes que les règles D1, D2, 3.12 et le lot 2-3 interdisent (compte_id, particulier_id, demande_id, '
+    + 'visite_id, dossier_id, nature, date_redaction, taux_justification, regime_tva)', toutes.length >= 40 && fautes.length === 0,
+  fautes.join(', '));
+  const flottants = toutes.filter((c) => /^(numeric|decimal|real|float|double)/i.test(c.type)).map((c) => `${c.table}.${c.nom} ${c.type}`);
+  verifier('aucune colonne `numeric` ni flottante : l’argent est en centimes `bigint` (la rupture avec `annonces_pro.prix`, '
+    + 'commentée dans la section)', flottants.length === 0, flottants.join(', '));
+}
+
+console.log('\n  14. D4 — rien n’est obligatoire hors l’entreprise, et aucun motif ne nomme une origine');
+{
+  /* D4-a : les seules clés obligatoires. */
+  const cles = TABLES49.flatMap((t) => (colonnesDe(t) || []).filter((c) => /\breferences\b/i.test(c.texte))
+    .map((c) => ({ table: t, nom: c.nom, obligatoire: c.obligatoire, action: ((/on\s+delete\s+(set\s+null|cascade|restrict|no\s+action)/i.exec(c.texte) || [])[1] || 'aucune').toLowerCase().replace(/\s+/g, ' ') })));
+  const obligatoires = cles.filter((c) => c.obligatoire).map((c) => `${c.table}.${c.nom}`).sort();
+  verifier('D4-a : les seules clés obligatoires sont `devis.pro_id`, `devis_lignes.devis_id`, `devis_tva.devis_id` (en cascade)',
+    json(obligatoires) === json(['devis.pro_id', 'devis_lignes.devis_id', 'devis_tva.devis_id'])
+    && cles.filter((c) => c.obligatoire).every((c) => c.action === 'cascade'), json(cles));
+  const liens = cles.filter((c) => ['client_id', 'quote_request_id', 'sos_request_id'].includes(c.nom));
+  verifier('…et les trois liens d’origine sont facultatifs, en `on delete set null` (D3, D11)',
+    liens.length === 3 && liens.every((c) => !c.obligatoire && c.action === 'set null'), json(liens));
+  /* D4-b : aucune contrainte « origine ⇒ lien » ; la garde ne lève rien sur un lien vide. */
+  const nommentUnLien = CHECKS49.filter((c) => /\b(client_id|quote_request_id|sos_request_id)\b/.test(c.regle)).map((c) => c.nom);
+  verifier('D4-b : aucune contrainte de la section ne nomme `client_id`, `quote_request_id` ni `sos_request_id`',
+    CHECKS49.length >= 20 && nommentUnLien.length === 0, nommentUnLien.join(', '));
+  /* LA GARDE OP013, BLOC PAR BLOC, et sa branche INSERT exigée (relecture
+     des essais de l'étape 3, I-1) : une version qui ne vérifiait que la
+     MODIFICATION d'un lien passait ce contrôle et l'essai — et l'artisan
+     rattachait, à la CRÉATION, un devis à la fiche d'un autre (prouvé :
+     INSERT 0 1). Chacun des trois blocs doit dire, dans cet ordre : « le
+     lien n'est pas vide, ET (c'est une insertion OU il change), ET il n'est
+     pas à moi ». */
+  const garde = corpsDe('tient_le_devis');
+  const gardes = [...garde.matchAll(/if\s+new\.(client_id|quote_request_id|sos_request_id)\s+is\s+not\s+null\s+and\s+\(tg_op\s*=\s*'INSERT'\s+or\s+new\.\1\s+is\s+distinct\s+from\s+old\.\1\)\s+and\s+not\s+exists\s*\([^;]*?\)\s+then\s+raise\s+exception\s+'(?:[^']|'')*'\s+using\s+errcode\s*=\s*'OP013'/gi)].map((m) => m[1]);
+  verifier('…et `tient_le_devis()` ne lève OP013 que sur un lien NON VIDE, À LA CRÉATION comme quand il CHANGE : un lien vide '
+    + 'passe toujours',
+  json(gardes.sort()) === json(['client_id', 'quote_request_id', 'sos_request_id'])
+    && (garde.match(/using\s+errcode\s*=\s*'OP013'/gi) || []).length === 3, json(gardes));
+
+  /* D4-c : LES FONCTIONS DE MOTIFS, NOMMÉES : une liste, pas une sélection
+     par type de retour, qui ramasserait `admin_traiter_demande_pro`,
      `devenir_pro` ou `rattacher_mon_siret` (relecture « base », B1).
      `emetteur_incomplet` existe depuis le lot 0a ; `motifs_refus_remise`
      naîtra au lot 2. On vise la COLONNE du devis, pas le mot : la première
      lit déjà `r.source` — la source d'une ENTREPRISE (`entreprise_registre`),
      et c'est juste. */
   const MOTIFS = [{ nom: 'emetteur_incomplet', naitAuLot: '0a' }, { nom: 'motifs_refus_remise', naitAuLot: '2' }];
-  const trouvees = MOTIFS.map((m) => ({ ...m, corps: FONCTIONS.filter((f) => f.nom === m.nom).map((f) => f.corps).join('\n') || null }));
+  const trouvees = MOTIFS.map((m) => ({ ...m, corps: corpsDe(m.nom) || null }));
   const INTERDITS = [
     [/\bpublic\.devis\b/i, 'la table `public.devis`'],
     [/\bquote_request_id\b/i, '`quote_request_id`'],
@@ -1460,7 +1817,7 @@ console.log('\n  14. D4-c — aucun motif de refus ne nomme une ORIGINE');
   ];
   const fautes = trouvees.filter((m) => m.corps).flatMap((m) => INTERDITS.filter(([re]) => re.test(m.corps)).map(([, quoi]) => `${m.nom} nomme ${quoi}`));
   verifier('`emetteur_incomplet` est lue (sinon ce contrôle n’éprouverait rien)', !!trouvees[0].corps && trouvees[0].corps.length > 500);
-  verifier(`aucune fonction de motifs (${trouvees.filter((m) => m.corps).map((m) => m.nom).join(', ')}) ne nomme `
+  verifier(`D4-c : aucune fonction de motifs (${trouvees.filter((m) => m.corps).map((m) => m.nom).join(', ')}) ne nomme `
     + '`public.devis`, `quote_request_id`, `sos_request_id` ni une origine (qr, visite, dossier)',
   fautes.length === 0, `${fautes.join(' ; ')} — un motif de refus de remise qui dépend d’une origine rendrait le QR, la `
     + 'visite ou la demande OBLIGATOIRES pour remettre un devis (D4-c, validé le 19/10).');
@@ -1474,6 +1831,41 @@ console.log('\n  14. D4-c — aucun motif de refus ne nomme une ORIGINE');
     mauvais.length === 0, mauvais.join(' | '));
 }
 
+console.log('\n  15. les contraintes — vingt-trois, toutes nommées en `_check`');
+{
+  const noms = CHECKS49.map((c) => c.nom);
+  const tables = [...new Set(CHECKS49.map((c) => c.table))].sort();
+  verifier(`la section pose ${noms.length} contraintes \`check\` sur les trois tables — il en faut 23`,
+    noms.length === 23 && json(tables) === json([...TABLES49].sort()), json(noms));
+  verifier('…toutes finissent par `_check`, aucune en `_check<chiffres>`, aucune en double',
+    noms.every((n) => /_check$/.test(n) && !/_check\d+$/.test(n)) && new Set(noms).size === noms.length);
+  const sansDrop = CHECKS49.filter((c) => !new RegExp(`alter\\s+table\\s+public\\.${c.table}\\s+drop\\s+constraint\\s+if\\s+exists\\s+${c.nom}\\s*;`, 'i').test(S49))
+    .map((c) => c.nom);
+  verifier('…et chacune se REFAIT (`drop constraint if exists` puis `add constraint`) : `add column if not exists` ne touche pas '
+    + 'aux contraintes', sansDrop.length === 0, sansDrop.join(', '));
+  const anonymes = TABLES49.filter((t) => {
+    const m = new RegExp(`create\\s+table\\s+if\\s+not\\s+exists\\s+public\\.${t}\\s*\\(([\\s\\S]*?)\\n\\);`, 'i').exec(S49);
+    return m && /\bcheck\s*\(/i.test(m[1]);
+  });
+  verifier('…aucune contrainte ANONYME dans un `create table` (PostgreSQL la nommerait `…_check1`, et `erreurs.js` n’aurait '
+    + 'pas sa phrase)', anonymes.length === 0, anonymes.join(', '));
+  /* LES PHRASES : `MESSAGES_CONTRAINTE` (erreurs.js) les reçoit à l'étape
+     4, avec l'écriture par l'application. Dès que `api.js` écrit dans ces
+     tables, chaque contrainte DOIT avoir sa phrase — et réciproquement ;
+     avant, aucune phrase de devis ne doit nommer une contrainte absente. */
+  const phrases = Object.keys(ERR.MESSAGES_CONTRAINTE || {}).filter((k) => /^devis_/.test(k));
+  const api = lire('src/lib/api.js');
+  const ecritDevis = /from\(\s*['"]devis(_lignes)?['"]\s*\)/.test(api);
+  const sansPhrase = noms.filter((n) => !phrases.includes(n));
+  const phraseSansContrainte = phrases.filter((n) => !noms.includes(n));
+  verifier(ecritDevis
+    ? 'chacune a sa phrase dans `MESSAGES_CONTRAINTE` — et réciproquement (l’application écrit dans ces tables)'
+    : `aucune phrase de \`MESSAGES_CONTRAINTE\` ne nomme une contrainte absente (${phrases.length} phrase(s) de devis ; les 23 `
+      + 's’exigeront dès que `api.js` écrira dans ces tables, étape 4)',
+  phraseSansContrainte.length === 0 && (!ecritDevis || sansPhrase.length === 0),
+  `sans phrase : ${sansPhrase.join(', ') || '—'} ; phrase sans contrainte : ${phraseSansContrainte.join(', ') || '—'}`);
+}
+
 console.log('\n  16. l’ordre des contraintes de ligne — celui de PostgreSQL');
 {
   const noms = [...D.CONTRAINTES_LIGNE];
@@ -1483,28 +1875,371 @@ console.log('\n  16. l’ordre des contraintes de ligne — celui de PostgreSQL'
   verifier('`CONTRAINTES_DEVIS` : dix noms `devis_…_check`, triés de même',
     D.CONTRAINTES_DEVIS.length === 10 && D.CONTRAINTES_DEVIS.every((n) => /^devis_[a-z_]+_check$/.test(n) && !/^devis_ligne_/.test(n))
     && egalListes([...D.CONTRAINTES_DEVIS], [...D.CONTRAINTES_DEVIS].sort()));
+  const schemaLigne = CHECKS49.filter((c) => c.table === 'devis_lignes').map((c) => c.nom).sort();
+  const schemaDevis = CHECKS49.filter((c) => c.table === 'devis').map((c) => c.nom).sort();
+  verifier('…et ce sont EXACTEMENT les dix de `devis_lignes` et les dix de `devis` que le schéma pose',
+    egalListes(schemaLigne, noms) && egalListes(schemaDevis, [...D.CONTRAINTES_DEVIS]),
+    `schéma (lignes) ${json(schemaLigne)} ; schéma (devis) ${json(schemaDevis)}`);
 }
 
-console.log('\n  17. la classe de blancs — une seule règle, recopiée sous contrôle');
+console.log('\n  17. les miroirs — une seule règle, recopiée sous contrôle');
 {
+  const nombres = (t) => (t || '').split(',').map((x) => Number(x)).filter((x) => Number.isFinite(x));
+  const tauxLigne = listeDe('devis_ligne_taux_check', 'taux_tva_centiemes');
+  const tauxTva = listeDe('devis_tva_taux_check', 'taux_tva_centiemes');
+  verifier('`TAUX_TVA` = la liste de `devis_ligne_taux_check` = celle de `devis_tva_taux_check`',
+    !!tauxLigne && !!tauxTva && json(nombres(tauxLigne.join(','))) === json([...D.TAUX_TVA])
+    && json(nombres(tauxTva.join(','))) === json([...D.TAUX_TVA]), `${json(tauxLigne)} / ${json(tauxTva)}`);
+  const unites = listeDe('devis_ligne_unite_check', 'unite');
+  verifier('`UNITES` = les sept clés de `devis_ligne_unite_check` ; aucun libellé « ml » ni « M2 »',
+    !!unites && json(unites) === json(D.UNITES.map((u) => u.cle)) && unites.length === 7
+    && D.UNITES.every((u) => ![u.court, u.pastille, u.nom].some((x) => x === 'ml' || x === 'M2')), json(unites));
+  verifier('`TYPES_LIGNE` = `devis_ligne_type_check` ; `SOURCES` = `devis_source_check`, sans qr, visite ni dossier ; '
+    + '`STATUTS` = `devis_statut_check`',
+  json(listeDe('devis_ligne_type_check', 'type')) === json([...D.TYPES_LIGNE])
+    && json(listeDe('devis_source_check', 'source')) === json([...D.SOURCES])
+    && !D.SOURCES.some((x) => /^(qr|visite|dossier)$/.test(x))
+    && json(listeDe('devis_statut_check', 'statut')) === json([...D.STATUTS]));
+  const n = (x) => String(x);
+  const bornes = [
+    ['QUANTITE_MAX', D.QUANTITE_MAX, /quantite_milliemes\s+between\s+1\s+and\s+(\d+)/i, 'devis_ligne_quantite_check'],
+    ['PRIX_MAX', D.PRIX_MAX, /prix_unitaire_centimes\s+between\s+0\s+and\s+(\d+)/i, 'devis_ligne_prix_check'],
+    ['PLAFOND', D.PLAFOND, /total_ht_centimes\s+between\s+0\s+and\s+(\d+)/i, 'devis_plafond_check'],
+    ['PLAFOND', D.PLAFOND, /total_ttc_centimes\s*<=\s*(\d+)/i, 'devis_plafond_check'],
+    ['PLAFOND', D.PLAFOND, /<=\s*(\d+)\s+and\s+total_centimes/i, 'devis_ligne_total_check'],
+    ['SURFACE_MAX', D.SURFACE_MAX, /surface_sol_milliemes\s+between\s+1\s+and\s+(\d+)/i, 'devis_ligne_surfaces_check'],
+    ['RETENUE_MAX', D.RETENUE_MAX, /between\s+1\s+and\s+(\d+)/i, 'devis_retenue_check'],
+    ['LONGUEURS.designation', D.LONGUEURS.designation, /between\s+1\s+and\s+(\d+)/i, 'devis_ligne_designation_check'],
+    ['LONGUEURS.objet', D.LONGUEURS.objet, /<=\s*(\d+)/i, 'devis_objet_check'],
+    ['LONGUEURS.lieuAdresse', D.LONGUEURS.lieuAdresse, /<=\s*(\d+)/i, 'devis_lieu_adresse_check'],
+    ['LONGUEURS.lieuVille', D.LONGUEURS.lieuVille, /<=\s*(\d+)/i, 'devis_lieu_ville_check'],
+    ['LONGUEURS.delaiExecution', D.LONGUEURS.delaiExecution, /<=\s*(\d+)/i, 'devis_delai_check'],
+  ];
+  const fautesB = bornes.filter(([, v, re, c]) => n((re.exec(regleDe(c)) || [])[1]) !== n(v)).map(([k, v, , c]) => `${k}=${v} contre ${c}`);
+  verifier('les bornes de `devis.js` sont celles des contraintes (quantité, prix, plafond ×3, surfaces, retenue, cinq longueurs)',
+    fautesB.length === 0, fautesB.join(' ; '));
+  const fTotal = corpsDe('devis_total_ligne');
+  const fTva = corpsDe('devis_tva_de');
+  verifier('…et celles des deux fonctions de calcul : `devis_total_ligne` (quantité, prix), `devis_tva_de` (`TAUX_CALCUL_MAX`)',
+    new RegExp(`p_quantite\\s+between\\s+1\\s+and\\s+${D.QUANTITE_MAX}\\b`).test(fTotal)
+    && new RegExp(`p_prix\\s+between\\s+0\\s+and\\s+${D.PRIX_MAX}\\b`).test(fTotal)
+    && new RegExp(`p_taux\\s+between\\s+0\\s+and\\s+${D.TAUX_CALCUL_MAX}\\b`).test(fTva), `${sansEspaces(fTotal)} | ${sansEspaces(fTva)}`);
+  const recalc = corpsDe('recalcule_devis');
+  const lignesMax = (/\(select\s+count\(\*\)\s+from\s+public\.devis_lignes\s+l\s+where\s+l\.devis_id\s*=\s*p_devis\)\s*>\s*(\d+)/i.exec(recalc) || [])[1];
+  verifier('`LIGNES_MAX` est le nombre que `recalcule_devis()` compte, SOUS SON VERROU (OP014)',
+    n(lignesMax) === n(D.LIGNES_MAX) && /using\s+errcode\s*=\s*'OP014'/i.test(recalc), `schéma ${lignesMax}, devis.js ${D.LIGNES_MAX}`);
+
+  /* LA CLASSE DE BLANCS — une seule règle, recopiée sous contrôle (CR-B M2) :
+     les cinq copies de la section 49, les deux de la section 47, et
+     `BLANCS_TARIFS`. */
   const decoder = (e) => e.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\n/g, '\n');
-  const corps = (nom) => (FONCTIONS.find((f) => f.nom === nom) || {}).corps || '';
+    .replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\n/g, '\n').replace(/\\v/g, '\v').replace(/\\f/g, '\f');
   const jeuDe = (nom, colonne) => {
-    const m = corps(nom).match(new RegExp(
+    const m = corpsDe(nom).match(new RegExp(
       `new\\.${colonne} := nullif\\(btrim\\(coalesce\\(new\\.${colonne}, ''\\),\\s*E'((?:[^'\\\\]|\\\\.)*)'\\), ''\\);`));
     return m ? [...new Set(decoder(m[1]))].sort().join('') : null;
   };
   const js = [...new Set(D.BLANCS)].sort().join('');
-  const s47a = jeuDe('tient_les_tarifs', 'frais_deplacement_texte');
-  const s47b = jeuDe('tient_les_tarifs_publics', 'decompte_temps_texte');
+  const copies = {
+    'tient_les_tarifs (47)': jeuDe('tient_les_tarifs', 'frais_deplacement_texte'),
+    'tient_les_tarifs_publics (47)': jeuDe('tient_les_tarifs_publics', 'decompte_temps_texte'),
+    'tient_le_devis.objet': jeuDe('tient_le_devis', 'objet'),
+    'tient_le_devis.lieu_adresse': jeuDe('tient_le_devis', 'lieu_adresse'),
+    'tient_le_devis.lieu_ville': jeuDe('tient_le_devis', 'lieu_ville'),
+    'tient_le_devis.delai_execution': jeuDe('tient_le_devis', 'delai_execution'),
+    'tient_la_ligne_de_devis.designation': jeuDe('tient_la_ligne_de_devis', 'designation'),
+  };
   const tarifs = [...new Set(E.BLANCS_TARIFS || '')].sort().join('');
-  verifier('`BLANCS` (devis.js) = la classe de la section 47 (ses deux déclencheurs) = `BLANCS_TARIFS` — les invisibles compris',
-    !!s47a && js === s47a && js === s47b && js === tarifs && ['\u00a0', '\u200b', '\u200c', '\u200d', '\u2060', '\ufeff'].every((ch) => js.includes(ch)),
-    `devis ${json(js)} ; 47 ${json(s47a)} / ${json(s47b)} ; tarifs ${json(tarifs)}`);
+  const differentes = Object.entries(copies).filter(([, v]) => v !== js).map(([k, v]) => `${k} ${json(v)}`);
+  verifier('`BLANCS` (devis.js) = les SEPT copies de la classe (section 47 ×2, section 49 ×5) = `BLANCS_TARIFS` — les invisibles compris',
+    differentes.length === 0 && js === tarifs && [' ', '​', '‌', '‍', '⁠', '﻿'].every((ch) => js.includes(ch)),
+    `devis ${json(js)} ; différentes : ${differentes.join(' | ') || '—'} ; tarifs ${json(tarifs)}`);
   verifier('…et le nettoyage d’une désignation la rogne : un U+200B seul n’est pas une désignation',
-    D.validerLigne({ type: 'zone', designation: '\u200b\u00a0 ' }).contrainte === 'devis_ligne_designation_check'
-    && D.nettoyerLigne({ designation: '\ufeff pose\u2060 ' }).designation === 'pose');
+    D.validerLigne({ type: 'zone', designation: '​  ' }).contrainte === 'devis_ligne_designation_check'
+    && D.nettoyerLigne({ designation: '﻿ pose⁠ ' }).designation === 'pose');
+  /* LE CODE POSTAL : une liste EXPLICITE, jamais `\s` (relecture 0-2, C10 :
+     ce que `\s` retire dépend du serveur). */
+  const cp = (/new\.lieu_code_postal\s*:=\s*nullif\(regexp_replace\(coalesce\(new\.lieu_code_postal,\s*''\),\s*E'\[((?:[^'\\\]]|\\.)*)\]',\s*'',\s*'g'\),\s*''\)/i
+    .exec(corpsDe('tient_le_devis')) || [])[1];
+  const cpSql = cp ? [...new Set(decoder(cp.replace(/\\\\/g, '\\')))].sort().join('') : null;
+  const cpJs = [...new Set(D.ESPACES_CODE_POSTAL)].sort().join('');
+  verifier('le code postal se nettoie par la MÊME liste explicite des deux côtés (`ESPACES_CODE_POSTAL`) — jamais par `\\s`',
+    !!cpSql && cpSql === cpJs && !/regexp_replace\([^;]*'\\\\s'/i.test(corpsDe('tient_le_devis')), `sql ${json(cpSql)} ; js ${json(cpJs)}`);
+}
+
+console.log('\n  18. les formules — écrites une fois, en entiers, et deux égalités qui ne passent jamais sur un NULL');
+{
+  const fTotal = corpsDe('devis_total_ligne');
+  const fTva = corpsDe('devis_tva_de');
+  verifier('`devis_total_ligne` : `(q × p + 500) / 1000` ; `devis_tva_de` : `(base × taux + 5000) / 10000`',
+    /\(p_quantite\s*\*\s*p_prix\s*\+\s*500\)\s*\/\s*1000\b/.test(fTotal) && /\(p_base\s*\*\s*p_taux\s*\+\s*5000\)\s*\/\s*10000\b/.test(fTva));
+  const fonctions49 = FONCTIONS.filter((f) => NOMS49.includes(f.nom));
+  const arrondis = fonctions49.filter((f) => /\bround\s*\(|\bnumeric\b|\bfloat|\bdouble\s+precision\b|\breal\b/i.test(f.corps)).map((f) => f.nom);
+  verifier(`aucune fonction de la section (${fonctions49.map((f) => f.nom).join(', ')}) n’écrit \`round(\`, \`numeric\`, un flottant`,
+    fonctions49.length >= 6 && arrondis.length === 0, arrondis.join(', '));
+  verifier('`devis_ligne_total_check` : `case when offert then 0` — « Offert » met le TOTAL à 0 et garde le prix',
+    /case\s+when\s+offert\s+then\s+0\b/i.test(regleDe('devis_ligne_total_check')));
+  /* UN NULL NE SATISFAIT JAMAIS UNE ÉGALITÉ PAR ACCIDENT (CR-B M1) : pour
+     chaque `X = public.devis_…(`, un `X is not null and` le précède dans la
+     même contrainte. */
+  /* …ET C'EST LE RÉSULTAT DE LA FONCTION QU'ON GARDE, pas la colonne
+     comparée (relecture de l'étape 3, mineur 5) : `devis_tva_arrondi_check`
+     gardait `tva_centimes is not null` — déjà `not null` par la colonne —,
+     et une base hors des bornes de `devis_tva_de` (qui rend alors NULL)
+     faisait PASSER la contrainte, avec une TVA quelconque (prouvé). Pour
+     chaque `X = public.devis_f(…)`, il faut `public.devis_f(…) is not null
+     and` AVANT, dans la même contrainte. */
+  const egalites = CHECKS49.flatMap((c) => [...c.regle.matchAll(/(\w+)\s*=\s*(?:case\b[\s\S]*?\b(public\.devis_\w+)\(|(public\.devis_\w+)\()/gi)]
+    .map((m) => ({ c: c.nom, x: m[1], f: m[2] || m[3], avant: c.regle.slice(0, m.index) })));
+  const nues = egalites.filter((e) => !new RegExp(`${e.f.replace('.', '\\.')}\\([^)]*\\)\\s+is\\s+not\\s+null\\s+and\\b`, 'i').test(e.avant))
+    .map((e) => `${e.c} (${e.x} = ${e.f}(…) sans « ${e.f}(…) is not null and » avant)`);
+  verifier(`les égalités à une fonction de calcul sont gardées par « public.devis_…(…) is not null and » — le RÉSULTAT de la `
+    + `fonction, pas la colonne (${egalites.map((e) => e.c).join(', ')})`,
+  egalites.length >= 2 && nues.length === 0, nues.join(', '));
+  verifier('aucune contrainte ne lie `main_oeuvre` à `unite` (CR-D B1 : un prix au m² est un prix forfaitaire)',
+    !CHECKS49.some((c) => /\bmain_oeuvre\b/.test(c.regle) && /\bunite\b/.test(c.regle) && !/devis_ligne_forme_check/.test(c.nom)));
+  verifier('`devis_ligne_offert_check` : « un prix de 0 seulement avec Offert » s’écrit `<> 0` (un prix négatif reste à '
+    + '`devis_ligne_prix_check` : l’écart n° 1, prouvé)', /prix_unitaire_centimes\s*<>\s*0\s+or\s+offert/i.test(regleDe('devis_ligne_offert_check'))
+    && !/prix_unitaire_centimes\s*>\s*0/i.test(regleDe('devis_ligne_offert_check')));
+}
+
+console.log('\n  19. le statut, et le tri de la liste');
+{
+  const statuts = listeDe('devis_statut_check', 'statut') || [];
+  const api = lire('src/lib/api.js');
+  const mesDevis = (/function\s+mesDevis\w*\s*\([\s\S]*?\n\}/.exec(api) || [''])[0];
+  verifier('`devis_statut_check` porte UNE valeur ; si un jour il en porte plus, `mesDevis()` ne trie plus par `modifie_le` seule',
+    statuts.length === 1 || (statuts.length > 1 && /order\(\s*['"]statut/.test(mesDevis)),
+    'la borne de 200 n’est honnête qu’avec le tri : ce qui attend doit passer devant, côté base');
+}
+
+console.log('\n  20. les politiques — trois, et rien pour `anon` ; les droits de table, un par un');
+{
+  /* DANS TOUT LE FICHIER, et pas dans la section 49 seule (relecture des
+     essais de l'étape 3, I-3) : « exactement une politique sur `devis` » est
+     une propriété de la TABLE. Une politique `using (true)` posée dans la
+     section 42 n'existait pas pour l'ancien contrôle — et ouvrait tous les
+     devis à tout compte connecté (prouvé : B et P lisaient 1 devis de A). */
+  /* LE NOM SOUS SES DEUX FORMES, LA TABLE SOUS TOUTES LES SIENNES (relecture
+     des essais, 2e tour, N1 à N4) : un nom sans guillemets (`tout_lire`), un
+     nom d'un seul mot entre guillemets — que le dépliage rend nu —, une table
+     non qualifiée (`on devis`) ou espacée (`public . devis`) : chacune
+     passait l'une ou l'autre version de ce motif, et ouvrait les devis de A à
+     B et à P (prouvé). L'essai (cas 12, 28) les voit toutes, par
+     `pg_policies`. */
+  const pol = [...SQL.matchAll(/create\s+policy\s+(?:"([^"]+)"|([a-z_][\w$]*))\s+on\s+(?:only\s+)?(?:public\s*\.\s*)?(devis|devis_lignes|devis_tva)\b([\s\S]*?);/gi)]
+    .map((m) => ({ nom: m[1] || m[2], table: m[3], corps: m[4] }));
+  const modifiees = [...SQL.matchAll(/alter\s+policy\s+[^;]*\bon\s+(?:only\s+)?(?:public\s*\.\s*)?(devis|devis_lignes|devis_tva)\b[^;]*;/gi)].map((m) => sansEspaces(m[0]));
+  const sur = (tb) => pol.filter((p) => p.table === tb);
+  verifier('dans TOUT `schema.sql`, exactement une politique sur `devis`, une sur `devis_lignes`, une sur `devis_tva` (`for select`) ; '
+    + 'aucun `alter policy` ne les récrit',
+  pol.length === 3 && sur('devis').length === 1 && sur('devis_lignes').length === 1 && sur('devis_tva').length === 1
+    && modifiees.length === 0
+    && /\bfor\s+all\s+to\s+authenticated\b/i.test(sur('devis')[0].corps) && /\bfor\s+all\s+to\s+authenticated\b/i.test(sur('devis_lignes')[0].corps)
+    && /\bfor\s+select\s+to\s+authenticated\b/i.test(sur('devis_tva')[0].corps), `${json(pol.map((p) => `${p.table}:${p.nom}`))} ${modifiees.join(' | ')}`);
+  const fautes = pol.filter((p) => /\bto\s+(anon|public)\b/i.test(p.corps) || !/\bto\s+authenticated\b/i.test(p.corps)
+    || /auth\.uid\(\)|est_masque|est_admin|professional_partners|blocages|partage|\btrue\b/i.test(p.corps)).map((p) => p.nom);
+  verifier('aucune n’est `to anon`, `to public` ou sans rôle, ni n’écrit `auth.uid()`, `true`, `est_masque`, `est_admin`, une '
+    + 'relation ou un partage (D6)', fautes.length === 0, fautes.join(', '));
+  /* L'APPARTENANCE, par une sous-requête NON CORRÉLÉE (relecture sécurité de
+     l'étape 3, I2, mesuré) : `est_mon_entreprise(pro_id)` écrit dans la
+     politique s'appelait POUR CHAQUE LIGNE — export de 100 000 lignes à soi
+     en 10,6 s, au-delà des 8 s de la vraie base. Les chaînes EXACTES. */
+  const DEVIS = 'pro_id in (select public.mes_entreprises())';
+  const LIGNES = 'devis_id in (select d.id from public.devis d where d.pro_id in (select public.mes_entreprises()))';
+  /* Le contenu d'une clause, PARENTHÈSES COMPTÉES (une expression régulière
+     gourmande avalait la clause suivante). */
+  const entre = (txt, mot) => {
+    const m = new RegExp(`\\b${mot}\\s*\\(`, 'i').exec(txt);
+    if (!m) return null;
+    let p = 1; let i = m.index + m[0].length;
+    const d = i;
+    for (; i < txt.length && p > 0; i += 1) { if (txt[i] === '(') p += 1; else if (txt[i] === ')') p -= 1; }
+    return sansEspaces(txt.slice(d, i - 1));
+  };
+  const clauses = (p) => [entre(p.corps, 'using'), entre(p.corps, 'with\\s+check')];
+  const [du, dw] = sur('devis')[0] ? clauses(sur('devis')[0]) : [];
+  const [lu, lw] = sur('devis_lignes')[0] ? clauses(sur('devis_lignes')[0]) : [];
+  const [tu, tw] = sur('devis_tva')[0] ? clauses(sur('devis_tva')[0]) : [];
+  verifier('l’appartenance passe par `public.mes_entreprises()`, en sous-requête NON corrélée, des deux côtés — chaînes exactes',
+    du === DEVIS && dw === DEVIS && lu === LIGNES && lw === LIGNES && tu === LIGNES && !tw,
+    `devis : ${du} / ${dw} ; lignes : ${lu} / ${lw} ; tva : ${tu} / ${tw}`);
+  /* …et `mes_entreprises()` ne fait qu'ÉNUMÉRER : c'est `est_mon_entreprise()`
+     qui DÉCIDE. Une règle ne s'écrit qu'à UN endroit. */
+  const me = FONCTIONS.filter((f) => f.nom === 'mes_entreprises');
+  const meApres = me[0] ? SQL.slice(me[0].fin, (FONCTIONS.find((f) => f.index > me[0].index) || { index: SQL.length }).index) : '';
+  verifier('`mes_entreprises()` : UNE définition, `security invoker`, `stable`, qui rend `auth.uid()` si et seulement si '
+    + '`est_mon_entreprise(auth.uid())` — retirée à PUBLIC et `anon`, rendue à `authenticated`, juste après elle',
+  me.length === 1 && /returns\s+setof\s+uuid/i.test(me[0].attributs) && /security\s+invoker/i.test(me[0].attributs)
+    && /\bstable\b/i.test(me[0].attributs)
+    && sansEspaces(me[0].corps) === 'select auth.uid() where public.est_mon_entreprise(auth.uid())'
+    && /revoke\s+all\s+on\s+function\s+public\.mes_entreprises\(\)\s+from\s+public,\s*anon\s*;/i.test(meApres)
+    && /grant\s+execute\s+on\s+function\s+public\.mes_entreprises\(\)\s+to\s+authenticated\s*;/i.test(meApres),
+  me[0] ? sansEspaces(me[0].corps) : 'introuvable');
+  /* LES DROITS DE TABLE (relecture sécurité, M2) : tout retiré à `anon` ET à
+     `authenticated`, puis rendu un par un — ni `truncate`, ni `references`,
+     ni `trigger`, ni (PostgreSQL 17) `maintain`. Les RÔLES se lisent comme un
+     ENSEMBLE (relecture des essais, M4 : l'ordre des mots ne change rien aux
+     droits). */
+  const roles = (txt) => [...new Set(txt.split(',').map((r) => r.trim().toLowerCase()).filter(Boolean))].sort().join(',');
+  const revokes = [...S49.matchAll(/revoke\s+all\s+on\s+public\.devis\s*,\s*public\.devis_lignes\s*,\s*public\.devis_tva\s+from\s+([\w\s,]+?)\s*;/gi)]
+    .map((m) => ({ roles: roles(m[1]), index: m.index }));
+  /* LA TABLE QUALIFIÉE OU NON (relecture des essais, 2e tour, N12) :
+     `grant select on devis_lignes to anon` passait le premier motif, qui
+     exigeait `public.` — le droit de table, seconde ligne de défense de la
+     section 41, était rendu au visiteur sans un ✘. */
+  const grants = [...SQL.matchAll(/grant\s+([^;]*?)\s+on\s+(?:table\s+)?([^;]*?(?:\bpublic\s*\.\s*|(?<![\w$.]))devis(?:_lignes|_tva)?\b[^;]*?)\s+to\s+([^;]*?)\s*;/gi)]
+    .map((m) => ({ quoi: sansEspaces(m[1]).toLowerCase(), sur: sansEspaces(m[2]).toLowerCase(), a: roles(m[3]), index: m.index }));
+  const attendus = [
+    { quoi: 'select, insert, update, delete', sur: 'public.devis, public.devis_lignes', a: 'authenticated' },
+    { quoi: 'select', sur: 'public.devis_tva', a: 'authenticated' },
+  ];
+  const ok = grants.length === 2 && attendus.every((g) => grants.some((x) => x.quoi === g.quoi && x.sur === g.sur && x.a === g.a));
+  const sRevoke = revokes[0] ? revokes[0].index : -1;
+  const iGrants = grants.map((g) => S49.indexOf(g.quoi === 'select' ? 'grant select on public.devis_tva' : 'grant select, insert, update, delete'));
+  verifier('`revoke all … from anon, authenticated` sur les trois tables, PUIS deux `grant` exacts : lecture et écriture des '
+    + 'devis et des lignes, LECTURE SEULE de la ventilation — et aucun autre `grant` sur ces tables dans tout le fichier',
+  revokes.length === 1 && revokes[0].roles === 'anon,authenticated' && ok && iGrants.every((i) => i > sRevoke),
+  `${json(revokes)} ; ${json(grants.map((g) => `${g.quoi} | ${g.sur} | ${g.a}`))}`);
+  /* …ET RIEN NE REND CES DROITS SANS NOMMER LES TABLES (relecture des
+     essais, 2e tour, N5 et N5b, prouvés) : `grant select on all tables in
+     schema public to anon` après la section 49 laissait un visiteur lire les
+     e-mails des comptes ; `grant all on all tables … to authenticated`
+     laissait B vider par `truncate` les lignes de TOUS les artisans (TRUNCATE
+     ignore la RLS). `alter default privileges … on tables` rendrait d'office
+     tout ce qui naîtra. L'essai les voit par le catalogue (cas 26) ; ici,
+     c'est l'alerte rapide. */
+  const iTablesLu = SQL.search(/create\s+table\s+if\s+not\s+exists\s+public\.devis\s*\(/i);
+  const enMasseTables = [...SQL.matchAll(/grant\s+[^;]*\bon\s+all\s+tables\s+in\s+schema\b[^;]*;/gi)]
+    .filter((m) => iTablesLu > 0 && m.index > iTablesLu).map((m) => sansEspaces(m[0]));
+  const parDefautTables = [...SQL.matchAll(/alter\s+default\s+privileges\b[^;]*\bgrant\b[^;]*\bon\s+tables\b[^;]*;/gi)].map((m) => sansEspaces(m[0]));
+  verifier('…et aucun `grant … on all tables in schema` après la création des tables du devis, aucun `alter default privileges … on '
+    + 'tables` : ils rendraient les droits sans nommer les tables', iTablesLu > 0 && enMasseTables.length === 0 && parDefautTables.length === 0,
+  [...enMasseTables, ...parDefautTables].join(' | ') || 'les tables du devis sont introuvables dans le texte lu');
+}
+
+console.log('\n  21. les fonctions et les déclencheurs');
+{
+  const attr = (nom) => (fonctionDe(nom) || {}).attributs || '';
+  verifier('`recalcule_devis` et `recalcule_apres_ligne_de_devis` sont `security definer` ; `tient_le_devis`, '
+    + '`tient_la_ligne_de_devis`, `devis_total_ligne`, `devis_tva_de` ne le sont pas',
+  /security\s+definer/i.test(attr('recalcule_devis')) && /security\s+definer/i.test(attr('recalcule_apres_ligne_de_devis'))
+    && ['tient_le_devis', 'tient_la_ligne_de_devis', 'devis_total_ligne', 'devis_tva_de'].every((f) => fonctionDe(f) && !/security\s+definer/i.test(attr(f))));
+  const r = fonctionDe('recalcule_devis');
+  const apres = r ? SQL.slice(r.fin, (FONCTIONS.find((f) => f.index > r.index) || { index: SQL.length }).index).replace(/^\s*;/, '') : '';
+  /* Les RÔLES se lisent comme un ENSEMBLE (relecture des essais, M4) :
+     `from anon, authenticated, public` retire exactement la même chose. */
+  const rolesRetires = (/^\s*revoke\s+all\s+on\s+function\s+public\.recalcule_devis\(uuid,\s*bigint\)\s+from\s+([\w\s,]+?)\s*;/i.exec(apres) || [])[1] || '';
+  verifier('`recalcule_devis(uuid, bigint)` est retirée à PUBLIC, `anon` ET `authenticated`, JUSTE APRÈS ELLE (dans n’importe quel ordre)',
+    [...new Set(rolesRetires.split(',').map((r) => r.trim().toLowerCase()).filter(Boolean))].sort().join(',') === 'anon,authenticated,public',
+    sansEspaces(apres).slice(0, 160));
+  /* QUALIFIÉ OU NON (relecture des essais, 2e tour, N6, prouvé) : une
+     `definer` accordée qui appelait `recalcule_devis(p, 2^53 − 1)` sans
+     `public.` laissait B figer le devis de A — ni ce motif, qui exigeait
+     `public.`, ni les deux autres contrôles ne la voyaient ; l'essai, si
+     (cas 27b : une `definer` ouverte de trop). */
+  const appelants = FONCTIONS.filter((f) => /\brecalcule_devis\s*\(/.test(f.corps)).map((f) => f.nom);
+  verifier('…et son SEUL appelant est `recalcule_apres_ligne_de_devis` (un appelant de plus, et la révocation le casserait)',
+    json([...new Set(appelants)]) === json(['recalcule_apres_ligne_de_devis'])
+    && !/grant[^;]*recalcule_devis/i.test(SQL), json(appelants));
+  /* …ET RIEN NE LA REND SANS LA NOMMER (relecture des essais, I-4, prouvé :
+     un autre artisan figeait le devis de A, l'horloge poussée au maximum).
+     `grant … on all functions in schema …` rend tout ce qui existe déjà ;
+     `alter default privileges … on functions` tout ce qui naîtra. Le premier
+     n'a pas sa place APRÈS la section 49 ; le second nulle part dans ce
+     fichier (Supabase le pose lui-même, et c'est contre lui que chaque
+     `revoke` de ce fichier est écrit). */
+  /* La place de la section 49 DANS LE TEXTE LU (sans commentaires) : `iS49`
+     est un index du texte brut, et les deux ne se comparent pas — le premier
+     jet de ce contrôle le faisait, et laissait passer le `grant` en masse
+     (éprouvé en le posant avant `mes_donnees()`). */
+  const iS49Lu = SQL.search(/create\s+table\s+if\s+not\s+exists\s+public\.devis\s*\(/i);
+  const enMasse = [...SQL.matchAll(/grant\s+[^;]*\bon\s+all\s+(functions|routines|procedures)\s+in\s+schema\b[^;]*;/gi)]
+    .filter((m) => iS49Lu > 0 && m.index > iS49Lu).map((m) => sansEspaces(m[0]));
+  const parDefaut = [...SQL.matchAll(/alter\s+default\s+privileges\b[^;]*\bgrant\b[^;]*\bon\s+(functions|routines)\b[^;]*;/gi)].map((m) => sansEspaces(m[0]));
+  verifier('…et aucun `grant … on all functions in schema` après la section 49, aucun `alter default privileges … on functions` : '
+    + 'ils la rendraient sans la nommer', iS49Lu > 0 && enMasse.length === 0 && parDefaut.length === 0,
+  [...enMasse, ...parDefaut].join(' | ') || 'la section 49 est introuvable dans le texte lu');
+  const corpsR = r ? r.corps : '';
+  const iVerrou = corpsR.search(/\bfor\s+no\s+key\s+update\b/i);
+  const iLignes = corpsR.search(/\bpublic\.devis_lignes\b/i);
+  verifier('`recalcule_devis` prend `for no key update` AVANT sa première lecture de `devis_lignes`, et aucun `for update` nu',
+    iVerrou > 0 && iLignes > iVerrou && !/\bfor\s+update\b/i.test(corpsR.replace(/\bfor\s+no\s+key\s+update\b/gi, '')),
+    'FOR UPDATE interbloque deux insertions (FOR KEY SHARE de la clé étrangère) ; sans verrou, deux lignes au même taux en '
+    + 'oublient une (concurrence, passages 1 et 3)');
+  const corps49 = FONCTIONS.filter((f) => NOMS49.includes(f.nom));
+  const ordresDestructeurs = corps49.filter((f) => /(^|;|\bthen|\bbegin|\bloop|\belse)\s*(delete|drop|truncate)\b/i.test(f.corps)).map((f) => f.nom);
+  verifier('aucun corps de fonction de la section ne contient un ordre `delete`, `drop` ni `truncate` (le connecteur les refuse, '
+    + 'même là)', corps49.length >= 6 && ordresDestructeurs.length === 0, ordresDestructeurs.join(', '));
+  const horsSchema = [...S49.matchAll(/(^|;)\s*(delete|drop)\b([^;]*)/gi)].map((m) => sansEspaces(m[2] + m[3]))
+    .filter((o) => !/^drop\s+(policy|constraint|trigger|index)\s+if\s+exists\b/i.test(o));
+  verifier('…et les seuls `drop` de la section sont les formes rejouables de `schema.sql` (`drop … if exists`)',
+    horsSchema.length === 0, horsSchema.join(' | '));
+  verifier('`tient_le_devis` ne lit pas `auth.uid()` : pendant une cascade, c’est celui de QUELQU’UN D’AUTRE',
+    !!fonctionDe('tient_le_devis') && !/auth\.uid\(\)/.test(corpsDe('tient_le_devis')));
+  const decl = [...S49.matchAll(/create\s+or\s+replace\s+trigger\s+(\w+)\s+(before|after)\s+([\w\s]+?)\s+on\s+public\.(\w+)\s+for\s+each\s+row\s+execute\s+function\s+public\.(\w+)\(\)/gi)]
+    .map((m) => `${m[1]}|${m[2]} ${sansEspaces(m[3])}|${m[4]}|${m[5]}`);
+  verifier('les trois déclencheurs existent SOUS LEURS NOMS, en `create or replace trigger` (leur ordre est alphabétique)',
+    json(decl.sort()) === json([
+      'trg_recalcule_devis|after insert or update or delete|devis_lignes|recalcule_apres_ligne_de_devis',
+      'trg_tient_la_ligne_de_devis|before insert or update|devis_lignes|tient_la_ligne_de_devis',
+      'trg_tient_le_devis|before insert or update|devis|tient_le_devis',
+    ]) && !/create\s+trigger\b/i.test(S49), json(decl));
+}
+
+console.log('\n  21 bis. la requête tardive (49.5 bis) — la parade est tenue par la BASE');
+{
+  const r = corpsDe('recalcule_devis');
+  const t = corpsDe('tient_le_devis');
+  const a = corpsDe('recalcule_apres_ligne_de_devis');
+  const iVerrou = r.search(/\bfor\s+no\s+key\s+update\b/i);
+  const iOP015 = r.search(/p_generation\s+is\s+not\s+null\s+and\s+p_generation\s*<=\s*v_horloge/i);
+  verifier('`recalcule_devis` lit l’horloge du devis SOUS son verrou, puis refuse (OP015) une écriture de ligne dont le numéro '
+    + 'ne la dépasse pas', /select\s+d\.generation\s+into\s+v_horloge\s+from\s+public\.devis\s+d\s+where\s+d\.id\s*=\s*p_devis\s+for\s+no\s+key\s+update/i.test(r)
+    && iOP015 > iVerrou && iVerrou > 0 && /using\s+errcode\s*=\s*'OP015'/i.test(r));
+  verifier('…et l’horloge AVANCE au numéro de l’écriture appliquée (jamais un incrément, jamais un recul)',
+    /update\s+public\.devis\s+set\s+modifie_le\s*=\s*clock_timestamp\(\),\s*generation\s*=\s*coalesce\(p_generation,\s*generation\)\s+where\s+id\s*=\s*p_devis/i.test(r));
+  /* LE DÉPLACEMENT porte son numéro aux DEUX devis (49.5 bis, point 6 —
+     relecture de l'étape 3, prouvé à deux sessions : avec `null` pour le
+     devis quitté, un déplacement tardif écrasait une retouche plus récente,
+     et le numéro de la ligne RECULAIT). Seule la suppression passe sans
+     numéro. */
+  verifier('le déclencheur passe le numéro de la ligne pour une insertion ou une modification — AUX DEUX DEVIS quand elle change de '
+    + 'devis —, et RIEN pour une suppression seule',
+  /tg_op\s*=\s*'DELETE'\s+then\s+perform\s+public\.recalcule_devis\(old\.devis_id,\s*null\)/i.test(a)
+    && (a.match(/public\.recalcule_devis\(new\.devis_id,\s*new\.generation\)/gi) || []).length === 3
+    && (a.match(/public\.recalcule_devis\(old\.devis_id,\s*new\.generation\)/gi) || []).length === 2
+    && (a.match(/public\.recalcule_devis\(old\.devis_id,\s*null\)/gi) || []).length === 1
+    && (a.match(/public\.recalcule_devis\(/gi) || []).length === 6, sansEspaces(a).slice(0, 400));
+  /* LES BORNES DU NUMÉRO (49.5 bis, point 7) : NULL, 0, un négatif et
+     au-delà de 2^53 − 1 sont refusés par OP016 dans les DEUX déclencheurs
+     `before` — et la borne est celle de la file (`NUMERO_MAX`). */
+  const borne = (c) => (/new\.generation\s+is\s+null\s+or\s+new\.generation\s+not\s+between\s+1\s+and\s+(\d+)\s+then\s+raise\s+exception\s+'(?:[^']|'')*'\s+using\s+errcode\s*=\s*'OP016'/i.exec(c) || [])[1];
+  const bL = borne(corpsDe('tient_la_ligne_de_devis'));
+  const bD = borne(t);
+  verifier('le numéro est BORNÉ — absent, nul, négatif ou au-delà de 2^53 − 1 : OP016 — dans `tient_le_devis` ET '
+    + '`tient_la_ligne_de_devis`, et c’est la borne de la file (`NUMERO_MAX`)',
+  !!bL && bL === bD && Number(bL) === F.NUMERO_MAX && F.NUMERO_MAX === Number.MAX_SAFE_INTEGER, `ligne ${bL}, devis ${bD}, file ${F.NUMERO_MAX}`);
+  /* LE PLAFOND PAR DEMANDE ET PAR URGENCE (OP017 — relecture sécurité, I1,
+     mesuré : 100 000 brouillons rattachés à la demande d'un particulier
+     bloquaient la suppression de son compte). Compté SOUS UN VERROU
+     consultatif pris AVANT le compte, une constante écrite UNE fois. */
+  const pl = (lien, mot) => new RegExp(`if\\s+new\\.${lien}\\s+is\\s+not\\s+null\\s+and\\s+\\(tg_op\\s*=\\s*'INSERT'\\s+or\\s+new\\.${lien}\\s+is\\s+distinct\\s+from\\s+old\\.${lien}\\)\\s+then\\s+`
+    + `perform\\s+pg_advisory_xact_lock\\(hashtextextended\\('devis:${mot}:'\\s*\\|\\|\\s*new\\.${lien}::text,\\s*0\\)\\)\\s*;\\s*`
+    + `if\\s+\\(select\\s+count\\(\\*\\)\\s+from\\s+public\\.devis\\s+d\\s+where\\s+d\\.${lien}\\s*=\\s*new\\.${lien}\\s+and\\s+d\\.pro_id\\s*=\\s*new\\.pro_id\\s+and\\s+d\\.id\\s*<>\\s*new\\.id\\)\\s*>=\\s*v_plafond\\s+then`, 'i');
+  verifier('un PLAFOND de devis par demande et par urgence (OP017), compté SOUS un verrou consultatif pris AVANT le compte, '
+    + 'quand le lien est posé ou change — la constante écrite une fois (`v_plafond`)',
+  pl('quote_request_id', 'demande').test(t) && pl('sos_request_id', 'urgence').test(t)
+    && (t.match(/using\s+errcode\s*=\s*'OP017'/gi) || []).length === 2
+    && /v_plafond\s+constant\s+integer\s*:=\s*20\s*;/i.test(t) && (t.match(/:=\s*20\b/g) || []).length === 1);
+  verifier('`tient_le_devis` : une écriture DIRECTE du devis (`pg_trigger_depth() = 1`) doit faire MONTER le numéro ; aucune '
+    + 'écriture, d’où qu’elle vienne, ne le fait reculer (OP015)',
+  /pg_trigger_depth\(\)\s*=\s*1\s+and\s+new\.generation\s*<=\s*old\.generation/i.test(t)
+    && /or\s+new\.generation\s*<\s*old\.generation/i.test(t) && /using\s+errcode\s*=\s*'OP015'/i.test(t));
+  const iOP014 = r.search(/using\s+errcode\s*=\s*'OP014'/i);
+  verifier('le plafond de lignes (OP014) est compté SOUS le verrou, et ne refuse jamais une suppression',
+    iOP014 > iVerrou && /if\s+p_generation\s+is\s+not\s+null\s+and\s+\(select\s+count\(\*\)/i.test(r)
+    && !/OP014/.test(corpsDe('tient_la_ligne_de_devis')));
 }
 
 console.log('\n  22. qui nomme les tables du devis — une liste FERMÉE');
@@ -1512,10 +2247,12 @@ console.log('\n  22. qui nomme les tables du devis — une liste FERMÉE');
   /* LE NOM QUALIFIÉ, jamais le mot : « devis » est dans les chaînes de cinq
      fonctions existantes (des phrases, et le genre `'devis'` d'une demande).
      Les fonctions qui nomment `public.devis`, `public.devis_lignes` ou
-     `public.devis_tva` sont, au plus, ces quatre-là ; et aucune référence ne
+     `public.devis_tva` sont EXACTEMENT ces trois-là — `tient_la_ligne_de_devis`
+     n'en nomme plus depuis que le plafond de lignes a déménagé sous le verrou
+     de `recalcule_devis` (étape 3, 21/10/2026) ; et aucune référence ne
      s'écrit sans `public.` (relecture « base », B2). */
-  const FERMEE = ['tient_le_devis', 'tient_la_ligne_de_devis', 'recalcule_devis', 'mes_donnees'];
-  const nomment = [...new Set(FONCTIONS.filter((f) => /\bpublic\.devis(_lignes|_tva)?\b/i.test(f.corps)).map((f) => f.nom))].sort();
+  const FERMEE = ['mes_donnees', 'recalcule_devis', 'tient_le_devis'];
+  const nomment = [...new Set(FONCTIONS.filter((f) => /\bpublic\s*\.\s*devis(_lignes|_tva)?\b/i.test(f.corps)).map((f) => f.nom))].sort();
   const enTrop = nomment.filter((n) => !FERMEE.includes(n));
   const enMoins = FERMEE.filter((n) => !nomment.includes(n));
   verifier(`le schéma est lu (${FONCTIONS.length} fonctions)`, FONCTIONS.length >= 60);
@@ -1523,14 +2260,215 @@ console.log('\n  22. qui nomme les tables du devis — une liste FERMÉE');
     verifier('les fonctions qui nomment les tables du devis sont EXACTEMENT la liste fermée — un nom en trop ou en moins rougit',
       enTrop.length === 0 && enMoins.length === 0, `en trop : ${enTrop.join(', ') || '—'} ; en moins : ${enMoins.join(', ') || '—'}`);
   } else {
-    verifier('les tables du devis ne sont pas encore créées : AUCUNE fonction ne les nomme (la liste fermée se juge en entier '
-      + 'dès la section 49)', nomment.length === 0, nomment.join(', '));
+    verifier('les tables du devis ne sont pas encore créées : AUCUNE fonction ne les nomme', nomment.length === 0, nomment.join(', '));
   }
   verifier('aucune fonction `admin_*` ne les nomme (`PLAN-DEVIS` 10.10, l’engagement du 18/10)',
     !nomment.some((n) => /^admin_/.test(n)), nomment.join(', '));
-  const nonQualifiees = [...SQL.matchAll(/\b(from|join|into|update|table)\s+devis(_lignes|_tva)?\b/gi)].map((m) => m[0]);
-  verifier('aucune référence NON qualifiée (`from devis`, `update devis_lignes`…) dans tout `schema.sql`',
+  /* NON QUALIFIÉE, sous TOUTES ses formes (relecture des essais, I-2) :
+     après `from`, `join`, `into`, `update`, `table`, `only`, `using` — et
+     après une VIRGULE (`from (select 1) x, devis_lignes l`), cherchée dans
+     le texte SANS SES CHAÎNES pour ne pas tomber sur une phrase française.
+     SANS « regard en avant » sur la parenthèse (2e tour, N9, prouvé) : le
+     premier jet écartait `devis_lignes (` — c'est-à-dire `insert into
+     devis_lignes (devis_id, …)`, la forme d'un déclencheur `definer` qui
+     écrivait dans le devis d'un autre artisan, et que rien ne voyait. */
+  const nonQualifiees = [
+    ...[...SQL.matchAll(/\b(from|join|into|update|table|only|using)\s+devis(_lignes|_tva)?\b/gi)].map((m) => m[0]),
+    ...[...sansChaines(SQL).matchAll(/,\s*devis(_lignes|_tva)?\b(?!\s*[:=])/gi)].map((m) => m[0]),
+  ];
+  verifier('aucune référence NON qualifiée (`from devis`, `update devis_lignes`, `…, devis_lignes l`…) dans tout `schema.sql`',
     nonQualifiees.length === 0, nonQualifiees.join(' | '));
+  /* UNE VUE passe outre la RLS (elle lit avec les droits de son
+     propriétaire) : aucune ne nomme ces tables, qualifiées ou non. */
+  const vues = [...SQL.matchAll(/create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\b[^;]*;/gi)]
+    .map((m) => m[0]).filter((v) => /\bdevis(_lignes|_tva)?\b/i.test(sansChaines(v)));
+  verifier('aucune VUE ne nomme les tables du devis (une vue lit par-dessus les politiques)', vues.length === 0,
+    vues.map((v) => sansEspaces(v).slice(0, 100)).join(' | '));
+  /* UNE RÈGLE (`create rule`) agit avec les droits du propriétaire de SA
+     table, par-dessus la RLS : posée sur `clients`, elle laissait B écrire
+     une ligne dans le devis de A en créant une fiche dans son propre carnet
+     (sabotage N14 de la fin de l'étape 3, prouvé). `schema.sql` n'en
+     contient aucune, et n'en a besoin d'aucune : la règle de texte la plus
+     simple est « aucune ». L'essai (cas 27e) la voit par `pg_rewrite`. */
+  const regles = [...SQL.matchAll(/create\s+(?:or\s+replace\s+)?rule\b[^;]*/gi)].map((m) => sansEspaces(m[0]).slice(0, 100));
+  verifier('aucune RÈGLE (`create rule`) dans tout `schema.sql` : elle écrirait par-dessus les politiques', regles.length === 0,
+    regles.join(' | '));
+  verifier('…et aucune fonction HORS du schéma `public` ne les nomme', !FONCTIONS.some((f) => f.schema !== 'public'
+    && /\bpublic\.devis(_lignes|_tva)?\b|\bdevis(_lignes|_tva)?\b/i.test(f.corps)));
+  const definer = FONCTIONS.filter((f) => nomment.includes(f.nom) && /security\s+definer/i.test(f.attributs)).map((f) => f.nom);
+  verifier('…et parmi elles, `recalcule_devis` SEULE est `security definer`', json([...new Set(definer)]) === json(['recalcule_devis']),
+    json(definer));
+}
+
+console.log('\n  23. la place — la 49 entre la 48 et l’export ; `mes_donnees()` la dernière fonction ; le balayage le dernier bloc');
+{
+  verifier('la section 49 commence après la 48 et finit avant l’en-tête de la 42', iS48 > 0 && iS49 > iS48 && iS42 > iS49);
+  const derniere = FONCTIONS[FONCTIONS.length - 1];
+  verifier('`mes_donnees()` est la DERNIÈRE fonction du fichier (PostgreSQL contrôle un corps SQL à sa création)',
+    derniere && derniere.nom === 'mes_donnees', derniere && derniere.nom);
+  const iBalayage = SQL.indexOf('do $portes$');
+  const apres = iBalayage > 0 ? SQL.slice(SQL.indexOf('$portes$;', iBalayage) + 9) : 'x';
+  verifier('le balayage (`do $portes$`) vient après la dernière fonction, et derrière lui il n’y a plus que des `revoke`',
+    iBalayage > derniere.fin && apres.split(';').map((x) => x.trim()).filter(Boolean).every((o) => /^revoke\s/i.test(o)),
+    sansEspaces(apres).slice(0, 200));
+}
+
+console.log('\n  24. l’export — `mes_donnees()`');
+{
+  const m = corpsDe('mes_donnees');
+  verifier('il rend `devis_emis`, `devis_lignes`, `devis_tva` et `demandes_de_devis`',
+    ['devis_emis', 'devis_lignes', 'devis_tva', 'demandes_de_devis'].every((k) => new RegExp(`'${k}'\\s*,`).test(m)));
+  verifier('…et ni `\'devis\'` (elle portait les DEMANDES, des deux côtés) ni `\'demandes_de_devis_recues\'` (faux pour un particulier)',
+    !/'devis'\s*,/.test(m) && !/'demandes_de_devis_recues'/.test(m));
+  verifier('…les lignes dans l’ordre du devis (`ordre`, puis `id`), et la ventilation EN ENTIER (zéros compris)',
+    /order\s+by\s+l\.devis_id,\s*l\.ordre,\s*l\.id/i.test(m) && !/nb_lignes\s*>\s*0/.test(m));
+}
+
+console.log('\n  25. les noms déjà pris');
+{
+  verifier('aucun `create index … idx_devis_pro` (il existe sur `quote_requests` : un `if not exists` ne créerait RIEN, sans un mot)',
+    !/create\s+(unique\s+)?index\s+(if\s+not\s+exists\s+)?idx_devis_pro\b[^;]*on\s+public\.devis\b/i.test(SQL)
+    && (SQL.match(/create\s+(unique\s+)?index\s+(if\s+not\s+exists\s+)?idx_devis_pro\b/gi) || []).length === 1);
+  verifier('aucune politique « lecture mes devis » (ni « creation devis », « le pro traite le devis ») posée sur les tables du devis',
+    !/create\s+policy\s+"(lecture mes devis|creation devis|le pro traite le devis|mes informations de devis)"\s+on\s+public\.devis(_lignes|_tva)?\b/i.test(SQL));
+}
+
+/* ================================================================== */
+/*  C. L'ESSAI — `supabase/essais-section-49.sql`                       */
+/* ================================================================== */
+console.log('\nC. L’ESSAI — ce que le fichier SQL doit contenir (le jouer est l’affaire de PostgreSQL, à la main)');
+console.log('\n  26. l’essai et le témoin');
+{
+  let brut = '';
+  try { brut = lire('supabase/essais-section-49.sql'); } catch (e) { brut = ''; }
+  const essai = sansCommentairesSql(brut);
+  verifier('`supabase/essais-section-49.sql` existe et a un CAS 0 (la donnée existe)',
+    brut.length > 5000 && /\\echo\s+'===\s+0\.\s/.test(essai));
+  /* AUCUN BLOC `do`, SOUS AUCUNE SYNTAXE, et aucun `set_config` du rôle ou
+     du jeton (relecture des essais, 2e tour, E1) : le premier motif ne lisait
+     que `do $…$ … $…$` — `do language plpgsql $x$ … $x$` y échappait, et un
+     cas de RLS joué là passe au vert sans rien éprouver (01/10/2026). L'essai
+     n'a besoin d'aucun bloc `do` : la règle la plus simple est la seule qui
+     ne se contourne pas par la syntaxe. */
+  const blocsDo = [...essai.matchAll(/(?:^|;)\s*do\s*(?:\$|[eE]?'|language\b)/gim)].map((m) => sansEspaces(m[0]));
+  const setConfig = [...essai.matchAll(/set_config\s*\(\s*'(?:role|request\.jwt[^']*)'/gi)].map((m) => m[0]);
+  verifier('aucun `set local role` ni `request.jwt` dans un bloc `do` — et aucun bloc `do` du tout, sous aucune syntaxe (`do $…$`, '
+    + '`do language …`, `do \'…\'`), ni aucun `set_config` du rôle ou du jeton : la RLS n’est pas appliquée dans un bloc `do`, '
+    + 'l’essai passerait au vert sans rien éprouver',
+  blocsDo.length === 0 && setConfig.length === 0, [...blocsDo, ...setConfig].join(' | '));
+  const annonces = [...essai.matchAll(/\\echo\s+'([^']*)'/g)].map((m) => m[1]).join('\n');
+  const noms = [...D.CONTRAINTES_LIGNE, 'devis_retenue_check', 'devis_source_check', 'devis_statut_check', 'devis_lieu_code_postal_check',
+    'devis_objet_check', 'devis_plafond_check', 'OP013', 'OP014', 'OP015', 'OP016', 'OP017', '23505',
+    'permission denied for table devis_tva', 'permission denied for table devis', 'permission denied for function mes_donnees',
+    'permission denied for function recalcule_devis', 'permission denied for function mes_entreprises', 'row-level security policy',
+    'row-level security policy (USING expression)'];
+  const absents = noms.filter((n) => !annonces.includes(n));
+  verifier('il annonce ses refus PAR LEUR NOM (les dix de ligne, six du devis, OP013 à OP017, 23505, les droits de table et de '
+    + 'fonction, la RLS)',
+    absents.length === 0, `non annoncés : ${absents.join(', ')}`);
+  /* Toute suppression d'un cas compte les lignes AVANT et APRÈS — hors le
+     ménage de tête, et hors les refus attendus sur `devis_tva` (le dernier
+     ordre de leur transaction). */
+  /* Le joueur du cas 30 est une fonction TEMPORAIRE : ses `delete` sont
+     ceux des cas d'argent, comptés par leur attendu. On lit les cas sans
+     les corps de fonction. */
+  /* ENCADRÉE, et pas seulement « quelque part » (relecture des essais,
+     M5) : un `count(*)` n'importe où avant et après dans le cas suffisait —
+     retirer le comptage qui suit la première suppression du cas 8 passait,
+     parce qu'un autre suivait la seconde. Désormais, chaque SUITE de
+     suppressions (des `delete` consécutifs, seuls `set`, `reset` et `\echo`
+     entre eux) doit avoir un comptage depuis la suite précédente — ou le
+     début de sa transaction — ET un autre avant la suite suivante — ou la
+     fin de sa transaction. */
+  const cas = essai.replace(/\$\$[\s\S]*?\$\$/g, ' ').split(/\\echo\s+'===\s+/).slice(1);
+  const nus = [];
+  let suites = 0;
+  cas.forEach((c) => {
+    const titre = c.slice(0, 30).trim();
+    /* Les ordres du cas, dans l'ordre : `begin`/`rollback`/`commit` ferment
+       un encadrement ; les lignes `\…` de psql sont des ordres neutres. */
+    const ordres = c.split(/;|\n(?=\\)/).map((o) => sansEspaces(o.replace(/^\s*\\[^\n]*$/gm, ' '))).filter(Boolean);
+    const neutre = (o) => /^(set|reset)\b/i.test(o);
+    const fin = (o) => /^(begin|rollback|commit)\b/i.test(o);
+    /* UN COMPTAGE QUI COMPTE LA TABLE SUPPRIMÉE (relecture des essais, 2e
+       tour, E2) : remplacer, au cas 21, le comptage qui suit la suppression
+       du brouillon par un `count(*)` des FICHES passait — le cas n'éprouvait
+       plus rien. Le comptage doit nommer l'une des tables que la suite
+       supprime ; pour `auth.users`, l'une de celles que la cascade vide. */
+    const CASCADE_COMPTE = ['auth.users', 'public.devis', 'public.devis_lignes', 'public.devis_tva', 'public.quote_requests',
+      'public.sos_requests', 'public.clients'];
+    const tableDe = (o) => { const m = /^delete\s+from\s+(public\.\w+|auth\.users)\b/i.exec(o); return m ? m[1].toLowerCase() : null; };
+    const compte = (o, tables) => /count\(\*\)/i.test(o) && tables.some((t) => new RegExp(`\\b${t.replace('.', '\\.')}\\b(?![\\w])`, 'i').test(o));
+    const supprime = (o) => { const t = tableDe(o); return t && t !== 'public.devis_tva'; };
+    for (let i = 0; i < ordres.length; i += 1) {
+      if (!supprime(ordres[i])) continue;
+      let j = i;
+      while (j + 1 < ordres.length && (supprime(ordres[j + 1]) || neutre(ordres[j + 1]))) j += 1;
+      const tables = [...new Set(ordres.slice(i, j + 1).map(tableDe).filter(Boolean)
+        .flatMap((t) => (t === 'auth.users' ? CASCADE_COMPTE : [t])))];
+      let avant = false;
+      for (let k = i - 1; k >= 0 && !fin(ordres[k]) && !supprime(ordres[k]); k -= 1) if (compte(ordres[k], tables)) { avant = true; break; }
+      let apres = false;
+      for (let k = j + 1; k < ordres.length && !fin(ordres[k]) && !supprime(ordres[k]); k += 1) if (compte(ordres[k], tables)) { apres = true; break; }
+      suites += 1;
+      if (!avant || !apres) nus.push(`${titre} : ${ordres[i].slice(0, 60)}${avant ? '' : ' (rien compté AVANT)'}${apres ? '' : ' (rien compté APRÈS)'}`);
+      i = j;
+    }
+  });
+  verifier(`toute suppression d’un cas est ENCADRÉE par un comptage avant et un après — qui compte LA TABLE supprimée —, même quand `
+    + `elle doit réussir (${suites} suites de suppressions lues — moins de dix : le lecteur a perdu sa cible)`, suites >= 10 && nus.length === 0,
+  nus.join(' | '));
+  verifier('le cas 30 lit `supabase/cas-devis.json` et joue les cas par une fonction TEMPORAIRE (rien n’entre dans le schéma)',
+    /\\set\s+cas\s+`cat\s+supabase\/cas-devis\.json`/.test(essai) && /create\s+or\s+replace\s+function\s+pg_temp\.jouer_cas\(/i.test(essai)
+    && /écarts : /.test(essai));
+  const requis = ['14 bis', '14 ter', '14 quater', '14 quinquies', '16 bis', '16 ter', '31', '32', '33', '34'];
+  const manquants = requis.filter((n) => !new RegExp(`\\\\echo\\s+'===\\s+${n.replace(' ', '\\s+')}\\.`).test(essai));
+  verifier('il contient les cas 14 bis (un lien inchangé), 14 ter (la prémisse d’OP013), 14 quater (les identifiants), 14 quinquies '
+    + '(OP013 à la création), 16 bis et 16 ter (OP014, par insertion et par déplacement), 31 (l’ordre des déclencheurs), 32 (la '
+    + 'requête tardive), 33 (visiteur, jeton vide, administrateur, blocage, upsert) et 34 (OP017)', manquants.length === 0, manquants.join(', '));
+  /* LES CAS QUI ÉPROUVENT CE QUE LES RELECTURES DE L'ÉTAPE 3 ONT TROUVÉ
+     (chacun avait PASSÉ un sabotage) : la création liée à la fiche d'un
+     autre, la frontière « <= », le déplacement tardif, le contrat « un ordre
+     = une ligne », les bornes du numéro, et le cas 9 qui compare aux LIGNES. */
+  const exige = [
+    [/14 quinquies[\s\S]*?insert\s+into\s+public\.devis\s*\(pro_id,\s*client_id,\s*generation\)\s*values\s*\(:A,\s*:CB,/i, '14 quinquies : une CRÉATION liée à la fiche de B'],
+    [/32k\.[\s\S]*?generation\s*=\s*10\s+where\s+id\s*=\s*:L5/i, '32k : une ligne au numéro ÉGAL à l’horloge (10)'],
+    [/32l\.[\s\S]*?set\s+devis_id\s*=\s*:D2,[^;]*generation\s*=\s*15/i, '32l : le déplacement tardif (n° 15 après n° 20)'],
+    [/32m\.[\s\S]*?'Première',[^;]*?,\s*5\),\s*\([^;]*?,\s*5\);/i, '32m : deux lignes, un seul ordre, le même numéro'],
+    [/32n\.[\s\S]*?,\s*null\);/i, '32n : un numéro NULL'],
+    [/=== 9\.[\s\S]*?full\s+join\s+ventilation[\s\S]*?=== 10\./i, '9 : la ventilation comparée aux LIGNES par une jointure complète'],
+  ].filter(([re]) => !re.test(essai)).map(([, quoi]) => quoi);
+  verifier('…et les formes que les relectures ont vu passer : ' + 'création liée à la fiche d’un autre, frontière « <= », '
+    + 'déplacement tardif, un ordre = une ligne, numéro NULL, invariants contre les lignes', exige.length === 0, exige.join(' | '));
+  /* LES PREUVES PAR LE CATALOGUE (relecture des essais, 2e tour) : c'est
+     l'essai qui tient la sécurité, et c'est donc lui qui ne doit rien perdre.
+     Ce contrôle ne peut que vérifier qu'il INTERROGE encore le catalogue
+     comme il le faut — et que le motif du cas 27 n'a pas retrouvé son
+     « regard en avant », qui cachait `insert into devis_lignes (…)` (N9). */
+  const c27 = (/===\s+27\.[\s\S]*?===\s+28\./.exec(essai) || [''])[0];
+  const c26 = (/===\s+26\.[\s\S]*?===\s+27\./.exec(essai) || [''])[0];
+  const c4q = (/===\s+4\s+quater\.[\s\S]*?===\s+5\./.exec(essai) || [''])[0];
+  const unites = D.UNITES.map((u) => u.cle);
+  const preuves = [
+    [/pg_get_function_sqlbody\s*\(\s*p\.oid\s*\)/i.test(c27) && /\bp\.prosrc\b/i.test(c27), '27a : le corps lu dans `prosrc` ET `prosqlbody`'],
+    [c27.length > 0 && !/\(\?!\\s\*\\\(\)/.test(c27), '27a : AUCUN regard en avant `(?!\\s*\\()` dans le motif (il cachait N9)'],
+    [/definer_ouvertes_attendu_\d+/.test(c27) && /p\.prosecdef\s+and\s+\(has_function_privilege\('anon'/i.test(c27), '27b : les `definer` appelables, en liste fermée'],
+    [/definer_fermees_attendu_\d+/.test(c27) && /p\.prosecdef\s+and\s+not\s+\(has_function_privilege\('anon'/i.test(c27), '27c : les `definer` NON appelables (déclencheurs compris), en liste fermée'],
+    [/\bpg_rewrite\b/i.test(c27) && /\bpg_depend\b/i.test(c27), '27d-e : dépendances, vues et règles'],
+    [/\bpg_trigger\b[\s\S]*?not\s+t\.tgisinternal/i.test(c27), '27f : les déclencheurs posés sur les trois tables'],
+    [/has_any_column_privilege\('anon'/i.test(c26) && /has_any_column_privilege\('public'/i.test(c26)
+      && /has_table_privilege\('public'/i.test(c26), '26 : PUBLIC, et les droits de COLONNE'],
+    [unites.length === 7 && unites.every((k) => new RegExp(`,\\s*'${k}',\\s*\\d+,\\s*\\d+,\\s*(true|false),\\s*\\d+\\)`).test(c4q)),
+      `4 quater : les sept unités de \`UNITES\` (${unites.join(', ')}) INSÉRÉES, une ligne chacune (N13)`],
+  ].filter(([ok]) => !ok).map(([, quoi]) => quoi);
+  verifier('…et les preuves PAR LE CATALOGUE que le 2e tour a rendues nécessaires (droits de colonne et PUBLIC, `prosrc` + `prosqlbody` '
+    + 'sans regard en avant, `definer` en deux listes fermées, règles, déclencheurs, les sept unités insérées)', preuves.length === 0,
+  preuves.join(' | '));
+  let temoin = '';
+  try { temoin = lire('supabase/essais-section-49-temoin.sql'); } catch (e) { temoin = ''; }
+  verifier('le témoin de concurrence vit dans `supabase/essais-section-49-temoin.sql` (le déclencheur `S_attente`)…',
+    /create\s+trigger\s+"S_attente"/i.test(sansCommentairesSql(temoin)) && /pg_sleep\(2\)/.test(temoin));
+  verifier('…et JAMAIS dans `schema.sql`', !/S_attente|temoin_attente_essai_49/.test(SQL));
 }
 
 console.log('\n  32. dans les fichiers du calcul : une seule orthographe, jamais une moyenne, jamais un arrondi flottant');
@@ -1540,6 +2478,8 @@ console.log('\n  32. dans les fichiers du calcul : une seule orthographe, jamais
      écrans et la section 49 s'y ajouteront avec leurs étapes. */
   const MODULE = ['src/lib/devis.js', 'src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js'];
   const textes = MODULE.map((f) => [f, sansCommentairesJs(lire(f))]);
+  verifier('…ni dans la section 49 (le schéma du devis ne lit aucun statut de `sos_requests`)', S49.length > 5000
+    && !/\b(acceptee|refusee)\b/.test(S49));
   const accordees = textes.flatMap(([f, t]) => t.split('\n')
     .filter((l) => /\b(acceptee|refusee)\b/.test(l) && !(f === 'src/lib/devis.js' && /^\s*sos:\s*Object\.freeze\(\[/.test(l)))
     .map((l) => `${f} : ${l.trim()}`));
@@ -1565,5 +2505,5 @@ if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);
   process.exit(1);
 }
-console.log('✔ Le chiffrage compte juste, au centime, et la file n’écrit rien deux fois. Ce que PostgreSQL en fait, '
-  + '`essais-section-49.sql` le dira (étape 3).\n');
+console.log('✔ Le chiffrage compte juste, au centime, la file n’écrit rien deux fois ni dans le désordre, et le schéma tient ce '
+  + 'qu’il promet. Ce que PostgreSQL en fait, `essais-section-49.sql` le dit — à jouer à la main.\n');

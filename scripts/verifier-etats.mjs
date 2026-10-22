@@ -349,6 +349,21 @@ console.log('\nUne consultation qui n’aboutit pas n’accuse jamais le numéro
   const deja = messageClair(new Error('User already registered'));
   verifier('« already registered » n’enferme pas dans « connectez-vous »',
     /Se connecter/.test(deja) && /professionnel/.test(deja), deja);
+
+  /* 57014 — LA BASE A ARRÊTÉ L'OPÉRATION (relecture sécurité du lot 1 du
+     devis, 21/10/2026) : son message contient « timeout », et l'écran
+     disait « pas de connexion » à quelqu'un dont le réseau allait bien. On
+     FAIT TOURNER la traduction sur l'erreur telle que PostgREST la rend, et
+     sur le délai du TÉLÉPHONE, qui doit, lui, rester une affaire de réseau. */
+  const { estUnProblemeDeReseau } = await import('../src/lib/erreurs.js');
+  const arretee = Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' });
+  const parLaBase = messageClair(arretee, 'La suppression de votre compte');
+  verifier('57014 (la base a arrêté l’opération) n’est PAS un problème de réseau, et le dit en français',
+    !estUnProblemeDeReseau(arretee) && !/connexion\. Vérifiez votre réseau/.test(parLaBase)
+      && /n’est pas votre connexion/.test(parLaBase) && /rien n’a été enregistré/.test(parLaBase), parLaBase);
+  const delaiTelephone = Object.assign(new Error('La base ne répond pas (plus de 12 secondes).'), { name: 'AbortError' });
+  verifier('…et le délai du TÉLÉPHONE (`avecDelai`) reste un problème de réseau',
+    estUnProblemeDeReseau(delaiTelephone) && /pas de connexion/.test(messageClair(delaiTelephone, 'X')));
 }
 
 console.log('\nLa démonstration fait vivre CHAQUE issue, sans un vrai SIRET');

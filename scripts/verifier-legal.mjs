@@ -12,6 +12,28 @@
  * en oubliant de remplir les champs, et ne s'en apercevoir qu'une fois
  * l'application en ligne. Ici, l'oubli se voit tout de suite.
  *
+ * À LIRE AVANT LA PARTIE « TARIFS ET PRIX » : UN CONTRÔLE QUI LIT DU TEXTE
+ * NE PEUT PAS VOIR TOUTES LES FORMES QU'UN SQL PEUT PRENDRE ; LA PREUVE DE
+ * SÉCURITÉ EST L'ESSAI, QUI INTERROGE LE CATALOGUE DE LA BASE REJOUÉE. Ce
+ * fichier lit `schema.sql` comme du texte pour tenir la promesse « vos tarifs
+ * et vos prix » (la liste fermée des lecteurs, C16, les vues, les fonctions
+ * Edge). Il attrape tôt les fautes ordinaires ; il ne PROUVE rien. Les deux
+ * relectures de l'étape 3 du lot 1 l'ont montré sur des copies sabotées,
+ * fuites à l'appui (B lisait 86 545 c, les prix de A) : guillemets, `begin
+ * atomic`, corps entre APOSTROPHES, PROCÉDURE, `public . x`, `insert into x
+ * (cols)` non qualifié, appel non qualifié… Les motifs ci-dessous en
+ * reconnaissent désormais la plupart ; ce qu'ils manqueront demain, c'est
+ * `supabase/essais-section-49.sql` qui le tient, par le catalogue :
+ *   - toute `security definer`, quels que soient son nom, son corps, son genre
+ *     et la façon d'écrire la table — cas 27b et 27c, deux listes FERMÉES
+ *     (sabotages N6, N7, N7b, N7c, N8, N9, N10, N11) ;
+ *   - les politiques des tables du devis, quel que soit leur nom — cas 12 et
+ *     28 (`pg_policies` ; N1 à N4) ;
+ *   - les DROITS de table et de colonne, quelle que soit l'écriture du
+ *     `grant` (sans `public.`, en masse sur les tables, par colonne, à PUBLIC)
+ *     — cas 26 (N5, N5b, N12) : ce fichier ne les lit pas du tout ;
+ *   - les vues et les RÈGLES — cas 27e.
+ *
  * node scripts/verifier-legal.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -695,6 +717,27 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
     `${politiques.length} politique(s) sur tarifs_pro (${lecture.length} de lecture). Une lecture pour `
     + 'l’administration ferait mentir « ni dans l’espace d’administration » ; une lecture sans '
     + '`not est_un_pro()` montrerait les prix d’un artisan à ses concurrents.');
+  /* LES TABLES DU DEVIS, MÊME PROMESSE — relecture des essais de l'étape 3
+     du lot 1 (I-3) : une politique `using (true)` sur `public.devis`, posée
+     hors de la section 49, ouvrait tous les devis à tout compte connecté, et
+     ce contrôle n'en savait rien (verifier-devis tient la liste EXACTE ; ici,
+     la promesse « ni un autre artisan, ni l'administration »). Dans TOUT le
+     fichier, toute politique sur ces trois tables est `to authenticated`,
+     passe par `mes_entreprises()`, et n'écrit ni `true`, ni `est_admin`, ni
+     `auth.uid()`, ni `anon`. */
+  /* LE NOM AVEC OU SANS GUILLEMETS, LA TABLE QUALIFIÉE, ESPACÉE, ENTRE
+     GUILLEMETS OU NON (relecture des essais, 2e tour, N1 à N4) : chacune de
+     ces formes passait l'un des deux contrôles, et ouvrait les devis de A à
+     B et à P (prouvé). L'essai (cas 12, 28) les voit toutes par
+     `pg_policies`. */
+  const sqlDeplie = sql.replace(/"([a-z_][a-z0-9_]*)"/g, '$1');
+  const politiquesDevis = [...sqlDeplie.matchAll(/create\s+policy\s+(?:"[^"]+"|[a-z_][\w$]*)\s+on\s+(?:only\s+)?(?:public\s*\.\s*)?(?:devis|devis_lignes|devis_tva)\b[\s\S]*?;/gi)].map((m) => m[0]);
+  const ouvertesDevis = politiquesDevis.filter((x) => !/\bto authenticated\b/.test(x) || /\bto (anon|public)\b/.test(x)
+    || /\(\s*true\s*\)|\btrue\b|est_admin|auth\.uid\(\)/.test(x) || !/public\.mes_entreprises\(\)/.test(x));
+  verifier(`…et les tables du DEVIS ne s’ouvrent qu’à leur entreprise : ${politiquesDevis.length} politique(s) dans tout le fichier, `
+    + 'chacune par `mes_entreprises()`, sans `true`, ni `est_admin`, ni `anon`',
+  politiquesDevis.length === 3 && ouvertesDevis.length === 0,
+  ouvertesDevis.map((x) => x.replace(/\s+/g, ' ').slice(0, 120)).join(' | ') || `${politiquesDevis.length} politique(s) au lieu de 3`);
   /* UNE PROPRIÉTÉ, PAS UN NOM — relecture du 18/10/2026. Ce contrôle ne
      regardait que les fonctions nommées `admin_…` : une fonction `security
      definer` sous un autre nom (`frais_d_un_artisan`), accordée à `anon`,
@@ -708,14 +751,35 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
        - aucune vue ne les nomme ;
        - aucune fonction Edge ne les nomme : avec la clé de service, elle
          lirait tout, sans aucune politique.
-     LA LISTE DES TABLES S'ALLONGERA : au lot 1, les prix des lignes de devis
-     (`devis_lignes`) entreront dans la promesse « les tarifs et les prix que
-     vous enregistrez pour vos devis » — et dans `PRIVEES` ci-dessous.
+     LA LISTE DES TABLES S'EST ALLONGÉE au lot 1 du devis (section 49,
+     21/10/2026) : les prix des lignes de devis entrent dans la promesse
+     « les tarifs et les prix que vous enregistrez pour vos devis ». Les
+     trois tables du devis se nomment ici SOUS LEUR NOM QUALIFIÉ
+     (`public.devis`, `public.devis_lignes`, `public.devis_tva`), jamais par
+     le mot « devis » : ce lecteur GARDE les chaînes, et le mot est dans les
+     phrases de `notifie_demande`, `mes_demandes_recues`, `emetteur_incomplet`
+     (relecture « base » du cahier, B2).
+
+     ET LA RÈGLE « AUCUNE `security definer` » EST DEVENUE « AUCUNE `security
+     definer` EXÉCUTABLE PAR UN CLIENT » (cahier C16) : `devis_tva` n'a
+     aucune politique d'écriture, seule une fonction `definer` peut la
+     remplir — `recalcule_devis`. Une telle fonction doit donc avoir, JUSTE
+     APRÈS ELLE, son `revoke … from public, anon, authenticated`, et rien ne
+     doit la rendre. SANS EXEMPTION pour les fonctions de déclencheur : le
+     balayage de la section 43 leur retire bien le droit d'appel, mais une
+     fonction de déclencheur `definer` posée sur une table publique pourrait
+     RECOPIER des prix dans cette table — l'appelabilité n'est pas le seul
+     risque d'un `definer` (CR-B M3).
 
      Le SQL est lu SANS SES COMMENTAIRES, par un lecteur qui respecte les
      chaînes (y compris `E'…\'…'`) : un nom de table cité dans un commentaire
      ne compte pas, un nom caché dans un `execute $q$…$q$` compte. */
-  const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
+  /* `public . devis_lignes` (espacé) et `insert into devis_lignes (…)` (non
+     qualifié) sont les mêmes tables (relecture des essais, 2e tour, N9 et
+     N11, prouvés : un déclencheur `definer` écrivait dans le devis d'un
+     autre ; une `definer` rendait à B les prix de A). */
+  const DEVIS_NOMME = /\bpublic\s*\.\s*devis(_lignes|_tva)?\b|\b(?:from|join|into|update|table|only|using)\s+devis(_lignes|_tva)?\b/i;
+  const PRIVEES = new RegExp(`\\b(tarifs_pro|emetteur_assurances|emetteur)\\b|${DEVIS_NOMME.source}`, 'i');
   /* DEUX LISTES depuis le lot T : `artisans_urgence()` lit `tarifs_pro` — à
      travers « tarifs affiches », en `security invoker` — et elle seule de
      plus. Elle n'a rien à faire dans `emetteur` ni `emetteur_assurances`,
@@ -725,6 +789,12 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
       permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees'] },
     { tables: /\btarifs_pro\b/,
       permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence'] },
+    /* LA TROISIÈME, au lot 1 du devis : les prix des lignes. Le cahier y
+       mettait aussi `tient_la_ligne_de_devis` ; elle n'en nomme plus depuis
+       que le plafond de lignes compte sous le verrou de `recalcule_devis`
+       (étape 3, 21/10/2026 — `verifier-devis` B-22 tient la liste EXACTE). */
+    { tables: DEVIS_NOMME,
+      permises: ['tient_le_devis', 'recalcule_devis', 'mes_donnees'] },
   ];
   const sansCommentairesSql = (t) => {
     let sortie = '';
@@ -757,10 +827,64 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
     }
     return sortie;
   };
-  const sqlNu = sansCommentairesSql(readFileSync('supabase/schema.sql', 'utf8'));
-  const fonctions = [...sqlNu.matchAll(
-    /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?(\w+)\s*\(([\s\S]*?)\bas\s+(\$\w*\$)([\s\S]*?)\3/gi,
-  )].map((m) => ({ nom: m[1], attributs: m[2], corps: m[4] }));
+  /* LES IDENTIFIANTS ENTRE GUILLEMETS SONT DÉPLIÉS, et LES TROIS FORMES DE
+     CORPS sont lues — relecture des essais de l'étape 3 du lot 1 (I-2), avec
+     une fuite prouvée : une `definer` qui lisait `public."devis_lignes"`, ou
+     dont le corps était `begin atomic … end`, passait ce contrôle, et rendait
+     à un autre artisan la somme des prix de A. Le même lecteur que
+     `verifier-devis`, dans n'importe quel schéma. */
+  const deplier = (t) => t.replace(/"([a-z_][a-z0-9_]*)"/g, '$1');
+  const sansChaines = (t) => t.replace(/'(?:[^']|'')*'/g, (m) => `'${' '.repeat(Math.max(0, m.length - 2))}'`);
+  const sqlNu = deplier(sansCommentairesSql(readFileSync('supabase/schema.sql', 'utf8')));
+  const fonctions = [];
+  {
+    /* …ET LES PROCÉDURES, ET UN CORPS ENTRE APOSTROPHES (`as '…'`), ET
+       `public . nom` (relecture des essais, 2e tour, N7c et N8, prouvés :
+       B lisait 86 545 c par l'une et par l'autre). */
+    const debut = /create\s+(?:or\s+replace\s+)?(?:function|procedure)\s+((?:\w+\s*\.\s*)?\w+)\s*\(/gi;
+    let m;
+    while ((m = debut.exec(sqlNu))) {
+      const base = m.index + m[0].length;
+      const apres = sqlNu.slice(base);
+      const dollar = /\bas\s+(\$\w*\$)/i.exec(apres);
+      const atomique = /\bbegin\s+atomic\b/i.exec(apres);
+      const retour = /\breturn\s/i.exec(apres);
+      const apostrophe = /\bas\s+([eE]?)'/.exec(apres);
+      const premier = [dollar, atomique, retour, apostrophe].filter(Boolean).sort((a, b) => a.index - b.index)[0];
+      if (!premier) continue;
+      let corps; let fin;
+      if (premier === apostrophe) {
+        const echappe = apostrophe[1] !== '';
+        let j = apostrophe.index + apostrophe[0].length;
+        const cDebut = j;
+        while (j < apres.length) {
+          if (echappe && apres[j] === '\\') { j += 2; continue; }
+          if (apres[j] === "'" && apres[j + 1] === "'") { j += 2; continue; }
+          if (apres[j] === "'") break;
+          j += 1;
+        }
+        corps = apres.slice(cDebut, j).replace(/''/g, "'"); fin = j + 1;
+      } else if (premier === dollar) {
+        const cDebut = dollar.index + dollar[0].length;
+        const cFin = apres.indexOf(dollar[1], cDebut);
+        if (cFin < 0) continue;
+        corps = apres.slice(cDebut, cFin); fin = cFin + dollar[1].length;
+      } else if (premier === atomique) {
+        const cDebut = atomique.index + atomique[0].length;
+        const mots = /\b(case|begin|end)\b/gi; mots.lastIndex = cDebut;
+        let p = 1; let w; fin = apres.length;
+        while ((w = mots.exec(apres))) {
+          if (/^end$/i.test(w[1])) { p -= 1; if (p === 0) { fin = w.index + w[0].length; break; } } else p += 1;
+        }
+        corps = apres.slice(cDebut, fin);
+      } else {
+        fin = apres.indexOf(';', retour.index); if (fin < 0) fin = apres.length;
+        corps = apres.slice(retour.index, fin);
+      }
+      fonctions.push({ nom: m[1].replace(/\s+/g, '').split('.').pop(), attributs: apres.slice(0, premier.index), corps, index: m.index, fin: base + fin });
+      debut.lastIndex = base + fin;
+    }
+  }
   /* 78 fonctions le 18/10/2026 (deux « create function » de plus dans le
      fichier ne sont que des exemples écrits en commentaire). Moins de 60 :
      le lecteur a perdu sa cible, et le contrôle le dit au lieu de passer. */
@@ -773,15 +897,57 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
     horsListe.length ? `${horsListe.join(', ')} : une fonction de plus qui lit les tarifs ferait mentir `
       + '« Vos tarifs et vos prix ». Si elle est légitime, elle entre dans la liste, avec sa raison.'
       : 'le lecteur ne trouve plus les fonctions, ou plus celles qui lisent ces tables : il est devenu aveugle');
-  verifier('…et aucune de celles qui les lisent n’est `security definer` (elle lirait par-dessus les politiques)',
-    lisent.length >= 2 && definer.length === 0, definer.join(', '));
+  /* C16 : une `definer` qui nomme une table de prix n'est exécutable par
+     AUCUN client — le `revoke` juste après elle, et rien qui le rende. */
+  const ouvertes = definer.filter((nom) => {
+    const f = fonctions.find((x) => x.nom === nom);
+    const suivante = fonctions.find((x) => x.index > f.index);
+    const apres = sqlNu.slice(f.fin, suivante ? suivante.index : sqlNu.length).replace(/^\s*;/, '');
+    /* Les rôles se lisent comme un ENSEMBLE (relecture des essais, M4). */
+    const roles = (new RegExp(`^\\s*revoke\\s+all\\s+on\\s+(?:function|procedure|routine)\\s+public\\.${nom}\\s*\\([^)]*\\)\\s+from\\s+([\\w\\s,]+?)\\s*;`, 'i').exec(apres) || [])[1] || '';
+    const retiree = [...new Set(roles.split(',').map((r) => r.trim().toLowerCase()).filter(Boolean))].sort().join(',') === 'anon,authenticated,public';
+    const rendue = new RegExp(`grant[^;]*\\b(?:function|procedure|routine)\\s+(?:public\\s*\\.\\s*)?${nom}\\b[^;]*\\bto\\b[^;]*\\b(public|anon|authenticated)\\b`, 'i').test(sqlNu);
+    return !retiree || rendue;
+  });
+  verifier(`…et celles qui les lisent en \`security definer\` (${definer.join(', ') || 'aucune'}) ne sont exécutables par AUCUN client : `
+    + '`revoke … from public, anon, authenticated` juste après elles, et rien qui le rende — fonctions de déclencheur comprises',
+  lisent.length >= 2 && ouvertes.length === 0, `${ouvertes.join(', ')} : une fonction qui lit par-dessus les politiques, `
+    + 'appelable par `/rest/v1/rpc`, lirait les prix de n’importe quel artisan (la faille du 18/10 était une `definer` accordée à `anon`).');
+  /* …ET RIEN NE LES REND SANS LES NOMMER (relecture des essais, I-4,
+     prouvé : un autre artisan figeait le devis de A, l'horloge au maximum)
+     : `grant … on all functions in schema` après la section 49 rendrait
+     `recalcule_devis` à tout compte connecté ; `alter default privileges …
+     on functions` rendrait d'office toute fonction à naître. */
+  const iS49 = sqlNu.search(/create\s+table\s+if\s+not\s+exists\s+public\.devis\s*\(/i);
+  const enMasse = [...sqlNu.matchAll(/grant\s+[^;]*\bon\s+all\s+(functions|routines|procedures)\s+in\s+schema\b[^;]*;/gi)]
+    .filter((m) => iS49 > 0 && m.index > iS49).map((m) => m[0].replace(/\s+/g, ' '));
+  const parDefaut = [...sqlNu.matchAll(/alter\s+default\s+privileges\b[^;]*\bgrant\b[^;]*\bon\s+(functions|routines)\b[^;]*;/gi)].map((m) => m[0].replace(/\s+/g, ' '));
+  verifier('…et aucun `grant … on all functions in schema` après la section 49, aucun `alter default privileges … on functions` : '
+    + 'ils rendraient une `definer` de prix sans la nommer', iS49 > 0 && enMasse.length === 0 && parDefaut.length === 0,
+  [...enMasse, ...parDefaut].join(' | ') || 'la section 49 est introuvable');
+  /* UNE VUE lit avec les droits de son propriétaire : aucune ne nomme ces
+     tables — et pour celles du devis, QUALIFIÉES OU NON (relecture des
+     essais, I-2 : `from (select 1) x, devis_lignes l` passait), cherché
+     sans les chaînes. */
   const vues = [...sqlNu.matchAll(/create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+[\s\S]*?;/gi)]
-    .map((m) => m[0]).filter((v) => PRIVEES.test(v));
+    .map((m) => m[0]).filter((v) => PRIVEES.test(v) || /\bdevis(_lignes|_tva)?\b/i.test(sansChaines(v)));
   verifier('…aucune vue ne les nomme', vues.length === 0, vues.map((v) => v.slice(0, 80)).join(' | '));
   const edge = execFileSync('git',
     ['ls-files', '--cached', '--others', '--exclude-standard', 'supabase/functions'], { encoding: 'utf8' })
     .split('\n').filter((f) => /\.(ts|js|mjs)$/.test(f));
-  const edgeQuiLisent = edge.filter((f) => PRIVEES.test(sansCommentairesJs(readFileSync(f, 'utf8'))));
+  /* Une fonction Edge nommerait les tables du devis par supabase-js
+     (`from('devis_lignes')`), pas par leur nom qualifié — et sous TOUTES les
+     formes d'une chaîne, gabarit compris (relecture des essais, I-2 :
+     `from(\`devis_lignes\`)` passait). Et un `.from(` dont l'argument n'est
+     pas une chaîne écrite en toutes lettres ne se relit pas : la table
+     viendrait d'une variable. Seuls `storage.from(espace)` (le stockage,
+     pas une table) et `Array.from(…)` y échappent. */
+  const PRIVEES_EDGE = /\b(tarifs_pro|emetteur_assurances|emetteur)\b|\bfrom\(\s*['"`]devis(_lignes|_tva)?['"`]|\bpublic\.devis(_lignes|_tva)?\b/;
+  const FROM_ILLISIBLE = /(?<!\bstorage|\bArray)\.from\(\s*(?!['"][\w.-]*['"]\s*\))/;
+  const edgeQuiLisent = edge.filter((f) => {
+    const src = sansCommentairesJs(readFileSync(f, 'utf8'));
+    return PRIVEES_EDGE.test(src) || FROM_ILLISIBLE.test(src);
+  });
   verifier(`…et aucune fonction Edge ne les nomme (${edge.length} fichiers lus) : la clé de service lirait tout`,
     edge.length >= 3 && edgeQuiLisent.length === 0,
     edgeQuiLisent.length ? edgeQuiLisent.join(', ') : 'moins de trois fichiers de fonctions Edge : le contrôle a perdu sa cible');

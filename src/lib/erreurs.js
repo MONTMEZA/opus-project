@@ -171,10 +171,28 @@ export function messageDeContrainte(nom) {
   return `Cette valeur n’est pas acceptée (règle « ${String(nom)} »).`;
 }
 
+/**
+ * UNE REQUÊTE QUE LA BASE A ARRÊTÉE — 57014, « canceling statement due to
+ * statement timeout ». Relecture sécurité du lot 1 du devis (étape 3,
+ * 21/10/2026), mesuré : quand une opération dépassait les 8 s que la vraie
+ * base accorde à un compte connecté, le message contenait « timeout »,
+ * `estUnProblemeDeReseau()` le prenait pour une coupure, et l'écran disait
+ * « pas de connexion » — à quelqu'un dont la connexion allait très bien, et
+ * qui réessayait pour rien. La base a RÉPONDU : ce n'est pas le réseau.
+ */
+export function estUneRequeteArreteeParLaBase(e) {
+  const code = String((e && e.code) || '');
+  const m = String((e && e.message) || e || '').toLowerCase();
+  return code === '57014' || m.includes('statement timeout') || m.includes('canceling statement');
+}
+
 /** Vrai quand l'erreur vient manifestement du réseau, pas du programme. */
 export function estUnProblemeDeReseau(e) {
   const m = String((e && e.message) || e || '').toLowerCase();
   const nom = String((e && e.name) || '').toLowerCase();
+  /* « timeout » ci-dessous vise le DÉLAI DU TÉLÉPHONE ; celui de la base
+     (57014) n'est pas une coupure — voir juste au-dessus. */
+  if (estUneRequeteArreteeParLaBase(e)) return false;
   return (
     m.includes('failed to fetch')
     || m.includes('network request failed')
@@ -318,6 +336,15 @@ export function messageClair(e, quoi = '') {
      ou « délai » dans une phrase du serveur ne disent pas que le téléphone
      est hors ligne. */
   if (String((e && e.name) || '') === 'ErreurAssistant' && brut) return brut;
+
+  /* La base a répondu qu'elle avait ARRÊTÉ l'opération (57014) : ce n'est
+     pas le réseau, et le dire serait envoyer chercher la panne au mauvais
+     endroit. Rien n'a été enregistré — la transaction est annulée en
+     entier. Avant le réseau, puisque son message contient « timeout ». */
+  if (estUneRequeteArreteeParLaBase(e)) {
+    return phrase(sujet, 'l’opération a pris trop de temps du côté d’Opus, et la base l’a arrêtée. '
+      + 'Ce n’est pas votre connexion, et rien n’a été enregistré : réessayez dans quelques minutes.');
+  }
 
   /* Le réseau d'abord : c'est le cas le plus fréquent sur un chantier, et
      celui où l'utilisateur n'a rien fait de mal. */
