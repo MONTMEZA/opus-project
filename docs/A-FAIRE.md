@@ -1858,6 +1858,9 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
   (constaté le 20/10). Deux autres, posées pour l'essai du 20/10, expirent
   deux heures après et partiront de même ; les compteurs `tva-` de cet essai
   (cinq lignes, sous empreinte) partent à la purge, plus d'un jour après.
+  **Corrigé le 23/10 : « partiront de même » n'était pas encore vrai deux
+  jours après** — ces deux preuves étaient en base le 22/10, et ont servi,
+  mises à jour, à l'essai du lot 1 (voir « Après le lot 1 »).
 
 ### Après le lot T — ce qui reste (20/10/2026)
 
@@ -1926,6 +1929,305 @@ lisible par tous les particuliers connectés pendant ce temps-là.
   pour ne pas prêter à l'artisan une convention d'Opus. À trancher.
 - [ ] Le motif de `verifier-etats` ne voit pas `e.message ||` : élargi, il
   rougirait sur huit endroits hors du lot T.
+
+### Après le lot 1 — ce qui reste (23/10/2026)
+
+Le détail est dans CLAUDE.md, « Le chiffrage — lot 1 » ; le cahier qui l'a
+guidé est archivé en `docs/CAHIER-LOT-1.md`. La section 49 est sur la vraie
+base depuis le 22/10, vers 23 h 43 (heure de Paris), et l'essai par le chemin
+de l'application a été fait les 22 et 23/10, avec trois comptes jetables
+supprimés ensuite : la base est revenue à 0 devis. Les comptes rendus d'étape
+et les relectures cités entre parenthèses sont des documents de travail de la
+session : ils ne sont pas dans le dépôt, le cahier archivé l'est.
+
+**Toujours ouverts depuis le lot T, et non recopiés ici** (voir « Après le
+lot T », juste au-dessus) : faire ré-accepter les conditions — `VERSION` est
+passée au `2026-10-22` avec ce lot, et rien ne compare encore la version
+acceptée à la version en vigueur — ; et l'unité des montants sur le devis,
+qui rejoint le quatrième point du juriste, plus bas.
+
+**Les avertissements des commits `fde72f9` et `b1926d9`, qui disaient de ne
+pas récupérer cette version avant la migration, ne valent plus** depuis le
+22/10 au soir : la version du dépôt peut aller sur le téléphone, « Mes devis »
+y trouvera ses tables.
+
+**À trancher avec vous, en voyant l'écran** — des choix et des relevés d'écran,
+qui ne sont pas tous de la même sorte, et chaque case dit la sienne (compte
+rendu des étapes 4 à 7, §8, points 1 et 4 ; et, pour le plafond, la relecture
+sécurité de l'étape 3) :
+
+- [ ] **L'origine d'une suggestion de prix se nomme par sa DATE** (« votre
+  devis du 12/10/2026 ») quand le devis d'origine vient d'une demande ou d'une
+  urgence, et par quatre mots de son objet quand vous l'avez commencé à la
+  main. Pourquoi : l'objet d'un devis né d'une demande est le texte que le
+  CLIENT a écrit ; le montrer dans le devis d'un autre client ferait lire à
+  l'un ce qu'a écrit l'autre (relecture « données », I5). Le cahier disait
+  « avec leur devis d'origine » sans dire comment le nommer : c'est le seul
+  choix de cette liste que la construction a fait seule, faute de réponse
+  écrite.
+- [ ] **Une ligne ouverte en grand montre deux retours** (← et « ‹ Devis »)
+  **et le titre de la pièce deux fois.** Ce n'est pas un choix de la
+  construction : c'est un choix du CAHIER (§4.8 : en saisie, le titre de
+  retour est celui de la pièce), que la relecture « écran » discute — elle
+  proposait de ne garder le titre que dans la barre de la carte (C5). À juger
+  sur l'iPhone.
+- [ ] **« Choisir dans mon carnet » passe sur deux lignes** sur un écran de
+  320 points de large : 56 points de haut contre 44 pour son voisin. Rien de
+  cassé, c'est le libellé du cahier ; la relecture « écran » proposait
+  « Mon carnet » (C6), sans l'avoir mesuré.
+- [ ] **En revenant d'un devis ouvert depuis « Pour moi », la pastille revient
+  à « À traiter »**, même si vous étiez sur « En cours » : l'écran a été
+  démonté, et il faut retoucher la pastille. Ce n'est pas un choix, c'est un
+  défaut relevé à l'étape 7, mesuré à chaque passage (§8, point 4) ; il est
+  ici parce qu'il se juge en voyant l'écran.
+- [ ] **Le plafond de 20 devis par demande, et de 20 par urgence** (`OP017`).
+  Posé pendant la construction sur la proposition de la relecture sécurité de
+  l'étape 3 (I1), qui le disait à trancher avec vous : la règle D4 interdit
+  l'UNICITÉ (un client a plusieurs projets), pas une borne. Pourquoi une
+  borne : sans elle, 100 000 brouillons rattachés à la demande d'un
+  particulier faisaient dépasser les 8 s de la vraie base à la suppression de
+  son compte (mesuré). Sur la vraie base, le 22-23/10 : 20 brouillons pour la
+  même demande passent, le 21ᵉ est refusé par `OP017`. Le nombre, lui, est à
+  vous.
+
+**À savoir avant de remettre le compte à votre frère :**
+
+- [ ] **La phrase des textes légaux « le seul artisan qui y tient un carnet ou
+  y prépare des devis est l'auteur de l'application lui-même »** a été relue
+  sur la vraie base après le ménage de l'essai : un seul compte tient un
+  carnet (un administrateur), aucun ne prépare de devis — elle est vraie.
+  **Elle devient fausse le jour où un autre artisan enregistre un client ou
+  commence un devis**, et c'est ce jour-là que le contrat de sous-traitance
+  (« Avant de remettre le compte au frère », plus haut) devient nécessaire.
+  Votre propre essai sur votre compte principal ne la rend pas fausse : c'est
+  toujours vous.
+
+**À essayer sur l'iPhone — dans le build de développement ou Expo Go (le lot
+n'ajoute aucun module natif), JAMAIS dans l'icône « preview » du 17/10**, qui
+porte le code d'avant : si rien n'a changé à l'écran, demander d'abord QUELLE
+application est ouverte. Le compte : le vôtre (réponse du 21/10, Q5) ; vos
+brouillons d'essai ne partent nulle part, ils restent à vous et se
+suppriment. Les dix questions écrites à l'avance (cahier §7.6) :
+
+- [ ] Taper « 2,5 » dans la quantité : la virgule passe-t-elle ?
+- [ ] Quand le pavé numérique est ouvert, voyez-vous les unités et le taux ?
+  Le geste « glisser vers le bas » ferme-t-il le clavier ?
+- [ ] Le total en bas se voit-il quand vous en avez besoin ? Vous manque-t-il
+  pendant que vous tapez ? (Il est caché clavier ouvert, et c'est dit ; une
+  barre au-dessus du clavier serait la parade suivante — invisible au
+  navigateur, donc pas livrée sans l'avoir vue, cahier §1.3.)
+- [ ] La ligne qui s'ouvre en grand : préférez-vous cela, ou la voir dans la
+  liste ? Retrouvez-vous votre place en revenant ?
+- [ ] Combien de touches pour la deuxième chape ?
+- [ ] Les pastilles d'unité et de taux, et « Faire un devis » dans « Pour
+  moi », se touchent-ils sans viser ? (« Faire un devis » fait 36 points de
+  haut, plus une marge de visée que le navigateur ignore.)
+- [ ] Le total se lit-il d'un coup d'œil, chiffres alignés ?
+- [ ] Le correcteur a-t-il changé un mot de métier (« placo », « BA13 »,
+  « ragréage ») ?
+- [ ] « Nouveau client » depuis le devis ouvre-t-il bien la fiche, puis la
+  pose-t-il sur le devis ?
+- [ ] La toute première ligne tapée est-elle là après avoir fermé puis rouvert
+  Opus ? C'est aussi la preuve que le téléphone sait fabriquer l'identifiant
+  d'une ligne — déduit du code d'Expo, jamais vu.
+
+Trois de plus, relevés pendant la construction (compte rendu des étapes 4 à
+7, §8) :
+
+- [ ] le code postal du lieu ouvre-t-il le pavé numérique ?
+- [ ] avec VoiceOver, une ligne ouverte en grand cache-t-elle bien le reste de
+  l'écran ? (Ce réglage n'a été que LU dans le code.)
+- [ ] un code postal de quatre chiffres dans l'en-tête, puis un appui sur la
+  barre du bas : la bande « ce que vous avez écrit n'est pas enregistré »
+  paraît-elle, et le champ garde-t-il son curseur ? Au navigateur, le toucher
+  retire le curseur : ça ne se juge qu'au doigt.
+
+Et ce qui n'a tourné qu'ailleurs : les calculs sous Hermes (seulement sous
+`node`), l'annulation d'une requête sur le téléphone, et la file d'écriture
+sous un vrai réseau de chantier — ici, seule une coupure franche se simule.
+
+**À faire relire par un juriste, avant le lot 2** — c'est lui qui imprimera ;
+au lot 1, l'écran n'affirme aucun de ces points (cahier §1.2, §1.4, §1.5 et
+§10) :
+
+- [ ] **L'assiette de la retenue de garantie : HT ou TTC ?** La loi
+  n° 71-584 dit « de leur montant » (celui des acomptes) ; la FFB écrit TTC ;
+  la Caisse des dépôts fait attester que la retenue « ne dépasse pas 5 % du
+  montant des acomptes versés ». D'où : l'écran ne montre aucun montant de
+  retenue, seulement son taux et sa phrase (cahier §1.2).
+- [ ] **Une retenue sur un paiement unique**, à la fin des travaux : le texte
+  ne vise que « les acomptes » (cahier §1.2).
+- [ ] **Ce qu'un artisan en franchise écrit à la place de « HT et TTC, en
+  précisant le taux »** (cahier §10).
+- [ ] **Le taux horaire TTC du lot T face à un prix unitaire HT** au centime.
+  Au régime réel, le champ du devis reste vide et la phrase dessous montre le
+  taux déclaré, jamais converti : mesuré, 12 euros ronds sur 131 ne se
+  retrouvent pas en TTC à 10 % depuis un HT au centime (cahier §1.5, C9).
+  C'est le même sujet que « l'unité des montants sur le devis », d'« Après le
+  lot T ».
+- [ ] **Le taux d'une ligne de frais de déplacement sur un devis à deux taux**
+  de TVA (cahier §10).
+- [ ] **Un « Offert » est-il une remise, ou une prestation à prix nul — et que
+  le devis en imprime-t-il ?** (« Offert — valeur 45,00 € », ou rien.) Le
+  lot 1 garde le prix d'une ligne offerte et met son total à 0, pour ne rien
+  perdre : si c'est une remise, la facture devra porter le prix AVANT la
+  réduction (CGI, ann. II, 242 nonies A, I, 8° et 9° ; BOFiP
+  BOI-TVA-DECLA-30-20-20-10 §220), et un prix rangé à 0 l'aurait perdu
+  (cahier §1.4, point 1).
+- [ ] L'extension de R. 212-2 aux non-professionnels (R. 212-5) (cahier §10).
+- [x] **Les primes déduites** (CEE, aides publiques) — **répondu le 21/10 :
+  jamais** (Q4). Elles étaient sur la liste du cahier ; rien à prévoir.
+
+**Pour le lot S (sécurité), décidé le 19/10 AVANT le lot 2** — trouvés en
+construisant le lot 1, d'avant le module ou hors de son périmètre :
+
+- [ ] **`authenticated` garde le droit `truncate` sur `clients`** (relevé à la
+  lecture du code et sur la vraie base, cahier §1.3 et §2.7 ; toujours vrai
+  dans `schema.sql` au 23/10). Un `truncate` ignore la RLS : prouvé le 22/10
+  sur `devis_lignes`, dans une base d'essai où ce droit avait été rendu exprès
+  — un artisan qui ne lisait aucun devis d'un autre a vidé les lignes de TOUS
+  les artisans (relecture des essais de l'étape 3, N5b). Les tables posées
+  depuis la section 45 le retirent ; le carnet de clients, non. Aucun écran
+  ne s'en sert : c'est un droit qui n'a aucune raison d'exister.
+- [ ] **Un blocage ne cache pas à l'artisan une demande déjà reçue** :
+  `quote_requests`, `sos_requests` et `mes_demandes_recues()` ne filtrent pas
+  `est_masque` (mesuré par la critique « base » du cahier, cahier §1.3). Le
+  devis en est un lecteur de plus : un artisan qu'un particulier a bloqué
+  peut encore rattacher un NOUVEAU devis à la demande de ce particulier
+  (relecture sécurité de l'étape 3, M4 : `INSERT 0 1`) — un devis que personne
+  d'autre que lui ne lit. **Une décision d'abord, et elle est à vous** : « un
+  blocage est symétrique » ne dit pas si une demande déjà reçue doit
+  disparaître.
+- [ ] **La classe de blancs est recopiée** — les caractères qu'on retire au
+  bord d'un texte, invisibles compris. Relevé le 23/10 : sept copies dans
+  quatre fonctions de `schema.sql` (`tient_les_tarifs`,
+  `tient_les_tarifs_publics`, `tient_le_devis`, `tient_la_ligne_de_devis`),
+  plus deux constantes JavaScript (`BLANCS_TARIFS` dans `src/lib/emetteur.js`,
+  `BLANCS` dans `src/lib/devis.js`). `verifier-devis` les compare, donc elles
+  ne peuvent pas diverger en silence ; mais une règle ne s'écrit qu'à UN
+  endroit. La ramener à une seule fonction SQL touche des fonctions des lots
+  0a, T et 1 (sections 46, 47 et 49) : un lot à part (cahier §2.6, qui
+  écrivait « 0a, T et 48 » avant que la section 49 existe — la section 48,
+  celle de VIES, n'en contient aucune).
+- [ ] **L'artisan peut récrire une demande qui lui est adressée.** La
+  politique « le pro traite le devis » de `quote_requests`, d'avant le module,
+  le laisse modifier toutes les colonnes, `client_id` et `description`
+  compris, et aucun déclencheur ne les fige — prouvé sur une base d'essai :
+  `UPDATE 1` (relecture SQL du 2e tour de l'étape 3, point 6). Ça compte
+  depuis le lot 1 : « Faire un devis » reprend cette description comme objet
+  du devis, et l'export du particulier la range parmi les demandes qu'il a
+  envoyées (`demandes_de_devis`).
+
+**Au lot 2 :**
+
+- [ ] **La remise sur le TOTAL du devis** — réponse du 21/10 (Q3). Elle se
+  construit **avant le PDF** : répartie entre les taux de TVA au centime près
+  par une règle écrite et éprouvée (sans la règle du plus fort reste, une
+  répartition donne 334 au lieu de 333), et le prix avant remise gardé
+  (BOFiP §220). Le lot 1 ne pose aucune colonne de remise — une colonne sans
+  lecteur — ; `devis_tva`, recalculée en entier à chaque écriture,
+  l'accueillera sans réécrire un devis.
+- [ ] **En franchise, le « Total » additionne encore la TVA des lignes qui en
+  portent** — sur la carte de « Mes devis » comme dans le pied de la saisie.
+  Le bandeau de cohérence le signale (« Vous êtes déclaré en franchise de TVA,
+  mais des lignes portent un taux… »), et rien ne corrige les lignes à votre
+  place. Relevé sur la vraie base le 22-23/10. C'est le refus de remise du
+  lot 2 qui le tiendra : au lot 1, la base ne lit pas le régime (cahier §1.5,
+  C3).
+- [ ] **Le figeage** : le statut (aujourd'hui `'brouillon'` seul), le numéro,
+  la copie de l'émetteur et du client — **dont le régime de TVA, figé sur le
+  devis** —, `OP003`, et le refus de remise d'un devis sans régime déclaré ou
+  dont les taux contredisent le régime (cahier §1.3). Deux choses que le
+  lot 1 laisse, et que le figeage doit fermer : supprimer puis recréer un
+  brouillon sous le même identifiant récrit sa source (relecture sécurité de
+  l'étape 3, M7 — un droit au lot 1, où rien n'engage personne) ; et
+  **l'invariant de la profondeur**, écrit dans 49.5 bis : le jour où un
+  déclencheur du lot 2 écrira `devis`, il passera sans numéro d'écriture —
+  c'est là qu'il faudra revoir la règle.
+- [ ] **Remesurer le coût du recalcul ligne par ligne** quand un gros artisan
+  supprime son compte : 1,6 s à 100 000 lignes ; une variante qui, pour une
+  suppression, recalcule une fois par devis (un déclencheur par instruction)
+  a été éprouvée à 0,37 s (relecture SQL du 2e tour de l'étape 3).
+- [ ] **Le commentaire de 49.5 bis, point 7, ne dit pas encore qu'à la borne
+  même (2^53 − 1), un devis ne s'écrit plus, mais se supprime** : plus aucun
+  numéro ne peut dépasser la borne, donc l'en-tête et toute ligne sont
+  refusés pour toujours ; la suppression, elle, passe. Seul un client modifié
+  y porte son devis. Prouvé sur une base d'essai ; une phrase à ajouter, pas
+  de code (relecture SQL du 2e tour de l'étape 3, mineur 3 ; compte rendu de
+  l'étape 3, §9).
+- [ ] **« jour » n'est dans aucun cas de `supabase/cas-devis.json`** (44 cas,
+  relevé le 23/10) : l'essai 49 insère une ligne dans chacune des sept unités,
+  mais aucun cas joué à la fois par JavaScript et par PostgreSQL ne la tient.
+- [ ] **`verifier-devis` interdit `public.devis` à la lettre dans les fonctions
+  de motifs** (D4-c). Au lot 2, `motifs_refus_remise` devra lire le devis : la
+  vérification se resserrera alors sur la colonne `source` et les deux liens,
+  comme le dit le contrôle.
+
+**La Base Adresse Nationale change d'adresse — à migrer :**
+
+- [ ] **`api-adresse.data.gouv.fr` est passée à la Géoplateforme de l'IGN.**
+  Mesuré le 23/10/2026 : elle répond encore, en 200, mais ses en-têtes disent
+  `x-api-deprecated: true`, `deprecation` et `sunset` au **31/01/2026**, et
+  `x-api-new-host: https://data.geopf.fr/geocodage/`. La même question posée
+  à `https://data.geopf.fr/geocodage/search/` rend la même réponse, au même
+  format (même empreinte `etag`). Un service annoncé fermé peut s'éteindre
+  sans prévenir : ce jour-là, aucun champ de ville ne propose plus rien, et
+  l'écran SOS — qui envoie directement les coordonnées de la suggestion —
+  ne trouve plus d'artisan, sans la moindre erreur (CLAUDE.md, « L'adresse
+  d'un client se propose »). À changer ENSEMBLE : `src/lib/adresse.js` (`BASE`
+  et son en-tête) et `scripts/verifier-adresse.mjs`, qui l'appelle pour de
+  vrai ; **`src/data/legal.js`**, dont la politique de confidentialité nomme
+  `api-adresse.data.gouv.fr` parmi les destinataires, et
+  **`scripts/verifier-legal.mjs`**, qui exige ce nom — le texte opposable
+  change, donc `VERSION` aussi ; `scripts/essai-adresse-client.mjs`, le
+  `README.md`, et le relais des essais au navigateur
+  (`poserRelais(page, { hote: 'api-adresse.data.gouv.fr' })`, CLAUDE.md).
+
+**L'outillage :**
+
+- [ ] **`npm run mesure-devis` n'est ni dans `npm run verifier` ni dans la
+  CI** : il lui faut un serveur Expo et un navigateur. C'est pourtant lui SEUL
+  qui tient les tailles de cible, les positions et les gestes du devis
+  (186 mesures, en vrais événements tactiles). À lancer à la main avant toute
+  retouche de ces écrans, ou à brancher dans la CI avec un serveur (compte
+  rendu des étapes 4 à 7, §7).
+- [ ] **`supabase/essais-section-49.sql` ne tourne qu'à la main** (§2.3 :
+  `npm run verifier` ne joue aucun SQL). C'est lui qui prouve la sécurité des
+  tables du devis, par le catalogue de la base rejouée ; un contrôle qui lit
+  du texte ne verra jamais toutes les formes qu'un SQL peut prendre. Tant que
+  ce n'est pas automatisé, une régression qui passe les contrôles ne se voit
+  qu'au prochain rejeu.
+- [ ] **La relecture SÉCURITÉ du 2e tour de l'étape 3 n'a jamais été rendue**
+  (le conteneur a redémarré pendant qu'elle tournait). Les deux importants du
+  1er tour sont corrigés et mesurés ; au 2e tour, la relecture SQL a rejoué
+  les cascades, `OP014` et `OP017`, et celle des essais les acteurs adverses.
+  Aucun compte rendu suivant ne dit qu'elle ait été relancée : à relancer
+  avant le lot 2, ou à acter.
+- [ ] **Les deux preuves SIRET « essai » restent en base** : réutilisées,
+  mises à jour pour six heures, pour l'essai du 22-23/10 ; le connecteur
+  refuse un `delete`, elles expirent d'elles-mêmes. Ce sont celles de l'essai
+  du 20/10, encore là deux jours après (voir « Après le lot 0a ») : à
+  constater à la prochaine session.
+
+**Laissé ouvert, et daté :**
+
+- [ ] **« Mes devis » déjà lu ne se relit pas en rouvrant l'écran** : il se
+  charge à la demande, une fois. Couper le réseau ne montre l'échec qu'après
+  un rechargement complet ; au premier chargement, l'échec est bien dit
+  (« Lecture impossible… », jamais « Aucun devis »). Relevé sur la vraie base.
+- [ ] **« Non enregistrée » arrive tout de suite sur une coupure franche** ;
+  la file n'attend ses 8 secondes que si la requête ne revient pas — et quand
+  la carte est fermée pendant une écriture qui ne revient pas, la rangée ne le
+  dit qu'au bout de 13,8 s (deux envois de la même version, mesuré en
+  démonstration).
+- [ ] **Une rangée non enregistrée montre sa valeur LOCALE**, pendant que le
+  pied garde la dernière valeur de la base : deux montants qui ne
+  correspondent pas, tant que la ligne n'est pas enregistrée. Le pied le dit
+  (« 1 ligne non enregistrée »), la rangée aussi (« Non enregistrée —
+  Réessayer ») ; à juger avec vous si c'est assez clair.
+- [ ] **« modifié il y a… », dans « Mes devis », vient de l'heure de la BASE**
+  (relecture « données », m6) — et **aucun contrôle ne le tient** : une
+  retouche qui reprendrait l'heure du téléphone passerait au vert.
 
 ### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
 

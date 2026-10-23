@@ -8162,6 +8162,470 @@ défaut d'Opus : c'est à lui de le faire activer par son service des impôts
 des entreprises (ou de le lire dans son espace professionnel), puis de
 l'écrire dans « Mon entreprise → Votre entreprise ».
 
+### Le chiffrage — lot 1 (20-23/10/2026)
+
+Section 49 de `schema.sql`, `src/lib/devis.js`, `src/lib/file-ecriture.js`,
+`src/screens/SaisieDevisScreen.js`, `npm run verifier-devis` et
+`npm run mesure-devis`. Le cahier qui l'a guidé : `docs/CAHIER-LOT-1.md`
+(archivé le 23/10 tel qu'il a servi ; en cas de désaccord, c'est cette
+section et le code qui disent vrai). C'est sa version 2, du 21/10, réécrite
+après la relecture de la version 1 (20/10) par trois critiques (droit, base,
+écran), avec les réponses du propriétaire en tête. Deuxième lot de l'ordre
+**T → 1 → P → S → 2** (`docs/PLAN-DEVIS.md` §10.14).
+
+Un artisan ouvre « Mes devis », tape son chiffrage pièce par pièce, et
+**chaque ligne s'enregistre quand il la quitte** ; le total — HT, la TVA par
+taux, TTC — est **celui que la base a calculé**, jamais celui du téléphone.
+**Rien ne sort** : aucun numéro, aucun PDF, aucune remise au client (lot 2
+et suivants), et l'écran le dit en tête : « Chiffrage — ce brouillon ne part
+pas encore. » Aucun paquet nouveau, aucun module natif : rien à reconstruire.
+
+#### Ce qui est construit
+
+**La base — section 49**, appliquée sur la vraie base le 22/10 :
+
+- **trois tables PRIVÉES** : `devis` (un seul statut, `'brouillon'`),
+  `devis_lignes`, et `devis_tva` (une ligne par taux), que **seule la base
+  écrit** — le droit de table refuse avant la RLS. Rien pour `anon`. Un taux
+  qui disparaît garde sa ligne, **remise à zéro** (`nb_lignes = 0`) : aucun
+  corps de fonction ne contient d'ordre de suppression, que le connecteur
+  refuserait ;
+- **l'argent en entiers** : montants en centimes (`bigint`), quantités en
+  millièmes de l'unité, taux en centièmes de point (`2000` = 20 %) ;
+- **les deux arrondis, écrits UNE fois**, demi vers le haut :
+  `devis_total_ligne` = `(q × p + 500) / 1000`, `devis_tva_de` =
+  `(base × taux + 5000) / 10000`, une fois par taux sur la somme des bases ;
+  hors des bornes, `NULL`, jamais une erreur 22003 en anglais ;
+- **cinq types de ligne** : `zone` et `piece` (deux niveaux de titre),
+  `poste`, `option` (**hors des totaux et de `devis_tva`**), `reserve` ;
+  une ligne appartient au dernier titre qui la précède dans le tri
+  `ordre, id` — le second critère départage deux lignes au même `ordre`,
+  que PostgREST et JavaScript rangeraient sinon différemment ;
+- **« Offert » est un drapeau qui met le TOTAL à 0 et GARDE le prix** : la
+  valeur du geste reste écrite, pour que la facture puisse dire le prix
+  avant la réduction (BOFiP BOI-TVA-DECLA-30-20-20-10 §220), et éteindre
+  « Offert » fait revenir le prix. Un prix de 0 n'existe qu'avec « Offert » ;
+- **la retenue de garantie** : son taux seul, vide = aucune, de 0,01 % à
+  5 % ; sa phrase ne dit jamais « un an » sans « opposition » ;
+- **`source`** (`'manuelle'`, `'demande'`, `'urgence'`) dit le geste et ne
+  se récrit plus ; les trois liens (`client_id`, `quote_request_id`,
+  `sos_request_id`) sont **facultatifs, indépendants, en
+  `on delete set null`** (D1 à D4, D11) ;
+- **cinq codes** : `OP013` (un lien vers ce qui est à un AUTRE), `OP014`
+  (500 lignes au plus), `OP015` et `OP016` (la requête tardive), `OP017`
+  (20 devis au plus par demande et par urgence) ; les 23 contraintes, toutes
+  en `_check`, ont leur phrase dans `erreurs.js` ;
+- **l'export RGPD** rend `devis_emis`, `devis_lignes`, `devis_tva`, et la
+  clé `'devis'` devient **`'demandes_de_devis'`** : elle portait des
+  DEMANDES, des deux côtés, pas des devis.
+
+**Le calcul, dans des fichiers que `node` fait tourner** :
+`src/lib/centimes.js` (`versCentimes` et `centimesLisibles`, déménagées
+OCTET POUR OCTET d'`emetteur.js`, qui les réexporte, puis retouchées aux
+étapes 4 à 7 pour accepter « ,50 » — sur un pavé décimal, on tape la
+virgule d'abord, C7), `src/lib/devis.js`
+(qui n'importe que `centimes.js` et `entreprise.js`), `file-ecriture.js` et
+`identifiant.js` (qui n'importent rien). `supabase/cas-devis.json` porte
+44 cas d'argent, joués par JavaScript ET par PostgreSQL.
+
+**La file d'écriture** : une par devis, une requête en vol à la fois ; des
+**identifiants choisis par le téléphone** (une création renvoyée après un
+délai rend 23505 au lieu d'un doublon) ; une ligne s'INSÈRE une fois,
+entière, puis ne se modifie que par `update` — **jamais d'`upsert`**, le
+piège du lot T ; 8 s et une annulation sur chaque requête ; les totaux
+**relus** dès que la file est au repos.
+
+**Les écrans** : « Mes devis » sur le profil d'un pro ; la saisie, qui se
+lit en liste, chaque ligne s'éditant dans une **carte qui prend l'écran**
+(`CarteLigne`) ; un pied fixe qui porte le total ; « Pour qui ? »
+(`ChoixClientDevis`) ; **« Faire un devis »** depuis une demande de devis ou
+une urgence acceptée (jamais un rappel), et depuis la fiche d'un client, qui
+montre « Ses devis ». `legal.js` passe à `VERSION = '2026-10-22'`.
+
+#### Les réponses du propriétaire, le 21/10
+
+| question | réponse |
+|---|---|
+| Q1 — au régime réel, le taux se choisit-il ligne par ligne ? | **oui, dès le lot 1** : 20 %, 10 %, 5,5 %, **rien de pré-coché** sur la première ligne ; la suivante reprend le taux de la précédente du même TYPE (précisé par la relecture) |
+| Q2 — d'autres unités ? | **« jour » ajoutée** : sept clés, `m2`, `m`, `m3`, `u`, `h`, `jour`, `forfait` ; la pastille dit « m linéaire », jamais « ml », qu'on lit « millilitre » |
+| Q3 — une remise ? | **sur le TOTAL, au lot 2, avant le PDF**, répartie entre les taux au centime près par une règle écrite (sans elle, 334 au lieu de 333). Le lot 1 ne pose **aucune** colonne de remise : `devis_tva`, recalculée en entier, l'accueillera sans réécrire un devis |
+| Q4 — des primes déduites ? | **jamais** |
+| Q5 — quel compte sur l'iPhone ? | **son compte principal** (« oui mon compte principal c'est bon ») |
+
+L'essai sur l'iPhone se fait dans le build de développement ou dans Expo Go
+— le lot n'ajoute aucun module natif —, **jamais dans l'icône « preview » du
+17/10**, qui porte le code d'avant. Dix questions l'attendent dans le cahier
+(§7.6).
+
+#### Une requête arrivée en retard n'écrase jamais une plus récente
+
+La file annule une requête qui dépasse son délai, mais **l'annulation
+n'arrête que ce que le serveur n'a pas encore reçu**. Une requête reçue dont
+la réponse se perd (téléphone en veille, Wi-Fi qui change) s'exécute quand
+même ; passée APRÈS la suivante, une ancienne valeur écrase la nouvelle, une
+ligne retirée revient — comptée, invisible —, une suppression emporte une
+ligne remise. Aucune erreur.
+
+> **Un ordre de passage ne se répare que là où les requêtes passent : dans
+> la base.**
+
+D'où une **horloge par devis** (49.5 bis) : une colonne `generation` sur
+`devis` et `devis_lignes`. Chaque écriture porte un numéro qui ne fait que
+monter (le plus grand entre le précédent + 1, l'horloge lue + 1, et l'heure
+du téléphone en millisecondes) ; une ligne dont le numéro ne dépasse pas
+l'horloge est refusée **sous le verrou du recalcul** (`OP015`) ; un numéro
+absent ou hors de 1 à 2^53 − 1 est refusé par `OP016`, qui dit « mettez Opus
+à jour ». Une suppression ne porte pas de valeur : le téléphone la
+**conditionne** (`generation < N`). Prouvé à deux sessions :
+
+| scénario | sans la parade | avec |
+|---|---|---|
+| modification tardive (n° 12, 50 €) qui attend le verrou de la récente (n° 13, 60 €) | 50 € gagne | **OP015**, 60 € gardé |
+| insertion tardive d'une ligne retirée | elle revient | **OP015** — et sans la levée de l'horloge avant la suppression, elle revient |
+| suppression tardive d'une ligne retouchée | elle part | rien de supprimé |
+| en-tête « Ancien » (61) arrivé après « Nouveau » (62) | « Ancien » gagne, l'horloge RECULE | **OP015** |
+
+Le contrat vaut pour tout ce qui écrira dans ces tables : **un ordre = une
+ligne**, **une migration qui récrit un devis fait monter son horloge**,
+**jamais d'`upsert`**. Non couverts, et dits : la CRÉATION d'un devis
+arrivée après sa suppression, deux appareils (le dernier gagne), l'heure du
+téléphone reculée entre deux sessions.
+
+#### `for no key update`, et pas `for update` — l'interblocage mesuré
+
+Le recalcul verrouille le devis. `for update` **interbloque** : une
+insertion de ligne passe d'abord par la vérification de sa clé étrangère,
+qui pose `for key share` sur le devis, et `for update` lui est incompatible — deux
+insertions dans le même devis s'attendent l'une l'autre. `for no key update`
+ne gêne pas `for key share` et sérialise quand même deux recalculs. Mesuré
+avec un déclencheur témoin qui élargit la fenêtre
+(`essais-section-49-temoin.sql`, jamais dans `schema.sql`) :
+
+| | résultat |
+|---|---|
+| sans verrou | **HT 1000** : deux lignes enregistrées ensemble, une oubliée |
+| `for update` | **deadlock detected** (40P01) |
+| `for no key update` | HT 2000 |
+| plafond de devis par demande, sans verrou · avec | **21** · 20, puis `OP017` |
+
+> **Un plafond se compte SOUS le verrou**, sinon deux insertions simultanées
+> comptent chacune 499. Compté dans le déclencheur de la ligne, `OP014`
+> coûtait 9,7 s pour 500 lignes et laissait passer une 501ᵉ (mesuré).
+
+Un interblocage reste, et il est dit : modifier une ligne verrouille la
+ligne puis le devis, supprimer le devis l'inverse. PostgreSQL annule l'un
+des deux en entier, et la file retente un 40P01 une fois.
+
+#### Une clé étrangère ne regarde pas la RLS — `OP013`, sans oracle
+
+Sans garde, un artisan rattachait à son devis la fiche client d'un AUTRE
+(mesuré : `INSERT 0 1`). **Une vérification de clé étrangère ignore la
+RLS** : elle dit que la ligne existe, pas qu'elle est à vous.
+`tient_le_devis()` refuse un lien vers une fiche, une demande ou une urgence
+qui n'est pas la sienne, **avec le même refus pour « pas à vous » et
+« n'existe pas »** : aucun oracle par 23503. Et elle ne lit jamais
+`auth.uid()` : pendant une cascade `set null`, mesuré, `current_user` vaut
+`postgres` et `auth.uid()` est celui de QUELQU'UN D'AUTRE.
+
+Ce qui reste un oracle, dit plutôt que promis : l'identifiant d'un devis
+d'autrui renvoyé à la création rend 23505 — on apprend qu'il existe, rien
+d'autre, et un UUID v4 ne se devine pas.
+
+#### Un tiers ne doit pas pouvoir bloquer le droit à l'effacement — `OP017`
+
+Mesuré par la relecture de sécurité : un artisan à qui un particulier a
+écrit rattachait, par un client modifié, **100 000 brouillons** à sa demande
+et à son urgence. Quand ce particulier supprimait son compte, chaque devis
+passait à vide, la suppression dépassait les **8 s** de la vraie base, et
+l'application parlait de réseau.
+
+> **Une clé `on delete set null` fait payer la suppression à celui qui
+> supprime.** D4 interdit l'UNICITÉ (un client a plusieurs projets), pas une
+> borne : **20 devis** par demande, 20 par urgence, comptés sous un verrou
+> consultatif — un nombre à confirmer avec le propriétaire.
+
+Et l'erreur 57014 (le délai de 8 s) n'est plus prise pour une coupure
+réseau : `erreurs.js` dit que rien n'a été enregistré.
+
+#### Une politique RLS se paie PAR LIGNE, et elle ne trie pas
+
+Écrites `est_mon_entreprise(pro_id)`, les politiques appelaient la fonction
+deux fois par ligne de devis — une fonction qui porte `set search_path`
+n'est jamais « dépliée ». Avec **100 000 lignes à soi**, l'export RGPD
+prenait **10,6 s** et la mémoire des prix 7,6 s : au-delà des 8 s, l'export
+échouait en entier. `pro_id in (select public.mes_entreprises())`, une
+sous-requête NON corrélée calculée une fois par requête : **2,25 s** et
+**55 ms**. `est_mon_entreprise()` reste la seule à DÉCIDER.
+
+> **La première mesure n'avait fait varier que les lignes des AUTRES.**
+> Elle ne disait rien du coût des siennes — la famille de « mesurer avec
+> SEPT éléments ne prouve rien » du lot 4.
+
+**La mémoire des prix** (les lignes déjà écrites, avec leur dernier prix,
+jamais une moyenne) ne se fie pas à la RLS pour trier : laissée à elle
+seule, la lecture parcourt les lignes de TOUS les artisans avant d'écarter
+celles des autres. Filtrée par ses devis côté base
+(`devis:devis_id!inner(…)` et `devis.pro_id=eq.…`) : **2,0 ms contre
+29,8 ms** sur une distribution réaliste. Et l'objet d'un devis venu d'une
+demande est le texte d'un AUTRE client : une suggestion qui en vient se
+nomme par sa date (« votre devis du 12/10/2026 ») — à confirmer avec le
+propriétaire.
+
+#### Ce que tient la base, ce que tient l'écran
+
+**La base tient ce qui compte** : totaux et ventilation (recalcul complet,
+jamais un incrément), liens, horloge, plafonds. Le téléphone n'envoie que
+les colonnes que l'artisan écrit. Vérifié sur la vraie base : un total
+envoyé à la main est accepté (204) et **ignoré** — le total relu est le
+vrai, 105,60 €.
+
+**L'écran seul tient le régime de TVA**, et c'est écrit : en franchise,
+aucun taux et la mention de franchise ; au réel, trois taux ; non déclaré,
+des titres et des réserves seulement. Aucune fonction de la section 49 ne
+lit `emetteur` : la base accepte une ligne chiffrée quel que soit le régime.
+Sans danger tant que rien ne sort ; **le refus de remise du lot 2 le
+tiendra**.
+
+> **Le régime a cinq états, et un échec n'est JAMAIS « non déclaré ».** Le
+> dire sur une lecture ratée enverrait l'artisan redéclarer ce qu'il a déjà
+> déclaré.
+
+Deux pièges de forme, trouvés en les éprouvant :
+
+- **quand une valeur viole deux contraintes, la base nomme la première dans
+  l'ordre ALPHABÉTIQUE.** Écrite `prix > 0 or offert`, la contrainte
+  d'« Offert » attrapait un prix NÉGATIF avant celle du prix : l'écran
+  aurait répondu « un prix de 0 s'écrit avec Offert » à « −1 ». Elle
+  s'écrit `prix <> 0 or offert` (prouvé sur PostgreSQL 16) ;
+- **trois lectures en parallèle ne font pas un instantané** : un HT de
+  100,00 € au-dessus de lignes qui en font 300,00 €, quand une ligne
+  s'écrivait entre deux (mesuré). `unDevis()` lit tout en UNE requête.
+
+#### Ce qui n'est pas parti se VOIT — et une seule garde
+
+Une rangée non enregistrée dit **« Non enregistrée — Réessayer »**, et le
+pied garde **la dernière valeur sûre** de la base en disant combien de
+lignes ne sont pas enregistrées. Sur une coupure franche l'état arrive tout
+de suite ; la file n'attend ses 8 s que si la requête ne revient pas. **Mais
+8 s n'est pas un plafond** : si la carte est fermée pendant l'envoi, la même
+version part deux fois, et « Non enregistrée » n'est apparu qu'à **13,8 s**
+(mesuré en démonstration à l'étape 7, sur une écriture qui ne revient pas,
+simulée).
+
+Rien ne quitte la saisie sans **la garde de sortie** : elle attend la file
+huit secondes au plus, se voit dès l'appui (« Enregistrement avant de
+partir… »), et distingue la ligne incomplète, le champ d'en-tête refusé, la
+ligne en cours d'envoi et la ligne refusée.
+
+> **Une garde se tient par une PROPRIÉTÉ, pas par une liste de portes.** Le
+> cahier en comptait cinq ; la relecture de l'écran a trouvé la sixième —
+> « Nouveau client », un nom déjà pris, « Ouvrir sa fiche », « Faire un
+> devis » —, qui démontait la saisie sans garde : deux lignes perdues sans
+> un mot. Le contrôle exige désormais que **toute** fonction d'`OpusApp` qui
+> démonte ou pose la saisie attende `quitterSaisieDevis()`.
+
+Même famille : une relecture de « Mes devis » ratée **vidait la liste déjà
+lue** ; elle la garde désormais, et une liste jamais lue dit « Lecture
+impossible », jamais « Aucun devis ».
+
+#### Un contrôle de texte ne voit pas toutes les formes du SQL
+
+Au second tour de relecture de la base, **treize formes** échappaient aux
+contrôles qui lisent le texte, **onze avec un dommage prouvé** — dont un
+déclencheur `security definer` posé sur `clients` qui écrivait dans
+`devis_lignes` (B ajoutait une ligne au devis de A), que personne ne voyait.
+
+> **La preuve de sécurité est l'essai, qui interroge le catalogue de la base
+> rejouée** : droits de table et de colonne, corps de fonction, vues et
+> règles, déclencheurs, et **deux listes fermées de fonctions
+> `security definer`** (24 appelables, 27 non), que toute section future
+> met à jour avec sa raison. Mais l'essai ne tourne qu'à la main :
+> `npm run verifier` ne joue aucun SQL (`docs/A-FAIRE.md` §2.3).
+
+#### La migration sur la vraie base, et ses pièges
+
+**Construite, pas recopiée** : un script (hors du dépôt) PREND chaque objet
+dans `schema.sql` — la section 49, `mes_donnees()` réécrite, le balayage de
+la section 43. Les 23 paires `drop constraint` + `add constraint` deviennent
+un `add` **sous condition** (`pg_constraint`) dans un bloc `do`, les 3 paires
+de politiques un `create policy` sous condition (`pg_policies`) ; aucun ordre
+ne commence par `drop`, `delete` ou `truncate`, et le script le compte. En
+tête, **`set local lock_timeout = '5s'`** : une écriture qui tiendrait un
+verrou sur `professional_profiles`, `clients`, `quote_requests` ou
+`sos_requests` fait échouer la migration au lieu de faire attendre
+l'application derrière elle.
+
+**Simulée sur une IMITATION de la vraie base** : `git show
+5897ef3:supabase/schema.sql`, rejoué deux fois, comparé à la vraie base par
+une **empreinte du catalogue** (colonnes et défauts, contraintes,
+politiques, déclencheurs, index, droits, RLS) — identique aux restes connus
+près, 82 fonctions de chaque côté. La migration y passe deux fois ;
+l'empreinte obtenue est celle d'une base neuve au schéma du jour
+(**1 321 lignes identiques**), et l'essai 49 y rend 169 valeurs sur 169.
+
+**Relue avant d'être appliquée** (fidélité : 90 ordres attendus, 90 reçus ;
+production Supabase ; transport). Deux constats corrigés AVANT : la
+simulation du transport était naïve, et l'essai 49 ne voyait pas une classe
+du code postal abîmée — la seule ligne de `schema.sql` écrite avec deux
+barres obliques inverses. Et par prudence, un commentaire DANS le corps de
+`recalcule_devis()` qui commençait par « delete » a été reformulé : le
+connecteur lit le TEXTE (commit `b1926d9`).
+
+**Appliquée le 22/10 vers 23 h 43** (heure de Paris), par `apply_migration`,
+validée par le propriétaire dans la fenêtre du connecteur. **Relevé après,
+en lecture seule** : les 17 groupes d'empreinte des trois tables identiques
+au caractère près à la simulation ; 89 fonctions de chaque côté (hors
+`admin_basculer_metier`), mêmes droits ; les md5 des 8 corps nouveaux ou
+réécrits, identiques ; aucune fonction de déclencheur appelable par `anon` ou
+`authenticated`.
+
+**Les avertissements des commits `fde72f9` et `b1926d9` — ne pas mettre
+cette version sur le téléphone, ne pas faire `git pull` avant la migration —
+ne valent plus depuis ce soir-là** : « Mes devis » trouve ses tables. Un
+message de commit ne se récrit pas ; c'est ici qu'on dit qu'il a vieilli.
+
+#### Le transport du connecteur, ÉTABLI le 22/10
+
+Les lots 0a et T avaient noté qu'une séquence `\u00a0` envoyée par le
+connecteur arrive en vrai caractère. C'était vrai, et incomplet :
+
+> **Le connecteur change un `\uXXXX` en caractère SEULEMENT si sa barre
+> n'est pas elle-même échappée.** `\t`, `\r`, `\n` arrivent tels quels ;
+> une paire `\\` arrive telle quelle. n barres suivies de `uXXXX` : n
+> impair, n − 1 barres et le caractère ; n pair, la suite reste intacte.
+
+Relevé avant (les octets de `tient_les_tarifs`), sondé par la relecture,
+**confirmé après application** : les md5 des 8 corps sont ceux de la
+simulation faite avec cette règle (30 séquences changées, 7 paires de barres
+intactes). D'où un constructeur qui écrit **deux fichiers** : ce qu'on
+ENVOIE, et ce que la base RECEVRA — c'est le second qu'on simule.
+
+> **L'outil d'édition de ces sessions a fait la MÊME chose.** Aux étapes 0
+> à 2 (21/10), 41 séquences `\u00a0` écrites dans `devis.js` et
+> `verifier-devis.mjs` sont devenues des caractères invisibles, réécrites
+> ensuite en séquences ; et le cahier lui-même portait trois passages ainsi
+> changés, rendus sous leur forme écrite à son archivage (en-tête de
+> `docs/CAHIER-LOT-1.md`). Un caractère invisible ne se voit pas à l'œil :
+> **après avoir écrit une barre oblique inverse, on relit les OCTETS**
+> (`od -c`).
+>
+> Reconstaté le 22/10, en ajoutant les deux cas de l'essai 49 : le texte
+> CHERCHÉ par l'outil d'édition, qui contenait `E'13\u202f410'`, a été changé
+> lui aussi, et l'édition a échoué faute de le trouver. Elle est passée par
+> un petit script Python qui écrit la barre par `chr(92)`.
+
+#### Vérifié, et comment
+
+Avant la vraie base : `schema.sql` rejoué deux fois sur une base neuve
+(0 erreur) ; `essais-section-49.sql` joué deux fois — **169 valeurs justes
+sur 169, 74 refus** rattachés à leur annonce —, dont les 44 cas d'argent par
+PostgreSQL, **0 écart** avec JavaScript ; les 24 autres fichiers d'essais
+identiques au relevé d'avant, hors l'essai 43 (attendu) ; **les 50
+contrôles**, dont `verifier-devis` (292 ✔) ; le linter à 32 ; les paquets
+iOS et Android lus ; **`npm run mesure-devis`** au navigateur, en vrais
+événements tactiles, 186 mesures sans échec (il lui faut un serveur : il
+n'est pas dans `npm run verifier`). Des relectures adverses à chaque étape,
+chaque problème qui se fait tourner **reproduit avant d'être corrigé** — les
+autres (des textes, VoiceOver, quelques points lus dans le code) seulement
+relus, et les comptes rendus le disent —, puis 88, 138 et 75 sabotages,
+chacun conforme à l'attendu.
+
+Puis sur la VRAIE base, par le chemin de l'application : un artisan
+plaquiste A **à Brest**, un concurrent B, un particulier P, jetables
+`…@exemple-opus.test` ; les deux preuves SIRET `essai` déjà en base (SIRET
+fictifs) **réutilisées**, avec l'accord du propriétaire ; un `.env` posé
+pour l'essai puis retiré ; des routes coupées à la demande, les appuis en
+vrais événements tactiles :
+
+| | relevé |
+|---|---|
+| A, sans régime déclaré | seulement Pièce, Zone, Réserve ; aucune écriture tant que rien n'est tapé |
+| la lecture du régime coupée | au bout de 6,9 s (4 essais), « n'a pas pu être lu… Réessayer » — **jamais « non déclaré »** |
+| A déclare le réel depuis le bandeau | `POST emetteur 201` ; au retour, sans recharger, « Poste » est actif, **aucun taux pré-coché** |
+| une pièce, quatre postes à deux taux, une réserve, une option, un « Offert » | `POST devis 201` **une fois**, un `POST devis_lignes 201` par ligne, un `PATCH` par changement ; **aucun en double, aucun upsert** |
+| le total | écran : HT 1 336,50 €, TVA 20 % 92,30 €, TVA 10 % 87,50 €, TTC 1 516,30 € ; base : 133650 / 17980 / 151630 ; `totauxDevis()` sur les lignes relues : **identique au centime** |
+| après rechargement complet | 1 516,30 € ; « 1 forfait × 150,00 € — Offert » |
+| une ligne retirée | « TVA 10 % » quitte l'écran ; en base, sa ventilation reste **à zéro** |
+| « 0 » dans un prix sans « Offert » | **aucune requête**, et la phrase qui renvoie à « Offert » |
+| l'écriture d'une ligne coupée | « Non enregistrée — Réessayer », le pied à la dernière valeur sûre ; la barre du bas → la garde, **l'écran ne part pas** ; « Réessayer » → `POST 201` |
+| la mémoire des prix | la requête porte `!inner` et `devis.pro_id` ; 0,28 à 0,54 s à travers le mandataire ; 7 lignes, toutes de A ; B, même filtre : `[]` |
+| A passe en franchise | la bande de cohérence ; **aucune écriture** sur les tables du devis |
+| P demande un devis, A l'accepte, « Faire un devis » | rien d'écrit avant la première ligne ; puis `source = 'demande'`, le lien, aucun client ; une seconde fois : « Reprendre le brouillon le plus récent » rouvre **le même** |
+| A supprime la fiche du client | l'avertissement dit que ses 2 devis resteront ; `DELETE 204` ; ils **restent**, seul `client_id` passe à vide |
+| un visiteur sur les trois tables | **401 · 42501** ×3 |
+| B, juste après que A a lu son devis | `[]` ×3 ; une ligne chez A : **403** ; modifier, supprimer : 204 et **rien de changé** |
+| A écrit `devis_tva` · envoie un total à la main | **403 · 42501** ×3 · 204, total relu **vrai** (105,60 €) |
+| la fiche de B · une demande inventée | **400 OP013** · **400 OP013**, jamais 23503 |
+| retenue de 501 · `id` déjà pris · écriture plus ancienne que l'horloge · ligne sans numéro | `devis_retenue_check` · **409** 23505 · **400 OP015** · **OP016** |
+| 500 lignes d'un coup dans un devis qui en a 1 · 21ᵉ brouillon pour une demande | **OP014** en 612 ms, aucune insérée · **OP017** |
+| l'export RGPD de A | `devis_emis` 3, `devis_lignes` 9, `devis_tva` 4 (le taux à zéro compris), `demandes_de_devis` 1, **clé `devis` absente** |
+| « Mes devis », lecture coupée | au bout de 6,7 s, « Lecture impossible » — **jamais « Aucun devis »** |
+| P supprime son compte | le devis de A **reste**, le lien vide, objet, lieu et total intacts (D3) |
+| la phrase des textes légaux (« le seul artisan qui y tient un carnet ou y prépare des devis… ») | **relue en base après le ménage** : vraie |
+
+Ménage : A et B supprimés par le chemin de l'application, comme P avant eux ;
+base revenue à 14 comptes / 8 fiches / 21 publications / 1 client /
+6 demandes de devis / 3 entreprises / 1 fiche émetteur / **0 devis, 0 ligne,
+0 ventilation** / 18 notifications / 5 conversations, aucun compte
+`@exemple-opus.test`, les deux SIREN d'essai non réservés. Les deux
+preuves `essai` restent (elles expirent d'elles-mêmes) : le connecteur
+refuse un `delete`.
+
+#### Ce qui n'a PAS été vérifié
+
+- **rien sur l'iPhone** : le clavier (ce qui reste visible au-dessus d'une
+  carte, le pied caché pendant la frappe, les pastilles sous le pavé
+  numérique), la virgule du pavé décimal, le pavé numérique du code postal
+  du lieu, le pouce sur les rangées et sur le « Faire un devis » de « Pour
+  moi » (son `hitSlop`, que le navigateur ignore), les chiffres tabulaires
+  d'Inter, **VoiceOver** sur la carte, et **le curseur gardé en touchant la
+  barre du bas avec un champ d'en-tête refusé** (au navigateur, le toucher
+  retire le curseur) ;
+- **`globalThis.expo.uuidv4`** dans l'application d'essai : DÉDUIT du code
+  d'Expo ; la première ligne enregistrée depuis l'iPhone le prouvera ;
+- **Hermes** : le calcul et la file n'ont tourné que sous `node` 22 ;
+  l'annulation d'une requête n'a pas été éprouvée sur le téléphone ;
+- le correcteur du clavier sur le jargon (« placo », « BA13 ») ;
+- **une réponse réellement perdue sur un réseau de chantier** : seules la
+  coupure franche au navigateur, deux sessions sur PostgreSQL et une écriture
+  envoyée à la main sur la vraie base l'ont jouée ;
+- **le plan que PostgREST tire de `!inner`** : sur la vraie base, la requête
+  et son temps sont relevés, pas son plan ;
+- **la relecture de sécurité du second tour de la base n'a jamais été
+  rendue** (conteneur redémarré) ; ses deux importants du premier tour sont
+  corrigés et mesurés ;
+- **un vrai devis d'un vrai artisan** : il n'en existe aucun.
+
+#### Ce qui reste ouvert
+
+Dans `docs/A-FAIRE.md`, « Après le lot 1 » : c'est là qu'est la liste
+complète. Ce que les comptes rendus laissent ouvert, en bref :
+
+- les dix questions de l'essai sur l'iPhone (cahier §7.6) ;
+- à confirmer avec le propriétaire : le plafond de 20 devis par demande,
+  l'origine d'une suggestion par sa date, le titre de pièce écrit deux fois
+  (et les deux retours) quand une carte est ouverte, « Choisir dans mon
+  carnet » sur deux lignes à 320 points (C6), la pastille qui revient à
+  « À traiter » au retour d'un devis ouvert depuis « Pour moi » ;
+- au lot 2 : la remise sur le total ; le refus de remise, qui tiendra le
+  régime ; en franchise, le « Total » additionne encore la TVA des lignes
+  qui en portent (une bande le signale) ; le recalcul ligne par ligne quand
+  un gros compte part (1,6 s pour 100 000 lignes), à remesurer ;
+- au juriste : l'assiette de la retenue et une retenue sur un paiement
+  unique ; la qualification d'un « Offert » ; ce qu'un franchisé écrit à la
+  place de « HT et TTC » ; le taux horaire TTC face à un prix HT ; le taux
+  d'une ligne de frais de déplacement sur un devis à deux taux ;
+- au lot S : le `truncate` de `clients`, un blocage qui ne cache pas une
+  demande déjà reçue, la classe de blancs recopiée sept fois dans quatre
+  fonctions SQL (`tient_les_tarifs`, `tient_les_tarifs_publics`,
+  `tient_le_devis`, `tient_la_ligne_de_devis`), plus deux constantes
+  JavaScript (`BLANCS_TARIFS`, `BLANCS`) — `verifier-devis` les compare —,
+  l'artisan qui peut récrire la demande qui lui est adressée ;
+- « jour » n'est dans aucun cas de `cas-devis.json` ; une ligne de « Mes
+  devis » déjà chargée ne se relit pas en rouvrant l'écran ; les essais SQL
+  ne tournent qu'à la main ; et la ré-acceptation des CGU n'existe toujours
+  pas, alors que `VERSION` a encore changé.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

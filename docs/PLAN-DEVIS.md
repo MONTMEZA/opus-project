@@ -10,7 +10,7 @@
 > douze corrections sont listées, une par une, avec leur endroit, au **§9**.
 >
 > Le §22 du second cahier des charges demande exactement cela : « NE COMMENCE PAS
-> PAR CODER. […] ATTENDRE VALIDATION DU PLAN. » — **Mise à jour du 17/10/2026 : le §10, à la fin, fait foi là où il contredit les §0 à §9** (numéros de ligne inchangés).
+> PAR CODER. […] ATTENDRE VALIDATION DU PLAN. » — **Mise à jour du 17/10/2026 : le §10, à la fin, fait foi là où il contredit les §0 à §9** (numéros de ligne inchangés). — **Mise à jour du 23/10/2026 : le lot 1 est FAIT (10.16).** Les lignes que sa construction a rendues fausses sont corrigées SUR PLACE le 23/10, chacune marquée « corrigé au lot 1 » (« tranché au lot 1 » pour une question que le plan laissait ouverte), **sans ajouter ni retirer une seule ligne** : les numéros que d'autres documents citent restent justes.
 
 ---
 
@@ -1154,7 +1154,7 @@ avec `annonces_pro.prix numeric(10,2)`, et elle doit être **commentée dans
 | `numeric` rendu par PostgREST | `0.10` arrive `0.1` en JavaScript, `20.00` arrive `20` |
 | `0.1 * 3` en JavaScript | `0.30000000000000004` |
 | `numeric(10,2)` | **déborde à 100 000 000** sur un code **22003**, qui n'est PAS une contrainte `_check` et sort en anglais brut |
-| `(base * taux + 500) / 1000` en entiers, SQL **et** JavaScript | **les mêmes sept résultats**, demi-centime exact compris (5 centimes à 10 % → 1) |
+| `(base * taux + 500) / 1000` en entiers, SQL **et** JavaScript — **CORRIGÉ AU LOT 1, le 23/10 : la TVA se calcule `(base * taux + 5000) / 10000`, le taux en CENTIÈMES de point** (2000, 1000, 550), décidé le 17/10 (10.3) parce que les millièmes ne savent pas écrire 1,05 %. C'est `devis_tva_de()`, section 49.1. **Attention, la forme `+ 500) / 1000` existe toujours, mais pour autre chose** : le total d'une LIGNE, quantité en millièmes × prix en centimes (`devis_total_ligne()`). Ne pas recopier l'une pour l'autre (10.16) | **les mêmes sept résultats**, demi-centime exact compris (5 centimes à 10 % → 1) — mesurés pour l'ancienne forme. La nouvelle coïncide avec elle sur tous les taux que l'ancienne sait écrire, et le lot 1 joue ses 44 cas d'argent en JavaScript ET en PostgreSQL : **0 écart** |
 
 `annonces_pro.prix` est un nombre unique qu'on affiche ; un devis additionne
 N lignes et satisfait un invariant. Ce ne sont pas la même chose.
@@ -1783,8 +1783,8 @@ a quatre tables.**
 **Plus deux choses dans la même fonction**, parce qu'on la réécrit de toute
 façon :
 
-1. la clé existante `'devis'`, qui désigne aujourd'hui les **demandes** reçues
-   (schema.sql:7737), est renommée `'demandes_de_devis_recues'`. C'est le seul
+1. la clé existante `'devis'`, qui désigne aujourd'hui les **demandes** reçues **— CORRIGÉ AU LOT 1, le 23/10 : pas seulement reçues. Elle porte les demandes des DEUX côtés** : celles que l'artisan reçoit ET celles que le particulier envoie (la fonction lit `client_id = auth.uid() or professional_id = auth.uid()` ; mesuré : un particulier y trouve la demande qu'il a envoyée) —
+   (schema.sql:7737), est renommée `'demandes_de_devis_recues'` **— corrigé au lot 1 : renommée `'demandes_de_devis'`**, sur le modèle de `'rappels'` et `'urgences'` ; le nom prévu ici aurait dit faux. Vérifié sur la vraie base, par le chemin de l'application (22-23/10) : la clé `'devis'` a disparu de l'export, `'demandes_de_devis'` y est (10.16). C'est le seul
    renommage que ce module fait, et il est gratuit : la fonction est réécrite ;
 2. **la politique de LECTURE de `devis_tva`** doit exister, sinon la clé est là
    et la liste est vide (§3.5). `mes_donnees()` est `security invoker`.
@@ -1989,9 +1989,9 @@ répond à la moitié de la demande du propriétaire (« ses informations »).
 > table privée. Posée avant, la question ne coûte rien ; posée après, c'est un
 > déménagement de colonnes et un devis déjà figé qui pointe l'ancienne.
 
-### Lot 1 — Le chiffrage : il tape, ça se totalise, et ça se relit
+### Lot 1 — Le chiffrage : il tape, ça se totalise, et ça se relit — FAIT le 23/10/2026 (10.16)
 
-**Contenu.** `devis` dans sa forme minimale (liens, statut limité à
+**[FAIT le 23/10/2026. Ce qui suit est le plan d'AVANT la construction**, gardé tel quel ; ce que le lot 1 a changé — trois taux au choix dès ce lot au régime réel, « Offert » qui garde son prix, aucune remise, la formule en centièmes de point, sept unités — est au **10.16, qui fait foi.]** **Contenu.** `devis` dans sa forme minimale (liens, statut limité à
 `('brouillon')`, source, objet, lieu d'exécution, **délai d'exécution**, totaux,
 dates), `devis_lignes` en entier, **et `devis_tva`** avec sa contrainte d'arrondi
 **et sa politique de LECTURE** (§3.5). Les trois déclencheurs : nettoyage, calcul
@@ -2004,7 +2004,7 @@ pures `devisDepuisClient()` / `devisDepuisDemande()`. **La pastille de statut pa
 `surFond()`** (§3.9).
 
 **La colonne de taux et la FORMULE existent dès ce lot**, même si l'écran ne
-propose pas encore les trois taux : changer la formule après que des devis sont
+propose pas encore les trois taux **[corrigé au lot 1, le 23/10 : l'écran les propose dès ce lot, au régime réel — Q1, 10.16]** : changer la formule après que des devis sont
 figés produirait des devis gelés dont les totaux ne correspondent plus à leurs
 lignes — et le figeage interdit justement de les corriger.
 
@@ -2023,7 +2023,7 @@ Un demi-produit qui s'annonce vaut mieux qu'un document qui a l'air conforme.
    `order by created_at desc limit 200` gardait **0** devis en attente sur
    250 demandes closes du jour. Avec un pied de liste qui DIT la troncature ;
 2. **le total qui court en pied d'écran pendant qu'il tape**, avec le tableau de
-   ventilation par taux ;
+   ventilation par taux — **CORRIGÉ AU LOT 1, le 23/10 : pas pendant qu'il tape. Le total est recalculé quand il QUITTE un champ, et c'est celui que la BASE a calculé**, pas le téléphone ; entre-temps le pied garde la dernière valeur sûre et dit combien de lignes ne sont pas encore enregistrées (10.16) ;
 3. **la fiche d'un client, qui montre ses devis** — et c'est le **premier lecteur
    de `clients` qui ne soit pas son propre écran** : la boucle du module 1 se
    ferme ici ;
@@ -2038,9 +2038,9 @@ qu'il n'y a aucun PDF dedans. `verifier-devis` **FAIT TOURNER** `devis.js` sur
 les cas de bord : les trois lignes à 33,33 € à 10 % (999 ligne par ligne, 1000
 par taux — **c'est le cas qui prouve la méthode**), le demi-centime exact, 2,5 m²
 à 33,33 €, trois taux dans le même devis, une option hors du total, une remise
-sur un montant impair, un total au plafond. **Et il compare les résultats
+sur un montant impair **[corrigé au lot 1, le 23/10 : aucune remise au lot 1, et rien ne définissait une remise. Ce cas est remplacé par « Offert » et par le refus d'une ligne négative. La remise commerciale — une réduction de prix, à ne pas confondre avec la remise du devis au client — se construit au lot 2, avant le PDF, sur le TOTAL du devis (réponse du 21/10, 10.16)]**, un total au plafond. **Et il compare les résultats
 JavaScript aux résultats SQL sur le MÊME jeu** — l'accord de
-`(base*taux + 500)/1000` est déjà mesuré des deux côtés, donc il est
+`(base*taux + 500)/1000` **[corrigé au lot 1, le 23/10 : c'était la formule en millièmes ; la TVA se calcule `(base * taux + 5000) / 10000`, taux en centièmes de point, et le lot 1 a joué ses 44 cas d'argent des deux côtés, 0 écart]** est déjà mesuré des deux côtés, donc il est
 démontrable, pas espéré.
 
 Côté base : `schema.sql` rejoué deux fois, les invariants
@@ -2171,7 +2171,7 @@ avant qu'un devis réel existe — et avant que la Visite multiplie le cas hors
 
 ### Lot 3 — La TVA complète, et la case que le client coche
 
-**Contenu.** L'écran choisit enfin un taux par ligne (20 / 10 / 5,5 proposés) ;
+**Contenu.** L'écran choisit enfin un taux par ligne (20 / 10 / 5,5 proposés) **[corrigé au lot 1, le 23/10 : ce choix existe dès le lot 1, au régime réel (Q1, 10.16). Reste ici la certification du client pour 10 % et 5,5 %, et la liste des taux, qui se refait]** ;
 `preparer_remise_devis()` cesse de refuser le régime réel ; le pied du devis
 devient le vrai **tableau de ventilation** (la place était réservée au lot 2,
 remplie d'une seule ligne). Les **trois** cases de certification du § 80, chacune
@@ -2893,7 +2893,7 @@ Trois règles sont **plus strictes que la loi**, et le restent par choix ; il fa
 |---|---|---|---|
 | **Construction neuve ou transformation importante** : ces contrats sortent du régime hors établissement — pas de formulaire de rétractation, pas de 14 jours, pas de blocage des 7 jours, pas d'amende de L. 242-10 | C. conso. L. 221-2 12° ; directive 2011/83 cons. 26 | une question **par devis**, « construction neuve ou transformation importante ? », **« non » par défaut** (le cas le plus exigeant). « Oui » retire les blocs de rétractation et du 8e jour, après une confirmation qui dit le risque (se tromper ouvre les 12 mois de L. 221-20) et laisse une trace datée. **Cela revoit le §6 (l.2426)**, qui excluait tout interrupteur actionné par l'artisan : la question par devis, « non » par défaut, avec une confirmation qui dit le risque et une trace datée, en est la version encadrée — jamais une déduction | 2 |
 | **Déchets de chantier** : quantité estimée, modalités de tri et d'enlèvement, point(s) de collecte (raison sociale, adresse, type d'installation), coût estimé. Sur tout devis de construction, rénovation, démolition ou jardinage, **quel que soit le client** ; amende jusqu'à 3 000 / 15 000 €. **Exception** : les travaux soumis au diagnostic « produits, équipements, matériaux et déchets » (PEMD, CCH L. 111-10-4) relèvent du IV | C. env. L. 541-21-2-3, D. 541-45-1 | un bloc **par devis**, et un motif de refus de `preparer_remise_devis` pour ces familles de travaux (sauf chantier soumis au PEMD), **décrit** dans `mentions-devis.js` | 1-2 |
-| Main-d'œuvre hors établissement : pour chaque prestation, le taux horaire **et le temps estimé**, ou un forfait | arrêté 2017 art. 4-II | `devis_lignes` distingue une ligne horaire d'un forfait ; refus d'une ligne de main-d'œuvre qui n'a ni l'un ni l'autre | 1 |
+| Main-d'œuvre hors établissement : pour chaque prestation, le taux horaire **et le temps estimé**, ou un forfait | arrêté 2017 art. 4-II | `devis_lignes` distingue une ligne horaire d'un forfait ; refus d'une ligne de main-d'œuvre qui n'a ni l'un ni l'autre — **CORRIGÉ AU LOT 1, le 23/10 : AUCUNE contrainte.** « Ni l'un ni l'autre » est déjà impossible : toute ligne chiffrée porte une quantité (`devis_ligne_forme_check`), donc un temps quand l'unité est l'heure. Et l'arrêté range lui-même le prix au mètre carré parmi les prestations forfaitaires (art. 2) : une contrainte « heure ou forfait » aurait été une règle plus stricte que la loi, contre la décision du 18/10, et appliquée à TOUT devis alors que le texte vise le dépannage, la réparation et l'entretien, face au consommateur. Le drapeau `main_oeuvre` reste, sans contrainte d'unité : il propose l'unité « heure » (si aucune n'est choisie) ; le taux horaire déclaré est proposé dans un prix encore vide en franchise, et seulement montré sous le champ au régime réel, jamais converti (C9 du cahier ; 10.16) | 1 |
 | Modalités de paiement, d'exécution, de traitement des réclamations. Vocabulaire imposé : « garantie légale », et « garantie commerciale » **seulement** si l'artisan en offre une | R. 111-1 ; R. 221-2 (15 rubriques) | colonnes d'`emetteur` ; contrôle du vocabulaire | 0 |
 | **Formulaire type de rétractation** : c'est un texte réglementaire fixe | annexe à R. 221-1 | le reproduire AU MOT, avec un contrôle qui compare le texte imprimé à celui de l'annexe (une propriété, pas une syntaxe). L'avis d'information type (annexe à R. 221-3, version du 05/01/2026) est facultatif | 2 |
 | Information remise avant la signature, sur papier ou, **avec l'accord du client**, sur un support durable ; c'est au pro de prouver qu'il l'a remise | L. 221-7, L. 221-8, L. 111-5 ; C. civ. 1127-4 | accord du client horodaté. Le support durable est le **fichier PDF**, jamais l'adresse signée : elle expire à validité + 30 jours, alors que la rétractation peut courir 12 mois et 14 jours. Garder l'accusé de réception | 2 |
@@ -2918,8 +2918,8 @@ Ce que le devis range, parce qu'il l'imprime ou qu'un de ses contrôles le lit :
 
 | donnée | son lecteur | lot |
 |---|---|---|
-| unité en **liste fermée** (m², ml, m³, u, h, forfait…) | imprimée. Choisir des unités qui ont un code UN/ECE rec20 (MTK, MTR, MTQ et C62 sont dans la liste Peppol, révision 11, vérifiée le 17/10 ; leur présence dans l'annexe 7 française, qui peut restreindre la liste, reste à vérifier, comme HUR et LS) ; la correspondance elle-même s'écrira avec la facture | 1 |
-| main-d'œuvre : taux horaire **et** temps estimé, ou forfait | imprimée ; exigée hors établissement (arrêté 2017 art. 4-II) | 1 |
+| unité en **liste fermée** (m², ml, m³, u, h, forfait…) **[corrigé au lot 1, le 23/10 : sept clés, `m2`, `m`, `m3`, `u`, `h`, `jour`, `forfait` ; « ml » ne s'affiche jamais — Q2, 10.16]** | imprimée. Choisir des unités qui ont un code UN/ECE rec20 (MTK, MTR, MTQ et C62 sont dans la liste Peppol, révision 11, vérifiée le 17/10 ; leur présence dans l'annexe 7 française, qui peut restreindre la liste, reste à vérifier, comme HUR et LS) ; la correspondance elle-même s'écrira avec la facture | 1 |
+| main-d'œuvre : taux horaire **et** temps estimé, ou forfait | imprimée ; exigée hors établissement (arrêté 2017 art. 4-II) — **[corrigé au lot 1, le 23/10 : un drapeau `main_oeuvre`, SANS contrainte d'unité. Le temps estimé est la quantité d'une ligne à l'heure, que toute ligne chiffrée porte déjà ; une pose au m² reste possible. Voir la ligne « Main-d'œuvre hors établissement » plus haut, et 10.16]** | 1 |
 | lieu d'exécution structuré (rue, code postal, ville) | imprimé ; c'est aussi lui qui situe un poste dans une région (10.6) | 1 |
 | taux en centièmes de point | la formule, et le pied du devis | 1 |
 | qualité du destinataire : consommateur, non-professionnel, professionnel | décide des mentions imprimées (médiateur pour un consommateur, juridiction jamais face à un consommateur, conditions de paiement entre professionnels). Proposée depuis `clients.type`, confirmée d'un appui ; un non-professionnel (SCI, syndic) traité comme un consommateur par prudence | 1-2 |
@@ -2997,9 +2997,9 @@ La décision d'adéquation du Royaume-Uni a été renouvelée le 21/12/2025 : l'
 | lot | ce qui change |
 |---|---|
 | 0 | lit `entreprise_registre` (ligne active) ; liste d'assurances ; médiateur, bloquant pour un consommateur ; modalités de paiement, d'exécution et de réclamation ; capital ou « capital variable » ; ville du greffe ; régime de TVA « non déclaré » sans rien de pré-coché ; logo ; tarifs rangés selon la réponse du tour 1 ; points 1 à 4 d'`erreurs.js` |
-| 1 | la forme d'une ligne (10.6) ; unité en liste fermée ; main-d'œuvre horaire avec temps estimé, ou forfait ; lieu d'exécution structuré ; taux en centièmes de point et nouvelle formule ; qualité du destinataire ; gros chantiers selon la réponse ; correcteur du clavier sur les descriptions |
+| 1 | la forme d'une ligne (10.6) ; unité en liste fermée ; main-d'œuvre horaire avec temps estimé, ou forfait ; lieu d'exécution structuré ; taux en centièmes de point et nouvelle formule ; qualité du destinataire ; gros chantiers selon la réponse ; correcteur du clavier sur les descriptions **[corrigé au lot 1, le 23/10 : la main-d'œuvre y est un drapeau SANS contrainte d'unité ; la qualité du destinataire passe au lot 2 ; le lien SOS y est entré — 10.16]** |
 | P | la base de postes : prix de référence, écart signalé, ajout d'un appui (10.6) |
-| 2 | reconstruction EAS d'abord (10.4) ; question L. 221-2 12° ; bloc déchets (exception PEMD) ; formulaire au mot ; accord pour le support durable et PDF remis avant la signature ; tout l'acompte, « au plus tôt le 8e jour », jamais « à la signature » ; urgence par ligne et lien SOS ; délai obligatoire au II ; `lieu_conclusion` à deux valeurs ; juridiction jamais imprimée pour un consommateur ; RGE conditionnel ; avertissement sur le SIREN du client ; « Document d'essai — sans valeur » tant que `STATUT = 'essai'` (10.5) ; la fonction des motifs de refus (10.7) |
+| 2 | reconstruction EAS d'abord (10.4) ; question L. 221-2 12° ; bloc déchets (exception PEMD) ; formulaire au mot ; accord pour le support durable et PDF remis avant la signature ; tout l'acompte, « au plus tôt le 8e jour », jamais « à la signature » ; urgence par ligne et lien SOS **[corrigé au lot 1, le 23/10 : le lien SOS est entré au lot 1 ; le marqueur d'urgence par ligne reste ici, comme la qualité du destinataire — 10.16]** ; délai obligatoire au II ; `lieu_conclusion` à deux valeurs ; juridiction jamais imprimée pour un consommateur ; RGE conditionnel ; avertissement sur le SIREN du client ; « Document d'essai — sans valeur » tant que `STATUT = 'essai'` (10.5) ; la fonction des motifs de refus (10.7) |
 | 3 | phrase unique de certification ; qualité du preneur ; « Autoliquidation » imprimé, 5,5 % possible en sous-traitance ; franchise ⇒ pas d'autoliquidation ; bornes de recharge et photovoltaïque ; double exemplaire ; bornes CIBS datées ; `cl_tva_intra` |
 | 4 | L. 221-19 et jours fériés ; archive des devis à conserver pendant la vie du compte ; suppression de compte ⇒ téléchargement proposé, puis tout effacé ; purge des devis jamais acceptés **et son mécanisme** ; la question des factures reposée |
 | 5 | **trois** modèles (10.6) ; tailles en pt ou en mm ; Oswald dans un module engendré au build ; fonds par `print-color-adjust` |
@@ -3087,11 +3087,11 @@ Trois de ses habitudes changent ce qu'est une ligne de `devis_lignes`, donc elle
 |---|---|---|
 | le devis se lit **par pièce** : un titre de zone (« R+1 », « Extérieur »), puis un titre de pièce (« Cuisine »), puis les lignes chiffrées | des **lignes de titre à deux niveaux**, sans quantité, sans prix, sans taux, ignorées par le total | le PDF ; l'écran de saisie, qui se remplit **pièce par pièce, une carte par ligne** (« une LISTE qui se lit, une CARTE qui s'édite ») |
 | des **réserves** dans le tableau, à l'endroit du problème (« Non relevé : les cotes ne sont pas sur les plans ») | une ligne **« réserve »** : du texte seul, ignoré par le total | le PDF, qui l'imprime précédée du mot **« Réserve : »** en plus du rouge — un devis se photocopie en noir et blanc, et **la couleur ne porte jamais l'information seule** |
-| le geste commercial s'écrit **« Offert »** | une ligne à **zéro centime + un drapeau** | le PDF, qui imprime « Offert » au lieu de « 0,00 € », qui laisse croire à un oubli |
+| le geste commercial s'écrit **« Offert »** | une ligne à **zéro centime + un drapeau** — **CORRIGÉ AU LOT 1, le 23/10 : le drapeau met le TOTAL de la ligne à 0 et GARDE le prix unitaire.** Un prix de 0 n'est accepté qu'avec « Offert » (`devis_ligne_offert_check`) ; éteindre « Offert » fait revenir le prix tout seul. Pourquoi : si le geste est fiscalement une remise, la facture qui naîtra du devis devra porter le prix AVANT la réduction (CGI ann. II, art. 242 nonies A, I, 8° et 9° ; BOFiP §220) ; avec un prix à 0, cette valeur serait perdue au figeage. Que l'« Offert » soit une remise ou une prestation à prix nul **n'est pas établi** : question au juriste (10.16) | le PDF, qui imprime « Offert » au lieu de « 0,00 € », qui laisse croire à un oubli — **ce qu'il imprime de la valeur offerte (« Offert — valeur 45,00 € », ou rien) se décide avec le juriste, avant le lot 2** |
 | « carrelage **non fourni** » — la moitié du prix | **fourniture comprise / non comprise**, par ligne : une case qui écrit la mention, plutôt qu'une parenthèse qu'on oublie une fois sur dix | le PDF |
 | « 24,5M2 », « 105ML » tapés dans une case | une **quantité nombre** et une **unité en liste fermée** | déjà dans le plan |
 
-Ce qui reste à trancher en écrivant le lot 1, et c'est dit plutôt que décidé ici : le nom et les valeurs exactes de la colonne de type de ligne (les « options, non comprises » du plan, l.2030, y entrent) ; une ligne de pure fourniture a-t-elle besoin d'une troisième valeur « sans objet » pour la fourniture ; une ligne appartient-elle à sa pièce **par l'ordre** (le plus simple) ou par une clé vers la ligne de titre. Et une contrainte nommée en `_check` interdit une quantité, un prix ou un taux sur un titre ou une réserve. Le **sous-total par zone ou par pièce**, que le §10 laissait ouvert, se calcule depuis les titres sans aucune colonne : l'imprimer ou non se décide au lot 1.
+Ce qui reste à trancher en écrivant le lot 1, et c'est dit plutôt que décidé ici : le nom et les valeurs exactes de la colonne de type de ligne (les « options, non comprises » du plan, l.2030, y entrent) ; une ligne de pure fourniture a-t-elle besoin d'une troisième valeur « sans objet » pour la fourniture ; une ligne appartient-elle à sa pièce **par l'ordre** (le plus simple) ou par une clé vers la ligne de titre. Et une contrainte nommée en `_check` interdit une quantité, un prix ou un taux sur un titre ou une réserve. Le **sous-total par zone ou par pièce**, que le §10 laissait ouvert, se calcule depuis les titres sans aucune colonne : l'imprimer ou non se décide au lot 1. **[Tranché au lot 1 le 21/10, écrit ici le 23/10 : cinq types (`zone`, `piece`, `poste`, `option`, `reserve`) ; pas de troisième valeur pour la fourniture (un seul drapeau, `fourniture_non_comprise`) ; le rattachement par l'ordre, puis par l'identifiant quand deux lignes ont le même ordre ; le sous-total affiché sur chaque titre, en HT au régime réel. Voir 10.16.]**
 
 #### Les surfaces de la pièce
 
@@ -3182,7 +3182,7 @@ Le **logo** s'envoie une fois, dans « Mon entreprise » (lot 0), et s'imprime s
 Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) **tient** ; le régime de TVA et le moment de la signature (tour 2) décident toujours de l'inversion des lots 2 et 3. Ce qui bouge :
 
 - **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
-- **Lot 1** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
+- **Lot 1** **(FAIT le 23/10/2026 — 10.16 ; la main-d'œuvre y est un drapeau SANS contrainte d'unité)** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
 - **Lot P — la base de postes** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier s'y tranche avant (10.6).
 - **Lot 2** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
 - **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
@@ -3215,7 +3215,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 À concilier sur cet écran :
 
 - total « qui court » pendant la frappe (l.2025-2026) ou total recalculé quand on quitte un champ : **le second**, pour ne pas redessiner l'écran à chaque chiffre ;
-- `montants.js` ou `devis.js` : **un seul fichier**, `src/lib/devis.js`, qui pose le séparateur de milliers lui-même ;
+- `montants.js` ou `devis.js` : **un seul fichier**, `src/lib/devis.js`, qui pose le séparateur de milliers lui-même **[corrigé au lot 1, le 23/10 : les deux fonctions de montant vivent dans `src/lib/centimes.js`, qui n'importe rien, et `devis.js` les importe — une règle ne s'écrit qu'à UN endroit (C8, 10.16)]** ;
 - le sous-total par zone ou par pièce : calculé depuis les titres (10.6), imprimé ou non selon la décision du lot 1.
 
 « En faire un devis » ne préremplit que la description (le plan l'emporte sur CONCURRENCE-DEVIS.md:158-166) ; l'adresse vient du carnet de clients.
@@ -3278,7 +3278,7 @@ Dans ce plan :
 - l.570-573 et 696 (médiateur) ;
 - l.580-584 (franchise) ;
 - l.599-608 (CIBS) ;
-- l.616-620 et 1212 (arrondi) ; l.1157 et 2040-2043 (formule en millièmes → centièmes de point, sept cas réécrits, plus un cas à 1,05 %) ;
+- l.616-620 et 1212 (arrondi) ; l.1157 et 2040-2043 (formule en millièmes → centièmes de point, sept cas réécrits, plus un cas à 1,05 %) — **l.1157 et 2040-2043 corrigées sur place le 23/10/2026 (10.16)** ;
 - l.639-640 (devis non accepté : au moins un an pour les services à la personne) ;
 - l.692 (palier 1) ;
 - l.784 (format du numéro, à trancher) ;
@@ -3289,7 +3289,7 @@ Dans ce plan :
 - l.1702 (`thead`) ;
 - l.1919-1922 (bouton SIRET) ;
 - l.1974-1981 (contenu de la coupe du lot 0 : l'identité est faite, ce qui bloque change) ;
-- l.2025-2026 (total « qui court » → recalculé quand on quitte un champ) ;
+- l.2025-2026 (total « qui court » → recalculé quand on quitte un champ) — **corrigées sur place le 23/10/2026 (10.16)** ;
 - l.2032-2034 et l.2419 (pas de table `ouvrages`) → la base de postes, lot P (10.6) ; l.2418 (l'agent qui rédige : « aucune source de prix ») ;
 - l.2122-2131 (acompte, désormais au lot 2) ;
 - l.2177-2181 (trois cases de certification → une phrase) ;
@@ -3326,7 +3326,7 @@ Dans les annexes :
 - **Le comportement d'`expo-print` au chargement** (appelle-t-il `requireNativeModule` dès l'import ?) : le paquet n'est pas installé. Et la fluidité d'un trait de signature dessiné en segments de `View`, à mesurer si l'on écarte `react-native-svg`.
 - **Le mécanisme de purge n'existe pas** : `pg_cron` et `pg_net` sont disponibles mais non installés ; rien n'a été choisi.
 - Le format de `entreprise_registre.adresse` ; la date de fin de la décision d'adéquation britannique ; la date française du portefeuille européen d'identité ; l'existence d'une convention d'assistance mutuelle France–Royaume-Uni au sens de LPF L. 102 C.
-- La forme exacte de la ligne de devis (valeurs du type de ligne, fourniture « sans objet », rattachement à la pièce) : à trancher en écrivant le lot 1, pas ici.
+- La forme exacte de la ligne de devis (valeurs du type de ligne, fourniture « sans objet », rattachement à la pièce) : à trancher en écrivant le lot 1, pas ici. **[Tranchée au lot 1 le 21/10, écrite ici le 23/10 : 10.6 et 10.16.]**
 - **La séparation exigée par `DONNEES-DES-ARTISANS.md` §5.2** n'est pas tenue contre l'éditeur SQL de Supabase, que le propriétaire détient : seul l'accès par l'application est fermé. C'est un préalable (10.7), pas encore décidé.
 - La fonction des motifs de refus (10.7) est un principe : son nom et la forme exacte de sa valeur (`text[]` ou `jsonb`) se décident au lot 2.
 - Les numéros de ligne de `schema.sql` cités ici l'ont été sur le commit bd8b47c ; ils bougeront à la prochaine section — d'où les noms d'objets.
@@ -3520,3 +3520,211 @@ se prennent avant d'écrire la table.
 journal, et le repointage d'un devis remis vers une autre fiche lors d'une
 fusion de doublons — D11 l'interdit aujourd'hui ; l'ouvrir serait un choix
 explicite, plus tard, avec son essai.
+
+### 10.16 Le lot 1 — FAIT le 23/10/2026, et les réponses du 21/10
+
+**Le lot 1 est FAIT le 23/10/2026** : construit les 21 et 22/10 (quatre
+commits : `546944d` le calcul, `f3b4168` la section 49 de `schema.sql`,
+`fde72f9` les écrans, `b1926d9` deux retouches trouvées par la relecture de
+la migration), **migré sur la vraie base le 22/10 vers 23 h 43** (heure de
+Paris), validé par le propriétaire dans la fenêtre du connecteur, puis
+**essayé par le chemin de l'application** les 22 et 23/10, avec trois comptes
+jetables supprimés ensuite (CLAUDE.md, « Le chiffrage — lot 1 » ; le cahier
+qui l'a guidé : `docs/CAHIER-LOT-1.md`, sa version 2 du 21/10, les réponses
+du propriétaire en tête). En cas de désaccord entre ce cahier et le code,
+c'est le code et CLAUDE.md qui disent vrai.
+
+**Ce qu'il livre, en une phrase.** Un artisan ouvre « Mes devis » depuis son
+profil — ou « Faire un devis » sur la fiche d'un client, sur une demande ou
+une urgence qu'il a acceptée —, tape son chiffrage pièce par pièce (zones,
+pièces, postes, réserves, options, « Offert »), chaque ligne s'enregistre
+quand il la quitte et dit si elle l'est, et le total — HT, la TVA par taux,
+TTC — est **celui que la base a calculé**, pas celui du téléphone. **Il ne
+sort RIEN** : ni numéro, ni PDF, ni envoi au client. L'écran le dit en tête :
+« Chiffrage — ce brouillon ne part pas encore. »
+
+#### Les réponses du 21/10/2026
+
+Posées par le cahier du lot 1 (son §9), avant de construire :
+
+| question | réponse | ce qu'elle change |
+|---|---|---|
+| **Q1** — au régime réel, l'écran propose-t-il le choix du taux (20 %, 10 %, 5,5 %) ligne par ligne dès le lot 1 ? | **oui, dès maintenant** | rien de pré-coché sur la première ligne ; chaque ligne suivante reprend le taux de la précédente **du même type** (un poste celui du dernier poste, une option celui de la dernière option). En franchise : aucun taux affiché, la mention « TVA non applicable, article 293 B du CGI » à la place de la TVA. Régime non déclaré : seulement des titres et des réserves, et un bandeau qui ouvre « Mon entreprise ». Un régime qui n'a pas pu être LU ne s'affiche **jamais** « non déclaré ». **Ce n'est tenu que par l'écran** : la base accepte une ligne chiffrée quel que soit le régime, et c'est le refus de remise du lot 2 qui le tiendra. Rien ne part : le lot 2 refusera d'envoyer un devis au régime réel tant que le lot 3 n'aura pas ajouté la certification du client pour 10 % et 5,5 % |
+| **Q2** — faut-il d'autres unités que m², mètre linéaire, m³, unité, heure et forfait ? | **ajouter « jour »** | **sept** clés en liste fermée : `m2`, `m`, `m3`, `u`, `h`, `jour`, `forfait` (`devis_ligne_unite_check`). L'écran montre « m linéaire » et « unité » ; **« ml » ne s'affiche ni ne s'enregistre jamais**. La liste « m², ml, m³, u, h, forfait… » de 10.3 est corrigée sur place (l.2921) |
+| **Q3** — voulez-vous pouvoir faire une remise sur un devis ? (une remise COMMERCIALE, une réduction de prix — à ne pas confondre avec la remise du devis au client, qui est le lot 2) | **une remise sur le TOTAL du devis** | elle se construit **au lot 2, avant le PDF** — pas au lot 1. Elle demande une règle de répartition entre les taux, écrite et éprouvée avant la première colonne : sans la règle du plus fort reste, l'exemple de la lecture argent donne 334 au lieu de 333. Le prix avant remise reste écrit (BOFiP §220). Le lot 1 ne pose **aucune colonne de remise** — aucune colonne sans lecteur — et rien qui l'empêche : `devis_tva` est recalculée **en entier** par la base à chaque écriture, donc une remise répartie s'y ajoutera sans réécrire de devis |
+| **Q4** — vos devis déduisent-ils parfois une prime (CEE, une aide) du prix à payer ? | **jamais** | rien à prévoir. Et le chiffrage refuse toute ligne négative |
+
+Et une cinquième, qui ne change pas le plan : **le compte sur lequel il
+essaiera le chiffrage sur son iPhone** — son compte principal, confirmé par
+lui le 21/10. Au 23/10, cet essai n'a pas encore eu lieu (« Ce qui n'a PAS
+été vérifié », plus bas).
+
+#### Ce que le lot 1 a CHANGÉ au plan
+
+Le cahier a relevé les contradictions de ce plan et les a tranchées une par
+une (son §1.5, numérotées C1 à C22). Voici celles qui changent ce que le plan
+dit — plus C21, qui tranche une recommandation faite avant le cahier, pas une
+ligne du plan. **Les lignes citées ont été corrigées SUR PLACE le 23/10**,
+chacune marquée « corrigé au lot 1 », sans ajouter ni retirer de ligne :
+
+| | ce que disait le plan | ce qui vaut depuis le lot 1 | dans ce plan |
+|---|---|---|---|
+| **C1** | la TVA en millièmes, `(base*taux + 500)/1000` | **centièmes de point**, `(base * taux + 5000) / 10000`, écrite UNE fois en SQL (`devis_tva_de()`, section 49.1) et une fois en JavaScript (`devis.js`), en entiers, demi vers le haut, le taux borné de 0 à 9000. Les deux formules coïncident sur tous les taux que l'ancienne sait écrire. 1,05 % se calcule, mais **une ligne à 1,05 % est refusée au lot 1** : la liste est `0, 550, 1000, 2000`, et se refait au lot 3 | corrigé l.1157 et l.2043 |
+| **C2** | le total « qui court » pendant la frappe | recalculé quand on **quitte** un champ, et c'est celui de la **base** ; entre-temps, la dernière valeur sûre | corrigé l.2026 |
+| **C3** | « l'écran ne propose pas encore les trois taux » | les trois, au choix, dès le lot 1 (Q1) | renvoi en tête du lot 1, l.1994 ; corrigé l.2007 et l.2174 |
+| **C6** | « une remise sur un montant impair », cas d'essai du lot 1 | **aucune remise** au lot 1 ; « Offert » et le refus d'une ligne négative à la place. La remise sur le total entre au **lot 2**, avant le PDF (Q3) | corrigé l.2041 |
+| **C7** | la retenue de garantie, « on ne la construit pas » | **une colonne**, `retenue_garantie_centiemes` : `null` = aucune, sinon de 0,01 % à 5 % ; aucun montant rangé ; une phrase qui ne dit **jamais** « un an » sans la réserve de l'opposition du client | — |
+| **C19** | « Offert » = une ligne à zéro centime + un drapeau | le drapeau met le **total** de la ligne à 0 et **garde le prix** ; un prix de 0 seulement avec « Offert ». C'est un sur-ensemble de l'ancienne forme : tout ce qu'elle acceptait passe encore | corrigé l.3090 |
+| **C20** | refus d'une ligne de main-d'œuvre « qui n'a ni l'un ni l'autre » (horaire ou forfait) | **aucune contrainte d'unité** : « ni l'un ni l'autre » est déjà impossible, et l'arrêté range le prix au m² parmi les prix forfaitaires. Le drapeau `main_oeuvre` **propose** l'heure (si aucune unité n'est choisie) ; le taux horaire déclaré est proposé dans un prix vide en franchise, seulement **montré** sous le champ au régime réel, jamais converti (C9 du cahier) ; il n'interdit rien | corrigé l.2896, l.2922 et l.3000 |
+| **C22** | la clé `'devis'` de l'export, « les demandes reçues », renommée `'demandes_de_devis_recues'` | elle porte les demandes **des deux côtés** : renommée **`'demandes_de_devis'`**, comme `'rappels'` et `'urgences'` | corrigé l.1786-1787 |
+| C5 | le lien SOS rangé au lot 2 ; `demande_id` | `'urgence'` et `sos_request_id` entrent au lot 1 (« Faire un devis » se pose aussi sur une urgence acceptée) ; le lien s'appelle `quote_request_id` (D2). Le marqueur d'urgence **par ligne** reste au lot 2 | corrigé l.3000 et l.3002 (10.7, l.3199, décrivait déjà le lien, sans le ranger dans un lot) |
+| C8 | `devis.js` « qui n'importe RIEN » et « pose le séparateur de milliers lui-même » | les deux fonctions de montant déménagent dans `src/lib/centimes.js`, qui n'importe rien ; `devis.js` n'importe que lui et deux fonctions de date d'`entreprise.js`. Une règle ne s'écrit qu'à UN endroit | corrigé l.3218 |
+| C11 | la section s'insère « entre 7692 et 7693 » | après la fin de la section 48, avant l'export RGPD (section 42) | 10.9 le disait déjà |
+| C13 | « tout code nouveau prend OP011 et suivants » | **OP013 à OP017** sont pris par le lot 1 (plus bas) ; **OP003 reste réservé au devis remis**, lot 2 | — |
+| C21 | *(pas le plan : une recommandation de la lecture droit, un document de travail d'avant le cahier)* « `null` ou une catégorie » pour une ligne sans TVA | **`0`** = aucune TVA facturée sur cette ligne. La raison — la franchise aujourd'hui — est portée par le **régime**, que le lot 2 figera sur le devis, jamais par la ligne. Jamais affiché « 0 % » | — |
+
+> **Deux formules qui se ressemblent au caractère près ne font pas la même
+> chose.** `(q × p + 500) / 1000` existe toujours dans le lot 1 : c'est le
+> total d'une LIGNE, la quantité étant rangée en millièmes
+> (`devis_total_ligne()`). La TVA, elle, est `(base * taux + 5000) / 10000`.
+> Recopiée dans le recalcul de la base, l'ancienne forme de la ligne 1157
+> serait refusée par `devis_tva_arrondi_check`, qui exige le résultat de
+> `devis_tva_de()` ; dans `devis.js`, les 44 cas de `verifier-devis`
+> rougiraient. Mais recopiée dans un calcul que ni l'une ni l'autre ne
+> rejoue — un futur affichage, le PDF —, elle donnerait un devis faux sans
+> un mot.
+
+#### Ce que la construction a ajouté, et que le lot 2 doit savoir
+
+Le cahier prévoyait déjà OP013, OP014, le verrou `for no key update` et la
+liste du point 6 (son §1.3). Ce que ni le plan ni le cahier ne prévoyaient,
+les relectures l'ont rendu nécessaire : l'horloge (OP015, OP016), OP017,
+`mes_entreprises()` et les deux listes fermées. Pour les points 1 à 5, c'est
+**la base** qui tient la règle.
+
+1. **Une horloge par devis, contre la requête qui arrive en retard.** Une
+   écriture reçue par le serveur dont la réponse se perd s'exécute quand même ;
+   passée après la suivante, une valeur ancienne écrasait la nouvelle, sans
+   erreur. D'où une colonne `generation` sur `devis` et `devis_lignes` : chaque
+   écriture du téléphone porte un numéro qui ne fait que monter, et la base
+   refuse celle qui ne dépasse pas l'horloge du devis (**OP015**) ou dont le
+   numéro est hors bornes (**OP016**). Prouvé à deux sessions. **Le contrat
+   que le lot 2 doit tenir**, écrit en 49.5 bis : un ordre = une ligne ; une
+   ligne se modifie par `update`, **jamais par `upsert`** ; **une migration
+   qui récrit un devis fait monter son horloge**.
+
+   > **Une écriture qui part dans l'ordre n'arrive pas forcément dans
+   > l'ordre.** La file du téléphone n'envoie qu'une requête à la fois ; un
+   > ordre de passage ne se répare quand même que là où les requêtes passent :
+   > dans la base.
+
+2. **Trois autres refus, chacun avec sa phrase en français.** **OP013** : un
+   devis ne peut pas pointer la fiche client, la demande ou l'urgence d'un
+   autre artisan — une vérification de clé étrangère ignore la RLS (mesuré).
+   **OP014** : 500 lignes au plus par devis, comptées sous le verrou du
+   recalcul. **OP017** : 20 devis au plus par artisan et par demande ou
+   urgence (un nombre à confirmer avec le propriétaire, écrit une seule fois,
+   dans la base) — sans lui, des brouillons rattachés à la demande d'un particulier
+   faisaient échouer la suppression de son compte au-delà du délai de 8 s de
+   la base (mesuré).
+3. **Le recalcul complet se fait sous un verrou `for no key update`** :
+   `for update` interbloquait deux insertions (mesuré). Et `devis_tva` ne
+   s'écrit que par la base.
+4. **L'appartenance passe par `mes_entreprises()`, en sous-requête non
+   corrélée**, et non par `est_mon_entreprise(pro_id)` écrite dans chaque
+   politique : à 100 000 lignes à soi, l'export RGPD est passé de 10,6 s à
+   2,25 s. `est_mon_entreprise()` reste la seule à **décider**.
+5. **L'essai 49 tient deux listes FERMÉES de fonctions `security definer`**
+   (24 qu'un client peut appeler, 27 qu'il ne peut pas, relevées le 22/10 sur
+   une base locale). **Toute section future qui ajoute une `definer` doit les
+   mettre à jour, avec sa raison** — c'est voulu : une `definer` nouvelle,
+   quels que soient son nom et son corps, fait rougir l'une ou l'autre.
+6. **Ce qui attend le lot 2, avec son lecteur** (le cahier, §1.3) : la
+   qualité du destinataire ; le caractère payant de CE devis ; les déchets de
+   chantier (une ligne `poste` ou une estimation hors totaux, **jamais** une
+   colonne de montant que le recalcul ignorerait) ; le marqueur « relève de la
+   construction » ; le marqueur d'urgence par ligne ; l'acompte ; un
+   avertissement au franchisé dont le devis dépasse à lui seul 41 250 € ;
+   **le TTC « option comprise », imprimé face à un consommateur, calculé sur
+   l'union des lignes, jamais par addition de deux totaux** ; et l'instantané,
+   dont **le régime de TVA figé sur le devis** — c'est lui, et plus jamais
+   `emetteur`, qui dira ce que veut dire une ligne à `0`.
+
+#### Vérifié, et comment
+
+| | relevé |
+|---|---|
+| `schema.sql` rejoué deux fois sur une base neuve ; l'essai 49 joué deux fois | 0 erreur ; **169 valeurs justes sur 169, 74 refus**, chacun rattaché à sa cause |
+| les 44 cas d'argent, JavaScript contre PostgreSQL | **0 écart** |
+| `npm run verifier` ; `verifier-devis` ; `npm run mesure-devis` (au navigateur, en démonstration, en vrais événements tactiles) | **50 contrôles**, code 0 ; **292 ✔** ; **186 ✔** |
+| la migration, simulée deux fois sur une imitation de la vraie base (le schéma qu'elle avait réellement reçu, `5897ef3`) | rejouable ; empreinte du catalogue : **1 321 lignes identiques** à une base neuve |
+| appliquée le 22/10, sans un ordre qui commence par `drop`, `delete` ou `truncate` ; relevée après, en lecture seule | les 17 groupes d'empreinte des trois tables identiques à la simulation ; **0** fonction de déclencheur appelable par `anon` ou `authenticated` |
+| un devis de 4 postes à 2 taux, une réserve, une option, un « Offert » | un `POST` par ligne, **aucun en double, aucun upsert** ; TTC **1 516,30 €** à l'écran, en base et par `devis.js` : **identique au centime** |
+| le même après un rechargement complet | il revient de la base, « Offert » avec son prix |
+| un prix de 0 sans « Offert » | **aucune requête** ; une phrase qui dit d'utiliser l'interrupteur |
+| la route d'écriture coupée | « Non enregistrée — Réessayer » ; le pied garde la dernière valeur sûre ; la barre du bas ne fait pas quitter l'écran |
+| le régime de TVA illisible | « n'a pas pu être lu… Réessayer » — **jamais « non déclaré »** |
+| la mémoire des prix (l'engagement du 18/10) | filtrée par SES devis côté base ; un autre artisan avec le même filtre : **`[]`** |
+| la clé publiable seule, sur les trois tables | **401 · 42501** ×3 |
+| un autre artisan, juste après la lecture du devis | **`[]`** ×3 ; écrire une ligne : **403** ; modifier ou supprimer : **rien de changé** |
+| l'artisan écrit dans `devis_tva` | **403** ×3 |
+| un total envoyé à la main ; la fiche d'un autre ; une demande inventée | le **vrai** total relu ; **OP013** ; **OP013** |
+| 500 lignes d'un coup dans un devis qui en a une ; le 21ᵉ brouillon d'une demande | **OP014**, aucune insérée ; **OP017** |
+| l'export RGPD (`mes_donnees()`) | `devis_emis`, `devis_lignes`, `devis_tva`, `demandes_de_devis` ; **la clé `devis` a disparu** |
+| la fiche du client supprimée ; le particulier supprime son compte | les devis **restent** : seuls les liens passent à vide, le lieu, l'objet et les totaux intacts (D3) |
+| les règles de l'addendum (10.15) | la relecture de sécurité de l'étape 3 — premier tour, 21/10, avant les corrections — dit D1, D3, D4, D6 et D11 tenues ; D2 est le nom de la colonne. Le second tour n'a jamais été rendu (plus bas) |
+| le ménage | les trois comptes supprimés par le chemin de l'application ; **0 devis** en base |
+
+#### Ce qui n'a PAS été vérifié
+
+- **Rien sur l'iPhone** : le clavier, la virgule du pavé décimal, le pouce sur
+  une ligne, VoiceOver sur la carte d'une ligne. L'essai sur son compte
+  principal (Q5) reste à faire — dans un build de développement ou Expo Go,
+  **jamais l'icône « preview » du 17/10**, dont le code est figé.
+- **Hermes** n'a fait tourner ni `devis.js` ni `file-ecriture.js` : les calculs
+  ont tourné sous `node`.
+- **Le verrou à deux sessions n'a été éprouvé que sur PostgreSQL 16** ; la
+  vraie base est en 17.6. La documentation dit les règles identiques : aucune
+  mesure sur 17.
+- **« jour » n'est dans aucun des 44 cas partagés** (`cas-devis.json`) :
+  l'essai 49 insère une ligne dans chacune des sept unités, mais aucun cas ne
+  le tient des deux côtés.
+- **Le droit, au juriste** (`docs/A-FAIRE.md`) : l'assiette de la retenue (HT
+  ou TTC) et une retenue sur un paiement unique ; ce qu'un franchisé écrit à la
+  place de « HT et TTC » ; le taux horaire TTC face à un prix unitaire HT ; le
+  taux d'une ligne de frais sur un devis à deux taux ; **la qualification d'un
+  « Offert »** (remise ou prestation à prix nul) et ce que le devis en imprime.
+  Les primes déduites, elles, sont réglées : jamais (Q4).
+- **La relecture de sécurité du second tour de la base n'a jamais été
+  rendue** : le conteneur a redémarré pendant qu'elle tournait. Ses deux
+  points importants du premier tour sont corrigés et mesurés ; la relecture
+  SQL du second tour a rejoué les cascades, OP014 et OP017, et celle des
+  essais les acteurs adverses — mais aucune relecture de sécurité n'a relu
+  l'état final.
+- **Aucun vrai devis** : la vraie base en compte 0 après le ménage.
+
+#### Ce qui reste ouvert
+
+- En franchise, la carte « Mes devis » et le pied disent « Total » et
+  additionnent la TVA des lignes qui en portent encore. Un bandeau le
+  signale ; c'est le refus de remise du lot 2 qui tiendra la cohérence entre
+  régime et taux — **aujourd'hui, seul l'écran la tient**.
+- La suppression de compte d'un artisan paie un recalcul par ligne de devis
+  (1,6 s à 100 000 lignes, sur PostgreSQL 16) : à remesurer sur la vraie base
+  au lot 2.
+- Quatre choix à confirmer avec le propriétaire : le plafond de 20 devis par
+  demande ou par urgence (OP017) ; puis trois choix d'écran — l'origine d'une
+  suggestion de la mémoire, nommée par sa date ; le titre de pièce affiché deux
+  fois et les deux retours quand une carte est ouverte ; « Choisir dans mon
+  carnet » sur deux lignes à 320 points.
+- La ré-acceptation des conditions par les comptes existants n'existe
+  toujours pas (`legal.js` est passé à `VERSION = '2026-10-22'`) : à construire
+  avant que `STATUT` quitte `'essai'`.
+- Pour le lot S, relevés en chemin : le `truncate` que `authenticated` garde
+  sur `clients` ; un blocage qui ne cache pas une demande déjà reçue ; une
+  classe de blancs recopiée sept fois dans quatre fonctions SQL, plus deux
+  constantes JavaScript (relevé le 23/10 ; le cahier en prévoyait « au moins
+  six fonctions ») ; un artisan qui peut récrire
+  `client_id` et `description` d'une demande qui lui est adressée ; un artisan
+  bloqué qui peut rattacher un nouveau devis à la demande du particulier qui
+  l'a bloqué.
