@@ -8571,18 +8571,32 @@ base revenue à 14 comptes / 8 fiches / 21 publications / 1 client /
 preuves `essai` restent (elles expirent d'elles-mêmes) : le connecteur
 refuse un `delete`.
 
+#### ESSAYÉ SUR L'IPHONE le 23/10/2026
+
+Par le propriétaire, sur son compte principal (Q5), dans Expo Go ou le build
+de développement : « tout me paraît correct », puis « tout fonctionne ». Il
+n'a pas détaillé les treize questions de `docs/A-FAIRE.md`.
+
+Ce que la base en dit, relevé par sa FORME seulement (aucun texte, aucun
+prix lu) : un brouillon créé à 19 h 17, source `manuelle`, six lignes
+(`piece` et `poste`, en `m2` et `forfait`), deux taux. **Les six
+identifiants sont des UUID v4 choisis par le téléphone** : la preuve que
+`globalThis.expo.uuidv4` existe bien dans son application, ce qui n'était
+que DÉDUIT du code d'Expo. L'horloge d'écriture est en millisecondes, comme
+prévu. **Aucune quantité n'a de décimale** : la virgule du pavé décimal
+(« 2,5 ») n'est donc pas prouvée par ce brouillon.
+
 #### Ce qui n'a PAS été vérifié
 
-- **rien sur l'iPhone** : le clavier (ce qui reste visible au-dessus d'une
-  carte, le pied caché pendant la frappe, les pastilles sous le pavé
+- **le détail du toucher sur l'iPhone** (essayé en bloc le 23/10, ci-dessus,
+  sans réponse point par point) : le clavier (ce qui reste visible au-dessus
+  d'une carte, le pied caché pendant la frappe, les pastilles sous le pavé
   numérique), la virgule du pavé décimal, le pavé numérique du code postal
   du lieu, le pouce sur les rangées et sur le « Faire un devis » de « Pour
   moi » (son `hitSlop`, que le navigateur ignore), les chiffres tabulaires
   d'Inter, **VoiceOver** sur la carte, et **le curseur gardé en touchant la
   barre du bas avec un champ d'en-tête refusé** (au navigateur, le toucher
   retire le curseur) ;
-- **`globalThis.expo.uuidv4`** dans l'application d'essai : DÉDUIT du code
-  d'Expo ; la première ligne enregistrée depuis l'iPhone le prouvera ;
 - **Hermes** : le calcul et la file n'ont tourné que sous `node` 22 ;
   l'annulation d'une requête n'a pas été éprouvée sur le téléphone ;
 - le correcteur du clavier sur le jargon (« placo », « BA13 ») ;

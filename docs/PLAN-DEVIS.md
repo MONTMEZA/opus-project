@@ -3556,8 +3556,9 @@ Posées par le cahier du lot 1 (son §9), avant de construire :
 
 Et une cinquième, qui ne change pas le plan : **le compte sur lequel il
 essaiera le chiffrage sur son iPhone** — son compte principal, confirmé par
-lui le 21/10. Au 23/10, cet essai n'a pas encore eu lieu (« Ce qui n'a PAS
-été vérifié », plus bas).
+lui le 21/10. **Essayé par lui le 23/10 au soir : « tout fonctionne »**, sans
+réponse point par point (CLAUDE.md, « Le chiffrage — lot 1 », « Essayé sur
+l'iPhone »).
 
 #### Ce que le lot 1 a CHANGÉ au plan
 
@@ -3677,10 +3678,13 @@ les relectures l'ont rendu nécessaire : l'horloge (OP015, OP016), OP017,
 
 #### Ce qui n'a PAS été vérifié
 
-- **Rien sur l'iPhone** : le clavier, la virgule du pavé décimal, le pouce sur
-  une ligne, VoiceOver sur la carte d'une ligne. L'essai sur son compte
-  principal (Q5) reste à faire — dans un build de développement ou Expo Go,
-  **jamais l'icône « preview » du 17/10**, dont le code est figé.
+- **Le détail du toucher sur l'iPhone** : le clavier, la virgule du pavé
+  décimal, le pouce sur une ligne, VoiceOver sur la carte d'une ligne.
+  L'essai sur son compte principal (Q5) a eu lieu le 23/10 au soir — « tout
+  fonctionne » —, sans réponse point par point. Son brouillon, relevé par sa
+  forme, prouve que le téléphone fabrique l'identifiant d'une ligne (six
+  UUID v4) ; aucune de ses quantités n'a de décimale, donc la virgule n'est
+  pas prouvée.
 - **Hermes** n'a fait tourner ni `devis.js` ni `file-ecriture.js` : les calculs
   ont tourné sous `node`.
 - **Le verrou à deux sessions n'a été éprouvé que sur PostgreSQL 16** ; la

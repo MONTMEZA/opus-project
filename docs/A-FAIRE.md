@@ -2002,6 +2002,11 @@ sécurité de l'étape 3) :
   Votre propre essai sur votre compte principal ne la rend pas fausse : c'est
   toujours vous.
 
+**Essayé par vous le 23/10 au soir, sur votre compte principal : « tout
+fonctionne ».** Les cases ci-dessous restent ouvertes tant qu'elles n'ont pas
+reçu leur réponse une par une — notamment la virgule : aucune quantité de
+votre brouillon n'a de décimale.
+
 **À essayer sur l'iPhone — dans le build de développement ou Expo Go (le lot
 n'ajoute aucun module natif), JAMAIS dans l'icône « preview » du 17/10**, qui
 porte le code d'avant : si rien n'a changé à l'écran, demander d'abord QUELLE
@@ -2027,9 +2032,11 @@ suppriment. Les dix questions écrites à l'avance (cahier §7.6) :
   « ragréage ») ?
 - [ ] « Nouveau client » depuis le devis ouvre-t-il bien la fiche, puis la
   pose-t-il sur le devis ?
-- [ ] La toute première ligne tapée est-elle là après avoir fermé puis rouvert
+- [x] La toute première ligne tapée est-elle là après avoir fermé puis rouvert
   Opus ? C'est aussi la preuve que le téléphone sait fabriquer l'identifiant
-  d'une ligne — déduit du code d'Expo, jamais vu.
+  d'une ligne — **prouvé le 23/10** : son brouillon porte six lignes dont les
+  six identifiants sont des UUID v4 choisis par le téléphone (relevé par la
+  forme, sans rien lire du contenu).
 
 Trois de plus, relevés pendant la construction (compte rendu des étapes 4 à
 7, §8) :
