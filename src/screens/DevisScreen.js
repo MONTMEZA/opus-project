@@ -23,6 +23,12 @@
  *     régime n'est pas connu : un artisan en franchise ne facture pas de
  *     TVA, et un régime qu'on n'a pas pu lire ne permet pas de nommer la
  *     taxe.
+ *
+ * « MA BASE DE POSTES » (lot P) : une porte pleine largeur, sous la ligne
+ * du compte — à 390 points de large, l'en-tête n'a pas la place d'un
+ * second bouton à côté de « Nouveau devis ». C'est l'une des deux portes ;
+ * l'autre est dans « Mon profil », parce que cet en-tête n'existe pas
+ * pendant la toute première lecture de la liste.
  */
 import React from 'react';
 import {
@@ -86,7 +92,7 @@ function Intervalle() {
 
 export default function DevisScreen({
   devis = [], etat = 'vide', lus = false, tronque = false, enRetard = false, regime = null,
-  onRecharger, onOuvrir, onNouveau,
+  onRecharger, onOuvrir, onNouveau, onMaBase = null,
 }) {
   const libelleTotal = regime === 'reel' ? 'Total TTC' : 'Total';
   const ouvrir = React.useCallback((id) => onOuvrir && onOuvrir(id), [onOuvrir]);
@@ -141,6 +147,13 @@ export default function DevisScreen({
         </Text>
         <BtnMain label="Nouveau devis" onPress={onNouveau} />
       </View>
+      {!!onMaBase && (
+        <BtnOutline
+          label="Ma base de postes"
+          accessibilityLabel="Ma base de postes : vos phrases et vos prix de référence"
+          onPress={onMaBase}
+        />
+      )}
       {garderLaListe && (
         <View style={s.nonActualisee} accessibilityLiveRegion="polite">
           <Text style={s.nonActualiseeTexte}>

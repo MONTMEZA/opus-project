@@ -12447,6 +12447,567 @@ create index if not exists idx_devis_emis_demande on public.devis (quote_request
 create index if not exists idx_devis_emis_urgence on public.devis (sos_request_id);
 create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_id, ordre, id);
 
+-- ==========================================================================
+--  50. LA BASE DE POSTES — ce que l'artisan FIXE lui-même (lot P)
+--      (23/10/2026)
+--
+--  Un artisan chiffre une ligne — « Chape sèche avant carrelage collé,
+--  45 € le m² » —, touche « Ajouter à ma base », relit la phrase, garde ou
+--  corrige le PRIX DE RÉFÉRENCE proposé (le prix de la ligne), et valide. À
+--  partir de là, ce poste lui est proposé quand il retape « chape » dans un
+--  autre devis, et sa référence s'affiche au-dessus du prix de toute ligne
+--  qui le porte ; s'il met un autre prix : « Vous mettez 52,00 € — c'est
+--  voulu ? ». Le propriétaire l'a demandé ainsi le 23/10 : reconnaître une
+--  même phrase écrite à un s, un accent ou une majuscule près, et « qu'il
+--  n'y ait pas trop de propositions ».
+--
+--  LA BASE DE POSTES N'EST PAS LA MÉMOIRE DU LOT 1
+--  ----------------------------------------------
+--  La mémoire du lot 1 relit toute seule les lignes déjà écrites, et elle
+--  continue. Un poste, lui, n'entre ici que par un APPUI de l'artisan (sa
+--  réponse du 23/10 : « D'un appui ») : c'est une DÉCISION — sa phrase et
+--  son prix —, et c'est pour cela que l'écart se signale contre elle. Aucun
+--  déclencheur, aucune fonction n'écrit dans `base_postes` hors de cet appui.
+--
+--  CE QU'ELLE POSE
+--  ---------------
+--    - la fonction `public.cle_de_rapprochement(text)` (50.0), ENGENDRÉE
+--      depuis `src/lib/rapprochement.js` par `npm run generer-rapprochement`
+--      — jamais écrite à la main ;
+--    - un index unique `devis (id, pro_id)` (50.1), le point d'attache du
+--      lien vers le devis d'origine ;
+--    - une table PRIVÉE, `base_postes` (50.2) : une ligne par poste, la
+--      phrase MOT POUR MOT, et sa clé de rapprochement dans une colonne
+--      GÉNÉRÉE que personne d'autre que la base n'écrit ;
+--    - cinq contraintes, toutes en `_check` (50.3) ;
+--    - un déclencheur, `tient_le_poste()`, et un PLAFOND de 1 000 postes par
+--      entreprise, `OP018` (50.4) ;
+--    - une politique et des droits de table posés un par un (50.5), deux
+--      index (50.6).
+--
+--  CE QU'ELLE NE POSE PAS
+--  ----------------------
+--  Aucune COLONNE de client — la phrase est le texte de l'artisan, qui peut
+--  en nommer un, et l'écran le lui signale. Pas de taux de TVA (la TVA
+--  dépend du chantier, pas du poste : un poste « 10 % » réutilisé en neuf
+--  donnerait une TVA fausse sans un mot), pas de métier (décidé le 23/10),
+--  pas de région, pas d'historique des prix de référence (une valeur et sa
+--  date), aucune écriture automatique, aucune fonction `security definer`.
+--  Et aucun prix d'un autre artisan, aucune moyenne, aucun prix « conseillé ».
+--
+--  LA PHRASE EST RANGÉE MOT POUR MOT ; LA CLÉ NE SERT QU'À RAPPROCHER
+--  ---------------------------------------------------------------
+--  La phrase, c'est ce que le client lira, et c'est elle que l'écran montre.
+--  La clé de rapprochement — sans majuscules, sans accents, sans
+--  ponctuation, sans le s ou le x d'un pluriel — ne s'affiche nulle part :
+--  elle sert ici à refuser un doublon PRESQUE identique (50.6), et le
+--  téléphone calcule la même pour proposer un poste pendant la frappe. Une
+--  variante reconnue ne remplace jamais la phrase d'un poste existant.
+--
+--  LES PHRASES ET LES PRIX D'UN ARTISAN NE SE LISENT PAS PAR UN AUTRE.
+--  Aucune politique pour l'administration, aucune fonction `admin_*` ne
+--  nomme cette table ; la liste FERMÉE des fonctions qui la nomment
+--  (`tient_le_poste`, `mes_donnees`) est tenue par `verifier-legal` et par
+--  l'essai 50, qui la demande au catalogue. L'éditeur SQL de Supabase reste
+--  un accès ouvert : c'est un ENGAGEMENT écrit, qui couvre les phrases comme
+--  les prix — pas une impossibilité, et ce commentaire ne doit pas laisser
+--  croire le contraire.
+--
+--  DANS LE CODE DE CETTE SECTION, AUCUN CARACTÈRE HORS DE L'ASCII, hors la
+--  phrase d'OP018 (recopiée octet pour octet dans `src/lib/erreurs.js`), et
+--  AUCUNE BARRE OBLIQUE INVERSE, nulle part, commentaires compris : tout
+--  caractère spécial s'écrit `chr(n)`. La clé ne dépend donc d'aucun réglage
+--  de PostgreSQL (`standard_conforming_strings`), le transport du connecteur
+--  Supabase n'a rien à y changer, et un éditeur qui enregistrerait le
+--  fichier en forme décomposée ne pourrait pas changer la table sans que ça
+--  se voie. Les commentaires, eux, restent en français.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  50.0 La clé de rapprochement — UNE source, deux écritures
+--
+--  « Chape sèche », « CHAPES SÈCHES. », la même phrase copiée d'un PDF (un
+--  « e » suivi de son accent) ou avec une espace insécable : UNE même
+--  phrase. La règle s'applique à DEUX endroits — ici, pour refuser un
+--  doublon, et dans le téléphone (`src/lib/rapprochement.js`), pour proposer
+--  un poste pendant la frappe —, et deux écritures tenues à la main
+--  finissent toujours par diverger, sans erreur : le téléphone dirait
+--  « nouveau poste », la base refuserait, ou l'inverse. D'où UNE source, la
+--  table du fichier JavaScript, et cette fonction ENGENDRÉE depuis elle,
+--  entre ses deux repères, par `npm run generer-rapprochement`. Elle ne se
+--  modifie pas à la main : `verifier-postes` refuse un corps qui n'est pas,
+--  octet pour octet, celui que rend le générateur.
+--
+--  AUCUNE TABLE UNICODE À L'EXÉCUTION — ni `lower()`, ni `upper()`, ni
+--  `unaccent`, ni `normalize`, ni collation : `lower('I')` ne rend pas la
+--  même lettre sous une collation turque. Seulement une table EXPLICITE de
+--  998 caractères (lettres accentuées, chiffres en exposant, séparateurs,
+--  caractères invisibles), trente remplacements par un mot — un signe qui
+--  porte un SENS ne s'efface pas : `<` devient « inf », `%` « pourcent »,
+--  `€` « euro » —, deux expressions à motifs ASCII, et une exception écrite
+--  (« bas » ne perd pas son s : « Plancher bas » n'est pas « Plancher BA »,
+--  le béton armé). Les deux écritures rendent la même EMPREINTE sur chacun
+--  des 1 112 063 points de code d'Unicode, et les mêmes 175 cas écrits à la
+--  main (`supabase/cas-rapprochement.json`) : `verifier-postes` côté
+--  téléphone, l'essai 50 (cas 18 et 18 bis) côté base.
+--
+--  LA GARDE : au-delà de 2 000 points de code, pas de clé (`null`), et rien
+--  n'est calculé. Sans elle, 10 Mo envoyés par n'importe quel compte
+--  connecté tenaient un processus près de quarante secondes — et, par la
+--  colonne générée, faisaient attendre l'artisan dont on usurpait le nom ;
+--  avec elle, 47 ms. Une phrase de poste ne dépasse jamais 2 000 caractères
+--  (`base_poste_designation_check`) : la garde ne refuse rien de légitime.
+--
+--  `immutable` ET `strict` : la colonne générée et l'index l'exigent, et
+--  `null` rend `null`. ELLE RESTE EXÉCUTABLE PAR `authenticated`, par
+--  NÉCESSITÉ : une colonne générée s'évalue avec les droits de CELUI QUI
+--  ÉCRIT — la leçon de `horaires_valides()` (30/09), étendue aux colonnes
+--  générées ; sans ce droit, toute insertion tombe sur 42501. L'exposer par
+--  `/rest/v1/rpc` ne donne accès à rien : elle ne lit aucune table, et la
+--  garde borne son coût.
+--
+--  CHANGER LA RÈGLE UN JOUR, C'EST RÉÉCRIRE LA TABLE : une fonction
+--  remplacée ne recalcule pas une colonne déjà rangée. Le contrat entier —
+--  la table, les cas et les deux empreintes, les postes devenus doublons à
+--  faire trancher, puis `update public.base_postes set designation =
+--  designation` — est écrit en tête de `src/lib/rapprochement.js`.
+-- --------------------------------------------------------------------------
+-- <<< CLÉ DE RAPPROCHEMENT ENGENDRÉE par npm run generer-rapprochement — ne pas modifier à la main >>>
+create or replace function public.cle_de_rapprochement(p_phrase text)
+returns text
+language sql
+immutable
+strict
+parallel safe
+security invoker
+set search_path = public
+as $$
+  select case when char_length(p_phrase) > 2000 then null else
+  regexp_replace(
+    btrim(regexp_replace(
+      translate(
+        replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(p_phrase, chr(37), ' pourcent '), chr(38), ' et '), chr(43), ' plus '), chr(60), ' inf '), chr(62), ' sup '), chr(188), '1 4'), chr(189), '1 2'), chr(190), '3 4'), chr(198), 'ae'), chr(215), 'x'), chr(222), 'th'), chr(223), 'ss'), chr(230), 'ae'), chr(254), 'th'), chr(306), 'ij'), chr(307), 'ij'), chr(338), 'oe'), chr(339), 'oe'), chr(7838), 'ss'), chr(8240), ' pourmille '), chr(8364), ' euro '), chr(8804), ' inf '), chr(8805), ' sup '), chr(64256), 'ff'), chr(64257), 'fi'), chr(64258), 'fl'), chr(64259), 'ffi'), chr(64260), 'ffl'), chr(64261), 'st'), chr(64262), 'st'),
+        'ABCDEFGHIJKLMNOP'
+        || 'QRSTUVWXYZ' || chr(192) || chr(193) || chr(194) || chr(195) || chr(196) || chr(197)
+        || chr(199) || chr(200) || chr(201) || chr(202) || chr(203) || chr(204) || chr(205) || chr(206) || chr(207) || chr(208) || chr(209) || chr(210) || chr(211) || chr(212) || chr(213) || chr(214)
+        || chr(216) || chr(217) || chr(218) || chr(219) || chr(220) || chr(221) || chr(224) || chr(225) || chr(226) || chr(227) || chr(228) || chr(229) || chr(231) || chr(232) || chr(233) || chr(234)
+        || chr(235) || chr(236) || chr(237) || chr(238) || chr(239) || chr(240) || chr(241) || chr(242) || chr(243) || chr(244) || chr(245) || chr(246) || chr(248) || chr(249) || chr(250) || chr(251)
+        || chr(252) || chr(253) || chr(255) || chr(256) || chr(257) || chr(258) || chr(259) || chr(260) || chr(261) || chr(262) || chr(263) || chr(264) || chr(265) || chr(266) || chr(267) || chr(268)
+        || chr(269) || chr(270) || chr(271) || chr(272) || chr(273) || chr(274) || chr(275) || chr(276) || chr(277) || chr(278) || chr(279) || chr(280) || chr(281) || chr(282) || chr(283) || chr(284)
+        || chr(285) || chr(286) || chr(287) || chr(288) || chr(289) || chr(290) || chr(291) || chr(292) || chr(293) || chr(294) || chr(295) || chr(296) || chr(297) || chr(298) || chr(299) || chr(300)
+        || chr(301) || chr(302) || chr(303) || chr(304) || chr(305) || chr(308) || chr(309) || chr(310) || chr(311) || chr(313) || chr(314) || chr(315) || chr(316) || chr(317) || chr(318) || chr(319)
+        || chr(320) || chr(321) || chr(322) || chr(323) || chr(324) || chr(325) || chr(326) || chr(327) || chr(328) || chr(332) || chr(333) || chr(334) || chr(335) || chr(336) || chr(337) || chr(340)
+        || chr(341) || chr(342) || chr(343) || chr(344) || chr(345) || chr(346) || chr(347) || chr(348) || chr(349) || chr(350) || chr(351) || chr(352) || chr(353) || chr(354) || chr(355) || chr(356)
+        || chr(357) || chr(358) || chr(359) || chr(360) || chr(361) || chr(362) || chr(363) || chr(364) || chr(365) || chr(366) || chr(367) || chr(368) || chr(369) || chr(370) || chr(371) || chr(372)
+        || chr(373) || chr(374) || chr(375) || chr(376) || chr(377) || chr(378) || chr(379) || chr(380) || chr(381) || chr(382) || chr(383) || chr(416) || chr(417) || chr(431) || chr(432) || chr(461)
+        || chr(462) || chr(463) || chr(464) || chr(465) || chr(466) || chr(467) || chr(468) || chr(469) || chr(470) || chr(471) || chr(472) || chr(473) || chr(474) || chr(475) || chr(476) || chr(478)
+        || chr(479) || chr(480) || chr(481) || chr(486) || chr(487) || chr(488) || chr(489) || chr(490) || chr(491) || chr(492) || chr(493) || chr(496) || chr(500) || chr(501) || chr(504) || chr(505)
+        || chr(506) || chr(507) || chr(512) || chr(513) || chr(514) || chr(515) || chr(516) || chr(517) || chr(518) || chr(519) || chr(520) || chr(521) || chr(522) || chr(523) || chr(524) || chr(525)
+        || chr(526) || chr(527) || chr(528) || chr(529) || chr(530) || chr(531) || chr(532) || chr(533) || chr(534) || chr(535) || chr(536) || chr(537) || chr(538) || chr(539) || chr(542) || chr(543)
+        || chr(550) || chr(551) || chr(552) || chr(553) || chr(554) || chr(555) || chr(556) || chr(557) || chr(558) || chr(559) || chr(560) || chr(561) || chr(562) || chr(563) || chr(7680) || chr(7681)
+        || chr(7682) || chr(7683) || chr(7684) || chr(7685) || chr(7686) || chr(7687) || chr(7688) || chr(7689) || chr(7690) || chr(7691) || chr(7692) || chr(7693) || chr(7694) || chr(7695) || chr(7696) || chr(7697)
+        || chr(7698) || chr(7699) || chr(7700) || chr(7701) || chr(7702) || chr(7703) || chr(7704) || chr(7705) || chr(7706) || chr(7707) || chr(7708) || chr(7709) || chr(7710) || chr(7711) || chr(7712) || chr(7713)
+        || chr(7714) || chr(7715) || chr(7716) || chr(7717) || chr(7718) || chr(7719) || chr(7720) || chr(7721) || chr(7722) || chr(7723) || chr(7724) || chr(7725) || chr(7726) || chr(7727) || chr(7728) || chr(7729)
+        || chr(7730) || chr(7731) || chr(7732) || chr(7733) || chr(7734) || chr(7735) || chr(7736) || chr(7737) || chr(7738) || chr(7739) || chr(7740) || chr(7741) || chr(7742) || chr(7743) || chr(7744) || chr(7745)
+        || chr(7746) || chr(7747) || chr(7748) || chr(7749) || chr(7750) || chr(7751) || chr(7752) || chr(7753) || chr(7754) || chr(7755) || chr(7756) || chr(7757) || chr(7758) || chr(7759) || chr(7760) || chr(7761)
+        || chr(7762) || chr(7763) || chr(7764) || chr(7765) || chr(7766) || chr(7767) || chr(7768) || chr(7769) || chr(7770) || chr(7771) || chr(7772) || chr(7773) || chr(7774) || chr(7775) || chr(7776) || chr(7777)
+        || chr(7778) || chr(7779) || chr(7780) || chr(7781) || chr(7782) || chr(7783) || chr(7784) || chr(7785) || chr(7786) || chr(7787) || chr(7788) || chr(7789) || chr(7790) || chr(7791) || chr(7792) || chr(7793)
+        || chr(7794) || chr(7795) || chr(7796) || chr(7797) || chr(7798) || chr(7799) || chr(7800) || chr(7801) || chr(7802) || chr(7803) || chr(7804) || chr(7805) || chr(7806) || chr(7807) || chr(7808) || chr(7809)
+        || chr(7810) || chr(7811) || chr(7812) || chr(7813) || chr(7814) || chr(7815) || chr(7816) || chr(7817) || chr(7818) || chr(7819) || chr(7820) || chr(7821) || chr(7822) || chr(7823) || chr(7824) || chr(7825)
+        || chr(7826) || chr(7827) || chr(7828) || chr(7829) || chr(7830) || chr(7831) || chr(7832) || chr(7833) || chr(7840) || chr(7841) || chr(7842) || chr(7843) || chr(7844) || chr(7845) || chr(7846) || chr(7847)
+        || chr(7848) || chr(7849) || chr(7850) || chr(7851) || chr(7852) || chr(7853) || chr(7854) || chr(7855) || chr(7856) || chr(7857) || chr(7858) || chr(7859) || chr(7860) || chr(7861) || chr(7862) || chr(7863)
+        || chr(7864) || chr(7865) || chr(7866) || chr(7867) || chr(7868) || chr(7869) || chr(7870) || chr(7871) || chr(7872) || chr(7873) || chr(7874) || chr(7875) || chr(7876) || chr(7877) || chr(7878) || chr(7879)
+        || chr(7880) || chr(7881) || chr(7882) || chr(7883) || chr(7884) || chr(7885) || chr(7886) || chr(7887) || chr(7888) || chr(7889) || chr(7890) || chr(7891) || chr(7892) || chr(7893) || chr(7894) || chr(7895)
+        || chr(7896) || chr(7897) || chr(7898) || chr(7899) || chr(7900) || chr(7901) || chr(7902) || chr(7903) || chr(7904) || chr(7905) || chr(7906) || chr(7907) || chr(7908) || chr(7909) || chr(7910) || chr(7911)
+        || chr(7912) || chr(7913) || chr(7914) || chr(7915) || chr(7916) || chr(7917) || chr(7918) || chr(7919) || chr(7920) || chr(7921) || chr(7922) || chr(7923) || chr(7924) || chr(7925) || chr(7926) || chr(7927)
+        || chr(7928) || chr(7929) || chr(178) || chr(179) || chr(185) || chr(8304) || chr(8308) || chr(8309) || chr(8310) || chr(8311) || chr(8312) || chr(8313) || chr(8320) || chr(8321) || chr(8322) || chr(8323)
+        || chr(8324) || chr(8325) || chr(8326) || chr(8327) || chr(8328) || chr(8329) || chr(1) || chr(2) || chr(3) || chr(4) || chr(5) || chr(6) || chr(7) || chr(8) || chr(9) || chr(10)
+        || chr(11) || chr(12) || chr(13) || chr(14) || chr(15) || chr(16) || chr(17) || chr(18) || chr(19) || chr(20) || chr(21) || chr(22) || chr(23) || chr(24) || chr(25) || chr(26)
+        || chr(27) || chr(28) || chr(29) || chr(30) || chr(31) || '!"#$' || chr(39) || '()*,-.'
+        || '/:;=?@[' || chr(92) || ']^_`{|}~'
+        || chr(127) || chr(128) || chr(129) || chr(130) || chr(131) || chr(132) || chr(133) || chr(134) || chr(135) || chr(136) || chr(137) || chr(138) || chr(139) || chr(140) || chr(141) || chr(142)
+        || chr(143) || chr(144) || chr(145) || chr(146) || chr(147) || chr(148) || chr(149) || chr(150) || chr(151) || chr(152) || chr(153) || chr(154) || chr(155) || chr(156) || chr(157) || chr(158)
+        || chr(159) || chr(160) || chr(161) || chr(162) || chr(163) || chr(164) || chr(165) || chr(166) || chr(167) || chr(168) || chr(169) || chr(170) || chr(171) || chr(172) || chr(174) || chr(175)
+        || chr(176) || chr(177) || chr(180) || chr(182) || chr(183) || chr(184) || chr(186) || chr(187) || chr(191) || chr(247) || chr(697) || chr(698) || chr(699) || chr(700) || chr(701) || chr(5760)
+        || chr(8192) || chr(8193) || chr(8194) || chr(8195) || chr(8196) || chr(8197) || chr(8198) || chr(8199) || chr(8200) || chr(8201) || chr(8202) || chr(8208) || chr(8209) || chr(8210) || chr(8211) || chr(8212)
+        || chr(8213) || chr(8214) || chr(8215) || chr(8216) || chr(8217) || chr(8218) || chr(8219) || chr(8220) || chr(8221) || chr(8222) || chr(8223) || chr(8224) || chr(8225) || chr(8226) || chr(8227) || chr(8228)
+        || chr(8229) || chr(8230) || chr(8231) || chr(8232) || chr(8233) || chr(8239) || chr(8241) || chr(8242) || chr(8243) || chr(8244) || chr(8245) || chr(8246) || chr(8247) || chr(8248) || chr(8249) || chr(8250)
+        || chr(8251) || chr(8252) || chr(8253) || chr(8254) || chr(8255) || chr(8256) || chr(8257) || chr(8258) || chr(8259) || chr(8260) || chr(8261) || chr(8262) || chr(8263) || chr(8264) || chr(8265) || chr(8266)
+        || chr(8267) || chr(8268) || chr(8269) || chr(8270) || chr(8271) || chr(8272) || chr(8273) || chr(8274) || chr(8275) || chr(8276) || chr(8277) || chr(8278) || chr(8279) || chr(8280) || chr(8281) || chr(8282)
+        || chr(8283) || chr(8284) || chr(8285) || chr(8286) || chr(8287) || chr(8293) || chr(8352) || chr(8353) || chr(8354) || chr(8355) || chr(8356) || chr(8357) || chr(8358) || chr(8359) || chr(8360) || chr(8361)
+        || chr(8362) || chr(8363) || chr(8365) || chr(8366) || chr(8367) || chr(8368) || chr(8369) || chr(8370) || chr(8371) || chr(8372) || chr(8373) || chr(8374) || chr(8375) || chr(8376) || chr(8377) || chr(8378)
+        || chr(8379) || chr(8380) || chr(8381) || chr(8382) || chr(8383) || chr(8384) || chr(8385) || chr(8386) || chr(8387) || chr(8388) || chr(8389) || chr(8390) || chr(8391) || chr(8392) || chr(8393) || chr(8394)
+        || chr(8395) || chr(8396) || chr(8397) || chr(8398) || chr(8399) || chr(8722) || chr(8725) || chr(12288) || chr(173) || chr(768) || chr(769) || chr(770) || chr(771) || chr(772) || chr(773) || chr(774)
+        || chr(775) || chr(776) || chr(777) || chr(778) || chr(779) || chr(780) || chr(781) || chr(782) || chr(783) || chr(784) || chr(785) || chr(786) || chr(787) || chr(788) || chr(789) || chr(790)
+        || chr(791) || chr(792) || chr(793) || chr(794) || chr(795) || chr(796) || chr(797) || chr(798) || chr(799) || chr(800) || chr(801) || chr(802) || chr(803) || chr(804) || chr(805) || chr(806)
+        || chr(807) || chr(808) || chr(809) || chr(810) || chr(811) || chr(812) || chr(813) || chr(814) || chr(815) || chr(816) || chr(817) || chr(818) || chr(819) || chr(820) || chr(821) || chr(822)
+        || chr(823) || chr(824) || chr(825) || chr(826) || chr(827) || chr(828) || chr(829) || chr(830) || chr(831) || chr(832) || chr(833) || chr(834) || chr(835) || chr(836) || chr(837) || chr(838)
+        || chr(839) || chr(840) || chr(841) || chr(842) || chr(843) || chr(844) || chr(845) || chr(846) || chr(847) || chr(848) || chr(849) || chr(850) || chr(851) || chr(852) || chr(853) || chr(854)
+        || chr(855) || chr(856) || chr(857) || chr(858) || chr(859) || chr(860) || chr(861) || chr(862) || chr(863) || chr(864) || chr(865) || chr(866) || chr(867) || chr(868) || chr(869) || chr(870)
+        || chr(871) || chr(872) || chr(873) || chr(874) || chr(875) || chr(876) || chr(877) || chr(878) || chr(879) || chr(4447) || chr(4448) || chr(6158) || chr(8203) || chr(8204) || chr(8205) || chr(8206)
+        || chr(8207) || chr(8234) || chr(8235) || chr(8236) || chr(8237) || chr(8238) || chr(8288) || chr(8289) || chr(8290) || chr(8291) || chr(8292) || chr(8294) || chr(8295) || chr(8296) || chr(8297) || chr(8298)
+        || chr(8299) || chr(8300) || chr(8301) || chr(8302) || chr(8303) || chr(12644) || chr(65024) || chr(65025) || chr(65026) || chr(65027) || chr(65028) || chr(65029) || chr(65030) || chr(65031) || chr(65032) || chr(65033)
+        || chr(65034) || chr(65035) || chr(65036) || chr(65037) || chr(65038) || chr(65039) || chr(65279) || chr(65440),
+        'abcdefghijklmnopqrstuvwxyzaaaaaaceeeeiiiidnoooooouuuuyaaaaaaceeeeiiiidnoooooouuuuyyaaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiiijjkkllllllllllnnnnnnoooooorrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzzsoouuaaiioouuuuuuuuuuaaaaggkkoooojggnnaaaaaaeeeeiiiioooorrrruuuusstthhaaeeooooooooyyaabbbbbbccddddddddddeeeeeeeeeeffgghhhhhhhhhhiiiikkkkkkllllllllmmmmmmnnnnnnnnoooooooopppprrrrrrrrssssssssssttttttttuuuuuuuuuuvvvvwwwwwwwwwwxxxxyyzzzzzzhtwyaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeeeeeeeeeeeiiiioooooooooooooooooooooooouuuuuuuuuuuuuuyyyyyyyy23104567890123456789                                                                                                                                                                                                                                                                  '),
+      ' {2,}', ' ', 'g'), ' '),
+    '(^| )(?!(?:bas)(?: |$))([abcdefghijklmnopqrstuvwxyz]{2,})[sx](?= |$)', chr(92) || '1' || chr(92) || '2', 'g')
+  end
+$$;
+-- <<< FIN DE LA CLÉ DE RAPPROCHEMENT ENGENDRÉE >>>
+
+revoke all on function public.cle_de_rapprochement(text) from public, anon;
+grant execute on function public.cle_de_rapprochement(text) to authenticated;
+
+comment on function public.cle_de_rapprochement(text) is
+  'La clé de rapprochement d''une phrase : sans casse, sans accents, sans ponctuation, sans le s ou le x d''un pluriel '
+  '(« bas » excepté), les signes de sens changés en mots. NULL pour NULL et au-delà de 2 000 points de code. ENGENDRÉE '
+  'depuis src/lib/rapprochement.js par npm run generer-rapprochement : ne pas modifier à la main. Section 50.0.';
+
+-- --------------------------------------------------------------------------
+--  50.1 L'index unique `devis (id, pro_id)` — un point d'attache
+--
+--  `id` est déjà unique : cet index ne refuse rien de plus. Il sert de CIBLE
+--  à la clé composée du lien d'origine (50.2) — sans lui, PostgreSQL répond
+--  « there is no unique constraint matching given keys ». Un index, et pas
+--  une contrainte : sur `devis`, `verifier-devis` n'admet que `add
+--  constraint … check`. Et un nom qui n'existe nulle part ailleurs : un
+--  `create index if not exists` d'un nom déjà pris ne crée RIEN, sans un mot
+--  (la leçon de `idx_devis_pro`, section 49).
+--
+--  CE QU'IL CHANGE AU LOT 1, ET CE QU'IL NE CHANGE PAS : `devis` porte
+--  désormais DEUX index uniques. Un identifiant de devis renvoyé — le sien
+--  comme celui d'un autre — rend toujours `devis_pkey`, jamais celui-ci :
+--  PostgreSQL vérifie les index dans l'ordre de leur création, et la clé
+--  primaire est le plus ancien, sur une base neuve comme après la migration
+--  (essai 50, cas 15). `src/lib/file-ecriture.js`, qui ne reconnaît qu'un
+--  nom en `_pkey`, reste donc juste ; son commentaire le dit.
+-- --------------------------------------------------------------------------
+create unique index if not exists idx_devis_id_pro on public.devis (id, pro_id);
+
+-- --------------------------------------------------------------------------
+--  50.2 `public.base_postes` — un poste par ligne
+--
+--  `base_postes`, jamais `postes` : à une lettre de `posts`, la table du
+--  fil, un `from('postes')` mal tapé lirait le fil sans la moindre erreur.
+--
+--  TROIS RÈGLES DE FORME, reprises de la section 49 :
+--    - une colonne « obligatoire » que le téléphone remplit est NULLABLE,
+--      avec une contrainte NOMMÉE : `not null` refuse par 23502, en anglais.
+--      Les deux booléens restent `not null default false`, comme ceux de
+--      `devis_lignes` : l'application envoie toujours un booléen ;
+--    - un NULL ne satisfait jamais une contrainte par accident ;
+--    - aucune colonne sans lecteur — d'où l'absence de taux, de quantité, de
+--      région, de client, de métier. `cle_rapprochement` est la seule dont
+--      le lecteur est un INDEX (50.6) : c'est voulu, et nommé.
+--
+--  `cle_rapprochement` EST GÉNÉRÉE, et pas posée par le déclencheur : un
+--  client qui l'envoie reçoit 428C9, au lieu de la voir écrasée en silence,
+--  et la propriété est tenue par le CATALOGUE, pas par un corps de fonction.
+--  PostgreSQL la calcule APRÈS les déclencheurs `before` : c'est la clé de
+--  la phrase DÉJÀ rognée. L'application ne la lit pas — elle calcule la même
+--  par son miroir, pour des lignes qui ne sont pas encore en base.
+--
+--  `prix_reference_centimes` : en CENTIMES, `null` = « pas encore fixé »,
+--  jamais 0. `prix_fixe_le` est posée par la BASE quand le prix change, et
+--  se vide avec lui : une date que le téléphone peut écrire ne prouve rien.
+--
+--  LE LIEN VERS LE DEVIS D'ORIGINE est une clé COMPOSÉE `(devis_origine_id,
+--  pro_id)` vers `devis (id, pro_id)` : « un devis DE CETTE entreprise »,
+--  sans aucune fonction. Une clé simple vers `devis(id)` laisserait citer le
+--  devis d'un AUTRE — une clé étrangère ignore la RLS. Le devis d'un autre
+--  et un devis inexistant rendent le MÊME refus, sans valeur : aucun oracle.
+--  `on delete set null (devis_origine_id)`, AVEC sa liste de colonnes
+--  (PostgreSQL 15 et plus) : sans elle, supprimer le devis voudrait mettre
+--  `pro_id` à vide, et échouerait sur 23502. Le compte part : la fiche part
+--  en cascade, et avec elle tous les postes — y compris une phrase qui
+--  nommerait un client.
+--
+--  `modifie_le` est l'horloge d'une écriture CONDITIONNÉE : l'application
+--  modifie et retire un poste `where modifie_le = <la date lue>`. Une
+--  écriture partie avec une date périmée — le réseau a traîné, l'artisan a
+--  corrigé entre-temps — ne trouve aucune ligne, et l'écran relit au lieu
+--  d'écraser la plus récente. Pas d'horloge `generation` comme au lot 1 :
+--  ici les écritures sont rares, une à la fois, et chacune attend sa
+--  réponse. NON COUVERT, et dit : un AJOUT tardif — resté en route, réessayé,
+--  le poste retiré, puis le premier arrive — fait REVENIR le poste (essai
+--  50, cas 17). Il se voit dans « Ma base » et se retire d'un appui : une
+--  pierre tombale coûterait une table pour un seul cas.
+-- --------------------------------------------------------------------------
+create table if not exists public.base_postes (
+  id                       uuid primary key default gen_random_uuid(),
+  pro_id                   uuid not null references public.professional_profiles(id) on delete cascade,
+  designation              text,
+  cle_rapprochement        text generated always as (public.cle_de_rapprochement(designation)) stored,
+  unite                    text,
+  fourniture_non_comprise  boolean not null default false,
+  main_oeuvre              boolean not null default false,
+  prix_reference_centimes  bigint,
+  prix_fixe_le             timestamptz,
+  devis_origine_id         uuid,
+  created_at               timestamptz not null default now(),
+  modifie_le               timestamptz not null default now(),
+  constraint base_postes_devis_origine_fkey foreign key (devis_origine_id, pro_id)
+    references public.devis (id, pro_id) on delete set null (devis_origine_id)
+);
+
+-- --------------------------------------------------------------------------
+--  50.3 Les contraintes — cinq, toutes en `_check`
+--
+--  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
+--  donne à chacune une phrase qui dit QUOI FAIRE. Écrites dans l'ordre
+--  ALPHABÉTIQUE de leurs noms, qui est l'ordre où PostgreSQL les nomme quand
+--  une ligne en viole plusieurs : une phrase vide ET l'unité « ml » sortent
+--  par `base_poste_designation_check` ; « — » ET « ml » par
+--  `base_poste_rapprochement_check` ; « — » ET un prix 0 par
+--  `base_poste_prix_check`. `validerPoste()`, dans le téléphone, teste dans
+--  ce même ordre.
+--
+--  `base_poste_rapprochement_check` : une phrase faite seulement de blancs,
+--  de ponctuation, de marques ou de caractères invisibles (« — », « … », un
+--  remplisseur hangûl) a une clé VIDE, et ne fait pas un poste. `null` y
+--  laisse parler `base_poste_designation_check` : une phrase vide n'a pas de
+--  clé, une phrase de plus de 2 000 points de code non plus (la garde). Ce
+--  qui fait un poste, et c'est dit : un émoji seul, une flèche, une lettre
+--  grecque — leur clé n'est pas vide. (Les cinq blancs que la classe du
+--  projet ne connaît pas — U+3000, U+202F… — sont des SÉPARATEURS pour la
+--  clé : refusés seuls ici, ils restent acceptés par `devis_lignes`, au
+--  lot S.)
+-- --------------------------------------------------------------------------
+alter table public.base_postes drop constraint if exists base_poste_designation_check;
+alter table public.base_postes add constraint base_poste_designation_check
+  check (designation is not null and char_length(designation) between 1 and 2000);
+alter table public.base_postes drop constraint if exists base_poste_prix_check;
+alter table public.base_postes add constraint base_poste_prix_check
+  check (prix_reference_centimes is null or prix_reference_centimes between 1 and 9999999999);
+alter table public.base_postes drop constraint if exists base_poste_prix_date_check;
+alter table public.base_postes add constraint base_poste_prix_date_check
+  check ((prix_reference_centimes is null) = (prix_fixe_le is null));
+alter table public.base_postes drop constraint if exists base_poste_rapprochement_check;
+alter table public.base_postes add constraint base_poste_rapprochement_check
+  check (cle_rapprochement is null or cle_rapprochement <> '');
+alter table public.base_postes drop constraint if exists base_poste_unite_check;
+alter table public.base_postes add constraint base_poste_unite_check
+  check (unite is not null and unite in ('m2', 'm', 'm3', 'u', 'h', 'jour', 'forfait'));
+
+comment on table public.base_postes is
+  'La base de postes d''un artisan : SES phrases et SES prix de référence, entrés d''un appui depuis une ligne de devis. '
+  'Privée (est_mon_entreprise), rien pour anon, part avec le compte. Section 50.';
+comment on column public.base_postes.designation is
+  'La phrase, MOT POUR MOT (rognée de ses blancs, rien d''autre). C''est elle que le client lira. 1 à 2 000 caractères.';
+comment on column public.base_postes.cle_rapprochement is
+  'GÉNÉRÉE par public.cle_de_rapprochement(designation) : ne s''écrit pas (428C9), ne s''affiche nulle part. Son lecteur est '
+  'l''index unique idx_base_postes_rapprochement.';
+comment on column public.base_postes.unite is
+  'Une des sept unités du lot 1 (m2, m, m3, u, h, jour, forfait) — « ml » jamais. Obligatoire.';
+comment on column public.base_postes.prix_reference_centimes is
+  'En CENTIMES, dans la convention de la ligne (hors taxes au régime réel, sans TVA en franchise), jamais TTC. NULL = pas '
+  'encore fixé ; jamais 0.';
+comment on column public.base_postes.prix_fixe_le is
+  'Posée par la BASE quand le prix change, vidée avec lui. Jamais par le téléphone.';
+comment on column public.base_postes.devis_origine_id is
+  'Le devis d''où le poste a été ajouté — un devis DE CETTE entreprise (clé composée). Facultatif ; passe à vide quand le '
+  'devis est supprimé, et ne se récrit jamais.';
+comment on column public.base_postes.modifie_le is
+  'Posée par la base à chaque écriture DIRECTE (pas par la cascade). L''application modifie et retire un poste SOUS '
+  'CONDITION sur cette date : une écriture tardive ne trouve aucune ligne.';
+
+-- --------------------------------------------------------------------------
+--  50.4 Le déclencheur `tient_le_poste()` — et le plafond
+--
+--  `security invoker`, `before insert or update`, posé par `create or
+--  replace trigger`. Il ne lit que `public.base_postes` et, dans la seule
+--  branche d'insertion, `public.est_mon_entreprise()`.
+--
+--    1. LA PHRASE EST ROGNÉE par la classe de blancs du projet (espace,
+--       tabulation, CR, LF, U+00A0, U+200B, U+200C, U+200D, U+2060,
+--       U+FEFF), écrite en `chr(n)`. C'est la HUITIÈME copie de cette
+--       classe : `verifier-devis` la compare aux sept autres et à `BLANCS`.
+--       « Mot pour mot » veut dire que rien d'autre n'est réécrit.
+--    2. À L'INSERTION : les deux dates par `clock_timestamp()` (et non
+--       `now()`, l'heure du DÉBUT de la transaction), la date du prix si un
+--       prix est donné ; puis le PLAFOND.
+--    3. À LA MODIFICATION : l'identifiant et l'entreprise sont FIGÉS ; la
+--       date de création est gardée ; le lien d'origine ne peut que
+--       DISPARAÎTRE ; la date du prix ne bouge que si le prix change, et se
+--       vide avec lui ; `modifie_le` ne bouge que pour une écriture DIRECTE
+--       (`pg_trigger_depth() = 1`) — la cascade `set null` d'un devis
+--       supprimé tourne plus profond, et ne doit pas faire croire à
+--       l'artisan que son poste a été modifié entre-temps.
+--
+--  LE PLAFOND : 1 000 postes par entreprise, `OP018`, compté SOUS un verrou
+--  consultatif — sans lui, deux ajouts simultanés comptent chacun 999. La
+--  saisie lit TOUTE la base d'un coup, sans pagination : une borne la garde
+--  petite. Et 1 000 est aussi la limite de lecture par défaut de l'API.
+--  La phrase écrit le nombre EN TOUTES LETTRES, avec une espace ordinaire,
+--  et `src/lib/erreurs.js` la recopie octet pour octet. La constante
+--  s'appelle `v_plafond_postes`, jamais `v_plafond` : `verifier-devis` lit
+--  la première occurrence de `v_plafond constant` du fichier (OP017).
+--
+--  LE VERROU ET LE COMPTE NE SONT PRIS QUE POUR SA PROPRE ENTREPRISE — ou
+--  sans jeton (l'éditeur SQL, une fonction sans jeton : elles restent
+--  comptées). Le déclencheur tourne AVANT la colonne générée, la politique
+--  et les contraintes : un particulier qui écrivait au nom de A prenait le
+--  verrou de A, payait le calcul de la clé, puis était refusé — et A
+--  attendait plus de huit secondes pour ajouter SON poste (mesuré). Une
+--  écriture au nom d'un autre ne compte plus rien et n'attend personne ; la
+--  politique la refuse juste après (42501). Les deux `if` sont IMBRIQUÉS
+--  exprès : `est_mon_entreprise` n'est exécutable que par `anon` et
+--  `authenticated`, et une écriture du rôle de service, qui n'a pas de
+--  jeton, ne doit pas l'appeler.
+--
+--  POURQUOI `security invoker` EST UNE PROPRIÉTÉ DE SÉCURITÉ : en `definer`
+--  « pour compter juste », un autre artisan qui écrivait au nom de A
+--  recevait « Votre base compte déjà 1 000 postes » — il apprenait que la
+--  base de A était pleine. Il reçoit 42501, jamais `OP018` (essai 50, cas
+--  6 bis et 23).
+--
+--  POURQUOI FIGER `id` ET `pro_id` : `update … set id = <autre>` passait.
+--  Sans dommage aujourd'hui, mais une modification conditionnée qui
+--  viserait l'ancien identifiant dirait « modifié entre-temps » sur un poste
+--  qui n'a pas changé. `pro_id` est déjà tenu par la politique pour un
+--  client ; le figer ferme la porte à une écriture future qui ne passerait
+--  pas par la RLS. Un client qui tente de déplacer son poste chez B reçoit
+--  `UPDATE 1` — et le poste reste chez lui.
+--
+--  `auth.uid()` NE SE LIT QUE DANS LA BRANCHE D'INSERTION. En modification,
+--  le déclencheur tourne aussi pendant une cascade, où `auth.uid()` est
+--  celui de QUELQU'UN D'AUTRE ; une cascade n'insère jamais ici.
+--
+--  LES CONTRATS, à tenir par tout ce qui écrira un jour dans cette table :
+--    - jamais d'`upsert` : le déclencheur `before insert` compte AVANT de
+--      savoir que la ligne fusionnera (au plafond, un `on conflict … do
+--      update` sur un poste existant rend `OP018`) ;
+--    - seule la cascade `set null` écrit à une profondeur supérieure à 1 ;
+--      toute autre écriture future hors d'un client passe à profondeur 1, ou
+--      pose `modifie_le` elle-même ;
+--    - le nombre du plafond ne dépasse pas la limite de lecture de l'API ;
+--    - changer la règle de la clé, c'est réécrire la table (50.0) ;
+--    - `auth.uid()` ne se lit que dans la branche d'insertion.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_poste()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_plafond_postes constant integer := 1000;
+  v_compter boolean;
+begin
+  new.designation := nullif(btrim(coalesce(new.designation, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  if tg_op = 'INSERT' then
+    new.created_at := clock_timestamp();
+    new.modifie_le := new.created_at;
+    new.prix_fixe_le := case when new.prix_reference_centimes is null then null else new.created_at end;
+    if auth.uid() is null then
+      v_compter := true;
+    else
+      v_compter := public.est_mon_entreprise(new.pro_id);
+    end if;
+    if v_compter then
+      perform pg_advisory_xact_lock(hashtextextended('base_postes:' || new.pro_id::text, 0));
+      if (select count(*) from public.base_postes b where b.pro_id = new.pro_id) >= v_plafond_postes then
+        raise exception 'Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.'
+          using errcode = 'OP018';
+      end if;
+    end if;
+  else
+    new.id := old.id;
+    new.pro_id := old.pro_id;
+    new.created_at := old.created_at;
+    new.devis_origine_id := case when new.devis_origine_id is null then null else old.devis_origine_id end;
+    if new.prix_reference_centimes is distinct from old.prix_reference_centimes then
+      new.prix_fixe_le := case when new.prix_reference_centimes is null then null else clock_timestamp() end;
+    else
+      new.prix_fixe_le := old.prix_fixe_le;
+    end if;
+    if pg_trigger_depth() = 1 then
+      new.modifie_le := clock_timestamp();
+    else
+      new.modifie_le := old.modifie_le;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_poste
+  before insert or update on public.base_postes
+  for each row execute function public.tient_le_poste();
+
+comment on function public.tient_le_poste() is
+  'Rogne la phrase (la classe de blancs du projet, en chr(n)), pose les dates, fige id, pro_id et created_at, ne laisse le '
+  'lien d''origine que disparaître, et compte le plafond de 1 000 postes (OP018) sous verrou — pour SA propre entreprise '
+  'ou sans jeton seulement. security invoker, et doit le rester. Section 50.4.';
+
+-- --------------------------------------------------------------------------
+--  50.5 Qui lit, qui écrit
+--
+--  La forme de la section 49.7 : `pro_id in (select public.mes_entreprises())`,
+--  une sous-requête NON corrélée, calculée UNE fois par requête — et c'est
+--  toujours `est_mon_entreprise()` qui DÉCIDE. Aucune fonction gardienne
+--  nouvelle.
+--
+--  `for all`, QUATRE PORTES, et ici les quatre sont justes : lire, ajouter,
+--  corriger et retirer SES postes. Retirer un poste ne détruit rien qui
+--  engage un tiers — le raisonnement du carnet de clients.
+--
+--  `anon` n'a AUCUN droit de table : un visiteur reçoit « permission denied
+--  for table base_postes », pas une liste vide. `authenticated` en a
+--  exactement quatre : ni `truncate` (qu'aucune politique RLS ne filtre),
+--  ni `references`, ni `trigger`. AUCUNE politique pour l'administration :
+--  un administrateur lit 0, un jeton qui ne correspond à aucun compte lit 0.
+-- --------------------------------------------------------------------------
+alter table public.base_postes enable row level security;
+
+drop policy if exists "ma base de postes" on public.base_postes;
+create policy "ma base de postes" on public.base_postes
+  for all to authenticated
+  using (pro_id in (select public.mes_entreprises()))
+  with check (pro_id in (select public.mes_entreprises()));
+
+revoke all on public.base_postes from anon, authenticated;
+grant select, insert, update, delete on public.base_postes to authenticated;
+
+-- --------------------------------------------------------------------------
+--  50.6 Les index
+--
+--  `idx_base_postes_rapprochement` REFUSE LE DOUBLON PRESQUE EXACT : une
+--  même clé de rapprochement, à la même unité, avec la même fourniture, chez
+--  le même artisan — 23505. « Chape sèche avant carrelage collé » au m²
+--  rangée, « chapes seches avant carrelage colle. » est refusée ; au
+--  forfait, ou fourniture non comprise, c'est un autre poste (un autre
+--  prix). Deux références pour un même poste, ce serait la question
+--  « laquelle compte pour l'écart ? », et la moyenne qui revient par la
+--  porte de côté. L'écran ne laisse pas arriver le doublon (il dit « ce
+--  poste existe déjà ») ; l'index reste la dernière garde : une base lue il
+--  y a une heure, un autre appareil, une application en retard d'une
+--  version de la règle. Il sert aussi `where pro_id = …` (la lecture, le
+--  compte du plafond).
+--
+--  POURQUOI `md5(…)::uuid` ET `unite collate "C"` : une entrée fixe de seize
+--  octets, sans collation, au lieu de la clé en clair — une phrase de 2 000
+--  caractères de quatre octets a une clé de 8 000 octets, et un index en
+--  clair la refuse (54000, en anglais). Et `unite` comparée octet pour
+--  octet : AUCUNE colonne de cet index ne dépend de la collation de la base,
+--  donc une mise à jour de sa bibliothèque de collation n'exigerait pas de
+--  le reconstruire. 88 kB pour 1 000 postes.
+--
+--  UN NOM NEUF : une esquisse de ce lot portait un autre index unique, sous
+--  un autre nom, sur `md5(designation)` — et un `create unique index if not
+--  exists` sous un nom déjà pris garde l'ANCIENNE définition, sans erreur.
+--  La vraie base n'a jamais reçu de section 50 ; un nom neuf rend la
+--  confusion impossible sur toute base d'essai, et l'essai 50 (cas 20) lit
+--  la définition. L'ancien nom n'est écrit nulle part dans le dépôt :
+--  `verifier-postes` y veille.
+--
+--  `idx_base_postes_devis` sert la cascade `set null` d'un devis supprimé.
+-- --------------------------------------------------------------------------
+create unique index if not exists idx_base_postes_rapprochement
+  on public.base_postes (pro_id, (md5(cle_rapprochement)::uuid), (unite collate "C"), fourniture_non_comprise);
+create index if not exists idx_base_postes_devis
+  on public.base_postes (devis_origine_id) where devis_origine_id is not null;
+
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
@@ -12609,7 +13170,22 @@ as $$
                  coalesce((select jsonb_agg(to_jsonb(t) order by t.devis_id, t.taux_tva_centiemes desc)
                              from public.devis_tva t
                              join public.devis d on d.id = t.devis_id
-                            where d.pro_id = auth.uid()), '[]'::jsonb)
+                            where d.pro_id = auth.uid()), '[]'::jsonb),
+    /* MA BASE DE POSTES (section 50) — les DEUX fondements de `devis_emis`,
+       et pour la même raison. Pour l'artisan PERSONNE PHYSIQUE, ses phrases
+       et ses prix de référence sont des données sur lui : l'article 15 ; pour
+       une société, l'export reste un engagement d'Opus. Et une phrase est le
+       texte libre de l'artisan, qui peut NOMMER un client (« … chez Mme X ») :
+       pour cette personne-là, c'est l'article 28 — aider l'artisan à
+       répondre à sa demande (28.3.e) et lui rendre ses données (28.3.g).
+       Une phrase survit au devis et à la fiche du client : c'est ICI qu'elle
+       se retrouve. `to_jsonb(x)` emporte aussi `cle_rapprochement`, une
+       valeur calculée, rendue telle quelle : cette fonction rend des LIGNES,
+       pas une liste de colonnes, et un export qui omettrait une colonne de
+       la table ne serait plus « tout ». */
+    'ma_base_de_postes',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.base_postes x where x.pro_id = auth.uid()), '[]'::jsonb)
   )
 $$;
 

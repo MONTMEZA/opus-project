@@ -25,12 +25,29 @@
  * CORRECTION ET ORTHOGRAPHE ACTIVES (`autoCorrect`, `spellCheck`) : c'est
  * le texte que le client lira. L'inverse exact de `ChampMontant`.
  *
- * LA MÉMOIRE : les suggestions partent quand la frappe RETOMBE
+ * LES PROPOSITIONS : elles partent quand la frappe RETOMBE
  * (`useRechercheDifferee`), dès trois lettres, trois au plus, SOUS le champ
  * — au-dessus, la liste qui arrive ferait descendre le champ sous le doigt.
- * Elles viennent de `memoireDesLignes()` (`devis.js`) : des prix que
- * l'artisan a RÉELLEMENT écrits, chacun avec son devis d'origine, jamais
- * une moyenne.
+ * Depuis le lot P (24/10/2026), elles viennent de DEUX sources, dans UNE
+ * liste (`suggestionsPourLaFrappe`, `postes.js`) :
+ *   - la BASE DE POSTES de l'artisan — ses phrases rangées d'un appui, avec
+ *     le prix de référence qu'il a fixé lui-même ;
+ *   - la MÉMOIRE du lot 1 — les prix qu'il a RÉELLEMENT écrits dans ses
+ *     devis, chacun avec son devis d'origine, jamais une moyenne.
+ * UNE PROPOSITION PAR PHRASE (à une variante d'écriture près : majuscules,
+ * accents, ponctuation, un s de pluriel), jamais plus de trois — la réponse
+ * du propriétaire du 23/10 : « il ne faut pas qu'il y ait trop de
+ * propositions, ça pourrait nous perdre ». Ce qui s'affiche et ce qu'un
+ * appui recopie est TOUJOURS une phrase rangée, mot pour mot : la clé qui
+ * rapproche deux phrases ne sort jamais de `devis.js` et de `postes.js`, et
+ * cet écran n'importe pas `rapprochement.js`.
+ *
+ * UNE RANGÉE = un titre de deux lignes au plus + un détail d'UNE ligne. Le
+ * prix qu'un appui recopie est écrit par `Montant`, à l'encre du texte ; le
+ * reste du détail en gris. Si quelque chose est coupé, c'est l'historique
+ * ou l'origine, jamais « fourniture non comprise » (`detailDeSuggestion`
+ * les range dans cet ordre). Et VoiceOver entend d'abord le prix qu'un
+ * appui recopie (`libelleDeSuggestion`).
  */
 import React, {
   forwardRef, useImperativeHandle, useRef, useState, useMemo,
@@ -43,14 +60,23 @@ import {
 } from '../theme';
 import { uiStyles, Montant, Pastille } from './ui';
 import { useRechercheDifferee } from '../lib/frappe';
-import { memoireDesLignes, UNITES, LONGUEURS } from '../lib/devis';
+import { LONGUEURS } from '../lib/devis';
+import { suggestionsPourLaFrappe, morceauxDuDetail, libelleDeSuggestion } from '../lib/postes';
 
 /** Trois lettres avant de chercher : en deçà, tout ressemble à tout. */
 const LETTRES_MIN = 3;
-/** Trois suggestions au plus : au-delà, on lit au lieu de taper. */
+/** Trois propositions au plus : au-delà, on lit au lieu de taper. */
 const SUGGESTIONS_MAX = 3;
+const AUCUN_POSTE = Object.freeze([]);
 
-const uniteDe = (cle) => UNITES.find((u) => u.cle === cle) || null;
+/* CE QUI N'A PAS PU ÊTRE LU, en UNE phrase — et un seul « Réessayer », qui
+   relit ce qui a échoué. Une source en panne n'éteint jamais l'autre : la
+   phrase dit laquelle manque, et ce qui reste proposé. */
+function phraseEchec(memoire, base) {
+  if (memoire && base) return 'Vos prix déjà écrits et votre base de postes n’ont pas pu être lus.';
+  if (base) return 'Votre base de postes n’a pas pu être lue : seuls vos prix déjà écrits sont proposés.';
+  return 'Les prix de vos autres devis n’ont pas pu être lus : seules les lignes de ce devis-ci sont proposées.';
+}
 
 const ChampDesignation = forwardRef(function ChampDesignation({
   defaut = '', placeholder, accessibilityLabel, autoFocus = false,
@@ -62,6 +88,11 @@ const ChampDesignation = forwardRef(function ChampDesignation({
      phrase qui annonce zéro au-dessus de deux suggestions dément ce qu'on
      voit — mesuré au navigateur sur une copie en panne. */
   memoireEchec = false, onRelireMemoire = null,
+  /* La base de postes (lot P) : le tableau tel qu'`OpusApp` l'a lu — le
+     MÊME objet d'un rendu à l'autre, c'est ce qui garde ses clés en cache
+     (`postesPrepares`) —, l'état de sa lecture, et de quoi la relire. Elle
+     ne propose rien tant qu'elle n'est pas lue (`'ok'`). */
+  postes = null, postesEtat = 'vide', onRelirePostes = null,
 }, ref) {
   /* `recherche` : le texte une fois la frappe retombée — c'est lui qui
      décide des suggestions. `vif` : le texte exact, pour `lire()` au moment
@@ -74,8 +105,9 @@ const ChampDesignation = forwardRef(function ChampDesignation({
      avec des suggestions qu'on n'avait pas demandées (sa désignation valait
      déjà trois lettres), et UN appui distrait changeait son prix : 45 € →
      38 € « fourniture non comprise », le total du devis avec (relecture
-     « écran » des étapes 4 à 7, B1). La mémoire répond à une FRAPPE, jamais
-     à l'ouverture. */
+     « écran » des étapes 4 à 7, B1). Les propositions répondent à une
+     FRAPPE, jamais à l'ouverture — celles de la base comme celles de la
+     mémoire. */
   const [choisi, setChoisi] = useState(defaut || null);
   const vif = useRef(defaut || '');
   const champ = useRef(null);
@@ -98,11 +130,27 @@ const ChampDesignation = forwardRef(function ChampDesignation({
     focus: () => { if (champ.current && champ.current.focus) champ.current.focus(); },
   }), [setTexte]);
 
+  const postesLus = postesEtat === 'ok' && Array.isArray(postes) ? postes : null;
   const suggestions = useMemo(() => {
-    if (!memoire || choisi === recherche) return [];
+    if ((!memoire && !postesLus) || choisi === recherche) return [];
     if (String(recherche || '').trim().length < LETTRES_MIN) return [];
-    return memoireDesLignes(memoire, recherche, { idLigne }).slice(0, SUGGESTIONS_MAX);
-  }, [memoire, recherche, idLigne, choisi]);
+    return suggestionsPourLaFrappe({
+      postes: postesLus || AUCUN_POSTE,
+      memoire: Array.isArray(memoire) ? memoire : [],
+      texte: recherche,
+      idLigne,
+      max: SUGGESTIONS_MAX,
+    });
+  }, [memoire, postesLus, recherche, idLigne, choisi]);
+
+  /* L'échec de la base ne se dit que là où elle aurait proposé quelque
+     chose : la carte ne passe `postesEtat` qu'à une ligne chiffrée (un
+     poste, une option) — un titre n'en reçoit pas. */
+  const baseEchec = postesEtat === 'echec';
+  const relire = () => {
+    if (memoireEchec && onRelireMemoire) onRelireMemoire();
+    if (baseEchec && onRelirePostes) onRelirePostes();
+  };
 
   return (
     <View>
@@ -123,26 +171,29 @@ const ChampDesignation = forwardRef(function ChampDesignation({
         accessibilityLabel={accessibilityLabel}
         style={[uiStyles.textarea, s.champ]}
       />
-      {memoireEchec && (
+      {(memoireEchec || baseEchec) && (
         <View style={s.echec} accessibilityLiveRegion="polite">
-          <Text style={s.echecTexte}>
-            Les prix de vos autres devis n’ont pas pu être lus : seules les lignes de ce devis-ci sont proposées.
-          </Text>
-          {!!onRelireMemoire && <Pastille label="Réessayer" nom="Relire vos prix déjà écrits" onPress={onRelireMemoire} />}
+          <Text style={s.echecTexte}>{phraseEchec(memoireEchec, baseEchec)}</Text>
+          {!!(onRelireMemoire || onRelirePostes) && (
+            <Pastille label="Réessayer" nom="Relire vos prix déjà écrits et votre base de postes" onPress={relire} />
+          )}
         </View>
       )}
+      {/* LE CONTENEUR NE PORTE AUCUN LIBELLÉ : posé sur une vue qui n'est
+          pas un élément d'accessibilité, VoiceOver ne le lit pas. Chaque
+          rangée porte le sien, au préfixe commun « Reprendre : ». */}
       {suggestions.length > 0 && (
-        <View style={s.liste} accessibilityLabel="Déjà écrit dans vos devis">
+        <View style={s.liste}>
           {suggestions.map((sug) => {
-            const u = uniteDe(sug.unite);
-            /* D'OÙ ELLE VIENT, sans jamais montrer le texte d'un AUTRE
-               client : `origineDeSuggestion()` (devis.js) nomme un devis
-               ouvert depuis une demande par sa date (relecture « données »
-               des étapes 4 à 7, I5). */
-            const origine = sug.origine.libelle;
+            /* LE DÉTAIL COUPÉ AUTOUR DU PRIX RECOPIÉ (`morceauxDuDetail`) :
+               le prix par `Montant`, à l'encre du texte, le reste en gris.
+               L'origine d'une ligne de mémoire ne montre jamais le texte
+               d'un AUTRE client : un devis ouvert depuis une demande se
+               nomme par sa date (`origine.libelle`, `devis.js`). */
+            const m = morceauxDuDetail(sug);
             return (
               <Pressable
-                key={`${sug.ligneId}-${sug.prixUnitaireCentimes}`}
+                key={`${sug.source}-${sug.cle}`}
                 onPress={() => {
                   vif.current = sug.designation;
                   setTexte(sug.designation);
@@ -151,18 +202,14 @@ const ChampDesignation = forwardRef(function ChampDesignation({
                   if (onChoisir) onChoisir(sug);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Reprendre : ${sug.designation}${u ? `, par ${u.nom}` : ''}`
-                  + `${sug.fournitureNonComprise ? ', fourniture non comprise' : ''}`
-                  + `${origine ? `, déjà écrit dans ${origine}` : ''}`}
+                accessibilityLabel={libelleDeSuggestion(sug)}
                 style={({ pressed }) => [s.suggestion, pressed && APPUI.discret]}
               >
                 <Text style={s.suggestionTitre} numberOfLines={2}>{sug.designation}</Text>
-                <Text style={s.suggestionDetail} numberOfLines={2}>
-                  <Montant centimes={sug.prixUnitaireCentimes} enLigne style={s.suggestionPrix} />
-                  {u ? ` / ${u.court}` : ''}
-                  {sug.offert ? ' (offert)' : ''}
-                  {sug.fournitureNonComprise ? ' · fourniture non comprise' : ''}
-                  {origine ? ` · ${origine}` : ''}
+                <Text style={s.suggestionDetail} numberOfLines={1}>
+                  {m.avant}
+                  {m.prix != null && <Montant centimes={m.prix} enLigne style={s.suggestionPrix} />}
+                  {m.apres}
                 </Text>
               </Pressable>
             );

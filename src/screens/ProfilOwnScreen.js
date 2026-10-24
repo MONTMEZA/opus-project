@@ -96,7 +96,7 @@ export default function ProfilOwnScreen({
   demandesPartenariat = [], partenariatsEnvoyes = [],
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
-  onClients, onDevis = null, onEntreprise,
+  onClients, onDevis = null, onMaBase = null, onEntreprise,
   onConfidentialite, admin = null, onAdmin,
   mesChantiers = [], onOuvrirChantier,
   /* Section 45 : l'entreprise rattachée (un pro), la demande de compte
@@ -352,6 +352,20 @@ export default function ProfilOwnScreen({
             label="Mes devis"
             accessibilityLabel="Mes devis : les brouillons de chiffrage"
             onPress={onDevis}
+          />
+        </View>
+      )}
+
+      {/* MA BASE DE POSTES (lot P) — sous « Mes devis » : ses phrases et ses
+          prix de référence servent à chiffrer. Une seconde porte, parce que
+          l'en-tête de « Mes devis » n'existe pas pendant sa toute première
+          lecture. Réservée aux professionnels, comme « Mes devis ». */}
+      {!!onMaBase && (
+        <View style={s.pad}>
+          <BtnOutline
+            label="Ma base de postes"
+            accessibilityLabel="Ma base de postes : vos phrases et vos prix de référence"
+            onPress={onMaBase}
           />
         </View>
       )}

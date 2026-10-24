@@ -60,6 +60,7 @@
     "verifier-horaires": "node scripts/verifier-horaires.mjs",
     "verifier-carte": "node scripts/verifier-carte.mjs",
     "generer-catalogue": "node scripts/generer-catalogue.mjs",
+    "generer-rapprochement": "node scripts/generer-rapprochement.mjs",
     "verifier-imports": "node scripts/verifier-imports.mjs",
     "verifier-retour": "node scripts/verifier-retour.mjs",
     "verifier-demandes": "node scripts/verifier-demandes.mjs",
@@ -94,7 +95,8 @@
     "verifier-siret": "node scripts/verifier-siret.mjs",
     "verifier-tarifs": "node scripts/verifier-tarifs.mjs",
     "verifier-tva": "node scripts/verifier-tva.mjs",
-    "verifier-devis": "node scripts/verifier-devis.mjs"
+    "verifier-devis": "node scripts/verifier-devis.mjs",
+    "verifier-postes": "node scripts/verifier-postes.mjs"
   },
   "private": true,
   "devDependencies": {

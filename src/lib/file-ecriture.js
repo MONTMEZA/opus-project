@@ -151,9 +151,17 @@ const DEVIS = 'devis';
    repart à la prochaine écriture, quelle que soit la valeur voulue. */
 const INCONNU = Symbol('valeur inconnue en base');
 
-/* Une erreur de clé primaire déjà prise : 23505 sur `…_pkey` (le devis et
-   ses lignes n'ont AUCUNE autre contrainte d'unicité — un index unique sur
-   (pro, client) est même interdit, D4). */
+/* Une erreur de clé primaire déjà prise : 23505 sur `…_pkey`. Les lignes
+   n'ont aucune autre contrainte d'unicité, et un index unique sur (pro,
+   client) est interdit (D4). Le DEVIS, lui, porte depuis le lot P un SECOND
+   index unique, `idx_devis_id_pro` sur `(id, pro_id)` (section 50.1) : il
+   ne refuse rien de plus — `id` est déjà unique —, il sert de point
+   d'attache au lien d'un poste vers son devis d'origine. Un identifiant de
+   devis renvoyé, le sien comme celui d'un autre, rend TOUJOURS `devis_pkey`,
+   jamais lui : PostgreSQL vérifie les index dans l'ordre de leur création,
+   et la clé primaire est le plus ancien, sur une base neuve comme après la
+   migration (essai 50, cas 15). D'où ce test sur le seul suffixe `_pkey`,
+   qui reste juste. */
 function estUneCleDejaPrise(e) {
   if (!e || e.code !== '23505') return false;
   const texte = `${e.message || ''} ${e.details || ''}`;

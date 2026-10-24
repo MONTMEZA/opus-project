@@ -609,11 +609,20 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
       devis: { id: `d${n}`, objet: `Devis ${n}`, source: 'manuelle', modifieLe: `2026-10-${String(n).padStart(2, '0')}T10:00:00Z` }, ...plus,
     };
   };
+  /* LA RÉPONSE DU PROPRIÉTAIRE DU 23/10 (lot P, cahier §3.1, mesuré X-16) :
+     « il ne faut pas qu'il y ait trop de propositions, ça pourrait nous
+     perdre ». La même phrase écrite à 50 € puis à 70 € n'est plus DEUX
+     suggestions mais UNE proposition, qui porte les deux prix — le plus
+     récent d'abord, celui qu'un appui recopie. Ce qui ne change pas : aucun
+     prix que personne n'a écrit, donc jamais 60 €. */
   const deux = [L('Chape sèche', 5000), L('Chape sèche', 7000)];
   const s2 = D.memoireDesLignes(deux, 'chape');
-  verifier('50 € et 70 € → DEUX suggestions, 70 € (la plus récente) d’abord — aucune ne vaut 60 €',
-    s2.length === 2 && s2[0].prixUnitaireCentimes === 7000 && s2[1].prixUnitaireCentimes === 5000
-    && s2.every((s) => [5000, 7000].includes(s.prixUnitaireCentimes)), json(s2.map((s) => s.prixUnitaireCentimes)));
+  verifier('50 € et 70 € → UNE proposition (une par phrase, réponse du 23/10) qui porte les DEUX prix, 70 € (le plus récent) '
+    + 'd’abord et recopié par un appui — aucun ne vaut 60 €',
+  s2.length === 1 && s2[0].prixUnitaireCentimes === 7000 && egalListes((s2[0].prix || []).map((p) => p.prixUnitaireCentimes), [7000, 5000])
+    && D.valeursDeLaSuggestion(s2[0]).prixUnitaireCentimes === 7000
+    && !s2.some((s) => s.prixUnitaireCentimes === 6000 || (s.prix || []).some((p) => p.prixUnitaireCentimes === 6000)),
+  json(s2.map((s) => [s.prixUnitaireCentimes, (s.prix || []).map((p) => p.prixUnitaireCentimes)])));
   const unites = D.memoireDesLignes([L('Ragréage', 4500), L('Ragréage', 4500, { unite: 'forfait' })], 'ragr');
   verifier('la même phrase au m² et au forfait, AU MÊME PRIX → deux suggestions',
     unites.length === 2 && new Set(unites.map((s) => s.unite)).size === 2, json(unites.map((s) => s.unite)));
@@ -621,10 +630,17 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
   verifier('la même phrase avec et sans fourniture, AU MÊME PRIX → deux suggestions (sans accent ni casse : « faience »)',
     fourniture.length === 2 && fourniture.filter((s) => s.fournitureNonComprise).length === 1, json(fourniture));
   const quatre = D.memoireDesLignes([L('Enduit', 1000), L('Enduit', 2000), L('Enduit', 3000), L('Enduit', 4000), L('Enduit', 4000)], 'enduit');
-  verifier('trois prix au plus par phrase, sans répéter un même prix, chacun avec son devis d’origine',
-    quatre.length === 3 && egalListes(quatre.map((s) => s.prixUnitaireCentimes), [4000, 3000, 2000])
-    && quatre[0].origine.objet === 'Devis 11' && /^\d{2}\/10\/2026$/.test(quatre[0].origine.date || ''),
-    json(quatre.map((s) => [s.prixUnitaireCentimes, s.origine])));
+  /* Toujours trois prix au plus, et toujours chacun avec son devis
+     d'origine — mais dans UNE proposition (réponse du 23/10) : l'origine de
+     la proposition est celle du prix qu'un appui recopie (4 000, « Devis
+     11 » ; le 4 000 du devis 10, plus ancien, n'est pas répété). */
+  verifier('trois prix au plus par phrase, sans répéter un même prix, chacun avec son devis d’origine — dans UNE proposition, '
+    + 'dont l’origine est celle du prix recopié',
+  quatre.length === 1 && egalListes((quatre[0].prix || []).map((p) => p.prixUnitaireCentimes), [4000, 3000, 2000])
+    && egalListes(quatre[0].prix.map((p) => p.origine && p.origine.objet), ['Devis 11', 'Devis 9', 'Devis 8'])
+    && quatre[0].prix.every((p) => /^\d{2}\/10\/2026$/.test((p.origine && p.origine.date) || ''))
+    && quatre[0].origine.objet === 'Devis 11' && quatre[0].prixUnitaireCentimes === 4000,
+  json(quatre.map((s) => (s.prix || []).map((p) => [p.prixUnitaireCentimes, p.origine]))));
   /* L'ORIGINE D'UNE SUGGESTION, MONTRÉE PENDANT QU'ON CHIFFRE LE DEVIS D'UN
      AUTRE CLIENT : l'objet d'un devis ouvert depuis une demande ou une
      urgence est le texte du PARTICULIER — il ne sort jamais de ses devis ;
@@ -644,8 +660,16 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
     && oInconnue && !/M\. Y|Chez/.test(texteDe(oInconnue)) && oMain && oMain.origine.libelle === 'Rénovation de la salle…',
     [oDemande, oUrgence, oInconnue, oMain].map(texteDe).join(' | '));
   const CD = sansCommentairesJs(lire('src/components/ChampDesignation.js'));
-  verifier('…et `ChampDesignation` n’affiche l’origine que par `origine.libelle` — jamais `origine.objet` directement',
-    /origine\.libelle/.test(CD) && !/origine\.objet/.test(CD) && !/\.devis\.objet/.test(CD));
+  /* Depuis le lot P, `ChampDesignation` n'écrit plus le détail lui-même : il
+     passe par `morceauxDuDetail` et `libelleDeSuggestion` (`postes.js`), qui
+     lisent l'origine. La règle suit le texte là où il s'écrit. */
+  const PO = sansCommentairesJs(lire('src/lib/postes.js'));
+  const lecteursOrigine = `${corpsDeFonction(PO, 'detailDeSuggestion') || ''}\n${corpsDeFonction(PO, 'libelleDeSuggestion') || ''}`;
+  verifier('…et l’écran n’affiche l’origine que par `origine.libelle` — `ChampDesignation` passe par `morceauxDuDetail` et '
+    + '`libelleDeSuggestion` (`postes.js`), qui la lisent ainsi — jamais `origine.objet` directement',
+  !/origine\.objet|\.devis\.objet/.test(CD) && !/origine\.objet|\.devis\.objet/.test(PO)
+    && (/origine\.libelle/.test(CD) || (/morceauxDuDetail\(sug\)/.test(CD) && /libelleDeSuggestion\(sug\)/.test(CD)
+      && (lecteursOrigine.match(/origine\.libelle/g) || []).length >= 2)));
   const longue = D.devisDepuisDemande({ id: 'q', genre: 'devis', titre: `${'a'.repeat(1200)}` });
   verifier('l’objet pré-rempli depuis une demande tient dans `devis_objet_check` (1 000 caractères) : au-delà, le brouillon ne se '
     + 'créerait pas', longue && [...longue.objet].length === D.LONGUEURS.objet && D.validerDevis({ ...longue }).ok,
@@ -671,6 +695,94 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
   verifier('…une ligne offerte SANS valeur ne recopie aucun prix (un 0 sans « Offert » serait refusé) ; la fourniture non '
     + 'comprise est recopiée', sansValeur && sansValeur.prixUnitaireCentimes === null && avecFourniture.fournitureNonComprise === true,
     json([sansValeur, avecFourniture]));
+
+  /* LA MÉMOIRE PAR LA CLÉ (lot P, cahier §3.1 et §3.3, cas 15, 28 à 33, 39
+     et 41). Des dates relatives à un instant fixé, et non le compteur `n`
+     d'au-dessus : passé le 31, il fabriquerait un « 2026-10-35 » illisible,
+     donc une ligne sans date, rangée au hasard. */
+  /* Un calcul qui PLANTE (une fonction absente, une forme inattendue) ne
+     doit pas arrêter le contrôle : l'exception devient un échec NOMMÉ. */
+  try {
+    const T0 = Date.UTC(2026, 9, 23, 12);
+    const il = (h) => new Date(T0 - h * 3600e3).toISOString();
+    const M = (id, designation, prix, ageH, plus = {}) => ({
+      id, type: 'poste', designation, unite: 'u', prixUnitaireCentimes: prix, offert: false, mainOeuvre: false,
+      fournitureNonComprise: false, modifieLe: il(ageH),
+      devis: { id: `d-${id}`, objet: `Devis ${id}`, source: 'manuelle', modifieLe: il(ageH) }, ...plus,
+    });
+    /* Cas 28 : deux orthographes de la même phrase — UNE proposition, titrée
+       par la plus RÉCENTE (mot pour mot), les deux prix, chacun avec son
+       devis d'origine. La phrase la plus récente gagne : c'est la règle dite
+       au propriétaire le 23/10 (question B du cahier, défaut). */
+    const seuils = D.memoireDesLignes([
+      M('s1', 'Seuils de porte en aluminium (fourniture seule, sans pose)', 2300, 72),
+      M('s2', 'Seuil de porte en aluminium (fourniture seule, sans pose)', 2500, 2),
+    ], 'seuil');
+    verifier('cas 28 : « Seuil de porte… » (il y a 2 h, 25 €) et « Seuils de porte… » (il y a 3 jours, 23 €) → UNE proposition, '
+      + 'titrée par la phrase la plus RÉCENTE, mot pour mot, avec les deux prix et leurs devis d’origine',
+    seuils.length === 1 && seuils[0].designation === 'Seuil de porte en aluminium (fourniture seule, sans pose)'
+      && egalListes(seuils[0].prix.map((p) => p.prixUnitaireCentimes), [2500, 2300])
+      && egalListes(seuils[0].prix.map((p) => p.origine.objet), ['Devis s2', 'Devis s1']) && seuils[0].ligneId === 's2',
+    json(seuils.map((s) => [s.designation, s.prix.map((p) => p.prixUnitaireCentimes)])));
+    /* Cas 30 : la même phrase deux fois au même prix, dont une variante —
+       une proposition, un prix (le plus récent des deux). */
+    const variante = D.memoireDesLignes([M('v1', 'Chape sèche avant carrelage collé', 4500, 30),
+      M('v2', 'CHAPES SECHES, avant carrelages collés.', 4500, 3)], 'chape');
+    verifier('cas 30 : la même phrase écrite deux fois AU MÊME PRIX, dont une variante (majuscules, accents, pluriel, ponctuation) → '
+      + 'une proposition, un seul prix', variante.length === 1 && variante[0].prix.length === 1
+      && variante[0].prix[0].ligneId === 'v2' && variante[0].designation === 'CHAPES SECHES, avant carrelages collés.',
+    json(variante));
+    /* Cas 31 : la clé d'une proposition est celle d'un poste de même phrase
+       (à une variante près), de même unité, de même fourniture : c'est par
+       elle que la base de postes la MASQUE (`postes.js`). Une autre unité ou
+       une autre fourniture fait une autre clé. */
+    const poste = { designation: 'Chape sèche avant carrelage collé', unite: 'u', fournitureNonComprise: false };
+    verifier('cas 31 : la clé d’une proposition (`cle`) est `cleDeLigne` d’un poste de même phrase à une variante près, même unité, '
+      + 'même fourniture — une autre unité ou une autre fourniture en fait une autre',
+    variante[0].cle === D.cleDeLigne(poste) && D.cleDeLigne({ ...poste, unite: 'm2' }) !== variante[0].cle
+      && D.cleDeLigne({ ...poste, fournitureNonComprise: true }) !== variante[0].cle
+      && D.cleDeLigne({ ...poste, designation: 'Chape seche avant carrelage colle' }) === variante[0].cle,
+    `${variante[0] && variante[0].cle} / ${D.cleDeLigne(poste)}`);
+    /* Cas 15 et 32 : la recherche par MOTS, dans n'importe quel ordre, et le
+       pluriel tapé trouve le singulier écrit. */
+    const corpus = [M('c1', 'Chape sèche avant carrelage collé', 4500, 5), M('c2', 'Dalle béton armé, épaisseur 12 cm, sur hérisson', 8500, 6),
+      M('c3', 'Dépose de l’ancien carrelage au sol', 1800, 7), M('c4', 'Pose d’un meuble vasque', 18000, 8)];
+    const trouve = (t) => D.memoireDesLignes(corpus, t).map((s) => s.ligneId).sort();
+    verifier('cas 15 et 32 : « seche chape » trouve « Chape sèche… » ; « Dalles », « beton », « BETON » trouvent la dalle ; '
+      + '« carrelages » trouve les deux carrelages — là où le lot 1 ne trouvait que ce qui CONTENAIT le texte tapé',
+    json(trouve('seche chape')) === json(['c1']) && json(trouve('Dalles')) === json(['c2']) && json(trouve('beton')) === json(['c2'])
+      && json(trouve('BETON')) === json(['c2']) && json(trouve('carrelages')) === json(['c1', 'c3'])
+      && D.correspondALaRecherche('Dalle béton armé', 'Dalles') && !D.correspondALaRecherche('Pose de plinthes', 'Les'),
+    json(['seche chape', 'Dalles', 'beton', 'BETON', 'carrelages'].map((t) => [t, trouve(t)])));
+    /* Cas 33 : « Pos » met « Pose… » (la phrase COMMENCE par le texte, degré
+       4) devant « Dépose… » (contenu seulement, degré 2), même quand
+       « Dépose » est plus récente. */
+    const pos = D.memoireDesLignes([M('p1', 'Pose d’un meuble vasque', 18000, 50), M('p2', 'Dépose de l’ancien carrelage au sol', 1800, 1)], 'Pos');
+    verifier('cas 33 : « Pos » range « Pose d’un meuble… » (degré 4) devant « Dépose de… » (degré 2), même plus récente — le degré '
+      + 'd’abord, la date ensuite', pos.length === 2 && pos[0].ligneId === 'p1'
+      && D.degreDeCorrespondance('Pose d’un meuble vasque', 'Pos') === 4 && D.degreDeCorrespondance('Dépose de l’ancien carrelage', 'Pos') === 2
+      && D.degreDeCorrespondance('Pose de plinthes carrelées', 'pose carrel') === 3 && D.degreDeCorrespondance('Dalle béton', 'Dalles') === 1
+      && D.degreDeCorrespondance('Dalle béton', 'Sas') === 0, json(pos.map((s) => s.designation)));
+    /* Cas 41 : une ligne SANS prix, plus récente, titre la proposition (sa
+       phrase est la plus récente) mais ne fait pas perdre le prix : un appui
+       recopie 52 €, le plus récent des prix UTILISABLES. */
+    const sansPrix = D.memoireDesLignes([M('q1', 'Chape sèche avant carrelage collé', 4500, 72),
+      M('q2', 'Chape sèche avant carrelage collé', 5200, 2), M('q3', 'Chape seche avant carrelage colle', null, 0.1)], 'chape');
+    verifier('cas 41 : 45 € (il y a 72 h), 52 € (2 h), et la même phrase SANS prix (6 min) → une proposition, titrée par la ligne de '
+      + '6 min, `prix` = [52 €, 45 €], et un appui recopie 52 € — une ligne sans prix ne compte pas',
+    sansPrix.length === 1 && sansPrix[0].ligneId === 'q3' && sansPrix[0].designation === 'Chape seche avant carrelage colle'
+      && egalListes(sansPrix[0].prix.map((p) => p.prixUnitaireCentimes), [5200, 4500])
+      && D.valeursDeLaSuggestion(sansPrix[0]).prixUnitaireCentimes === 5200 && sansPrix[0].origine.objet === 'Devis q2',
+    json(sansPrix));
+    /* Cas 39 : `avertissementDelai` garde ses résultats sans `normalize` (la
+       clé de rapprochement ramène « INDICATIFS » à « indicatif »). */
+    verifier('cas 39 : « indicatif », « INDICATIFS », « délai indicatif. » avertissent tous trois, comme au lot 1 — et sans `normalize`',
+      ['indicatif', 'INDICATIFS', 'délai indicatif.'].every((t) => D.avertissementDelai(t) !== null));
+  } catch (e) {
+    verifier('les cas de la mémoire par la clé (lot P) se font tourner jusqu’au bout : le calcul ne PLANTE sur aucun', false, e && e.stack);
+  }
+  verifier('`devis.js` n’appelle plus `normalize` : la clé de rapprochement (`rapprochement.js`) n’a besoin d’aucune table '
+    + 'Unicode, et le moteur de l’iPhone n’a pas à en avoir une', !/\bnormalize\b/.test(sansCommentairesJs(lire('src/lib/devis.js'))));
 }
 
 console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases de la loi');
@@ -983,16 +1095,20 @@ console.log('\n  7. la démonstration — elle fait VIVRE le mécanisme, sans `.
     && jeu.lignes.some((l) => l.mainOeuvre === true && l.unite === 'h')
     && jeu.lignes.some((l) => l.fournitureNonComprise === true),
   `deux taux : ${deuxTaux.length} devis ; offerts : ${offerts.map((l) => D.valeurLigne(l)).join(', ')} ; options : ${options.length} ; titres : ${titres.join(', ')}`);
-  /* La mémoire, sur « chape » : deux prix (45 € et 52 €), et la variante
-     sans la fourniture (38 €) — TROIS entrées, et aucune ne vaut la
-     moyenne de deux autres. */
+  /* La mémoire, sur « chape » : 52 € et 45 € sont la MÊME phrase, au m²,
+     fourniture comprise — UNE proposition qui porte les deux, 52 € (le plus
+     récent) d'abord ; la variante sans la fourniture (38 €) en est une
+     autre. DEUX propositions (la réponse du 23/10, lot P), et aucun prix ne
+     vaut la moyenne de deux autres. */
   const base = DEMO.creerBaseDevisDemo({ maintenant: () => maintenant });
   const memoire = await base.memoire('1');
   const chape = D.memoireDesLignes(memoire, 'chape');
-  const prixChape = chape.map((s) => `${s.prixUnitaireCentimes}${s.fournitureNonComprise ? '/sans fourniture' : ''}`).sort();
-  verifier('la mémoire de démonstration, sur « chape », rend TROIS entrées : deux prix, et la variante « fourniture non comprise » '
-    + '— jamais une moyenne', chape.length === 3 && json(prixChape) === json(['3800/sans fourniture', '4500', '5200'])
-    && !chape.some((s) => s.prixUnitaireCentimes === 4850) && chape.every((s) => s.origine && s.origine.objet && s.origine.date),
+  const prixChape = chape.map((s) => `${(s.prix || []).map((p) => p.prixUnitaireCentimes).join('+')}${s.fournitureNonComprise ? '/sans fourniture' : ''}`).sort();
+  verifier('la mémoire de démonstration, sur « chape », rend DEUX propositions : 52 € puis 45 € dans la même, et la variante '
+    + '« fourniture non comprise » à 38 € — jamais une moyenne', chape.length === 2
+    && json(prixChape) === json(['3800/sans fourniture', '5200+4500'])
+    && !chape.some((s) => (s.prix || []).some((p) => p.prixUnitaireCentimes === 4850))
+    && chape.every((s) => (s.prix || []).every((p) => p.origine && p.origine.objet && p.origine.date)),
   json(prixChape));
   /* « moi » vaut 1 (un nombre) dans les données et '1' (une chaîne) pour
      `Object.keys()` : la base de démonstration compare par `String()`. */
@@ -1073,11 +1189,17 @@ console.log('\n  8. une seule écriture des montants');
   }
   const srcDevis = sansCommentairesJs(lire('src/lib/devis.js'));
   const imps = importsDe(srcDevis);
-  verifier('`devis.js` importe EXACTEMENT `./centimes.js` (`centimesLisibles`) et `./entreprise.js` (`dateFrancaise`, `isoLisible`) — '
-    + 'deux instructions, aucune autre forme (ni import nu, ni réexportation, ni `import()`)',
-    imps.length === 2 && json(imps.find((x) => x.de === './centimes.js')) === json({ de: './centimes.js', noms: ['centimesLisibles'] })
+  /* Un TROISIÈME import depuis le lot P : `./rapprochement.js`, la clé de
+     rapprochement — un fichier qui n'importe RIEN (`verifier-postes` A le
+     tient), donc `node` sait toujours faire tourner `devis.js`. */
+  verifier('`devis.js` importe EXACTEMENT `./centimes.js` (`centimesLisibles`), `./entreprise.js` (`dateFrancaise`, `isoLisible`) '
+    + 'et `./rapprochement.js` (`aPlat`, `cleDeRapprochement` — lot P) — trois instructions, aucune autre forme (ni import nu, ni '
+    + 'réexportation, ni `import()`)',
+  imps.length === 3 && json(imps.find((x) => x.de === './centimes.js')) === json({ de: './centimes.js', noms: ['centimesLisibles'] })
     && json(imps.find((x) => x.de === './entreprise.js')) === json({ de: './entreprise.js', noms: ['dateFrancaise', 'isoLisible'] })
-    && json(modulesDe(srcDevis).sort()) === json(['./centimes.js', './entreprise.js']) && instructionsDImport(srcDevis) === 2
+    && json(imps.find((x) => x.de === './rapprochement.js')) === json({ de: './rapprochement.js', noms: ['aPlat', 'cleDeRapprochement'] })
+    && json(modulesDe(srcDevis).sort()) === json(['./centimes.js', './entreprise.js', './rapprochement.js'])
+    && instructionsDImport(srcDevis) === 3
     && !/\brequire\s*\(|\bimport\s*\(/.test(srcDevis), `${json(imps)} ; modules ${json(modulesDe(srcDevis))} ; `
     + `${instructionsDImport(srcDevis)} instruction(s)`);
   const purs = ['src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js']
@@ -1877,13 +1999,28 @@ const corpsDe = (nom) => FONCTIONS.filter((f) => f.nom === nom).map((f) => f.cor
 const fonctionDe = (nom) => FONCTIONS.find((f) => f.nom === nom) || null;
 const sansEspaces = (t) => (t || '').replace(/\s+/g, ' ').trim();
 
-/* LA SECTION 49, ET ELLE SEULE : du titre « 49. LE CHIFFRAGE » au titre de
-   la section 42 (l'export), relevés dans le texte brut — les titres sont des
-   commentaires —, puis lue sans ses commentaires. */
+/* LA SECTION 49, ET ELLE SEULE : du titre « 49. LE CHIFFRAGE » au PROCHAIN
+   titre de section, relevés dans le texte brut — les titres sont des
+   commentaires —, puis lue sans ses commentaires.
+   AU PROCHAIN TITRE, ET PLUS « AU TITRE 42 » (lot P, 23/10/2026) : la
+   section 50 (la base de postes) se pose entre la 49 et l'export. Découpée
+   jusqu'à la 42, la « section 49 » emportait la 50 — cinq contraintes de
+   plus, un quatrième déclencheur, la phrase d'OP018 —, et quatre
+   vérifications rougissaient sur du code juste (mesuré). Et il y a DEUX
+   découpes dans ce fichier (celle-ci, et celle des phrases de `REFUS_DEVIS`
+   plus bas) : n'en corriger qu'une en laissait une rouge. Un titre de
+   section, c'est « -- », deux espaces, un nombre, un point, une espace : un
+   sous-titre (« 49.1 », « 49.5 bis ») a un chiffre après le point. Et
+   EXACTEMENT deux espaces, comme `sectionDuSchema` (`verifier-emetteur`) :
+   les listes numérotées des commentaires (« --    1. … », section 49.5 bis)
+   en ont quatre, et le premier jet de cette découpe s'y arrêtait (éprouvé :
+   sept vérifications rouges sur une section 49 tronquée). */
 const iS48 = SCHEMA.search(/^--\s+48\.\s/m);
 const iS49 = SCHEMA.search(/^--\s+49\.\s+LE CHIFFRAGE/m);
 const iS42 = SCHEMA.search(/^--\s+42\.\s+L'EXPORT RGPD/m);
-const S49 = iS49 >= 0 && iS42 > iS49 ? deplier(sansCommentairesSql(SCHEMA.slice(iS49, iS42))) : '';
+const iApresS49 = iS49 >= 0 ? SCHEMA.slice(iS49 + 1).search(/^-- {2}\d+\. /m) : -1;
+const iFinS49 = iApresS49 >= 0 ? iS49 + 1 + iApresS49 : -1;
+const S49 = iS49 >= 0 && iFinS49 > iS49 ? deplier(sansCommentairesSql(SCHEMA.slice(iS49, iFinS49))) : '';
 const TABLES49 = ['devis', 'devis_lignes', 'devis_tva'];
 /* Les fonctions que la section 49 CRÉE, par leur nom. */
 const NOMS49 = [...new Set([...S49.matchAll(/create\s+or\s+replace\s+function\s+public\.(\w+)\s*\(/gi)].map((m) => m[1]))];
@@ -2120,14 +2257,30 @@ console.log('\n  17. les miroirs — une seule règle, recopiée sous contrôle'
     n(lignesMax) === n(D.LIGNES_MAX) && /using\s+errcode\s*=\s*'OP014'/i.test(recalc), `schéma ${lignesMax}, devis.js ${D.LIGNES_MAX}`);
 
   /* LA CLASSE DE BLANCS — une seule règle, recopiée sous contrôle (CR-B M2) :
-     les cinq copies de la section 49, les deux de la section 47, et
-     `BLANCS_TARIFS`. */
+     les cinq copies de la section 49, les deux de la section 47, la
+     HUITIÈME de la section 50 (`tient_le_poste`, lot P), et `BLANCS_TARIFS`.
+     DEUX FORMES SE LISENT : la chaîne `E'…'` à séquences des sections 47
+     et 49, et la concaténation de littéraux `'…'` et de `chr(n)` de la
+     section 50, qui ne contient AUCUNE barre oblique inverse (cahier du
+     lot P, §2.4). Une copie qu'on ne sait pas lire rend `null`, donc
+     « différente » : elle n'échappe pas à la comparaison. */
   const decoder = (e) => e.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
     .replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\n/g, '\n').replace(/\\v/g, '\v').replace(/\\f/g, '\f');
+  /* La concaténation, ÉVALUÉE : chaque terme est un littéral '…' (apostrophe
+     doublée) ou un chr(n) — rien d'autre n'est admis, comme dans
+     `verifier-postes`. */
+  const evaluerConcat = (e) => {
+    const termes = e.match(/'(?:[^']|'')*'|chr\(\d+\)/g) || [];
+    const reste = e.replace(/'(?:[^']|'')*'|chr\(\d+\)/g, '').replace(/\|\||\s/g, '');
+    if (reste !== '' || termes.length === 0) return null;
+    return termes.map((x) => (x.startsWith('chr(') ? String.fromCodePoint(Number(x.slice(4, -1))) : x.slice(1, -1).replace(/''/g, "'"))).join('');
+  };
   const jeuDe = (nom, colonne) => {
     const m = corpsDe(nom).match(new RegExp(
-      `new\\.${colonne} := nullif\\(btrim\\(coalesce\\(new\\.${colonne}, ''\\),\\s*E'((?:[^'\\\\]|\\\\.)*)'\\), ''\\);`));
-    return m ? [...new Set(decoder(m[1]))].sort().join('') : null;
+      `new\\.${colonne} := nullif\\(btrim\\(coalesce\\(new\\.${colonne}, ''\\),\\s*(?:E'((?:[^'\\\\]|\\\\.)*)'|((?:'(?:[^']|'')*'|chr\\(\\d+\\))(?:\\s*\\|\\|\\s*(?:'(?:[^']|'')*'|chr\\(\\d+\\)))*))\\), ''\\);`));
+    if (!m) return null;
+    const jeu = m[1] !== undefined ? decoder(m[1]) : evaluerConcat(m[2]);
+    return jeu === null ? null : [...new Set(jeu)].sort().join('');
   };
   const js = [...new Set(D.BLANCS)].sort().join('');
   const copies = {
@@ -2138,10 +2291,29 @@ console.log('\n  17. les miroirs — une seule règle, recopiée sous contrôle'
     'tient_le_devis.lieu_ville': jeuDe('tient_le_devis', 'lieu_ville'),
     'tient_le_devis.delai_execution': jeuDe('tient_le_devis', 'delai_execution'),
     'tient_la_ligne_de_devis.designation': jeuDe('tient_la_ligne_de_devis', 'designation'),
+    'tient_le_poste.designation (50, en chr(n))': jeuDe('tient_le_poste', 'designation'),
   };
   const tarifs = [...new Set(E.BLANCS_TARIFS || '')].sort().join('');
+  /* …ET TOUTE COPIE EST DANS LA LISTE — une PROPRIÉTÉ, pas une liste à
+     tenir (lot P, 23/10/2026, éprouvé : retirer la huitième copie de
+     `copies` laissait ce contrôle vert). Chaque rognage du fichier dont la
+     classe porte les caractères INVISIBLES (U+200B…) est une copie de LA
+     classe du projet ; les rognages de la section 46 (« Mon entreprise »),
+     sans invisibles, en sont une autre, plus petite, et restent à part. On
+     compte ces copies fonction par fonction, et la liste doit compter les
+     mêmes. */
+  const INVISIBLE = String.fromCharCode(0x200b);
+  const trouvees = FONCTIONS.flatMap((f) => [...f.corps.matchAll(
+    /new\.(\w+) := nullif\(btrim\(coalesce\(new\.\1, ''\),\s*(E'(?:[^'\\]|\\.)*'|(?:'(?:[^']|'')*'|chr\(\d+\))(?:\s*\|\|\s*(?:'(?:[^']|'')*'|chr\(\d+\)))*)\), ''\);/g)]
+    .map((m) => ({ f: f.nom, jeu: m[2].startsWith("E'") ? decoder(m[2].slice(2, -1)) : evaluerConcat(m[2]) })))
+    .filter((c) => c.jeu && c.jeu.includes(INVISIBLE));
+  const parFonction = (noms) => json(Object.entries(noms.reduce((a, n) => ({ ...a, [n]: (a[n] || 0) + 1 }), {})).sort());
+  const dansLeFichier = parFonction(trouvees.map((c) => c.f));
+  const dansLaListe = parFonction(Object.keys(copies).map((k) => k.split(/[ .]/)[0]));
+  verifier(`chaque copie de la classe que porte le fichier (${trouvees.length}, invisibles compris) est dans la liste comparée ci-dessous`,
+    trouvees.length >= 8 && dansLeFichier === dansLaListe, `fichier ${dansLeFichier} ; liste ${dansLaListe}`);
   const differentes = Object.entries(copies).filter(([, v]) => v !== js).map(([k, v]) => `${k} ${json(v)}`);
-  verifier('`BLANCS` (devis.js) = les SEPT copies de la classe (section 47 ×2, section 49 ×5) = `BLANCS_TARIFS` — les invisibles compris',
+  verifier('`BLANCS` (devis.js) = les HUIT copies de la classe (section 47 ×2, section 49 ×5, section 50 ×1) = `BLANCS_TARIFS` — les invisibles compris',
     differentes.length === 0 && js === tarifs && [' ', '​', '‌', '‍', '⁠', '﻿'].every((ch) => js.includes(ch)),
     `devis ${json(js)} ; différentes : ${differentes.join(' | ') || '—'} ; tarifs ${json(tarifs)}`);
   verifier('…et le nettoyage d’une désignation la rogne : un U+200B seul n’est pas une désignation',
@@ -2492,7 +2664,8 @@ console.log('\n  22. qui nomme les tables du devis — une liste FERMÉE');
 
 console.log('\n  23. la place — la 49 entre la 48 et l’export ; `mes_donnees()` la dernière fonction ; le balayage le dernier bloc');
 {
-  verifier('la section 49 commence après la 48 et finit avant l’en-tête de la 42', iS48 > 0 && iS49 > iS48 && iS42 > iS49);
+  verifier('la section 49 commence après la 48 et finit au plus tard à l’en-tête de la 42 (la 50 se pose entre les deux)',
+    iS48 > 0 && iS49 > iS48 && iFinS49 > iS49 && iS42 >= iFinS49);
   const derniere = FONCTIONS[FONCTIONS.length - 1];
   verifier('`mes_donnees()` est la DERNIÈRE fonction du fichier (PostgreSQL contrôle un corps SQL à sa création)',
     derniere && derniere.nom === 'mes_donnees', derniere && derniere.nom);
@@ -2674,8 +2847,11 @@ console.log('\n  27. `api.js` : la forme, la liste fermée, la file, la mémoire
      arguments : on la FAIT TOURNER telle qu'elle est écrite. */
   const API = sansCommentairesJs(lire('src/lib/api.js'));
   const iNoop = API.search(/\bconst\s+noop\s*=/);
-  /* Les fonctions du devis, et les choix « deux fonctions nommées ». */
-  const estDuDevis = (nom) => /devis/i.test(nom) || /^(memoireDesLignes|monRegime|rowToLigne|ligneVersBase)/.test(nom);
+  /* Les fonctions du devis, et les choix « deux fonctions nommées ». Depuis
+     le lot P, celles de la base de postes aussi (`/poste/i`) : une fonction
+     `mesPostes` échapperait sinon à ces vérifications par son seul nom
+     (cahier du lot P, §6.2). */
+  const estDuDevis = (nom) => /devis|poste/i.test(nom) || /^(memoireDesLignes|monRegime|rowToLigne|ligneVersBase)/.test(nom);
   const decls = [...API.matchAll(/(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/g)]
     .map((m) => ({ nom: m[1], i: m.index })).filter((d) => estDuDevis(d.nom));
   const choix = [...API.matchAll(/(?:^|\n)\s*(?:export\s+)?const\s+(\w+)\s*=\s*(!?)\s*hasSupabase\s*\?([\s\S]*?);/g)]
@@ -2999,7 +3175,7 @@ console.log('\n  27 bis. la base de démonstration refuse AVEC LES MOTS DE LA BA
     vaut(e17, 'OP015', ERR.SUPPRESSION_DEPASSEE.devis) && (await base.un('1', ID(1))) === null
     && (await base.relireUn('1', { quoi: 'ligne', id: ID(11) })) === null && !(await base.liste('1')).some((d) => d.id === ID(1)));
   /* Les phrases de `REFUS_DEVIS` sont-elles CELLES de la base ? */
-  const raises = [...sansCommentairesSql(SCHEMA.slice(iS49, iS42)).matchAll(/raise\s+exception\s+'((?:[^']|'')*)'(?:\s*,\s*v_plafond)?\s+using\s+errcode\s*=\s*'(OP01\d)'/gi)]
+  const raises = [...sansCommentairesSql(SCHEMA.slice(iS49, iFinS49)).matchAll(/raise\s+exception\s+'((?:[^']|'')*)'(?:\s*,\s*v_plafond)?\s+using\s+errcode\s*=\s*'(OP01\d)'/gi)]
     .map((m) => ({ code: m[2], texte: m[1].replace(/''/g, '\'') }));
   const plafondSql = Number((/v_plafond\s+constant\s+integer\s*:=\s*(\d+)/i.exec(SCHEMA) || [])[1]);
   const textesBase = raises.map((r) => (r.code === 'OP017' ? r.texte.replace('%', String(plafondSql)) : r.texte));
@@ -3095,6 +3271,11 @@ const ECRANS_DEVIS = {
   montant: 'src/components/ChampMontant.js',
 };
 const lireSiExiste = (f) => { try { return lire(f); } catch (e) { return null; } };
+/* Les écrans de la base de postes (lot P) : ils ne sont pas dans la liste
+   ci-dessus — chacun a ses propres règles, tenues par `verifier-postes` (E) —,
+   mais les règles du MODULE (les échelles, jamais de moyenne ni d'arrondi
+   flottant) les couvrent aussi. */
+const ECRANS_POSTES = ['src/components/FeuilleAjoutPoste.js', 'src/components/FeuillePoste.js', 'src/screens/PostesScreen.js'];
 const ECR = Object.fromEntries(Object.entries(ECRANS_DEVIS).map(([k, f]) => [k, sansCommentairesJs(lireSiExiste(f) || '')]));
 const TOUS_ECRANS = Object.values(ECR);
 /* La balise ouvrante d'un élément, de `<Nom` à son `>` — en sautant les `>`
@@ -3289,6 +3470,44 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
       && /onChoisirPourLeDevis\(fiche\)/.test(sansCommentairesJs(lire('src/components/FicheClient.js'))),
     autre.slice(0, 120));
   }
+  /* LOT P — CE QU'UN APPUI RECOPIE (T10) : une proposition sans prix ne vide
+     jamais un prix déjà tapé. `prixAEcrire` rend `null`, et `null` veut dire
+     « ne touchez pas au champ ». */
+  {
+    const choisir = (/onChoisir=\{\(sug\) => \{[\s\S]*?\n {10}\}\}/.exec(ECR.carte) || [''])[0];
+    verifier('lot P : un appui sur une proposition passe par `valeursDeLaProposition` PUIS `prixAEcrire` (T10) — le champ prix '
+      + 'n’est écrit que si `prixAEcrire` rend un prix',
+    choisir.indexOf('valeursDeLaProposition(sug)') > 0 && choisir.indexOf('prixAEcrire(') > choisir.indexOf('valeursDeLaProposition(sug)')
+      && /if \(prix !== null && refPrix\.current\) refPrix\.current\.ecrire\(prix\);/.test(choisir)
+      && !/centimesEnSaisie\(v\.prixUnitaireCentimes\)/.test(ECR.carte), choisir.slice(0, 200));
+  }
+  /* LOT P — LA GARDE, CÔTÉ SORTIE : toute fonction qu'`OpusApp` PASSE à la
+     saisie et qui change d'écran attend `quitterSaisieDevis(` d'abord ; et
+     aucune fonction passée à la saisie n'ouvre « Ma base de postes » (on y
+     change sa référence par une feuille posée PAR-DESSUS, sans la quitter).
+     Une porte écrite en paramètre (`onX('postes')`) ou par une variable
+     échappait à une liste de noms : on lit chaque rappel de la balise. */
+  {
+    const balise = balises(APP, 'SaisieDevisScreen')[0] || '';
+    const rappels = [...balise.matchAll(/\b(on\w+)=\{([\s\S]*?)\}(?=\s+\w+=|\s*\/?>)/g)].map((m) => ({ prop: m[1], valeur: m[2] }));
+    /* Le rappel lui-même, PLUS le corps de chaque fonction d'`OpusApp` qu'il
+       appelle (un niveau) : `(section) => ouvrirMonEntreprise(section)` est
+       jugé sur `ouvrirMonEntreprise`, pas sur sa flèche. */
+    const corpsDe = (v) => {
+      const nom = (/^\s*(\w+)\s*$/.exec(v) || [])[1];
+      const appeles = nom ? [nom] : [...v.matchAll(/\b([a-z]\w*)\(/g)].map((m) => m[1]);
+      return [v, ...appeles.map((n) => corpsFleche(APP, `const ${n} = `))].join('\n');
+    };
+    const fautes = rappels.filter(({ valeur }) => {
+      const c = corpsDe(valeur);
+      const iEcran = c.search(/\bsetScreen\(/);
+      return /\bouvrirMaBase\b|'postes'/.test(c) || (iEcran >= 0 && (c.indexOf('quitterSaisieDevis(') < 0 || c.indexOf('quitterSaisieDevis(') > iEcran));
+    }).map(({ prop }) => prop);
+    verifier('lot P : la garde tient AUSSI côté sortie — tout rappel passé à la saisie qui change d’écran attend `quitterSaisieDevis(` '
+      + 'avant, et aucun n’ouvre « Ma base de postes » (ni `ouvrirMaBase`, ni l’écran `\'postes\'`)',
+    rappels.length >= 10 && rappels.some((r) => r.prop === 'onChargerPostes') && fautes.length === 0,
+    `${rappels.length} rappel(s) ; fautifs : ${fautes.join(', ') || '—'}`);
+  }
   /* L'APPUI SE VOIT (B4) : la bande « Enregistrement avant de partir… »
      paraît AVANT l'attente de la file, avec « Rester ». */
   verifier('la garde se VOIT au moment de l’appui : `enregistrerTout` appelle `pendantLAttente` AVANT d’attendre la file, et la '
@@ -3338,9 +3557,13 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
      ouvert restent proposées (`memoireComplete`), et une phrase qui annonce
      zéro au-dessus de deux suggestions dément l'écran — mesuré sur une copie
      en panne pendant les corrections des étapes 4 à 7. */
+  /* Depuis le lot P, la base de postes est une SECONDE source : un seul
+     « Réessayer », sous le champ, qui relit ce qui a échoué — et la mémoire
+     d'abord (`relire`). */
   verifier('une mémoire illisible se DIT et se REDEMANDE (`setMemoire(\'echec\')`, `memoireEchec`, « Réessayer »), sans annoncer « aucune suggestion »',
     /\.catch\(\(\) => setMemoire\('echec'\)\)/.test(ECR.saisie) && /memoireEchec=\{memoire === 'echec'\}/.test(ECR.saisie)
-    && /memoireEchec && \(/.test(ECR.designation) && /onPress=\{onRelireMemoire\}/.test(ECR.designation)
+    && /\(memoireEchec \|\| baseEchec\) && \(/.test(ECR.designation)
+    && /if \(memoireEchec && onRelireMemoire\) onRelireMemoire\(\);/.test(ECR.designation) && /onPress=\{relire\}/.test(ECR.designation)
     && !/aucune suggestion/i.test(ECR.designation));
   verifier('la carte est MODALE pour VoiceOver, et le bas de la saisie (pied, bandes) caché quand elle est ouverte',
     /<View style=\{s\.ecran\} accessibilityViewIsModal>/.test(ECR.carte)
@@ -3427,7 +3650,9 @@ console.log('\n  30. la fiche d’un client, « Pour moi », « Pour qui ? »');
 console.log('\n  31. les jetons de thème existent, et aucune arithmétique sur une taille');
 {
   const THEME = await import('../src/theme.js');
-  const fichiersJetons = [...Object.values(ECRANS_DEVIS), 'src/components/FicheClient.js'];
+  /* Les écrans de la base de postes (lot P) aussi : leurs échelles sont
+     celles du devis. */
+  const fichiersJetons = [...Object.values(ECRANS_DEVIS), 'src/components/FicheClient.js', ...ECRANS_POSTES];
   const inconnus = [];
   const calculs = [];
   for (const f of fichiersJetons) {
@@ -3457,17 +3682,20 @@ console.log('\n  31. les jetons de thème existent, et aucune arithmétique sur 
 console.log('\n  32. dans les fichiers du calcul : une seule orthographe, jamais une moyenne, jamais un arrondi flottant');
 {
   /* TOUT LE MODULE, et pas `devis.js` seul (le cahier, §6.1-32 ; relecture
-     des étapes 0-2, M2) : les quatre fichiers que `node` fait tourner. Les
-     écrans et la section 49 s'y ajouteront avec leurs étapes. */
+     des étapes 0-2, M2) : les fichiers que `node` fait tourner — et, depuis
+     le lot P, la clé de rapprochement et le calcul de la base de postes
+     (cahier du lot P, §6.2 : une fonction `mesPostes` échapperait sinon à la
+     règle par son seul nom). Les écrans et la section 49 s'y ajoutent avec
+     leurs étapes. */
   const MODULE = ['src/lib/devis.js', 'src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js',
-    'src/data/devis-demo.js', ...Object.values(ECRANS_DEVIS)];
+    'src/lib/rapprochement.js', 'src/lib/postes.js', 'src/data/devis-demo.js', ...Object.values(ECRANS_DEVIS), ...ECRANS_POSTES];
   const textes = MODULE.map((f) => [f, sansCommentairesJs(lire(f))]);
   verifier('…ni dans la section 49 (le schéma du devis ne lit aucun statut de `sos_requests`)', S49.length > 5000
     && !/\b(acceptee|refusee)\b/.test(S49));
   const accordees = textes.flatMap(([f, t]) => t.split('\n')
     .filter((l) => /\b(acceptee|refusee)\b/.test(l) && !(f === 'src/lib/devis.js' && /^\s*sos:\s*Object\.freeze\(\[/.test(l)))
     .map((l) => `${f} : ${l.trim()}`));
-  verifier('`acceptee` / `refusee` n’apparaissent dans le module (devis, centimes, file, identifiant, démonstration) que pour LIRE '
+  verifier('`acceptee` / `refusee` n’apparaissent dans le module (devis, centimes, file, identifiant, clé, postes, démonstration) que pour LIRE '
     + '`sos_requests` (D9)', accordees.length === 0, accordees.join(' | '));
   /* La règle du cahier (§3.1), tenue enfin : jamais `Math.round`, `toFixed`
      ni `parseFloat` sur de l'argent. Elle ne se voit pas toujours dans un
@@ -3478,6 +3706,13 @@ console.log('\n  32. dans les fichiers du calcul : une seule orthographe, jamais
     .map((m) => `${f} : ${m[0]}`));
   verifier('le module n’écrit jamais `Math.round`, `toFixed` ni `parseFloat` : l’argent se calcule en entiers, et se convertit '
     + 'sur la chaîne', flottants.length === 0, flottants.join(' | '));
+  /* LOT P : « jamais de moyenne » vaut aussi pour les écrans de la base et
+     pour ce que la carte et les propositions affichent — un prix montré a
+     été écrit par l'artisan, une fois. */
+  const moyennes = textes.filter(([f]) => /postes\.js$|PostesScreen|FeuilleAjoutPoste|FeuillePoste|CarteLigne|ChampDesignation/.test(f))
+    .filter(([, x]) => /moyenne|m[ée]diane|\bavg\(|Math\.(min|max)\(|\.reduce\(/i.test(x)).map(([f]) => f);
+  verifier('lot P : ni `postes.js`, ni la carte, ni les propositions, ni les écrans de la base ne calculent une moyenne, une médiane, un '
+    + 'minimum, un maximum, ni ne réduisent une liste de prix', moyennes.length === 0, moyennes.join(', '));
   const src = textes[0][1];
   const memoire = corpsDeFonction(src, 'memoireDesLignes') || '';
   verifier('`memoireDesLignes` ne calcule ni moyenne, ni médiane, ni minimum, ni maximum',

@@ -84,6 +84,8 @@ import MonEntreprise from './components/MonEntreprise';
    d'ouvrir un brouillon pré-rempli (depuis une fiche, depuis une demande). */
 import DevisScreen from './screens/DevisScreen';
 import SaisieDevisScreen from './screens/SaisieDevisScreen';
+/* La base de postes (lot P) : la page, ouverte par deux portes. */
+import PostesScreen from './screens/PostesScreen';
 import { devisDepuisClient, devisDepuisDemande, trierDevis } from './lib/devis';
 import { dateDeDemandeDemo } from './data/devis-demo';
 import {
@@ -3491,6 +3493,75 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      `enregistrerTout`) pour qu'aucune porte ne la démonte sans avoir lu ce
      qui est tapé. */
   const gardeSortie = useRef(null);
+  /* LA DATE DE DÉCLARATION DU RÉGIME DE TVA (lot P), lue AVEC le régime
+     (`monRegimeEtSaDate`) : une référence fixée avant ne se compare plus au
+     prix d'une ligne, elle se vérifie. */
+  const [regimeDeclareLe, setRegimeDeclareLe] = useState(null);
+
+  /* ================================================================== */
+  /*  LA BASE DE POSTES — lot P du module devis (24/10/2026)             */
+  /*                                                                     */
+  /*  Lue À LA DEMANDE — à la première carte chiffrée d'un devis, ou à   */
+  /*  l'ouverture de « Ma base de postes » —, jamais au démarrage, comme */
+  /*  le carnet et les devis. L'état vit ICI, au-dessus de la saisie et  */
+  /*  de la page : un poste ajouté depuis une ligne se voit aussitôt     */
+  /*  dans la page, et l'inverse.                                         */
+  /* ================================================================== */
+  const [postes, setPostes] = useState([]);
+  /* `'vide'` (jamais demandée), `'chargement'`, `'ok'`, `'echec'`. Une
+     relecture d'une base déjà lue reste `'ok'` pendant qu'elle part : ce
+     qui a été lu continue de servir. */
+  const [postesEtat, setPostesEtat] = useState('vide');
+  const [postesLus, setPostesLus] = useState(false);
+  const [postesEnRetard, setPostesEnRetard] = useState(false);
+  const [postesIncomplete, setPostesIncomplete] = useState(false);
+  const generationPostes = useRef(0);
+  /* D'où l'on a ouvert « Ma base de postes », pour y revenir. */
+  const [origineMaBase, setOrigineMaBase] = useState('profil');
+
+  /** Lire la base de postes. Rend la liste lue, ou `null` sur un échec —
+   *  la feuille d'ajout s'en sert après un refus 23505 : elle MONTRE le
+   *  poste qui existe, ou dit qu'elle ne le voit pas. Un échec n'est JAMAIS
+   *  « votre base est vide ». */
+  const chargerPostes = useCallback(async () => {
+    generationPostes.current += 1;
+    const g = generationPostes.current;
+    setPostesEtat((e) => (e === 'ok' ? 'ok' : 'chargement'));
+    try {
+      const r = await api.mesPostes();
+      if (generationPostes.current !== g) return r.postes || [];
+      setPostes(r.postes || []);
+      setPostesIncomplete(!!r.incomplete);
+      setPostesEnRetard(false);
+      setPostesLus(true);
+      setPostesEtat('ok');
+      return r.postes || [];
+    } catch (e) {
+      if (generationPostes.current !== g) return null;
+      setPostesEnRetard(!!(e && e.baseEnRetard));
+      setPostesEtat('echec');
+      return null;
+    }
+  }, []);
+
+  /** UNE SEULE PORTE pour RANGER un poste (le modèle de `rangerClient`) —
+   *  et elle REMPLACE le tableau, jamais une mutation en place : c'est ce
+   *  qui invalide les clés gardées en cache sur l'ancien (`postesPrepares`).
+   *  `retire` : il n'existe plus. Une génération de plus : une lecture
+   *  partie AVANT ne peut plus écraser ce poste. */
+  const rangerPoste = useCallback((p, { retire = false } = {}) => {
+    if (!p || p.id == null) return;
+    generationPostes.current += 1;
+    setPostes((liste) => {
+      const autres = liste.filter((x) => String(x.id) !== String(p.id));
+      if (retire) return autres;
+      const i = liste.findIndex((x) => String(x.id) === String(p.id));
+      if (i < 0) return [...liste, p];
+      const copie = liste.slice();
+      copie[i] = p;
+      return copie;
+    });
+  }, []);
 
   const chargerDevis = async () => {
     setDevisEtat('chargement');
@@ -3523,8 +3594,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     generationRegime.current += 1;
     const g = generationRegime.current;
     if (!discret) setMonRegime({ chargement: true });
-    const lecture = api.monRegime();
-    lecture.then((r) => { if (generationRegime.current === g) setMonRegime(r == null ? null : r); }).catch(() => {});
+    /* LE RÉGIME ET LA DATE DE SA DÉCLARATION, par la même lecture : deux
+       lectures écrites à part finiraient par ne plus dire la même chose. */
+    const lecture = api.monRegimeEtSaDate();
+    lecture.then((r) => {
+      if (generationRegime.current !== g) return;
+      setMonRegime(r && r.regime != null ? r.regime : null);
+      setRegimeDeclareLe(r && r.declareLe ? r.declareLe : null);
+    }).catch(() => {});
     avecDelai(lecture, 8000, 'La lecture de votre régime de TVA')
       .catch(() => { if (generationRegime.current === g) setMonRegime({ echec: true }); });
   }, []);
@@ -3536,11 +3613,28 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   const recevoirEmetteur = useCallback((emetteur) => {
     generationRegime.current += 1;
     setMonRegime(emetteur && emetteur.regime_tva != null ? emetteur.regime_tva : null);
+    setRegimeDeclareLe(emetteur && emetteur.regime_tva_declare_le ? emetteur.regime_tva_declare_le : null);
   }, []);
 
   const ouvrirMesDevis = () => {
     setScreen('devis');
     if (devisEtat === 'vide' || devisEtat === 'echec') chargerDevis();
+    lireRegime({ discret: typeof monRegime === 'string' });
+  };
+
+  /**
+   * « MA BASE DE POSTES » — UNE fonction pour les deux portes (« Mes devis »
+   * et « Mon profil ») : deux façons d'arriver au même écran font le même
+   * travail. La page se RELIT à chaque ouverture (une base vue la veille sur
+   * un autre appareil n'est plus celle d'aujourd'hui), et le régime aussi
+   * (l'étiquette « HT » et la date de sa déclaration en dépendent). Aucune
+   * porte ne l'ouvre depuis la saisie d'un devis : changer sa référence s'y
+   * fait par une feuille posée par-dessus, sans la quitter.
+   */
+  const ouvrirMaBase = () => {
+    setOrigineMaBase(screen === 'devis' ? 'devis' : 'profil');
+    setScreen('postes');
+    chargerPostes();
     lireRegime({ discret: typeof monRegime === 'string' });
   };
 
@@ -3852,7 +3946,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     || screen === 'mesPublications' || screen === 'gererPortfolio'
     || screen === 'confidentialite' || screen === 'legal' || screen === 'admin'
     || screen === 'clients' || screen === 'passerPro'
-    || screen === 'devis' || screen === 'devisSaisie'
+    || screen === 'devis' || screen === 'devisSaisie' || screen === 'postes'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'publication' ? 'Publication'
@@ -3867,6 +3961,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     : screen === 'admin' ? 'Administration'
     : screen === 'clients' ? 'Mes clients'
     : screen === 'devis' ? 'Mes devis'
+    : screen === 'postes' ? 'Ma base de postes'
     /* En saisie, le titre de la PIÈCE quand une carte de ligne est ouverte :
        on ne voit plus les lignes voisines, le titre dit où l'on est. */
     : screen === 'devisSaisie'
@@ -3896,6 +3991,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
               return;
             }
             if (screen === 'devis') { setScreen('profil'); return; }
+            /* On revient d'où l'on a ouvert la base : « Mes devis » ou le
+               profil. */
+            if (screen === 'postes') { setScreen(origineMaBase); return; }
             /* On revient d'où l'on vient : la cloche. Repartir sur le
                fil ferait perdre la liste qu'on était en train de lire. */
             if (screen === 'publication') { setPostCible(null); setScreen('notifications'); }
@@ -4342,6 +4440,8 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             /* « Mes devis » : un particulier n'en écrit pas, la rangée
                n'existe pas pour lui. */
             onDevis={canPublish ? ouvrirMesDevis : null}
+            /* « Ma base de postes » (lot P) : un particulier n'en a pas. */
+            onMaBase={canPublish ? ouvrirMaBase : null}
             /* « Mon entreprise », sous « Mes clients » : un particulier n'a
                pas d'entreprise, la rangée n'existe pas pour lui. Une flèche,
                pour que l'événement d'appui ne devienne pas une ancre. */
@@ -4412,6 +4512,22 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onRecharger={chargerDevis}
             onOuvrir={(id) => ouvrirDevis({ id }, 'devis')}
             onNouveau={() => ouvrirDevis({ valeurs: { source: 'manuelle' } }, 'devis')}
+            onMaBase={ouvrirMaBase}
+          />
+        )}
+
+        {screen === 'postes' && (
+          <PostesScreen
+            postes={postes}
+            etat={postesEtat}
+            lus={postesLus}
+            incomplete={postesIncomplete}
+            enRetard={postesEnRetard}
+            regime={monRegime}
+            regimeDeclareLe={regimeDeclareLe}
+            onRecharger={chargerPostes}
+            onRanger={rangerPoste}
+            onRelire={chargerPostes}
           />
         )}
 
@@ -4432,6 +4548,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onRanger={rangerDevis}
             onSupprime={devisSupprime}
             onErreur={showErreur}
+            /* La base de postes (lot P) : lue et rangée ICI, jamais par la
+               saisie elle-même — et aucune de ces fonctions ne change
+               d'écran. */
+            postes={postes}
+            postesEtat={postesEtat}
+            regimeDeclareLe={regimeDeclareLe}
+            onChargerPostes={chargerPostes}
+            onRangerPoste={rangerPoste}
           />
         )}
 

@@ -33,6 +33,15 @@
  * enregistrer AVANT le démontage, et `OpusApp` passe par
  * `quitterSaisieDevis()` à chacune de ces portes.
  *
+ * LES FEUILLES : « Pour qui ? », « Ajouter à ma base » et la feuille d'un
+ * poste (lot P). Elles se posent PAR-DESSUS la saisie — et par-dessus la
+ * carte d'une ligne, qui n'est pas une `Modal` — sans la quitter. Leur état
+ * est UNE valeur (`feuille`), jamais un booléen par feuille : deux `Modal`
+ * empilées laissent sur l'iPhone un voile invisible qui avale les touches
+ * (la leçon des Demandes, « un seul panneau à la fois, tenu par une chaîne
+ * et non par trois booléens »). Deux feuilles ne peuvent donc pas être
+ * demandées ensemble, par construction.
+ *
  * EN DÉMONSTRATION, tout cela VIT : la base en mémoire de
  * `src/data/devis-demo.js` refuse avec les mots de la vraie base, une
  * écriture y prend un tiers de seconde, et les états « enregistrement… » ou
@@ -54,6 +63,8 @@ import { ChevronDown, ChevronRight } from '../components/icons';
 import EnteteDevis from '../components/EnteteDevis';
 import CarteLigne, { MANQUE } from '../components/CarteLigne';
 import ChoixClientDevis from '../components/ChoixClientDevis';
+import FeuilleAjoutPoste from '../components/FeuilleAjoutPoste';
+import FeuillePoste from '../components/FeuillePoste';
 import ChampMontant from '../components/ChampMontant';
 import * as api from '../lib/api';
 import * as retour from '../lib/retour';
@@ -70,6 +81,7 @@ import {
   devisDepuisClient, milliemesLisibles, versCentiemes, centiemesEnSaisie, texteNet, choisirChamps,
   fusionnerAvecLaFile,
 } from '../lib/devis';
+import { posteDepuisLaLigne } from '../lib/postes';
 
 /* Ce que nomme la bande de la garde quand un champ de l'en-tête a été REFUSÉ
    par l'écran (relecture « données » des étapes 4 à 7, I1). */
@@ -397,6 +409,11 @@ export default function SaisieDevisScreen({
   ouverture, regime, tarifs = null, clients = [], clientsEtat = 'vide', onGarde = null,
   onRelireRegime, onMonEntreprise, onChargerClients, onNouveauClient,
   onCarte, onRanger, onSupprime, onErreur,
+  /* LA BASE DE POSTES (lot P) : lue par `OpusApp` — à la première carte
+     chiffrée, comme la mémoire —, rangée par `OpusApp` (`onRangerPoste`).
+     `regimeDeclareLe` : une référence fixée avant la déclaration du régime
+     de TVA actuel se vérifie au lieu de se comparer. */
+  postes = null, postesEtat = 'vide', regimeDeclareLe = null, onChargerPostes = null, onRangerPoste = null,
 }) {
   /* L'identifiant d'un brouillon NEUF vient du téléphone (une écriture
      renvoyée n'est jamais un doublon) ; s'il ne sait pas en fabriquer,
@@ -433,7 +450,10 @@ export default function SaisieDevisScreen({
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
   const [memoire, setMemoire] = useState(null);
-  const [choixClient, setChoixClient] = useState(false);
+  /* L'UNIQUE ÉTAT DE FEUILLE : `null`, `{ type: 'client' }`,
+     `{ type: 'ajout', valeurs, devisOrigineId }` ou
+     `{ type: 'poste', poste, prixPropose }`. Jamais deux booléens. */
+  const [feuille, setFeuille] = useState(null);
   const [phraseLieu, setPhraseLieu] = useState(null);
   const [garde, setGarde] = useState(null);
   const gardeRef = useRef(null);
@@ -771,6 +791,11 @@ export default function SaisieDevisScreen({
     if (refEntete.current) refEntete.current.enregistrer();
     const l = lignesRef.current.find((x) => x.id === id);
     if (l && TYPES_CHIFFRES.includes(l.type) && !memoireDemandee.current) demanderMemoire();
+    /* LA BASE DE POSTES, une fois par session, à la première carte
+       chiffrée — sauf si « Ma base de postes » l'a déjà lue. Une lecture
+       ratée ne se redemande pas toute seule : « Réessayer », sous la
+       désignation. */
+    if (l && TYPES_CHIFFRES.includes(l.type) && postesEtat === 'vide' && onChargerPostes) onChargerPostes();
     poserCarte(id);
     setCleCarte((k) => k + 1);
     if (rappels.current.onCarte) rappels.current.onCarte(titreDeLaCarte(id));
@@ -893,7 +918,7 @@ export default function SaisieDevisScreen({
   /*  POUR QUI ?                                                          */
   /* ------------------------------------------------------------------ */
   const choisirClient = (fiche) => {
-    setChoixClient(false);
+    setFeuille(null);
     if (!fiche || !fiche.id) return;
     setClientAffiche({ nom: fiche.nom, ville: fiche.ville || null });
     const changements = { clientId: fiche.id };
@@ -914,14 +939,37 @@ export default function SaisieDevisScreen({
 
   const ouvrirChoixClient = () => {
     if (clientsEtat === 'vide' || clientsEtat === 'echec') onChargerClients();
-    setChoixClient(true);
+    setFeuille({ type: 'client' });
   };
 
   const nouveauClient = () => {
-    setChoixClient(false);
+    setFeuille(null);
     const depuis = ouverture.demandeSource ? clientDepuisDemande(ouverture.demandeSource) : null;
     if (rappels.current.onNouveauClient) rappels.current.onNouveauClient(depuis, choisirClient);
   };
+
+  /* ------------------------------------------------------------------ */
+  /*  LA BASE DE POSTES — les deux feuilles que la carte demande          */
+  /* ------------------------------------------------------------------ */
+  /* « Ajouter à ma base » : ce que la feuille PROPOSE vient de la ligne
+     (`posteDepuisLaLigne` : la phrase, l'unité, la fourniture, la
+     main-d'œuvre et son prix comme prix de référence — jamais « Offert »,
+     jamais la quantité, jamais le taux). Le lien d'origine n'est posé que
+     si le devis est DÉJÀ en base à cet instant : aucune attente de la file. */
+  const demanderAjout = (valeurs) => {
+    const f = fileRef.current;
+    setFeuille({
+      type: 'ajout',
+      valeurs: posteDepuisLaLigne(valeurs),
+      devisOrigineId: f && f.devisEnBase() ? f.devisId() : null,
+    });
+  };
+  /* La feuille d'un poste, PAR-DESSUS la carte : changer sa référence ne
+     quitte pas la saisie. */
+  const demanderPoste = (poste, prixPropose = null) => {
+    if (poste) setFeuille({ type: 'poste', poste, prixPropose });
+  };
+  const relirePostes = () => (onChargerPostes ? onChargerPostes() : Promise.resolve(null));
 
   /* ------------------------------------------------------------------ */
   /*  LA RETENUE, LA SUPPRESSION, LES TOTAUX                               */
@@ -1010,7 +1058,9 @@ export default function SaisieDevisScreen({
     /* Carte ouverte, le RETOUR ferme la carte (elle s'enregistre) au lieu de
        quitter l'écran. */
     if (parLeRetour && carteRef.current) { fermerCarte(); return false; }
-    setChoixClient(false);
+    /* La feuille ouverte se ferme : rien n'y a été écrit, il n'y a rien à
+       dire. Une requête déjà partie finit, et se dit. */
+    setFeuille(null);
     /* Une bande déjà affichée (un second appui sur la barre du bas) : la
        première demande répond « on reste », la seconde prend la place. Sans
        ça, la première attendrait pour toujours. */
@@ -1187,6 +1237,59 @@ export default function SaisieDevisScreen({
   let suffixe = '';
   if (nbNonEnregistrees) suffixe = ` · ${nbNonEnregistrees} ${nbNonEnregistrees > 1 ? 'lignes non enregistrées' : 'ligne non enregistrée'}`;
   else if (attente.enCours) suffixe = ' · ligne en cours';
+
+  /* LA FEUILLE, UN SEUL `switch` : une seule à l'écran, par construction. */
+  const rendreLaFeuille = () => {
+    if (!feuille) return null;
+    switch (feuille.type) {
+      case 'client':
+        return (
+          <ChoixClientDevis
+            clients={clients}
+            etat={clientsEtat}
+            onRecharger={onChargerClients}
+            onChoisir={choisirClient}
+            onNouveau={nouveauClient}
+            onFermer={() => setFeuille(null)}
+          />
+        );
+      case 'ajout':
+        return (
+          <FeuilleAjoutPoste
+            valeurs={feuille.valeurs}
+            devisOrigineId={feuille.devisOrigineId}
+            postes={postesEtat === 'ok' ? postes : null}
+            regime={regime}
+            /* L'avertissement d'un nom de client lit la FICHE du carnet (son
+               nom, son adresse, son téléphone) et le lieu des travaux. */
+            client={clientFiche || client}
+            lieu={{ adresse: devis.lieuAdresse || null }}
+            onRanger={onRangerPoste}
+            onRelire={relirePostes}
+            onFermer={() => setFeuille(null)}
+          />
+        );
+      case 'poste': {
+        /* Le poste relu dans la base à chaque rendu : une relecture
+           (« modifié entre-temps ») lui donne la date à jour. */
+        const poste = (Array.isArray(postes) ? postes.find((p) => String(p.id) === String(feuille.poste.id)) : null) || feuille.poste;
+        return (
+          <FeuillePoste
+            poste={poste}
+            prixPropose={feuille.prixPropose}
+            postes={postes}
+            regime={regime}
+            regimeDeclareLe={regimeDeclareLe}
+            onRanger={onRangerPoste}
+            onRelire={relirePostes}
+            onFermer={() => setFeuille(null)}
+          />
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   const entete = (
     <EnteteDevis
@@ -1411,6 +1514,12 @@ export default function SaisieDevisScreen({
           memoire={memoireComplete}
           memoireEchec={memoire === 'echec'}
           onRelireMemoire={demanderMemoire}
+          postes={postes}
+          postesEtat={postesEtat}
+          onRelirePostes={relirePostes}
+          regimeDeclareLe={regimeDeclareLe}
+          onAjouterALaBase={demanderAjout}
+          onOuvrirPoste={demanderPoste}
           erreur={erreurs[ligneOuverte.id] || null}
           tauxHoraire={tauxHorairePropose(tarifs, regime)}
           retrait={retraitDe(ligneOuverte)}
@@ -1426,16 +1535,7 @@ export default function SaisieDevisScreen({
         />
       )}
 
-      {choixClient && (
-        <ChoixClientDevis
-          clients={clients}
-          etat={clientsEtat}
-          onRecharger={onChargerClients}
-          onChoisir={choisirClient}
-          onNouveau={nouveauClient}
-          onFermer={() => setChoixClient(false)}
-        />
-      )}
+      {rendreLaFeuille()}
     </View>
   );
 }

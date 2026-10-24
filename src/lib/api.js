@@ -29,7 +29,7 @@ import { reduireImage, TAILLE_MAX_MO } from './media';
 import { chiffresSeuls, communeLisible, departementDe } from './siret';
 import { analyserNumeroTva, ESSAIS_VIES } from './tva';
 import { NOM_ENTREPRISE_MAX } from './entreprise';
-import { issueDeVerification, avecDelai, REFUS_DEVIS, SUPPRESSION_DEPASSEE } from './erreurs';
+import { issueDeVerification, avecDelai, REFUS_DEVIS, SUPPRESSION_DEPASSEE, ErreurPoste } from './erreurs';
 import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
 /* « Mon entreprise » pour les devis (section 46). `emetteur.js` et
    `emetteur-demo.js` n'importent que des fichiers purs : aucun cycle avec
@@ -55,6 +55,11 @@ import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
 } from './devis';
 import { creerBaseDevisDemo } from '../data/devis-demo';
+/* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
+   fichiers purs (`devis.js`, `centimes.js`, `entreprise.js`,
+   `rapprochement.js`) : aucun cycle avec ce fichier. Seul le plafond en
+   vient — la lecture demande exactement ce nombre de lignes. */
+import { POSTES_MAX } from './postes';
 
 export const mode = hasSupabase ? 'supabase' : 'demo';
 
@@ -3042,15 +3047,323 @@ export const memoireDesLignes = hasSupabase ? memoireDesLignesSupabase : memoire
  * UNE ERREUR LÈVE : l'écran tient cinq états, et un régime qu'on n'a pas pu
  * lire n'est JAMAIS « non déclaré » (`tauxProposes` rend `null`, pas `[]`).
  */
+/* Le régime et la date de sa déclaration, lus dans la fiche que rend
+   `monEmetteur…` : UNE écriture de cette lecture, pour `monRegime` comme
+   pour `monRegimeEtSaDate` — deux lectures écrites à part finiraient par
+   ne plus dire la même chose. */
+function regimeEtSaDate(f) {
+  const e = f && f.emetteur;
+  return {
+    regime: e ? (e.regime_tva ?? null) : null,
+    declareLe: e ? (e.regime_tva_declare_le ?? null) : null,
+  };
+}
 async function monRegimeSupabase() {
-  const f = await monEmetteurSupabase();
-  return f && f.emetteur ? (f.emetteur.regime_tva ?? null) : null;
+  return regimeEtSaDate(await monEmetteurSupabase()).regime;
 }
 async function monRegimeDemo() {
-  const f = await monEmetteurDemo();
-  return f && f.emetteur ? (f.emetteur.regime_tva ?? null) : null;
+  return regimeEtSaDate(await monEmetteurDemo()).regime;
 }
 export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
+
+/**
+ * MON RÉGIME ET LA DATE DE SA DÉCLARATION — `{ regime, declareLe }` (lot P,
+ * section 50 ; la date est `regime_tva_declare_le`, posée par la BASE au
+ * changement de régime, section 46).
+ *
+ * POURQUOI LA DATE : un prix de référence est dans la convention de la
+ * LIGNE — hors taxes au régime réel, sans TVA en franchise. Fixé AVANT le
+ * changement de régime, il ne se compare plus au prix d'aujourd'hui sans
+ * réfléchir : la référence le DIT (« …, avant la déclaration de votre
+ * régime de TVA actuel : vérifiez-le. ») au lieu de poser la question de
+ * l'écart. La même lecture que `monRegime` — aucune lecture nouvelle des
+ * tables de l'émetteur —, et `monRegime` reste : les cinq états du régime
+ * ne changent pas, et une erreur LÈVE (un régime qu'on n'a pas pu lire
+ * n'est jamais « non déclaré »).
+ */
+async function monRegimeEtSaDateSupabase() {
+  return regimeEtSaDate(await monEmetteurSupabase());
+}
+async function monRegimeEtSaDateDemo() {
+  return regimeEtSaDate(await monEmetteurDemo());
+}
+export const monRegimeEtSaDate = hasSupabase ? monRegimeEtSaDateSupabase : monRegimeEtSaDateDemo;
+
+/* ==========================================================================
+   LA BASE DE POSTES — section 50 de `schema.sql` (lot P du module devis)
+
+   Un poste, c'est une phrase que l'artisan a chiffrée une fois et rangée
+   d'un APPUI (« Ajouter à ma base »), avec un prix de référence qu'il a
+   fixé lui-même. Il ne passe PAS par la file d'écriture du devis : ce n'est
+   pas une ligne, et la file ne connaît que `devis` et `ligne`. Ses quatre
+   fonctions tiennent pourtant le même contrat :
+     - UNE REQUÊTE À LA FOIS (`uneRequeteDePosteALaFois`) : la seconde
+       attend la première. Un double appui, ou un ajout et une correction
+       partis ensemble, arrivent dans l'ordre où ils sont partis ;
+     - UN DÉLAI DE 8 s ET UNE ANNULATION sur chacune (`lectureDevis`) : une
+       requête qui ne revient jamais n'atteint jamais le `catch` (l'incident
+       du 01/10). Le délai court à partir du tour de la requête, pas de sa
+       mise en file : sinon une écriture qui attend la précédente
+       épuiserait le sien à attendre ;
+     - JAMAIS D'`upsert` : PostgreSQL juge la ligne PROPOSÉE avant de la
+       fusionner (le piège du lot T), et le déclencheur compte le plafond
+       avant de savoir qu'elle fusionnerait ;
+     - une lecture qui échoue LÈVE (jamais une liste vide), avec
+       `baseEnRetard` quand la table manque (`leverLecture`) ;
+     - pas d'horloge `generation` : modifier et retirer se font SOUS
+       CONDITION sur `modifie_le`, la date LUE. Une écriture partie avec
+       une date périmée ne touche aucune ligne, et ça se DIT
+       (`ErreurPoste`, « modifié entre-temps ») au lieu de ressembler à un
+       travail fait.
+
+   AUCUNE AUTRE FONCTION N'ÉCRIT `base_postes`, et c'est un contrat :
+   `verifier-postes` (D) refuse le nom de la table hors de ces quatre
+   fonctions, sous toutes ses formes. Rien ne s'ajoute tout seul : un poste
+   n'entre dans la base que par l'appui de l'artisan (sa réponse du 23/10).
+
+   LA CLÉ DE RAPPROCHEMENT N'EST NI LUE NI ENVOYÉE : la base la calcule
+   (une colonne GÉNÉRÉE — l'envoyer rendrait 428C9), et l'application
+   calcule la même par son miroir (`cleDeLigne`), comme pour une ligne qui
+   n'est pas encore en base.
+   ========================================================================== */
+
+/* Les dix colonnes qu'on lit, et rien d'autre — aucun plongeon dans
+   `devis` (l'objet d'un devis peut nommer un client, et l'origine d'un
+   poste se dit par sa DATE), pas la clé de rapprochement. La saisie et la
+   page lisent les mêmes. */
+const COLONNES_POSTE = 'id, designation, unite, fourniture_non_comprise, main_oeuvre, prix_reference_centimes, '
+  + 'prix_fixe_le, devis_origine_id, created_at, modifie_le';
+
+/** Un poste de la base, aux noms de l'application — ceux que `postes.js`
+ *  lit. `modifieLe` reste la CHAÎNE reçue : elle repart TELLE QUELLE dans
+ *  la condition d'une modification ; la reformater ferait rater l'égalité,
+ *  et dire « modifié entre-temps » sur un poste que personne n'a touché. */
+function rowToPoste(p) {
+  if (!p) return null;
+  return {
+    id: p.id,
+    designation: p.designation ?? null,
+    unite: p.unite ?? null,
+    fournitureNonComprise: p.fourniture_non_comprise === true,
+    mainOeuvre: p.main_oeuvre === true,
+    prixReferenceCentimes: nombreOuNul(p.prix_reference_centimes),
+    prixFixeLe: p.prix_fixe_le ?? null,
+    devisOrigineId: p.devis_origine_id ?? null,
+    createdAt: p.created_at ?? null,
+    modifieLe: p.modifie_le ?? null,
+  };
+}
+
+/**
+ * CE QUE LE TÉLÉPHONE ENVOIE D'UN POSTE — la liste FERMÉE, et rien d'autre.
+ *
+ * À la CRÉATION : la phrase, l'unité, les deux interrupteurs, le prix de
+ * référence (vide permis : « à fixer plus tard »), l'entreprise et le lien
+ * d'origine — la ligne part ENTIÈRE, un interrupteur non dit vaut `false`.
+ * En MODIFICATION : la phrase (corrigée dans la page) et le prix de
+ * référence, SEULEMENT — l'unité et la fourniture font la clé du poste, et
+ * la feuille d'ajout ne corrige jamais la phrase.
+ *
+ * Jamais `id`, `created_at`, `modifie_le`, `prix_fixe_le` (la base les
+ * pose), jamais `cle_rapprochement` (428C9). Un nom INCONNU n'est pas
+ * ignoré : il lève. Un champ mal nommé (`prix_reference_centimes` au lieu
+ * de `prixReferenceCentimes`) partirait sinon sans rien changer, et
+ * l'écran annoncerait un prix changé qui ne l'est pas.
+ *
+ * Elle ne lit rien d'autre que ses arguments : `verifier-postes` (D) la
+ * FAIT TOURNER telle qu'elle est écrite ici.
+ */
+function posteVersBase(v, { creation = false, proId = null, devisOrigineId = null } = {}) {
+  const colonnes = creation
+    ? [['designation', 'designation'], ['unite', 'unite'], ['fourniture_non_comprise', 'fournitureNonComprise'],
+      ['main_oeuvre', 'mainOeuvre'], ['prix_reference_centimes', 'prixReferenceCentimes']]
+    : [['designation', 'designation'], ['prix_reference_centimes', 'prixReferenceCentimes']];
+  const dites = Object.keys(v || {}).filter((cle) => v[cle] !== undefined);
+  const inconnues = dites.filter((cle) => !colonnes.some(([, c]) => c === cle));
+  if (inconnues.length) {
+    throw new Error(`Opus a voulu ${creation ? 'ranger' : 'modifier'} « ${inconnues.join(', ')} » sur un poste : `
+      + `seuls ${colonnes.map(([, c]) => c).join(', ')} s’écrivent ${creation ? 'à l’ajout' : 'en modification'}. `
+      + 'C’est un défaut d’Opus, pas le vôtre : rien n’a été enregistré.');
+  }
+  if (!creation && !dites.length) {
+    throw new Error('Opus a voulu modifier un poste sans rien changer : c’est un défaut d’Opus, pas le vôtre.');
+  }
+  const r = {};
+  colonnes.forEach(([colonne, cle]) => {
+    if (v && Object.prototype.hasOwnProperty.call(v, cle) && v[cle] !== undefined) r[colonne] = v[cle];
+  });
+  if (creation) {
+    if (!Object.prototype.hasOwnProperty.call(r, 'designation')) r.designation = null;
+    if (!Object.prototype.hasOwnProperty.call(r, 'unite')) r.unite = null;
+    r.fourniture_non_comprise = r.fourniture_non_comprise === true;
+    r.main_oeuvre = r.main_oeuvre === true;
+    if (!Object.prototype.hasOwnProperty.call(r, 'prix_reference_centimes')) r.prix_reference_centimes = null;
+    r.pro_id = proId;
+    r.devis_origine_id = devisOrigineId || null;
+  }
+  return r;
+}
+
+/* UNE REQUÊTE DE POSTE À LA FOIS : la seconde part quand la première a
+   fini — réussi, échoué ou dépassé son délai. Le délai et l'annulation
+   (`lectureDevis`) s'appliquent au TOUR de la requête. */
+let tourDesPostes = Promise.resolve();
+function uneRequeteDePosteALaFois(quoi, construire) {
+  const tour = tourDesPostes.then(() => lectureDevis(quoi, construire));
+  tourDesPostes = tour.then(() => undefined, () => undefined);
+  return tour;
+}
+
+/* LE LIEN D'ORIGINE REFUSÉ — et lui seul : le devis cité a été supprimé
+   entre l'ouverture de la feuille et l'appui (ou il n'a jamais été en
+   base). L'origine n'est qu'une information — la cascade l'aurait vidée de
+   toute façon — : l'ajout repart UNE fois, sans elle. Toute autre clé
+   étrangère, tout autre refus remontent tels quels : « cet enregistrement
+   désigne quelque chose qui n'existe plus » serait FAUX pour un poste
+   refusé pour une autre raison. */
+function lienOrigineRefuse(e) {
+  return Boolean(e) && String(e.code || '') === '23503'
+    && String(e.message || '').includes('base_postes_devis_origine_fkey');
+}
+
+/* Une modification ou un retrait conditionnés qui n'ont touché AUCUNE
+   ligne : le poste a été modifié, ou retiré, depuis qu'on l'a lu. */
+function unPosteTouche(lignes) {
+  if (!(Array.isArray(lignes) && lignes.length)) throw new ErreurPoste();
+  return lignes[0];
+}
+
+/* Un poste se modifie et se retire AVEC la date lue : sans elle, la
+   condition ne garderait rien — ce serait une faute d'Opus, et elle doit
+   se voir. */
+function exigerDateLue(modifieLe) {
+  if (typeof modifieLe !== 'string' || !modifieLe) {
+    throw new Error('Opus a voulu écrire un poste sans la date de sa dernière lecture : c’est un défaut d’Opus, '
+      + 'pas le vôtre, et rien n’a été enregistré.');
+  }
+}
+
+/**
+ * MA BASE DE POSTES — `{ postes, incomplete }`.
+ *
+ * FILTRÉE PAR MON ENTREPRISE CÔTÉ BASE (`.eq('pro_id', …)`), jamais par la
+ * seule règle d'accès : une politique RLS se paie PAR LIGNE, et elle ne
+ * trie pas (CLAUDE.md, lot 1). TRIÉE par l'identifiant et BORNÉE au
+ * plafond, AVEC son compte : l'API de Supabase coupe chaque réponse à sa
+ * limite de lignes, SANS erreur. Sans ordre, une base au-delà de la limite
+ * rendrait des postes pris au hasard ; sans compte, rien ne le dirait.
+ * `incomplete` le dit.
+ */
+async function mesPostesSupabase() {
+  const { data, error, count } = await uneRequeteDePosteALaFois('La lecture de votre base de postes', (signal) => avecSignal(
+    supabase.from('base_postes')
+      .select(COLONNES_POSTE, { count: 'exact' })
+      .eq('pro_id', currentUserId)
+      .order('id')
+      .limit(POSTES_MAX), signal));
+  if (error) leverLecture(error);
+  const postes = (data || []).map(rowToPoste);
+  return { postes, incomplete: Number(count) > postes.length };
+}
+
+/**
+ * AJOUTER UN POSTE — le poste rangé, tel que la base l'a gardé (sa phrase
+ * rognée, ses dates).
+ *
+ * `devisOrigineId` : le devis d'où vient la ligne, SEULEMENT s'il est déjà
+ * en base au moment de l'appui (l'écran le sait par la file, sans
+ * l'attendre). Refusé (le devis a disparu entre-temps), l'ajout repart une
+ * fois sans lui. Un 23505 (`idx_base_postes_rapprochement`) remonte TEL
+ * QUEL : ce poste existe déjà, presque mot pour mot — la feuille relit la
+ * base et le MONTRE.
+ */
+async function ajouterPosteSupabase(valeurs, { devisOrigineId = null } = {}) {
+  const essayer = (lien) => uneRequeteDePosteALaFois('L’ajout à votre base de postes', (signal) => avecSignal(
+    supabase.from('base_postes')
+      .insert(posteVersBase(valeurs, { creation: true, proId: currentUserId, devisOrigineId: lien }))
+      .select(COLONNES_POSTE)
+      .single(), signal));
+  let { data, error } = await essayer(devisOrigineId);
+  if (error && devisOrigineId && lienOrigineRefuse(error)) ({ data, error } = await essayer(null));
+  if (error) throw error;
+  return rowToPoste(data);
+}
+
+/**
+ * MODIFIER UN POSTE — sa phrase (depuis la page) ou son prix de référence,
+ * SOUS CONDITION : `modifieLe` est la date LUE. Zéro ligne touchée →
+ * `ErreurPoste` (« modifié entre-temps ») : l'écran relit la base.
+ */
+async function modifierPosteSupabase(id, changements, { modifieLe } = {}) {
+  exigerDateLue(modifieLe);
+  const patch = posteVersBase(changements);
+  const { data, error } = await uneRequeteDePosteALaFois('La modification de ce poste', (signal) => avecSignal(
+    supabase.from('base_postes')
+      .update(patch)
+      .eq('id', id)
+      .eq('modifie_le', modifieLe)
+      .select(COLONNES_POSTE), signal));
+  if (error) throw error;
+  return rowToPoste(unPosteTouche(data));
+}
+
+/** RETIRER UN POSTE, sous la même condition. Ce qui concerne un tiers
+ *  s'anonymise ; ici rien n'engage personne d'autre — c'est SA phrase et SON
+ *  prix —, donc le poste part vraiment. */
+async function retirerPosteSupabase(id, { modifieLe } = {}) {
+  exigerDateLue(modifieLe);
+  const { data, error } = await uneRequeteDePosteALaFois('Le retrait de ce poste', (signal) => avecSignal(
+    supabase.from('base_postes')
+      .delete()
+      .eq('id', id)
+      .eq('modifie_le', modifieLe)
+      .select('id'), signal));
+  if (error) throw error;
+  return { id: unPosteTouche(data).id };
+}
+
+/* LA DÉMONSTRATION : la base de postes en mémoire (`creerBaseDevisDemo`),
+   qui REÇOIT ce que l'application envoie (`posteVersBase`, les noms de la
+   base) et refuse avec les mots de la base. Chaque requête y prend une
+   pause NOMMÉE, passée par les quatre fonctions : un script l'allonge pour
+   voir « Lecture impossible » et « Pas enregistré » (au-delà des 8 s), et
+   la course de « ce poste existe déjà » (5 s, sous le délai). Elle n'est
+   pas celle des devis : allonger l'une ne doit pas changer l'autre. */
+const PAUSE_POSTES_DEMO = 250;
+
+async function mesPostesDemo() {
+  const { postes, compte } = await uneRequeteDePosteALaFois('La lecture de votre base de postes',
+    (signal) => baseDevisDeDemo().lirePostes(moiEnDemo(), { signal, pauseMs: PAUSE_POSTES_DEMO }));
+  return { postes, incomplete: compte > postes.length };
+}
+async function ajouterPosteDemo(valeurs, { devisOrigineId = null } = {}) {
+  const essayer = (lien) => uneRequeteDePosteALaFois('L’ajout à votre base de postes',
+    (signal) => baseDevisDeDemo().ajouterUnPoste(moiEnDemo(),
+      posteVersBase(valeurs, { creation: true, proId: moiEnDemo(), devisOrigineId: lien }),
+      { signal, pauseMs: PAUSE_POSTES_DEMO }));
+  try {
+    return await essayer(devisOrigineId);
+  } catch (e) {
+    if (devisOrigineId && lienOrigineRefuse(e)) return essayer(null);
+    throw e;
+  }
+}
+async function modifierPosteDemo(id, changements, { modifieLe } = {}) {
+  exigerDateLue(modifieLe);
+  const patch = posteVersBase(changements);
+  return unPosteTouche(await uneRequeteDePosteALaFois('La modification de ce poste',
+    (signal) => baseDevisDeDemo().modifierUnPoste(moiEnDemo(), id, patch, { modifieLe, signal, pauseMs: PAUSE_POSTES_DEMO })));
+}
+async function retirerPosteDemo(id, { modifieLe } = {}) {
+  exigerDateLue(modifieLe);
+  return { id: unPosteTouche(await uneRequeteDePosteALaFois('Le retrait de ce poste',
+    (signal) => baseDevisDeDemo().retirerUnPoste(moiEnDemo(), id, { modifieLe, signal, pauseMs: PAUSE_POSTES_DEMO }))).id };
+}
+
+export const mesPostes = hasSupabase ? mesPostesSupabase : mesPostesDemo;
+export const ajouterPoste = hasSupabase ? ajouterPosteSupabase : ajouterPosteDemo;
+export const modifierPoste = hasSupabase ? modifierPosteSupabase : modifierPosteDemo;
+export const retirerPoste = hasSupabase ? retirerPosteSupabase : retirerPosteDemo;
 
 export const markNotificationRead = !hasSupabase ? noop : async (id) => {
   await supabase.from('notifications').update({ lue: true }).eq('id', id);

@@ -29,7 +29,54 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-22';
+export const VERSION = '2026-10-24';
+/* 24/10/2026 — LA BASE DE POSTES (lot P du module devis, section 50 de
+   `schema.sql`). Ce qui a changé DE FOND :
+     - la collecte s'allonge : la base de postes d'un artisan — les phrases
+       qu'il y range, mot pour mot, leur unité, la fourniture et la
+       main-d'œuvre, le prix de référence qu'il fixe et sa date, et le devis
+       depuis lequel il a ajouté le poste ;
+     - une FINALITÉ nouvelle, et étroite : lui proposer, pendant qu'il
+       chiffre, ses phrases et ses prix de référence, et lui signaler un
+       écart avec ce prix — exécution du contrat. Une finalité se fixe à la
+       PREMIÈRE collecte (`docs/DONNEES-DES-ARTISANS.md`) : rien n'est écrit
+       sur une base commune entre artisans, parce qu'un intérêt futur ne
+       s'annonce pas pour se couvrir ;
+     - L'ENGAGEMENT DE L'ÉDITEUR COUVRE LES PHRASES, pas seulement les prix
+       (critique « droit » du cahier du lot P, CD4) : ouvrir la table, c'est
+       lire les deux, et un prix de référence est un prix FUTUR, la donnée
+       la plus sensible en droit des ententes. La phrase ajoutée à « Vos
+       tarifs et vos prix » se pose À CÔTÉ de celle que `verifier-legal`
+       tient mot pour mot, jamais au milieu ;
+     - LA VÉRITÉ SUR L'EFFACEMENT, une fois de plus (CD1, mesuré sur
+       PostgreSQL) : la base n'a aucune COLONNE de client, mais une phrase
+       est le texte libre de l'artisan, qui peut en nommer un — et elle
+       survit à la suppression de la fiche ET du devis, et reste dans
+       l'export. Le chemin d'effacement que donne `CE_QUI_RESTE_D_UN_CLIENT`
+       était donc incomplet sans le dire ; il le dit ;
+     - « Combien de temps » et « Vos droits » la nomment : elle part avec le
+       compte, supprimer un devis ne la vide pas, et elle se corrige dans
+       « Ma base de postes ».
+
+   CE QUI N'EST PAS ÉCRIT, ET POURQUOI : aucune durée propre à la base
+   (elle suit le compte) ; aucune mise en commun des postes entre artisans
+   (elle demanderait une case à part, non cochée, et ce qui a été rangé
+   sous cette version n'y entrerait que par ce geste — cahier du lot P,
+   C10) ; aucune clause de sous-traitance (l'acte de l'article 28.3
+   n'existe pas — et il devra couvrir la base de postes) ; et nulle part
+   « aucune donnée de client » : une phrase peut en nommer un, et l'écran
+   le signale au moment de l'ajouter.
+
+   LA MÊME LIMITE QUE LES 19, 20 ET 22/10 : aucun écran ne fait
+   ré-accepter un compte existant (`docs/A-FAIRE.md`, « Après le lot T »).
+   S'y ajoute, si Opus est un service d'intermédiation en ligne — c'est
+   probable, il met des particuliers en relation avec des artisans —, un
+   préavis d'au moins quinze jours, sur un support durable, pour changer
+   des conditions déjà acceptées (règlement 2019/1150, art. 3.2 ; analyse
+   de `docs/DONNEES-DES-ARTISANS.md`, pas un avis d'avocat). Sans effet
+   tant que `STATUT` vaut « essai » ; à redire AVANT la remise du compte
+   du frère du propriétaire, qui acceptera alors lui-même ses
+   conditions. */
 /* 22/10/2026 — LE CHIFFRAGE D'UN DEVIS (lot 1 du module devis, section 49
    de `schema.sql`). Ce qui a changé DE FOND :
      - la collecte s'allonge : les devis en préparation d'un artisan — leur
@@ -644,7 +691,19 @@ export const CGU = [
        CE QUI NE CHANGE PAS : l'éditeur PEUT techniquement les lire avec les
        outils de l'hébergeur — un engagement, PAS une impossibilité
        technique ; aucun journal des lectures n'existe, et le texte ne dit
-       pas « encore » ; rien d'autre n'est promis. */
+       pas « encore » ; rien d'autre n'est promis.
+
+       LE LOT P (24/10/2026) AJOUTE LA BASE DE POSTES, et l'engagement doit
+       couvrir ses PHRASES autant que ses prix de référence : ouvrir la
+       table `base_postes`, c'est lire les deux (critique « droit » du
+       cahier, CD4). La phrase est AJOUTÉE après « Vos devis portent… »,
+       et non insérée dans « les autres prix que vous enregistrez pour vos
+       devis, ne sont montrés à personne d’autre que vous » : celle-là,
+       `verifier-legal` la tient mot pour mot, et une insertion au milieu
+       l'aurait cassée. Elle dit « la consulter », au singulier : « les
+       consulter » est la formule que le contrôle refuse, parce qu'elle
+       promettrait de ne pas regarder les tarifs affichés, que tout
+       particulier connecté lit déjà. */
     titre: 'Vos tarifs et vos prix',
     texte: 'Les tarifs que vous enregistrez dans « Mon entreprise » ne sont utilisés que par '
       + 'vous tant que vous ne choisissez pas de les afficher : vos frais de déplacement, votre '
@@ -663,7 +722,11 @@ export const CGU = [
       + 'n’affichez pas, et les autres prix que vous enregistrez pour vos devis, ne sont montrés '
       + 'à personne d’autre que vous par aucun écran d’Opus : ni à un autre artisan, ni à un '
       + 'particulier, ni à un visiteur, ni dans l’espace d’administration. Vos devis portent '
-      + 'ceux qui leur servent, pour le client à qui vous les adressez. La base de données le '
+      + 'ceux qui leur servent, pour le client à qui vous les adressez. Votre base de postes — '
+      + 'ses phrases comme ses prix de référence — suit la même règle : aucun écran d’Opus ne la '
+      + 'montre à quelqu’un d’autre que vous, ni dans l’espace d’administration, et l’éditeur '
+      + 's’engage à ne pas la consulter ; c’est un engagement, pas une impossibilité technique. '
+      + 'La base de données le '
       + 'garantit pour les autres utilisateurs. L’éditeur d’Opus, qui administre cette base, '
       + 'pourrait techniquement les lire avec les outils d’administration de l’hébergeur : il '
       + 's’engage à ne pas consulter ceux que vous n’affichez pas. C’est un engagement, pas une '
@@ -750,10 +813,24 @@ export const CGU = [
    est écrite UNE fois et servie aux DEUX branches de « Les clients que vous
    enregistrez » : le jour où le contrat de sous-traitance existera, cette
    vérité ne doit pas disparaître avec l'ancienne branche.
-   `npm run verifier-legal` refuse « sans son nom » dans cette section. */
+   `npm run verifier-legal` refuse « sans son nom » dans cette section.
+
+   ET LA BASE DE POSTES, lot P (24/10/2026). Mesuré sur PostgreSQL (critique
+   « droit » du cahier, CD1) : une phrase rangée dans la base peut nommer un
+   client — « Reprise des fissures, maison Martin » —, et elle survit à la
+   suppression de la fiche ET du devis, lien d'origine vidé, et reste dans
+   l'export. « Supprimez aussi ses devis » était donc un chemin d'effacement
+   incomplet qui ne le disait pas : un ménage incomplet ne doit pas
+   ressembler à un ménage fait. Un poste n'est rattaché à aucun client (la
+   base n'a aucune COLONNE de client) : la seule façon de le retrouver est
+   de chercher le nom dans « Ma base de postes », dont la recherche lit les
+   phrases. `verifier-legal` exige « base de postes » ici, dans les deux
+   branches. */
 const CE_QUI_RESTE_D_UN_CLIENT = 'Supprimer la fiche d’un client ne supprime pas ses '
   + 'devis : ils restent, avec l’adresse des travaux et ce que vous y avez écrit. Pour '
-  + 'effacer les données de ce client, supprimez aussi ses devis.';
+  + 'effacer les données de ce client, supprimez aussi ses devis, et retirez de votre base '
+  + 'de postes toute phrase qui le nommerait : un poste n’est rattaché à aucun client, '
+  + 'cherchez son nom dans « Ma base de postes ».';
 
 export const CONFIDENTIALITE = [
   {
@@ -791,7 +868,18 @@ export const CONFIDENTIALITE = [
        le délai, la retenue de garantie, les lignes et leurs prix, les
        totaux que la base calcule, la fiche du carnet et la demande d'origine.
        « Aucun écran d'Opus ne les montre » couvre ces devis aussi : la
-       section « Les clients que vous enregistrez » le dit en entier. */
+       section « Les clients que vous enregistrez » le dit en entier.
+
+       LA BASE DE POSTES, lot P (24/10/2026) : nommée colonne par colonne de
+       la section 50, dans une phrase à part, posée APRÈS celle des devis
+       (que `verifier-legal` découpe à partir de « devis en préparation » et
+       qu'il ne faut pas toucher) et AVANT « Aucun écran d'Opus ne les
+       montre » — c'est ce qui la range dans la portée de cette promesse.
+       « Le devis depuis lequel vous avez ajouté chaque poste » : le cahier
+       écrivait « vous l'avez ajouté », dont on ne sait pas ce qu'il désigne
+       dans une énumération ; un texte opposable ne laisse pas deviner. La
+       clé de rapprochement, que la base calcule depuis la phrase, n'est pas
+       une donnée de plus : c'est la phrase, mise à plat. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -824,7 +912,10 @@ export const CONFIDENTIALITE = [
       + 'majoration de nuit et de week-end, prix du devis) ; et vos devis en préparation '
       + 'eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de '
       + 'garantie, leurs lignes, leurs prix et leurs totaux, le client de votre carnet auquel ils '
-      + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Aucun '
+      + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Et votre '
+      + 'base de postes : les phrases que vous y rangez, leur unité, la fourniture et la '
+      + 'main-d’œuvre, le prix de référence que vous fixez et sa date, et le devis depuis lequel '
+      + 'vous avez ajouté chaque poste. Aucun '
       + 'écran d’Opus ne les montre '
       + 'à quelqu’un d’autre que vous, sauf vos tarifs si vous choisissez de les afficher : ils '
       + 'deviennent alors lisibles par les particuliers qui ont un compte Opus ; ils ne '
@@ -861,6 +952,15 @@ export const CONFIDENTIALITE = [
   },
   {
     titre: 'Pourquoi, et sur quelle base',
+    /* LA BASE DE POSTES, lot P (24/10/2026) — critique « droit » du cahier,
+       CD5. Une finalité se fixe à la PREMIÈRE collecte, et un intérêt futur
+       (une base commune entre artisans, un agent qui lirait les postes) ne
+       s'annonce pas pour se couvrir : il doit être « réel et actuel »
+       (`docs/DONNEES-DES-ARTISANS.md`). D'où une finalité ÉTROITE — ce que
+       l'écran fait aujourd'hui, et rien d'autre : proposer les phrases et
+       les prix de référence pendant le chiffrage, et signaler un écart. Le
+       jour où la base servira à autre chose, ce sera une finalité nouvelle,
+       annoncée avec SA case. */
     texte: 'Faire fonctionner le service et votre compte : exécution du '
       + 'contrat. Modérer les contenus et prévenir les fraudes : intérêt '
       + 'légitime, et obligation légale pour un service en ligne ouvert au '
@@ -875,7 +975,9 @@ export const CONFIDENTIALITE = [
       + 'qui permet de l’imprimer sur vos devis — et intérêt légitime à ce qu’un devis ne '
       + 'porte pas un numéro qu’aucune administration ne reconnaît. Limiter le nombre de '
       + 'ces contrôles par compte : intérêt légitime, protéger le service et VIES contre '
-      + 'les abus.',
+      + 'les abus. Vous proposer, pendant que vous chiffrez, les phrases et les prix de '
+      + 'référence de votre base de postes, et vous signaler un écart avec ce prix : '
+      + 'exécution du contrat.',
   },
   {
     /* L'ARTICLE 22 DU RGPD — relecture « droit » du plan, constat 5. Refuser
@@ -1052,7 +1154,14 @@ export const CONFIDENTIALITE = [
        TOUTE demande reçue acceptée ou terminée, rappels compris — et une
        demande de rappel porte le nom et le téléphone écrits par le
        particulier. « De devis ou d'urgence » disait moins que la vérité ;
-       `verifier-legal` tire désormais la liste des genres du CODE. */
+       `verifier-legal` tire désormais la liste des genres du CODE.
+
+       LA BASE DE POSTES, lot P (24/10/2026) — critique « droit » CD9 et
+       CD1 : aucune durée PROPRE (elle suit le compte, comme les devis), et
+       une vérité qu'on croirait inverse : la clé du lien d'origine est
+       `on delete set null`, donc supprimer un devis VIDE ce lien et laisse
+       la phrase dans la base. Celui qui supprime un devis pour effacer un
+       client doit le savoir. */
     texte: 'Vos données sont conservées tant que votre compte existe. À sa '
       + 'suppression, elles sont effacées immédiatement, sauf ce qui '
       + 'suit : les avis et commentaires laissés chez d’autres sont conservés '
@@ -1066,7 +1175,8 @@ export const CONFIDENTIALITE = [
       + 'la suppression de votre compte ne l’efface pas de ses documents — pour '
       + 'cela, adressez-vous à lui. Si vous êtes artisan, vos devis en préparation '
       + 'sont conservés tant que vous ne les supprimez pas, et partent avec votre '
-      + 'compte. Si '
+      + 'compte. Votre base de postes aussi ; supprimer un devis ne retire pas les phrases '
+      + 'que vous en avez rangées dans votre base. Si '
       + 'l’administration a retiré une entreprise à votre compte, son numéro SIREN '
       + 'reste en outre réservé, sans aucune autre information, jusqu’à ce que son '
       + 'titulaire en obtienne le rattachement : sans cela, il suffirait de '
@@ -1091,9 +1201,15 @@ export const CONFIDENTIALITE = [
   },
   {
     titre: 'Vos droits, et comment les exercer ICI',
+    /* LA BASE DE POSTES SE CORRIGE AILLEURS (lot P, 24/10/2026 ; critique
+       « droit » CD9) : ni dans « Modifier mon profil », ni dans un devis.
+       Un droit de rectification qui renvoie au mauvais écran ne s'exerce
+       pas. `verifier-legal` exige que le texte la nomme, et que la porte
+       « Ma base de postes » existe vraiment sur le profil d'un artisan. */
     texte: 'Accès et portabilité : Profil → Confidentialité et sécurité → '
       + '« Récupérer mes données » vous rend tout ce que nous avons, en '
-      + 'JSON. Rectification : Profil → Modifier mon profil. Effacement : '
+      + 'JSON. Rectification : Profil → Modifier mon profil ; votre base de postes : '
+      + 'Profil → Ma base de postes. Effacement : '
       + 'Profil → Confidentialité et sécurité → « Supprimer mon compte », '
       + 'immédiat et sans intermédiaire. '
       + parEcrit(

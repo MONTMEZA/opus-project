@@ -31,14 +31,16 @@
  *     la somme des lignes de ce taux (3 × 33,33 € à 10 % : 10,00 € de TVA,
  *     et non 9,99 € ligne par ligne).
  *
- * CE FICHIER N'IMPORTE QUE DEUX FICHIERS PURS
- * -------------------------------------------
- * `./centimes.js` (l'écriture d'un montant, la seule du projet) et
+ * CE FICHIER N'IMPORTE QUE TROIS FICHIERS PURS
+ * --------------------------------------------
+ * `./centimes.js` (l'écriture d'un montant, la seule du projet),
  * `./entreprise.js` (pour `dateFrancaise()` et `isoLisible()` : une date
  * d'horodatage se lit à l'heure du téléphone, jamais par ses dix premiers
- * caractères — la leçon de la nuit du lot T). Aucun des deux ne charge
- * React Native : `node` fait tourner ce fichier, et un contrôle qui plante
- * ne vérifie rien. `verifier-devis` tient cette liste.
+ * caractères — la leçon de la nuit du lot T) et, depuis le lot P,
+ * `./rapprochement.js` (la clé de rapprochement : « Seuil » et « seuils »
+ * sont la même phrase, sans `normalize`, sans table Unicode). Aucun des
+ * trois ne charge React Native : `node` fait tourner ce fichier, et un
+ * contrôle qui plante ne vérifie rien. `verifier-devis` tient cette liste.
  *
  * LES NOMS
  * --------
@@ -48,6 +50,7 @@
  */
 import { centimesLisibles } from './centimes.js';
 import { dateFrancaise, isoLisible } from './entreprise.js';
+import { cleDeRapprochement, aPlat } from './rapprochement.js';
 
 /* ================================================================== */
 /*  LES CONSTANTES — chacune a son miroir dans la base                  */
@@ -309,8 +312,8 @@ export function texteNet(v) {
   return s === '' ? null : s;
 }
 
-/* Sans accents ni casse, pour chercher dans la mémoire. */
-const pourChercher = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+/* Sans accents ni casse ni pluriel, pour `avertissementDelai`. */
+const pourChercher = (s) => cleDeRapprochement(String(s || '')) || '';
 
 /* ================================================================== */
 /*  LES DEUX ARRONDIS                                                   */
@@ -989,23 +992,38 @@ function plusRecentDAbord(a, b) {
  *
  * `lignes` sont les lignes de SES devis (la base les filtre), chacune avec
  * son devis d'origine (`devis: { id, objet, modifieLe }`). On garde les
- * postes et les options dont la désignation contient le texte tapé (sans
- * accents ni casse), jamais un titre ni une réserve, jamais la ligne en
- * cours (`idLigne`).
+ * postes et les options que le texte tapé TROUVE (`correspondALaRecherche`,
+ * plus bas), jamais un titre ni une réserve, jamais la ligne en cours
+ * (`idLigne`), jamais une phrase dont la clé est vide (« — », un U+200B).
  *
- * Elles sont GROUPÉES par (désignation exacte, unité, fourniture non
- * comprise) : une même phrase au m² et au forfait, ou avec et sans
- * fourniture, n'a pas le même prix — deux groupes. Chaque groupe garde ses
- * TROIS derniers prix différents, chacun avec son devis d'origine ; et la
- * mémoire rend une SUGGESTION par prix, la plus récente d'abord. 50 € et
- * 70 € font deux suggestions, jamais 60 € : **aucune moyenne, aucune
- * médiane, aucun minimum, aucun maximum** — un prix que personne n'a écrit
- * n'a rien à faire dans un devis.
+ * Elles sont GROUPÉES par `cleDeLigne` : (clé de rapprochement, unité,
+ * fourniture non comprise). Une même phrase au m² et au forfait, ou avec et
+ * sans fourniture, n'a pas le même prix — deux groupes. Mais « Seuil de
+ * porte » et « Seuils de porte », « Chape sèche » et « chape seche », c'est
+ * la MÊME phrase écrite deux fois : UN groupe. C'est la réponse du
+ * propriétaire du 23/10 (lot P) : « il ne faut pas qu'il y ait trop de
+ * propositions, ça pourrait nous perdre ».
  *
- * Une suggestion : `{ ligneId, modifieLe, cle, designation, unite,
- * fournitureNonComprise, mainOeuvre, prixUnitaireCentimes, offert,
- * origine: { devisId, objet, date } }`. Ce qu'un appui RECOPIE :
- * `valeursDeLaSuggestion()`.
+ * La mémoire rend donc UNE PROPOSITION PAR GROUPE, titrée par la phrase de
+ * sa ligne la plus RÉCENTE — mot pour mot, jamais la clé, qui ne s'affiche
+ * nulle part. Elle porte `prix` : les TROIS derniers prix UTILISABLES
+ * différents (un entier > 0, la valeur d'une ligne offerte comprise ; une
+ * ligne SANS prix ne compte pas, sinon l'artisan qui écrit ses phrases
+ * d'abord perdrait le prix d'hier), chacun avec son devis d'origine. Le
+ * premier est celui qu'un appui recopie. 50 € et 70 € font une proposition
+ * qui porte les deux, jamais 60 € : **aucune moyenne, aucune médiane, aucun
+ * minimum, aucun maximum** — un prix que personne n'a écrit n'a rien à faire
+ * dans un devis.
+ *
+ * Une proposition : `{ cle, ligneId, modifieLe, designation, unite,
+ * fournitureNonComprise, mainOeuvre, origine, prix: [{ prixUnitaireCentimes,
+ * offert, ligneId, modifieLe, origine }], prixUnitaireCentimes, offert }` —
+ * `ligneId` et `modifieLe` sont ceux de la ligne la plus récente (le dernier
+ * usage) ; `prixUnitaireCentimes`, `offert` et `origine` sont ceux de
+ * `prix[0]`, ou `null`, `false` et l'origine de la ligne la plus récente
+ * quand aucun prix n'est utilisable. Les propositions se rangent par
+ * `degreDeCorrespondance`, puis la plus récente d'abord. Ce qu'un appui
+ * RECOPIE : `valeursDeLaSuggestion()`.
  */
 /* Les mots de l'objet d'un devis qu'on montre sous une suggestion : quatre au
    plus, puis « … ». */
@@ -1043,39 +1061,147 @@ export function origineDeSuggestion(d) {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/*  LA CLÉ D'UNE LIGNE, ET LA RECHERCHE PAR MOTS (lot P)                */
+/* ------------------------------------------------------------------ */
+
+/* Ce que la recherche sait d'une phrase : sa forme à plat (sans casse, sans
+   accents, sans ponctuation — le pluriel encore là), les mots de cette
+   forme, et les mots de sa CLÉ (le pluriel retiré). Deux passages par la table de
+   `rapprochement.js`, et c'est tout ce qu'une phrase coûte. */
+const motsDe = (s) => (s || '').split(' ').filter(Boolean);
+function formesDe(phrase) {
+  const plat = aPlat(phrase) || '';
+  const cle = cleDeRapprochement(phrase);
+  return { plat, motsPlat: motsDe(plat), cle, motsCle: new Set(motsDe(cle)) };
+}
+/* Le texte TAPÉ, préparé une fois par recherche : ses mots à plat, et la
+   clé de chacun (le même mot privé de son pluriel). */
+function tapeDe(texte) {
+  const t = aPlat(texte) || '';
+  const mots = motsDe(t);
+  return { t, mots, cles: mots.map((w) => cleDeRapprochement(w) || '') };
+}
+
+/* LES CLÉS SE CALCULENT UNE FOIS (cahier du lot P, §3.1). La mémoire est
+   fouillée à chaque frappe — 500 lignes, deux passages par la table chacune
+   — et la base de postes recalcule la clé de chaque ligne de mémoire pour
+   dater son dernier usage. Le cache vit sur CHAQUE LIGNE (un `WeakMap`, qui
+   s'oublie avec elle), et pas sur le tableau : l'écran reconstruit le
+   tableau de la mémoire à chaque ligne enregistrée, alors que les lignes
+   lues de la base, elles, restent les mêmes objets. Et il se VÉRIFIE à
+   chaque lecture : une phrase, une unité ou une fourniture qui a changé
+   sur le même objet recalcule tout — une clé périmée rapprocherait une
+   ligne d'un poste qui n'est plus le sien, sans un mot. */
+const PREPAREES = new WeakMap();
+function preparee(l) {
+  const d = l.designation;
+  const u = l.unite;
+  const f = l.fournitureNonComprise;
+  const deja = PREPAREES.get(l);
+  if (deja && deja.d === d && deja.u === u && deja.f === f) return deja;
+  const net = texteNet(d);
+  const brutes = formesDe(d);
+  const nettes = net === d ? brutes : formesDe(net);
+  const p = { d, u, f, net, brutes, nettes, cle: JSON.stringify([nettes.cle, u ?? null, vrai(f)]) };
+  PREPAREES.set(l, p);
+  return p;
+}
+
+/** La clé d'une ligne ou d'un poste : (clé de rapprochement de la phrase,
+ *  unité, fourniture non comprise). C'est elle qui regroupe la mémoire et
+ *  qui reconnaît un poste de la base : une règle, un endroit. La phrase,
+ *  elle, reste rangée mot pour mot — la clé ne s'affiche nulle part. */
+export function cleDeLigne(l) {
+  if (l !== null && typeof l === 'object') return preparee(l).cle;
+  return JSON.stringify([cleDeRapprochement(texteNet(l && l.designation)), (l && l.unite) ?? null, vrai(l && l.fournitureNonComprise)]);
+}
+
+function correspond(f, tape) {
+  if (tape.mots.length === 0) return false;
+  return tape.mots.every((w, i) => {
+    if (f.plat.includes(w)) return true;
+    const k = tape.cles[i];
+    return k !== w && (k.length >= 3 || tape.mots.length > 1) && f.motsCle.has(k);
+  });
+}
+function degre(f, tape) {
+  if (!correspond(f, tape)) return 0;
+  if (f.plat.startsWith(tape.t)) return 4;
+  if (tape.mots.every((w) => f.motsPlat.some((m) => m.startsWith(w)))) return 3;
+  if (tape.mots.every((w) => f.plat.includes(w))) return 2;
+  return 1;
+}
+
+/** Le texte tapé TROUVE-t-il cette phrase ? Chaque mot tapé, dans n'importe
+ *  quel ordre, doit être CONTENU dans la phrase à plat — exactement la
+ *  recherche du lot 1, donc rien de ce qu'on trouvait n'est perdu —, ou,
+ *  privé de son pluriel, être un MOT ENTIER de la clé de la phrase, pourvu
+ *  que cette clé ait trois lettres au moins ou que le texte tapé ait
+ *  plusieurs mots. « Dalles » trouve « Dalle béton », « seche chape »
+ *  trouve « Chape sèche » ; « Les » ne trouve que ce qui CONTIENT « les » :
+ *  sa clé, `le`, est dans presque toutes les phrases, et trois propositions
+ *  sans rapport perdraient l'artisan (mesuré par le cahier du lot P, X-6). */
+export function correspondALaRecherche(designation, texte) {
+  return correspond(formesDe(designation), tapeDe(texte));
+}
+/** Le degré de pertinence, pour ranger les propositions : 4, la phrase à
+ *  plat COMMENCE par le texte tapé ; 3, chaque mot tapé commence un mot de
+ *  la phrase ; 2, chaque mot tapé y est contenu ; 1, trouvée par le pluriel
+ *  seulement ; 0, non trouvée. « Pos » met « Pose de… » (4) devant
+ *  « Dépose de… » (2). */
+export function degreDeCorrespondance(designation, texte) {
+  return degre(formesDe(designation), tapeDe(texte));
+}
+
+/* Un prix qu'un appui peut recopier : un entier > 0 (la valeur d'une ligne
+   offerte comprise). Une ligne sans prix, ou offerte à 0, n'en porte pas. */
+const prixUtilisable = (l) => entier(l.prixUnitaireCentimes) && l.prixUnitaireCentimes > 0;
 export function memoireDesLignes(lignes, texte, { idLigne = null } = {}) {
-  const cherche = pourChercher(texte).trim();
-  if (!cherche) return [];
+  const tape = tapeDe(texte);
+  if (tape.mots.length === 0) return [];
   const retenues = (lignes || [])
     .filter((l) => TYPES_CHIFFRES.includes(typeDe(l)))
     .filter((l) => l.id !== idLigne)
-    .filter((l) => texteNet(l.designation) && pourChercher(l.designation).includes(cherche))
+    .filter((l) => {
+      const p = preparee(l);
+      return !!p.net && !!p.nettes.cle && correspond(p.brutes, tape);
+    })
     .sort(plusRecentDAbord);
   const groupes = new Map();
+  /* Le degré d'une proposition, calculé UNE fois, sur la phrase qui la
+     titre — et non à chaque comparaison du tri. */
+  const degres = new Map();
   for (const l of retenues) {
-    const designation = texteNet(l.designation);
-    const cle = JSON.stringify([designation, l.unite ?? null, vrai(l.fournitureNonComprise)]);
-    if (!groupes.has(cle)) groupes.set(cle, []);
-    const prix = groupes.get(cle);
-    const deja = prix.some((p) => p.prixUnitaireCentimes === l.prixUnitaireCentimes && p.offert === vrai(l.offert));
-    if (deja || prix.length >= 3) continue;
-    prix.push({
-      ligneId: l.id ?? null,
-      modifieLe: l.modifieLe ?? null,
-      cle,
-      designation,
-      unite: l.unite ?? null,
-      fournitureNonComprise: vrai(l.fournitureNonComprise),
-      mainOeuvre: vrai(l.mainOeuvre),
-      prixUnitaireCentimes: l.prixUnitaireCentimes ?? null,
-      offert: vrai(l.offert),
-      origine: origineDeSuggestion(l.devis),
-    });
+    const p = preparee(l);
+    let g = groupes.get(p.cle);
+    if (!g) {
+      g = {
+        cle: p.cle, ligneId: l.id ?? null, modifieLe: l.modifieLe ?? null, designation: p.net,
+        unite: l.unite ?? null, fournitureNonComprise: vrai(l.fournitureNonComprise), mainOeuvre: vrai(l.mainOeuvre),
+        origine: origineDeSuggestion(l.devis), prix: [], prixUnitaireCentimes: null, offert: false,
+      };
+      groupes.set(p.cle, g);
+      degres.set(g, degre(p.nettes, tape));
+    }
+    if (prixUtilisable(l) && g.prix.length < 3 && !g.prix.some((x) => x.prixUnitaireCentimes === l.prixUnitaireCentimes)) {
+      g.prix.push({
+        prixUnitaireCentimes: l.prixUnitaireCentimes, offert: vrai(l.offert), ligneId: l.id ?? null,
+        modifieLe: l.modifieLe ?? null, origine: origineDeSuggestion(l.devis),
+      });
+    }
   }
-  /* Toutes les suggestions, la plus récente d'abord : le groupe ne sert
-     qu'à garder trois prix par phrase, et à ne pas répéter un même prix. */
-  return [...groupes.values()].flat()
-    .sort((a, b) => plusRecentDAbord({ modifieLe: a.modifieLe, id: a.ligneId }, { modifieLe: b.modifieLe, id: b.ligneId }));
+  /* Le prix qu'un appui recopie est le plus récent des prix UTILISABLES —
+     jamais une ligne sans prix, même plus récente. */
+  for (const g of groupes.values()) {
+    if (g.prix.length > 0) {
+      g.prixUnitaireCentimes = g.prix[0].prixUnitaireCentimes;
+      g.offert = g.prix[0].offert;
+      g.origine = g.prix[0].origine;
+    }
+  }
+  return [...groupes.values()].sort((a, b) => degres.get(b) - degres.get(a)
+    || plusRecentDAbord({ modifieLe: a.modifieLe, id: a.ligneId }, { modifieLe: b.modifieLe, id: b.ligneId }));
 }
 
 /**

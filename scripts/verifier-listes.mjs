@@ -67,6 +67,8 @@ const LISTES = {
      un devis porte jusqu'à 500 lignes — deux listes qui grandissent. */
   'src/screens/DevisScreen.js': 'les devis',
   'src/screens/SaisieDevisScreen.js': 'les lignes d’un devis',
+  /* La base de postes (lot P) : jusqu'à 1 000 postes par entreprise. */
+  'src/screens/PostesScreen.js': 'les postes de la base',
 };
 
 console.log('\nToute liste qui grandit est virtualisée');
@@ -96,6 +98,7 @@ console.log('\nCe qui vit dans une liste est mémorisé');
     ['src/screens/DemandesScreen.js', 'la demande'],
     ['src/screens/DevisScreen.js', 'la carte d’un devis'],
     ['src/screens/SaisieDevisScreen.js', 'la rangée d’une ligne de devis'],
+    ['src/screens/PostesScreen.js', 'la rangée d’un poste de la base'],
   ].forEach(([f, quoi]) => {
     verifier(`${quoi}`, /React\.memo\(/.test(lire(f)), f);
   });

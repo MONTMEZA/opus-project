@@ -25,12 +25,22 @@
  *     2 h », « il y a 3 jours ») : une date figée dans ce fichier vieillirait
  *     (la leçon des demandes de démonstration du 04/10).
  *
- * Ce fichier n'importe que des fichiers purs (`devis.js`, `erreurs.js`,
- * `demo.js`) : `verifier-devis` le FAIT TOURNER sous `node` — il écrit des
- * lignes, en refuse, en retire, et compare ce qu'il rend à ce que la base
- * rendrait. Et il ne retouche AUCUNE donnée de démonstration existante :
- * `initialDemandesRecues`, `emetteur-demo.js` et `tarifs-demo.js` sont lus
- * par d'autres contrôles.
+ * Ce fichier n'importe que des fichiers purs (`devis.js`, `postes.js`,
+ * `erreurs.js`, `demo.js`) : `verifier-devis` et `verifier-postes` le FONT
+ * TOURNER sous `node` — il écrit des lignes et des postes, en refuse, en
+ * retire, et compare ce qu'il rend à ce que la base rendrait. Et il ne
+ * retouche AUCUNE donnée de démonstration existante : `initialDemandesRecues`,
+ * `emetteur-demo.js` et `tarifs-demo.js` sont lus par d'autres contrôles.
+ *
+ * LA BASE DE POSTES (lot P, section 50) vit dans la même base de
+ * démonstration : huit postes (`fabriquerPostesDemo`), les mêmes refus que
+ * la base — dans le même ordre, avec les mêmes noms —, le doublon reconnu à
+ * une variante près, le plafond (OP018, avec la phrase de la base),
+ * l'écriture SOUS CONDITION sur la date lue, et un devis supprimé qui vide
+ * le lien d'origine de ses postes. UNE REQUÊTE DE POSTES À LA FOIS : la
+ * seconde attend la première, comme sur la vraie base où le plafond se
+ * compte sous un verrou — c'est ce qui fait vivre « ce poste existe déjà »
+ * sans `.env`.
  *
  * LE JEU, ET CE QU'IL PERMET DE VOIR SANS `.env`
  * ----------------------------------------------
@@ -43,15 +53,21 @@
  *      VALEUR, une réserve, une option, une retenue de garantie de 5 % ;
  *   2. un brouillon SANS client (« Pour qui ? — à choisir ») : la même
  *      chape à 52,00 €, et sa variante « fourniture non comprise » à
- *      38,00 €. Sans eux, « deux prix → deux suggestions » et « avec et sans
- *      fourniture → deux suggestions » ne se verraient nulle part sans
- *      `.env` : la mémoire, sur « chape », en rend TROIS.
+ *      38,00 €. Sans eux, « deux prix → UNE proposition qui porte les deux »
+ *      (la réponse du 23/10, lot P) et « avec et sans fourniture → deux
+ *      propositions » ne se verraient nulle part sans `.env` (ce paragraphe
+ *      disait « deux prix → deux suggestions » jusqu'au lot P) ;
  *   3. le lien vers une DEMANDE se vit par le geste, pas par une donnée
  *      truquée : la demande de devis de démonstration est « en attente »
  *      (`demo.js`) ; on l'ACCEPTE dans « Pour moi », et « Faire un devis »
  *      apparaît — le brouillon qu'il ouvre porte son lien, et la base de
  *      démonstration vérifie qu'elle vous est adressée (OP013) et qu'il n'y
- *      en a pas déjà vingt (OP017).
+ *      en a pas déjà vingt (OP017) ;
+ *   4. depuis le lot P, le second devis porte trois lignes de plus (des
+ *      orthographes qui se regroupent, une ligne qui porte un poste écrit
+ *      autrement) : la mémoire, sur « chape », rend désormais DEUX
+ *      propositions (52 € puis 45 € dans la même, et 38 € « fourniture non
+ *      comprise »), la base de postes en tête quand elle les connaît.
  *
  * L'artisan est la fiche `1` — un NOMBRE ici, une CHAÎNE ailleurs
  * (`Object.keys()`) : toute comparaison passe par `String()`, le piège des
@@ -60,9 +76,10 @@
 import {
   nettoyerDevis, validerDevis, nettoyerLigne, validerLigne, totauxDevis, trierLignes, trierDevis,
   devisDepuisClient, choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, TYPES_CHIFFRES, LIGNES_MAX,
-  DEVIS_PAR_DEMANDE_MAX, PLAFOND_LISTE, MEMOIRE_MAX, DELAI_PAR_DEFAUT,
+  DEVIS_PAR_DEMANDE_MAX, PLAFOND_LISTE, MEMOIRE_MAX, DELAI_PAR_DEFAUT, cleDeLigne,
 } from '../lib/devis.js';
-import { REFUS_DEVIS, SUPPRESSION_DEPASSEE } from '../lib/erreurs.js';
+import { nettoyerPoste, validerPoste, POSTES_MAX } from '../lib/postes.js';
+import { REFUS_DEVIS, SUPPRESSION_DEPASSEE, REFUS_POSTES } from '../lib/erreurs.js';
 import { initialClients } from './demo.js';
 
 /** L'artisan de démonstration : la fiche 1 (`Object.keys(proProfiles)[0]`). */
@@ -230,9 +247,117 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       designation: 'Seuil de porte en aluminium (fourniture seule, sans pose)', unite: 'u',
       quantiteMilliemes: 2000, prixUnitaireCentimes: 2500, tauxTvaCentiemes: 2000,
     }, 2 * HEURE + MINUTE),
+
+    /* LES TROIS LIGNES DE LA BASE DE POSTES (lot P), dans ce devis-ci et
+       pas dans le premier : `mesure-devis` compte EXACTEMENT quatre postes
+       chiffrés dans « Rénovation salle de bains », alors que le total de
+       celui-ci est toujours recalculé. Chacune fait voir une réponse du
+       propriétaire du 23/10 (« reconnaître les phrases… pas trop de
+       propositions ») sans fichier `.env`, et chacune reste au plus
+       l'horloge du devis (deux heures).
+         - « Seuils » à 23 €, écrite AVANT « Seuil » à 25 € : deux
+           orthographes, UNE proposition, titrée par la plus récente, qui
+           porte les deux prix — et plus tard le chemin « ce poste existe
+           déjà » ;
+         - « Depose… » sans accent : une ligne qui PORTE un poste écrit
+           autrement (« Dépose… ») — la référence le nomme, et l'écart
+           (20 € contre 18 €) pose sa question ;
+         - « evacuation… » tapée vite, la plus récente : elle titre la
+           proposition qui regroupe aussi « Évacuation… » offerte à 150 €
+           du premier devis. C'est la règle de la phrase la plus RÉCENTE, et
+           sa conséquence, sous les yeux. */
+    ligne(2, 4, {
+      designation: 'Seuils de porte en aluminium (fourniture seule, sans pose)', unite: 'u',
+      quantiteMilliemes: 1000, prixUnitaireCentimes: 2300, tauxTvaCentiemes: 2000,
+    }, 2 * HEURE + 4 * MINUTE),
+    ligne(2, 5, {
+      designation: 'Depose de l’ancien carrelage au sol', unite: 'm2',
+      quantiteMilliemes: 24000, prixUnitaireCentimes: 2000, tauxTvaCentiemes: 1000,
+    }, 2 * HEURE + 30 * 1000),
+    ligne(2, 6, {
+      designation: 'evacuation des gravats en dechetterie', unite: 'forfait',
+      quantiteMilliemes: 1000, prixUnitaireCentimes: 18000, tauxTvaCentiemes: 1000,
+    }, 2 * HEURE),
   ];
 
   return { devis, lignes };
+}
+
+/** Les identifiants des postes de démonstration — des UUID v4 à chiffres
+ *  hexadécimaux, comme ceux que la base fabrique (`gen_random_uuid()`). */
+const idPoste = (rang) => `ba5e${String(rang).padStart(4, '0')}-0000-4000-8000-${String(rang).padStart(12, '0')}`;
+
+/**
+ * LA BASE DE POSTES DE DÉMONSTRATION — huit postes (lot P, section 50).
+ *
+ * AUX NOMS DE L'APPLICATION, comme `rowToPoste` les rend, plus l'entreprise
+ * (`proId`). Les prix sont INVENTÉS, jamais ceux des devis du propriétaire,
+ * et le mot « chape » n'apparaît que dans le premier poste. Chacun fait
+ * VOIR quelque chose sans fichier `.env` :
+ *   1. la chape à 45 € : la référence sur la ligne du premier devis (pas
+ *      d'écart), l'ÉCART sur celle du second (52 €), et la base en tête sur
+ *      « chape », qui masque la mémoire à 52 € et 45 € ;
+ *   2. la faïence à l'heure, SANS prix : « dans votre base, sans prix de
+ *      référence », et sa proposition reprend le dernier prix écrit (45 €) ;
+ *   3. la faïence au forfait : choisie sur la ligne de faïence (12 h),
+ *      « l'unité est passée de heure à forfait » ;
+ *   4. le ragréage : une phrase longue, coupée à trois lignes dans la page ;
+ *   5. la dépose : son devis d'origine a été supprimé — « Ajouté le … » sans
+ *      origine ; et la ligne « Depose… » du second devis la fait reconnaître ;
+ *   6. les plinthes, fixées il y a quarante jours : AVANT la déclaration du
+ *      régime de démonstration (vingt jours, `emetteur-demo.js`) — « …
+ *      vérifiez-le » ;
+ *   7. le meuble vasque « fourniture non comprise » : la ligne du premier
+ *      devis est dans la base, sans écart ;
+ *   8. la dalle : aucune ligne ne la porte — taper « Dalles » ou « beton »
+ *      la propose, la réponse du propriétaire mise à l'épreuve.
+ *
+ * LES DATES SONT COHÉRENTES AVEC LES DEVIS : un poste rangé depuis le
+ * premier devis l'a été APRÈS que ses lignes ont été écrites (il y a trois
+ * jours), jamais avant que le devis existe. Toutes, sauf les plinthes, sont
+ * postérieures à la déclaration du régime. Calculées depuis `maintenant`,
+ * comme le reste de ce fichier.
+ */
+export function fabriquerPostesDemo(maintenant = new Date()) {
+  const t = maintenant.getTime();
+  const il = (ms) => new Date(t - ms).toISOString();
+  const poste = (rang, valeurs, age, origine = null) => ({
+    id: idPoste(rang),
+    proId: PRO_DEMO_DEVIS,
+    designation: null,
+    unite: null,
+    fournitureNonComprise: false,
+    mainOeuvre: false,
+    prixReferenceCentimes: null,
+    ...valeurs,
+    prixFixeLe: valeurs.prixReferenceCentimes == null ? null : il(age),
+    devisOrigineId: origine,
+    createdAt: il(age),
+    modifieLe: il(age),
+  });
+  /* Juste après les lignes du premier devis (écrites il y a 3 jours et
+     quelques minutes). */
+  const apresLeDevis1 = (minutes) => 3 * JOUR - minutes * MINUTE;
+  return [
+    poste(1, { designation: 'Chape sèche avant carrelage collé', unite: 'm2', prixReferenceCentimes: 4500 },
+      apresLeDevis1(20), DEVIS_DEMO_IDS.renovation),
+    poste(2, { designation: 'Pose de faïence murale', unite: 'h', mainOeuvre: true },
+      apresLeDevis1(25), DEVIS_DEMO_IDS.renovation),
+    poste(3, { designation: 'Faïence murale, forfait pour une salle d’eau complète', unite: 'forfait', prixReferenceCentimes: 90000 },
+      7 * JOUR),
+    poste(4, {
+      designation: 'Ragréage autolissant fibré sur plancher bois, après pose d’un primaire d’accrochage et d’une bande '
+        + 'périphérique, épaisseur moyenne 5 mm, nettoyage compris',
+      unite: 'm2',
+      prixReferenceCentimes: 2800,
+    }, 12 * JOUR),
+    poste(5, { designation: 'Dépose de l’ancien carrelage au sol', unite: 'm2', prixReferenceCentimes: 1800 }, 15 * JOUR),
+    poste(6, { designation: 'Pose de plinthes carrelées', unite: 'm', prixReferenceCentimes: 1200 }, 40 * JOUR),
+    poste(7, { designation: 'Pose d’un meuble vasque', unite: 'u', fournitureNonComprise: true, prixReferenceCentimes: 18000 },
+      apresLeDevis1(30), DEVIS_DEMO_IDS.renovation),
+    poste(8, { designation: 'Dalle béton armé, épaisseur 12 cm, sur hérisson', unite: 'm2', prixReferenceCentimes: 8500 },
+      5 * JOUR),
+  ];
 }
 
 /* ================================================================== */
@@ -263,6 +388,19 @@ const refusCle = (table, id) => refus('23505', `duplicate key value violates uni
 const refusNul = (colonne, table) => refus('23502',
   `null value in column "${colonne}" of relation "${table}" violates not-null constraint`);
 const refusEntier = () => refus('22003', 'integer out of range');
+/* LA BASE DE POSTES, AUX MOTS DE POSTGRESQL 16 (relevés sur l'essai 50). Le
+   nom de la table n'est écrit qu'ICI, une fois : `verifier-postes` (D)
+   refuse ce nom partout dans `src/` hors des quatre fonctions de `api.js` —
+   et ce fichier ne charge aucun client Supabase, il ne peut que l'imiter. */
+const TABLE_POSTES = 'base_postes';
+/* Le doublon : la table a la RLS, donc PostgreSQL ne détaille PAS la clé
+   (mesuré) — aucune valeur dans `details`. */
+const refusDoublon = () => refus('23505', 'duplicate key value violates unique constraint "idx_base_postes_rapprochement"');
+/* La clé composée du lien d'origine : le devis d'un autre et un devis
+   inexistant rendent le MÊME refus, sans valeur — aucun oracle. */
+const refusLienOrigine = () => refus('23503',
+  `insert or update on table "${TABLE_POSTES}" violates foreign key constraint "base_postes_devis_origine_fkey"`,
+  'Key is not present in table "devis".');
 /* Une modification qui n'a touché AUCUNE ligne — la règle d'accès ne la
    montre pas, ou elle n'existe plus. PostgREST rend 204 sans rien dire ;
    `api.js` le DIT, avec le code que `messageClair()` traduit par « cet
@@ -432,6 +570,7 @@ export function creerBaseDevisDemo({
     if (estAMoi(d, proId) && d.generation < op.generationMax) {
       lignesDe(d.id).forEach((l) => lignes.delete(l.id));   // la cascade
       devis.delete(d.id);
+      viderLeLienDOrigine(d.id);
       return;
     }
     /* Rien de supprimé : déjà parti, ou retouché depuis par une écriture
@@ -491,6 +630,183 @@ export function creerBaseDevisDemo({
     'ligne:modifier': modifierLigne,
     'ligne:supprimer': supprimerLigne,
   };
+
+  /* ---------------------------------------------------------------- */
+  /*  LA BASE DE POSTES — le miroir de la section 50 (lot P)            */
+  /*                                                                    */
+  /*  Elle REÇOIT ce que l'application envoie (`posteVersBase`, dans    */
+  /*  `api.js` : les noms de la base, `designation`, `pro_id`…) et rend */
+  /*  ce que `rowToPoste` rendrait (les noms de l'application). Les      */
+  /*  deux côtés passent donc par la MÊME traduction, en démonstration  */
+  /*  comme sur la vraie base.                                          */
+  /* ---------------------------------------------------------------- */
+  const postes = new Map();
+  (donnees ? (donnees.postes || []) : fabriquerPostesDemo(maintenant())).forEach((p) => postes.set(p.id, { ...p }));
+  let numeroPoste = 100;
+  const posteAMoi = (p, proId) => Boolean(p) && String(p.proId) === String(proId);
+  const postesDe = (proId) => [...postes.values()].filter((p) => posteAMoi(p, proId));
+  /* Ce que la lecture rend : les dix colonnes de `COLONNES_POSTE`, ni
+     l'entreprise ni la clé de rapprochement. */
+  const posteLu = (p) => ({
+    id: p.id,
+    designation: p.designation,
+    unite: p.unite,
+    fournitureNonComprise: p.fournitureNonComprise === true,
+    mainOeuvre: p.mainOeuvre === true,
+    prixReferenceCentimes: p.prixReferenceCentimes,
+    prixFixeLe: p.prixFixeLe,
+    devisOrigineId: p.devisOrigineId,
+    createdAt: p.createdAt,
+    modifieLe: p.modifieLe,
+  });
+  /* Les colonnes que la base connaît, et leur nom dans l'application. */
+  const COLONNES_ECRITES = {
+    designation: 'designation',
+    unite: 'unite',
+    fourniture_non_comprise: 'fournitureNonComprise',
+    main_oeuvre: 'mainOeuvre',
+    prix_reference_centimes: 'prixReferenceCentimes',
+  };
+  const aLaColonne = (o, c) => Boolean(o) && Object.prototype.hasOwnProperty.call(o, c) && o[c] !== undefined;
+
+  /* LA CASCADE `on delete set null (devis_origine_id)` d'un devis supprimé :
+     elle tourne plus profond que l'écriture directe, donc `modifieLe` NE
+     BOUGE PAS (section 50.4, `pg_trigger_depth()`) — un poste que personne
+     n'a touché ne doit pas devenir « modifié entre-temps ». */
+  function viderLeLienDOrigine(devisId) {
+    postes.forEach((p) => {
+      if (p.devisOrigineId === devisId) p.devisOrigineId = null;
+    });
+  }
+
+  /* UNE REQUÊTE DE POSTES À LA FOIS, comme sur la vraie base où le
+     plafond se compte sous un verrou (section 50.4) : la seconde attend
+     que la première ait fini. C'est ce qui fait qu'un second ajout du même
+     poste, parti pendant que le premier est en route, reçoit le 23505 au
+     lieu de faire un doublon. */
+  let tourDesPostes = Promise.resolve();
+  function unALaFois(faire) {
+    const tour = tourDesPostes.then(faire);
+    tourDesPostes = tour.then(() => undefined, () => undefined);
+    return tour;
+  }
+  /* LA PAUSE NOMMÉE (`PAUSE_POSTES_DEMO`, dans `api.js`) : elle s'arrête
+     dès que la requête est annulée (le délai de 8 s), pour qu'une requête
+     abandonnée ne fasse pas attendre la suivante. */
+  function attendrePostes(ms, signal) {
+    if (!(ms > 0) || (signal && signal.aborted)) return Promise.resolve();
+    return new Promise((fini) => {
+      let minuteur = null;
+      const arreter = () => {
+        clearTimeout(minuteur);
+        if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', arreter);
+        fini();
+      };
+      minuteur = setTimeout(arreter, ms);
+      if (signal && typeof signal.addEventListener === 'function') signal.addEventListener('abort', arreter);
+    });
+  }
+  function requeteDePostes({ signal = null, pauseMs: p = 0 } = {}, faire) {
+    return unALaFois(async () => {
+      if (signal && signal.aborted) throw annulee();
+      await attendrePostes(p, signal);
+      /* Une requête annulée pendant sa pause n'est jamais partie. */
+      if (signal && signal.aborted) throw annulee();
+      return faire();
+    });
+  }
+
+  /* Le doublon, sur la clé COMPLÈTE (`cleDeLigne` : la phrase à une
+     variante près, l'unité, la fourniture) — donc aussi pour une VARIANTE
+     d'un poste existant, comme `idx_base_postes_rapprochement`. */
+  function doublon(proId, x, sauf = null) {
+    const cle = cleDeLigne(x);
+    return postesDe(proId).some((q) => q.id !== sauf && cleDeLigne(q) === cle);
+  }
+
+  /** Ma base : les postes triés par l'identifiant, bornés au plafond, et
+   *  leur nombre (le `count: 'exact'` de la vraie lecture). */
+  function lirePostes(proId, opts) {
+    return requeteDePostes(opts, () => {
+      const miens = postesDe(proId).sort((a, b) => (a.id < b.id ? -1 : 1));
+      return { postes: miens.slice(0, POSTES_MAX).map(posteLu), compte: miens.length };
+    });
+  }
+
+  /** Un ajout, dans l'ordre de PostgreSQL : le déclencheur (la phrase
+   *  rognée, les dates, le plafond OP018 sous verrou), puis la règle
+   *  d'accès, puis les contraintes dans l'ordre alphabétique, puis l'index
+   *  du doublon, puis la clé étrangère du lien d'origine. */
+  function ajouterUnPoste(proId, ligne, opts) {
+    return requeteDePostes(opts, () => {
+      /* Seules les colonnes que l'artisan écrit sont lues ; les dates, la
+         base les pose. La colonne GÉNÉRÉE de la clé n'est pas imitée (la
+         vraie base refuserait sa valeur par 428C9) : son nom n'a rien à
+         faire dans `src/` (`verifier-postes` D), et `posteVersBase` — que
+         D fait tourner — ne l'envoie jamais. */
+      const r = ligne || {};
+      const x = nettoyerPoste(Object.fromEntries(Object.entries(COLONNES_ECRITES).map(([c, k]) => [k, aLaColonne(r, c) ? r[c] : null])));
+      /* Le plafond ne se compte que pour SA propre entreprise (section
+         50.4) : un étranger qui écrit au nom d'un autre n'apprend pas que
+         sa base est pleine — il reçoit le refus de la règle d'accès. */
+      const aMoi = String(r.pro_id) === String(proId);
+      if (aMoi && postesDe(proId).length >= POSTES_MAX) throw refus('OP018', REFUS_POSTES.OP018);
+      if (!aMoi) throw refusAcces(TABLE_POSTES);
+      const c = validerPoste(x);
+      if (!c.ok) throw refusCheck(TABLE_POSTES, c.contrainte);
+      if (doublon(proId, x)) throw refusDoublon();
+      const lien = r.devis_origine_id == null ? null : r.devis_origine_id;
+      if (lien !== null && !estAMoi(devis.get(lien), proId)) throw refusLienOrigine();
+      const n = horodatage();
+      numeroPoste += 1;
+      const p = {
+        ...x,
+        id: aLaColonne(r, 'id') ? r.id : idPoste(numeroPoste),
+        proId: r.pro_id,
+        devisOrigineId: lien,
+        prixFixeLe: x.prixReferenceCentimes == null ? null : n,
+        createdAt: n,
+        modifieLe: n,
+      };
+      postes.set(p.id, p);
+      return posteLu(p);
+    });
+  }
+
+  /** Une modification SOUS CONDITION : sur la date lue (`modifieLe`). Ce qui
+   *  n'est pas à moi, ce qui n'existe plus, ce qui a changé depuis : aucune
+   *  ligne — `[]`, comme PostgREST. Le déclencheur fige l'identifiant,
+   *  l'entreprise et la date de création, ne laisse le lien d'origine que
+   *  disparaître, et pose les dates. */
+  function modifierUnPoste(proId, id, patch, opts = {}) {
+    return requeteDePostes(opts, () => {
+      const r = patch || {};
+      const p = postes.get(id);
+      if (!posteAMoi(p, proId) || String(p.modifieLe) !== String(opts.modifieLe)) return [];
+      const x = nettoyerPoste(Object.fromEntries(Object.entries(COLONNES_ECRITES).map(([c, k]) => [k, aLaColonne(r, c) ? r[c] : p[k]])));
+      const c = validerPoste(x);
+      if (!c.ok) throw refusCheck(TABLE_POSTES, c.contrainte);
+      if (doublon(proId, x, p.id)) throw refusDoublon();
+      const n = horodatage();
+      const prixChange = x.prixReferenceCentimes !== p.prixReferenceCentimes;
+      Object.assign(p, x, {
+        devisOrigineId: aLaColonne(r, 'devis_origine_id') && r.devis_origine_id === null ? null : p.devisOrigineId,
+        prixFixeLe: prixChange ? (x.prixReferenceCentimes == null ? null : n) : p.prixFixeLe,
+        modifieLe: n,
+      });
+      return [posteLu(p)];
+    });
+  }
+
+  /** Un retrait sous la même condition : `[{ id }]`, ou `[]`. */
+  function retirerUnPoste(proId, id, opts = {}) {
+    return requeteDePostes(opts, () => {
+      const p = postes.get(id);
+      if (!posteAMoi(p, proId) || String(p.modifieLe) !== String(opts.modifieLe)) return [];
+      postes.delete(id);
+      return [{ id }];
+    });
+  }
 
   /* ---------------------------------------------------------------- */
   /*  CE QUE LA BASE REND                                               */
@@ -574,6 +890,17 @@ export function creerBaseDevisDemo({
       return trierDevis([...devis.values()].filter((d) => estAMoi(d, proId) && d[col] === id))
         .slice(0, 5).map((d) => ({ id: d.id, objet: d.objet, modifieLe: d.modifieLe }));
     },
+
+    /* La base de postes (lot P) — voir plus haut. Chaque fonction prend
+       l'artisan en premier, puis `{ signal, pauseMs }` en dernier : la
+       pause NOMMÉE de `api.js`, et l'annulation de son délai. Leurs noms ne
+       sont PAS ceux de `api.js` (`ajouterPoste`…) : ce sont les gestes de
+       la BASE, et `verifier-postes` (D) cherche le nom `ajouterPoste` pour
+       savoir qui, dans les écrans, range un poste. */
+    lirePostes,
+    ajouterUnPoste,
+    modifierUnPoste,
+    retirerUnPoste,
 
     /** La mémoire : les postes et options de MES devis, avec leur devis
      *  d'origine, la plus récente d'abord — 500 au plus. */

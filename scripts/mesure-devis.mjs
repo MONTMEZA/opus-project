@@ -1,6 +1,7 @@
 /**
  * LA SAISIE D'UN DEVIS, MESURÉE AU NAVIGATEUR — lot 1 du module devis
- * (cahier du lot 1, §6.1-G et §7.3).
+ * (cahier du lot 1, §6.1-G et §7.3), puis la base de postes du lot P
+ * (cahier du lot P, §6.2 et §7.3).
  *
  * POURQUOI UN SCRIPT, ET POURQUOI HORS DE `npm run verifier`
  * ----------------------------------------------------------
@@ -76,6 +77,58 @@
  * Ce n'est PAS PostgreSQL : sur la vraie base, la coupure se fait par
  * `page.route` (étape 9 du lot).
  *
+ * LA BASE DE POSTES (lot P, 24/10/2026) — CE QU'IL EN MESURE
+ * ----------------------------------------------------------
+ *   - la mémoire du lot 1 regroupée par PHRASE : « chape » rend exactement
+ *     DEUX propositions, la base d'abord (45,00 €), jamais 52,00 € ; leurs
+ *     clés, reconstruites depuis les libellés par `rapprochement.js` sous
+ *     `node`, sont différentes ; un appui recopie 45 et la phrase rangée,
+ *     octet pour octet ;
+ *   - sur une ligne neuve : « seuils » et « gravats » rendent UNE rangée,
+ *     « faience » la base puis le dernier prix, « Pos » exactement trois
+ *     « Pose », « Dalles » et « beton » la dalle — la réponse du propriétaire
+ *     du 23/10 — et « Les », « Sas », « Aux » RIEN ;
+ *   - chaque proposition affichée : un titre de deux lignes au plus, un
+ *     détail d'UNE ligne, une rangée de 44 points (à 320 de large) ;
+ *   - sur la carte : la référence AU-DESSUS du champ prix, l'écart dessous,
+ *     leurs couleurs CALCULÉES (`C.muted` pour la phrase, `C.ink` pour le
+ *     montant), « Ce poste existe déjà … sous « … » » sur une variante, et
+ *     RIEN de tout cela dans la liste du devis (Q3 a) ;
+ *   - les deux feuilles (« Ajouter à ma base », la feuille d'un poste),
+ *     jamais deux à la fois, et la course « ce poste existe déjà » ;
+ *   - la page « Ma base de postes », ses deux portes, sa recherche, ses
+ *     écritures ; et la base illisible : « Lecture impossible », jamais
+ *     « Aucun poste ».
+ *
+ * CE QU'IL SIMULE, ET COMMENT IL LIT LA BASE
+ * ------------------------------------------
+ * En démonstration, chaque requête de postes attend `PAUSE_POSTES_DEMO`
+ * (`api.js`) dans `attendrePostes` (`devis-demo.js`). Comme pour les
+ * écritures du devis, seule CETTE minuterie est allongée, et seulement le
+ * temps d'une mesure : au-delà de 8 s, la lecture échoue ; à 7 s, deux
+ * ajouts du même poste se croisent. Chaque requête de postes est aussi
+ * COMPTÉE : une section ne peut mesurer « la première lecture » que si
+ * aucune n'a encore eu lieu.
+ *
+ * Deux choses ne se voient pas à l'écran, et la mesure les lit dans les
+ * modules que Metro a chargés (`__r.getModules()`, présent en
+ * développement seulement) :
+ *   - la base de démonstration, LUE par `api.mesPostes()` — la même porte
+ *     que l'application —, pour ouvrir chaque section par sa PRÉCONDITION
+ *     (« aucun poste de cette clé n'existe encore ») et pour constater ce
+ *     qu'un geste a rangé. Une lecture, jamais une écriture ;
+ *   - les annonces à VoiceOver (`retour.annoncer`) :
+ *     `AccessibilityInfo.announceForAccessibility` n'est qu'une fonction
+ *     vide sous `react-native-web`. La mesure l'écoute ; elle ne dit RIEN
+ *     de ce que VoiceOver en fait sur l'iPhone.
+ *
+ * L'ORDRE DES SECTIONS A UNE RAISON. Les mesures de la base vivent AVANT
+ * « Le régime de TVA » : passer en franchise puis revenir au réel REDÉCLARE
+ * le régime, donc chaque prix de référence devient « fixé avant la
+ * déclaration de votre régime de TVA actuel : vérifiez-le », et l'écart se
+ * tait (T9) — c'est voulu, et ça rendrait leurs mesures muettes. Et toutes
+ * vivent AVANT « Supprimer ce brouillon », qui efface « Sol du séjour ».
+ *
  * CE QU'IL NE PEUT PAS DIRE
  * -------------------------
  * C'est Chromium et `react-native-web`, pas un iPhone : ni le clavier (et
@@ -86,13 +139,23 @@
  * démonstration : « en lecture » (la lecture y est immédiate), « échec »
  * (elle ne peut pas y échouer) et « non déclaré » (le compte de
  * démonstration a un régime, et l'on ne peut pas en « décocher » un).
+ *
+ * Pour la base de postes, pas davantage : ni le clavier sous les feuilles,
+ * ni `hitSlop` (la croix d'une feuille mesure 18 × 20 ici, environ 38 × 40
+ * au doigt), ni VoiceOver, ni Hermes. Deux `Modal` empilées ne laissent
+ * aucun voile invisible sous `react-native-web` : ici on compte qu'il n'y en
+ * a jamais deux ; ce qu'iOS en ferait, seul l'iPhone le dit. Et « modifié
+ * entre-temps » ne se produit pas en démonstration : il est éprouvé par
+ * `verifier-postes` (G) sous `node`, et sur la vraie base.
  */
 import { readFileSync, mkdirSync } from 'node:fs';
-import { fabriquerDevisDemo, DEVIS_DEMO_IDS } from '../src/data/devis-demo.js';
+import { fabriquerDevisDemo, fabriquerPostesDemo, DEVIS_DEMO_IDS } from '../src/data/devis-demo.js';
 import {
-  totauxDevis, sousTotaux, totalLigne, validerLigne, trierLignes, UNITES,
+  totauxDevis, sousTotaux, totalLigne, validerLigne, trierLignes, UNITES, cleDeLigne,
   MENTION_FRANCHISE, PHRASE_RETENUE, DELAI_PAR_DEFAUT, avertissementDelai, coherenceRegime, tauxLisible,
 } from '../src/lib/devis.js';
+import { cleDeRapprochement } from '../src/lib/rapprochement.js';
+import { PHRASE_SORTIE, changementDUnite } from '../src/lib/postes.js';
 import { centimesLisibles } from '../src/lib/centimes.js';
 import { messageDeContrainte } from '../src/lib/erreurs.js';
 import { DELAI_ECRITURE } from '../src/lib/file-ecriture.js';
@@ -114,6 +177,22 @@ const EXCEPTIONS = [/^Faire un devis pour la demande de /];
 /* La pause de la base de démonstration, LUE dans `api.js` : si elle change,
    la simulation suit — et si elle disparaît, la mesure le dit. */
 const PAUSE_DEMO = Number((readFileSync('src/lib/api.js', 'utf8').match(/const PAUSE_ECRITURE_DEMO = (\d+);/) || [])[1]);
+/* …et celle de la base de postes (lot P), lue de même. */
+const PAUSE_POSTES = Number((readFileSync('src/lib/api.js', 'utf8').match(/const PAUSE_POSTES_DEMO = (\d+);/) || [])[1]);
+
+/* Les deux encres de la base de postes, LUES dans `theme.js` : la phrase
+   d'aide en gris (`C.muted`), le montant à l'encre du texte (`C.ink`). Une
+   couleur se mesure calculée, jamais supposée. */
+const THEME = readFileSync('src/theme.js', 'utf8');
+const rgbDuTheme = (nom) => {
+  const m = THEME.match(new RegExp(`\\b${nom}: '#([0-9A-Fa-f]{6})'`));
+  if (!m) return null;
+  const v = parseInt(m[1], 16);
+  return `rgb(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255})`;
+};
+const ENCRE = rgbDuTheme('ink');
+const GRIS = rgbDuTheme('muted');
+const ORANGE_DE_LECTURE = rgbDuTheme('accentTexte');
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -149,23 +228,73 @@ const tauxRepris = (ordre, type = 'poste') => {
 const DEMANDE = initialDemandesRecues.find((d) => d.genre === 'devis');
 const URGENCE = initialDemandesRecues.find((d) => d.genre === 'sos');
 
+/* LA BASE DE POSTES DE DÉMONSTRATION (lot P) et les lignes de « Sol du
+   séjour », telles que `devis-demo.js` les fabrique : les phrases que la
+   mesure attend sont CELLES-LÀ, octet pour octet. */
+const POSTES_DEMO = fabriquerPostesDemo(new Date());
+const posteDemo = (debut) => POSTES_DEMO.find((p) => (p.designation || '').startsWith(debut));
+const LIGNES_SEJOUR = trierLignes(jeu.lignes.filter((l) => l.devisId === SEJOUR.id));
+const ligneSejour = (debut) => LIGNES_SEJOUR.find((l) => (l.designation || '').startsWith(debut));
+const CHAPE = posteDemo('Chape sèche').designation;
+const SEUIL = ligneSejour('Seuil de porte').designation;
+const SEUILS = ligneSejour('Seuils de porte').designation;
+const DEPOSE = posteDemo('Dépose de l’ancien').designation;
+const DALLE = posteDemo('Dalle béton').designation;
+const RAGREAGE = posteDemo('Ragréage').designation;
+
 /* ======================================================================== */
 const n = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   args: ['--no-sandbox'],
 });
 const ctx = await n.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-await ctx.addInitScript(({ pause }) => {
+await ctx.addInitScript(({ pause, pausePostes }) => {
   /* LA SIMULATION DE L'ÉCRITURE QUI NE REVIENT PAS : seule la minuterie de
      `pause` millisecondes appelée depuis l'écrivain de démonstration
      (`ecrire`) est allongée, et seulement quand on le demande. */
   const origine = window.setTimeout.bind(window);
   window.__opusSuspendreEcritures = false;
+  /* LA BASE DE POSTES (lot P) : chaque requête de postes de la
+     démonstration attend `pausePostes` dans `attendrePostes`. On les
+     COMPTE, et on peut allonger leur pause le temps d'une mesure
+     (`__opusPausePostes`, en millisecondes ; `null` = la vraie). */
+  window.__opusRequetesPostes = 0;
+  window.__opusPausePostes = null;
   window.setTimeout = (f, ms, ...reste) => {
     if (window.__opusSuspendreEcritures && ms === pause && /\becrire\b/.test(String(new Error().stack))) {
       return origine(f, 60000, ...reste);
     }
+    if (ms === pausePostes && /\battendrePostes\b/.test(String(new Error().stack))) {
+      window.__opusRequetesPostes += 1;
+      if (window.__opusPausePostes != null) return origine(f, window.__opusPausePostes, ...reste);
+    }
     return origine(f, ms, ...reste);
+  };
+  /* LES FENÊTRES : `react-native-web` rend une `Modal` avec
+     `aria-modal="true"`. On retient le PLUS GRAND nombre jamais présent à
+     la fois : « jamais deux feuilles ensemble » se juge à chaque instant,
+     pas seulement quand on regarde. */
+  window.__opusModales = { max: 0 };
+  const compterModales = () => {
+    const nb = document.querySelectorAll('[aria-modal="true"]').length;
+    if (nb > window.__opusModales.max) window.__opusModales.max = nb;
+  };
+  new MutationObserver(compterModales).observe(document, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ['aria-modal'],
+  });
+  /* LES ANNONCES À VOICEOVER, relevées une fois branchées (voir le
+     démarrage). */
+  window.__opusAnnonces = [];
+  /* UN MODULE DE L'APPLICATION, par son chemin — tel que Metro l'a chargé
+     en développement (`__r.getModules()`). Pour LIRE la base de
+     démonstration par `api.mesPostes()`, et écouter les annonces. */
+  window.__opusModule = (chemin) => {
+    const ms = window.__r && window.__r.getModules ? window.__r.getModules() : null;
+    if (!ms) return null;
+    for (const [, m] of (ms instanceof Map ? ms.entries() : Object.entries(ms))) {
+      if (m && m.isInitialized && m.verboseName === chemin) return m.publicModule.exports;
+    }
+    return null;
   };
   /* CHAQUE PERTE DE FOCUS, ET SA CAUSE : un `blur()` venu du
      `dismissKeyboard` de react-native-web (la fin d'un défilement) n'est
@@ -182,7 +311,7 @@ await ctx.addInitScript(({ pause }) => {
     window.__opusFocus.push(e.target.getAttribute ? (e.target.getAttribute('aria-label') || e.target.tagName) : '?');
   }, true);
   window.__opusMarqueur = 'page jamais rechargée';
-}, { pause: PAUSE_DEMO });
+}, { pause: PAUSE_DEMO, pausePostes: PAUSE_POSTES });
 const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
 const erreursPage = [];
@@ -284,6 +413,9 @@ const cibles = () => page.evaluate(() => {
      liste, qui reste montée dessous (et donc mesurable, mais recouverte). */
   let carte = document.querySelector('[aria-label="Enregistrer cette ligne et revenir au devis"]');
   while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
+  /* La feuille ouverte (lot P) : la dernière `Modal`, posée par-dessus
+     tout le reste, qui reste monté dessous. */
+  const modale = [...document.querySelectorAll('[aria-modal="true"]')].pop() || null;
   const chrome = [
     retour ? conteneurPleineLargeur(retour, 120) : null,
     document.querySelector('[role="tablist"]'),
@@ -299,23 +431,39 @@ const cibles = () => page.evaluate(() => {
       visible: b.width > 0 && b.height > 0 && st.visibility !== 'hidden' && st.display !== 'none',
       chrome: chrome.some((c) => c.contains(e)),
       dansCarte: !!carte && carte.contains(e),
+      dansModale: !!modale && modale.contains(e),
+      /* Une ICÔNE est un glyphe d'une police d'icônes (`@expo/vector-icons`),
+         rangé dans la zone d'usage privé d'Unicode : un texte qui n'est
+         fait que de ces glyphes et de blancs ne dit rien à qui le lit. */
+      icone: [...(e.innerText || '')].every((ch) => {
+        const c = ch.codePointAt(0);
+        return (c >= 0xe000 && c <= 0xf8ff) || ch.trim() === '';
+      }),
     };
   }).filter((c) => c.visible);
 });
+/* LA SECONDE EXCEPTION NOMMÉE (lot P, cahier §4.9) : la croix d'une
+   `FeuilleBas` — une icône sans texte, « Fermer », dans la fenêtre. Elle
+   fait 18 × 20 par sa boîte (environ 38 × 40 au doigt par `hitSlop`, que
+   le navigateur ignore). Pourquoi elle est tolérée : le VOILE ferme aussi
+   la feuille, sur toute la largeur de l'écran ; et la corriger touche
+   TOUTES les feuilles du projet — un lot à part, écrit dans A-FAIRE. */
+const croixDeFeuille = (c) => c.dansModale && c.icone && c.libelle === 'Fermer';
+const exceptionNommee = (c) => EXCEPTIONS.some((r) => r.test(c.libelle)) || croixDeFeuille(c);
 /** Juge les cibles hors chrome ; `garder` restreint aux cibles d'un écran du
  *  devis quand d'autres écrans sont montés en dessous (une fenêtre). */
 const jugerCibles = async (ou, garder = null) => {
   const toutes = await cibles();
   const jugees = toutes.filter((c) => !c.chrome && (!garder || garder(c)));
-  const petites = jugees.filter((c) => (c.h < TOUCHE - 0.5 || c.l < TOUCHE - 0.5)
-    && !EXCEPTIONS.some((r) => r.test(c.libelle)));
-  const nommees = jugees.filter((c) => EXCEPTIONS.some((r) => r.test(c.libelle)));
-  const plusPetite = jugees.filter((c) => !EXCEPTIONS.some((r) => r.test(c.libelle)))
+  const petites = jugees.filter((c) => (c.h < TOUCHE - 0.5 || c.l < TOUCHE - 0.5) && !exceptionNommee(c));
+  const nommees = jugees.filter(exceptionNommee);
+  const plusPetite = jugees.filter((c) => !exceptionNommee(c))
     .reduce((m, c) => Math.min(m, c.h, c.l), Infinity);
   verifier(`${ou} : ${jugees.length} cible(s), toutes à ${TOUCHE} points au moins par leur BOÎTE hors exception nommée (la plus petite : ${Number.isFinite(plusPetite) ? plusPetite : '—'})`,
     jugees.length > 0 && petites.length === 0,
     petites.map((c) => `« ${c.libelle} » ${c.l} × ${c.h}`).join(' | '));
-  nommees.forEach((c) => noter(`${ou} — exception nommée « ${c.libelle} »`, `${c.l} × ${c.h}`));
+  nommees.forEach((c) => noter(`${ou} — exception nommée « ${c.libelle} »${croixDeFeuille(c)
+    ? ' (la croix d’une feuille : le voile ferme aussi, sur toute la largeur ; un lot à part)' : ''}`, `${c.l} × ${c.h}`));
 };
 
 /** Les montants affichés et leur `font-variant-numeric` CALCULÉ. */
@@ -390,6 +538,9 @@ const section = async (titre, f) => {
   } catch (e) {
     verifier(`${titre} : la mesure est allée au bout`, false, e && e.message ? e.message.split('\n')[0] : String(e));
     await capture(`echec-${titre.slice(0, 30).replace(/[^\p{L}\d]+/gu, '-')}`);
+    /* Une pause de la base allongée ne survit pas à la section qui l'a
+       posée : la suivante mesurerait la panne d'une autre. */
+    await page.evaluate(() => { window.__opusPausePostes = null; }).catch(() => {});
   }
 };
 /** Aller sur « Mes devis » depuis n'importe où (par la barre du bas). */
@@ -407,6 +558,221 @@ const ouvrirLeDevis = async (objet) => {
 };
 
 /* ======================================================================== */
+/*  LA BASE DE POSTES (lot P) — de quoi la mesurer                          */
+/* ======================================================================== */
+const PORTE_BASE = 'Ma base de postes : vos phrases et vos prix de référence';
+const AJOUTER_BASE = 'Ajouter cette ligne à ma base de postes';
+const RELIRE_BASE = 'Relire vos prix déjà écrits et votre base de postes';
+/* La phrase de `ChampDesignation` quand SEULE la base n'a pas pu être lue :
+   la mémoire, elle, a répondu. */
+const ECHEC_BASE = 'Votre base de postes n’a pas pu être lue : seuls vos prix déjà écrits sont proposés.';
+const PREFIXE = 'Reprendre : ';
+const FIXE_LE = '\\d\\d/\\d\\d/\\d{4}';
+const aujourdhui = () => {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+const echapper = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** LA BASE DE POSTES TELLE QUE L'APPLICATION LA LIT (`api.mesPostes`, dans
+ *  la page) — une LECTURE, pour les préconditions et pour constater ce
+ *  qu'un geste a rangé. Elle passe dans la file des postes (une requête à
+ *  la fois) : on ne l'appelle jamais pendant une course qu'on mesure. */
+const postesEnBase = () => page.evaluate(async () => {
+  const api = window.__opusModule('src/lib/api.js');
+  if (!api || typeof api.mesPostes !== 'function') return null;
+  const r = await api.mesPostes();
+  return (r.postes || []).map((p) => ({
+    id: p.id, designation: p.designation, unite: p.unite, fournitureNonComprise: p.fournitureNonComprise,
+    mainOeuvre: p.mainOeuvre, prixReferenceCentimes: p.prixReferenceCentimes, prixFixeLe: p.prixFixeLe,
+    devisOrigineId: p.devisOrigineId,
+  }));
+});
+/** Les postes de MÊME CLÉ (`cleDeLigne`, la clé de `devis.js` sous `node`). */
+const postesDeCle = (postes, v) => (postes || []).filter((p) => cleDeLigne(p) === cleDeLigne({ fournitureNonComprise: false, ...v }));
+/** Une section de la base s'ouvre par sa PRÉCONDITION : sinon elle
+ *  s'arrête en disant que l'ordre des sections a changé, au lieu d'échouer
+ *  plus bas pour une raison qui n'est pas la sienne. */
+const exiger = (ok, quoi) => {
+  if (!ok) throw new Error(`précondition non tenue — ${quoi} : l’ordre des sections a changé`);
+  verifier(`précondition : ${quoi}`, true);
+};
+/** Les lignes de « Sol du séjour » sont-elles toutes dans la liste ouverte ? */
+const sejourEstLa = async () => {
+  const ls = await page.locator('button[aria-label$=", ouvrir"]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  return LIGNES_SEJOUR.every((l) => ls.includes(`${l.designation}, ouvrir`))
+    && ls.filter((l) => l === `${CHAPE}, ouvrir`).length >= 2;
+};
+const ouvrirSejour = async () => {
+  if (await carteOuverte()) await fermerCarte();
+  await allerAMesDevis();
+  await ouvrirLeDevis('Sol du séjour');
+};
+/** Une rangée de la liste par son libellé EXACT (deux chapes ont le même :
+ *  la première vaut 52 €, la seconde 38 € « fourniture non comprise »). */
+const rangee = (designation, n = 0) => page.locator(`button[aria-label="${designation}, ouvrir"]`).nth(n);
+
+/** Les fenêtres ouvertes, leur texte, le plus grand nombre vu à la fois. */
+const modales = () => page.evaluate(() => document.querySelectorAll('[aria-modal="true"]').length);
+const texteDeLaFeuille = async () => net(await page.evaluate(() => {
+  const m = [...document.querySelectorAll('[aria-modal="true"]')].pop();
+  return m ? m.innerText : '';
+}));
+const remettreModalesMax = () => page.evaluate(() => {
+  window.__opusModales.max = document.querySelectorAll('[aria-modal="true"]').length;
+});
+const modalesMax = () => page.evaluate(() => window.__opusModales.max);
+const annonces = async () => (await page.evaluate(() => window.__opusAnnonces.slice())).map(net);
+const oublierAnnonces = () => page.evaluate(() => { window.__opusAnnonces.length = 0; });
+/** Un bouton DE LA FEUILLE, par son texte (la croix et « Fermer » portent
+ *  le même libellé : la croix n'a pas de texte). */
+const boutonDeLaFeuille = (nom) => page.locator('[aria-modal="true"] button').filter({ hasText: new RegExp(`^${echapper(nom)}$`) }).last();
+/* La croix vient AVANT le contenu de la feuille, donc avant tout « Fermer »
+   écrit en toutes lettres. */
+const croixDeLaFeuille = () => page.locator('[aria-modal="true"]').last().locator('button[aria-label="Fermer"]').first();
+const champPrixDeLaFeuille = () => page.locator('[aria-modal="true"] input[aria-label^="Prix de référence"], [aria-modal="true"] input[aria-label^="Taux horaire de référence"]').last();
+const attendreModales = (nb, ms = 5000) => jusqua(async () => (await modales()) === nb, ms, 100);
+
+/** LE VOILE d'une feuille, touché en haut de l'écran — là où la feuille ne
+ *  le recouvre pas. C'est la sortie de secours : on vérifie que le doigt
+ *  tombe bien sur LUI, et pas sur la croix ni sur la feuille. */
+const toucherLeVoile = async () => {
+  const p = await page.evaluate(() => {
+    const m = [...document.querySelectorAll('[aria-modal="true"]')].pop();
+    if (!m) return null;
+    const x = Math.round(window.innerWidth / 2);
+    const y = 24;
+    const t = document.elementFromPoint(x, y);
+    return {
+      x, y,
+      voile: !!t && m.contains(t) && t.getAttribute('aria-label') === 'Fermer' && t.tagName !== 'BUTTON' && t.getAttribute('role') !== 'button',
+    };
+  });
+  if (!p || !p.voile) throw new Error('le voile de la feuille n’est pas sous le doigt, en haut de l’écran');
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y }] });
+  await new Promise((r) => { setTimeout(r, 40); });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  appuis += 1;
+  await attendre(600);
+};
+
+/** LES PROPOSITIONS sous la désignation, lues par leurs RANGÉES (préfixe
+ *  commun « Reprendre : ») : leur libellé parlé, leur titre et leur détail,
+ *  le nombre de lignes de chacun (hauteur ÷ interligne calculé), la hauteur
+ *  de la rangée, et si le détail est coupé par sa garde d'une ligne. */
+const lirePropositions = async () => (await page.evaluate((prefixe) => [...document.querySelectorAll(`[aria-label^="${prefixe}"]`)]
+  .map((e) => {
+    const [titre, detail] = [...e.children].filter((c) => (c.innerText || '').trim());
+    const lignes = (x) => (x ? Math.round(x.getBoundingClientRect().height / parseFloat(getComputedStyle(x).lineHeight)) : 0);
+    return {
+      libelle: e.getAttribute('aria-label') || '',
+      titre: titre ? titre.innerText : '',
+      detail: detail ? detail.innerText : '',
+      lignesTitre: lignes(titre),
+      lignesDetail: lignes(detail),
+      coupe: !!detail && (detail.scrollWidth > detail.clientWidth + 1 || detail.scrollHeight > detail.clientHeight + 1),
+      h: Math.round(e.getBoundingClientRect().height),
+    };
+  }), PREFIXE)).map((p) => ({ ...p, libelle: net(p.libelle), titre: net(p.titre), detail: net(p.detail) }));
+/* Toutes les propositions affichées pendant la mesure, pour le compte rendu
+   de la propriété « deux lignes + une ligne ». */
+const PROPOSITIONS_VUES = [];
+/** LA PROPRIÉTÉ D'UNE RANGÉE (CE3-10) : un titre de deux lignes au plus, un
+ *  détail d'UNE ligne, 44 points au moins. Le détail peut être coupé par sa
+ *  garde — c'est l'historique ou l'origine qui part, jamais le prix ni
+ *  « fourniture non comprise » (`detailDeSuggestion`) : on le relève. */
+const jugerPropositions = (ou, ps) => {
+  const largeur = page.viewportSize().width;
+  ps.forEach((p) => PROPOSITIONS_VUES.push({ ou, largeur, ...p }));
+  const fautives = ps.filter((p) => p.lignesTitre > 2 || p.lignesTitre < 1 || p.lignesDetail !== 1 || p.h < TOUCHE - 0.5);
+  verifier(`${ou}, à ${largeur} : chaque rangée = un titre de deux lignes au plus + un détail d’UNE ligne, 44 points au moins (${ps.map((p) => `${p.lignesTitre}+${p.lignesDetail} l., ${p.h} pt`).join(' ; ')})`,
+    ps.length > 0 && fautives.length === 0, fautives.map((p) => `« ${p.titre} » ${p.lignesTitre}+${p.lignesDetail} ${p.h}`).join(' | '));
+  ps.filter((p) => p.coupe).forEach((p) => noter(`${ou} — détail coupé par sa garde d’une ligne`, p.detail));
+};
+/** Taper dans la désignation (vidée), attendre que la frappe retombe, et
+ *  lire les propositions. */
+const taperDesignation = async (t) => {
+  await viderEtTaper(parLibelle('Désignation de la ligne'), t);
+  await attendre(900);
+  return lirePropositions();
+};
+const toucherProposition = async (i) => toucher(page.locator(`[aria-label^="${PREFIXE}"]`).nth(i));
+
+/** LA CLÉ D'UNE PROPOSITION, reconstruite depuis son LIBELLÉ parlé (la
+ *  phrase, « par <unité> », « fourniture non comprise ») par
+ *  `rapprochement.js`, sous `node` — jamais lue dans l'écran, qui ne la
+ *  connaît pas. */
+const NOMS_UNITES = UNITES.map((u) => u.nom).sort((a, b) => b.length - a.length);
+const cleDuLibelle = (libelle) => {
+  const reste = net(libelle).replace(PREFIXE, '');
+  for (const nom of NOMS_UNITES) {
+    const marque = `, par ${nom}`;
+    const i = reste.indexOf(marque);
+    if (i > 0) {
+      const r = cleDeRapprochement(reste.slice(0, i));
+      const fnc = reste.slice(i + marque.length).startsWith(', fourniture non comprise');
+      return r ? JSON.stringify([r, UNITES.find((u) => u.nom === nom).cle, fnc]) : null;
+    }
+  }
+  return null;
+};
+
+/** UNE PHRASE DE LA CARTE (la référence, l'écart, …) : son texte, sa boîte,
+ *  la couleur CALCULÉE de la phrase et celle de son montant (un `Montant`
+ *  posé dedans). */
+const phraseDeLaCarte = (debut) => page.evaluate((d) => {
+  const net0 = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const e = [...document.querySelectorAll('div[dir="auto"]')].find((x) => net0(x.innerText).startsWith(d)
+    && ![...x.children].some((c) => net0(c.innerText).startsWith(d)));
+  if (!e) return null;
+  const montant = [...e.querySelectorAll('*')].find((s) => /\d,\d\d/.test(s.innerText || '')
+    && ![...s.children].some((c) => /\d,\d\d/.test(c.innerText || '')));
+  const b = e.getBoundingClientRect();
+  return {
+    texte: e.innerText, y: b.y, bas: b.y + b.height,
+    couleur: getComputedStyle(e).color, couleurMontant: montant ? getComputedStyle(montant).color : null,
+  };
+}, debut).then((r) => (r ? { ...r, texte: net(r.texte) } : null));
+
+/** Trois captures du même écran, à 390, 375 et 320 points de large — et la
+ *  fenêtre remise comme elle était. */
+const capturerAuxTroisLargeurs = async (nom) => {
+  if (!DOSSIER) return;
+  const avant = page.viewportSize();
+  for (const [l, h] of [[390, 844], [375, 667], [320, 568]]) {
+    await page.setViewportSize({ width: l, height: h });
+    await attendre(500);
+    await page.screenshot({ path: `${DOSSIER}/${nom}-${l}.png` });
+  }
+  await page.setViewportSize(avant);
+  await attendre(500);
+};
+/** Retirer la ligne ouverte, en deux appuis. */
+const retirerLaLigneOuverte = async () => {
+  await toucher(parLibelle('Retirer cette ligne'));
+  await toucher(parLibelle('Confirmer : retirer cette ligne'));
+};
+/** La page « Ma base de postes » est-elle à l'écran ? */
+const surLaPage = async () => (await texte()).includes('Vos phrases et vos prix de référence.');
+const ouvrirLaPageDepuisMesDevis = async () => {
+  if (await carteOuverte()) await fermerCarte();
+  await allerAMesDevis();
+  await toucher(parLibelle(PORTE_BASE));
+  await jusqua(surLaPage, 8000);
+  await attendre(600);
+};
+/** Une rangée de la page, par sa phrase. */
+const rangeeDuPoste = (designation) => page.locator(`[aria-label="Ouvrir le poste ${designation}"]`).first();
+/* Le texte d'une rangée SANS ses glyphes d'icônes (le chevron, rangé dans
+   la zone d'usage privé d'Unicode par la police d'icônes) : on lit ce qui
+   est ÉCRIT. */
+const sansIcones = (t) => [...String(t || '')].filter((ch) => {
+  const c = ch.codePointAt(0);
+  return c < 0xe000 || c > 0xf8ff;
+}).join('');
+const texteDeLaRangeeDuPoste = async (designation) => net(sansIcones(await rangeeDuPoste(designation).innerText().catch(() => ''))).trim();
+
+/* ======================================================================== */
 /*  LE PARCOURS                                                             */
 /* ======================================================================== */
 console.log(`Mesure de la saisie d’un devis — http://localhost:${PORT}, en démonstration`);
@@ -420,6 +786,27 @@ await section('Le démarrage', async () => {
   await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
   await page.getByText('JE SUIS UN PROFESSIONNEL').first().waitFor({ timeout: 240000 });
   noter('accueil affiché après', `${Math.round((Date.now() - t0) / 1000)} s`);
+  /* LES ANNONCES À VOICEOVER (lot P) : `retour.annoncer` appelle
+     `AccessibilityInfo.announceForAccessibility`, une fonction VIDE sous
+     `react-native-web`. On l'écoute pour savoir qu'une annonce part — ce
+     que VoiceOver en fait, seul l'iPhone le dit. */
+  const ecoute = await page.evaluate(() => {
+    const ai = window.__opusModule('node_modules/react-native-web/dist/exports/AccessibilityInfo/index.js');
+    const o = ai && (ai.default || ai);
+    if (!o || typeof o.announceForAccessibility !== 'function') return false;
+    if (!o.opusEcoute) {
+      const avant = o.announceForAccessibility;
+      o.announceForAccessibility = function ecouter(t) {
+        window.__opusAnnonces.push(String(t));
+        return avant.call(this, t);
+      };
+      o.opusEcoute = true;
+    }
+    return true;
+  });
+  verifier('les annonces à VoiceOver sont écoutées (Metro expose ses modules en développement)', ecoute);
+  verifier(`la pause de la base de postes est lue dans api.js (${PAUSE_POSTES} ms), et les encres dans theme.js (${ENCRE}, ${GRIS})`,
+    PAUSE_POSTES > 0 && !!ENCRE && !!GRIS && !!ORANGE_DE_LECTURE);
   await toucher(page.getByText('JE SUIS UN PROFESSIONNEL').first());
   await attendre(3000);
   /* La fenêtre « Votre agent a besoin d'un nom » s'ouvre à la première
@@ -467,6 +854,78 @@ await section('« Mon profil » → « Mes devis »', async () => {
   await jugerMontants('« Mes devis »');
   await jugerCibles('« Mes devis »');
   await capture('01-mes-devis');
+});
+
+await section('La base de postes illisible : « Lecture impossible », et la carte s’en passe (lot P)', async () => {
+  /* PREMIÈRE de la base, et il le faut : « Lecture impossible » ne se voit
+     que sur une PREMIÈRE lecture ratée — une relecture ratée garde la liste
+     déjà lue, sous « Liste non actualisée » (cahier §4.7). */
+  exiger((await page.evaluate(() => window.__opusRequetesPostes)) === 0, 'la base de postes n’a encore jamais été lue');
+  exiger(!!(await page.getByText('Nouveau devis', { exact: true }).count()), '« Mes devis » est à l’écran');
+  await page.evaluate(() => { window.__opusPausePostes = 60000; });
+  const porte = parLibelle(PORTE_BASE);
+  const b = await porte.boundingBox();
+  verifier(`« Mes devis » porte « Ma base de postes » : un bouton de 44 points (${b && Math.round(b.width)} × ${b && Math.round(b.height)})`,
+    !!b && b.height >= TOUCHE - 0.5);
+  await toucher(porte);
+  const enLecture = await jusqua(async () => (await texte()).includes('Lecture de votre base de postes…'), 3000, 100);
+  verifier('la page s’ouvre sur « Lecture de votre base de postes… »', !!enLecture);
+  const t0 = Date.now();
+  const impossible = await jusqua(async () => (await texte()).includes('Lecture impossible'), 14000, 200);
+  const t = await texte();
+  verifier(`la lecture qui ne revient pas : « Lecture impossible », au bout de ${Math.round((Date.now() - t0) / 100) / 10} s`, !!impossible);
+  verifier('…jamais « Aucun poste » ni « Votre base est vide » : ce n’est pas qu’elle est vide',
+    !/Aucun poste|Votre base est vide/.test(t) && t.includes('Ce n’est pas qu’elle est vide'));
+  const reessayer = await page.getByRole('button', { name: 'Réessayer', exact: true }).first().boundingBox();
+  verifier(`…avec un vrai « Réessayer » de 44 points (${reessayer && Math.round(reessayer.width)} × ${reessayer && Math.round(reessayer.height)})`,
+    !!reessayer && reessayer.height >= TOUCHE - 0.5 && reessayer.width >= TOUCHE - 0.5);
+  await capturerAuxTroisLargeurs('p00-base-illisible');
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await ouvrirLeDevis('Sol du séjour');
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  /* LA CARTE, BASE ILLISIBLE : la phrase sous la désignation, UN
+     « Réessayer », et le bloc « base » se tait — aucune référence peut-être
+     périmée, aucun « Ajouter à ma base » qui ferait un doublon. */
+  await toucher(rangee(CHAPE));
+  const tc = await texte();
+  verifier(`la carte de la chape : « ${ECHEC_BASE} »`, tc.includes(ECHEC_BASE));
+  verifier(`…UN seul « Réessayer » (${await page.getByLabel(RELIRE_BASE, { exact: true }).count()})`,
+    (await page.getByLabel(RELIRE_BASE, { exact: true }).count()) === 1);
+  verifier('…et le bloc ne dit rien : ni référence, ni écart, ni « Ajouter à ma base »',
+    !/Votre prix de référence|Vous mettez|Dans votre base|Ce poste existe déjà/.test(tc)
+    && (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0
+    && (await page.getByText('Changer ma référence', { exact: true }).count()) === 0);
+  await capture('p00-carte-base-illisible-390');
+  /* LA MÉMOIRE MARCHE ENCORE : une source en panne n'éteint pas l'autre. */
+  await toucher(parLibelle(SUIVANT));
+  await taper('chape');
+  await attendre(900);
+  const ps = await lirePropositions();
+  verifier(`la mémoire propose encore (« chape » : ${ps.length} proposition(s), aucune de la base)`,
+    ps.length >= 1 && ps.every((p) => !/de votre base/.test(p.libelle)), ps.map((p) => p.libelle).join(' | '));
+  await retirerLaLigneOuverte();
+  /* PENDANT LA LECTURE : aucun « Ajouter à ma base » (on proposerait un
+     doublon d'un poste pas encore lu). La seuil à 25 € est ajoutable dès
+     que la base est lue. */
+  await toucher(rangee(SEUIL));
+  await toucher(parLibelle(RELIRE_BASE));
+  await attendre(1500);
+  const pendant = await texte();
+  verifier('« Réessayer », la lecture repart : pendant qu’elle attend, aucun « Ajouter à ma base », et la phrase d’échec s’efface',
+    (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0 && !pendant.includes(ECHEC_BASE));
+  const revenu = await jusqua(async () => (await texte()).includes(ECHEC_BASE), 14000, 200);
+  verifier('…elle échoue encore : la phrase revient, toujours sans bloc', !!revenu && (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0);
+  /* LA LECTURE RÉTABLIE : un appui sur « Réessayer », et le bloc parle. */
+  await page.evaluate(() => { window.__opusPausePostes = null; });
+  await toucher(parLibelle(RELIRE_BASE));
+  const ajoutable = await jusqua(async () => (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 1, 4000, 100);
+  verifier('lecture rétablie : la phrase d’échec part, et la seuil devient « Ajouter à ma base »',
+    !!ajoutable && !(await texte()).includes(ECHEC_BASE));
+  await fermerCarte();
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await attendre(500);
 });
 
 await section('Le brouillon « Rénovation salle de bains », en liste', async () => {
@@ -735,32 +1194,55 @@ await section('Une ligne EXISTANTE s’ouvre sans suggestion', async () => {
   await ouvrirRangee('Chape sèche');
   await attendre(1200);
   const nb = await page.locator('[aria-label^="Reprendre : "]').count();
-  verifier(`aucune suggestion à l’ouverture (${nb})`, nb === 0);
+  verifier(`aucune proposition à l’ouverture, des DEUX sources — la mémoire et la base (${nb})`, nb === 0);
+  /* …ET LA FRAPPE LES RAPPELLE (CE3-14) : sans cette moitié, un champ qui
+     ne proposerait plus jamais rien passerait la mesure au vert. Un « s »
+     au bout de la phrase, puis effacé : la phrase revient intacte. */
+  const champ = parLibelle('Désignation de la ligne');
+  const avant = await champ.inputValue();
+  await toucher(champ);
+  await page.keyboard.press('Control+End');
+  await taper('s');
+  await attendre(900);
+  const ps = await lirePropositions();
+  verifier(`un « s » tapé au bout : au moins une proposition (${ps.length} : ${ps.map((p) => p.titre).join(' | ')})`, ps.length >= 1);
+  await page.keyboard.press('Backspace');
+  await attendre(400);
+  const apres = await champ.inputValue();
+  verifier(`le « s » effacé, la phrase est intacte, octet pour octet (« ${apres} »)`, apres === avant && apres === CHAPE);
   await fermerCarte();
 });
 
-await section('La deuxième chape : la mémoire, deux appuis', async () => {
+await section('La deuxième chape : la base d’abord, une proposition par phrase, deux appuis', async () => {
+  /* LOT P : la mémoire du lot 1 se regroupe par PHRASE (la clé de
+     rapprochement), et la base de postes passe devant à pertinence égale.
+     « chape » rendait trois suggestions (45 €, 52 €, 38 €) ; il en rend
+     DEUX : le poste de la base à 45 €, qui masque les 52 € et 45 € écrits,
+     puis la variante « fourniture non comprise » à 38 € — une autre clé. */
   await ouvrirRangee('Carrelage du sol');
   await page.evaluate(() => { window.__opusFocus = []; window.__opusBlurs = []; });
   appuis = 0;
   await toucher(parLibelle(SUIVANT));
   await taper('chape');
   await attendre(900);
-  const sugg = page.locator('[aria-label^="Reprendre : "]');
-  const nb = await sugg.count();
-  const t = await page.evaluate(() => {
-    const e = document.querySelector('[aria-label="Déjà écrit dans vos devis"]');
-    return e ? e.innerText.replace(/[  ]/g, ' ') : '';
-  });
-  verifier(`trois suggestions (${nb})`, nb === 3, t);
-  verifier('…45,00 €, 52,00 € et la variante « fourniture non comprise » à 38,00 €',
-    t.includes('45,00 €') && t.includes('52,00 €') && /38,00 €[^\n]*fourniture non comprise/.test(t), t);
-  verifier('…chacune avec son devis d’origine', (t.match(/Sol du séjour|Rénovation salle de bains/g) || []).length >= 3, t);
-  const rangsSugg = await sugg.evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().height)));
-  verifier(`…des rangées de 44 points au moins (${rangsSugg.join(', ')})`, rangsSugg.every((h) => h >= TOUCHE));
+  const ps = await lirePropositions();
+  verifier(`exactement DEUX propositions, comptées par leur préfixe commun « ${PREFIXE}» (${ps.length})`, ps.length === 2,
+    ps.map((p) => p.libelle).join(' | '));
+  verifier('…la BASE en tête : « de votre base, prix de référence 45,00 € », et « réf. du … » dans son détail',
+    !!ps[0] && /, de votre base, prix de référence 45,00 €/.test(ps[0].libelle)
+    && new RegExp(`^45,00 € / m² · réf\\. du ${FIXE_LE}$`).test(ps[0].detail), ps[0] && `${ps[0].libelle} — ${ps[0].detail}`);
+  verifier('…puis 38,00 € « fourniture non comprise »',
+    !!ps[1] && /au prix de 38,00 €/.test(ps[1].libelle) && /fourniture non comprise/.test(ps[1].libelle)
+    && /^38,00 € \/ m² · fourniture non comprise/.test(ps[1].detail), ps[1] && `${ps[1].libelle} — ${ps[1].detail}`);
+  verifier('…et 52,00 € n’apparaît NULLE PART (masqué par la base)', ps.every((p) => !/52,00/.test(`${p.libelle} ${p.detail}`)));
+  const cles = ps.map((p) => cleDuLibelle(p.libelle));
+  verifier(`…leurs clés, reconstruites depuis les libellés par rapprochement.js sous node, sont toutes différentes (${cles.join(' ≠ ')})`,
+    cles.length === 2 && cles.every(Boolean) && new Set(cles).size === cles.length);
+  verifier('…et chaque titre est une phrase RANGÉE, jamais une clé', ps.every((p) => p.titre === CHAPE));
+  jugerPropositions('« chape »', ps);
   await capture('10-memoire');
   await page.evaluate(() => { window.__opusFocus = []; window.__opusBlurs = []; });
-  await toucher(page.locator('[aria-label^="Reprendre : "]', { hasText: '52,00' }).first());
+  await toucherProposition(0);
   const trace = await page.evaluate(() => ({ focus: window.__opusFocus.slice(), blurs: window.__opusBlurs.slice(), actif: document.activeElement && document.activeElement.getAttribute('aria-label') }));
   const dernierFocus = trace.focus[trace.focus.length - 1];
   verifier(`la main passe à la QUANTITÉ (dernier focus donné : « ${dernierFocus} »)`, dernierFocus === 'Quantité', JSON.stringify(trace));
@@ -769,15 +1251,17 @@ await section('La deuxième chape : la mémoire, deux appuis', async () => {
   const perduesRnw = trace.blurs.filter((b) => b.qui === 'Quantité' && b.rnw);
   if (perduesRnw.length) noter('focus repris par react-native-web (fin de défilement, `on-drag`) — pas un défaut d’iOS', `${perduesRnw.length} fois`);
   verifier(`deux appuis en tout (${appuis})`, appuis === 2);
+  const designation = await parLibelle('Désignation de la ligne').inputValue();
+  verifier(`le champ « Désignation » vaut la phrase de la démonstration, octet pour octet (« ${designation} »)`, designation === CHAPE);
   if (trace.actif !== 'Quantité') await toucher(parLibelle('Quantité'));
   await taper('3');
   await toucher(parLibelle('Prix unitaire HT'));
   const prix = await parLibelle('Prix unitaire HT').inputValue();
-  verifier(`le prix est recopié (« ${prix} »)`, prix === '52' || prix === '52,00');
+  verifier(`le prix recopié est le prix de référence de la base (« ${prix} »)`, prix === '45' || prix === '45,00');
   await fermerCarte();
   modele.push({
     id: 'chape2', ordre: 12000, type: 'poste', designation: 'Chape sèche avant carrelage collé', quantiteMilliemes: 3000, unite: 'm2',
-    prixUnitaireCentimes: 5200, tauxTvaCentiemes: tauxRepris(12000), offert: false, mainOeuvre: false, fournitureNonComprise: false,
+    prixUnitaireCentimes: 4500, tauxTvaCentiemes: tauxRepris(12000), offert: false, mainOeuvre: false, fournitureNonComprise: false,
   });
   verifier(`le pied suit : ${euros(totaux().ttc)}`, !!(await piedVaut(totaux().ttc)), `lu : ${(await pied()).texte}`);
 });
@@ -1059,6 +1543,739 @@ await section('À 375 × 667 (iPhone SE) : le chrome fixe', async () => {
   await attendre(600);
 });
 
+/* ======================================================================== */
+/*  LA BASE DE POSTES (lot P, cahier §7.3) — AVANT « Le régime de TVA » :   */
+/*  il redéclare le régime, et toute référence deviendrait « fixée avant la */
+/*  déclaration » (voir l'en-tête). Chaque section s'ouvre par sa           */
+/*  PRÉCONDITION.                                                           */
+/* ======================================================================== */
+
+await section('« Sol du séjour », la chape à 52 € : la référence au-dessus du prix, l’écart dessous (lot P)', async () => {
+  await ouvrirSejour();
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  const base = await postesEnBase();
+  const chape = postesDeCle(base, { designation: CHAPE, unite: 'm2' });
+  exiger(chape.length === 1 && chape[0].prixReferenceCentimes === 4500, 'la chape de la base vaut 45,00 € (le poste de démonstration, intact)');
+  await toucher(rangee(CHAPE));
+  exiger((await parLibelle('Prix unitaire HT').inputValue()) === '52', 'la chape de « Sol du séjour » est à 52 €');
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  const ecart = await phraseDeLaCarte('Vous mettez');
+  const champ = await parLibelle('Prix unitaire HT').boundingBox();
+  verifier(`la référence : « ${ref && ref.texte} »`, !!ref && new RegExp(`^Votre prix de référence : 45,00 € / m², fixé le ${FIXE_LE}\\.$`).test(ref.texte));
+  verifier(`…AU-DESSUS du champ prix, avant qu’on le tape (bas de la phrase ${ref && Math.round(ref.bas)} ≤ haut du champ ${champ && Math.round(champ.y)})`,
+    !!ref && !!champ && ref.bas <= champ.y + 0.5);
+  verifier(`l’écart : « ${ecart && ecart.texte} », SOUS le champ (${ecart && Math.round(ecart.y)} ≥ ${champ && Math.round(champ.y + champ.height)})`,
+    !!ecart && ecart.texte === 'Vous mettez 52,00 € — c’est voulu ?' && ecart.y >= champ.y + champ.height - 0.5);
+  verifier(`les deux phrases en gris, C.muted (${ref && ref.couleur} ; ${ecart && ecart.couleur} ; attendu ${GRIS})`,
+    !!ref && !!ecart && ref.couleur === GRIS && ecart.couleur === GRIS);
+  verifier(`leurs montants à l’encre du texte, C.ink (${ref && ref.couleurMontant} ; ${ecart && ecart.couleurMontant} ; attendu ${ENCRE})`,
+    !!ref && !!ecart && ref.couleurMontant === ENCRE && ecart.couleurMontant === ENCRE);
+  verifier(`aucune fenêtre ne s’impose (${await modales()})`, (await modales()) === 0);
+  const t = await texte();
+  verifier('même phrase que le poste : ni « Ce poste existe déjà », ni la phrase de sortie',
+    !t.includes('Ce poste existe déjà') && !t.includes(net(PHRASE_SORTIE)));
+  const changer = await parLibelle('Faire de 52,00 € votre prix de référence pour ce poste').boundingBox();
+  verifier(`« Changer ma référence », sa réponse sur place : 44 points (${changer && Math.round(changer.width)} × ${changer && Math.round(changer.height)})`,
+    !!changer && changer.height >= TOUCHE - 0.5 && changer.width >= TOUCHE - 0.5);
+  await jugerMontants('La carte de la chape, avec sa référence et son écart');
+  await jugerCibles('La carte de la chape, avec sa référence et son écart', (c) => c.dansCarte);
+  await capturerAuxTroisLargeurs('p01-chape-reference-ecart');
+  /* Le prix remis à 45 : l'écart part, la référence reste. */
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '45');
+  await toucher(parLibelle('Quantité'));
+  await attendre(500);
+  const t45 = await texte();
+  verifier('prix remis à 45 et champ quitté : l’écart disparaît, la référence reste, « Dans votre base de postes. »',
+    !t45.includes('Vous mettez') && t45.includes('Votre prix de référence : 45,00 €') && t45.includes('Dans votre base de postes.'));
+  await capture('p01b-chape-sans-ecart-390');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '52');
+  await toucher(parLibelle('Quantité'));
+  await attendre(500);
+  verifier('remis à 52 : la question revient', (await texte()).includes('Vous mettez 52,00 € — c’est voulu ?'));
+  await fermerCarte();
+});
+
+await section('Q3 a : la liste du devis ne dit RIEN de la référence (lot P)', async () => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  await toucher(rangee(CHAPE));
+  exiger((await parLibelle('Prix unitaire HT').inputValue()) === '52', 'la chape de « Sol du séjour » est à 52 €');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '70');
+  await toucher(parLibelle(SUIVANT));
+  verifier('« Poste suivant » ouvre une ligne neuve', (await carteOuverte()) && (await parLibelle('Désignation de la ligne').inputValue()) === '');
+  await fermerCarte();
+  verifier('la ligne neuve, vierge, ne reste pas', !(await carteOuverte()) && (await page.getByLabel('Ligne incomplète. La compléter', { exact: true }).count()) === 0);
+  const rs = await page.locator('button[aria-label$=", ouvrir"]').evaluateAll((es) => es.map((e) => ({ l: e.getAttribute('aria-label'), t: e.innerText })));
+  const ch = rs.find((r) => r.l === `${CHAPE}, ouvrir`);
+  verifier(`la rangée de la chape dit SON prix et son total (« ${ch && net(ch.t).replace(/\n/g, ' · ')} »)`,
+    !!ch && /× 70,00 €/.test(net(ch.t)) && /1 680,00 €/.test(net(ch.t)));
+  verifier('…et RIEN de la référence : ni « réf. », ni « référence », ni 45,00 €', !!ch && !/réf|45,00/.test(net(ch.t)));
+  verifier(`aucune rangée de la liste ne dit « réf. » ni « référence » (${rs.length} rangées)`, rs.length > 0 && rs.every((r) => !/réf/.test(net(r.t))));
+  await capture('p02-liste-sans-reference-390');
+  await toucher(rangee(CHAPE));
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '52');
+  await toucher(parLibelle('Quantité'));
+  await fermerCarte();
+  const ch2 = (await rangees()).find((r) => r.libelle === CHAPE);
+  verifier(`la chape remise à 52 € (total ${ch2 && euros(ch2.total)})`, !!ch2 && ch2.total === 124800);
+});
+
+await section('« Depose… » sans accent : la variante reconnue, la référence qui NOMME le poste (lot P)', async () => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  const base = await postesEnBase();
+  const dep = postesDeCle(base, { designation: DEPOSE, unite: 'm2' });
+  exiger(dep.length === 1 && dep[0].prixReferenceCentimes === 1800 && dep[0].designation === DEPOSE, 'la dépose de la base vaut 18,00 €, sous sa phrase accentuée');
+  await toucher(rangee(ligneSejour('Depose').designation));
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  const champ = await parLibelle('Prix unitaire HT').boundingBox();
+  verifier(`la référence NOMME le poste : « ${ref && ref.texte} »`,
+    !!ref && new RegExp(`^Votre prix de référence pour « ${echapper(DEPOSE)} » : 18,00 € / m², fixé le ${FIXE_LE}\\.$`).test(ref.texte));
+  verifier('…au-dessus du champ prix', !!ref && !!champ && ref.bas <= champ.y + 0.5);
+  const existe = await phraseDeLaCarte('Ce poste existe déjà');
+  const sortie = await phraseDeLaCarte('Ce n’est pas le même travail');
+  const ecart = await phraseDeLaCarte('Vous mettez');
+  verifier(`le bloc : « ${existe && existe.texte} »`, !!existe && existe.texte === `Ce poste existe déjà dans votre base, sous « ${DEPOSE} ».`);
+  verifier('…puis la phrase de sortie, mot pour mot', !!sortie && sortie.texte === net(PHRASE_SORTIE));
+  verifier(`…puis l’écart : « ${ecart && ecart.texte} »`, !!ecart && ecart.texte === 'Vous mettez 20,00 € — c’est voulu ?');
+  verifier('…dans cet ordre, et sous le champ prix', !!existe && !!sortie && !!ecart && !!champ
+    && champ.y + champ.height <= existe.y + 0.5 && existe.y < sortie.y && sortie.y < ecart.y);
+  verifier('« Changer ma référence » est là, « Ajouter à ma base » ne l’est PAS',
+    (await page.getByLabel('Faire de 20,00 € votre prix de référence pour ce poste', { exact: true }).count()) === 1
+    && (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0);
+  await capturerAuxTroisLargeurs('p03-depose-variante');
+  await fermerCarte();
+});
+
+await section('Les propositions d’une ligne neuve, à 320 points : une par phrase, trois au plus (lot P)', async () => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  const base = await postesEnBase();
+  exiger(postesDeCle(base, { designation: SEUIL, unite: 'u' }).length === 0, 'aucun poste « Seuil de porte… » dans la base');
+  exiger(postesDeCle(base, { designation: 'Pose de faïence murale', unite: 'h' }).some((p) => p.prixReferenceCentimes == null)
+    && postesDeCle(base, { designation: posteDemo('Faïence murale').designation, unite: 'forfait' }).length === 1,
+    'la faïence à l’heure sans prix de référence, et la faïence au forfait, sont dans la base');
+  await page.setViewportSize({ width: 320, height: 568 });
+  await attendre(700);
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  verifier('une ligne neuve est ouverte', await carteOuverte());
+
+  /* « seuils » : deux orthographes, UNE rangée, titrée par la plus récente. */
+  let ps = await taperDesignation('seuils');
+  verifier(`« seuils » : UNE rangée (${ps.length}), titrée « ${ps[0] && ps[0].titre} »`, ps.length === 1 && ps[0].titre === SEUIL);
+  verifier(`…détail « ${ps[0] && ps[0].detail} »`, !!ps[0] && ps[0].detail === '25,00 € / u · aussi 23,00 €');
+  const libelleSeuil = `${PREFIXE}${SEUIL}, par unité, au prix de 25,00 €, déjà écrit dans Sol du séjour ; aussi écrit à 23,00 €`;
+  verifier(`…libellé parlé « ${ps[0] && ps[0].libelle} » — le prix recopié d’abord`,
+    !!ps[0] && ps[0].libelle === libelleSeuil && ps[0].libelle.indexOf('25,00') < ps[0].libelle.indexOf('23,00'));
+  jugerPropositions('« seuils »', ps);
+  await capture('p04a-seuils-320');
+  await toucherProposition(0);
+  verifier(`un appui recopie 25 et la phrase (« ${await parLibelle('Prix unitaire HT').inputValue()} »)`,
+    (await parLibelle('Prix unitaire HT').inputValue()) === '25' && (await parLibelle('Désignation de la ligne').inputValue()) === SEUIL);
+
+  /* « gravats » : la règle de la phrase la plus RÉCENTE, sous les yeux. */
+  ps = await taperDesignation('gravats');
+  verifier(`« gravats » : UNE rangée, titrée par la plus récente (« ${ps[0] && ps[0].titre} »)`,
+    ps.length === 1 && ps[0].titre === ligneSejour('evacuation').designation);
+  verifier(`…détail « ${ps[0] && ps[0].detail} »`, !!ps[0] && ps[0].detail === '180,00 € / forfait · aussi 150,00 €');
+  jugerPropositions('« gravats »', ps);
+
+  /* « faience » : la base au forfait, puis la faïence sans référence, qui
+     porte son dernier prix — et un appui le RECOPIE, par-dessus un prix
+     déjà tapé (25, la seuil). */
+  exiger((await parLibelle('Prix unitaire HT').inputValue()) === '25', 'un prix est déjà tapé dans la ligne (25)');
+  ps = await taperDesignation('faience');
+  verifier(`« faience » : deux rangées, la base au forfait d’abord (${ps.map((p) => p.titre).join(' | ')})`,
+    ps.length === 2 && ps[0].titre === posteDemo('Faïence murale').designation && ps[1].titre === 'Pose de faïence murale');
+  verifier(`…« ${ps[0] && ps[0].detail} », puis « ${ps[1] && ps[1].detail} »`,
+    ps.length === 2 && new RegExp(`^900,00 € / forfait · réf\\. du ${FIXE_LE}$`).test(ps[0].detail)
+    && ps[1].detail === 'sans réf. · dernier : 45,00 € / h');
+  jugerPropositions('« faience »', ps);
+  await capture('p04b-faience-320');
+  await toucherProposition(1);
+  verifier(`un appui sur « Pose de faïence murale » remplace le prix tapé par 45 (« ${await parLibelle('Taux horaire (HT)').inputValue().catch(() => '?')} »)`,
+    (await parLibelle('Taux horaire (HT)').inputValue().catch(() => '')) === '45');
+  verifier('…et recopie l’heure et la main-d’œuvre', (await parLibelle('heure').getAttribute('aria-selected')) === 'true'
+    && (await page.getByRole('switch', { name: /^Main-d’œuvre/ }).getAttribute('aria-checked')) === 'true');
+
+  /* « Pos » : exactement les trois « Pose », jamais « Dépose » en tête. */
+  ps = await taperDesignation('Pos');
+  verifier(`« Pos » : exactement TROIS, les trois « Pose » (${ps.map((p) => p.titre).join(' | ')})`,
+    ps.length === 3 && ps.every((p) => p.titre.startsWith('Pose')));
+  jugerPropositions('« Pos »', ps);
+  await capture('p04c-pos-320');
+
+  /* « Dalles », « beton » : la réponse du propriétaire du 23/10 — un s, un
+     accent, et le poste se retrouve. */
+  for (const q of ['Dalles', 'beton']) {
+    ps = await taperDesignation(q);
+    verifier(`« ${q} » propose la dalle de la base (${ps.map((p) => p.titre).join(' | ') || 'rien'})`, ps.some((p) => p.titre === DALLE && /de votre base/.test(p.libelle)));
+    jugerPropositions(`« ${q} »`, ps);
+  }
+  /* « chape », à 320 cette fois : la propriété de la rangée vaut à la plus
+     petite largeur, pas seulement à 390 (« La deuxième chape »). */
+  ps = await taperDesignation('chape');
+  verifier(`« chape », à 320 : les deux mêmes propositions, la base d’abord (${ps.map((p) => p.detail).join(' | ')})`,
+    ps.length === 2 && /de votre base, prix de référence 45,00 €/.test(ps[0].libelle) && /fourniture non comprise/.test(ps[1].libelle));
+  jugerPropositions('« chape »', ps);
+  noter('un poste SANS référence et SANS dernier prix laisse le prix tapé en place (T10)',
+    'la démonstration n’en a pas — c’est le cas 16 de verifier-postes, sous node');
+  /* « Les », « Sas », « Aux » : rien — un mot court ne trouve que ce qui le
+     CONTIENT, comme au lot 1. */
+  for (const q of ['Les', 'Sas', 'Aux']) {
+    ps = await taperDesignation(q);
+    verifier(`« ${q} » : AUCUNE proposition (${ps.length})`, ps.length === 0, ps.map((p) => p.titre).join(' | '));
+  }
+  await retirerLaLigneOuverte();
+  verifier('la ligne d’essai retirée', !(await carteOuverte()) && (await page.getByLabel('Ligne incomplète. La compléter', { exact: true }).count()) === 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(600);
+});
+
+await section('Une ligne SANS PRIX ne vide pas la proposition de son groupe (lot P, CE3-2)', async () => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  exiger(postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' }).length === 0, 'aucun poste « Seuil de porte… » dans la base');
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  await taper(SEUIL);
+  await toucher(parLibelle('unité'));
+  await fermerCarte();
+  verifier('une ligne « Seuil de porte… » sans prix est dans le devis, incomplète',
+    (await page.locator(`button[aria-label="${SEUIL}, ouvrir"]`).count()) === 2
+    && (await page.getByLabel('Ligne incomplète. La compléter', { exact: true }).count()) === 1);
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  const ps = await taperDesignation('seuils');
+  verifier(`« seuils » : UNE rangée, titrée par cette phrase (« ${ps[0] && ps[0].titre} »)`, ps.length === 1 && ps[0].titre === SEUIL);
+  verifier(`…qui porte le prix écrit, pas un vide (« ${ps[0] && ps[0].detail} »)`, !!ps[0] && /^25,00 € \/ u/.test(ps[0].detail));
+  await toucherProposition(0);
+  verifier(`un appui recopie 25 (« ${await parLibelle('Prix unitaire HT').inputValue()} »)`, (await parLibelle('Prix unitaire HT').inputValue()) === '25');
+  await retirerLaLigneOuverte();
+  await toucher(parLibelle('Ligne incomplète. La compléter'));
+  verifier('« La compléter » rouvre la ligne sans prix', (await parLibelle('Désignation de la ligne').inputValue()) === SEUIL
+    && (await parLibelle('Prix unitaire HT').inputValue()) === '');
+  await retirerLaLigneOuverte();
+  verifier('les deux lignes d’essai retirées, en deux appuis chacune', !(await carteOuverte())
+    && (await page.getByLabel('Ligne incomplète. La compléter', { exact: true }).count()) === 0 && await sejourEstLa());
+});
+
+await section('Une ligne neuve « chapes seches avant carrelage colle » : ce poste existe déjà (lot P)', async () => {
+  const chape = postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2' });
+  exiger(chape.length === 1 && chape[0].designation === CHAPE && chape[0].prixReferenceCentimes === 4500, 'la chape de la base vaut 45,00 €, sous sa phrase');
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  await taper('chapes seches avant carrelage colle');
+  await toucher(parLibelle('mètre carré'));
+  await attendre(500);
+  const existe = await phraseDeLaCarte('Ce poste existe déjà');
+  const sortie = await phraseDeLaCarte('Ce n’est pas le même travail');
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  const champ = await parLibelle('Prix unitaire HT').boundingBox();
+  verifier('pas d’« Ajouter à ma base »', (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0);
+  verifier(`« ${existe && existe.texte} », et la phrase de sortie`,
+    !!existe && existe.texte === `Ce poste existe déjà dans votre base, sous « ${CHAPE} ».` && !!sortie && sortie.texte === net(PHRASE_SORTIE));
+  verifier(`la référence, au-dessus du prix, NOMME le poste : « ${ref && ref.texte} »`,
+    !!ref && !!champ && ref.bas <= champ.y + 0.5
+    && new RegExp(`^Votre prix de référence pour « ${echapper(CHAPE)} » : 45,00 € / m², fixé le ${FIXE_LE}\\.$`).test(ref.texte));
+  await capture('p05-variante-ligne-neuve-390');
+  await retirerLaLigneOuverte();
+  verifier('la ligne d’essai retirée', !(await carteOuverte()));
+});
+
+await section('La chape « fourniture non comprise » → « Ajouter à ma base » : une seule ligne de poste proche (lot P)', async () => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  const base = await postesEnBase();
+  exiger(postesDeCle(base, { designation: CHAPE, unite: 'm2' }).some((p) => p.prixReferenceCentimes === 4500)
+    && postesDeCle(base, { designation: CHAPE, unite: 'm2', fournitureNonComprise: true }).length === 0,
+    'la chape avec la fourniture vaut 45,00 €, la chape sans la fourniture n’est pas dans la base');
+  await toucher(rangee(CHAPE, 1));
+  exiger((await parLibelle('Prix unitaire HT').inputValue()) === '38', 'la seconde chape est celle à 38 €, fourniture non comprise');
+  await remettreModalesMax();
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  const tf = await texteDeLaFeuille();
+  const proche = `Déjà dans votre base, avec la fourniture : « ${CHAPE} » (45,00 € / m²).`;
+  verifier(`la feuille montre UNE ligne : « ${proche} »`, tf.includes(proche) && (tf.match(/Déjà dans votre base/g) || []).length === 1, tf.slice(0, 400));
+  verifier(`…le prix proposé est celui de la ligne (« ${await champPrixDeLaFeuille().inputValue()} »)`, (await champPrixDeLaFeuille().inputValue()) === '38');
+  await jugerCibles('La feuille d’ajout', (c) => c.dansModale);
+  await capturerAuxTroisLargeurs('p06-feuille-ajout-proche');
+  const croix = await croixDeLaFeuille().boundingBox();
+  noter('la croix de la feuille, par sa boîte (exception nommée)', croix ? `${Math.round(croix.width)} × ${Math.round(croix.height)}` : '?');
+  await toucher(croixDeLaFeuille());
+  verifier('la croix ferme la feuille sans rien ajouter ; la carte est toujours ouverte', (await modales()) === 0 && await carteOuverte()
+    && postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2', fournitureNonComprise: true }).length === 0);
+  verifier(`une seule fenêtre à la fois (au plus ${await modalesMax()})`, (await modalesMax()) <= 1);
+  await fermerCarte();
+});
+
+/** LA COURSE « CE POSTE EXISTE DÉJÀ » (CE3-6, CE3-8) — deux ajouts du même
+ *  poste qui se croisent : le premier part depuis « Seuil… » (25 €), sa
+ *  feuille fermée par le voile PENDANT l'envoi ; la carte de « Seuils… »
+ *  (23 €) dit encore « Ajouter à ma base », puisque le premier n'est pas
+ *  arrivé ; on y porte `prix`, on valide. La feuille passe d'elle-même à
+ *  « Ce poste existe déjà ». La pause de la base est de 7 s, toujours sous
+ *  le délai de 8 s. Le cahier dit 5 s ; 7 s laisse plus de marge : la
+ *  seconde ligne s'ouvre environ 2,4 s après le premier envoi (mesuré), et
+ *  il faut encore ouvrir sa feuille, y taper le prix et valider avant que
+ *  le premier ajout n'arrive. Si la course n'a pas lieu, la section le DIT
+ *  et s'arrête, au lieu de mesurer autre chose. */
+const PAUSE_COURSE = 7000;
+const courseExisteDeja = async (prix) => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  exiger(postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' }).length === 0, 'aucun poste « Seuil de porte… » dans la base');
+  await remettreModalesMax();
+  await oublierAnnonces();
+  await page.evaluate((ms) => { window.__opusPausePostes = ms; }, PAUSE_COURSE);
+  await toucher(rangee(SEUIL));
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  verifier(`le premier ajout : « Seuil… » propose 25 (« ${await champPrixDeLaFeuille().inputValue()} »)`, (await champPrixDeLaFeuille().inputValue()) === '25');
+  const t0 = Date.now();
+  await toucher(boutonDeLaFeuille('Ajouter à ma base'));
+  verifier('…« Enregistrement… » pendant l’envoi', (await boutonDeLaFeuille('Enregistrement…').count()) === 1);
+  await toucherLeVoile();
+  verifier('…la feuille fermée par le VOILE pendant l’envoi', (await modales()) === 0);
+  await fermerCarte();
+  await toucher(rangee(SEUILS));
+  const encore = (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 1;
+  verifier(`la carte de « Seuils… » dit ENCORE « Ajouter à ma base » (${Date.now() - t0} ms après le premier envoi)`, encore);
+  if (!encore) throw new Error('le premier ajout est arrivé avant la seconde ligne : la course n’a pas eu lieu');
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  await viderEtTaper(champPrixDeLaFeuille(), String(prix));
+  await toucher(boutonDeLaFeuille('Ajouter à ma base'));
+  const existe = await jusqua(async () => (await texteDeLaFeuille()).includes('Ce poste existe déjà dans votre base.'), 15000, 150);
+  verifier(`la feuille passe d’ELLE-MÊME à « Ce poste existe déjà » (${Date.now() - t0} ms après le premier envoi)`, !!existe);
+  const tf = await texteDeLaFeuille();
+  verifier('…elle montre la ligne, le poste, l’explication et la sortie',
+    tf.includes(`Votre ligne : « ${SEUILS} »`) && tf.includes(`Le poste : « ${SEUIL} »`)
+    && tf.includes('Opus les reconnaît comme la même phrase : majuscules, accents, espaces, ponctuation et pluriel mis à part.')
+    && tf.includes(net(PHRASE_SORTIE)), tf.slice(0, 500));
+  verifier('…et aucun bouton pour créer un second poste ni remplacer sa phrase',
+    (await boutonDeLaFeuille('Ajouter à ma base').count()) === 0 && !/Remplacer|second poste/.test(tf));
+  return { t0, tf };
+};
+/** La file des postes vidée : la pause remise, puis une lecture — elle passe
+ *  APRÈS le second ajout (son refus 23505) et la relecture qu'il déclenche. */
+const viderLaFileDesPostes = async () => {
+  await page.evaluate(() => { window.__opusPausePostes = null; });
+  return postesEnBase();
+};
+
+await section('« Ce poste existe déjà » : la course, le prix porté égal à la référence (25 €) — « Fermer » seul (lot P)', async () => {
+  const { tf } = await courseExisteDeja(25);
+  verifier('« Il a déjà ce prix de référence : 25,00 € / u, fixé le … »', new RegExp(`Il a déjà ce prix de référence : 25,00 € / u, fixé le ${FIXE_LE}\\.`).test(tf), tf.slice(0, 500));
+  verifier('…et le SEUL bouton « Fermer » : ni champ, ni « Changer ma référence »',
+    (await boutonDeLaFeuille('Fermer').count()) === 1 && (await boutonDeLaFeuille('Changer ma référence').count()) === 0
+    && (await champPrixDeLaFeuille().count()) === 0);
+  await capture('p07a-existe-deja-meme-prix-390');
+  const apres = await viderLaFileDesPostes();
+  const seuils = postesDeCle(apres, { designation: SEUIL, unite: 'u' });
+  verifier(`UN seul poste de cette clé dans la base de démonstration (${seuils.length}), à 25,00 €, sous la phrase du PREMIER ajout`,
+    seuils.length === 1 && seuils[0].prixReferenceCentimes === 2500 && seuils[0].designation === SEUIL);
+  verifier(`le premier ajout, fermé pendant l’envoi, a quand même été ANNONCÉ (« ${(await annonces()).join(' | ')} »)`,
+    (await annonces()).includes('Ajouté à votre base de postes.'));
+  verifier(`jamais deux fenêtres à la fois (au plus ${await modalesMax()})`, (await modalesMax()) <= 1);
+  await toucher(boutonDeLaFeuille('Fermer'));
+  verifier('« Fermer » : la feuille part, la carte reste', (await modales()) === 0 && await carteOuverte());
+  await fermerCarte();
+});
+
+await section('Retirer un poste depuis « Ma base de postes », en deux appuis (lot P)', async () => {
+  exiger(postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' }).length === 1, 'le poste « Seuil de porte… » est dans la base');
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await toucher(parLibelle(PORTE_BASE));
+  await jusqua(surLaPage, 8000);
+  await attendre(600);
+  const avant = Number(((await texte()).match(/(\d+) postes/) || [])[1]);
+  await oublierAnnonces();
+  await toucher(rangeeDuPoste(SEUIL));
+  await attendreModales(1);
+  await toucher(parLibelle('Retirer ce poste de ma base'));
+  verifier('le premier appui ne retire rien : il demande, et dit ce qui arrivera',
+    (await modales()) === 1 && (await page.getByLabel('Confirmer : retirer ce poste de ma base', { exact: true }).count()) === 1
+    && (await texteDeLaFeuille()).includes('Il ne sera plus proposé sur vos devis.'));
+  await toucher(parLibelle('Confirmer : retirer ce poste de ma base'));
+  await attendreModales(0);
+  const apres = Number(((await texte()).match(/(\d+) postes?/) || [])[1]);
+  verifier(`le second retire : la page passe de ${avant} à ${apres} postes, la rangée disparaît`,
+    apres === avant - 1 && (await rangeeDuPoste(SEUIL).count()) === 0);
+  verifier('…c’est annoncé, et la base ne l’a plus', (await annonces()).includes('Le poste est retiré de votre base.')
+    && postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' }).length === 0);
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await ouvrirLeDevis('Sol du séjour');
+});
+
+await section('« Ce poste existe déjà » : la même course, prix porté à 24 € — « Changer ma référence » (lot P)', async () => {
+  const { tf } = await courseExisteDeja(24);
+  verifier('« Son prix de référence : 25,00 € / u, fixé le … »', new RegExp(`Son prix de référence : 25,00 € / u, fixé le ${FIXE_LE}\\.`).test(tf), tf.slice(0, 500));
+  verifier(`…le champ vaut 24 — le prix TAPÉ, gardé (« ${await champPrixDeLaFeuille().inputValue()} »)`, (await champPrixDeLaFeuille().inputValue()) === '24');
+  /* Tant que le SECOND ajout est en route (il recevra le refus 23505), la
+     feuille le dit : son bouton porte « Enregistrement… ». Une requête de
+     cette feuille est bel et bien partie. */
+  noter('pendant que le second ajout est en route, le bouton de la feuille dit', (await boutonDeLaFeuille('Enregistrement…').count()) === 1 ? '« Enregistrement… »' : '« Changer ma référence »');
+  await viderLaFileDesPostes();
+  await attendre(400);
+  verifier('le second ajout revenu (23505, puis la base relue) : « Changer ma référence » et « Fermer »',
+    (await boutonDeLaFeuille('Changer ma référence').count()) === 1 && (await boutonDeLaFeuille('Fermer').count()) === 1
+    && (await champPrixDeLaFeuille().inputValue()) === '24');
+  await jugerCibles('La feuille « Ce poste existe déjà »', (c) => c.dansModale);
+  await capturerAuxTroisLargeurs('p07b-existe-deja-24');
+  await oublierAnnonces();
+  await toucher(boutonDeLaFeuille('Changer ma référence'));
+  await attendreModales(0);
+  const seuils = postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' });
+  verifier(`« Changer ma référence » : le poste vaut 24,00 € (${seuils.map((p) => euros(p.prixReferenceCentimes)).join(', ')}), et il reste UN seul poste de cette clé`,
+    seuils.length === 1 && seuils[0].prixReferenceCentimes === 2400);
+  verifier('…c’est annoncé', (await annonces()).includes('Votre prix de référence est changé.'));
+  verifier(`jamais deux fenêtres à la fois, sur toute la course (au plus ${await modalesMax()})`, (await modalesMax()) <= 1);
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  verifier(`la carte de « Seuils… » : la référence nomme le poste, à 24,00 € (« ${ref && ref.texte} »), et l’écart parle`,
+    !!ref && ref.texte.startsWith(`Votre prix de référence pour « ${SEUIL} » : 24,00 € / u`)
+    && (await texte()).includes('Vous mettez 23,00 € — c’est voulu ?'));
+  await fermerCarte();
+});
+
+await section('« Dépose de l’évier chez Mme Exemple » → « Ajouter à ma base » : l’avertissement, jamais un refus (lot P)', async () => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  await taper('Dépose de l’évier chez Mme Exemple');
+  await toucher(parLibelle('unité'));
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  const tf = await texteDeLaFeuille();
+  const avert = 'Cette phrase contient une formule comme « chez » ou « Mme », qui désigne souvent un client. Elle resterait dans votre base même si vous supprimez ce client.';
+  verifier(`l’avertissement : « ${avert} »`, tf.includes(avert), tf.slice(0, 600));
+  const filet = await page.evaluate((a) => {
+    const m = [...document.querySelectorAll('[aria-modal="true"]')].pop();
+    const e = m && [...m.querySelectorAll('div[dir="auto"]')].find((x) => (x.innerText || '').startsWith(a.slice(0, 30)));
+    return e && e.parentElement ? { bord: getComputedStyle(e.parentElement).borderLeftColor, encre: getComputedStyle(e).color } : null;
+  }, avert);
+  verifier(`…encre du texte, filet ORANGE DE LECTURE (${filet && filet.encre}, ${filet && filet.bord})`,
+    !!filet && filet.encre === ENCRE && filet.bord === ORANGE_DE_LECTURE);
+  verifier('…et le bouton reste ACTIF : un faux positif existe (« M. Blanc » et « blanc cassé »)',
+    (await boutonDeLaFeuille('Ajouter à ma base').getAttribute('aria-disabled')) !== 'true');
+  await capturerAuxTroisLargeurs('p08-avertissement-client');
+  await toucherLeVoile();
+  verifier('le voile ferme la feuille, rien n’est ajouté', (await modales()) === 0);
+  await retirerLaLigneOuverte();
+  verifier('la ligne d’essai retirée', !(await carteOuverte()));
+});
+
+await section('La chape à 52 € → « Changer ma référence » : la feuille du poste, PAR-DESSUS la carte (lot P)', async () => {
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  exiger(postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2' }).some((p) => p.prixReferenceCentimes === 4500), 'la chape de la base vaut 45,00 €');
+  await toucher(rangee(CHAPE));
+  exiger((await parLibelle('Prix unitaire HT').inputValue()) === '52', 'la chape de « Sol du séjour » est à 52 €');
+  await remettreModalesMax();
+  await oublierAnnonces();
+  await toucher(parLibelle('Faire de 52,00 € votre prix de référence pour ce poste'));
+  await attendreModales(1);
+  const tf = await texteDeLaFeuille();
+  verifier(`la feuille du poste, pré-remplie avec le prix de la LIGNE (« ${await champPrixDeLaFeuille().inputValue()} »)`,
+    tf.startsWith('Prix de référence') && tf.includes(CHAPE) && (await champPrixDeLaFeuille().inputValue()) === '52');
+  verifier('…posée PAR-DESSUS la carte, qui reste montée dessous', (await page.getByLabel(RETOUR_CARTE, { exact: true }).count()) === 1);
+  await jugerCibles('La feuille d’un poste, depuis la carte', (c) => c.dansModale);
+  await capturerAuxTroisLargeurs('p09-feuille-poste');
+  await toucher(boutonDeLaFeuille('Enregistrer'));
+  await attendreModales(0);
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  verifier(`« Enregistrer » : « ${ref && ref.texte} »`, !!ref && ref.texte === `Votre prix de référence : 52,00 € / m², fixé le ${aujourdhui()}.`);
+  verifier('…l’écart disparaît, la carte est toujours ouverte, l’écran n’a pas quitté la saisie',
+    !(await texte()).includes('Vous mettez') && await carteOuverte() && await dansLaSaisie());
+  verifier('…c’est annoncé, et la base le dit', (await annonces()).includes('Votre prix de référence est changé.')
+    && postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2' }).some((p) => p.prixReferenceCentimes === 5200));
+  verifier(`une seule fenêtre à la fois (au plus ${await modalesMax()})`, (await modalesMax()) <= 1);
+  await capture('p09b-reference-changee-390');
+  await fermerCarte();
+});
+
+await section('La faïence (12 h) devient un forfait : la phrase qui le DIT, puis s’efface (lot P, T11)', async () => {
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  const faience = ligneDe('Pose de faïence murale');
+  exiger(faience.quantiteMilliemes === 12000 && faience.unite === 'h' && faience.prixUnitaireCentimes === 4500 && !faience.offert,
+    'la faïence de « Rénovation salle de bains » est à 12 h, à 45 €');
+  exiger(postesDeCle(await postesEnBase(), { designation: posteDemo('Faïence murale').designation, unite: 'forfait' }).length === 1,
+    'la faïence au forfait est dans la base');
+  await ouvrirRangee('Pose de faïence murale');
+  let ps = await taperDesignation('faïence');
+  const auForfait = ps.findIndex((p) => p.titre === posteDemo('Faïence murale').designation);
+  exiger(auForfait >= 0, '« faïence » propose la faïence au forfait');
+  await toucherProposition(auForfait);
+  const attendue = net(changementDUnite({ unite: 'h', quantiteMilliemes: 12000 }, { unite: 'forfait' }));
+  const phrase = await phraseDeLaCarte('L’unité est passée');
+  const unites = await page.evaluate((noms) => Math.max(...noms.map((nom) => {
+    const e = document.querySelector(`[aria-label="${nom}"]`);
+    return e ? e.getBoundingClientRect().bottom : 0;
+  })), UNITES.map((u) => u.nom));
+  const taux = await parLibelle('TVA à 10 %').boundingBox();
+  verifier(`la phrase de T11, sous les unités : « ${phrase && phrase.texte} »`,
+    !!phrase && phrase.texte === attendue && phrase.y >= unites - 0.5 && !!taux && phrase.bas <= taux.y + 0.5);
+  await capturerAuxTroisLargeurs('p10-changement-d-unite');
+  await toucher(parLibelle('Quantité'));
+  await toucher(parLibelle('Prix unitaire HT'));
+  verifier('la quantité retouchée : la phrase s’efface', !(await texte()).includes('L’unité est passée'));
+  /* Remise en l'état : la faïence à l'heure, à 45 €, et le modèle intact. */
+  ps = await taperDesignation('faïence');
+  const aLHeure = ps.findIndex((p) => p.titre === 'Pose de faïence murale');
+  exiger(aLHeure >= 0, '« faïence » propose la faïence à l’heure');
+  await toucherProposition(aLHeure);
+  await viderEtTaper(parLibelle('Taux horaire (HT)'), '45');
+  await toucher(parLibelle('Temps estimé'));
+  await fermerCarte();
+  const r = (await rangees()).find((x) => x.libelle === 'Pose de faïence murale');
+  verifier(`remise à 12 h × 45 € : la rangée et le pied sont ceux de devis.js (${euros(totalLigne(faience))}, ${euros(totaux().ttc)})`,
+    !!r && r.total === totalLigne(faience) && !!(await piedVaut(totaux().ttc)), `lu : ${(await pied()).texte}`);
+});
+
+await section('« Niche murale carrelée » → « Ajouter à ma base », à 320 × 568 (lot P)', async () => {
+  exiger(postesDeCle(await postesEnBase(), { designation: 'Niche murale carrelée', unite: 'u' }).length === 0, 'aucun poste « Niche murale carrelée » dans la base');
+  await page.setViewportSize({ width: 320, height: 568 });
+  await attendre(700);
+  await toucher(page.locator('button[aria-label="Option : Niche murale carrelée, ouvrir"]').first());
+  await remettreModalesMax();
+  await oublierAnnonces();
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  await attendre(500);
+  const etat = await page.evaluate(() => {
+    const a = document.activeElement;
+    const m = [...document.querySelectorAll('[aria-modal="true"]')].pop();
+    const btn = m && [...m.querySelectorAll('button')].find((b) => (b.innerText || '').trim() === 'Ajouter à ma base');
+    const prix = m && m.querySelector('input[aria-label^="Prix de référence"]');
+    const b = btn ? btn.getBoundingClientRect() : null;
+    return {
+      focus: a && /^(INPUT|TEXTAREA)$/.test(a.tagName) ? (a.getAttribute('aria-label') || a.tagName) : null,
+      prix: prix ? prix.value : null,
+      champsDePhrase: m ? [...m.querySelectorAll('input, textarea')].filter((x) => x.value === 'Niche murale carrelée').length : -1,
+      bouton: b && { haut: b.top, bas: b.bottom, h: b.height, l: b.width },
+      vh: window.innerHeight,
+    };
+  });
+  verifier(`aucun champ n’a le focus — le pavé décimal ne monte pas (${etat.focus || 'aucun'})`, etat.focus === null);
+  verifier(`une seule fenêtre (${await modales()})`, (await modales()) === 1);
+  verifier('la phrase est MONTRÉE, sans champ pour la corriger', (await texteDeLaFeuille()).includes('Niche murale carrelée') && etat.champsDePhrase === 0);
+  verifier(`le prix proposé est celui de la ligne (« ${etat.prix} »)`, etat.prix === '240');
+  verifier(`« Ajouter à ma base » est visible SANS DÉFILER à 320 × 568 (${etat.bouton && Math.round(etat.bouton.haut)}–${etat.bouton && Math.round(etat.bouton.bas)} sur ${etat.vh}), 44 points (${etat.bouton && Math.round(etat.bouton.h)})`,
+    !!etat.bouton && etat.bouton.haut >= 0 && etat.bouton.bas <= etat.vh + 0.5 && etat.bouton.h >= TOUCHE - 0.5);
+  await jugerCibles('La feuille d’ajout de la niche, à 320', (c) => c.dansModale);
+  await capture('p11-feuille-niche-320');
+  await toucher(boutonDeLaFeuille('Ajouter à ma base'));
+  await attendreModales(0, 4000);
+  const t = await texte();
+  verifier('après validation : « Dans votre base de postes. », et « Ajouter à ma base » a disparu',
+    t.includes('Dans votre base de postes.') && (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0);
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  verifier(`…la référence paraît : « ${ref && ref.texte} »`, !!ref && ref.texte === `Votre prix de référence : 240,00 € / u, fixé le ${aujourdhui()}.`);
+  verifier(`…et c’est annoncé (« ${(await annonces()).join(' | ')} »)`, (await annonces()).includes('Ajouté à votre base de postes.'));
+  const niche = postesDeCle(await postesEnBase(), { designation: 'Niche murale carrelée', unite: 'u' });
+  verifier(`la base a UN poste « Niche murale carrelée », à 240,00 €, rattaché à ce devis (${niche.length})`,
+    niche.length === 1 && niche[0].prixReferenceCentimes === 24000 && niche[0].devisOrigineId === RENOVATION.id);
+  verifier(`une seule fenêtre à la fois (au plus ${await modalesMax()})`, (await modalesMax()) <= 1);
+  await capture('p11b-niche-ajoutee-320');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(600);
+  await fermerCarte();
+});
+
+await section('« … chez Mme Martin », dans le devis de Mme Martin : l’avertissement NOMME le client (lot P)', async () => {
+  /* La moitié de l'avertissement que « Sol du séjour » ne peut pas montrer :
+     il n'a pas de client. Ici, le devis est celui d'une fiche du carnet, et
+     la saisie passe cette fiche à la feuille. */
+  /* Sa ville ne s'écrit à côté du nom que si le carnet a été lu ; le NOM,
+     lui, vient du devis — et c'est lui que la feuille cherche. */
+  exiger((await texte()).includes('Mme Martin'), 'le devis ouvert est celui de Mme Martin');
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  await taper('Dépose de l’évier chez Mme Martin');
+  await toucher(parLibelle('unité'));
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  const tf = await texteDeLaFeuille();
+  const avert = 'Cette phrase contient « Martin », le nom du client de ce devis et une formule comme « chez » ou « Mme », qui désigne souvent un client. Elle resterait dans votre base même si vous supprimez ce client.';
+  verifier(`l’avertissement nomme le client : « ${avert} »`, tf.includes(avert), tf.slice(0, 600));
+  verifier('…et le bouton reste actif', (await boutonDeLaFeuille('Ajouter à ma base').getAttribute('aria-disabled')) !== 'true');
+  await capture('p11c-avertissement-nom-390');
+  await toucherLeVoile();
+  await retirerLaLigneOuverte();
+  verifier('rien n’est ajouté, la ligne d’essai retirée', (await modales()) === 0 && !(await carteOuverte())
+    && !(await postesEnBase()).some((p) => /Martin/.test(p.designation)));
+});
+
+await section('« Ma base de postes » : deux portes, une page (lot P)', async () => {
+  await allerAMesDevis();
+  await page.setViewportSize({ width: 320, height: 568 });
+  await attendre(700);
+  const porte = await page.evaluate((l) => {
+    const e = document.querySelector(`[aria-label="${l}"]`);
+    if (!e) return null;
+    const b = e.getBoundingClientRect();
+    const tx = [...e.querySelectorAll('div[dir="auto"]')].pop();
+    return { x: b.x, droite: b.right, h: b.height, l: b.width, deborde: !!tx && tx.scrollWidth > tx.clientWidth + 1, vw: window.innerWidth };
+  }, PORTE_BASE);
+  verifier(`la porte de « Mes devis » tient à 320 points (${porte && Math.round(porte.x)}–${porte && Math.round(porte.droite)}, ${porte && Math.round(porte.h)} de haut, texte entier)`,
+    !!porte && porte.x >= 0 && porte.droite <= porte.vw + 0.5 && porte.h >= TOUCHE - 0.5 && !porte.deborde);
+  await capture('p12-porte-mes-devis-320');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(600);
+  await toucher(parLibelle(PORTE_BASE));
+  await jusqua(surLaPage, 8000);
+  await attendre(800);
+  const base = await postesEnBase();
+  const t = await texte();
+  verifier(`la page : « ${base.length} postes », la phrase d’en-tête, aucun « Nouveau poste »`,
+    t.includes(`${base.length} postes`) && t.includes('Aucun écran d’Opus ne les montre à quelqu’un d’autre que vous.') && !/Nouveau poste/.test(t));
+  const hauteurs = await page.locator('[aria-label^="Ouvrir le poste "]').evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().height)));
+  verifier(`les rangées font 44 points au moins (${hauteurs.length} montées : ${hauteurs.join(', ')})`, hauteurs.length > 0 && hauteurs.every((h) => h >= TOUCHE));
+  const plinthes = await texteDeLaRangeeDuPoste('Pose de plinthes carrelées');
+  const chape = await texteDeLaRangeeDuPoste(CHAPE);
+  verifier('les plinthes disent « avant la déclaration de votre régime de TVA actuel : vérifiez-le », la chape non',
+    plinthes.includes('avant la déclaration de votre régime de TVA actuel : vérifiez-le') && !!chape && !chape.includes('avant la déclaration'));
+  const depose = await texteDeLaRangeeDuPoste(DEPOSE);
+  verifier('« Ajouté le … depuis un de vos devis » sur la chape, « Ajouté le … » seul sur la dépose (son devis a été supprimé)',
+    new RegExp(`Ajouté le ${FIXE_LE} depuis un de vos devis`).test(chape) && new RegExp(`Ajouté le ${FIXE_LE}$`).test(depose));
+  const ragreage = await rangeeDuPoste(RAGREAGE).evaluate((e) => {
+    const p = [...e.querySelectorAll('div[dir="auto"]')].find((x) => (x.innerText || '').startsWith('Ragréage'));
+    return p ? { lignes: Math.round(p.getBoundingClientRect().height / parseFloat(getComputedStyle(p).lineHeight)), coupe: p.scrollHeight > p.clientHeight + 1 } : null;
+  });
+  verifier(`la phrase longue du ragréage tient sur TROIS lignes (${ragreage && ragreage.lignes}, coupée : ${ragreage && ragreage.coupe ? 'oui' : 'non'})`,
+    !!ragreage && ragreage.lignes === 3);
+  await jugerCibles('La page « Ma base de postes »', (c) => !c.dansModale);
+  await capturerAuxTroisLargeurs('p12-ma-base');
+  /* La recherche, par les mots de la CLÉ. */
+  await toucher(parLibelle('Chercher dans ma base de postes'));
+  await taper('seche chape');
+  await attendre(900);
+  let trouves = await page.locator('[aria-label^="Ouvrir le poste "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  verifier(`« seche chape » trouve la chape, et elle seule (${trouves.join(' | ')})`, trouves.length === 1 && trouves[0] === `Ouvrir le poste ${CHAPE}`);
+  await jugerCibles('La page, recherche en cours', (c) => !c.dansModale);
+  await viderEtTaper(parLibelle('Chercher dans ma base de postes'), 'seche');
+  await attendre(900);
+  trouves = await page.locator('[aria-label^="Ouvrir le poste "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  verifier(`« seche » trouve la chape (${trouves.join(' | ')})`, trouves.includes(`Ouvrir le poste ${CHAPE}`));
+  await viderEtTaper(parLibelle('Chercher dans ma base de postes'), 'DURANDAL');
+  await attendre(900);
+  verifier('« DURANDAL » : aucun poste de démonstration ne nomme ce client — « Aucun poste ne contient « DURANDAL ». »',
+    (await page.locator('[aria-label^="Ouvrir le poste "]').count()) === 0 && (await texte()).includes('Aucun poste ne contient « DURANDAL ».'));
+  await capture('p12b-recherche-vide-390');
+  await toucher(parLibelle('Effacer la recherche'));
+  await attendre(700);
+  verifier('« Effacer la recherche » rend toute la liste', (await page.locator('[aria-label^="Ouvrir le poste "]').count()) === hauteurs.length);
+  /* LA SECONDE PORTE : « Mon profil ». */
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(900);
+  const rangeeProfil = await parLibelle(PORTE_BASE).boundingBox();
+  verifier(`« Mon profil » porte la rangée « Ma base de postes », 44 points (${rangeeProfil && Math.round(rangeeProfil.height)})`, !!rangeeProfil && rangeeProfil.height >= TOUCHE - 0.5);
+  await toucher(parLibelle(PORTE_BASE));
+  await jusqua(surLaPage, 8000);
+  await attendre(600);
+  verifier(`…elle ouvre la MÊME page (« ${base.length} postes »)`, (await texte()).includes(`${base.length} postes`));
+  await toucher(parLibelle('Revenir en arrière'));
+  await attendre(900);
+  verifier('…et le retour ramène à « Mon profil »', (await page.getByLabel('Mes devis : les brouillons de chiffrage', { exact: true }).count()) === 1);
+});
+
+await section('Dans la page : fixer, changer, retirer un prix de référence (lot P)', async () => {
+  const base = await postesEnBase();
+  exiger(postesDeCle(base, { designation: 'Pose de faïence murale', unite: 'h' }).some((p) => p.prixReferenceCentimes == null)
+    && postesDeCle(base, { designation: RAGREAGE, unite: 'm2' }).some((p) => p.prixReferenceCentimes === 2800)
+    && postesDeCle(base, { designation: DALLE, unite: 'm2' }).some((p) => p.prixReferenceCentimes === 8500),
+    'la faïence à l’heure sans prix, le ragréage à 28 €, la dalle à 85 €');
+  await toucher(parLibelle(PORTE_BASE));
+  await jusqua(surLaPage, 8000);
+  await attendre(600);
+  await oublierAnnonces();
+  /* Fixer : la faïence à l'heure, « Prix non fixé ». */
+  verifier('la faïence à l’heure dit « Prix non fixé »', (await texteDeLaRangeeDuPoste('Pose de faïence murale')).includes('Prix non fixé'));
+  await toucher(rangeeDuPoste('Pose de faïence murale'));
+  await attendreModales(1);
+  verifier('sa feuille : « Ce poste », le taux horaire de référence, vide', (await texteDeLaFeuille()).startsWith('Ce poste')
+    && (await champPrixDeLaFeuille().getAttribute('aria-label')) === 'Taux horaire de référence (HT)' && (await champPrixDeLaFeuille().inputValue()) === '');
+  await jugerCibles('La feuille d’un poste, depuis la page', (c) => c.dansModale);
+  await capture('p13-feuille-poste-page-390');
+  await viderEtTaper(champPrixDeLaFeuille(), '50');
+  await toucher(boutonDeLaFeuille('Enregistrer'));
+  await attendreModales(0);
+  let r = await texteDeLaRangeeDuPoste('Pose de faïence murale');
+  verifier(`fixer : « 50,00 € » et « fixé le ${aujourdhui()} »`, r.includes('50,00 €') && r.includes(`fixé le ${aujourdhui()}`), r);
+  /* Changer : le ragréage, 28 → 30. */
+  await toucher(rangeeDuPoste(RAGREAGE));
+  await attendreModales(1);
+  verifier('la feuille du ragréage montre la phrase ENTIÈRE', (await page.locator('[aria-modal="true"] textarea[aria-label="Phrase du poste"]').inputValue()) === RAGREAGE);
+  await viderEtTaper(champPrixDeLaFeuille(), '30');
+  await toucher(boutonDeLaFeuille('Enregistrer'));
+  await attendreModales(0);
+  r = await texteDeLaRangeeDuPoste(RAGREAGE);
+  verifier(`changer : « 30,00 € » et « fixé le ${aujourdhui()} »`, r.includes('30,00 €') && r.includes(`fixé le ${aujourdhui()}`), r);
+  /* Retirer : la dalle — « Prix non fixé », plus aucune date. */
+  await toucher(rangeeDuPoste(DALLE));
+  await attendreModales(1);
+  await toucher(boutonDeLaFeuille('Retirer le prix de référence'));
+  await attendreModales(0);
+  r = await texteDeLaRangeeDuPoste(DALLE);
+  verifier('retirer : « Prix non fixé », plus de « fixé le »', r.includes('Prix non fixé') && !r.includes('fixé le'), r);
+  verifier(`chaque écriture est annoncée (« ${(await annonces()).join(' | ')} »)`,
+    (await annonces()).filter((a) => a === 'Votre prix de référence est changé.').length === 2 && (await annonces()).includes('Le prix de référence est retiré.'));
+  /* La page RELUE : on la quitte, on y revient, et la base le confirme. */
+  await toucher(parLibelle('Revenir en arrière'));
+  await attendre(800);
+  await toucher(parLibelle(PORTE_BASE));
+  await jusqua(surLaPage, 8000);
+  await attendre(600);
+  const relue = await postesEnBase();
+  verifier('la page relue montre les mêmes prix, et la base aussi (50 €, 30 €, aucun)',
+    (await texteDeLaRangeeDuPoste('Pose de faïence murale')).includes('50,00 €') && (await texteDeLaRangeeDuPoste(RAGREAGE)).includes('30,00 €')
+    && (await texteDeLaRangeeDuPoste(DALLE)).includes('Prix non fixé')
+    && postesDeCle(relue, { designation: 'Pose de faïence murale', unite: 'h' })[0].prixReferenceCentimes === 5000
+    && postesDeCle(relue, { designation: RAGREAGE, unite: 'm2' })[0].prixReferenceCentimes === 3000
+    && postesDeCle(relue, { designation: DALLE, unite: 'm2' })[0].prixReferenceCentimes == null);
+});
+
+await section('Dans la page : corriger la phrase d’un poste (lot P, T14)', async () => {
+  exiger(await surLaPage(), 'la page « Ma base de postes » est à l’écran');
+  exiger(postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2' }).some((p) => p.designation === CHAPE), 'la chape porte sa phrase de démonstration');
+  await oublierAnnonces();
+  const nouvelle = 'CHAPES SÈCHES avant carrelage collé';
+  await toucher(rangeeDuPoste(CHAPE));
+  await attendreModales(1);
+  await viderEtTaper(page.locator('[aria-modal="true"] textarea[aria-label="Phrase du poste"]'), nouvelle);
+  await attendre(900);
+  let tf = await texteDeLaFeuille();
+  verifier('une majuscule, un s, un accent : AUCUNE phrase d’avertissement, « Enregistrer » actif',
+    !tf.includes('ne seront plus reconnues') && !tf.includes('Un autre poste de votre base') && (await boutonDeLaFeuille('Enregistrer').getAttribute('aria-disabled')) !== 'true');
+  await toucher(boutonDeLaFeuille('Enregistrer'));
+  await attendreModales(0);
+  verifier('…enregistré, et annoncé', (await rangeeDuPoste(nouvelle).count()) === 1 && (await annonces()).includes('Le poste est enregistré.'));
+  /* La ligne du devis reste reconnue : sa référence nomme le poste. */
+  await ouvrirSejour();
+  await toucher(rangee(CHAPE));
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  verifier(`la ligne de « Sol du séjour » reste reconnue : « ${ref && ref.texte} »`,
+    !!ref && new RegExp(`^Votre prix de référence pour « ${echapper(nouvelle)} » : 52,00 € / m², fixé le ${FIXE_LE}\\.$`).test(ref.texte));
+  await fermerCarte();
+  await ouvrirLaPageDepuisMesDevis();
+  /* La phrase d'un AUTRE poste : refusée avant d'envoyer. Le cahier écrit
+     « Pose de plinthes carrelées » — au mètre linéaire, quand la chape est
+     au m² : ce ne serait PAS un doublon (la clé d'un poste porte son
+     unité). Comme le dit sa parenthèse, on choisit un poste de MÊME unité :
+     la dalle, au m². */
+  await toucher(rangeeDuPoste(nouvelle));
+  await attendreModales(1);
+  await viderEtTaper(page.locator('[aria-modal="true"] textarea[aria-label="Phrase du poste"]'), 'DALLES béton armé, épaisseur 12 cm, sur hérisson');
+  await attendre(900);
+  tf = await texteDeLaFeuille();
+  verifier(`la phrase d’un autre poste : « Un autre poste de votre base porte presque la même phrase : « ${DALLE} ». », « Enregistrer » désactivé`,
+    tf.includes(`Un autre poste de votre base porte presque la même phrase : « ${DALLE} ».`)
+    && (await boutonDeLaFeuille('Enregistrer').getAttribute('aria-disabled')) === 'true', tf.slice(0, 600));
+  await capture('p14-correction-doublon-390');
+  await viderEtTaper(page.locator('[aria-modal="true"] textarea[aria-label="Phrase du poste"]'), 'Chape liquide anhydrite');
+  await attendre(900);
+  tf = await texteDeLaFeuille();
+  verifier('une AUTRE phrase, libre : « Les lignes déjà écrites avec l’ancienne phrase ne seront plus reconnues comme ce poste. »',
+    tf.includes('Les lignes déjà écrites avec l’ancienne phrase ne seront plus reconnues comme ce poste.')
+    && (await boutonDeLaFeuille('Enregistrer').getAttribute('aria-disabled')) !== 'true');
+  await toucher(croixDeLaFeuille());
+  verifier('la croix ferme sans rien écrire : la chape garde sa phrase', (await modales()) === 0
+    && postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2' }).some((p) => p.designation === nouvelle));
+  noter('« modifié entre-temps »', 'ne se produit pas en démonstration : éprouvé par verifier-postes (G) sous node, et sur la vraie base (cahier §7.5)');
+});
+
 await section('Le régime de TVA : réel → franchise → réel, sans recharger', async () => {
   await page.evaluate(() => { window.__opusMarqueur = 'toujours la même page'; });
   await toucher(page.getByRole('tab', { name: 'Profil' }));
@@ -1309,6 +2526,13 @@ await section('Un particulier n’a pas « Mes devis »', async () => {
     && (await page.getByLabel('Mes clients', { exact: true }).count()) === 0);
   await capture('31-particulier');
 });
+
+/* LA PROPRIÉTÉ DES RANGÉES, en un chiffre : combien de propositions ont été
+   jugées, dont combien à 320 points, et combien de détails la garde d'une
+   ligne a coupés (l'historique ou l'origine, jamais le prix). */
+console.log('\nLes propositions vues');
+noter('propositions jugées « titre de deux lignes au plus + détail d’une ligne »',
+  `${PROPOSITIONS_VUES.length}, dont ${PROPOSITIONS_VUES.filter((p) => p.largeur === 320).length} à 320 points ; détails coupés : ${PROPOSITIONS_VUES.filter((p) => p.coupe).length}`);
 
 console.log('\nCe que la page a dit');
 const vraies = erreursPage.filter((e) => !/play\(\)|Failed to load resource/.test(e));

@@ -27,12 +27,40 @@
  * une suggestion) ; la carte fermée. À chaque fois, la carte LIT tous ses
  * champs (`lire()`) : une pastille touchée pendant qu'on tape le prix
  * enregistre aussi le prix.
+ *
+ * LA BASE DE POSTES (lot P, 24/10/2026) — ce que la carte en montre, de
+ * haut en bas, et pourquoi à cet endroit :
+ *   - la LIGNE DE RÉFÉRENCE, AU-DESSUS de la quantité et du prix : « Votre
+ *     prix de référence : 45,00 € / m², fixé le 14/10/2026. » Elle paraît
+ *     dès que la ligne porte un poste de la base (même phrase à une
+ *     variante d'écriture près, même unité, même fourniture), AVANT qu'on
+ *     tape le prix — c'est là qu'elle sert. Clavier ouvert, elle reste
+ *     au-dessus du champ que le défilement amène contre le clavier. Quand
+ *     la phrase de la ligne ne s'écrit pas comme celle du poste, elle NOMME
+ *     le poste (« … pour « Dépose fenêtre » … ») ;
+ *   - le BLOC « base », juste SOUS le prix : l'écart (« Vous mettez
+ *     52,00 € — c'est voulu ? ») et sa réponse « Changer ma référence » ;
+ *     « Ce poste existe déjà dans votre base, sous « … ». » quand la ligne
+ *     en est une variante, avec la sortie d'un faux rapprochement ;
+ *     « Ajouter à ma base ». Une phrase DISCRÈTE, jamais une fenêtre, jamais
+ *     un refus, jamais le rouge des refus ni l'orange : c'est une question,
+ *     et l'écart peut être une décision.
+ * La référence ne vit QUE dans la carte, jamais dans la liste du devis
+ * (réponse du propriétaire du 23/10) : la liste est l'écran qu'on montre à
+ * un client.
+ *
+ * TOUCHER « Ajouter à ma base » (ou « Changer ma référence », « Modifier »,
+ * « Fixer le prix ») : la carte s'ENREGISTRE d'abord (le même travail que
+ * quitter un champ), FERME le clavier — sur iOS, il resterait sinon attaché
+ * au champ prix caché sous la feuille —, puis DEMANDE la feuille à la
+ * saisie, qui tient l'UNIQUE état de feuille. La carte n'est pas une
+ * `Modal` : il n'y en a jamais qu'une à l'écran.
  */
 import React, {
   forwardRef, useImperativeHandle, useRef, useState,
 } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet,
+  View, Text, Pressable, ScrollView, Keyboard, StyleSheet,
 } from 'react-native';
 import {
   C, F, T, S, R, TOUCHE, APPUI, interligne, surFond,
@@ -44,8 +72,13 @@ import { CLAVIER } from '../lib/clavier';
 import { versCentimes } from '../lib/centimes';
 import {
   UNITES, UNITE_MAIN_OEUVRE, tauxLisible, versMilliemes, milliemesEnSaisie, centimesEnSaisie,
-  milliemesLisibles, valeursDeLaSuggestion,
+  milliemesLisibles,
 } from '../lib/devis';
+import {
+  etatDansLaBase, referenceDuPoste, ecartAuPoste, morceauxDeLaReference, morceauxDeLEcart, libelleEcart,
+  libelleChangerReference, PHRASE_SORTIE, posteDeLaLigne, posteDepuisLaLigne, valeursDeLaProposition, prixAEcrire,
+  changementDUnite,
+} from '../lib/postes';
 
 /* Ce qu'il manque à une ligne chiffrée, dit champ par champ : la phrase de
    la contrainte de forme (« une ligne chiffrée a une quantité, une unité… »)
@@ -67,6 +100,13 @@ const CarteLigne = forwardRef(function CarteLigne({
   piece = null, sousTotalPiece = null, sousTotalPropre = null,
   memoire = null, memoireEchec = false, onRelireMemoire = null, erreur = null, tauxHoraire = null, retrait = null,
   peutMonter = false, peutDescendre = false,
+  /* La base de postes (lot P) : le tableau lu par `OpusApp` (le MÊME objet
+     d'un rendu à l'autre : ses clés restent en cache, `postesPrepares`),
+     l'état de sa lecture, la date de déclaration du régime de TVA (une
+     référence fixée avant ne se compare plus, elle se vérifie), et les deux
+     demandes de feuille, que la SAISIE exauce. */
+  postes = null, postesEtat = 'vide', onRelirePostes = null, regimeDeclareLe = null,
+  onAjouterALaBase = null, onOuvrirPoste = null,
   onEnregistrer, onFermer, onPosteSuivant, onPosteDansPiece, onMonter, onDescendre, onRetirer,
 }, ref) {
   const refDesignation = useRef(null);
@@ -75,6 +115,12 @@ const CarteLigne = forwardRef(function CarteLigne({
   const refSol = useRef(null);
   const refMurs = useRef(null);
   const [confirmeRetrait, setConfirmeRetrait] = useState(false);
+  /* « L'unité est passée de m² à forfait : la quantité 27 est restée,
+     vérifiez-la. » — 27 m² à 900 € le forfait font sinon 24 300 € sans un
+     mot. Posée par une proposition qui change l'unité d'une ligne qui a
+     une quantité ; effacée dès que la quantité est retouchée ou qu'une
+     unité est rechoisie. */
+  const [phraseUnite, setPhraseUnite] = useState(null);
 
   const chiffree = ligne.type === 'poste' || ligne.type === 'option';
   const estPiece = ligne.type === 'piece';
@@ -115,6 +161,27 @@ const CarteLigne = forwardRef(function CarteLigne({
 
   useImperativeHandle(ref, () => ({ lire }));
 
+  /* DEMANDER UNE FEUILLE : la carte s'enregistre (tout ce qu'elle porte, lu
+     à l'instant), ferme le clavier, PUIS demande la feuille à la saisie —
+     avec les valeurs lues, pas celles du dernier rendu : une désignation
+     tapée sans quitter le champ en fait partie. */
+  const versLaFeuille = (demander) => {
+    const lu = lire();
+    onEnregistrer(lu.valeurs, lu.erreurs);
+    Keyboard.dismiss();
+    demander(lu.valeurs);
+  };
+  /* La feuille d'un poste, pré-remplie avec le prix de la LIGNE
+     (`avecLePrixDeLaLigne`) ou avec la référence du poste. Le poste est
+     relu sur les valeurs lues : une phrase changée sans quitter le champ ne
+     porte peut-être plus ce poste — alors rien ne s'ouvre, et le bloc se
+     redessine sur la vraie ligne. */
+  const ouvrirLePoste = (avecLePrixDeLaLigne) => versLaFeuille((v) => {
+    const p = posteDeLaLigne(v, postes);
+    if (!p || !onOuvrirPoste) return;
+    onOuvrirPoste(p, avecLePrixDeLaLigne ? posteDepuisLaLigne(v).prixPropose : null);
+  });
+
   const sous = (champ) => (erreur && erreur.champ === champ
     ? <Text style={s.erreur} accessibilityLiveRegion="polite">{erreur.message}</Text> : null);
 
@@ -131,6 +198,71 @@ const CarteLigne = forwardRef(function CarteLigne({
 
   const titreBarre = estPiece ? (ligne.designation || 'Pièce') : (piece ? piece.designation : TITRES[ligne.type]);
   const sousTotalBarre = estPiece ? sousTotalPropre : sousTotalPiece;
+
+  /* LA LIGNE DEVANT SA BASE — calculée sur la ligne ENREGISTRÉE (chaque
+     champ quitté, chaque pastille l'enregistre). La référence et l'écart ne
+     se disent que d'une base LUE : une base illisible ne montre pas une
+     référence peut-être périmée, et le bloc se tait (l'échec et son
+     « Réessayer » sont sous la désignation). */
+  const base = chiffree ? etatDansLaBase(ligne, postes, postesEtat) : { etat: 'sans_objet', poste: null, sous: null };
+  const lue = chiffree && postesEtat === 'ok';
+  const reference = lue ? referenceDuPoste(ligne, postes, { regimeDeclareLe }) : null;
+  const ecart = lue ? ecartAuPoste(ligne, postes, { regimeDeclareLe }) : null;
+  const morceauxReference = reference ? morceauxDeLaReference(reference) : null;
+  const morceauxEcart = ecart && !ecart.avantRegime ? morceauxDeLEcart(ecart) : null;
+  let bloc = null;
+  if (base.etat === 'dans_la_base') {
+    let etatPoste = null;
+    let pastille = null;
+    if (reference && reference.avantRegime) {
+      /* La ligne de référence dit déjà « vérifiez-le » : pas de question. */
+      pastille = <Pastille label="Modifier" nom="Modifier le prix de référence de ce poste" onPress={() => ouvrirLePoste(false)} />;
+    } else if (morceauxEcart) {
+      etatPoste = (
+        <Text style={s.aide} accessibilityLabel={libelleEcart(ecart)}>
+          {morceauxEcart.avant}
+          {morceauxEcart.prix != null && <Montant centimes={morceauxEcart.prix} enLigne style={s.aideMontant} />}
+          {morceauxEcart.apres}
+        </Text>
+      );
+      pastille = <Pastille label="Changer ma référence" nom={libelleChangerReference(ecart)} onPress={() => ouvrirLePoste(true)} />;
+    } else if (reference) {
+      if (!base.sous) etatPoste = <Text style={s.aide}>Dans votre base de postes.</Text>;
+      pastille = <Pastille label="Modifier" nom="Modifier le prix de référence de ce poste" onPress={() => ouvrirLePoste(false)} />;
+    } else {
+      etatPoste = (
+        <Text style={s.aide}>
+          {base.sous ? 'Il n’a pas encore de prix de référence.' : 'Dans votre base, sans prix de référence.'}
+        </Text>
+      );
+      pastille = <Pastille label="Fixer le prix" nom="Fixer le prix de référence de ce poste" onPress={() => ouvrirLePoste(true)} />;
+    }
+    bloc = (
+      <View style={s.bloc}>
+        {/* LES MOTS PROMIS AU PROPRIÉTAIRE, et la sortie d'un faux
+            rapprochement : la ligne garde SA phrase (c'est elle qui ira au
+            client), le poste garde la sienne. */}
+        {!!base.sous && (
+          <>
+            <Text style={s.blocTexte}>{`Ce poste existe déjà dans votre base, sous « ${base.sous} ».`}</Text>
+            <Text style={s.aide}>{PHRASE_SORTIE}</Text>
+          </>
+        )}
+        {etatPoste}
+        {!!pastille && <View style={s.pastilles}>{pastille}</View>}
+      </View>
+    );
+  } else if (base.etat === 'ajoutable' && onAjouterALaBase) {
+    bloc = (
+      <View style={s.pastilles}>
+        <Pastille
+          label="Ajouter à ma base"
+          nom="Ajouter cette ligne à ma base de postes"
+          onPress={() => versLaFeuille((v) => onAjouterALaBase(v))}
+        />
+      </View>
+    );
+  }
 
   return (
     /* LA CARTE EST MODALE pour VoiceOver : sous elle, la liste est cachée,
@@ -184,16 +316,32 @@ const CarteLigne = forwardRef(function CarteLigne({
           memoire={chiffree ? memoire : null}
           memoireEchec={chiffree && memoireEchec}
           onRelireMemoire={onRelireMemoire}
+          postes={chiffree ? postes : null}
+          postesEtat={chiffree ? postesEtat : 'sans_objet'}
+          onRelirePostes={onRelirePostes}
           autoFocus={!ligne.designation}
           accessibilityLabel={estPiece ? 'Nom de la pièce' : 'Désignation de la ligne'}
           placeholder={estPiece ? 'Salle de bains' : ligne.type === 'zone' ? 'Rez-de-chaussée' : ligne.type === 'reserve'
             ? 'Sous réserve de l’état des supports' : 'Pose de faïence murale'}
           onBlur={() => enregistrer()}
           onChoisir={(sug) => {
-            const v = valeursDeLaSuggestion(sug);
+            /* CE QU'UN APPUI RECOPIE : la phrase rangée, l'unité, la
+               fourniture, la main-d'œuvre — et un prix SEULEMENT s'il y en a
+               un (`prixAEcrire` rend `null` : « ne touchez pas au champ »).
+               Une proposition sans prix ne vide jamais un prix déjà tapé.
+               Jamais le taux, jamais « Offert », jamais la quantité. */
+            const v = valeursDeLaProposition(sug);
             if (!v) return;
-            if (refPrix.current) refPrix.current.ecrire(centimesEnSaisie(v.prixUnitaireCentimes));
-            enregistrer(v);
+            const avant = lire().valeurs;
+            const prix = prixAEcrire(v);
+            if (prix !== null && refPrix.current) refPrix.current.ecrire(prix);
+            const changement = {
+              designation: v.designation, unite: v.unite,
+              fournitureNonComprise: v.fournitureNonComprise, mainOeuvre: v.mainOeuvre,
+            };
+            if (prix !== null) changement.prixUnitaireCentimes = v.prixUnitaireCentimes;
+            setPhraseUnite(changementDUnite(avant, { unite: v.unite }));
+            enregistrer(changement);
             /* La main passe à la QUANTITÉ : c'est le seul nombre qui dépend
                du chantier. */
             if (refQuantite.current) refQuantite.current.focus();
@@ -214,11 +362,12 @@ const CarteLigne = forwardRef(function CarteLigne({
                   label={u.pastille}
                   nom={u.nom}
                   choisie={ligne.unite === u.cle}
-                  onPress={() => enregistrer({ unite: u.cle })}
+                  onPress={() => { setPhraseUnite(null); enregistrer({ unite: u.cle }); }}
                 />
               ))}
             </View>
             {sous('unite')}
+            {!!phraseUnite && <Text style={s.aide} accessibilityLiveRegion="polite">{phraseUnite}</Text>}
 
             {/* LE TAUX, au régime réel seulement : rien de coché sur la
                 première ligne, celui de la précédente ensuite. En franchise,
@@ -251,6 +400,17 @@ const CarteLigne = forwardRef(function CarteLigne({
             )}
             {sous('tauxTvaCentiemes')}
 
+            {/* LA RÉFÉRENCE, AU-DESSUS DU PRIX : elle se lit avant qu'on le
+                tape. Le montant par `Montant` (chiffres alignés, à l'encre
+                du texte), le reste en gris — une phrase discrète. */}
+            {!!morceauxReference && (
+              <Text style={s.aide}>
+                {morceauxReference.avant}
+                {morceauxReference.prix != null && <Montant centimes={morceauxReference.prix} enLigne style={s.aideMontant} />}
+                {morceauxReference.apres}
+              </Text>
+            )}
+
             {/* QUANTITÉ ET PRIX CÔTE À CÔTE : chacun environ 140 points à 320
                 de large, assez pour « 99 999 999,99 ». */}
             <View style={s.deux}>
@@ -261,7 +421,7 @@ const CarteLigne = forwardRef(function CarteLigne({
                   defaut={milliemesEnSaisie(ligne.quantiteMilliemes)}
                   placeholder="1"
                   accessibilityLabel={etiquetteQuantite}
-                  onBlur={() => enregistrer()}
+                  onBlur={() => { setPhraseUnite(null); enregistrer(); }}
                 />
               </View>
               <View style={s.moitie}>
@@ -277,6 +437,9 @@ const CarteLigne = forwardRef(function CarteLigne({
             </View>
             {sous('quantiteMilliemes')}
             {sous('prixUnitaireCentimes')}
+            {/* LE BLOC « BASE », JUSTE SOUS LE PRIX — visible sans glisser,
+                clavier fermé. */}
+            {bloc}
             {surfaces.length > 0 && (
               <View style={s.pastilles}>
                 {surfaces.map(([nom, v]) => (
@@ -435,6 +598,12 @@ const s = StyleSheet.create({
   moitie: { flex: 1, minWidth: 0 },
   interrupteurs: { gap: S.sm, marginTop: S.md },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit), marginTop: S.xs },
+  /* Le montant d'une phrase d'aide : à l'encre du texte, chiffres alignés. */
+  aideMontant: { fontSize: T.petit, color: C.ink },
+  /* Le bloc « base » : de la STRUCTURE posée sous le prix, sans fond ni
+     couleur d'alerte — c'est une question, pas un refus. */
+  bloc: { gap: S.xs, marginTop: S.sm },
+  blocTexte: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit) },
   erreur: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit), marginTop: S.xs },
   retrait: { marginTop: S.xl, gap: S.sm, borderTopWidth: 1, borderTopColor: C.line, paddingTop: S.md },
   action: {

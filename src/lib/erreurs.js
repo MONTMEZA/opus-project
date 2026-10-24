@@ -56,9 +56,10 @@
  * « Vos informations de devis : », et `messageDeContrainte` leur met la
  * majuscule quand elles s'affichent seules, sous un champ.
  *
- * LES NOMS SONT CEUX DE LA BASE, au caractère près. `verifier-emetteur` et
- * `verifier-clients` le comparent : une phrase rangée sous un nom qui
- * n'existe pas ne s'afficherait jamais, et rien ne le dirait.
+ * LES NOMS SONT CEUX DE LA BASE, au caractère près. `verifier-emetteur`,
+ * `verifier-clients`, `verifier-devis` et `verifier-postes` le comparent :
+ * une phrase rangée sous un nom qui n'existe pas ne s'afficherait jamais,
+ * et rien ne le dirait.
  */
 const TEXTE_TROP_LONG = 'un de vos textes dépasse la longueur prévue : le formulaire indique la '
   + 'limite de chaque champ.';
@@ -197,6 +198,36 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   devis_tva_arrondi_check: APPLICATION_EN_RETARD,
   devis_tva_nb_check: APPLICATION_EN_RETARD,
   devis_tva_taux_check: APPLICATION_EN_RETARD,
+
+  /* --- La base de postes : section 50 (lot P du module devis) ---
+     LES CINQ CONTRAINTES, ET L'INDEX DU DOUBLON. Un 23505 se reconnaît au
+     nom de son index, que `messageClair` lit après « constraint » : la
+     phrase est donc rangée ici sous `idx_base_postes_rapprochement`, comme
+     une contrainte. La feuille d'ajout refuse AVANT d'envoyer
+     (`validerPoste`, `postes.js`, dans l'ordre alphabétique de la base) et,
+     sur un 23505, elle relit la base et MONTRE le poste qui existe : ces
+     phrases ne sortent donc que d'une version en retard, d'un autre
+     appareil, ou d'une relecture ratée — et ce jour-là elles disent quoi
+     faire, jamais « schema.sql n'a pas été rejoué ».
+
+     La phrase de `base_poste_designation_check` est aussi celle d'une
+     phrase de plus de 2 000 caractères : au-delà, la clé de
+     rapprochement n'existe pas (la garde de la section 50.0), la
+     contrainte de la clé se tait, et c'est celle de la phrase qui parle.
+     `verifier-postes` (D) compare ces six noms à la section 50. */
+  base_poste_designation_check: 'la phrase du poste est vide ou dépasse 2\u00a0000 caractères : écrivez-la, ou '
+    + 'raccourcissez-la.',
+  base_poste_prix_check: 'un prix de référence s’écrit au centime, entre 0,01\u00a0€ et 99\u00a0999\u00a0999,99\u00a0€. '
+    + 'Pour ne pas en fixer, laissez le champ vide.',
+  base_poste_prix_date_check: 'la date du prix de référence est posée par la base : mettez Opus à jour, puis '
+    + 'réessayez.',
+  base_poste_rapprochement_check: 'la phrase du poste ne contient ni lettre ni chiffre : écrivez ce que vous '
+    + 'faites, puis ajoutez-la.',
+  base_poste_unite_check: 'un poste a toujours une unité, une des sept de vos devis : choisissez-la sur la '
+    + 'ligne, puis ajoutez-la.',
+  idx_base_postes_rapprochement: 'ce poste est déjà dans votre base, sous une phrase presque identique — même '
+    + 'unité, même fourniture. Son prix de référence se change depuis la ligne (« Changer ma référence ») ou '
+    + 'dans « Ma base de postes ».',
 });
 
 /**
@@ -237,6 +268,55 @@ export const REFUS_DEVIS = Object.freeze({
   OP017_urgence: "Vous avez déjà 20 devis pour cette urgence : supprimez un brouillon dont vous n'avez plus besoin "
     + "avant d'en commencer un autre.",
 });
+
+/**
+ * LE REFUS QUE LA BASE ÉCRIT ELLE-MÊME POUR UN POSTE (section 50.4 de
+ * `schema.sql`), AU MOT PRÈS — OP018, le plafond de 1 000 postes par
+ * entreprise.
+ *
+ * La même raison que `REFUS_DEVIS` : `messageClair` rend la phrase de la
+ * base TELLE QUELLE (un code `OP…` porte déjà son français) ; cette copie
+ * sert à la DÉMONSTRATION (`src/data/devis-demo.js`), qui doit refuser avec
+ * les mots exacts de la base. « 1 000 » s'écrit ici avec une espace
+ * ORDINAIRE, contrairement aux autres nombres de ce fichier : c'est celle
+ * de `schema.sql`, dont la section 50 ne porte aucun caractère invisible,
+ * pas même une espace insécable. `verifier-postes` compare les deux, octet
+ * pour octet, et compare ses chiffres au plafond (`v_plafond_postes`).
+ */
+export const REFUS_POSTES = Object.freeze({
+  OP018: 'Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.',
+});
+
+/**
+ * UN POSTE MODIFIÉ OU RETIRÉ ENTRE-TEMPS — et ça, ce n'est PAS la base qui
+ * l'écrit (section 50.2 de `schema.sql`).
+ *
+ * Modifier ou retirer un poste part avec une CONDITION : « si sa date de
+ * dernière écriture (`modifie_le`) est encore celle que j'ai lue ». Une
+ * écriture partie avec une date périmée — le réseau a traîné, l'artisan a
+ * corrigé depuis un autre appareil — ne trouve aucune ligne : la base ne
+ * refuse rien, elle ne touche simplement rien. Laissée là, l'écran croirait
+ * l'écriture faite : un échec qui ressemble à un succès. `api.js` lève donc
+ * `ErreurPoste` avec cette phrase dès qu'une telle écriture n'a touché
+ * aucune ligne, et l'écran RELIT la base — d'où « il a été relu ».
+ *
+ * Pas d'horloge `generation` comme pour un devis : un poste s'écrit
+ * rarement, une écriture à la fois, et chacune attend sa réponse. La date
+ * que la base pose suffit à reconnaître une écriture partie trop tôt.
+ */
+export const MODIFIE_ENTRE_TEMPS = 'Ce poste a été modifié entre-temps — peut-être depuis un autre appareil. '
+  + 'Il a été relu : vérifiez, puis recommencez si besoin.';
+
+/** L'erreur du « modifié entre-temps » : déjà en français, `messageClair` la
+ *  rend telle quelle (comme `ErreurAssistant`). Elle vit ici, et pas dans
+ *  `api.js`, parce que `node` sait ouvrir ce fichier : `verifier-postes` la
+ *  fait tourner. */
+export class ErreurPoste extends Error {
+  constructor(message = MODIFIE_ENTRE_TEMPS) {
+    super(message);
+    this.name = 'ErreurPoste';
+  }
+}
 
 /**
  * UNE SUPPRESSION QUI N'A RIEN SUPPRIMÉ PARCE QU'UN AUTRE APPAREIL A ÉCRIT
@@ -476,7 +556,9 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
   /* LES CODES MAISON DE LA BASE (OP001 et suivants — OP011 naît avec la
      section 46, OP012 avec la section 47 : une version ancienne de
      l'application qui écrit encore des tarifs dans `sos_availability` ;
-     OP003 reste réservé au devis remis) PORTENT DÉJÀ LEUR PHRASE,
+     OP013 à OP017 avec la section 49, OP018 — le plafond de la base de
+     postes — avec la section 50 ; OP003 reste réservé au devis remis)
+     PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler
      ici, c'est écrire la même règle à deux endroits — et la première des
@@ -492,6 +574,12 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      ou « délai » dans une phrase du serveur ne disent pas que le téléphone
      est hors ligne. */
   if (String((e && e.name) || '') === 'ErreurAssistant' && brut) return brut;
+
+  /* Même raison pour un POSTE modifié ou retiré entre-temps (`ErreurPoste`,
+     levée par `api.js`) : sa phrase dit déjà ce qui s'est passé et quoi
+     faire. Repassée par les règles qui suivent, « appareil » ou « relu »
+     n'y changeraient rien — mais la règle est la même : traduite une fois. */
+  if (String((e && e.name) || '') === 'ErreurPoste' && brut) return brut;
 
   /* La base a répondu qu'elle avait ARRÊTÉ l'opération (57014) : ce n'est
      pas le réseau, et le dire serait envoyer chercher la panne au mauvais
@@ -538,6 +626,19 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      pose), puis par le texte. Les textes ci-dessous sont ceux de
      PostgreSQL 16, relevés tels quels ; `verifier-emetteur` fait tourner
      cette fonction dessus. */
+
+  /* 428C9 — UNE VALEUR ENVOYÉE DANS UNE COLONNE QUE LA BASE CALCULE
+     ELLE-MÊME : une colonne GÉNÉRÉE, comme la clé de rapprochement d'un
+     poste (`base_postes.cle_rapprochement`, section 50). Aucune version
+     d'Opus ne l'envoie : seul un client modifié ou une version en retard le
+     fait. Le texte de PostgreSQL 16, relevé tel quel — « cannot insert a
+     non-DEFAULT value into column … », « column … can only be updated to
+     DEFAULT » — sortait en anglais ; et ce n'est pas une saisie à corriger,
+     c'est l'application à mettre à jour. */
+  if (code === '428C9' || m.includes('non-default value into column') || m.includes('can only be updated to default')) {
+    return phrase(sujet, 'Opus a envoyé une valeur que la base calcule elle-même : mettez Opus à jour, puis '
+      + 'réessayez.');
+  }
 
   /* 23503 — une clé étrangère. Deux sens, qui ne se disent pas pareil :
      on écrit une ligne qui désigne quelque chose qui a disparu, ou l'on
