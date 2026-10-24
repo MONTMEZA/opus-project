@@ -121,6 +121,14 @@ const CarteLigne = forwardRef(function CarteLigne({
      une quantité ; effacée dès que la quantité est retouchée ou qu'une
      unité est rechoisie. */
   const [phraseUnite, setPhraseUnite] = useState(null);
+  /* « RETOUCHÉE » VEUT DIRE CHANGÉE, pas « quittée » : la proposition donne
+     la main à la quantité, donc un simple champ quitté — le clavier qu'on
+     ferme pour relire, la liste qu'on fait glisser — effaçait la phrase qui
+     demande justement de vérifier cette quantité. Trouvé sur une capture de
+     `mesure-devis` (lot P, étape 7) : la phrase disparaissait au premier
+     défilement. On retient donc le texte de la quantité au moment où la
+     phrase est posée, et on ne l'efface que s'il a changé. */
+  const quantiteALaPhrase = useRef(null);
 
   const chiffree = ligne.type === 'poste' || ligne.type === 'option';
   const estPiece = ligne.type === 'piece';
@@ -340,6 +348,7 @@ const CarteLigne = forwardRef(function CarteLigne({
               fournitureNonComprise: v.fournitureNonComprise, mainOeuvre: v.mainOeuvre,
             };
             if (prix !== null) changement.prixUnitaireCentimes = v.prixUnitaireCentimes;
+            quantiteALaPhrase.current = refQuantite.current ? refQuantite.current.lire() : null;
             setPhraseUnite(changementDUnite(avant, { unite: v.unite }));
             enregistrer(changement);
             /* La main passe à la QUANTITÉ : c'est le seul nombre qui dépend
@@ -421,7 +430,10 @@ const CarteLigne = forwardRef(function CarteLigne({
                   defaut={milliemesEnSaisie(ligne.quantiteMilliemes)}
                   placeholder="1"
                   accessibilityLabel={etiquetteQuantite}
-                  onBlur={() => { setPhraseUnite(null); enregistrer(); }}
+                  onBlur={() => {
+                    if (!refQuantite.current || refQuantite.current.lire() !== quantiteALaPhrase.current) setPhraseUnite(null);
+                    enregistrer();
+                  }}
                 />
               </View>
               <View style={s.moitie}>
@@ -448,6 +460,8 @@ const CarteLigne = forwardRef(function CarteLigne({
                     label={`${nom} ${milliemesLisibles(v)} m²`}
                     nom={`${nom === 'Sol' ? 'Surface du sol' : 'Surface des murs'} : ${milliemesLisibles(v)} mètres carrés`}
                     onPress={() => {
+                      /* Une surface recopiée RETOUCHE la quantité. */
+                      setPhraseUnite(null);
                       if (refQuantite.current) refQuantite.current.ecrire(milliemesEnSaisie(v));
                       enregistrer({ quantiteMilliemes: v });
                     }}

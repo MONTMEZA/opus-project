@@ -671,9 +671,33 @@ const lirePropositions = async () => (await page.evaluate((prefixe) => [...docum
       lignesTitre: lignes(titre),
       lignesDetail: lignes(detail),
       coupe: !!detail && (detail.scrollWidth > detail.clientWidth + 1 || detail.scrollHeight > detail.clientHeight + 1),
+      visible: (() => {
+        /* CE QUE L'ŒIL LIT du détail, et pas seulement s'il est coupé : les
+           caractères dont la boîte tient avant les points de suspension que
+           la garde d'une ligne pose au bout (leur largeur mesurée dans la
+           police CALCULÉE du détail). Sans cela, « jamais le prix ni
+           « fourniture non comprise » » (T23) resterait une promesse. */
+        if (!detail) return '';
+        const cs = getComputedStyle(detail);
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        const ellipse = detail.scrollWidth > detail.clientWidth + 1 ? ctx.measureText(String.fromCharCode(0x2026)).width : 0;
+        const limite = detail.getBoundingClientRect().left + detail.clientLeft + detail.clientWidth - ellipse + 0.5;
+        const r = document.createRange();
+        const marche = document.createTreeWalker(detail, NodeFilter.SHOW_TEXT);
+        let vu = '';
+        for (let n = marche.nextNode(); n; n = marche.nextNode()) {
+          for (let i = 0; i < n.length; i += 1) {
+            r.setStart(n, i); r.setEnd(n, i + 1);
+            if (r.getBoundingClientRect().right > limite) return vu;
+            vu += n.data[i];
+          }
+        }
+        return vu;
+      })(),
       h: Math.round(e.getBoundingClientRect().height),
     };
-  }), PREFIXE)).map((p) => ({ ...p, libelle: net(p.libelle), titre: net(p.titre), detail: net(p.detail) }));
+  }), PREFIXE)).map((p) => ({ ...p, libelle: net(p.libelle), titre: net(p.titre), detail: net(p.detail), visible: net(p.visible) }));
 /* Toutes les propositions affichées pendant la mesure, pour le compte rendu
    de la propriété « deux lignes + une ligne ». */
 const PROPOSITIONS_VUES = [];
@@ -687,7 +711,16 @@ const jugerPropositions = (ou, ps) => {
   const fautives = ps.filter((p) => p.lignesTitre > 2 || p.lignesTitre < 1 || p.lignesDetail !== 1 || p.h < TOUCHE - 0.5);
   verifier(`${ou}, à ${largeur} : chaque rangée = un titre de deux lignes au plus + un détail d’UNE ligne, 44 points au moins (${ps.map((p) => `${p.lignesTitre}+${p.lignesDetail} l., ${p.h} pt`).join(' ; ')})`,
     ps.length > 0 && fautives.length === 0, fautives.map((p) => `« ${p.titre} » ${p.lignesTitre}+${p.lignesDetail} ${p.h}`).join(' | '));
-  ps.filter((p) => p.coupe).forEach((p) => noter(`${ou} — détail coupé par sa garde d’une ligne`, p.detail));
+  /* CE QUE LA GARDE COUPE (T23) : le prix et son unité — le premier morceau
+     du détail — et « fourniture non comprise » restent LUS en entier ; seul
+     l'historique ou l'origine peut partir. Et un détail non coupé se lit
+     tout entier : c'est le témoin de la mesure elle-même. */
+  const mal = ps.filter((p) => !p.visible.startsWith(p.detail.split(' · ')[0])
+    || (p.detail.includes('fourniture non comprise') && !p.visible.includes('fourniture non comprise'))
+    || (!p.coupe && p.visible !== p.detail));
+  verifier(`${ou}, à ${largeur} : ce que l’œil lit du détail garde le prix${ps.some((p) => p.detail.includes('fourniture non comprise')) ? ' et « fourniture non comprise »' : ''} (${ps.map((p) => `« ${p.visible}${p.coupe ? '…' : ''} »`).join(' ; ')})`,
+    ps.length > 0 && mal.length === 0, mal.map((p) => `« ${p.detail} » lu « ${p.visible} »`).join(' | '));
+  ps.filter((p) => p.coupe).forEach((p) => noter(`${ou} — détail coupé par sa garde d’une ligne`, `« ${p.detail} », lu « ${p.visible}… »`));
 };
 /** Taper dans la désignation (vidée), attendre que la frappe retombe, et
  *  lire les propositions. */
@@ -736,15 +769,38 @@ const phraseDeLaCarte = (debut) => page.evaluate((d) => {
 
 /** Trois captures du même écran, à 390, 375 et 320 points de large — et la
  *  fenêtre remise comme elle était. */
-const capturerAuxTroisLargeurs = async (nom) => {
+const capturerAuxTroisLargeurs = async (nom, viser = null) => {
   if (!DOSSIER) return;
   const avant = page.viewportSize();
+  /* `viser` : un morceau de la phrase MESURÉE. À 375 × 667 et 320 × 568 elle
+     tombe souvent sous le pli ; une capture qui ne la montre pas ne prouve
+     rien. On l'amène au milieu du cadre, puis on remet chaque défilement où
+     il était — les mesures suivantes repartent du même écran. */
+  if (viser) {
+    await page.evaluate(() => {
+      window.__opusDefilements = [...document.querySelectorAll('*')]
+        .filter((e) => e.scrollHeight > e.clientHeight + 1).map((e) => [e, e.scrollTop]);
+    });
+  }
   for (const [l, h] of [[390, 844], [375, 667], [320, 568]]) {
     await page.setViewportSize({ width: l, height: h });
     await attendre(500);
+    if (viser) {
+      await page.evaluate((m) => {
+        const e = [...document.querySelectorAll('div[dir="auto"],span')].reverse().find((x) => (x.innerText || '').includes(m));
+        if (e) e.scrollIntoView({ block: 'center' });
+      }, viser);
+      await attendre(400);
+    }
     await page.screenshot({ path: `${DOSSIER}/${nom}-${l}.png` });
   }
   await page.setViewportSize(avant);
+  if (viser) {
+    await page.evaluate(() => {
+      (window.__opusDefilements || []).forEach(([e, t]) => { if (e.isConnected) e.scrollTop = t; });
+      window.__opusDefilements = null;
+    });
+  }
   await attendre(500);
 };
 /** Retirer la ligne ouverte, en deux appuis. */
@@ -906,7 +962,7 @@ await section('La base de postes illisible : « Lecture impossible », et la car
     ps.length >= 1 && ps.every((p) => !/de votre base/.test(p.libelle)), ps.map((p) => p.libelle).join(' | '));
   await retirerLaLigneOuverte();
   /* PENDANT LA LECTURE : aucun « Ajouter à ma base » (on proposerait un
-     doublon d'un poste pas encore lu). La seuil à 25 € est ajoutable dès
+     doublon d'un poste pas encore lu). La ligne du seuil à 25 € est ajoutable dès
      que la base est lue. */
   await toucher(rangee(SEUIL));
   await toucher(parLibelle(RELIRE_BASE));
@@ -920,7 +976,7 @@ await section('La base de postes illisible : « Lecture impossible », et la car
   await page.evaluate(() => { window.__opusPausePostes = null; });
   await toucher(parLibelle(RELIRE_BASE));
   const ajoutable = await jusqua(async () => (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 1, 4000, 100);
-  verifier('lecture rétablie : la phrase d’échec part, et la seuil devient « Ajouter à ma base »',
+  verifier('lecture rétablie : la phrase d’échec part, et la ligne du seuil dit « Ajouter à ma base »',
     !!ajoutable && !(await texte()).includes(ECHEC_BASE));
   await fermerCarte();
   await toucher(parLibelle('Revenir en arrière'));
@@ -1579,7 +1635,7 @@ await section('« Sol du séjour », la chape à 52 € : la référence au-dess
     !!changer && changer.height >= TOUCHE - 0.5 && changer.width >= TOUCHE - 0.5);
   await jugerMontants('La carte de la chape, avec sa référence et son écart');
   await jugerCibles('La carte de la chape, avec sa référence et son écart', (c) => c.dansCarte);
-  await capturerAuxTroisLargeurs('p01-chape-reference-ecart');
+  await capturerAuxTroisLargeurs('p01-chape-reference-ecart', 'Votre prix de référence');
   /* Le prix remis à 45 : l'écart part, la référence reste. */
   await viderEtTaper(parLibelle('Prix unitaire HT'), '45');
   await toucher(parLibelle('Quantité'));
@@ -1641,7 +1697,7 @@ await section('« Depose… » sans accent : la variante reconnue, la référenc
   verifier('« Changer ma référence » est là, « Ajouter à ma base » ne l’est PAS',
     (await page.getByLabel('Faire de 20,00 € votre prix de référence pour ce poste', { exact: true }).count()) === 1
     && (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0);
-  await capturerAuxTroisLargeurs('p03-depose-variante');
+  await capturerAuxTroisLargeurs('p03-depose-variante', 'Ce poste existe déjà');
   await fermerCarte();
 });
 
@@ -1679,7 +1735,7 @@ await section('Les propositions d’une ligne neuve, à 320 points : une par phr
 
   /* « faience » : la base au forfait, puis la faïence sans référence, qui
      porte son dernier prix — et un appui le RECOPIE, par-dessus un prix
-     déjà tapé (25, la seuil). */
+     déjà tapé (25, celui du seuil). */
   exiger((await parLibelle('Prix unitaire HT').inputValue()) === '25', 'un prix est déjà tapé dans la ligne (25)');
   ps = await taperDesignation('faience');
   verifier(`« faience » : deux rangées, la base au forfait d’abord (${ps.map((p) => p.titre).join(' | ')})`,
@@ -1715,6 +1771,7 @@ await section('Les propositions d’une ligne neuve, à 320 points : une par phr
   verifier(`« chape », à 320 : les deux mêmes propositions, la base d’abord (${ps.map((p) => p.detail).join(' | ')})`,
     ps.length === 2 && /de votre base, prix de référence 45,00 €/.test(ps[0].libelle) && /fourniture non comprise/.test(ps[1].libelle));
   jugerPropositions('« chape »', ps);
+  await capture('p04d-chape-320');
   noter('un poste SANS référence et SANS dernier prix laisse le prix tapé en place (T10)',
     'la démonstration n’en a pas — c’est le cas 16 de verifier-postes, sous node');
   /* « Les », « Sas », « Aux » : rien — un mot court ne trouve que ce qui le
@@ -2008,15 +2065,24 @@ await section('La faïence (12 h) devient un forfait : la phrase qui le DIT, pui
   const taux = await parLibelle('TVA à 10 %').boundingBox();
   verifier(`la phrase de T11, sous les unités : « ${phrase && phrase.texte} »`,
     !!phrase && phrase.texte === attendue && phrase.y >= unites - 0.5 && !!taux && phrase.bas <= taux.y + 0.5);
-  await capturerAuxTroisLargeurs('p10-changement-d-unite');
+  await capturerAuxTroisLargeurs('p10-changement-d-unite', 'L’unité est passée');
+  /* « RETOUCHÉE » VEUT DIRE CHANGÉE : la quantité QUITTÉE sans changement
+     (le clavier qu'on ferme pour relire) garde la phrase — elle demande
+     justement de vérifier ce nombre. Puis une quantité tapée l'efface. */
   await toucher(parLibelle('Quantité'));
   await toucher(parLibelle('Prix unitaire HT'));
-  verifier('la quantité retouchée : la phrase s’efface', !(await texte()).includes('L’unité est passée'));
+  await attendre(400);
+  verifier('la quantité quittée SANS changement : la phrase reste', (await texte()).includes(attendue));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await toucher(parLibelle('Prix unitaire HT'));
+  await attendre(400);
+  verifier('la quantité retouchée (12 → 1) : la phrase s’efface', !(await texte()).includes('L’unité est passée'));
   /* Remise en l'état : la faïence à l'heure, à 45 €, et le modèle intact. */
   ps = await taperDesignation('faïence');
   const aLHeure = ps.findIndex((p) => p.titre === 'Pose de faïence murale');
   exiger(aLHeure >= 0, '« faïence » propose la faïence à l’heure');
   await toucherProposition(aLHeure);
+  await viderEtTaper(parLibelle('Temps estimé'), '12');
   await viderEtTaper(parLibelle('Taux horaire (HT)'), '45');
   await toucher(parLibelle('Temps estimé'));
   await fermerCarte();
