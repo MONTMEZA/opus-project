@@ -92,13 +92,31 @@
  *     détail d'UNE ligne, une rangée de 44 points (à 320 de large) ;
  *   - sur la carte : la référence AU-DESSUS du champ prix, l'écart dessous,
  *     leurs couleurs CALCULÉES (`C.muted` pour la phrase, `C.ink` pour le
- *     montant), « Ce poste existe déjà … sous « … » » sur une variante, et
- *     RIEN de tout cela dans la liste du devis (Q3 a) ;
+ *     montant), « Ce poste existe déjà dans votre base. » sur une variante
+ *     — la phrase du poste citée UNE fois, la référence la nommant déjà —,
+ *     et RIEN de tout cela dans la liste du devis (Q3 a) ;
  *   - les deux feuilles (« Ajouter à ma base », la feuille d'un poste),
- *     jamais deux à la fois, et la course « ce poste existe déjà » ;
+ *     jamais deux à la fois, et la course « ce poste existe déjà » : la
+ *     décision avant les explications, atteignable à 320 × 568, et le prix
+ *     tapé GARDÉ quand le poste arrive pendant la frappe ;
+ *   - la feuille d'un poste ouverte depuis la carte : le prix actuel écrit,
+ *     aucun « Retirer » ; dans la page, « Retirer le prix de référence » en
+ *     DEUX appuis ;
  *   - la page « Ma base de postes », ses deux portes, sa recherche, ses
- *     écritures ; et la base illisible : « Lecture impossible », jamais
- *     « Aucun poste ».
+ *     écritures ; la base illisible : « Lecture impossible », jamais
+ *     « Aucun poste » ; une relecture ratée, puis une écriture et
+ *     « Réessayer » : la page et la carte retrouvent la base ;
+ *   - les propositions de même titre, distinguées en tête de leur détail
+ *     (« avec la fourniture » / « fourniture non comprise »), et la phrase
+ *     d'un changement d'unité qui survit à une seconde proposition.
+ *
+ * La relecture « écran » du lot P (ECRAN1) a sorti ce que ces écrans
+ * décident vers des fonctions pures de `postes.js` et de `devis.js`, que
+ * `verifier-postes` (partie E bis) FAIT TOURNER sous `node`. Ce qui reste ici
+ * seulement, parce que seul un navigateur le dit : une POSITION (la
+ * référence au-dessus du prix, la décision dans l'écran à 320 × 568), une
+ * COULEUR calculée, une feuille qui change d'état PENDANT qu'on tape, une
+ * course entre une lecture et une écriture, et un geste.
  *
  * CE QU'IL SIMULE, ET COMMENT IL LIT LA BASE
  * ------------------------------------------
@@ -155,7 +173,9 @@ import {
   MENTION_FRANCHISE, PHRASE_RETENUE, DELAI_PAR_DEFAUT, avertissementDelai, coherenceRegime, tauxLisible,
 } from '../src/lib/devis.js';
 import { cleDeRapprochement } from '../src/lib/rapprochement.js';
-import { PHRASE_SORTIE, changementDUnite } from '../src/lib/postes.js';
+import {
+  PHRASE_SORTIE, PHRASE_RETRAIT_DU_POSTE, PHRASE_POSTES_D_UN_CLIENT, changementDUnite, phraseSuppressionDuBrouillon,
+} from '../src/lib/postes.js';
 import { centimesLisibles } from '../src/lib/centimes.js';
 import { messageDeContrainte } from '../src/lib/erreurs.js';
 import { DELAI_ECRITURE } from '../src/lib/file-ecriture.js';
@@ -715,7 +735,16 @@ const jugerPropositions = (ou, ps) => {
      du détail — et « fourniture non comprise » restent LUS en entier ; seul
      l'historique ou l'origine peut partir. Et un détail non coupé se lit
      tout entier : c'est le témoin de la mesure elle-même. */
-  const mal = ps.filter((p) => !p.visible.startsWith(p.detail.split(' · ')[0])
+  /* Le premier morceau qui porte un montant, et tout ce qui le précède :
+     depuis la relecture « écran » (ECRAN9), deux titres identiques
+     s'ouvrent par ce qui les distingue (« avec la fourniture »), AVANT le
+     prix — la distinction et le prix doivent être lus, tous les deux. */
+  const jusquAuPrix = (d) => {
+    const m = d.split(' · ');
+    const i = m.findIndex((x) => /\d,\d\d €/.test(x));
+    return m.slice(0, i < 0 ? 1 : i + 1).join(' · ');
+  };
+  const mal = ps.filter((p) => !p.visible.startsWith(jusquAuPrix(p.detail))
     || (p.detail.includes('fourniture non comprise') && !p.visible.includes('fourniture non comprise'))
     || (!p.coupe && p.visible !== p.detail));
   verifier(`${ou}, à ${largeur} : ce que l’œil lit du détail garde le prix${ps.some((p) => p.detail.includes('fourniture non comprise')) ? ' et « fourniture non comprise »' : ''} (${ps.map((p) => `« ${p.visible}${p.coupe ? '…' : ''} »`).join(' ; ')})`,
@@ -764,6 +793,7 @@ const phraseDeLaCarte = (debut) => page.evaluate((d) => {
   return {
     texte: e.innerText, y: b.y, bas: b.y + b.height,
     couleur: getComputedStyle(e).color, couleurMontant: montant ? getComputedStyle(montant).color : null,
+    police: `${getComputedStyle(e).fontFamily} ${getComputedStyle(e).fontWeight}`,
   };
 }, debut).then((r) => (r ? { ...r, texte: net(r.texte) } : null));
 
@@ -1284,12 +1314,25 @@ await section('La deuxième chape : la base d’abord, une proposition par phras
   const ps = await lirePropositions();
   verifier(`exactement DEUX propositions, comptées par leur préfixe commun « ${PREFIXE}» (${ps.length})`, ps.length === 2,
     ps.map((p) => p.libelle).join(' | '));
-  verifier('…la BASE en tête : « de votre base, prix de référence 45,00 € », et « réf. du … » dans son détail',
-    !!ps[0] && /, de votre base, prix de référence 45,00 €/.test(ps[0].libelle)
-    && new RegExp(`^45,00 € / m² · réf\\. du ${FIXE_LE}$`).test(ps[0].detail), ps[0] && `${ps[0].libelle} — ${ps[0].detail}`);
-  verifier('…puis 38,00 € « fourniture non comprise »',
-    !!ps[1] && /au prix de 38,00 €/.test(ps[1].libelle) && /fourniture non comprise/.test(ps[1].libelle)
-    && /^38,00 € \/ m² · fourniture non comprise/.test(ps[1].detail), ps[1] && `${ps[1].libelle} — ${ps[1].detail}`);
+  /* DEUX TITRES IDENTIQUES SE DISTINGUENT EN TÊTE DU DÉTAIL (relecture
+     « écran » du lot P, ECRAN9) : la seule différence entre les deux chapes
+     — la fourniture — vient AVANT le prix, à l'encre du texte, et le
+     libellé parlé de la première dit « avec la fourniture ». Avant, elle
+     n'était que dans la ligne grise de la seconde, après le prix. */
+  verifier('…la BASE en tête : « avec la fourniture · 45,00 € / m² · réf. du … », et son libellé le dit',
+    !!ps[0] && /, par mètre carré, avec la fourniture, de votre base, prix de référence 45,00 €/.test(ps[0].libelle)
+    && new RegExp(`^avec la fourniture · 45,00 € / m² · réf\\. du ${FIXE_LE}$`).test(ps[0].detail), ps[0] && `${ps[0].libelle} — ${ps[0].detail}`);
+  verifier('…puis « fourniture non comprise · 38,00 € / m² · … »',
+    !!ps[1] && /au prix de 38,00 €/.test(ps[1].libelle) && /, fourniture non comprise,/.test(ps[1].libelle)
+    && /^fourniture non comprise · 38,00 € \/ m²/.test(ps[1].detail), ps[1] && `${ps[1].libelle} — ${ps[1].detail}`);
+  const encres = await page.evaluate((prefixe) => [...document.querySelectorAll(`[aria-label^="${prefixe}"]`)].map((e) => {
+    const detail = [...e.children].filter((c) => (c.innerText || '').trim())[1];
+    const premier = detail && [...detail.childNodes].find((n) => n.nodeType === 1 && (n.innerText || '').trim());
+    return premier ? { mot: premier.innerText, couleur: getComputedStyle(premier).color, gris: getComputedStyle(detail).color } : null;
+  }), PREFIXE);
+  verifier(`…la distinction est à l’encre du texte, le reste du détail en gris (${encres.map((x) => x && `« ${x.mot} » ${x.couleur} / ${x.gris}`).join(' ; ')})`,
+    encres.length === 2 && encres.every((x) => !!x && x.couleur === ENCRE && x.gris === GRIS)
+    && encres[0].mot === 'avec la fourniture' && encres[1].mot === 'fourniture non comprise');
   verifier('…et 52,00 € n’apparaît NULLE PART (masqué par la base)', ps.every((p) => !/52,00/.test(`${p.libelle} ${p.detail}`)));
   const cles = ps.map((p) => cleDuLibelle(p.libelle));
   verifier(`…leurs clés, reconstruites depuis les libellés par rapprochement.js sous node, sont toutes différentes (${cles.join(' ≠ ')})`,
@@ -1686,14 +1729,26 @@ await section('« Depose… » sans accent : la variante reconnue, la référenc
   verifier(`la référence NOMME le poste : « ${ref && ref.texte} »`,
     !!ref && new RegExp(`^Votre prix de référence pour « ${echapper(DEPOSE)} » : 18,00 € / m², fixé le ${FIXE_LE}\\.$`).test(ref.texte));
   verifier('…au-dessus du champ prix', !!ref && !!champ && ref.bas <= champ.y + 0.5);
+  /* LA PHRASE DU POSTE N'EST CITÉE QU'UNE FOIS (relecture « écran »,
+     ECRAN9) : la référence la nomme déjà au-dessus du prix, donc le bloc ne
+     la recopie pas — « Ce poste existe déjà dans votre base. » puis la
+     sortie, dans UN paragraphe, à la police de la référence (pas en gras :
+     sur une ligne où l'artisan n'a rien demandé, il se lisait comme un
+     avertissement de doublon). Mesuré à 320 × 568, de la référence au
+     bouton : 274 points avant, 254 après. */
   const existe = await phraseDeLaCarte('Ce poste existe déjà');
-  const sortie = await phraseDeLaCarte('Ce n’est pas le même travail');
   const ecart = await phraseDeLaCarte('Vous mettez');
-  verifier(`le bloc : « ${existe && existe.texte} »`, !!existe && existe.texte === `Ce poste existe déjà dans votre base, sous « ${DEPOSE} ».`);
-  verifier('…puis la phrase de sortie, mot pour mot', !!sortie && sortie.texte === net(PHRASE_SORTIE));
+  verifier(`le bloc, un seul paragraphe : « ${existe && existe.texte} »`,
+    !!existe && existe.texte === `Ce poste existe déjà dans votre base. ${net(PHRASE_SORTIE)}`);
+  verifier(`…à la police et à l’encre de la référence, pas en gras (${existe && existe.police} ; ${ref && ref.police})`,
+    !!existe && !!ref && existe.police === ref.police && existe.couleur === ref.couleur);
+  const citations = ((await texte()).match(new RegExp(`« ${echapper(DEPOSE)} »`, 'g')) || []).length;
+  verifier(`…et la phrase du poste citée UNE fois dans la carte (${citations})`, citations === 1);
   verifier(`…puis l’écart : « ${ecart && ecart.texte} »`, !!ecart && ecart.texte === 'Vous mettez 20,00 € — c’est voulu ?');
-  verifier('…dans cet ordre, et sous le champ prix', !!existe && !!sortie && !!ecart && !!champ
-    && champ.y + champ.height <= existe.y + 0.5 && existe.y < sortie.y && sortie.y < ecart.y);
+  verifier('…dans cet ordre, et sous le champ prix', !!existe && !!ecart && !!champ
+    && champ.y + champ.height <= existe.y + 0.5 && existe.y < ecart.y);
+  const bouton = await page.getByLabel('Faire de 20,00 € votre prix de référence pour ce poste', { exact: true }).boundingBox();
+  if (ref && bouton) noter('de la référence au bouton, à cette largeur', `${Math.round(bouton.y + bouton.height - ref.y)} points (${page.viewportSize().width} de large)`);
   verifier('« Changer ma référence » est là, « Ajouter à ma base » ne l’est PAS',
     (await page.getByLabel('Faire de 20,00 € votre prix de référence pour ce poste', { exact: true }).count()) === 1
     && (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0);
@@ -1819,12 +1874,15 @@ await section('Une ligne neuve « chapes seches avant carrelage colle » : ce po
   await toucher(parLibelle('mètre carré'));
   await attendre(500);
   const existe = await phraseDeLaCarte('Ce poste existe déjà');
-  const sortie = await phraseDeLaCarte('Ce n’est pas le même travail');
   const ref = await phraseDeLaCarte('Votre prix de référence');
   const champ = await parLibelle('Prix unitaire HT').boundingBox();
   verifier('pas d’« Ajouter à ma base »', (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 0);
-  verifier(`« ${existe && existe.texte} », et la phrase de sortie`,
-    !!existe && existe.texte === `Ce poste existe déjà dans votre base, sous « ${CHAPE} ».` && !!sortie && sortie.texte === net(PHRASE_SORTIE));
+  /* La référence nomme le poste au-dessus : le bloc ne recopie pas sa
+     phrase (ECRAN9), et la sortie suit dans le même paragraphe. */
+  verifier(`« ${existe && existe.texte} » — sans recopier la phrase du poste`,
+    !!existe && existe.texte === `Ce poste existe déjà dans votre base. ${net(PHRASE_SORTIE)}`);
+  const citations = ((await texte()).match(new RegExp(`« ${echapper(CHAPE)} »`, 'g')) || []).length;
+  verifier(`la phrase du poste citée UNE fois dans la carte (${citations})`, citations === 1);
   verifier(`la référence, au-dessus du prix, NOMME le poste : « ${ref && ref.texte} »`,
     !!ref && !!champ && ref.bas <= champ.y + 0.5
     && new RegExp(`^Votre prix de référence pour « ${echapper(CHAPE)} » : 45,00 € / m², fixé le ${FIXE_LE}\\.$`).test(ref.texte));
@@ -1895,17 +1953,64 @@ const courseExisteDeja = async (prix) => {
   await attendreModales(1);
   await viderEtTaper(champPrixDeLaFeuille(), String(prix));
   await toucher(boutonDeLaFeuille('Ajouter à ma base'));
-  const existe = await jusqua(async () => (await texteDeLaFeuille()).includes('Ce poste existe déjà dans votre base.'), 15000, 150);
+  const existe = await jusqua(async () => (await texteDeLaFeuille()).includes(`Le poste : « ${SEUIL} »`), 15000, 150);
   verifier(`la feuille passe d’ELLE-MÊME à « Ce poste existe déjà » (${Date.now() - t0} ms après le premier envoi)`, !!existe);
-  const tf = await texteDeLaFeuille();
-  verifier('…elle montre la ligne, le poste, l’explication et la sortie',
-    tf.includes(`Votre ligne : « ${SEUILS} »`) && tf.includes(`Le poste : « ${SEUIL} »`)
-    && tf.includes('Opus les reconnaît comme la même phrase : majuscules, accents, espaces, ponctuation et pluriel mis à part.')
-    && tf.includes(net(PHRASE_SORTIE)), tf.slice(0, 500));
-  verifier('…et aucun bouton pour créer un second poste ni remplacer sa phrase',
-    (await boutonDeLaFeuille('Ajouter à ma base').count()) === 0 && !/Remplacer|second poste/.test(tf));
+  const tf = await verifierLaFeuilleExisteDeja();
   return { t0, tf };
 };
+/** CE QUE MONTRE LA FEUILLE « CE POSTE EXISTE DÉJÀ » (CE3-8, et la relecture
+ *  « écran » : ECRAN8, ECRAN10) — son titre, dit UNE fois ; le poste, son
+ *  unité dite en mots (« À l’unité », jamais « Unité : unité » — TEXTES16) ; et la
+ *  DÉCISION (le prix, les boutons) AVANT les explications (votre ligne, ce
+ *  qu'Opus reconnaît, la sortie) : à 320 × 568 elles poussaient « Fermer »
+ *  sous le pli. */
+const verifierLaFeuilleExisteDeja = async () => {
+  const tf = await texteDeLaFeuille();
+  verifier('…elle montre le poste, son unité en mots, la ligne, l’explication et la sortie',
+    tf.startsWith('Ce poste existe déjà') && tf.includes(`Le poste : « ${SEUIL} »`) && tf.includes('À l’unité')
+    && !tf.includes('Unité :')
+    && tf.includes(`Votre ligne : « ${SEUILS} »`)
+    && tf.includes('Opus la reconnaît comme la phrase de ce poste : majuscules, accents, espaces, ponctuation et pluriel mis à part.')
+    && tf.includes(net(PHRASE_SORTIE)), tf.slice(0, 500));
+  verifier('…son titre n’est pas redit à la ligne suivante (« Ce poste existe déjà dans votre base. » n’y est plus)',
+    (tf.match(/Ce poste existe déjà/g) || []).length === 1);
+  const ordre = await page.evaluate(() => {
+    const m = [...document.querySelectorAll('[aria-modal="true"]')].pop();
+    if (!m) return null;
+    const haut = (debut) => {
+      const e = [...m.querySelectorAll('div[dir="auto"]')].find((x) => (x.innerText || '').trim().startsWith(debut));
+      return e ? e.getBoundingClientRect().top : null;
+    };
+    const fermer = [...m.querySelectorAll('button')].filter((b) => (b.innerText || '').trim() === 'Fermer').pop();
+    return { fermer: fermer ? fermer.getBoundingClientRect().top : null, ligne: haut('Votre ligne'), sortie: haut('Ce n’est pas le même travail') };
+  });
+  verifier(`…la décision avant les explications : « Fermer » (${ordre && Math.round(ordre.fermer)}) au-dessus de « Votre ligne » (${ordre && Math.round(ordre.ligne)}) et de la sortie (${ordre && Math.round(ordre.sortie)})`,
+    !!ordre && ordre.fermer != null && ordre.ligne != null && ordre.sortie != null && ordre.fermer < ordre.ligne && ordre.ligne < ordre.sortie);
+  verifier('…et aucun bouton pour créer un second poste ni remplacer sa phrase',
+    (await boutonDeLaFeuille('Ajouter à ma base').count()) === 0 && !/Remplacer|second poste/.test(tf));
+  return tf;
+};
+/** OÙ TOMBE LA DÉCISION DE LA FEUILLE : le champ du prix, « Changer ma
+ *  référence », « Fermer » — et la LIMITE de ce qu'on voit sans défiler :
+ *  le bas de l'écran, ou celui de la zone qui défile s'il est plus haut
+ *  (un bouton coupé par elle n'est pas atteignable). */
+const decisionDeLaFeuille = () => page.evaluate(() => {
+  const m = [...document.querySelectorAll('[aria-modal="true"]')].pop();
+  if (!m) return null;
+  const bouton = (t) => [...m.querySelectorAll('button')].filter((b) => (b.innerText || '').trim() === t).pop();
+  const champ = m.querySelector('input[aria-label^="Prix de référence"]');
+  const elements = [['champ', champ], ['Changer ma référence', bouton('Changer ma référence')], ['Fermer', bouton('Fermer')]]
+    .filter(([, e]) => !!e).map(([nom, e]) => {
+      const b = e.getBoundingClientRect();
+      return { nom, haut: b.top, bas: b.bottom };
+    });
+  let limite = window.innerHeight;
+  for (let e = champ && champ.parentElement; e && e !== document.body; e = e.parentElement) {
+    const o = getComputedStyle(e).overflowY;
+    if (o === 'auto' || o === 'scroll' || o === 'hidden') limite = Math.min(limite, e.getBoundingClientRect().bottom);
+  }
+  return { elements, limite };
+});
 /** La file des postes vidée : la pause remise, puis une lecture — elle passe
  *  APRÈS le second ajout (son refus 23505) et la relecture qu'il déclenche. */
 const viderLaFileDesPostes = async () => {
@@ -1944,9 +2049,13 @@ await section('Retirer un poste depuis « Ma base de postes », en deux appuis (
   await toucher(rangeeDuPoste(SEUIL));
   await attendreModales(1);
   await toucher(parLibelle('Retirer ce poste de ma base'));
-  verifier('le premier appui ne retire rien : il demande, et dit ce qui arrivera',
+  /* CE QUI ARRIVERA VRAIMENT (relecture « textes », TEXTES2) : la mémoire
+     des prix peut reproposer la phrase — jamais « plus proposé sur vos
+     devis ». */
+  const tRetrait = await texteDeLaFeuille();
+  verifier('le premier appui ne retire rien : il demande, et dit ce qui arrivera — la mémoire peut reproposer la phrase',
     (await modales()) === 1 && (await page.getByLabel('Confirmer : retirer ce poste de ma base', { exact: true }).count()) === 1
-    && (await texteDeLaFeuille()).includes('Il ne sera plus proposé sur vos devis.'));
+    && tRetrait.includes(net(PHRASE_RETRAIT_DU_POSTE)) && !tRetrait.includes('plus proposé sur vos devis'), tRetrait.slice(-300));
   await toucher(parLibelle('Confirmer : retirer ce poste de ma base'));
   await attendreModales(0);
   const apres = Number(((await texte()).match(/(\d+) postes?/) || [])[1]);
@@ -1973,6 +2082,19 @@ await section('« Ce poste existe déjà » : la même course, prix porté à 24
     (await boutonDeLaFeuille('Changer ma référence').count()) === 1 && (await boutonDeLaFeuille('Fermer').count()) === 1
     && (await champPrixDeLaFeuille().inputValue()) === '24');
   await jugerCibles('La feuille « Ce poste existe déjà »', (c) => c.dansModale);
+  /* À 320 × 568 (relecture « écran », ECRAN10) : le champ, « Changer ma
+     référence » et « Fermer » tiennent dans l'écran ET dans la zone qui
+     défile, sans défiler. Avant, les explications passaient d'abord :
+     « Changer ma référence » était coupé par le bas de la zone, « Fermer »
+     à 568–612, hors de l'écran. */
+  await page.setViewportSize({ width: 320, height: 568 });
+  await attendre(700);
+  const pos = await decisionDeLaFeuille();
+  verifier(`à 320 × 568, la décision est atteignable SANS DÉFILER (${pos && pos.elements.map((e) => `${e.nom} ${Math.round(e.haut)}–${Math.round(e.bas)}`).join(', ')} ; limite ${pos && Math.round(pos.limite)})`,
+    !!pos && pos.elements.length === 3 && pos.elements.every((e) => e.haut >= 0 && e.bas <= pos.limite + 0.5));
+  await capture('p07c-existe-deja-24-320');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(600);
   await capturerAuxTroisLargeurs('p07b-existe-deja-24');
   await oublierAnnonces();
   await toucher(boutonDeLaFeuille('Changer ma référence'));
@@ -1986,6 +2108,74 @@ await section('« Ce poste existe déjà » : la même course, prix porté à 24
   verifier(`la carte de « Seuils… » : la référence nomme le poste, à 24,00 € (« ${ref && ref.texte} »), et l’écart parle`,
     !!ref && ref.texte.startsWith(`Votre prix de référence pour « ${SEUIL} » : 24,00 € / u`)
     && (await texte()).includes('Vous mettez 23,00 € — c’est voulu ?'));
+  await fermerCarte();
+});
+
+/** Retirer un poste depuis « Ma base de postes », en deux appuis, puis
+ *  revenir à « Sol du séjour » — la remise en état d'une section qui a
+ *  besoin que ce poste n'existe pas encore. */
+const retirerDeLaBase = async (designation) => {
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await toucher(parLibelle(PORTE_BASE));
+  await jusqua(surLaPage, 8000);
+  await attendre(600);
+  await toucher(rangeeDuPoste(designation));
+  await attendreModales(1);
+  await toucher(parLibelle('Retirer ce poste de ma base'));
+  await toucher(parLibelle('Confirmer : retirer ce poste de ma base'));
+  await attendreModales(0);
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await ouvrirLeDevis('Sol du séjour');
+};
+
+await section('« Ce poste existe déjà » qui arrive PENDANT la frappe : le prix tapé reste (lot P, ECRAN4)', async () => {
+  /* La relecture « écran » (ECRAN4) : la course, mais le second prix tapé
+     SANS quitter le champ ni valider. Le premier ajout arrive pendant ce
+     temps ; la feuille jugeait « même prix » sur le prix PORTÉ (25) et
+     retirait le champ — le 24 disparaissait sans un mot. Elle juge
+     désormais sur ce que l'artisan a touché : un prix tapé garde le
+     champ, et « Changer ma référence ». */
+  if (postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' }).length) await retirerDeLaBase(SEUIL);
+  exiger(await sejourEstLa(), 'les six lignes de « Sol du séjour » sont là');
+  exiger(postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' }).length === 0, 'aucun poste « Seuil de porte… » dans la base');
+  await remettreModalesMax();
+  await oublierAnnonces();
+  await page.evaluate((ms) => { window.__opusPausePostes = ms; }, PAUSE_COURSE);
+  await toucher(rangee(SEUIL));
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  const t0 = Date.now();
+  await toucher(boutonDeLaFeuille('Ajouter à ma base'));
+  await toucherLeVoile();
+  await fermerCarte();
+  await toucher(rangee(SEUILS));
+  const encore = (await page.getByLabel(AJOUTER_BASE, { exact: true }).count()) === 1;
+  verifier(`la carte de « Seuils… » dit ENCORE « Ajouter à ma base » (${Date.now() - t0} ms après le premier envoi)`, encore);
+  if (!encore) throw new Error('le premier ajout est arrivé avant la seconde ligne : la course n’a pas eu lieu');
+  await toucher(parLibelle(AJOUTER_BASE));
+  await attendreModales(1);
+  await viderEtTaper(champPrixDeLaFeuille(), '24');
+  const avant = await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'));
+  verifier(`24 tapé, le champ garde le curseur, rien n’est validé (« ${avant} »)`, /^Prix de référence/.test(avant || '') && (await modales()) === 1);
+  const arrive = await jusqua(async () => (await texteDeLaFeuille()).includes(`Le poste : « ${SEUIL} »`), 15000, 150);
+  verifier(`la feuille passe d’ELLE-MÊME à « Ce poste existe déjà » (${Date.now() - t0} ms après le premier envoi)`, !!arrive);
+  const tf = await verifierLaFeuilleExisteDeja();
+  verifier(`…le champ est LÀ et vaut 24 — le prix tapé, gardé (« ${(await champPrixDeLaFeuille().count()) ? await champPrixDeLaFeuille().inputValue() : 'aucun champ'} »)`,
+    (await champPrixDeLaFeuille().count()) === 1 && (await champPrixDeLaFeuille().inputValue()) === '24');
+  verifier('…« Son prix de référence : 25,00 € », jamais « Il a déjà ce prix », et « Changer ma référence »',
+    tf.includes('Son prix de référence : 25,00 € / u') && !tf.includes('Il a déjà ce prix')
+    && (await boutonDeLaFeuille('Changer ma référence').count()) === 1);
+  await capture('p07d-existe-deja-pendant-la-frappe-390');
+  await viderLaFileDesPostes();
+  await oublierAnnonces();
+  await toucher(boutonDeLaFeuille('Changer ma référence'));
+  await attendreModales(0);
+  const seuils = postesDeCle(await postesEnBase(), { designation: SEUIL, unite: 'u' });
+  verifier(`« Changer ma référence » : le poste vaut 24,00 € (${seuils.map((p) => euros(p.prixReferenceCentimes)).join(', ')}), UN seul poste`,
+    seuils.length === 1 && seuils[0].prixReferenceCentimes === 2400 && (await annonces()).includes('Votre prix de référence est changé.'));
+  verifier(`jamais deux fenêtres à la fois (au plus ${await modalesMax()})`, (await modalesMax()) <= 1);
   await fermerCarte();
 });
 
@@ -2028,6 +2218,19 @@ await section('La chape à 52 € → « Changer ma référence » : la feuille 
   verifier(`la feuille du poste, pré-remplie avec le prix de la LIGNE (« ${await champPrixDeLaFeuille().inputValue()} »)`,
     tf.startsWith('Prix de référence') && tf.includes(CHAPE) && (await champPrixDeLaFeuille().inputValue()) === '52');
   verifier('…posée PAR-DESSUS la carte, qui reste montée dessous', (await page.getByLabel(RETOUR_CARTE, { exact: true }).count()) === 1);
+  /* LE PRIX ACTUEL EST ÉCRIT (relecture « écran », ECRAN3) : le champ porte
+     52, le prix de la LIGNE ; « Le prix actuel a été fixé le … », seul, se
+     lisait comme si 52 € était déjà la référence. */
+  verifier('…la feuille DIT le prix actuel : « Votre prix de référence actuel : 45,00 € / m², fixé le … »',
+    new RegExp(`Votre prix de référence actuel : 45,00 € / m², fixé le ${FIXE_LE}\\.`).test(tf) && !tf.includes('Le prix actuel a été fixé'), tf.slice(0, 400));
+  /* DEPUIS LA CARTE, RIEN NE SE RETIRE (ECRAN2) : on venait « changer sa
+     référence » ; deux boutons qui détruisent (« Retirer le prix », 8 points
+     sous « Enregistrer », en UN appui ; « Retirer ce poste ») ne s'y
+     montrent plus. Retirer se fait dans la page, où l'on vient pour ça, et
+     la feuille le dit. */
+  verifier('…aucun « Retirer » depuis la carte, et la phrase qui renvoie à la page',
+    (await boutonDeLaFeuille('Retirer le prix de référence').count()) === 0 && (await boutonDeLaFeuille('Retirer ce poste').count()) === 0
+    && tf.includes('Pour retirer ce prix ou ce poste, ouvrez « Ma base de postes ».'));
   await jugerCibles('La feuille d’un poste, depuis la carte', (c) => c.dansModale);
   await capturerAuxTroisLargeurs('p09-feuille-poste');
   await toucher(boutonDeLaFeuille('Enregistrer'));
@@ -2066,6 +2269,19 @@ await section('La faïence (12 h) devient un forfait : la phrase qui le DIT, pui
   verifier(`la phrase de T11, sous les unités : « ${phrase && phrase.texte} »`,
     !!phrase && phrase.texte === attendue && phrase.y >= unites - 0.5 && !!taux && phrase.bas <= taux.y + 0.5);
   await capturerAuxTroisLargeurs('p10-changement-d-unite', 'L’unité est passée');
+  /* UNE SECONDE PROPOSITION DE MÊME UNITÉ NE L'EFFACE PAS (relecture
+     « écran », ECRAN7) : la quantité 12 est toujours là, au forfait, et la
+     phrase qui demande de la vérifier doit rester. Avant, une proposition
+     qui ne changeait pas d'unité rendait `null` et l'effaçait — 12 × 180 €,
+     sans un mot. */
+  ps = await taperDesignation('gravats');
+  const auForfaitAussi = ps.findIndex((p) => /\/ forfait/.test(p.detail));
+  exiger(auForfaitAussi >= 0, '« gravats » propose une ligne au forfait');
+  await toucherProposition(auForfaitAussi);
+  await attendre(400);
+  const encore = await phraseDeLaCarte('L’unité est passée');
+  verifier(`une SECONDE proposition au forfait : la phrase reste (« ${encore && encore.texte} »), la quantité aussi (${await parLibelle('Quantité').inputValue()})`,
+    !!encore && encore.texte === attendue && (await parLibelle('Quantité').inputValue()) === '12');
   /* « RETOUCHÉE » VEUT DIRE CHANGÉE : la quantité QUITTÉE sans changement
      (le clavier qu'on ferme pour relire) garde la phrase — elle demande
      justement de vérifier ce nombre. Puis une quantité tapée l'efface. */
@@ -2154,7 +2370,9 @@ await section('« … chez Mme Martin », dans le devis de Mme Martin : l’aver
   await toucher(parLibelle(AJOUTER_BASE));
   await attendreModales(1);
   const tf = await texteDeLaFeuille();
-  const avert = 'Cette phrase contient « Martin », le nom du client de ce devis et une formule comme « chez » ou « Mme », qui désigne souvent un client. Elle resterait dans votre base même si vous supprimez ce client.';
+  /* La virgule avant le dernier « et », quand un morceau en porte déjà une
+     (relecture « textes », TEXTES10). */
+  const avert = 'Cette phrase contient « Martin », le nom du client de ce devis, et une formule comme « chez » ou « Mme », qui désigne souvent un client. Elle resterait dans votre base même si vous supprimez ce client.';
   verifier(`l’avertissement nomme le client : « ${avert} »`, tf.includes(avert), tf.slice(0, 600));
   verifier('…et le bouton reste actif', (await boutonDeLaFeuille('Ajouter à ma base').getAttribute('aria-disabled')) !== 'true');
   await capture('p11c-avertissement-nom-390');
@@ -2187,6 +2405,13 @@ await section('« Ma base de postes » : deux portes, une page (lot P)', async (
   const t = await texte();
   verifier(`la page : « ${base.length} postes », la phrase d’en-tête, aucun « Nouveau poste »`,
     t.includes(`${base.length} postes`) && t.includes('Aucun écran d’Opus ne les montre à quelqu’un d’autre que vous.') && !/Nouveau poste/.test(t));
+  /* Les mots de la carte, pas un mot de plus (relecture « écran », ECRAN8) :
+     « écart » n'apparaît nulle part ailleurs ; la carte demande « c’est
+     voulu ? ». Et un poste à l'unité se dit « à l’unité ». */
+  verifier('l’aide parle comme la carte : « Pour ne plus voir la question « c’est voulu ? » sur un poste, retirez son prix de référence. »',
+    t.includes('Pour ne plus voir la question « c’est voulu ? » sur un poste, retirez son prix de référence.') && !t.includes('écart'));
+  verifier('…et « À l’unité », jamais « Unité : unité » ni « Unité : à l’unité » (TEXTES16)',
+    t.includes('À l’unité') && !t.includes('Unité : unité') && !t.includes('Unité : à l’unité'));
   const hauteurs = await page.locator('[aria-label^="Ouvrir le poste "]').evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().height)));
   verifier(`les rangées font 44 points au moins (${hauteurs.length} montées : ${hauteurs.join(', ')})`, hauteurs.length > 0 && hauteurs.every((h) => h >= TOUCHE));
   const plinthes = await texteDeLaRangeeDuPoste('Pose de plinthes carrelées');
@@ -2272,7 +2497,18 @@ await section('Dans la page : fixer, changer, retirer un prix de référence (lo
   /* Retirer : la dalle — « Prix non fixé », plus aucune date. */
   await toucher(rangeeDuPoste(DALLE));
   await attendreModales(1);
-  await toucher(boutonDeLaFeuille('Retirer le prix de référence'));
+  /* DEUX APPUIS (relecture « écran », ECRAN2) : le lot n'a aucun historique
+     des prix ; un appui distrait, 8 points sous « Enregistrer », effaçait
+     85,00 € et sa date. Le premier appui DIT ce qui part, le second retire
+     — la règle de « Retirer ce poste », juste en dessous. */
+  await toucher(parLibelle('Retirer le prix de référence'));
+  const confirmer = new RegExp(`Le prix de référence 85,00 € / m², fixé le ${FIXE_LE}, sera effacé : Opus n’en garde aucune trace\\.`);
+  verifier('le premier appui ne retire rien : il demande, et dit ce qui part (« Le prix de référence 85,00 € / m², fixé le …, sera effacé : Opus n’en garde aucune trace. »)',
+    (await modales()) === 1 && (await page.getByLabel('Confirmer : retirer le prix de référence', { exact: true }).count()) === 1
+    && confirmer.test(await texteDeLaFeuille())
+    && postesDeCle(await postesEnBase(), { designation: DALLE, unite: 'm2' })[0].prixReferenceCentimes === 8500);
+  await capture('p13b-retirer-le-prix-confirmation-390');
+  await toucher(parLibelle('Confirmer : retirer le prix de référence'));
   await attendreModales(0);
   r = await texteDeLaRangeeDuPoste(DALLE);
   verifier('retirer : « Prix non fixé », plus de « fixé le »', r.includes('Prix non fixé') && !r.includes('fixé le'), r);
@@ -2340,6 +2576,73 @@ await section('Dans la page : corriger la phrase d’un poste (lot P, T14)', asy
   verifier('la croix ferme sans rien écrire : la chape garde sa phrase', (await modales()) === 0
     && postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2' }).some((p) => p.designation === nouvelle));
   noter('« modifié entre-temps »', 'ne se produit pas en démonstration : éprouvé par verifier-postes (G) sous node, et sur la vraie base (cahier §7.5)');
+});
+
+await section('Une relecture ratée, une écriture, « Réessayer » : la base ne reste jamais « en lecture » (lot P, ECRAN5, ECRAN6)', async () => {
+  /* La relecture « écran » (ECRAN5) : une relecture ratée, puis une
+     écriture partie de la page (feuille fermée pendant l'envoi), puis
+     « Réessayer ». La file des postes passe une requête à la fois : la
+     lecture revient APRÈS l'écriture, elle est périmée, et elle était JETÉE
+     sans remettre l'état — la page perdait son compte, et la carte d'un
+     devis ne montrait plus rien (ni référence, ni échec, ni « Réessayer »),
+     jusqu'à ce qu'on rouvre la page. Une lecture jetée se relance une fois,
+     et sa relance remet l'état. */
+  exiger(await surLaPage(), 'la page « Ma base de postes » est à l’écran');
+  const n = (await postesEnBase()).length;
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await page.evaluate(() => { window.__opusPausePostes = 60000; });
+  await toucher(parLibelle(PORTE_BASE));
+  const ratee = await jusqua(async () => (await texte()).includes('Liste non actualisée'), 14000, 200);
+  verifier(`la relecture qui ne revient pas : « Liste non actualisée », la liste lue gardée (« ${n} postes »)`,
+    !!ratee && (await texte()).includes(`${n} postes`));
+  /* ECRAN6 : une recherche sans résultat sous une liste GARDÉE dit qu'elle
+     ne trouve rien — pas « Lecture impossible », et pas un SECOND
+     « Réessayer » sous celui de la bande. */
+  await toucher(parLibelle('Chercher dans ma base de postes'));
+  await taper('zzzz');
+  await attendre(900);
+  const tz = await texte();
+  const reessayer = await page.getByRole('button', { name: 'Réessayer', exact: true }).count();
+  verifier(`…« zzzz » : « Aucun poste ne contient « zzzz ». », jamais « Lecture impossible », un seul « Réessayer » (${reessayer})`,
+    tz.includes('Aucun poste ne contient « zzzz ».') && !tz.includes('Lecture impossible') && reessayer === 1);
+  await capture('p15a-recherche-apres-relecture-ratee-390');
+  await toucher(parLibelle('Effacer la recherche'));
+  await attendre(600);
+  await page.evaluate(() => { window.__opusPausePostes = 3000; });
+  await oublierAnnonces();
+  await toucher(rangeeDuPoste(RAGREAGE));
+  await attendreModales(1);
+  await viderEtTaper(champPrixDeLaFeuille(), '31');
+  await toucher(boutonDeLaFeuille('Enregistrer'));
+  await toucher(croixDeLaFeuille());
+  verifier('l’écriture partie (31 € pour le ragréage), sa feuille fermée pendant l’envoi', (await modales()) === 0);
+  const t0 = Date.now();
+  await toucher(page.getByRole('button', { name: 'Réessayer', exact: true }).first());
+  const remise = await jusqua(async () => {
+    const t = await texte();
+    return t.includes(`${n} postes`) && !t.includes('Liste non actualisée') && !t.includes('Lecture de votre base');
+  }, 15000, 200);
+  const r = await texteDeLaRangeeDuPoste(RAGREAGE);
+  verifier(`« Réessayer » : la page retrouve son compte (« ${n} postes »), sans bande, au bout de ${Math.round((Date.now() - t0) / 100) / 10} s`, !!remise);
+  verifier(`…la rangée du ragréage dit 31,00 €, la base aussi, et c’est annoncé (« ${(await annonces()).join(' | ')} »)`,
+    r.includes('31,00 €') && (await annonces()).includes('Votre prix de référence est changé.')
+    && postesDeCle(await postesEnBase(), { designation: RAGREAGE, unite: 'm2' })[0].prixReferenceCentimes === 3100);
+  await capture('p15b-page-apres-lecture-jetee-390');
+  await page.evaluate(() => { window.__opusPausePostes = null; });
+  /* Et dans un devis : la carte de la chape retrouve sa référence (52 €
+     depuis « Changer ma référence », plus haut — donc pas d'écart), et
+     aucune phrase d'échec : la base est LUE. */
+  await toucher(parLibelle('Revenir en arrière'));
+  await page.getByText('Nouveau devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await ouvrirLeDevis('Sol du séjour');
+  await toucher(rangee(CHAPE));
+  await attendre(800);
+  const ref = await phraseDeLaCarte('Votre prix de référence');
+  verifier(`…la carte de la chape : la référence est là (« ${ref && ref.texte} »), sans phrase d’échec ni « Réessayer »`,
+    !!ref && /: 52,00 € \/ m², fixé le /.test(ref.texte) && !(await texte()).includes(ECHEC_BASE)
+    && (await page.getByLabel(RELIRE_BASE, { exact: true }).count()) === 0);
+  await fermerCarte();
 });
 
 await section('Le régime de TVA : réel → franchise → réel, sans recharger', async () => {
@@ -2491,6 +2794,9 @@ await section('La fiche de Mme Martin : « Ses devis », « Faire un devis », c
   await toucher(page.getByRole('button', { name: 'Supprimer cette fiche', exact: true }));
   const t = await texte();
   verifier('le second appui de « Supprimer » dit « avec l’adresse des travaux »', /devis : (ils resteront, détachés|il restera, détaché) de sa fiche, avec l’adresse des travaux/.test(t));
+  /* …ET LA BASE DE POSTES (relecture « textes », TEXTES1). */
+  verifier('…et la base de postes : « cherchez son nom dans « Ma base de postes » », et le devis d’un autre client',
+    t.includes(net(PHRASE_POSTES_D_UN_CLIENT)), t.slice(-500));
   await capture('27-supprimer-fiche');
   await toucher(parLibelle('Faire un devis pour Mme Martin'));
   await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
@@ -2501,12 +2807,63 @@ await section('La fiche de Mme Martin : « Ses devis », « Faire un devis », c
   await attendre(900);
 });
 
+/* LA FICHE D'UN CLIENT SANS DEVIS (relecture « textes », TEXTES1) : son seul
+   avertissement ne paraissait que s'il avait des devis — or c'est quand il
+   n'en a pas qu'une phrase de la base peut être la dernière copie de son nom. */
+await section('La fiche d’un client SANS devis : supprimer dit quand même la base de postes (TEXTES1)', async () => {
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(900);
+  await toucher(parLibelle('Mes clients'));
+  await toucher(parLibelle('Ouvrir la fiche de SCI du Moulin'));
+  await page.getByText('Ses devis', { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const sesDevis = await page.locator('[aria-label^="Ouvrir le devis "]').count();
+  exiger(sesDevis === 0, `la SCI du Moulin n’a aucun devis en démonstration (${sesDevis})`);
+  await toucher(page.getByRole('button', { name: 'Supprimer cette fiche', exact: true }));
+  const t = await texte();
+  verifier('sans devis : aucune phrase sur des devis, mais la base de postes, « cherchez son nom », et le devis d’un autre client',
+    !t.includes('Ce client a ') && t.includes(net(PHRASE_POSTES_D_UN_CLIENT)), t.slice(-500));
+  await capture('27b-supprimer-fiche-sans-devis');
+  /* On n'appuie PAS une seconde fois : la fiche reste. On la ferme, puis on
+     quitte le carnet. */
+  await toucher(parLibelle('Fermer'));
+  await attendre(600);
+  await toucher(parLibelle('Revenir en arrière'));
+  await attendre(900);
+});
+
 await section('« Supprimer ce brouillon », deux appuis', async () => {
   await allerAMesDevis();
+  /* CE QUI RESTE (relecture « textes », TEXTES8) : « Rénovation salle de
+     bains » a des postes rangés depuis lui, « Sol du séjour » aucun. La
+     phrase attendue est celle que la fonction rend sur les postes de la
+     démonstration ENCORE EN BASE à cet instant. */
+  const enBase = await postesEnBase();
+  const attendueRenovation = phraseSuppressionDuBrouillon({ postes: enBase, postesEtat: 'ok', devisId: DEVIS_DEMO_IDS.renovation });
+  exiger(/Les postes que vous en avez rangés dans votre base de postes restent\./.test(attendueRenovation),
+    'au moins un poste de la démonstration vient encore de « Rénovation salle de bains »');
+  await ouvrirLeDevis('Rénovation salle de bains');
+  await toucher(bouton('Supprimer ce brouillon'));
+  const tR = await texte();
+  verifier('« Rénovation salle de bains » : le second appui dit que ses postes restent dans la base',
+    tR.includes(net(attendueRenovation)), tR.slice(-400));
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), 8000);
+  await attendre(800);
   const avant = await page.locator('button[aria-label^="Ouvrir le brouillon "]').count();
   await ouvrirLeDevis('Sol du séjour');
   await toucher(bouton('Supprimer ce brouillon'));
   verifier('le premier appui ne supprime rien, il demande', (await bouton('Confirmer la suppression de ce brouillon').count()) === 1 && await dansLaSaisie());
+  /* « Sol du séjour » : les sections précédentes y ont peut-être rangé des
+     postes (« Ajouter à ma base ») — l'attente se CALCULE sur la base telle
+     qu'elle est, et la mesure dit quel cas elle a vu. Le cas « aucun poste »
+     est éprouvé par `verifier-postes`, qui fait tourner la fonction. */
+  const attendueSejour = phraseSuppressionDuBrouillon({ postes: await postesEnBase(), postesEtat: 'ok', devisId: DEVIS_DEMO_IDS.sejour });
+  const tS = await texte();
+  verifier(`« Sol du séjour » : le second appui dit ce que la fonction rend sur la base actuelle (${
+    /restent\.$/.test(attendueSejour) ? 'des postes en viennent' : 'aucun poste n’en vient'})`,
+    tS.includes(net(attendueSejour))
+    && (/restent\.$/.test(attendueSejour) || !tS.includes('Les postes que vous en avez rangés')), attendueSejour);
   await toucher(bouton('Confirmer la suppression de ce brouillon'));
   await jusqua(async () => !(await dansLaSaisie()), 5000);
   await attendre(800);

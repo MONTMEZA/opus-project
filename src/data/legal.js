@@ -33,9 +33,9 @@ export const VERSION = '2026-10-24';
 /* 24/10/2026 — LA BASE DE POSTES (lot P du module devis, section 50 de
    `schema.sql`). Ce qui a changé DE FOND :
      - la collecte s'allonge : la base de postes d'un artisan — les phrases
-       qu'il y range, mot pour mot, leur unité, la fourniture et la
-       main-d'œuvre, le prix de référence qu'il fixe et sa date, et le devis
-       depuis lequel il a ajouté le poste ;
+       qu'il y range, mot pour mot, leur unité, si la fourniture est comprise
+       et s'il s'agit de main-d'œuvre, le prix de référence qu'il fixe et sa
+       date, et le devis depuis lequel il a ajouté le poste ;
      - une FINALITÉ nouvelle, et étroite : lui proposer, pendant qu'il
        chiffre, ses phrases et ses prix de référence, et lui signaler un
        écart avec ce prix — exécution du contrat. Une finalité se fixe à la
@@ -47,16 +47,31 @@ export const VERSION = '2026-10-24';
        lire les deux, et un prix de référence est un prix FUTUR, la donnée
        la plus sensible en droit des ententes. La phrase ajoutée à « Vos
        tarifs et vos prix » se pose À CÔTÉ de celle que `verifier-legal`
-       tient mot pour mot, jamais au milieu ;
+       tient mot pour mot, jamais au milieu ; l'exception (compter les
+       lignes, vérifier la structure) dit « sans lire vos prix ni les
+       phrases de votre base de postes », et l'aveu « un engagement, pas une
+       impossibilité technique » est écrit une fois, pour les deux ;
      - LA VÉRITÉ SUR L'EFFACEMENT, une fois de plus (CD1, mesuré sur
        PostgreSQL) : la base n'a aucune COLONNE de client, mais une phrase
        est le texte libre de l'artisan, qui peut en nommer un — et elle
        survit à la suppression de la fiche ET du devis, et reste dans
        l'export. Le chemin d'effacement que donne `CE_QUI_RESTE_D_UN_CLIENT`
-       était donc incomplet sans le dire ; il le dit ;
+       était donc incomplet sans le dire ; il le dit — et il dit aussi
+       qu'une phrase reprise dans le devis d'un AUTRE client y reste ;
+     - « Les clients que vous enregistrez » nomme la base de postes dans ses
+       deux branches : une phrase qui nomme un client est une donnée sur un
+       tiers, dans le même rôle que le carnet et les devis ;
      - « Combien de temps » et « Vos droits » la nomment : elle part avec le
        compte, supprimer un devis ne la vide pas, et elle se corrige dans
        « Ma base de postes ».
+
+   LA RELECTURE « TEXTES » DU MÊME JOUR (TEXTES3, 4, 6, 7) a récrit quatre
+   passages de ce texte APRÈS qu'il a été commité une première fois
+   (`92c3804`), sous la même date : `VERSION` ne s'écrit qu'en
+   « AAAA-MM-JJ » (`verifier-legal`), et le lot P n'est appliqué à aucune
+   base — personne n'a pu accepter la première écriture. SI LE COMMIT DE CES
+   CORRECTIONS SE FAIT UN AUTRE JOUR, `VERSION` PREND LA DATE DE CE COMMIT :
+   deux textes ne doivent jamais porter la même version.
 
    CE QUI N'EST PAS ÉCRIT, ET POURQUOI : aucune durée propre à la base
    (elle suit le compte) ; aucune mise en commun des postes entre artisans
@@ -696,14 +711,33 @@ export const CGU = [
        LE LOT P (24/10/2026) AJOUTE LA BASE DE POSTES, et l'engagement doit
        couvrir ses PHRASES autant que ses prix de référence : ouvrir la
        table `base_postes`, c'est lire les deux (critique « droit » du
-       cahier, CD4). La phrase est AJOUTÉE après « Vos devis portent… »,
-       et non insérée dans « les autres prix que vous enregistrez pour vos
-       devis, ne sont montrés à personne d’autre que vous » : celle-là,
-       `verifier-legal` la tient mot pour mot, et une insertion au milieu
-       l'aurait cassée. Elle dit « la consulter », au singulier : « les
-       consulter » est la formule que le contrôle refuse, parce qu'elle
-       promettrait de ne pas regarder les tarifs affichés, que tout
-       particulier connecté lit déjà. */
+       cahier, CD4). La phrase qui la nomme est AJOUTÉE après « Vos devis
+       portent… », et non insérée dans « les autres prix que vous
+       enregistrez pour vos devis, ne sont montrés à personne d’autre que
+       vous » : celle-là, `verifier-legal` la tient mot pour mot.
+
+       LA RELECTURE « TEXTES » (24/10, TEXTES4) A TROUVÉ TROIS DÉFAUTS dans la
+       première écriture, et cette forme les corrige :
+         - l'exception (« compter les lignes ou vérifier la structure… sans
+           lire vos prix ») ne couvrait pas les PHRASES, alors que les
+           relevés de forme prévus sur la vraie base comptent les postes et
+           mesurent la longueur des phrases (cahier, §7.4, CD6) : elle dit
+           maintenant « sans lire vos prix ni les phrases de votre base de
+           postes » ;
+         - posée juste avant « La base de données le garantit… », la phrase
+           de la base de postes faisait lire « le » et « cette base » comme
+           SA base de postes. Le mot « base » ne s'écrit plus seul dans cette
+           section : « base de données » ou « base de postes », toujours ;
+         - « C’est un engagement, pas une impossibilité technique » était
+           écrit deux fois en quatre lignes. L'engagement de ne pas consulter
+           la base de postes rejoint celui des tarifs non affichés (« ni votre
+           base de postes »), et l'aveu, écrit UNE fois, les couvre tous les
+           deux. `verifier-legal` exige l'aveu une seule fois, APRÈS les deux
+           engagements.
+       « s’engage à ne pas consulter ceux que vous n’affichez pas » reste mot
+       pour mot (le contrôle du lot T le tient), et « les consulter » reste
+       absent : cette formule promettrait de ne pas regarder les tarifs
+       affichés, que tout particulier connecté lit déjà. */
     titre: 'Vos tarifs et vos prix',
     texte: 'Les tarifs que vous enregistrez dans « Mon entreprise » ne sont utilisés que par '
       + 'vous tant que vous ne choisissez pas de les afficher : vos frais de déplacement, votre '
@@ -724,15 +758,15 @@ export const CGU = [
       + 'particulier, ni à un visiteur, ni dans l’espace d’administration. Vos devis portent '
       + 'ceux qui leur servent, pour le client à qui vous les adressez. Votre base de postes — '
       + 'ses phrases comme ses prix de référence — suit la même règle : aucun écran d’Opus ne la '
-      + 'montre à quelqu’un d’autre que vous, ni dans l’espace d’administration, et l’éditeur '
-      + 's’engage à ne pas la consulter ; c’est un engagement, pas une impossibilité technique. '
-      + 'La base de données le '
-      + 'garantit pour les autres utilisateurs. L’éditeur d’Opus, qui administre cette base, '
-      + 'pourrait techniquement les lire avec les outils d’administration de l’hébergeur : il '
-      + 's’engage à ne pas consulter ceux que vous n’affichez pas. C’est un engagement, pas une '
-      + 'impossibilité technique, et aucun journal n’enregistre une telle lecture. Pour faire '
-      + 'fonctionner le service, il peut compter les lignes ou vérifier la structure de la base '
-      + 'sans lire vos prix. Seule une obligation légale pourrait l’amener à les communiquer.',
+      + 'montre à quelqu’un d’autre que vous, ni dans l’espace d’administration. La base de '
+      + 'données d’Opus garantit tout cela pour les autres utilisateurs. L’éditeur d’Opus, qui '
+      + 'administre cette base de données, pourrait techniquement les lire avec les outils '
+      + 'd’administration de l’hébergeur : il s’engage à ne pas consulter ceux que vous '
+      + 'n’affichez pas, ni votre base de postes. C’est un engagement, pas une impossibilité '
+      + 'technique, et aucun journal n’enregistre une telle lecture. Pour faire fonctionner le '
+      + 'service, il peut compter les lignes ou vérifier la structure de la base de données sans '
+      + 'lire vos prix ni les phrases de votre base de postes. Seule une obligation légale '
+      + 'pourrait l’amener à les communiquer.',
   },
   {
     titre: 'Ce qui est interdit',
@@ -825,12 +859,21 @@ export const CGU = [
    base n'a aucune COLONNE de client) : la seule façon de le retrouver est
    de chercher le nom dans « Ma base de postes », dont la recherche lit les
    phrases. `verifier-legal` exige « base de postes » ici, dans les deux
-   branches. */
+   branches.
+
+   ET LE DEVIS D'UN AUTRE CLIENT (relecture « textes », TEXTES3, mesuré) : la
+   base de postes sert justement à reprendre une phrase sur les devis de TOUS
+   les clients. Une phrase qui nomme Mme Martin, reprise par un appui dans le
+   devis de M. Durand, survit au chemin d'avant — fiche, devis et poste de
+   Mme Martin supprimés, Opus la proposait encore, « déjà écrit dans Cuisine
+   Durand ». « Mes devis » n'a pas de recherche : seul l'artisan sait où il
+   l'a reprise, le texte le lui dit. */
 const CE_QUI_RESTE_D_UN_CLIENT = 'Supprimer la fiche d’un client ne supprime pas ses '
   + 'devis : ils restent, avec l’adresse des travaux et ce que vous y avez écrit. Pour '
   + 'effacer les données de ce client, supprimez aussi ses devis, et retirez de votre base '
   + 'de postes toute phrase qui le nommerait : un poste n’est rattaché à aucun client, '
-  + 'cherchez son nom dans « Ma base de postes ».';
+  + 'cherchez son nom dans « Ma base de postes ». Si vous avez repris une de ces phrases dans le '
+  + 'devis d’un autre client, elle y reste aussi : corrigez-la dans ce devis.';
 
 export const CONFIDENTIALITE = [
   {
@@ -879,7 +922,14 @@ export const CONFIDENTIALITE = [
        écrivait « vous l'avez ajouté », dont on ne sait pas ce qu'il désigne
        dans une énumération ; un texte opposable ne laisse pas deviner. La
        clé de rapprochement, que la base calcule depuis la phrase, n'est pas
-       une donnée de plus : c'est la phrase, mise à plat. */
+       une donnée de plus : c'est la phrase, mise à plat.
+
+       Relecture « textes » (TEXTES6) : « la fourniture et la main-d’œuvre »
+       se lisait comme deux MONTANTS, alors que ce sont deux cases (la
+       fourniture est-elle comprise, s'agit-il de main-d'œuvre) ; et le
+       renvoi vers l'engagement des conditions disait « vos tarifs et vos
+       prix » — les PHRASES de la base ne sont ni l'un ni l'autre, et c'est
+       pourtant l'engagement que la critique CD4 leur a donné. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -913,8 +963,9 @@ export const CONFIDENTIALITE = [
       + 'eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de '
       + 'garantie, leurs lignes, leurs prix et leurs totaux, le client de votre carnet auquel ils '
       + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Et votre '
-      + 'base de postes : les phrases que vous y rangez, leur unité, la fourniture et la '
-      + 'main-d’œuvre, le prix de référence que vous fixez et sa date, et le devis depuis lequel '
+      + 'base de postes : les phrases que vous y rangez, leur unité, si la fourniture est comprise '
+      + 'et s’il s’agit de main-d’œuvre, le prix de référence que vous fixez et sa date, et le '
+      + 'devis depuis lequel '
       + 'vous avez ajouté chaque poste. Aucun '
       + 'écran d’Opus ne les montre '
       + 'à quelqu’un d’autre que vous, sauf vos tarifs si vous choisissez de les afficher : ils '
@@ -927,7 +978,8 @@ export const CONFIDENTIALITE = [
       + 'avez répondu aux urgences : votre métier d’urgence, votre rayon d’intervention et votre '
       + 'délai d’arrivée habituel, lisibles par tous, même après avoir cessé d’y répondre ; ce '
       + 'délai s’affiche avec vos tarifs aux personnes qui cherchent une urgence près de chez '
-      + 'elles. Pour vos tarifs et vos prix, l’éditeur prend en plus un engagement '
+      + 'elles. Pour vos tarifs, vos prix et votre base de postes, l’éditeur prend en plus un '
+      + 'engagement '
       + 'écrit dans les conditions d’utilisation (« Vos tarifs et vos prix »).',
   },
   {
@@ -1052,14 +1104,24 @@ export const CONFIDENTIALITE = [
        distincts dans `clients` ET dans `devis` : le frère du propriétaire
        peut l'avoir rendue fausse. « Ou y prépare des devis » ajouté le 22/10
        (relecture « conformité » des étapes 4 à 7, mineur 3) : la phrase ne
-       parlait que du carnet. */
+       parlait que du carnet.
+
+       LA BASE DE POSTES Y ENTRE AUSSI (relecture « textes », TEXTES7) :
+       une phrase qui nomme un client est une donnée sur un tiers, dans le
+       même rôle (l'artisan responsable, Opus sous-traitant). Le bloc
+       d'historique du 24/10 le savait — l'acte de l'article 28.3 « devra
+       couvrir la base de postes » — mais la section ne le disait pas, et le
+       jour où `contratSousTraitance` passera à `true`, la branche affichée
+       aurait décrit un contrat sans elle. Les DEUX branches la nomment, et
+       `verifier-legal` les fait tourner toutes les deux. */
     texte: !EDITEUR.contratSousTraitance
       ? 'Si vous êtes artisan, Opus vous permet de tenir un carnet de '
         + 'clients et de préparer des devis. Un devis se rattache à une fiche '
         + 'de votre carnet et porte souvent l’adresse des travaux, c’est-à-dire '
         + 'le domicile de votre client. Ces informations concernent des personnes qui, le '
         + 'plus souvent, n’ont pas de compte Opus : vous en êtes le responsable du traitement, et '
-        + 'Opus n’en est que le sous-traitant (article 28 du RGPD). Le '
+        + 'Opus n’en est que le sous-traitant (article 28 du RGPD). Il en va de même d’une phrase de '
+        + 'votre base de postes qui nommerait un client. Le '
         + 'contrat qui doit encadrer cette relation n’est pas encore '
         + 'publié : Opus n’est pas ouverte au public, et le seul artisan '
         + 'qui y tient un carnet ou y prépare des devis est l’auteur de '
@@ -1081,8 +1143,8 @@ export const CONFIDENTIALITE = [
         + 'qui part, c’est l’adresse que vous tapez, et rien d’autre : '
         + 'jamais le nom de votre client, jamais son téléphone, jamais le '
         + 'fait que ce soit un client.'
-      : 'Le carnet de clients d’un artisan, et les devis qu’il prépare, '
-        + 'contiennent des données '
+      : 'Le carnet de clients d’un artisan, les devis qu’il prépare et, quand une phrase y nomme un '
+        + 'client, sa base de postes, contiennent des données '
         + 'personnelles sur des tiers. L’artisan en est le responsable du '
         + 'traitement ; l’éditeur d’Opus agit comme sous-traitant au sens '
         + 'de l’article 28 du RGPD, dans les limites fixées par le contrat '

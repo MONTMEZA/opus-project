@@ -87,6 +87,7 @@ import SaisieDevisScreen from './screens/SaisieDevisScreen';
 /* La base de postes (lot P) : la page, ouverte par deux portes. */
 import PostesScreen from './screens/PostesScreen';
 import { devisDepuisClient, devisDepuisDemande, trierDevis } from './lib/devis';
+import { etatAuDepartDeLaLecture, issueDeLaLecture } from './lib/postes';
 import { dateDeDemandeDemo } from './data/devis-demo';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
@@ -3515,43 +3516,68 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   const [postesLus, setPostesLus] = useState(false);
   const [postesEnRetard, setPostesEnRetard] = useState(false);
   const [postesIncomplete, setPostesIncomplete] = useState(false);
-  const generationPostes = useRef(0);
+  /* Le compte de la base, quand elle l'a donné : une liste coupée écrit le
+     VRAI nombre de postes (relecture « textes », TEXTES12). */
+  const [postesTotal, setPostesTotal] = useState(null);
+  /* DEUX COMPTEURS, et pas un : une lecture peut être DÉPASSÉE (une lecture
+     plus récente est partie — c'est elle qui décidera) ou JETÉE (un poste a
+     été rangé pendant qu'elle était en route — sa liste ne doit pas
+     l'écraser). Ce n'est pas la même chose : avec un seul compteur, une
+     lecture jetée revenait sans rien poser, et la base restait « en
+     lecture » pour toujours (relecture « écran », ECRAN5). */
+  const lecturesPostes = useRef(0);
+  const ecrituresPostes = useRef(0);
   /* D'où l'on a ouvert « Ma base de postes », pour y revenir. */
   const [origineMaBase, setOrigineMaBase] = useState('profil');
 
   /** Lire la base de postes. Rend la liste lue, ou `null` sur un échec —
    *  la feuille d'ajout s'en sert après un refus 23505 : elle MONTRE le
    *  poste qui existe, ou dit qu'elle ne le voit pas. Un échec n'est JAMAIS
-   *  « votre base est vide ». */
-  const chargerPostes = useCallback(async () => {
-    generationPostes.current += 1;
-    const g = generationPostes.current;
-    setPostesEtat((e) => (e === 'ok' ? 'ok' : 'chargement'));
-    try {
-      const r = await api.mesPostes();
-      if (generationPostes.current !== g) return r.postes || [];
-      setPostes(r.postes || []);
-      setPostesIncomplete(!!r.incomplete);
-      setPostesEnRetard(false);
-      setPostesLus(true);
-      setPostesEtat('ok');
-      return r.postes || [];
-    } catch (e) {
-      if (generationPostes.current !== g) return null;
-      setPostesEnRetard(!!(e && e.baseEnRetard));
-      setPostesEtat('echec');
-      return null;
-    }
+   *  « votre base est vide ».
+   *
+   *  CE QU'UNE LECTURE LAISSE derrière elle est décidé par
+   *  `etatAuDepartDeLaLecture` et `issueDeLaLecture` (`postes.js`, que
+   *  `verifier-postes` fait tourner) : aucune issue ne laisse la base « en
+   *  lecture » sans qu'une autre lecture soit en route. */
+  const chargerPostes = useCallback(() => {
+    const lire = async (relancee) => {
+      lecturesPostes.current += 1;
+      const g = lecturesPostes.current;
+      const ecritures = ecrituresPostes.current;
+      setPostesEtat((e) => etatAuDepartDeLaLecture(e));
+      let lu = null;
+      let erreur = null;
+      try {
+        lu = await api.mesPostes();
+      } catch (e) {
+        erreur = e || new Error('lecture');
+      }
+      const issue = issueDeLaLecture({
+        reussie: !erreur, depassee: lecturesPostes.current !== g, jetee: ecrituresPostes.current !== ecritures, relancee,
+      });
+      if (issue.relancer) return lire(true);
+      if (issue.prendre) {
+        setPostes(lu.postes || []);
+        setPostesIncomplete(!!lu.incomplete);
+        setPostesTotal(Number.isSafeInteger(lu.total) ? lu.total : null);
+        setPostesLus(true);
+      }
+      if (issue.etat === 'ok') setPostesEnRetard(false);
+      if (issue.etat === 'echec') setPostesEnRetard(!!(erreur && erreur.baseEnRetard));
+      if (issue.etat) setPostesEtat(issue.etat);
+      return erreur ? null : (lu.postes || []);
+    };
+    return lire(false);
   }, []);
 
   /** UNE SEULE PORTE pour RANGER un poste (le modèle de `rangerClient`) —
    *  et elle REMPLACE le tableau, jamais une mutation en place : c'est ce
    *  qui invalide les clés gardées en cache sur l'ancien (`postesPrepares`).
-   *  `retire` : il n'existe plus. Une génération de plus : une lecture
-   *  partie AVANT ne peut plus écraser ce poste. */
+   *  `retire` : il n'existe plus. Une écriture de plus : une lecture partie
+   *  AVANT ne peut plus écraser ce poste (elle est « jetée », et relancée). */
   const rangerPoste = useCallback((p, { retire = false } = {}) => {
     if (!p || p.id == null) return;
-    generationPostes.current += 1;
+    ecrituresPostes.current += 1;
     setPostes((liste) => {
       const autres = liste.filter((x) => String(x.id) !== String(p.id));
       if (retire) return autres;
@@ -4522,6 +4548,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             etat={postesEtat}
             lus={postesLus}
             incomplete={postesIncomplete}
+            total={postesTotal}
             enRetard={postesEnRetard}
             regime={monRegime}
             regimeDeclareLe={regimeDeclareLe}

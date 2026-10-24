@@ -23,8 +23,18 @@
  *
  * « Retirer le prix de référence » le remet À VIDE, et c'est la seule façon
  * de ne plus voir d'écart sur ce poste : il n'y a pas de réglage pour faire
- * taire la question, elle a sa réponse ici. « Retirer ce poste » se fait en
- * DEUX appuis, comme « Retirer » d'une ligne de devis.
+ * taire la question, elle a sa réponse ici. Les DEUX retraits se font en
+ * DEUX appuis, comme « Retirer » d'une ligne de devis — le second dit ce qui
+ * part : le lot n'a aucun historique, un prix effacé ne se retrouve que de
+ * mémoire (relecture « écran », ECRAN2 : un seul appui, à huit points sous
+ * « Enregistrer », effaçait 45,00 € et sa date).
+ *
+ * CE QU'ELLE MONTRE est décidé par `vueDeLaFeuillePoste` (`postes.js`, que
+ * `verifier-postes` fait tourner) : depuis la CARTE d'une ligne, seul
+ * « Enregistrer » — retirer un prix ou un poste se fait dans la page, où
+ * l'on vient pour ça, et une phrase le dit ; et quand le champ porte un
+ * autre nombre que la référence, la phrase du prix DIT la référence
+ * (ECRAN3).
  *
  * DANS SON PROPRE FICHIER : `verifier-feuilles` juge PAR FICHIER, et une
  * feuille du bas ne se cumule jamais avec `{...CLAVIER}`.
@@ -38,7 +48,7 @@ import {
 } from '../theme';
 import FeuilleBas from './FeuilleBas';
 import ChampMontant from './ChampMontant';
-import { BtnMain, BtnOutline, TextArea } from './ui';
+import { BtnMain, BtnOutline, TextArea, Montant } from './ui';
 import * as api from '../lib/api';
 import * as retour from '../lib/retour';
 import { useRechercheDifferee } from '../lib/frappe';
@@ -47,8 +57,21 @@ import { versCentimes } from '../lib/centimes';
 import { centimesEnSaisie, texteNet, LONGUEURS } from '../lib/devis';
 import {
   consequenceDeLaCorrection, indicesDuClient, phraseIndices, ligneDescriptive, etiquettePrixReference, validerPoste,
-  phraseFixeLe, libelleOrigine,
+  libelleOrigine, vueDeLaFeuillePoste, phraseRetraitDuPrix, PHRASE_RETRAIT_DU_POSTE, issueDuModifieEntreTemps,
 } from '../lib/postes';
+
+/* Une phrase qui porte un montant : le montant par `Montant` (chiffres
+   alignés, à l'encre du texte), le reste dans le style de la phrase. */
+function Phrase({ morceaux, style }) {
+  if (!morceaux || (!morceaux.avant && morceaux.prix == null)) return null;
+  return (
+    <Text style={style}>
+      {morceaux.avant}
+      {morceaux.prix != null && <Montant centimes={morceaux.prix} enLigne style={s.montant} />}
+      {morceaux.apres}
+    </Text>
+  );
+}
 
 /* LA PHRASE, DANS SON PROPRE COMPOSANT, avec son texte à lui : une lettre ne
    redessine que lui. La feuille n'apprend la phrase que quand la frappe
@@ -74,7 +97,7 @@ const ChampPhrase = forwardRef(function ChampPhrase({ valeur, onPause }, ref) {
 });
 
 export default function FeuillePoste({
-  poste, prixPropose = null, depuisLaPage = false, postes = null, regime = null, regimeDeclareLe = null,
+  poste, prixPropose = null, depuisLaPage = false, postes = null, regime = null, regimeDeclareLe = null, absent = false,
   onRanger, onRelire, onFermer,
 }) {
   const refPrix = useRef(null);
@@ -85,6 +108,7 @@ export default function FeuillePoste({
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState(null);
   const [confirmeRetrait, setConfirmeRetrait] = useState(false);
+  const [confirmeRetraitPrix, setConfirmeRetraitPrix] = useState(false);
   /* La phrase une fois la frappe retombée : c'est elle qui décide de la
      conséquence affichée. */
   const [phrase, setPhrase] = useState(poste ? poste.designation : '');
@@ -95,9 +119,10 @@ export default function FeuillePoste({
   /* Dans la page, il n'y a plus de devis : on ne cherche que les MOTIFS
      (un numéro, une adresse e-mail, « chez », une civilité). */
   const avertissement = depuisLaPage ? phraseIndices(indicesDuClient(phrase), { page: true }) : null;
-  const fixe = phraseFixeLe(poste, { regimeDeclareLe });
   const origine = libelleOrigine(poste);
-  const prixDepart = prixPropose != null ? prixPropose : poste.prixReferenceCentimes;
+  /* CE QUE LA FEUILLE MONTRE : le prix de départ, la phrase du prix, les
+     retraits — `vueDeLaFeuillePoste`, jamais une condition écrite ici. */
+  const vue = vueDeLaFeuillePoste({ poste, prixPropose, depuisLaPage, regimeDeclareLe, absent });
 
   const refuser = (message) => {
     setErreur(message);
@@ -118,12 +143,15 @@ export default function FeuillePoste({
       if (vivant.current) onFermer();
     } catch (e) {
       /* « Modifié entre-temps » : la base est relue, la feuille reste
-         ouverte, et la phrase le dit. */
-      if (e instanceof ErreurPoste) await onRelire();
-      if (vivant.current) refuser(messageClair(e, 'Pas enregistré'));
+         ouverte, et la phrase dit ce que la relecture a VRAIMENT rendu —
+         relue ou non, le poste toujours là ou retiré (TEXTES5). */
+      const message = e instanceof ErreurPoste
+        ? issueDuModifieEntreTemps(await onRelire(), poste.id).phrase
+        : messageClair(e, 'Pas enregistré');
+      if (vivant.current) refuser(message);
       else {
         retour.echec();
-        retour.annoncer(messageClair(e, 'Ce poste n’a pas pu être enregistré'));
+        retour.annoncer(e instanceof ErreurPoste ? message : messageClair(e, 'Ce poste n’a pas pu être enregistré'));
       }
     } finally {
       enVol.current = false;
@@ -159,10 +187,14 @@ export default function FeuillePoste({
     ecrire(() => api.modifierPoste(poste.id, changements, { modifieLe: poste.modifieLe }), annonce);
   };
 
-  const retirerLePrix = () => ecrire(
-    () => api.modifierPoste(poste.id, { prixReferenceCentimes: null }, { modifieLe: poste.modifieLe }),
-    'Le prix de référence est retiré.',
-  );
+  /* RETIRER LE PRIX, EN DEUX APPUIS : le premier demande et dit ce qui part. */
+  const retirerLePrix = () => {
+    if (!confirmeRetraitPrix) { setConfirmeRetraitPrix(true); return; }
+    ecrire(
+      () => api.modifierPoste(poste.id, { prixReferenceCentimes: null }, { modifieLe: poste.modifieLe }),
+      'Le prix de référence est retiré.',
+    );
+  };
 
   const retirerLePoste = () => {
     if (!confirmeRetrait) { setConfirmeRetrait(true); return; }
@@ -171,6 +203,18 @@ export default function FeuillePoste({
       return poste;
     }, 'Le poste est retiré de votre base.', { retire: true });
   };
+
+  /* UN POSTE QUI N'EST PLUS DANS LA BASE RELUE (TEXTES5) : rien à
+     enregistrer, rien à retirer — la phrase, pourquoi, et « Fermer ». */
+  if (vue.phraseAbsent) {
+    return (
+      <FeuilleBas titre={depuisLaPage ? 'Ce poste' : 'Prix de référence'} onFermer={onFermer}>
+        <Text style={s.phraseLue}>{poste.designation}</Text>
+        <Text style={s.erreur} accessibilityLiveRegion="polite">{vue.phraseAbsent}</Text>
+        <BtnOutline label="Fermer" onPress={onFermer} />
+      </FeuilleBas>
+    );
+  }
 
   return (
     <FeuilleBas titre={depuisLaPage ? 'Ce poste' : 'Prix de référence'} onFermer={onFermer}>
@@ -197,11 +241,11 @@ export default function FeuillePoste({
       <Text style={s.etiquette}>{etiquettePrixReference(poste, regime)}</Text>
       <ChampMontant
         ref={refPrix}
-        defaut={centimesEnSaisie(prixDepart)}
+        defaut={centimesEnSaisie(vue.prixDepart)}
         placeholder="0,00"
         accessibilityLabel={etiquettePrixReference(poste, regime)}
       />
-      {!!fixe && <Text style={s.aide}>{`Le prix actuel a été ${fixe}.`}</Text>}
+      <Phrase morceaux={vue.phrasePrix} style={s.aide} />
       {erreur ? <Text style={s.erreur} accessibilityLiveRegion="polite">{erreur}</Text> : null}
 
       <BtnMain
@@ -209,30 +253,47 @@ export default function FeuillePoste({
         disabled={envoi || consequence.consequence === 'doublon'}
         onPress={enregistrer}
       />
-      {poste.prixReferenceCentimes != null && (
-        <BtnOutline label="Retirer le prix de référence" onPress={retirerLePrix} />
+      {vue.renvoiALaPage && (
+        <Text style={s.aide}>Pour retirer ce prix ou ce poste, ouvrez « Ma base de postes ».</Text>
       )}
 
-      {/* RETIRER CE POSTE, EN DEUX APPUIS — un appui distrait ne doit pas
-          faire disparaître un prix qu'on a mis du temps à fixer. */}
-      <View style={s.retrait}>
-        <Pressable
-          onPress={retirerLePoste}
-          disabled={envoi}
-          accessibilityRole="button"
-          accessibilityLabel={confirmeRetrait ? 'Confirmer : retirer ce poste de ma base' : 'Retirer ce poste de ma base'}
-          style={({ pressed }) => [s.action, confirmeRetrait && s.actionDanger, pressed && APPUI.plein]}
-        >
-          <Text style={[s.actionTexte, confirmeRetrait && s.actionDangerTexte]}>
-            {confirmeRetrait ? 'Confirmer le retrait' : 'Retirer ce poste'}
-          </Text>
-        </Pressable>
-        {confirmeRetrait && (
-          <Text style={s.aide}>
-            Il ne sera plus proposé sur vos devis. Les lignes déjà écrites gardent leur phrase et leur prix.
-          </Text>
-        )}
-      </View>
+      {/* LES RETRAITS, DANS LA PAGE SEULEMENT, CHACUN EN DEUX APPUIS — un appui
+          distrait ne doit pas faire disparaître un prix qu'on a mis du temps
+          à fixer. Le second appui dit ce qui part. */}
+      {(vue.retirerLePrix || vue.retirerLePoste) && (
+        <View style={s.retrait}>
+          {vue.retirerLePrix && (
+            <Pressable
+              onPress={retirerLePrix}
+              disabled={envoi}
+              accessibilityRole="button"
+              accessibilityLabel={confirmeRetraitPrix ? 'Confirmer : retirer le prix de référence' : 'Retirer le prix de référence'}
+              style={({ pressed }) => [s.action, confirmeRetraitPrix && s.actionDanger, pressed && APPUI.plein]}
+            >
+              <Text style={[s.actionTexte, confirmeRetraitPrix && s.actionDangerTexte]}>
+                {confirmeRetraitPrix ? 'Confirmer le retrait du prix' : 'Retirer le prix de référence'}
+              </Text>
+            </Pressable>
+          )}
+          {vue.retirerLePrix && confirmeRetraitPrix && <Phrase morceaux={phraseRetraitDuPrix(poste)} style={s.aide} />}
+          {vue.retirerLePoste && (
+            <Pressable
+              onPress={retirerLePoste}
+              disabled={envoi}
+              accessibilityRole="button"
+              accessibilityLabel={confirmeRetrait ? 'Confirmer : retirer ce poste de ma base' : 'Retirer ce poste de ma base'}
+              style={({ pressed }) => [s.action, confirmeRetrait && s.actionDanger, pressed && APPUI.plein]}
+            >
+              <Text style={[s.actionTexte, confirmeRetrait && s.actionDangerTexte]}>
+                {confirmeRetrait ? 'Confirmer le retrait' : 'Retirer ce poste'}
+              </Text>
+            </Pressable>
+          )}
+          {/* CE QUI PART, ET CE QUI RESTE (TEXTES2) : la mémoire des prix
+              peut reproposer la phrase — `PHRASE_RETRAIT_DU_POSTE` le dit. */}
+          {vue.retirerLePoste && confirmeRetrait && <Text style={s.aide}>{PHRASE_RETRAIT_DU_POSTE}</Text>}
+        </View>
+      )}
     </FeuilleBas>
   );
 }
@@ -242,6 +303,8 @@ const s = StyleSheet.create({
   phrase: { minHeight: TOUCHE * 2 },
   phraseLue: { fontFamily: F.inter6, fontSize: T.corps, color: C.ink, lineHeight: interligne(T.corps) },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
+  /* Le montant d'une phrase : à l'encre du texte, chiffres alignés. */
+  montant: { color: C.ink },
   /* L'avertissement : encre du texte, filet orange DE LECTURE (4,52 : 1). */
   avertissement: { borderLeftWidth: 3, borderLeftColor: C.accentTexte, paddingLeft: S.sm },
   avertissementTexte: { fontFamily: F.inter, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit) },

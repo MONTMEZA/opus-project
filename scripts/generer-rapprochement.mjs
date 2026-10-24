@@ -14,9 +14,10 @@
  * ou l'inverse, et l'artisan aurait deux postes pour un.
  *
  * Le remède est celui du catalogue des métiers (`generer-catalogue`) : le
- * second endroit n'est plus écrit par un humain. La table de 998
- * caractères vit dans le fichier JavaScript ; la fonction SQL en est
- * ENGENDRÉE, caractère par caractère.
+ * second endroit n'est plus écrit par un humain. La table — 5 093
+ * caractères traduits ou supprimés, et 30 remplacés par un mot — vit dans
+ * le fichier JavaScript ; la fonction SQL en est ENGENDRÉE, caractère par
+ * caractère.
  *
  *   npm run generer-rapprochement                  réécrit la fonction dans
  *                                                  schema.sql, entre ses repères
@@ -27,12 +28,14 @@
  *
  * CE QU'IL REFUSE D'ENGENDRER (code 1, et il dit pourquoi)
  * --------------------------------------------------------
- * La base applique la table en DEUX passes — les remplacements par une
- * chaîne (`replace`), puis la table d'un caractère (`translate`) sur leur
- * résultat — quand JavaScript l'applique en UNE. Les deux ne rendent la
- * même chose que si CE QUE RAPPORTE UN REMPLACEMENT N'EST FAIT QUE DE
- * CARACTÈRES QUE LA TABLE LAISSE TELS QUELS : `a` à `z`, `0` à `9` et
- * l'espace. Mesuré quand on l'a cherché : « ≤ » remplacé par « <= » donnait
+ * La base applique la table en DEUX passes — la table d'un caractère
+ * (`translate`), puis les remplacements par une chaîne (`replace`) sur son
+ * résultat (l'ordre, et pourquoi, est écrit dans `engendrerFonction`) —
+ * quand JavaScript l'applique en UNE. Les deux ne rendent la même chose que
+ * si CE QUE RAPPORTE UN REMPLACEMENT N'EST FAIT QUE DE CARACTÈRES QUE LA
+ * TABLE LAISSE TELS QUELS — `a` à `z`, `0` à `9` et l'espace — et si aucun
+ * caractère remplacé n'est AUSSI dans la table. Mesuré quand on l'a
+ * cherché, dans l'ordre d'avant : « ≤ » remplacé par « <= » donnait
  * « a<=b » d'un côté et « a< b » de l'autre — et aucun des cas écrits à la
  * main ne l'aurait vu. Le script s'arrête donc sur toute table qui casse
  * cette règle, plutôt que d'écrire une fonction qui se tromperait sans un
@@ -137,6 +140,16 @@ export function problemesDeLaTable(m) {
       }
     }
   }
+  /* LA PROFONDEUR (24/10/2026) : la chaîne du `translate` s'écrit par
+     groupes de seize, entre parenthèses ; leur concaténation reste d'un
+     seul tenant. Au-delà de 1 000 groupes — 16 000 caractères —, on
+     dépasserait la profondeur de la première table (968 termes d'un seul
+     tenant, qui passaient), et l'on s'approcherait des ~4 000 qui font
+     tomber PostgreSQL sur « stack depth limit exceeded ». */
+  if (de.length > 16 * 1000) {
+    pb.push(`TABLE_DE compte ${de.length} caractères : au-delà de 16 000, la fonction engendrée serait trop profonde pour `
+      + 'PostgreSQL (il faudrait des groupes de groupes).');
+  }
   const exc = m.EXCEPTIONS_PLURIEL;
   if (!Array.isArray(exc) || exc.some((e) => typeof e !== 'string' || !/^[a-z]+$/.test(e))) {
     pb.push('EXCEPTIONS_PLURIEL doit être une liste de mots faits de a à z.');
@@ -173,6 +186,23 @@ function sqlChaine(cars) {
   return morceaux.join(' || ');
 }
 
+/* LES GROUPES DE SEIZE, ENTRE PARENTHÈSES (24/10/2026). La chaîne de départ
+   du `translate` est une concaténation de littéraux et de `chr(n)`. Écrite
+   d'un seul tenant — `chr(1) || chr(2) || … ` —, PostgreSQL en fait un
+   arbre aussi PROFOND qu'elle est longue, qu'il parcourt récursivement en
+   préparant la fonction : mesuré sur PostgreSQL 16, une chaîne de 4 000
+   termes passe, une de 4 500 tombe sur « stack depth limit exceeded »
+   (`max_stack_depth` = 2 Mo, la valeur par défaut de PostgreSQL ; celle de
+   la vraie base n'a pas été relevée). La table complétée des invisibles en
+   compte 5 093. Seize termes par
+   parenthèse, et l'arbre n'a plus que ~320 niveaux, sous les 968 de la
+   première table, qui passaient. */
+const groupes16 = (cars) => {
+  const g = [];
+  for (let i = 0; i < cars.length; i += 16) g.push(cars.slice(i, i + 16));
+  return g;
+};
+
 /** Le motif SQL du pluriel : celui du miroir, la classe des lettres énumérée. */
 export const motifSqlDuPluriel = (source) => source.split('[a-z]').join(`[${LETTRES}]`);
 
@@ -187,18 +217,28 @@ export function engendrerFonction(m = MIROIR) {
   }
   const de = [...m.TABLE_DE];
   const multiples = [...m.TABLE_MULTIPLES].sort((a, b) => a[0].codePointAt(0) - b[0].codePointAt(0));
-  let expr = 'p_phrase';
+  /* LA TABLE D'ABORD, LES REMPLACEMENTS ENSUITE (24/10/2026). `translate`
+     cherche chaque caractère de la phrase dans TOUTE sa chaîne de départ :
+     son coût est la longueur de la phrase fois celle de la table. Appliqué
+     APRÈS les remplacements, il travaillait sur une phrase que « % » →
+     « pourcent » avait rendue dix fois plus longue — 2 000 « % » en
+     faisaient 20 000. Appliqué AVANT, il ne voit jamais plus que les 2 000
+     points de code de la garde. Les deux ordres rendent la même clé, par
+     l'invariant que `problemesDeLaTable` tient : un caractère remplacé n'est
+     pas dans TABLE_DE (le translate le laisse tel quel), et ce que rapporte
+     un remplacement n'est fait que de a à z, 0 à 9 et de l'espace (le
+     translate ne l'aurait pas touché non plus). Mesuré : 2 000 « % » en
+     ~70 ms avec la table complétée des invisibles, contre ~460 ms dans
+     l'ordre d'avant. */
+  let expr = `translate(\n          p_phrase,\n          ${groupes16(de).map((g) => `(${sqlChaine(g)})`).join('\n          || ')},\n`
+    + `          '${m.TABLE_VERS}')`;
   for (const [c, v] of multiples) expr = `replace(${expr}, chr(${c.codePointAt(0)}), '${v}')`;
-  const groupes = [];
-  for (let i = 0; i < de.length; i += 16) groupes.push(de.slice(i, i + 16));
   const lignes = [
     'create or replace function public.cle_de_rapprochement(p_phrase text)',
     'returns text', 'language sql', 'immutable', 'strict', 'parallel safe', 'security invoker',
     'set search_path = public', 'as $$',
     `  select case when char_length(p_phrase) > ${m.LONGUEUR_MAX} then null else`,
-    '  regexp_replace(', '    btrim(regexp_replace(', '      translate(', `        ${expr},`,
-    `        ${groupes.map(sqlChaine).join('\n        || ')},`,
-    `        '${m.TABLE_VERS}'),`, "      ' {2,}', ' ', 'g'), ' '),",
+    '  regexp_replace(', '    btrim(regexp_replace(', `      ${expr},`, "      ' {2,}', ' ', 'g'), ' '),",
     `    '${motifSqlDuPluriel(m.PLURIEL_SOURCE)}', chr(92) || '1' || chr(92) || '2', 'g')`, '  end', '$$;',
   ];
   const corps = `${lignes.join('\n')}\n`;
@@ -254,8 +294,8 @@ function principal() {
   writeFileSync(path.join(RACINE, FICHIER), fichier.slice(0, i) + attendu + fichier.slice(j + FIN.length));
   console.log(`✔ ${FICHIER} réécrit : public.cle_de_rapprochement engendrée depuis la table du miroir.`);
   console.log('  Rejouer le schéma sur une base d’essai, puis npm run verifier-postes.');
-  console.log('  Et sur la vraie base, une fonction remplacée ne recalcule pas une clé déjà rangée :');
-  console.log('  voir le contrat écrit en tête de src/lib/rapprochement.js.');
+  console.log('  Et sur la vraie base, une fonction remplacée ne recalcule AUCUNE clé déjà rangée : remplacement et');
+  console.log('  réécriture se font dans UNE transaction — le contrat est écrit en section 50.0 de schema.sql.');
 }
 
 /* Lancé (`npm run generer-rapprochement`), il écrit ; importé (par

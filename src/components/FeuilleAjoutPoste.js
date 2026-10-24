@@ -17,7 +17,8 @@
  * monterait et cacherait le bouton.
  *
  * DEUX ÉTATS, ET UN SEUL SE VOIT : « saisie » et « ce poste existe déjà ».
- * Lequel, c'est `posteExistant()`, RECALCULÉ À CHAQUE RENDU : une base
+ * Lequel, c'est `etatDeLaFeuilleAjout()` (`postes.js`, que `verifier-postes`
+ * fait tourner), RECALCULÉ À CHAQUE RENDU : une base
  * relue entre-temps (le résultat d'un ajout parti plus tôt, un autre
  * appareil, ou la relecture qui suit un refus 23505) fait passer la feuille
  * ouverte à « existe déjà » d'elle-même. Dans cet état, elle change
@@ -53,8 +54,8 @@ import { messageClair, messageDeContrainte, ErreurPoste } from '../lib/erreurs';
 import { versCentimes } from '../lib/centimes';
 import { centimesEnSaisie } from '../lib/devis';
 import {
-  posteExistant, sousQuelPoste, postesProches, phraseProche, indicesDuClient, phraseIndices, ligneDescriptive,
-  etiquettePrixReference, validerPoste, phrasePrixDuPoste, coupeAutourDuPrix, PHRASE_SORTIE,
+  etatDeLaFeuilleAjout, posteExistant, postesProches, phraseProche, indicesDuClient, phraseIndices, ligneDescriptive,
+  etiquettePrixReference, validerPoste, phrasePrixDuPoste, coupeAutourDuPrix, PHRASE_SORTIE, issueDuModifieEntreTemps,
 } from '../lib/postes';
 
 /* Une phrase qui porte un montant : le montant par `Montant` (chiffres
@@ -95,22 +96,37 @@ export default function FeuilleAjoutPoste({
      poste, il n'y a rien à changer ; sinon, le champ le garde — jamais le
      prix de la ligne, que l'artisan a pu corriger. */
   const [prixTape, setPrixTape] = useState(valeurs && valeurs.prixPropose != null ? valeurs.prixPropose : null);
+  /* L'ARTISAN EST EN TRAIN DE TAPER UN PRIX (ECRAN4) : une lettre tapée au
+     doigt depuis que le prix porté a été fixé. Tant que c'est vrai, le prix
+     porté n'est pas connu — si la base arrive à ce moment-là, la feuille
+     garde le champ (et ce qui y est tapé) au lieu de conclure « il a déjà ce
+     prix ». */
+  const [prixTouche, setPrixTouche] = useState(false);
   /* La base a refusé un doublon (23505), relue, et ne montre aucun poste de
      même clé : une application en retard d'une règle. */
   const [doublonInvisible, setDoublonInvisible] = useState(false);
 
-  const existant = posteExistant(valeurs, postes);
+  /* L'ÉTAT DE LA FEUILLE, décidé par `etatDeLaFeuilleAjout` — jamais ici. */
+  const feuille = etatDeLaFeuilleAjout({ valeurs, postes, prixTape, prixTouche, doublonInvisible });
+  const { existant } = feuille;
 
   const lirePrix = () => versCentimes(refPrix.current ? refPrix.current.lire() : '');
   const refuser = (message) => {
     setErreur(message);
     retour.echec();
   };
+  /* LE PRIX PORTÉ DEVIENT CELUI DU CHAMP : l'artisan n'est plus « en train
+     de taper », et la prochaine lettre le redira. */
+  const porter = (centimes) => {
+    setPrixTape(centimes);
+    setPrixTouche(false);
+    if (refPrix.current) refPrix.current.rearmer();
+  };
   /* Le champ quitté, pendant la saisie : le prix porté change. */
   const surSortieDuPrix = () => {
     if (existant) return;
     const lu = lirePrix();
-    if (lu.ok) setPrixTape(lu.centimes);
+    if (lu.ok) porter(lu.centimes);
   };
 
   /* « AJOUTER À MA BASE » — l'état « saisie ». */
@@ -118,7 +134,7 @@ export default function FeuilleAjoutPoste({
     if (enVol.current) return;
     const lu = lirePrix();
     if (!lu.ok) { refuser(lu.message); return; }
-    setPrixTape(lu.centimes);
+    porter(lu.centimes);
     const poste = {
       designation: valeurs.designation,
       unite: valeurs.unite,
@@ -175,7 +191,7 @@ export default function FeuilleAjoutPoste({
     const lu = lirePrix();
     if (!lu.ok) { refuser(lu.message); return; }
     if (lu.centimes == null) { refuser('Écrivez un prix, ou touchez « Fermer ».'); return; }
-    setPrixTape(lu.centimes);
+    porter(lu.centimes);
     /* Le montant vaut déjà la référence : AUCUNE requête. */
     if (lu.centimes === existant.prixReferenceCentimes) {
       retour.annoncer('Il a déjà ce prix de référence.');
@@ -197,12 +213,16 @@ export default function FeuilleAjoutPoste({
       if (vivant.current) onFermer();
     } catch (e) {
       /* « Modifié entre-temps » : la base est relue, et la feuille se
-         ré-évalue sur ce qu'elle contient vraiment. */
-      if (e instanceof ErreurPoste) await onRelire();
-      if (vivant.current) refuser(messageClair(e, 'Pas enregistré'));
+         ré-évalue sur ce qu'elle contient vraiment — et la phrase dit ce que
+         la relecture a rendu : relue ou non, le poste toujours là ou retiré
+         (TEXTES5). */
+      const message = e instanceof ErreurPoste
+        ? issueDuModifieEntreTemps(await onRelire(), existant.id).phrase
+        : messageClair(e, 'Pas enregistré');
+      if (vivant.current) refuser(message);
       else {
         retour.echec();
-        retour.annoncer(messageClair(e, 'Le prix de référence n’a pas pu être changé'));
+        retour.annoncer(e instanceof ErreurPoste ? message : messageClair(e, 'Le prix de référence n’a pas pu être changé'));
       }
     } finally {
       enVol.current = false;
@@ -222,13 +242,14 @@ export default function FeuilleAjoutPoste({
       placeholder="0,00"
       accessibilityLabel={etiquettePrixReference(poste, regime)}
       onBlur={surSortieDuPrix}
+      surPremiereFrappe={() => setPrixTouche(true)}
     />,
     erreur ? <Text key="erreur" style={s.erreur} accessibilityLiveRegion="polite">{erreur}</Text> : null,
   ];
 
   let titre;
   let contenu;
-  if (!existant && doublonInvisible) {
+  if (feuille.etat === 'invisible') {
     titre = 'Ce poste existe déjà';
     contenu = [
       <Text key="invisible" style={s.texte}>
@@ -236,38 +257,30 @@ export default function FeuilleAjoutPoste({
       </Text>,
       <BtnOutline key="fermer" label="Fermer" onPress={onFermer} />,
     ];
-  } else if (existant) {
+  } else if (feuille.etat === 'existe') {
+    /* LA DÉCISION D'ABORD, LES EXPLICATIONS ENSUITE (ECRAN10) : à 320 × 568,
+       sur une ligne variante, « Changer ma référence » tombait sous le bord
+       et « Fermer » hors de l'écran, sous quatre phrases d'explication. Le
+       titre dit déjà « Ce poste existe déjà » : la ligne qui le redisait mot
+       pour mot est partie (ECRAN8). */
     titre = 'Ce poste existe déjà';
-    const sous = sousQuelPoste({ designation: valeurs.designation }, existant);
-    const aUneReference = existant.prixReferenceCentimes != null;
-    const memePrix = aUneReference && prixTape === existant.prixReferenceCentimes;
     contenu = [
-      <Text key="reconnu" style={s.texteFort}>Ce poste existe déjà dans votre base.</Text>,
-      ...(sous ? [
-        <Text key="ligne" style={s.texte}>{`Votre ligne : « ${valeurs.designation} »`}</Text>,
-        <Text key="poste" style={s.texte}>{`Le poste : « ${existant.designation} »`}</Text>,
-        <Text key="pourquoi" style={s.aide}>
-          Opus les reconnaît comme la même phrase : majuscules, accents, espaces, ponctuation et pluriel mis à part.
-        </Text>,
-        <Text key="sortie" style={s.aide}>{PHRASE_SORTIE}</Text>,
-      ] : [
-        <Text key="poste" style={s.texte}>{`Le poste : « ${existant.designation} »`}</Text>,
-      ]),
+      <Text key="poste" style={s.texteFort}>{`Le poste : « ${existant.designation} »`}</Text>,
       <Text key="descriptive" style={s.aide}>{ligneDescriptive(existant)}</Text>,
     ];
-    if (memePrix) {
-      /* LE MÊME PRIX : il n'y a rien à décider — « Fermer », et rien d'autre. */
+    if (feuille.memePrix) {
+      /* LE MÊME PRIX, et l'artisan n'y touche pas : il n'y a rien à décider —
+         « Fermer », et rien d'autre. */
       contenu.push(
         <Phrase
           key="meme-prix"
           style={s.texte}
           morceaux={coupeAutourDuPrix(phrasePrixDuPoste(existant, 'Il a déjà ce prix de référence'), existant.prixReferenceCentimes, { dernier: true })}
         />,
-        <BtnOutline key="fermer" label="Fermer" onPress={onFermer} />,
       );
     } else {
       contenu.push(
-        aUneReference ? (
+        feuille.aUneReference ? (
           <Phrase
             key="sa-reference"
             style={s.texte}
@@ -277,11 +290,20 @@ export default function FeuilleAjoutPoste({
         ...champ(existant),
         <BtnMain
           key="changer"
-          label={envoi ? 'Enregistrement…' : (aUneReference ? 'Changer ma référence' : 'Fixer le prix')}
+          label={envoi ? 'Enregistrement…' : (feuille.action === 'changer' ? 'Changer ma référence' : 'Fixer le prix')}
           disabled={envoi}
           onPress={changer}
         />,
-        <BtnOutline key="fermer" label="Fermer" onPress={onFermer} />,
+      );
+    }
+    contenu.push(<BtnOutline key="fermer" label="Fermer" onPress={onFermer} />);
+    if (feuille.sous) {
+      contenu.push(
+        <Text key="ligne" style={s.texte}>{`Votre ligne : « ${valeurs.designation} »`}</Text>,
+        <Text key="pourquoi" style={s.aide}>
+          Opus la reconnaît comme la phrase de ce poste : majuscules, accents, espaces, ponctuation et pluriel mis à part.
+        </Text>,
+        <Text key="sortie" style={s.aide}>{PHRASE_SORTIE}</Text>,
       );
     }
   } else {
@@ -295,7 +317,8 @@ export default function FeuilleAjoutPoste({
       <Text key="phrase" style={s.phrase}>{valeurs.designation}</Text>,
       <Text key="pour-tous" style={s.aide}>
         Cette phrase vous sera proposée telle quelle sur vos prochains devis, pour tous vos clients. N’y laissez ni le nom
-        ni l’adresse d’un client : pour la corriger, corrigez d’abord la ligne.
+        ni l’adresse d’un client : pour la corriger, corrigez d’abord la ligne, ou corrigez-la ensuite dans « Ma base de
+        postes ».
       </Text>,
       avertissement ? (
         <View key="avertissement" style={s.avertissement}>

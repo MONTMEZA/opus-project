@@ -3122,7 +3122,7 @@ export const monRegimeEtSaDate = hasSupabase ? monRegimeEtSaDateSupabase : monRe
    n'entre dans la base que par l'appui de l'artisan (sa réponse du 23/10).
 
    LA CLÉ DE RAPPROCHEMENT N'EST NI LUE NI ENVOYÉE : la base la calcule
-   (une colonne GÉNÉRÉE — l'envoyer rendrait 428C9), et l'application
+   (son déclencheur la pose — l'envoyer rendrait 428C9), et l'application
    calcule la même par son miroir (`cleDeLigne`), comme pour une ligne qui
    n'est pas encore en base.
    ========================================================================== */
@@ -3244,7 +3244,7 @@ function exigerDateLue(modifieLe) {
 }
 
 /**
- * MA BASE DE POSTES — `{ postes, incomplete }`.
+ * MA BASE DE POSTES — `{ postes, incomplete, total }`.
  *
  * FILTRÉE PAR MON ENTREPRISE CÔTÉ BASE (`.eq('pro_id', …)`), jamais par la
  * seule règle d'accès : une politique RLS se paie PAR LIGNE, et elle ne
@@ -3252,7 +3252,9 @@ function exigerDateLue(modifieLe) {
  * plafond, AVEC son compte : l'API de Supabase coupe chaque réponse à sa
  * limite de lignes, SANS erreur. Sans ordre, une base au-delà de la limite
  * rendrait des postes pris au hasard ; sans compte, rien ne le dirait.
- * `incomplete` le dit.
+ * `incomplete` le dit, et `total` (le compte de la base, ou `null`) dit
+ * combien : la page écrit le vrai nombre, et que sa recherche ne porte que
+ * sur les postes lus (relecture « textes », TEXTES12).
  */
 async function mesPostesSupabase() {
   const { data, error, count } = await uneRequeteDePosteALaFois('La lecture de votre base de postes', (signal) => avecSignal(
@@ -3263,7 +3265,8 @@ async function mesPostesSupabase() {
       .limit(POSTES_MAX), signal));
   if (error) leverLecture(error);
   const postes = (data || []).map(rowToPoste);
-  return { postes, incomplete: Number(count) > postes.length };
+  const total = Number.isSafeInteger(Number(count)) ? Number(count) : null;
+  return { postes, incomplete: Number(count) > postes.length, total };
 }
 
 /**
@@ -3334,7 +3337,7 @@ const PAUSE_POSTES_DEMO = 250;
 async function mesPostesDemo() {
   const { postes, compte } = await uneRequeteDePosteALaFois('La lecture de votre base de postes',
     (signal) => baseDevisDeDemo().lirePostes(moiEnDemo(), { signal, pauseMs: PAUSE_POSTES_DEMO }));
-  return { postes, incomplete: compte > postes.length };
+  return { postes, incomplete: compte > postes.length, total: Number.isSafeInteger(compte) ? compte : null };
 }
 async function ajouterPosteDemo(valeurs, { devisOrigineId = null } = {}) {
   const essayer = (lien) => uneRequeteDePosteALaFois('L’ajout à votre base de postes',

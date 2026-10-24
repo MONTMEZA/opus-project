@@ -215,7 +215,41 @@ const depuisPolitiques = new Set();
 for (const m of schema.matchAll(/\b(?:using|with check)\s*\(([\s\S]{0,600}?)\)\s*(?:;|with check|to\s)/g)) {
   for (const f of m[1].matchAll(/public\.([a-z_]+)\s*\(/g)) depuisPolitiques.add(f[1]);
 }
-const gardiennes = new Set([...depuisContraintes, ...depuisPolitiques]);
+/* LA TROISIÈME FAMILLE (relecture « base » du lot P, BASE3, 24/10/2026) :
+   une fonction appelée par un DÉCLENCHEUR `security invoker` s'exécute,
+   elle aussi, avec les droits de celui qui écrit — comme une politique ou une
+   contrainte. `cle_de_rapprochement` (section 50) en est le cas d'école : le
+   déclencheur `tient_le_poste()` l'appelle, et sans ce droit toute insertion
+   dans `base_postes` tombe sur 42501. Une révocation qui ne la nommait pas
+   — une boucle sur `pg_proc` — laissait CE contrôle au vert, et trois autres
+   avec lui : seul l'essai 50, joué à la main, la voyait. On relève donc
+   aussi les fonctions des corps de déclencheurs `security invoker` (la
+   DERNIÈRE définition de chacun, celle qui compte), des expressions
+   `generated always as (…)` et des expressions d'index : trois endroits où
+   PostgreSQL évalue une fonction pour le compte de celui qui écrit. Un nom
+   qui n'est pas une fonction du schéma — une table suivie d'une parenthèse —
+   n'est pas retenu. */
+const fonctionsDuSchema = new Set([...schema.matchAll(/create\s+or\s+replace\s+function\s+public\.([a-z_0-9]+)\s*\(/gi)]
+  .map((m) => m[1]));
+/* Sans ses chaînes ni ses commentaires `/* … *​/` : un corps qui DIT « le même
+   jeu que `tient_les_tarifs()` » ne l'appelle pas. */
+const sansChaines = (txt) => txt.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/'(?:[^']|'')*'/g, "''");
+const appelsDans = (txt) => [...sansChaines(txt).matchAll(/\b(?:public\s*\.\s*)?([a-z_][a-z0-9_]*)\s*\(/gi)]
+  .map((m) => m[1].toLowerCase()).filter((f) => fonctionsDuSchema.has(f));
+const declencheurs = new Map();
+for (const m of schema.matchAll(/create\s+or\s+replace\s+function\s+public\.([a-z_0-9]+)\s*\([^)]*\)\s*returns\s+trigger\b([\s\S]*?)\bas\s+(\$[a-z_0-9]*\$)([\s\S]*?)\3/gi)) {
+  declencheurs.set(m[1], { invoker: !/security\s+definer/i.test(m[2]), corps: m[4] });
+}
+const depuisDeclencheurs = new Set();
+for (const [nom, d] of declencheurs) {
+  if (d.invoker) appelsDans(d.corps).filter((f) => f !== nom).forEach((f) => depuisDeclencheurs.add(f));
+}
+const depuisExpressions = new Set();
+for (const m of schema.matchAll(/generated\s+always\s+as\s*\(([^;]*?)\)\s*stored/gi)) appelsDans(m[1]).forEach((f) => depuisExpressions.add(f));
+for (const m of schema.matchAll(/create\s+(?:unique\s+)?index\b[^;]*?\bon\s+(?:only\s+)?public\.[a-z_0-9]+\b([^;]*);/gi)) {
+  appelsDans(m[1]).forEach((f) => depuisExpressions.add(f));
+}
+const gardiennes = new Set([...depuisContraintes, ...depuisPolitiques, ...depuisDeclencheurs, ...depuisExpressions]);
 
 verifier('le relevé trouve bien des fonctions gardiennes',
   gardiennes.size >= 4,
@@ -227,6 +261,58 @@ verifier('le relevé trouve bien des fonctions gardiennes',
 verifier('…et `horaires_valides` en fait partie — c’est le cas d’école',
   gardiennes.has('horaires_valides'),
   'Si elle n’y est plus, c’est le relevé qui est cassé, pas le schéma.');
+
+verifier('…et la troisième famille aussi : `cle_de_rapprochement`, appelée par le déclencheur `security invoker` '
+  + '`tient_le_poste()` (section 50)',
+  depuisDeclencheurs.has('cle_de_rapprochement') && declencheurs.has('tient_le_poste') && declencheurs.get('tient_le_poste').invoker,
+  `Relevées depuis les déclencheurs security invoker : ${[...depuisDeclencheurs].join(', ') || '(aucune)'}. Si elle manque, `
+  + 'c’est le relevé qui est cassé — ou le déclencheur est passé en `definer`, ce que la section 50 interdit.');
+
+/* ET LES RÉVOCATIONS QUI NE NOMMENT PERSONNE. Un `revoke` écrit en toutes
+   lettres se lit ; une révocation DYNAMIQUE — `execute format('revoke …
+   %s …', f)` dans une boucle — ne se lit que par sa boucle. Deux formes sont
+   connues et lisibles : une LISTE NOMMÉE (`foreach f in array array['…']`),
+   et le balayage de la section 43, qui ne prend que ce qui rend `trigger`
+   (aucune gardienne ne rend `trigger`, vérifié plus bas). Toute autre
+   boucle qui révoque un droit de fonction — `for f in select … from pg_proc
+   where proname like 'cle%'`, le sabotage de la relecture — rougit : sa
+   cible ne se lit pas, et elle peut emporter une gardienne sans la nommer.
+   Une liste nommée, elle, ne doit retirer à `authenticated` aucune gardienne,
+   ni la retirer à PUBLIC sans la rendre à `authenticated` dans le même bloc
+   (`est_un_pro` et `horaires_valides` vivent sur le droit de PUBLIC). */
+{
+  const blocsDo = [...schema.matchAll(/\bdo\s+(\$[a-z_0-9]*\$)([\s\S]*?)\1/gi)].map((m) => ({ b: m[2], fin: m.index + m[0].length }));
+  const dynamiques = blocsDo.filter(({ b }) => /\bexecute\b[^;]*\brevoke\b[^;]*\bon\s+function\b/i.test(b));
+  const illisibles = [];
+  const fautives = [];
+  /* Rendue à `authenticated` APRÈS le bloc, en toutes lettres : c'est la
+     forme de `est_admin` (section 25), le droit de PUBLIC retiré dans un
+     bloc, celui d'`authenticated` posé juste après. */
+  const renduApres = (f, fin) => new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${f}\\s*\\([^)]*\\)\\s+to\\s+authenticated`, 'i')
+    .test(schema.slice(fin));
+  for (const { b, fin } of dynamiques) {
+    const liste = /foreach\s+\w+\s+in\s+array\s+array\s*\[([\s\S]*?)\]/i.exec(b);
+    const litteraux = [...b.matchAll(/\bexecute\s+'([^']*\brevoke\b[^']*)'/gi)].map((m) => m[1]);
+    const toutesLitterales = litteraux.length > 0
+      && litteraux.length === (b.match(/\bexecute\b[^;]*\brevoke\b/gi) || []).length;
+    if (liste || toutesLitterales) {
+      const noms = liste ? [...liste[1].matchAll(/'public\.([a-z_0-9]+)\s*\(/gi)].map((m) => m[1])
+        : litteraux.flatMap((x) => [...x.matchAll(/\bpublic\.([a-z_0-9]+)\s*\(/gi)].map((m) => m[1]));
+      const retireAuthentifie = /\brevoke\b[^;]*\bfrom\b[^;]*\bauthenticated\b/i.test(b);
+      const retirePublic = /\brevoke\b[^;]*\bfrom\s+public\b/i.test(b);
+      const rendAuthentifie = /\bgrant\b[^;]*\bto\s+authenticated\b/i.test(b);
+      noms.filter((f) => gardiennes.has(f) && (retireAuthentifie || (retirePublic && !rendAuthentifie && !renduApres(f, fin))))
+        .forEach((f) => fautives.push(f));
+    } else if (!/prorettype\s*=\s*'(?:pg_catalog\.)?trigger'::regtype/i.test(b)) {
+      illisibles.push(b.replace(/\s+/g, ' ').trim().slice(0, 140));
+    }
+  }
+  verifier(`aucune révocation DYNAMIQUE ne peut emporter une gardienne (${dynamiques.length} bloc(s) lu(s)) : une liste nommée qui `
+    + 'ne la contient pas, ou le balayage des fonctions qui rendent `trigger` — jamais une boucle dont la cible ne se lit pas',
+  dynamiques.length >= 4 && illisibles.length === 0 && fautives.length === 0,
+  `${illisibles.length ? `boucle(s) illisible(s) : ${illisibles.join(' | ')}` : ''}${fautives.length ? ` gardienne(s) retirée(s) `
+    + `par une liste : ${fautives.join(', ')}` : ''}`);
+}
 
 /* CE QUE CE CONTRÔLE PEUT DIRE, ET CE QU'IL NE PEUT PAS
    ------------------------------------------------------
@@ -292,7 +378,7 @@ console.log('\nLA VRAIE PREUVE EST EN SQL — ce fichier ne sait pas interroger 
      contrôle — et la première où c'est du SQL d'essai et non du code. */
   const essais = readFileSync('supabase/essais-section-43.sql', 'utf8')
     .replace(/^\s*--.*$/gm, '');
-  verifier('les essais éprouvent les huit portes refermées',
+  verifier('les essais éprouvent les huit portes refermées du 11/10',
     /has_function_privilege\('anon'/.test(essais)
     && /prorettype = 'pg_catalog\.trigger'::regtype/.test(essais));
 

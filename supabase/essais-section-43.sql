@@ -49,6 +49,14 @@ select has_function_privilege('anon', 'public.recalcule_chantier(uuid)', 'execut
 -- mes_entreprises (section 49.7, relecture de l etape 3 du lot 1) aussi : les
 -- trois politiques du devis l appellent en sous-requete non correlee. t pour
 -- authentifie, f pour anon (les politiques sont `to authenticated`).
+-- a_deja_une_reponse et cle_de_rapprochement (relecture « base » du lot P,
+-- 24/10/2026) : la TROISIEME famille. Un declencheur `security invoker`
+-- s execute avec les droits de celui qui ecrit, et les fonctions qu il appelle
+-- aussi : tient_le_texte() appelle a_deja_une_reponse, tient_le_poste()
+-- appelle cle_de_rapprochement — sans ce droit, plus aucun commentaire ne se
+-- corrige et plus aucun poste ne s insere (42501). Une revocation qui ne les
+-- nommait pas (une boucle sur pg_proc) laissait verifier-portes au vert.
+-- t pour authentifie, f pour anon sur les deux.
 -- `authentifie` doit valoir t PARTOUT. Un f ici, et la regle echoue au lieu
 -- de filtrer.
 select p.proname, p.prosecdef as definer,
@@ -58,7 +66,8 @@ select p.proname, p.prosecdef as definer,
  where n.nspname = 'public'
    and p.proname in ('est_admin', 'est_masque', 'est_un_pro', 'est_mon_entreprise',
                      'horaires_valides', 'metiers_connus',
-                     'devis_total_ligne', 'devis_tva_de', 'mes_entreprises')
+                     'devis_total_ligne', 'devis_tva_de', 'mes_entreprises',
+                     'a_deja_une_reponse', 'cle_de_rapprochement')
  order by 1;
 
 \echo '=== 5. ET UNE ECRITURE PASSE ENCORE — les declencheurs travaillent ==='

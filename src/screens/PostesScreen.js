@@ -25,6 +25,14 @@
  *     « Liste non actualisée » (le modèle de « Mes devis ») ;
  *   - une liste COUPÉE se dit (`incomplete`) : l'API de Supabase coupe une
  *     réponse à sa limite de lignes, sans erreur.
+ *
+ * CE QU'ELLE MONTRE — la liste triée et cherchée, la liste gardée, le
+ * message d'une liste vide, le compte — est décidé par `vueDeLaPage`
+ * (`postes.js`), que `verifier-postes` fait tourner. Écrit ici, une
+ * recherche « à la lettre » (« beton » ne trouvait plus « béton ») passait
+ * au vert (relecture « écran », ECRAN1) ; et après une relecture ratée, une
+ * recherche sans résultat disait « Lecture impossible » sous une liste qui
+ * avait été lue (ECRAN6).
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -38,9 +46,8 @@ import { Search, X, FileText, ChevronRight } from '../components/icons';
 import FeuillePoste from '../components/FeuillePoste';
 import { CLAVIER } from '../lib/clavier';
 import { useRechercheDifferee } from '../lib/frappe';
-import { correspondALaRecherche } from '../lib/devis';
 import {
-  POSTES_MAX, trierPostes, ligneDescriptive, libelleOrigine, phraseFixeLe,
+  vueDeLaPage, ligneDescriptive, libelleOrigine, phraseFixeLe,
 } from '../lib/postes';
 
 /* LA RECHERCHE EST SON PROPRE COMPOSANT, avec son texte à lui : une lettre
@@ -112,24 +119,29 @@ function Intervalle() {
 }
 
 export default function PostesScreen({
-  postes = [], etat = 'vide', lus = false, incomplete = false, enRetard = false,
+  postes = [], etat = 'vide', lus = false, incomplete = false, total = null, enRetard = false,
   regime = null, regimeDeclareLe = null,
   onRecharger, onRanger, onRelire,
 }) {
   const [recherche, setRecherche] = useState('');
-  /* La feuille ouverte : l'IDENTIFIANT du poste, relu dans la liste à chaque
-     rendu — une base relue (« modifié entre-temps ») lui donne la date à
-     jour pour la prochaine écriture. */
+  /* La feuille ouverte : le poste TEL QU'IL ÉTAIT à l'ouverture, relu dans
+     la liste à chaque rendu — une base relue (« modifié entre-temps ») lui
+     donne la date à jour pour la prochaine écriture. L'instantané ne sert
+     que si le poste a DISPARU de la base relue (retiré depuis un autre
+     appareil) : la feuille le dit au lieu de s'effacer sans un mot
+     (relecture « textes », TEXTES5). */
   const [ouvert, setOuvert] = useState(null);
 
-  const tries = useMemo(() => trierPostes(postes), [postes]);
-  const liste = useMemo(() => (String(recherche || '').trim()
-    ? tries.filter((p) => correspondALaRecherche(p.designation, recherche))
-    : tries), [tries, recherche]);
-  const ouvrir = React.useCallback((id) => setOuvert(id), []);
-  const posteOuvert = ouvert != null ? postes.find((p) => String(p.id) === String(ouvert)) : null;
+  /* CE QUE LA PAGE MONTRE : `vueDeLaPage`, jamais un filtre écrit ici. */
+  const vue = useMemo(
+    () => vueDeLaPage({ postes, etat, lus, recherche, incomplete, total }),
+    [postes, etat, lus, recherche, incomplete, total],
+  );
+  const ouvrir = React.useCallback((id) => setOuvert(postes.find((p) => String(p.id) === String(id)) || null), [postes]);
+  const posteLu = ouvert ? postes.find((p) => String(p.id) === String(ouvert.id)) : null;
+  const posteOuvert = posteLu || ouvert;
 
-  if ((etat === 'chargement' || etat === 'vide') && !lus) {
+  if (vue.enAttente) {
     return (
       <View style={s.attente}>
         <ActivityIndicator color={C.accent} />
@@ -138,27 +150,35 @@ export default function PostesScreen({
     );
   }
 
-  const echec = etat === 'echec';
   /* Une relecture ratée ne VIDE pas l'écran : ce qui a été lu reste, sous
      une rangée qui dit qu'il n'est pas à jour. « Lecture impossible »
      plein écran, seulement quand rien n'a jamais été lu. */
-  const garderLaListe = echec && lus;
+  const { garderLaListe } = vue;
 
   let vide;
-  if (echec) {
+  if (vue.vide === 'illisible') {
     vide = (
       <EmptyState
         icone={FileText}
         titre="Lecture impossible"
         action={onRecharger ? { label: 'Réessayer', onPress: onRecharger } : null}
       >
+        {/* « LA BASE » NE DÉSIGNE PAS LE SERVEUR SUR CET ÉCRAN (relecture
+            « textes », TEXTES11) : pour l'artisan, ici, « la base », c'est SA
+            base de postes. Et « n'a pas répondu » affirmait une cause qu'on
+            ne connaît pas — session expirée, délai, refus… */}
         {enRetard
-          ? 'La base n’est pas encore à jour pour les postes : ce n’est pas que votre base est vide. Réessayez plus tard.'
-          : 'Votre base de postes n’a pas pu être lue. Ce n’est pas qu’elle est vide : la base n’a pas répondu.'}
+          ? 'Le serveur d’Opus n’est pas encore à jour pour les postes : ce n’est pas que votre base est vide. Réessayez plus tard.'
+          : 'Votre base de postes n’a pas pu être lue. Ce n’est pas qu’elle est vide : la lecture n’a pas abouti — vérifiez '
+            + 'votre connexion, puis réessayez.'}
       </EmptyState>
     );
-  } else if (String(recherche || '').trim()) {
-    vide = <EmptyState icone={Search} titre={`Aucun poste ne contient « ${recherche.trim()} ».`} />;
+  } else if (vue.vide === 'recherche') {
+    vide = (
+      <EmptyState icone={Search} titre={`Aucun poste ne contient « ${vue.recherche} ».`}>
+        {vue.aideRecherche}
+      </EmptyState>
+    );
   } else {
     vide = (
       <EmptyState icone={FileText} titre="Votre base est vide">
@@ -169,29 +189,26 @@ export default function PostesScreen({
 
   const entete = (
     <View style={s.entete}>
-      <Text style={s.compte}>
-        {etat === 'ok' || garderLaListe
-          ? `${postes.length} ${postes.length > 1 ? 'postes' : 'poste'}`
-          : 'Ma base de postes'}
-      </Text>
+      <Text style={s.compte}>{vue.compte || 'Ma base de postes'}</Text>
       <Text style={s.aide}>
         Vos phrases et vos prix de référence. Aucun écran d’Opus ne les montre à quelqu’un d’autre que vous.
       </Text>
-      {/* La liste coupée se DIT : sans cela, « Ma base » montrerait les
-          premiers postes sans un mot sur les autres. */}
-      {incomplete && (
+      {/* La liste coupée se DIT, avec le vrai total, et la recherche avec
+          elle : sans cela, « Ma base » montrerait les premiers postes sans
+          un mot sur les autres — et une recherche sans résultat, faite sur
+          une partie de la base, ressemblerait à une base vérifiée
+          (`vueDeLaPage`, relecture « textes », TEXTES12). */}
+      {!!vue.bandeIncomplete && (
         <View style={s.bande} accessibilityLiveRegion="polite">
-          <Text style={s.bandeTexte}>
-            {`Liste incomplète : votre base compte plus de postes qu’Opus n’en a lu — ${postes.length} sont affichés, `
-              + `sur ${POSTES_MAX} au plus par entreprise.`}
-          </Text>
+          <Text style={s.bandeTexte}>{vue.bandeIncomplete}</Text>
         </View>
       )}
       {garderLaListe && (
         <View style={s.bande} accessibilityLiveRegion="polite">
           <Text style={s.bandeTexte}>
             {enRetard
-              ? 'Liste non actualisée : la base n’est pas encore à jour pour les postes. Ce qui est affiché date de votre dernière lecture.'
+              ? 'Liste non actualisée : le serveur d’Opus n’est pas encore à jour pour les postes. Ce qui est affiché date de votre '
+                + 'dernière lecture.'
               : 'Liste non actualisée : votre base de postes n’a pas pu être relue. Ce qui est affiché date de votre dernière lecture.'}
           </Text>
           {!!onRecharger && <BtnOutline label="Réessayer" onPress={onRecharger} />}
@@ -199,7 +216,9 @@ export default function PostesScreen({
       )}
       {postes.length > 0 && (
         <>
-          <Text style={s.aide}>Pour ne plus voir d’écart sur un poste, retirez son prix de référence.</Text>
+          {/* « Écart » n'apparaît nulle part ailleurs à l'écran : la carte
+              pose une QUESTION, et c'est elle qu'on nomme (ECRAN8). */}
+          <Text style={s.aide}>Pour ne plus voir la question « c’est voulu ? » sur un poste, retirez son prix de référence.</Text>
           <BarreRecherche valeur={recherche} onChange={setRecherche} />
         </>
       )}
@@ -210,7 +229,7 @@ export default function PostesScreen({
     <View style={s.ecran}>
       <FlatList
         {...CLAVIER}
-        data={echec && !garderLaListe ? [] : liste}
+        data={vue.visibles}
         keyExtractor={(p) => String(p.id)}
         renderItem={({ item }) => (
           <RangeePoste
@@ -243,6 +262,7 @@ export default function PostesScreen({
           postes={postes}
           regime={regime}
           regimeDeclareLe={regimeDeclareLe}
+          absent={!posteLu}
           onRanger={onRanger}
           onRelire={onRelire}
           onFermer={() => setOuvert(null)}

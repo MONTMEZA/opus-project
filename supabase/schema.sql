@@ -12477,8 +12477,8 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --    - un index unique `devis (id, pro_id)` (50.1), le point d'attache du
 --      lien vers le devis d'origine ;
 --    - une table PRIVÉE, `base_postes` (50.2) : une ligne par poste, la
---      phrase MOT POUR MOT, et sa clé de rapprochement dans une colonne
---      GÉNÉRÉE que personne d'autre que la base n'écrit ;
+--      phrase MOT POUR MOT, et sa clé de rapprochement, que seule la base
+--      écrit — à l'insertion et quand la phrase change, jamais ailleurs ;
 --    - cinq contraintes, toutes en `_check` (50.3) ;
 --    - un déclencheur, `tient_le_poste()`, et un PLAFOND de 1 000 postes par
 --      entreprise, `OP018` (50.4) ;
@@ -12508,10 +12508,17 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  Aucune politique pour l'administration, aucune fonction `admin_*` ne
 --  nomme cette table ; la liste FERMÉE des fonctions qui la nomment
 --  (`tient_le_poste`, `mes_donnees`) est tenue par `verifier-legal` et par
---  l'essai 50, qui la demande au catalogue. L'éditeur SQL de Supabase reste
---  un accès ouvert : c'est un ENGAGEMENT écrit, qui couvre les phrases comme
---  les prix — pas une impossibilité, et ce commentaire ne doit pas laisser
---  croire le contraire.
+--  l'essai 50, qui la demande au catalogue.
+--
+--  DEUX ACCÈS LISENT TOUT, RLS IGNORÉE, et il faut les nommer tous les deux :
+--  l'éditeur SQL de Supabase, et le connecteur de LECTURE des sessions de
+--  travail (`SupabaseLecture`, rôle `supabase_read_only_user`, qui a
+--  `bypassrls` et `pg_read_all_data` — CLAUDE.md, « Les permissions
+--  Supabase », 19/10/2026). Aucune règle de ce fichier ne les ferme. Ce qui
+--  les retient est un ENGAGEMENT écrit, qui couvre les phrases comme les
+--  prix — et, pour le connecteur, la règle « on interroge la FORME, jamais
+--  le contenu », que plus aucun regard humain ne tient. Pas une
+--  impossibilité, et ce commentaire ne doit pas laisser croire le contraire.
 --
 --  DANS LE CODE DE CETTE SECTION, AUCUN CARACTÈRE HORS DE L'ASCII, hors la
 --  phrase d'OP018 (recopiée octet pour octet dans `src/lib/erreurs.js`), et
@@ -12541,36 +12548,103 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  AUCUNE TABLE UNICODE À L'EXÉCUTION — ni `lower()`, ni `upper()`, ni
 --  `unaccent`, ni `normalize`, ni collation : `lower('I')` ne rend pas la
 --  même lettre sous une collation turque. Seulement une table EXPLICITE de
---  998 caractères (lettres accentuées, chiffres en exposant, séparateurs,
---  caractères invisibles), trente remplacements par un mot — un signe qui
---  porte un SENS ne s'efface pas : `<` devient « inf », `%` « pourcent »,
---  `€` « euro » —, deux expressions à motifs ASCII, et une exception écrite
---  (« bas » ne perd pas son s : « Plancher bas » n'est pas « Plancher BA »,
---  le béton armé). Les deux écritures rendent la même EMPREINTE sur chacun
---  des 1 112 063 points de code d'Unicode, et les mêmes 175 cas écrits à la
---  main (`supabase/cas-rapprochement.json`) : `verifier-postes` côté
---  téléphone, l'essai 50 (cas 18 et 18 bis) côté base.
+--  5 123 caractères (lettres accentuées, chiffres en exposant, séparateurs,
+--  caractères invisibles), dont trente remplacements par un mot — un signe
+--  qui porte un SENS ne s'efface pas : `<` devient « inf », `%`
+--  « pourcent », `€` « euro » —, deux expressions à motifs ASCII, et une
+--  exception écrite (« bas » ne perd pas son s : « Plancher bas » n'est pas
+--  « Plancher BA », le béton armé). Les deux écritures rendent la même
+--  EMPREINTE sur chacun des 1 112 063 points de code d'Unicode, et les mêmes
+--  188 cas écrits à la main (`supabase/cas-rapprochement.json`) :
+--  `verifier-postes` côté téléphone, l'essai 50 (cas 18 et 18 bis) côté base.
+--
+--  LES INVISIBLES (24/10/2026) : toute la propriété Unicode
+--  `Default_Ignorable_Code_Point` — 4 174 points de code, lus dans
+--  `DerivedCoreProperties.txt` d'Unicode 17.0.0 (la même liste en 15.1 et en
+--  16.0) — est SUPPRIMÉE, et U+2800 (le motif braille vide, un blanc qui a
+--  la largeur d'une lettre) est un SÉPARATEUR. Avant, une phrase faite d'un
+--  sélecteur de variante ou d'une étiquette (U+E0100, U+E0041…) faisait un
+--  poste invisible, et la même phrase suivie d'un U+061C ou d'un U+180B
+--  passait à côté de son doublon. Ce qui reste, et c'est voulu : une marque
+--  combinante HORS de U+0300–U+036F se voit sur sa lettre, elle reste.
+--
+--  L'ORDRE ET LA FORME DU CORPS, qui ne sont pas des détails :
+--    - la table (`translate`) passe AVANT les remplacements (`replace`).
+--      `translate` cherche chaque caractère de la phrase dans toute sa
+--      chaîne de départ ; appliqué après, il travaillait sur une phrase que
+--      « % » → « pourcent » avait rendue dix fois plus longue. Les deux
+--      ordres rendent la même clé (un caractère remplacé n'est pas dans la
+--      table, et un remplacement ne rapporte que a à z, 0 à 9 et l'espace) :
+--      le générateur l'exige, et les deux empreintes le prouvent ;
+--    - la chaîne de départ s'écrit par groupes de seize, entre parenthèses.
+--      D'un seul tenant, PostgreSQL en fait un arbre aussi profond qu'elle
+--      est longue : mesuré, 4 000 termes passent, 4 500 tombent sur « stack
+--      depth limit exceeded » (`max_stack_depth` de 2 Mo, la valeur par
+--      défaut). La table en compte 5 093 dans le `translate`.
 --
 --  LA GARDE : au-delà de 2 000 points de code, pas de clé (`null`), et rien
 --  n'est calculé. Sans elle, 10 Mo envoyés par n'importe quel compte
---  connecté tenaient un processus près de quarante secondes — et, par la
---  colonne générée, faisaient attendre l'artisan dont on usurpait le nom ;
---  avec elle, 47 ms. Une phrase de poste ne dépasse jamais 2 000 caractères
---  (`base_poste_designation_check`) : la garde ne refuse rien de légitime.
+--  connecté tenaient un processus près de quarante secondes. Une phrase de
+--  poste ne dépasse jamais 2 000 caractères (`base_poste_designation_check`) :
+--  la garde ne refuse rien de légitime. CE QU'UNE CLÉ COÛTE, mesuré sur
+--  PostgreSQL 16 le 24/10/2026 (cas 22) : une phrase ordinaire de 95
+--  caractères, ~2 ms une fois la fonction PRÉPARÉE — la préparation, ~16 ms,
+--  se paie une fois par ordre SQL (79 Ko de SQL à lire) ; 1 995 caractères
+--  de français, ~43 ms ; le PIRE cas, une phrase COURTE qui s'allonge —
+--  1 990 « % », chacun devenu « pourcent » —, ~47 ms (61 ms avant que la
+--  table ne passe devant les remplacements ; ~460 ms pour la table complétée
+--  dans l'ordre d'avant). Et ce coût ne se paie qu'à l'INSERTION et quand la
+--  phrase change (50.2), jamais pour un prix ni pendant une cascade.
 --
---  `immutable` ET `strict` : la colonne générée et l'index l'exigent, et
---  `null` rend `null`. ELLE RESTE EXÉCUTABLE PAR `authenticated`, par
---  NÉCESSITÉ : une colonne générée s'évalue avec les droits de CELUI QUI
---  ÉCRIT — la leçon de `horaires_valides()` (30/09), étendue aux colonnes
---  générées ; sans ce droit, toute insertion tombe sur 42501. L'exposer par
---  `/rest/v1/rpc` ne donne accès à rien : elle ne lit aucune table, et la
---  garde borne son coût.
+--  `immutable` (même phrase, même clé, quels que soient la collation et les
+--  réglages : cas 18 bis et 24) ET `strict` (`null` rend `null`). ELLE RESTE
+--  EXÉCUTABLE PAR `authenticated`, par NÉCESSITÉ : le déclencheur
+--  `tient_le_poste()` l'appelle, et il est `security invoker` — il s'exécute
+--  avec les droits de CELUI QUI ÉCRIT. C'est la leçon de `horaires_valides()`
+--  (30/09), étendue aux déclencheurs `security invoker` : sans ce droit,
+--  toute insertion tombe sur 42501 (cas 19e). `verifier-portes` relève cette
+--  troisième famille de fonctions gardiennes, à côté des politiques et des
+--  contraintes (section 43). L'exposer par `/rest/v1/rpc` ne donne accès à
+--  rien : elle ne lit aucune table, et la garde borne son coût.
 --
---  CHANGER LA RÈGLE UN JOUR, C'EST RÉÉCRIRE LA TABLE : une fonction
---  remplacée ne recalcule pas une colonne déjà rangée. Le contrat entier —
---  la table, les cas et les deux empreintes, les postes devenus doublons à
---  faire trancher, puis `update public.base_postes set designation =
---  designation` — est écrit en tête de `src/lib/rapprochement.js`.
+--  CHANGER LA RÈGLE UN JOUR — LE CONTRAT. La clé est RANGÉE : le
+--  déclencheur la calcule à l'insertion, puis SEULEMENT quand la phrase
+--  change (50.2, 50.4). Remplacer cette fonction ne change donc AUCUNE clé
+--  rangée tant qu'une réécriture explicite ne les recalcule pas — et une
+--  phrase corrigée entre les deux recevrait une clé de la NOUVELLE règle à
+--  côté des clés de l'ancienne, qui ne se rapprocheraient plus. D'où, dans
+--  le MÊME lot :
+--    1. la table de `src/lib/rapprochement.js` (par script), puis
+--       `npm run generer-rapprochement` ; les cas et les deux empreintes de
+--       `supabase/cas-rapprochement.json`, recalculées des deux côtés ;
+--    2. AVANT la migration, chercher les postes que la nouvelle règle rendrait
+--       doublons (même entreprise, même nouvelle clé, même unité, même
+--       fourniture) avec une fonction TEMPORAIRE qui porte la nouvelle règle
+--       (`create function pg_temp.…`) — une lecture, rien ne change —, et
+--       les faire trancher ;
+--    3. LA MIGRATION, EN UNE SEULE TRANSACTION, et jamais en deux :
+--         set local lock_timeout = '5s';
+--         lock table public.base_postes in share row exclusive mode;
+--         create or replace function public.cle_de_rapprochement(…) … ;
+--         update public.base_postes
+--            set cle_rapprochement = public.cle_de_rapprochement(designation)
+--          where cle_rapprochement is distinct from public.cle_de_rapprochement(designation);
+--       Le verrou fait attendre les écritures (la lecture continue) : sans
+--       lui, un poste ajouté pendant la migration par une session qui voit
+--       encore l'ancienne fonction garderait une clé de l'ancienne règle.
+--       Cette réécriture est la SEULE écriture de la clé que le déclencheur
+--       accepte : exactement son recalcul (50.4). Un doublon apparu depuis
+--       la recherche fait tomber l'ordre sur 23505 et ANNULE TOUT,
+--       remplacement compris : la base reste à l'ancienne règle, jamais à
+--       moitié. (Une chaîne de clés qui se décalent — la nouvelle clé de X
+--       est l'ancienne de Y, qui change aussi — PEUT tomber de la même
+--       façon : l'index vérifie chaque ligne aussitôt, et tout dépend de
+--       l'ordre où PostgreSQL visite les lignes — mesuré dans les deux sens.
+--       On réécrit alors d'abord les postes dont la nouvelle clé est libre,
+--       puis les autres.)
+--    4. une application qui calcule encore l'ancienne clé verra un 23505 sur
+--       un poste qu'elle croyait nouveau : la feuille le dit.
+--  L'essai 50 joue ce contrat (cas 21 et 21 bis).
 -- --------------------------------------------------------------------------
 -- <<< CLÉ DE RAPPROCHEMENT ENGENDRÉE par npm run generer-rapprochement — ne pas modifier à la main >>>
 create or replace function public.cle_de_rapprochement(p_phrase text)
@@ -12585,70 +12659,328 @@ as $$
   select case when char_length(p_phrase) > 2000 then null else
   regexp_replace(
     btrim(regexp_replace(
-      translate(
-        replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(p_phrase, chr(37), ' pourcent '), chr(38), ' et '), chr(43), ' plus '), chr(60), ' inf '), chr(62), ' sup '), chr(188), '1 4'), chr(189), '1 2'), chr(190), '3 4'), chr(198), 'ae'), chr(215), 'x'), chr(222), 'th'), chr(223), 'ss'), chr(230), 'ae'), chr(254), 'th'), chr(306), 'ij'), chr(307), 'ij'), chr(338), 'oe'), chr(339), 'oe'), chr(7838), 'ss'), chr(8240), ' pourmille '), chr(8364), ' euro '), chr(8804), ' inf '), chr(8805), ' sup '), chr(64256), 'ff'), chr(64257), 'fi'), chr(64258), 'fl'), chr(64259), 'ffi'), chr(64260), 'ffl'), chr(64261), 'st'), chr(64262), 'st'),
-        'ABCDEFGHIJKLMNOP'
-        || 'QRSTUVWXYZ' || chr(192) || chr(193) || chr(194) || chr(195) || chr(196) || chr(197)
-        || chr(199) || chr(200) || chr(201) || chr(202) || chr(203) || chr(204) || chr(205) || chr(206) || chr(207) || chr(208) || chr(209) || chr(210) || chr(211) || chr(212) || chr(213) || chr(214)
-        || chr(216) || chr(217) || chr(218) || chr(219) || chr(220) || chr(221) || chr(224) || chr(225) || chr(226) || chr(227) || chr(228) || chr(229) || chr(231) || chr(232) || chr(233) || chr(234)
-        || chr(235) || chr(236) || chr(237) || chr(238) || chr(239) || chr(240) || chr(241) || chr(242) || chr(243) || chr(244) || chr(245) || chr(246) || chr(248) || chr(249) || chr(250) || chr(251)
-        || chr(252) || chr(253) || chr(255) || chr(256) || chr(257) || chr(258) || chr(259) || chr(260) || chr(261) || chr(262) || chr(263) || chr(264) || chr(265) || chr(266) || chr(267) || chr(268)
-        || chr(269) || chr(270) || chr(271) || chr(272) || chr(273) || chr(274) || chr(275) || chr(276) || chr(277) || chr(278) || chr(279) || chr(280) || chr(281) || chr(282) || chr(283) || chr(284)
-        || chr(285) || chr(286) || chr(287) || chr(288) || chr(289) || chr(290) || chr(291) || chr(292) || chr(293) || chr(294) || chr(295) || chr(296) || chr(297) || chr(298) || chr(299) || chr(300)
-        || chr(301) || chr(302) || chr(303) || chr(304) || chr(305) || chr(308) || chr(309) || chr(310) || chr(311) || chr(313) || chr(314) || chr(315) || chr(316) || chr(317) || chr(318) || chr(319)
-        || chr(320) || chr(321) || chr(322) || chr(323) || chr(324) || chr(325) || chr(326) || chr(327) || chr(328) || chr(332) || chr(333) || chr(334) || chr(335) || chr(336) || chr(337) || chr(340)
-        || chr(341) || chr(342) || chr(343) || chr(344) || chr(345) || chr(346) || chr(347) || chr(348) || chr(349) || chr(350) || chr(351) || chr(352) || chr(353) || chr(354) || chr(355) || chr(356)
-        || chr(357) || chr(358) || chr(359) || chr(360) || chr(361) || chr(362) || chr(363) || chr(364) || chr(365) || chr(366) || chr(367) || chr(368) || chr(369) || chr(370) || chr(371) || chr(372)
-        || chr(373) || chr(374) || chr(375) || chr(376) || chr(377) || chr(378) || chr(379) || chr(380) || chr(381) || chr(382) || chr(383) || chr(416) || chr(417) || chr(431) || chr(432) || chr(461)
-        || chr(462) || chr(463) || chr(464) || chr(465) || chr(466) || chr(467) || chr(468) || chr(469) || chr(470) || chr(471) || chr(472) || chr(473) || chr(474) || chr(475) || chr(476) || chr(478)
-        || chr(479) || chr(480) || chr(481) || chr(486) || chr(487) || chr(488) || chr(489) || chr(490) || chr(491) || chr(492) || chr(493) || chr(496) || chr(500) || chr(501) || chr(504) || chr(505)
-        || chr(506) || chr(507) || chr(512) || chr(513) || chr(514) || chr(515) || chr(516) || chr(517) || chr(518) || chr(519) || chr(520) || chr(521) || chr(522) || chr(523) || chr(524) || chr(525)
-        || chr(526) || chr(527) || chr(528) || chr(529) || chr(530) || chr(531) || chr(532) || chr(533) || chr(534) || chr(535) || chr(536) || chr(537) || chr(538) || chr(539) || chr(542) || chr(543)
-        || chr(550) || chr(551) || chr(552) || chr(553) || chr(554) || chr(555) || chr(556) || chr(557) || chr(558) || chr(559) || chr(560) || chr(561) || chr(562) || chr(563) || chr(7680) || chr(7681)
-        || chr(7682) || chr(7683) || chr(7684) || chr(7685) || chr(7686) || chr(7687) || chr(7688) || chr(7689) || chr(7690) || chr(7691) || chr(7692) || chr(7693) || chr(7694) || chr(7695) || chr(7696) || chr(7697)
-        || chr(7698) || chr(7699) || chr(7700) || chr(7701) || chr(7702) || chr(7703) || chr(7704) || chr(7705) || chr(7706) || chr(7707) || chr(7708) || chr(7709) || chr(7710) || chr(7711) || chr(7712) || chr(7713)
-        || chr(7714) || chr(7715) || chr(7716) || chr(7717) || chr(7718) || chr(7719) || chr(7720) || chr(7721) || chr(7722) || chr(7723) || chr(7724) || chr(7725) || chr(7726) || chr(7727) || chr(7728) || chr(7729)
-        || chr(7730) || chr(7731) || chr(7732) || chr(7733) || chr(7734) || chr(7735) || chr(7736) || chr(7737) || chr(7738) || chr(7739) || chr(7740) || chr(7741) || chr(7742) || chr(7743) || chr(7744) || chr(7745)
-        || chr(7746) || chr(7747) || chr(7748) || chr(7749) || chr(7750) || chr(7751) || chr(7752) || chr(7753) || chr(7754) || chr(7755) || chr(7756) || chr(7757) || chr(7758) || chr(7759) || chr(7760) || chr(7761)
-        || chr(7762) || chr(7763) || chr(7764) || chr(7765) || chr(7766) || chr(7767) || chr(7768) || chr(7769) || chr(7770) || chr(7771) || chr(7772) || chr(7773) || chr(7774) || chr(7775) || chr(7776) || chr(7777)
-        || chr(7778) || chr(7779) || chr(7780) || chr(7781) || chr(7782) || chr(7783) || chr(7784) || chr(7785) || chr(7786) || chr(7787) || chr(7788) || chr(7789) || chr(7790) || chr(7791) || chr(7792) || chr(7793)
-        || chr(7794) || chr(7795) || chr(7796) || chr(7797) || chr(7798) || chr(7799) || chr(7800) || chr(7801) || chr(7802) || chr(7803) || chr(7804) || chr(7805) || chr(7806) || chr(7807) || chr(7808) || chr(7809)
-        || chr(7810) || chr(7811) || chr(7812) || chr(7813) || chr(7814) || chr(7815) || chr(7816) || chr(7817) || chr(7818) || chr(7819) || chr(7820) || chr(7821) || chr(7822) || chr(7823) || chr(7824) || chr(7825)
-        || chr(7826) || chr(7827) || chr(7828) || chr(7829) || chr(7830) || chr(7831) || chr(7832) || chr(7833) || chr(7840) || chr(7841) || chr(7842) || chr(7843) || chr(7844) || chr(7845) || chr(7846) || chr(7847)
-        || chr(7848) || chr(7849) || chr(7850) || chr(7851) || chr(7852) || chr(7853) || chr(7854) || chr(7855) || chr(7856) || chr(7857) || chr(7858) || chr(7859) || chr(7860) || chr(7861) || chr(7862) || chr(7863)
-        || chr(7864) || chr(7865) || chr(7866) || chr(7867) || chr(7868) || chr(7869) || chr(7870) || chr(7871) || chr(7872) || chr(7873) || chr(7874) || chr(7875) || chr(7876) || chr(7877) || chr(7878) || chr(7879)
-        || chr(7880) || chr(7881) || chr(7882) || chr(7883) || chr(7884) || chr(7885) || chr(7886) || chr(7887) || chr(7888) || chr(7889) || chr(7890) || chr(7891) || chr(7892) || chr(7893) || chr(7894) || chr(7895)
-        || chr(7896) || chr(7897) || chr(7898) || chr(7899) || chr(7900) || chr(7901) || chr(7902) || chr(7903) || chr(7904) || chr(7905) || chr(7906) || chr(7907) || chr(7908) || chr(7909) || chr(7910) || chr(7911)
-        || chr(7912) || chr(7913) || chr(7914) || chr(7915) || chr(7916) || chr(7917) || chr(7918) || chr(7919) || chr(7920) || chr(7921) || chr(7922) || chr(7923) || chr(7924) || chr(7925) || chr(7926) || chr(7927)
-        || chr(7928) || chr(7929) || chr(178) || chr(179) || chr(185) || chr(8304) || chr(8308) || chr(8309) || chr(8310) || chr(8311) || chr(8312) || chr(8313) || chr(8320) || chr(8321) || chr(8322) || chr(8323)
-        || chr(8324) || chr(8325) || chr(8326) || chr(8327) || chr(8328) || chr(8329) || chr(1) || chr(2) || chr(3) || chr(4) || chr(5) || chr(6) || chr(7) || chr(8) || chr(9) || chr(10)
-        || chr(11) || chr(12) || chr(13) || chr(14) || chr(15) || chr(16) || chr(17) || chr(18) || chr(19) || chr(20) || chr(21) || chr(22) || chr(23) || chr(24) || chr(25) || chr(26)
-        || chr(27) || chr(28) || chr(29) || chr(30) || chr(31) || '!"#$' || chr(39) || '()*,-.'
-        || '/:;=?@[' || chr(92) || ']^_`{|}~'
-        || chr(127) || chr(128) || chr(129) || chr(130) || chr(131) || chr(132) || chr(133) || chr(134) || chr(135) || chr(136) || chr(137) || chr(138) || chr(139) || chr(140) || chr(141) || chr(142)
-        || chr(143) || chr(144) || chr(145) || chr(146) || chr(147) || chr(148) || chr(149) || chr(150) || chr(151) || chr(152) || chr(153) || chr(154) || chr(155) || chr(156) || chr(157) || chr(158)
-        || chr(159) || chr(160) || chr(161) || chr(162) || chr(163) || chr(164) || chr(165) || chr(166) || chr(167) || chr(168) || chr(169) || chr(170) || chr(171) || chr(172) || chr(174) || chr(175)
-        || chr(176) || chr(177) || chr(180) || chr(182) || chr(183) || chr(184) || chr(186) || chr(187) || chr(191) || chr(247) || chr(697) || chr(698) || chr(699) || chr(700) || chr(701) || chr(5760)
-        || chr(8192) || chr(8193) || chr(8194) || chr(8195) || chr(8196) || chr(8197) || chr(8198) || chr(8199) || chr(8200) || chr(8201) || chr(8202) || chr(8208) || chr(8209) || chr(8210) || chr(8211) || chr(8212)
-        || chr(8213) || chr(8214) || chr(8215) || chr(8216) || chr(8217) || chr(8218) || chr(8219) || chr(8220) || chr(8221) || chr(8222) || chr(8223) || chr(8224) || chr(8225) || chr(8226) || chr(8227) || chr(8228)
-        || chr(8229) || chr(8230) || chr(8231) || chr(8232) || chr(8233) || chr(8239) || chr(8241) || chr(8242) || chr(8243) || chr(8244) || chr(8245) || chr(8246) || chr(8247) || chr(8248) || chr(8249) || chr(8250)
-        || chr(8251) || chr(8252) || chr(8253) || chr(8254) || chr(8255) || chr(8256) || chr(8257) || chr(8258) || chr(8259) || chr(8260) || chr(8261) || chr(8262) || chr(8263) || chr(8264) || chr(8265) || chr(8266)
-        || chr(8267) || chr(8268) || chr(8269) || chr(8270) || chr(8271) || chr(8272) || chr(8273) || chr(8274) || chr(8275) || chr(8276) || chr(8277) || chr(8278) || chr(8279) || chr(8280) || chr(8281) || chr(8282)
-        || chr(8283) || chr(8284) || chr(8285) || chr(8286) || chr(8287) || chr(8293) || chr(8352) || chr(8353) || chr(8354) || chr(8355) || chr(8356) || chr(8357) || chr(8358) || chr(8359) || chr(8360) || chr(8361)
-        || chr(8362) || chr(8363) || chr(8365) || chr(8366) || chr(8367) || chr(8368) || chr(8369) || chr(8370) || chr(8371) || chr(8372) || chr(8373) || chr(8374) || chr(8375) || chr(8376) || chr(8377) || chr(8378)
-        || chr(8379) || chr(8380) || chr(8381) || chr(8382) || chr(8383) || chr(8384) || chr(8385) || chr(8386) || chr(8387) || chr(8388) || chr(8389) || chr(8390) || chr(8391) || chr(8392) || chr(8393) || chr(8394)
-        || chr(8395) || chr(8396) || chr(8397) || chr(8398) || chr(8399) || chr(8722) || chr(8725) || chr(12288) || chr(173) || chr(768) || chr(769) || chr(770) || chr(771) || chr(772) || chr(773) || chr(774)
-        || chr(775) || chr(776) || chr(777) || chr(778) || chr(779) || chr(780) || chr(781) || chr(782) || chr(783) || chr(784) || chr(785) || chr(786) || chr(787) || chr(788) || chr(789) || chr(790)
-        || chr(791) || chr(792) || chr(793) || chr(794) || chr(795) || chr(796) || chr(797) || chr(798) || chr(799) || chr(800) || chr(801) || chr(802) || chr(803) || chr(804) || chr(805) || chr(806)
-        || chr(807) || chr(808) || chr(809) || chr(810) || chr(811) || chr(812) || chr(813) || chr(814) || chr(815) || chr(816) || chr(817) || chr(818) || chr(819) || chr(820) || chr(821) || chr(822)
-        || chr(823) || chr(824) || chr(825) || chr(826) || chr(827) || chr(828) || chr(829) || chr(830) || chr(831) || chr(832) || chr(833) || chr(834) || chr(835) || chr(836) || chr(837) || chr(838)
-        || chr(839) || chr(840) || chr(841) || chr(842) || chr(843) || chr(844) || chr(845) || chr(846) || chr(847) || chr(848) || chr(849) || chr(850) || chr(851) || chr(852) || chr(853) || chr(854)
-        || chr(855) || chr(856) || chr(857) || chr(858) || chr(859) || chr(860) || chr(861) || chr(862) || chr(863) || chr(864) || chr(865) || chr(866) || chr(867) || chr(868) || chr(869) || chr(870)
-        || chr(871) || chr(872) || chr(873) || chr(874) || chr(875) || chr(876) || chr(877) || chr(878) || chr(879) || chr(4447) || chr(4448) || chr(6158) || chr(8203) || chr(8204) || chr(8205) || chr(8206)
-        || chr(8207) || chr(8234) || chr(8235) || chr(8236) || chr(8237) || chr(8238) || chr(8288) || chr(8289) || chr(8290) || chr(8291) || chr(8292) || chr(8294) || chr(8295) || chr(8296) || chr(8297) || chr(8298)
-        || chr(8299) || chr(8300) || chr(8301) || chr(8302) || chr(8303) || chr(12644) || chr(65024) || chr(65025) || chr(65026) || chr(65027) || chr(65028) || chr(65029) || chr(65030) || chr(65031) || chr(65032) || chr(65033)
-        || chr(65034) || chr(65035) || chr(65036) || chr(65037) || chr(65038) || chr(65039) || chr(65279) || chr(65440),
-        'abcdefghijklmnopqrstuvwxyzaaaaaaceeeeiiiidnoooooouuuuyaaaaaaceeeeiiiidnoooooouuuuyyaaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiiijjkkllllllllllnnnnnnoooooorrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzzsoouuaaiioouuuuuuuuuuaaaaggkkoooojggnnaaaaaaeeeeiiiioooorrrruuuusstthhaaeeooooooooyyaabbbbbbccddddddddddeeeeeeeeeeffgghhhhhhhhhhiiiikkkkkkllllllllmmmmmmnnnnnnnnoooooooopppprrrrrrrrssssssssssttttttttuuuuuuuuuuvvvvwwwwwwwwwwxxxxyyzzzzzzhtwyaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeeeeeeeeeeeiiiioooooooooooooooooooooooouuuuuuuuuuuuuuyyyyyyyy23104567890123456789                                                                                                                                                                                                                                                                  '),
+      replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(translate(
+          p_phrase,
+          ('ABCDEFGHIJKLMNOP')
+          || ('QRSTUVWXYZ' || chr(192) || chr(193) || chr(194) || chr(195) || chr(196) || chr(197))
+          || (chr(199) || chr(200) || chr(201) || chr(202) || chr(203) || chr(204) || chr(205) || chr(206) || chr(207) || chr(208) || chr(209) || chr(210) || chr(211) || chr(212) || chr(213) || chr(214))
+          || (chr(216) || chr(217) || chr(218) || chr(219) || chr(220) || chr(221) || chr(224) || chr(225) || chr(226) || chr(227) || chr(228) || chr(229) || chr(231) || chr(232) || chr(233) || chr(234))
+          || (chr(235) || chr(236) || chr(237) || chr(238) || chr(239) || chr(240) || chr(241) || chr(242) || chr(243) || chr(244) || chr(245) || chr(246) || chr(248) || chr(249) || chr(250) || chr(251))
+          || (chr(252) || chr(253) || chr(255) || chr(256) || chr(257) || chr(258) || chr(259) || chr(260) || chr(261) || chr(262) || chr(263) || chr(264) || chr(265) || chr(266) || chr(267) || chr(268))
+          || (chr(269) || chr(270) || chr(271) || chr(272) || chr(273) || chr(274) || chr(275) || chr(276) || chr(277) || chr(278) || chr(279) || chr(280) || chr(281) || chr(282) || chr(283) || chr(284))
+          || (chr(285) || chr(286) || chr(287) || chr(288) || chr(289) || chr(290) || chr(291) || chr(292) || chr(293) || chr(294) || chr(295) || chr(296) || chr(297) || chr(298) || chr(299) || chr(300))
+          || (chr(301) || chr(302) || chr(303) || chr(304) || chr(305) || chr(308) || chr(309) || chr(310) || chr(311) || chr(313) || chr(314) || chr(315) || chr(316) || chr(317) || chr(318) || chr(319))
+          || (chr(320) || chr(321) || chr(322) || chr(323) || chr(324) || chr(325) || chr(326) || chr(327) || chr(328) || chr(332) || chr(333) || chr(334) || chr(335) || chr(336) || chr(337) || chr(340))
+          || (chr(341) || chr(342) || chr(343) || chr(344) || chr(345) || chr(346) || chr(347) || chr(348) || chr(349) || chr(350) || chr(351) || chr(352) || chr(353) || chr(354) || chr(355) || chr(356))
+          || (chr(357) || chr(358) || chr(359) || chr(360) || chr(361) || chr(362) || chr(363) || chr(364) || chr(365) || chr(366) || chr(367) || chr(368) || chr(369) || chr(370) || chr(371) || chr(372))
+          || (chr(373) || chr(374) || chr(375) || chr(376) || chr(377) || chr(378) || chr(379) || chr(380) || chr(381) || chr(382) || chr(383) || chr(416) || chr(417) || chr(431) || chr(432) || chr(461))
+          || (chr(462) || chr(463) || chr(464) || chr(465) || chr(466) || chr(467) || chr(468) || chr(469) || chr(470) || chr(471) || chr(472) || chr(473) || chr(474) || chr(475) || chr(476) || chr(478))
+          || (chr(479) || chr(480) || chr(481) || chr(486) || chr(487) || chr(488) || chr(489) || chr(490) || chr(491) || chr(492) || chr(493) || chr(496) || chr(500) || chr(501) || chr(504) || chr(505))
+          || (chr(506) || chr(507) || chr(512) || chr(513) || chr(514) || chr(515) || chr(516) || chr(517) || chr(518) || chr(519) || chr(520) || chr(521) || chr(522) || chr(523) || chr(524) || chr(525))
+          || (chr(526) || chr(527) || chr(528) || chr(529) || chr(530) || chr(531) || chr(532) || chr(533) || chr(534) || chr(535) || chr(536) || chr(537) || chr(538) || chr(539) || chr(542) || chr(543))
+          || (chr(550) || chr(551) || chr(552) || chr(553) || chr(554) || chr(555) || chr(556) || chr(557) || chr(558) || chr(559) || chr(560) || chr(561) || chr(562) || chr(563) || chr(7680) || chr(7681))
+          || (chr(7682) || chr(7683) || chr(7684) || chr(7685) || chr(7686) || chr(7687) || chr(7688) || chr(7689) || chr(7690) || chr(7691) || chr(7692) || chr(7693) || chr(7694) || chr(7695) || chr(7696) || chr(7697))
+          || (chr(7698) || chr(7699) || chr(7700) || chr(7701) || chr(7702) || chr(7703) || chr(7704) || chr(7705) || chr(7706) || chr(7707) || chr(7708) || chr(7709) || chr(7710) || chr(7711) || chr(7712) || chr(7713))
+          || (chr(7714) || chr(7715) || chr(7716) || chr(7717) || chr(7718) || chr(7719) || chr(7720) || chr(7721) || chr(7722) || chr(7723) || chr(7724) || chr(7725) || chr(7726) || chr(7727) || chr(7728) || chr(7729))
+          || (chr(7730) || chr(7731) || chr(7732) || chr(7733) || chr(7734) || chr(7735) || chr(7736) || chr(7737) || chr(7738) || chr(7739) || chr(7740) || chr(7741) || chr(7742) || chr(7743) || chr(7744) || chr(7745))
+          || (chr(7746) || chr(7747) || chr(7748) || chr(7749) || chr(7750) || chr(7751) || chr(7752) || chr(7753) || chr(7754) || chr(7755) || chr(7756) || chr(7757) || chr(7758) || chr(7759) || chr(7760) || chr(7761))
+          || (chr(7762) || chr(7763) || chr(7764) || chr(7765) || chr(7766) || chr(7767) || chr(7768) || chr(7769) || chr(7770) || chr(7771) || chr(7772) || chr(7773) || chr(7774) || chr(7775) || chr(7776) || chr(7777))
+          || (chr(7778) || chr(7779) || chr(7780) || chr(7781) || chr(7782) || chr(7783) || chr(7784) || chr(7785) || chr(7786) || chr(7787) || chr(7788) || chr(7789) || chr(7790) || chr(7791) || chr(7792) || chr(7793))
+          || (chr(7794) || chr(7795) || chr(7796) || chr(7797) || chr(7798) || chr(7799) || chr(7800) || chr(7801) || chr(7802) || chr(7803) || chr(7804) || chr(7805) || chr(7806) || chr(7807) || chr(7808) || chr(7809))
+          || (chr(7810) || chr(7811) || chr(7812) || chr(7813) || chr(7814) || chr(7815) || chr(7816) || chr(7817) || chr(7818) || chr(7819) || chr(7820) || chr(7821) || chr(7822) || chr(7823) || chr(7824) || chr(7825))
+          || (chr(7826) || chr(7827) || chr(7828) || chr(7829) || chr(7830) || chr(7831) || chr(7832) || chr(7833) || chr(7840) || chr(7841) || chr(7842) || chr(7843) || chr(7844) || chr(7845) || chr(7846) || chr(7847))
+          || (chr(7848) || chr(7849) || chr(7850) || chr(7851) || chr(7852) || chr(7853) || chr(7854) || chr(7855) || chr(7856) || chr(7857) || chr(7858) || chr(7859) || chr(7860) || chr(7861) || chr(7862) || chr(7863))
+          || (chr(7864) || chr(7865) || chr(7866) || chr(7867) || chr(7868) || chr(7869) || chr(7870) || chr(7871) || chr(7872) || chr(7873) || chr(7874) || chr(7875) || chr(7876) || chr(7877) || chr(7878) || chr(7879))
+          || (chr(7880) || chr(7881) || chr(7882) || chr(7883) || chr(7884) || chr(7885) || chr(7886) || chr(7887) || chr(7888) || chr(7889) || chr(7890) || chr(7891) || chr(7892) || chr(7893) || chr(7894) || chr(7895))
+          || (chr(7896) || chr(7897) || chr(7898) || chr(7899) || chr(7900) || chr(7901) || chr(7902) || chr(7903) || chr(7904) || chr(7905) || chr(7906) || chr(7907) || chr(7908) || chr(7909) || chr(7910) || chr(7911))
+          || (chr(7912) || chr(7913) || chr(7914) || chr(7915) || chr(7916) || chr(7917) || chr(7918) || chr(7919) || chr(7920) || chr(7921) || chr(7922) || chr(7923) || chr(7924) || chr(7925) || chr(7926) || chr(7927))
+          || (chr(7928) || chr(7929) || chr(178) || chr(179) || chr(185) || chr(8304) || chr(8308) || chr(8309) || chr(8310) || chr(8311) || chr(8312) || chr(8313) || chr(8320) || chr(8321) || chr(8322) || chr(8323))
+          || (chr(8324) || chr(8325) || chr(8326) || chr(8327) || chr(8328) || chr(8329) || chr(1) || chr(2) || chr(3) || chr(4) || chr(5) || chr(6) || chr(7) || chr(8) || chr(9) || chr(10))
+          || (chr(11) || chr(12) || chr(13) || chr(14) || chr(15) || chr(16) || chr(17) || chr(18) || chr(19) || chr(20) || chr(21) || chr(22) || chr(23) || chr(24) || chr(25) || chr(26))
+          || (chr(27) || chr(28) || chr(29) || chr(30) || chr(31) || '!"#$' || chr(39) || '()*,-.')
+          || ('/:;=?@[' || chr(92) || ']^_`{|}~')
+          || (chr(127) || chr(128) || chr(129) || chr(130) || chr(131) || chr(132) || chr(133) || chr(134) || chr(135) || chr(136) || chr(137) || chr(138) || chr(139) || chr(140) || chr(141) || chr(142))
+          || (chr(143) || chr(144) || chr(145) || chr(146) || chr(147) || chr(148) || chr(149) || chr(150) || chr(151) || chr(152) || chr(153) || chr(154) || chr(155) || chr(156) || chr(157) || chr(158))
+          || (chr(159) || chr(160) || chr(161) || chr(162) || chr(163) || chr(164) || chr(165) || chr(166) || chr(167) || chr(168) || chr(169) || chr(170) || chr(171) || chr(172) || chr(174) || chr(175))
+          || (chr(176) || chr(177) || chr(180) || chr(182) || chr(183) || chr(184) || chr(186) || chr(187) || chr(191) || chr(247) || chr(697) || chr(698) || chr(699) || chr(700) || chr(701) || chr(5760))
+          || (chr(8192) || chr(8193) || chr(8194) || chr(8195) || chr(8196) || chr(8197) || chr(8198) || chr(8199) || chr(8200) || chr(8201) || chr(8202) || chr(8208) || chr(8209) || chr(8210) || chr(8211) || chr(8212))
+          || (chr(8213) || chr(8214) || chr(8215) || chr(8216) || chr(8217) || chr(8218) || chr(8219) || chr(8220) || chr(8221) || chr(8222) || chr(8223) || chr(8224) || chr(8225) || chr(8226) || chr(8227) || chr(8228))
+          || (chr(8229) || chr(8230) || chr(8231) || chr(8232) || chr(8233) || chr(8239) || chr(8241) || chr(8242) || chr(8243) || chr(8244) || chr(8245) || chr(8246) || chr(8247) || chr(8248) || chr(8249) || chr(8250))
+          || (chr(8251) || chr(8252) || chr(8253) || chr(8254) || chr(8255) || chr(8256) || chr(8257) || chr(8258) || chr(8259) || chr(8260) || chr(8261) || chr(8262) || chr(8263) || chr(8264) || chr(8265) || chr(8266))
+          || (chr(8267) || chr(8268) || chr(8269) || chr(8270) || chr(8271) || chr(8272) || chr(8273) || chr(8274) || chr(8275) || chr(8276) || chr(8277) || chr(8278) || chr(8279) || chr(8280) || chr(8281) || chr(8282))
+          || (chr(8283) || chr(8284) || chr(8285) || chr(8286) || chr(8287) || chr(8352) || chr(8353) || chr(8354) || chr(8355) || chr(8356) || chr(8357) || chr(8358) || chr(8359) || chr(8360) || chr(8361) || chr(8362))
+          || (chr(8363) || chr(8365) || chr(8366) || chr(8367) || chr(8368) || chr(8369) || chr(8370) || chr(8371) || chr(8372) || chr(8373) || chr(8374) || chr(8375) || chr(8376) || chr(8377) || chr(8378) || chr(8379))
+          || (chr(8380) || chr(8381) || chr(8382) || chr(8383) || chr(8384) || chr(8385) || chr(8386) || chr(8387) || chr(8388) || chr(8389) || chr(8390) || chr(8391) || chr(8392) || chr(8393) || chr(8394) || chr(8395))
+          || (chr(8396) || chr(8397) || chr(8398) || chr(8399) || chr(8722) || chr(8725) || chr(12288) || chr(10240) || chr(173) || chr(768) || chr(769) || chr(770) || chr(771) || chr(772) || chr(773) || chr(774))
+          || (chr(775) || chr(776) || chr(777) || chr(778) || chr(779) || chr(780) || chr(781) || chr(782) || chr(783) || chr(784) || chr(785) || chr(786) || chr(787) || chr(788) || chr(789) || chr(790))
+          || (chr(791) || chr(792) || chr(793) || chr(794) || chr(795) || chr(796) || chr(797) || chr(798) || chr(799) || chr(800) || chr(801) || chr(802) || chr(803) || chr(804) || chr(805) || chr(806))
+          || (chr(807) || chr(808) || chr(809) || chr(810) || chr(811) || chr(812) || chr(813) || chr(814) || chr(815) || chr(816) || chr(817) || chr(818) || chr(819) || chr(820) || chr(821) || chr(822))
+          || (chr(823) || chr(824) || chr(825) || chr(826) || chr(827) || chr(828) || chr(829) || chr(830) || chr(831) || chr(832) || chr(833) || chr(834) || chr(835) || chr(836) || chr(837) || chr(838))
+          || (chr(839) || chr(840) || chr(841) || chr(842) || chr(843) || chr(844) || chr(845) || chr(846) || chr(847) || chr(848) || chr(849) || chr(850) || chr(851) || chr(852) || chr(853) || chr(854))
+          || (chr(855) || chr(856) || chr(857) || chr(858) || chr(859) || chr(860) || chr(861) || chr(862) || chr(863) || chr(864) || chr(865) || chr(866) || chr(867) || chr(868) || chr(869) || chr(870))
+          || (chr(871) || chr(872) || chr(873) || chr(874) || chr(875) || chr(876) || chr(877) || chr(878) || chr(879) || chr(4447) || chr(4448) || chr(6158) || chr(8203) || chr(8204) || chr(8205) || chr(8206))
+          || (chr(8207) || chr(8234) || chr(8235) || chr(8236) || chr(8237) || chr(8238) || chr(8288) || chr(8289) || chr(8290) || chr(8291) || chr(8292) || chr(8294) || chr(8295) || chr(8296) || chr(8297) || chr(8298))
+          || (chr(8299) || chr(8300) || chr(8301) || chr(8302) || chr(8303) || chr(12644) || chr(65024) || chr(65025) || chr(65026) || chr(65027) || chr(65028) || chr(65029) || chr(65030) || chr(65031) || chr(65032) || chr(65033))
+          || (chr(65034) || chr(65035) || chr(65036) || chr(65037) || chr(65038) || chr(65039) || chr(65279) || chr(65440) || chr(8293) || chr(1564) || chr(6068) || chr(6069) || chr(6155) || chr(6156) || chr(6157) || chr(6159))
+          || (chr(65520) || chr(65521) || chr(65522) || chr(65523) || chr(65524) || chr(65525) || chr(65526) || chr(65527) || chr(65528) || chr(113824) || chr(113825) || chr(113826) || chr(113827) || chr(119155) || chr(119156) || chr(119157))
+          || (chr(119158) || chr(119159) || chr(119160) || chr(119161) || chr(119162) || chr(917504) || chr(917505) || chr(917506) || chr(917507) || chr(917508) || chr(917509) || chr(917510) || chr(917511) || chr(917512) || chr(917513) || chr(917514))
+          || (chr(917515) || chr(917516) || chr(917517) || chr(917518) || chr(917519) || chr(917520) || chr(917521) || chr(917522) || chr(917523) || chr(917524) || chr(917525) || chr(917526) || chr(917527) || chr(917528) || chr(917529) || chr(917530))
+          || (chr(917531) || chr(917532) || chr(917533) || chr(917534) || chr(917535) || chr(917536) || chr(917537) || chr(917538) || chr(917539) || chr(917540) || chr(917541) || chr(917542) || chr(917543) || chr(917544) || chr(917545) || chr(917546))
+          || (chr(917547) || chr(917548) || chr(917549) || chr(917550) || chr(917551) || chr(917552) || chr(917553) || chr(917554) || chr(917555) || chr(917556) || chr(917557) || chr(917558) || chr(917559) || chr(917560) || chr(917561) || chr(917562))
+          || (chr(917563) || chr(917564) || chr(917565) || chr(917566) || chr(917567) || chr(917568) || chr(917569) || chr(917570) || chr(917571) || chr(917572) || chr(917573) || chr(917574) || chr(917575) || chr(917576) || chr(917577) || chr(917578))
+          || (chr(917579) || chr(917580) || chr(917581) || chr(917582) || chr(917583) || chr(917584) || chr(917585) || chr(917586) || chr(917587) || chr(917588) || chr(917589) || chr(917590) || chr(917591) || chr(917592) || chr(917593) || chr(917594))
+          || (chr(917595) || chr(917596) || chr(917597) || chr(917598) || chr(917599) || chr(917600) || chr(917601) || chr(917602) || chr(917603) || chr(917604) || chr(917605) || chr(917606) || chr(917607) || chr(917608) || chr(917609) || chr(917610))
+          || (chr(917611) || chr(917612) || chr(917613) || chr(917614) || chr(917615) || chr(917616) || chr(917617) || chr(917618) || chr(917619) || chr(917620) || chr(917621) || chr(917622) || chr(917623) || chr(917624) || chr(917625) || chr(917626))
+          || (chr(917627) || chr(917628) || chr(917629) || chr(917630) || chr(917631) || chr(917632) || chr(917633) || chr(917634) || chr(917635) || chr(917636) || chr(917637) || chr(917638) || chr(917639) || chr(917640) || chr(917641) || chr(917642))
+          || (chr(917643) || chr(917644) || chr(917645) || chr(917646) || chr(917647) || chr(917648) || chr(917649) || chr(917650) || chr(917651) || chr(917652) || chr(917653) || chr(917654) || chr(917655) || chr(917656) || chr(917657) || chr(917658))
+          || (chr(917659) || chr(917660) || chr(917661) || chr(917662) || chr(917663) || chr(917664) || chr(917665) || chr(917666) || chr(917667) || chr(917668) || chr(917669) || chr(917670) || chr(917671) || chr(917672) || chr(917673) || chr(917674))
+          || (chr(917675) || chr(917676) || chr(917677) || chr(917678) || chr(917679) || chr(917680) || chr(917681) || chr(917682) || chr(917683) || chr(917684) || chr(917685) || chr(917686) || chr(917687) || chr(917688) || chr(917689) || chr(917690))
+          || (chr(917691) || chr(917692) || chr(917693) || chr(917694) || chr(917695) || chr(917696) || chr(917697) || chr(917698) || chr(917699) || chr(917700) || chr(917701) || chr(917702) || chr(917703) || chr(917704) || chr(917705) || chr(917706))
+          || (chr(917707) || chr(917708) || chr(917709) || chr(917710) || chr(917711) || chr(917712) || chr(917713) || chr(917714) || chr(917715) || chr(917716) || chr(917717) || chr(917718) || chr(917719) || chr(917720) || chr(917721) || chr(917722))
+          || (chr(917723) || chr(917724) || chr(917725) || chr(917726) || chr(917727) || chr(917728) || chr(917729) || chr(917730) || chr(917731) || chr(917732) || chr(917733) || chr(917734) || chr(917735) || chr(917736) || chr(917737) || chr(917738))
+          || (chr(917739) || chr(917740) || chr(917741) || chr(917742) || chr(917743) || chr(917744) || chr(917745) || chr(917746) || chr(917747) || chr(917748) || chr(917749) || chr(917750) || chr(917751) || chr(917752) || chr(917753) || chr(917754))
+          || (chr(917755) || chr(917756) || chr(917757) || chr(917758) || chr(917759) || chr(917760) || chr(917761) || chr(917762) || chr(917763) || chr(917764) || chr(917765) || chr(917766) || chr(917767) || chr(917768) || chr(917769) || chr(917770))
+          || (chr(917771) || chr(917772) || chr(917773) || chr(917774) || chr(917775) || chr(917776) || chr(917777) || chr(917778) || chr(917779) || chr(917780) || chr(917781) || chr(917782) || chr(917783) || chr(917784) || chr(917785) || chr(917786))
+          || (chr(917787) || chr(917788) || chr(917789) || chr(917790) || chr(917791) || chr(917792) || chr(917793) || chr(917794) || chr(917795) || chr(917796) || chr(917797) || chr(917798) || chr(917799) || chr(917800) || chr(917801) || chr(917802))
+          || (chr(917803) || chr(917804) || chr(917805) || chr(917806) || chr(917807) || chr(917808) || chr(917809) || chr(917810) || chr(917811) || chr(917812) || chr(917813) || chr(917814) || chr(917815) || chr(917816) || chr(917817) || chr(917818))
+          || (chr(917819) || chr(917820) || chr(917821) || chr(917822) || chr(917823) || chr(917824) || chr(917825) || chr(917826) || chr(917827) || chr(917828) || chr(917829) || chr(917830) || chr(917831) || chr(917832) || chr(917833) || chr(917834))
+          || (chr(917835) || chr(917836) || chr(917837) || chr(917838) || chr(917839) || chr(917840) || chr(917841) || chr(917842) || chr(917843) || chr(917844) || chr(917845) || chr(917846) || chr(917847) || chr(917848) || chr(917849) || chr(917850))
+          || (chr(917851) || chr(917852) || chr(917853) || chr(917854) || chr(917855) || chr(917856) || chr(917857) || chr(917858) || chr(917859) || chr(917860) || chr(917861) || chr(917862) || chr(917863) || chr(917864) || chr(917865) || chr(917866))
+          || (chr(917867) || chr(917868) || chr(917869) || chr(917870) || chr(917871) || chr(917872) || chr(917873) || chr(917874) || chr(917875) || chr(917876) || chr(917877) || chr(917878) || chr(917879) || chr(917880) || chr(917881) || chr(917882))
+          || (chr(917883) || chr(917884) || chr(917885) || chr(917886) || chr(917887) || chr(917888) || chr(917889) || chr(917890) || chr(917891) || chr(917892) || chr(917893) || chr(917894) || chr(917895) || chr(917896) || chr(917897) || chr(917898))
+          || (chr(917899) || chr(917900) || chr(917901) || chr(917902) || chr(917903) || chr(917904) || chr(917905) || chr(917906) || chr(917907) || chr(917908) || chr(917909) || chr(917910) || chr(917911) || chr(917912) || chr(917913) || chr(917914))
+          || (chr(917915) || chr(917916) || chr(917917) || chr(917918) || chr(917919) || chr(917920) || chr(917921) || chr(917922) || chr(917923) || chr(917924) || chr(917925) || chr(917926) || chr(917927) || chr(917928) || chr(917929) || chr(917930))
+          || (chr(917931) || chr(917932) || chr(917933) || chr(917934) || chr(917935) || chr(917936) || chr(917937) || chr(917938) || chr(917939) || chr(917940) || chr(917941) || chr(917942) || chr(917943) || chr(917944) || chr(917945) || chr(917946))
+          || (chr(917947) || chr(917948) || chr(917949) || chr(917950) || chr(917951) || chr(917952) || chr(917953) || chr(917954) || chr(917955) || chr(917956) || chr(917957) || chr(917958) || chr(917959) || chr(917960) || chr(917961) || chr(917962))
+          || (chr(917963) || chr(917964) || chr(917965) || chr(917966) || chr(917967) || chr(917968) || chr(917969) || chr(917970) || chr(917971) || chr(917972) || chr(917973) || chr(917974) || chr(917975) || chr(917976) || chr(917977) || chr(917978))
+          || (chr(917979) || chr(917980) || chr(917981) || chr(917982) || chr(917983) || chr(917984) || chr(917985) || chr(917986) || chr(917987) || chr(917988) || chr(917989) || chr(917990) || chr(917991) || chr(917992) || chr(917993) || chr(917994))
+          || (chr(917995) || chr(917996) || chr(917997) || chr(917998) || chr(917999) || chr(918000) || chr(918001) || chr(918002) || chr(918003) || chr(918004) || chr(918005) || chr(918006) || chr(918007) || chr(918008) || chr(918009) || chr(918010))
+          || (chr(918011) || chr(918012) || chr(918013) || chr(918014) || chr(918015) || chr(918016) || chr(918017) || chr(918018) || chr(918019) || chr(918020) || chr(918021) || chr(918022) || chr(918023) || chr(918024) || chr(918025) || chr(918026))
+          || (chr(918027) || chr(918028) || chr(918029) || chr(918030) || chr(918031) || chr(918032) || chr(918033) || chr(918034) || chr(918035) || chr(918036) || chr(918037) || chr(918038) || chr(918039) || chr(918040) || chr(918041) || chr(918042))
+          || (chr(918043) || chr(918044) || chr(918045) || chr(918046) || chr(918047) || chr(918048) || chr(918049) || chr(918050) || chr(918051) || chr(918052) || chr(918053) || chr(918054) || chr(918055) || chr(918056) || chr(918057) || chr(918058))
+          || (chr(918059) || chr(918060) || chr(918061) || chr(918062) || chr(918063) || chr(918064) || chr(918065) || chr(918066) || chr(918067) || chr(918068) || chr(918069) || chr(918070) || chr(918071) || chr(918072) || chr(918073) || chr(918074))
+          || (chr(918075) || chr(918076) || chr(918077) || chr(918078) || chr(918079) || chr(918080) || chr(918081) || chr(918082) || chr(918083) || chr(918084) || chr(918085) || chr(918086) || chr(918087) || chr(918088) || chr(918089) || chr(918090))
+          || (chr(918091) || chr(918092) || chr(918093) || chr(918094) || chr(918095) || chr(918096) || chr(918097) || chr(918098) || chr(918099) || chr(918100) || chr(918101) || chr(918102) || chr(918103) || chr(918104) || chr(918105) || chr(918106))
+          || (chr(918107) || chr(918108) || chr(918109) || chr(918110) || chr(918111) || chr(918112) || chr(918113) || chr(918114) || chr(918115) || chr(918116) || chr(918117) || chr(918118) || chr(918119) || chr(918120) || chr(918121) || chr(918122))
+          || (chr(918123) || chr(918124) || chr(918125) || chr(918126) || chr(918127) || chr(918128) || chr(918129) || chr(918130) || chr(918131) || chr(918132) || chr(918133) || chr(918134) || chr(918135) || chr(918136) || chr(918137) || chr(918138))
+          || (chr(918139) || chr(918140) || chr(918141) || chr(918142) || chr(918143) || chr(918144) || chr(918145) || chr(918146) || chr(918147) || chr(918148) || chr(918149) || chr(918150) || chr(918151) || chr(918152) || chr(918153) || chr(918154))
+          || (chr(918155) || chr(918156) || chr(918157) || chr(918158) || chr(918159) || chr(918160) || chr(918161) || chr(918162) || chr(918163) || chr(918164) || chr(918165) || chr(918166) || chr(918167) || chr(918168) || chr(918169) || chr(918170))
+          || (chr(918171) || chr(918172) || chr(918173) || chr(918174) || chr(918175) || chr(918176) || chr(918177) || chr(918178) || chr(918179) || chr(918180) || chr(918181) || chr(918182) || chr(918183) || chr(918184) || chr(918185) || chr(918186))
+          || (chr(918187) || chr(918188) || chr(918189) || chr(918190) || chr(918191) || chr(918192) || chr(918193) || chr(918194) || chr(918195) || chr(918196) || chr(918197) || chr(918198) || chr(918199) || chr(918200) || chr(918201) || chr(918202))
+          || (chr(918203) || chr(918204) || chr(918205) || chr(918206) || chr(918207) || chr(918208) || chr(918209) || chr(918210) || chr(918211) || chr(918212) || chr(918213) || chr(918214) || chr(918215) || chr(918216) || chr(918217) || chr(918218))
+          || (chr(918219) || chr(918220) || chr(918221) || chr(918222) || chr(918223) || chr(918224) || chr(918225) || chr(918226) || chr(918227) || chr(918228) || chr(918229) || chr(918230) || chr(918231) || chr(918232) || chr(918233) || chr(918234))
+          || (chr(918235) || chr(918236) || chr(918237) || chr(918238) || chr(918239) || chr(918240) || chr(918241) || chr(918242) || chr(918243) || chr(918244) || chr(918245) || chr(918246) || chr(918247) || chr(918248) || chr(918249) || chr(918250))
+          || (chr(918251) || chr(918252) || chr(918253) || chr(918254) || chr(918255) || chr(918256) || chr(918257) || chr(918258) || chr(918259) || chr(918260) || chr(918261) || chr(918262) || chr(918263) || chr(918264) || chr(918265) || chr(918266))
+          || (chr(918267) || chr(918268) || chr(918269) || chr(918270) || chr(918271) || chr(918272) || chr(918273) || chr(918274) || chr(918275) || chr(918276) || chr(918277) || chr(918278) || chr(918279) || chr(918280) || chr(918281) || chr(918282))
+          || (chr(918283) || chr(918284) || chr(918285) || chr(918286) || chr(918287) || chr(918288) || chr(918289) || chr(918290) || chr(918291) || chr(918292) || chr(918293) || chr(918294) || chr(918295) || chr(918296) || chr(918297) || chr(918298))
+          || (chr(918299) || chr(918300) || chr(918301) || chr(918302) || chr(918303) || chr(918304) || chr(918305) || chr(918306) || chr(918307) || chr(918308) || chr(918309) || chr(918310) || chr(918311) || chr(918312) || chr(918313) || chr(918314))
+          || (chr(918315) || chr(918316) || chr(918317) || chr(918318) || chr(918319) || chr(918320) || chr(918321) || chr(918322) || chr(918323) || chr(918324) || chr(918325) || chr(918326) || chr(918327) || chr(918328) || chr(918329) || chr(918330))
+          || (chr(918331) || chr(918332) || chr(918333) || chr(918334) || chr(918335) || chr(918336) || chr(918337) || chr(918338) || chr(918339) || chr(918340) || chr(918341) || chr(918342) || chr(918343) || chr(918344) || chr(918345) || chr(918346))
+          || (chr(918347) || chr(918348) || chr(918349) || chr(918350) || chr(918351) || chr(918352) || chr(918353) || chr(918354) || chr(918355) || chr(918356) || chr(918357) || chr(918358) || chr(918359) || chr(918360) || chr(918361) || chr(918362))
+          || (chr(918363) || chr(918364) || chr(918365) || chr(918366) || chr(918367) || chr(918368) || chr(918369) || chr(918370) || chr(918371) || chr(918372) || chr(918373) || chr(918374) || chr(918375) || chr(918376) || chr(918377) || chr(918378))
+          || (chr(918379) || chr(918380) || chr(918381) || chr(918382) || chr(918383) || chr(918384) || chr(918385) || chr(918386) || chr(918387) || chr(918388) || chr(918389) || chr(918390) || chr(918391) || chr(918392) || chr(918393) || chr(918394))
+          || (chr(918395) || chr(918396) || chr(918397) || chr(918398) || chr(918399) || chr(918400) || chr(918401) || chr(918402) || chr(918403) || chr(918404) || chr(918405) || chr(918406) || chr(918407) || chr(918408) || chr(918409) || chr(918410))
+          || (chr(918411) || chr(918412) || chr(918413) || chr(918414) || chr(918415) || chr(918416) || chr(918417) || chr(918418) || chr(918419) || chr(918420) || chr(918421) || chr(918422) || chr(918423) || chr(918424) || chr(918425) || chr(918426))
+          || (chr(918427) || chr(918428) || chr(918429) || chr(918430) || chr(918431) || chr(918432) || chr(918433) || chr(918434) || chr(918435) || chr(918436) || chr(918437) || chr(918438) || chr(918439) || chr(918440) || chr(918441) || chr(918442))
+          || (chr(918443) || chr(918444) || chr(918445) || chr(918446) || chr(918447) || chr(918448) || chr(918449) || chr(918450) || chr(918451) || chr(918452) || chr(918453) || chr(918454) || chr(918455) || chr(918456) || chr(918457) || chr(918458))
+          || (chr(918459) || chr(918460) || chr(918461) || chr(918462) || chr(918463) || chr(918464) || chr(918465) || chr(918466) || chr(918467) || chr(918468) || chr(918469) || chr(918470) || chr(918471) || chr(918472) || chr(918473) || chr(918474))
+          || (chr(918475) || chr(918476) || chr(918477) || chr(918478) || chr(918479) || chr(918480) || chr(918481) || chr(918482) || chr(918483) || chr(918484) || chr(918485) || chr(918486) || chr(918487) || chr(918488) || chr(918489) || chr(918490))
+          || (chr(918491) || chr(918492) || chr(918493) || chr(918494) || chr(918495) || chr(918496) || chr(918497) || chr(918498) || chr(918499) || chr(918500) || chr(918501) || chr(918502) || chr(918503) || chr(918504) || chr(918505) || chr(918506))
+          || (chr(918507) || chr(918508) || chr(918509) || chr(918510) || chr(918511) || chr(918512) || chr(918513) || chr(918514) || chr(918515) || chr(918516) || chr(918517) || chr(918518) || chr(918519) || chr(918520) || chr(918521) || chr(918522))
+          || (chr(918523) || chr(918524) || chr(918525) || chr(918526) || chr(918527) || chr(918528) || chr(918529) || chr(918530) || chr(918531) || chr(918532) || chr(918533) || chr(918534) || chr(918535) || chr(918536) || chr(918537) || chr(918538))
+          || (chr(918539) || chr(918540) || chr(918541) || chr(918542) || chr(918543) || chr(918544) || chr(918545) || chr(918546) || chr(918547) || chr(918548) || chr(918549) || chr(918550) || chr(918551) || chr(918552) || chr(918553) || chr(918554))
+          || (chr(918555) || chr(918556) || chr(918557) || chr(918558) || chr(918559) || chr(918560) || chr(918561) || chr(918562) || chr(918563) || chr(918564) || chr(918565) || chr(918566) || chr(918567) || chr(918568) || chr(918569) || chr(918570))
+          || (chr(918571) || chr(918572) || chr(918573) || chr(918574) || chr(918575) || chr(918576) || chr(918577) || chr(918578) || chr(918579) || chr(918580) || chr(918581) || chr(918582) || chr(918583) || chr(918584) || chr(918585) || chr(918586))
+          || (chr(918587) || chr(918588) || chr(918589) || chr(918590) || chr(918591) || chr(918592) || chr(918593) || chr(918594) || chr(918595) || chr(918596) || chr(918597) || chr(918598) || chr(918599) || chr(918600) || chr(918601) || chr(918602))
+          || (chr(918603) || chr(918604) || chr(918605) || chr(918606) || chr(918607) || chr(918608) || chr(918609) || chr(918610) || chr(918611) || chr(918612) || chr(918613) || chr(918614) || chr(918615) || chr(918616) || chr(918617) || chr(918618))
+          || (chr(918619) || chr(918620) || chr(918621) || chr(918622) || chr(918623) || chr(918624) || chr(918625) || chr(918626) || chr(918627) || chr(918628) || chr(918629) || chr(918630) || chr(918631) || chr(918632) || chr(918633) || chr(918634))
+          || (chr(918635) || chr(918636) || chr(918637) || chr(918638) || chr(918639) || chr(918640) || chr(918641) || chr(918642) || chr(918643) || chr(918644) || chr(918645) || chr(918646) || chr(918647) || chr(918648) || chr(918649) || chr(918650))
+          || (chr(918651) || chr(918652) || chr(918653) || chr(918654) || chr(918655) || chr(918656) || chr(918657) || chr(918658) || chr(918659) || chr(918660) || chr(918661) || chr(918662) || chr(918663) || chr(918664) || chr(918665) || chr(918666))
+          || (chr(918667) || chr(918668) || chr(918669) || chr(918670) || chr(918671) || chr(918672) || chr(918673) || chr(918674) || chr(918675) || chr(918676) || chr(918677) || chr(918678) || chr(918679) || chr(918680) || chr(918681) || chr(918682))
+          || (chr(918683) || chr(918684) || chr(918685) || chr(918686) || chr(918687) || chr(918688) || chr(918689) || chr(918690) || chr(918691) || chr(918692) || chr(918693) || chr(918694) || chr(918695) || chr(918696) || chr(918697) || chr(918698))
+          || (chr(918699) || chr(918700) || chr(918701) || chr(918702) || chr(918703) || chr(918704) || chr(918705) || chr(918706) || chr(918707) || chr(918708) || chr(918709) || chr(918710) || chr(918711) || chr(918712) || chr(918713) || chr(918714))
+          || (chr(918715) || chr(918716) || chr(918717) || chr(918718) || chr(918719) || chr(918720) || chr(918721) || chr(918722) || chr(918723) || chr(918724) || chr(918725) || chr(918726) || chr(918727) || chr(918728) || chr(918729) || chr(918730))
+          || (chr(918731) || chr(918732) || chr(918733) || chr(918734) || chr(918735) || chr(918736) || chr(918737) || chr(918738) || chr(918739) || chr(918740) || chr(918741) || chr(918742) || chr(918743) || chr(918744) || chr(918745) || chr(918746))
+          || (chr(918747) || chr(918748) || chr(918749) || chr(918750) || chr(918751) || chr(918752) || chr(918753) || chr(918754) || chr(918755) || chr(918756) || chr(918757) || chr(918758) || chr(918759) || chr(918760) || chr(918761) || chr(918762))
+          || (chr(918763) || chr(918764) || chr(918765) || chr(918766) || chr(918767) || chr(918768) || chr(918769) || chr(918770) || chr(918771) || chr(918772) || chr(918773) || chr(918774) || chr(918775) || chr(918776) || chr(918777) || chr(918778))
+          || (chr(918779) || chr(918780) || chr(918781) || chr(918782) || chr(918783) || chr(918784) || chr(918785) || chr(918786) || chr(918787) || chr(918788) || chr(918789) || chr(918790) || chr(918791) || chr(918792) || chr(918793) || chr(918794))
+          || (chr(918795) || chr(918796) || chr(918797) || chr(918798) || chr(918799) || chr(918800) || chr(918801) || chr(918802) || chr(918803) || chr(918804) || chr(918805) || chr(918806) || chr(918807) || chr(918808) || chr(918809) || chr(918810))
+          || (chr(918811) || chr(918812) || chr(918813) || chr(918814) || chr(918815) || chr(918816) || chr(918817) || chr(918818) || chr(918819) || chr(918820) || chr(918821) || chr(918822) || chr(918823) || chr(918824) || chr(918825) || chr(918826))
+          || (chr(918827) || chr(918828) || chr(918829) || chr(918830) || chr(918831) || chr(918832) || chr(918833) || chr(918834) || chr(918835) || chr(918836) || chr(918837) || chr(918838) || chr(918839) || chr(918840) || chr(918841) || chr(918842))
+          || (chr(918843) || chr(918844) || chr(918845) || chr(918846) || chr(918847) || chr(918848) || chr(918849) || chr(918850) || chr(918851) || chr(918852) || chr(918853) || chr(918854) || chr(918855) || chr(918856) || chr(918857) || chr(918858))
+          || (chr(918859) || chr(918860) || chr(918861) || chr(918862) || chr(918863) || chr(918864) || chr(918865) || chr(918866) || chr(918867) || chr(918868) || chr(918869) || chr(918870) || chr(918871) || chr(918872) || chr(918873) || chr(918874))
+          || (chr(918875) || chr(918876) || chr(918877) || chr(918878) || chr(918879) || chr(918880) || chr(918881) || chr(918882) || chr(918883) || chr(918884) || chr(918885) || chr(918886) || chr(918887) || chr(918888) || chr(918889) || chr(918890))
+          || (chr(918891) || chr(918892) || chr(918893) || chr(918894) || chr(918895) || chr(918896) || chr(918897) || chr(918898) || chr(918899) || chr(918900) || chr(918901) || chr(918902) || chr(918903) || chr(918904) || chr(918905) || chr(918906))
+          || (chr(918907) || chr(918908) || chr(918909) || chr(918910) || chr(918911) || chr(918912) || chr(918913) || chr(918914) || chr(918915) || chr(918916) || chr(918917) || chr(918918) || chr(918919) || chr(918920) || chr(918921) || chr(918922))
+          || (chr(918923) || chr(918924) || chr(918925) || chr(918926) || chr(918927) || chr(918928) || chr(918929) || chr(918930) || chr(918931) || chr(918932) || chr(918933) || chr(918934) || chr(918935) || chr(918936) || chr(918937) || chr(918938))
+          || (chr(918939) || chr(918940) || chr(918941) || chr(918942) || chr(918943) || chr(918944) || chr(918945) || chr(918946) || chr(918947) || chr(918948) || chr(918949) || chr(918950) || chr(918951) || chr(918952) || chr(918953) || chr(918954))
+          || (chr(918955) || chr(918956) || chr(918957) || chr(918958) || chr(918959) || chr(918960) || chr(918961) || chr(918962) || chr(918963) || chr(918964) || chr(918965) || chr(918966) || chr(918967) || chr(918968) || chr(918969) || chr(918970))
+          || (chr(918971) || chr(918972) || chr(918973) || chr(918974) || chr(918975) || chr(918976) || chr(918977) || chr(918978) || chr(918979) || chr(918980) || chr(918981) || chr(918982) || chr(918983) || chr(918984) || chr(918985) || chr(918986))
+          || (chr(918987) || chr(918988) || chr(918989) || chr(918990) || chr(918991) || chr(918992) || chr(918993) || chr(918994) || chr(918995) || chr(918996) || chr(918997) || chr(918998) || chr(918999) || chr(919000) || chr(919001) || chr(919002))
+          || (chr(919003) || chr(919004) || chr(919005) || chr(919006) || chr(919007) || chr(919008) || chr(919009) || chr(919010) || chr(919011) || chr(919012) || chr(919013) || chr(919014) || chr(919015) || chr(919016) || chr(919017) || chr(919018))
+          || (chr(919019) || chr(919020) || chr(919021) || chr(919022) || chr(919023) || chr(919024) || chr(919025) || chr(919026) || chr(919027) || chr(919028) || chr(919029) || chr(919030) || chr(919031) || chr(919032) || chr(919033) || chr(919034))
+          || (chr(919035) || chr(919036) || chr(919037) || chr(919038) || chr(919039) || chr(919040) || chr(919041) || chr(919042) || chr(919043) || chr(919044) || chr(919045) || chr(919046) || chr(919047) || chr(919048) || chr(919049) || chr(919050))
+          || (chr(919051) || chr(919052) || chr(919053) || chr(919054) || chr(919055) || chr(919056) || chr(919057) || chr(919058) || chr(919059) || chr(919060) || chr(919061) || chr(919062) || chr(919063) || chr(919064) || chr(919065) || chr(919066))
+          || (chr(919067) || chr(919068) || chr(919069) || chr(919070) || chr(919071) || chr(919072) || chr(919073) || chr(919074) || chr(919075) || chr(919076) || chr(919077) || chr(919078) || chr(919079) || chr(919080) || chr(919081) || chr(919082))
+          || (chr(919083) || chr(919084) || chr(919085) || chr(919086) || chr(919087) || chr(919088) || chr(919089) || chr(919090) || chr(919091) || chr(919092) || chr(919093) || chr(919094) || chr(919095) || chr(919096) || chr(919097) || chr(919098))
+          || (chr(919099) || chr(919100) || chr(919101) || chr(919102) || chr(919103) || chr(919104) || chr(919105) || chr(919106) || chr(919107) || chr(919108) || chr(919109) || chr(919110) || chr(919111) || chr(919112) || chr(919113) || chr(919114))
+          || (chr(919115) || chr(919116) || chr(919117) || chr(919118) || chr(919119) || chr(919120) || chr(919121) || chr(919122) || chr(919123) || chr(919124) || chr(919125) || chr(919126) || chr(919127) || chr(919128) || chr(919129) || chr(919130))
+          || (chr(919131) || chr(919132) || chr(919133) || chr(919134) || chr(919135) || chr(919136) || chr(919137) || chr(919138) || chr(919139) || chr(919140) || chr(919141) || chr(919142) || chr(919143) || chr(919144) || chr(919145) || chr(919146))
+          || (chr(919147) || chr(919148) || chr(919149) || chr(919150) || chr(919151) || chr(919152) || chr(919153) || chr(919154) || chr(919155) || chr(919156) || chr(919157) || chr(919158) || chr(919159) || chr(919160) || chr(919161) || chr(919162))
+          || (chr(919163) || chr(919164) || chr(919165) || chr(919166) || chr(919167) || chr(919168) || chr(919169) || chr(919170) || chr(919171) || chr(919172) || chr(919173) || chr(919174) || chr(919175) || chr(919176) || chr(919177) || chr(919178))
+          || (chr(919179) || chr(919180) || chr(919181) || chr(919182) || chr(919183) || chr(919184) || chr(919185) || chr(919186) || chr(919187) || chr(919188) || chr(919189) || chr(919190) || chr(919191) || chr(919192) || chr(919193) || chr(919194))
+          || (chr(919195) || chr(919196) || chr(919197) || chr(919198) || chr(919199) || chr(919200) || chr(919201) || chr(919202) || chr(919203) || chr(919204) || chr(919205) || chr(919206) || chr(919207) || chr(919208) || chr(919209) || chr(919210))
+          || (chr(919211) || chr(919212) || chr(919213) || chr(919214) || chr(919215) || chr(919216) || chr(919217) || chr(919218) || chr(919219) || chr(919220) || chr(919221) || chr(919222) || chr(919223) || chr(919224) || chr(919225) || chr(919226))
+          || (chr(919227) || chr(919228) || chr(919229) || chr(919230) || chr(919231) || chr(919232) || chr(919233) || chr(919234) || chr(919235) || chr(919236) || chr(919237) || chr(919238) || chr(919239) || chr(919240) || chr(919241) || chr(919242))
+          || (chr(919243) || chr(919244) || chr(919245) || chr(919246) || chr(919247) || chr(919248) || chr(919249) || chr(919250) || chr(919251) || chr(919252) || chr(919253) || chr(919254) || chr(919255) || chr(919256) || chr(919257) || chr(919258))
+          || (chr(919259) || chr(919260) || chr(919261) || chr(919262) || chr(919263) || chr(919264) || chr(919265) || chr(919266) || chr(919267) || chr(919268) || chr(919269) || chr(919270) || chr(919271) || chr(919272) || chr(919273) || chr(919274))
+          || (chr(919275) || chr(919276) || chr(919277) || chr(919278) || chr(919279) || chr(919280) || chr(919281) || chr(919282) || chr(919283) || chr(919284) || chr(919285) || chr(919286) || chr(919287) || chr(919288) || chr(919289) || chr(919290))
+          || (chr(919291) || chr(919292) || chr(919293) || chr(919294) || chr(919295) || chr(919296) || chr(919297) || chr(919298) || chr(919299) || chr(919300) || chr(919301) || chr(919302) || chr(919303) || chr(919304) || chr(919305) || chr(919306))
+          || (chr(919307) || chr(919308) || chr(919309) || chr(919310) || chr(919311) || chr(919312) || chr(919313) || chr(919314) || chr(919315) || chr(919316) || chr(919317) || chr(919318) || chr(919319) || chr(919320) || chr(919321) || chr(919322))
+          || (chr(919323) || chr(919324) || chr(919325) || chr(919326) || chr(919327) || chr(919328) || chr(919329) || chr(919330) || chr(919331) || chr(919332) || chr(919333) || chr(919334) || chr(919335) || chr(919336) || chr(919337) || chr(919338))
+          || (chr(919339) || chr(919340) || chr(919341) || chr(919342) || chr(919343) || chr(919344) || chr(919345) || chr(919346) || chr(919347) || chr(919348) || chr(919349) || chr(919350) || chr(919351) || chr(919352) || chr(919353) || chr(919354))
+          || (chr(919355) || chr(919356) || chr(919357) || chr(919358) || chr(919359) || chr(919360) || chr(919361) || chr(919362) || chr(919363) || chr(919364) || chr(919365) || chr(919366) || chr(919367) || chr(919368) || chr(919369) || chr(919370))
+          || (chr(919371) || chr(919372) || chr(919373) || chr(919374) || chr(919375) || chr(919376) || chr(919377) || chr(919378) || chr(919379) || chr(919380) || chr(919381) || chr(919382) || chr(919383) || chr(919384) || chr(919385) || chr(919386))
+          || (chr(919387) || chr(919388) || chr(919389) || chr(919390) || chr(919391) || chr(919392) || chr(919393) || chr(919394) || chr(919395) || chr(919396) || chr(919397) || chr(919398) || chr(919399) || chr(919400) || chr(919401) || chr(919402))
+          || (chr(919403) || chr(919404) || chr(919405) || chr(919406) || chr(919407) || chr(919408) || chr(919409) || chr(919410) || chr(919411) || chr(919412) || chr(919413) || chr(919414) || chr(919415) || chr(919416) || chr(919417) || chr(919418))
+          || (chr(919419) || chr(919420) || chr(919421) || chr(919422) || chr(919423) || chr(919424) || chr(919425) || chr(919426) || chr(919427) || chr(919428) || chr(919429) || chr(919430) || chr(919431) || chr(919432) || chr(919433) || chr(919434))
+          || (chr(919435) || chr(919436) || chr(919437) || chr(919438) || chr(919439) || chr(919440) || chr(919441) || chr(919442) || chr(919443) || chr(919444) || chr(919445) || chr(919446) || chr(919447) || chr(919448) || chr(919449) || chr(919450))
+          || (chr(919451) || chr(919452) || chr(919453) || chr(919454) || chr(919455) || chr(919456) || chr(919457) || chr(919458) || chr(919459) || chr(919460) || chr(919461) || chr(919462) || chr(919463) || chr(919464) || chr(919465) || chr(919466))
+          || (chr(919467) || chr(919468) || chr(919469) || chr(919470) || chr(919471) || chr(919472) || chr(919473) || chr(919474) || chr(919475) || chr(919476) || chr(919477) || chr(919478) || chr(919479) || chr(919480) || chr(919481) || chr(919482))
+          || (chr(919483) || chr(919484) || chr(919485) || chr(919486) || chr(919487) || chr(919488) || chr(919489) || chr(919490) || chr(919491) || chr(919492) || chr(919493) || chr(919494) || chr(919495) || chr(919496) || chr(919497) || chr(919498))
+          || (chr(919499) || chr(919500) || chr(919501) || chr(919502) || chr(919503) || chr(919504) || chr(919505) || chr(919506) || chr(919507) || chr(919508) || chr(919509) || chr(919510) || chr(919511) || chr(919512) || chr(919513) || chr(919514))
+          || (chr(919515) || chr(919516) || chr(919517) || chr(919518) || chr(919519) || chr(919520) || chr(919521) || chr(919522) || chr(919523) || chr(919524) || chr(919525) || chr(919526) || chr(919527) || chr(919528) || chr(919529) || chr(919530))
+          || (chr(919531) || chr(919532) || chr(919533) || chr(919534) || chr(919535) || chr(919536) || chr(919537) || chr(919538) || chr(919539) || chr(919540) || chr(919541) || chr(919542) || chr(919543) || chr(919544) || chr(919545) || chr(919546))
+          || (chr(919547) || chr(919548) || chr(919549) || chr(919550) || chr(919551) || chr(919552) || chr(919553) || chr(919554) || chr(919555) || chr(919556) || chr(919557) || chr(919558) || chr(919559) || chr(919560) || chr(919561) || chr(919562))
+          || (chr(919563) || chr(919564) || chr(919565) || chr(919566) || chr(919567) || chr(919568) || chr(919569) || chr(919570) || chr(919571) || chr(919572) || chr(919573) || chr(919574) || chr(919575) || chr(919576) || chr(919577) || chr(919578))
+          || (chr(919579) || chr(919580) || chr(919581) || chr(919582) || chr(919583) || chr(919584) || chr(919585) || chr(919586) || chr(919587) || chr(919588) || chr(919589) || chr(919590) || chr(919591) || chr(919592) || chr(919593) || chr(919594))
+          || (chr(919595) || chr(919596) || chr(919597) || chr(919598) || chr(919599) || chr(919600) || chr(919601) || chr(919602) || chr(919603) || chr(919604) || chr(919605) || chr(919606) || chr(919607) || chr(919608) || chr(919609) || chr(919610))
+          || (chr(919611) || chr(919612) || chr(919613) || chr(919614) || chr(919615) || chr(919616) || chr(919617) || chr(919618) || chr(919619) || chr(919620) || chr(919621) || chr(919622) || chr(919623) || chr(919624) || chr(919625) || chr(919626))
+          || (chr(919627) || chr(919628) || chr(919629) || chr(919630) || chr(919631) || chr(919632) || chr(919633) || chr(919634) || chr(919635) || chr(919636) || chr(919637) || chr(919638) || chr(919639) || chr(919640) || chr(919641) || chr(919642))
+          || (chr(919643) || chr(919644) || chr(919645) || chr(919646) || chr(919647) || chr(919648) || chr(919649) || chr(919650) || chr(919651) || chr(919652) || chr(919653) || chr(919654) || chr(919655) || chr(919656) || chr(919657) || chr(919658))
+          || (chr(919659) || chr(919660) || chr(919661) || chr(919662) || chr(919663) || chr(919664) || chr(919665) || chr(919666) || chr(919667) || chr(919668) || chr(919669) || chr(919670) || chr(919671) || chr(919672) || chr(919673) || chr(919674))
+          || (chr(919675) || chr(919676) || chr(919677) || chr(919678) || chr(919679) || chr(919680) || chr(919681) || chr(919682) || chr(919683) || chr(919684) || chr(919685) || chr(919686) || chr(919687) || chr(919688) || chr(919689) || chr(919690))
+          || (chr(919691) || chr(919692) || chr(919693) || chr(919694) || chr(919695) || chr(919696) || chr(919697) || chr(919698) || chr(919699) || chr(919700) || chr(919701) || chr(919702) || chr(919703) || chr(919704) || chr(919705) || chr(919706))
+          || (chr(919707) || chr(919708) || chr(919709) || chr(919710) || chr(919711) || chr(919712) || chr(919713) || chr(919714) || chr(919715) || chr(919716) || chr(919717) || chr(919718) || chr(919719) || chr(919720) || chr(919721) || chr(919722))
+          || (chr(919723) || chr(919724) || chr(919725) || chr(919726) || chr(919727) || chr(919728) || chr(919729) || chr(919730) || chr(919731) || chr(919732) || chr(919733) || chr(919734) || chr(919735) || chr(919736) || chr(919737) || chr(919738))
+          || (chr(919739) || chr(919740) || chr(919741) || chr(919742) || chr(919743) || chr(919744) || chr(919745) || chr(919746) || chr(919747) || chr(919748) || chr(919749) || chr(919750) || chr(919751) || chr(919752) || chr(919753) || chr(919754))
+          || (chr(919755) || chr(919756) || chr(919757) || chr(919758) || chr(919759) || chr(919760) || chr(919761) || chr(919762) || chr(919763) || chr(919764) || chr(919765) || chr(919766) || chr(919767) || chr(919768) || chr(919769) || chr(919770))
+          || (chr(919771) || chr(919772) || chr(919773) || chr(919774) || chr(919775) || chr(919776) || chr(919777) || chr(919778) || chr(919779) || chr(919780) || chr(919781) || chr(919782) || chr(919783) || chr(919784) || chr(919785) || chr(919786))
+          || (chr(919787) || chr(919788) || chr(919789) || chr(919790) || chr(919791) || chr(919792) || chr(919793) || chr(919794) || chr(919795) || chr(919796) || chr(919797) || chr(919798) || chr(919799) || chr(919800) || chr(919801) || chr(919802))
+          || (chr(919803) || chr(919804) || chr(919805) || chr(919806) || chr(919807) || chr(919808) || chr(919809) || chr(919810) || chr(919811) || chr(919812) || chr(919813) || chr(919814) || chr(919815) || chr(919816) || chr(919817) || chr(919818))
+          || (chr(919819) || chr(919820) || chr(919821) || chr(919822) || chr(919823) || chr(919824) || chr(919825) || chr(919826) || chr(919827) || chr(919828) || chr(919829) || chr(919830) || chr(919831) || chr(919832) || chr(919833) || chr(919834))
+          || (chr(919835) || chr(919836) || chr(919837) || chr(919838) || chr(919839) || chr(919840) || chr(919841) || chr(919842) || chr(919843) || chr(919844) || chr(919845) || chr(919846) || chr(919847) || chr(919848) || chr(919849) || chr(919850))
+          || (chr(919851) || chr(919852) || chr(919853) || chr(919854) || chr(919855) || chr(919856) || chr(919857) || chr(919858) || chr(919859) || chr(919860) || chr(919861) || chr(919862) || chr(919863) || chr(919864) || chr(919865) || chr(919866))
+          || (chr(919867) || chr(919868) || chr(919869) || chr(919870) || chr(919871) || chr(919872) || chr(919873) || chr(919874) || chr(919875) || chr(919876) || chr(919877) || chr(919878) || chr(919879) || chr(919880) || chr(919881) || chr(919882))
+          || (chr(919883) || chr(919884) || chr(919885) || chr(919886) || chr(919887) || chr(919888) || chr(919889) || chr(919890) || chr(919891) || chr(919892) || chr(919893) || chr(919894) || chr(919895) || chr(919896) || chr(919897) || chr(919898))
+          || (chr(919899) || chr(919900) || chr(919901) || chr(919902) || chr(919903) || chr(919904) || chr(919905) || chr(919906) || chr(919907) || chr(919908) || chr(919909) || chr(919910) || chr(919911) || chr(919912) || chr(919913) || chr(919914))
+          || (chr(919915) || chr(919916) || chr(919917) || chr(919918) || chr(919919) || chr(919920) || chr(919921) || chr(919922) || chr(919923) || chr(919924) || chr(919925) || chr(919926) || chr(919927) || chr(919928) || chr(919929) || chr(919930))
+          || (chr(919931) || chr(919932) || chr(919933) || chr(919934) || chr(919935) || chr(919936) || chr(919937) || chr(919938) || chr(919939) || chr(919940) || chr(919941) || chr(919942) || chr(919943) || chr(919944) || chr(919945) || chr(919946))
+          || (chr(919947) || chr(919948) || chr(919949) || chr(919950) || chr(919951) || chr(919952) || chr(919953) || chr(919954) || chr(919955) || chr(919956) || chr(919957) || chr(919958) || chr(919959) || chr(919960) || chr(919961) || chr(919962))
+          || (chr(919963) || chr(919964) || chr(919965) || chr(919966) || chr(919967) || chr(919968) || chr(919969) || chr(919970) || chr(919971) || chr(919972) || chr(919973) || chr(919974) || chr(919975) || chr(919976) || chr(919977) || chr(919978))
+          || (chr(919979) || chr(919980) || chr(919981) || chr(919982) || chr(919983) || chr(919984) || chr(919985) || chr(919986) || chr(919987) || chr(919988) || chr(919989) || chr(919990) || chr(919991) || chr(919992) || chr(919993) || chr(919994))
+          || (chr(919995) || chr(919996) || chr(919997) || chr(919998) || chr(919999) || chr(920000) || chr(920001) || chr(920002) || chr(920003) || chr(920004) || chr(920005) || chr(920006) || chr(920007) || chr(920008) || chr(920009) || chr(920010))
+          || (chr(920011) || chr(920012) || chr(920013) || chr(920014) || chr(920015) || chr(920016) || chr(920017) || chr(920018) || chr(920019) || chr(920020) || chr(920021) || chr(920022) || chr(920023) || chr(920024) || chr(920025) || chr(920026))
+          || (chr(920027) || chr(920028) || chr(920029) || chr(920030) || chr(920031) || chr(920032) || chr(920033) || chr(920034) || chr(920035) || chr(920036) || chr(920037) || chr(920038) || chr(920039) || chr(920040) || chr(920041) || chr(920042))
+          || (chr(920043) || chr(920044) || chr(920045) || chr(920046) || chr(920047) || chr(920048) || chr(920049) || chr(920050) || chr(920051) || chr(920052) || chr(920053) || chr(920054) || chr(920055) || chr(920056) || chr(920057) || chr(920058))
+          || (chr(920059) || chr(920060) || chr(920061) || chr(920062) || chr(920063) || chr(920064) || chr(920065) || chr(920066) || chr(920067) || chr(920068) || chr(920069) || chr(920070) || chr(920071) || chr(920072) || chr(920073) || chr(920074))
+          || (chr(920075) || chr(920076) || chr(920077) || chr(920078) || chr(920079) || chr(920080) || chr(920081) || chr(920082) || chr(920083) || chr(920084) || chr(920085) || chr(920086) || chr(920087) || chr(920088) || chr(920089) || chr(920090))
+          || (chr(920091) || chr(920092) || chr(920093) || chr(920094) || chr(920095) || chr(920096) || chr(920097) || chr(920098) || chr(920099) || chr(920100) || chr(920101) || chr(920102) || chr(920103) || chr(920104) || chr(920105) || chr(920106))
+          || (chr(920107) || chr(920108) || chr(920109) || chr(920110) || chr(920111) || chr(920112) || chr(920113) || chr(920114) || chr(920115) || chr(920116) || chr(920117) || chr(920118) || chr(920119) || chr(920120) || chr(920121) || chr(920122))
+          || (chr(920123) || chr(920124) || chr(920125) || chr(920126) || chr(920127) || chr(920128) || chr(920129) || chr(920130) || chr(920131) || chr(920132) || chr(920133) || chr(920134) || chr(920135) || chr(920136) || chr(920137) || chr(920138))
+          || (chr(920139) || chr(920140) || chr(920141) || chr(920142) || chr(920143) || chr(920144) || chr(920145) || chr(920146) || chr(920147) || chr(920148) || chr(920149) || chr(920150) || chr(920151) || chr(920152) || chr(920153) || chr(920154))
+          || (chr(920155) || chr(920156) || chr(920157) || chr(920158) || chr(920159) || chr(920160) || chr(920161) || chr(920162) || chr(920163) || chr(920164) || chr(920165) || chr(920166) || chr(920167) || chr(920168) || chr(920169) || chr(920170))
+          || (chr(920171) || chr(920172) || chr(920173) || chr(920174) || chr(920175) || chr(920176) || chr(920177) || chr(920178) || chr(920179) || chr(920180) || chr(920181) || chr(920182) || chr(920183) || chr(920184) || chr(920185) || chr(920186))
+          || (chr(920187) || chr(920188) || chr(920189) || chr(920190) || chr(920191) || chr(920192) || chr(920193) || chr(920194) || chr(920195) || chr(920196) || chr(920197) || chr(920198) || chr(920199) || chr(920200) || chr(920201) || chr(920202))
+          || (chr(920203) || chr(920204) || chr(920205) || chr(920206) || chr(920207) || chr(920208) || chr(920209) || chr(920210) || chr(920211) || chr(920212) || chr(920213) || chr(920214) || chr(920215) || chr(920216) || chr(920217) || chr(920218))
+          || (chr(920219) || chr(920220) || chr(920221) || chr(920222) || chr(920223) || chr(920224) || chr(920225) || chr(920226) || chr(920227) || chr(920228) || chr(920229) || chr(920230) || chr(920231) || chr(920232) || chr(920233) || chr(920234))
+          || (chr(920235) || chr(920236) || chr(920237) || chr(920238) || chr(920239) || chr(920240) || chr(920241) || chr(920242) || chr(920243) || chr(920244) || chr(920245) || chr(920246) || chr(920247) || chr(920248) || chr(920249) || chr(920250))
+          || (chr(920251) || chr(920252) || chr(920253) || chr(920254) || chr(920255) || chr(920256) || chr(920257) || chr(920258) || chr(920259) || chr(920260) || chr(920261) || chr(920262) || chr(920263) || chr(920264) || chr(920265) || chr(920266))
+          || (chr(920267) || chr(920268) || chr(920269) || chr(920270) || chr(920271) || chr(920272) || chr(920273) || chr(920274) || chr(920275) || chr(920276) || chr(920277) || chr(920278) || chr(920279) || chr(920280) || chr(920281) || chr(920282))
+          || (chr(920283) || chr(920284) || chr(920285) || chr(920286) || chr(920287) || chr(920288) || chr(920289) || chr(920290) || chr(920291) || chr(920292) || chr(920293) || chr(920294) || chr(920295) || chr(920296) || chr(920297) || chr(920298))
+          || (chr(920299) || chr(920300) || chr(920301) || chr(920302) || chr(920303) || chr(920304) || chr(920305) || chr(920306) || chr(920307) || chr(920308) || chr(920309) || chr(920310) || chr(920311) || chr(920312) || chr(920313) || chr(920314))
+          || (chr(920315) || chr(920316) || chr(920317) || chr(920318) || chr(920319) || chr(920320) || chr(920321) || chr(920322) || chr(920323) || chr(920324) || chr(920325) || chr(920326) || chr(920327) || chr(920328) || chr(920329) || chr(920330))
+          || (chr(920331) || chr(920332) || chr(920333) || chr(920334) || chr(920335) || chr(920336) || chr(920337) || chr(920338) || chr(920339) || chr(920340) || chr(920341) || chr(920342) || chr(920343) || chr(920344) || chr(920345) || chr(920346))
+          || (chr(920347) || chr(920348) || chr(920349) || chr(920350) || chr(920351) || chr(920352) || chr(920353) || chr(920354) || chr(920355) || chr(920356) || chr(920357) || chr(920358) || chr(920359) || chr(920360) || chr(920361) || chr(920362))
+          || (chr(920363) || chr(920364) || chr(920365) || chr(920366) || chr(920367) || chr(920368) || chr(920369) || chr(920370) || chr(920371) || chr(920372) || chr(920373) || chr(920374) || chr(920375) || chr(920376) || chr(920377) || chr(920378))
+          || (chr(920379) || chr(920380) || chr(920381) || chr(920382) || chr(920383) || chr(920384) || chr(920385) || chr(920386) || chr(920387) || chr(920388) || chr(920389) || chr(920390) || chr(920391) || chr(920392) || chr(920393) || chr(920394))
+          || (chr(920395) || chr(920396) || chr(920397) || chr(920398) || chr(920399) || chr(920400) || chr(920401) || chr(920402) || chr(920403) || chr(920404) || chr(920405) || chr(920406) || chr(920407) || chr(920408) || chr(920409) || chr(920410))
+          || (chr(920411) || chr(920412) || chr(920413) || chr(920414) || chr(920415) || chr(920416) || chr(920417) || chr(920418) || chr(920419) || chr(920420) || chr(920421) || chr(920422) || chr(920423) || chr(920424) || chr(920425) || chr(920426))
+          || (chr(920427) || chr(920428) || chr(920429) || chr(920430) || chr(920431) || chr(920432) || chr(920433) || chr(920434) || chr(920435) || chr(920436) || chr(920437) || chr(920438) || chr(920439) || chr(920440) || chr(920441) || chr(920442))
+          || (chr(920443) || chr(920444) || chr(920445) || chr(920446) || chr(920447) || chr(920448) || chr(920449) || chr(920450) || chr(920451) || chr(920452) || chr(920453) || chr(920454) || chr(920455) || chr(920456) || chr(920457) || chr(920458))
+          || (chr(920459) || chr(920460) || chr(920461) || chr(920462) || chr(920463) || chr(920464) || chr(920465) || chr(920466) || chr(920467) || chr(920468) || chr(920469) || chr(920470) || chr(920471) || chr(920472) || chr(920473) || chr(920474))
+          || (chr(920475) || chr(920476) || chr(920477) || chr(920478) || chr(920479) || chr(920480) || chr(920481) || chr(920482) || chr(920483) || chr(920484) || chr(920485) || chr(920486) || chr(920487) || chr(920488) || chr(920489) || chr(920490))
+          || (chr(920491) || chr(920492) || chr(920493) || chr(920494) || chr(920495) || chr(920496) || chr(920497) || chr(920498) || chr(920499) || chr(920500) || chr(920501) || chr(920502) || chr(920503) || chr(920504) || chr(920505) || chr(920506))
+          || (chr(920507) || chr(920508) || chr(920509) || chr(920510) || chr(920511) || chr(920512) || chr(920513) || chr(920514) || chr(920515) || chr(920516) || chr(920517) || chr(920518) || chr(920519) || chr(920520) || chr(920521) || chr(920522))
+          || (chr(920523) || chr(920524) || chr(920525) || chr(920526) || chr(920527) || chr(920528) || chr(920529) || chr(920530) || chr(920531) || chr(920532) || chr(920533) || chr(920534) || chr(920535) || chr(920536) || chr(920537) || chr(920538))
+          || (chr(920539) || chr(920540) || chr(920541) || chr(920542) || chr(920543) || chr(920544) || chr(920545) || chr(920546) || chr(920547) || chr(920548) || chr(920549) || chr(920550) || chr(920551) || chr(920552) || chr(920553) || chr(920554))
+          || (chr(920555) || chr(920556) || chr(920557) || chr(920558) || chr(920559) || chr(920560) || chr(920561) || chr(920562) || chr(920563) || chr(920564) || chr(920565) || chr(920566) || chr(920567) || chr(920568) || chr(920569) || chr(920570))
+          || (chr(920571) || chr(920572) || chr(920573) || chr(920574) || chr(920575) || chr(920576) || chr(920577) || chr(920578) || chr(920579) || chr(920580) || chr(920581) || chr(920582) || chr(920583) || chr(920584) || chr(920585) || chr(920586))
+          || (chr(920587) || chr(920588) || chr(920589) || chr(920590) || chr(920591) || chr(920592) || chr(920593) || chr(920594) || chr(920595) || chr(920596) || chr(920597) || chr(920598) || chr(920599) || chr(920600) || chr(920601) || chr(920602))
+          || (chr(920603) || chr(920604) || chr(920605) || chr(920606) || chr(920607) || chr(920608) || chr(920609) || chr(920610) || chr(920611) || chr(920612) || chr(920613) || chr(920614) || chr(920615) || chr(920616) || chr(920617) || chr(920618))
+          || (chr(920619) || chr(920620) || chr(920621) || chr(920622) || chr(920623) || chr(920624) || chr(920625) || chr(920626) || chr(920627) || chr(920628) || chr(920629) || chr(920630) || chr(920631) || chr(920632) || chr(920633) || chr(920634))
+          || (chr(920635) || chr(920636) || chr(920637) || chr(920638) || chr(920639) || chr(920640) || chr(920641) || chr(920642) || chr(920643) || chr(920644) || chr(920645) || chr(920646) || chr(920647) || chr(920648) || chr(920649) || chr(920650))
+          || (chr(920651) || chr(920652) || chr(920653) || chr(920654) || chr(920655) || chr(920656) || chr(920657) || chr(920658) || chr(920659) || chr(920660) || chr(920661) || chr(920662) || chr(920663) || chr(920664) || chr(920665) || chr(920666))
+          || (chr(920667) || chr(920668) || chr(920669) || chr(920670) || chr(920671) || chr(920672) || chr(920673) || chr(920674) || chr(920675) || chr(920676) || chr(920677) || chr(920678) || chr(920679) || chr(920680) || chr(920681) || chr(920682))
+          || (chr(920683) || chr(920684) || chr(920685) || chr(920686) || chr(920687) || chr(920688) || chr(920689) || chr(920690) || chr(920691) || chr(920692) || chr(920693) || chr(920694) || chr(920695) || chr(920696) || chr(920697) || chr(920698))
+          || (chr(920699) || chr(920700) || chr(920701) || chr(920702) || chr(920703) || chr(920704) || chr(920705) || chr(920706) || chr(920707) || chr(920708) || chr(920709) || chr(920710) || chr(920711) || chr(920712) || chr(920713) || chr(920714))
+          || (chr(920715) || chr(920716) || chr(920717) || chr(920718) || chr(920719) || chr(920720) || chr(920721) || chr(920722) || chr(920723) || chr(920724) || chr(920725) || chr(920726) || chr(920727) || chr(920728) || chr(920729) || chr(920730))
+          || (chr(920731) || chr(920732) || chr(920733) || chr(920734) || chr(920735) || chr(920736) || chr(920737) || chr(920738) || chr(920739) || chr(920740) || chr(920741) || chr(920742) || chr(920743) || chr(920744) || chr(920745) || chr(920746))
+          || (chr(920747) || chr(920748) || chr(920749) || chr(920750) || chr(920751) || chr(920752) || chr(920753) || chr(920754) || chr(920755) || chr(920756) || chr(920757) || chr(920758) || chr(920759) || chr(920760) || chr(920761) || chr(920762))
+          || (chr(920763) || chr(920764) || chr(920765) || chr(920766) || chr(920767) || chr(920768) || chr(920769) || chr(920770) || chr(920771) || chr(920772) || chr(920773) || chr(920774) || chr(920775) || chr(920776) || chr(920777) || chr(920778))
+          || (chr(920779) || chr(920780) || chr(920781) || chr(920782) || chr(920783) || chr(920784) || chr(920785) || chr(920786) || chr(920787) || chr(920788) || chr(920789) || chr(920790) || chr(920791) || chr(920792) || chr(920793) || chr(920794))
+          || (chr(920795) || chr(920796) || chr(920797) || chr(920798) || chr(920799) || chr(920800) || chr(920801) || chr(920802) || chr(920803) || chr(920804) || chr(920805) || chr(920806) || chr(920807) || chr(920808) || chr(920809) || chr(920810))
+          || (chr(920811) || chr(920812) || chr(920813) || chr(920814) || chr(920815) || chr(920816) || chr(920817) || chr(920818) || chr(920819) || chr(920820) || chr(920821) || chr(920822) || chr(920823) || chr(920824) || chr(920825) || chr(920826))
+          || (chr(920827) || chr(920828) || chr(920829) || chr(920830) || chr(920831) || chr(920832) || chr(920833) || chr(920834) || chr(920835) || chr(920836) || chr(920837) || chr(920838) || chr(920839) || chr(920840) || chr(920841) || chr(920842))
+          || (chr(920843) || chr(920844) || chr(920845) || chr(920846) || chr(920847) || chr(920848) || chr(920849) || chr(920850) || chr(920851) || chr(920852) || chr(920853) || chr(920854) || chr(920855) || chr(920856) || chr(920857) || chr(920858))
+          || (chr(920859) || chr(920860) || chr(920861) || chr(920862) || chr(920863) || chr(920864) || chr(920865) || chr(920866) || chr(920867) || chr(920868) || chr(920869) || chr(920870) || chr(920871) || chr(920872) || chr(920873) || chr(920874))
+          || (chr(920875) || chr(920876) || chr(920877) || chr(920878) || chr(920879) || chr(920880) || chr(920881) || chr(920882) || chr(920883) || chr(920884) || chr(920885) || chr(920886) || chr(920887) || chr(920888) || chr(920889) || chr(920890))
+          || (chr(920891) || chr(920892) || chr(920893) || chr(920894) || chr(920895) || chr(920896) || chr(920897) || chr(920898) || chr(920899) || chr(920900) || chr(920901) || chr(920902) || chr(920903) || chr(920904) || chr(920905) || chr(920906))
+          || (chr(920907) || chr(920908) || chr(920909) || chr(920910) || chr(920911) || chr(920912) || chr(920913) || chr(920914) || chr(920915) || chr(920916) || chr(920917) || chr(920918) || chr(920919) || chr(920920) || chr(920921) || chr(920922))
+          || (chr(920923) || chr(920924) || chr(920925) || chr(920926) || chr(920927) || chr(920928) || chr(920929) || chr(920930) || chr(920931) || chr(920932) || chr(920933) || chr(920934) || chr(920935) || chr(920936) || chr(920937) || chr(920938))
+          || (chr(920939) || chr(920940) || chr(920941) || chr(920942) || chr(920943) || chr(920944) || chr(920945) || chr(920946) || chr(920947) || chr(920948) || chr(920949) || chr(920950) || chr(920951) || chr(920952) || chr(920953) || chr(920954))
+          || (chr(920955) || chr(920956) || chr(920957) || chr(920958) || chr(920959) || chr(920960) || chr(920961) || chr(920962) || chr(920963) || chr(920964) || chr(920965) || chr(920966) || chr(920967) || chr(920968) || chr(920969) || chr(920970))
+          || (chr(920971) || chr(920972) || chr(920973) || chr(920974) || chr(920975) || chr(920976) || chr(920977) || chr(920978) || chr(920979) || chr(920980) || chr(920981) || chr(920982) || chr(920983) || chr(920984) || chr(920985) || chr(920986))
+          || (chr(920987) || chr(920988) || chr(920989) || chr(920990) || chr(920991) || chr(920992) || chr(920993) || chr(920994) || chr(920995) || chr(920996) || chr(920997) || chr(920998) || chr(920999) || chr(921000) || chr(921001) || chr(921002))
+          || (chr(921003) || chr(921004) || chr(921005) || chr(921006) || chr(921007) || chr(921008) || chr(921009) || chr(921010) || chr(921011) || chr(921012) || chr(921013) || chr(921014) || chr(921015) || chr(921016) || chr(921017) || chr(921018))
+          || (chr(921019) || chr(921020) || chr(921021) || chr(921022) || chr(921023) || chr(921024) || chr(921025) || chr(921026) || chr(921027) || chr(921028) || chr(921029) || chr(921030) || chr(921031) || chr(921032) || chr(921033) || chr(921034))
+          || (chr(921035) || chr(921036) || chr(921037) || chr(921038) || chr(921039) || chr(921040) || chr(921041) || chr(921042) || chr(921043) || chr(921044) || chr(921045) || chr(921046) || chr(921047) || chr(921048) || chr(921049) || chr(921050))
+          || (chr(921051) || chr(921052) || chr(921053) || chr(921054) || chr(921055) || chr(921056) || chr(921057) || chr(921058) || chr(921059) || chr(921060) || chr(921061) || chr(921062) || chr(921063) || chr(921064) || chr(921065) || chr(921066))
+          || (chr(921067) || chr(921068) || chr(921069) || chr(921070) || chr(921071) || chr(921072) || chr(921073) || chr(921074) || chr(921075) || chr(921076) || chr(921077) || chr(921078) || chr(921079) || chr(921080) || chr(921081) || chr(921082))
+          || (chr(921083) || chr(921084) || chr(921085) || chr(921086) || chr(921087) || chr(921088) || chr(921089) || chr(921090) || chr(921091) || chr(921092) || chr(921093) || chr(921094) || chr(921095) || chr(921096) || chr(921097) || chr(921098))
+          || (chr(921099) || chr(921100) || chr(921101) || chr(921102) || chr(921103) || chr(921104) || chr(921105) || chr(921106) || chr(921107) || chr(921108) || chr(921109) || chr(921110) || chr(921111) || chr(921112) || chr(921113) || chr(921114))
+          || (chr(921115) || chr(921116) || chr(921117) || chr(921118) || chr(921119) || chr(921120) || chr(921121) || chr(921122) || chr(921123) || chr(921124) || chr(921125) || chr(921126) || chr(921127) || chr(921128) || chr(921129) || chr(921130))
+          || (chr(921131) || chr(921132) || chr(921133) || chr(921134) || chr(921135) || chr(921136) || chr(921137) || chr(921138) || chr(921139) || chr(921140) || chr(921141) || chr(921142) || chr(921143) || chr(921144) || chr(921145) || chr(921146))
+          || (chr(921147) || chr(921148) || chr(921149) || chr(921150) || chr(921151) || chr(921152) || chr(921153) || chr(921154) || chr(921155) || chr(921156) || chr(921157) || chr(921158) || chr(921159) || chr(921160) || chr(921161) || chr(921162))
+          || (chr(921163) || chr(921164) || chr(921165) || chr(921166) || chr(921167) || chr(921168) || chr(921169) || chr(921170) || chr(921171) || chr(921172) || chr(921173) || chr(921174) || chr(921175) || chr(921176) || chr(921177) || chr(921178))
+          || (chr(921179) || chr(921180) || chr(921181) || chr(921182) || chr(921183) || chr(921184) || chr(921185) || chr(921186) || chr(921187) || chr(921188) || chr(921189) || chr(921190) || chr(921191) || chr(921192) || chr(921193) || chr(921194))
+          || (chr(921195) || chr(921196) || chr(921197) || chr(921198) || chr(921199) || chr(921200) || chr(921201) || chr(921202) || chr(921203) || chr(921204) || chr(921205) || chr(921206) || chr(921207) || chr(921208) || chr(921209) || chr(921210))
+          || (chr(921211) || chr(921212) || chr(921213) || chr(921214) || chr(921215) || chr(921216) || chr(921217) || chr(921218) || chr(921219) || chr(921220) || chr(921221) || chr(921222) || chr(921223) || chr(921224) || chr(921225) || chr(921226))
+          || (chr(921227) || chr(921228) || chr(921229) || chr(921230) || chr(921231) || chr(921232) || chr(921233) || chr(921234) || chr(921235) || chr(921236) || chr(921237) || chr(921238) || chr(921239) || chr(921240) || chr(921241) || chr(921242))
+          || (chr(921243) || chr(921244) || chr(921245) || chr(921246) || chr(921247) || chr(921248) || chr(921249) || chr(921250) || chr(921251) || chr(921252) || chr(921253) || chr(921254) || chr(921255) || chr(921256) || chr(921257) || chr(921258))
+          || (chr(921259) || chr(921260) || chr(921261) || chr(921262) || chr(921263) || chr(921264) || chr(921265) || chr(921266) || chr(921267) || chr(921268) || chr(921269) || chr(921270) || chr(921271) || chr(921272) || chr(921273) || chr(921274))
+          || (chr(921275) || chr(921276) || chr(921277) || chr(921278) || chr(921279) || chr(921280) || chr(921281) || chr(921282) || chr(921283) || chr(921284) || chr(921285) || chr(921286) || chr(921287) || chr(921288) || chr(921289) || chr(921290))
+          || (chr(921291) || chr(921292) || chr(921293) || chr(921294) || chr(921295) || chr(921296) || chr(921297) || chr(921298) || chr(921299) || chr(921300) || chr(921301) || chr(921302) || chr(921303) || chr(921304) || chr(921305) || chr(921306))
+          || (chr(921307) || chr(921308) || chr(921309) || chr(921310) || chr(921311) || chr(921312) || chr(921313) || chr(921314) || chr(921315) || chr(921316) || chr(921317) || chr(921318) || chr(921319) || chr(921320) || chr(921321) || chr(921322))
+          || (chr(921323) || chr(921324) || chr(921325) || chr(921326) || chr(921327) || chr(921328) || chr(921329) || chr(921330) || chr(921331) || chr(921332) || chr(921333) || chr(921334) || chr(921335) || chr(921336) || chr(921337) || chr(921338))
+          || (chr(921339) || chr(921340) || chr(921341) || chr(921342) || chr(921343) || chr(921344) || chr(921345) || chr(921346) || chr(921347) || chr(921348) || chr(921349) || chr(921350) || chr(921351) || chr(921352) || chr(921353) || chr(921354))
+          || (chr(921355) || chr(921356) || chr(921357) || chr(921358) || chr(921359) || chr(921360) || chr(921361) || chr(921362) || chr(921363) || chr(921364) || chr(921365) || chr(921366) || chr(921367) || chr(921368) || chr(921369) || chr(921370))
+          || (chr(921371) || chr(921372) || chr(921373) || chr(921374) || chr(921375) || chr(921376) || chr(921377) || chr(921378) || chr(921379) || chr(921380) || chr(921381) || chr(921382) || chr(921383) || chr(921384) || chr(921385) || chr(921386))
+          || (chr(921387) || chr(921388) || chr(921389) || chr(921390) || chr(921391) || chr(921392) || chr(921393) || chr(921394) || chr(921395) || chr(921396) || chr(921397) || chr(921398) || chr(921399) || chr(921400) || chr(921401) || chr(921402))
+          || (chr(921403) || chr(921404) || chr(921405) || chr(921406) || chr(921407) || chr(921408) || chr(921409) || chr(921410) || chr(921411) || chr(921412) || chr(921413) || chr(921414) || chr(921415) || chr(921416) || chr(921417) || chr(921418))
+          || (chr(921419) || chr(921420) || chr(921421) || chr(921422) || chr(921423) || chr(921424) || chr(921425) || chr(921426) || chr(921427) || chr(921428) || chr(921429) || chr(921430) || chr(921431) || chr(921432) || chr(921433) || chr(921434))
+          || (chr(921435) || chr(921436) || chr(921437) || chr(921438) || chr(921439) || chr(921440) || chr(921441) || chr(921442) || chr(921443) || chr(921444) || chr(921445) || chr(921446) || chr(921447) || chr(921448) || chr(921449) || chr(921450))
+          || (chr(921451) || chr(921452) || chr(921453) || chr(921454) || chr(921455) || chr(921456) || chr(921457) || chr(921458) || chr(921459) || chr(921460) || chr(921461) || chr(921462) || chr(921463) || chr(921464) || chr(921465) || chr(921466))
+          || (chr(921467) || chr(921468) || chr(921469) || chr(921470) || chr(921471) || chr(921472) || chr(921473) || chr(921474) || chr(921475) || chr(921476) || chr(921477) || chr(921478) || chr(921479) || chr(921480) || chr(921481) || chr(921482))
+          || (chr(921483) || chr(921484) || chr(921485) || chr(921486) || chr(921487) || chr(921488) || chr(921489) || chr(921490) || chr(921491) || chr(921492) || chr(921493) || chr(921494) || chr(921495) || chr(921496) || chr(921497) || chr(921498))
+          || (chr(921499) || chr(921500) || chr(921501) || chr(921502) || chr(921503) || chr(921504) || chr(921505) || chr(921506) || chr(921507) || chr(921508) || chr(921509) || chr(921510) || chr(921511) || chr(921512) || chr(921513) || chr(921514))
+          || (chr(921515) || chr(921516) || chr(921517) || chr(921518) || chr(921519) || chr(921520) || chr(921521) || chr(921522) || chr(921523) || chr(921524) || chr(921525) || chr(921526) || chr(921527) || chr(921528) || chr(921529) || chr(921530))
+          || (chr(921531) || chr(921532) || chr(921533) || chr(921534) || chr(921535) || chr(921536) || chr(921537) || chr(921538) || chr(921539) || chr(921540) || chr(921541) || chr(921542) || chr(921543) || chr(921544) || chr(921545) || chr(921546))
+          || (chr(921547) || chr(921548) || chr(921549) || chr(921550) || chr(921551) || chr(921552) || chr(921553) || chr(921554) || chr(921555) || chr(921556) || chr(921557) || chr(921558) || chr(921559) || chr(921560) || chr(921561) || chr(921562))
+          || (chr(921563) || chr(921564) || chr(921565) || chr(921566) || chr(921567) || chr(921568) || chr(921569) || chr(921570) || chr(921571) || chr(921572) || chr(921573) || chr(921574) || chr(921575) || chr(921576) || chr(921577) || chr(921578))
+          || (chr(921579) || chr(921580) || chr(921581) || chr(921582) || chr(921583) || chr(921584) || chr(921585) || chr(921586) || chr(921587) || chr(921588) || chr(921589) || chr(921590) || chr(921591) || chr(921592) || chr(921593) || chr(921594))
+          || (chr(921595) || chr(921596) || chr(921597) || chr(921598) || chr(921599)),
+          'abcdefghijklmnopqrstuvwxyzaaaaaaceeeeiiiidnoooooouuuuyaaaaaaceeeeiiiidnoooooouuuuyyaaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiiijjkkllllllllllnnnnnnoooooorrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzzsoouuaaiioouuuuuuuuuuaaaaggkkoooojggnnaaaaaaeeeeiiiioooorrrruuuusstthhaaeeooooooooyyaabbbbbbccddddddddddeeeeeeeeeeffgghhhhhhhhhhiiiikkkkkkllllllllmmmmmmnnnnnnnnoooooooopppprrrrrrrrssssssssssttttttttuuuuuuuuuuvvvvwwwwwwwwwwxxxxyyzzzzzzhtwyaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeeeeeeeeeeeiiiioooooooooooooooooooooooouuuuuuuuuuuuuuyyyyyyyy23104567890123456789                                                                                                                                                                                                                                                                  '), chr(37), ' pourcent '), chr(38), ' et '), chr(43), ' plus '), chr(60), ' inf '), chr(62), ' sup '), chr(188), '1 4'), chr(189), '1 2'), chr(190), '3 4'), chr(198), 'ae'), chr(215), 'x'), chr(222), 'th'), chr(223), 'ss'), chr(230), 'ae'), chr(254), 'th'), chr(306), 'ij'), chr(307), 'ij'), chr(338), 'oe'), chr(339), 'oe'), chr(7838), 'ss'), chr(8240), ' pourmille '), chr(8364), ' euro '), chr(8804), ' inf '), chr(8805), ' sup '), chr(64256), 'ff'), chr(64257), 'fi'), chr(64258), 'fl'), chr(64259), 'ffi'), chr(64260), 'ffl'), chr(64261), 'st'), chr(64262), 'st'),
       ' {2,}', ' ', 'g'), ' '),
     '(^| )(?!(?:bas)(?: |$))([abcdefghijklmnopqrstuvwxyz]{2,})[sx](?= |$)', chr(92) || '1' || chr(92) || '2', 'g')
   end
@@ -12700,12 +13032,40 @@ create unique index if not exists idx_devis_id_pro on public.devis (id, pro_id);
 --      région, de client, de métier. `cle_rapprochement` est la seule dont
 --      le lecteur est un INDEX (50.6) : c'est voulu, et nommé.
 --
---  `cle_rapprochement` EST GÉNÉRÉE, et pas posée par le déclencheur : un
---  client qui l'envoie reçoit 428C9, au lieu de la voir écrasée en silence,
---  et la propriété est tenue par le CATALOGUE, pas par un corps de fonction.
---  PostgreSQL la calcule APRÈS les déclencheurs `before` : c'est la clé de
---  la phrase DÉJÀ rognée. L'application ne la lit pas — elle calcule la même
---  par son miroir, pour des lignes qui ne sont pas encore en base.
+--  `cle_rapprochement` EST POSÉE PAR LE DÉCLENCHEUR, ET SEULEMENT QUAND LA
+--  PHRASE CHANGE (24/10/2026). Elle a d'abord été une colonne GÉNÉRÉE — et
+--  PostgreSQL recalcule toute colonne générée stockée à CHAQUE modification
+--  d'une table qui porte un déclencheur `before update`, quelles que soient
+--  les colonnes visées. Mesuré sur 999 postes de pire cas qui citent un même
+--  devis : changer le seul PRIX, 999 appels et 60 s ; « Supprimer ce
+--  brouillon » (la cascade `set null`), 999 appels et 59 s — sur la vraie
+--  base, au-delà des 8 s d'un client, la suppression aurait échoué. Et une
+--  fonction remplacée recalculait la clé de toute ligne qu'on touchait, pour
+--  n'importe quelle raison : la cascade d'un devis tombait sur 23505 entre
+--  le remplacement et la réécriture. Posée par le déclencheur, elle se
+--  calcule à l'INSERTION et quand la phrase CHANGE (`is distinct from`),
+--  jamais ailleurs : les mêmes modifications, 0 appel (cas 21 ter). C'est
+--  la clé de la phrase DÉJÀ rognée.
+--
+--  Un client qui l'ENVOIE reçoit 428C9, le refus de la colonne générée, au
+--  lieu de la voir écrasée en silence — et la seule écriture acceptée est
+--  son recalcul EXACT, celle de la réécriture du contrat (50.0). La
+--  propriété est tenue par un corps de fonction, et plus par le catalogue :
+--  l'essai 50 la prouve (cas 19, 20, 21), `verifier-postes` lit le corps.
+--  L'application ne la lit pas — elle calcule la même par son miroir, pour
+--  des lignes qui ne sont pas encore en base.
+--
+--  L'IDENTIFIANT, ET CE QU'IL DIT. `id` a un défaut, mais rien n'empêche un
+--  client de l'ENVOYER à la création (l'application ne le fait pas :
+--  `posteVersBase` ne l'écrit jamais). Renvoyer l'identifiant d'un poste
+--  d'un AUTRE artisan rend 23505 `base_postes_pkey` (et `on conflict do
+--  nothing`, 0 ligne au lieu d'une) : on apprend que ce poste EXISTE, rien
+--  d'autre — ni sa phrase, ni son prix, ni à qui il est. C'est l'oracle que
+--  le lot 1 a écrit pour `devis` (« ce qui reste un oracle, dit plutôt que
+--  promis »), et il n'est pas fermé : un UUID v4 ne se devine pas, et aucune
+--  lecture ne montre à B un identifiant de poste de A. Le fermer — `new.id
+--  := gen_random_uuid()` à l'insertion — changerait la nature de six cas de
+--  l'essai, qui posent des identifiants fixes.
 --
 --  `prix_reference_centimes` : en CENTIMES, `null` = « pas encore fixé »,
 --  jamais 0. `prix_fixe_le` est posée par la BASE quand le prix change, et
@@ -12737,7 +13097,7 @@ create table if not exists public.base_postes (
   id                       uuid primary key default gen_random_uuid(),
   pro_id                   uuid not null references public.professional_profiles(id) on delete cascade,
   designation              text,
-  cle_rapprochement        text generated always as (public.cle_de_rapprochement(designation)) stored,
+  cle_rapprochement        text,
   unite                    text,
   fourniture_non_comprise  boolean not null default false,
   main_oeuvre              boolean not null default false,
@@ -12749,6 +13109,13 @@ create table if not exists public.base_postes (
   constraint base_postes_devis_origine_fkey foreign key (devis_origine_id, pro_id)
     references public.devis (id, pro_id) on delete set null (devis_origine_id)
 );
+
+/* Une base d'ESSAI qui a reçu la section 50 sous sa forme d'avant (la clé
+   GÉNÉRÉE, commits du 23 et du 24/10/2026) : `create table if not exists`
+   ne la touche pas, et la colonne resterait générée. Cet ordre en fait une
+   colonne ordinaire qui GARDE ses valeurs ; ailleurs — la vraie base n'a
+   jamais reçu de section 50 —, il ne fait rien et le dit. */
+alter table public.base_postes alter column cle_rapprochement drop expression if exists;
 
 -- --------------------------------------------------------------------------
 --  50.3 Les contraintes — cinq, toutes en `_check`
@@ -12763,12 +13130,15 @@ create table if not exists public.base_postes (
 --  ce même ordre.
 --
 --  `base_poste_rapprochement_check` : une phrase faite seulement de blancs,
---  de ponctuation, de marques ou de caractères invisibles (« — », « … », un
---  remplisseur hangûl) a une clé VIDE, et ne fait pas un poste. `null` y
---  laisse parler `base_poste_designation_check` : une phrase vide n'a pas de
---  clé, une phrase de plus de 2 000 points de code non plus (la garde). Ce
---  qui fait un poste, et c'est dit : un émoji seul, une flèche, une lettre
---  grecque — leur clé n'est pas vide. (Les cinq blancs que la classe du
+--  de ponctuation, de marques combinantes U+0300–U+036F ou de caractères
+--  invisibles — toute la propriété Unicode `Default_Ignorable_Code_Point`,
+--  et le motif braille vide U+2800 — a une clé VIDE, et ne fait pas un poste
+--  (« — », « … », un remplisseur hangûl, un sélecteur de variante, une
+--  étiquette U+E0041). `null` y laisse parler `base_poste_designation_check` :
+--  une phrase vide n'a pas de clé, une phrase de plus de 2 000 points de code
+--  non plus (la garde). Ce qui fait un poste, et c'est dit : un émoji seul,
+--  une flèche, une lettre grecque, une marque combinante HORS de
+--  U+0300–U+036F (elle se voit sur sa lettre) — leur clé n'est pas vide. (Les cinq blancs que la classe du
 --  projet ne connaît pas — U+3000, U+202F… — sont des SÉPARATEURS pour la
 --  clé : refusés seuls ici, ils restent acceptés par `devis_lignes`, au
 --  lot S.)
@@ -12795,8 +13165,9 @@ comment on table public.base_postes is
 comment on column public.base_postes.designation is
   'La phrase, MOT POUR MOT (rognée de ses blancs, rien d''autre). C''est elle que le client lira. 1 à 2 000 caractères.';
 comment on column public.base_postes.cle_rapprochement is
-  'GÉNÉRÉE par public.cle_de_rapprochement(designation) : ne s''écrit pas (428C9), ne s''affiche nulle part. Son lecteur est '
-  'l''index unique idx_base_postes_rapprochement.';
+  'public.cle_de_rapprochement(designation), POSÉE par le déclencheur tient_le_poste() à l''insertion et quand la phrase '
+  'change, jamais ailleurs. Un client qui l''envoie reçoit 428C9 (seul son recalcul exact passe). Ne s''affiche nulle part. '
+  'Son lecteur est l''index unique idx_base_postes_rapprochement.';
 comment on column public.base_postes.unite is
   'Une des sept unités du lot 1 (m2, m, m3, u, h, jour, forfait) — « ml » jamais. Obligatoire.';
 comment on column public.base_postes.prix_reference_centimes is
@@ -12823,13 +13194,19 @@ comment on column public.base_postes.modifie_le is
 --       U+FEFF), écrite en `chr(n)`. C'est la HUITIÈME copie de cette
 --       classe : `verifier-devis` la compare aux sept autres et à `BLANCS`.
 --       « Mot pour mot » veut dire que rien d'autre n'est réécrit.
---    2. À L'INSERTION : les deux dates par `clock_timestamp()` (et non
---       `now()`, l'heure du DÉBUT de la transaction), la date du prix si un
---       prix est donné ; puis le PLAFOND.
+--    2. À L'INSERTION : la CLÉ DE RAPPROCHEMENT, calculée pour TOUTE
+--       insertion, par qui que ce soit (une ligne rangée sans clé passerait
+--       à côté de l'index du doublon) — et 428C9 si le client en envoie une
+--       autre ; les deux dates par `clock_timestamp()` (et non `now()`,
+--       l'heure du DÉBUT de la transaction), la date du prix si un prix est
+--       donné ; puis le PLAFOND.
 --    3. À LA MODIFICATION : l'identifiant et l'entreprise sont FIGÉS ; la
 --       date de création est gardée ; le lien d'origine ne peut que
---       DISPARAÎTRE ; la date du prix ne bouge que si le prix change, et se
---       vide avec lui ; `modifie_le` ne bouge que pour une écriture DIRECTE
+--       DISPARAÎTRE ; la CLÉ n'est recalculée que si la phrase CHANGE, et
+--       une clé ÉCRITE n'est acceptée que si elle est exactement son
+--       recalcul (la réécriture du contrat, 50.0) — 428C9 sinon ; la date du
+--       prix ne bouge que si le prix change, et se vide avec lui ;
+--       `modifie_le` ne bouge que pour une écriture DIRECTE
 --       (`pg_trigger_depth() = 1`) — la cascade `set null` d'un devis
 --       supprimé tourne plus profond, et ne doit pas faire croire à
 --       l'artisan que son poste a été modifié entre-temps.
@@ -12844,16 +13221,27 @@ comment on column public.base_postes.modifie_le is
 --  la première occurrence de `v_plafond constant` du fichier (OP017).
 --
 --  LE VERROU ET LE COMPTE NE SONT PRIS QUE POUR SA PROPRE ENTREPRISE — ou
---  sans jeton (l'éditeur SQL, une fonction sans jeton : elles restent
---  comptées). Le déclencheur tourne AVANT la colonne générée, la politique
---  et les contraintes : un particulier qui écrivait au nom de A prenait le
---  verrou de A, payait le calcul de la clé, puis était refusé — et A
---  attendait plus de huit secondes pour ajouter SON poste (mesuré). Une
---  écriture au nom d'un autre ne compte plus rien et n'attend personne ; la
---  politique la refuse juste après (42501). Les deux `if` sont IMBRIQUÉS
---  exprès : `est_mon_entreprise` n'est exécutable que par `anon` et
---  `authenticated`, et une écriture du rôle de service, qui n'a pas de
---  jeton, ne doit pas l'appeler.
+--  pour un rôle qui n'est pas un CLIENT (l'éditeur SQL, le rôle de service :
+--  ils restent comptés). Le déclencheur tourne AVANT la politique et les
+--  contraintes : un particulier qui écrivait au nom de A prenait le verrou
+--  de A, puis était refusé — et A attendait plus de huit secondes pour
+--  ajouter SON poste (mesuré). Une écriture au nom d'un autre ne compte plus
+--  rien et n'attend personne ; la politique la refuse juste après (42501).
+--  Elle paie encore le calcul de sa clé, borné par la garde, sans tenir le
+--  verrou de personne. Les deux `if` sont IMBRIQUÉS exprès :
+--  `est_mon_entreprise` n'est exécutable que par `anon` et `authenticated`,
+--  et une écriture du rôle de service, qui n'a pas de jeton, ne doit pas
+--  l'appeler.
+--
+--  « SANS JETON » SE DÉCIDE SUR LE RÔLE, PAS SUR `auth.uid()` VIDE
+--  (24/10/2026). Une session `authenticated` dont le jeton n'a pas de `sub`
+--  — Supabase n'en signe jamais, mais un réglage de session en fabrique une
+--  — avait `auth.uid()` vide, passait pour l'éditeur SQL, et prenait le
+--  verrou de n'importe quelle entreprise : mesuré, elle attendait derrière
+--  celui de A jusqu'à son délai. Pour `anon` et `authenticated`, plus de
+--  verrou ni de compte ; la politique refuse la ligne (aucune entreprise ne
+--  lui appartient). `anon` n'atteint d'ailleurs jamais ce déclencheur : il
+--  n'a aucun droit sur la table, et le refus vient avant.
 --
 --  POURQUOI `security invoker` EST UNE PROPRIÉTÉ DE SÉCURITÉ : en `definer`
 --  « pour compter juste », un autre artisan qui écrivait au nom de A
@@ -12881,7 +13269,9 @@ comment on column public.base_postes.modifie_le is
 --      toute autre écriture future hors d'un client passe à profondeur 1, ou
 --      pose `modifie_le` elle-même ;
 --    - le nombre du plafond ne dépasse pas la limite de lecture de l'API ;
---    - changer la règle de la clé, c'est réécrire la table (50.0) ;
+--    - changer la règle de la clé : remplacer la fonction ET réécrire les
+--      clés, dans UNE transaction (50.0) — la seule écriture de la clé
+--      acceptée est son recalcul exact ;
 --    - `auth.uid()` ne se lit que dans la branche d'insertion.
 -- --------------------------------------------------------------------------
 create or replace function public.tient_le_poste()
@@ -12893,14 +13283,21 @@ as $$
 declare
   v_plafond_postes constant integer := 1000;
   v_compter boolean;
+  v_cle text;
 begin
   new.designation := nullif(btrim(coalesce(new.designation, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
   if tg_op = 'INSERT' then
+    v_cle := public.cle_de_rapprochement(new.designation);
+    if new.cle_rapprochement is not null and new.cle_rapprochement is distinct from v_cle then
+      raise exception 'cle_rapprochement : la base calcule cette cle, elle ne s''envoie pas.'
+        using errcode = '428C9';
+    end if;
+    new.cle_rapprochement := v_cle;
     new.created_at := clock_timestamp();
     new.modifie_le := new.created_at;
     new.prix_fixe_le := case when new.prix_reference_centimes is null then null else new.created_at end;
     if auth.uid() is null then
-      v_compter := true;
+      v_compter := current_user not in ('anon', 'authenticated');
     else
       v_compter := public.est_mon_entreprise(new.pro_id);
     end if;
@@ -12916,6 +13313,14 @@ begin
     new.pro_id := old.pro_id;
     new.created_at := old.created_at;
     new.devis_origine_id := case when new.devis_origine_id is null then null else old.devis_origine_id end;
+    if new.cle_rapprochement is distinct from old.cle_rapprochement then
+      if new.cle_rapprochement is distinct from public.cle_de_rapprochement(new.designation) then
+        raise exception 'cle_rapprochement : la base calcule cette cle, elle ne s''ecrit que par son recalcul exact.'
+          using errcode = '428C9';
+      end if;
+    elsif new.designation is distinct from old.designation then
+      new.cle_rapprochement := public.cle_de_rapprochement(new.designation);
+    end if;
     if new.prix_reference_centimes is distinct from old.prix_reference_centimes then
       new.prix_fixe_le := case when new.prix_reference_centimes is null then null else clock_timestamp() end;
     else
@@ -12936,9 +13341,11 @@ create or replace trigger trg_tient_le_poste
   for each row execute function public.tient_le_poste();
 
 comment on function public.tient_le_poste() is
-  'Rogne la phrase (la classe de blancs du projet, en chr(n)), pose les dates, fige id, pro_id et created_at, ne laisse le '
-  'lien d''origine que disparaître, et compte le plafond de 1 000 postes (OP018) sous verrou — pour SA propre entreprise '
-  'ou sans jeton seulement. security invoker, et doit le rester. Section 50.4.';
+  'Rogne la phrase (la classe de blancs du projet, en chr(n)), pose la clé de rapprochement (à l''insertion et quand la '
+  'phrase change, jamais ailleurs ; 428C9 pour une clé envoyée qui n''est pas son recalcul), pose les dates, fige id, '
+  'pro_id et created_at, ne laisse le lien d''origine que disparaître, et compte le plafond de 1 000 postes (OP018) sous '
+  'verrou — pour SA propre entreprise, ou pour un rôle qui n''est pas un client. security invoker, et doit le rester. '
+  'Section 50.4.';
 
 -- --------------------------------------------------------------------------
 --  50.5 Qui lit, qui écrit
@@ -13279,12 +13686,24 @@ revoke all on function public.recalcule_chantier(uuid) from public, anon, authen
    ci-dessus. */
 
 /* ET CE QU'ON NE TOUCHE SURTOUT PAS, écrit ici pour que ce soit relu avec le
-   balayage : les fonctions appelées par une POLITIQUE ou une CONTRAINTE
-   doivent rester exécutables par `authenticated`, sans quoi la règle ÉCHOUE
-   au lieu de filtrer — « permission denied for function », et c'est la panne
-   du 30/09. Elles sont huit : est_masque, est_un_pro, est_mon_entreprise,
-   horaires_valides, metiers_connus, et depuis le lot 1 du devis devis_total_ligne
-   et devis_tva_de (section 49.1), que deux contraintes appellent, et
-   mes_entreprises (section 49.7), que les trois politiques du devis appellent.
-   `verifier-portes` les recense dans le fichier et refuse que l'une d'elles
-   perde son droit. */
+   balayage : les fonctions que PostgreSQL évalue POUR LE COMPTE DE CELUI QUI
+   ÉCRIT doivent rester exécutables par `authenticated`, sans quoi la règle
+   ÉCHOUE au lieu de filtrer — « permission denied for function », et c'est
+   la panne du 30/09. Trois familles, ONZE fonctions (le 24/10/2026) :
+     - appelées par une POLITIQUE : est_admin, est_masque, est_un_pro,
+       est_mon_entreprise, et mes_entreprises (section 49.7, les politiques
+       du devis et de la base de postes) ;
+     - appelées par une CONTRAINTE : horaires_valides, metiers_connus, et
+       depuis le lot 1 du devis devis_total_ligne et devis_tva_de (49.1) ;
+     - appelées par un DÉCLENCHEUR `security invoker`, qui s'exécute avec les
+       droits de celui qui écrit (relecture « base » du lot P) :
+       a_deja_une_reponse (tient_le_texte, 20.1 bis), devis_total_ligne
+       (tient_la_ligne_de_devis), est_mon_entreprise et cle_de_rapprochement
+       (tient_le_poste, 50.4). Sans ce droit, plus aucun poste ne s'insère.
+   (« Elles sont huit », écrit ici jusqu'au 24/10, comptait faux depuis le
+   lot 1 : est_admin manquait, et la troisième famille n'existait pas.)
+   `verifier-portes` les RELÈVE dans le fichier — politiques, contraintes,
+   corps des déclencheurs `security invoker`, expressions générées et
+   d'index —, refuse que l'une d'elles perde son droit, y compris par une
+   révocation DYNAMIQUE dont la cible ne se lit pas, et exige que l'essai 43
+   (cas 4) les interroge toutes au catalogue. */

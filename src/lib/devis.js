@@ -916,6 +916,52 @@ export function ligneVierge(l) {
     && !vrai(l.offert) && !vrai(l.mainOeuvre) && !vrai(l.fournitureNonComprise);
 }
 
+/** Ce qu'une rangée de la LISTE du devis reçoit — et rien d'autre. */
+export const PROPRIETES_DE_LA_RANGEE = Object.freeze([
+  'id', 'type', 'designation', 'total', 'offert', 'fournitureNonComprise', 'quantite', 'unite', 'prix', 'sousTotal',
+  'etat', 'erreurTexte', 'incomplete',
+]);
+
+/**
+ * CE QU'UNE RANGÉE DE LA LISTE DU DEVIS AFFICHE, calculé ICI pour que
+ * `verifier-postes` le fasse tourner (lot P, corrections « écran »,
+ * 24/10/2026) : la ligne telle qu'elle IRA AU CLIENT — sa phrase, mot pour
+ * mot, sa quantité, son prix, son total —, son état d'enregistrement, et
+ * rien d'autre.
+ *
+ * Elle ne reçoit PAS la base de postes, et c'est la réponse du propriétaire
+ * du 23/10 (Q3 a) : la liste est l'écran qu'on montre à un client ; la
+ * référence, l'écart, « réf. » ne vivent que dans la carte ouverte en grand.
+ * La relecture « écran » l'a cassé en une ligne — la phrase de référence
+ * ajoutée à `designation` dans la balise de la rangée — sans qu'un contrôle
+ * rougisse : il cherchait des NOMS dans la balise, pas ce qui coulait dans
+ * la désignation. La rangée reçoit désormais CE QUE REND cette fonction, en
+ * entier et seul.
+ *   - `sousTotaux` : `sousTotaux(lignes)`, pour une zone ou une pièce ;
+ *   - `etats`, `erreurs`, `phrasesEchec` : par identifiant, ceux de la
+ *     saisie (`'en_cours'`, `'echec'`, `'locale'`…).
+ */
+export function proprietesDeLaRangee(l, {
+  sousTotaux: sous = {}, etats = {}, erreurs = {}, phrasesEchec = {},
+} = {}) {
+  const etat = (etats && etats[l.id]) || null;
+  return {
+    id: l.id,
+    type: l.type,
+    designation: l.designation,
+    total: totalLigne(l),
+    offert: !!l.offert,
+    fournitureNonComprise: !!l.fournitureNonComprise,
+    quantite: l.quantiteMilliemes,
+    unite: l.unite,
+    prix: l.prixUnitaireCentimes,
+    sousTotal: NIVEAU[l.type] && sous ? (sous[l.id] ?? null) : null,
+    etat,
+    erreurTexte: etat === 'echec' ? ((phrasesEchec && phrasesEchec[l.id]) || null) : null,
+    incomplete: !!(erreurs && erreurs[l.id]) || etat === 'locale',
+  };
+}
+
 /* Le plus grand `ordre` qu'une colonne `integer` accepte. */
 const ORDRE_MAX = 2_147_483_647;
 /** Le pas entre deux lignes, à la création et à la renumérotation. */

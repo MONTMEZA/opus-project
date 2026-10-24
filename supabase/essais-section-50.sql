@@ -19,7 +19,7 @@
 --  une même base avec les mêmes SIREN, et le second tombe sur OP007.
 --  CLAUDE.md interdit le SIRET d'une vraie entreprise, même pour un essai.
 --
---  DES CAS ATTENDENT UNE ERREUR — 46 refus, et c'est le but : un essai de
+--  DES CAS ATTENDENT UNE ERREUR — 50 refus, et c'est le but : un essai de
 --  sécurité qui ne montre aucun refus n'éprouve rien. Chacun est annoncé
 --  dans son `\echo` PAR SON NOM : la contrainte (`base_poste_…_check`),
 --  l'index (`idx_base_postes_rapprochement`), la clé (`devis_pkey`,
@@ -115,6 +115,13 @@
 --        que A ajoute SON poste, puis 40 écritures étrangères en parallèle :
 --        A n'attend pas (quelques dizaines de millisecondes ; condition
 --        retirée, plusieurs centaines).
+--        D ter, UNE SESSION CLIENTE SANS `sub` (24/10/2026) — la même forme
+--        déterministe, la session 2 en `set local role authenticated; set
+--        local request.jwt.claim.sub = '';` : `auth.uid()` y est vide, et elle
+--        passait pour l'éditeur SQL. Attendu : refusée par la politique SANS
+--        ATTENDRE (« row-level security policy »). Avant la correction (le
+--        « sans jeton » décidé sur `auth.uid()` seul), elle attendait le
+--        verrou de A et tombait sur 57014 à une seconde.
 --
 --  ET LES VERROUS PARTAGÉS AVEC LE LOT 1 (50.2) : un poste qui cite un devis
 --  pose `FOR KEY SHARE` sur ce devis, le temps de sa transaction. Modifier
@@ -802,8 +809,8 @@ rollback;
 \echo '=== 18. LA CLÉ, LES CAS PARTAGÉS — supabase/cas-rapprochement.json, les MÊMES attendus que JavaScript ==='
 -- ==========================================================================
 \set cas `cat supabase/cas-rapprochement.json`
-select (:'cas'::jsonb->>'nombre')::int as nombre_annonce_attendu_175,
-       jsonb_array_length(:'cas'::jsonb->'cas') as cas_lus_attendu_175,
+select (:'cas'::jsonb->>'nombre')::int as nombre_annonce_attendu_188,
+       jsonb_array_length(:'cas'::jsonb->'cas') as cas_lus_attendu_188,
        jsonb_array_length(:'cas'::jsonb->'distincts') as paires_lues_attendu_22;
 \echo '-- les écarts, un par ligne (AUCUNE ligne attendue)'
 select c->>'id' as cas, public.cle_de_rapprochement(c->>'phrase') as obtenu, c->>'attendu' as attendu
@@ -833,8 +840,9 @@ select public.cle_de_rapprochement(null) is null as null_rend_null_attendu_t;
 -- la clé de la sonde c + 'a' + c + 'bs ' + c + 'X' + c, une ligne « n:clé »,
 -- et le md5 de l'ensemble : la MÊME sonde que `verifier-postes`. Puis la
 -- même requête, la collation posée sur l'argument : `lower()` changerait
--- de résultat d'une collation à l'autre, cette fonction non. Une dizaine de
--- secondes en tout.
+-- de résultat d'une collation à l'autre, cette fonction non. Une minute et
+-- demie en tout depuis que la table compte les 4 174 invisibles (chaque
+-- requête prépare 79 Ko de SQL et parcourt une table cinq fois plus longue).
 select count(*) as points_attendu_63487,
        md5(string_agg(n::text || ':' || public.cle_de_rapprochement(chr(n) || 'a' || chr(n) || 'bs ' || chr(n) || 'X' || chr(n)), chr(10) order by n))
          = (:'cas'::jsonb->'empreintes'->'plan_de_base'->>'md5') as empreinte_du_fichier_attendu_t,
@@ -862,16 +870,23 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 19. LA COLONNE GÉNÉRÉE — la base seule l écrit, et la fonction reste exécutable par celui qui écrit ==='
+\echo '=== 19. LA CLÉ POSÉE PAR LE DÉCLENCHEUR — la base seule l écrit, et la fonction reste exécutable par celui qui écrit ==='
 -- ==========================================================================
-\echo '--- 19a. A envoie cle_rapprochement à l insertion → 428C9 (cannot insert a non-DEFAULT value into column "cle_rapprochement")'
+\echo '--- 19a. A envoie cle_rapprochement à l insertion → 428C9 (la base calcule cette cle, elle ne s envoie pas)'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 insert into public.base_postes (pro_id, designation, unite, cle_rapprochement) values (:A, 'Chape', 'm2', 'une autre cle');
 rollback;
-\echo '--- 19b. …et à la modification → 428C9 (column "cle_rapprochement" can only be updated to DEFAULT)'
+\echo '--- 19b. …et à la modification → 428C9 (la base calcule cette cle, elle ne s ecrit que par son recalcul exact)'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute poste_A;
 update public.base_postes set cle_rapprochement = 'une autre cle' where id = :X1;
+rollback;
+\echo '--- 19b bis. …mais son recalcul EXACT passe : c est la réécriture du contrat (50.0), et elle ne change rien ici'
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+execute poste_A;
+with u as (update public.base_postes set cle_rapprochement = public.cle_de_rapprochement(designation) where id = :X1 returning cle_rapprochement)
+select count(*) as recalcul_exact_accepte_attendu_1,
+       bool_and(cle_rapprochement = 'chape seche avant carrelage colle') as cle_inchangee_attendu_t from u;
 rollback;
 \echo '--- 19c. une phrase modifiée RECALCULE la clé : « POSES DE PLINTHES » → pose de plinthe'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
@@ -883,7 +898,7 @@ rollback;
 select has_function_privilege('authenticated', 'public.cle_de_rapprochement(text)', 'execute') as cle_authentifie_attendu_t,
        has_function_privilege('anon', 'public.cle_de_rapprochement(text)', 'execute') as cle_anon_attendu_f,
        has_function_privilege('public', 'public.cle_de_rapprochement(text)', 'execute') as cle_public_attendu_f;
-\echo '--- 19e. dans une transaction ANNULÉE, le droit retiré à authenticated : l insertion suivante → permission denied for function cle_de_rapprochement'
+\echo '--- 19e. dans une transaction ANNULÉE, le droit retiré à authenticated : l insertion suivante (le déclencheur, security invoker, appelle la fonction) → permission denied for function cle_de_rapprochement'
 begin;
 revoke execute on function public.cle_de_rapprochement(text) from authenticated;
 set local role authenticated; set local request.jwt.claim.sub = :A;
@@ -896,11 +911,18 @@ select has_function_privilege('authenticated', 'public.cle_de_rapprochement(text
 \echo ''
 \echo '=== 20. LE CATALOGUE DE LA CLÉ — la colonne, la fonction, son corps, l index ==='
 -- ==========================================================================
-select a.attgenerated = 's' as colonne_generee_attendu_t,
-       pg_get_expr(d.adbin, d.adrelid) = 'cle_de_rapprochement(designation)' as expression_exacte_attendu_t,
-       pg_get_expr(d.adbin, d.adrelid) as expression
-  from pg_attribute a join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+\echo '-- la colonne est ORDINAIRE : ni générée, ni défaut (une colonne générée se recalculait à CHAQUE modification de la ligne)'
+select a.attgenerated = '' as colonne_ordinaire_attendu_t,
+       (select count(*) from pg_attrdef d where d.adrelid = a.attrelid and d.adnum = a.attnum) as expression_ou_defaut_attendu_0
+  from pg_attribute a
  where a.attrelid = 'public.base_postes'::regclass and a.attname = 'cle_rapprochement';
+\echo '-- le déclencheur l écrit : trois appels à la fonction (l insertion, la vérification d une clé écrite, la phrase changée), deux refus 428C9, et le « sans jeton » décidé sur le RÔLE'
+select (char_length(prosrc) - char_length(replace(prosrc, 'public.cle_de_rapprochement(new.designation)', '')))
+         / char_length('public.cle_de_rapprochement(new.designation)') as appels_dans_le_declencheur_attendu_3,
+       (char_length(prosrc) - char_length(replace(prosrc, 'errcode = ''428C9''', ''))) / char_length('errcode = ''428C9''') as refus_428c9_attendu_2,
+       prosrc like '%new.designation is distinct from old.designation%' as seulement_si_la_phrase_change_attendu_t,
+       prosrc like '%v_compter := current_user not in (''anon'', ''authenticated'');%' as sans_jeton_sur_le_role_attendu_t
+  from pg_proc where oid = 'public.tient_le_poste()'::regprocedure;
 select provolatile = 'i' as immuable_attendu_t,
        proisstrict as stricte_attendu_t,
        prosecdef as cle_definer_attendu_f,
@@ -908,7 +930,9 @@ select provolatile = 'i' as immuable_attendu_t,
        prosrc !~* '(lower|upper|initcap|normalize)\s*\(|unaccent|collate|ilike|~\*' as aucune_table_unicode_attendu_t,
        strpos(prosrc, chr(92)) as barre_oblique_inverse_attendu_0,
        (char_length(prosrc) - char_length(replace(prosrc, 'chr(92)', ''))) / char_length('chr(92)') as chr_92_attendu_3,
-       ltrim(prosrc, chr(10) || ' ') like 'select case when char_length(p_phrase) > 2000 then null else%' as commence_par_la_garde_attendu_t
+       ltrim(prosrc, chr(10) || ' ') like 'select case when char_length(p_phrase) > 2000 then null else%' as commence_par_la_garde_attendu_t,
+       prosrc ~ 'replace[(]translate[(]\s+p_phrase,' as table_avant_les_remplacements_attendu_t,
+       (char_length(prosrc) - char_length(replace(prosrc, '|| (', ''))) / char_length('|| (') as groupes_de_seize_apres_le_premier_attendu_318
   from pg_proc where oid = 'public.cle_de_rapprochement(text)'::regprocedure;
 select i.indexrelid::regclass::text = 'idx_base_postes_rapprochement' as nom_attendu_t,
        pg_get_indexdef(i.indexrelid) like '%(md5(cle_rapprochement))::uuid%' as empreinte_uuid_attendu_t,
@@ -917,8 +941,8 @@ select i.indexrelid::regclass::text = 'idx_base_postes_rapprochement' as nom_att
           from unnest(i.indcollation::oid[]) c) as seulement_0_et_c_attendu_t,
        pg_get_indexdef(i.indexrelid) as definition
   from pg_index i where i.indexrelid = 'public.idx_base_postes_rapprochement'::regclass;
-\echo '-- pg_depend relie l expression de la colonne à la fonction'
-select count(*) as dependance_attendu_1
+\echo '-- et plus aucune expression de la table ne dépend de la fonction (pg_depend : 0)'
+select count(*) as dependance_attendu_0
   from pg_depend dp join pg_attrdef d on dp.classid = 'pg_attrdef'::regclass and dp.objid = d.oid
  where d.adrelid = 'public.base_postes'::regclass
    and dp.refclassid = 'pg_proc'::regclass and dp.refobjid = 'public.cle_de_rapprochement(text)'::regprocedure;
@@ -926,19 +950,92 @@ select count(*) as dependance_attendu_1
 
 -- ==========================================================================
 \echo ''
-\echo '=== 21. LE CONTRAT DE LA RÈGLE — une fonction remplacée ne recalcule pas une clé rangée ; une réécriture, si ==='
+\echo '=== 21. LE CONTRAT DE LA RÈGLE — remplacer la fonction ne change AUCUNE clé rangée ; seule la réécriture du contrat les recalcule ==='
 -- ==========================================================================
 begin;
-insert into public.base_postes (id, pro_id, designation, unite) values (:X1, :A, 'Pose des plinthes', 'm');
+insert into public.base_postes (id, pro_id, designation, unite, prix_reference_centimes) values (:X1, :A, 'Pose des plinthes', 'm', 1000);
 select cle_rapprochement = 'pose de plinthe' as avant_attendu_t from public.base_postes where id = :X1;
 create or replace function public.cle_de_rapprochement(p_phrase text)
 returns text language sql immutable strict parallel safe security invoker set search_path = public
 as $$ select lower(p_phrase) $$;
 select cle_rapprochement = 'pose de plinthe' as rangee_ne_change_pas_attendu_t from public.base_postes where id = :X1;
+\echo '--- 21a. le PRIX seul change : la clé ne bouge pas (avec la colonne générée, elle était recalculée — relecture BASE1)'
+update public.base_postes set prix_reference_centimes = 1100 where id = :X1;
+select cle_rapprochement = 'pose de plinthe' as prix_seul_cle_gardee_attendu_t from public.base_postes where id = :X1;
+\echo '--- 21b. la phrase renvoyée À L IDENTIQUE : la clé ne bouge pas non plus'
 update public.base_postes set designation = designation where id = :X1;
+select cle_rapprochement = 'pose de plinthe' as meme_phrase_cle_gardee_attendu_t from public.base_postes where id = :X1;
+\echo '--- 21c. la RÉÉCRITURE du contrat : la seule écriture de la clé acceptée, exactement son recalcul'
+with u as (update public.base_postes set cle_rapprochement = public.cle_de_rapprochement(designation)
+            where cle_rapprochement is distinct from public.cle_de_rapprochement(designation) returning 1)
+select count(*) as reecrites_attendu_1 from u;
 select cle_rapprochement = 'pose des plinthes' as reecrite_change_attendu_t from public.base_postes where id = :X1;
 rollback;
 select public.cle_de_rapprochement('Pose des plinthes') = 'pose de plinthe' as fonction_restauree_attendu_t;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 21 bis. ENTRE LE REMPLACEMENT ET LA RÉÉCRITURE — la cascade d un devis ne touche plus la clé ; la réécriture tombe sur le doublon et annule TOUT ==='
+-- ==========================================================================
+-- Une règle nouvelle qui confondrait « Pose plinthe » et « Pose » (le premier
+-- mot seul). Avec la colonne générée, A qui supprimait SON devis entre le
+-- remplacement de la fonction et la réécriture tombait sur 23505 : la
+-- cascade recalculait la clé du poste qui citait le devis (relecture BASE1).
+begin;
+insert into public.base_postes (id, pro_id, designation, unite, devis_origine_id) values
+  (:X1, :A, 'Pose plinthe', 'm', :DA), (:X2, :A, 'Pose', 'm', null);
+\echo '--- 21 bis a. AVANT la migration, la recherche des doublons par une fonction TEMPORAIRE qui porte la nouvelle règle (une lecture)'
+create function pg_temp.cle_nouvelle(p text) returns text language sql immutable as $$ select split_part(lower(p), ' ', 1) $$;
+select count(*) as doublons_a_trancher_attendu_1
+  from (select pro_id, pg_temp.cle_nouvelle(designation), unite, fourniture_non_comprise
+          from public.base_postes where pro_id = :A group by 1, 2, 3, 4 having count(*) > 1) d;
+create or replace function public.cle_de_rapprochement(p_phrase text)
+returns text language sql immutable strict parallel safe security invoker set search_path = public
+as $$ select split_part(lower(p_phrase), ' ', 1) $$;
+\echo '--- 21 bis b. A supprime SON devis : la cascade passe, la clé du poste qui le citait ne bouge pas'
+set local role authenticated; set local request.jwt.claim.sub = :A;
+with s as (delete from public.devis where id = :DA returning 1) select count(*) as devis_supprime_attendu_1 from s;
+reset role;
+select cle_rapprochement = 'pose plinthe' as cle_inchangee_par_la_cascade_attendu_t,
+       devis_origine_id is null as lien_vide_attendu_t
+  from public.base_postes where id = :X1;
+\echo '--- 21 bis c. la réécriture, sous le verrou du contrat, tombe sur le doublon que la nouvelle règle crée → 23505 idx_base_postes_rapprochement, et TOUT est annulé'
+lock table public.base_postes in share row exclusive mode;
+update public.base_postes set cle_rapprochement = public.cle_de_rapprochement(designation)
+ where cle_rapprochement is distinct from public.cle_de_rapprochement(designation);
+rollback;
+select public.cle_de_rapprochement('Pose plinthe') = 'pose plinthe' as ancienne_regle_restauree_attendu_t;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 21 ter. LE COÛT — la clé ne se calcule qu à l insertion et quand la phrase change : un prix, une cascade, 0 appel ==='
+-- ==========================================================================
+-- Les appels se comptent par pg_stat_get_xact_function_calls : la fonction
+-- porte `set search_path`, elle n'est jamais dépliée, chaque appel compte.
+-- Mesuré sur 999 postes de pire cas avant la correction : le prix seul, 999
+-- appels et 60 s ; la cascade, 999 appels et 59 s. Après : 0 appel, 90 ms.
+begin;
+set local track_functions = 'all';
+select 'public.cle_de_rapprochement(text)'::regprocedure::oid as fcle \gset
+set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.base_postes (id, pro_id, designation, unite, prix_reference_centimes, devis_origine_id)
+  values (:X1, :A, 'Chape sèche avant carrelage collé', 'm2', 4500, :DA);
+reset role;
+select coalesce(pg_stat_get_xact_function_calls(:fcle), 0) as appels_apres_insertion_attendu_1;
+set local role authenticated; set local request.jwt.claim.sub = :A;
+update public.base_postes set prix_reference_centimes = 4600 where id = :X1;
+update public.base_postes set main_oeuvre = main_oeuvre where id = :X1;
+with s as (delete from public.devis where id = :DA returning 1) select count(*) as devis_supprime_attendu_1 from s;
+reset role;
+select coalesce(pg_stat_get_xact_function_calls(:fcle), 0) as appels_apres_prix_rien_et_cascade_attendu_1,
+       (select devis_origine_id is null from public.base_postes where id = :X1) as lien_vide_attendu_t;
+set local role authenticated; set local request.jwt.claim.sub = :A;
+update public.base_postes set designation = 'Chapes sèches avant carrelage collé' where id = :X1;
+reset role;
+select coalesce(pg_stat_get_xact_function_calls(:fcle), 0) as appels_apres_phrase_changee_attendu_2;
+rollback;
 
 
 -- ==========================================================================
@@ -952,6 +1049,10 @@ select public.cle_de_rapprochement(repeat('Chapes sèches, ', 700000)) is null a
        clock_timestamp() - :'debut_22'::timestamptz < interval '1 second' as moins_d_une_seconde_attendu_t;
 select public.cle_de_rapprochement(repeat('a', 2000)) = repeat('a', 2000) as deux_mille_attendu_t,
        public.cle_de_rapprochement(repeat('a', 2001)) is null as deux_mille_un_null_attendu_t;
+\echo '-- le PIRE cas n est pas une phrase longue mais une phrase courte qui s allonge : 1 990 « % », chacun devenu « pourcent » (~50 ms mesurés)'
+select clock_timestamp() as debut_22b \gset
+select char_length(public.cle_de_rapprochement('1 ' || repeat('%', 1990))) = 1 + 9 * 1990 as pire_cas_cle_entiere_attendu_t,
+       clock_timestamp() - :'debut_22b'::timestamptz < interval '1 second' as pire_cas_moins_d_une_seconde_attendu_t;
 rollback;
 
 
@@ -1005,4 +1106,31 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== FIN — 46 refus attendus, chacun annoncé par son nom ci-dessus ; les valeurs attendues sont dans le nom des colonnes ==='
+\echo '=== 26. LES INVISIBLES — toute la propriété Default_Ignorable_Code_Point est supprimée, U+2800 est un séparateur ==='
+-- ==========================================================================
+\echo '--- 26a. U+2800 seul (le motif braille vide) → base_poste_rapprochement_check'
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.base_postes (pro_id, designation, unite) values (:A, chr(10240), 'u');
+rollback;
+\echo '--- 26b. une étiquette et un sélecteur de variante seuls (U+E0001, U+E0100) → base_poste_rapprochement_check'
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.base_postes (pro_id, designation, unite) values (:A, chr(917505) || chr(917760), 'u');
+rollback;
+\echo '--- 26c. la même phrase qu un poste rangé, un U+E0100 glissé à la fin → 23505 idx_base_postes_rapprochement (c était un second poste)'
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+execute poste_A;
+insert into public.base_postes (pro_id, designation, unite) values (:A, 'Chape sèche avant carrelage collé' || chr(917760), 'm2');
+rollback;
+\echo '--- 26d. trois clés lues dans la COLONNE : U+2800 sépare, U+061C et U+2065 disparaissent'
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.base_postes (id, pro_id, designation, unite) values
+  (:X1, :A, 'Chape' || chr(10240) || 'sèche', 'm2'), (:X2, :A, 'Isolant' || chr(1564) || 's', 'm2'), (:X3, :A, 'pla' || chr(8293) || 'co', 'm2');
+select (select cle_rapprochement from public.base_postes where id = :X1) = 'chape seche' as braille_separe_attendu_t,
+       (select cle_rapprochement from public.base_postes where id = :X2) = 'isolant' as marque_arabe_supprimee_attendu_t,
+       (select cle_rapprochement from public.base_postes where id = :X3) = 'placo' as reserve_2065_supprimee_attendu_t;
+rollback;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== FIN — 50 refus attendus, chacun annoncé par son nom ci-dessus ; les valeurs attendues sont dans le nom des colonnes ==='

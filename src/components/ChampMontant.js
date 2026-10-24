@@ -23,19 +23,22 @@
  * pastille touchée, une carte fermée.
  *
  * `forwardRef` : `lire()`, `ecrire()` (une surface copiée, une suggestion de
- * la mémoire) et `focus()` (« la main passe à la quantité »).
+ * la mémoire) et `focus()` (« la main passe à la quantité ») — et
+ * `rearmer()`, avec `surPremiereFrappe` (la première lettre tapée au doigt,
+ * voir `ChampLocal`).
  */
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import ChampLocal from './ChampLocal';
 
 const ChampMontant = forwardRef(function ChampMontant({
-  defaut = '', placeholder, accessibilityLabel, onBlur, style, maxLength = 16,
+  defaut = '', placeholder, accessibilityLabel, onBlur, style, maxLength = 16, surPremiereFrappe,
 }, ref) {
   const champ = useRef(null);
   useImperativeHandle(ref, () => ({
     lire: () => (champ.current ? champ.current.lire() : ''),
     ecrire: (t) => { if (champ.current) champ.current.ecrire(t == null ? '' : String(t)); },
     focus: () => { if (champ.current) champ.current.focus(); },
+    rearmer: () => { if (champ.current) champ.current.rearmer(); },
   }), []);
   return (
     <ChampLocal
@@ -49,6 +52,7 @@ const ChampMontant = forwardRef(function ChampMontant({
       spellCheck={false}
       maxLength={maxLength}
       onBlur={onBlur}
+      surPremiereFrappe={surPremiereFrappe}
       style={style}
     />
   );

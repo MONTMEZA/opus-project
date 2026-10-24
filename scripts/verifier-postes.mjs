@@ -269,33 +269,46 @@ function evaluerFonctionSql(texte) {
       if (n < 1 || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff)) throw new LectureSql(`chr(${n}) n’est pas un caractère`);
       return String.fromCodePoint(n);
     }
-    throw new LectureSql(`un littéral '…' ou un chr(n) attendu, « ${x.v} » trouvé (jeton ${p})`);
+    /* Un GROUPE entre parenthèses — la chaîne du `translate` s'écrit par
+       seize termes parenthésés, sans quoi PostgreSQL dépasse sa pile en la
+       préparant (24/10/2026). Ce qu'il contient obéit à la même règle. */
+    if (x.v === '(') {
+      p += 1;
+      const s = concat();
+      attendre(')');
+      return s;
+    }
+    throw new LectureSql(`un littéral '…', un chr(n) ou un groupe ( … ) attendu, « ${x.v} » trouvé (jeton ${p})`);
   };
-  const concat = () => {
+  function concat() {
     let s = terme();
     while (voir().v === '||') { p += 1; s += terme(); }
     return s;
-  };
+  }
   attendre('select', 'case', 'when', 'char_length', '(', 'p_phrase', ')', '>');
   const garde = nombre();
-  attendre('then', 'null', 'else', 'regexp_replace', '(', 'btrim', '(', 'regexp_replace', '(', 'translate', '(');
+  /* LA TABLE D'ABORD, LES REMPLACEMENTS ENSUITE : `replace(…(translate(
+     p_phrase, <de>, <vers>), <c>, <mot>)…)`. L'ordre d'avant (les
+     remplacements, puis la table sur leur résultat) n'est plus lu : il
+     faisait travailler `translate` sur une phrase allongée dix fois. */
+  attendre('then', 'null', 'else', 'regexp_replace', '(', 'btrim', '(', 'regexp_replace', '(');
   let k = 0;
   while (voir().v === 'replace') { attendre('replace', '('); k += 1; }
-  attendre('p_phrase');
-  const multiples = [];
-  for (let n = 0; n < k; n += 1) {
-    attendre(',');
-    const de = concat();
-    attendre(',');
-    const vers = concat();
-    attendre(')');
-    multiples.push([de, vers]);
-  }
-  attendre(',');
+  attendre('translate', '(', 'p_phrase', ',');
   const de = concat();
   attendre(',');
   const vers = concat();
-  attendre(')', ',');
+  attendre(')');
+  const multiples = [];
+  for (let n = 0; n < k; n += 1) {
+    attendre(',');
+    const c = concat();
+    attendre(',');
+    const v = concat();
+    attendre(')');
+    multiples.push([c, v]);
+  }
+  attendre(',');
   const blancs = concat();
   attendre(',');
   const uneEspace = concat();
@@ -427,8 +440,8 @@ console.log('\nA. LA CLÉ DE RAPPROCHEMENT — les cas, l’empreinte, la table 
 {
   const cas = Array.isArray(CAS.cas) ? CAS.cas : [];
   const ids = new Set(cas.map((c) => c.id));
-  verifier(`supabase/cas-rapprochement.json porte ses ${CAS.nombre} cas (au moins 175, chacun son identifiant)`,
-    cas.length >= 175 && cas.length === CAS.nombre && ids.size === cas.length,
+  verifier(`supabase/cas-rapprochement.json porte ses ${CAS.nombre} cas (au moins 188, chacun son identifiant)`,
+    cas.length >= 188 && cas.length === CAS.nombre && ids.size === cas.length,
     `${cas.length} cas lus, « nombre » vaut ${CAS.nombre}, ${ids.size} identifiants distincts — un cas retiré ne doit pas passer en silence`);
   const ecarts = cas.filter((c) => cle(c.phrase) !== c.attendu);
   verifier(`les ${cas.length} cas rendent EXACTEMENT leur attendu (écrit à la main)`, ecarts.length === 0,
@@ -518,6 +531,29 @@ console.log('\nA. LA CLÉ DE RAPPROCHEMENT — les cas, l’empreinte, la table 
       `motif ${JSON.stringify(ev.motif)}, attendu ${JSON.stringify(attenduMotif)} ; remplacement ${JSON.stringify(ev.remplacement)}`);
     verifier(`${nom} : aucune barre oblique inverse écrite, aucun caractère hors de l’ASCII`,
       !texte.includes(BARRE) && [...texte].every((c) => c.codePointAt(0) < 128));
+    /* LA PROFONDEUR (24/10/2026) : PostgreSQL prépare une concaténation
+       `a || b || c …` comme un arbre aussi profond qu'elle est longue, et le
+       parcourt récursivement. Mesuré sur PostgreSQL 16 : 4 000 termes d'un
+       seul tenant passent, 4 500 tombent sur « stack depth limit exceeded ».
+       La table compte 5 093 caractères : écrite d'un seul tenant, le schéma
+       ne se rejouait plus. On compte, à chaque niveau de parenthèses, la plus
+       longue suite de `||` — sans les chaînes ; la première table en avait
+       968, qui passaient. */
+    const plusLongue = (() => {
+      const sans = texte.replace(/'(?:[^']|'')*'/g, "''");
+      const pile = [0];
+      let max = 0;
+      for (let i = 0; i < sans.length; i += 1) {
+        const c = sans[i];
+        if (c === '(') pile.push(0);
+        else if (c === ')') pile.pop();
+        else if (c === ',') pile[pile.length - 1] = 0;
+        else if (c === '|' && sans[i + 1] === '|') { pile[pile.length - 1] += 1; max = Math.max(max, pile[pile.length - 1]); i += 1; }
+      }
+      return max + 1;
+    })();
+    verifier(`${nom} : aucune concaténation de plus de 1 000 termes d’un seul tenant (la plus longue : ${plusLongue}) — `
+      + 'au-delà, PostgreSQL dépasse sa pile en préparant la fonction', plusLongue <= 1000);
   }
 
   /* L'AUTO-ÉPREUVE du lecteur : sans elle, un lecteur qui ne verrait rien
@@ -558,6 +594,36 @@ console.log('\nA. LA CLÉ DE RAPPROCHEMENT — les cas, l’empreinte, la table 
     `en double : ${doubles.map(nomCar).join(' ')}`);
   verifier('la table ne compte ni U+0000 (PostgreSQL ne le porte pas) ni moitié de paire',
     ![...de, ...cles].some((c) => { const n = c.codePointAt(0); return n === 0 || (n >= 0xd800 && n <= 0xdfff); }));
+}
+
+/* ---- (4 bis) les invisibles ------------------------------------------ */
+/* UNE PROPRIÉTÉ, PAS UNE LISTE (relecture « base », BASE2, 24/10/2026).
+   Huit caractères qu'on ne voit pas — U+2800, U+E0100, U+061C, U+180B… —
+   faisaient des postes « vides à l'œil » et des doublons non reconnus, et
+   aucun contrôle ne le disait : les cas écrits à la main ne nomment que ce
+   qu'on a pensé à nommer. Ici, CHAQUE point de code de la propriété Unicode
+   `Default_Ignorable_Code_Point` (la classe DI que connaît node — ce
+   contrôle peut s'en servir, le miroir non : il ne dépend d'aucune table
+   Unicode) doit disparaître de la clé, au milieu d'un mot comme seul. Le
+   jour où une version d'Unicode en ajoute un, ce contrôle rougit, et la
+   table se complète (par script). */
+{
+  const di = [];
+  const estDI = new RegExp(`^${BARRE}p{Default_Ignorable_Code_Point}$`, 'u');
+  for (let cp = 1; cp <= 0x10ffff; cp += 1) {
+    if (cp >= 0xd800 && cp <= 0xdfff) continue;
+    if (estDI.test(String.fromCodePoint(cp))) di.push(cp);
+  }
+  const restent = di.filter((cp) => { const c = String.fromCodePoint(cp); return cle(`pla${c}co`) !== 'placo' || cle(c) !== ''; });
+  verifier(`chacun des ${di.length} invisibles de la propriété Unicode Default_Ignorable_Code_Point disparaît de la clé — « pla<c>co » `
+    + 'rend « placo », et <c> seul une clé VIDE (donc pas de poste, `base_poste_rapprochement_check`)',
+  di.length >= 4174 && restent.length === 0,
+  `${restent.length} restent, dont ${restent.slice(0, 8).map((cp) => `U+${cp.toString(16).toUpperCase()}`).join(' ')} — `
+    + 'les ajouter aux SUPPRIMÉS de la table de src/lib/rapprochement.js (par un script), puis npm run generer-rapprochement');
+  const braille = String.fromCodePoint(0x2800);
+  verifier('U+2800, le motif braille vide — un blanc qui a la largeur d’une lettre —, est un SÉPARATEUR : « Chape<U+2800>sèche » rend '
+    + '« chape seche », et seul une clé vide', cle(`Chape${braille}sèche`) === 'chape seche' && cle(braille) === '',
+  JSON.stringify(cle(`Chape${braille}sèche`)));
 }
 
 /* ---- (5) la garde ------------------------------------------------------ */
@@ -874,13 +940,21 @@ try {
     + '« — » avec un prix de 0 par le PRIX ; 2 000 émojis et un émoji seul passent',
   faux18.length === 0 && P.validerPoste({ designation: 'Chape', unite: 'm2' }).ok, json(faux18));
   /* 19 : le changement d'unité. */
-  verifier('cas 19 : « L’unité est passée de m² à forfait : la quantité 27 est restée, vérifiez-la. » ; sans quantité, rien ; '
-    + 'à l’heure, « heure »', P.changementDUnite({ unite: 'm2', quantiteMilliemes: 27000 }, { unite: 'forfait' })
-      === 'L’unité est passée de m² à forfait : la quantité 27 est restée, vérifiez-la.'
+  /* TEXTES16 : « passée de heure », « de unité » manquaient l'élision. Les
+     noms d'unité sont CITÉS — et la propriété est vérifiée sur les 42
+     couples, pas sur deux exemples. */
+  const couples19 = D.UNITES.flatMap((a) => D.UNITES.filter((b) => b.cle !== a.cle).map((b) => [a, b]));
+  const mal19 = couples19.filter(([a, b]) => P.changementDUnite({ unite: a.cle, quantiteMilliemes: 2000 }, { unite: b.cle })
+    !== `L’unité est passée de « ${a.pastille} » à « ${b.pastille} » : la quantité 2 est restée, vérifiez-la.`);
+  verifier('cas 19 : « L’unité est passée de « m² » à « forfait » : la quantité 27 est restée, vérifiez-la. » — les noms CITÉS, '
+    + 'aucune élision manquée (« de heure », « de unité »), sur les 42 couples ; sans quantité, rien',
+  P.changementDUnite({ unite: 'm2', quantiteMilliemes: 27000 }, { unite: 'forfait' })
+      === 'L’unité est passée de « m² » à « forfait » : la quantité 27 est restée, vérifiez-la.'
     && P.changementDUnite({ unite: 'm2', quantiteMilliemes: null }, { unite: 'forfait' }) === null
     && P.changementDUnite({ unite: 'm2', quantiteMilliemes: 27000 }, { unite: 'm2' }) === null
-    && P.changementDUnite({ unite: 'h', quantiteMilliemes: 12000 }, { unite: 'forfait' })
-      === 'L’unité est passée de heure à forfait : la quantité 12 est restée, vérifiez-la.');
+    && couples19.length === 42 && mal19.length === 0
+    && couples19.every(([a, b]) => !/ de [aeiouhé]/.test(P.changementDUnite({ unite: a.cle, quantiteMilliemes: 2000 }, { unite: b.cle }))),
+  json(mal19.map(([a, b]) => `${a.cle}→${b.cle}`)));
   /* 21 : le plafond et la limite de lecture. */
   verifier('cas 21 : `POSTES_MAX` vaut 1 000, et ne dépasse pas `LIMITE_LECTURE_API` (une réponse plus longue serait COUPÉE, sans erreur)',
     P.POSTES_MAX === 1000 && P.LIMITE_LECTURE_API === 1000 && P.POSTES_MAX <= P.LIMITE_LECTURE_API, `${P.POSTES_MAX} / ${P.LIMITE_LECTURE_API}`);
@@ -918,10 +992,13 @@ try {
     && rendues[3] === `Votre taux horaire de référence : ${eur('45,00')} / h, fixé le 14/10/2026.`, json(rendues));
   /* 26 : la ligne descriptive, le libellé du prix. */
   const noms = D.UNITES.map((u) => P.ligneDescriptive({ unite: u.cle }));
-  verifier('cas 26 : les sept unités par leur NOM, la fourniture et la main-d’œuvre ; « Taux horaire de référence (HT) » au réel, '
+  verifier('cas 26 : les sept unités dites comme sur un chantier, par leur NOM (« À l’unité », « Au mètre carré » : « Unité : '
+    + 'unité » se lisait comme une faute, ECRAN8, et « Unité : à l’unité » à côté de « Unité : mètre carré » disait la même chose de '
+    + 'deux façons, TEXTES16), la fourniture et la main-d’œuvre ; « Taux horaire de référence (HT) » au réel, '
     + 'sans « HT » en franchise, non déclaré, en lecture ou en échec',
-  json(noms) === json(D.UNITES.map((u) => `Unité : ${u.nom}`))
-    && P.ligneDescriptive({ unite: 'm2', fournitureNonComprise: true, mainOeuvre: true }) === 'Unité : mètre carré · fourniture non comprise · main-d’œuvre'
+  json(noms) === json(['Au mètre carré', 'Au mètre linéaire', 'Au mètre cube', 'À l’unité', 'À l’heure', 'Au jour', 'Au forfait'])
+    && noms.every((n, i) => n.endsWith(D.UNITES[i].nom) && !/^Unité/.test(n))
+    && P.ligneDescriptive({ unite: 'm2', fournitureNonComprise: true, mainOeuvre: true }) === 'Au mètre carré · fourniture non comprise · main-d’œuvre'
     && P.etiquettePrixReference({ unite: 'h' }, 'reel') === 'Taux horaire de référence (HT)'
     && P.etiquettePrixReference({ unite: 'h' }, 'franchise') === 'Taux horaire de référence'
     && P.etiquettePrixReference({ unite: 'm2' }, 'reel') === 'Prix de référence HT'
@@ -1035,7 +1112,11 @@ try {
     + 'vide, et la phrase de sortie existe', D.cleDeLigne(l46) === D.cleDeLigne(fenetre[0])
     && phr(l46, fenetre) === `Votre prix de référence pour « Dépose fenêtre » : ${eur('300,00')} / forfait, fixé le 14/10/2026.`
     && !!ecart(l46, fenetre) && P.etatDansLaBase(l46, fenetre, 'ok').sous === 'Dépose fenêtre'
-    && P.PHRASE_SORTIE === 'Ce n’est pas le même travail ? Changez un mot de la ligne : elle ne sera plus rapprochée de ce poste.',
+    && P.PHRASE_SORTIE === 'Ce n’est pas le même travail ? Changez un mot de la ligne (un s, un accent ou une majuscule ne suffit pas).'
+    /* …et ce qu'elle dit est VRAI (TEXTES16) : un s, un accent, une
+       majuscule laissent la ligne rapprochée du même poste. */
+    && [Li('Dépose fenêtres', 'forfait', 1), Li('Depose fenetre', 'forfait', 1), Li('DÉPOSE FENÊTRE', 'forfait', 1)]
+      .every((x) => D.cleDeLigne(x) === D.cleDeLigne(fenetre[0])),
   json(phr(l46, fenetre)));
   const r47 = sugg({ postes: POSTES, memoire: MEMOIRE2, texte: 'seuils' });
   verifier('cas 47 : le libellé VoiceOver de « seuils » dit d’abord le prix qu’un appui recopie, puis l’autre',
@@ -1316,7 +1397,7 @@ const SQL_ENTIER = sqlSansCommentaires(SCHEMA_BRUT);
   const fCle = fonctionSql(S50, 'cle_de_rapprochement');
   const iTable = S50.search(/create\s+table\s+if\s+not\s+exists\s+public\.base_postes\s*\(/i);
   const attrCle = plat(fCle ? fCle.attributs : '').toLowerCase();
-  verifier('`public.cle_de_rapprochement(p_phrase text)` naît AVANT la table (la colonne générée l’appelle) : `language sql`, '
+  verifier('`public.cle_de_rapprochement(p_phrase text)` naît AVANT la table et son déclencheur, qui l’appelle : `language sql`, '
     + '`immutable`, `strict`, `parallel safe`, `security invoker`, `set search_path = public`',
   !!fCle && iTable > fCle.index && /\(p_phrase text\) returns text\b/.test(attrCle)
     && ['language sql', 'immutable', 'strict', 'parallel safe', 'security invoker', 'set search_path = public'].every((x) => attrCle.includes(x))
@@ -1335,8 +1416,8 @@ const SQL_ENTIER = sqlSansCommentaires(SCHEMA_BRUT);
     bloc.length > 10000 && occurrences === 1 && S50B.texte.includes(bloc),
     `${occurrences} occurrence(s) — la fonction a été retouchée à la main, ou la table a changé sans relancer `
     + '`npm run generer-rapprochement`');
-  verifier('…et son droit : `revoke all … from public, anon` puis `grant execute … to authenticated` — par NÉCESSITÉ (la colonne '
-    + 'générée s’évalue avec les droits de celui qui écrit), et rien ne le retire à `authenticated`',
+  verifier('…et son droit : `revoke all … from public, anon` puis `grant execute … to authenticated` — par NÉCESSITÉ (le déclencheur, '
+    + '`security invoker`, l’appelle avec les droits de celui qui écrit), et rien ne le retire à `authenticated`',
   /revoke\s+all\s+on\s+function\s+public\.cle_de_rapprochement\(text\)\s+from\s+public\s*,\s*anon\s*;/i.test(S50)
     && /grant\s+execute\s+on\s+function\s+public\.cle_de_rapprochement\(text\)\s+to\s+authenticated\s*;/i.test(S50)
     && !/revoke[^;]*cle_de_rapprochement[^;]*\bauthenticated\b/i.test(SQL_ENTIER));
@@ -1358,8 +1439,20 @@ const SQL_ENTIER = sqlSansCommentaires(SCHEMA_BRUT);
     .flatMap((m) => [...m[1].matchAll(/\badd\b(?!\s+constraint\s+\w+\s+check\b)\s*[^,;]*/gi)].map((a) => plat(a[0])));
   verifier('…et rien ne s’y ajoute plus bas : sur cette table, le seul `add` est `add constraint <nom> check`', ajouts.length === 0,
     ajouts.join(' | '));
-  verifier('`cle_rapprochement` est une colonne GÉNÉRÉE par la fonction : la base seule l’écrit (428C9 pour un client)',
-    /cle_rapprochement\s+text\s+generated\s+always\s+as\s+\(public\.cle_de_rapprochement\(designation\)\)\s+stored\s*,/i.test(corpsTable));
+  /* PLUS AUCUNE COLONNE GÉNÉRÉE (relecture « base », BASE1, 24/10/2026) :
+     PostgreSQL recalcule toute colonne générée stockée à CHAQUE modification
+     d'une table qui porte un déclencheur `before update` — un prix changé,
+     la cascade d'un devis supprimé —, 999 appels et 60 s pour 999 postes de
+     pire cas. La clé est une colonne ORDINAIRE que le déclencheur pose ; les
+     propriétés de ce qu'il en fait sont lues plus bas, et JOUÉES par l'essai
+     50 (cas 19, 20, 21 et 21 ter). */
+  verifier('`cle_rapprochement` est une colonne ORDINAIRE (`text`, rien d’autre), et aucune colonne de `base_postes` n’est générée : '
+    + 'une colonne générée se recalcule à CHAQUE modification d’une table qui porte un déclencheur `before update`',
+  /^\s*cle_rapprochement\s+text\s*,\s*$/im.test(corpsTable) && !/\bgenerated\b/i.test(corpsTable));
+  verifier('…et une base d’essai qui l’avait GÉNÉRÉE la voit redevenir ordinaire, ses valeurs gardées : '
+    + '`alter column cle_rapprochement drop expression if exists`, après la table',
+  /alter\s+table\s+public\.base_postes\s+alter\s+column\s+cle_rapprochement\s+drop\s+expression\s+if\s+exists\s*;/i.test(S50)
+    && S50.search(/drop\s+expression\s+if\s+exists/i) > iTable);
   verifier('`pro_id` → `professional_profiles(id) on delete cascade` : le compte part, ses postes avec lui',
     /pro_id\s+uuid\s+not\s+null\s+references\s+public\.professional_profiles\(id\)\s+on\s+delete\s+cascade\s*,/i.test(corpsTable));
   verifier('le lien d’origine est une clé COMPOSÉE vers `devis (id, pro_id)`, en `on delete set null (devis_origine_id)` — AVEC sa '
@@ -1410,11 +1503,15 @@ const SQL_ENTIER = sqlSansCommentaires(SCHEMA_BRUT);
   const uids = [...corps.matchAll(/auth\.uid\(\)/g)].map((m) => m.index);
   verifier('`auth.uid()` ne se lit QUE dans la branche d’insertion (en modification, pendant une cascade, c’est celui de quelqu’un d’autre)',
     uids.length >= 1 && insertion.length > 0 && uids.every((x) => x > iIns && x < iMod), `${uids.length} lecture(s), insertion de ${iIns} à ${iMod}`);
-  const BLOC_PLAFOND = 'if auth.uid() is null then v_compter := true; else v_compter := public.est_mon_entreprise(new.pro_id); end if; '
+  /* « SANS JETON » SE DÉCIDE SUR LE RÔLE (relecture « base », BASE5) : une
+     session `authenticated` sans `sub` a `auth.uid()` vide, et elle prenait
+     le verrou de n'importe quelle entreprise. */
+  const BLOC_PLAFOND = "if auth.uid() is null then v_compter := current_user not in ('anon', 'authenticated'); "
+    + 'else v_compter := public.est_mon_entreprise(new.pro_id); end if; '
     + "if v_compter then perform pg_advisory_xact_lock(hashtextextended('base_postes:' || new.pro_id::text, 0)); "
     + 'if (select count(*) from public.base_postes b where b.pro_id = new.pro_id) >= v_plafond_postes then raise exception';
-  verifier('le verrou et le compte ne sont pris que pour SA propre entreprise — ou sans jeton —, les deux `if` IMBRIQUÉS, et le verrou '
-    + 'AVANT le compte', insertion.includes(BLOC_PLAFOND)
+  verifier('le verrou et le compte ne sont pris que pour SA propre entreprise — ou pour un rôle qui n’est pas un client (`anon`, '
+    + '`authenticated`) —, les deux `if` IMBRIQUÉS, et le verrou AVANT le compte', insertion.includes(BLOC_PLAFOND)
     && insertion.indexOf('pg_advisory_xact_lock') < insertion.indexOf('select count(*) from public.base_postes')
     && (corps.match(/pg_advisory_xact_lock/g) || []).length === 1 && (corps.match(/count\(\*\)/g) || []).length === 1,
   'un étranger qui écrit au nom de A ne doit ni prendre son verrou, ni payer son compte (cahier §2.4, T20)');
@@ -1439,8 +1536,34 @@ const SQL_ENTIER = sqlSansCommentaires(SCHEMA_BRUT);
   verifier('la phrase est rognée par la classe de blancs du projet, écrite en chr(n) — la HUITIÈME copie, ÉVALUÉE et égale à `BLANCS` '
     + '(devis.js)', jeuSql !== null && jeuJs !== null && [...new Set(jeuSql)].sort().join('') === jeuJs,
   `section 50 : ${jeuSql === null ? 'illisible' : [...jeuSql].map(nomCar).join(' ')}`);
-  verifier('le déclencheur ne nomme jamais `cle_rapprochement` (PostgreSQL la calcule APRÈS les déclencheurs `before`)',
-    !!fPoste && !/cle_rapprochement/i.test(fPoste.corps));
+  /* LA CLÉ, POSÉE PAR LE DÉCLENCHEUR : calculée pour TOUTE insertion (en
+     tête de la branche, avant le verrou — une ligne rangée sans clé passerait
+     à côté de l'index du doublon), recalculée SEULEMENT quand la phrase
+     change, et une clé ÉCRITE n'est acceptée que si elle est exactement son
+     recalcul (la réécriture du contrat, 50.0). Ce qui se lit ici est la
+     forme ; la propriété est JOUÉE par l'essai 50 (19a, 19b, 19b bis, 21,
+     21 ter : un prix, une cascade, 0 appel). */
+  const CLE_INSERTION = "if tg_op = 'INSERT' then v_cle := public.cle_de_rapprochement(new.designation); "
+    + 'if new.cle_rapprochement is not null and new.cle_rapprochement is distinct from v_cle then raise exception ';
+  const CLE_MODIFICATION = 'if new.cle_rapprochement is distinct from old.cle_rapprochement then '
+    + 'if new.cle_rapprochement is distinct from public.cle_de_rapprochement(new.designation) then raise exception ';
+  const CLE_PHRASE = 'elsif new.designation is distinct from old.designation then '
+    + 'new.cle_rapprochement := public.cle_de_rapprochement(new.designation); end if;';
+  const iCle = insertion.indexOf('new.cle_rapprochement := v_cle;');
+  verifier('à l’INSERTION, la clé est calculée en TÊTE de la branche, pour qui que ce soit (avant le verrou et hors de tout `if`), '
+    + 'et une clé envoyée qui n’est pas la sienne est refusée par 428C9 avant d’être remplacée',
+  insertion.startsWith(CLE_INSERTION) && iCle > 0 && iCle < insertion.indexOf('pg_advisory_xact_lock')
+    && /raise exception '(?:[^']|'')*' using errcode = '428C9'; end if; new\.cle_rapprochement := v_cle;/.test(insertion),
+  insertion.slice(0, 260));
+  verifier('à la MODIFICATION, la clé n’est recalculée que si la phrase CHANGE (`is distinct from`), et une clé ÉCRITE n’est acceptée '
+    + 'que si elle est EXACTEMENT son recalcul (428C9 sinon) — jamais pour un prix, jamais pendant une cascade',
+  modification.includes(CLE_MODIFICATION) && modification.includes(CLE_PHRASE)
+    && /using errcode = '428C9'; end if; elsif new\.designation is distinct from old\.designation then/.test(modification),
+  modification.slice(0, 400));
+  verifier('…et nulle part ailleurs : trois appels à la fonction dans le corps, deux affectations de la clé, deux refus 428C9',
+    (corps.match(/cle_de_rapprochement\(/g) || []).length === 3 && (corps.match(/new\.cle_rapprochement\s*:=/g) || []).length === 2
+      && (corps.match(/errcode = '428C9'/g) || []).length === 2,
+  `${(corps.match(/cle_de_rapprochement\(/g) || []).length} appel(s), ${(corps.match(/new\.cle_rapprochement\s*:=/g) || []).length} affectation(s)`);
   verifier('le déclencheur est posé sous son nom, en `create or replace trigger`, avant insertion et modification',
     /create\s+or\s+replace\s+trigger\s+trg_tient_le_poste\s+before\s+insert\s+or\s+update\s+on\s+public\.base_postes\s+for\s+each\s+row\s+execute\s+function\s+public\.tient_le_poste\(\)\s*;/i.test(S50)
     && !/create\s+trigger\b/i.test(S50));
@@ -1525,7 +1648,7 @@ console.log('\nC. L’ESSAI — ce que le fichier SQL doit contenir (le jouer es
   verifier('il annonce ses refus PAR LEUR NOM (les contraintes, l’index du doublon, la clé d’origine, `devis_pkey`, OP018, 428C9, la '
     + 'RLS, les droits de table et de fonction)', absents.length === 0, `non annoncés : ${absents.join(', ')}`);
   const requis = ['1 bis', '4 bis', '5 bis', '5 ter', '6 bis', '8 bis', '14', '15', '16', '17', '18', '18 bis', '19', '20', '21',
-    '22', '23', '24', '25'];
+    '21 bis', '21 ter', '22', '23', '24', '25', '26'];
   const manquants = requis.filter((n) => !new RegExp(`\\\\echo\\s+'===\\s+${n.replace(' ', '\\s+')}\\.\\s`).test(essai));
   verifier(`il contient les cas ${requis.join(', ')}`, manquants.length === 0, `manquants : ${manquants.join(', ')}`);
   const PROCEDURES = [
@@ -1555,6 +1678,25 @@ console.log('\nC. L’ESSAI — ce que le fichier SQL doit contenir (le jouer es
     && /set\s+local\s+standard_conforming_strings\s*=\s*off/i.test(c18b) && /'empreintes'->'plan_de_base'/.test(c18b));
   const c20 = cas('20', '21');
   verifier('le cas 20 lit `pg_get_indexdef` et `indcollation`', /pg_get_indexdef/.test(c20) && /indcollation/.test(c20));
+  /* LE CONTRAT DE LA RÈGLE, JOUÉ (relecture « base », BASE1) : le prix seul
+     ne recalcule plus la clé, la réécriture se fait sous le verrou, la
+     cascade d'un devis entre le remplacement et la réécriture ne tombe plus
+     sur 23505, et les appels à la fonction se COMPTENT. */
+  const c21 = cas('21', '21\\s+bis');
+  const c21b = cas('21\\s+bis', '21\\s+ter');
+  const c21t = cas('21\\s+ter', '22');
+  verifier('le cas 21 joue le contrat : la fonction remplacée, le PRIX seul change sans toucher la clé, puis la réécriture EXACTE '
+    + '(`set cle_rapprochement = public.cle_de_rapprochement(designation)`)',
+  /create\s+or\s+replace\s+function\s+public\.cle_de_rapprochement/i.test(c21) && /prix_seul_cle_gardee_attendu_t/.test(c21)
+    && /set\s+cle_rapprochement\s*=\s*public\.cle_de_rapprochement\(designation\)/i.test(c21));
+  verifier('le cas 21 bis : la recherche des doublons par une fonction `pg_temp`, la cascade d’un devis entre le remplacement et la '
+    + 'réécriture (la clé ne bouge pas), puis la réécriture sous `lock table … in share row exclusive mode`, qui tombe sur le doublon',
+  /create\s+function\s+pg_temp\./i.test(c21b) && /delete\s+from\s+public\.devis/i.test(c21b)
+    && /cle_inchangee_par_la_cascade_attendu_t/.test(c21b) && /lock\s+table\s+public\.base_postes\s+in\s+share\s+row\s+exclusive\s+mode/i.test(c21b));
+  verifier('le cas 21 ter COMPTE les appels à la fonction (`pg_stat_get_xact_function_calls`, `track_functions`) : un prix, une '
+    + 'modification vide et une cascade n’en ajoutent aucun, une phrase changée en ajoute un',
+  /pg_stat_get_xact_function_calls/.test(c21t) && /track_functions\s*=\s*'all'/.test(c21t)
+    && /appels_apres_prix_rien_et_cascade_attendu_1/.test(c21t) && /appels_apres_phrase_changee_attendu_2/.test(c21t));
   const c1b = cas('1\\s+bis', '2');
   const blancsHors = ['chr(12288)', 'chr(8239)', 'chr(11)', 'chr(133)', 'chr(8232)'];
   verifier('le cas 1 bis attend un REFUS pour chacun des cinq blancs hors classe (`base_poste_rapprochement_check`)',
@@ -1864,12 +2006,20 @@ const extraire = (nom, injecte = {}) => {
   const doublonPg = { code: '23505', message: 'duplicate key value violates unique constraint "idx_base_postes_rapprochement"' };
   const phraseDoublon = ERR.MESSAGES_CONTRAINTE.idx_base_postes_rapprochement || '';
   verifier('le 23505 de l’index du doublon se reconnaît à son NOM (`idx_base_postes_rapprochement`, celui de la section 50) : la '
-    + 'phrase dit que le poste existe déjà, presque mot pour mot, et OÙ changer son prix (« Changer ma référence », « Ma base de '
-    + 'postes ») — et l’ancien nom de l’index n’y est pas',
+    + 'phrase dit que le poste existe déjà, presque mot pour mot, et OÙ changer son prix (depuis la ligne, ou « Ma base de postes ») '
+    + '— sans nommer « Changer ma référence », qui n’existe que s’il y a un écart (TEXTES13)',
   /create\s+unique\s+index\s+if\s+not\s+exists\s+idx_base_postes_rapprochement\b/i.test(S50)
     && ERR.messageClair(doublonPg, 'Votre base de postes') === `Votre base de postes : ${phraseDoublon}`
-    && /presque identique/.test(phraseDoublon) && /« Changer ma référence »/.test(phraseDoublon) && /« Ma base de postes »/.test(phraseDoublon),
+    && /presque identique/.test(phraseDoublon) && /depuis la ligne/.test(phraseDoublon) && /« Ma base de postes »/.test(phraseDoublon)
+    && !/Changer ma référence/.test(phraseDoublon),
   phraseDoublon);
+  /* TEXTES13 : « puis ajoutez-la » ne se dit pas d'un refus qu'on ne
+     rencontre qu'en CORRIGEANT une phrase dans « Ma base de postes » — la
+     feuille d'ajout ne propose jamais une phrase sans lettre ni chiffre. */
+  verifier('…et le refus d’une phrase sans lettre ni chiffre ne dit pas « ajoutez-la » : on ne le rencontre qu’en la corrigeant',
+    !/ajoutez-la/.test(ERR.MESSAGES_CONTRAINTE.base_poste_rapprochement_check || 'ajoutez-la')
+    && /écrivez ce que vous faites/.test(ERR.MESSAGES_CONTRAINTE.base_poste_rapprochement_check || ''),
+  ERR.MESSAGES_CONTRAINTE.base_poste_rapprochement_check);
   const c428 = [
     { code: '428C9', message: 'cannot insert a non-DEFAULT value into column "cle_rapprochement"' },
     { code: '428C9', message: 'column "cle_rapprochement" can only be updated to DEFAULT' },
@@ -1879,11 +2029,26 @@ const extraire = (nom, injecte = {}) => {
     + 'le texte anglais de PostgreSQL (« non-DEFAULT », « can only be updated »), avec ou sans son code',
   c428.every((m) => m === 'Opus a envoyé une valeur que la base calcule elle-même : mettez Opus à jour, puis réessayez.'), json(c428));
   const ep = new ERR.ErreurPoste();
-  verifier('`ErreurPoste` dit, mot pour mot, « Ce poste a été modifié entre-temps — peut-être depuis un autre appareil. Il a été relu : '
-    + 'vérifiez, puis recommencez si besoin. », et `messageClair` la rend TELLE QUELLE, sans sujet (elle est déjà en français)',
-  ERR.MODIFIE_ENTRE_TEMPS === 'Ce poste a été modifié entre-temps — peut-être depuis un autre appareil. Il a été relu : vérifiez, '
-    + 'puis recommencez si besoin.' && ep.name === 'ErreurPoste' && ep instanceof Error && ep.message === ERR.MODIFIE_ENTRE_TEMPS
-    && ERR.messageClair(ep, 'Ce poste') === ERR.MODIFIE_ENTRE_TEMPS, ERR.messageClair(ep, 'Ce poste'));
+  verifier('`ErreurPoste` dit, mot pour mot, « Ce poste a été modifié ou retiré entre-temps — peut-être depuis un autre appareil. '
+    + 'Rien n’a été enregistré. » — ce qu’on peut dire SANS savoir : ni « relu », ni « modifié » seul (TEXTES5) — et `messageClair` '
+    + 'la rend TELLE QUELLE, sans sujet (elle est déjà en français)',
+  ERR.MODIFIE_ENTRE_TEMPS === 'Ce poste a été modifié ou retiré entre-temps — peut-être depuis un autre appareil. Rien n’a été '
+    + 'enregistré.' && ep.name === 'ErreurPoste' && ep instanceof Error && ep.message === ERR.MODIFIE_ENTRE_TEMPS
+    && !/relu/.test(ERR.MODIFIE_ENTRE_TEMPS) && ERR.messageClair(ep, 'Ce poste') === ERR.MODIFIE_ENTRE_TEMPS, ERR.messageClair(ep, 'Ce poste'));
+  /* …ET CE QUE LES FEUILLES EN DISENT, d'après ce que la relecture a RENDU
+     (`issueDuModifieEntreTemps`) : une relecture ratée ne se dit jamais
+     « relue » ; un poste absent de la base relue a été RETIRÉ ; présent, il
+     a été modifié. */
+  const relueRatee = P.issueDuModifieEntreTemps(null, 'p1');
+  const retire = P.issueDuModifieEntreTemps([{ id: 'p2' }], 'p1');
+  const modifie = P.issueDuModifieEntreTemps([{ id: 'p1' }, { id: 'p2' }], 'p1');
+  verifier('l’issue d’un « modifié entre-temps » (`issueDuModifieEntreTemps`) : relecture ratée → « n’a pas pu être relue », jamais '
+    + '« a été relue » ; poste absent → `absent` et « n’est plus dans votre base » ; présent → « modifié » et « a été relue »',
+  !relueRatee.absent && /n’a pas pu être relue/.test(relueRatee.phrase) && !/a été relue/.test(relueRatee.phrase)
+    && /modifié ou retiré/.test(relueRatee.phrase)
+    && retire.absent === true && retire.phrase === P.PHRASE_POSTE_ABSENT && /n’est plus dans votre base/.test(retire.phrase)
+    && !modifie.absent && /a été modifié entre-temps/.test(modifie.phrase) && /a été relue/.test(modifie.phrase),
+  json({ relueRatee, retire, modifie }));
 }
 
 /* ================================================================== */
@@ -1934,6 +2099,32 @@ function blocApres(src, debut) {
   }
   return '';
 }
+/* Les instructions d'un bloc, AU PREMIER NIVEAU : on coupe à chaque `;` et
+   à chaque `}` qui referme ce qu'il a ouvert, les chaînes et les
+   parenthèses sautées. `if (x) onFermer();` est UNE instruction ; un appel
+   écrit dans un `if`, derrière un `&&` ou dans un ternaire n'en commence
+   jamais une. */
+function instructionsDuBloc(bloc) {
+  const r = [];
+  let cur = '';
+  let p = 0;
+  for (let i = 0; i < bloc.length; i += 1) {
+    const c = bloc[i];
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1;
+      while (j < bloc.length && bloc[j] !== c) { if (bloc[j] === BARRE) j += 1; j += 1; }
+      cur += bloc.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if ('({['.includes(c)) p += 1;
+    else if (')}]'.includes(c)) p -= 1;
+    cur += c;
+    if (p === 0 && (c === ';' || c === '}')) { if (cur.trim()) r.push(cur.trim()); cur = ''; }
+  }
+  if (cur.trim()) r.push(cur.trim());
+  return r;
+}
 const lireSiE = (f) => (existsSync(path.join(RACINE, f)) ? sansCommentairesJs(lire(f)) : '');
 const ECRANS_BASE = {
   carte: 'src/components/CarteLigne.js',
@@ -1958,7 +2149,7 @@ try {
   /* -- LA CARTE : la référence AU-DESSUS du prix, le bloc DESSOUS ------- */
   {
     const c = EC.carte;
-    const iRef = c.indexOf('{morceauxReference.avant}');
+    const iRef = c.indexOf('{vue.reference.avant}');
     const iChiffree = c.indexOf('{chiffree && (');
     const iDeux = c.indexOf('<View style={s.deux}>', iChiffree);
     const iBloc = c.indexOf('{bloc}');
@@ -1969,19 +2160,20 @@ try {
     `réf. ${iRef}, rangée ${iDeux}, bloc ${iBloc}, surfaces ${iSurfaces}`);
     verifier('…la référence et l’écart sont des `Text` au style EXACTEMENT `s.aide` (gris, une phrase discrète), le montant par '
       + '`Montant` ; l’écart porte son libellé VoiceOver entier (`libelleEcart`)',
-    /<Text style=\{s\.aide\}>\s*\{morceauxReference\.avant\}/.test(c)
-      && /<Text style=\{s\.aide\} accessibilityLabel=\{libelleEcart\(ecart\)\}>\s*\{morceauxEcart\.avant\}/.test(c)
-      && /<Montant centimes=\{morceauxReference\.prix\}/.test(c) && /<Montant centimes=\{morceauxEcart\.prix\}/.test(c));
-    const iDebutBloc = c.indexOf('let bloc = null;');
+    /<Text style=\{s\.aide\}>\s*\{vue\.reference\.avant\}/.test(c)
+      && /<Text style=\{s\.aide\} accessibilityLabel=\{vue\.ecart\.libelle\}>\s*\{vue\.ecart\.morceaux\.avant\}/.test(c)
+      && /<Montant centimes=\{vue\.reference\.prix\}/.test(c) && /<Montant centimes=\{vue\.ecart\.morceaux\.prix\}/.test(c));
+    const iDebutBloc = c.indexOf('const bloc = ');
     const segBloc = iDebutBloc >= 0 ? c.slice(iDebutBloc, c.indexOf('\n  return (', iDebutBloc)) : '';
-    const stylesBloc = ['aide', 'aideMontant', 'bloc', 'blocTexte'].map((n) => styleE(c, n));
+    const stylesBloc = ['aide', 'aideMontant', 'bloc'].map((n) => styleE(c, n));
     verifier('…le bloc « base » n’emploie ni le style `erreur`, ni `C.bad` (le rouge des refus), ni l’orange (`C.accent`, '
       + '`C.accentTexte`), ni une couleur écrite en ligne : c’est une question, pas un refus',
     segBloc.length > 500 && !/s\.erreur|C\.bad|C\.accent|style=\{\{|style=\{\[/.test(segBloc)
       && stylesBloc.every((x) => x.length > 0 && !/C\.bad|C\.accent/.test(x)), stylesBloc.join(' | '));
-    verifier('…quand la ligne est une VARIANTE d’un poste (`sous`), le bloc dit « Ce poste existe déjà dans votre base, sous « … ». » '
-      + 'puis la sortie (`PHRASE_SORTIE`) — les mots promis au propriétaire',
-    /\{!!base\.sous && \(\s*<>\s*<Text style=\{s\.blocTexte\}>\{`Ce poste existe déjà dans votre base, sous « \$\{base\.sous\} »\.`\}<\/Text>\s*<Text style=\{s\.aide\}>\{PHRASE_SORTIE\}<\/Text>/.test(segBloc));
+    verifier('…quand la ligne est une VARIANTE d’un poste, le bloc affiche `vue.existe` — « Ce poste existe déjà dans votre base » et '
+      + 'la sortie, en UN paragraphe discret (`s.aide`, plus de gras : il se lisait comme un avertissement de doublon, ECRAN9)',
+    /\{!!vue\.existe && <Text style=\{s\.aide\}>\{vue\.existe\}<\/Text>\}/.test(segBloc) && !/blocTexte|inter6/.test(segBloc)
+      && !/blocTexte/.test(c));
     const choisir = blocApres(c, 'onChoisir={(sug) => {');
     verifier('…un appui sur une proposition passe par `valeursDeLaProposition` PUIS `prixAEcrire` — `null` veut dire « ne touchez '
       + 'pas au champ » : une proposition sans prix ne vide jamais un prix déjà tapé (T10) ; plus aucun `valeursDeLaSuggestion`',
@@ -2011,8 +2203,8 @@ try {
   /* -- LA FEUILLE D'AJOUT ------------------------------------------------- */
   {
     const a = EC.ajout;
-    const existe = a.slice(a.indexOf('} else if (existant) {'), a.indexOf("titre = 'Ajouter à ma base';"));
-    const memePrix = blocApres(existe, 'if (memePrix) {');
+    const existe = a.slice(a.indexOf("} else if (feuille.etat === 'existe') {"), a.indexOf("titre = 'Ajouter à ma base';"));
+    const memePrix = blocApres(existe, 'if (feuille.memePrix) {');
     const champs = ['TextInput', 'TextArea', 'Field', 'ChampLocal', 'ChampDesignation', 'ChampPhrase'].filter((n) => balisesE(a, n).length);
     const montants = balisesE(a, 'ChampMontant');
     verifier('`FeuilleAjoutPoste` : AUCUN champ pour la phrase (elle est montrée, mot pour mot) — un seul champ, le prix, un '
@@ -2030,26 +2222,75 @@ try {
     verifier('…son état « ce poste existe déjà » n’a AUCUN bouton pour ajouter un second poste ni pour remplacer la phrase du poste ; '
       + 'et à PRIX ÉGAL, seul « Fermer » (ni champ, ni bouton principal)',
     existe.length > 500 && !/onPress=\{ajouter\}|Ajouter à ma base|ajouterPoste/.test(existe)
-      && memePrix.length > 50 && /<BtnOutline key="fermer" label="Fermer"/.test(memePrix)
-      && !/<BtnMain|<ChampMontant|champ\(/.test(memePrix), memePrix.slice(0, 120));
-    verifier('…la feuille passe d’elle-même à « existe déjà » : `posteExistant` est RECALCULÉ à chaque rendu (jamais retenu dans un '
-      + 'état), et un 23505 relit la base avant de montrer la phrase de l’index',
-    /\n {2}const existant = posteExistant\(valeurs, postes\);/.test(a) && !/useState\([^)]*posteExistant/.test(a)
+      && memePrix.length > 50 && !/<BtnMain|<ChampMontant|champ\(|<BtnOutline/.test(memePrix)
+      && (existe.match(/<BtnOutline key="fermer" label="Fermer"/g) || []).length === 1
+      && /\n {4}contenu\.push\(<BtnOutline key="fermer" label="Fermer" onPress=\{onFermer\} \/>\);/.test(existe), memePrix.slice(0, 120));
+    verifier('…la feuille passe d’elle-même à « existe déjà » : son état vient de `etatDeLaFeuilleAjout`, RECALCULÉ à chaque rendu '
+      + '(jamais retenu dans un état), avec le prix PORTÉ et le drapeau « en train de taper » ; et un 23505 relit la base avant de '
+      + 'montrer la phrase de l’index',
+    /\n {2}const feuille = etatDeLaFeuilleAjout\(\{ valeurs, postes, prixTape, prixTouche, doublonInvisible \}\);/.test(a)
+      && !/useState\([^)]*etatDeLaFeuilleAjout/.test(a) && (a.match(/etatDeLaFeuilleAjout\(/g) || []).length === 1
       && /=== '23505'\) \{[\s\S]{0,400}await onRelire\(\)/.test(a));
+  }
+
+  /* -- UNE FEUILLE FERMÉE PENDANT L'ENVOI : LE RÉSULTAT EST RANGÉ QUAND MÊME --
+     Trouvé par le banc de sabotages final (24/10/2026) : poser
+     `if (vivant.current) onRanger(pose);` après « Changer ma référence »
+     passait TOUS les contrôles ET `mesure-devis` (450 mesures vertes). Or
+     une feuille fermée pendant l'envoi (le voile, la croix) laisse alors la
+     base de l'écran derrière la vraie : la carte montre l'ancienne
+     référence, et la prochaine écriture part avec une date périmée
+     (« modifié entre-temps »). La PROPRIÉTÉ : dans les deux feuilles, le
+     résultat de chaque écriture (l'ajout, le prix changé, l'écriture de la
+     feuille d'un poste) est rangé par `onRanger(<résultat>` au PREMIER
+     niveau du bloc où l'écriture a réussi, sans `return` ni `throw` entre
+     les deux — et `onRanger` n'est appelé nulle part ailleurs (donc jamais
+     sous une condition). `vivant.current` ne garde que la feuille
+     elle-même : la fermer, y écrire. */
+  {
+    const fautes = [];
+    const vues = [];
+    for (const [nom, src] of [['FeuilleAjoutPoste', EC.ajout], ['FeuillePoste', EC.poste]]) {
+      let ranges = 0;
+      for (const m of src.matchAll(/const (\w+) = await (api\.(?:ajouterPoste|modifierPoste)|faire)\(/g)) {
+        vues.push(`${nom} : ${m[2]}`);
+        const iTry = src.lastIndexOf('try {', m.index);
+        const corps = iTry >= 0 ? blocApres(src.slice(iTry), 'try {').slice(1, -1) : '';
+        const ins = instructionsDuBloc(corps);
+        const k = ins.findIndex((x) => x.startsWith(`const ${m[1]} = await `));
+        const j = ins.findIndex((x, n) => n > k && new RegExp(`^onRanger\\(${m[1]}\\b`).test(x));
+        const entre = k >= 0 && j > k ? ins.slice(k + 1, j) : [];
+        if (k < 0 || j < 0 || entre.some((x) => /\breturn\b|\bthrow\b/.test(x))) {
+          fautes.push(`${nom} : le résultat de ${m[2]} n’est pas rangé au premier niveau (${(j < 0 ? ins.slice(k + 1, k + 3) : entre).join(' ').slice(0, 140)})`);
+        } else ranges += 1;
+      }
+      const appels = appelsE(src, 'onRanger').length;
+      if (appels !== ranges) fautes.push(`${nom} : ${appels} appel(s) à onRanger, dont ${ranges} rangé(s) sans condition après une écriture`);
+    }
+    verifier('les deux feuilles RANGENT le résultat de chaque écriture même fermées pendant l’envoi (le voile, la croix) : '
+      + '`onRanger(<résultat>` au premier niveau du bloc où l’écriture a réussi — l’ajout, le prix changé, l’écriture de la '
+      + 'feuille d’un poste —, jamais sous une condition (`vivant.current` ne garde que la feuille elle-même) ; sinon la carte '
+      + 'garde l’ancienne référence et la prochaine écriture part « modifiée entre-temps »',
+    vues.length === 3 && fautes.length === 0, fautes.join(' ; ') || vues.join(' ; '));
   }
 
   /* -- LE PRIX PORTÉ, L'AVERTISSEMENT, LE POSTE PROCHE ------------------- */
   {
     const a = EC.ajout;
     const montant = balisesE(a, 'ChampMontant')[0] || '';
-    const existe = a.slice(a.indexOf('} else if (existant) {'), a.indexOf("titre = 'Ajouter à ma base';"));
+    const existe = a.slice(a.indexOf("} else if (feuille.etat === 'existe') {"), a.indexOf("titre = 'Ajouter à ma base';"));
     const saisie = a.slice(a.indexOf("titre = 'Ajouter à ma base';"));
+    const porter = blocApres(a, 'const porter = (centimes) => {');
     verifier('…quand la feuille passe à « existe déjà », le champ du prix GARDE ce qui y est tapé : le même `ChampMontant`, sous la '
-      + 'MÊME clé (`key="prix"`, écrite en clair), rendu par `champ(` dans les deux états — et « même prix » se juge sur le prix '
-      + 'PORTÉ (`prixTape`), jamais sur celui de la ligne',
+      + 'MÊME clé (`key="prix"`, écrite en clair), rendu par `champ(` dans les deux états ; la PREMIÈRE lettre tapée le dit '
+      + '(`surPremiereFrappe`), et seul `porter()` — un prix lu, puis réarmé — l’efface (ECRAN4). « Même prix » se décide dans '
+      + '`etatDeLaFeuilleAjout`, jamais ici',
     /key="prix"/.test(montant) && !/key=\{/.test(montant) && /\.\.\.champ\(existant\)/.test(existe) && /\.\.\.champ\(/.test(saisie)
-      && /const memePrix = aUneReference && prixTape === existant\.prixReferenceCentimes;/.test(a)
-      && !/memePrix = [^;]*prixPropose/.test(a), montant.slice(0, 160));
+      && /surPremiereFrappe=\{\(\) => setPrixTouche\(true\)\}/.test(montant)
+      && (a.match(/setPrixTouche\(/g) || []).length === 2 && /setPrixTouche\(false\)/.test(porter)
+      && /refPrix\.current\.rearmer\(\)/.test(porter) && /setPrixTape\(centimes\)/.test(porter)
+      && (a.match(/setPrixTape\(/g) || []).length === 1
+      && !/memePrix\s*=|aUneReference\s*=|posteExistant\(valeurs, postes\)/.test(a), montant.slice(0, 160));
     const lePoste = [...existe.matchAll(/Le poste : « \$\{([\w.]+)\}/g)].map((m) => m[1]);
     verifier('…« ce poste existe déjà » nomme le POSTE par SA phrase (`existant.designation`), jamais par celle de la ligne ; la '
       + 'ligne, elle, est dite « Votre ligne » ; et la sortie (`PHRASE_SORTIE`) est là quand l’une est la variante de l’autre',
@@ -2072,10 +2313,12 @@ try {
       + 'poste de la ligne ouverte ; la conséquence d’une correction se CALCULE (`consequenceDeLaCorrection`)',
     phrases.length === 1 && /\{depuisLaPage \? \(\s*<ChampPhrase\b/.test(p) && /consequenceDeLaCorrection\(/.test(p)
       && /disabled=\{envoi \|\| consequence\.consequence === 'doublon'\}/.test(p));
-    verifier('…toute écriture part SOUS CONDITION sur la date lue, une garde par référence, et « Retirer ce poste » en DEUX appuis',
+    verifier('…toute écriture part SOUS CONDITION sur la date lue, une garde par référence, et les DEUX retraits — le prix et le '
+      + 'poste — en DEUX appuis : le premier ne fait que demander (ECRAN2)',
     appelsE(p, 'api\\.(?:modifierPoste|retirerPoste)').length === 3
       && appelsE(p, 'api\\.(?:modifierPoste|retirerPoste)').every((x) => /modifieLe: poste\.modifieLe/.test(x))
-      && /if \(enVol\.current\) return;/.test(p) && /if \(!confirmeRetrait\) \{ setConfirmeRetrait\(true\); return; \}/.test(p));
+      && /if \(enVol\.current\) return;/.test(p) && /if \(!confirmeRetrait\) \{ setConfirmeRetrait\(true\); return; \}/.test(p)
+      && /const retirerLePrix = \(\) => \{\s*if \(!confirmeRetraitPrix\) \{ setConfirmeRetraitPrix\(true\); return; \}\s*ecrire\(/.test(p));
   }
 
   /* -- LES DEUX FEUILLES, DANS LEURS FICHIERS ----------------------------- */
@@ -2110,7 +2353,7 @@ try {
   {
     const pg = EC.page;
     const liste = balisesE(pg, 'FlatList')[0] || '';
-    const brancheEchec = blocApres(pg, 'if (echec) {');
+    const brancheEchec = blocApres(pg, "if (vue.vide === 'illisible') {");
     const chaines = pg.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || [];
     const textesJsx = [...pg.matchAll(/>([^<>{}=;()]*[\p{L}][^<>{}=;()]*)</gu)].map((m) => m[1]);
     const dits = [...chaines, ...textesJsx].join('\n');
@@ -2123,7 +2366,14 @@ try {
     /initialNumToRender=\{\d+\}/.test(liste) && /maxToRenderPerBatch=\{\d+\}/.test(liste) && /windowSize=\{\d+\}/.test(liste)
       && /\{\.\.\.CLAVIER\}/.test(liste) && /titre="Lecture impossible"/.test(brancheEchec)
       && /label: 'Réessayer'/.test(brancheEchec) && !/Aucun poste/.test(brancheEchec)
-      && /\{incomplete && \([\s\S]{0,200}Liste incomplète/.test(pg) && !/Nouveau poste/i.test(pg), liste.slice(0, 120));
+      && /\{!!vue\.bandeIncomplete && \([\s\S]{0,200}\{vue\.bandeIncomplete\}/.test(pg) && !/Nouveau poste/i.test(pg), liste.slice(0, 120));
+    /* TEXTES11 : sur CET écran, « la base », pour l'artisan, c'est SA base de
+       postes — le serveur se nomme « le serveur d’Opus » ; et « n’a pas
+       répondu » affirmait une cause qu'on ne connaît pas. */
+    const laBase = dits.match(/(?<![\p{L}])[Ll]a base(?! de postes)[^\n]{0,40}/gu) || [];
+    verifier('…et « la base » n’y désigne jamais le serveur, ni une cause qu’on ne connaît pas (« n’a pas répondu ») — TEXTES11',
+      laBase.length === 0 && !/n’a pas répondu/.test(dits) && /serveur d’Opus/.test(dits),
+      `${laBase.join(' | ')}`);
     verifier('…et aucune promesse qu’aucun écran ne tient : ni « personne d’autre ne », ni « personne ne les », ni « ne peut pas '
       + 'lire », ni « impossible » ailleurs que dans « Lecture impossible » — c’est un ENGAGEMENT, pas une impossibilité',
     promesses.length === 0 && impossibles === 0 && /Aucun écran d’Opus ne les montre à quelqu’un d’autre que vous\./.test(pg),
@@ -2135,12 +2385,12 @@ try {
     const d = EC.designation;
     const conteneur = balisesE(d, 'View').find((b) => /style=\{s\.liste\}/.test(b)) || '';
     const detail = balisesE(d, 'Text').find((b) => /style=\{s\.suggestionDetail\}/.test(b)) || '';
-    verifier('`ChampDesignation` : les propositions viennent de `suggestionsPourLaFrappe` ; le conteneur de la liste ne porte AUCUN '
-      + 'libellé (VoiceOver ne le lit pas) ; chaque rangée porte `libelleDeSuggestion` ; le détail tient sur UNE ligne '
-      + '(`numberOfLines={1}`) ; la clé React porte la `cle` de la proposition',
-    /suggestionsPourLaFrappe\(\{/.test(d) && conteneur.length > 0 && !/accessibilityLabel/.test(conteneur)
-      && /accessibilityLabel=\{libelleDeSuggestion\(sug\)\}/.test(d) && /numberOfLines=\{1\}/.test(detail)
-      && /key=\{`\$\{sug\.source\}-\$\{sug\.cle\}`\}/.test(d) && !/memoireDesLignes/.test(d), `${conteneur} | ${detail}`);
+    verifier('`ChampDesignation` : les rangées viennent de `propositionsAMontrer` ; le conteneur de la liste ne porte AUCUN '
+      + 'libellé (VoiceOver ne le lit pas) ; chaque rangée porte `r.libelle` ; le détail tient sur UNE ligne '
+      + '(`numberOfLines={1}`) ; la clé React porte la `cle` de la rangée',
+    /propositionsAMontrer\(\{/.test(d) && conteneur.length > 0 && !/accessibilityLabel/.test(conteneur)
+      && /accessibilityLabel=\{r\.libelle\}/.test(d) && /numberOfLines=\{1\}/.test(detail)
+      && /key=\{r\.cle\}/.test(d) && !/memoireDesLignes|suggestionsPourLaFrappe/.test(d), `${conteneur} | ${detail}`);
     verifier('`ChampDesignation` et `CarteLigne` obtiennent les clés des postes par `postesPrepares` (dans `postes.js`), jamais par '
       + '`cleDeLigne` appliqué à chaque poste — et aucun des deux n’importe la clé de rapprochement',
     [EC.designation, EC.carte].every((x) => !/cleDeLigne|rapprochement/.test(x)));
@@ -2217,6 +2467,573 @@ try {
 }
 
 /* ================================================================== */
+/*  E bis. CE QUE LES ÉCRANS MONTRENT, FAIT TOURNER — et les écrans     */
+/*         qui doivent passer par là (corrections « écran », 24/10)     */
+/* ================================================================== */
+console.log('\nE bis. CE QUE LES ÉCRANS MONTRENT, FAIT TOURNER — les propositions, la phrase de T11, le bloc de la carte, les deux '
+  + 'feuilles, la page, la lecture de la base, la rangée de la liste ; puis les écrans, qui doivent passer par ces fonctions sans '
+  + 'toucher à ce qu’elles rendent');
+/*
+ * POURQUOI CETTE PARTIE. La relecture « écran » du lot P a posé quinze
+ * défauts d'écran sur une copie du dépôt — six propositions, des
+ * propositions dès une lettre, la phrase de T11 qui s'efface au premier
+ * champ quitté, « Ajouter à ma base » pendant la lecture, une porte
+ * masquée, une page qui cherche « à la lettre », la référence écrite dans
+ * la liste du devis… — et quatorze passaient ce contrôle, qui lisait la
+ * FORME du code des écrans (ECRAN1). Les règles vivent désormais dans
+ * `postes.js` et `devis.js`, qu'on FAIT TOURNER ici sur les cas qui
+ * comptent ; la seconde moitié refuse un écran qui ne les appelle plus, ou
+ * qui touche à ce qu'elles rendent (une liste FERMÉE de formes, pas une
+ * liste de noms interdits). Ce qui ne se voit qu'à l'écran — une position,
+ * une couleur calculée, un geste, une feuille qui passe d'un état à
+ * l'autre pendant qu'on tape — reste à `mesure-devis`, au navigateur.
+ */
+try {
+  const recoudre = (m) => (m ? `${m.avant}${m.prix == null ? '' : CT.centimesLisibles(m.prix)}${m.apres}` : null);
+  const parleDeFourniture = (d) => /fourniture/.test(d || '');
+
+  /* -- (1) LES NOMBRES DE LA PROMESSE ------------------------------------ */
+  verifier('la promesse au propriétaire, écrite UNE fois, dans `postes.js` : `PROPOSITIONS_MAX` vaut 3 et `LETTRES_MIN` vaut 3 '
+    + '(« il ne faut pas qu’il y ait trop de propositions, ça pourrait nous perdre », 23/10)',
+  P.PROPOSITIONS_MAX === 3 && P.LETTRES_MIN === 3, `${P.PROPOSITIONS_MAX} / ${P.LETTRES_MIN}`);
+
+  /* -- (2) LES PROPOSITIONS À MONTRER, sur TOUS les débuts de mots ------- */
+  {
+    const montrer = (texte, plus = {}) => P.propositionsAMontrer({ postes: POSTES, postesEtat: 'ok', memoire: MEMOIRE_DEMO, texte, ...plus });
+    const rangees = new Set([...MEMOIRE_DEMO.map((l) => D.texteNet(l.designation)), ...POSTES.map((p) => p.designation)].filter(Boolean));
+    const textes = new Set();
+    for (const x of rangees) for (const mot of String(x).split(/\s+/)) for (let k = 1; k <= mot.length; k += 1) textes.add(mot.slice(0, k));
+    const fautes = [];
+    let courts = 0;
+    for (const t of textes) {
+      const r = montrer(t);
+      const quoi = [];
+      if (r.length > 3) quoi.push(`${r.length} rangées`);
+      if (t.trim().length < 3 && r.length) quoi.push('des rangées sous trois lettres');
+      if (t.trim().length < 3) courts += 1;
+      if (new Set(r.map((x) => x.cle)).size !== r.length) quoi.push('une clé de rangée en double');
+      r.forEach((x) => {
+        const p = x.proposition;
+        const fourniture = parleDeFourniture(x.distinction);
+        const v = P.valeursDeLaProposition(p);
+        const recopie = v && Number.isSafeInteger(v.prixUnitaireCentimes) && v.prixUnitaireCentimes > 0 ? v.prixUnitaireCentimes : null;
+        if (x.titre !== p.designation || !rangees.has(x.titre)) quoi.push('un titre qui n’est pas la phrase rangée');
+        if (recoudre(x.morceaux) !== P.detailDeSuggestion(p, { sansFourniture: fourniture }) || x.morceaux.prix !== recopie) {
+          quoi.push('un détail qui ne se recoud pas, ou qui met en avant un autre prix que celui recopié');
+        }
+        if (x.libelle !== P.libelleDeSuggestion(p, { avecLaFourniture: fourniture })) quoi.push('un libellé VoiceOver qui n’est pas le sien');
+        if (fourniture && /fourniture non comprise/.test(recoudre(x.morceaux))) quoi.push('la fourniture dite deux fois sur la ligne');
+      });
+      if (quoi.length) fautes.push(`« ${t} » : ${quoi.join(', ')}`);
+    }
+    verifier(`les rangées que \`ChampDesignation\` affiche (\`propositionsAMontrer\`), sur ${textes.size} textes — chaque début de mot `
+      + `de chaque phrase rangée, dès UNE lettre (${courts} textes de moins de trois lettres) : jamais plus de trois, RIEN sous trois `
+      + 'lettres, chaque titre la phrase rangée mot pour mot, le détail recousu autour du prix qu’un appui recopie, le libellé '
+      + 'VoiceOver le sien, la fourniture jamais dite deux fois',
+    textes.size >= 300 && courts >= 30 && fautes.length === 0, `${textes.size} textes ; ${fautes.slice(0, 4).join(' | ')}`);
+    const pos = montrer('Pos');
+    const po = montrer('Po');
+    const brut = P.suggestionsPourLaFrappe({ postes: POSTES, memoire: MEMOIRE_DEMO, texte: 'Po' });
+    verifier('…et les TÉMOINS : « Pos » rend EXACTEMENT trois rangées, les trois « Pose » ; « Po » n’en rend AUCUNE, alors que le '
+      + 'calcul sans la garde en trouverait — c’est bien la garde des trois lettres qui se tait',
+    pos.length === 3 && pos.every((x) => /^Pose /.test(x.titre)) && po.length === 0 && brut.length > 0,
+    `${json(pos.map((x) => x.titre))} ; « Po » : ${po.length}, sans la garde : ${brut.length}`);
+    const six = [1, 2, 3, 4, 5, 6].map((n) => Lm(`e${n}`, `Enduit de lissage numéro ${n}`, 'm2', 1000 * n, n));
+    verifier('…`suggestionsPourLaFrappe` ne rend JAMAIS plus de trois propositions, même quand on lui en demande six (la promesse '
+      + 'est tenue par le calcul, pas par l’écran qui l’appelle)',
+    P.suggestionsPourLaFrappe({ postes: [], memoire: six, texte: 'enduit', max: 6 }).length === 3
+      && P.suggestionsPourLaFrappe({ postes: [], memoire: six, texte: 'enduit', max: 2 }).length === 2
+      && P.propositionsAMontrer({ memoire: six, texte: 'enduit' }).length === 3);
+    verifier('…RIEN à l’ouverture d’une ligne existante ni après un choix : le texte CHOISI (`choisi`) ne propose rien — « chape » '
+      + 'en propose deux, « chape » choisi aucune (B1 du lot 1 : un appui distrait changeait le prix)',
+    montrer('chape').length === 2 && montrer('chape', { choisi: 'chape' }).length === 0 && montrer('chape', { choisi: 'autre' }).length === 2);
+    const nonLue = ['echec', 'chargement', 'vide', undefined].map((e) => [e, montrer('chape', { postesEtat: e })]);
+    verifier('…une base NON LUE (en lecture, en échec, jamais demandée) ne propose rien d’elle — la mémoire, oui ; et sans aucune des '
+      + 'deux sources, rien',
+    nonLue.every(([, r]) => r.length > 0 && r.every((x) => x.proposition.source !== 'base'))
+      && P.propositionsAMontrer({ postes: POSTES, postesEtat: 'echec', memoire: null, texte: 'chape' }).length === 0
+      && P.postesLus(POSTES, 'ok') === POSTES && ['echec', 'chargement', 'vide', null].every((e) => P.postesLus(POSTES, e) === null),
+    json(nonLue.map(([e, r]) => [e, r.map((x) => x.proposition.source)])));
+    const chape = montrer('chape');
+    const unite = P.propositionsAMontrer({ postes: POSTES, postesEtat: 'ok', memoire: [Lm('cf', 'Chape sèche avant carrelage collé', 'forfait', 90000, 1)], texte: 'chape' });
+    verifier('…deux propositions de la MÊME phrase disent ce qui les DISTINGUE, en tête du détail : « avec la fourniture » / '
+      + '« fourniture non comprise » (la fourniture n’est plus répétée plus loin), « au mètre carré » / « au forfait » ; VoiceOver '
+      + 'entend « avec la fourniture » ; deux phrases différentes ne portent rien (ECRAN9)',
+    chape.length === 2 && chape[0].titre === chape[1].titre
+      && json(chape.map((x) => x.distinction)) === json(['avec la fourniture', 'fourniture non comprise'])
+      && /, avec la fourniture, /.test(chape[0].libelle) && /, fourniture non comprise, /.test(chape[1].libelle)
+      && !/fourniture/.test(recoudre(chape[1].morceaux))
+      && json(unite.map((x) => x.distinction)) === json(['au mètre carré', 'au forfait'])
+      && pos.every((x) => x.distinction === null),
+    json({ chape: chape.map((x) => [x.distinction, recoudre(x.morceaux)]), unite: unite.map((x) => x.distinction) }));
+  }
+
+  /* -- (3) LA PHRASE DE T11 --------------------------------------------- */
+  {
+    const avantH = { unite: 'h', quantiteMilliemes: 12000 };
+    const pas = (e, g) => P.phraseUniteApres(e, g);
+    const posee = pas(P.PHRASE_UNITE_VIDE, { type: 'proposition', avant: avantH, unite: 'forfait', quantite: '12' });
+    const attendue = P.changementDUnite(avantH, { unite: 'forfait' });
+    const seconde = pas(posee, { type: 'proposition', avant: { unite: 'forfait', quantiteMilliemes: 12000 }, unite: 'forfait', quantite: '12' });
+    verifier('la phrase de T11 (`phraseUniteApres`) : une proposition qui change l’unité d’une ligne qui a une quantité la POSE ; une '
+      + 'SECONDE proposition de même unité la GARDE (ECRAN7) ; la quantité quittée SANS changement la garde (le défaut de l’étape 7) ; '
+      + 'retouchée, elle l’efface ; une unité rechoisie ou une surface recopiée l’effacent ; sans quantité, rien',
+    attendue && posee.phrase === attendue && posee.quantite === '12' && seconde.phrase === attendue
+      && pas(posee, { type: 'quantite_quittee', quantite: '12' }).phrase === attendue
+      && pas(posee, { type: 'quantite_quittee', quantite: '1' }).phrase === null
+      && pas(posee, { type: 'unite' }).phrase === null && pas(posee, { type: 'surface' }).phrase === null
+      && pas(P.PHRASE_UNITE_VIDE, { type: 'proposition', avant: { unite: 'h' }, unite: 'forfait', quantite: '' }).phrase === null
+      && pas(P.PHRASE_UNITE_VIDE, { type: 'quantite_quittee', quantite: '3' }).phrase === null,
+    json({ posee, seconde }));
+  }
+
+  /* -- (4) LE BLOC DE LA CARTE --------------------------------------------- */
+  {
+    const l52 = Li('Chape sèche avant carrelage collé', 'm2', 5200);
+    const vue = (l, etat = 'ok', opts = {}) => P.vueDeLaBase(l, POSTES, etat, opts);
+    const v52 = vue(l52);
+    const muets = ['echec', 'chargement', 'vide', null].map((e) => vue(l52, e));
+    const vide = (v) => v.reference === null && v.existe === null && v.ecart === null && v.phraseEtat === null && v.action === null;
+    const neuve = Li('Niche murale carrelée', 'u', 24000);
+    verifier('le bloc de la carte (`vueDeLaBase`) : la chape à 52 € dit sa référence et son écart (recousus), et propose « Changer ma '
+      + 'référence » avec le prix de la LIGNE ; une base NON LUE ne dit RIEN — ni référence peut-être périmée, ni bouton ; « Ajouter '
+      + 'à ma base » n’existe que d’une base lue (jamais pendant la lecture : on proposerait un doublon) et que si l’écran a une '
+      + 'feuille à ouvrir',
+    recoudre(v52.reference) === P.phraseReference(P.referenceDuPoste(l52, POSTES)) && v52.ecart
+      && recoudre(v52.ecart.morceaux) === P.phraseEcart(P.ecartAuPoste(l52, POSTES)) && v52.ecart.libelle === P.libelleEcart(P.ecartAuPoste(l52, POSTES))
+      && v52.action && v52.action.cle === 'changer' && v52.action.avecLePrixDeLaLigne === true
+      && v52.action.nom === P.libelleChangerReference(P.ecartAuPoste(l52, POSTES)) && muets.every(vide)
+      && vue(neuve).action && vue(neuve).action.cle === 'ajouter' && vide(vue(neuve, 'chargement')) && vide(vue(neuve, 'echec'))
+      && vue(neuve, 'ok', { peutAjouter: false }).action === null && vide(vue({ ...l52, type: 'zone' })),
+    json({ v52, muets }));
+    const dep = Li('Depose de l’ancien carrelage au sol', 'm2', 2000);
+    const vDep = vue(dep);
+    const faience = Li('pose de faience murale', 'h', 4500, { mainOeuvre: true });
+    const vFai = vue(faience);
+    const vFai2 = vue(Li('Pose de faïence murale', 'h', 4500, { mainOeuvre: true }));
+    const vAvant = vue(l52, 'ok', { regimeDeclareLe: '2099-01-01T00:00:00Z' });
+    const vEgal = vue(Li('Chape sèche avant carrelage collé', 'm2', 4500));
+    verifier('…une ligne VARIANTE dit « Ce poste existe déjà dans votre base » et la sortie en UN paragraphe — sans recopier la phrase '
+      + 'du poste quand la référence la cite déjà (ECRAN9) ; sans référence, il la nomme, dit « Il n’a pas encore de prix de '
+      + 'référence. » et propose « Fixer le prix » ; même phrase sans prix : « Dans votre base, sans prix de référence. » ; prix égal : '
+      + '« Dans votre base de postes. » et « Modifier » ; référence d’avant le régime : « Modifier », aucune question',
+    vDep.existe === `Ce poste existe déjà dans votre base. ${P.PHRASE_SORTIE}` && /pour « Dépose de l’ancien carrelage au sol »/.test(recoudre(vDep.reference))
+      && vDep.action.cle === 'changer'
+      && vFai.existe === `Ce poste existe déjà dans votre base, sous « Pose de faïence murale ». ${P.PHRASE_SORTIE}`
+      && vFai.reference === null && vFai.phraseEtat === 'Il n’a pas encore de prix de référence.' && vFai.action.cle === 'fixer'
+      && vFai2.existe === null && vFai2.phraseEtat === 'Dans votre base, sans prix de référence.' && vFai2.action.cle === 'fixer'
+      && vEgal.ecart === null && vEgal.phraseEtat === 'Dans votre base de postes.' && vEgal.action.cle === 'modifier'
+      && vEgal.action.avecLePrixDeLaLigne === false && vAvant.ecart === null && vAvant.action.cle === 'modifier',
+    json({ vDep: vDep.existe, vFai: [vFai.existe, vFai.phraseEtat], vFai2: vFai2.phraseEtat, vEgal: vEgal.phraseEtat }));
+  }
+
+  /* -- (5) LA FEUILLE « AJOUTER À MA BASE » ------------------------------- */
+  {
+    const valeurs = P.posteDepuisLaLigne(Li('Chape sèche avant carrelage collé', 'm2', 5200));
+    const etat = (plus) => P.etatDeLaFeuilleAjout({ valeurs, postes: POSTES, ...plus });
+    const ref = POSTES[0].prixReferenceCentimes;
+    const sansPrix = P.etatDeLaFeuilleAjout({ valeurs: P.posteDepuisLaLigne(Li('Pose de faïence murale', 'h', 4500, { mainOeuvre: true })), postes: POSTES, prixTape: 4500 });
+    const r = {
+      saisie: P.etatDeLaFeuilleAjout({ valeurs, postes: null, prixTape: 5200 }),
+      invisible: P.etatDeLaFeuilleAjout({ valeurs, postes: [], doublonInvisible: true }),
+      meme: etat({ prixTape: ref }),
+      enTrainDeTaper: etat({ prixTape: ref, prixTouche: true }),
+      vide: etat({ prixTape: null }),
+      autre: etat({ prixTape: 5200 }),
+    };
+    verifier('la feuille d’ajout (`etatDeLaFeuilleAjout`) : « saisie » tant que la base lue n’a pas ce poste ; « existe » sinon — et '
+      + '« même prix » (« Fermer » seul, NI champ NI bouton) seulement quand le prix PORTÉ est un vrai montant égal à la référence ET '
+      + 'que l’artisan ne tape pas : un prix en train d’être tapé garde le champ et « Changer ma référence » (ECRAN4), un prix VIDE '
+      + 'n’est jamais « le même » ; sans référence, « Fixer le prix » ; un doublon que la base ne montre pas : « invisible »',
+    r.saisie.etat === 'saisie' && r.saisie.champ && r.saisie.action === 'ajouter'
+      && r.invisible.etat === 'invisible' && !r.invisible.champ && r.invisible.action === null
+      && r.meme.etat === 'existe' && r.meme.memePrix && !r.meme.champ && r.meme.action === null
+      && !r.enTrainDeTaper.memePrix && r.enTrainDeTaper.champ && r.enTrainDeTaper.action === 'changer'
+      && !r.vide.memePrix && r.vide.champ && r.vide.action === 'changer' && r.autre.action === 'changer'
+      && sansPrix.etat === 'existe' && sansPrix.action === 'fixer' && sansPrix.champ
+      && !!r.meme.existant && r.meme.existant.id === 'p1',
+    json(Object.fromEntries(Object.entries(r).map(([k, x]) => [k, [x.etat, x.memePrix, x.champ, x.action]]))));
+  }
+
+  /* -- (6) LA FEUILLE D'UN POSTE ------------------------------------------ */
+  {
+    const chape = POSTES[0];
+    const carte = P.vueDeLaFeuillePoste({ poste: chape, prixPropose: 5200 });
+    const page = P.vueDeLaFeuillePoste({ poste: chape, depuisLaPage: true });
+    const sansPrix = P.vueDeLaFeuillePoste({ poste: POSTES[1], depuisLaPage: true });
+    const retrait = P.phraseRetraitDuPrix(chape);
+    verifier('la feuille d’un poste (`vueDeLaFeuillePoste`) : ouverte depuis la CARTE avec un autre prix que la référence, elle DIT '
+      + 'la référence (« Votre prix de référence actuel : 45,00 € / m², fixé le … », ECRAN3), n’offre qu’« Enregistrer » et renvoie '
+      + 'à la page pour retirer (ECRAN2) ; depuis la PAGE, « Le prix actuel a été fixé le … » et les deux retraits — celui du prix '
+      + 'seulement s’il y en a un ; le second appui dit ce qui part (« … sera effacé : Opus n’en garde aucune trace. »)',
+    carte.prixDepart === 5200 && recoudre(carte.phrasePrix) === `Votre prix de référence actuel : ${CT.centimesLisibles(4500)} / m², fixé le 14/10/2026.`
+      && carte.phrasePrix.prix === 4500 && !carte.retirerLePrix && !carte.retirerLePoste && carte.renvoiALaPage
+      && page.prixDepart === 4500 && recoudre(page.phrasePrix) === 'Le prix actuel a été fixé le 14/10/2026.'
+      && page.retirerLePrix && page.retirerLePoste && !page.renvoiALaPage
+      && !sansPrix.retirerLePrix && sansPrix.retirerLePoste && sansPrix.phrasePrix === null
+      && recoudre(retrait) === `Le prix de référence ${CT.centimesLisibles(4500)} / m², fixé le 14/10/2026, sera effacé : Opus n’en garde aucune trace.`
+      && retrait.prix === 4500 && P.phraseRetraitDuPrix(POSTES[1]) === null,
+    json({ carte, page, sansPrix, retrait }));
+
+    const absente = P.vueDeLaFeuillePoste({ poste: chape, depuisLaPage: true, absent: true });
+    verifier('…et un poste ABSENT de la base relue (TEXTES5) : rien à enregistrer, rien à retirer, la phrase dit pourquoi',
+      absente.enregistrer === false && !absente.retirerLePrix && !absente.retirerLePoste && !absente.renvoiALaPage
+      && absente.phraseAbsent === P.PHRASE_POSTE_ABSENT && page.enregistrer === true && page.phraseAbsent === null,
+    json(absente));
+
+    /* « RETIRER CE POSTE » DIT CE QUI ARRIVE VRAIMENT (relecture « textes »,
+       TEXTES2). La phrase d'avant promettait « Il ne sera plus proposé sur
+       vos devis » ; or un poste naît d'une ligne de devis, et la mémoire des
+       prix relit ces lignes : le poste retiré, la même phrase REVIENT. On le
+       FAIT TOURNER — un poste et la ligne d'où il vient, puis le poste
+       retiré —, et la phrase de confirmation doit dire ce que le calcul
+       montre : si la mémoire repropose, elle le dit, et ne promet rien
+       d'autre. Puis la feuille doit afficher CETTE phrase-là, au second
+       appui. */
+    const phraseDuPoste = 'Dépose de l’évier chez Mme Martin';
+    const posteRetire = { id: 'r1', designation: phraseDuPoste, unite: 'forfait', fournitureNonComprise: false, mainOeuvre: false,
+      prixReferenceCentimes: 12000, prixFixeLe: '2026-10-20T10:01:00Z', modifieLe: '2026-10-20T10:01:00Z', createdAt: '2026-10-20T10:01:00Z' };
+    const ligneDOrigine = { id: 'lr1', type: 'poste', designation: phraseDuPoste, unite: 'forfait', prixUnitaireCentimes: 12000,
+      modifieLe: '2026-10-20T10:00:00Z', devis: { id: 'd-martin', objet: 'Salle de bains', source: 'manuelle', modifieLe: '2026-10-20T10:00:00Z' } };
+    const avantRetrait = P.suggestionsPourLaFrappe({ postes: [posteRetire], memoire: [ligneDOrigine], texte: 'Dépose', idLigne: 'autre' });
+    const apresRetrait = P.suggestionsPourLaFrappe({ postes: [], memoire: [ligneDOrigine], texte: 'Dépose', idLigne: 'autre' });
+    const reproposee = apresRetrait.some((x) => x.designation === phraseDuPoste);
+    const phraseRetrait = String(P.PHRASE_RETRAIT_DU_POSTE || '');
+    verifier('« Retirer ce poste » dit la vérité (TEXTES2) : poste retiré, la mémoire des prix REPROPOSE sa phrase — la confirmation '
+      + 'le dit (« Opus peut encore vous la proposer »), ne promet pas « plus proposé sur vos devis », et la feuille l’affiche au '
+      + 'second appui',
+    avantRetrait.length > 0 && avantRetrait[0].source === 'base' && reproposee
+      && /Opus peut encore vous la proposer/.test(phraseRetrait) && /plus proposé comme poste de votre base/.test(phraseRetrait)
+      && !/plus proposée? sur vos devis/.test(phraseRetrait) && !/(tant qu|toujours|jamais plus)/.test(phraseRetrait)
+      && /\{vue\.retirerLePoste && confirmeRetrait && <Text style=\{s\.aide\}>\{PHRASE_RETRAIT_DU_POSTE\}<\/Text>\}/.test(EC.poste)
+      && !/plus proposé sur vos devis/.test(EC.poste),
+    json({ avant: avantRetrait.map((x) => x.source), apres: apresRetrait.map((x) => x.source), phraseRetrait }));
+  }
+
+  /* -- (7) LA PAGE « MA BASE DE POSTES » ---------------------------------- */
+  {
+    const page = (plus) => P.vueDeLaPage({ postes: POSTES, etat: 'ok', lus: true, recherche: '', ...plus });
+    const ids = (v) => v.visibles.map((p) => p.id);
+    const relueRatee = page({ etat: 'echec', recherche: 'zzzz' });
+    const jamaisLue = page({ etat: 'echec', lus: false, recherche: 'zzzz' });
+    verifier('la page (`vueDeLaPage`) cherche par la CLÉ : « beton » et « BETON » trouvent la dalle, « seche chape » la chape, '
+      + '« Les » et « DURANDAL » rien ; triée par la phrase ; après une relecture RATÉE, une recherche sans résultat dit « Aucun poste '
+      + 'ne contient » — jamais « Lecture impossible » sous une liste lue (ECRAN6) ; jamais lue : « Lecture impossible », aucune '
+      + 'rangée ; le compte (« 8 postes », « 1 poste ») ne se dit que d’une liste lue',
+    json(ids(page({ recherche: 'beton' }))) === json(['p8']) && json(ids(page({ recherche: 'BETON' }))) === json(['p8'])
+      && json(ids(page({ recherche: 'seche chape' }))) === json(['p1']) && ids(page({ recherche: 'Les' })).length === 0
+      && ids(page({ recherche: 'DURANDAL' })).length === 0 && json(ids(page({}))) === json(P.trierPostes(POSTES).map((p) => p.id))
+      && relueRatee.garderLaListe && relueRatee.vide === 'recherche' && relueRatee.visibles.length === 0
+      && jamaisLue.vide === 'illisible' && jamaisLue.visibles.length === 0 && !jamaisLue.garderLaListe
+      && page({ postes: [] }).vide === 'base_vide' && page({}).compte === '8 postes' && page({ postes: [POSTES[0]] }).compte === '1 poste'
+      && page({ etat: 'chargement', lus: false }).enAttente && page({ etat: 'chargement', lus: false }).compte === null
+      && !page({ etat: 'chargement', lus: true }).enAttente,
+    json({ relueRatee: [relueRatee.vide, relueRatee.garderLaListe], jamaisLue: jamaisLue.vide }));
+  }
+
+  /* -- (8) LA LECTURE DE LA BASE ------------------------------------------ */
+  {
+    const combos = [];
+    for (const reussie of [true, false]) for (const depassee of [true, false]) for (const jetee of [true, false]) for (const relancee of [true, false]) {
+      combos.push([{ reussie, depassee, jetee, relancee }, P.issueDeLaLecture({ reussie, depassee, jetee, relancee })]);
+    }
+    const coince = combos.filter(([c, i]) => i.etat === null && !i.relancer && !c.depassee);
+    verifier('une lecture de la base (`issueDeLaLecture`) ne laisse JAMAIS la base « en lecture » sans qu’une autre lecture soit en '
+      + 'route (ECRAN5 : une lecture jetée revenait sans rien poser, et la base disparaissait des devis) : dépassée, la plus récente '
+      + 'décidera ; jetée une première fois, elle se RELANCE ; une seconde fois, elle pose l’état sans écraser la liste rangée ; et '
+      + 'une base lue reste « ok » pendant qu’on la relit (`etatAuDepartDeLaLecture`)',
+    combos.length === 16 && coince.length === 0
+      && combos.every(([c, i]) => (c.depassee ? i.etat === null && !i.relancer && !i.prendre : true))
+      && combos.every(([c, i]) => (!c.depassee && !c.jetee ? i.etat === (c.reussie ? 'ok' : 'echec') && i.prendre === c.reussie : true))
+      && combos.every(([c, i]) => (!c.depassee && c.jetee && !c.relancee ? i.relancer && i.etat === null : true))
+      && combos.every(([c, i]) => (!c.depassee && c.jetee && c.relancee ? !i.relancer && !i.prendre && i.etat === (c.reussie ? 'ok' : 'echec') : true))
+      && P.etatAuDepartDeLaLecture('ok') === 'ok' && ['echec', 'vide', 'chargement', undefined].every((e) => P.etatAuDepartDeLaLecture(e) === 'chargement'),
+    json(coince));
+  }
+
+  /* -- (9) LA RANGÉE DE LA LISTE DU DEVIS (Q3 a) -------------------------- */
+  {
+    const sejour = MEMOIRE_DEMO.filter((l) => l.devis && l.devis.objet === 'Sol du séjour');
+    const fautes = sejour.filter((l) => {
+      const r = D.proprietesDeLaRangee(l, { etats: { [l.id]: 'echec' }, phrasesEchec: { [l.id]: 'non enregistrée' } });
+      return json(Object.keys(r)) !== json(D.PROPRIETES_DE_LA_RANGEE) || r.designation !== l.designation || r.total !== D.totalLigne(l)
+        || /r[ée]f/i.test(json(r)) || r.erreurTexte !== 'non enregistrée';
+    });
+    const avecRef = sejour.filter((l) => P.referenceDuPoste(l, POSTES));
+    verifier('la rangée de la liste du devis (`proprietesDeLaRangee`) reçoit EXACTEMENT les treize valeurs de '
+      + '`PROPRIETES_DE_LA_RANGEE` — la phrase de la ligne mot pour mot, son total, son état — et rien de la base de postes : la liste '
+      + 'est l’écran qu’on montre à un client (Q3 a ; la relecture y avait écrit la phrase de référence sans qu’un contrôle rougisse)',
+    sejour.length === 6 && avecRef.length >= 2 && fautes.length === 0 && D.PROPRIETES_DE_LA_RANGEE.length === 13
+      && D.proprietesDeLaRangee.length === 1, fautes.map((l) => l.designation).join(' | '));
+  }
+
+  /* ================================================================== */
+  /*  LES ÉCRANS PASSENT PAR CES FONCTIONS — une liste FERMÉE de formes   */
+  /* ================================================================== */
+  const norm = (x) => String(x || '').replace(/\s+/g, ' ').trim();
+  const importsDe = (src, de) => {
+    const m = new RegExp(`import \\{([^}]*)\\} from '${de.replace(/[./]/g, (c) => `\\${c}`)}';`).exec(src);
+    return m ? m[1].split(',').map((x) => x.trim()).filter(Boolean).sort() : null;
+  };
+
+  /* -- (10) ChampDesignation ---------------------------------------------- */
+  {
+    const d = EC.designation;
+    const corps = d.slice(d.indexOf('}, ref) {'));
+    verifier('`ChampDesignation` affiche les rangées de `propositionsAMontrer` TELLES QUELLES : il n’importe de `postes.js` QUE cette '
+      + 'fonction, l’appelle UNE fois avec le texte tapé, le texte choisi, la base, son état et la mémoire — sans les retoucher —, et '
+      + 'ne filtre, ne coupe, ne trie, ne complète jamais la liste qu’elle rend (`rangees` : sa déclaration, `.length > 0`, `.map`)',
+    json(importsDe(d, '../lib/postes')) === json(['propositionsAMontrer'])
+      && norm(d).includes(norm('const rangees = useMemo( () => propositionsAMontrer({ postes, postesEtat, memoire, texte: recherche, '
+        + 'choisi, idLigne }), [postes, postesEtat, memoire, recherche, choisi, idLigne], );'))
+      && (d.match(/\bpropositionsAMontrer\(/g) || []).length === 1 && (d.match(/\brangees\b/g) || []).length === 3
+      && /\{rangees\.length > 0 && \(/.test(d) && /\{rangees\.map\(\(r\) => \(/.test(d) && (d.match(/\.map\(/g) || []).length === 1
+      && !/\.(slice|filter|concat|splice|sort|reverse|push|unshift)\(/.test(d)
+      && !/\b(postes|postesEtat|memoire|recherche|choisi)\s*=[^=>]/.test(corps)
+      && /onChoisir\(r\.proposition\)/.test(d) && /<Text style=\{s\.suggestionTitre\} numberOfLines=\{2\}>\{r\.titre\}<\/Text>/.test(d)
+      && /setChoisi\(null\)/.test(d) && /setChoisi\(r\.titre\)/.test(d)
+      /* LE TEXTE D'OUVERTURE COMPTE COMME « CHOISI » : sans cela, une ligne
+         existante s'ouvre avec des propositions (B1 du lot 1). */
+      && /const \[choisi, setChoisi\] = useState\(defaut \|\| null\);/.test(d));
+  }
+
+  /* -- (11) CarteLigne ---------------------------------------------------- */
+  {
+    const c = EC.carte;
+    const t11 = [...c.matchAll(/suivreT11\(\{ type: '(\w+)'/g)].map((m) => m[1]).sort();
+    const quantite = balisesE(c, 'ChampMontant').find((b) => /ref=\{refQuantite\}/.test(b)) || '';
+    const iU = c.indexOf('{UNITES.map((');
+    const unites = iU >= 0 ? c.slice(iU, c.indexOf("{sous('unite')}", iU)) : '';
+    const choisir = blocApres(c, 'onChoisir={(sug) => {');
+    verifier('`CarteLigne` affiche `vueDeLaBase` TELLE QUELLE : elle n’importe de `postes.js` que la liste fermée (`vueDeLaBase`, la '
+      + 'phrase de T11, ce qu’un appui recopie, le poste à ouvrir), l’appelle UNE fois — avec `peutAjouter` —, ne lit JAMAIS l’état '
+      + 'de la base elle-même (`postesEtat ===`), et n’écrit aucun libellé de bouton de la base : le seul bouton du bloc est '
+      + '`vue.action`',
+    json(importsDe(c, '../lib/postes')) === json(['PHRASE_UNITE_VIDE', 'phraseUniteApres', 'posteDeLaLigne', 'posteDepuisLaLigne',
+      'prixAEcrire', 'valeursDeLaProposition', 'vueDeLaBase'])
+      && norm(c).includes(norm("const vue = vueDeLaBase(ligne, chiffree ? postes : null, chiffree ? postesEtat : 'sans_objet', { "
+        + 'regimeDeclareLe, peutAjouter: !!onAjouterALaBase, });'))
+      && (c.match(/\bvueDeLaBase\(/g) || []).length === 1 && !/postesEtat\s*[!=]==/.test(c)
+      && !/'(Ajouter à ma base|Changer ma référence|Fixer le prix|Modifier)'|"(Ajouter à ma base|Changer ma référence|Fixer le prix|Modifier)"/.test(c)
+      && (c.match(/<Pastille label=\{vue\.action\.label\} nom=\{vue\.action\.nom\} onPress=\{\(\) => agir\(vue\.action\)\} \/>/g) || []).length === 1
+      && /\{!!vue\.action && \(/.test(c) && /\{!!vue\.reference && \(/.test(c));
+    verifier('…et sa phrase de T11 ne change QUE par `phraseUniteApres` : un seul `setT11`, et les quatre gestes — la proposition '
+      + '(au choix d’une suggestion), la quantité quittée (au `onBlur` de la quantité, avec son texte), l’unité rechoisie, la '
+      + 'surface recopiée ; la phrase rendue est `t11.phrase`',
+    (c.match(/\bsetT11\(/g) || []).length === 1 && /const suivreT11 = \(geste\) => setT11\(\(e\) => phraseUniteApres\(e, geste\)\);/.test(c)
+      && json(t11) === json(['proposition', 'quantite_quittee', 'surface', 'unite'])
+      && /suivreT11\(\{ type: 'quantite_quittee', quantite: quantiteLue\(\) \}\)/.test(quantite)
+      && /suivreT11\(\{ type: 'proposition', avant, unite: v\.unite, quantite: quantiteLue\(\) \}\)/.test(choisir)
+      && /suivreT11\(\{ type: 'unite' \}\)/.test(unites)
+      && /\{!!t11\.phrase && <Text style=\{s\.aide\} accessibilityLiveRegion="polite">\{t11\.phrase\}<\/Text>\}/.test(c),
+    json(t11));
+  }
+
+  /* -- (12) les deux feuilles --------------------------------------------- */
+  {
+    const a = EC.ajout;
+    const existe = a.slice(a.indexOf("} else if (feuille.etat === 'existe') {"), a.indexOf("titre = 'Ajouter à ma base';"));
+    const i = (k) => existe.indexOf(`key="${k}"`);
+    verifier('`FeuilleAjoutPoste` : « existe déjà » met la DÉCISION avant les explications — le poste, son prix, le champ, « Changer '
+      + 'ma référence », « Fermer », PUIS « Votre ligne », pourquoi, la sortie (ECRAN10) ; la ligne qui redisait le titre est partie '
+      + '(ECRAN8)',
+    i('poste') >= 0 && i('poste') < i('sa-reference') && i('sa-reference') < i('changer') && i('changer') < i('fermer')
+      && i('fermer') < i('ligne') && i('ligne') < i('pourquoi') && i('pourquoi') < i('sortie')
+      && !/Ce poste existe déjà dans votre base\./.test(a), json(['poste', 'sa-reference', 'changer', 'fermer', 'ligne', 'pourquoi', 'sortie'].map(i)));
+    const p = EC.poste;
+    verifier('`FeuillePoste` montre `vueDeLaFeuillePoste` : appelée UNE fois ; le champ part de `vue.prixDepart` ; la phrase du prix est '
+      + '`vue.phrasePrix` ; « Retirer le prix de référence » n’existe que sous `vue.retirerLePrix`, « Retirer ce poste » que sous '
+      + '`vue.retirerLePoste`, le renvoi à la page que sous `vue.renvoiALaPage` — aucune condition écrite à la main sur le prix',
+    norm(p).includes(norm('const vue = vueDeLaFeuillePoste({ poste, prixPropose, depuisLaPage, regimeDeclareLe, absent });'))
+      && (p.match(/\bvueDeLaFeuillePoste\(/g) || []).length === 1 && /defaut=\{centimesEnSaisie\(vue\.prixDepart\)\}/.test(p)
+      && /<Phrase morceaux=\{vue\.phrasePrix\} style=\{s\.aide\} \/>/.test(p)
+      && /\{vue\.retirerLePrix && \(\s*<Pressable\s+onPress=\{retirerLePrix\}/.test(p)
+      && /\{vue\.retirerLePoste && \(\s*<Pressable\s+onPress=\{retirerLePoste\}/.test(p)
+      && (p.match(/onPress=\{retirerLePrix\}/g) || []).length === 1 && (p.match(/onPress=\{retirerLePoste\}/g) || []).length === 1
+      && /\{vue\.renvoiALaPage && \(/.test(p) && !/prixReferenceCentimes\s*(!=|!==|==|===)\s*null\s*&&/.test(p)
+      && !/phraseFixeLe/.test(p));
+    /* TEXTES5 : un poste qui n'est plus dans la base relue ne laisse que sa
+       phrase, POURQUOI, et « Fermer » — ni « Enregistrer » (qui repartirait
+       vers un poste qui n'existe plus), ni retrait. Et le « modifié
+       entre-temps » se dit d'après la relecture, jamais « relu » d'office. */
+    const branchesAbsent = p.slice(p.indexOf('if (vue.phraseAbsent) {'), p.indexOf('if (vue.phraseAbsent) {') + 600);
+    const finAbsent = branchesAbsent.indexOf('</FeuilleBas>');
+    const absentSeul = finAbsent > 0 ? branchesAbsent.slice(0, finAbsent) : '';
+    verifier('…un poste ABSENT de la base relue (`vue.phraseAbsent`) ne montre que sa phrase, pourquoi, et « Fermer » ; le « modifié '
+      + 'entre-temps » se dit par `issueDuModifieEntreTemps(await onRelire(), …)`, jamais « relu » d’office (TEXTES5)',
+    /\{vue\.phraseAbsent\}/.test(absentSeul) && /<BtnOutline label="Fermer" onPress=\{onFermer\} \/>/.test(absentSeul)
+      && !/enregistrer|retirerLe|ChampMontant/.test(absentSeul)
+      && /issueDuModifieEntreTemps\(await onRelire\(\), poste\.id\)/.test(p) && !/await onRelire\(\);/.test(p)
+      && /issueDuModifieEntreTemps\(await onRelire\(\), existant\.id\)/.test(a)
+      && /<FeuillePoste\b[^>]*\babsent=\{!posteLu\}/.test(EC.page.replace(/\s+/g, ' '))
+      && /\babsent=\{!!lue && !posteLu\}/.test(EC.saisie),
+    absentSeul.slice(0, 200));
+  }
+
+  /* -- (13) la page -------------------------------------------------------- */
+  {
+    const pg = EC.page;
+    verifier('`PostesScreen` montre `vueDeLaPage` : appelée UNE fois avec la base, son état, « déjà lue » et la recherche ; la liste '
+      + 'est `vue.visibles`, le message vide `vue.vide`, l’attente `vue.enAttente` — aucun filtre, aucun tri écrit ici',
+    norm(pg).includes(norm('const vue = useMemo( () => vueDeLaPage({ postes, etat, lus, recherche, incomplete, total }), '
+      + '[postes, etat, lus, recherche, incomplete, total], );'))
+      && (pg.match(/\bvueDeLaPage\(/g) || []).length === 1 && /data=\{vue\.visibles\}/.test(pg) && /if \(vue\.enAttente\) \{/.test(pg)
+      && /if \(vue\.vide === 'illisible'\) \{/.test(pg) && /\} else if \(vue\.vide === 'recherche'\) \{/.test(pg)
+      && !/\.(filter|sort)\(|correspondALaRecherche|trierPostes/.test(pg));
+  }
+
+  /* -- (14) la saisie : la rangée, la feuille d'ajout --------------------- */
+  {
+    const s = EC.saisie;
+    const def = (/const RangeeLigne = React\.memo\(function RangeeLigne\(\{([\s\S]*?)\}\)/.exec(s) || [])[1] || '';
+    const params = def.split(',').map((x) => x.trim().split(/\s*=/)[0]).filter(Boolean).sort();
+    const balises = balisesE(s, 'RangeeLigne');
+    const iR = s.indexOf('<RangeeLigne');
+    const element = iR >= 0 ? s.slice(iR, s.indexOf('/>', iR) + 2) : '';
+    verifier('`SaisieDevisScreen` : la rangée de la liste reçoit `proprietesDeLaRangee(item, …)` ET RIEN D’AUTRE que ses deux '
+      + 'rappels — l’élément est écrit EXACTEMENT ainsi : une valeur ajoutée, une désignation retouchée font rougir',
+    balises.length === 1 && norm(element) === norm('<RangeeLigne {...proprietesDeLaRangee(item, { sousTotaux: sous, etats, erreurs, '
+      + 'phrasesEchec })} onOuvrir={ouvrirStable} onReessayer={reessayerStable} />'), norm(element).slice(0, 220));
+    verifier('…`RangeeLigne` n’accepte que les treize valeurs et les deux rappels ; la feuille d’ajout reçoit `postesLus(postes, postesEtat)`',
+      json(params) === json([...D.PROPRIETES_DE_LA_RANGEE, 'onOuvrir', 'onReessayer'].sort())
+      && /postes=\{postesLus\(postes, postesEtat\)\}/.test(balisesE(s, 'FeuilleAjoutPoste')[0] || ''), json(params));
+  }
+
+  /* -- (14 bis) LES PHRASES DE LA RELECTURE « TEXTES » ----------------------
+     Chaque propriété est FAITE TOURNER, puis on vérifie que l'écran affiche
+     ce que la fonction rend — jamais une phrase écrite à la main. */
+  {
+    /* TEXTES8 : supprimer un brouillon dit que ses postes restent. */
+    const devisDeLaChape = POSTES[0].devisOrigineId;
+    const avecPostes = P.phraseSuppressionDuBrouillon({ postes: POSTES, postesEtat: 'ok', devisId: devisDeLaChape });
+    const sansPostes = P.phraseSuppressionDuBrouillon({ postes: POSTES, postesEtat: 'ok', devisId: 'un-autre-devis' });
+    const pasLue = P.phraseSuppressionDuBrouillon({ postes: POSTES, postesEtat: 'echec', devisId: devisDeLaChape });
+    const debut = 'Définitif : le brouillon et toutes ses lignes partent. Rien n’avait été envoyé au client.';
+    verifier('« Supprimer ce brouillon » dit ce qui RESTE (TEXTES8) : un poste rangé depuis ce devis → « Les postes que vous en '
+      + 'avez rangés … restent » ; aucun → rien de plus ; base pas lue → « S’il y en a… » — et la saisie affiche ce que la '
+      + 'fonction rend',
+    devisDeLaChape != null && avecPostes === `${debut} Les postes que vous en avez rangés dans votre base de postes restent.`
+      && sansPostes === debut && pasLue === `${debut} S’il y en a, les postes que vous en avez rangés dans votre base de postes restent.`
+      && /\{confirmeSuppression && <Text style=\{s\.aide\}>\{phraseSuppression\}<\/Text>\}/.test(EC.saisie)
+      && /phraseSuppression=\{phraseSuppressionDuBrouillon\(\{ postes, postesEtat, devisId: devisIdInitial \}\)\}/.test(EC.saisie)
+      && !/toutes ses lignes partent/.test(EC.saisie),
+    json({ avecPostes, sansPostes, pasLue }));
+
+    /* TEXTES9 : les motifs qui désignent un client sans connaître sa fiche,
+       et la fiche demandée à l'ouverture de la feuille d'ajout. */
+    const motifs = ['Travaux Mlle Durand', 'Travaux Mr Durand', 'Travaux M.Durand', 'Cuisine famille Dupont', 'Travaux Mme, au 2e',
+      'Appeler +33 6 12 34 56 78', 'Appeler 0033 6 12 34 56 78', 'Appeler 06.12.34.56.78']
+      .map((ph) => [ph, P.indicesDuClient(ph).map((x) => x.genre)]);
+    const muets = motifs.filter(([, g]) => g.length === 0);
+    const neutres = ['Chape sèche avant carrelage collé', 'Pose de 12 m de plinthes', 'Dalle béton 12 cm, ferraillage HA8']
+      .filter((ph) => P.indicesDuClient(ph).length > 0);
+    verifier('les motifs d’un client sans sa fiche (TEXTES9) : « Mlle », « Mr », « M.Durand », « famille », une civilité suivie d’une '
+      + 'virgule, un numéro en +33 ou 0033 sont signalés ; trois phrases de métier ne le sont pas ; la saisie demande le carnet à '
+      + 'l’ouverture de la feuille d’ajout, et passe le nom du demandeur quand elle le connaît',
+    muets.length === 0 && neutres.length === 0
+      && /if \(devis\.clientId && \(clientsEtat === 'vide' \|\| clientsEtat === 'echec'\)\) onChargerClients\(\);\s*setFeuille\(\{\s*type: 'ajout'/.test(EC.saisie)
+      && /client=\{clientFiche \|\| client \|\| \(ouverture\.demandeSource \? clientDepuisDemande\(ouverture\.demandeSource\) : null\)\}/.test(EC.saisie),
+    json({ muets, neutres }));
+
+    /* TEXTES10 : la phrase de l'avertissement ne dit rien deux fois. */
+    const ind = (liste) => P.phraseIndices(liste);
+    const deuxNoms = ind([{ genre: 'nom', mot: 'Durand' }, { genre: 'nom', mot: 'Lefèvre' }]);
+    const deuxNumeros = ind([{ genre: 'telephone', mot: null }, { genre: 'numero', mot: null }]);
+    const nomEtFormule = ind([{ genre: 'nom', mot: 'Martin' }, { genre: 'civilite', mot: null }]);
+    const adresse = ind([{ genre: 'adresse', mot: 'Oliviers' }]);
+    const compte = (t, x) => t.split(x).length - 1;
+    verifier('l’avertissement d’un nom de client ne répète rien (TEXTES10) : deux mots du nom en UN morceau, le numéro du client sans '
+      + '« un numéro de téléphone » en double, une virgule avant le dernier « et » quand un morceau en porte une, et un mot '
+      + 'd’adresse « du client ou du chantier »',
+    deuxNoms === 'Cette phrase contient « Durand » et « Lefèvre », des mots du nom du client de ce devis. Elle resterait dans votre base '
+      + 'même si vous supprimez ce client.'
+      && compte(deuxNoms, 'du client de ce devis') === 1
+      && deuxNumeros === 'Cette phrase contient le numéro de téléphone du client de ce devis. Elle resterait dans votre base même si vous '
+        + 'supprimez ce client.'
+      && /« Martin », le nom du client de ce devis, et une formule/.test(nomEtFormule)
+      && /« Oliviers », un mot de l’adresse du client ou du chantier\./.test(adresse) && !/adresse de ce devis/.test(adresse)
+      && P.phraseIndices([]) === null,
+    json({ deuxNoms, deuxNumeros, nomEtFormule, adresse }));
+
+    /* TEXTES12 : la page dit qu'elle est coupée, avec le vrai total, et que
+       la recherche ne porte que sur ce qui est lu ; une civilité ne compte
+       pas ; une recherche de plusieurs mots sans résultat est conseillée. */
+    const coupee = P.vueDeLaPage({ postes: POSTES, etat: 'ok', lus: true, incomplete: true, total: 1200 });
+    const coupeeSansTotal = P.vueDeLaPage({ postes: POSTES, etat: 'ok', lus: true, incomplete: true, total: null });
+    const entiere = P.vueDeLaPage({ postes: POSTES, etat: 'ok', lus: true, incomplete: false, total: POSTES.length });
+    const nbsp = String.fromCharCode(0xa0);
+    const civil = P.vueDeLaPage({ postes: [...POSTES, { id: 'zm', designation: 'Reprise fissures maison MARTIN', unite: 'u' }],
+      etat: 'ok', lus: true, recherche: 'Mme Martin' });
+    const rien = P.vueDeLaPage({ postes: POSTES, etat: 'ok', lus: true, recherche: 'Mme Introuvable' });
+    const unMot = P.vueDeLaPage({ postes: POSTES, etat: 'ok', lus: true, recherche: 'Introuvable' });
+    verifier('la page coupée (TEXTES12) : « votre base compte 1 200 postes, Opus n’en a lu que 8 » et « La recherche ne porte que sur '
+      + 'ceux-là » ; le compte de l’en-tête est le VRAI total ; sans total, « plus de postes qu’Opus n’en a lu » ; entière, aucune '
+      + 'bande ; « Mme Martin » trouve « maison MARTIN » ; une recherche de plusieurs mots sans résultat conseille le nom de famille',
+    coupee.bandeIncomplete === `Liste incomplète : votre base compte 1${nbsp}200 postes, Opus n’en a lu que ${POSTES.length}. La recherche ne porte que sur ceux-là.`
+      && coupee.compte === `1${nbsp}200 postes`
+      && /plus de postes qu’Opus n’en a lu/.test(coupeeSansTotal.bandeIncomplete || '') && /ceux-là/.test(coupeeSansTotal.bandeIncomplete || '')
+      && entiere.bandeIncomplete === null && entiere.compte === `${POSTES.length} postes`
+      && civil.visibles.length === 1 && civil.visibles[0].id === 'zm'
+      && rien.vide === 'recherche' && /nom de famille, seul/.test(rien.aideRecherche || '') && unMot.aideRecherche === null
+      && /\{vue\.aideRecherche\}/.test(EC.page),
+    json({ bande: coupee.bandeIncomplete, compte: coupee.compte, civil: civil.visibles.map((x) => x.id), aide: rien.aideRecherche }));
+
+    /* TEXTES14 : la feuille d'ajout donne les DEUX façons d'ôter un nom. */
+    verifier('la feuille d’ajout donne les deux façons d’ôter un nom de client : corriger la ligne, ou corriger la phrase ensuite dans '
+      + '« Ma base de postes » — qui ne touche pas le devis de ce client (TEXTES14)',
+    /corrigez d’abord la ligne, ou corrigez-la ensuite dans « Ma base de\s+postes »/.test(EC.ajout), '');
+  }
+
+  /* -- (15) OpusApp : la lecture de la base ------------------------------- */
+  {
+    const app = EC.app;
+    const charger = blocApres(app, 'const chargerPostes = useCallback(() => {');
+    const etats = [...app.matchAll(/setPostesEtat\(([^;]*?)\);/g)].map((m) => m[1].trim()).sort();
+    verifier('`OpusApp` : l’état de la base ne change QUE par `etatAuDepartDeLaLecture` et `issueDeLaLecture` (deux écritures, et pas '
+      + 'une de plus) ; une lecture jetée se relance ; la liste lue ne remplace celle de l’écran que si l’issue le dit',
+    json(etats) === json(['(e) => etatAuDepartDeLaLecture(e)', 'issue.etat'].sort())
+      && /if \(issue\.relancer\) return lire\(true\);/.test(charger) && /if \(issue\.etat\) setPostesEtat\(issue\.etat\);/.test(charger)
+      && /if \(issue\.prendre\) \{\s*setPostes\(lu\.postes \|\| \[\]\);/.test(charger) && (charger.match(/setPostes\(/g) || []).length === 1
+      && /issueDeLaLecture\(\{/.test(charger), json(etats));
+  }
+
+  /* -- (16) les deux portes : rendues sous `onMaBase`, et RIEN d'autre ---- */
+  {
+    /* Les conditions qui enveloppent une position dans du JSX : chaque `{`
+       (ou `(` derrière `&&`, `||`, `?`, `:`) ouvert et pas encore refermé,
+       jusqu'au corps de la fonction. */
+    const enveloppes = (src, i) => {
+      const r = [];
+      let prof = 0;
+      for (let k = i - 1; k >= 0; k -= 1) {
+        const ch = src[k];
+        if (ch === '}' || ch === ')') prof += 1;
+        else if (ch === '{' || ch === '(') {
+          if (prof > 0) { prof -= 1; continue; }
+          const avant = src.slice(0, k).replace(/\s+$/, '');
+          if (ch === '{' && (/\)$/.test(avant) || /=>$/.test(avant))) break;
+          let entree = null;
+          if (ch === '{') entree = norm(src.slice(k, src.indexOf('\n', k)));
+          else if (/(&&|\|\||\?|:)$/.test(avant)) entree = norm(src.slice(Math.max(0, avant.lastIndexOf('\n')), k + 1));
+          /* `{x && (` : la parenthèse et l'accolade sont la MÊME condition. */
+          if (entree && r[r.length - 1] !== entree) r.push(entree);
+        }
+      }
+      return r;
+    };
+    const portes = [[EC.liste, 'DevisScreen'], [EC.profil, 'ProfilOwnScreen']].map(([src, nom]) => {
+      const n = (src.match(/onPress=\{onMaBase\}/g) || []).length;
+      return { nom, n, chaine: n === 1 ? enveloppes(src, src.indexOf('onPress={onMaBase}')) : null };
+    });
+    verifier('les DEUX portes de « Ma base de postes » sont rendues sous `{!!onMaBase && (` et sous AUCUNE autre condition (la '
+      + 'relecture les masquait d’un `false &&` sans qu’un contrôle rougisse) : une seule par écran',
+    portes.every((x) => x.n === 1 && json(x.chaine) === json(['{!!onMaBase && (']) ), json(portes));
+  }
+} catch (e) {
+  verifier('ce que les écrans montrent se fait tourner jusqu’au bout : rien ne PLANTE', false, e && e.stack);
+}
+
+/* ================================================================== */
 /*  F. QUI LIT, QUI ÉCRIT — chaque colonne de `base_postes`             */
 /* ================================================================== */
 console.log('\nF. QUI LIT, QUI ÉCRIT — chaque colonne de `base_postes`, lue dans le SCHÉMA, a un écrivain et un lecteur');
@@ -2252,9 +3069,10 @@ try {
        `devis.pro_id` dans `verifier-devis` — l'application ne la lit pas
        (elle ne la sélectionne même pas). */
     if (d.nom === 'pro_id' && /\bpro_id\b/.test(politique)) { parExceptions.push('pro_id (la politique)'); return; }
-    /* L'EXCEPTION NOMMÉE : la clé, écrite par son expression de génération,
-       lue par l'index du doublon — l'application ne la lit pas (T18). */
-    if (d.nom === 'cle_rapprochement' && /generated\s+always\s+as/i.test(d.texte) && /\bcle_rapprochement\b/.test(index)) {
+    /* L'EXCEPTION NOMMÉE : la clé, écrite par le DÉCLENCHEUR (24/10/2026 :
+       elle n'est plus générée), lue par l'index du doublon — l'application
+       ne la lit pas (T18). */
+    if (d.nom === 'cle_rapprochement' && /\bnew\.cle_rapprochement\s*:=/.test(fPoste) && /\bcle_rapprochement\b/.test(index)) {
       parExceptions.push('cle_rapprochement (l’index)');
       return;
     }

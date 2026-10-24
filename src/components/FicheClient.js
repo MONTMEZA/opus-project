@@ -30,6 +30,7 @@ import {
   TYPES_CLIENT, LONGUEUR_MAX, validerClient, clientsDuMemeNom, siretPropre,
 } from '../lib/clients';
 import { depuisLisible } from '../lib/devis';
+import { PHRASE_POSTES_D_UN_CLIENT } from '../lib/postes';
 
 /* « Ses devis » en montre 20 au plus : la lecture en demande 21, pour SAVOIR
    qu'il y en a d'autres. Une boucle, pas une liste virtualisée : on est dans
@@ -547,6 +548,12 @@ export default function FicheClient({
                   travaux.
                 </Text>
               )}
+              {/* ET LA BASE DE POSTES, À CHAQUE CONFIRMATION (relecture
+                  « textes », TEXTES1) — avec ou sans devis, lus ou non : c'est
+                  quand il n'a plus de devis qu'une phrase de la base peut être
+                  la dernière copie de son nom. `verifier-legal` exige cette
+                  ligne sous la seule condition `confirmeSuppression`. */}
+              {confirmeSuppression && <Text style={s.erreur}>{PHRASE_POSTES_D_UN_CLIENT}</Text>}
             </View>
           )}
         </ScrollView>

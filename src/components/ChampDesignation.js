@@ -28,6 +28,13 @@
  * LES PROPOSITIONS : elles partent quand la frappe RETOMBE
  * (`useRechercheDifferee`), dès trois lettres, trois au plus, SOUS le champ
  * — au-dessus, la liste qui arrive ferait descendre le champ sous le doigt.
+ * CE QUI EN DÉCIDE N'EST PAS ICI : `propositionsAMontrer` (`postes.js`) rend
+ * les rangées toutes prêtes — le nombre, les trois lettres, le silence à
+ * l'ouverture, la distinction de deux phrases identiques —, et ce composant
+ * ne fait que les afficher. Ici, aucun contrôle ne pouvait faire tourner ces
+ * règles : six propositions au lieu de trois passaient au vert (relecture
+ * « écran » du lot P, ECRAN1). `verifier-postes` refuse un composant qui
+ * filtrerait, couperait ou compléterait la liste qu'il reçoit.
  * Depuis le lot P (24/10/2026), elles viennent de DEUX sources, dans UNE
  * liste (`suggestionsPourLaFrappe`, `postes.js`) :
  *   - la BASE DE POSTES de l'artisan — ses phrases rangées d'un appui, avec
@@ -61,13 +68,7 @@ import {
 import { uiStyles, Montant, Pastille } from './ui';
 import { useRechercheDifferee } from '../lib/frappe';
 import { LONGUEURS } from '../lib/devis';
-import { suggestionsPourLaFrappe, morceauxDuDetail, libelleDeSuggestion } from '../lib/postes';
-
-/** Trois lettres avant de chercher : en deçà, tout ressemble à tout. */
-const LETTRES_MIN = 3;
-/** Trois propositions au plus : au-delà, on lit au lieu de taper. */
-const SUGGESTIONS_MAX = 3;
-const AUCUN_POSTE = Object.freeze([]);
+import { propositionsAMontrer } from '../lib/postes';
 
 /* CE QUI N'A PAS PU ÊTRE LU, en UNE phrase — et un seul « Réessayer », qui
    relit ce qui a échoué. Une source en panne n'éteint jamais l'autre : la
@@ -130,18 +131,11 @@ const ChampDesignation = forwardRef(function ChampDesignation({
     focus: () => { if (champ.current && champ.current.focus) champ.current.focus(); },
   }), [setTexte]);
 
-  const postesLus = postesEtat === 'ok' && Array.isArray(postes) ? postes : null;
-  const suggestions = useMemo(() => {
-    if ((!memoire && !postesLus) || choisi === recherche) return [];
-    if (String(recherche || '').trim().length < LETTRES_MIN) return [];
-    return suggestionsPourLaFrappe({
-      postes: postesLus || AUCUN_POSTE,
-      memoire: Array.isArray(memoire) ? memoire : [],
-      texte: recherche,
-      idLigne,
-      max: SUGGESTIONS_MAX,
-    });
-  }, [memoire, postesLus, recherche, idLigne, choisi]);
+  /* LES RANGÉES, TOUTES PRÊTES : rien n'est filtré, coupé ni ajouté ici. */
+  const rangees = useMemo(
+    () => propositionsAMontrer({ postes, postesEtat, memoire, texte: recherche, choisi, idLigne }),
+    [postes, postesEtat, memoire, recherche, choisi, idLigne],
+  );
 
   /* L'échec de la base ne se dit que là où elle aurait proposé quelque
      chose : la carte ne passe `postesEtat` qu'à une ligne chiffrée (un
@@ -182,38 +176,38 @@ const ChampDesignation = forwardRef(function ChampDesignation({
       {/* LE CONTENEUR NE PORTE AUCUN LIBELLÉ : posé sur une vue qui n'est
           pas un élément d'accessibilité, VoiceOver ne le lit pas. Chaque
           rangée porte le sien, au préfixe commun « Reprendre : ». */}
-      {suggestions.length > 0 && (
+      {rangees.length > 0 && (
         <View style={s.liste}>
-          {suggestions.map((sug) => {
-            /* LE DÉTAIL COUPÉ AUTOUR DU PRIX RECOPIÉ (`morceauxDuDetail`) :
-               le prix par `Montant`, à l'encre du texte, le reste en gris.
-               L'origine d'une ligne de mémoire ne montre jamais le texte
-               d'un AUTRE client : un devis ouvert depuis une demande se
-               nomme par sa date (`origine.libelle`, `devis.js`). */
-            const m = morceauxDuDetail(sug);
-            return (
-              <Pressable
-                key={`${sug.source}-${sug.cle}`}
-                onPress={() => {
-                  vif.current = sug.designation;
-                  setTexte(sug.designation);
-                  setRecherche(sug.designation);
-                  setChoisi(sug.designation);
-                  if (onChoisir) onChoisir(sug);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={libelleDeSuggestion(sug)}
-                style={({ pressed }) => [s.suggestion, pressed && APPUI.discret]}
-              >
-                <Text style={s.suggestionTitre} numberOfLines={2}>{sug.designation}</Text>
-                <Text style={s.suggestionDetail} numberOfLines={1}>
-                  {m.avant}
-                  {m.prix != null && <Montant centimes={m.prix} enLigne style={s.suggestionPrix} />}
-                  {m.apres}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {/* LE DÉTAIL COUPÉ AUTOUR DU PRIX RECOPIÉ (`r.morceaux`) : le prix
+              par `Montant`, à l'encre du texte, le reste en gris — et, quand
+              deux propositions portent la même phrase, ce qui les DISTINGUE
+              en tête, à l'encre du texte (`r.distinction`). L'origine d'une
+              ligne de mémoire ne montre jamais le texte d'un AUTRE client :
+              un devis ouvert depuis une demande se nomme par sa date. */}
+          {rangees.map((r) => (
+            <Pressable
+              key={r.cle}
+              onPress={() => {
+                vif.current = r.titre;
+                setTexte(r.titre);
+                setRecherche(r.titre);
+                setChoisi(r.titre);
+                if (onChoisir) onChoisir(r.proposition);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={r.libelle}
+              style={({ pressed }) => [s.suggestion, pressed && APPUI.discret]}
+            >
+              <Text style={s.suggestionTitre} numberOfLines={2}>{r.titre}</Text>
+              <Text style={s.suggestionDetail} numberOfLines={1}>
+                {!!r.distinction && <Text style={s.suggestionDistinction}>{r.distinction}</Text>}
+                {r.distinction ? ' · ' : ''}
+                {r.morceaux.avant}
+                {r.morceaux.prix != null && <Montant centimes={r.morceaux.prix} enLigne style={s.suggestionPrix} />}
+                {r.morceaux.apres}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       )}
     </View>
@@ -236,6 +230,9 @@ const s = StyleSheet.create({
     fontFamily: F.inter, fontSize: T.petit, color: C.muted, marginTop: S.xs, lineHeight: interligne(T.petit),
   },
   suggestionPrix: { fontSize: T.petit, color: C.ink },
+  /* Ce qui distingue deux propositions de même phrase : à l'encre du texte,
+     comme le prix — c'est ce que l'œil doit lire en premier. */
+  suggestionDistinction: { fontFamily: F.inter6, color: C.ink },
   echec: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: S.xs, paddingHorizontal: S.md,
     borderWidth: 1, borderTopWidth: 0, borderColor: C.line, backgroundColor: C.surface,

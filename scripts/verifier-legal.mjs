@@ -1038,16 +1038,78 @@ console.log('\nLe chiffrage d’un devis : ce que les textes en disent (lot 1)')
      d'effacement qui s'arrêterait aux devis serait incomplet sans le dire.
      Exigé ici, donc dans les DEUX branches (l'autre est faite tourner plus
      bas avec la même fonction). */
+  /* ET LE DEVIS D'UN AUTRE CLIENT (relecture « textes », TEXTES3, mesuré) :
+     une phrase de la base, reprise par un appui dans le devis de M. Durand,
+     survivait au chemin d'effacement de Mme Martin — et « Mes devis » n'a pas
+     de recherche. Le texte doit dire qu'elle y reste, et où la corriger.
+
+     ET LES RÔLES NOMMENT LA BASE (TEXTES7) : la partie de la section qui dit
+     qui est responsable et qui est sous-traitant — tout ce qui précède
+     « Supprimer la fiche d’un client », où la base est nommée de toute
+     façon — doit nommer la base de postes elle-même. Sans cela, le jour où le
+     contrat de sous-traitance existera, la branche affichée décrira un
+     contrat qui ne la couvre pas. */
+  const ROLES_NOMMENT_LA_BASE = (texte) => /base de postes/.test(String(texte).split('Supprimer la fiche d’un client')[0]);
   const VERITE_EFFACEMENT = (texte) => /Supprimer la fiche d’un client ne supprime pas ses devis/.test(texte)
     && /adresse des travaux/.test(texte) && /supprimez aussi ses devis/.test(texte)
     && /retirez de votre base de postes toute phrase qui le nommerait/.test(texte)
-    && /cherchez son nom dans « Ma base de postes »/.test(texte);
-  verifier('…et dit ce qu’une suppression de fiche n’efface pas, et comment l’effacer — base de postes comprise',
+    && /cherchez son nom dans « Ma base de postes »/.test(texte)
+    && /repris une de ces phrases dans le devis d’un autre client, elle y reste aussi : corrigez-la dans ce devis/.test(texte)
+    && ROLES_NOMMENT_LA_BASE(texte);
+  verifier('…et dit ce qu’une suppression de fiche n’efface pas, et comment l’effacer — base de postes et devis '
+    + 'd’un autre client compris, la base nommée parmi les rôles',
     VERITE_EFFACEMENT(clients),
-    '« Supprimer la fiche d’un client ne supprime pas ses devis : ils restent, avec l’adresse des '
+    `${ROLES_NOMMENT_LA_BASE(clients) ? '' : 'la partie « rôles » (avant « Supprimer la fiche d’un client ») ne nomme pas '
+      + 'la base de postes — '}« Supprimer la fiche d’un client ne supprime pas ses devis : ils restent, avec l’adresse des `
     + 'travaux… Pour effacer les données de ce client, supprimez aussi ses devis, et retirez de votre '
     + 'base de postes toute phrase qui le nommerait : un poste n’est rattaché à aucun client, cherchez '
-    + 'son nom dans « Ma base de postes ». »');
+    + 'son nom dans « Ma base de postes ». Si vous avez repris une de ces phrases dans le devis d’un autre '
+    + 'client, elle y reste aussi : corrigez-la dans ce devis. »');
+
+  /* L'ÉCRAN OÙ L'ON SUPPRIME LA FICHE LE DIT AUSSI — relecture « textes »,
+     TEXTES1. Le texte opposable était juste, et l'écran que l'artisan lit
+     AU MOMENT de supprimer ne parlait que des devis, et seulement s'il en
+     avait : sans devis, une phrase de la base est la dernière copie de son
+     nom, et rien ne s'affichait. La PROPRIÉTÉ, et pas un nom de variable :
+       - la phrase (importée de `postes.js`, et FAITE TOURNER) nomme la base,
+         dit où chercher et parle du devis d'un autre client ;
+       - la fiche l'importe, et la rend sous la condition EXACTE
+         `confirmeSuppression` — rien sur les devis ;
+       - au même niveau que le bouton « Confirmer la suppression » : les
+         accolades et parenthèses ouvertes entre le bouton et l'avertissement
+         se referment toutes. Glissée dans un bloc « s'il a des devis », elle
+         ne l'est plus. */
+  {
+    const fiche = readFileSync('src/components/FicheClient.js', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    let phrase = '';
+    try {
+      phrase = (await import('../src/lib/postes.js')).PHRASE_POSTES_D_UN_CLIENT || '';
+    } catch (e) {
+      phrase = '';
+    }
+    const usage = fiche.match(/\{\s*([^{}]*?)\s*&&\s*<Text\b[^>]*>\s*\{PHRASE_POSTES_D_UN_CLIENT\}\s*<\/Text>\s*\}/);
+    const bouton = fiche.indexOf('s.actionDanger]}');
+    const debutBouton = bouton >= 0 ? fiche.lastIndexOf('<Pressable', bouton) : -1;
+    let solde = null;
+    if (usage && debutBouton >= 0 && usage.index > debutBouton) {
+      solde = 0;
+      for (const c of fiche.slice(debutBouton, usage.index)) {
+        if ('{(['.includes(c)) solde += 1;
+        else if ('})]'.includes(c)) solde -= 1;
+      }
+    }
+    verifier('…et la fiche d’un client le DIT au moment de la supprimer, avec ou sans devis (TEXTES1)',
+      /base de postes/.test(phrase) && /cherchez son nom dans « Ma base de postes »/.test(phrase)
+      && /devis d’un autre client/.test(phrase)
+      && /import \{[^}]*\bPHRASE_POSTES_D_UN_CLIENT\b[^}]*\} from '\.\.\/lib\/postes'/.test(fiche)
+      && !!usage && usage[1] === 'confirmeSuppression' && solde === 0,
+      !phrase ? '`PHRASE_POSTES_D_UN_CLIENT` est introuvable dans `postes.js`'
+        : !usage ? 'la fiche ne rend pas `PHRASE_POSTES_D_UN_CLIENT` dans un `<Text>`'
+          : usage[1] !== 'confirmeSuppression' ? `la condition est « ${usage[1]} » : elle doit être \`confirmeSuppression\`, sans rien sur les devis`
+            : `rendue ${solde === null ? 'avant le bouton' : `à ${solde} niveau(x) de plus que le bouton « Confirmer la suppression »`} : `
+              + 'elle doit être sa voisine, hors de tout bloc qui dépend des devis');
+  }
 
   /* L'AUTRE BRANCHE, FAITE TOURNER — `legal.js` n'importe rien : une copie
      dont le drapeau `contratSousTraitance` est basculé s'importe telle
@@ -1263,8 +1325,11 @@ console.log('\nLa base de postes : ce que les textes en disent (lot P)');
   const NOMMEES = {
     designation: 'les phrases que vous y rangez',
     unite: 'leur unité',
-    fourniture_non_comprise: 'la fourniture',
-    main_oeuvre: 'main-d’œuvre',
+    /* Deux CASES, pas deux montants (relecture « textes », TEXTES6) : « la
+       fourniture et la main-d’œuvre » se lisait comme le coût de l'une et
+       de l'autre. */
+    fourniture_non_comprise: 'si la fourniture est comprise',
+    main_oeuvre: 's’il s’agit de main-d’œuvre',
     prix_reference_centimes: 'le prix de référence que vous fixez',
     prix_fixe_le: 'sa date',
     devis_origine_id: 'le devis depuis lequel vous avez ajouté chaque poste',
@@ -1287,6 +1352,12 @@ console.log('\nLa base de postes : ce que les textes en disent (lot P)');
       : `${[...sansPlace.map((c) => `\`${c}\` n’a de place ni dans le texte ni parmi les colonnes techniques`),
         ...absentes.map(([c, mot]) => `« ${mot} » (\`${c}\`) manque`)].join(' · ') || 'aucune phrase ne nomme la base de postes'}`
         + ' — une donnée collectée qui n’est pas nommée n’est pas annoncée');
+  /* …et le RENVOI vers l'engagement des conditions nomme la base de postes :
+     ses phrases ne sont ni des tarifs ni des prix (TEXTES6). */
+  const phraseRenvoi = phrasesDe(collecte).find((p) => /engagement écrit dans les conditions d’utilisation/.test(p)) || '';
+  verifier('…et son renvoi vers l’engagement des conditions nomme la base de postes',
+    /base de postes/.test(phraseRenvoi) && /« Vos tarifs et vos prix »/.test(phraseRenvoi),
+    phraseRenvoi || 'aucune phrase de « Ce que nous collectons » ne renvoie à l’engagement des conditions');
   const iDevis = collecte.indexOf('devis en préparation');
   const iPostes = phrasePostes ? collecte.indexOf(phrasePostes) : -1;
   const iPromesse = collecte.indexOf('Aucun écran d’Opus ne les montre');
@@ -1296,26 +1367,65 @@ console.log('\nLa base de postes : ce que les textes en disent (lot P)');
     + 'sortirait de la portée de « Aucun écran d’Opus ne les montre »');
 
   /* L'ENGAGEMENT DE L'ÉDITEUR COUVRE LES PHRASES (CD4) : ouvrir la table,
-     c'est lire les deux. Et « la consulter », pas « les consulter » — cette
-     forme-là, le contrôle du lot T la refuse plus haut. */
+     c'est lire les deux. « Les consulter » reste refusé par le contrôle du
+     lot T, plus haut.
+
+     LA RELECTURE « TEXTES » (TEXTES4) a trouvé trois défauts dans la
+     première écriture, que ces vérifications tiennent désormais par des
+     PROPRIÉTÉS :
+       - la phrase qui nomme la base dit ce qu'aucun écran ne montre (ses
+         phrases ET ses prix de référence, ni dans l'administration) ;
+       - l'engagement de ne pas consulter couvre la base, dans la phrase
+         même de l'engagement sur les tarifs non affichés ;
+       - L'AVEU EST ÉCRIT UNE FOIS : « pas une impossibilité technique » et
+         « C’est un engagement » n'apparaissent qu'une fois dans la section,
+         et APRÈS les deux engagements — c'est ce qui le fait porter sur les
+         deux (la première écriture le répétait en quatre lignes) ;
+       - « BASE » NE S'ÉCRIT JAMAIS SEULE : « base de données » ou « base de
+         postes ». Posée juste avant « La base de données le garantit », la
+         phrase de la base de postes faisait lire « le » et « cette base »
+         comme SA base de postes. */
   const phraseEngagement = phrasesDe(engagement).find((p) => /base de postes/.test(p)) || '';
   const EXIGES_ENGAGEMENT = ['phrases', 'prix de référence',
-    'aucun écran d’Opus ne la montre à quelqu’un d’autre que vous', 'ni dans l’espace d’administration',
-    's’engage à ne pas la consulter', 'pas une impossibilité technique'];
-  verifier('« Vos tarifs et vos prix » : l’engagement couvre les PHRASES de la base de postes et ses prix de référence, '
-    + 'garde « ni dans l’espace d’administration » et l’aveu',
+    'aucun écran d’Opus ne la montre à quelqu’un d’autre que vous', 'ni dans l’espace d’administration'];
+  verifier('« Vos tarifs et vos prix » : la base de postes — ses PHRASES et ses prix de référence — n’est montrée à '
+    + 'personne d’autre, ni dans l’espace d’administration',
     EXIGES_ENGAGEMENT.every((x) => phraseEngagement.includes(x)),
     `${EXIGES_ENGAGEMENT.filter((x) => !phraseEngagement.includes(x)).map((x) => `« ${x} » manque`).join(' · ')} `
     + '— un engagement qui ne couvre que les prix laisse lire les phrases, qui portent parfois un nom de client');
+  const phraseNePasConsulter = phrasesDe(engagement).find((p) => /s’engage à ne pas consulter/.test(p)) || '';
+  const iNePasConsulter = phraseNePasConsulter ? engagement.indexOf(phraseNePasConsulter) : -1;
+  const aveux = engagement.split('pas une impossibilité technique').length - 1;
+  const cestUn = (engagement.match(/c’est un engagement/gi) || []).length;
+  const iAveu = engagement.indexOf('pas une impossibilité technique');
+  verifier('…l’éditeur s’engage à ne pas consulter la base de postes, et l’aveu — UNE fois, après les deux engagements — '
+    + 'les couvre tous les deux',
+    /ceux que vous n’affichez pas, ni votre base de postes/.test(phraseNePasConsulter)
+    && aveux === 1 && cestUn === 1 && iNePasConsulter >= 0 && iAveu > iNePasConsulter
+    && engagement.indexOf(phraseEngagement) < iNePasConsulter,
+    `engagement : « ${phraseNePasConsulter || 'introuvable'} » ; « pas une impossibilité technique » ×${aveux}, `
+    + `« C’est un engagement » ×${cestUn} — l’aveu se dit une fois, après l’engagement qui nomme la base de postes`);
+  const basesSeules = (engagement.match(/[^.]{0,40}(?<![\p{L}])bases?(?![\p{L}])(?! de (?:données|postes))[^.]{0,30}/gu) || []);
+  verifier('…et « base » ne s’y écrit jamais seule : « base de données » ou « base de postes »',
+    basesSeules.length === 0,
+    `${basesSeules.join(' | ')} — pour un artisan qui vient de lire « votre base de postes », « cette base » `
+    + 'désigne sa base de postes');
   const iPortent = engagement.indexOf('Vos devis portent ceux qui leur servent');
   verifier('…posée APRÈS « Vos devis portent… », à côté de la phrase tenue mot pour mot, jamais dedans',
     iPortent >= 0 && phraseEngagement.length > 0 && engagement.indexOf(phraseEngagement) > iPortent
     && /les autres prix que vous enregistrez pour vos devis, ne sont montrés à personne d’autre que vous/.test(engagement),
     'le cahier du lot P la place juste après « Vos devis portent ceux qui leur servent… » ; insérée '
     + 'ailleurs, elle casserait la phrase des prix des devis, ou en changerait la portée');
-  verifier('…et l’aveu de ce qu’il faut bien faire reste : compter les lignes ou vérifier la structure, sans lire',
-    /compter les lignes ou vérifier la structure de la base sans lire vos prix/.test(engagement),
-    'sans cette exception, l’engagement promettrait de ne jamais toucher une base qu’il faut entretenir');
+  /* L'EXCEPTION COUVRE LES PHRASES (TEXTES4) : les relevés de FORME prévus
+     sur la vraie base comptent les postes et mesurent la longueur des
+     phrases (cahier du lot P, §7.4, CD6) — « sans lire vos prix » seul ne
+     permettait rien de tel pour la base de postes. */
+  verifier('…et l’aveu de ce qu’il faut bien faire reste : compter les lignes ou vérifier la structure, sans lire les '
+    + 'prix NI les phrases de la base de postes',
+    /compter les lignes ou vérifier la structure de la base de données sans lire vos prix ni les phrases de votre base de postes/
+      .test(engagement),
+    'sans cette exception, l’engagement promettrait de ne jamais toucher une base qu’il faut entretenir — et elle '
+    + 'doit couvrir les phrases, que les relevés de forme comptent et mesurent');
 
   /* LA FINALITÉ, ÉTROITE (CD5) : celle de l'écran d'aujourd'hui. Et aucune
      phrase qui nomme la base n'annonce un usage futur — une finalité se
@@ -1328,14 +1438,80 @@ console.log('\nLa base de postes : ce que les textes en disent (lot P)');
     && /vous signaler un écart/.test(phraseFinalite) && /: exécution du contrat\.$/.test(phraseFinalite),
     phraseFinalite || 'aucune phrase de cette section ne nomme la base de postes : une donnée collectée a une finalité, '
       + 'et elle se dit');
-  const USAGE_FUTUR = /(?<![\p{L}])(?:communs?|communes?|mutualis\p{L}*|partag\p{L}*|statistiq\p{L}*|entraîn\p{L}*|agrég\p{L}*|anonymis\p{L}*|agents?|intelligence artificielle)(?![\p{L}])|(?<![\p{L}])IA(?![\p{L}])/u;
-  const phrasesBase = phrasesDe(tout).filter((p) => /base de postes/i.test(p));
-  const futures = phrasesBase.filter((p) => USAGE_FUTUR.test(p));
-  verifier(`…et aucune phrase qui nomme la base de postes n’annonce un usage futur (${phrasesBase.length} phrases)`,
+  /* AUCUN USAGE FUTUR — et la relecture « textes » (TEXTES15) a mesuré que
+     ce contrôle n'en était pas un : sur neuf phrases qui annoncent un usage
+     futur, il n'en refusait QU'UNE (« mise en commun »). « Mutualisée »
+     passait par sa majuscule (pas de drapeau `i`), et « aider d’autres
+     artisans », « améliorer Opus », « transmise à nos partenaires »,
+     « nourrir notre assistant », « entrainer un modèle » par leurs mots.
+     Trois couches désormais, et chacune dit ce qu'elle voit :
+       1. LES MOTS, sans souci de casse, élargis aux familles relevées ;
+       2. LE FUTUR : une phrase qui nomme la base de postes ne dit pas ce
+          qu'elle « pourra », « servira » ou « sera » ;
+       3. UN INVENTAIRE FERMÉ : chaque phrase qui nomme la base — dans tous
+          les textes, ET dans la branche du contrat de sous-traitance — est
+          une des phrases RELUES ci-dessous, avec sa raison. C'est la seule
+          couche qui attrape une paraphrase qu'aucun motif n'a prévue (« nous
+          en tirerons des tendances ») : une phrase nouvelle rougit jusqu'à
+          ce qu'un humain l'ait relue et ajoutée.
+     CE QU'AUCUNE NE VOIT, et il faut le dire : une phrase qui annonce un
+     usage de la base SANS la nommer (« vos données de chiffrage pourront
+     servir à… »). L'inventaire ne lit que les phrases qui disent « base de
+     postes » ; la parade, c'est la relecture humaine de tout changement de
+     `legal.js`, que `VERSION` et son bloc d'historique rendent visible. */
+  const USAGE_FUTUR = new RegExp('(?<![\\p{L}])(?:communs?|communes?|mutualis\\p{L}*|partag\\p{L}*|statistiq\\p{L}*'
+    + '|entra[iî]n\\p{L}*|agrég\\p{L}*|anonymis\\p{L}*|agents?|intelligence artificielle|réutilis\\p{L}*|transmi\\p{L}*'
+    + '|partenaires?|autres artisans|région\\p{L}*|indices?|modèles?|assistants?|amélior\\p{L}*|nourri\\p{L}*'
+    + '|vend\\p{L}*|commercialis\\p{L}*|tendances?|référentiels?|prix (?:du|de) marché|moyennes?)(?![\\p{L}])'
+    + '|(?<![\\p{L}])IA(?![\\p{L}])', 'iu');
+  const FUTUR = /(?<![\p{L}])(?:pourra|pourront|servira|serviront|sera|seront|deviendra|deviendront|permettra|permettront)(?![\p{L}])/iu;
+  const brancheDuContrat = await (async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { pathToFileURL } = await import('node:url');
+    const source = readFileSync('src/data/legal.js', 'utf8');
+    const drapeau = /contratSousTraitance:\s*(true|false)\s*,/;
+    const valeur = (source.match(drapeau) || [])[1];
+    if (!valeur) return '';
+    const dossier = mkdtempSync(join(tmpdir(), 'legal-inventaire-'));
+    const fichier = join(dossier, 'legal.mjs');
+    writeFileSync(fichier, source.replace(drapeau, `contratSousTraitance: ${valeur === 'true' ? 'false' : 'true'},`));
+    try {
+      const m = await import(pathToFileURL(fichier).href);
+      return m.CONFIDENTIALITE.filter((b) => /clients que vous enregistrez/i.test(b.titre)).map((b) => b.texte).join(' ');
+    } finally {
+      rmSync(dossier, { recursive: true, force: true });
+    }
+  })();
+  const phrasesBase = [...new Set([...phrasesDe(tout), ...phrasesDe(brancheDuContrat)])].filter((p) => /base de postes/i.test(p));
+  const futures = phrasesBase.filter((p) => USAGE_FUTUR.test(p) || FUTUR.test(p));
+  verifier(`…et aucune phrase qui nomme la base de postes n’annonce un usage futur — ni par ses mots, ni par un futur `
+    + `(${phrasesBase.length} phrases)`,
     phrasesBase.length >= 6 && futures.length === 0,
     futures.length ? `${futures.join(' | ')} — une mise en commun demanderait une case à part, non cochée (cahier du lot P, C10)`
       : 'moins de six phrases nomment la base de postes (la collecte, l’engagement, la finalité, la durée, les droits, '
         + 'l’effacement d’un client) : l’une a disparu, ou ce contrôle a perdu sa cible');
+  /* L'INVENTAIRE : le début de chaque phrase relue, et pourquoi elle est là. */
+  const INVENTAIRE_BASE = [
+    ['Votre base de postes — ses phrases comme ses prix de référence — suit la même règle', 'CGU : aucun écran ne la montre'],
+    ['L’éditeur d’Opus, qui administre cette base de données, pourrait techniquement les lire', 'CGU : ne pas la consulter, et l’aveu'],
+    ['Pour faire fonctionner le service, il peut compter les lignes', 'CGU : l’exception des relevés de forme'],
+    ['Et votre base de postes : les phrases que vous y rangez', 'la collecte, colonne par colonne'],
+    ['Pour vos tarifs, vos prix et votre base de postes, l’éditeur prend en plus un engagement', 'le renvoi vers l’engagement'],
+    ['Vous proposer, pendant que vous chiffrez, les phrases et les prix de référence', 'la finalité, étroite'],
+    ['Il en va de même d’une phrase de votre base de postes qui nommerait un client', 'les rôles (branche affichée)'],
+    ['Le carnet de clients d’un artisan, les devis qu’il prépare et, quand une phrase y nomme un client, sa base de postes',
+      'les rôles (branche du contrat de sous-traitance)'],
+    ['Pour effacer les données de ce client, supprimez aussi ses devis', 'l’effacement d’un client'],
+    ['Votre base de postes aussi ; supprimer un devis ne retire pas les phrases', 'combien de temps'],
+    ['Rectification : Profil → Modifier mon profil ; votre base de postes', 'le droit de rectification'],
+  ];
+  const horsInventaire = phrasesBase.filter((p) => !INVENTAIRE_BASE.some(([debut]) => p.startsWith(debut)));
+  verifier(`…et chaque phrase qui la nomme est une phrase RELUE (inventaire fermé de ${INVENTAIRE_BASE.length} débuts)`,
+    phrasesBase.length > 0 && horsInventaire.length === 0,
+    `${horsInventaire.join(' | ')} — une phrase NOUVELLE sur la base de postes : relisez-la (annonce-t-elle un usage, une `
+    + 'finalité, un destinataire ?), puis ajoutez son début à `INVENTAIRE_BASE`, avec sa raison');
 
   /* COMBIEN DE TEMPS : aucune durée propre, et la vérité qu'on croirait
      inverse — supprimer un devis VIDE le lien d'origine (`on delete set
@@ -1384,11 +1560,34 @@ console.log('\nLa base de postes : ce que les textes en disent (lot P)');
   } catch (e) {
     detailRecherche = `\`src/lib/devis.js\` ne s’importe pas sous node : ${e && e.message}`;
   }
+  /* La recherche de la page est décidée par `vueDeLaPage` (`postes.js`)
+     depuis les corrections « écran » du lot P (24/10/2026) : on la FAIT
+     TOURNER, sur un poste qui nomme un client, plutôt que de chercher le
+     texte d'un filtre dans l'écran. */
+  let pageTrouve = false;
+  try {
+    const PM = await import('../src/lib/postes.js');
+    const v = PM.vueDeLaPage({
+      postes: [{ id: 'm', designation: 'Dépose de la maison Martin', unite: 'u' }, { id: 'a', designation: 'Pose de plinthes', unite: 'm' }],
+      etat: 'ok', lus: true, recherche: 'MARTIN',
+    });
+    /* …ET LE NOM TEL QUE LA FICHE L'ÉCRIT (relecture « textes », TEXTES12) :
+       « Mme Martin », recopié de la fiche, ne trouvait pas « maison MARTIN »
+       — « Aucun poste ne contient « Mme Martin » » se lisait comme la preuve
+       qu'il n'y avait rien à effacer. La civilité ne compte pas. */
+    const civil = PM.vueDeLaPage({
+      postes: [{ id: 'm', designation: 'Reprise fissures maison MARTIN', unite: 'u' }, { id: 'a', designation: 'Pose de plinthes', unite: 'm' }],
+      etat: 'ok', lus: true, recherche: 'Mme Martin',
+    });
+    pageTrouve = v.visibles.length === 1 && v.visibles[0].id === 'm' && civil.visibles.length === 1 && civil.visibles[0].id === 'm';
+  } catch (e) {
+    pageTrouve = false;
+  }
   verifier('« cherchez son nom dans « Ma base de postes » » : la recherche de la page trouve vraiment un nom dans une phrase',
-    trouve && /<BarreRecherche\b/.test(ecranPostes)
-    && /correspondALaRecherche\(\s*p\.designation\s*,\s*recherche\s*\)/.test(ecranPostes),
-    detailRecherche || 'la page « Ma base de postes » doit porter sa barre de recherche et filtrer les phrases '
-      + '(`correspondALaRecherche(p.designation, recherche)`) : sinon le chemin d’effacement promis n’existe pas');
+    trouve && pageTrouve && /<BarreRecherche\b/.test(ecranPostes)
+    && /vueDeLaPage\(\{ postes, etat, lus, recherche, incomplete, total \}\)/.test(ecranPostes) && /data=\{vue\.visibles\}/.test(ecranPostes),
+    detailRecherche || 'la page « Ma base de postes » doit porter sa barre de recherche et montrer les phrases que rend '
+      + '`vueDeLaPage` (qui cherche par la clé : « MARTIN » trouve « Martin ») : sinon le chemin d’effacement promis n’existe pas');
 
   /* NULLE PART « AUCUNE DONNÉE DE CLIENT » : vrai des COLONNES, faux des
      phrases (CD10). La forme, pas la chaîne. */

@@ -79,9 +79,9 @@ import {
   lignesDeLaPiece, titreQuiRecoit, pieceDeLaLigne, ligneVierge, ordreEntre, renumeroter,
   monter, descendre, tauxLisible, tauxProposes, tauxHorairePropose, coherenceRegime,
   devisDepuisClient, milliemesLisibles, versCentiemes, centiemesEnSaisie, texteNet, choisirChamps,
-  fusionnerAvecLaFile,
+  fusionnerAvecLaFile, proprietesDeLaRangee,
 } from '../lib/devis';
-import { posteDepuisLaLigne } from '../lib/postes';
+import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
 
 /* Ce que nomme la bande de la garde quand un champ de l'en-tête a été REFUSÉ
    par l'écran (relecture « données » des étapes 4 à 7, I1). */
@@ -116,7 +116,12 @@ const ordreMax = (lignes) => (lignes.length ? Math.max(...lignes.map((l) => Numb
 /* --------------------------------------------------------------------------
    UNE RANGÉE DE LA LISTE — mémorisée, et elle ne reçoit que des VALEURS
    (un total, un état, un sous-total), jamais des fonctions qui décident :
-   sinon chaque rangée se croirait différente à chaque rendu.
+   sinon chaque rangée se croirait différente à chaque rendu. Ces valeurs
+   sont CE QUE REND `proprietesDeLaRangee` (`devis.js`), et rien d'autre :
+   la liste est l'écran qu'on montre à un client, elle ne dit rien de la
+   base de postes (réponse du propriétaire du 23/10, Q3 a). `verifier-postes`
+   fait tourner la fonction, et refuse une balise qui ajouterait quoi que ce
+   soit à ce qu'elle rend.
    -------------------------------------------------------------------------- */
 const RangeeLigne = React.memo(function RangeeLigne({
   id, type, designation, total, offert, fournitureNonComprise, quantite, unite, prix,
@@ -213,7 +218,7 @@ function Intervalle() {
    -------------------------------------------------------------------------- */
 const BasDuDevis = forwardRef(function BasDuDevis({
   options, franchise, reel, propositions, regimeEnEchec, totaux, totauxIllisibles, retenue, erreurs,
-  onOuvrir, onAjouter, onRelireTotaux, onRetenue, onSupprimer, confirmeSuppression,
+  onOuvrir, onAjouter, onRelireTotaux, onRetenue, onSupprimer, confirmeSuppression, phraseSuppression,
 }, ref) {
   const refRetenue = useRef(null);
   const [ouvert, setOuvert] = useState(retenue != null);
@@ -396,9 +401,9 @@ const BasDuDevis = forwardRef(function BasDuDevis({
           {confirmeSuppression ? 'Confirmer : supprimer ce brouillon' : 'Supprimer ce brouillon'}
         </Text>
       </Pressable>
-      {confirmeSuppression && (
-        <Text style={s.aide}>Définitif : le brouillon et toutes ses lignes partent. Rien n’avait été envoyé au client.</Text>
-      )}
+      {/* …et ce qui RESTE : les postes rangés depuis ce devis (TEXTES8) —
+          `phraseSuppressionDuBrouillon`, jamais une phrase écrite ici. */}
+      {confirmeSuppression && <Text style={s.aide}>{phraseSuppression}</Text>}
     </View>
   );
 });
@@ -958,6 +963,11 @@ export default function SaisieDevisScreen({
      si le devis est DÉJÀ en base à cet instant : aucune attente de la file. */
   const demanderAjout = (valeurs) => {
     const f = fileRef.current;
+    /* L'AVERTISSEMENT D'UN NOM DE CLIENT LIT LA FICHE DU CARNET — encore
+       faut-il que le carnet soit lu : un devis rouvert depuis « Mes devis »
+       ne le charge pas (relecture « textes », TEXTES9). On le demande ici,
+       comme « Pour qui ? » ; la feuille se met à jour quand il arrive. */
+    if (devis.clientId && (clientsEtat === 'vide' || clientsEtat === 'echec')) onChargerClients();
     setFeuille({
       type: 'ajout',
       valeurs: posteDepuisLaLigne(valeurs),
@@ -1258,11 +1268,18 @@ export default function SaisieDevisScreen({
           <FeuilleAjoutPoste
             valeurs={feuille.valeurs}
             devisOrigineId={feuille.devisOrigineId}
-            postes={postesEtat === 'ok' ? postes : null}
+            postes={postesLus(postes, postesEtat)}
             regime={regime}
             /* L'avertissement d'un nom de client lit la FICHE du carnet (son
-               nom, son adresse, son téléphone) et le lieu des travaux. */
-            client={clientFiche || client}
+               nom, son adresse, son téléphone) quand le carnet est lu — il est
+               demandé à l'ouverture de la feuille —, sinon le nom seul. Pour
+               un devis venu d'une demande, le nom que le demandeur a écrit,
+               quand le devis vient d'être ouvert depuis « Pour moi » ; rouvert
+               plus tard depuis « Mes devis », la saisie ne connaît plus ce nom
+               (le devis ne garde de la demande que sa date et son budget), et
+               seuls les motifs (« chez », « Mme », un numéro…) jouent. Et le
+               lieu des travaux. */
+            client={clientFiche || client || (ouverture.demandeSource ? clientDepuisDemande(ouverture.demandeSource) : null)}
             lieu={{ adresse: devis.lieuAdresse || null }}
             onRanger={onRangerPoste}
             onRelire={relirePostes}
@@ -1271,11 +1288,16 @@ export default function SaisieDevisScreen({
         );
       case 'poste': {
         /* Le poste relu dans la base à chaque rendu : une relecture
-           (« modifié entre-temps ») lui donne la date à jour. */
-        const poste = (Array.isArray(postes) ? postes.find((p) => String(p.id) === String(feuille.poste.id)) : null) || feuille.poste;
+           (« modifié entre-temps ») lui donne la date à jour. Absent d'une
+           base LUE, il a été retiré : la feuille le DIT, et n'écrit plus rien
+           — elle retombait sur le poste disparu, et « Enregistrer » repartait
+           vers un poste qui n'existe plus (relecture « textes », TEXTES5). */
+        const lue = postesLus(postes, postesEtat);
+        const posteLu = lue ? lue.find((p) => String(p.id) === String(feuille.poste.id)) : null;
         return (
           <FeuillePoste
-            poste={poste}
+            poste={posteLu || feuille.poste}
+            absent={!!lue && !posteLu}
             prixPropose={feuille.prixPropose}
             postes={postes}
             regime={regime}
@@ -1325,6 +1347,7 @@ export default function SaisieDevisScreen({
       onRetenue={changerRetenue}
       onSupprimer={supprimer}
       confirmeSuppression={confirmeSuppression}
+      phraseSuppression={phraseSuppressionDuBrouillon({ postes, postesEtat, devisId: devisIdInitial })}
     />
   );
 
@@ -1338,19 +1361,7 @@ export default function SaisieDevisScreen({
         keyExtractor={(l) => String(l.id)}
         renderItem={({ item }) => (
           <RangeeLigne
-            id={item.id}
-            type={item.type}
-            designation={item.designation}
-            total={totalLigne(item)}
-            offert={!!item.offert}
-            fournitureNonComprise={!!item.fournitureNonComprise}
-            quantite={item.quantiteMilliemes}
-            unite={item.unite}
-            prix={item.prixUnitaireCentimes}
-            sousTotal={NIVEAU[item.type] ? sous[item.id] : null}
-            etat={etats[item.id] || null}
-            erreurTexte={etats[item.id] === 'echec' ? (phrasesEchec[item.id] || null) : null}
-            incomplete={!!erreurs[item.id] || etats[item.id] === 'locale'}
+            {...proprietesDeLaRangee(item, { sousTotaux: sous, etats, erreurs, phrasesEchec })}
             onOuvrir={ouvrirStable}
             onReessayer={reessayerStable}
           />

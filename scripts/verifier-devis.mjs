@@ -661,15 +661,32 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
     [oDemande, oUrgence, oInconnue, oMain].map(texteDe).join(' | '));
   const CD = sansCommentairesJs(lire('src/components/ChampDesignation.js'));
   /* Depuis le lot P, `ChampDesignation` n'écrit plus le détail lui-même : il
-     passe par `morceauxDuDetail` et `libelleDeSuggestion` (`postes.js`), qui
-     lisent l'origine. La règle suit le texte là où il s'écrit. */
+     affiche les rangées que rend `propositionsAMontrer` (`postes.js`). La
+     règle suit le texte là où il s'écrit — et elle se FAIT TOURNER (les
+     corrections « écran » du lot P, 24/10/2026) : ce que la rangée montre
+     et ce que VoiceOver lit, pour un devis ouvert depuis une demande, une
+     urgence ou de source inconnue, ne contient jamais un mot de son objet. */
   const PO = sansCommentairesJs(lire('src/lib/postes.js'));
-  const lecteursOrigine = `${corpsDeFonction(PO, 'detailDeSuggestion') || ''}\n${corpsDeFonction(PO, 'libelleDeSuggestion') || ''}`;
-  verifier('…et l’écran n’affiche l’origine que par `origine.libelle` — `ChampDesignation` passe par `morceauxDuDetail` et '
-    + '`libelleDeSuggestion` (`postes.js`), qui la lisent ainsi — jamais `origine.objet` directement',
+  const PM = await import('../src/lib/postes.js');
+  const rangeesDe = (devis) => PM.propositionsAMontrer({
+    memoire: [L('Carrelage', 4000, { devis: { ...devis, modifieLe: LE } })], texte: 'carrelage',
+  });
+  const vus = [
+    ['demande', { id: 'dd', objet: 'Fuite chez moi au 4 rue des Lilas, code 1234', source: 'demande' }, /Lilas|Fuite|1234/],
+    ['urgence', { id: 'du', objet: 'Dégât des eaux chez Mme X', source: 'urgence' }, /Mme|Dégât/],
+    ['inconnue', { id: 'di', objet: 'Chez M. Y' }, /M\. Y|Chez/],
+  ].map(([nom, devis, interdit]) => {
+    const r = rangeesDe(devis);
+    const dit = json(r.map((x) => [x.titre, x.distinction, x.morceaux, x.libelle]));
+    return { nom, ok: r.length === 1 && !interdit.test(dit) && /votre devis du 12\/10\/2026/.test(dit), dit };
+  });
+  verifier('…et l’écran n’affiche l’origine que par `origine.libelle` : les rangées de `ChampDesignation` viennent de '
+    + '`propositionsAMontrer`, FAITE TOURNER — ce qu’elles montrent et ce que VoiceOver lit d’un devis ouvert depuis une demande, '
+    + 'une urgence ou de source inconnue dit sa date, jamais un mot de son objet ; et ni l’écran ni `postes.js` ne lisent '
+    + '`origine.objet`',
   !/origine\.objet|\.devis\.objet/.test(CD) && !/origine\.objet|\.devis\.objet/.test(PO)
-    && (/origine\.libelle/.test(CD) || (/morceauxDuDetail\(sug\)/.test(CD) && /libelleDeSuggestion\(sug\)/.test(CD)
-      && (lecteursOrigine.match(/origine\.libelle/g) || []).length >= 2)));
+    && /propositionsAMontrer\(\{/.test(CD) && !/memoireDesLignes|suggestionsPourLaFrappe|detailDeSuggestion|libelleDeSuggestion/.test(CD)
+    && vus.every((v) => v.ok), vus.filter((v) => !v.ok).map((v) => `${v.nom} : ${v.dit}`).join(' | '));
   const longue = D.devisDepuisDemande({ id: 'q', genre: 'devis', titre: `${'a'.repeat(1200)}` });
   verifier('l’objet pré-rempli depuis une demande tient dans `devis_objet_check` (1 000 caractères) : au-delà, le brouillon ne se '
     + 'créerait pas', longue && [...longue.objet].length === D.LONGUEURS.objet && D.validerDevis({ ...longue }).ok,

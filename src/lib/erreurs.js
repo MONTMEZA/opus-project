@@ -221,13 +221,19 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
     + 'Pour ne pas en fixer, laissez le champ vide.',
   base_poste_prix_date_check: 'la date du prix de référence est posée par la base : mettez Opus à jour, puis '
     + 'réessayez.',
+  /* Ni « puis ajoutez-la » (relecture « textes », TEXTES13) : la feuille
+     d'ajout ne propose jamais une phrase sans lettre ni chiffre — on ne
+     rencontre ce refus qu'en CORRIGEANT une phrase dans « Ma base de
+     postes », où « ajoutez-la » ne veut rien dire. */
   base_poste_rapprochement_check: 'la phrase du poste ne contient ni lettre ni chiffre : écrivez ce que vous '
-    + 'faites, puis ajoutez-la.',
+    + 'faites.',
   base_poste_unite_check: 'un poste a toujours une unité, une des sept de vos devis : choisissez-la sur la '
     + 'ligne, puis ajoutez-la.',
+  /* Pas « (« Changer ma référence ») » (TEXTES13) : cette pastille n'existe
+     que s'il y a un écart ; sinon la carte dit « Modifier » ou « Fixer le
+     prix ». On renvoie à la ligne, sans nommer un bouton qui peut manquer. */
   idx_base_postes_rapprochement: 'ce poste est déjà dans votre base, sous une phrase presque identique — même '
-    + 'unité, même fourniture. Son prix de référence se change depuis la ligne (« Changer ma référence ») ou '
-    + 'dans « Ma base de postes ».',
+    + 'unité, même fourniture. Son prix de référence se change depuis la ligne ou dans « Ma base de postes ».',
 });
 
 /**
@@ -298,14 +304,20 @@ export const REFUS_POSTES = Object.freeze({
  * refuse rien, elle ne touche simplement rien. Laissée là, l'écran croirait
  * l'écriture faite : un échec qui ressemble à un succès. `api.js` lève donc
  * `ErreurPoste` avec cette phrase dès qu'une telle écriture n'a touché
- * aucune ligne, et l'écran RELIT la base — d'où « il a été relu ».
+ * aucune ligne, et l'écran RELIT la base.
+ *
+ * ELLE NE DIT PLUS « IL A ÉTÉ RELU » (relecture « textes », TEXTES5) : la
+ * relecture peut échouer, et zéro ligne touchée veut aussi dire « retiré ».
+ * Cette phrase est celle qu'on peut dire SANS savoir ; les feuilles la
+ * précisent d'après ce que la relecture a rendu (`issueDuModifieEntreTemps`,
+ * dans `postes.js`).
  *
  * Pas d'horloge `generation` comme pour un devis : un poste s'écrit
  * rarement, une écriture à la fois, et chacune attend sa réponse. La date
  * que la base pose suffit à reconnaître une écriture partie trop tôt.
  */
-export const MODIFIE_ENTRE_TEMPS = 'Ce poste a été modifié entre-temps — peut-être depuis un autre appareil. '
-  + 'Il a été relu : vérifiez, puis recommencez si besoin.';
+export const MODIFIE_ENTRE_TEMPS = 'Ce poste a été modifié ou retiré entre-temps — peut-être depuis un autre appareil. '
+  + 'Rien n’a été enregistré.';
 
 /** L'erreur du « modifié entre-temps » : déjà en français, `messageClair` la
  *  rend telle quelle (comme `ErreurAssistant`). Elle vit ici, et pas dans
@@ -628,8 +640,9 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      cette fonction dessus. */
 
   /* 428C9 — UNE VALEUR ENVOYÉE DANS UNE COLONNE QUE LA BASE CALCULE
-     ELLE-MÊME : une colonne GÉNÉRÉE, comme la clé de rapprochement d'un
-     poste (`base_postes.cle_rapprochement`, section 50). Aucune version
+     ELLE-MÊME : une colonne GÉNÉRÉE, ou posée par un déclencheur qui refuse
+     par ce même code, comme la clé de rapprochement d'un poste
+     (`base_postes.cle_rapprochement`, section 50). Aucune version
      d'Opus ne l'envoie : seul un client modifié ou une version en retard le
      fait. Le texte de PostgreSQL 16, relevé tel quel — « cannot insert a
      non-DEFAULT value into column … », « column … can only be updated to

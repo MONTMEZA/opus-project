@@ -57,9 +57,17 @@ import { Field, TextArea } from './ui';
  * `surSeuil` reçoit `{ vide, long }` — et UNIQUEMENT quand l'un des deux
  * change. `seuilLong` est le nombre de caractères à partir duquel `long`
  * devient vrai ; laissé à 0, il ne sert pas.
+ *
+ * `surPremiereFrappe` est appelé à la PREMIÈRE lettre tapée au doigt — une
+ * fois, jusqu'à ce que l'écran le réarme (`rearmer()`) — jamais quand
+ * l'écran écrit lui-même (`ecrire`). Ajouté au lot P (relecture « écran »,
+ * ECRAN4) : la feuille « Ajouter à ma base » doit savoir qu'un prix est EN
+ * TRAIN d'être tapé, pour ne pas le faire disparaître si la base arrive au
+ * même moment. Une fois, et pas à chaque lettre : c'est toute la raison
+ * d'être de ce composant.
  */
 const ChampLocal = forwardRef(function ChampLocal({
-  defaut = '', surSeuil, seuilLong = 0, multiligne = false, style,
+  defaut = '', surSeuil, seuilLong = 0, surPremiereFrappe, multiligne = false, style,
   amorce = '', onAmorceUtilisee, ...reste
 }, ref) {
   const [texte, setTexte] = useState(defaut);
@@ -87,6 +95,16 @@ const ChampLocal = forwardRef(function ChampLocal({
     }
   }, [surSeuil, seuilLong]);
 
+  /* LA FRAPPE AU DOIGT : ce que fait `changer`, plus le premier signal. */
+  const arme = useRef(true);
+  const frapper = useCallback((t) => {
+    changer(t);
+    if (surPremiereFrappe && arme.current) {
+      arme.current = false;
+      surPremiereFrappe();
+    }
+  }, [changer, surPremiereFrappe]);
+
   /* LE CHAMP LUI-MÊME, pour « Suivant » — ajouté avec « Mon entreprise »
      (lot 0a du devis). La touche « Suivant » d'un clavier doit AMENER au
      champ d'après, sinon elle ne fait que refermer le clavier (le défaut
@@ -100,6 +118,8 @@ const ChampLocal = forwardRef(function ChampLocal({
     /** Écrire depuis l'écran — l'assistant de relecture s'en sert. */
     ecrire: (t) => changer(t || ''),
     vider: () => changer(''),
+    /** Le prochain signal de première frappe repartira. */
+    rearmer: () => { arme.current = true; },
     /** Donner la main à ce champ — la touche « Suivant » du champ d'avant. */
     focus: () => { if (interieur.current && interieur.current.focus) interieur.current.focus(); },
   }), [changer]);
@@ -119,10 +139,10 @@ const ChampLocal = forwardRef(function ChampLocal({
   }, [amorce, changer, onAmorceUtilisee]);
 
   if (multiligne) {
-    return <TextArea value={texte} onChangeText={changer} style={style} {...reste} />;
+    return <TextArea value={texte} onChangeText={frapper} style={style} {...reste} />;
   }
   return (
-    <Field ref={interieur} value={texte} onChangeText={changer} style={style} {...reste} />
+    <Field ref={interieur} value={texte} onChangeText={frapper} style={style} {...reste} />
   );
 });
 
