@@ -90,8 +90,36 @@ const EXPO_MINIMUM = 57;
    Le bundler construit le paquet ; il n'entre pas dedans. La règle de ce
    contrôle est inchangée : **la bonne question n'est jamais « combien ? »,
    c'est « est-ce que ce paquet part sur le téléphone ? »** — et on y
-   répond en regardant le paquet, pas en raisonnant sur un nom. */
+   répond en regardant le paquet, pas en raisonnant sur un nom.
+
+   ET LES DÉPENDANCES DE DÉVELOPPEMENT, ajoutées le 24/10/2026. Ce jour-là,
+   le contrôle a rougi sans qu'une ligne du projet ait bougé : un avis neuf
+   sur `zod`, par `eslint-config-expo > eslint-plugin-react-hooks > zod`.
+   C'est le LINTER : il tourne sur l'ordinateur quand on lance `npm run
+   lint`, et il est rangé dans `devDependencies`. Mesuré sur le paquet iOS
+   exporté (5,9 Mo) : `zod-validation-error`, `eslint-plugin-react-hooks` et
+   `ZodError` 0 occurrence ; les 4 « zod » trouvés sont des noms d'icônes
+   (`zodiac-aries`, `zodiac-leo`…). Un chemin qui PART d'une dépendance de
+   développement est donc un outil — à une condition, que le contrôle tient
+   aussi : qu'aucun fichier de `src/` ne l'importe, sinon il entrerait dans
+   le paquet comme n'importe quelle dépendance. */
 const OUTILS = ['@expo/cli', '@expo/config-plugins', '@expo/metro'];
+const PAQUET = JSON.parse(readFileSync('package.json', 'utf8'));
+const DEV = Object.keys(PAQUET.devDependencies || {});
+
+/* Une dépendance de développement importée par l'application entrerait dans
+   le paquet : elle cesse alors d'être un outil. On lit les fichiers suivis
+   de `src/`, commentaires compris — un faux « importé » ne fait que rougir,
+   jamais passer au vert à tort. */
+const SOURCES = spawnSync('git', ['ls-files', 'src'], { encoding: 'utf8' }).stdout
+  .split('\n').filter((f) => /\.(js|jsx|ts|tsx|mjs)$/.test(f) && existsSync(f))
+  .map((f) => readFileSync(f, 'utf8')).join('\n');
+const importeParLApplication = (nom) => {
+  const n = nom.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  return new RegExp(`(from\\s*|require\\(\\s*|import\\(\\s*)['"]${n}(['"/])`).test(SOURCES);
+};
+const estUnOutil = (chemin) => chemin.some((hop) => OUTILS.includes(hop))
+  || (DEV.includes(chemin[0]) && !importeParLApplication(chemin[0]));
 
 console.log('\nExpo n’a pas été ramené en arrière');
 {
@@ -157,7 +185,7 @@ console.log('\nAucune alerte ne touche ce qui part sur le téléphone');
         if (arbre) marche(arbre, []);
 
         chemins.forEach((p) => {
-          const outil = p.some((hop) => OUTILS.includes(hop));
+          const outil = estUnOutil(p);
           console.log(`      ${outil ? '·' : '⚠'} ${p.join(' > ')}`);
           if (!outil) dansLApplication.push(p.join(' > '));
         });
