@@ -8254,7 +8254,8 @@ montre « Ses devis ». `legal.js` passe à `VERSION = '2026-10-22'`.
 | Q5 — quel compte sur l'iPhone ? | **son compte principal** (« oui mon compte principal c'est bon ») |
 
 L'essai sur l'iPhone se fait dans le build de développement ou dans Expo Go
-— le lot n'ajoute aucun module natif —, **jamais dans l'icône « preview » du
+— le lot n'ajoute aucun module natif ; Expo Go ne l'ouvre plus depuis le 25/10,
+voir « Expo Go ne peut plus ouvrir Opus » —, **jamais dans l'icône « preview » du
 17/10**, qui porte le code d'avant. Dix questions l'attendent dans le cahier
 (§7.6).
 
@@ -8651,8 +8652,9 @@ Section 50 de `schema.sql`, `src/lib/rapprochement.js` (la clé),
 l'a guidé : `docs/CAHIER-LOT-P.md` (archivé le 25/10, avec en tête ce qui a
 changé depuis). Troisième lot de l'ordre **T → 1 → P → S → 2**
 (`docs/PLAN-DEVIS.md` §10.14 et 10.17). **Aucun paquet nouveau, aucun module
-natif : rien à reconstruire** — Expo Go ou le build de développement
-suffisent, jamais l'icône « preview » du 17/10.
+natif : rien à reconstruire** — le build de développement suffit (Expo Go ne
+peut plus ouvrir Opus depuis le 25/10, voir « Expo Go ne peut plus ouvrir
+Opus »), jamais l'icône « preview » du 17/10.
 
 Un artisan qui a écrit une ligne de devis touche **« Ajouter à ma base »** :
 la phrase est rangée **mot pour mot**, avec son unité, et un **prix de
@@ -8993,6 +8995,52 @@ Deux leçons d'outil, au passage :
 
 Dans `docs/A-FAIRE.md`, « Après le lot P ».
 
+### Expo Go ne peut plus ouvrir Opus — le SDK 58 (25/10/2026)
+
+Signalé par le propriétaire en voulant essayer le lot P sur son iPhone :
+« l'application refuse de s'ouvrir », et dans son terminal :
+
+    iOS  ERROR  Project is incompatible with this version of Expo Go
+    • The installed version of Expo Go is for SDK 58.0.0.
+    • The project you opened uses SDK 57.
+
+**Ce n'est pas le code d'Opus.** Expo Go, sur iPhone, ne connaît qu'UN SDK —
+le dernier — et l'App Store le met à jour tout seul. Le SDK 58 est sorti le
+15/10 ; le plan l'avait prévu (`docs/PLAN-DEVIS.md`, l.3014 : « la prochaine
+Expo Go des stores ne prendra que le SDK 58 »), et la mise à jour est arrivée
+sur son téléphone avant le 25/10. On ne peut pas réinstaller une
+ancienne Expo Go sur un iPhone.
+
+> **Depuis le 25/10, Opus ne s'ouvre sur l'iPhone QUE dans le build de
+> développement** (l'icône Opus, construite par `eas build --profile
+> development`). Toute phrase de ce dépôt qui dit « Expo Go ou le build de
+> développement » décrit ce qui était vrai avant ; `npx expo start --go` ne
+> sert plus à rien sur un vrai iPhone.
+
+Le terminal le disait déjà : « Using development build », et un code QR en
+`exp+opus-project://`. Ce code s'ouvre avec l'appareil photo de l'iPhone, ou
+depuis la page de lancement de l'icône Opus — **pas depuis Expo Go**.
+
+**Et la question à poser d'abord : QUELLE icône Opus est sur son iPhone ?**
+Les profils `development` et `preview` portent la même identité
+(`com.opusproject.app`) : installer l'un remplace l'autre, sans prévenir.
+
+| en touchant l'icône Opus | c'est | ce qu'il faut faire |
+|---|---|---|
+| une page de lancement (la liste des serveurs) | le build de **développement** | `npx expo start` sur le PC, même Wi-Fi, toucher le serveur (ou scanner le code avec l'appareil photo) |
+| Opus directement, sur le Fil | la version **« preview » du 17/10**, au code figé | reconstruire le build de développement : `eas build --platform ios --profile development`, l'installer par le lien ou le code QR qu'EAS donne, puis `npx expo start` |
+
+**Migrer au SDK 58 ne règle pas le fond** : Expo Go passera au SDK 59 un jour,
+et le problème reviendra. La migration reste une décision du propriétaire
+(`docs/A-FAIRE.md`), et elle se fera avec une reconstruction du build de
+développement, jamais pour rendre Expo Go utilisable.
+
+Au passage, `npx expo install --check` demande deux petites mises à jour
+(`expo` 57.0.31, `expo-notifications` 57.0.24). **Elles ne causent pas cette
+panne, et elles ne se font pas seules** : `expo-notifications` est un module
+natif, donc la mise à jour se fait EN MÊME TEMPS qu'une reconstruction du
+build de développement, jamais entre deux.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :
@@ -9003,7 +9051,8 @@ regarder la date de la dernière publication avant de conseiller un paquet.
 Et se rappeler qu'un **module natif impose de RECONSTRUIRE l'application** :
 depuis le 15/10/2026, le propriétaire essaie Opus dans un **build de
 développement** (`expo-dev-client`, profils `development` et `preview` de
-`eas.json`), plus dans Expo Go. Un module natif ajouté au code n'existe donc
+`eas.json`), plus dans Expo Go — qui, depuis le 25/10, ne PEUT plus l'ouvrir
+(il est passé au SDK 58). Un module natif ajouté au code n'existe donc
 dans son téléphone qu'après un nouveau `eas build` et une réinstallation —
 et un import statique d'un module absent fait planter l'application **dès le
 démarrage**. L'ordre est toujours : installer, construire, réinstaller, PUIS

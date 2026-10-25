@@ -1747,7 +1747,13 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
   de rétractation (annexe à R. 221-1), mention 293 B. Légifrance répond 403
   depuis le conteneur.
 - [ ] Décider d'une **migration au SDK 58** (sorti le 15/10/2026), avant ou
-  après la reconstruction EAS du lot 2.
+  après la reconstruction EAS du lot 2. **Depuis le 25/10, Expo Go (passé au
+  SDK 58) n'ouvre plus Opus** : seul le build de développement le fait, et
+  migrer ne réglerait rien de durable — Expo Go passera au SDK 59 un jour.
+- [ ] Les deux petites mises à jour qu'attend Expo (`expo` 57.0.31,
+  `expo-notifications` 57.0.24, relevées le 25/10) : **en même temps qu'une
+  reconstruction** du build de développement, jamais seules —
+  `expo-notifications` est un module natif.
 - [ ] Corriger les annexes du plan (CONCURRENCE-DEVIS.md, SIRET-ET-CLAUSES.md)
   et `DEVIS-DU-PROPRIETAIRE.md:179` (« Acompte à la signature », contraire au
   droit hors établissement).
@@ -2013,8 +2019,9 @@ fonctionne ».** Les cases ci-dessous restent ouvertes tant qu'elles n'ont pas
 reçu leur réponse une par une — notamment la virgule : aucune quantité de
 votre brouillon n'a de décimale.
 
-**À essayer sur l'iPhone — dans le build de développement ou Expo Go (le lot
-n'ajoute aucun module natif), JAMAIS dans l'icône « preview » du 17/10**, qui
+**À essayer sur l'iPhone — dans le build de développement (Expo Go ne l'ouvre
+plus depuis le 25/10 : il est passé au SDK 58), JAMAIS dans l'icône « preview »
+du 17/10**, qui
 porte le code d'avant : si rien n'a changé à l'écran, demander d'abord QUELLE
 application est ouverte. Le compte : le vôtre (réponse du 21/10, Q5) ; vos
 brouillons d'essai ne partent nulle part, ils restent à vous et se
@@ -2270,9 +2277,10 @@ les essais SQL (§2.3), qui ne tournent qu'à la main. **Les deux preuves SIRET
 `essai`** ont été réutilisées une fois de plus le 25/10, réécrites pour les
 adresses de l'essai : elles sont toujours en base, et expirent d'elles-mêmes.
 
-**À essayer sur votre iPhone** — votre compte principal, dans Expo Go ou le
-build de développement, jamais l'icône « preview » du 17/10, et jamais le
-compte du frère :
+**À essayer sur votre iPhone** — votre compte principal, dans le build de
+développement (plus dans Expo Go : depuis le 25/10, il est passé au SDK 58 et
+ne sait plus ouvrir Opus — CLAUDE.md, « Expo Go ne peut plus ouvrir Opus »),
+jamais l'icône « preview » du 17/10, et jamais le compte du frère :
 
 - [ ] dans un devis, une ligne chiffrée → « Ajouter à ma base » : la feuille
   propose le prix de la ligne, le clavier ne cache ni le prix ni le bouton ;
