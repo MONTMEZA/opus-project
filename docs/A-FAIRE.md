@@ -1750,10 +1750,15 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
   après la reconstruction EAS du lot 2. **Depuis le 25/10, Expo Go (passé au
   SDK 58) n'ouvre plus Opus** : seul le build de développement le fait, et
   migrer ne réglerait rien de durable — Expo Go passera au SDK 59 un jour.
-- [ ] Les deux petites mises à jour qu'attend Expo (`expo` 57.0.31,
-  `expo-notifications` 57.0.24, relevées le 25/10) : **en même temps qu'une
-  reconstruction** du build de développement, jamais seules —
+- [x] Les deux petites mises à jour qu'attend Expo (`expo` 57.0.31,
+  `expo-notifications` 57.0.24, relevées le 25/10) : faites dans le dépôt le
+  25/10, **juste avant la reconstruction** du build de développement (son
+  icône Opus était la version « preview » du 17/10). Jamais seules :
   `expo-notifications` est un module natif.
+- [ ] **Reconstruire et réinstaller le build de développement** sur l'iPhone
+  (`git pull`, `npm install`, `eas build --platform ios --profile
+  development`), puis essayer le lot P : c'est la seule façon de voir le devis
+  et la base de postes sur le téléphone.
 - [ ] Corriger les annexes du plan (CONCURRENCE-DEVIS.md, SIRET-ET-CLAUSES.md)
   et `DEVIS-DU-PROPRIETAIRE.md:179` (« Acompte à la signature », contraire au
   droit hors établissement).

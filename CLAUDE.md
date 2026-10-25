@@ -9035,11 +9035,19 @@ et le problème reviendra. La migration reste une décision du propriétaire
 (`docs/A-FAIRE.md`), et elle se fera avec une reconstruction du build de
 développement, jamais pour rendre Expo Go utilisable.
 
-Au passage, `npx expo install --check` demande deux petites mises à jour
-(`expo` 57.0.31, `expo-notifications` 57.0.24). **Elles ne causent pas cette
-panne, et elles ne se font pas seules** : `expo-notifications` est un module
-natif, donc la mise à jour se fait EN MÊME TEMPS qu'une reconstruction du
-build de développement, jamais entre deux.
+Au passage, `npx expo install --check` demandait deux petites mises à jour
+(`expo` 57.0.31, `expo-notifications` 57.0.24, publiées les 21 et 22/10).
+**Elles ne causaient pas cette panne, et elles ne se font pas seules** :
+`expo-notifications` est un module natif, donc la mise à jour se fait EN MÊME
+TEMPS qu'une reconstruction du build de développement, jamais entre deux.
+
+**Le 25/10, son icône Opus s'est révélée être la version « preview » du
+17/10** (« une ancienne version, le devis n'existe pas »). Une reconstruction
+s'imposait : les deux mises à jour ont été faites JUSTE AVANT, dans le dépôt
+(`npx expo install --fix`, puis les 51 contrôles, le linter à 32, les paquets
+iOS et Android lus), pour que la nouvelle construction parte de versions
+alignées. Elles n'existent sur son téléphone qu'une fois le build de
+développement reconstruit et réinstallé.
 
 ## Dépendances : vérifier avant de proposer
 
