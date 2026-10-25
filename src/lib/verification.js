@@ -139,3 +139,83 @@ export function resumeVerification(pro, identite) {
 export function toutValide(pro) {
   return etatKbis(pro) === VALIDE && etatAssurance(pro) === VALIDE;
 }
+
+/* ==========================================================================
+ *  LE BADGE SUSPENDU (lot S-a, 25/10/2026, décision D4 du propriétaire)
+ *
+ *  La BASE décide (`tient_le_profil_pro()`, point 4) : une pièce VALIDÉE
+ *  dont le chemin change est suspendue ; si le badge était accordé, il est
+ *  suspendu jusqu'à ce que l'administration ait regardé la nouvelle pièce,
+ *  et les métiers restent figés d'ici là. Ces deux fonctions ne font que
+ *  REDIRE la règle à l'écran — avant l'envoi pour prévenir, après l'envoi
+ *  pour que l'état affiché suive sans attendre un rechargement (sinon on lit
+ *  « À jour » à côté de « En attente »). Elles n'importent rien de React :
+ *  `verifier-stockage` les fait tourner sur les mêmes cas que l'essai
+ *  `essais-section-51a.sql`.
+ * ========================================================================== */
+
+/**
+ * Envoyer ces pièces suspendrait-il le badge ? Seulement si le badge est
+ * accordé ET qu'on envoie une pièce d'existence ou d'assurance validée.
+ * JAMAIS pour un envoi RGE seul : le RGE ne fait pas le badge.
+ */
+export function envoiSuspendLeBadge(pro, { kbis = false, assurance = false } = {}) {
+  if (!pro || !pro.verifie) return false;
+  return (!!kbis && !!(pro.kbis && pro.kbis.valide))
+    || (!!assurance && !!(pro.assurance && pro.assurance.valide));
+}
+
+/** La phrase de l'écran, écrite une fois. */
+export const AVERTISSEMENT_SUSPENSION = 'Envoyer une nouvelle pièce suspend votre badge '
+  + 'jusqu’à ce que l’administration d’Opus l’ait regardée. Vos métiers restent '
+  + 'figés pendant ce temps.';
+
+/**
+ * La fiche telle que la base la rendra après l'envoi : même règle que
+ * `tient_le_profil_pro()`, pour que l'écran n'affiche pas un état que la
+ * base a déjà quitté. `maintenant` : la date à poser (la base pose la
+ * sienne ; celle-ci ne sert qu'à l'affichage, jusqu'au prochain
+ * rechargement).
+ */
+export function apresEnvoiDesPieces(pro, {
+  kbisPath = null, assurancePath = null, rgePath = null, rge = null,
+} = {}, maintenant = null) {
+  if (!pro) return pro;
+  const suite = {
+    ...pro,
+    kbisPath: kbisPath || pro.kbisPath || null,
+    assurancePath: assurancePath || pro.assurancePath || null,
+    rgePath: rgePath || pro.rgePath || null,
+  };
+  if (rge) {
+    suite.rgeDeclare = !!rge.declare;
+    suite.rgeNumero = rge.numero || '';
+    suite.rgeExpire = rge.expire || '';
+  }
+  const kbisChange = !!kbisPath && kbisPath !== (pro.kbisPath || null);
+  const assuranceChange = !!assurancePath && assurancePath !== (pro.assurancePath || null);
+  const kbisSuspendu = kbisChange && !!(pro.kbis && pro.kbis.valide);
+  const assuranceSuspendue = assuranceChange && !!(pro.assurance && pro.assurance.valide);
+
+  if (kbisSuspendu || assuranceSuspendue) {
+    if (kbisSuspendu) suite.kbis = { valide: false, maj: null };
+    if (assuranceSuspendue) suite.assurance = { valide: false, expire: null };
+    suite.verificationStatut = (suite.kbisPath || suite.assurancePath) ? 'en_attente' : 'non_soumis';
+    if (pro.verifie) {
+      suite.verifie = false;
+      suite.verifieLe = null;
+      suite.badgeSuspenduLe = maintenant || new Date().toISOString();
+    }
+    return suite;
+  }
+  /* Rien de validé n'a changé : une pièce nouvelle (ou une première pièce)
+     met la fiche « en attente », sauf si elle reste vérifiée — renvoyer le
+     même chemin ne change rien. Un envoi RGE seul ne touche pas au statut. */
+  if ((kbisChange || assuranceChange) && !pro.verifie) suite.verificationStatut = 'en_attente';
+  return suite;
+}
+
+/** Les métiers sont figés : badge accordé, ou suspendu le temps d'un examen. */
+export function metiersFiges(pro) {
+  return !!(pro && (pro.verifie || pro.badgeSuspenduLe));
+}

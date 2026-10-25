@@ -375,6 +375,16 @@ const CarteVerification = React.memo(function CarteVerification({ pro, onActe, o
         onErreur={onErreur}
       />
       {!!pro.note && <Text style={s.noteAncienne}>Dernière note : {pro.note}</Text>}
+      {/* LE BADGE SUSPENDU (lot S-a) : cette fiche ÉTAIT vérifiée, et elle a
+          envoyé une nouvelle pièce. C'est le cas qui compte le plus dans la
+          file — l'artisan a perdu son badge en attendant — et rien ne le
+          distinguait d'une première demande. */}
+      {!!pro.badgeSuspenduLe && (
+        <Text style={s.suspendu}>
+          Badge suspendu le {dateFrancaise(pro.badgeSuspenduLe)} : nouvelle pièce à
+          regarder sur une fiche qui était vérifiée.
+        </Text>
+      )}
 
       {/* LES DOCUMENTS. Ils vivent dans l'espace PRIVÉ de Supabase, et
           l'adresse rendue n'est valable que cinq minutes : un Kbis porte le
@@ -1333,6 +1343,10 @@ const s = StyleSheet.create({
   },
   noteAncienne: {
     fontFamily: F.inter, fontSize: T.petit, color: C.muted,
+    lineHeight: interligne(T.petit),
+  },
+  suspendu: {
+    fontFamily: F.inter6, fontSize: T.petit, color: C.accentTexte,
     lineHeight: interligne(T.petit),
   },
   extrait: {

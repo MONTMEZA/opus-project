@@ -13,7 +13,9 @@
  * et pourquoi (`etatReglageSos`, la même phrase que dans « Mon
  * entreprise »), et RENVOIE à « Mon entreprise » pour les changer.
  */
-import { pieceExistence, pieceAssurance } from '../lib/verification';
+import {
+  pieceExistence, pieceAssurance, metiersFiges, envoiSuspendLeBadge, AVERTISSEMENT_SUSPENSION,
+} from '../lib/verification';
 import { enMilieuDePhrase } from '../lib/texte';
 import React, { useState } from 'react';
 import {
@@ -271,7 +273,14 @@ export default function ProfilEditScreen({
             <ChoixMetiers
               valeurs={metiers}
               onChange={setMetiers}
-              verrouille={!!profil.verifie}
+              /* Figés aussi PENDANT une suspension (lot S-a) : sans ça, un
+                 artisan suspendu changeait de métier librement, et la
+                 revalidation de sa pièce lui rendait le badge avec un métier
+                 jamais contrôlé. La base le refuse de toute façon
+                 (`tient_les_metiers`) ; l'écran ne doit pas proposer ce
+                 qu'elle refusera. */
+              verrouille={metiersFiges(profil)}
+              suspendu={!profil.verifie && !!profil.badgeSuspenduLe}
               demandeEnCours={!!demandeMetiers}
               onDemanderModification={() => setDemandeOuverte(true)}
             />
@@ -280,7 +289,7 @@ export default function ProfilEditScreen({
                 c'est un humain qui tranchera, mais la demande part d'ici et
                 porte ce qu'il faut pour décider — les métiers voulus et la
                 raison. */}
-            {profil.verifie && demandeOuverte && !demandeMetiers && (
+            {metiersFiges(profil) && demandeOuverte && !demandeMetiers && (
               <View style={s.demande}>
                 <Text style={s.demandeTitre}>Demande de modification</Text>
                 <Text style={s.demandeTexte}>
@@ -640,6 +649,16 @@ export default function ProfilEditScreen({
                 </View>
               )}
 
+              {/* AVANT l'envoi, et pas après : un badge suspendu par
+                  surprise ressemble à un badge retiré (lot S-a). Seulement
+                  pour une pièce d'existence ou d'assurance — un envoi RGE
+                  seul ne touche pas au badge. */}
+              {envoiSuspendLeBadge(profil, { kbis: !!kbis, assurance: !!assurance }) && (
+                <Text style={s.suspension} accessibilityLiveRegion="polite">
+                  {AVERTISSEMENT_SUSPENSION}
+                </Text>
+              )}
+
               {/* Secondaire, comme la demande de métiers : l'action de
                   l'écran « Modifier mon profil », c'est « Enregistrer ». */}
               <BtnMain
@@ -895,6 +914,10 @@ const s = StyleSheet.create({
   docDetail: { fontSize: T.petit, color: C.muted, marginTop: 2, fontFamily: F.inter },
   docChoisi: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   docChoisiTexte: { fontSize: T.petit, color: C.ok, flexShrink: 1, fontFamily: F.inter },
+  suspension: {
+    fontSize: T.petit, color: C.accentTexte, fontFamily: F.inter6,
+    lineHeight: interligne(T.petit), marginTop: S.sm, marginBottom: S.sm,
+  },
 
   statut: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',

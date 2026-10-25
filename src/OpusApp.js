@@ -70,6 +70,7 @@ import {
 import { aiMatchPros, aiRecitChantier, surTravailAgent } from './lib/ai';
 import { doitProposerLeNom, nomAgent } from './lib/agent';
 import { clientDepuisDemande } from './lib/clients';
+import { apresEnvoiDesPieces, envoiSuspendLeBadge } from './lib/verification';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
@@ -2687,24 +2688,29 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
       await api.submitDocuments({ kbisPath, assurancePath, rgePath, rge });
 
+      /* L'ÉTAT AFFICHÉ SUIT LA RÈGLE DE LA BASE (lot S-a) : une pièce
+         validée remplacée est suspendue, et le badge avec elle. Sans ça,
+         l'écran gardait « À jour » à côté de « En attente », et le badge,
+         jusqu'au prochain rechargement. `apresEnvoiDesPieces()` redit la
+         règle de `tient_le_profil_pro()` ; elle vit dans un fichier que
+         `node` sait ouvrir, pour qu'un contrôle la fasse tourner. */
+      const avant = pros[myProId];
+      const suspendu = !!(avant && avant.verifie
+        && envoiSuspendLeBadge(avant, { kbis: !!kbisPath, assurance: !!assurancePath }));
       setPros((prev) => (prev[myProId]
         ? {
             ...prev,
-            [myProId]: {
-              ...prev[myProId],
-              kbisPath: kbisPath || prev[myProId].kbisPath,
-              assurancePath: assurancePath || prev[myProId].assurancePath,
-              rgePath: rgePath || prev[myProId].rgePath,
-              rgeDeclare: rge ? !!rge.declare : prev[myProId].rgeDeclare,
-              rgeNumero: rge ? rge.numero : prev[myProId].rgeNumero,
-              rgeExpire: rge ? rge.expire : prev[myProId].rgeExpire,
-              verificationStatut: 'en_attente',
-            },
+            [myProId]: apresEnvoiDesPieces(prev[myProId],
+              { kbisPath, assurancePath, rgePath, rge }),
           }
         : prev));
 
       setScreen('profil');
-      showBanner('Documents envoyés. Votre profil passe en vérification.');
+      showBanner(suspendu
+        ? 'Documents envoyés. Votre badge est suspendu le temps que l’administration regarde la nouvelle pièce.'
+        : (kbisPath || assurancePath)
+          ? 'Documents envoyés. Votre profil passe en vérification.'
+          : 'Certification RGE envoyée.');
     } catch (e) {
       showErreur(messageClair(e, 'Envoi impossible'));
     }

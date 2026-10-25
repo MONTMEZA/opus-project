@@ -104,6 +104,19 @@ alter table public.professional_profiles add column if not exists verifie_le    
 alter table public.professional_profiles add column if not exists verification_statut text
   not null default 'non_soumis';
 
+/* LE BADGE SUSPENDU (lot S-a, 25/10/2026). Posée par la base quand un
+   artisan dont le badge est accordé remplace une pièce validée
+   (`tient_le_profil_pro`, section 17.3) ; vidée quand l'administration rend
+   ou refuse le badge. Elle sert à une chose précise : garder le verrou des
+   métiers PENDANT la suspension (`tient_les_metiers`). Sans elle, un
+   « avocat » vérifié renvoyait une pièce, passait « maçon » pendant que son
+   badge était suspendu, et la revalidation de la pièce lui rendait le badge
+   avec un métier dont personne n'avait contrôlé la décennale (mesuré).
+   Elle naît ICI, tout en haut : les déclencheurs qui la lisent tournent dès
+   la section 10 bis, et un corps plpgsql qui nomme une colonne absente
+   échoue à l'exécution. */
+alter table public.professional_profiles add column if not exists badge_suspendu_le timestamptz;
+
 -- La contrainte écrite dans le `create table` n'existe QUE sur une base
 -- neuve : une base créée avant cette colonne l'a reçue par l'ordre
 -- ci-dessus, et `add column if not exists` ne touche pas aux contraintes.
@@ -221,13 +234,26 @@ begin
      modifié ne peut donc pas se présenter avec `auth.uid()` vide — il ne
      verrait plus aucune ligne à modifier. Et c'est par là que passera le
      back-office qui validera les demandes de `metier_demandes`. */
+  /* ET PENDANT LA SUSPENSION DU BADGE (lot S-a, 25/10/2026). Remplacer
+     une pièce validée suspend le badge (`verifie` passe à faux, section
+     17.3) : avec le seul test `old.verifie`, le verrou tombait au même
+     instant. L'artisan changeait alors de métier, et la revalidation de la
+     PIÈCE lui rendait le badge avec ce métier — sans que personne n'ait
+     contrôlé la couverture qu'il exige (décennale ou RC pro). Mesuré sur
+     PostgreSQL 16. `badge_suspendu_le` dit « ce profil a été vérifié, et
+     attend la revue d'une nouvelle pièce ». */
   if tg_op = 'UPDATE'
-     and old.verifie
+     and (old.verifie or old.badge_suspendu_le is not null)
      and auth.uid() is not null
      and auth.uid() = new.id
      and new.metiers is distinct from old.metiers then
+    if old.verifie then
+      raise exception
+        'Les métiers d''un profil vérifié ne se modifient pas directement : déposez une demande de modification.'
+        using errcode = 'check_violation';
+    end if;
     raise exception
-      'Les métiers d''un profil vérifié ne se modifient pas directement : déposez une demande de modification.'
+      'Vos métiers ne se modifient pas pendant l''examen de votre nouvelle pièce : déposez une demande de modification.'
       using errcode = 'check_violation';
   end if;
 
@@ -959,6 +985,8 @@ begin
     new.verifie            := true;
     new.verification_statut := 'verifie';
     new.verifie_le         := coalesce(new.verifie_le, now());
+    -- Le badge est rendu : la suspension est finie (lot S-a).
+    new.badge_suspendu_le  := null;
   else
     new.verifie    := false;
     new.verifie_le := null;
@@ -968,6 +996,11 @@ begin
         when new.kbis_url is not null or new.assurance_url is not null then 'en_attente'
         else 'non_soumis'
       end;
+    end if;
+    -- Un refus de l'administration clôt la suspension : la fiche n'attend
+    -- plus de revue, le verrou des métiers n'a plus à tenir (lot S-a).
+    if new.verification_statut = 'refuse' then
+      new.badge_suspendu_le := null;
     end if;
   end if;
   return new;
@@ -1326,10 +1359,32 @@ update storage.buckets set file_size_limit = 50 * 1024 * 1024
 update storage.buckets set file_size_limit = 20 * 1024 * 1024
  where id = 'documents';
 
--- Lecture publique des médias affichés dans l'application
+-- --------------------------------------------------------------------------
+--  Lecture des médias publics — chacun ne LISTE que SON dossier (lot S-a,
+--  25/10/2026).
+--
+--  Cette règle valait pour tout le monde, sans compte, sur les trois espaces
+--  publics. Or une règle de LECTURE sur `storage.objects` ne sert pas à
+--  afficher une photo d'un espace public — storage-api la sert lui-même, en
+--  superutilisateur (getPublicObject.ts:57-60, lu au commit 6dd28b4) : elle
+--  sert à LISTER. Un visiteur pouvait donc énumérer les dossiers (qui portent
+--  l'identifiant du compte) et télécharger les photos des demandes de travaux
+--  des particuliers sans en connaître l'adresse.
+--
+--  Restreinte à son propre dossier, elle garde ce dont l'envoi a besoin : la
+--  sonde « upsert » de storage-api rend la ligne qu'elle vient d'écrire
+--  (RETURNING), ce qui demande de pouvoir la lire. Mesuré sur un clone : un
+--  envoi vers un chemin neuf passe, un visiteur liste 0 ligne.
+--
+--  Ce que ça NE fait PAS : rendre ces photos privées. Elles restent lisibles
+--  par quiconque connaît leur adresse (A-FAIRE, R24).
+-- --------------------------------------------------------------------------
 drop policy if exists "lecture publique des medias" on storage.objects;
 create policy "lecture publique des medias" on storage.objects
-  for select using (bucket_id in ('avatars', 'bannieres', 'publications'));
+  for select using (
+    bucket_id in ('avatars', 'bannieres', 'publications')
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 -- Les documents justificatifs ne sont lisibles que par leur propriétaire
 -- (et par vous depuis le tableau de bord, qui contourne ces règles).
@@ -1340,7 +1395,7 @@ create policy "lecture de mes documents" on storage.objects
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
--- Chacun n'envoie, remplace et supprime que ses propres fichiers
+-- Chacun n'envoie que dans son propre dossier
 drop policy if exists "envoi de mes fichiers" on storage.objects;
 create policy "envoi de mes fichiers" on storage.objects
   for insert with check (
@@ -1348,14 +1403,51 @@ create policy "envoi de mes fichiers" on storage.objects
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
+-- --------------------------------------------------------------------------
+--  PERSONNE NE REMPLACE UN FICHIER ; CHACUN RETIRE SES PHOTOS PUBLIQUES
+--  (lot S-a, 25/10/2026 — défaut R1 de l'audit du 19/10, règle D7)
+--
+--  Ces deux règles valaient pour TOUS les espaces, sans filtre : elles ne
+--  demandaient que « le premier dossier du chemin est le mien ». Des règles
+--  RLS s'additionnent : une absence de règle propre à un espace ne fermait
+--  donc rien. Mesuré sur PostgreSQL 16 (règles identiques à la vraie base au
+--  caractère près) :
+--    - l'expéditeur retirait ou remplaçait une pièce jointe DÉJÀ REÇUE, alors
+--      que la section 28 promet « une pièce envoyée ne se retire pas » ;
+--    - un artisan remplaçait ou retirait son Kbis VALIDÉ ;
+--    - le « move » de storage-api est un UPDATE de `name` ET de `bucket_id` :
+--      un Kbis passait de `documents` à `publications` (rendu public), une
+--      pièce jointe sortait de sa conversation, et un fichier forgé serait
+--      ENTRÉ dans le futur espace des devis en contournant sa règle d'envoi.
+--
+--  La décision du propriétaire (D5) : personne ne remplace un fichier — un
+--  nouveau fichier est un nouveau chemin, et l'application n'envoie que des
+--  chemins horodatés, toujours neufs ; chacun peut retirer SES photos
+--  publiques (avatars, bannières, publications), jamais une pièce jointe, un
+--  justificatif ni un devis.
+--
+--  « remplacement » reste écrite, fermée (`using (false)`) : sur la vraie
+--  base, le connecteur refuse un ordre qui commence par `drop`, et une règle
+--  fermée se comporte exactement comme une absence de règle (mesuré). Le
+--  ménage de compte (fonction Edge `compte`) passe par la clé de service, qui
+--  ignore ces règles.
+--
+--  Et un envoi en upsert vers un chemin NEUF n'a besoin d'aucune règle
+--  UPDATE : la sonde de storage-api est un INSERT … ON CONFLICT … DO UPDATE,
+--  et PostgreSQL n'applique les règles UPDATE que sur le chemin du conflit
+--  (mesuré sur la forme exacte). L'application cesse quand même l'upsert : une
+--  collision répond alors 409 au lieu d'un 403.
+-- --------------------------------------------------------------------------
 drop policy if exists "remplacement de mes fichiers" on storage.objects;
 create policy "remplacement de mes fichiers" on storage.objects
-  for update using ((storage.foldername(name))[1] = auth.uid()::text)
-  with check ((storage.foldername(name))[1] = auth.uid()::text);
+  for update to authenticated using (false) with check (false);
 
 drop policy if exists "suppression de mes fichiers" on storage.objects;
 create policy "suppression de mes fichiers" on storage.objects
-  for delete using ((storage.foldername(name))[1] = auth.uid()::text);
+  for delete to authenticated using (
+    bucket_id in ('avatars', 'bannieres', 'publications')
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 -- --------------------------------------------------------------------------
 --  UNE COORDONNÉE, OU RIEN — et surtout pas une erreur
@@ -2647,6 +2739,7 @@ begin
     new.assurance_expire  := null;
     new.rge               := false;
     new.verification_note := null;
+    new.badge_suspendu_le := null;
 
     -- Déposer ses documents dès la création reste permis : c'est dire
     -- « voici mes justificatifs », pas « je suis vérifié ».
@@ -2664,12 +2757,64 @@ begin
     new.assurance_expire  := old.assurance_expire;
     new.rge               := old.rge;
     new.verification_note := old.verification_note;
+    new.badge_suspendu_le := old.badge_suspendu_le;
 
     -- Il a le droit de dire « voici mes documents » (`en_attente`), pas de
     -- dire « je suis vérifié ».
     if new.verification_statut is distinct from old.verification_statut
        and new.verification_statut not in ('non_soumis', 'en_attente') then
       new.verification_statut := old.verification_statut;
+    end if;
+
+    /* 4. UNE PIÈCE VALIDÉE QUI CHANGE EST SUSPENDUE (lot S-a, 25/10/2026,
+          décision D4 du propriétaire : « Badge suspendu jusqu'à ta revue »).
+
+       Le défaut : un artisan vérifié changeait `kbis_url` (ou
+       `assurance_url`) vers un autre fichier. Ce déclencheur ne touchait pas
+       aux chemins : il gardait son badge, et la file de l'administration
+       (`where not p.verifie`) ne le revoyait jamais. Le badge attestait un
+       document qu'il n'avait plus. Mesuré sur PostgreSQL 16.
+
+       La règle porte sur la PIÈCE VALIDÉE, et vaut « y compris depuis
+       vide » : 3 fiches de la vraie base sont « vérifiées » sans aucun
+       fichier (restes du jeu de démonstration du 14/09) ; une garde
+       « l'ancien chemin n'était pas vide » laisserait un artisan vérifié
+       envoyer n'importe quel premier document sans être revu. Renvoyer le
+       MÊME chemin ne change rien (`is distinct from`). Le RGE n'est pas
+       concerné : il ne fait pas le badge.
+
+       L'ORDRE DES DÉCLENCHEURS COMPTE : `trg_synchronise_verification`
+       passe AVANT celui-ci (ordre alphabétique) et a déjà calculé `verifie`
+       sur les anciennes valeurs. Le badge se recalcule donc ICI. */
+    if (old.kbis_valide and new.kbis_url is distinct from old.kbis_url)
+       or (old.assurance_valide and new.assurance_url is distinct from old.assurance_url) then
+      if old.kbis_valide and new.kbis_url is distinct from old.kbis_url then
+        new.kbis_valide := false;
+        new.kbis_maj    := null;
+      end if;
+      if old.assurance_valide and new.assurance_url is distinct from old.assurance_url then
+        new.assurance_valide := false;
+        new.assurance_expire := null;
+      end if;
+      -- La règle de `synchronise_verification` : « en attente » s'il reste
+      -- une pièce à regarder, « non soumis » sinon. (Un Kbis RETIRÉ sortait
+      -- sinon « en attente » sans aucune pièce, mesuré.)
+      new.verification_statut := case
+        when new.kbis_url is not null or new.assurance_url is not null then 'en_attente'
+        else 'non_soumis'
+      end;
+      if old.verifie then
+        new.verifie           := false;
+        new.verifie_le        := null;
+        new.badge_suspendu_le := clock_timestamp();
+        /* Le dire, et le garder écrit : une suspension qui ne se lit que sur
+           l'écran d'envoi disparaît avec lui. La notification part au nom du
+           titulaire lui-même (« mes notifications » l'y autorise), sans
+           acteur : c'est la base qui parle. */
+        insert into public.notifications (user_id, type, texte)
+        values (new.id, 'verification_suspendue',
+                'Votre badge « vérifié » est suspendu le temps que l''administration d''Opus examine votre nouvelle pièce.');
+      end if;
     end if;
   end if;
 
@@ -5439,6 +5584,13 @@ end $blk$;
 --  ne se retire pas**, exactement comme un message ne se récrit pas
 --  (section 20) : ce qui engage quelqu'un d'autre se ferme. Retirer le
 --  fichier laisserait en plus un lien mort dans la conversation.
+--
+--  CETTE PROMESSE N'ÉTAIT PAS TENUE avant le lot S-a (25/10/2026) : les
+--  règles GÉNÉRALES de la section 12 (« remplacement de mes fichiers »,
+--  « suppression de mes fichiers ») s'appliquaient à tous les espaces, et des
+--  règles RLS s'additionnent — une absence ne ferme rien si une règle plus
+--  large existe. Elles sont désormais filtrées par espace : c'est là, et non
+--  ici, que la promesse se tient.
 --
 --  Elle part, en revanche, avec la conversation : `preparer_suppression_compte`
 --  supprime les conversations entières, et la fonction Edge vide le dossier.

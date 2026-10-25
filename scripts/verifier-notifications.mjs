@@ -68,6 +68,34 @@ verifier('…et les quinze types de la base sont couverts',
   'TYPES_CONNUS doit lister ce que les déclencheurs de schema.sql savent '
   + 'écrire. Un type oublié ici n\'est contrôlé par rien.');
 
+/* LES TYPES SE RELÈVENT DANS LA BASE, PAS DANS LA LISTE (25/10/2026).
+   Le contrôle faisait confiance à `TYPES_CONNUS` : `verification_attente`
+   (écrit par `admin_verifier_pro`) et `metiers_refuses` (par
+   `admin_traiter_metiers`) n'y étaient pas, et rien ne rougissait — un
+   appui sur ces notifications ne menait nulle part depuis des semaines.
+   On relève donc chaque chaîne littérale d'un `insert into
+   public.notifications` dans `schema.sql`, et on exige qu'elle soit
+   connue. Les morceaux composés (`genre || '_accepte'`) sont nommés à part,
+   puisqu'aucun texte ne les écrit en entier. */
+const NON_TYPES = new Set(['acceptee', 'verifie', 'refusee', 'en_attente']);
+const COMPOSES = { _accepte: ['devis_accepte', 'rappel_accepte', 'sos_accepte'] };
+const typesDeLaBase = new Set();
+for (const m of schema.matchAll(/insert into public\.notifications\b([\s\S]{0,1200}?);/g)) {
+  for (const [, t] of m[1].matchAll(/'([a-z_]{4,40})'/g)) {
+    if (NON_TYPES.has(t)) continue;
+    for (const u of (COMPOSES[t] || [t])) typesDeLaBase.add(u);
+  }
+}
+const inconnus = [...typesDeLaBase].filter((t) => !TYPES_CONNUS.includes(t));
+verifier('chaque type que la BASE écrit est connu de l\'application',
+  typesDeLaBase.size >= 15 && inconnus.length === 0,
+  `Types écrits par schema.sql et inconnus de TYPES_CONNUS : ${inconnus.join(', ') || '(relevé vide)'}. `
+  + 'Une notification de ce type ne mène nulle part.');
+verifier('…dont la suspension du badge (lot S-a)',
+  typesDeLaBase.has('verification_suspendue')
+  && destinationNotif({ type: 'verification_suspendue' }).quoi === 'profil',
+  'La suspension se lit sur la fiche, comme une vérification acceptée ou refusée.');
+
 /* DEUX LISTES POUR UNE SEULE VÉRITÉ, c'est le défaut des voyants du
    04/10. `NOTIFS_PROFIL` dit « ce type n'a pas de cible, il mène à la
    fiche » et `CIBLE_ATTENDUE` dit « ce type porte telle colonne ». Les

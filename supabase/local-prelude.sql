@@ -85,9 +85,24 @@ create table if not exists storage.objects (
   owner     uuid
 );
 alter table storage.objects enable row level security;
+/* L'ARBITRE DE L'UPSERT (lot S-a, 25/10/2026). storage-api envoie un fichier
+   « en upsert » par un INSERT … ON CONFLICT (bucket_id, name) DO UPDATE ; sans
+   cet index unique, un essai ne peut pas reproduire la sonde, et la règle de
+   remplacement ne serait jamais éprouvée sur son vrai chemin. */
+create unique index if not exists objects_bucket_nom on storage.objects (bucket_id, name);
+
+/* `storage.foldername` COMME LA PRODUCTION (relevée par pg_get_functiondef le
+   25/10/2026). L'ancienne imitation rendait `{nom}` pour un fichier posé à la
+   racine, là où la vraie rend `{}` : elle était PLUS PERMISSIVE que la
+   production, donc un essai de sécurité pouvait passer pour la mauvaise
+   raison — la famille de la ligne sur les fonctions, plus bas. */
 create or replace function storage.foldername(name text) returns text[]
-language sql immutable as $$
-  select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 1)];
+language plpgsql as $$
+declare _parts text[];
+begin
+  select string_to_array(name, '/') into _parts;
+  return _parts[1:array_length(_parts, 1) - 1];
+end
 $$;
 
 create publication supabase_realtime;

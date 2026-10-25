@@ -41,6 +41,7 @@ import { execFileSync } from 'node:child_process';
 import {
   VERSION, STATUT, DOMAINE, EDITEUR, MENTIONS, CGU, CONFIDENTIALITE,
   editeurComplet, manquesEditeur, rappelStatut,
+  CE_QUI_RESTE_EN_LIGNE, EFFACEMENT_CLOUDINARY, PAYS_CLOUDINARY,
 } from '../src/data/legal.js';
 
 let echecs = 0;
@@ -1596,6 +1597,74 @@ console.log('\nLa base de postes : ce que les textes en disent (lot P)');
     !aucuneDonnee.test(tout),
     `${(tout.match(/[^.]{0,60}aucune\s+(?:donnée|information)[^.]{0,40}/gi) || []).join(' | ')} — la base de postes n’a `
     + 'aucune COLONNE de client, mais une phrase peut en nommer un, et l’écran le signale');
+}
+
+/* ------------------------------------------------------------------ */
+/*  LOT S-a (25/10/2026) — CLOUDINARY ET LE BADGE SUSPENDU             */
+/* ------------------------------------------------------------------ */
+console.log('\nLot S-a — ce qui reste en ligne, et le badge suspendu');
+{
+  const bloc = (liste, titre) => (liste.find((b) => b.titre === titre) || {}).texte || '';
+  const ecran = readFileSync('src/screens/ConfidentialiteScreen.js', 'utf8');
+  const ecranSans = ecran.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const fonctionCompte = readFileSync('supabase/functions/compte/index.ts', 'utf8');
+  const compteToucheCloudinary = /cloudinary/i.test(fonctionCompte.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''));
+
+  verifier('`CE_QUI_RESTE_EN_LIGNE` dit que les vidéos et les musiques restent chez Cloudinary',
+    typeof CE_QUI_RESTE_EN_LIGNE === 'string' && /Cloudinary/.test(CE_QUI_RESTE_EN_LIGNE)
+    && /restent en ligne/.test(CE_QUI_RESTE_EN_LIGNE) && /vidéos/.test(CE_QUI_RESTE_EN_LIGNE)
+    && /musiques/.test(CE_QUI_RESTE_EN_LIGNE),
+    'la vérité est écrite UNE fois, et elle nomme ce qui reste');
+  verifier('…sans adresse publiée, elle dit qu’aucun moyen n’existe encore (parEcrit, jamais « Contact : »)',
+    EDITEUR.email ? CE_QUI_RESTE_EN_LIGNE.includes(EDITEUR.email)
+      : (/ne peut pas encore être demandé/.test(CE_QUI_RESTE_EN_LIGNE) && !/Contact\s*:/.test(CE_QUI_RESTE_EN_LIGNE)),
+    'ligneContact() glisserait « Contact : … » au milieu d’une phrase et ferait croire qu’un chemin existe');
+  verifier('…et elle est servie à « Fermer son compte » et à « Combien de temps »',
+    bloc(CGU, 'Fermer son compte').includes(CE_QUI_RESTE_EN_LIGNE)
+    && bloc(CONFIDENTIALITE, 'Combien de temps').includes(CE_QUI_RESTE_EN_LIGNE));
+  verifier('…et l’ÉCRAN de suppression l’IMPORTE (pas de recopie)',
+    /import\s*\{[^}]*\bCE_QUI_RESTE_EN_LIGNE\b[^}]*\}\s*from\s*'\.\.\/data\/legal'/.test(ecranSans)
+    && /\{CE_QUI_RESTE_EN_LIGNE\}/.test(ecranSans),
+    'ConfidentialiteScreen.js doit afficher la constante de legal.js');
+
+  /* « effacé(e)s » sans la constante dans le MÊME texte, tant que la
+     fonction `compte` ne touche pas à Cloudinary : c'est la phrase qui était
+     fausse à cinq endroits. */
+  const effaceSans = [...CGU, ...CONFIDENTIALITE]
+    .filter((b) => /(?:données|fichiers)[^.]{0,80}effacé(?:e?s)?(?![\p{L}_])/iu.test(b.texte)
+      && !b.texte.includes(CE_QUI_RESTE_EN_LIGNE))
+    .map((b) => b.titre);
+  verifier('aucun texte ne dit « données / fichiers effacés » sans dire ce qui reste chez Cloudinary',
+    compteToucheCloudinary || effaceSans.length === 0,
+    `textes : ${effaceSans.join(', ')}`);
+  verifier('…et l’écran de suppression non plus',
+    compteToucheCloudinary || !/fichiers\s+sont\s+effacés/.test(ecranSans.replace(/\s+/g, ' ')),
+    '« vos fichiers sont effacés » était faux : les vidéos restent chez Cloudinary');
+
+  const tousTextes = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte).join(' ');
+  verifier('Cloudinary HÉBERGE : jamais « transit » à côté de Cloudinary',
+    !/Cloudinary[^.]{0,160}transit|transit[^.]{0,160}Cloudinary/i.test(tousTextes));
+  verifier('« Où vos données sont hébergées » nomme Cloudinary pour les vidéos',
+    /Cloudinary/.test(bloc(CONFIDENTIALITE, 'Où vos données sont hébergées')));
+  verifier('« Propriété intellectuelle » ne promet plus « le temps qu’ils y sont publiés »',
+    !/le temps qu.ils y sont publiés/.test(bloc(MENTIONS, 'Propriété intellectuelle'))
+    && /pas ses fichiers/.test(bloc(MENTIONS, 'Propriété intellectuelle')));
+
+  verifier('les CGU disent que remplacer une pièce suspend le badge, y compris une attestation renouvelée',
+    /suspend le badge/.test(bloc(CGU, 'Le badge vérifié')) && /renouvelée/.test(bloc(CGU, 'Le badge vérifié')));
+  verifier('…et la politique la range parmi les décisions automatiques, avec son effet et sans délai promis',
+    (() => {
+      const t = bloc(CONFIDENTIALITE, 'Une décision automatique, et comment la faire revoir');
+      return /suspendu automatiquement/.test(t) && /professionnels vérifiés/.test(t) && /Aucun délai d’examen n’est promis/.test(t);
+    })());
+
+  if (STATUT !== 'essai') {
+    verifier('ouvrir au public suppose l’effacement chez Cloudinary construit (EFFACEMENT_CLOUDINARY)',
+      EFFACEMENT_CLOUDINARY === true,
+      'on n’ouvre pas une application qui ne sait pas effacer ce qu’elle publie');
+    verifier('…et le pays d’hébergement de Cloudinary relevé (PAYS_CLOUDINARY)',
+      !!PAYS_CLOUDINARY && !tousTextes.includes('[à compléter : pays relevé'));
+  }
 }
 
 console.log('');

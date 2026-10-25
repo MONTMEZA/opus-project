@@ -809,6 +809,20 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
       + 'Elle se suit sur votre profil, où vous pouvez joindre un justificatif — ou '
       + 'l’annuler pour en faire une autre.';
   }
+  /* UN FICHIER QUI EXISTE DÉJÀ (Supabase Storage, statut 409, « The
+     resource already exists »). Depuis le lot S-a, aucun envoi ne remplace
+     un fichier rangé : le stockage répond alors 409 au lieu d'écraser.
+     CETTE BRANCHE VIT AVANT CELLE DU 23505, et c'est mesuré : son message
+     contient « already exists », et la branche suivante l'aurait traduit
+     par « cet enregistrement… depuis un autre appareil », ce qui envoie
+     chercher un autre appareil qui n'existe pas. Le téléphone l'enveloppe
+     dans « Envoi refusé par Supabase : … » (`storage.js`), le navigateur
+     le rend tel quel avec `statusCode: '409'` : les deux sont reconnus. */
+  const statut = String((e && (e.statusCode || e.status)) || '');
+  if (m.includes('resource already exists') || (statut === '409' && m.includes('exist'))) {
+    return phrase(sujet, 'un fichier du même nom est déjà rangé, et Opus ne remplace '
+      + 'jamais un fichier envoyé. Recommencez l’envoi : il partira sous un nom neuf.');
+  }
   /* 23505 — « cela existe déjà » ne disait ni quoi, ni quoi faire. Une
      contrainte d'unicité qui garde une saisie aura sa phrase dans
      `MESSAGES_CONTRAINTE` ; sinon, le cas le plus fréquent : la même ligne

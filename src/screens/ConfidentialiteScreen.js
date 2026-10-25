@@ -39,6 +39,7 @@ import {
 import { TAILLE_JOURNAL_IA } from '../lib/api';
 import { TITRES_LEGAUX } from './LegalScreen';
 import { CLAVIER } from '../lib/clavier';
+import { CE_QUI_RESTE_EN_LIGNE } from '../data/legal';
 
 /** Le mot à taper pour supprimer. En majuscules : on ne le tape pas par hasard. */
 const MOT_DE_PASSE_DE_SORTIE = 'SUPPRIMER';
@@ -365,9 +366,14 @@ export default function ConfidentialiteScreen({
           <Text style={s.dangerTitre}>C’est définitif</Text>
         </View>
         <Text style={s.dangerTexte}>
-          Vos publications, vos demandes, vos annonces, vos messages et vos
-          fichiers sont effacés immédiatement. Rien n’est récupérable ensuite,
-          par personne.
+          {/* La vérité sur Cloudinary est écrite UNE fois, dans `legal.js`
+              (lot S-a) : « vos fichiers sont effacés » était faux, les
+              vidéos et les musiques y restent en ligne. */}
+          Vos publications, vos demandes, vos annonces, vos messages et les
+          fichiers rangés chez Opus sont effacés immédiatement. Rien n’est
+          récupérable ensuite, par personne.
+          {'\n\n'}
+          {CE_QUI_RESTE_EN_LIGNE}
           {'\n\n'}
           Les avis et commentaires que vous avez laissés chez d’autres sont
           CONSERVÉS, mais détachés de votre nom. Les effacer reviendrait à

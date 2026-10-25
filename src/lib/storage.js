@@ -121,9 +121,15 @@ async function envoiWeb({ uri, bucket, chemin, type, onTaille }) {
   if (octets.length > TAILLE_MAX_MO * 1024 * 1024) throw tropLourd(octets.length);
   if (onTaille) onTaille(octets.length);
 
+  /* `upsert: false`, ET C'EST UNE RÈGLE DE LA BASE (lot S-a, 25/10/2026) :
+     depuis ce jour, plus personne ne remplace un fichier rangé — ni une
+     pièce jointe envoyée à quelqu'un, ni un Kbis déjà validé. Le chemin
+     porte l'heure à la milliseconde, donc un envoi normal ne tombe jamais
+     sur un fichier existant ; s'il y tombait, Supabase répond 409 et
+     `messageClair()` le dit en français. */
   const { error } = await supabase.storage.from(bucket).upload(chemin, octets, {
     contentType: type,
-    upsert: true,
+    upsert: false,
   });
   if (error) throw error;
 }
@@ -185,7 +191,8 @@ async function envoiTelephone({ uri, bucket, chemin, type, onProgress, onTaille 
       // elle se télécharge en entier avant de démarrer, au lieu de se lire
       // au fil de l'eau. C'est ce qui la rendait si lente à apparaître.
       'Content-Type': type,
-      'x-upsert': 'true',
+      // PAS d'en-tête `x-upsert` : la base ne laisse plus remplacer un
+      // fichier rangé (lot S-a). Sans lui, Supabase crée, ou répond 409.
       'cache-control': 'max-age=3600',
     },
     onProgress: onProgress

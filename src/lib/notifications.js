@@ -37,6 +37,16 @@ export const TYPES_CONNUS = [
   'demande_refusee',
   'partenaire_demande', 'partenaire_accepte',
   'verification_acceptee', 'verification_refusee',
+  /* Le badge suspendu le temps qu'une nouvelle pièce soit regardée (lot
+     S-a, 25/10/2026) : posée par `tient_le_profil_pro()`, sans acteur. */
+  'verification_suspendue',
+  /* DEUX TYPES QUE LA BASE ÉCRIVAIT DÉJÀ ET QUE PERSONNE NE SAVAIT OUVRIR
+     (trouvés le 25/10/2026 en ajoutant le précédent) : `admin_verifier_pro`
+     écrit `verification_attente` quand il manque encore une pièce, et
+     `admin_traiter_metiers` écrit `metiers_refuses`. Un appui dessus ne
+     menait nulle part. `verifier-notifications` relève désormais les types
+     dans `schema.sql` lui-même, au lieu de faire confiance à cette liste. */
+  'verification_attente', 'metiers_refuses',
   'metiers_acceptes',
   /* La porte de secours et les entreprises (section 45, 15/10/2026) :
      quatre types, et chacun mène quelque part — sinon c'est le défaut du
@@ -51,8 +61,8 @@ export const TYPES_CONNUS = [
    Les trois vivent sur le même écran, donc une seule destination. */
 export const NOTIFS_PROFIL = new Set([
   'partenaire_demande', 'partenaire_accepte',
-  'verification_acceptee', 'verification_refusee',
-  'metiers_acceptes',
+  'verification_acceptee', 'verification_refusee', 'verification_suspendue',
+  'verification_attente', 'metiers_acceptes', 'metiers_refuses',
   /* Une entreprise retirée par l'administration : la fiche est l'endroit
      où l'on voit ce qui est rattaché, et ce qui ne l'est plus. Elle n'a
      pas de cible — l'identité retirée n'est plus la sienne. */
@@ -125,7 +135,10 @@ export const CIBLE_ATTENDUE = {
   partenaire_accepte: null,
   verification_acceptee: null,
   verification_refusee: null,
+  verification_suspendue: null,
+  verification_attente: null,
   metiers_acceptes: null,
+  metiers_refuses: null,
   demande_pro_nouvelle: 'demandeProId',
   compte_pro_ouvert: 'demandeProId',
   demande_pro_refusee: 'demandeProId',

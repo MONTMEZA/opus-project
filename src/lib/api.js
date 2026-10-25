@@ -404,7 +404,12 @@ export function alignerTypeDuCompte(type) {
  */
 export async function submitDocuments({ kbisPath, assurancePath, rgePath, rge }) {
   if (!hasSupabase) return null;
-  const patch = { verification_statut: 'en_attente' };
+  /* « Voici mes documents » (`en_attente`) ne part qu'avec une pièce qui
+     FAIT le badge — l'existence ou l'assurance (lot S-a). Envoyé avec un RGE
+     seul, il laissait une fiche vérifiée marquée « en attente » pour un
+     document que personne n'examine pour le badge. */
+  const patch = {};
+  if (kbisPath || assurancePath) patch.verification_statut = 'en_attente';
   if (kbisPath) patch.kbis_url = kbisPath;
   if (assurancePath) patch.assurance_url = assurancePath;
   if (rgePath) patch.rge_url = rgePath;
@@ -418,6 +423,7 @@ export async function submitDocuments({ kbisPath, assurancePath, rgePath, rge })
     patch.rge_numero = rge.numero || null;
     patch.rge_expire = rge.expire || null;
   }
+  if (!Object.keys(patch).length) return null;
 
   const { error } = await supabase.from('professional_profiles')
     .update(patch).eq('id', currentUserId);
@@ -465,6 +471,10 @@ const COLONNES_PRO_LISTE = [
   'assurance_valide', 'assurance_expire', 'kbis_valide', 'kbis_maj',
   'avatar_url', 'banner_url', 'kbis_url', 'assurance_url',
   'verification_statut', 'verification_note', 'verifie_le',
+  /* Lot S-a : le badge suspendu le temps qu'une nouvelle pièce soit
+     regardée. Tenue par la base seule ; l'écran s'en sert pour figer les
+     métiers et pour dire pourquoi le badge n'est plus là. */
+  'badge_suspendu_le',
   'code_postal', 'latitude', 'longitude',
   'avis_count', 'note_delais', 'note_qualite', 'note_tarif',
   /* La fiche de contact : téléphone, zone d'intervention, spécialités.
@@ -536,6 +546,7 @@ function rowToPro(row, reviews = [], partners = []) {
     noteQualite: row.note_qualite || 0,
     noteTarif: row.note_tarif || 0,
     verifieLe: row.verifie_le || null,
+    badgeSuspenduLe: row.badge_suspendu_le || null,
     codePostal: row.code_postal || null,
     latitude: row.latitude || null,
     longitude: row.longitude || null,
@@ -4377,6 +4388,20 @@ async function fileVerificationsDemo() { return []; }
 async function fileVerificationsSupabase() {
   const { data, error } = await supabase.rpc('admin_file_verifications');
   if (error) throw error;
+  /* LE BADGE SUSPENDU (lot S-a) se lit À CÔTÉ de la file, pas dedans : la
+     fonction rend un `returns table` figé, et lui ajouter une colonne
+     demanderait de la supprimer d'abord — ce que le connecteur refuse.
+     `professional_profiles` est lisible par tout compte connecté, donc
+     cette lecture n'ouvre rien. Un échec n'empêche pas la file de
+     s'afficher : la carte ne dit alors rien de la suspension (`null`),
+     plutôt que d'affirmer « pas suspendu ». */
+  const ids = (data || []).map((p) => p.id);
+  let suspendus = null;
+  if (ids.length) {
+    const lu = await supabase.from('professional_profiles')
+      .select('id, badge_suspendu_le').in('id', ids);
+    if (!lu.error) suspendus = new Map((lu.data || []).map((r) => [r.id, r.badge_suspendu_le]));
+  }
   return (data || []).map((p) => ({
     id: p.id,
     entreprise: p.entreprise,
@@ -4408,6 +4433,7 @@ async function fileVerificationsSupabase() {
     aEnvoye: p.a_envoye,
     estMoi: p.est_moi,
     inscritLe: p.inscrit_le,
+    badgeSuspenduLe: suspendus ? (suspendus.get(p.id) || null) : undefined,
   }));
 }
 

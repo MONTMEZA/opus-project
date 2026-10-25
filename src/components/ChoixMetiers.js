@@ -56,7 +56,7 @@ export const MAX_METIERS = 4;
  */
 export default function ChoixMetiers({
   valeurs = [], onChange, verrouille = false, onDemanderModification, demandeEnCours,
-  proposition = null,
+  proposition = null, suspendu = false,
 }) {
   const choisis = valeurs.filter(Boolean);
   const [selecteurOuvert, setSelecteurOuvert] = useState(false);
@@ -90,10 +90,16 @@ export default function ChoixMetiers({
 
         <View style={s.verrou}>
           <Lock size={13} color={C.accent2} />
+          {/* `suspendu` (lot S-a) : le badge est suspendu le temps qu'une
+              nouvelle pièce soit regardée. Les métiers restent figés, pour
+              que le badge rendu atteste les métiers qui ont été contrôlés. */}
           <Text style={s.verrouTexte}>
-            Vos métiers sont figés depuis la vérification de vos documents.
-            C'est ce qui donne sa valeur à votre badge : un client sait que le
-            métier affiché est celui qui a été contrôlé.
+            {suspendu
+              ? 'Vos métiers restent figés pendant l’examen de votre nouvelle pièce : '
+                + 'votre badge reviendra avec les métiers qui ont été contrôlés.'
+              : 'Vos métiers sont figés depuis la vérification de vos documents. '
+                + 'C’est ce qui donne sa valeur à votre badge : un client sait que le '
+                + 'métier affiché est celui qui a été contrôlé.'}
           </Text>
         </View>
 

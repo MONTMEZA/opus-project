@@ -47,6 +47,15 @@ const ETATS = {
   },
 };
 
+const SUSPENDU = {
+  couleur: C.accent2,
+  Icone: FileText,
+  titre: 'Badge suspendu pendant l’examen',
+  texte: 'Vous avez envoyé une nouvelle pièce : votre badge reviendra dès que '
+    + 'l’administration d’Opus l’aura regardée. Vos métiers restent figés d’ici là.',
+  action: 'Voir mes documents',
+};
+
 /**
  * DEPUIS LE 15/10/2026 (section 45), LE RAPPEL A DEUX ÉTAPES.
  *
@@ -69,7 +78,11 @@ export default function RappelVerification({
   // Profil vérifié : plus rien à rappeler.
   if (!statut || statut === 'verifie') return null;
 
-  const e = ETATS[statut] || ETATS.non_soumis;
+  /* LE BADGE SUSPENDU (lot S-a) : la fiche était vérifiée, une nouvelle
+     pièce est partie. « Vérification en cours » laissait croire à une
+     première demande, et ne disait pas pourquoi le badge avait disparu. */
+  const suspendu = !!(pro && pro.badgeSuspenduLe) && statut === 'en_attente';
+  const e = suspendu ? SUSPENDU : (ETATS[statut] || ETATS.non_soumis);
   /* Certains textes dépendent du métier — un avocat n'a pas de décennale.
      `pro` peut manquer (un appel ancien) : `pieceAssurance(null)` rend alors
      la décennale, qui est le bon défaut dans une application du bâtiment. */

@@ -29,7 +29,28 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-24';
+export const VERSION = '2026-10-25';
+/* 25/10/2026 — LE STOCKAGE ET LE BADGE (lot S-a du lot de sécurité).
+   Ce qui a changé DE FOND :
+     - LA SUSPENSION DU BADGE (décision D4 du propriétaire) : remplacer sa
+       pièce d'existence légale ou son attestation d'assurance alors que le
+       badge est accordé le suspend jusqu'à l'examen, y compris pour une
+       attestation renouvelée (réponse du propriétaire du 25/10 : « Garder la
+       règle »). C'est une décision AUTOMATIQUE qui a un effet — la fiche sort
+       des recherches « vérifiés seulement » —, donc elle est dite dans les
+       CGU ET parmi les décisions automatiques (critique « droit », constat
+       9) ;
+     - LA VÉRITÉ SUR CLOUDINARY, dite cinq fois au lieu d'une et écrite UNE
+       fois (`CE_QUI_RESTE_EN_LIGNE`) : les vidéos et les musiques y sont
+       HÉBERGÉES (elles n'y « transitent » pas), et elles restent en ligne
+       après la suppression de la publication comme du compte — la fonction
+       `compte` ne touche pas à Cloudinary. « Vos données sont effacées »
+       était faux, à l'écran de suppression comme dans les textes ; et les
+       photos d'une publication supprimée restent rangées jusqu'à la
+       suppression du compte ;
+     - Opus ne remplace plus jamais un fichier envoyé (règle de la base) :
+       rien à dire au public, c'est une garantie de plus. */
+/* 24/10/2026 — avant ce jour : */
 /* 24/10/2026 — LA BASE DE POSTES (lot P du module devis, section 50 de
    `schema.sql`). Ce qui a changé DE FOND :
      - la collecte s'allonge : la base de postes d'un artisan — les phrases
@@ -237,6 +258,27 @@ export const VERSION = '2026-10-24';
  * professionnelle : 'particulier' ne suffit plus, il faut un SIRET.
  */
 export const STATUT = 'essai';
+
+/**
+ * L'EFFACEMENT CHEZ CLOUDINARY — un drapeau HUMAIN, sur le modèle de
+ * `contratSousTraitance` (lot S-a, 25/10/2026).
+ *
+ * Les vidéos et les musiques publiées sont hébergées par Cloudinary, et RIEN
+ * ne les y retire : ni la suppression d'une publication, ni celle d'un compte
+ * (la fonction Edge `compte` ne connaît que les espaces de Supabase). Les
+ * textes le disent (`CE_QUI_RESTE_EN_LIGNE`). Ce drapeau passe à `true` le
+ * jour où l'effacement est construit ET éprouvé — et `verifier-legal` refuse
+ * qu'Opus quitte `'essai'` tant qu'il vaut `false` : on n'ouvre pas au public
+ * une application qui ne sait pas effacer ce qu'elle publie.
+ */
+export const EFFACEMENT_CLOUDINARY = false;
+
+/**
+ * Le PAYS où Cloudinary range les vidéos d'Opus : il se lit dans la console
+ * Cloudinary du propriétaire, il ne se devine pas. Tant qu'il vaut `null`,
+ * les textes affichent « [à compléter] ».
+ */
+export const PAYS_CLOUDINARY = null;
 
 /**
  * LE DOMAINE D'OPUS — et pourquoi il est écrit ici.
@@ -481,6 +523,27 @@ function questionDonnees() {
   );
 }
 
+/**
+ * CE QUI RESTE EN LIGNE APRÈS UNE SUPPRESSION — écrit UNE fois (lot S-a).
+ *
+ * La phrase vit ici parce qu'elle est dite à TROIS endroits : les CGU
+ * (« Fermer son compte »), la politique (« Combien de temps ») et l'écran
+ * de suppression de compte, qui l'IMPORTE au lieu de la recopier. Avant ce
+ * jour, les trois disaient « vos données sont effacées », et c'était faux.
+ *
+ * `parEcrit()`, jamais `ligneContact()` : sans adresse publiée, la phrase dit
+ * qu'aucun moyen n'existe encore, au lieu de glisser « Contact : … » au
+ * milieu d'une phrase et de laisser croire qu'il y en a un.
+ */
+export const CE_QUI_RESTE_EN_LIGNE = 'Une exception, à corriger : vos vidéos et vos '
+  + 'musiques sont hébergées par Cloudinary, et elles restent en ligne, à leur adresse, '
+  + 'après la suppression de la publication comme après celle de votre compte. '
+  + parEcrit(
+    (adresse) => `Pour en obtenir l’effacement, écrivez à ${adresse}.`,
+    'Aucune adresse de contact n’est encore publiée : cet effacement ne peut pas encore '
+      + 'être demandé. C’est à corriger avant toute ouverture au public.',
+  );
+
 /* ------------------------------------------------------------------ */
 /*  1. MENTIONS LÉGALES                                                */
 /*                                                                     */
@@ -556,8 +619,9 @@ export const MENTIONS = [
     texte: "Le nom Opus, son identité visuelle et le code de l'application "
       + "appartiennent à l'éditeur. Les photos, vidéos et textes publiés par "
       + 'les utilisateurs restent la propriété de leurs auteurs : Opus ne '
-      + "reçoit qu'une autorisation de les afficher dans l'application, le "
-      + 'temps qu’ils y sont publiés.',
+      + "reçoit qu'une autorisation de les afficher dans l'application. "
+      + 'Supprimer une publication la retire d’Opus, mais pas ses fichiers : voir '
+      + '« Combien de temps » dans la politique de confidentialité.',
   },
   {
     /* LA LICENCE OUVERTE DE L'INSEE L'EXIGE : « www.insee.fr » et la date
@@ -654,7 +718,10 @@ export const CGU = [
       + 'compte professionnel, qui dit seulement que l’entreprise existait et était '
       + 'active à cette date : cette consultation n’apparaît jamais sur votre fiche '
       + 'publique — seuls vous et l’administration d’Opus la voyez —, et elle ne '
-      + 'prouve pas que le compte appartient à l’entreprise.',
+      + 'prouve pas que le compte appartient à l’entreprise. Remplacer l’une des deux '
+      + 'pièces — y compris pour envoyer une attestation d’assurance renouvelée — '
+      + 'suspend le badge jusqu’à ce que l’administration d’Opus ait examiné la '
+      + 'nouvelle pièce ; vos métiers ne se modifient pas pendant ce temps.',
   },
   {
     titre: 'Ce que vous publiez',
@@ -809,7 +876,8 @@ export const CGU = [
     titre: 'Fermer son compte',
     texte: 'Vous pouvez supprimer votre compte à tout moment depuis '
       + 'l’application, sans avoir à le demander à qui que ce soit. Vos '
-      + 'données sont effacées. Les avis et commentaires que vous avez laissés '
+      + 'données rangées chez Opus sont effacées, avec les photos et les fichiers '
+      + 'de votre compte. ' + CE_QUI_RESTE_EN_LIGNE + ' Les avis et commentaires que vous avez laissés '
       + 'chez d’autres sont conservés mais détachés de votre nom : les '
       + 'supprimer reviendrait à modifier l’historique de quelqu’un qui n’a '
       + 'rien demandé.',
@@ -1056,15 +1124,22 @@ export const CONFIDENTIALITE = [
       + 'décision : seul votre service des impôts des entreprises peut activer ou corriger '
       + 'votre numéro auprès de l’administration fiscale, et vous pouvez le faire contrôler '
       + 'de nouveau dès qu’il l’a fait. Si vous relevez en réalité de la franchise en base '
-      + 'de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé.',
+      + 'de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé. '
+      + 'Enfin, si vous remplacez votre justificatif d’existence légale ou votre attestation '
+      + 'd’assurance alors que votre badge est accordé, le badge est suspendu automatiquement '
+      + 'dès l’envoi, jusqu’à ce que l’administration d’Opus ait examiné la nouvelle pièce : '
+      + 'c’est une personne qui le rend ou le refuse, avec un motif. Pendant ce temps, votre '
+      + 'fiche n’apparaît pas quand quelqu’un ne cherche que les professionnels vérifiés. '
+      + 'Aucun délai d’examen n’est promis.',
   },
   {
     titre: 'Où vos données sont hébergées',
-    texte: 'La base et les fichiers sont hébergés par Supabase à Londres '
-      + '(Royaume-Uni). Le Royaume-Uni ne fait plus partie de l’Union '
+    texte: 'La base, les photos et les autres fichiers sont hébergés par Supabase à '
+      + 'Londres (Royaume-Uni). Le Royaume-Uni ne fait plus partie de l’Union '
       + 'européenne, mais la Commission européenne a reconnu qu’il offre un '
       + 'niveau de protection équivalent : le transfert est donc autorisé '
-      + 'sans formalité supplémentaire.',
+      + 'sans formalité supplémentaire. Les vidéos et les musiques sont hébergées '
+      + `par Cloudinary (${ou(PAYS_CLOUDINARY, '[à compléter : pays relevé dans la console Cloudinary]')}).`,
   },
   {
     /* LE RENVERSEMENT QUE LE CARNET DE CLIENTS APPORTE (section 41 de
@@ -1167,8 +1242,8 @@ export const CONFIDENTIALITE = [
        données sont transmises » et qui oublie un destinataire ne vaut rien,
        même quand ce destinataire est un service public français. */
     texte: 'Supabase, pour l’hébergement de la base et des fichiers. '
-      + 'Cloudinary, pour la compression des vidéos et le montage — les vidéos '
-      + 'publiées y transitent. L’API Recherche d’entreprises de l’État '
+      + 'Cloudinary, qui compresse et héberge les vidéos et les musiques que vous '
+      + 'publiez, et fabrique les montages. L’API Recherche d’entreprises de l’État '
       + '(recherche-entreprises.api.gouv.fr), qui publie le répertoire Sirene de '
       + 'l’INSEE, quand vous faites consulter un numéro SIRET : seul ce numéro y est '
       + 'envoyé, depuis les serveurs d’Opus — jamais votre nom, jamais votre adresse '
@@ -1257,7 +1332,9 @@ export const CONFIDENTIALITE = [
       + 'le compte ni le numéro ; ces compteurs sont effacés lors d’un contrôle suivant, '
       + 'plus d’un jour après, y compris si le compte a été supprimé entre-temps : comme '
       + 'pour la consultation du répertoire, aucune durée maximale ne peut donc être '
-      + 'promise. Les journaux techniques de l’hébergeur, qui contiennent '
+      + 'promise. Les photos d’une publication que vous supprimez restent rangées, à leur '
+      + 'adresse, jusqu’à la suppression de votre compte. ' + CE_QUI_RESTE_EN_LIGNE
+      + ' Les journaux techniques de l’hébergeur, qui contiennent '
       + 'l’adresse IP des appareils, sont effacés par lui au bout d’un jour, selon '
       + 'l’offre souscrite aujourd’hui.',
   },
