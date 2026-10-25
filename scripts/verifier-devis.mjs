@@ -778,8 +778,22 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
     verifier('cas 33 : « Pos » range « Pose d’un meuble… » (degré 4) devant « Dépose de… » (degré 2), même plus récente — le degré '
       + 'd’abord, la date ensuite', pos.length === 2 && pos[0].ligneId === 'p1'
       && D.degreDeCorrespondance('Pose d’un meuble vasque', 'Pos') === 4 && D.degreDeCorrespondance('Dépose de l’ancien carrelage', 'Pos') === 2
-      && D.degreDeCorrespondance('Pose de plinthes carrelées', 'pose carrel') === 3 && D.degreDeCorrespondance('Dalle béton', 'Dalles') === 1
+      && D.degreDeCorrespondance('Pose de plinthes carrelées', 'pose carrel') === 3 && D.degreDeCorrespondance('Dalle béton', 'dalles eton') === 1
       && D.degreDeCorrespondance('Dalle béton', 'Sas') === 0, json(pos.map((s) => s.designation)));
+    /* Cas 33 bis (25/10/2026, trouvé sur la VRAIE base) : le degré se lit
+       aussi SANS les pluriels. « Dalles » mettait « Dalle béton » au degré 1
+       (« trouvée par le pluriel seulement ») ; « creation de la dalles »
+       rangeait « Création de la dalle en béton… » DERRIÈRE « CREATION DES
+       DALLES EN BETON… », une autre phrase qui contenait toutes les lettres.
+       Les clés commencent pareil : degré 4. */
+    verifier('cas 33 bis : « Dalles » → « Dalle béton » au degré 4 ; « creation de la dalles » → « Création de la dalle en béton… » (4) '
+      + 'devant « CREATION DES DALLES EN BETON… » (2) ; « dalles beton » → 3 ; « dalles eton » reste au degré 1',
+    D.degreDeCorrespondance('Dalle béton', 'Dalles') === 4
+      && D.degreDeCorrespondance('Création de la dalle en béton y compris coulage manuel, finition talochée', 'creation de la dalles') === 4
+      && D.degreDeCorrespondance('CREATION DES DALLES EN BETON y compris coulage manuel finition talochée', 'creation de la dalles') === 2
+      && D.degreDeCorrespondance('Création de la dalle en béton', 'dalles beton') === 3
+      && D.degreDeCorrespondance('Dalle béton', 'dalles eton') === 1,
+    json(['Dalles', 'creation de la dalles', 'dalles beton', 'dalles eton'].map((t) => [t, D.degreDeCorrespondance('Dalle béton', t)])));
     /* Cas 41 : une ligne SANS prix, plus récente, titre la proposition (sa
        phrase est la plus récente) mais ne fait pas perdre le prix : un appui
        recopie 52 €, le plus récent des prix UTILISABLES. */

@@ -3150,7 +3150,7 @@ Ce document (commité, fait foi) porte sur une base commune future. Quatre de se
    **Un conflit entre deux règles écrites, sur la catégorie de métier, et il appartient au propriétaire.** A-FAIRE.md (dernière section, point 1) fait une **exigence** de ranger un poste avec son unité, son prix, sa date, sa région **et sa catégorie de métier** ; `DONNEES-DES-ARTISANS.md` (§2.1, §7) cite aussi le métier. La règle du projet, elle, refuse une colonne sans lecteur. Deux options :
    - **(a) aucune colonne** : le métier se déduira plus tard des métiers de la fiche, avec le cahier des charges de la base. Simple, mais approximatif pour un artisan qui a plusieurs métiers ;
    - **(b) une colonne métier sur la ligne de la base de postes**, qui a un lecteur dès le premier jour : le filtre de la suggestion pendant la frappe, pour un artisan qui a plusieurs métiers.
-   À trancher avec lui avant le lot P (10.8, « À trancher plus tard »). Le premier jet tranchait pour (a) sans le dire : c'est corrigé.
+   À trancher avec lui avant le lot P (10.8, « À trancher plus tard »). Le premier jet tranchait pour (a) sans le dire : c'est corrigé. **Tranché au lot P le 23/10 (Q1) : (a), aucune colonne métier** — 10.17.
 2. **Jamais de prix conseillé.** L'agent peut montrer à l'artisan **ses propres** prix ; il n'écrit jamais « le prix à mettre est X », ne propose jamais de « s'aligner », ne pré-remplit jamais un devis avec le prix d'un autre (lignes directrices horizontales 2023, points 397 et 402). Un devis n'affiche jamais le prix d'un autre artisan.
 3. **Les données des clients ne servent jamais pour le compte d'Opus.** Opus en est le sous-traitant (10.3) : un prix signé est une donnée du client, et le réutiliser pour une base, même « anonymisé », est exactement ce que la CNIL a sanctionné le 11/12/2025.
 4. **Le propriétaire, du métier, ne doit pas lire les prix individuels des autres artisans**, administrateur compris : aucune fonction `admin_*` ne lit `devis`, `devis_lignes`, `devis_tva` ni la base de postes, et `verifier-devis` le refuse. **Limite à dire** : le propriétaire détient l'éditeur SQL de Supabase, qui lit tout ; la « séparation réelle » de §5.2 n'est pas tenue par ce module. `DONNEES-DES-ARTISANS.md` §7 (décision 3) veut qu'elle se décide **avant le module devis** : elle devient un préalable (10.7).
@@ -3183,7 +3183,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 
 - **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
 - **Lot 1** **(FAIT le 23/10/2026 — 10.16 ; la main-d'œuvre y est un drapeau SANS contrainte d'unité)** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
-- **Lot P — la base de postes** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier s'y tranche avant (10.6).
+- **Lot P — la base de postes** **(FAIT le 25/10/2026 — 10.17 ; aucune colonne métier, tranché le 23/10)** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier s'y tranche avant (10.6).
 - **Lot 2** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
 - **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
 - **Lot 5** : trois modèles au lieu de cinq.
@@ -3253,7 +3253,7 @@ Elles remplacent les listes du §8, de SIRET-ET-CLAUSES §7 et de CONCURRENCE-DE
 
 **Ne sont pas des questions au propriétaire**, mais des questions **par devis**, posées à l'artisan dans l'écran : le moment de conclusion (`lieu_conclusion`) et « construction neuve ou transformation importante ? » (10.3), toutes deux avec le cas le plus exigeant par défaut.
 
-**À trancher plus tard, avec lui** : la colonne métier de la base de postes (10.6, options a et b — avant le lot P) ; le format du numéro (avant le lot 2) ; la couleur d'accent et Oswald en base64 (lot 5) ; le nom de la base de prix dont il parle (avant toute lecture de ses conditions) ; et la séparation de `DONNEES-DES-ARTISANS.md` §5.2, préalable du module (10.7).
+**À trancher plus tard, avec lui** : la colonne métier de la base de postes (10.6, options a et b — avant le lot P ; **tranché au lot P le 23/10 : aucune**, 10.17) ; le format du numéro (avant le lot 2) ; la couleur d'accent et Oswald en base64 (lot 5) ; le nom de la base de prix dont il parle (avant toute lecture de ses conditions) ; et la séparation de `DONNEES-DES-ARTISANS.md` §5.2, préalable du module (10.7).
 
 ### 10.9 Lignes à corriger quand le plan sera reposé
 
@@ -3350,7 +3350,7 @@ Trouvé en écrivant cette mise à jour, mais hors du module. Chaque point est a
 11. Recopier mot pour mot depuis Légifrance, avec le navigateur du propriétaire, les citations prioritaires avant qu'elles s'affichent : arrêté du 24/01/2017 (dont l'art. 3, « tout espace de communication en ligne dédié »), annexe à R. 221-1 (formulaire de rétractation), arrêté du 17/03/2015 art. 6, mention 293 B ; lire aussi le contenu de la « solution dédiée » de l'art. 242 nonies G (décret 2026-677).
 12. Décider d'une migration au SDK 58 (sorti le 15/10/2026), avant ou après la reconstruction EAS du module devis.
 13. Corriger les annexes : CONCURRENCE-DEVIS.md (lexique acompte/arrhes l.421-422, plateformes l.458-467 et 581, ETI l.453, icône Info, n° de TVA verrouillé, « dès le premier euro ») et SIRET-ET-CLAUSES.md (l.240-247, 294-300, 530-531, 683-689) ; et DEVIS-DU-PROPRIETAIRE.md:179 (« Acompte à la signature », contraire au droit hors établissement).
-14. Mettre à jour docs/A-FAIRE.md : la question des factures (particuliers d'abord ou tout ensemble) est reportée à la fin du lot 4, avec l'échéance du 01/09/2027 ; et le conflit sur la catégorie de métier (exigence de la dernière section contre « pas de colonne sans lecteur ») est à trancher avec le propriétaire avant la base de postes.
+14. Mettre à jour docs/A-FAIRE.md : la question des factures (particuliers d'abord ou tout ensemble) est reportée à la fin du lot 4, avec l'échéance du 01/09/2027 ; et le conflit sur la catégorie de métier (exigence de la dernière section contre « pas de colonne sans lecteur ») est à trancher avec le propriétaire avant la base de postes. **Tranché au lot P le 23/10 : aucune colonne métier (10.17).**
 15. Démarches de l'entreprise qui émettra de vrais devis (celle du propriétaire s'il en a une active, sinon celle du frère s'il utilise Opus) : adhérer à un médiateur référencé par la CECMC avant le premier devis réel à un particulier ; choisir une plateforme agréée de réception des factures électroniques (obligatoire depuis le 01/09/2026, même en franchise) — à dire aussi au frère, puisque son entreprise est concernée indépendamment d'Opus.
 16. Demander au propriétaire le nom et le lien de la base de prix du bâtiment dont il parle (DEVIS-DU-PROPRIETAIRE.md §6.2), pour lire ses conditions de licence avant toute intégration.
 17. Changement d'entreprise d'un compte pro (nouveau SIREN, par exemple passage d'une micro-entreprise à une société) : aucune porte n'existe (OP008/OP009) ; cela touchera la numérotation et l'instantané des devis.
@@ -3732,3 +3732,91 @@ les relectures l'ont rendu nécessaire : l'horloge (OP015, OP016), OP017,
   `client_id` et `description` d'une demande qui lui est adressée ; un artisan
   bloqué qui peut rattacher un nouveau devis à la demande du particulier qui
   l'a bloqué.
+
+### 10.17 Le lot P — FAIT le 25/10/2026, et les réponses du 23/10 et du 25/10
+
+**Le lot P est FAIT le 25/10/2026** : construit du 23 au 25/10 (commits
+`92c3804` les étapes 0 à 6, `1144750` le parcours au navigateur, `7a8cc10` les
+corrections des trois relectures, puis celui du 25/10 qui corrige le classement
+des propositions et documente le lot), **migré sur la vraie base le 25/10 à
+11 h 12** (heure de Paris), avec l'accord du propriétaire, puis **essayé par le
+chemin de l'application** le même jour, avec trois comptes jetables supprimés
+ensuite (CLAUDE.md, « La base de postes — lot P » ; le cahier qui l'a guidé :
+`docs/CAHIER-LOT-P.md`, archivé avec en tête ce qui a changé depuis). En cas
+de désaccord entre ce cahier et le code, c'est le code et CLAUDE.md qui disent
+vrai.
+
+**Ce qu'il livre, en une phrase.** Sur une ligne de devis qu'il a écrite,
+l'artisan touche « Ajouter à ma base » : la phrase est rangée mot pour mot,
+avec son unité et un prix de référence ; quand il tape une ligne, ses phrases
+lui sont proposées — une par phrase, trois au plus, et sans IA les variantes
+d'une même phrase (majuscules, accents, ponctuation, un s de pluriel) n'en font
+qu'une — ; sous le prix d'une ligne qui correspond, sa référence, et, s'il met
+autre chose, « c'est voulu ? ». **Rien ne sort**, et personne d'autre que lui ne
+voit sa base.
+
+#### Les réponses du 23/10/2026
+
+Données après la lecture de la v2 du cahier ; plus aucune question du lot P
+n'est restée ouverte.
+
+| question | réponse | ce qu'elle change |
+|---|---|---|
+| construire le lot P ? | **« non on construit le lot p »** | il avait d'abord cru que la mémoire du lot 1 faisait déjà ce qu'il décrivait ; il voulait le prix de référence et l'écart |
+| les variantes d'une même phrase | **mot pour mot** : « il faudrait arriver à reconnaître les phrases, parce que l'artisan pour le même travail a par exemple rajouté un s ; il ne faut pas qu'il y ait trop de propositions, ça pourrait nous perdre » | la **clé de rapprochement** (CLAUDE.md) : une proposition par phrase, jamais plus de trois, et « ce poste existe déjà » au lieu d'un doublon. Une AUTRE formulation n'est pas reconnue : c'est l'étage de l'agent |
+| comment un poste entre dans la base | **d'un appui** (« Ajouter à ma base ») | jamais un ajout automatique ; la mémoire du lot 1 continue de tout retenir seule |
+| **Q1** — une colonne métier sur un poste (10.6, options a et b) ? | **(a), aucune** | le métier se déduira plus tard des métiers de la fiche, avec le cahier des charges de la base ; le conflit de 10.6 et de `A-FAIRE.md` est tranché |
+| **Q2** — la feuille d'ajout propose-t-elle le prix de la ligne ? | **oui, modifiable** | laissé vide, le prix « n'est pas fixé » : un `null` n'est pas un `0` |
+| **Q3** — où voir la référence ? | **seulement dans la ligne ouverte en grand** | jamais dans la liste du devis : un client qui regarde l'écran ne la voit pas |
+| **Q4** — créer un poste directement dans « Ma base » ? | **non** | un poste naît d'une ligne de devis ; « Ma base de postes » corrige et retire |
+
+#### Les réponses du 25/10/2026
+
+Posées juste avant la migration ; elles confirment les choix par défaut.
+
+| question | réponse |
+|---|---|
+| **A** — « 10cm » et « 10 cm » sont-ils une seule phrase ? | **non, deux** (de même « BA13 » et « BA 13 ») |
+| **B** — de deux variantes d'une même phrase, laquelle proposer ? | **la plus récente** |
+
+#### Ce que le lot P a CHANGÉ au plan
+
+Corrigé sur place le 25/10, marqué « tranché au lot P » : la colonne métier
+(10.6, 10.8, la liste des lots, la ligne 14 de 10.9), et `A-FAIRE.md`.
+
+| | ce que disait le plan | ce qui vaut depuis le lot P |
+|---|---|---|
+| la colonne métier | « à trancher avec lui avant le lot P » | **aucune** (Q1) |
+| la base de postes, 10.6 | « une table privée de postes : la phrase mot pour mot, l'unité, la fourniture, le prix de référence » | la même, plus la **main-d'œuvre**, la **date du prix posée par la base**, le **devis d'origine** (une clé composée, `on delete set null`) et une **clé de rapprochement** que seule la base calcule ; **1 000 postes au plus** (`OP018`) |
+| l'ajout d'un appui | « Ajouter à ma base » sur une ligne écrite | tel quel ; une phrase déjà rangée sous une autre forme (un s, une majuscule) répond « ce poste existe déjà » et propose de changer la référence |
+
+#### Ce que la construction a ajouté, et que le lot 2 doit savoir
+
+- **`OP018` est pris** (le plafond de postes) ; le prochain code libre est
+  `OP019`. `OP003` reste réservé au devis remis.
+- **La clé de rapprochement est une règle à DEUX écritures**, et la SQL est
+  ENGENDRÉE depuis `src/lib/rapprochement.js` (`npm run
+  generer-rapprochement`). La changer demande la procédure de la section 50.0 :
+  remplacer la fonction ne recalcule aucune clé rangée.
+- **La base de postes est PRIVÉE et le reste.** Aucune fonction `admin_*` ne
+  la lit, aucun écran ne la montre à un autre, et les textes légaux étendent
+  l'engagement de l'éditeur à ses phrases (`VERSION = '2026-10-24'`). Le
+  contrat de sous-traitance, quand il existera, devra la couvrir : un artisan
+  peut y laisser le nom d'un client malgré l'avertissement de la feuille.
+- **Le devis reste la seule vérité de ce qu'il dit.** Une ligne garde sa phrase
+  et son prix même si le poste change ou disparaît ; le poste ne sert qu'à
+  proposer et à comparer. Le lot 2 n'imprime jamais un prix de référence.
+- **L'agent** qui proposera une ligne (l'étage de la compréhension) aura ici
+  sa source de prix : les prix de l'artisan, et eux seuls.
+
+#### Ce qui n'a pas été vérifié
+
+Rien sur l'iPhone ; la clé sous Hermes ; « tout Unicode » sur la vraie base
+d'un seul bloc (le plan de base et les plans 1 et 14 seulement) ; aucun vrai
+poste d'un vrai artisan. Le détail est dans CLAUDE.md.
+
+#### La suite
+
+Le prochain lot de l'ordre **T → 1 → P → S → 2** est **S**, le petit lot de
+sécurité (`docs/AUDIT-ADDENDUM-QR.md`) : les règles générales du stockage
+d'abord, avant l'espace des PDF de devis du lot 2.

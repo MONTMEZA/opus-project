@@ -1093,7 +1093,18 @@ try {
   const r44 = sugg({ postes: quatreChapes, memoire: [Lm('h1', 'Chape sèche avant carrelage collé', 'm2', 4500, 1), Lm('h2', 'Chape fibrée sur isolant', 'm2', 3900, 300)], texte: 'chape' });
   verifier('cas 44 : quatre « Chape » — la sèche servie il y a une heure, puis la fibrée (300 h), puis l’anhydrite (l’ordre à plat)',
     json(r44.map((s) => s.id)) === json(['c4', 'c3', 'c1']), json(r44.map((s) => s.designation)));
-  const courts = ['Les', 'Aux', 'Sas', 'Mes', 'Pas', 'oss'].map((t) => [t, trouve(t).length]);
+  /* Cas 44 bis (25/10/2026, trouvé sur la VRAIE base avec un compte
+     d'essai) : un « s » de trop ne range plus la bonne phrase derrière une
+     voisine. La voisine, plus récente, contient toutes les lettres tapées ;
+     la bonne phrase n'était trouvée que par sa clé. */
+  const r44b = sugg({ postes: [Po('d1', 'Création de la dalle en béton y compris coulage manuel, finition talochée', 'm2', 7500,
+    { modifieLe: '2026-10-25T10:36:00Z' }),
+  Po('d2', 'CREATION DES DALLES EN BETON y compris coulage manuel finition talochée', 'm2', null, { modifieLe: '2026-10-25T10:50:00Z' })],
+  memoire: [], texte: 'creation de la dalles' });
+  verifier('cas 44 bis : « creation de la dalles » — « Création de la dalle en béton… » (degré 4) DEVANT « CREATION DES DALLES… » '
+    + '(degré 2), même plus récente', json(r44b.map((s) => [s.id, s.degre])) === json([['d1', 4], ['d2', 2]]),
+  json(r44b.map((s) => [s.id, s.degre])));
+  const courts =['Les', 'Aux', 'Sas', 'Mes', 'Pas', 'oss'].map((t) => [t, trouve(t).length]);
   /* « Des » rend UNE proposition, celle des gravats. Depuis l'étape 4, la
      démonstration porte aussi « evacuation des gravats en dechetterie »,
      tapée vite et plus récente que « Évacuation… » : même clé, donc la

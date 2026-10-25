@@ -8640,6 +8640,298 @@ complète. Ce que les comptes rendus laissent ouvert, en bref :
   ne tournent qu'à la main ; et la ré-acceptation des CGU n'existe toujours
   pas, alors que `VERSION` a encore changé.
 
+### La base de postes — lot P (20-25/10/2026)
+
+Section 50 de `schema.sql`, `src/lib/rapprochement.js` (la clé),
+`src/lib/postes.js` (ce que les écrans décident), `src/components/FeuilleAjoutPoste.js`,
+`src/components/FeuillePoste.js`, `src/screens/PostesScreen.js`,
+`npm run verifier-postes` et `npm run generer-rapprochement`. Le cahier qui
+l'a guidé : `docs/CAHIER-LOT-P.md` (archivé le 25/10, avec en tête ce qui a
+changé depuis). Troisième lot de l'ordre **T → 1 → P → S → 2**
+(`docs/PLAN-DEVIS.md` §10.14 et 10.17).
+
+Un artisan qui a écrit une ligne de devis touche **« Ajouter à ma base »** :
+la phrase est rangée **mot pour mot**, avec son unité, et un **prix de
+référence** qu'il fixe (proposé depuis la ligne, modifiable, ou laissé vide).
+Ensuite, quand il tape une ligne, Opus lui propose ses phrases — **une par
+phrase, trois au plus** —, et sous le prix d'une ligne qui correspond à un
+poste : « Votre prix de référence : 75,00 € / m², fixé le … » ; s'il met
+autre chose, **« Vous mettez 60,00 € — c'est voulu ? »**. Une phrase
+discrète, jamais une fenêtre, jamais un refus : le prix de la ligne est le
+sien. « Ma base de postes » (depuis « Mes devis » et « Mon profil ») les liste,
+les cherche, les corrige, les retire. **Rien ne sort** : aucun client ne voit
+la base, et aucun écran ne la montre à quelqu'un d'autre que lui.
+
+#### Les réponses du propriétaire
+
+| le 23/10 | réponse |
+|---|---|
+| construire le lot P ? | **oui** — « non on construit le lot p », alors qu'il avait d'abord cru que la mémoire du lot 1 le faisait déjà |
+| les variantes | **mot pour mot** : « il faudrait arriver à reconnaître les phrases, parce que l'artisan pour le même travail a par exemple rajouté un s ; il ne faut pas qu'il y ait trop de propositions, ça pourrait nous perdre » |
+| comment un poste entre dans la base | **d'un appui** (« Ajouter à ma base ») ; la mémoire du lot 1 continue de tout retenir seule |
+| Q1 — un métier sur un poste ? | **non** |
+| Q2 — le prix de la ligne proposé comme référence ? | **oui, modifiable** avant de valider |
+| Q3 — où voir la référence ? | **seulement dans la ligne ouverte en grand**, jamais dans la liste du devis (un client qui regarde l'écran ne la voit pas) |
+| Q4 — créer un poste directement dans « Ma base » ? | **non** : un poste naît d'une ligne de devis |
+
+| le 25/10 | réponse |
+|---|---|
+| A — « 10cm » et « 10 cm », une seule phrase ? | **non, deux** |
+| B — de deux variantes d'une même phrase, laquelle proposer ? | **la plus récente** |
+
+#### Reconnaître une phrase, sans IA : la clé de rapprochement
+
+Deux phrases sont **la même** si elles ne diffèrent que par les majuscules,
+les accents, les espaces, la ponctuation et un **s ou un x de pluriel** (mots
+de trois lettres et plus). « Chape sèche », « CHAPES SECHES. » et la même
+phrase recopiée d'un PDF ont la même clé. **La clé ne s'affiche nulle part** :
+elle sert à rapprocher, et la phrase reste rangée telle qu'il l'a écrite —
+c'est elle que le client lira.
+
+Ce qu'elle ne rapproche PAS, à dessein :
+
+- **une autre formulation** (« création d'une dalle béton » / « dalle en béton
+  à couler ») : c'est l'agent, plus tard ;
+- **« plancher bas » et « plancher BA »** (le béton armé, un autre prix) :
+  « bas » garde son s ;
+- **les signes qui portent un sens** : `<` devient « inf », `>` « sup », `+`
+  « plus », `%` « pourcent », `€` « euro », `×` la lettre x — « déplacement
+  < 20 km » et « > 20 km » restent deux postes ;
+- **« 10cm » et « 10 cm », « BA13 » et « BA 13 »** : une espace entre des
+  lettres et des chiffres fait deux phrases (réponse A) ; et « travaux » /
+  « travail », dont le pluriel ne se fait pas en s.
+
+> **Une règle, deux écritures, et l'une est ENGENDRÉE.** Le téléphone et la
+> base doivent calculer la même clé, sinon l'écran dirait « nouveau poste »
+> et la base refuserait un doublon (ou l'inverse), sans un mot. La fonction
+> SQL `cle_de_rapprochement()` n'est jamais écrite à la main : `npm run
+> generer-rapprochement` la produit depuis la table de `rapprochement.js`,
+> comme le SQL du catalogue des métiers. `verifier-postes` compare 188 cas
+> écrits à la main (`supabase/cas-rapprochement.json`) et une **empreinte**
+> calculée sur chaque point de code : plan de base
+> `f7d1ccf4d41f431c125dc9ba2b46bf09`, tout Unicode
+> `a4c49da5c8af9023455882d4de7c6152`, identiques des deux côtés.
+
+Trois choix qui tiennent cette parité, et qu'il ne faut pas « simplifier » :
+
+- **ni `normalize`, ni `toLowerCase`, ni `Intl`, ni `lower()` côté SQL** :
+  les tables Unicode et les règles de casse diffèrent entre Hermes et
+  PostgreSQL, et selon leur version et leur langue (le I turc). La règle
+  n'est faite que d'une table explicite, chaque caractère nommé ;
+- **`rapprochement.js` est en ASCII pur, commentaires compris**, et la
+  fonction SQL ne contient **aucune barre oblique inverse** (la table écrite
+  en `chr(n)`) : sous `standard_conforming_strings = off`, une barre dans la
+  fonction changeait « Pose des plinthes » en caractères de contrôle ;
+- **une garde de 2 000 points de code** en tête de la fonction ET du
+  miroir : sans elle, 10 Mo envoyés par n'importe quel compte connecté
+  tenaient un processus 39 s malgré le délai de 8 s.
+
+#### Une colonne générée se recalcule à CHAQUE écriture de la ligne
+
+Premier jet : `cle_rapprochement` en colonne générée. Mesuré par la
+relecture de la base, 999 postes au pire cas : **changer un prix prenait
+60 s**, et supprimer un devis d'origine (la clé étrangère passe à vide)
+**59,5 s** — PostgreSQL recalcule toute colonne générée stockée à chaque mise
+à jour de la ligne, même quand la phrase ne bouge pas, et une fonction qui
+porte `set search_path` n'est jamais dépliée.
+
+> **C'est une colonne ORDINAIRE, posée par le déclencheur
+> `tient_le_poste()`** : à l'insertion, et en modification **seulement si la
+> phrase change**. Après : 90 ms pour un prix, 97 ms pour la cascade. Un
+> client qui envoie une clé fausse reçoit toujours **428C9** (le code d'une
+> colonne générée, que `erreurs.js` traduit par « mettez Opus à jour »), et
+> la seule écriture acceptée est son recalcul exact. La propriété est tenue
+> par un corps de fonction et non plus par le catalogue : l'essai et
+> `verifier-postes` la lisent.
+
+Et le contrat qui va avec : **remplacer la fonction ne change AUCUNE clé
+rangée.** Toute révision de la règle se fait en une transaction qui verrouille
+la table, remplace la fonction et recalcule les clés, après avoir cherché les
+doublons qu'elle créerait (section 50.0).
+
+#### Un caractère qui ne se voit pas ne fait pas une autre phrase
+
+Toute la propriété Unicode « Default_Ignorable » — **4 174 points de code**,
+dont 4 096 étiquettes et sélecteurs de variante — est retirée par la clé. Sans
+cela, un U+200B collé d'un PDF faisait un second poste, identique à l'œil.
+C'est ce qui a changé l'empreinte entre le cahier (`0186e2b8…`) et le code
+(`f7d1ccf4…`).
+
+#### Le reste de la base, en bref
+
+- **`base_postes` est PRIVÉE** : `pro_id in (select mes_entreprises())`, rien
+  pour `anon`, aucun droit de table pour lui ; aucune fonction
+  `security definer` ne la nomme ;
+- **l'index unique** `(pro_id, md5(cle)::uuid, unite collate "C",
+  fourniture_non_comprise)` : la même phrase au m² et au mètre linéaire, ou
+  avec et sans fourniture, fait deux postes — leurs prix diffèrent ;
+- **1 000 postes au plus** (`OP018`, compté sous un verrou, et seulement pour
+  SA propre entreprise : une écriture au nom d'un autre ne doit pas pouvoir
+  tenir son verrou) ;
+- **la date du prix appartient à la base** (`prix_fixe_le`), comme toutes
+  les dates du projet ;
+- **le devis d'origine** par une clé composée `(devis_origine_id, pro_id)` :
+  on ne rattache pas son poste au devis d'un autre (23503, sans oracle), et
+  le poste survit à son devis (`on delete set null`) ;
+- **une écriture tardive ne gagne pas** : chaque modification est conditionnée
+  sur `modifie_le` ; arrivée après une plus récente, elle ne touche aucune
+  ligne et l'écran dit « modifié entre-temps » ;
+- **l'export RGPD** porte `ma_base_de_postes`.
+
+#### Ce que tient l'écran — et le défaut de classement trouvé sur la vraie base
+
+`postes.js` porte tout ce que les écrans décident, en fonctions pures que
+`verifier-postes` fait tourner : trois propositions au plus, trois lettres
+avant la première, un poste de la base avant la mémoire, la recherche de la
+page, l'avertissement d'unité. **Sur 15 sabotages d'écran, 14 passaient
+avant ce déménagement ; 0 après.**
+
+Le 25/10, sur la vraie base, en tapant « creation de la dalles » : la bonne
+phrase arrivait **derrière** une voisine. Le degré de correspondance comparait
+ce qu'on tape à la phrase « à plat » seulement — le s en trop faisait tomber
+la bonne phrase de « commence par » à « contient ».
+
+> **Le degré se mesure aussi sur les phrases privées de leurs pluriels.**
+> « Dalles » met « Dalle béton » au degré 4 (« commence par »).
+> `verifier-devis` (cas 33 bis) et `verifier-postes` (cas 44 bis) le font
+> tourner. **Aucun essai en démonstration ne l'avait vu** : les phrases de
+> démonstration ne se ressemblent pas assez.
+
+Trois choix d'écran faits sans lui, à lui montrer : « réf. » dans les
+propositions (la place, à 320 points) ; la phrase de sortie raccourcie (« Ce
+n'est pas le même travail ? Changez un mot de la ligne (un s, un accent ou une
+majuscule ne suffit pas). ») ; « Au jour » pour l'unité `jour` plutôt que « À
+la journée ». Et deux textes : la fin de « Vos tarifs et vos prix » dans les
+textes légaux (l'engagement de l'éditeur couvre aussi les phrases :
+`VERSION = '2026-10-24'`), et les trois paragraphes rouges sous « Confirmer la
+suppression » d'un client qui a des devis.
+
+#### La migration : 101 Ko, envoyés sous forme « compacte et gardée »
+
+`apply_migration` prend le TEXTE de la migration dans l'appel : on ne lui
+passe pas un fichier. Or celle-ci faisait **101 077 octets**, dont la table de
+la clé — des milliers de `chr(n)` — qu'il aurait fallu recopier sans une
+faute.
+
+> **Un bloc `do` qui refabrique ce qui est régulier, et qui vérifie avant
+> d'exécuter.** Les quatre suites régulières (9, 5, 6 et 255 lignes de
+> `chr()`) et les 258 espaces d'une chaîne se reconstruisent par
+> `generate_series` et `repeat` ; le bloc compare le **md5** du texte obtenu
+> à celui du fichier simulé, et **n'exécute RIEN** s'il diffère. 33 113
+> octets. Éprouvé : identique au fichier sur deux copies (même empreinte du
+> catalogue), et trois sabotages (une espace, un chiffre, une suite
+> raccourcie) refusés sans rien appliquer.
+
+L'ordre `alter column … drop expression if exists` de la section 50.2 (pour
+une base d'essai qui aurait reçu la forme générée) n'a pas été envoyé : il
+porte « drop », et le 17/10 un `drop column` avait expiré par le connecteur.
+Il est remplacé par une garde qui arrête tout si la colonne est encore
+générée.
+
+**Appliquée le 25/10** (accord du propriétaire, « Oui, vas-y »), puis
+comparée :
+
+- **avant**, la vraie base contre l'imitation (`git show d75217d`) : les
+  écarts sont tous connus — le droit `m` (MAINTAIN) de PostgreSQL 17,
+  `entreprise_registre.gele`, `admin_basculer_metier`, « lecture demandes
+  visiteur », l'U+00A0 de `emetteur_denomination_ei_check`, des corps de
+  fonction sans leurs commentaires (89 sur 89 identiques une fois
+  normalisés), **l'ORDRE PHYSIQUE des colonnes de quatre tables** (l'histoire
+  de leurs ajouts ; la migration n'insère jamais par position) et pgcrypto,
+  posé par le prélude local seulement ;
+- **après** : les 30 lignes de catalogue ajoutées, identiques à la copie
+  locale ; les **133 autres groupes inchangés** ; les md5 des trois corps
+  (`cle_de_rapprochement`, `tient_le_poste`, `mes_donnees`) ceux de la
+  simulation ;
+- **l'empreinte de la clé CALCULÉE PAR LA VRAIE BASE** — `f7d1ccf4…` sur les
+  63 487 points du plan de base, et les plans 1 et 14 identiques au
+  PostgreSQL 16 local. Elle passe par le connecteur PRINCIPAL, avec
+  l'accord du propriétaire : **le rôle de `SupabaseLecture` ne peut pas
+  exécuter la fonction** (accordée à `authenticated` seul). « Tout Unicode »
+  d'un bloc prend 4 minutes : trop long pour une requête.
+
+#### Vérifié avant la vraie base
+
+Trois relectures adverses (base, écran, textes), chaque problème reproduit
+avant d'être corrigé ; `schema.sql` rejoué deux fois sur une base neuve ;
+`essais-section-50.sql` joué deux fois — **184 valeurs justes sur 184, 50
+refus, tous rattachés à l'annonce qui les nomme** ; les 26 autres fichiers
+d'essais identiques au relevé d'avant (quatre écarts, tous expliqués) ; la
+parité de la clé sur tout Unicode ; les 51 contrôles ; le linter à 32 ; les
+paquets iOS et Android lus ; `mesure-devis` à 450 mesures sans échec ; **360
+sabotages refusés**, après qu'un trou de contrôle (le 42b) a été trouvé et
+fermé.
+
+Après la correction du classement (25/10) : les 51 contrôles, le linter à 32,
+`mesure-devis` à **450 sans échec**, les deux paquets lus (1 « Exported »,
+0 « Import stack »), et trois sabotages de la correction elle-même —
+l'ancienne règle remise, puis chacune de ses deux moitiés retirée seule —,
+tous trois refusés. **Le banc complet des 360 sabotages, lui, n'a pas été
+rejoué** après cette correction.
+
+#### Essayé sur la VRAIE base, et comment
+
+Par le chemin de l'application, avec un artisan A, un concurrent B et un
+particulier P **à Brest**, jetables `…@exemple-opus.test`, SIRET fictifs (les
+preuves `essai` déjà en base, réutilisées), `enregistrer_vues` neutralisé :
+
+| | relevé |
+|---|---|
+| A ouvre « Ma base de postes », vide | « Votre base est vide », et comment la remplir ; aucune écriture |
+| A chiffre une ligne, « Ajouter à ma base » | la feuille propose le prix de la ligne ; `POST base_postes 201` |
+| une ligne neuve, « Creation des dalles en beton » | **une** proposition : la phrase rangée, « 60,00 € / m² · réf. du 25/10/2026 » |
+| A met 75 € au lieu de 60 € | « Vous mettez 75,00 € — c'est voulu ? » ; « Changer ma référence » écrit 75 € |
+| après rechargement complet | la référence et l'écart reviennent de la base |
+| la même phrase au mètre linéaire, puis fourniture non comprise | trois postes, et **trois** propositions qui se distinguent par l'unité et la fourniture |
+| « creation de la dalles » | la bonne phrase **en tête** (après la correction du classement) |
+| la page : corriger, retirer un prix (deux appuis), retirer un poste | `PATCH 200`, `DELETE 200` ; la liste suit |
+| la lecture de la base coupée | « Liste non actualisée… Réessayer », la liste déjà lue reste |
+| un visiteur | **401 · 42501** en lecture comme en écriture |
+| B lit, modifie, retire les postes de A | `[]` ×3 ; écrire au nom de A : **403** |
+| B rattache SON poste au devis de A | **409 · 23503**, sans dire si le devis existe |
+| P se crée un poste | **403** |
+| A envoie une clé fausse (insertion, modification) | **400 · 428C9** ×2 |
+| A ajoute trois vraies variantes (majuscules et pluriel, minuscules et point final, espaces doublés et pluriels) | **409 · 23505** ×3 — « ce poste existe déjà » ; « CREATION DES DALLES… », à qui il manque « la », est une AUTRE phrase, et la base l'accepte |
+| un prix de 0 · l'unité « ml » · une phrase de blancs | **400** · `base_poste_prix_check`, `_unite_check`, `_designation_check` |
+| une date de prix envoyée (2001) · `pro_id` et devis d'origine changés | ignorés : la base garde les siens |
+| une écriture tardive (ancienne `modifie_le`) | **0 ligne** |
+| l'export RGPD | A : `ma_base_de_postes`, ses postes ; B et P : rien |
+| **999 postes d'un envoi** (1 000 avec le premier) | 201 en 3,6 s ; la lecture de l'application les rend **tous** (`content-range 0-999/1000`, 1,0 s à travers le mandataire) — la limite de lignes de l'API ne coupe pas |
+| le 1 001ᵉ | **400 · OP018**, la phrase complète |
+| « Ma base de postes » à 1 000 postes, processeur bridé six fois | affichée en **2,3 s** (lecture comprise), **13 cartes montées** sur 1 000 ; la recherche, **58 ms par lettre** en moyenne |
+| une ligne de devis tapée avec 1 000 postes en base, même bridage | **57 ms par lettre** en moyenne (111 au pire), trois propositions, les bonnes |
+
+Comptes supprimés par le chemin de l'application ; base revenue à son état
+d'avant, aucun compte `@exemple-opus.test`.
+
+Deux leçons d'outil, au passage :
+
+- **le paquet servi par Metro était périmé** après la correction du
+  classement : le module chargé dans la page rendait encore l'ancien degré.
+  Relancer `npx expo start --web -c` (la leçon du 15/10), et vérifier le
+  MODULE chargé, pas seulement le fichier ;
+- **`pkill -f "expo start"` a tué mon propre terminal** : le motif se trouvait
+  dans la ligne de commande du shell qui le lançait. On arrête un serveur par
+  son numéro de processus.
+
+#### Ce qui n'a PAS été vérifié
+
+- **rien sur l'iPhone** : le clavier sous la feuille d'ajout et sous la
+  carte, la virgule du pavé décimal, les propositions au pouce, VoiceOver ;
+- **Hermes** : la clé n'a tourné que sous `node` 22 et PostgreSQL ; une
+  différence de moteur sur une expression régulière ne se verrait qu'au
+  téléphone ;
+- **« tout Unicode » sur la vraie base d'un seul bloc** : seulement le plan de
+  base et les plans 1 et 14 ;
+- **la page « Ma base de postes » à 1 000 postes au doigt** : le navigateur
+  bridé dit que la liste ne monte que ce qu'on voit et que la frappe tient ;
+  le ressenti, lui, ne se juge que sur l'iPhone ;
+- **un vrai poste d'un vrai artisan** : la vraie base n'en compte aucun.
+
+#### Ce qui reste ouvert
+
+Dans `docs/A-FAIRE.md`, « Après le lot P ».
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

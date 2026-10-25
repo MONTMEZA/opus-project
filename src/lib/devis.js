@@ -1119,14 +1119,15 @@ const motsDe = (s) => (s || '').split(' ').filter(Boolean);
 function formesDe(phrase) {
   const plat = aPlat(phrase) || '';
   const cle = cleDeRapprochement(phrase);
-  return { plat, motsPlat: motsDe(plat), cle, motsCle: new Set(motsDe(cle)) };
+  const motsCle = motsDe(cle);
+  return { plat, motsPlat: motsDe(plat), cle, motsCle: new Set(motsCle), motsCleListe: motsCle };
 }
-/* Le texte TAPÉ, préparé une fois par recherche : ses mots à plat, et la
-   clé de chacun (le même mot privé de son pluriel). */
+/* Le texte TAPÉ, préparé une fois par recherche : ses mots à plat, la clé
+   de chacun (le même mot privé de son pluriel), et la clé du texte entier. */
 function tapeDe(texte) {
   const t = aPlat(texte) || '';
   const mots = motsDe(t);
-  return { t, mots, cles: mots.map((w) => cleDeRapprochement(w) || '') };
+  return { t, mots, cles: mots.map((w) => cleDeRapprochement(w) || ''), cle: cleDeRapprochement(texte) || '' };
 }
 
 /* LES CLÉS SE CALCULENT UNE FOIS (cahier du lot P, §3.1). La mémoire est
@@ -1171,10 +1172,20 @@ function correspond(f, tape) {
     return k !== w && (k.length >= 3 || tape.mots.length > 1) && f.motsCle.has(k);
   });
 }
+/* LE DEGRÉ SE MESURE AUSSI SANS LES PLURIELS — corrigé le 25/10/2026, sur la
+   vraie base. « creation de la dalles » trouvait bien « Création de la dalle
+   en béton… », mais par sa clé seulement (degré 1) : « CREATION DES DALLES
+   EN BETON… », une AUTRE phrase, contenait toutes les lettres tapées (degré
+   2) et passait devant. Un « s » de trop rangeait la bonne phrase derrière
+   une voisine — exactement ce que le propriétaire demandait d'éviter. Les
+   degrés 4 et 3 se lisent donc deux fois : sur les phrases à plat, puis sur
+   leurs CLÉS (la même règle que `cleDeRapprochement`). Le degré ne fait que
+   RANGER ce que `correspond` a déjà trouvé : il n'ajoute aucune proposition. */
 function degre(f, tape) {
   if (!correspond(f, tape)) return 0;
-  if (f.plat.startsWith(tape.t)) return 4;
+  if (f.plat.startsWith(tape.t) || (tape.cle && f.cle && f.cle.startsWith(tape.cle))) return 4;
   if (tape.mots.every((w) => f.motsPlat.some((m) => m.startsWith(w)))) return 3;
+  if (tape.cles.every((k) => k && f.motsCleListe.some((m) => m.startsWith(k)))) return 3;
   if (tape.mots.every((w) => f.plat.includes(w))) return 2;
   return 1;
 }
@@ -1191,11 +1202,12 @@ function degre(f, tape) {
 export function correspondALaRecherche(designation, texte) {
   return correspond(formesDe(designation), tapeDe(texte));
 }
-/** Le degré de pertinence, pour ranger les propositions : 4, la phrase à
- *  plat COMMENCE par le texte tapé ; 3, chaque mot tapé commence un mot de
- *  la phrase ; 2, chaque mot tapé y est contenu ; 1, trouvée par le pluriel
- *  seulement ; 0, non trouvée. « Pos » met « Pose de… » (4) devant
- *  « Dépose de… » (2). */
+/** Le degré de pertinence, pour ranger les propositions : 4, la phrase
+ *  COMMENCE par le texte tapé (à plat, ou les deux privés de leurs
+ *  pluriels) ; 3, chaque mot tapé commence un mot de la phrase (à plat, ou
+ *  privés de leurs pluriels) ; 2, chaque mot tapé y est contenu ; 1, trouvée
+ *  par le pluriel seulement ; 0, non trouvée. « Pos » met « Pose de… » (4)
+ *  devant « Dépose de… » (2) ; « Dalles » met « Dalle béton » au degré 4. */
 export function degreDeCorrespondance(designation, texte) {
   return degre(formesDe(designation), tapeDe(texte));
 }
