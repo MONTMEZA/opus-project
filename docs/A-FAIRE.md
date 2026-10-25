@@ -2288,18 +2288,20 @@ jamais l'icône « preview » du 17/10, et jamais le compte du frère.
 
 **Essayé en bloc le 25/10** : « tout fonctionne correctement », et la base
 porte trois postes rangés depuis votre téléphone, sur votre compte principal
-(l'ajout d'un appui et une modification sont donc passés). Les onze points
-ci-dessous n'ont pas eu de réponse un par un ; le deuxième et le troisième
-sont les plus utiles — ce sont les seuls qui prouvent que la clé tourne sur le
-téléphone :
+(l'ajout d'un appui et une modification sont donc passés). Puis le deuxième
+point, le plus utile : « si je rajoute une lettre, la proposition de phrase
+reste la même » — le premier signe que la clé tourne sur le téléphone. Les
+autres points n'ont pas eu de réponse un par un :
 
 - [ ] dans un devis, une ligne chiffrée → « Ajouter à ma base » : la feuille
   propose le prix de la ligne, le clavier ne cache ni le prix ni le bouton ;
-- [ ] une ligne neuve où vous tapez la même phrase avec un s en plus, ou en
-  majuscules : **une seule** proposition, la bonne en tête ;
+- [x] une ligne neuve où vous tapez la même phrase avec un s en plus, ou en
+  majuscules : **une seule** proposition, la bonne en tête — essayé le 25/10
+  (« si je rajoute une lettre, la proposition de phrase reste la même »), sans
+  dire quelle lettre ni où ;
 - [ ] tapez « Les » : rien ne doit être proposé ; « seuils » (si vous avez un
-  poste « Seuil… ») : une seule proposition — c'est la preuve que la clé
-  tourne sur le téléphone, ce qui n'a jamais été vérifié ;
+  poste « Seuil… ») : une seule proposition — un second témoin de la clé sur
+  le téléphone, après la lettre ajoutée du point précédent ;
 - [ ] la ligne ouverte en grand montre « Votre prix de référence » au-dessus
   de la quantité ; mettez un autre prix : « c'est voulu ? » apparaît sous le
   prix ; la liste du devis, elle, ne montre rien ;
@@ -2437,8 +2439,9 @@ travail) :
 - **sur la vraie base, la clé n'a été comparée que sur le plan de base et les
   plans 1 et 14** d'Unicode : « tout Unicode » d'un bloc prend 4 minutes,
   trop pour une requête ; la parité complète est prouvée sur PostgreSQL 16 ;
-- **la clé n'a jamais tourné sous Hermes**, le moteur de l'iPhone : seulement
-  sous `node` et PostgreSQL ;
+- **sous Hermes, le moteur de l'iPhone, la clé n'a qu'un témoin** : une lettre
+  ajoutée garde la même proposition (25/10). Sa parité complète n'est prouvée
+  que sous `node` et PostgreSQL ;
 - `normalize` reste appelé par `texte.js`, `clients.js` et `emetteur.js` ; la
   clé, elle, ne s'en sert pas ;
 - `verifier-adresse` échoue parfois à travers le mandataire du conteneur : un

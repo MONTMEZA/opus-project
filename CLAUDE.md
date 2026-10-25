@@ -8987,17 +8987,28 @@ Ce que ces lignes NE prouvent PAS : la clé sous Hermes. Le téléphone n'envoie
 jamais la clé — c'est la base qui la calcule —, donc trois postes acceptés ne
 disent rien de la clé que le téléphone calcule pour PROPOSER. Seule la
 question « la même phrase avec un s en plus ne donne qu'une proposition » le
-dirait, et elle n'a pas eu de réponse détaillée.
+dit.
+
+**Et il y a répondu, le même jour** : « si je rajoute une lettre, la
+proposition de phrase reste la même ». C'est la PREMIÈRE fois que la clé
+tourne sous Hermes avec un témoin : une phrase qui ne diffère d'un poste que
+par un s ne se reconnaît PAS sur la phrase « à plat » — seule la clé, calculée
+par le téléphone, la retrouve. Ce qu'il n'a pas dit, et qu'il faut garder en
+tête : quelle lettre, ni où. Une lettre ajoutée au BOUT de ce qu'on tape, tant
+que le texte reste le début de la phrase rangée, garderait la même
+proposition sans la clé. C'est donc un bon signe, pas une preuve sur tout
+Unicode — et « Les » (rien ne doit être proposé) n'a pas été rapporté.
 
 #### Ce qui n'a PAS été vérifié
 
 - **le détail du toucher sur l'iPhone** (essayé en bloc le 25/10, ci-dessus,
   sans réponse point par point) : le clavier sous la feuille d'ajout et sous
   la carte, la virgule du pavé décimal, les propositions au pouce, VoiceOver ;
-- **Hermes** : la clé n'a été éprouvée que sous `node` 22 et PostgreSQL ; une
-  différence de moteur sur une expression régulière ne se verrait qu'au
-  téléphone, sur une variante (un s, une majuscule) qui donnerait deux
-  propositions au lieu d'une ;
+- **Hermes, au-delà de la lettre ajoutée** : la parité complète de la clé
+  n'est prouvée que sous `node` 22 et PostgreSQL ; au téléphone, seul le cas
+  « une lettre de plus, la même proposition » est rapporté (ci-dessus). Une
+  différence de moteur sur un caractère rare ne se verrait que sur une
+  variante qui donnerait deux propositions au lieu d'une ;
 - **« tout Unicode » sur la vraie base d'un seul bloc** : seulement le plan de
   base et les plans 1 et 14 ;
 - **à l'écran, les états « modifié entre-temps » et « poste absent »** : ils ne

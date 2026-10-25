@@ -3823,7 +3823,9 @@ statut du propriétaire) ; et `A-FAIRE.md`, `AUDIT-ADDENDUM-QR.md`,
 
 #### Ce qui n'a pas été vérifié
 
-Rien sur l'iPhone ; la clé sous Hermes ; « tout Unicode » sur la vraie base
+Sur l'iPhone, un essai en bloc seulement (le 25/10, dans le build de
+développement reconstruit : « tout fonctionne », et une lettre ajoutée garde
+la même proposition — le seul témoin de la clé sous Hermes) ; « tout Unicode » sur la vraie base
 d'un seul bloc (le plan de base et les plans 1 et 14 seulement) ; à l'écran,
 les états « modifié entre-temps » et « poste absent » ; aucun vrai poste d'un
 vrai artisan. Le détail est dans CLAUDE.md.
