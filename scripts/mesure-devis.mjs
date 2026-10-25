@@ -164,7 +164,8 @@
  * aucun voile invisible sous `react-native-web` : ici on compte qu'il n'y en
  * a jamais deux ; ce qu'iOS en ferait, seul l'iPhone le dit. Et « modifié
  * entre-temps » ne se produit pas en démonstration : il est éprouvé par
- * `verifier-postes` (G) sous `node`, et sur la vraie base.
+ * `verifier-postes` (G) sous `node`, et sur la vraie base par l'API seulement
+ * (une écriture tardive n'y touche aucune ligne ; l'écran ne l'a jamais montré).
  */
 import { readFileSync, mkdirSync } from 'node:fs';
 import { fabriquerDevisDemo, fabriquerPostesDemo, DEVIS_DEMO_IDS } from '../src/data/devis-demo.js';
@@ -2575,7 +2576,7 @@ await section('Dans la page : corriger la phrase d’un poste (lot P, T14)', asy
   await toucher(croixDeLaFeuille());
   verifier('la croix ferme sans rien écrire : la chape garde sa phrase', (await modales()) === 0
     && postesDeCle(await postesEnBase(), { designation: CHAPE, unite: 'm2' }).some((p) => p.designation === nouvelle));
-  noter('« modifié entre-temps »', 'ne se produit pas en démonstration : éprouvé par verifier-postes (G) sous node, et sur la vraie base (cahier §7.5)');
+  noter('« modifié entre-temps »', 'ne se produit pas en démonstration : éprouvé par verifier-postes (G) sous node, et sur la vraie base par l’API seulement (cahier §7.5)');
 });
 
 await section('Une relecture ratée, une écriture, « Réessayer » : la base ne reste jamais « en lecture » (lot P, ECRAN5, ECRAN6)', async () => {

@@ -1398,7 +1398,8 @@ la réponse à vos 50 € devenus 70 € sans que vous l'ayez décidé.
   avant le lot P, la **colonne métier** : (a) aucune, le métier se déduira
   plus tard de la fiche ; ou (b) une colonne métier sur chaque poste, qui sert
   dès le premier jour à filtrer les suggestions d'un artisan qui a plusieurs
-  métiers.
+  métiers. **Tranché le 23/10 : (a), aucune colonne métier ; le lot P est fait
+  le 25/10 (`PLAN-DEVIS.md` 10.17).**
 - Une **proposition**, à arbitrer au lot 1 contre la règle « aucune colonne
   sans lecteur » (`PLAN-DEVIS.md` §3.12) : copier l'origine du prix sur la
   ligne au moment du chiffrage (un instantané, pas une jointure), parce que

@@ -1657,6 +1657,9 @@ pour la même raison que le §4 n'a pas posé ses sept réglages d'un coup :
 | ✅ | **Personne ne devient pro par lui-même** — fait le 15/10/2026 | 5 | **Le préalable du SIRET, et une faille réelle.** Un particulier pouvait se déclarer pro (`update users set type`), s'insérer une fiche, puis lire les demandes des particuliers, publier, ouvrir un carnet de clients, créer un chantier. Une seconde porte passait par la suppression de compte. Fermées par la base (section 44, OP004 et OP005), vérifiées sur la vraie base avec deux comptes jetables supprimés. Le trou n'avait jamais servi : 7 fiches sur 7 sont sur un compte pro. Sans cette correction, vérifier le SIRET à l'inscription n'aurait rien protégé. `npm run verifier-pro`. |
 | ✅ | **Le SIRET à l'inscription** — fait le 17/10/2026 | 5 | **Décidé le 12/10 par le propriétaire.** Un compte pro ne naît plus qu'avec un SIRET trouvé ACTIF au répertoire Sirene (INSEE), consulté par la fonction Edge `siret` qui range une preuve ; inscription en deux temps (le répertoire préremplit le nom, la forme, la commune, propose le métier), SIRET verrouillé, une entreprise = un compte, porte de secours DANS Opus (compte en attente + demande suivie, administration prévenue), « Passer en compte professionnel » pour un particulier, « Mon entreprise » dans le profil, file des demandes en administration. Section 45, appliquée sur la vraie base et éprouvée par curl et au navigateur avec des comptes jetables supprimés. **Il ne prouve PAS qu'on est le titulaire** : le badge reste humain. Restent au propriétaire : voir CLAUDE.md, « Le SIRET à l'inscription », « Ce qui reste ouvert ». `npm run verifier-siret`. |
 | ✅ | **Devis, lot 0a : « Mon entreprise »** — fait le 18/10/2026 | 9 | **Ce que l'entreprise doit porter sur chaque devis pour qu'il soit légal**, avant qu'aucun devis n'existe : registre et greffe, capital, régime de TVA (date posée par la base), assurances (une liste, attestation dans l'espace privé `documents`), médiateur choisi dans la liste officielle, garanties, modalités, réclamations, frais de déplacement (« Déplacement offert » est un choix, pas un champ vide). L'identité se LIT dans `entreprise_registre`, rien n'est ressaisi. Trois tables privées (section 46), `emetteur_incomplet()` dit ce qui manque en 21 motifs dont les `conso_` (seulement pour un particulier). Appliqué sur la vraie base, éprouvé par l'API et au navigateur avec trois comptes jetables supprimés. `npm run verifier-emetteur`. Ce qui reste : plus bas, « Après le lot 0a ». |
+| ✅ | **Devis, lot T : les tarifs réunis** — fait le 20/10/2026 | 9 | Une seule liste de tarifs pour le devis, la fiche et le SOS (section 47) ; un particulier connecté les lit quand l'artisan les affiche. CLAUDE.md, « Les tarifs réunis — lot T ». Ce qui reste : plus bas, « Après le lot T ». |
+| ✅ | **Devis, lot 1 : le chiffrage** — fait le 23/10/2026 | 9 | Le brouillon chiffré pièce par pièce, le total calculé par la base (section 49) ; rien ne sort encore. CLAUDE.md, « Le chiffrage — lot 1 ». Ce qui reste : plus bas, « Après le lot 1 ». |
+| ✅ | **Devis, lot P : la base de postes** — fait le 25/10/2026 | 9 | Ses phrases et ses prix de référence, proposés pendant la frappe, les variantes d'une même phrase reconnues sans IA (section 50). CLAUDE.md, « La base de postes — lot P ». Ce qui reste : plus bas, « Après le lot P ». |
 | 2 | **Devis** | 9 | Le cœur du métier, et le premier document qui ENGAGE. Numérotation, TVA, mentions obligatoires, acceptation. |
 | 3 | **Factures** | 10 | Elles NAISSENT d'un devis accepté : les écrire avant obligerait à tout ressaisir. Facturation électronique obligatoire entre entreprises, vérifiée le 17/10/2026 (FAQ officielle d'août 2026) : **réception** obligatoire pour toutes depuis le 01/09/2026 ; **émission** par les grandes entreprises et les ETI depuis la même date, par les PME, TPE et micro-entreprises au plus tard le 01/09/2027. À relire au moment de le construire. |
 | 4 | **Dashboard** | 8 | Il MONTRE ce que les trois précédents ont produit. Avant eux, il n'aurait rien à afficher — ce serait le « bouton §18 » à l'échelle d'un écran. |
@@ -1695,6 +1698,8 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
 **À décider avant le module — et c'est au propriétaire :**
 
 - [x] **Son statut** — répondu le 17/10 : une entreprise, aujourd'hui fermée.
+  **Corrigé : depuis le 20/10, il a une SARL active, rattachée à son compte
+  principal (CLAUDE.md).**
   CLAUDE.md et `DONNEES-DES-ARTISANS.md` corrigés.
 - [x] **L'accord de son frère** — répondu le 17/10 : d'accord, et il s'en
   servira lui-même. Le badge reste. On construit et on essaie avec ce compte,
@@ -2109,7 +2114,8 @@ construisant le lot 1, d'avant le module ou hors de son périmètre :
 - [ ] **La classe de blancs est recopiée** — les caractères qu'on retire au
   bord d'un texte, invisibles compris. Relevé le 23/10 : sept copies dans
   quatre fonctions de `schema.sql` (`tient_les_tarifs`,
-  `tient_les_tarifs_publics`, `tient_le_devis`, `tient_la_ligne_de_devis`),
+  `tient_les_tarifs_publics`, `tient_le_devis`, `tient_la_ligne_de_devis`) —
+  **huit dans cinq depuis le lot P**, avec `tient_le_poste` —,
   plus deux constantes JavaScript (`BLANCS_TARIFS` dans `src/lib/emetteur.js`,
   `BLANCS` dans `src/lib/devis.js`). `verifier-devis` les compare, donc elles
   ne peuvent pas diverger en silence ; mais une règle ne s'écrit qu'à UN
@@ -2242,37 +2248,58 @@ construisant le lot 1, d'avant le module ou hors de son périmètre :
 Le détail est dans CLAUDE.md, « La base de postes — lot P » ; le cahier qui
 l'a guidé est archivé en `docs/CAHIER-LOT-P.md`. La section 50 est sur la
 vraie base depuis le 25/10 à 11 h 12 (heure de Paris), et l'essai par le
-chemin de l'application a été fait le même jour, avec trois comptes jetables
-supprimés ensuite : la base est revenue à 0 poste. Les comptes rendus et les
-relectures cités entre parenthèses (BASE…, ECRAN…, TEXTES…) sont des
-documents de travail de la session : ils ne sont pas dans le dépôt.
+chemin de l'application a été fait le même jour, avec quatre comptes jetables
+à Brest (A, B et P, puis A recréé avec la même adresse pour la limite de
+1 000 postes), tous supprimés par le chemin de l'application : la base est
+revenue à 0 poste. Les comptes rendus et les relectures cités entre
+parenthèses (BASE…, ECRAN…, TEXTES…) sont des documents de travail de la
+session : ils ne sont pas dans le dépôt.
 
 **Les avertissements des commits `92c3804`, `1144750` et `7a8cc10` —
 « NE PAS METTRE CETTE VERSION SUR LE TÉLÉPHONE » — ne valent plus** depuis le
 25/10 : « Ma base de postes » trouve sa table. Vous pouvez faire `git pull`.
+Aucun paquet nouveau, aucun module natif : rien à reconstruire.
 
 **Toujours ouverts, et non recopiés ici** (voir « Après le lot 1 » et « Après
 le lot T ») : faire ré-accepter les conditions — `VERSION` est passée au
 `2026-10-24` avec ce lot, et rien ne compare encore la version acceptée à la
 version en vigueur — ; le contrat de sous-traitance, qui devra couvrir aussi
 la base de postes (un artisan peut y laisser le nom d'un client malgré
-l'avertissement de la feuille) ; `mesure-devis` et les essais SQL, qui ne
-tournent qu'à la main (§2.3).
+l'avertissement de la feuille) ; `mesure-devis` (voir « Après le lot 1 ») et
+les essais SQL (§2.3), qui ne tournent qu'à la main. **Les deux preuves SIRET
+`essai`** ont été réutilisées une fois de plus le 25/10, réécrites pour les
+adresses de l'essai : elles sont toujours en base, et expirent d'elles-mêmes.
 
 **À essayer sur votre iPhone** — votre compte principal, dans Expo Go ou le
-build de développement, jamais l'icône « preview » du 17/10 :
+build de développement, jamais l'icône « preview » du 17/10, et jamais le
+compte du frère :
 
 - [ ] dans un devis, une ligne chiffrée → « Ajouter à ma base » : la feuille
   propose le prix de la ligne, le clavier ne cache ni le prix ni le bouton ;
 - [ ] une ligne neuve où vous tapez la même phrase avec un s en plus, ou en
   majuscules : **une seule** proposition, la bonne en tête ;
-- [ ] la ligne ouverte en grand montre « Votre prix de référence » ; mettez un
-  autre prix : « c'est voulu ? » ; la liste du devis, elle, ne montre rien ;
+- [ ] tapez « Les » : rien ne doit être proposé ; « seuils » (si vous avez un
+  poste « Seuil… ») : une seule proposition — c'est la preuve que la clé
+  tourne sur le téléphone, ce qui n'a jamais été vérifié ;
+- [ ] la ligne ouverte en grand montre « Votre prix de référence » au-dessus
+  de la quantité ; mettez un autre prix : « c'est voulu ? » apparaît sous le
+  prix ; la liste du devis, elle, ne montre rien ;
+- [ ] après « Changer ma référence », la ligne répond-elle au premier appui ?
+  (deux fenêtres empilées laissent parfois, sur iPhone, un voile invisible qui
+  avale les touches) ;
 - [ ] « Ma base de postes » (depuis « Mes devis » ou « Mon profil ») :
   chercher, corriger une phrase, retirer un prix (deux appuis), retirer un
   poste ;
-- [ ] jamais plus de trois propositions, et la virgule du pavé décimal dans
-  le prix de référence.
+- [ ] jamais plus de trois propositions, la troisième visible clavier ouvert,
+  et la virgule du pavé décimal dans le prix de référence ;
+- [ ] la croix des feuilles se touche-t-elle bien, avec un gant ?
+- [ ] avec VoiceOver, la référence est-elle lue avant le prix ?
+- [ ] le correcteur du clavier change-t-il « placo » ou « BA13 » dans une
+  phrase de la base ?
+- [ ] dans le choix des métiers, « macon » trouve-t-il « Maçon » ? (sinon, le
+  téléphone ne sait pas retirer les accents comme le fait le navigateur, et
+  d'autres recherches d'Opus en pâtissent — pas la clé du lot P, qui ne s'en
+  sert pas).
 
 **À trancher avec vous, en voyant l'écran** — des choix d'écran faits sans
 vous (relectures « écran » et « textes ») :
@@ -2287,10 +2314,16 @@ vous (relectures « écran » et « textes ») :
 - [ ] **plus aucun retrait depuis la ligne** : la feuille renvoie à « Ma base
   de postes » (ECRAN2) ;
 - [ ] **deux propositions de même phrase** se distinguent par l'unité et la
-  fourniture, au prix de la fin de la date à 320 points (ECRAN9) ;
-- [ ] **trois paragraphes rouges** sous « Confirmer la suppression » d'un
-  client qui a des devis (TEXTES1) : c'est le style des avertissements de
-  cette fiche, à juger à l'écran.
+  fourniture ; le prix, c'est de couper la fin de la date (ou de « votre base,
+  sans prix de référence ») — dès 390 points de large, quand l'unité et la
+  fourniture s'écrivent toutes deux (ECRAN9) ;
+- [ ] **la feuille « Ce poste existe déjà »** ne redit plus cette phrase sous
+  son titre (le cahier la redisait) ;
+- [ ] **pour une ligne écrite autrement qu'un poste**, la phrase du poste n'est
+  écrite qu'une fois, dans la référence ;
+- [ ] **sous « Confirmer la suppression » d'un client qui a des devis**, deux
+  paragraphes rouges sous une ligne grise (« Définitif… ») (TEXTES1) : c'est
+  le style des avertissements de cette fiche, à juger à l'écran.
 
 **À faire relire (droit)** :
 
@@ -2317,8 +2350,41 @@ vous (relectures « écran » et « textes ») :
 - [ ] un poste ajouté **avant** que le devis soit enregistré en base n'a pas
   de devis d'origine, et ne compte pas dans « les postes que vous en avez
   rangés » (TEXTES8) : rare ;
-- [ ] `DevisScreen.js` et `ChoixClientDevis.js` disent encore « la base n'a
-  pas répondu » — une cause qu'on ne connaît pas (relevé hors du lot).
+- [ ] `DevisScreen.js`, `ChoixClientDevis.js` et `ClientsScreen.js` disent
+  encore « la base n'a pas répondu » — une cause qu'on ne connaît pas (relevé
+  hors du lot) ;
+- [ ] **l'origine d'une suggestion de la mémoire** (le point « Après le
+  lot 1 ») : le lot P ne l'aggrave pas — « Ma base de postes » dit seulement
+  « Ajouté le … depuis un de vos devis », jamais un mot de son objet — mais
+  une proposition de la mémoire peut toujours dire « déjà écrit dans Salle de
+  bains Martin » pendant que vous chiffrez le devis d'un autre client
+  (TEXTES17).
+
+**Au lot 4** :
+
+- [ ] la purge des devis jamais acceptés **ne touche pas la base de postes** :
+  une phrase qui nomme un client survit à son devis. Le chemin d'effacement des
+  textes légaux le dit déjà ; le mécanisme de purge devra le savoir.
+
+**Un lot à part** :
+
+- [ ] **la croix des feuilles du bas** (`FeuilleBas`) fait 18 × 20 points
+  (environ 38 × 40 au doigt, par `hitSlop`) : sous les 44 points. `mesure-devis`
+  la tolère parce que le voile ferme aussi la feuille ; la corriger touche
+  toutes les feuilles du projet.
+
+**Pour la base commune, un jour** (le cahier, C10 — des contraintes, pas un
+travail) :
+
+- aucun poste ne rejoint une base commune sans une case à part, **non
+  cochée** par défaut ;
+- le lien vers le devis d'origine ne part jamais ;
+- un prix de référence est un prix **futur**, que l'artisan se fixe : jamais
+  versable tel quel ;
+- tant que le lien existe, c'est aussi le prix d'un devis précis, donc d'un
+  client : à poser à l'avocat ;
+- une phrase peut venir d'une bibliothèque sous licence (CPI L342-1) ;
+- Opus n'« actualise » jamais les références de tout le monde d'un coup.
 
 **Connus, et laissés tels quels, avec leur raison** :
 
@@ -2326,13 +2392,17 @@ vous (relectures « écran » et « textes ») :
   réponse du 25/10) ; « travaux » / « travail » aussi (ce pluriel ne se fait
   pas en s) ; une **autre formulation** du même travail n'est pas reconnue :
   c'est l'agent, plus tard ;
+- **un AJOUT tardif n'est pas couvert** : resté en route, réessayé, le poste
+  retiré entre-temps, puis le premier envoi arrive — le poste revient (essai
+  50, cas 17). Il se voit dans « Ma base » et se retire de nouveau ; une
+  « pierre tombale » coûterait une table pour un seul cas ;
 - une phrase collée en **forme décomposée** (un accent écrit en deux
   caractères, ce que fait parfois un PDF) a bien la même clé, mais l'écran
   dit qu'elle est rangée « sous « … » » (T21) : rare, et sans effet sur les
   propositions ;
-- l'écran ne reconnaît qu'environ 26 caractères invisibles quand il compare
-  la forme d'une ligne à celle d'un poste (`formeVisible`), la base en
-  retire 4 174 : une ligne qui ne diffère d'un poste que par un invisible
+- l'écran ne reconnaît que 38 caractères invisibles (et 25 espaces) quand il
+  compare la forme d'une ligne à celle d'un poste (`formeVisible`), la base
+  en retire 4 174 : une ligne qui ne diffère d'un poste que par un invisible
   rare dirait « sous « … » ». Cosmétique ;
 - un client modifié qui envoie l'identifiant d'un poste d'un AUTRE artisan
   apprend que ce poste existe (refus 23505), et rien d'autre (BASE4) : c'est
@@ -2341,13 +2411,22 @@ vous (relectures « écran » et « textes ») :
 - **la base n'est relue, pendant la saisie, qu'une fois par session** : un
   poste ajouté depuis un autre appareil n'apparaît dans les propositions
   qu'après avoir rouvert « Ma base de postes » ou relancé Opus ;
+- **la limite de lignes de l'API** vaut au moins 1 000 (mesuré le 25/10 : les
+  1 000 postes d'un compte au plafond reviennent d'une lecture) ; sa valeur
+  exacte n'est pas connue : relever un jour le plafond `OP018` demanderait de
+  la remesurer d'abord ;
 - **sur la vraie base, la clé n'a été comparée que sur le plan de base et les
   plans 1 et 14** d'Unicode : « tout Unicode » d'un bloc prend 4 minutes,
   trop pour une requête ; la parité complète est prouvée sur PostgreSQL 16 ;
 - **la clé n'a jamais tourné sous Hermes**, le moteur de l'iPhone : seulement
   sous `node` et PostgreSQL ;
+- `normalize` reste appelé par `texte.js`, `clients.js` et `emetteur.js` ; la
+  clé, elle, ne s'en sert pas ;
 - `verifier-adresse` échoue parfois à travers le mandataire du conteneur : un
-  échec isolé se relance avant d'accuser le code.
+  échec isolé se relance avant d'accuser le code ;
+- `verifier-devis` a rougi une fois, le 24/10, sous forte charge, sur « un cas
+  de la file tourne sans planter » ; non reproduit en six relances. S'il
+  revient, garder la sortie complète du contrôle avant de relancer.
 
 **Avant de remettre son compte au frère** : vérifier qu'il ne porte **aucun
 poste** — des phrases et des prix rangés pour essayer seraient remis avec le
@@ -2460,8 +2539,9 @@ DÈS MAINTENANT, parce qu'elles coûteraient cher à rattraper :
    métier sert un jour à une base ; un poste rangé en texte libre ne servira
    jamais à rien. C'est déjà la direction du plan devis (quantité en nombre,
    unité en liste, centimes) ; elle devient une exigence. (Pour la base de
-   postes, tranché au lot P le 23/10 : pas de colonne métier ; le métier se
-   déduira des métiers de la fiche — plan 10.17.)
+   postes, tranché au lot P le 23/10 : ni colonne métier ni région — aucun
+   lecteur, et un poste n'a pas de lieu ; le métier se déduira des métiers de
+   la fiche — plan 10.17.)
 2. **Les données des artisans ne sont PAS à Opus.** Leurs prix sont leur
    secret commercial, leurs clients sont des tiers. Une base commune ne pourra
    naître que de contributions **consenties, retirables et anonymes** — jamais

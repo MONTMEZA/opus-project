@@ -147,7 +147,7 @@ Chaque ligne : ce que l'addendum demande, ce qui existe, et la preuve.
 | 1.16 | « Opus identifie le particulier sans donner accès à son compte privé » (`addendum.txt:85`) | **en partie** : l'e-mail, le téléphone et la position GPS du compte sont fermés à tous. Mais le nom, la ville et le code postal sont lisibles par tous, même sans compte (voir R29) | `schema:2769` ; vraie base : droits de colonne relevés |
 | 1.17 | Les lignes du devis reliables plus tard à une visite | chaque ligne aura son propre identifiant, « visable de l'extérieur » | `PLAN:1452-1458` |
 | 1.18 | Un dossier ou une visite ne doit jamais devenir une **condition** de remise | ce qui bloque une remise sera **une liste** rendue par une seule fonction de la base. Cette forme rend l'ajout d'un motif facile ; **elle ne l'empêche pas** — d'où la règle (c) de D4 | `PLAN:3193-3195` |
-| 1.19 | La base de prix de l'artisan ne doit rien savoir du client | la base de postes (lot P) ne contient « aucune donnée de client » | `PLAN:3130` |
+| 1.19 | La base de prix de l'artisan ne doit rien savoir du client | la base de postes (lot P) ne contient « aucune donnée de client » — **corrigé au lot P (25/10) : aucune COLONNE de client, mais une phrase, texte libre, peut en nommer un** | `PLAN:3130` |
 | 1.20 | Retrouver une relation par des « identifiants internes fiables » (`addendum.txt:309-311`) | des **paires (pro, compte)** fiables existent déjà : une conversation par paire, et les demandes de devis, de rappel, d'urgence relient un compte à un pro | `schema:586-592`, `498-501`, `515-518`, `854-857` |
 | 1.21 | Rendez-vous « créés depuis le particulier » (`addendum.txt:249-250`) | une demande de rappel porte déjà un **créneau** choisi par le particulier : c'est l'amorce d'un rendez-vous, à relier et non à doubler | `schema:520` |
 
@@ -424,7 +424,7 @@ le PDF, avec le figeage) → **3** (la TVA) → **4** (accepter, refuser, refair
 | lot | pourquoi |
 |---|---|
 | tarifs | rien à changer : l'addendum n'en parle pas. L'affichage public des tarifs reste un lot conditionnel qui attend ta décision (`PLAN:2417`), et les conditions promettent aujourd'hui l'inverse (`src/data/legal.js:546-549`) |
-| P | la base de postes ne connaît aucun client (`PLAN:3130`) |
+| P | la base de postes ne connaît aucun client (`PLAN:3130`) — **corrigé au lot P : aucune colonne de client, mais une phrase, texte libre, peut en nommer un** |
 | 3 | la TVA ne touche ni la relation ni le dossier |
 | 5 | les modèles habillent un contenu figé ; ils n'ont rien à savoir de l'origine du devis |
 

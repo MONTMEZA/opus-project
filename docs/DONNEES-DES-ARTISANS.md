@@ -916,7 +916,9 @@ Ce sont des idées à trancher par vous, **pas des règles vérifiées**.
 2. **La base légale** pour les données des artisans : le consentement, déjà
    prévu par vos documents, est le plus solide. À confirmer avec l'avocat.
 3. **Votre statut, et la séparation.** Précisé par vous le 17/10/2026 : vous
-   avez eu une entreprise, aujourd'hui fermée. Vous restez du métier, et le
+   avez eu une entreprise, aujourd'hui fermée (**corrigé le 25/10 : depuis le
+   20/10, vous avez une SARL active, rattachée à votre compte principal —
+   CLAUDE.md**). Vous restez du métier, et le
    premier autre artisan d'Opus sera votre frère : qui fait tourner le calcul
    des fourchettes, et qui peut lire quoi — éditeur SQL compris —, se décide
    toujours avant le module devis (§5.2).
@@ -1020,4 +1022,6 @@ Ce sont des idées à trancher par vous, **pas des règles vérifiées**.
     messagerie : non étudié. La messagerie est de toute façon hors de ce
     projet de base.
 18. **Votre statut exact** : précisé le 17/10/2026 — une entreprise que vous
-    avez eue, aujourd'hui fermée ; aucune entreprise active.
+    avez eue, aujourd'hui fermée ; aucune entreprise active. **Corrigé le
+    25/10 : depuis le 20/10, vous avez une SARL active, rattachée à votre
+    compte principal (CLAUDE.md).**

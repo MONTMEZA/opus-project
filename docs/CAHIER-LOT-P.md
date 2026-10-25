@@ -47,7 +47,12 @@
 >     `src/lib/devis.js`, `degre()`) ;
 >   - les réponses du 25/10 aux deux dernières questions : « 10cm » et
 >     « 10 cm » restent deux phrases (A), et entre deux variantes c'est la
->     plus récente qui est proposée (B).
+>     plus récente qui est proposée (B) ;
+>   - **les textes et les gestes des écrans ont été repris par les relectures
+>     « écran » et « textes »** : la phrase de sortie, le retrait du prix (deux
+>     appuis, depuis « Ma base de postes » seulement), les titres des feuilles,
+>     les libellés d'unité et de collecte. Pour tout texte affiché, c'est
+>     `src/lib/postes.js` qui fait foi, pas ce cahier.
 
 
 > **Ce document est un cahier de réalisation, pas du code.** Rien n'a été

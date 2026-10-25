@@ -76,8 +76,10 @@ export const PROPOSITIONS_MAX = 3;
 export const LETTRES_MIN = 3;
 
 /** La limite de lecture par défaut de l'API de Supabase : une réponse est
- *  COUPÉE à ce nombre de lignes, sans erreur. SUPPOSÉE pour ce projet (à
- *  relever sur la vraie base, étape 10 du lot P). Le plafond ne doit jamais
+ *  COUPÉE à ce nombre de lignes, sans erreur. RELEVÉE le 25/10/2026 sur la
+ *  vraie base : sans limite demandée, l'API rend les 1 000 postes d'un compte
+ *  au plafond. Elle vaut donc AU MOINS 1 000 ; sa valeur exacte n'est pas
+ *  connue, et relever le plafond demanderait de la remesurer. Il ne doit jamais
  *  la dépasser, sinon « Ma base » montrerait 1 000 postes sur 1 200 sans un
  *  mot — `verifier-postes` exige `POSTES_MAX <= LIMITE_LECTURE_API`. */
 export const LIMITE_LECTURE_API = 1000;
