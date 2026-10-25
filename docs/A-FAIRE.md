@@ -1755,10 +1755,9 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
   25/10, **juste avant la reconstruction** du build de développement (son
   icône Opus était la version « preview » du 17/10). Jamais seules :
   `expo-notifications` est un module natif.
-- [ ] **Reconstruire et réinstaller le build de développement** sur l'iPhone
-  (`git pull`, `npm install`, `eas build --platform ios --profile
-  development`), puis essayer le lot P : c'est la seule façon de voir le devis
-  et la base de postes sur le téléphone.
+- [x] **Reconstruire et réinstaller le build de développement** sur l'iPhone :
+  fait par le propriétaire le 25/10 (« c'est bon, j'ai installé, ça
+  fonctionne »), puis le lot P essayé dessus le jour même.
 - [ ] Corriger les annexes du plan (CONCURRENCE-DEVIS.md, SIRET-ET-CLAUSES.md)
   et `DEVIS-DU-PROPRIETAIRE.md:179` (« Acompte à la signature », contraire au
   droit hors établissement).
@@ -2285,7 +2284,14 @@ adresses de l'essai : elles sont toujours en base, et expirent d'elles-mêmes.
 **À essayer sur votre iPhone** — votre compte principal, dans le build de
 développement (plus dans Expo Go : depuis le 25/10, il est passé au SDK 58 et
 ne sait plus ouvrir Opus — CLAUDE.md, « Expo Go ne peut plus ouvrir Opus »),
-jamais l'icône « preview » du 17/10, et jamais le compte du frère :
+jamais l'icône « preview » du 17/10, et jamais le compte du frère.
+
+**Essayé en bloc le 25/10** : « tout fonctionne correctement », et la base
+porte trois postes rangés depuis votre téléphone, sur votre compte principal
+(l'ajout d'un appui et une modification sont donc passés). Les onze points
+ci-dessous n'ont pas eu de réponse un par un ; le deuxième et le troisième
+sont les plus utiles — ce sont les seuls qui prouvent que la clé tourne sur le
+téléphone :
 
 - [ ] dans un devis, une ligne chiffrée → « Ajouter à ma base » : la feuille
   propose le prix de la ligne, le clavier ne cache ni le prix ni le bouton ;

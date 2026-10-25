@@ -8968,13 +8968,36 @@ Deux leçons d'outil, au passage :
   dans la ligne de commande du shell qui le lançait. On arrête un serveur par
   son numéro de processus.
 
+#### ESSAYÉ SUR L'IPHONE le 25/10/2026
+
+Par le propriétaire, sur son compte principal, dans le build de développement
+reconstruit le jour même (voir la section suivante) : « j'ai testé sur mon
+iPhone et tout fonctionne correctement sur mon application Opus ». Il n'a pas
+détaillé les onze questions de `docs/A-FAIRE.md`.
+
+Ce que la base en dit, relevé par sa FORME seulement (aucune phrase, aucun
+prix lu) : **3 postes**, tous sur son compte principal — celui
+d'administrateur, ni un compte jetable ni celui du frère —, rangés entre
+16 h 48 et 16 h 57 (heure de Paris), depuis **2 devis** différents, en `m2` et
+en `forfait`, **tous avec un prix de référence** dont la date a été posée par
+la base, et **un modifié après coup**. L'ajout d'un appui, la feuille d'ajout
+et une modification sont donc passés par le téléphone jusqu'à la vraie base.
+
+Ce que ces lignes NE prouvent PAS : la clé sous Hermes. Le téléphone n'envoie
+jamais la clé — c'est la base qui la calcule —, donc trois postes acceptés ne
+disent rien de la clé que le téléphone calcule pour PROPOSER. Seule la
+question « la même phrase avec un s en plus ne donne qu'une proposition » le
+dirait, et elle n'a pas eu de réponse détaillée.
+
 #### Ce qui n'a PAS été vérifié
 
-- **rien sur l'iPhone** : le clavier sous la feuille d'ajout et sous la
-  carte, la virgule du pavé décimal, les propositions au pouce, VoiceOver ;
-- **Hermes** : la clé n'a tourné que sous `node` 22 et PostgreSQL ; une
+- **le détail du toucher sur l'iPhone** (essayé en bloc le 25/10, ci-dessus,
+  sans réponse point par point) : le clavier sous la feuille d'ajout et sous
+  la carte, la virgule du pavé décimal, les propositions au pouce, VoiceOver ;
+- **Hermes** : la clé n'a été éprouvée que sous `node` 22 et PostgreSQL ; une
   différence de moteur sur une expression régulière ne se verrait qu'au
-  téléphone ;
+  téléphone, sur une variante (un s, une majuscule) qui donnerait deux
+  propositions au lieu d'une ;
 - **« tout Unicode » sur la vraie base d'un seul bloc** : seulement le plan de
   base et les plans 1 et 14 ;
 - **à l'écran, les états « modifié entre-temps » et « poste absent »** : ils ne
@@ -8989,7 +9012,8 @@ Deux leçons d'outil, au passage :
 - **la page « Ma base de postes » à 1 000 postes au doigt** : le navigateur
   bridé dit que la liste ne monte que ce qu'on voit et que la frappe tient ;
   le ressenti, lui, ne se juge que sur l'iPhone ;
-- **un vrai poste d'un vrai artisan** : la vraie base n'en compte aucun.
+- **un poste d'un AUTRE artisan** : la vraie base n'en compte que trois, ceux
+  de l'essai du propriétaire sur son propre compte.
 
 #### Ce qui reste ouvert
 
@@ -9048,6 +9072,13 @@ s'imposait : les deux mises à jour ont été faites JUSTE AVANT, dans le dépô
 iOS et Android lus), pour que la nouvelle construction parte de versions
 alignées. Elles n'existent sur son téléphone qu'une fois le build de
 développement reconstruit et réinstallé.
+
+**Reconstruit et réinstallé le 25/10/2026**, par le propriétaire : « c'est bon,
+j'ai installé, ça fonctionne ». Son icône Opus est donc désormais le build de
+**développement**, avec `expo` 57.0.31 et `expo-notifications` 57.0.24 ; la
+version « preview » du 17/10 n'est plus sur son téléphone (même identité :
+l'une a remplacé l'autre). Et le lot P y a été essayé le jour même (section
+précédente).
 
 ## Dépendances : vérifier avant de proposer
 
