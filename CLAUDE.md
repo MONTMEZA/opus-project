@@ -8929,7 +8929,7 @@ avec la même adresse — quatre comptes en tout, tous supprimés :
 | après rechargement complet | la référence et l'écart reviennent de la base |
 | la même phrase au mètre linéaire, puis fourniture non comprise | trois postes, et **trois** propositions qui se distinguent par l'unité et la fourniture |
 | « creation de la dalles » | la bonne phrase **en tête** (après la correction du classement) |
-| la page : corriger une phrase et fixer son prix (« Pose de plinthes en chêne massif », 12,50 €), puis retirer un poste | `PATCH 200`, `DELETE 200` (avec « Changer ma référence » : 3 `PATCH`, 1 `DELETE` au journal) ; la liste suit |
+| la page : corriger une phrase et fixer son prix (« Pose de plinthes en chêne massif », 12,50 €), retirer le prix d'un poste, puis retirer un poste | `PATCH 200` ×3 avec « Changer ma référence », `DELETE 200` ; le prix retiré se relit vide en base (`prix_reference_centimes` et `prix_fixe_le`), « Prix non fixé » à l'écran ; la liste suit |
 | la lecture de la base coupée | « Liste non actualisée… Réessayer », la liste déjà lue reste |
 | un visiteur | **401 · 42501** en lecture comme en écriture |
 | B lit, modifie, retire les postes de A | `[]` ×3 ; écrire au nom de A : **403** |
