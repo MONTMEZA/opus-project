@@ -3425,7 +3425,7 @@ n'est pas un réglage technique :
   frère (art. 28) : contrat de sous-traitance, registre des traitements
   (30.2), notification des violations. Son entreprise étant fermée, c'est
   **un particulier** qui tiendra ce rôle, et c'est à lui de décider s'il le
-  tient tel quel ou s'il s'immatricule d'abord ;
+  tient tel quel ou s'il s'immatricule d'abord **(corrigé au lot P : depuis le 20/10, il a une SARL active, rattachée à son compte principal — CLAUDE.md ; que ce soit elle qui tienne ce rôle, comme l'éditeur d'Opus, reste une décision à lui poser)** ;
 - `STATUT` doit quitter `'essai'`, et `verifier-legal` refusera tant que le
   contrat (`contratSousTraitance`) et une adresse de contact relevée
   (`emailReleve`, la boîte IONOS) ne sont pas là ;

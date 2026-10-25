@@ -8898,10 +8898,13 @@ refus, tous rattachés à l'annonce qui les nomme** ; les 26 autres fichiers
 d'essais identiques au relevé d'avant (quatre écarts, tous expliqués) ; la
 parité de la clé sur tout Unicode ; les 51 contrôles ; le linter à 32 ; les
 paquets iOS et Android lus ; `mesure-devis` à 450 mesures sans échec. Et le
-banc des sabotages : **326 posés, 325 refusés** — la contre-épreuve 42h reste
-verte à dessein —, dont 35 rejoués aussi sur une base PostgreSQL, après qu'un
-trou de contrôle (le 42b) a été trouvé et fermé. (Le message du commit
-`7a8cc10` disait « 360 » : il comptait deux fois les 35 rejoués.)
+banc des sabotages : **326 posés, 323 refusés** par la vérification visée —
+trois verts, tous expliqués : la contre-épreuve 42h, voulue ; un X5 mal posé,
+reposé puis refusé ; X11, une mutation équivalente —, dont 35 rejoués aussi
+sur une base PostgreSQL, après qu'un trou de contrôle (le 42b) a été trouvé et
+fermé. (Le message du commit `7a8cc10` disait « 360 » : il comptait deux fois
+les 35 rejoués ; celui de `c2e82d1`, « 326 posés, 325 refusés », oubliait X5
+et X11.)
 
 Après la correction du classement (25/10) : les 51 contrôles, le linter à 32,
 `mesure-devis` à **450 sans échec**, les deux paquets lus (1 « Exported »,
