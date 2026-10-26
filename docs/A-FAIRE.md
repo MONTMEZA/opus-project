@@ -2648,41 +2648,91 @@ choisit.
    grossière, un délai d'intervention (ou au moins de prise de contact),
    et déjà une base de tarif — elle existe depuis le lot T.
 
-**Les protections à poser avec, sinon la position se devine quand même :**
+**Ce qu'a établi la recherche du 26/10** (trois études — le code, l'iPhone,
+le droit —, puis une relecture adverse qui a revérifié chaque point
+important dans le code et sur la vraie base, en lecture seule) :
 
-- **une distance ARRONDIE** (« moins de 1 km », « 1 à 5 km »), jamais
-  « 150 m » : une distance exacte montre presque où il est ;
-- **la position est rangée à part, lisible par personne** — une fonction
-  de la base la lit et ne rend que le classement et la tranche de
-  distance ;
-- **elle expire toute seule** (au bout de quelques heures, ou dès qu'il se
-  met indisponible) : sinon, le soir, Opus garderait l'adresse de sa
-  maison ;
-- **une limite au nombre d'urgences par particulier** : sans elle, on peut
-  lancer de fausses urgences depuis trois endroits pour retrouver un
-  artisan ;
-- **le délai annoncé est celui de l'ARTISAN**, et l'écran le dit : Opus ne
-  le garantit pas.
+1. **« On ne montre pas où il est » ne protège RIEN, et c'est mesuré.** La
+   recherche d'urgence accepte n'importe quel point de départ et ne garde
+   que les artisans dont le RAYON couvre ce point. En ne regardant QUE
+   « l'artisan apparaît / n'apparaît pas » — sans jamais lire de distance —,
+   **120 recherches suffisent à situer un artisan à 7,5 m près**
+   (simulation de la vraie fonction, revérifiée le 26/10). Une distance
+   arrondie, une limite par compte (un concurrent ouvre trois comptes
+   particuliers) ou « trier sans montrer » n'y changent rien.
+   > **Ce que la base RANGE se retrouve, à la finesse où elle le range.**
+   > La seule protection est donc de ne jamais ranger une position plus
+   > fine que ce qu'on accepte de voir public : **la COMMUNE**, ou au pire
+   > une case d'au moins 1 km — et c'est la BASE qui arrondit, pas le
+   > téléphone (un client modifié enverrait la position exacte).
+2. **Une position précise dirait son domicile le soir, et l'adresse de ses
+   CLIENTS le jour** : un concurrent apprendrait chaque jour où il
+   travaille.
+3. **Ce qui ralentit vraiment une urgence aujourd'hui, ce n'est pas la
+   distance** : elle part à UN SEUL artisan, sans notification sur l'écran
+   verrouillé (le « dernier mètre » des notifications push, §2.2), sans
+   délai de réponse, sans « personne ne répond : choisir un autre
+   artisan ». Mettre le plus proche en tête sans ce filet peut RALENTIR :
+   s'il est sur un toit ou au volant, la personne attend sans le savoir.
+4. **Proche ne veut pas dire libre.** En plein chantier, il ne peut
+   peut-être pas partir. Ce qui compte pour la personne, c'est « il peut
+   partir maintenant » et le délai. Et « Je réponds aux urgences » ne
+   s'éteint jamais tout seul aujourd'hui : un artisan qui l'oublie allumé
+   en vacances apparaît quand même.
+5. **Les deux endroits « naturels » pour ranger une position sont lisibles
+   SANS COMPTE** (mesuré sur la vraie base) : les coordonnées de la fiche
+   (`professional_profiles`) et toute la table `sos_availability`. Une
+   position irait dans une table À ELLE, privée, que personne d'autre ne
+   lit.
+6. **Le droit** (recommandation de la CNIL sur les applications mobiles,
+   2025) : la permission de l'iPhone ne vaut PAS consentement — Opus doit
+   demander le sien, éteint par défaut, et le refuser ne doit rien coûter ;
+   la CNIL recommande de **privilégier une donnée fournie à la main** ; une
+   **analyse d'impact (AIPD) est très probablement obligatoire** si le GPS
+   arrive (le logiciel PIA de la CNIL est gratuit) — point à faire
+   confirmer par un juriste. **Et la politique de confidentialité promet
+   aujourd'hui l'inverse** : « Votre position n'est jamais relevée par
+   votre téléphone » (`legal.js`). Elle se réécrit AVANT.
+7. **L'iPhone** : `expo-location` 57.0.22 pour le SDK 57, absent d'Opus →
+   un nouveau build de développement. Une position prise **une fois, au
+   premier plan**, se vérifie en partie au navigateur ; le suivi en
+   arrière-plan (autorisation « Toujours », batterie, contrôle d'Apple) ne
+   se vérifie nulle part ici — **jamais d'arrière-plan.**
 
-**Deux étapes, et la seconde est un vrai chantier :**
+**La forme recommandée, dans cet ordre, et TOUT APRÈS le devis et la
+facture :**
 
-- « les 3 plus proches » et les délais par tranche de distance : simple ;
-- « s'il ne répond pas dans le temps donné, la demande passe aux
-  suivants » : il faut un minuteur qui tourne côté serveur, téléphones
-  éteints. À mesurer à ce moment-là.
+1. **les notifications push**, puis le filet « pas de réponse : choisir un
+   autre artisan », et une expiration à « Je réponds aux urgences » — c'est
+   ce qui rend une urgence réellement plus rapide ;
+2. **« Disponible maintenant à [commune] jusqu'à [heure] », SANS GPS** :
+   l'artisan choisit sa commune du moment à la main (prérempli avec celle
+   de sa fiche) et une heure de fin. Aucun module natif, aucun nouveau
+   build, vérifiable au navigateur et en démonstration, et rien de plus fin
+   que ce qui est déjà public. La recherche s'en sert pour CLASSER, et
+   l'écran dit une phrase — « en ce moment dans votre commune », « en ce
+   moment à Rognes, signalé il y a 20 min » —, jamais une carte ni un
+   dixième de kilomètre. Une garde contre la triche : sa commune du moment
+   doit rester à une distance bornée de sa fiche ;
+3. **vos délais par tranche de distance** se posent sur cette base ;
+4. **le GPS, seulement si l'étape 2 est trop pénible à l'usage** : un
+   bouton « Me localiser », d'un appui, qui ne fait que REMPLIR la même
+   commune — la position précise ne quitte jamais le téléphone. Le même
+   module servirait à un « Me localiser » pour l'adresse du PARTICULIER en
+   urgence, qui est peut-être le gain le plus direct.
 
-**Ce que ça demande techniquement** : le GPS est un module natif
-(`expo-location`, pas encore dans Opus) → **un nouveau build de
-développement** (comme le 25/10), pas une réécriture. La forme la plus
-simple et la plus sûre : la position est demandée **une fois**, quand
-l'artisan se met disponible, application ouverte — pas un suivi continu
-en arrière-plan (autorisation « Toujours », batterie, contrôle d'Apple).
+**Une autre fonction, peut-être celle que vous vouliez dire** : APRÈS qu'un
+artisan a ACCEPTÉ une urgence, le client le voit arriver, comme un VTC,
+pendant un temps limité. Elle est bien moins risquée : un seul destinataire
+(celui qui l'attend chez lui), une destination connue, une durée bornée
+jusqu'à l'arrivée. À distinguer de la recherche.
 
-**À établir avant de construire** : ce que disent la CNIL et le RGPD
-(consentement, durée de conservation, la phrase de la politique de
-confidentialité, et si une analyse d'impact est obligatoire) ; ce que
-l'iPhone autorise exactement. Une recherche est en cours le 26/10 ; ses
-conclusions seront ajoutées ici.
+**Les questions à vous poser le jour venu** : « si un artisan accepte »
+veut-il dire « s'il accepte d'être localisé pour être trouvé », ou « après
+avoir accepté une urgence, le client le voit arriver » ? Acceptez-vous
+« en ce moment dans votre commune » plutôt que « dans votre rue » ? Le rayon
+se compte-t-il depuis sa fiche ou depuis sa commune du moment ? Combien de
+temps dure une disponibilité « maintenant » ?
 
 **Et ce qui manque DÉJÀ aux urgences, à faire dans le même lot** : la base
 laisse envoyer une urgence à n'importe quel artisan, même s'il ne fait pas

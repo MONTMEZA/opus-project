@@ -1806,6 +1806,41 @@ console.log('\nLot S-a — ce qui reste en ligne, et le badge suspendu');
   }
 }
 
+/* LA POSITION DU TÉLÉPHONE — une promesse écrite, et le paquet qui la
+   démentirait (26/10/2026). La politique de confidentialité dit : « Votre
+   position n'est jamais relevée par votre téléphone. » C'est VRAI tant
+   qu'Opus n'embarque aucun module de localisation. Le jour où quelqu'un
+   ajoute `expo-location` — l'idée des urgences par la position est notée
+   dans A-FAIRE —, rien ne rougissait : la phrase serait devenue fausse en
+   silence, dans un texte qui engage. Les deux ne peuvent plus coexister :
+   ajouter le paquet oblige à réécrire la phrase dans le même lot (avec le
+   consentement propre à Opus et l'analyse d'impact que la recherche du
+   26/10 juge très probablement obligatoire). */
+console.log('\nLa position du téléphone : la promesse et le paquet ne se contredisent pas');
+{
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const paquets = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const MODULES_POSITION = ['expo-location', 'react-native-geolocation-service',
+    '@react-native-community/geolocation', 'expo-task-manager'];
+  const presents = MODULES_POSITION.filter((m) => m in paquets);
+  const textes = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte).join(' ');
+  const promesse = /position n.est jamais relevée par votre téléphone/.test(textes);
+  verifier('aucun module de localisation tant que les textes promettent « jamais relevée »',
+    !(promesse && presents.length > 0), `présents : ${presents.join(', ')}`);
+  /* Et la promesse doit être LÀ tant que rien ne la dément : la retirer sans
+     raison laisserait le texte muet sur une question qu'on se pose. */
+  verifier('…et la promesse est écrite tant qu’aucun module de localisation n’est installé',
+    presents.length > 0 || promesse);
+  /* Le code non plus ne lit pas la position : une API du navigateur suffirait
+     à la relever au web, sans aucun paquet. */
+  const src = execFileSync('git', ['ls-files', 'src'], { encoding: 'utf8' })
+    .split('\n').filter((f) => /\.(js|jsx|ts|tsx)$/.test(f));
+  const lecteurs = src.filter((f) => /\bgeolocation\s*\.\s*(getCurrentPosition|watchPosition)|getCurrentPositionAsync|watchPositionAsync|requestForegroundPermissionsAsync|requestBackgroundPermissionsAsync/
+    .test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')));
+  verifier('aucun fichier de src/ ne lit la position du téléphone',
+    !(promesse && lecteurs.length > 0), lecteurs.join(', '));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

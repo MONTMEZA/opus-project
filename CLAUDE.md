@@ -9527,6 +9527,34 @@ s'ordonnent par distance pastille allumée, par métier éteinte.
 aucune vidéo, seul le contrôle tient la rangée cachée ; rien sur l'iPhone ;
 rien sur la vraie base (aucune écriture : décision du propriétaire).
 
+##### Les urgences par la position du téléphone — notée, PAS construite
+
+L'idée du propriétaire, le même soir : que l'artisan qui l'accepte soit
+trouvé par la position de son téléphone, et que le particulier en urgence
+voie les plus proches. **À construire après le devis et la facture** (sa
+décision). Le plan et les questions : `docs/A-FAIRE.md`, « Les urgences par
+la position du téléphone ». Une recherche (code, iPhone, droit) et sa
+relecture adverse en ont tiré une leçon qui dépasse les urgences :
+
+> **Ce que la base RANGE se retrouve, à la finesse où elle le range.**
+> `artisans_urgence` accepte n'importe quel point de départ et ne garde que
+> les artisans dont le rayon le couvre. Sans lire aucune distance, en ne
+> regardant que « apparaît / n'apparaît pas », 120 recherches situent un
+> artisan à **7,5 m** (simulation de la vraie fonction, revérifiée).
+> « Trier sans montrer », une distance arrondie, une limite par compte : rien
+> de tout cela ne protège. Seule la finesse de ce qui est rangé borne ce qu'on
+> apprend — d'où, pour une position du moment, la COMMUNE, arrondie par la
+> base.
+
+Aujourd'hui, c'est sans danger : la base ne range que la commune de la
+fiche, déjà publique. Et une garde est posée dès maintenant, parce qu'elle
+ne coûte rien : la politique de confidentialité promet « Votre position
+n'est jamais relevée par votre téléphone », et **`verifier-legal` refuse
+désormais un module de localisation (`expo-location`, `expo-task-manager`…)
+ou un lecteur de position dans `src/` tant que cette phrase existe** — et
+refuse qu'elle disparaisse sans raison. Quatre défauts remis à la main,
+les quatre refusés ; un lecteur cité en commentaire ne fait pas rougir.
+
 #### Ce qui n'a PAS été corrigé, et pourquoi
 
 - **Les anciennes données de démonstration sont dans la VRAIE base** —
