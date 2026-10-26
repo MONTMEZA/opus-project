@@ -9475,8 +9475,9 @@ existait, personne ne lui donnait `null`. **« Signaler » est parti aussi**,
 validé le même soir (« on peut enlever aussi ce signaler ») ; il reste sur
 les publications des AUTRES, et `verifier-fil` refuse qu'il disparaisse
 pour tout le monde — les magasins vérifient qu'un signalement se trouve.
-Reste « Masquer » sur sa propre publication : hors de ce qui a été validé
-(`A-FAIRE`).
+**« Masquer » (l'œil barré) est parti aussi**, validé le même soir
+(« enlève l'œil barré ») : se masquer soi-même faisait disparaître sa
+publication de son propre fil jusqu'au prochain démarrage.
 
 ##### « Les plus proches » trie vraiment par distance
 

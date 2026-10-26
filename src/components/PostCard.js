@@ -170,13 +170,19 @@ const PostCard = React.memo(function PostCard({
               range la publication pour soi ; « Signaler » l'envoie à la
               modération. Les cacher tous les deux derrière un « … » ferait
               qu'on ne trouverait ni l'un ni l'autre — or les magasins
-              d'applications vérifient qu'un signalement se trouve. */}
-          <IconBtn
-            onPress={() => onHide(post.id)}
-            accessibilityLabel="Masquer cette publication"
-          >
-            <EyeOff size={15} color={C.ink} />
-          </IconBtn>
+              d'applications vérifient qu'un signalement se trouve.
+              Ni l'un ni l'autre sur SA publication (validé le 26/10/2026 au
+              soir pour « Masquer » : se masquer soi-même n'a pas de sens, et
+              sa publication disparaissait de SON fil sans retour possible
+              jusqu'au prochain démarrage). */}
+          {!mienne && (
+            <IconBtn
+              onPress={() => onHide(post.id)}
+              accessibilityLabel="Masquer cette publication"
+            >
+              <EyeOff size={15} color={C.ink} />
+            </IconBtn>
+          )}
           {/* Pas sur SA publication — validé par le propriétaire le
               26/10/2026 : se signaler soi-même n'a pas plus de sens que se
               suivre. Le signalement doit rester trouvable sur celles des

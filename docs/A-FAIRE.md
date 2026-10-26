@@ -2604,9 +2604,9 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   validé par vous le 26/10 (« on peut enlever aussi ce signaler »). Il reste
   sur les publications des autres — les magasins d'applications vérifient
   qu'un signalement se trouve.
-- [ ] Reste **« Masquer »** (l'œil barré) sur SA propre publication : se
-  masquer soi-même n'a pas beaucoup de sens non plus. Pas dans ce que vous
-  avez validé : à décider.
+- [x] **« Masquer »** (l'œil barré) sur SA propre publication : retiré,
+  validé par vous le 26/10 au soir (« enlève l'œil barré »). Il reste sur
+  les publications des autres.
 - [x] **La pastille « Les plus proches » de la page Demandes** ne triait
   par distance qu'APRÈS « mes métiers » et l'urgence. Tranché par vous le
   26/10 : **elle trie vraiment par distance** (`src/lib/tri-demandes.js`,

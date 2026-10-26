@@ -923,6 +923,9 @@ console.log('\n9. Sur sa propre publication, ni « Suivre » ni « Contacter »'
     garde(carte, '{!mienne && (', 'label="Contacter"'), JSON.stringify(toutDansGarde(carte, '{!mienne && (', 'label="Contacter"')));
   verifier('la carte : le menu « Contacter » ne peut pas s’ouvrir sur ma publication',
     garde(carte, '{contactOpen && !mienne && (', 'style={s.contactPop}'));
+  verifier('la carte : pas de « Masquer » (l’œil barré) sur ma publication (validé le 26/10 au soir)',
+    garde(carte, '{!mienne && (', 'accessibilityLabel="Masquer cette publication"'),
+    JSON.stringify(toutDansGarde(carte, '{!mienne && (', 'accessibilityLabel="Masquer cette publication"')));
   verifier('la carte : pas de « Signaler » sur ma publication (validé le 26/10)',
     garde(carte, '{!!onSignaler && !mienne && (', 'accessibilityLabel="Signaler cette publication"'));
   const iSignaler = carte.indexOf('Signaler cette publication');
