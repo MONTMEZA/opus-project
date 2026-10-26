@@ -942,7 +942,11 @@ rollback;
 
 \echo '--- C20. LE JOURNAL DU BADGE ne garde plus la fiche : l''artisan part, plus de téléphone ni de SIRET (attendu : badge_pose = t, puis {assurance_valide,kbis_valide,rge,verification_statut,verifie} | f | f)'
 begin;
-update public.professional_profiles set telephone = '0611111111' where id = :VIEUX;
+-- Ses deux pièces rangées dans SON dossier : depuis le lot S-a, on ne valide
+-- plus une pièce qui n'est pas là (OP024).
+update public.professional_profiles
+   set telephone = '0611111111', kbis_url = :VIEUX || '/kbis.pdf', assurance_url = :VIEUX || '/assurance.pdf'
+ where id = :VIEUX;
 set local role authenticated;
 set local request.jwt.claim.sub = :ADMIN;
 select public.admin_verifier_pro(:VIEUX, true, true);

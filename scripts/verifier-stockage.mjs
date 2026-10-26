@@ -38,9 +38,14 @@
  * (`essais-section-51a.sql`, cas B12 et B13).
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const RACINE = process.argv[2] || process.cwd();
+/* `resolve` et `pathToFileURL` (relecture « écran », E13) : avec un chemin
+   RELATIF en argument, `import()` le lisait par rapport au script, et le
+   contrôle PLANTAIT au lieu de vérifier. */
+const RACINE = resolve(process.argv[2] || process.cwd());
+const importer = (f) => import(pathToFileURL(join(RACINE, f)).href);
 const lire = (f) => readFileSync(join(RACINE, f), 'utf8');
 const ESPACES_PUBLICS = ['avatars', 'bannieres', 'publications'];
 const ESPACES_FIGES = ['documents', 'pieces-jointes', 'devis'];
@@ -183,11 +188,24 @@ const fichiers = [];
 let appels = 0;
 for (const f of fichiers) {
   const code = sansCommentaires(readFileSync(f, 'utf8'));
-  if (/\bupsert\s*:\s*true\b/.test(code) && /storage/.test(code)) ko(`${f.replace(RACINE + '/', '')} : « upsert: true » dans un fichier qui parle au stockage`);
-  if (/['"]x-upsert['"]/i.test(code)) ko(`${f.replace(RACINE + '/', '')} : en-tête x-upsert`);
+  const nom = f.replace(RACINE + '/', '');
+  if (/\bupsert\s*:\s*true\b/.test(code) && /storage/.test(code)) ko(`${nom} : « upsert: true » dans un fichier qui parle au stockage`);
+  if (/['"]x-upsert['"]/i.test(code)) ko(`${nom} : en-tête x-upsert`);
   for (const m of code.matchAll(/\.storage\s*\.\s*from\([^)]*\)\s*\.\s*([A-Za-z]+)/g)) {
     appels += 1;
-    if (!METHODES_PERMISES.has(m[1])) ko(`${f.replace(RACINE + '/', '')} : storage.${m[1]}() n'est pas dans la liste permise`);
+    if (!METHODES_PERMISES.has(m[1])) ko(`${nom} : storage.${m[1]}() n'est pas dans la liste permise`);
+  }
+  /* SECOND PASSAGE (relecture « écran », E8) : `const espace =
+     supabase.storage.from('x')` puis `espace.remove(…)` échappait au premier.
+     On relève les noms qui reçoivent un `storage.from(…)` ou un `.storage`,
+     puis toute méthode appelée sur eux. */
+  const noms = new Set();
+  for (const m of code.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[^;\n]*?\.storage\b(?:\s*\.\s*from\([^)]*\))?\s*;?\s*$/gm)) noms.add(m[1]);
+  for (const n of noms) {
+    for (const m of code.matchAll(new RegExp(`\\b${n.replace(/\$/g, '\\$')}\\s*\\.\\s*([A-Za-z]+)\\s*\\(`, 'g'))) {
+      appels += 1;
+      if (!METHODES_PERMISES.has(m[1])) ko(`${nom} : ${n}.${m[1]}() (stockage par une variable) n'est pas dans la liste permise`);
+    }
   }
 }
 if (appels === 0) ko('aucun appel au stockage trouvé : le contrôle ne lit rien');
@@ -226,8 +244,8 @@ console.log('— B bis. Le chemin HTTP direct du téléphone (storage.js)');
 }
 
 console.log('— D. Le badge suspendu : la règle de l’écran tourne sur les cas de l’essai');
+const V = await importer('src/lib/verification.js');
 {
-  const V = await import(join(RACINE, 'src/lib/verification.js'));
   const A = {
     verifie: true, verifieLe: '2026-01-01T00:00:00Z', verificationStatut: 'verifie',
     kbis: { valide: true, maj: '03/2026' }, assurance: { valide: true, expire: '12/2026' },
@@ -265,6 +283,43 @@ console.log('— D. Le badge suspendu : la règle de l’écran tourne sur les c
   }
 }
 
+/* LES 768 CAS DE LA BASE (relecture « écran », E3) : le contrôle ne faisait
+   tourner que sept cas écrits à la main — ni la première pièce d'un artisan
+   non vérifié (le cas le plus courant), ni une déclaration RGE jointe.
+   `supabase/cas-badge.json` range ce que le VRAI déclencheur fait de chaque
+   situation (`scripts/generer-cas-badge.mjs`) ; la règle de l'écran doit
+   rendre la même fiche, et prévenir exactement quand la base notifie. */
+console.log('— D (suite). La règle de l’écran rend ce que la base a rendu, sur supabase/cas-badge.json');
+{
+  let donnees = null;
+  try { donnees = JSON.parse(lire('supabase/cas-badge.json')); } catch (e) { donnees = null; }
+  const liste = (donnees && Array.isArray(donnees.cas)) ? donnees.cas : [];
+  if (liste.length < 768) ko(`supabase/cas-badge.json : ${liste.length} cas au lieu de 768 — le contrôle ne lit rien`);
+  const T = '2026-10-25T10:00:00Z';
+  const versPro = (f) => ({
+    verifie: f[0], verifieLe: f[1] ? '2026-10-01T00:00:00Z' : null, verificationStatut: f[2],
+    kbis: { valide: f[3], maj: f[4] }, assurance: { valide: f[5], expire: f[6] },
+    kbisPath: f[7], assurancePath: f[8], rgePath: f[9], badgeSuspenduLe: f[10] ? '2026-10-20T10:00:00Z' : null,
+  });
+  const versFiche = (p) => [!!p.verifie, p.verifieLe ? 1 : 0, p.verificationStatut, !!(p.kbis && p.kbis.valide),
+    (p.kbis && p.kbis.maj) || null, !!(p.assurance && p.assurance.valide), (p.assurance && p.assurance.expire) || null,
+    p.kbisPath || null, p.assurancePath || null, p.rgePath || null, p.badgeSuspenduLe ? 1 : 0];
+  const ecarts = []; const avertissements = [];
+  for (const [n, avant, envoi, apres, notif] of liste) {
+    const pro = versPro(avant);
+    const [kbisPath, assurancePath, rgePath] = envoi;
+    const rendu = versFiche(V.apresEnvoiDesPieces(pro,
+      { kbisPath, assurancePath, rgePath, rge: { declare: true, numero: 'QB/1', expire: '12/2027' } }, T));
+    if (JSON.stringify(rendu) !== JSON.stringify(apres)) ecarts.push(`cas ${n} : écran ${JSON.stringify(rendu)} / base ${JSON.stringify(apres)}`);
+    const previent = V.envoiSuspendLeBadge(pro, { kbis: !!kbisPath, assurance: !!assurancePath });
+    if (previent !== (notif === 1)) avertissements.push(`cas ${n} : l’écran ${previent ? 'prévient' : 'ne prévient pas'}, la base ${notif ? 'notifie' : 'ne notifie pas'}`);
+  }
+  if (liste.length && ecarts.length === 0) ok(`${liste.length} cas : la fiche rendue par l’écran est celle de la base`);
+  else if (liste.length) ko(`${ecarts.length} écart(s), dont : ${ecarts.slice(0, 3).join(' | ')}`);
+  if (liste.length && avertissements.length === 0) ok(`${liste.length} cas : l’avertissement avant envoi part exactement quand la base suspend le badge`);
+  else if (liste.length) ko(`${avertissements.length} écart(s) d’avertissement, dont : ${avertissements.slice(0, 3).join(' | ')}`);
+}
+
 console.log('— D bis. La base tient les cinq points de la décision D4');
 {
   const corps = (nom) => {
@@ -294,16 +349,45 @@ console.log('— D bis. La base tient les cinq points de la décision D4');
     ['la suspension s’efface quand le badge est rendu ou refusé',
       (() => { const c = corps('synchronise_verification');
         return (c.match(/new\.badge_suspendu_le\s*:=\s*null/g) || []).length >= 2 && /'refuse'/.test(c); })()],
-    ['l’écran fige les métiers par `metiersFiges()` et prévient avant l’envoi',
+    ['l’écran fige les métiers par `metiersFiges()` et prévient avant l’envoi, avec les DEUX pièces choisies',
       (() => { const e = sansCommentaires(lire('src/screens/ProfilEditScreen.js'));
-        return /verrouille=\{metiersFiges\(profil\)\}/.test(e) && /envoiSuspendLeBadge\(profil,/.test(e) && /AVERTISSEMENT_SUSPENSION/.test(e); })()],
-    ['l’état local suit la base après l’envoi (`apresEnvoiDesPieces`)',
-      /apresEnvoiDesPieces\(prev\[myProId\]/.test(sansCommentaires(lire('src/OpusApp.js')))],
+        return /verrouille=\{metiersFiges\(profil\)\}/.test(e)
+          && /envoiSuspendLeBadge\(profil,\s*\{\s*kbis:\s*!!kbis,\s*assurance:\s*!!assurance\s*\}\)\s*&&/.test(e)
+          && /\{AVERTISSEMENT_SUSPENSION\}/.test(e); })()],
+    ['l’état local suit la base après l’envoi (`apresEnvoiDesPieces`, avec ce qui part vraiment)',
+      (() => { const a = sansCommentaires(lire('src/OpusApp.js'));
+        return /\[myProId\]:\s*apresEnvoiDesPieces\(prev\[myProId\],\s*\{\s*kbisPath,\s*assurancePath,\s*rgePath,\s*rge\s*\}\)/.test(a)
+          && /envoiSuspendLeBadge\(avant,\s*\{\s*kbis:\s*!!kbisPath,\s*assurance:\s*!!assurancePath\s*\}\)/.test(a); })()],
+    ['l’application LIT `badge_suspendu_le` sur sa propre fiche (sinon, après rechargement, des métiers modifiables que la base refusera)',
+      (() => { const a = sansCommentaires(lire('src/lib/api.js'));
+        return /\.select\('demandes_vues_le, badge_suspendu_le'\)\.eq\('id', uid\)/.test(a)
+          && /pros\[uid\]\.badgeSuspenduLe\s*=\s*vuesRes\.data\.badge_suspendu_le/.test(a)
+          && !/COLONNES_PRO_LISTE\s*=[^;]*badge_suspendu_le/.test(a); })()],
+    ['une fiche ne range que les pièces de SON dossier (`pro_pieces_dossier_check`, les trois pièces)',
+      /add constraint pro_pieces_dossier_check[\s\S]{0,400}?kbis_url is null or split_part\(kbis_url, '\/', 1\) = id::text[\s\S]{0,200}?assurance_url is null or split_part\(assurance_url, '\/', 1\) = id::text[\s\S]{0,200}?rge_url is null or split_part\(rge_url, '\/', 1\) = id::text/.test(schema)],
+    ['valider une pièce RETIRÉE est refusé (OP024 dans `admin_verifier_pro`)',
+      /if \(p_kbis is true and le_kbis is null\) or \(p_assurance is true and l_assurance is null\) then[\s\S]{0,300}?errcode = 'OP024'/.test(corps('admin_verifier_pro'))],
+    ['l’écran valide la pièce qu’il a VUE (`admin_valider_pieces` compare les chemins, OP024, appelée par l’application)',
+      (() => { const c = corps('admin_valider_pieces');
+        const a = sansCommentaires(lire('src/lib/api.js'));
+        return /\(p_kbis is true and le_kbis is distinct from p_kbis_vu\)\s*or \(p_assurance is true and l_assurance is distinct from p_assurance_vu\)/.test(c)
+          && /errcode = 'OP024'/.test(c) && /for update/.test(c) && /perform public\.admin_verifier_pro\(/.test(c)
+          && /'public\.admin_valider_pieces\(uuid, text, text, boolean, boolean, boolean, text\)'/.test(schema)
+          && /rpc\('admin_valider_pieces',[\s\S]{0,200}?p_kbis_vu[\s\S]{0,80}?p_assurance_vu/.test(a)
+          && !/rpc\('admin_verifier_pro'/.test(a); })()],
+    ['la suspension ne lève pas OP009 (`rattacher_mon_siret`)',
+      /p\.verifie or p\.badge_suspendu_le is not null/.test(corps('rattacher_mon_siret'))],
+    ['la fiche suspendue passe EN TÊTE de la file de l’administration',
+      /order by \(p\.badge_suspendu_le is not null\) desc/.test(corps('admin_file_verifications'))],
+    ['la notification dit la suspension sans promettre l’issue, et dit le retrait quand une pièce est retirée',
+      (() => { const t = (schema.match(/'verification_suspendue',\s*case[\s\S]*?end\);/) || [''])[0];
+        return /vous avez retiré une pièce/.test(t) && (t.match(/le rende ou le refuse/g) || []).length >= 1
+          && !/reviendra|le temps que/.test(t); })()],
     ['`en_attente` ne part qu’avec une pièce d’existence ou d’assurance',
       /if \(kbisPath \|\| assurancePath\) patch\.verification_statut = 'en_attente'/.test(sansCommentaires(lire('src/lib/api.js')))],
     ['l’essai SQL du lot existe et éprouve la suspension, le verrou et le stockage',
       (() => { let t = ''; try { t = lire('supabase/essais-section-51a.sql').replace(/^\s*--.*$/gm, ''); } catch (e) { return false; }
-        return /verification_suspendue/.test(t) && /pendant l''examen/.test(t)
+        return /verification_suspendue/.test(t) && /tant que votre badge est suspendu/.test(t)
           && /on conflict \(bucket_id, name\) do update/.test(t) && /set bucket_id = 'publications'/.test(t); })()],
   ];
   for (const [nom, v] of verifs) { if (v) ok(nom); else ko(nom); }
@@ -311,7 +395,7 @@ console.log('— D bis. La base tient les cinq points de la décision D4');
 
 console.log('— E. La phrase du 409 passe AVANT celle du 23505 (la fonction est appelée)');
 {
-  const E = await import(join(RACINE, 'src/lib/erreurs.js'));
+  const E = await importer('src/lib/erreurs.js');
   const telephone = E.messageClair(new Error('Envoi refusé par Supabase : The resource already exists'), 'Votre pièce');
   const nav = new Error('The resource already exists'); nav.statusCode = '409';
   const navigateur = E.messageClair(nav, 'Votre pièce');

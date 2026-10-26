@@ -1209,17 +1209,17 @@ select string_agg(nspname || '.' || proname, ', ' order by proname) filter (wher
        string_agg(proname, ', ') filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and prosecdef) as definer_attendu_recalcule_devis,
        count(*) filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and proname ~ '^admin_') as admin_attendu_0
   from corps;
-\echo '--- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le 21/10/2026 — une NOUVELLE, quelle qu elle soit, rougit'
+\echo '--- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le 21/10/2026, plus admin_valider_pieces (lot S-a, 25/10/2026 : valider la pièce que l administration a vue) — une NOUVELLE, quelle qu elle soit, rougit'
 with ouvertes as (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prosecdef
      and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
 )
-select count(*) as definer_ouvertes_attendu_24,
+select count(*) as definer_ouvertes_attendu_25,
        coalesce(string_agg(proname, ', ' order by proname) filter (where proname not in (
          'a_deja_une_reponse', 'admin_demandes_pro', 'admin_file_verifications', 'admin_metier_demandes', 'admin_refuser_pro',
          'admin_resume', 'admin_retirer_entreprise', 'admin_signalements', 'admin_specialites', 'admin_traiter_demande_pro',
-         'admin_traiter_metier_demande', 'admin_traiter_signalement', 'admin_traiter_specialite', 'admin_verifier_pro',
+         'admin_traiter_metier_demande', 'admin_traiter_signalement', 'admin_traiter_specialite', 'admin_valider_pieces', 'admin_verifier_pro',
          'annuler_ma_demande_pro', 'completer_ma_demande_pro', 'devenir_pro', 'est_admin', 'est_masque', 'marquer_lus',
          'mes_demandes_recues', 'mon_compte', 'preparer_suppression_compte', 'rattacher_mon_siret')), '—') as nouvelles_attendu_tiret
   from ouvertes;

@@ -19,6 +19,7 @@ import Vignette from '../components/Vignette';
 import { porteUnVisuel } from '../lib/formats-publication';
 import { nbCommentairesDe } from '../components/Commentaires';
 import { CLAVIER } from '../lib/clavier';
+import { CE_QUE_LA_SUPPRESSION_GARDE } from '../data/legal';
 import {
   Heart, MessageSquare, Share2, Trash, RefreshCw, Grid, VideoIcon, Layers, TypeIcon,
   Edit, Lightbulb, Eye,
@@ -168,8 +169,11 @@ export default function MesPublicationsScreen({
                    d'appuyer sur « Supprimer » en croyant viser autre chose. */
                 <View style={s.confirmation}>
                   <Text style={s.confirmationTexte}>
-                    Supprimer définitivement ? Les commentaires et les j'aime
-                    partiront avec.
+                    {/* Ce que la suppression ne retire pas est écrit dans
+                        `legal.js` (lot S-a) : « définitivement » laissait
+                        croire que les fichiers partaient aussi. */}
+                    Supprimer cette publication du fil ? Les commentaires et
+                    les j'aime partiront avec. {CE_QUE_LA_SUPPRESSION_GARDE}
                   </Text>
                   <View style={s.confirmationBoutons}>
                     <BtnMini outline label="Annuler" onPress={() => setASupprimer(null)} />

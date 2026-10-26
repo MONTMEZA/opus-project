@@ -406,8 +406,10 @@ export async function submitDocuments({ kbisPath, assurancePath, rgePath, rge })
   if (!hasSupabase) return null;
   /* « Voici mes documents » (`en_attente`) ne part qu'avec une pièce qui
      FAIT le badge — l'existence ou l'assurance (lot S-a). Envoyé avec un RGE
-     seul, il laissait une fiche vérifiée marquée « en attente » pour un
-     document que personne n'examine pour le badge. */
+     seul, il laissait l'ÉCRAN afficher « en attente » sur une fiche vérifiée
+     (la base, elle, remettait « vérifié » : mesuré par la relecture
+     « écran ») ; on n'envoie plus ce statut pour une pièce qui ne fait pas
+     le badge. */
   const patch = {};
   if (kbisPath || assurancePath) patch.verification_statut = 'en_attente';
   if (kbisPath) patch.kbis_url = kbisPath;
@@ -471,10 +473,10 @@ const COLONNES_PRO_LISTE = [
   'assurance_valide', 'assurance_expire', 'kbis_valide', 'kbis_maj',
   'avatar_url', 'banner_url', 'kbis_url', 'assurance_url',
   'verification_statut', 'verification_note', 'verifie_le',
-  /* Lot S-a : le badge suspendu le temps qu'une nouvelle pièce soit
-     regardée. Tenue par la base seule ; l'écran s'en sert pour figer les
-     métiers et pour dire pourquoi le badge n'est plus là. */
-  'badge_suspendu_le',
+  /* `badge_suspendu_le` N'Y EST PAS (lot S-a, relecture « écran ») : elle ne
+     sert qu'à SA propre fiche, et ici elle partirait vers tous les
+     téléphones — la date à laquelle un artisan a remplacé un justificatif.
+     Elle se lit à part, avec `demandes_vues_le`, dans `loadAll()`. */
   'code_postal', 'latitude', 'longitude',
   'avis_count', 'note_delais', 'note_qualite', 'note_tarif',
   /* La fiche de contact : téléphone, zone d'intervention, spécialités.
@@ -546,7 +548,6 @@ function rowToPro(row, reviews = [], partners = []) {
     noteQualite: row.note_qualite || 0,
     noteTarif: row.note_tarif || 0,
     verifieLe: row.verifie_le || null,
-    badgeSuspenduLe: row.badge_suspendu_le || null,
     codePostal: row.code_postal || null,
     latitude: row.latitude || null,
     longitude: row.longitude || null,
@@ -777,7 +778,7 @@ export async function loadAll() {
        voyager pour les cinq cents autres artisans. La requête part en
        parallèle des autres : elle ne coûte pas une attente de plus. */
     supabase.from('professional_profiles')
-      .select('demandes_vues_le').eq('id', uid).maybeSingle(),
+      .select('demandes_vues_le, badge_suspendu_le').eq('id', uid).maybeSingle(),
   ]);
 
   const err = [profilesRes, partnersRes, postsRes].find((r) => r.error);
@@ -810,6 +811,13 @@ export async function loadAll() {
        la moyenne tenue par la base. */
     pros[row.id] = rowToPro(row, [], partnersByPro[row.id] || []);
   });
+  /* LE BADGE SUSPENDU DE MA fiche, et de la mienne seule (lot S-a) : il fige
+     mes métiers à l'écran et explique pourquoi le badge a disparu. Sans
+     lui, après un redémarrage, l'écran rouvrait des métiers que la base
+     refuse (`tient_les_metiers`). */
+  if (pros[uid] && vuesRes && vuesRes.data) {
+    pros[uid].badgeSuspenduLe = vuesRes.data.badge_suspendu_le || null;
+  }
 
   const likedSet = new Set((likesRes.data || []).map((l) => l.post_id));
 
@@ -4140,17 +4148,24 @@ export const supprimerMonCompte = !hasSupabase
     const { data: resume, error: erreurDonnees } = await supabase.rpc('preparer_suppression_compte');
     if (erreurDonnees) throw erreurDonnees;
 
+    let reponse = null;
     try {
-      const { error } = await supabase.functions.invoke('compte', {
+      const { data, error } = await supabase.functions.invoke('compte', {
         body: { action: 'supprimer' },
       });
       if (error) throw error;
+      reponse = data;
     } catch (e) {
       await supabase.auth.signOut();
       currentUserId = null;
+      /* Lot S-a (relecture « textes ») : « Vos données ont bien été
+         supprimées » était faux — c'est la fonction `compte` qui vide le
+         stockage, Kbis et attestation compris, et elle n'a pas tourné. Et
+         « écrivez-nous sous 48 heures » visait une adresse qui n'existe
+         pas : aucune promesse sur un canal injoignable. */
       const err = new Error(
-        'Vos données ont bien été supprimées, mais le compte de connexion n’a '
-        + 'pas pu être fermé. Écrivez-nous et nous le ferons sous 48 heures.',
+        'Vos données ont été retirées de la base d’Opus, mais vos fichiers et votre '
+        + 'compte de connexion n’ont peut-être pas pu l’être.',
       );
       err.partiel = true;
       err.resume = resume;
@@ -4159,7 +4174,12 @@ export const supprimerMonCompte = !hasSupabase
 
     await supabase.auth.signOut();
     currentUserId = null;
-    return { supprime: true, resume };
+    /* La fonction rend, espace par espace, ce qu'elle a retiré et ce qui
+       a résisté (`erreur`, y compris une arborescence trop profonde). Un
+       ménage incomplet ne doit pas ressembler à un ménage fait : la leçon
+       du 04/10, que l'application jetait. */
+    const fichiersRestes = ((reponse && reponse.fichiers) || []).some((f) => f && f.erreur);
+    return { supprime: true, resume, fichiersRestes };
   };
 
 /**
@@ -4391,8 +4411,11 @@ async function fileVerificationsSupabase() {
   /* LE BADGE SUSPENDU (lot S-a) se lit À CÔTÉ de la file, pas dedans : la
      fonction rend un `returns table` figé, et lui ajouter une colonne
      demanderait de la supprimer d'abord — ce que le connecteur refuse.
-     `professional_profiles` est lisible par tout compte connecté, donc
-     cette lecture n'ouvre rien. Un échec n'empêche pas la file de
+     `professional_profiles` est lisible par tous (même sans compte : c'est
+     la règle « lecture profils », et fermer cette colonne-là est une
+     décision du lot S-d, écrite dans A-FAIRE), donc cette lecture n'ouvre
+     rien de plus. Le jour où elle sera fermée, l'administration devra la
+     recevoir par une fonction à elle. Un échec n'empêche pas la file de
      s'afficher : la carte ne dit alors rien de la suspension (`null`),
      plutôt que d'affirmer « pas suspendu ». */
   const ids = (data || []).map((p) => p.id);
@@ -4476,9 +4499,16 @@ const refuseEnDemo = async () => {
   throw new Error('Le back-office a besoin de la vraie base : il n’y a rien à administrer en mode démonstration.');
 };
 
-async function verifierProSupabase({ id, kbis, assurance, rge = null, note = null }) {
-  const { error } = await supabase.rpc('admin_verifier_pro', {
-    p_pro: id, p_kbis: !!kbis, p_assurance: !!assurance, p_rge: rge, p_note: note,
+/* `admin_valider_pieces` et pas `admin_verifier_pro` (lot S-a) : l'écran
+   envoie les CHEMINS des pièces qu'il a montrées, et la base refuse (OP024)
+   si l'artisan les a changées depuis. Sans ça, l'administration validait la
+   pièce qui avait remplacé celle qu'elle venait d'ouvrir. */
+async function verifierProSupabase({
+  id, kbis, assurance, rge = null, note = null, kbisVu = null, assuranceVu = null,
+}) {
+  const { error } = await supabase.rpc('admin_valider_pieces', {
+    p_pro: id, p_kbis_vu: kbisVu, p_assurance_vu: assuranceVu,
+    p_kbis: !!kbis, p_assurance: !!assurance, p_rge: rge, p_note: note,
   });
   if (error) throw error;
 }
@@ -5105,8 +5135,10 @@ async function rattacherMonSiretDemo(siret) {
   const actuelle = entreprisesDemo[moi];
   const fiche = prosAjoutesDemo[moi] || demoPros[moi] || {};
   if (!actuelle) {
-    if (fiche.verifie) {
-      throw refusDeLaBase('OP009', 'Votre fiche porte le badge « vérifié », accordé avant que les '
+    /* Même règle que la base (lot S-a) : un badge SUSPENDU garde le verrou. */
+    if (fiche.verifie || fiche.badgeSuspenduLe) {
+      throw refusDeLaBase('OP009', 'Votre fiche porte le badge « vérifié » (ou l’attend, le temps '
+        + 'd’un examen), accordé avant que les '
         + 'entreprises soient rattachées : y lier une entreprise ne peut pas se faire '
         + 'automatiquement, et ne peut pas encore se demander depuis l’application.');
     }

@@ -49,8 +49,14 @@ export const VERSION = '2026-10-25';
        photos d'une publication supprimée restent rangées jusqu'à la
        suppression du compte ;
      - Opus ne remplace plus jamais un fichier envoyé (règle de la base) :
-       rien à dire au public, c'est une garantie de plus. */
-/* 24/10/2026 — avant ce jour : */
+       rien à dire au public, c'est une garantie de plus ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions, et le préavis de quinze jours du règlement
+       2019/1150 (art. 3.2) s'appliquerait à ce changement qui touche les
+       professionnels. Sans effet tant que STATUT vaut 'essai' ; à organiser
+       avant l'ouverture au public (A-FAIRE). Si un autre sous-lot du lot S
+       change les textes le même jour, il prend une date suffixée
+       (2026-10-25b), pour que deux textes ne portent pas la même version. */
 /* 24/10/2026 — LA BASE DE POSTES (lot P du module devis, section 50 de
    `schema.sql`). Ce qui a changé DE FOND :
      - la collecte s'allonge : la base de postes d'un artisan — les phrases
@@ -273,12 +279,6 @@ export const STATUT = 'essai';
  */
 export const EFFACEMENT_CLOUDINARY = false;
 
-/**
- * Le PAYS où Cloudinary range les vidéos d'Opus : il se lit dans la console
- * Cloudinary du propriétaire, il ne se devine pas. Tant qu'il vaut `null`,
- * les textes affichent « [à compléter] ».
- */
-export const PAYS_CLOUDINARY = null;
 
 /**
  * LE DOMAINE D'OPUS — et pourquoi il est écrit ici.
@@ -391,7 +391,25 @@ export const EDITEUR = {
      */
     region: 'eu-west-2 (Londres, Royaume-Uni)',
   },
+  /**
+   * LE SECOND HÉBERGEUR (lot S-a, relecture « textes ») : les vidéos et les
+   * musiques publiées sont HÉBERGÉES par Cloudinary — ce sont des contenus
+   * publics, et la LCEN (art. 6-III) demande de nommer leur hébergeur avec
+   * son adresse. Le pays se lit dans la console Cloudinary du propriétaire,
+   * l'adresse dans les conditions de Cloudinary : ni l'un ni l'autre ne se
+   * devine. Tant qu'ils valent `null`, les textes affichent « [à compléter] »,
+   * et `verifier-legal` refuse qu'Opus quitte `'essai'`.
+   */
+  hebergeurVideos: {
+    nom: 'Cloudinary',
+    adresse: null,
+    site: 'https://cloudinary.com',
+    pays: null,
+  },
 };
+
+/** Le pays où Cloudinary range les vidéos (voir `EDITEUR.hebergeurVideos`). */
+export const PAYS_CLOUDINARY = EDITEUR.hebergeurVideos.pays;
 
 /**
  * Ce que chaque statut exige RÉELLEMENT. Une seule table, pour que la
@@ -401,6 +419,8 @@ const EXIGENCES = {
   essai: [],
   particulier: [
     ['hebergeur.region', 'la région d’hébergement Supabase'],
+    ['hebergeurVideos.adresse', 'l’adresse de Cloudinary, qui héberge les vidéos'],
+    ['hebergeurVideos.pays', 'le pays où Cloudinary range les vidéos (console Cloudinary)'],
     ['identiteRemiseALHebergeur',
       'la confirmation que votre identité a été communiquée à l’hébergeur '
       + '(sans elle, la dispense d’anonymat ne s’applique pas)'],
@@ -410,6 +430,8 @@ const EXIGENCES = {
     ['siren', 'votre numéro SIRET'],
     ['adresse', 'l’adresse de l’entreprise'],
     ['hebergeur.region', 'la région d’hébergement Supabase'],
+    ['hebergeurVideos.adresse', 'l’adresse de Cloudinary, qui héberge les vidéos'],
+    ['hebergeurVideos.pays', 'le pays où Cloudinary range les vidéos (console Cloudinary)'],
   ],
   societe: [
     ['denomination', 'la dénomination sociale'],
@@ -418,6 +440,8 @@ const EXIGENCES = {
     ['adresse', 'l’adresse du siège'],
     ['directeurPublication', 'le directeur de la publication'],
     ['hebergeur.region', 'la région d’hébergement Supabase'],
+    ['hebergeurVideos.adresse', 'l’adresse de Cloudinary, qui héberge les vidéos'],
+    ['hebergeurVideos.pays', 'le pays où Cloudinary range les vidéos (console Cloudinary)'],
   ],
 };
 
@@ -518,8 +542,9 @@ function questionDonnees() {
     (adresse) => `Pour toute question sur vos données : ${adresse}.`,
     'Vos droits d’accès, de rectification et d’effacement s’exercent '
       + 'directement dans l’application : Profil → Confidentialité et '
-      + 'sécurité. Aucune adresse de contact n’est encore publiée pour le '
-      + 'reste.',
+      + 'sécurité — l’effacement, avec les exceptions que « Combien de temps » '
+      + 'énumère, dont les vidéos et les musiques hébergées par Cloudinary. '
+      + 'Aucune adresse de contact n’est encore publiée pour le reste.',
   );
 }
 
@@ -535,14 +560,39 @@ function questionDonnees() {
  * qu'aucun moyen n'existe encore, au lieu de glisser « Contact : … » au
  * milieu d'une phrase et de laisser croire qu'il y en a un.
  */
-export const CE_QUI_RESTE_EN_LIGNE = 'Une exception, à corriger : vos vidéos et vos '
-  + 'musiques sont hébergées par Cloudinary, et elles restent en ligne, à leur adresse, '
-  + 'après la suppression de la publication comme après celle de votre compte. '
+export const CE_QUI_RESTE_EN_LIGNE = 'Les vidéos et les musiques de vos publications sont, '
+  + 'pour la plupart, hébergées par Cloudinary, et elles restent en ligne, à leur adresse, '
+  + 'après la suppression de la publication comme après celle de votre compte : c’est à '
+  + 'corriger. '
   + parEcrit(
     (adresse) => `Pour en obtenir l’effacement, écrivez à ${adresse}.`,
     'Aucune adresse de contact n’est encore publiée : cet effacement ne peut pas encore '
       + 'être demandé. C’est à corriger avant toute ouverture au public.',
   );
+
+/**
+ * CE QUI EST GARDÉ QUAND ON SUPPRIME SON COMPTE (lot S-a, relecture
+ * « textes ») : l'écran de suppression affirmait « Rien n'est récupérable
+ * ensuite, par personne », et taisait les exceptions que « Combien de
+ * temps » énumère. Une phrase, servie à l'écran et aux CGU, qui renvoie à la
+ * liste complète au lieu de la recopier.
+ */
+export const CE_QUI_EST_GARDE = 'Certaines choses sont gardées, et « Combien de temps », dans '
+  + 'la politique de confidentialité, les énumère : les avis et commentaires laissés chez '
+  + 'd’autres, sans votre nom ; les signalements, un an ; les décisions de l’administration '
+  + 'qui vous concernent ; et ce qu’un artisan a repris de vos demandes dans son carnet ou '
+  + 'dans ses devis.';
+
+/**
+ * CE QUE SUPPRIMER UNE PUBLICATION NE RETIRE PAS (lot S-a, relecture
+ * « textes ») : l'écran disait « Supprimer définitivement ? » sans rien dire
+ * des fichiers, ni du portfolio — une publication « Les deux » y garde son
+ * média, affiché sur la fiche publique. Une phrase, pour l'écran de
+ * suppression ; la clause de propriété intellectuelle dit la même chose.
+ */
+export const CE_QUE_LA_SUPPRESSION_GARDE = 'Ses photos et ses vidéos restent en ligne, à '
+  + 'leur adresse ; si vous l’aviez aussi mise dans votre portfolio, elle y reste jusqu’à '
+  + 'ce que vous l’en retiriez.';
 
 /* ------------------------------------------------------------------ */
 /*  1. MENTIONS LÉGALES                                                */
@@ -612,16 +662,22 @@ export const MENTIONS = [
     titre: 'Hébergement',
     texte: `${EDITEUR.hebergeur.nom}\n${EDITEUR.hebergeur.adresse}\n`
       + `${EDITEUR.hebergeur.site}\n`
-      + `Données hébergées dans la région : ${ou(EDITEUR.hebergeur.region, '[à compléter]')}.`,
+      + `Données hébergées dans la région : ${ou(EDITEUR.hebergeur.region, '[à compléter]')}.\n\n`
+      + `Les vidéos et les musiques publiées : ${EDITEUR.hebergeurVideos.nom}\n`
+      + `${ou(EDITEUR.hebergeurVideos.adresse, '[à compléter : adresse]')}\n`
+      + `${EDITEUR.hebergeurVideos.site}\n`
+      + `Pays : ${ou(EDITEUR.hebergeurVideos.pays, '[à compléter : relevé dans la console Cloudinary]')}.`,
   },
   {
     titre: 'Propriété intellectuelle',
     texte: "Le nom Opus, son identité visuelle et le code de l'application "
       + "appartiennent à l'éditeur. Les photos, vidéos et textes publiés par "
       + 'les utilisateurs restent la propriété de leurs auteurs : Opus ne '
-      + "reçoit qu'une autorisation de les afficher dans l'application. "
-      + 'Supprimer une publication la retire d’Opus, mais pas ses fichiers : voir '
-      + '« Combien de temps » dans la politique de confidentialité.',
+      + "reçoit qu'une autorisation de les afficher dans l'application, le "
+      + 'temps qu’ils y sont publiés. Supprimer une publication la retire du fil ; si '
+      + 'vous l’aviez aussi mise dans votre portfolio, elle y reste jusqu’à ce que vous '
+      + 'l’en retiriez. Ses fichiers, eux, restent hébergés à leur adresse jusqu’à leur '
+      + 'effacement : voir « Combien de temps » dans la politique de confidentialité.',
   },
   {
     /* LA LICENCE OUVERTE DE L'INSEE L'EXIGE : « www.insee.fr » et la date
@@ -718,10 +774,10 @@ export const CGU = [
       + 'compte professionnel, qui dit seulement que l’entreprise existait et était '
       + 'active à cette date : cette consultation n’apparaît jamais sur votre fiche '
       + 'publique — seuls vous et l’administration d’Opus la voyez —, et elle ne '
-      + 'prouve pas que le compte appartient à l’entreprise. Remplacer l’une des deux '
-      + 'pièces — y compris pour envoyer une attestation d’assurance renouvelée — '
-      + 'suspend le badge jusqu’à ce que l’administration d’Opus ait examiné la '
-      + 'nouvelle pièce ; vos métiers ne se modifient pas pendant ce temps.',
+      + 'prouve pas que le compte appartient à l’entreprise. Remplacer ou retirer l’une '
+      + 'des deux pièces — y compris pour envoyer une attestation d’assurance renouvelée — '
+      + 'suspend le badge jusqu’à ce que l’administration d’Opus le rende ou le refuse ; '
+      + 'vos métiers ne se modifient pas tant qu’il est suspendu.',
   },
   {
     titre: 'Ce que vous publiez',
@@ -877,7 +933,8 @@ export const CGU = [
     texte: 'Vous pouvez supprimer votre compte à tout moment depuis '
       + 'l’application, sans avoir à le demander à qui que ce soit. Vos '
       + 'données rangées chez Opus sont effacées, avec les photos et les fichiers '
-      + 'de votre compte. ' + CE_QUI_RESTE_EN_LIGNE + ' Les avis et commentaires que vous avez laissés '
+      + 'de votre compte, sauf ce que la politique de confidentialité énumère (« Combien '
+      + 'de temps »). ' + CE_QUI_RESTE_EN_LIGNE + ' Les avis et commentaires que vous avez laissés '
       + 'chez d’autres sont conservés mais détachés de votre nom : les '
       + 'supprimer reviendrait à modifier l’historique de quelqu’un qui n’a '
       + 'rien demandé.',
@@ -1125,10 +1182,10 @@ export const CONFIDENTIALITE = [
       + 'votre numéro auprès de l’administration fiscale, et vous pouvez le faire contrôler '
       + 'de nouveau dès qu’il l’a fait. Si vous relevez en réalité de la franchise en base '
       + 'de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé. '
-      + 'Enfin, si vous remplacez votre justificatif d’existence légale ou votre attestation '
-      + 'd’assurance alors que votre badge est accordé, le badge est suspendu automatiquement '
-      + 'dès l’envoi, jusqu’à ce que l’administration d’Opus ait examiné la nouvelle pièce : '
-      + 'c’est une personne qui le rend ou le refuse, avec un motif. Pendant ce temps, votre '
+      + 'Enfin, si vous remplacez ou retirez votre justificatif d’existence légale ou votre '
+      + 'attestation d’assurance alors que votre badge est accordé, le badge est suspendu '
+      + 'automatiquement, jusqu’à ce qu’une personne de l’administration d’Opus le rende ou le '
+      + 'refuse, avec un motif. Pendant ce temps, votre '
       + 'fiche n’apparaît pas quand quelqu’un ne cherche que les professionnels vérifiés. '
       + 'Aucun délai d’examen n’est promis.',
   },
@@ -1332,8 +1389,10 @@ export const CONFIDENTIALITE = [
       + 'le compte ni le numéro ; ces compteurs sont effacés lors d’un contrôle suivant, '
       + 'plus d’un jour après, y compris si le compte a été supprimé entre-temps : comme '
       + 'pour la consultation du répertoire, aucune durée maximale ne peut donc être '
-      + 'promise. Les photos d’une publication que vous supprimez restent rangées, à leur '
-      + 'adresse, jusqu’à la suppression de votre compte. ' + CE_QUI_RESTE_EN_LIGNE
+      + 'promise. Les photos d’une publication supprimée, d’une demande refermée ou d’une '
+      + 'annonce retirée, et vos anciennes photos de profil ou de bannière, restent en ligne, '
+      + 'lisibles par qui connaît leur adresse, jusqu’à la suppression de votre compte. '
+      + CE_QUI_RESTE_EN_LIGNE
       + ' Les journaux techniques de l’hébergeur, qui contiennent '
       + 'l’adresse IP des appareils, sont effacés par lui au bout d’un jour, selon '
       + 'l’offre souscrite aujourd’hui.',
@@ -1350,7 +1409,8 @@ export const CONFIDENTIALITE = [
       + 'JSON. Rectification : Profil → Modifier mon profil ; votre base de postes : '
       + 'Profil → Ma base de postes. Effacement : '
       + 'Profil → Confidentialité et sécurité → « Supprimer mon compte », '
-      + 'immédiat et sans intermédiaire. '
+      + 'immédiat et sans intermédiaire, sauf ce que « Combien de temps » énumère — '
+      + 'dont les vidéos et les musiques hébergées par Cloudinary. '
       + parEcrit(
         (adresse) => `Opposition et limitation : écrivez à ${adresse}. `
           + 'Nous répondons sous un mois.',

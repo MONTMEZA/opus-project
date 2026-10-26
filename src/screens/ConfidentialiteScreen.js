@@ -39,7 +39,7 @@ import {
 import { TAILLE_JOURNAL_IA } from '../lib/api';
 import { TITRES_LEGAUX } from './LegalScreen';
 import { CLAVIER } from '../lib/clavier';
-import { CE_QUI_RESTE_EN_LIGNE } from '../data/legal';
+import { CE_QUI_RESTE_EN_LIGNE, CE_QUI_EST_GARDE } from '../data/legal';
 
 /** Le mot à taper pour supprimer. En majuscules : on ne le tape pas par hasard. */
 const MOT_DE_PASSE_DE_SORTIE = 'SUPPRIMER';
@@ -370,10 +370,11 @@ export default function ConfidentialiteScreen({
               (lot S-a) : « vos fichiers sont effacés » était faux, les
               vidéos et les musiques y restent en ligne. */}
           Vos publications, vos demandes, vos annonces, vos messages et les
-          fichiers rangés chez Opus sont effacés immédiatement. Rien n’est
-          récupérable ensuite, par personne.
+          fichiers rangés chez Opus sont effacés immédiatement.
           {'\n\n'}
           {CE_QUI_RESTE_EN_LIGNE}
+          {'\n\n'}
+          {CE_QUI_EST_GARDE}
           {'\n\n'}
           Les avis et commentaires que vous avez laissés chez d’autres sont
           CONSERVÉS, mais détachés de votre nom. Les effacer reviendrait à

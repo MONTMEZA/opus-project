@@ -391,7 +391,7 @@ console.log('\nLa porte de secours et les entreprises (section 45)');
   }
   for (const nom of ['admin_verifier_pro', 'admin_refuser_pro']) {
     const corps = morceau(nom).corps;
-    const etats = [...corps.matchAll(/select jsonb_build_object\(([\s\S]*?)\)(?:, [a-z.]+)?\s+into (?:avant|apres)/g)];
+    const etats = [...corps.matchAll(/select jsonb_build_object\(([\s\S]*?)\)(?:,\s*[a-z_.]+)*\s+into (?:avant|apres)/g)];
     const cles = new Set();
     etats.forEach((m) => m[1].split(',').map((x) => x.trim())
       .forEach((a, k) => { if (k % 2 === 0) cles.add(a.replace(/^'|'$/g, '')); }));
@@ -457,8 +457,11 @@ console.log('\nL’application ne contourne pas la base');
      un client modifié ne l'atteint pas. */
   /* Les trois de la section 45 aussi : une file que l'écran ne lit pas est
      le défaut du 01/10 — « X est prévenu », et personne ne l'était. */
+  /* `admin_valider_pieces` remplace `admin_verifier_pro` côté application
+     (lot S-a) : elle compare les chemins vus à ceux en place, puis appelle
+     l'autre. */
   ['admin_resume', 'admin_file_verifications', 'admin_signalements',
-    'admin_verifier_pro', 'admin_refuser_pro', 'admin_traiter_signalement',
+    'admin_valider_pieces', 'admin_refuser_pro', 'admin_traiter_signalement',
     'admin_demandes_pro', 'admin_traiter_demande_pro', 'admin_retirer_entreprise',
   ].forEach((f) => {
     verifier(`\`${f}\` est appelée par \`rpc\``,

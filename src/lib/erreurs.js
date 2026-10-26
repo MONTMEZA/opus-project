@@ -569,7 +569,9 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      section 46, OP012 avec la section 47 : une version ancienne de
      l'application qui écrit encore des tarifs dans `sos_availability` ;
      OP013 à OP017 avec la section 49, OP018 — le plafond de la base de
-     postes — avec la section 50 ; OP003 reste réservé au devis remis)
+     postes — avec la section 50, OP024 — une pièce changée ou retirée
+     depuis que l'administration l'a ouverte — avec la section 51 ; OP003
+     reste réservé au devis remis, OP019 à OP023 aux sous-lots S-b à S-d)
      PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler

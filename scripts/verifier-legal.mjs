@@ -41,8 +41,12 @@ import { execFileSync } from 'node:child_process';
 import {
   VERSION, STATUT, DOMAINE, EDITEUR, MENTIONS, CGU, CONFIDENTIALITE,
   editeurComplet, manquesEditeur, rappelStatut,
-  CE_QUI_RESTE_EN_LIGNE, EFFACEMENT_CLOUDINARY, PAYS_CLOUDINARY,
+  CE_QUI_RESTE_EN_LIGNE, CE_QUI_EST_GARDE, CE_QUE_LA_SUPPRESSION_GARDE,
+  EFFACEMENT_CLOUDINARY, PAYS_CLOUDINARY,
 } from '../src/data/legal.js';
+import {
+  AVERTISSEMENT_SUSPENSION, RAPPEL_SUSPENSION, METIERS_FIGES_SUSPENSION,
+} from '../src/lib/verification.js';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -1605,16 +1609,34 @@ console.log('\nLa base de postes : ce que les textes en disent (lot P)');
 console.log('\nLot S-a — ce qui reste en ligne, et le badge suspendu');
 {
   const bloc = (liste, titre) => (liste.find((b) => b.titre === titre) || {}).texte || '';
-  const ecran = readFileSync('src/screens/ConfidentialiteScreen.js', 'utf8');
-  const ecranSans = ecran.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const fonctionCompte = readFileSync('supabase/functions/compte/index.ts', 'utf8');
-  const compteToucheCloudinary = /cloudinary/i.test(fonctionCompte.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''));
+  const sansCommentaires = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  const ecranSans = sansCommentaires(readFileSync('src/screens/ConfidentialiteScreen.js', 'utf8'));
+  const publicationsSans = sansCommentaires(readFileSync('src/screens/MesPublicationsScreen.js', 'utf8'));
+  const fonctionCompte = sansCommentaires(readFileSync('supabase/functions/compte/index.ts', 'utf8'));
+  const schema = readFileSync('supabase/schema.sql', 'utf8');
+  const rappelSans = sansCommentaires(readFileSync('src/components/RappelVerification.js', 'utf8'));
+  const sourceLegalComplet = readFileSync('src/data/legal.js', 'utf8');
+
+  /* LA GARDE TIENT AU DRAPEAU HUMAIN, PAS AU TEXTE DE LA FONCTION (relecture
+     « textes », T10) : elle se levait dès que le mot « cloudinary » paraissait
+     dans `compte/index.ts` — une ligne de journal suffisait. Elle ne se lève
+     plus que si EFFACEMENT_CLOUDINARY est coché, ET que la fonction appelle
+     vraiment l'API de suppression de Cloudinary : le drapeau seul se coche
+     d'un doigt. */
+  const appelSuppressionCloudinary = /api\.cloudinary\.com\/v1_1\/[^'"`\s]*\/resources\//.test(fonctionCompte)
+    && /method\s*:\s*['"]DELETE['"]/.test(fonctionCompte);
+  const effacementConstruit = EFFACEMENT_CLOUDINARY === true && appelSuppressionCloudinary;
+  verifier('EFFACEMENT_CLOUDINARY n’est coché que si la fonction `compte` appelle la suppression de Cloudinary',
+    EFFACEMENT_CLOUDINARY !== true || appelSuppressionCloudinary,
+    'un drapeau coché sans appel de suppression ferait dire aux textes ce qui n’est pas fait');
 
   verifier('`CE_QUI_RESTE_EN_LIGNE` dit que les vidéos et les musiques restent chez Cloudinary',
     typeof CE_QUI_RESTE_EN_LIGNE === 'string' && /Cloudinary/.test(CE_QUI_RESTE_EN_LIGNE)
     && /restent en ligne/.test(CE_QUI_RESTE_EN_LIGNE) && /vidéos/.test(CE_QUI_RESTE_EN_LIGNE)
-    && /musiques/.test(CE_QUI_RESTE_EN_LIGNE),
-    'la vérité est écrite UNE fois, et elle nomme ce qui reste');
+    && /musiques/.test(CE_QUI_RESTE_EN_LIGNE) && /pour la plupart/.test(CE_QUI_RESTE_EN_LIGNE),
+    'la vérité est écrite UNE fois, et elle nomme ce qui reste — « pour la plupart » : '
+    + 'sans Cloudinary configuré, une vidéo va chez Supabase (relecture « textes », T13)');
   verifier('…sans adresse publiée, elle dit qu’aucun moyen n’existe encore (parEcrit, jamais « Contact : »)',
     EDITEUR.email ? CE_QUI_RESTE_EN_LIGNE.includes(EDITEUR.email)
       : (/ne peut pas encore être demandé/.test(CE_QUI_RESTE_EN_LIGNE) && !/Contact\s*:/.test(CE_QUI_RESTE_EN_LIGNE)),
@@ -1622,33 +1644,150 @@ console.log('\nLot S-a — ce qui reste en ligne, et le badge suspendu');
   verifier('…et elle est servie à « Fermer son compte » et à « Combien de temps »',
     bloc(CGU, 'Fermer son compte').includes(CE_QUI_RESTE_EN_LIGNE)
     && bloc(CONFIDENTIALITE, 'Combien de temps').includes(CE_QUI_RESTE_EN_LIGNE));
-  verifier('…et l’ÉCRAN de suppression l’IMPORTE (pas de recopie)',
-    /import\s*\{[^}]*\bCE_QUI_RESTE_EN_LIGNE\b[^}]*\}\s*from\s*'\.\.\/data\/legal'/.test(ecranSans)
-    && /\{CE_QUI_RESTE_EN_LIGNE\}/.test(ecranSans),
-    'ConfidentialiteScreen.js doit afficher la constante de legal.js');
 
-  /* « effacé(e)s » sans la constante dans le MÊME texte, tant que la
-     fonction `compte` ne touche pas à Cloudinary : c'est la phrase qui était
-     fausse à cinq endroits. */
-  const effaceSans = [...CGU, ...CONFIDENTIALITE]
-    .filter((b) => /(?:données|fichiers)[^.]{0,80}effacé(?:e?s)?(?![\p{L}_])/iu.test(b.texte)
-      && !b.texte.includes(CE_QUI_RESTE_EN_LIGNE))
-    .map((b) => b.titre);
-  verifier('aucun texte ne dit « données / fichiers effacés » sans dire ce qui reste chez Cloudinary',
-    compteToucheCloudinary || effaceSans.length === 0,
-    `textes : ${effaceSans.join(', ')}`);
-  verifier('…et l’écran de suppression non plus',
-    compteToucheCloudinary || !/fichiers\s+sont\s+effacés/.test(ecranSans.replace(/\s+/g, ' ')),
+  /* L'ÉCRAN DE SUPPRESSION : la constante doit être DANS le texte affiché
+     (`dangerTexte`), pas seulement importée — un JSX jamais monté satisfaisait
+     l'ancienne vérification (relecture « textes », S2c). */
+  const debutDanger = ecranSans.indexOf('<Text style={s.dangerTexte}>');
+  const danger = debutDanger < 0 ? '' : ecranSans.slice(debutDanger, ecranSans.indexOf('</Text>', debutDanger));
+  verifier('l’écran de suppression AFFICHE `CE_QUI_RESTE_EN_LIGNE` et `CE_QUI_EST_GARDE` dans son texte',
+    /import\s*\{[^}]*\bCE_QUI_RESTE_EN_LIGNE\b[^}]*\}\s*from\s*'\.\.\/data\/legal'/.test(ecranSans)
+    && /import\s*\{[^}]*\bCE_QUI_EST_GARDE\b[^}]*\}\s*from\s*'\.\.\/data\/legal'/.test(ecranSans)
+    && /\{CE_QUI_RESTE_EN_LIGNE\}/.test(danger) && /\{CE_QUI_EST_GARDE\}/.test(danger),
+    'ConfidentialiteScreen.js doit afficher les deux constantes dans le bloc `dangerTexte`');
+  verifier('…et il ne dit plus « Rien n’est récupérable » (les vidéos le sont, à leur adresse)',
+    !/récupérable/.test(danger.replace(/\s+/g, ' ')));
+  verifier('`CE_QUI_EST_GARDE` renvoie à « Combien de temps », qui énumère ces exceptions',
+    typeof CE_QUI_EST_GARDE === 'string' && /Combien de temps/.test(CE_QUI_EST_GARDE)
+    && /signalements/.test(CE_QUI_EST_GARDE) && /carnet/.test(CE_QUI_EST_GARDE)
+    && /conservés un an/.test(bloc(CONFIDENTIALITE, 'Combien de temps')));
+
+  /* SUPPRIMER UNE PUBLICATION (T4) : « définitivement » taisait les fichiers
+     et le portfolio. */
+  const debutConfirm = publicationsSans.indexOf('<Text style={s.confirmationTexte}>', publicationsSans.indexOf('enSuppression ?'));
+  const confirm = debutConfirm < 0 ? '' : publicationsSans.slice(debutConfirm, publicationsSans.indexOf('</Text>', debutConfirm));
+  verifier('supprimer une publication dit ce qui reste (fichiers, portfolio) — la constante de legal.js',
+    /\{CE_QUE_LA_SUPPRESSION_GARDE\}/.test(confirm) && !/définitivement/.test(confirm)
+    && /portfolio/.test(CE_QUE_LA_SUPPRESSION_GARDE) && /restent en ligne/.test(CE_QUE_LA_SUPPRESSION_GARDE));
+
+  /* « effacé(e)s », « effacement … immédiat », « s'exercent … dans
+     l'application » : chaque PHRASE qui promet un effacement doit dire
+     l'exception dans la phrase même — renvoyer à « Combien de temps » ou
+     nommer Cloudinary —, ou son texte doit porter la constante (T1). */
+  const promet = [
+    /(?:données|fichiers)[^.]{0,80}effacé(?:e?s)?(?![\p{L}_])/iu,
+    /effacement[^.]{0,120}immédiat/iu,
+    /d’effacement[^.]{0,80}s’exercent[^.]{0,80}dans l’application/iu,
+    /effacé(?:e?s)?[^.]{0,40}immédiatement/iu,
+  ];
+  const tousLesTextes = [
+    ...[...CGU, ...CONFIDENTIALITE].map((b) => [b.titre, b.texte]),
+    ...MENTIONS.map((b) => [b.titre, b.texte]),
+  ];
+  /* PHRASE PAR PHRASE, même dans un texte qui porte la constante : sinon
+     « Toutes vos données, partout, sont effacées » glissé dans « Fermer son
+     compte » passait, puisque la constante y est (relecture « textes »,
+     S12). Une phrase qui promet dit son exception — « sauf ce… », le
+     renvoi à « Combien de temps », ou Cloudinary. */
+  const effaceSans = [];
+  for (const [titre, texte] of tousLesTextes) {
+    for (const phrase of texte.split(/(?<=[.!?])\s+/)) {
+      if (promet.some((m) => m.test(phrase)) && !/Combien de temps|Cloudinary|\bsauf ce/.test(phrase)) {
+        effaceSans.push(`${titre} : « ${phrase.slice(0, 90)}… »`);
+      }
+    }
+  }
+  verifier('aucune phrase ne promet un effacement sans dire ce qui reste chez Cloudinary',
+    effacementConstruit || effaceSans.length === 0,
+    effaceSans.join(' | '));
+  const dangerPlat = danger.replace(/\s+/g, ' ');
+  verifier('…et l’écran de suppression non plus : ni « vos fichiers sont effacés », ni « tout », ni « partout »',
+    effacementConstruit || (!/(?:tous|toutes|tout)\s+(?:vos|ce|est)[^.]{0,60}effacé/i.test(dangerPlat)
+      && !/partout/i.test(dangerPlat) && !/(?:vos|les|tous les)\s+fichiers\s+sont\s+effacés/i.test(dangerPlat)),
     '« vos fichiers sont effacés » était faux : les vidéos restent chez Cloudinary');
 
+  /* AUCUN DÉLAI PROMIS dans les phrases de ce lot (T11) : « sous 48 heures »
+     visait une adresse qui n'existe pas. */
+  const phrasesDuLot = {
+    CE_QUI_RESTE_EN_LIGNE, CE_QUI_EST_GARDE, CE_QUE_LA_SUPPRESSION_GARDE,
+    AVERTISSEMENT_SUSPENSION, RAPPEL_SUSPENSION, METIERS_FIGES_SUSPENSION,
+  };
+  const delai = /\bsous\s+(?:\d+|vingt|quarante|trente|quinze|huit|deux|trois)[^.]{0,20}(?:heures?|jours?|semaines?|mois|h)(?![\p{L}_])/iu;
+  const avecDelai = Object.entries(phrasesDuLot).filter(([, t]) => delai.test(t)).map(([n]) => n);
+  verifier('aucune phrase du lot ne promet un délai (« sous N heures / jours »)',
+    avecDelai.length === 0, avecDelai.join(', '));
+
+  /* LE BADGE SUSPENDU : on dit ce qui se passe sans promettre l'issue (T2).
+     L'administration le REND ou le REFUSE ; un examen partiel le laisse
+     suspendu. */
+  const notifSuspension = (schema.match(/'verification_suspendue',\s*case[\s\S]*?end\);/) || [''])[0];
+  const phrasesBadge = {
+    AVERTISSEMENT_SUSPENSION, RAPPEL_SUSPENSION, METIERS_FIGES_SUSPENSION,
+    'notification de la base': notifSuspension,
+    'CGU « Le badge vérifié »': bloc(CGU, 'Le badge vérifié'),
+    'décision automatique': bloc(CONFIDENTIALITE, 'Une décision automatique, et comment la faire revoir'),
+    RappelVerification: rappelSans,
+  };
+  const promesse = /reviendra|revient automatiquement|vous sera rendu|retiré définitivement|badge est retiré|pendant l.examen/iu;
+  const promettent = Object.entries(phrasesBadge).filter(([, t]) => promesse.test(t)).map(([n]) => n);
+  verifier('les phrases du badge suspendu ne promettent ni son retour ni son retrait définitif',
+    notifSuspension.length > 0 && promettent.length === 0, promettent.join(', '));
+  const sansIssue = ['AVERTISSEMENT_SUSPENSION', 'RAPPEL_SUSPENSION', 'notification de la base',
+    'CGU « Le badge vérifié »', 'décision automatique']
+    .filter((n) => !/le rend(?:e)? ou le refuse/.test(phrasesBadge[n].replace(/''/g, '’')));
+  verifier('…et elles disent les deux issues : l’administration le rend ou le refuse',
+    sansIssue.length === 0, sansIssue.join(', '));
+
+  /* LA SUPPRESSION DE COMPTE DIT CE QUI S'EST PASSÉ (T8, T14) : « Vos
+     données ont bien été supprimées » quand le ménage des fichiers n'avait
+     pas tourné, et « écrivez-nous sous 48 heures » vers une adresse qui
+     n'existe pas ; et la réponse de la fonction `compte`, qui dit ce qui a
+     résisté, était jetée. */
+  const apiSans = sansCommentaires(readFileSync('src/lib/api.js', 'utf8'));
+  const iSupp = apiSans.indexOf('export const supprimerMonCompte');
+  const supp = iSupp < 0 ? '' : apiSans.slice(iSupp, apiSans.indexOf('\n  };', iSupp));
+  verifier('la suppression de compte ne promet rien qu’elle ne sait pas (ni « bien été supprimées », ni délai, ni « écrivez-nous »)',
+    supp.length > 0 && !/bien été supprimées/.test(supp) && !/\bsous\s+\d+\s*heures/.test(supp) && !/[ÉE]crivez-nous/.test(supp));
+  verifier('…et elle LIT la réponse de la fonction `compte` (ce qui a résisté)',
+    /const \{ data, error \} = await supabase\.functions\.invoke\('compte'/.test(supp)
+    && /reponse\.fichiers/.test(supp) && /fichiersRestes/.test(supp)
+    && /resultat\.fichiersRestes/.test(sansCommentaires(readFileSync('src/OpusApp.js', 'utf8'))));
+
+  /* L'HISTORIQUE DE VERSION redit la limite (T12) : ré-acceptation et
+     préavis de quinze jours. */
+  const iVersion = sourceLegalComplet.indexOf(`export const VERSION = '${VERSION}';`);
+  const histoire = iVersion < 0 ? '' : sourceLegalComplet.slice(iVersion, sourceLegalComplet.indexOf('*/', iVersion));
+  verifier('le bloc d’historique de la VERSION en cours redit « LA MÊME LIMITE » (ré-acceptation, préavis de 15 jours)',
+    /LA MÊME LIMITE/.test(histoire) && /2019\/1150/.test(histoire) && !/avant ce jour : \*\//.test(sourceLegalComplet));
+
   const tousTextes = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte).join(' ');
-  verifier('Cloudinary HÉBERGE : jamais « transit » à côté de Cloudinary',
-    !/Cloudinary[^.]{0,160}transit|transit[^.]{0,160}Cloudinary/i.test(tousTextes));
+  verifier('Cloudinary HÉBERGE : jamais « transit », « y passent » ni « de passage » à côté de Cloudinary',
+    !/Cloudinary[^.]{0,160}(?:transit|y passent|passent par|de passage)|(?:transit|de passage)[^.]{0,160}Cloudinary/i.test(tousTextes));
   verifier('« Où vos données sont hébergées » nomme Cloudinary pour les vidéos',
     /Cloudinary/.test(bloc(CONFIDENTIALITE, 'Où vos données sont hébergées')));
-  verifier('« Propriété intellectuelle » ne promet plus « le temps qu’ils y sont publiés »',
-    !/le temps qu.ils y sont publiés/.test(bloc(MENTIONS, 'Propriété intellectuelle'))
-    && /pas ses fichiers/.test(bloc(MENTIONS, 'Propriété intellectuelle')));
+  verifier('« Hébergement » (mentions légales) nomme le second hébergeur, Cloudinary (LCEN art. 6-III)',
+    /* le NOM, sur sa ligne — « [à compléter : … console Cloudinary] » contient
+       aussi le mot, et suffisait à faire passer une mention sans hébergeur. */
+    !!EDITEUR.hebergeurVideos && EDITEUR.hebergeurVideos.nom === 'Cloudinary'
+    && /(?:^|\n)Les vidéos et les musiques publiées : Cloudinary\n/.test(bloc(MENTIONS, 'Hébergement')),
+    'la politique dit que Cloudinary héberge les vidéos : les mentions doivent le nommer');
+  const sourceLegal = readFileSync('src/data/legal.js', 'utf8');
+  verifier('…et quitter `essai` exige son adresse et son pays (EXIGENCES des trois autres statuts)',
+    (sourceLegal.match(/\['hebergeurVideos\.adresse'/g) || []).length === 3
+    && (sourceLegal.match(/\['hebergeurVideos\.pays'/g) || []).length === 3);
+
+  /* PROPRIÉTÉ INTELLECTUELLE (T6) : l'autorisation garde sa DURÉE — une
+     autorisation délimite sa durée (CPI L.131-3) —, et la conservation des
+     fichiers est dite à part, avec un renvoi. */
+  const pi = bloc(MENTIONS, 'Propriété intellectuelle');
+  verifier('« Propriété intellectuelle » garde la durée de l’autorisation et renvoie à « Combien de temps »',
+    /le temps qu.ils y sont publiés/.test(pi) && /Combien de temps/.test(pi) && /portfolio/.test(pi));
+
+  /* « répertoire Sirene », jamais « registre » — la règle n'était tenue que
+     pour les messages SIRET (T11, S16). « registre du commerce » reste juste. */
+  const registre = /(?<![\p{L}_])registres?(?![\p{L}_])(?!\s+(?:du commerce|national des entreprises|des métiers))/iu;
+  verifier('les textes légaux ne disent jamais « registre » pour le répertoire Sirene',
+    !registre.test(tousTextes));
 
   verifier('les CGU disent que remplacer une pièce suspend le badge, y compris une attestation renouvelée',
     /suspend le badge/.test(bloc(CGU, 'Le badge vérifié')) && /renouvelée/.test(bloc(CGU, 'Le badge vérifié')));
@@ -1660,10 +1799,10 @@ console.log('\nLot S-a — ce qui reste en ligne, et le badge suspendu');
 
   if (STATUT !== 'essai') {
     verifier('ouvrir au public suppose l’effacement chez Cloudinary construit (EFFACEMENT_CLOUDINARY)',
-      EFFACEMENT_CLOUDINARY === true,
+      effacementConstruit,
       'on n’ouvre pas une application qui ne sait pas effacer ce qu’elle publie');
-    verifier('…et le pays d’hébergement de Cloudinary relevé (PAYS_CLOUDINARY)',
-      !!PAYS_CLOUDINARY && !tousTextes.includes('[à compléter : pays relevé'));
+    verifier('…et le pays et l’adresse de Cloudinary relevés',
+      !!PAYS_CLOUDINARY && !!EDITEUR.hebergeurVideos.adresse && !tousTextes.includes('[à compléter'));
   }
 }
 

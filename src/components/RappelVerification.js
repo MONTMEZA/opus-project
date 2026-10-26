@@ -13,7 +13,7 @@ import {
 import { ShieldCheck, ShieldX, FileText, ChevronRight, Check } from './icons';
 import {
   toutValide, etatKbis, etatAssurance, ATTENTE, VALIDE,
-  pieceExistence, pieceAssurance,
+  pieceExistence, pieceAssurance, RAPPEL_SUSPENSION,
 } from '../lib/verification';
 import { enMilieuDePhrase } from '../lib/texte';
 
@@ -50,9 +50,8 @@ const ETATS = {
 const SUSPENDU = {
   couleur: C.accent2,
   Icone: FileText,
-  titre: 'Badge suspendu pendant l’examen',
-  texte: 'Vous avez envoyé une nouvelle pièce : votre badge reviendra dès que '
-    + 'l’administration d’Opus l’aura regardée. Vos métiers restent figés d’ici là.',
+  titre: 'Badge suspendu',
+  texte: RAPPEL_SUSPENSION,
   action: 'Voir mes documents',
 };
 
@@ -81,7 +80,7 @@ export default function RappelVerification({
   /* LE BADGE SUSPENDU (lot S-a) : la fiche était vérifiée, une nouvelle
      pièce est partie. « Vérification en cours » laissait croire à une
      première demande, et ne disait pas pourquoi le badge avait disparu. */
-  const suspendu = !!(pro && pro.badgeSuspenduLe) && statut === 'en_attente';
+  const suspendu = !!(pro && pro.badgeSuspenduLe) && statut !== 'refuse';
   const e = suspendu ? SUSPENDU : (ETATS[statut] || ETATS.non_soumis);
   /* Certains textes dépendent du métier — un avocat n'a pas de décennale.
      `pro` peut manquer (un appel ancien) : `pieceAssurance(null)` rend alors

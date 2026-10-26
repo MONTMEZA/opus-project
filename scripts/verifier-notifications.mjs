@@ -80,12 +80,52 @@ verifier('…et les quinze types de la base sont couverts',
 const NON_TYPES = new Set(['acceptee', 'verifie', 'refusee', 'en_attente']);
 const COMPOSES = { _accepte: ['devis_accepte', 'rappel_accepte', 'sos_accepte'] };
 const typesDeLaBase = new Set();
+/* SECOND RELEVÉ (relecture « écran », E7) : un type ASSIGNÉ à une variable
+   hors de l'insert (`le_type := 'nouveau'`, puis `values (x, le_type, …)`)
+   échappait au premier — c'était déjà le cas de `sos`, que seul
+   `genre := 'sos'` écrit. On isole l'expression placée dans la colonne
+   `type` de chaque insert ; si c'est un nom (ou `nom || '_suffixe'`), on
+   relève toutes ses affectations littérales dans schema.sql. Et trois
+   lettres suffisent : `sos` en a trois. */
+const auPremierNiveau = (texte, sep) => {
+  const parts = []; let n = 0; let chaine = false; let dernier = 0;
+  for (let i = 0; i < texte.length; i += 1) {
+    const c = texte[i];
+    if (c === "'") chaine = !chaine;
+    if (chaine) continue;
+    if (c === '(') n += 1; else if (c === ')') n -= 1;
+    else if (n === 0 && texte.startsWith(sep, i)) { parts.push(texte.slice(dernier, i)); dernier = i + sep.length; }
+  }
+  parts.push(texte.slice(dernier));
+  return parts.map((x) => x.trim());
+};
+const affectations = (nom) => [...schema.matchAll(new RegExp(`\\b${nom}\\s*:=\\s*'([a-z_]{3,40})'`, 'g'))].map((x) => x[1]);
+let expressionsLues = 0;
 for (const m of schema.matchAll(/insert into public\.notifications\b([\s\S]{0,1200}?);/g)) {
-  for (const [, t] of m[1].matchAll(/'([a-z_]{4,40})'/g)) {
+  for (const [, t] of m[1].matchAll(/'([a-z_]{3,40})'/g)) {
     if (NON_TYPES.has(t)) continue;
     for (const u of (COMPOSES[t] || [t])) typesDeLaBase.add(u);
   }
+  const cols = m[1].match(/^\s*\(([^)]*)\)\s*(values\s*\(|select\s)/i);
+  if (!cols) continue;
+  const iType = cols[1].split(',').map((c) => c.trim()).indexOf('type');
+  if (iType < 0) continue;
+  const reste = m[1].slice(cols.index + cols[0].length);
+  const liste = /^values/i.test(cols[2])
+    ? auPremierNiveau(reste.slice(0, (() => { let n = 1; let ch = false; for (let i = 0; i < reste.length; i += 1) { const c = reste[i]; if (c === "'") ch = !ch; if (ch) continue; if (c === '(') n += 1; if (c === ')') { n -= 1; if (n === 0) return i; } } return reste.length; })()), ',')
+    : auPremierNiveau(reste.split(/\sfrom\s/i)[0], ',');
+  const expr = liste[iType] || '';
+  expressionsLues += 1;
+  const nom = expr.match(/^([a-z_][a-z0-9_]*)(?:\s*\|\|\s*'([a-z_]+)')?$/i);
+  if (nom && !/^(null|new|old)$/i.test(nom[1])) {
+    for (const v of affectations(nom[1])) {
+      const t = nom[2] ? v + nom[2] : v;
+      if (!NON_TYPES.has(t)) typesDeLaBase.add(t);
+    }
+  }
 }
+verifier('le relevé lit l\'expression de la colonne `type` dans les inserts de notifications',
+  expressionsLues >= 10, `${expressionsLues} expression(s) lue(s) : le relevé ne lit rien`);
 const inconnus = [...typesDeLaBase].filter((t) => !TYPES_CONNUS.includes(t));
 verifier('chaque type que la BASE écrit est connu de l\'application',
   typesDeLaBase.size >= 15 && inconnus.length === 0,

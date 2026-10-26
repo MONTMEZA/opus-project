@@ -166,9 +166,22 @@ export function envoiSuspendLeBadge(pro, { kbis = false, assurance = false } = {
 }
 
 /** La phrase de l'écran, écrite une fois. */
-export const AVERTISSEMENT_SUSPENSION = 'Envoyer une nouvelle pièce suspend votre badge '
-  + 'jusqu’à ce que l’administration d’Opus l’ait regardée. Vos métiers restent '
-  + 'figés pendant ce temps.';
+/* Ces trois phrases DISENT CE QUI SE PASSE SANS PROMETTRE L'ISSUE (relectures
+   « écran » et « textes ») : après examen, l'administration rend le badge OU
+   le refuse — et un refus invalide les pièces. « Votre badge reviendra »
+   était une promesse que la base ne tient pas. Écrites ici, une fois. */
+export const AVERTISSEMENT_SUSPENSION = 'Envoyer une nouvelle pièce suspend votre badge, '
+  + 'jusqu’à ce que l’administration d’Opus vous le rende ou le refuse. '
+  + 'Vos métiers restent figés pendant ce temps.';
+
+/** Le rappel d'une fiche dont le badge est suspendu. */
+export const RAPPEL_SUSPENSION = 'Vous avez remplacé ou retiré une pièce validée : votre '
+  + 'badge reste suspendu jusqu’à ce que l’administration d’Opus vous le rende ou le '
+  + 'refuse. Vos métiers restent figés d’ici là.';
+
+/** Le verrou des métiers pendant une suspension. */
+export const METIERS_FIGES_SUSPENSION = 'Vos métiers restent figés tant que votre badge est '
+  + 'suspendu : s’il vous est rendu, il attestera les métiers qui ont été contrôlés.';
 
 /**
  * La fiche telle que la base la rendra après l'envoi : même règle que

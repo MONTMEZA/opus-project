@@ -2706,11 +2706,18 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         : prev));
 
       setScreen('profil');
+      /* Un envoi RGE sans fichier est une DÉCLARATION, et elle peut être un
+         retrait : « Certification RGE envoyée » à quelqu'un qui vient de la
+         retirer serait faux (relecture « écran »). */
       showBanner(suspendu
-        ? 'Documents envoyés. Votre badge est suspendu le temps que l’administration regarde la nouvelle pièce.'
+        ? 'Documents envoyés. Votre badge est suspendu jusqu’à ce que l’administration regarde la nouvelle pièce.'
         : (kbisPath || assurancePath)
           ? 'Documents envoyés. Votre profil passe en vérification.'
-          : 'Certification RGE envoyée.');
+          : rgePath
+            ? 'Attestation RGE envoyée.'
+            : (rge && !rge.declare)
+              ? 'Déclaration RGE retirée.'
+              : 'Déclaration RGE enregistrée.');
     } catch (e) {
       showErreur(messageClair(e, 'Envoi impossible'));
     }
@@ -2751,9 +2758,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    */
   const supprimerMonCompte = async () => {
     try {
-      await api.supprimerMonCompte();
+      const resultat = await api.supprimerMonCompte();
       /* Le message passe PAR la déconnexion : posé ici avec `showBanner`,
-         il s'afficherait sur une instance qui est en train de partir. */
+         il s'afficherait sur une instance qui est en train de partir. Et il
+         dit quand une partie des fichiers a résisté (lot S-a). */
+      if (resultat && resultat.fichiersRestes) {
+        await deconnexion('Votre compte a été supprimé, mais une partie de vos fichiers n’a pas pu être retirée.');
+        return;
+      }
       await deconnexion('Votre compte a été supprimé. Merci d’être passé par Opus.');
     } catch (e) {
       /* Cas particulier : les données sont parties mais le compte de

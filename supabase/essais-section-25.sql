@@ -99,11 +99,15 @@ insert into auth.users (id, email, raw_user_meta_data) values
 -- La seule entrée de cette table est l'éditeur SQL (25.1) : c'est ici.
 insert into public.administrateurs (user_id, note) values (:ADMIN, 'essais section 25');
 
--- PRO a envoyé son Kbis, rangé dans SON dossier de l'espace privé.
+-- PRO a envoyé son Kbis ET son attestation, rangés dans SON dossier de
+-- l'espace privé. Les deux : depuis le lot S-a (25/10/2026), on ne valide
+-- plus une pièce qui n'est pas là — le cas 5 valide les deux.
 insert into storage.objects (bucket_id, name, owner)
-values ('documents', 'bbbbbbbb-0000-0000-0000-000000000002/kbis.pdf', :PRO);
+values ('documents', 'bbbbbbbb-0000-0000-0000-000000000002/kbis.pdf', :PRO),
+       ('documents', 'bbbbbbbb-0000-0000-0000-000000000002/assurance.pdf', :PRO);
 update public.professional_profiles
    set kbis_url = 'bbbbbbbb-0000-0000-0000-000000000002/kbis.pdf',
+       assurance_url = 'bbbbbbbb-0000-0000-0000-000000000002/assurance.pdf',
        verification_statut = 'en_attente'
  where id = :PRO;
 
@@ -117,7 +121,7 @@ values (:SIGNAL, :TIERS, 'publication', 'eeeeeeee-0000-0000-0000-000000000025', 
 \set QUIET off
 
 \echo '0. LA DONNEE EXISTE avant qu on pretende la proteger (le piege de la section 29)'
-\echo '   attendu : Admin Opus pro|t|f|t ; Pro Carreleur pro|t|f|f ; Un Tiers particulier|f||f ; puis 1 | 1'
+\echo '   attendu : Admin Opus pro|t|f|t ; Pro Carreleur pro|t|f|f ; Un Tiers particulier|f||f ; puis 1 | 2'
 select u.nom, u.type,
        exists (select 1 from public.professional_profiles p where p.id = u.id) as a_une_fiche,
        (select p.verifie from public.professional_profiles p where p.id = u.id) as verifie,

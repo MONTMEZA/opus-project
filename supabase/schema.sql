@@ -253,7 +253,7 @@ begin
         using errcode = 'check_violation';
     end if;
     raise exception
-      'Vos métiers ne se modifient pas pendant l''examen de votre nouvelle pièce : déposez une demande de modification.'
+      'Vos métiers ne se modifient pas tant que votre badge est suspendu : déposez une demande de modification.'
       using errcode = 'check_violation';
   end if;
 
@@ -2647,6 +2647,26 @@ alter table public.professional_profiles add column if not exists rge_numero  te
 alter table public.professional_profiles add column if not exists rge_expire  text;
 alter table public.professional_profiles add column if not exists rge_url     text;
 
+/* UNE PIÈCE EST RANGÉE DANS LE DOSSIER DE SON TITULAIRE (lot S-a, 25/10/2026,
+   trouvé par la relecture « base »). Rien n'obligeait `kbis_url`,
+   `assurance_url` ni `rge_url` à désigner un fichier du titulaire. Or ces
+   chemins sont lisibles par tous (« lecture profils » est `using (true)`) :
+   un artisan non vérifié recopiait dans SA fiche les chemins du Kbis et de
+   l'attestation d'un artisan vérifié, la file de l'administration montrait
+   son entreprise avec les pièces d'un autre, et le badge lui était accordé
+   sur elles. Prouvé sur PostgreSQL 16. C'est la règle déjà tenue pour le
+   justificatif d'une demande de compte pro (`demande_pro_justificatif_check`,
+   section 45) ; une CONTRAINTE, et pas un verrou du titulaire, parce qu'aucun
+   écrivain — pas même l'administration — n'a de raison d'y déroger. Relevé
+   sur la vraie base avant de la poser : 4 chemins, tous dans leur dossier. */
+alter table public.professional_profiles drop constraint if exists pro_pieces_dossier_check;
+alter table public.professional_profiles add constraint pro_pieces_dossier_check
+  check (
+    (kbis_url is null or split_part(kbis_url, '/', 1) = id::text)
+    and (assurance_url is null or split_part(assurance_url, '/', 1) = id::text)
+    and (rge_url is null or split_part(rge_url, '/', 1) = id::text)
+  );
+
 -- --------------------------------------------------------------------------
 --  17.3 Le verrou : un client modifié ne se décerne pas ses propres badges
 --
@@ -2811,9 +2831,19 @@ begin
            l'écran d'envoi disparaît avec lui. La notification part au nom du
            titulaire lui-même (« mes notifications » l'y autorise), sans
            acteur : c'est la base qui parle. */
+        /* Le texte dit ce qui s'est passé, sans promettre l'issue : après
+           examen, l'administration rend le badge OU le refuse (relectures
+           « textes » et « écran »). Et une pièce RETIRÉE n'est pas une
+           « nouvelle pièce » : il n'y a rien à examiner tant qu'il n'en
+           envoie pas une autre (relecture « base »). */
         insert into public.notifications (user_id, type, texte)
         values (new.id, 'verification_suspendue',
-                'Votre badge « vérifié » est suspendu le temps que l''administration d''Opus examine votre nouvelle pièce.');
+                case
+                  when (old.kbis_valide and new.kbis_url is null)
+                    or (old.assurance_valide and new.assurance_url is null)
+                  then 'Votre badge « vérifié » est suspendu : vous avez retiré une pièce que l''administration d''Opus avait validée. Envoyez-en une nouvelle pour qu''elle puisse l''examiner.'
+                  else 'Votre badge « vérifié » est suspendu jusqu''à ce que l''administration d''Opus examine votre nouvelle pièce, puis vous le rende ou le refuse.'
+                end);
       end if;
     end if;
   end if;
@@ -4724,10 +4754,12 @@ security definer
 set search_path = public
 as $$
 declare
-  moi   uuid := public.admin_exige_droit();
-  avant jsonb;
-  apres jsonb;
-  qui   text;
+  moi         uuid := public.admin_exige_droit();
+  avant       jsonb;
+  apres       jsonb;
+  qui         text;
+  le_kbis     text;
+  l_assurance text;
 begin
   if p_pro = moi then
     raise exception
@@ -4744,11 +4776,26 @@ begin
   select jsonb_build_object(
            'verifie', p.verifie, 'kbis_valide', p.kbis_valide,
            'assurance_valide', p.assurance_valide, 'rge', p.rge,
-           'verification_statut', p.verification_statut), p.entreprise
-    into avant, qui
-    from public.professional_profiles p where p.id = p_pro;
+           'verification_statut', p.verification_statut), p.entreprise,
+         p.kbis_url, p.assurance_url
+    into avant, qui, le_kbis, l_assurance
+    from public.professional_profiles p where p.id = p_pro
+    -- La ligne est VERROUILLÉE jusqu'à la fin : le titulaire ne change pas
+    -- de pièce entre ce relevé et la validation (lot S-a).
+     for update;
   if avant is null then
     raise exception 'Cette fiche professionnelle n''existe pas.' using errcode = 'no_data_found';
+  end if;
+
+  /* ON NE VALIDE PAS UNE PIÈCE QUI N'EST PAS LÀ (lot S-a, relecture « base »).
+     Un artisan vérifié qui retirait son Kbis voyait son badge suspendu ; la
+     validation remettait ensuite `kbis_valide` à vrai sur une fiche SANS
+     Kbis, et le badge revenait. La garde vit ici, et pas seulement dans
+     `admin_valider_pieces`, pour qu'aucun chemin ne la contourne. */
+  if (p_kbis is true and le_kbis is null) or (p_assurance is true and l_assurance is null) then
+    raise exception
+      'Cette fiche n''a plus la pièce que vous voulez valider : l''artisan l''a retirée. Rechargez la file.'
+      using errcode = 'OP024';
   end if;
 
   update public.professional_profiles set
@@ -4790,6 +4837,62 @@ begin
             then 'Vos documents ont été contrôlés : ' || qui || ' affiche désormais le badge « vérifié ».'
             else 'Vos documents ont été examinés. Il manque encore une pièce pour obtenir le badge « vérifié ».'
           end);
+end;
+$$;
+
+/* --------------------------------------------------------------------------
+   25.4 bis VALIDER LA PIÈCE QU'ON A VUE — et pas celle qui l'a remplacée
+   (lot S-a, 25/10/2026, relecture « base »).
+
+   « Suspendu jusqu'à ta revue » (décision D4) promet une revue de LA
+   nouvelle pièce. Or rien ne liait la validation à ce que l'administration
+   avait ouvert : l'artisan envoyait Y, l'administration regardait Y,
+   l'artisan remplaçait par Z pendant ce temps — sans trace, puisque sa pièce
+   n'était déjà plus validée —, et `admin_verifier_pro` rendait le badge sur
+   Z. Prouvé sur PostgreSQL 16.
+
+   L'écran envoie donc les CHEMINS qu'il a montrés ; la fonction verrouille la
+   fiche, les compare à ceux qui sont en place, et refuse s'ils ont bougé. La
+   ligne verrouillée l'est jusqu'à la fin de la transaction : l'artisan ne
+   peut pas la changer entre la comparaison et la validation.
+
+   UNE FONCTION NOUVELLE, et pas trois paramètres de plus à
+   `admin_verifier_pro` : changer sa signature créerait une SURCHARGE, que
+   PostgREST ne saurait plus départager (section 34), et le connecteur refuse
+   `drop function`. L'ancienne reste appelable par l'administration seule, et
+   garde la garde « pas de pièce, pas de validation ». */
+create or replace function public.admin_valider_pieces(
+  p_pro          uuid,
+  p_kbis_vu      text,
+  p_assurance_vu text,
+  p_kbis         boolean,
+  p_assurance    boolean,
+  p_rge          boolean default null,
+  p_note         text    default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moi         uuid := public.admin_exige_droit();
+  le_kbis     text;
+  l_assurance text;
+begin
+  select p.kbis_url, p.assurance_url into le_kbis, l_assurance
+    from public.professional_profiles p where p.id = p_pro
+     for update;
+  if not found then
+    raise exception 'Cette fiche professionnelle n''existe pas.' using errcode = 'no_data_found';
+  end if;
+  if (p_kbis is true and le_kbis is distinct from p_kbis_vu)
+     or (p_assurance is true and l_assurance is distinct from p_assurance_vu) then
+    raise exception
+      'L''artisan a changé de pièce depuis que vous avez ouvert sa fiche : rechargez la file et regardez la nouvelle avant de valider.'
+      using errcode = 'OP024';
+  end if;
+  perform public.admin_verifier_pro(p_pro, p_kbis, p_assurance, p_rge, p_note);
 end;
 $$;
 
@@ -4997,10 +5100,16 @@ begin
            p.created_at
       from public.professional_profiles p
      where not p.verifie
-     /* Celui qui a ENVOYÉ quelque chose passe devant : il attend une
-        réponse. Et à égalité, le plus ancien d'abord — c'est lui qui
-        attend depuis le plus longtemps. */
-     order by (p.kbis_url is not null or p.assurance_url is not null) desc,
+     /* UNE FICHE DONT LE BADGE EST SUSPENDU PASSE EN TÊTE (lot S-a) : elle a
+        perdu un badge qu'elle avait, c'est l'attente la plus coûteuse, et la
+        décision D4 a été prise sur la promesse « la revue est rapide, la
+        fiche apparaît en tête de ta file ». Triée par date de création, elle
+        se rangeait derrière toutes les premières demandes, et sortait même
+        de la file au-delà de 50 (mesuré par deux relectures). Puis celui qui
+        a ENVOYÉ quelque chose : il attend une réponse. Et à égalité, le plus
+        ancien d'abord — c'est lui qui attend depuis le plus longtemps. */
+     order by (p.badge_suspendu_le is not null) desc,
+              (p.kbis_url is not null or p.assurance_url is not null) desc,
               p.created_at asc
      limit greatest(1, least(coalesce(p_limite, 50), 200));
 end;
@@ -5114,6 +5223,7 @@ begin
     'public.admin_file_verifications(int)',
     'public.admin_signalements(int)',
     'public.admin_verifier_pro(uuid, boolean, boolean, boolean, text)',
+    'public.admin_valider_pieces(uuid, text, text, boolean, boolean, boolean, text)',
     'public.admin_refuser_pro(uuid, text)',
     'public.admin_traiter_signalement(uuid, text, text)'
   ] loop
@@ -9231,10 +9341,17 @@ begin
    for update;
 
   if not found then
-    select p.verifie into le_badge from public.professional_profiles p where p.id = moi;
+    /* `verifie` SEUL ne suffit plus (lot S-a) : une suspension le met à faux,
+       et ce verrou tombait au même instant — l'artisan rattachait alors
+       n'importe quel SIRET, et l'administration lui rendait le badge à côté
+       d'une entreprise que personne n'avait examinée (mesuré par deux
+       relectures). Même règle que `tient_les_metiers`. */
+    select (p.verifie or p.badge_suspendu_le is not null) into le_badge
+      from public.professional_profiles p where p.id = moi;
     if coalesce(le_badge, false) then
       raise exception
-        'Votre fiche porte le badge « vérifié », accordé avant que les '
+        'Votre fiche porte le badge « vérifié » (ou l''attend, le temps d''un '
+        'examen), accordé avant que les '
         'entreprises soient rattachées : y lier une entreprise ne peut pas se '
         'faire automatiquement, et ne peut pas encore se demander depuis '
         'l''application.'

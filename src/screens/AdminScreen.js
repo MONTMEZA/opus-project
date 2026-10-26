@@ -328,8 +328,11 @@ const CarteVerification = React.memo(function CarteVerification({ pro, onActe, o
       if (quoi === 'refus') {
         await api.refuserPro({ id: pro.id, note: texte });
       } else {
+        /* Les chemins MONTRÉS par cette carte : la base refuse si l'artisan
+           a changé de pièce depuis le chargement de la file (lot S-a). */
         await api.verifierPro({
           id: pro.id, kbis, assurance: assuranceOk, rge, note: texte || null,
+          kbisVu: pro.kbisUrl || null, assuranceVu: pro.assuranceUrl || null,
         });
       }
       retour.reussite();

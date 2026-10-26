@@ -45,6 +45,7 @@ import {
 } from '../lib/tarifs';
 import { choisirImage, choisirDocument } from '../lib/media';
 import { CLAVIER } from '../lib/clavier';
+import * as retour from '../lib/retour';
 
 export default function ProfilEditScreen({
   userType, profil, sos, onSave, onEnvoyerDocuments, onErreur,
@@ -575,7 +576,13 @@ export default function ProfilEditScreen({
                 onChoisir={async () => {
                   try {
                     const doc = await choisirDocument();
-                    if (doc) setKbis(doc);
+                    if (doc) {
+                      setKbis(doc);
+                      /* L'avertissement s'affiche ; sous VoiceOver il faut aussi
+                         l'ANNONCER — `accessibilityLiveRegion` n'existe que sur
+                         Android (lot 5). */
+                      if (envoiSuspendLeBadge(profil, { kbis: true })) retour.annoncer(AVERTISSEMENT_SUSPENSION);
+                    }
                   } catch (e) { onErreur(e.message || "Le fichier n'a pas pu être ouvert."); }
                 }}
               />
@@ -588,7 +595,10 @@ export default function ProfilEditScreen({
                 onChoisir={async () => {
                   try {
                     const doc = await choisirDocument();
-                    if (doc) setAssurance(doc);
+                    if (doc) {
+                      setAssurance(doc);
+                      if (envoiSuspendLeBadge(profil, { assurance: true })) retour.annoncer(AVERTISSEMENT_SUSPENSION);
+                    }
                   } catch (e) { onErreur(e.message || "Le fichier n'a pas pu être ouvert."); }
                 }}
               />
