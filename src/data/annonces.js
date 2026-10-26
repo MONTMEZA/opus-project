@@ -38,7 +38,7 @@ export const TYPES_ANNONCE = [
     avecMetier: false,
     avecDates: false,
     avecPrix: true,
-    aide: "Le surplus de chantier. Ce qui part aujourd'hui à la benne ou sur Leboncoin.",
+    aide: "Le surplus de chantier. Ce qui part aujourd'hui à la benne ou sur un site de petites annonces.",
   },
   {
     cle: 'materiel_location',

@@ -82,7 +82,7 @@ const TYPES = [
 const NB_MEDIAS = { photo: PHOTOS_MAX, video: 1, avantapres: 2, montage: CLIPS_MAX };
 
 const DESTINATIONS = [
-  ['fil', Send, 'Le fil', 'Visible par tous, avec likes et commentaires.'],
+  ['fil', Send, 'Le fil', 'Visible par tous, avec j’aime et commentaires.'],
   ['portfolio', Grid, 'Mon portfolio', 'Rangé dans vos réalisations, rien dans le fil.'],
   ['deux', Layers, 'Les deux', 'Publié dans le fil ET ajouté à vos réalisations.'],
 ];

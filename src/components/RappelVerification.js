@@ -139,7 +139,7 @@ export function EtatVerificationPublic({ pro }) {
         <View style={{ flex: 1 }}>
           <Text style={[s.publicTitre, { color: C.ok }]}>Profil vérifié par Opus</Text>
           <Text style={s.publicTexte}>
-            {pieceExistence().court} et {enMilieuDePhrase(pieceAssurance(pro).court)} contrôlés
+            {pieceExistence().court} et {enMilieuDePhrase(pieceAssurance(pro).court)} contrôlées
             {pro.verifieLe ? ` le ${formatDate(pro.verifieLe)}` : ''}.
           </Text>
         </View>

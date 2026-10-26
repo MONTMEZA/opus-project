@@ -9359,6 +9359,52 @@ navigateur en démonstration : **aucun grand dégradé** dans le fil, les
 photos aux bonnes places. **Pas vérifié** : le rendu sur l'iPhone, et le
 poids de ces 2,8 Mo dans l'application installée.
 
+#### La seconde relecture — après le second tournage (26/10/2026)
+
+Les 23 vidéos, une image par seconde, les 36 captures et le mode d'emploi,
+relus par cinq agents, puis chaque constat contre-examiné par un second
+chargé de le réfuter : **21 constats confirmés sur 66**. Ceux de
+l'application :
+
+- **« Existence légale et décennale contrôlés »** : les deux noms sont
+  féminins, et la phrase s'affiche pour TOUT artisan vérifié
+  (`RappelVerification.js`) → « contrôlées » ;
+- **« avec likes et commentaires »** sous « Le fil » (`CreerScreen.js`) →
+  « j'aime » : l'application ne dit « likes » nulle part ailleurs ;
+- **« à la benne ou sur Leboncoin »** dans l'aide d'une annonce « À vendre »
+  (`annonces.js`) : une marque réelle, lisible dans une publicité → « sur un
+  site de petites annonces » ;
+- **le texte de la fiche passait SUR la bannière en défilant.** La bannière
+  descendait à demi-vitesse et débordait sous ce qui la suit ; ni le nom ni
+  les chiffres n'ont de fond, donc on lisait « Réalisations · Abonnés ·
+  Note » à moitié effacés sur la photo (fiche publique ET « Mon profil »).
+
+> **Un élément qui se déplace moins vite que ce qui le suit passe DESSOUS.**
+> Ou ce qui suit a un fond, ou l'élément est coupé par son propre cadre.
+> C'est la seconde parade qui a été prise (`EnteteProfilImmersif.js`) : le
+> CADRE défile normalement en `overflow: 'hidden'`, la PHOTO descend dedans à
+> demi-vitesse — à la même place à l'écran qu'avant, la partie qui débordait
+> en moins. Le geste de tirer vers le bas agrandit toujours le cadre entier,
+> et la bande de chantier reste au bord du cadre, sous la photo de profil.
+> Mesuré au navigateur à 0, 120 et 240 px. **Pas vérifié sur l'iPhone.**
+
+Et ceux de l'OUTIL, qui sont la vraie leçon :
+
+- **la garde floutait une adresse inventée** (« 4 rue des Lilas ») dans le
+  carnet de clients, pendant que le devis la montrait en clair, et le mode
+  d'emploi affirmait « aucun flou ». Les deux adresses de la démonstration
+  ont été cherchées dans la Base Adresse le 26/10 : aucune n'existe. Elles
+  restent lisibles, comme les numéros de fiction ;
+- **sept clips sur vingt avaient été filmés SANS la garde**, alors que le
+  mode d'emploi disait qu'elle avait relu « image par image » chaque clip.
+
+> **Ce qu'un outil a vérifié se MESURE à la fin, ça ne se recopie pas.**
+> Le contrôle du montage (`outils/verifier.mjs`, livré avec les vidéos —
+> les outils de la publicité ne sont pas dans ce dépôt) exige désormais, pour chaque clip
+> du montage, une `sonde.json` du même tournage, sans ancien nom ni zone
+> floutée. Éprouvé AVANT la correction : il a refusé les six clips sans
+> garde restants et le flou de l'adresse.
+
 #### Ce qui n'a PAS été corrigé, et pourquoi
 
 - **Les anciennes données de démonstration sont dans la VRAIE base** —

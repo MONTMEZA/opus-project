@@ -2516,20 +2516,24 @@ chantier (elle plantait l'application jusqu'au 26/10).
 ### La démonstration et la publicité — décidé le 26/10/2026
 
 Les vidéos et les captures promotionnelles sont faites (en mode
-démonstration, sans son, 21 vidéos et 36 captures). Votre réponse du 26/10 :
+démonstration, sans son, 23 vidéos et 36 captures). Votre réponse du 26/10 :
 **renommer les artisans de la démonstration** avec des noms vérifiés absents
 des registres, et **remplacer les dégradés de couleur par des photos libres
-de droit** — puis refilmer.
+de droit** — puis refilmer. **Fait le 26/10**, et relu deux fois :
 
-- [ ] Nouveaux noms d'entreprise pour tous les artisans et annonceurs de
-  `src/data/demo.js` (aujourd'hui trois noms d'entreprises réelles et actives
-  du même métier, et une fausse publicité d'une société réelle), vérifiés
-  dans l'annuaire des entreprises et la base des marques de l'INPI ;
-- [ ] des photos sous une licence qui permet la publicité (sans personne
-  reconnaissable, sans marque visible), à la place des dégradés ;
-- [ ] les numéros de téléphone de la démonstration dans la tranche de
-  fiction de l'Arcep (06 39 98 …) ;
-- [ ] puis refilmer les vidéos d'une commande.
+- [x] nouveaux noms d'entreprise pour tous les artisans et annonceurs,
+  cherchés dans l'annuaire des entreprises (aucune entreprise ne porte ces
+  mots) — **la base des marques de l'INPI, elle, n'a pas pu être consultée**
+  (ligne plus bas) ;
+- [x] 22 photos CC0 ou domaine public à la place des dégradés
+  (`assets/demo/LICENCES.md`) ;
+- [x] les numéros dans les six plages de fiction de l'Arcep ;
+- [x] refilmé, monté, relu par une relecture adverse (21 constats confirmés
+  sur 66), corrigé, refilmé une seconde fois.
+
+**Les vidéos et captures du 25/10 ne doivent jamais être publiées** : elles
+portent les anciens noms. Elles ont les mêmes noms de fichiers que les
+nouvelles ; on les reconnaît à leurs dégradés de couleur.
 
 Avant toute publicité payante : vérifier le libellé exact de votre marque
 (« Opus » ou « Opus-Project »), et décider qui édite Opus (le mode d'emploi
@@ -2581,8 +2585,8 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   (« 06 39 98 » / « 03 01. ») : des espaces insécables, facultatif.
 - [ ] Les noms inventés n'ont pas été cherchés dans la base des marques de
   l'INPI ni dans celle de l'EUIPO (une marque de l'Union vaut aussi en
-  France ; pas d'accès sans compte) : avant toute publicité payante. Les 21
-  vidéos et 36 captures du 25/10 portent les ANCIENS noms : ne pas les
+  France ; pas d'accès sans compte) : avant toute publicité payante. Les
+  vidéos et captures du 25/10 portent les ANCIENS noms : ne pas les
   publier.
 - [ ] **Quatre sujets n'ont pas de photo libre de droit acceptable** (mur
   de parpaings en cours de montage, toiture en cours de dépose, tuiles canal
@@ -2590,6 +2594,23 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   photos trouvées (`assets/demo/LICENCES.md`). Le jour où l'on veut ces
   sujets, la meilleure source est une photo prise sur un VRAI chantier, avec
   l'accord du client et sans rien d'identifiable.
+- [ ] **Sur SA propre publication, un artisan voit « Suivre » et
+  « Contacter »** (relevé à la relecture du 26/10, dans la démonstration ;
+  le code est le même avec la vraie base) : `PostCard` ne reçoit `moiId` que
+  pour les commentaires, et passe `onFollow` et le bouton « Contacter » à
+  toutes les cartes. Se suivre soi-même et s'écrire à soi-même n'ont pas de
+  sens. La correction est petite (cacher les deux quand l'auteur est le
+  compte connecté, dans le fil, le fil vidéo et la page d'une publication),
+  mais elle touche une carte mémorisée utilisée partout : à valider avant de
+  la faire.
+- [ ] **La pastille « Les plus proches » de la page Demandes** ne trie la
+  liste par distance qu'APRÈS « mes métiers » et l'urgence (choix écrit dans
+  `DemandesScreen.js` : « un chantier urgent à 40 km passe avant un chantier
+  tranquille à 5 km »). Pastille allumée, une demande à 319 km peut donc
+  passer devant une demande « dans votre commune » — vu dans la vidéo de la
+  page. Le tri est défendable ; le NOM de la pastille promet autre chose. À
+  trancher : renommer la pastille, ou trier vraiment par distance quand elle
+  est allumée.
 - [ ] **`supabase/seed.sql` ne peut plus être rejoué** (mesuré en
   transaction annulée) : ses comptes naissent particuliers, et
   `exige_un_compte_pro()` refuse leur fiche. Il reste un document, pas un
