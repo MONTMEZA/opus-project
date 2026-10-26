@@ -403,6 +403,40 @@ verifier('les textes d\'étape nomment de VRAIES étapes de métier',
   'C\'est la matière dont le récit écrit aura besoin : des étapes nommées, '
   + 'dans l\'ordre. Un « Ggggggg » ne raconterait rien.');
 
+console.log('\nLE DICTIONNAIRE DES CHANTIERS SE LIT PAR IDENTIFIANT');
+/* `OpusApp` tient les chantiers dans un DICTIONNAIRE (indexé par
+   identifiant) et le passe tel quel au fil et à la page d'une publication.
+   La page le parcourait comme une LISTE (`chantiers.find`) : toute
+   notification menant à une publication rangée dans un chantier faisait
+   planter l'application (« chantiers.find is not a function »), du 07/10
+   au 26/10, sans qu'aucun contrôle le voie. On relève chaque écran qui
+   reçoit `chantiers={chantiers}`, on ouvre son fichier, et on refuse une
+   méthode de liste sur ce dictionnaire. */
+{
+  const app = lire('src/OpusApp.js');
+  const sansCom = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const appSans = sansCom(app);
+  const recepteurs = new Set();
+  for (const m of appSans.matchAll(/chantiers=\{chantiers\}/g)) {
+    const avant = appSans.slice(0, m.index);
+    const balise = [...avant.matchAll(/<([A-Z][A-Za-z0-9]*)\b/g)].pop();
+    if (balise) recepteurs.add(balise[1]);
+  }
+  verifier('le relevé trouve les écrans qui reçoivent le dictionnaire (au moins le fil et la page d\'une publication)',
+    recepteurs.has('HomeScreen') && recepteurs.has('PublicationScreen'),
+    `trouvés : ${[...recepteurs].join(', ') || 'aucun'}`);
+  const fautifs = [];
+  for (const nom of recepteurs) {
+    const imp = app.match(new RegExp(`import\\s+${nom}\\s+from\\s+'(\\.[^']+)'`));
+    if (!imp) { fautifs.push(`${nom} : import introuvable`); continue; }
+    let code = '';
+    try { code = sansCom(lire(`src/${imp[1].replace(/^\.\//, '')}.js`)); } catch (e) { fautifs.push(`${nom} : fichier illisible`); continue; }
+    if (/\bchantiers\s*\.\s*(?:find|filter|map|some|every|forEach|reduce|length|indexOf|includes)\b/.test(code)) fautifs.push(`${nom} : méthode de LISTE sur le dictionnaire`);
+    if (/\bchantiers\s*=\s*\[\s*\]/.test(code)) fautifs.push(`${nom} : valeur par défaut en liste (\`chantiers = []\`)`);
+  }
+  verifier('…et chacun le lit par identifiant, jamais comme une liste', fautifs.length === 0, fautifs.join(' · '));
+}
+
 /* ------------------------------------------------------------------ */
 if (echecs) {
   console.error(`\n✘ ${echecs} vérification(s) en échec.\n`);

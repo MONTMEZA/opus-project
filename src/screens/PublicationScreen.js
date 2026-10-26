@@ -48,7 +48,7 @@ import { MessageSquare } from '../components/icons';
 import { CLAVIER } from '../lib/clavier';
 
 export default function PublicationScreen({
-  post, pros = {}, chantiers = [], commentaireCible = null,
+  post, pros = {}, chantiers = {}, commentaireCible = null,
   followingIds, savedIds, openContactId, moiId,
   onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   onAddComment, onVoirCommentateur, onSave, onToggleContact, onContact,
@@ -68,9 +68,14 @@ export default function PublicationScreen({
   }
 
   const pro = pros[post.proId] || null;
-  const chantier = post.chantierId
-    ? chantiers.find((c) => String(c.id) === String(post.chantierId)) || null
-    : null;
+  /* LE DICTIONNAIRE DES CHANTIERS, comme le fil (`HomeScreen`) : `OpusApp`
+     le passe tel quel, indexé par identifiant. L'écran le parcourait comme
+     une LISTE (`chantiers.find`) : toute notification qui menait à une
+     publication rangée dans un chantier faisait planter l'application —
+     écran blanc, « chantiers.find is not a function ». Vrai depuis le
+     07/10, et invisible tant que la publication essayée n'avait pas de
+     chantier. Trouvé en filmant la démonstration, le 25/10. */
+  const chantier = post.chantierId ? (chantiers[post.chantierId] || null) : null;
 
   return (
     <ScrollView
