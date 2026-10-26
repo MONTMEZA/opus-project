@@ -1082,12 +1082,25 @@ export const TAILLE_PAGE_DEMANDES = 200;
  * `chargerPageFil` — un objet construit par étalement (`...p`) à l'intérieur
  * d'une fonction asynchrone fait échouer la construction sous Metro.
  */
+/* LES « J'AIME » DE LA DÉMONSTRATION VIVENT EN MÉMOIRE — 26/10/2026.
+   `setLike` valait `noop` sans fichier `.env`, et poser un filtre recharge
+   le fil depuis les données de démonstration : le j'aime qu'on venait de
+   donner disparaissait (vu sur la publicité : 215 dans le fil, 214 dans le
+   fil filtré, cœur vide). Avec la vraie base, le compteur vient de
+   `likes_count`, tenu par un déclencheur, et rien ne se perd : la
+   démonstration doit se comporter pareil. Clé : l'identifiant, en chaîne. */
+const jaimesDemo = new Map();
+
 function postDemo(p, rang) {
   const commentaires = p.comments ? p.comments.slice() : [];
+  const cle = String(p.id);
+  const jaime = jaimesDemo.has(cle) ? jaimesDemo.get(cle) : !!p.liked;
   return Object.assign({}, p, {
     comments: commentaires,
     nbCommentaires: commentaires.length,
     curseur: String(rang),
+    liked: jaime,
+    likes: (p.likes || 0) + (jaime ? 1 : 0) - (p.liked ? 1 : 0),
   });
 }
 
@@ -1424,7 +1437,11 @@ export const changerStatutDemande = !hasSupabase ? noop : async (id, statut) => 
   if (error) throw error;
 };
 
-export const setLike = !hasSupabase ? noop : async (postId, liked) => {
+async function setLikeDemo(postId, liked) {
+  jaimesDemo.set(String(postId), !!liked);
+}
+
+export const setLike = !hasSupabase ? setLikeDemo : async (postId, liked) => {
   if (liked) {
     await supabase.from('post_likes').insert({ post_id: postId, user_id: currentUserId });
   } else {

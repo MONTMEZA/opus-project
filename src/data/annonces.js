@@ -73,7 +73,7 @@ export const TYPES_ANNONCE = [
     avecDates: false,
     avecPrix: true,
     avecUnite: true,
-    aide: "Une nouveauté, un déstockage, une offre du mois. Nommez le produit comme les artisans le cherchent — « placo », « BA13 », « nacelle » — pas comme il figure au catalogue.",
+    aide: "Une nouveauté, un déstockage, une offre du mois. Nommez le produit comme les artisans le cherchent — «\u00a0placo\u00a0», «\u00a0BA13\u00a0», «\u00a0nacelle\u00a0» — pas comme il figure au catalogue.",
   },
   {
     cle: 'entraide',

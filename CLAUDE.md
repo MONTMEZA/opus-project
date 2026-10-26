@@ -9405,6 +9405,40 @@ Et ceux de l'OUTIL, qui sont la vraie leçon :
 > floutée. Éprouvé AVANT la correction : il a refusé les six clips sans
 > garde restants et le flou de l'adresse.
 
+#### La troisième relecture — les « j'aime » qui oubliaient (26/10/2026)
+
+Les vidéos refilmées, relues une seconde fois. Ce qu'elle a trouvé dans
+l'APPLICATION :
+
+- **un « j'aime » donné en démonstration s'oubliait à la page suivante.**
+  `setLike` valait `noop`, et chaque page du fil se reconstruit depuis les
+  données d'origine : aimé dans le fil, revenu à 214 dans le fil filtré.
+  `api.js` retient désormais les « j'aime » de la démonstration en mémoire
+  (`jaimesDemo`), le temps que l'application reste ouverte. Même famille
+  que la création d'un chantier qui valait `noop` (06/10) : **une
+  démonstration qui ne retient pas un geste montre une application qui
+  l'ignore** ;
+- **« Raconte ce que tu as fait » et « Une légende, si tu veux… »** dans
+  l'écran Publier : le seul tutoiement de l'application → vouvoiement ;
+- **un guillemet orphelin en fin de ligne** dans l'aide d'une annonce
+  « Fournisseur » (`annonces.js`) : les espaces autour de « placo »,
+  « BA13 », « nacelle » étaient ordinaires, la ligne se coupait entre « et
+  le mot, et on lisait « nacelle » sans son guillemet ouvrant. Espaces
+  insécables, écrites ` ` — c'est la typographie française de toute
+  façon.
+
+Et dans l'outil, une erreur de diagnostic à retenir : deux vidéos
+s'ouvraient sur trois images d'un AUTRE écran (l'accueil avant l'agent, une
+liste avant la base de postes) — c'est la première image que Reels et
+TikTok prennent pour miniature. J'ai accusé la coupe de ffmpeg et changé
+d'outil ; le défaut est resté. Il venait de la FENÊTRE choisie, qui
+commençait trois images avant le changement d'écran. **Un défaut qui
+survit à sa correction n'avait pas la cause qu'on lui prêtait** : on le
+mesure à nouveau, image par image, avant de corriger une seconde fois. Six
+coupes étaient dans ce cas ; un relevé des changements d'écran de chaque
+clip les refuse désormais (`outils/bornes.mjs`, appelé par le contrôle du
+montage, éprouvé en remettant l'ancienne fenêtre).
+
 #### Ce qui n'a PAS été corrigé, et pourquoi
 
 - **Les anciennes données de démonstration sont dans la VRAIE base** —

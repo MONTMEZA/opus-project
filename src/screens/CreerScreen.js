@@ -375,8 +375,8 @@ export default function CreerScreen({
         ref={legende}
         multiligne
         placeholder={dansLeFil
-          ? 'Raconte ce que tu as fait, avec tes mots...'
-          : 'Une légende, si tu veux...'}
+          ? 'Racontez ce que vous avez fait, avec vos mots…'
+          : 'Une légende, si vous voulez…'}
         surSeuil={setEtatLegende}
         seuilLong={MINIMUM_RELECTURE}
       />
