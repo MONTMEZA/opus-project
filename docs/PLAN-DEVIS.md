@@ -3835,3 +3835,12 @@ vrai artisan. Le détail est dans CLAUDE.md.
 Le prochain lot de l'ordre **T → 1 → P → S → 2** est **S**, le petit lot de
 sécurité (`docs/AUDIT-ADDENDUM-QR.md`) : les règles générales du stockage
 d'abord, avant l'espace des PDF de devis du lot 2.
+
+**Le 26/10/2026, S-a est fait** — les règles générales du stockage (D7) et
+le badge suspendu (D4), sur la vraie base depuis le 26/10 vers 6 h 37 :
+plus aucune règle ne permet de remplacer un fichier, ni de supprimer un
+document privé. La condition de D7 pour l'espace `devis` du lot 2 est donc
+remplie ; le contrôle qu'elle demande (« aucune règle ne permet de modifier
+ou supprimer un fichier de l'espace `devis` ») est `verifier-stockage`, qui
+range déjà `devis` parmi les espaces figés. Restent S-b, S-c et S-d (CLAUDE.md,
+« Le stockage et le badge suspendu — lot S-a »).

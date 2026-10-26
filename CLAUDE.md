@@ -9091,6 +9091,156 @@ version « preview » du 17/10 n'est plus sur son téléphone (même identité :
 l'une a remplacé l'autre). Et le lot P y a été essayé le jour même (section
 précédente).
 
+### Le stockage et le badge suspendu — lot S-a (25-26/10/2026)
+
+Section 51 de `schema.sql`, `src/lib/verification.js`,
+`supabase/cas-badge.json` (engendré par `scripts/generer-cas-badge.mjs`),
+`npm run verifier-stockage`. Premier des quatre sous-lots du lot S (sécurité,
+ordre **T → 1 → P → S → 2**) ; le cahier est un document de travail de la
+session (`cahier-v2.md`), il sera archivé dans `docs/` à la fin du lot S.
+
+#### R1 : des règles RLS s'ADDITIONNENT — prouvé sur la vraie base
+
+Deux règles GÉNÉRALES de la section 13 (« remplacement de mes fichiers »,
+« suppression de mes fichiers ») valaient pour TOUS les espaces de stockage.
+Mesuré le 26/10 par l'API de stockage réelle, avec un compte particulier
+jetable, AVANT la migration :
+
+| | avant | après |
+|---|---|---|
+| envoyer un document privé neuf | 200 | 200 |
+| le **remplacer** sous le même nom (`x-upsert`) | **200** | 403 (RLS) |
+| le **déplacer** de `documents` vers `publications` | **200** | refusé (« Object not found ») |
+| le lire **sans compte** à l'adresse publique | **200 — la fuite** | 400 |
+| supprimer un document privé | **supprimé** | rien de supprimé |
+| envoyer puis retirer SA photo publique | 200 | 200 (décision D5) |
+| lister l'espace `publications`, sans compte | **5 dossiers** | 0 |
+| …avec un compte | 5 | 1 — le sien |
+
+> **Le `move` de storage-api est un UPDATE** : la règle « remplacement »
+> autorisait donc aussi à sortir un Kbis de l'espace privé vers l'espace
+> public. Et une absence de règle « à soi » ne ferme rien tant qu'une règle
+> plus large existe déjà.
+
+La règle tenue depuis : **personne ne remplace un fichier** (`using (false)
+with check (false)`), **on ne retire que SES photos publiques** (avatars,
+bannières, publications), et **la lecture par l'API ne voit que son dossier**
+— les images publiques restent servies par leur adresse publique, sans RLS.
+`src/lib/storage.js` envoie avec `upsert: false` et en POST, et un 409 dit
+« Opus ne remplace jamais un fichier » (`erreurs.js`, avant le 23505).
+
+#### Le stockage de production est VERSIONNÉ, le modèle local non
+
+Relevé avant la migration : la vraie table `storage.objects` porte des index
+de versions (`idx_objects_current_version`, `objects_bucket_id_name_version_key`…),
+pas l'index unique `(bucket_id, name)` que `local-prelude.sql` pose pour
+imiter un envoi qui remplace. **L'essai SQL modélise, l'essai HTTP prouve** :
+c'est pourquoi R1 a été éprouvé deux fois par l'API réelle, avant et après.
+
+#### Le badge suspendu — décision D4 du propriétaire
+
+« Garder la règle » (25/10) : remplacer OU retirer une pièce VALIDÉE (Kbis ou
+attestation d'assurance, y compris renouvelée) **suspend le badge**, jusqu'à
+ce que l'administration le rende ou le refuse. Tenu par `tient_le_profil_pro()`
+(point 4) : pièce suspendue, `badge_suspendu_le` posé par la BASE, une
+notification qui dit le retrait quand c'en est un, et **les métiers figés
+pendant la suspension** (`tient_les_metiers()`), sinon le badge rendu
+attesterait un métier que personne n'a contrôlé. Trois verrous trouvés par les
+relectures, et pas à l'œil :
+
+- **la suspension levait OP009** (`rattacher_mon_siret`, qui ne testait que
+  `verifie`) : l'artisan rattachait n'importe quel SIRET, et le badge revenait
+  à côté ;
+- **l'administration validait la pièce qu'elle n'avait pas vue** : l'écran
+  appelle désormais `admin_valider_pieces`, qui compare les chemins montrés
+  aux chemins rangés et refuse (`OP024`) s'ils ont changé ; et
+  `admin_verifier_pro` refuse de valider une pièce RETIRÉE ;
+- **une fiche rangeait le Kbis d'un AUTRE** (un chemin lisible) :
+  `pro_pieces_dossier_check` exige que chaque pièce soit dans son propre
+  dossier. Vérifié sur la vraie base avant de la poser : 0 fiche hors dossier.
+
+La fiche suspendue passe **en tête** de la file de l'administration. Une
+fonction de signature nouvelle (`admin_valider_pieces`) plutôt qu'un
+paramètre ajouté à `admin_verifier_pro` : ajouter un paramètre crée une
+SURCHARGE (section 34).
+
+> **La règle de l'écran est éprouvée sur la sortie de la base.**
+> `apresEnvoiDesPieces()` redit la règle du déclencheur pour que l'écran
+> n'affiche pas un état déjà quitté. `scripts/generer-cas-badge.mjs` fait
+> jouer **768 situations** par le VRAI déclencheur sur un PostgreSQL local et
+> les range dans `supabase/cas-badge.json` ; `verifier-stockage` fait tourner
+> la fonction de l'écran sur les mêmes entrées : même fiche, et l'avertissement
+> avant envoi part exactement quand la base notifie. **À relancer, et le
+> fichier à commiter, dès que la règle de la base change.**
+
+#### Ce qui reste en ligne — les textes disent la vérité, écrite une fois
+
+La fonction `compte` ne touche pas à Cloudinary : **les vidéos et les
+musiques restent en ligne** après la suppression de la publication comme du
+compte. Les textes disaient « vos données sont effacées » à cinq endroits.
+Trois constantes de `src/data/legal.js`, servies aux textes ET aux écrans :
+`CE_QUI_RESTE_EN_LIGNE` (Cloudinary, « pour la plupart » — sans Cloudinary
+configuré une vidéo va chez Supabase), `CE_QUI_EST_GARDE` (l'écran de
+suppression ne dit plus « rien n'est récupérable ») et
+`CE_QUE_LA_SUPPRESSION_GARDE` (supprimer une publication laisse ses fichiers,
+et son entrée de portfolio). Les mentions légales nomment Cloudinary comme
+**second hébergeur** (`EDITEUR.hebergeurVideos`, adresse et pays à relever par
+le propriétaire, exigés dès que `STATUT` quitte `'essai'`), et la clause de
+propriété intellectuelle **garde la durée** de l'autorisation (CPI L.131-3).
+
+`verifier-legal` vérifie **phrase par phrase** qu'une promesse d'effacement
+dit son exception, refuse tout délai promis dans ces phrases, et ne lève la
+garde Cloudinary que si `EFFACEMENT_CLOUDINARY` est coché ET que la fonction
+`compte` appelle vraiment l'API de suppression — un mot dans un journal ne
+suffit plus. Et l'échec partiel d'une suppression de compte ne dit plus
+« bien supprimées » ni « écrivez-nous sous 48 heures » (une adresse qui
+n'existe pas) : l'application LIT ce que la fonction `compte` a retiré.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur une base neuve, les 28 fichiers d'essais
+(dont `essais-section-51a.sql`, réécrit pour prouver la règle D7 sur de
+vraies données), les 52 contrôles, le linter (32, tous antérieurs), les
+paquets iOS et Android. Sabotages : 65 refusés sur 68, chacun par la
+vérification visée ; les 3 verts sont des mutations équivalentes (un badge
+accordé suppose les deux pièces validées). La migration, construite depuis
+`schema.sql` sans un ordre qui commence par `drop`, `delete` ou `truncate`,
+simulée deux fois sur une imitation de la vraie base (`git show e9b6e27`) :
+même empreinte qu'une base neuve, à l'ordre physique des colonnes près.
+**Appliquée le 26/10/2026 vers 6 h 37** (heure de Paris), avec l'accord du
+propriétaire ; relevé après : les 7 fonctions, les 3 règles du stockage, la
+colonne et la contrainte identiques à l'imitation migrée. Puis l'essai
+ci-dessus, et le ménage par le chemin de l'application : base revenue à
+14 comptes / 8 fiches / 21 publications, aucun compte ni fichier d'essai.
+
+**Les avertissements des commits `37783ad` et `a96b3e6` — « ne pas faire
+`git pull` avant la migration » — ne valent plus.** Aucun module natif :
+`git pull` puis `npx expo start -c` suffisent.
+
+**Ce qui n'a PAS été vérifié** : rien sur l'iPhone ; la suspension du badge
+n'a été éprouvée que par les essais SQL et les 768 cas, pas par un vrai
+remplacement de pièce sur la vraie base (il faudrait un compte pro vérifié) ;
+`badge_suspendu_le` reste lisible par tout compte connecté (B4, reporté à
+S-d). La suite est dans `docs/A-FAIRE.md`, « Après le lot S-a ».
+
+### Un dictionnaire n'est pas une liste — la notification qui plantait (26/10/2026)
+
+Trouvé en filmant les vidéos promotionnelles : toucher une notification qui
+mène à une publication rangée dans un chantier faisait **planter
+l'application** (écran blanc, « chantiers.find is not a function »), depuis
+le 07/10, sur la vraie base comme en démonstration. `OpusApp` tient les
+chantiers dans un DICTIONNAIRE et le passe tel quel ; la page d'une
+publication le parcourait comme une LISTE. L'essai du 07/10 portait sur des
+publications sans chantier.
+
+> **Une même donnée passée sous deux formes à deux écrans finit par être lue
+> sous la mauvaise.** `verifier-chantier` relève chaque écran qui reçoit
+> `chantiers={chantiers}` et refuse une méthode de liste sur ce dictionnaire.
+
+Vérifié au navigateur : la notification ouvre la publication, son chantier et
+le commentaire ; l'ancien fichier remis, le même essai rend l'écran blanc.
+Pas vérifié sur l'iPhone.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

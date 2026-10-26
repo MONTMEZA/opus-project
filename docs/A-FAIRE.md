@@ -2455,6 +2455,86 @@ poste** — des phrases et des prix rangés pour essayer seraient remis avec le
 compte, donc donnés à un autre artisan. L'essai se fait sur votre compte
 principal, jamais sur le sien.
 
+### Après le lot S-a — ce qui reste (26/10/2026)
+
+Le détail est dans CLAUDE.md, « Le stockage et le badge suspendu — lot S-a ».
+La section 51 est sur la vraie base depuis le 26/10 vers 6 h 37 (heure de
+Paris), et le défaut R1 a été prouvé AVANT puis fermé APRÈS par l'API de
+stockage réelle, avec un compte particulier jetable supprimé par le chemin de
+l'application (base revenue à 14 comptes / 8 fiches / 21 publications).
+
+**Les avertissements des commits `37783ad` et `a96b3e6` — « ne pas faire
+`git pull` » — ne valent plus** : `git pull`, puis `npx expo start -c`.
+Aucun module natif : rien à reconstruire.
+
+**La suite du lot S**, dans l'ordre du cahier : S-b (demandes, blocage,
+partenariats, réponses — vos réponses Q1 et Q2 du 25/10), S-c (compteurs,
+dates, remontée — Q3 : 3 remontées par artisan et par semaine), S-d
+(lectures, droits, export). Puis le lot 2 du devis.
+
+**Reportés, et à ne pas oublier** :
+
+- [ ] **`badge_suspendu_le` est lisible par tout compte connecté** (B4,
+  mesuré sur la vraie base le 26/10). L'application ne la lit que pour sa
+  propre fiche ; c'est une colonne à fermer avec les autres droits de colonne,
+  dans S-d.
+- [ ] **Supprimer une publication laisse son entrée de portfolio** (une
+  publication « Les deux »). Les textes le disent désormais ; la retirer aussi
+  est **une décision à vous**.
+- [ ] **Cloudinary** : relever le PAYS dans la console Cloudinary et l'ADRESSE
+  de Cloudinary (`EDITEUR.hebergeurVideos` dans `src/data/legal.js`), signer
+  son contrat de sous-traitance (DPA), et construire l'effacement des vidéos
+  (`EFFACEMENT_CLOUDINARY`). `verifier-legal` refuse qu'Opus quitte `'essai'`
+  sans les trois.
+- [ ] **Un refus de l'administration invalide les DEUX pièces**
+  (`admin_refuser_pro` remet le Kbis et l'assurance à « non validé »), même si
+  une seule avait changé ; et **le renouvellement annuel d'une attestation
+  suspend le badge** (votre décision « Garder la règle »). Les deux sont voulus
+  aujourd'hui ; à dire aux artisans le jour où l'administration aura du monde
+  à revoir.
+- [ ] **Faire ré-accepter les conditions** : `VERSION` est passée au
+  `2026-10-25`, et rien ne compare encore la version acceptée à la version
+  en vigueur (préavis de quinze jours pour les professionnels, règlement
+  2019/1150).
+- [ ] **Les droits sur les musiques** des montages vidéo, avant toute
+  ouverture au public.
+- [ ] **La fonction `compte` liste 1 000 fichiers au plus par dossier**, sans
+  page suivante : au-delà, des fichiers resteraient sans que sa réponse le
+  dise. L'application lit maintenant sa réponse et dit quand un ménage est
+  incomplet.
+- [ ] **Le modèle local du stockage n'est pas celui de la production** (qui
+  est versionné) : un essai SQL du stockage modélise, seul un essai par l'API
+  réelle prouve.
+
+**À essayer sur votre iPhone**, dans le build de développement : envoyer une
+nouvelle attestation d'assurance depuis « Modifier mon profil » (sur un
+compte PRO qui n'est pas vérifié, rien ne doit changer, sinon l'avertissement
+« Envoyer une nouvelle pièce suspend votre badge » doit s'afficher avant) ; et
+toucher une notification de commentaire sur une publication rangée dans un
+chantier (elle plantait l'application jusqu'au 26/10).
+
+### La démonstration et la publicité — décidé le 26/10/2026
+
+Les vidéos et les captures promotionnelles sont faites (en mode
+démonstration, sans son, 21 vidéos et 36 captures). Votre réponse du 26/10 :
+**renommer les artisans de la démonstration** avec des noms vérifiés absents
+des registres, et **remplacer les dégradés de couleur par des photos libres
+de droit** — puis refilmer.
+
+- [ ] Nouveaux noms d'entreprise pour tous les artisans et annonceurs de
+  `src/data/demo.js` (aujourd'hui trois noms d'entreprises réelles et actives
+  du même métier, et une fausse publicité d'une société réelle), vérifiés
+  dans l'annuaire des entreprises et la base des marques de l'INPI ;
+- [ ] des photos sous une licence qui permet la publicité (sans personne
+  reconnaissable, sans marque visible), à la place des dégradés ;
+- [ ] les numéros de téléphone de la démonstration dans la tranche de
+  fiction de l'Arcep (06 39 98 …) ;
+- [ ] puis refilmer les vidéos d'une commande.
+
+Avant toute publicité payante : vérifier le libellé exact de votre marque
+(« Opus » ou « Opus-Project »), et décider qui édite Opus (le mode d'emploi
+des vidéos le détaille).
+
 ### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
 
 Le document : `docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md` (le PDF fait foi).
