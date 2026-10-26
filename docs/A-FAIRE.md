@@ -2618,6 +2618,76 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   `exige_un_compte_pro()` refuse leur fiche. Il reste un document, pas un
   outil — à retirer ou à réécrire, jamais à rejouer sur la vraie base.
 
+### Les urgences par la position du téléphone — votre idée, PAS construite (26/10/2026)
+
+**Décidé par vous le 26/10 : on finit d'abord le devis et la facture.** Ce
+qui suit est le plan, pour le jour où l'on ouvrira un lot « urgences ».
+
+**Aujourd'hui**, une urgence cherche l'artisan à la commune écrite sur sa
+FICHE (souvent le centre de la commune), jamais à la position de son
+téléphone : un artisan de Lambesc qui travaille à Aix est vu à Lambesc. Le
+particulier voit tous les artisans disponibles dans leur rayon, du plus près
+au plus loin, avec un délai (« ~45 min ») et une estimation de prix, puis il
+choisit.
+
+**Votre idée, telle que vous l'avez décrite :**
+
+1. **c'est l'artisan qui l'allume**, lui-même (« Je suis disponible ici »),
+   et il l'éteint quand il veut. Sans elle, rien ne change : la commune de
+   sa fiche sert, comme aujourd'hui ;
+2. **on ne MONTRE jamais où il est** : la position sert seulement à TRIER.
+   Quand une urgence part, Opus propose **les 3 plus proches** ;
+3. **il règle ses délais selon la distance**, par exemple « à moins de
+   1 km : intervention en 20 minutes au plus », « de 1 à 5 km : 40
+   minutes »… — au lieu d'un seul délai pour toutes les distances ;
+4. **il choisit combien de temps sa position reste partagée pour UNE
+   urgence**, et après ce délai elle ne l'est plus pour cette urgence-là,
+   tout en restant active pour les urgences à venir *(à confirmer : c'est
+   ainsi que je l'ai compris)* ;
+5. le particulier choisit **en connaissance de cause** : une position
+   grossière, un délai d'intervention (ou au moins de prise de contact),
+   et déjà une base de tarif — elle existe depuis le lot T.
+
+**Les protections à poser avec, sinon la position se devine quand même :**
+
+- **une distance ARRONDIE** (« moins de 1 km », « 1 à 5 km »), jamais
+  « 150 m » : une distance exacte montre presque où il est ;
+- **la position est rangée à part, lisible par personne** — une fonction
+  de la base la lit et ne rend que le classement et la tranche de
+  distance ;
+- **elle expire toute seule** (au bout de quelques heures, ou dès qu'il se
+  met indisponible) : sinon, le soir, Opus garderait l'adresse de sa
+  maison ;
+- **une limite au nombre d'urgences par particulier** : sans elle, on peut
+  lancer de fausses urgences depuis trois endroits pour retrouver un
+  artisan ;
+- **le délai annoncé est celui de l'ARTISAN**, et l'écran le dit : Opus ne
+  le garantit pas.
+
+**Deux étapes, et la seconde est un vrai chantier :**
+
+- « les 3 plus proches » et les délais par tranche de distance : simple ;
+- « s'il ne répond pas dans le temps donné, la demande passe aux
+  suivants » : il faut un minuteur qui tourne côté serveur, téléphones
+  éteints. À mesurer à ce moment-là.
+
+**Ce que ça demande techniquement** : le GPS est un module natif
+(`expo-location`, pas encore dans Opus) → **un nouveau build de
+développement** (comme le 25/10), pas une réécriture. La forme la plus
+simple et la plus sûre : la position est demandée **une fois**, quand
+l'artisan se met disponible, application ouverte — pas un suivi continu
+en arrière-plan (autorisation « Toujours », batterie, contrôle d'Apple).
+
+**À établir avant de construire** : ce que disent la CNIL et le RGPD
+(consentement, durée de conservation, la phrase de la politique de
+confidentialité, et si une analyse d'impact est obligatoire) ; ce que
+l'iPhone autorise exactement. Une recherche est en cours le 26/10 ; ses
+conclusions seront ajoutées ici.
+
+**Et ce qui manque DÉJÀ aux urgences, à faire dans le même lot** : la base
+laisse envoyer une urgence à n'importe quel artisan, même s'il ne fait pas
+ce métier (voir plus haut, « Les défauts relevés au tournage »).
+
 ### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
 
 Le document : `docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md` (le PDF fait foi).
