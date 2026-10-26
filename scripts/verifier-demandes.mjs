@@ -333,6 +333,13 @@ console.log('\nCe que l’écran promet au particulier, la base le tient');
   const ecran = readFileSync('src/screens/DemandesScreen.js', 'utf8');
   verifier('l’encart ne promet plus qu’une demande n’est vue que du métier concerné',
     !/métier concerné la\s+reçoivent/.test(ecran) && !/visible que d’eux/.test(ecran));
+  /* Le même défaut, au message qui suit la publication : « les pros du
+     métier vont la recevoir » promettait un envoi qui n'existe pas. */
+  const app = readFileSync('src/OpusApp.js', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  verifier('le message de publication ne promet ni envoi ni « métier » seul',
+    /Votre demande est publiée\. Les professionnels d’Opus la voient dans leur onglet Demandes\./.test(app)
+    && !/vont la recevoir/.test(app));
   verifier('…et il dit que les photos jointes restent lisibles par leur adresse',
     /photos jointes\s+restent lisibles/.test(ecran));
   verifier('un particulier ne voit que SES demandes, comme la base le lui rend',

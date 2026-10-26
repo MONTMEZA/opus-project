@@ -9259,7 +9259,7 @@ phrases du lot P), trois partiels.
 
 | | le défaut | la correction |
 |---|---|---|
-| D1 | l'encart des demandes promettait « visible des seuls pros du métier » ; la base l'ouvre à tout pro (section 30.1), personne n'est prévenu, les photos sont dans un espace public | le texte dit vrai ; la démo ne montre plus au particulier les demandes des autres |
+| D1 | l'encart des demandes promettait « visible des seuls pros du métier » ; la base l'ouvre à tout pro (section 30.1), personne n'est prévenu, les photos sont dans un espace public | le texte dit vrai ; la démo ne montre plus au particulier les demandes des autres. **Et le bandeau qui suit « Publier » disait encore « les pros du métier vont la recevoir »** — trouvé au second tournage : il dit maintenant « les professionnels d’Opus la voient dans leur onglet Demandes » |
 | D2 | « 3 avis vérifiés », « Avis clients vérifiés » : TOUS les avis sont comptés et listés, vérifiés ou non | « 3 avis », « Avis clients » ; le badge de chaque avis reste |
 | D3 | « C'est ce qui distingue Opus d'un groupe Facebook » | retiré |
 | D4 | « Voir tout le fil », « Tout effacer » et les puces de note de la loupe : **17 px de haut** | 44 px |

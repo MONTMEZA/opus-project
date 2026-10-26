@@ -2843,7 +2843,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       reponses: 0,
       budget, urgence,
     }, ...ds]);
-    showBanner('Votre demande est publiée. Les pros du métier vont la recevoir.');
+    /* Rien ne PRÉVIENT les professionnels d'une demande publiée (aucune
+       notification), et tous la voient, pas seulement ceux du métier : le
+       message dit ce que la base fait, comme l'encart (26/10/2026). */
+    showBanner('Votre demande est publiée. Les professionnels d’Opus la voient dans leur onglet Demandes.');
   };
 
   const repondreDemande = async (demande) => {
