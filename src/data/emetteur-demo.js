@@ -70,7 +70,7 @@ export function fabriquerEmetteurDemo(maintenant = new Date()) {
       siege_adresse: null,
       siege_code_postal: null,
       siege_ville: null,
-      telephone: '04 91 00 00 00',
+      telephone: '04 65 71 00 00',
       email: 'contact@exemple-opus.test',
       regime_tva: 'reel',
       regime_tva_declare_le: ilYA20Jours,

@@ -249,7 +249,7 @@ export default function AdminScreen({ onRafraichirResume, onErreur, onEcrire }) 
 
 /* LE RAPPEL DU JOURNAL VOYAGE AVEC LA LISTE, il n'est pas posé en bas de
    l'écran. Mesuré au navigateur le 03/10/2026 : en pied d'écran, il
-   RECOUVRAIT la dernière carte — on lisait « Faure Charpente » à travers
+   RECOUVRAIT la dernière carte — on lisait « Charpentes Mérivel » à travers
    une phrase grise. Un texte d'explication n'a de toute façon rien à faire
    en garniture permanente : on le lit une fois. */
 function PiedDuJournal() {

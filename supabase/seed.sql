@@ -28,11 +28,11 @@ on conflict (id) do nothing;
 
 -- 2. Fiches utilisateurs -----------------------------------------------------
 insert into public.users (id, type, nom, avatar_seed) values
-  ('11111111-1111-4111-8111-111111111111', 'pro', 'Karim Belaïd',  1),
-  ('22222222-2222-4222-8222-222222222222', 'pro', 'Sophie Renaud', 2),
-  ('33333333-3333-4333-8333-333333333333', 'pro', 'Yanis Cortez',  3),
-  ('44444444-4444-4444-8444-444444444444', 'pro', 'Marc Dubreuil', 4),
-  ('55555555-5555-4555-8555-555555555555', 'pro', 'Élodie Faure',  5)
+  ('11111111-1111-4111-8111-111111111111', 'pro', 'Karim Ferlane',  1),
+  ('22222222-2222-4222-8222-222222222222', 'pro', 'Sophie Belvanne', 2),
+  ('33333333-3333-4333-8333-333333333333', 'pro', 'Yanis Coulvane',  3),
+  ('44444444-4444-4444-8444-444444444444', 'pro', 'Marc Valsanne', 4),
+  ('55555555-5555-4555-8555-555555555555', 'pro', 'Élodie Mérivel',  5)
 on conflict (id) do nothing;
 
 -- 3. Profils professionnels --------------------------------------------------
@@ -40,31 +40,31 @@ insert into public.professional_profiles
   (id, nom, entreprise, metier, ville, siret, bio, experience_annees, verifie,
    followers_count, assurance_valide, assurance_expire, kbis_valide, kbis_maj, rge, portfolio)
 values
-  ('11111111-1111-4111-8111-111111111111', 'Karim Belaïd', 'Belaïd Maçonnerie', 'Maçon', 'Marseille (13)',
+  ('11111111-1111-4111-8111-111111111111', 'Karim Ferlane', 'Maçonnerie Ferlane', 'Maçon', 'Marseille (13)',
    '812 345 678 00019',
    'Entreprise familiale spécialisée dans la maçonnerie générale et la rénovation depuis 2015.',
    9, true, 1240, true, '12/2026', true, '03/2026', true,
    array['#3a3a38,#8a8578','#6b4226,#b98255','#1b4b6b,#4d7f9e','#4b4b2f,#9a9a5a','#5a3a3a,#a87a7a','#2f4b3a,#6a9a7a']),
 
-  ('22222222-2222-4222-8222-222222222222', 'Sophie Renaud', 'Renaud Élec', 'Électricien', 'Lyon (69)',
+  ('22222222-2222-4222-8222-222222222222', 'Sophie Belvanne', 'Belvanne Élec', 'Électricien', 'Lyon (69)',
    '798 221 044 00027',
    'Installations électriques neuves et rénovation, mise aux normes NF C 15-100.',
    6, true, 860, true, '09/2027', true, '01/2026', true,
    array['#1b4b6b,#4d7f9e','#3a3a38,#8a8578','#4b4b2f,#9a9a5a']),
 
-  ('33333333-3333-4333-8333-333333333333', 'Yanis Cortez', 'YC Carrelage', 'Carreleur', 'Toulouse (31)',
+  ('33333333-3333-4333-8333-333333333333', 'Yanis Coulvane', 'Coulvane Carrelage', 'Carreleur', 'Toulouse (31)',
    '889 112 004 00013',
    'Pose de carrelage grand format, faïence, douches à l''italienne.',
    4, false, 410, false, null, true, '11/2025', false,
    array['#6b4226,#b98255','#5a3a3a,#a87a7a']),
 
-  ('44444444-4444-4444-8444-444444444444', 'Marc Dubreuil', 'Dubreuil Plomberie', 'Plombier', 'Marseille (13)',
+  ('44444444-4444-4444-8444-444444444444', 'Marc Valsanne', 'Valsanne Plomberie', 'Plombier', 'Marseille (13)',
    '701 998 332 00041',
    'Plomberie générale, chauffage, dépannage rapide sur Marseille et alentours.',
    12, true, 990, true, '06/2027', true, '02/2026', false,
    array['#1b4b6b,#4d7f9e','#2f4b3a,#6a9a7a','#3a3a38,#8a8578']),
 
-  ('55555555-5555-4555-8555-555555555555', 'Élodie Faure', 'Faure Charpente', 'Charpentier', 'Aix-en-Provence (13)',
+  ('55555555-5555-4555-8555-555555555555', 'Élodie Mérivel', 'Charpentes Mérivel', 'Charpentier', 'Aix-en-Provence (13)',
    '845 667 210 00018',
    'Charpente traditionnelle et ossature bois, du neuf à la rénovation.',
    8, true, 320, true, '04/2027', false, null, true,
@@ -91,9 +91,9 @@ insert into public.posts (author_id, type, texte, media, metier, ville, created_
 
 -- Publications sponsorisées
 insert into public.posts (is_ad, annonceur, accroche, cta, media, created_at) values
-  (true, 'BricoPro Matériaux', '-15% sur les sacs de ciment ce mois-ci pour les pros inscrits.',
-   'Voir l''offre', '#2b2b2b,#555555', now() - interval '5 hours'),
-  (true, 'AssurBTP', 'Assurance décennale dès 39€/mois pour les artisans du bâtiment.',
+  (true, 'Estelvin Matériaux', 'Ciment, plaques de plâtre, outillage : retrait au dépôt dès 7 h.',
+   'Découvrir', '#2b2b2b,#555555', now() - interval '5 hours'),
+  (true, 'Roucanne Assurances', 'Votre décennale et votre RC pro, avec l’attestation en ligne.',
    'En savoir plus', '#111111,#3a3a38', now() - interval '20 hours');
 
 -- 5. Partenariats ------------------------------------------------------------

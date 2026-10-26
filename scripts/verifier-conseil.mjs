@@ -207,8 +207,12 @@ console.log('\nLa publication SANS VISUEL — le format « Texte », enfin regar
 verifier('la carte sait qu\'il n\'y a pas de visuel',
   /const sansVisuel = !estVideo && \(!porteUnVisuel\(post\.format\) \|\| photos\.length === 0\);/.test(carte));
 
+/* Depuis le 26/10/2026, tout le média vit sous `{!sansVisuel && (` : la
+   barre d'actions est sortie du geste du double appui (défaut D9), et une
+   publication sans visuel n'a plus ni cadre ni geste. La PROPRIÉTÉ n'a pas
+   changé ; seule sa forme. */
 verifier('…et ne monte alors AUCUN cadre d\'image',
-  /\) : sansVisuel \? null : \(/.test(carte),
+  /\{!sansVisuel && \(\s*<DoubleAppui/.test(carte),
   'Sinon la carte affiche un carré de dégradé vide, avec la barre d\'actions '
   + 'posée dessus. Personne ne l\'avait jamais vu : zéro publication de ce '
   + 'format sur seize.');

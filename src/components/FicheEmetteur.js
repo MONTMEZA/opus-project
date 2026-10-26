@@ -713,7 +713,7 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
         <ChampLocal
           ref={(r) => { champs.current.telephone = r; }}
           defaut={init.textes.telephone}
-          placeholder="04 90 00 00 00"
+          placeholder="04 65 71 00 00"
           keyboardType="phone-pad"
           maxLength={L.telephone}
           surSeuil={({ vide }) => setTelVide(vide)}

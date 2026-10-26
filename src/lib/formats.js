@@ -47,6 +47,32 @@ export function libelleDates(debut, fin) {
   return `du ${d.getDate()} ${MOIS[d.getMonth()]} au ${f.getDate()} ${MOIS[f.getMonth()]}`;
 }
 
+/**
+ * « 4,3 », « 2,4 » : un nombre à une décimale, écrit à la française.
+ *
+ * `toFixed(1)` écrit TOUJOURS un point — c'est la forme anglaise. Relevé au
+ * tournage du 25/10/2026 : les notes (« 4.3 ») et la distance du SOS
+ * (« 2.4 km ») s'affichaient ainsi à six endroits, pendant que d'autres
+ * écrans écrivaient déjà « 2,4 km ». Une seule fonction, que `node` fait
+ * tourner (ce fichier n'importe rien).
+ */
+export function decimal1(n) {
+  if (n === null || n === undefined || n === '') return '—';
+  const x = Number(n);
+  if (!Number.isFinite(x)) return '—';
+  return virgule(x.toFixed(1));
+}
+
+/**
+ * Un nombre tel quel, avec une virgule : « 2,5 », mais « 2 » et pas
+ * « 2,0 ». Pour ce qui n'a pas toujours une décimale — la durée d'un
+ * dépannage (« 1–2,5 h »), une distance déjà arrondie par la base.
+ */
+export function virgule(n) {
+  if (n === null || n === undefined || n === '') return '—';
+  return String(n).replace('.', ',');
+}
+
 /** « 180 € », « 95 € / jour ». Les centimes à zéro ne s'écrivent pas. */
 export function libellePrix(prix, unite = 'total') {
   if (prix === null || prix === undefined || prix === '') return null;

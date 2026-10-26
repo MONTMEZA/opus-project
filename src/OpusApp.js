@@ -4235,7 +4235,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                            cours » et pas dans « À traiter » (section 37). */
                         demandeCible={demandeCible}
                         onCibleConsommee={() => setDemandeCible(null)}
-                        chargement={demandesRecuesEtat === 'charge'}
+                        /* « Jamais lues » n'est pas « vides » : la page voisine,
+                           montée au repos, affichait « Aucune demande » à
+                           mi-glissement, sous une pastille qui annonçait des
+                           nouveautés (relevé le 26/10/2026). */
+                        chargement={demandesRecuesEtat === 'charge' || demandesRecuesEtat === 'jamais'}
                         /* L'échec était calculé et jamais transmis : l'écran
                            annonçait « aucune demande » quand il n'avait rien
                            pu lire. Corrigé le 04/10/2026. */
@@ -4610,9 +4614,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             publications={publicationsChantier}
             chargement={!chantierCharge}
             pro={pros[chantierOuvert.proId] || null}
-            estLeMien={String(chantierOuvert.proId) === String(myProId)}
+            /* `userType` d'abord : chez un particulier, `myProId` désigne le
+               PREMIER artisan chargé — il voyait « Terminer » et « Demander
+               le récit » sur le chantier de cet artisan (relevé le 26/10). La
+               base refusait l'écriture ; l'écran ne doit pas la proposer. */
+            estLeMien={userType === 'pro' && String(chantierOuvert.proId) === String(myProId)}
             onRetour={() => setScreen(
-              String(chantierOuvert.proId) === String(myProId) ? 'profil' : 'profilPro')}
+              userType === 'pro' && String(chantierOuvert.proId) === String(myProId)
+                ? 'profil' : 'profilPro')}
             onBasculerStatut={basculerStatutChantier}
             nomAgent={nomDeMonAgent}
             onEcrireRecit={ecrireRecitChantier}
@@ -4675,7 +4684,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       </View>
 
       <BottomNav
-        screen={screen}
+        /* Sa propre fiche allume « Profil » ; celle d'un autre, rien —
+           comme toute page de détail. `userType` d'abord : chez un
+           particulier, `myProId` désigne le PREMIER artisan chargé. */
+        screen={screen === 'profilPro' && userType === 'pro'
+          && String(viewedProId) === String(myProId) ? 'profil' : screen}
         dark={videoMode}
         canPublish={canPublish}
         avatarUrl={monAvatar}

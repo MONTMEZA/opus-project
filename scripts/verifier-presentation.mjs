@@ -35,7 +35,7 @@ verifier('complet : assez',
 
 console.log('\nRédaction complète');
 const propositions = redigerLocalement({
-  profil: { entreprise: 'Belaïd Maçonnerie', metiers: ['Maçon', 'Carreleur'], ville: 'Marseille (13)' },
+  profil: { entreprise: 'Maçonnerie Ferlane', metiers: ['Maçon', 'Carreleur'], ville: 'Marseille (13)' },
   reponses: {
     anciennete: 'longue',
     equipe: 'petite',
@@ -70,7 +70,7 @@ propositions.forEach((p) => {
 
 console.log('\nRédaction minimale (le strict nécessaire)');
 const mini = redigerLocalement({
-  profil: { entreprise: 'Sanchez Plomberie', metiers: ['Plombier'], ville: 'Toulouse (31)' },
+  profil: { entreprise: 'Lissagne Plomberie', metiers: ['Plombier'], ville: 'Toulouse (31)' },
   reponses: { anciennete: 'debut', equipe: 'seul', chantiers: 'dépannage et petites rénovations' },
 });
 verifier('trois propositions aussi', mini.length === 3);

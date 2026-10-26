@@ -12,7 +12,7 @@ import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
   initialDemandes, initialAnnonces, initialDemandesRecues, initialChantiers,
-  initialClients,
+  initialClients, initialReponsesAnnonces,
 } from '../data/demo';
 import { correspond } from './filtre-fil';
 import { decouperPage, finDemo } from './page-fil';
@@ -3735,7 +3735,29 @@ export const repondreAnnonce = !hasSupabase ? noop : async (annonceId, message) 
  * vide — pas une erreur, parce qu'il n'y a rien de secret dans le fait
  * qu'une annonce existe.
  */
-async function reponsesAnnonceDemo() { return []; }
+/* En démonstration, les réponses viennent du jeu d'essai, avec la même
+   forme que celle que rend la vraie base : la feuille ne sait pas d'où elles
+   viennent. Une annonce sans réponse rend une liste vide, comme en base. */
+async function reponsesAnnonceDemo(annonceId) {
+  return (initialReponsesAnnonces[annonceId] || []).map((r) => {
+    const p = demoPros[r.proId];
+    return {
+      id: r.id,
+      message: r.message,
+      time: r.time,
+      proId: r.proId,
+      auteur: p ? {
+        id: p.id,
+        entreprise: p.entreprise,
+        metier: p.metier,
+        metiers: p.metiers || [p.metier],
+        ville: p.ville,
+        verifie: !!p.verifie,
+        avatarUrl: null,
+      } : null,
+    };
+  });
+}
 
 async function reponsesAnnonceSupabase(annonceId) {
   if (!annonceId) return [];

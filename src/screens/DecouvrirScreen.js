@@ -16,6 +16,7 @@ import { exerce } from '../lib/metiers';
 import { correspond, texteDePro } from '../lib/recherche';
 import { useRechercheDifferee } from '../lib/frappe';
 import { CLAVIER } from '../lib/clavier';
+import { decimal1 } from '../lib/formats';
 
 /**
  * L'assistant IA, dans son propre composant — et ce n'est PAS un rangement.
@@ -194,7 +195,7 @@ export default function DecouvrirScreen({
             <ArtisanRow
               key={String(a.id)}
               pro={a}
-              note={{ value: avg.count ? avg.global.toFixed(1) : '—', count: avg.count }}
+              note={{ value: avg.count ? decimal1(avg.global) : '—', count: avg.count }}
               right={(
                 <View style={{ gap: 5 }}>
                   <BtnMini label="Profil" onPress={() => onView(a.id)} />

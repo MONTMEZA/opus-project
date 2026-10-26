@@ -228,7 +228,19 @@ const PostCard = React.memo(function PostCard({
           aimé — sinon le geste a l'air de n'avoir rien fait et on
           recommence. Et il n'enlève JAMAIS : on double-appuie parfois par
           accident, et un accident ne doit pas défaire quelque chose. Pour
-          retirer, le cœur de la barre du bas est là, et lui bascule. */}
+          retirer, le cœur de la barre du bas est là, et lui bascule.
+
+          LA BARRE D'ACTIONS N'EST PAS DANS LE GESTE — corrigé le 26/10/2026.
+          Elle y était, parce qu'elle est posée SUR la photo : un appui sur
+          « Commentaires » d'une VIDÉO ouvrait le panneau, puis l'appui simple
+          du geste parent ouvrait le lecteur 0,2 s plus tard ; deux appuis sur
+          « Partager » aimaient la publication. Le parent reçoit aussi les
+          appuis de ses enfants (UIKit comme le navigateur). La barre est donc
+          une SŒUR posée par-dessus — exactement le montage de `VideoSlide`,
+          qui n'avait pas ce défaut. Une publication sans visuel n'a pas de
+          geste : il n'y a rien sur quoi double-appuyer. */}
+      <View style={s.zoneMedia}>
+      {!sansVisuel && (
       <DoubleAppui
         onAimer={() => { if (!post.liked) onLike(post.id); }}
         onAppuiSimple={estVideo && onOuvrirVideo ? () => onOuvrirVideo(post) : null}
@@ -289,11 +301,13 @@ const PostCard = React.memo(function PostCard({
             </View>
           </Media>
         </View>
-      ) : sansVisuel ? null : (
+      ) : (
         /* Une photo, ou plusieurs qu'on fait défiler au doigt. Avec une seule
            image, le carrousel se retire complètement : ni points, ni
            compteur. */
         <Carrousel medias={photos} basReserve={HAUTEUR_BARRE} pleineResolution />
+      )}
+      </DoubleAppui>
       )}
 
       {/* LA BARRE D'ACTIONS EST POSÉE SUR LA PHOTO — demandé par le
@@ -381,7 +395,7 @@ const PostCard = React.memo(function PostCard({
           </View>
         </View>
       </View>
-      </DoubleAppui>
+      </View>
 
       {/* menu Contacter */}
       {contactOpen && (
@@ -513,6 +527,9 @@ const s = StyleSheet.create({
   /* La barre est POSÉE SUR la photo, calée en bas. `box-none` sur le
      conteneur : le voile ne doit pas intercepter le double-appui, seuls
      les boutons reçoivent la touche. */
+  /* Le cadre commun du média et de la barre posée dessus : la barre s'y
+     place en absolu, SŒUR du geste du média et non plus son enfant. */
+  zoneMedia: { position: 'relative' },
   barreSurPhoto: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   /* SANS PHOTO, la barre n'a rien sur quoi se poser : elle reprend sa place
      dans le flux, sous le texte, avec un filet pour la détacher. Un trait

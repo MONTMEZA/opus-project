@@ -38,6 +38,7 @@ import {
 import { messageClair } from '../lib/erreurs';
 import ChampVille from '../components/ChampVille';
 import { CLAVIER } from '../lib/clavier';
+import { decimal1, virgule } from '../lib/formats';
 import { avgReviews } from '../data/demo';
 
 const ICONES = { wrench: Wrench, zap: Zap, key: Key, thermometer: Thermometer };
@@ -218,7 +219,7 @@ export default function SosScreen({
                   <Text style={s.ligneTitre}>{pb.label}</Text>
                   {!!pb.detail && <Text style={s.ligneDetail}>{pb.detail}</Text>}
                 </View>
-                <Text style={s.ligneDuree}>{pb.h[0]}–{pb.h[1]} h</Text>
+                <Text style={s.ligneDuree}>{virgule(pb.h[0])}–{virgule(pb.h[1])} h</Text>
               </Pressable>
             ))}
           </View>
@@ -321,12 +322,12 @@ export default function SosScreen({
                           <>
                             <Star size={11} color={C.accent} />
                             <Text style={s.meta}>
-                              {note.count ? note.global.toFixed(1) : '—'} ({note.count})
+                              {note.count ? decimal1(note.global) : '—'} ({note.count})
                             </Text>
                           </>
                         )}
                         <Navigation size={11} color={C.muted} />
-                        <Text style={s.meta}>{a.distanceKm} km</Text>
+                        <Text style={s.meta}>{virgule(a.distanceKm)} km</Text>
                         <Clock size={11} color={C.muted} />
                         <Text style={s.meta}>~{a.delaiMin} min</Text>
                       </View>

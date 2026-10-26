@@ -37,6 +37,7 @@ import {
 import { avgReviews } from '../data/demo';
 import { aiSummarizeReviews } from '../lib/ai';
 import { CLAVIER } from '../lib/clavier';
+import { decimal1 } from '../lib/formats';
 
 /* --- .crit-row : un critère + sa barre de progression --- */
 function CritereBar({ label, value }) {
@@ -46,7 +47,7 @@ function CritereBar({ label, value }) {
       <View style={s.critBar}>
         <View style={[s.critFill, { width: `${(value / 5) * 100}%` }]} />
       </View>
-      <Text style={s.critVal}>{value ? value.toFixed(1) : '—'}</Text>
+      <Text style={s.critVal}>{value ? decimal1(value) : '—'}</Text>
     </View>
   );
 }
@@ -175,12 +176,12 @@ export default function ProfilProScreen({
             <Text style={s.metier}>{nomMetier(metierPrincipal(pro))} · {pro.ville}</Text>
           </>
         )}
-        <Text style={s.sub}>{pro.exp} ans d'expérience · {avg.count} avis vérifiés</Text>
+        <Text style={s.sub}>{pro.exp} ans d'expérience · {avg.count} avis</Text>
 
         <View style={s.stats}>
           <Stat value={pro.portfolio.length} label="Réalisations" />
           <Stat value={pro.followers + (following ? 1 : 0)} label="Abonnés" />
-          <Stat value={avg.count ? avg.global.toFixed(1) : '—'} label="Note" />
+          <Stat value={avg.count ? decimal1(avg.global) : '—'} label="Note" />
         </View>
 
         <View style={s.headBtns}>
@@ -311,7 +312,7 @@ export default function ProfilProScreen({
       <SectionLabel
         right={<BtnMini label={showForm ? 'Fermer' : 'Laisser un avis'} onPress={() => setShowForm((v) => !v)} />}
       >
-        Avis clients vérifiés
+        Avis clients
       </SectionLabel>
 
       {avg.count > 0 && (

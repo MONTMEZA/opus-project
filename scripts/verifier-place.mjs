@@ -353,6 +353,41 @@ console.log('\nUne ligne de recherche au lieu de quatre rangées');
     'un message précis et faux est pire qu’un message général et juste');
 }
 
+/* LA DÉMONSTRATION NE SE DÉMENT PAS — 26/10/2026. La cloche disait
+   « Belvanne Élec a répondu à… » et la feuille ouverte répondait « Personne
+   n'a encore répondu » ; la nacelle affichait « 2 réponses » sur une liste
+   vide. On FAIT TOURNER les données au lieu de les relire. */
+console.log('\nLa démonstration montre les réponses qu’elle annonce');
+{
+  const demo = await import('../src/data/demo.js');
+  const annonces = demo.initialAnnonces;
+  const reponses = demo.initialReponsesAnnonces || {};
+  const monPro = Object.keys(demo.proProfiles)[0];
+  const miennes = annonces.filter((a) => String(a.auteurId) === String(monPro));
+  const ecarts = miennes.filter((a) => (reponses[a.id] || []).length !== (a.reponses || 0));
+  verifier('chaque annonce du pro de démonstration a autant de réponses que son compteur',
+    miennes.length > 0 && ecarts.length === 0,
+    ecarts.map((a) => `${a.id} : compteur ${a.reponses}, ${(reponses[a.id] || []).length} réponse(s)`).join(' ; '));
+  const orphelines = Object.keys(reponses).filter((id) => !miennes.some((a) => a.id === id));
+  verifier('…et aucune réponse n’est rangée sous l’annonce d’un autre',
+    orphelines.length === 0,
+    'seul l’auteur lit le détail des réponses (section 29.2) : ' + orphelines.join(', '));
+  const inconnus = Object.values(reponses).flat().filter((r) => !demo.proProfiles[r.proId]);
+  verifier('…écrites par des artisans qui existent dans la démonstration',
+    inconnus.length === 0, inconnus.map((r) => r.id).join(', '));
+  const notifs = demo.initialNotifications.filter((n) => n.annonceId);
+  const menteuses = notifs.filter((n) => {
+    const a = annonces.find((x) => x.id === n.annonceId);
+    const auteurs = (reponses[n.annonceId] || []).map((r) => String(r.proId));
+    return !a || !n.texte.includes(a.titre) || !auteurs.includes(String(n.acteurId));
+  });
+  verifier('une notification d’annonce nomme la bonne annonce et un artisan qui y a VRAIMENT répondu',
+    notifs.length > 0 && menteuses.length === 0,
+    menteuses.map((n) => `notification ${n.id}`).join(', '));
+  verifier('la démonstration lit ces réponses (et non une liste vide écrite en dur)',
+    /initialReponsesAnnonces\[annonceId\]/.test(api));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

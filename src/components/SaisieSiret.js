@@ -402,7 +402,7 @@ export function CarteEntreprise({ identite, etiquetteOui, onOui, onNon }) {
 }
 
 /**
- * LA LIGNE REPLIÉE — « ✓ Bâti Démo · 000 004 002 00010 — Changer ».
+ * LA LIGNE REPLIÉE — « ✓ Bâti Talvèse · 000 004 002 00010 — Changer ».
  *
  * Après « Oui », la carte se replie : le formulaire qui suit a besoin de la
  * place, et l'artisan doit pouvoir se tromper sans tout recommencer.

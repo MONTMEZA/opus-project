@@ -824,6 +824,23 @@ console.log('\n8. Aucun lecteur vidéo ne naît pendant un élan');
     && /affiche=\{estVideo\(item\) \? afficheVideo\(item\) : null\}/.test(vis));
 }
 
+/* RELEVÉ AU TOURNAGE DU 25/10/2026, confirmé deux fois : la barre d'actions
+   vivait DANS le geste du double appui, parce qu'elle est posée sur la photo.
+   « Commentaires » d'une vidéo ouvrait le panneau puis le lecteur 0,2 s plus
+   tard ; deux appuis sur « Partager » aimaient. Un parent reçoit aussi les
+   appuis de ses enfants : aucun bouton ne vit dans le geste. */
+console.log('\nAucun bouton ne vit dans le geste du double appui');
+{
+  const carte = sansCommentaires(lire('src/components/PostCard.js'));
+  const i = carte.indexOf('<DoubleAppui');
+  const j = carte.indexOf('</DoubleAppui>');
+  const dedans = i >= 0 && j > i ? carte.slice(i, j) : '';
+  verifier('le geste n’enveloppe que le média : ni Pressable ni bouton entre ses balises',
+    dedans.length > 0 && !/<Pressable|<BtnMini|onPress=/.test(dedans));
+  verifier('…et la barre d’actions est posée APRÈS lui, en sœur',
+    j > 0 && carte.indexOf('barreSurPhoto', j) > j);
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

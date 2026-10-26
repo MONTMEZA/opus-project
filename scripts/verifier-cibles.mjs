@@ -210,6 +210,22 @@ console.log('\nCe qu’on vise avec un gant');
   verifier('toute marge de visée passe par `viser()`',
     brut.length === 0,
     brut.join('\n      '));
+
+  /* TROUVÉ AU TOURNAGE DU 25/10/2026 : la loupe du fil écrivait
+     `...viser(TOUCHE)` DANS UN STYLE. Or `viser()` rend un NOMBRE (la marge
+     à ajouter), et étaler un nombre dans un objet ne pose rien : « Voir tout
+     le fil » et « Tout effacer » mesuraient 358 × 17, les puces de note 19 de
+     haut — depuis la création de la feuille. Aucune erreur, aucun contrôle
+     rouge. Une boîte se grandit par `minHeight: TOUCHE` ; `viser()` ne va
+     que dans `hitSlop`. */
+  const etales = [];
+  fichiers.forEach((f) => {
+    const c = sansCommentaires(lire(f));
+    if (/\.\.\.\s*viser\(/.test(c)) etales.push(f);
+  });
+  verifier('`viser()` n’est jamais étalé dans un style (il rend un nombre, pas un style)',
+    etales.length === 0,
+    etales.join('\n      '));
 }
 
 console.log('\nLe mot de passe ne se tape plus à l’aveugle');

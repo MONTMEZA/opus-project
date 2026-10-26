@@ -2815,11 +2815,11 @@ await section('La fiche d’un client SANS devis : supprimer dit quand même la 
   await toucher(page.getByRole('tab', { name: 'Profil' }));
   await attendre(900);
   await toucher(parLibelle('Mes clients'));
-  await toucher(parLibelle('Ouvrir la fiche de SCI du Moulin'));
+  await toucher(parLibelle('Ouvrir la fiche de SCI des Verlusses'));
   await page.getByText('Ses devis', { exact: true }).first().waitFor({ timeout: 6000 });
   await attendre(800);
   const sesDevis = await page.locator('[aria-label^="Ouvrir le devis "]').count();
-  exiger(sesDevis === 0, `la SCI du Moulin n’a aucun devis en démonstration (${sesDevis})`);
+  exiger(sesDevis === 0, `la SCI des Verlusses n’a aucun devis en démonstration (${sesDevis})`);
   await toucher(page.getByRole('button', { name: 'Supprimer cette fiche', exact: true }));
   const t = await texte();
   verifier('sans devis : aucune phrase sur des devis, mais la base de postes, « cherchez son nom », et le devis d’un autre client',

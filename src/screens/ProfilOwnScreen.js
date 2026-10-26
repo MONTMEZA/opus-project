@@ -22,6 +22,7 @@ import BandeChantiers from '../components/BandeChantiers';
 import FicheContactPro from '../components/FicheContactPro';
 import TarifsPublics from '../components/TarifsPublics';
 import { QUI_VOIT_LES_TARIFS } from '../lib/tarifs';
+import { decimal1 } from '../lib/formats';
 import { BadgeCheck, Lock, ChevronRight, ShieldCheck } from '../components/icons';
 import RappelVerification from '../components/RappelVerification';
 import CarteDemandePro from '../components/CarteDemandePro';
@@ -244,7 +245,7 @@ export default function ProfilOwnScreen({
         <View style={s.stats}>
           <Stat value={me.portfolio.length} label="Réalisations" />
           <Stat value={me.followers} label="Abonnés" />
-          <Stat value={avg.count ? avg.global.toFixed(1) : '—'} label="Note" />
+          <Stat value={avg.count ? decimal1(avg.global) : '—'} label="Note" />
         </View>
         <BtnOutline label="Modifier mon profil" onPress={onEdit} />
       </View>

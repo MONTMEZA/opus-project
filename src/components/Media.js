@@ -23,6 +23,7 @@ import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { C, F, T, S, R, rond } from '../theme';
 import { Gradient } from './ui';
+import { photoDemo } from '../data/photos-demo';
 import { Play } from './icons';
 /* `estFichier` et `estVideo` vivent dans un fichier qui n'importe que
    `cloudinary-adresses.js`, pour qu'un contrôle les FASSE TOURNER. Ils
@@ -79,6 +80,29 @@ export default function Media({
   media, style, lecture = false, muet = true, children, onRatio,
   pleineResolution = false, repos, affiche = null,
 }) {
+  /* UNE PHOTO DE LA DÉMONSTRATION (« demo:… », `photos-demo.js`) : une
+     image rangée dans l'application, montrée comme une vraie — et sa forme
+     remonte, pour que le cadre du carrousel la suive. */
+  const photo = photoDemo(media);
+  if (photo) {
+    return (
+      <View style={[{ backgroundColor: C.line }, style]}>
+        <Image
+          source={photo}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          allowDownscaling={Platform.OS !== 'ios' || !pleineResolution}
+          onLoad={onRatio ? (e) => {
+            const src = (e && e.source) || {};
+            if (src.width > 0 && src.height > 0) onRatio(src.width / src.height);
+          } : undefined}
+          recyclingKey={media}
+        />
+        {children}
+      </View>
+    );
+  }
+
   if (!estFichier(media)) {
     return <Gradient media={media} style={style}>{children}</Gradient>;
   }

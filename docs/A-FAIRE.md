@@ -2535,6 +2535,60 @@ Avant toute publicité payante : vérifier le libellé exact de votre marque
 (« Opus » ou « Opus-Project »), et décider qui édite Opus (le mode d'emploi
 des vidéos le détaille).
 
+### Les défauts relevés au tournage — ce qui reste (26/10/2026)
+
+Neuf défauts d'écran corrigés (CLAUDE.md, « Les défauts relevés au
+tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
+
+- [ ] **Les anciennes données de démonstration sont dans la vraie base**
+  (relevé en lecture seule le 26/10) : 5 fiches aux noms d'entreprises
+  réelles — « Belaïd Maçonnerie », « Dubreuil Plomberie », « Faure
+  Charpente », « Renaud Élec », « YC Carrelage » —, dont **3 portent le
+  badge vérifié sans aucune pièce**, leurs 5 publications, et les 2 fausses
+  publicités (« BricoPro Matériaux », « AssurBTP ») dans le vrai Fil. C'est
+  une écriture en production : **à vous de décider** — les renommer (avec
+  les nouveaux noms) et retirer les badges, ou les supprimer depuis
+  Supabase.
+- [ ] **D11 — le maçon de démonstration reçoit une urgence de plomberie.**
+  Aucun maçon ne peut en recevoir. Trois voies, chacune a un coût : (a) lui
+  ajouter le métier de plombier (la démonstration de l'état « orpheline »
+  des urgences disparaît) ; (b) retirer cette urgence (on ne voit plus de
+  SOS sans fichier `.env`, et `mesure-devis` est à adapter) ; (c) en faire
+  une ancienne urgence d'électricité (cohérent avec l'histoire de la démo,
+  mais une urgence « tout de suite » restée trois semaines sans réponse est
+  étrange). À trancher.
+- [ ] **La base laisse envoyer un SOS à n'importe quel artisan** (lot S) :
+  « creation sos » ne regarde que le client et le blocage. Mesuré sur
+  PostgreSQL : un SOS « plomberie » vers un maçon sans disponibilité ni
+  tarifs passe, un `metier_key` inventé passe, une estimation inventée
+  passe, et l'artisan reçoit « a besoin de vous EN URGENCE ». À ajouter :
+  une contrainte sur `metier_key`, et dans le `with check` les conditions
+  d'`artisans_urgence` (sans la distance), avec une phrase dans
+  `erreurs.js`.
+- [ ] **« Client vérifié » n'est expliqué nulle part** dans les textes
+  légaux, alors que le code de la consommation (L. 111-7-2) demande de dire
+  comment les avis sont contrôlés. À faire relire par un juriste avant
+  l'ouverture. Et un avis écrit AVANT l'acceptation de la demande ne devient
+  jamais « client vérifié » (le déclencheur ne joue qu'à l'écriture de
+  l'avis) : une décision qui touche la base.
+- [ ] **Une demande publiée ne prévient personne** — aucun déclencheur sur
+  `demandes`. L'encart le dit désormais honnêtement ; prévenir les pros du
+  métier serait une décision produit.
+- [ ] Les sous-pages de son profil (« Modifier mon profil », « Mes
+  publications », « Mes devis »…) n'allument aucun onglet. Un choix, pas un
+  défaut : à décider si « Profil » doit rester allumé.
+- [ ] Le numéro de téléphone d'une confirmation se coupe sur deux lignes
+  (« 06 39 98 » / « 03 01. ») : des espaces insécables, facultatif.
+- [ ] Les noms inventés n'ont pas été cherchés dans la base des marques de
+  l'INPI ni dans celle de l'EUIPO (une marque de l'Union vaut aussi en
+  France ; pas d'accès sans compte) : avant toute publicité payante. Les 21
+  vidéos et 36 captures du 25/10 portent les ANCIENS noms : ne pas les
+  publier.
+- [ ] **`supabase/seed.sql` ne peut plus être rejoué** (mesuré en
+  transaction annulée) : ses comptes naissent particuliers, et
+  `exige_un_compte_pro()` refuse leur fiche. Il reste un document, pas un
+  outil — à retirer ou à réécrire, jamais à rejouer sur la vraie base.
+
 ### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
 
 Le document : `docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md` (le PDF fait foi).

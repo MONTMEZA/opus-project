@@ -268,7 +268,7 @@ export default function ProfilEditScreen({
         {estPro ? (
           <>
             <Text style={s.label}>Nom de l'entreprise</Text>
-            <Field value={entreprise} onChangeText={setEntreprise} placeholder="Belaïd Maçonnerie" />
+            <Field value={entreprise} onChangeText={setEntreprise} placeholder="Maçonnerie Ferlane" />
 
             <Text style={s.label}>Vos métiers</Text>
             <ChoixMetiers
@@ -425,7 +425,7 @@ export default function ProfilEditScreen({
             <Field
               value={telephone}
               onChangeText={setTelephone}
-              placeholder="04 78 00 00 00"
+              placeholder="04 65 71 00 00"
               keyboardType="phone-pad"
             />
             <Text style={s.aide}>
@@ -535,7 +535,7 @@ export default function ProfilEditScreen({
             <Field
               value={telephone}
               onChangeText={setTelephone}
-              placeholder="06 12 34 56 78"
+              placeholder="06 39 98 00 00"
               keyboardType="phone-pad"
             />
             <Text style={s.aide}>

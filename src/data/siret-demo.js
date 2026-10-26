@@ -49,7 +49,7 @@
  * Ce fichier n'importe RIEN : `verifier-etats` le fait tourner.
  */
 
-/* L'ENTREPRISE DE L'ARTISAN DE DÉMONSTRATION (« Belaïd Maçonnerie », la
+/* L'ENTREPRISE DE L'ARTISAN DE DÉMONSTRATION (« Maçonnerie Ferlane », la
    fiche 1). Elle est déjà rattachée à son compte : c'est elle que montre
    « Modifier mon profil → Mon entreprise ». L'adresse est INVENTÉE — dans
    la vraie base, c'est souvent le domicile d'un entrepreneur individuel, et
@@ -57,9 +57,9 @@
 export const IDENTITE_DEMO_DU_PRO = Object.freeze({
   siret: '00000488700014',
   siren: '000004887',
-  denomination: 'BELAID MACONNERIE',
+  denomination: 'MACONNERIE FERLANE',
   sigle: null,
-  nom_commercial: 'Belaïd Maçonnerie',
+  nom_commercial: 'Maçonnerie Ferlane',
   est_ei: false,
   forme_juridique: '5499',
   date_creation: '2015-02-02',
@@ -98,9 +98,9 @@ const NOUVEL_ETABLISSEMENT_DU_PRO = Object.freeze({
 const SOCIETE = Object.freeze({
   siret: '00000400200010',
   siren: '000004002',
-  denomination: 'BATI DEMO PROVENCE',
+  denomination: 'BATI TALVESE PROVENCE',
   sigle: null,
-  nom_commercial: 'Bâti Démo',
+  nom_commercial: 'Bâti Talvèse',
   est_ei: false,
   forme_juridique: '5499',
   date_creation: '2022-03-14',

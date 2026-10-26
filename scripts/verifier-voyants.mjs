@@ -205,6 +205,21 @@ console.log('\nLa barre du bas dit AUSSI où l’on se trouve');
     + 'la barre de deux pixels à chaque changement de page');
 }
 
+/* RELEVÉ AU TOURNAGE DU 25/10/2026, confirmé deux fois : `profilPro` est la
+   fiche de N'IMPORTE QUEL artisan, et la barre allumait « Profil » dessus —
+   « vous êtes ici » sur la page d'un autre. Et chez un particulier,
+   `myProId` désigne le PREMIER artisan chargé : il faut regarder le type de
+   compte d'abord. */
+console.log('\n« Profil » ne s’allume que sur SA fiche');
+{
+  verifier('la barre allume un onglet par simple égalité, sans exception pour `profilPro`',
+    /const on = screen === key;/.test(nav) && !/profilPro/.test(nav));
+  verifier('OpusApp passe « profil » seulement quand un PRO regarde SA propre fiche',
+    /screen=\{screen === 'profilPro' && userType === 'pro'\s*&& String\(viewedProId\) === String\(myProId\) \? 'profil' : screen\}/.test(app));
+  verifier('un chantier n’est « le mien » que pour un compte pro',
+    /estLeMien=\{userType === 'pro' && String\(chantierOuvert\.proId\) === String\(myProId\)\}/.test(app));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

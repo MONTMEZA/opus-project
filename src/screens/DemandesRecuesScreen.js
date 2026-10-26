@@ -559,7 +559,8 @@ function Demande({
           <Text style={s.aide}>
             {genre.aide
               || 'Accepter permet à ce client de laisser un avis « client vérifié » '
-                + 'sur votre fiche. C’est ce qui distingue Opus d’un groupe Facebook.'}
+                + 'sur votre fiche. Sans demande acceptée, son avis s’affichera sans '
+                + 'cette mention.'}
           </Text>
         )}
       </View>

@@ -25,9 +25,23 @@ import { useMouvementReduit } from '../lib/retour';
    `Montant`, plus bas, est la seule porte qui l'appelle dans les écrans du
    devis. */
 import { centimesLisibles } from '../lib/centimes';
+import { photoDemo } from '../data/photos-demo';
 
-/* --- dégradé (remplace les linear-gradient CSS) --- */
+/* --- dégradé (remplace les linear-gradient CSS) ---
+   Une clé « demo:… » est une PHOTO de la démonstration (`photos-demo.js`) :
+   les écrans qui dessinaient un dégradé à la place d'une image — une
+   publicité, une demande, une bannière — la montrent sans rien savoir de
+   plus. Une vraie couleur reste un dégradé. */
 export function Gradient({ media, angle = 160, style, children }) {
+  const photo = photoDemo(media);
+  if (photo) {
+    return (
+      <View style={[{ backgroundColor: C.line, overflow: 'hidden' }, style]}>
+        <Image source={photo} style={StyleSheet.absoluteFill} contentFit="cover" />
+        {children}
+      </View>
+    );
+  }
   const dir = angle === 120 ? GRAD_120 : GRAD_160;
   return (
     <LinearGradient
@@ -249,7 +263,10 @@ export function AvatarSuivre({
    sont), ou à défaut le dégradé bleu acier du prototype. */
 export function ProfileBanner({ uri, height = 140, children }) {
   const estPhoto = typeof uri === 'string' && /^(https?:|file:|data:|content:|blob:)/.test(uri);
-  const estDegrade = typeof uri === 'string' && !estPhoto && uri.includes(',');
+  /* Une photo de la démonstration (« demo:… ») passe par `Gradient`, qui
+     sait la montrer. */
+  const estDegrade = typeof uri === 'string' && !estPhoto
+    && (uri.includes(',') || !!photoDemo(uri));
 
   if (estPhoto) {
     return (
@@ -955,6 +972,10 @@ const s = StyleSheet.create({
     backgroundColor: C.ink, paddingVertical: S.sm, paddingHorizontal: S.lg,
     borderRadius: R.gelule,
     flexDirection: 'row', alignItems: 'center', gap: 6,
+    /* Une confirmation de deux lignes prenait tout l'écran, d'un bord à
+       l'autre, ombre rognée (relevé au tournage du 25/10) : la même borne
+       que l'erreur, pour qu'elle garde de l'air des deux côtés. */
+    maxWidth: '88%',
     ...SH.detache,
   },
   /* Rouge, et non plus noir : on doit voir AVANT de lire que c'est un

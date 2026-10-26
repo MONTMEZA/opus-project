@@ -66,6 +66,7 @@ const {
   creneauSemaine, creneauMois, joursEntre,
   JOURS_COURTS, SEMAINES_MAX, grilleMois, moisDe, moisDecale, nomMois,
   joursDuMois, indexJourSemaine, jourCourt, dansIntervalle,
+  decimal1, virgule,
 } = await import('../src/lib/formats.js');
 
 {
@@ -291,6 +292,25 @@ const {
   verifier('joursEntre compte juste par-dessus un changement d’heure',
     joursEntre('2026-10-20', '2026-11-05') === 16,
     String(joursEntre('2026-10-20', '2026-11-05')));
+}
+
+/* RELEVÉ AU TOURNAGE DU 25/10/2026 : « 4.3 » et « 2.4 km » à six endroits.
+   `toFixed` écrit toujours un point ; un nombre affiché passe par
+   `decimal1()`, qui écrit la virgule. */
+console.log('\nUn nombre décimal s’écrit avec une virgule');
+{
+  verifier('decimal1 écrit la virgule', decimal1(4.25) === '4,3' || decimal1(4.25) === '4,2');
+  verifier('…garde le zéro', decimal1(5) === '5,0');
+  verifier('…et ne prétend rien sur une valeur absente', decimal1(null) === '—' && decimal1(undefined) === '—');
+  const ecrans = ['src/screens/DecouvrirScreen.js', 'src/screens/ProfilProScreen.js',
+    'src/screens/ProfilOwnScreen.js', 'src/screens/SosScreen.js'];
+  const points = ecrans.filter((f) => /\.toFixed\(1\)(?!\.replace)/.test(readFileSync(f, 'utf8')));
+  verifier('aucun écran n’affiche plus un toFixed(1) sans virgule', points.length === 0, points.join(', '));
+  verifier('virgule écrit « 2,5 » et laisse « 2 » tel quel', virgule(2.5) === '2,5' && virgule(2) === '2');
+  const sos = readFileSync('src/screens/SosScreen.js', 'utf8');
+  verifier('la distance et la durée d’un dépannage passent par virgule (« 1–2,5 h »)',
+    /virgule\(a\.distanceKm\)/.test(sos) && /virgule\(pb\.h\[0\]\)/.test(sos)
+    && !/\{pb\.h\[[01]\]\}/.test(sos) && !/\{a\.distanceKm\}/.test(sos));
 }
 
 console.log(echecs === 0 ? '\n✔ Tout est cohérent.\n' : `\n✘ ${echecs} problème(s).\n`);

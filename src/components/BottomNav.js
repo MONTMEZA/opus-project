@@ -69,7 +69,10 @@ export default function BottomNav({
       style={[s.nav, dark && s.navDark, { paddingBottom: S.md + insets.bottom }]}
     >
       {tabs.map(({ key, label, annonce, Icon, sos }) => {
-        const on = screen === key || (key === 'profil' && screen === 'profilPro');
+        /* `profilPro` est la fiche de N'IMPORTE QUEL artisan : elle allumait
+           « Profil » pour la fiche d'un autre (relevé au tournage du 25/10).
+           OpusApp passe `profil` quand c'est la SIENNE ; ici, une égalité. */
+        const on = screen === key;
         /**
          * L'ANNEAU DE L'ONGLET ACTIF — 05/10/2026, demandé par le
          * propriétaire : « on ne voit pas forcément où on est ».

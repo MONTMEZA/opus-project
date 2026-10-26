@@ -31,7 +31,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import {
-  C, F, T, S, R, viser, TOUCHE, interligne,
+  C, F, T, S, R, TOUCHE, interligne,
 } from '../theme';
 import FeuilleBas from './FeuilleBas';
 import ChampVille from './ChampVille';
@@ -220,7 +220,7 @@ const s = StyleSheet.create({
 
   /* Arrondi : une puce FLOTTE au-dessus du fond, et on appuie dessus. */
   puce: {
-    ...viser(32),
+    minHeight: TOUCHE,
     paddingHorizontal: S.md,
     borderWidth: 1, borderColor: C.line, borderRadius: R.gelule,
     backgroundColor: C.surface, justifyContent: 'center',
@@ -248,14 +248,14 @@ const s = StyleSheet.create({
   },
 
   btnPlein: {
-    ...viser(TOUCHE),
+    minHeight: TOUCHE,
     backgroundColor: C.accent, borderRadius: R.gelule,
     alignItems: 'center', justifyContent: 'center', marginTop: S.xl,
   },
   btnPleinTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: C.surAccent },
 
   btnVide: {
-    ...viser(TOUCHE),
+    minHeight: TOUCHE,
     alignItems: 'center', justifyContent: 'center', marginTop: S.xs,
   },
   btnVideTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: C.accentTexte },

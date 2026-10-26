@@ -26,7 +26,7 @@ const ilYA = (heures) => new Date(Date.now() - heures * 3600e3).toISOString();
    tête) — un vrai SIRET affiché en exemple serait l'usurpation que ce lot
    ferme. */
 export const proProfiles = {
-  1: { id: 1, nom: 'Karim Belaïd', entreprise: 'Belaïd Maçonnerie', metier: 'macon',
+  1: { id: 1, nom: 'Karim Ferlane', entreprise: 'Maçonnerie Ferlane', metier: 'macon',
        metiers: ['macon', 'carreleur'],
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 9,
        followers: 1240,
@@ -39,7 +39,7 @@ export const proProfiles = {
          sam: [['09:00', '12:00']],
          dim: [],
        },
-       telephone: '04 91 00 12 34', zoneKm: 40,
+       telephone: '04 65 71 01 01', zoneKm: 40,
        specialites: ['Mur en pierre', 'Enduit à la chaux', 'Ouverture de mur porteur', 'Dalle béton'],
        rgeDeclare: true, rgeExpire: '09/2027',
        bio: "Entreprise familiale spécialisée dans la maçonnerie générale et la rénovation depuis 2015.",
@@ -53,7 +53,7 @@ export const proProfiles = {
          { id: 2, auteur: 'Thomas B.', verifie: true, date: 'Août 2026', delais: 4, qualite: 5, tarif: 4, commentaire: "Fondations nickel, un léger retard sur la fin mais bien communiqué." },
          { id: 3, auteur: 'Nadia K.', verifie: true, date: 'Juil. 2026', delais: 5, qualite: 4, tarif: 3, commentaire: "Bon travail dans l'ensemble, tarif un peu élevé par rapport au devis initial." },
        ] },
-  2: { id: 2, nom: 'Sophie Renaud', entreprise: 'Renaud Élec', metier: 'electricien',
+  2: { id: 2, nom: 'Sophie Belvanne', entreprise: 'Belvanne Élec', metier: 'electricien',
        ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357, verifie: true, exp: 6,
        followers: 860,
        horaires: {
@@ -61,7 +61,7 @@ export const proProfiles = {
          mer: [['07:30', '17:30']], jeu: [['07:30', '17:30']],
          ven: [['07:30', '16:00']], sam: [], dim: [],
        },
-       telephone: '04 78 55 09 09', zoneKm: 30,
+       telephone: '04 65 71 01 02', zoneKm: 30,
        specialites: ['Mise aux normes NF C 15-100', 'Borne de recharge', 'Tableau électrique'],
        rgeDeclare: true, rgeExpire: '03/2028',
        bio: "Installations électriques neuves et rénovation, mise aux normes NF C 15-100.",
@@ -73,10 +73,10 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Marc L.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 5, commentaire: "Impeccable du devis à la mise en service, je recommande." },
        ] },
-  3: { id: 3, nom: 'Yanis Cortez', entreprise: 'YC Carrelage', metier: 'carreleur',
+  3: { id: 3, nom: 'Yanis Coulvane', entreprise: 'Coulvane Carrelage', metier: 'carreleur',
        ville: 'Toulouse (31)', latitude: 43.6045, longitude: 1.4442, verifie: false, exp: 4,
        followers: 410,
-       telephone: '05 61 22 33 44', zoneKm: 25,
+       telephone: '05 36 49 01 03', zoneKm: 25,
        specialites: ["Douche à l'italienne", 'Carrelage grand format', 'Faïence salle de bain'],
        bio: "Pose de carrelage grand format, faïence, douches à l'italienne.",
        partners: [],
@@ -87,7 +87,7 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Antoine R.', verifie: true, date: 'Août 2026', delais: 3, qualite: 4, tarif: 5, commentaire: "Très bon rapport qualité-prix, quelques jours de retard sur le planning." },
        ] },
-  4: { id: 4, nom: 'Marc Dubreuil', entreprise: 'Dubreuil Plomberie', metier: 'plombier',
+  4: { id: 4, nom: 'Marc Valsanne', entreprise: 'Valsanne Plomberie', metier: 'plombier',
        metiers: ['plombier', 'chauffagiste'],
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 12,
        followers: 990,
@@ -101,7 +101,7 @@ export const proProfiles = {
          { id: 1, auteur: 'Claire D.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 4, commentaire: "Intervention rapide pour une urgence, très professionnel." },
          { id: 2, auteur: 'Hugo P.', verifie: true, date: 'Juin 2026', delais: 4, qualite: 5, tarif: 3, commentaire: "Excellent travail sur le remplacement de chaudière, prix un peu haut." },
        ] },
-  8: { id: 8, nom: 'Léa Sanchez', entreprise: 'Sanchez Plomberie', metier: 'plombier',
+  8: { id: 8, nom: 'Léa Lissagne', entreprise: 'Lissagne Plomberie', metier: 'plombier',
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 5,
        followers: 380,
        bio: "Dépannage, sanitaire et rénovation de salle de bain. Devis gratuit sous 24 h.",
@@ -113,7 +113,7 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Samir T.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 5, commentaire: "Fuite réparée en une heure, tarif annoncé respecté." },
        ] },
-  6: { id: 6, nom: 'Driss Amrani', entreprise: 'Amrani Serrurerie', metier: 'serrurier',
+  6: { id: 6, nom: 'Driss Quintavel', entreprise: 'Quintavel Serrurerie', metier: 'serrurier',
        ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698, verifie: true, exp: 7,
        followers: 540,
        bio: "Ouverture de porte, changement de serrure, blindage. Interventions d'urgence 7j/7.",
@@ -125,7 +125,7 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Léa V.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 4, commentaire: "Porte claquée un dimanche soir, arrivé en 25 minutes, aucune dégradation." },
        ] },
-  7: { id: 7, nom: 'Pierre Nogaret', entreprise: 'Nogaret Chauffage', metier: 'chauffagiste',
+  7: { id: 7, nom: 'Pierre Arnevin', entreprise: 'Arnevin Chauffage', metier: 'chauffagiste',
        ville: 'Aix-en-Provence (13)', latitude: 43.5297, longitude: 5.4474, verifie: true, exp: 15,
        followers: 720,
        bio: "Chaudières gaz et fioul, pompes à chaleur, dépannage et entretien annuel.",
@@ -137,13 +137,13 @@ export const proProfiles = {
        reviews: [
          { id: 1, auteur: 'Farid B.', verifie: true, date: 'Août 2026', delais: 4, qualite: 5, tarif: 4, commentaire: "Chaudière relancée le jour même, explications claires sur l'entretien." },
        ] },
-  5: { id: 5, nom: 'Élodie Faure', entreprise: 'Faure Charpente', metier: 'charpentier',
+  5: { id: 5, nom: 'Élodie Mérivel', entreprise: 'Charpentes Mérivel', metier: 'charpentier',
        ville: 'Aix-en-Provence (13)', latitude: 43.5297, longitude: 5.4474, verifie: true, exp: 8,
        followers: 320,
        bio: "Charpente traditionnelle et ossature bois, du neuf à la rénovation.",
        partners: [1],
        assurance: { valide: true, expire: '04/2027' },
-       kbis: { valide: false, maj: null },
+       kbis: { valide: true, maj: '05/2026' },
        rge: true,
        portfolio: ['#4b4b2f,#9a9a5a', '#6b4226,#b98255'],
        reviews: [] },
@@ -209,20 +209,20 @@ export const initialPosts = [
       { id: 1, auteurId: 'demo-julie', auteur: 'Julie M.', auteurType: 'particulier',
         texte: 'Superbe avancée, bravo !', time: 'Il y a 1 h',
         reponses: [
-          { id: 11, auteurId: 1, auteur: 'Belaïd Maçonnerie', auteurType: 'pro',
+          { id: 11, auteurId: 1, auteur: 'Maçonnerie Ferlane', auteurType: 'pro',
             texte: 'Merci Julie ! La dalle est prévue vendredi.', time: 'Il y a 45 min',
             reponses: [] },
           { id: 12, auteurId: 'demo-julie', auteur: 'Julie M.', auteurType: 'particulier',
-            texte: '@Belaïd Maçonnerie hâte de voir le résultat.', time: 'Il y a 30 min',
+            texte: '@Maçonnerie Ferlane hâte de voir le résultat.', time: 'Il y a 30 min',
             reponses: [] },
         ] },
     ] },
   { id: 2, type: 'post', format: 'video', proId: 2, time: 'Il y a 4 h',
     texte: "Tableau électrique aux normes NF C 15-100, mise en service demain matin.",
     media: '#1b4b6b,#4d7f9e', likes: 132, vues: 1870, liked: false, comments: [] },
-  { id: 'ad1', type: 'ad', annonceur: 'BricoPro Matériaux',
-    accroche: "-15% sur les sacs de ciment ce mois-ci pour les pros inscrits.",
-    cta: "Voir l'offre", media: '#2b2b2b,#555555' },
+  { id: 'ad1', type: 'ad', annonceur: 'Estelvin Matériaux',
+    accroche: "Ciment, plaques de plâtre, outillage : retrait au dépôt dès 7 h.",
+    cta: 'Découvrir', media: '#2b2b2b,#555555' },
   { id: 3, type: 'post', format: 'video', proId: 3, time: 'Hier',
     texte: "Pose grand format 120x60 en salle de bain, jointoiement fini cette semaine. Rendu au top.",
     media: '#6b4226,#b98255', likes: 341, vues: 5240, liked: false,
@@ -239,8 +239,8 @@ export const initialPosts = [
     media: '#1b4b6b,#2f4b3a',
     medias: ['#1b4b6b,#2f4b3a', '#3a3a38,#8a8578', '#6b4226,#b98255', '#2f4b3a,#6a9a7a'],
     likes: 87, vues: 940, liked: false, comments: [] },
-  { id: 'ad2', type: 'ad', annonceur: 'AssurBTP',
-    accroche: "Assurance décennale dès 39€/mois pour les artisans du bâtiment.",
+  { id: 'ad2', type: 'ad', annonceur: 'Roucanne Assurances',
+    accroche: "Votre décennale et votre RC pro, avec l’attestation en ligne.",
     cta: 'En savoir plus', media: '#111111,#3a3a38' },
   { id: 6, type: 'post', format: 'montage', proId: 2, time: 'Il y a 1 j',
     texte: "Chantier en trois temps : saignées, passage des gaines, tableau fini.",
@@ -249,8 +249,13 @@ export const initialPosts = [
     musique: null, likes: 96, vues: 1310, liked: false, comments: [] },
   { id: 5, type: 'post', format: 'avantapres', proId: 5, time: 'Il y a 2 j',
     chantierId: 'ch-toiture', publieLe: ilYA(2 * 24),
-    texte: "Charpente traditionnelle posée en 3 jours, ossature chêne massif.",
-    media: '#4b4b2f,#9a9a5a', likes: 176, vues: 2080, liked: false, comments: [] },
+    texte: "Couverture terminée : tuiles posées, faîtage scellé, gouttières en zinc reposées.",
+    /* Un avant/après porte DEUX photos : l'application refuse d'en publier
+       un avec une seule (relevé le 26/10). `media` reste l'après, c'est la
+       couverture du chantier. */
+    media: '#4b4b2f,#9a9a5a',
+    medias: ['#6b4226,#b98255', '#4b4b2f,#9a9a5a'],
+    likes: 176, vues: 2080, liked: false, comments: [] },
 
   /* LE CHANTIER DU PRO DE DÉMONSTRATION — deux étapes de plus, pour qu'il
      en ait TROIS. En dessous de trois, la place du récit ne s'affiche pas,
@@ -351,9 +356,9 @@ export const initialChantiers = [
       + 'de côté les tuiles réutilisables. La charpente était saine : nous '
       + 'avons gardé les pannes et posé des chevrons neufs en douglas. '
       + "L'écran sous-toiture et les liteaux ont été mis en place ensuite — "
-      + "c'est lui qui protège de la condensation. La charpente "
-      + 'traditionnelle, en ossature chêne massif, a été posée en trois '
-      + 'jours.',
+      + "c'est lui qui protège de la condensation. Pour finir, les tuiles "
+      + 'ont été posées, le faîtage scellé et les gouttières en zinc '
+      + 'reposées.',
     recitEcritLe: ilYA(2 * 24 - 1) },
   { id: 'ch-villa', proId: 1, titre: 'Villa R+1 Marseille', ville: 'Marseille (13)',
     statut: 'en_cours', nbPublications: 3, couverture: '#3a3a38,#8a8578',
@@ -379,14 +384,14 @@ export const initialChantiers = [
 /* ====================================================================== */
 export const initialClients = [
   { id: 'cl-martin', proId: 1, type: 'particulier', nom: 'Mme Martin',
-    siret: null, telephone: '06 12 34 56 78', email: null,
+    siret: null, telephone: '06 39 98 02 01', email: null,
     adresse: '4 rue des Lilas', codePostal: '13350', ville: 'Charleval',
     notes: 'Portail à gauche, le chien aboie mais il est gentil.',
     archive: false, creeLe: ilYA(30 * 24), modifieLe: ilYA(30 * 24) },
-  { id: 'cl-moulin', proId: 1, type: 'entreprise', nom: 'SCI du Moulin',
-    siret: '12345678900012', telephone: '04 90 00 00 00',
-    email: 'contact@sci-moulin.fr',
-    adresse: '12 chemin du Moulin', codePostal: '13410', ville: 'Lambesc',
+  { id: 'cl-moulin', proId: 1, type: 'entreprise', nom: 'SCI des Verlusses',
+    siret: '00000490300019', telephone: '04 65 71 02 02',
+    email: 'contact@sci-verlusses.example',
+    adresse: '12 chemin des Verlusses', codePostal: '13410', ville: 'Lambesc',
     notes: null, archive: false, creeLe: ilYA(12 * 24), modifieLe: ilYA(5 * 24) },
   { id: 'cl-ancien', proId: 1, type: 'particulier', nom: 'M. Rossi',
     siret: null, telephone: null, email: null,
@@ -424,12 +429,12 @@ export const initialNotifications = [
      06/10/2026 — « on clique dessus, rien ne se passe ». `a3` est une
      annonce du pro de démonstration, donc la feuille de ses réponses
      s'ouvre vraiment. */
-  { id: 5, type: 'annonce', texte: 'Renaud Élec a répondu à « Bétonnière 160 L »',
-    acteurId: 3, acteurNom: 'Renaud Élec',
+  { id: 5, type: 'annonce', texte: 'Belvanne Élec a répondu à « 40 m² de tuiles canal, jamais posées »',
+    acteurId: 2, acteurNom: 'Belvanne Élec',
     annonceId: 'a3', lue: false, time: 'Il y a 2 h' },
   /* Une demande de devis EN ATTENTE : elle ouvre la pastille « À traiter ». */
-  { id: 6, type: 'devis', texte: 'Marc Dubreuil vous demande un devis',
-    acteurId: 'u-marc', acteurNom: 'Marc Dubreuil',
+  { id: 6, type: 'devis', texte: 'Marc Dumont vous demande un devis',
+    acteurId: 'u-marc', acteurNom: 'Marc Dumont',
     devisId: 'dr-devis-1', lue: false, time: 'Il y a 3 h' },
   /* Un rappel ACCEPTÉ : il ouvre « En cours », et pas « À traiter ». C'est
      tout l'intérêt de viser la demande et pas la page — c'est là que vit le
@@ -438,10 +443,10 @@ export const initialNotifications = [
     acteurId: 'u-julie', acteurNom: 'Julie M.',
     rappelId: 'dr-rappel-1', lue: true, time: 'Hier' },
   /* Et une qui mène à SA PROPRE FICHE. */
-  { id: 8, type: 'partenaire_demande', texte: 'YC Carrelage vous propose un partenariat',
-    acteurId: 6, acteurNom: 'YC Carrelage', lue: false, time: 'Il y a 5 h' },
-  { id: 3, type: 'info', texte: 'Marc Dubreuil vous suit désormais',
-    acteurId: 'u-marc', acteurNom: 'Marc Dubreuil', lue: true, time: 'Hier' },
+  { id: 8, type: 'partenaire_demande', texte: 'Coulvane Carrelage vous propose un partenariat',
+    acteurId: 3, acteurNom: 'Coulvane Carrelage', lue: false, time: 'Il y a 5 h' },
+  { id: 3, type: 'info', texte: 'Marc Dumont vous suit désormais',
+    acteurId: 'u-marc', acteurNom: 'Marc Dumont', lue: true, time: 'Hier' },
   { id: 4, type: 'info', texte: 'Votre publication a été enregistrée par 3 personnes',
     lue: true, time: 'Il y a 2 j' },
 ];
@@ -492,7 +497,7 @@ export const initialAnnonces = [
     titre: '40 m² de tuiles canal, jamais posées',
     texte: "Surplus d'un chantier annulé. Palettes complètes, stockées à l'abri. À prendre sur place.",
     ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698,
-    prix: 180, unite: 'total', media: '#6b4226,#b98255', time: 'Il y a 2 j', reponses: 0 },
+    prix: 180, unite: 'total', media: '#6b4226,#b98255', time: 'Il y a 2 j', reponses: 1 },
   { id: 'a4', type: 'materiel_location', auteurId: 1,
     titre: 'Nacelle 12 m — disponible en semaine',
     texte: "Nacelle articulée, contrôle technique à jour. Livraison possible dans un rayon de 30 km.",
@@ -519,7 +524,7 @@ export const initialAnnonces = [
     ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357,
     prix: 12, unite: 'total', time: 'Il y a 2 j', reponses: 0 },
 
-  /* Volontairement posée par un artisan NON vérifié (YC Carrelage) : c'est
+  /* Volontairement posée par un artisan NON vérifié (Coulvane Carrelage) : c'est
      ce qui permet de voir le filtre « vérifiés uniquement » faire son
      travail dès le premier lancement. */
   { id: 'a5', type: 'entraide', auteurId: 3,
@@ -528,6 +533,32 @@ export const initialAnnonces = [
     ville: 'Lyon (69)', latitude: 45.764, longitude: 4.8357,
     dateDebut: '2026-10-06', time: 'Il y a 5 h', reponses: 4 },
 ];
+
+/**
+ * LES RÉPONSES AUX ANNONCES DU PRO DE DÉMONSTRATION (a3 et a4).
+ *
+ * Ajoutées le 26/10/2026 : la cloche disait « Belvanne Élec a répondu à… »,
+ * et la feuille qu'elle ouvrait répondait « Personne n'a encore répondu ».
+ * Même chose pour « 2 réponses » sur la nacelle. Une démonstration qui se
+ * dément elle-même fait croire à un défaut. Le nombre de chaque liste DOIT
+ * égaler le compteur `reponses` de l'annonce : `verifier-place` le recompte.
+ *
+ * Seules les annonces du compte de démonstration en ont : c'est la seule
+ * personne qui puisse les lire (section 29.2 — le détail des réponses n'est
+ * lisible que par l'auteur de l'annonce).
+ */
+export const initialReponsesAnnonces = {
+  a3: [
+    { id: 'ra3-1', proId: 2, time: 'Il y a 2 h',
+      message: "Bonjour, je refais une toiture le mois prochain : les 40 m² m'intéressent. Je peux passer les voir jeudi ?" },
+  ],
+  a4: [
+    { id: 'ra4-1', proId: 4, time: 'Hier',
+      message: "Elle serait libre mardi et mercredi prochains ? C'est pour un ravalement à Marseille." },
+    { id: 'ra4-2', proId: 7, time: 'Il y a 2 j',
+      message: 'Je la prendrais une journée début novembre. Vous livrez sur Aix ?' },
+  ],
+};
 
 /** Dégradés utilisés pour illustrer une nouvelle publication. */
 export const POST_GRADIENTS = [
@@ -550,15 +581,15 @@ export const POST_GRADIENTS = [
 export const initialDemandesRecues = [
   {
     id: 'dr-sos-1', genre: 'sos', statut: 'envoyee',
-    clientId: 'u-julie', nom: 'Julie M.', telephone: '06 11 22 33 44',
+    clientId: 'u-julie', nom: 'Julie M.', telephone: '06 39 98 03 01',
     metier: 'plomberie', titre: 'Fuite sous l’évier',
-    details: 'Ça coule depuis ce matin · 12 rue des Lices, Lambesc',
+    details: 'Ça coule depuis ce matin, sous l’évier de la cuisine · Lambesc',
     ville: null, budget: null, creneau: 'immediat',
     prixMin: 90, prixMax: 180, avatarUrl: null, quand: 'Il y a 12 min',
   },
   {
     id: 'dr-devis-1', genre: 'devis', statut: 'en_attente',
-    clientId: 'u-marc', nom: 'Marc Dumont', telephone: '06 55 44 33 22',
+    clientId: 'u-marc', nom: 'Marc Dumont', telephone: '06 39 98 03 02',
     metier: 'macon', titre: 'Ouverture de mur porteur, 3 m de portée',
     details: null, ville: 'Lambesc (13)', budget: '5000_15000',
     creneau: null, prixMin: null, prixMax: null, avatarUrl: null,
@@ -566,7 +597,7 @@ export const initialDemandesRecues = [
   },
   {
     id: 'dr-rappel-1', genre: 'rappel', statut: 'accepte',
-    clientId: 'u-sophie', nom: 'Sophie B.', telephone: '06 77 88 99 00',
+    clientId: 'u-sophie', nom: 'Sophie B.', telephone: '06 39 98 03 03',
     metier: null, titre: null, details: null, ville: null, budget: null,
     creneau: 'Matin', prixMin: null, prixMax: null, avatarUrl: null,
     quand: 'Hier',

@@ -322,6 +322,30 @@ console.log('\nUne demande déjà vue, une demande pourvue, et une liste bornée
     + 'jour puis plus jamais');
 }
 
+/* RELEVÉ AU TOURNAGE DU 25/10/2026, confirmé deux fois. L'encart disait
+   « les professionnels du métier concerné la reçoivent… elle n'est visible
+   que d'eux » : la base (section 30.1) l'ouvre à TOUT professionnel connecté,
+   aucune notification ne part, et les photos vont dans un espace public. Et
+   la démonstration montrait au particulier les demandes des AUTRES, juste
+   sous cette phrase. */
+console.log('\nCe que l’écran promet au particulier, la base le tient');
+{
+  const ecran = readFileSync('src/screens/DemandesScreen.js', 'utf8');
+  verifier('l’encart ne promet plus qu’une demande n’est vue que du métier concerné',
+    !/métier concerné la\s+reçoivent/.test(ecran) && !/visible que d’eux/.test(ecran));
+  verifier('…et il dit que les photos jointes restent lisibles par leur adresse',
+    /photos jointes\s+restent lisibles/.test(ecran));
+  verifier('un particulier ne voit que SES demandes, comme la base le lui rend',
+    /: filtrees\.filter\(estLaMienne\);/.test(ecran));
+  const recues = readFileSync('src/screens/DemandesRecuesScreen.js', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  verifier('« jamais lues » s’affiche comme un chargement, jamais comme « aucune demande »',
+    /chargement=\{demandesRecuesEtat === 'charge' \|\| demandesRecuesEtat === 'jamais'\}/
+      .test(readFileSync('src/OpusApp.js', 'utf8')));
+  verifier('aucun texte affiché ne se compare à une marque (« groupe Facebook »)',
+    !/Facebook/.test(recues));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

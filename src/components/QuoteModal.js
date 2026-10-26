@@ -193,7 +193,7 @@ const s = StyleSheet.create({
   label: { fontFamily: F.oswald6, fontSize: T.courant, color: C.muted, marginBottom: 6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   input: { marginBottom: 8 },
-  aide: { fontSize: T.petit, color: C.accentTexte, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 9 },
+  aide: { fontSize: T.petit, color: C.muted, fontFamily: F.inter, lineHeight: 16, marginTop: -4, marginBottom: 9 },
 
   memo: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 6 },
   case: {

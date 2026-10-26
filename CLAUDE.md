@@ -1769,8 +1769,13 @@ Trois choses à ne pas redécouvrir :
    un hasard. Le nombre reste blanc, seul le cœur devient orange.
 3. **Le conteneur du voile est en `pointerEvents="box-none"`.** Sinon il
    avalerait le double-appui sur toute la moitié basse de la photo.
-   Vérifié : deux appuis sur « Partager » n'aiment pas, deux appuis sur
-   l'image aiment.
+   ~~Vérifié : deux appuis sur « Partager » n'aiment pas~~ — **C'ÉTAIT
+   FAUX jusqu'au 26/10/2026** : la barre vivait DANS le geste du double
+   appui, donc deux appuis sur « Partager » aimaient, et « Commentaires »
+   d'une vidéo ouvrait le lecteur 0,2 s après le panneau. `box-none` ne
+   change rien quand le geste est porté par un PARENT. Corrigé (la barre
+   est une sœur posée par-dessus, comme dans `VideoSlide`), voir « Les
+   défauts relevés au tournage ».
 
 #### Une poignée qui ne s'attrape pas est pire que pas de poignée
 
@@ -9240,6 +9245,90 @@ publications sans chantier.
 Vérifié au navigateur : la notification ouvre la publication, son chantier et
 le commentaire ; l'ancien fichier remis, le même essai rend l'écran blanc.
 Pas vérifié sur l'iPhone.
+
+### Les défauts relevés au tournage — et la démo qui prêtait des noms (26/10/2026)
+
+Le tournage des vidéos promotionnelles (25/10, en mode démonstration) a
+relevé treize défauts possibles. Chacun a été **reproduit** par un premier
+agent, puis **contre-examiné** par un second chargé de le réfuter, avant
+qu'une ligne ne soit changée. Neuf étaient vrais, un était faux (les lignes
+de devis sans accents sont VOULUES : elles montrent la reconnaissance des
+phrases du lot P), trois partiels.
+
+#### Ce qui a été corrigé, à l'écran seulement
+
+| | le défaut | la correction |
+|---|---|---|
+| D1 | l'encart des demandes promettait « visible des seuls pros du métier » ; la base l'ouvre à tout pro (section 30.1), personne n'est prévenu, les photos sont dans un espace public | le texte dit vrai ; la démo ne montre plus au particulier les demandes des autres |
+| D2 | « 3 avis vérifiés », « Avis clients vérifiés » : TOUS les avis sont comptés et listés, vérifiés ou non | « 3 avis », « Avis clients » ; le badge de chaque avis reste |
+| D3 | « C'est ce qui distingue Opus d'un groupe Facebook » | retiré |
+| D4 | « Voir tout le fil », « Tout effacer » et les puces de note de la loupe : **17 px de haut** | 44 px |
+| D5 | une confirmation de deux lignes collait aux deux bords | `maxWidth: '88%'`, comme l'erreur |
+| D6 | les aides de la demande de devis en orange, lues comme des erreurs | gris |
+| D7 | « Profil » allumé sur la fiche de N'IMPORTE QUEL artisan | seulement sur la sienne |
+| D8 | « 4.3 », « 2.4 km », « 1.5–3 h » | `decimal1()` et `virgule()`, `formats.js` |
+| D9 | la barre d'actions vivait DANS le geste du double appui | une sœur posée par-dessus |
+| — | « Pour moi » jamais lue affichait « Aucune demande » à mi-glissement | « jamais lues » = chargement |
+
+> **`viser()` rend un NOMBRE, pas un style.** `{...viser(TOUCHE)}` dans un
+> objet de style ne pose RIEN — la loupe l'avait depuis sa création.
+> `verifier-cibles` le refuse désormais.
+
+> **Un geste porté par un PARENT reçoit aussi les appuis de ses enfants**
+> (UIKit comme le navigateur), et `pointerEvents="box-none"` n'y change
+> rien. Un bouton ne vit jamais dans un `<DoubleAppui>` : `verifier-fil`.
+
+> **Chez un particulier, `myProId` n'est pas « personne »** : c'est le
+> PREMIER artisan chargé. Toute comparaison à `myProId` regarde `userType`
+> d'abord — sinon le particulier voyait « Terminer » et « Demander le
+> récit » sur le chantier de cet artisan (relevé en vérifiant D7).
+
+Et un défaut de méthode, retrouvé : **le serveur Metro a servi un
+`OpusApp` périmé** pendant une mesure — la correction de « Pour moi »
+semblait sans effet. On vérifie le paquet servi (`curl
+/index.bundle?platform=web&dev=true | grep`), pas seulement le fichier.
+
+#### La démonstration prêtait des noms, des numéros, et se démentait
+
+Relevé dans l'annuaire Sirene : **« Faure Charpente » est une société
+active de charpente**, « Dubreuil Plomberie - Chauffage » aussi, « Renaud
+Élec » l'enseigne d'un électricien, « BricoPro » une enseigne de négoce,
+« AssurBTP » le nom commercial d'un courtier — avec des offres chiffrées
+inventées. Et les sept numéros de téléphone tombaient dans des tranches
+**attribuées** (fichier MAJNUM de l'Arcep) : ils pouvaient appartenir à
+quelqu'un. Les vidéos publicitaires les montraient.
+
+> **Une démonstration qui sert à la publicité ne prête rien à personne.**
+> Noms inventés, cherchés dans Sirene (zéro entreprise ne porte ces mots) ;
+> numéros dans les six racines que l'Arcep réserve à la fiction (`01 99
+> 00`, `02 61 91`, `03 53 01`, `04 65 71`, `05 36 49`, `06 39 98`) ;
+> publicités sans offre chiffrée. `npm run verifier-demo` refuse le retour
+> d'un ancien nom et tout numéro hors de ces racines.
+
+La base des marques de l'INPI n'a **pas** pu être consultée (pas d'accès
+sans compte) : à faire avant toute publicité payante.
+
+La démonstration se démentait aussi, et rien ne le disait : un badge
+« vérifié » sur une fiche sans Kbis (la base l'interdit), une notification
+« Marc Dubreuil vous demande un devis » pour une demande de « Marc
+Dumont », une réponse annoncée que la feuille ne montrait pas (la démo
+rendait `[]` pour toutes les annonces), un récit de chantier qui gardait la
+charpente puis la reposait. `verifier-demo` et `verifier-place` les font
+tourner.
+
+#### Ce qui n'a PAS été corrigé, et pourquoi
+
+- **Les anciennes données de démonstration sont dans la VRAIE base** —
+  relevé en lecture seule : les 5 fiches du `seed.sql` aux noms
+  d'entreprises réelles (3 « vérifiées » sans pièce), leurs 5
+  publications et les 2 fausses publicités, visibles dans le vrai Fil.
+  Les changer est une écriture en production : au propriétaire de décider.
+- **D11** : le maçon de démonstration reçoit une urgence de PLOMBERIE, ce
+  qu'aucun maçon ne peut recevoir. Trois voies, toutes avec un coût
+  (`docs/A-FAIRE.md`) : à trancher avec lui.
+- **La base laisse envoyer un SOS à n'importe quel artisan**, avec
+  n'importe quel `metier_key` et une estimation inventée : la politique
+  « creation sos » ne regarde que le client et le blocage. Lot S.
 
 ## Dépendances : vérifier avant de proposer
 

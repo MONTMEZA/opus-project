@@ -235,7 +235,10 @@ export default function DemandesScreen({
       if (!triDistance || a.km === null || b.km === null) return 0;
       return a.km - b.km;
     })
-    : filtrees;
+    /* Un particulier ne voit que SES demandes : c'est ce que la base lui
+       rend (section 30.1). La démonstration lui montrait celles des
+       autres, juste sous la phrase qui dit le contraire (26/10/2026). */
+    : filtrees.filter(estLaMienne);
 
   const nbNouvelles = estPro ? liste.filter(estNouvelle).length : 0;
 
@@ -288,9 +291,11 @@ export default function DemandesScreen({
         <View style={s.encart}>
           <Text style={s.encartTitre}>Décrivez votre besoin</Text>
           <Text style={s.encartTexte}>
-            Publiez une demande : les professionnels du métier concerné la
-            reçoivent et vous répondent. Elle n’est visible que d’eux —
-            ni des autres particuliers, ni des visiteurs.
+            Publiez une demande : les professionnels inscrits sur Opus la
+            voient dans leur onglet Demandes (ceux du métier choisi en
+            premier) et peuvent vous répondre. Les autres particuliers et les
+            visiteurs sans compte ne la voient pas ; les photos jointes
+            restent lisibles par qui connaît leur adresse.
           </Text>
           {!formOuvert ? (
             <BtnMain block label="Publier une demande" onPress={() => setFormOuvert(true)} />
@@ -439,7 +444,7 @@ export default function DemandesScreen({
       ListEmptyComponent={(
           <EmptyState>
             {!estPro
-              ? 'Vous n’avez pas encore publié de demande. Décrivez votre besoin ci-dessus, et les artisans du métier vous répondront.'
+              ? 'Vous n’avez pas encore publié de demande. Décrivez votre besoin ci-dessus : les artisans pourront vous répondre.'
               : filtreMetier
                 ? `Aucune demande en ${nomMetier(filtreMetier)} pour le moment.`
                 : 'Aucune demande de particulier pour le moment. Elles arriveront ici, et le point orange vous préviendra.'}

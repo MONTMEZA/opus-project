@@ -239,7 +239,7 @@ export default function FicheClient({
             {estEntreprise ? "Nom de l'entreprise" : 'Nom du client'}
           </Text>
           <Field
-            placeholder={estEntreprise ? 'SCI du Moulin' : 'Mme Martin'}
+            placeholder={estEntreprise ? 'SCI des Verlusses' : 'Mme Martin'}
             value={v.nom}
             onChangeText={poser('nom')}
             autoFocus={!fiche}
@@ -302,7 +302,7 @@ export default function FicheClient({
           <Text style={s.label}>Téléphone</Text>
           <Field
             ref={refTelephone}
-            placeholder="06 12 34 56 78"
+            placeholder="06 39 98 00 00"
             value={v.telephone}
             onChangeText={poser('telephone')}
             keyboardType="phone-pad"

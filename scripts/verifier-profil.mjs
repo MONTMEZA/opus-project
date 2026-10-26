@@ -24,6 +24,7 @@
 import { detailRge, etatRge, VALIDE, ATTENTE, REFUSE, ABSENT } from '../src/lib/verification.js';
 import { correspond, texteDePro, texteDe } from '../src/lib/recherche.js';
 import { proProfiles } from '../src/data/demo.js';
+import { readFileSync } from 'node:fs';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -69,7 +70,7 @@ console.log('\nLe badge RGE ne s’allume PAS sur une simple déclaration');
 console.log('\nUne spécialité rend l’artisan trouvable');
 {
   const pro = {
-    entreprise: 'YC Carrelage', metier: 'Carreleur', metiers: ['Carreleur'],
+    entreprise: 'Coulvane Carrelage', metier: 'Carreleur', metiers: ['Carreleur'],
     ville: 'Toulouse (31)',
     specialites: ['Douche à l’italienne', 'Carrelage grand format'],
   };
@@ -108,6 +109,21 @@ console.log('\nLes fiches de démonstration portent bien ces champs');
     pros.every((p) => (p.specialites || []).every((x) => x.length <= 40)));
   verifier('aucune zone d’intervention hors des bornes de la base (1 à 300 km)',
     pros.every((p) => p.zoneKm == null || (p.zoneKm >= 1 && p.zoneKm <= 300)));
+}
+
+/* RELEVÉ AU TOURNAGE DU 25/10/2026, confirmé deux fois. La fiche disait
+   « 3 avis vérifiés » et « Avis clients vérifiés » alors que TOUS les avis y
+   sont comptés et listés, vérifiés ou non (calcule_client_verifie ne fait que
+   poser le badge de chaque avis). Présenter comme vérifié ce qui ne l'est pas
+   est une pratique trompeuse (code de la consommation, L. 121-4). Le badge
+   « Client vérifié » de chaque avis reste : lui est exact. */
+console.log('\nLa fiche ne dit pas « vérifiés » pour des avis qui ne le sont pas');
+{
+  const fiche = readFileSync('src/screens/ProfilProScreen.js', 'utf8');
+  verifier('ni « avis vérifiés » dans l’en-tête, ni « Avis clients vérifiés » en titre',
+    !/avis vérifiés/.test(fiche) && !/Avis clients vérifiés/.test(fiche));
+  verifier('…et le badge de chaque avis vérifié reste',
+    /Client vérifié/.test(fiche));
 }
 
 console.log('');
