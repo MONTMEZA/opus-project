@@ -2550,17 +2550,19 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   Charpente », « Renaud Élec », « YC Carrelage » —, dont **3 portent le
   badge vérifié sans aucune pièce**, leurs 5 publications, et les 2 fausses
   publicités (« BricoPro Matériaux », « AssurBTP ») dans le vrai Fil. C'est
-  une écriture en production : **à vous de décider** — les renommer (avec
-  les nouveaux noms) et retirer les badges, ou les supprimer depuis
-  Supabase.
-- [ ] **D11 — le maçon de démonstration reçoit une urgence de plomberie.**
-  Aucun maçon ne peut en recevoir. Trois voies, chacune a un coût : (a) lui
-  ajouter le métier de plombier (la démonstration de l'état « orpheline »
-  des urgences disparaît) ; (b) retirer cette urgence (on ne voit plus de
-  SOS sans fichier `.env`, et `mesure-devis` est à adapter) ; (c) en faire
-  une ancienne urgence d'électricité (cohérent avec l'histoire de la démo,
-  mais une urgence « tout de suite » restée trois semaines sans réponse est
-  étrange). À trancher.
+  une écriture en production. **Décidé par vous le 26/10 : on n'y touche
+  PAS pour l'instant** — « je ne veux pas casser ce qui existe sur Opus ».
+  La publicité est en pause ; une vidéo de présentation se fera quand Opus
+  sera presque terminé. Le point reste ouvert pour ce jour-là : les
+  renommer et retirer les badges, ou les supprimer.
+- [x] **D11 — le maçon de démonstration recevait une urgence de
+  plomberie.** Tranché par vous le 26/10 : **une ancienne urgence
+  d'électricité** (« Plus de courant dans la cuisine », il y a 21 jours),
+  du temps où ce compte était électricien — il en garde la ligne d'urgence.
+  `verifier-demo` refuse le retour d'une urgence d'un métier sans ligne
+  d'urgence, et compare son ancienneté écrite à sa date calculée. Ce qui
+  reste étrange, et c'est assumé : une urgence « tout de suite » restée
+  trois semaines sans réponse.
 - [ ] **La base laisse envoyer un SOS à n'importe quel artisan** (lot S) :
   « creation sos » ne regarde que le client et le blocage. Mesuré sur
   PostgreSQL : un SOS « plomberie » vers un maçon sans disponibilité ni
@@ -2594,23 +2596,19 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   photos trouvées (`assets/demo/LICENCES.md`). Le jour où l'on veut ces
   sujets, la meilleure source est une photo prise sur un VRAI chantier, avec
   l'accord du client et sans rien d'identifiable.
-- [ ] **Sur SA propre publication, un artisan voit « Suivre » et
-  « Contacter »** (relevé à la relecture du 26/10, dans la démonstration ;
-  le code est le même avec la vraie base) : `PostCard` ne reçoit `moiId` que
-  pour les commentaires, et passe `onFollow` et le bouton « Contacter » à
-  toutes les cartes. Se suivre soi-même et s'écrire à soi-même n'ont pas de
-  sens. La correction est petite (cacher les deux quand l'auteur est le
-  compte connecté, dans le fil, le fil vidéo et la page d'une publication),
-  mais elle touche une carte mémorisée utilisée partout : à valider avant de
-  la faire.
-- [ ] **La pastille « Les plus proches » de la page Demandes** ne trie la
-  liste par distance qu'APRÈS « mes métiers » et l'urgence (choix écrit dans
-  `DemandesScreen.js` : « un chantier urgent à 40 km passe avant un chantier
-  tranquille à 5 km »). Pastille allumée, une demande à 319 km peut donc
-  passer devant une demande « dans votre commune » — vu dans la vidéo de la
-  page. Le tri est défendable ; le NOM de la pastille promet autre chose. À
-  trancher : renommer la pastille, ou trier vraiment par distance quand elle
-  est allumée.
+- [x] **Sur SA propre publication, un artisan voyait « Suivre » et
+  « Contacter ».** Validé par vous le 26/10 (« cacher les deux ») : fait
+  dans le fil, le fil vidéo et la page d'une publication
+  (`src/lib/ma-fiche.js`, `verifier-fil` section 9).
+- [ ] Sur SA propre publication restent **« Masquer »** (l'œil barré) et
+  **« Signaler »** (le drapeau) : se signaler soi-même n'a pas plus de sens
+  que se suivre. Pas dans ce que vous avez validé : à décider.
+- [x] **La pastille « Les plus proches » de la page Demandes** ne triait
+  par distance qu'APRÈS « mes métiers » et l'urgence. Tranché par vous le
+  26/10 : **elle trie vraiment par distance** (`src/lib/tri-demandes.js`,
+  `verifier-demandes`). Éteinte, l'ancien ordre revient : mes métiers, puis
+  l'urgence. Elle reste ALLUMÉE par défaut : la page s'ouvre donc par
+  distance — à changer si vous préférez ouvrir sur vos métiers.
 - [ ] **`supabase/seed.sql` ne peut plus être rejoué** (mesuré en
   transaction annulée) : ses comptes naissent particuliers, et
   `exige_un_compte_pro()` refuse leur fiche. Il reste un document, pas un

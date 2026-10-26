@@ -9424,7 +9424,7 @@ l'APPLICATION :
   « Fournisseur » (`annonces.js`) : les espaces autour de « placo »,
   « BA13 », « nacelle » étaient ordinaires, la ligne se coupait entre « et
   le mot, et on lisait « nacelle » sans son guillemet ouvrant. Espaces
-  insécables, écrites ` ` — c'est la typographie française de toute
+  insécables, écrites `\u00a0` — c'est la typographie française de toute
   façon.
 
 Et dans l'outil, une erreur de diagnostic à retenir : deux vidéos
@@ -9439,16 +9439,98 @@ coupes étaient dans ce cas ; un relevé des changements d'écran de chaque
 clip les refuse désormais (`outils/bornes.mjs`, appelé par le contrôle du
 montage, éprouvé en remettant l'ancienne fenêtre).
 
+#### Les décisions du propriétaire, le 26/10 au soir
+
+Quatre questions posées après la troisième relecture, quatre réponses :
+
+| question | réponse |
+|---|---|
+| les anciennes données de démo dans la vraie base, et la publicité | **« Laisse tomber les pubs pour le moment, je ne veux pas casser ce qui existe sur Opus ; on fera une vidéo de présentation plus tard, quand Opus sera presque terminé. »** On ne touche PAS à la vraie base |
+| D11, l'urgence de plomberie du maçon | **une ancienne urgence d'électricité** |
+| « Suivre » et « Contacter » sur SA publication | **les cacher tous les deux** |
+| « Les plus proches » | **trier vraiment par distance** |
+
+##### « Est-ce ma publication ? » — une règle, et un piège d'identité
+
+`src/lib/ma-fiche.js` (qui n'importe rien, `verifier-fil` section 9).
+`maFiche()` rend l'identifiant de MA fiche, ou `null` ; `estMienne()` dit si
+une publication est la mienne. Les cartes reçoivent un BOOLÉEN `mienne`,
+jamais l'identité : `PostCard` est mémorisée.
+
+> **L'identité du compte n'est pas la même en démonstration et sur la
+> vraie base.** Sur la vraie base, ma fiche porte l'identifiant de mon
+> compte ; en démonstration `api.getUserId()` vaut `'demo-user'`, qui n'est
+> la clé d'aucune fiche, et le compte de démo est la PREMIÈRE fiche. Et
+> chez un particulier, `myProId` est le premier artisan chargé : s'en
+> servir aurait retiré « Suivre » et « Contacter » des publications d'un
+> AUTRE artisan, qui n'aurait plus eu de clients pour le contacter.
+> `maFiche()` rend donc `null` à un particulier, et `null` sur la vraie
+> base tant que ma fiche n'est pas chargée — jamais « la première venue ».
+> Au pire, « Suivre » reste affiché sur ma publication ; le contraire
+> abîmerait celle d'un autre.
+
+`AvatarSuivre` savait déjà se passer de pastille (« pas de pastille du tout
+quand il n'y a rien à suivre (sa propre publication) ») : le commentaire
+existait, personne ne lui donnait `null`. Restent sur sa propre publication
+« Masquer » et « Signaler » : hors de ce qui a été validé (`A-FAIRE`).
+
+##### « Les plus proches » trie vraiment par distance
+
+`src/lib/tri-demandes.js` (`verifier-demandes`). Allumée : la distance
+d'abord, sans exception, puis mes métiers et l'urgence à distance égale ;
+une demande sans distance va à la FIN. Éteinte : mes métiers, puis
+l'urgence. Elle reste allumée par défaut.
+
+> **Un comparateur qui rend « égal » dès qu'une valeur manque n'est pas
+> un ordre.** L'ancien rendait 0 si UNE des deux distances était absente :
+> A = B et B = C n'impliquaient plus A = C, et le moteur rangeait comme il
+> pouvait. Une valeur absente se place (à la fin), elle ne s'égalise pas.
+
+Et un tri incomplet se dit : `phraseDuTriParDistance()` écrit « Votre ville
+n'est pas placée sur la carte : le tri par distance ne peut pas se faire »
+ou « 2 demandes sans lieu précis sont en fin de liste » — la règle des
+« 3 annonces sans lieu précisé » de la Place des pros.
+
+##### Une notification visait la demande d'un AUTRE client
+
+En relisant la démonstration pour D11 : « Vous avez accepté un rappel »
+nommait Julie M., alors que le rappel visé était celui de Sophie B.
+`verifier-demo` vérifiait que le nom correspondait à UN client — Julie en
+est une —, pas au client de la demande VISÉE. Il compare désormais les
+deux.
+
+> **Un contrôle de cohérence compare à la chose visée, pas à la famille
+> de la chose.** « C'est bien un nom de client » passait ; « c'est le
+> client de CETTE demande » non.
+
+##### Vérifié, et comment
+
+Les contrôles nouveaux éprouvés en cassant ce qu'ils surveillent :
+**29 sabotages, 28 refusés** ; le dernier (une publicité sans `null`
+explicite) est une mutation sans effet — `String(null)` vaut « null »,
+qui n'est l'identifiant d'aucune fiche. Un trou trouvé ainsi et fermé :
+« la liste reçue n'est pas modifiée » passait au vert parce que la liste,
+triée plus haut, était revenue par hasard dans son ordre de départ. Les
+53 contrôles, le linter (32, tous antérieurs), le paquet iOS lu. Au
+navigateur, en démonstration : sur le compte pro, les cartes de sa fiche
+n'ont ni « Contacter » ni « + », les autres les gardent ; côté
+particulier, toutes les cartes les ont ; la page d'une publication
+ouverte depuis une notification, idem ; « Pour moi » montre « Plus de
+courant dans la cuisine · Électricité · Il y a 21 j » ; les Demandes
+s'ordonnent par distance pastille allumée, par métier éteinte.
+
+**Pas vérifié** : le fil VIDÉO à l'écran — le compte de démonstration n'a
+aucune vidéo, seul le contrôle tient la rangée cachée ; rien sur l'iPhone ;
+rien sur la vraie base (aucune écriture : décision du propriétaire).
+
 #### Ce qui n'a PAS été corrigé, et pourquoi
 
 - **Les anciennes données de démonstration sont dans la VRAIE base** —
   relevé en lecture seule : les 5 fiches du `seed.sql` aux noms
   d'entreprises réelles (3 « vérifiées » sans pièce), leurs 5
   publications et les 2 fausses publicités, visibles dans le vrai Fil.
-  Les changer est une écriture en production : au propriétaire de décider.
-- **D11** : le maçon de démonstration reçoit une urgence de PLOMBERIE, ce
-  qu'aucun maçon ne peut recevoir. Trois voies, toutes avec un coût
-  (`docs/A-FAIRE.md`) : à trancher avec lui.
+  **Le propriétaire a décidé le 26/10 de ne rien y toucher pour
+  l'instant** ; à reprendre avec la vidéo de présentation.
 - **La base laisse envoyer un SOS à n'importe quel artisan**, avec
   n'importe quel `metier_key` et une estimation inventée : la politique
   « creation sos » ne regarde que le client et le blocage. Lot S.

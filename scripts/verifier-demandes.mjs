@@ -353,6 +353,88 @@ console.log('\nCe que l’écran promet au particulier, la base le tient');
     !/Facebook/.test(recues));
 }
 
+/* DÉCIDÉ PAR LE PROPRIÉTAIRE LE 26/10/2026 : « Les plus proches » trie
+   VRAIMENT par distance. La distance ne venait qu'en troisième, après mes
+   métiers et l'urgence : la pastille allumée laissait un chantier à 80 km
+   devant un autre à 3 km. La règle vit dans `src/lib/tri-demandes.js`, qui
+   n'importe rien : on la FAIT TOURNER. */
+console.log('\n« Les plus proches » trie vraiment par distance');
+{
+  const T = await import(new URL('../src/lib/tri-demandes.js', import.meta.url)).catch(() => ({}));
+  const { trierDemandesOuvertes: trier, phraseDuTriParDistance: phrase } = T;
+  verifier('`tri-demandes.js` s’ouvre avec node (il n’importe rien)',
+    typeof trier === 'function' && typeof phrase === 'function');
+  if (typeof trier === 'function' && typeof phrase === 'function') {
+    const RANG = { quand_possible: 0, ce_mois: 1, urgent: 2 };
+    const regles = (parDistance) => ({
+      parDistance,
+      pourMoi: (d) => d.mien === true,
+      rangUrgence: (d) => RANG[d.urgence] ?? 0,
+    });
+    const ids = (l) => l.map((d) => d.id).join(',');
+    /* Le cas du tournage : un chantier URGENT, de MON métier, loin, contre
+       un chantier tranquille, d'un autre métier, tout près. */
+    const loinUrgentMien = { id: 'loin', km: 80, urgence: 'urgent', mien: true };
+    const presTranquille = { id: 'pres', km: 3, urgence: 'quand_possible', mien: false };
+    const moyen = { id: 'moyen', km: 25, urgence: 'ce_mois', mien: false };
+    const sansLieu = { id: 'sans', km: null, urgence: 'urgent', mien: true };
+    const liste = [loinUrgentMien, sansLieu, moyen, presTranquille];
+
+    verifier('pastille allumée : la plus proche d’abord, même tranquille et d’un autre métier',
+      ids(trier(liste, regles(true))) === 'pres,moyen,loin,sans', ids(trier(liste, regles(true))));
+    verifier('…et une demande SANS distance va à la fin, même urgente et de mon métier',
+      trier(liste, regles(true)).at(-1).id === 'sans');
+    verifier('pastille éteinte : mes métiers, puis l’urgence — la distance ne compte plus',
+      ids(trier(liste, regles(false))) === 'loin,sans,moyen,pres', ids(trier(liste, regles(false))));
+    const egal1 = { id: 'e1', km: 10, urgence: 'quand_possible', mien: false };
+    const egal2 = { id: 'e2', km: 10, urgence: 'urgent', mien: false };
+    const egal3 = { id: 'e3', km: 10, urgence: 'quand_possible', mien: true };
+    verifier('à distance égale : mes métiers, puis l’urgence',
+      ids(trier([egal1, egal2, egal3], regles(true))) === 'e3,e2,e1');
+    const a = { id: 'a', km: null, urgence: 'quand_possible', mien: false };
+    const b = { id: 'b', km: null, urgence: 'quand_possible', mien: false };
+    verifier('à critères égaux, l’ordre reçu (le plus récent d’abord) est gardé',
+      ids(trier([a, b], regles(true))) === 'a,b' && ids(trier([b, a], regles(false))) === 'b,a');
+    /* L'ancien comparateur rendait « égal » dès qu'UNE distance manquait :
+       ce n'est pas un ordre, et le résultat dépendait de l'ordre d'arrivée. */
+    const p1 = trier([sansLieu, moyen, presTranquille], regles(true));
+    const p2 = trier([presTranquille, moyen, sansLieu], regles(true));
+    verifier('le résultat ne dépend pas de l’ordre d’arrivée', ids(p1) === ids(p2), `${ids(p1)} / ${ids(p2)}`);
+    verifier('une distance NaN compte comme absente',
+      trier([{ id: 'n', km: NaN }, { id: 'k', km: 5 }], regles(true))[0].id === 'k');
+    /* Sur une liste NEUVE : `liste`, triée plus haut, aurait pu revenir
+       par hasard dans son ordre de départ. */
+    const recue = [moyen, sansLieu, presTranquille, loinUrgentMien];
+    const avant = ids(recue);
+    const rendue = trier(recue, regles(true));
+    verifier('la liste reçue n’est pas modifiée (le tri en rend une nouvelle)',
+      ids(recue) === avant && rendue !== recue, `${avant} → ${ids(recue)}`);
+
+    verifier('phrase : rien à dire quand le tri est fait en entier',
+      phrase({ parDistance: true, moiLocalise: true, demandes: [moyen, presTranquille] }) === null);
+    verifier('phrase : rien à dire pastille éteinte, ni sur une liste vide',
+      phrase({ parDistance: false, moiLocalise: false, demandes: liste }) === null
+      && phrase({ parDistance: true, moiLocalise: false, demandes: [] }) === null);
+    verifier('phrase : ma ville sans coordonnées — le tri NE PEUT PAS se faire, et on le dit',
+      /tri par distance ne peut pas se faire/.test(
+        phrase({ parDistance: true, moiLocalise: false, demandes: liste }) || ''));
+    verifier('phrase : les demandes sans lieu précis sont annoncées en fin de liste',
+      phrase({ parDistance: true, moiLocalise: true, demandes: liste }) === '1 demande sans lieu précis est en fin de liste.'
+      && phrase({ parDistance: true, moiLocalise: true, demandes: [sansLieu, { ...sansLieu, id: 's2' }] })
+        === '2 demandes sans lieu précis sont en fin de liste.');
+  }
+
+  const ecran = readFileSync('src/screens/DemandesScreen.js', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  verifier('l’écran trie par la règle commune, avec l’état de la pastille',
+    /trierDemandesOuvertes\(filtrees, \{\s*parDistance: triDistance,/.test(ecran));
+  verifier('…et il n’a plus de comparateur à lui', !/\[\.\.\.filtrees\]\.sort\(/.test(ecran));
+  verifier('l’écran affiche ce que le tri n’a pas pu faire',
+    /phraseDuTriParDistance\(\{/.test(ecran) && /\{phraseTri && <Text/.test(ecran));
+  verifier('la pastille reste allumée par défaut (la liste s’ouvre par distance)',
+    /const \[triDistance, setTriDistance\] = useState\(true\);/.test(ecran));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

@@ -46,10 +46,11 @@ import { EmptyState } from '../components/ui';
 import PostCard from '../components/PostCard';
 import { MessageSquare } from '../components/icons';
 import { CLAVIER } from '../lib/clavier';
+import { estMienne } from '../lib/ma-fiche';
 
 export default function PublicationScreen({
   post, pros = {}, chantiers = {}, commentaireCible = null,
-  followingIds, savedIds, openContactId, moiId,
+  followingIds, savedIds, openContactId, moiId, maFicheId = null,
   onLike, onFollow, onView, onHide, onOuvrirVideo, onSignaler,
   onAddComment, onVoirCommentateur, onSave, onToggleContact, onContact,
   onShare, onSupprimerCommentaire, onModifierCommentaire, onOuvrirChantier,
@@ -97,6 +98,10 @@ export default function PublicationScreen({
         saved={savedIds.has(post.id)}
         onSave={onSave}
         moiId={moiId}
+        /* Une notification mène souvent à SA publication (« X a commenté
+           votre publication ») : c'est exactement là qu'il ne faut ni
+           « Suivre » ni « Contacter ». Même règle que le fil. */
+        mienne={estMienne(post, maFicheId)}
         /* LE PANNEAU EST OUVERT D'OFFICE : on arrive ici par une
            notification de commentaire, donc c'est précisément ce qu'on
            vient lire. Et `onToggleComments` n'est pas transmis — il n'y a

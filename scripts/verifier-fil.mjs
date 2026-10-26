@@ -841,6 +841,86 @@ console.log('\nAucun bouton ne vit dans le geste du double appui');
     j > 0 && carte.indexOf('barreSurPhoto', j) > j);
 }
 
+/* DÉCIDÉ PAR LE PROPRIÉTAIRE LE 26/10/2026 : sur SA publication, un artisan
+   ne voit ni « Suivre » ni « Contacter ». Relevé au tournage : le compte
+   filmé est l'auteur de la première publication du fil, et il s'y proposait
+   de se contacter. La règle « est-ce la mienne ? » vit dans
+   `src/lib/ma-fiche.js`, qui n'importe rien : on la FAIT TOURNER sur les
+   cas qui comptent — et d'abord sur le piège de l'identité, qui n'est pas la
+   même en démonstration et sur la vraie base. */
+console.log('\n9. Sur sa propre publication, ni « Suivre » ni « Contacter »');
+{
+  const { maFiche, estMienne } = await import(path.resolve('src/lib/ma-fiche.js'))
+    .catch(() => ({}));
+  verifier('`ma-fiche.js` s’ouvre avec node (il n’importe rien)',
+    typeof maFiche === 'function' && typeof estMienne === 'function');
+  if (typeof maFiche === 'function' && typeof estMienne === 'function') {
+    const pros = { 1: { id: 1 }, 2: { id: 2 } };
+    const reelles = { 'uid-a': { id: 'uid-a' }, 'uid-b': { id: 'uid-b' } };
+
+    verifier('démonstration, compte pro : ma fiche est la PREMIÈRE (« demo-user » n’en est aucune)',
+      maFiche({ userType: 'pro', pros, userId: 'demo-user', mode: 'demo' }) === '1');
+    verifier('vraie base, compte pro : ma fiche est celle de MON identifiant',
+      maFiche({ userType: 'pro', pros: reelles, userId: 'uid-b', mode: 'supabase' }) === 'uid-b');
+    verifier('vraie base, ma fiche pas encore chargée : PERSONNE, jamais la première venue',
+      maFiche({ userType: 'pro', pros: reelles, userId: 'uid-z', mode: 'supabase' }) === null);
+    verifier('un particulier n’a AUCUNE fiche, en démonstration comme sur la vraie base',
+      maFiche({ userType: 'particulier', pros, userId: 'demo-user', mode: 'demo' }) === null
+      && maFiche({ userType: 'particulier', pros: reelles, userId: 'uid-a', mode: 'supabase' }) === null
+      && maFiche({ userType: null, pros, userId: 'demo-user', mode: 'demo' }) === null);
+    verifier('appelée sans rien, elle rend null au lieu de planter',
+      maFiche() === null && maFiche({ userType: 'pro', mode: 'demo' }) === null);
+
+    verifier('ma publication : identifiant NUMÉRIQUE contre une clé en chaîne (démonstration)',
+      estMienne({ proId: 1 }, '1') === true);
+    verifier('la publication d’un autre n’est pas la mienne',
+      estMienne({ proId: 2 }, '1') === false && estMienne({ proId: 'uid-a' }, 'uid-b') === false);
+    verifier('sans fiche (particulier), aucune publication n’est la mienne',
+      estMienne({ proId: 1 }, null) === false);
+    verifier('une publicité, sans auteur, n’est jamais la mienne',
+      estMienne({ type: 'ad', proId: null }, '1') === false
+      && estMienne({ type: 'ad' }, '1') === false && estMienne(null, '1') === false);
+  }
+
+  /* Ce que `node` ne sait pas ouvrir se RELIT : chaque surface où l'on voit
+     « Suivre » et « Contacter » doit lire `mienne`, et chaque écran doit le
+     lui donner. Trois surfaces : la carte du fil, la diapositive du fil
+     vidéo, la page d'une publication (où mène une notification). */
+  const carte = sansCommentaires(lire('src/components/PostCard.js'));
+  verifier('la carte : « Suivre » n’a pas de pastille sur ma publication',
+    /onSuivre=\{onFollow && !mienne \?/.test(carte));
+  const iContact = carte.indexOf('label="Contacter"');
+  const avantContact = iContact > 0 ? carte.slice(Math.max(0, iContact - 200), iContact) : '';
+  verifier('la carte : le bouton « Contacter » n’existe pas sur ma publication',
+    /\{!mienne && \(/.test(avantContact));
+  verifier('la carte : le menu « Contacter » ne peut pas s’ouvrir sur ma publication',
+    /\{contactOpen && !mienne && \(/.test(carte));
+  verifier('la carte reçoit `mienne`, faux par défaut',
+    /mienne = false/.test(carte));
+
+  const diapo = sansCommentaires(lire('src/components/VideoSlide.js'));
+  const iRangee = diapo.indexOf('<View style={s.btnRow}>');
+  verifier('le fil vidéo : la rangée « Suivre · Contacter » disparaît sur ma vidéo',
+    iRangee > 0 && /\{!mienne && \(\s*$/.test(diapo.slice(Math.max(0, iRangee - 60), iRangee))
+    && /mienne = false/.test(diapo));
+
+  const fil = sansCommentaires(lire('src/screens/HomeScreen.js'));
+  const nbMienne = (fil.match(/mienne=\{estMienne\(p, maFicheId\)\}/g) || []).length;
+  verifier('le fil donne `mienne` à la carte ET à la diapositive (deux fois)', nbMienne === 2,
+    `${nbMienne} fois`);
+  const page = sansCommentaires(lire('src/screens/PublicationScreen.js'));
+  verifier('la page d’une publication donne `mienne` à sa carte',
+    /mienne=\{estMienne\(post, maFicheId\)\}/.test(page));
+
+  const opus = sansCommentaires(lire('src/OpusApp.js'));
+  verifier('OpusApp calcule ma fiche par `maFiche()`, avec le type de compte et le mode',
+    /const maFicheId = maFiche\(\{ userType, pros, userId: api\.getUserId\(\), mode: api\.mode \}\)/.test(opus));
+  const nbPasse = (opus.match(/maFicheId=\{maFicheId\}/g) || []).length;
+  verifier('…et la passe au fil ET à la page d’une publication', nbPasse === 2, `${nbPasse} fois`);
+  verifier('…et jamais `myProId` à leur place (chez un particulier, c’est le premier artisan)',
+    !/maFicheId=\{myProId\}/.test(opus) && !/estMienne\([^)]*myProId/.test(opus + fil + page));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

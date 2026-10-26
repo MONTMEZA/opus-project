@@ -90,6 +90,7 @@ import PostesScreen from './screens/PostesScreen';
 import { devisDepuisClient, devisDepuisDemande, trierDevis } from './lib/devis';
 import { etatAuDepartDeLaLecture, issueDeLaLecture } from './lib/postes';
 import { dateDeDemandeDemo } from './data/devis-demo';
+import { maFiche } from './lib/ma-fiche';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
 } from './lib/filtre-fil';
@@ -733,6 +734,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
   /** Mon compte professionnel : le mien s'il existe, sinon le premier de la liste. */
   const myProId = pros[api.getUserId()] ? api.getUserId() : Object.keys(pros)[0];
+  /* MA FICHE, pour savoir quelles publications sont les miennes — `null`
+     chez un particulier, et jamais « la première venue » sur la vraie base
+     (`src/lib/ma-fiche.js` dit pourquoi). Sur sa propre publication, un
+     artisan ne voit ni « Suivre » ni « Contacter » : décidé le 26/10/2026. */
+  const maFicheId = maFiche({ userType, pros, userId: api.getUserId(), mode: api.mode });
 
   /**
    * MES CHANTIERS EN COURS — ceux que l'écran de publication propose.
@@ -4147,6 +4153,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onSupprimerCommentaire={supprimerCommentaire}
             onModifierCommentaire={modifierCommentaire}
             moiId={api.getUserId()}
+            maFicheId={maFicheId}
             chargePage={chargePage}
             finDuFil={finDuFil}
             rafraichit={rafraichit}
@@ -4173,6 +4180,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             savedIds={savedIds}
             openContactId={openContactId}
             moiId={api.getUserId()}
+            maFicheId={maFicheId}
             onLike={toggleLike}
             onFollow={toggleFollow}
             onView={viewProfile}

@@ -10,7 +10,7 @@ import {
   View, Text, FlatList, Pressable, ScrollView, StyleSheet, RefreshControl,
 } from 'react-native';
 import {
-  C, F, T, S, R, viser, surFond, GOUTTIERE, CARTE_PLEINE,
+  C, F, T, S, R, viser, surFond, GOUTTIERE, CARTE_PLEINE, interligne,
 } from '../theme';
 import {
   Avatar, BtnMain, BtnMini, Chip, TextArea, EmptyState,
@@ -27,6 +27,7 @@ import { METIER_PAR_DEFAUT, nomMetier } from '../lib/metiers';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
 import { distanceKm, libelleDistance } from '../lib/adresse';
 import { CLAVIER } from '../lib/clavier';
+import { trierDemandesOuvertes, phraseDuTriParDistance } from '../lib/tri-demandes';
 
 /**
  * UNE DEMANDE, isolée et mémorisée.
@@ -222,18 +223,18 @@ export default function DemandesScreen({
     .filter((d) => (!filtreMetier || d.metier === filtreMetier))
     .filter((d) => !(masquerRepondues && jyAiRepondu(d)));
 
-  /* Trois critères, dans cet ordre : mes métiers d'abord, puis l'urgence,
-     puis la distance. Un chantier urgent à 40 km passe avant un chantier
-     tranquille à 5 km — c'est l'ordre dans lequel on décide vraiment. */
+  /* L'ORDRE, décidé par le propriétaire le 26/10/2026 : « Les plus
+     proches » allumée trie VRAIMENT par distance — la distance d'abord, sans
+     exception. Éteinte : mes métiers, puis l'urgence. Avant, la distance
+     ne venait qu'en troisième, et la pastille disait « les plus proches »
+     au-dessus d'un chantier à 80 km. La règle vit dans
+     `src/lib/tri-demandes.js`, que `verifier-demandes` fait tourner. */
   const rangUrgence = (d) => URGENCES.findIndex((u) => u.cle === (d.urgence || 'quand_possible'));
   const liste = estPro
-    ? [...filtrees].sort((a, b) => {
-      const mien = estPourMoi(b) - estPourMoi(a);
-      if (mien !== 0) return mien;
-      const presse = rangUrgence(b) - rangUrgence(a);
-      if (presse !== 0) return presse;
-      if (!triDistance || a.km === null || b.km === null) return 0;
-      return a.km - b.km;
+    ? trierDemandesOuvertes(filtrees, {
+      parDistance: triDistance,
+      pourMoi: estPourMoi,
+      rangUrgence,
     })
     /* Un particulier ne voit que SES demandes : c'est ce que la base lui
        rend (section 30.1). La démonstration lui montrait celles des
@@ -241,6 +242,13 @@ export default function DemandesScreen({
     : filtrees.filter(estLaMienne);
 
   const nbNouvelles = estPro ? liste.filter(estNouvelle).length : 0;
+  const phraseTri = estPro
+    ? phraseDuTriParDistance({
+      parDistance: triDistance,
+      moiLocalise: !!moi && typeof moi.latitude === 'number' && typeof moi.longitude === 'number',
+      demandes: liste,
+    })
+    : null;
 
   const publier = () => {
     if (!texte.trim()) return;
@@ -417,6 +425,7 @@ export default function DemandesScreen({
               onPress={() => setMasquerRepondues((v) => !v)}
             />
           </ScrollView>
+          {phraseTri && <Text style={s.noteTri}>{phraseTri}</Text>}
 
           {/* Le sélecteur de métiers est une fenêtre entière : on l'ouvre
               depuis la pastille, au lieu de laisser son champ occuper
@@ -527,6 +536,10 @@ const s = StyleSheet.create({
     fontFamily: F.oswald6, fontSize: T.petit, color: C.muted, letterSpacing: 0.6,
   },
   pastilles: { flexDirection: 'row', gap: S.sm, paddingRight: S.lg, paddingBottom: S.sm },
+  noteTri: {
+    fontSize: T.petit, lineHeight: interligne(T.petit), color: C.muted, fontFamily: F.inter,
+    marginBottom: S.sm,
+  },
 
   rubans: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: S.sm },
   ruban: {

@@ -122,6 +122,70 @@ console.log('\nLa démonstration ne se dément pas');
   });
   verifier('chaque notification porte le nom de celui qui a vraiment agi',
     menteuses.length === 0, menteuses.map((n) => `notification ${n.id} (${n.acteurNom})`).join(', '));
+
+  /* Et une notification qui VISE une demande nomme le client de CETTE
+     demande. « Vous avez accepté un rappel » nommait Julie M., alors que le
+     rappel visé était celui de Sophie B. — le contrôle d'au-dessus ne le
+     voyait pas : Julie est bien une cliente, simplement pas celle-là
+     (relevé le 26/10/2026). */
+  const demandesParId = new Map(demo.initialDemandesRecues.map((d) => [d.id, d]));
+  const deTravers = demo.initialNotifications.filter((n) => {
+    const cible = n.devisId || n.rappelId || n.sosId;
+    if (!cible) return false;
+    const d = demandesParId.get(cible);
+    return !d || d.clientId !== n.acteurId || d.nom !== n.acteurNom;
+  });
+  verifier('une notification qui vise une demande nomme le client de cette demande',
+    deTravers.length === 0, deTravers.map((n) => `notification ${n.id} (${n.acteurNom})`).join(', '));
+}
+
+/* DÉFAUT D11 DU TOURNAGE, tranché par le propriétaire le 26/10/2026 : le
+   compte de démonstration — maçon et carreleur — recevait une urgence de
+   PLOMBERIE. La base ne propose une urgence qu'à un artisan dont la fiche
+   porte le métier : aucun maçon ne reçoit une fuite d'eau. L'urgence est
+   devenue une ANCIENNE urgence d'électricité, du temps où ce compte était
+   électricien — il en garde la ligne d'urgence (`MES_SOS_DEMO`). */
+console.log('\nLes urgences reçues tiennent debout');
+{
+  const { MES_SOS_DEMO } = await import('../src/data/tarifs-demo.js');
+  const { METIERS_SOS } = await import('../src/data/urgences.js');
+  const { dateDeDemandeDemo } = await import('../src/data/devis-demo.js');
+  const clesSos = new Set(METIERS_SOS.map((m) => m.key));
+  const mesLignes = new Set(MES_SOS_DEMO.lignes.map((l) => l.metierKey));
+  const urgences = demo.initialDemandesRecues.filter((d) => d.genre === 'sos');
+  verifier('il y a au moins une urgence reçue en démonstration', urgences.length > 0);
+  const horsCles = urgences.filter((d) => !clesSos.has(d.metier));
+  verifier('une urgence porte une clé d’URGENCE (« electricite »), pas une clé du catalogue',
+    horsCles.length === 0, horsCles.map((d) => `${d.id} : ${d.metier}`).join(', '));
+  const sansLigne = urgences.filter((d) => !mesLignes.has(d.metier));
+  verifier('une urgence reçue est d’un métier pour lequel le compte a une ligne d’urgence',
+    sansLigne.length === 0, sansLigne.map((d) => `${d.id} : ${d.metier}`).join(', '));
+  const plomberie = urgences.filter((d) => d.metier === 'plomberie');
+  verifier('le maçon de démonstration ne reçoit plus de fuite d’eau', plomberie.length === 0);
+
+  /* L'ANCIENNETÉ EST ÉCRITE DEUX FOIS : en texte dans `demo.js`
+     (« Il y a 21 j ») et en durée dans `devis-demo.js`, qui date « depuis
+     une demande du … ». Les deux doivent dire la même chose — on lit le
+     texte comme un intervalle, sans réécrire la fonction qui le fabrique. */
+  const intervalle = (quand) => {
+    const MIN = 60_000; const H = 60 * MIN; const J = 24 * H;
+    let m;
+    if ((m = /^Il y a (\d+) min$/.exec(quand))) return [Number(m[1]) * MIN, (Number(m[1]) + 1) * MIN];
+    if ((m = /^Il y a (\d+) h$/.exec(quand))) return [Number(m[1]) * H, (Number(m[1]) + 1) * H];
+    if (quand === 'Hier') return [J, 2 * J];
+    if ((m = /^Il y a (\d+) j$/.exec(quand))) return [Number(m[1]) * J, (Number(m[1]) + 1) * J];
+    return null;
+  };
+  const maintenant = new Date('2026-10-26T12:00:00Z');
+  const discordantes = demo.initialDemandesRecues.filter((d) => {
+    const iso = dateDeDemandeDemo(d.id, maintenant);
+    const borne = intervalle(d.quand);
+    if (!iso || !borne) return true;
+    const ecart = maintenant.getTime() - new Date(iso).getTime();
+    return ecart < borne[0] || ecart >= borne[1];
+  });
+  verifier('l’ancienneté écrite (« Il y a 21 j ») et la date calculée disent la même chose',
+    discordantes.length === 0, discordantes.map((d) => `${d.id} : « ${d.quand} »`).join(', '));
 }
 
 console.log('\nDe vraies photos, libres de droit, à la place des dégradés');

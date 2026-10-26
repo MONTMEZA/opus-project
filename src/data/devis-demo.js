@@ -103,7 +103,7 @@ const idLigne = (devis, rang) => `${devis === 1 ? 'de0001a0' : 'de0002a0'}-0000-
  * L'ANCIENNETÉ DES DEMANDES DE DÉMONSTRATION.
  *
  * `initialDemandesRecues` (`demo.js`) dit son ancienneté en TEXTE (« Il y a
- * 12 min », « Il y a 2 h », « Hier ») et ne porte aucune date — et on n'y
+ * 21 j », « Il y a 2 h », « Hier ») et ne porte aucune date — et on n'y
  * touche pas : d'autres contrôles la lisent. Or « depuis une demande du
  * 15/09/2026 » (`origineLisible`) a besoin de la date qu'elle aurait en
  * base. Elle est donc calculée ICI, au moment où l'on regarde, d'après ce
@@ -112,7 +112,9 @@ const idLigne = (devis, rang) => `${devis === 1 ? 'de0001a0' : 'de0002a0'}-0000-
  * vide, c'est-à-dire un mensonge.
  */
 const ANCIENNETE_DEMANDES = Object.freeze({
-  'dr-sos-1': 12 * MINUTE,
+  /* Une urgence d'électricité vieille de trois semaines (décision du
+     26/10/2026, voir `demo.js`) : « Il y a 21 j » là-bas, 21 jours ici. */
+  'dr-sos-1': 21 * JOUR,
   'dr-devis-1': 2 * HEURE,
   'dr-rappel-1': 26 * HEURE,
 });

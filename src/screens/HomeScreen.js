@@ -22,6 +22,7 @@ import useCompteurDeVues from '../lib/compteur-vues';
 import { vuesPossibles } from '../lib/vues';
 import { CLAVIER } from '../lib/clavier';
 import { FORMATS_VIDEO } from '../lib/formats-publication';
+import { estMienne } from '../lib/ma-fiche';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
 
@@ -129,6 +130,7 @@ export default function HomeScreen({
   onChargerPlus, chargePage = false, finDuFil = false,
   resumeFiltre = '', onEffacerFiltre, onOuvrirFiltre,
   rafraichit = false, onRafraichir, onSupprimerCommentaire, onModifierCommentaire, moiId,
+  maFicheId = null,
   onVues, chantiers = {}, onOuvrirChantier,
 }) {
   const { height: windowHeight } = useWindowDimensions();
@@ -333,6 +335,10 @@ export default function HomeScreen({
               onGlisserVersFil={() => setFeedMode('classic')}
               pro={p.proId ? pros[p.proId] : null}
               following={p.proId ? followingIds.has(p.proId) : false}
+              /* Sur SA publication, ni « Suivre » ni « Contacter » (26/10).
+                 Un BOOLÉEN, et pas `maFicheId` : la diapositive n'a pas à
+                 savoir qui je suis, seulement si c'est la mienne. */
+              mienne={estMienne(p, maFicheId)}
               saved={savedIds.has(p.id)}
               height={windowHeight}
               bottomInset={bottomInset}
@@ -480,6 +486,10 @@ export default function HomeScreen({
               pros={pros}
               onVoirCommentateur={onVoirCommentateur}
               following={p.proId ? followingIds.has(p.proId) : false}
+              /* Un BOOLÉEN, comme `mien` dans la Place des pros : `PostCard`
+                 est mémorisée, et lui passer l'identité ou une fonction la
+                 ferait se croire différente à chaque rendu (lot 4). */
+              mienne={estMienne(p, maFicheId)}
               onLike={onLike}
               onFollow={onFollow}
               onView={onView}

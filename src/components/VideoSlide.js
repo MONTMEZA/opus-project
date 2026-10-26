@@ -37,6 +37,10 @@ export default function VideoSlide({
   post, pro, following, saved, height, bottomInset = 0, actif = true,
   onLike, onFollow, onSave, onView, onShare, onContact, onComment,
   onGlisserVersProfil, onGlisserVersFil,
+  /* VRAI quand c'est MA vidéo (`estMienne`, lib/ma-fiche.js) : ni
+     « Suivre » ni « Contacter » sur sa propre publication — décidé par le
+     propriétaire le 26/10/2026. */
+  mienne = false,
 }) {
   const infoPad = 24 + bottomInset;
   const clips = post.medias && post.medias.length ? post.medias : [post.media];
@@ -178,10 +182,14 @@ export default function VideoSlide({
             <Text style={s.locText}>{pro.ville}</Text>
           </View>
           <Text style={s.feedText}>{post.texte}</Text>
-          <View style={s.btnRow}>
-            <ChipFollow video following={following} onPress={() => onFollow(pro.id)} />
-            <BtnMain label="Contacter" onPress={() => onContact(pro, 'message')} />
-          </View>
+          {/* La rangée entière disparaît sur sa propre vidéo : vide, elle
+              laisserait sa marge du haut sous le texte, pour rien. */}
+          {!mienne && (
+            <View style={s.btnRow}>
+              <ChipFollow video following={following} onPress={() => onFollow(pro.id)} />
+              <BtnMain label="Contacter" onPress={() => onContact(pro, 'message')} />
+            </View>
+          )}
         </View>
       </Surface>
     </GlissementLateral>

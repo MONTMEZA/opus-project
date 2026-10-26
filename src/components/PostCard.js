@@ -46,6 +46,10 @@ const PostCard = React.memo(function PostCard({
   commentsOpen, onToggleComments, onAddComment, onVoirCommentateur,
   saved, onSave, contactOpen, onToggleContact, onContact, onShare,
   onSupprimerCommentaire, onModifierCommentaire, moiId,
+  /* VRAI quand c'est MA publication (`estMienne`, lib/ma-fiche.js). Un
+     BOOLÉEN et pas une identité : la carte est mémorisée, et le lui passer
+     tout fait ne la redessine que lorsque la réponse change. */
+  mienne = false,
 }) {
 
   const estVideo = FORMATS_VIDEO.has(post.format);
@@ -126,7 +130,12 @@ const PostCard = React.memo(function PostCard({
           nom={pro.entreprise}
           suivi={following}
           onVoir={() => onView(pro.id)}
-          onSuivre={onFollow ? () => onFollow(pro.id) : null}
+          /* Sur SA publication, ni « Suivre » ni « Contacter » — décidé par
+             le propriétaire le 26/10/2026 : se suivre soi-même ou s'écrire
+             à soi-même n'a pas de sens, et un bouton qui ne fait rien
+             d'utile fait croire l'application cassée. `AvatarSuivre` sait
+             déjà se passer de pastille. */
+          onSuivre={onFollow && !mienne ? () => onFollow(pro.id) : null}
         />
         <Pressable
           style={s.headLeft}
@@ -390,15 +399,20 @@ const PostCard = React.memo(function PostCard({
         >
             <Bookmark size={16} filled={saved} color={saved ? C.accent : encre} />
         </Pressable>
-          <View style={s.contactWrap}>
-            <BtnMini label="Contacter" onPress={() => onToggleContact(post.id)} />
-          </View>
+          {!mienne && (
+            <View style={s.contactWrap}>
+              <BtnMini label="Contacter" onPress={() => onToggleContact(post.id)} />
+            </View>
+          )}
         </View>
       </View>
       </View>
 
       {/* menu Contacter */}
-      {contactOpen && (
+      {/* `!mienne` ici aussi : le menu ne s'ouvre que par le bouton, mais
+          `contactOpen` vient d'un état d'OpusApp qui ne connaît pas
+          l'auteur — rien ne doit pouvoir le rouvrir sur sa publication. */}
+      {contactOpen && !mienne && (
         <View style={s.contactPop}>
           <ContactItem icon={<MessageCircle size={13} color={C.ink} />} label="Envoyer un message" onPress={() => onContact(pro, 'message')} />
           <ContactItem icon={<Phone size={13} color={C.ink} />} label="Être rappelé" onPress={() => onContact(pro, 'rappel')} />

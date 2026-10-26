@@ -439,8 +439,11 @@ export const initialNotifications = [
   /* Un rappel ACCEPTÉ : il ouvre « En cours », et pas « À traiter ». C'est
      tout l'intérêt de viser la demande et pas la page — c'est là que vit le
      numéro de téléphone du client. */
+  /* Le rappel est celui de Sophie B. (`dr-rappel-1`) : la notification
+     nommait Julie M., qui ne l'a jamais demandé. `verifier-demo` compare
+     désormais l'acteur d'une notification au client de la demande visée. */
   { id: 7, type: 'rappel_accepte', texte: 'Vous avez accepté un rappel',
-    acteurId: 'u-julie', acteurNom: 'Julie M.',
+    acteurId: 'u-sophie', acteurNom: 'Sophie B.',
     rappelId: 'dr-rappel-1', lue: true, time: 'Hier' },
   /* Et une qui mène à SA PROPRE FICHE. */
   { id: 8, type: 'partenaire_demande', texte: 'Coulvane Carrelage vous propose un partenariat',
@@ -579,13 +582,25 @@ export const POST_GRADIENTS = [
  * formulaire. Jamais celui de son compte.
  */
 export const initialDemandesRecues = [
+  /* UNE URGENCE D'ÉLECTRICITÉ, ANCIENNE — décidé par le propriétaire le
+     26/10/2026 (défaut D11 du tournage). Elle était de PLOMBERIE, reçue il
+     y a douze minutes : or le compte de démonstration est maçon et
+     carreleur, et la base ne propose une urgence qu'à un artisan dont la
+     FICHE porte le métier (`artisans_urgence`). Aucun maçon ne peut
+     recevoir une fuite d'eau.
+     Ce compte a, en revanche, une ligne d'urgence « Électricité » restée
+     active (`MES_SOS_DEMO`, tarifs-demo.js — l'état exact de la vraie base
+     au 19/10) : il a été électricien. L'urgence date donc de CETTE
+     époque-là, il y a trois semaines, et l'histoire tient debout. Son
+     ancienneté en date vit dans `devis-demo.js` (`ANCIENNETE_DEMANDES`),
+     et les deux doivent dire la même chose : `verifier-demo` les compare. */
   {
     id: 'dr-sos-1', genre: 'sos', statut: 'envoyee',
     clientId: 'u-julie', nom: 'Julie M.', telephone: '06 39 98 03 01',
-    metier: 'plomberie', titre: 'Fuite sous l’évier',
-    details: 'Ça coule depuis ce matin, sous l’évier de la cuisine · Lambesc',
+    metier: 'electricite', titre: 'Plus de courant dans la cuisine',
+    details: 'Le disjoncteur saute dès qu’on branche le four · Lambesc',
     ville: null, budget: null, creneau: 'immediat',
-    prixMin: 90, prixMax: 180, avatarUrl: null, quand: 'Il y a 12 min',
+    prixMin: 90, prixMax: 180, avatarUrl: null, quand: 'Il y a 21 j',
   },
   {
     id: 'dr-devis-1', genre: 'devis', statut: 'en_attente',
