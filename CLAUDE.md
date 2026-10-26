@@ -9471,8 +9471,12 @@ jamais l'identité : `PostCard` est mémorisée.
 
 `AvatarSuivre` savait déjà se passer de pastille (« pas de pastille du tout
 quand il n'y a rien à suivre (sa propre publication) ») : le commentaire
-existait, personne ne lui donnait `null`. Restent sur sa propre publication
-« Masquer » et « Signaler » : hors de ce qui a été validé (`A-FAIRE`).
+existait, personne ne lui donnait `null`. **« Signaler » est parti aussi**,
+validé le même soir (« on peut enlever aussi ce signaler ») ; il reste sur
+les publications des AUTRES, et `verifier-fil` refuse qu'il disparaisse
+pour tout le monde — les magasins vérifient qu'un signalement se trouve.
+Reste « Masquer » sur sa propre publication : hors de ce qui a été validé
+(`A-FAIRE`).
 
 ##### « Les plus proches » trie vraiment par distance
 

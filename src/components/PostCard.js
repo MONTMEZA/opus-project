@@ -177,7 +177,11 @@ const PostCard = React.memo(function PostCard({
           >
             <EyeOff size={15} color={C.ink} />
           </IconBtn>
-          {!!onSignaler && (
+          {/* Pas sur SA publication — validé par le propriétaire le
+              26/10/2026 : se signaler soi-même n'a pas plus de sens que se
+              suivre. Le signalement doit rester trouvable sur celles des
+              AUTRES (les magasins le vérifient), et il l'est. */}
+          {!!onSignaler && !mienne && (
             <IconBtn
               accessibilityLabel="Signaler cette publication"
               onPress={() => onSignaler({

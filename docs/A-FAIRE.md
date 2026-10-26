@@ -2600,9 +2600,13 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   « Contacter ».** Validé par vous le 26/10 (« cacher les deux ») : fait
   dans le fil, le fil vidéo et la page d'une publication
   (`src/lib/ma-fiche.js`, `verifier-fil` section 9).
-- [ ] Sur SA propre publication restent **« Masquer »** (l'œil barré) et
-  **« Signaler »** (le drapeau) : se signaler soi-même n'a pas plus de sens
-  que se suivre. Pas dans ce que vous avez validé : à décider.
+- [x] **« Signaler »** (le drapeau) sur SA propre publication : retiré,
+  validé par vous le 26/10 (« on peut enlever aussi ce signaler »). Il reste
+  sur les publications des autres — les magasins d'applications vérifient
+  qu'un signalement se trouve.
+- [ ] Reste **« Masquer »** (l'œil barré) sur SA propre publication : se
+  masquer soi-même n'a pas beaucoup de sens non plus. Pas dans ce que vous
+  avez validé : à décider.
 - [x] **La pastille « Les plus proches » de la page Demandes** ne triait
   par distance qu'APRÈS « mes métiers » et l'urgence. Tranché par vous le
   26/10 : **elle trie vraiment par distance** (`src/lib/tri-demandes.js`,

@@ -895,6 +895,11 @@ console.log('\n9. Sur sa propre publication, ni « Suivre » ni « Contacter »'
     /\{!mienne && \(/.test(avantContact));
   verifier('la carte : le menu « Contacter » ne peut pas s’ouvrir sur ma publication',
     /\{contactOpen && !mienne && \(/.test(carte));
+  verifier('la carte : pas de « Signaler » sur ma publication (validé le 26/10)',
+    /\{!!onSignaler && !mienne && \(/.test(carte));
+  const iSignaler = carte.indexOf('Signaler cette publication');
+  verifier('…mais le signalement reste sur celles des autres (les magasins le vérifient)',
+    iSignaler > 0 && /onSignaler\(\{/.test(carte.slice(iSignaler, iSignaler + 300)));
   verifier('la carte reçoit `mienne`, faux par défaut',
     /mienne = false/.test(carte));
 
