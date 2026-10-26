@@ -47,7 +47,7 @@ export const proProfiles = {
        assurance: { valide: true, expire: '12/2026' },
        kbis: { valide: true, maj: '03/2026' },
        rge: true,
-       portfolio: ['#3a3a38,#8a8578', '#6b4226,#b98255', '#1b4b6b,#4d7f9e', '#4b4b2f,#9a9a5a', '#5a3a3a,#a87a7a', '#2f4b3a,#6a9a7a'],
+       portfolio: ['demo:chantier-fondations', 'demo:chantier-ferraillage', 'demo:macon-mur-pierre', 'demo:chantier-terrassement', 'demo:macon-coffrage'],
        reviews: [
          { id: 1, auteur: 'Julie M.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 4, commentaire: "Chantier livré dans les temps, très bon relationnel, travail soigné." },
          { id: 2, auteur: 'Thomas B.', verifie: true, date: 'Août 2026', delais: 4, qualite: 5, tarif: 4, commentaire: "Fondations nickel, un léger retard sur la fin mais bien communiqué." },
@@ -69,7 +69,7 @@ export const proProfiles = {
        assurance: { valide: true, expire: '09/2027' },
        kbis: { valide: true, maj: '01/2026' },
        rge: true,
-       portfolio: ['#1b4b6b,#4d7f9e', '#3a3a38,#8a8578', '#4b4b2f,#9a9a5a'],
+       portfolio: ['demo:electricite-tableau', 'demo:electricite-testeur'],
        reviews: [
          { id: 1, auteur: 'Marc L.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 5, commentaire: "Impeccable du devis à la mise en service, je recommande." },
        ] },
@@ -83,7 +83,7 @@ export const proProfiles = {
        assurance: { valide: false, expire: null },
        kbis: { valide: true, maj: '11/2025' },
        rge: false,
-       portfolio: ['#6b4226,#b98255', '#5a3a3a,#a87a7a'],
+       portfolio: ['demo:carrelage-grand-format', 'demo:carrelage-pose'],
        reviews: [
          { id: 1, auteur: 'Antoine R.', verifie: true, date: 'Août 2026', delais: 3, qualite: 4, tarif: 5, commentaire: "Très bon rapport qualité-prix, quelques jours de retard sur le planning." },
        ] },
@@ -96,7 +96,7 @@ export const proProfiles = {
        assurance: { valide: true, expire: '06/2027' },
        kbis: { valide: true, maj: '02/2026' },
        rge: false,
-       portfolio: ['#1b4b6b,#4d7f9e', '#2f4b3a,#6a9a7a', '#3a3a38,#8a8578'],
+       portfolio: ['demo:chauffage-chaudiere', 'demo:plomberie-cuivre', 'demo:chauffage-radiateur'],
        reviews: [
          { id: 1, auteur: 'Claire D.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 4, commentaire: "Intervention rapide pour une urgence, très professionnel." },
          { id: 2, auteur: 'Hugo P.', verifie: true, date: 'Juin 2026', delais: 4, qualite: 5, tarif: 3, commentaire: "Excellent travail sur le remplacement de chaudière, prix un peu haut." },
@@ -109,7 +109,7 @@ export const proProfiles = {
        assurance: { valide: true, expire: '03/2027' },
        kbis: { valide: true, maj: '06/2026' },
        rge: false,
-       portfolio: ['#1b4b6b,#4d7f9e', '#6b4226,#b98255'],
+       portfolio: ['demo:plomberie-cuivre', 'demo:chauffage-radiateur'],
        reviews: [
          { id: 1, auteur: 'Samir T.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 4, tarif: 5, commentaire: "Fuite réparée en une heure, tarif annoncé respecté." },
        ] },
@@ -121,7 +121,7 @@ export const proProfiles = {
        assurance: { valide: true, expire: '08/2027' },
        kbis: { valide: true, maj: '04/2026' },
        rge: false,
-       portfolio: ['#3a3a38,#8a8578', '#5a3a3a,#a87a7a'],
+       portfolio: ['demo:serrurerie-porte'],
        reviews: [
          { id: 1, auteur: 'Léa V.', verifie: true, date: 'Sept. 2026', delais: 5, qualite: 5, tarif: 4, commentaire: "Porte claquée un dimanche soir, arrivé en 25 minutes, aucune dégradation." },
        ] },
@@ -133,7 +133,7 @@ export const proProfiles = {
        assurance: { valide: true, expire: '11/2026' },
        kbis: { valide: true, maj: '05/2026' },
        rge: true,
-       portfolio: ['#1b4b6b,#4d7f9e', '#2f4b3a,#6a9a7a'],
+       portfolio: ['demo:chauffage-radiateur', 'demo:chauffage-chaudiere'],
        reviews: [
          { id: 1, auteur: 'Farid B.', verifie: true, date: 'Août 2026', delais: 4, qualite: 5, tarif: 4, commentaire: "Chaudière relancée le jour même, explications claires sur l'entretien." },
        ] },
@@ -145,7 +145,7 @@ export const proProfiles = {
        assurance: { valide: true, expire: '04/2027' },
        kbis: { valide: true, maj: '05/2026' },
        rge: true,
-       portfolio: ['#4b4b2f,#9a9a5a', '#6b4226,#b98255'],
+       portfolio: ['demo:toiture-tuiles-posees', 'demo:toiture-chevrons', 'demo:charpente-traditionnelle'],
        reviews: [] },
 };
 
@@ -203,49 +203,49 @@ export function avgReviews(pro) {
 export const initialPosts = [
   { id: 1, type: 'post', format: 'photo', proId: 1, time: 'Il y a 2 h',
     chantierId: 'ch-villa', publieLe: ilYA(2),
-    texte: "Fondations coulées ce matin, dalle prévue vendredi. Chantier villa R+1.",
-    media: '#3a3a38,#8a8578', likes: 214, vues: 3120, liked: false,
+    texte: "Dalle coulée ce matin à la pompe, sur le treillis posé hier. Chantier villa R+1.",
+    media: 'demo:chantier-fondations', likes: 214, vues: 3120, liked: false,
     comments: [
       { id: 1, auteurId: 'demo-julie', auteur: 'Julie M.', auteurType: 'particulier',
         texte: 'Superbe avancée, bravo !', time: 'Il y a 1 h',
         reponses: [
           { id: 11, auteurId: 1, auteur: 'Maçonnerie Ferlane', auteurType: 'pro',
-            texte: 'Merci Julie ! La dalle est prévue vendredi.', time: 'Il y a 45 min',
+            texte: 'Merci Julie ! On attaque les murs la semaine prochaine.', time: 'Il y a 45 min',
             reponses: [] },
           { id: 12, auteurId: 'demo-julie', auteur: 'Julie M.', auteurType: 'particulier',
             texte: '@Maçonnerie Ferlane hâte de voir le résultat.', time: 'Il y a 30 min',
             reponses: [] },
         ] },
     ] },
-  { id: 2, type: 'post', format: 'video', proId: 2, time: 'Il y a 4 h',
-    texte: "Tableau électrique aux normes NF C 15-100, mise en service demain matin.",
-    media: '#1b4b6b,#4d7f9e', likes: 132, vues: 1870, liked: false, comments: [] },
+  { id: 2, type: 'post', format: 'video', proId: 6, time: 'Il y a 4 h',
+    texte: "Deux cylindres changés sur une porte ancienne en chêne. Clés remises au client le jour même.",
+    media: 'demo:serrurerie-porte', likes: 132, vues: 1870, liked: false, comments: [] },
   { id: 'ad1', type: 'ad', annonceur: 'Estelvin Matériaux',
-    accroche: "Ciment, plaques de plâtre, outillage : retrait au dépôt dès 7 h.",
-    cta: 'Découvrir', media: '#2b2b2b,#555555' },
+    accroche: "Carrelage, ciment, plaques de plâtre, outillage : retrait au dépôt dès 7 h.",
+    cta: 'Découvrir', media: 'demo:carrelage-pose' },
   { id: 3, type: 'post', format: 'video', proId: 3, time: 'Hier',
     texte: "Pose grand format 120x60 en salle de bain, jointoiement fini cette semaine. Rendu au top.",
-    media: '#6b4226,#b98255', likes: 341, vues: 5240, liked: false,
+    media: 'demo:carrelage-grand-format', likes: 341, vues: 5240, liked: false,
     comments: [
       { id: 2, auteurId: 'demo-antoine', auteur: 'Antoine R.', auteurType: 'particulier',
         texte: 'Magnifique travail, vous intervenez sur Toulouse centre ?',
         time: 'Il y a 3 h', reponses: [] },
     ] },
   /* Plusieurs photos : c'est CE post qui montre le carrousel en mode démo.
-     Un chantier ne se raconte pas en une image — ici la chaudière posée, le
-     circuit purgé, le raccordement, le tableau de commande. */
+     Un chantier ne se raconte pas en une image — ici la chaudière posée,
+     puis le plancher chauffant dont on a purgé le circuit. */
   { id: 4, type: 'post', format: 'photo', proId: 4, time: 'Hier',
-    texte: "Remplacement chaudière + purge complète du circuit. Client satisfait, garantie 2 ans.",
-    media: '#1b4b6b,#2f4b3a',
-    medias: ['#1b4b6b,#2f4b3a', '#3a3a38,#8a8578', '#6b4226,#b98255', '#2f4b3a,#6a9a7a'],
+    texte: "Remplacement chaudière et purge complète du circuit, plancher chauffant compris. Client satisfait, garantie 2 ans.",
+    media: 'demo:chauffage-chaudiere',
+    medias: ['demo:chauffage-chaudiere', 'demo:chauffage-radiateur'],
     likes: 87, vues: 940, liked: false, comments: [] },
   { id: 'ad2', type: 'ad', annonceur: 'Roucanne Assurances',
     accroche: "Votre décennale et votre RC pro, avec l’attestation en ligne.",
-    cta: 'En savoir plus', media: '#111111,#3a3a38' },
+    cta: 'En savoir plus', media: 'demo:macon-coffrage' },
   { id: 6, type: 'post', format: 'montage', proId: 2, time: 'Il y a 1 j',
-    texte: "Chantier en trois temps : saignées, passage des gaines, tableau fini.",
-    media: '#2f4b3a,#6a9a7a',
-    medias: ['#2f4b3a,#6a9a7a', '#1b4b6b,#4d7f9e', '#4b4b2f,#9a9a5a'],
+    texte: "Chantier en deux temps : les borniers câblés et repérés, puis le contrôle avant la mise en service.",
+    media: 'demo:electricite-tableau',
+    medias: ['demo:electricite-tableau', 'demo:electricite-testeur'],
     musique: null, likes: 96, vues: 1310, liked: false, comments: [] },
   { id: 5, type: 'post', format: 'avantapres', proId: 5, time: 'Il y a 2 j',
     chantierId: 'ch-toiture', publieLe: ilYA(2 * 24),
@@ -253,8 +253,8 @@ export const initialPosts = [
     /* Un avant/après porte DEUX photos : l'application refuse d'en publier
        un avec une seule (relevé le 26/10). `media` reste l'après, c'est la
        couverture du chantier. */
-    media: '#4b4b2f,#9a9a5a',
-    medias: ['#6b4226,#b98255', '#4b4b2f,#9a9a5a'],
+    media: 'demo:toiture-tuiles-posees',
+    medias: ['demo:toiture-ancienne', 'demo:toiture-tuiles-posees'],
     likes: 176, vues: 2080, liked: false, comments: [] },
 
   /* LE CHANTIER DU PRO DE DÉMONSTRATION — deux étapes de plus, pour qu'il
@@ -266,11 +266,11 @@ export const initialPosts = [
   { id: 13, type: 'post', format: 'photo', proId: 1, time: 'Il y a 3 j',
     chantierId: 'ch-villa', publieLe: ilYA(3 * 24),
     texte: "Terrassement terminé. Le sol est bon, pas besoin de reprise en sous-œuvre.",
-    media: '#6b4226,#b98255', likes: 63, vues: 940, liked: false, comments: [] },
+    media: 'demo:chantier-terrassement', likes: 63, vues: 940, liked: false, comments: [] },
   { id: 14, type: 'post', format: 'photo', proId: 1, time: 'Il y a 1 j',
     chantierId: 'ch-villa', publieLe: ilYA(24),
     texte: "Semelles filantes ferraillées et coffrées. On coule dès que le contrôle est passé.",
-    media: '#3a3a38,#8a8578', likes: 88, vues: 1180, liked: false, comments: [] },
+    media: 'demo:chantier-ferraillage', likes: 88, vues: 1180, liked: false, comments: [] },
 
   /* UN CHANTIER RACONTÉ EN QUATRE ÉTAPES — ajouté le 05/10/2026 avec la
      section 36. Sans lui, ni la bande de la fiche, ni la page du chantier,
@@ -285,20 +285,20 @@ export const initialPosts = [
   { id: 10, type: 'post', format: 'photo', proId: 5, time: 'Il y a 6 j',
     chantierId: 'ch-toiture', publieLe: ilYA(6 * 24),
     texte: "Dépose de l'ancienne couverture. Les tuiles réutilisables sont mises de côté.",
-    media: '#6b4226,#b98255', likes: 54, vues: 810, liked: false, comments: [] },
+    media: 'demo:toiture-ancienne', likes: 54, vues: 810, liked: false, comments: [] },
   /* DEUX photos sur une seule étape : sans ça, le carrousel du dossier ne
      se vérifie nulle part — c'est exactement le défaut que le propriétaire
      a trouvé sur son iPhone le 06/10/2026. */
   { id: 11, type: 'post', format: 'photo', proId: 5, time: 'Il y a 5 j',
     chantierId: 'ch-toiture', publieLe: ilYA(5 * 24),
     texte: "Pose des chevrons neufs en douglas. La charpente était saine, on a gardé les pannes.",
-    media: '#4b4b2f,#9a9a5a',
-    medias: ['#4b4b2f,#9a9a5a', '#6b4226,#b98255'],
+    media: 'demo:toiture-chevrons',
+    medias: ['demo:toiture-chevrons', 'demo:charpente-traditionnelle'],
     likes: 71, vues: 1040, liked: false, comments: [] },
   { id: 12, type: 'post', format: 'photo', proId: 5, time: 'Il y a 4 j',
     chantierId: 'ch-toiture', publieLe: ilYA(4 * 24),
     texte: "Écran sous-toiture et liteaux. C'est lui qui protège de la condensation.",
-    media: '#2f4b3a,#6a9a7a', likes: 48, vues: 760, liked: false, comments: [] },
+    media: 'demo:toiture-ecran-liteaux', likes: 48, vues: 760, liked: false, comments: [] },
 
   /* DEUX CONSEILS, ET LES DEUX CAS QUI COMPTENT — ajoutés le 05/10/2026
      avec l'étiquette (section 34). Sans eux, ni le bandeau du fil, ni le
@@ -311,12 +311,12 @@ export const initialPosts = [
      est un TEXTE sans image — le format que le propriétaire a demandé de
      garder, et dont personne ne s'était jamais servi : c'est lui qui a
      révélé que la carte affichait alors un carré de dégradé vide. */
-  { id: 7, type: 'post', format: 'video', proId: 2, time: 'Il y a 3 j',
+  { id: 7, type: 'post', format: 'video', proId: 4, time: 'Il y a 3 j',
     conseil: true,
-    texte: "Avant de percer un mur, coupez au disjoncteur ET vérifiez au "
-      + "détecteur de tension. Une gaine passe rarement là où on l'imagine : "
-      + "sur une rénovation, je trouve encore des fils sans gaine du tout.",
-    media: '#1b4b6b,#4d7f9e', likes: 418, vues: 7650, liked: false, comments: [] },
+    texte: "Avant de braser un raccord cuivre, videz complètement la "
+      + "canalisation : une seule goutte d'eau suffit à empêcher la brasure "
+      + "de prendre. La fuite, elle, attend la remise en eau.",
+    media: 'demo:plomberie-cuivre', likes: 418, vues: 7650, liked: false, comments: [] },
   { id: 8, type: 'post', format: 'texte', proId: 1, time: 'Il y a 4 j',
     conseil: true,
     texte: "On ne coule pas une dalle en dessous de 5 °C : le béton ne prend "
@@ -350,7 +350,7 @@ export const initialChantiers = [
      Celui du récit périmé se voit en publiant une étape de plus, et il est
      éprouvé par le contrôle, qui fait tourner `recitPerime()`. */
   { id: 'ch-toiture', proId: 5, titre: 'Toiture Charleval', ville: 'Charleval (13)',
-    statut: 'termine', nbPublications: 4, couverture: '#4b4b2f,#9a9a5a',
+    statut: 'termine', nbPublications: 4, couverture: 'demo:toiture-tuiles-posees',
     debut: ilYA(6 * 24), fin: ilYA(2 * 24),
     recit: "Nous avons commencé par déposer l'ancienne couverture, en mettant "
       + 'de côté les tuiles réutilisables. La charpente était saine : nous '
@@ -361,7 +361,7 @@ export const initialChantiers = [
       + 'reposées.',
     recitEcritLe: ilYA(2 * 24 - 1) },
   { id: 'ch-villa', proId: 1, titre: 'Villa R+1 Marseille', ville: 'Marseille (13)',
-    statut: 'en_cours', nbPublications: 3, couverture: '#3a3a38,#8a8578',
+    statut: 'en_cours', nbPublications: 3, couverture: 'demo:chantier-fondations',
     debut: ilYA(3 * 24), fin: ilYA(2) },
 ];
 
@@ -429,7 +429,7 @@ export const initialNotifications = [
      06/10/2026 — « on clique dessus, rien ne se passe ». `a3` est une
      annonce du pro de démonstration, donc la feuille de ses réponses
      s'ouvre vraiment. */
-  { id: 5, type: 'annonce', texte: 'Belvanne Élec a répondu à « 40 m² de tuiles canal, jamais posées »',
+  { id: 5, type: 'annonce', texte: 'Belvanne Élec a répondu à « 300 parpaings creux, jamais utilisés »',
     acteurId: 2, acteurNom: 'Belvanne Élec',
     annonceId: 'a3', lue: false, time: 'Il y a 2 h' },
   /* Une demande de devis EN ATTENTE : elle ouvre la pastille « À traiter ». */
@@ -465,15 +465,15 @@ export const initialNotifications = [
 export const initialDemandes = [
   { id: 1, auteurId: 'p-camille', auteur: 'Camille R.', metier: 'carreleur', ville: 'Toulouse (31)',
     texte: "Salle de bain de 6 m² à carreler entièrement, murs et sol. Faïence déjà achetée.",
-    media: '#6b4226,#b98255', time: 'Il y a 3 h', deposeeLe: ilYA(3), statut: 'ouverte', reponses: 2,
+    media: 'demo:demande-salle-de-bain', time: 'Il y a 3 h', deposeeLe: ilYA(3), statut: 'ouverte', reponses: 2,
     budget: '2000_5000', urgence: 'ce_mois', latitude: 43.6045, longitude: 1.4442 },
   { id: 2, auteurId: 'p-hugo', auteur: 'Hugo P.', metier: 'peintre-en-batiment', ville: 'Marseille (13)',
-    texte: "Deux chambres à repeindre, environ 30 m² au total. Murs en bon état.",
-    media: null, time: 'Hier', deposeeLe: ilYA(26), statut: 'ouverte', reponses: 5,
+    texte: "Deux chambres à repeindre, environ 30 m² au total. J'ai commencé la première, je n'ai pas le temps de finir.",
+    media: 'demo:peinture-mur', time: 'Hier', deposeeLe: ilYA(26), statut: 'ouverte', reponses: 5,
     budget: '500_2000', urgence: 'quand_possible', latitude: 43.2965, longitude: 5.3698 },
   { id: 3, auteurId: 'p-nadia', auteur: 'Nadia K.', metier: 'macon', ville: 'Aix-en-Provence (13)',
-    texte: "Mur de clôture de 12 m à monter en parpaing, avec un portail à sceller.",
-    media: '#3a3a38,#8a8578', time: 'Il y a 2 j', deposeeLe: ilYA(50), statut: 'ouverte', reponses: 1,
+    texte: "Fissure en escalier sur la façade, elle s'agrandit depuis l'hiver. J'aimerais un avis avant qu'elle n'empire.",
+    media: 'demo:demande-fissure', time: 'Il y a 2 j', deposeeLe: ilYA(50), statut: 'ouverte', reponses: 1,
     budget: 'a_chiffrer', urgence: 'urgent', latitude: 43.5297, longitude: 5.4474 },
 ];
 
@@ -494,10 +494,10 @@ export const initialAnnonces = [
     metier: 'plombier', ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698,
     dateDebut: '2026-10-23', dateFin: '2026-10-31', time: 'Hier', reponses: 1 },
   { id: 'a3', type: 'materiel_vente', auteurId: 1,
-    titre: '40 m² de tuiles canal, jamais posées',
-    texte: "Surplus d'un chantier annulé. Palettes complètes, stockées à l'abri. À prendre sur place.",
+    titre: '300 parpaings creux, jamais utilisés',
+    texte: "Surplus d'un chantier annulé. Sur palettes, stockés à l'abri. À prendre sur place.",
     ville: 'Marseille (13)', latitude: 43.2965, longitude: 5.3698,
-    prix: 180, unite: 'total', media: '#6b4226,#b98255', time: 'Il y a 2 j', reponses: 1 },
+    prix: 180, unite: 'total', media: 'demo:macon-parpaings', time: 'Il y a 2 j', reponses: 1 },
   { id: 'a4', type: 'materiel_location', auteurId: 1,
     titre: 'Nacelle 12 m — disponible en semaine',
     texte: "Nacelle articulée, contrôle technique à jour. Livraison possible dans un rayon de 30 km.",
@@ -550,7 +550,7 @@ export const initialAnnonces = [
 export const initialReponsesAnnonces = {
   a3: [
     { id: 'ra3-1', proId: 2, time: 'Il y a 2 h',
-      message: "Bonjour, je refais une toiture le mois prochain : les 40 m² m'intéressent. Je peux passer les voir jeudi ?" },
+      message: "Bonjour, je monte un local technique au fond de mon terrain : les 300 m'intéressent. Je peux passer les voir jeudi ?" },
   ],
   a4: [
     { id: 'ra4-1', proId: 4, time: 'Hier',

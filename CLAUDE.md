@@ -9316,6 +9316,49 @@ rendait `[]` pour toutes les annonces), un récit de chantier qui gardait la
 charpente puis la reposait. `verifier-demo` et `verifier-place` les font
 tourner.
 
+#### Des photos libres de droit à la place des dégradés
+
+Demandé par le propriétaire le 26/10 : « ajoute des photos libres de droit
+pour enlever les dégradés de couleur ». **22 photos**, dans `assets/demo/`,
+désignées dans `demo.js` par une clé (`'demo:chantier-fondations'`) et
+résolues par `src/data/photos-demo.js` — `demo.js` reste ouvrable par
+`node`, qui ne sait pas charger une image.
+
+> **CC0 ou domaine public, et rien d'autre.** Même CC-BY obligerait à citer
+> l'auteur dans l'application ET dans chaque publicité. Personne de
+> reconnaissable, aucune marque lisible : chaque photo a été regardée par un
+> relecteur, agrandie, puis une seconde fois avant d'être branchée. Licence,
+> auteur et source : `assets/demo/LICENCES.md`. `verifier-demo` refuse une
+> photo sans bloc de licence, une autre licence, un fichier orphelin, une
+> photo de plus de 260 Ko.
+
+> **Une légende dit ce que montre SA photo.** Une photo de dalle coulée sous
+> « fondations coulées, dalle prévue vendredi » serait fausse pour un
+> maçon : six légendes de la démonstration ont été réécrites autour des
+> photos trouvées. Quatre sujets n'avaient AUCUNE photo acceptable (mur de
+> parpaings en cours de montage, toiture en dépose, tuiles canal neuves,
+> gaines électriques) : l'annonce de tuiles canal est devenue une annonce
+> de parpaings, le montage d'électricien un chantier en deux temps, la
+> publication vidéo de l'électricien est passée au serrurier, et le conseil
+> en vidéo au plombier.
+
+Deux pièges rencontrés :
+
+- **Wikimedia refuse une largeur arbitraire** (`/thumb/…/1080px-…` rend
+  400) et limite le débit (429) : `Special:FilePath/<nom>?width=960`
+  passe. **StockSnap est derrière Cloudflare** (403 au conteneur, à
+  WebFetch, à son CDN) : sa licence ne se relit qu'à travers Openverse, et
+  la seule photo trouvée là n'existait qu'en 600 px — écartée.
+- **Le contrôle des licences lisait le mauvais bloc** : il cherchait le nom
+  du fichier, que l'introduction de `LICENCES.md` cite. Il cherche
+  désormais le TITRE `### \`fichier.jpg\``, et lit le bloc entier.
+
+Vérifié : les 53 contrôles, le linter (32, tous antérieurs), les paquets
+iOS et Android (les 22 photos y sont, retrouvées par empreinte), et au
+navigateur en démonstration : **aucun grand dégradé** dans le fil, les
+photos aux bonnes places. **Pas vérifié** : le rendu sur l'iPhone, et le
+poids de ces 2,8 Mo dans l'application installée.
+
 #### Ce qui n'a PAS été corrigé, et pourquoi
 
 - **Les anciennes données de démonstration sont dans la VRAIE base** —

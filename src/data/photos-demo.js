@@ -22,6 +22,28 @@
  * vraie base.
  */
 export const PHOTOS_DEMO = {
+  'carrelage-grand-format': require('../../assets/demo/carrelage-grand-format.jpg'),
+  'carrelage-pose': require('../../assets/demo/carrelage-pose.jpg'),
+  'chantier-ferraillage': require('../../assets/demo/chantier-ferraillage.jpg'),
+  'chantier-fondations': require('../../assets/demo/chantier-fondations.jpg'),
+  'chantier-terrassement': require('../../assets/demo/chantier-terrassement.jpg'),
+  'charpente-traditionnelle': require('../../assets/demo/charpente-traditionnelle.jpg'),
+  'chauffage-chaudiere': require('../../assets/demo/chauffage-chaudiere.jpg'),
+  'chauffage-radiateur': require('../../assets/demo/chauffage-radiateur.jpg'),
+  'demande-fissure': require('../../assets/demo/demande-fissure.jpg'),
+  'demande-salle-de-bain': require('../../assets/demo/demande-salle-de-bain.jpg'),
+  'electricite-tableau': require('../../assets/demo/electricite-tableau.jpg'),
+  'electricite-testeur': require('../../assets/demo/electricite-testeur.jpg'),
+  'macon-coffrage': require('../../assets/demo/macon-coffrage.jpg'),
+  'macon-mur-pierre': require('../../assets/demo/macon-mur-pierre.jpg'),
+  'macon-parpaings': require('../../assets/demo/macon-parpaings.jpg'),
+  'peinture-mur': require('../../assets/demo/peinture-mur.jpg'),
+  'plomberie-cuivre': require('../../assets/demo/plomberie-cuivre.jpg'),
+  'serrurerie-porte': require('../../assets/demo/serrurerie-porte.jpg'),
+  'toiture-ancienne': require('../../assets/demo/toiture-ancienne.jpg'),
+  'toiture-chevrons': require('../../assets/demo/toiture-chevrons.jpg'),
+  'toiture-ecran-liteaux': require('../../assets/demo/toiture-ecran-liteaux.jpg'),
+  'toiture-tuiles-posees': require('../../assets/demo/toiture-tuiles-posees.jpg'),
 };
 
 /** La photo d'une clé « demo:… », ou `null` pour tout le reste. */

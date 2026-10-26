@@ -29,7 +29,7 @@
  *
  *   npm run verifier-demo
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -124,9 +124,84 @@ console.log('\nLa démonstration ne se dément pas');
     menteuses.length === 0, menteuses.map((n) => `notification ${n.id} (${n.acteurNom})`).join(', '));
 }
 
+console.log('\nDe vraies photos, libres de droit, à la place des dégradés');
+{
+  const DEGRADE = /^#[0-9a-f]{6},#[0-9a-f]{6}$/i;
+  const medias = [];
+  Object.values(pros).forEach((p) => (p.portfolio || []).forEach((m) => medias.push(['portfolio', p.entreprise, m])));
+  demo.initialPosts.forEach((p) => {
+    if (p.media) medias.push(['publication', p.id, p.media]);
+    (p.medias || []).forEach((m) => medias.push(['publication', p.id, m]));
+  });
+  demo.initialChantiers.forEach((c) => medias.push(['chantier', c.id, c.couverture]));
+  demo.initialDemandes.forEach((d) => { if (d.media) medias.push(['demande', d.id, d.media]); });
+  demo.initialAnnonces.forEach((a) => { if (a.media) medias.push(['annonce', a.id, a.media]); });
+
+  const degrades = medias.filter(([, , m]) => typeof m === 'string' && DEGRADE.test(m));
+  verifier('plus aucun dégradé de couleur à la place d’une photo',
+    degrades.length === 0, degrades.map(([t, id]) => `${t} ${id}`).join(', '));
+
+  const cles = new Set(medias.map(([, , m]) => m)
+    .filter((m) => typeof m === 'string' && m.startsWith('demo:'))
+    .map((m) => m.slice(5)));
+
+  /* La table des photos, lue comme du texte : `cle: require('…/fichier.jpg')`. */
+  const table = sansCommentaires(lire('src/data/photos-demo.js'));
+  const entrees = [...table.matchAll(/'([a-z0-9-]+)':\s*require\('\.\.\/\.\.\/assets\/demo\/([a-z0-9-]+\.jpg)'\)/g)]
+    .map(([, cle, fichier]) => ({ cle, fichier }));
+  const connues = new Set(entrees.map((e) => e.cle));
+  const manquantes = [...cles].filter((c) => !connues.has(c));
+  verifier('chaque photo nommée dans les données existe dans la table des photos',
+    cles.size > 0 && manquantes.length === 0, manquantes.join(', '));
+
+  const inutiles = entrees.filter((e) => !cles.has(e.cle));
+  verifier('…et la table ne garde aucune photo que personne n’affiche',
+    inutiles.length === 0,
+    'une photo inutile alourdit l’application pour rien : ' + inutiles.map((e) => e.cle).join(', '));
+
+  const dossier = 'assets/demo';
+  const surDisque = existsSync(dossier) ? readdirSync(dossier).filter((f) => f.endsWith('.jpg')) : [];
+  const absents = entrees.filter((e) => !surDisque.includes(e.fichier));
+  verifier('chaque fichier de la table est bien dans assets/demo',
+    absents.length === 0, absents.map((e) => e.fichier).join(', '));
+  const orphelins = surDisque.filter((f) => !entrees.some((e) => e.fichier === f));
+  verifier('…et assets/demo ne contient aucun fichier que la table ne nomme pas',
+    orphelins.length === 0, orphelins.join(', '));
+
+  /* Une photo de démonstration voyage DANS l'application : chacune est
+     réduite à 1080 px et pèse moins de 260 Ko, et l'ensemble reste borné. */
+  const poids = surDisque.map((f) => [f, statSync(`${dossier}/${f}`).size]);
+  const lourdes = poids.filter(([, o]) => o > 260 * 1024);
+  verifier('chaque photo pèse moins de 260 Ko',
+    lourdes.length === 0, lourdes.map(([f, o]) => `${f} : ${Math.round(o / 1024)} Ko`).join(', '));
+  const total = poids.reduce((t, [, o]) => t + o, 0);
+  verifier('l’ensemble des photos pèse moins de 6 Mo',
+    total <= 6 * 1024 * 1024, `${(total / 1024 / 1024).toFixed(1)} Mo`);
+
+  /* LA LICENCE EST ÉCRITE À CÔTÉ DE CHAQUE PHOTO. Seules deux sont admises :
+     CC0 (l'auteur renonce à ses droits) et le domaine public. Toute autre —
+     même CC-BY — exigerait de citer l'auteur dans l'application et dans
+     chaque publicité, ce que personne ne pensera à faire. */
+  const licences = existsSync(`${dossier}/LICENCES.md`) ? lire(`${dossier}/LICENCES.md`) : '';
+  const sansLicence = surDisque.filter((f) => {
+    /* Son TITRE, et pas la première mention du nom : l'introduction en
+       cite un, et le bloc lu aurait alors été celui de quelqu'un d'autre. */
+    const i = licences.indexOf(`### \`${f}\``);
+    if (i < 0) return true;
+    /* Le bloc entier, jusqu'au titre suivant : une fenêtre de taille fixe
+       perdait la ligne « Licence » derrière une description longue. */
+    const bloc = licences.slice(i).split(/\n### /)[0];
+    return !/Licence : (CC0 1\.0|domaine public)/.test(bloc) || !/Source : https:\/\//.test(bloc);
+  });
+  verifier('chaque photo a sa licence (CC0 ou domaine public) et sa source dans LICENCES.md',
+    surDisque.length > 0 && sansLicence.length === 0, sansLicence.join(', '));
+  verifier('LICENCES.md n’admet aucune autre licence',
+    licences.length > 0 && !/Licence : (?!CC0 1\.0|domaine public)/.test(licences));
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);
   process.exit(1);
 }
-console.log('✔ La démonstration ne prête un nom ou un numéro à personne, et elle ne se dément pas.\n');
+console.log('✔ La démonstration ne prête un nom, un numéro ou une photo à personne, et elle ne se dément pas.\n');

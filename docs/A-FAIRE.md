@@ -2584,6 +2584,12 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   France ; pas d'accès sans compte) : avant toute publicité payante. Les 21
   vidéos et 36 captures du 25/10 portent les ANCIENS noms : ne pas les
   publier.
+- [ ] **Quatre sujets n'ont pas de photo libre de droit acceptable** (mur
+  de parpaings en cours de montage, toiture en cours de dépose, tuiles canal
+  neuves, gaines électriques) : la démonstration a été réécrite autour des 22
+  photos trouvées (`assets/demo/LICENCES.md`). Le jour où l'on veut ces
+  sujets, la meilleure source est une photo prise sur un VRAI chantier, avec
+  l'accord du client et sans rien d'identifiable.
 - [ ] **`supabase/seed.sql` ne peut plus être rejoué** (mesuré en
   transaction annulée) : ses comptes naissent particuliers, et
   `exige_un_compte_pro()` refuse leur fiche. Il reste un document, pas un
