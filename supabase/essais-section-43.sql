@@ -57,6 +57,11 @@ select has_function_privilege('anon', 'public.recalcule_chantier(uuid)', 'execut
 -- corrige et plus aucun poste ne s insere (42501). Une revocation qui ne les
 -- nommait pas (une boucle sur pg_proc) laissait verifier-portes au vert.
 -- t pour authentifie, f pour anon sur les deux.
+-- metier_du_sos (lot S-b, 26/10/2026) entre dans la meme famille :
+-- tient_l_urgence(), declencheur `security invoker` pose avant l insertion
+-- d une urgence, l appelle pour verifier que l artisan exerce bien le metier
+-- demande. Sans ce droit, plus aucune urgence ne partirait (42501). t pour
+-- authentifie, f pour anon (un visiteur n envoie pas d urgence).
 -- `authentifie` doit valoir t PARTOUT. Un f ici, et la regle echoue au lieu
 -- de filtrer.
 select p.proname, p.prosecdef as definer,
@@ -67,7 +72,7 @@ select p.proname, p.prosecdef as definer,
    and p.proname in ('est_admin', 'est_masque', 'est_un_pro', 'est_mon_entreprise',
                      'horaires_valides', 'metiers_connus',
                      'devis_total_ligne', 'devis_tva_de', 'mes_entreprises',
-                     'a_deja_une_reponse', 'cle_de_rapprochement')
+                     'a_deja_une_reponse', 'cle_de_rapprochement', 'metier_du_sos')
  order by 1;
 
 \echo '=== 5. ET UNE ECRITURE PASSE ENCORE — les declencheurs travaillent ==='

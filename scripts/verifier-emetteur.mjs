@@ -1257,13 +1257,16 @@ if (!E) {
     /* DEUX LISTES depuis le lot T : `artisans_urgence()` lit `tarifs_pro`
        (à travers « tarifs affiches », en `security invoker`), et elle n'a
        rien à faire dans `emetteur` ni dans `emetteur_assurances`, qui ne
-       s'affichent nulle part. Une liste commune l'aurait autorisée partout. */
+       s'affichent nulle part. Une liste commune l'aurait autorisée partout.
+       `tient_l_urgence()` (lot S-b, 26/10/2026) y entre aussi : elle refuse
+       une urgence vers un artisan absent de la recherche, avec les mêmes
+       conditions, en `security invoker` — elle ne rend aucun tarif. */
     const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
     const LISTES = [
       { tables: /\b(emetteur_assurances|emetteur)\b/,
         permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees'] },
       { tables: /\btarifs_pro\b/,
-        permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence'] },
+        permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence'] },
     ];
     const fonctions = [...SCHEMA.matchAll(
       /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?(\w+)\s*\(([\s\S]*?)\bas\s+(\$\w*\$)([\s\S]*?)\3/gi,

@@ -182,7 +182,10 @@ insert into public.quote_requests (id, client_id, professional_id, metier, descr
  (:QA, :P, :A, 'macon', 'Refaire la salle de bain', 'Lambesc', 'environ 2 000 €', 'accepte'),
  (:QB, :P, :B, 'plombier', 'Changer un chauffe-eau', 'Lambesc', null, 'accepte');
 insert into public.sos_requests (id, client_id, professional_id, metier_key, probleme_key, statut) values
- (:SA, :P, :A, 'maconnerie', 'fissure', 'acceptee'),
+ -- « plomberie » et non plus « maconnerie » : depuis le lot S-b (26/10/2026),
+ -- `sos_metier_key_check` n'accepte que les quatre clés d'urgence. L'essai ne
+ -- regarde pas le métier de l'urgence, seulement le lien du devis.
+ (:SA, :P, :A, 'plomberie', 'fuite', 'acceptee'),
  (:SB, :P, :B, 'plomberie', 'fuite', 'acceptee');
 commit;
 
@@ -1209,34 +1212,34 @@ select string_agg(nspname || '.' || proname, ', ' order by proname) filter (wher
        string_agg(proname, ', ') filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and prosecdef) as definer_attendu_recalcule_devis,
        count(*) filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and proname ~ '^admin_') as admin_attendu_0
   from corps;
-\echo '--- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le 21/10/2026, plus admin_valider_pieces (lot S-a, 25/10/2026 : valider la pièce que l administration a vue) — une NOUVELLE, quelle qu elle soit, rougit'
+\echo '--- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le 21/10/2026, plus admin_valider_pieces (lot S-a, 25/10/2026 : valider la pièce que l administration a vue) et peut_faire_un_devis (lot S-b, 26/10/2026 : dire AVANT la saisie si un nouveau devis peut se rattacher à une demande, sans rien dire d une demande qui n est pas à l appelant) — une NOUVELLE, quelle qu elle soit, rougit'
 with ouvertes as (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prosecdef
      and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
 )
-select count(*) as definer_ouvertes_attendu_25,
+select count(*) as definer_ouvertes_attendu_26,
        coalesce(string_agg(proname, ', ' order by proname) filter (where proname not in (
          'a_deja_une_reponse', 'admin_demandes_pro', 'admin_file_verifications', 'admin_metier_demandes', 'admin_refuser_pro',
          'admin_resume', 'admin_retirer_entreprise', 'admin_signalements', 'admin_specialites', 'admin_traiter_demande_pro',
          'admin_traiter_metier_demande', 'admin_traiter_signalement', 'admin_traiter_specialite', 'admin_valider_pieces', 'admin_verifier_pro',
          'annuler_ma_demande_pro', 'completer_ma_demande_pro', 'devenir_pro', 'est_admin', 'est_masque', 'marquer_lus',
-         'mes_demandes_recues', 'mon_compte', 'preparer_suppression_compte', 'rattacher_mon_siret')), '—') as nouvelles_attendu_tiret
+         'mes_demandes_recues', 'mon_compte', 'peut_faire_un_devis', 'preparer_suppression_compte', 'rattacher_mon_siret')), '—') as nouvelles_attendu_tiret
   from ouvertes;
-\echo '--- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026 — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)'
+\echo '--- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026, plus trois du lot S-b (26/10/2026) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)'
 with fermees as (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prosecdef
      and not (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
 )
-select count(*) as definer_fermees_attendu_27,
+select count(*) as definer_fermees_attendu_30,
        coalesce(string_agg(proname, ', ' order by proname) filter (where proname not in (
          'admin_exige_droit', 'anonymise_actes_admin', 'calcule_client_verifie', 'compter_appel_siret', 'compter_essai_tva',
          'cree_fiche_utilisateur', 'enregistrer_appel_ia', 'fiche_pro_indestructible', 'maj_chantier', 'maj_comments_count',
-         'maj_followers_count', 'maj_likes_count', 'maj_nb_reponses', 'maj_notes_pro', 'maj_vues_count', 'notifie_commentaire',
+         'maj_followers_count', 'maj_likes_count', 'maj_nb_reponses', 'maj_nb_reponses_demande', 'maj_notes_pro', 'maj_vues_count', 'notifie_commentaire',
          'notifie_demande', 'notifie_demande_pro', 'notifie_partenariat', 'notifie_reponse_annonce', 'pose_le_lieu_du_post',
          'recalcule_apres_ligne_de_devis', 'recalcule_chantier', 'recalcule_devis', 'recalcule_notes_pro', 'siren_reserve',
-         'tient_le_chantier_du_post')), '—') as nouvelles_attendu_tiret
+         'tait_les_notifications_bloquees', 'tient_le_chantier_du_post', 'tient_le_lien_du_devis')), '—') as nouvelles_attendu_tiret
   from fermees;
 \echo '--- 27d. sans texte : les fonctions que la BASE a enregistrées comme dépendant des trois tables (corps SQL standard)'
 select coalesce(string_agg(distinct p.proname, ', '), '—') as fonctions_dependantes_attendu_tiret
@@ -1249,9 +1252,9 @@ select count(distinct v.oid) as vues_ou_regles_attendu_0
   join pg_class v on v.oid = r.ev_class
  where d.refobjid in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass)
    and v.oid not in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass);
-\echo '--- 27f. sans texte : les déclencheurs posés sur les trois tables (hors clés étrangères) — exactement les trois nommés, et aucune règle sur elles'
+\echo '--- 27f. sans texte : les déclencheurs posés sur les trois tables (hors clés étrangères) — exactement les quatre nommés (trg_tient_le_lien_du_devis depuis le lot S-b : un nouveau lien vers la demande d une personne en blocage, OP020), et aucune règle sur elles'
 select string_agg(c.relname || '.' || t.tgname, ', ' order by c.relname, t.tgname)
-         = 'devis.trg_tient_le_devis, devis_lignes.trg_recalcule_devis, devis_lignes.trg_tient_la_ligne_de_devis' as declencheurs_exacts_attendu_t,
+         = 'devis.trg_tient_le_devis, devis.trg_tient_le_lien_du_devis, devis_lignes.trg_recalcule_devis, devis_lignes.trg_tient_la_ligne_de_devis' as declencheurs_exacts_attendu_t,
        string_agg(c.relname || '.' || t.tgname, ', ' order by c.relname, t.tgname) as declencheurs,
        (select count(*) from pg_rewrite r
          where r.ev_class in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass)) as regles_sur_elles_attendu_0
@@ -1383,7 +1386,7 @@ select count(*) as devis_restants_attendu_0 from public.devis where pro_id = :A;
 -- ==========================================================================
 select string_agg(case when tgname like 'RI_ConstraintTrigger_c_%' then 'RI_ConstraintTrigger_c_…' else tgname end, ' → ' order by tgname) as ordre_attendu_RI_puis_trg_recalcule_devis
   from pg_trigger where tgrelid = 'public.devis_lignes'::regclass and tgtype & 3 = 1;
-select string_agg(tgname, ', ' order by tgname) as les_trois_declencheurs_nommes
+select string_agg(tgname, ', ' order by tgname) as les_quatre_declencheurs_nommes
   from pg_trigger where not tgisinternal
    and tgrelid in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass);
 

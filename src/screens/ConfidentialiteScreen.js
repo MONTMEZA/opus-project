@@ -172,9 +172,12 @@ export default function ConfidentialiteScreen({
       {/* --- personnes bloquées --- */}
       <SectionLabel>Personnes bloquées</SectionLabel>
       <Text style={s.aide}>
-        Vous ne voyez plus rien de ces comptes, ils ne voient plus rien du
-        vôtre, et aucun message ne passe entre vous. Le blocage se retire
-        quand vous le voulez.
+        Vous ne voyez plus leurs publications ni leurs commentaires, ils ne
+        voient plus les vôtres, et plus rien de nouveau ne passe entre vous
+        — ni message, ni demande. Rien n’est effacé : vos conversations avec
+        eux sont masquées des deux côtés tant que dure le blocage, et
+        reviennent si vous le retirez. Le blocage se retire quand vous le
+        voulez.
       </Text>
       <View style={s.bloc}>
         {chargement && <ActivityIndicator style={{ margin: S.lg }} color={C.muted} />}

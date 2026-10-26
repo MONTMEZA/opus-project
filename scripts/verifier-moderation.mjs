@@ -69,6 +69,259 @@ verifier('les signalements aussi',
 verifier('`anon` ne peut pas appeler les fonctions à privilèges',
   /revoke execute on function %s from anon/.test(sql));
 
+/* ==========================================================================
+   LOT S-b (26/10/2026) — « CLORE OUI, OUVRIR NON » : le blocage ferme aussi
+   ce qu'on ÉCRIT, et la cloche se tait (décisions D2, Q1, Q2).
+   Les commentaires SQL sont retirés avant de lire : un contrôle qui lit du
+   code retire d'abord la documentation, sinon il accuse le commentaire qui
+   explique le défaut (la leçon des lots 5 et 8).
+   ========================================================================== */
+const sqlCode = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+const politiques = (nom, table) => [...sqlCode.matchAll(
+  new RegExp(`create policy "${nom}" on public\\.${table}\\b([\\s\\S]*?);`, 'g'))].map((m) => m[1]);
+const unePolitique = (nom, table) => {
+  const toutes = politiques(nom, table);
+  return toutes.length === 1 ? toutes[0].replace(/\s+/g, ' ') : null;
+};
+const fonction = (nom) => {
+  const morceaux = sqlCode.split(`create or replace function public.${nom}(`);
+  if (morceaux.length !== 2) return null;
+  return morceaux[1].split(/\n\$\$;/)[0];
+};
+const checkDe = (pol) => (pol && pol.includes(' with check ') ? pol.split(' with check ')[1] : '');
+const usingDe = (pol) => (pol && pol.includes(' using ') ? pol.split(' using ')[1].split(' with check ')[0] : '');
+
+console.log('\nLot S-b — le blocage ferme aussi ce qu’on écrit (R-B)');
+{
+  const ecritures = [
+    /* Des sous-requêtes CORRÉLÉES — elles cherchent LA ligne visée, par sa
+       clé (relecture du 26/10) : écrites `x in (select id from t)`, elles
+       relisaient toute la table à chaque écriture, `est_masque()` une fois
+       par ligne — 0,7 s par « j'aime » à 50 000 publications. */
+    ['mes likes', 'post_likes', /exists \(select 1 from public\.posts p where p\.id = post_likes\.post_id\)/],
+    ['mes comments', 'comments', /exists \(select 1 from public\.posts p where p\.id = comments\.post_id\)/],
+    ['mes follows', 'follows', /not public\.est_masque\(following_id\)/],
+    ['mes reviews', 'reviews', /not public\.est_masque\(professional_id\)/],
+    ['mes reponses', 'demande_reponses', /exists \(select 1 from public\.demandes d where d\.id = demande_reponses\.demande_id and d\.statut = 'ouverte' and d\.client_id <> auth\.uid\(\)\)/],
+    ['annonce reponses ecriture', 'annonce_reponses', /exists \(select 1 from public\.annonces_pro a where a\.id = annonce_reponses\.annonce_id and a\.statut = 'ouverte' and a\.auteur_id <> auth\.uid\(\)\)/],
+  ];
+  for (const [nom, table, regle] of ecritures) {
+    const pol = unePolitique(nom, table);
+    /* La règle est dans le `with check`, JAMAIS dans le `using` : `using`
+       gouverne aussi la SUPPRESSION, et l'on retire toujours ce qu'on a
+       posé (« clore, oui »). Et la politique n'est créée qu'à UN endroit. */
+    verifier(`« ${nom} » : créée une seule fois, \`to authenticated\`, la règle dans le \`with check\` et pas dans le \`using\``,
+      !!pol && /\bto authenticated\b/.test(pol) && regle.test(checkDe(pol)) && !regle.test(usingDe(pol))
+        && !/est_masque|in \(select|exists \(/.test(usingDe(pol)),
+      pol || `${politiques(nom, table).length} création(s)`);
+  }
+  /* DÉCISION Q2 : l'artisan lit TOUJOURS les avis qui le concernent. */
+  const lecture = unePolitique('lecture reviews', 'reviews');
+  verifier('« lecture reviews » : créée une seule fois, et l’artisan lit les avis qui le visent malgré le blocage',
+    !!lecture && /\bto authenticated\b/.test(lecture)
+      && /not public\.est_masque\(author_id\) or professional_id = auth\.uid\(\)/.test(lecture),
+    lecture || `${politiques('lecture reviews', 'reviews').length} création(s)`);
+  /* Une réponse sous un commentaire masqué : `limite_profondeur_commentaire`
+     cherche le parent AVEC LES DROITS DE CELUI QUI ÉCRIT. Si elle devenait
+     `security definer`, elle le trouverait — et la porte se rouvrirait. */
+  const profondeur = sqlCode.split('create or replace function public.limite_profondeur_commentaire()')[1] || '';
+  verifier('la réponse à un commentaire masqué reste refusée : `limite_profondeur_commentaire` n’est pas `security definer`',
+    profondeur.length > 0 && !/security\s+definer/i.test(profondeur.split('$$')[0])
+      && /if not found then/.test(profondeur.split('$$;')[0]));
+  /* ET LE COMMENTAIRE D'ORIGINE AUSSI (relecture du 26/10) : répondre à la
+     réponse d'un TIERS rangeait la réponse sous le commentaire de la
+     personne en blocage — le parent immédiat était lisible, la racine non.
+     La seconde recherche suit le rattachement, et refuse. */
+  const corpsProfondeur = profondeur.split('$$;')[0];
+  const rattache = corpsProfondeur.indexOf('new.parent_id := grand_parent;');
+  const apres = rattache >= 0 ? corpsProfondeur.slice(rattache) : '';
+  verifier('…et le commentaire d’ORIGINE du fil doit être lisible lui aussi : relu APRÈS le rattachement, refusé sinon',
+    rattache > 0 && /perform 1 from public\.comments where id = grand_parent;\s+if not found then\s+raise exception 'Le commentaire parent n''existe pas';/.test(apres)
+      && fonction('limite_profondeur_commentaire') !== null);
+  /* UN « J'AIME » ET UN ABONNEMENT NE SE DÉPLACENT PAS : la porte UPDATE de
+     `for all` gonflait les compteurs sans limite (relecture du 26/10). */
+  const revokeLikes = sqlCode.indexOf('revoke update on public.post_likes, public.follows from anon, authenticated;');
+  verifier('`post_likes` et `follows` : plus de droit UPDATE pour `anon` ni `authenticated`, et aucun `grant` ne le rend plus bas',
+    revokeLikes > 0 && !/grant\s[^;]*\bon\s+(table\s+)?public\.(post_likes|follows)\b/.test(sqlCode.slice(revokeLikes)));
+  /* AUCUNE politique ne relit une table ENTIÈRE à chaque écriture. */
+  const nonCorrelees = [...sqlCode.matchAll(/create policy "([^"]+)" on public\.(\w+)([\s\S]*?);/g)]
+    .filter((m) => /\bin \(select [a-z]\.id from public\.(posts|demandes|annonces_pro)\b/.test(m[3]))
+    .map((m) => `${m[2]}.${m[1]}`);
+  verifier('aucune politique n’écrit `x in (select id from posts|demandes|annonces_pro)` : la sous-requête cherche LA ligne visée',
+    nonCorrelees.length === 0, nonCorrelees.join(', '));
+  /* Toute politique qui appelle `est_masque()` est `to authenticated` :
+     appelée pour un visiteur, à qui son exécution est retirée, elle ÉCHOUE
+     au lieu de filtrer (section 13.1). */
+  const toutes = [...sqlCode.matchAll(/create policy "([^"]+)" on public\.(\w+)([\s\S]*?);/g)];
+  const sansRole = toutes.filter((m) => /est_masque/.test(m[3]) && !/\bto authenticated\b/.test(m[3])).map((m) => `${m[2]}.${m[1]}`);
+  verifier(`toute politique qui appelle \`est_masque()\` est \`to authenticated\` (${toutes.filter((m) => /est_masque/.test(m[3])).length} relevées)`,
+    sansRole.length === 0, sansRole.join(', '));
+}
+
+console.log('\nLot S-b — les demandes reçues, les urgences, les devis, sous blocage');
+{
+  const demande = fonction('tient_la_demande');
+  verifier('`tient_la_demande` : `security invoker`, R-A, tout figé sauf le statut (OP019), le blocage à l’acceptation (OP020)',
+    !!demande && /security invoker/.test(demande) && /current_user not in \('authenticated', 'anon'\)/.test(demande)
+      && /\(to_jsonb\(new\) - 'statut'\) is distinct from \(to_jsonb\(old\) - 'statut'\)/.test(demande)
+      && /new\.statut = accepte and public\.est_masque\(new\.client_id\)/.test(demande)
+      && /errcode = 'OP020'/.test(demande));
+  for (const [table, nom] of [['quote_requests', 'devis'], ['callback_requests', 'rappel'], ['sos_requests', 'sos']]) {
+    verifier(`…posé AVANT toute mise à jour de \`${table}\``,
+      new RegExp(`create or replace trigger trg_tient_la_demande_${nom}\\s+before update on public\\.${table}\\s+for each row execute function public\\.tient_la_demande\\(\\)`).test(sqlCode));
+  }
+  const lien = fonction('tient_le_lien_du_devis');
+  verifier('`tient_le_lien_du_devis` : `security definer` — il doit voir le blocage posé par le CLIENT —, lit les DEUX sens, ne lit jamais `auth.uid()`',
+    /* DEUX BRANCHES (la demande, l'urgence), et CHACUNE lit les deux sens :
+       un motif cherché « quelque part » laissait une branche perdre un sens
+       pendant que l'autre le gardait (trouvé en cassant, 26/10). */
+    !!lien && /security definer/.test(lien) && !/auth\.uid\(\)/.test(lien)
+      && (lien.match(/b\.bloqueur_id = new\.pro_id and b\.bloque_id = v_client/g) || []).length === 2
+      && (lien.match(/b\.bloqueur_id = v_client and b\.bloque_id = new\.pro_id/g) || []).length === 2
+      && /new\.quote_request_id is not null/.test(lien) && /new\.sos_request_id is not null/.test(lien));
+  /* PostgreSQL déclenche les `before` d'une table dans l'ordre ALPHABÉTIQUE
+     de leurs noms. On relève donc les VRAIS noms posés sur `devis` — une
+     comparaison de deux chaînes écrites ici serait toujours vraie, quoi que
+     dise le schéma (c'était le cas jusqu'au 26/10). */
+  const avantDevis = [...sqlCode.matchAll(/create (?:or replace )?trigger (\w+)\s+before [^;]*? on public\.devis\s/g)]
+    .map((m) => m[1]).sort();
+  verifier('…posé sur `devis` APRÈS `trg_tient_le_devis` (ordre alphabétique) : « pas à vous » (OP013) est décidé avant le blocage',
+    /create or replace trigger trg_tient_le_lien_du_devis\s+before insert or update of quote_request_id, sos_request_id on public\.devis/.test(sqlCode)
+      && avantDevis.includes('trg_tient_le_devis')
+      && avantDevis.indexOf('trg_tient_le_devis') < avantDevis.indexOf('trg_tient_le_lien_du_devis'),
+    avantDevis.join(', '));
+  const peut = fonction('peut_faire_un_devis');
+  verifier('`peut_faire_un_devis` : `security definer`, seulement pour les demandes ADRESSÉES à l’appelant, exécutable par `authenticated` seul',
+    !!peut && /security definer/.test(peut) && /q\.professional_id = auth\.uid\(\)/.test(peut)
+      && /s\.professional_id = auth\.uid\(\)/.test(peut)
+      && /\(b\.bloqueur_id = auth\.uid\(\) and b\.bloque_id = c\.client_id\)\s+or \(b\.bloqueur_id = c\.client_id and b\.bloque_id = auth\.uid\(\)\)/.test(peut)
+      && /\(p_demande is null\) <> \(p_urgence is null\)/.test(peut)
+      && /revoke all on function public\.peut_faire_un_devis\(uuid, uuid\) from public, anon;/.test(sqlCode)
+      && /grant execute on function public\.peut_faire_un_devis\(uuid, uuid\) to authenticated;/.test(sqlCode));
+}
+
+console.log('\nLot S-b — la cloche se tait (décision Q1)');
+{
+  const tait = fonction('tait_les_notifications_bloquees');
+  /* Q1 : on ne tait QUE ce que le destinataire reçoit de quelqu'un qu'IL a
+     bloqué. Le sens inverse (l'artisan qui a bloqué refuse : le client est
+     prévenu) doit passer — un test « dans les deux sens » le casserait. */
+  /* L'AUTRE SENS, POUR UN COMMENTAIRE SEULEMENT (relecture du 26/10) : une
+     notification qui désigne un commentaire que la lecture cache à son
+     destinataire. Une seule occurrence, et sous la condition
+     `new.comment_id is not null` — sans elle, le refus d'une demande
+     n'arriverait plus au client bloqué (décision Q1). */
+  const autreSens = (tait || '').match(/b\.bloqueur_id = new\.acteur_id/g) || [];
+  verifier('`tait_les_notifications_bloquees` : `security definer`, `return null` ; le destinataire a bloqué l’acteur ; l’autre sens pour un COMMENTAIRE seulement',
+    !!tait && /security definer/.test(tait) && /return null;/.test(tait)
+      /* LA SÉQUENCE ENTIÈRE du premier sens, jusqu'à son `return null` : la
+         branche du commentaire porte AUSSI un `return null`, et « il y a un
+         `return null` quelque part » laissait neutraliser le premier sens au
+         vert (trouvé en cassant, 26/10). */
+      && /if exists \(select 1 from public\.blocages b\s+where b\.bloqueur_id = new\.user_id and b\.bloque_id = new\.acteur_id\) then\s+return null;\s+end if;/.test(tait)
+      && autreSens.length === 1
+      && /if new\.comment_id is not null\s+and exists \(select 1 from public\.blocages b\s+where b\.bloqueur_id = new\.acteur_id and b\.bloque_id = new\.user_id\) then\s+return null;/.test(tait),
+    `${autreSens.length} occurrence(s) de l’autre sens`);
+  verifier('…posé AVANT l’insertion d’une notification',
+    /create or replace trigger trg_tait_les_notifications_bloquees\s+before insert on public\.notifications/.test(sqlCode));
+  /* LA LISTE FERMÉE DES TYPES JAMAIS TUS = tous les types ADRESSÉS À
+     L'ADMINISTRATION. On les trouve dans la base elle-même : une insertion
+     dans `notifications` qui lit `public.administrateurs`. Un type ajouté
+     demain pour l'administration, et oublié dans la liste, rougit ici. */
+  const jamaisTus = ((tait || '').match(/new\.type in \(([^)]*)\)/) || [])[1] || '';
+  const listeJamais = entreApostrophes(jamaisTus);
+  const versAdmin = [...sqlCode.matchAll(/insert into public\.notifications[^;]*?select[^;]*?'([a-z_]+)'[^;]*?from public\.administrateurs/g)]
+    .map((m) => m[1]);
+  /* L'ÉGALITÉ, pas l'inclusion (relecture du 26/10) : y glisser
+     « commentaire » rendait sonores les notifications de la personne
+     bloquée, au vert. La liste ne contient QUE ce qui va à l'administration. */
+  const admin = [...new Set(versAdmin)].sort();
+  verifier(`la liste des jamais tus est EXACTEMENT celle des types adressés à l’administration (${admin.join(', ') || 'aucun trouvé'})`,
+    admin.length >= 1 && JSON.stringify([...new Set(listeJamais)].sort()) === JSON.stringify(admin),
+    `liste : ${listeJamais.join(', ')}`);
+  /* Et l'administration le LIT là où elle travaille (relecture du 26/10) :
+     la phrase de la file existe tant que la liste des jamais tus contient
+     `demande_pro_nouvelle` — et pas au-delà. */
+  const ecranAdmin = readFileSync('src/screens/AdminScreen.js', 'utf8').replace(/\s+/g, ' ');
+  verifier('…et l’écran d’administration dit qu’une demande de compte pro arrive même de quelqu’un qu’on a bloqué',
+    listeJamais.includes('demande_pro_nouvelle')
+      === ecranAdmin.includes('Une demande arrive même de quelqu’un que vous avez bloqué : vous devez pouvoir l’examiner.'));
+  verifier('…et ce qui n’a pas d’acteur (les décisions de l’administration) passe toujours',
+    /if new\.acteur_id is null\s+or new\.type in/.test(tait || ''));
+}
+
+console.log('\nLot S-b — ce qu’un contrôle de texte doit pouvoir voir (relecture du 26/10)');
+{
+  /* LES FORMES QUI CHANGENT UNE RÈGLE SANS LA RÉÉCRIRE. Un `alter policy`
+     posé plus bas rouvrait un `with check` sans qu'aucun contrôle ne relise
+     la politique ; un `disable trigger` éteignait un verrou. Aucune n'existe
+     dans `schema.sql` : `alter policy` est réservé aux migrations de la
+     vraie base, qui se prouvent par empreinte. */
+  const interdits = [
+    ['alter policy', /\balter policy\b/],
+    ['disable row level security', /\bdisable row level security\b/],
+    ['no force row level security', /\bno force row level security\b/],
+    ['disable trigger', /\bdisable trigger\b/],
+    ['session_replication_role', /\bsession_replication_role\b/],
+  ];
+  for (const [nom, motif] of interdits) {
+    verifier(`\`schema.sql\` ne contient aucun \`${nom}\``, !motif.test(sqlCode));
+  }
+  /* UNE FONCTION NE SE CRÉE QU'À UN ENDROIT : un contrôle qui lit la
+     PREMIÈRE définition ne voit pas la seconde, qui gagne au rejeu.
+     `notifie_demande` est la seule exception connue (sa seconde définition
+     est celle que lit `verifier-demo`) — à résorber, pas à imiter. */
+  const nbFonctions = {};
+  for (const m of sqlCode.matchAll(/create or replace function public\.(\w+)\(/g)) nbFonctions[m[1]] = (nbFonctions[m[1]] || 0) + 1;
+  const doublesF = Object.entries(nbFonctions).filter(([n, k]) => k > 1 && n !== 'notifie_demande').map(([n, k]) => `${n} ×${k}`);
+  verifier('aucune fonction n’est créée deux fois dans `schema.sql` (sauf `notifie_demande`, connue)',
+    doublesF.length === 0 && nbFonctions.notifie_demande === 2, doublesF.join(', '));
+  /* UN DÉCLENCHEUR, UNE TABLE, UNE CRÉATION : une redéfinition plus bas
+     (`before update of statut`) ne se déclenchait plus quand seule la
+     description changeait. */
+  const nbDecl = {};
+  for (const m of sqlCode.matchAll(/create (?:or replace )?trigger (\w+)\s+(?:before|after|instead of)[^;]*?\son\s+(\w+\.\w+)/g)) {
+    const cle = `${m[1]} sur ${m[2]}`;
+    nbDecl[cle] = (nbDecl[cle] || 0) + 1;
+  }
+  const doublesD = Object.entries(nbDecl).filter(([, k]) => k > 1).map(([n, k]) => `${n} ×${k}`);
+  verifier(`aucun déclencheur n’est créé deux fois sur la même table (${Object.keys(nbDecl).length} relevés)`,
+    Object.keys(nbDecl).length > 40 && doublesD.length === 0, doublesD.join(', '));
+  /* LA LISTE FERMÉE DES POLITIQUES, table par table : une politique de plus
+     — même sous un autre nom, même sans `public.` — s'ADDITIONNE en OU et
+     annule ce que le blocage ferme. Un nom nouveau sur ces tables se
+     décide, et se met dans cette liste. */
+  const ATTENDUES = {
+    post_likes: ['lecture likes', 'mes likes'],
+    follows: ['lecture follows', 'mes follows'],
+    comments: ['lecture comments', 'lecture comments visiteur', 'mes comments'],
+    reviews: ['lecture reviews', 'lecture reviews visiteur', 'mes reviews'],
+    demande_reponses: ['lecture reponses', 'lecture reponses visiteur', 'mes reponses'],
+    annonce_reponses: ['annonce reponses ecriture', 'annonce reponses lecture pro'],
+    professional_partners: ['je demande un partenariat', 'je reponds a un partenariat', 'je romps un partenariat',
+      'lecture partenaires', 'lecture partenariats'],
+    quote_requests: ['creation devis', 'le pro traite le devis', 'lecture mes devis'],
+    callback_requests: ['creation rappel', 'le pro traite le rappel', 'lecture mes rappels'],
+    sos_requests: ['creation sos', 'le pro traite le sos', 'lecture mes sos'],
+    annonces_pro: ['annonces ecriture auteur', 'annonces lecture pro'],
+    demandes: ['lecture demandes', 'mes demandes'],
+    notifications: ['mes notifications'],
+    blocages: ['mes blocages'],
+    conversations: null,
+  };
+  const creations = [...sqlCode.matchAll(/create policy "([^"]+)"\s+on\s+(?:(\w+)\.)?(\w+)/g)]
+    .map((m) => ({ nom: m[1], schema: m[2] || null, table: m[3] }));
+  const sansSchema = creations.filter((c) => !c.schema).map((c) => `${c.table}.${c.nom}`);
+  verifier(`toute politique nomme son schéma (\`on public.x\`, \`on storage.objects\`) — ${creations.length} relevées`,
+    creations.length > 90 && sansSchema.length === 0, sansSchema.join(', '));
+  for (const [table, noms] of Object.entries(ATTENDUES)) {
+    if (!noms) continue;
+    const vus = [...new Set(creations.filter((c) => c.table === table).map((c) => c.nom))].sort();
+    verifier(`\`${table}\` : exactement ${noms.length} politique(s) — ${noms.join(', ')}`,
+      JSON.stringify(vus) === JSON.stringify([...noms].sort()), vus.join(', '));
+  }
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

@@ -751,7 +751,7 @@ select has_table_privilege('anon', 'public.sos_availability', 'select')   as sos
 -- --------------------------------------------------------------------------
 select string_agg(p.proname, ', ' order by p.proname) as nomment_tarifs_pro,
        string_agg(p.proname, ', ' order by p.proname)
-         = 'artisans_urgence, emetteur_incomplet, mes_donnees' as liste_fermee_attendu_t
+         = 'artisans_urgence, emetteur_incomplet, mes_donnees, tient_l_urgence' as liste_fermee_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\mtarifs_pro\M';
 select string_agg(p.proname, ', ' order by p.proname) as nomment_emetteur,

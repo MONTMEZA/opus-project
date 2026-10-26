@@ -3061,9 +3061,15 @@ console.log('\n  27. `api.js` : la forme, la liste fermée, la file, la mémoire
       .every((n) => /leverLecture\(/.test(corpsDeFonction(API, n) || '') && /lectureDevis\(/.test(corpsDeFonction(API, n) || ''))
     && /tableAbsente\(\s*error\s*\)\)\s*error\.baseEnRetard\s*=\s*true/.test(corpsDeFonction(API, 'leverLecture') || ''));
 
-  const blocDevis = decls.map((d) => corpsDeFonction(API, d.nom) || '').join('\n');
-  verifier('aucune fonction SQL nouvelle ne lit l’émetteur ni les tarifs : pas de `.rpc(` dans les fonctions du devis, le régime passe '
-    + 'par `monEmetteur…`, et la section 49 ne nomme ni `emetteur` ni `tarifs_pro`',
+  /* UNE SEULE EXCEPTION, NOMMÉE (lot S-b, 26/10/2026) : `peut_faire_un_devis`,
+     qui ne lit que la demande et les blocages (section 49.6 bis, donc dans
+     `S49` : elle aussi ne doit nommer ni `emetteur` ni `tarifs_pro`). Toute
+     AUTRE fonction appelée par `.rpc(` rougit encore. */
+  const blocDevis = decls.map((d) => corpsDeFonction(API, d.nom) || '').join('\n')
+    .replace(/supabase\.rpc\(\s*'peut_faire_un_devis'\s*,/g, '');
+  verifier('aucune fonction SQL nouvelle ne lit l’émetteur ni les tarifs : pas de `.rpc(` dans les fonctions du devis (sauf '
+    + '`peut_faire_un_devis`, qui ne lit que les blocages), le régime passe par `monEmetteur…`, et la section 49 ne nomme ni '
+    + '`emetteur` ni `tarifs_pro`',
   !/\.rpc\(/.test(blocDevis) && /monEmetteurSupabase\(\)/.test(corpsDeFonction(API, 'monRegimeSupabase') || '')
     && /monEmetteurDemo\(\)/.test(corpsDeFonction(API, 'monRegimeDemo') || '')
     && !/\bpublic\.(emetteur|tarifs_pro)\b/.test(S49) && !/\b(from|join)\s+(public\.)?(emetteur|tarifs_pro)\b/.test(S49));
@@ -3139,6 +3145,25 @@ console.log('\n  27 bis. la base de démonstration refuse AVEC LES MOTS DE LA BA
   const e8 = await essayer(() => ecrire({ quoi: 'devis', action: 'inserer', id: ID(200), valeurs: { source: 'demande', quoteRequestId: 'dr-devis-1' }, generation: n() }));
   verifier(`e. OP017 : le ${D.DEVIS_PAR_DEMANDE_MAX + 1}e devis pour une même demande est refusé, avec la phrase de la base`,
     vaut(e8, 'OP017', ERR.REFUS_DEVIS.OP017_demande) && (await base.deLaDemande('1', 'devis', 'dr-devis-1')).length === 5);
+  /* e bis. UN NOUVEAU LIEN SOUS BLOCAGE (OP020, lot S-b) — la démonstration
+     ne le refusait pas (relecture du 26/10). APRÈS « pas à vous » : une
+     demande qui n'est pas adressée à l'artisan reste OP013, jamais OP020. */
+  {
+    const fermee = DEMO.creerBaseDevisDemo({
+      demandeDe: (g, id) => demandes[`${g}:${id}`] || null,
+      lienFerme: (g, id) => (g === 'devis' && id === 'dr-devis-1') || (g === 'sos' && id === 'dr-sos-1'),
+    });
+    const ecrireF = (op) => fermee.ecrire('1', op);
+    const f1 = await essayer(() => ecrireF({ quoi: 'devis', action: 'inserer', id: ID(300), valeurs: { source: 'demande', quoteRequestId: 'dr-devis-1' }, generation: n() }));
+    const f2 = await essayer(() => ecrireF({ quoi: 'devis', action: 'inserer', id: ID(301), valeurs: { source: 'urgence', sosRequestId: 'dr-sos-1' }, generation: n() }));
+    const f3 = await essayer(() => ecrireF({ quoi: 'devis', action: 'inserer', id: ID(302), valeurs: { quoteRequestId: 'dr-autre' }, generation: n() }));
+    verifier('e bis. sous blocage, un NOUVEAU lien vers la demande ou l’urgence est refusé (OP020, les phrases de la base) — '
+      + 'et « pas à vous » reste OP013, décidé avant',
+      vaut(f1, 'OP020', ERR.REFUS_DEMANDES.OP020_devis_demande) && vaut(f2, 'OP020', ERR.REFUS_DEMANDES.OP020_devis_urgence)
+      && vaut(f3, 'OP013', ERR.REFUS_DEVIS.OP013_demande)
+      && (await fermee.relireUn('1', { quoi: 'devis', id: ID(300) })) === null,
+      [f1, f2, f3].map((e) => (e ? e.code : 'passé')).join(' | '));
+  }
   const e9 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(15), valeurs: { devisId: ID(1), ordre: 4000, ...poste({ quantiteMilliemes: 1000, prixUnitaireCentimes: 9999999999 }) }, generation: n() }));
   verifier('f. deux lignes recevables dont la SOMME dépasse le plafond : 23514 `devis_plafond_check` sur le DEVIS, comme la base',
     vaut(e9, '23514', 'new row for relation "devis" violates check constraint "devis_plafond_check"')

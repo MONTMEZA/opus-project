@@ -170,14 +170,20 @@ export const proProfiles = {
  */
 export function avgReviews(pro) {
   const rs = (pro && pro.reviews) || [];
+  const n = (pro && pro.avisCount) || 0;
 
-  if (rs.length > 0) {
+  /* On recalcule depuis les avis CHARGÉS — c'est ce qui fait bouger la note
+     tout de suite après qu'on a publié le sien —, mais seulement s'ils sont
+     TOUS là (relecture du 26/10). La lecture cache à quelqu'un les avis
+     d'une personne qu'il a bloquée : recalculée sur ce qui reste, la note
+     de la fiche différait de celle des listes, et un avis qui existe ne
+     comptait plus dans la note affichée. Il en manque : la note de la base. */
+  if (rs.length > 0 && rs.length >= n) {
     const sum = (k) => rs.reduce((a, r) => a + r[k], 0) / rs.length;
     const delais = sum('delais'), qualite = sum('qualite'), tarif = sum('tarif');
     return { delais, qualite, tarif, global: (delais + qualite + tarif) / 3, count: rs.length };
   }
 
-  const n = (pro && pro.avisCount) || 0;
   if (n === 0) return { delais: 0, qualite: 0, tarif: 0, global: 0, count: 0 };
 
   const delais = Number(pro.noteDelais) || 0;
@@ -206,13 +212,13 @@ export const initialPosts = [
     texte: "Dalle coulée ce matin à la pompe, sur le treillis posé hier. Chantier villa R+1.",
     media: 'demo:chantier-fondations', likes: 214, vues: 3120, liked: false,
     comments: [
-      { id: 1, auteurId: 'demo-julie', auteur: 'Julie M.', auteurType: 'particulier',
+      { id: 1, auteurId: 'u-julie', auteur: 'Julie M.', auteurType: 'particulier',
         texte: 'Superbe avancée, bravo !', time: 'Il y a 1 h',
         reponses: [
           { id: 11, auteurId: 1, auteur: 'Maçonnerie Ferlane', auteurType: 'pro',
             texte: 'Merci Julie ! On attaque les murs la semaine prochaine.', time: 'Il y a 45 min',
             reponses: [] },
-          { id: 12, auteurId: 'demo-julie', auteur: 'Julie M.', auteurType: 'particulier',
+          { id: 12, auteurId: 'u-julie', auteur: 'Julie M.', auteurType: 'particulier',
             texte: '@Maçonnerie Ferlane hâte de voir le résultat.', time: 'Il y a 30 min',
             reponses: [] },
         ] },
@@ -420,10 +426,10 @@ export const initialConversations = [
    précisément de son absence sur la vraie base. */
 export const initialNotifications = [
   { id: 1, type: 'commentaire', texte: 'Julie M. a commenté votre publication',
-    acteurId: 'demo-julie', acteurNom: 'Julie M.',
+    acteurId: 'u-julie', acteurNom: 'Julie M.',
     postId: 1, commentId: 1, lue: false, time: 'Il y a 1 h' },
   { id: 2, type: 'reponse', texte: 'Julie M. a répondu à votre commentaire',
-    acteurId: 'demo-julie', acteurNom: 'Julie M.',
+    acteurId: 'u-julie', acteurNom: 'Julie M.',
     postId: 1, commentId: 11, lue: false, time: 'Il y a 30 min' },
   /* Une réponse à une annonce : le cas que le propriétaire a nommé le
      06/10/2026 — « on clique dessus, rien ne se passe ». `a3` est une
@@ -445,11 +451,12 @@ export const initialNotifications = [
      Jusqu'au 26/10/2026, c'était un `rappel_accepte` « Vous avez accepté un
      rappel » : la base n'envoie JAMAIS ce type à l'artisan — elle l'envoie
      au CLIENT, au nom de l'artisan (`notifie_demande()`). Le texte est donc
-     mot pour mot celui que la base écrit à l'arrivée d'un rappel, accord
-     compris (voir `docs/A-FAIRE.md` : la base écrit « rappelé » pour tout
-     le monde). `verifier-demo` compare chaque notification au modèle de la
-     base pour son type. */
-  { id: 7, type: 'rappel', texte: 'Sophie B. souhaite être rappelé',
+     mot pour mot celui que la base écrit à l'arrivée d'un rappel. Depuis le
+     lot S-b (26/10/2026), la base écrit « X attend votre appel » : une
+     tournure qui n'accorde rien, au lieu de « rappelé » pour tout le monde.
+     `verifier-demo` compare chaque notification au modèle de la base pour
+     son type — modèle qu'il LIT dans `schema.sql`. */
+  { id: 7, type: 'rappel', texte: 'Sophie B. attend votre appel',
     acteurId: 'u-sophie', acteurNom: 'Sophie B.',
     rappelId: 'dr-rappel-1', lue: true, time: 'Hier' },
   /* Et une qui mène à SA PROPRE FICHE. */

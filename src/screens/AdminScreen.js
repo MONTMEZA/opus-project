@@ -630,6 +630,16 @@ function ComptesProAOuvrir({ demandes, etat, onRelire, onErreur, onEcrire }) {
       {etat === 'pret' && ouvertes.length === 0 && (
         <Text style={s.sectionTexte}>Personne n’attend qu’on ouvre son compte.</Text>
       )}
+      {/* LA SEULE NOTIFICATION QU'UN BLOCAGE NE TAIT PAS (section 13.5
+          quater de `schema.sql`) : elle est dite là où l'administration la
+          lit, plutôt que dans les CGU, qui s'adressent à tous (relecture du
+          26/10). */}
+      {etat === 'pret' && ouvertes.length > 0 && (
+        <Text style={s.sectionTexte}>
+          Une demande arrive même de quelqu’un que vous avez bloqué : vous devez
+          pouvoir l’examiner.
+        </Text>
+      )}
 
       {etat === 'pret' && ouvertes.map((d) => (
         <CarteCompteProAOuvrir

@@ -114,8 +114,13 @@ const Demande = React.memo(function Demande({
         ))}
 
         <View style={s.carteBas}>
+          {/* « — » quand le nombre n'est pas connu (une base où la section
+              30.3 n'est pas encore passée) : « 0 réponse » annoncerait
+              qu'aucun artisan n'a répondu, ce qu'on ne sait pas (lot S-b). */}
           <Text style={s.reponses}>
-            {d.reponses} {d.reponses > 1 ? 'réponses' : 'réponse'}
+            {Number.isInteger(d.reponses)
+              ? `${d.reponses} ${d.reponses > 1 ? 'réponses' : 'réponse'}`
+              : '— réponse'}
           </Text>
           {/* Une demande peut être une arnaque ou un démarchage déguisé :
               elle se signale comme le reste. */}

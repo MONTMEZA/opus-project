@@ -118,10 +118,12 @@ export default function Signaler({
               <Check size={18} color={C.ok} />
               <Text style={s.confirmationTexte}>
                 {auteurNom || 'Cette personne'} est bloquée. Vous ne verrez plus
-                rien de ce compte, il ne verra plus rien du vôtre, et aucun
-                message ne peut plus passer entre vous. Vous pouvez revenir sur
-                ce blocage à tout moment depuis Profil → Confidentialité et
-                sécurité.
+                ses publications ni ses commentaires, elle ne verra plus les
+                vôtres, et plus rien de nouveau ne peut passer entre vous — ni
+                message, ni demande. Vos conversations avec elle sont masquées
+                des deux côtés, sans rien effacer : elles reviennent si vous
+                retirez ce blocage, à tout moment, depuis Profil →
+                Confidentialité et sécurité.
               </Text>
             </View>
           )}

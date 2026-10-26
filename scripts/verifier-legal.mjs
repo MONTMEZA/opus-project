@@ -805,12 +805,15 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
   /* DEUX LISTES depuis le lot T : `artisans_urgence()` lit `tarifs_pro` — à
      travers « tarifs affiches », en `security invoker` — et elle seule de
      plus. Elle n'a rien à faire dans `emetteur` ni `emetteur_assurances`,
-     qui ne s'affichent nulle part : une liste commune l'y aurait admise. */
+     qui ne s'affichent nulle part : une liste commune l'y aurait admise.
+     `tient_l_urgence()` (lot S-b) y entre aussi : elle REFUSE une urgence
+     vers un artisan qui n'apparaîtrait pas dans la recherche, avec les
+     mêmes conditions, en `security invoker` — elle ne rend aucun tarif. */
   const LISTES = [
     { tables: /\b(emetteur_assurances|emetteur)\b/,
       permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees'] },
     { tables: /\btarifs_pro\b/,
-      permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence'] },
+      permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence'] },
     /* LA TROISIÈME, au lot 1 du devis : les prix des lignes. Le cahier y
        mettait aussi `tient_la_ligne_de_devis` ; elle n'en nomme plus depuis
        que le plafond de lignes compte sous le verrou de `recalcule_devis`
@@ -1816,6 +1819,123 @@ console.log('\nLot S-a — ce qui reste en ligne, et le badge suspendu');
    ajouter le paquet oblige à réécrire la phrase dans le même lot (avec le
    consentement propre à Opus et l'analyse d'impact que la recherche du
    26/10 juge très probablement obligatoire). */
+console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le texte et la base disent la même chose');
+{
+  /* Trois promesses du lot S-b (26/10/2026), chacune tenue par un objet de
+     la base. Le texte est comparé à l'OBJET, dans les deux sens : si la
+     base change, le texte doit changer avec elle — et l'inverse. */
+  const sqlS = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const bloc = (titre) => ([...MENTIONS, ...CGU, ...CONFIDENTIALITE].find((b) => b.titre === titre) || {}).texte || '';
+  const bloquer = bloc('Bloquer quelqu’un');
+  /* Réponse D2 du propriétaire (25/10) : « Rien ne disparaît, plus rien de
+     neuf ». Le texte en dit les deux moitiés, et les deux sens. */
+  verifier('« Bloquer quelqu’un » dit les deux moitiés : plus rien de nouveau, dans les deux sens — et rien n’est effacé',
+    /arrête tout ce qui est nouveau entre vous, dans un sens comme dans l’autre/.test(bloquer)
+      && /Rien n’est effacé/.test(bloquer) && !/ne disparaît pas/.test(bloquer));
+  /* LES CONVERSATIONS SONT MASQUÉES DES DEUX CÔTÉS — leurs propres messages
+     compris (relecture du 26/10) : « ce qui existait avant ne disparaît
+     pas » se lisait « reste visible », et c'était faux pour la messagerie.
+     Le texte suit la politique de lecture, dans les deux sens : le jour où
+     « mes conversations » cesse de masquer, la phrase doit partir. */
+  const politiquesConv = [...sqlS.matchAll(/create policy "mes conversations" on public\.conversations([\s\S]*?);/g)];
+  const derniere = politiquesConv.length ? politiquesConv[politiquesConv.length - 1][1] : '';
+  const masque = /not public\.est_masque\(professional_id\)/.test(derniere) && /not public\.est_masque\(client_id\)/.test(derniere);
+  const phraseConv = 'vos conversations avec cette personne — vos messages et les pièces jointes compris — sont masquées des deux côtés tant que dure le blocage, et reviennent si vous le retirez';
+  const ecranConf = readFileSync('src/screens/ConfidentialiteScreen.js', 'utf8').replace(/\s+/g, ' ');
+  const ecranSig = readFileSync('src/components/Signaler.js', 'utf8').replace(/\s+/g, ' ');
+  verifier('…« vos conversations … sont masquées des deux côtés » tant que « mes conversations » applique le blocage — et les deux écrans le disent',
+    masque === bloquer.includes(phraseConv)
+      && masque === ecranConf.includes('vos conversations avec eux sont masquées des deux côtés tant que dure le blocage, et reviennent si vous le retirez')
+      && masque === ecranSig.includes('Vos conversations avec elle sont masquées des deux côtés, sans rien effacer : elles reviennent si vous retirez ce blocage'),
+    masque ? 'un texte ne le dit plus' : 'la base ne masque plus les conversations : les textes doivent changer');
+  /* « Une demande déjà reçue peut encore être refusée ou marquée terminée »
+     — et JAMAIS acceptée : la base répond OP020 (relecture du 26/10). */
+  const reste = (bloquer.match(/une demande déjà reçue[^;]*?terminée/) || [''])[0];
+  verifier('…« une demande déjà reçue peut encore être refusée ou marquée terminée », et le mot « accept » n’y est pas',
+    reste === 'une demande déjà reçue peut encore être refusée ou marquée terminée' && !/accept/i.test(reste), reste);
+  /* ÊTRE BLOQUÉ SE SAIT (relecture du 26/10) : les phrases de refus ne le
+     nomment jamais, mais c'est une politesse — vos contenus disparaissent
+     pour lui. Le dire évite de promettre un secret. */
+  verifier('…et le texte ne promet pas le secret : « elle peut s’en apercevoir »',
+    /Aucune notification ne lui annonce le blocage, mais elle peut s’en apercevoir/.test(bloquer));
+  /* Q1 du propriétaire : « Oui, le refus passe ». La base ne tait QUE les
+     notifications reçues par celui qui a bloqué (`bloqueur_id = user_id`) :
+     celle d'un refus, envoyée à la personne bloquée, part encore. */
+  const tait = (sqlS.split('create or replace function public.tait_les_notifications_bloquees()')[1] || '').split('$$;')[0];
+  /* L'autre sens n'existe que pour un COMMENTAIRE (une notification qui
+     désigne un commentaire que la lecture cache) : un refus de demande ne
+     porte pas de commentaire, il part toujours. */
+  const autreSens = tait.match(/b\.bloqueur_id = new\.acteur_id/g) || [];
+  const unSens = /if exists \(select 1 from public\.blocages b\s+where b\.bloqueur_id = new\.user_id and b\.bloque_id = new\.acteur_id\) then\s+return null;\s+end if;/.test(tait)
+    && autreSens.length === 1
+    && /if new\.comment_id is not null\s+and exists \(select 1 from public\.blocages b\s+where b\.bloqueur_id = new\.acteur_id and b\.bloque_id = new\.user_id\) then/.test(tait);
+  verifier('…« elle est encore prévenue si vous refusez sa demande » : la base ne tait que les notifications REÇUES par qui a bloqué',
+    unSens && /elle, en revanche, est encore prévenue si vous refusez sa demande/.test(bloquer)
+      && /Vous ne recevez plus aucune notification de la personne que vous avez bloquée/.test(bloquer),
+    unSens ? 'le texte ne le dit plus' : 'la base tait désormais les deux sens : le texte promet une notification qui ne part plus');
+  verifier('…et aucune notification n’annonce le blocage (aucun déclencheur sur `blocages` n’écrit dans `notifications`)',
+    /Aucune notification ne lui annonce le blocage/.test(bloquer)
+      && !/create (or replace )?trigger \w+\s+(after|before) insert[^;]*on public\.blocages/.test(sqlS));
+  /* « l'artisan qu'il concerne le lit toujours » : c'est la clause
+     `or professional_id = auth.uid()` de « lecture reviews ». */
+  const lectureAvis = (sqlS.match(/create policy "lecture reviews" on public\.reviews([\s\S]*?);/) || [])[1] || '';
+  const litToujours = /not public\.est_masque\(author_id\) or professional_id = auth\.uid\(\)/.test(lectureAvis);
+  verifier('« l’artisan qu’il concerne le lit toujours » : « lecture reviews » garde `or professional_id = auth.uid()`',
+    litToujours && /l’artisan qu’il concerne le lit toujours/.test(bloquer)
+      && /l’artisan qu’il concerne le lit toujours, même s’il a bloqué son auteur ou a été bloqué par lui/.test(bloc('Les avis')),
+    litToujours ? 'le texte ne le dit plus' : 'la base ne le permet plus : le texte promet une lecture qui n’existe plus');
+
+  /* « Il n'existe pas encore de bouton pour signaler un avis » : vrai tant
+     que `signalements_cible_type_check` n'accepte pas l'avis. Le jour où
+     il l'accepte, la phrase devient fausse — et elle doit partir. */
+  const cibles = (sqlS.match(/add constraint signalements_cible_type_check\s+check \(cible_type in \(([^)]*)\)\)/) || [])[1] || '';
+  const avisSignalable = /'(avis|review|reviews)'/.test(cibles);
+  const ditPasDeBouton = /Il n’existe pas encore de bouton pour signaler un avis/.test(bloc('Les avis'));
+  verifier('« Les avis » : « pas encore de bouton pour signaler un avis » tant que la base ne l’accepte pas — et plus après',
+    cibles.length > 0 && ditPasDeBouton === !avisSignalable,
+    avisSignalable ? 'la base accepte le signalement d’un avis : retirer la phrase' : 'la phrase manque');
+  /* LA RÈGLE ELLE-MÊME, et non l'existence de la fonction (relecture du
+     26/10) : compter une demande seulement ENVOYÉE, ou cesser de compter
+     les urgences, laissait le texte faux au vert — et aucun essai ne la
+     jouait. Une seule définition ; les trois sortes de demande, ACCEPTÉES
+     ou terminées ; et la mention se garde à l'anonymisation. */
+  const morceauxCv = sqlS.split('create or replace function public.calcule_client_verifie()');
+  const cv = (morceauxCv[1] || '').split('$$;')[0].replace(/\s+/g, ' ');
+  verifier('…et « client vérifié » : une demande de devis, de rappel ou d’urgence ACCEPTÉE (ou terminée) — rien d’autre',
+    morceauxCv.length === 2
+      && /Opus ne vérifie ni que les travaux ont eu lieu, ni ce que l’avis raconte, ni les notes données/.test(bloc('Les avis'))
+      && /une demande de devis, de rappel ou d’urgence acceptée par l’artisan qu’il note/.test(bloc('Les avis'))
+      && /from public\.quote_requests q where q\.client_id = new\.author_id and q\.professional_id = new\.professional_id and q\.statut in \('accepte', 'termine'\)/.test(cv)
+      && /from public\.callback_requests c where c\.client_id = new\.author_id and c\.professional_id = new\.professional_id and c\.statut in \('accepte', 'termine'\)/.test(cv)
+      && /from public\.sos_requests s where s\.client_id = new\.author_id and s\.professional_id = new\.professional_id and s\.statut in \('acceptee', 'termine'\)/.test(cv)
+      && (cv.match(/exists \(/g) || []).length === 3,
+    `${morceauxCv.length - 1} définition(s)`);
+  verifier('…« au moment où il l’a écrit » : l’anonymisation (auteur parti) GARDE la mention',
+    /au moment où il l’a écrit ou modifié/.test(bloc('Les avis'))
+      && /if tg_op = 'UPDATE' and new\.author_id is null then new\.client_verifie := old\.client_verifie; return new; end if;/.test(cv));
+
+  /* « Une demande de partenariat refusée reste enregistrée… celui-ci peut
+     l'effacer » : c'est « je romps un partenariat ». */
+  const romps = (sqlS.match(/create policy "je romps un partenariat" on public\.professional_partners([\s\S]*?);/) || [])[1] || '';
+  const refusGarde = /\(auth\.uid\(\) = professional_id and statut <> 'refuse'\)\s*or auth\.uid\(\) = partner_id/.test(romps);
+  const combien = bloc('Combien de temps');
+  verifier('« Combien de temps » : le partenariat refusé reste, et seul celui qui a refusé peut l’effacer — comme la base',
+    refusGarde && /Une demande de partenariat refusée reste enregistrée tant que les deux comptes existent/.test(combien)
+      && /celui-ci peut l’effacer/.test(combien),
+    refusGarde ? 'le texte ne le dit plus' : 'la règle de la base a changé');
+
+  /* Les écrans disaient « vous ne verrez plus RIEN de ce compte » : faux
+     depuis S-b (un avis reste lisible par l'artisan qu'il concerne, une
+     demande déjà reçue reste). */
+  const ecrans = ['src/components/Signaler.js', 'src/screens/ConfidentialiteScreen.js']
+    .map((f) => [f, readFileSync(f, 'utf8')]);
+  /* Par le SENS, pas par les tournures d'avant (relecture du 26/10) :
+     « vous ne verrez plus rien de cette personne » passait. Seul « plus
+     rien de NOUVEAU » est vrai. */
+  const menteurs = ecrans.filter(([, c]) => /plus rien d(e ce compte|u vôtre)|ne (voyez|verrez|verra|voient|verront) plus rien(?! de nouveau)|plus rien de (vous|ces comptes|cette personne)/.test(c.replace(/\s+/g, ' '))).map(([f]) => f);
+  verifier('aucun écran ne dit plus « vous ne verrez plus RIEN de ce compte » — sous aucune tournure', menteurs.length === 0, menteurs.join(', '));
+}
+
 console.log('\nLa position du téléphone : la promesse et le paquet ne se contredisent pas');
 {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));

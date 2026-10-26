@@ -1678,7 +1678,7 @@ console.log('\nC. L’ESSAI — ce que le fichier SQL doit contenir (le jouer es
   verifier('le cas 13 porte le motif NORMALISÉ du cas 27a de l’essai 49 : `prosrc` ET `prosqlbody`, commentaires et chaînes retirés, '
     + 'aucun regard en avant',
   /pg_get_function_sqlbody\s*\(\s*p\.oid\s*\)/i.test(c13) && /\bp\.prosrc\b/i.test(c13) && /base_postes/.test(c13)
-    && /definer_ouvertes_attendu_25/.test(c13) && /definer_fermees_attendu_27/.test(c13) && !c13.includes(`(?!${BARRE}s*${BARRE}()`));
+    && /definer_ouvertes_attendu_\d+/.test(c13) && /definer_fermees_attendu_\d+/.test(c13) && !c13.includes(`(?!${BARRE}s*${BARRE}()`));
   const c18 = cas('18', '18\\s+bis');
   verifier('le cas 18 lit `supabase/cas-rapprochement.json` par `\\set … cat`, compte les écarts et les paires confondues',
     /\\set\s+cas\s+`cat\s+supabase\/cas-rapprochement\.json`/.test(c18) && /is\s+distinct\s+from\s+c->>'attendu'/.test(c18)

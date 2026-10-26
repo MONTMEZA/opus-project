@@ -69,7 +69,7 @@ import ChampMontant from '../components/ChampMontant';
 import * as api from '../lib/api';
 import * as retour from '../lib/retour';
 import { CLAVIER } from '../lib/clavier';
-import { messageClair, messageDeContrainte } from '../lib/erreurs';
+import { messageClair, messageDeContrainte, estUnRefusDefinitif } from '../lib/erreurs';
 import { DELAI_ECRITURE } from '../lib/file-ecriture';
 import { nouvelIdentifiant, IDENTIFIANT_IMPOSSIBLE } from '../lib/identifiant';
 import { clientDepuisDemande } from '../lib/clients';
@@ -1390,13 +1390,21 @@ export default function SaisieDevisScreen({
         importantForAccessibility={carte ? 'no-hide-descendants' : 'auto'}
       >
         {/* CE QUI N'EST PAS PARTI SE DIT, et se renvoie. */}
+        {/* UN REFUS DÉFINITIF NE SE RÉESSAIE PAS (lot S-b) : « ce n'est pas
+            votre demande » (OP013), « vous ne pouvez plus rattacher un
+            nouveau devis à cette demande » (OP020, un blocage). Renvoyée,
+            la même écriture recevrait la même réponse : « Réessayer »
+            mentirait. La phrase de la base dit ce qui reste possible, et
+            la garde de sortie laisse partir (« Quitter sans elles »). */}
         {!!attente.devisErreur && (
           <View style={s.bande}>
             <Text style={s.bandeTexte}>
               {`Le brouillon n’a pas pu être enregistré. ${typeof attente.devisErreur === 'object'
                 ? messageClair(attente.devisErreur, '') : ''}`}
             </Text>
-            <BtnOutline label="Réessayer" onPress={() => fileRef.current && fileRef.current.reessayer('devis')} />
+            {!estUnRefusDefinitif(attente.devisErreur) && (
+              <BtnOutline label="Réessayer" onPress={() => fileRef.current && fileRef.current.reessayer('devis')} />
+            )}
           </View>
         )}
         {attente.retraitsEnEchec > 0 && (

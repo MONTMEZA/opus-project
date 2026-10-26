@@ -861,6 +861,11 @@ select t, has_table_privilege('anon', t, 'select') as anon_select_attendu_f,
 -- réserve les lignes affichées aux particuliers — et l'attendu se lit par
 -- ENSEMBLE, pas par un nombre : un nom remplacé par un autre ne garderait
 -- pas le compte juste pour une mauvaise raison.
+--
+-- ET PAR LE LOT S-b (26/10/2026) : `tient_l_urgence()` refuse une urgence
+-- vers un artisan qui n'apparaîtrait pas dans `artisans_urgence()` — les
+-- mêmes conditions, tarifs affichés compris. `security invoker` elle aussi :
+-- elle lit à travers « tarifs affiches », et ne RENDS rien, elle refuse.
 -- --------------------------------------------------------------------------
 select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
          as hors_liste_attendu_aucune
@@ -868,12 +873,12 @@ select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
  where ns.nspname = 'public'
    and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M'
    and p.proname <> all (array['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs',
-                               'emetteur_incomplet', 'mes_donnees', 'artisans_urgence']);
+                               'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence']);
 select count(*) filter (where p.prosecdef) as definer_attendu_0,
        string_agg(p.proname, ', ' order by p.proname)
          as les_nomment,
        string_agg(p.proname, ', ' order by p.proname)
-         = 'artisans_urgence, emetteur_incomplet, mes_donnees' as liste_attendu_t
+         = 'artisans_urgence, emetteur_incomplet, mes_donnees, tient_l_urgence' as liste_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M';
 select (select count(*) from pg_views

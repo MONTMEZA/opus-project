@@ -146,11 +146,28 @@ console.log('\nLa démonstration ne se dément pas');
      n'envoie jamais. Chaque notification de demande reprend donc le MODÈLE
      de la base pour son type, mot pour mot. */
   const demandesParId = new Map(demo.initialDemandesRecues.map((d) => [d.id, d]));
-  const ARRIVEE = {
-    devis: (nom) => `${nom} vous demande un devis`,
-    rappel: (nom) => `${nom} souhaite être rappelé`,
-    sos: (nom) => `${nom} a besoin de vous EN URGENCE`,
+  /* LES TEXTES D'ARRIVÉE SONT LUS DANS `schema.sql` (lot S-b) — dans la
+     DERNIÈRE définition de `notifie_demande()`, celle qui gagne au rejeu.
+     Recopiés ici, ils auraient survécu au changement de la base : la
+     démonstration aurait gardé « souhaite être rappelé » pendant que la
+     base écrivait « attend votre appel », et ce contrôle serait resté vert. */
+  const SCHEMA_SQL = lire('supabase/schema.sql');
+  const corpsNotifie = SCHEMA_SQL.split('create or replace function public.notifie_demande()').pop()
+    .split(/\nend; \$\$;/)[0];
+  const texteDArrivee = (genre) => {
+    const m = corpsNotifie.match(new RegExp(`when '${genre}'\\s+then nom_client \\|\\| '([^']+)'`))
+      || (genre === 'sos' && corpsNotifie.match(/else\s+nom_client \|\| '([^']+)'/));
+    return m ? m[1] : null;
   };
+  const ARRIVEE = {
+    devis: (nom) => `${nom}${texteDArrivee('devis')}`,
+    rappel: (nom) => `${nom}${texteDArrivee('rappel')}`,
+    sos: (nom) => `${nom}${texteDArrivee('sos')}`,
+  };
+  verifier('les textes d’arrivée d’une demande sont LUS dans la base (`notifie_demande()`, sa dernière définition)',
+    texteDArrivee('devis') === ' vous demande un devis' && texteDArrivee('rappel') === ' attend votre appel'
+      && texteDArrivee('sos') === ' a besoin de vous EN URGENCE',
+    `${texteDArrivee('devis')} | ${texteDArrivee('rappel')} | ${texteDArrivee('sos')}`);
   const REPONSE = {
     devis_accepte: (pro) => `${pro} a accepté votre demande`,
     rappel_accepte: (pro) => `${pro} a accepté votre demande`,
@@ -303,6 +320,44 @@ console.log('\nDe vraies photos, libres de droit, à la place des dégradés');
     surDisque.length > 0 && sansLicence.length === 0, sansLicence.join(', '));
   verifier('LICENCES.md n’admet aucune autre licence',
     licences.length > 0 && !/Licence : (?!CC0 1\.0|domaine public)/.test(licences));
+}
+
+console.log('\nLe blocage se voit en démonstration (relecture du 26/10)');
+{
+  /* UNE PERSONNE, UN IDENTIFIANT : Julie commentait sous « demo-julie » et
+     demandait sous « u-julie ». La bloquer depuis son commentaire — la seule
+     porte de la démonstration — n'atteignait pas sa demande reçue, et le
+     refus OP020 ne se voyait nulle part sans `.env`. */
+  /* TOUS les identifiants vus pour un nom — pas le dernier : un seul
+     commentaire resté sous l'ancien identifiant passait au vert (trouvé en
+     cassant, 26/10). */
+  const auteurs = new Map();
+  const parcourir = (cs) => (cs || []).forEach((c) => {
+    if (c.auteurType === 'particulier') {
+      if (!auteurs.has(c.auteur)) auteurs.set(c.auteur, new Set());
+      auteurs.get(c.auteur).add(String(c.auteurId));
+    }
+    parcourir(c.reponses);
+  });
+  demo.initialPosts.forEach((p) => parcourir(p.comments));
+  const ecarts = demo.initialDemandesRecues
+    .filter((d) => auteurs.has(d.nom) && [...auteurs.get(d.nom)].some((id) => id !== String(d.clientId)))
+    .map((d) => `${d.nom} : ${[...auteurs.get(d.nom)].join('/')} ≠ ${d.clientId}`);
+  const communs = demo.initialDemandesRecues.filter((d) => auteurs.has(d.nom));
+  verifier('un client qui commente ET a une demande reçue porte le MÊME identifiant des deux côtés (il y en a au moins un)',
+    communs.length >= 1 && ecarts.length === 0, ecarts.join(', ') || `${communs.length} commun(s)`);
+  /* LA NOTE D'UNE FICHE (relecture du 26/10) : recalculée sur les avis
+     chargés seulement s'ils sont TOUS là — la lecture cache à celui qui a
+     bloqué un auteur l'avis de cet auteur, et la note de la fiche
+     différait alors de celle des listes. */
+  const base = { avisCount: 2, noteDelais: 3, noteQualite: 3, noteTarif: 3 };
+  const masque = demo.avgReviews({ ...base, reviews: [{ delais: 5, qualite: 5, tarif: 5 }] });
+  const complet = demo.avgReviews({ ...base, reviews: [{ delais: 5, qualite: 5, tarif: 5 }, { delais: 1, qualite: 1, tarif: 1 }] });
+  const plus = demo.avgReviews({ avisCount: 1, noteDelais: 1, noteQualite: 1, noteTarif: 1,
+    reviews: [{ delais: 5, qualite: 5, tarif: 5 }, { delais: 3, qualite: 3, tarif: 3 }] });
+  verifier('`avgReviews` : un avis masqué → la note de la BASE ; tous chargés → recalcul ; son propre avis tout juste publié → recalcul',
+    masque.global === 3 && masque.count === 2 && complet.global === 3 && complet.count === 2
+      && plus.global === 4 && plus.count === 2, JSON.stringify([masque, complet, plus]));
 }
 
 console.log('');

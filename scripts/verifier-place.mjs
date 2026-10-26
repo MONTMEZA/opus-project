@@ -85,6 +85,13 @@ console.log('\nLe compteur ne compte plus les lignes');
   verifier('le rattrapage RECALCULE, il n’incrémente pas',
     /set nb_reponses = \(select count\(\*\)/.test(section),
     'sinon le rejouer une seconde fois doublerait le compte');
+  /* ET IL NE S'ÉCRIT PAS DEPUIS LE TÉLÉPHONE (relecture du 26/10) : l'auteur
+     d'une annonce y écrivait « 40 réponses ». La garde R-A, la même que
+     celle des demandes : `security invoker`, remise silencieuse. */
+  const garde = (section.split('create or replace function public.tient_le_compteur_d_annonce()')[1] || '').split('$$;')[0];
+  verifier('…et l’auteur ne l’écrit pas : `tient_le_compteur_d_annonce` (R-A, `security invoker`) remet 0 à l’insertion, l’ancien nombre ensuite',
+    /security invoker/.test(garde) && /if current_user in \('authenticated', 'anon'\) then\s+if tg_op = 'INSERT' then\s+new\.nb_reponses := 0;\s+else\s+new\.nb_reponses := old\.nb_reponses;/.test(garde)
+      && /create or replace trigger trg_tient_le_compteur_d_annonce\s+before insert or update on public\.annonces_pro\s+for each row execute function public\.tient_le_compteur_d_annonce\(\);/.test(section));
 
   verifier('l’application lit `nb_reponses`, elle ne compte plus',
     /reponses: a\.nb_reponses/.test(api)
@@ -386,6 +393,35 @@ console.log('\nLa démonstration montre les réponses qu’elle annonce');
     menteuses.map((n) => `notification ${n.id}`).join(', '));
   verifier('la démonstration lit ces réponses (et non une liste vide écrite en dur)',
     /initialReponsesAnnonces\[annonceId\]/.test(api));
+}
+
+console.log('\nLot S-b — on ne répond qu’à une annonce qu’on LIT, ouverte, et pas à la sienne');
+{
+  /* Avant le 26/10, « annonce reponses ecriture » ne vérifiait que le
+     compte : un client modifié répondait à l'annonce de quelqu'un qui
+     l'avait bloqué (et l'auteur recevait la notification), à une annonce
+     retirée, ou à la sienne. La sous-requête sur `annonces_pro` passe par
+     « annonces lecture pro », qui écarte les blocages — c'est ce qui rend
+     la règle juste sans appeler `est_masque` une seconde fois. */
+  const sql = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const pol = [...sql.matchAll(/create policy "annonce reponses ecriture" on public\.annonce_reponses([\s\S]*?);/g)]
+    .map((m) => m[1].replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ \)/g, ')').trim());
+  verifier('« annonce reponses ecriture » : créée une fois, `to authenticated`, la règle dans `with check` seulement',
+    pol.length === 1 && /^for all to authenticated using \(auth\.uid\(\) = professional_id\) with check/.test(pol[0]),
+    pol.join(' | '));
+  verifier('…une annonce OUVERTE, d’un AUTRE, que la politique de lecture laisse voir',
+    pol.length === 1
+      /* CORRÉLÉE (relecture du 26/10) : elle cherche L'annonce visée par
+         sa clé, au lieu de relire toute la table à chaque réponse. */
+      && /exists \(select 1 from public\.annonces_pro a where a\.id = annonce_reponses\.annonce_id and a\.statut = 'ouverte' and a\.auteur_id <> auth\.uid\(\)\)/.test(pol[0])
+      && /and public\.est_un_pro\(\)/.test(pol[0]));
+  /* La sous-requête n'écarte un blocage QUE si la lecture le fait : on
+     vérifie donc la DERNIÈRE création de « annonces lecture pro ». */
+  const lectures = [...sql.matchAll(/create policy "annonces lecture pro" on public\.annonces_pro([\s\S]*?);/g)].map((m) => m[1]);
+  verifier('…et « annonces lecture pro » (sa dernière version) écarte bien les blocages, pour `authenticated`',
+    lectures.length > 0 && /to authenticated using \(public\.est_un_pro\(\) and not public\.est_masque\(auteur_id\)\)/.test(lectures[lectures.length - 1]));
+  verifier('une réponse ne se DÉPLACE pas vers une autre annonce (OP021, `trg_tient_la_reponse`)',
+    /create or replace trigger trg_tient_la_reponse\s+before update on public\.annonce_reponses/.test(sql));
 }
 
 console.log('');

@@ -123,6 +123,18 @@ export default function SosScreen({
     setRecherche(false);
   };
 
+  /* L'ENVOI, ET CE QU'IL REND (relecture du 26/10). Un artisan peut cesser
+     de répondre aux urgences entre la recherche et le choix : la base
+     refuse alors l'envoi (OP025, « relancez la recherche »). On la relance
+     nous-mêmes — sa carte disparaît, et son « Choisir » avec elle, au lieu
+     de refaire le même refus à chaque appui. Un seul envoi à la fois. */
+  const [envoi, setEnvoi] = useState(false);
+  const envoyer = async (demande) => {
+    if (envoi) return;
+    setEnvoi(true);
+    try { return await onEnvoyer(demande); } finally { setEnvoi(false); }
+  };
+
   /* LA LISTE VISIBLE, calculée AVANT le rendu : un artisan dont
      l'estimation ne se calcule pas ne s'affiche pas — et c'est elle, pas la
      réponse brute, qui décide de l'état vide. Sinon une carte invisible
@@ -346,7 +358,8 @@ export default function SosScreen({
                     <BtnMini
                       label="Choisir"
                       style={s.choisir}
-                      onPress={() => onEnvoyer({
+                      disabled={envoi}
+                      onPress={() => envoyer({
                         proId: a.proId,
                         entreprise: pro.entreprise,
                         metierKey: metier.key,
@@ -361,7 +374,7 @@ export default function SosScreen({
                         creneau,
                         prixMin: prix.min,
                         prixMax: prix.max,
-                      })}
+                      }).then((r) => { if (r && r.code === 'OP025') chercherArtisans(); })}
                     >
                       <Text style={s.choisirTexte}>Choisir</Text>
                     </BtnMini>

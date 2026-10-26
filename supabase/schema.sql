@@ -413,6 +413,16 @@ begin
   -- Le parent est déjà une réponse : on rattache au commentaire d'origine.
   if grand_parent is not null then
     new.parent_id := grand_parent;
+    -- Et ce commentaire d'origine doit être LISIBLE, lui aussi (lot S-b,
+    -- relecture du 26/10). Sans cette seconde recherche, répondre à la
+    -- réponse d'un tiers rangeait la nouvelle réponse sous le commentaire
+    -- d'une personne en blocage — et l'écran y mène tout seul : une
+    -- réponse dont le parent est masqué s'affiche comme une racine. Même
+    -- message que plus haut : ni l'un ni l'autre ne dit pourquoi.
+    perform 1 from public.comments where id = grand_parent;
+    if not found then
+      raise exception 'Le commentaire parent n''existe pas';
+    end if;
   end if;
   return new;
 end; $$;
@@ -551,6 +561,29 @@ create table if not exists public.callback_requests (
 );
 
 -- --------------------------------------------------------------------------
+--  ON NE SE FAIT PAS UNE DEMANDE À SOI-MÊME (lot S-b, 26/10/2026)
+--
+--  L'écran ne le propose plus (« C'est votre fiche » remplace les boutons
+--  sur sa propre fiche, 26/10), mais la base l'acceptait : un client modifié
+--  se demandait un devis, un rappel ou une urgence, et l'artisan se
+--  notifiait sa propre demande. Même règle que `pas_sabonner_a_soi_meme`
+--  sur les abonnements et `pas_dauto_avis` sur les avis.
+--
+--  `not valid` : la vraie base contient DÉJÀ une ligne de ce genre dans
+--  chacune des deux tables (relevées par leur forme seulement, 26/10), et
+--  `add constraint` refuserait de se poser sur elles. Une contrainte
+--  « not valid » vaut pour toute ligne ÉCRITE ou MODIFIÉE à partir de
+--  maintenant ; les deux anciennes restent, inertes. Les retirer appartient
+--  au propriétaire (le connecteur refuse un `delete`).
+-- --------------------------------------------------------------------------
+alter table public.quote_requests drop constraint if exists quote_requests_pas_soi_meme_check;
+alter table public.quote_requests add constraint quote_requests_pas_soi_meme_check
+  check (client_id <> professional_id) not valid;
+alter table public.callback_requests drop constraint if exists callback_requests_pas_soi_meme_check;
+alter table public.callback_requests add constraint callback_requests_pas_soi_meme_check
+  check (client_id <> professional_id) not valid;
+
+-- --------------------------------------------------------------------------
 --  6. AVIS (notation sur 3 critères)
 -- --------------------------------------------------------------------------
 create table if not exists public.reviews (
@@ -578,6 +611,18 @@ security definer
 set search_path = public
 as $$
 begin
+  -- L'ANONYMISATION ne retire pas la mention (lot S-b, relecture du 26/10).
+  -- Quand l'auteur supprime son compte, `author_id` passe à vide — par
+  -- `preparer_suppression_compte()` ou par la cascade `set null` — et ce
+  -- déclencheur recalculait alors sur « personne » : l'avis restait, il
+  -- comptait dans la note, et perdait « client vérifié ». La mention dit ce
+  -- que l'auteur avait au moment où il a écrit : elle se garde. Et plus
+  -- personne ne modifie un avis sans auteur (« mes reviews » exige
+  -- `auth.uid() = author_id`).
+  if tg_op = 'UPDATE' and new.author_id is null then
+    new.client_verifie := old.client_verifie;
+    return new;
+  end if;
   new.client_verifie :=
     exists (
       select 1 from public.quote_requests q
@@ -628,6 +673,13 @@ create table if not exists public.messages (
 
 create index if not exists idx_messages_conv on public.messages (conversation_id, created_at);
 
+-- On ne s'écrit pas à soi-même (lot S-b, 26/10/2026) : même raison, et même
+-- `not valid`, qu'aux demandes de la section 5 — une conversation de ce
+-- genre existe déjà sur la vraie base.
+alter table public.conversations drop constraint if exists conversations_pas_soi_meme_check;
+alter table public.conversations add constraint conversations_pas_soi_meme_check
+  check (client_id <> professional_id) not valid;
+
 -- --------------------------------------------------------------------------
 --  8. PARTENAIRES
 -- --------------------------------------------------------------------------
@@ -656,6 +708,14 @@ alter table public.professional_partners add column if not exists statut text
   check (statut in ('en_attente', 'accepte', 'refuse'));
 alter table public.professional_partners add column if not exists repondu_le timestamptz;
 
+-- LE DÉFAUT SUIT LA RÈGLE (lot S-b, 26/10/2026). La colonne est née avec
+-- `default 'accepte'` pour ne rien changer aux partenariats déjà en place ;
+-- mais une ligne écrite SANS statut serait alors un partenariat accepté
+-- d'office. La politique d'insertion exige « en attente » et refuse donc
+-- cette ligne — un défaut qui ne passe jamais ne sert à rien, et le jour où
+-- une fonction de la base écrira une ligne, il serait faux.
+alter table public.professional_partners alter column statut set default 'en_attente';
+
 -- Les partenariats existants étaient écrits dans les deux sens : on ne garde
 -- qu'une ligne par paire, sans rien perdre, avant de poser l'index unique.
 delete from public.professional_partners a
@@ -682,10 +742,22 @@ begin
     from public.professional_profiles where id = new.partner_id;
 
   if tg_op = 'INSERT' and new.statut = 'en_attente' then
-    insert into public.notifications (user_id, type, texte, acteur_id)
-    values (new.partner_id, 'partenaire_demande',
-            nom_demandeur || ' vous propose un partenariat',
-            new.professional_id);
+    /* UNE FOIS PAR PAIRE ET PAR 24 HEURES (lot S-b, 26/10/2026). Le
+       demandeur peut annuler sa demande en attente puis la renvoyer : sans
+       cette garde, une boucle faisait sonner le destinataire autant de
+       fois qu'on voulait. La demande renvoyée existe bien — elle n'est pas
+       perdue —, elle ne sonne plus. Même parade que `notifie_demande_pro`
+       (section 45). */
+    if not exists (select 1 from public.notifications n
+                    where n.user_id = new.partner_id
+                      and n.acteur_id = new.professional_id
+                      and n.type = 'partenaire_demande'
+                      and n.created_at > clock_timestamp() - interval '24 hours') then
+      insert into public.notifications (user_id, type, texte, acteur_id)
+      values (new.partner_id, 'partenaire_demande',
+              nom_demandeur || ' vous propose un partenariat',
+              new.professional_id);
+    end if;
 
   elsif tg_op = 'UPDATE' and new.statut = 'accepte' and old.statut <> 'accepte' then
     insert into public.notifications (user_id, type, texte, acteur_id)
@@ -911,6 +983,35 @@ alter table public.sos_requests add column if not exists longitude   double prec
 create index if not exists idx_sos_pro on public.sos_requests (professional_id, created_at desc);
 
 -- --------------------------------------------------------------------------
+--  Une urgence ne s'envoie qu'à un artisan QUI RÉPOND AUX URGENCES de ce
+--  métier (lot S-b, 26/10/2026)
+--
+--  « creation sos » ne regardait que le client et le blocage. Mesuré sur
+--  PostgreSQL : un SOS « plomberie » vers un maçon sans disponibilité ni
+--  tarifs passait, une clé de métier inventée aussi, et l'artisan recevait
+--  « a besoin de vous EN URGENCE ». D'où deux gardes :
+--    - la clé est une des quatre clés d'urgence (`sos_metier_key_check`,
+--      les mêmes que `sos_availability`) ;
+--    - l'artisan apparaîtrait dans `artisans_urgence()` pour ce métier —
+--      ligne active, métier sur la fiche, tarifs affichés et complets —,
+--      la distance mise à part : `tient_l_urgence()`, section 24.4, OP025.
+--  Aucune urgence n'existe sur la vraie base (relevé du 26/10) : la
+--  contrainte se pose valide.
+--
+--  CE QUI RESTE, ET C'EST SU : l'estimation (`prix_min`, `prix_max`) est
+--  calculée par le téléphone à partir des tarifs et de la durée du
+--  problème ; la base ne connaît pas ces durées, elle ne peut donc pas la
+--  recalculer. Un client modifié peut l'inventer — l'artisan, lui, a ses
+--  propres tarifs sous les yeux.
+-- --------------------------------------------------------------------------
+alter table public.sos_requests drop constraint if exists sos_metier_key_check;
+alter table public.sos_requests add constraint sos_metier_key_check
+  check (metier_key in ('plomberie', 'electricite', 'serrurerie', 'chauffage'));
+alter table public.sos_requests drop constraint if exists sos_requests_pas_soi_meme_check;
+alter table public.sos_requests add constraint sos_requests_pas_soi_meme_check
+  check (client_id <> professional_id);
+
+-- --------------------------------------------------------------------------
 --  11. NOTIFICATIONS
 -- --------------------------------------------------------------------------
 create table if not exists public.notifications (
@@ -1077,10 +1178,24 @@ create policy "annonces ecriture auteur" on public.annonces_pro
 drop policy if exists "annonce reponses lecture pro" on public.annonce_reponses;
 create policy "annonce reponses lecture pro" on public.annonce_reponses
   for select using (public.est_un_pro());
+-- RÉPONDRE À UNE ANNONCE (lot S-b, 26/10/2026) : seulement à une annonce
+-- que je LIS — la politique « annonces lecture pro » (section 13.5) écarte
+-- déjà celles d'une personne avec qui je suis en blocage, dans un sens
+-- comme dans l'autre —, encore ouverte, et qui n'est pas la mienne. Avant,
+-- seul le compte était vérifié : un client modifié répondait à l'annonce
+-- de quelqu'un qui l'avait bloqué, et l'auteur recevait la notification.
+-- C'est la règle « clore oui, ouvrir non » du lot S (R-B). `with check`
+-- seulement : retirer sa réponse reste toujours possible.
 drop policy if exists "annonce reponses ecriture" on public.annonce_reponses;
 create policy "annonce reponses ecriture" on public.annonce_reponses
-  for all using (auth.uid() = professional_id)
-  with check (auth.uid() = professional_id and public.est_un_pro());
+  for all to authenticated using (auth.uid() = professional_id)
+  with check (
+    auth.uid() = professional_id
+    and public.est_un_pro()
+    and exists (select 1 from public.annonces_pro a
+                 where a.id = annonce_reponses.annonce_id
+                   and a.statut = 'ouverte' and a.auteur_id <> auth.uid())
+  );
 
 -- Demandes de modification des métiers : strictement privées. Personne
 -- d'autre que l'artisan ne les voit, et lui ne peut pas les trancher —
@@ -1105,10 +1220,22 @@ drop policy if exists "lecture comments" on public.comments;
 create policy "lecture comments"   on public.comments              for select using (true);
 drop policy if exists "lecture follows" on public.follows;
 create policy "lecture follows"    on public.follows               for select using (true);
-drop policy if exists "lecture reviews" on public.reviews;
-create policy "lecture reviews"    on public.reviews               for select using (true);
+-- « lecture reviews » n'est PAS créée ici : la section 13.5 la crée avec le
+-- blocage (lot S-b). Deux créations pour une politique, c'est la première
+-- qui se fait oublier le jour où la règle change.
+--
+-- « lecture partenaires » ÉTAIT `using (true)`, pour tout le monde, et
+-- c'est le défaut n° 2 de l'audit du 19/10/2026 : les politiques `select`
+-- s'additionnent en OU, donc elle ouvrait AUSSI les demandes en attente et
+-- les refus, à n'importe qui, sans compte — alors que « lecture
+-- partenariats » (plus bas) les réservait aux deux intéressés. Elle reste
+-- écrite, FERMÉE (lot S-b, 26/10/2026) : sur la vraie base, le connecteur
+-- refuse un ordre qui commence par `drop`, et une règle fermée se comporte
+-- exactement comme une absence de règle (la même parade que « remplacement
+-- de mes fichiers », lot S-a). La lecture des connectés est dans la
+-- section 13.5, avec le blocage.
 drop policy if exists "lecture partenaires" on public.professional_partners;
-create policy "lecture partenaires" on public.professional_partners for select using (true);
+create policy "lecture partenaires" on public.professional_partners for select to anon using (false);
 
 -- Chacun gère sa propre fiche
 drop policy if exists "ecriture mon user" on public.users;
@@ -1136,27 +1263,17 @@ create policy "ecriture mes posts" on public.posts
   for all using (auth.uid() = author_id)
   with check (auth.uid() = author_id and public.est_un_pro());
 
--- J'aime, enregistrés, abonnements : chacun les siens
-drop policy if exists "mes likes" on public.post_likes;
-create policy "mes likes"  on public.post_likes
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- J'aime, enregistrés, abonnements : chacun les siens.
+-- « mes likes », « mes follows », « mes comments » et « mes reviews » ne
+-- sont PAS créées ici : la section 13.5 les crée avec le blocage (lot S-b,
+-- 26/10/2026). Elles appellent `est_masque()`, qui n'existe pas encore à cet
+-- endroit du fichier — et une politique SQL est contrôlée à sa création.
 drop policy if exists "mes saves" on public.saved_posts;
 create policy "mes saves"  on public.saved_posts
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "lecture mes saves" on public.saved_posts;
 create policy "lecture mes saves" on public.saved_posts
   for select using (auth.uid() = user_id);
-drop policy if exists "mes follows" on public.follows;
-create policy "mes follows" on public.follows
-  for all using (auth.uid() = follower_id) with check (auth.uid() = follower_id);
-drop policy if exists "mes comments" on public.comments;
-create policy "mes comments" on public.comments
-  for all using (auth.uid() = author_id) with check (auth.uid() = author_id);
-
--- Avis : je peux écrire le mien ; client_verifie reste calculé par le trigger
-drop policy if exists "mes reviews" on public.reviews;
-create policy "mes reviews" on public.reviews
-  for all using (auth.uid() = author_id) with check (auth.uid() = author_id);
 
 -- Devis / rappels : visibles par le client et par le professionnel concerné
 drop policy if exists "lecture mes devis" on public.quote_requests;
@@ -1202,31 +1319,15 @@ create policy "envoi message" on public.messages
     where c.id = conversation_id
       and (c.client_id = auth.uid() or c.professional_id = auth.uid())));
 
--- Partenaires : le professionnel gère sa propre liste
--- Partenariats : un partenariat accepté est public — il s'affiche sur les deux
--- profils. Une demande en cours ne regarde que les deux intéressés.
+-- Partenariats : les quatre politiques ne sont PAS créées ici. Elles ont
+-- déménagé en section 13.5 ter (lot S-b, 26/10/2026) : elles appellent
+-- `est_masque()`, qui n'existe pas encore à cet endroit du fichier.
+--
+-- « mes partenaires » était `for all` : QUATRE portes. Elle n'existe plus sur
+-- la vraie base (relevé le 26/10/2026) ; on la retire ici d'une base qui
+-- l'aurait encore. Des règles permissives s'additionnent : une seule restée
+-- ouverte suffirait à annuler les quatre de la section 13.5 ter.
 drop policy if exists "mes partenaires" on public.professional_partners;
-drop policy if exists "lecture partenariats" on public.professional_partners;
-create policy "lecture partenariats" on public.professional_partners
-  for select using (
-    statut = 'accepte' or auth.uid() = professional_id or auth.uid() = partner_id
-  );
-
--- Je ne peux demander qu'en mon nom, et seulement une demande en attente :
--- personne ne s'ajoute d'office aux partenaires d'un confrère.
-drop policy if exists "je demande un partenariat" on public.professional_partners;
-create policy "je demande un partenariat" on public.professional_partners
-  for insert with check (auth.uid() = professional_id and statut = 'en_attente');
-
--- Seul celui à qui on demande peut répondre.
-drop policy if exists "je reponds a un partenariat" on public.professional_partners;
-create policy "je reponds a un partenariat" on public.professional_partners
-  for update using (auth.uid() = partner_id) with check (auth.uid() = partner_id);
-
--- Chacun peut rompre un partenariat, ou annuler sa demande.
-drop policy if exists "je romps un partenariat" on public.professional_partners;
-create policy "je romps un partenariat" on public.professional_partners
-  for delete using (auth.uid() = professional_id or auth.uid() = partner_id);
 
 -- Demandes : visibles de tous, publiees par leur auteur seulement
 drop policy if exists "lecture demandes" on public.demandes;
@@ -1237,9 +1338,8 @@ create policy "mes demandes" on public.demandes
 
 drop policy if exists "lecture reponses" on public.demande_reponses;
 create policy "lecture reponses" on public.demande_reponses for select using (true);
-drop policy if exists "mes reponses" on public.demande_reponses;
-create policy "mes reponses" on public.demande_reponses
-  for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
+-- « mes reponses » n'est PAS créée ici : la section 13.5 la crée avec le
+-- blocage (lot S-b, 26/10/2026).
 
 -- Disponibilites SOS : lisibles de tous (c'est ce qui alimente la recherche),
 -- modifiables uniquement par l'artisan concerne.
@@ -2035,9 +2135,16 @@ drop policy if exists "lecture comments visiteur" on public.comments;
 create policy "lecture comments visiteur" on public.comments
   for select to anon using (true);
 
+-- UN ARTISAN LIT TOUJOURS LES AVIS QUI LE CONCERNENT (lot S-b, 26/10/2026,
+-- décision Q2 du propriétaire). Sinon, un avis 1/5 laissé par quelqu'un
+-- qu'il a bloqué — ou qui l'a bloqué — compte dans sa note sans qu'il
+-- puisse ni le LIRE, ni le SIGNALER (mesuré : l'avis disparaissait de sa
+-- fiche, la note baissait). « Rien ne disparaît » vaut d'abord pour celui
+-- qu'un avis vise. Les autres lecteurs gardent la règle du blocage.
 drop policy if exists "lecture reviews" on public.reviews;
 create policy "lecture reviews" on public.reviews
-  for select to authenticated using (not public.est_masque(author_id));
+  for select to authenticated
+  using (not public.est_masque(author_id) or professional_id = auth.uid());
 drop policy if exists "lecture reviews visiteur" on public.reviews;
 create policy "lecture reviews visiteur" on public.reviews
   for select to anon using (true);
@@ -2051,9 +2158,17 @@ create policy "lecture reviews visiteur" on public.reviews
 drop policy if exists "lecture reponses" on public.demande_reponses;
 create policy "lecture reponses" on public.demande_reponses
   for select to authenticated using (not public.est_masque(professional_id));
+-- PLUS AUCUNE LECTURE SANS COMPTE (lot S-b, 26/10/2026) — défaut n° 3 de
+-- l'audit du 19/10 : un visiteur lisait qui avait répondu à quelle demande,
+-- et le message. Les demandes elles-mêmes ne se lisent plus sans compte
+-- depuis le 04/10 (section 30) ; leurs réponses, si. La politique reste
+-- écrite, FERMÉE, pour la même raison que « lecture partenaires » : le
+-- connecteur refuse un `drop`. Et le droit de TABLE part avec elle — une
+-- politique fermée ne doit pas être la seule barrière.
 drop policy if exists "lecture reponses visiteur" on public.demande_reponses;
 create policy "lecture reponses visiteur" on public.demande_reponses
-  for select to anon using (true);
+  for select to anon using (false);
+revoke all on public.demande_reponses from anon;
 
 -- La Place des pros n'a jamais été visible d'un visiteur : pas de politique
 -- « anon » ici, l'absence de règle suffit à tout refuser.
@@ -2104,17 +2219,329 @@ create policy "envoi message" on public.messages
 
 -- Et l'on ne sollicite pas quelqu'un qu'on a bloqué, ni quelqu'un qui nous
 -- a bloqué : devis, rappel, urgence.
+--
+-- UNE DEMANDE NAÎT EN ATTENTE (lot S-b, 26/10/2026). Mesuré : un
+-- particulier insérait sa demande directement au statut « accepte », sans
+-- que l'artisan ait rien fait — et l'avis qu'il laissait ensuite devenait
+-- « client vérifié » (`calcule_client_verifie`, section 6). Accepter est le
+-- geste de l'ARTISAN, et lui seul. L'application n'envoie pas de statut :
+-- la valeur par défaut passe.
 drop policy if exists "creation devis" on public.quote_requests;
 create policy "creation devis" on public.quote_requests
-  for insert to authenticated with check (auth.uid() = client_id and not public.est_masque(professional_id));
+  for insert to authenticated with check (
+    auth.uid() = client_id and statut = 'en_attente' and not public.est_masque(professional_id));
 
 drop policy if exists "creation rappel" on public.callback_requests;
 create policy "creation rappel" on public.callback_requests
-  for insert to authenticated with check (auth.uid() = client_id and not public.est_masque(professional_id));
+  for insert to authenticated with check (
+    auth.uid() = client_id and statut = 'en_attente' and not public.est_masque(professional_id));
 
 drop policy if exists "creation sos" on public.sos_requests;
 create policy "creation sos" on public.sos_requests
-  for insert to authenticated with check (auth.uid() = client_id and not public.est_masque(professional_id));
+  for insert to authenticated with check (
+    auth.uid() = client_id and statut = 'envoyee' and not public.est_masque(professional_id));
+
+-- --------------------------------------------------------------------------
+--  13.5 bis  LE BLOCAGE FERME AUSSI CE QU'ON ÉCRIT — « clore oui, ouvrir
+--            non » (lot S-b, 26/10/2026, règle R-B du lot S)
+--
+--  Jusqu'ici, le blocage masquait les LECTURES et fermait la messagerie et
+--  les demandes. Tout le reste s'écrivait encore entre deux personnes
+--  bloquées, par un client modifié : un avis 1/5 sur l'artisan qui vous a
+--  bloqué, un commentaire sous sa publication, un « j'aime », un
+--  abonnement, une réponse à son annonce ou à sa demande, une demande de
+--  partenariat. Mesuré par deux relectures séparées du cahier du lot S.
+--
+--  LA RÈGLE (décision D2 du propriétaire, 25/10) : RIEN NE DISPARAÎT de ce
+--  qui existait avant le blocage ; PLUS RIEN DE NEUF entre les deux, dans
+--  les deux sens ; CLORE reste permis (retirer son avis, son commentaire,
+--  sa réponse, refuser ou rompre un partenariat).
+--
+--  COMMENT C'EST TENU, et pourquoi pas autrement : par le `with check` de
+--  chaque politique, jamais par le `using` — `using` gouverne aussi la
+--  SUPPRESSION, et l'on retire toujours ce qu'on a posé. Deux formes :
+--    - « la cible est LISIBLE » : `exists (select 1 from posts p where
+--      p.id = post_likes.post_id)`. La politique de lecture des
+--      publications (13.5) écarte déjà celles d'une personne masquée, dans
+--      les deux sens. La règle est donc écrite UNE fois, dans la lecture,
+--      et l'écriture s'y range. Et la sous-requête est CORRÉLÉE — elle
+--      cherche LA publication visée, par sa clé : écrite
+--      `post_id in (select id from posts)`, elle relisait toute la table à
+--      chaque « j'aime », et la lecture appelait `est_masque()` une fois
+--      par ligne. Mesuré (relecture du 26/10) avec 50 000 publications :
+--      0,7 s par « j'aime » contre 5 ms. La leçon de la section 49 ;
+--    - « la personne n'est pas masquée » : `not est_masque(x)`, pour un
+--      abonnement et un avis, qui visent une personne et non un contenu.
+--  Toutes `to authenticated` : une politique qui appelle `est_masque()`
+--  pour un visiteur, à qui son exécution est retirée, ÉCHOUE au lieu de
+--  filtrer (section 13.1).
+--
+--  UNE MODIFICATION EST UNE ÉCRITURE : après un blocage, on ne corrige plus
+--  son commentaire ni son avis sur la personne en cause. On peut les
+--  retirer.
+--
+--  CE QUE LE BLOCAGE NE CACHE PAS : qu'il existe (relecture du 26/10). Les
+--  phrases de refus ne le nomment jamais — c'est une POLITESSE, pas une
+--  garantie : `est_masque()` est appelable par tout compte connecté, et la
+--  lecture publique `to anon` ne l'applique pas, donc comparer ce qu'on lit
+--  connecté et sans compte suffit à s'en apercevoir. Le cacher vraiment
+--  serait une autre décision, notée dans docs/A-FAIRE.md.
+-- --------------------------------------------------------------------------
+drop policy if exists "mes likes" on public.post_likes;
+create policy "mes likes" on public.post_likes
+  for all to authenticated using (auth.uid() = user_id)
+  with check (auth.uid() = user_id
+              and exists (select 1 from public.posts p where p.id = post_likes.post_id));
+
+drop policy if exists "mes follows" on public.follows;
+create policy "mes follows" on public.follows
+  for all to authenticated using (auth.uid() = follower_id)
+  with check (auth.uid() = follower_id and not public.est_masque(following_id));
+
+-- UN « J'AIME » ET UN ABONNEMENT NE SE DÉPLACENT PAS (relecture du 26/10).
+-- `for all` laissait aussi la porte UPDATE : un client modifié changeait le
+-- `post_id` de son « j'aime » (ou le `following_id` de son abonnement). Les
+-- compteurs ne bougent qu'à l'insertion et à la suppression
+-- (`maj_likes_count`, `maj_followers_count`) : l'ancienne cible gardait +1
+-- sans ligne. Répété — aimer, déplacer, ré-aimer —, un seul compte gonflait
+-- SANS LIMITE le compteur de n'importe quelle publication. L'application
+-- n'en a pas l'usage : elle insère et supprime. Un droit de TABLE, comme
+-- `users` en 18.2 — une politique ne sait pas distinguer.
+revoke update on public.post_likes, public.follows from anon, authenticated;
+
+-- Un commentaire sous une publication LISIBLE. Et une RÉPONSE sous un
+-- commentaire lisible — répondre, sous la publication d'un tiers, à celui
+-- qui vous a bloqué reste un échange entre les deux —, mais ce n'est PAS
+-- cette politique qui le tient : une politique de `comments` qui relirait
+-- `comments` ferait boucler PostgreSQL (« infinite recursion detected in
+-- policy »). C'est `limite_profondeur_commentaire()` (section 4), qui
+-- cherche le parent avec les droits de celui qui écrit : la lecture des
+-- commentaires (13.5) lui cache celui d'une personne masquée, et il refuse
+-- « Le commentaire parent n'existe pas ». Il cherche aussi le commentaire
+-- d'ORIGINE du fil, sous lequel une réponse à une réponse est rangée : sans
+-- cette seconde recherche (relecture du 26/10), répondre à la réponse d'un
+-- tiers rangeait la réponse sous le commentaire de la personne en blocage.
+drop policy if exists "mes comments" on public.comments;
+create policy "mes comments" on public.comments
+  for all to authenticated using (auth.uid() = author_id)
+  with check (auth.uid() = author_id
+              and exists (select 1 from public.posts p where p.id = comments.post_id));
+
+-- Avis : je peux écrire le mien ; `client_verifie` reste calculé par le
+-- déclencheur. Et plus aucun NOUVEL avis entre deux personnes en blocage,
+-- dans un sens comme dans l'autre (décision Q2). Un avis déjà écrit reste.
+drop policy if exists "mes reviews" on public.reviews;
+create policy "mes reviews" on public.reviews
+  for all to authenticated using (auth.uid() = author_id)
+  with check (auth.uid() = author_id and not public.est_masque(professional_id));
+
+-- RÉPONDRE À UNE DEMANDE DE PARTICULIER : seulement à une demande que je
+-- LIS (la politique « lecture demandes », section 30, exige d'être pro et
+-- écarte le client masqué), encore OUVERTE, et qui n'est pas la mienne.
+-- Avant : « chacun ses réponses », sans plus — un client modifié répondait
+-- à la demande d'un particulier qui l'avait bloqué, et à une demande
+-- pourvue depuis six mois.
+drop policy if exists "mes reponses" on public.demande_reponses;
+create policy "mes reponses" on public.demande_reponses
+  for all to authenticated using (auth.uid() = professional_id)
+  with check (
+    auth.uid() = professional_id
+    and exists (select 1 from public.demandes d
+                 where d.id = demande_reponses.demande_id
+                   and d.statut = 'ouverte' and d.client_id <> auth.uid())
+  );
+
+-- --------------------------------------------------------------------------
+--  13.5 ter  LES PARTENARIATS — défaut n° 2 de l'audit du 19/10/2026
+--
+--  Deux défauts, mesurés sur la vraie base avant d'écrire :
+--    1. « lecture partenaires » laissait lire À TOUT LE MONDE, sans compte,
+--       chaque demande en attente et chaque refus (fermée en section 4) ;
+--    2. « je reponds a un partenariat » ne regardait que `partner_id` : en
+--       ACCEPTANT, celui qui reçoit la demande pouvait aussi en changer
+--       l'AUTEUR (`professional_id`), et s'inscrire ainsi chez un tiers qui
+--       n'avait rien demandé.
+--  Plus R-B : on ne propose ni n'accepte un partenariat sous blocage.
+--
+--  CE QUI TIENT CHAQUE PORTE :
+--    - LIRE : les deux intéressés lisent tout ce qui les concerne (une
+--      demande, un refus) ; un tiers ne lit qu'un partenariat ACCEPTÉ, et
+--      seulement si aucune des deux parties ne lui est masquée ;
+--    - DEMANDER : en son nom, en attente, jamais vers une personne en
+--      blocage — et OP020 le dit, par `tient_le_partenariat()`, qui joue
+--      AVANT la politique (mesuré : à l'insertion, un déclencheur BEFORE
+--      ROW lève avant le `with check`) ;
+--    - RÉPONDRE : seulement une demande EN ATTENTE, et seulement vers
+--      « accepte » ou « refuse ». Accepter une demande déjà refusée
+--      touche 0 ligne, sans erreur : la clause `using` filtre AVANT le
+--      déclencheur (l'écran ne le propose pas) ;
+--    - RETIRER : chacun rompt un partenariat ou annule sa demande ; mais le
+--      DEMANDEUR ne supprime plus un REFUS. Sinon il le supprime et
+--      redemande, en boucle — la paire est unique (`idx_partenaires_paire`),
+--      et c'est le refus gardé qui tient la porte fermée. Celui qui a
+--      refusé peut, lui, effacer son refus : c'est sa porte ;
+--    - LES COLONNES : un client n'écrit que `professional_id`, `partner_id`
+--      et `statut` à l'insertion, `statut` et `repondu_le` à la mise à
+--      jour (l'application envoie `repondu_le` ; le déclencheur pose la
+--      vraie date). Changer une clé répond 42501 — « permission denied » —
+--      avant même le déclencheur, qui garde OP021 en seconde ligne.
+-- --------------------------------------------------------------------------
+drop policy if exists "lecture partenariats" on public.professional_partners;
+create policy "lecture partenariats" on public.professional_partners
+  for select to authenticated using (
+    auth.uid() = professional_id
+    or auth.uid() = partner_id
+    or (statut = 'accepte'
+        and not public.est_masque(professional_id)
+        and not public.est_masque(partner_id))
+  );
+
+drop policy if exists "je demande un partenariat" on public.professional_partners;
+create policy "je demande un partenariat" on public.professional_partners
+  for insert to authenticated with check (
+    auth.uid() = professional_id and statut = 'en_attente' and not public.est_masque(partner_id));
+
+drop policy if exists "je reponds a un partenariat" on public.professional_partners;
+create policy "je reponds a un partenariat" on public.professional_partners
+  for update to authenticated
+  using (auth.uid() = partner_id and statut = 'en_attente')
+  with check (auth.uid() = partner_id and statut in ('accepte', 'refuse'));
+
+drop policy if exists "je romps un partenariat" on public.professional_partners;
+create policy "je romps un partenariat" on public.professional_partners
+  for delete to authenticated using (
+    (auth.uid() = professional_id and statut <> 'refuse') or auth.uid() = partner_id);
+
+revoke all on public.professional_partners from anon;
+revoke insert, update on public.professional_partners from authenticated;
+grant insert (professional_id, partner_id, statut) on public.professional_partners to authenticated;
+grant update (statut, repondu_le) on public.professional_partners to authenticated;
+
+/* Le déclencheur des partenariats — `security invoker`, et la règle R-A du
+   lot S : il ne s'applique qu'à ce qu'un CLIENT écrit (`current_user`
+   vaut `authenticated` ou `anon`). Une fonction de la base, l'éditeur SQL
+   ou la clé de service passent : le ménage d'un compte supprime des
+   lignes, il n'en écrit pas, mais une migration doit pouvoir réparer.
+   Il pose LA DATE DE RÉPONSE lui-même : celle que l'application envoie
+   n'est qu'une indication — elle vient de l'horloge du téléphone. */
+create or replace function public.tient_le_partenariat()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    -- Les phrases d'OP020 ne nomment jamais un blocage : un artisan
+    -- connaît SES blocages ; lui dire « bloqué » quand il n'a bloqué
+    -- personne lui apprendrait que l'autre l'a bloqué.
+    if public.est_masque(new.partner_id) then
+      raise exception 'Vous ne pouvez pas proposer ce partenariat.'
+        using errcode = 'OP020';
+    end if;
+    -- La date de la demande appartient à la BASE (relecture du 26/10) : le
+    -- droit de colonne la ferme déjà, et c'est la seconde ligne — un droit
+    -- élargi un jour par mégarde ne doit pas laisser un demandeur antidater
+    -- sa demande.
+    new.created_at := clock_timestamp();
+    new.repondu_le := null;
+    return new;
+  end if;
+
+  if new.professional_id is distinct from old.professional_id
+     or new.partner_id is distinct from old.partner_id
+     or new.created_at is distinct from old.created_at then
+    raise exception 'Un partenariat ne change ni de demandeur, ni de destinataire, ni de date.'
+      using errcode = 'OP021';
+  end if;
+  if new.statut = 'accepte' and old.statut is distinct from 'accepte'
+     and public.est_masque(new.professional_id) then
+    raise exception 'Vous ne pouvez plus accepter ce partenariat. Vous pouvez encore le refuser.'
+      using errcode = 'OP020';
+  end if;
+  new.repondu_le := case when new.statut is distinct from old.statut
+                         then clock_timestamp() else old.repondu_le end;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_partenariat
+  before insert or update on public.professional_partners
+  for each row execute function public.tient_le_partenariat();
+
+-- --------------------------------------------------------------------------
+--  13.5 quater  LES NOTIFICATIONS D'UNE PERSONNE QU'ON A BLOQUÉE SE TAISENT
+--               (lot S-b, 26/10/2026 — décisions D2 et Q1)
+--
+--  Un blocage arrêtait la messagerie, mais pas la cloche : « X a commenté »,
+--  « X vous propose un partenariat », « X ne peut pas donner suite »
+--  continuaient d'arriver, avec le nom de celui qu'on fuit.
+--
+--  CE QUI SE TAIT, EXACTEMENT (décision Q1 du propriétaire) : ce que le
+--  destinataire reçoit de quelqu'un qu'IL a bloqué. Dans l'autre sens, rien
+--  ne change : un artisan qui bloque un client peut encore REFUSER sa
+--  demande, et ce client — qui, lui, n'a bloqué personne — reçoit le refus.
+--  Il n'a aucun écran « mes demandes envoyées » : sans la notification, il
+--  attendrait sans jamais rien savoir.
+--
+--  UNE EXCEPTION dans l'autre sens, ajoutée par la relecture du 26/10 : une
+--  notification qui désigne un COMMENTAIRE se tait aussi quand c'est
+--  l'auteur du commentaire qui a bloqué le destinataire. La lecture des
+--  commentaires (13.5) cache ce commentaire au destinataire : la
+--  notification ne mènerait à rien. Un refus de demande ne porte pas de
+--  commentaire, et passe toujours.
+--
+--  JAMAIS TUES, quel que soit le blocage : ce qui n'a pas d'acteur (les
+--  décisions de l'administration ne portent pas d'`acteur_id`), et ce qui
+--  est ADRESSÉ à l'administration. Liste fermée, à tenir à jour avec tout
+--  nouveau type adressé aux administrateurs : `demande_pro_nouvelle`
+--  (section 45). Mesuré le 26/10 : l'unique blocage de la vraie base est
+--  posé par l'administrateur — et `notifie_demande_pro` met le demandeur
+--  en `acteur_id`. Sans cette liste, l'administration n'aurait plus été
+--  prévenue des demandes de quelqu'un qu'elle a bloqué.
+--
+--  `return null` dans un déclencheur BEFORE INSERT : la ligne n'est pas
+--  écrite, sans erreur. Relevé avant de l'écrire : aucune des fonctions qui
+--  écrivent une notification ne lit `RETURNING`, `FOUND` ni `ROW_COUNT`.
+--  `security definer` : il doit lire les blocages du DESTINATAIRE, que la
+--  politique « mes blocages » cache à celui qui écrit.
+-- --------------------------------------------------------------------------
+create or replace function public.tait_les_notifications_bloquees()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.acteur_id is null
+     or new.type in ('demande_pro_nouvelle') then
+    return new;
+  end if;
+  if exists (select 1 from public.blocages b
+              where b.bloqueur_id = new.user_id and b.bloque_id = new.acteur_id) then
+    return null;
+  end if;
+  -- L'autre sens, pour un COMMENTAIRE seulement : P a bloqué B, B a parlé
+  -- dans le fil d'un tiers, P y répond — B recevait « P a répondu dans une
+  -- discussion… » pour un commentaire que la lecture lui cache. Une
+  -- notification qui désigne ce qu'on ne peut pas lire ne mène nulle part,
+  -- et elle porte le nom de quelqu'un qu'on ne voit plus.
+  if new.comment_id is not null
+     and exists (select 1 from public.blocages b
+                  where b.bloqueur_id = new.acteur_id and b.bloque_id = new.user_id) then
+    return null;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tait_les_notifications_bloquees
+  before insert on public.notifications
+  for each row execute function public.tait_les_notifications_bloquees();
 
 -- Le signalement survit lui aussi à son auteur : sinon, il suffirait de
 -- supprimer son compte pour effacer ce qu'on a dénoncé — ou, à l'inverse,
@@ -4032,9 +4459,15 @@ begin
      set metier = public.metier_depuis_ancien_nom(metier)
    where metier is not null and public.metier_depuis_ancien_nom(metier) <> metier;
 
+  -- Sauf une demande « à soi-même » (lot S-b, section 5) : elle viole
+  -- `quote_requests_pas_soi_meme_check`, posée `not valid` parce que la
+  -- vraie base en porte encore. Or une contrainte `not valid` s'applique à
+  -- toute ligne MODIFIÉE : récrire son métier arrêterait le rejeu du
+  -- schéma (relecture du 26/10). Ces lignes sont inertes.
   update public.quote_requests
      set metier = public.metier_depuis_ancien_nom(metier)
-   where metier is not null and public.metier_depuis_ancien_nom(metier) <> metier;
+   where metier is not null and public.metier_depuis_ancien_nom(metier) <> metier
+     and client_id is distinct from professional_id;
 
   update public.annonces_pro
      set metier = public.metier_depuis_ancien_nom(metier)
@@ -4281,7 +4714,7 @@ begin
       genre,
       case genre
         when 'devis'  then nom_client || ' vous demande un devis'
-        when 'rappel' then nom_client || ' souhaite être rappelé'
+        when 'rappel' then nom_client || ' attend votre appel'
         else                nom_client || ' a besoin de vous EN URGENCE'
       end,
       new.client_id);
@@ -4324,6 +4757,163 @@ create or replace trigger trg_notifie_rappel
 create or replace trigger trg_notifie_sos
   after insert or update on public.sos_requests
   for each row execute function public.notifie_demande();
+
+-- « X attend votre appel » ET NON PLUS « X souhaite être rappelé » (lot
+-- S-b, 26/10/2026) : la base écrivait le masculin pour tout le monde —
+-- « Sophie B. souhaite être rappelé ». Elle ne connaît pas le genre de
+-- quelqu'un, et elle n'a pas à le connaître : une tournure qui n'accorde
+-- rien. La démonstration recopie ce texte mot pour mot (`verifier-demo`).
+
+-- --------------------------------------------------------------------------
+--  24.4  UNE DEMANDE REÇUE NE CHANGE QUE PAR SES TROIS GESTES (lot S-b,
+--        26/10/2026)
+--
+--  « le pro traite le devis » (et ses deux sœurs) laissait l'artisan
+--  modifier TOUTE la ligne : le nom du client, son numéro, sa description,
+--  sa date — une demande récrite par celui qui la reçoit, et qui servira
+--  un jour de preuve dans un litige (« vous m'aviez demandé… »). Et le
+--  statut changeait dans n'importe quel sens : « refusé » → « accepté » trois
+--  semaines plus tard, « terminé » → « en attente ».
+--
+--  LA RÈGLE : tout est figé sauf le statut, et le statut ne suit QUE les
+--  transitions de l'écran — Accepter et Refuser une demande en attente,
+--  Marquer terminée une demande acceptée. Un statut renvoyé INCHANGÉ passe
+--  (un double appui ne doit pas faire une erreur). Code OP019, avec une
+--  phrase qui dit l'état RÉEL de la demande : un écran resté ouvert sur un
+--  autre téléphone propose encore « Accepter » sur une demande acceptée.
+--
+--  ET LE BLOCAGE (règle R-B, décision D2) : on n'ACCEPTE plus la demande de
+--  quelqu'un avec qui l'on est en blocage, dans un sens ou dans l'autre —
+--  OP020. Refuser reste permis, et c'est voulu : clore, oui ; ouvrir, non.
+--  Ni la phrase ni le code ne nomment le blocage : un artisan connaît SES
+--  blocages ; lui dire « bloqué » quand il n'a bloqué personne lui
+--  apprendrait que le client l'a bloqué.
+--
+--  R-A : il ne s'applique qu'à ce qu'un CLIENT écrit (`current_user` vaut
+--  `authenticated` ou `anon`). L'éditeur SQL, la clé de service et les
+--  migrations passent — la section 21 récrit les métiers des demandes, par
+--  exemple. `security invoker` : dans une fonction `security definer`,
+--  `current_user` vaut TOUJOURS son propriétaire (leçon de la section 45).
+-- --------------------------------------------------------------------------
+create or replace function public.tient_la_demande()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  attente  text;
+  accepte  text;
+  refuse   text;
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+
+  -- Les mots de chaque table, comme `notifie_demande()`.
+  if tg_table_name = 'sos_requests' then
+    attente := 'envoyee'; accepte := 'acceptee'; refuse := 'refusee';
+  else
+    attente := 'en_attente'; accepte := 'accepte'; refuse := 'refuse';
+  end if;
+
+  -- 1. Tout est figé sauf le statut.
+  if (to_jsonb(new) - 'statut') is distinct from (to_jsonb(old) - 'statut') then
+    raise exception 'Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.'
+      using errcode = 'OP019';
+  end if;
+
+  -- 2. Un statut renvoyé inchangé passe.
+  if new.statut is not distinct from old.statut then
+    return new;
+  end if;
+
+  -- 3. Les transitions de l'écran, et elles seules. La phrase dit l'état
+  --    RÉEL, et ce qui reste possible.
+  if not ((old.statut = attente and new.statut in (accepte, refuse))
+          or (old.statut = accepte and new.statut = 'termine')) then
+    if old.statut = accepte then
+      raise exception 'Cette demande a déjà été acceptée : vous pouvez la marquer terminée.'
+        using errcode = 'OP019';
+    elsif old.statut = refuse then
+      raise exception 'Cette demande a déjà été refusée : elle ne peut plus changer.'
+        using errcode = 'OP019';
+    elsif old.statut = 'termine' then
+      raise exception 'Cette demande est déjà terminée : elle ne peut plus changer.'
+        using errcode = 'OP019';
+    elsif old.statut = attente then
+      raise exception 'Cette demande n''a pas encore été acceptée : acceptez-la ou refusez-la d''abord.'
+        using errcode = 'OP019';
+    else
+      raise exception 'Cette demande a été annulée : elle ne peut plus changer.'
+        using errcode = 'OP019';
+    end if;
+  end if;
+
+  -- 4. Le blocage : on n'ouvre plus rien.
+  if new.statut = accepte and public.est_masque(new.client_id) then
+    raise exception 'Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser.'
+      using errcode = 'OP020';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_la_demande_devis
+  before update on public.quote_requests
+  for each row execute function public.tient_la_demande();
+create or replace trigger trg_tient_la_demande_rappel
+  before update on public.callback_requests
+  for each row execute function public.tient_la_demande();
+create or replace trigger trg_tient_la_demande_sos
+  before update on public.sos_requests
+  for each row execute function public.tient_la_demande();
+
+/* UNE URGENCE NE PART QUE VERS UN ARTISAN QUI RÉPOND AUX URGENCES de ce
+   métier — les conditions d'`artisans_urgence()` (section 47.6), la
+   distance mise à part : le lieu de l'urgence peut manquer, et le rayon
+   est une affaire de RECHERCHE, pas de droit. OP025 (OP019 à OP023 sont
+   réservés au lot S, OP024 est pris par la section 51).
+
+   `security invoker` et R-A, comme `tient_la_demande()`. Il lit les
+   tarifs à travers « tarifs affiches » (section 47.5) : un particulier y
+   lit ceux d'un artisan qui les affiche et qu'il n'a pas bloqué. Un compte
+   PRO n'y lit aucun tarif : il ne peut donc envoyer aucune urgence — c'est
+   la règle de l'écran (le SOS est réservé aux comptes qui ne publient pas),
+   désormais tenue par la base. */
+create or replace function public.tient_l_urgence()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  if not exists (
+       select 1
+         from public.sos_availability sa
+         join public.professional_profiles pp on pp.id = sa.professional_id
+         join public.tarifs_pro t            on t.pro_id = sa.professional_id
+        where sa.professional_id = new.professional_id
+          and sa.metier_key = new.metier_key
+          and sa.actif
+          and pp.metiers @> array[public.metier_du_sos(sa.metier_key)]
+          and t.affiche is true
+          and t.frais_deplacement_centimes is not null
+          and t.taux_horaire_centimes is not null
+          and t.majoration_pct is not null) then
+    raise exception 'Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.'
+      using errcode = 'OP025';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_l_urgence
+  before insert on public.sos_requests
+  for each row execute function public.tient_l_urgence();
 
 -- 24.3  Une seule liste pour les trois origines
 --
@@ -5852,6 +6442,35 @@ update public.annonces_pro a
  where a.nb_reponses is distinct from (select count(*) from public.annonce_reponses r
                                         where r.annonce_id = a.id);
 
+/* LE COMPTEUR NE S'ÉCRIT PAS DEPUIS LE TÉLÉPHONE — règle R-A du lot S,
+   ajoutée par la relecture du 26/10. La section 30.3 l'avait posée pour les
+   demandes seulement : « annonces ecriture auteur » est `for all`, et
+   l'auteur d'une annonce y écrivait le nombre qu'il voulait (« 40 réponses
+   »), que tous les pros lisent. Même forme que `tient_le_compteur_de_demande()`
+   : remise silencieuse, `security invoker` — `maj_nb_reponses()`, `security
+   definer`, passe. */
+create or replace function public.tient_le_compteur_d_annonce()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.nb_reponses := 0;
+    else
+      new.nb_reponses := old.nb_reponses;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_compteur_d_annonce
+  before insert or update on public.annonces_pro
+  for each row execute function public.tient_le_compteur_d_annonce();
+
 -- --------------------------------------------------------------------------
 --  29.2  UNE RÉPONSE NE SE LIT QU'ENTRE LES DEUX CONCERNÉS
 --
@@ -6047,6 +6666,114 @@ comment on column public.demandes.statut is
   'ouverte | pourvue | fermee. « pourvue » est posé par l''AUTEUR quand il a '
   'trouvé : la demande sort de la liste des artisans et lui reste visible. '
   'Lu par l''application depuis le 04/10/2026 — avant, personne ne le lisait.';
+
+-- --------------------------------------------------------------------------
+-- 30.3  LE NOMBRE DE RÉPONSES SORT DE LA TABLE DES RÉPONSES (lot S-b,
+--       26/10/2026 — décision D6 du propriétaire : « le nombre seulement »)
+-- --------------------------------------------------------------------------
+--
+-- Le compteur « 3 réponses » sous une demande s'obtenait en lisant TOUTE la
+-- table `demande_reponses` au démarrage — chaque ligne, de chaque artisan,
+-- pour chaque demande : qui a répondu à quoi, et l'application comptait.
+-- C'est la même parade que la Place des pros (section 29.1) : la valeur est
+-- publique, le détail ne l'est pas. Le nombre vit sur la demande, tenu par
+-- un déclencheur ; le jour où la lecture des réponses se ferme (lot S-d),
+-- il reste juste pour tout le monde.
+--
+-- Ce que ce nombre ne fait pas, et c'est voulu : il ne retire pas les
+-- réponses des personnes qu'on a bloquées. Un compteur ne sait pas qui le
+-- regarde (la même raison qu'en 29.1).
+alter table public.demandes add column if not exists nb_reponses int not null default 0;
+
+create or replace function public.maj_nb_reponses_demande()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.demandes set nb_reponses = nb_reponses + 1 where id = new.demande_id;
+  elsif tg_op = 'DELETE' then
+    -- `greatest(…, 0)` : un compteur négatif se verrait à l'écran et ne se
+    -- corrigerait jamais tout seul.
+    update public.demandes set nb_reponses = greatest(nb_reponses - 1, 0) where id = old.demande_id;
+  end if;
+  return null;
+end;
+$$;
+
+create or replace trigger trg_maj_nb_reponses_demande
+  after insert or delete on public.demande_reponses
+  for each row execute function public.maj_nb_reponses_demande();
+
+/* LE COMPTEUR NE S'ÉCRIT PAS DEPUIS LE TÉLÉPHONE — règle R-A du lot S.
+   « mes demandes » est `for all` : sans cette garde, le particulier
+   écrivait « 40 réponses » sous sa demande, ou « 0 » pour attirer
+   l'attention. Remise SILENCIEUSE, et pas un refus : aucune version de
+   l'application n'envoie ce nombre, et il ne trompe personne s'il est
+   remis. `security invoker` : le compteur lui-même passe par
+   `maj_nb_reponses_demande()`, `security definer`, dans laquelle
+   `current_user` vaut le propriétaire. */
+create or replace function public.tient_le_compteur_de_demande()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.nb_reponses := 0;
+    else
+      new.nb_reponses := old.nb_reponses;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_compteur_de_demande
+  before insert or update on public.demandes
+  for each row execute function public.tient_le_compteur_de_demande();
+
+-- Le rattrapage RECALCULE, il n'incrémente pas : `schema.sql` se rejoue.
+update public.demandes d
+   set nb_reponses = (select count(*) from public.demande_reponses r where r.demande_id = d.id)
+ where d.nb_reponses is distinct from
+       (select count(*) from public.demande_reponses r where r.demande_id = d.id);
+
+/* UNE RÉPONSE NE SE DÉPLACE PAS (lot S-b, 26/10/2026). « mes reponses » et
+   « annonce reponses ecriture » sont `for all` : l'auteur d'une réponse
+   pouvait la déplacer vers une AUTRE demande, ou une autre annonce — sans
+   repasser par la règle d'insertion, donc vers une demande fermée ou celle
+   d'une personne qui l'a bloqué — et le compteur, lui, ne bougeait pas.
+   Seul le MESSAGE change. OP021. `security invoker` et R-A : une fonction
+   de la base qui réparerait une ligne passe. */
+create or replace function public.tient_la_reponse()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  if (to_jsonb(new) - 'message') is distinct from (to_jsonb(old) - 'message') then
+    raise exception 'Une réponse ne se déplace pas : seul son message peut changer.'
+      using errcode = 'OP021';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_la_reponse
+  before update on public.demande_reponses
+  for each row execute function public.tient_la_reponse();
+create or replace trigger trg_tient_la_reponse
+  before update on public.annonce_reponses
+  for each row execute function public.tient_la_reponse();
 
 
 -- ==========================================================================
@@ -7252,7 +7979,7 @@ begin
       genre,
       case genre
         when 'devis'  then nom_client || ' vous demande un devis'
-        when 'rappel' then nom_client || ' souhaite être rappelé'
+        when 'rappel' then nom_client || ' attend votre appel'
         else                nom_client || ' a besoin de vous EN URGENCE'
       end,
       new.client_id,
@@ -12601,6 +13328,115 @@ comment on function public.recalcule_devis(uuid, bigint) is
   'aucun client. Section 49.6.';
 comment on function public.recalcule_apres_ligne_de_devis() is
   'Après chaque écriture d''une ligne : appelle recalcule_devis(), dans l''ordre des identifiants. Section 49.6.';
+
+-- --------------------------------------------------------------------------
+--  49.6 bis  UN NOUVEAU DEVIS NE SE RATTACHE PAS À LA DEMANDE D'UNE PERSONNE
+--            EN BLOCAGE (lot S-b, 26/10/2026 — règle R-B, décision D2)
+--
+--  « L'artisan garde ce qu'il a reçu, mais ne peut plus faire un nouveau
+--  devis » (D2). `tient_le_devis()` ne le pouvait pas : il est `security
+--  invoker`, et sous les droits de l'artisan, la politique « mes blocages »
+--  ne lui montre que SES blocages — mesuré : le blocage posé par le CLIENT
+--  était invisible, et le devis était créé. D'où un déclencheur à part,
+--  `security definer`, qui lit les blocages dans les deux sens.
+--
+--  L'EXCEPTION À R-A, DITE : ce déclencheur ne regarde pas `current_user`
+--  (en `definer`, il vaut toujours le propriétaire) — son test ne dépend pas
+--  de QUI écrit, mais de deux identifiants écrits sur les lignes :
+--  `devis.pro_id` et le client de la demande. Jamais `auth.uid()`.
+--
+--  CE QUI PASSE : un lien déjà posé reste (« rien ne disparaît ») — la
+--  garde ne joue que quand le lien CHANGE et n'est pas vide ; une cascade
+--  qui le vide (`set null`) passe toujours. Son nom le range APRÈS
+--  `trg_tient_le_devis` (ordre alphabétique) : « cette demande n'est pas à
+--  vous » (OP013) est décidé AVANT le blocage, et un artisan n'apprend rien
+--  sur les blocages d'une demande qui ne lui est pas adressée.
+--
+--  LA LIMITE, DITE AUSSI : le blocage suit un COMPTE, pas une fiche du
+--  carnet de clients. Un artisan peut toujours faire un devis à « Mme X »
+--  depuis son carnet — la base ne sait pas que c'est la même personne.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_lien_du_devis()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_client uuid;
+begin
+  if new.quote_request_id is not null
+     and (tg_op = 'INSERT' or new.quote_request_id is distinct from old.quote_request_id) then
+    select q.client_id into v_client from public.quote_requests q where q.id = new.quote_request_id;
+    if exists (select 1 from public.blocages b
+                where (b.bloqueur_id = new.pro_id and b.bloque_id = v_client)
+                   or (b.bloqueur_id = v_client and b.bloque_id = new.pro_id)) then
+      raise exception 'Vous ne pouvez plus rattacher un nouveau devis à cette demande. Un devis déjà commencé reste modifiable.'
+        using errcode = 'OP020';
+    end if;
+  end if;
+  if new.sos_request_id is not null
+     and (tg_op = 'INSERT' or new.sos_request_id is distinct from old.sos_request_id) then
+    select s.client_id into v_client from public.sos_requests s where s.id = new.sos_request_id;
+    if exists (select 1 from public.blocages b
+                where (b.bloqueur_id = new.pro_id and b.bloque_id = v_client)
+                   or (b.bloqueur_id = v_client and b.bloque_id = new.pro_id)) then
+      raise exception 'Vous ne pouvez plus rattacher un nouveau devis à cette urgence. Un devis déjà commencé reste modifiable.'
+        using errcode = 'OP020';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_lien_du_devis
+  before insert or update of quote_request_id, sos_request_id on public.devis
+  for each row execute function public.tient_le_lien_du_devis();
+
+/* AVANT D'OUVRIR LA SAISIE, l'écran demande si un nouveau devis peut se
+   rattacher à cette demande (la relecture « écran » du cahier du lot S,
+   mesurée : sans cela, l'artisan tapait sa première ligne, et c'est elle
+   qui recevait le refus). Elle rend `true` seulement si la demande (ou
+   l'urgence) est adressée à l'appelant et qu'aucun blocage n'existe entre
+   eux, dans un sens ou dans l'autre ; `false` sinon — y compris pour une
+   demande qui n'existe pas ou qui est à un autre : le même `false`, aucun
+   oracle sur les demandes des autres. Pour une demande QUI LUI EST
+   ADRESSÉE, elle dit à l'artisan ce que l'insertion lui dirait de toute
+   façon (OP020) : rien de plus.
+   `security definer` : les blocages posés par le client ne se lisent que
+   d'ici. Exactement l'une des deux clés : une demande OU une urgence. */
+create or replace function public.peut_faire_un_devis(p_demande uuid, p_urgence uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cible as (
+    select q.client_id from public.quote_requests q
+     where p_urgence is null and q.id = p_demande and q.professional_id = auth.uid()
+    union all
+    select s.client_id from public.sos_requests s
+     where p_demande is null and s.id = p_urgence and s.professional_id = auth.uid()
+  )
+  select auth.uid() is not null
+     and (p_demande is null) <> (p_urgence is null)
+     and exists (select 1 from cible)
+     and not exists (
+       select 1 from cible c, public.blocages b
+        where (b.bloqueur_id = auth.uid() and b.bloque_id = c.client_id)
+           or (b.bloqueur_id = c.client_id and b.bloque_id = auth.uid()))
+$$;
+
+revoke all on function public.peut_faire_un_devis(uuid, uuid) from public, anon;
+grant execute on function public.peut_faire_un_devis(uuid, uuid) to authenticated;
+
+comment on function public.tient_le_lien_du_devis() is
+  'Refuse un NOUVEAU lien entre un devis et la demande ou l''urgence d''une personne en blocage avec '
+  'l''artisan, dans un sens ou dans l''autre (OP020). Un lien déjà posé reste. Section 49.6 bis.';
+comment on function public.peut_faire_un_devis(uuid, uuid) is
+  'Vrai si un nouveau devis peut se rattacher à cette demande (ou urgence) : elle est adressée à '
+  'l''appelant et aucun blocage n''existe entre eux. Faux sinon, sans dire pourquoi. Section 49.6 bis.';
 
 -- --------------------------------------------------------------------------
 --  49.7 Qui lit, qui écrit

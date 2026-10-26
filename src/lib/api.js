@@ -30,7 +30,10 @@ import { reduireImage, TAILLE_MAX_MO } from './media';
 import { chiffresSeuls, communeLisible, departementDe } from './siret';
 import { analyserNumeroTva, ESSAIS_VIES } from './tva';
 import { NOM_ENTREPRISE_MAX } from './entreprise';
-import { issueDeVerification, avecDelai, REFUS_DEVIS, SUPPRESSION_DEPASSEE, ErreurPoste } from './erreurs';
+import {
+  issueDeVerification, avecDelai, REFUS_DEVIS, SUPPRESSION_DEPASSEE, ErreurPoste, REFUS_DEMANDES, ErreurDeLaBase, REPONSE_FERMEE,
+} from './erreurs';
+import { GENRES_DEMANDE, refusDeTransition } from './transitions-demandes';
 import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
 /* « Mon entreprise » pour les devis (section 46). `emetteur.js` et
    `emetteur-demo.js` n'importent que des fichiers purs : aucun cycle avec
@@ -694,6 +697,7 @@ export async function loadAll() {
       // En démo, une demande en attente pour montrer le mécanisme.
       demandesPartenariat: [3],
       partenariatsEnvoyes: [5],
+      partenariatsClos: [],
     };
   }
 
@@ -707,7 +711,7 @@ export async function loadAll() {
          quelqu'un les ouvre. La plupart n'étaient jamais lus. */
   const [profilesRes, partnersRes, postsRes,
          likesRes, savesRes, followsRes, convRes, notifRes,
-         demandesRes, reponsesRes, masosRes, moiRes, vuesRes] = await Promise.all([
+         demandesRes, masosRes, moiRes, vuesRes] = await Promise.all([
     /* SANS `bio` NI `portfolio` : ce sont les deux colonnes lourdes, et
        elles ne servent QUE sur la page d'un artisan — jamais dans une
        liste. Un portfolio, c'est un tableau d'adresses de photos ; multiplié
@@ -755,7 +759,11 @@ export async function loadAll() {
       .or(`statut.eq.ouverte,client_id.eq.${uid}`)
       .order('created_at', { ascending: false })
       .limit(TAILLE_PAGE_DEMANDES),
-    supabase.from('demande_reponses').select('demande_id'),
+    /* PLUS DE LECTURE DE `demande_reponses` ICI (lot S-b, 26/10/2026). On
+       téléchargeait TOUTE la table — chaque réponse de chaque artisan à
+       chaque demande — pour en compter les lignes. Le nombre vit désormais
+       sur la demande (`demandes.nb_reponses`, tenu par un déclencheur,
+       section 30.3), et il arrive avec le `select('*')` ci-dessus. */
     /* MA DISPONIBILITÉ AUX URGENCES — TOUTES mes lignes, une par métier
        d'urgence (la clé de la table est `(professional_id, metier_key)`).
        `maybeSingle()` plantait dès qu'il y en avait deux, et l'écran ne
@@ -788,6 +796,11 @@ export async function loadAll() {
   const partnersByPro = {};
   const demandesRecues = [];
   const demandesEnvoyees = [];
+  /* LES PAIRES CLOSES (lot S-b) : un REFUS reste en base, dans un sens ou
+     dans l'autre, et la paire est unique (`idx_partenaires_paire`). Les
+     proposer comme candidates faisait toucher « Demander » pour recevoir
+     un refus de la base. Elles ne sont plus proposées. */
+  const partenariatsClos = [];
   (partnersRes.data || []).forEach((p) => {
     if (p.statut === 'accepte') {
       if (!partnersByPro[p.professional_id]) partnersByPro[p.professional_id] = [];
@@ -797,6 +810,9 @@ export async function loadAll() {
     } else if (p.statut === 'en_attente') {
       if (p.partner_id === uid) demandesRecues.push(p.professional_id);
       else if (p.professional_id === uid) demandesEnvoyees.push(p.partner_id);
+    } else if (p.statut === 'refuse') {
+      if (p.partner_id === uid) partenariatsClos.push(p.professional_id);
+      else if (p.professional_id === uid) partenariatsClos.push(p.partner_id);
     }
   });
 
@@ -843,13 +859,6 @@ export async function loadAll() {
     messages: null,
   }));
 
-  // Nombre de réponses par demande, compté ici plutôt qu'en interrogeant
-  // la base une fois par demande.
-  const nbReponses = {};
-  (reponsesRes.data || []).forEach((r) => {
-    nbReponses[r.demande_id] = (nbReponses[r.demande_id] || 0) + 1;
-  });
-
   const demandes = (demandesRes.data || []).map((d) => ({
     id: d.id,
     auteurId: d.client_id,
@@ -869,7 +878,10 @@ export async function loadAll() {
        de l'onglet. « il y a 2 h » est un texte, il ne se compare pas. */
     deposeeLe: d.created_at,
     statut: d.statut || 'ouverte',
-    reponses: nbReponses[d.id] || 0,
+    /* `null` quand la colonne manque — une base où la section 30.3 n'est
+       pas encore passée — et l'écran affiche alors « — ». Pas « 0 » : ce
+       serait annoncer qu'aucun artisan n'a répondu, ce qu'on ne sait pas. */
+    reponses: Number.isInteger(d.nb_reponses) ? d.nb_reponses : null,
     budget: d.budget || null,
     urgence: d.urgence || 'quand_possible',
   }));
@@ -919,6 +931,7 @@ export async function loadAll() {
     demandesVuesLe: vuesRes && vuesRes.data ? vuesRes.data.demandes_vues_le : null,
     demandesPartenariat: demandesRecues,
     partenariatsEnvoyes: demandesEnvoyees,
+    partenariatsClos,
     /* `acteurNom` EST LA LIGNE QUI MANQUAIT, et elle valait douze ronds
        beiges vides. La requête va chercher `acteur:acteur_id(nom,
        avatar_url)` depuis le début ; seule l'adresse de la photo était
@@ -2417,15 +2430,10 @@ export const sendMessage = !hasSupabase ? noop : async (conversationId, texte) =
    d'écrire.
    ========================================================================== */
 
-/** Les trois genres, et ce qu'ils valent côté base. */
-export const GENRES_DEMANDE = {
-  devis:  { table: 'quote_requests',    accepte: 'accepte',  refuse: 'refuse',  termine: 'termine' },
-  rappel: { table: 'callback_requests', accepte: 'accepte',  refuse: 'refuse',  termine: 'termine' },
-  /* Les urgences accordent leurs participes : 'acceptee', 'refusee'. On ne
-     les aligne PAS — des lignes existent déjà, et la contrainte `check` de
-     la table les impose. On traduit ici, une fois pour toutes. */
-  sos:    { table: 'sos_requests',      accepte: 'acceptee', refuse: 'refusee', termine: 'termine' },
-};
+/* Les trois genres, et ce qu'ils valent côté base — et les transitions
+   permises : dans `transitions-demandes.js`, qui n'importe rien, pour qu'un
+   contrôle puisse les faire tourner (lot S-b). */
+export { GENRES_DEMANDE, refusDeTransition };
 
 /* Une copie VIVANTE : accepter une demande en mode démo doit se voir, comme
    sur la vraie base. Sans cela, l'écran paraît cassé alors qu'il ne l'est
@@ -2474,9 +2482,21 @@ export const chargerDemandesRecues = hasSupabase ? demandesRecuesSupabase : dema
    proposait pas « Faire un devis ». Deux formes pour une même réponse se
    contredisent toujours un jour. */
 async function repondreDemandeDemo(genre, id, statut) {
-  const valeur = (GENRES_DEMANDE[genre] || {})[statut] || statut;
+  const regles = GENRES_DEMANDE[genre] || GENRES_DEMANDE.devis;
+  const valeur = regles[statut] || statut;
   const d = DEMANDES_RECUES_DEMO.find((x) => x.id === id);
-  if (d) d.statut = valeur;
+  if (d) {
+    /* LES MÊMES REFUS QUE LA BASE (lot S-b) — la transition, puis le
+       blocage —, avec ses mots exacts (`REFUS_DEMANDES`). Une
+       démonstration plus aimable que la base masquerait ce que l'artisan
+       rencontrera pour de vrai (la première règle de CLAUDE.md). */
+    const refus = refusDeTransition(regles, d.statut, valeur);
+    if (refus) throw new ErreurDeLaBase('OP019', REFUS_DEMANDES[refus]);
+    if (valeur === regles.accepte && valeur !== d.statut && demoBlocages.has(String(d.clientId))) {
+      throw new ErreurDeLaBase('OP020', REFUS_DEMANDES.OP020_demande);
+    }
+    d.statut = valeur;
+  }
   return { id, statut: valeur };
 }
 
@@ -2485,13 +2505,55 @@ async function repondreDemandeSupabase(genre, id, statut) {
   if (!regles) throw new Error(`Genre de demande inconnu : ${genre}`);
   const valeur = regles[statut];
   if (!valeur) throw new Error(`Réponse inconnue : ${statut}`);
-  const { error } = await supabase.from(regles.table)
+  /* `.select('statut')` : une mise à jour que la politique écarte touche
+     ZÉRO ligne, sans erreur — l'écran aurait affiché « acceptée » pour une
+     demande qui ne l'est pas. On relit ce que la base a vraiment écrit. */
+  const { data, error } = await supabase.from(regles.table)
     .update({ statut: valeur })
     .eq('id', id)
-    .eq('professional_id', currentUserId);
+    .eq('professional_id', currentUserId)
+    .select('statut');
   if (error) throw error;
-  return { id, statut: valeur };
+  if (!data || !data.length) {
+    throw new ErreurDeLaBase('OP019', 'Cette demande n’a pas pu être mise à jour : elle n’est plus dans '
+      + 'votre liste, ou elle vient de changer. Votre liste va être relue.');
+  }
+  return { id, statut: data[0].statut };
 }
+
+/**
+ * UN NOUVEAU DEVIS PEUT-IL SE RATTACHER À CETTE DEMANDE ? (lot S-b)
+ *
+ * Demandé AVANT d'ouvrir la saisie : sinon l'artisan tape sa première
+ * ligne, et c'est elle qui reçoit le refus (OP020). La base répond
+ * `true` / `false` sans dire pourquoi (`peut_faire_un_devis`, section
+ * 49.6 bis). Un rappel n'a pas de lien de devis : `true` (on n'y propose
+ * de toute façon pas « Faire un devis »).
+ */
+async function nouveauDevisPermisSupabase(genre, id) {
+  if (genre !== 'devis' && genre !== 'sos') return true;
+  /* Par `lectureDevis` (relecture du 26/10) : 8 s et une annulation, comme
+     la liste des brouillons qui part avec elle. Sans délai, une requête qui
+     ne revenait pas laissait « Vérification… » grisé indéfiniment. */
+  const { data, error } = await lectureDevis('La vérification de cette demande', (signal) => avecSignal(
+    supabase.rpc('peut_faire_un_devis', {
+      p_demande: genre === 'devis' ? id : null,
+      p_urgence: genre === 'sos' ? id : null,
+    }), signal));
+  if (error) leverLecture(error);
+  return data === true;
+}
+/* Le blocage d'un client de démonstration ferme les NOUVEAUX liens — la
+   même règle pour la question posée avant la saisie et pour la base de
+   devis de démonstration, qui refuse alors l'écriture (OP020). */
+function lienFermeDemo(genre, id) {
+  const d = DEMANDES_RECUES_DEMO.find((x) => x.id === id);
+  return !!(d && demoBlocages.has(String(d.clientId)));
+}
+async function nouveauDevisPermisDemo(genre, id) {
+  return !lienFermeDemo(genre, id);
+}
+export const nouveauDevisPermis = hasSupabase ? nouveauDevisPermisSupabase : nouveauDevisPermisDemo;
 
 /**
  * Accepter, refuser ou clore une demande.
@@ -2816,7 +2878,9 @@ function demandeRecueDemo(genre, id) {
 }
 function baseDevisDeDemo() {
   if (!baseDevisDemo) {
-    baseDevisDemo = creerBaseDevisDemo({ demandeDe: demandeRecueDemo, pauseMs: PAUSE_ECRITURE_DEMO });
+    baseDevisDemo = creerBaseDevisDemo({
+      demandeDe: demandeRecueDemo, lienFerme: lienFermeDemo, pauseMs: PAUSE_ECRITURE_DEMO,
+    });
   }
   return baseDevisDemo;
 }
@@ -3611,14 +3675,45 @@ export const createDemande = !hasSupabase ? noop : async (
   return data;
 };
 
-/** Un professionnel répond à une demande. */
-export const repondreADemande = !hasSupabase ? noop : async (demandeId, message) => {
-  const { error } = await supabase.from('demande_reponses').upsert(
-    { demande_id: demandeId, professional_id: currentUserId, message: message || null },
-    { onConflict: 'demande_id,professional_id' },
-  );
-  if (error) throw error;
-};
+/**
+ * Un professionnel répond à une demande — `{ nouvelle }` dit si une réponse
+ * vient d'être COMPTÉE.
+ *
+ * Une INSERTION, plus un `upsert` (lot S-b, 26/10/2026) : répondre une
+ * seconde fois ne crée rien, et la base le dit par un 23505 — c'est alors
+ * « déjà répondu », pas une erreur, et le compteur ne monte PAS. Tout autre
+ * refus est RENDU : une demande fermée, ou d'un particulier avec qui l'on
+ * est en blocage (section 13.5 bis). Avant, l'appelant avalait l'erreur et
+ * l'écran disait « Vous avez répondu » quand la base avait refusé.
+ */
+async function repondreADemandeSupabase(demandeId, message) {
+  const { error } = await supabase.from('demande_reponses')
+    .insert({ demande_id: demandeId, professional_id: currentUserId, message: message || null });
+  if (!error) return { nouvelle: true };
+  if (error.code === '23505') return { nouvelle: false };
+  /* 42501 : la politique « mes reponses » refuse — la demande n'est plus
+     ouverte, ou son auteur est en blocage avec l'artisan. On ne dit pas
+     lequel (relecture du 26/10) : « plus ouverte » serait faux dans le
+     second cas, et apprendrait un blocage. */
+  if (error.code === '42501') throw new ErreurDeLaBase('REPONSE_FERMEE', REPONSE_FERMEE);
+  throw error;
+}
+/* La démonstration n'a pas de table : chaque demande ne se compte qu'UNE
+   fois par session, comme la base le ferait par sa clé unique. Et elle
+   refuse comme la base une demande qui n'est plus ouverte, ou dont
+   l'auteur est en blocage. */
+const REPONSES_DEMANDES_DEMO = new Set();
+async function repondreADemandeDemo(demandeId) {
+  const cle = String(demandeId);
+  const d = initialDemandes.find((x) => String(x.id) === cle);
+  if (d && ((d.statut && d.statut !== 'ouverte') || demoBlocages.has(String(d.auteurId)))) {
+    throw new ErreurDeLaBase('REPONSE_FERMEE', REPONSE_FERMEE);
+  }
+  if (REPONSES_DEMANDES_DEMO.has(cle)) return { nouvelle: false };
+  REPONSES_DEMANDES_DEMO.add(cle);
+  return { nouvelle: true };
+}
+export const repondreADemande = hasSupabase ? repondreADemandeSupabase : repondreADemandeDemo;
 
 /* ------------------------------------------------------------------ */
 /*  La Place des pros                                                  */
@@ -3956,20 +4051,51 @@ export const createSosRequest = !hasSupabase ? noop : async (d) => {
  * décidera. Les règles de la base refusent tout le reste — on ne peut pas
  * s'inscrire d'office chez un confrère.
  */
-export const demanderPartenariat = !hasSupabase ? noop : async (partnerId) => {
-  const { error } = await supabase.from('professional_partners').insert({
-    professional_id: currentUserId, partner_id: partnerId, statut: 'en_attente',
-  });
-  if (error) throw error;
-};
+/* LA DÉMONSTRATION REFUSE COMME LA BASE (lot S-b) : sous un blocage, on ne
+   propose ni n'accepte un partenariat (OP020, ses mots exacts). Sans cela,
+   le mécanisme ne s'essaierait nulle part sans fichier `.env`. */
+export const demanderPartenariat = !hasSupabase
+  ? async (partnerId) => {
+    if (demoBlocages.has(String(partnerId))) {
+      throw new ErreurDeLaBase('OP020', REFUS_DEMANDES.OP020_proposer);
+    }
+    return null;
+  }
+  : async (partnerId) => {
+    const { error } = await supabase.from('professional_partners').insert({
+      professional_id: currentUserId, partner_id: partnerId, statut: 'en_attente',
+    });
+    if (error) throw error;
+  };
 
-/** Répondre à une demande reçue. Seul le destinataire y parvient. */
-export const repondrePartenariat = !hasSupabase ? noop : async (demandeurId, accepte) => {
-  const { error } = await supabase.from('professional_partners')
-    .update({ statut: accepte ? 'accepte' : 'refuse', repondu_le: new Date().toISOString() })
-    .eq('professional_id', demandeurId).eq('partner_id', currentUserId);
-  if (error) throw error;
-};
+/**
+ * Répondre à une demande reçue. Seul le destinataire y parvient.
+ *
+ * `.select('statut')` (lot S-b) : la base ne laisse plus répondre qu'à une
+ * demande EN ATTENTE, et une mise à jour que la politique écarte touche
+ * ZÉRO ligne, sans erreur — l'écran aurait dit « Partenariat accepté » pour
+ * une demande refusée depuis un autre appareil. `repondu_le` part encore
+ * (une version plus ancienne de la base l'attendait) ; la base pose la
+ * sienne.
+ */
+export const repondrePartenariat = !hasSupabase
+  ? async (demandeurId, accepte) => {
+    if (accepte && demoBlocages.has(String(demandeurId))) {
+      throw new ErreurDeLaBase('OP020', REFUS_DEMANDES.OP020_accepter);
+    }
+    return null;
+  }
+  : async (demandeurId, accepte) => {
+    const { data, error } = await supabase.from('professional_partners')
+      .update({ statut: accepte ? 'accepte' : 'refuse', repondu_le: new Date().toISOString() })
+      .eq('professional_id', demandeurId).eq('partner_id', currentUserId)
+      .select('statut');
+    if (error) throw error;
+    if (!data || !data.length) {
+      throw new ErreurDeLaBase('OP019', 'Cette demande de partenariat n’est plus en attente : elle a '
+        + 'peut-être été annulée, ou déjà traitée depuis un autre appareil.');
+    }
+  };
 
 /** Annuler une demande envoyée, ou rompre un partenariat. */
 export const retirerPartenariat = !hasSupabase ? noop : async (autreId) => {

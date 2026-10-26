@@ -94,7 +94,8 @@ function Compte({ onLogout, onConfidentialite, admin, onAdmin }) {
 
 export default function ProfilOwnScreen({
   userType, pros, myProId, monProfil, followingIds, savedIds,
-  demandesPartenariat = [], partenariatsEnvoyes = [],
+  demandesPartenariat = [], partenariatsEnvoyes = [], partenariatsClos = [],
+  partenariatsFermes = null,
   onDemanderPartenariat, onRepondrePartenariat, onViewProfile, onEdit,
   onMesPublications, onGererPortfolio, nbPublications = 0, onLogout,
   onClients, onDevis = null, onMaBase = null, onEntreprise,
@@ -113,6 +114,17 @@ export default function ProfilOwnScreen({
 }) {
   const me = pros[myProId];
   const [showAdd, setShowAdd] = useState(false);
+  /* UN SEUL ENVOI À LA FOIS PAR DEMANDE DE PARTENARIAT (relecture du 26/10),
+     comme les demandes reçues (`envoi`) : un second appui parti avant que la
+     rangée ne disparaisse ne touchait aucune ligne, la base répondait
+     « plus en attente » — et un bandeau rouge remplaçait « Partenariat
+     accepté. », alors que le partenariat ÉTAIT accepté. */
+  const [envoiPartenariat, setEnvoiPartenariat] = useState(null);
+  const repondrePartenariat = async (id, accepte) => {
+    if (envoiPartenariat) return;
+    setEnvoiPartenariat(id);
+    try { await onRepondrePartenariat(id, accepte); } finally { setEnvoiPartenariat(null); }
+  };
   /* Comme sur la fiche d'un confrère : la bannière suit le doigt, sans
      qu'aucune valeur ne remonte en JavaScript. */
   const defilement = useSharedValue(0);
@@ -198,10 +210,14 @@ export default function ProfilOwnScreen({
 
   const avg = avgReviews(me);
   // On ne propose ni soi-même, ni un partenaire déjà en place, ni quelqu'un
-  // dont la demande est déjà en cours dans un sens ou dans l'autre.
+  // dont la demande est déjà en cours dans un sens ou dans l'autre — ni,
+  // depuis le lot S-b, quelqu'un avec qui une demande a été REFUSÉE : la
+  // paire est unique, le refus reste, et « Demander » ne ferait que
+  // recevoir un refus de la base.
   const candidats = Object.values(pros).filter((p) => p.id !== me.id
     && !me.partners.includes(p.id)
-    && !demandesPartenariat.includes(p.id));
+    && !demandesPartenariat.includes(p.id)
+    && !partenariatsClos.includes(p.id));
 
   return (
     <Animated.ScrollView
@@ -400,8 +416,21 @@ export default function ProfilOwnScreen({
                 avatarSize={40}
                 right={(
                   <View style={s.reponse}>
-                    <BtnMini label="Accepter" onPress={() => onRepondrePartenariat(id, true)} />
-                    <BtnMini outline label="Refuser" onPress={() => onRepondrePartenariat(id, false)} />
+                    {/* Fermée sur un OP020 : on ne peut plus l'accepter,
+                        on peut toujours la refuser. */}
+                    {!(partenariatsFermes && partenariatsFermes.has(id)) && (
+                      <BtnMini
+                        label="Accepter"
+                        disabled={!!envoiPartenariat}
+                        onPress={() => repondrePartenariat(id, true)}
+                      />
+                    )}
+                    <BtnMini
+                      outline
+                      label="Refuser"
+                      disabled={!!envoiPartenariat}
+                      onPress={() => repondrePartenariat(id, false)}
+                    />
                   </View>
                 )}
               />

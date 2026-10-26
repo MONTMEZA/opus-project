@@ -322,6 +322,20 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   // Partenariats en cours : reçus d'un côté, envoyés de l'autre.
   const [demandesPartenariat, setDemandesPartenariat] = useState([]);
   const [partenariatsEnvoyes, setPartenariatsEnvoyes] = useState([]);
+  /* Les paires où un REFUS reste en base, dans un sens ou dans l'autre (lot
+     S-b) : on ne les propose plus comme candidates — la base refuserait. */
+  const [partenariatsClos, setPartenariatsClos] = useState([]);
+  /* LES DEMANDES REÇUES QU'ON NE PEUT PLUS ACCEPTER (lot S-b, OP020) : la
+     carte garde « Refuser », perd « Accepter ». Pas de retour à l'état
+     d'avant tant que rien n'a changé, qui reproposerait le même bouton.
+     Mais l'ensemble SE VIDE (relecture du 26/10) à chaque relecture réussie
+     de la liste, et à chaque déblocage fait ici : un blocage levé — par
+     l'artisan, ou par le client, ce que l'artisan ne voit pas — laissait la
+     carte avec « Refuser » pour seul geste, alors que la base acceptait. Si
+     le blocage tient encore, la base redit OP020 et la carte se referme. */
+  const [demandesFermees, setDemandesFermees] = useState(() => new Set());
+  /* Même chose pour les PARTENARIATS qu'on ne peut plus accepter (OP020). */
+  const [partenariatsFermes, setPartenariatsFermes] = useState(() => new Set());
   const [mesSos, setMesSos] = useState(null);
   /* MES TARIFS (section 47, lot T) : `null` (rien de déclaré, ou pas encore
      lu), la ligne, ou `{ echec: true }` — « je n'ai pas pu lire » ne se dit
@@ -515,6 +529,8 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       setSavedIds(new Set(data.savedIds));
       setDemandesPartenariat(data.demandesPartenariat || []);
       setPartenariatsEnvoyes(data.partenariatsEnvoyes || []);
+      setPartenariatsClos(data.partenariatsClos || []);
+      setPartenariatsFermes(new Set());
       /* Une demande de modification des métiers déjà déposée doit réapparaître
          à la reconnexion, sinon l'artisan la redépose et la base la refuse. */
       if (type === 'pro') {
@@ -2001,15 +2017,41 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     showBanner('Demande envoyée. Le partenariat apparaîtra une fois acceptée.');
   };
 
+  /* DÉBLOQUER ROUVRE CE QUE LE BLOCAGE AVAIT FERMÉ À L'ÉCRAN (relecture du
+     26/10) : les cartes et les rangées passées « fermées » sur un OP020
+     retrouvent « Accepter ». Si un autre blocage tient encore — celui que
+     l'autre a posé —, la base redira OP020 au prochain appui. */
+  const debloquerEtRouvrir = async (id) => {
+    await api.debloquer(id);
+    setDemandesFermees(new Set());
+    setPartenariatsFermes(new Set());
+  };
+
   const repondrePartenariat = async (demandeurId, accepte) => {
     try {
       await api.repondrePartenariat(demandeurId, accepte);
     } catch (e) {
+      /* La demande n'est plus en attente (OP019 : annulée, ou traitée
+         ailleurs) : elle quitte la liste au lieu d'y rester avec des
+         boutons qui ne font plus rien. OP020 : on ne peut plus l'accepter,
+         mais la refuser reste possible — elle reste. */
+      if (String((e && e.code) || '') === 'OP019') {
+        setDemandesPartenariat((l) => l.filter((id) => id !== demandeurId));
+      }
+      /* OP020 : la rangée garde « Refuser » et perd « Accepter » — sinon
+         chaque appui refaisait le même refus (relecture du 26/10). */
+      if (String((e && e.code) || '') === 'OP020') {
+        setPartenariatsFermes((f) => new Set([...f, demandeurId]));
+      }
       showErreur(messageClair(e, 'Réponse impossible'));
       return;
     }
     setDemandesPartenariat((l) => l.filter((id) => id !== demandeurId));
-    if (!accepte) { showBanner('Demande refusée.'); return; }
+    if (!accepte) {
+      setPartenariatsClos((l) => [...new Set([...l, demandeurId])]);
+      showBanner('Demande refusée.');
+      return;
+    }
 
     // Accepté : chacun apparaît maintenant chez l'autre.
     setPros((prev) => {
@@ -2489,6 +2531,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     if (!silencieux) setDemandesRecuesEtat('charge');
     try {
       setDemandesRecues(await api.chargerDemandesRecues());
+      setDemandesFermees(new Set());
       setDemandesRecuesEtat('pret');
       demandesRecuesChargees.current = true;
     } catch (e) {
@@ -2530,19 +2573,38 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       setDemandesRecues((liste) => liste.map((d) => (
         d.id === demande.id ? { ...d, statut: enBase } : d
       )));
+      /* « LE CLIENT EST PRÉVENU » NE S'ÉCRIT QUE QUAND C'EST VRAI (lot S-b).
+         Une acceptation le prévient toujours : la base refuse d'accepter
+         sous un blocage, dans un sens comme dans l'autre (OP020). Un REFUS,
+         lui, se tait si le client a bloqué l'artisan — et l'artisan ne voit
+         pas les blocages des autres : la phrase ne promet donc rien. */
       if (statut === 'accepte') {
         showBanner(demande.telephone
           ? `Demande acceptée. Vous pouvez appeler ${demande.nom} au ${demande.telephone}.`
           : 'Demande acceptée. Le client est prévenu.');
       } else if (statut === 'refuse') {
-        showBanner('Demande refusée. Le client est prévenu, il pourra chercher ailleurs.');
+        showBanner('Demande refusée. Elle passe dans « Terminées ».');
       } else {
         showBanner('Demande close.');
       }
     } catch (e) {
-      setDemandesRecues((liste) => liste.map((d) => (
-        d.id === demande.id ? { ...d, statut: avant } : d
-      )));
+      const code = String((e && e.code) || '');
+      if (code === 'OP020') {
+        /* On ne peut plus l'ACCEPTER : la carte garde « Refuser ». */
+        setDemandesFermees((f) => new Set([...f, demande.id]));
+        setDemandesRecues((liste) => liste.map((d) => (
+          d.id === demande.id ? { ...d, statut: avant } : d
+        )));
+      } else if (code === 'OP019') {
+        /* L'ÉTAT A CHANGÉ AILLEURS (un autre téléphone, une autre session) :
+           on RELIT plutôt que de remettre un état qui reproposerait le même
+           bouton. La phrase de la base dit déjà où en est la demande. */
+        chargerDemandesRecues({ silencieux: true });
+      } else {
+        setDemandesRecues((liste) => liste.map((d) => (
+          d.id === demande.id ? { ...d, statut: avant } : d
+        )));
+      }
       showErreur(messageClair(e, "La réponse n'est pas partie"));
     }
   };
@@ -2883,8 +2945,44 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
   const repondreDemande = async (demande) => {
     const contactId = `part-${demande.auteurId || demande.id}`;
-    let conv = conversations.find((c) => c.contact && c.contact.id === contactId);
 
+    /* LA RÉPONSE D'ABORD, LA CONVERSATION ENSUITE (relecture du 26/10).
+       C'est la réponse qui est la porte : la base la refuse sur une demande
+       qui n'est plus ouverte, ou dont l'auteur est en blocage avec
+       l'artisan. Dans l'ordre inverse, la conversation se créait, la
+       réponse était refusée, et chaque appui suivant refaisait le même
+       refus sans rien ouvrir.
+
+       ELLE EST ENREGISTRÉE À CHAQUE « RÉPONDRE », même si la conversation
+       existait déjà (lot S-b) — et son refus est DIT. Le compteur ne monte
+       que si la base vient de COMPTER une réponse : répondre une seconde
+       fois ne compte rien (`{ nouvelle: false }`). */
+    let resultat;
+    try {
+      resultat = await api.repondreADemande(demande.id, null);
+    } catch (e) {
+      /* Une phrase NEUTRE, qui couvre la demande fermée comme le blocage
+         sans dire lequel — et la carte quitte la liste : la base ne la
+         rendrait plus, ni fermée, ni masquée. */
+      if (e && e.code === 'REPONSE_FERMEE') {
+        showErreur(e.message);
+        setDemandes((ds) => ds.filter((d) => d.id !== demande.id));
+        return;
+      }
+      showErreur(messageClair(e, 'Votre réponse n’a pas été enregistrée'));
+      return;
+    }
+    if (resultat && resultat.nouvelle) {
+      setDemandes((ds) => ds.map((d) => (
+        d.id === demande.id && Number.isInteger(d.reponses) ? { ...d, reponses: d.reponses + 1 } : d
+      )));
+    }
+
+    /* Se souvenir qu'on a répondu, pour ne pas relire dix fois la même
+       demande. */
+    setMesReponsesDemandes((r) => new Set([...r, demande.id]));
+
+    let conv = conversations.find((c) => c.contact && c.contact.id === contactId);
     if (!conv) {
       let id = `local-${Date.now()}`;
       try {
@@ -2915,20 +3013,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         messages: [],
       };
       setConversations((cs) => [conv, ...cs]);
-
-      try {
-        await api.repondreADemande(demande.id, null);
-      } catch (e) {
-        // La conversation est ouverte : la réponse sera comptée au prochain envoi.
-      }
-      setDemandes((ds) => ds.map((d) => (
-        d.id === demande.id ? { ...d, reponses: d.reponses + 1 } : d
-      )));
     }
-
-    /* Se souvenir qu'on a répondu, pour ne pas relire dix fois la même
-       demande. Même si la conversation existait déjà. */
-    setMesReponsesDemandes((r) => new Set([...r, demande.id]));
 
     await ouvrirConversation(conv.id);
   };
@@ -3161,7 +3246,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       });
     } catch (e) {
       showErreur(messageClair(e, 'Envoi impossible'));
-      return;
+      /* L'écran du SOS doit SAVOIR que l'envoi a échoué (relecture du
+         26/10) : sur OP025 — l'artisan ne répond plus aux urgences —, il
+         relance la recherche au lieu de garder sa carte et son « Choisir »,
+         qui refaisait le même refus. */
+      return { ok: false, code: String((e && e.code) || '') };
     }
     setScreen('home');
     /* ON NE POUSSE PLUS DE FAUSSE NOTIFICATION ICI.
@@ -3177,6 +3266,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           + `Estimation ${demande.prixMin}–${demande.prixMax} € TTC.`
         : 'Votre demande d\'urgence est partie.',
     );
+    return { ok: true };
   };
 
   /* ---------- assistant IA ---------- */
@@ -4290,6 +4380,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                         onFaireDevis={canPublish ? faireDevisDepuisDemande : null}
                         onReessayer={() => chargerDemandesRecues()}
                         onRepondre={repondreDemandeRecue}
+                        /* Les cartes où « Accepter » n'est plus possible
+                           (OP020) : elles ne proposent plus que « Refuser ». */
+                        fermees={demandesFermees}
                         onAppeler={appeler}
                         onVoirProfil={viewProfile}
                       />
@@ -4497,6 +4590,8 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             followingIds={followingIds} savedIds={savedIds}
             demandesPartenariat={demandesPartenariat}
             partenariatsEnvoyes={partenariatsEnvoyes}
+            partenariatsClos={partenariatsClos}
+            partenariatsFermes={partenariatsFermes}
             onDemanderPartenariat={demanderPartenariat}
             onRepondrePartenariat={repondrePartenariat}
             onViewProfile={viewProfile}
@@ -4557,7 +4652,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             /* Absent pour un particulier : il n'a pas d'agent (§3), et la
                rangée ne s'affiche donc pas du tout. */
             onRenommerAgent={canPublish ? () => setRenommerAgent(true) : null}
-            onDebloquer={api.debloquer}
+            onDebloquer={debloquerEtRouvrir}
             onExporter={api.exporterMesDonnees}
             onSupprimer={supprimerMonCompte}
             onLire={(cle) => { setTexteLegal(cle); setScreen('legal'); }}

@@ -98,7 +98,8 @@
     "verifier-tva": "node scripts/verifier-tva.mjs",
     "verifier-devis": "node scripts/verifier-devis.mjs",
     "verifier-postes": "node scripts/verifier-postes.mjs",
-    "verifier-stockage": "node scripts/verifier-stockage.mjs"
+    "verifier-stockage": "node scripts/verifier-stockage.mjs",
+    "verifier-partenariats": "node scripts/verifier-partenariats.mjs"
   },
   "private": true,
   "devDependencies": {

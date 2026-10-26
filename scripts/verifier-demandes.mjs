@@ -67,9 +67,11 @@ console.log('\nLes trois tables sont LUES, pas seulement écrites');
     'un écran qu’on ne peut pas ouvrir ne sert à rien');
 
   ['accepte', 'refuse', 'termine'].forEach((r) => {
+    /* `GENRES_DEMANDE` vit depuis le lot S-b dans `transitions-demandes.js`,
+       qui n'importe rien : `api.js` le réexporte, la règle y tourne. */
     verifier(`l’artisan peut répondre « ${r} »`,
       /GENRES_DEMANDE/.test(lire('src/lib/api.js'))
-      && new RegExp(`${r}:`).test(lire('src/lib/api.js')));
+      && new RegExp(`${r}:`).test(lire('src/lib/transitions-demandes.js')));
   });
 }
 
@@ -581,6 +583,270 @@ console.log('\n« Les plus proches » trie vraiment par distance');
     /latitude: lieu\.latitude,/.test(appel) && /longitude: lieu\.longitude,/.test(appel));
   verifier('…sans jamais refuser la demande pour ça',
     /try \{\s*lieu = await completerLieu\(lieu\);\s*\} catch/.test(corps));
+}
+
+/* ==========================================================================
+   LOT S-b (26/10/2026) — une demande reçue ne change que par ses trois
+   gestes ; elle naît en attente ; on ne s'en fait pas à soi-même ; une
+   urgence ne part que vers qui y répond ; et l'écran ne dit que le vrai.
+   ========================================================================== */
+const schemaCode = schema.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+const sansCommentairesJs = (c) => c.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+console.log('\nLot S-b — une demande naît EN ATTENTE, et pas à soi-même');
+{
+  for (const [nom, table, statut] of [['creation devis', 'quote_requests', 'en_attente'],
+    ['creation rappel', 'callback_requests', 'en_attente'], ['creation sos', 'sos_requests', 'envoyee']]) {
+    const pol = [...schemaCode.matchAll(new RegExp(`create policy "${nom}" on public\\.${table}([\\s\\S]*?);`, 'g'))];
+    /* LA POLITIQUE ENTIÈRE, normalisée — et non `statut = …` cherché
+       « quelque part » : `… and not est_masque(…) or statut = 'en_attente'`
+       le satisfaisait, et laissait déposer une demande au nom d'un AUTRE
+       client (relecture du 26/10, la priorité de `or`). */
+    const forme = pol.length === 1 ? pol[0][1].replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ \)/g, ')').trim() : '';
+    verifier(`« ${nom} » : créée une seule fois, exactement « le client, en ${statut}, vers qui ne lui est pas masqué »`,
+      forme === `for insert to authenticated with check (auth.uid() = client_id and statut = '${statut}' and not public.est_masque(professional_id))`,
+      forme || `${pol.length} création(s)`);
+  }
+  for (const table of ['quote_requests', 'callback_requests', 'sos_requests', 'conversations']) {
+    const nom = `${table}_pas_soi_meme_check`;
+    /* `not valid` sur les trois tables qui portent DÉJÀ une ligne « à
+       soi-même » sur la vraie base — sans lui, le rejeu s'y arrête — et PAS
+       sur les urgences, table vide, où la contrainte se vérifie entière
+       (relecture du 26/10 : le retirer passait au vert). */
+    const nonValide = table !== 'sos_requests';
+    verifier(`\`${nom}\` : posée (client ≠ artisan), ${nonValide ? '`not valid`' : 'VALIDE'}, et sa phrase est dans \`erreurs.js\``,
+      new RegExp(`add constraint ${nom}\\s+check \\(client_id <> professional_id\\)${nonValide ? ' not valid;' : ';'}`).test(schemaCode)
+        && new RegExp(`\\b${nom}: '`).test(lire('src/lib/erreurs.js')));
+  }
+  /* LE REJEU NE DÉPEND PAS DES DONNÉES (relecture du 26/10) : la section 21
+     récrit le métier des demandes de devis ; une ligne « à soi-même »
+     modifiée violerait la contrainte `not valid`, et le rejeu s'arrêterait.
+     Elle les laisse donc. */
+  verifier('la section 21 ne récrit pas le métier d’une demande « à soi-même » (le rejeu ne dépend pas des données)',
+    /update public\.quote_requests\s+set metier = public\.metier_depuis_ancien_nom\(metier\)\s+where metier is not null and public\.metier_depuis_ancien_nom\(metier\) <> metier\s+and client_id is distinct from professional_id;/.test(schemaCode));
+  verifier('`sos_metier_key_check` : les quatre clés d’urgence, les mêmes que `sos_availability`',
+    /add constraint sos_metier_key_check\s+check \(metier_key in \('plomberie', 'electricite', 'serrurerie', 'chauffage'\)\)/.test(schemaCode));
+}
+
+console.log('\nLot S-b — les refus de la base, mot pour mot dans `erreurs.js`');
+{
+  const { REFUS_DEMANDES } = await import('../src/lib/erreurs.js');
+  /* Les phrases de la base, prises dans `schema.sql` (code, sans les
+     commentaires), `''` dépliés en `'`. Chacune de `REFUS_DEMANDES` doit y
+     être à l'octet près : la démonstration refuse avec les mots exacts de
+     la base, et l'écran les montre tels quels. */
+  const phrasesBase = new Set([...schemaCode.matchAll(/raise exception '((?:[^']|'')*)'/g)].map((m) => m[1].replace(/''/g, "'")));
+  const absentes = Object.entries(REFUS_DEMANDES).filter(([cle, p]) => !cle.startsWith('OP019_annulee') && !phrasesBase.has(p));
+  verifier(`les ${Object.keys(REFUS_DEMANDES).length} phrases de \`REFUS_DEMANDES\` sont celles de la base, à l’octet près`,
+    absentes.length === 0, absentes.map(([c]) => c).join(', '));
+  verifier('…et « annulée » aussi (la seule qu’aucun essai ne provoque : aucun écran n’annule une urgence)',
+    phrasesBase.has(REFUS_DEMANDES.OP019_annulee));
+  /* LES PHRASES D'OP020 NE NOMMENT JAMAIS UN BLOCAGE (critique « droit ») :
+     un artisan qu'on aurait bloqué l'apprendrait. Ni « bloqu », ni
+     « masqu », ni dans les copies, ni dans la base. */
+  const op020 = Object.entries(REFUS_DEMANDES).filter(([c]) => c.startsWith('OP020')).map(([, p]) => p);
+  const op020Base = [...schemaCode.matchAll(/raise exception '((?:[^']|'')*)'\s+using errcode = 'OP020'/g)].map((m) => m[1]);
+  verifier(`aucune phrase d’OP020 ne nomme un blocage (${op020.length} copies, ${op020Base.length} dans la base)`,
+    op020.length >= 5 && op020Base.length >= 5 && [...op020, ...op020Base].every((p) => !/bloqu|masqu/i.test(p)));
+}
+
+console.log('\nLot S-b — les transitions, la même règle dans la base et dans la démonstration');
+{
+  const { GENRES_DEMANDE, refusDeTransition } = await import('../src/lib/transitions-demandes.js');
+  /* LA RÈGLE DE LA BASE, écrite ici en clair : Accepter et Refuser une
+     demande EN ATTENTE, Marquer terminée une demande ACCEPTÉE, un statut
+     renvoyé inchangé. Tout le reste est refusé. `refusDeTransition` tourne
+     sur CHAQUE paire d'états, pour les trois genres. */
+  let ecarts = [];
+  for (const [genre, r] of Object.entries(GENRES_DEMANDE)) {
+    const attente = genre === 'sos' ? 'envoyee' : 'en_attente';
+    const etats = genre === 'sos' ? ['envoyee', 'acceptee', 'refusee', 'termine', 'annulee'] : ['en_attente', 'accepte', 'refuse', 'termine'];
+    for (const avant of etats) {
+      for (const apres of etats) {
+        const permis = avant === apres || (avant === attente && [r.accepte, r.refuse].includes(apres))
+          || (avant === r.accepte && apres === 'termine');
+        if ((refusDeTransition(r, avant, apres) === null) !== permis) ecarts.push(`${genre} ${avant}→${apres}`);
+      }
+    }
+  }
+  verifier('`refusDeTransition` : permis exactement Accepter, Refuser (en attente), Terminer (acceptée), et l’inchangé',
+    ecarts.length === 0, ecarts.join(', '));
+  ecarts = [];
+  const r = GENRES_DEMANDE.devis;
+  const attendu = { accepte: 'OP019_acceptee', refuse: 'OP019_refusee', termine: 'OP019_terminee' };
+  for (const [avant, cle] of Object.entries(attendu)) if (refusDeTransition(r, avant, 'en_attente') !== cle) ecarts.push(avant);
+  if (refusDeTransition(r, 'en_attente', 'termine') !== 'OP019_en_attente') ecarts.push('en_attente→termine');
+  verifier('…et la phrase rendue dit l’état RÉEL de la demande', ecarts.length === 0, ecarts.join(', '));
+  /* La base, de son côté : les MÊMES transitions dans `tient_la_demande`. */
+  /* Le corps SEUL, coupé à son `$$;` : la suite du fichier contient d'autres
+     fonctions, et un motif trouvé plus bas passerait pour le sien. */
+  const corps = (schemaCode.split('create or replace function public.tient_la_demande()')[1] || '').split('$$;')[0];
+  verifier('`tient_la_demande` permet exactement les mêmes transitions',
+    /if not \(\(old\.statut = attente and new\.statut in \(accepte, refuse\)\)\s+or \(old\.statut = accepte and new\.statut = 'termine'\)\)/.test(corps)
+      && /if new\.statut is not distinct from old\.statut then\s+return new;/.test(corps));
+  const api = sansCommentairesJs(lire('src/lib/api.js'));
+  verifier('la démonstration applique la règle ET le blocage, avec les phrases de la base',
+    /const refus = refusDeTransition\(regles, d\.statut, valeur\);/.test(api)
+      && /throw new ErreurDeLaBase\('OP019', REFUS_DEMANDES\[refus\]\)/.test(api)
+      && /throw new ErreurDeLaBase\('OP020', REFUS_DEMANDES\.OP020_demande\)/.test(api));
+}
+
+console.log('\nLot S-b — l’écran ne dit que le vrai');
+{
+  const app = sansCommentairesJs(lire('src/OpusApp.js'));
+  const iRep = app.indexOf('const repondreDemandeRecue = async');
+  const corps = iRep < 0 ? '' : app.slice(iRep, app.indexOf('\n  };', iRep));
+  /* « Le client est prévenu » sur un REFUS serait faux quand le client a
+     bloqué l'artisan : la base tait la notification, et l'artisan ne voit
+     pas les blocages des autres. Sur une ACCEPTATION, c'est vrai : la base
+     refuse d'accepter sous un blocage. */
+  const iRefus = corps.indexOf("statut === 'refuse'");
+  const brancheRefus = iRefus < 0 ? '' : corps.slice(iRefus, corps.indexOf('} else {', iRefus));
+  /* LE TEXTE EXACT du bandeau, et non une liste de verbes interdits
+     (« averti », « informé »… toujours incomplète — relecture du 26/10). */
+  verifier('un REFUS dit exactement « Demande refusée. Elle passe dans « Terminées ». » — rien sur le client',
+    brancheRefus.length > 0 && /showBanner\('Demande refusée\. Elle passe dans « Terminées »\.'\);/.test(brancheRefus)
+      && (brancheRefus.match(/showBanner\(/g) || []).length === 1);
+  verifier('OP020 ferme la carte (`demandesFermees`), OP019 RELIT la liste au lieu de remettre l’état d’avant',
+    /code === 'OP020'[\s\S]*?setDemandesFermees/.test(corps) && /code === 'OP019'[\s\S]*?chargerDemandesRecues\(\{ silencieux: true \}\)/.test(corps));
+  const ecran = sansCommentairesJs(lire('src/screens/DemandesRecuesScreen.js'));
+  verifier('…et la carte fermée ne propose plus « Accepter » (elle garde « Refuser »)',
+    /\{!fermee && \(\s*<BtnMini\s+label=\{envoi === 'accepte'/.test(ecran)
+      && /fermee=\{!!fermees && fermees\.has\(item\.id\)\}/.test(ecran));
+  verifier('« Faire un devis » pose ses deux questions par `Promise.allSettled`, et c’est `issueDeFaireUnDevis` qui décide',
+    /const \[rListe, rPermis\] = await Promise\.allSettled\(\[\s*api\.devisDeLaDemande\(d\.genre, d\.id\),\s*api\.nouveauDevisPermis\(d\.genre, d\.id\),\s*\]\);/.test(ecran)
+      && /const issue = issueDeFaireUnDevis\(rListe, rPermis\);\s*if \(issue\.etat === 'ouvrir'\) \{ setBrouillons\(null\); onFaireDevis\(d\); return; \}\s*setBrouillons\(issue\);/.test(ecran)
+      && !/Promise\.all\(\[/.test(ecran));
+  /* LA DÉCISION, FAITE TOURNER sur chaque cas (relecture du 26/10) : un
+     échec de la seule PERMISSION ne doit ni cacher le brouillon trouvé, ni
+     inventer un refus. */
+  {
+    const { issueDeFaireUnDevis } = await import('../src/lib/transitions-demandes.js');
+    const ok = (value) => ({ status: 'fulfilled', value });
+    const ko = { status: 'rejected', reason: new Error('réseau') };
+    const un = [{ id: 'b1' }];
+    const cas = [
+      ['liste en échec', ko, ok(true), 'echec'],
+      ['liste en échec, permission en échec', ko, ko, 'echec'],
+      ['liste vide, permis', ok([]), ok(true), 'ouvrir'],
+      ['liste vide, refusé', ok([]), ok(false), 'ferme'],
+      ['liste vide, permission en échec : on OUVRE (la base dira OP020)', ok([]), ko, 'ouvrir'],
+      ['un brouillon, permis', ok(un), ok(true), 'trouve', true],
+      ['un brouillon, refusé', ok(un), ok(false), 'trouve', false],
+      ['un brouillon, permission en échec : INCONNUE, jamais « non »', ok(un), ko, 'trouve', null],
+    ];
+    for (const [nom, l, p, etat, permis] of cas) {
+      const r = issueDeFaireUnDevis(l, p);
+      verifier(`issueDeFaireUnDevis — ${nom} → ${etat}${permis === undefined ? '' : ` (nouveau devis : ${permis})`}`,
+        r.etat === etat && (permis === undefined || (r.nouveauPermis === permis && r.liste === un)),
+        JSON.stringify(r));
+    }
+  }
+  verifier('…et la permission passe par `lectureDevis` (8 s, annulable), comme la liste des brouillons',
+    /async function nouveauDevisPermisSupabase\(genre, id\) \{[\s\S]*?await lectureDevis\('La vérification de cette demande', \(signal\) => avecSignal\(\s*supabase\.rpc\('peut_faire_un_devis'[\s\S]*?if \(error\) leverLecture\(error\);/.test(sansCommentairesJs(lire('src/lib/api.js'))));
+  verifier('…un brouillon déjà commencé se reprend toujours ; « Nouveau devis » disparaît si la base dit non',
+    /brouillons\.nouveauPermis !== false && \(/.test(ecran));
+  const saisie = sansCommentairesJs(lire('src/screens/SaisieDevisScreen.js'));
+  verifier('un refus DÉFINITIF à la création du brouillon (OP013, OP020) ne propose pas « Réessayer »',
+    /\{!estUnRefusDefinitif\(attente\.devisErreur\) && \(\s*<BtnOutline label="Réessayer" onPress=\{\(\) => fileRef\.current && fileRef\.current\.reessayer\('devis'\)\}/.test(saisie));
+
+  /* RÉPONDRE À UNE DEMANDE : la réponse part à CHAQUE « Répondre », son
+     refus est dit, et le compteur ne monte que si la base vient d'en
+     compter une. Avant : un `catch` vide, et « Vous avez répondu ». */
+  const iRepondre = app.indexOf('const repondreDemande = async');
+  const repondre = iRepondre < 0 ? '' : app.slice(iRepondre, app.indexOf('\n  };', iRepondre));
+  verifier('`repondreADemande` n’est jamais dans un `catch` vide, et son refus est montré',
+    /resultat = await api\.repondreADemande\(demande\.id, null\);\s*\} catch \(e\) \{/.test(repondre)
+      && (repondre.match(/showErreur\(/g) || []).length >= 3
+      && !/catch \(e\) \{\s*\}/.test(repondre));
+  /* LA RÉPONSE D'ABORD, LA CONVERSATION ENSUITE (relecture du 26/10) : dans
+     l'autre ordre, la conversation se créait, la réponse était refusée, et
+     chaque appui refaisait le même refus sans rien ouvrir. */
+  const iReponse = repondre.indexOf('api.repondreADemande(');
+  const iConv = repondre.indexOf('api.createConversationWithClient(');
+  verifier('la réponse part AVANT la création de la conversation',
+    iReponse > 0 && iConv > iReponse);
+  verifier('…un refus de la politique se dit en phrase NEUTRE (`REPONSE_FERMEE`), et la carte quitte la liste',
+    /if \(e && e\.code === 'REPONSE_FERMEE'\) \{\s*showErreur\(e\.message\);\s*setDemandes\(\(ds\) => ds\.filter\(\(d\) => d\.id !== demande\.id\)\);\s*return;/.test(repondre));
+  {
+    const err = await import('../src/lib/erreurs.js');
+    const e = new err.ErreurDeLaBase('REPONSE_FERMEE', err.REPONSE_FERMEE);
+    verifier('…`REPONSE_FERMEE` ne nomme ni la fermeture ni un blocage, `messageClair` la rend telle quelle, et c’est un refus définitif',
+      err.REPONSE_FERMEE === 'Vous ne pouvez plus répondre à cette demande.'
+        && err.messageClair(e, 'x') === err.REPONSE_FERMEE && err.estUnRefusDefinitif(e)
+        && !/bloqu|masqu|ferm|pourvue/i.test(err.REPONSE_FERMEE));
+  }
+  verifier('…l’API traduit le 42501 de `demande_reponses` en `REPONSE_FERMEE`, et la démonstration refuse pareil',
+    /if \(error\.code === '42501'\) throw new ErreurDeLaBase\('REPONSE_FERMEE', REPONSE_FERMEE\);/.test(sansCommentairesJs(lire('src/lib/api.js')))
+      && /if \(d && \(\(d\.statut && d\.statut !== 'ouverte'\) \|\| demoBlocages\.has\(String\(d\.auteurId\)\)\)\) \{\s*throw new ErreurDeLaBase\('REPONSE_FERMEE', REPONSE_FERMEE\);/.test(sansCommentairesJs(lire('src/lib/api.js'))));
+  /* LES CARTES FERMÉES SE ROUVRENT quand la liste est relue, et au
+     déblocage (relecture du 26/10). */
+  verifier('`demandesFermees` se vide à chaque relecture réussie de « Pour moi », et au déblocage',
+    /setDemandesRecues\(await api\.chargerDemandesRecues\(\)\);\s*setDemandesFermees\(new Set\(\)\);/.test(app)
+      && /onDebloquer=\{debloquerEtRouvrir\}/.test(app));
+  verifier('…le compteur ne monte que si une réponse vient d’être COMPTÉE',
+    /if \(resultat && resultat\.nouvelle\) \{[\s\S]*?reponses: d\.reponses \+ 1/.test(repondre)
+      && (repondre.match(/reponses \+ 1/g) || []).length === 1);
+  const api = sansCommentairesJs(lire('src/lib/api.js'));
+  verifier('…et l’API insère (jamais d’upsert), un 23505 voulant dire « déjà répondu »',
+    /from\('demande_reponses'\)\s*\.insert\(/.test(api) && !/from\('demande_reponses'\)\.upsert/.test(api)
+      && /if \(error\.code === '23505'\) return \{ nouvelle: false \};/.test(api));
+  verifier('le démarrage ne lit plus TOUTE la table des réponses : le nombre vient de `demandes.nb_reponses`',
+    !/from\('demande_reponses'\)\.select\('demande_id'\),/.test(api)
+      && /reponses: Number\.isInteger\(d\.nb_reponses\) \? d\.nb_reponses : null,/.test(api));
+  const pageDemandes = sansCommentairesJs(lire('src/screens/DemandesScreen.js'));
+  verifier('…et un nombre inconnu s’affiche « — », jamais « 0 »',
+    /Number\.isInteger\(d\.reponses\)[\s\S]{0,120}: '— réponse'/.test(pageDemandes));
+  /* La base, de son côté : le compteur tenu par un déclencheur, sa garde
+     R-A, et un rattrapage qui RECALCULE. */
+  verifier('la base tient `demandes.nb_reponses` : déclencheur `definer`, garde R-A, rattrapage qui recalcule',
+    /alter table public\.demandes add column if not exists nb_reponses int not null default 0;/.test(schemaCode)
+      && /create or replace trigger trg_maj_nb_reponses_demande\s+after insert or delete on public\.demande_reponses/.test(schemaCode)
+      && /create or replace trigger trg_tient_le_compteur_de_demande\s+before insert or update on public\.demandes/.test(schemaCode)
+      && /set nb_reponses = \(select count\(\*\) from public\.demande_reponses r where r\.demande_id = d\.id\)/.test(schemaCode));
+  verifier('une réponse ne se déplace pas (OP021), sur les deux tables',
+    /create or replace trigger trg_tient_la_reponse\s+before update on public\.demande_reponses/.test(schemaCode)
+      && /create or replace trigger trg_tient_la_reponse\s+before update on public\.annonce_reponses/.test(schemaCode));
+  verifier('un visiteur ne lit plus aucune réponse : la règle est fermée ET le droit de table retiré',
+    /create policy "lecture reponses visiteur" on public\.demande_reponses\s+for select to anon using \(false\);/.test(schemaCode)
+      && /revoke all on public\.demande_reponses from anon;/.test(schemaCode));
+}
+
+console.log('\nLot S-b — l’urgence ne part que vers qui y répond (OP025)');
+{
+  /* Chaque corps SEUL, coupé à son `$$;` — sinon `tient_l_urgence` « contient »
+     les conditions d'`artisans_urgence`, écrite plus bas dans le fichier, et
+     une condition retirée de la garde passait au vert (trouvé en cassant). */
+  const corps = (schemaCode.split('create or replace function public.tient_l_urgence()')[1] || '').split('$$;')[0];
+  const urgence = (schemaCode.split('create or replace function public.artisans_urgence(')[1] || '').split('$$;')[0];
+  /* LES MÊMES CONDITIONS que la recherche, la distance mise à part : un
+     artisan absent de la recherche ne doit pas pouvoir recevoir d'urgence,
+     et un artisan présent doit pouvoir la recevoir. */
+  const conditions = ['sa.actif', 'pp.metiers @> array[public.metier_du_sos(sa.metier_key)]', 't.affiche is true',
+    't.frais_deplacement_centimes is not null', 't.taux_horaire_centimes is not null', 't.majoration_pct is not null'];
+  verifier('`tient_l_urgence` : `security invoker`, R-A, et les conditions d’`artisans_urgence()` une par une',
+    /security invoker/.test(corps) && /current_user not in \('authenticated', 'anon'\)/.test(corps)
+      && conditions.every((c) => corps.includes(c) && urgence.includes(c)) && /errcode = 'OP025'/.test(corps),
+    conditions.filter((c) => !corps.includes(c) || !urgence.includes(c)).join(' | '));
+  /* ET LE LIEN AVEC L'ARTISAN ET LE MÉTIER VISÉS — propres à la garde, que
+     la recherche n'a pas : sans eux, elle passait dès qu'UN artisan
+     quelconque répondait à UNE urgence (relecture du 26/10). */
+  verifier('…et la garde porte sur l’artisan ET le métier VISÉS (`if not exists`)',
+    /if not exists \(/.test(corps) && /sa\.professional_id = new\.professional_id/.test(corps)
+      && /sa\.metier_key = new\.metier_key/.test(corps));
+  verifier('…posé AVANT l’insertion d’une urgence',
+    /create or replace trigger trg_tient_l_urgence\s+before insert on public\.sos_requests/.test(schemaCode));
+  /* L'ÉCRAN APPREND L'ÉCHEC, et relance la recherche sur OP025. */
+  const app = sansCommentairesJs(lire('src/OpusApp.js'));
+  const iSos = app.indexOf('const envoyerSos = async');
+  const sos = iSos < 0 ? '' : app.slice(iSos, app.indexOf('\n  };', iSos));
+  verifier('`envoyerSos` rend son issue — `{ ok: false, code }` sur un échec, `{ ok: true }` sinon',
+    /return \{ ok: false, code: String\(\(e && e\.code\) \|\| ''\) \};/.test(sos) && /return \{ ok: true \};\s*$/.test(sos));
+  const ecranSos = sansCommentairesJs(lire('src/screens/SosScreen.js'));
+  verifier('…et sur OP025 l’écran du SOS RELANCE la recherche ; « Choisir » n’envoie qu’une fois à la fois',
+    /if \(r && r\.code === 'OP025'\) chercherArtisans\(\);/.test(ecranSos)
+      && /if \(envoi\) return;/.test(ecranSos) && /disabled=\{envoi\}\s+onPress=\{\(\) => envoyer\(\{/.test(ecranSos)
+      && !/onPress=\{\(\) => onEnvoyer\(/.test(ecranSos));
 }
 
 console.log('');

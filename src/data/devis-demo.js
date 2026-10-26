@@ -79,7 +79,7 @@ import {
   DEVIS_PAR_DEMANDE_MAX, PLAFOND_LISTE, MEMOIRE_MAX, DELAI_PAR_DEFAUT, cleDeLigne,
 } from '../lib/devis.js';
 import { nettoyerPoste, validerPoste, POSTES_MAX } from '../lib/postes.js';
-import { REFUS_DEVIS, SUPPRESSION_DEPASSEE, REFUS_POSTES } from '../lib/erreurs.js';
+import { REFUS_DEVIS, SUPPRESSION_DEPASSEE, REFUS_POSTES, REFUS_DEMANDES } from '../lib/erreurs.js';
 import { initialClients } from './demo.js';
 
 /** L'artisan de démonstration : la fiche 1 (`Object.keys(proProfiles)[0]`). */
@@ -449,6 +449,7 @@ function plusRecentDAbord(a, b) {
 export function creerBaseDevisDemo({
   maintenant = () => new Date(),
   demandeDe = () => null,
+  lienFerme = () => false,
   pauseMs = 0,
   donnees = null,
 } = {}) {
@@ -487,6 +488,16 @@ export function creerBaseDevisDemo({
     if (change('clientId') && !clientAMoi(proId, x.clientId)) throw refus('OP013', REFUS_DEVIS.OP013_client);
     if (change('quoteRequestId') && !demandeDe('devis', x.quoteRequestId)) throw refus('OP013', REFUS_DEVIS.OP013_demande);
     if (change('sosRequestId') && !demandeDe('sos', x.sosRequestId)) throw refus('OP013', REFUS_DEVIS.OP013_urgence);
+    /* UN NOUVEAU LIEN SOUS BLOCAGE (OP020, lot S-b) — APRÈS « pas à vous »,
+       comme la base (`trg_tient_le_devis` avant `trg_tient_le_lien_du_devis`) :
+       un artisan à qui la demande n'est pas adressée n'apprend rien d'un
+       blocage. Relecture du 26/10 : la démonstration ne le refusait pas. */
+    if (change('quoteRequestId') && lienFerme('devis', x.quoteRequestId)) {
+      throw refus('OP020', REFUS_DEMANDES.OP020_devis_demande);
+    }
+    if (change('sosRequestId') && lienFerme('sos', x.sosRequestId)) {
+      throw refus('OP020', REFUS_DEMANDES.OP020_devis_urgence);
+    }
   }
 
   /* LE PLAFOND PAR DEMANDE ET PAR URGENCE (OP017), quand le lien change. */

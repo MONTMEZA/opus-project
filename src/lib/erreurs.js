@@ -133,6 +133,24 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   sos_availability_metier_key_check: 'ce métier n’a pas d’urgence dans Opus : choisissez plomberie, '
     + 'électricité, serrurerie ou chauffage.',
 
+  /* --- Les demandes, les urgences, la messagerie : lot S-b (26/10/2026) ---
+     On ne se fait pas une demande à soi-même, et une urgence n'a que quatre
+     métiers. Aucun écran ne propose l'un ni l'autre : ces phrases ne sortent
+     que d'un client modifié ou d'une version en retard. */
+  quote_requests_pas_soi_meme_check: 'on ne se demande pas un devis à soi-même.',
+  callback_requests_pas_soi_meme_check: 'on ne se demande pas d’être rappelé par soi-même.',
+  sos_requests_pas_soi_meme_check: 'on ne s’envoie pas une urgence à soi-même.',
+  conversations_pas_soi_meme_check: 'on ne s’écrit pas à soi-même.',
+  sos_metier_key_check: 'ce métier n’a pas d’urgence dans Opus : plomberie, électricité, '
+    + 'serrurerie ou chauffage.',
+  /* UN PARTENARIAT QUI EXISTE DÉJÀ entre deux artisans — l'index « une
+     ligne par paire, quel que soit le sens » (section 8). Ce peut être une
+     demande en attente, un partenariat en place… ou un REFUS : la phrase
+     ne laisse pas croire à une demande qui attend, puisque c'est peut-être
+     un refus (lot S-b). */
+  idx_partenaires_paire: 'une demande de partenariat existe déjà entre vous deux — en attente, '
+    + 'acceptée ou refusée. Elle ne se renvoie pas.',
+
   /* --- Le carnet de clients : section 41 ---
      Ces contraintes gardent elles aussi une SAISIE. Le formulaire refuse
      avant d'envoyer (`validerClient`), donc ces phrases ne sortent que
@@ -292,6 +310,67 @@ export const REFUS_DEVIS = Object.freeze({
 export const REFUS_POSTES = Object.freeze({
   OP018: 'Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.',
 });
+
+/**
+ * LES REFUS QUE LA BASE ÉCRIT ELLE-MÊME POUR LES DEMANDES, LES PARTENARIATS
+ * ET LES RÉPONSES (lot S-b, 26/10/2026), AU MOT PRÈS — OP019, OP020, OP021,
+ * OP025.
+ *
+ * La même raison que `REFUS_DEVIS` : `messageClair` rend la phrase de la
+ * base TELLE QUELLE ; ces copies servent à la DÉMONSTRATION, qui doit
+ * refuser avec les mots exacts de la base, et à l'écran, qui reconnaît un
+ * refus DÉFINITIF à son code. `verifier-demandes` les compare à
+ * `schema.sql`, octet pour octet (les `''` du SQL y deviennent `'`).
+ *
+ * AUCUNE NE NOMME UN BLOCAGE, et `verifier-moderation` le tient : un
+ * artisan connaît SES blocages ; lui dire « bloqué » quand il n'a bloqué
+ * personne lui apprendrait que le client l'a bloqué.
+ */
+export const REFUS_DEMANDES = Object.freeze({
+  OP019_modifiee: 'Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.',
+  OP019_acceptee: 'Cette demande a déjà été acceptée : vous pouvez la marquer terminée.',
+  OP019_refusee: 'Cette demande a déjà été refusée : elle ne peut plus changer.',
+  OP019_terminee: 'Cette demande est déjà terminée : elle ne peut plus changer.',
+  OP019_en_attente: "Cette demande n'a pas encore été acceptée : acceptez-la ou refusez-la d'abord.",
+  OP019_annulee: 'Cette demande a été annulée : elle ne peut plus changer.',
+  OP020_demande: 'Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser.',
+  OP020_devis_demande: 'Vous ne pouvez plus rattacher un nouveau devis à cette demande. Un devis déjà commencé reste modifiable.',
+  OP020_devis_urgence: 'Vous ne pouvez plus rattacher un nouveau devis à cette urgence. Un devis déjà commencé reste modifiable.',
+  OP020_proposer: 'Vous ne pouvez pas proposer ce partenariat.',
+  OP020_accepter: 'Vous ne pouvez plus accepter ce partenariat. Vous pouvez encore le refuser.',
+  OP021_partenariat: 'Un partenariat ne change ni de demandeur, ni de destinataire, ni de date.',
+  OP021_reponse: 'Une réponse ne se déplace pas : seul son message peut changer.',
+  OP025: 'Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.',
+});
+
+/**
+ * RÉPONDRE À UNE DEMANDE QUI N'EST PLUS OUVERTE — ou dont l'auteur est en
+ * blocage avec l'artisan (relecture du 26/10). La base refuse par sa
+ * politique (« mes reponses », 42501), sans phrase : celle-ci est écrite
+ * ici, et elle ne dit pas laquelle des deux causes. « Cette demande n'est
+ * plus ouverte » serait faux dans le second cas, et apprendrait un blocage.
+ */
+export const REPONSE_FERMEE = 'Vous ne pouvez plus répondre à cette demande.';
+
+/** Une erreur qui porte un des codes maison du lot S-b, et la phrase de la base. */
+export class ErreurDeLaBase extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'ErreurDeLaBase';
+    this.code = code;
+  }
+}
+
+/**
+ * UN REFUS DÉFINITIF : la même demande, renvoyée, recevra la même réponse.
+ * OP019 (l'état a changé), OP020 (on n'ouvre plus rien entre ces deux
+ * personnes), OP013 (ce n'est pas à vous), OP021, OP025. L'écran ne propose
+ * donc PAS « Réessayer » : il dit ce qui reste possible, ou relit.
+ */
+export function estUnRefusDefinitif(e) {
+  const code = String((e && e.code) || '');
+  return /^OP0(13|19|20|21|25)$/.test(code) || code === 'REPONSE_FERMEE';
+}
 
 /**
  * UN POSTE MODIFIÉ OU RETIRÉ ENTRE-TEMPS — et ça, ce n'est PAS la base qui
@@ -571,7 +650,10 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      OP013 à OP017 avec la section 49, OP018 — le plafond de la base de
      postes — avec la section 50, OP024 — une pièce changée ou retirée
      depuis que l'administration l'a ouverte — avec la section 51 ; OP003
-     reste réservé au devis remis, OP019 à OP023 aux sous-lots S-b à S-d)
+     reste réservé au devis remis ; OP019 à OP021 et OP025 — une demande
+     qui ne change que par ses gestes, ce qu'on n'ouvre plus sous blocage,
+     une réponse qui ne se déplace pas, une urgence vers qui n'y répond
+     pas — avec le lot S-b ; OP022 et OP023 restent aux sous-lots S-c et S-d)
      PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler
@@ -594,6 +676,12 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      faire. Repassée par les règles qui suivent, « appareil » ou « relu »
      n'y changeraient rien — mais la règle est la même : traduite une fois. */
   if (String((e && e.name) || '') === 'ErreurPoste' && brut) return brut;
+
+  /* Et une réponse à une demande refusée par la politique (`REPONSE_FERMEE`,
+     levée par `api.js` sur un 42501) : sa phrase est écrite exprès pour ne
+     dire ni « fermée » ni « bloqué ». Repassée par les règles qui suivent,
+     elle redeviendrait « vous n'avez pas le droit d'écrire cette ligne ». */
+  if (code === 'REPONSE_FERMEE' && brut) return brut;
 
   /* La base a répondu qu'elle avait ARRÊTÉ l'opération (57014) : ce n'est
      pas le réseau, et le dire serait envoyer chercher la panne au mauvais

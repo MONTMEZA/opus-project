@@ -46,7 +46,9 @@ import { METIERS_SOS } from '../data/urgences';
 /* Lot 1 du devis : « Faire un devis » lit, au moment de l'appui, si un
    brouillon existe déjà pour cette demande. */
 import * as api from '../lib/api';
+import { REFUS_DEMANDES } from '../lib/erreurs';
 import { peutFaireUnDevis, depuisLisible } from '../lib/devis';
+import { issueDeFaireUnDevis } from '../lib/transitions-demandes';
 
 /**
  * LE MÉTIER NE SE NOMME PAS PAREIL SELON L'ORIGINE, et c'est un piège réel :
@@ -175,6 +177,9 @@ export default function DemandesRecuesScreen({
   onRepondre, onAppeler, onVoirProfil, onAjouterClient,
   /* « Faire un devis » (lot 1) : absent pour un particulier. */
   onFaireDevis = null,
+  /* Les demandes qu'on ne peut plus ACCEPTER (lot S-b, OP020) : leur carte
+     ne garde que « Refuser ». Un `Set` d'identifiants, tenu par OpusApp. */
+  fermees = null,
   /* La demande qu'une notification désigne (section 37), et le moyen de
      dire qu'on l'a consommée. */
   demandeCible = null, onCibleConsommee,
@@ -337,6 +342,7 @@ export default function DemandesRecuesScreen({
           onVoirProfil={onVoirProfil}
           onAjouterClient={onAjouterClient}
           onFaireDevis={onFaireDevis}
+          fermee={!!fermees && fermees.has(item.id)}
         />
       )}
     />
@@ -345,6 +351,7 @@ export default function DemandesRecuesScreen({
 
 function Demande({
   d, onRepondre, onAppeler, onVoirProfil, onAjouterClient, onFaireDevis = null, visee = false,
+  fermee = false,
 }) {
   /* « FAIRE UN DEVIS » NE RECRÉE PAS UN BROUILLON QUI EXISTE (la critique
      « écran », I10). L'appui lit `devisDeLaDemande()` À CE MOMENT-LÀ —
@@ -353,16 +360,28 @@ function Demande({
      Plusieurs devis pour une même demande restent permis ; on ne les crée
      plus sans le savoir. `null` : rien demandé ; `{ etat }` sinon. */
   const [brouillons, setBrouillons] = useState(null);
+  /* ET UN NOUVEAU DEVIS EST-IL ENCORE POSSIBLE ? (lot S-b) Sous un blocage
+     — posé par le client, que l'artisan ne voit pas —, la base refuse tout
+     NOUVEAU devis rattaché à la demande (OP020). On le demande à la base
+     AVANT d'ouvrir la saisie : sinon l'artisan tape sa première ligne, et
+     c'est elle qui reçoit le refus. Un brouillon déjà commencé, lui, se
+     reprend toujours. */
+  /* `Promise.allSettled`, et pas `all` (relecture du 26/10) : avec `all`,
+     un échec de la seule PERMISSION (réseau coupé sur elle) faisait dire
+     « je n'ai pas pu vérifier s'il existe un brouillon » — faux, la liste
+     avait été lue — et retirait « Reprendre ». La décision vit dans
+     `issueDeFaireUnDevis()` (`transitions-demandes.js`, qui n'importe
+     rien), que `verifier-demandes` fait tourner sur chaque cas. */
   const faireUnDevis = async () => {
     if (brouillons && brouillons.etat === 'lecture') return;
     setBrouillons({ etat: 'lecture' });
-    try {
-      const liste = await api.devisDeLaDemande(d.genre, d.id);
-      if (!liste || !liste.length) { setBrouillons(null); onFaireDevis(d); return; }
-      setBrouillons({ etat: 'trouve', liste });
-    } catch (e) {
-      setBrouillons({ etat: 'echec' });
-    }
+    const [rListe, rPermis] = await Promise.allSettled([
+      api.devisDeLaDemande(d.genre, d.id),
+      api.nouveauDevisPermis(d.genre, d.id),
+    ]);
+    const issue = issueDeFaireUnDevis(rListe, rPermis);
+    if (issue.etat === 'ouvrir') { setBrouillons(null); onFaireDevis(d); return; }
+    setBrouillons(issue);
   };
   /* Le verrou contre le double appui : accepter deux fois une urgence
      enverrait deux fois l'artisan. Même famille de défaut que le bouton
@@ -425,16 +444,21 @@ function Demande({
             a écrit dans sa demande, pour vous. Il peut donc manquer. */}
         {estEnAttente(d) ? (
           <View style={s.boutons}>
-            <BtnMini
-              label={envoi === 'accepte' ? 'Envoi…' : 'Accepter'}
-              disabled={!!envoi}
-              onPress={() => repondre('accepte')}
-            >
-              <Check size={12} color={C.surAccent} />
-              <Text style={s.btnTexte}>
-                {envoi === 'accepte' ? 'Envoi…' : 'Accepter'}
-              </Text>
-            </BtnMini>
+            {/* FERMÉE (OP020) : on ne peut plus l'accepter, on peut encore la
+                refuser. Le bouton disparaît au lieu d'échouer une seconde
+                fois — la phrase de la base a déjà dit pourquoi. */}
+            {!fermee && (
+              <BtnMini
+                label={envoi === 'accepte' ? 'Envoi…' : 'Accepter'}
+                disabled={!!envoi}
+                onPress={() => repondre('accepte')}
+              >
+                <Check size={12} color={C.surAccent} />
+                <Text style={s.btnTexte}>
+                  {envoi === 'accepte' ? 'Envoi…' : 'Accepter'}
+                </Text>
+              </BtnMini>
+            )}
             <BtnMini
               outline
               label={envoi === 'refuse' ? 'Envoi…' : 'Refuser'}
@@ -529,13 +553,25 @@ function Demande({
                 style={s.cible}
                 onPress={() => { const id = brouillons.liste[0].id; setBrouillons(null); onFaireDevis(d, { devisId: id }); }}
               />
-              <BtnMini
-                outline
-                label="Nouveau devis"
-                style={s.cible}
-                onPress={() => { setBrouillons(null); onFaireDevis(d); }}
-              />
+              {brouillons.nouveauPermis !== false && (
+                <BtnMini
+                  outline
+                  label="Nouveau devis"
+                  style={s.cible}
+                  onPress={() => { setBrouillons(null); onFaireDevis(d); }}
+                />
+              )}
             </View>
+            {brouillons.nouveauPermis === false && (
+              <Text style={s.brouillonTexte}>{REFUS_DEMANDES[d.genre === 'sos' ? 'OP020_devis_urgence' : 'OP020_devis_demande']}</Text>
+            )}
+          </View>
+        )}
+        {!!brouillons && brouillons.etat === 'ferme' && (
+          <View style={s.brouillon}>
+            <Text style={s.brouillonTexte}>
+              {REFUS_DEMANDES[d.genre === 'sos' ? 'OP020_devis_urgence' : 'OP020_devis_demande']}
+            </Text>
           </View>
         )}
         {!!brouillons && brouillons.etat === 'echec' && (
@@ -555,7 +591,10 @@ function Demande({
           </View>
         )}
 
-        {estEnAttente(d) && (
+        {/* Une carte FERMÉE (on ne peut plus l'accepter, OP020) n'a plus de
+            bouton « Accepter » : l'aide qui l'explique part avec lui. Celle
+            d'une urgence (« Répondez, même pour refuser ») reste vraie. */}
+        {estEnAttente(d) && (genre.aide || !fermee) && (
           <Text style={s.aide}>
             {genre.aide
               || 'Accepter permet à ce client de laisser un avis « client vérifié » '

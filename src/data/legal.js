@@ -29,7 +29,30 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-25';
+export const VERSION = '2026-10-26';
+/* 26/10/2026 — LES DEMANDES, LE BLOCAGE, LES PARTENARIATS, LES RÉPONSES
+   (lot S-b du lot de sécurité). Ce qui a changé DE FOND :
+     - « BLOQUER QUELQU'UN » DIT CE QUE FAIT VRAIMENT UN BLOCAGE (décisions
+       D2 et Q1 du propriétaire, 25/10) : rien ne disparaît de ce qui
+       existait, plus rien de NOUVEAU entre les deux personnes, dans les
+       deux sens — et les notifications de la personne qu'on a bloquée se
+       taisent, mais un REFUS envoyé par celui qui bloque arrive encore.
+       L'ancien texte ne parlait que des contenus et des messages ;
+     - « LES AVIS », SECTION NOUVELLE (critique « droit » du cahier, et le
+       code de la consommation, L. 111-7-2, qui demande de dire comment les
+       avis sont contrôlés) : ce que veut dire « client vérifié », et rien de
+       plus ; ce qui n'est pas contrôlé ; et la vérité sur le signalement
+       d'un avis — il n'existe pas encore de bouton pour le faire, et le
+       texte le dit au lieu de le promettre. Et un avis déjà écrit reste
+       lisible par l'artisan qu'il vise, même sous blocage (décision Q2) ;
+     - « COMBIEN DE TEMPS » : une demande de partenariat REFUSÉE reste
+       enregistrée tant que les deux comptes existent — c'est elle qui
+       empêche de la renvoyer en boucle (intérêt légitime) ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions, et le préavis de quinze jours du règlement
+       2019/1150 (art. 3.2) s'appliquerait à ce changement, qui touche les
+       professionnels (le blocage, les avis). Sans effet tant que STATUT vaut
+       'essai' ; à organiser avant l'ouverture au public (A-FAIRE). */
 /* 25/10/2026 — LE STOCKAGE ET LE BADGE (lot S-a du lot de sécurité).
    Ce qui a changé DE FOND :
      - LA SUSPENSION DU BADGE (décision D4 du propriétaire) : remplacer sa
@@ -788,6 +811,30 @@ export const CGU = [
       + "un motif de signalement à part entière.",
   },
   {
+    /* CE QUE VEUT DIRE « CLIENT VÉRIFIÉ », ET RIEN DE PLUS (lot S-b,
+       26/10/2026). Le code de la consommation (L. 111-7-2) demande de dire
+       si les avis sont contrôlés et comment : la mention était affichée
+       sous chaque avis sans être expliquée nulle part. Ce texte dit ce que
+       calcule `calcule_client_verifie()` (section 6 de `schema.sql`), au
+       moment où l'avis est écrit ou modifié — et ce qu'elle ne prouve pas.
+
+       LE SIGNALEMENT D'UN AVIS N'EXISTE PAS ENCORE — `signalements_cible_type_check`
+       n'accepte pas « avis », et aucun écran ne le propose. On le DIT au
+       lieu de le promettre (A-FAIRE). À relire par un juriste avant
+       l'ouverture au public. */
+    titre: 'Les avis',
+    texte: 'Un avis porte la mention « client vérifié » quand son auteur avait, au '
+      + 'moment où il l’a écrit ou modifié, une demande de devis, de rappel ou '
+      + 'd’urgence acceptée par l’artisan qu’il note. C’est tout ce que cette mention '
+      + 'atteste : Opus ne vérifie ni que les travaux ont eu lieu, ni ce que l’avis '
+      + 'raconte, ni les notes données. Les autres avis sont publiés sans cette '
+      + 'mention, et sans contrôle préalable. Chacun ne laisse qu’un avis par artisan, '
+      + 'jamais sur sa propre fiche. Un avis compte dans la note de l’artisan tant qu’il '
+      + 'existe ; l’artisan qu’il concerne le lit toujours, même s’il a bloqué son '
+      + 'auteur ou a été bloqué par lui. Il n’existe pas encore de bouton pour signaler '
+      + 'un avis : c’est à ajouter avant l’ouverture d’Opus au public.',
+  },
+  {
     /* L'ENGAGEMENT DE L'ÉDITEUR SUR LES PRIX DES ARTISANS — réponse du
        propriétaire du 18/10/2026 au préalable de `DONNEES-DES-ARTISANS.md`
        §5.2 : « personne ne lit les prix d'un autre artisan, éditeur SQL
@@ -923,10 +970,29 @@ export const CGU = [
       ),
   },
   {
+    /* LE TEXTE DIT CE QUE TIENT LA BASE (lot S-b, 26/10/2026, sections
+       13.5 bis, 13.5 ter et 13.5 quater de `schema.sql`), et `verifier-legal`
+       tient chacun de ses morceaux : « rien ne disparaît », « plus rien de
+       nouveau », les deux sens, le refus qui arrive encore, et l'avis que
+       l'artisan lit toujours. */
     titre: 'Bloquer quelqu’un',
-    texte: 'Bloquer une personne masque ses contenus des deux côtés et empêche '
-      + 'tout message entre vous. Le blocage se retire quand vous le '
-      + 'souhaitez, depuis Profil → Confidentialité et sécurité.',
+    texte: 'Bloquer une personne masque ses contenus des deux côtés, et arrête '
+      + 'tout ce qui est nouveau entre vous, dans un sens comme dans l’autre : plus '
+      + 'de message, de commentaire, de « j’aime », d’abonnement ni d’avis ; plus de '
+      + 'demande de devis, de rappel ou d’urgence, ni de réponse à une demande ou à '
+      + 'une annonce ; plus de demande de partenariat, et un artisan ne peut plus '
+      + 'accepter une demande, ni y rattacher un nouveau devis. Rien n’est effacé : '
+      + 'vos conversations avec cette personne — vos messages et les pièces jointes '
+      + 'compris — sont masquées des deux côtés tant que dure le blocage, et '
+      + 'reviennent si vous le retirez. Ce qui engage l’un de vous reste en place : '
+      + 'une demande déjà reçue peut encore être refusée ou marquée terminée, un '
+      + 'devis déjà commencé reste modifiable, un avis déjà écrit reste — et '
+      + 'l’artisan qu’il concerne le lit toujours. Vous ne recevez plus aucune '
+      + 'notification de la personne que vous avez bloquée ; elle, en revanche, est '
+      + 'encore prévenue si vous refusez sa demande, pour qu’elle ne l’attende pas en '
+      + 'vain. Aucune notification ne lui annonce le blocage, mais elle peut s’en '
+      + 'apercevoir : vos contenus ne lui apparaissent plus. Le blocage se retire '
+      + 'quand vous le souhaitez, depuis Profil → Confidentialité et sécurité.',
   },
   {
     titre: 'Fermer son compte',
@@ -1389,7 +1455,9 @@ export const CONFIDENTIALITE = [
       + 'le compte ni le numéro ; ces compteurs sont effacés lors d’un contrôle suivant, '
       + 'plus d’un jour après, y compris si le compte a été supprimé entre-temps : comme '
       + 'pour la consultation du répertoire, aucune durée maximale ne peut donc être '
-      + 'promise. Les photos d’une publication supprimée, d’une demande refermée ou d’une '
+      + 'promise. Une demande de partenariat refusée reste enregistrée tant que les deux '
+      + 'comptes existent : c’est elle qui empêche de la renvoyer en boucle à celui qui '
+      + 'l’a refusée — celui-ci peut l’effacer. Les photos d’une publication supprimée, d’une demande refermée ou d’une '
       + 'annonce retirée, et vos anciennes photos de profil ou de bannière, restent en ligne, '
       + 'lisibles par qui connaît leur adresse, jusqu’à la suppression de votre compte. '
       + CE_QUI_RESTE_EN_LIGNE
