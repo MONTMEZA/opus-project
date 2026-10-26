@@ -886,17 +886,45 @@ console.log('\n9. Sur sa propre publication, ni « Suivre » ni « Contacter »'
      « Suivre » et « Contacter » doit lire `mienne`, et chaque écran doit le
      lui donner. Trois surfaces : la carte du fil, la diapositive du fil
      vidéo, la page d'une publication (où mène une notification). */
+  /* CE QUE LA GARDE CONTIENT, pas ce qui la précède — relecture du
+     26/10/2026 : ces vérifications lisaient la PROXIMITÉ d'un texte (« une
+     garde dans les 200 caractères avant le bouton »). Une garde vidée, avec
+     le bouton laissé juste dehors, passait au vert. On prend maintenant le
+     corps de chaque garde, et CHAQUE occurrence du bouton doit y être. */
+  const gardes = (code, ouverture) => {
+    const zones = [];
+    let i = code.indexOf(ouverture);
+    while (i >= 0) {
+      const corps = corpsDe(code, i + ouverture.length - 1);
+      const debut = code.indexOf('(', i + ouverture.length - 1) + 1;
+      zones.push([debut, debut + corps.length]);
+      i = code.indexOf(ouverture, i + 1);
+    }
+    return zones;
+  };
+  const toutDansGarde = (code, ouverture, cible) => {
+    const zones = gardes(code, ouverture);
+    const positions = [];
+    let i = code.indexOf(cible);
+    while (i >= 0) { positions.push(i); i = code.indexOf(cible, i + 1); }
+    const dehors = positions.filter((p) => !zones.some(([d, f]) => p >= d && p < f));
+    return { trouves: positions.length, dehors: dehors.length };
+  };
+  const garde = (code, ouverture, cible) => {
+    const r = toutDansGarde(code, ouverture, cible);
+    return r.trouves > 0 && r.dehors === 0;
+  };
+
   const carte = sansCommentaires(lire('src/components/PostCard.js'));
-  verifier('la carte : « Suivre » n’a pas de pastille sur ma publication',
-    /onSuivre=\{onFollow && !mienne \?/.test(carte));
-  const iContact = carte.indexOf('label="Contacter"');
-  const avantContact = iContact > 0 ? carte.slice(Math.max(0, iContact - 200), iContact) : '';
-  verifier('la carte : le bouton « Contacter » n’existe pas sur ma publication',
-    /\{!mienne && \(/.test(avantContact));
+  verifier('la carte : « Suivre » n’a pas de pastille sur ma publication (sinon : null, pas une fonction vide)',
+    /onSuivre=\{onFollow && !mienne \? \(\) => onFollow\(pro\.id\) : null\}/.test(carte)
+    && (carte.match(/onSuivre=/g) || []).length === 1);
+  verifier('la carte : chaque bouton « Contacter » vit DANS la garde `!mienne`',
+    garde(carte, '{!mienne && (', 'label="Contacter"'), JSON.stringify(toutDansGarde(carte, '{!mienne && (', 'label="Contacter"')));
   verifier('la carte : le menu « Contacter » ne peut pas s’ouvrir sur ma publication',
-    /\{contactOpen && !mienne && \(/.test(carte));
+    garde(carte, '{contactOpen && !mienne && (', 'style={s.contactPop}'));
   verifier('la carte : pas de « Signaler » sur ma publication (validé le 26/10)',
-    /\{!!onSignaler && !mienne && \(/.test(carte));
+    garde(carte, '{!!onSignaler && !mienne && (', 'accessibilityLabel="Signaler cette publication"'));
   const iSignaler = carte.indexOf('Signaler cette publication');
   verifier('…mais le signalement reste sur celles des autres (les magasins le vérifient)',
     iSignaler > 0 && /onSignaler\(\{/.test(carte.slice(iSignaler, iSignaler + 300)));
@@ -904,10 +932,32 @@ console.log('\n9. Sur sa propre publication, ni « Suivre » ni « Contacter »'
     /mienne = false/.test(carte));
 
   const diapo = sansCommentaires(lire('src/components/VideoSlide.js'));
-  const iRangee = diapo.indexOf('<View style={s.btnRow}>');
-  verifier('le fil vidéo : la rangée « Suivre · Contacter » disparaît sur ma vidéo',
-    iRangee > 0 && /\{!mienne && \(\s*$/.test(diapo.slice(Math.max(0, iRangee - 60), iRangee))
-    && /mienne = false/.test(diapo));
+  verifier('le fil vidéo : « Suivre » vit DANS la garde `!mienne`',
+    garde(diapo, '{!mienne && (', '<ChipFollow'), JSON.stringify(toutDansGarde(diapo, '{!mienne && (', '<ChipFollow')));
+  verifier('le fil vidéo : « Contacter » aussi',
+    garde(diapo, '{!mienne && (', 'label="Contacter"'));
+  verifier('le fil vidéo reçoit `mienne`, faux par défaut', /mienne = false/.test(diapo));
+
+  /* SA PROPRE FICHE — relecture du 26/10/2026 : l'artisan y arrive d'un
+     appui sur le nom de SA publication, et y trouvait « Suivre » (qui
+     affichait une réussite que la base refuse), « Demander un devis »,
+     « Envoyer un message », « Laisser un avis » et « Signaler ». */
+  const fiche = sansCommentaires(lire('src/screens/ProfilProScreen.js'));
+  const iTernaire = fiche.indexOf('{mienne ? (');
+  const branche1 = iTernaire >= 0 ? corpsDe(fiche, iTernaire + '{mienne ? '.length) : '';
+  const iSinon = iTernaire >= 0 ? fiche.indexOf(': (', iTernaire + '{mienne ? ('.length + branche1.length) : -1;
+  const sinon = iSinon >= 0 ? corpsDe(fiche, iSinon) : '';
+  const uneFois = (cible) => fiche.split(cible).length - 1 === 1;
+  verifier('sa fiche : « Demander un devis », « Suivre » et « Envoyer un message » n’existent que chez les AUTRES',
+    ['label="Demander un devis"', 'onPress={() => onFollow(pro.id)}', 'Envoyer un message']
+      .every((c) => sinon.includes(c) && uneFois(c)) && !/onFollow|onContact/.test(branche1));
+  verifier('sa fiche : une phrase dit pourquoi les boutons manquent',
+    /les boutons pour vous contacter s’affichent chez les autres/.test(branche1));
+  verifier('sa fiche : ni « Signaler ce profil » ni « Laisser un avis »',
+    garde(fiche, '{!!onSignaler && !mienne && (', 'Signaler ou bloquer ce profil')
+    && /right=\{mienne \? null : <BtnMini label=\{showForm \? 'Fermer' : 'Laisser un avis'\}/.test(fiche)
+    && uneFois("'Laisser un avis'"));
+  verifier('sa fiche reçoit `mienne`, faux par défaut', /mienne = false,/.test(fiche));
 
   const fil = sansCommentaires(lire('src/screens/HomeScreen.js'));
   const nbMienne = (fil.match(/mienne=\{estMienne\(p, maFicheId\)\}/g) || []).length;
@@ -924,6 +974,24 @@ console.log('\n9. Sur sa propre publication, ni « Suivre » ni « Contacter »'
   verifier('…et la passe au fil ET à la page d’une publication', nbPasse === 2, `${nbPasse} fois`);
   verifier('…et jamais `myProId` à leur place (chez un particulier, c’est le premier artisan)',
     !/maFicheId=\{myProId\}/.test(opus) && !/estMienne\([^)]*myProId/.test(opus + fil + page));
+  verifier('OpusApp dit à la fiche quand c’est la MIENNE, avec `maFicheId`',
+    /mienne=\{!!maFicheId && String\(viewedProId\) === maFicheId\}/.test(opus)
+    && (opus.match(/mienne=\{/g) || []).length === 1);
+  verifier('…et la barre du bas allume « Profil » par la MÊME règle',
+    /screen=\{screen === 'profilPro' && !!maFicheId\s*&& String\(viewedProId\) === maFicheId \? 'profil' : screen\}/.test(opus));
+
+  /* « SUIVRE » NE MENT PLUS : l'erreur de la base se lit, et l'affichage se
+     défait. Sans ça, un refus laissait « Suivi ✓ » jusqu'au rechargement. */
+  const apiTexte = sansCommentaires(lire('src/lib/api.js'));
+  const iSetFollow = apiTexte.indexOf('export const setFollow');
+  const setFollow = iSetFollow < 0 ? '' : apiTexte.slice(iSetFollow, apiTexte.indexOf('\n};', iSetFollow));
+  verifier('`setFollow` lit l’erreur de la base et la lève',
+    /const \{ error \} = following/.test(setFollow) && /throw error;/.test(setFollow));
+  const iToggle = opus.indexOf('const toggleFollow');
+  const toggle = iToggle < 0 ? '' : opus.slice(iToggle, opus.indexOf('\n  };', iToggle));
+  verifier('`toggleFollow` décide AVANT, puis défait l’affichage et le dit si la base refuse',
+    /const suivre = !followingIds\.has\(proId\);/.test(toggle)
+    && /\.catch\(\(e\) => \{\s*poser\(!suivre\);\s*showErreur\(/.test(toggle));
 }
 
 console.log('');

@@ -1402,14 +1402,23 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     setProfilPublicCharge(false);
   };
 
+  /* L'état voulu se décide AVANT, sur ce qui est affiché : une variable
+     posée dans la fonction de mise à jour ne l'est que si React l'exécute
+     tout de suite, ce qu'il ne garantit pas. Et un refus de la base DÉFAIT
+     l'affichage et se dit — il laissait « Suivi ✓ » sur un abonnement que
+     la base n'avait pas enregistré (relecture du 26/10/2026). */
   const toggleFollow = (proId) => {
-    let following = false;
-    setFollowingIds((s) => {
+    const suivre = !followingIds.has(proId);
+    const poser = (oui) => setFollowingIds((s) => {
       const n = new Set(s);
-      if (n.has(proId)) n.delete(proId); else { n.add(proId); following = true; }
+      if (oui) n.add(proId); else n.delete(proId);
       return n;
     });
-    api.setFollow(proId, following).catch(() => {});
+    poser(suivre);
+    api.setFollow(proId, suivre).catch((e) => {
+      poser(!suivre);
+      showErreur(messageClair(e, suivre ? 'Abonnement impossible' : 'Désabonnement impossible'));
+    });
   };
 
   /**
@@ -2812,6 +2821,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   }) => {
     let id = `local-${Date.now()}`;
     let envoyees = photos;
+    let lieu = { affichage: ville, codePostal, latitude, longitude };
     setLoading(true);
     try {
       const uid = api.getUserId();
@@ -2821,8 +2831,22 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           ? await envoyerFichier({ uri, bucket: 'publications', nom: 'demande', userId: uid })
           : uri);
       }
+      /* LES COORDONNÉES, RETROUVÉES AU MOMENT D'ENREGISTRER — comme
+         l'annonce, le profil, la publication et l'inscription. Une ville
+         TAPÉE sans toucher de suggestion n'en avait aucune, et la demande
+         passait derrière tout le reste dès que « Les plus proches » est
+         allumée — urgente, de mon métier, dans ma commune, derrière un
+         chantier à 300 km (relecture du 26/10/2026). Le centre de la
+         COMMUNE, jamais une adresse. L'échec ne bloque rien : la demande
+         part sans, et l'écran dit qu'elle n'est pas placée. */
+      try {
+        lieu = await completerLieu(lieu);
+      } catch { /* jamais de demande refusée pour ça */ }
       const ligne = await api.createDemande({
-        metier, ville, texte, codePostal, latitude, longitude,
+        metier, ville, texte,
+        codePostal: lieu.codePostal || codePostal || null,
+        latitude: lieu.latitude,
+        longitude: lieu.longitude,
         media: envoyees[0] || null, medias: envoyees,
         budget, urgence,
       });
@@ -2841,7 +2865,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       avatarUrl: monProfil.avatarUrl || null,
       metier,
       ville: ville || 'Non précisée',
-      codePostal, latitude, longitude,
+      codePostal: lieu.codePostal || codePostal || null,
+      latitude: lieu.latitude,
+      longitude: lieu.longitude,
       texte,
       media: envoyees[0] || null,
       medias: envoyees,
@@ -4689,6 +4715,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onFollow={toggleFollow} onContact={handleContact}
             onViewProfile={viewProfile} onSubmitReview={submitReview}
             onSignaler={ouvrirSignalement}
+            mienne={!!maFicheId && String(viewedProId) === maFicheId}
           />
         )}
         </Animated.View>
@@ -4696,10 +4723,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
       <BottomNav
         /* Sa propre fiche allume « Profil » ; celle d'un autre, rien —
-           comme toute page de détail. `userType` d'abord : chez un
-           particulier, `myProId` désigne le PREMIER artisan chargé. */
-        screen={screen === 'profilPro' && userType === 'pro'
-          && String(viewedProId) === String(myProId) ? 'profil' : screen}
+           comme toute page de détail. `maFicheId`, et pas `myProId` : chez
+           un particulier, `myProId` désigne le PREMIER artisan chargé, et
+           `maFiche()` le sait (la même règle que les boutons de la fiche). */
+        screen={screen === 'profilPro' && !!maFicheId
+          && String(viewedProId) === maFicheId ? 'profil' : screen}
         dark={videoMode}
         canPublish={canPublish}
         avatarUrl={monAvatar}

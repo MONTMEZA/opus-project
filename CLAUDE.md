@@ -9481,9 +9481,9 @@ Reste « Masquer » sur sa propre publication : hors de ce qui a été validé
 ##### « Les plus proches » trie vraiment par distance
 
 `src/lib/tri-demandes.js` (`verifier-demandes`). Allumée : la distance
-d'abord, sans exception, puis mes métiers et l'urgence à distance égale ;
-une demande sans distance va à la FIN. Éteinte : mes métiers, puis
-l'urgence. Elle reste allumée par défaut.
+d'abord, puis mes métiers et l'urgence à distance LUE égale (corrigé par la
+relecture, plus bas) ; une demande sans distance va à la FIN. Éteinte : mes
+métiers, puis l'urgence. Elle reste allumée par défaut.
 
 > **Un comparateur qui rend « égal » dès qu'une valeur manque n'est pas
 > un ordre.** L'ancien rendait 0 si UNE des deux distances était absente :
@@ -9491,8 +9491,9 @@ l'urgence. Elle reste allumée par défaut.
 > pouvait. Une valeur absente se place (à la fin), elle ne s'égalise pas.
 
 Et un tri incomplet se dit : `phraseDuTriParDistance()` écrit « Votre ville
-n'est pas placée sur la carte : le tri par distance ne peut pas se faire »
-ou « 2 demandes sans lieu précis sont en fin de liste » — la règle des
+n'est pas placée sur la carte : le tri par distance ne peut pas se faire »,
+« 2 demandes ne sont pas placées sur la carte : elles sont en fin de liste »,
+ou, quand AUCUNE ne l'est, l'ordre réellement suivi — la règle des
 « 3 annonces sans lieu précisé » de la Place des pros.
 
 ##### Une notification visait la demande d'un AUTRE client
@@ -9526,6 +9527,67 @@ s'ordonnent par distance pastille allumée, par métier éteinte.
 **Pas vérifié** : le fil VIDÉO à l'écran — le compte de démonstration n'a
 aucune vidéo, seul le contrôle tient la rangée cachée ; rien sur l'iPhone ;
 rien sur la vraie base (aucune écriture : décision du propriétaire).
+
+##### La relecture de ces décisions — treize défauts, trois contrôles aveugles
+
+Relue le soir même par trois angles (identité, tri, démonstration et
+contrôles), chaque constat reproduit puis contre-examiné : **13 confirmés
+sur 14**. Corrigés à l'écran et dans les contrôles ; celui qui touche la
+base (un compte qui se demande un devis à lui-même) attend le lot S
+(`docs/A-FAIRE.md`).
+
+- **Sa propre FICHE** gardait « Suivre », « Demander un devis », « Envoyer
+  un message », « Laisser un avis », « Signaler » — on y arrive d'un appui
+  sur le nom de sa publication. `ProfilProScreen` reçoit `mienne`, calculé
+  avec `maFicheId` (comme la barre du bas, qui utilisait `myProId`).
+- **« Suivre » affichait une réussite que la base refusait.** `postgrest-js`
+  ne lève rien par défaut (`shouldThrowOnError = false`) : `setFollow` ne
+  lisait jamais `{ error }`. Il la lit, et `toggleFollow` défait
+  l'affichage. Et il décide AVANT : une variable posée DANS la fonction de
+  mise à jour de React ne l'est que si React l'exécute tout de suite, ce
+  qu'il ne garantit pas.
+- **Une demande dont la ville était TAPÉE n'avait aucune position** :
+  `publierDemande` n'appelait pas `completerLieu()`, alors que l'annonce, le
+  profil, la publication et l'inscription le font. Le trou existait ; le
+  tri par distance l'a rendu visible (la demande passait derrière un
+  chantier à 300 km).
+- **« À distance égale » se juge à la distance AFFICHÉE** (`distanceLue()`,
+  `adresse.js`, la même règle que le libellé) : au dixième, deux cartes
+  « à 12 km » laissaient un chantier tranquille d'un autre métier devant
+  une urgence du mien.
+
+> **Une règle que l'écran PASSE à une fonction pure vit dans le fichier pur,
+> elle aussi.** `verifier-demandes` donnait au tri SES propres règles
+> (`d.mien`, un tableau de rangs) : « mes métiers » mort, l'urgence à
+> l'envers, ma ville toujours « placée » passaient au vert. `reglesDuTri`,
+> `distanceDe` et `estPlace` vivent maintenant dans `tri-demandes.js`, et le
+> contrôle les fait tourner avec la VRAIE liste des urgences.
+>
+> **Une garde se vérifie par ce qu'elle CONTIENT, pas par ce qui la
+> précède.** `verifier-fil` cherchait `{!mienne && (` dans les 200
+> caractères avant « Contacter » : une garde vidée, le bouton laissé juste
+> dehors, passait. Il prend le corps de chaque garde et exige que CHAQUE
+> occurrence du bouton y soit.
+>
+> **Un contrôle de démonstration lit ce qui s'AFFICHE, et le compare au
+> modèle de la base pour son type.** `verifier-demo` ne lisait que
+> `acteurNom` (les initiales de l'avatar), jamais `texte` ; sa règle
+> « l'acteur est le client de la demande visée » était l'INVERSE de la base
+> pour un `*_accepte`, et bénissait un `rappel_accepte` envoyé à l'artisan,
+> que la base n'envoie jamais. La démonstration écrit maintenant mot pour
+> mot ce que `notifie_demande()` écrit ; et son ancienneté est comparée à
+> la sortie EXACTE de `relativeTime` (déménagée dans `formats.js`), plus à
+> un intervalle qui acceptait « Il y a 26 h ».
+
+**Vérifié** : 32 sabotages sur une copie, 31 refusés par la vérification
+visée, et une notification fidèle à la base ACCEPTÉE ; les 53 contrôles ;
+le linter (32, tous antérieurs) ; les paquets iOS et Android lus. Au
+navigateur, en démonstration : sa fiche montre la phrase et allume
+« Profil », celle d'un autre garde ses cinq boutons, celle de Maçonnerie
+Ferlane vue par un particulier aussi ; une demande publiée avec une ville
+tapée part sans erreur — la Base Adresse ne répond pas depuis le conteneur,
+donc la position retrouvée elle-même n'a pas été vue. **Pas vérifié** :
+rien sur l'iPhone ni sur la vraie base.
 
 ##### Les urgences par la position du téléphone — notée, PAS construite
 

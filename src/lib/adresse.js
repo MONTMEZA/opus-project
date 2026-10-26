@@ -216,14 +216,33 @@ export function distanceKm(lat1, lon1, lat2, lon2) {
  * rien du tout, plutôt qu'un tiret qui ferait croire à une panne.
  */
 export function libelleDistance(km) {
-  if (km === null || km === undefined || Number.isNaN(Number(km))) return null;
+  const lue = distanceLue(km);
+  if (lue === null) return null;
+  if (lue === 0) return 'dans votre commune';
+  return `à ${String(lue).replace('.', ',')} km`;
+}
+
+/**
+ * LA DISTANCE TELLE QU'ON LA LIT, en nombre — ou `null` si on ne la sait pas.
+ *
+ * Les trois paliers de `libelleDistance`, écrits UNE fois : 0 pour « dans
+ * votre commune », le demi-kilomètre sous 10 km, le kilomètre entier
+ * au-delà. Le tri des demandes s'en sert pour dire « à distance égale » :
+ * deux cartes qui affichent toutes les deux « à 12 km » sont à la même
+ * distance pour celui qui les lit, et c'est alors son métier et l'urgence
+ * qui les départagent (relecture du 26/10/2026). Comparer au dixième de
+ * kilomètre aurait laissé un chantier tranquille d'un autre métier devant
+ * une urgence du sien, sous deux distances identiques à l'écran.
+ *
+ * La fonction ne fait que monter avec la distance : un tri sur elle reste
+ * donc un vrai ordre.
+ */
+export function distanceLue(km) {
+  if (km === null || km === undefined || km === '' || Number.isNaN(Number(km))) return null;
   const d = Number(km);
-  if (d < 1) return 'dans votre commune';
-  if (d < 10) {
-    const arrondi = Math.round(d * 2) / 2;
-    return `à ${String(arrondi).replace('.', ',')} km`;
-  }
-  return `à ${Math.round(d)} km`;
+  if (d < 1) return 0;
+  if (d < 10) return Math.round(d * 2) / 2;
+  return Math.round(d);
 }
 
 /* ==========================================================================

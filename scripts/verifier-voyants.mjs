@@ -214,8 +214,12 @@ console.log('\n« Profil » ne s’allume que sur SA fiche');
 {
   verifier('la barre allume un onglet par simple égalité, sans exception pour `profilPro`',
     /const on = screen === key;/.test(nav) && !/profilPro/.test(nav));
+  /* `maFicheId` (`maFiche()`, `src/lib/ma-fiche.js`) : null chez un
+     particulier, la VRAIE fiche du compte sur la vraie base — la même
+     règle que les boutons de la fiche (relecture du 26/10/2026). */
   verifier('OpusApp passe « profil » seulement quand un PRO regarde SA propre fiche',
-    /screen=\{screen === 'profilPro' && userType === 'pro'\s*&& String\(viewedProId\) === String\(myProId\) \? 'profil' : screen\}/.test(app));
+    /screen=\{screen === 'profilPro' && !!maFicheId\s*&& String\(viewedProId\) === maFicheId \? 'profil' : screen\}/.test(app)
+    && /const maFicheId = maFiche\(\{ userType, /.test(app));
   verifier('un chantier n’est « le mien » que pour un compte pro',
     /estLeMien=\{userType === 'pro' && String\(chantierOuvert\.proId\) === String\(myProId\)\}/.test(app));
 }

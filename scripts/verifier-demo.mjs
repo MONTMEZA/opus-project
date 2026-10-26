@@ -123,20 +123,59 @@ console.log('\nLa démonstration ne se dément pas');
   verifier('chaque notification porte le nom de celui qui a vraiment agi',
     menteuses.length === 0, menteuses.map((n) => `notification ${n.id} (${n.acteurNom})`).join(', '));
 
-  /* Et une notification qui VISE une demande nomme le client de CETTE
-     demande. « Vous avez accepté un rappel » nommait Julie M., alors que le
-     rappel visé était celui de Sophie B. — le contrôle d'au-dessus ne le
-     voyait pas : Julie est bien une cliente, simplement pas celle-là
-     (relevé le 26/10/2026). */
+  /* LE NOM QU'ON LIT est dans `texte` — `acteurNom` ne donne que les
+     initiales de l'avatar (NotificationsScreen). Relecture du 26/10/2026 :
+     ce contrôle ne lisait jamais `texte`, et « Julie M. vous demande un
+     devis » sous l'avatar de Marc passait au vert. Le texte commence par le
+     nom de celui qui a agi, ou ne nomme personne ; et il ne contient le nom
+     d'aucun AUTRE client. */
+  const nomsClients = [...new Set(demo.initialDemandesRecues.map((d) => d.nom))];
+  const mauvaisTexte = demo.initialNotifications.filter((n) => {
+    const t = String(n.texte || '');
+    if (n.acteurNom && !t.startsWith(`${n.acteurNom} `)) return true;
+    return nomsClients.some((nom) => nom !== n.acteurNom && t.includes(nom));
+  });
+  verifier('le TEXTE affiché commence par le nom de celui qui a agi, et n’en nomme aucun autre',
+    mauvaisTexte.length === 0, mauvaisTexte.map((n) => `notification ${n.id} : « ${n.texte} »`).join(', '));
+
+  /* CE QUE LA BASE ENVOIE, type par type (`notifie_demande()`) — relecture
+     du 26/10/2026 : la règle d'avant exigeait le CLIENT pour acteur de toute
+     notification qui vise une demande, l'inverse de la base pour un
+     `*_accepte` ou un refus, qui partent vers le client AU NOM de l'artisan.
+     Et elle bénissait un `rappel_accepte` envoyé à l'artisan, que la base
+     n'envoie jamais. Chaque notification de demande reprend donc le MODÈLE
+     de la base pour son type, mot pour mot. */
   const demandesParId = new Map(demo.initialDemandesRecues.map((d) => [d.id, d]));
+  const ARRIVEE = {
+    devis: (nom) => `${nom} vous demande un devis`,
+    rappel: (nom) => `${nom} souhaite être rappelé`,
+    sos: (nom) => `${nom} a besoin de vous EN URGENCE`,
+  };
+  const REPONSE = {
+    devis_accepte: (pro) => `${pro} a accepté votre demande`,
+    rappel_accepte: (pro) => `${pro} a accepté votre demande`,
+    sos_accepte: (pro) => `${pro} a accepté votre demande`,
+    demande_refusee: (pro) => `${pro} ne peut pas donner suite`,
+  };
   const deTravers = demo.initialNotifications.filter((n) => {
     const cible = n.devisId || n.rappelId || n.sosId;
     if (!cible) return false;
-    const d = demandesParId.get(cible);
-    return !d || d.clientId !== n.acteurId || d.nom !== n.acteurNom;
+    if (ARRIVEE[n.type]) {
+      /* À l'ARRIVÉE d'une demande : l'artisan la reçoit, au nom du client. */
+      const d = demandesParId.get(cible);
+      return !d || d.genre !== n.type || d.clientId !== n.acteurId || d.nom !== n.acteurNom
+        || n.texte !== ARRIVEE[n.type](d.nom);
+    }
+    if (REPONSE[n.type]) {
+      /* La RÉPONSE : le client la reçoit, au nom de l'artisan — elle ne
+         vise donc jamais une demande que le compte a REÇUE. */
+      const pro = pros[n.acteurId];
+      return !pro || demandesParId.has(cible) || n.texte !== REPONSE[n.type](pro.entreprise);
+    }
+    return true;   // un type de demande que la base n'envoie pas
   });
-  verifier('une notification qui vise une demande nomme le client de cette demande',
-    deTravers.length === 0, deTravers.map((n) => `notification ${n.id} (${n.acteurNom})`).join(', '));
+  verifier('une notification de demande dit, mot pour mot, ce que la base envoie pour son type',
+    deTravers.length === 0, deTravers.map((n) => `notification ${n.id} (${n.type})`).join(', '));
 }
 
 /* DÉFAUT D11 DU TOURNAGE, tranché par le propriétaire le 26/10/2026 : le
@@ -165,27 +204,30 @@ console.log('\nLes urgences reçues tiennent debout');
 
   /* L'ANCIENNETÉ EST ÉCRITE DEUX FOIS : en texte dans `demo.js`
      (« Il y a 21 j ») et en durée dans `devis-demo.js`, qui date « depuis
-     une demande du … ». Les deux doivent dire la même chose — on lit le
-     texte comme un intervalle, sans réécrire la fonction qui le fabrique. */
-  const intervalle = (quand) => {
-    const MIN = 60_000; const H = 60 * MIN; const J = 24 * H;
-    let m;
-    if ((m = /^Il y a (\d+) min$/.exec(quand))) return [Number(m[1]) * MIN, (Number(m[1]) + 1) * MIN];
-    if ((m = /^Il y a (\d+) h$/.exec(quand))) return [Number(m[1]) * H, (Number(m[1]) + 1) * H];
-    if (quand === 'Hier') return [J, 2 * J];
-    if ((m = /^Il y a (\d+) j$/.exec(quand))) return [Number(m[1]) * J, (Number(m[1]) + 1) * J];
-    return null;
-  };
-  const maintenant = new Date('2026-10-26T12:00:00Z');
+     une demande du … ». Les deux doivent dire la même chose — et le texte
+     doit être EXACTEMENT celui que l'application écrirait : la règle
+     d'avant lisait un intervalle, et laissait passer « Il y a 26 h », que
+     l'application n'écrit jamais (elle dit « Hier ») — relecture du
+     26/10/2026. `relativeTime` vit dans `formats.js`, qui n'importe rien :
+     on la FAIT TOURNER. */
+  const { relativeTime } = await import('../src/lib/formats.js');
+  const maintenant = new Date('2026-10-26T12:00:00Z').getTime();
   const discordantes = demo.initialDemandesRecues.filter((d) => {
-    const iso = dateDeDemandeDemo(d.id, maintenant);
-    const borne = intervalle(d.quand);
-    if (!iso || !borne) return true;
-    const ecart = maintenant.getTime() - new Date(iso).getTime();
-    return ecart < borne[0] || ecart >= borne[1];
+    const iso = dateDeDemandeDemo(d.id, new Date(maintenant));
+    return !iso || relativeTime(iso, maintenant) !== d.quand;
   });
-  verifier('l’ancienneté écrite (« Il y a 21 j ») et la date calculée disent la même chose',
+  verifier('l’ancienneté écrite (« Il y a 21 j ») est mot pour mot celle que l’application écrirait',
     discordantes.length === 0, discordantes.map((d) => `${d.id} : « ${d.quand} »`).join(', '));
+  /* Et la notification d'arrivée d'une demande naît AVEC elle (même
+     transaction, dans la base) : même ancienneté. */
+  const parId = new Map(demo.initialDemandesRecues.map((d) => [d.id, d]));
+  const decalees = demo.initialNotifications.filter((n) => {
+    if (!['devis', 'rappel', 'sos'].includes(n.type)) return false;
+    const d = parId.get(n.devisId || n.rappelId || n.sosId);
+    return !d || n.time !== d.quand;
+  });
+  verifier('une notification d’arrivée a l’ancienneté de sa demande',
+    decalees.length === 0, decalees.map((n) => `notification ${n.id} : « ${n.time} »`).join(', '));
 }
 
 console.log('\nDe vraies photos, libres de droit, à la place des dégradés');

@@ -26,7 +26,7 @@ import { readFileSync } from 'node:fs';
 const {
   destinationNotif, TYPES_CONNUS, CIBLE_ATTENDUE, NOTIFS_PROFIL, photoActeur,
 } = await import('../src/lib/notifications.js');
-const { initialNotifications } = await import('../src/data/demo.js');
+const { initialNotifications, initialDemandesRecues } = await import('../src/data/demo.js');
 
 let echecs = 0;
 const lire = (f) => readFileSync(f, 'utf8');
@@ -632,11 +632,22 @@ verifier('…et elles couvrent les QUATRE destinations',
   `Couvertes : ${JSON.stringify(parQuoi)}. Une destination qu'aucun exemple `
   + 'n\'emprunte ne se vérifie nulle part sans fichier `.env`.');
 
+/* La propriété, et pas un TYPE : une notification qui mène à une demande
+   ACCEPTÉE (« En cours ») et une autre à une demande EN ATTENTE. Jusqu'au
+   26/10/2026, ce contrôle exigeait un type `*_accepte` — et bénissait ainsi
+   un `rappel_accepte` envoyé à l'artisan, que la base n'envoie jamais (elle
+   l'envoie au CLIENT). La démonstration passe désormais par l'arrivée d'un
+   rappel que le compte a accepté depuis : la pastille suit la demande. */
+const statutVise = (n) => {
+  const cible = n.devisId || n.rappelId || n.sosId;
+  const d = cible && initialDemandesRecues.find((x) => x.id === cible);
+  return d ? d.statut : null;
+};
 verifier('…dont une demande ACCEPTÉE, qui n\'ouvre pas la même pastille',
-  initialNotifications.some((n) => n.rappelId || n.devisId)
-  && initialNotifications.some((n) => /_accepte$/.test(n.type)),
+  initialNotifications.some((n) => ['accepte', 'acceptee'].includes(statutVise(n)))
+  && initialNotifications.some((n) => ['en_attente', 'envoyee'].includes(statutVise(n))),
   'C\'est le cas qui prouve que la pastille suit la DEMANDE et non le '
-  + 'type : « a accepté » vit dans « En cours ».');
+  + 'type : une demande acceptée vit dans « En cours ».');
 
 /* ------------------------------------------------------------------ */
 if (echecs) {

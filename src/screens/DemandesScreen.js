@@ -25,9 +25,11 @@ import SelecteurMetiers, { ChampMetier } from '../components/SelecteurMetiers';
 import { PastilleFiltre, PastilleBascule } from '../components/FiltresPlace';
 import { METIER_PAR_DEFAUT, nomMetier } from '../lib/metiers';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
-import { distanceKm, libelleDistance } from '../lib/adresse';
+import { libelleDistance } from '../lib/adresse';
 import { CLAVIER } from '../lib/clavier';
-import { trierDemandesOuvertes, phraseDuTriParDistance } from '../lib/tri-demandes';
+import {
+  trierDemandesOuvertes, phraseDuTriParDistance, reglesDuTri, distanceDe, estPlace,
+} from '../lib/tri-demandes';
 
 /**
  * UNE DEMANDE, isolée et mémorisée.
@@ -207,17 +209,16 @@ export default function DemandesScreen({
   const estLaMienne = (d) => !!monId && String(d.auteurId) === String(monId);
   const repondues = mesReponses || new Set();
   const jyAiRepondu = (d) => estPro && repondues.has(d.id);
-  const estPourMoi = (d) => estPro && mesMetiers.includes(d.metier);
+  /* LES RÈGLES DU TRI vivent dans `src/lib/tri-demandes.js`, que
+     `verifier-demandes` fait tourner : « mes métiers » et l'urgence, ici
+     comme sur le badge « Pour vous » de la carte — une seule écriture. */
+  const regles = reglesDuTri({ estPro, mesMetiers, clesUrgence: URGENCES.map((u) => u.cle) });
+  const estPourMoi = regles.pourMoi;
 
   /* La distance est calculée ici, à partir des coordonnées que la Base
      Adresse Nationale a déjà posées sur la demande et sur le profil. Elles
      ne servaient jusqu'ici qu'aux urgences. */
-  const avecDistance = demandes.map((d) => ({
-    ...d,
-    km: (moi && typeof moi.latitude === 'number' && typeof d.latitude === 'number')
-      ? distanceKm(moi.latitude, moi.longitude, d.latitude, d.longitude)
-      : null,
-  }));
+  const avecDistance = demandes.map((d) => ({ ...d, km: distanceDe(moi, d) }));
 
   const filtrees = avecDistance
     .filter((d) => (!filtreMetier || d.metier === filtreMetier))
@@ -229,13 +230,8 @@ export default function DemandesScreen({
      ne venait qu'en troisième, et la pastille disait « les plus proches »
      au-dessus d'un chantier à 80 km. La règle vit dans
      `src/lib/tri-demandes.js`, que `verifier-demandes` fait tourner. */
-  const rangUrgence = (d) => URGENCES.findIndex((u) => u.cle === (d.urgence || 'quand_possible'));
   const liste = estPro
-    ? trierDemandesOuvertes(filtrees, {
-      parDistance: triDistance,
-      pourMoi: estPourMoi,
-      rangUrgence,
-    })
+    ? trierDemandesOuvertes(filtrees, { parDistance: triDistance, ...regles })
     /* Un particulier ne voit que SES demandes : c'est ce que la base lui
        rend (section 30.1). La démonstration lui montrait celles des
        autres, juste sous la phrase qui dit le contraire (26/10/2026). */
@@ -245,7 +241,7 @@ export default function DemandesScreen({
   const phraseTri = estPro
     ? phraseDuTriParDistance({
       parDistance: triDistance,
-      moiLocalise: !!moi && typeof moi.latitude === 'number' && typeof moi.longitude === 'number',
+      moiLocalise: estPlace(moi),
       demandes: liste,
     })
     : null;

@@ -15,6 +15,7 @@ import {
   initialClients, initialReponsesAnnonces,
 } from '../data/demo';
 import { correspond } from './filtre-fil';
+import { relativeTime } from './formats';
 import { decouperPage, finDemo } from './page-fil';
 import { photoActeur } from './notifications';
 
@@ -575,16 +576,11 @@ function formatDate(iso) {
   return `${MOIS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** Temps relatif simple, comme "Il y a 2 h" dans le prototype. */
-export function relativeTime(iso) {
-  if (!iso) return "À l'instant";
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "À l'instant";
-  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)} h`;
-  if (diff < 172800) return 'Hier';
-  return `Il y a ${Math.floor(diff / 86400)} j`;
-}
+/* `relativeTime` vit dans `formats.js`, qui n'importe rien : la
+   démonstration écrit ses anciennetés à la main (« Il y a 21 j »), et
+   `verifier-demo` les compare à ce que CETTE fonction écrirait — elle ne
+   pouvait pas tourner ici, où l'on charge Supabase (relecture du 26/10). */
+export { relativeTime };
 
 /**
  * LES CONSEILS D'UN ARTISAN — version démonstration.
@@ -1457,12 +1453,19 @@ export const setSaved = !hasSupabase ? noop : async (postId, saved) => {
   }
 };
 
+/* L'ERREUR SE LIT. `postgrest-js` ne lève rien par défaut
+   (`shouldThrowOnError = false`) : sans ces lignes, un abonnement refusé
+   par la base laissait « Suivi ✓ » à l'écran jusqu'au rechargement —
+   relevé le 26/10/2026 sur sa PROPRE fiche, où la base refuse
+   (`pas_sabonner_a_soi_meme`). Un abonnement déjà en base (23505) n'est
+   pas un échec : c'est l'état demandé. */
 export const setFollow = !hasSupabase ? noop : async (proId, following) => {
-  if (following) {
-    await supabase.from('follows').insert({ follower_id: currentUserId, following_id: proId });
-  } else {
-    await supabase.from('follows').delete().eq('follower_id', currentUserId).eq('following_id', proId);
-  }
+  const { error } = following
+    ? await supabase.from('follows').insert({ follower_id: currentUserId, following_id: proId })
+    : await supabase.from('follows').delete().eq('follower_id', currentUserId).eq('following_id', proId);
+  if (!error || (following && error.code === '23505')) return;
+  if (error.code === '23514') throw new Error('on ne s’abonne pas à sa propre page.');
+  throw error;
 };
 
 export const addComment = !hasSupabase ? noop : async (postId, texte, parentId = null) => {

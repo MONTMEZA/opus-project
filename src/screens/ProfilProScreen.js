@@ -9,7 +9,7 @@ import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-nati
 import Slider from '@react-native-community/slider';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import {
-  C, F, T, S, GOUTTIERE, CARTE_PLEINE,
+  C, F, T, S, GOUTTIERE, CARTE_PLEINE, interligne,
 } from '../theme';
 import GlissementLateral from '../components/GlissementLateral';
 import { metierPrincipal, nomMetier } from '../lib/metiers';
@@ -91,6 +91,15 @@ export default function ProfilProScreen({
   /* Ses tarifs AFFICHÉS (section 47, lot T) — remplis par `OpusApp` pour un
      PARTICULIER seulement ; `null` pour tout autre compte. */
   tarifs = null,
+  /* C'EST MA FICHE — calculé par `OpusApp` avec `maFiche()`, jamais avec
+     `myProId` (chez un particulier, c'est le premier artisan chargé).
+     Décidé le 26/10/2026 pour les publications, et la raison vaut ici mot
+     pour mot : se suivre, se demander un devis, s'écrire, se noter ou se
+     signaler n'a pas de sens. Et « Suivre » y affichait une RÉUSSITE que
+     la base refuse (`pas_sabonner_a_soi_meme`) — relevé par la relecture
+     du 26/10 : l'artisan y arrive d'un appui sur le nom de SA
+     publication. */
+  mienne = false,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [rDelais, setRDelais] = useState(5);
@@ -184,20 +193,30 @@ export default function ProfilProScreen({
           <Stat value={avg.count ? decimal1(avg.global) : '—'} label="Note" />
         </View>
 
-        <View style={s.headBtns}>
-          <BtnMain label="Demander un devis" onPress={() => onContact(pro, 'devis')} />
-          <BtnOutline label={following ? 'Suivi ✓' : 'Suivre'} on={following} onPress={() => onFollow(pro.id)} />
-        </View>
+        {/* Sur SA fiche, une phrase à la place des boutons : sans elle, on
+            croirait qu'ils ont disparu pour tout le monde. */}
+        {mienne ? (
+          <Text style={s.noteMienne}>
+            C’est votre fiche : les boutons pour vous contacter s’affichent chez les autres.
+          </Text>
+        ) : (
+          <>
+            <View style={s.headBtns}>
+              <BtnMain label="Demander un devis" onPress={() => onContact(pro, 'devis')} />
+              <BtnOutline label={following ? 'Suivi ✓' : 'Suivre'} on={following} onPress={() => onFollow(pro.id)} />
+            </View>
 
-        <Pressable style={s.linkBtn} onPress={() => onContact(pro, 'message')}>
-          <MessageCircle size={13} color={C.accent2} />
-          <Text style={s.linkBtnText}>Envoyer un message</Text>
-        </Pressable>
+            <Pressable style={s.linkBtn} onPress={() => onContact(pro, 'message')}>
+              <MessageCircle size={13} color={C.accent2} />
+              <Text style={s.linkBtnText}>Envoyer un message</Text>
+            </Pressable>
+          </>
+        )}
 
         {/* Signaler ou bloquer ce profil. Discret — on ne le cherche que
             lorsqu'on en a besoin — mais toujours au même endroit, sous les
             boutons de contact, comme sur tous les réseaux. */}
-        {!!onSignaler && (
+        {!!onSignaler && !mienne && (
           <Pressable
             style={s.linkBtn}
             onPress={() => onSignaler({
@@ -310,7 +329,8 @@ export default function ProfilProScreen({
 
       {/* --- avis --- */}
       <SectionLabel
-        right={<BtnMini label={showForm ? 'Fermer' : 'Laisser un avis'} onPress={() => setShowForm((v) => !v)} />}
+        /* On ne se note pas soi-même : la base le refuse (`pas_dauto_avis`). */
+        right={mienne ? null : <BtnMini label={showForm ? 'Fermer' : 'Laisser un avis'} onPress={() => setShowForm((v) => !v)} />}
       >
         Avis clients
       </SectionLabel>
@@ -501,6 +521,10 @@ const s = StyleSheet.create({
   headBtns: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 8 },
   linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, justifyContent: 'center' },
   linkBtnText: { color: C.accent2, fontSize: T.courant, fontFamily: F.inter6 },
+  noteMienne: {
+    fontSize: T.petit, lineHeight: interligne(T.petit), color: C.muted, fontFamily: F.inter,
+    textAlign: 'center', paddingHorizontal: S.lg, marginBottom: S.sm,
+  },
   bio: {
     fontSize: T.courant, color: C.muted, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 4,
     textAlign: 'center', lineHeight: 18, fontFamily: F.inter,

@@ -2613,6 +2613,52 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   `verifier-demandes`). Éteinte, l'ancien ordre revient : mes métiers, puis
   l'urgence. Elle reste ALLUMÉE par défaut : la page s'ouvre donc par
   distance — à changer si vous préférez ouvrir sur vos métiers.
+
+**La relecture de ces décisions (26/10/2026, au soir)** — treize défauts
+confirmés, chacun reproduit puis contre-examiné. Corrigés à l'écran et dans
+les contrôles :
+
+- [x] **Sur SA PROPRE FICHE** (ouverte d'un appui sur le nom de sa
+  publication), l'artisan voyait encore « Suivre », « Demander un devis »,
+  « Envoyer un message », « Laisser un avis » et « Signaler ». C'est la
+  même raison que pour la publication : une phrase les remplace (« C'est
+  votre fiche : les boutons pour vous contacter s'affichent chez les
+  autres »). **Si vous préférez y garder les boutons, dites-le** : c'est
+  une ligne.
+- [x] **« Suivre » affichait une réussite que la base refusait** (on ne
+  s'abonne pas à soi-même) : l'erreur de la base n'était jamais lue.
+  Elle l'est, et l'affichage se défait s'il y a refus.
+- [x] **Une demande dont la ville était TAPÉE** (sans toucher de suggestion)
+  n'avait aucune position, et passait derrière un chantier à 300 km —
+  même urgente, de votre métier, dans votre commune. Sa position est
+  maintenant retrouvée au moment de publier, comme pour une annonce.
+- [x] **« À distance égale » se juge à la distance AFFICHÉE** : deux cartes
+  « à 12 km » sont à la même distance pour vous, et c'est alors votre
+  métier puis l'urgence qui les départagent. Au dixième près, une demande
+  tranquille d'un autre métier passait devant une urgence du vôtre.
+- [x] Trois contrôles qui laissaient passer des défauts (le tri, les boutons
+  de sa publication, les notifications de démonstration) vérifient
+  maintenant ce qui est AFFICHÉ, et ont été éprouvés en cassant : 31 défauts
+  remis exprès, 31 refusés.
+
+Ce qui reste, et qui touche la base (donc votre accord) :
+
+- [ ] **La base accepte qu'un compte se demande un devis, un rappel, une
+  urgence, ou s'écrive à lui-même.** L'écran ne le propose plus, mais un
+  client modifié le peut, et l'artisan se notifie alors sa propre demande.
+  La parade : une contrainte « pas soi-même » sur les quatre tables
+  (comme `pas_sabonner_a_soi_meme` sur les abonnements), posée **« not
+  valid »** parce que la vraie base contient **déjà une ligne de chaque**
+  (1 conversation, 1 demande de devis, 1 demande de rappel, relevées par
+  leur forme seulement). À ranger dans le lot S. Les retirer vous appartient
+  (le connecteur refuse un `delete`) : elles ne gênent rien.
+- [ ] **La base écrit « X souhaite être rappelé » pour tout le monde**,
+  Sophie comprise (`notifie_demande()`). Une tournure neutre — « X attend
+  votre appel » — se pose avec la prochaine migration (lot S). La
+  démonstration écrit mot pour mot ce que la base envoie, faute comprise.
+- [ ] Les « j'aime » et « enregistrer » ont la même forme que l'ancien
+  « Suivre » : une réponse de la base qui n'est pas lue. Moins grave (rien
+  ne les refuse aujourd'hui), à reprendre au passage.
 - [ ] **`supabase/seed.sql` ne peut plus être rejoué** (mesuré en
   transaction annulée) : ses comptes naissent particuliers, et
   `exige_un_compte_pro()` refuse leur fiche. Il reste un document, pas un

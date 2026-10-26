@@ -356,28 +356,81 @@ console.log('\nCe que l’écran promet au particulier, la base le tient');
 /* DÉCIDÉ PAR LE PROPRIÉTAIRE LE 26/10/2026 : « Les plus proches » trie
    VRAIMENT par distance. La distance ne venait qu'en troisième, après mes
    métiers et l'urgence : la pastille allumée laissait un chantier à 80 km
-   devant un autre à 3 km. La règle vit dans `src/lib/tri-demandes.js`, qui
-   n'importe rien : on la FAIT TOURNER. */
+   devant un autre à 3 km. La règle vit dans `src/lib/tri-demandes.js` :
+   on la FAIT TOURNER.
+
+   ET LES RÈGLES QUE L'ÉCRAN LUI PASSE AUSSI — relecture du 26/10/2026. Ce
+   bloc donnait au tri SES propres règles (`d.mien`, un tableau de rangs) :
+   trois sabotages de l'écran sur quatre passaient au vert (« mes métiers »
+   mort, l'urgence à l'envers, ma ville toujours « placée »). Les règles
+   vivent maintenant dans le fichier pur (`reglesDuTri`, `distanceDe`,
+   `estPlace`), et c'est ELLES qui tournent ici, avec la VRAIE liste des
+   urgences de `annonces.js`. */
 console.log('\n« Les plus proches » trie vraiment par distance');
 {
   const T = await import(new URL('../src/lib/tri-demandes.js', import.meta.url)).catch(() => ({}));
-  const { trierDemandesOuvertes: trier, phraseDuTriParDistance: phrase } = T;
-  verifier('`tri-demandes.js` s’ouvre avec node (il n’importe rien)',
-    typeof trier === 'function' && typeof phrase === 'function');
-  if (typeof trier === 'function' && typeof phrase === 'function') {
-    const RANG = { quand_possible: 0, ce_mois: 1, urgent: 2 };
-    const regles = (parDistance) => ({
-      parDistance,
-      pourMoi: (d) => d.mien === true,
-      rangUrgence: (d) => RANG[d.urgence] ?? 0,
+  const A = await import(new URL('../src/lib/adresse.js', import.meta.url)).catch(() => ({}));
+  const {
+    trierDemandesOuvertes: trier, phraseDuTriParDistance: phrase, reglesDuTri, distanceDe, estPlace,
+  } = T;
+  const { distanceLue, libelleDistance } = A;
+  const fonctions = [trier, phrase, reglesDuTri, distanceDe, estPlace, distanceLue, libelleDistance];
+  verifier('`tri-demandes.js` s’ouvre avec node (il n’importe que `adresse.js`)',
+    fonctions.every((f) => typeof f === 'function'));
+
+  /* LA VRAIE LISTE DES URGENCES, dans l'ordre du fichier : `annonces.js`
+     importe le thème, `node` ne sait pas l'ouvrir — on lit ses clés. */
+  const blocUrgences = (lire('src/data/annonces.js').match(/export const URGENCES = \[([\s\S]*?)\];/) || [])[1] || '';
+  const URG = [...blocUrgences.matchAll(/cle: '([a-z_]+)'/g)].map((m) => m[1]);
+  verifier('les urgences de `annonces.js` se lisent, de la moins à la plus pressée',
+    URG.join(',') === 'quand_possible,ce_mois,urgent', URG.join(','));
+
+  if (fonctions.every((f) => typeof f === 'function')) {
+    const reglesPro = reglesDuTri({ estPro: true, mesMetiers: ['macon', 'carreleur'], clesUrgence: URG });
+    const reglesPart = reglesDuTri({ estPro: false, mesMetiers: ['macon'], clesUrgence: URG });
+    verifier('« mes métiers » : un de mes métiers compte, un autre non',
+      reglesPro.pourMoi({ metier: 'macon' }) === true && reglesPro.pourMoi({ metier: 'plombier' }) === false);
+    verifier('…et seulement pour un professionnel', reglesPart.pourMoi({ metier: 'macon' }) === false);
+    const r = (u) => reglesPro.rangUrgence({ urgence: u });
+    verifier('l’urgence : « urgent » avant « ce mois-ci » avant « pas pressé »',
+      r('urgent') > r('ce_mois') && r('ce_mois') > r('quand_possible'), `${r('urgent')} ${r('ce_mois')} ${r('quand_possible')}`);
+    verifier('une urgence absente ou inconnue vaut « pas pressé », comme à l’écran',
+      r(undefined) === r('quand_possible') && r('nimporte') === r('quand_possible'));
+
+    verifier('un lieu placé porte une latitude ET une longitude, en nombres',
+      estPlace({ latitude: 43.6, longitude: 5.2 }) && !estPlace({ latitude: 43.6 })
+      && !estPlace({ latitude: '43.6', longitude: 5.2 }) && !estPlace({ latitude: NaN, longitude: 5.2 })
+      && !estPlace(null));
+    const lambesc = { latitude: 43.6539, longitude: 5.2626 };
+    verifier('la distance ne se calcule que si les DEUX sont placés',
+      typeof distanceDe(lambesc, { latitude: 43.5297, longitude: 5.4474 }) === 'number'
+      && distanceDe({ latitude: 43.65 }, { latitude: 43.5297, longitude: 5.4474 }) === null
+      && distanceDe(lambesc, { ville: 'Lambesc' }) === null);
+
+    /* LA DISTANCE LUE ne fait que monter : sans ça, le tri sur elle ne
+       serait pas un ordre. Et le libellé de la carte est la même règle. */
+    let monte = true;
+    let precedente = -1;
+    for (let k = 0; k <= 3000; k += 1) {
+      const lue = distanceLue(k / 10);
+      if (lue < precedente) monte = false;
+      precedente = lue;
+    }
+    verifier('la distance lue ne fait que monter avec la distance', monte);
+    const memes = [0.2, 0.8, 4.4, 4.6, 12.0, 12.4, 150].every((km) => {
+      const lue = distanceLue(km);
+      return libelleDistance(km) === (lue === 0 ? 'dans votre commune' : `à ${String(lue).replace('.', ',')} km`);
     });
+    verifier('le libellé de la carte et la distance lue sont la même règle', memes);
+
+    const regles = (parDistance) => ({ parDistance, ...reglesPro });
     const ids = (l) => l.map((d) => d.id).join(',');
     /* Le cas du tournage : un chantier URGENT, de MON métier, loin, contre
        un chantier tranquille, d'un autre métier, tout près. */
-    const loinUrgentMien = { id: 'loin', km: 80, urgence: 'urgent', mien: true };
-    const presTranquille = { id: 'pres', km: 3, urgence: 'quand_possible', mien: false };
-    const moyen = { id: 'moyen', km: 25, urgence: 'ce_mois', mien: false };
-    const sansLieu = { id: 'sans', km: null, urgence: 'urgent', mien: true };
+    const loinUrgentMien = { id: 'loin', km: 80, urgence: 'urgent', metier: 'macon' };
+    const presTranquille = { id: 'pres', km: 3, urgence: 'quand_possible', metier: 'plombier' };
+    const moyen = { id: 'moyen', km: 25, urgence: 'ce_mois', metier: 'peintre' };
+    const sansLieu = { id: 'sans', km: null, urgence: 'urgent', metier: 'macon' };
     const liste = [loinUrgentMien, sansLieu, moyen, presTranquille];
 
     verifier('pastille allumée : la plus proche d’abord, même tranquille et d’un autre métier',
@@ -386,20 +439,67 @@ console.log('\n« Les plus proches » trie vraiment par distance');
       trier(liste, regles(true)).at(-1).id === 'sans');
     verifier('pastille éteinte : mes métiers, puis l’urgence — la distance ne compte plus',
       ids(trier(liste, regles(false))) === 'loin,sans,moyen,pres', ids(trier(liste, regles(false))));
-    const egal1 = { id: 'e1', km: 10, urgence: 'quand_possible', mien: false };
-    const egal2 = { id: 'e2', km: 10, urgence: 'urgent', mien: false };
-    const egal3 = { id: 'e3', km: 10, urgence: 'quand_possible', mien: true };
+    const egal1 = { id: 'e1', km: 10, urgence: 'quand_possible', metier: 'peintre' };
+    const egal2 = { id: 'e2', km: 10, urgence: 'urgent', metier: 'peintre' };
+    const egal3 = { id: 'e3', km: 10, urgence: 'quand_possible', metier: 'macon' };
     verifier('à distance égale : mes métiers, puis l’urgence',
       ids(trier([egal1, egal2, egal3], regles(true))) === 'e3,e2,e1');
-    const a = { id: 'a', km: null, urgence: 'quand_possible', mien: false };
-    const b = { id: 'b', km: null, urgence: 'quand_possible', mien: false };
+
+    /* À DISTANCE LUE ÉGALE — deux cartes « à 12 km », « à 4,5 km » ou
+       « dans votre commune » : mon urgence passe devant, même un peu plus
+       loin au dixième. */
+    const paire = (kmMien, kmAutre) => ids(trier([
+      { id: 'autre', km: kmAutre, urgence: 'quand_possible', metier: 'peintre' },
+      { id: 'mien', km: kmMien, urgence: 'urgent', metier: 'macon' },
+    ], regles(true)));
+    verifier('à distance LUE égale, mon métier urgent passe devant (12,4 / 12,0 · 4,6 / 4,4 · 0,8 / 0,2)',
+      paire(12.4, 12.0) === 'mien,autre' && paire(4.6, 4.4) === 'mien,autre' && paire(0.8, 0.2) === 'mien,autre',
+      `${paire(12.4, 12.0)} · ${paire(4.6, 4.4)} · ${paire(0.8, 0.2)}`);
+    verifier('…mais un palier de plus reste plus loin (« à 13 km » après « à 12 km »)',
+      paire(12.6, 12.4) === 'autre,mien', paire(12.6, 12.4));
+    verifier('…et à tout égal, la plus proche au dixième d’abord',
+      ids(trier([{ id: 'b', km: 12.4, metier: 'peintre' }, { id: 'a', km: 12.0, metier: 'peintre' }], regles(true))) === 'a,b');
+
+    /* ENTRE ELLES, les demandes sans distance gardent l'ordre de la pastille
+       éteinte — le cas réel d'une fiche sans coordonnées (relecture du
+       26/10/2026 : aucun cas ne l'éprouvait). */
+    const sansAutre = { id: 'sans-autre', km: null, urgence: 'quand_possible', metier: 'peintre' };
+    const sansMien = { id: 'sans-mien', km: null, urgence: 'urgent', metier: 'macon' };
+    verifier('sans aucune distance, pastille allumée : mes métiers, puis l’urgence',
+      ids(trier([sansAutre, sansMien], regles(true))) === 'sans-mien,sans-autre');
+    verifier('…et derrière une demande placée, dans le même ordre',
+      ids(trier([sansAutre, sansMien, moyen], regles(true))) === 'moyen,sans-mien,sans-autre');
+
+    const a = { id: 'a', km: null, urgence: 'quand_possible', metier: 'peintre' };
+    const b = { id: 'b', km: null, urgence: 'quand_possible', metier: 'peintre' };
     verifier('à critères égaux, l’ordre reçu (le plus récent d’abord) est gardé',
       ids(trier([a, b], regles(true))) === 'a,b' && ids(trier([b, a], regles(false))) === 'b,a');
-    /* L'ancien comparateur rendait « égal » dès qu'UNE distance manquait :
-       ce n'est pas un ordre, et le résultat dépendait de l'ordre d'arrivée. */
-    const p1 = trier([sansLieu, moyen, presTranquille], regles(true));
-    const p2 = trier([presTranquille, moyen, sansLieu], regles(true));
-    verifier('le résultat ne dépend pas de l’ordre d’arrivée', ids(p1) === ids(p2), `${ids(p1)} / ${ids(p2)}`);
+    /* UN VRAI ORDRE : sur des demandes toutes différentes, le résultat ne
+       dépend pas de l'ordre d'arrivée — les 120 façons de les recevoir. */
+    const cinq = [
+      { id: 'c1', km: 12.4, urgence: 'urgent', metier: 'macon' },
+      { id: 'c2', km: 12.0, urgence: 'quand_possible', metier: 'peintre' },
+      { id: 'c3', km: null, urgence: 'urgent', metier: 'macon' },
+      { id: 'c4', km: null, urgence: 'quand_possible', metier: 'peintre' },
+      { id: 'c5', km: 3, urgence: 'ce_mois', metier: 'plombier' },
+    ];
+    const permutations = (l) => (l.length <= 1 ? [l]
+      : l.flatMap((x, i) => permutations([...l.slice(0, i), ...l.slice(i + 1)]).map((p) => [x, ...p])));
+    /* Pastille éteinte, la distance ne compte plus : cinq demandes qui
+       diffèrent par (mon métier, urgence), sinon deux ex aequo gardent
+       l'ordre reçu, et c'est voulu. */
+    const cinqEteinte = [
+      { id: 'd1', urgence: 'urgent', metier: 'macon' },
+      { id: 'd2', urgence: 'ce_mois', metier: 'macon' },
+      { id: 'd3', urgence: 'quand_possible', metier: 'macon' },
+      { id: 'd4', urgence: 'urgent', metier: 'peintre' },
+      { id: 'd5', urgence: 'ce_mois', metier: 'peintre' },
+    ];
+    for (const [parDistance, jeu] of [[true, cinq], [false, cinqEteinte]]) {
+      const resultats = new Set(permutations(jeu).map((p) => ids(trier(p, regles(parDistance)))));
+      verifier(`le résultat ne dépend pas de l’ordre d’arrivée (pastille ${parDistance ? 'allumée' : 'éteinte'}, 120 ordres)`,
+        resultats.size === 1, [...resultats].join(' / '));
+    }
     verifier('une distance NaN compte comme absente',
       trier([{ id: 'n', km: NaN }, { id: 'k', km: 5 }], regles(true))[0].id === 'k');
     /* Sur une liste NEUVE : `liste`, triée plus haut, aurait pu revenir
@@ -418,21 +518,69 @@ console.log('\n« Les plus proches » trie vraiment par distance');
     verifier('phrase : ma ville sans coordonnées — le tri NE PEUT PAS se faire, et on le dit',
       /tri par distance ne peut pas se faire/.test(
         phrase({ parDistance: true, moiLocalise: false, demandes: liste }) || ''));
-    verifier('phrase : les demandes sans lieu précis sont annoncées en fin de liste',
-      phrase({ parDistance: true, moiLocalise: true, demandes: liste }) === '1 demande sans lieu précis est en fin de liste.'
-      && phrase({ parDistance: true, moiLocalise: true, demandes: [sansLieu, { ...sansLieu, id: 's2' }] })
-        === '2 demandes sans lieu précis sont en fin de liste.');
+    const NB = ' ';
+    verifier('phrase : les demandes non placées sont annoncées en fin de liste',
+      phrase({ parDistance: true, moiLocalise: true, demandes: liste })
+        === `1 demande n’est pas placée sur la carte${NB}: elle est en fin de liste.`
+      && phrase({ parDistance: true, moiLocalise: true, demandes: [sansLieu, { ...sansLieu, id: 's2' }, moyen] })
+        === `2 demandes ne sont pas placées sur la carte${NB}: elles sont en fin de liste.`);
+    /* Quand AUCUNE ne l'est, il n'y a pas de « fin de liste » (relecture du
+       26/10/2026) : la liste entière est dans l'autre ordre. */
+    const toutes = phrase({ parDistance: true, moiLocalise: true, demandes: [sansLieu, sansAutre] }) || '';
+    const une = phrase({ parDistance: true, moiLocalise: true, demandes: [sansLieu] }) || '';
+    verifier('phrase : aucune demande placée — ni « fin de liste », mais l’ordre réellement suivi',
+      !/fin de liste/.test(toutes) && /rangées par métier, puis par urgence/.test(toutes)
+      && !/fin de liste/.test(une) && /ne se calcule pas/.test(une), `${toutes} / ${une}`);
+    /* LA TYPOGRAPHIE : à 320 points, « Modifier mon profil » se coupait
+       entre le guillemet et le mot (mesuré dans Chromium). */
+    const phrases = [
+      phrase({ parDistance: true, moiLocalise: false, demandes: liste }),
+      phrase({ parDistance: true, moiLocalise: true, demandes: liste }),
+      phrase({ parDistance: true, moiLocalise: true, demandes: [sansLieu, { ...sansLieu, id: 's2' }, moyen] }),
+      toutes, une,
+    ];
+    verifier('aucune espace ordinaire devant « : » ni contre un guillemet',
+      phrases.every((t) => t && !/ [:;!?»]|« /.test(t)), phrases.find((t) => !t || / [:;!?»]|« /.test(t)) || '');
   }
 
   const ecran = readFileSync('src/screens/DemandesScreen.js', 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  verifier('l’écran trie par la règle commune, avec l’état de la pastille',
-    /trierDemandesOuvertes\(filtrees, \{\s*parDistance: triDistance,/.test(ecran));
-  verifier('…et il n’a plus de comparateur à lui', !/\[\.\.\.filtrees\]\.sort\(/.test(ecran));
-  verifier('l’écran affiche ce que le tri n’a pas pu faire',
-    /phraseDuTriParDistance\(\{/.test(ecran) && /\{phraseTri && <Text/.test(ecran));
+  /* L'ÉCRAN NE FAIT QUE PASSER SES DONNÉES : la forme EXACTE de chaque
+     appel, parce que c'est là que les sabotages de la relecture passaient
+     (`pourMoi: () => false`, `moiLocalise: true`, l'urgence à l'envers). */
+  verifier('l’écran prend ses règles dans le fichier pur, avec la vraie liste des urgences',
+    /const regles = reglesDuTri\(\{ estPro, mesMetiers, clesUrgence: URGENCES\.map\(\(u\) => u\.cle\) \}\);/.test(ecran)
+    && (ecran.match(/\bregles\s*=/g) || []).length === 1);
+  verifier('…le badge « Pour vous » est la MÊME règle que le tri',
+    /const estPourMoi = regles\.pourMoi;/.test(ecran) && /mien=\{estPourMoi\(d\)\}/.test(ecran)
+    && (ecran.match(/\bestPourMoi\s*=/g) || []).length === 1);
+  verifier('…la distance vient de `distanceDe(moi, d)`',
+    /km: distanceDe\(moi, d\)/.test(ecran) && !/distanceKm\(/.test(ecran));
+  verifier('l’écran trie par la règle commune, avec l’état de la pastille, et rien d’autre',
+    /trierDemandesOuvertes\(filtrees, \{ parDistance: triDistance, \.\.\.regles \}\)/.test(ecran));
+  verifier('…et il n’a plus de comparateur à lui', !/\.sort\(/.test(ecran));
+  verifier('l’écran affiche ce que le tri n’a pas pu faire, avec MA position réelle',
+    /phraseDuTriParDistance\(\{/.test(ecran) && /moiLocalise: estPlace\(moi\),/.test(ecran)
+    && /\{phraseTri && <Text/.test(ecran));
   verifier('la pastille reste allumée par défaut (la liste s’ouvre par distance)',
     /const \[triDistance, setTriDistance\] = useState\(true\);/.test(ecran));
+
+  /* UNE VILLE TAPÉE SANS TOUCHER DE SUGGESTION n'avait aucune coordonnée,
+     et la demande passait derrière un chantier à 300 km (relecture du
+     26/10/2026). `publierDemande` la complète AVANT d'écrire, comme
+     l'annonce, le profil et la publication. */
+  const app = readFileSync('src/OpusApp.js', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const iDebut = app.indexOf('const publierDemande = async');
+  const corps = iDebut < 0 ? '' : app.slice(iDebut, app.indexOf('const repondreDemande', iDebut));
+  const iLieu = corps.indexOf('completerLieu(');
+  const iEcrire = corps.indexOf('api.createDemande(');
+  const appel = iEcrire < 0 ? '' : corps.slice(iEcrire, corps.indexOf('});', iEcrire));
+  verifier('une demande complète son lieu AVANT d’être écrite',
+    iLieu > 0 && iEcrire > iLieu, `completerLieu à ${iLieu}, createDemande à ${iEcrire}`);
+  verifier('…et ce sont les coordonnées complétées qui partent',
+    /latitude: lieu\.latitude,/.test(appel) && /longitude: lieu\.longitude,/.test(appel));
+  verifier('…sans jamais refuser la demande pour ça',
+    /try \{\s*lieu = await completerLieu\(lieu\);\s*\} catch/.test(corps));
 }
 
 console.log('');

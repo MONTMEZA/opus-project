@@ -402,3 +402,23 @@ export function dansIntervalle(iso, debut, fin) {
   if (!fin) return iso === debut;
   return iso >= debut && iso <= fin;
 }
+
+/**
+ * « Il y a 2 h », « Hier », « Il y a 21 j » — l'ancienneté telle que
+ * l'application l'écrit partout (fil, demandes, notifications).
+ *
+ * Déménagée de `api.js` le 26/10/2026 : la démonstration écrit ses
+ * anciennetés à la main, et `verifier-demo` les compare à ce que cette
+ * fonction écrirait — « Il y a 26 h » passait un contrôle trop large alors
+ * que l'application n'écrit jamais d'heures au-delà de 24 (elle dit
+ * « Hier »). `maintenant` ne sert qu'aux contrôles.
+ */
+export function relativeTime(iso, maintenant = Date.now()) {
+  if (!iso) return "À l'instant";
+  const diff = (maintenant - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "À l'instant";
+  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)} h`;
+  if (diff < 172800) return 'Hier';
+  return `Il y a ${Math.floor(diff / 86400)} j`;
+}

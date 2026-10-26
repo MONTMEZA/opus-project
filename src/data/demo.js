@@ -432,17 +432,24 @@ export const initialNotifications = [
   { id: 5, type: 'annonce', texte: 'Belvanne Élec a répondu à « 300 parpaings creux, jamais utilisés »',
     acteurId: 2, acteurNom: 'Belvanne Élec',
     annonceId: 'a3', lue: false, time: 'Il y a 2 h' },
-  /* Une demande de devis EN ATTENTE : elle ouvre la pastille « À traiter ». */
+  /* Une demande de devis EN ATTENTE : elle ouvre la pastille « À traiter ».
+     Écrite par la base AU DÉPÔT de la demande : même ancienneté qu'elle
+     (« Il y a 3 h » contre « Il y a 2 h » jusqu'au 26/10/2026). */
   { id: 6, type: 'devis', texte: 'Marc Dumont vous demande un devis',
     acteurId: 'u-marc', acteurNom: 'Marc Dumont',
-    devisId: 'dr-devis-1', lue: false, time: 'Il y a 3 h' },
-  /* Un rappel ACCEPTÉ : il ouvre « En cours », et pas « À traiter ». C'est
-     tout l'intérêt de viser la demande et pas la page — c'est là que vit le
-     numéro de téléphone du client. */
-  /* Le rappel est celui de Sophie B. (`dr-rappel-1`) : la notification
-     nommait Julie M., qui ne l'a jamais demandé. `verifier-demo` compare
-     désormais l'acteur d'une notification au client de la demande visée. */
-  { id: 7, type: 'rappel_accepte', texte: 'Vous avez accepté un rappel',
+    devisId: 'dr-devis-1', lue: false, time: 'Il y a 2 h' },
+  /* L'arrivée d'un rappel que le compte a ACCEPTÉ depuis : la toucher ouvre
+     « En cours », et pas « À traiter ». C'est tout l'intérêt de viser la
+     demande et pas la page — c'est là que vit le numéro de téléphone du
+     client.
+     Jusqu'au 26/10/2026, c'était un `rappel_accepte` « Vous avez accepté un
+     rappel » : la base n'envoie JAMAIS ce type à l'artisan — elle l'envoie
+     au CLIENT, au nom de l'artisan (`notifie_demande()`). Le texte est donc
+     mot pour mot celui que la base écrit à l'arrivée d'un rappel, accord
+     compris (voir `docs/A-FAIRE.md` : la base écrit « rappelé » pour tout
+     le monde). `verifier-demo` compare chaque notification au modèle de la
+     base pour son type. */
+  { id: 7, type: 'rappel', texte: 'Sophie B. souhaite être rappelé',
     acteurId: 'u-sophie', acteurNom: 'Sophie B.',
     rappelId: 'dr-rappel-1', lue: true, time: 'Hier' },
   /* Et une qui mène à SA PROPRE FICHE. */
