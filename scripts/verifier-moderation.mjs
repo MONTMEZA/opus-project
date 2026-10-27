@@ -149,14 +149,21 @@ console.log('\nLot S-b — le blocage ferme aussi ce qu’on écrit (R-B)');
      inatteignable, au vert). */
   const rattache = profondeur.indexOf('new.parent_id := grand_parent;');
   const apres = rattache >= 0 ? profondeur.slice(rattache) : '';
-  verifier('…et le commentaire d’ORIGINE du fil doit être lisible lui aussi : relu JUSTE APRÈS le rattachement, refusé sinon',
-    rattache > 0 && /^new\.parent_id := grand_parent;\s+perform 1 from public\.comments where id = grand_parent;\s+if not found then\s+raise exception 'Le commentaire parent n''existe pas';/.test(apres));
+  /* Lisible ET sous la même publication (troisième relecture du 27/10) :
+     une réponse incohérente écrite avant la règle servait de marchepied,
+     le parent direct était bien sous la publication déclarée, le
+     commentaire d'origine non. */
+  verifier('…et le commentaire d’ORIGINE du fil doit être lisible ET sous la même publication : relu JUSTE APRÈS le rattachement, refusé sinon',
+    rattache > 0 && /^new\.parent_id := grand_parent;\s+select post_id into post_d_origine\s+from public\.comments where id = grand_parent;\s+if not found or post_d_origine is distinct from new\.post_id then\s+raise exception 'Le commentaire parent n''existe pas';/.test(apres));
   /* ET LA MÊME PUBLICATION (seconde relecture du 27/10) : la lecture des
      commentaires ne filtre que leur auteur ; une réponse qui déclarait une
      autre publication que son parent s'accrochait au fil d'une publication
      cachée. Comparé à l'écriture qui pose le lien, pas à l'anonymisation. */
-  verifier('…et une réponse vit sous la publication de son parent (`post_du_parent is distinct from new.post_id`, à l’insertion ou quand le lien change)',
-    /select parent_id, post_id into grand_parent, post_du_parent\s+from public\.comments where id = new\.parent_id;\s+if not found\s+or \(\(tg_op = 'INSERT'\s+or new\.post_id is distinct from old\.post_id\s+or new\.parent_id is distinct from old\.parent_id\)\s+and post_du_parent is distinct from new\.post_id\) then/.test(profondeur));
+  /* Une écriture qui ne touche pas au lien (corriger son texte,
+     l'anonymisation) sort AVANT la recherche — et seulement elle : le
+     test porte sur les DEUX colonnes du lien (troisième relecture). */
+  verifier('…et une réponse vit sous la publication de son parent : seule une modification qui ne touche pas au lien sort avant, puis `post_du_parent is distinct from new.post_id` refuse',
+    /if new\.parent_id is null then return new; end if;\s+if tg_op = 'UPDATE'\s+and new\.post_id is not distinct from old\.post_id\s+and new\.parent_id is not distinct from old\.parent_id then\s+return new;\s+end if;\s+select parent_id, post_id into grand_parent, post_du_parent\s+from public\.comments where id = new\.parent_id;\s+if not found or post_du_parent is distinct from new\.post_id then\s+raise exception/.test(profondeur));
   /* UN « J'AIME » ET UN ABONNEMENT NE SE DÉPLACENT PAS : la porte UPDATE de
      `for all` gonflait les compteurs sans limite (relecture du 26/10). */
   const revokeLikes = sqlCode.indexOf('revoke update on public.post_likes, public.follows from anon, authenticated;');
@@ -316,6 +323,7 @@ console.log('\nLot S-b — ce qu’un contrôle de texte doit pouvoir voir (rele
      annule ce que le blocage ferme. Un nom nouveau sur ces tables se
      décide, et se met dans cette liste. */
   const ATTENDUES = {
+    posts: ['ecriture mes posts', 'lecture posts', 'lecture posts visiteur'],
     post_likes: ['lecture likes', 'mes likes'],
     follows: ['lecture follows', 'mes follows'],
     comments: ['lecture comments', 'lecture comments visiteur', 'mes comments'],
@@ -367,7 +375,7 @@ console.log('\nLot S-b — les formes ENTIÈRES des règles nouvelles (seconde r
   const FORMES = {
     "tait_les_notifications_bloquees": ") returns trigger language plpgsql security definer set search_path = public as $$ begin if new.acteur_id is null or new.type in ('demande_pro_nouvelle') then return new; end if; if exists (select 1 from public.blocages b where b.bloqueur_id = new.user_id and b.bloque_id = new.acteur_id) then return null; end if; if new.comment_id is not null and exists (select 1 from public.blocages b where b.bloqueur_id = new.acteur_id and b.bloque_id = new.user_id) then return null; end if; return new; end;",
     "calcule_client_verifie": ") returns trigger language plpgsql security definer set search_path = public as $$ begin if tg_op = 'UPDATE' and new.author_id is null then new.client_verifie := old.client_verifie; return new; end if; new.client_verifie := exists ( select 1 from public.quote_requests q where q.client_id = new.author_id and q.professional_id = new.professional_id and q.statut in ('accepte', 'termine') ) or exists ( select 1 from public.callback_requests c where c.client_id = new.author_id and c.professional_id = new.professional_id and c.statut in ('accepte', 'termine') ) or exists ( select 1 from public.sos_requests s where s.client_id = new.author_id and s.professional_id = new.professional_id and s.statut in ('acceptee', 'termine') ); return new; end;",
-    "limite_profondeur_commentaire": ") returns trigger language plpgsql set search_path = public as $$ declare grand_parent uuid; post_du_parent uuid; begin if new.parent_id is null then return new; end if; select parent_id, post_id into grand_parent, post_du_parent from public.comments where id = new.parent_id; if not found or ((tg_op = 'INSERT' or new.post_id is distinct from old.post_id or new.parent_id is distinct from old.parent_id) and post_du_parent is distinct from new.post_id) then raise exception 'Le commentaire parent n''existe pas'; end if; if grand_parent is not null then new.parent_id := grand_parent; perform 1 from public.comments where id = grand_parent; if not found then raise exception 'Le commentaire parent n''existe pas'; end if; end if; return new; end;",
+    "limite_profondeur_commentaire": ") returns trigger language plpgsql set search_path = public as $$ declare grand_parent uuid; post_du_parent uuid; post_d_origine uuid; begin if new.parent_id is null then return new; end if; if tg_op = 'UPDATE' and new.post_id is not distinct from old.post_id and new.parent_id is not distinct from old.parent_id then return new; end if; select parent_id, post_id into grand_parent, post_du_parent from public.comments where id = new.parent_id; if not found or post_du_parent is distinct from new.post_id then raise exception 'Le commentaire parent n''existe pas'; end if; if grand_parent is not null then new.parent_id := grand_parent; select post_id into post_d_origine from public.comments where id = grand_parent; if not found or post_d_origine is distinct from new.post_id then raise exception 'Le commentaire parent n''existe pas'; end if; end if; return new; end;",
     "tient_l_urgence": ") returns trigger language plpgsql security invoker set search_path = public as $$ begin if current_user not in ('authenticated', 'anon') then return new; end if; if not exists ( select 1 from public.sos_availability sa join public.professional_profiles pp on pp.id = sa.professional_id join public.tarifs_pro t on t.pro_id = sa.professional_id where sa.professional_id = new.professional_id and sa.metier_key = new.metier_key and sa.actif and pp.metiers @> array[public.metier_du_sos(sa.metier_key)] and t.affiche is true and t.frais_deplacement_centimes is not null and t.taux_horaire_centimes is not null and t.majoration_pct is not null) then raise exception 'Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.' using errcode = 'OP025'; end if; return new; end;",
     "tient_le_compteur_d_annonce": ") returns trigger language plpgsql security invoker set search_path = public as $$ begin if current_user in ('authenticated', 'anon') then if tg_op = 'INSERT' then new.nb_reponses := 0; else new.nb_reponses := old.nb_reponses; end if; end if; return new; end;",
     "tient_le_compteur_de_demande": ") returns trigger language plpgsql security invoker set search_path = public as $$ begin if current_user in ('authenticated', 'anon') then if tg_op = 'INSERT' then new.nb_reponses := 0; else new.nb_reponses := old.nb_reponses; end if; end if; return new; end;",
@@ -387,6 +395,55 @@ console.log('\nLot S-b — les formes ENTIÈRES des règles nouvelles (seconde r
     const vu = forme(unePolitique(nom, table));
     verifier(`« ${nom} » a exactement la forme relue et éprouvée par l’essai 51 b`, vu === attendu,
       vu ? `reçu : ${vu}` : `${politiques(nom, table).length} création(s)`);
+  }
+  /* LES LECTURES QUE LE BLOCAGE MASQUE, entières (troisième relecture du
+     27/10) : la présence de `not public.est_masque(...)` « quelque part »
+     laissait passer un `or true` ajouté au bout, ou une seconde branche
+     `or auth.uid() in (…)` — et les textes promettent « masquées des deux
+     côtés ». Ces politiques sont créées deux fois dans le fichier (l'ancienne
+     forme, puis la nouvelle) : c'est la DERNIÈRE qui compte dans la base. */
+  const derniereForme = (nom, cible) => {
+    const toutes = [...sqlCode.matchAll(new RegExp(`create policy "${nom}" on ${cible.replace('.', '\\.')}\\b([\\s\\S]*?);`, 'g'))];
+    return toutes.length ? forme(toutes[toutes.length - 1][1]) : null;
+  };
+  const LECTURES = [
+    ['lecture posts', 'public.posts', 'for select to authenticated using (not public.est_masque(author_id))'],
+    ['lecture comments', 'public.comments', 'for select to authenticated using (not public.est_masque(author_id))'],
+    ['mes conversations', 'public.conversations', 'for select to authenticated using ( (auth.uid() = client_id and not public.est_masque(professional_id)) or (auth.uid() = professional_id and not public.est_masque(client_id)) )'],
+    ['lecture mes messages', 'public.messages', 'for select to authenticated using ( not public.est_masque(sender_id) and exists ( select 1 from public.conversations c where c.id = messages.conversation_id and (c.client_id = auth.uid() or c.professional_id = auth.uid())))'],
+    ['lecture piece jointe', 'storage.objects', "for select to authenticated using ( bucket_id = 'pieces-jointes' and exists ( select 1 from public.conversations c where c.id::text = (storage.foldername(name))[2] and (c.client_id = auth.uid() or c.professional_id = auth.uid()) and not public.est_masque(c.client_id) and not public.est_masque(c.professional_id)))"],
+  ];
+  for (const [nom, cible, attendu] of LECTURES) {
+    const vu = derniereForme(nom, cible);
+    verifier(`« ${nom} » (la dernière créée) a exactement la forme qui masque sous blocage`, vu === attendu,
+      vu ? `reçu : ${vu}` : 'introuvable');
+  }
+  /* LES DÉCLENCHEURS, entiers (troisième relecture du 27/10) : les formes
+     ci-dessus comparaient les FONCTIONS, jamais ce qui les appelle. Une
+     clause `when (…)`, un événement retiré (`before update` seul) éteignait
+     la règle — et tout restait au vert. */
+  const DECLENCHEURS = [
+    'create or replace trigger trg_tient_le_partenariat before insert or update on public.professional_partners for each row execute function public.tient_le_partenariat();',
+    'create or replace trigger trg_tait_les_notifications_bloquees before insert on public.notifications for each row execute function public.tait_les_notifications_bloquees();',
+    'create or replace trigger trg_tient_la_demande_devis before update on public.quote_requests for each row execute function public.tient_la_demande();',
+    'create or replace trigger trg_tient_la_demande_rappel before update on public.callback_requests for each row execute function public.tient_la_demande();',
+    'create or replace trigger trg_tient_la_demande_sos before update on public.sos_requests for each row execute function public.tient_la_demande();',
+    'create or replace trigger trg_tient_l_urgence before insert on public.sos_requests for each row execute function public.tient_l_urgence();',
+    'create or replace trigger trg_tient_le_compteur_d_annonce before insert or update on public.annonces_pro for each row execute function public.tient_le_compteur_d_annonce();',
+    'create or replace trigger trg_maj_nb_reponses_demande after insert or delete on public.demande_reponses for each row execute function public.maj_nb_reponses_demande();',
+    'create or replace trigger trg_tient_le_compteur_de_demande before insert or update on public.demandes for each row execute function public.tient_le_compteur_de_demande();',
+    'create or replace trigger trg_tient_la_reponse before update on public.demande_reponses for each row execute function public.tient_la_reponse();',
+    'create or replace trigger trg_tient_la_reponse before update on public.annonce_reponses for each row execute function public.tient_la_reponse();',
+    'create or replace trigger trg_tient_le_lien_du_devis before insert or update of quote_request_id, sos_request_id on public.devis for each row execute function public.tient_le_lien_du_devis();',
+    'create trigger trg_limite_profondeur_commentaire before insert or update on public.comments for each row execute function public.limite_profondeur_commentaire();',
+    'create trigger trg_reviews_client_verifie before insert or update on public.reviews for each row execute function public.calcule_client_verifie();',
+  ];
+  for (const attendu of DECLENCHEURS) {
+    const [, nom, table] = attendu.match(/trigger (\w+) .* on public\.(\w+) for each row/);
+    const vus = [...sqlCode.matchAll(new RegExp(`create\\s+(?:or\\s+replace\\s+)?trigger\\s+"?${nom}"?\\b[^;]*;`, 'gi'))]
+      .map((m) => forme(m[0])).filter((d) => new RegExp(`\\son\\s+(?:"?public"?\\s*\\.\\s*)?"?${table}"?\\s`, 'i').test(d));
+    verifier(`le déclencheur \`${nom}\` sur \`${table}\` a exactement sa forme (événements, aucune clause \`when\`)`,
+      vus.length === 1 && vus[0] === attendu, vus.join(' | ') || 'introuvable');
   }
 }
 
@@ -412,6 +469,23 @@ console.log('\nLot S-b — une lecture TOLÉRANTE du même SQL (seconde relectur
     ['session_replication_role', /\bsession_replication_role\b/i],
   ];
   for (const [nom, motif] of interditsI) verifier(`(tolérant) \`schema.sql\` ne contient aucun \`${nom}\`, quelle que soit sa casse`, !motif.test(t));
+  /* TOUT LE SQL DE `schema.sql` EST EN MINUSCULES (troisième relecture du
+     27/10) : une politique recréée en MAJUSCULES sous le même nom, plus
+     bas, remplaçait la règle sans qu'aucun motif ne la voie. Plutôt que de
+     rendre chaque motif insensible à la casse, on refuse la casse : un mot
+     clé du DDL écrit autrement qu'en minuscules, hors des chaînes. */
+  const sansChaines = t.replace(/'(?:[^']|'')*'/g, "''");
+  const enCapitales = [...sansChaines.matchAll(/\b(create|drop|alter|grant|revoke|policy|trigger|function|routine|procedure|security|definer|disable|enable|replica|execute|on|to|using)\b/gi)]
+    .filter((m) => m[0] !== m[0].toLowerCase()).map((m) => sansChaines.slice(m.index, m.index + 40).replace(/\s+/g, ' '));
+  verifier('(tolérant) aucun mot clé SQL n’est écrit autrement qu’en minuscules (hors chaînes et commentaires)',
+    enCapitales.length === 0, enCapitales.slice(0, 3).join(' | '));
+  /* …et leurs SYNONYMES : `alter routine`, `drop routine`, une procédure. */
+  verifier('(tolérant) aucun `alter`/`drop`/`create` de `routine` ou de `procedure`',
+    !/\b(alter|drop|create(\s+or\s+replace)?)\s+(routine|procedure)\b/i.test(t));
+  /* …et aucun droit accordé « sur toutes les tables » : il rouvrirait d'un
+     coup chaque `revoke` du fichier. */
+  verifier('(tolérant) aucun `grant … on all tables|sequences|functions|routines in schema`',
+    !/\bgrant\s[^;]*\bon\s+all\s+(tables|sequences|functions|routines|procedures)\s+in\s+schema\b/i.test(t));
   const ID = '(?:"([^"]+)"|(\\w+))';
   const SCH = '(?:(?:"\\w+"|\\w+)\\s*\\.\\s*)?';
   /* les déclencheurs : nom et table, schéma facultatif ; et aucun `drop
@@ -453,7 +527,7 @@ console.log('\nLot S-b — une lecture TOLÉRANTE du même SQL (seconde relectur
      NOMBRE de noms par table, celui de la liste fermée plus haut */
   const pols = [...t.matchAll(new RegExp(`create\\s+policy\\s+${ID}\\s+on\\s+${SCH}"?(\\w+)"?`, 'gi'))]
     .map((m) => ({ nom: m[1] || m[2].toLowerCase(), table: m[3].toLowerCase() }));
-  const ATT = { post_likes: 2, follows: 2, comments: 3, reviews: 3, demande_reponses: 3, annonce_reponses: 2,
+  const ATT = { posts: 3, post_likes: 2, follows: 2, comments: 3, reviews: 3, demande_reponses: 3, annonce_reponses: 2,
     professional_partners: 5, quote_requests: 3, callback_requests: 3, sos_requests: 3, annonces_pro: 2, demandes: 2,
     notifications: 1, blocages: 1, conversations: 2, messages: 2, objects: 8 };
   for (const [table, k] of Object.entries(ATT)) {

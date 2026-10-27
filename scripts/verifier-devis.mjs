@@ -3191,12 +3191,16 @@ console.log('\n  27 bis. la base de démonstration refuse AVEC LES MOTS DE LA BA
       && julie.every((d) => !ferme(d.genre === 'sos' ? 'devis' : 'sos', d.id));
     blocs.delete('u-julie');
     const apres = julie.every((d) => !ferme(d.genre, d.id));
-    const apiTexte = lire('src/lib/api.js');
+    /* Commentaires retirés, formes ENTIÈRES (troisième relecture du 27/10) :
+       `lienFerme: lienFermeDemo && (() => false)` et un `if (genre) return
+       true;` glissé en tête passaient au vert. */
+    const apiTexte = sansCommentairesJs(lire('src/lib/api.js'));
     verifier(`e ter. \`creerLienFermeDemo\` sur les demandes de démonstration : u-julie (${julie.length} demande(s)) ouverte, fermée sous blocage — les autres non, ni un autre genre —, rouverte au déblocage ; et \`api.js\` la branche`,
       julie.length >= 1 && autres.length >= 1 && avant && pendant && apres
         && /creerLienFermeDemo\(DEMANDES_RECUES_DEMO, demoBlocages\)\(genre, id\)/.test(apiTexte)
-        && /lienFerme: lienFermeDemo/.test(apiTexte)
-        && /return !lienFermeDemo\(genre, id\);/.test(apiTexte));
+        && /demandeDe: demandeRecueDemo, lienFerme: lienFermeDemo, pauseMs: PAUSE_ECRITURE_DEMO,/.test(apiTexte)
+        && /async function nouveauDevisPermisDemo\(genre, id\) \{\s*return !lienFermeDemo\(genre, id\);\s*\}/.test(apiTexte)
+        && /function lienFermeDemo\(genre, id\) \{\s*return creerLienFermeDemo\(DEMANDES_RECUES_DEMO, demoBlocages\)\(genre, id\);\s*\}/.test(apiTexte));
   }
   const e9 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(15), valeurs: { devisId: ID(1), ordre: 4000, ...poste({ quantiteMilliemes: 1000, prixUnitaireCentimes: 9999999999 }) }, generation: n() }));
   verifier('f. deux lignes recevables dont la SOMME dépasse le plafond : 23514 `devis_plafond_check` sur le DEVIS, comme la base',

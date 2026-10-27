@@ -29,7 +29,19 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-27';
+export const VERSION = '2026-10-28';
+/* 28/10/2026 — LA TROISIÈME RELECTURE DU LOT S-b. Le texte du 27/10 a été
+   commité (`d281d85`) : celui-ci prend la date du jour suivant. Ce qui a
+   changé DE FOND, dans « Bloquer quelqu'un » :
+     - « VOUS NE RECEVEZ PLUS AUCUNE NOTIFICATION » avait une exception que
+       le texte taisait : une demande d'ouverture de compte professionnel
+       arrive à l'administration même de quelqu'un qu'elle a bloqué
+       (`tait_les_notifications_bloquees`, essai 51 b, cas E1) — et l'écran
+       d'administration le dit. Le texte la nomme ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions, et le préavis de quinze jours du règlement
+       2019/1150 (art. 3.2) s'appliquerait. Sans effet tant que STATUT vaut
+       'essai' ; à organiser avant l'ouverture au public (A-FAIRE). */
 /* 27/10/2026 — LA SECONDE RELECTURE DU LOT S-b. Le texte du 26/10 a été
    commité (`aa95a41`) puis corrigé le lendemain : il prend la date de ce
    commit, pour que deux textes ne portent jamais la même version. Ce qui a
@@ -1008,7 +1020,9 @@ export const CGU = [
       + 'une demande déjà reçue peut encore être refusée ou marquée terminée, un '
       + 'devis déjà commencé reste modifiable, un avis déjà écrit reste — et '
       + 'l’artisan qu’il concerne le lit toujours. Vous ne recevez plus aucune '
-      + 'notification de la personne que vous avez bloquée ; elle, en revanche, est '
+      + 'notification de la personne que vous avez bloquée — sauf, si vous '
+      + 'administrez Opus, une demande d’ouverture de compte professionnel, qui doit '
+      + 'pouvoir être examinée ; elle, en revanche, est '
       + 'encore prévenue si vous refusez sa demande, pour qu’elle ne l’attende pas en '
       + 'vain. Aucune notification ne lui annonce le blocage, mais elle peut s’en '
       + 'apercevoir : vos publications et vos commentaires ne lui apparaissent plus. '

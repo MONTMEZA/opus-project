@@ -617,6 +617,35 @@ select (select author_id is null and auteur_supprime from public.comments where 
        not exists (select 1 from public.users where id = :P) as compte_parti;
 rollback;
 
+\echo '--- F2 ter g. LE MARCHEPIED (troisième relecture du 27/10) : une réponse incohérente R, écrite avant la règle (Q, déclarée sur la publication de A, parent sous la publication de B) ; P a bloqué B, lit R, et répond à R en déclarant la publication de A (attendu : 1, puis ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, rangée sous le commentaire de la publication de B)'
+begin;
+insert into public.comments (id, post_id, author_id, texte) values ('a51b0000-0000-4000-8000-0000000000e3', :PB, :Q, 'Commentaire de Q sous la publication de B');
+alter table public.comments disable trigger trg_limite_profondeur_commentaire;
+insert into public.comments (id, post_id, author_id, texte, parent_id) values ('a51b0000-0000-4000-8000-0000000000e4', :PA, :Q, 'Réponse R, d avant la règle', 'a51b0000-0000-4000-8000-0000000000e3');
+alter table public.comments enable trigger trg_limite_profondeur_commentaire;
+insert into public.blocages (bloqueur_id, bloque_id) values (:P, :B);
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+select count(*) as p_lit_la_reponse_r from public.comments where id = 'a51b0000-0000-4000-8000-0000000000e4';
+insert into public.comments (post_id, author_id, texte, parent_id)
+values ('a51b0000-0000-4000-8000-0000000000a1', 'a51b0000-0000-4000-8000-000000000001', 'Réponse de P à R', 'a51b0000-0000-4000-8000-0000000000e4');
+rollback;
+
+\echo '--- F2 ter h. CORRIGER SON TEXTE ne juge pas le lien (troisième relecture du 27/10) : P a répondu au commentaire de Q, puis a bloqué Q ; P corrige sa réponse, personne n ayant écrit après (attendu : UPDATE 1, puis t — avant : ERROR « Le commentaire parent n existe pas »)'
+begin;
+-- Deux heures distinctes : dans une même transaction, `now()` est le même, et
+-- la règle « quelqu'un a répondu après lui » (OP001) mordrait.
+insert into public.comments (id, post_id, author_id, texte, created_at) values ('a51b0000-0000-4000-8000-0000000000e1', :PA, :Q, 'Commentaire de Q', now() - interval '2 minutes');
+insert into public.comments (id, post_id, author_id, texte, parent_id, created_at) values ('a51b0000-0000-4000-8000-0000000000e2', :PA, :P, 'Réponse de P, avec une fote', 'a51b0000-0000-4000-8000-0000000000e1', now() - interval '1 minute');
+insert into public.blocages (bloqueur_id, bloque_id) values (:P, :Q);
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+update public.comments set texte = 'Réponse de P, corrigée' where id = 'a51b0000-0000-4000-8000-0000000000e2';
+reset role;
+select texte = 'Réponse de P, corrigée' and parent_id = 'a51b0000-0000-4000-8000-0000000000e1' and post_id = :PA as corrigee_lien_intact
+  from public.comments where id = 'a51b0000-0000-4000-8000-0000000000e2';
+rollback;
+
 \echo '--- F2 quater. la notification d un commentaire qu on ne peut pas lire se tait : P a bloqué B ; dans le fil de Q, B avait répondu ; P y répond (attendu : INSERT 0 1, puis reponse_chez_b 0 | reponse_chez_q 1 — avant la correction : 1 | 1)'
 begin;
 insert into public.comments (id, post_id, author_id, texte) values ('a51b0000-0000-4000-8000-0000000000e1', :PA, :Q, 'Commentaire de Q');

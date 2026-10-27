@@ -139,10 +139,18 @@ console.log('\nB. Ce qu’un client a le droit d’écrire, colonne par colonne'
      suivent sont relevés — un droit de COLONNE (`grant insert (created_at)`)
      ou `grant all on TABLE` échappaient au premier motif (relecture du
      26/10) — et seuls les deux attendus sont admis. */
+  /* La lecture est TOLÉRANTE (troisième banc du 27/10) : `grant update on
+     professional_partners` — sans `public.` — rouvrait toutes les colonnes
+     au vert. Casse, guillemets et schéma facultatifs, la table citée parmi
+     d'autres ; et un `grant … on all tables in schema public` rouvrirait
+     tout aussi bien. */
+  const TT = '(?:"?public"?\\s*\\.\\s*)?"?professional_partners"?(?![\\w"])';
   const iRevoke = schema.search(new RegExp(`revoke insert, update on ${T} from authenticated;`));
   const apres = schema.slice(iRevoke);
-  const grants = [...apres.matchAll(new RegExp(`grant\\s[^;]*?\\bon\\s+(?:table\\s+)?${T}\\b[^;]*;`, 'g'))]
+  const grants = [...apres.matchAll(new RegExp(`grant\\s[^;]*?\\bon\\s+(?:table\\s+)?(?:[\\w."]+\\s*,\\s*)*${TT}[^;]*;`, 'gi'))]
     .map((m) => m[0].replace(/\s+/g, ' '));
+  verifier('après le `revoke`, aucun `grant … on all tables in schema public` (il rouvrirait la table)',
+    iRevoke >= 0 && !/grant\s[^;]*\bon\s+all\s+tables\s+in\s+schema\b/i.test(apres));
   const attendus = [
     'grant insert (professional_id, partner_id, statut) on public.professional_partners to authenticated;',
     'grant update (statut, repondu_le) on public.professional_partners to authenticated;',

@@ -69,7 +69,7 @@ import {
 import { aiMatchPros, aiRecitChantier, surTravailAgent } from './lib/ai';
 import { doitProposerLeNom, nomAgent } from './lib/agent';
 import { clientDepuisDemande } from './lib/clients';
-import { obtenirConversation, repondreEtOuvrir } from './lib/repondre-demande';
+import { conversationConcerne, obtenirConversation, repondreEtOuvrir } from './lib/repondre-demande';
 import { apresEnvoiDesPieces, envoiSuspendLeBadge } from './lib/verification';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
@@ -2873,7 +2873,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
        renverra plus, mais ce qui est déjà affiché à l'écran, si. */
     setPosts((ps) => ps.filter((post) => String(post.proId) !== String(userId)));
     setDemandes((ds) => ds.filter((d) => String(d.auteurId) !== String(userId)));
-    setConversations((cs) => cs.filter((c) => String(c.proId) !== String(userId)));
+    /* Les TROIS formes d'une conversation (chargée, ou construite à
+       l'instant par « Répondre » ou « Envoyer un message ») : regarder
+       `proId` seul laissait celle d'un particulier tout juste contacté
+       (troisième relecture du 27/10). */
+    setConversations((cs) => cs.filter((c) => !conversationConcerne(c, userId)));
     setFollowingIds((ids) => {
       const suite = new Set(ids);
       suite.delete(userId);
@@ -2990,7 +2994,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     if (!conv) {
       conv = {
         id: issue.id || `local-${Date.now()}`,
-        proId: null,
+        /* La MÊME forme qu'une conversation chargée de la base, où `proId`
+           vaut l'identifiant de l'autre (`api.js`) : `null` laissait la
+           conversation affichée après un blocage. */
+        proId: demande.auteurId,
         /* La photo du particulier arrive avec la demande : on la reprend,
            au lieu de laisser une pastille vide jusqu'au prochain
            rechargement. */
@@ -3194,7 +3201,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     if (!conv) {
       conv = {
         id: issue.id || `local-${Date.now()}`,
-        proId: null,
+        proId: profil.id,
         autre: {
           id: profil.id,
           nom: profil.nom,

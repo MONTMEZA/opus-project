@@ -346,6 +346,25 @@ console.log('\nLe blocage se voit en démonstration (relecture du 26/10)');
   const communs = demo.initialDemandesRecues.filter((d) => auteurs.has(d.nom));
   verifier('un client qui commente ET a une demande reçue porte le MÊME identifiant des deux côtés (il y en a au moins un)',
     communs.length >= 1 && ecarts.length === 0, ecarts.join(', ') || `${communs.length} commun(s)`);
+  /* …et SES NOTIFICATIONS aussi (troisième banc du 27/10) : une
+     notification de Julie restée sous un ancien identifiant passait au
+     vert — l'avatar change de couleur d'un écran à l'autre, et le jour où
+     la démonstration taira les notifications d'un compte bloqué, elle ne
+     tairait pas celles-là. */
+  const idsConnus = new Map();
+  auteurs.forEach((ids, nom) => idsConnus.set(nom, new Set(ids)));
+  demo.initialDemandesRecues.forEach((d) => {
+    if (!idsConnus.has(d.nom)) idsConnus.set(d.nom, new Set());
+    idsConnus.get(d.nom).add(String(d.clientId));
+  });
+  const notifsParticulier = demo.initialNotifications
+    .filter((n) => typeof n.acteurId === 'string' && idsConnus.has(n.acteurNom));
+  const ecartsNotif = notifsParticulier
+    .filter((n) => [...idsConnus.get(n.acteurNom)].some((id) => id !== n.acteurId))
+    .map((n) => `notification ${n.id} : ${n.acteurId} ≠ ${[...idsConnus.get(n.acteurNom)].join('/')}`);
+  verifier('une notification d’un particulier porte le MÊME identifiant que ses commentaires et ses demandes (il y en a au moins une)',
+    notifsParticulier.length >= 1 && ecartsNotif.length === 0,
+    ecartsNotif.join(', ') || `${notifsParticulier.length} notification(s)`);
   /* LA NOTE D'UNE FICHE (relecture du 26/10) : recalculée sur les avis
      chargés seulement s'ils sont TOUS là — la lecture cache à celui qui a
      bloqué un auteur l'avis de cet auteur, et la note de la fiche
@@ -376,9 +395,12 @@ console.log('\nLe blocage se voit en démonstration (relecture du 26/10)');
       && proche(apres3.global, 3) && apres3.count === 2,
     JSON.stringify([apres1, apres2, apres3]));
   /* Et l'écran S'EN SERT : `submitReview` passe par elle. */
-  const opus = readFileSync('src/OpusApp.js', 'utf8');
-  verifier('…et `submitReview` met à jour la fiche par `avecAvisPublie`',
-    /\[proId\]: avecAvisPublie\(pro, review\)/.test(opus));
+  /* La forme ENTIÈRE, commentaires retirés (troisième relecture du 27/10) :
+     `avecAvisPublie(pro, review) && { … }` jetait son résultat au vert. */
+  const opus = readFileSync('src/OpusApp.js', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  verifier('…et `submitReview` met à jour la fiche par `avecAvisPublie` — son résultat, tel quel',
+    /return \{ \.\.\.prev, \[proId\]: avecAvisPublie\(pro, review\) \};/.test(opus)
+      && (opus.match(/avecAvisPublie\(/g) || []).length === 1);
 }
 
 console.log('');

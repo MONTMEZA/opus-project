@@ -27,6 +27,7 @@ import { METIER_PAR_DEFAUT, nomMetier } from '../lib/metiers';
 import { BUDGETS, URGENCES, libelleBudget, urgenceDe } from '../data/annonces';
 import { libelleDistance } from '../lib/adresse';
 import { CLAVIER } from '../lib/clavier';
+import { demandeEstLaMienne } from '../lib/repondre-demande';
 import {
   trierDemandesOuvertes, phraseDuTriParDistance, reglesDuTri, distanceDe, estPlace,
 } from '../lib/tri-demandes';
@@ -160,11 +161,24 @@ const Demande = React.memo(function Demande({
           {/* Jamais « Répondre » sur SA propre demande (seconde relecture du
               27/10) : la base refuse de répondre à soi-même, et le refus
               retirait la carte de sa liste. */}
+          {/* « DÉJÀ RÉPONDU » GARDE UN GESTE (troisième relecture du 27/10).
+              C'était un simple texte : si la conversation n'avait pas pu
+              s'ouvrir, puis l'application fermée, la base relisait la
+              réponse au démarrage et la carte n'avait plus AUCUN bouton —
+              ce client était perdu. Le même geste repart : la réponse déjà
+              comptée revient en `{ nouvelle: false }`, la conversation est
+              retrouvée, relue ou créée (`repondre-demande.js`). */}
           {estPro && !laMienne && (dejaRepondu ? (
-            <View style={s.dejaRepondu}>
-              <Check size={12} color={C.accent2} />
-              <Text style={s.dejaReponduTexte}>Vous avez répondu</Text>
-            </View>
+            <BtnMini
+              outline
+              accessibilityLabel="Vous avez répondu. Écrire au client"
+              onPress={() => onRepondre(d)}
+            >
+              <View style={s.dejaRepondu}>
+                <Check size={12} color={C.accent2} />
+                <Text style={s.dejaReponduTexte}>Répondu · Écrire</Text>
+              </View>
+            </BtnMini>
           ) : (
             <BtnMini onPress={() => onRepondre(d)}>
               <MessageCircle size={12} color="#111" />
@@ -218,7 +232,7 @@ export default function DemandesScreen({
      « mes demandes », vérifiée le 04/10 : un autre compte reçoit zéro ligne
      modifiée), mais un bouton qu'on peut toucher et qui ne fait rien est
      pire qu'un bouton absent. */
-  const estLaMienne = (d) => !!monId && String(d.auteurId) === String(monId);
+  const estLaMienne = (d) => demandeEstLaMienne(d, monId);
   const repondues = mesReponses || new Set();
   const jyAiRepondu = (d) => estPro && repondues.has(d.id);
   /* LES RÈGLES DU TRI vivent dans `src/lib/tri-demandes.js`, que

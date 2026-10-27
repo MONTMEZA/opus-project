@@ -16,6 +16,12 @@
  * repart : la réponse déjà comptée revient en `{ nouvelle: false }` (le
  * compteur ne monte pas deux fois), et la conversation se crée.
  *
+ * ET APRÈS UN REDÉMARRAGE (troisième relecture du 27/10) : la base relit
+ * la réponse, la carte se souvient donc d'avoir répondu — mais elle ne sait
+ * pas si la conversation a pu s'ouvrir. Le souvenir n'enlève donc PLUS le
+ * geste : la carte porte « Répondu · Écrire », qui rejoue ce même geste.
+ * Ce premier correctif ne tenait que pendant la session.
+ *
  * Deux autres pièges, mesurés eux aussi :
  *   - une conversation CHARGÉE DE LA BASE n'a pas de `contact` (seulement
  *     `autre`) : la chercher par `contact.id` ne la trouvait jamais, et la
@@ -30,12 +36,41 @@
  * conversation créée mais réponse perdue, refus de la réponse.
  */
 
+/**
+ * Cette demande est-elle la MIENNE ? (troisième relecture du 27/10 : la
+ * règle vivait dans l'écran, que le contrôle ne fait pas tourner — une
+ * faute de frappe la rendait toujours fausse, et l'écran montrait
+ * « Répondre » sur sa propre demande en retirant « J'ai trouvé ».)
+ * L'identifiant peut arriver en nombre ou en chaîne : on compare des chaînes.
+ */
+export function demandeEstLaMienne(d, monId) {
+  if (!d || monId === null || monId === undefined || monId === '') return false;
+  return String(d.auteurId) === String(monId);
+}
+
 /** La conversation avec un particulier, qu'elle ait été créée ici (`contact`) ou chargée de la base (`autre`). */
 export function conversationAvec(conversations, idParticulier) {
   if (idParticulier === null || idParticulier === undefined) return null;
   const id = String(idParticulier);
   return (conversations || []).find((c) => (c.contact && c.contact.id === `part-${id}`)
     || (c.autre && String(c.autre.id) === id)) || null;
+}
+
+/**
+ * Cette conversation est-elle avec cette personne ? Les TROIS formes d'une
+ * conversation à l'écran : chargée de la base (`proId` = `autre.id`), ou
+ * construite à l'instant par « Répondre » ou « Envoyer un message »
+ * (`autre`, `contact`). Troisième relecture du 27/10 : bloquer ne regardait
+ * que `proId`, qui valait `null` sur une conversation construite à
+ * l'instant — elle restait affichée, alors que les textes promettent
+ * « masquées des deux côtés ».
+ */
+export function conversationConcerne(c, idPersonne) {
+  if (!c || idPersonne === null || idPersonne === undefined) return false;
+  const id = String(idPersonne);
+  return (c.proId !== null && c.proId !== undefined && String(c.proId) === id)
+    || (!!c.autre && String(c.autre.id) === id)
+    || (!!c.contact && c.contact.id === `part-${id}`);
 }
 
 /**

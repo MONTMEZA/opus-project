@@ -1831,9 +1831,29 @@ console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le tex
      change les CGU (le blocage, les avis, la durée d'un refus de
      partenariat), et ses corrections du 27/10 les changent encore. Ramener
      VERSION au 25/10 passait au vert. */
-  verifier('VERSION est au moins celle du lot S-b corrigé (27/10/2026)',
-    VERSION >= '2026-10-27',
-    `VERSION = ${VERSION}. Le blocage (ce qui revient, ce qui disparaît), les avis et le partenariat refusé : un changement de fond, sous une version nouvelle.`);
+  verifier('VERSION est au moins celle du lot S-b relu une troisième fois (28/10/2026)',
+    VERSION >= '2026-10-28',
+    `VERSION = ${VERSION}. Le blocage (ce qui revient, ce qui disparaît, l'exception de l'administration), les avis et le partenariat refusé : un changement de fond, sous une version nouvelle.`);
+  /* LE PARAGRAPHE ENTIER (troisième relecture du 27/10) : les motifs
+     ci-dessous cherchent des TOURNURES — « vos conversations reviennent dès
+     que vous retirez le vôtre », phrase fausse sous un blocage mutuel,
+     passait au vert parce qu'elle n'était pas écrite comme les deux
+     interdites. Ce texte engage : il se compare mot pour mot à celui qui a
+     été relu contre la base, et le changer se DÉCIDE ici, dans le même lot. */
+  const BLOQUER_RELU = "Bloquer une personne masque ses publications et ses commentaires des deux côtés, et arrête tout ce qui est nouveau entre vous, dans un sens comme dans l’autre : plus de message, de commentaire, de « j’aime », d’abonnement ni d’avis ; plus de demande de devis, de rappel ou d’urgence, ni de réponse à une demande ou à une annonce ; plus de demande de partenariat, et un artisan ne peut plus accepter une demande, ni y rattacher un nouveau devis. Rien n’est effacé : vos conversations avec cette personne — vos messages et les pièces jointes compris — sont masquées des deux côtés tant que dure le blocage, et reviennent quand plus aucun blocage ne vous sépare. Ce qui engage l’un de vous reste en place : une demande déjà reçue peut encore être refusée ou marquée terminée, un devis déjà commencé reste modifiable, un avis déjà écrit reste — et l’artisan qu’il concerne le lit toujours. Vous ne recevez plus aucune notification de la personne que vous avez bloquée — sauf, si vous administrez Opus, une demande d’ouverture de compte professionnel, qui doit pouvoir être examinée ; elle, en revanche, est encore prévenue si vous refusez sa demande, pour qu’elle ne l’attende pas en vain. Aucune notification ne lui annonce le blocage, mais elle peut s’en apercevoir : vos publications et vos commentaires ne lui apparaissent plus. Le blocage se retire quand vous le souhaitez, depuis Profil → Confidentialité et sécurité.";
+  verifier('« Bloquer quelqu’un » a EXACTEMENT le texte relu contre la base (28/10/2026)',
+    bloquer === BLOQUER_RELU, bloquer);
+  /* …et son exception SUIT LA BASE : les notifications que
+     `tait_les_notifications_bloquees` ne tait jamais sont celles que le
+     texte nomme. Un type ajouté à cette liste oblige à réécrire la phrase. */
+  {
+    const tait = (sqlS.split('create or replace function public.tait_les_notifications_bloquees(')[1] || '').split('$$;')[0];
+    const jamaisTus = ((tait.match(/new\.type in \(([^)]*)\)/) || [])[1] || '').match(/'[^']+'/g) || [];
+    verifier('…et l’exception du texte (une demande d’ouverture de compte professionnel) est EXACTEMENT la liste des notifications que la base ne tait jamais',
+      JSON.stringify(jamaisTus) === JSON.stringify(["'demande_pro_nouvelle'"])
+        && /sauf, si vous administrez Opus, une demande d’ouverture de compte professionnel/.test(bloquer),
+      jamaisTus.join(', '));
+  }
   /* Réponse D2 du propriétaire (25/10) : « Rien ne disparaît, plus rien de
      neuf ». Le texte en dit les deux moitiés, et les deux sens. */
   verifier('« Bloquer quelqu’un » dit les deux moitiés : plus rien de nouveau, dans les deux sens — et rien n’est effacé',

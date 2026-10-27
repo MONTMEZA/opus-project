@@ -812,6 +812,60 @@ console.log('\nLot S-b — l’écran ne dit que le vrai');
     const e1 = await jouer(e);
     verifier('…une réponse qui ne part pas rend « echec_reponse », sans créer de conversation',
       e1.etat === 'echec_reponse' && e.etat.convs.size === 0, JSON.stringify(e1.etat));
+    // X. APRÈS UN REDÉMARRAGE (troisième relecture du 27/10) : la conversation
+    //    a échoué, l'application est fermée ; au démarrage la base relit la
+    //    réponse, la carte se souvient d'avoir répondu — et son bouton
+    //    « Répondu · Écrire » rejoue le MÊME geste : ouverte, rien recompté.
+    const x = fabrique({ coupeConv: 1 });
+    const x1 = await jouer(x);
+    const relueAuDemarrage = new Set([...x.etat.reponses]);
+    const x2 = relueAuDemarrage.has(demande.id) ? await jouer(x) : null;
+    verifier('…après un échec de la conversation PUIS un redémarrage, le geste de la carte ouvre la conversation sans recompter la réponse',
+      x1.etat === 'echec_conversation' && !!x2 && x2.etat === 'ouverte' && x2.comptee === false
+        && x2.id === 'conv-P' && x.etat.reponses.size === 1, JSON.stringify([x1.etat, x2]));
+  }
+  /* « EST-CE MA DEMANDE ? » — une fonction pure, jouée ici (troisième
+     relecture du 27/10 : la règle vivait dans l'écran ; rendue toujours
+     fausse, l'écran montrait « Répondre » sur sa propre demande et retirait
+     « J'ai trouvé » à son auteur, au vert). */
+  {
+    const { demandeEstLaMienne } = await import('../src/lib/repondre-demande.js');
+    const ecranM = sansCommentairesJs(lire('src/screens/DemandesScreen.js'));
+    verifier('`demandeEstLaMienne` : chaîne ou nombre, la mienne oui, une autre non, sans identifiant jamais — et l’écran s’en sert',
+      demandeEstLaMienne({ auteurId: 'P' }, 'P') && demandeEstLaMienne({ auteurId: 42 }, '42')
+        && demandeEstLaMienne({ auteurId: '42' }, 42) && !demandeEstLaMienne({ auteurId: 'Q' }, 'P')
+        && !demandeEstLaMienne({ auteurId: 'P' }, null) && !demandeEstLaMienne({ auteurId: 'P' }, '')
+        && !demandeEstLaMienne(null, 'P')
+        && /const estLaMienne = \(d\) => demandeEstLaMienne\(d, monId\);/.test(ecranM)
+        && (ecranM.match(/estLaMienne = /g) || []).length === 1);
+  }
+  /* « DÉJÀ RÉPONDU » GARDE UN GESTE : la carte ne remplace plus le bouton
+     par un simple texte — c'était le défaut après un redémarrage. */
+  {
+    const ecranD = sansCommentairesJs(lire('src/screens/DemandesScreen.js'));
+    verifier('la carte « déjà répondu » est un BOUTON qui rejoue `onRepondre(d)` (« Répondu · Écrire »), plus un simple texte',
+      /\{estPro && !laMienne && \(dejaRepondu \? \(\s*<BtnMini\s+outline\s+accessibilityLabel="Vous avez répondu\. Écrire au client"\s+onPress=\{\(\) => onRepondre\(d\)\}\s*>[\s\S]{0,260}?Répondu · Écrire<\/Text>[\s\S]{0,80}?<\/BtnMini>\s*\) : \(/.test(ecranD));
+  }
+  /* BLOQUER RETIRE LA CONVERSATION, QUELLE QUE SOIT SA FORME (troisième
+     relecture du 27/10) : `proId` valait `null` sur une conversation
+     construite à l'instant, et le filtre ne regardait que lui. */
+  {
+    const { conversationConcerne } = await import('../src/lib/repondre-demande.js');
+    const formes = [
+      { id: 'base', proId: 'P', autre: { id: 'P' } },
+      { id: 'repondre', proId: null, autre: { id: 'P' }, contact: { id: 'part-P' } },
+      { id: 'contact-seul', proId: null, contact: { id: 'part-P' } },
+    ];
+    const autres = [{ id: 'q', proId: 'Q', autre: { id: 'Q' } }, { id: 'pro', proId: 7, contact: { id: 7 } }];
+    verifier('`conversationConcerne` reconnaît les trois formes d’une conversation avec P, et aucune autre',
+      formes.every((c) => conversationConcerne(c, 'P')) && autres.every((c) => !conversationConcerne(c, 'P'))
+        && !conversationConcerne(formes[0], null) && conversationConcerne({ proId: 7 }, 7));
+    const appD = sansCommentairesJs(lire('src/OpusApp.js'));
+    const bloquer = (appD.split('const bloquerPersonne = async (userId) => {')[1] || '').split('\n  };')[0];
+    verifier('`bloquerPersonne` retire les conversations par `conversationConcerne`, et les conversations construites portent l’identifiant de l’autre (`proId`), comme celles de la base',
+      /setConversations\(\(cs\) => cs\.filter\(\(c\) => !conversationConcerne\(c, userId\)\)\);/.test(bloquer)
+        && /proId: demande\.auteurId,/.test(appD) && /proId: profil\.id,/.test(appD)
+        && !/proId: null/.test(appD));
   }
   /* ET L'ÉCRAN APPLIQUE L'ISSUE DANS LE BON ORDRE : « Vous avez répondu »
      (`setMesReponsesDemandes`) seulement APRÈS le retour sur l'échec de la
@@ -826,6 +880,13 @@ console.log('\nLot S-b — l’écran ne dit que le vrai');
       && (repondre.match(/setMesReponsesDemandes\(/g) || []).length === 1);
   verifier('…et la relecture sur 23505 cherche LA conversation de ce particulier avec MOI (client = lui, pro = moi)',
     /export const conversationAvecClient = !hasSupabase \? noop : async \(clientId\) => \{\s*const \{ data, error \} = await supabase\.from\('conversations'\)\s*\.select\('id'\)\.eq\('client_id', clientId\)\.eq\('professional_id', currentUserId\)\s*\.maybeSingle\(\);/.test(sansCommentairesJs(lire('src/lib/api.js'))));
+  /* LES DEUX ÉCHECS S'ARRÊTENT LÀ (troisième relecture du 27/10) : sans le
+     `return;`, l'écran construisait une conversation locale et retenait
+     « Vous avez répondu » — la régression même que le lot corrige. Les
+     branches ENTIÈRES. */
+  verifier('…les deux échecs (`echec_reponse`, `echec_conversation`) disent leur phrase et S’ARRÊTENT (branches entières)',
+    /if \(issue\.etat === 'echec_reponse'\) \{\s*showErreur\(messageClair\(issue\.erreur, 'Votre réponse n’a pas été enregistrée'\)\);\s*return;\s*\}/.test(repondre)
+      && /if \(issue\.etat === 'echec_conversation'\) \{\s*showErreur\('Votre réponse est enregistrée, mais la conversation n’a pas pu s’ouvrir : '\s*\+ 'touchez « Répondre » de nouveau\.'\);\s*return;\s*\}/.test(repondre));
   verifier('…un refus de la politique se dit en phrase NEUTRE (`REPONSE_FERMEE`), et la carte quitte la liste',
     /if \(issue\.etat === 'fermee'\) \{\s*showErreur\(issue\.message\);\s*setDemandes\(\(ds\) => ds\.filter\(\(d\) => d\.id !== demande\.id\)\);\s*return;/.test(repondre));
   {
@@ -881,7 +942,10 @@ console.log('\nLot S-b — l’écran ne dit que le vrai');
     verifier('…`api.js` refuse par lui en démonstration, et la recherche de démonstration relit `sosArtisansDemo()`',
       /async function createSosRequestDemo\(d\) \{\s*if \(envoiSosDemo\(SOS_ARTISANS, SOS_RETIRES_DEMO, d\.proId, d\.metierKey\) === 'OP025'\) \{\s*throw new ErreurDeLaBase\('OP025', REFUS_DEMANDES\.OP025\);/.test(apiSc)
         && /export const createSosRequest = !hasSupabase \? createSosRequestDemo :/.test(apiSc)
-        && /artisansDisponiblesDemo\(metierKey, \{ sos: api\.sosArtisansDemo\(\), tarifs: TARIFS_DEMO, pros \}\)/.test(app));
+        && /artisansDisponiblesDemo\(metierKey, \{ sos: api\.sosArtisansDemo\(\), tarifs: TARIFS_DEMO, pros \}\)/.test(app)
+        /* …et la relance relit les RETRAITS (troisième relecture du 27/10 :
+           `new Set()` à la place remontrait l'artisan, OP025 en boucle). */
+        && /export function sosArtisansDemo\(\) \{\s*return sosDisponiblesDemo\(SOS_ARTISANS, SOS_RETIRES_DEMO\);\s*\}/.test(apiSc));
   }
   const api = sansCommentairesJs(lire('src/lib/api.js'));
   verifier('…et l’API insère (jamais d’upsert), un 23505 voulant dire « déjà répondu »',
@@ -906,6 +970,18 @@ console.log('\nLot S-b — l’écran ne dit que le vrai');
   verifier('un visiteur ne lit plus aucune réponse : la règle est fermée ET le droit de table retiré',
     /create policy "lecture reponses visiteur" on public\.demande_reponses\s+for select to anon using \(false\);/.test(schemaCode)
       && /revoke all on public\.demande_reponses from anon;/.test(schemaCode));
+  /* …et rien ne le rend plus bas (troisième banc du 27/10 : un `grant`
+     écrit sans `public.`, ou la table citée parmi d'autres, rouvrait au
+     vert sur la table des partenariats). Lecture tolérante. */
+  {
+    const i = schemaCode.search(/revoke all on public\.demande_reponses from anon;/);
+    const apres = i >= 0 ? schemaCode.slice(i) : '';
+    const rouvre = new RegExp('grant\\s[^;]*?\\bon\\s+(?:table\\s+)?(?:[\\w."]+\\s*,\\s*)*'
+      + '(?:"?public"?\\s*\\.\\s*)?"?demande_reponses"?(?![\\w"])[^;]*\\bto\\b[^;]*\\b(anon|public)\\b[^;]*;', 'i');
+    verifier('…et aucun `grant` plus bas ne le rend à `anon` ni à `public`, sous aucune forme (ni `on all tables in schema`)',
+      i >= 0 && !rouvre.test(apres)
+        && !/grant\s[^;]*\bon\s+all\s+tables\s+in\s+schema\b[^;]*\bto\b[^;]*\b(anon|public)\b/i.test(apres));
+  }
 }
 
 console.log('\nLot S-b — l’urgence ne part que vers qui y répond (OP025)');
