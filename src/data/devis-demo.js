@@ -446,6 +446,24 @@ function plusRecentDAbord(a, b) {
  * Chaque fonction prend l'artisan (`proId`) en premier : ce qui n'est pas à
  * lui n'existe pas pour lui, comme sous la règle d'accès de la base.
  */
+/**
+ * La règle « un NOUVEAU lien sous blocage » de la démonstration (lot S-b,
+ * seconde relecture du 27/10), écrite ici pour être FAITE TOURNER : rangée
+ * dans `api.js`, qui charge Supabase, aucun contrôle ne pouvait l'ouvrir —
+ * débrancher le refus, ou lire le mauvais identifiant, passait au vert.
+ *
+ * Elle compare le GENRE et l'identifiant (un rappel et une urgence ne se
+ * confondent pas), et lit le CLIENT de la demande — c'est lui qu'on bloque.
+ * `demandesRecues` et `blocages` sont lus à chaque appel : la démonstration
+ * bloque et débloque en cours de route.
+ */
+export function creerLienFermeDemo(demandesRecues, blocages) {
+  return (genre, id) => {
+    const d = (demandesRecues || []).find((x) => x.genre === genre && x.id === id);
+    return !!(d && blocages && blocages.has(String(d.clientId)));
+  };
+}
+
 export function creerBaseDevisDemo({
   maintenant = () => new Date(),
   demandeDe = () => null,

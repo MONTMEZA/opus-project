@@ -121,9 +121,9 @@ export default function Signaler({
                 ses publications ni ses commentaires, elle ne verra plus les
                 vôtres, et plus rien de nouveau ne peut passer entre vous — ni
                 message, ni demande. Vos conversations avec elle sont masquées
-                des deux côtés, sans rien effacer : elles reviennent si vous
-                retirez ce blocage, à tout moment, depuis Profil →
-                Confidentialité et sécurité.
+                des deux côtés, sans rien effacer : elles reviennent quand plus
+                aucun blocage ne vous sépare. Vous pouvez retirer le vôtre à
+                tout moment, depuis Profil → Confidentialité et sécurité.
               </Text>
             </View>
           )}

@@ -29,7 +29,25 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-26';
+export const VERSION = '2026-10-27';
+/* 27/10/2026 — LA SECONDE RELECTURE DU LOT S-b. Le texte du 26/10 a été
+   commité (`aa95a41`) puis corrigé le lendemain : il prend la date de ce
+   commit, pour que deux textes ne portent jamais la même version. Ce qui a
+   changé DE FOND, dans « Bloquer quelqu'un » :
+     - LES CONVERSATIONS « reviennent quand plus aucun blocage ne vous
+       sépare », et non plus « si vous le retirez » : la base regarde les
+       deux sens, donc quand l'autre personne vous a bloqué elle aussi,
+       retirer le vôtre ne rend rien — et vous ne pouvez pas savoir pourquoi
+       (mesuré, essai 51 b, cas F10) ;
+     - « ELLE PEUT S'EN APERCEVOIR : vos publications et vos commentaires ne
+       lui apparaissent plus », et non plus « vos contenus » : votre fiche,
+       votre disponibilité aux urgences, un avis ou une demande déjà reçus
+       restent lisibles — le même paragraphe le dit. La première phrase dit
+       de même « ses publications et ses commentaires » ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions, et le préavis de quinze jours du règlement
+       2019/1150 (art. 3.2) s'appliquerait. Sans effet tant que STATUT vaut
+       'essai' ; à organiser avant l'ouverture au public (A-FAIRE). */
 /* 26/10/2026 — LES DEMANDES, LE BLOCAGE, LES PARTENARIATS, LES RÉPONSES
    (lot S-b du lot de sécurité). Ce qui a changé DE FOND :
      - « BLOQUER QUELQU'UN » DIT CE QUE FAIT VRAIMENT UN BLOCAGE (décisions
@@ -77,9 +95,9 @@ export const VERSION = '2026-10-26';
        ré-accepter les conditions, et le préavis de quinze jours du règlement
        2019/1150 (art. 3.2) s'appliquerait à ce changement qui touche les
        professionnels. Sans effet tant que STATUT vaut 'essai' ; à organiser
-       avant l'ouverture au public (A-FAIRE). Si un autre sous-lot du lot S
-       change les textes le même jour, il prend une date suffixée
-       (2026-10-25b), pour que deux textes ne portent pas la même version. */
+       avant l'ouverture au public (A-FAIRE). Un autre texte du même jour
+       prend la date du jour suivant : `VERSION` ne s'écrit qu'en
+       « AAAA-MM-JJ » (`verifier-legal`), sans lettre. */
 /* 24/10/2026 — LA BASE DE POSTES (lot P du module devis, section 50 de
    `schema.sql`). Ce qui a changé DE FOND :
      - la collecte s'allonge : la base de postes d'un artisan — les phrases
@@ -976,7 +994,8 @@ export const CGU = [
        nouveau », les deux sens, le refus qui arrive encore, et l'avis que
        l'artisan lit toujours. */
     titre: 'Bloquer quelqu’un',
-    texte: 'Bloquer une personne masque ses contenus des deux côtés, et arrête '
+    texte: 'Bloquer une personne masque ses publications et ses commentaires des '
+      + 'deux côtés, et arrête '
       + 'tout ce qui est nouveau entre vous, dans un sens comme dans l’autre : plus '
       + 'de message, de commentaire, de « j’aime », d’abonnement ni d’avis ; plus de '
       + 'demande de devis, de rappel ou d’urgence, ni de réponse à une demande ou à '
@@ -984,14 +1003,16 @@ export const CGU = [
       + 'accepter une demande, ni y rattacher un nouveau devis. Rien n’est effacé : '
       + 'vos conversations avec cette personne — vos messages et les pièces jointes '
       + 'compris — sont masquées des deux côtés tant que dure le blocage, et '
-      + 'reviennent si vous le retirez. Ce qui engage l’un de vous reste en place : '
+      + 'reviennent quand plus aucun blocage ne vous sépare. Ce qui engage l’un de '
+      + 'vous reste en place : '
       + 'une demande déjà reçue peut encore être refusée ou marquée terminée, un '
       + 'devis déjà commencé reste modifiable, un avis déjà écrit reste — et '
       + 'l’artisan qu’il concerne le lit toujours. Vous ne recevez plus aucune '
       + 'notification de la personne que vous avez bloquée ; elle, en revanche, est '
       + 'encore prévenue si vous refusez sa demande, pour qu’elle ne l’attende pas en '
       + 'vain. Aucune notification ne lui annonce le blocage, mais elle peut s’en '
-      + 'apercevoir : vos contenus ne lui apparaissent plus. Le blocage se retire '
+      + 'apercevoir : vos publications et vos commentaires ne lui apparaissent plus. '
+      + 'Le blocage se retire '
       + 'quand vous le souhaitez, depuis Profil → Confidentialité et sécurité.',
   },
   {

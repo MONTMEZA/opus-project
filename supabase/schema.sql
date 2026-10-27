@@ -402,12 +402,28 @@ create index if not exists idx_comments_parent on public.comments(parent_id);
 -- --------------------------------------------------------------------------
 create or replace function public.limite_profondeur_commentaire()
 returns trigger language plpgsql set search_path = public as $$
-declare grand_parent uuid;
+declare
+  grand_parent   uuid;
+  post_du_parent uuid;
 begin
   if new.parent_id is null then return new; end if;
 
-  select parent_id into grand_parent from public.comments where id = new.parent_id;
-  if not found then
+  -- Une réponse vit sous la MÊME publication que son parent (lot S-b,
+  -- seconde relecture du 27/10). La lecture des commentaires ne filtre que
+  -- leur AUTEUR : on pouvait donc répondre au commentaire d'un tiers posé
+  -- sous la publication d'une personne bloquée, en déclarant une autre
+  -- publication, lisible — et s'accrocher à son fil. Comparé seulement à
+  -- l'écriture qui POSE le lien (insertion, ou changement de publication ou
+  -- de parent) : l'anonymisation d'un compte qui part est un UPDATE, et une
+  -- réponse incohérente écrite avant cette règle ne doit pas bloquer le
+  -- droit à l'effacement de son auteur.
+  select parent_id, post_id into grand_parent, post_du_parent
+    from public.comments where id = new.parent_id;
+  if not found
+     or ((tg_op = 'INSERT'
+          or new.post_id is distinct from old.post_id
+          or new.parent_id is distinct from old.parent_id)
+         and post_du_parent is distinct from new.post_id) then
     raise exception 'Le commentaire parent n''existe pas';
   end if;
   -- Le parent est déjà une réponse : on rattache au commentaire d'origine.

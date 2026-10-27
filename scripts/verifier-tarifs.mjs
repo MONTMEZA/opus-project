@@ -519,9 +519,15 @@ console.log('\n  14. la démonstration, et `urgences.js` allégé');
     json(etat));
   verifier('`urgences.js` n’exporte plus `estimation` ni `artisansDisponibles`',
     !('estimation' in U) && !('artisansDisponibles' in U)
-    && egalEnsembles(Object.keys(U), ['CRENEAUX_SOS', 'METIERS_SOS', 'PROBLEMES', 'SOS_ARTISANS', 'estNuitOuWeekend']),
+    /* `envoiSosDemo` et `sosDisponiblesDemo` (lot S-b, seconde relecture du
+       27/10) : le refus OP025 de la démonstration, sans aucun prix. */
+    && egalEnsembles(Object.keys(U), ['CRENEAUX_SOS', 'METIERS_SOS', 'PROBLEMES', 'SOS_ARTISANS', 'estNuitOuWeekend',
+      'envoiSosDemo', 'sosDisponiblesDemo']),
     `exports : ${Object.keys(U).join(', ')}`);
-  const AUTORISEES = ['proId', 'metierKey', 'distanceKm', 'delaiMin', 'actif'];
+  /* `seRetireApresRecherche` (seconde relecture du 27/10) : l'artisan de
+     démonstration qui coupe ses urgences juste après la recherche — un
+     drapeau, pas un chiffre. */
+  const AUTORISEES = ['proId', 'metierKey', 'distanceKm', 'delaiMin', 'actif', 'seRetireApresRecherche'];
   verifier('`SOS_ARTISANS` ne porte plus aucun chiffre de tarif',
     U.SOS_ARTISANS.every((a) => Object.keys(a).every((k) => AUTORISEES.includes(k))));
   const urg = sansCommentaires(lire('src/data/urgences.js'));

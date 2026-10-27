@@ -83,11 +83,20 @@ const unePolitique = (nom, table) => {
   const toutes = politiques(nom, table);
   return toutes.length === 1 ? toutes[0].replace(/\s+/g, ' ') : null;
 };
+/* Le corps s'arrête au `$$` qui FERME, où qu'il soit (seconde relecture du
+   27/10) : couper à la première ligne qui commence par `$$;` lisait bien
+   au-delà d'une fonction qui finit par `end; $$;` sur la même ligne — la
+   suivante entrait dans « son » corps, et un motif y trouvait ce qu'il
+   cherchait. Toutes les fonctions de `schema.sql` sont écrites `as $$`. */
 const fonction = (nom) => {
   const morceaux = sqlCode.split(`create or replace function public.${nom}(`);
   if (morceaux.length !== 2) return null;
-  return morceaux[1].split(/\n\$\$;/)[0];
+  const t = morceaux[1];
+  const debut = t.indexOf('$$');
+  const fin = debut < 0 ? -1 : t.indexOf('$$', debut + 2);
+  return fin < 0 ? null : t.slice(0, fin);
 };
+const forme = (texte) => (texte || '').replace(/\s+/g, ' ').trim();
 const checkDe = (pol) => (pol && pol.includes(' with check ') ? pol.split(' with check ')[1] : '');
 const usingDe = (pol) => (pol && pol.includes(' using ') ? pol.split(' using ')[1].split(' with check ')[0] : '');
 
@@ -124,20 +133,30 @@ console.log('\nLot S-b — le blocage ferme aussi ce qu’on écrit (R-B)');
   /* Une réponse sous un commentaire masqué : `limite_profondeur_commentaire`
      cherche le parent AVEC LES DROITS DE CELUI QUI ÉCRIT. Si elle devenait
      `security definer`, elle le trouverait — et la porte se rouvrirait. */
-  const profondeur = sqlCode.split('create or replace function public.limite_profondeur_commentaire()')[1] || '';
+  const profondeur = fonction('limite_profondeur_commentaire') || '';
   verifier('la réponse à un commentaire masqué reste refusée : `limite_profondeur_commentaire` n’est pas `security definer`',
     profondeur.length > 0 && !/security\s+definer/i.test(profondeur.split('$$')[0])
-      && /if not found then/.test(profondeur.split('$$;')[0]));
+      && /if not found/.test(profondeur)
+      /* Et rien ne la rend `security definer` après coup (seconde relecture
+         du 27/10) : un `alter function` posé plus bas ne touchait pas
+         l'en-tête que lit la ligne précédente. */
+      && !/alter\s+function\s+(public\.)?"?limite_profondeur_commentaire\b/i.test(sqlCode));
   /* ET LE COMMENTAIRE D'ORIGINE AUSSI (relecture du 26/10) : répondre à la
      réponse d'un TIERS rangeait la réponse sous le commentaire de la
      personne en blocage — le parent immédiat était lisible, la racine non.
-     La seconde recherche suit le rattachement, et refuse. */
-  const corpsProfondeur = profondeur.split('$$;')[0];
-  const rattache = corpsProfondeur.indexOf('new.parent_id := grand_parent;');
-  const apres = rattache >= 0 ? corpsProfondeur.slice(rattache) : '';
-  verifier('…et le commentaire d’ORIGINE du fil doit être lisible lui aussi : relu APRÈS le rattachement, refusé sinon',
-    rattache > 0 && /perform 1 from public\.comments where id = grand_parent;\s+if not found then\s+raise exception 'Le commentaire parent n''existe pas';/.test(apres)
-      && fonction('limite_profondeur_commentaire') !== null);
+     La seconde recherche suit DIRECTEMENT le rattachement (seconde relecture
+     du 27/10 : un `return new;` glissé entre les deux la rendait
+     inatteignable, au vert). */
+  const rattache = profondeur.indexOf('new.parent_id := grand_parent;');
+  const apres = rattache >= 0 ? profondeur.slice(rattache) : '';
+  verifier('…et le commentaire d’ORIGINE du fil doit être lisible lui aussi : relu JUSTE APRÈS le rattachement, refusé sinon',
+    rattache > 0 && /^new\.parent_id := grand_parent;\s+perform 1 from public\.comments where id = grand_parent;\s+if not found then\s+raise exception 'Le commentaire parent n''existe pas';/.test(apres));
+  /* ET LA MÊME PUBLICATION (seconde relecture du 27/10) : la lecture des
+     commentaires ne filtre que leur auteur ; une réponse qui déclarait une
+     autre publication que son parent s'accrochait au fil d'une publication
+     cachée. Comparé à l'écriture qui pose le lien, pas à l'anonymisation. */
+  verifier('…et une réponse vit sous la publication de son parent (`post_du_parent is distinct from new.post_id`, à l’insertion ou quand le lien change)',
+    /select parent_id, post_id into grand_parent, post_du_parent\s+from public\.comments where id = new\.parent_id;\s+if not found\s+or \(\(tg_op = 'INSERT'\s+or new\.post_id is distinct from old\.post_id\s+or new\.parent_id is distinct from old\.parent_id\)\s+and post_du_parent is distinct from new\.post_id\) then/.test(profondeur));
   /* UN « J'AIME » ET UN ABONNEMENT NE SE DÉPLACENT PAS : la porte UPDATE de
      `for all` gonflait les compteurs sans limite (relecture du 26/10). */
   const revokeLikes = sqlCode.indexOf('revoke update on public.post_likes, public.follows from anon, authenticated;');
@@ -242,7 +261,12 @@ console.log('\nLot S-b — la cloche se tait (décision Q1)');
   /* Et l'administration le LIT là où elle travaille (relecture du 26/10) :
      la phrase de la file existe tant que la liste des jamais tus contient
      `demande_pro_nouvelle` — et pas au-delà. */
-  const ecranAdmin = readFileSync('src/screens/AdminScreen.js', 'utf8').replace(/\s+/g, ' ');
+  /* Les commentaires retirés d'abord (seconde relecture du 27/10) : une
+     phrase rangée dans un commentaire JSX n'est plus AFFICHÉE, et la
+     trouver là passait au vert. */
+  const ecranAdmin = readFileSync('src/screens/AdminScreen.js', 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    .replace(/\s+/g, ' ');
   verifier('…et l’écran d’administration dit qu’une demande de compte pro arrive même de quelqu’un qu’on a bloqué',
     listeJamais.includes('demande_pro_nouvelle')
       === ecranAdmin.includes('Une demande arrive même de quelqu’un que vous avez bloqué : vous devez pouvoir l’examiner.'));
@@ -307,7 +331,17 @@ console.log('\nLot S-b — ce qu’un contrôle de texte doit pouvoir voir (rele
     demandes: ['lecture demandes', 'mes demandes'],
     notifications: ['mes notifications'],
     blocages: ['mes blocages'],
-    conversations: null,
+    /* Les conversations, les messages et les pièces jointes ENTRENT dans la
+       liste (seconde relecture du 27/10) : la phrase « vos conversations …
+       masquées des deux côtés » ne tient que par elles, et une seconde
+       lecture sous un autre nom la rendait fausse au vert. La double
+       création historique de « mes conversations » (sections 7 et 13.5) ne
+       gêne pas : on compare des NOMS. */
+    conversations: ['creation conversation', 'mes conversations'],
+    messages: ['envoi message', 'lecture mes messages'],
+    objects: ['envoi de mes fichiers', 'envoi piece jointe', 'lecture de mes documents',
+      'lecture des documents par l administration', 'lecture piece jointe', 'lecture publique des medias',
+      'remplacement de mes fichiers', 'suppression de mes fichiers'],
   };
   const creations = [...sqlCode.matchAll(/create policy "([^"]+)"\s+on\s+(?:(\w+)\.)?(\w+)/g)]
     .map((m) => ({ nom: m[1], schema: m[2] || null, table: m[3] }));
@@ -320,6 +354,116 @@ console.log('\nLot S-b — ce qu’un contrôle de texte doit pouvoir voir (rele
     verifier(`\`${table}\` : exactement ${noms.length} politique(s) — ${noms.join(', ')}`,
       JSON.stringify(vus) === JSON.stringify([...noms].sort()), vus.join(', '));
   }
+}
+
+console.log('\nLot S-b — les formes ENTIÈRES des règles nouvelles (seconde relecture du 27/10)');
+{
+  /* Une règle se compare ENTIÈRE, espaces réduits, et non par morceaux
+     cherchés « quelque part » : un `and` devenu `or`, un `exists` devenu
+     `not exists` (qui contient toujours « exists ( »), un `return new;`
+     glissé avant la garde — chacun rouvrait une règle au vert. Changer une
+     de ces règles se DÉCIDE : on change la base, l'essai 51 b, et la forme
+     attendue ici, dans le même lot, en disant pourquoi. */
+  const FORMES = {
+    "tait_les_notifications_bloquees": ") returns trigger language plpgsql security definer set search_path = public as $$ begin if new.acteur_id is null or new.type in ('demande_pro_nouvelle') then return new; end if; if exists (select 1 from public.blocages b where b.bloqueur_id = new.user_id and b.bloque_id = new.acteur_id) then return null; end if; if new.comment_id is not null and exists (select 1 from public.blocages b where b.bloqueur_id = new.acteur_id and b.bloque_id = new.user_id) then return null; end if; return new; end;",
+    "calcule_client_verifie": ") returns trigger language plpgsql security definer set search_path = public as $$ begin if tg_op = 'UPDATE' and new.author_id is null then new.client_verifie := old.client_verifie; return new; end if; new.client_verifie := exists ( select 1 from public.quote_requests q where q.client_id = new.author_id and q.professional_id = new.professional_id and q.statut in ('accepte', 'termine') ) or exists ( select 1 from public.callback_requests c where c.client_id = new.author_id and c.professional_id = new.professional_id and c.statut in ('accepte', 'termine') ) or exists ( select 1 from public.sos_requests s where s.client_id = new.author_id and s.professional_id = new.professional_id and s.statut in ('acceptee', 'termine') ); return new; end;",
+    "limite_profondeur_commentaire": ") returns trigger language plpgsql set search_path = public as $$ declare grand_parent uuid; post_du_parent uuid; begin if new.parent_id is null then return new; end if; select parent_id, post_id into grand_parent, post_du_parent from public.comments where id = new.parent_id; if not found or ((tg_op = 'INSERT' or new.post_id is distinct from old.post_id or new.parent_id is distinct from old.parent_id) and post_du_parent is distinct from new.post_id) then raise exception 'Le commentaire parent n''existe pas'; end if; if grand_parent is not null then new.parent_id := grand_parent; perform 1 from public.comments where id = grand_parent; if not found then raise exception 'Le commentaire parent n''existe pas'; end if; end if; return new; end;",
+    "tient_l_urgence": ") returns trigger language plpgsql security invoker set search_path = public as $$ begin if current_user not in ('authenticated', 'anon') then return new; end if; if not exists ( select 1 from public.sos_availability sa join public.professional_profiles pp on pp.id = sa.professional_id join public.tarifs_pro t on t.pro_id = sa.professional_id where sa.professional_id = new.professional_id and sa.metier_key = new.metier_key and sa.actif and pp.metiers @> array[public.metier_du_sos(sa.metier_key)] and t.affiche is true and t.frais_deplacement_centimes is not null and t.taux_horaire_centimes is not null and t.majoration_pct is not null) then raise exception 'Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.' using errcode = 'OP025'; end if; return new; end;",
+    "tient_le_compteur_d_annonce": ") returns trigger language plpgsql security invoker set search_path = public as $$ begin if current_user in ('authenticated', 'anon') then if tg_op = 'INSERT' then new.nb_reponses := 0; else new.nb_reponses := old.nb_reponses; end if; end if; return new; end;",
+    "tient_le_compteur_de_demande": ") returns trigger language plpgsql security invoker set search_path = public as $$ begin if current_user in ('authenticated', 'anon') then if tg_op = 'INSERT' then new.nb_reponses := 0; else new.nb_reponses := old.nb_reponses; end if; end if; return new; end;",
+  };
+  for (const [nom, attendu] of Object.entries(FORMES)) {
+    const vu = forme(fonction(nom));
+    verifier(`\`${nom}\` a exactement la forme relue et éprouvée par l’essai 51 b`, vu === attendu,
+      vu ? `reçu : ${vu.slice(0, 240)}…` : 'fonction introuvable, ou créée plusieurs fois');
+  }
+  const POLITIQUES = [
+    ["mes likes", "post_likes", "for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id and exists (select 1 from public.posts p where p.id = post_likes.post_id))"],
+    ["mes comments", "comments", "for all to authenticated using (auth.uid() = author_id) with check (auth.uid() = author_id and exists (select 1 from public.posts p where p.id = comments.post_id))"],
+    ["mes reponses", "demande_reponses", "for all to authenticated using (auth.uid() = professional_id) with check ( auth.uid() = professional_id and exists (select 1 from public.demandes d where d.id = demande_reponses.demande_id and d.statut = 'ouverte' and d.client_id <> auth.uid()) )"],
+    ["annonce reponses ecriture", "annonce_reponses", "for all to authenticated using (auth.uid() = professional_id) with check ( auth.uid() = professional_id and public.est_un_pro() and exists (select 1 from public.annonces_pro a where a.id = annonce_reponses.annonce_id and a.statut = 'ouverte' and a.auteur_id <> auth.uid()) )"],
+  ];
+  for (const [nom, table, attendu] of POLITIQUES) {
+    const vu = forme(unePolitique(nom, table));
+    verifier(`« ${nom} » a exactement la forme relue et éprouvée par l’essai 51 b`, vu === attendu,
+      vu ? `reçu : ${vu}` : `${politiques(nom, table).length} création(s)`);
+  }
+}
+
+console.log('\nLot S-b — une lecture TOLÉRANTE du même SQL (seconde relecture du 27/10)');
+{
+  /* Les motifs plus haut lisent une ORTHOGRAPHE : minuscules, une espace,
+     des guillemets, `public.` collé au nom. Le même ordre SQL s'écrit
+     autrement — `ALTER POLICY` en majuscules ou sur deux lignes, une
+     politique sans guillemets, `"public"."post_likes"`, une espace avant
+     « ( », `enable replica trigger` (qui éteint sans dire « disable ») — et
+     chacune de ces formes rouvrait une règle du lot sans qu'aucun contrôle
+     ne rougisse. Cette lecture-ci ne remplace pas les motifs : elle ignore
+     la casse, accepte tous les blancs, rend guillemets et schéma facultatifs,
+     et compte. Un faux refus ici se corrige en relisant le SQL, pas en
+     assouplissant le motif. */
+  const t = sqlCode;
+  const interditsI = [
+    ['alter policy', /\balter\s+policy\b/i],
+    ['alter function', /\balter\s+function\b/i],
+    ['disable row level security', /\bdisable\s+row\s+level\s+security\b/i],
+    ['no force row level security', /\bno\s+force\s+row\s+level\s+security\b/i],
+    ['disable / enable replica / enable always trigger', /\b(disable|enable\s+(replica|always))\s+trigger\b/i],
+    ['session_replication_role', /\bsession_replication_role\b/i],
+  ];
+  for (const [nom, motif] of interditsI) verifier(`(tolérant) \`schema.sql\` ne contient aucun \`${nom}\`, quelle que soit sa casse`, !motif.test(t));
+  const ID = '(?:"([^"]+)"|(\\w+))';
+  const SCH = '(?:(?:"\\w+"|\\w+)\\s*\\.\\s*)?';
+  /* les déclencheurs : nom et table, schéma facultatif ; et aucun `drop
+     trigger` APRÈS la dernière création du même déclencheur */
+  const decl = [...t.matchAll(new RegExp(`create\\s+(?:or\\s+replace\\s+)?trigger\\s+${ID}\\s+(?:before|after|instead\\s+of)[^;]*?\\son\\s+${SCH}"?(\\w+)"?`, 'gi'))]
+    .map((m) => ({ nom: (m[1] || m[2]).toLowerCase(), table: m[3].toLowerCase(), i: m.index }));
+  const nbD = {};
+  for (const d of decl) nbD[`${d.nom} sur ${d.table}`] = (nbD[`${d.nom} sur ${d.table}`] || 0) + 1;
+  const doublesD = Object.entries(nbD).filter(([, k]) => k > 1).map(([n, k]) => `${n} ×${k}`);
+  verifier(`(tolérant) aucun déclencheur n’est créé deux fois sur la même table (${decl.length} relevés)`,
+    decl.length > 40 && doublesD.length === 0, doublesD.join(', '));
+  const derniere = {};
+  for (const d of decl) derniere[d.nom] = Math.max(derniere[d.nom] || 0, d.i);
+  const dropsApres = [...t.matchAll(new RegExp(`drop\\s+trigger\\s+(?:if\\s+exists\\s+)?${ID}`, 'gi'))]
+    .map((m) => ({ nom: (m[1] || m[2]).toLowerCase(), i: m.index }))
+    .filter((d) => derniere[d.nom] !== undefined && d.i > derniere[d.nom]);
+  verifier('(tolérant) aucun `drop trigger` ne vient après la dernière création du même déclencheur',
+    dropsApres.length === 0, dropsApres.map((d) => d.nom).join(', '));
+  /* les fonctions : schéma et guillemets facultatifs, espace avant « ( » */
+  const nbF = {};
+  const derniereF = {};
+  for (const m of t.matchAll(new RegExp(`create\\s+(?:or\\s+replace\\s+)?function\\s+${SCH}${ID}\\s*\\(`, 'gi'))) {
+    const n = (m[1] || m[2]).toLowerCase();
+    nbF[n] = (nbF[n] || 0) + 1;
+    derniereF[n] = Math.max(derniereF[n] || 0, m.index);
+  }
+  const doublesF = Object.entries(nbF).filter(([n, k]) => k > 1 && n !== 'notifie_demande').map(([n, k]) => `${n} ×${k}`);
+  verifier('(tolérant) aucune fonction n’est créée deux fois (sauf `notifie_demande`, connue)',
+    doublesF.length === 0 && nbF.notifie_demande === 2, doublesF.join(', '));
+  /* Un `drop function` AVANT la création (une signature qui change, sur une
+     base ancienne — `artisans_urgence`) est légitime ; APRÈS la dernière
+     création, il retire la règle sans que rien d'autre ne le voie. */
+  const dropsF = [...t.matchAll(new RegExp(`drop\\s+function\\s+(?:if\\s+exists\\s+)?${SCH}${ID}`, 'gi'))]
+    .map((m) => ({ nom: (m[1] || m[2]).toLowerCase(), i: m.index }))
+    .filter((d) => derniereF[d.nom] !== undefined && d.i > derniereF[d.nom]);
+  verifier('(tolérant) aucun `drop function` ne vient après la dernière création de la même fonction',
+    dropsF.length === 0, dropsF.map((d) => d.nom).join(', '));
+  /* les politiques : nom avec ou sans guillemets, schéma facultatif — le
+     NOMBRE de noms par table, celui de la liste fermée plus haut */
+  const pols = [...t.matchAll(new RegExp(`create\\s+policy\\s+${ID}\\s+on\\s+${SCH}"?(\\w+)"?`, 'gi'))]
+    .map((m) => ({ nom: m[1] || m[2].toLowerCase(), table: m[3].toLowerCase() }));
+  const ATT = { post_likes: 2, follows: 2, comments: 3, reviews: 3, demande_reponses: 3, annonce_reponses: 2,
+    professional_partners: 5, quote_requests: 3, callback_requests: 3, sos_requests: 3, annonces_pro: 2, demandes: 2,
+    notifications: 1, blocages: 1, conversations: 2, messages: 2, objects: 8 };
+  for (const [table, k] of Object.entries(ATT)) {
+    const vus = [...new Set(pols.filter((x) => x.table === table).map((x) => x.nom))];
+    verifier(`(tolérant) \`${table}\` : ${k} nom(s) de politique, guillemets et schéma facultatifs`, vus.length === k, vus.join(', '));
+  }
+  /* les droits : plusieurs tables dans le même `grant` */
+  const ap = t.indexOf('revoke update on public.post_likes, public.follows from anon, authenticated;');
+  verifier('(tolérant) aucun `grant` ne rend une écriture sur `post_likes` ou `follows`, même cité parmi d’autres tables',
+    ap > 0 && !new RegExp(`grant\\s[^;]*?\\bon\\s+(?:table\\s+)?(?:[\\w."]+\\s*,\\s*)*${SCH}"?(post_likes|follows)"?\\b`, 'i').test(t.slice(ap)));
 }
 
 console.log('');

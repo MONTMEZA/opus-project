@@ -48,6 +48,7 @@ import { fabriquerEmetteurDemo, PRO_DEMO_EMETTEUR } from '../data/emetteur-demo'
    cycle avec ce fichier, et `verifier-tarifs` peut les faire tourner. */
 import { depuisLaRecherche } from './tarifs';
 import { TARIFS_DEMO, MES_SOS_DEMO } from '../data/tarifs-demo';
+import { SOS_ARTISANS, envoiSosDemo, sosDisponiblesDemo } from '../data/urgences';
 /* Le chiffrage d'un devis (section 49, lot 1 du module devis). Les quatre
    fichiers n'importent que des fichiers purs — `devis.js` (`centimes.js`,
    `entreprise.js`), `file-ecriture.js` et `identifiant.js` rien du tout,
@@ -58,7 +59,7 @@ import { nouvelIdentifiant } from './identifiant';
 import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
 } from './devis';
-import { creerBaseDevisDemo } from '../data/devis-demo';
+import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
 /* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
    fichiers purs (`devis.js`, `centimes.js`, `entreprise.js`,
    `rapprochement.js`) : aucun cycle avec ce fichier. Seul le plafond en
@@ -2395,6 +2396,21 @@ export const createConversationWithClient = !hasSupabase ? noop : async (clientI
   return data;
 };
 
+/**
+ * Relire la conversation qui existe déjà avec ce particulier (seconde
+ * relecture du 27/10) : la création répond 23505 quand elle existe côté
+ * base sans être dans la liste de l'écran — créée sur un autre appareil,
+ * ou dont la réponse s'est perdue. Sans cette relecture, chaque appui
+ * suivant recevait le même 23505, jusqu'au redémarrage.
+ */
+export const conversationAvecClient = !hasSupabase ? noop : async (clientId) => {
+  const { data, error } = await supabase.from('conversations')
+    .select('id').eq('client_id', clientId).eq('professional_id', currentUserId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+};
+
 export const sendMessage = !hasSupabase ? noop : async (conversationId, texte) => {
   const { data, error } = await supabase.from('messages')
     .insert({ conversation_id: conversationId, sender_id: currentUserId, texte })
@@ -2546,9 +2562,11 @@ async function nouveauDevisPermisSupabase(genre, id) {
 /* Le blocage d'un client de démonstration ferme les NOUVEAUX liens — la
    même règle pour la question posée avant la saisie et pour la base de
    devis de démonstration, qui refuse alors l'écriture (OP020). */
+/* UNE FONCTION, PAS UNE CONSTANTE : `demoBlocages` est déclaré bien plus
+   bas dans ce fichier, et le lire au chargement serait un ReferenceError —
+   un écran blanc au démarrage, que ni l'export ni le linter ne signalent. */
 function lienFermeDemo(genre, id) {
-  const d = DEMANDES_RECUES_DEMO.find((x) => x.id === id);
-  return !!(d && demoBlocages.has(String(d.clientId)));
+  return creerLienFermeDemo(DEMANDES_RECUES_DEMO, demoBlocages)(genre, id);
 }
 async function nouveauDevisPermisDemo(genre, id) {
   return !lienFermeDemo(genre, id);
@@ -3706,7 +3724,8 @@ const REPONSES_DEMANDES_DEMO = new Set();
 async function repondreADemandeDemo(demandeId) {
   const cle = String(demandeId);
   const d = initialDemandes.find((x) => String(x.id) === cle);
-  if (d && ((d.statut && d.statut !== 'ouverte') || demoBlocages.has(String(d.auteurId)))) {
+  if (d && ((d.statut && d.statut !== 'ouverte') || d.fermeeApresChargement
+    || demoBlocages.has(String(d.auteurId)))) {
     throw new ErreurDeLaBase('REPONSE_FERMEE', REPONSE_FERMEE);
   }
   if (REPONSES_DEMANDES_DEMO.has(cle)) return { nouvelle: false };
@@ -4024,7 +4043,22 @@ export const chercherArtisansUrgence = !hasSupabase ? noop : async (
  * juste au-dessus du bouton. Un numéro transmis en le sachant n'est pas un
  * numéro divulgué.
  */
-export const createSosRequest = !hasSupabase ? noop : async (d) => {
+/* LA DÉMONSTRATION REFUSE COMME LA BASE (seconde relecture du 27/10) :
+   OP025 vers un artisan dont la ligne d'urgence n'est pas active pour ce
+   métier — et le chauffagiste de démonstration coupe la sienne juste après
+   la recherche (`envoiSosDemo`, `urgences.js`, que `verifier-demandes` fait
+   tourner). */
+const SOS_RETIRES_DEMO = new Set();
+export function sosArtisansDemo() {
+  return sosDisponiblesDemo(SOS_ARTISANS, SOS_RETIRES_DEMO);
+}
+async function createSosRequestDemo(d) {
+  if (envoiSosDemo(SOS_ARTISANS, SOS_RETIRES_DEMO, d.proId, d.metierKey) === 'OP025') {
+    throw new ErreurDeLaBase('OP025', REFUS_DEMANDES.OP025);
+  }
+  return null;
+}
+export const createSosRequest = !hasSupabase ? createSosRequestDemo : async (d) => {
   const { data, error } = await supabase.from('sos_requests').insert({
     client_id: currentUserId,
     professional_id: d.proId,

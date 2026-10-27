@@ -1827,6 +1827,13 @@ console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le tex
   const sqlS = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const bloc = (titre) => ([...MENTIONS, ...CGU, ...CONFIDENTIALITE].find((b) => b.titre === titre) || {}).texte || '';
   const bloquer = bloc('Bloquer quelqu’un');
+  /* LA VERSION SUIT LE TEXTE (seconde relecture du 27/10) : le lot S-b
+     change les CGU (le blocage, les avis, la durée d'un refus de
+     partenariat), et ses corrections du 27/10 les changent encore. Ramener
+     VERSION au 25/10 passait au vert. */
+  verifier('VERSION est au moins celle du lot S-b corrigé (27/10/2026)',
+    VERSION >= '2026-10-27',
+    `VERSION = ${VERSION}. Le blocage (ce qui revient, ce qui disparaît), les avis et le partenariat refusé : un changement de fond, sous une version nouvelle.`);
   /* Réponse D2 du propriétaire (25/10) : « Rien ne disparaît, plus rien de
      neuf ». Le texte en dit les deux moitiés, et les deux sens. */
   verifier('« Bloquer quelqu’un » dit les deux moitiés : plus rien de nouveau, dans les deux sens — et rien n’est effacé',
@@ -1837,17 +1844,50 @@ console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le tex
      pas » se lisait « reste visible », et c'était faux pour la messagerie.
      Le texte suit la politique de lecture, dans les deux sens : le jour où
      « mes conversations » cesse de masquer, la phrase doit partir. */
-  const politiquesConv = [...sqlS.matchAll(/create policy "mes conversations" on public\.conversations([\s\S]*?);/g)];
-  const derniere = politiquesConv.length ? politiquesConv[politiquesConv.length - 1][1] : '';
-  const masque = /not public\.est_masque\(professional_id\)/.test(derniere) && /not public\.est_masque\(client_id\)/.test(derniere);
-  const phraseConv = 'vos conversations avec cette personne — vos messages et les pièces jointes compris — sont masquées des deux côtés tant que dure le blocage, et reviennent si vous le retirez';
+  /* TOUTES LES POLITIQUES DE LECTURE, et pas la seule « mes conversations »
+     (seconde relecture du 27/10) : des politiques s'ADDITIONNENT en OU, et
+     une seconde lecture, sous n'importe quel nom, rendait la conversation
+     visible sous blocage — au vert. Chaque politique qui laisse LIRE (`for
+     select` ou `for all`), prise dans sa DERNIÈRE définition, doit masquer :
+     sur `conversations` les deux côtés, sur `messages` l'expéditeur ET la
+     conversation (qu'elle relit, donc masquée elle aussi), et sur
+     `storage.objects` toute lecture qui peut atteindre l'espace
+     `pieces-jointes`. */
+  const derniereDe = (table, schema = 'public') => {
+    const parNom = new Map();
+    for (const m of sqlS.matchAll(new RegExp(`create policy "([^"]+)"\\s+on\\s+${schema}\\.${table}\\b([\\s\\S]*?);`, 'g'))) {
+      parNom.set(m[1], m[2].replace(/\s+/g, ' '));
+    }
+    return [...parNom.entries()];
+  };
+  const lit = (corps) => /\bfor (select|all)\b/.test(corps) || !/\bfor (insert|update|delete)\b/.test(corps);
+  const lecturesConv = derniereDe('conversations').filter(([, c]) => lit(c));
+  const lecturesMsg = derniereDe('messages').filter(([, c]) => lit(c));
+  const lecturesPj = derniereDe('objects', 'storage').filter(([, c]) => lit(c))
+    .filter(([, c]) => !/bucket_id (=|in) /.test(c) || /'pieces-jointes'/.test(c));
+  const masqueConv = lecturesConv.length >= 1 && lecturesConv.every(([, c]) => /not public\.est_masque\(professional_id\)/.test(c)
+    && /not public\.est_masque\(client_id\)/.test(c));
+  const masqueMsg = lecturesMsg.length >= 1 && lecturesMsg.every(([, c]) => /not public\.est_masque\(sender_id\)/.test(c)
+    && /exists \( ?select 1 from public\.conversations c where c\.id = messages\.conversation_id/.test(c));
+  const masquePj = lecturesPj.length >= 1 && lecturesPj.every(([, c]) => /not public\.est_masque\(c\.client_id\)/.test(c)
+    && /not public\.est_masque\(c\.professional_id\)/.test(c));
+  const masque = masqueConv && masqueMsg && masquePj;
+  const phraseConv = 'vos conversations avec cette personne — vos messages et les pièces jointes compris — sont masquées des deux côtés tant que dure le blocage, et reviennent quand plus aucun blocage ne vous sépare';
   const ecranConf = readFileSync('src/screens/ConfidentialiteScreen.js', 'utf8').replace(/\s+/g, ' ');
   const ecranSig = readFileSync('src/components/Signaler.js', 'utf8').replace(/\s+/g, ' ');
-  verifier('…« vos conversations … sont masquées des deux côtés » tant que « mes conversations » applique le blocage — et les deux écrans le disent',
+  verifier(`…« vos conversations … sont masquées des deux côtés » tant que TOUTES les lectures des conversations (${lecturesConv.length}), des messages (${lecturesMsg.length}) et des pièces jointes (${lecturesPj.length}) appliquent le blocage — et les deux écrans le disent`,
     masque === bloquer.includes(phraseConv)
-      && masque === ecranConf.includes('vos conversations avec eux sont masquées des deux côtés tant que dure le blocage, et reviennent si vous le retirez')
-      && masque === ecranSig.includes('Vos conversations avec elle sont masquées des deux côtés, sans rien effacer : elles reviennent si vous retirez ce blocage'),
-    masque ? 'un texte ne le dit plus' : 'la base ne masque plus les conversations : les textes doivent changer');
+      && masque === ecranConf.includes('vos conversations avec eux sont masquées des deux côtés tant que dure le blocage, et reviennent quand plus aucun blocage ne vous sépare')
+      && masque === ecranSig.includes('Vos conversations avec elle sont masquées des deux côtés, sans rien effacer : elles reviennent quand plus aucun blocage ne vous sépare'),
+    masque ? 'un texte ne le dit plus' : `la base ne masque plus (conversations ${masqueConv}, messages ${masqueMsg}, pièces jointes ${masquePj}) : les textes doivent changer`);
+  /* « QUAND PLUS AUCUN BLOCAGE NE VOUS SÉPARE », jamais « si vous le
+     retirez » : `est_masque()` regarde les deux sens, et retirer le sien ne
+     rend rien quand l'autre vous a bloqué aussi (seconde relecture du 27/10,
+     essai 51 b, F10). */
+  const promesseRetrait = [bloquer, ecranConf, ecranSig]
+    .some((t) => /reviennent si vous (le |ce blocage )?retirez|reviennent si vous retirez ce blocage/.test(t));
+  verifier('…et aucun texte ne promet que les conversations « reviennent si vous le retirez » : il faut que PLUS AUCUN blocage ne sépare les deux personnes',
+    !promesseRetrait);
   /* « Une demande déjà reçue peut encore être refusée ou marquée terminée »
      — et JAMAIS acceptée : la base répond OP020 (relecture du 26/10). */
   const reste = (bloquer.match(/une demande déjà reçue[^;]*?terminée/) || [''])[0];
@@ -1858,6 +1898,18 @@ console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le tex
      pour lui. Le dire évite de promettre un secret. */
   verifier('…et le texte ne promet pas le secret : « elle peut s’en apercevoir »',
     /Aucune notification ne lui annonce le blocage, mais elle peut s’en apercevoir/.test(bloquer));
+  /* …ET IL NE DIT PAS PLUS QUE LA BASE (seconde relecture du 27/10) : la
+     fiche, la disponibilité aux urgences, un avis ou une demande déjà reçus
+     restent lisibles. Ce qui disparaît, ce sont les publications et les
+     commentaires — les deux lectures qui appellent `est_masque()`. */
+  const lectPosts = (sqlS.match(/create policy "lecture posts" on public\.posts([\s\S]*?);/g) || []).pop() || '';
+  const lectComments = (sqlS.match(/create policy "lecture comments" on public\.comments([\s\S]*?);/g) || []).pop() || '';
+  const masquePub = /est_masque\(author_id\)/.test(lectPosts) && /est_masque\(author_id\)/.test(lectComments);
+  verifier('…« vos publications et vos commentaires ne lui apparaissent plus » — pas « vos contenus » —, tant que les deux lectures masquent l’auteur',
+    masquePub && /mais elle peut s’en apercevoir : vos publications et vos commentaires ne lui apparaissent plus/.test(bloquer)
+      && !/vos contenus ne lui apparaissent plus/.test(bloquer)
+      && /^Bloquer une personne masque ses publications et ses commentaires des deux côtés/.test(bloquer),
+    masquePub ? 'le texte ne le dit plus' : 'les lectures ne masquent plus l’auteur');
   /* Q1 du propriétaire : « Oui, le refus passe ». La base ne tait QUE les
      notifications reçues par celui qui a bloqué (`bloqueur_id = user_id`) :
      celle d'un refus, envoyée à la personne bloquée, part encore. */
@@ -1934,6 +1986,27 @@ console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le tex
      rien de NOUVEAU » est vrai. */
   const menteurs = ecrans.filter(([, c]) => /plus rien d(e ce compte|u vôtre)|ne (voyez|verrez|verra|voient|verront) plus rien(?! de nouveau)|plus rien de (vous|ces comptes|cette personne)/.test(c.replace(/\s+/g, ' '))).map(([f]) => f);
   verifier('aucun écran ne dit plus « vous ne verrez plus RIEN de ce compte » — sous aucune tournure', menteurs.length === 0, menteurs.join(', '));
+  /* LE BLOC ENTIER, et pas une liste de tournures interdites (seconde
+     relecture du 27/10) : « vous ne verrez plus JAMAIS rien » passait la
+     liste. Ce qui s'affiche après un blocage est relu mot pour mot, les
+     commentaires retirés d'abord — une phrase rangée dans un commentaire ne
+     s'affiche pas. Changer ces phrases se décide, et se recopie ici. */
+  const noeud = (fichier, debut) => {
+    const c = readFileSync(fichier, 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s+/g, ' ');
+    const i = c.indexOf(debut);
+    return i < 0 ? '' : c.slice(i, c.indexOf('</Text>', i)).trim();
+  };
+  const BLOCS = [
+    ['src/screens/ConfidentialiteScreen.js', 'Vous ne voyez plus leurs publications',
+      'Vous ne voyez plus leurs publications ni leurs commentaires, ils ne voient plus les vôtres, et plus rien de nouveau ne passe entre vous — ni message, ni demande. Rien n’est effacé : vos conversations avec eux sont masquées des deux côtés tant que dure le blocage, et reviennent quand plus aucun blocage ne vous sépare. Le blocage se retire quand vous le voulez.'],
+    ['src/components/Signaler.js', '{auteurNom || \'Cette personne\'} est bloquée.',
+      '{auteurNom || \'Cette personne\'} est bloquée. Vous ne verrez plus ses publications ni ses commentaires, elle ne verra plus les vôtres, et plus rien de nouveau ne peut passer entre vous — ni message, ni demande. Vos conversations avec elle sont masquées des deux côtés, sans rien effacer : elles reviennent quand plus aucun blocage ne vous sépare. Vous pouvez retirer le vôtre à tout moment, depuis Profil → Confidentialité et sécurité.'],
+  ];
+  for (const [fichier, debut, attendu] of BLOCS) {
+    const vu = noeud(fichier, debut);
+    verifier(`…\`${fichier.split('/').pop()}\` affiche, après un blocage, exactement le texte relu`, vu === attendu, vu || 'texte introuvable');
+  }
 }
 
 console.log('\nLa position du téléphone : la promesse et le paquet ne se contredisent pas');

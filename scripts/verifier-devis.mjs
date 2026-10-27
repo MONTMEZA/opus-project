@@ -3163,6 +3163,40 @@ console.log('\n  27 bis. la base de démonstration refuse AVEC LES MOTS DE LA BA
       && vaut(f3, 'OP013', ERR.REFUS_DEVIS.OP013_demande)
       && (await fermee.relireUn('1', { quoi: 'devis', id: ID(300) })) === null,
       [f1, f2, f3].map((e) => (e ? e.code : 'passé')).join(' | '));
+    /* f4 (seconde relecture du 27/10) : une demande À LA FOIS fermée par le
+       blocage ET inconnue de l'artisan. C'est le seul cas qui éprouve
+       l'ORDRE : OP013 d'abord, sinon un tiers apprendrait le blocage. */
+    const fermee4 = DEMO.creerBaseDevisDemo({
+      demandeDe: (g, id) => demandes[`${g}:${id}`] || null,
+      lienFerme: () => true,
+    });
+    const f4 = await essayer(() => fermee4.ecrire('1', { quoi: 'devis', action: 'inserer', id: ID(303), valeurs: { quoteRequestId: 'dr-ferme-inconnue' }, generation: n() }));
+    verifier('e bis. une demande fermée par un blocage ET qui n’est pas à l’artisan : « pas à vous » (OP013), jamais OP020',
+      vaut(f4, 'OP013', ERR.REFUS_DEVIS.OP013_demande), f4 ? f4.code : 'passé');
+  }
+  /* e ter. LA RÈGLE QUE LA DÉMONSTRATION BRANCHE VRAIMENT (seconde relecture
+     du 27/10) : `creerLienFermeDemo`, sur les vraies demandes reçues de
+     démonstration — u-julie bloquée, puis débloquée. Le GENRE compte : la
+     même clé d'un autre genre n'est pas fermée. Et `api.js` la branche. */
+  {
+    const { creerLienFermeDemo } = DEMO;
+    const { initialDemandesRecues } = await import('../src/data/demo.js');
+    const blocs = new Set();
+    const ferme = creerLienFermeDemo(initialDemandesRecues, blocs);
+    const julie = initialDemandesRecues.filter((d) => String(d.clientId) === 'u-julie');
+    const autres = initialDemandesRecues.filter((d) => String(d.clientId) !== 'u-julie');
+    const avant = julie.every((d) => !ferme(d.genre, d.id));
+    blocs.add('u-julie');
+    const pendant = julie.every((d) => ferme(d.genre, d.id)) && autres.every((d) => !ferme(d.genre, d.id))
+      && julie.every((d) => !ferme(d.genre === 'sos' ? 'devis' : 'sos', d.id));
+    blocs.delete('u-julie');
+    const apres = julie.every((d) => !ferme(d.genre, d.id));
+    const apiTexte = lire('src/lib/api.js');
+    verifier(`e ter. \`creerLienFermeDemo\` sur les demandes de démonstration : u-julie (${julie.length} demande(s)) ouverte, fermée sous blocage — les autres non, ni un autre genre —, rouverte au déblocage ; et \`api.js\` la branche`,
+      julie.length >= 1 && autres.length >= 1 && avant && pendant && apres
+        && /creerLienFermeDemo\(DEMANDES_RECUES_DEMO, demoBlocages\)\(genre, id\)/.test(apiTexte)
+        && /lienFerme: lienFermeDemo/.test(apiTexte)
+        && /return !lienFermeDemo\(genre, id\);/.test(apiTexte));
   }
   const e9 = await essayer(() => ecrire({ quoi: 'ligne', action: 'inserer', id: ID(15), valeurs: { devisId: ID(1), ordre: 4000, ...poste({ quantiteMilliemes: 1000, prixUnitaireCentimes: 9999999999 }) }, generation: n() }));
   verifier('f. deux lignes recevables dont la SOMME dépasse le plafond : 23514 `devis_plafond_check` sur le DEVIS, comme la base',

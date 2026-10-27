@@ -575,6 +575,48 @@ values ('a51b0000-0000-4000-8000-0000000000a1', 'a51b0000-0000-4000-8000-0000000
 select parent_id = 'a51b0000-0000-4000-8000-0000000000e1' as sous_le_commentaire_d_origine from public.comments where author_id = 'a51b0000-0000-4000-8000-00000000000b';
 rollback;
 
+\echo '--- F2 ter d. UNE RÉPONSE VIT SOUS LA PUBLICATION DE SON PARENT (seconde relecture du 27/10) : P a bloqué B ; Q a commenté la publication de B ; P lit ce commentaire (pas la publication), et y répond en déclarant la publication de A (attendu : 0 | 1, puis ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, accroché au fil de la publication de B)'
+begin;
+insert into public.comments (id, post_id, author_id, texte) values ('a51b0000-0000-4000-8000-0000000000e3', :PB, :Q, 'Commentaire de Q sous la publication de B');
+insert into public.blocages (bloqueur_id, bloque_id) values (:P, :B);
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+select (select count(*) from public.posts where id = 'a51b0000-0000-4000-8000-0000000000b1') as p_lit_la_publication_de_b,
+       (select count(*) from public.comments where id = 'a51b0000-0000-4000-8000-0000000000e3') as p_lit_le_commentaire_de_q;
+insert into public.comments (post_id, author_id, texte, parent_id)
+values ('a51b0000-0000-4000-8000-0000000000a1', 'a51b0000-0000-4000-8000-000000000001', 'Réponse de P', 'a51b0000-0000-4000-8000-0000000000e3');
+rollback;
+
+\echo '--- F2 ter e. … et c est une règle d intégrité, pas de blocage : sans aucun blocage, A répond au même commentaire en déclarant SA publication, puis en déclarant la bonne (attendu : ERROR « Le commentaire parent n existe pas », puis INSERT 0 1)'
+begin;
+insert into public.comments (id, post_id, author_id, texte) values ('a51b0000-0000-4000-8000-0000000000e3', :PB, :Q, 'Commentaire de Q sous la publication de B');
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000a';
+insert into public.comments (post_id, author_id, texte, parent_id)
+values ('a51b0000-0000-4000-8000-0000000000a1', 'a51b0000-0000-4000-8000-00000000000a', 'Réponse de A, mauvaise publication', 'a51b0000-0000-4000-8000-0000000000e3');
+rollback;
+begin;
+insert into public.comments (id, post_id, author_id, texte) values ('a51b0000-0000-4000-8000-0000000000e3', :PB, :Q, 'Commentaire de Q sous la publication de B');
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000a';
+insert into public.comments (post_id, author_id, texte, parent_id)
+values ('a51b0000-0000-4000-8000-0000000000b1', 'a51b0000-0000-4000-8000-00000000000a', 'Réponse de A, bonne publication', 'a51b0000-0000-4000-8000-0000000000e3');
+rollback;
+
+\echo '--- F2 ter f. une réponse INCOHÉRENTE écrite avant cette règle ne bloque pas le droit à l effacement : P, son auteur, supprime son compte (attendu : t, puis anonymisee t | compte_parti t)'
+begin;
+insert into public.comments (id, post_id, author_id, texte) values ('a51b0000-0000-4000-8000-0000000000e3', :PB, :Q, 'Commentaire de Q sous la publication de B');
+alter table public.comments disable trigger trg_limite_profondeur_commentaire;
+insert into public.comments (id, post_id, author_id, texte, parent_id) values ('a51b0000-0000-4000-8000-0000000000e4', :PA, :P, 'Réponse de P, d avant la règle', 'a51b0000-0000-4000-8000-0000000000e3');
+alter table public.comments enable trigger trg_limite_profondeur_commentaire;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+select public.preparer_suppression_compte() is not null as compte_prepare;
+reset role;
+select (select author_id is null and auteur_supprime from public.comments where id = 'a51b0000-0000-4000-8000-0000000000e4') as anonymisee,
+       not exists (select 1 from public.users where id = :P) as compte_parti;
+rollback;
+
 \echo '--- F2 quater. la notification d un commentaire qu on ne peut pas lire se tait : P a bloqué B ; dans le fil de Q, B avait répondu ; P y répond (attendu : INSERT 0 1, puis reponse_chez_b 0 | reponse_chez_q 1 — avant la correction : 1 | 1)'
 begin;
 insert into public.comments (id, post_id, author_id, texte) values ('a51b0000-0000-4000-8000-0000000000e1', :PA, :Q, 'Commentaire de Q');
@@ -752,6 +794,35 @@ select client_verifie, auteur_supprime, author_id is null as anonyme
   from public.reviews where professional_id = :A;
 rollback;
 
+\echo '--- F10. LES CONVERSATIONS (seconde relecture du 27/10) : masquées des deux côtés sous un blocage, et revenues seulement quand PLUS AUCUN blocage ne sépare les deux personnes (attendu, P puis A à chaque étape : avant 1|1 1|1 ; P bloque A 0|0 0|0 ; A bloque P aussi 0|0 ; P retire le sien DELETE 1 puis 0|0 ; A retire le sien DELETE 1 puis 1|1 1|1)'
+begin;
+insert into public.conversations (id, client_id, professional_id) values ('a51b0000-0000-4000-8000-0000000000e5', :P, :A);
+insert into public.messages (conversation_id, sender_id, texte) values ('a51b0000-0000-4000-8000-0000000000e5', :P, 'Bonjour');
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+select 'avant, P' as etape, (select count(*) from public.conversations) as conv, (select count(*) from public.messages) as msg;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000a';
+select 'avant, A' as etape, (select count(*) from public.conversations) as conv, (select count(*) from public.messages) as msg;
+reset role;
+insert into public.blocages (bloqueur_id, bloque_id) values (:P, :A);
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+select 'P bloque A, P' as etape, (select count(*) from public.conversations) as conv, (select count(*) from public.messages) as msg;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000a';
+select 'P bloque A, A' as etape, (select count(*) from public.conversations) as conv, (select count(*) from public.messages) as msg;
+reset role;
+insert into public.blocages (bloqueur_id, bloque_id) values (:A, :P);
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+delete from public.blocages where bloqueur_id = 'a51b0000-0000-4000-8000-000000000001' and bloque_id = 'a51b0000-0000-4000-8000-00000000000a';
+select 'P a retiré le sien, A garde le sien, P' as etape, (select count(*) from public.conversations) as conv, (select count(*) from public.messages) as msg;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000a';
+delete from public.blocages where bloqueur_id = 'a51b0000-0000-4000-8000-00000000000a' and bloque_id = 'a51b0000-0000-4000-8000-000000000001';
+select 'plus aucun blocage, A' as etape, (select count(*) from public.conversations) as conv, (select count(*) from public.messages) as msg;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
+select 'plus aucun blocage, P' as etape, (select count(*) from public.conversations) as conv, (select count(*) from public.messages) as msg;
+rollback;
+
 \echo ''
 \echo '##### G. LES RÉPONSES AUX DEMANDES — section 30.3 #####'
 
@@ -765,19 +836,28 @@ set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
 select nb_reponses from public.demandes where id = 'a51b0000-0000-4000-8000-0000000000d1';
 rollback;
 
-\echo '--- G2. P écrit « 40 réponses » sous sa demande (attendu : UPDATE 1, et le compteur reste à 0)'
+\echo '--- G2. P écrit « 40 réponses » sous sa demande, après une vraie réponse de A, puis la passe « pourvue » (seconde relecture du 27/10 : l ancien nombre est GARDÉ — attendu : INSERT 0 1, UPDATE 1, 1, UPDATE 1, 1 ; une garde qui remettrait 0 à chaque écriture rendrait 0)'
 begin;
 set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000a';
+insert into public.demande_reponses (demande_id, professional_id, message)
+values ('a51b0000-0000-4000-8000-0000000000d1', 'a51b0000-0000-4000-8000-00000000000a', 'Je passe demain');
 set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-000000000001';
 update public.demandes set nb_reponses = 40 where id = 'a51b0000-0000-4000-8000-0000000000d1';
 select nb_reponses from public.demandes where id = 'a51b0000-0000-4000-8000-0000000000d1';
+update public.demandes set statut = 'pourvue' where id = 'a51b0000-0000-4000-8000-0000000000d1';
+select nb_reponses from public.demandes where id = 'a51b0000-0000-4000-8000-0000000000d1';
 rollback;
 
-\echo '--- G2 bis. B écrit « 40 réponses » sous SON ANNONCE (relecture du 26/10 : attendu UPDATE 1, et le compteur reste à 0 — avant : 40)'
+\echo '--- G2 bis. B écrit « 40 réponses » sous SON ANNONCE et change son titre, après une vraie réponse de A, puis la ferme (relecture du 26/10 et du 27/10 : attendu INSERT 0 1, UPDATE 1, 1, UPDATE 1, 1 — avant : 40)'
 begin;
 set local role authenticated;
+set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000a';
+insert into public.annonce_reponses (annonce_id, professional_id, message) values ('a51b0000-0000-4000-8000-0000000000b2', 'a51b0000-0000-4000-8000-00000000000a', 'Dispo');
 set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000b';
-update public.annonces_pro set nb_reponses = 40 where id = 'a51b0000-0000-4000-8000-0000000000b2';
+update public.annonces_pro set nb_reponses = 40, titre = 'Annonce de B, retouchée' where id = 'a51b0000-0000-4000-8000-0000000000b2';
+select nb_reponses from public.annonces_pro where id = 'a51b0000-0000-4000-8000-0000000000b2';
+update public.annonces_pro set statut = 'pourvue' where id = 'a51b0000-0000-4000-8000-0000000000b2';
 select nb_reponses from public.annonces_pro where id = 'a51b0000-0000-4000-8000-0000000000b2';
 rollback;
 
@@ -1006,7 +1086,8 @@ select p.proname, p.prosecdef as definer,
    and p.proname in ('tient_la_demande', 'tient_l_urgence', 'tient_le_partenariat', 'tient_la_reponse',
                      'tient_le_compteur_de_demande', 'tient_le_compteur_d_annonce',
                      'maj_nb_reponses_demande', 'tient_le_lien_du_devis',
-                     'tait_les_notifications_bloquees', 'peut_faire_un_devis')
+                     'tait_les_notifications_bloquees', 'peut_faire_un_devis',
+                     'limite_profondeur_commentaire')
  order by p.proname;
 
 \echo '--- I2. les droits de table qu un visiteur n a plus (attendu : f | f)'

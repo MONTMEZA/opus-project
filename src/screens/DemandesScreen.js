@@ -40,7 +40,7 @@ import {
  * règlent les deux.
  */
 const Demande = React.memo(function Demande({
-  d, estPro, mien, dejaRepondu, nouvelle, onRepondre, onSignaler, onChangerStatut,
+  d, estPro, mien, laMienne, dejaRepondu, nouvelle, onRepondre, onSignaler, onChangerStatut,
 }) {
   const pourvue = d.statut === 'pourvue';
   return (
@@ -146,14 +146,21 @@ const Demande = React.memo(function Demande({
               fermait jamais, et la liste des artisans gardait des chantiers
               faits depuis six mois. Seul l'auteur peut le faire — la base
               le tient (politique « mes demandes »), pas l'écran. */}
-          {!estPro && !!onChangerStatut && (
+          {/* SUR SA DEMANDE, et non « si l'on n'est pas pro » (seconde
+              relecture du 27/10) : un compte passé pro garde les demandes
+              qu'il avait déposées comme particulier, et il doit pouvoir les
+              refermer. `onChangerStatut` n'arrive que sur sa propre carte. */}
+          {!!onChangerStatut && (
             <BtnMini
               outline
               label={pourvue ? 'Rouvrir' : 'J’ai trouvé'}
               onPress={() => onChangerStatut(d.id, pourvue ? 'ouverte' : 'pourvue')}
             />
           )}
-          {estPro && (dejaRepondu ? (
+          {/* Jamais « Répondre » sur SA propre demande (seconde relecture du
+              27/10) : la base refuse de répondre à soi-même, et le refus
+              retirait la carte de sa liste. */}
+          {estPro && !laMienne && (dejaRepondu ? (
             <View style={s.dejaRepondu}>
               <Check size={12} color={C.accent2} />
               <Text style={s.dejaReponduTexte}>Vous avez répondu</Text>
@@ -471,6 +478,7 @@ export default function DemandesScreen({
           d={d}
           estPro={estPro}
           mien={estPourMoi(d)}
+          laMienne={estLaMienne(d)}
           dejaRepondu={jyAiRepondu(d)}
           nouvelle={estPro && estNouvelle(d)}
           onRepondre={onRepondre}

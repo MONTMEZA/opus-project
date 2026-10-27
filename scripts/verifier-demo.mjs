@@ -358,6 +358,27 @@ console.log('\nLe blocage se voit en démonstration (relecture du 26/10)');
   verifier('`avgReviews` : un avis masqué → la note de la BASE ; tous chargés → recalcul ; son propre avis tout juste publié → recalcul',
     masque.global === 3 && masque.count === 2 && complet.global === 3 && complet.count === 2
       && plus.global === 4 && plus.count === 2, JSON.stringify([masque, complet, plus]));
+  /* SON PROPRE AVIS, PUBLIÉ AVEC DES AVIS MASQUÉS (seconde relecture du
+     27/10) : la note doit être celle de TOUS les avis, le sien compris.
+     La base en compte trois (5, 5, 1), le lecteur a bloqué l'auteur du 1 ;
+     il publie un 2 → 3,25 sur 4 avis. Et quand la base en compte quatre
+     (5, 5, 1, 1), les deux 1 masqués, plus le sien (2) → 2,8 sur 5 avis. */
+  const av = (x) => ({ delais: x, qualite: x, tarif: x });
+  const fiche1 = { avisCount: 3, noteDelais: 11 / 3, noteQualite: 11 / 3, noteTarif: 11 / 3, reviews: [av(5), av(5)] };
+  const apres1 = demo.avgReviews(demo.avecAvisPublie(fiche1, av(2)));
+  const fiche2 = { avisCount: 4, noteDelais: 3, noteQualite: 3, noteTarif: 3, reviews: [av(5), av(5)] };
+  const apres2 = demo.avgReviews(demo.avecAvisPublie(fiche2, av(2)));
+  const fiche3 = { reviews: [av(4)] };
+  const apres3 = demo.avgReviews(demo.avecAvisPublie(fiche3, av(2)));
+  const proche = (a, b) => Math.abs(a - b) < 1e-9;
+  verifier('`avecAvisPublie` : après son avis, un avis masqué → 3,25 sur 4 ; deux masqués → 2,8 sur 5 ; une fiche sans compte de la base → le recalcul sur ce qui est chargé',
+    proche(apres1.global, 3.25) && apres1.count === 4 && proche(apres2.global, 2.8) && apres2.count === 5
+      && proche(apres3.global, 3) && apres3.count === 2,
+    JSON.stringify([apres1, apres2, apres3]));
+  /* Et l'écran S'EN SERT : `submitReview` passe par elle. */
+  const opus = readFileSync('src/OpusApp.js', 'utf8');
+  verifier('…et `submitReview` met à jour la fiche par `avecAvisPublie`',
+    /\[proId\]: avecAvisPublie\(pro, review\)/.test(opus));
 }
 
 console.log('');

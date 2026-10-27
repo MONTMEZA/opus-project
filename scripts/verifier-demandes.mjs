@@ -755,19 +755,79 @@ console.log('\nLot S-b — l’écran ne dit que le vrai');
      compter une. Avant : un `catch` vide, et « Vous avez répondu ». */
   const iRepondre = app.indexOf('const repondreDemande = async');
   const repondre = iRepondre < 0 ? '' : app.slice(iRepondre, app.indexOf('\n  };', iRepondre));
-  verifier('`repondreADemande` n’est jamais dans un `catch` vide, et son refus est montré',
-    /resultat = await api\.repondreADemande\(demande\.id, null\);\s*\} catch \(e\) \{/.test(repondre)
-      && (repondre.match(/showErreur\(/g) || []).length >= 3
-      && !/catch \(e\) \{\s*\}/.test(repondre));
-  /* LA RÉPONSE D'ABORD, LA CONVERSATION ENSUITE (relecture du 26/10) : dans
-     l'autre ordre, la conversation se créait, la réponse était refusée, et
-     chaque appui refaisait le même refus sans rien ouvrir. */
-  const iReponse = repondre.indexOf('api.repondreADemande(');
-  const iConv = repondre.indexOf('api.createConversationWithClient(');
-  verifier('la réponse part AVANT la création de la conversation',
-    iReponse > 0 && iConv > iReponse);
+  /* LE GESTE ENTIER, FAIT TOURNER (seconde relecture du 27/10) : la
+     première correction avait inversé l'ordre et retenu « Vous avez
+     répondu » AVANT la conversation — un échec de celle-ci laissait la
+     carte sans bouton, pour toujours. Un contrôle qui lisait l'ordre des
+     lignes passait au vert. `repondreEtOuvrir` (`repondre-demande.js`, qui
+     n'importe rien) est joué ici contre une base simulée. */
+  {
+    const { repondreEtOuvrir, conversationAvec } = await import('../src/lib/repondre-demande.js');
+    const fabrique = ({ convs = [], coupeConv = 0, convServeur = false, refus = null } = {}) => {
+      const etat = { reponses: new Set(), convs: new Set(convServeur ? ['P'] : []), coupe: coupeConv };
+      return {
+        etat,
+        conversations: convs,
+        repondre: async (id) => {
+          if (refus) throw Object.assign(new Error(refus.message), { code: refus.code });
+          if (etat.reponses.has(id)) return { nouvelle: false };
+          etat.reponses.add(id);
+          return { nouvelle: true };
+        },
+        creer: async (client) => {
+          if (etat.coupe > 0) { etat.coupe -= 1; throw Object.assign(new Error('Network request failed'), { code: '' }); }
+          if (etat.convs.has(client)) throw Object.assign(new Error('duplicate key'), { code: '23505' });
+          etat.convs.add(client);
+          return { id: `conv-${client}` };
+        },
+        relire: async (client) => (etat.convs.has(client) ? { id: `conv-relue-${client}` } : null),
+      };
+    };
+    const demande = { id: 'd1', auteurId: 'P' };
+    const jouer = (b) => repondreEtOuvrir({ demande, conversations: b.conversations, repondre: b.repondre, creer: b.creer, relire: b.relire });
+    // A. le réseau coupe la conversation une fois : la carte GARDE « Répondre », l'appui suivant ouvre, sans recompter
+    const a = fabrique({ coupeConv: 1 });
+    const a1 = await jouer(a);
+    const a2 = await jouer(a);
+    verifier('« Répondre » — la conversation échoue une fois : la réponse est comptée UNE fois, « echec_conversation », puis l’appui suivant ouvre sans recompter',
+      a1.etat === 'echec_conversation' && a1.comptee === true && a2.etat === 'ouverte' && a2.comptee === false
+        && a2.id === 'conv-P' && a.etat.reponses.size === 1, JSON.stringify([a1.etat, a1.comptee, a2]));
+    // B. une conversation CHARGÉE DE LA BASE (sans `contact`) est retrouvée, pas recréée
+    const b = fabrique({ convs: [{ id: 'conv-base', autre: { id: 'P' } }], convServeur: true });
+    const b1 = await jouer(b);
+    verifier('…une conversation chargée de la base (`autre`, sans `contact`) est retrouvée — aucune seconde création',
+      b1.etat === 'ouverte' && b1.id === 'conv-base' && b1.ajoutee === false
+        && conversationAvec([{ id: 'x', contact: { id: 'part-P' } }], 'P').id === 'x', JSON.stringify(b1));
+    // D. la conversation existe côté base sans être dans la liste : 23505, et on la RELIT
+    const dd = fabrique({ convServeur: true });
+    const d1 = await jouer(dd);
+    verifier('…une conversation créée côté base mais absente de la liste (23505) est RELUE et ouverte',
+      d1.etat === 'ouverte' && d1.id === 'conv-relue-P' && d1.relue === true, JSON.stringify(d1));
+    // R. le refus de la base : phrase neutre, rien d'autre ne part
+    const r = fabrique({ refus: { code: 'REPONSE_FERMEE', message: 'Vous ne pouvez plus répondre à cette demande.' } });
+    const r1 = await jouer(r);
+    verifier('…un refus de la base (`REPONSE_FERMEE`) rend « fermee » et sa phrase, sans créer de conversation',
+      r1.etat === 'fermee' && r1.message === 'Vous ne pouvez plus répondre à cette demande.' && r.etat.convs.size === 0, JSON.stringify(r1));
+    const e = fabrique({ refus: { code: '', message: 'Network request failed' } });
+    const e1 = await jouer(e);
+    verifier('…une réponse qui ne part pas rend « echec_reponse », sans créer de conversation',
+      e1.etat === 'echec_reponse' && e.etat.convs.size === 0, JSON.stringify(e1.etat));
+  }
+  /* ET L'ÉCRAN APPLIQUE L'ISSUE DANS LE BON ORDRE : « Vous avez répondu »
+     (`setMesReponsesDemandes`) seulement APRÈS le retour sur l'échec de la
+     conversation, et avant l'ouverture ; le compteur sur `issue.comptee`,
+     une seule fois ; la carte retirée sur « fermee ». */
+  const iEchecConv = repondre.indexOf("if (issue.etat === 'echec_conversation') {");
+  const iSouvenir = repondre.indexOf('setMesReponsesDemandes(');
+  const iOuvrir = repondre.indexOf('await ouvrirConversation(conv.id, conv);');
+  verifier('`repondreDemande` passe par `repondreEtOuvrir` (l’API branchée), et retient « Vous avez répondu » APRÈS l’échec possible de la conversation, juste avant de l’ouvrir',
+    /await repondreEtOuvrir\(\{[\s\S]*?repondre: \(id\) => api\.repondreADemande\(id, null\),\s*creer: \(id\) => api\.createConversationWithClient\(id\),\s*relire: \(id\) => api\.conversationAvecClient\(id\),/.test(repondre)
+      && iEchecConv > 0 && iSouvenir > iEchecConv && iOuvrir > iSouvenir
+      && (repondre.match(/setMesReponsesDemandes\(/g) || []).length === 1);
+  verifier('…et la relecture sur 23505 cherche LA conversation de ce particulier avec MOI (client = lui, pro = moi)',
+    /export const conversationAvecClient = !hasSupabase \? noop : async \(clientId\) => \{\s*const \{ data, error \} = await supabase\.from\('conversations'\)\s*\.select\('id'\)\.eq\('client_id', clientId\)\.eq\('professional_id', currentUserId\)\s*\.maybeSingle\(\);/.test(sansCommentairesJs(lire('src/lib/api.js'))));
   verifier('…un refus de la politique se dit en phrase NEUTRE (`REPONSE_FERMEE`), et la carte quitte la liste',
-    /if \(e && e\.code === 'REPONSE_FERMEE'\) \{\s*showErreur\(e\.message\);\s*setDemandes\(\(ds\) => ds\.filter\(\(d\) => d\.id !== demande\.id\)\);\s*return;/.test(repondre));
+    /if \(issue\.etat === 'fermee'\) \{\s*showErreur\(issue\.message\);\s*setDemandes\(\(ds\) => ds\.filter\(\(d\) => d\.id !== demande\.id\)\);\s*return;/.test(repondre));
   {
     const err = await import('../src/lib/erreurs.js');
     const e = new err.ErreurDeLaBase('REPONSE_FERMEE', err.REPONSE_FERMEE);
@@ -776,17 +836,53 @@ console.log('\nLot S-b — l’écran ne dit que le vrai');
         && err.messageClair(e, 'x') === err.REPONSE_FERMEE && err.estUnRefusDefinitif(e)
         && !/bloqu|masqu|ferm|pourvue/i.test(err.REPONSE_FERMEE));
   }
-  verifier('…l’API traduit le 42501 de `demande_reponses` en `REPONSE_FERMEE`, et la démonstration refuse pareil',
-    /if \(error\.code === '42501'\) throw new ErreurDeLaBase\('REPONSE_FERMEE', REPONSE_FERMEE\);/.test(sansCommentairesJs(lire('src/lib/api.js')))
-      && /if \(d && \(\(d\.statut && d\.statut !== 'ouverte'\) \|\| demoBlocages\.has\(String\(d\.auteurId\)\)\)\) \{\s*throw new ErreurDeLaBase\('REPONSE_FERMEE', REPONSE_FERMEE\);/.test(sansCommentairesJs(lire('src/lib/api.js'))));
+  const apiSc = sansCommentairesJs(lire('src/lib/api.js'));
+  verifier('…l’API traduit le 42501 de `demande_reponses` en `REPONSE_FERMEE`, et la démonstration refuse pareil — y compris la demande refermée APRÈS le chargement',
+    /if \(error\.code === '42501'\) throw new ErreurDeLaBase\('REPONSE_FERMEE', REPONSE_FERMEE\);/.test(apiSc)
+      && /if \(d && \(\(d\.statut && d\.statut !== 'ouverte'\) \|\| d\.fermeeApresChargement\s*\|\| demoBlocages\.has\(String\(d\.auteurId\)\)\)\) \{\s*throw new ErreurDeLaBase\('REPONSE_FERMEE', REPONSE_FERMEE\);/.test(apiSc));
+  {
+    const demoD = await import('../src/data/demo.js');
+    const fermee = demoD.initialDemandes.filter((d) => d.fermeeApresChargement);
+    verifier('…une demande de démonstration est refermée par son auteur APRÈS le chargement (la liste l’affiche ouverte) : le refus se VOIT sans `.env`',
+      fermee.length === 1 && fermee[0].statut === 'ouverte'
+        && !/fermeeApresChargement/.test(sansCommentairesJs(lire('src/screens/DemandesScreen.js'))));
+  }
   /* LES CARTES FERMÉES SE ROUVRENT quand la liste est relue, et au
      déblocage (relecture du 26/10). */
   verifier('`demandesFermees` se vide à chaque relecture réussie de « Pour moi », et au déblocage',
     /setDemandesRecues\(await api\.chargerDemandesRecues\(\)\);\s*setDemandesFermees\(new Set\(\)\);/.test(app)
       && /onDebloquer=\{debloquerEtRouvrir\}/.test(app));
   verifier('…le compteur ne monte que si une réponse vient d’être COMPTÉE',
-    /if \(resultat && resultat\.nouvelle\) \{[\s\S]*?reponses: d\.reponses \+ 1/.test(repondre)
+    /if \(issue\.comptee\) \{[\s\S]*?reponses: d\.reponses \+ 1/.test(repondre)
       && (repondre.match(/reponses \+ 1/g) || []).length === 1);
+  /* SA PROPRE DEMANDE (seconde relecture du 27/10) : jamais « Répondre »
+     dessus — la base refuse, et le refus retirait la carte —, et
+     « J'ai trouvé » à son auteur, même passé pro. */
+  const pageD = sansCommentairesJs(lire('src/screens/DemandesScreen.js'));
+  verifier('jamais « Répondre » sur sa propre demande ; « J’ai trouvé » à son auteur, même devenu pro',
+    /\{estPro && !laMienne && \(dejaRepondu \? \(/.test(pageD) && /laMienne=\{estLaMienne\(d\)\}/.test(pageD)
+      && /\{!!onChangerStatut && \(\s*<BtnMini/.test(pageD) && !/\{!estPro && !!onChangerStatut && \(/.test(pageD));
+  /* L'URGENCE EN DÉMONSTRATION refuse comme la base (OP025), et le
+     chauffagiste se retire juste après la recherche : le refus et la
+     relance se VOIENT sans `.env`. */
+  {
+    const urg = await import('../src/data/urgences.js');
+    const retires = new Set();
+    const chauffe = urg.SOS_ARTISANS.find((a) => a.seRetireApresRecherche);
+    const p = urg.SOS_ARTISANS.find((a) => a.metierKey === 'plomberie' && !a.seRetireApresRecherche);
+    const premier = urg.envoiSosDemo(urg.SOS_ARTISANS, retires, chauffe.proId, chauffe.metierKey);
+    const apres = urg.sosDisponiblesDemo(urg.SOS_ARTISANS, retires).find((a) => a.proId === chauffe.proId && a.metierKey === chauffe.metierKey);
+    const second = urg.envoiSosDemo(urg.SOS_ARTISANS, retires, chauffe.proId, chauffe.metierKey);
+    const autreMetier = urg.envoiSosDemo(urg.SOS_ARTISANS, retires, p.proId, 'serrurerie');
+    const ok = urg.envoiSosDemo(urg.SOS_ARTISANS, retires, p.proId, p.metierKey);
+    verifier('`envoiSosDemo` : OP025 vers l’artisan qui se retire (puis inactif pour la recherche), OP025 vers un métier qu’il ne prend pas, l’envoi normal passe',
+      !!chauffe && premier === 'OP025' && apres && apres.actif === false && second === 'OP025'
+        && autreMetier === 'OP025' && ok === null);
+    verifier('…`api.js` refuse par lui en démonstration, et la recherche de démonstration relit `sosArtisansDemo()`',
+      /async function createSosRequestDemo\(d\) \{\s*if \(envoiSosDemo\(SOS_ARTISANS, SOS_RETIRES_DEMO, d\.proId, d\.metierKey\) === 'OP025'\) \{\s*throw new ErreurDeLaBase\('OP025', REFUS_DEMANDES\.OP025\);/.test(apiSc)
+        && /export const createSosRequest = !hasSupabase \? createSosRequestDemo :/.test(apiSc)
+        && /artisansDisponiblesDemo\(metierKey, \{ sos: api\.sosArtisansDemo\(\), tarifs: TARIFS_DEMO, pros \}\)/.test(app));
+  }
   const api = sansCommentairesJs(lire('src/lib/api.js'));
   verifier('…et l’API insère (jamais d’upsert), un 23505 voulant dire « déjà répondu »',
     /from\('demande_reponses'\)\s*\.insert\(/.test(api) && !/from\('demande_reponses'\)\.upsert/.test(api)

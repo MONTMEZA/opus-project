@@ -192,6 +192,31 @@ export function avgReviews(pro) {
   return { delais, qualite, tarif, global: (delais + qualite + tarif) / 3, count: n };
 }
 
+/**
+ * La fiche d'un artisan juste après qu'on a publié SON avis (lot S-b,
+ * seconde relecture du 27/10). L'avis entre dans la liste, ET le nombre
+ * d'avis et les trois moyennes de la base bougent avec lui — sans quoi :
+ *   - un avis masqué (on a bloqué son auteur) plus le sien faisaient
+ *     « tous les avis sont là » par compensation, et la note retombait sur
+ *     les seuls avis visibles, avec un compte faux ;
+ *   - deux avis masqués plus le sien laissaient la note de la base,
+ *     PÉRIMÉE : elle ne bougeait pas après la publication.
+ * Ici chaque moyenne vaut (ancienne × n + nouvelle) / (n + 1). Les listes
+ * (Découvrir, SOS), qui lisent la note de la base, la voient aussi.
+ */
+export function avecAvisPublie(pro, avis) {
+  const n = (pro && pro.avisCount) || 0;
+  const moyenne = (ancienne, nouvelle) => ((Number(ancienne) || 0) * n + nouvelle) / (n + 1);
+  return {
+    ...pro,
+    reviews: [avis, ...((pro && pro.reviews) || [])],
+    avisCount: n + 1,
+    noteDelais: moyenne(pro && pro.noteDelais, avis.delais),
+    noteQualite: moyenne(pro && pro.noteQualite, avis.qualite),
+    noteTarif: moyenne(pro && pro.noteTarif, avis.tarif),
+  };
+}
+
 // « format » dit ce qu'on regarde (photo, vidéo…) ; « type » dit s'il s'agit
 // d'une publication ou d'une publicité. Le fil des vidéos ne retient que les
 // publications dont le format est 'video'.
@@ -492,6 +517,16 @@ export const initialDemandes = [
     texte: "Fissure en escalier sur la façade, elle s'agrandit depuis l'hiver. J'aimerais un avis avant qu'elle n'empire.",
     media: 'demo:demande-fissure', time: 'Il y a 2 j', deposeeLe: ilYA(50), statut: 'ouverte', reponses: 1,
     budget: 'a_chiffrer', urgence: 'urgent', latitude: 43.5297, longitude: 5.4474 },
+  /* UNE DEMANDE REFERMÉE PAR SON AUTEUR APRÈS LE CHARGEMENT (lot S-b,
+     seconde relecture du 27/10) : la liste l'affiche encore ouverte, et
+     « Répondre » reçoit le refus neutre de la base (`REPONSE_FERMEE`) — la
+     carte quitte alors la liste. `fermeeApresChargement` n'est lu que par
+     la réponse de démonstration, jamais par la liste. */
+  { id: 4, auteurId: 'p-lucas', auteur: 'Lucas B.', metier: 'menuisier', ville: 'Lyon (69)',
+    texte: "Porte d'entrée à remplacer, l'ancienne ferme mal et laisse passer le froid.",
+    media: null, time: 'Il y a 5 j', deposeeLe: ilYA(120), statut: 'ouverte', reponses: 3,
+    budget: '500_2000', urgence: 'ce_mois', latitude: 45.764, longitude: 4.8357,
+    fermeeApresChargement: true },
 ];
 
 /**

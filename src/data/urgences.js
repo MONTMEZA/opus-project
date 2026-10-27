@@ -91,13 +91,40 @@ export const SOS_ARTISANS = [
   { proId: 4, metierKey: 'plomberie',   distanceKm: 2.4, delaiMin: 25, actif: true },
   { proId: 2, metierKey: 'electricite', distanceKm: 4.1, delaiMin: 40, actif: true },
   { proId: 6, metierKey: 'serrurerie',  distanceKm: 1.8, delaiMin: 20, actif: true },
-  { proId: 7, metierKey: 'chauffage',   distanceKm: 6.7, delaiMin: 55, actif: true },
+  /* LE CHAUFFAGISTE SE RETIRE JUSTE APRÈS LA RECHERCHE (lot S-b, seconde
+     relecture du 27/10) : il apparaît dans la liste, et son « Choisir »
+     reçoit le refus de la base (OP025) — l'artisan a coupé ses urgences
+     entre-temps. Sans cette ligne, ce refus ne se verrait jamais sans
+     fichier `.env`, et la relance de la recherche non plus. */
+  { proId: 7, metierKey: 'chauffage',   distanceKm: 6.7, delaiMin: 55, actif: true, seRetireApresRecherche: true },
   // Un même métier peut avoir plusieurs artisans disponibles : c'est le
   // principe même de l'app, le client compare et choisit lui-même.
   // Un artisan ne peut être disponible que sur SON métier : un maçon
   // n'apparaît jamais dans les plombiers d'urgence.
   { proId: 8, metierKey: 'plomberie',   distanceKm: 5.2, delaiMin: 45, actif: true },
 ];
+
+/**
+ * L'ENVOI D'UNE URGENCE EN DÉMONSTRATION refuse comme la base
+ * (`tient_l_urgence()`, OP025) : vers un artisan qui n'a pas de ligne
+ * ACTIVE pour ce métier, ou qui vient de la couper. `retires` retient les
+ * lignes coupées pendant la séance ; `sosDisponiblesDemo` les rend
+ * inactives, si bien que la recherche relancée ne les propose plus.
+ * Rend `'OP025'` ou `null`.
+ */
+export function envoiSosDemo(sosArtisans, retires, proId, metierKey) {
+  const cle = `${proId}:${metierKey}`;
+  const ligne = (sosArtisans || []).find((a) => String(a.proId) === String(proId) && a.metierKey === metierKey);
+  if (!ligne || !ligne.actif || retires.has(cle)) return 'OP025';
+  if (ligne.seRetireApresRecherche) {
+    retires.add(cle);
+    return 'OP025';
+  }
+  return null;
+}
+export function sosDisponiblesDemo(sosArtisans, retires) {
+  return (sosArtisans || []).map((a) => (retires.has(`${a.proId}:${a.metierKey}`) ? { ...a, actif: false } : a));
+}
 
 /**
  * Vrai entre 20 h et 7 h, ou le samedi et le dimanche : les heures où Opus

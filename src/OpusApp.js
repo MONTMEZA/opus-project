@@ -46,7 +46,7 @@ import DemandesScreen from './screens/DemandesScreen';
 import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
 import AdminScreen from './screens/AdminScreen';
 import PasserProScreen from './screens/PasserProScreen';
-import { POST_GRADIENTS, avgReviews } from './data/demo';
+import { POST_GRADIENTS, avecAvisPublie, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier , metiersDe } from './lib/metiers';
 import { etapesPourLeRecit } from './lib/recit';
 import { FORMATS_VISUELS, FORMATS_VIDEO } from './lib/formats-publication';
@@ -57,7 +57,6 @@ import {
   messageClair, estUnProblemeDeReseau, avecDelai, avecReprise,
 } from './lib/erreurs';
 import { hasSupabase } from './lib/supabase';
-import { SOS_ARTISANS } from './data/urgences';
 /* Les tarifs réunis (lot T) : l'état du réglage d'urgence, une seule
    écriture partagée avec « Modifier mon profil », et la recherche SOS de
    démonstration, qui lit les tarifs AFFICHÉS comme la base. */
@@ -70,6 +69,7 @@ import {
 import { aiMatchPros, aiRecitChantier, surTravailAgent } from './lib/ai';
 import { doitProposerLeNom, nomAgent } from './lib/agent';
 import { clientDepuisDemande } from './lib/clients';
+import { obtenirConversation, repondreEtOuvrir } from './lib/repondre-demande';
 import { apresEnvoiDesPieces, envoiSuspendLeBadge } from './lib/verification';
 import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
@@ -1584,11 +1584,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * messages de TOUTES ses conversations à chaque ouverture, pour n'afficher
    * qu'un aperçu.
    */
-  const ouvrirConversation = async (id) => {
+  /* `donnee` : une conversation qu'on vient d'AJOUTER — l'état n'est pas
+     encore relu dans cette fermeture, et une conversation relue de la base
+     doit pouvoir charger ses messages (seconde relecture du 27/10). */
+  const ouvrirConversation = async (id, donnee = null) => {
     setActiveConvId(id);
     setScreen('messages');
 
-    const conv = conversations.find((c) => c.id === id);
+    const conv = conversations.find((c) => c.id === id) || donnee;
     if (!conv) return;
 
     if (!Array.isArray(conv.messages)) {
@@ -1995,7 +1998,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       const review = {
         id, auteur: 'Vous', verifie, date: "À l'instant", delais, qualite, tarif, commentaire,
       };
-      return { ...prev, [proId]: { ...pro, reviews: [review, ...pro.reviews] } };
+      /* Le nombre d'avis et les moyennes de la base bougent avec lui
+         (`avecAvisPublie`, `demo.js`, que `verifier-demo` fait tourner). */
+      return { ...prev, [proId]: avecAvisPublie(pro, review) };
     });
 
     showBanner(verifie
@@ -2944,56 +2949,47 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   };
 
   const repondreDemande = async (demande) => {
-    const contactId = `part-${demande.auteurId || demande.id}`;
-
-    /* LA RÉPONSE D'ABORD, LA CONVERSATION ENSUITE (relecture du 26/10).
-       C'est la réponse qui est la porte : la base la refuse sur une demande
-       qui n'est plus ouverte, ou dont l'auteur est en blocage avec
-       l'artisan. Dans l'ordre inverse, la conversation se créait, la
-       réponse était refusée, et chaque appui suivant refaisait le même
-       refus sans rien ouvrir.
-
-       ELLE EST ENREGISTRÉE À CHAQUE « RÉPONDRE », même si la conversation
-       existait déjà (lot S-b) — et son refus est DIT. Le compteur ne monte
-       que si la base vient de COMPTER une réponse : répondre une seconde
-       fois ne compte rien (`{ nouvelle: false }`). */
-    let resultat;
-    try {
-      resultat = await api.repondreADemande(demande.id, null);
-    } catch (e) {
+    /* LA RÉPONSE D'ABORD, LA CONVERSATION ENSUITE, ET « VOUS AVEZ RÉPONDU »
+       SEULEMENT UNE FOIS LA CONVERSATION OUVERTE (lot S-b, relectures du 26
+       et du 27/10). Tout le geste vit dans `repondre-demande.js`, qui
+       n'importe rien et que `verifier-demandes` fait tourner : un échec de
+       la conversation laisse « Répondre » sur la carte, et un nouvel appui
+       repart — la réponse déjà comptée ne compte pas deux fois. */
+    const issue = await repondreEtOuvrir({
+      demande,
+      conversations,
+      repondre: (id) => api.repondreADemande(id, null),
+      creer: (id) => api.createConversationWithClient(id),
+      relire: (id) => api.conversationAvecClient(id),
+    });
+    if (issue.etat === 'fermee') {
       /* Une phrase NEUTRE, qui couvre la demande fermée comme le blocage
          sans dire lequel — et la carte quitte la liste : la base ne la
-         rendrait plus, ni fermée, ni masquée. */
-      if (e && e.code === 'REPONSE_FERMEE') {
-        showErreur(e.message);
-        setDemandes((ds) => ds.filter((d) => d.id !== demande.id));
-        return;
-      }
-      showErreur(messageClair(e, 'Votre réponse n’a pas été enregistrée'));
+         rendrait plus, ni fermée, ni masquée. (Sa PROPRE demande n'a pas
+         de « Répondre » : `DemandesScreen` le cache.) */
+      showErreur(issue.message);
+      setDemandes((ds) => ds.filter((d) => d.id !== demande.id));
       return;
     }
-    if (resultat && resultat.nouvelle) {
+    if (issue.etat === 'echec_reponse') {
+      showErreur(messageClair(issue.erreur, 'Votre réponse n’a pas été enregistrée'));
+      return;
+    }
+    if (issue.comptee) {
       setDemandes((ds) => ds.map((d) => (
         d.id === demande.id && Number.isInteger(d.reponses) ? { ...d, reponses: d.reponses + 1 } : d
       )));
     }
+    if (issue.etat === 'echec_conversation') {
+      showErreur('Votre réponse est enregistrée, mais la conversation n’a pas pu s’ouvrir : '
+        + 'touchez « Répondre » de nouveau.');
+      return;
+    }
 
-    /* Se souvenir qu'on a répondu, pour ne pas relire dix fois la même
-       demande. */
-    setMesReponsesDemandes((r) => new Set([...r, demande.id]));
-
-    let conv = conversations.find((c) => c.contact && c.contact.id === contactId);
+    let conv = conversations.find((c) => c.id === issue.id) || null;
     if (!conv) {
-      let id = `local-${Date.now()}`;
-      try {
-        const row = await api.createConversationWithClient(demande.auteurId);
-        if (row) id = row.id;
-      } catch (e) {
-        showErreur("La conversation n'a pas pu être ouverte.");
-        return;
-      }
       conv = {
-        id,
+        id: issue.id || `local-${Date.now()}`,
         proId: null,
         /* La photo du particulier arrive avec la demande : on la reprend,
            au lieu de laisser une pastille vide jusqu'au prochain
@@ -3005,17 +3001,22 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           type: 'particulier',
         },
         contact: {
-          id: contactId,
+          id: `part-${demande.auteurId}`,
           titre: demande.auteur,
           metier: `Demande · ${nomMetier(demande.metier)}`,
           avatarUrl: demande.avatarUrl || null,
         },
-        messages: [],
+        /* Relue de la base : elle a peut-être déjà des messages, on les
+           charge en l'ouvrant (`null` = pas encore chargés). Neuve : aucun. */
+        messages: issue.relue ? null : [],
       };
-      setConversations((cs) => [conv, ...cs]);
+      const neuve = conv;
+      setConversations((cs) => (cs.some((c) => c.id === neuve.id) ? cs : [neuve, ...cs]));
     }
 
-    await ouvrirConversation(conv.id);
+    /* Se souvenir qu'on a répondu — APRÈS l'ouverture, jamais avant. */
+    setMesReponsesDemandes((r) => new Set([...r, demande.id]));
+    await ouvrirConversation(conv.id, conv);
   };
 
   /**
@@ -3173,20 +3174,26 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * Même mécanique que la réponse à une demande, sans la demande.
    */
   const contacterParticulier = async (profil) => {
-    const contactId = `part-${profil.id}`;
-    let conv = conversations.find((c) => c.contact && c.contact.id === contactId);
-
+    /* La même recherche et la même relecture que « Répondre »
+       (`repondre-demande.js`) : une conversation chargée de la base n'a pas
+       de `contact`, et la chercher par là la faisait recréer — refusée par
+       la clé unique (seconde relecture du 27/10). */
+    let issue;
+    try {
+      issue = await obtenirConversation({
+        conversations,
+        idParticulier: profil.id,
+        creer: (id) => api.createConversationWithClient(id),
+        relire: (id) => api.conversationAvecClient(id),
+      });
+    } catch (e) {
+      showErreur("La conversation n'a pas pu être ouverte.");
+      return false;
+    }
+    let conv = conversations.find((c) => c.id === issue.id) || null;
     if (!conv) {
-      let id = `local-${Date.now()}`;
-      try {
-        const row = await api.createConversationWithClient(profil.id);
-        if (row) id = row.id;
-      } catch (e) {
-        showErreur("La conversation n'a pas pu être ouverte.");
-        return false;
-      }
       conv = {
-        id,
+        id: issue.id || `local-${Date.now()}`,
         proId: null,
         autre: {
           id: profil.id,
@@ -3195,17 +3202,18 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           type: 'particulier',
         },
         contact: {
-          id: contactId,
+          id: `part-${profil.id}`,
           titre: profil.nom,
           metier: profil.ville || 'Particulier',
           avatarUrl: profil.avatarUrl || null,
         },
-        messages: [],
+        messages: issue.relue ? null : [],
       };
-      setConversations((cs) => [conv, ...cs]);
+      const neuve = conv;
+      setConversations((cs) => (cs.some((c) => c.id === neuve.id) ? cs : [neuve, ...cs]));
     }
 
-    await ouvrirConversation(conv.id);
+    await ouvrirConversation(conv.id, conv);
     return true;
   };
 
@@ -3219,7 +3227,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    */
   const chercherArtisansUrgence = async ({ metierKey, latitude, longitude }) => {
     if (!hasSupabase) {
-      return artisansDisponiblesDemo(metierKey, { sos: SOS_ARTISANS, tarifs: TARIFS_DEMO, pros });
+      return artisansDisponiblesDemo(metierKey, { sos: api.sosArtisansDemo(), tarifs: TARIFS_DEMO, pros });
     }
     if (typeof latitude !== 'number' || typeof longitude !== 'number') {
       /* Le FILET : l'écran SOS refuse déjà, sous le champ, une adresse sans
