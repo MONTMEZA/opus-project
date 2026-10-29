@@ -181,6 +181,23 @@ simulant la panne :
    `@supabase/supabase-js`, `expo-image` —, il rougit, **et là il faut
    agir**.
 
+**Le 29/10/2026, il a rougi sur GitHub à chaque envoi, et nulle part
+ailleurs.** Le propriétaire a reçu les e-mails « Run failed: Vérifier ». La
+cause : un avis neuf, de gravité « faible », sur `deepmerge`, par
+`expo > @expo/config > deepmerge`. `@expo/config` est le lecteur de
+`app.json`, un outil de l'ordinateur : mesuré sur le paquet iOS exporté, ni
+le code de `deepmerge` ni celui d'`@expo/config` n'y sont (0 occurrence,
+témoin `accentTexte` à 1). Il a rejoint la liste des outils, avec sa preuve.
+
+> **Et le contrôle passait au vert dans le conteneur de travail sans RIEN
+> voir.** `npm ls` y rendait un arbre vide : aucun chemin trouvé, donc
+> aucun chemin « dans l'application ». Il lit désormais l'arbre dans le
+> VERROU (`--package-lock-only`, ce que `npm ci` installe), et un paquet
+> signalé dont il ne trouve aucun chemin le fait rougir. Éprouvé : les deux
+> défauts remis à la main sont refusés. **Quand GitHub rougit et pas le
+> conteneur, c'est le conteneur qui ment** : lire le journal de GitHub
+> d'abord.
+
 ### Les versions de paquets Expo se désalignent toutes seules
 
 `npm install` d'un nouveau paquet peut laisser les autres en arrière.

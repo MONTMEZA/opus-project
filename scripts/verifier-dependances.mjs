@@ -40,8 +40,9 @@
  *      un `npm audit fix --force` lancé un jour de fatigue. Il tourne même
  *      sans réseau, et c'est le plus important des deux ;
  *   2. **aucune alerte ne touche un paquet qui part sur le téléphone.**
- *      Tant que tout passe par `@expo/cli` ou `@expo/config-plugins`, il
- *      n'y a rien à faire. Le jour où une alerte apparaît ailleurs —
+ *      Tant que tout passe par les outils d'Expo (`@expo/cli`,
+ *      `@expo/config-plugins`, `@expo/metro`, `@expo/config`) ou par une
+ *      dépendance de développement, il n'y a rien à faire. Le jour où une alerte apparaît ailleurs —
  *      `react-native`, `@supabase/supabase-js`, `expo-image` — ce contrôle
  *      rougit, et là il faut agir.
  *
@@ -103,7 +104,20 @@ const EXPO_MINIMUM = 57;
    développement est donc un outil — à une condition, que le contrôle tient
    aussi : qu'aucun fichier de `src/` ne l'importe, sinon il entrerait dans
    le paquet comme n'importe quelle dépendance. */
-const OUTILS = ['@expo/cli', '@expo/config-plugins', '@expo/metro'];
+/* ET `@expo/config`, ajouté le 29/10/2026 — même famille, même preuve.
+   Ce jour-là, la vérification continue (GitHub) a rougi à CHAQUE envoi
+   depuis le 29/10 à 17 h, sans qu'une ligne du projet ait bougé : un avis
+   neuf, de gravité « faible », sur `deepmerge`, par
+   `expo > @expo/config > deepmerge`. `@expo/config` est le LECTEUR de
+   `app.json` : il tourne sur l'ordinateur quand Metro, le serveur ou un
+   build lisent la configuration. Mesuré sur le paquet iOS exporté (6,1 Mo
+   de bytecode Hermes) : `isMergeableObject`, `deepmerge`,
+   `cloneUnlessOtherwiseSpecified`, `customMerge` (le code de `deepmerge`),
+   `getConfigFilePaths` et `withConfigPlugins` (celui d'`@expo/config`) :
+   0 occurrence chacun — et le témoin `accentTexte` (une couleur de
+   `theme.js`) : 1. Un mot ASCII survit dans la table des chaînes de
+   Hermes ; s'il n'y est pas, le code n'y est pas. */
+const OUTILS = ['@expo/cli', '@expo/config-plugins', '@expo/metro', '@expo/config'];
 const PAQUET = JSON.parse(readFileSync('package.json', 'utf8'));
 const DEV = Object.keys(PAQUET.devDependencies || {});
 
@@ -170,8 +184,16 @@ console.log('\nAucune alerte ne touche ce qui part sur le téléphone');
       verifier('aucune alerte du tout', true);
     } else {
       const dansLApplication = [];
+      const introuvables = [];
       causes.forEach((paquet) => {
-        const l = spawnSync('npm', ['ls', paquet, '--json'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+        /* `--package-lock-only` : l'arbre se lit dans le VERROU, celui que
+           `npm ci` installe — pas dans un `node_modules` qui peut en avoir
+           dérivé. Constaté le 29/10 : dans le conteneur de travail, `npm ls`
+           rendait un arbre VIDE, aucun chemin n'était trouvé, et le contrôle
+           passait au vert sans avoir rien regardé, pendant que la
+           vérification continue, installée par `npm ci`, rougissait. */
+        const l = spawnSync('npm', ['ls', paquet, '--json', '--all', '--package-lock-only'],
+          { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
         let arbre = null;
         try { arbre = JSON.parse(l.stdout); } catch { arbre = null; }
         const chemins = [];
@@ -184,12 +206,24 @@ console.log('\nAucune alerte ne touche ce qui part sur le téléphone');
         };
         if (arbre) marche(arbre, []);
 
+        /* Un paquet signalé dont on ne trouve AUCUN chemin n'est pas « dans
+           les outils » : c'est le contrôle qui n'a rien vu. Il le dit. */
+        if (!chemins.length) {
+          introuvables.push(paquet);
+          console.log(`      ? ${paquet} — aucun chemin trouvé dans le verrou`);
+        }
+
         chemins.forEach((p) => {
           const outil = estUnOutil(p);
           console.log(`      ${outil ? '·' : '⚠'} ${p.join(' > ')}`);
           if (!outil) dansLApplication.push(p.join(' > '));
         });
       });
+
+      verifier('chaque paquet signalé est retrouvé dans le verrou',
+        introuvables.length === 0,
+        `${introuvables.join(', ')} : sans chemin, rien ne dit s’il part sur `
+        + 'le téléphone. Le contrôle n’a rien vérifié pour lui.');
 
       verifier('tout passe par les outils, rien par l’application',
         dansLApplication.length === 0,
