@@ -400,13 +400,34 @@ export function clientDepuisDemande(demande = {}) {
 export const POURQUOI_LA_FICHE = Object.freeze({
   existante: 'Ce numéro de téléphone est déjà dans votre carnet : choisissez ce client pour le devis.',
   archivee: 'Ce numéro de téléphone est celui d’un client que vous avez archivé : choisissez-le pour le devis, ou remettez-le d’abord dans votre liste.',
-  homonyme: 'Un client de ce nom est déjà dans votre carnet : vérifiez, puis enregistrez la fiche pour ouvrir le devis.',
-  sans_nom: 'La demande ne donne pas le nom du client : écrivez-le, puis enregistrez la fiche pour ouvrir le devis.',
-  carnet: 'Votre carnet n’a pas pu être lu : vérifiez que ce client n’y est pas déjà, puis enregistrez la fiche pour ouvrir le devis.',
-  lieu: 'L’adresse de l’urgence n’a pas pu être lue : complétez-la si vous la connaissez, puis enregistrez la fiche pour ouvrir le devis.',
-  adresse: 'L’adresse de la demande ne se range pas toute seule : vérifiez la rue, le code postal et la commune, puis enregistrez la fiche pour ouvrir le devis.',
-  invalide: 'Une information de la demande ne peut pas aller telle quelle sur la fiche : corrigez-la, puis enregistrez la fiche pour ouvrir le devis.',
+  homonyme: 'Un client de ce nom est déjà dans votre carnet : vérifiez que ce n’est pas lui, puis touchez « Ajouter ce client » — le devis s’ouvrira.',
+  sans_nom: 'La demande ne donne pas le nom du client : écrivez-le, puis touchez « Ajouter ce client » — le devis s’ouvrira.',
+  carnet: 'Votre carnet n’a pas pu être lu : vérifiez que ce client n’y est pas déjà, puis touchez « Ajouter ce client » — le devis s’ouvrira.',
+  lieu: 'L’adresse de l’urgence n’a pas pu être lue : complétez-la si vous la connaissez, puis touchez « Ajouter ce client » — le devis s’ouvrira.',
+  adresse: 'L’adresse de la demande ne se range pas toute seule : vérifiez la rue, le code postal et la commune, puis touchez « Ajouter ce client » — le devis s’ouvrira.',
+  invalide: 'Une information de la demande ne peut pas aller telle quelle sur la fiche : corrigez le champ marqué en rouge, puis touchez « Ajouter ce client » — le devis s’ouvrira.',
 });
+
+/**
+ * LE CARNET, RELU AVANT DE DÉCIDER — une liste, ou `null` quand il n'a pas
+ * pu être lu.
+ *
+ * `null` n'est pas « un carnet vide » : un carnet vide ferait CRÉER la fiche
+ * à l'aveugle, et une liste ancienne déciderait d'un doublon sur ce qu'on
+ * croyait savoir. `null` ouvre le formulaire, et sa phrase le dit
+ * (`POURQUOI_LA_FICHE.carnet`). Écrit ici, et pas dans l'écran, pour que
+ * `verifier-clients` le FASSE TOURNER : un `catch` qui rendait « la liste en
+ * mémoire » ou « une liste vide » passait tous les contrôles (relecture des
+ * contrôles du 29/10/2026).
+ */
+export async function lireLeCarnet(lire) {
+  try {
+    const carnet = await lire();
+    return Array.isArray(carnet) ? carnet : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 export function ficheAPartirDeLaDemande(valeurs, carnet, { lieuLu = true, lieuSur = true } = {}) {
   if (!Array.isArray(carnet)) return { geste: 'formulaire', raison: 'carnet' };

@@ -368,12 +368,69 @@ console.log('\nLa conversation monte avec le corps de l’application, sans nomb
     + '(le clavier compterait deux fois)',
     !/KeyboardAvoidingView/.test(conv) && !/\.\.\.\s*CLAVIER\b/.test(conv) && !/\bCLAVIER\b/.test(conv)
       && !/automaticallyAdjustKeyboardInsets/.test(conv) && !/lib\/clavier/.test(conv));
-  /* AUCUN DÉCALAGE ÉCRIT EN NOMBRE, nulle part : un nombre de points ne vaut
-     que pour un téléphone, et c'est exactement ce qui a caché le texte. */
+  /* …NI PAR UN COMPOSANT ENVELOPPE. Remplacer la vue de la conversation par
+     `<EnveloppeClavier>`, rangé dans un autre fichier, remettait un second
+     `KeyboardAvoidingView` que la vérification précédente — qui ne lit que
+     CE fichier — ne voyait pas (relecture des contrôles du 29/10/2026, K05).
+     Chaque balise de la conversation doit donc venir de React Native, d'un
+     import local LU ici (et ses imports locaux, de proche en proche), ou
+     être définie dans le fichier ; aucune de ces sources ne gère le
+     clavier. Une balise venue de nulle part est refusée. */
+  {
+    const path = await import('node:path');
+    const { existsSync } = await import('node:fs');
+    const resoudre = (de, spec) => {
+      const base = path.resolve(path.dirname(de), spec);
+      return [`${base}.js`, `${base}/index.js`, base].find((x) => existsSync(x) && x.endsWith('.js')) || null;
+    };
+    const importsDe = (code) => {
+      const r = new Map();
+      for (const m of code.matchAll(/import\s+([\s\S]*?)\s+from\s+'([^']+)'/g)) {
+        const [, quoi, d] = m;
+        const def = (quoi.match(/^([A-Za-z_$][\w$]*)/) || [])[1];
+        if (def) r.set(def, d);
+        const nommes = (quoi.match(/\{([\s\S]*)\}/) || [])[1];
+        if (nommes) nommes.split(',').map((x) => x.trim().split(/\s+as\s+/).pop()).filter(Boolean).forEach((n) => r.set(n, d));
+        const tout = (quoi.match(/\*\s+as\s+([\w$]+)/) || [])[1];
+        if (tout) r.set(tout, d);
+      }
+      return r;
+    };
+    const GERE_LE_CLAVIER = /KeyboardAvoidingView|automaticallyAdjustKeyboardInsets|keyboardVerticalOffset|\bCLAVIER\b|lib\/clavier/;
+    const fautifs = [];
+    const vus = new Set();
+    const parcourir = (fichier, profondeur) => {
+      if (vus.has(fichier) || profondeur > 4) return;
+      vus.add(fichier);
+      const code = sansCommentaires(lire(fichier));
+      if (fichier !== path.resolve('src/screens/ConversationScreen.js') && GERE_LE_CLAVIER.test(code)) fautifs.push(path.relative(process.cwd(), fichier));
+      for (const d of new Set(importsDe(code).values())) {
+        if (!d.startsWith('.')) continue;
+        const cible = resoudre(fichier, d);
+        if (cible && cible.includes(`${path.sep}src${path.sep}`)) parcourir(cible, profondeur + 1);
+      }
+    };
+    const fichierConv = path.resolve('src/screens/ConversationScreen.js');
+    parcourir(fichierConv, 0);
+    const imp = importsDe(conv);
+    const locaux = new Set([...conv.matchAll(/(?:function|const|let)\s+([A-Z][\w$]*)/g)].map((m) => m[1]));
+    const balisesConv = [...new Set([...conv.matchAll(/<([A-Z][\w$]*)(?:\.[\w$]+)?[\s/>]/g)].map((m) => m[1]))];
+    const inconnues = balisesConv.filter((b) => !imp.has(b) && !locaux.has(b));
+    verifier('…ni par un composant ENVELOPPE : chaque balise de la conversation a une source connue, et aucune ne gère le clavier',
+      inconnues.length === 0 && fautifs.length === 0,
+      `balises sans source : ${inconnues.join(', ') || '—'} ; sources qui gèrent le clavier : ${fautifs.join(', ') || '—'}`);
+  }
+  /* AUCUN DÉCALAGE, nulle part : un nombre de points ne vaut que pour un
+     téléphone, et c'est exactement ce qui a caché le texte. Le chercher
+     « écrit en chiffres » ne suffisait pas : `Platform.OS === 'ios' ? 90 : 0`
+     ou une constante `DECALAGE = 90` passaient (relecture des contrôles du
+     29/10/2026, K07 et K08). Toute mention de la propriété est refusée,
+     sauf la valeur nulle écrite telle quelle. */
   const fichiers = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'],
     { encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js'));
-  const enDur = fichiers.filter((f) => /keyboardVerticalOffset=\{\s*-?[1-9]/.test(sansCommentaires(lire(f))));
-  verifier('aucun `keyboardVerticalOffset` écrit en nombre (autre que 0) dans `src/`',
+  const enDur = fichiers.filter((f) => /keyboardVerticalOffset/.test(
+    sansCommentaires(lire(f)).replace(/keyboardVerticalOffset=\{0\}/g, '')));
+  verifier('aucun `keyboardVerticalOffset` dans `src/` (sinon `={0}`) — ni nombre, ni condition, ni constante',
     enDur.length === 0, enDur.join(', '));
 }
 

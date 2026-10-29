@@ -958,10 +958,39 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
       && D.texteDUrgence({ libelle: 'Fuite', details: '  ' }) === 'Fuite'
       && D.texteDUrgence({ libelle: null, details: 'Ça coule' }) === 'Ça coule'
       && D.texteDUrgence({}) === null
-      && /urgence:sos_request_id\(created_at, probleme_label, details\)/.test(API_TEXTE)
-      && /texte: texteDUrgence\(\{ libelle: d\.urgence\.probleme_label, details: d\.urgence\.details \}\)/.test(API_TEXTE)
+      && /urgence:sos_request_id\(created_at, probleme_label, details\)/.test(D.LIENS_DU_DEVIS_OUVERT)
       && /select\('adresse, code_postal, probleme_label, details'\)/.test(API_TEXTE)
       && /texte: texteDUrgence\(\{ libelle: data\.probleme_label, details: data\.details \}\)/.test(API_TEXTE));
+  }
+  /* CE QUE LE CLIENT A DEMANDÉ, LU PAR LE LIEN — la lecture TOURNE, et
+     l'API ne peut ni lire autre chose ni ouvrir un devis sans ces colonnes.
+     Un devis ouvert avec les liens de la LISTE (sans `description`), ou une
+     lecture qui prenait le budget pour le texte, passaient tous les
+     contrôles (relecture des contrôles du 29/10/2026, F16 et F17). */
+  {
+    const API_TEXTE = sansCommentairesJs(lire('src/lib/api.js'));
+    const o = D.originesDuDevis({
+      demande: { created_at: '2026-10-29T08:00:00Z', budget: '500-1000', description: 'Ouvrir un mur porteur' },
+      urgence: { created_at: '2026-10-29T09:00:00Z', probleme_label: 'Plus de courant', details: 'Le disjoncteur saute' },
+    });
+    const liste = D.originesDuDevis({ demande: { created_at: 'x', budget: null }, urgence: { created_at: 'y' } });
+    verifier('`originesDuDevis` : le texte de la demande est sa DESCRIPTION, celui de l’urgence « problème — ce qu’elle a écrit » ; sans la colonne, `null`',
+      o.demande.texte === 'Ouvrir un mur porteur' && o.demande.budget === '500-1000'
+        && o.demande.createdAt === '2026-10-29T08:00:00Z'
+        && o.urgence.texte === 'Plus de courant — Le disjoncteur saute' && o.urgence.createdAt === '2026-10-29T09:00:00Z'
+        && liste.demande.texte === null && liste.urgence.texte === null
+        && json(D.originesDuDevis({})) === json({ demande: null, urgence: null }), json(o));
+    verifier('…le devis OUVERT joint la description et le problème, la LISTE non (200 devis ne transportent pas 200 textes)',
+      /demande:quote_request_id\(created_at, budget, description\)/.test(D.LIENS_DU_DEVIS_OUVERT)
+        && /urgence:sos_request_id\(created_at, probleme_label, details\)/.test(D.LIENS_DU_DEVIS_OUVERT)
+        && !/description|details|probleme_label/.test(D.LIENS_DU_DEVIS));
+    const unDevisApi = corpsDeFonction(API_TEXTE, 'unDevisSupabase') || '';
+    const versDevis = corpsDeFonction(API_TEXTE, 'rowToDevis') || '';
+    verifier('…et l’API s’en sert : `unDevis` lit `LIENS_DU_DEVIS_OUVERT`, `rowToDevis` passe par `originesDuDevis`, sans liens à elle',
+      /\.select\(`\$\{LIENS_DU_DEVIS_OUVERT\}, devis_lignes\(\*\), `/.test(unDevisApi)
+        && /\.\.\.originesDuDevis\(d\),/.test(versDevis) && !/\bdemande:|\burgence:/.test(versDevis)
+        && !/const LIENS_DU_DEVIS/.test(API_TEXTE) && !/quote_request_id\(/.test(API_TEXTE.replace(/\.select\('[^']*'\)/g, '')),
+      `${unDevisApi.slice(0, 120)} | ${versDevis.slice(0, 120)}`);
   }
   const statuts = [
     [{ genre: 'devis', statut: 'accepte' }, true], [{ genre: 'devis', statut: 'termine' }, true],
@@ -3490,6 +3519,29 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
     + 'décimal d’iOS n’a pas de touche retour)',
     /autoCorrect=\{false\}/.test(ECR.montant) && /spellCheck=\{false\}/.test(ECR.montant)
     && /keyboardType="decimal-pad"/.test(ECR.montant) && !/returnKeyType/.test(ECR.montant));
+  /* CE QUE LE CLIENT A DEMANDÉ RESTE AU-DESSUS, ET HORS DU DEVIS (décision
+     du propriétaire, 29/10/2026). Trois sabotages passaient tous les
+     contrôles (relecture des contrôles, X03, F14, F15) : l'objet prérempli
+     avec le texte de la demande, la note « Ce texte n'apparaît pas sur le
+     devis. » retirée, et « 4 rue des Lilas » revenu dans le lieu. */
+  {
+    const objet = balises(ECR.entete, 'ChampLocal').filter((b) => /accessibilityLabel="Objet du devis"/.test(b));
+    verifier('l’OBJET ne se remplit que de l’objet du devis — jamais du texte de la demande',
+      objet.length === 1 && /\bdefaut=\{texte\(devis\.objet\)\}/.test(objet[0])
+        && !/demande/i.test(objet[0]), objet.join(' | ').slice(0, 300));
+    verifier('…le texte de la demande s’affiche au-dessus, avec « Ce texte n’apparaît pas sur le devis. »',
+      /\{!!demandeDuClient && \(\s*<View style=\{s\.demande\}>\s*<Text style=\{s\.demandeTitre\}>Ce que le client a demandé<\/Text>\s*<Text style=\{s\.demandeTexte\}>\{demandeDuClient\}<\/Text>\s*<Text style=\{s\.demandeNote\}>Ce texte n’apparaît pas sur le devis\.<\/Text>\s*<\/View>\s*\)\}/.test(ECR.entete)
+        && (ECR.entete.match(/\{demandeDuClient\}/g) || []).length === 1
+        && /const demandeDuClient = texteDeLaDemande\(devis\);/.test(ECR.entete));
+    const ATTENDU = { 'lieu.lieuAdresse': 'N° et rue', 'lieu.lieuCodePostal': 'Code postal', 'lieu.lieuVille': 'Commune' };
+    const champsLieu = [...balises(ECR.entete, 'ChampLocal'), ...balises(ECR.entete, 'ChampVille')];
+    const lus = Object.keys(ATTENDU).map((cle) => {
+      const b = champsLieu.find((x) => new RegExp(`\\b(defaut|valeur)=\\{${cle.replace('.', '\\.')}\\}`).test(x));
+      return { cle, p: b ? (b.match(/\bplaceholder="([^"]*)"/) || [])[1] : undefined };
+    });
+    verifier('…et le lieu des travaux dit ce qu’il attend : « N° et rue », « Code postal », « Commune » — aucun exemple d’adresse',
+      lus.every((x) => x.p === ATTENDU[x.cle]), json(lus));
+  }
   /* UNE SEULE EXCEPTION, NOMMÉE : le code postal du lieu des travaux, en
      pavé numérique comme celui du carnet (`FicheClient`) — cinq chiffres ne
      se tapent pas sur le clavier des lettres (relecture « écran » des étapes

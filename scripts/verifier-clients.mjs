@@ -27,6 +27,7 @@ import {
   clientsVisibles, clientCorrespond, clientDepuisDemande, nomNormalise,
   TYPES_CLIENT, LONGUEUR_MAX, villeSansDepartement, chiffresDuTelephone, clientsDuMemeNumero,
   lieuDepuisUrgence, ficheAPartirDeLaDemande, POURQUOI_LA_FICHE, decouperLieuLibre, lieuDeLaDemande,
+  lireLeCarnet,
 } from '../src/lib/clients.js';
 import { adresseDUrgence } from '../src/lib/adresse.js';
 import { initialClients, proProfiles } from '../src/data/demo.js';
@@ -214,6 +215,10 @@ const meme = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ['même numéro écrit « +33 (0)6… » → la fiche existante', { nom: 'J. M.', telephone: '+33 (0)6 39 98 02 01' }, carnet, {}, 'existante:b:existante'],
     ['même numéro qu’une fiche ARCHIVÉE → elle, et la phrase le dit', { nom: 'Lucien', telephone: '+33 6 39 98 04 04' }, carnet, {}, 'existante:d:archivee'],
     ['même numéro, SANS nom → la fiche existante plutôt qu’un formulaire', { nom: '', telephone: '0639980201' }, carnet, {}, 'existante:b:existante'],
+    /* LE NUMÉRO AVANT LE NOM : le même nom ET le même numéro, c'est la MÊME
+       personne — la fiche existante, jamais un formulaire qui en ferait une
+       seconde (sabotage F09 de la relecture des contrôles, vert avant). */
+    ['même numéro ET même nom → la fiche existante, pas le formulaire de l’homonyme', { nom: 'martin  PAULE', telephone: '06 39 98 02 01' }, carnet, {}, 'existante:b:existante'],
     ['même nom, autre numéro → le formulaire (« le doublon s’avertit »)', { nom: 'marc  DUMONT', telephone: '0639980399' }, carnet, {}, 'formulaire:homonyme'],
     ['aucun vrai nom → le formulaire', { nom: '', telephone: '0639980399' }, carnet, {}, 'formulaire:sans_nom'],
     ['carnet illisible → le formulaire, jamais une création à l’aveugle', { nom: 'Julie M.' }, null, {}, 'formulaire:carnet'],
@@ -243,6 +248,33 @@ const meme = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   verifier('chaque raison d’ouvrir la fiche a SA phrase (`POURQUOI_LA_FICHE`), et il n’y en a pas d’autre',
     raisons.every((k) => typeof POURQUOI_LA_FICHE[k] === 'string' && POURQUOI_LA_FICHE[k].length > 20)
       && Object.keys(POURQUOI_LA_FICHE).length === raisons.length);
+  /* …et chaque phrase parle de SA raison. Deux phrases permutées (« ce
+     numéro est déjà dans votre carnet » sous un homonyme) passaient la
+     vérification précédente : elle ne regardait que leur EXISTENCE
+     (sabotage F10, vert avant). Un mot qui ne peut appartenir qu'à elle. */
+  const dit = {
+    existante: (t) => /numéro de téléphone est déjà dans votre carnet/.test(t) && !/archiv/.test(t),
+    archivee: (t) => /numéro de téléphone/.test(t) && /archivé/.test(t),
+    homonyme: (t) => /client de ce nom/.test(t) && !/numéro/.test(t),
+    sans_nom: (t) => /ne donne pas le nom/.test(t),
+    carnet: (t) => /carnet n’a pas pu être lu/.test(t),
+    lieu: (t) => /adresse de l’urgence n’a pas pu être lue/.test(t),
+    adresse: (t) => /ne se range pas toute seule/.test(t),
+    invalide: (t) => /ne peut pas aller telle quelle/.test(t),
+  };
+  const phrasesFausses = raisons.filter((k) => !(dit[k] && dit[k](String(POURQUOI_LA_FICHE[k] || ''))));
+  verifier('…et chaque phrase dit SA raison (deux phrases permutées se voient)',
+    phrasesFausses.length === 0, phrasesFausses.join(', '));
+  /* …ET ELLE NOMME LE VRAI BOUTON. « Enregistrez la fiche » sur un écran
+     dont le bouton s'appelle « Ajouter ce client » : un débutant cherche un
+     bouton qui n'existe pas (CONTROLES-9). Les raisons qui ouvrent un
+     FORMULAIRE nomment « Ajouter ce client », et c'est bien le libellé du
+     bouton d'une fiche nouvelle. */
+  const duFormulaire = raisons.filter((k) => !['existante', 'archivee'].includes(k));
+  const sansBouton = duFormulaire.filter((k) => !String(POURQUOI_LA_FICHE[k]).includes('touchez « Ajouter ce client »'));
+  verifier('…les phrases d’un formulaire nomment le bouton qui existe : « Ajouter ce client »',
+    sansBouton.length === 0 && /\(fiche \? 'Enregistrer' : 'Ajouter ce client'\)/.test(forme)
+      && !Object.values(POURQUOI_LA_FICHE).some((t) => /enregistrez la fiche/i.test(t)), sansBouton.join(', '));
 
   /* LE LIEU LIBRE D'UNE DEMANDE DE DEVIS (« Ville ou adresse du chantier ») :
      découpé quand c'est SÛR, jamais une rue dans la case « ville ». */
@@ -279,6 +311,11 @@ const meme = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     [{ adresse: '4 Rue des Acacias', codePostal: '13350' }, { adresse: '4 Rue des Acacias', codePostal: '13350', ville: '', sur: false }],
     [{ adresse: 'Charleval', codePostal: '13350' }, { adresse: 'Charleval', codePostal: '13350', ville: '', sur: false }],
     [{ adresse: null, codePostal: 'abc' }, { adresse: '', codePostal: '', ville: '', sur: true }],
+    /* Le code postal doit être un MOT entier, entouré d'espaces : collé à la
+       ville, ou dans un nombre plus long, il ne découpe rien (sabotage F08,
+       vert avant). */
+    [{ adresse: '4 Rue des Acacias 13350Charleval', codePostal: '13350' }, { adresse: '4 Rue des Acacias 13350Charleval', codePostal: '13350', ville: '', sur: false }],
+    [{ adresse: 'Lot 134100 Lambesc', codePostal: '13410' }, { adresse: 'Lot 134100 Lambesc', codePostal: '13410', ville: '', sur: false }],
   ];
   const lieuxFaux = lieux.filter(([e, a]) => !meme(lieuDepuisUrgence(e), a)).map(([e]) => `${JSON.stringify(e)} → ${JSON.stringify(lieuDepuisUrgence(e))}`);
   verifier('l’adresse d’une urgence se relit : la forme rangée depuis le 29/10 se découpe ; une commune n’apporte pas son code postal ; l’ANCIENNE forme (rue ou commune seule) n’est pas sûre',
@@ -307,8 +344,27 @@ const meme = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     /const lu = await api\.lieuDeLUrgence\(demande\.id\);/.test(corps) && /catch \(e\) \{ lieuLu = false; \}/.test(corps)
       && /ficheAPartirDeLaDemande\(valeurs, carnet, \{ lieuLu, lieuSur: lieu\.sur \}\)/.test(corps)
       && /const valeurs = clientDepuisDemande\(complete\);\s*const lieu = lieuDeLaDemande\(complete\);/.test(corps));
+  /* UN CARNET ILLISIBLE N'EST PAS UN CARNET VIDE — et ce n'est pas non plus
+     la liste en mémoire. Les deux sabotages (`catch → carnet = []`,
+     `catch → carnet = clients`) passaient tous les contrôles : la lecture
+     est sortie dans `lireLeCarnet`, qu'on FAIT TOURNER ici, et l'écran ne
+     peut plus rien mettre d'autre dans `carnet`. */
+  const lus = [
+    await lireLeCarnet(async () => { throw new Error('réseau'); }),
+    await lireLeCarnet(async () => null),
+    await lireLeCarnet(async () => ({ data: [] })),
+    await lireLeCarnet(() => { throw new Error('synchrone'); }),
+  ];
+  const plein = [{ id: 'x', nom: 'Lucie R.' }];
+  verifier('`lireLeCarnet` : une lecture ratée (ou qui ne rend pas une liste) vaut `null`, jamais une liste vide ni une ancienne',
+    lus.every((x) => x === null) && (await lireLeCarnet(async () => plein)) === plein
+      && Array.isArray(await lireLeCarnet(async () => [])) && (await lireLeCarnet(async () => [])).length === 0,
+    JSON.stringify(lus));
+  verifier('…et « Faire un devis » décide sur ce qu’elle rend, et sur rien d’autre',
+    /const carnet = await lireLeCarnet\(\(\) => avecDelai\(api\.mesClients\(\), 8000, '[^']+'\)\);/.test(corps)
+      && (corps.match(/\bcarnet\s*=(?!=)/g) || []).length === 1);
   verifier('…le carnet est RELU avant de décider ; la fiche existante ou le formulaire s’ouvrent avec LEUR phrase, sans relire le carnet une seconde fois',
-    /carnet = await avecDelai\(api\.mesClients\(\)/.test(corps)
+    /lireLeCarnet\(\(\) => avecDelai\(api\.mesClients\(\)/.test(corps)
       && /ouvrirFicheClient\(decision\.fiche, null, ouvrirAvec, POURQUOI_LA_FICHE\[decision\.raison\], \{ carnetLu: true \}\)/.test(corps)
       && /ouvrirFicheClient\(null, valeurs, ouvrirAvec, POURQUOI_LA_FICHE\[decision\.raison\] \|\| null,\s*\{ carnetLu: Array\.isArray\(carnet\) \}\)/.test(corps)
       && /if \(clientsEtat === 'vide' && !carnetLu\) chargerClients\(\);/.test(app));
@@ -326,6 +382,23 @@ const meme = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   verifier('…et la composition garde le lien d’origine (`devisDepuisDemandeEtFiche`, jamais `devisDepuisClient`), le lieu de la demande seulement s’il est SÛR',
     /valeurs: devisDepuisDemandeEtFiche\(demande, fiche, lieu\.sur \? lieu : \{\}\)/.test(corps) && !/devisDepuisClient/.test(corps)
       && /demandeSource: complete,/.test(corps));
+  /* LE BANDEAU NE PRÉCÈDE PAS LA FICHE : « X est dans votre carnet de
+     clients » n'est vrai qu'une fois la fiche POSÉE. Annoncé avant
+     l'enregistrement, il mentait à chaque échec (sabotage F20, vert avant). */
+  const iRanger = corps.indexOf('rangerClient(pose)');
+  const annonces = [...corps.matchAll(/est dans votre carnet de clients/g)].map((m) => m.index);
+  verifier('…« est dans votre carnet de clients » ne s’affiche qu’APRÈS que la fiche est posée',
+    iRanger > 0 && annonces.length >= 1 && annonces.every((k) => k > iRanger), `${iRanger} / ${annonces.join(',')}`);
+  /* LA RAISON SE TRANSMET ET S'AFFICHE, pour TOUTES les raisons : la phrase
+     de `POURQUOI_LA_FICHE` n'est utile que si la fiche la MONTRE. Ne plus la
+     transmettre, l'afficher vide, ou seulement sur une fiche existante,
+     passait (sabotages F11, F11b, F12, verts avant). */
+  verifier('…la fiche reçoit la raison (`pourquoi`), et l’affiche dès qu’il y en a une — fiche existante OU formulaire',
+    /<FicheClient\b[\s\S]*?\bpourquoi=\{ficheClient\.pourquoi \|\| null\}/.test(app)
+      && /setFicheClient\(\{ fiche, depuis, depuisLaSaisie: !!apres, pourquoi \}\)/.test(app)
+      && /\{!!pourquoi && \(\s*<View style=\{s\.garde\}>\s*<Text style=\{s\.gardeTitre\}>Pour ce devis<\/Text>\s*<Text style=\{s\.gardeTexte\}>\{pourquoi\}<\/Text>\s*<\/View>\s*\)\}/.test(forme)
+      && (forme.match(/\{pourquoi\}/g) || []).length === 1);
+
   /* « Ajouter à mes clients » relit l'adresse d'une urgence comme « Faire un
      devis » ; une fiche existante corrigée POUR UN DEVIS reste ouverte. */
   const j = app.indexOf('const ajouterClientDepuisDemande = async');
@@ -786,6 +859,106 @@ console.log('\nLA DÉMONSTRATION — le mécanisme doit VIVRE sans fichier `.env
 }
 
 /* ================================================================== */
+
+/* ================================================================== */
+console.log('\nCE QUI NE PASSE PAS SE VOIT, SUR LE CHAMP');
+{
+  /* Chaque champ que `validerClient` peut refuser a SA place pour le dire
+     dans la fiche. La ville n'en avait pas : une ville trop longue (une
+     demande la remplit sans passer par la limite du champ) était refusée,
+     et l'appui sur « Ajouter ce client » ne faisait rien, sans un mot. */
+  const long = (n) => 'x'.repeat(n + 1);
+  const refus = [
+    validerClient({}),
+    validerClient({ nom: long(LONGUEUR_MAX.nom) }),
+    validerClient({ type: 'entreprise', nom: 'SCI', siret: '123' }),
+    validerClient({ nom: 'A', email: 'pas-une-adresse' }),
+    validerClient({ nom: 'A', codePostal: '12' }),
+    validerClient({ nom: 'A', telephone: long(LONGUEUR_MAX.telephone) }),
+    validerClient({ nom: 'A', adresse: long(LONGUEUR_MAX.adresse) }),
+    validerClient({ nom: 'A', ville: long(LONGUEUR_MAX.ville) }),
+    validerClient({ nom: 'A', notes: long(LONGUEUR_MAX.notes) }),
+  ];
+  const champsRefuses = [...new Set(refus.filter((r) => !r.ok).map((r) => r.champ))];
+  const muets = champsRefuses.filter((c) => !forme.includes(`messageErreur('${c}')`));
+  verifier(`chaque champ que \`validerClient\` refuse a sa place dans la fiche (${champsRefuses.join(', ')})`,
+    refus.every((r) => !r.ok) && muets.length === 0, `sans message : ${muets.join(', ')}`);
+  /* OUVERTE PAR « FAIRE UN DEVIS », la fiche marque le champ fautif DÈS
+     l'ouverture — la phrase « corrigez le champ marqué en rouge » le promet. */
+  verifier('…et, ouverte par « Faire un devis », elle marque le champ fautif dès l’ouverture',
+    /useState\(\(\) => \{\s*if \(fiche \|\| !pourquoi\) return null;\s*const r = validerClient\(depart\);\s*return r\.ok \? null : r;\s*\}\)/.test(forme)
+      && /champ marqué en rouge/.test(POURQUOI_LA_FICHE.invalide));
+}
+
+/* ================================================================== */
+console.log('\nAUCUN TEXTE GRIS NE RESSEMBLE À UNE DONNÉE');
+{
+  /* « Mme Martin » (une cliente de la démonstration), « 06 39 98 00 00 »,
+     « SCI des Verlusses » : le même piège que « 4 rue des Lilas », sur les
+     autres champs (CONTROLES-3). Un texte gris dit ce que le champ attend ;
+     un EXEMPLE commence par « Ex. : », qui ne se lit pas comme une donnée. */
+  const noms = [...initialClients.map((c) => c.nom), ...Object.values(proProfiles).map((p) => p && (p.entreprise || p.nom))]
+    .filter(Boolean).flatMap((n) => String(n).split(/\s+/)).filter((m) => m.length >= 4 && /^[A-ZÀ-Ý]/.test(m));
+  const villes = [...new Set(initialClients.map((c) => c.ville).filter(Boolean))];
+  const ressembleAUneDonnee = (p) => !/^Ex\. : /.test(p) && (
+    /\d{3}/.test(p) || /(\d{2}[\s.]?){3}/.test(p) || /@/.test(p)
+    || /\d\s*(bis|ter)?\s*,?\s*(rue|chemin|avenue|impasse|allée|boulevard|route)\b/i.test(p)
+    || /\b(rue|chemin|avenue|impasse|allée|boulevard|route)\s+(des?|du|de la|d’|d')\s*\S/i.test(p)
+    || /\b(Mme|Mr|M\.|SCI|SARL|EURL|SAS)(\s|$)/.test(p)
+    || noms.some((n) => p.includes(n)) || villes.some((v) => p.includes(v)));
+  const fautifs = [];
+  for (const f of ['src/components/FicheClient.js', 'src/components/EnteteDevis.js']) {
+    const code = sansCommentaires(readFileSync(f, 'utf8'));
+    for (const m of code.matchAll(/placeholder=(?:"([^"]*)"|\{([^}]*)\})/g)) {
+      const textes = m[1] !== undefined ? [m[1]] : [...m[2].matchAll(/'([^']*)'|"([^"]*)"|`([^`]*)`/g)].map((x) => x[1] ?? x[2] ?? x[3]);
+      for (const t of textes) if (ressembleAUneDonnee(t)) fautifs.push(`${f.split('/').pop()} : « ${t} »`);
+    }
+  }
+  verifier('dans la fiche client et le devis, aucun texte gris ne ressemble à un nom, un numéro, une adresse ou une commune — sauf un « Ex. : »',
+    fautifs.length === 0 && noms.length > 5 && villes.length > 1, fautifs.join(' | ') || `${noms.length} noms, ${villes.length} villes`);
+}
+
+/* ================================================================== */
+console.log('\nLES CHAMPS D’ADRESSE NE MONTRENT PAS UNE ADRESSE');
+/* Le texte gris d'un champ vide qui RESSEMBLE à une donnée est lu comme
+   une donnée : « 4 rue des Lilas », « 13350 », « Charleval » ont été pris
+   pour l'adresse du client (retour de l'iPhone du 29/10/2026). Remettre ces
+   exemples dans la fiche passait tous les contrôles (sabotage F13). Un
+   champ d'adresse DIT ce qu'il attend, il ne donne pas d'exemple. */
+{
+  /* Un élément JSX entier : depuis « <Balise » jusqu'au « /> » ou « > » de
+     même profondeur — les accolades des fonctions fléchées comptent. */
+  const elements = (code, balises) => {
+    const res = [];
+    const re = new RegExp(`<(${balises.join('|')})\\b`, 'g');
+    let m;
+    while ((m = re.exec(code))) {
+      let prof = 0;
+      let k = m.index + m[0].length;
+      for (; k < code.length; k += 1) {
+        const c = code[k];
+        if (c === '{') prof += 1;
+        else if (c === '}') prof -= 1;
+        else if (prof === 0 && c === '>') break;
+      }
+      res.push(code.slice(m.index, k + 1));
+    }
+    return res;
+  };
+  const ATTENDU = { 'v.adresse': 'N° et rue', 'v.codePostal': 'Code postal', 'v.ville': 'Commune' };
+  const champs = elements(forme, ['ChampVille', 'Field', 'ChampLocal']);
+  const trouves = Object.keys(ATTENDU).map((cle) => {
+    const el = champs.find((e) => new RegExp(`\\b(valeur|value)=\\{${cle.replace('.', '\\.')}\\}`).test(e));
+    const p = el && (el.match(/\bplaceholder="([^"]*)"/) || [])[1];
+    return { cle, el: !!el, p, ok: !!el && p === ATTENDU[cle] };
+  });
+  verifier('la fiche client : « N° et rue », « Code postal », « Commune » — aucun exemple d’adresse',
+    trouves.every((x) => x.ok), JSON.stringify(trouves));
+  const chiffres = champs.filter((e) => /\b(valeur|value)=\{v\.(adresse|codePostal|ville)\}/.test(e))
+    .map((e) => (e.match(/\bplaceholder=(["{])([^"}]*)/) || [])[2] || '').filter((p) => /\d/.test(p));
+  verifier('…et aucun chiffre dans le texte gris d’un champ d’adresse', chiffres.length === 0, chiffres.join(' | '));
+}
+
 if (echecs) {
   console.error(`\n✘ ${echecs} contrôle(s) en échec.\n`);
   process.exit(1);

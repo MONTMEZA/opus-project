@@ -1375,6 +1375,40 @@ export function texteDUrgence({ libelle = null, details = null } = {}) {
   return l || d || null;
 }
 
+/* CE QUE LA REQUÊTE D'UN DEVIS Y JOINT. La liste de « Mes devis » n'a besoin
+   que des dates et du budget ; un devis OUVERT montre aussi ce que le client
+   a demandé (« Ce que le client a demandé », 29/10/2026) : la description de
+   la demande, le problème de l'urgence et ce que la personne a écrit — lus
+   par le lien, jamais rangés dans le devis. Écrits ICI, avec leur lecture
+   (`originesDuDevis`), pour que `verifier-devis` FASSE TOURNER la lecture :
+   un devis ouvert sans ces colonnes, ou une lecture qui prenait le budget
+   pour le texte, passaient tous les contrôles (relecture des contrôles du
+   29/10/2026, sabotages F16 et F17). */
+export const LIENS_DU_DEVIS = '*, client:client_id(nom), demande:quote_request_id(created_at, budget), '
+  + 'urgence:sos_request_id(created_at)';
+export const LIENS_DU_DEVIS_OUVERT = '*, client:client_id(nom), demande:quote_request_id(created_at, budget, description), '
+  + 'urgence:sos_request_id(created_at, probleme_label, details)';
+
+/** La demande et l'urgence jointes à un devis de la base, aux noms de
+ *  l'application : leur date, le budget écrit par le client, et le TEXTE —
+ *  la description de la demande, ou « problème — ce qu'elle a écrit » pour
+ *  une urgence. Une colonne absente (la liste ne la demande pas) vaut `null`. */
+export function originesDuDevis(d) {
+  const demande = d && d.demande;
+  const urgence = d && d.urgence;
+  return {
+    demande: demande ? {
+      createdAt: demande.created_at ?? null,
+      budget: demande.budget ?? null,
+      texte: demande.description ?? null,
+    } : null,
+    urgence: urgence ? {
+      createdAt: urgence.created_at ?? null,
+      texte: texteDUrgence({ libelle: urgence.probleme_label, details: urgence.details }),
+    } : null,
+  };
+}
+
 /** Ce que le client a demandé, pour l'en-tête du devis — le texte de sa
  *  demande ou le problème de son urgence. Lu par le lien d'origine, JAMAIS
  *  rangé dans le devis : la demande effacée, il disparaît avec elle. */

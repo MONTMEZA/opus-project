@@ -181,7 +181,6 @@ import { centimesLisibles } from '../src/lib/centimes.js';
 import { messageDeContrainte } from '../src/lib/erreurs.js';
 import { DELAI_ECRITURE } from '../src/lib/file-ecriture.js';
 import { initialDemandesRecues } from '../src/data/demo.js';
-import { POURQUOI_LA_FICHE } from '../src/lib/clients.js';
 
 const PORT = process.env.PORT || 8097;
 const PW = '/opt/node22/lib/node_modules/playwright/index.js';
@@ -2750,7 +2749,10 @@ await section('« Pour moi » : accepter la demande de devis, « Faire un devis 
   await attendre(500);
   const t3 = await texte();
   verifier('« Nouveau devis » : la fiche EXISTANTE s’ouvre, avec sa raison, et « Choisir ce client pour ce devis »',
-    t3.includes(net(POURQUOI_LA_FICHE.existante))
+    /* La phrase écrite ICI, en toutes lettres : comparée à la constante du
+       code, elle suivait toute erreur du code (deux phrases permutées
+       passaient — relecture des contrôles du 29/10/2026, CONTROLES-2). */
+    t3.includes('Ce numéro de téléphone est déjà dans votre carnet : choisissez ce client pour le devis.')
     && (await page.getByLabel(`Choisir ${NOM_DEMANDE} pour le devis en cours`, { exact: true }).count()) === 1
     && !t3.includes(`${NOM_DEMANDE} est dans votre carnet de clients.`));
   await capture('22a-meme-numero');

@@ -58,7 +58,7 @@ import { creerFileEcriture, DELAI_ECRITURE } from './file-ecriture';
 import { nouvelIdentifiant } from './identifiant';
 import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
-  texteDUrgence,
+  texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, originesDuDevis,
 } from './devis';
 import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
 /* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
@@ -2671,16 +2671,9 @@ function rowToDevis(d) {
     client: d.client ? { nom: d.client.nom ?? null } : null,
     /* Le TEXTE de la demande (sa description) et le problème de l'urgence
        n'arrivent qu'avec `unDevis` (`LIENS_DU_DEVIS_OUVERT`) : l'en-tête de la
-       saisie les affiche, jamais recopiés dans le devis (29/10/2026). */
-    demande: d.demande ? {
-      createdAt: d.demande.created_at ?? null,
-      budget: d.demande.budget ?? null,
-      texte: d.demande.description ?? null,
-    } : null,
-    urgence: d.urgence ? {
-      createdAt: d.urgence.created_at ?? null,
-      texte: texteDUrgence({ libelle: d.urgence.probleme_label, details: d.urgence.details }),
-    } : null,
+       saisie les affiche, jamais recopiés dans le devis (29/10/2026). La
+       lecture vit dans `devis.js`, que `verifier-devis` fait tourner. */
+    ...originesDuDevis(d),
   };
 }
 
@@ -3070,15 +3063,11 @@ export function fileExistante(devisId) {
    Le jour où un second statut existe, ce qui attend passe devant, côté
    base — `verifier-devis` l'exigera.
    -------------------------------------------------------------------------- */
-const LIENS_DU_DEVIS = '*, client:client_id(nom), demande:quote_request_id(created_at, budget), '
-  + 'urgence:sos_request_id(created_at)';
-/* UN DEVIS OUVERT montre aussi ce que le client a demandé (« Ce que le client
-   a demandé », 29/10/2026) : la description de la demande, le problème de
-   l'urgence. Lus par le lien — la politique « lecture mes devis » / « lecture
-   mes sos » laisse l'artisan lire ce qui lui est adressé —, et seulement pour
-   le devis ouvert : une liste de 200 devis n'a pas à transporter 200 textes. */
-const LIENS_DU_DEVIS_OUVERT = '*, client:client_id(nom), demande:quote_request_id(created_at, budget, description), '
-  + 'urgence:sos_request_id(created_at, probleme_label, details)';
+/* `LIENS_DU_DEVIS` et `LIENS_DU_DEVIS_OUVERT` vivent dans `devis.js`, avec
+   leur lecture. UN DEVIS OUVERT montre aussi ce que le client a demandé :
+   lu par le lien — la politique « lecture mes devis » / « lecture mes sos »
+   laisse l'artisan lire ce qui lui est adressé —, et seulement pour le devis
+   ouvert : une liste de 200 devis n'a pas à transporter 200 textes. */
 
 async function mesDevisSupabase() {
   const { data, error } = await lectureDevis('La lecture de vos devis', (signal) => avecSignal(

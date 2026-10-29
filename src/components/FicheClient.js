@@ -79,7 +79,16 @@ export default function FicheClient({
     : { ...VIDE, ...(depuis || {}) };
 
   const [v, setV] = useState(depart);
-  const [erreur, setErreur] = useState(null);
+  /* OUVERTE PAR « FAIRE UN DEVIS » (`pourquoi`), la fiche dit TOUT DE SUITE
+     ce qui ne passe pas : la phrase « une information ne peut pas aller
+     telle quelle » sans le champ fautif marqué, c'est chercher à l'aveugle
+     (relecture des contrôles du 29/10/2026, CONTROLES-9). Un nouveau client
+     tapé à la main, lui, ne reçoit pas d'erreur avant d'avoir rien écrit. */
+  const [erreur, setErreur] = useState(() => {
+    if (fiche || !pourquoi) return null;
+    const r = validerClient(depart);
+    return r.ok ? null : r;
+  });
   const [occupe, setOccupe] = useState(false);
   const [confirmeSuppression, setConfirmeSuppression] = useState(false);
 
@@ -251,7 +260,7 @@ export default function FicheClient({
             {estEntreprise ? "Nom de l'entreprise" : 'Nom du client'}
           </Text>
           <Field
-            placeholder={estEntreprise ? 'SCI des Verlusses' : 'Mme Martin'}
+            placeholder={estEntreprise ? 'Nom de l’entreprise' : 'Nom et prénom'}
             value={v.nom}
             onChangeText={poser('nom')}
             autoFocus={!fiche}
@@ -295,7 +304,7 @@ export default function FicheClient({
               <Text style={s.label}>SIRET</Text>
               <Field
                 ref={refSiret}
-                placeholder="123 456 789 00012"
+                placeholder="14 chiffres"
                 value={v.siret}
                 onChangeText={poser('siret')}
                 keyboardType="number-pad"
@@ -314,7 +323,7 @@ export default function FicheClient({
           <Text style={s.label}>Téléphone</Text>
           <Field
             ref={refTelephone}
-            placeholder="06 39 98 00 00"
+            placeholder="Numéro de téléphone"
             value={v.telephone}
             onChangeText={poser('telephone')}
             keyboardType="phone-pad"
@@ -325,7 +334,7 @@ export default function FicheClient({
           <Text style={s.label}>E-mail</Text>
           <Field
             ref={refEmail}
-            placeholder="client@exemple.fr"
+            placeholder="Adresse e-mail"
             value={v.email}
             onChangeText={poser('email')}
             keyboardType="email-address"
@@ -403,6 +412,7 @@ export default function FicheClient({
             </View>
           </View>
           {messageErreur('codePostal')}
+          {messageErreur('ville')}
 
           {!!sesDevis && (
             <>
@@ -452,7 +462,7 @@ export default function FicheClient({
 
           <SectionLabel>Ce qu&apos;il faut se rappeler</SectionLabel>
           <TextArea
-            placeholder="Portail à gauche. Prévenir la veille."
+            placeholder="Ex. : portail à gauche, prévenir la veille"
             value={v.notes}
             onChangeText={poser('notes')}
             maxLength={LONGUEUR_MAX.notes}

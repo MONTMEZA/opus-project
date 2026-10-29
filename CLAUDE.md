@@ -10157,6 +10157,54 @@ juste au-dessus du clavier, et l'arrivée dans une conversation clavier
 ouvert) ; le délai dépassé et la relecture par l'identifiant (tenus par
 `verifier-clients` seulement) ; la création au doigt sur l'iPhone.
 
+#### La relecture des CONTRÔLES — 45 défauts remis exprès, 21 passaient
+
+Un relecteur a remis à la main, sur une copie, les défauts que ce lot
+corrige, puis lancé les contrôles. **Sur 45 défauts, 21 passaient
+`npm run verifier` sans un « ✘ »** — dont le carnet illisible pris pour un
+carnet vide (création à l'aveugle), deux phrases de la fiche permutées,
+l'objet du devis rempli avec le texte de la demande, la note « Ce texte
+n'apparaît pas sur le devis. » retirée, « 4 rue des Lilas » revenu, le
+bandeau « est dans votre carnet » affiché avant la création, et un décalage
+de clavier écrit `Platform.OS === 'ios' ? 90 : 0`. Plusieurs n'étaient vus
+que par `mesure-devis`, qui n'est pas dans `npm run verifier`.
+
+> **Ce qui décide se FAIT TOURNER ; ce qui se lit se lit sur sa PROPRIÉTÉ.**
+> La lecture du carnet est sortie dans `lireLeCarnet()` (`clients.js`), la
+> lecture des liens d'un devis dans `originesDuDevis()` et
+> `LIENS_DU_DEVIS_OUVERT` (`devis.js`) : les contrôles les exécutent.
+> Chaque phrase de `POURQUOI_LA_FICHE` doit parler de SA raison ; un
+> décalage de clavier est refusé sous TOUTES ses formes ; un composant
+> enveloppe importé par la conversation est suivi de proche en proche.
+
+Et **une mesure qui compare l'écran à la constante qu'elle importe du code
+ne vérifie rien** : deux phrases permutées dans le code l'étaient aussi dans
+la mesure. Elle compare désormais à un texte écrit en toutes lettres.
+
+Trois défauts d'écran trouvés au passage, et corrigés :
+
+- **les autres textes gris de la fiche** ressemblaient encore à des données
+  — « Mme Martin » (une cliente de la démonstration), « 06 39 98 00 00 »,
+  « SCI des Verlusses » : le même piège que l'adresse. Ils disent ce que le
+  champ attend (« Nom et prénom », « Numéro de téléphone »), et un exemple
+  commence par « Ex. : ». `verifier-clients` le tient pour la fiche ET pour
+  l'en-tête du devis ;
+- **les phrases disaient « enregistrez la fiche »** quand le bouton
+  s'appelle « Ajouter ce client » : elles nomment le vrai bouton, et la
+  fiche ouverte par « Faire un devis » marque le champ fautif dès
+  l'ouverture ;
+- **une ville trop longue était refusée sans message** : la fiche n'avait
+  aucune place pour le dire, et « Ajouter ce client » ne faisait rien. Le
+  contrôle vérifie désormais que CHAQUE champ que `validerClient()` peut
+  refuser a sa place dans la fiche.
+
+Après correction : **56 défauts remis, les 56 refusés**, chacun par la
+vérification visée. Au navigateur, en démonstration, le cas de l'homonyme
+(une autre Julie M. au carnet) : la fiche s'ouvre avec sa phrase, « Ajouter
+ce client » ouvre le devis pour elle. **Pas vu au navigateur** : le champ
+marqué en rouge dès l'ouverture (la démonstration n'a pas de demande
+invalide) — il n'est tenu que par le contrôle.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

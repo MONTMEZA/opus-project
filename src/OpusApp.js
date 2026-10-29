@@ -71,7 +71,7 @@ import {
 import { aiMatchPros, aiRecitChantier, surTravailAgent } from './lib/ai';
 import { doitProposerLeNom, nomAgent } from './lib/agent';
 import {
-  clientDepuisDemande, ficheAPartirDeLaDemande, lieuDeLaDemande, POURQUOI_LA_FICHE,
+  clientDepuisDemande, ficheAPartirDeLaDemande, lieuDeLaDemande, POURQUOI_LA_FICHE, lireLeCarnet,
 } from './lib/clients';
 import { nouvelIdentifiant } from './lib/identifiant';
 import { conversationConcerne, obtenirConversation, repondreEtOuvrir } from './lib/repondre-demande';
@@ -3998,12 +3998,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
       /* LE CARNET, RELU — on ne décide pas d'un doublon sur une liste
          ancienne ; et un carnet illisible ouvre le formulaire. */
-      let carnet = null;
-      try {
-        carnet = await avecDelai(api.mesClients(), 8000, 'La lecture de votre carnet');
-        setClients(carnet || []);
+      const carnet = await lireLeCarnet(() => avecDelai(api.mesClients(), 8000, 'La lecture de votre carnet'));
+      if (carnet) {
+        setClients(carnet);
         setClientsEtat('ok');
-      } catch (e) { carnet = null; }
+      }
 
       const date = demande.createdAt || (api.mode === 'demo' ? dateDeDemandeDemo(demande.id) : null);
       /* Le lieu des travaux : celui de la demande quand il se découpe

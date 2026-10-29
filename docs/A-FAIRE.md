@@ -2595,6 +2595,12 @@ migration : `git pull`, puis `npx expo start -c`. Aucun module natif : rien
   « 13350 », « Charleval ») ne ressemblent plus à une adresse ;
 - [x] **l'écran SOS range l'adresse COMPLÈTE**, commune comprise : avant,
   l'artisan recevait une rue sans savoir dans quelle ville.
+- [x] **plus aucun texte gris de la fiche client ne ressemble à une
+  donnée** (« Mme Martin », « 06 39 98 00 00 », « SCI des Verlusses »
+  sont partis) ; les phrases de la fiche nomment le vrai bouton (« Ajouter
+  ce client ») ; une ville trop longue a enfin son message ;
+- [x] **les contrôles voient désormais les 56 défauts** qu'un relecteur a
+  remis exprès dans le code (21 passaient sans un mot avant).
 
 **À essayer sur votre iPhone** (build de développement, après `git pull` et
 `npx expo start -c`) :
@@ -2626,6 +2632,14 @@ migration : `git pull`, puis `npx expo start -c`. Aucun module natif : rien
 - [ ] le délai dépassé à la création de la fiche, et sa relecture par
   l'identifiant choisi sur le téléphone, ne sont éprouvés que par les
   contrôles — pas sur un vrai réseau coupé.
+- [ ] la fiche ouverte pour une demande dont une valeur ne passe pas (un
+  nom trop long, un code postal faux) marque le champ en rouge dès
+  l'ouverture : tenu par le contrôle seulement, la démonstration n'a pas de
+  telle demande ;
+- [ ] `mesure-devis` (au navigateur) n'est toujours pas dans
+  `npm run verifier` : il demande un serveur. Les décisions de ce retour
+  sont désormais tenues AUSSI par les contrôles ordinaires, mais le parcours
+  complet ne se rejoue qu'à la main.
 
 ### La démonstration et la publicité — décidé le 26/10/2026
 
