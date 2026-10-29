@@ -9626,9 +9626,385 @@ les quatre refusés ; un lecteur cité en commentaire ne fait pas rougir.
   publications et les 2 fausses publicités, visibles dans le vrai Fil.
   **Le propriétaire a décidé le 26/10 de ne rien y toucher pour
   l'instant** ; à reprendre avec la vidéo de présentation.
-- **La base laisse envoyer un SOS à n'importe quel artisan**, avec
+- ~~**La base laisse envoyer un SOS à n'importe quel artisan**, avec
   n'importe quel `metier_key` et une estimation inventée : la politique
-  « creation sos » ne regarde que le client et le blocage. Lot S.
+  « creation sos » ne regarde que le client et le blocage. Lot S.~~
+  **Fermé le 29/10 par le lot S-b (OP025)** — sauf la distance, voir
+  ci-dessous.
+
+### Les demandes, le blocage, les partenariats, les réponses — lot S-b (26-29/10/2026)
+
+Section 51 b de `schema.sql` (réparties dans les sections qu'elle touche :
+13.5 à 13.5 quater, 24.4, 30.3, 49.6 bis), `src/lib/transitions-demandes.js`,
+`supabase/essais-section-51b.sql`, `npm run verifier-partenariats`, et des
+contrôles durcis (`verifier-moderation`, `-demandes`, `-legal`, `-place`,
+`-demo`, `-devis`). Deuxième des quatre sous-lots du lot S. Les décisions du
+propriétaire : **Q1 « Oui, le refus passe »** — on ne tait que les
+notifications que le destinataire reçoit de quelqu'un qu'IL a bloqué ; un
+refus envoyé par celui qui bloque arrive — et **Q2 « Oui aux deux »** — plus
+aucun nouvel avis entre deux personnes en blocage, et un artisan lit TOUJOURS
+les avis qui le concernent.
+
+#### Les deux règles qui portent tout le lot
+
+> **R-A — une écriture du CLIENT se reconnaît à son rôle.** Dans une fonction
+> `security invoker`, `current_user in ('authenticated', 'anon')` dit « c'est
+> le téléphone » ; l'éditeur SQL et une migration (`postgres`) passent, pour
+> pouvoir réparer. Dans une fonction `security definer`, `current_user` vaut
+> TOUJOURS le propriétaire (la leçon d'OP010) : la garde n'y mordrait pas.
+>
+> **R-B — « clore oui, ouvrir non ».** Un blocage interdit d'OUVRIR quelque
+> chose de nouveau (aimer, commenter, s'abonner, laisser un avis, répondre,
+> accepter, rattacher un devis), jamais de CLORE ce qu'on a posé (retirer,
+> refuser, marquer terminé). Il se pose donc dans `with check`, **jamais dans
+> `using`**, qui gouverne aussi la suppression. Et toute politique qui
+> appelle `est_masque()` est `to authenticated` : appelée pour un visiteur,
+> elle échouerait au lieu de filtrer (essai I4).
+
+#### Ce qui était ouvert, et ne l'est plus
+
+Mesuré sur PostgreSQL 16 avant chaque correction (la colonne « avant » de
+l'essai 51 b) :
+
+| | avant | après |
+|---|---|---|
+| un particulier dépose sa demande déjà « acceptée » — et gagne « client vérifié » | `INSERT 0 1` | refusé |
+| l'artisan récrit la description, le nom ou le numéro d'une demande reçue | `UPDATE 1` | **OP019** |
+| une demande refusée ou terminée revient « en attente » | `UPDATE 1` | **OP019**, une phrase par cas |
+| une urgence envoyée à n'importe quel artisan, n'importe quel métier, une estimation inventée | `INSERT 0 1` | **OP025** : seulement à qui répond aux urgences de CE métier et affiche ses tarifs |
+| se demander un devis, un rappel, s'écrire à soi-même | `INSERT 0 1` | refusé (contraintes `…_pas_soi_meme_check`) |
+| accepter la demande de quelqu'un qui vous a bloqué | `UPDATE 1` | **OP020** — la refuser passe |
+| un devis neuf rattaché à la demande d'une personne en blocage | `INSERT 0 1` | **OP020** ; un devis commencé avant reste modifiable |
+| aimer, commenter, s'abonner, noter, répondre sous blocage | `INSERT 0 1` | refusé, dans les deux sens |
+| répondre à une demande pourvue, à sa propre annonce | `INSERT 0 1` | refusé |
+| un visiteur lit les réponses aux demandes, et les partenariats | 1 ligne, 2 lignes | **permission refusée** |
+| un tiers lit une demande de partenariat en attente | 1 | 0 |
+| en acceptant un partenariat, on en change l'AUTEUR (défaut du 19/10) | `UPDATE 1` | **permission refusée** |
+| le demandeur supprime le refus pour redemander en boucle | `DELETE 1` | `DELETE 0` |
+| « 40 réponses » écrit sous sa demande ou son annonce | 40 | le compteur reste juste |
+| une réponse déplacée vers une autre demande | `UPDATE 1` | **OP021** |
+
+Et la base parle juste : « Paule P. **attend votre appel** » pour un rappel
+(elle écrivait le masculin pour tout le monde), « a besoin de vous **EN
+URGENCE** » pour une urgence.
+
+#### Une réponse à une réponse se range sous la RACINE — qui doit être lisible aussi
+
+Trouvé par la relecture, et c'est la famille du « fil à deux niveaux » de la
+section 20.1 bis. `limite_profondeur_commentaire()` vérifiait que le parent
+IMMÉDIAT était lisible, puis rangeait la réponse sous le commentaire
+d'origine sans le relire. P a bloqué B ; B a un commentaire sous la
+publication d'un tiers, Q lui a répondu ; P répond à Q : sa réponse se
+rangeait **sous le commentaire de B**, et B recevait « Paule P. a répondu à
+votre commentaire ». L'essai ne testait que la réponse directe : il passait
+au vert.
+
+> **Un fil qu'on aplatit se vérifie au niveau où l'on RANGE, pas au niveau où
+> l'on vise.** La racine est relue (invoker, donc filtrée par le blocage), et
+> la notification d'un commentaire que le destinataire a bloqué se tait.
+
+#### Une règle RLS se paie par ligne écrite — une sous-requête corrélée, pas une liste
+
+`post_id in (select id from public.posts)` dans un `with check` relit TOUTE
+la table des publications à chaque « j'aime ». La forme corrélée
+`exists (select 1 from public.posts p where p.id = post_likes.post_id)`
+s'arrête à une ligne, par l'index. Même famille que les politiques du lot 1
+(`mes_entreprises()` en sous-requête NON corrélée, calculée une fois) : **ce
+qui dépend de la ligne se corrèle, ce qui n'en dépend pas se calcule une
+fois.**
+
+#### `for all`, cinquième fois : un « j'aime » qui se DÉPLACE
+
+« mes likes » et « mes follows » sont `for all`. L'UPDATE déplaçait un
+« j'aime » d'une publication à l'autre : la première gardait son +1 sans
+ligne, la seconde ne comptait rien. `revoke update on post_likes, follows` —
+un droit de table, parce qu'une politique ne distingue pas « retirer » de
+« déplacer ». Aimer, retirer, s'abonner, se désabonner passent toujours
+(F3 quinquies).
+
+Même famille, deux compteurs écrits depuis le téléphone :
+`annonces_pro.nb_reponses` (tenu par `tient_le_compteur_d_annonce()`) et
+`demandes.nb_reponses` (né dans ce lot, avec un rattrapage qui RECALCULE).
+
+#### L'anonymisation ne retire pas « client vérifié »
+
+`calcule_client_verifie()` recalculait la mention à chaque UPDATE ; or
+l'anonymisation d'un compte qui part est un UPDATE (`author_id` à vide), et
+le recalcul ne retrouvait plus l'auteur : l'avis perdait sa mention au moment
+précis où il ne pouvait plus la regagner. **Ce qui a été vrai le reste** :
+un avis anonymisé garde son ancienne valeur (F9 ter).
+
+#### Être bloqué se SAIT — c'est une politesse, pas une garantie
+
+Un compte qui en a bloqué un autre ne lui montre plus rien : l'autre peut
+donc s'en apercevoir (`est_masque()` répond aussi pour l'appelant, et un
+refus OP020 le dit). Les textes le disent : « elle peut s'en apercevoir : vos
+contenus ne lui apparaissent plus ». Rendre le blocage indétectable
+demanderait de répondre des choses fausses : décision à poser, pas un défaut
+caché.
+
+#### L'écran : ce qui est refusé se dit, ce qui est inconnu n'est pas « non »
+
+- **Répondre d'abord, ouvrir la conversation ensuite.** Avant, la
+  conversation naissait, puis la réponse était refusée : un fil vide avec un
+  client qui n'avait rien demandé. Un refus (`REPONSE_FERMEE`) retire la
+  carte et le dit.
+- **« Faire un devis » demande à la base** (`peut_faire_un_devis()`) en même
+  temps qu'il cherche les brouillons — `Promise.allSettled` : deux questions
+  indépendantes, et l'échec de l'une ne cache pas la réponse de l'autre. Une
+  permission qu'on n'a pas pu lire vaut « inconnue », **jamais « non »**
+  (`issueDeFaireUnDevis`, `transitions-demandes.js`, que `node` fait
+  tourner).
+- **Débloquer rouvre** les cartes et les partenariats fermés par un OP020.
+- **Un bouton envoyé ne s'appuie pas deux fois** : partenariats et SOS ont
+  leur verrou ; après OP025, la recherche d'artisans se relance.
+
+#### Les contrôles ont été durcis là où la relecture les a trouvés aveugles
+
+Douze trous de contrôle, tous de la même famille — **un contrôle de texte ne
+voit que la forme qu'il cherche** :
+
+- une politique réécrite plus bas par `alter policy`, ou une seconde
+  politique permissive sous un autre nom, rouvrait ce que le blocage fermait :
+  **listes FERMÉES des politiques par table**, et `alter policy`,
+  `disable trigger` et `session_replication_role` refusés dans `schema.sql` ;
+- une fonction ou un déclencheur redéfini plus bas gagne au rejeu, alors que
+  le contrôle lisait la PREMIÈRE définition : **une seule définition**, exigée ;
+- une garde cherchée « quelque part » dans un corps : le contrôle coupe
+  chaque corps à son `$$;` et cherche la SÉQUENCE entière (un `return null`
+  ailleurs dans la fonction le satisfaisait) ;
+- `not valid` retiré des contraintes « soi-même » : la migration aurait
+  échoué sur la vraie base (elle a des lignes à soi-même), au vert.
+
+#### La seconde relecture — une correction peut CRÉER le défaut (27/10/2026)
+
+La première relecture avait trouvé 30 constats, tous corrigés. Les
+corrections ont été relues à leur tour, par trois angles et un contradicteur
+par angle : 19 constats, 13 confirmés, 6 en partie. Le plus grave venait de
+la correction elle-même.
+
+> **« Répondre » retenait « Vous avez répondu » AVANT la conversation.** La
+> première correction avait inversé l'ordre (la réponse d'abord, la bonne
+> idée) et placé le souvenir trop tôt : une coupure entre les deux requêtes,
+> et la carte n'avait plus de bouton — au redémarrage la base relisait la
+> réponse, et l'artisan ne pouvait plus JAMAIS écrire à ce client depuis la
+> demande. Le contrôle ajouté vérifiait l'ORDRE des lignes : vert.
+
+D'où `src/lib/repondre-demande.js`, qui n'importe rien, et que
+`verifier-demandes` **fait tourner** contre une base simulée : réseau coupé
+sur la conversation (la carte garde « Répondre », l'appui suivant ouvre sans
+recompter), conversation chargée de la base — elle n'a pas de `contact`,
+seulement `autre`, et la chercher par `contact` la faisait recréer, refusée
+par la clé unique —, conversation créée côté serveur mais réponse perdue
+(23505 : on la RELIT), et le refus de la base.
+
+> **Un geste à plusieurs écritures se contrôle en le JOUANT, pas en lisant
+> l'ordre de ses lignes.** C'est la leçon de `cloudinary-adresses.js`,
+> appliquée à un enchaînement d'appels.
+
+Les autres, en bref :
+
+- **une réponse vit sous la publication de son parent.** La lecture des
+  commentaires ne filtre que leur auteur : on répondait au commentaire d'un
+  tiers posé sous la publication d'une personne bloquée en DÉCLARANT une
+  autre publication, et l'on s'accrochait à son fil. Comparé seulement à
+  l'écriture qui pose le lien : l'anonymisation d'un compte qui part est un
+  UPDATE, et une réponse incohérente écrite AVANT la règle ne doit pas
+  bloquer le droit à l'effacement de son auteur (prouvé, essai F2 ter f) ;
+- **un rattrapage voyage avec sa garde.** La migration posait la garde du
+  compteur des annonces sans son recalcul : un « 40 réponses » écrit avant
+  la migration serait resté, FIGÉ par la garde. Elle le recalcule ;
+- **« reviennent si vous le retirez » était faux sous un blocage mutuel** :
+  `est_masque()` regarde les deux sens, retirer le sien ne rend rien, et l'on
+  ne peut pas savoir pourquoi. « Quand plus aucun blocage ne vous sépare »
+  (essai F10). Et « vos contenus ne lui apparaissent plus » disait plus que
+  la base : la fiche, la disponibilité aux urgences, un avis ou une demande
+  déjà reçus restent lisibles — « vos publications et vos commentaires » ;
+- **la démonstration fait vivre les deux refus du lot** : un chauffagiste
+  qui coupe ses urgences juste après la recherche (OP025, puis la recherche
+  relancée ne le propose plus), une demande refermée par son auteur après le
+  chargement (`REPONSE_FERMEE`) ;
+- **la note d'une fiche suit son propre avis** (`avecAvisPublie`) : un avis
+  masqué plus le sien faisaient « tous les avis sont là » par compensation ;
+- **jamais « Répondre » sur sa propre demande** : un compte passé pro garde
+  celles qu'il avait déposées, la base refusait, et le refus retirait la
+  carte. « J'ai trouvé » lui revient.
+
+Et un piège évité de justesse en corrigeant : `const lienFermeDemo =
+creerLienFermeDemo(..., demoBlocages)` lisait au chargement une `const`
+déclarée 1 500 lignes plus bas — un écran blanc au démarrage, que ni le
+linter ni l'export ne signalent (la règle des voyants du 04/10). C'est une
+fonction.
+
+#### Les contrôles : une lecture TOLÉRANTE, des formes ENTIÈRES
+
+> **Un contrôle de texte lit une ORTHOGRAPHE.** Le même ordre SQL s'écrit
+> autrement : `ALTER POLICY` en majuscules ou sur deux lignes, une politique
+> sans guillemets, `"public"."post_likes"`, une espace avant « ( »,
+> `enable replica trigger` (qui éteint sans dire « disable »), un `grant`
+> qui cite plusieurs tables. Quatorze formes rouvraient une règle du lot au
+> vert.
+
+`verifier-moderation` porte donc, À CÔTÉ des motifs existants (qui ne sont
+pas normalisés : ils dépendent des guillemets et des retours à la ligne), une
+lecture qui ignore la casse et les blancs, rend guillemets et schéma
+facultatifs, et COMPTE : politiques par table, définitions de fonction, de
+déclencheur, `drop` placé après la dernière création. Et les règles nouvelles
+du lot (six fonctions, quatre politiques) sont comparées ENTIÈRES, espaces
+réduits : un `and` devenu `or`, un `exists` devenu `not exists`, un `return
+new;` glissé avant la garde passaient tous. Changer une de ces règles se
+décide : la base, l'essai 51 b et la forme attendue, dans le même lot.
+
+Trois autres trous, de la même famille :
+
+- **l'outil de lecture du contrôle coupait une fonction à la première ligne
+  qui commence par `$$;`** — celle qui finit par `end; $$;` sur la même
+  ligne voyait la SUIVANTE entrer dans son corps. Il coupe au `$$` qui
+  ferme ;
+- **la phrase « vos conversations sont masquées » ne suivait qu'UNE
+  politique** : toutes les lectures des conversations, des messages et des
+  pièces jointes sont relues, et les trois tables entrent dans la liste
+  fermée ;
+- **une phrase rangée dans un commentaire JSX** satisfaisait le contrôle de
+  l'écran d'administration : les commentaires sont retirés avant de lire, et
+  les deux textes affichés après un blocage sont relus MOT POUR MOT.
+
+> **Le vrai trou reste ailleurs, et il est connu** : l'essai 51 b voit
+> TOUTES ces formes, mais `npm run verifier` ne joue aucun essai SQL
+> (`docs/A-FAIRE.md` §2.3). Tant que ce n'est pas fait, les contrôles de
+> texte sont la seule garde automatique — d'où leur durcissement.
+
+#### La troisième relecture — une garde peut BLOQUER ce qu'elle protège (27/10/2026)
+
+Relue une troisième fois, par trois angles et un contradicteur par constat :
+18 constats, 9 confirmés, 2 réfutés, et 7 que j'ai reproduits moi-même
+(leurs sabotages passaient au vert sur `d281d85`).
+
+- **Le « marchepied ».** Une réponse incohérente écrite AVANT la règle (sous
+  une publication, rattachée à un commentaire d'une autre) servait d'appui :
+  une nouvelle réponse visait celle-là, était rangée sous sa racine, et
+  rejoignait le fil d'une publication qu'on ne pouvait pas lire. Le
+  commentaire d'ORIGINE doit être sous la même publication lui aussi (essai
+  51 b, cas F2 ter g) ;
+- **et la même garde empêchait de corriger son propre texte.** Elle relisait
+  le parent à chaque UPDATE ; l'auteur d'une réponse qui bloquait ensuite
+  l'auteur du parent ne pouvait plus la corriger. Une écriture qui ne touche
+  ni `post_id` ni `parent_id` sort désormais AVANT toute recherche (cas
+  F2 ter h).
+
+> **Une garde posée sur le LIEN ne se paie que quand le lien change.**
+> Vérifiée à chaque écriture, elle finit par interdire ce qu'elle ne
+> regardait pas — corriger un texte, anonymiser un compte qui part.
+
+À l'écran :
+
+- **« Vous avez répondu » ne retire plus le geste.** Après un échec de la
+  conversation PUIS un redémarrage, la base relisait la réponse et la carte
+  n'avait plus AUCUN bouton : l'artisan ne pouvait plus écrire à ce client
+  depuis la demande. Elle porte « Répondu · Écrire », qui rejoue le même
+  geste — la base répond « déjà là » (409, voulu) et le compteur ne monte
+  pas ;
+- **bloquer retire aussi une conversation construite à l'instant.** Elle
+  portait `proId: null` et `bloquerPersonne` ne regardait que `proId` : elle
+  restait affichée, alors que les textes promettent « masquées des deux
+  côtés ». `conversationConcerne()` reconnaît les trois formes, et les
+  conversations construites portent `proId` comme celles de la base ;
+- `demandeEstLaMienne()` est sortie de l'écran pour être jouée par le
+  contrôle.
+
+Aux textes (`VERSION = '2026-10-28'`) : « Vous ne recevez plus aucune
+notification de la personne que vous avez bloquée » taisait l'exception de
+l'administration — une demande d'ouverture de compte professionnel doit
+pouvoir être examinée. Le paragraphe est comparé mot pour mot, et son
+exception à la liste que tient la base (`tait_les_notifications_bloquees`).
+
+Aux contrôles : formes ENTIÈRES des lectures masquées (publications,
+commentaires, conversations, messages, pièces jointes) et des 14
+déclencheurs du lot ; aucun mot clé SQL hors minuscules, ni `routine` ou
+`procedure`, ni `grant … on all tables in schema` ; branches d'échec de
+« Répondre » entières ; formes exactes en démonstration.
+
+#### La migration — gardée par son empreinte
+
+Construite depuis `schema.sql` (28 435 octets), sans un ordre qui commence
+par `drop`, `delete` ou `truncate` : `alter policy`, contraintes sous
+condition, `not valid` pour les trois contraintes « pas soi-même » — la vraie
+base contient une ligne « à soi-même » dans trois tables —, et
+`set local lock_timeout = '5s'`. Simulée deux fois sur une imitation
+(`git show ae081f8:supabase/schema.sql`) : même empreinte qu'une base neuve,
+essai 51 b identique, rattrapage exercé sur de vrais compteurs faux
+(40 → 1).
+
+> **Un texte long envoyé par le connecteur se protège par son md5.** La
+> migration voyage dans un bloc `do` qui compare l'empreinte du texte reçu à
+> celle du fichier simulé et **n'exécute rien** si elle diffère. C'est la
+> forme du lot P, ici sans reconstruction : le texte entier est dans le bloc.
+
+**Appliquée le 29/10/2026 à 17 h 35 (heure de Paris)** — migration
+`lot_s_b_demandes_blocage_partenariats` —, avec l'accord du propriétaire.
+Relevé APRÈS, comparé à l'imitation migrée sur 100 lignes de catalogue
+(fonctions et leurs droits, déclencheurs, politiques, contraintes, droits de
+table et de colonne) : **identique**, au droit MAINTAIN de PostgreSQL 17
+près et à un reste connu (« lecture demandes visiteur », réduite à
+`using (false)` depuis la section 30). Aucune fonction de déclencheur
+exécutable par `anon` ou `authenticated` ; le compteur de la seule demande
+recalculé à sa vraie valeur ; aucun compteur d'annonce faux.
+
+**Les avertissements des commits `aa95a41`, `d281d85` et `d4dbf78` — « ne pas
+faire `git pull` avant la migration » — ne valent plus depuis ce jour-là.**
+Et le message d'`aa95a41` dit qu'une urgence ne part plus qu'à un artisan
+« dans son rayon » : **c'est faux**, la base vérifie le métier et les tarifs
+affichés, pas la distance (le rayon est une affaire de RECHERCHE). Un message
+de commit ne se récrit pas ; c'est ici qu'on dit qu'il a vieilli.
+
+#### Vérifié, et comment
+
+Avant la vraie base : `schema.sql` rejoué deux fois sur une base neuve, les
+29 fichiers d'essais (dont `essais-section-51b.sql`) comparés à leur relevé
+d'avant, les 54 contrôles, le linter à 32, les paquets iOS et Android lus,
+les sabotages des trois relectures et du banc (N01 à N34, série S) refusés
+par la vérification visée, et au navigateur en démonstration.
+
+Puis sur la VRAIE base, par le chemin de l'application, avec un artisan
+plombier A, un électricien B et deux particuliers P et Q **à Brest**,
+jetables `…@exemple-opus.test` (les deux preuves SIRET `essai` déjà en base,
+SIRET fictifs, réécrites pour leurs adresses) — **70 ✔ / 0 ✘**, dont :
+
+| | résultat |
+|---|---|
+| A se demande un devis à lui-même | refusé (`pas_soi_meme`) |
+| P dépose sa demande déjà « acceptée » | **403** |
+| A récrit la description · revient sur une demande acceptée ou terminée | **OP019** |
+| le client change le statut | aucune ligne |
+| une urgence vers B (sans urgences) · une urgence de serrurerie vers A | **OP025** ×2 ; de plomberie : 201, « EN URGENCE » |
+| P bloque A : `peut_faire_un_devis` · un devis neuf · accepter | `false` · **OP020** · **OP020** ; refuser : 204, et P n'en est pas prévenu |
+| aimer, s'abonner, commenter, noter sous blocage | **403** ; déplacer son « j'aime » ou son abonnement : **42501** |
+| le fil indirect (répondre sous le commentaire de B par la réponse de A) | refusé ; le témoin Q, lui, passe et se range sous la racine |
+| une réponse qui déclare une autre publication que son parent | refusée |
+| P corrige SA réponse après avoir bloqué l'auteur du parent | **204**, texte changé |
+| « 40 réponses » écrit sous sa demande, sous son annonce | le compteur reste à **1** |
+| déplacer sa réponse vers une autre demande | **OP021** |
+| répondre à une demande pourvue · à sa propre annonce | **403** |
+| un visiteur lit les réponses, les partenariats | **401** |
+| un tiers lit un partenariat en attente · accepté | `[]` · 1 |
+| en acceptant, changer l'auteur · dater la réponse en 2001 | **42501** · la base pose sa date |
+| P (devis accepté puis terminé) laisse un avis à A | « client vérifié », **gardé après le départ de P**, anonymisé |
+| **au navigateur**, A se connecte | les 24 lectures du démarrage en **200** (fil, demandes, conversations, tarifs…) |
+| …Demandes | la carte de P porte **« Répondu · Écrire »** (115 × 36) ; la demande pourvue n'y est pas |
+| …« Répondu · Écrire » | la conversation s'ouvre (`POST demande_reponses 409`, voulu ; `POST conversations 201`) ; le compteur reste à 1 |
+| …bloquer P depuis sa carte | `POST blocages 201`, la conversation **quitte Messages** |
+
+Ménage par le chemin de l'application : quatre comptes supprimés, reconnexion
+refusée ; base revenue à 14 comptes / 8 fiches / 21 publications, aucun
+compte `@exemple-opus.test`, les deux SIREN d'essai non réservés.
+
+**Ce qui n'a PAS été vérifié** : rien sur l'iPhone (le bouton « Répondu ·
+Écrire » au pouce — 115 × 36 au navigateur, `BtnMini` compte sur `hitSlop`,
+que le navigateur ignore) ; sur la vraie base, une notification tue ne l'a
+été que pour un refus (P a bloqué A, et le refus de A ne lui arrive pas) —
+les autres sortes, par les essais SQL seulement ; l'exception de
+l'administration, faute de compte administrateur jetable. La suite est dans `docs/A-FAIRE.md`, « Après le lot
+S-b ».
 
 ## Dépendances : vérifier avant de proposer
 

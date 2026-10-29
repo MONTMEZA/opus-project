@@ -2513,6 +2513,67 @@ compte PRO qui n'est pas vérifié, rien ne doit changer, sinon l'avertissement
 toucher une notification de commentaire sur une publication rangée dans un
 chantier (elle plantait l'application jusqu'au 26/10).
 
+### Après le lot S-b — ce qui reste (29/10/2026)
+
+Le détail est dans CLAUDE.md, « Les demandes, le blocage, les partenariats,
+les réponses — lot S-b ». **La migration est sur la vraie base depuis le
+29/10 à 17 h 35** (heure de Paris), avec votre accord ; le relevé d'après est
+identique à la simulation, et l'essai par le chemin de l'application a rendu
+70 ✔ / 0 ✘ avec quatre comptes jetables à Brest, supprimés ensuite (base
+revenue à 14 comptes / 8 fiches / 21 publications).
+
+**Les avertissements des commits `aa95a41`, `d281d85` et `d4dbf78` — « ne pas
+faire `git pull` » — ne valent plus** : `git pull`, puis `npx expo start -c`.
+Aucun module natif : rien à reconstruire.
+
+**Ce que le lot a fermé, et qui était listé plus bas** :
+
+- [x] la base laissait envoyer un SOS à n'importe quel artisan, avec
+  n'importe quel métier (OP025) — **mais pas la distance** : une urgence part
+  vers un artisan qui prend ce métier et affiche ses tarifs, même hors de son
+  rayon. Le rayon est une affaire de RECHERCHE, pas de droit ;
+- [x] un compte qui se demande un devis, un rappel, une urgence, ou s'écrit
+  à lui-même (contraintes « pas soi-même », posées `not valid` : les trois
+  lignes « à soi-même » de la vraie base restent — les retirer vous
+  appartient, le connecteur refuse un `delete`) ;
+- [x] « X souhaite être rappelé » pour tout le monde : « X attend votre
+  appel ».
+
+**Reportés, et à ne pas oublier** :
+
+- [ ] **Être bloqué se sait.** `est_masque()` répond aussi pour l'appelant,
+  et un refus OP020 le laisse deviner. Les textes le disent (« elle peut
+  s'en apercevoir »). Rendre le blocage indétectable demanderait de répondre
+  des choses fausses : **une décision à vous**.
+- [ ] **Il n'existe pas de bouton pour signaler un AVIS.** Les textes le
+  disent au lieu de le promettre. À construire avec la modération des avis.
+- [ ] **Les essais SQL ne tournent pas dans `npm run verifier`** (§2.3) :
+  l'essai 51 b voit toutes les formes de SQL qui rouvrent une règle, les
+  contrôles de texte non. Le plus utile des chantiers d'outillage.
+- [ ] **Des compteurs d'abonnés sont faux sur la vraie base** — relevé de
+  FORME du 27/10 : `followers_count` est PLUS HAUT que le vrai nombre sur 5
+  fiches, les 5 du `seed.sql` (dont 3 « vérifiées » sans pièce). Aucun
+  `likes_count` faux. Rien ne les recalcule : c'est le lot S-c (les
+  compteurs), avec un nouveau relevé d'abord.
+- [ ] **`notifie_demande` est créée deux fois dans `schema.sql`** (exception
+  connue, que `verifier-demo` lit) ; « annonces lecture pro », « annonce
+  reponses lecture pro », « lecture reponses » et « lecture demandes »
+  aussi, depuis avant le lot. À résorber, pas à imiter.
+- [ ] **Les décisions de l'administration passent sous un blocage**
+  (`demande_pro_nouvelle` n'est jamais tue) : voulu — une demande de compte
+  pro doit pouvoir être examinée —, et l'écran d'administration comme les
+  textes le disent.
+- [ ] **Faire ré-accepter les conditions** : `VERSION` est passée au
+  `2026-10-28`, et rien ne compare encore la version acceptée à la version
+  en vigueur (préavis de quinze jours pour les professionnels).
+
+**À essayer sur votre iPhone**, dans le build de développement, après
+`git pull` et `npx expo start -c` : répondre à une demande (Découvrir →
+Demandes), puis rouvrir la conversation par « Répondu · Écrire » ; bloquer
+quelqu'un depuis sa carte puis le débloquer depuis Confidentialité ;
+accepter ou refuser un partenariat ; et « Faire un devis » depuis « Pour
+moi ».
+
 ### La démonstration et la publicité — décidé le 26/10/2026
 
 Les vidéos et les captures promotionnelles sont faites (en mode
@@ -2563,7 +2624,7 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   d'urgence, et compare son ancienneté écrite à sa date calculée. Ce qui
   reste étrange, et c'est assumé : une urgence « tout de suite » restée
   trois semaines sans réponse.
-- [ ] **La base laisse envoyer un SOS à n'importe quel artisan** (lot S) :
+- [x] **La base laisse envoyer un SOS à n'importe quel artisan** (lot S) — **fermé le 29/10 par le lot S-b (OP025), sauf la distance** :
   « creation sos » ne regarde que le client et le blocage. Mesuré sur
   PostgreSQL : un SOS « plomberie » vers un maçon sans disponibilité ni
   tarifs passe, un `metier_key` inventé passe, une estimation inventée
@@ -2643,8 +2704,8 @@ les contrôles :
 
 Ce qui reste, et qui touche la base (donc votre accord) :
 
-- [ ] **La base accepte qu'un compte se demande un devis, un rappel, une
-  urgence, ou s'écrive à lui-même.** L'écran ne le propose plus, mais un
+- [x] **La base accepte qu'un compte se demande un devis, un rappel, une
+  urgence, ou s'écrive à lui-même.** Fermé le 29/10 par le lot S-b. L'écran ne le propose plus, mais un
   client modifié le peut, et l'artisan se notifie alors sa propre demande.
   La parade : une contrainte « pas soi-même » sur les quatre tables
   (comme `pas_sabonner_a_soi_meme` sur les abonnements), posée **« not
@@ -2652,7 +2713,7 @@ Ce qui reste, et qui touche la base (donc votre accord) :
   (1 conversation, 1 demande de devis, 1 demande de rappel, relevées par
   leur forme seulement). À ranger dans le lot S. Les retirer vous appartient
   (le connecteur refuse un `delete`) : elles ne gênent rien.
-- [ ] **La base écrit « X souhaite être rappelé » pour tout le monde**,
+- [x] **La base écrit « X souhaite être rappelé » pour tout le monde** (fermé le 29/10 : « X attend votre appel »),
   Sophie comprise (`notifie_demande()`). Une tournure neutre — « X attend
   votre appel » — se pose avec la prochaine migration (lot S). La
   démonstration écrit mot pour mot ce que la base envoie, faute comprise.
