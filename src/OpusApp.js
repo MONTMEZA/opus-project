@@ -7,7 +7,9 @@
  * Sans .env, l'écriture Supabase ne fait rien : l'app tourne en mode démo.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import {
+  View, StyleSheet, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { C, M } from './theme';
@@ -68,7 +70,10 @@ import {
 } from './lib/cloudinary';
 import { aiMatchPros, aiRecitChantier, surTravailAgent } from './lib/ai';
 import { doitProposerLeNom, nomAgent } from './lib/agent';
-import { clientDepuisDemande } from './lib/clients';
+import {
+  clientDepuisDemande, ficheAPartirDeLaDemande, lieuDeLaDemande, POURQUOI_LA_FICHE,
+} from './lib/clients';
+import { nouvelIdentifiant } from './lib/identifiant';
 import { conversationConcerne, obtenirConversation, repondreEtOuvrir } from './lib/repondre-demande';
 import { apresEnvoiDesPieces, envoiSuspendLeBadge } from './lib/verification';
 import { partagerPost } from './lib/partage';
@@ -87,7 +92,9 @@ import DevisScreen from './screens/DevisScreen';
 import SaisieDevisScreen from './screens/SaisieDevisScreen';
 /* La base de postes (lot P) : la page, ouverte par deux portes. */
 import PostesScreen from './screens/PostesScreen';
-import { devisDepuisClient, devisDepuisDemande, trierDevis } from './lib/devis';
+import {
+  devisDepuisClient, devisDepuisDemande, devisDepuisDemandeEtFiche, trierDevis,
+} from './lib/devis';
 import { etatAuDepartDeLaLecture, issueDeLaLecture } from './lib/postes';
 import { dateDeDemandeDemo } from './data/devis-demo';
 import { maFiche } from './lib/ma-fiche';
@@ -151,6 +158,12 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   const sansMouvement = useMouvementReduit();
   const [typeChoisi, setTypeChoisi] = useState(null); // type retenu avant connexion
   const [screen, setScreen] = useState('home');
+  /* L'ÉCRAN COURANT, LU PAR UNE RÉFÉRENCE : un geste qui ATTEND (« Faire un
+     devis » lit, crée, puis ouvre) ne doit pas décider sur l'écran figé du
+     rendu où il a commencé — la garde de la saisie l'aurait crue fermée
+     (relecture du 29/10/2026). */
+  const ecranRef = useRef(screen);
+  useEffect(() => { ecranRef.current = screen; }, [screen]);
   /* 'filVideo' quand la fiche d'un artisan a été ouverte depuis le fil
      vidéo — par le glissement comme par un appui sur son nom. */
   const [origineProfil, setOrigineProfil] = useState(null);
@@ -3534,15 +3547,17 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      « Ses devis » ni « Faire un devis » : quitter la saisie ne se fait que
      par sa garde. */
   const apresFicheClient = useRef(null);
-  const ouvrirFicheClient = (fiche = null, depuis = null, apres = null) => {
+  const ouvrirFicheClient = (fiche = null, depuis = null, apres = null, pourquoi = null, { carnetLu = false } = {}) => {
     apresFicheClient.current = apres;
     setCleFiche((k) => k + 1);
-    setFicheClient({ fiche, depuis, depuisLaSaisie: !!apres });
+    setFicheClient({ fiche, depuis, depuisLaSaisie: !!apres, pourquoi });
     /* On peut arriver ici sans être passé par le carnet — depuis une
        demande reçue. L'avertissement « vous avez déjà un client de ce
        nom » a besoin de la liste : on la demande, et son absence ne
-       bloque rien. */
-    if (clientsEtat === 'vide') chargerClients();
+       bloque rien. `carnetLu` : l'appelant vient de le lire — un geste qui
+       a attendu verrait encore `clientsEtat` de son premier rendu, et le
+       relirait pour rien. */
+    if (clientsEtat === 'vide' && !carnetLu) chargerClients();
   };
 
   /** Remplace une fiche dans la liste, ou l'ajoute. Une seule porte :
@@ -3560,6 +3575,16 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     try {
       const pose = await api.enregistrerClient(valeurs, id);
       rangerClient(pose);
+      /* UNE FICHE EXISTANTE ouverte POUR UN DEVIS, et corrigée : elle reste
+         ouverte, à jour, avec « Choisir ce client pour ce devis ». La
+         refermer jetait le devis qu'on était venu faire — il fallait tout
+         recommencer (relecture du 29/10/2026). */
+      if (id && apresFicheClient.current) {
+        setCleFiche((k) => k + 1);
+        setFicheClient((f) => (f ? { ...f, fiche: pose } : f));
+        showBanner(`La fiche de ${pose.nom} est à jour.`);
+        return;
+      }
       setFicheClient(null);
       const apres = apresFicheClient.current;
       apresFicheClient.current = null;
@@ -3609,8 +3634,19 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * Changer d'écran sous le doigt de quelqu'un qui n'a rien demandé est
    * désagréable, et il faudrait ensuite revenir.
    */
-  const ajouterClientDepuisDemande = (demande) => {
-    ouvrirFicheClient(null, clientDepuisDemande(demande));
+  const ajouterClientDepuisDemande = async (demande) => {
+    /* Une urgence porte son adresse À PART : on la relit, comme « Faire un
+       devis » — deux gestes qui préremplissent la même fiche doivent faire
+       le même travail (relecture du 29/10/2026). Sans elle, la fiche
+       s'ouvre quand même. */
+    let complete = demande;
+    if (demande && demande.genre === 'sos') {
+      try {
+        const lu = await api.lieuDeLUrgence(demande.id);
+        if (lu) complete = { ...demande, adresse: lu.adresse, codePostal: lu.codePostal };
+      } catch (e) { /* la fiche s'ouvre sans l'adresse : l'artisan la voit vide */ }
+    }
+    ouvrirFicheClient(null, clientDepuisDemande(complete));
   };
 
   /* ================================================================== */
@@ -3888,7 +3924,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * ligne ouverte se FERME (elle s'enregistre) au lieu de quitter l'écran.
    */
   const quitterSaisieDevis = async ({ parLeRetour = false } = {}) => {
-    if (screen !== 'devisSaisie' || !gardeSortie.current) return true;
+    if (ecranRef.current !== 'devisSaisie' || !gardeSortie.current) return true;
     return gardeSortie.current.sortir({ parLeRetour });
   };
 
@@ -3903,20 +3939,143 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     revenirDuDevis();
   };
 
-  /** « Faire un devis » sur une demande ou une urgence acceptée : un
-   *  brouillon NEUF (la description, le lien d'origine, ni client ni lieu),
-   *  ou celui qu'on reprend. */
-  const faireDevisDepuisDemande = (demande, { devisId = null } = {}) => {
-    if (devisId) { ouvrirDevis({ id: devisId }, 'decouvrir'); return; }
-    const valeurs = devisDepuisDemande(demande);
-    if (!valeurs) return;
-    const date = demande.createdAt || (api.mode === 'demo' ? dateDeDemandeDemo(demande.id) : null);
-    ouvrirDevis({
-      valeurs,
-      demande: demande.genre === 'devis' ? { createdAt: date, budget: demande.budget || null } : null,
-      urgence: demande.genre === 'sos' ? { createdAt: date } : null,
-      demandeSource: demande,
-    }, 'decouvrir');
+  /**
+   * « FAIRE UN DEVIS » SUR UNE DEMANDE OU UNE URGENCE ACCEPTÉE — la fiche du
+   * client d'abord, le devis ensuite (décision du propriétaire, 29/10/2026 :
+   * « du moment qu'on accepte une demande de devis en cliquant sur faire un
+   * devis, ça devrait déjà créer un client avec toutes les informations de
+   * la personne, et ensuite le diriger sur le devis avec toutes les infos »).
+   *
+   * Ce que la demande sait — le nom et le téléphone ÉCRITS dans la demande,
+   * la ville du chantier, l'adresse d'une urgence — va sur la fiche ET dans
+   * le lieu des travaux. `ficheAPartirDeLaDemande()` (`clients.js`, que
+   * `verifier-clients` fait tourner) décide :
+   *   - rien de douteux → la fiche se CRÉE, et le devis s'ouvre dessus ;
+   *   - le même NUMÉRO déjà dans le carnet → cette fiche s'affiche, avec
+   *     « Choisir ce client pour ce devis » : pas de doublon ;
+   *   - un homonyme, aucun vrai nom, ou un carnet illisible → la fiche
+   *     s'ouvre PRÉ-REMPLIE, et c'est l'artisan qui l'enregistre — on ne crée
+   *     pas à l'aveugle, et « le doublon s'avertit » (section 41).
+   * La fiche refermée sans être enregistrée, rien ne s'ouvre : on est
+   * toujours devant la demande.
+   *
+   * L'ordre n'est pas libre : la fiche doit exister en base AVANT la première
+   * écriture du devis — sa clé étrangère et OP013 refuseraient sinon. Le
+   * brouillon, lui, naît toujours à la première ligne (lot 1).
+   *
+   * Et un seul geste à la fois : un second appui pendant que la fiche se
+   * crée en créerait une seconde.
+   */
+  const devisDemandeEnCours = useRef(false);
+  const faireDevisDepuisDemande = async (demande, { devisId = null } = {}) => {
+    if (devisId) { ouvrirDevis({ id: devisId }, 'decouvrir'); return 'ouvert'; }
+    if (!devisDepuisDemande(demande)) return null;
+    /* Un geste à la fois — et le second appui le SAIT : la carte dit « déjà
+       en cours » au lieu de ne rien faire (relecture du 29/10/2026). */
+    if (devisDemandeEnCours.current) return 'occupe';
+    devisDemandeEnCours.current = true;
+    /* L'artisan a-t-il QUITTÉ l'écran pendant les lectures ? On ne lui
+       arrache pas l'écran où il est allé : rien ne s'ouvre, et on le dit. */
+    const parti = () => ecranRef.current !== 'decouvrir';
+    try {
+      /* L'URGENCE : son adresse et son texte, relus à part. Une lecture
+         ratée ne crée pas une fiche SANS adresse en annonçant un succès :
+         la fiche s'ouvre pré-remplie, et elle le DIT. */
+      let complete = demande;
+      let lieuLu = true;
+      let texteUrgence = null;
+      if (demande.genre === 'sos') {
+        try {
+          const lu = await api.lieuDeLUrgence(demande.id);
+          if (lu) {
+            complete = { ...demande, adresse: lu.adresse, codePostal: lu.codePostal };
+            texteUrgence = lu.texte;
+          } else lieuLu = false;
+        } catch (e) { lieuLu = false; }
+      }
+      const valeurs = clientDepuisDemande(complete);
+      const lieu = lieuDeLaDemande(complete);
+
+      /* LE CARNET, RELU — on ne décide pas d'un doublon sur une liste
+         ancienne ; et un carnet illisible ouvre le formulaire. */
+      let carnet = null;
+      try {
+        carnet = await avecDelai(api.mesClients(), 8000, 'La lecture de votre carnet');
+        setClients(carnet || []);
+        setClientsEtat('ok');
+      } catch (e) { carnet = null; }
+
+      const date = demande.createdAt || (api.mode === 'demo' ? dateDeDemandeDemo(demande.id) : null);
+      /* Le lieu des travaux : celui de la demande quand il se découpe
+         SÛREMENT ; sinon, celui de la fiche — que l'artisan vient de
+         vérifier. */
+      const ouvrirAvec = (fiche) => ouvrirDevis({
+        valeurs: devisDepuisDemandeEtFiche(demande, fiche, lieu.sur ? lieu : {}),
+        demande: demande.genre === 'devis'
+          ? { createdAt: date, budget: demande.budget || null, texte: demande.titre || null } : null,
+        urgence: demande.genre === 'sos'
+          ? { createdAt: date, texte: texteUrgence || demande.titre || null } : null,
+        client: fiche ? { nom: fiche.nom, ville: fiche.ville || null } : null,
+        demandeSource: complete,
+      }, 'decouvrir');
+
+      if (parti()) {
+        showBanner('« Faire un devis » n’a rien ouvert : vous avez changé d’écran entre-temps.');
+        return 'parti';
+      }
+      const decision = ficheAPartirDeLaDemande(valeurs, carnet, { lieuLu, lieuSur: lieu.sur });
+      if (decision.geste === 'existante') {
+        ouvrirFicheClient(decision.fiche, null, ouvrirAvec, POURQUOI_LA_FICHE[decision.raison], { carnetLu: true });
+        return 'fiche';
+      }
+      if (decision.geste === 'formulaire') {
+        ouvrirFicheClient(null, valeurs, ouvrirAvec, POURQUOI_LA_FICHE[decision.raison] || null,
+          { carnetLu: Array.isArray(carnet) });
+        return 'fiche';
+      }
+
+      /* LA FICHE SE CRÉE, sous un identifiant CHOISI ICI : un délai dépassé
+         n'annule pas une insertion déjà partie. Sans réponse, on la RELIT
+         avant de conclure — sinon l'écran annoncerait un échec pendant que
+         la fiche arrive en base, et « Nouveau client » en créerait une
+         seconde (relecture du 29/10/2026). */
+      const idNeuf = nouvelIdentifiant();
+      let pose = null;
+      try {
+        pose = await avecDelai(api.enregistrerClient(decision.valeurs, null, { idNeuf }), 8000, 'L’enregistrement de la fiche');
+      } catch (e) {
+        const refusee = !!(e && typeof e.code === 'string' && /^[0-9A-Z]{5}$/.test(e.code));
+        let relue = null;
+        if (!refusee) {
+          try { relue = await api.ficheDuCarnet(idNeuf); } catch (e2) { relue = undefined; }
+        }
+        if (relue) pose = relue;
+        else {
+          /* Le carnet sera RELU à la prochaine ouverture : une fiche arrivée
+             en retard y apparaîtra, et l'avertissement de doublon la verra. */
+          setClientsEtat('vide');
+          showErreur(refusee
+            ? `${messageClair(e, 'La fiche du client n’a pas pu être créée')} `
+              + 'Le devis s’ouvre sans client : choisissez-le dans « Pour qui ? ».'
+            : 'Opus ne sait pas si la fiche du client a été créée (pas de réponse). '
+              + 'Vérifiez votre carnet avant d’en créer une autre. Le devis s’ouvre sans client.');
+          if (parti()) return 'parti';
+          await ouvrirAvec(null);
+          return 'ouvert';
+        }
+      }
+      rangerClient(pose);
+      if (parti()) {
+        showBanner(`${pose.nom} est dans votre carnet de clients. Le devis ne s’est pas ouvert : `
+          + 'vous avez changé d’écran — touchez de nouveau « Faire un devis ».');
+        return 'parti';
+      }
+      showBanner(`${pose.nom} est dans votre carnet de clients.`);
+      await ouvrirAvec(pose);
+      return 'ouvert';
+    } finally {
+      devisDemandeEnCours.current = false;
+    }
   };
 
   /* Depuis la fiche d'un client : la fiche se FERME, puis le devis s'ouvre —
@@ -4203,7 +4362,33 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         />
       ))}
 
-      <View style={[s.body, videoMode && { backgroundColor: C.dark }]}>
+      {/* LE CORPS MONTE AVEC LE CLAVIER — pendant une CONVERSATION seulement
+          (29/10/2026). La barre de saisie d'une conversation est collée en
+          bas : elle doit MONTER. Un `KeyboardAvoidingView` mesure sa place
+          par rapport à son PARENT ; posé dans l'écran de conversation, son
+          parent commençait SOUS la barre de retour (128 points sur un
+          iPhone 16, zone de l'encoche comprise), et le décalage écrit en dur
+          (90) laissait la barre de saisie 38 points sous le clavier. Ici, le
+          parent est `s.app`, qui commence en haut de la fenêtre, et la barre
+          de retour est une SŒUR : le calcul est juste par construction, sans
+          aucun nombre à régler — c'est ce qui rend `AuthScreen` juste.
+          `enabled` le limite à la conversation : les autres écrans font
+          remonter leur CONTENU (`CLAVIER`, `src/lib/clavier.js`), et les
+          deux mécanismes ensemble compteraient le clavier deux fois.
+          LA CLÉ LE FAIT RENAÎTRE à chaque entrée et sortie d'une
+          conversation (relecture du 29/10/2026) : désactivé, le composant
+          continue de suivre le clavier sans se redessiner, et rattrape d'un
+          coup en se réactivant — arriver dans une conversation avec le
+          clavier d'un AUTRE champ encore ouvert faisait sauter la page, et
+          en revenir clavier ouvert laissait une image avec l'ancienne
+          marge. Neuf, il part de zéro, comme celui que la conversation
+          portait elle-même. */}
+      <KeyboardAvoidingView
+        key={screen === 'messages' && activeConv ? `conversation-${activeConvId}` : 'corps'}
+        style={[s.body, videoMode && { backgroundColor: C.dark }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={screen === 'messages' && !!activeConv}
+      >
         {/* Elle est DANS le corps et pas flottante : on ne doit ni pouvoir
             la rater, ni la confondre avec un message passager. */}
         <BandeDemo visible={api.mode === 'demo'} />
@@ -4829,7 +5014,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           />
         )}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
 
       <BottomNav
         /* Sa propre fiche allume « Profil » ; celle d'un autre, rien —
@@ -4926,6 +5111,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           onOuvrirDevis={canPublish && !ficheClient.depuisLaSaisie ? ouvrirDevisDepuisFiche : null}
           onFaireDevis={canPublish && !ficheClient.depuisLaSaisie ? faireDevisDepuisFiche : null}
           onChoisirPourLeDevis={ficheClient.depuisLaSaisie && !!ficheClient.fiche ? choisirFichePourLeDevis : null}
+          pourquoi={ficheClient.pourquoi || null}
         />
       )}
 

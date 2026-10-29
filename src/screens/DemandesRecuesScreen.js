@@ -360,6 +360,15 @@ function Demande({
      Plusieurs devis pour une même demande restent permis ; on ne les crée
      plus sans le savoir. `null` : rien demandé ; `{ etat }` sinon. */
   const [brouillons, setBrouillons] = useState(null);
+  /* UN NOUVEAU DEVIS — attendu, lui aussi : la fiche du client se crée
+     d'abord, et le bouton reste sur « Vérification… ». Un geste déjà en
+     cours ailleurs (une autre carte) le DIT, au lieu de ne rien faire
+     (relecture du 29/10/2026). */
+  const nouveauDevis = async () => {
+    setBrouillons({ etat: 'lecture' });
+    const r = await onFaireDevis(d);
+    setBrouillons(r === 'occupe' ? { etat: 'occupe' } : null);
+  };
   /* ET UN NOUVEAU DEVIS EST-IL ENCORE POSSIBLE ? (lot S-b) Sous un blocage
      — posé par le client, que l'artisan ne voit pas —, la base refuse tout
      NOUVEAU devis rattaché à la demande (OP020). On le demande à la base
@@ -380,7 +389,11 @@ function Demande({
       api.nouveauDevisPermis(d.genre, d.id),
     ]);
     const issue = issueDeFaireUnDevis(rListe, rPermis);
-    if (issue.etat === 'ouvrir') { setBrouillons(null); onFaireDevis(d); return; }
+    /* Le geste peut CRÉER la fiche du client avant d'ouvrir le devis
+       (29/10/2026) : on l'attend, et le bouton reste sur « Vérification… »
+       pendant ce temps — sinon on touche, rien ne bouge pendant une seconde,
+       et l'on retouche. */
+    if (issue.etat === 'ouvrir') { await nouveauDevis(); return; }
     setBrouillons(issue);
   };
   /* Le verrou contre le double appui : accepter deux fois une urgence
@@ -558,13 +571,20 @@ function Demande({
                   outline
                   label="Nouveau devis"
                   style={s.cible}
-                  onPress={() => { setBrouillons(null); onFaireDevis(d); }}
+                  onPress={nouveauDevis}
                 />
               )}
             </View>
             {brouillons.nouveauPermis === false && (
               <Text style={s.brouillonTexte}>{REFUS_DEMANDES[d.genre === 'sos' ? 'OP020_devis_urgence' : 'OP020_devis_demande']}</Text>
             )}
+          </View>
+        )}
+        {!!brouillons && brouillons.etat === 'occupe' && (
+          <View style={s.brouillon}>
+            <Text style={s.brouillonTexte}>
+              Un devis est déjà en train de s’ouvrir : attendez qu’il s’affiche, puis recommencez si besoin.
+            </Text>
           </View>
         )}
         {!!brouillons && brouillons.etat === 'ferme' && (
@@ -585,7 +605,7 @@ function Demande({
                 outline
                 label="Nouveau devis quand même"
                 style={s.cible}
-                onPress={() => { setBrouillons(null); onFaireDevis(d); }}
+                onPress={nouveauDevis}
               />
             </View>
           </View>

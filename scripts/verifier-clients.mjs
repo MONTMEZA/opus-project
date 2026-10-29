@@ -25,8 +25,10 @@ import { readFileSync } from 'node:fs';
 import {
   validerClient, siretPropre, siretValide, emailPlausible, clientsDuMemeNom,
   clientsVisibles, clientCorrespond, clientDepuisDemande, nomNormalise,
-  TYPES_CLIENT, LONGUEUR_MAX,
+  TYPES_CLIENT, LONGUEUR_MAX, villeSansDepartement, chiffresDuTelephone, clientsDuMemeNumero,
+  lieuDepuisUrgence, ficheAPartirDeLaDemande, POURQUOI_LA_FICHE, decouperLieuLibre, lieuDeLaDemande,
 } from '../src/lib/clients.js';
+import { adresseDUrgence } from '../src/lib/adresse.js';
 import { initialClients, proProfiles } from '../src/data/demo.js';
 import { messageClair, MESSAGES_CONTRAINTE } from '../src/lib/erreurs.js';
 
@@ -171,6 +173,175 @@ verifier('…et un numéro se cherche SANS ses espaces',
     'C’est ce qui remplace le lien vers un compte Opus que la section 41 a '
     + 'refusé d’écrire : un geste utile aujourd’hui plutôt qu’une colonne '
     + 'que personne ne lirait.');
+}
+
+/* « FAIRE UN DEVIS » CRÉE LA FICHE DU CLIENT (décision du propriétaire,
+   29/10/2026). Les règles sont FAITES TOURNER : un doublon créé en silence,
+   une fiche « Un client », une rue rangée dans la case « ville » d'une
+   facture ne lèveraient aucune erreur. */
+const meme = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+{
+  const d = clientDepuisDemande({ nom: 'Marc Dumont', telephone: '06 39 98 03 02', ville: 'Lambesc (13)' });
+  verifier('la ville du chantier va sur la fiche SANS son « (13) », et aucun code postal n’est inventé',
+    d.ville === 'Lambesc' && d.codePostal === '' && d.adresse === '' && d.nom === 'Marc Dumont'
+      && villeSansDepartement('Ajaccio (2A)') === 'Ajaccio' && villeSansDepartement('Saint-Rémy') === 'Saint-Rémy',
+    JSON.stringify(d));
+  verifier('« Un client » (le repli de la base quand personne n’a de nom) n’est PAS un nom : la fiche part sans nom',
+    clientDepuisDemande({ nom: 'Un client' }).nom === '' && clientDepuisDemande({ nom: '  Julie M.  ' }).nom === 'Julie M.');
+  /* LE MÊME NUMÉRO, quelle que soit son écriture (relecture du 29/10/2026 :
+     « +33 (0)6… » rendait douze chiffres, et un doublon se créait). */
+  const numeros = [
+    ['+33 6 39 98 03 02', '0639980302'], ['+33 (0)6 39 98 03 02', '0639980302'],
+    ['0033 (0)6 39 98 03 02', '0639980302'], ['0033639980302', '0639980302'],
+    ['06.39.98.03.02', '0639980302'], ['6 39 98 03 02', '0639980302'], ['339980302', '0339980302'],
+    ['0612', ''], [null, ''], ['+32 470 12 34 56', '32470123456'],
+  ];
+  const numerosFaux = numeros.filter(([e, a]) => chiffresDuTelephone(e) !== a).map(([e]) => `${e} → ${chiffresDuTelephone(e)}`);
+  verifier('un numéro se compare sous sa forme nationale (« +33 (0)6… », « 0033… », « 6 39… »), et il en faut au moins neuf chiffres',
+    numerosFaux.length === 0, numerosFaux.join(' | '));
+  const carnet = [
+    { id: 'a', nom: 'Mme Martin', telephone: '06 39 98 02 01', archive: true },
+    { id: 'b', nom: 'Martin Paule', telephone: '+33 6 39 98 02 01', archive: false },
+    { id: 'c', nom: 'Marc Dumont', telephone: null },
+    { id: 'd', nom: 'Lucien Vieux', telephone: '06 39 98 04 04', archive: true },
+  ];
+  verifier('les fiches du même numéro, les ACTIVES d’abord',
+    clientsDuMemeNumero('0639980201', carnet).map((c) => c.id).join(',') === 'b,a'
+      && clientsDuMemeNumero('', carnet).length === 0 && clientsDuMemeNumero('06', carnet).length === 0);
+  const cas = [
+    ['rien de douteux → la fiche se crée', { nom: 'Julie M.', telephone: '06 39 98 03 01' }, carnet, {}, 'creer'],
+    ['même numéro → la fiche existante, à choisir', { nom: 'Paule', telephone: '0639980201' }, carnet, {}, 'existante:b:existante'],
+    ['même numéro écrit « +33 (0)6… » → la fiche existante', { nom: 'J. M.', telephone: '+33 (0)6 39 98 02 01' }, carnet, {}, 'existante:b:existante'],
+    ['même numéro qu’une fiche ARCHIVÉE → elle, et la phrase le dit', { nom: 'Lucien', telephone: '+33 6 39 98 04 04' }, carnet, {}, 'existante:d:archivee'],
+    ['même numéro, SANS nom → la fiche existante plutôt qu’un formulaire', { nom: '', telephone: '0639980201' }, carnet, {}, 'existante:b:existante'],
+    ['même nom, autre numéro → le formulaire (« le doublon s’avertit »)', { nom: 'marc  DUMONT', telephone: '0639980399' }, carnet, {}, 'formulaire:homonyme'],
+    ['aucun vrai nom → le formulaire', { nom: '', telephone: '0639980399' }, carnet, {}, 'formulaire:sans_nom'],
+    ['carnet illisible → le formulaire, jamais une création à l’aveugle', { nom: 'Julie M.' }, null, {}, 'formulaire:carnet'],
+    ['sans numéro, sans homonyme → la fiche se crée', { nom: 'Sophie B.', telephone: '' }, carnet, {}, 'creer'],
+    ['l’adresse de l’urgence n’a pas pu être lue → le formulaire', { nom: 'Julie M.', telephone: '' }, carnet, { lieuLu: false }, 'formulaire:lieu'],
+    ['un lieu qui ne se découpe pas sûrement → le formulaire', { nom: 'Julie M.', telephone: '' }, carnet, { lieuSur: false }, 'formulaire:adresse'],
+    ['un nom trop long → le formulaire, jamais un refus de la base', { nom: 'x'.repeat(LONGUEUR_MAX.nom + 1), telephone: '' }, carnet, {}, 'formulaire:invalide'],
+    ['un code postal faux → le formulaire', { nom: 'Lucie R.', telephone: '', codePostal: '1341' }, carnet, {}, 'formulaire:invalide'],
+  ];
+  const dire = (r) => (r.geste === 'existante' ? `existante:${r.fiche.id}:${r.raison}` : (r.geste === 'formulaire' ? `formulaire:${r.raison}` : r.geste));
+  const faux = cas.filter(([, v, c, o, attendu]) => dire(ficheAPartirDeLaDemande(v, c, o)) !== attendu)
+    .map(([nom, v, c, o]) => `${nom} (${dire(ficheAPartirDeLaDemande(v, c, o))})`);
+  verifier(`\`ficheAPartirDeLaDemande\` : créer, proposer la fiche du même numéro, ou ouvrir le formulaire — ${cas.length} cas`,
+    faux.length === 0, faux.join(' | '));
+  /* CE QUI SE CRÉE PASSE PAR `validerClient()` : les valeurs rendues sont
+     celles que le formulaire aurait enregistrées (blancs retirés, champs
+     vides à `null`, adresse électronique en minuscules). */
+  const cree = ficheAPartirDeLaDemande({
+    type: 'particulier', nom: '  Julie M. ', telephone: ' 06 39 98 03 01 ', email: '', adresse: '',
+    codePostal: '', ville: 'Lambesc', siret: '', notes: '',
+  }, carnet);
+  verifier('…et ce qui se crée sort de `validerClient()` (blancs retirés, vides à `null`)',
+    cree.geste === 'creer' && !!cree.valeurs && cree.valeurs.nom === 'Julie M.' && cree.valeurs.telephone === '06 39 98 03 01'
+      && cree.valeurs.email === null && cree.valeurs.adresse === null && cree.valeurs.codePostal === null
+      && cree.valeurs.siret === null && cree.valeurs.ville === 'Lambesc', JSON.stringify(cree));
+  const raisons = ['existante', 'archivee', 'homonyme', 'sans_nom', 'carnet', 'lieu', 'adresse', 'invalide'];
+  verifier('chaque raison d’ouvrir la fiche a SA phrase (`POURQUOI_LA_FICHE`), et il n’y en a pas d’autre',
+    raisons.every((k) => typeof POURQUOI_LA_FICHE[k] === 'string' && POURQUOI_LA_FICHE[k].length > 20)
+      && Object.keys(POURQUOI_LA_FICHE).length === raisons.length);
+
+  /* LE LIEU LIBRE D'UNE DEMANDE DE DEVIS (« Ville ou adresse du chantier ») :
+     découpé quand c'est SÛR, jamais une rue dans la case « ville ». */
+  const libres = [
+    ['Lambesc (13)', { adresse: '', codePostal: '', ville: 'Lambesc', sur: true }],
+    ['Ajaccio (2A)', { adresse: '', codePostal: '', ville: 'Ajaccio', sur: true }],
+    ['Lambesc (13410)', { adresse: '', codePostal: '13410', ville: 'Lambesc', sur: true }],
+    ['13410 Lambesc', { adresse: '', codePostal: '13410', ville: 'Lambesc', sur: true }],
+    ['12 chemin des Pins, 13410 Lambesc', { adresse: '12 chemin des Pins', codePostal: '13410', ville: 'Lambesc', sur: true }],
+    ['12 chemin des Pins 13410 Lambesc', { adresse: '12 chemin des Pins', codePostal: '13410', ville: 'Lambesc', sur: true }],
+    ['Brest', { adresse: '', codePostal: '', ville: 'Brest', sur: true }],
+    ['12 chemin des Pins', { adresse: '12 chemin des Pins', codePostal: '', ville: '', sur: false }],
+    ['', { adresse: '', codePostal: '', ville: '', sur: true }],
+  ];
+  const libresFaux = libres.filter(([e, a]) => !meme(decouperLieuLibre(e), a)).map(([e]) => `${e} → ${JSON.stringify(decouperLieuLibre(e))}`);
+  verifier('le lieu libre d’une demande de devis se découpe SEULEMENT quand c’est sûr — jamais une rue dans la case « ville »',
+    libresFaux.length === 0, libresFaux.join(' | '));
+
+  /* L'ADRESSE D'UNE URGENCE : ce que l'écran SOS range VRAIMENT
+     (`adresseDUrgence`), et ce qu'il rangeait avant le 29/10/2026. */
+  const sos = (genre, label, ville, codePostal, affichage) => adresseDUrgence({ genre, label, ville, codePostal, affichage });
+  const ranges = [
+    [sos('housenumber', '4 Rue des Acacias 13350 Charleval', 'Charleval', '13350', '4 Rue des Acacias'), '4 Rue des Acacias 13350 Charleval'],
+    [sos('street', 'Rue des Acacias 13350 Charleval', 'Charleval', '13350', 'Rue des Acacias'), 'Rue des Acacias 13350 Charleval'],
+    [sos('municipality', 'Marseille', 'Marseille', '13001', 'Marseille'), 'Marseille (13)'],
+    [sos(null, null, null, '', ' derrière l’église '), 'derrière l’église'],
+  ];
+  verifier('l’écran SOS range l’adresse COMPLÈTE, commune comprise (`adresseDUrgence`)',
+    ranges.every(([r, a]) => r === a), ranges.map(([r]) => r).join(' | '));
+  const lieux = [
+    [{ adresse: '4 Rue des Acacias 13350 Charleval', codePostal: '13350' }, { adresse: '4 Rue des Acacias', codePostal: '13350', ville: 'Charleval', sur: true }],
+    [{ adresse: 'Lambesc (13)', codePostal: '13410' }, { adresse: '', codePostal: '', ville: 'Lambesc', sur: true }],
+    [{ adresse: 'Marseille (13)', codePostal: '13001' }, { adresse: '', codePostal: '', ville: 'Marseille', sur: true }],
+    [{ adresse: '4 Rue des Acacias', codePostal: '13350' }, { adresse: '4 Rue des Acacias', codePostal: '13350', ville: '', sur: false }],
+    [{ adresse: 'Charleval', codePostal: '13350' }, { adresse: 'Charleval', codePostal: '13350', ville: '', sur: false }],
+    [{ adresse: null, codePostal: 'abc' }, { adresse: '', codePostal: '', ville: '', sur: true }],
+  ];
+  const lieuxFaux = lieux.filter(([e, a]) => !meme(lieuDepuisUrgence(e), a)).map(([e]) => `${JSON.stringify(e)} → ${JSON.stringify(lieuDepuisUrgence(e))}`);
+  verifier('l’adresse d’une urgence se relit : la forme rangée depuis le 29/10 se découpe ; une commune n’apporte pas son code postal ; l’ANCIENNE forme (rue ou commune seule) n’est pas sûre',
+    lieuxFaux.length === 0, lieuxFaux.join(' | '));
+  verifier('UNE seule lecture du lieu pour les trois gestes (`lieuDeLaDemande`) : une urgence par son adresse, une demande par sa ville',
+    meme(lieuDeLaDemande({ genre: 'sos', adresse: 'Lambesc (13)', codePostal: '13410', ville: 'Ailleurs' }), { adresse: '', codePostal: '', ville: 'Lambesc', sur: true })
+      && meme(lieuDeLaDemande({ genre: 'devis', ville: '13410 Lambesc', adresse: 'ignorée' }), { adresse: '', codePostal: '13410', ville: 'Lambesc', sur: true })
+      && clientDepuisDemande({ genre: 'sos', nom: 'Julie M.', adresse: 'Lambesc (13)', codePostal: '13410' }).ville === 'Lambesc'
+      && clientDepuisDemande({ genre: 'sos', nom: 'Julie M.', adresse: 'Lambesc (13)', codePostal: '13410' }).adresse === '');
+}
+
+/* LE GESTE, DANS `OpusApp` : la décision vient de `ficheAPartirDeLaDemande`,
+   le carnet est RELU avant de décider, l'adresse d'une urgence aussi (et son
+   échec ne crée rien en silence), la fiche existe en base AVANT le devis
+   sous un identifiant choisi ici (un délai dépassé la fait RELIRE), rien ne
+   s'ouvre si l'artisan a quitté l'écran, un second geste se dit, et la
+   composition garde le lien d'origine. */
+{
+  const app = sansCommentaires(appli);
+  const i = app.indexOf('const faireDevisDepuisDemande = async');
+  const corps = i < 0 ? '' : app.slice(i, app.indexOf('\n  };\n', i));
+  verifier('« Faire un devis » : un geste à la fois — le second le SAIT (`occupe`)',
+    /if \(devisDemandeEnCours\.current\) return 'occupe';\s*devisDemandeEnCours\.current = true;/.test(corps)
+      && /finally \{\s*devisDemandeEnCours\.current = false;\s*\}/.test(corps), corps.slice(0, 200));
+  verifier('…l’adresse d’une urgence est relue, et une lecture ratée ouvre le formulaire (`lieuLu`), jamais une fiche sans adresse annoncée comme faite',
+    /const lu = await api\.lieuDeLUrgence\(demande\.id\);/.test(corps) && /catch \(e\) \{ lieuLu = false; \}/.test(corps)
+      && /ficheAPartirDeLaDemande\(valeurs, carnet, \{ lieuLu, lieuSur: lieu\.sur \}\)/.test(corps)
+      && /const valeurs = clientDepuisDemande\(complete\);\s*const lieu = lieuDeLaDemande\(complete\);/.test(corps));
+  verifier('…le carnet est RELU avant de décider ; la fiche existante ou le formulaire s’ouvrent avec LEUR phrase, sans relire le carnet une seconde fois',
+    /carnet = await avecDelai\(api\.mesClients\(\)/.test(corps)
+      && /ouvrirFicheClient\(decision\.fiche, null, ouvrirAvec, POURQUOI_LA_FICHE\[decision\.raison\], \{ carnetLu: true \}\)/.test(corps)
+      && /ouvrirFicheClient\(null, valeurs, ouvrirAvec, POURQUOI_LA_FICHE\[decision\.raison\] \|\| null,\s*\{ carnetLu: Array\.isArray\(carnet\) \}\)/.test(corps)
+      && /if \(clientsEtat === 'vide' && !carnetLu\) chargerClients\(\);/.test(app));
+  const iCreer = corps.indexOf('api.enregistrerClient(decision.valeurs, null, { idNeuf })');
+  const iOuvrir = corps.indexOf('await ouvrirAvec(pose)');
+  verifier('…la fiche se crée sous un identifiant CHOISI ICI, AVANT le devis ; sans réponse, elle est RELUE ; un refus de la base, ou l’incertitude, se DIT',
+    /const idNeuf = nouvelIdentifiant\(\);/.test(corps) && iCreer > 0 && iOuvrir > iCreer
+      && /relue = await api\.ficheDuCarnet\(idNeuf\)/.test(corps) && /if \(relue\) pose = relue;/.test(corps)
+      && /setClientsEtat\('vide'\);/.test(corps) && /Opus ne sait pas si la fiche du client a été créée/.test(corps)
+      && corps.indexOf('rangerClient(pose)') > iCreer && corps.indexOf('rangerClient(pose)') < iOuvrir);
+  verifier('…rien ne s’ouvre si l’artisan a QUITTÉ l’écran pendant l’attente — et on le dit (`ecranRef`)',
+    /const parti = \(\) => ecranRef\.current !== 'decouvrir';/.test(corps)
+      && (corps.match(/if \(parti\(\)\)/g) || []).length >= 3
+      && corps.indexOf('if (parti())') < corps.indexOf('const decision = ficheAPartirDeLaDemande('));
+  verifier('…et la composition garde le lien d’origine (`devisDepuisDemandeEtFiche`, jamais `devisDepuisClient`), le lieu de la demande seulement s’il est SÛR',
+    /valeurs: devisDepuisDemandeEtFiche\(demande, fiche, lieu\.sur \? lieu : \{\}\)/.test(corps) && !/devisDepuisClient/.test(corps)
+      && /demandeSource: complete,/.test(corps));
+  /* « Ajouter à mes clients » relit l'adresse d'une urgence comme « Faire un
+     devis » ; une fiche existante corrigée POUR UN DEVIS reste ouverte. */
+  const j = app.indexOf('const ajouterClientDepuisDemande = async');
+  const ajouter = j < 0 ? '' : app.slice(j, app.indexOf('\n  };\n', j));
+  verifier('« Ajouter à mes clients » relit l’adresse d’une urgence, comme « Faire un devis »',
+    /await api\.lieuDeLUrgence\(demande\.id\)/.test(ajouter) && /ouvrirFicheClient\(null, clientDepuisDemande\(complete\)\);/.test(ajouter));
+  verifier('une fiche EXISTANTE corrigée pour un devis reste ouverte, à jour — le devis n’est pas jeté',
+    /if \(id && apresFicheClient\.current\) \{\s*setCleFiche\(\(k\) => k \+ 1\);\s*setFicheClient\(\(f\) => \(f \? \{ \.\.\.f, fiche: pose \} : f\)\);/.test(app));
+  const apiCl = sansCommentaires(readFileSync('src/lib/api.js', 'utf8'));
+  verifier('l’API pose l’identifiant CHOISI par le téléphone, et relit une fiche par lui — dans SON carnet seulement',
+    /\.insert\(\{ \.\.\.ligne, pro_id: currentUserId, \.\.\.\(idNeuf \? \{ id: idNeuf \} : \{\}\) \}\)/.test(apiCl)
+      && /from\('clients'\)\.select\('\*'\)\.eq\('id', id\)\.eq\('pro_id', currentUserId\)\.maybeSingle\(\)/.test(apiCl)
+      && /id: idNeuf \|\| `cl-demo-\$\{Date\.now\(\)\}`/.test(apiCl));
+  verifier('l’écran SOS range l’adresse complète (`adresseDUrgence(lieu)`), jamais la rue seule',
+    /adresse: adresseDUrgence\(lieu\),/.test(sansCommentaires(readFileSync('src/screens/SosScreen.js', 'utf8')))
+      && !/adresse: lieu\.affichage,/.test(sansCommentaires(readFileSync('src/screens/SosScreen.js', 'utf8'))));
 }
 
 verifier('les deux types sont nommés une seule fois',

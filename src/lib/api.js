@@ -58,6 +58,7 @@ import { creerFileEcriture, DELAI_ECRITURE } from './file-ecriture';
 import { nouvelIdentifiant } from './identifiant';
 import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
+  texteDUrgence,
 } from './devis';
 import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
 /* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
@@ -1858,7 +1859,7 @@ async function mesClientsSupabase() {
 
 export const mesClients = hasSupabase ? mesClientsSupabase : mesClientsDemo;
 
-async function enregistrerClientDemo(valeurs, id) {
+async function enregistrerClientDemo(valeurs, id, { idNeuf = null } = {}) {
   const monPro = moiEnDemo();
   if (id) {
     const deja = initialClients.find((c) => String(c.id) === String(id));
@@ -1867,7 +1868,7 @@ async function enregistrerClientDemo(valeurs, id) {
     return { ...deja };
   }
   const neuf = {
-    id: `cl-demo-${Date.now()}`,
+    id: idNeuf || `cl-demo-${Date.now()}`,
     proId: monPro,
     ...valeurs,
     archive: false,
@@ -1890,7 +1891,7 @@ async function enregistrerClientDemo(valeurs, id) {
  * `clock_timestamp()`. L'horloge d'un téléphone peut mentir, et c'est le
  * seul service que rend cette colonne. Même règle que `recit_ecrit_le`.
  */
-async function enregistrerClientSupabase(valeurs, id) {
+async function enregistrerClientSupabase(valeurs, id, { idNeuf = null } = {}) {
   const ligne = clientVersBase(valeurs);
   if (id) {
     const { data, error } = await supabase.from('clients')
@@ -1900,15 +1901,35 @@ async function enregistrerClientSupabase(valeurs, id) {
     return rowToClient(data);
   }
   const { data, error } = await supabase.from('clients')
-    .insert({ ...ligne, pro_id: currentUserId })
+    .insert({ ...ligne, pro_id: currentUserId, ...(idNeuf ? { id: idNeuf } : {}) })
     .select().single();
   if (error) throw error;
   return rowToClient(data);
 }
 
+/* `idNeuf` : l'identifiant CHOISI PAR LE TÉLÉPHONE (« Faire un devis »,
+   29/10/2026). Un délai dépassé n'annule pas une insertion déjà partie :
+   sans lui, on ne saurait pas dire si la fiche a été créée — et l'écran
+   annoncerait un échec pendant que la fiche arrive en base. Avec lui, on la
+   RELIT (`ficheDuCarnet`). La même parade que les devis (lot 1). */
 export const enregistrerClient = hasSupabase
   ? enregistrerClientSupabase
   : enregistrerClientDemo;
+
+/** UNE fiche du carnet, par son identifiant — `null` si elle n'y est pas. */
+async function ficheDuCarnetSupabase(id) {
+  const { data, error } = await avecDelai(
+    supabase.from('clients').select('*').eq('id', id).eq('pro_id', currentUserId).maybeSingle(),
+    8000, 'La relecture de la fiche',
+  );
+  if (error) throw error;
+  return data ? rowToClient(data) : null;
+}
+async function ficheDuCarnetDemo(id) {
+  const c = initialClients.find((x) => String(x.id) === String(id));
+  return c ? { ...c } : null;
+}
+export const ficheDuCarnet = hasSupabase ? ficheDuCarnetSupabase : ficheDuCarnetDemo;
 
 async function archiverClientDemo(id, archive) {
   const c = initialClients.find((x) => String(x.id) === String(id));
@@ -2648,8 +2669,18 @@ function rowToDevis(d) {
     createdAt: d.created_at ?? null,
     modifieLe: d.modifie_le ?? null,
     client: d.client ? { nom: d.client.nom ?? null } : null,
-    demande: d.demande ? { createdAt: d.demande.created_at ?? null, budget: d.demande.budget ?? null } : null,
-    urgence: d.urgence ? { createdAt: d.urgence.created_at ?? null } : null,
+    /* Le TEXTE de la demande (sa description) et le problème de l'urgence
+       n'arrivent qu'avec `unDevis` (`LIENS_DU_DEVIS_OUVERT`) : l'en-tête de la
+       saisie les affiche, jamais recopiés dans le devis (29/10/2026). */
+    demande: d.demande ? {
+      createdAt: d.demande.created_at ?? null,
+      budget: d.demande.budget ?? null,
+      texte: d.demande.description ?? null,
+    } : null,
+    urgence: d.urgence ? {
+      createdAt: d.urgence.created_at ?? null,
+      texte: texteDUrgence({ libelle: d.urgence.probleme_label, details: d.urgence.details }),
+    } : null,
   };
 }
 
@@ -3041,6 +3072,13 @@ export function fileExistante(devisId) {
    -------------------------------------------------------------------------- */
 const LIENS_DU_DEVIS = '*, client:client_id(nom), demande:quote_request_id(created_at, budget), '
   + 'urgence:sos_request_id(created_at)';
+/* UN DEVIS OUVERT montre aussi ce que le client a demandé (« Ce que le client
+   a demandé », 29/10/2026) : la description de la demande, le problème de
+   l'urgence. Lus par le lien — la politique « lecture mes devis » / « lecture
+   mes sos » laisse l'artisan lire ce qui lui est adressé —, et seulement pour
+   le devis ouvert : une liste de 200 devis n'a pas à transporter 200 textes. */
+const LIENS_DU_DEVIS_OUVERT = '*, client:client_id(nom), demande:quote_request_id(created_at, budget, description), '
+  + 'urgence:sos_request_id(created_at, probleme_label, details)';
 
 async function mesDevisSupabase() {
   const { data, error } = await lectureDevis('La lecture de vos devis', (signal) => avecSignal(
@@ -3071,7 +3109,7 @@ export const mesDevis = hasSupabase ? mesDevisSupabase : mesDevisDemo;
 async function unDevisSupabase(id) {
   const { data, error } = await lectureDevis('La lecture de ce devis', (signal) => avecSignal(
     supabase.from('devis')
-      .select(`${LIENS_DU_DEVIS}, devis_lignes(*), `
+      .select(`${LIENS_DU_DEVIS_OUVERT}, devis_lignes(*), `
         + 'devis_tva(taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)')
       .eq('id', id)
       .order('ordre', { referencedTable: 'devis_lignes' })
@@ -3129,6 +3167,36 @@ async function devisDeLaDemandeDemo(genre, id) {
   return baseDevisDeDemo().deLaDemande(moiEnDemo(), genre, id);
 }
 export const devisDeLaDemande = hasSupabase ? devisDeLaDemandeSupabase : devisDeLaDemandeDemo;
+
+/** L'ADRESSE D'UNE URGENCE, pour la fiche du client et le lieu des travaux,
+ *  et son TEXTE — le problème et ce que la personne a écrit (« Faire un
+ *  devis », 29/10/2026). `mes_demandes_recues()` colle les deux dans ses
+ *  détails ; on les relit à part, par la table :
+ *  la politique « lecture mes sos » laisse l'artisan lire les urgences qui
+ *  lui sont adressées. Changer les colonnes que rend la fonction aurait
+ *  demandé de la supprimer, ce que le connecteur refuse (section 34).
+ *  `null` si l'urgence n'est plus lisible. */
+async function lieuDeLUrgenceSupabase(id) {
+  const { data, error } = await avecDelai(
+    supabase.from('sos_requests').select('adresse, code_postal, probleme_label, details').eq('id', id).maybeSingle(),
+    8000, 'La lecture de l’adresse de l’urgence',
+  );
+  if (error) throw error;
+  return data ? {
+    adresse: data.adresse ?? null,
+    codePostal: data.code_postal ?? null,
+    texte: texteDUrgence({ libelle: data.probleme_label, details: data.details }),
+  } : null;
+}
+async function lieuDeLUrgenceDemo(id) {
+  const d = DEMANDES_RECUES_DEMO.find((x) => x.genre === 'sos' && String(x.id) === String(id));
+  return d ? {
+    adresse: d.adresse ?? null,
+    codePostal: d.codePostal ?? null,
+    texte: texteDUrgence({ libelle: d.titre, details: d.detailsEcrits }),
+  } : null;
+}
+export const lieuDeLUrgence = hasSupabase ? lieuDeLUrgenceSupabase : lieuDeLUrgenceDemo;
 
 /**
  * LA MÉMOIRE — les postes et options de MES devis, brouillons compris, la plus

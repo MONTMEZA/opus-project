@@ -1433,9 +1433,14 @@ export const CONFIDENTIALITE = [
        consultation, donc personne ne peut garantir « 24 heures ».
 
        LOT 1 DU DEVIS (22/10/2026), critique « droit » I6 : le texte d'une
-       demande est recopié dans l'objet d'un devis (`devisDepuisDemande`), et
+       demande était recopié dans l'objet d'un devis (`devisDepuisDemande`), et
        le nom, le téléphone et la commune d'un demandeur dans un carnet
-       (« Ajouter à mes clients », section 41). Ces copies SURVIVENT à la
+       (« Ajouter à mes clients », section 41). DEPUIS LE 29/10/2026, le texte
+       n'est plus recopié (il s'affiche par le lien, et part avec la demande) ;
+       mais « Faire un devis » CRÉE la fiche du demandeur dans le carnet — son
+       nom, son téléphone, la commune ou l'adresse du chantier — et les met
+       dans le lieu des travaux du devis : c'est toujours ce que l'artisan « a
+       repris », par son geste, et la phrase ci-dessous reste vraie. Ces copies SURVIVENT à la
        suppression du compte du particulier — c'est voulu (l'essai 49, cas
        23, l'exige : un devis ne perd pas son objet), et elles relèvent de
        l'artisan, responsable de son carnet. Le texte le dit, et dit à qui

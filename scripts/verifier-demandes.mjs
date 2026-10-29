@@ -715,7 +715,15 @@ console.log('\nLot S-b — l’écran ne dit que le vrai');
       && /fermee=\{!!fermees && fermees\.has\(item\.id\)\}/.test(ecran));
   verifier('« Faire un devis » pose ses deux questions par `Promise.allSettled`, et c’est `issueDeFaireUnDevis` qui décide',
     /const \[rListe, rPermis\] = await Promise\.allSettled\(\[\s*api\.devisDeLaDemande\(d\.genre, d\.id\),\s*api\.nouveauDevisPermis\(d\.genre, d\.id\),\s*\]\);/.test(ecran)
-      && /const issue = issueDeFaireUnDevis\(rListe, rPermis\);\s*if \(issue\.etat === 'ouvrir'\) \{ setBrouillons\(null\); onFaireDevis\(d\); return; \}\s*setBrouillons\(issue\);/.test(ecran)
+      /* Le geste peut CRÉER la fiche du client avant d'ouvrir le devis
+         (29/10/2026) : la carte l'ATTEND, et le bouton reste sur
+         « Vérification… » pendant ce temps. */
+      && /const issue = issueDeFaireUnDevis\(rListe, rPermis\);\s*if \(issue\.etat === 'ouvrir'\) \{ await nouveauDevis\(\); return; \}\s*setBrouillons\(issue\);/.test(ecran)
+      /* « Nouveau devis » est ATTENDU lui aussi, et un geste déjà en cours
+         ailleurs se DIT (relecture du 29/10/2026) : jamais un appui jeté. */
+      && /const nouveauDevis = async \(\) => \{\s*setBrouillons\(\{ etat: 'lecture' \}\);\s*const r = await onFaireDevis\(d\);\s*setBrouillons\(r === 'occupe' \? \{ etat: 'occupe' \} : null\);\s*\};/.test(ecran)
+      && !/onPress=\{\(\) => \{ setBrouillons\(null\); onFaireDevis\(d\); \}\}/.test(ecran)
+      && /brouillons\.etat === 'occupe' && \(/.test(ecran)
       && !/Promise\.all\(\[/.test(ecran));
   /* LA DÉCISION, FAITE TOURNER sur chaque cas (relecture du 26/10) : un
      échec de la seule PERMISSION ne doit ni cacher le brouillon trouvé, ni

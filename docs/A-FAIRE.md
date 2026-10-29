@@ -2574,6 +2574,59 @@ quelqu'un depuis sa carte puis le débloquer depuis Confidentialité ;
 accepter ou refuser un partenariat ; et « Faire un devis » depuis « Pour
 moi ».
 
+### Le retour de l'iPhone du 29/10 — ce qui reste
+
+Le détail est dans CLAUDE.md, « Le retour de l'iPhone du 29/10 ». Aucune
+migration : `git pull`, puis `npx expo start -c`. Aucun module natif : rien
+à reconstruire.
+
+**Ce qui est fait** :
+
+- [x] le clavier ne cache plus le texte en répondant à une demande (le
+  composant qui fait monter la page est posé autour du corps de
+  l'application, sans décalage écrit en nombre) ;
+- [x] « Faire un devis » crée la fiche du client avec ce que la demande
+  porte — nom, numéro, commune —, puis ouvre le devis dessus ; le même
+  numéro déjà au carnet montre la fiche existante ; un doute (homonyme, pas
+  de nom, adresse illisible, valeur refusée) ouvre la fiche avec sa raison ;
+- [x] l'objet reste vide, et « Ce que le client a demandé » s'affiche
+  au-dessus — jamais imprimé ;
+- [x] les textes d'exemple des champs d'adresse (« 4 rue des Lilas »,
+  « 13350 », « Charleval ») ne ressemblent plus à une adresse ;
+- [x] **l'écran SOS range l'adresse COMPLÈTE**, commune comprise : avant,
+  l'artisan recevait une rue sans savoir dans quelle ville.
+
+**À essayer sur votre iPhone** (build de développement, après `git pull` et
+`npx expo start -c`) :
+
+- [ ] répondre à une demande, puis écrire dans la conversation : la barre de
+  saisie doit rester **juste au-dessus du clavier** ;
+- [ ] « Répondre » à une annonce dont l'auteur vous a déjà écrit (la
+  conversation s'ouvre pendant que le clavier se ferme) : rien ne doit
+  sauter ;
+- [ ] « Pour moi » → une demande acceptée → « Faire un devis » : le bandeau
+  « … est dans votre carnet de clients », puis le devis, son client, sa
+  commune, et la demande affichée au-dessus ;
+- [ ] « Faire un devis » une seconde fois → « Nouveau devis » : la fiche
+  existante, avec « Choisir ce client pour ce devis ».
+
+**À savoir, et à ne pas oublier** :
+
+- [ ] **Le SOS envoie le nom et le numéro du compte du particulier**
+  (`envoyerSos`, `OpusApp.js`), et le commentaire du code affirme que
+  « l'écran du SOS le dit avant qu'on appuie » : **c'est faux**, l'écran
+  n'en dit rien. Une phrase à poser sur l'écran SOS, à décider avec vous ;
+- [ ] **une urgence rangée avant le 29/10** (la rue seule, ou la commune
+  seule) ouvre la fiche pour vérification au lieu de la créer. Relevé sur la
+  vraie base : **aucune** urgence réelle n'existe aujourd'hui (hors comptes
+  d'essai) ;
+- [ ] **le code postal d'une commune choisie dans la liste n'est pas
+  repris** (c'est le plus petit de la commune) : une fiche créée depuis une
+  urgence « commune » n'a que la ville. L'artisan complète s'il le sait ;
+- [ ] le délai dépassé à la création de la fiche, et sa relecture par
+  l'identifiant choisi sur le téléphone, ne sont éprouvés que par les
+  contrôles — pas sur un vrai réseau coupé.
+
 ### La démonstration et la publicité — décidé le 26/10/2026
 
 Les vidéos et les captures promotionnelles sont faites (en mode

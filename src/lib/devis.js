@@ -1304,29 +1304,84 @@ export function devisDepuisClient(c) {
 }
 
 /**
- * « Faire un devis » sur une demande acceptée : le lien d'origine et la
- * DESCRIPTION seulement (`PLAN-DEVIS` §10.7). Ni client, ni lieu : le client
- * d'une demande est un COMPTE, et le client d'un devis une FICHE du carnet
- * (D1) — l'artisan la choisit, ou la crée. `null` pour un rappel, qui n'a
- * pas de lien d'origine.
+ * « Faire un devis » sur une demande acceptée : le LIEN D'ORIGINE, et rien
+ * d'autre. Ni client (le client d'une demande est un COMPTE, celui d'un
+ * devis une FICHE du carnet, D1), ni lieu, ni objet. `null` pour un rappel,
+ * qui n'a pas de lien d'origine.
+ *
+ * L'OBJET N'EST PLUS LE TEXTE DE LA DEMANDE — décision du propriétaire,
+ * 29/10/2026, après l'avoir essayé : « dans objet il y a écrit le texte de
+ * la demande ». L'objet s'imprimera sur le devis ; c'est l'artisan qui
+ * l'écrit. Le texte du client reste AFFICHÉ au-dessus (« Ce que le client a
+ * demandé », `texteDeLaDemande`), lu par le lien, jamais recopié.
  */
-/* La description d'une demande devient l'OBJET du brouillon : elle n'a pas de
-   limite de longueur (le formulaire du particulier n'en pose pas), l'objet en
-   a une (`devis_objet_check`, 1 000 caractères). Au-delà, le brouillon ne se
-   créait pas, et toutes ses lignes passaient en échec (relecture « données »
-   des étapes 4 à 7, I5) : on la coupe à la borne, au caractère près — comme
-   la base les compte. */
-const objetDeDemande = (titre) => {
-  const net = texteNet(titre);
-  if (!net) return net;
-  const c = [...net];
-  return c.length > LONGUEURS.objet ? `${c.slice(0, LONGUEURS.objet - 1).join('')}…` : net;
-};
-
 export function devisDepuisDemande(d) {
   if (!d || !d.id) return null;
-  if (d.genre === 'devis') return { source: 'demande', quoteRequestId: d.id, objet: objetDeDemande(d.titre) };
-  if (d.genre === 'sos') return { source: 'urgence', sosRequestId: d.id, objet: objetDeDemande(d.titre) };
+  if (d.genre === 'devis') return { source: 'demande', quoteRequestId: d.id };
+  if (d.genre === 'sos') return { source: 'urgence', sosRequestId: d.id };
+  return null;
+}
+
+/* Une copie dans un champ du devis est bornée comme la base la borne (au
+   caractère près) : au-delà, le brouillon ne se créerait pas — la leçon de
+   l'objet trop long (relecture « données » des étapes 4 à 7, I5). */
+const borne = (v, max) => {
+  const net = texteNet(v);
+  if (!net) return null;
+  const c = [...net];
+  return c.length > max ? `${c.slice(0, max - 1).join('')}…` : net;
+};
+
+/**
+ * « Faire un devis » sur une demande, LA FICHE DU CLIENT TROUVÉE OU CRÉÉE
+ * (décision du propriétaire, 29/10/2026 : « créer un client avec toutes les
+ * informations de la personne, et ensuite le diriger sur le devis »).
+ *
+ * Le lien d'origine est GARDÉ — `devisDepuisClient` dirait `'manuelle'`, et
+ * la composition dans l'autre sens ferait perdre « depuis une demande du … »
+ * sans la moindre erreur. Le LIEU DES TRAVAUX est ce que le client a écrit
+ * dans sa demande (le chantier) ; à défaut, l'adresse de la fiche. Un code
+ * postal qui n'a pas cinq chiffres n'est pas un code postal : il n'est pas
+ * repris.
+ */
+export function devisDepuisDemandeEtFiche(d, fiche = null, lieu = {}) {
+  const base = devisDepuisDemande(d);
+  if (!base) return null;
+  const v = { ...base };
+  if (fiche && fiche.id) v.clientId = fiche.id;
+  const source = (lieu && (lieu.adresse || lieu.codePostal || lieu.ville))
+    ? lieu
+    : { adresse: fiche && fiche.adresse, codePostal: fiche && fiche.codePostal, ville: fiche && fiche.ville };
+  const cp = texteNet(source.codePostal);
+  const l = {
+    lieuAdresse: borne(source.adresse, LONGUEURS.lieuAdresse),
+    lieuCodePostal: cp && /^[0-9]{5}$/.test(cp) ? cp : null,
+    lieuVille: borne(source.ville, LONGUEURS.lieuVille),
+  };
+  Object.keys(l).forEach((k) => { if (l[k]) v[k] = l[k]; });
+  return v;
+}
+
+/** Ce qu'une URGENCE dit d'elle-même : le problème choisi dans la liste ET
+ *  ce que la personne a écrit (`sos_requests.details`). UNE écriture, pour
+ *  l'ouverture depuis « Pour moi » comme pour la relecture du devis
+ *  (relecture du 29/10/2026 : les deux ne lisaient pas la même colonne, et
+ *  « Le disjoncteur saute dès qu'on branche le four » n'apparaissait
+ *  nulle part). */
+export function texteDUrgence({ libelle = null, details = null } = {}) {
+  const l = texteNet(libelle);
+  const d = texteNet(details);
+  if (l && d) return `${l} — ${d}`;
+  return l || d || null;
+}
+
+/** Ce que le client a demandé, pour l'en-tête du devis — le texte de sa
+ *  demande ou le problème de son urgence. Lu par le lien d'origine, JAMAIS
+ *  rangé dans le devis : la demande effacée, il disparaît avec elle. */
+export function texteDeLaDemande(devis) {
+  if (!devis) return null;
+  if (devis.quoteRequestId && devis.demande) return texteNet(devis.demande.texte);
+  if (devis.sosRequestId && devis.urgence) return texteNet(devis.urgence.texte);
   return null;
 }
 

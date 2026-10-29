@@ -127,7 +127,7 @@ await page.waitForTimeout(300);
 console.log('\n3. L’ADRESSE PROPOSE — et on choisit');
 
 const avant = appelsBan.length;
-const champAdresse = page.locator('input[placeholder*="rue des Lilas"]').first();
+const champAdresse = page.locator('input[placeholder="N° et rue"]').first();
 await champAdresse.click();
 await champAdresse.type('4 rue des acacias charl', { delay: 60 });
 
@@ -178,10 +178,10 @@ if (nb > 0) {
   await page.waitForTimeout(1200);
 }
 
-const lire = async (motif) => page.locator(`input[placeholder*="${motif}"]`).first().inputValue();
-const rue = await lire('rue des Lilas');
-const cp = await lire('13350');
-const ville = await lire('Charleval');
+const lire = async (motif) => page.locator(`input[placeholder="${motif}"]`).first().inputValue();
+const rue = await lire('N° et rue');
+const cp = await lire('Code postal');
+const ville = await lire('Commune');
 console.log(`    rue « ${rue} » · code postal « ${cp} » · ville « ${ville} »`);
 dire('la RUE est posée, sans le code postal ni la ville',
   /Acacias/i.test(rue) && !/13350/.test(rue) && !/Charleval/.test(rue),
@@ -220,9 +220,9 @@ await page.screenshot({ path: `${DOSSIER}/3-apres-rechargement.png` });
 if (carte > 0) {
   await page.getByText(nomClient).first().click();
   await page.waitForTimeout(2500);
-  const rueRelue = await lire('rue des Lilas');
-  const cpRelu = await lire('13350');
-  const villeRelue = await lire('Charleval');
+  const rueRelue = await lire('N° et rue');
+  const cpRelu = await lire('Code postal');
+  const villeRelue = await lire('Commune');
   console.log(`    relu en base : « ${rueRelue} » · « ${cpRelu} » · « ${villeRelue} »`);
   dire('…et les trois cases viennent bien de la base',
     /Acacias/i.test(rueRelue) && cpRelu === '13350' && villeRelue === 'Charleval',

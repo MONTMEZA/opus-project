@@ -687,10 +687,18 @@ console.log('\n  4. la mémoire — les prix déjà écrits, jamais une moyenne'
   !/origine\.objet|\.devis\.objet/.test(CD) && !/origine\.objet|\.devis\.objet/.test(PO)
     && /propositionsAMontrer\(\{/.test(CD) && !/memoireDesLignes|suggestionsPourLaFrappe|detailDeSuggestion|libelleDeSuggestion/.test(CD)
     && vus.every((v) => v.ok), vus.filter((v) => !v.ok).map((v) => `${v.nom} : ${v.dit}`).join(' | '));
-  const longue = D.devisDepuisDemande({ id: 'q', genre: 'devis', titre: `${'a'.repeat(1200)}` });
-  verifier('l’objet pré-rempli depuis une demande tient dans `devis_objet_check` (1 000 caractères) : au-delà, le brouillon ne se '
-    + 'créerait pas', longue && [...longue.objet].length === D.LONGUEURS.objet && D.validerDevis({ ...longue }).ok,
-  `${longue && [...longue.objet].length} caractères`);
+  /* LE LIEU COPIÉ D'UNE DEMANDE TIENT DANS SES BORNES (29/10/2026) : la
+     « ville » d'une demande de devis est un champ LIBRE, sans limite ; le
+     lieu d'un devis en a une (`devis_lieu_ville_check`). Au-delà, le
+     brouillon ne se créerait pas — la leçon de l'objet trop long des étapes
+     4 à 7 (I5). Et un code postal qui n'a pas cinq chiffres n'est pas repris. */
+  const longue = D.devisDepuisDemandeEtFiche({ id: 'q', genre: 'devis', titre: 'x' }, null,
+    { adresse: `${'a'.repeat(300)}`, codePostal: '1234', ville: `${'b'.repeat(300)}` });
+  verifier('le lieu repris d’une demande tient dans `devis_lieu_*_check` (200 et 120 caractères) et un code postal de quatre chiffres '
+    + 'n’est pas repris : au-delà, le brouillon ne se créerait pas',
+  Boolean(longue) && [...longue.lieuAdresse].length === D.LONGUEURS.lieuAdresse
+    && [...longue.lieuVille].length === D.LONGUEURS.lieuVille && !('lieuCodePostal' in longue)
+    && D.validerDevis({ ...longue }).ok, json(longue && Object.keys(longue)));
   const melange = [
     L('Chape', 4500, { id: 'courante' }), L('Chape', 4600, { type: 'zone' }), L('Chape', 4700, { type: 'reserve' }),
     L('Chape', 4800, { type: 'option' }), L('Pose', 9900),
@@ -909,13 +917,52 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
     ville: 'Lambesc (13)', telephone: '06', budget: '5000_15000' };
   const dd = D.devisDepuisDemande(demande);
   const ds = D.devisDepuisDemande({ ...demande, id: 's1', genre: 'sos', titre: 'Fuite' });
-  verifier('`devisDepuisDemande` : la description et le lien d’origine SEULEMENT — ni client (un compte n’est pas une fiche, '
-    + 'D1), ni lieu ; un rappel → null',
-    json(dd) === json({ source: 'demande', quoteRequestId: 'q1', objet: 'Ouverture de mur porteur' })
-    && json(ds) === json({ source: 'urgence', sosRequestId: 's1', objet: 'Fuite' })
+  verifier('`devisDepuisDemande` : le lien d’origine SEULEMENT — ni client (un compte n’est pas une fiche, D1), ni lieu, ni '
+    + 'OBJET (le texte de la demande ne s’y recopie plus : décision du 29/10/2026) ; un rappel → null',
+    json(dd) === json({ source: 'demande', quoteRequestId: 'q1' })
+    && json(ds) === json({ source: 'urgence', sosRequestId: 's1' })
     && D.devisDepuisDemande({ ...demande, genre: 'rappel' }) === null
-    && [dd, ds].every((x) => !Object.keys(x).some((k) => /client|lieu|ville|adresse|telephone|nom/i.test(k))),
+    && [dd, ds].every((x) => !Object.keys(x).some((k) => /client|lieu|ville|adresse|telephone|nom|objet/i.test(k))),
     `${json(dd)} ${json(ds)}`);
+  /* LA COMPOSITION AVEC LA FICHE (29/10/2026) garde le lien d'origine :
+     dans l'autre sens, `devisDepuisClient` aurait écrit `'manuelle'`, et
+     « depuis une demande du … » disparaissait sans un mot. Le lieu est
+     celui que le client a écrit (le chantier) ; à défaut, l'adresse de la
+     fiche ; un rappel → null. */
+  const ficheMarc = { id: 'cl-marc', nom: 'Marc Dumont', adresse: '9 rue des Pins', codePostal: '13410', ville: 'Lambesc' };
+  const df = D.devisDepuisDemandeEtFiche(demande, ficheMarc, { adresse: '', codePostal: '', ville: 'Lambesc' });
+  const dfSansLieu = D.devisDepuisDemandeEtFiche(demande, ficheMarc, {});
+  const dsf = D.devisDepuisDemandeEtFiche({ ...demande, id: 's1', genre: 'sos', titre: 'Fuite' }, null,
+    { adresse: '4 Rue des Acacias', codePostal: '13350', ville: 'Charleval' });
+  verifier('`devisDepuisDemandeEtFiche` : le lien d’origine GARDÉ (« demande » / « urgence », jamais « manuelle »), la fiche '
+    + 'rattachée, le lieu du chantier écrit dans la demande, à défaut celui de la fiche ; jamais d’objet ; un rappel → null',
+    json(df) === json({ source: 'demande', quoteRequestId: 'q1', clientId: 'cl-marc', lieuVille: 'Lambesc' })
+    && json(dfSansLieu) === json({ source: 'demande', quoteRequestId: 'q1', clientId: 'cl-marc', lieuAdresse: '9 rue des Pins', lieuCodePostal: '13410', lieuVille: 'Lambesc' })
+    && json(dsf) === json({ source: 'urgence', sosRequestId: 's1', lieuAdresse: '4 Rue des Acacias', lieuCodePostal: '13350', lieuVille: 'Charleval' })
+    && D.devisDepuisDemandeEtFiche({ ...demande, genre: 'rappel' }, ficheMarc, {}) === null
+    && [df, dfSansLieu, dsf].every((x) => D.validerDevis({ ...x }).ok && !('objet' in x)),
+    `${json(df)} ${json(dfSansLieu)} ${json(dsf)}`);
+  verifier('`texteDeLaDemande` : le texte de la demande ou le problème de l’urgence, LU PAR LE LIEN — le lien vide (la demande '
+    + 'effacée), plus rien',
+    D.texteDeLaDemande({ quoteRequestId: 'q1', demande: { texte: '  Ouverture de mur  ' } }) === 'Ouverture de mur'
+    && D.texteDeLaDemande({ sosRequestId: 's1', urgence: { texte: 'Fuite' } }) === 'Fuite'
+    && D.texteDeLaDemande({ quoteRequestId: null, demande: { texte: 'reste à l’écran' } }) === null
+    && D.texteDeLaDemande({ source: 'manuelle', objet: 'Cuisine' }) === null);
+  /* L'URGENCE : le problème ET ce que la personne a écrit, UNE écriture pour
+     l'ouverture et la relecture (relecture du 29/10/2026 : la relecture ne
+     lisait que le libellé). */
+  {
+    const API_TEXTE = sansCommentairesJs(lire('src/lib/api.js'));
+    verifier('`texteDUrgence` : « problème — ce qu’elle a écrit » ; la jointure du devis ouvert lit `details`, et la relecture de l’urgence aussi',
+      D.texteDUrgence({ libelle: 'Plus de courant', details: '  Le disjoncteur saute ' }) === 'Plus de courant — Le disjoncteur saute'
+      && D.texteDUrgence({ libelle: 'Fuite', details: '  ' }) === 'Fuite'
+      && D.texteDUrgence({ libelle: null, details: 'Ça coule' }) === 'Ça coule'
+      && D.texteDUrgence({}) === null
+      && /urgence:sos_request_id\(created_at, probleme_label, details\)/.test(API_TEXTE)
+      && /texte: texteDUrgence\(\{ libelle: d\.urgence\.probleme_label, details: d\.urgence\.details \}\)/.test(API_TEXTE)
+      && /select\('adresse, code_postal, probleme_label, details'\)/.test(API_TEXTE)
+      && /texte: texteDUrgence\(\{ libelle: data\.probleme_label, details: data\.details \}\)/.test(API_TEXTE));
+  }
   const statuts = [
     [{ genre: 'devis', statut: 'accepte' }, true], [{ genre: 'devis', statut: 'termine' }, true],
     [{ genre: 'sos', statut: 'acceptee' }, true], [{ genre: 'sos', statut: 'termine' }, true],
@@ -1172,7 +1219,7 @@ console.log('\n  7. la démonstration — elle fait VIVRE le mécanisme, sans `.
   const dr = demandes.find((d) => d.id === 'dr-devis-1');
   const acceptee = dr ? { ...dr, statut: 'accepte' } : null;
   const base2 = DEMO.creerBaseDevisDemo({ maintenant: () => maintenant, demandeDe: (g, id) => (acceptee && g === 'devis' && id === acceptee.id ? acceptee : null) });
-  const ouverture = acceptee ? D.devisDepuisDemande(acceptee) : null;
+  const ouverture = acceptee ? D.devisDepuisDemandeEtFiche(acceptee, { id: 'cl-martin', nom: 'Mme Martin' }, { ville: 'Lambesc' }) : null;
   let lien = null;
   if (ouverture) {
     await base2.ecrire('1', { quoi: 'devis', action: 'inserer', id: 'de0000ff-0000-4000-8000-000000000001', valeurs: { ...ouverture }, generation: Date.now() });
@@ -1181,7 +1228,11 @@ console.log('\n  7. la démonstration — elle fait VIVRE le mécanisme, sans `.
   verifier('la demande de démonstration se lie PAR LE GESTE : « en attente » dans les données (aucun lien truqué), « Faire un devis » '
     + 'une fois acceptée, et le brouillon dit « depuis une demande du … » avec une date calculée',
   Boolean(dr && dr.statut === 'en_attente' && !D.peutFaireUnDevis(dr) && D.peutFaireUnDevis(acceptee)
-    && lien && lien.quoteRequestId === 'dr-devis-1' && /^depuis une demande du \d{2}\/\d{2}\/\d{4}$/.test(D.origineLisible(lien) || ''))
+    && lien && lien.quoteRequestId === 'dr-devis-1' && /^depuis une demande du \d{2}\/\d{2}\/\d{4}$/.test(D.origineLisible(lien) || '')
+    /* …avec la FICHE et le lieu (29/10/2026), et le texte de la demande
+       LU PAR LE LIEN, comme `api.unDevis` le joint — jamais dans l'objet. */
+    && lien.clientId === 'cl-martin' && lien.lieuVille === 'Lambesc' && !lien.objet
+    && D.texteDeLaDemande(lien) === acceptee.titre)
     && !jeu.devis.some((d) => d.quoteRequestId || d.sosRequestId),
   lien ? D.origineLisible(lien) : '(pas de brouillon)');
   /* Des dates CALCULÉES : un jeu fabriqué à deux heures différentes ne
@@ -3531,7 +3582,11 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
      seul `mesure-devis` le voyait). */
   verifier('le retour, la barre du bas, la cloche, une notification et la déconnexion passent par `quitterSaisieDevis` AVANT de '
     + 'changer d’écran — et elle consulte la garde quand l’écran est la saisie',
-    ratees.length === 0 && /^\{\s*if \(screen !== 'devisSaisie' \|\| !gardeSortie\.current\) return true;\s*return gardeSortie\.current\.sortir\(\{ parLeRetour \}\);\s*\}$/.test(garde.replace(/^=>\s*/, ''))
+    ratees.length === 0 && /^\{\s*if \(ecranRef\.current !== 'devisSaisie' \|\| !gardeSortie\.current\) return true;\s*return gardeSortie\.current\.sortir\(\{ parLeRetour \}\);\s*\}$/.test(garde.replace(/^=>\s*/, ''))
+    /* L'écran est lu par une RÉFÉRENCE tenue à jour (29/10/2026) : un geste
+       qui a attendu (« Faire un devis ») appelle la garde depuis un rendu
+       ancien, où `screen` serait figé — elle croirait la saisie fermée. */
+    && /const ecranRef = useRef\(screen\);\s*useEffect\(\(\) => \{ ecranRef\.current = screen; \}, \[screen\]\);/.test(APP)
     && /onGarde=\{inscrireGarde\}/.test(APP), `portes ratées : ${ratees.join(', ') || '—'}`);
   verifier('…et la saisie lit TOUT avant de partir : la carte ouverte, l’en-tête, la retenue, puis attend la file',
     /const enregistrerTout = async \([^)]*\) => \{[\s\S]{0,400}fermerCarte\(\)[\s\S]{0,200}refEntete\.current\.enregistrer\(\)[\s\S]{0,200}refBas\.current\.enregistrer\(\)[\s\S]{0,240}\.attendre\(DELAI_ECRITURE\)/
@@ -3726,8 +3781,10 @@ console.log('\n  30. la fiche d’un client, « Pour moi », « Pour qui ? »');
   const gardes = boutons.every((b) => /\{peutFaireUnDevis\(d\) && !!onFaireDevis && \(\s*$/.test(DR.slice(Math.max(0, DR.indexOf(b) - 120), DR.indexOf(b))));
   verifier('« Faire un devis » n’apparaît que par `peutFaireUnDevis(` (jamais sur un rappel)', boutons.length === 1 && gardes);
   const faire = corpsFleche(DR, 'const faireUnDevis = ');
+  const nouveau = corpsFleche(DR, 'const nouveauDevis = ');
   verifier('…et l’appui lit `devisDeLaDemande(` AVANT d’ouvrir la saisie ; « Reprendre » existe',
-    faire.length > 50 && faire.indexOf('devisDeLaDemande(') > 0 && faire.indexOf('devisDeLaDemande(') < faire.indexOf('onFaireDevis(')
+    faire.length > 50 && faire.indexOf('devisDeLaDemande(') > 0 && faire.indexOf('devisDeLaDemande(') < faire.indexOf('nouveauDevis(')
+    && /await onFaireDevis\(d\)/.test(nouveau)
     && /label="Reprendre"/.test(DR));
   verifier('`ChoixClientDevis` est une `<FeuilleBas` — et ne porte PAS `{...CLAVIER}`',
     /<FeuilleBas\b/.test(ECR.choix) && !/\{\.\.\.CLAVIER\}/.test(ECR.choix) && /keyboardShouldPersistTaps="handled"/.test(ECR.choix));

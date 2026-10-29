@@ -221,9 +221,17 @@ console.log('\nTout conteneur qui défile et qui porte un champ est couvert');
   const nus = [];
   const cumulent = [];
 
+  /* MONTÉS PAR LE CORPS D'`OpusApp` (29/10/2026) : la conversation ne porte
+     plus de `KeyboardAvoidingView` — c'est le corps de l'application qui
+     monte pendant une conversation (section suivante). Son fil de messages
+     n'a donc ni l'un ni l'autre, et c'est voulu ; la section suivante exige
+     que ce soit VRAI. */
+  const MONTES_PAR_LE_CORPS = ['src/screens/ConversationScreen.js'];
+
   fichiers.forEach((f) => {
     const c = sansCommentaires(lire(f));
     if (!CHAMPS.test(c)) return;
+    if (MONTES_PAR_LE_CORPS.includes(f)) return;
 
     /* CE QUI EST COLLÉ AU BAS DE L'ÉCRAN MONTE, et c'est l'autre
        mécanisme : une feuille, une barre de saisie de conversation, un
@@ -274,7 +282,6 @@ console.log('\nCe qui montait avec le clavier continue de monter');
     'src/components/FeuilleBas.js': 'la brique des feuilles du bas',
     'src/components/CommentsSheet.js': 'le panneau des commentaires du fil vidéo',
     'src/components/QuoteModal.js': 'la demande de devis',
-    'src/screens/ConversationScreen.js': 'la barre de saisie d’une conversation',
     'src/screens/AuthScreen.js': 'le formulaire centré de connexion',
   };
   Object.entries(COLLES).forEach(([f, quoi]) => {
@@ -283,6 +290,91 @@ console.log('\nCe qui montait avec le clavier continue de monter');
       `${f} a perdu son KeyboardAvoidingView. Ce qui est collé au bas de `
       + 'l’écran doit MONTER : l’inset du contenu n’y suffit pas.');
   });
+}
+
+console.log('\nLa conversation monte avec le corps de l’application, sans nombre écrit en dur');
+{
+  /* LE DÉFAUT DU 29/10/2026 — « quand on répond à une demande, le clavier
+     cache le texte », sur l'iPhone 16 du propriétaire. La conversation
+     portait un `KeyboardAvoidingView` réglé à 90 points écrits en dur. Ce
+     composant mesure sa place par rapport à son PARENT ; la barre de retour
+     (zone de l'encoche comprise) vivait hors de ce parent et faisait 128
+     points : la barre de saisie restait 38 points sous le clavier. Ce
+     contrôle vérifiait seulement que le composant était PRÉSENT — il ne
+     pouvait pas voir un réglage faux. */
+  const appli = sansCommentaires(lire('src/OpusApp.js'));
+  const conv = sansCommentaires(lire('src/screens/ConversationScreen.js'));
+  const iKav = appli.indexOf('<KeyboardAvoidingView');
+  const finOuvrante = iKav < 0 ? -1 : appli.indexOf('>', appli.indexOf('enabled=', iKav));
+  const ouvrante = iKav < 0 ? '' : appli.slice(iKav, finOuvrante + 1);
+  const iFerme = appli.indexOf('</KeyboardAvoidingView>');
+  const dedans = iKav < 0 || iFerme < 0 ? '' : appli.slice(iKav, iFerme);
+  verifier('`OpusApp` enveloppe le CORPS (`s.body`) dans un `KeyboardAvoidingView` actif pour la conversation SEULEMENT, '
+    + 'en `padding` sur iOS, SANS décalage',
+    (appli.match(/<KeyboardAvoidingView/g) || []).length === 1
+      && /style=\{\[s\.body, videoMode && \{ backgroundColor: C\.dark \}\]\}/.test(ouvrante)
+      && /behavior=\{Platform\.OS === 'ios' \? 'padding' : undefined\}/.test(ouvrante)
+      && /enabled=\{screen === 'messages' && !!activeConv\}/.test(ouvrante)
+      /* …et il RENAÎT à chaque entrée et sortie d'une conversation : désactivé,
+         il suit le clavier sans se redessiner, et rattraperait d'un coup. */
+      && /key=\{screen === 'messages' && activeConv \? `conversation-\$\{activeConvId\}` : 'corps'\}/.test(ouvrante)
+      && !/keyboardVerticalOffset/.test(ouvrante),
+    ouvrante.slice(0, 300));
+  verifier('…qui contient l’écran (l’`Animated.View key={screen}`), et dont la barre de retour est une SŒUR placée AVANT : '
+    + 'React Native compte alors juste par construction',
+    /<Animated\.View\s+key=\{screen\}/.test(dedans)
+      && iKav > 0 && appli.lastIndexOf('<BackBar', iKav) > 0 && appli.indexOf('<BottomNav', iFerme) > iFerme);
+  /* LA PROPRIÉTÉ, ET NON L'ÉCRITURE (relecture du 29/10/2026) : le calcul
+     de React Native est juste parce que le parent du composant commence en
+     HAUT de la fenêtre. Un conteneur glissé entre la racine et lui (pour un
+     fond, une animation…) refait le défaut en pire — 128 points sous le
+     clavier — et toutes les vérifications ci-dessus resteraient vertes. On
+     exige donc qu'il soit un enfant DIRECT de la racine `<View style={[s.app`,
+     que la racine n'ait ni marge ni remplissage, et que rien n'enveloppe
+     l'application dans `App.js`. */
+  const pile = (texte) => {
+    const ouverts = [];
+    let k = 0;
+    while (k < texte.length) {
+      if (texte[k] === '<' && /[A-Za-z/]/.test(texte[k + 1] || '')) {
+        const fermeture = texte[k + 1] === '/';
+        const nom = (texte.slice(k + (fermeture ? 2 : 1)).match(/^[A-Za-z][\w.]*/) || [''])[0];
+        let n = k + 1; let accolades = 0; let chaine = null;
+        for (; n < texte.length; n += 1) {
+          const ch = texte[n];
+          if (chaine) { if (ch === chaine && texte[n - 1] !== '\\') chaine = null; continue; }
+          if (ch === '"' || ch === "'" || ch === '`') { chaine = ch; continue; }
+          if (ch === '{') accolades += 1;
+          else if (ch === '}') accolades -= 1;
+          else if (ch === '>' && accolades === 0) break;
+        }
+        if (fermeture) { if (ouverts.length && ouverts[ouverts.length - 1] === nom) ouverts.pop(); else ouverts.push(`(fermeture inattendue ${nom})`); }
+        else if (texte[n - 1] !== '/') ouverts.push(nom);
+        k = n + 1;
+      } else k += 1;
+    }
+    return ouverts;
+  };
+  const iRacine = appli.lastIndexOf('<View style={[s.app', iKav);
+  const finRacine = iRacine < 0 ? -1 : appli.indexOf('>', appli.indexOf(']}', iRacine));
+  const entre = iRacine < 0 || iKav < 0 ? null : pile(appli.slice(finRacine + 1, iKav));
+  const app = sansCommentaires(lire('App.js'));
+  verifier('…et il est un enfant DIRECT de la racine `s.app` (aucun conteneur entre eux), la racine part du HAUT de la fenêtre, '
+    + 'et `App.js` n’enveloppe rien d’un autre `KeyboardAvoidingView`',
+    !!entre && entre.length === 0
+      && /app: \{ flex: 1, backgroundColor: C\.bg \},/.test(appli)
+      && !/KeyboardAvoidingView/.test(app), entre ? `ouverts entre la racine et lui : ${entre.join(', ') || '—'}` : 'racine introuvable');
+  verifier('la conversation ne porte plus son propre `KeyboardAvoidingView`, ni `CLAVIER`, ni l’inset natif à la main '
+    + '(le clavier compterait deux fois)',
+    !/KeyboardAvoidingView/.test(conv) && !/\.\.\.\s*CLAVIER\b/.test(conv) && !/\bCLAVIER\b/.test(conv)
+      && !/automaticallyAdjustKeyboardInsets/.test(conv) && !/lib\/clavier/.test(conv));
+  /* AUCUN DÉCALAGE ÉCRIT EN NOMBRE, nulle part : un nombre de points ne vaut
+     que pour un téléphone, et c'est exactement ce qui a caché le texte. */
+  const fichiers = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'],
+    { encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js'));
+  const enDur = fichiers.filter((f) => /keyboardVerticalOffset=\{\s*-?[1-9]/.test(sansCommentaires(lire(f))));
+  verifier('aucun `keyboardVerticalOffset` écrit en nombre (autre que 0) dans `src/`',
+    enDur.length === 0, enDur.join(', '));
 }
 
 console.log('');

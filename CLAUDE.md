@@ -10006,6 +10006,157 @@ les autres sortes, par les essais SQL seulement ; l'exception de
 l'administration, faute de compte administrateur jetable. La suite est dans `docs/A-FAIRE.md`, « Après le lot
 S-b ».
 
+### Le retour de l'iPhone du 29/10 — le clavier, et « Faire un devis » qui crée le client
+
+Deux remarques du propriétaire, après avoir essayé le lot S-b sur son
+iPhone : « quand on répond à une demande, le clavier cache le texte » ; et
+« Faire un devis » depuis « Pour moi » ouvrait un devis dont l'objet était
+le texte de la demande, avec une adresse qui n'était pas celle du client —
+il voulait que le client soit créé avec toutes ses informations, puis le
+devis ouvert dessus.
+
+#### Le clavier : un composant mesure sa place par rapport à son PARENT
+
+La conversation portait son propre `KeyboardAvoidingView`, avec un décalage
+écrit en dur (90). Le calcul de React Native est `frame.y + frame.height −
+(haut du clavier − décalage)`, où `frame` vient d'`onLayout`, donc **relatif
+au parent**. Ce parent commençait SOUS la barre de retour — 128 points sur
+un iPhone 16, zone de l'encoche comprise —, et la barre de saisie restait
+38 points sous le clavier.
+
+> **Un décalage écrit en nombre ne vaut que pour un téléphone.** Le composant
+> enveloppe désormais le CORPS d'`OpusApp` (`s.body`), enfant DIRECT de la
+> racine `s.app`, qui part du haut de la fenêtre ; la barre de retour est une
+> sœur. Le calcul est juste par construction, sans aucun nombre — c'est ce
+> qui rend `AuthScreen` juste depuis le début.
+
+Trois règles autour, toutes contrôlées par `verifier-feuilles` :
+
+- **actif pendant une conversation seulement** (`enabled`) : les autres
+  écrans font remonter leur CONTENU (`CLAVIER`), et les deux mécanismes
+  ensemble comptent le clavier deux fois ;
+- **une clé le fait RENAÎTRE à chaque entrée et sortie d'une conversation** :
+  désactivé, le composant suit le clavier sans se redessiner, et rattrape
+  d'un coup en se réactivant (arriver dans une conversation avec le clavier
+  d'un autre champ ouvert faisait sauter la page) ;
+- **la propriété, pas l'écriture** : le contrôle vérifie qu'AUCUN conteneur ne
+  s'interpose entre la racine et lui (un tokeniseur de balises JSX, éprouvé
+  en en glissant un) — sinon le défaut revient, en pire, et toutes les autres
+  vérifications restent vertes.
+
+**Rien de cela ne se vérifie au navigateur** : `react-native-web` ne rend
+aucun clavier. Au navigateur, la conversation s'ouvre, envoie et se referme
+sans erreur ; le reste est à l'iPhone.
+
+#### « Faire un devis » crée la fiche du client — les décisions du 29/10
+
+| question | réponse du propriétaire |
+|---|---|
+| la fiche | **création directe** ; en cas de doute, la fiche s'ouvre et DIT pourquoi |
+| l'objet | **vide** ; le texte de la demande s'affiche au-dessus, il ne s'imprime jamais |
+| la ville | **dans le lieu des travaux ET sur la fiche** |
+| le même numéro déjà au carnet | **la fiche existante**, avec « Choisir ce client pour ce devis » |
+
+`ficheAPartirDeLaDemande()` (`clients.js`, que `verifier-clients` fait
+tourner sur treize cas) décide : **le numéro d'abord** (une fiche qui existe
+vaut mieux qu'un formulaire, même sans nom), puis aucun vrai nom, un
+homonyme (« le doublon s'avertit »), l'adresse d'une urgence illisible, un
+lieu qui ne se découpe pas sûrement, une valeur que `validerClient()`
+refuserait — chaque cas ouvre la fiche avec SA phrase (`POURQUOI_LA_FICHE`).
+Sinon la fiche se crée, **avec les valeurs que `validerClient()` rend** :
+ce qui part en base sans relecture passe par la porte de ce que l'artisan
+aurait enregistré lui-même.
+
+> **Un texte d'exemple qui ressemble à une donnée est lu comme une donnée.**
+> L'« adresse qui n'est pas celle du client » était le texte gris des champs
+> vides — « 4 rue des Lilas », « 13350 », « Charleval ». Les champs disent
+> maintenant « N° et rue », « Code postal », « Commune ».
+
+#### L'écran SOS ne rangeait pas la commune — et mon premier essai l'a imité
+
+Le champ d'une urgence s'appelle « Adresse complète de l'intervention »,
+mais il rangeait `lieu.affichage` : en mode adresse, **la rue seule**
+(« 4 Rue des Acacias », sans la commune) ou **le nom seul d'une commune**.
+`sos_requests` n'a pas de colonne pour la ville : l'artisan recevait une rue
+sans savoir dans quelle commune — et « Faire un devis » ne pouvait rien en
+tirer.
+
+> **L'écran SOS range l'adresse COMPLÈTE** (`adresseDUrgence`, `adresse.js`) :
+> le libellé entier de la Base Adresse pour un numéro ou une rue, « Brest
+> (29) » pour une commune. `lieuDepuisUrgence()` relit ces formes ; l'ANCIENNE
+> (rue ou commune seule) n'est pas sûre, et ouvre le formulaire.
+>
+> **Le code postal d'une commune n'est jamais repris** : c'est le plus petit
+> de la commune (Marseille rend 13001). Celui d'un numéro ou d'une rue, si.
+
+**Et mon premier essai sur la vraie base avait écrit lui-même « Brest
+(29) »** dans l'urgence, au lieu de passer par l'écran : il prouvait ma
+lecture, pas ce que l'application range. C'est la relecture adverse qui l'a
+trouvé.
+
+> **Un essai qui fabrique la donnée à la main ne prouve que ce qu'on a
+> fabriqué.** Pour une écriture, passer par l'écran qui l'écrit — ici, le
+> vrai écran SOS, au navigateur, sur la vraie base.
+
+#### Ce que la relecture adverse a trouvé, et qui est corrigé
+
+Douze constats, tous contre-examinés (dix confirmés, deux en partie) :
+
+- **le même numéro mal reconnu** : « +33 (0)6… » donnait douze chiffres, et
+  une seconde fiche se créait en silence (`chiffresDuTelephone` connaît le
+  « (0) », « 0033 » et le numéro à neuf chiffres) ;
+- **un délai dépassé n'annule pas une insertion partie** : l'écran annonçait
+  un échec pendant que la fiche arrivait en base, puis « Nouveau client » en
+  créait une seconde. L'identifiant est **choisi par le téléphone**
+  (`nouvelIdentifiant`), et sans réponse la fiche est **relue** par lui ;
+  l'incertitude se dit (« Opus ne sait pas si la fiche a été créée ») ;
+- **un geste qui ATTEND lisait l'écran figé de son premier rendu** : la garde
+  de la saisie se croyait fermée et une saisie ouverte entre-temps perdait
+  ses lignes. L'écran se lit par une référence (`ecranRef`), et rien ne
+  s'ouvre si l'artisan a quitté « Découvrir » — on le dit ;
+- **« Nouveau devis » n'attendait rien**, et un second appui était jeté en
+  silence : il attend, et un geste déjà en cours se dit (`'occupe'`) ;
+- **l'adresse d'une urgence illisible créait une fiche sans adresse**
+  annoncée comme faite : la fiche s'ouvre et le dit ;
+- **une fiche ARCHIVÉE au même numéro** était proposée sans le dire ;
+- **corriger la fiche existante puis l'enregistrer jetait le devis** : elle
+  reste ouverte, à jour, avec « Choisir ce client pour ce devis » ;
+- **l'urgence ne montrait que le libellé du problème**, jamais ce que la
+  personne avait écrit, et l'ouverture et la relecture ne lisaient pas la
+  même colonne : `texteDUrgence()`, une seule écriture ;
+- **trois gestes préremplissaient la même fiche de trois façons**
+  (« Faire un devis », « Ajouter à mes clients », « Pour qui ? → Nouveau
+  client ») : `lieuDeLaDemande()`, une seule lecture ;
+- **un champ « ville » libre** (« 12 chemin des Pins, 13410 Lambesc ») allait
+  tel quel dans la case « ville » d'une facture : il se découpe quand c'est
+  sûr (`decouperLieuLibre`), sinon la fiche s'ouvre.
+
+#### Vérifié, et comment
+
+Les 54 contrôles, le linter à 32, les paquets iOS et Android lus,
+`mesure-devis` au navigateur (461 vérifications) ; **22 sabotages, les 22
+refusés** par la vérification visée. Sur un PostgreSQL 16 local, schéma
+rejoué deux fois : la fiche et le devis lié s'insèrent avec les valeurs
+calculées par les VRAIES fonctions de l'application, et l'artisan relit le
+texte de la demande et l'adresse de l'urgence. Puis sur la VRAIE base, par
+le chemin de l'application, avec un artisan et deux particuliers jetables à
+Brest (supprimés ensuite) :
+
+| | relevé |
+|---|---|
+| « Faire un devis » sur une demande | `POST clients 201`, « Paule Essai · Brest », objet vide, la demande affichée |
+| le brouillon naît | `POST devis 201`, lié à la demande et à la fiche |
+| « Nouveau devis » au même numéro | la fiche existante, **aucun `POST clients`** |
+| le vrai écran SOS, commune « Brest » | range **« Brest (29) »** (`POST sos_requests 201`) |
+| « Faire un devis » sur cette urgence | fiche « Essai FD P · Brest », lieu Brest, **sans code postal** |
+| une urgence à l'ANCIENNE forme | la fiche s'ouvre avec sa phrase, **rien de créé** ; complétée, elle ouvre le devis |
+| le particulier lit le carnet de l'artisan | `[]` |
+
+**Ce qui n'a PAS été vérifié** : le clavier sur l'iPhone (la barre de saisie
+juste au-dessus du clavier, et l'arrivée dans une conversation clavier
+ouvert) ; le délai dépassé et la relecture par l'identifiant (tenus par
+`verifier-clients` seulement) ; la création au doigt sur l'iPhone.
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

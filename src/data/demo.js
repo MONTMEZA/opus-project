@@ -647,7 +647,15 @@ export const initialDemandesRecues = [
     id: 'dr-sos-1', genre: 'sos', statut: 'envoyee',
     clientId: 'u-julie', nom: 'Julie M.', telephone: '06 39 98 03 01',
     metier: 'electricite', titre: 'Plus de courant dans la cuisine',
-    details: 'Le disjoncteur saute dès qu’on branche le four · Lambesc',
+    /* `details` est ce que `mes_demandes_recues()` rend : ce que la
+       personne a écrit, puis l'adresse rangée par l'écran SOS. */
+    details: 'Le disjoncteur saute dès qu’on branche le four · Lambesc (13)',
+    /* Ce que `sos_requests` range à part (et que « Faire un devis » relit) :
+       le texte ÉCRIT, et une COMMUNE choisie dans la liste — la forme que
+       l'écran SOS range depuis le 29/10/2026 (`adresseDUrgence`), jamais
+       une rue : la démonstration ne prête l'adresse de personne. */
+    detailsEcrits: 'Le disjoncteur saute dès qu’on branche le four',
+    adresse: 'Lambesc (13)', codePostal: '13410',
     ville: null, budget: null, creneau: 'immediat',
     prixMin: 90, prixMax: 180, avatarUrl: null, quand: 'Il y a 21 j',
   },

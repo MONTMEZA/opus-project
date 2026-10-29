@@ -31,7 +31,7 @@ import ChampLocal from './ChampLocal';
 import ChampVille from './ChampVille';
 import { libelleBudget } from '../data/annonces';
 import {
-  DELAI_PAR_DEFAUT, LONGUEURS, avertissementDelai, origineLisible,
+  DELAI_PAR_DEFAUT, LONGUEURS, avertissementDelai, origineLisible, texteDeLaDemande,
 } from '../lib/devis';
 
 /** Le texte du bandeau, une fois : `verifier-devis` le cherche ici. */
@@ -98,6 +98,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
 
   const origine = origineLisible(devis);
   const budget = devis.demande && devis.demande.budget ? libelleBudget(devis.demande.budget) : null;
+  const demandeDuClient = texteDeLaDemande(devis);
 
   return (
     <View style={s.boite}>
@@ -112,6 +113,19 @@ const EnteteDevis = forwardRef(function EnteteDevis({
             calcul, et ne s'additionne à rien. */}
         {!!budget && <Text style={s.origine}>{`Budget indiqué par le client : ${budget}`}</Text>}
       </View>
+
+      {/* CE QUE LE CLIENT A DEMANDÉ — affiché, jamais imprimé (décision du
+          propriétaire, 29/10/2026). Il était recopié dans l'OBJET, qui
+          s'imprimera sur le devis : c'est l'artisan qui écrit l'objet, et le
+          texte du client reste sous ses yeux. Lu par le lien d'origine : la
+          demande effacée, il disparaît avec elle. */}
+      {!!demandeDuClient && (
+        <View style={s.demande}>
+          <Text style={s.demandeTitre}>Ce que le client a demandé</Text>
+          <Text style={s.demandeTexte}>{demandeDuClient}</Text>
+          <Text style={s.demandeNote}>Ce texte n’apparaît pas sur le devis.</Text>
+        </View>
+      )}
 
       {/* LE RÉGIME DE TVA, en trois messages DISTINCTS. Un échec de lecture
           n'est JAMAIS « non déclaré » : un artisan en franchise à qui l'on
@@ -150,7 +164,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
       <ChampLocal
         ref={refObjet}
         defaut={texte(devis.objet)}
-        placeholder="Rénovation de la salle de bains"
+        placeholder="Ex. : rénovation de la salle de bains"
         maxLength={LONGUEURS.objet}
         accessibilityLabel="Objet du devis"
         returnKeyType="done"
@@ -164,7 +178,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
           Un choix remplit les trois cases, et s'enregistre aussitôt. */}
       <ChampVille
         type="rue"
-        placeholder="4 rue des Lilas"
+        placeholder="N° et rue"
         valeur={lieu.lieuAdresse}
         maxLength={LONGUEURS.lieuAdresse}
         onChange={(l) => {
@@ -196,7 +210,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
           <ChampLocal
             ref={refCp}
             defaut={lieu.lieuCodePostal}
-            placeholder="13350"
+            placeholder="Code postal"
             keyboardType="number-pad"
             maxLength={5}
             accessibilityLabel="Code postal du lieu des travaux"
@@ -208,7 +222,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
           <ChampLocal
             ref={refVille}
             defaut={lieu.lieuVille}
-            placeholder="Charleval"
+            placeholder="Commune"
             maxLength={LONGUEURS.lieuVille}
             accessibilityLabel="Ville du lieu des travaux"
             returnKeyType="done"
@@ -223,7 +237,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
       <ChampLocal
         ref={refDelai}
         defaut={texte(devis.delaiExecution)}
-        placeholder="Du 12 au 20 novembre"
+        placeholder="Ex. : du 12 au 20 novembre"
         maxLength={LONGUEURS.delaiExecution}
         accessibilityLabel="Délai d’exécution"
         returnKeyType="done"
@@ -271,6 +285,16 @@ const s = StyleSheet.create({
     padding: S.md, gap: S.sm, marginBottom: S.md,
   },
   avisTexte: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, lineHeight: interligne(T.corps) },
+  /* Ce que le client a demandé : un bloc de STRUCTURE (angle vif), sur le
+     blanc de la carte, avec le filet bleu des informations — pas l'orange,
+     qui dirait « à faire » ou « attention ». */
+  demande: {
+    backgroundColor: C.surface, borderLeftWidth: 3, borderLeftColor: C.accent2,
+    padding: S.md, gap: S.xs, marginBottom: S.md,
+  },
+  demandeTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2 },
+  demandeTexte: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, lineHeight: interligne(T.corps) },
+  demandeNote: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
   titre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, marginTop: S.md },
   client: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, marginBottom: S.xs },
   deux: { flexDirection: 'row', gap: S.sm },

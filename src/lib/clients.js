@@ -204,23 +204,226 @@ export function clientsVisibles(liste = [], { recherche = '', archives = false }
     .sort((a, b) => nomNormalise(a.nom).localeCompare(nomNormalise(b.nom), 'fr'));
 }
 
-/** Ce qu'une demande reçue sait déjà du client, prêt pour le formulaire.
+/**
+ * « Lambesc (13) » → « Lambesc ».
  *
- *  LE TÉLÉPHONE EST CELUI QUE LE CLIENT A ÉCRIT DANS SA DEMANDE, jamais
- *  `users.telephone`, fermé à tout le monde le 29/09/2026 : le remettre à
- *  l'écran par cette porte annulerait ce travail sans bruit. C'est la même
- *  garde que la section 24.
+ * Le numéro entre parenthèses DÉPARTAGE les communes de même nom dans une
+ * recherche (`decouperAffichage`, `adresse.js`) ; sur une fiche de client,
+ * il s'imprimerait tel quel sur une facture. La même règle, recopiée ici
+ * parce que ce fichier n'importe rien (`verifier-clients` la fait tourner
+ * sur les mêmes cas).
+ */
+export function villeSansDepartement(texte) {
+  const brut = String(texte == null ? '' : texte).trim();
+  const m = brut.match(/^(.*?)\s*\((\d{2,3}|2[AB])\)\s*$/i);
+  return m ? m[1].trim() : brut;
+}
+
+/**
+ * Les chiffres d'un numéro de téléphone, sous leur forme NATIONALE (dix
+ * chiffres, un « 0 » devant) : « +33 6 12 34 56 78 », « 0033 (0)6 12 34 56
+ * 78 », « +33 (0)6… », « 06.12.34.56.78 » et « 6 12 34 56 78 » sont le
+ * même numéro — c'est ce qui décide qu'une demande vient d'un client DÉJÀ
+ * dans le carnet, donc ce qui évite un doublon (relecture du 29/10/2026 :
+ * « +33 (0)6… » rendait douze chiffres, et une seconde fiche se créait en
+ * silence). Un numéro étranger garde ses chiffres. Vide si l'on n'a pas au
+ * moins neuf chiffres : un numéro incomplet ne prouve pas qu'on parle de la
+ * même personne.
+ */
+export function chiffresDuTelephone(valeur) {
+  const c = String(valeur == null ? '' : valeur).replace(/[^0-9]/g, '');
+  let reste = null;
+  if (c.startsWith('0033')) reste = c.slice(4);
+  else if (c.startsWith('33') && (c.length === 11 || c.length === 12)) reste = c.slice(2);
+  else if (c.length === 9 && c[0] !== '0') reste = c;
+  if (reste !== null) {
+    if (reste.length === 10 && reste[0] === '0') return reste;
+    if (reste.length === 9 && reste[0] !== '0') return `0${reste}`;
+  }
+  return c.length >= 9 ? c : '';
+}
+
+/** Les fiches qui portent ce numéro — les actives d'abord. */
+export function clientsDuMemeNumero(telephone, liste = []) {
+  const cherche = chiffresDuTelephone(telephone);
+  if (!cherche) return [];
+  return liste
+    .filter((c) => c && chiffresDuTelephone(c.telephone) === cherche)
+    .sort((a, b) => Number(Boolean(a.archive)) - Number(Boolean(b.archive)));
+}
+
+/* Le nom de repli que la base rend quand ni la demande ni le compte n'en
+   portent (`mes_demandes_recues()`, section 24). Ce n'est PAS un nom : une
+   fiche « Un client » créée en silence serait un client qu'on ne retrouve
+   plus. */
+const NOM_DE_REPLI = 'Un client';
+
+const net = (v) => String(v == null ? '' : v).trim();
+const CODE_POSTAL = /^[0-9]{5}$/;
+
+/**
+ * LE LIEU ÉCRIT DANS UNE DEMANDE DE DEVIS, en trois cases — et s'il est SÛR.
+ *
+ * `quote_requests.ville` est un champ LIBRE (« Ville ou adresse du
+ * chantier », prérempli depuis le compte) : on y lit « Lambesc (13) », mais
+ * aussi « 13410 Lambesc » ou « 12 chemin des Pins, 13410 Lambesc ». On ne
+ * découpe que ce qui se découpe SÛREMENT :
+ *   - « Commune (dd) » → la commune, sans son « (13) » ;
+ *   - « Commune (13410) » → la commune et son code postal ;
+ *   - « …, 13410 Commune » → la rue (s'il y en a une), le code postal, la
+ *     commune ;
+ *   - un texte SANS chiffre → une commune ;
+ *   - tout le reste (« 12 chemin des Pins ») → `sur: false` : on ne range
+ *     pas une rue dans la case « ville » d'une facture. Le texte va dans
+ *     « N° et rue », et c'est l'artisan qui vérifie.
+ * Le CODE POSTAL ne se devine jamais d'une commune (Paris rendrait 75001 à
+ * tout le monde) : il n'est repris que s'il est ÉCRIT.
+ */
+export function decouperLieuLibre(texte) {
+  const brut = net(texte);
+  if (!brut) return { adresse: '', codePostal: '', ville: '', sur: true };
+  let m = brut.match(/^(.*?)\s*\((\d{2,3}|2[AB])\)$/i);
+  if (m && !/\d/.test(m[1])) return { adresse: '', codePostal: '', ville: m[1].trim(), sur: true };
+  m = brut.match(/^(.*?)\s*\((\d{5})\)$/);
+  if (m && !/\d/.test(m[1])) return { adresse: '', codePostal: m[2], ville: m[1].trim(), sur: true };
+  m = brut.match(/^(?:(.*?)[\s,]+)?(\d{5})\s+(\D.*)$/);
+  if (m) return { adresse: net(m[1]).replace(/[\s,]+$/, ''), codePostal: m[2], ville: m[3].trim(), sur: true };
+  if (!/\d/.test(brut)) return { adresse: '', codePostal: '', ville: brut, sur: true };
+  return { adresse: brut, codePostal: '', ville: '', sur: false };
+}
+
+/**
+ * L'ADRESSE D'UNE URGENCE, en trois cases — et si elle est SÛRE.
+ *
+ * Depuis le 29/10/2026, l'écran SOS range une adresse COMPLÈTE
+ * (`adresseDUrgence`, `adresse.js`) : « 4 Rue des Acacias 13350 Charleval »
+ * pour un numéro ou une rue, « Charleval (13) » pour une commune. Avant, il
+ * ne rangeait que la RUE (« 4 Rue des Acacias », sans la commune) ou le nom
+ * seul de la commune (« Charleval ») : ces urgences-là ne se découpent pas
+ * sûrement (`sur: false`), et l'artisan vérifie.
+ *
+ * Le code postal d'une COMMUNE choisie dans la liste est le plus PETIT de la
+ * commune (Marseille rend 13001) : il n'est pas repris. Celui d'un numéro ou
+ * d'une rue, si.
+ */
+export function lieuDepuisUrgence({ adresse = null, codePostal = null } = {}) {
+  const brut = net(adresse);
+  const cp = CODE_POSTAL.test(net(codePostal)) ? net(codePostal) : '';
+  if (!brut) return { adresse: '', codePostal: '', ville: '', sur: true };
+  const commune = brut.match(/^(.*?)\s*\((\d{2,3}|2[AB])\)$/i);
+  if (commune && !/\d/.test(commune[1])) {
+    return { adresse: '', codePostal: '', ville: commune[1].trim(), sur: true };
+  }
+  if (cp) {
+    const i = brut.lastIndexOf(` ${cp} `);
+    if (i > 0) {
+      return {
+        adresse: brut.slice(0, i).trim().replace(/,$/, ''), codePostal: cp,
+        ville: brut.slice(i + cp.length + 2).trim(), sur: true,
+      };
+    }
+  }
+  return { adresse: brut, codePostal: cp, ville: '', sur: false };
+}
+
+/**
+ * LE LIEU QU'UNE DEMANDE CONNAÎT, quelle qu'elle soit — UNE seule porte pour
+ * les trois gestes qui préremplissent une fiche (« Faire un devis »,
+ * « Ajouter à mes clients », « Pour qui ? → Nouveau client ») : deux
+ * façons d'arriver à la même fiche doivent faire le même travail
+ * (relecture du 29/10/2026).
+ *
+ * Une urgence porte son adresse à part (`adresse`, `codePostal` — relus par
+ * `api.lieuDeLUrgence`) ; une demande de devis, sa « ville » libre.
+ */
+export function lieuDeLaDemande(demande = {}) {
+  if (demande.genre === 'sos') {
+    return lieuDepuisUrgence({ adresse: demande.adresse, codePostal: demande.codePostal });
+  }
+  return decouperLieuLibre(demande.ville);
+}
+
+/**
+ * CE QU'UNE DEMANDE REÇUE SAIT DÉJÀ DU CLIENT, prêt pour sa fiche.
+ *
+ * LE TÉLÉPHONE EST CELUI QUE LE CLIENT A ÉCRIT DANS SA DEMANDE, jamais
+ * `users.telephone`, fermé à tout le monde le 29/09/2026 : le remettre à
+ * l'écran par cette porte annulerait ce travail sans bruit. C'est la même
+ * garde que la section 24.
+ *
+ * LE LIEU EST CELUI DU CHANTIER : il va AUSSI sur la fiche — décision du
+ * propriétaire, 29/10/2026 —, découpé par `lieuDeLaDemande()`.
  */
 export function clientDepuisDemande(demande = {}) {
+  const nom = net(demande.clientNom || demande.nom);
+  const lieu = lieuDeLaDemande(demande);
   return {
     type: 'particulier',
-    nom: String(demande.clientNom || demande.nom || '').trim(),
-    telephone: String(demande.telephone || '').trim(),
-    ville: String(demande.ville || '').trim(),
-    codePostal: String(demande.codePostal || '').trim(),
+    nom: nom === NOM_DE_REPLI ? '' : nom,
+    telephone: net(demande.telephone),
+    ville: lieu.ville,
+    codePostal: lieu.codePostal,
     email: '',
-    adresse: '',
+    adresse: lieu.adresse,
     siret: '',
     notes: '',
   };
+}
+
+/**
+ * « FAIRE UN DEVIS » SUR UNE DEMANDE : la fiche du client se CRÉE TOUTE
+ * SEULE, sauf s'il y a un doute — décision du propriétaire, 29/10/2026
+ * (« création directe » ; « proposer la fiche existante » quand le numéro
+ * est déjà dans le carnet).
+ *
+ *   - `{ geste: 'existante', fiche, raison }` : le MÊME NUMÉRO est déjà dans
+ *     le carnet — on montre cette fiche, et l'artisan la choisit d'un appui.
+ *     Pas de doublon, et il voit de qui il s'agit. `raison` vaut
+ *     `'archivee'` quand cette fiche est archivée : il faut le DIRE ;
+ *   - `{ geste: 'formulaire', raison }` : la fiche s'ouvre pré-remplie, et
+ *     c'est l'artisan qui l'enregistre — le carnet n'a pas pu être lu (on
+ *     ne crée pas à l'aveugle), la demande ne porte aucun vrai nom, un
+ *     client du MÊME NOM existe (« le doublon s'avertit », section 41 : dans
+ *     un village il y a souvent trois Martin), l'adresse de l'urgence n'a
+ *     pas pu être lue, le lieu ne se découpe pas sûrement, ou une valeur ne
+ *     passerait pas `validerClient()` ;
+ *   - `{ geste: 'creer', valeurs }` : rien n'est douteux, la fiche se crée,
+ *     avec les valeurs que `validerClient()` rend — celles qu'il aurait
+ *     enregistrées lui-même.
+ *
+ * Le NUMÉRO passe avant tout le reste : une fiche qui existe déjà vaut
+ * mieux qu'un formulaire, même quand la demande n'a pas de nom.
+ */
+/* Ce que la fiche DIT quand elle s'affiche au lieu du devis — sinon on
+   touche « Faire un devis », une fiche apparaît, et l'on ne sait pas
+   pourquoi. Une phrase par raison, écrite ici une fois. */
+export const POURQUOI_LA_FICHE = Object.freeze({
+  existante: 'Ce numéro de téléphone est déjà dans votre carnet : choisissez ce client pour le devis.',
+  archivee: 'Ce numéro de téléphone est celui d’un client que vous avez archivé : choisissez-le pour le devis, ou remettez-le d’abord dans votre liste.',
+  homonyme: 'Un client de ce nom est déjà dans votre carnet : vérifiez, puis enregistrez la fiche pour ouvrir le devis.',
+  sans_nom: 'La demande ne donne pas le nom du client : écrivez-le, puis enregistrez la fiche pour ouvrir le devis.',
+  carnet: 'Votre carnet n’a pas pu être lu : vérifiez que ce client n’y est pas déjà, puis enregistrez la fiche pour ouvrir le devis.',
+  lieu: 'L’adresse de l’urgence n’a pas pu être lue : complétez-la si vous la connaissez, puis enregistrez la fiche pour ouvrir le devis.',
+  adresse: 'L’adresse de la demande ne se range pas toute seule : vérifiez la rue, le code postal et la commune, puis enregistrez la fiche pour ouvrir le devis.',
+  invalide: 'Une information de la demande ne peut pas aller telle quelle sur la fiche : corrigez-la, puis enregistrez la fiche pour ouvrir le devis.',
+});
+
+export function ficheAPartirDeLaDemande(valeurs, carnet, { lieuLu = true, lieuSur = true } = {}) {
+  if (!Array.isArray(carnet)) return { geste: 'formulaire', raison: 'carnet' };
+  const memeNumero = clientsDuMemeNumero(valeurs && valeurs.telephone, carnet);
+  if (memeNumero.length) {
+    return { geste: 'existante', fiche: memeNumero[0], raison: memeNumero[0].archive ? 'archivee' : 'existante' };
+  }
+  if (!valeurs || !String(valeurs.nom || '').trim()) return { geste: 'formulaire', raison: 'sans_nom' };
+  if (clientsDuMemeNom(valeurs.nom, carnet).length) return { geste: 'formulaire', raison: 'homonyme' };
+  if (!lieuLu) return { geste: 'formulaire', raison: 'lieu' };
+  if (!lieuSur) return { geste: 'formulaire', raison: 'adresse' };
+  /* La MÊME validation que le formulaire : ce qui part en base sans que
+     l'artisan l'ait relu doit passer par la porte de ce qu'il aurait
+     enregistré lui-même — sinon une valeur trop longue revient en refus de
+     la base, et le devis s'ouvre sans client. Ce qui ne passe pas ouvre le
+     formulaire, et c'est lui qui DIT quoi corriger. */
+  const v = validerClient(valeurs);
+  if (!v.ok) return { geste: 'formulaire', raison: 'invalide' };
+  return { geste: 'creer', valeurs: v.valeurs };
 }

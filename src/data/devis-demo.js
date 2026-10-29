@@ -844,8 +844,9 @@ export function creerBaseDevisDemo({
   /* ---------------------------------------------------------------- */
 
   /* Un devis avec ce que la requête de `api.js` y joint : le nom du client
-     (si la fiche est à moi — la règle d'accès du carnet), la date et le
-     budget de la demande, la date de l'urgence. */
+     (si la fiche est à moi — la règle d'accès du carnet), la date, le budget
+     et le TEXTE de la demande, la date et le problème de l'urgence — le
+     texte est lu par le lien, jamais recopié dans le devis (29/10/2026). */
   function avecLiens(d) {
     const client = d.clientId
       ? initialClients.find((c) => String(c.id) === String(d.clientId) && String(c.proId) === String(d.proId))
@@ -856,8 +857,8 @@ export function creerBaseDevisDemo({
     return {
       ...d,
       client: client ? { nom: client.nom } : null,
-      demande: dem ? { createdAt: date(dem), budget: dem.budget ?? null } : null,
-      urgence: urg ? { createdAt: date(urg) } : null,
+      demande: dem ? { createdAt: date(dem), budget: dem.budget ?? null, texte: dem.titre ?? null } : null,
+      urgence: urg ? { createdAt: date(urg), texte: urg.titre ?? null } : null,
     };
   }
 

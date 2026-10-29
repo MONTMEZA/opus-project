@@ -3218,7 +3218,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 - `montants.js` ou `devis.js` : **un seul fichier**, `src/lib/devis.js`, qui pose le séparateur de milliers lui-même **[corrigé au lot 1, le 23/10 : les deux fonctions de montant vivent dans `src/lib/centimes.js`, qui n'importe rien, et `devis.js` les importe — une règle ne s'écrit qu'à UN endroit (C8, 10.16)]** ;
 - le sous-total par zone ou par pièce : calculé depuis les titres (10.6), imprimé ou non selon la décision du lot 1.
 
-« En faire un devis » ne préremplit que la description (le plan l'emporte sur CONCURRENCE-DEVIS.md:158-166) ; l'adresse vient du carnet de clients.
+« En faire un devis » ne préremplit que la description (le plan l'emporte sur CONCURRENCE-DEVIS.md:158-166) ; l'adresse vient du carnet de clients. **[changé le 29/10/2026, à la demande du propriétaire, après l'avoir essayé sur l'iPhone : « Faire un devis » sur une demande CRÉE la fiche du client avec ce que la demande porte (nom, numéro, commune — l'urgence, son adresse complète), puis ouvre le devis dessus ; le même numéro déjà au carnet montre la fiche existante. L'objet reste VIDE, et le texte de la demande s'affiche au-dessus de la saisie sans jamais être rangé dans le devis. La fiche reste une FICHE du carnet, jamais un compte (D1). Détail : CLAUDE.md, « Le retour de l'iPhone du 29/10 »]**
 
 Erreurs à corriger dans les annexes :
 

@@ -49,10 +49,15 @@ export default function FicheClient({
      et « Faire un devis ». Absents — un particulier, ou la fiche ouverte
      depuis la saisie d'un devis —, la section n'existe pas. */
   lireSesDevis = null, onOuvrirDevis = null, onFaireDevis = null,
-  /* Une fiche EXISTANTE ouverte depuis la saisie d'un devis (« vous avez déjà
-     un client de ce nom ») : on la choisit pour ce devis, d'un appui —
-     c'est ce que le geste cherchait. Absent partout ailleurs. */
+  /* Une fiche EXISTANTE ouverte pour un devis — depuis sa saisie (« vous
+     avez déjà un client de ce nom »), ou depuis « Faire un devis » sur une
+     demande dont le numéro est déjà au carnet (29/10/2026) : on la choisit
+     pour ce devis, d'un appui — c'est ce que le geste cherchait. Absent
+     partout ailleurs. */
   onChoisirPourLeDevis = null,
+  /* Pourquoi la fiche s'affiche au lieu du devis (« Faire un devis » sur une
+     demande, `POURQUOI_LA_FICHE`) — une phrase, ou rien. */
+  pourquoi = null,
 }) {
   /* `depuis` pré-remplit le formulaire avec ce qu'une demande reçue sait
      déjà du client. La `key` du composant est changée par l'appelant à
@@ -216,10 +221,17 @@ export default function FicheClient({
             </View>
           )}
 
-          {/* DEPUIS LA SAISIE D'UN DEVIS, la fiche d'un client existant ne
-              mène pas à un AUTRE devis (la garde de la saisie ne le
-              permettrait pas sans la lire) : elle se choisit pour celui
-              qu'on est en train d'écrire. */}
+          {!!pourquoi && (
+            <View style={s.garde}>
+              <Text style={s.gardeTitre}>Pour ce devis</Text>
+              <Text style={s.gardeTexte}>{pourquoi}</Text>
+            </View>
+          )}
+
+          {/* POUR UN DEVIS, la fiche d'un client existant ne mène pas à un
+              AUTRE devis (la garde de la saisie ne le permettrait pas sans
+              la lire) : elle se choisit pour celui qu'on est en train
+              d'écrire. */}
           {!!fiche && !!onChoisirPourLeDevis && (
             <BtnMain
               label="Choisir ce client pour ce devis"
@@ -348,7 +360,7 @@ export default function FicheClient({
           <ChampVille
             ref={refAdresse}
             type="rue"
-            placeholder="4 rue des Lilas"
+            placeholder="N° et rue"
             valeur={v.adresse}
             maxLength={LONGUEUR_MAX.adresse}
             onChange={(lieu) => {
@@ -371,7 +383,7 @@ export default function FicheClient({
               <Text style={s.label}>Code postal</Text>
               <Field
                 ref={refCodePostal}
-                placeholder="13350"
+                placeholder="Code postal"
                 value={v.codePostal}
                 onChangeText={poser('codePostal')}
                 keyboardType="number-pad"
@@ -382,7 +394,7 @@ export default function FicheClient({
               <Text style={s.label}>Ville</Text>
               <Field
                 ref={refVille}
-                placeholder="Charleval"
+                placeholder="Commune"
                 value={v.ville}
                 onChangeText={poser('ville')}
                 maxLength={LONGUEUR_MAX.ville}
@@ -609,7 +621,7 @@ const s = StyleSheet.create({
   /* Angle VIF : ces blocs PORTENT l'information, ils ne flottent pas. */
   garde: {
     padding: S.md, marginBottom: S.md,
-    backgroundColor: C.bg, borderLeftWidth: 3, borderLeftColor: C.accent,
+    backgroundColor: C.bg, borderLeftWidth: 3, borderLeftColor: C.accentTexte,
   },
   gardeTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accentTexte },
   gardeTexte: {

@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, KeyboardAvoidingView, Platform, Linking, StyleSheet,
+  View, Text, FlatList, Pressable, Linking, StyleSheet,
 } from 'react-native';
 import { C, F, T, S, R, APPUI, interligne, viser } from '../theme';
 import { EmptyState } from '../components/ui';
@@ -353,12 +353,19 @@ export default function ConversationScreen({
     [conversation.messages],
   );
 
+  /* LE CLAVIER SE GÈRE AU-DESSUS DE CET ÉCRAN, DANS `OpusApp` (29/10/2026).
+     Il y avait ici un `KeyboardAvoidingView` réglé à 90 points écrits en
+     dur. Or ce composant mesure sa place par rapport à son PARENT, et la
+     barre de retour (avec la zone de l'encoche) vit HORS de ce parent : sur
+     un iPhone 16 elle fait 128 points, et la barre de saisie restait 38
+     points sous le clavier — « le clavier cache le texte », signalé par le
+     propriétaire. Le `KeyboardAvoidingView` enveloppe maintenant le CORPS
+     de l'application, dont le parent commence en haut de la fenêtre : la
+     barre de retour y est une sœur, et React Native compte juste par
+     construction — le principe qui rend `AuthScreen` juste. Il n'y en a
+     plus ici : deux mécanismes compteraient le clavier deux fois. */
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
-    >
+    <View style={{ flex: 1 }}>
       {/* UNE LISTE INVERSÉE, et c'est le bon outil pour une conversation.
           Avant : un `ScrollView` qui montait TOUS les messages, plus un
           `scrollToEnd` déclenché à chaque changement de taille. Sur une
@@ -467,7 +474,7 @@ export default function ConversationScreen({
         onChoisir={joindre}
         onFermer={() => setChoixOuvert(false)}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

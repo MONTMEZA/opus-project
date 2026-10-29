@@ -37,6 +37,7 @@ import {
 } from '../lib/tarifs';
 import { messageClair } from '../lib/erreurs';
 import ChampVille from '../components/ChampVille';
+import { adresseDUrgence } from '../lib/adresse';
 import { CLAVIER } from '../lib/clavier';
 import { decimal1, virgule } from '../lib/formats';
 import { avgReviews } from '../data/demo';
@@ -366,7 +367,7 @@ export default function SosScreen({
                         metier: metier.label,
                         problemeKey: probleme.key,
                         probleme: probleme.label,
-                        adresse: lieu.affichage,
+                        adresse: adresseDUrgence(lieu),
                         codePostal: lieu.codePostal,
                         latitude: lieu.latitude,
                         longitude: lieu.longitude,

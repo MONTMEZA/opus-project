@@ -181,6 +181,7 @@ import { centimesLisibles } from '../src/lib/centimes.js';
 import { messageDeContrainte } from '../src/lib/erreurs.js';
 import { DELAI_ECRITURE } from '../src/lib/file-ecriture.js';
 import { initialDemandesRecues } from '../src/data/demo.js';
+import { POURQUOI_LA_FICHE } from '../src/lib/clients.js';
 
 const PORT = process.env.PORT || 8097;
 const PW = '/opt/node22/lib/node_modules/playwright/index.js';
@@ -2688,8 +2689,14 @@ await section('Le régime de TVA : réel → franchise → réel, sans recharger
   noter('les états « en lecture », « échec » et « non déclaré »', 'ne se produisent pas en démonstration (voir l’en-tête)');
 });
 
-let objetDemande = null;
-await section('« Pour moi » : accepter la demande de devis, « Faire un devis »', async () => {
+/* « FAIRE UN DEVIS » CRÉE LA FICHE DU CLIENT (retour de l'iPhone du
+   29/10/2026, décisions du propriétaire) : un appui range le client dans le
+   carnet — son nom, son numéro, sa commune, tels qu'il les a écrits — puis
+   ouvre le devis pour lui. L'objet reste VIDE : le texte de la demande
+   s'affiche au-dessus, il ne s'imprime pas. Et un second « Nouveau devis »
+   ne fait pas de doublon : le même numéro montre la fiche existante. */
+const NOM_DEMANDE = DEMANDE.nom;
+await section('« Pour moi » : accepter la demande de devis, « Faire un devis » crée la fiche', async () => {
   await toucher(page.getByRole('tab', { name: /^Découvrir/ }));
   await attendre(900);
   await toucher(page.getByRole('tab', { name: 'Pour moi' }));
@@ -2698,19 +2705,27 @@ await section('« Pour moi » : accepter la demande de devis, « Faire un devis 
   await toucher(page.getByRole('button', { name: 'Accepter', exact: true }).nth(1));
   await attendre(900);
   await toucher(page.getByRole('button', { name: /^En cours/ }));
-  const faire = parLibelle(`Faire un devis pour la demande de ${DEMANDE.nom}`);
-  verifier('acceptée, la demande montre « Faire un devis »', (await page.getByLabel(`Faire un devis pour la demande de ${DEMANDE.nom}`, { exact: true }).count()) === 1);
+  const faire = parLibelle(`Faire un devis pour la demande de ${NOM_DEMANDE}`);
+  verifier('acceptée, la demande montre « Faire un devis »', (await page.getByLabel(`Faire un devis pour la demande de ${NOM_DEMANDE}`, { exact: true }).count()) === 1);
   await jugerCibles('« Pour moi », la demande acceptée', (c) => /^(Faire un devis|Reprendre|Nouveau devis)/.test(c.libelle));
   await capture('20-pour-moi');
   await toucher(faire);
   await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
   await attendre(600);
   const t = await texte();
-  objetDemande = await parLibelle('Objet du devis').inputValue();
-  verifier(`le brouillon s’ouvre, son objet est la description de la demande (« ${objetDemande} »)`, objetDemande === DEMANDE.titre);
-  verifier('…sans client (« À choisir ») ni lieu', t.includes('À choisir') && (await parLibelle('Ville du lieu des travaux').inputValue()) === '' && (await parLibelle('Code postal du lieu des travaux').inputValue()) === '');
+  verifier(`la fiche est créée, et le bandeau le DIT (« ${NOM_DEMANDE} est dans votre carnet de clients. »)`,
+    t.includes(`${NOM_DEMANDE} est dans votre carnet de clients.`));
+  verifier(`« Pour qui ? » : ${NOM_DEMANDE} · Lambesc — sans le « (13) »`, t.includes(`${NOM_DEMANDE} · Lambesc`) && !t.includes('À choisir'));
+  verifier('l’objet reste VIDE', (await parLibelle('Objet du devis').inputValue()) === '');
+  verifier('…la demande est affichée au-dessus, et le dit : « Ce texte n’apparaît pas sur le devis. »',
+    t.includes('Ce que le client a demandé') && t.includes(DEMANDE.titre) && t.includes('Ce texte n’apparaît pas sur le devis.'));
+  verifier('le lieu reçoit la commune de la demande (Lambesc), sans code postal inventé',
+    (await parLibelle('Ville du lieu des travaux').inputValue()) === 'Lambesc'
+    && (await parLibelle('Code postal du lieu des travaux').inputValue()) === '');
   verifier('…« depuis une demande du … »', /depuis une demande du \d\d\/\d\d\/\d{4}/.test(t));
   verifier('…et le budget écrit par le client', /Budget indiqué par le client : /.test(t));
+  verifier('aucun texte d’exemple ne ressemble à une adresse (« rue des Lilas », « 13350 », « Charleval »)',
+    (await page.locator('input[placeholder*="Lilas"], input[placeholder="13350"], input[placeholder="Charleval"]').count()) === 0);
   await capture('21-depuis-demande');
   /* Le brouillon ne naît qu'au premier geste : l'appui du délai. */
   await toucher(bouton(DELAI_PAR_DEFAUT.texte));
@@ -2719,20 +2734,43 @@ await section('« Pour moi » : accepter la demande de devis, « Faire un devis 
   await attendre(900);
   verifier('le retour ramène à « Pour moi »', !(await dansLaSaisie()) && /À traiter/.test(await texte()));
   /* Relevé : la pastille revient à « À traiter » — l'écran a été démonté. */
-  const surEnCours = (await page.getByLabel(`Faire un devis pour la demande de ${DEMANDE.nom}`, { exact: true }).count()) === 1;
+  const surEnCours = (await page.getByLabel(`Faire un devis pour la demande de ${NOM_DEMANDE}`, { exact: true }).count()) === 1;
   noter('au retour, la pastille de « Pour moi » est restée sur « En cours »', surEnCours ? 'oui' : 'non — revenue à « À traiter »');
   if (!surEnCours) await toucher(page.getByRole('button', { name: /^En cours/ }));
-  await toucher(parLibelle(`Faire un devis pour la demande de ${DEMANDE.nom}`));
+  await toucher(parLibelle(`Faire un devis pour la demande de ${NOM_DEMANDE}`));
   const t2 = await texte();
   verifier('« Faire un devis » de nouveau : « Brouillon en cours » — Reprendre · Nouveau devis',
     /Brouillon en cours, modifié/.test(t2) && (await bouton('Reprendre le brouillon le plus récent pour cette demande').count()) === 1);
   await jugerCibles('« Pour moi », le brouillon en cours', (c) => /^(Reprendre|Nouveau devis)/.test(c.libelle));
   await capture('22-reprendre');
+  /* « NOUVEAU DEVIS » : le même numéro est déjà dans le carnet. On ne crée
+     pas un second Marc Dumont — on montre sa fiche, et on DIT pourquoi. */
+  await toucher(page.getByRole('button', { name: /^Nouveau devis/ }).first());
+  await page.getByText('Pour ce devis', { exact: true }).first().waitFor({ timeout: 8000 });
+  await attendre(500);
+  const t3 = await texte();
+  verifier('« Nouveau devis » : la fiche EXISTANTE s’ouvre, avec sa raison, et « Choisir ce client pour ce devis »',
+    t3.includes(net(POURQUOI_LA_FICHE.existante))
+    && (await page.getByLabel(`Choisir ${NOM_DEMANDE} pour le devis en cours`, { exact: true }).count()) === 1
+    && !t3.includes(`${NOM_DEMANDE} est dans votre carnet de clients.`));
+  await capture('22a-meme-numero');
+  await toucher(parLibelle(`Choisir ${NOM_DEMANDE} pour le devis en cours`));
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(600);
+  verifier('…un appui ouvre le devis pour lui, la demande au-dessus', (await texte()).includes(`${NOM_DEMANDE} · Lambesc`)
+    && (await texte()).includes('Ce que le client a demandé'));
+  /* Aucun geste : ce second brouillon ne naît pas. */
+  await toucher(parLibelle('Revenir en arrière'));
+  await attendre(900);
+  if ((await page.getByLabel(`Faire un devis pour la demande de ${NOM_DEMANDE}`, { exact: true }).count()) === 0) {
+    await toucher(page.getByRole('button', { name: /^En cours/ }));
+  }
+  await toucher(parLibelle(`Faire un devis pour la demande de ${NOM_DEMANDE}`));
   await toucher(bouton('Reprendre le brouillon le plus récent pour cette demande'));
   await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
   await attendre(600);
-  verifier('« Reprendre » ouvre LE MÊME brouillon (son objet, et le délai posé)',
-    (await parLibelle('Objet du devis').inputValue()) === objetDemande
+  verifier('« Reprendre » ouvre LE MÊME brouillon (son client, et le délai posé)',
+    (await texte()).includes(`${NOM_DEMANDE} · Lambesc`)
     && (await parLibelle('Délai d’exécution').inputValue()) === DELAI_PAR_DEFAUT.texte);
 });
 
@@ -2741,6 +2779,8 @@ await section('« Pour qui ? » → « Choisir dans mon carnet »', async () => 
   const recherche = parLibelle('Chercher dans mon carnet');
   await recherche.waitFor({ timeout: 6000 });
   await jugerCibles('La feuille du carnet', (c) => /^(Chercher dans mon carnet|Choisir |Nouveau client)/.test(c.libelle));
+  const tous = await page.locator('[aria-label^="Choisir "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  verifier(`le carnet porte ${NOM_DEMANDE} UNE fois — pas de doublon`, tous.filter((l) => l.startsWith(`Choisir ${NOM_DEMANDE}`)).length === 1, tous.join(' | '));
   await toucher(recherche);
   await taper('mart');
   await attendre(700);
@@ -2753,9 +2793,9 @@ await section('« Pour qui ? » → « Choisir dans mon carnet »', async () => 
   await attendre(900);
   const t = await texte();
   verifier('le client est posé : « Mme Martin · Charleval »', t.includes('Mme Martin · Charleval'));
-  verifier('le lieu vide reçoit SON adresse', (await parLibelle('Ville du lieu des travaux').inputValue()) === 'Charleval'
-    && (await parLibelle('Code postal du lieu des travaux').inputValue()) === '13350');
-  verifier('…et le DIT', t.includes('Adresse du client reprise : modifiez-la si le chantier est ailleurs.'));
+  verifier('le lieu DÉJÀ rempli (Lambesc) n’est PAS remplacé par son adresse — et rien ne le prétend',
+    (await parLibelle('Ville du lieu des travaux').inputValue()) === 'Lambesc'
+    && !t.includes('Adresse du client reprise'));
   await capture('24-client-pose');
   await toucher(parLibelle('Revenir en arrière'));
   await attendre(900);
@@ -2773,7 +2813,18 @@ await section('« Pour moi » : l’urgence acceptée, et le rappel', async () =
   verifier(`le rappel accepté n’a PAS de bouton (${cartes} demandes en cours, ${boutons} « Faire un devis »)`, cartes === 3 && boutons === 2);
   await toucher(faire.first());
   await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
-  verifier('« depuis une urgence du … »', /depuis une urgence du \d\d\/\d\d\/\d{4}/.test(await texte()));
+  await attendre(600);
+  const t = await texte();
+  verifier('« depuis une urgence du … »', /depuis une urgence du \d\d\/\d\d\/\d{4}/.test(t));
+  verifier(`l’urgence crée la fiche de ${URGENCE.nom} et l’ouvre pour elle (« ${URGENCE.nom} · Lambesc »)`,
+    t.includes(`${URGENCE.nom} est dans votre carnet de clients.`) && t.includes(`${URGENCE.nom} · Lambesc`));
+  /* Une COMMUNE choisie dans la liste n'apporte pas son code postal : c'est
+     le plus petit de la commune (Marseille rend 13001), il ne dit rien. */
+  verifier('…le lieu : la commune de l’urgence (Lambesc), et AUCUN code postal deviné d’une commune',
+    (await parLibelle('Ville du lieu des travaux').inputValue()) === 'Lambesc'
+    && (await parLibelle('Code postal du lieu des travaux').inputValue()) === '');
+  verifier('…et le problème ET ce que la personne a écrit, au-dessus, jamais dans l’objet',
+    t.includes(`${URGENCE.titre} — ${URGENCE.detailsEcrits}`) && (await parLibelle('Objet du devis').inputValue()) === '');
   await capture('25-depuis-urgence');
   await toucher(parLibelle('Revenir en arrière'));
   await attendre(900);
@@ -2787,8 +2838,8 @@ await section('La fiche de Mme Martin : « Ses devis », « Faire un devis », c
   await page.getByText('Ses devis', { exact: true }).first().waitFor({ timeout: 6000 });
   await attendre(800);
   const sesDevis = await page.locator('[aria-label^="Ouvrir le devis "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
-  verifier(`« Ses devis » : ${sesDevis.length} — Rénovation salle de bains, et celui de la demande`,
-    sesDevis.includes('Ouvrir le devis Rénovation salle de bains') && sesDevis.includes(`Ouvrir le devis ${objetDemande}`), sesDevis.join(' | '));
+  verifier(`« Ses devis » : ${sesDevis.length} — Rénovation salle de bains, et celui de la demande (sans objet)`,
+    sesDevis.includes('Ouvrir le devis Rénovation salle de bains') && sesDevis.includes('Ouvrir le devis sans objet'), sesDevis.join(' | '));
   const f = await parLibelle('Faire un devis pour Mme Martin').boundingBox();
   verifier(`« Faire un devis » : un bouton de 44 points (${f && Math.round(f.width)} × ${f && Math.round(f.height)})`, !!f && f.height >= TOUCHE - 0.5);
   await capture('26-fiche-martin');
@@ -2912,6 +2963,12 @@ await section('Un devis neuf : « + Poste » sans défiler, et la sixième porte
   const t = await texte();
   verifier('…un appui la pose sur CE devis, et la ligne incomplète est toujours là', (await dansLaSaisie())
     && t.includes('Mme Martin · Charleval') && /Ragréage/.test(t) && /Incomplète/.test(t));
+  /* Le lieu VIDE d'un devis neuf prend l'adresse du client — et le DIT
+     (vérifié ici depuis le 29/10 : un devis venu d'une demande a déjà son
+     lieu, la commune que le client a écrite). */
+  verifier('…le lieu vide reçoit SON adresse', (await parLibelle('Ville du lieu des travaux').inputValue()) === 'Charleval'
+    && (await parLibelle('Code postal du lieu des travaux').inputValue()) === '13350');
+  verifier('…et le DIT', t.includes('Adresse du client reprise : modifiez-la si le chantier est ailleurs.'));
   await toucher(parLibelle('Revenir en arrière'));
   const bande = await jusqua(async () => /n’est pas complète/.test(await texte()), DELAI_ECRITURE + 3000);
   verifier('le retour passe par la garde : la ligne incomplète la retient', !!bande && await dansLaSaisie());

@@ -60,6 +60,32 @@ export function formater(feature) {
 }
 
 /**
+ * CE QUE L'ÉCRAN SOS RANGE COMME ADRESSE — l'adresse COMPLÈTE, commune
+ * comprise (29/10/2026).
+ *
+ * Le champ d'adresse d'une urgence garde la RUE (`ChampVille`, mode
+ * adresse : « 4 Rue des Acacias »), parce que sur une fiche le code postal
+ * et la ville ont leurs propres cases. Mais `sos_requests` n'a PAS de case
+ * pour la commune : ranger la rue seule, c'était envoyer l'artisan au
+ * « 4 Rue des Acacias » sans lui dire de quelle ville — et ne rien pouvoir
+ * reprendre sur la fiche du client. On range donc :
+ *   - pour un numéro, une rue ou un lieu-dit : le libellé ENTIER de la Base
+ *     Adresse (« 4 Rue des Acacias 13350 Charleval ») ;
+ *   - pour une commune : « Charleval (13) » — son code postal est le plus
+ *     petit de la commune, il ne dit rien de plus ;
+ *   - pour un texte tapé sans choisir de suggestion : ce texte, tel quel.
+ * `lieuDepuisUrgence()` (`clients.js`) relit ces trois formes.
+ */
+export function adresseDUrgence(lieu = {}) {
+  const l = lieu || {};
+  if (l.genre === 'municipality' && l.ville) {
+    return `${l.ville} (${String(l.codePostal || '').slice(0, 2)})`.replace(' ()', '');
+  }
+  if (l.genre && l.label) return l.label;
+  return String(l.affichage || '').trim();
+}
+
+/**
  * Les seules valeurs que l'API accepte pour le paramètre `type`.
  * En envoyer une autre lui fait renvoyer une erreur 400, et donc aucune
  * suggestion. Pour chercher une adresse, on n'envoie PAS de type : la
