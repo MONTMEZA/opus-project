@@ -9395,6 +9395,8 @@ l'application :
 > demi-vitesse, le texte glisse dessus), avec un commentaire qui le dit.
 > Mesuré au navigateur : à 400 px de défilement, la bannière occupe encore
 > le haut de l'écran et « Réalisations · Abonnés · Note » passe dessus.
+> **Vérifié sur l'iPhone le 29/10** par le propriétaire : « parfait, c'est
+> revenu comme avant ».
 >
 > **Un effet que le propriétaire a choisi n'est pas un défaut qu'une
 > relecture peut corriger seule.** La lisibilité sur une photo claire était
