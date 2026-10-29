@@ -2602,18 +2602,18 @@ migration : `git pull`, puis `npx expo start -c`. Aucun module natif : rien
 - [x] **les contrôles voient désormais les 56 défauts** qu'un relecteur a
   remis exprès dans le code (21 passaient sans un mot avant).
 
-**À essayer sur votre iPhone** (build de développement, après `git pull` et
-`npx expo start -c`) :
+**À essayer sur votre iPhone** — **fait le 29/10** : « j'ai testé, tout
+fonctionne correctement » (build de développement) :
 
-- [ ] répondre à une demande, puis écrire dans la conversation : la barre de
+- [x] répondre à une demande, puis écrire dans la conversation : la barre de
   saisie doit rester **juste au-dessus du clavier** ;
-- [ ] « Répondre » à une annonce dont l'auteur vous a déjà écrit (la
+- [x] « Répondre » à une annonce dont l'auteur vous a déjà écrit (la
   conversation s'ouvre pendant que le clavier se ferme) : rien ne doit
   sauter ;
-- [ ] « Pour moi » → une demande acceptée → « Faire un devis » : le bandeau
+- [x] « Pour moi » → une demande acceptée → « Faire un devis » : le bandeau
   « … est dans votre carnet de clients », puis le devis, son client, sa
   commune, et la demande affichée au-dessus ;
-- [ ] « Faire un devis » une seconde fois → « Nouveau devis » : la fiche
+- [x] « Faire un devis » une seconde fois → « Nouveau devis » : la fiche
   existante, avec « Choisir ce client pour ce devis ».
 
 **À savoir, et à ne pas oublier** :

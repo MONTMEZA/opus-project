@@ -9388,6 +9388,19 @@ l'application :
 > et la bande de chantier reste au bord du cadre, sous la photo de profil.
 > Mesuré au navigateur à 0, 120 et 240 px. **Pas vérifié sur l'iPhone.**
 
+> **ANNULÉ le 29/10/2026, à la demande du propriétaire** : « on avait les
+> textes qui passaient en transparence sur la bannière […] je veux remettre
+> comme c'était, je trouvais ça très bien ». `EnteteProfilImmersif.js` est
+> revenu au code d'avant le 26/10 (la bannière ENTIÈRE descend à
+> demi-vitesse, le texte glisse dessus), avec un commentaire qui le dit.
+> Mesuré au navigateur : à 400 px de défilement, la bannière occupe encore
+> le haut de l'écran et « Réalisations · Abonnés · Note » passe dessus.
+>
+> **Un effet que le propriétaire a choisi n'est pas un défaut qu'une
+> relecture peut corriger seule.** La lisibilité sur une photo claire était
+> un vrai constat ; le trancher était à lui. La prochaine fois : le lui
+> montrer et lui demander, avant de changer ce qu'il voit.
+
 Et ceux de l'OUTIL, qui sont la vraie leçon :
 
 - **la garde floutait une adresse inventée** (« 4 rue des Lilas ») dans le
@@ -10152,10 +10165,14 @@ Brest (supprimés ensuite) :
 | une urgence à l'ANCIENNE forme | la fiche s'ouvre avec sa phrase, **rien de créé** ; complétée, elle ouvre le devis |
 | le particulier lit le carnet de l'artisan | `[]` |
 
-**Ce qui n'a PAS été vérifié** : le clavier sur l'iPhone (la barre de saisie
-juste au-dessus du clavier, et l'arrivée dans une conversation clavier
-ouvert) ; le délai dépassé et la relecture par l'identifiant (tenus par
-`verifier-clients` seulement) ; la création au doigt sur l'iPhone.
+**ESSAYÉ SUR L'IPHONE le 29/10/2026**, par le propriétaire, dans le build
+de développement : « j'ai testé, tout fonctionne correctement » — le
+clavier en répondant à une demande, « Faire un devis » et « Nouveau
+devis ». Sans détailler point par point.
+
+**Ce qui n'a PAS été vérifié** : le délai dépassé et la relecture par
+l'identifiant (tenus par `verifier-clients` seulement, jamais sur un vrai
+réseau coupé).
 
 #### La relecture des CONTRÔLES — 45 défauts remis exprès, 21 passaient
 

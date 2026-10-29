@@ -53,52 +53,41 @@ export default function EnteteProfilImmersif({
      `defilement` est une valeur partagée qui vit sur le fil natif : rien
      ne remonte en JavaScript à chaque pixel. Sans ça, descendre une fiche
      redessinerait tout l'écran soixante fois par seconde. */
-  /* LA PHOTO GLISSE DANS SON CADRE, elle n'en sort pas — 26/10/2026.
-     Jusque-là c'était la bannière ENTIÈRE qui descendait à demi-vitesse :
-     elle débordait alors sous ce qui la suit, et comme ni le nom ni les
-     chiffres n'ont de fond, on lisait « Réalisations · Abonnés · Note »
-     par-dessus la photo de chantier, à moitié effacés (relevé sur les
-     vidéos de la publicité, la fiche arrêtée à 2 s de défilement).
-     Désormais le CADRE défile normalement et coupe ce qui dépasse
-     (`overflow: 'hidden'`) ; c'est la PHOTO, dedans, qui descend à
-     demi-vitesse. À l'écran, elle est exactement à la même place qu'avant
-     — seule la partie qui débordait est cachée. Le geste de tirer vers le
-     bas, lui, agrandit toujours le cadre entier : il n'y a rien dessous à
-     recouvrir. */
-  const styleCadre = useAnimatedStyle(() => {
+  /* LE TEXTE PASSE SUR LA BANNIÈRE, et c'est VOULU — décidé par le
+     propriétaire le 29/10/2026 : « je trouvais ça très bien ».
+     C'est la bannière ENTIÈRE qui descend à demi-vitesse : elle passe donc
+     sous ce qui la suit, et le nom, les chiffres et la présentation
+     glissent par-dessus la photo en défilant.
+     Le 26/10, une relecture des vidéos de la publicité l'avait jugé
+     illisible (« Réalisations · Abonnés · Note » à moitié effacés sur une
+     photo de chantier claire), et la photo avait été enfermée dans un
+     cadre qui coupait ce qui dépassait. Le propriétaire a préféré l'effet
+     d'origine : ne pas le « corriger » de nouveau sans le lui demander. */
+  const styleBanniere = useAnimatedStyle(() => {
     if (!defilement || sansMouvement) return {};
     const y = defilement.value;
     return {
       transform: [
-        { translateY: y < 0 ? y : 0 },
+        { translateY: y > 0 ? y * 0.5 : y },
         { scale: y < 0 ? 1 + (-y / hauteur) : 1 },
       ],
     };
   }, [defilement, sansMouvement, hauteur]);
-  const stylePhoto = useAnimatedStyle(() => {
-    if (!defilement || sansMouvement) return {};
-    const y = defilement.value;
-    return { transform: [{ translateY: y > 0 ? y * 0.5 : 0 }] };
-  }, [defilement, sansMouvement]);
 
   return (
     <View>
-      <Animated.View style={[{ height: hauteur, overflow: 'hidden' }, styleCadre]}>
-        <Animated.View style={stylePhoto}>
-          <ProfileBanner uri={bannerUrl} height={hauteur}>
-            {/* Voile progressif : la photo reste visible en haut, l'anneau clair
-                de la photo de profil se détache en bas, même sur une image claire. */}
-            <LinearGradient
-              colors={['rgba(26,27,25,0.10)', 'rgba(26,27,25,0.22)', 'rgba(26,27,25,0.55)']}
-              locations={[0, 0.5, 1]}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-          </ProfileBanner>
-        </Animated.View>
-        {/* La bande de chantier reste au BORD du cadre : c'est sur elle que
-            la photo de profil est posée, elle doit donc défiler avec elle. */}
+      <Animated.View style={styleBanniere}>
+      <ProfileBanner uri={bannerUrl} height={hauteur}>
+        {/* Voile progressif : la photo reste visible en haut, l'anneau clair
+            de la photo de profil se détache en bas, même sur une image claire. */}
+        <LinearGradient
+          colors={['rgba(26,27,25,0.10)', 'rgba(26,27,25,0.22)', 'rgba(26,27,25,0.55)']}
+          locations={[0, 0.5, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <View style={s.bande}><HazardStrip height={5} /></View>
+      </ProfileBanner>
       </Animated.View>
 
       <View style={s.zonePhoto}>
