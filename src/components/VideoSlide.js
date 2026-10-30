@@ -181,6 +181,10 @@ export default function VideoSlide({
             <MapPin size={12} color="#fff" />
             <Text style={s.locText}>{pro.ville}</Text>
           </View>
+          {/* « Remise en avant » — la même mention que dans le fil classique
+              (décision du 29/10/2026) : la vidéo garde sa date, et dit
+              pourquoi elle est là. */}
+          {!!post.remonteLe && <Text style={s.remise}>Remise en avant</Text>}
           <Text style={s.feedText}>{post.texte}</Text>
           {/* La rangée entière disparaît sur sa propre vidéo : vide, elle
               laisserait sa marge du haut sous le texte, pour rien. */}
@@ -276,5 +280,6 @@ const s = StyleSheet.create({
   loc: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
   locText: { fontSize: T.petit, color: '#fff', opacity: 0.85, fontFamily: F.inter },
   feedText: { fontSize: T.corps, color: '#fff', marginTop: 8, lineHeight: 18, maxWidth: 250, fontFamily: F.inter },
+  remise: { fontSize: T.micro, color: '#fff', marginTop: 8, fontFamily: F.inter6 },
   btnRow: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center' },
 });

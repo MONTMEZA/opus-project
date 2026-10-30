@@ -39,27 +39,83 @@
  * et une passent sans rien changer à la base. Un vrai curseur composé
  * (heure + identifiant) demanderait un paramètre de plus, donc une seconde
  * signature de la fonction — ce que la section 34 interdit.
+ *
+ * LA CLÉ DE TRI N'EST PLUS LA DATE DE PUBLICATION — lot S-c, 30/10/2026
+ * --------------------------------------------------------------------
+ * Une publication REMISE EN AVANT se range à la date de sa remise en avant
+ * (`remonte_le`), sans que sa date de publication (`created_at`) bouge :
+ * `fil_filtre()` ordonne par `coalesce(remonte_le, created_at)`. Le curseur
+ * et l'égalité se lisent donc sur CETTE clé, `cleDeTri()`. Lue sur
+ * `created_at`, une remise en avant qui fermait une page faisait redemander
+ * « plus ancien que sa date de PUBLICATION » — d'il y a trois semaines :
+ * toutes les publications entre les deux disparaissaient (mesuré : 20 sur
+ * 40). Et une égalité lue sur `created_at` coupait une page au mauvais
+ * endroit.
+ *
+ * `decouperPage` reçoit la clé en paramètre : « Mes publications » se trie,
+ * elle, par date de PUBLICATION (`created_at`), et lui passe la sienne.
  */
+
+/**
+ * La clé de tri d'une ligne de `posts` — la même que l'ordre de
+ * `fil_filtre()`. Rend la CHAÎNE telle que la base l'a écrite, jamais
+ * repassée par `new Date` : c'est elle qui repart comme `p_avant`, et un
+ * aller-retour par l'heure du téléphone pourrait la décaler.
+ */
+export function cleDeTri(ligne) {
+  if (!ligne) return null;
+  return ligne.remonte_le || ligne.created_at || null;
+}
+
+/**
+ * La même question pour la DÉMONSTRATION, dont les publications sont écrites
+ * en camelCase (`remonteLe`, `publieLe`) : `cleDeTri` y rendrait `null`
+ * partout, et un tri sur des clés nulles garde l'ordre du FICHIER, sans un
+ * mot (mesuré, critique du 29/10).
+ */
+export function cleDemo(p) {
+  if (!p) return '';
+  return p.remonteLe || p.publieLe || '';
+}
+
+/**
+ * Le fil de démonstration, dans l'ordre de `fil_filtre()` : la clé de tri
+ * d'abord, la plus récente en tête ; puis l'identifiant, en chaîne — ils
+ * mêlent des nombres et `'ad1'`. Une seule fonction pour les deux portes
+ * (premier chargement, page suivante) : deux tris finiraient par diverger.
+ * Ne modifie pas la liste reçue.
+ */
+export function trierDemo(liste) {
+  return (Array.isArray(liste) ? liste.slice() : []).sort((a, b) => {
+    const ka = cleDemo(a);
+    const kb = cleDemo(b);
+    if (ka !== kb) return ka < kb ? 1 : -1;
+    const ia = String(a && a.id);
+    const ib = String(b && b.id);
+    if (ia === ib) return 0;
+    return ia < ib ? 1 : -1;
+  });
+}
 
 /**
  * Coupe ce que la base a rendu — `taille + 1` lignes demandées — en une page
  * de `taille` au plus, et dit si c'était la dernière.
  *
- * Si la ligne de trop est à égalité d'heure avec la dernière gardée, on
+ * Si la ligne de trop est à égalité de CLÉ avec la dernière gardée, on
  * retire de la page tout ce groupe à égalité : la page suivante, qui demande
  * « plus ancien que la dernière GARDÉE », le reprendra en entier. Si la page
  * entière est à la même heure, on la garde telle quelle — c'est le seul cas
  * où une ligne peut encore manquer, et il demanderait vingt publications à la
  * même microseconde.
  */
-export function decouperPage(lignes, taille) {
+export function decouperPage(lignes, taille, cle = cleDeTri) {
   const recues = Array.isArray(lignes) ? lignes : [];
   if (recues.length <= taille) return { lignes: recues, fin: true };
 
   let page = recues.slice(0, taille);
-  const limite = recues[taille] && recues[taille].created_at;
-  if (limite != null && page[page.length - 1].created_at === limite) {
-    const avant = page.filter((l) => l.created_at !== limite);
+  const limite = cle(recues[taille]);
+  if (limite != null && cle(page[page.length - 1]) === limite) {
+    const avant = page.filter((l) => cle(l) !== limite);
     if (avant.length > 0) page = avant;
   }
   return { lignes: page, fin: false };

@@ -354,6 +354,22 @@ alter table public.posts add column if not exists musique text;
 -- --------------------------------------------------------------------------
 alter table public.posts add column if not exists montage_url text;
 
+-- --------------------------------------------------------------------------
+--  La remise en avant (lot S-c, 30/10/2026). La date à laquelle l'auteur a
+--  remis sa publication parmi les plus récentes du fil ; vide tant qu'il ne
+--  l'a pas fait. Écrite par `remonter_publication()` SEULE (section 52) :
+--  vidée à la création par le client, remise en modification par
+--  `tient_le_texte()`.
+--
+--  Elle naît ICI, avec sa table, et pas dans la section 52 : `fil_filtre()`
+--  (section 33) la nomme, et une fonction SQL est contrôlée à sa création.
+--
+--  `created_at` NE BOUGE JAMAIS : c'est la date de publication, que la
+--  carte affiche, que le récit d'un chantier raconte, et que
+--  `recalcule_chantier()` lit.
+-- --------------------------------------------------------------------------
+alter table public.posts add column if not exists remonte_le timestamptz;
+
 create index if not exists idx_posts_created on public.posts (created_at desc);
 
 -- --------------------------------------------------------------------------
@@ -1612,6 +1628,62 @@ comment on function public.coord_ou_null(text, double precision) is
 grant execute on function public.coord_ou_null(text, double precision)
   to anon, authenticated;
 
+-- --------------------------------------------------------------------------
+--  La VERSION des conditions acceptées, lue comme une coordonnée (lot S-c,
+--  30/10/2026).
+--
+--  Elle vient du TÉLÉPHONE : de `signUp(options.data)` à l'inscription, de
+--  l'appel de `devenir_pro()` ensuite. La base posait déjà la DATE de
+--  l'acceptation ; la version, elle, était rangée telle quelle — mesuré :
+--  une inscription avec « version-inventee-2099 » la gardait.
+--
+--  On ne garde qu'une version qui a la forme de `VERSION` dans
+--  `src/data/legal.js` (AAAA-MM-JJ), qui est une vraie date, ni antérieure
+--  aux premiers textes d'Opus (09/2026) ni plus tard que demain (un
+--  téléphone en France passe minuit avant le serveur). Sinon `null` —
+--  jamais une erreur : faire échouer une inscription pour une métadonnée
+--  malformée serait pire que le défaut (la leçon de `coord_ou_null`,
+--  section 31).
+--
+--  CE QUE ÇA NE FERME PAS, et c'est dit : la base ne connaît pas la
+--  version COURANTE des textes. Un client modifié peut toujours écrire une
+--  date plausible qu'il n'a pas lue. Le jour où il faudra le fermer, la
+--  version courante vivra dans la base, et la ré-acceptation passera par
+--  une fonction (docs/A-FAIRE.md).
+--
+--  Des classes `[0-9]`, et aucune barre oblique inverse : le connecteur et
+--  `standard_conforming_strings` en ont déjà changé une (lot P).
+-- --------------------------------------------------------------------------
+create or replace function public.version_cgu_ou_null(brut text)
+returns text
+language plpgsql
+stable
+security invoker
+set search_path = public
+as $$
+declare
+  v text := nullif(btrim(coalesce(brut, '')), '');
+  d date;
+begin
+  if v is null or v !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
+    return null;
+  end if;
+  begin
+    d := v::date;
+  exception when others then
+    return null;
+  end;
+  if d < date '2026-09-01' or d > current_date + 1 then
+    return null;
+  end if;
+  return v;
+end;
+$$;
+
+comment on function public.version_cgu_ou_null(text) is
+  'Lit la version des conditions envoyée par le client. Rend null — jamais '
+  'une erreur — si ce n''est pas une date AAAA-MM-JJ plausible. Lot S-c.';
+
 
 -- ==========================================================================
 --  13. CRÉATION AUTOMATIQUE DES FICHES, À L'INSCRIPTION
@@ -1656,7 +1728,7 @@ declare
 begin
   meta    := coalesce(new.raw_user_meta_data, '{}'::jsonb);
   le_type := coalesce(meta ->> 'type', 'particulier');
-  la_cgu  := nullif(btrim(coalesce(meta ->> 'cgu', '')), '');
+  la_cgu  := public.version_cgu_ou_null(meta ->> 'cgu');
 
   -- 0. UN COMPTE PRO EXIGE UNE ENTREPRISE ACTIVE, CONSTATÉE PAR LA BASE
   --    (section 45.6), et c'est vérifié AVANT toute écriture.
@@ -3766,10 +3838,16 @@ security invoker
 set search_path = public
 as $$
 begin
+  /* `current_user` (lot S-c, 30/10/2026, règle R-A) : ce verrou vise le
+     CLIENT. `remonter_publication()` (section 52) est `security definer`
+     et appelée par l'auteur lui-même : sans cette condition, `auth.uid()
+     = new.author_id` et `pg_trigger_depth() = 1` y sont vrais, et la
+     remise en avant était remise à vide aussitôt écrite (mesuré). */
   if tg_op = 'UPDATE'
      and auth.uid() is not null
      and auth.uid() = new.author_id
      and pg_trigger_depth() = 1
+     and current_user in ('authenticated', 'anon')
   then
     /* TOUT revient à l'ancienne valeur, sauf le texte — et sauf
        `chantier_id`, ajouté le 06/10/2026 avec la section 36.
@@ -7161,9 +7239,18 @@ update public.posts p
 --  bloquées — et personne ne s'en apercevrait, puisqu'elle rendrait des
 --  publications parfaitement normales.
 --
+--  L'ORDRE (lot S-c, 30/10/2026) : la date de remise en avant si l'auteur
+--  en a fait une, sinon la date de publication — `coalesce(remonte_le,
+--  created_at)`. Rien d'autre : ni les « j'aime », ni les vues, ni les
+--  abonnés, ni la note. Les CGU le disent (« L'ordre du fil ») ; changer
+--  cet ordre est un changement des conditions. La SIGNATURE ne bouge pas :
+--  une fonction appelée par l'application ne change jamais de signature
+--  (section 34).
+--
 --  TOUT FILTRE RETIRE LES PUBLICITÉS, et c'est voulu.
---  Une publicité n'a ni auteur, ni métier, ni lieu, ni badge : elle ne
---  peut satisfaire aucun critère. Demander « les maçons vérifiés à 20 km »
+--  Une publicité n'a ni auteur, ni badge, et le filtre métier et le filtre
+--  de distance l'écartent explicitement (lot S-c) : elle ne peut
+--  satisfaire aucun critère. Demander « les maçons vérifiés à 20 km »
 --  et recevoir une publicité serait exactement ce qui fait perdre
 --  confiance dans un fil. Elle revient dès qu'on enlève le filtre.
 --
@@ -7190,7 +7277,9 @@ language sql stable security invoker set search_path = public as $$
   select p.*
     from public.posts p
     left join public.professional_profiles pp on pp.id = p.author_id
-   where (p_avant is null or p.created_at < p_avant)
+   where (p_avant is null
+          or p.remonte_le < p_avant
+          or (p.remonte_le is null and p.created_at < p_avant))
 
      -- Le fil « Vidéos » ne retient que ce qui se regarde en plein écran.
      -- Une publicité n'en est pas une, même quand elle porte une vidéo.
@@ -7205,7 +7294,11 @@ language sql stable security invoker set search_path = public as $$
                       where f.follower_id = auth.uid()
                         and f.following_id = p.author_id))
 
-     and (p_metier is null or p.metier = p_metier)
+     -- `not p.is_ad` (lot S-c) : une publicité créée par l'éditeur SQL PEUT
+     -- porter un métier ou des coordonnées — rien ne l'interdit —, et elle
+     -- passait alors ces deux filtres (mesuré : 1 ligne). La note et le
+     -- badge, eux, l'écartent par la jointure sur la fiche, qui est vide.
+     and (p_metier is null or (not p.is_ad and p.metier = p_metier))
      and (not p_verifies or coalesce(pp.verifie, false))
 
      -- `avis_count > 0` : sans avis, il n'y a pas de note — et pas de note
@@ -7217,12 +7310,20 @@ language sql stable security invoker set search_path = public as $$
      -- « Pas de coordonnées » veut dire « on ne sait pas où » : prétendre
      -- que c'est à 10 km serait inventer. Même règle que les annonces.
      and (p_rayon_km is null or p_lat is null or p_lon is null
-          or (p.latitude is not null and p.longitude is not null
+          or (not p.is_ad and p.latitude is not null and p.longitude is not null
               and public.distance_km(p_lat, p_lon, p.latitude, p.longitude) <= p_rayon_km))
 
-   order by p.created_at desc, p.id desc
+   order by coalesce(p.remonte_le, p.created_at) desc, p.id desc
    limit least(coalesce(p_limite, 20), 50)
 $$;
+
+-- L'index que lit `fil_filtre()` depuis la remise en avant (lot S-c). Le
+-- curseur s'écrit SANS `coalesce` : écrit avec, il n'est pas « leakproof »,
+-- PostgreSQL appelle alors la politique — donc `est_masque()` — sur chaque
+-- ligne qu'il saute, et le coût monte avec le rang (mesuré : 50 022 appels
+-- au rang 50 000, contre 21 sans `coalesce`, 35-42 ms comme avant).
+create index if not exists idx_posts_fil_remonte
+  on public.posts ((coalesce(remonte_le, created_at)) desc, id desc);
 
 comment on function public.fil_filtre(
   text, double precision, double precision, int, numeric, boolean, boolean,
@@ -9006,6 +9107,16 @@ begin
   end if;
 
   new.modifie_le := clock_timestamp();
+
+  /* La DATE DE CRÉATION appartient à la base, elle aussi (lot S-c,
+     30/10/2026) : posée à l'insertion, gardée en modification. Le carnet
+     se trie par elle ; une fiche datée 2099 restait en tête pour toujours.
+     Pour tous les rôles, comme `modifie_le` : rien ne doit la choisir. */
+  if tg_op = 'INSERT' then
+    new.created_at := clock_timestamp();
+  else
+    new.created_at := old.created_at;
+  end if;
   return new;
 end;
 $$;
@@ -9017,8 +9128,8 @@ create or replace trigger trg_tient_le_client
 comment on function public.tient_le_client() is
   'Nettoie une fiche client avant écriture : les blancs deviennent null, '
   'l''e-mail passe en minuscules, le SIRET ne garde que ses chiffres et '
-  'disparaît si le client est un particulier. Pose `modifie_le` avec '
-  'clock_timestamp(). Section 41.3.';
+  'disparaît si le client est un particulier. Pose `modifie_le` et '
+  '`created_at` avec clock_timestamp(). Section 41.3 (et lot S-c).';
 
 -- ==========================================================================
 --  44. ÊTRE UN PROFESSIONNEL NE SE DÉCIDE PAS SOI-MÊME (15/10/2026)
@@ -10191,7 +10302,7 @@ as $$
 declare
   moi          uuid := auth.uid();
   le_siret     text := regexp_replace(coalesce(p ->> 'siret', ''), '\D', '', 'g');
-  la_cgu       text := nullif(btrim(coalesce(p ->> 'cgu_version', '')), '');
+  la_cgu       text := public.version_cgu_ou_null(p ->> 'cgu_version');
   mon_email    text;
   le_compte    record;
   la_preuve    record;
@@ -14546,6 +14657,640 @@ create unique index if not exists idx_base_postes_rapprochement
 create index if not exists idx_base_postes_devis
   on public.base_postes (devis_origine_id) where devis_origine_id is not null;
 
+-- ==========================================================================
+--  52. LES COMPTEURS ET LES DATES — tenus par la base, et la remise en avant
+--      (lot S-c, 30/10/2026)
+--
+--  Numérotée 52 et posée ICI, avant les sections 42 (l'export RGPD) et 43
+--  (le balayage des portes), qui doivent rester les deux derniers blocs du
+--  fichier.
+--
+--  CE QUI ÉTAIT OUVERT, mesuré le 29/10 sur une base rejouée
+--  --------------------------------------------------------
+--  Le client choisissait, À LA CRÉATION, la date et les compteurs de ce
+--  qu'il écrivait. `tient_le_texte()` (section 20) ne regardait que la
+--  MODIFICATION. Par gravité :
+--
+--    - un commentaire inséré daté 2099 restait modifiable après qu'on lui
+--      avait répondu : `a_deja_une_reponse()` compare des dates, et le
+--      verrou OP001 (« figé pour toujours », section 20.1 bis) se
+--      contournait ;
+--    - une publication datée 2099 tenait la tête du fil POUR TOUJOURS, et
+--      s'affichait « À l'instant » à jamais ;
+--    - une publication naissait avec 9 999 « j'aime », ou en fausse
+--      publicité (`is_ad`, un annonceur choisi) — elle entrait alors dans
+--      l'onglet « Abonnements » de tout le monde ;
+--    - le titulaire d'une fiche d'artisan récrivait son nombre d'avis, ses
+--      trois notes, ses abonnés et sa date d'inscription — la note forgée
+--      ouvrait le filtre « note ≥ 4,5 » du fil ;
+--    - un avis se déplaçait d'un artisan à l'autre, se datait, se marquait
+--      « Compte supprimé » sous un auteur bien présent ;
+--    - le titulaire d'un compte récrivait sa trace des CGU et son e-mail ;
+--    - les files de l'administration se doublaient par une date antidatée,
+--      et un signalement naissait « traité, rien à signaler ».
+--
+--  LES RÈGLES QUI TIENNENT TOUTE LA SECTION
+--  ---------------------------------------
+--  R-A — une écriture du CLIENT se reconnaît à `current_user in
+--  ('authenticated', 'anon')`, dans une fonction `security invoker`.
+--  JAMAIS `auth.uid()` seul : dans `devenir_pro()` (security definer,
+--  appelée par le client), `auth.uid()` est le titulaire et
+--  `pg_trigger_depth()` vaut 1 — mesuré. Les fonctions de la base (les
+--  compteurs, `recalcule_chantier()`, l'anonymisation d'un compte qui
+--  part, l'administration) écrivent donc sans être remises à zéro.
+--
+--  `clock_timestamp()`, jamais `now()` : deux lignes d'une même
+--  transaction reçoivent sinon la même date (mesuré sur deux messages).
+--
+--  Le propriétaire d'une colonne est celui d'un COUPLE (colonne, verbe) :
+--  `posts.modifie_le` est vidé à la création ici, et posé à la
+--  modification par `tient_le_texte()`. `verifier-portes` tient la liste.
+--
+--  Remise SILENCIEUSE, sauf pour le compte (OP023) : aucune version de
+--  l'application n'envoie ces colonnes (relevé de toutes ses écritures).
+--  Seul un client modifié les envoie, et il n'a pas à être renseigné.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  52.1  La date d'une ligne — `pose_la_date()`
+--
+--  À l'insertion par le client : l'horloge de la base. En modification par
+--  le client : l'ancienne valeur. Les fonctions de la base passent (R-A).
+--
+--  UN DÉCLENCHEUR PAR TABLE, `trg_pose_la_date_<table>`. Sous un seul nom
+--  posé sur quinze tables, un `drop trigger` glissé plus bas pour UNE table
+--  passait `verifier-moderation`, qui range les déclencheurs par nom
+--  (mesuré, relecture du 29/10). Le préfixe commun garde la place de ce
+--  déclencheur dans l'ordre alphabétique de chaque table — celui dans
+--  lequel PostgreSQL les appelle.
+--
+--  INSERT SEULEMENT là où un refus tient déjà la date en modification :
+--  les trois demandes reçues (OP019, section 24.4) et les deux tables de
+--  réponses (OP021, section 30.3). En modification, `trg_pose_la_date_*`
+--  passerait AVANT `trg_tient_la_demande_*` (ordre des noms) et rendrait
+--  le refus silencieux — mesuré. Et sur `posts` et `comments`, la
+--  modification est tenue par `tient_le_texte()` ; sur `reviews`, par le
+--  droit de table (52.7) ; `messages` et `post_vues` ne se modifient pas.
+--
+--  Sur `professional_profiles`, la branche INSERT ne sert qu'à la base :
+--  `trg_exige_un_compte_pro` (OP010) refuse avant elle toute fiche écrite
+--  par un client.
+--
+--  CE QUI N'EST PAS ICI, et pourquoi (le contrôle refuse une table ni
+--  posée ni exclue) :
+--    - `devis`, `devis_lignes`, `base_postes`, `emetteur`,
+--      `emetteur_assurances`, `tarifs_pro`, `clients` : leur déclencheur
+--      pose déjà la date, pour tous les rôles ;
+--    - `professional_partners` : `tient_le_partenariat()` la pose, et le
+--      droit de colonne est fermé (lot S-b) ;
+--    - `demandes_pro`, `entreprise_registre`, `journal_admin`,
+--      `journal_ia`, `remontees` : droit de colonne fermé, ou aucune
+--      écriture du client ;
+--    - `signalements`, `metier_demandes`, `specialites_proposees` : fermées
+--      par droits de colonne à l'insertion (52.2) ;
+--    - `notifications`, `blocages`, `saved_posts` : la sienne seulement,
+--      lue par soi seul — elle ne trompe que soi ;
+--    - `follows`, `post_likes` : la date n'est lue nulle part ;
+--    - `conversations` : la liste se trie par le dernier message ;
+--    - `sos_availability.updated_at` : aucun lecteur.
+--  Ces raisons tombent le jour où l'une de ces dates est montrée à
+--  quelqu'un d'autre.
+-- --------------------------------------------------------------------------
+create or replace function public.pose_la_date()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.created_at := clock_timestamp();
+    else
+      new.created_at := old.created_at;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+comment on function public.pose_la_date() is
+  'La date de création d''une ligne écrite par le client : l''horloge de la '
+  'base à l''insertion, l''ancienne valeur en modification. Section 52.1.';
+
+-- INSERT seulement
+create or replace trigger trg_pose_la_date_posts
+  before insert on public.posts
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_comments
+  before insert on public.comments
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_quote_requests
+  before insert on public.quote_requests
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_callback_requests
+  before insert on public.callback_requests
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_sos_requests
+  before insert on public.sos_requests
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_demande_reponses
+  before insert on public.demande_reponses
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_annonce_reponses
+  before insert on public.annonce_reponses
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_messages
+  before insert on public.messages
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_post_vues
+  before insert on public.post_vues
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_reviews
+  before insert on public.reviews
+  for each row execute function public.pose_la_date();
+
+-- INSERT OR UPDATE
+create or replace trigger trg_pose_la_date_annonces_pro
+  before insert or update on public.annonces_pro
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_demandes
+  before insert or update on public.demandes
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_chantiers
+  before insert or update on public.chantiers
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_professional_profiles
+  before insert or update on public.professional_profiles
+  for each row execute function public.pose_la_date();
+create or replace trigger trg_pose_la_date_users
+  before insert or update on public.users
+  for each row execute function public.pose_la_date();
+
+-- --------------------------------------------------------------------------
+--  52.2  Les files de l'administration — par DROITS DE COLONNE
+--
+--  Le motif de `demandes_pro` (section 45) : le client n'insère que les
+--  colonnes que l'application envoie (relevées dans `api.js`). Cela ferme
+--  d'un coup `created_at`, `traite_at` / `traite_le`, `traite_par`,
+--  `note` — un signalement né « traité par l'administrateur, rien à
+--  signaler » — et le `statut` d'une demande de métiers ou d'une
+--  spécialité née « acceptée ». `signalements.statut` reste ouvert :
+--  l'application l'envoie, et la politique d'écriture le tient à
+--  « nouveau ».
+--
+--  Un droit de table, parce qu'une politique RLS filtre des LIGNES,
+--  jamais des COLONNES (section 18). `revoke insert` de table d'abord :
+--  un droit de colonne ne retire rien tant que le droit de table existe.
+-- --------------------------------------------------------------------------
+revoke insert on public.signalements from anon, authenticated;
+grant insert (auteur_id, cible_type, cible_id, cible_auteur_id, extrait, motif, details, statut)
+  on public.signalements to authenticated;
+
+revoke insert on public.metier_demandes from anon, authenticated;
+grant insert (professional_id, metiers_actuels, metiers_voulus, motif)
+  on public.metier_demandes to authenticated;
+
+revoke insert on public.specialites_proposees from anon, authenticated;
+grant insert (texte, metier, propose_par)
+  on public.specialites_proposees to authenticated;
+
+-- --------------------------------------------------------------------------
+--  52.3  La réputation d'une fiche — `tient_la_reputation()`
+--
+--  Nombre d'avis, trois notes, abonnés : `recalcule_notes_pro()` et
+--  `maj_followers_count()` (security definer) les écrivent ; le titulaire,
+--  jamais. Un déclencheur À PART de `tient_le_profil_pro()`, pour que la
+--  règle du badge (`supabase/cas-badge.json`) ne bouge pas.
+--
+--  `demandes_vues_le` : quand le téléphone la change, la base pose SON
+--  heure à la place. Un téléphone en avance éteignait le « Nouveau » de
+--  toutes les demandes des vingt-quatre heures suivantes. On REMPLACE, on
+--  ne refuse pas : c'est le geste « j'ai ouvert l'onglet », et il est
+--  légitime.
+--
+--  CE QUE ÇA NE RÉPARE PAS : les cinq fiches du jeu de démonstration de la
+--  vraie base gardent leurs abonnés gonflés (décision du propriétaire du
+--  29/10 : on n'y touche pas avant l'ouverture). Rien ne peut plus en
+--  forger de nouveaux.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_la_reputation()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.avis_count      := 0;
+      new.note_delais     := 0;
+      new.note_qualite    := 0;
+      new.note_tarif      := 0;
+      new.followers_count := 0;
+    else
+      new.avis_count      := old.avis_count;
+      new.note_delais     := old.note_delais;
+      new.note_qualite    := old.note_qualite;
+      new.note_tarif      := old.note_tarif;
+      new.followers_count := old.followers_count;
+      if new.demandes_vues_le is distinct from old.demandes_vues_le then
+        new.demandes_vues_le := clock_timestamp();
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_la_reputation
+  before insert or update on public.professional_profiles
+  for each row execute function public.tient_la_reputation();
+
+-- --------------------------------------------------------------------------
+--  52.4  Une publication NAÎT sans rien — `tient_la_publication_neuve()`
+--
+--  Ses compteurs à zéro, pas de date de modification ni de remise en
+--  avant, et JAMAIS une publicité : une publicité n'a pas d'auteur, et ne
+--  naît que de l'éditeur SQL ou d'une fonction de la base.
+--
+--  La contrainte qui va avec est AJOUTÉE, sans retirer l'ancienne : elle
+--  dit « une publicité n'a pas d'auteur » ; l'ancienne
+--  (`post_a_un_auteur_ou_est_une_pub`) dit « une publication a un auteur ».
+--  Ensemble, elles valent la règle entière. Ajouter évite tout ordre qui
+--  commence par `drop`, que le connecteur Supabase refuse — et son nom
+--  finit par `_check`, que `erreurs.js` sait lire. Relevé sur la vraie
+--  base avant de la poser : 2 publicités, 0 avec un auteur.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_la_publication_neuve()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    new.likes_count    := 0;
+    new.comments_count := 0;
+    new.vues_count     := 0;
+    new.is_ad          := false;
+    new.annonceur      := null;
+    new.accroche       := null;
+    new.cta            := null;
+    new.modifie_le     := null;
+    new.remonte_le     := null;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_la_publication_neuve
+  before insert on public.posts
+  for each row execute function public.tient_la_publication_neuve();
+
+do $c$
+begin
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.posts'::regclass
+                    and conname = 'post_publicite_sans_auteur_check') then
+    alter table public.posts add constraint post_publicite_sans_auteur_check
+      check (not is_ad or author_id is null);
+  end if;
+end
+$c$;
+
+-- --------------------------------------------------------------------------
+--  52.5  Un commentaire NAÎT sans rien — `tient_le_commentaire_neuf()`
+--
+--  `limite_profondeur_commentaire()` (forme gelée par le lot S-b) n'est
+--  pas touchée : ce déclencheur vit à côté.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_commentaire_neuf()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    new.modifie_le      := null;
+    new.auteur_supprime := false;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_commentaire_neuf
+  before insert on public.comments
+  for each row execute function public.tient_le_commentaire_neuf();
+
+-- --------------------------------------------------------------------------
+--  52.6  Les compteurs d'un chantier — `tient_les_compteurs_du_chantier()`
+--
+--  `recalcule_chantier()` (security definer, section 36) les écrit à
+--  chaque publication ; le titulaire, jamais. Mesuré : un chantier naissait
+--  « 9 999 publications », avec une couverture qui n'était aucune
+--  publication, et le restait en modification.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_les_compteurs_du_chantier()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.nb_publications := 0;
+      new.couverture      := null;
+      new.debut           := null;
+      new.fin             := null;
+    else
+      new.nb_publications := old.nb_publications;
+      new.couverture      := old.couverture;
+      new.debut           := old.debut;
+      new.fin             := old.fin;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_les_compteurs_du_chantier
+  before insert or update on public.chantiers
+  for each row execute function public.tient_les_compteurs_du_chantier();
+
+-- --------------------------------------------------------------------------
+--  52.7  Un avis ne se MODIFIE plus — décision du propriétaire du 29/10
+--
+--  « Figé, mais retirable » : un avis ne se modifie jamais une fois publié ;
+--  son auteur peut le RETIRER (« mes reviews », `using (auth.uid() =
+--  author_id)`, qu'un blocage n'empêche pas — clore, oui), puis en écrire
+--  un autre. La note se recalcule (`trg_notes_pro`, après suppression).
+--
+--  Un droit de TABLE, et pas un déclencheur : il ferme d'un coup la date,
+--  le déplacement d'un avis vers un autre artisan et `auteur_supprime` en
+--  modification — et il refuse AVANT toute règle. L'anonymisation d'un
+--  compte qui part (`preparer_suppression_compte()`, security definer) et
+--  `calcule_client_verifie()` passent.
+--
+--  CE QUE ÇA FERME AUSSI, et c'est dit : retoucher son avis après
+--  l'acceptation de sa demande était la seule façon de gagner « client
+--  vérifié » pour un avis écrit AVANT. Il reste « retirer et réécrire ».
+--  Le recalcul au passage d'une demande à « accepté », par la base, est
+--  dans docs/A-FAIRE.md.
+-- --------------------------------------------------------------------------
+create or replace function public.tient_l_avis_neuf()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    new.auteur_supprime := false;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_l_avis_neuf
+  before insert on public.reviews
+  for each row execute function public.tient_l_avis_neuf();
+
+revoke update on public.reviews from anon, authenticated;
+
+-- --------------------------------------------------------------------------
+--  52.8  Le compte — `tient_le_compte()` et OP023
+--
+--  La trace des CGU (`cgu_version`, `cgu_acceptees_le`) et l'adresse du
+--  compte (`email`) ne s'écrivent que par la base : à l'inscription
+--  (`cree_fiche_utilisateur()`), au passage en professionnel
+--  (`devenir_pro()`). Aucune version de l'application ne les envoie.
+--
+--  En modification par le client : un REFUS qui dit pourquoi, comme OP004,
+--  plutôt qu'une remise silencieuse — seul un client modifié peut le
+--  déclencher, et un jour une application en retard sur une
+--  ré-acceptation des conditions (qui passera par une fonction).
+--  À l'insertion par le client (la « seconde porte » de la section 44 : la
+--  ligne recréée après `preparer_suppression_compte()`) : vidées.
+--
+--  Écartée : la parade par droits de colonne sur `users`. Elle marche
+--  (mesuré), mais répondrait 42501 au lieu d'OP004 et changerait sept
+--  fichiers d'essais ; elle se discutera avec les LECTURES de `users`
+--  (lot S-d).
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_compte()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.cgu_version      := null;
+      new.cgu_acceptees_le := null;
+      new.email            := null;
+    elsif new.cgu_version      is distinct from old.cgu_version
+       or new.cgu_acceptees_le is distinct from old.cgu_acceptees_le
+       or new.email            is distinct from old.email then
+      raise exception
+        'Ces informations du compte ne se changent pas ici. Si vous voyez ce message, mettez Opus à jour.'
+        using errcode = 'OP023';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_compte
+  before insert or update on public.users
+  for each row execute function public.tient_le_compte();
+
+-- --------------------------------------------------------------------------
+--  52.9  LA REMISE EN AVANT — décisions D7 (25/10) et Q2 (29/10)
+--
+--  « Remettre en avant » changeait la date de publication par le client —
+--  ce que `tient_le_texte()` remettait aussitôt : le bouton ne faisait
+--  RIEN, et l'écran disait « Publication remise en tête du fil ».
+--
+--  LA RÈGLE, tenue ICI et nulle part ailleurs :
+--    - gratuite ;
+--    - une publication : une semaine après sa publication, puis une fois
+--      tous les sept jours ;
+--    - un professionnel : trois remises en avant au plus sur sept jours
+--      glissants, PUBLICATIONS SUPPRIMÉES COMPRISES — sinon supprimer une
+--      publication remise en avant rendait une place (mesuré : six en une
+--      semaine) ;
+--    - la publication garde sa date de publication (`created_at`), ses
+--      « j'aime » et ses commentaires ; `posts.remonte_le` reçoit l'heure
+--      de la remise en avant, et `fil_filtre()` ordonne par
+--      `coalesce(remonte_le, created_at)`. La carte porte « Remise en
+--      avant » (décision Q2 du 29/10).
+--
+--  `remontees`, l'HISTORIQUE : c'est lui qui compte les trois de la
+--  semaine. `post_id … on delete set null` : une remise en avant survit à
+--  la publication supprimée, sinon une suppression rend une place.
+--  `auteur_id … on delete cascade` : l'historique part avec le compte.
+--  Lisible par son auteur seul, AUCUNE écriture du client — pas même
+--  `truncate`, que la RLS ne couvre pas (le précédent de `devis_tva`).
+-- --------------------------------------------------------------------------
+create table if not exists public.remontees (
+  id          uuid primary key default gen_random_uuid(),
+  post_id     uuid references public.posts(id) on delete set null,
+  auteur_id   uuid not null references public.users(id) on delete cascade,
+  remontee_le timestamptz not null default clock_timestamp()
+);
+
+create index if not exists idx_remontees_auteur
+  on public.remontees (auteur_id, remontee_le desc);
+-- La cascade `set null` d'une publication supprimée.
+create index if not exists idx_remontees_post
+  on public.remontees (post_id) where post_id is not null;
+
+alter table public.remontees enable row level security;
+
+drop policy if exists "lecture mes remontees" on public.remontees;
+create policy "lecture mes remontees" on public.remontees
+  for select to authenticated using (auth.uid() = auteur_id);
+
+revoke all on public.remontees from anon;
+revoke insert, update, delete, truncate on public.remontees from authenticated;
+
+-- --------------------------------------------------------------------------
+--  `remonter_publication(p_id)` — la SEULE écriture de `remonte_le`
+--
+--  `security definer` : elle écrit dans `remontees`, que le client ne peut
+--  pas écrire, et dans `posts`, où `tient_le_texte()` la laisse passer
+--  (R-A). Exécutable par `authenticated` seul.
+--
+--  VOLATILE, et ce n'est pas un détail : la course de deux appuis
+--  simultanés ne se ferme que parce qu'en lecture validée, chaque ordre
+--  d'une fonction volatile prend un nouvel instantané APRÈS le verrou.
+--  Mesuré sur deux sessions, avec une pause entre le compte et
+--  l'écriture : sans le verrou, quatre remises en avant dans la semaine ;
+--  avec, trois. Une fonction `stable` lirait un seul instantané.
+--
+--  LE VERROU vient AVANT la première lecture de `remontees`, et sa clé est
+--  préfixée comme les autres (`devis:demande:`, `base_postes:`).
+--
+--  LES REFUS — OP022, avec `detail` :
+--    - 'absente' : la publication n'existe pas, n'est pas à vous, ou est
+--      une publicité — la même phrase pour les trois : aucun oracle ;
+--    - 'publication' : la règle de la publication n'est pas tenue ;
+--    - 'artisan' : trois remises en avant ces sept derniers jours.
+--  Quand les deux règles échouent, c'est la plus TARDIVE qui est dite
+--  (à égalité, la publication) : c'est elle qui décide du moment où ce
+--  sera possible. Le `hint` porte cet instant, en UTC, au format ISO,
+--  ARRONDI À LA SECONDE SUPÉRIEURE — tronqué, rejouer à l'instant annoncé
+--  pouvait encore être refusé (mesuré : …42.9996 rendu « …42.999 »).
+--  L'écran l'arrondit ensuite à la minute supérieure, à l'heure du
+--  téléphone (`src/lib/remontee.js`). Le message, lui, ne porte AUCUNE
+--  date : c'est le repli honnête d'une application qui ne saurait pas lire
+--  le `hint`.
+-- --------------------------------------------------------------------------
+create or replace function public.remonter_publication(p_id uuid)
+returns timestamptz
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  moi        uuid := auth.uid();
+  pub        record;
+  maintenant timestamptz;
+  pour_pub   timestamptz;
+  pour_art   timestamptz;
+  bloquant   timestamptz;
+  quelle     text;
+  n          int;
+begin
+  if moi is null then
+    raise exception 'Connectez-vous pour remettre une publication en avant.'
+      using errcode = '42501';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('remontee:' || moi::text, 0));
+
+  select p.id, p.author_id, p.is_ad, p.created_at, p.remonte_le
+    into pub
+    from public.posts p
+   where p.id = p_id;
+  if not found or pub.author_id is distinct from moi or pub.is_ad then
+    raise exception
+      'Cette publication ne peut pas être remise en avant : elle n''existe plus, ou ce n''est pas l''une des vôtres.'
+      using errcode = 'OP022', detail = 'absente';
+  end if;
+
+  maintenant := clock_timestamp();
+
+  -- La règle de la publication : une semaine après sa publication, puis
+  -- une semaine après sa dernière remise en avant.
+  pour_pub := greatest(pub.created_at, pub.remonte_le) + interval '7 days';
+  if pour_pub <= maintenant then
+    pour_pub := null;
+  end if;
+
+  -- La règle du professionnel : trois sur sept jours glissants. La place
+  -- se libère sept jours après la TROISIÈME plus récente.
+  select count(*) into n
+    from public.remontees r
+   where r.auteur_id = moi
+     and r.remontee_le > maintenant - interval '7 days';
+  if n >= 3 then
+    select r.remontee_le + interval '7 days' into pour_art
+      from public.remontees r
+     where r.auteur_id = moi
+       and r.remontee_le > maintenant - interval '7 days'
+     order by r.remontee_le desc
+     offset 2 limit 1;
+  end if;
+
+  if pour_pub is not null or pour_art is not null then
+    if pour_art is null or (pour_pub is not null and pour_pub >= pour_art) then
+      bloquant := pour_pub;
+      quelle   := 'publication';
+    else
+      bloquant := pour_art;
+      quelle   := 'artisan';
+    end if;
+    -- Arrondi à la seconde SUPÉRIEURE (voir plus haut).
+    if date_trunc('second', bloquant) < bloquant then
+      bloquant := date_trunc('second', bloquant) + interval '1 second';
+    end if;
+    if quelle = 'publication' then
+      raise exception
+        'Cette publication ne peut pas encore être remise en avant : une semaine après sa publication, puis une fois tous les sept jours.'
+        using errcode = 'OP022', detail = quelle,
+              hint = to_char(bloquant at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+    else
+      raise exception
+        'Vous avez déjà remis en avant trois publications ces sept derniers jours, publications supprimées comprises.'
+        using errcode = 'OP022', detail = quelle,
+              hint = to_char(bloquant at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+    end if;
+  end if;
+
+  insert into public.remontees (post_id, auteur_id, remontee_le)
+  values (pub.id, moi, maintenant);
+  update public.posts set remonte_le = maintenant where id = pub.id;
+  return maintenant;
+end;
+$$;
+
+comment on function public.remonter_publication(uuid) is
+  'Remet une de MES publications parmi les plus récentes du fil. Une fois '
+  'tous les sept jours par publication (la première une semaine après sa '
+  'publication), trois sur sept jours par professionnel. Refus : OP022, '
+  'detail absente | publication | artisan, hint = l''instant ISO UTC. '
+  'Section 52.9.';
+
+revoke all on function public.remonter_publication(uuid) from public, anon;
+grant execute on function public.remonter_publication(uuid) to authenticated;
+
+
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
@@ -14723,7 +15468,13 @@ as $$
        la table ne serait plus « tout ». */
     'ma_base_de_postes',
                  coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
-                             from public.base_postes x where x.pro_id = auth.uid()), '[]'::jsonb)
+                             from public.base_postes x where x.pro_id = auth.uid()), '[]'::jsonb),
+    /* L'HISTORIQUE DE MES REMISES EN AVANT (lot S-c, section 52.9) : leur
+       date, et la publication tant qu'elle existe. La date de la dernière,
+       elle, est déjà dans `publications` (`remonte_le`). */
+    'mes_remontees',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.remontee_le, x.id)
+                             from public.remontees x where x.auteur_id = auth.uid()), '[]'::jsonb)
   )
 $$;
 

@@ -87,6 +87,9 @@ function VerifRow({ etat, label, value, neutre }) {
 
 export default function ProfilProScreen({
   pro, pros, following, onFollow, onContact, onViewProfile, onSubmitReview, onSignaler,
+  /* « Retirer mon avis » (lot S-c, décision du propriétaire du 29/10 :
+     « figé, mais retirable »). Rend `true` quand l'avis est parti. */
+  onRetirerAvis = null,
   charge = true, onRetourFilVideo = null, chantiers = [], onOuvrirChantier,
   /* Ses tarifs AFFICHÉS (section 47, lot T) — remplis par `OpusApp` pour un
      PARTICULIER seulement ; `null` pour tout autre compte. */
@@ -102,6 +105,10 @@ export default function ProfilProScreen({
   mienne = false,
 }) {
   const [showForm, setShowForm] = useState(false);
+  /* Retirer un avis demande une confirmation : c'est définitif — on peut en
+     écrire un autre, mais pas retrouver celui-ci. */
+  const [confirmeRetrait, setConfirmeRetrait] = useState(false);
+  const [retraitEnCours, setRetraitEnCours] = useState(false);
   const [rDelais, setRDelais] = useState(5);
   const [rQualite, setRQualite] = useState(5);
   const [rTarif, setRTarif] = useState(5);
@@ -119,6 +126,11 @@ export default function ProfilProScreen({
   const [aiError, setAiError] = useState(null);
 
   const reviews = pro.reviews || [];
+  /* MON AVIS, s'il est dans la liste. Un avis ne se modifie plus une fois
+     publié (la base retire le droit, section 52.7) : à qui en a un, la fiche
+     propose de le RETIRER, et cache « Laisser un avis » — un second avis
+     serait refusé par la base (une seule ligne par client et par artisan). */
+  const monAvis = reviews.find((r) => r.mien) || null;
   const avg = avgReviews(pro);
   const kbisDetail = detailDocument(pro, 'kbis');
   const assuranceDetail = detailDocument(pro, 'assurance');
@@ -330,10 +342,36 @@ export default function ProfilProScreen({
       {/* --- avis --- */}
       <SectionLabel
         /* On ne se note pas soi-même : la base le refuse (`pas_dauto_avis`). */
-        right={mienne ? null : <BtnMini label={showForm ? 'Fermer' : 'Laisser un avis'} onPress={() => setShowForm((v) => !v)} />}
+        right={mienne ? null : (monAvis && onRetirerAvis
+          ? <BtnMini label="Retirer mon avis" onPress={() => setConfirmeRetrait(true)} />
+          : (monAvis ? null
+            : <BtnMini label={showForm ? 'Fermer' : 'Laisser un avis'} onPress={() => setShowForm((v) => !v)} />))}
       >
         Avis clients
       </SectionLabel>
+
+      {confirmeRetrait && monAvis && (
+        <View style={s.confirmeRetrait}>
+          <Text style={s.confirmeRetraitTexte}>
+            Retirer votre avis ? Il disparaît de la fiche et la note se recalcule. Un avis ne se
+            modifie pas une fois publié : vous pourrez ensuite en écrire un autre.
+          </Text>
+          <View style={s.confirmeRetraitBoutons}>
+            <BtnMini
+              label={retraitEnCours ? 'Retrait…' : 'Retirer'}
+              disabled={retraitEnCours}
+              onPress={async () => {
+                if (retraitEnCours) return;
+                setRetraitEnCours(true);
+                const parti = await onRetirerAvis(pro.id, monAvis);
+                setRetraitEnCours(false);
+                if (parti) setConfirmeRetrait(false);
+              }}
+            />
+            <BtnMini outline label="Annuler" disabled={retraitEnCours} onPress={() => setConfirmeRetrait(false)} />
+          </View>
+        </View>
+      )}
 
       {avg.count > 0 && (
         <View style={s.ratingBlock}>
@@ -385,7 +423,7 @@ export default function ProfilProScreen({
         {reviews.map((r) => (
           <View key={String(r.id)} style={s.reviewCard}>
             <View style={s.reviewTop}>
-              <Text style={s.reviewAuteur}>{r.auteur}</Text>
+              <Text style={s.reviewAuteur}>{r.mien ? 'Votre avis' : r.auteur}</Text>
               {r.verifie && (
                 <View style={s.reviewBadge}>
                   <ClipboardCheck size={11} color={C.ok} />
@@ -561,6 +599,14 @@ const s = StyleSheet.create({
     marginHorizontal: 16, marginBottom: 14, backgroundColor: C.surface,
     borderWidth: 1, borderColor: C.line, padding: 12, gap: 8,
   },
+  /* La confirmation du retrait d'un avis : un BLOC (angle vif), comme le
+     formulaire qu'elle remplace. */
+  confirmeRetrait: {
+    marginHorizontal: 16, marginBottom: 12, backgroundColor: C.surface,
+    borderWidth: 1, borderColor: C.line, padding: 12, gap: 8,
+  },
+  confirmeRetraitTexte: { fontSize: T.courant, lineHeight: interligne(T.courant), color: C.ink, fontFamily: F.inter },
+  confirmeRetraitBoutons: { flexDirection: 'row', gap: 8 },
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sliderLabel: { width: 120, fontSize: T.petit, color: C.muted, fontFamily: F.inter },
   sliderValue: { width: 32, textAlign: 'right', color: C.ink, fontSize: T.petit, fontFamily: F.inter6 },

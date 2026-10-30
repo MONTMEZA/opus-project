@@ -1387,9 +1387,15 @@ const iS42 = SCHEMA_BRUT.search(/^-- {2}42\. /m);
 const SQL_ENTIER = sqlSansCommentaires(SCHEMA_BRUT);
 
 {
+  /* Entre la fin de la 50 et le titre de la 42, il ne peut y avoir que des
+     sections PLUS RÉCENTES (la 52 du lot S-c, 30/10/2026) : la 42 reste la
+     dernière, c'est ce qui compte pour l'export. */
+  const entre50et42 = S50B.fin > 0 && iS42 >= S50B.fin ? SCHEMA_BRUT.slice(S50B.fin, iS42) : '';
+  const titresEntre = [...entre50et42.matchAll(/^-- {2}(\d+)\. /gm)].map((m) => Number(m[1]));
   verifier('la section 50 existe, APRÈS la 49 et AVANT le titre de la 42 (l’export doit pouvoir nommer sa table)',
-    S50B.debut > 0 && iS49 > 0 && S50B.debut > iS49 && iS42 > S50B.debut && S50B.fin === iS42 && S50.length > 3000,
-    `49 à ${iS49}, 50 de ${S50B.debut} à ${S50B.fin}, 42 à ${iS42}`);
+    S50B.debut > 0 && iS49 > 0 && S50B.debut > iS49 && iS42 > S50B.debut && S50B.fin <= iS42
+      && titresEntre.every((n) => n > 50) && S50.length > 3000,
+    `49 à ${iS49}, 50 de ${S50B.debut} à ${S50B.fin}, 42 à ${iS42}, entre les deux : ${titresEntre.join(', ') || 'rien'}`);
 
   /* -- LE TEXTE BRUT : aucune barre oblique inverse, nulle part ---------- */
   const barres = [...S50B.texte].filter((c) => c === BARRE).length;

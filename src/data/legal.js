@@ -29,7 +29,29 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-28';
+export const VERSION = '2026-10-30';
+/* 30/10/2026 — LES COMPTEURS, LES DATES ET L'ORDRE DU FIL (lot S-c du lot
+   de sécurité). Ce qui a changé DE FOND :
+     - « L'ORDRE DU FIL », SECTION NOUVELLE (`ORDRE_DU_FIL`, servie aussi à
+       la ligne « Comment le fil est ordonné ») : par date, sans
+       personnalisation, la remise en avant gratuite et ses limites (une fois
+       tous les sept jours par publication, trois sur sept jours par
+       professionnel), aucun paiement, et la vérité sur les publicités de
+       l'essai ;
+     - « LES AVIS » : un avis ne se modifie plus, son auteur peut le retirer
+       et en écrire un autre (décision du propriétaire du 29/10) ; « écrit
+       ou modifié » devient « écrit » ; la date et la note sont tenues par
+       Opus ;
+     - « CE QUI EST INTERDIT » : gonfler ses compteurs, écrire un faux avis ;
+     - LA COLLECTE, LA FINALITÉ ET LA DURÉE de l'historique des remises en
+       avant ;
+     - « SÉCURITÉ » disait faux (« ne permettrait pas d'y accéder
+       davantage ») : elle dit ce que la base tient, et ce qu'une version
+       modifiée peut encore lire ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions, et le préavis de quinze jours du règlement
+       2019/1150 (art. 3.2) s'appliquerait. Sans effet tant que STATUT vaut
+       'essai' ; à organiser avant l'ouverture au public (A-FAIRE). */
 /* 28/10/2026 — LA TROISIÈME RELECTURE DU LOT S-b. Le texte du 27/10 a été
    commité (`d281d85`) : celui-ci prend la date du jour suivant. Ce qui a
    changé DE FOND, dans « Bloquer quelqu'un » :
@@ -647,6 +669,50 @@ export const CE_QUE_LA_SUPPRESSION_GARDE = 'Ses photos et ses vidéos restent en
   + 'leur adresse ; si vous l’aviez aussi mise dans votre portfolio, elle y reste jusqu’à '
   + 'ce que vous l’en retiriez.';
 
+/**
+ * L'ORDRE DU FIL — écrit UNE fois (lot S-c, 30/10/2026).
+ *
+ * Servi à la CGU (« L'ordre du fil ») ET déplié sur place par la ligne
+ * « Comment le fil est ordonné », dans la feuille de la loupe et sur la ligne
+ * « Filtre : … » du fil — la page des résultats quand une recherche est
+ * posée (critique « textes » du cahier, constat 7). `verifier-legal` exige
+ * que les deux montrent CETTE constante.
+ *
+ * Ce qu'il dit est vrai de `fil_filtre()` (section 33.1 de `schema.sql`) :
+ * l'ordre `coalesce(remonte_le, created_at) desc` ; les publicités écartées
+ * par le fil des vidéos et par chaque réglage de la loupe, gardées par
+ * « Abonnements » ; la règle de `remonter_publication()` (section 52.9) ;
+ * aucun paiement. Il donne les RAISONS de l'ordre — le règlement
+ * 2019/1150 les demande avec les paramètres (constat 6) —, sans numéro
+ * d'article.
+ *
+ * Ce qu'il NE promet PAS : une place « en tête » qui durerait, une gratuité
+ * perpétuelle, que les publicités sont payées. La phrase « exemples placés
+ * par l'éditeur pendant l'essai » est vraie des deux publicités de
+ * démonstration de la vraie base, auxquelles le propriétaire a décidé de ne
+ * pas toucher pour l'instant (29/10) ; elle se retire avec elles.
+ */
+export const ORDRE_DU_FIL = 'Le fil montre les publications des professionnels de la plus '
+  + 'récente à la plus ancienne. Il n’est pas personnalisé : l’onglet « Tout » montre le même '
+  + 'fil à tout le monde, à l’exception des personnes que vous avez bloquées, et rien n’y est '
+  + 'classé selon les « j’aime », les vues, le nombre d’abonnés ou la note. L’ordre par date ne '
+  + 'favorise ni les comptes les plus suivis, ni ceux qui paieraient : c’est ce qui laisse sa '
+  + 'chance à un professionnel qui vient d’arriver. Les réglages de la loupe — métier, '
+  + 'secteur, note, professionnels vérifiés —, l’onglet « Abonnements » et le fil des vidéos '
+  + 'retirent ce qui ne leur répond pas ; ils ne changent pas l’ordre. Un professionnel peut '
+  + 'remettre en avant l’une de ses publications, gratuitement : elle reprend sa place parmi '
+  + 'les plus récentes, à la date de cette remise en avant, puis redescend à mesure que '
+  + 'd’autres arrivent. Elle garde sa date de publication, ses « j’aime » et ses commentaires, '
+  + 'et porte la mention « Remise en avant ». Une publication ne se remet en avant qu’une '
+  + 'semaine après sa publication, puis une fois tous les sept jours ; et un professionnel '
+  + 'n’en remet pas en avant plus de trois sur sept jours, même s’il en supprime une ensuite. '
+  + 'Ces limites empêchent un même professionnel d’occuper le haut du fil. Aucun '
+  + 'professionnel ne paie pour être mieux placé dans le fil. Opus ne vend pas encore de '
+  + 'publicité : les publications marquées « Sponsorisé » que vous pouvez voir aujourd’hui '
+  + 'sont des exemples placés par l’éditeur pendant l’essai. Elles n’apparaissent ni dans le '
+  + 'fil des vidéos, ni quand vous utilisez la loupe, mais elles restent dans l’onglet '
+  + '« Abonnements ».';
+
 /* ------------------------------------------------------------------ */
 /*  1. MENTIONS LÉGALES                                                */
 /*                                                                     */
@@ -841,12 +907,24 @@ export const CGU = [
       + "un motif de signalement à part entière.",
   },
   {
+    /* Lot S-c (30/10/2026) : la constante, et rien d'autre — la même que
+       déplie « Comment le fil est ordonné ». */
+    titre: 'L’ordre du fil',
+    texte: ORDRE_DU_FIL,
+  },
+  {
     /* CE QUE VEUT DIRE « CLIENT VÉRIFIÉ », ET RIEN DE PLUS (lot S-b,
        26/10/2026). Le code de la consommation (L. 111-7-2) demande de dire
        si les avis sont contrôlés et comment : la mention était affichée
        sous chaque avis sans être expliquée nulle part. Ce texte dit ce que
        calcule `calcule_client_verifie()` (section 6 de `schema.sql`), au
-       moment où l'avis est écrit ou modifié — et ce qu'elle ne prouve pas.
+       moment où l'avis est écrit — et ce qu'elle ne prouve pas.
+
+       LOT S-c (30/10/2026), réponse du propriétaire du 29/10 (« Figé, mais
+       retirable ») : un avis ne se MODIFIE plus (`revoke update on
+       reviews`), « écrit ou modifié » devient « écrit » ; son auteur le
+       retire depuis la fiche et peut en écrire un autre. La date et la note
+       sont posées et calculées par la base (sections 52.2 et 52.4).
 
        LE SIGNALEMENT D'UN AVIS N'EXISTE PAS ENCORE — `signalements_cible_type_check`
        n'accepte pas « avis », et aucun écran ne le propose. On le DIT au
@@ -854,12 +932,17 @@ export const CGU = [
        l'ouverture au public. */
     titre: 'Les avis',
     texte: 'Un avis porte la mention « client vérifié » quand son auteur avait, au '
-      + 'moment où il l’a écrit ou modifié, une demande de devis, de rappel ou '
+      + 'moment où il l’a écrit, une demande de devis, de rappel ou '
       + 'd’urgence acceptée par l’artisan qu’il note. C’est tout ce que cette mention '
       + 'atteste : Opus ne vérifie ni que les travaux ont eu lieu, ni ce que l’avis '
       + 'raconte, ni les notes données. Les autres avis sont publiés sans cette '
       + 'mention, et sans contrôle préalable. Chacun ne laisse qu’un avis par artisan, '
-      + 'jamais sur sa propre fiche. Un avis compte dans la note de l’artisan tant qu’il '
+      + 'jamais sur sa propre fiche. Un avis ne se modifie pas une fois publié ; son auteur '
+      + 'peut le retirer, depuis la fiche de l’artisan, puis en écrire un autre. Chaque avis '
+      + 'affiche le mois et l’année de sa publication, enregistrés par Opus ; les avis sont '
+      + 'présentés du plus récent au plus ancien. La note et le nombre d’avis d’une fiche sont '
+      + 'calculés par Opus à partir des avis publiés : l’artisan ne peut pas les modifier. '
+      + 'Un avis compte dans la note de l’artisan tant qu’il '
       + 'existe ; l’artisan qu’il concerne le lit toujours, même s’il a bloqué son '
       + 'auteur ou a été bloqué par lui. Il n’existe pas encore de bouton pour signaler '
       + 'un avis : c’est à ajouter avant l’ouverture d’Opus au public.',
@@ -985,7 +1068,10 @@ export const CGU = [
       + 'rattachée à un compte qui n’est pas le vôtre, demandez une vérification à la '
       + 'main, depuis un compte particulier ou à l’inscription : chacun pourra être '
       + 'invité à justifier qu’il en est le titulaire. Un compte déjà professionnel ne '
-      + 'peut pas encore la demander depuis l’application.',
+      + 'peut pas encore la demander depuis l’application. Gonfler ses « j’aime », ses '
+      + 'abonnés, ses vues, ses avis ou sa note, par exemple depuis un second compte. Écrire '
+      + 'un avis sur son propre travail, ou sur celui d’un concurrent, en se faisant passer '
+      + 'pour un client.',
   },
   {
     titre: 'Modération',
@@ -1162,7 +1248,11 @@ export const CONFIDENTIALITE = [
       + 'votre commune — celles de la mairie, pas de votre domicile — qui '
       + 'servent au tri par distance. Votre téléphone, si vous le renseignez. '
       + 'Vos photos, vidéos, textes, commentaires, avis, messages, demandes et '
-      + 'annonces. Pour un compte professionnel : votre justificatif '
+      + 'annonces. Si vous remettez en avant une de vos publications : la date de cette '
+      + 'remise en avant, enregistrée avec la publication — comme le reste de la publication, '
+      + 'elle peut être lue par toute personne qui la consulte —, et l’historique de vos '
+      + 'remises en avant (leur date, et la publication concernée tant qu’elle existe), que '
+      + 'vous seul pouvez lire. Pour un compte professionnel : votre justificatif '
       + 'd’existence légale et votre attestation d’assurance ; le numéro SIRET de '
       + 'votre entreprise, et ce que le répertoire Sirene de l’INSEE en dit au moment '
       + 'de la consultation — dénomination, nom commercial, le nom complet tel que le '
@@ -1255,7 +1345,9 @@ export const CONFIDENTIALITE = [
       + 'ces contrôles par compte : intérêt légitime, protéger le service et VIES contre '
       + 'les abus. Vous proposer, pendant que vous chiffrez, les phrases et les prix de '
       + 'référence de votre base de postes, et vous signaler un écart avec ce prix : '
-      + 'exécution du contrat.',
+      + 'exécution du contrat. Remettre en avant vos publications et appliquer ses limites '
+      + '— une fois tous les sept jours par publication, trois sur sept jours par '
+      + 'professionnel — : exécution du contrat.',
   },
   {
     /* L'ARTICLE 22 DU RGPD — relecture « droit » du plan, constat 5. Refuser
@@ -1495,7 +1587,9 @@ export const CONFIDENTIALITE = [
       + 'le compte ni le numéro ; ces compteurs sont effacés lors d’un contrôle suivant, '
       + 'plus d’un jour après, y compris si le compte a été supprimé entre-temps : comme '
       + 'pour la consultation du répertoire, aucune durée maximale ne peut donc être '
-      + 'promise. Une demande de partenariat refusée reste enregistrée tant que les deux '
+      + 'promise. L’historique de vos remises en avant est conservé tant que votre compte '
+      + 'existe, y compris pour une publication supprimée depuis, et part avec votre compte. '
+      + 'Une demande de partenariat refusée reste enregistrée tant que les deux '
       + 'comptes existent : c’est elle qui empêche de la renvoyer en boucle à celui qui '
       + 'l’a refusée — celui-ci peut l’effacer. Les photos d’une publication supprimée, d’une demande refermée ou d’une '
       + 'annonce retirée, et vos anciennes photos de profil ou de bannière, restent en ligne, '
@@ -1547,10 +1641,21 @@ export const CONFIDENTIALITE = [
   },
   {
     titre: 'Sécurité',
-    texte: 'Les échanges sont chiffrés. Les règles d’accès sont appliquées par '
-      + 'la base de données elle-même, et non par l’application : une version '
-      + 'modifiée de l’application ne permettrait pas d’y accéder davantage. '
-      + 'Les clés des services extérieurs ne se trouvent jamais dans '
-      + 'l’application installée sur votre téléphone.',
+    /* « NE PERMETTRAIT PAS D'Y ACCÉDER DAVANTAGE » ÉTAIT FAUX (lot S-c,
+       critique « textes » du cahier, constat 12) : une version modifiée de
+       l'application lit, par l'interface d'Opus, des informations qu'elle
+       n'affiche pas (mesuré). Et jusqu'au lot S-c, elle pouvait écrire les
+       compteurs et les dates que l'écran affiche. « Tenus », jamais
+       « calculés » : vrai aussi des fiches de démonstration de la vraie
+       base, dont aucun client ne peut plus changer les abonnés. */
+    texte: 'Les échanges sont chiffrés. Les règles d’accès, les compteurs et les dates '
+      + 'qu’Opus affiche — « j’aime », commentaires, vues, abonnés, nombre d’avis et note, '
+      + 'date d’une publication, d’un commentaire, d’un avis, d’un message ou d’une '
+      + 'demande — sont tenus par la base de données elle-même, et non par l’application : '
+      + 'une version modifiée de l’application ne peut pas les changer. Elle peut en '
+      + 'revanche lire, par l’interface d’Opus, des informations que l’application '
+      + 'n’affiche pas. Ces règles ne sont pas parfaites : quand un défaut y est trouvé, il '
+      + 'est corrigé dans la base de données. Les clés des services extérieurs ne se '
+      + 'trouvent jamais dans l’application installée sur votre téléphone.',
   },
 ];

@@ -135,9 +135,15 @@ begin; set local role authenticated; set local request.jwt.claim.sub = 'aaaaaaaa
 rollback;
 
 \echo '=== 6. on ne tranche pas SA PROPRE demande ==='
-begin; set local role authenticated; set local request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
+-- La demande est posée par l'éditeur SQL : depuis le lot S-c (section 52.2),
+-- le client n'insère que les colonnes que l'application envoie, et `id`
+-- n'en fait pas partie. Insérée en `authenticated` avec son `id`, elle
+-- était refusée, et l'appel de l'administrateur n'était plus JAMAIS joué —
+-- l'essai ne prouvait plus rien, sans rien rougir (critique du 29/10).
+begin;
   insert into public.metier_demandes (id, professional_id, metiers_actuels, metiers_voulus)
     values ('11111111-0000-0000-0000-000000000009', :ADM, array['macon'], array['macon','couvreur']);
+  set local role authenticated; set local request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
   select public.admin_traiter_metier_demande('11111111-0000-0000-0000-000000000009', 'acceptee');
 rollback;
 

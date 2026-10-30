@@ -38,6 +38,7 @@ import ChampVille from './ChampVille';
 import { ChampMetier } from './SelecteurMetiers';
 import { Ligne, Rayons } from './FiltresPlace';
 import { FILTRE_VIDE, filtreActif } from '../lib/filtre-fil';
+import OrdreDuFil from './OrdreDuFil';
 
 /** Les notes proposées. En dessous de 3, le filtre ne veut plus rien dire. */
 const NOTES = [3, 4, 4.5];
@@ -192,6 +193,10 @@ export default function FeuilleRecherche({ filtre, moi, onValider, onFermer }) {
       >
         <Text style={s.btnVideTexte}>Tout effacer</Text>
       </Pressable>
+
+      {/* Les réglages RETIRENT, ils ne changent pas l'ordre : la feuille le
+          dit, avec le même texte que les conditions (lot S-c). */}
+      <OrdreDuFil style={s.ordreDuFil} />
     </FeuilleBas>
   );
 }
@@ -212,6 +217,7 @@ function Puce({ texte, on, onPress }) {
 }
 
 const s = StyleSheet.create({
+  ordreDuFil: { marginTop: S.md },
   titreBloc: {
     fontFamily: F.oswald6, fontSize: T.petit, color: C.muted,
     marginTop: S.lg, marginBottom: S.sm, letterSpacing: 0.4,

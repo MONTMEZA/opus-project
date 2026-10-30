@@ -729,7 +729,7 @@ set local request.jwt.claim.sub = 'a51b0000-0000-4000-8000-00000000000c';
 select count(*) as c_a_bloque_l_auteur from public.reviews where professional_id = :B;
 rollback;
 
-\echo '--- F6. … P, après le blocage, ne CORRIGE plus son avis, mais peut le RETIRER (attendu : ERROR … row-level security au premier essai ; DELETE 1 au second)'
+\echo '--- F6. … P, après le blocage, ne CORRIGE plus son avis, mais peut le RETIRER (attendu : ERROR permission denied for table reviews au premier essai — depuis le lot S-c, plus personne ne corrige un avis une fois publié, blocage ou non, et c est le droit de table qui refuse, avant la règle ; le blocage sur l ÉCRITURE d un avis reste éprouvé par F4 ; DELETE 1 au second)'
 begin;
 insert into public.reviews (professional_id, author_id, delais, qualite, tarif, commentaire)
 values (:B, :P, 1, 1, 1, 'Chantier abandonné');

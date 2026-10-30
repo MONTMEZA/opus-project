@@ -217,6 +217,19 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   devis_tva_nb_check: APPLICATION_EN_RETARD,
   devis_tva_taux_check: APPLICATION_EN_RETARD,
 
+  /* --- Les compteurs et les dates : section 52 (lot S-c) ---
+     UN SECOND AVIS du même client sur le même artisan. L'écran cache
+     « Laisser un avis » à qui en a déjà un, et propose « Retirer mon avis »
+     à la place (décision du propriétaire du 29/10) : cette phrase ne sort
+     que d'une version en retard ou d'un double appui. Elle disait avant
+     « il a sans doute été créé entre-temps, depuis un autre appareil » —
+     faux, et sans la porte de sortie. La publicité qui aurait un auteur ne
+     peut naître que de l'éditeur SQL : elle n'a pas de phrase pour un
+     client. */
+  reviews_professional_id_author_id_key: 'vous avez déjà laissé un avis à cet artisan. Pour en écrire un autre, '
+    + 'retirez d’abord le vôtre depuis sa fiche (« Retirer mon avis »).',
+  post_publicite_sans_auteur_check: APPLICATION_EN_RETARD,
+
   /* --- La base de postes : section 50 (lot P du module devis) ---
      LES CINQ CONTRAINTES, ET L'INDEX DU DOUBLON. Un 23505 se reconnaît au
      nom de son index, que `messageClair` lit après « constraint » : la
@@ -653,7 +666,9 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      reste réservé au devis remis ; OP019 à OP021 et OP025 — une demande
      qui ne change que par ses gestes, ce qu'on n'ouvre plus sous blocage,
      une réponse qui ne se déplace pas, une urgence vers qui n'y répond
-     pas — avec le lot S-b ; OP022 et OP023 restent aux sous-lots S-c et S-d)
+     pas — avec le lot S-b ; OP022 — une remise en avant refusée — et
+     OP023 — une trace des conditions ou une adresse de compte qu'on ne
+     récrit pas — avec le lot S-c, section 52)
      PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler
@@ -661,6 +676,11 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      deux qu'on oublie de corriger est celle qui ment. On la rend telle
      quelle, AVANT tout le reste : un mot comme « permission » dans l'une
      d'elles ne doit pas la faire passer pour un droit manquant. */
+  /* OP022 PASSE ICI AUSSI, et c'est voulu : sa date est dans le `hint`, et
+     ce fichier n'importe rien (il ne peut pas la mettre en forme à l'heure
+     du téléphone). L'écran appelle `phraseDuRefus()` (`remontee.js`) AVANT
+     d'arriver ici ; ce passage est le repli — la phrase de la base, sans
+     date, jamais une date inventée. */
   const code = String((e && e.code) || '');
   if (/^OP\d{3}$/.test(code) && brut) return brut;
 

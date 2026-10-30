@@ -12,11 +12,13 @@ import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
   initialDemandes, initialAnnonces, initialDemandesRecues, initialChantiers,
-  initialClients, initialReponsesAnnonces,
+  initialClients, initialReponsesAnnonces, REMONTEES_DEMO,
 } from '../data/demo';
 import { correspond } from './filtre-fil';
 import { relativeTime } from './formats';
-import { decouperPage, finDemo } from './page-fil';
+import { decouperPage, finDemo, trierDemo } from './page-fil';
+import { rowToPost } from './publication';
+import { decisionRemontee } from './remontee';
 import { photoActeur } from './notifications';
 
 /* En HAUT, jamais en `await import()` : la règle du 01/10 — Metro découpe
@@ -564,6 +566,10 @@ function rowToPro(row, reviews = [], partners = []) {
 function rowToReview(row) {
   return {
     id: row.id,
+    /* MON AVIS (lot S-c) : la fiche propose « Retirer mon avis » à la place
+       de « Laisser un avis » — un avis ne se modifie plus, il se retire et
+       se réécrit (décision du propriétaire du 29/10). */
+    mien: !!currentUserId && row.author_id === currentUserId,
     auteur: row.auteur || 'Client',
     verifie: !!row.client_verifie,
     date: formatDate(row.created_at),
@@ -654,13 +660,15 @@ export async function loadAll() {
     });
     return {
       pros,
-      posts: initialPosts.slice(0, TAILLE_PAGE_FIL).map((p, i) => ({
+      /* DANS L'ORDRE DU FIL (`postsDemo`, la clé de tri de `fil_filtre`) :
+         une publication remise en avant remonte en démonstration aussi. */
+      posts: postsDemo().slice(0, TAILLE_PAGE_FIL).map((p, i) => ({
         ...p,
         comments: p.comments ? [...p.comments] : [],
         nbCommentaires: p.comments ? p.comments.length : 0,
         curseur: String(i + 1),
       })),
-      finDuFil: finDemo(0, TAILLE_PAGE_FIL, initialPosts.length),
+      finDuFil: finDemo(0, TAILLE_PAGE_FIL, postsDemo().length),
       /* Le mode démonstration doit se comporter EXACTEMENT comme la base :
          un dernier message, un nombre de non-lus, et les messages déjà là
          (ici on les garde, il n'y en a que quelques-uns). Sans cela, la
@@ -1102,6 +1110,45 @@ export const TAILLE_PAGE_DEMANDES = 200;
    démonstration doit se comporter pareil. Clé : l'identifiant, en chaîne. */
 const jaimesDemo = new Map();
 
+/* LES PUBLICATIONS DE LA DÉMONSTRATION VIVENT EN MÉMOIRE, ELLES AUSSI —
+   lot S-c, 30/10/2026. Publier, corriger, supprimer valaient `noop` : tant
+   que « Mes publications » se déduisait du fil chargé, l'écran suivait
+   quand même. Depuis qu'elle a SA lecture (elle se charge par la base,
+   page par page), une publication supprimée en démonstration y serait
+   revenue, une correction perdue, une publication neuve absente
+   (critique du 29/10). Et la remise en avant doit pouvoir se montrer :
+   sa règle se rejoue sur l'historique de la démonstration
+   (`REMONTEES_DEMO`) plus celles de la session. */
+const publicationsDemo = {
+  ajoutees: [],
+  retirees: new Set(),
+  textes: new Map(),
+  remontees: new Map(),
+  historique: REMONTEES_DEMO.map((r) => ({ ...r })),
+};
+
+/* Le compte de démonstration est la PREMIÈRE fiche (`maFiche`, ma-fiche.js). */
+function maFicheDemo() {
+  const premiere = Object.keys(demoPros)[0];
+  return premiere === undefined ? null : String(premiere);
+}
+
+/* Toutes les publications de la démonstration, telles qu'elles sont
+   MAINTENANT, dans l'ordre du fil (`trierDemo`, la clé de `fil_filtre`). */
+function postsDemo() {
+  const d = publicationsDemo;
+  const toutes = [...d.ajoutees, ...initialPosts]
+    .filter((p) => !d.retirees.has(String(p.id)))
+    .map((p) => {
+      const cle = String(p.id);
+      let q = p;
+      if (d.textes.has(cle)) q = { ...q, texte: d.textes.get(cle), modifie: true };
+      if (d.remontees.has(cle)) q = { ...q, remonteLe: d.remontees.get(cle) };
+      return q;
+    });
+  return trierDemo(toutes);
+}
+
 function postDemo(p, rang) {
   const commentaires = p.comments ? p.comments.slice() : [];
   const cle = String(p.id);
@@ -1115,63 +1162,9 @@ function postDemo(p, rang) {
   });
 }
 
-/**
- * Une ligne de la table `posts` devient une publication de l'application.
- *
- * `commentaires` vaut `null` quand ils n'ont PAS été chargés — ce qui est
- * désormais le cas normal, on ne les charge qu'à l'ouverture. Le nombre
- * affiché vient alors de `comments_count`, tenu par un trigger côté base.
- * Distinguer `null` (pas chargés) de `[]` (chargés, aucun) est ce qui permet
- * à l'écran de savoir s'il faut aller les chercher.
- */
-function rowToPost(p, likedSet, commentaires = null) {
-  if (p.is_ad) {
-    return {
-      id: p.id, type: 'ad', annonceur: p.annonceur, accroche: p.accroche,
-      cta: p.cta, media: p.media,
-      /* UNE PUBLICITÉ A AUSSI UN CURSEUR (17/10/2026). Sans lui, une page
-         qui finissait sur une publicité faisait croire au bout du fil :
-         `chargerPlusDeFil` ne savait pas d'où repartir, et posait
-         « fin ». Relevé sur la vraie base : les deux publicités aux rangs
-         16 et 17 — trois publications de plus, et elles fermaient la
-         première page. */
-      curseur: p.created_at,
-    };
-  }
-  return {
-    id: p.id, type: 'post', proId: p.author_id, time: relativeTime(p.created_at),
-    // « type » dit si c'est une publication ou une publicité ; « format »
-    // dit ce qu'on regarde. Les deux étaient confondus, si bien qu'une
-    // photo se retrouvait dans le fil des vidéos.
-    format: p.type || 'photo',
-    /* L'INTENTION, à côté du SUPPORT. `type` dit ce qu'on regarde (photo,
-       vidéo, montage) ; `conseil` dit pourquoi c'est là. Les deux se
-       combinent — une vidéo-conseil est les deux à la fois. */
-    conseil: !!p.conseil,
-    /* LE CHANTIER AUQUEL ELLE APPARTIENT (section 36), ou `null`. Le TITRE
-       ne voyage pas ici : il vit dans la table `chantiers`, et l'écran le
-       lit dans le dictionnaire que `chantiersDeCesPosts()` remplit. Le
-       recopier sur chaque publication ferait deux sources pour une seule
-       vérité — et un chantier renommé laisserait l'ancien nom dans le
-       fil, pour toujours. */
-    chantierId: p.chantier_id || null,
-    texte: p.texte, media: p.media,
-    medias: (p.medias && p.medias.length) ? p.medias : (p.media ? [p.media] : []),
-    musique: p.musique || null,
-    // Le montage assemblé en un seul fichier, quand Cloudinary l'a fabriqué.
-    montageUrl: p.montage_url || null,
-    likes: p.likes_count || 0,
-    /* COMBIEN DE PERSONNES ONT VU (section 35). Jamais QUI : la table du
-       détail n'est lisible que par celui qui a regardé. */
-    vues: p.vues_count || 0,
-    liked: likedSet.has(p.id),
-    comments: commentaires,
-    nbCommentaires: p.comments_count || 0,
-    // Le repère de pagination : on redemande « ce qui est plus ancien que ».
-    modifie: !!p.modifie_le,
-    curseur: p.created_at,
-  };
-}
+/* `rowToPost` vit dans `publication.js` depuis le lot S-c : `node` peut
+   l'y FAIRE TOURNER, et c'est là que se décide quelle date sert à quoi
+   (l'ancienneté affichée, le récit, la pagination). */
 
 /**
  * La page suivante du fil.
@@ -1221,7 +1214,7 @@ async function pageFilDemo(options = {}) {
   const f = options.filtre || {};
   const abonnements = f.abonnements ? new Set(ABONNEMENTS_DEMO) : null;
 
-  const retenus = initialPosts.filter(
+  const retenus = postsDemo().filter(
     (p) => correspond(p, demoPros[p.proId], f, { abonnements, videos: !!f.videos }));
 
   const page = retenus
@@ -1521,7 +1514,25 @@ export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
   };
 };
 
-export const createPost = !hasSupabase ? noop : async ({
+/* La publication de la démonstration : retenue en mémoire (voir
+   `publicationsDemo`), avec une vraie date, pour que « Mes publications »,
+   qui a sa propre lecture, la retrouve. */
+function createPostDemo({
+  type, texte, media, medias = [], musique = null, montageUrl = null, metier, ville,
+  conseil = false, chantierId = null,
+}) {
+  const id = `demo-pub-${Date.now()}`;
+  publicationsDemo.ajoutees.unshift({
+    id, type: 'post', format: type || 'photo', proId: Number(maFicheDemo()) || maFicheDemo(),
+    time: "À l'instant", publieLe: new Date().toISOString(),
+    texte, media, medias, musique, montageUrl, metier, ville,
+    conseil: !!conseil, chantierId: chantierId || null,
+    likes: 0, vues: 0, liked: false, comments: [],
+  });
+  return Promise.resolve({ id });
+}
+
+export const createPost = !hasSupabase ? createPostDemo : async ({
   type, texte, media, medias = [], musique = null, montageUrl = null, metier, ville,
   latitude = null, longitude = null, conseil = false, chantierId = null,
 }) => {
@@ -1614,7 +1625,7 @@ export const chantiersDeCesPosts = !hasSupabase
  * plus ancien, et c'est le seul endroit où ce serait un contresens.
  */
 export const publicationsDuChantier = !hasSupabase
-  ? async (chantierId) => initialPosts
+  ? async (chantierId) => postsDemo()
     .filter((p) => p.chantierId === chantierId)
     /* DU PLUS ANCIEN AU PLUS RÉCENT, comme la requête ci-dessous. En
        démonstration, les publications sortaient dans l'ordre du FICHIER —
@@ -1654,13 +1665,20 @@ export const publicationsDuChantier = !hasSupabase
  * NORMAL ici (supprimée, masquée, bloquée), pas une erreur à remonter.
  */
 export const publicationParId = !hasSupabase
-  ? async (id) => initialPosts.map((p, i) => postDemo(p, i))
+  ? async (id) => postsDemo().map((p, i) => postDemo(p, i))
     .find((p) => String(p.id) === String(id)) || null
   : async (id) => {
     const { data, error } = await supabase.from('posts').select('*')
       .eq('id', id).maybeSingle();
     if (error) throw error;
-    return data ? rowToPost(data, new Set(), null) : null;
+    if (!data) return null;
+    /* SON « J'AIME » À MOI (lot S-c) : elle s'affichait « non aimée » même
+       si on l'avait aimée, et un appui insérait un doublon que la base
+       refusait — le compteur montait quand même à l'écran. */
+    const aime = data.is_ad ? null : await supabase.from('post_likes')
+      .select('post_id').eq('user_id', currentUserId).eq('post_id', data.id);
+    const likedSet = new Set(((aime && aime.data) || []).map((l) => l.post_id));
+    return rowToPost(data, likedSet, null);
   };
 
 /**
@@ -2371,27 +2389,130 @@ export const ajouterAuPortfolio = !hasSupabase ? noop : async (media) => {
 };
 
 /** Supprimer une de mes publications. Les règles RLS n'autorisent que les miennes. */
-export const supprimerPost = !hasSupabase ? noop : async (postId) => {
-  const { error } = await supabase.from('posts')
-    .delete().eq('id', postId).eq('author_id', currentUserId);
-  if (error) throw error;
-};
+export const supprimerPost = !hasSupabase
+  ? async (postId) => { publicationsDemo.retirees.add(String(postId)); }
+  : async (postId) => {
+    const { error } = await supabase.from('posts')
+      .delete().eq('id', postId).eq('author_id', currentUserId);
+    if (error) throw error;
+  };
 
 /**
- * Remettre une publication en tête du fil.
+ * REMETTRE EN AVANT une de mes publications — lot S-c, 30/10/2026.
  *
- * On ne la recopie pas : une copie perdrait ses j'aime et ses commentaires,
- * et laisserait deux fois la même chose dans le fil. On change sa date, ce
- * qui la fait remonter — le fil étant trié par date.
+ * On ne la recopie pas : une copie perdrait ses j'aime et ses commentaires.
+ * Et on ne change PLUS sa date : c'était ce que faisait cette fonction, et
+ * `tient_le_texte()` remettait la date aussitôt — le bouton ne faisait
+ * RIEN, pendant que l'écran disait « remise en tête du fil ». C'est la
+ * base qui décide (`remonter_publication()`, section 52.9) : une fois tous
+ * les sept jours par publication, trois sur sept jours par professionnel.
+ *
+ * Rend l'instant de la remise en avant (la chaîne de la base). Un refus est
+ * une erreur PostgREST OP022, avec `details` et `hint` : `phraseDuRefus()`
+ * (`remontee.js`) la met en mots, avec sa date.
  */
-export const republierPost = !hasSupabase ? noop : async (postId) => {
-  const { data, error } = await supabase.from('posts')
-    .update({ created_at: new Date().toISOString() })
-    .eq('id', postId).eq('author_id', currentUserId)
-    .select().single();
+function remonterPublicationDemo(postId) {
+  const publication = postsDemo().find((p) => String(p.id) === String(postId)) || null;
+  const d = decisionRemontee({
+    publication,
+    moi: maFicheDemo(),
+    historique: publicationsDemo.historique,
+    maintenant: Date.now(),
+  });
+  if (!d.ok) {
+    const e = new Error(d.message);
+    Object.assign(e, { code: d.code, details: d.details, hint: d.hint });
+    return Promise.reject(e);
+  }
+  publicationsDemo.remontees.set(String(postId), d.instant);
+  publicationsDemo.historique.push({ postId, remonteeLe: d.instant });
+  return Promise.resolve(d.instant);
+}
+
+export const remonterPublication = !hasSupabase ? remonterPublicationDemo : async (postId) => {
+  const { data, error } = await supabase.rpc('remonter_publication', { p_id: postId });
   if (error) throw error;
   return data;
 };
+
+/* ------------------------------------------------------------------ */
+/*  « MES PUBLICATIONS » — sa propre lecture (lot S-c)                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * MES publications, page par page, de la plus RÉCEMMENT PUBLIÉE à la plus
+ * ancienne — la date de publication, pas celle d'une remise en avant :
+ * c'est ma liste, pas le fil.
+ *
+ * Elle se déduisait du fil CHARGÉ : un artisan qui a trois publications
+ * lisait « Vous n'avez encore rien publié » dès que vingt publications plus
+ * récentes d'autres artisans étaient arrivées (mesuré).
+ *
+ * `curseur` est la date de publication BRUTE de la dernière ligne gardée,
+ * lue AVANT `rowToPost` — jamais `post.curseur`, qui est la clé du FIL :
+ * une publication remise en avant en fin de page faisait redemander la
+ * même page, sans fin (mesuré : 30 requêtes, l'écran bloqué à 20).
+ *
+ * `select('*')` : `created_at` doit venir — sans lui, `relativeTime`
+ * dirait « À l'instant » de chaque carte.
+ */
+async function mesPublicationsSupabase({ avant = null } = {}) {
+  let requete = supabase.from('posts').select('*')
+    .eq('author_id', currentUserId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(TAILLE_PAGE_FIL + 1);
+  if (avant) requete = requete.lt('created_at', avant);
+  const { data, error } = await requete;
+  if (error) throw error;
+
+  const { lignes, fin } = decouperPage(data, TAILLE_PAGE_FIL, (l) => (l ? l.created_at : null));
+  const ids = lignes.map((p) => p.id);
+  let likedSet = new Set();
+  if (ids.length) {
+    const r = await supabase.from('post_likes')
+      .select('post_id').eq('user_id', currentUserId).in('post_id', ids);
+    likedSet = new Set((r.data || []).map((l) => l.post_id));
+  }
+  const derniere = lignes[lignes.length - 1];
+  return {
+    posts: lignes.map((p) => rowToPost(p, likedSet, null)),
+    fin,
+    curseur: derniere ? derniere.created_at : null,
+  };
+}
+
+function mesPublicationsDemo({ avant = null } = {}) {
+  const moi = maFicheDemo();
+  const miennes = postsDemo()
+    .filter((p) => p.type !== 'ad' && String(p.proId) === String(moi))
+    .sort((a, b) => String(b.publieLe || '').localeCompare(String(a.publieLe || '')));
+  const depart = avant ? Number(avant) : 0;
+  const page = miennes.slice(depart, depart + TAILLE_PAGE_FIL).map((p, i) => postDemo(p, depart + i + 1));
+  return Promise.resolve({
+    posts: page,
+    fin: finDemo(depart, TAILLE_PAGE_FIL, miennes.length),
+    curseur: String(depart + page.length),
+  });
+}
+
+export const mesPublications = hasSupabase ? mesPublicationsSupabase : mesPublicationsDemo;
+
+/**
+ * Combien j'en ai — pour la rangée « Mes publications (N) » du profil et le
+ * titre de l'écran. Un nombre qu'on n'a pas pu lire vaut `null`, et l'écran
+ * n'affiche RIEN : jamais « (0) » pour « je ne sais pas ».
+ */
+export const nbMesPublications = !hasSupabase
+  ? async () => postsDemo()
+    .filter((p) => p.type !== 'ad' && String(p.proId) === String(maFicheDemo())).length
+  : async () => {
+    const { count, error } = await supabase.from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('author_id', currentUserId);
+    if (error) throw error;
+    return typeof count === 'number' ? count : null;
+  };
 
 /** Remplacer la liste des réalisations : suppression et réordonnancement. */
 export const definirPortfolio = !hasSupabase ? noop : async (liste) => {
@@ -3587,6 +3708,31 @@ export const createReview = !hasSupabase ? noop : async ({ proId, delais, qualit
   return data;
 };
 
+/**
+ * RETIRER MON AVIS — lot S-c, décision du propriétaire du 29/10 (« figé,
+ * mais retirable »).
+ *
+ * Un avis ne se MODIFIE plus une fois publié (la base retire le droit,
+ * section 52.7) : on le retire, puis on en écrit un autre. La note de la
+ * fiche se recalcule par la base (`trg_notes_pro`). Un blocage n'empêche pas
+ * de retirer ce qu'on a posé.
+ *
+ * `select('id')` : sans lui, un avis déjà parti (un autre appareil) ou qui
+ * n'est pas à moi répondrait « 0 ligne » SANS erreur — et l'écran dirait
+ * « avis retiré » pour rien.
+ */
+export const retirerAvis = !hasSupabase
+  ? async () => true
+  : async (id) => {
+    const { data, error } = await supabase.from('reviews')
+      .delete().eq('id', id).eq('author_id', currentUserId).select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error('Cet avis n’est plus là : il a sans doute été retiré depuis un autre appareil. Rechargez la fiche.');
+    }
+    return true;
+  };
+
 export const createQuoteRequest = !hasSupabase ? noop : async ({
   proId, metier, description, ville, budget, nom, telephone,
 }) => {
@@ -4486,16 +4632,25 @@ export const supprimerMonCompte = !hasSupabase
  * avale ses erreurs au lieu de les lever — l'artisan n'a pas à voir un
  * message rouge parce qu'une table d'administration était indisponible.
  *
- * `ignoreDuplicates` : le même mot proposé cent fois ferait cent lignes,
- * et la file deviendrait illisible au moment précis où elle servirait.
- * L'index unique de la section 22 s'en charge ; ici on évite juste de
- * faire remonter l'erreur de conflit.
+ * Le même mot proposé cent fois ferait cent lignes, et la file deviendrait
+ * illisible au moment précis où elle servirait. L'index unique de la
+ * section 22 s'en charge ; ici on tait juste son refus (23505).
  */
 export const proposerSpecialite = !hasSupabase ? noop : async (texte, metier) => {
+  /* UNE INSERTION SIMPLE, et son doublon ignoré (lot S-c, 30/10/2026).
+     C'était un `upsert` avec `onConflict: 'texte,metier'` : l'index unique
+     de la section 22 porte sur des EXPRESSIONS (`lower(btrim(texte))`,
+     `coalesce(metier, '')`), aucune contrainte ne correspond, et la base
+     répondait 42P10 — avalé ici. AUCUNE spécialité proposée n'est jamais
+     arrivée dans la file (mesuré par la critique du 29/10). L'index rend
+     23505 pour un mot déjà proposé : c'est le doublon qu'on voulait
+     éviter, et on le tait. Et seules ces trois colonnes s'écrivent
+     (droits de colonne, section 52.2). */
   try {
+    /* `{ error }` n'est pas lu : un refus, doublon compris, ne doit rien
+       casser ici (voir plus haut). */
     await supabase.from('specialites_proposees')
-      .upsert({ texte, metier: metier || null, propose_par: currentUserId },
-        { onConflict: 'texte,metier', ignoreDuplicates: true });
+      .insert({ texte, metier: metier || null, propose_par: currentUserId });
   } catch (e) {
     /* Silence volontaire : voir le commentaire ci-dessus. */
   }
@@ -4507,11 +4662,13 @@ export const modifierCommentaire = !hasSupabase ? noop : async (id, texte) => {
   if (error) throw error;
 };
 
-export const modifierPost = !hasSupabase ? noop : async (id, texte) => {
-  const { error } = await supabase.from('posts')
-    .update({ texte }).eq('id', id).eq('author_id', currentUserId);
-  if (error) throw error;
-};
+export const modifierPost = !hasSupabase
+  ? async (id, texte) => { publicationsDemo.textes.set(String(id), texte); }
+  : async (id, texte) => {
+    const { error } = await supabase.from('posts')
+      .update({ texte }).eq('id', id).eq('author_id', currentUserId);
+    if (error) throw error;
+  };
 
 export const supprimerCommentaire = !hasSupabase ? noop : async (id) => {
   const { error } = await supabase.from('comments').delete().eq('id', id);

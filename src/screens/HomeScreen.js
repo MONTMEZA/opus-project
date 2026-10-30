@@ -1,5 +1,5 @@
 /**
- * 2. Accueil — bascule "Fil" / "Vidéos" et sous-onglets "Pour vous" / "Abonnements".
+ * 2. Accueil — bascule "Fil" / "Vidéos" et sous-onglets "Tout" / "Abonnements".
  * (.home-wrap du prototype)
  *
  * En mode "Vidéos", les diapositives occupent toute la hauteur de l'écran et
@@ -23,6 +23,7 @@ import { vuesPossibles } from '../lib/vues';
 import { CLAVIER } from '../lib/clavier';
 import { FORMATS_VIDEO } from '../lib/formats-publication';
 import { estMienne } from '../lib/ma-fiche';
+import OrdreDuFil from '../components/OrdreDuFil';
 
 const MODES = [{ key: 'classic', label: 'Fil' }, { key: 'video', label: 'Vidéos' }];
 
@@ -74,30 +75,43 @@ function BasDuFil({ chargement, fin, vide }) {
 function RappelFiltre({ resume, onOuvrir, onEffacer }) {
   if (!resume) return null;
   return (
-    <View style={s.rappelFiltre}>
-      <Pressable
-        onPress={onOuvrir}
-        style={({ pressed }) => [s.rappelTouche, pressed && s.rappelPressee]}
-        accessibilityRole="button"
-        accessibilityLabel={`Filtre : ${resume}. Modifier`}
-      >
-        <Search size={14} color={C.accentTexte} />
-        <Text style={s.rappelTexte} numberOfLines={1}>{resume}</Text>
-      </Pressable>
-      <Pressable
-        onPress={onEffacer}
-        style={({ pressed }) => [s.rappelCroix, pressed && s.rappelPressee]}
-        accessibilityRole="button"
-        accessibilityLabel="Enlever le filtre"
-      >
-        <X size={16} color={C.accentTexte} />
-      </Pressable>
+    <View>
+      <View style={s.rappelFiltre}>
+        <Pressable
+          onPress={onOuvrir}
+          style={({ pressed }) => [s.rappelTouche, pressed && s.rappelPressee]}
+          accessibilityRole="button"
+          accessibilityLabel={`Filtre : ${resume}. Modifier`}
+        >
+          <Search size={14} color={C.accentTexte} />
+          <Text style={s.rappelTexte} numberOfLines={1}>{resume}</Text>
+        </Pressable>
+        <Pressable
+          onPress={onEffacer}
+          style={({ pressed }) => [s.rappelCroix, pressed && s.rappelPressee]}
+          accessibilityRole="button"
+          accessibilityLabel="Enlever le filtre"
+        >
+          <X size={16} color={C.accentTexte} />
+        </Pressable>
+      </View>
+      {/* LA PAGE DES RÉSULTATS dit comment elle est ordonnée (lot S-c) :
+          une recherche est posée, c'est donc ici qu'on se le demande. */}
+      <OrdreDuFil style={s.ordreDuFil} />
     </View>
   );
 }
 
-const TABS = [
-  { key: 'pourvous', label: 'Pour vous' },
+/* « TOUT », et plus « Pour vous » — décision du propriétaire du 29/10/2026.
+   Sur les réseaux, « Pour vous » veut dire « choisi pour vous » ; ce fil-ci
+   n'est pas personnalisé : il montre tout, du plus récent au plus ancien,
+   avec les publications remises en avant (lot S-c). Les conditions
+   d'utilisation nomment CE libellé (« L'ordre du fil »), et `verifier-legal`
+   compare les deux. Seul le libellé change : la clé `pourvous` reste, donc
+   aucun état n'est à reprendre. Le badge « Pour vous » des Demandes, lui,
+   reste : il veut bien dire « un de vos métiers ». */
+export const TABS = [
+  { key: 'pourvous', label: 'Tout' },
   { key: 'abonnements', label: 'Abonnements' },
 ];
 
@@ -393,7 +407,7 @@ export default function HomeScreen({
           ListFooterComponentStyle={s.piedListe}
           /* UN MESSAGE DE LISTE VIDE QUI DONNE TORT À L'APPLICATION.
              Celui d'avant disait « Suis des professionnels pour voir leurs
-             publications ici » — y compris dans « Pour vous », où il n'y
+             publications ici » — y compris dans « Tout », où il n'y
              avait rien à suivre, et désormais y compris avec un filtre qui
              écarte tout. On en conclut qu'Opus est désert, et on n'y revient
              pas. C'est le défaut trouvé le 04/10 sur la Place des pros, à
@@ -531,6 +545,7 @@ const s = StyleSheet.create({
   /* ANGLE VIF : cette ligne est de la STRUCTURE — elle PORTE l'information
      « voilà ce que vous regardez », elle ne flotte pas. Les deux zones
      appuyables qu'elle contient, elles, sont arrondies. */
+  ordreDuFil: { marginHorizontal: GOUTTIERE, marginBottom: S.sm },
   rappelFiltre: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: GOUTTIERE, marginBottom: S.sm,

@@ -120,8 +120,21 @@ verifier('la case se remet à faux après chaque publication',
 /* ------------------------------------------------------------------ */
 console.log('\nQui LIT l\'étiquette — l\'autre bout de la chaîne');
 
-verifier('`rowToPost` la fait voyager',
-  /conseil: !!p\.conseil,/.test(api));
+/* `rowToPost` vit dans `publication.js` depuis le lot S-c (30/10/2026), un
+   fichier que `node` sait ouvrir : on la FAIT TOURNER au lieu de chercher
+   une ligne de texte dans `api.js`. */
+const { rowToPost } = await import('../src/lib/publication.js');
+const ligneConseil = rowToPost({
+  id: 1, author_id: 'a', type: 'photo', conseil: true, created_at: '2026-10-01T10:00:00Z',
+}, new Set(), null);
+const ligneSans = rowToPost({
+  id: 2, author_id: 'a', type: 'photo', conseil: null, created_at: '2026-10-01T10:00:00Z',
+}, new Set(), null);
+verifier('`rowToPost` la fait voyager (FAIT TOURNER : vrai reste vrai, vide devient faux)',
+  ligneConseil.conseil === true && ligneSans.conseil === false
+    && /^import \{ rowToPost \} from '\.\/publication';$/m.test(api)
+    && !/function rowToPost\(/.test(api),
+  'une seule écriture, dans publication.js, importée par api.js');
 
 verifier('la fiche va CHERCHER les conseils en base',
   /\.eq\('conseil', true\)/.test(api),

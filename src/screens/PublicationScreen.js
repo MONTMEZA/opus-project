@@ -62,8 +62,10 @@ export default function PublicationScreen({
   if (!post) {
     return (
       <EmptyState icone={MessageSquare} titre="Publication introuvable">
-        Elle a peut-être été supprimée depuis que la notification est
-        arrivée.
+        {/* Une phrase qui vaut pour les DEUX portes (lot S-c) : la cloche,
+            et « Mes publications ». « Depuis que la notification est
+            arrivée » était faux pour la seconde. */}
+        Elle a peut-être été supprimée entre-temps.
       </EmptyState>
     );
   }

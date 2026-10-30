@@ -744,9 +744,9 @@ select c.confrelid = 'public.devis'::regclass as vers_devis_attendu_t,
 \echo '--- 13h. les deux index UNIQUES'
 select (select indisunique from pg_index where indexrelid = 'public.idx_base_postes_rapprochement'::regclass) as rapprochement_unique_attendu_t,
        (select indisunique from pg_index where indexrelid = 'public.idx_devis_id_pro'::regclass) as devis_id_pro_unique_attendu_t;
-\echo '--- 13i. les listes 27b et 27c de l essai 49 : le lot P n y ajoute aucune fonction security definer (26 = les 24 d avant lui, plus admin_valider_pieces du lot S-a et peut_faire_un_devis du lot S-b ; 30 = les 27 d avant, plus les trois déclencheurs definer du lot S-b)'
+\echo '--- 13i. les listes 27b et 27c de l essai 49 : le lot P n y ajoute aucune fonction security definer (27 = les 24 d avant lui, plus admin_valider_pieces du lot S-a, peut_faire_un_devis du lot S-b et remonter_publication du lot S-c ; 30 = les 27 d avant, plus les trois déclencheurs definer du lot S-b)'
 select count(*) filter (where has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
-         as definer_ouvertes_attendu_26,
+         as definer_ouvertes_attendu_27,
        count(*) filter (where not (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute')))
          as definer_fermees_attendu_30
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace

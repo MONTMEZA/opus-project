@@ -48,7 +48,7 @@ import DemandesScreen from './screens/DemandesScreen';
 import DemandesRecuesScreen, { appeler } from './screens/DemandesRecuesScreen';
 import AdminScreen from './screens/AdminScreen';
 import PasserProScreen from './screens/PasserProScreen';
-import { POST_GRADIENTS, avecAvisPublie, avgReviews } from './data/demo';
+import { POST_GRADIENTS, avecAvisPublie, avecAvisRetire, avgReviews } from './data/demo';
 import { METIER_PAR_DEFAUT, nomMetier , metiersDe } from './lib/metiers';
 import { etapesPourLeRecit } from './lib/recit';
 import { FORMATS_VISUELS, FORMATS_VIDEO } from './lib/formats-publication';
@@ -98,6 +98,7 @@ import {
 import { etatAuDepartDeLaLecture, issueDeLaLecture } from './lib/postes';
 import { dateDeDemandeDemo } from './data/devis-demo';
 import { maFiche } from './lib/ma-fiche';
+import { phraseDuRefus } from './lib/remontee';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
 } from './lib/filtre-fil';
@@ -149,6 +150,12 @@ const MESSAGE_PUBLICATION = api.mode === 'demo' ? {
  * REMONTE ce composant entier, au lieu d'en vider les états un par un.
  * Le raisonnement est écrit là-bas.
  */
+/* L'instant présent, en ISO. Hors du composant : lu seulement dans un
+   GESTE (publier, remettre en avant), jamais pendant un rendu. */
+function instantPresent() {
+  return new Date().toISOString();
+}
+
 export default function OpusApp({ onSortie, messageInitial = null }) {
   const [userType, setUserType] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -244,7 +251,37 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      et faire sauter le fil sous le doigt de quelqu'un qui est déjà
      devant la bonne publication serait désagréable. Le défilement
      n'appartient donc qu'au chemin de la CLOCHE. */
-  const [postCible, setPostCible] = useState(null);
+  /* LA PUBLICATION OUVERTE SUR SA PAGE — l'OBJET, et plus un identifiant à
+     chercher dans le fil (lot S-c, 30/10/2026). « Mes publications » ouvre
+     des publications ANCIENNES, absentes de la page chargée : la cloche les
+     insérait EN TÊTE du fil pour les retrouver — une publication de
+     quarante jours au-dessus de tout, même filtrée par la loupe —, et ses
+     commentaires ne se chargeaient jamais (critique du 29/10). La page lit
+     maintenant cet objet ; `majPost` le tient à jour comme le fil. */
+  const [publicationOuverte, setPublicationOuverte] = useState(null);
+  /* D'où l'on vient : la flèche y ramène. */
+  const [originePublication, setOriginePublication] = useState('notifications');
+  /* « MES PUBLICATIONS » — SA PROPRE LECTURE (lot S-c). Elle se déduisait
+     du fil chargé : un artisan qui a trois publications lisait « Vous
+     n'avez encore rien publié » dès que vingt publications plus récentes
+     d'autres artisans étaient arrivées. `etat` : 'jamais', 'chargement',
+     'pret', 'echec' — une liste illisible n'est JAMAIS « rien publié ». */
+  const [mesPubs, setMesPubs] = useState({ liste: [], fin: false, etat: 'jamais' });
+  /* Le curseur de « Mes publications » : la date de PUBLICATION brute de la
+     dernière ligne, rendue par `api.mesPublications` — jamais
+     `post.curseur`, qui est la clé du FIL (une remise en avant en fin de
+     page faisait redemander la même page, sans fin). Dans une référence :
+     deux appels rapprochés doivent lire la même valeur. */
+  const curseurMesPubs = useRef(null);
+  const chargementMesPubs = useRef(false);
+  /* Combien j'ai de publications, lu par la base ; `null` = je ne sais pas,
+     et l'écran n'affiche alors RIEN, jamais « (0) ». */
+  const [nbMesPubs, setNbMesPubs] = useState(null);
+  /* Le refus d'une remise en avant, GARDÉ sous la carte : le bandeau
+     d'erreur ne vit que quelques secondes, et c'est la seule information
+     sur la date à partir de laquelle ce sera possible. */
+  const [refusRemontee, setRefusRemontee] = useState({});
+  const remonteeEnCours = useRef(null);
   const [annonceCible, setAnnonceCible] = useState(null);
   const [demandeCible, setDemandeCible] = useState(null);
   const [openContactId, setOpenContactId] = useState(null);
@@ -1002,13 +1039,37 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
 
   /* ---------- actions publication ---------- */
+  /* UNE PUBLICATION, PARTOUT OÙ ELLE EST AFFICHÉE — lot S-c, 30/10/2026.
+     Le fil, la page d'une publication, « Mes publications » : trois copies
+     de la même publication, et chaque geste (aimer, commenter, corriger,
+     remettre en avant) doit les toucher TOUTES. Une seule fonction, sinon
+     la quatrième copie de demain sera oubliée. */
+  const majPost = (id, changement) => {
+    const meme = (p) => p && String(p.id) === String(id);
+    setPosts((ps) => ps.map((p) => (meme(p) ? changement(p) : p)));
+    setPublicationOuverte((p) => (meme(p) ? changement(p) : p));
+    setMesPubs((m) => (m.liste.some(meme)
+      ? { ...m, liste: m.liste.map((p) => (meme(p) ? changement(p) : p)) }
+      : m));
+  };
+  /* La copie la plus FRAÎCHE d'une publication : la page ouverte d'abord,
+     puis le fil, puis « Mes publications ». */
+  const trouverPost = (id) => {
+    const meme = (p) => p && String(p.id) === String(id);
+    if (meme(publicationOuverte)) return publicationOuverte;
+    return posts.find(meme) || mesPubs.liste.find(meme) || null;
+  };
+
+  /* La décision AVANT la mise à jour : une variable posée DANS la fonction
+     de mise à jour de React ne l'est que si React l'exécute tout de suite
+     (la leçon de « Suivre », 26/10). */
   const toggleLike = (id) => {
-    let liked = false;
-    setPosts((ps) => ps.map((p) => {
-      if (p.id !== id) return p;
-      liked = !p.liked;
-      return { ...p, liked, likes: p.likes + (p.liked ? -1 : 1) };
-    }));
+    const actuel = trouverPost(id);
+    if (!actuel) return;
+    const liked = !actuel.liked;
+    majPost(id, (p) => (p.liked === liked
+      ? p
+      : { ...p, liked, likes: (p.likes || 0) + (liked ? 1 : -1) }));
     api.setLike(id, liked).catch(() => showErreur("Le j'aime n'a pas pu être enregistré."));
   };
 
@@ -1086,7 +1147,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   /**
    * LA SEULE PORTE QUI CHANGE CE QU'ON VOIT DANS LE FIL.
    *
-   * Filtre, « Fil / Vidéos », « Pour vous / Abonnements » : les trois
+   * Filtre, « Fil / Vidéos », « Tout / Abonnements » : les trois
    * passent par ici, parce que les trois sont la même chose — une question
    * posée à la base. Avant, les deux derniers filtraient À L'ÉCRAN les
    * vingt publications déjà téléchargées : avec mille artisans, les vingt
@@ -1098,8 +1159,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * React ne change pas dans la foulée de l'appel qui l'a posé. C'est
    * exactement le piège de la réponse à une annonce, le 04/10.
    */
+  /* Rend la page reçue, ou `null` si le chargement a échoué. `silencieux` :
+     l'appelant dit lui-même ce qui s'est passé (la remise en avant, qui a
+     RÉUSSI même si le fil ne se recharge pas). */
   const changerCeQuOnVoit = async ({
-    filtre = filtreFil, mode = feedMode, tab = feedTab,
+    filtre = filtreFil, mode = feedMode, tab = feedTab, silencieux = false,
   } = {}) => {
     setFiltreFil(filtre);
     setFeedMode(mode);
@@ -1107,18 +1171,21 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     if (mode !== feedMode) setVideoCible(null);
 
     setChargePage(true);
+    let page = null;
     try {
-      const { posts: page, fin } = await api.chargerPageFil({
+      const reponse = await api.chargerPageFil({
         filtre: argumentsDuFil(filtre, {
           abonnements: tab === 'abonnements', videos: mode === 'video',
         }),
       });
+      page = reponse.posts;
       setPosts(page);
-      setFinDuFil(fin);
+      setFinDuFil(reponse.fin);
     } catch (e) {
-      showErreur(messageClair(e, 'Le fil n’a pas pu être chargé.'));
+      if (!silencieux) showErreur(messageClair(e, 'Le fil n’a pas pu être chargé.'));
     }
     setChargePage(false);
+    return page;
   };
 
   /* LES TROIS ENVELOPPES SONT DÉCLARÉES ICI, ET PAS PLUS HAUT.
@@ -1134,7 +1201,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      05/10/2026 : il est appliqué par la base, pas sur ce qui revient. */
   const changerFeedMode = (mode) => { changerCeQuOnVoit({ mode }); };
 
-  /* Même raison pour « Pour vous » / « Abonnements ». Deux façons d'arriver
+  /* Même raison pour « Tout » / « Abonnements ». Deux façons d'arriver
      au même écran doivent faire exactement le même travail — c'est la leçon
      du glissement de Découvrir, le 04/10. */
   const changerFeedTab = (tab) => { changerCeQuOnVoit({ tab }); };
@@ -1261,18 +1328,22 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      > et je venais de la violer dans l'autre sens : là, un état changeait
      > sans le travail qui va avec ; ici, un panneau s'ouvrait sans son
      > contenu. */
-  const ouvrirCommentaires = async (id) => {
+  /* `objet` : la publication qu'on vient d'ouvrir, quand l'appelant l'a —
+     la cloche et « Mes publications » l'ouvrent dans le MÊME geste, et la
+     fermeture de cette fonction lit encore l'état d'avant (critique du
+     29/10 : « Chargement des commentaires… » pour toujours). */
+  const ouvrirCommentaires = async (id, objet = null) => {
     setOpenCommentsId(id);
 
-    const post = posts.find((p) => String(p.id) === String(id));
+    const post = objet || trouverPost(id);
     if (!post || Array.isArray(post.comments)) return;
 
     try {
       const liste = await api.chargerCommentaires(id);
-      setPosts((ps) => ps.map((p) => (String(p.id) === String(id) ? { ...p, comments: liste } : p)));
+      majPost(id, (p) => ({ ...p, comments: liste }));
     } catch (e) {
       showErreur('Les commentaires n’ont pas pu être chargés.');
-      setPosts((ps) => ps.map((p) => (String(p.id) === String(id) ? { ...p, comments: [] } : p)));
+      majPost(id, (p) => ({ ...p, comments: [] }));
     }
   };
 
@@ -1301,8 +1372,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       reponses: [],
     };
 
-    setPosts((ps) => ps.map((p) => {
-      if (p.id !== postId) return p;
+    majPost(postId, (p) => {
       /* `comments` peut valoir null : on commente depuis un endroit où ils
          n'ont pas été chargés. On part alors d'une liste vide plutôt que de
          planter. Le compteur, lui, avance dans tous les cas. */
@@ -1316,7 +1386,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           ? { ...c, reponses: [...(c.reponses || []), nouveau] }
           : c)),
       };
-    }));
+    });
 
     api.addComment(postId, texte, parentId)
       .catch(() => showErreur("Le commentaire n'a pas pu être envoyé."));
@@ -1361,9 +1431,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       ? { ...c, texte: commentaire.texte, modifie: commentaire.modifie }
       : { ...c, reponses: (c.reponses || []).map(restaurer) });
 
-    const appliquer = (fn) => setPosts((ps) => ps.map((p) => (p.id !== postId || !Array.isArray(p.comments)
+    const appliquer = (fn) => majPost(postId, (p) => (!Array.isArray(p.comments)
       ? p
-      : { ...p, comments: p.comments.map(fn) })));
+      : { ...p, comments: p.comments.map(fn) }));
 
     appliquer(remplacer);
     try {
@@ -1386,8 +1456,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
     /* Retrait immédiat, avant la réponse du serveur : sinon on appuie et
        rien ne bouge pendant une seconde. */
-    setPosts((ps) => ps.map((p) => {
-      if (p.id !== postId) return p;
+    majPost(postId, (p) => {
       const actuels = Array.isArray(p.comments) ? p.comments : [];
       const restants = actuels
         .filter((c) => c.id !== commentaire.id)
@@ -1400,7 +1469,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         comments: restants,
         nbCommentaires: Math.max((p.nbCommentaires || 0) - 1 - nbReponses, 0),
       };
-    }));
+    });
 
     try {
       await api.supprimerCommentaire(commentaire.id);
@@ -1931,12 +2000,24 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
     const couverture = envoyes[0] || (aUnVisuel ? POST_GRADIENTS[0] : null);
     if (versLeFil) {
-      setPosts((ps) => [{
+      /* `publieLe` et `remonteLe` comme `rowToPost` les pose : sans eux,
+         « Remettre en avant » ne saurait pas dater sa règle sur une
+         publication qu'on vient d'écrire. */
+      const maintenant = instantPresent();
+      const neuve = {
         id, type: 'post', format: createType, proId: myProId, time: "À l'instant",
         conseil: createConseil, chantierId: createChantier,
         texte, media: couverture, medias: envoyes, musique: urlMusique, montageUrl,
         likes: 0, liked: false, comments: [],
-      }, ...ps]);
+        publieLe: maintenant, remonteLe: null, curseur: maintenant,
+      };
+      setPosts((ps) => [neuve, ...ps]);
+      /* « Mes publications » déjà lue la reçoit en tête ; jamais lue, elle
+         la lira en base à son ouverture. Le compte gagne un — connu, il
+         sera relu en base à la prochaine ouverture du profil ; inconnu, il
+         le reste. */
+      setMesPubs((m) => (m.etat === 'jamais' ? m : { ...m, liste: [neuve, ...m.liste] }));
+      setNbMesPubs((n) => (typeof n === 'number' ? n + 1 : n));
     }
     if (versLePortfolio && myProId) {
       setPros((ps) => (ps[myProId]
@@ -2009,7 +2090,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       const pro = prev[proId];
       if (!pro) return prev;
       const review = {
-        id, auteur: 'Vous', verifie, date: "À l'instant", delais, qualite, tarif, commentaire,
+        id, mien: true, auteur: 'Vous', verifie, date: "À l'instant", delais, qualite, tarif, commentaire,
       };
       /* Le nombre d'avis et les moyennes de la base bougent avec lui
          (`avecAvisPublie`, `demo.js`, que `verifier-demo` fait tourner). */
@@ -2019,6 +2100,33 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     showBanner(verifie
       ? 'Avis publié — vous êtes un client vérifié.'
       : 'Avis publié (non vérifié : aucun devis accepté avec ce pro).');
+  };
+
+  /* RETIRER MON AVIS (lot S-c) — un avis ne se modifie plus ; on le retire,
+     puis on en écrit un autre (décision du propriétaire du 29/10). La note
+     suit tout de suite à l'écran (`avecAvisRetire`), puis la fiche est
+     RELUE : c'est la base qui calcule la note, et une moyenne recalculée à
+     l'écran sur une liste incomplète pourrait s'en écarter. */
+  const retirerMonAvis = async (proId, avis) => {
+    try {
+      await api.retirerAvis(avis.id);
+    } catch (e) {
+      showErreur(messageClair(e, 'Avis non retiré'));
+      return false;
+    }
+    setPros((prev) => (prev[proId] ? { ...prev, [proId]: avecAvisRetire(prev[proId], avis) } : prev));
+    showBanner('Avis retiré. Vous pouvez en écrire un autre.');
+    if (api.mode !== 'demo') {
+      try {
+        const complet = await api.chargerProfilPro(proId);
+        if (complet) {
+          setPros((ps) => (ps[proId]
+            ? { ...ps, [proId]: { ...ps[proId], ...complet, portfolioCharge: true } }
+            : ps));
+        }
+      } catch (e) { /* la fiche garde ce qu'on vient de calculer */ }
+    }
+    return true;
   };
 
   /* ---------- partenaires ----------
@@ -2084,13 +2192,51 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   };
 
   /* ---------- mes publications ---------- */
-  /* Comparaison sur le texte, et non sur la valeur brute : les identifiants
-     sont des UUID avec Supabase, mais des nombres dans les données de
-     démonstration — où myProId, lu comme clé d'objet, est une chaîne. Sans
-     cette précaution, la liste restait vide en démonstration. */
-  const mesPublications = posts.filter(
-    (p) => p.type === 'post' && String(p.proId) === String(myProId),
-  );
+  /* « MES PUBLICATIONS » SE CHARGE PAR LA BASE, page par page (lot S-c).
+     `suite` : la page suivante, au bas de la liste. Un échec garde la liste
+     déjà lue et le DIT — jamais « Vous n'avez encore rien publié ». */
+  const chargerMesPublications = async ({ suite = false } = {}) => {
+    if (chargementMesPubs.current) return;
+    if (suite && (mesPubs.fin || !curseurMesPubs.current)) return;
+    chargementMesPubs.current = true;
+    setMesPubs((m) => ({ ...m, etat: 'chargement' }));
+    try {
+      const { posts: page, fin, curseur } = await api.mesPublications({
+        avant: suite ? curseurMesPubs.current : null,
+      });
+      curseurMesPubs.current = curseur;
+      setMesPubs((m) => {
+        const deja = suite ? m.liste : [];
+        const vus = new Set(deja.map((p) => String(p.id)));
+        return {
+          liste: [...deja, ...page.filter((p) => !vus.has(String(p.id)))],
+          fin,
+          etat: 'pret',
+        };
+      });
+    } catch (e) {
+      setMesPubs((m) => ({ ...m, etat: 'echec', echecDe: suite ? 'suite' : 'debut' }));
+    }
+    chargementMesPubs.current = false;
+  };
+
+  /* Combien j'en ai. Relu à l'ouverture du profil, après une publication et
+     après une suppression ; illisible, il vaut `null` et rien ne s'affiche. */
+  const lireNbMesPublications = async () => {
+    if (!canPublish) return;
+    try {
+      setNbMesPubs(await api.nbMesPublications());
+    } catch (e) {
+      setNbMesPubs(null);
+    }
+  };
+
+  const ouvrirMesPublications = () => {
+    setRefusRemontee({});
+    setScreen('mesPublications');
+    chargerMesPublications();
+    lireNbMesPublications();
+  };
 
   /**
    * Corriger le texte d'une de mes publications.
@@ -2100,45 +2246,103 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * indépendamment de cet écran (section 20 de schema.sql).
    */
   const modifierPublication = async (post, texte) => {
-    const appliquer = (t, modifie) => setPosts((ps) => ps.map((p) => (p.id === post.id
-      ? { ...p, texte: t, modifie }
-      : p)));
-
-    appliquer(texte, true);
+    majPost(post.id, (p) => ({ ...p, texte, modifie: true }));
     try {
       await api.modifierPost(post.id, texte);
       showBanner('Publication corrigée.');
     } catch (e) {
-      appliquer(post.texte, post.modifie);
+      majPost(post.id, (p) => ({ ...p, texte: post.texte, modifie: post.modifie }));
       showErreur(messageClair(e, 'Correction impossible'));
     }
   };
 
+  /* Supprimer : la carte part de PARTOUT tout de suite (le fil, « Mes
+     publications », « Mes conseils », la page ouverte) et revient si la base
+     refuse. */
   const supprimerPublication = async (post) => {
-    setPosts((ps) => ps.filter((p) => p.id !== post.id));
+    const meme = (p) => String(p.id) === String(post.id);
+    const avantFil = posts;
+    const avantMes = mesPubs.liste;
+    setPosts((ps) => ps.filter((p) => !meme(p)));
+    setMesPubs((m) => ({ ...m, liste: m.liste.filter((p) => !meme(p)) }));
+    setPublicationOuverte((p) => (p && meme(p) ? null : p));
+    if (myProId) {
+      setPros((ps) => (ps[myProId] && (ps[myProId].conseils || []).some(meme)
+        ? { ...ps, [myProId]: { ...ps[myProId], conseils: ps[myProId].conseils.filter((c) => !meme(c)) } }
+        : ps));
+    }
     try {
       await api.supprimerPost(post.id);
       showBanner('Publication supprimée.');
+      lireNbMesPublications();
     } catch (e) {
+      setPosts(avantFil);
+      setMesPubs((m) => ({ ...m, liste: avantMes }));
       showErreur(messageClair(e, 'Suppression impossible'));
-      await start(userType);          // on remet la liste d'aplomb
     }
   };
 
-  /* Remonter une publication, sans la recopier : une copie perdrait ses
-     j'aime et ses commentaires, et laisserait deux fois la même chose. */
+  /* REMETTRE EN AVANT — lot S-c, 30/10/2026. C'est la BASE qui décide
+     (`remonter_publication()`) : une fois tous les sept jours par
+     publication, trois sur sept jours par professionnel. Avant, ce geste
+     changeait la date de publication, la base la remettait aussitôt, et
+     l'écran disait « remise en tête du fil » : le bouton ne faisait RIEN.
+
+     Le refus se dit avec SA date, à l'heure du téléphone
+     (`phraseDuRefus`, AVANT `messageClair`, qui ne connaît que la phrase de
+     la base, sans date), et il reste SOUS la carte.
+
+     Le bandeau se décide sur la page RECHARGÉE : la publication reprend sa
+     place parmi les plus récentes, mais un fil filtré (abonnements, vidéos,
+     métier, secteur, note) peut ne pas la montrer — et « en tête » serait
+     faux dès que quelqu'un publie. */
   const republierPublication = async (post) => {
+    if (remonteeEnCours.current) return;
+    remonteeEnCours.current = post.id;
+    let instant = null;
     try {
-      await api.republierPost(post.id);
+      instant = await api.remonterPublication(post.id);
     } catch (e) {
-      showErreur(messageClair(e, 'Impossible de remettre en avant'));
+      remonteeEnCours.current = null;
+      const phrase = phraseDuRefus(e) || messageClair(e, 'Remise en avant impossible');
+      setRefusRemontee((r) => ({ ...r, [post.id]: phrase }));
+      showErreur(phrase);
       return;
     }
-    setPosts((ps) => [
-      { ...post, time: "À l'instant" },
-      ...ps.filter((p) => p.id !== post.id),
-    ]);
-    showBanner('Publication remise en tête du fil.');
+    remonteeEnCours.current = null;
+    const quand = typeof instant === 'string' ? instant : instantPresent();
+    setRefusRemontee((r) => { const c = { ...r }; delete c[post.id]; return c; });
+    majPost(post.id, (p) => ({ ...p, remonteLe: quand }));
+
+    const page = await changerCeQuOnVoit({ silencieux: true });
+    if (page === null) {
+      /* La remise en avant a RÉUSSI : c'est le rechargement du fil qui n'a
+         pas eu lieu. Un bandeau de succès, donc, qui dit le geste à faire —
+         pas une erreur qui ferait croire à un échec. */
+      showBanner('Publication remise en avant. Tirez le fil vers le bas pour la voir à sa nouvelle place.');
+    } else if (page.some((p) => String(p.id) === String(post.id))) {
+      showBanner('Publication remise en avant : elle reprend place parmi les plus récentes du fil, puis redescendra à mesure que d’autres publient.');
+    } else {
+      showBanner('Publication remise en avant : elle reprend place parmi les plus récentes du fil. Votre fil, tel qu’il est filtré en ce moment, ne la montre pas.');
+    }
+  };
+
+  /* Ouvrir une de mes publications SUR SA PAGE, comme la cloche — et
+     revenir à « Mes publications » par la flèche. Une vidéo garde le
+     comportement d'avant : le fil vidéo en plein écran, avec le son. */
+  const ouvrirMaPublication = (p) => {
+    if (FORMATS_VIDEO.has(p.format)) {
+      setFeedMode('video');
+      setVideoCible(p.id);
+      setOpenCommentsId(null);
+      setScreen('home');
+      return;
+    }
+    setPublicationOuverte(p);
+    setOriginePublication('mesPublications');
+    setCommentaireCible(null);
+    ouvrirCommentaires(p.id, p);
+    setScreen('publication');
   };
 
   const partagerPublication = async (post) => {
@@ -2178,7 +2382,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   /**
    * Toucher une notification doit mener au contenu, pas seulement la marquer
    * lue. On revient au fil et on ouvre la discussion concernée — en remettant
-   * l'onglet « Pour vous », sinon la publication resterait invisible derrière
+   * l’onglet « Tout », sinon la publication resterait invisible derrière
    * le filtre « Abonnements ».
    */
   /**
@@ -2218,22 +2422,28 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
        est pire qu'un message général et juste — la leçon de la liste vide
        du 04/10. */
     if (ou.quoi === 'post') {
-      let presente = posts.some((p) => String(p.id) === String(ou.postId));
-      if (!presente) {
+      /* La publication est posée sur SA page (`publicationOuverte`), et
+         n'entre plus dans le fil (lot S-c, 30/10/2026) : glissée en tête de
+         `posts`, une publication de septembre s'affichait au-dessus de
+         celles d'aujourd'hui, et le fil, trié par la base, ne la montrait
+         plus jamais à sa place. */
+      let trouve = posts.find((p) => String(p.id) === String(ou.postId)) || null;
+      if (!trouve) {
         try {
-          const trouve = await api.publicationParId(ou.postId);
-          if (trouve) { setPosts((liste) => [trouve, ...liste]); presente = true; }
+          trouve = await api.publicationParId(ou.postId);
         } catch (e) { /* on retombe sur le message ci-dessous */ }
       }
-      if (!presente) {
+      if (!trouve) {
         showBanner("Cette publication n'est plus disponible.");
         return;
       }
       setHiddenIds((h) => { const c = new Set(h); c.delete(ou.postId); return c; });
+      setPublicationOuverte(trouve);
+      setOriginePublication('notifications');
       /* `ouvrirCommentaires` et PAS `setOpenCommentsId` : c'est elle qui va
          CHERCHER le fil de discussion. Le panneau s'ouvrait vide, et on
          revoyait exactement le défaut signalé. */
-      ouvrirCommentaires(ou.postId);
+      ouvrirCommentaires(ou.postId, trouve);
       /* LE commentaire, pas le panneau. `comment_id` est rempli par
          `notifie_commentaire()` depuis le premier jour et n'était lu par
          PERSONNE — le défaut du 01/10 dans sa forme la plus pure, puisque
@@ -2245,7 +2455,6 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
          `PublicationScreen.js` : `scrollToIndex` ne sait pas sauter à une
          carte qui n'est pas montée, et ça ne se vérifie pas au navigateur.
          Ici il n'y a plus de rang, plus de fil, plus de virtualisation. */
-      setPostCible(ou.postId);
       setScreen('publication');
       return;
     }
@@ -2436,6 +2645,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   /* Ce que le profil doit savoir, la première fois qu'on l'ouvre. */
   const chargerPourLeProfil = () => {
     if (userType === 'pro' && entrepriseEtat === 'jamais') chargerMonEntreprise();
+    /* « N publications » sur le profil : COMPTÉ par la base, plus déduit
+       des vingt publications du fil chargé (lot S-c). */
+    if (userType === 'pro') lireNbMesPublications();
     if (userType === 'particulier' && demandeProEtat === 'jamais') chargerMaDemandePro();
   };
 
@@ -4338,7 +4550,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             if (screen === 'postes') { setScreen(origineMaBase); return; }
             /* On revient d'où l'on vient : la cloche. Repartir sur le
                fil ferait perdre la liste qu'on était en train de lire. */
-            if (screen === 'publication') { setPostCible(null); setScreen('notifications'); }
+            if (screen === 'publication') {
+              setPublicationOuverte(null);
+              setScreen(originePublication === 'mesPublications' ? 'mesPublications' : 'notifications');
+            }
             else if (screen === 'messages') setActiveConvId(null);
             else if (screen === 'legal') setScreen('confidentialite');
             else if (screen === 'profilEdit' || screen === 'mesPublications'
@@ -4483,10 +4698,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
         {screen === 'publication' && (
           <PublicationScreen
-            /* On la cherche dans `posts` et non dans `feedFiltered` : la
-               loupe ne doit pas pouvoir cacher la publication qu'une
-               notification désigne. On vient la lire, pas la filtrer. */
-            post={posts.find((p) => String(p.id) === String(postCible)) || null}
+            /* SA propre copie, et pas une recherche dans le fil : la loupe
+               ne doit pas pouvoir cacher la publication qu'une notification
+               — ou « Mes publications » — désigne. On vient la lire, pas la
+               filtrer. */
+            post={publicationOuverte}
             pros={pros}
             chantiers={chantiers}
             onOuvrirChantier={ouvrirChantier}
@@ -4694,17 +4910,19 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
         {screen === 'mesPublications' && (
           <MesPublicationsScreen
-            posts={mesPublications}
+            posts={mesPubs.liste}
+            etat={mesPubs.etat}
+            echecDe={mesPubs.echecDe}
+            fin={mesPubs.fin}
+            total={nbMesPubs}
+            refus={refusRemontee}
+            onPlus={() => chargerMesPublications({ suite: true })}
+            onRecharger={() => chargerMesPublications()}
             onSupprimer={supprimerPublication}
             onModifier={modifierPublication}
             onRepublier={republierPublication}
             onPartager={partagerPublication}
-            onOuvrir={(p) => {
-              setFeedMode(FORMATS_VIDEO.has(p.format) ? 'video' : 'classic');
-              setVideoCible(FORMATS_VIDEO.has(p.format) ? p.id : null);
-              setOpenCommentsId(null);
-              setScreen('home');
-            }}
+            onOuvrir={ouvrirMaPublication}
           />
         )}
 
@@ -4795,7 +5013,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onRepondrePartenariat={repondrePartenariat}
             onViewProfile={viewProfile}
             onEdit={() => { chargerPourLeProfil(); setScreen('profilEdit'); }}
-            onMesPublications={() => setScreen('mesPublications')}
+            onMesPublications={ouvrirMesPublications}
             /* La carte de la demande de compte pro, lue EN BASE (section 45),
                et la ligne sous le nom d'un artisan. */
             entreprise={monEntreprise}
@@ -4826,7 +5044,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                pour que l'événement d'appui ne devienne pas une ancre. */
             onEntreprise={canPublish ? () => ouvrirMonEntreprise() : null}
             onGererPortfolio={() => setScreen('gererPortfolio')}
-            nbPublications={mesPublications.length}
+            nbPublications={nbMesPubs}
             onConfidentialite={() => setScreen('confidentialite')}
             admin={admin}
             onAdmin={() => setScreen('admin')}
@@ -5008,6 +5226,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             following={followingIds.has(viewedProId)}
             onFollow={toggleFollow} onContact={handleContact}
             onViewProfile={viewProfile} onSubmitReview={submitReview}
+            onRetirerAvis={retirerMonAvis}
             onSignaler={ouvrirSignalement}
             mienne={!!maFicheId && String(viewedProId) === maFicheId}
           />

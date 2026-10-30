@@ -235,6 +235,20 @@ console.log('\nLes urgences reçues tiennent debout');
   });
   verifier('l’ancienneté écrite (« Il y a 21 j ») est mot pour mot celle que l’application écrirait',
     discordantes.length === 0, discordantes.map((d) => `${d.id} : « ${d.quand} »`).join(', '));
+  /* LES PUBLICATIONS AUSSI (lot S-c, 30/10/2026) : chacune porte une vraie
+     date (`publieLe`), qui ORDONNE le fil et décide de la remise en avant,
+     et un texte (`time`) qui l'affiche. Les deux doivent dire la même
+     chose — « Hier » sur une publication de trente heures, pas « Il y a
+     4 h ». `ilYA()` compte depuis le lancement : on compare à l'instant
+     présent, et une publicité aussi. */
+  const maintenantPubs = Date.now();
+  const sansDate = demo.initialPosts.filter((p) => !p.publieLe).map((p) => p.id);
+  const discordantesPubs = demo.initialPosts
+    .filter((p) => p.publieLe && p.time && relativeTime(p.publieLe, maintenantPubs) !== p.time)
+    .map((p) => `${p.id} : « ${p.time} » ≠ « ${relativeTime(p.publieLe, maintenantPubs)} »`);
+  verifier('chaque publication de démonstration a sa date (`publieLe`), et son ancienneté écrite est celle de cette date',
+    sansDate.length === 0 && discordantesPubs.length === 0,
+    `${sansDate.length ? `sans date : ${sansDate.join(', ')} ; ` : ''}${discordantesPubs.join(', ')}`);
   /* Et la notification d'arrivée d'une demande naît AVEC elle (même
      transaction, dans la base) : même ancienneté. */
   const parId = new Map(demo.initialDemandesRecues.map((d) => [d.id, d]));

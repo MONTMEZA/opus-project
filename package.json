@@ -90,6 +90,7 @@
     "verifier-notifications": "node scripts/verifier-notifications.mjs",
     "verifier-agent": "node scripts/verifier-agent.mjs",
     "verifier-recit": "node scripts/verifier-recit.mjs",
+    "verifier-remontee": "node scripts/verifier-remontee.mjs",
     "verifier-agent-nom": "node scripts/verifier-agent-nom.mjs",
     "verifier-portes": "node scripts/verifier-portes.mjs",
     "verifier-pro": "node scripts/verifier-pro.mjs",

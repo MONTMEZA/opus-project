@@ -163,6 +163,15 @@ const PostCard = React.memo(function PostCard({
               </Text>
               <Text style={[s.meta, { flexShrink: 0 }]}> · {post.time}</Text>
             </View>
+            {/* « REMISE EN AVANT » — décision du propriétaire du 29/10/2026.
+                La carte garde SA date de publication (« Il y a 3 sem. ») :
+                sans un mot, elle aurait l'air posée au-dessus d'« Il y a
+                2 h » par erreur. Une mention discrète, pas une étiquette :
+                la remise en avant est gratuite et ouverte à tous les
+                professionnels ; « Sponsorisé » reste aux publicités. */}
+            {!!post.remonteLe && (
+              <Text style={s.meta} numberOfLines={1}>Remise en avant</Text>
+            )}
           </View>
         </Pressable>
         <View style={s.headRight}>

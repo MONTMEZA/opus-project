@@ -408,9 +408,18 @@ console.log('\n5. Le bas du fil ne va pas chercher une page vide');
     'deux formules de fin finiraient par répondre différemment');
   /* Une PUBLICITÉ a un curseur : sans lui, une page qui finit sur elle fait
      croire au bout du fil (relevé sur la vraie base le 17/10/2026). */
-  const pub = api.slice(api.indexOf('if (p.is_ad) {'), api.indexOf('if (p.is_ad) {') + 400);
-  verifier('une publicité porte un curseur, comme une publication',
-    /curseur: p\.created_at/.test(pub),
+  /* FAIT TOURNER depuis le lot S-c (30/10/2026) : `rowToPost` vit dans
+     `publication.js`, que `node` ouvre. Le curseur est la clé de TRI du
+     fil (`cleDeTri` : la remise en avant, sinon la publication) — pour une
+     publicité comme pour une publication. */
+  const { rowToPost } = await import('../src/lib/publication.js');
+  const pubLigne = rowToPost({ id: 'p1', is_ad: true, created_at: '2026-10-01T10:00:00Z' }, new Set(), null);
+  const remontee = rowToPost({
+    id: 'p2', author_id: 'a', created_at: '2026-09-01T10:00:00Z', remonte_le: '2026-10-02T10:00:00Z',
+  }, new Set(), null);
+  verifier('une publicité porte un curseur, comme une publication — et une publication remise en avant, la date de sa remise',
+    pubLigne.curseur === '2026-10-01T10:00:00Z' && remontee.curseur === '2026-10-02T10:00:00Z'
+      && remontee.publieLe === '2026-09-01T10:00:00Z',
     'sans lui, `chargerPlusDeFil` pose « fin » dès qu’une page se termine sur une publicité');
 
   /* `fil_filtre()` doit pouvoir rendre cette ligne de trop. Si un jour la
@@ -958,8 +967,11 @@ console.log('\n9. Sur sa propre publication, ni « Suivre » ni « Contacter »'
     /les boutons pour vous contacter s’affichent chez les autres/.test(branche1));
   verifier('sa fiche : ni « Signaler ce profil » ni « Laisser un avis »',
     garde(fiche, '{!!onSignaler && !mienne && (', 'Signaler ou bloquer ce profil')
-    && /right=\{mienne \? null : <BtnMini label=\{showForm \? 'Fermer' : 'Laisser un avis'\}/.test(fiche)
-    && uneFois("'Laisser un avis'"));
+    /* Lot S-c (30/10/2026) : la branche des AUTRES propose « Retirer mon
+       avis » quand j'en ai un, et « Laisser un avis » sinon — jamais sur sa
+       propre fiche. */
+    && /right=\{mienne \? null : \(monAvis && onRetirerAvis\s*\? <BtnMini label="Retirer mon avis"[^\n]*\n\s*: \(monAvis \? null\s*: <BtnMini label=\{showForm \? 'Fermer' : 'Laisser un avis'\}/.test(fiche)
+    && uneFois("'Laisser un avis'") && uneFois('label="Retirer mon avis"'));
   verifier('sa fiche reçoit `mienne`, faux par défaut', /mienne = false,/.test(fiche));
 
   const fil = sansCommentaires(lire('src/screens/HomeScreen.js'));

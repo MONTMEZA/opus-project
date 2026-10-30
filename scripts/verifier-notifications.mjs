@@ -281,7 +281,9 @@ verifier('une publication ABSENTE de la page se cherche en base',
   + '« plus disponible » alors qu\'il existait.');
 
 verifier('…et le message ne sort QUE si elle a vraiment disparu',
-  /if \(!presente\) \{\s*\n\s*showBanner\("Cette publication n'est plus disponible\."\)/.test(app),
+  /* lot S-c : la recherche rend l'OBJET (`trouve`), plus un booléen. Le
+     message ne sort qu'après la recherche en base, et seulement sans résultat. */
+  /trouve = await api\.publicationParId\(ou\.postId\);[\s\S]{0,120}?\}\s*\n\s*if \(!trouve\) \{\s*\n\s*showBanner\("Cette publication n'est plus disponible\."\)/.test(app),
   'Un message précis et faux est pire qu\'un message général et juste.');
 
 verifier('`destinationNotif` est la SEULE porte du routage',
@@ -388,13 +390,18 @@ verifier('la page ouvre le panneau des commentaires d\'office',
   'On y arrive par une notification de commentaire : c\'est precisement '
   + 'ce qu\'on vient lire.');
 
-verifier('…et elle cherche dans `posts`, jamais dans le fil FILTRE',
-  /post=\{posts\.find\(\(p\) => String\(p\.id\) === String\(postCible\)\)/.test(app),
+/* Depuis le lot S-c (30/10/2026), la page a SA copie (`publicationOuverte`),
+   posée par la cloche et par « Mes publications » ; elle n'entre plus dans
+   le fil, où une publication de septembre se glissait en tête. */
+verifier('…et elle lit SA copie, jamais le fil FILTRE — et rien n\'est glisse dans le fil',
+  /post=\{publicationOuverte\}/.test(app)
+  && /setPublicationOuverte\(trouve\);\s*setOriginePublication\('notifications'\);/.test(routage)
+  && !/setPosts\(\(liste\) => \[trouve, \.\.\.liste\]\)/.test(app),
   'La loupe ne doit pas pouvoir cacher la publication qu\'une '
   + 'notification designe : on vient la lire, pas la filtrer.');
 
-verifier('…et le retour ramene a la CLOCHE, d\'ou l\'on vient',
-  /screen === 'publication'\) \{ setPostCible\(null\); setScreen\('notifications'\)/.test(app),
+verifier('…et le retour ramene d\'ou l\'on vient : la CLOCHE, ou « Mes publications »',
+  /if \(screen === 'publication'\) \{\s*setPublicationOuverte\(null\);\s*setScreen\(originePublication === 'mesPublications' \? 'mesPublications' : 'notifications'\);/.test(app),
   'Repartir sur le fil ferait perdre la liste des notifications qu\'on '
   + 'etait en train de parcourir.');
 
@@ -430,7 +437,7 @@ verifier('…et les COMMENTAIRES avaient le meme defaut',
   + 'a cote.');
 
 verifier('la cloche CHARGE les commentaires, elle n\'ouvre pas un panneau vide',
-  /ouvrirCommentaires\(ou\.postId\)/.test(routage)
+  /ouvrirCommentaires\(ou\.postId, trouve\)/.test(routage)
   && !/setOpenCommentsId\(ou\.postId\)/.test(routage),
   'Poser `openCommentsId` a la main affiche un panneau sans contenu : '
   + '`post.comments` n\'existe pas tant que personne ne l\'a demande. '
@@ -438,7 +445,7 @@ verifier('la cloche CHARGE les commentaires, elle n\'ouvre pas un panneau vide',
   + 'moitie, et aucune relecture de code ne l\'aurait vu.');
 
 verifier('…et `ouvrirCommentaires` est la seule porte, partagee avec la carte',
-  /const ouvrirCommentaires = async \(id\)/.test(app)
+  /const ouvrirCommentaires = async \(id, objet = null\)/.test(app)
   && /await ouvrirCommentaires\(id\);/.test(app),
   '`toggleComments` BASCULE : l\'appeler depuis la cloche refermerait le '
   + 'panneau quand il est deja ouvert sur ce post.');

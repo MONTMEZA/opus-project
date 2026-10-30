@@ -1982,9 +1982,20 @@ console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le tex
       && /from public\.sos_requests s where s\.client_id = new\.author_id and s\.professional_id = new\.professional_id and s\.statut in \('acceptee', 'termine'\)/.test(cv)
       && (cv.match(/exists \(/g) || []).length === 3,
     `${morceauxCv.length - 1} définition(s)`);
-  verifier('…« au moment où il l’a écrit » : l’anonymisation (auteur parti) GARDE la mention',
-    /au moment où il l’a écrit ou modifié/.test(bloc('Les avis'))
+  /* « ÉCRIT », PLUS « ÉCRIT OU MODIFIÉ » (lot S-c, 30/10/2026) : un avis ne
+     se modifie plus — l'UPDATE est retiré par un droit de table. Le texte et
+     le droit vont ensemble : « ou modifié » revenu, ou le droit rendu, et
+     l'un des deux ment. Seule l'anonymisation (un UPDATE de la base, quand
+     l'auteur part) écrit encore sur un avis, et elle GARDE la mention. */
+  const lesAvis = bloc('Les avis');
+  verifier('…« au moment où il l’a écrit » (plus « ou modifié ») : un avis ne se modifie plus, et l’anonymisation GARDE la mention',
+    /au moment où il l’a écrit, une demande de devis/.test(lesAvis)
+      && !/écrit ou modifié/.test(lesAvis)
+      && /^revoke update on public\.reviews from anon, authenticated;$/m.test(sqlS)
+      && !/^grant[^;]*\bupdate\b[^;]*on public\.reviews\b/m.test(sqlS)
       && /if tg_op = 'UPDATE' and new\.author_id is null then new\.client_verifie := old\.client_verifie; return new; end if;/.test(cv));
+  verifier('…et le texte dit qu’un avis se RETIRE depuis la fiche, puis qu’on peut en écrire un autre (décision du 29/10)',
+    /Un avis ne se modifie pas une fois publié ; son auteur peut le retirer, depuis la fiche de l’artisan, puis en écrire un autre\./.test(lesAvis));
 
   /* « Une demande de partenariat refusée reste enregistrée… celui-ci peut
      l'effacer » : c'est « je romps un partenariat ». */

@@ -1212,19 +1212,20 @@ select string_agg(nspname || '.' || proname, ', ' order by proname) filter (wher
        string_agg(proname, ', ') filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and prosecdef) as definer_attendu_recalcule_devis,
        count(*) filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and proname ~ '^admin_') as admin_attendu_0
   from corps;
-\echo '--- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le 21/10/2026, plus admin_valider_pieces (lot S-a, 25/10/2026 : valider la pièce que l administration a vue) et peut_faire_un_devis (lot S-b, 26/10/2026 : dire AVANT la saisie si un nouveau devis peut se rattacher à une demande, sans rien dire d une demande qui n est pas à l appelant) — une NOUVELLE, quelle qu elle soit, rougit'
+\echo '--- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le 21/10/2026, plus admin_valider_pieces (lot S-a, 25/10/2026 : valider la pièce que l administration a vue) et peut_faire_un_devis (lot S-b, 26/10/2026 : dire AVANT la saisie si un nouveau devis peut se rattacher à une demande, sans rien dire d une demande qui n est pas à l appelant) et remonter_publication (lot S-c, 30/10/2026 : la seule écriture de la remise en avant, et de son historique, que le client ne peut pas écrire) — une NOUVELLE, quelle qu elle soit, rougit'
 with ouvertes as (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prosecdef
      and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
 )
-select count(*) as definer_ouvertes_attendu_26,
+select count(*) as definer_ouvertes_attendu_27,
        coalesce(string_agg(proname, ', ' order by proname) filter (where proname not in (
          'a_deja_une_reponse', 'admin_demandes_pro', 'admin_file_verifications', 'admin_metier_demandes', 'admin_refuser_pro',
          'admin_resume', 'admin_retirer_entreprise', 'admin_signalements', 'admin_specialites', 'admin_traiter_demande_pro',
          'admin_traiter_metier_demande', 'admin_traiter_signalement', 'admin_traiter_specialite', 'admin_valider_pieces', 'admin_verifier_pro',
          'annuler_ma_demande_pro', 'completer_ma_demande_pro', 'devenir_pro', 'est_admin', 'est_masque', 'marquer_lus',
-         'mes_demandes_recues', 'mon_compte', 'peut_faire_un_devis', 'preparer_suppression_compte', 'rattacher_mon_siret')), '—') as nouvelles_attendu_tiret
+         'mes_demandes_recues', 'mon_compte', 'peut_faire_un_devis', 'preparer_suppression_compte', 'rattacher_mon_siret',
+         'remonter_publication')), '—') as nouvelles_attendu_tiret
   from ouvertes;
 \echo '--- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026, plus trois du lot S-b (26/10/2026) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)'
 with fermees as (

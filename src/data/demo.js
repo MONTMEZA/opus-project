@@ -217,6 +217,33 @@ export function avecAvisPublie(pro, avis) {
   };
 }
 
+/**
+ * LE GESTE INVERSE — « Retirer mon avis » (lot S-c, décision du 29/10).
+ *
+ * La base recalcule la note à la suppression (`trg_notes_pro`) ; l'écran
+ * fait de même, tout de suite : chaque moyenne vaut (moyenne × n − retirée)
+ * / (n − 1), et revient à 0 quand il ne reste aucun avis — « pas d'avis »
+ * n'est pas « une mauvaise note », et c'est ce que la base écrit.
+ * `verifier-demo` la fait tourner, avec `avecAvisPublie` : publier puis
+ * retirer rend la fiche d'avant.
+ */
+export function avecAvisRetire(pro, avis) {
+  const n = (pro && pro.avisCount) || 0;
+  const reviews = ((pro && pro.reviews) || []).filter((r) => String(r.id) !== String(avis && avis.id));
+  if (n <= 1) {
+    return { ...pro, reviews, avisCount: 0, noteDelais: 0, noteQualite: 0, noteTarif: 0 };
+  }
+  const moyenne = (ancienne, retiree) => ((Number(ancienne) || 0) * n - retiree) / (n - 1);
+  return {
+    ...pro,
+    reviews,
+    avisCount: n - 1,
+    noteDelais: moyenne(pro.noteDelais, avis.delais),
+    noteQualite: moyenne(pro.noteQualite, avis.qualite),
+    noteTarif: moyenne(pro.noteTarif, avis.tarif),
+  };
+}
+
 // « format » dit ce qu'on regarde (photo, vidéo…) ; « type » dit s'il s'agit
 // d'une publication ou d'une publicité. Le fil des vidéos ne retient que les
 // publications dont le format est 'video'.
@@ -248,13 +275,13 @@ export const initialPosts = [
             reponses: [] },
         ] },
     ] },
-  { id: 2, type: 'post', format: 'video', proId: 6, time: 'Il y a 4 h',
+  { id: 2, type: 'post', format: 'video', proId: 6, time: 'Il y a 4 h', publieLe: ilYA(4),
     texte: "Deux cylindres changés sur une porte ancienne en chêne. Clés remises au client le jour même.",
     media: 'demo:serrurerie-porte', likes: 132, vues: 1870, liked: false, comments: [] },
-  { id: 'ad1', type: 'ad', annonceur: 'Estelvin Matériaux',
+  { id: 'ad1', type: 'ad', annonceur: 'Estelvin Matériaux', publieLe: ilYA(5),
     accroche: "Carrelage, ciment, plaques de plâtre, outillage : retrait au dépôt dès 7 h.",
     cta: 'Découvrir', media: 'demo:carrelage-pose' },
-  { id: 3, type: 'post', format: 'video', proId: 3, time: 'Hier',
+  { id: 3, type: 'post', format: 'video', proId: 3, time: 'Hier', publieLe: ilYA(28),
     texte: "Pose grand format 120x60 en salle de bain, jointoiement fini cette semaine. Rendu au top.",
     media: 'demo:carrelage-grand-format', likes: 341, vues: 5240, liked: false,
     comments: [
@@ -265,15 +292,15 @@ export const initialPosts = [
   /* Plusieurs photos : c'est CE post qui montre le carrousel en mode démo.
      Un chantier ne se raconte pas en une image — ici la chaudière posée,
      puis le plancher chauffant dont on a purgé le circuit. */
-  { id: 4, type: 'post', format: 'photo', proId: 4, time: 'Hier',
+  { id: 4, type: 'post', format: 'photo', proId: 4, time: 'Hier', publieLe: ilYA(30),
     texte: "Remplacement chaudière et purge complète du circuit, plancher chauffant compris. Client satisfait, garantie 2 ans.",
     media: 'demo:chauffage-chaudiere',
     medias: ['demo:chauffage-chaudiere', 'demo:chauffage-radiateur'],
     likes: 87, vues: 940, liked: false, comments: [] },
-  { id: 'ad2', type: 'ad', annonceur: 'Roucanne Assurances',
+  { id: 'ad2', type: 'ad', annonceur: 'Roucanne Assurances', publieLe: ilYA(33),
     accroche: "Votre décennale et votre RC pro, avec l’attestation en ligne.",
     cta: 'En savoir plus', media: 'demo:macon-coffrage' },
-  { id: 6, type: 'post', format: 'montage', proId: 2, time: 'Il y a 1 j',
+  { id: 6, type: 'post', format: 'montage', proId: 2, time: 'Hier', publieLe: ilYA(34),
     texte: "Chantier en deux temps : les borniers câblés et repérés, puis le contrôle avant la mise en service.",
     media: 'demo:electricite-tableau',
     medias: ['demo:electricite-tableau', 'demo:electricite-testeur'],
@@ -298,8 +325,8 @@ export const initialPosts = [
     chantierId: 'ch-villa', publieLe: ilYA(3 * 24),
     texte: "Terrassement terminé. Le sol est bon, pas besoin de reprise en sous-œuvre.",
     media: 'demo:chantier-terrassement', likes: 63, vues: 940, liked: false, comments: [] },
-  { id: 14, type: 'post', format: 'photo', proId: 1, time: 'Il y a 1 j',
-    chantierId: 'ch-villa', publieLe: ilYA(24),
+  { id: 14, type: 'post', format: 'photo', proId: 1, time: 'Hier',
+    chantierId: 'ch-villa', publieLe: ilYA(25),
     texte: "Semelles filantes ferraillées et coffrées. On coule dès que le contrôle est passé.",
     media: 'demo:chantier-ferraillage', likes: 88, vues: 1180, liked: false, comments: [] },
 
@@ -342,18 +369,54 @@ export const initialPosts = [
      est un TEXTE sans image — le format que le propriétaire a demandé de
      garder, et dont personne ne s'était jamais servi : c'est lui qui a
      révélé que la carte affichait alors un carré de dégradé vide. */
-  { id: 7, type: 'post', format: 'video', proId: 4, time: 'Il y a 3 j',
+  { id: 7, type: 'post', format: 'video', proId: 4, time: 'Il y a 3 j', publieLe: ilYA(3 * 24 + 2),
     conseil: true,
     texte: "Avant de braser un raccord cuivre, videz complètement la "
       + "canalisation : une seule goutte d'eau suffit à empêcher la brasure "
       + "de prendre. La fuite, elle, attend la remise en eau.",
     media: 'demo:plomberie-cuivre', likes: 418, vues: 7650, liked: false, comments: [] },
-  { id: 8, type: 'post', format: 'texte', proId: 1, time: 'Il y a 4 j',
+  { id: 8, type: 'post', format: 'texte', proId: 1, time: 'Il y a 4 j', publieLe: ilYA(4 * 24 + 3),
     conseil: true,
     texte: "On ne coule pas une dalle en dessous de 5 °C : le béton ne prend "
       + "pas, il gèle. Et au-dessus de 30 °C, il faut l'arroser pendant trois "
       + "jours sinon il fissure. Le thermomètre fait partie des outils.",
     media: null, likes: 263, vues: 4410, liked: false, comments: [] },
+
+  /* TROIS PUBLICATIONS ANCIENNES DU MAÇON — lot S-c, 30/10/2026. Sans
+     elles, la remise en avant ne se voyait nulle part sans fichier `.env` :
+     toutes les publications du compte de démonstration avaient moins de
+     sept jours, donc un seul refus possible. Avec elles, les trois issues
+     se montrent depuis « Mes publications » : la 15 a été remise en avant
+     HIER (refus « une fois tous les sept jours », et la carte du fil porte
+     « Remise en avant ») ; la 16 se remet en avant — c'est la troisième de
+     la semaine, l'historique en compte deux (`REMONTEES_DEMO`) ; la 17,
+     ensuite, est refusée (« trois sur sept jours »).
+
+     Les légendes disent ce que montre CHAQUE photo (`assets/demo/
+     LICENCES.md`) : un mur de moellons rejointoyé, une PILE de parpaings
+     — livrés, pas montés —, un coffrage de fondations. */
+  { id: 15, type: 'post', format: 'photo', proId: 1, time: 'Il y a 12 j',
+    publieLe: ilYA(12 * 24), remonteLe: ilYA(24),
+    texte: "Mur en moellons rejointoyé à la chaux, joints pleins. Une maison de 1890, on a gardé la pierre d'origine.",
+    media: 'demo:macon-mur-pierre', likes: 152, vues: 2210, liked: false, comments: [] },
+  { id: 16, type: 'post', format: 'photo', proId: 1, time: 'Il y a 15 j',
+    publieLe: ilYA(15 * 24),
+    texte: "Parpaings livrés pour l'élévation des murs du garage. On monte la semaine prochaine.",
+    media: 'demo:macon-parpaings', likes: 41, vues: 690, liked: false, comments: [] },
+  { id: 17, type: 'post', format: 'photo', proId: 1, time: 'Il y a 20 j',
+    publieLe: ilYA(20 * 24),
+    texte: "Coffrage des murs de fondation, étayé avant le coulage.",
+    media: 'demo:macon-coffrage', likes: 77, vues: 1150, liked: false, comments: [] },
+];
+
+/* L'HISTORIQUE DES REMISES EN AVANT DE LA DÉMONSTRATION (lot S-c). Le
+   compte de démonstration (la fiche 1) en a fait DEUX cette semaine : la
+   publication 15, hier, et une publication qu'il a supprimée depuis
+   (`postId: null`, comme `on delete set null` en base) — elle compte
+   quand même, c'est la règle. La troisième passe, la quatrième non. */
+export const REMONTEES_DEMO = [
+  { postId: 15, remonteeLe: ilYA(24) },
+  { postId: null, remonteeLe: ilYA(3 * 24) },
 ];
 
 /**

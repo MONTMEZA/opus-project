@@ -240,8 +240,15 @@ verifier('…et elle est un `noop` en démonstration',
 /* ------------------------------------------------------------------ */
 console.log('\nQui LIT — l\'autre bout de la chaîne');
 
-verifier('le compteur voyage avec la publication',
-  /vues: p\.vues_count \|\| 0,/.test(api));
+/* FAIT TOURNER (lot S-c, 30/10/2026) : `rowToPost` vit dans
+   `publication.js`, que `node` sait ouvrir. */
+const { rowToPost } = await import('../src/lib/publication.js');
+const avecVues = rowToPost({ id: 1, author_id: 'a', created_at: '2026-10-01T10:00:00Z', vues_count: 47 }, new Set(), null);
+const sansVues = rowToPost({ id: 2, author_id: 'a', created_at: '2026-10-01T10:00:00Z', vues_count: null }, new Set(), null);
+verifier('le compteur voyage avec la publication (FAIT TOURNER : 47 reste 47, vide devient 0)',
+  avecVues.vues === 47 && sansVues.vues === 0
+    && /^import \{ rowToPost \} from '\.\/publication';$/m.test(api)
+    && !/function rowToPost\(/.test(api));
 
 verifier('« Mes publications » l\'affiche',
   /<Eye size=\{12\}[\s\S]{0,120}?\{p\.vues \|\| 0\}/.test(mesPubs),

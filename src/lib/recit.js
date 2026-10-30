@@ -75,7 +75,12 @@ export function etapesPourLeRecit(publications = []) {
   return publications
     .filter((p) => texteUtilisable(p && p.texte))
     .map((p) => ({
-      date: String((p.publieLe || p.curseur || '')).slice(0, 10) || null,
+      /* LA DATE DE PUBLICATION, et elle seule (lot S-c, 30/10/2026). Ce
+         champ lisait le CURSEUR à défaut : depuis la remise en avant, le
+         curseur est la date de remise en avant, et une étape remise en
+         avant aurait été racontée au jour de sa remise — un texte public
+         faux (mesuré, critique du 29/10). `rowToPost` pose `publieLe`. */
+      date: String(p.publieLe || '').slice(0, 10) || null,
       texte: String(p.texte).trim().slice(0, LONGUEUR_MAX_ETAPE),
     }));
 }

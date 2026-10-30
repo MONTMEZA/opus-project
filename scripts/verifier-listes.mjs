@@ -69,6 +69,10 @@ const LISTES = {
   'src/screens/SaisieDevisScreen.js': 'les lignes d’un devis',
   /* La base de postes (lot P) : jusqu'à 1 000 postes par entreprise. */
   'src/screens/PostesScreen.js': 'les postes de la base',
+  /* « Mes publications » (lot S-c) : lue en base, page par page, et elle
+     grandit avec chaque publication — une boucle dans un ScrollView ne
+     tenait que parce qu'elle filtrait les vingt du fil. */
+  'src/screens/MesPublicationsScreen.js': 'mes publications',
 };
 
 console.log('\nToute liste qui grandit est virtualisée');
@@ -99,6 +103,7 @@ console.log('\nCe qui vit dans une liste est mémorisé');
     ['src/screens/DevisScreen.js', 'la carte d’un devis'],
     ['src/screens/SaisieDevisScreen.js', 'la rangée d’une ligne de devis'],
     ['src/screens/PostesScreen.js', 'la rangée d’un poste de la base'],
+    ['src/screens/MesPublicationsScreen.js', 'la carte d’une de mes publications'],
   ].forEach(([f, quoi]) => {
     verifier(`${quoi}`, /React\.memo\(/.test(lire(f)), f);
   });
