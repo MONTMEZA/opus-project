@@ -1578,6 +1578,7 @@ async function chargerProfilPublicDemo(userId, { jeSuisPro = false } = {}) {
     type: 'particulier',
     ville: villeVisible({ personne, regardeur }),
     demandes: demandesAMontrer(siennes, { jeSuisPro }).map(versDemandeDeFiche),
+    demandesEchec: false,
   };
 }
 
@@ -1599,7 +1600,10 @@ export const chargerProfilPublic = !hasSupabase ? chargerProfilPublicDemo : asyn
     avatarUrl: uRes.data.avatar_url,
     type: uRes.data.type,
     ville: uRes.data.ville || null,
-    demandes: demandesAMontrer(dRes.data || [], { jeSuisPro }).map(versDemandeDeFiche),
+    /* Une lecture des demandes ratée n'est pas « aucune demande » : elle se
+       DIT (relecture du 30/10 — l'erreur n'était jamais lue). */
+    demandes: dRes.error ? [] : demandesAMontrer(dRes.data || [], { jeSuisPro }).map(versDemandeDeFiche),
+    demandesEchec: !!dRes.error,
   };
 };
 
@@ -4440,9 +4444,17 @@ const demoSignalements = [];
 /**
  * Signaler un contenu.
  *
- * On recopie l'auteur et un extrait AU MOMENT du signalement : le contenu
+ * L'auteur et un extrait sont recopiés AU MOMENT du signalement : le contenu
  * peut disparaître ensuite (son auteur l'efface, justement), et un
  * signalement qui ne dit plus ce qui a été signalé est inexploitable.
+ *
+ * MAIS C'EST LA BASE QUI LES RECOPIE (lot S-d, section 53.8) : l'auteur et
+ * l'extrait que le téléphone envoie sont ÉCRASÉS par ceux du vrai contenu.
+ * Sans ça, un client modifié rangeait « Untel a écrit telle horreur » sous
+ * le nom de quelqu'un qui n'avait rien écrit — et ce signalement entrait
+ * dans SON export. On les envoie quand même : une version ancienne de la
+ * base les attend. Un contenu disparu, ou un message qui ne vous est pas
+ * adressé, est refusé (OP026), avec la phrase de la base.
  */
 export const signaler = !hasSupabase
   ? async (s) => { demoSignalements.push({ ...s, id: `demo-${Date.now()}` }); return true; }

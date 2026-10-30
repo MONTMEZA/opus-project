@@ -921,7 +921,11 @@ console.log('\nD. LE SCHÉMA — la section 47, lue comme des propriétés');
   const md = fonctionSql('mes_donnees');
   verifier('26. `mes_donnees()` exporte `ma_disponibilite_urgences` et `urgences`, des deux côtés',
     /'ma_disponibilite_urgences',\s*coalesce\(\(select jsonb_agg\(to_jsonb\(x\) order by x\.metier_key\)\s+from public\.sos_availability x\s+where x\.professional_id = auth\.uid\(\)\), '\[\]'::jsonb\)/.test(md)
-    && /'urgences',\s*coalesce\(\(select jsonb_agg\(to_jsonb\(x\)\) from public\.sos_requests x\s+where x\.client_id = auth\.uid\(\) or x\.professional_id = auth\.uid\(\)\), '\[\]'::jsonb\)/.test(md),
+    /* Depuis le lot S-d, les urgences viennent de `mes_donnees_sans_masquage()` :
+       les siennes en entier, celles qu'on a REÇUES bornées (un tiers les
+       remplit) — `verifier-lectures` tient la borne. */
+    && /'urgences',\s+s\.j -> 'urgences'/.test(md)
+    && /'urgences',\s*coalesce\(\(select jsonb_agg\(to_jsonb\(x\) order by x\.created_at, x\.id\)\s+from \(select q\.\* from public\.sos_requests q where q\.client_id = auth\.uid\(\)\s+union all\s+select q\.\* from public\.sos_requests q join recus_urgences r on r\.id = q\.id\) x\), '\[\]'::jsonb\)/.test(fonctionSql('mes_donnees_sans_masquage')),
     'Une demande d’urgence porte l’adresse et les coordonnées du particulier : c’est une donnée sur lui '
     + '(article 15), et sur l’artisan à qui elle est adressée. Elles manquaient depuis le premier jour.');
 }

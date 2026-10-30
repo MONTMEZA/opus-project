@@ -16,6 +16,13 @@
  *   - « Signaler », à tous sauf à lui-même.
  * Jamais son adresse, son code postal ni son courriel : ce n'est pas parce
  * qu'une donnée est en base qu'elle a sa place à l'écran.
+ *
+ * ET CE QUI N'A PAS PU ÊTRE LU SE DIT (relecture du 30/10) : un échec de
+ * la fiche n'est pas « Ce profil n'est plus disponible » — c'était laisser
+ * croire à un compte supprimé —, et un échec des demandes n'est pas « aucune
+ * demande ». Tant que le type de compte n'est pas connu (lecture en cours,
+ * ou en échec), ni « Envoyer un message » ni « Ses demandes » : rien plutôt
+ * qu'une affirmation devinée.
  */
 import React from 'react';
 import { View, Text, ScrollView, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
@@ -25,22 +32,31 @@ import {
 import { Avatar, BtnMain, EmptyState, SectionLabel, Gradient } from '../components/ui';
 import { MapPin } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
-import { peutEcrireDepuisLaFiche, AUCUNE_DEMANDE_A_MONTRER } from '../lib/profil-public';
+import {
+  peutEcrireDepuisLaFiche, AUCUNE_DEMANDE_A_MONTRER, FICHE_ILLISIBLE, DEMANDES_ILLISIBLES,
+} from '../lib/profil-public';
 
 export default function ProfilPublicScreen({
-  profil, chargement, jeSuisPro = false, monId = null, onContacter, onSignaler,
+  profil, chargement, echec = false, onReessayer, jeSuisPro = false, monId = null, onContacter, onSignaler,
 }) {
-  if (chargement) {
-    return (
-      <View style={s.centre}>
-        <ActivityIndicator color={C.accent} />
-      </View>
-    );
+  const reessayer = onReessayer ? { label: 'Réessayer', onPress: onReessayer } : undefined;
+  if (!profil) {
+    if (chargement) {
+      return (
+        <View style={s.centre}>
+          <ActivityIndicator color={C.accent} />
+        </View>
+      );
+    }
+    if (echec) return <EmptyState titre="Lecture impossible" action={reessayer}>{FICHE_ILLISIBLE}</EmptyState>;
+    return <EmptyState>Ce profil n'est plus disponible.</EmptyState>;
   }
-  if (!profil) return <EmptyState>Ce profil n'est plus disponible.</EmptyState>;
 
   const demandes = profil.demandes || [];
   const estPro = profil.type === 'pro';
+  /* Le type n'est connu qu'une fois la fiche LUE : le nom affiché pendant la
+     lecture vient de l'écran d'où l'on arrive (un commentaire). */
+  const typeConnu = !!profil.type;
   const cEstMoi = monId != null && String(monId) === String(profil.id);
   const ecrire = !!onContacter && peutEcrireDepuisLaFiche({ profil, monId, jeSuisPro });
 
@@ -57,7 +73,7 @@ export default function ProfilPublicScreen({
         )}
         {/* Le type n'est connu qu'une fois la fiche lue : rien plutôt
             qu'un rôle deviné. */}
-        {!!profil.type && <Text style={s.role}>{estPro ? 'Professionnel' : 'Particulier'}</Text>}
+        {typeConnu && <Text style={s.role}>{estPro ? 'Professionnel' : 'Particulier'}</Text>}
 
         {ecrire && (
           <BtnMain
@@ -66,7 +82,7 @@ export default function ProfilPublicScreen({
             style={{ marginTop: 14 }}
           />
         )}
-        {!!onSignaler && !cEstMoi && !!profil.type && (
+        {!!onSignaler && !cEstMoi && typeConnu && (
           <Pressable
             onPress={() => onSignaler({
               cibleType: 'profil',
@@ -84,13 +100,26 @@ export default function ProfilPublicScreen({
         )}
       </View>
 
+      {/* PENDANT LA LECTURE, ou SI ELLE A ÉCHOUÉ : ni demandes ni message,
+          puisqu'on ne sait pas encore à qui l'on a affaire. */}
+      {!typeConnu && chargement && (
+        <View style={s.centre}>
+          <ActivityIndicator color={C.accent} />
+        </View>
+      )}
+      {!typeConnu && !chargement && echec && (
+        <EmptyState titre="Lecture impossible" action={reessayer}>{FICHE_ILLISIBLE}</EmptyState>
+      )}
+
       {/* SES DEMANDES : aux professionnels seulement — ce sont eux qui y
           répondent. Et jamais « cette personne n'a publié aucune demande » :
           une demande pourvue, ou cachée par un blocage, existe quand même. */}
-      {jeSuisPro && !estPro && (
+      {jeSuisPro && profil.type === 'particulier' && (
         <>
           <SectionLabel>Ses demandes en cours</SectionLabel>
-          {demandes.length === 0 && (
+          {profil.demandesEchec ? (
+            <EmptyState action={reessayer}>{DEMANDES_ILLISIBLES}</EmptyState>
+          ) : demandes.length === 0 && (
             <EmptyState>{AUCUNE_DEMANDE_A_MONTRER}</EmptyState>
           )}
         </>
@@ -118,7 +147,7 @@ export default function ProfilPublicScreen({
 }
 
 const s = StyleSheet.create({
-  centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
   entete: { alignItems: 'center', paddingTop: 22, paddingHorizontal: 20, paddingBottom: 14 },
   nom: { fontFamily: F.oswald6, fontSize: 19, color: C.ink, marginTop: 10, textAlign: 'center' },
   ligneVille: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },

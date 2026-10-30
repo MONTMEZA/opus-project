@@ -141,6 +141,11 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   callback_requests_pas_soi_meme_check: 'on ne se demande pas d’être rappelé par soi-même.',
   sos_requests_pas_soi_meme_check: 'on ne s’envoie pas une urgence à soi-même.',
   conversations_pas_soi_meme_check: 'on ne s’écrit pas à soi-même.',
+  /* Lot S-d (section 53.8) : l'application coupe déjà l'extrait à 500
+     caractères et les précisions à 1 000 — seule une version ancienne, ou
+     un client modifié, rencontre ces deux refus. */
+  signalements_extrait_check: 'l’extrait d’un signalement compte 500 caractères au plus.',
+  signalements_details_check: 'les précisions d’un signalement comptent 1 000 caractères au plus.',
   sos_metier_key_check: 'ce métier n’a pas d’urgence dans Opus : plomberie, électricité, '
     + 'serrurerie ou chauffage.',
   /* UN PARTENARIAT QUI EXISTE DÉJÀ entre deux artisans — l'index « une
@@ -668,7 +673,9 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      une réponse qui ne se déplace pas, une urgence vers qui n'y répond
      pas — avec le lot S-b ; OP022 — une remise en avant refusée — et
      OP023 — une trace des conditions ou une adresse de compte qu'on ne
-     récrit pas — avec le lot S-c, section 52)
+     récrit pas — avec le lot S-c, section 52 ; OP026 — un signalement
+     d'un contenu qui n'existe plus, ou qui ne vous est pas adressé — avec
+     le lot S-d, section 53.8)
      PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler

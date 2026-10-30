@@ -48,6 +48,10 @@
 \set DEM_P '''a51d0000-0000-4000-8000-0000000000d1'''
 \set CONV  '''a51d0000-0000-4000-8000-0000000000c1'''
 \set COM_Q '''a51d0000-0000-4000-8000-0000000000e1'''
+\set COM_P '''a51d0000-0000-4000-8000-0000000000e2'''
+\set CONV2 '''a51d0000-0000-4000-8000-0000000000c2'''
+\set AN_B  '''a51d0000-0000-4000-8000-0000000000b6'''
+\set MSG_A '''a51d0000-0000-4000-8000-0000000000f1'''
 
 -- Ménage d'un passage précédent : le fichier se rejoue.
 delete from public.administrateurs where user_id = :ADMIN;
@@ -104,14 +108,30 @@ insert into public.annonce_reponses (annonce_id, professional_id, message) value
 -- Une conversation P — A, un message de chaque côté.
 insert into public.conversations (id, client_id, professional_id) values (:CONV, :P, :A);
 insert into public.messages (conversation_id, sender_id, texte) values
-  (:CONV, :P, 'Bonjour, c est pour la fuite'),
-  (:CONV, :A, 'Je passe demain matin');
+  (:CONV, :P, 'Bonjour, c est pour la fuite');
+insert into public.messages (id, conversation_id, sender_id, texte) values
+  (:MSG_A, :CONV, :A, 'Je passe demain matin');
+-- P répond au commentaire de Q : une réponse ADRESSÉE à Q.
+insert into public.comments (id, post_id, author_id, parent_id, texte)
+values (:COM_P, :PA, :P, :COM_Q, 'Merci Quentin');
+-- DES DONNÉES QUI NE CONCERNENT PAS P (relecture du 30/10, RT10) : une
+-- conversation A — B, une annonce de B à laquelle A répond, Q qui suit B.
+-- Aucune ne doit apparaître dans l'export de P.
+insert into public.conversations (id, client_id, professional_id) values (:CONV2, :A, :B);
+insert into public.messages (conversation_id, sender_id, texte) values (:CONV2, :B, 'MESSAGE PRIVE B VERS A');
+insert into public.annonces_pro (id, auteur_id, type, titre, texte) values
+  (:AN_B, :B, 'entraide', 'Annonce de B', 'Un autre coup de main');
+insert into public.annonce_reponses (annonce_id, professional_id, message) values (:AN_B, :A, 'REPONSE DE A A B');
+insert into public.follows (follower_id, following_id) values (:Q, :B);
 -- Un avis de P sur A.
 insert into public.reviews (professional_id, author_id, delais, qualite, tarif, commentaire)
 values (:A, :P, 4, 4, 4, 'Bon travail');
 -- Un signalement de Q sur la publication de A, traité avec une note interne.
 insert into public.signalements (auteur_id, cible_type, cible_id, cible_auteur_id, motif, extrait)
 values (:Q, 'publication', :PA, :A, 'spam', 'Publication de A');
+-- P signale le message que A lui a écrit (le geste de ConversationScreen).
+insert into public.signalements (auteur_id, cible_type, cible_id, motif)
+values (:P, 'message', :MSG_A, 'haine');
 update public.signalements set statut = 'traite', traite_par = :ADMIN, note = 'déjà averti deux fois'
  where auteur_id = :Q;
 -- A répond aux urgences de plomberie.
@@ -418,7 +438,7 @@ set local role anon;
 select professional_id, actif from public.sos_availability;
 rollback;
 
-\echo '--- H2. Un particulier connecté la lit, et la recherche d urgence le trouve (attendu : 1 | 1)'
+\echo '--- H2. Un particulier connecté la lit (attendu : 1)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
@@ -457,7 +477,7 @@ rollback;
 -- ==========================================================================
 --  J. L'export
 -- ==========================================================================
-\echo '--- J1. Les clés de l export, en LISTE FERMÉE (attendu : 47 | t | t)'
+\echo '--- J1. Les clés de l export, en LISTE FERMÉE (attendu : 48 | t | t)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
@@ -465,7 +485,7 @@ with e as (select public.mes_donnees() as j)
 select (select count(*) from jsonb_object_keys(e.j)) as nb_cles,
        (select array_agg(k order by k) from jsonb_object_keys(e.j) k)
          = array['abonnements', 'annonces', 'avis_laisses', 'avis_recus', 'chantiers', 'clients_de_mon_entreprise',
-                 'commentaires', 'compte', 'conversations', 'decisions_de_l_administration', 'demandes',
+                 'commentaires', 'commentaires_recus', 'compte', 'conversations', 'decisions_de_l_administration', 'demandes',
                  'demandes_de_devis', 'demandes_pro', 'devis_emis', 'devis_lignes', 'devis_tva',
                  'entreprise_registre', 'export_du', 'fiche_professionnelle', 'journal_ia',
                  'limites_de_l_export', 'ma_base_de_postes', 'ma_disponibilite_urgences',
@@ -618,13 +638,153 @@ set local role anon;
 select public.mes_donnees_sans_masquage();
 rollback;
 
+\echo '--- J9 bis. … ni l export lui-même (attendu : ERROR permission denied for function mes_donnees)'
+begin;
+set local role anon;
+select public.mes_donnees();
+rollback;
+
+\echo '--- J10. UN SIGNALEMENT NE S INVENTE PLUS (relecture du 30/10) — Q signale la demande de P en désignant A et un texte de son choix : la base relève l auteur et l extrait VRAIS (attendu : P | Fuite sous l évier — avant : A | texte inventé)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+insert into public.signalements (auteur_id, cible_type, cible_id, cible_auteur_id, motif, extrait)
+values (:Q, 'demande', :DEM_P, :A, 'spam', 'Texte inventé par Q');
+reset role;
+select case cible_auteur_id when :P then 'P' when :A then 'A' else 'autre' end as auteur_releve, extrait
+  from public.signalements where auteur_id = :Q and cible_type = 'demande';
+rollback;
+
+\echo '--- J10 bis. Une cible inventée est refusée (attendu : ERROR OP026 — avant : INSERT 0 1)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+insert into public.signalements (auteur_id, cible_type, cible_id, cible_auteur_id, motif, extrait)
+values (:Q, 'publication', gen_random_uuid(), :P, 'spam', 'Texte inventé');
+rollback;
+
+\echo '--- J10 ter. Q ne signale pas un message d une conversation où il n est pas (attendu : ERROR OP026)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+insert into public.signalements (auteur_id, cible_type, cible_id, motif)
+values (:Q, 'message', :MSG_A, 'haine');
+rollback;
+
+\echo '--- J10 quater. … et A ne signale pas son PROPRE message (attendu : ERROR OP026)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+insert into public.signalements (auteur_id, cible_type, cible_id, motif)
+values (:A, 'message', :MSG_A, 'haine');
+rollback;
+
+\echo '--- J10 quinquies. Une précision de plus de 1 000 caractères est refusée (attendu : ERROR signalements_details_check)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+insert into public.signalements (auteur_id, cible_type, cible_id, motif, details)
+values (:Q, 'commentaire', :COM_P, 'spam', repeat('x', 1001));
+rollback;
+
+\echo '--- J11. LE SIGNALEMENT D UN MESSAGE N ENTRE PAS DANS L EXPORT DE SON AUTEUR : dans une conversation à deux, il dirait qui l a déposé (attendu : 0 | 1 | 1 — avant : 1)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+with e as (select public.mes_donnees() as j)
+select (select count(*) from jsonb_array_elements(e.j -> 'signalements_visant_mes_contenus') x
+         where x ->> 'cible_type' = 'message') as messages_signales_rendus,
+       jsonb_array_length(e.j -> 'signalements_visant_mes_contenus') as autres_rendus,
+       (e.j -> 'limites_de_l_export' -> 'signalements_visant_mes_contenus' ->> 'total')::int as total_dit
+  from e;
+rollback;
+
+\echo '--- J12. LA BORNE EST AUSSI EN TAILLE — A écrit 5 000 messages de 56 ko : l export de P passe, borné à 10 Mo, et le dit (attendu : t | 5001 | t | t — avant : ERROR total size of jsonb array elements exceeds the maximum)'
+begin;
+insert into public.messages (conversation_id, sender_id, texte)
+  select :CONV, :A, repeat('x', 56000) || g from generate_series(1, 5000) g;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
+set local statement_timeout = '8s';
+with e as (select public.mes_donnees() as j)
+select jsonb_array_length(e.j -> 'messages_recus') between 100 and 200 as rendus_dans_10_mo,
+       (e.j -> 'limites_de_l_export' -> 'messages_recus' ->> 'total')::int as total,
+       (e.j -> 'limites_de_l_export' -> 'messages_recus' ->> 'rendus')::int
+         = jsonb_array_length(e.j -> 'messages_recus') as rendus_dits,
+       octet_length(e.j::text) < 20000000 as export_sous_20_mo
+  from e;
+rollback;
+
+\echo '--- J13. Un particulier qui inonde un artisan de 50 000 demandes de devis ne fait pas échouer son export : ses demandes REÇUES sont bornées, celles de P à lui-même restent (attendu : 5000 | 50001 | 5000 — avant : délai dépassé à 200 000)'
+begin;
+insert into public.quote_requests (client_id, professional_id, nom, telephone, description, statut)
+  select :P, :A, 'Paule P.', '0639980000', 'demande ' || g, 'en_attente' from generate_series(1, 50000) g;
+insert into public.quote_requests (client_id, professional_id, nom, telephone, description, statut)
+  values (:P, :A, 'Paule P.', '0639980000', 'une de plus', 'en_attente');
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+set local statement_timeout = '8s';
+with e as (select public.mes_donnees() as j)
+select jsonb_array_length(e.j -> 'demandes_de_devis') as rendues,
+       (e.j -> 'limites_de_l_export' -> 'demandes_de_devis_recues' ->> 'total')::int as total,
+       (e.j -> 'limites_de_l_export' -> 'demandes_de_devis_recues' ->> 'rendus')::int as rendus
+  from e;
+rollback;
+
+\echo '--- J14. RIEN DE CE QUI NE CONCERNE PAS P N EST DANS SON EXPORT, ni dans sa partie sans masquage : la conversation A — B, la réponse de A à l annonce de B, l abonnement de Q (attendu : f | f | f | f | f)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
+with e as (select public.mes_donnees()::text as t, public.mes_donnees_sans_masquage()::text as s)
+select position('MESSAGE PRIVE B VERS A' in e.t) > 0 as message_etranger,
+       position('REPONSE DE A A B' in e.t) > 0 as reponse_etrangere,
+       position('a51d0000-0000-4000-8000-0000000000c2' in e.t) > 0 as conversation_etrangere,
+       position('MESSAGE PRIVE B VERS A' in e.s) > 0 or position('REPONSE DE A A B' in e.s) > 0 as sans_masquage_etranger,
+       (select count(*) from jsonb_array_elements(public.mes_donnees() -> 'abonnements') x
+         where x ->> 'follower_id' <> 'a51d0000-0000-4000-8000-000000000001') > 0 as abonnement_etranger
+  from e;
+rollback;
+
+\echo '--- J14 bis. NI QUI VOUS A BLOQUÉ, NI QUI VOUS SUIT : R (un compte qui n a rien d autre à voir avec P) bloque P, Q suit A ; ni l export de P ni celui de A ne le disent, sans masquage compris (attendu : f | f | f | f)'
+begin;
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a51d0000-0000-4000-8000-0000000000b9', 'r51d@exemple-opus.test', '{"type":"particulier","nom":"Rémi R.","cgu":"2026-10-28"}'::jsonb);
+insert into public.blocages (bloqueur_id, bloque_id) values ('a51d0000-0000-4000-8000-0000000000b9', :P);
+insert into public.follows (follower_id, following_id) values (:Q, :A) on conflict do nothing;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
+with e as (select public.mes_donnees()::text as t, public.mes_donnees_sans_masquage()::text as s)
+select position('a51d0000-0000-4000-8000-0000000000b9' in e.t) > 0 as p_voit_qui_la_bloque,
+       position('a51d0000-0000-4000-8000-0000000000b9' in e.s) > 0 as p_le_voit_sans_masquage
+  from e \gset j14b_
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+with e as (select public.mes_donnees()::text as t, public.mes_donnees_sans_masquage()::text as s)
+select :'j14b_p_voit_qui_la_bloque'::boolean as p_voit_qui_la_bloque,
+       :'j14b_p_le_voit_sans_masquage'::boolean as p_le_voit_sans_masquage,
+       position('"follower_id": "a51d0000-0000-4000-8000-000000000002"' in e.t) > 0 as a_voit_qui_le_suit,
+       position('"follower_id": "a51d0000-0000-4000-8000-000000000002"' in e.s) > 0 as a_le_voit_sans_masquage
+  from e;
+rollback;
+
+\echo '--- J15. CE QU ON VOUS ÉCRIT EST DANS VOTRE EXPORT : A reçoit le commentaire de Q sous sa publication, Q la réponse de P à son commentaire (attendu : t | t | 1 | 1)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+select position('Joli travail' in (public.mes_donnees() -> 'commentaires_recus')::text) > 0 as a_recoit_q \gset
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+select :'a_recoit_q'::boolean as a_recoit_q,
+       position('Merci Quentin' in (public.mes_donnees() -> 'commentaires_recus')::text) > 0 as q_recoit_p,
+       (public.mes_donnees() -> 'limites_de_l_export' -> 'commentaires_recus' ->> 'total')::int as total_q,
+       jsonb_array_length(public.mes_donnees() -> 'commentaires_recus') as rendus_q;
+rollback;
+
 -- ==========================================================================
 --  K. Les notifications d'un compte qui part — décision du 30/10
 -- ==========================================================================
 \echo '--- K1. Q part : sa notification chez A part avec lui, celle de l administration reste (attendu : 0 | 1 — avant : 1 | 1, avec son nom dans le texte)'
 begin;
 delete from auth.users where id = :Q;
-select (select count(*) from public.notifications where user_id = :A and type = 'commentaire') as de_q,
+select (select count(*) from public.notifications where user_id = :A and texte like 'Quentin Q.%') as de_q,
        (select count(*) from public.notifications where user_id = :A and acteur_id is null) as de_l_administration;
 rollback;
 
@@ -656,6 +816,13 @@ select count(*) filter (where p.prosecdef) as definer,
   from pg_proc p
  where p.pronamespace = 'public'::regnamespace
    and p.proname in ('profil_public', 'ma_fiche_pro', 'admin_etat_des_fiches', 'mes_donnees_sans_masquage');
+
+\echo '--- L3. Le déclencheur des signalements : definer, appelable par PERSONNE (attendu : t | f | f)'
+select p.prosecdef as definer,
+       has_function_privilege('authenticated', p.oid, 'execute') as connecte,
+       has_function_privilege('anon', p.oid, 'execute') as visiteur
+  from pg_proc p
+ where p.pronamespace = 'public'::regnamespace and p.proname = 'tient_le_signalement';
 
 -- Ménage.
 \set QUIET on

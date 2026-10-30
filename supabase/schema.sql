@@ -15569,19 +15569,30 @@ alter table public.notifications
 --      signalements qui visent ses contenus, les décisions de
 --      l'administration, la copie de ses informations d'inscription.
 --
+--  Elle rend aussi, depuis la relecture du 30/10, tout ce que d'AUTRES ont
+--  écrit à la personne : les commentaires sous ses publications et les
+--  réponses à ses commentaires, les réponses à ses demandes, les avis sur sa
+--  fiche, les demandes de devis, de rappel et d'urgence qu'on lui a
+--  adressées. Les textes le promettaient ; l'export ne les rendait pas.
+--
 --  CE QUI EN EST TENU À L'ÉCART, et pourquoi (la liste fermée de l'export,
 --  section 42) : l'identité de qui a signalé et ce qu'il a écrit (`auteur_id`,
---  `details`) ; la note interne et l'identité de l'administrateur
---  (`note`, `traite_par`, `admin_id`) ; les décisions sur un signalement ou
---  sur le catalogue des métiers, qui ne portent pas sur la personne.
+--  `details`) ; les signalements de ses MESSAGES (dans une conversation à
+--  deux, les rendre dirait qui les a déposés) ; la note interne et
+--  l'identité de l'administrateur (`note`, `traite_par`, `admin_id`) ; les
+--  décisions sur un signalement ou sur le catalogue des métiers, qui ne
+--  portent pas sur la personne.
 --
---  CE QUE D'AUTRES REMPLISSENT EST BORNÉ : les messages reçus aux 5 000
---  plus récents, avec leur nombre total. Un interlocuteur qui inonde une
---  conversation faisait sinon dépasser le délai de 8 secondes de la vraie
---  base, et c'est le droit d'accès d'une AUTRE personne qui tombait (mesuré :
---  300 000 messages, l'export actuel 2,4 s ; tous les reçus, plus de 8 s ;
---  bornés à 5 000, 0,2 s). Les SIENS ne sont pas bornés : personne d'autre
---  ne peut les multiplier.
+--  CE QUE D'AUTRES REMPLISSENT EST BORNÉ, en NOMBRE et en TAILLE : les
+--  5 000 plus récents, dans une taille cumulée (10 Mo pour les messages
+--  reçus, 5 Mo pour les autres, 2 Mo pour les rappels), le total et le
+--  nombre rendu dits partie par partie dans `limites`. Un interlocuteur qui
+--  inonde une conversation faisait sinon dépasser le délai de 8 secondes de
+--  la vraie base (mesuré : 300 000 messages, plus de 8 s ; bornés à 5 000,
+--  0,2 s) — et 5 000 messages de 56 ko dépassaient la taille maximale d'un
+--  jsonb : la borne en nombre seule ne suffisait pas (relecture du 30/10).
+--  C'est le droit d'accès d'une AUTRE personne qui tombait. Les SIENS ne
+--  sont pas bornés : personne d'autre ne peut les multiplier.
 --
 --  `security definer`, sans aucune politique, et chaque morceau filtré sur
 --  `auth.uid()` : elle ne rend jamais que ce qui concerne l'appelant.
@@ -15593,6 +15604,122 @@ stable
 security definer
 set search_path = public
 as $$
+  /* Chaque morceau rempli par D'AUTRES passe par la même forme : les 5 000
+     plus récents, PUIS une taille cumulée (`cumul`, en octets approchés :
+     les textes, plus 300 par ligne pour le reste). La borne en nombre seule
+     ne suffisait pas : 5 000 messages de 56 ko dépassaient la taille
+     maximale d'un jsonb, et tout l'export tombait (relecture du 30/10).
+     `materialized` : chaque morceau est lu UNE fois, pour l'export et pour
+     son décompte dans `limites`. */
+  with
+  recus_messages as materialized (
+    select x.* from (
+      select m.*, sum(octet_length(m.texte) + coalesce(octet_length(m.piece_nom), 0) + 300)
+                    over (order by m.created_at desc, m.id desc) as cumul
+        from public.messages m
+        join public.conversations c on c.id = m.conversation_id
+       where (c.client_id = auth.uid() or c.professional_id = auth.uid())
+         and m.sender_id <> auth.uid()
+       order by m.created_at desc, m.id desc
+       limit 5000) x
+     where x.cumul <= 10000000),
+  recus_commentaires as materialized (
+    select x.* from (
+      select k.*, sum(coalesce(octet_length(k.texte), 0) + 300)
+                    over (order by k.created_at desc, k.id desc) as cumul
+        from public.comments k
+       where k.author_id is distinct from auth.uid()
+         and (k.post_id in (select p.id from public.posts p where p.author_id = auth.uid())
+              or k.parent_id in (select k2.id from public.comments k2 where k2.author_id = auth.uid()))
+       order by k.created_at desc, k.id desc
+       limit 5000) x
+     where x.cumul <= 5000000),
+  recus_reponses_annonces as materialized (
+    select x.* from (
+      select r.*, sum(coalesce(octet_length(r.message), 0) + 300)
+                    over (order by r.created_at desc, r.id desc) as cumul
+        from public.annonce_reponses r
+        join public.annonces_pro a on a.id = r.annonce_id
+       where a.auteur_id = auth.uid()
+       order by r.created_at desc, r.id desc
+       limit 5000) x
+     where x.cumul <= 5000000),
+  recus_reponses_demandes as materialized (
+    select x.* from (
+      select r.*, sum(coalesce(octet_length(r.message), 0) + 300)
+                    over (order by r.created_at desc, r.id desc) as cumul
+        from public.demande_reponses r
+        join public.demandes d on d.id = r.demande_id
+       where d.client_id = auth.uid()
+       order by r.created_at desc, r.id desc
+       limit 5000) x
+     where x.cumul <= 5000000),
+  recus_avis as materialized (
+    select x.* from (
+      select v.*, sum(coalesce(octet_length(v.commentaire), 0) + 300)
+                    over (order by v.created_at desc, v.id desc) as cumul
+        from public.reviews v
+       where v.professional_id = auth.uid()
+       order by v.created_at desc, v.id desc
+       limit 5000) x
+     where x.cumul <= 5000000),
+  /* Un signalement de MESSAGE n'y est pas : dans une conversation à deux,
+     dire qu'un message a été signalé dirait qui l'a signalé (relecture du
+     30/10). Pour le reste, ni l'identité de qui a signalé, ni ce qu'il a
+     écrit : colonne par colonne. L'extrait, lui, est celui que la BASE a
+     relevé sur le contenu (53.8), jamais un texte choisi par le signaleur. */
+  recus_signalements as materialized (
+    select x.* from (
+      select g.id, g.cible_type, g.cible_id, g.motif, g.extrait, g.statut, g.created_at, g.traite_at,
+             sum(coalesce(octet_length(g.extrait), 0) + 300)
+               over (order by g.created_at desc, g.id desc) as cumul
+        from public.signalements g
+       where g.cible_auteur_id = auth.uid()
+         and g.cible_type <> 'message'
+       order by g.created_at desc, g.id desc
+       limit 5000) x
+     where x.cumul <= 5000000),
+  /* LES DEMANDES ADRESSÉES À L'ARTISAN : remplies par ses clients. Celles
+     qu'on a ENVOYÉES ne sont pas bornées (personne d'autre ne peut les
+     multiplier) ; celles qu'on a REÇUES le sont. `client_id is distinct
+     from` : une demande « à soi-même » d'avant le lot S-b est rangée avec
+     les siennes, une seule fois. */
+  recus_devis as materialized (
+    select x.* from (
+      select q.id, sum(coalesce(octet_length(q.description), 0) + coalesce(octet_length(q.nom), 0) + 300)
+                    over (order by q.created_at desc, q.id desc) as cumul
+        from public.quote_requests q
+       where q.professional_id = auth.uid() and q.client_id is distinct from auth.uid()
+       order by q.created_at desc, q.id desc
+       limit 5000) x
+     where x.cumul <= 5000000),
+  recus_rappels as materialized (
+    select x.* from (
+      select q.id, sum(coalesce(octet_length(q.nom), 0) + 300)
+                    over (order by q.created_at desc, q.id desc) as cumul
+        from public.callback_requests q
+       where q.professional_id = auth.uid() and q.client_id is distinct from auth.uid()
+       order by q.created_at desc, q.id desc
+       limit 5000) x
+     where x.cumul <= 2000000),
+  mes_notifications as materialized (
+    select x.* from (
+      select n.*, sum(coalesce(octet_length(n.texte), 0) + 300)
+                    over (order by n.created_at desc, n.id desc) as cumul
+        from public.notifications n
+       where n.user_id = auth.uid()
+       order by n.created_at desc, n.id desc
+       limit 5000) x
+     where x.cumul <= 2000000),
+  recus_urgences as materialized (
+    select x.* from (
+      select q.id, sum(coalesce(octet_length(q.details), 0) + coalesce(octet_length(q.adresse), 0) + 300)
+                    over (order by q.created_at desc, q.id desc) as cumul
+        from public.sos_requests q
+       where q.professional_id = auth.uid() and q.client_id is distinct from auth.uid()
+       order by q.created_at desc, q.id desc
+       limit 5000) x
+     where x.cumul <= 5000000)
   select jsonb_build_object(
     'conversations',
       coalesce((select jsonb_agg(to_jsonb(c) order by c.created_at, c.id)
@@ -15603,34 +15730,34 @@ as $$
                   from public.messages m
                  where m.sender_id = auth.uid()), '[]'::jsonb),
     'messages_recus',
-      coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
-                  from (select m.*
-                          from public.messages m
-                          join public.conversations c on c.id = m.conversation_id
-                         where (c.client_id = auth.uid() or c.professional_id = auth.uid())
-                           and m.sender_id <> auth.uid()
-                         order by m.created_at desc, m.id desc
-                         limit 5000) x), '[]'::jsonb),
-    'messages_recus_total',
-      (select count(*)
-         from public.messages m
-         join public.conversations c on c.id = m.conversation_id
-        where (c.client_id = auth.uid() or c.professional_id = auth.uid())
-          and m.sender_id <> auth.uid()),
+      coalesce((select jsonb_agg(to_jsonb(x) - 'cumul' order by x.created_at, x.id) from recus_messages x), '[]'::jsonb),
+    'commentaires_recus',
+      coalesce((select jsonb_agg(to_jsonb(x) - 'cumul' order by x.created_at, x.id) from recus_commentaires x), '[]'::jsonb),
     'reponses_recues_a_mes_annonces',
-      coalesce((select jsonb_agg(to_jsonb(r) order by r.created_at, r.id)
-                  from public.annonce_reponses r
-                  join public.annonces_pro a on a.id = r.annonce_id
-                 where a.auteur_id = auth.uid()), '[]'::jsonb),
+      coalesce((select jsonb_agg(to_jsonb(x) - 'cumul' order by x.created_at, x.id) from recus_reponses_annonces x), '[]'::jsonb),
+    'reponses_recues_a_mes_demandes',
+      coalesce((select jsonb_agg(to_jsonb(x) - 'cumul' order by x.created_at, x.id) from recus_reponses_demandes x), '[]'::jsonb),
+    'avis_recus',
+      coalesce((select jsonb_agg(to_jsonb(x) - 'cumul' order by x.created_at, x.id) from recus_avis x), '[]'::jsonb),
     'signalements_visant_mes_contenus',
-      coalesce((select jsonb_agg(jsonb_build_object(
-                         'cible_type', s.cible_type, 'cible_id', s.cible_id,
-                         'motif', s.motif, 'extrait', s.extrait,
-                         'statut', s.statut, 'created_at', s.created_at,
-                         'traite_at', s.traite_at)
-                       order by s.created_at, s.id)
-                  from public.signalements s
-                 where s.cible_auteur_id = auth.uid()), '[]'::jsonb),
+      coalesce((select jsonb_agg(to_jsonb(x) - 'cumul' order by x.created_at, x.id) from recus_signalements x), '[]'::jsonb),
+    'demandes_de_devis',
+      coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                  from (select q.* from public.quote_requests q where q.client_id = auth.uid()
+                        union all
+                        select q.* from public.quote_requests q join recus_devis r on r.id = q.id) x), '[]'::jsonb),
+    'rappels',
+      coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                  from (select q.* from public.callback_requests q where q.client_id = auth.uid()
+                        union all
+                        select q.* from public.callback_requests q join recus_rappels r on r.id = q.id) x), '[]'::jsonb),
+    'urgences',
+      coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                  from (select q.* from public.sos_requests q where q.client_id = auth.uid()
+                        union all
+                        select q.* from public.sos_requests q join recus_urgences r on r.id = q.id) x), '[]'::jsonb),
+    'mes_notifications',
+      coalesce((select jsonb_agg(to_jsonb(x) - 'cumul' order by x.created_at, x.id) from mes_notifications x), '[]'::jsonb),
     'decisions_de_l_administration',
       coalesce((select jsonb_agg(jsonb_build_object(
                          'action', j.action, 'cible_type', j.cible_type, 'cible_id', j.cible_id,
@@ -15649,12 +15776,147 @@ as $$
                         and j.cible_id in (select e.id from public.entreprise_registre e where e.pro_id = auth.uid()))),
                '[]'::jsonb),
     'metadonnees_d_inscription',
-      (select u.raw_user_meta_data from auth.users u where u.id = auth.uid())
+      (select u.raw_user_meta_data from auth.users u where u.id = auth.uid()),
+    /* Ce qui a été borné, et de combien : total et rendus, partie par partie.
+       Un export coupé sans le dire ressemblerait à un export complet. */
+    'limites', jsonb_build_object(
+      'messages_recus', jsonb_build_object(
+        'total', (select count(*) from public.messages m join public.conversations c on c.id = m.conversation_id
+                   where (c.client_id = auth.uid() or c.professional_id = auth.uid()) and m.sender_id <> auth.uid()),
+        'rendus', (select count(*) from recus_messages)),
+      'commentaires_recus', jsonb_build_object(
+        'total', (select count(*) from public.comments k
+                   where k.author_id is distinct from auth.uid()
+                     and (k.post_id in (select p.id from public.posts p where p.author_id = auth.uid())
+                          or k.parent_id in (select k2.id from public.comments k2 where k2.author_id = auth.uid()))),
+        'rendus', (select count(*) from recus_commentaires)),
+      'reponses_recues_a_mes_annonces', jsonb_build_object(
+        'total', (select count(*) from public.annonce_reponses r join public.annonces_pro a on a.id = r.annonce_id
+                   where a.auteur_id = auth.uid()),
+        'rendus', (select count(*) from recus_reponses_annonces)),
+      'reponses_recues_a_mes_demandes', jsonb_build_object(
+        'total', (select count(*) from public.demande_reponses r join public.demandes d on d.id = r.demande_id
+                   where d.client_id = auth.uid()),
+        'rendus', (select count(*) from recus_reponses_demandes)),
+      'avis_recus', jsonb_build_object(
+        'total', (select count(*) from public.reviews v where v.professional_id = auth.uid()),
+        'rendus', (select count(*) from recus_avis)),
+      'signalements_visant_mes_contenus', jsonb_build_object(
+        'total', (select count(*) from public.signalements g
+                   where g.cible_auteur_id = auth.uid() and g.cible_type <> 'message'),
+        'rendus', (select count(*) from recus_signalements)),
+      'demandes_de_devis_recues', jsonb_build_object(
+        'total', (select count(*) from public.quote_requests q
+                   where q.professional_id = auth.uid() and q.client_id is distinct from auth.uid()),
+        'rendus', (select count(*) from recus_devis)),
+      'rappels_recus', jsonb_build_object(
+        'total', (select count(*) from public.callback_requests q
+                   where q.professional_id = auth.uid() and q.client_id is distinct from auth.uid()),
+        'rendus', (select count(*) from recus_rappels)),
+      'urgences_recues', jsonb_build_object(
+        'total', (select count(*) from public.sos_requests q
+                   where q.professional_id = auth.uid() and q.client_id is distinct from auth.uid()),
+        'rendus', (select count(*) from recus_urgences)),
+      'mes_notifications', jsonb_build_object(
+        'total', (select count(*) from public.notifications n where n.user_id = auth.uid()),
+        'rendus', (select count(*) from mes_notifications)))
   )
 $$;
 
 revoke all on function public.mes_donnees_sans_masquage() from public, anon;
 grant execute on function public.mes_donnees_sans_masquage() to authenticated;
+
+-- --------------------------------------------------------------------------
+--  53.8  Un signalement dit la vérité sur ce qu'il vise — `tient_le_signalement()`
+--
+--  Jusqu'ici, la cible d'un signalement, son AUTEUR et l'EXTRAIT gardé
+--  étaient écrits par le téléphone de celui qui signale, sans aucune
+--  vérification (relecture du 30/10). Tant que ces lignes ne servaient qu'à
+--  l'administration, c'était une gêne ; depuis que l'export de la personne
+--  visée les rend (53.7), c'était une porte : n'importe quel compte rangeait
+--  chez n'importe qui des centaines de milliers de « signalements » portant
+--  un texte de son invention, présenté comme un extrait de SES contenus, et
+--  son export échouait (délai de 8 s, ou taille maximale d'un jsonb).
+--
+--  La base relève donc elle-même, sur la cible RÉELLE :
+--    - son auteur (`cible_auteur_id`) et un extrait de 500 caractères au plus ;
+--    - et refuse une cible qui n'existe pas (OP026), sans dire si elle a
+--      existé : la même phrase pour « effacée » et « inventée ».
+--  Un MESSAGE ne se signale que par celui qui l'a reçu : une partie de la
+--  conversation, qui n'en est pas l'expéditeur. C'est déjà ce que fait
+--  l'écran ; la base le tient.
+--
+--  `security definer` : la cible peut être un contenu que la RLS cache à
+--  celui qui signale (un message lu, puis un blocage) — le déclencheur doit
+--  la trouver quand même. Il ne rend rien à l'appelant : il écrit deux
+--  colonnes de la ligne qu'on insère. Le balayage de la section 43 lui
+--  retire tout droit d'exécution.
+--
+--  Et deux bornes, que l'application tenait seule : l'extrait (500) et la
+--  précision écrite par celui qui signale (1 000).
+-- --------------------------------------------------------------------------
+create or replace function public.tient_le_signalement()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  l_auteur  uuid;
+  l_extrait text;
+  l_trouve  boolean := false;
+begin
+  if new.cible_type = 'publication' then
+    select p.author_id, p.texte, true into l_auteur, l_extrait, l_trouve
+      from public.posts p where p.id = new.cible_id;
+  elsif new.cible_type = 'commentaire' then
+    select k.author_id, k.texte, true into l_auteur, l_extrait, l_trouve
+      from public.comments k where k.id = new.cible_id;
+  elsif new.cible_type = 'message' then
+    select m.sender_id,
+           coalesce(nullif(m.texte, ''), '(pièce jointe : ' || coalesce(m.piece_nom, 'sans nom') || ')'),
+           true
+      into l_auteur, l_extrait, l_trouve
+      from public.messages m
+      join public.conversations c on c.id = m.conversation_id
+     where m.id = new.cible_id
+       and m.sender_id is distinct from new.auteur_id
+       and new.auteur_id in (c.client_id, c.professional_id);
+  elsif new.cible_type = 'profil' then
+    select u.id, coalesce(nullif(btrim(pp.bio), ''), pp.entreprise, u.nom), true
+      into l_auteur, l_extrait, l_trouve
+      from public.users u
+      left join public.professional_profiles pp on pp.id = u.id
+     where u.id = new.cible_id;
+  elsif new.cible_type = 'demande' then
+    select d.client_id, d.texte, true into l_auteur, l_extrait, l_trouve
+      from public.demandes d where d.id = new.cible_id;
+  elsif new.cible_type = 'annonce' then
+    select a.auteur_id, a.titre || ' — ' || a.texte, true into l_auteur, l_extrait, l_trouve
+      from public.annonces_pro a where a.id = new.cible_id;
+  end if;
+
+  if l_trouve is not true then
+    raise exception using
+      errcode = 'OP026',
+      message = 'Ce contenu ne peut pas être signalé : il n''existe plus, ou il ne vous est pas adressé.',
+      hint = 'Rien n''a été enregistré.';
+  end if;
+
+  new.cible_auteur_id := l_auteur;
+  new.extrait := left(l_extrait, 500);
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_signalement
+  before insert on public.signalements
+  for each row execute function public.tient_le_signalement();
+
+alter table public.signalements drop constraint if exists signalements_extrait_check;
+alter table public.signalements add constraint signalements_extrait_check check (extrait is null or char_length(extrait) <= 500);
+alter table public.signalements drop constraint if exists signalements_details_check;
+alter table public.signalements add constraint signalements_details_check check (details is null or char_length(details) <= 1000);
 
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
@@ -15670,16 +15932,22 @@ grant execute on function public.mes_donnees_sans_masquage() to authenticated;
 --  concernent la personne, SAUF une liste FERMÉE d'exclusions, chacune
 --  avec sa raison :
 --    1. l'identité de qui la suit (un pro en a le NOMBRE sur sa fiche) ;
---    2. l'identité de qui l'a bloquée, et le fait même d'être bloquée ;
---    3. l'identité de qui a signalé un de ses contenus, et ce qu'il a écrit ;
---    4. l'identité de l'administrateur qui a décidé (CJUE C-579/21) ;
---    5. la note interne d'un signalement ;
+--    2. l'identité de qui a aimé, enregistré ou regardé ses publications
+--       (elle en voit les NOMBRES : « combien, jamais qui ») ;
+--    3. l'identité de qui l'a bloquée, et le fait même d'être bloquée ;
+--    4. l'identité de qui a signalé un de ses contenus, et ce qu'il a écrit ;
+--       et les signalements de ses MESSAGES : dans une conversation à deux,
+--       les rendre dirait qui les a déposés ;
+--    5. l'identité de l'administrateur qui a décidé (CJUE C-579/21), la note
+--       interne d'un signalement et la décision prise sur lui ;
 --    6. les fichiers eux-mêmes — rendus par leur ADRESSE ;
 --    7. les fiches de carnet et les devis qu'un artisan tient sur elle : ce
 --       sont les données de cet artisan, à qui elle s'adresse.
---  Et ce que d'AUTRES remplissent est borné aux 5 000 plus récents (les
---  messages reçus, les notifications), le total dit dans
---  `limites_de_l_export`.
+--  Cette liste est écrite UNE fois pour les textes (`EXCLUSIONS_DE_L_EXPORT`,
+--  src/data/legal.js) : la changer ici se fait AVEC elle.
+--  Et ce que d'AUTRES remplissent est borné aux 5 000 plus récents ET à
+--  une taille cumulée (53.7 ; les notifications : 2 Mo), le total et le
+--  nombre rendu dits dans `limites_de_l_export`.
 --
 --  UN OBJET PLAFONNE À 50 CLÉS (100 arguments par fonction) : l'export est
 --  donc fait de DEUX `jsonb_build_object`, joints par `||`.
@@ -15736,11 +16004,8 @@ as $$
        exactement comme `rappels` et `urgences`. Le nom proposé par le plan,
        « demandes reçues », aurait écrit une chose fausse dans l'export d'un
        particulier. Les devis eux-mêmes sont plus bas, sous `devis_emis`. */
-    'demandes_de_devis',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.quote_requests x
-                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
-    'rappels',   coalesce((select jsonb_agg(to_jsonb(x)) from public.callback_requests x
-                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
+    'demandes_de_devis', s.j -> 'demandes_de_devis',
+    'rappels',   s.j -> 'rappels',
     /* MES messages, TOUS — sans le masquage d'un blocage (section 53.7). */
     'messages',  s.j -> 'messages',
     'abonnements',
@@ -15813,8 +16078,7 @@ as $$
        pour l'artisan, ce qu'on lui a adressé. Elles manquaient depuis le
        premier jour. `sos_requests` n'a aucun droit de colonne : `to_jsonb(x)`
        ne tombe pas dans le piège de `mon_compte()`. */
-    'urgences',  coalesce((select jsonb_agg(to_jsonb(x)) from public.sos_requests x
-                            where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
+    'urgences',  s.j -> 'urgences',
     /* Mes demandes de compte professionnel, avec leur message libre et la
        note de l'administration : c'est ce qu'on a écrit sur moi. Colonne
        par colonne, et pas `to_jsonb(x)` : depuis le 15/10, `traitee_par`
@@ -15883,6 +16147,9 @@ as $$
     'conversations',                   s.j -> 'conversations',
     'messages_recus',                  s.j -> 'messages_recus',
     'reponses_recues_a_mes_annonces',  s.j -> 'reponses_recues_a_mes_annonces',
+    'reponses_recues_a_mes_demandes',  s.j -> 'reponses_recues_a_mes_demandes',
+    'commentaires_recus',              s.j -> 'commentaires_recus',
+    'avis_recus',                      s.j -> 'avis_recus',
     'signalements_visant_mes_contenus', s.j -> 'signalements_visant_mes_contenus',
     'decisions_de_l_administration',   s.j -> 'decisions_de_l_administration',
     'metadonnees_d_inscription',       s.j -> 'metadonnees_d_inscription',
@@ -15905,14 +16172,6 @@ as $$
                    'annonces', coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
                                            from public.annonce_reponses x
                                           where x.professional_id = auth.uid()), '[]'::jsonb)),
-    'reponses_recues_a_mes_demandes',
-                 coalesce((select jsonb_agg(to_jsonb(r) order by r.created_at, r.id)
-                             from public.demande_reponses r
-                             join public.demandes d on d.id = r.demande_id
-                            where d.client_id = auth.uid()), '[]'::jsonb),
-    'avis_recus',
-                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
-                             from public.reviews x where x.professional_id = auth.uid()), '[]'::jsonb),
     'mes_demandes_de_metier',
                  coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
                              from public.metier_demandes x where x.professional_id = auth.uid()), '[]'::jsonb),
@@ -15920,20 +16179,8 @@ as $$
                  coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
                              from public.specialites_proposees x where x.propose_par = auth.uid()), '[]'::jsonb),
     /* Bornée : d'autres la remplissent (un « j'aime », un commentaire). */
-    'mes_notifications',
-                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
-                             from (select n.* from public.notifications n
-                                    where n.user_id = auth.uid()
-                                    order by n.created_at desc, n.id desc
-                                    limit 5000) x), '[]'::jsonb),
-    'limites_de_l_export',
-                 jsonb_build_object(
-                   'messages_recus', jsonb_build_object(
-                     'total', s.j -> 'messages_recus_total',
-                     'rendus', jsonb_array_length(s.j -> 'messages_recus')),
-                   'mes_notifications', jsonb_build_object(
-                     'total', (select count(*) from public.notifications n where n.user_id = auth.uid()),
-                     'rendus', least((select count(*) from public.notifications n where n.user_id = auth.uid()), 5000)))
+    'mes_notifications', s.j -> 'mes_notifications',
+    'limites_de_l_export',             s.j -> 'limites'
   )
   from s
 $$;

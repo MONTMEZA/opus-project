@@ -2697,6 +2697,37 @@ doit montrer que des vidéos) ; « Mes publications » depuis votre profil.
 VRAIE remise en avant**, visible de tous, et compte dans vos trois de la
 semaine — à faire sur une publication que vous voulez vraiment remonter.
 
+### Pendant le lot S-d — ce que la relecture a laissé ouvert (30/10/2026)
+
+La relecture adverse de la première version a trouvé 26 constats (25
+confirmés). Ceux qui sont corrigés sont dans CLAUDE.md (section du lot S-d) ;
+ceux-ci restent, et chacun a sa raison :
+
+- [ ] **Deux professionnels peuvent ouvrir une seconde conversation, dans
+  l'autre sens** (A client de B, puis B client de A) : la clé unique porte
+  sur la paire ORDONNÉE. Sans fuite ; deux fils pour les mêmes personnes.
+  À régler avec la messagerie entre pros.
+- [ ] **La règle « deux particuliers ne s'écrivent pas » vaut aussi pour
+  l'administration** : un administrateur qui serait un compte particulier ne
+  pourrait plus répondre par la messagerie. Aujourd'hui le seul
+  administrateur est un compte pro, donc la promesse de la politique tient.
+  **Un administrateur doit rester un compte professionnel**, ou il faudra
+  une porte à lui.
+- [ ] **Aucune limite de dépôt de signalements par compte.** La base relève
+  désormais l'auteur et l'extrait du vrai contenu (OP026) et l'export est
+  borné, mais un compte peut encore remplir la file de l'administration en
+  signalant mille contenus différents. Une limite par jour, à poser avec le
+  back-office.
+- [ ] **Même chose pour les demandes de devis, de rappel et d'urgence** :
+  l'export de l'artisan est borné, sa liste « Pour moi » ne l'est qu'à 200.
+  Une limite de dépôt par client et par jour.
+- [ ] **Un signalement qui visait un de vos contenus garde son court
+  extrait et l'identifiant technique de votre compte après la suppression
+  de celui-ci** (`cible_auteur_id` n'a pas de clé étrangère). Les textes le
+  disent désormais ; vider `cible_auteur_id` à la suppression est une
+  décision à prendre (le signalement servirait encore à la modération, sans
+  dire à qui il se rapportait).
+
 ### La démonstration et la publicité — décidé le 26/10/2026
 
 Les vidéos et les captures promotionnelles sont faites (en mode

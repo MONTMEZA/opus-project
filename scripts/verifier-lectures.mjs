@@ -56,7 +56,7 @@ const espaces = (t) => t.replace(/\s+/g, ' ').trim();
 const sur = (f) => { try { return f(); } catch (e) { return `PLANTE : ${e.message}`; } };
 
 const {
-  villeVisible, demandesAMontrer, peutEcrireDepuisLaFiche,
+  villeVisible, demandesAMontrer, peutEcrireDepuisLaFiche, FICHE_ILLISIBLE, DEMANDES_ILLISIBLES,
   DEMANDES_SUR_UNE_FICHE, AUCUNE_DEMANDE_A_MONTRER,
 } = await import('../src/lib/profil-public.js');
 
@@ -204,6 +204,14 @@ verifier('…jamais sur sa propre fiche', ecrit({ profil: particulier, monId: 'p
 verifier('…jamais sur la fiche d’un compte pro (il a sa page, et son bouton)',
   ecrit({ profil: { id: 'b', type: 'pro' }, monId: 'a', jeSuisPro: true }) === false);
 verifier('…ni sans fiche', ecrit({ profil: null, monId: 'a', jeSuisPro: true }) === false && ecrit() === false);
+verifier('…ni tant que le TYPE n’est pas connu (pendant la lecture, ou après un échec : seul le nom d’un commentaire)',
+  ecrit({ profil: { id: 'p9', nom: 'Paule', type: null }, monId: 'a', jeSuisPro: true }) === false
+  && ecrit({ profil: { id: 'p9', nom: 'Paule' }, monId: 'a', jeSuisPro: true }) === false);
+verifier('un échec se DIT, et ne ressemble ni à un profil supprimé ni à « aucune demande »',
+  typeof FICHE_ILLISIBLE === 'string' && typeof DEMANDES_ILLISIBLES === 'string'
+  && /ce n[’']est pas que ce profil n[’']existe plus/i.test(FICHE_ILLISIBLE)
+  && /ce n[’']est pas qu[’']il n[’']y en a aucune/i.test(DEMANDES_ILLISIBLES)
+  && /réessayez/i.test(FICHE_ILLISIBLE) && /réessayez/i.test(DEMANDES_ILLISIBLES));
 verifier('la fiche sans demande ne dit jamais « n’a publié aucune demande » (une pourvue, ou masquée, existe)',
   typeof AUCUNE_DEMANDE_A_MONTRER === 'string' && AUCUNE_DEMANDE_A_MONTRER.length > 0
   && !/n[’']a (?:publié|écrit|déposé)|aucune demande publiée/i.test(AUCUNE_DEMANDE_A_MONTRER));
@@ -225,95 +233,297 @@ function chaineApres(texte, i) {
     while (j < texte.length && /\s/.test(texte[j])) j += 1;
     if (texte[j] !== '.') return texte.slice(i, k);
     const ouvre = texte.indexOf('(', j);
-    if (ouvre < 0 || !/^\.\w+$/.test(texte.slice(j, ouvre))) return texte.slice(i, k);
-    let niveau = 0;
-    let fin = -1;
-    for (let q = ouvre; q < texte.length; q += 1) {
-      const c = texte[q];
-      if (c === "'" || c === '`') { const ferme = texte.indexOf(c, q + 1); if (ferme < 0) break; q = ferme; continue; }
-      if (c === '(') niveau += 1;
-      else if (c === ')') { niveau -= 1; if (niveau === 0) { fin = q; break; } }
-    }
-    if (fin < 0) return texte.slice(i, k);
+    if (ouvre < 0 || !/^\.\s*\w+\s*$/.test(texte.slice(j, ouvre))) return texte.slice(i, k);
+    const { fin } = interieurAppel(texte, ouvre);
+    if (fin >= texte.length) return texte.slice(i, k);
     k = fin + 1;
   }
 }
-function lecturesDe(table) {
-  const sortie = [];
-  const marque = `.from('${table}')`;
-  let i = api.indexOf(marque);
-  while (i >= 0) {
-    const ordre = chaineApres(api, i + marque.length);
-    for (const m of ordre.matchAll(/\.select\(\s*(?:'([^']*)'|([A-Z_]+))?\s*[,)]/g)) {
-      sortie.push({ brut: m[1], constante: m[2], ordre: espaces(marque + ordre).slice(0, 120) });
+/* LIRE UNE LECTURE SOUS TOUTES SES FORMES (relecture du 30/10, RT11 et
+   RT13). Le contrôle précédent ne reconnaissait que `.from('table')` entre
+   apostrophes et `.select('…')` ou une constante en majuscules : un
+   gabarit, des guillemets doubles, une variable, une jointure `users!fk(…)`
+   ou une colonne ajoutée après un `.join` passaient au vert — et, après M2,
+   une telle lecture fait tomber l'application au démarrage. Il ÉVALUE
+   désormais l'argument (chaînes, gabarits, concaténations, constantes du
+   fichier ou importées, `[…].join(', ')`), puis lit la liste PostgREST
+   comme un arbre, et décide de la table d'une jointure par la CLÉ
+   ÉTRANGÈRE de la table lue — `client:client_id(…)` d'un devis mène au
+   carnet `clients`, pas à `users`. Ce qu'il ne sait pas lire, il le
+   REFUSE : un contrôle qui ne comprend pas une forme ne doit pas la
+   déclarer bonne. */
+
+/* Un parcours de JavaScript qui saute les chaînes (', ", et les gabarits
+   avec leurs `${…}` imbriqués) et compte les parenthèses, crochets et
+   accolades. `rendre(c, k, niveau)` est appelé sur chaque caractère hors
+   chaîne ; il rend `true` pour s'arrêter. */
+function parcourir(texte, debut, rendre) {
+  let niveau = 0;
+  for (let k = debut; k < texte.length; k += 1) {
+    const c = texte[k];
+    if (c === "'" || c === '"') {
+      let q = k + 1;
+      while (q < texte.length && texte[q] !== c) q += texte[q] === '\\' ? 2 : 1;
+      k = q;
+      continue;
     }
-    i = api.indexOf(marque, i + marque.length);
+    if (c === '`') { k = finGabarit(texte, k); continue; }
+    if (rendre(c, k, niveau)) return k;
+    if ('([{'.includes(c)) niveau += 1;
+    else if (')]}'.includes(c)) niveau -= 1;
+  }
+  return texte.length;
+}
+function finGabarit(texte, k) {
+  let q = k + 1;
+  while (q < texte.length && texte[q] !== '`') {
+    if (texte[q] === '\\') { q += 2; continue; }
+    if (texte[q] === '$' && texte[q + 1] === '{') {
+      q = parcourir(texte, q + 2, (c, _k, niveau) => c === '}' && niveau === 0) + 1;
+      continue;
+    }
+    q += 1;
+  }
+  return q;
+}
+/* L'intérieur d'un appel dont la parenthèse ouvrante est à `ouvre`. */
+function interieurAppel(texte, ouvre) {
+  const ferme = parcourir(texte, ouvre + 1, (c, _k, niveau) => c === ')' && niveau === 0);
+  return { interieur: texte.slice(ouvre + 1, ferme), fin: ferme };
+}
+/* Découpe aux séparateurs de premier niveau (`,` pour des arguments, `+`
+   pour une concaténation). */
+function decouper(texte, sep) {
+  const morceaux = [];
+  let debut = 0;
+  parcourir(texte, 0, (c, k, niveau) => {
+    if (c === sep && niveau === 0) { morceaux.push(texte.slice(debut, k)); debut = k + 1; }
+    return false;
+  });
+  morceaux.push(texte.slice(debut));
+  return morceaux.map((m) => m.trim()).filter((m) => m !== '');
+}
+
+const SOURCES = new Map();
+const sourceDe = (f) => {
+  if (!SOURCES.has(f)) SOURCES.set(f, sansCommentaires(lire(f)));
+  return SOURCES.get(f);
+};
+const echapper = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/* La valeur d'une constante : dans le fichier (`const X = …;`), ou dans
+   le module d'où elle est importée. */
+function constante(nom, fichier, profondeur) {
+  const texte = sourceDe(fichier);
+  const def = new RegExp(`(?:^|[^\\w$.])(?:export\\s+)?const\\s+${echapper(nom)}\\s*=`).exec(texte);
+  if (def) {
+    const debut = def.index + def[0].length;
+    const fin = parcourir(texte, debut, (c, _k, niveau) => c === ';' && niveau === 0);
+    return evaluer(texte.slice(debut, fin), fichier, profondeur + 1);
+  }
+  for (const m of texte.matchAll(/import\s*\{([^}]*)\}\s*from\s*'(\.[^']+)'/g)) {
+    for (const nomImporte of m[1].split(',').map((x) => x.trim())) {
+      const [origine, local] = nomImporte.split(/\s+as\s+/).map((x) => x.trim());
+      if ((local || origine) !== nom) continue;
+      const base = `${fichier.replace(/\/[^/]*$/, '')}/${m[2]}`.replace(/\/\.\//g, '/');
+      const chemin = [`${base}.js`, `${base}/index.js`].find((c) => { try { lire(c); return true; } catch { return false; } });
+      if (!chemin) return { ok: false, raison: `module introuvable pour ${nom}` };
+      return constante(origine, chemin, profondeur + 1);
+    }
+  }
+  return { ok: false, raison: `constante introuvable : ${nom}` };
+}
+function evaluer(expr, fichier, profondeur = 0) {
+  if (profondeur > 12) return { ok: false, raison: 'trop d’indirections' };
+  const e = expr.trim();
+  const termes = decouper(e, '+');
+  if (termes.length > 1) {
+    let valeur = '';
+    for (const t of termes) {
+      const r = evaluer(t, fichier, profondeur + 1);
+      if (!r.ok || typeof r.valeur !== 'string') return { ok: false, raison: r.raison || `« ${t} » n’est pas une chaîne` };
+      valeur += r.valeur;
+    }
+    return { ok: true, valeur };
+  }
+  if (/^'(?:[^'\\]|\\.)*'$/.test(e) || /^"(?:[^"\\]|\\.)*"$/.test(e)) {
+    return { ok: true, valeur: e.slice(1, -1).replace(/\\(.)/g, '$1') };
+  }
+  if (e.startsWith('`') && finGabarit(e, 0) === e.length - 1) {
+    let valeur = '';
+    let k = 1;
+    while (k < e.length - 1) {
+      if (e[k] === '\\') { valeur += e[k + 1]; k += 2; continue; }
+      if (e[k] === '$' && e[k + 1] === '{') {
+        const fin = parcourir(e, k + 2, (c, _k, niveau) => c === '}' && niveau === 0);
+        const r = evaluer(e.slice(k + 2, fin), fichier, profondeur + 1);
+        if (!r.ok || typeof r.valeur !== 'string') return { ok: false, raison: r.raison || 'gabarit illisible' };
+        valeur += r.valeur;
+        k = fin + 1;
+        continue;
+      }
+      valeur += e[k];
+      k += 1;
+    }
+    return { ok: true, valeur };
+  }
+  if (e.startsWith('[') && parcourir(e, 0, (c, _k, niveau) => c === ']' && niveau === 1) === e.length - 1) {
+    const valeurs = [];
+    for (const el of decouper(e.slice(1, -1), ',')) {
+      const r = evaluer(el, fichier, profondeur + 1);
+      if (!r.ok || typeof r.valeur !== 'string') return { ok: false, raison: r.raison || 'élément de liste illisible' };
+      valeurs.push(r.valeur);
+    }
+    return { ok: true, valeur: valeurs };
+  }
+  const gele = /^Object\.freeze\(([\s\S]*)\)$/.exec(e);
+  if (gele) return evaluer(gele[1], fichier, profondeur + 1);
+  /* `X.join(', ')` — et `X.filter(…).join(', ')`, qui ne peut que RETIRER
+     des colonnes : on garde la liste entière, ce qui est prudent. */
+  const joint = /^([\s\S]+?)\.join\(\s*(['"])([^'"]*)\2\s*\)$/.exec(e);
+  if (joint) {
+    const base = joint[1].replace(/\.filter\([\s\S]*\)$/, '');
+    const r = evaluer(base, fichier, profondeur + 1);
+    if (!r.ok || !Array.isArray(r.valeur)) return { ok: false, raison: r.raison || '`.join` sur autre chose qu’une liste' };
+    return { ok: true, valeur: r.valeur.join(joint[3]) };
+  }
+  if (/^[A-Za-z_$][\w$]*$/.test(e)) return constante(e, fichier, profondeur + 1);
+  return { ok: false, raison: `forme illisible : « ${e.slice(0, 60)} »` };
+}
+
+/* LES CLÉS ÉTRANGÈRES DU SCHÉMA : `table.colonne → table visée`. C'est
+   d'elles que dépend la table d'une jointure `alias:colonne(…)`. */
+const CLES = new Map();
+const TABLES = new Set();
+for (const m of sql.matchAll(/create table if not exists public\.(\w+) \(([\s\S]*?)\n\);/g)) {
+  TABLES.add(m[1]);
+  for (const l of m[2].matchAll(/^\s*(\w+)\s+[^,\n]*?references public\.(\w+)/gm)) CLES.set(`${m[1]}.${l[1]}`, l[2]);
+}
+for (const m of sql.matchAll(/alter table (?:if exists )?public\.(\w+)\s+add column if not exists (\w+)\s+[^;]*?references public\.(\w+)/g)) CLES.set(`${m[1]}.${m[2]}`, m[3]);
+for (const m of sql.matchAll(/alter table (?:if exists )?public\.(\w+)\s+add constraint \w+\s+foreign key \((\w+)[^)]*\)\s+references public\.(\w+)/g)) CLES.set(`${m[1]}.${m[2]}`, m[3]);
+verifier('les clés étrangères du schéma sont lues (une jointure se décide par elles)',
+  CLES.get('devis.client_id') === 'clients' && CLES.get('conversations.client_id') === 'users'
+  && CLES.get('notifications.acteur_id') === 'users' && CLES.get('devis.quote_request_id') === 'quote_requests',
+  `devis.client_id → ${CLES.get('devis.client_id')}, conversations.client_id → ${CLES.get('conversations.client_id')}`);
+
+/* Une liste PostgREST, en arbre : `col`, `alias:col`, `col::type`, `*`,
+   et les jointures `[alias:]cible[!indice](…)`. Chaque nœud dit sa table. */
+function lireListe(liste, table, chemin, sortie) {
+  for (const item of decouper(liste, ',')) {
+    const jointure = /^(?:(\w+)\s*:\s*)?(\w+)\s*(?:!\s*(\w+))?\s*\(([\s\S]*)\)$/.exec(item);
+    if (jointure) {
+      const [, , cible, indice, interieur] = jointure;
+      const visee = CLES.get(`${table}.${cible}`) || (TABLES.has(cible) ? cible : null)
+        || (indice && CLES.get(`${table}.${indice}`)) || null;
+      if (!visee) { sortie.push({ table: null, colonne: item, chemin, raison: `jointure « ${cible} » sans table connue depuis ${table}` }); continue; }
+      sortie.push({ table: visee, jointure: true, chemin: `${chemin} → ${visee}` });
+      lireListe(interieur, visee, `${chemin} → ${visee}`, sortie);
+      continue;
+    }
+    const colonne = item.replace(/^\w+\s*:\s*/, '').replace(/::\w+$/, '').replace(/\s*->>?.*$/, '').trim();
+    if (!/^(?:\w+|\*)$/.test(colonne)) { sortie.push({ table: null, colonne: item, chemin, raison: `élément illisible « ${item} »` }); continue; }
+    sortie.push({ table, colonne, chemin });
   }
   return sortie;
 }
-const colonnes = (liste) => liste.split(',').map((c) => c.trim()).filter(Boolean);
 
-/* Tout ce qui précède ne relit que `api.js`. Ce n'est vrai que si c'est
-   le SEUL fichier de l'application qui parle à la base. */
+/* CHAQUE `.from(` de l'application. Un `.storage.from(…)` est un espace de
+   fichiers, pas une table ; `Array.from` n'est pas une lecture. */
 const { execSync } = await import('node:child_process');
-const autresLecteurs = execSync('git ls-files src', { encoding: 'utf8' }).split('\n')
-  .filter((f) => /\.(?:js|jsx|ts|tsx)$/.test(f) && f !== 'src/lib/api.js')
-  .filter((f) => /\bsupabase\s*\.\s*(?:from|rpc|schema)\s*\(/.test(sansCommentaires(lire(f))));
-verifier('`api.js` est le SEUL fichier de `src/` qui lit la base (sinon ce contrôle ne voit pas tout)',
-  autresLecteurs.length === 0, autresLecteurs.join(', '));
-
-const lecturesUsers = lecturesDe('users');
-verifier('l’application lit `users` (sinon ce contrôle ne regarde rien)', lecturesUsers.length >= 2,
-  `${lecturesUsers.length} lecture(s) trouvée(s)`);
-for (const l of lecturesUsers) {
-  const cols = l.brut == null ? ['*'] : colonnes(l.brut);
-  const fermees = cols.filter((c) => !USERS_OUVERTES.includes(c));
-  verifier(`\`users\` : « ${l.brut == null ? '(tout)' : l.brut} » ne nomme que ${USERS_OUVERTES.join(', ')}`,
-    fermees.length === 0, `${fermees.join(', ')} — dans ${l.ordre}`);
+const FICHIERS = execSync('git ls-files src', { encoding: 'utf8' }).split('\n')
+  .filter((f) => /\.(?:js|jsx|ts|tsx)$/.test(f));
+const PAS_UNE_TABLE = /(?:\bArray|\bBuffer|\bUint8Array|\bstorage\s*)$/;
+const appels = [];
+for (const f of FICHIERS) {
+  const texte = sourceDe(f);
+  for (const m of texte.matchAll(/\.\s*(from|rpc|schema)\s*\(/g)) {
+    const avant = texte.slice(Math.max(0, m.index - 40), m.index);
+    if (m[1] === 'from' && PAS_UNE_TABLE.test(avant)) continue;
+    appels.push({ fichier: f, methode: m[1], index: m.index, ouvre: m.index + m[0].length - 1 });
+  }
 }
+const horsApi = appels.filter((a) => a.fichier !== 'src/lib/api.js');
+verifier('`api.js` est le SEUL fichier de `src/` qui parle à la base — quel que soit le nom du client',
+  horsApi.length === 0, horsApi.map((a) => `${a.fichier} (.${a.methode})`).join(', '));
+verifier('…et personne n’importe le client sous un autre nom',
+  FICHIERS.every((f) => !/import\s*\{[^}]*\bsupabase\s+as\b/.test(sourceDe(f))));
 
-/* Les jointures intégrées vers `users` : `users:author_id(nom, …)`,
-   `acteur:acteur_id(…)`. Le sous-objet `fiche:professional_profiles(…)`
-   est une autre table : il est retiré avant de compter. */
-const jointuresUsers = [...api.matchAll(/(\w+):(author_id|client_id|acteur_id|bloque_id|auteur_id|sender_id|follower_id|user_id)\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g)];
+/* Une table qu'on ne sait pas nommer ne peut pas être contrôlée. Les deux
+   seules d'aujourd'hui sont écrites ici, avec les tables qu'elles visent —
+   et ces tables sont RELUES là où le code les décide : toute autre forme
+   est refusée. */
+const { GENRES_DEMANDE } = await import('../src/lib/transitions-demandes.js');
+const TABLES_VARIABLES = new Map([
+  ['table', ['devis', 'devis_lignes']],
+  ['regles.table', Object.values(GENRES_DEMANDE).map((g) => g.table)],
+]);
+verifier('les deux tables VARIABLES sont celles que le code décide, et aucune n’est `users` ni une fiche pro',
+  /const table = quoi === 'devis' \? 'devis' : 'devis_lignes';/.test(api)
+  && (api.match(/supabase\.from\(table\)/g) || []).length === 3
+  && (api.match(/const table = /g) || []).length === 1
+  && /const regles = GENRES_DEMANDE\[genre\];/.test(api)
+  && JSON.stringify(TABLES_VARIABLES.get('regles.table')) === JSON.stringify(['quote_requests', 'callback_requests', 'sos_requests']),
+  JSON.stringify(TABLES_VARIABLES.get('regles.table')));
+const lectures = [];
+const nonLues = [];
+for (const a of appels.filter((x) => x.fichier === 'src/lib/api.js' && x.methode === 'from')) {
+  const texte = sourceDe(a.fichier);
+  const { interieur, fin } = interieurAppel(texte, a.ouvre);
+  const arg = decouper(interieur, ',')[0] || '';
+  const r = evaluer(arg, a.fichier);
+  let tables;
+  if (r.ok && typeof r.valeur === 'string') tables = [r.valeur];
+  else if (TABLES_VARIABLES.has(arg.trim())) tables = TABLES_VARIABLES.get(arg.trim());
+  else { nonLues.push(`.from(${arg.trim().slice(0, 40)})`); continue; }
+  const chaine = chaineApres(texte, fin + 1);
+  for (const s of chaine.matchAll(/\.\s*select\s*\(/g)) {
+    const ouvre = s.index + s[0].length - 1;
+    const premier = decouper(interieurAppel(chaine, ouvre).interieur, ',')[0];
+    const valeur = premier == null ? { ok: true, valeur: '*' } : evaluer(premier, a.fichier);
+    for (const t of tables) {
+      if (!valeur.ok || typeof valeur.valeur !== 'string') {
+        lectures.push({ table: t, colonne: null, chemin: t, raison: valeur.raison || 'liste illisible', ordre: espaces(chaine).slice(0, 100) });
+        continue;
+      }
+      for (const n of lireListe(valeur.valeur, t, t, [])) lectures.push({ ...n, ordre: espaces(chaine).slice(0, 100) });
+    }
+  }
+}
+verifier('chaque `.from(…)` nomme une table que le contrôle sait lire (une constante, ou une des deux variables connues)',
+  nonLues.length === 0, nonLues.join(', '));
+const illisibles = lectures.filter((l) => l.raison);
+verifier('chaque liste de colonnes lue par l’application est LISIBLE par le contrôle (sinon elle est refusée)',
+  illisibles.length === 0, illisibles.map((l) => `${l.raison} — dans ${l.ordre}`).join(' | '));
+
+const colonnes = (liste) => liste.split(',').map((c) => c.trim()).filter(Boolean);
+const surUsers = lectures.filter((l) => !l.raison && !l.jointure && l.table === 'users');
+const surPro = lectures.filter((l) => !l.raison && !l.jointure && l.table === 'professional_profiles');
+const lecturesUsers = lectures.filter((l) => l.table === 'users' && !l.jointure && l.chemin === 'users');
+const jointuresUsers = lectures.filter((l) => l.jointure && l.table === 'users');
+verifier('l’application lit `users` (sinon ce contrôle ne regarde rien)', lecturesUsers.length >= 2,
+  `${lecturesUsers.length} colonne(s) lue(s) directement`);
 verifier('les jointures vers `users` sont trouvées (au moins quatre aujourd’hui)', jointuresUsers.length >= 4,
   `${jointuresUsers.length} trouvée(s)`);
-for (const m of jointuresUsers) {
-  const cols = colonnes(m[3].replace(/\w+:\w+\s*\([^()]*\)/g, ''));
-  const fermees = cols.filter((c) => !USERS_OUVERTES.includes(c));
-  verifier(`jointure \`${m[1]}:${m[2]}(…)\` : rien que ${USERS_OUVERTES.join(', ')}`,
-    fermees.length === 0, fermees.join(', '));
-}
+const fermeesUsers = surUsers.filter((l) => !USERS_OUVERTES.includes(l.colonne));
+verifier(`\`users\`, directement ou par jointure : rien que ${USERS_OUVERTES.join(', ')}`,
+  fermeesUsers.length === 0, fermeesUsers.map((l) => `${l.colonne} (${l.chemin}) — dans ${l.ordre}`).join(' | '));
+const lecturesPro = surPro.filter((l) => l.table === 'professional_profiles');
+verifier('l’application lit les fiches pro (sinon ce contrôle ne regarde rien)', lecturesPro.length >= 20,
+  `${lecturesPro.length} colonne(s)`);
+const fermeesPro = surPro.filter((l) => l.colonne === '*' || PRO_FERMEES.includes(l.colonne));
+verifier(`fiches pro, directement ou par jointure : ni tout, ni ${PRO_FERMEES.join(', ')}`,
+  fermeesPro.length === 0, fermeesPro.map((l) => `${l.colonne} (${l.chemin}) — dans ${l.ordre}`).join(' | '));
 
-/* La liste des colonnes des fiches pro : une constante, lue à part. */
-const listePro = (lire('src/lib/api.js').match(/const COLONNES_PRO_LISTE = \[([\s\S]*?)\]\.join/) || [])[1] || '';
-const colsListe = [...listePro.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+/* La liste des colonnes des fiches pro : ÉVALUÉE, pas lue entre crochets —
+   une colonne ajoutée après le `.join` y est comptée. */
+const listePro = evaluer('COLONNES_PRO_LISTE', 'src/lib/api.js');
+const colsListe = listePro.ok && typeof listePro.valeur === 'string' ? colonnes(listePro.valeur) : [];
 verifier('la liste des fiches pro est trouvée, et porte encore la vitrine (`entreprise`, `agent_nom`)',
   colsListe.includes('entreprise') && colsListe.includes('agent_nom') && colsListe.length > 20,
-  `${colsListe.length} colonne(s)`);
+  listePro.ok ? `${colsListe.length} colonne(s)` : listePro.raison);
 verifier(`…et aucune des huit colonnes fermées (${PRO_FERMEES.join(', ')})`,
-  PRO_FERMEES.every((c) => !colsListe.includes(c)),
+  colsListe.length > 0 && PRO_FERMEES.every((c) => !colsListe.includes(c)),
   colsListe.filter((c) => PRO_FERMEES.includes(c)).join(', '));
-
-const lecturesPro = lecturesDe('professional_profiles');
-verifier('l’application lit les fiches pro par `select` (sinon ce contrôle ne regarde rien)', lecturesPro.length >= 2,
-  `${lecturesPro.length} lecture(s)`);
-for (const l of lecturesPro) {
-  if (l.constante) {
-    verifier(`fiches pro : la constante \`${l.constante}\` est la liste contrôlée ci-dessus`, l.constante === 'COLONNES_PRO_LISTE');
-    continue;
-  }
-  const cols = l.brut == null ? ['*'] : colonnes(l.brut);
-  const fermees = cols.filter((c) => c === '*' || PRO_FERMEES.includes(c));
-  verifier(`fiches pro : « ${l.brut == null ? '(tout)' : l.brut} » ne lit aucune colonne fermée, ni tout`,
-    fermees.length === 0, `${fermees.join(', ')} — dans ${l.ordre}`);
-}
-const jointuresPro = [...api.matchAll(/:professional_profiles\s*\(([^()]*)\)/g)];
-for (const m of jointuresPro) {
-  const cols = colonnes(m[1]);
-  const fermees = cols.filter((c) => c === '*' || PRO_FERMEES.includes(c));
-  verifier(`jointure vers les fiches pro « ${m[1].slice(0, 60)} » : aucune colonne fermée`, fermees.length === 0, fermees.join(', '));
-}
 
 /* MA fiche, entière : par `ma_fiche_pro()`, fusionnée à elle SEULE, et
    l'échec n'est pas toléré pour un pro (sinon un n° RGE vide repartirait
@@ -344,7 +554,10 @@ verifier('…ne lit les demandes qu’à un pro, OUVERTES, et au plus `DEMANDES_
   /jeSuisPro\s*\?\s*supabase\.from\('demandes'\)/.test(chargerSupabase)
   && /\.eq\('statut', 'ouverte'\)/.test(chargerSupabase)
   && /\.limit\(DEMANDES_SUR_UNE_FICHE\)/.test(chargerSupabase)
-  && /demandesAMontrer\(dRes\.data \|\| \[\], \{ jeSuisPro \}\)/.test(chargerSupabase));
+  && /demandes: dRes\.error \? \[\] : demandesAMontrer\(dRes\.data \|\| \[\], \{ jeSuisPro \}\)/.test(chargerSupabase));
+verifier('…et une lecture des demandes RATÉE se dit (`demandesEchec`), elle n’est pas « aucune demande »',
+  /demandesEchec: !!dRes\.error,/.test(chargerSupabase)
+  && /demandesEchec: false,/.test((api.match(/async function chargerProfilPublicDemo[\s\S]*?\n\}/) || [''])[0]));
 const chargerDemo = (api.match(/async function chargerProfilPublicDemo[\s\S]*?\n\}/) || [''])[0];
 verifier('…et la démonstration décide de la ville par `villeVisible` (la règle D3, visible sans `.env`)',
   /ville: villeVisible\(\{ personne, regardeur \}\)/.test(chargerDemo)
@@ -361,13 +574,21 @@ verifier('…retient d’où l’on vient (le retour y ramène), sans s’écras
   /setOrigineProfilPublic\(screen === 'profilPublic' \? origineProfilPublic : screen\)/.test(voir)
   && /else if \(screen === 'profilPublic'\) setScreen\(origineProfilPublic \|\| 'home'\)/.test(app));
 verifier('…et un échec de chargement se DIT (pas une fiche vide qui passe pour la bonne)',
-  /catch \(e\) \{\s*showErreur\(messageClair\(e,/.test(voir));
+  /catch \(e\) \{\s*if \(profilDemande\.current !== demande\) return;\s*setProfilPublicEchec\(true\);\s*showErreur\(messageClair\(e,/.test(voir)
+  && /echec=\{profilPublicEchec\}\s+onReessayer=\{relireProfilPublic\}/.test(app));
+verifier('…une réponse TARDIVE ne remplace pas la fiche demandée ensuite (objet comparé par identité)',
+  /const demande = \{ id, repli \};\s*profilDemande\.current = demande;/.test(voir)
+  && /if \(profilDemande\.current !== demande\) return;\s*setProfilPublic\(fiche \|\| null\);/.test(voir)
+  && (voir.match(/profilDemande\.current !== demande/g) || []).length === 2);
 verifier('« Pour moi » ouvre la fiche du client par `voirPersonne`',
   /onVoirProfil=\{\(id\) => voirPersonne\(id\)\}/.test(app));
 verifier('l’écran décide du bouton par `peutEcrireDepuisLaFiche`, et dit `AUCUNE_DEMANDE_A_MONTRER`',
   /const ecrire = !!onContacter && peutEcrireDepuisLaFiche\(\{ profil, monId, jeSuisPro \}\);/.test(ecranPublic)
   && /\{ecrire && \(/.test(ecranPublic)
   && /<EmptyState>\{AUCUNE_DEMANDE_A_MONTRER\}<\/EmptyState>/.test(ecranPublic)
+  && /\{jeSuisPro && profil\.type === 'particulier' && \(/.test(ecranPublic)
+  && /\{profil\.demandesEchec \? \(\s*<EmptyState action=\{reessayer\}>\{DEMANDES_ILLISIBLES\}<\/EmptyState>/.test(ecranPublic)
+  && (ecranPublic.match(/<EmptyState titre="Lecture impossible" action=\{reessayer\}>\{FICHE_ILLISIBLE\}<\/EmptyState>/g) || []).length === 2
   && !/Envoyer un message[\s\S]{0,200}\bjeSuisPro\s*&&\s*!estPro\s*&&/.test(ecranPublic));
 verifier('…n’affiche une ville que si la base (ou `villeVisible`) en a rendu une — jamais le code postal',
   /\{!!profil\.ville && \(/.test(ecranPublic) && !/codePostal|code_postal/.test(ecranPublic));
@@ -430,6 +651,64 @@ verifier('un signalement : la note interne et l’administrateur fermés à son 
   && /grant select \(id, auteur_id, cible_type, cible_id, cible_auteur_id, extrait, motif, details,\s*statut, created_at, traite_at\)\s*on public\.signalements to authenticated;/.test(sql)
   && !/grant select \([^)]*\b(?:note|traite_par)\b[^)]*\) on public\.signalements/.test(sql)
   && !/grant (?:all|select) on public\.signalements to/.test(sql));
+/* LES DROITS, LUS COMME DES PROPRIÉTÉS (relecture du 30/10, RT9). Les
+   vérifications ci-dessus cherchent une ORTHOGRAPHE : `on table`, un nom
+   sans `public.`, des majuscules, `all privileges`, ou `grant authenticated
+   to anon` (un visiteur qui HÉRITE de tout ce qu'a un connecté) passaient
+   au vert. Ici le schéma est découpé en instructions, normalisé (casse,
+   blancs, guillemets, schéma, `table`), et chaque `grant` est lu pour ce
+   qu'il DONNE. Les corps de fonction et de bloc `do` sont lus à part,
+   pour les droits accordés par `execute`. */
+const sqlCorpsAPart = sql.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, (_m, t) => `$${t}$corps$${t}$`);
+const normaliser = (x) => x.replace(/"/g, '').replace(/\s+/g, ' ').trim().toLowerCase()
+  .replace(/\bpublic\.(?=\w)/g, '').replace(/ on table /g, ' on ').replace(/\ball privileges\b/g, 'all');
+const INSTRUCTIONS = sqlCorpsAPart.split(';').map(normaliser).filter(Boolean);
+const PUBLICS = /\b(?:anon|public)\b/;
+const attributions = INSTRUCTIONS.map((x, rang) => ({ x, rang })).filter((i) => /^grant /.test(i.x));
+const appartenances = attributions.filter((i) => !/ on /.test(i.x));
+verifier('aucun rôle ne fait HÉRITER ses droits à un visiteur ou à un connecté (`grant <rôle> to anon`)',
+  appartenances.every((i) => !/ to [^;]*\b(?:anon|authenticated|public)\b/.test(i.x)),
+  appartenances.map((i) => i.x).join(' | '));
+const surTable = (i, table) => {
+  const m = / on (?!function |schema |sequence |all )(.+?) to /.exec(i.x);
+  return !!m && m[1].split(',').map((t) => t.trim()).includes(table);
+};
+for (const table of ['users', 'sos_availability', 'signalements']) {
+  const fautives = attributions.filter((i) => surTable(i, table) && PUBLICS.test(i.x.split(' to ').pop()));
+  verifier(`\`${table}\` : aucun droit, sous aucune forme, pour un visiteur (\`anon\`, \`public\`)`,
+    fautives.length === 0, fautives.map((i) => i.x).join(' | '));
+}
+const surTout = attributions.filter((i) => / on all (?:tables|sequences|functions) in schema /.test(i.x));
+verifier('aucun `grant … on all tables in schema` (il rouvrirait toutes les colonnes fermées d’un coup)',
+  surTout.length === 0, surTout.map((i) => i.x).join(' | '));
+const sig = attributions.filter((i) => surTable(i, 'signalements'));
+const sigFautives = sig.filter((i) => {
+  const privileges = i.x.replace(/^grant /, '').replace(/ on .*$/, '');
+  /* Chaque privilège doit porter SA liste de colonnes, sans la note ni
+     l'administrateur : un `select` de table entière les rendrait. */
+  return decouper(privileges, ',').some((p) => !/^(?:select|insert|update) \([^)]*\)$/.test(p) || /\b(?:note|traite_par)\b/.test(p));
+});
+verifier('`signalements` : chaque droit porte ses colonnes, et jamais la note ni l’administrateur (sous aucune forme)',
+  sig.length >= 2 && sigFautives.length === 0, sigFautives.map((i) => i.x).join(' | '));
+const lectureUsers = attributions.filter((i) => surTable(i, 'users') && /(?:^grant |, )(?:select|all)\b/.test(i.x.replace(/ on .*$/, '')));
+verifier(`\`users\` : une lecture écrite à la main ne nomme que ${USERS_OUVERTES.join(', ')}`,
+  lectureUsers.every((i) => {
+    const m = /select \(([^)]*)\)/.exec(i.x);
+    return !!m && colonnes(m[1]).every((c) => USERS_OUVERTES.includes(c));
+  }), lectureUsers.map((i) => i.x).join(' | '));
+const iFinDroits = INSTRUCTIONS.findIndex((x) => /^do \$droits\$/.test(x));
+const apresDroits = INSTRUCTIONS.slice(iFinDroits + 1)
+  .filter((x) => (/^grant /.test(x) && !/^grant execute on function /.test(x)) || /^alter default privileges/.test(x));
+verifier('après le balayage `$droits$`, plus aucun droit de table n’est accordé (il échapperait au balayage)',
+  iFinDroits > 0 && apresDroits.length === 0, apresDroits.join(' | '));
+/* Et dans les corps (`execute 'grant …'`) : les mêmes interdits. */
+const sqlNormalise = normaliser(sql);
+const dynamiques = [
+  ...sqlNormalise.matchAll(/grant [^;']*? on [^;']*?\b(?:users|sos_availability|signalements)\b[^;']*? to [^;']*?\b(?:anon|public)\b/g),
+  ...sqlNormalise.matchAll(/grant (?!execute|select|insert|update|delete|truncate|references|trigger|usage|all|connect|create|temp)\w+(?:, ?\w+)* to [^;']*?\b(?:anon|authenticated|public)\b/g),
+].map((m) => m[0]);
+verifier('…ni par un ordre construit dans un corps de fonction ou de bloc `do`', dynamiques.length === 0, dynamiques.join(' | '));
+
 verifier('une notification part avec le compte qui l’a déclenchée (`acteur_id … on delete cascade`)',
   /add constraint notifications_acteur_id_fkey\s+foreign key \(acteur_id\) references public\.users\(id\) on delete cascade;/.test(sql)
   && !/acteur_id[^,;]*references public\.users\(id\) on delete set null/.test(sql));
@@ -464,15 +743,82 @@ const sansMasque = fonctionSql('mes_donnees_sans_masquage');
 const export_ = fonctionSql('mes_donnees');
 verifier('`mes_donnees_sans_masquage()` : une définition, `security definer`, `stable`',
   sansMasque.n === 1 && /security definer/.test(sansMasque.entete) && /\bstable\b/.test(sansMasque.entete));
+/* SA FORME ENTIÈRE (relecture du 30/10, RT10). Cette fonction est
+   `security definer`, sans RLS, et appelable directement : élargir un
+   filtre (`c.client_id = c.client_id`) ou ajouter une clé `bloque_par`
+   fuit vers un tiers, et passait au vert avec « au moins 14 `auth.uid()` ».
+   Son texte (commentaires retirés, espaces réduits) est comparé à une
+   EMPREINTE. Changer cette fonction se DÉCIDE : la base, l'essai 51d (J1 à
+   J15) et cette empreinte, dans le même lot. Même règle pour
+   `tient_le_signalement()`, qui décide de l'extrait qu'un tiers retrouve
+   dans son export. */
+const { createHash } = await import('node:crypto');
+const EMPREINTES = {
+  mes_donnees_sans_masquage: '918fa410f0d62161b66e00d2755beff588a933fc820cb1bcb1516c0c0b366df4',
+  tient_le_signalement: '572948566887ad8edd3fc423e3bf2ced21c5a4fab15cb0ca5993e7c01149b2e4',
+};
+for (const [nom, attendue] of Object.entries(EMPREINTES)) {
+  const f = fonctionSql(nom);
+  const texte = espaces(f.tout.replace(/\/\*[\s\S]*?\*\//g, ''));
+  const empreinte = createHash('sha256').update(texte).digest('hex');
+  verifier(`\`${nom}()\` : une seule définition, et EXACTEMENT celle que l’essai 51d éprouve (empreinte)`,
+    f.n === 1 && empreinte === attendue,
+    f.n !== 1 ? `${f.n} définition(s)` : `empreinte ${empreinte} — si le changement est voulu, rejouer l’essai 51d puis mettre à jour EMPREINTES`);
+}
 verifier('…aucune politique ne la protège : CHAQUE morceau est filtré sur `auth.uid()`',
   (sansMasque.corps.match(/auth\.uid\(\)/g) || []).length >= 14
   && !/where true|using \(true\)/.test(sansMasque.corps));
-verifier('…les messages reçus : les 5 000 plus récents, avec leur nombre total',
-  /order by m\.created_at desc, m\.id desc\s+limit 5000\) x\)/.test(sansMasque.corps)
-  && /'messages_recus_total',/.test(sansMasque.corps));
-const visant = (sansMasque.corps.match(/'signalements_visant_mes_contenus',[\s\S]*?where s\.cible_auteur_id = auth\.uid\(\)\)/) || [''])[0];
+/* CE QUE D'AUTRES REMPLISSENT est borné DEUX fois : les 5 000 plus
+   récents, PUIS une taille cumulée (5 000 messages de 56 ko dépassaient la
+   taille maximale d'un jsonb : tout l'export tombait — relecture du 30/10).
+   Chaque morceau est `materialized` (lu une fois, pour l'export et pour son
+   décompte), et chacun a son décompte dans `limites`. */
+const corpsSansMasque = sansMasque.corps.replace(/\/\*[\s\S]*?\*\//g, '');
+const BORNES_RECUES = [
+  ['recus_messages', 'messages_recus', 'm', 10000000],
+  ['recus_commentaires', 'commentaires_recus', 'k', 5000000],
+  ['recus_reponses_annonces', 'reponses_recues_a_mes_annonces', 'r', 5000000],
+  ['recus_reponses_demandes', 'reponses_recues_a_mes_demandes', 'r', 5000000],
+  ['recus_avis', 'avis_recus', 'v', 5000000],
+  ['recus_signalements', 'signalements_visant_mes_contenus', 'g', 5000000],
+  ['recus_devis', 'demandes_de_devis_recues', 'q', 5000000],
+  ['recus_rappels', 'rappels_recus', 'q', 2000000],
+  ['recus_urgences', 'urgences_recues', 'q', 5000000],
+  ['mes_notifications', 'mes_notifications', 'n', 2000000],
+];
+const cte = (nom) => {
+  const i = corpsSansMasque.search(new RegExp(`\\b${nom} as materialized \\(`));
+  if (i < 0) return '';
+  const debut = corpsSansMasque.indexOf('(', i);
+  let niveau = 0;
+  for (let k = debut; k < corpsSansMasque.length; k += 1) {
+    if (corpsSansMasque[k] === '(') niveau += 1;
+    else if (corpsSansMasque[k] === ')') { niveau -= 1; if (niveau === 0) return corpsSansMasque.slice(debut, k + 1); }
+  }
+  return '';
+};
+for (const [nom, cle, alias, budget] of BORNES_RECUES) {
+  const corps = cte(nom);
+  verifier(`…${cle} : \`${nom}\` lu une fois, les 5 000 plus récents PUIS au plus ${budget / 1e6} Mo`,
+    corps.length > 0
+    && new RegExp(`over \\(order by ${alias}\\.created_at desc, ${alias}\\.id desc\\) as cumul`).test(corps)
+    && new RegExp(`order by ${alias}\\.created_at desc, ${alias}\\.id desc\\s+limit 5000\\) x\\s+where x\\.cumul <= ${budget}\\)$`).test(corps));
+  verifier(`…et son décompte dans \`limites\` : '${cle}' (total, et rendus = \`${nom}\`)`,
+    new RegExp(`'${cle}', jsonb_build_object\\(\\s*'total', \\(select count\\(\\*\\)[\\s\\S]*?\\),\\s*'rendus', \\(select count\\(\\*\\) from ${nom}\\)\\)`).test(corpsSansMasque));
+}
+verifier('…aucune partie bornée ne rend la colonne de calcul `cumul`',
+  (corpsSansMasque.match(/to_jsonb\(x\) - 'cumul'/g) || []).length === 7
+  && !/to_jsonb\(x\)(?! - 'cumul')[^\n]*from (?:recus_|mes_notifications)/.test(corpsSansMasque));
+const visant = cte('recus_signalements');
 verifier('…un signalement qui me vise : ni qui l’a déposé, ni ce qu’il a écrit, ni la note, ni l’administrateur',
-  visant.length > 0 && !/\bauteur_id\b|\bdetails\b|\bnote\b|\btraite_par\b/.test(visant.replace(/cible_auteur_id/g, '')));
+  /select g\.id, g\.cible_type, g\.cible_id, g\.motif, g\.extrait, g\.statut, g\.created_at, g\.traite_at,/.test(visant)
+  && !/\bauteur_id\b|\bdetails\b|\bnote\b|\btraite_par\b|g\.\*/.test(visant.replace(/cible_auteur_id/g, '')));
+verifier('…ni un signalement de MESSAGE (à deux, il dirait qui l’a déposé)',
+  /where g\.cible_auteur_id = auth\.uid\(\)\s+and g\.cible_type <> 'message'/.test(visant)
+  && /where g\.cible_auteur_id = auth\.uid\(\) and g\.cible_type <> 'message'\),/.test(corpsSansMasque));
+verifier('…les demandes REÇUES : seulement les miennes en artisan, jamais une « à soi-même » deux fois',
+  ['quote_requests', 'callback_requests', 'sos_requests'].every((t) => new RegExp(
+    `from public\\.${t} q\\s+where q\\.professional_id = auth\\.uid\\(\\) and q\\.client_id is distinct from auth\\.uid\\(\\)`).test(corpsSansMasque)));
 const decisions = (sansMasque.corps.match(/'decisions_de_l_administration',[\s\S]*?'\[\]'::jsonb\)/) || [''])[0];
 verifier('…une décision de l’administration : jamais l’identité de l’administrateur (`admin_id`)',
   decisions.length > 0 && !/admin_id/.test(decisions) && /'motif', j\.motif/.test(decisions));
@@ -504,12 +850,17 @@ const ATTENDUES_SD = [
   'decisions_de_l_administration', 'metadonnees_d_inscription', 'mes_j_aime', 'publications_enregistrees',
   'partenariats', 'reponses_que_j_ai_ecrites', 'reponses_recues_a_mes_demandes', 'avis_recus',
   'mes_demandes_de_metier', 'mes_specialites_proposees', 'mes_notifications', 'limites_de_l_export',
+  'commentaires_recus',
 ];
-verifier('…les seize clés du lot S-d y sont',
+verifier('…les dix-sept clés du lot S-d y sont',
   ATTENDUES_SD.every((c) => clesExport.includes(c)), ATTENDUES_SD.filter((c) => !clesExport.includes(c)).join(', '));
-verifier('…ses notifications : les 5 000 plus récentes, le total dans `limites_de_l_export`',
-  /order by n\.created_at desc, n\.id desc\s+limit 5000\) x\)/.test(corpsExport)
-  && /'rendus', least\(\(select count\(\*\) from public\.notifications n where n\.user_id = auth\.uid\(\)\), 5000\)\)/.test(corpsExport));
+verifier('…les parties bornées viennent de `mes_donnees_sans_masquage()`, et `limites_de_l_export` aussi',
+  ['demandes_de_devis', 'rappels', 'urgences', 'reponses_recues_a_mes_demandes', 'commentaires_recus',
+    'avis_recus', 'mes_notifications'].every((c) => new RegExp(`'${c}',\\s+s\\.j -> '${c}'`).test(corpsExport))
+  && ['conversations', 'messages_recus', 'reponses_recues_a_mes_annonces', 'signalements_visant_mes_contenus']
+    .every((c) => new RegExp(`'${c}',\\s+s\\.j -> '${c}'`).test(corpsExport))
+  && /'limites_de_l_export',\s+s\.j -> 'limites'/.test(corpsExport)
+  && !/from public\.notifications/.test(corpsExport));
 
 /* LA LISTE FERMÉE : ce qui n'y figure PAS, et qui se glisserait sans bruit. */
 verifier('exclusion 1 — l’identité de qui me suit : aucun abonnement lu par `following_id`',

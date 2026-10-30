@@ -39,7 +39,7 @@ import {
 import { TAILLE_JOURNAL_IA } from '../lib/api';
 import { TITRES_LEGAUX } from './LegalScreen';
 import { CLAVIER } from '../lib/clavier';
-import { CE_QUI_RESTE_EN_LIGNE, CE_QUI_EST_GARDE } from '../data/legal';
+import { CE_QUI_RESTE_EN_LIGNE, CE_QUI_EST_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT } from '../data/legal';
 
 /** Le mot à taper pour supprimer. En majuscules : on ne le tape pas par hasard. */
 const MOT_DE_PASSE_DE_SORTIE = 'SUPPRIMER';
@@ -350,14 +350,19 @@ export default function ConfidentialiteScreen({
       {/* --- récupérer ses données --- */}
       <SectionLabel>Mes données</SectionLabel>
       {/* « TOUT CE QU'OPUS CONSERVE » ÉTAIT FAUX (lot S-d) : l'export a une
-          liste fermée d'exclusions et une borne, que la politique de
-          confidentialité dit en entier (« Vos droits »). */}
+          liste fermée d'exclusions et des bornes. Elles sont écrites UNE fois
+          dans `legal.js`, et dites ICI, avant l'appui, en entier — renvoyer à
+          « Vos droits » pour le « pourquoi » promettait une raison que ce
+          texte ne donnait pas (relecture du 30/10). */}
       <Text style={s.aide}>
         Vous pouvez récupérer les données de votre compte et ce que vous avez
         écrit ou reçu dans Opus, dans un fichier lisible et réutilisable
         ailleurs. C’est votre droit d’accès et de portabilité (RGPD, articles 15
-        et 20). Ce qui n’y figure pas, et pourquoi, est dit dans la politique
-        de confidentialité, à « Vos droits ».
+        et 20).
+        {'\n\n'}
+        {EXCLUSIONS_DE_L_EXPORT}
+        {'\n\n'}
+        {BORNES_DE_L_EXPORT}
       </Text>
       <View style={{ paddingHorizontal: S.lg }}>
         <BtnOutline

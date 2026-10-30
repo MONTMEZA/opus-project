@@ -61,7 +61,36 @@ export const VERSION = '2026-10-31';
      - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
        ré-accepter les conditions, et le préavis de quinze jours du règlement
        2019/1150 (art. 3.2) s'appliquerait. Sans effet tant que STATUT vaut
-       'essai' ; à organiser avant l'ouverture au public (A-FAIRE). */
+       'essai' ; à organiser avant l'ouverture au public (A-FAIRE).
+   CORRIGÉ AVANT TOUTE PUBLICATION, SOUS LA MÊME VERSION (relecture du 30/10
+   au soir). Le texte de `e92a4f2` n'a été mis sur aucun téléphone — son
+   commit le défendait, la migration n'étant pas appliquée — et personne ne
+   l'a accepté ; la version ne peut pas non plus avancer au-delà de demain
+   (`verifier-legal`, et la base qui range une version future à vide). Ce
+   qui a changé dans ce texte-là :
+     - « COMBIEN DE TEMPS » disait « sauf deux choses » : le départ d'une
+       autre personne emporte bien plus (vos commentaires sous ses
+       publications, votre avis sur sa fiche, vos demandes et réponses
+       échangées avec elle, vos j'aime, enregistrements, vues et
+       abonnements, vos partenariats et blocages) — mesuré, puis énuméré ;
+     - LA LISTE FERMÉE DE L'EXPORT est écrite UNE fois
+       (`EXCLUSIONS_DE_L_EXPORT`, servie à « Vos droits » et à l'écran) :
+       elle oubliait l'identité de qui aime, enregistre ou regarde vos
+       publications, ce qu'écrit celui qui signale, les signalements de vos
+       messages et la décision prise sur un signalement ;
+     - LES BORNES de l'export sont aussi en taille, partie par partie
+       (`BORNES_DE_L_EXPORT`), et les commentaires reçus y entrent ;
+     - L'EXTRAIT D'UN SIGNALEMENT est relevé par Opus sur le contenu, jamais
+       écrit par celui qui signale, et l'écran de suppression le dit ;
+     - ANTHROPIC : ce qui part vraiment, geste par geste — dont la fiche
+       publique d'un artisan, envoyée quand N'IMPORTE QUI fait une recherche
+       assistée ;
+     - LA COPIE D'INSCRIPTION n'est ni complète ni figée : « notamment », et
+       seul le type de compte y est tenu à jour ;
+     - LE TÉLÉPHONE garde cinq éléments, pas quatre : la session (et pas un
+       simple jeton) et les photos déjà vues, effacées à la déconnexion ;
+     - « QUI PEUT S'INSCRIRE » dit la règle de la messagerie : deux
+       particuliers ne s'y écrivent pas (décision du 30/10). */
 /* 30/10/2026 — LES COMPTEURS, LES DATES ET L'ORDRE DU FIL (lot S-c du lot
    de sécurité). Ce qui a changé DE FOND :
      - « L'ORDRE DU FIL », SECTION NOUVELLE (`ORDRE_DU_FIL`, servie aussi à
@@ -686,10 +715,45 @@ export const CE_QUI_RESTE_EN_LIGNE = 'Les vidéos et les musiques de vos publica
  */
 export const CE_QUI_EST_GARDE = 'Certaines choses sont gardées, et « Combien de temps », dans '
   + 'la politique de confidentialité, les énumère : les avis et commentaires laissés chez '
-  + 'd’autres, sans votre nom ; les signalements, sans le nom de qui les a déposés ; les '
+  + 'd’autres, sans votre nom ; les signalements, sans le nom de qui les a déposés — et, '
+  + 'pour ceux qui visaient un de vos contenus, le court extrait qu’Opus en avait relevé et '
+  + 'l’identifiant technique de votre compte ; les '
   + 'décisions de l’administration '
   + 'qui vous concernent ; et ce qu’un artisan a repris de vos demandes dans son carnet ou '
   + 'dans ses devis.';
+
+/**
+ * CE QUE « RÉCUPÉRER MES DONNÉES » NE REND PAS — une liste FERMÉE, chaque
+ * fois avec sa raison, écrite UNE fois (lot S-d, relecture du 30/10 :
+ * « Vos droits », « Ce que d'autres écrivent sur vous » et l'écran en
+ * donnaient trois listes différentes, et toutes en oubliaient). Elle suit,
+ * point pour point, la liste de la section 42 de `schema.sql` ; changer
+ * l'une se fait avec l'autre. Servie à « Vos droits » et à l'écran de
+ * Confidentialité, qui l'IMPORTE.
+ */
+export const EXCLUSIONS_DE_L_EXPORT = 'Ce qui n’y figure pas forme une liste fermée, chaque fois '
+  + 'pour une raison : l’identité de qui vous suit, et de qui a aimé, enregistré ou regardé vos '
+  + 'publications — vous en voyez le nombre, jamais les noms, comme tout le monde ; l’identité '
+  + 'de qui vous a bloqué, et le fait même de l’être — c’est le choix de cette personne ; '
+  + 'l’identité de qui a signalé un de vos contenus et ce qu’il a écrit, ainsi que les '
+  + 'signalements de vos messages — dans une conversation à deux, les rendre dirait qui les a '
+  + 'déposés ; l’identité de l’administrateur qui a décidé, et la note qu’il écrit en traitant '
+  + 'un signalement — c’est le travail de modération d’Opus, pas une donnée sur vous, et vous '
+  + 'avez l’état du signalement et sa date ; vos fichiers eux-mêmes, que le fichier rend par '
+  + 'leur adresse pour rester lisible ; et ce qu’un artisan tient sur vous dans son carnet ou '
+  + 'ses devis, qui relève de lui : c’est à lui de vous le rendre.';
+
+/**
+ * LES BORNES DE L'EXPORT (lot S-d, 53.7 de `schema.sql`) : ce que d'AUTRES
+ * remplissent est borné en nombre ET en taille, partie par partie — sans
+ * quoi un tiers faisait échouer l'export d'un autre. Les chiffres sont ceux
+ * de la base ; `verifier-lectures` compare les deux.
+ */
+export const BORNES_DE_L_EXPORT = 'Ce que d’autres personnes y ont écrit pour vous — messages, '
+  + 'commentaires, réponses à vos demandes et à vos annonces, avis, signalements, demandes '
+  + 'reçues — et vos notifications s’y limitent, partie par partie, aux 5 000 plus récents et '
+  + 'à une taille de 2 à 10 Mo ; le fichier dit, pour chaque partie, combien il y en a en '
+  + 'tout et combien il en rend.';
 
 /**
  * CE QUE SUPPRIMER UNE PUBLICATION NE RETIRE PAS (lot S-a, relecture
@@ -898,8 +962,10 @@ export const CGU = [
       + 'n’aboutit pas, ou si le numéro est déjà rattaché à un autre compte, vous pouvez '
       + 'demander une vérification à la main depuis l’application ; Opus peut alors vous '
       + 'demander un justificatif. Les publications dans le fil sont réservées aux '
-      + 'comptes professionnels. Un particulier peut aimer, commenter, partager et '
-      + 'publier des demandes de travaux.',
+      + 'comptes professionnels. Un particulier peut aimer, commenter, partager, '
+      + 'publier des demandes de travaux et écrire aux professionnels ; la messagerie relie '
+      + 'un particulier à un professionnel, ou deux professionnels : deux particuliers ne '
+      + 's’y écrivent pas.',
   },
   {
     titre: 'Le badge vérifié',
@@ -1291,9 +1357,11 @@ export const CONFIDENTIALITE = [
       + 'métier et les spécialités que vous proposez, vos chantiers, ce que votre agent a fait '
       + 'pour vous et le nom que vous lui donnez, la date de votre dernière visite de l’onglet '
       + 'Demandes, et la version des conditions que vous avez acceptée, avec sa date. À '
-      + 'l’inscription, une copie de ce que vous avez rempli (nom, ville, et pour un '
-      + 'professionnel son numéro SIRET et ses métiers) reste attachée à votre compte, '
-      + 'telle qu’au premier jour. Si vous remettez en avant une de vos publications : la date de cette '
+      + 'l’inscription, une copie de ce que vous avez rempli reste attachée à votre compte — '
+      + 'notamment votre nom, votre commune et sa position, la version des conditions '
+      + 'acceptée, et pour un professionnel son entreprise, son numéro SIRET et ses métiers ; '
+      + 'si vous avez demandé à la main l’ouverture d’un compte professionnel, cette demande '
+      + 'et son numéro SIRET ; seul le type de compte y est tenu à jour. Si vous remettez en avant une de vos publications : la date de cette '
       + 'remise en avant, enregistrée avec la publication — comme le reste de la publication, '
       + 'elle peut être lue par toute personne qui la consulte —, et l’historique de vos '
       + 'remises en avant (leur date, et la publication concernée tant qu’elle existe), que '
@@ -1358,14 +1426,17 @@ export const CONFIDENTIALITE = [
        l'administration, et pour un artisan les demandes qu'on lui adresse. */
     texte: 'Opus garde aussi des informations sur vous que d’autres personnes y écrivent, '
       + 'et c’est d’elles qu’elles viennent : les avis laissés sur votre fiche si vous êtes '
-      + 'artisan ; les messages qu’on vous envoie, les commentaires et les réponses qu’on vous '
-      + 'adresse, et les notifications qu’ils déclenchent chez vous ; les réponses des '
-      + 'professionnels à vos demandes et à vos annonces ; si vous êtes artisan, les demandes '
-      + 'de devis, de rappel ou d’urgence qu’un client vous envoie ; les signalements qui '
-      + 'visent un de vos contenus — leur motif, et le court extrait qu’ils en gardent ; et les '
-      + 'décisions que l’administration d’Opus prend à votre sujet, avec leur motif. Tout cela '
-      + 'figure dans « Récupérer mes données », sauf l’identité de qui a signalé un de vos '
-      + 'contenus et ce qu’il a écrit, et celle de l’administrateur qui a décidé.',
+      + 'artisan ; les messages qu’on vous envoie, les commentaires sous vos publications et '
+      + 'les réponses à vos commentaires, et les notifications qu’ils déclenchent chez vous ; '
+      + 'les réponses des professionnels à vos demandes et à vos annonces ; si vous êtes '
+      + 'artisan, les demandes de devis, de rappel ou d’urgence qu’un client vous envoie ; les '
+      + 'signalements qui visent un de vos contenus — leur motif, leur état, et le court '
+      + 'extrait qu’Opus relève lui-même de ce contenu au moment du signalement ; et les '
+      + 'décisions que l’administration d’Opus prend sur votre fiche professionnelle, votre '
+      + 'demande d’ouverture de compte professionnel, vos demandes de métier, les spécialités '
+      + 'que vous proposez ou votre entreprise, avec leur motif. Tout cela figure dans '
+      + '« Récupérer mes données », dans les limites que précise « Vos droits », sauf ce '
+      + 'qu’énumère sa liste fermée — dont l’identité de qui a signalé un de vos contenus.',
   },
   {
     titre: 'Ce que nous ne collectons pas',
@@ -1579,12 +1650,17 @@ export const CONFIDENTIALITE = [
       + 'qui y répond ; Opus ne garde de sa réponse que « reconnu » ou « refusé », et sa '
       + 'date, jamais le nom ni l’adresse qu’elle renvoie. Anthropic (États-Unis), UNIQUEMENT quand '
       + 'quelqu’un se sert de l’assistant, et seulement ce que chaque geste demande : quand vous '
-      + 'touchez « Améliorer avec l’IA » ou l’assistant de présentation, le texte que vous '
-      + 'avez écrit ; quand quelqu’un demande le résumé des avis d’un artisan, ces avis — '
-      + 'leurs notes et leur texte, jamais le nom de leurs auteurs ; quand vous cherchez un '
-      + 'artisan avec l’assistant, votre recherche et les fiches publiques des artisans '
-      + 'proposés ; quand un artisan fait raconter un de ses chantiers, le titre, la commune '
-      + 'et le texte de ses publications. Rien de tout cela n’est utilisé pour entraîner de '
+      + 'touchez « Améliorer avec l’IA », le texte que vous avez écrit, avec le nom de votre '
+      + 'entreprise, vos métiers, votre commune et vos années d’expérience ; avec l’assistant '
+      + 'de présentation, ces mêmes informations et vos réponses à ses questions ; quand '
+      + 'quelqu’un demande le résumé des avis d’un artisan, ces avis — leurs notes et leur '
+      + 'texte, jamais le nom de leurs auteurs —, avec le nom de l’entreprise et son métier ; '
+      + 'quand quelqu’un cherche un artisan avec l’assistant, sa recherche et les fiches '
+      + 'publiques des artisans chargés dans l’application, jusqu’à 200 — leurs métiers, leur '
+      + 'commune, leurs années d’expérience, leur note et leur présentation : si vous êtes '
+      + 'artisan, votre fiche publique part ainsi quand N’IMPORTE QUI fait une recherche '
+      + 'assistée ; quand un artisan fait raconter un de ses chantiers, le titre, la commune, '
+      + 'son métier, et le texte et la date de ses publications. Rien de tout cela n’est utilisé pour entraîner de '
       + 'modèle. Ces '
       + 'transferts hors Union européenne reposent sur les clauses '
       + 'contractuelles types de la Commission européenne.',
@@ -1628,15 +1704,23 @@ export const CONFIDENTIALITE = [
        `on delete set null`, donc supprimer un devis VIDE ce lien et laisse
        la phrase dans la base. Celui qui supprime un devis pour effacer un
        client doit le savoir. */
-    texte: 'Vos données sont conservées tant que votre compte existe — sauf deux choses '
-      + 'que le départ d’une AUTRE personne emporte : quand elle supprime son compte, vos '
-      + 'conversations avec elle, vos propres messages compris, et les notifications qu’elle '
-      + 'avait déclenchées chez vous partent avec lui. À la suppression de votre compte, vos '
+    texte: 'Vos données sont conservées tant que votre compte existe. Mais quand une AUTRE '
+      + 'personne supprime son compte, ce qui n’existait qu’avec elle part avec lui : vos '
+      + 'conversations avec elle, vos propres messages compris ; les commentaires sous ses '
+      + 'publications, les vôtres compris ; l’avis que vous aviez laissé sur sa fiche '
+      + 'd’artisan ; les demandes de devis, de rappel ou d’urgence échangées avec elle, et vos '
+      + 'réponses à ses demandes et à ses annonces ; vos j’aime, enregistrements et vues de ses '
+      + 'publications, et vos abonnements de l’une à l’autre ; vos partenariats et vos blocages '
+      + 'avec elle ; et les notifications qu’elle avait déclenchées chez vous. Ce qu’elle avait '
+      + 'écrit chez vous — un avis sur votre fiche, un commentaire sous vos publications — reste, '
+      + 'sans son nom, comme les réponses que vous aviez faites à ses commentaires chez '
+      + 'd’autres ; et, si vous êtes artisan, les fiches de votre carnet et vos devis restent. '
+      + 'À la suppression de votre compte, vos '
       + 'données sont effacées immédiatement, sauf ce qui '
       + 'suit : les avis et commentaires laissés chez d’autres sont conservés '
       + 'sans votre nom ; les signalements sont conservés sans le nom de celui qui les a '
-      + 'déposés — avec, s’ils visaient un de vos contenus, le court extrait qu’ils en '
-      + 'gardaient —, et aucune durée maximale ne peut encore être promise : leur effacement '
+      + 'déposés — avec, s’ils visaient un de vos contenus, le court extrait qu’Opus en '
+      + 'avait relevé et l’identifiant technique de votre compte —, et aucune durée maximale ne peut encore être promise : leur effacement '
       + 'automatique n’existe pas, il sera construit avant l’ouverture d’Opus au public ; les décisions de l’administration qui vous '
       + 'concernent restent à son journal — la décision, le motif écrit par '
       + 'l’administrateur et, pour une entreprise, son numéro SIREN ; et ce que '
@@ -1687,13 +1771,10 @@ export const CONFIDENTIALITE = [
        « Ma base de postes » existe vraiment sur le profil d'un artisan. */
     texte: 'Accès et portabilité : Profil → Confidentialité et sécurité → '
       + '« Récupérer mes données » vous rend, en JSON, les données de votre compte et ce que '
-      + 'vous avez écrit ou reçu dans Opus, sauf une liste fermée : l’identité de qui vous '
-      + 'suit, de qui vous a bloqué et de qui a signalé un de vos contenus, celle de '
-      + 'l’administrateur qui a décidé, et la note interne d’un signalement. Vos fichiers y '
-      + 'figurent par leur adresse. Les messages que vous avez reçus et vos notifications s’y '
-      + 'limitent aux 5 000 plus récents, et le fichier dit combien il y en a en tout. Ce qu’un '
-      + 'artisan tient sur vous dans son carnet ou ses devis relève de lui : c’est à lui de '
-      + 'vous le rendre. Rectification : Profil → Modifier mon profil ; votre base de postes : '
+      + 'vous avez écrit ou reçu dans Opus. '
+      + EXCLUSIONS_DE_L_EXPORT + ' '
+      + BORNES_DE_L_EXPORT + ' '
+      + 'Rectification : Profil → Modifier mon profil ; votre base de postes : '
       + 'Profil → Ma base de postes. Effacement : '
       + 'Profil → Confidentialité et sécurité → « Supprimer mon compte », '
       + 'immédiat et sans intermédiaire, sauf ce que « Combien de temps » énumère — '
@@ -1716,14 +1797,18 @@ export const CONFIDENTIALITE = [
   {
     titre: 'Cookies et traceurs',
     texte: 'Opus est une application mobile : elle n’utilise pas de cookies. '
-      + 'Quatre éléments peuvent être conservés sur votre téléphone, tous nécessaires au '
-      + 'service, et aucun ne suit quoi que ce soit : votre jeton de connexion — c’est ce qui '
-      + 'vous évite de retaper votre mot de passe à chaque ouverture —, qui disparaît quand '
-      + 'vous vous déconnectez ; le secteur que vous avez choisi pour filtrer le fil (une '
+      + 'Cinq éléments peuvent être conservés sur votre téléphone, tous nécessaires au '
+      + 'service, et aucun ne suit quoi que ce soit : votre session de connexion — un jeton, '
+      + 'avec votre adresse électronique et ce que vous avez rempli à l’inscription, qui vous '
+      + 'évite de retaper votre mot de passe à chaque ouverture —, qui disparaît quand '
+      + 'vous vous déconnectez ; les photos déjà affichées, gardées pour ne pas les télécharger '
+      + 'à nouveau — celles des pièces jointes de vos conversations comprises —, effacées elles '
+      + 'aussi à la déconnexion ; le secteur que vous avez choisi pour filtrer le fil (une '
       + 'commune et sa position sur la carte), qui disparaît lui aussi à la déconnexion ; le fait que vous '
       + 'ayez déjà vu l’animation d’ouverture ; et, si vous demandez l’ouverture d’un compte '
       + 'professionnel avant d’avoir confirmé votre adresse électronique, le message de cette '
-      + 'demande, avec cette adresse, qui part et s’efface à votre première connexion. C’est pourquoi aucun '
+      + 'demande, avec cette adresse, qui s’efface une fois joint à votre demande, à votre '
+      + 'première connexion. C’est pourquoi aucun '
       + 'bandeau de consentement ne vous est présenté : il n’y a rien à '
       + 'consentir. Si une version web d’Opus voit le jour, ce même jeton y '
       + 'sera rangé dans le stockage local du navigateur, avec le même statut.',

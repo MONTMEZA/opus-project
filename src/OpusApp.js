@@ -11,6 +11,7 @@ import {
   View, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { Image } from 'expo-image';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { C, M } from './theme';
 import { BandeDemo, BandeHorsLigne, ConfirmBanner, PillToggle } from './components/ui';
@@ -303,6 +304,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   // Fiche publique d'un particulier, ouverte depuis un commentaire.
   const [profilPublic, setProfilPublic] = useState(null);
   const [profilPublicCharge, setProfilPublicCharge] = useState(false);
+  /* La lecture de la fiche a échoué : un état à lui, que l'écran dit
+     durablement — le bandeau, lui, s'efface en quelques secondes, et
+     « Ce profil n'est plus disponible » laissait croire à un compte
+     supprimé (relecture du 30/10). */
+  const [profilPublicEchec, setProfilPublicEchec] = useState(false);
+  /* La fiche DEMANDÉE en dernier, et son repli. Une réponse arrivée en
+     retard pour une fiche quittée ne remplace jamais celle qu'on regarde. */
+  const profilDemande = useRef({ id: null, repli: null });
   /* L'écran d'où l'on a ouvert cette fiche : le retour y ramène. « Voir le
      profil » d'un client, dans « Pour moi », ramenait au fil, et l'artisan
      perdait la demande qu'il traitait (relecture du 30/10). */
@@ -1543,19 +1552,35 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     setOpenContactId(null);
     if (pros[id]) { viewProfile(id); return; }
 
+    /* Un OBJET neuf par demande, comparé par identité : « Réessayer » sur la
+       même fiche fait deux demandes du même `id`, et la réponse tardive de
+       la première (un échec) ne doit pas marquer en échec la seconde. */
+    const demande = { id, repli };
+    profilDemande.current = demande;
     setOrigineProfilPublic(screen === 'profilPublic' ? origineProfilPublic : screen);
     setScreen('profilPublic');
     setProfilPublicCharge(true);
+    setProfilPublicEchec(false);
     setProfilPublic(repli && repli.nom
       ? { id, nom: repli.nom, avatarUrl: repli.avatarUrl || null, type: null, demandes: [] }
       : null);
     try {
       const fiche = await api.chargerProfilPublic(id, { jeSuisPro: userType === 'pro' });
-      if (fiche) setProfilPublic(fiche);
+      /* Une AUTRE fiche a été demandée pendant la lecture : celle-ci n'est
+         plus celle qu'on regarde, elle ne touche à rien (relecture du 30/10 :
+         la réponse lente de la première remplaçait la seconde). */
+      if (profilDemande.current !== demande) return;
+      setProfilPublic(fiche || null);
     } catch (e) {
+      if (profilDemande.current !== demande) return;
+      setProfilPublicEchec(true);
       showErreur(messageClair(e, "Ce profil n'a pas pu être chargé"));
     }
     setProfilPublicCharge(false);
+  };
+  const relireProfilPublic = () => {
+    const { id, repli } = profilDemande.current;
+    if (id) voirPersonne(id, repli);
   };
   const voirCommentateur = (c) => voirPersonne(c.auteurId, { nom: c.auteur, avatarUrl: c.avatarUrl });
 
@@ -3137,6 +3162,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
        pro, lui, reste : il porte l'adresse du compte auquel il est destiné,
        et ne part qu'à sa première connexion. */
     try { await AsyncStorage.removeItem(CLE_SECTEUR); } catch (e) { /* rien à faire de plus */ }
+    /* LES PHOTOS GARDÉES SUR LE TÉLÉPHONE pour s'afficher plus vite —
+       vignettes des pièces jointes PRIVÉES de la messagerie comprises —
+       ne passent pas non plus au compte suivant (relecture du 30/10). Un
+       cache vide n'est pas une panne : les photos se rechargent. */
+    try {
+      if (typeof Image.clearDiskCache === 'function') await Image.clearDiskCache();
+      if (typeof Image.clearMemoryCache === 'function') await Image.clearMemoryCache();
+    } catch (e) { /* rien à faire de plus */ }
     /* Seul un TEXTE passe : un événement d'appui glissé là par erreur
        ferait planter le bandeau de l'instance suivante. */
     onSortie(typeof message === 'string' ? message : null);
@@ -5290,7 +5323,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         {screen === 'profilPublic' && (
           <ProfilPublicScreen
             profil={profilPublic}
-            chargement={profilPublicCharge && !profilPublic}
+            chargement={profilPublicCharge}
+            echec={profilPublicEchec}
+            onReessayer={relireProfilPublic}
             jeSuisPro={canPublish}
             monId={api.getUserId()}
             onContacter={contacterParticulier}

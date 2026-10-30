@@ -56,7 +56,10 @@ export function demandesAMontrer(demandes, { jeSuisPro = false } = {}) {
  */
 export function peutEcrireDepuisLaFiche({ profil = null, monId = null, jeSuisPro = false } = {}) {
   if (!profil || !jeSuisPro) return false;
-  if (profil.type && profil.type !== 'particulier') return false;
+  /* Le TYPE doit être connu, et particulier : pendant la lecture, ou après
+     un échec, la fiche n'a qu'un nom venu d'un commentaire — le bouton y
+     était proposé comme si l'on savait (relecture du 30/10). */
+  if (profil.type !== 'particulier') return false;
   if (monId != null && String(monId) === String(profil.id)) return false;
   return true;
 }
@@ -67,3 +70,13 @@ export function peutEcrireDepuisLaFiche({ profil = null, monId = null, jeSuisPro
  * cachée par un blocage, n'est pas une demande qui n'existe pas.
  */
 export const AUCUNE_DEMANDE_A_MONTRER = 'Aucune demande en cours à afficher.';
+
+/**
+ * Ce que la fiche dit quand elle n'a PAS PU être lue (réseau coupé, délai
+ * dépassé) : surtout pas « Ce profil n'est plus disponible », qui laisse
+ * croire à un compte supprimé.
+ */
+export const FICHE_ILLISIBLE = 'La fiche n’a pas pu être lue. Ce n’est pas que ce profil n’existe plus : réessayez.';
+
+/** …et quand ce sont ses DEMANDES qui n'ont pas pu être lues. */
+export const DEMANDES_ILLISIBLES = 'Ses demandes n’ont pas pu être lues. Ce n’est pas qu’il n’y en a aucune : réessayez.';

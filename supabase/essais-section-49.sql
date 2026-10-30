@@ -1228,20 +1228,21 @@ select count(*) as definer_ouvertes_attendu_31,
          'preparer_suppression_compte', 'profil_public', 'rattacher_mon_siret',
          'remonter_publication')), '—') as nouvelles_attendu_tiret
   from ouvertes;
-\echo '--- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026, plus trois du lot S-b (26/10/2026) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)'
+\echo '--- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026, plus trois du lot S-b (26/10/2026) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT), et une du lot S-d (30/10/2026) : tient_le_signalement (il relève l auteur et l extrait VRAIS de la cible d un signalement, même cachée à celui qui signale) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)'
 with fermees as (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prosecdef
      and not (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
 )
-select count(*) as definer_fermees_attendu_30,
+select count(*) as definer_fermees_attendu_31,
        coalesce(string_agg(proname, ', ' order by proname) filter (where proname not in (
          'admin_exige_droit', 'anonymise_actes_admin', 'calcule_client_verifie', 'compter_appel_siret', 'compter_essai_tva',
          'cree_fiche_utilisateur', 'enregistrer_appel_ia', 'fiche_pro_indestructible', 'maj_chantier', 'maj_comments_count',
          'maj_followers_count', 'maj_likes_count', 'maj_nb_reponses', 'maj_nb_reponses_demande', 'maj_notes_pro', 'maj_vues_count', 'notifie_commentaire',
          'notifie_demande', 'notifie_demande_pro', 'notifie_partenariat', 'notifie_reponse_annonce', 'pose_le_lieu_du_post',
          'recalcule_apres_ligne_de_devis', 'recalcule_chantier', 'recalcule_devis', 'recalcule_notes_pro', 'siren_reserve',
-         'tait_les_notifications_bloquees', 'tient_le_chantier_du_post', 'tient_le_lien_du_devis')), '—') as nouvelles_attendu_tiret
+         'tait_les_notifications_bloquees', 'tient_le_chantier_du_post', 'tient_le_lien_du_devis',
+         'tient_le_signalement')), '—') as nouvelles_attendu_tiret
   from fermees;
 \echo '--- 27d. sans texte : les fonctions que la BASE a enregistrées comme dépendant des trois tables (corps SQL standard)'
 select coalesce(string_agg(distinct p.proname, ', '), '—') as fonctions_dependantes_attendu_tiret

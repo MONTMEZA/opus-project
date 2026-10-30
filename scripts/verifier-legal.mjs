@@ -42,7 +42,7 @@ import {
   VERSION, STATUT, DOMAINE, EDITEUR, MENTIONS, CGU, CONFIDENTIALITE,
   editeurComplet, manquesEditeur, rappelStatut,
   CE_QUI_RESTE_EN_LIGNE, CE_QUI_EST_GARDE, CE_QUE_LA_SUPPRESSION_GARDE,
-  EFFACEMENT_CLOUDINARY, PAYS_CLOUDINARY,
+  EFFACEMENT_CLOUDINARY, PAYS_CLOUDINARY, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT,
 } from '../src/data/legal.js';
 import {
   AVERTISSEMENT_SUSPENSION, RAPPEL_SUSPENSION, METIERS_FIGES_SUSPENSION,
@@ -2175,6 +2175,77 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
     .test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')));
   verifier('aucun fichier de src/ ne lit la position du téléphone',
     !(promesse && lecteurs.length > 0), lecteurs.join(', '));
+}
+
+/* LES TEXTES DU LOT S-d, GARDÉS MOT POUR MOT (relecture du 30/10, RT12).
+   Revenir à « vous rend tout ce que nous avons », retirer « Ce que d'autres
+   écrivent sur vous », remettre un cookie unique, réduire le paragraphe
+   d'Anthropic ou rendre les urgences « lisibles par tous » passait tous les
+   contrôles : seule « 5 000 » quelque part était gardé. Chaque paragraphe
+   est comparé à une EMPREINTE (espaces réduits) ; ce qui dépend de
+   l'adresse de contact (« Opposition et limitation », la phrase de
+   Cloudinary) est retiré avant. Changer un de ces textes se DÉCIDE :
+   VERSION, son bloc d'historique, et cette empreinte, dans le même lot. */
+{
+  const { createHash } = await import('node:crypto');
+  const empreinte = (t) => createHash('sha256').update(t.replace(/\s+/g, ' ').trim()).digest('hex');
+  const section = (liste, titre) => (liste.find((b) => b.titre === titre) || { texte: '' }).texte;
+  const TEXTES = {
+    'CONFIDENTIALITE:Ce que d’autres écrivent sur vous': [section(CONFIDENTIALITE, 'Ce que d’autres écrivent sur vous'),
+      '60e815c4f210ac0d44f77624394c69a27de4a6ade394f0170ace5cc6a69d6e9a'],
+    'CONFIDENTIALITE:Combien de temps': [section(CONFIDENTIALITE, 'Combien de temps').split(CE_QUI_RESTE_EN_LIGNE).join('[CE_QUI_RESTE_EN_LIGNE]'),
+      '64a8df978ffacc46e148b00f0cbd9211f920d4681af5c11e8c977081faf2fd76'],
+    'CONFIDENTIALITE:Vos droits, et comment les exercer ICI': [section(CONFIDENTIALITE, 'Vos droits, et comment les exercer ICI').split('Opposition et limitation')[0],
+      '2a94924273307865bc33dfb0ac4e16365394c1f8dcc9f9f4c9bb8371507f7208'],
+    'CONFIDENTIALITE:Cookies et traceurs': [section(CONFIDENTIALITE, 'Cookies et traceurs'),
+      '23364241ccb449c217ffce4ad10a52975f61979564762b60a443a8cdfd538093'],
+    'CONFIDENTIALITE:À qui vos données sont transmises': [section(CONFIDENTIALITE, 'À qui vos données sont transmises'),
+      'ad8155ee4f074c5b1fd11915eea253647f6600287107a3a06286878a0115d08e'],
+    'CGU:Qui peut s’inscrire': [section(CGU, 'Qui peut s’inscrire'),
+      '074e5e6ccd336f28504d71f02c26e0decda78285e226df5483809267db505d37'],
+    EXCLUSIONS_DE_L_EXPORT: [EXCLUSIONS_DE_L_EXPORT, 'a7cbc7c71775e55ae5a7310ccdbad57e7bc2ef07e4d19ab3b9df6d96b6264b15'],
+    BORNES_DE_L_EXPORT: [BORNES_DE_L_EXPORT, 'a9327f02e6aa6c8f9bd5e6d4fa5fc1a49169f04e983bf05066984a61a168a44c'],
+    CE_QUI_EST_GARDE: [CE_QUI_EST_GARDE, '1df85a6fb5f6ab369a2201506a32d7e9cdc6ed63dd4a70e0506505ae059e42c8'],
+  };
+  for (const [nom, [texte, attendue]] of Object.entries(TEXTES)) {
+    const e = empreinte(texte);
+    verifier(`« ${nom} » : mot pour mot le texte relu (empreinte)`, texte.length > 0 && e === attendue,
+      texte.length === 0 ? 'section introuvable' : `empreinte ${e} — si le changement est voulu : VERSION, historique, puis cette empreinte`);
+  }
+  verifier('« Vos droits » sert la liste fermée et les bornes de l’export TELLES QUELLES',
+    section(CONFIDENTIALITE, 'Vos droits, et comment les exercer ICI').includes(EXCLUSIONS_DE_L_EXPORT)
+    && section(CONFIDENTIALITE, 'Vos droits, et comment les exercer ICI').includes(BORNES_DE_L_EXPORT));
+  const textesCollecte = section(CONFIDENTIALITE, 'Ce que nous collectons');
+  verifier('la disponibilité aux urgences : « plus par un visiteur sans compte » (la base la ferme aux visiteurs)',
+    /lisibles par les utilisateurs connectés d’Opus — plus par un visiteur sans compte —/.test(textesCollecte)
+    && !/urgences[^.]{0,300}lisibles? (?:par )?(?:tous|tout le monde|de tous)/.test(textesCollecte));
+  const tous = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte)
+    .concat([CE_QUI_EST_GARDE, CE_QUI_RESTE_EN_LIGNE, CE_QUE_LA_SUPPRESSION_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT]);
+  verifier('aucun texte ne promet « tout ce que nous avons » ni « tout ce qu’Opus conserve »',
+    tous.every((t) => !/tout ce que nous avons|tout ce qu[’']Opus conserve/i.test(t)));
+  /* Aucune durée près d'un signalement, quelle que soit la façon de
+     l'écrire (« un an », « douze mois », « 30 jours ») : aucune purge ne
+     tient de durée aujourd'hui. Les heures restent permises — « examen sous
+     48 heures » est un délai de traitement, pas de conservation. */
+  const DUREE_SIG = /(?:^|[^\p{L}\d])(?:\d+|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|quinze|vingt|trente)\s+(?:ans?|années?|mois|semaines?|jours?)(?![\p{L}])/iu;
+  const promesses = [];
+  for (const t of tous) {
+    for (const m of t.matchAll(/signalement/giu)) {
+      const zone = t.slice(Math.max(0, m.index - 200), m.index + 200);
+      const d = DUREE_SIG.exec(zone);
+      if (d) promesses.push(`« ${d[0].trim()} » près de « signalement »`);
+    }
+  }
+  verifier('aucune durée de conservation n’est promise près d’un signalement (sous aucune forme)',
+    promesses.length === 0, promesses.join(' | '));
+  /* L'écran sert les deux constantes AVANT l'appui, en entier. */
+  const ecranConf = readFileSync('src/screens/ConfidentialiteScreen.js', 'utf8')
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const mesDonnees = (ecranConf.match(/<SectionLabel>Mes données<\/SectionLabel>[\s\S]*?<\/Text>/) || [''])[0];
+  verifier('l’écran « Mes données » affiche la liste fermée et les bornes, importées de `legal.js`',
+    /\{EXCLUSIONS_DE_L_EXPORT\}/.test(mesDonnees) && /\{BORNES_DE_L_EXPORT\}/.test(mesDonnees)
+    && /import\s*\{[^}]*\bEXCLUSIONS_DE_L_EXPORT\b[^}]*\bBORNES_DE_L_EXPORT\b[^}]*\}\s*from\s*'\.\.\/data\/legal'/.test(ecranConf)
+    && !/tout ce qu/i.test(mesDonnees));
 }
 
 console.log('');
