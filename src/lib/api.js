@@ -12,8 +12,9 @@ import { supabase, hasSupabase } from './supabase';
 import {
   proProfiles as demoPros, initialPosts, initialConversations, initialNotifications,
   initialDemandes, initialAnnonces, initialDemandesRecues, initialChantiers,
-  initialClients, initialReponsesAnnonces, REMONTEES_DEMO,
+  initialClients, initialReponsesAnnonces, REMONTEES_DEMO, particuliersDemo,
 } from '../data/demo';
+import { villeVisible, demandesAMontrer, DEMANDES_SUR_UNE_FICHE } from './profil-public';
 import { correspond } from './filtre-fil';
 import { relativeTime } from './formats';
 import { decouperPage, finDemo, trierDemo } from './page-fil';
@@ -482,11 +483,14 @@ const COLONNES_PRO_LISTE = [
   'experience_annees', 'followers_count',
   'assurance_valide', 'assurance_expire', 'kbis_valide', 'kbis_maj',
   'avatar_url', 'banner_url', 'kbis_url', 'assurance_url',
-  'verification_statut', 'verification_note', 'verifie_le',
-  /* `badge_suspendu_le` N'Y EST PAS (lot S-a, relecture « écran ») : elle ne
-     sert qu'à SA propre fiche, et ici elle partirait vers tous les
-     téléphones — la date à laquelle un artisan a remplacé un justificatif.
-     Elle se lit à part, avec `demandes_vues_le`, dans `loadAll()`. */
+  'verification_statut', 'verifie_le',
+  /* NI `verification_note`, NI `rge_numero`, NI `agent_propositions`, NI
+     `badge_suspendu_le` (lot S-d, décision du 30/10/2026) : le motif de
+     refus écrit par l'administration, le n° RGE déclaré, le compteur de la
+     fenêtre de l'agent et la date d'un badge suspendu ne servent qu'à SA
+     propre fiche. Ici, ils partaient vers tous les téléphones — et la base
+     les ferme aux autres comptes (étape M2 de la section 53). Ils arrivent
+     par `ma_fiche_pro()`, dans `loadAll()`. */
   'code_postal', 'latitude', 'longitude',
   'avis_count', 'note_delais', 'note_qualite', 'note_tarif',
   /* La fiche de contact : téléphone, zone d'intervention, spécialités.
@@ -495,14 +499,29 @@ const COLONNES_PRO_LISTE = [
   'telephone', 'email_pro', 'zone_km', 'specialites', 'horaires',
   /* La certification RGE. `rge` est la seule vérifiée ; les trois autres
      sont ce que l'artisan a déclaré, et n'affichent pas de badge. */
-  'rge', 'rge_declare', 'rge_numero', 'rge_expire', 'rge_url',
+  'rge', 'rge_declare', 'rge_expire', 'rge_url',
   /* LE NOM DE L'AGENT voyage avec la fiche, et il est PUBLIC — une règle
      RLS filtre des lignes, jamais des colonnes (section 18). C'est écrit
      et assumé en section 40 : aucun écran d'Opus n'affiche le nom de
      l'agent de quelqu'un d'autre. Il est ici parce que l'artisan doit lire
-     LE SIEN sans une requête de plus au démarrage. */
-  'agent_nom', 'agent_propositions',
+     LE SIEN sans une requête de plus au démarrage. Le compteur de la
+     fenêtre, lui, est privé : il arrive par `ma_fiche_pro()`. */
+  'agent_nom',
 ].join(', ');
+
+/**
+ * LES COLONNES PRIVÉES DE MA FICHE (lot S-d) — ce que `ma_fiche_pro()` rend
+ * de plus que la vitrine, sous les noms de `rowToPro()`. Elles ne viennent
+ * jamais d'une autre fiche : pour celles-là, la base ne les rend plus.
+ */
+function champsPrivesDeMaFiche(row) {
+  return {
+    verificationNote: row.verification_note || null,
+    rgeNumero: row.rge_numero || '',
+    agentPropositions: row.agent_propositions || 0,
+    badgeSuspenduLe: row.badge_suspendu_le || null,
+  };
+}
 
 function rowToPro(row, reviews = [], partners = []) {
   return {
@@ -730,7 +749,7 @@ export async function loadAll() {
          quelqu'un les ouvre. La plupart n'étaient jamais lus. */
   const [profilesRes, partnersRes, postsRes,
          likesRes, savesRes, followsRes, convRes, notifRes,
-         demandesRes, masosRes, moiRes, vuesRes] = await Promise.all([
+         demandesRes, masosRes, moiRes, ficheRes] = await Promise.all([
     /* SANS `bio` NI `portfolio` : ce sont les deux colonnes lourdes, et
        elles ne servent QUE sur la page d'un artisan — jamais dans une
        liste. Un portfolio, c'est un tableau d'adresses de photos ; multiplié
@@ -796,12 +815,14 @@ export async function loadAll() {
        lire depuis que ces colonnes sont fermées à tout le monde (section
        18 de schema.sql). La fonction, elle, ne renvoie QUE ma ligne. */
     supabase.rpc('mon_compte').maybeSingle(),
-    /* MA date de dernière visite de l'onglet Demandes, et la mienne seule :
-       elle ne sert qu'à moi, et l'ajouter à `COLONNES_PRO_LISTE` la ferait
-       voyager pour les cinq cents autres artisans. La requête part en
-       parallèle des autres : elle ne coûte pas une attente de plus. */
-    supabase.from('professional_profiles')
-      .select('demandes_vues_le, badge_suspendu_le').eq('id', uid).maybeSingle(),
+    /* MA FICHE PRO ENTIÈRE, colonnes privées comprises (lot S-d) : la
+       date de ma dernière visite de l'onglet Demandes, mon badge suspendu,
+       le motif d'un refus, mon n° RGE, le compteur de la fenêtre de
+       l'agent. Elles ne servent qu'à moi, et la base les ferme aux autres
+       comptes. Un particulier n'a pas de fiche : la fonction rend zéro
+       ligne. La requête part en parallèle des autres : elle ne coûte pas
+       une attente de plus. */
+    supabase.rpc('ma_fiche_pro').maybeSingle(),
   ]);
 
   const err = [profilesRes, partnersRes, postsRes].find((r) => r.error);
@@ -842,12 +863,16 @@ export async function loadAll() {
        la moyenne tenue par la base. */
     pros[row.id] = rowToPro(row, [], partnersByPro[row.id] || []);
   });
-  /* LE BADGE SUSPENDU DE MA fiche, et de la mienne seule (lot S-a) : il fige
-     mes métiers à l'écran et explique pourquoi le badge a disparu. Sans
-     lui, après un redémarrage, l'écran rouvrait des métiers que la base
-     refuse (`tient_les_metiers`). */
-  if (pros[uid] && vuesRes && vuesRes.data) {
-    pros[uid].badgeSuspenduLe = vuesRes.data.badge_suspendu_le || null;
+  /* MA FICHE, ses colonnes privées fusionnées (lot S-d). LECTURE
+     OBLIGATOIRE POUR UN PRO, comme la liste des fiches : tolérée, un échec
+     laisserait les valeurs par défaut — un n° RGE vide que le prochain
+     « Envoyer pour vérification » écrirait en base, un compteur à zéro qui
+     rouvrirait la fenêtre de l'agent après trois refus, un badge suspendu
+     qui ne fige plus les métiers. Mieux vaut un démarrage qui échoue et se
+     retente qu'une fiche fausse sans un mot (relecture du 30/10). */
+  if (pros[uid]) {
+    if (ficheRes.error) throw ficheRes.error;
+    if (ficheRes.data) pros[uid] = { ...pros[uid], ...champsPrivesDeMaFiche(ficheRes.data) };
   }
 
   const likedSet = new Set((likesRes.data || []).map((l) => l.post_id));
@@ -947,7 +972,7 @@ export async function loadAll() {
     /* LA DATE DE MA DERNIÈRE VISITE de l'onglet Demandes. `null` pour qui
        n'y est jamais allé — et dans ce cas TOUT est nouveau, ce qui est la
        bonne réponse le premier jour. */
-    demandesVuesLe: vuesRes && vuesRes.data ? vuesRes.data.demandes_vues_le : null,
+    demandesVuesLe: ficheRes && ficheRes.data ? ficheRes.data.demandes_vues_le : null,
     demandesPartenariat: demandesRecues,
     partenariatsEnvoyes: demandesEnvoyees,
     partenariatsClos,
@@ -1029,7 +1054,11 @@ const TAILLE_CONSEILS = 12;
  */
 async function profilProDeSupabase(id) {
   const [ficheRes, avisRes, conseilsRes] = await Promise.all([
-    supabase.from('professional_profiles').select('*').eq('id', id).maybeSingle(),
+    /* `bio` et `portfolio` seulement : c'est tout ce que la page ajoute à
+       la fiche déjà chargée. Plus de `select('*')` (lot S-d) : il
+       demandait aussi les colonnes privées, que la base ferme aux autres
+       comptes — et la page entière tombait. */
+    supabase.from('professional_profiles').select('id, bio, portfolio').eq('id', id).maybeSingle(),
     supabase.from('reviews').select('*, users:author_id(nom)')
       .eq('professional_id', id).order('created_at', { ascending: false }),
     /* SES CONSEILS — une requête ordinaire, pas une fonction de plus.
@@ -1432,15 +1461,16 @@ async function noterRefusAgentDemo() {
 }
 
 export const noterRefusAgent = !hasSupabase ? noterRefusAgentDemo : async () => {
-  const { data: avant } = await supabase.from('professional_profiles')
-    .select('agent_propositions').eq('id', currentUserId).maybeSingle();
-  const suivant = ((avant && avant.agent_propositions) || 0) + 1;
-  const { data, error } = await supabase.from('professional_profiles')
+  /* La valeur se lit par `ma_fiche_pro()` et s'écrit SANS la relire : le
+     compteur est une colonne privée (lot S-d), qu'un `select` ordinaire ne
+     rend plus. Si la lecture échoue, on écrit 1 : `tient_l_agent()` garde
+     le plus grand des deux, le compteur ne redescend jamais. */
+  const { data: fiche } = await supabase.rpc('ma_fiche_pro').maybeSingle();
+  const suivant = ((fiche && fiche.agent_propositions) || 0) + 1;
+  await supabase.from('professional_profiles')
     .update({ agent_propositions: suivant })
-    .eq('id', currentUserId)
-    .select('agent_propositions').maybeSingle();
-  if (error) return suivant;
-  return data ? data.agent_propositions : suivant;
+    .eq('id', currentUserId);
+  return suivant;
 };
 
 /**
@@ -1511,19 +1541,55 @@ export const addComment = !hasSupabase ? addCommentDemo : async (postId, texte, 
 };
 
 /**
- * Fiche publique d'un particulier : ce qu'on voit en touchant son nom sous
- * un commentaire. Un professionnel a déjà sa page ; un particulier n'avait
- * rien, et son nom n'était donc cliquable nulle part.
+ * Fiche publique d'une personne : ce qu'on voit en touchant son nom sous
+ * un commentaire, ou « Voir le profil » d'un client dans « Pour moi ». Un
+ * professionnel a déjà sa page ; un particulier n'avait rien, et son nom
+ * n'était donc cliquable nulle part.
  *
- * On ne montre que ce qu'il a lui-même rendu public : son nom, sa ville, et
- * les demandes qu'il a publiées. Jamais son adresse ni son courriel.
+ * PAR `profil_public()` (lot S-d, section 53.1) : le nom, la photo, le type
+ * de compte — et la ville d'un particulier, que la base ne rend qu'à
+ * lui-même et aux professionnels (décision D3 du 25/10). Plus de `select`
+ * sur `users` : la ville, le code postal et la date d'inscription s'y
+ * ferment.
+ *
+ * Ses demandes ne sont demandées qu'à un PROFESSIONNEL — un particulier
+ * n'en lit de toute façon aucune d'un autre, et l'écran affirmait alors
+ * « Cette personne n'a publié aucune demande » —, les OUVERTES seulement,
+ * vingt au plus (`demandesAMontrer`, `profil-public.js`).
  */
-export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
+function versDemandeDeFiche(d) {
+  return {
+    id: d.id, metier: d.metier, ville: d.ville || 'Non précisée',
+    texte: d.texte, media: d.media || null,
+    time: d.time || relativeTime(d.created_at),
+  };
+}
+
+async function chargerProfilPublicDemo(userId, { jeSuisPro = false } = {}) {
+  const connu = particuliersDemo[userId];
+  if (!connu) return null;
+  const personne = { id: userId, type: 'particulier', ville: connu.ville };
+  const regardeur = { id: currentUserId, estPro: jeSuisPro, masque: demoBlocages.has(String(userId)) };
+  const siennes = initialDemandes.filter((d) => d.auteurId === userId);
+  return {
+    id: userId,
+    nom: connu.nom,
+    avatarUrl: null,
+    type: 'particulier',
+    ville: villeVisible({ personne, regardeur }),
+    demandes: demandesAMontrer(siennes, { jeSuisPro }).map(versDemandeDeFiche),
+  };
+}
+
+export const chargerProfilPublic = !hasSupabase ? chargerProfilPublicDemo : async (userId, { jeSuisPro = false } = {}) => {
   const [uRes, dRes] = await Promise.all([
-    supabase.from('users').select('id, nom, avatar_url, ville, type, created_at')
-      .eq('id', userId).maybeSingle(),
-    supabase.from('demandes').select('*').eq('client_id', userId)
-      .order('created_at', { ascending: false }),
+    supabase.rpc('profil_public', { p_id: userId }).maybeSingle(),
+    jeSuisPro
+      ? supabase.from('demandes').select('id, metier, ville, texte, media, statut, created_at')
+        .eq('client_id', userId).eq('statut', 'ouverte')
+        .order('created_at', { ascending: false })
+        .limit(DEMANDES_SUR_UNE_FICHE)
+      : Promise.resolve({ data: [] }),
   ]);
   if (uRes.error) throw uRes.error;
   if (!uRes.data) return null;
@@ -1531,13 +1597,9 @@ export const chargerProfilPublic = !hasSupabase ? noop : async (userId) => {
     id: uRes.data.id,
     nom: uRes.data.nom,
     avatarUrl: uRes.data.avatar_url,
-    ville: uRes.data.ville,
     type: uRes.data.type,
-    inscritLe: uRes.data.created_at,
-    demandes: (dRes.data || []).map((d) => ({
-      id: d.id, metier: d.metier, ville: d.ville || 'Non précisée',
-      texte: d.texte, media: d.media, time: relativeTime(d.created_at),
-    })),
+    ville: uRes.data.ville || null,
+    demandes: demandesAMontrer(dRes.data || [], { jeSuisPro }).map(versDemandeDeFiche),
   };
 };
 
@@ -4852,18 +4914,14 @@ async function fileVerificationsSupabase() {
   /* LE BADGE SUSPENDU (lot S-a) se lit À CÔTÉ de la file, pas dedans : la
      fonction rend un `returns table` figé, et lui ajouter une colonne
      demanderait de la supprimer d'abord — ce que le connecteur refuse.
-     `professional_profiles` est lisible par tous (même sans compte : c'est
-     la règle « lecture profils », et fermer cette colonne-là est une
-     décision du lot S-d, écrite dans A-FAIRE), donc cette lecture n'ouvre
-     rien de plus. Le jour où elle sera fermée, l'administration devra la
-     recevoir par une fonction à elle. Un échec n'empêche pas la file de
-     s'afficher : la carte ne dit alors rien de la suspension (`null`),
-     plutôt que d'affirmer « pas suspendu ». */
+     Depuis le lot S-d, la colonne est fermée aux autres comptes : elle
+     arrive par `admin_etat_des_fiches()`, réservée à l'administration. Un
+     échec n'empêche pas la file de s'afficher : la carte ne dit alors rien
+     de la suspension (`null`), plutôt que d'affirmer « pas suspendu ». */
   const ids = (data || []).map((p) => p.id);
   let suspendus = null;
   if (ids.length) {
-    const lu = await supabase.from('professional_profiles')
-      .select('id, badge_suspendu_le').in('id', ids);
+    const lu = await supabase.rpc('admin_etat_des_fiches', { p_ids: ids });
     if (!lu.error) suspendus = new Map((lu.data || []).map((r) => [r.id, r.badge_suspendu_le]));
   }
   return (data || []).map((p) => ({

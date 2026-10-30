@@ -1,24 +1,35 @@
 /**
- * Fiche publique d'un particulier.
+ * Fiche publique d'une personne qui n'a pas de page d'artisan.
  *
  * Elle existe pour une raison précise : sous un commentaire, on doit pouvoir
  * toucher un nom et arriver quelque part. Un professionnel a sa page ; un
  * particulier n'avait rien, et son nom n'était donc cliquable nulle part.
  *
- * On n'y montre que ce qu'il a lui-même rendu public — son nom, sa ville,
- * les demandes qu'il a publiées. Jamais son adresse ni son courriel : ce
- * n'est pas parce qu'une donnée est en base qu'elle a sa place à l'écran.
+ * Ce qu'elle montre, et à qui (lot S-d, 30/10/2026 — `profil-public.js`) :
+ *   - le nom et la photo, à tout compte connecté ;
+ *   - la VILLE d'un particulier, à lui-même et aux professionnels — la base
+ *     ne la rend qu'à eux (`profil_public()`, décision D3 du 25/10) ;
+ *   - ses demandes EN COURS, aux professionnels seulement ;
+ *   - « Envoyer un message », aux professionnels seulement, et jamais sur
+ *     sa propre fiche (décision du 30/10 : la base refuse aussi une
+ *     conversation entre deux particuliers) ;
+ *   - « Signaler », à tous sauf à lui-même.
+ * Jamais son adresse, son code postal ni son courriel : ce n'est pas parce
+ * qu'une donnée est en base qu'elle a sa place à l'écran.
  */
 import React from 'react';
-import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import {
-  C, F, T, CARTE_PLEINE,
+  C, F, T, CARTE_PLEINE, TOUCHE, APPUI,
 } from '../theme';
 import { Avatar, BtnMain, EmptyState, SectionLabel, Gradient } from '../components/ui';
 import { MapPin } from '../components/icons';
 import { nomMetier } from '../lib/metiers';
+import { peutEcrireDepuisLaFiche, AUCUNE_DEMANDE_A_MONTRER } from '../lib/profil-public';
 
-export default function ProfilPublicScreen({ profil, chargement, onContacter }) {
+export default function ProfilPublicScreen({
+  profil, chargement, jeSuisPro = false, monId = null, onContacter, onSignaler,
+}) {
   if (chargement) {
     return (
       <View style={s.centre}>
@@ -29,6 +40,9 @@ export default function ProfilPublicScreen({ profil, chargement, onContacter }) 
   if (!profil) return <EmptyState>Ce profil n'est plus disponible.</EmptyState>;
 
   const demandes = profil.demandes || [];
+  const estPro = profil.type === 'pro';
+  const cEstMoi = monId != null && String(monId) === String(profil.id);
+  const ecrire = !!onContacter && peutEcrireDepuisLaFiche({ profil, monId, jeSuisPro });
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }}>
@@ -41,20 +55,45 @@ export default function ProfilPublicScreen({ profil, chargement, onContacter }) 
             <Text style={s.ville}>{profil.ville}</Text>
           </View>
         )}
-        <Text style={s.role}>Particulier</Text>
+        {/* Le type n'est connu qu'une fois la fiche lue : rien plutôt
+            qu'un rôle deviné. */}
+        {!!profil.type && <Text style={s.role}>{estPro ? 'Professionnel' : 'Particulier'}</Text>}
 
-        {!!onContacter && (
+        {ecrire && (
           <BtnMain
             label="Envoyer un message"
             onPress={() => onContacter(profil)}
             style={{ marginTop: 14 }}
           />
         )}
+        {!!onSignaler && !cEstMoi && !!profil.type && (
+          <Pressable
+            onPress={() => onSignaler({
+              cibleType: 'profil',
+              cibleId: profil.id,
+              auteurId: profil.id,
+              auteurNom: profil.nom,
+              extrait: profil.nom,
+            })}
+            style={({ pressed }) => [s.signaler, pressed && APPUI.discret]}
+            accessibilityRole="button"
+            accessibilityLabel={`Signaler le profil de ${profil.nom}`}
+          >
+            <Text style={s.signalerTexte}>Signaler ce profil</Text>
+          </Pressable>
+        )}
       </View>
 
-      <SectionLabel>Ses demandes publiées</SectionLabel>
-      {demandes.length === 0 && (
-        <EmptyState>Cette personne n'a publié aucune demande.</EmptyState>
+      {/* SES DEMANDES : aux professionnels seulement — ce sont eux qui y
+          répondent. Et jamais « cette personne n'a publié aucune demande » :
+          une demande pourvue, ou cachée par un blocage, existe quand même. */}
+      {jeSuisPro && !estPro && (
+        <>
+          <SectionLabel>Ses demandes en cours</SectionLabel>
+          {demandes.length === 0 && (
+            <EmptyState>{AUCUNE_DEMANDE_A_MONTRER}</EmptyState>
+          )}
+        </>
       )}
       <View style={s.liste}>
         {demandes.map((d) => (
@@ -85,6 +124,8 @@ const s = StyleSheet.create({
   ligneVille: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ville: { fontSize: T.courant, color: C.muted, fontFamily: F.inter },
   role: { fontSize: T.petit, color: C.muted, fontFamily: F.inter6, marginTop: 6 },
+  signaler: { minHeight: TOUCHE, justifyContent: 'center', paddingHorizontal: 12, marginTop: 4 },
+  signalerTexte: { fontSize: T.petit, color: C.muted, fontFamily: F.inter6, textDecorationLine: 'underline' },
 
   liste: { gap: 10, paddingHorizontal: 16 },
   carte: { ...CARTE_PLEINE },

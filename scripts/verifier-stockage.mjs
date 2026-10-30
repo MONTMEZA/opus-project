@@ -360,8 +360,13 @@ console.log('— D bis. La base tient les cinq points de la décision D4');
           && /envoiSuspendLeBadge\(avant,\s*\{\s*kbis:\s*!!kbisPath,\s*assurance:\s*!!assurancePath\s*\}\)/.test(a); })()],
     ['l’application LIT `badge_suspendu_le` sur sa propre fiche (sinon, après rechargement, des métiers modifiables que la base refusera)',
       (() => { const a = sansCommentaires(lire('src/lib/api.js'));
-        return /\.select\('demandes_vues_le, badge_suspendu_le'\)\.eq\('id', uid\)/.test(a)
-          && /pros\[uid\]\.badgeSuspenduLe\s*=\s*vuesRes\.data\.badge_suspendu_le/.test(a)
+        /* Depuis le lot S-d : par `ma_fiche_pro()`, la seule porte vers les
+           colonnes privées de SA fiche, fusionnée à elle seule ; et jamais
+           dans la liste que tous les téléphones reçoivent. */
+        const prives = (a.match(/function champsPrivesDeMaFiche\(row\) \{[\s\S]*?\n\}/) || [''])[0];
+        return /supabase\.rpc\('ma_fiche_pro'\)\.maybeSingle\(\)/.test(a)
+          && /badgeSuspenduLe:\s*row\.badge_suspendu_le \|\| null/.test(prives)
+          && /if \(pros\[uid\]\) \{\s*if \(ficheRes\.error\) throw ficheRes\.error;\s*if \(ficheRes\.data\) pros\[uid\] = \{ \.\.\.pros\[uid\], \.\.\.champsPrivesDeMaFiche\(ficheRes\.data\) \};/.test(a)
           && !/COLONNES_PRO_LISTE\s*=[^;]*badge_suspendu_le/.test(a); })()],
     ['une fiche ne range que les pièces de SON dossier (`pro_pieces_dossier_check`, les trois pièces)',
       /add constraint pro_pieces_dossier_check[\s\S]{0,400}?kbis_url is null or split_part\(kbis_url, '\/', 1\) = id::text[\s\S]{0,200}?assurance_url is null or split_part\(assurance_url, '\/', 1\) = id::text[\s\S]{0,200}?rge_url is null or split_part\(rge_url, '\/', 1\) = id::text/.test(schema)],

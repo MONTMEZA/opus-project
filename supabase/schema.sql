@@ -1067,7 +1067,11 @@ create table if not exists public.notifications (
 -- De quoi ouvrir la bonne publication en touchant la notification, et
 -- afficher la photo de celui qui l'a déclenchée.
 alter table public.notifications add column if not exists type       text not null default 'info';
-alter table public.notifications add column if not exists acteur_id  uuid references public.users(id) on delete set null;
+-- `on delete cascade` depuis le lot S-d (30/10/2026) : une notification
+-- part avec le compte de celui qui l'a déclenchée (section 53.6, qui refait
+-- la clé sur une base déjà en place — `add column if not exists` ne touche
+-- pas à une clé existante).
+alter table public.notifications add column if not exists acteur_id  uuid references public.users(id) on delete cascade;
 alter table public.notifications add column if not exists post_id    uuid references public.posts(id) on delete cascade;
 alter table public.notifications add column if not exists comment_id uuid references public.comments(id) on delete cascade;
 create index if not exists idx_notifications_user on public.notifications(user_id, created_at desc);
@@ -1250,18 +1254,33 @@ create policy "metier demande depot" on public.metier_demandes
   for insert with check (auth.uid() = professional_id and statut = 'en_attente');
 
 -- Lecture publique du contenu visible dans le fil et les profils
+--
+-- `users` : les LIGNES restent lisibles de tout compte CONNECTÉ (le fil, les
+-- commentaires et la messagerie affichent des noms, celui d'une personne
+-- bloquée compris), et plus du tout sans compte (lot S-d, 30/10/2026 : un
+-- visiteur lisait la ville et le code postal de chacun). Ce qui protège une
+-- COLONNE, ce sont les droits de colonne de la section 18.1, pas ceci.
 drop policy if exists "lecture users" on public.users;
-create policy "lecture users"      on public.users                 for select using (true);
+create policy "lecture users"      on public.users                 for select to authenticated using (true);
 drop policy if exists "lecture profils" on public.professional_profiles;
 create policy "lecture profils"    on public.professional_profiles for select using (true);
 drop policy if exists "lecture posts" on public.posts;
 create policy "lecture posts"      on public.posts                 for select using (true);
+-- J'aime et abonnements : chacun lit les SIENS, et rien d'autre (lot S-d,
+-- décision du 30/10/2026). Un visiteur sans compte lisait qui aimait quoi et
+-- qui suivait qui ; tout compte connecté aussi. Les NOMBRES restent publics :
+-- ils vivent dans `posts.likes_count` et `professional_profiles.followers_count`,
+-- tenus par des déclencheurs. `anon` GARDE le droit de lecture de la table
+-- (section 53) et la politique ne lui rend rien : `fil_filtre()` est ouverte
+-- aux visiteurs et nomme `follows`, et PostgreSQL vérifie le droit de chaque
+-- table nommée au moment de préparer la requête, même dans une branche qui ne
+-- s'exécute pas. Sans ce droit, tout le fil tombait pour un visiteur (mesuré).
 drop policy if exists "lecture likes" on public.post_likes;
-create policy "lecture likes"      on public.post_likes            for select using (true);
+create policy "lecture likes"      on public.post_likes            for select to authenticated using (auth.uid() = user_id);
 drop policy if exists "lecture comments" on public.comments;
 create policy "lecture comments"   on public.comments              for select using (true);
 drop policy if exists "lecture follows" on public.follows;
-create policy "lecture follows"    on public.follows               for select using (true);
+create policy "lecture follows"    on public.follows               for select to authenticated using (auth.uid() = follower_id);
 -- « lecture reviews » n'est PAS créée ici : la section 13.5 la crée avec le
 -- blocage (lot S-b). Deux créations pour une politique, c'est la première
 -- qui se fait oublier le jour où la règle change.
@@ -1344,9 +1363,8 @@ create policy "le pro traite le rappel" on public.callback_requests
 drop policy if exists "mes conversations" on public.conversations;
 create policy "mes conversations" on public.conversations
   for select using (auth.uid() = client_id or auth.uid() = professional_id);
-drop policy if exists "creation conversation" on public.conversations;
-create policy "creation conversation" on public.conversations
-  for insert with check (auth.uid() = client_id or auth.uid() = professional_id);
+-- « creation conversation » n'est PAS créée ici : la section 13.5 la crée,
+-- avec le blocage et la règle « l'un des deux est un professionnel ».
 
 drop policy if exists "lecture mes messages" on public.messages;
 create policy "lecture mes messages" on public.messages
@@ -1378,15 +1396,17 @@ drop policy if exists "mes demandes" on public.demandes;
 create policy "mes demandes" on public.demandes
   for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
 
-drop policy if exists "lecture reponses" on public.demande_reponses;
-create policy "lecture reponses" on public.demande_reponses for select using (true);
--- « mes reponses » n'est PAS créée ici : la section 13.5 la crée avec le
--- blocage (lot S-b, 26/10/2026).
+-- « lecture reponses » et « mes reponses » ne sont PAS créées ici : la
+-- section 13.5 les crée (lots S-b et S-d). Deux créations pour une politique,
+-- c'est la première qui se fait oublier le jour où la règle change.
 
--- Disponibilites SOS : lisibles de tous (c'est ce qui alimente la recherche),
--- modifiables uniquement par l'artisan concerne.
+-- Disponibilites SOS : lisibles de tout compte CONNECTÉ (c'est ce qui
+-- alimente la recherche, `artisans_urgence()`), modifiables uniquement par
+-- l'artisan concerne. Plus du tout sans compte depuis le lot S-d (30/10/2026) :
+-- un visiteur lisait chaque ligne, artisans qui ont cessé de répondre compris,
+-- alors qu'aucun écran ne s'en sert sans compte.
 drop policy if exists "lecture dispo sos" on public.sos_availability;
-create policy "lecture dispo sos" on public.sos_availability for select using (true);
+create policy "lecture dispo sos" on public.sos_availability for select to authenticated using (true);
 drop policy if exists "ma dispo sos" on public.sos_availability;
 create policy "ma dispo sos" on public.sos_availability
   for all using (auth.uid() = professional_id) with check (auth.uid() = professional_id);
@@ -2253,9 +2273,24 @@ create policy "lecture reviews visiteur" on public.reviews
 -- endroits qui créent la même politique, c'est le premier qui se fait
 -- oublier le jour où on la change.
 
+-- LA RÉPONSE D'UN PRO À UNE DEMANDE NE SE LIT QU'ENTRE SES DEUX PARTIES
+-- (lot S-d, 30/10/2026). Jusque-là, TOUT compte connecté, particulier
+-- compris, lisait chaque réponse et son message : un artisan lisait ce que
+-- ses concurrents avaient répondu, et à qui. Désormais :
+--   - l'AUTEUR de la demande lit les réponses à SES demandes (ci-dessous) ;
+--   - le pro lit les SIENNES, par « mes reponses » (section 13.5 ter).
+-- Et SANS `est_masque` : l'auteur garde la réponse d'un pro qu'il a bloqué,
+-- comme celle d'un pro qui l'a bloqué — D2, « rien ne disparaît, plus rien
+-- de neuf ». Ces réponses ne s'affichent nulle part chez l'auteur : la règle
+-- porte sur ses DROITS (l'export, l'API). La sous-requête passe par
+-- « mes demandes » (sans masquage), et aucune politique de `demandes` ne lit
+-- `demande_reponses` : pas de récursion.
 drop policy if exists "lecture reponses" on public.demande_reponses;
 create policy "lecture reponses" on public.demande_reponses
-  for select to authenticated using (not public.est_masque(professional_id));
+  for select to authenticated using (exists (
+    select 1 from public.demandes d
+     where d.id = demande_reponses.demande_id
+       and d.client_id = auth.uid()));
 -- PLUS AUCUNE LECTURE SANS COMPTE (lot S-b, 26/10/2026) — défaut n° 3 de
 -- l'audit du 19/10 : un visiteur lisait qui avait répondu à quelle demande,
 -- et le message. Les demandes elles-mêmes ne se lisent plus sans compte
@@ -2288,11 +2323,21 @@ create policy "mes conversations" on public.conversations
     or (auth.uid() = professional_id and not public.est_masque(client_id))
   );
 
+-- ET UNE CONVERSATION A TOUJOURS UN PROFESSIONNEL (lot S-d, décision du
+-- 30/10/2026). `professional_id` désigne un compte (`users`), pas une
+-- fiche : un particulier pouvait donc ouvrir une conversation avec un
+-- autre particulier en se mettant lui-même « professionnel », et l'autre en
+-- ouvrir une SECONDE dans l'autre sens, puisque la clé unique ne voit pas
+-- la paire inverse (mesuré). Un pro écrit à un particulier, un particulier à
+-- un pro, un pro à un pro : inchangés. Seul le message d'un particulier à
+-- un particulier est refusé — et c'est la base qui le refuse, pas l'écran.
 drop policy if exists "creation conversation" on public.conversations;
 create policy "creation conversation" on public.conversations
   for insert to authenticated with check (
-    (auth.uid() = client_id and not public.est_masque(professional_id))
-    or (auth.uid() = professional_id and not public.est_masque(client_id))
+    ((auth.uid() = client_id and not public.est_masque(professional_id))
+     or (auth.uid() = professional_id and not public.est_masque(client_id)))
+    and exists (select 1 from public.professional_profiles p
+                 where p.id = conversations.professional_id)
   );
 
 drop policy if exists "lecture mes messages" on public.messages;
@@ -3465,9 +3510,19 @@ begin
   -- 1. plus aucun droit de lecture, ni sur la table ni sur les colonnes
   execute 'revoke select on public.users from anon, authenticated';
   execute format('revoke select (%s) on public.users from anon, authenticated', toutes);
-  -- 2. puis on rend, une par une, celles qui peuvent être publiques
-  execute format('grant select (%s) on public.users to anon, authenticated', permises);
+  -- 2. puis on rend, une par une, celles qui peuvent être lues — aux comptes
+  --    CONNECTÉS seulement depuis le lot S-d (30/10/2026)
+  execute format('grant select (%s) on public.users to authenticated', permises);
 end $$;
+
+-- SANS COMPTE, PLUS RIEN (lot S-d, 30/10/2026). Un visiteur lisait le nom,
+-- la photo, la ville, le code postal et la date d'inscription de chaque
+-- compte, avec la seule clé publiable. Aucun écran ne lit `users` sans
+-- compte : on retire TOUT à `anon` — lecture, écriture, et ses droits de
+-- colonne avec (un `revoke all` sur la table les emporte, mesuré). `anon`
+-- n'a aucune règle d'écriture sur cette table : ces droits ne servaient à
+-- rien, sinon à attendre qu'une politique les rattrape.
+revoke all on public.users from anon;
 
 -- Écrire reste permis : c'est bien son propre numéro qu'on enregistre, et
 -- la règle « ecriture mon user » limite déjà cela à sa propre ligne.
@@ -15292,13 +15347,342 @@ revoke all on function public.remonter_publication(uuid) from public, anon;
 grant execute on function public.remonter_publication(uuid) to authenticated;
 
 
+-- ==========================================================================
+--  53. CE QUE CHACUN LIT DES AUTRES — les lectures, les droits, l'export
+--      (lot S-d, 30/10/2026)
+--
+--  Posée ICI pour la même raison que la 52 : avant l'export RGPD (42) et le
+--  balayage des portes (43), qui restent les derniers blocs du fichier.
+--
+--  CE QUI ÉTAIT OUVERT, relevé le 30/10 sur la vraie base (forme seulement)
+--  ----------------------------------------------------------------------
+--    - un visiteur SANS COMPTE lisait le nom, la photo, la ville, le code
+--      postal et la date d'inscription de chaque compte ; qui aimait quoi et
+--      qui suivait qui ; la disponibilité aux urgences de chaque artisan ;
+--      et, sur chaque fiche pro, le motif de refus écrit par
+--      l'administration (« verification_note ») ;
+--    - tout compte CONNECTÉ, particulier compris, lisait chaque réponse d'un
+--      artisan à une demande, avec son message ;
+--    - l'auteur d'un signalement lisait l'identité de l'administrateur qui
+--      l'avait traité, et sa note interne ;
+--    - l'export « Récupérer mes données » oubliait une dizaine de choses, et
+--      un tiers pouvait le faire échouer en inondant une conversation.
+--
+--  DEUX ÉTAPES, et ce fichier dit toujours l'état de la vraie base
+--  ----------------------------------------------------------------
+--  M1d (aujourd'hui) se pose sur une base qui sert encore l'application
+--  d'avant : rien de ce qu'elle lit ne lui est retiré. M2 — les droits de
+--  colonne de `users` et des fiches pro — ne se pose qu'une fois le
+--  téléphone du propriétaire à jour : l'application d'avant lit ces
+--  colonnes AU DÉMARRAGE, et ne démarrerait plus du tout.
+--
+--  Les politiques réécrites le sont À LEUR PLACE (sections 13 et 13.5) ;
+--  ce qui est neuf vit ici.
+-- ==========================================================================
+
+-- --------------------------------------------------------------------------
+--  53.1  La fiche publique d'une personne — `profil_public()`
+--
+--  Ce que l'écran « fiche publique » d'un particulier lit, et RIEN d'autre :
+--  le nom, la photo, le type de compte — et la VILLE, seulement :
+--    - pour soi-même ;
+--    - pour un compte PROFESSIONNEL que la personne n'a pas bloqué, et qui
+--      ne l'a pas bloquée (décision D3 du 25/10 : « les artisans connectés
+--      seulement » — et dans Opus, un compte pro EST un artisan, une
+--      entreprise).
+--  Jamais le code postal, jamais la date d'inscription.
+--
+--  `security definer` parce qu'à l'étape M2, `ville` ne se lira plus par
+--  `select` : la fonction est la seule porte, et elle décide colonne par
+--  colonne. Dans une fonction definer, `auth.uid()` est bien l'appelant, et
+--  `est_un_pro()` / `est_masque()` répondent pour lui (mesuré).
+--
+--  La ville d'un compte PRO n'est jamais rendue ici : celle qu'on affiche
+--  est sur sa fiche (`professional_profiles.ville`), et `users.ville` n'y
+--  est jamais tenue à jour.
+-- --------------------------------------------------------------------------
+create or replace function public.profil_public(p_id uuid)
+returns table (id uuid, nom text, avatar_url text, type text, ville text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select u.id, u.nom, u.avatar_url, u.type,
+         case when u.type = 'particulier'
+                   and (u.id = auth.uid()
+                        or (public.est_un_pro() and not public.est_masque(u.id)))
+              then u.ville
+         end
+    from public.users u
+   where u.id = p_id
+     and auth.uid() is not null
+$$;
+
+revoke all on function public.profil_public(uuid) from public, anon;
+grant execute on function public.profil_public(uuid) to authenticated;
+
+-- --------------------------------------------------------------------------
+--  53.2  MA fiche pro, entière — `ma_fiche_pro()` — et l'état des fiches
+--        pour l'administration — `admin_etat_des_fiches()`
+--
+--  Décision du 30/10 : huit colonnes des fiches pro ne se liront plus que
+--  par leur titulaire et l'administration — le motif de refus, la date d'un
+--  badge suspendu, la date de la dernière visite de l'onglet Demandes, le
+--  compteur de la fenêtre « nommez votre agent », l'ancien SIRET tapé à la
+--  main, le n° RGE déclaré, le code INSEE et la date de création. Elles ne
+--  s'affichaient nulle part, et n'importe qui les lisait, même sans compte.
+--
+--  Leur fermeture est l'étape M2 (droits de colonne). Ces deux fonctions
+--  naissent AVANT, à l'étape M1d, pour que l'application les appelle déjà
+--  le jour où la colonne se ferme : c'est le modèle de `mon_compte()`
+--  (section 18), qui rend SA ligne de `users` entière.
+--
+--  `admin_etat_des_fiches()` rend l'identifiant et la date de suspension
+--  pour une liste de fiches : la file de l'administration la lisait par un
+--  `select` direct. Une signature NOUVELLE plutôt qu'un paramètre ajouté à
+--  `admin_file_verifications()` : ajouter un paramètre crée une SURCHARGE
+--  (section 34), et l'appel sans argument deviendrait ambigu.
+-- --------------------------------------------------------------------------
+create or replace function public.ma_fiche_pro()
+returns setof public.professional_profiles
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.* from public.professional_profiles p where p.id = auth.uid()
+$$;
+
+revoke all on function public.ma_fiche_pro() from public, anon;
+grant execute on function public.ma_fiche_pro() to authenticated;
+
+create or replace function public.admin_etat_des_fiches(p_ids uuid[])
+returns table (id uuid, badge_suspendu_le timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  perform public.admin_exige_droit();
+  return query
+    select p.id, p.badge_suspendu_le
+      from public.professional_profiles p
+     where p.id = any(coalesce(p_ids, '{}'::uuid[]));
+end;
+$$;
+
+revoke all on function public.admin_etat_des_fiches(uuid[]) from public, anon;
+grant execute on function public.admin_etat_des_fiches(uuid[]) to authenticated;
+
+-- --------------------------------------------------------------------------
+--  53.3  J'aime et abonnements — ce que `anon` garde, et pourquoi
+--
+--  La règle de lecture est en section 13 (« chacun les siens »). Ici, les
+--  droits de TABLE : `anon` n'a aucune règle d'écriture sur ces tables, ses
+--  droits d'écriture partent. Son droit de LECTURE reste, exprès : la
+--  politique `to authenticated` lui rend zéro ligne, et `fil_filtre()` —
+--  ouverte aux visiteurs — nomme `follows`. Sans ce droit, PostgreSQL
+--  refuse la requête entière au moment de la préparer, même si la branche
+--  « abonnements » ne s'exécute jamais : le fil tombait pour tout visiteur
+--  (mesuré le 30/10).
+-- --------------------------------------------------------------------------
+revoke insert, update, delete on public.post_likes, public.follows from anon;
+
+-- `sos_availability` ne se lit plus sans compte (politique en section 13) :
+-- aucune fonction ouverte aux visiteurs ne la nomme (`artisans_urgence()`
+-- n'est exécutable que par `authenticated`, section 47), donc son droit de
+-- TABLE part aussi — une politique fermée ne doit pas être la seule
+-- barrière (la leçon de la section 41).
+revoke all on public.sos_availability from anon;
+
+-- --------------------------------------------------------------------------
+--  53.4  Un signalement : ni l'administrateur, ni sa note
+--
+--  L'auteur d'un signalement lisait `traite_par` — l'identité de
+--  l'administrateur qui l'avait traité — et `note`, que l'écran
+--  d'administration présente comme INTERNE (« ce qui a été décidé, et
+--  pourquoi : la seule chose qu'on voudra relire dans six mois »). Une note
+--  sur la personne signalée est une donnée sur un TIERS. Droits de colonne,
+--  le motif de la section 18.1 : retirer la table, rendre colonne par
+--  colonne. L'application ne lit que `id, cible_type, motif, statut,
+--  created_at` ; l'administration lit par `admin_signalements()`, definer.
+--  Et `anon` ne lit plus rien : il n'avait de toute façon aucune ligne.
+-- --------------------------------------------------------------------------
+revoke select on public.signalements from anon, authenticated;
+revoke select (id, auteur_id, cible_type, cible_id, cible_auteur_id, extrait, motif, details,
+               statut, created_at, traite_at, note, traite_par)
+  on public.signalements from anon, authenticated;
+grant select (id, auteur_id, cible_type, cible_id, cible_auteur_id, extrait, motif, details,
+              statut, created_at, traite_at)
+  on public.signalements to authenticated;
+
+-- --------------------------------------------------------------------------
+--  53.5  Les index que ces lectures demandent
+--
+--    - `demandes(client_id)` : la règle « lecture reponses » cherche, pour
+--      chaque réponse, si sa demande est à moi ;
+--    - `demande_reponses(professional_id)` : « mes réponses » de l'artisan ;
+--    - `messages(sender_id)` : l'export, et la cascade quand un compte part ;
+--    - `notifications(acteur_id)` : la cascade de 53.6.
+-- --------------------------------------------------------------------------
+create index if not exists idx_demandes_client on public.demandes (client_id);
+create index if not exists idx_demande_reponses_pro on public.demande_reponses (professional_id);
+create index if not exists idx_messages_expediteur on public.messages (sender_id);
+create index if not exists idx_notifications_acteur on public.notifications (acteur_id);
+
+-- --------------------------------------------------------------------------
+--  53.6  Les notifications d'un compte qui part partent avec lui
+--
+--  Décision du 30/10. Jusque-là, `acteur_id … on delete set null` : le
+--  compte partait, et « Paule P. a commenté votre publication » restait
+--  écrit dans la cloche des autres, avec son nom — le nom est DANS le texte,
+--  composé par le déclencheur. La publication ou le commentaire visé reste,
+--  anonymisé : seule la ligne de la cloche disparaît, comme disparaissent
+--  déjà les conversations avec un compte supprimé. Les notifications de
+--  l'administration n'ont pas d'acteur : elles ne sont pas touchées.
+--
+--  Refaite ici pour une base déjà en place (`add column if not exists` ne
+--  touche pas une clé existante). Le `drop` est AU MILIEU d'un `alter
+--  table` : le connecteur Supabase l'accepte (mesuré le 03/10).
+-- --------------------------------------------------------------------------
+alter table public.notifications
+  drop constraint if exists notifications_acteur_id_fkey,
+  add constraint notifications_acteur_id_fkey
+    foreign key (acteur_id) references public.users(id) on delete cascade;
+
+-- --------------------------------------------------------------------------
+--  53.7  Ce que la RLS cacherait À TORT dans l'export —
+--        `mes_donnees_sans_masquage()`
+--
+--  `mes_donnees()` est `security invoker` : elle lit ce que les politiques
+--  laissent passer. C'est juste pour presque tout, et faux pour quatre
+--  choses, mesurées le 30/10 :
+--    - SES PROPRES MESSAGES disparaissent de l'export dès qu'un blocage
+--      existe, pour celui qui bloque comme pour celui qui est bloqué — la
+--      conversation est masquée. Ils restent pourtant en base, et
+--      l'article 15 ne connaît pas cette exception ;
+--    - les RÉPONSES reçues à ses annonces d'un pro avec qui il y a blocage ;
+--    - ses CONVERSATIONS (avec qui il parle) n'y étaient pas du tout ;
+--    - et ce que la base garde sur lui sans le lui montrer : les
+--      signalements qui visent ses contenus, les décisions de
+--      l'administration, la copie de ses informations d'inscription.
+--
+--  CE QUI EN EST TENU À L'ÉCART, et pourquoi (la liste fermée de l'export,
+--  section 42) : l'identité de qui a signalé et ce qu'il a écrit (`auteur_id`,
+--  `details`) ; la note interne et l'identité de l'administrateur
+--  (`note`, `traite_par`, `admin_id`) ; les décisions sur un signalement ou
+--  sur le catalogue des métiers, qui ne portent pas sur la personne.
+--
+--  CE QUE D'AUTRES REMPLISSENT EST BORNÉ : les messages reçus aux 5 000
+--  plus récents, avec leur nombre total. Un interlocuteur qui inonde une
+--  conversation faisait sinon dépasser le délai de 8 secondes de la vraie
+--  base, et c'est le droit d'accès d'une AUTRE personne qui tombait (mesuré :
+--  300 000 messages, l'export actuel 2,4 s ; tous les reçus, plus de 8 s ;
+--  bornés à 5 000, 0,2 s). Les SIENS ne sont pas bornés : personne d'autre
+--  ne peut les multiplier.
+--
+--  `security definer`, sans aucune politique, et chaque morceau filtré sur
+--  `auth.uid()` : elle ne rend jamais que ce qui concerne l'appelant.
+-- --------------------------------------------------------------------------
+create or replace function public.mes_donnees_sans_masquage()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'conversations',
+      coalesce((select jsonb_agg(to_jsonb(c) order by c.created_at, c.id)
+                  from public.conversations c
+                 where c.client_id = auth.uid() or c.professional_id = auth.uid()), '[]'::jsonb),
+    'messages',
+      coalesce((select jsonb_agg(to_jsonb(m) order by m.created_at, m.id)
+                  from public.messages m
+                 where m.sender_id = auth.uid()), '[]'::jsonb),
+    'messages_recus',
+      coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                  from (select m.*
+                          from public.messages m
+                          join public.conversations c on c.id = m.conversation_id
+                         where (c.client_id = auth.uid() or c.professional_id = auth.uid())
+                           and m.sender_id <> auth.uid()
+                         order by m.created_at desc, m.id desc
+                         limit 5000) x), '[]'::jsonb),
+    'messages_recus_total',
+      (select count(*)
+         from public.messages m
+         join public.conversations c on c.id = m.conversation_id
+        where (c.client_id = auth.uid() or c.professional_id = auth.uid())
+          and m.sender_id <> auth.uid()),
+    'reponses_recues_a_mes_annonces',
+      coalesce((select jsonb_agg(to_jsonb(r) order by r.created_at, r.id)
+                  from public.annonce_reponses r
+                  join public.annonces_pro a on a.id = r.annonce_id
+                 where a.auteur_id = auth.uid()), '[]'::jsonb),
+    'signalements_visant_mes_contenus',
+      coalesce((select jsonb_agg(jsonb_build_object(
+                         'cible_type', s.cible_type, 'cible_id', s.cible_id,
+                         'motif', s.motif, 'extrait', s.extrait,
+                         'statut', s.statut, 'created_at', s.created_at,
+                         'traite_at', s.traite_at)
+                       order by s.created_at, s.id)
+                  from public.signalements s
+                 where s.cible_auteur_id = auth.uid()), '[]'::jsonb),
+    'decisions_de_l_administration',
+      coalesce((select jsonb_agg(jsonb_build_object(
+                         'action', j.action, 'cible_type', j.cible_type, 'cible_id', j.cible_id,
+                         'avant', j.avant, 'apres', j.apres, 'motif', j.motif,
+                         'created_at', j.created_at)
+                       order by j.created_at, j.id)
+                  from public.journal_admin j
+                 where (j.cible_type = 'profil_pro' and j.cible_id = auth.uid())
+                    or (j.cible_type = 'demande_pro'
+                        and j.cible_id in (select d.id from public.demandes_pro d where d.compte_id = auth.uid()))
+                    or (j.cible_type = 'metier_demande'
+                        and j.cible_id in (select d.id from public.metier_demandes d where d.professional_id = auth.uid()))
+                    or (j.cible_type = 'specialite'
+                        and j.cible_id in (select x.id from public.specialites_proposees x where x.propose_par = auth.uid()))
+                    or (j.cible_type = 'entreprise'
+                        and j.cible_id in (select e.id from public.entreprise_registre e where e.pro_id = auth.uid()))),
+               '[]'::jsonb),
+    'metadonnees_d_inscription',
+      (select u.raw_user_meta_data from auth.users u where u.id = auth.uid())
+  )
+$$;
+
+revoke all on function public.mes_donnees_sans_masquage() from public, anon;
+grant execute on function public.mes_donnees_sans_masquage() to authenticated;
+
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
 --
 --  « Ce que j'ai regardé » et « mes chantiers » sont des données
 --  personnelles sur MOI, donc elles entrent dans l'export de l'article 15.
 --  `mes_donnees()` est `security invoker` : elle ne lit que ce que les
---  politiques laissent passer, c'est-à-dire mes lignes et rien d'autre.
+--  politiques laissent passer, c'est-à-dire mes lignes et rien d'autre —
+--  sauf ce que la RLS cacherait À TORT, qui passe par
+--  `mes_donnees_sans_masquage()` (section 53.7).
+--
+--  LA RÈGLE (lot S-d, 30/10/2026) : l'export rend les données qui
+--  concernent la personne, SAUF une liste FERMÉE d'exclusions, chacune
+--  avec sa raison :
+--    1. l'identité de qui la suit (un pro en a le NOMBRE sur sa fiche) ;
+--    2. l'identité de qui l'a bloquée, et le fait même d'être bloquée ;
+--    3. l'identité de qui a signalé un de ses contenus, et ce qu'il a écrit ;
+--    4. l'identité de l'administrateur qui a décidé (CJUE C-579/21) ;
+--    5. la note interne d'un signalement ;
+--    6. les fichiers eux-mêmes — rendus par leur ADRESSE ;
+--    7. les fiches de carnet et les devis qu'un artisan tient sur elle : ce
+--       sont les données de cet artisan, à qui elle s'adresse.
+--  Et ce que d'AUTRES remplissent est borné aux 5 000 plus récents (les
+--  messages reçus, les notifications), le total dit dans
+--  `limites_de_l_export`.
+--
+--  UN OBJET PLAFONNE À 50 CLÉS (100 arguments par fonction) : l'export est
+--  donc fait de DEUX `jsonb_build_object`, joints par `||`.
 --
 --  Et cette fonction est la DERNIÈRE du fichier, pour de bon : PostgreSQL
 --  contrôle le corps d'une fonction SQL à sa CRÉATION, donc elle ne peut
@@ -15319,6 +15703,11 @@ stable
 security invoker
 set search_path = public
 as $$
+  /* `materialized` : sans lui, PostgreSQL déplie la sous-requête et
+     recopie l'APPEL de la fonction dans chacune des neuf clés qui la
+     lisent — neuf fois le même travail. Mesuré avec 300 000 messages
+     reçus : 5,3 s au lieu de 0,6 s. */
+  with s as materialized (select public.mes_donnees_sans_masquage() as j)
   select jsonb_build_object(
     'export_du', now(),
     /* Passe par mon_compte() (section 18) et non par un `to_jsonb(u)`
@@ -15327,8 +15716,11 @@ as $$
        lire la ligne entière échouerait — l'export RGPD reviendrait vide ou
        en erreur, pour la meilleure des raisons. */
     'compte',    (select to_jsonb(public.mon_compte())),
+    /* Par `ma_fiche_pro()` (section 53.2), pour la même raison que
+       `mon_compte()` : à l'étape M2, huit colonnes de la fiche se ferment,
+       et un `to_jsonb(p)` direct ferait échouer TOUT l'export. */
     'fiche_professionnelle',
-                 (select to_jsonb(p) from public.professional_profiles p where p.id = auth.uid()),
+                 (select to_jsonb(p) from public.ma_fiche_pro() p),
     'publications',
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.posts x where x.author_id = auth.uid()), '[]'::jsonb),
     'commentaires',
@@ -15349,13 +15741,22 @@ as $$
                             where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
     'rappels',   coalesce((select jsonb_agg(to_jsonb(x)) from public.callback_requests x
                             where x.client_id = auth.uid() or x.professional_id = auth.uid()), '[]'::jsonb),
-    'messages',  coalesce((select jsonb_agg(to_jsonb(x)) from public.messages x where x.sender_id = auth.uid()), '[]'::jsonb),
+    /* MES messages, TOUS — sans le masquage d'un blocage (section 53.7). */
+    'messages',  s.j -> 'messages',
     'abonnements',
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.follows x where x.follower_id = auth.uid()), '[]'::jsonb),
     'personnes_bloquees',
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.blocages x where x.bloqueur_id = auth.uid()), '[]'::jsonb),
+    /* Colonne par colonne : `traite_par` et `note` sont fermées (section
+       53.4), et un `to_jsonb(x)` ferait échouer tout l'export. */
     'signalements_deposes',
-                 coalesce((select jsonb_agg(to_jsonb(x)) from public.signalements x where x.auteur_id = auth.uid()), '[]'::jsonb),
+                 coalesce((select jsonb_agg(jsonb_build_object(
+                             'id', x.id, 'cible_type', x.cible_type, 'cible_id', x.cible_id,
+                             'cible_auteur_id', x.cible_auteur_id, 'extrait', x.extrait,
+                             'motif', x.motif, 'details', x.details, 'statut', x.statut,
+                             'created_at', x.created_at, 'traite_at', x.traite_at)
+                             order by x.created_at, x.id)
+                             from public.signalements x where x.auteur_id = auth.uid()), '[]'::jsonb),
     'publications_vues',
                  coalesce((select jsonb_agg(to_jsonb(x)) from public.post_vues x where x.spectateur_id = auth.uid()), '[]'::jsonb),
     'chantiers', coalesce((select jsonb_agg(to_jsonb(x)) from public.chantiers x where x.pro_id = auth.uid()), '[]'::jsonb),
@@ -15476,7 +15877,65 @@ as $$
     'mes_remontees',
                  coalesce((select jsonb_agg(to_jsonb(x) order by x.remontee_le, x.id)
                              from public.remontees x where x.auteur_id = auth.uid()), '[]'::jsonb)
+  ) || jsonb_build_object(
+    /* LE LOT S-d (30/10/2026) — ce qui manquait. D'abord ce que la RLS
+       cacherait à tort (section 53.7). */
+    'conversations',                   s.j -> 'conversations',
+    'messages_recus',                  s.j -> 'messages_recus',
+    'reponses_recues_a_mes_annonces',  s.j -> 'reponses_recues_a_mes_annonces',
+    'signalements_visant_mes_contenus', s.j -> 'signalements_visant_mes_contenus',
+    'decisions_de_l_administration',   s.j -> 'decisions_de_l_administration',
+    'metadonnees_d_inscription',       s.j -> 'metadonnees_d_inscription',
+    /* Puis ce que les politiques laissent lire à la personne elle-même. */
+    'mes_j_aime',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at)
+                             from public.post_likes x where x.user_id = auth.uid()), '[]'::jsonb),
+    'publications_enregistrees',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at)
+                             from public.saved_posts x where x.user_id = auth.uid()), '[]'::jsonb),
+    'partenariats',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at)
+                             from public.professional_partners x
+                            where x.professional_id = auth.uid() or x.partner_id = auth.uid()), '[]'::jsonb),
+    'reponses_que_j_ai_ecrites',
+                 jsonb_build_object(
+                   'demandes', coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                                           from public.demande_reponses x
+                                          where x.professional_id = auth.uid()), '[]'::jsonb),
+                   'annonces', coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                                           from public.annonce_reponses x
+                                          where x.professional_id = auth.uid()), '[]'::jsonb)),
+    'reponses_recues_a_mes_demandes',
+                 coalesce((select jsonb_agg(to_jsonb(r) order by r.created_at, r.id)
+                             from public.demande_reponses r
+                             join public.demandes d on d.id = r.demande_id
+                            where d.client_id = auth.uid()), '[]'::jsonb),
+    'avis_recus',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.reviews x where x.professional_id = auth.uid()), '[]'::jsonb),
+    'mes_demandes_de_metier',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.metier_demandes x where x.professional_id = auth.uid()), '[]'::jsonb),
+    'mes_specialites_proposees',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.specialites_proposees x where x.propose_par = auth.uid()), '[]'::jsonb),
+    /* Bornée : d'autres la remplissent (un « j'aime », un commentaire). */
+    'mes_notifications',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from (select n.* from public.notifications n
+                                    where n.user_id = auth.uid()
+                                    order by n.created_at desc, n.id desc
+                                    limit 5000) x), '[]'::jsonb),
+    'limites_de_l_export',
+                 jsonb_build_object(
+                   'messages_recus', jsonb_build_object(
+                     'total', s.j -> 'messages_recus_total',
+                     'rendus', jsonb_array_length(s.j -> 'messages_recus')),
+                   'mes_notifications', jsonb_build_object(
+                     'total', (select count(*) from public.notifications n where n.user_id = auth.uid()),
+                     'rendus', least((select count(*) from public.notifications n where n.user_id = auth.uid()), 5000)))
   )
+  from s
 $$;
 
 /* Son droit est posé ICI, avec elle, et pas dans le `foreach` de la
@@ -15486,6 +15945,56 @@ $$;
    exactement le genre de panne que ce fichier traque. */
 revoke all on function public.mes_donnees() from public, anon;
 grant execute on function public.mes_donnees() to authenticated;
+
+-- ==========================================================================
+--  42 bis. LES DROITS DE TABLE QUE PERSONNE N'UTILISE (lot S-d, 30/10/2026)
+--
+--  Supabase accorde d'office à `anon` et `authenticated`, sur chaque table,
+--  sept droits : lire, insérer, modifier, supprimer — que la RLS tient —
+--  et TRUNCATE, REFERENCES, TRIGGER (plus MAINTAIN sous PostgreSQL 17), que
+--  la RLS ne tient PAS. TRUNCATE vide une table sans passer par aucune
+--  politique ; il est refusé par PostgREST, mais il ne doit pas attendre
+--  qu'une porte d'entrée le rattrape. Personne n'en a besoin : aucun
+--  `truncate` dans l'application ni dans les fonctions, et une clé étrangère
+--  comme un déclencheur marchent sans REFERENCES ni TRIGGER — c'est déjà le
+--  cas de `devis`, `devis_lignes` et `base_postes` (essais 49 et 50).
+--
+--  UN BALAYAGE, comme celui des portes juste en dessous : il prend toutes
+--  les tables de `public`, donc celles qui ne sont pas encore écrites.
+--  Et les droits PAR DÉFAUT de `postgres` sur `public` suivent : une table
+--  créée demain naît sans eux. Relevé sur la vraie base le 30/10 : aucune
+--  entrée GLOBALE de droits par défaut, celle de `public` suffit. Ceux de
+--  `supabase_admin` ne sont pas à la portée de `postgres` (A-FAIRE).
+--
+--  MAINTAIN n'existe que sous PostgreSQL 17 : la branche est conditionnée
+--  sur la version, et elle n'a jamais tourné ici (PostgreSQL 16). Sur la
+--  vraie base, elle part dans un appel À PART de la migration, pour qu'un
+--  refus n'annule rien d'autre.
+-- ==========================================================================
+do $droits$
+declare
+  t record;
+begin
+  for t in
+    select c.oid::regclass as nom
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relkind in ('r', 'p', 'v', 'm', 'f')
+  loop
+    execute format('revoke truncate, references, trigger on %s from anon, authenticated', t.nom);
+    if current_setting('server_version_num')::int >= 170000 then
+      execute format('revoke maintain on %s from anon, authenticated', t.nom);
+    end if;
+  end loop;
+  execute 'alter default privileges for role postgres in schema public '
+       || 'revoke truncate, references, trigger on tables from anon, authenticated';
+  if current_setting('server_version_num')::int >= 170000 then
+    execute 'alter default privileges for role postgres in schema public '
+         || 'revoke maintain on tables from anon, authenticated';
+  end if;
+end
+$droits$;
 
 -- ==========================================================================
 --  43. LES PORTES DE LA BASE — une fonction de déclencheur n'est appelable

@@ -567,6 +567,24 @@ export const initialNotifications = [
    montrer le mécanisme, sinon personne ne le voit jamais fonctionner —
    celui qui lance Opus sans fichier `.env` n'a que lui. */
 
+/* LES PARTICULIERS DE LA DÉMONSTRATION, tels que leur COMPTE les décrit
+   (lot S-d, 30/10/2026) : leur nom, et la ville de leur profil. Elle sert à
+   faire vivre la règle D3 — « la ville d'un particulier, aux professionnels
+   connectés seulement » — sur leur fiche publique ; sans elle, la règle ne
+   se verrait nulle part sans fichier `.env`. Des villes déjà nommées
+   ailleurs dans la démonstration (leurs demandes, leurs urgences, leurs
+   questions), jamais une adresse. */
+export const particuliersDemo = {
+  'u-julie': { nom: 'Julie M.', ville: 'Lambesc (13)' },
+  'u-marc': { nom: 'Marc Dumont', ville: 'Lambesc (13)' },
+  'u-sophie': { nom: 'Sophie B.', ville: null },
+  'demo-antoine': { nom: 'Antoine R.', ville: 'Toulouse (31)' },
+  'p-camille': { nom: 'Camille R.', ville: 'Toulouse (31)' },
+  'p-hugo': { nom: 'Hugo P.', ville: 'Marseille (13)' },
+  'p-nadia': { nom: 'Nadia K.', ville: 'Aix-en-Provence (13)' },
+  'p-lucas': { nom: 'Lucas B.', ville: 'Lyon (69)' },
+};
+
 export const initialDemandes = [
   { id: 1, auteurId: 'p-camille', auteur: 'Camille R.', metier: 'carreleur', ville: 'Toulouse (31)',
     texte: "Salle de bain de 6 m² à carreler entièrement, murs et sol. Faïence déjà achetée.",

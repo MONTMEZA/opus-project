@@ -1663,7 +1663,15 @@ console.log('\nLot S-a — ce qui reste en ligne, et le badge suspendu');
   verifier('`CE_QUI_EST_GARDE` renvoie à « Combien de temps », qui énumère ces exceptions',
     typeof CE_QUI_EST_GARDE === 'string' && /Combien de temps/.test(CE_QUI_EST_GARDE)
     && /signalements/.test(CE_QUI_EST_GARDE) && /carnet/.test(CE_QUI_EST_GARDE)
-    && /conservés un an/.test(bloc(CONFIDENTIALITE, 'Combien de temps')));
+    && /les signalements sont conservés sans le nom[^;]*aucune durée maximale ne peut encore être promise/
+      .test(bloc(CONFIDENTIALITE, 'Combien de temps').replace(/\s+/g, ' ')));
+  /* « conservés un an » était FAUX (lot S-d, 30/10) : aucune purge des
+     signalements n'existe. Plus aucun texte ne promet une durée qu'aucun
+     mécanisme ne tient. */
+  verifier('aucun texte ne promet de garder les signalements « un an » : aucune purge ne le tient',
+    ![...CGU, ...CONFIDENTIALITE, ...MENTIONS].some((b) => /signalement[^.]{0,200}\bun an\b/i.test(b.texte))
+    && !/\bun an\b/.test(CE_QUI_EST_GARDE),
+    'le jour où l’effacement automatique existera, ce contrôle changera AVEC lui');
 
   /* SUPPRIMER UNE PUBLICATION (T4) : « définitivement » taisait les fichiers
      et le portfolio. */
@@ -2056,6 +2064,20 @@ console.log('\nLot S-c — les avis, la remise en avant, la sécurité : mot pou
   verifier('VERSION est au moins celle du lot S-c (30/10/2026)',
     VERSION >= '2026-10-30',
     `VERSION = ${VERSION}. L'ordre du fil, la remise en avant, les avis qui ne se modifient plus, la sécurité : un changement de fond, sous une version nouvelle.`);
+
+  /* LA VERSION N'EST PAS DANS LE FUTUR (lot S-d, 30/10/2026). La base ne
+     range la version acceptée que si c'est une date au plus LENDEMAIN de
+     la sienne (`version_cgu_ou_null`, section 13, en UTC) : au-delà, elle
+     range `null` — la trace d'acceptation est perdue, sans une erreur.
+     Une version posée « en avance » pour un texte qu'on publiera dans une
+     semaine ferait donc accepter des CGU que personne ne saurait dater. */
+  const demainUTC = new Date(Date.now() + 86400e3).toISOString().slice(0, 10);
+  verifier('VERSION n’est pas plus loin que le lendemain (au-delà, la base range la trace d’acceptation à vide)',
+    /^\d{4}-\d{2}-\d{2}$/.test(VERSION) && VERSION <= demainUTC
+      && /if d < date '2026-09-01' or d > current_date \+ 1 then\s+return null;/.test(sqlS),
+    `VERSION = ${VERSION}, au plus ${demainUTC}`);
+  verifier('VERSION est au moins celle du lot S-d (31/10/2026) : un changement de fond, sous une version nouvelle',
+    VERSION >= '2026-10-31', `VERSION = ${VERSION}`);
 
   const AVIS_RELU = "Un avis porte la mention « client vérifié » quand son auteur avait, au moment où il l’a écrit, une demande de devis, de rappel ou d’urgence acceptée par l’artisan qu’il note. C’est tout ce que cette mention atteste : Opus ne vérifie ni que les travaux ont eu lieu, ni ce que l’avis raconte, ni les notes données. Les autres avis sont publiés sans cette mention, et sans contrôle préalable. Chacun ne laisse qu’un avis par artisan, jamais sur sa propre fiche. Un avis ne se modifie pas une fois publié ; son auteur peut le retirer, depuis la fiche de l’artisan, puis en écrire un autre. Chaque avis affiche le mois et l’année de sa publication, enregistrés par Opus ; les avis sont présentés du plus récent au plus ancien. La note et le nombre d’avis d’une fiche sont calculés par Opus à partir des avis publiés : l’artisan ne peut pas les modifier. Un avis compte dans la note de l’artisan tant qu’il existe ; l’artisan qu’il concerne le lit toujours, même s’il a bloqué son auteur ou a été bloqué par lui. Il n’existe pas encore de bouton pour signaler un avis : c’est à ajouter avant l’ouverture d’Opus au public.";
   verifier('« Les avis » a EXACTEMENT le texte relu contre la base (30/10/2026)', bloc('Les avis') === AVIS_RELU, bloc('Les avis'));

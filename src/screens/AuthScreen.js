@@ -489,7 +489,7 @@ export default function AuthScreen({ userType, onSignUp, onSignIn, onRetour, onL
                       {villePreremplie ? AIDE_VILLE
                         : estPro
                           ? "Elle place votre fiche sur la carte, au centre de la commune — jamais à votre adresse."
-                          : "Elle sert à vous montrer les artisans près de chez vous. On ne demande jamais votre adresse."}
+                          : "Elle sert à vous montrer les artisans près de chez vous. On ne vous demande pas votre adresse : seule une urgence demande celle de l’intervention."}
                     </Text>
 
                     {etapeSecours && (

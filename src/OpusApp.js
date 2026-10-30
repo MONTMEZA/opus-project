@@ -303,6 +303,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   // Fiche publique d'un particulier, ouverte depuis un commentaire.
   const [profilPublic, setProfilPublic] = useState(null);
   const [profilPublicCharge, setProfilPublicCharge] = useState(false);
+  /* L'écran d'où l'on a ouvert cette fiche : le retour y ramène. « Voir le
+     profil » d'un client, dans « Pour moi », ramenait au fil, et l'artisan
+     perdait la demande qu'il traitait (relecture du 30/10). */
+  const [origineProfilPublic, setOrigineProfilPublic] = useState('home');
   const [navHeight, setNavHeight] = useState(0);               // hauteur de la nav flottante
 
   /* Espace « Demandes » : l'inverse du fil, réservé aux particuliers qui publient. */
@@ -1524,26 +1528,36 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   };
 
   /**
-   * Toucher le nom sous un commentaire. Un professionnel a sa page ; un
-   * particulier a sa fiche publique, qu'on va chercher à la demande.
+   * TOUCHER LE NOM D'UNE PERSONNE — une seule porte (lot S-d). Un
+   * professionnel a sa page ; un particulier a sa fiche publique, qu'on va
+   * chercher à la demande. Elle sert au nom sous un commentaire comme à
+   * « Voir le profil » d'un client dans « Pour moi », qui ouvrait jusque-là
+   * la page PRO — vide — d'un particulier.
+   *
+   * `repli` : ce qu'on sait déjà (le nom sous le commentaire), affiché le
+   * temps de la lecture, et gardé si la personne n'est pas connue de la
+   * démonstration.
    */
-  const voirCommentateur = async (c) => {
-    if (!c.auteurId) return;
+  const voirPersonne = async (id, repli = null) => {
+    if (!id) return;
     setOpenContactId(null);
-    if (pros[c.auteurId]) { viewProfile(c.auteurId); return; }
+    if (pros[id]) { viewProfile(id); return; }
 
+    setOrigineProfilPublic(screen === 'profilPublic' ? origineProfilPublic : screen);
     setScreen('profilPublic');
     setProfilPublicCharge(true);
-    // Repli du mode démo : la fiche se reconstruit depuis le commentaire.
-    setProfilPublic({ id: c.auteurId, nom: c.auteur, avatarUrl: c.avatarUrl, demandes: [] });
+    setProfilPublic(repli && repli.nom
+      ? { id, nom: repli.nom, avatarUrl: repli.avatarUrl || null, type: null, demandes: [] }
+      : null);
     try {
-      const fiche = await api.chargerProfilPublic(c.auteurId);
+      const fiche = await api.chargerProfilPublic(id, { jeSuisPro: userType === 'pro' });
       if (fiche) setProfilPublic(fiche);
     } catch (e) {
-      showErreur("Ce profil n'a pas pu être chargé.");
+      showErreur(messageClair(e, "Ce profil n'a pas pu être chargé"));
     }
     setProfilPublicCharge(false);
   };
+  const voirCommentateur = (c) => voirPersonne(c.auteurId, { nom: c.auteur, avatarUrl: c.avatarUrl });
 
   /* L'état voulu se décide AVANT, sur ce qui est affiché : une variable
      posée dans la fonction de mise à jour ne l'est que si React l'exécute
@@ -1552,11 +1566,21 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      la base n'avait pas enregistré (relecture du 26/10/2026). */
   const toggleFollow = (proId) => {
     const suivre = !followingIds.has(proId);
-    const poser = (oui) => setFollowingIds((s) => {
-      const n = new Set(s);
-      if (oui) n.add(proId); else n.delete(proId);
-      return n;
-    });
+    /* LE COMPTEUR SUIT LE GESTE (lot S-d, relecture du 30/10). La fiche
+       ajoutait « 1 si je suis » au nombre lu en base — qui me comptait DÉJÀ
+       quand je suivais au chargement : deux abonnés pour un (mesuré), et un
+       de trop après un désabonnement. Le nombre de la fiche bouge
+       maintenant avec l'appui, et revient s'il est refusé. */
+    const poser = (oui) => {
+      setFollowingIds((s) => {
+        const n = new Set(s);
+        if (oui) n.add(proId); else n.delete(proId);
+        return n;
+      });
+      setPros((ps) => (ps[proId]
+        ? { ...ps, [proId]: { ...ps[proId], followers: Math.max(0, (ps[proId].followers || 0) + (oui ? 1 : -1)) } }
+        : ps));
+    };
     poser(suivre);
     api.setFollow(proId, suivre).catch((e) => {
       poser(!suivre);
@@ -3106,6 +3130,13 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
        fermer la session. */
     if (!(await quitterSaisieDevis())) return;
     try { await api.signOut(); } catch (e) { /* rien à faire de plus */ }
+    /* LE SECTEUR DU FIL NE PASSE PAS AU COMPTE SUIVANT (lot S-d). Il survit
+       à la fermeture de l'application — c'est voulu —, mais une commune et
+       ses coordonnées restées sur le téléphone se retrouvaient chez le
+       prochain compte qui s'y connectait. Le message d'une demande de compte
+       pro, lui, reste : il porte l'adresse du compte auquel il est destiné,
+       et ne part qu'à sa première connexion. */
+    try { await AsyncStorage.removeItem(CLE_SECTEUR); } catch (e) { /* rien à faire de plus */ }
     /* Seul un TEXTE passe : un événement d'appui glissé là par erreur
        ferait planter le bandeau de l'instance suivante. */
     onSortie(typeof message === 'string' ? message : null);
@@ -4622,6 +4653,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             }
             else if (screen === 'messages') setActiveConvId(null);
             else if (screen === 'legal') setScreen('confidentialite');
+            else if (screen === 'profilPublic') setScreen(origineProfilPublic || 'home');
             else if (screen === 'profilEdit' || screen === 'mesPublications'
                      || screen === 'gererPortfolio' || screen === 'admin'
                      || screen === 'clients' || screen === 'passerPro'
@@ -4865,7 +4897,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                            (OP020) : elles ne proposent plus que « Refuser ». */
                         fermees={demandesFermees}
                         onAppeler={appeler}
-                        onVoirProfil={viewProfile}
+                        /* Un client est un PARTICULIER : sa fiche publique,
+                           et le retour ramène ici (lot S-d). */
+                        onVoirProfil={(id) => voirPersonne(id)}
                       />
                     );
                   }
@@ -5257,7 +5291,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           <ProfilPublicScreen
             profil={profilPublic}
             chargement={profilPublicCharge && !profilPublic}
+            jeSuisPro={canPublish}
+            monId={api.getUserId()}
             onContacter={contacterParticulier}
+            onSignaler={ouvrirSignalement}
           />
         )}
 

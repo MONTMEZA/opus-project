@@ -39,13 +39,13 @@ on conflict (siret) do update set expire_le = excluded.expire_le;
 
 -- --------------------------------------------------------------------------
 \echo ''
-\echo '=== 1. LE DROIT : plus de delete, mais select et update intacts ==='
+\echo '=== 1. LE DROIT : plus de delete ; un compte connecté lit toujours le nom (t), un visiteur plus rien depuis le lot S-d du 30/10/2026 (f) ; update intact ==='
 -- Un droit de TABLE, et non une politique : une politique ne sait pas
 -- distinguer « modifier ma ligne » de « supprimer ma ligne ».
 -- --------------------------------------------------------------------------
 select r.rolname,
        has_table_privilege(r.rolname,'public.users','delete')          as delete_attendu_false,
-       has_column_privilege(r.rolname,'public.users','nom','select')   as lit_le_nom,
+       has_column_privilege(r.rolname,'public.users','nom','select')   as lit_le_nom_anon_f_connecte_t,
        has_column_privilege(r.rolname,'public.users','email','select') as lit_l_email_attendu_false
   from (values ('anon'),('authenticated')) as r(rolname);
 

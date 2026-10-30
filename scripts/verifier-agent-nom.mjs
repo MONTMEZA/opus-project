@@ -211,10 +211,23 @@ verifier('le nom de l’agent entre dans l’export RGPD',
 /* ================================================================== */
 console.log('\nL’APPLICATION — qui écrit, et surtout QUI LIT');
 
-verifier('les deux colonnes voyagent avec la fiche',
-  /'agent_nom', 'agent_propositions',/.test(api));
+/* Depuis le lot S-d (30/10/2026), les deux colonnes n'arrivent plus par
+   le même chemin : le NOM voyage avec la fiche, pour tout le monde ; le
+   COMPTEUR, qui ne sert qu'à SA propre fiche, arrive par `ma_fiche_pro()`
+   et ne part plus vers les autres téléphones. */
+const listePro = (api.match(/const COLONNES_PRO_LISTE = \[([\s\S]*?)\]\.join/) || [])[1] || '';
+const listeSans = listePro.replace(/\/\*[\s\S]*?\*\//g, '');
+verifier('le NOM de l’agent voyage avec la fiche',
+  /'agent_nom'/.test(listeSans));
+verifier('…mais pas le COMPTEUR, qui ne sert qu’à sa propre fiche (lot S-d)',
+  listeSans.length > 0 && !/'agent_propositions'/.test(listeSans));
+verifier('…qui arrive par `ma_fiche_pro()` au démarrage, fusionné à SA fiche seulement',
+  /supabase\.rpc\('ma_fiche_pro'\)\.maybeSingle\(\)/.test(api)
+  && /pros\[uid\] = \{ \.\.\.pros\[uid\], \.\.\.champsPrivesDeMaFiche\(ficheRes\.data\) \}/.test(api)
+  && /agentPropositions: row\.agent_propositions \|\| 0/.test(
+    (api.match(/function champsPrivesDeMaFiche\(row\) \{[\s\S]*?\n\}/) || [''])[0]));
 
-verifier('…et arrivent dans l’objet que les écrans lisent',
+verifier('…et les deux arrivent dans l’objet que les écrans lisent',
   /agentNom: row\.agent_nom \|\| null/.test(api)
   && /agentPropositions: row\.agent_propositions \|\| 0/.test(api));
 

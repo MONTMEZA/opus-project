@@ -349,10 +349,15 @@ export default function ConfidentialiteScreen({
 
       {/* --- récupérer ses données --- */}
       <SectionLabel>Mes données</SectionLabel>
+      {/* « TOUT CE QU'OPUS CONSERVE » ÉTAIT FAUX (lot S-d) : l'export a une
+          liste fermée d'exclusions et une borne, que la politique de
+          confidentialité dit en entier (« Vos droits »). */}
       <Text style={s.aide}>
-        Vous pouvez récupérer tout ce qu’Opus conserve à votre sujet, dans un
-        fichier lisible et réutilisable ailleurs. C’est votre droit d’accès et
-        de portabilité (RGPD, articles 15 et 20).
+        Vous pouvez récupérer les données de votre compte et ce que vous avez
+        écrit ou reçu dans Opus, dans un fichier lisible et réutilisable
+        ailleurs. C’est votre droit d’accès et de portabilité (RGPD, articles 15
+        et 20). Ce qui n’y figure pas, et pourquoi, est dit dans la politique
+        de confidentialité, à « Vos droits ».
       </Text>
       <View style={{ paddingHorizontal: S.lg }}>
         <BtnOutline

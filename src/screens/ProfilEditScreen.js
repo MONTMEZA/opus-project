@@ -538,9 +538,12 @@ export default function ProfilEditScreen({
               placeholder="06 39 98 00 00"
               keyboardType="phone-pad"
             />
+            {/* L'urgence l'envoie aussi, et l'artisan peut le garder dans
+                son carnet (lot S-d, critique « droit »). */}
             <Text style={s.aide}>
-              Il ne s'affiche nulle part. Il n'est transmis qu'aux artisans à
-              qui vous demandez un devis ou un rappel.
+              Il ne s'affiche pas sur votre profil. Il est transmis aux artisans
+              à qui vous demandez un devis, un rappel ou une urgence, qui peuvent
+              le garder dans leur carnet.
             </Text>
           </>
         )}
@@ -554,10 +557,15 @@ export default function ProfilEditScreen({
             <View style={s.docBloc}>
               <StatutVerification statut={profil.verificationStatut} note={profil.verificationNote} />
 
+              {/* « SEUL LE BADGE VÉRIFIÉ L'EST » ÉTAIT FAUX (lot S-d, critique
+                  « droit ») : la fiche publique montre l'ÉTAT de chaque pièce
+                  — reçue, à jour avec sa date d'expiration, refusée. Jamais
+                  le document, jamais le motif d'un refus. */}
               <Text style={s.docIntro}>
                 Ces documents ne sont visibles que par vous et par l'équipe Opus.
-                Ils ne sont jamais affichés sur votre profil public : seul le
-                badge vérifié l'est.
+                Votre fiche publique en affiche l'état — reçu, à jour avec sa
+                date d'expiration, ou refusé —, jamais le document lui-même ni
+                le motif d'un refus.
               </Text>
 
               <Text style={s.docIntro}>{pieceExistence().aide}</Text>
@@ -691,11 +699,15 @@ export default function ProfilEditScreen({
                     kbis,
                     assurance,
                     rgeFichier,
-                    rge: {
+                    /* LA DÉCLARATION RGE NE PART QUE SI ELLE A CHANGÉ (lot
+                       S-d). Elle partait à chaque envoi : un Kbis envoyé
+                       seul réécrivait le n° RGE avec ce que l'écran avait
+                       en mémoire — vide, s'il n'avait pas été lu. */
+                    rge: rgeChange ? {
                       declare: rgeDeclare,
                       numero: rgeNumero.trim(),
                       expire: rgeExpire.trim(),
-                    },
+                    } : null,
                   });
                   setEnvoiDocs(false);
                 }}

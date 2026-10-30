@@ -207,7 +207,9 @@ export default function ProfilProScreen({
 
         <View style={s.stats}>
           <Stat value={pro.portfolio.length} label="Réalisations" />
-          <Stat value={pro.followers + (following ? 1 : 0)} label="Abonnés" />
+          {/* Le nombre lu en base me compte déjà si je suis : c'est
+              `toggleFollow` qui le fait bouger avec l'appui (lot S-d). */}
+          <Stat value={pro.followers} label="Abonnés" />
           <Stat value={avg.count ? decimal1(avg.global) : '—'} label="Note" />
         </View>
 

@@ -729,7 +729,7 @@ rollback;
 
 -- --------------------------------------------------------------------------
 \echo ''
-\echo '=== 13. Les droits de table : anon n a rien sur tarifs_pro ; sur sos_availability, il ne fait que lire ==='
+\echo '=== 13. Les droits de table : anon n a rien sur tarifs_pro, ni sur sos_availability depuis le lot S-d (30/10/2026 : plus aucune lecture sans compte) ==='
 -- --------------------------------------------------------------------------
 select has_table_privilege('anon', 'public.tarifs_pro', 'select')   as tp_anon_select_attendu_f,
        has_table_privilege('anon', 'public.tarifs_pro', 'insert')   as tp_anon_insert_attendu_f,
@@ -737,7 +737,7 @@ select has_table_privilege('anon', 'public.tarifs_pro', 'select')   as tp_anon_s
        has_table_privilege('anon', 'public.tarifs_pro', 'delete')   as tp_anon_delete_attendu_f,
        has_table_privilege('anon', 'public.tarifs_pro', 'truncate') as tp_anon_truncate_attendu_f,
        has_table_privilege('authenticated', 'public.tarifs_pro', 'truncate') as tp_auth_truncate_attendu_f;
-select has_table_privilege('anon', 'public.sos_availability', 'select')   as sos_anon_select_attendu_t,
+select has_table_privilege('anon', 'public.sos_availability', 'select')   as sos_anon_select_attendu_f,
        has_table_privilege('anon', 'public.sos_availability', 'insert')   as sos_anon_insert_attendu_f,
        has_table_privilege('anon', 'public.sos_availability', 'update')   as sos_anon_update_attendu_f,
        has_table_privilege('anon', 'public.sos_availability', 'delete')   as sos_anon_delete_attendu_f,
