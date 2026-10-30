@@ -701,6 +701,44 @@ const apresDroits = INSTRUCTIONS.slice(iFinDroits + 1)
   .filter((x) => (/^grant /.test(x) && !/^grant execute on function /.test(x)) || /^alter default privileges/.test(x));
 verifier('après le balayage `$droits$`, plus aucun droit de table n’est accordé (il échapperait au balayage)',
   iFinDroits > 0 && apresDroits.length === 0, apresDroits.join(' | '));
+/* LES FONCTIONS QUI TOURNENT AVEC LES DROITS DU PROPRIÉTAIRE (banc du
+   30/10, X3). Une fonction `security definer` ignore la RLS et les droits
+   de colonne : une NOUVELLE, qui rendrait la ligne `users` entière à tout
+   connecté, rouvrait d'un coup ce que tout le lot ferme — et seul l'essai
+   SQL, joué à la main, la voyait. Leur liste est FERMÉE ici, comme dans
+   l'essai 49 (27c) ; en ajouter une se DÉCIDE, avec sa raison. */
+const DEFINER_ATTENDUES = [
+  'a_deja_une_reponse', 'admin_demandes_pro', 'admin_etat_des_fiches', 'admin_exige_droit',
+  'admin_file_verifications', 'admin_metier_demandes', 'admin_refuser_pro', 'admin_resume',
+  'admin_retirer_entreprise', 'admin_signalements', 'admin_specialites', 'admin_traiter_demande_pro',
+  'admin_traiter_metier_demande', 'admin_traiter_signalement', 'admin_traiter_specialite',
+  'admin_valider_pieces', 'admin_verifier_pro', 'annuler_ma_demande_pro', 'anonymise_actes_admin',
+  'calcule_client_verifie', 'completer_ma_demande_pro', 'compter_appel_siret', 'compter_essai_tva',
+  'cree_fiche_utilisateur', 'devenir_pro', 'enregistrer_appel_ia', 'est_admin', 'est_masque',
+  'fiche_pro_indestructible', 'ma_fiche_pro', 'maj_chantier', 'maj_comments_count',
+  'maj_followers_count', 'maj_likes_count', 'maj_nb_reponses', 'maj_nb_reponses_demande',
+  'maj_notes_pro', 'maj_vues_count', 'marquer_lus', 'mes_demandes_recues',
+  'mes_donnees_sans_masquage', 'mon_compte', 'notifie_commentaire', 'notifie_demande',
+  'notifie_demande_pro', 'notifie_partenariat', 'notifie_reponse_annonce', 'peut_faire_un_devis',
+  'pose_le_lieu_du_post', 'preparer_suppression_compte', 'profil_public', 'rattacher_mon_siret',
+  'recalcule_apres_ligne_de_devis', 'recalcule_chantier', 'recalcule_devis', 'recalcule_notes_pro',
+  'remonter_publication', 'siren_reserve', 'tait_les_notifications_bloquees',
+  'tient_le_chantier_du_post', 'tient_le_lien_du_devis', 'tient_le_signalement',
+];
+const definerTrouvees = new Set();
+for (const m of sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+(?:"?public"?\s*\.\s*)?"?(\w+)"?\s*\(/gi)) {
+  const reste = sql.slice(m.index, m.index + 4000);
+  const fin = reste.search(/\bas\s+\$\w*\$/i);
+  if (/security\s+definer/i.test(fin < 0 ? reste : reste.slice(0, fin))) definerTrouvees.add(m[1].toLowerCase());
+}
+const definerEnTrop = [...definerTrouvees].filter((n) => !DEFINER_ATTENDUES.includes(n));
+const definerManquantes = DEFINER_ATTENDUES.filter((n) => !definerTrouvees.has(n));
+verifier(`les fonctions \`security definer\` sont EXACTEMENT les ${DEFINER_ATTENDUES.length} de la liste fermée`,
+  definerEnTrop.length === 0 && definerManquantes.length === 0,
+  `en trop : ${definerEnTrop.join(', ') || '—'} ; manquantes : ${definerManquantes.join(', ') || '—'}`);
+verifier('…et aucune ne le devient après coup (`alter function … security definer`, ou dans un corps)',
+  !/alter\s+function[^;]*security\s+definer/i.test(sql) && !/alter\s+routine[^;]*security\s+definer/i.test(sql));
+
 /* Et dans les corps (`execute 'grant …'`) : les mêmes interdits. */
 const sqlNormalise = normaliser(sql);
 const dynamiques = [
