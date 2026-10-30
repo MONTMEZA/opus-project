@@ -14704,7 +14704,8 @@ create index if not exists idx_base_postes_devis
 --
 --  Le propriétaire d'une colonne est celui d'un COUPLE (colonne, verbe) :
 --  `posts.modifie_le` est vidé à la création ici, et posé à la
---  modification par `tient_le_texte()`. `verifier-portes` tient la liste.
+--  modification par `tient_le_texte()`. `verifier-remontee` (partie 10)
+--  tient la liste des déclencheurs et la forme ENTIÈRE de chaque fonction.
 --
 --  Remise SILENCIEUSE, sauf pour le compte (OP023) : aucune version de
 --  l'application n'envoie ces colonnes (relevé de toutes ses écritures).
@@ -14736,8 +14737,8 @@ create index if not exists idx_base_postes_devis
 --  `trg_exige_un_compte_pro` (OP010) refuse avant elle toute fiche écrite
 --  par un client.
 --
---  CE QUI N'EST PAS ICI, et pourquoi (le contrôle refuse une table ni
---  posée ni exclue) :
+--  CE QUI N'EST PAS ICI, et pourquoi (`verifier-remontee` refuse une table
+--  qui a une date de création et n'est ni posée ni exclue ici) :
 --    - `devis`, `devis_lignes`, `base_postes`, `emetteur`,
 --      `emetteur_assurances`, `tarifs_pro`, `clients` : leur déclencheur
 --      pose déjà la date, pour tous les rôles ;

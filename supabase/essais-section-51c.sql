@@ -229,6 +229,28 @@ insert into public.posts (id, author_id, type, texte, created_at)
 select (select created_at = '2026-01-01'::timestamptz from public.posts where id = 'a51c0000-0000-4000-8000-0000000000f8') as date_de_l_editeur_gardee;
 rollback;
 
+-- B6 — LE CARNET DE CLIENTS, l'EXCEPTION à B5 (relecture du 30/10 : la
+-- règle de `tient_le_client()` n'était éprouvée nulle part). Sa date est
+-- posée par la base pour TOUS les rôles, éditeur SQL compris : le carnet ne
+-- se reprend aujourd'hui depuis aucun autre outil. Le jour où il le faudra
+-- (un import de clients), cette règle sera à revoir — et cet essai avec.
+\echo '--- B6. Le carnet : création datée 2099 par A → date du jour ; modification datée 2001 → date gardée, le nom change ; l éditeur SQL aussi remis à l horloge (attendu : t | t | t | t)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51c0000-0000-4000-8000-00000000000a';
+insert into public.clients (id, pro_id, type, nom, created_at)
+  values ('a51c0000-0000-4000-8000-0000000000c6', :A, 'particulier', 'Mme Test', '2099-01-01');
+update public.clients set created_at = '2001-01-01', nom = 'Mme Test bis'
+  where id = 'a51c0000-0000-4000-8000-0000000000c6';
+reset role;
+insert into public.clients (id, pro_id, type, nom, created_at)
+  values ('a51c0000-0000-4000-8000-0000000000c7', :A, 'particulier', 'Reprise', '2020-01-01');
+select (select abs(extract(epoch from now() - created_at)) < 60 from public.clients where id = 'a51c0000-0000-4000-8000-0000000000c6') as creation_du_jour,
+       (select created_at > '2001-01-02' from public.clients where id = 'a51c0000-0000-4000-8000-0000000000c6') as modification_gardee,
+       (select nom = 'Mme Test bis' from public.clients where id = 'a51c0000-0000-4000-8000-0000000000c6') as nom_change,
+       (select abs(extract(epoch from now() - created_at)) < 60 from public.clients where id = 'a51c0000-0000-4000-8000-0000000000c7') as editeur_aussi_a_l_horloge;
+rollback;
+
 \echo ''
 \echo '##### C. LES FILES DE L ADMINISTRATION — droits de colonne #####'
 

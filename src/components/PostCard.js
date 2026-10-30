@@ -141,7 +141,11 @@ const PostCard = React.memo(function PostCard({
           style={s.headLeft}
           onPress={() => onView(pro.id)}
           accessibilityRole="button"
-          accessibilityLabel={`Voir la fiche de ${pro.entreprise}`}
+          /* L'ÉTIQUETTE REMPLACE LE CONTENU pour VoiceOver : l'âge de la
+             publication et « Remise en avant », écrits dans ce bouton,
+             n'étaient jamais lus (relecture du 30/10). Ils entrent dans
+             l'étiquette. */
+          accessibilityLabel={`Voir la fiche de ${pro.entreprise}${post.time ? `, ${minusculeInitiale(post.time)}` : ''}${post.remonteLe ? ', remise en avant' : ''}`}
         >
           {/* `flex: 1, minWidth: 0` : sans ça, le nom et la ligne de
               métier poussent la rangée au lieu de se raccourcir, et le
@@ -468,6 +472,12 @@ const PostCard = React.memo(function PostCard({
     </View>
   );
 });
+
+/* « Il y a 2 h » dit au milieu d'une étiquette : « …, il y a 2 h ». */
+function minusculeInitiale(t) {
+  const x = String(t);
+  return x.charAt(0).toLowerCase() + x.slice(1);
+}
 
 export default PostCard;
 function ContactItem({ icon, label, onPress, last }) {

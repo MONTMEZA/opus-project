@@ -38,6 +38,7 @@ import { avgReviews } from '../data/demo';
 import { aiSummarizeReviews } from '../lib/ai';
 import { CLAVIER } from '../lib/clavier';
 import { decimal1 } from '../lib/formats';
+import { CONFIRMATION_RETRAIT_AVIS } from '../lib/avis';
 
 /* --- .crit-row : un critère + sa barre de progression --- */
 function CritereBar({ label, value }) {
@@ -131,6 +132,11 @@ export default function ProfilProScreen({
      propose de le RETIRER, et cache « Laisser un avis » — un second avis
      serait refusé par la base (une seule ligne par client et par artisan). */
   const monAvis = reviews.find((r) => r.mien) || null;
+  /* LE FORMULAIRE SE FERME QUAND MON AVIS EST LÀ. Ouvert pendant la seconde
+     où les avis arrivent, il restait ouvert sous « Retirer mon avis », sans
+     bouton pour le fermer, et le publier rendait « déjà un avis » (relecture
+     du 30/10). Calculé, pas posé par un effet : aucun rendu de plus. */
+  const formulaireOuvert = showForm && !monAvis;
   const avg = avgReviews(pro);
   const kbisDetail = detailDocument(pro, 'kbis');
   const assuranceDetail = detailDocument(pro, 'assurance');
@@ -352,10 +358,9 @@ export default function ProfilProScreen({
 
       {confirmeRetrait && monAvis && (
         <View style={s.confirmeRetrait}>
-          <Text style={s.confirmeRetraitTexte}>
-            Retirer votre avis ? Il disparaît de la fiche et la note se recalcule. Un avis ne se
-            modifie pas une fois publié : vous pourrez ensuite en écrire un autre.
-          </Text>
+          {/* La phrase vit dans `avis.js`, comparée mot pour mot à la règle
+              des CGU par `verifier-legal`. */}
+          <Text style={s.confirmeRetraitTexte}>{CONFIRMATION_RETRAIT_AVIS}</Text>
           <View style={s.confirmeRetraitBoutons}>
             <BtnMini
               label={retraitEnCours ? 'Retrait…' : 'Retirer'}
@@ -365,7 +370,9 @@ export default function ProfilProScreen({
                 setRetraitEnCours(true);
                 const parti = await onRetirerAvis(pro.id, monAvis);
                 setRetraitEnCours(false);
-                if (parti) setConfirmeRetrait(false);
+                /* Mon avis parti, le formulaire ne se rouvre pas tout seul :
+                   on l'ouvre en touchant « Laisser un avis ». */
+                if (parti) { setConfirmeRetrait(false); setShowForm(false); }
               }}
             />
             <BtnMini outline label="Annuler" disabled={retraitEnCours} onPress={() => setConfirmeRetrait(false)} />
@@ -405,7 +412,7 @@ export default function ProfilProScreen({
         </View>
       )}
 
-      {showForm && (
+      {formulaireOuvert && (
         <View style={s.form}>
           <SliderRow label="Respect des délais" value={rDelais} onChange={setRDelais} />
           <SliderRow label="Qualité du travail" value={rQualite} onChange={setRQualite} />
@@ -471,7 +478,7 @@ export default function ProfilProScreen({
     <GlissementLateral
       style={{ flex: 1 }}
       fond={C.bg}
-      actif={!showForm}
+      actif={!formulaireOuvert}
       onVersDroite={onRetourFilVideo}
       apercuGauche={<ApercuFilVideo />}
     >

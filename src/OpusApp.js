@@ -98,7 +98,8 @@ import {
 import { etatAuDepartDeLaLecture, issueDeLaLecture } from './lib/postes';
 import { dateDeDemandeDemo } from './data/devis-demo';
 import { maFiche } from './lib/ma-fiche';
-import { phraseDuRefus } from './lib/remontee';
+import { phraseDuRefus, bandeauApresRemise } from './lib/remontee';
+import { apresPage, apresEchec } from './lib/mes-publications';
 import {
   FILTRE_VIDE, filtreActif, resumeFiltre, argumentsDuFil,
 } from './lib/filtre-fil';
@@ -182,7 +183,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      Personne ne l'avait vu — c'est le linter du lot 8 qui l'a trouvé. */
   const [amorceMessage, setAmorceMessage] = useState('');
   const [feedMode, setFeedMode] = useState('classic');
-  // Vidéo sur laquelle ouvrir le plein écran, quand on y arrive depuis le fil.
+  /* La PUBLICATION sur laquelle ouvrir le plein écran, quand on y arrive en
+     touchant une vidéo — l'objet, pas son identifiant : absente de la page du
+     fil, elle doit pouvoir être montrée quand même (`fil-video.js`). */
   const [videoCible, setVideoCible] = useState(null);
   const [feedTab, setFeedTab] = useState('pourvous');
 
@@ -282,6 +285,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      sur la date à partir de laquelle ce sera possible. */
   const [refusRemontee, setRefusRemontee] = useState({});
   const remonteeEnCours = useRef(null);
+  /* La publication dont la remise en avant est EN COURS, pour l'écran : son
+     bouton dit « Remise en avant… » et les autres s'éteignent, jusqu'à la
+     fin du geste (rechargement du fil et bandeau compris). La référence
+     ci-dessus garde la porte ; cet état la MONTRE. */
+  const [remiseEnCours, setRemiseEnCours] = useState(null);
   const [annonceCible, setAnnonceCible] = useState(null);
   const [demandeCible, setDemandeCible] = useState(null);
   const [openContactId, setOpenContactId] = useState(null);
@@ -1031,10 +1039,21 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * Dans le fil, une vidéo filmée debout n'est vue qu'en partie et reste
    * muette : c'est un aperçu. Le plein écran, lui, la montre entière, avec le
    * son. Renvoyer au début de la liste ferait perdre celle qu'on regardait.
+   *
+   * LA SEULE PORTE VERS LE PLEIN ÉCRAN PAR UN APPUI (relecture du lot S-c,
+   * 30/10) : le fil, la page d'une publication, « Mes publications » et
+   * l'étape d'un chantier passent tous par ici. La page d'une publication
+   * n'y arrivait pas — l'appui posait le mode vidéo sans quitter la page, et
+   * rien ne bougeait. Et c'est l'OBJET qui part, pas son identifiant : la
+   * vidéo touchée peut ne pas être dans la page du fil chargée.
    */
   const ouvrirVideoEnGrand = (post) => {
-    setVideoCible(post.id);
+    if (!post) return;
+    setVideoCible(post);
     setFeedMode('video');
+    setOpenCommentsId(null);
+    setCommentaireCible(null);
+    setScreen('home');
   };
 
 
@@ -1043,7 +1062,15 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      Le fil, la page d'une publication, « Mes publications » : trois copies
      de la même publication, et chaque geste (aimer, commenter, corriger,
      remettre en avant) doit les toucher TOUTES. Une seule fonction, sinon
-     la quatrième copie de demain sera oubliée. */
+     la copie de demain sera oubliée.
+
+     LA QUATRIÈME COPIE EST « MES CONSEILS », et elle n'est PAS ici : un
+     conseil de la fiche ne porte que ce qu'elle affiche (identifiant,
+     format, texte, image, âge), sans commentaires ni « j'aime » — lui
+     appliquer un changement du fil le casserait. Le seul geste qui la
+     change est la correction du texte, et c'est `majMesConseils`, appelée
+     par `modifierPublication` (relecture du 30/10 : l'ancien texte restait
+     sous « Mes conseils » jusqu'au redémarrage). */
   const majPost = (id, changement) => {
     const meme = (p) => p && String(p.id) === String(id);
     setPosts((ps) => ps.map((p) => (meme(p) ? changement(p) : p)));
@@ -1051,6 +1078,21 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     setMesPubs((m) => (m.liste.some(meme)
       ? { ...m, liste: m.liste.map((p) => (meme(p) ? changement(p) : p)) }
       : m));
+  };
+  const majMesConseils = (id, champs) => {
+    if (!myProId) return;
+    const meme = (c) => c && String(c.id) === String(id);
+    setPros((ps) => {
+      const fiche = ps[myProId];
+      if (!fiche || !(fiche.conseils || []).some(meme)) return ps;
+      return {
+        ...ps,
+        [myProId]: {
+          ...fiche,
+          conseils: fiche.conseils.map((c) => (meme(c) ? { ...c, ...champs } : c)),
+        },
+      };
+    });
   };
   /* La copie la plus FRAÎCHE d'une publication : la page ouverte d'abord,
      puis le fil, puis « Mes publications ». */
@@ -1388,7 +1430,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       };
     });
 
-    api.addComment(postId, texte, parentId)
+    /* `nouveau` : ce que l'écran affiche. La démonstration le retient
+       (« Mes publications » et la page d'une publication relisent la
+       démonstration) ; la vraie base l'ignore. */
+    api.addComment(postId, texte, parentId, nouveau)
       .catch(() => showErreur("Le commentaire n'a pas pu être envoyé."));
   };
 
@@ -2104,9 +2149,12 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
 
   /* RETIRER MON AVIS (lot S-c) — un avis ne se modifie plus ; on le retire,
      puis on en écrit un autre (décision du propriétaire du 29/10). La note
-     suit tout de suite à l'écran (`avecAvisRetire`), puis la fiche est
-     RELUE : c'est la base qui calcule la note, et une moyenne recalculée à
-     l'écran sur une liste incomplète pourrait s'en écarter. */
+     suit tout de suite à l'écran (`avecAvisRetire`), puis les AVIS sont
+     relus (`chargerProfilPro`) : la moyenne affichée se recalcule sur eux.
+     La note RANGÉE par la base (`note_*`, `avis_count`) n'est pas relue —
+     ce commentaire disait le contraire (relecture du 30/10). Avec un avis
+     masqué (son auteur est bloqué), la moyenne affichée peut s'écarter de
+     la note de la base d'un centième au plus, sous l'arrondi au dixième. */
   const retirerMonAvis = async (proId, avis) => {
     try {
       await api.retirerAvis(avis.id);
@@ -2205,17 +2253,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         avant: suite ? curseurMesPubs.current : null,
       });
       curseurMesPubs.current = curseur;
-      setMesPubs((m) => {
-        const deja = suite ? m.liste : [];
-        const vus = new Set(deja.map((p) => String(p.id)));
-        return {
-          liste: [...deja, ...page.filter((p) => !vus.has(String(p.id)))],
-          fin,
-          etat: 'pret',
-        };
-      });
+      setMesPubs((m) => apresPage(m, { page, fin, suite }));
     } catch (e) {
-      setMesPubs((m) => ({ ...m, etat: 'echec', echecDe: suite ? 'suite' : 'debut' }));
+      /* La liste déjà lue reste, et l'échec se DIT (`mes-publications.js`,
+         que `verifier-remontee` fait tourner). */
+      setMesPubs((m) => apresEchec(m, suite));
     }
     chargementMesPubs.current = false;
   };
@@ -2247,11 +2289,13 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    */
   const modifierPublication = async (post, texte) => {
     majPost(post.id, (p) => ({ ...p, texte, modifie: true }));
+    majMesConseils(post.id, { texte });
     try {
       await api.modifierPost(post.id, texte);
       showBanner('Publication corrigée.');
     } catch (e) {
       majPost(post.id, (p) => ({ ...p, texte: post.texte, modifie: post.modifie }));
+      majMesConseils(post.id, { texte: post.texte });
       showErreur(messageClair(e, 'Correction impossible'));
     }
   };
@@ -2263,6 +2307,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     const meme = (p) => String(p.id) === String(post.id);
     const avantFil = posts;
     const avantMes = mesPubs.liste;
+    /* « Mes conseils » aussi revient si la base refuse — elle restait vidée
+       (relecture du 30/10). Sa liste d'avant, prise ICI : relire `pros` dans
+       le `catch` lirait l'état du rendu qui a lancé la suppression, pas
+       forcément le dernier. */
+    const avantConseils = myProId && pros[myProId] ? pros[myProId].conseils : undefined;
     setPosts((ps) => ps.filter((p) => !meme(p)));
     setMesPubs((m) => ({ ...m, liste: m.liste.filter((p) => !meme(p)) }));
     setPublicationOuverte((p) => (p && meme(p) ? null : p));
@@ -2278,6 +2327,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     } catch (e) {
       setPosts(avantFil);
       setMesPubs((m) => ({ ...m, liste: avantMes }));
+      if (myProId && avantConseils) {
+        setPros((ps) => (ps[myProId]
+          ? { ...ps, [myProId]: { ...ps[myProId], conseils: avantConseils } }
+          : ps));
+      }
       showErreur(messageClair(e, 'Suppression impossible'));
     }
   };
@@ -2296,46 +2350,50 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      place parmi les plus récentes, mais un fil filtré (abonnements, vidéos,
      métier, secteur, note) peut ne pas la montrer — et « en tête » serait
      faux dès que quelqu'un publie. */
-  const republierPublication = async (post) => {
-    if (remonteeEnCours.current) return;
-    remonteeEnCours.current = post.id;
+  const remettreEnAvant = async (post) => {
     let instant = null;
     try {
       instant = await api.remonterPublication(post.id);
     } catch (e) {
-      remonteeEnCours.current = null;
       const phrase = phraseDuRefus(e) || messageClair(e, 'Remise en avant impossible');
       setRefusRemontee((r) => ({ ...r, [post.id]: phrase }));
       showErreur(phrase);
       return;
     }
-    remonteeEnCours.current = null;
     const quand = typeof instant === 'string' ? instant : instantPresent();
     setRefusRemontee((r) => { const c = { ...r }; delete c[post.id]; return c; });
     majPost(post.id, (p) => ({ ...p, remonteLe: quand }));
 
+    /* `null` si le rechargement a échoué : la remise en avant a RÉUSSI,
+       c'est le fil qui n'a pas été relu. Les phrases, et le choix entre
+       elles, sont dans `remontee.js` (`bandeauApresRemise`), que
+       `verifier-remontee` fait tourner. */
     const page = await changerCeQuOnVoit({ silencieux: true });
-    if (page === null) {
-      /* La remise en avant a RÉUSSI : c'est le rechargement du fil qui n'a
-         pas eu lieu. Un bandeau de succès, donc, qui dit le geste à faire —
-         pas une erreur qui ferait croire à un échec. */
-      showBanner('Publication remise en avant. Tirez le fil vers le bas pour la voir à sa nouvelle place.');
-    } else if (page.some((p) => String(p.id) === String(post.id))) {
-      showBanner('Publication remise en avant : elle reprend place parmi les plus récentes du fil, puis redescendra à mesure que d’autres publient.');
-    } else {
-      showBanner('Publication remise en avant : elle reprend place parmi les plus récentes du fil. Votre fil, tel qu’il est filtré en ce moment, ne la montre pas.');
+    showBanner(bandeauApresRemise(page, post.id, feedMode));
+  };
+  const republierPublication = async (post) => {
+    if (remonteeEnCours.current) return;
+    remonteeEnCours.current = post.id;
+    setRemiseEnCours(post.id);
+    /* Le verrou tient jusqu'à la FIN du geste — il était relâché dès la
+       réponse de la base, avant le rechargement du fil et le bandeau
+       (relecture du 30/10). */
+    try {
+      await remettreEnAvant(post);
+    } finally {
+      remonteeEnCours.current = null;
+      setRemiseEnCours(null);
     }
   };
 
   /* Ouvrir une de mes publications SUR SA PAGE, comme la cloche — et
      revenir à « Mes publications » par la flèche. Une vidéo garde le
-     comportement d'avant : le fil vidéo en plein écran, avec le son. */
+     comportement d'avant : le fil vidéo en plein écran, avec le son — et
+     s'ouvre bien sur ELLE, même plus ancienne que la page chargée du fil
+     (`fil-video.js`). */
   const ouvrirMaPublication = (p) => {
     if (FORMATS_VIDEO.has(p.format)) {
-      setFeedMode('video');
-      setVideoCible(p.id);
-      setOpenCommentsId(null);
-      setScreen('home');
+      ouvrirVideoEnGrand(p);
       return;
     }
     setPublicationOuverte(p);
@@ -3554,9 +3612,12 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * « Fil » garde tout : une vidéo y apparaît comme une carte, avec sa
    * pastille de lecture.
    *
-   * FORMATS_VIDEO est la même liste que celle qui décide vers quel fil
-   * renvoyer après une publication. Deux listes séparées finiraient par
-   * diverger : c'est exactement ce qui excluait les montages d'ici.
+   * Ce tri n'est PAS ici : entré par la pastille, la base l'a déjà fait
+   * (`p_videos`) ; entré en touchant une vidéo, la page n'est pas rechargée,
+   * et c'est `HomeScreen` qui retire photos et publicités par
+   * `filVideo()` (`src/lib/fil-video.js`). Ce commentaire disait « pas les
+   * publicités » au-dessus d'une liste qui les gardait (relecture du lot
+   * S-c, 30/10).
    */
   const feedFiltered = visiblePosts;
 
@@ -4552,6 +4613,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                fil ferait perdre la liste qu'on était en train de lire. */
             if (screen === 'publication') {
               setPublicationOuverte(null);
+              /* Le panneau de commentaires de la page est celui du FIL
+                 (`openCommentsId`) : laissé ouvert, il réapparaissait dans
+                 le fil au retour sur l'Accueil (relecture du 30/10). */
+              setOpenCommentsId(null);
+              setCommentaireCible(null);
               setScreen(originePublication === 'mesPublications' ? 'mesPublications' : 'notifications');
             }
             else if (screen === 'messages') setActiveConvId(null);
@@ -4916,6 +4982,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             fin={mesPubs.fin}
             total={nbMesPubs}
             refus={refusRemontee}
+            enRemise={remiseEnCours}
             onPlus={() => chargerMesPublications({ suite: true })}
             onRecharger={() => chargerMesPublications()}
             onSupprimer={supprimerPublication}
@@ -5181,9 +5248,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                ne fait rien serait pire que pas d'appui du tout. */
             onOuvrirPublication={(p) => {
               if (!FORMATS_VIDEO.has(p.format)) return;
-              setFeedMode('video');
-              setVideoCible(p.id);
-              setScreen('home');
+              ouvrirVideoEnGrand(p);
             }}
           />
         )}

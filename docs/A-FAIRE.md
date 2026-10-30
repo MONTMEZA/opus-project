@@ -2554,7 +2554,11 @@ Aucun module natif : rien à reconstruire.
   FORME du 27/10 : `followers_count` est PLUS HAUT que le vrai nombre sur 5
   fiches, les 5 du `seed.sql` (dont 3 « vérifiées » sans pièce). Aucun
   `likes_count` faux. Rien ne les recalcule : c'est le lot S-c (les
-  compteurs), avec un nouveau relevé d'abord.
+  compteurs), avec un nouveau relevé d'abord. **Le lot S-c ne les a PAS
+  recalculés**, et c'est votre décision du 29/10 : ce sont les données de
+  démonstration de la vraie base, « on n'y touche pas ». Depuis S-c, plus
+  personne ne peut les écrire depuis un téléphone ; ils seront remis à
+  leur vraie valeur avec ces données, avant l'ouverture.
 - [ ] **`notifie_demande` est créée deux fois dans `schema.sql`** (exception
   connue, que `verifier-demo` lit) ; « annonces lecture pro », « annonce
   reponses lecture pro », « lecture reponses » et « lecture demandes »
@@ -2641,6 +2645,58 @@ fonctionne correctement » (build de développement) :
   sont désormais tenues AUSSI par les contrôles ordinaires, mais le parcours
   complet ne se rejoue qu'à la main.
 
+### Après le lot S-c — ce qui reste (30/10/2026)
+
+Le détail est dans CLAUDE.md, « Les compteurs, les dates et la remise en
+avant — lot S-c ». **La migration est sur la vraie base depuis le 30/10 à
+14 h 34** (heure de Paris), avec votre accord ; les 15 fonctions relevées
+après sont identiques, au caractère près, à la simulation, et l'essai par le
+chemin de l'application a rendu 43 ✔ (et un ✘ qui venait de l'essai
+lui-même, refait juste) avec trois comptes jetables à Brest, supprimés
+ensuite (base revenue à 14 comptes / 8 fiches /
+21 publications / 4 avis, aucune remise en avant).
+
+**L'avertissement du commit `728c60e` — « ne pas mettre cette version sur le
+téléphone avant la migration » — ne vaut plus** : `git pull`, puis
+`npx expo start -c`. Aucun module natif : rien à reconstruire.
+
+**Reportés, et à ne pas oublier** :
+
+- [ ] **Un compte supprimé par Supabase → Authentication → Users** (ou par
+  `deleteUser` sans `preparer_suppression_compte()`) laisse ses avis et ses
+  commentaires sans le drapeau `auteur_supprime` : l'avis s'affiche sous
+  « Client », avec sa date, au lieu de « Compte supprimé ». Le chemin de
+  l'application, lui, pose le drapeau. Antérieur au lot ; la réparation est
+  un déclencheur sur `reviews` et `comments` qui pose le drapeau quand
+  l'auteur passe à vide. Le compte anonyme du 14/09 n'a ni avis ni
+  commentaire : le supprimer par ce chemin ne fait rien de faux.
+- [ ] **L'historique des remises en avant (`remontees`) est gardé tant que
+  le compte existe** — c'est ce que disent les textes. La règle n'en lit
+  que les sept derniers jours ; une purge au-delà est possible, mais elle
+  changerait les textes : une décision à vous.
+- [ ] **La base ne connaît pas la version COURANTE des conditions.** Elle
+  ne garde plus qu'une version qui a la forme d'une date plausible (une
+  version inventée est rangée vide, mesuré sur la vraie base), mais un
+  client modifié peut toujours écrire une date qu'il n'a pas lue. Et
+  **faire ré-accepter les conditions** reste à construire : `VERSION` est
+  passée au `2026-10-30`.
+- [ ] **Les données de démonstration de la vraie base** (5 fiches du
+  `seed.sql`, dont 3 « vérifiées » sans pièce, leurs abonnés comptés trop
+  haut, 2 publicités) : votre décision du 29/10, « on n'y touche pas » ;
+  les textes sont écrits pour ne pas être démentis par elles. **À régler
+  avant l'ouverture.**
+- [ ] **Pas de compteur « il vous reste N remises »** : c'est un choix, la
+  base répond au moment de l'appui, avec la date. Si les artisans le
+  demandent, il faudra une fonction qui lise l'historique complet.
+
+**À essayer sur votre iPhone**, dans le build de développement, après
+`git pull` et `npx expo start -c` : l'onglet « Tout » du fil ; la loupe →
+« Comment le fil est ordonné » ; toucher une vidéo du fil (le plein écran ne
+doit montrer que des vidéos) ; « Mes publications » depuis votre profil.
+**Attention : « Remettre en avant » sur votre compte principal fait une
+VRAIE remise en avant**, visible de tous, et compte dans vos trois de la
+semaine — à faire sur une publication que vous voulez vraiment remonter.
+
 ### La démonstration et la publicité — décidé le 26/10/2026
 
 Les vidéos et les captures promotionnelles sont faites (en mode
@@ -2699,12 +2755,17 @@ tournage »). Ce qui reste, et pourquoi ce n'est pas fait :
   une contrainte sur `metier_key`, et dans le `with check` les conditions
   d'`artisans_urgence` (sans la distance), avec une phrase dans
   `erreurs.js`.
-- [ ] **« Client vérifié » n'est expliqué nulle part** dans les textes
-  légaux, alors que le code de la consommation (L. 111-7-2) demande de dire
-  comment les avis sont contrôlés. À faire relire par un juriste avant
-  l'ouverture. Et un avis écrit AVANT l'acceptation de la demande ne devient
-  jamais « client vérifié » (le déclencheur ne joue qu'à l'écriture de
-  l'avis) : une décision qui touche la base.
+- [ ] **« Client vérifié »** : depuis le lot S-c (30/10), les textes
+  légaux disent ce que la mention atteste, et ce qu'elle n'atteste pas
+  (section « Les avis », comme le demande le code de la consommation,
+  L. 111-7-2). **À faire relire par un juriste avant l'ouverture.** Reste
+  un défaut de la base : un avis écrit AVANT l'acceptation de la demande
+  ne devient jamais « client vérifié » (le déclencheur ne joue qu'à
+  l'écriture de l'avis). Depuis S-c, un avis ne se modifie plus : le seul
+  chemin est « Retirer mon avis » puis en écrire un autre. La vraie
+  réparation passe par la base — recalculer la mention quand une demande
+  passe à « accepté », dans une fonction `security definer` — : un petit
+  lot, à décider.
 - [ ] **Une demande publiée ne prévient personne** — aucun déclencheur sur
   `demandes`. L'encart le dit désormais honnêtement ; prévenir les pros du
   métier serait une décision produit.

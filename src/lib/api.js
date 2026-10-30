@@ -18,7 +18,9 @@ import { correspond } from './filtre-fil';
 import { relativeTime } from './formats';
 import { decouperPage, finDemo, trierDemo } from './page-fil';
 import { rowToPost } from './publication';
-import { decisionRemontee } from './remontee';
+import { appliquerRemiseDemo } from './remontee';
+import { issueDuRetrait } from './avis';
+import { memoireCommentaires, commentairesEnSeance, retenirCommentaire } from './commentaires-demo';
 import { photoActeur } from './notifications';
 
 /* En HAUT, jamais en `await import()` : la règle du 01/10 — Metro découpe
@@ -627,9 +629,16 @@ function chantiersDemoDe(proId) {
     .map((c) => ({ ...c }));
 }
 
+/* Les conseils de la démonstration se lisent dans les publications TELLES
+   QU'ELLES SONT (`postsDemo`), pas dans le fichier : un conseil supprimé en
+   séance revenait dans « Mes conseils » au rechargement, et un conseil
+   publié en séance en disparaissait (relecture du lot S-c, 30/10). Le même
+   ordre que la vraie base : du plus récent au plus ancien PAR DATE DE
+   PUBLICATION — une remise en avant ne change pas l'ordre d'une fiche. */
 function conseilsDemoDe(proId) {
-  return initialPosts
-    .filter((p) => p.type !== 'ad' && p.conseil && p.proId === proId)
+  return postsDemo()
+    .filter((p) => p.type !== 'ad' && p.conseil && String(p.proId) === String(proId))
+    .sort((a, b) => String(b.publieLe || '').localeCompare(String(a.publieLe || '')))
     .map((p) => ({
       id: p.id, format: p.format || 'photo', texte: p.texte,
       media: p.media || null, time: p.time,
@@ -1127,6 +1136,14 @@ const publicationsDemo = {
   historique: REMONTEES_DEMO.map((r) => ({ ...r })),
 };
 
+/* LES COMMENTAIRES DE LA DÉMONSTRATION VIVENT EN MÉMOIRE AUSSI (relecture
+   du lot S-c, 30/10). `addComment` valait `noop` : un commentaire écrit
+   dans le fil était absent de « Mes publications » et de la page qu'on
+   ouvre de là, qui relisent la démonstration — le fil disait 4, la page 3.
+   L'arbre se fait dans `commentaires-demo.js`, que `verifier-demo` fait
+   tourner. */
+const commentairesDemo = memoireCommentaires();
+
 /* Le compte de démonstration est la PREMIÈRE fiche (`maFiche`, ma-fiche.js). */
 function maFicheDemo() {
   const premiere = Object.keys(demoPros)[0];
@@ -1144,7 +1161,7 @@ function postsDemo() {
       let q = p;
       if (d.textes.has(cle)) q = { ...q, texte: d.textes.get(cle), modifie: true };
       if (d.remontees.has(cle)) q = { ...q, remonteLe: d.remontees.get(cle) };
-      return q;
+      return { ...q, comments: commentairesEnSeance(q, commentairesDemo) };
     });
   return trierDemo(toutes);
 }
@@ -1476,7 +1493,17 @@ export const setFollow = !hasSupabase ? noop : async (proId, following) => {
   throw error;
 };
 
-export const addComment = !hasSupabase ? noop : async (postId, texte, parentId = null) => {
+/* `local` : le commentaire tel que l'écran l'affiche. La démonstration le
+   retient (`commentairesDemo`) ; la vraie base l'ignore — c'est elle qui
+   écrit l'auteur et la date. */
+function addCommentDemo(postId, texte, parentId = null, local = null) {
+  retenirCommentaire(commentairesDemo, {
+    postId, texte, parentId, local,
+  });
+  return Promise.resolve(null);
+}
+
+export const addComment = !hasSupabase ? addCommentDemo : async (postId, texte, parentId = null) => {
   const { data } = await supabase.from('comments')
     .insert({ post_id: postId, author_id: currentUserId, texte, parent_id: parentId })
     .select().single();
@@ -2411,21 +2438,20 @@ export const supprimerPost = !hasSupabase
  * une erreur PostgREST OP022, avec `details` et `hint` : `phraseDuRefus()`
  * (`remontee.js`) la met en mots, avec sa date.
  */
+/* La décision ET l'écriture de la démonstration sont dans `remontee.js`
+   (`appliquerRemiseDemo`), que `verifier-remontee` fait tourner : retirer
+   l'écriture de l'historique y rendait la règle des trois par semaine
+   inatteignable sans fichier `.env`, au vert (relecture du 30/10). */
 function remonterPublicationDemo(postId) {
   const publication = postsDemo().find((p) => String(p.id) === String(postId)) || null;
-  const d = decisionRemontee({
-    publication,
-    moi: maFicheDemo(),
-    historique: publicationsDemo.historique,
-    maintenant: Date.now(),
+  const d = appliquerRemiseDemo(publicationsDemo, {
+    publication, moi: maFicheDemo(), maintenant: Date.now(),
   });
   if (!d.ok) {
     const e = new Error(d.message);
     Object.assign(e, { code: d.code, details: d.details, hint: d.hint });
     return Promise.reject(e);
   }
-  publicationsDemo.remontees.set(String(postId), d.instant);
-  publicationsDemo.historique.push({ postId, remonteeLe: d.instant });
   return Promise.resolve(d.instant);
 }
 
@@ -3721,17 +3747,12 @@ export const createReview = !hasSupabase ? noop : async ({ proId, delais, qualit
  * n'est pas à moi répondrait « 0 ligne » SANS erreur — et l'écran dirait
  * « avis retiré » pour rien.
  */
+/* L'issue se décide dans `avis.js` (`issueDuRetrait`), que `verifier-legal`
+   fait tourner : jamais un succès sur zéro ligne. */
 export const retirerAvis = !hasSupabase
   ? async () => true
-  : async (id) => {
-    const { data, error } = await supabase.from('reviews')
-      .delete().eq('id', id).eq('author_id', currentUserId).select('id');
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      throw new Error('Cet avis n’est plus là : il a sans doute été retiré depuis un autre appareil. Rechargez la fiche.');
-    }
-    return true;
-  };
+  : async (id) => issueDuRetrait(await supabase.from('reviews')
+    .delete().eq('id', id).eq('author_id', currentUserId).select('id'));
 
 export const createQuoteRequest = !hasSupabase ? noop : async ({
   proId, metier, description, ville, budget, nom, telephone,
@@ -4656,11 +4677,13 @@ export const proposerSpecialite = !hasSupabase ? noop : async (texte, metier) =>
   }
 };
 
-export const modifierCommentaire = !hasSupabase ? noop : async (id, texte) => {
-  const { error } = await supabase.from('comments')
-    .update({ texte }).eq('id', id).eq('author_id', currentUserId);
-  if (error) throw error;
-};
+export const modifierCommentaire = !hasSupabase
+  ? async (id, texte) => { commentairesDemo.textes.set(String(id), texte); }
+  : async (id, texte) => {
+    const { error } = await supabase.from('comments')
+      .update({ texte }).eq('id', id).eq('author_id', currentUserId);
+    if (error) throw error;
+  };
 
 export const modifierPost = !hasSupabase
   ? async (id, texte) => { publicationsDemo.textes.set(String(id), texte); }
@@ -4670,10 +4693,12 @@ export const modifierPost = !hasSupabase
     if (error) throw error;
   };
 
-export const supprimerCommentaire = !hasSupabase ? noop : async (id) => {
-  const { error } = await supabase.from('comments').delete().eq('id', id);
-  if (error) throw error;
-};
+export const supprimerCommentaire = !hasSupabase
+  ? async (id) => { commentairesDemo.retires.add(String(id)); }
+  : async (id) => {
+    const { error } = await supabase.from('comments').delete().eq('id', id);
+    if (error) throw error;
+  };
 
 /* ------------------------------------------------------------------ */
 /*  La messagerie : à la demande, et en temps réel                     */

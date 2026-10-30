@@ -70,6 +70,21 @@ export const NOM_ENTREPRISE_MAX = 120;
  * écrite : approximative d'un jour la nuit, jamais inventée.
  */
 export function dateFrancaise(valeur) {
+  const jour = jourLocal(valeur);
+  if (!jour) return null;
+  const [a, m, j] = jour.split('-');
+  return `${j}/${m}/${a}`;
+}
+
+/**
+ * LE JOUR, « AAAA-MM-JJ », d'une date ou d'un horodatage — la MÊME règle que
+ * `dateFrancaise` (qui s'en sert), écrite à la façon d'une colonne `date`.
+ * Un horodatage se lit à l'heure du téléphone : le récit d'un chantier
+ * envoyait la date UTC d'une étape, donc la VEILLE pour une étape publiée
+ * entre minuit et 1 h ou 2 h en France (relecture du lot S-c, 30/10 ; la
+ * leçon du lot T, une fois de plus).
+ */
+export function jourLocal(valeur) {
   const s = String(valeur == null ? '' : valeur);
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
@@ -79,10 +94,10 @@ export function dateFrancaise(valeur) {
     if (Number.isFinite(t)) {
       const d = new Date(t);
       const deux = (n) => String(n).padStart(2, '0');
-      return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()}`;
+      return `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
     }
   }
-  return `${m[3]}/${m[2]}/${m[1]}`;
+  return `${m[1]}-${m[2]}-${m[3]}`;
 }
 
 /**

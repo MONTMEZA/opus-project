@@ -675,8 +675,10 @@ export const CE_QUE_LA_SUPPRESSION_GARDE = 'Ses photos et ses vidéos restent en
  * Servi à la CGU (« L'ordre du fil ») ET déplié sur place par la ligne
  * « Comment le fil est ordonné », dans la feuille de la loupe et sur la ligne
  * « Filtre : … » du fil — la page des résultats quand une recherche est
- * posée (critique « textes » du cahier, constat 7). `verifier-legal` exige
- * que les deux montrent CETTE constante.
+ * posée (critique « textes » du cahier, constat 7). `verifier-remontee`
+ * exige que les deux montrent CETTE constante, et la compare MOT POUR MOT à
+ * une forme écrite dans le contrôle : la changer est une décision (qui touche
+ * le contrôle, ce fichier et `VERSION`), pas une retouche.
  *
  * Ce qu'il dit est vrai de `fil_filtre()` (section 33.1 de `schema.sql`) :
  * l'ordre `coalesce(remonte_le, created_at) desc` ; les publicités écartées
@@ -694,7 +696,8 @@ export const CE_QUE_LA_SUPPRESSION_GARDE = 'Ses photos et ses vidéos restent en
  */
 export const ORDRE_DU_FIL = 'Le fil montre les publications des professionnels de la plus '
   + 'récente à la plus ancienne. Il n’est pas personnalisé : l’onglet « Tout » montre le même '
-  + 'fil à tout le monde, à l’exception des personnes que vous avez bloquées, et rien n’y est '
+  + 'fil à tout le monde, sauf les publications des personnes que vous avez bloquées ou qui '
+  + 'vous ont bloqué, et celles que vous avez masquées ; rien n’y est '
   + 'classé selon les « j’aime », les vues, le nombre d’abonnés ou la note. L’ordre par date ne '
   + 'favorise ni les comptes les plus suivis, ni ceux qui paieraient : c’est ce qui laisse sa '
   + 'chance à un professionnel qui vient d’arriver. Les réglages de la loupe — métier, '
@@ -1062,16 +1065,16 @@ export const CGU = [
       + "n'est pas la sienne. Proposer des travaux sans assurance ni facture. "
       + 'Insulter, menacer, harceler. Publier du contenu sexuel ou violent. '
       + 'Publier des photos qui ne sont pas les siennes. Collecter les '
-      + 'coordonnées des autres utilisateurs pour les démarcher ailleurs. Utiliser le '
+      + 'coordonnées des autres utilisateurs pour les démarcher ailleurs. Gonfler ses '
+      + '« j’aime », ses abonnés, ses vues, ses avis ou sa note, par exemple depuis un second '
+      + 'compte. Écrire un avis sur son propre travail, ou sur celui d’un concurrent, en se '
+      + 'faisant passer pour un client. Utiliser le '
       + 'numéro SIRET d’une entreprise qui n’est pas la sienne : l’entreprise est alors '
       + 'retirée du compte, et le compte peut être fermé. Si votre entreprise est '
       + 'rattachée à un compte qui n’est pas le vôtre, demandez une vérification à la '
       + 'main, depuis un compte particulier ou à l’inscription : chacun pourra être '
       + 'invité à justifier qu’il en est le titulaire. Un compte déjà professionnel ne '
-      + 'peut pas encore la demander depuis l’application. Gonfler ses « j’aime », ses '
-      + 'abonnés, ses vues, ses avis ou sa note, par exemple depuis un second compte. Écrire '
-      + 'un avis sur son propre travail, ou sur celui d’un concurrent, en se faisant passer '
-      + 'pour un client.',
+      + 'peut pas encore la demander depuis l’application.',
   },
   {
     titre: 'Modération',
@@ -1252,7 +1255,7 @@ export const CONFIDENTIALITE = [
       + 'remise en avant, enregistrée avec la publication — comme le reste de la publication, '
       + 'elle peut être lue par toute personne qui la consulte —, et l’historique de vos '
       + 'remises en avant (leur date, et la publication concernée tant qu’elle existe), que '
-      + 'vous seul pouvez lire. Pour un compte professionnel : votre justificatif '
+      + 'l’application ne montre qu’à vous. Pour un compte professionnel : votre justificatif '
       + 'd’existence légale et votre attestation d’assurance ; le numéro SIRET de '
       + 'votre entreprise, et ce que le répertoire Sirene de l’INSEE en dit au moment '
       + 'de la consultation — dénomination, nom commercial, le nom complet tel que le '

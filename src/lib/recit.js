@@ -1,12 +1,14 @@
 /**
  * LE RÉCIT D'UN CHANTIER — ce que l'agent a le droit de raconter.
  *
- * POURQUOI CE FICHIER N'IMPORTE RIEN
- * ----------------------------------
+ * POURQUOI CE FICHIER N'IMPORTE PRESQUE RIEN
+ * ------------------------------------------
  * Onzième application de la leçon de `cloudinary-adresses.js`. Ici ce
  * n'est pas une commodité : **ce fichier décide si l'agent a le droit
  * d'écrire**, et une règle de ce genre ne se juge ni à l'œil ni à l'écran.
- * `node` doit pouvoir la FAIRE TOURNER.
+ * `node` doit pouvoir la FAIRE TOURNER. Il n'importe que `entreprise.js`
+ * (`jourLocal`, le jour d'une étape à l'heure du téléphone), qui ne charge
+ * pas React Native.
  *
  * LA RÈGLE QUI PORTE TOUT LE LOT
  * -------------------------------
@@ -24,6 +26,7 @@
  * précisé ne sont pas affichées » — un travail qui ne peut pas se faire ne
  * doit jamais ressembler à un travail fait.
  */
+import { jourLocal } from './entreprise.js';
 
 /**
  * Trois étapes avant de proposer quoi que ce soit.
@@ -80,7 +83,10 @@ export function etapesPourLeRecit(publications = []) {
          curseur est la date de remise en avant, et une étape remise en
          avant aurait été racontée au jour de sa remise — un texte public
          faux (mesuré, critique du 29/10). `rowToPost` pose `publieLe`. */
-      date: String(p.publieLe || '').slice(0, 10) || null,
+      /* …et LE JOUR À L'HEURE DU TÉLÉPHONE : les dix premiers caractères
+         d'un horodatage sont la date UTC, donc la veille pour une étape
+         publiée entre minuit et 1 h ou 2 h en France (relecture du 30/10). */
+      date: jourLocal(p.publieLe) || null,
       texte: String(p.texte).trim().slice(0, LONGUEUR_MAX_ETAPE),
     }));
 }

@@ -339,6 +339,9 @@ console.log('\nLot S-b — ce qu’un contrôle de texte doit pouvoir voir (rele
     demandes: ['lecture demandes', 'mes demandes'],
     notifications: ['mes notifications'],
     blocages: ['mes blocages'],
+    /* L'historique des remises en avant (lot S-c) : lu par son auteur
+       SEUL — une seconde lecture sous un autre nom le rendrait public. */
+    remontees: ['lecture mes remontees'],
     /* Les conversations, les messages et les pièces jointes ENTRENT dans la
        liste (seconde relecture du 27/10) : la phrase « vos conversations …
        masquées des deux côtés » ne tient que par elles, et une seconde
@@ -390,6 +393,11 @@ console.log('\nLot S-b — les formes ENTIÈRES des règles nouvelles (seconde r
     ["mes comments", "comments", "for all to authenticated using (auth.uid() = author_id) with check (auth.uid() = author_id and exists (select 1 from public.posts p where p.id = comments.post_id))"],
     ["mes reponses", "demande_reponses", "for all to authenticated using (auth.uid() = professional_id) with check ( auth.uid() = professional_id and exists (select 1 from public.demandes d where d.id = demande_reponses.demande_id and d.statut = 'ouverte' and d.client_id <> auth.uid()) )"],
     ["annonce reponses ecriture", "annonce_reponses", "for all to authenticated using (auth.uid() = professional_id) with check ( auth.uid() = professional_id and public.est_un_pro() and exists (select 1 from public.annonces_pro a where a.id = annonce_reponses.annonce_id and a.statut = 'ouverte' and a.auteur_id <> auth.uid()) )"],
+    /* « mes reviews » ENTIÈRE (lot S-c, relecture du 30/10) : réduite à
+       `for insert`, plus personne ne pouvait retirer son avis — et la CGU
+       « son auteur peut le retirer » mentait, au vert. Le `using` est ce
+       qui laisse RETIRER : il ne porte que « c'est le mien ». */
+    ["mes reviews", "reviews", "for all to authenticated using (auth.uid() = author_id) with check (auth.uid() = author_id and not public.est_masque(professional_id))"],
   ];
   for (const [nom, table, attendu] of POLITIQUES) {
     const vu = forme(unePolitique(nom, table));

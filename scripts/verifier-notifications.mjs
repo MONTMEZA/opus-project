@@ -393,15 +393,38 @@ verifier('la page ouvre le panneau des commentaires d\'office',
 /* Depuis le lot S-c (30/10/2026), la page a SA copie (`publicationOuverte`),
    posée par la cloche et par « Mes publications » ; elle n'entre plus dans
    le fil, où une publication de septembre se glissait en tête. */
+/* Les ARGUMENTS de chaque appel à `setPosts(…)`, par comptage des
+   parenthèses. La garde cherchait une seule écriture (`(liste) => [trouve,
+   ...liste]`) : `(l) => [trouve, ...l]` passait au vert (relecture du
+   30/10). C'est la PROPRIÉTÉ qui compte : aucun appel ne reçoit `trouve`. */
+const argumentsDe = (texte, appel) => {
+  const sortie = [];
+  let i = texte.indexOf(appel);
+  while (i >= 0) {
+    let niveau = 0;
+    let k = i + appel.length - 1;
+    for (; k < texte.length; k += 1) {
+      if (texte[k] === '(') niveau += 1;
+      else if (texte[k] === ')') { niveau -= 1; if (niveau === 0) break; }
+    }
+    sortie.push(texte.slice(i + appel.length, k));
+    i = texte.indexOf(appel, k);
+  }
+  return sortie;
+};
+const appelsSetPosts = argumentsDe(app, 'setPosts(');
 verifier('…et elle lit SA copie, jamais le fil FILTRE — et rien n\'est glisse dans le fil',
   /post=\{publicationOuverte\}/.test(app)
   && /setPublicationOuverte\(trouve\);\s*setOriginePublication\('notifications'\);/.test(routage)
-  && !/setPosts\(\(liste\) => \[trouve, \.\.\.liste\]\)/.test(app),
+  && appelsSetPosts.length > 5 && !appelsSetPosts.some((a) => /\btrouve\b/.test(a)),
   'La loupe ne doit pas pouvoir cacher la publication qu\'une '
   + 'notification designe : on vient la lire, pas la filtrer.');
 
-verifier('…et le retour ramene d\'ou l\'on vient : la CLOCHE, ou « Mes publications »',
-  /if \(screen === 'publication'\) \{\s*setPublicationOuverte\(null\);\s*setScreen\(originePublication === 'mesPublications' \? 'mesPublications' : 'notifications'\);/.test(app),
+/* …et il FERME le panneau de commentaires, qui est celui du fil : laissé
+   ouvert, il réapparaissait dans le fil au retour sur l'Accueil
+   (relecture du 30/10). */
+verifier('…et le retour ramene d\'ou l\'on vient : la CLOCHE, ou « Mes publications » — panneau de commentaires FERMÉ',
+  /if \(screen === 'publication'\) \{\s*setPublicationOuverte\(null\);\s*setOpenCommentsId\(null\);\s*setCommentaireCible\(null\);\s*setScreen\(originePublication === 'mesPublications' \? 'mesPublications' : 'notifications'\);/.test(app),
   'Repartir sur le fil ferait perdre la liste des notifications qu\'on '
   + 'etait en train de parcourir.');
 

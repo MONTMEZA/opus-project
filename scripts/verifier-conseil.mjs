@@ -309,9 +309,12 @@ verifier('…dont un en VIDÉO, pour le repère de son',
 verifier('…et un en TEXTE sans image, pour la carte sans visuel',
   /format: 'texte'[\s\S]{0,80}?conseil: true,/.test(demo));
 
-verifier('les conseils de démonstration se DÉDUISENT des publications',
+/* Des publications TELLES QU'ELLES SONT (`postsDemo()`), pas du fichier :
+   un conseil supprimé en séance revenait dans « Mes conseils », un conseil
+   publié en séance en disparaissait (relecture du lot S-c, 30/10). */
+verifier('les conseils de démonstration se DÉDUISENT des publications — telles qu’elles sont en séance',
   /function conseilsDemoDe\(proId\)/.test(api)
-  && /initialPosts\s*\n?\s*\.filter\(\(p\) => p\.type !== 'ad' && p\.conseil/.test(api),
+  && /function conseilsDemoDe\(proId\) \{\s*return postsDemo\(\)\s*\.filter\(\(p\) => p\.type !== 'ad' && p\.conseil && String\(p\.proId\) === String\(proId\)\)/.test(api),
   'Une liste recopiée à la main se désaligne au premier conseil ajouté.');
 
 verifier('…et la fiche est déclarée complète en démonstration',

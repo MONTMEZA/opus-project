@@ -185,6 +185,25 @@ export function decisionRemontee({ publication, moi, historique = [], maintenant
   return { ok: true, instant: new Date(maintenant).toISOString() };
 }
 
+/**
+ * La remise en avant de la DÉMONSTRATION, décidée ET écrite — sur un `etat`
+ * de la forme `{ remontees: Map<id, iso>, historique: [{ postId, remonteeLe }] }`.
+ * La publication voit sa dernière remise de la séance (`etat.remontees`),
+ * et chaque remise acceptée entre dans l'historique : sans cette écriture,
+ * la règle des trois par semaine ne mordait jamais sans fichier `.env`.
+ */
+export function appliquerRemiseDemo(etat, { publication, moi, maintenant = Date.now() }) {
+  const cle = publication ? String(publication.id) : null;
+  const pub = publication && etat.remontees.has(cle)
+    ? { ...publication, remonteLe: etat.remontees.get(cle) }
+    : publication;
+  const d = decisionRemontee({ publication: pub, moi, historique: etat.historique, maintenant });
+  if (!d.ok) return d;
+  etat.remontees.set(cle, d.instant);
+  etat.historique.push({ postId: publication.id, remonteeLe: d.instant });
+  return d;
+}
+
 /* Une date de la démonstration (`toISOString()`, donc en UTC avec « Z »),
    lue par `lireInstant` — la même porte que le `hint`. */
 function lireDate(iso) {
@@ -206,9 +225,41 @@ export const NOTE_REMONTEE = '« Remettre en avant » ne crée pas de doublon : 
   + `publication, puis une fois tous les ${JOURS_LETTRES} jours ; ${PAR_PRO_LETTRES} remises en `
   + `avant au plus sur ${JOURS_LETTRES} jours, publications supprimées comprises.`;
 
-/** Ajouté à la confirmation de suppression d'une publication remise en avant récemment. */
-export const SUPPRESSION_APRES_REMISE = `Sa remise en avant compte encore dans vos ${PAR_PRO_LETTRES} `
-  + 'de la semaine.';
+/** Ajouté à la confirmation de suppression d'une publication remise en avant
+ *  récemment. « Des sept derniers jours », et pas « de la semaine », qui se
+ *  lit comme une semaine du calendrier : la règle est GLISSANTE (relecture du
+ *  30/10, comme « Cette semaine » de la Place des pros le 04/10). */
+export const SUPPRESSION_APRES_REMISE = `Sa remise en avant compte encore parmi vos ${PAR_PRO_LETTRES} `
+  + `des ${JOURS_LETTRES} derniers jours.`;
+
+/**
+ * LES BANDEAUX D'UNE REMISE EN AVANT RÉUSSIE — décidés sur la page du fil
+ * RECHARGÉE, jamais « en tête » : faux dès que quelqu'un publie.
+ *
+ * Quand le fil n'a pas pu être rechargé, la remise a quand même eu lieu : un
+ * bandeau de SUCCÈS, qui dit le geste qui recharge. Il n'est pas le même
+ * selon le fil : le fil classique se tire vers le bas, le fil des vidéos n'a
+ * pas ce geste — on le quitte pour le fil classique, qui se recharge en
+ * changeant de mode (relecture du 30/10 : « tirez le fil vers le bas » était
+ * dit aussi en mode vidéo).
+ */
+export const BANDEAUX_REMISE = Object.freeze({
+  dansLeFil: 'Publication remise en avant : elle reprend place parmi les plus récentes du fil, puis redescendra à mesure que d’autres publient.',
+  horsDuFiltre: 'Publication remise en avant : elle reprend place parmi les plus récentes du fil. Votre fil, tel qu’il est filtré en ce moment, ne la montre pas.',
+  rechargerFil: 'Publication remise en avant. Tirez le fil vers le bas pour la voir à sa nouvelle place.',
+  rechargerVideo: 'Publication remise en avant. Repassez au fil classique pour la voir à sa nouvelle place.',
+});
+
+/** Le bandeau, d'après la page rechargée (`null` si le rechargement a
+ *  échoué), l'identifiant remis en avant et le mode du fil. */
+export function bandeauApresRemise(page, id, feedMode) {
+  if (!Array.isArray(page)) {
+    return feedMode === 'video' ? BANDEAUX_REMISE.rechargerVideo : BANDEAUX_REMISE.rechargerFil;
+  }
+  return page.some((p) => p && String(p.id) === String(id))
+    ? BANDEAUX_REMISE.dansLeFil
+    : BANDEAUX_REMISE.horsDuFiltre;
+}
 
 /**
  * Cette remise en avant compte-t-elle encore dans la limite par

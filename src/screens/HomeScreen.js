@@ -5,7 +5,9 @@
  * En mode "Vidéos", les diapositives occupent toute la hauteur de l'écran et
  * la bascule Fil/Vidéos flotte par-dessus, comme sur TikTok.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from 'react';
 import {
   View, Text, FlatList, RefreshControl, ActivityIndicator, Pressable,
   StyleSheet, useWindowDimensions,
@@ -22,6 +24,7 @@ import useCompteurDeVues from '../lib/compteur-vues';
 import { vuesPossibles } from '../lib/vues';
 import { CLAVIER } from '../lib/clavier';
 import { FORMATS_VIDEO } from '../lib/formats-publication';
+import { filVideo } from '../lib/fil-video';
 import { estMienne } from '../lib/ma-fiche';
 import OrdreDuFil from '../components/OrdreDuFil';
 
@@ -106,8 +109,8 @@ function RappelFiltre({ resume, onOuvrir, onEffacer }) {
    Sur les réseaux, « Pour vous » veut dire « choisi pour vous » ; ce fil-ci
    n'est pas personnalisé : il montre tout, du plus récent au plus ancien,
    avec les publications remises en avant (lot S-c). Les conditions
-   d'utilisation nomment CE libellé (« L'ordre du fil »), et `verifier-legal`
-   compare les deux. Seul le libellé change : la clé `pourvous` reste, donc
+   d'utilisation nomment CE libellé (« L'ordre du fil »), et
+   `verifier-remontee` compare les deux. Seul le libellé change : la clé `pourvous` reste, donc
    aucun état n'est à reprendre. Le badge « Pour vous » des Demandes, lui,
    reste : il veut bien dire « un de vos métiers ». */
 export const TABS = [
@@ -157,11 +160,18 @@ export default function HomeScreen({
      et s'arrête quand elle en sort. Le son reste coupé : une vidéo qui parle
      toute seule pendant qu'on fait défiler est insupportable — Instagram et
      Facebook font pareil, le son ne vient qu'en plein écran. */
-  /* Quand on arrive depuis une vidéo touchée dans le fil, le plein écran
-     s'ouvre directement sur elle plutôt qu'au début de la liste. */
-  const indexCible = videoCible
-    ? Math.max(0, posts.findIndex((p) => p.id === videoCible))
-    : 0;
+  /* LE PLEIN ÉCRAN NE MONTRE QUE DES VIDÉOS, ET S'OUVRE SUR CELLE QU'ON A
+     TOUCHÉE — lot S-c (relecture du 30/10). `videoCible` est la PUBLICATION
+     touchée, pas son identifiant : absente de la page (une vidéo plus
+     ancienne que les vingt chargées), elle est posée en tête au lieu que
+     l'index retombe à 0 — sur une publicité. Et une page entrée par un appui
+     n'est pas rechargée : photos et publicités en sont retirées ici, comme
+     le promet « L'ordre du fil ». Le calcul est dans `fil-video.js`, que
+     `verifier-remontee` fait tourner. */
+  const { liste: postsVideo, index: indexCible } = useMemo(
+    () => filVideo(posts, videoCible),
+    [posts, videoCible],
+  );
 
   useEffect(() => {
     if (feedMode === 'video') setSlideActive(indexCible);
@@ -292,16 +302,16 @@ export default function HomeScreen({
      descendant. */
   useEffect(() => {
     if (feedMode !== 'video') return;
-    const courant = posts[slideActive];
+    const courant = postsVideo[slideActive];
     signalerVues(courant ? vuesPossibles([courant], moiId) : []);
-  }, [feedMode, slideActive, posts, moiId, signalerVues]);
+  }, [feedMode, slideActive, postsVideo, moiId, signalerVues]);
 
   /* ---------- mode vidéo : plein écran ---------- */
   if (feedMode === 'video') {
     return (
       <View style={s.videoWrap}>
         <FlatList
-          data={posts}
+          data={postsVideo}
           keyExtractor={(p) => String(p.id)}
           pagingEnabled
           showsVerticalScrollIndicator={false}

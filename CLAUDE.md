@@ -10241,6 +10241,190 @@ ce client » ouvre le devis pour elle. **Pas vu au navigateur** : le champ
 marqué en rouge dès l'ouverture (la démonstration n'a pas de demande
 invalide) — il n'est tenu que par le contrôle.
 
+### Les compteurs, les dates et la remise en avant — lot S-c (29-30/10/2026)
+
+Section 52 de `schema.sql` (et, en place : `tient_le_texte`, `fil_filtre`,
+`tient_le_client`, `cree_fiche_utilisateur`, `devenir_pro`, `mes_donnees`),
+`src/lib/remontee.js`, `src/lib/fil-video.js`, `src/lib/avis.js`,
+`src/lib/mes-publications.js`, `src/lib/commentaires-demo.js`,
+`src/components/OrdreDuFil.js`, `npm run verifier-remontee`. Troisième des
+quatre sous-lots du lot S.
+
+#### Les décisions du propriétaire
+
+| question | réponse |
+|---|---|
+| D7 / Q3 (25/10) | la remise en avant est **gratuite** ; une fois tous les 7 jours par publication, la première une semaine après sa publication ; **3 par artisan sur 7 jours glissants, publications supprimées comprises** |
+| l'avis (29/10) | **« Figé, mais retirable »** : il ne se modifie jamais, son auteur peut le retirer puis en écrire un autre |
+| la carte remise (29/10) | elle **garde sa vraie date** de publication, plus une mention discrète **« Remise en avant »** |
+| l'onglet (29/10) | « Pour vous » devient **« Tout »** — seul le libellé change, la clé `'pourvous'` reste |
+| la démo de la vraie base (29/10) | **« On n'y touche pas »** ; les textes sont écrits pour ne pas être démentis par elle |
+
+#### Ce qui était ouvert
+
+Mesuré sur PostgreSQL 16 avant chaque correction : depuis un téléphone, on
+choisissait la date de sa publication, de son commentaire, de son avis, d'une
+fiche de son carnet (une fiche datée 2099 restait en tête pour toujours) ; on
+s'écrivait 999 « j'aime », 500 abonnés, 99 avis ; une publication naissait
+« publicité » ; un avis se récrivait à vie ; une version de conditions
+inventée (« version-inventee-2099 ») était rangée telle quelle. Et
+**« Remettre en avant » ne faisait rien**, pendant que l'écran annonçait
+« en tête du fil ». « Mes publications » filtrait les vingt publications du
+fil déjà chargé : au-delà, elles disparaissaient de la liste.
+
+#### `pose_la_date()` : la date appartient à la base, et R-A dit pour qui
+
+Un déclencheur PAR TABLE (`trg_pose_la_date_<table>`), qui ne touche à la
+date que si l'écriture vient du client (`current_user in ('authenticated',
+'anon')`, la règle R-A du lot S-b). INSERT seulement sur les tables qu'on ne
+modifie pas ou dont la date est déjà gardée ailleurs ; INSERT OR UPDATE sur
+`annonces_pro`, `demandes`, `chantiers`, `professional_profiles`, `users`.
+`verifier-remontee` tient la liste FERMÉE des tables posées (15) et exclues
+(23), chacune avec sa raison dans la section 52.1 : **une table née demain
+avec une date de création rougit tant qu'elle n'est rangée nulle part.**
+
+`tient_le_client()` pose la date du carnet pour TOUS les rôles, comme
+`modifie_le` : rien ne doit la choisir (essai 51 c, cas B6).
+
+#### Un verrou qui vise le client se reconnaît au RÔLE, pas à l'identité
+
+Le piège du lot, et il ne se voit qu'en exécutant. `tient_le_texte()`
+remettait toutes les colonnes d'une publication à leur ancienne valeur
+« quand c'est son auteur qui écrit » (`auth.uid() = new.author_id`). Or
+`remonter_publication()` est `security definer` **et appelée par l'auteur
+lui-même** : dedans, `auth.uid()` est toujours l'auteur. La remise en avant
+était donc remise à vide aussitôt écrite (mesuré).
+
+> **Dans une fonction `security definer`, `auth.uid()` est toujours
+> l'appelant ; `current_user` est le propriétaire.** Un verrou qui doit
+> laisser passer la base mais pas le téléphone regarde `current_user`
+> (R-A). C'est la leçon d'OP010, retrouvée par l'autre bout.
+
+#### `remonter_publication(p_id)` : la seule écriture de `remonte_le`
+
+- **VOLATILE, et le verrou consultatif AVANT la première lecture** : deux
+  appuis simultanés, une seule place libre, mesurés sur deux sessions —
+  sans le verrou, quatre remises en avant dans la semaine ; avec, trois ;
+- **OP022, avec `detail`** : `absente` (n'existe pas, pas la vôtre, ou une
+  publicité — la MÊME phrase pour les trois : aucun oracle), `publication`,
+  `artisan`. Quand les deux règles mordent, c'est la plus TARDIVE qui est
+  dite, à égalité la publication ;
+- **le `hint` porte l'instant, en UTC, arrondi à la SECONDE SUPÉRIEURE** :
+  tronqué, rejouer à l'instant annoncé pouvait encore être refusé. L'écran
+  l'arrondit ensuite à la minute supérieure, à l'heure du téléphone ;
+- **l'historique (`remontees`) n'a aucune écriture du client**, pas même
+  `truncate` ; `post_id … on delete set null` : **supprimer une publication
+  ne rend pas sa place** ; il part avec le compte.
+
+#### Le curseur du fil s'écrit SANS `coalesce`
+
+`fil_filtre` range par `coalesce(remonte_le, created_at) desc, id desc`. Le
+curseur, lui, s'écrit `p.remonte_le < p_avant or (p.remonte_le is null and
+p.created_at < p_avant)`. Écrit avec `coalesce`, il n'est pas « leakproof » :
+PostgreSQL appelle alors la politique — donc `est_masque()` — sur chaque
+ligne qu'il SAUTE. Mesuré : **50 022 appels au rang 50 000, contre 21**. La
+signature de `fil_filtre` n'a pas bougé (section 34).
+
+#### Ce que la relecture adverse a trouvé à l'écran
+
+Vingt-trois constats, chacun reproduit puis contre-examiné ; un réfuté. Les
+deux plus graves, dans le même geste :
+
+- **toucher une vidéo ouvrait le plein écran sur la page entière du fil**,
+  photos et publicités comprises, alors que « L'ordre du fil » (un texte
+  opposable) dit que le fil des vidéos n'en montre pas ;
+- **une vidéo absente de la page s'ouvrait sur la PREMIÈRE diapositive** —
+  `Math.max(0, findIndex(...))` —, une publicité comprise, présentée comme
+  la vidéo touchée. « Mes publications », qui se lit maintenant en base,
+  rend ce cas courant.
+
+> **Un index de repli qui « retombe sur 0 » montre autre chose en se
+> présentant comme ce qu'on a demandé.** `filVideo()` filtre la liste et
+> pose la vidéo touchée en tête quand la page ne la contient pas
+> (`src/lib/fil-video.js`, que `verifier-remontee` fait tourner).
+
+Et : deux appuis rapprochés sur « Remettre en avant » faisaient une remise
+réussie affichée en échec rouge (verrou par référence, relâché dans un
+`finally`, bouton occupé) ; une correction de conseil n'atteignait pas « Mes
+conseils » ; la date d'une étape du récit d'un chantier était celle d'UTC
+(`jourLocal()`, contrôlé dans trois fuseaux) ; la démonstration oubliait un
+commentaire écrit (`commentaires-demo.js`).
+
+#### Les contrôles : des FORMES entières, et le banc
+
+`verifier-remontee` compare ENTIÈRES, commentaires retirés et espaces
+réduits, les onze fonctions SQL du lot, et les textes légaux mot pour mot
+(la CGU « L'ordre du fil » EST la constante qu'affiche l'écran). Le banc,
+rejoué sur une copie après les corrections : **106 sabotages, les 106
+refusés**, chacun par une vérification qui le concerne.
+
+> **Pour éprouver un verrou écrit `is distinct from`, envoyer une valeur
+> DIFFÉRENTE.** Sur la vraie base, renvoyer à P la version de conditions
+> qu'il avait déjà acceptée est passé (204) — c'est voulu ; l'essai était
+> faux. Refait avec une autre date : OP023.
+
+#### La migration — construite, simulée, gardée par son md5
+
+Construite par un script qui PREND chaque objet dans `schema.sql` (la
+section 52 sans ses commentaires hors des corps, les six fonctions changées
+en place, `mes_donnees()`, le balayage de la section 43) ; la politique de
+`remontees` créée sous condition dans un `do` ; aucun ordre qui commence par
+`drop`, `delete` ou `truncate` ; `set local lock_timeout = '5s'`. Simulée
+deux fois sur une imitation (`git show d4dbf78:supabase/schema.sql`) :
+empreinte du catalogue identique à une base neuve, à l'ordre physique des
+colonnes de `posts` près. Avant d'appliquer, les six fonctions remplacées
+ont été comparées sur la vraie base : identiques à l'imitation une fois
+leurs commentaires retirés.
+
+**Appliquée le 30/10/2026 à 14 h 34 (heure de Paris)** — migration
+`lot_s_c_remise_en_avant_dates_compteurs` —, avec l'accord du propriétaire.
+Relevé après : les 15 fonctions du lot identiques à la simulation au
+caractère près (md5, `security definer`, volatilité, droits), aucune
+fonction de déclencheur exécutable par `anon` ou `authenticated`, aucune
+donnée changée.
+
+**L'avertissement du commit `728c60e` — « ne pas mettre cette version sur le
+téléphone avant la migration » — ne vaut plus depuis ce jour-là.**
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois, les 30 fichiers d'essais comparés à leur
+relevé d'avant (seuls les écarts attendus), les 55 contrôles, le linter à
+32, les paquets iOS et Android lus, l'essai au navigateur en démonstration
+(fil vidéo filtré : 4 diapositives, ouvert sur la vidéo touchée, aucune
+publicité ; commentaire retenu après un aller-retour). Puis sur la VRAIE
+base, par le chemin de l'application, avec deux artisans A et B et un
+particulier P **à Brest**, jetables (les deux preuves SIRET `essai` déjà en
+base, SIRET fictifs, réécrites pour leurs adresses) :
+
+| | résultat |
+|---|---|
+| inscription avec la version « 2026-10-30 » · une version inventée | rangée et datée · **rangée vide** |
+| P change son e-mail · sa version des conditions · son nom | **OP023** · **OP023** · 204 |
+| A publie en datant 2001, avec 999 « j'aime », en « publicité », « remise » en 2030 | date du jour, compteurs à 0, pas une publicité, aucune remise |
+| A remonte une publication du jour | **OP022 `publication`**, l'instant dans `hint` |
+| B remonte celle de A · une publication inventée | **OP022 `absente`** ×2, même réponse |
+| A corrige sa publication en écrivant `remonte_le` et un compteur | le texte change, le reste non |
+| A écrit dans `remontees` · un visiteur le lit | refusé · refusé |
+| P laisse un avis daté 2001 · le modifie · le retire deux fois | daté du jour · **42501** · 1 ligne, puis **0** |
+| A se donne 99 avis et 500 abonnés | rien ne bouge |
+| une fiche client datée 2099 · un chantier né avec 99 publications | datée du jour · 0 |
+| un signalement « déjà traité » | refusé, rien d'écrit |
+| quatre publications vieillies de 8 jours (éditeur SQL) : trois remises | 200 ×3 ; la 4ᵉ **OP022 `artisan`** |
+| le fil vu par P | les trois en tête, la plus récente d'abord ; la page suivante au curseur, juste |
+| l'export de A · de P | `mes_remontees` 3 · `[]` |
+| A supprime une publication remise | l'historique garde 3 lignes, et la 4ᵉ reste refusée |
+| **au navigateur**, A : le fil · « Mes publications » | « Remise en avant » sous « Il y a 8 j » · le refus avec sa date, « vendredi 6 novembre à 14 h 44 » |
+
+Comptes supprimés par le chemin de l'application ; base revenue à
+14 comptes / 8 fiches / 21 publications / 4 avis, aucune remise en avant,
+aucun compte `@exemple-opus.test`.
+
+**Ce qui n'a PAS été vérifié** : rien sur l'iPhone ; une remise en avant
+RÉUSSIE au doigt (sur la vraie base, seule l'API l'a faite — l'écran n'a
+montré que le refus) ; VoiceOver sur la mention « remise en avant ». La
+suite est dans `docs/A-FAIRE.md`, « Après le lot S-c ».
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :

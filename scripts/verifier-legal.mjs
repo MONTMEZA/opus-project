@@ -2040,6 +2040,96 @@ console.log('\nLot S-b — le blocage, les avis, le partenariat refusé : le tex
   }
 }
 
+console.log('\nLot S-c — les avis, la remise en avant, la sécurité : mot pour mot, et liés à la base');
+{
+  /* RELECTURE DU 30/10 : du lot S-c, ce contrôle ne vérifiait que trois
+     choses dans « Les avis ». L'ancienne phrase « Sécurité » (fausse)
+     remise, la collecte ou la durée de l'historique retirées, `VERSION`
+     ramenée au 28/10, l'ordre des avis inversé, « l'artisan peut les
+     modifier » — tout passait au vert. Ces textes ENGAGENT : ils se
+     comparent mot pour mot à ceux qui ont été relus contre la base, et
+     chaque promesse est reliée à l'objet qui la tient. Changer l'un ou
+     l'autre se DÉCIDE ici, dans le même lot. */
+  const sqlS = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const sansCom = (t) => t.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const bloc = (titre) => ([...MENTIONS, ...CGU, ...CONFIDENTIALITE].find((b) => b.titre === titre) || {}).texte || '';
+  verifier('VERSION est au moins celle du lot S-c (30/10/2026)',
+    VERSION >= '2026-10-30',
+    `VERSION = ${VERSION}. L'ordre du fil, la remise en avant, les avis qui ne se modifient plus, la sécurité : un changement de fond, sous une version nouvelle.`);
+
+  const AVIS_RELU = "Un avis porte la mention « client vérifié » quand son auteur avait, au moment où il l’a écrit, une demande de devis, de rappel ou d’urgence acceptée par l’artisan qu’il note. C’est tout ce que cette mention atteste : Opus ne vérifie ni que les travaux ont eu lieu, ni ce que l’avis raconte, ni les notes données. Les autres avis sont publiés sans cette mention, et sans contrôle préalable. Chacun ne laisse qu’un avis par artisan, jamais sur sa propre fiche. Un avis ne se modifie pas une fois publié ; son auteur peut le retirer, depuis la fiche de l’artisan, puis en écrire un autre. Chaque avis affiche le mois et l’année de sa publication, enregistrés par Opus ; les avis sont présentés du plus récent au plus ancien. La note et le nombre d’avis d’une fiche sont calculés par Opus à partir des avis publiés : l’artisan ne peut pas les modifier. Un avis compte dans la note de l’artisan tant qu’il existe ; l’artisan qu’il concerne le lit toujours, même s’il a bloqué son auteur ou a été bloqué par lui. Il n’existe pas encore de bouton pour signaler un avis : c’est à ajouter avant l’ouverture d’Opus au public.";
+  verifier('« Les avis » a EXACTEMENT le texte relu contre la base (30/10/2026)', bloc('Les avis') === AVIS_RELU, bloc('Les avis'));
+  const SECURITE_RELUE = "Les échanges sont chiffrés. Les règles d’accès, les compteurs et les dates qu’Opus affiche — « j’aime », commentaires, vues, abonnés, nombre d’avis et note, date d’une publication, d’un commentaire, d’un avis, d’un message ou d’une demande — sont tenus par la base de données elle-même, et non par l’application : une version modifiée de l’application ne peut pas les changer. Elle peut en revanche lire, par l’interface d’Opus, des informations que l’application n’affiche pas. Ces règles ne sont pas parfaites : quand un défaut y est trouvé, il est corrigé dans la base de données. Les clés des services extérieurs ne se trouvent jamais dans l’application installée sur votre téléphone.";
+  verifier('« Sécurité » a EXACTEMENT le texte relu — et plus « ne permettrait pas d’y accéder davantage », qui était faux',
+    bloc('Sécurité') === SECURITE_RELUE && !/ne permettrait pas d’y accéder davantage/.test(bloc('Sécurité')), bloc('Sécurité'));
+
+  const PHRASES = [
+    ['Ce qui est interdit', 'Gonfler ses « j’aime », ses abonnés, ses vues, ses avis ou sa note, par exemple depuis un second compte. Écrire un avis sur son propre travail, ou sur celui d’un concurrent, en se faisant passer pour un client.'],
+    ['Pourquoi, et sur quelle base', 'Remettre en avant vos publications et appliquer ses limites — une fois tous les sept jours par publication, trois sur sept jours par professionnel — : exécution du contrat.'],
+    ['Ce que nous collectons', 'Si vous remettez en avant une de vos publications : la date de cette remise en avant, enregistrée avec la publication — comme le reste de la publication, elle peut être lue par toute personne qui la consulte —, et l’historique de vos remises en avant (leur date, et la publication concernée tant qu’elle existe), que l’application ne montre qu’à vous.'],
+    ['Combien de temps', 'L’historique de vos remises en avant est conservé tant que votre compte existe, y compris pour une publication supprimée depuis, et part avec votre compte.'],
+  ];
+  for (const [titre, phrase] of PHRASES) {
+    verifier(`« ${titre} » porte, mot pour mot, la phrase du lot S-c : « ${phrase.slice(0, 60)}… »`, bloc(titre).includes(phrase));
+  }
+
+  /* CHAQUE PROMESSE, RELIÉE À CE QUI LA TIENT. */
+  const remontees = (sqlS.match(/create table if not exists public\.remontees \(([\s\S]*?)\n\);/) || [])[1] || '';
+  verifier('« la publication concernée tant qu’elle existe » et « part avec votre compte » : `post_id … set null`, `auteur_id … cascade`, et l’export les rend',
+    /post_id\s+uuid references public\.posts\(id\) on delete set null/.test(remontees)
+      && /auteur_id\s+uuid not null references public\.users\(id\) on delete cascade/.test(remontees)
+      && /'mes_remontees',/.test(sqlS));
+  const api = sansCom(readFileSync('src/lib/api.js', 'utf8'));
+  verifier('« présentés du plus récent au plus ancien » : la fiche lit ses avis `order(created_at, descendant)`, et aucun écran ne les retrie',
+    /supabase\.from\('reviews'\)\.select\('\*, users:author_id\(nom\)'\)\s*\.eq\('professional_id', id\)\.order\('created_at', \{ ascending: false \}\)/.test(api)
+      && !/reviews[\s\S]{0,40}\.sort\(/.test(sansCom(readFileSync('src/screens/ProfilProScreen.js', 'utf8'))));
+  verifier('« le mois et l’année de sa publication, enregistrés par Opus » : `formatDate` écrit le mois et l’année de `created_at`, que la base pose',
+    /date: formatDate\(row\.created_at\),/.test(api)
+      && /return `\$\{MOIS\[d\.getMonth\(\)\]\} \$\{d\.getFullYear\(\)\}`;/.test(api)
+      && /create or replace trigger trg_pose_la_date_reviews\s+before insert on public\.reviews/.test(sqlS));
+  verifier('« calculés par Opus… l’artisan ne peut pas les modifier » : `trg_notes_pro` recalcule après toute écriture, `tient_la_reputation` garde la fiche',
+    /create trigger trg_notes_pro\s+after insert or update or delete on public\.reviews\s+for each row execute function public\.maj_notes_pro\(\);/.test(sqlS)
+      && /create or replace trigger trg_tient_la_reputation\s+before insert or update on public\.professional_profiles\s+for each row execute function public\.tient_la_reputation\(\);/.test(sqlS));
+
+  /* « Un avis ne se modifie pas » : AUCUN droit d'écriture rendu sur
+     `reviews` — pas seulement les `grant` qui disent « update » (relecture
+     du 30/10 : `grant all on public.reviews` passait). */
+  const grantsAvis = [...sqlS.matchAll(/\bgrant\b[^;]*?\bon (?:table )?(?:public\.)?reviews\b[^;]*;/g)].map((m) => m[0].replace(/\s+/g, ' '));
+  const iRevoke = sqlS.indexOf('revoke update on public.reviews from anon, authenticated;');
+  verifier('…aucun `grant` sur `reviews` autre qu’une LECTURE, et aucun `grant … on all tables` après le retrait',
+    iRevoke > 0 && grantsAvis.every((g) => /^grant select\b/.test(g))
+      && !/\bgrant\b[^;]*\bon all tables in schema\b/.test(sqlS.slice(iRevoke)),
+    grantsAvis.join(' | '));
+}
+
+console.log('\nLot S-c — retirer son avis : la décision FAIT TOURNER, les phrases mot pour mot');
+{
+  const sansCom = (t) => t.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const { issueDuRetrait, AVIS_DEJA_PARTI, CONFIRMATION_RETRAIT_AVIS } = await import('../src/lib/avis.js');
+  const essai = (r) => { try { return issueDuRetrait(r); } catch (e) { return `ERREUR ${e.message}`; } };
+  const panne = new Error('panne');
+  verifier('un retrait d’UNE ligne réussit ; ZÉRO ligne, `null` ou une erreur ne réussissent JAMAIS',
+    essai({ data: [{ id: 'a' }], error: null }) === true
+      && essai({ data: [], error: null }) === `ERREUR ${AVIS_DEJA_PARTI}`
+      && essai({ data: null, error: null }) === `ERREUR ${AVIS_DEJA_PARTI}`
+      && essai({ data: [{ id: 'a' }], error: panne }) === 'ERREUR panne'
+      && essai(undefined) === `ERREUR ${AVIS_DEJA_PARTI}`);
+  const api = sansCom(readFileSync('src/lib/api.js', 'utf8'));
+  verifier('…et `retirerAvis` passe par elle, sur un `delete … select(\'id\')` de SES avis',
+    /export const retirerAvis = !hasSupabase\s*\? async \(\) => true\s*: async \(id\) => issueDuRetrait\(await supabase\.from\('reviews'\)\s*\.delete\(\)\.eq\('id', id\)\.eq\('author_id', currentUserId\)\.select\('id'\)\);/.test(api));
+  const app = sansCom(readFileSync('src/OpusApp.js', 'utf8'));
+  verifier('…et un échec n’affiche JAMAIS le bandeau de succès : l’erreur, puis `return false`, AVANT « Avis retiré »',
+    /const retirerMonAvis = async \(proId, avis\) => \{\s*try \{\s*await api\.retirerAvis\(avis\.id\);\s*\} catch \(e\) \{\s*showErreur\(messageClair\(e, 'Avis non retiré'\)\);\s*return false;\s*\}\s*setPros\([\s\S]*?\);\s*showBanner\('Avis retiré\. Vous pouvez en écrire un autre\.'\);/.test(app));
+  verifier('la confirmation dit la règle des CGU, MOT POUR MOT, et l’écran l’affiche telle quelle',
+    CONFIRMATION_RETRAIT_AVIS === 'Retirer votre avis ? Il disparaît de la fiche et la note se recalcule. Un avis ne se modifie pas une fois publié : vous pourrez ensuite en écrire un autre.'
+      && /<Text style=\{s\.confirmeRetraitTexte\}>\{CONFIRMATION_RETRAIT_AVIS\}<\/Text>/.test(sansCom(readFileSync('src/screens/ProfilProScreen.js', 'utf8'))));
+  /* Les commentaires partent : celui qui EXPLIQUE l'ancienne phrase la cite. */
+  const erreurs = sansCom(readFileSync('src/lib/erreurs.js', 'utf8'));
+  verifier('le second avis dit QUOI FAIRE (retirer le sien), mot pour mot — plus « créé entre-temps, depuis un autre appareil »',
+    /reviews_professional_id_author_id_key: 'vous avez déjà laissé un avis à cet artisan\. Pour en écrire un autre, '\s*\+ 'retirez d’abord le vôtre depuis sa fiche \(« Retirer mon avis »\)\.',/.test(erreurs)
+      && !/créé entre-temps, depuis un autre appareil/.test(erreurs));
+}
+
 console.log('\nLa position du téléphone : la promesse et le paquet ne se contredisent pas');
 {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));

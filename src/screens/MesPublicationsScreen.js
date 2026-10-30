@@ -77,6 +77,7 @@ function Intervalle() {
  */
 const CartePublication = React.memo(function CartePublication({
   p, enSuppression, remiseCompteEncore, enModification, refus,
+  remiseOccupee = false, remiseBloquee = false,
   onDemanderSuppression, onAnnulerSuppression,
   onDemanderModification, onAnnulerModification,
   onSupprimer, onModifier, onRepublier, onPartager, onOuvrir,
@@ -91,7 +92,10 @@ const CartePublication = React.memo(function CartePublication({
         style={({ pressed }) => [s.haut, pressed && APPUI.discret]}
         onPress={() => onOuvrir && onOuvrir(p)}
         accessibilityRole="button"
-        accessibilityLabel={`Ouvrir cette publication : ${p.texte || NOM_FORMAT[p.format] || 'publication'}`}
+        /* L'ÉTIQUETTE REMPLACE LE CONTENU pour VoiceOver : l'âge et la
+           remise en avant écrits dans la carte n'étaient donc jamais lus
+           (relecture du 30/10). Ils entrent dans l'étiquette. */
+        accessibilityLabel={`Ouvrir cette publication : ${p.texte || NOM_FORMAT[p.format] || 'publication'}${p.time ? `, ${p.time}` : ''}${remise ? `, ${remise}` : ''}`}
       >
         {/* UNE PUBLICATION SANS VISUEL N'A PAS DE VIGNETTE — vu sur une
             capture le 05/10/2026, en relisant « Mes publications » avec une
@@ -217,14 +221,29 @@ const CartePublication = React.memo(function CartePublication({
         </View>
       ) : (
         <View style={s.actions}>
+          {/* UN BOUTON ENVOYÉ NE S'APPUIE PAS DEUX FOIS — jusqu'à la FIN du
+              geste, rechargement du fil et bandeau compris. Pendant ce
+              temps, il le DIT (« Remise en avant… », `busy`), et les autres
+              cartes le disent aussi : leur bouton est éteint au lieu
+              d'avaler l'appui sans un mot (relecture du 30/10). */}
           <Pressable
-            style={({ pressed }) => [s.action, pressed && APPUI.discret]}
+            style={({ pressed }) => [
+              s.action,
+              pressed && !(remiseOccupee || remiseBloquee) && APPUI.discret,
+              (remiseOccupee || remiseBloquee) && s.actionEteinte,
+            ]}
             onPress={() => onRepublier(p)}
+            disabled={remiseOccupee || remiseBloquee}
             accessibilityRole="button"
-            accessibilityLabel="Remettre en avant cette publication dans le fil"
+            accessibilityState={{ busy: remiseOccupee, disabled: remiseOccupee || remiseBloquee }}
+            accessibilityLabel={remiseOccupee
+              ? 'Remise en avant en cours'
+              : 'Remettre en avant cette publication dans le fil'}
           >
             <RefreshCw size={14} color={C.accent2} />
-            <Text style={[s.actionTexte, { color: C.accent2 }]}>Remettre en avant</Text>
+            <Text style={[s.actionTexte, { color: C.accent2 }]}>
+              {remiseOccupee ? 'Remise en avant…' : 'Remettre en avant'}
+            </Text>
           </Pressable>
 
           {!!onModifier && (
@@ -267,6 +286,7 @@ const CartePublication = React.memo(function CartePublication({
 
 export default function MesPublicationsScreen({
   posts = [], etat = 'jamais', echecDe = 'debut', fin = true, total = null, refus = {},
+  enRemise = null,
   onPlus, onRecharger,
   onSupprimer, onModifier, onRepublier, onPartager, onOuvrir,
 }) {
@@ -351,7 +371,9 @@ export default function MesPublicationsScreen({
       {...CLAVIER}
       data={posts}
       keyExtractor={(p) => String(p.id)}
-      extraData={{ aSupprimer, aModifier, refus }}
+      extraData={{
+        aSupprimer, aModifier, refus, enRemise,
+      }}
       renderItem={({ item }) => (
         <CartePublication
           p={item}
@@ -359,6 +381,8 @@ export default function MesPublicationsScreen({
           remiseCompteEncore={!!aSupprimer && aSupprimer.id === item.id && aSupprimer.recente}
           enModification={aModifier === item.id}
           refus={refus[item.id] || null}
+          remiseOccupee={enRemise != null && String(enRemise) === String(item.id)}
+          remiseBloquee={enRemise != null && String(enRemise) !== String(item.id)}
           onDemanderSuppression={demanderSuppression}
           onAnnulerSuppression={annulerSuppression}
           onDemanderModification={setAModifier}
@@ -440,6 +464,8 @@ const s = StyleSheet.create({
     gap: S.xs, minHeight: TOUCHE,
   },
   actionTexte: { fontSize: T.petit, color: C.muted, fontFamily: F.inter6 },
+  /* Éteint pendant une remise en avant : on voit qu'il ne répondra pas. */
+  actionEteinte: { opacity: 0.5 },
 
   confirmation: {
     borderTopWidth: 1, borderTopColor: C.line, padding: S.md, gap: S.sm,
