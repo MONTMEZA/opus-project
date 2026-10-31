@@ -124,6 +124,21 @@ console.log('\n2. La déconnexion rend la main au lieu de vider des états');
   const ordre = deco.indexOf('api.signOut') < deco.indexOf('onSortie(');
   verifier('…APRÈS la fermeture de session', ordre,
     'remonter avant de fermer la session : la nouvelle instance la retrouverait ouverte et rentrerait aussitôt.');
+  /* LES PHOTOS GARDÉES SUR LE TÉLÉPHONE (seconde relecture du 31/10,
+     R2-APP-1) : la politique de confidentialité promet qu'elles sont
+     « effacées elles aussi à la déconnexion ». Seules deux lignes de
+     `deconnexion` tiennent cette promesse : tant que le texte la fait, ces
+     deux lignes doivent y être, ATTENDUES, et AVANT de rendre la main. */
+  const { CONFIDENTIALITE } = await import('../src/data/legal.js');
+  const cookies = (CONFIDENTIALITE.find((b) => b.titre === 'Cookies et traceurs') || { texte: '' }).texte;
+  const promet = /effacées elles\s+aussi à la déconnexion/.test(cookies);
+  const iDisque = deco.indexOf('await Image.clearDiskCache()');
+  const iMemoire = deco.indexOf('await Image.clearMemoryCache()');
+  verifier('la politique promet l’effacement des photos à la déconnexion (sinon cette garde n’a plus d’objet)', promet,
+    'si la phrase change, cette vérification et la suivante changent AVEC elle.');
+  verifier('…et `deconnexion` ATTEND l’effacement des deux caches d’images AVANT de rendre la main',
+    !promet || (iDisque > 0 && iMemoire > 0 && iDisque < deco.indexOf('onSortie(') && iMemoire < deco.indexOf('onSortie(')
+      && /^import \{[^}]*\bImage\b[^}]*\} from 'expo-image';$/m.test(app)));
   const setters = deco.match(/\bset[A-Z]\w*\(/g) || [];
   verifier('…sans revenir à une liste d’états vidés à la main', setters.length === 0,
     `trouvé : ${setters.join(', ')} — une liste à la main oublie toujours le prochain état.`);

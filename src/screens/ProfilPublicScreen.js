@@ -10,9 +10,10 @@
  *   - la VILLE d'un particulier, à lui-même et aux professionnels — la base
  *     ne la rend qu'à eux (`profil_public()`, décision D3 du 25/10) ;
  *   - ses demandes EN COURS, aux professionnels seulement ;
- *   - « Envoyer un message », aux professionnels seulement, et jamais sur
+ *   - « Envoyer un message », aux professionnels seulement, jamais sur
  *     sa propre fiche (décision du 30/10 : la base refuse aussi une
- *     conversation entre deux particuliers) ;
+ *     conversation entre deux particuliers), ni sur celle d'une personne
+ *     qu'on a bloquée ;
  *   - « Signaler », à tous sauf à lui-même.
  * Jamais son adresse, son code postal ni son courriel : ce n'est pas parce
  * qu'une donnée est en base qu'elle a sa place à l'écran.
@@ -37,9 +38,17 @@ import {
 } from '../lib/profil-public';
 
 export default function ProfilPublicScreen({
-  profil, chargement, echec = false, onReessayer, jeSuisPro = false, monId = null, onContacter, onSignaler,
+  profil, chargement, echec = false, onReessayer, onRelireDemandes,
+  jeSuisPro = false, monId = null, onContacter, onSignaler,
 }) {
   const reessayer = onReessayer ? { label: 'Réessayer', onPress: onReessayer } : undefined;
+  /* Sous des demandes illisibles, « Réessayer » ne relit QUE les demandes et
+     GARDE la fiche affichée : il relisait tout, remettait le nom seul le
+     temps de la lecture, et un échec effaçait ce qui avait été lu (seconde
+     relecture du 31/10). */
+  const relireDemandes = onRelireDemandes
+    ? { label: 'Réessayer', onPress: onRelireDemandes }
+    : reessayer;
   if (!profil) {
     if (chargement) {
       return (
@@ -113,35 +122,42 @@ export default function ProfilPublicScreen({
 
       {/* SES DEMANDES : aux professionnels seulement — ce sont eux qui y
           répondent. Et jamais « cette personne n'a publié aucune demande » :
-          une demande pourvue, ou cachée par un blocage, existe quand même. */}
+          une demande pourvue, ou cachée par un blocage, existe quand même.
+          Les cartes vivent DANS le bloc de leur titre : sur la fiche d'un
+          compte pro, elles s'affichaient seules, sans titre (seconde
+          relecture du 31/10). */}
       {jeSuisPro && profil.type === 'particulier' && (
         <>
           <SectionLabel>Ses demandes en cours</SectionLabel>
-          {profil.demandesEchec ? (
-            <EmptyState action={reessayer}>{DEMANDES_ILLISIBLES}</EmptyState>
+          {profil.demandesEchec && chargement ? (
+            <View style={s.centre}>
+              <ActivityIndicator color={C.accent} />
+            </View>
+          ) : profil.demandesEchec ? (
+            <EmptyState action={relireDemandes}>{DEMANDES_ILLISIBLES}</EmptyState>
           ) : demandes.length === 0 && (
             <EmptyState>{AUCUNE_DEMANDE_A_MONTRER}</EmptyState>
           )}
+          <View style={s.liste}>
+            {demandes.map((d) => (
+              <View key={String(d.id)} style={s.carte}>
+                <View style={s.carteHaut}>
+                  <Text style={s.metier}>{nomMetier(d.metier)}</Text>
+                  <Text style={s.temps}>{d.time}</Text>
+                </View>
+                <Text style={s.texte}>{d.texte}</Text>
+                {!!d.media && (
+                  <Gradient media={d.media} style={{ width: '100%', aspectRatio: 16 / 10, marginTop: 8 }} />
+                )}
+                <View style={s.ligneVille}>
+                  <MapPin size={11} color={C.muted} />
+                  <Text style={s.ville}>{d.ville}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
         </>
       )}
-      <View style={s.liste}>
-        {demandes.map((d) => (
-          <View key={String(d.id)} style={s.carte}>
-            <View style={s.carteHaut}>
-              <Text style={s.metier}>{nomMetier(d.metier)}</Text>
-              <Text style={s.temps}>{d.time}</Text>
-            </View>
-            <Text style={s.texte}>{d.texte}</Text>
-            {!!d.media && (
-              <Gradient media={d.media} style={{ width: '100%', aspectRatio: 16 / 10, marginTop: 8 }} />
-            )}
-            <View style={s.ligneVille}>
-              <MapPin size={11} color={C.muted} />
-              <Text style={s.ville}>{d.ville}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
     </ScrollView>
   );
 }

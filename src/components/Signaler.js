@@ -156,6 +156,10 @@ export default function Signaler({
                 <TextArea
                   value={details}
                   onChangeText={setDetails}
+                  /* 1 000 caractères : la base n'en garde pas plus
+                     (`signalements_details_check`). Le champ s'arrête là
+                     au lieu d'un refus à l'envoi (seconde relecture du 31/10). */
+                  maxLength={1000}
                   placeholder={motif === 'autre'
                     ? 'Expliquez en quelques mots (obligatoire).'
                     : 'Ajoutez un détail, si vous en avez un.'}

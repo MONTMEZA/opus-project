@@ -99,6 +99,7 @@ import {
 import { etatAuDepartDeLaLecture, issueDeLaLecture } from './lib/postes';
 import { dateDeDemandeDemo } from './data/devis-demo';
 import { maFiche } from './lib/ma-fiche';
+import { CONVERSATION_IMPOSSIBLE } from './lib/profil-public';
 import { phraseDuRefus, bandeauApresRemise } from './lib/remontee';
 import { apresPage, apresEchec } from './lib/mes-publications';
 import {
@@ -1544,13 +1545,25 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * la page PRO — vide — d'un particulier.
    *
    * `repli` : ce qu'on sait déjà (le nom sous le commentaire), affiché le
-   * temps de la lecture, et gardé si la personne n'est pas connue de la
-   * démonstration.
+   * temps de la lecture — et, en DÉMONSTRATION seulement, gardé si la
+   * personne n'y est pas connue (un commentaire qu'on vient d'écrire porte
+   * l'identifiant de démonstration, qui n'est la fiche de personne).
+   *
+   * `garderLaFiche` : « Réessayer » sous des demandes illisibles ne relit
+   * que pour elles. La fiche déjà lue reste affichée, et un nouvel échec ne
+   * l'efface pas (seconde relecture du 31/10).
    */
-  const voirPersonne = async (id, repli = null) => {
+  const voirPersonne = async (id, repli = null, { garderLaFiche = false } = {}) => {
     if (!id) return;
     setOpenContactId(null);
     if (pros[id]) { viewProfile(id); return; }
+    /* SON PROPRE nom, en démonstration : l'identifiant du compte n'est pas
+       celui de sa fiche (`maFiche()`). Un pro arrive sur SA page ; sans
+       cette ligne, l'écran disait que son compte « n'est plus disponible ». */
+    if (maFicheId && String(id) === String(api.getUserId()) && pros[maFicheId]) {
+      viewProfile(maFicheId);
+      return;
+    }
 
     /* Un OBJET neuf par demande, comparé par identité : « Réessayer » sur la
        même fiche fait deux demandes du même `id`, et la réponse tardive de
@@ -1561,26 +1574,40 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     setScreen('profilPublic');
     setProfilPublicCharge(true);
     setProfilPublicEchec(false);
-    setProfilPublic(repli && repli.nom
+    const deRepli = repli && repli.nom
       ? { id, nom: repli.nom, avatarUrl: repli.avatarUrl || null, type: null, demandes: [] }
-      : null);
+      : null;
+    if (!garderLaFiche) setProfilPublic(deRepli);
+    /* La réponse ne vaut que si l'on regarde ENCORE cette fiche : une autre
+       demandée entre-temps (relecture du 30/10), ou l'écran quitté par le
+       retour (seconde relecture du 31/10 — l'échec tombait en bandeau sur
+       le fil). */
+    const toujoursLa = () => profilDemande.current === demande && ecranRef.current === 'profilPublic';
     try {
-      const fiche = await api.chargerProfilPublic(id, { jeSuisPro: userType === 'pro' });
-      /* Une AUTRE fiche a été demandée pendant la lecture : celle-ci n'est
-         plus celle qu'on regarde, elle ne touche à rien (relecture du 30/10 :
-         la réponse lente de la première remplaçait la seconde). */
-      if (profilDemande.current !== demande) return;
-      setProfilPublic(fiche || null);
+      /* Un délai, comme les lectures du démarrage : une requête qui ne
+         revient JAMAIS laissait l'indicateur tourner pour toujours, sans
+         « Réessayer » (seconde relecture). */
+      const fiche = await avecDelai(api.chargerProfilPublic(id, { jeSuisPro: userType === 'pro' }), 12000, 'La fiche');
+      if (!toujoursLa()) return;
+      if (fiche) setProfilPublic(fiche);
+      else setProfilPublic(api.mode === 'demo' && deRepli ? { ...deRepli, type: 'particulier', demandesEchec: false } : null);
     } catch (e) {
-      if (profilDemande.current !== demande) return;
+      if (!toujoursLa()) return;
+      /* L'échec se dit par l'ÉTAT de l'écran (« Lecture impossible »,
+         avec son bouton), pas par un bandeau : le bandeau restait affiché
+         au-dessus de la fiche relue, et suivait au retour. */
       setProfilPublicEchec(true);
-      showErreur(messageClair(e, "Ce profil n'a pas pu être chargé"));
+      if (garderLaFiche) setProfilPublic((p) => (p && String(p.id) === String(id) ? { ...p, demandesEchec: true } : p));
     }
     setProfilPublicCharge(false);
   };
   const relireProfilPublic = () => {
     const { id, repli } = profilDemande.current;
     if (id) voirPersonne(id, repli);
+  };
+  const relireDemandesDuProfil = () => {
+    const { id, repli } = profilDemande.current;
+    if (id) voirPersonne(id, repli, { garderLaFiche: true });
   };
   const voirCommentateur = (c) => voirPersonne(c.auteurId, { nom: c.auteur, avatarUrl: c.avatarUrl });
 
@@ -3230,6 +3257,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       suite.delete(userId);
       return suite;
     });
+    /* La fiche ouverte de cette personne : plus de « Envoyer un message »,
+       que la base refuserait (seconde relecture du 31/10). */
+    setProfilPublic((p) => (p && String(p.id) === String(userId) ? { ...p, bloque: true } : p));
   };
 
   /* ---------- demandes de particuliers ---------- */
@@ -3541,7 +3571,12 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         relire: (id) => api.conversationAvecClient(id),
       });
     } catch (e) {
-      showErreur("La conversation n'a pas pu être ouverte.");
+      /* La base REFUSE (un blocage, dans un sens ou dans l'autre) : une
+         phrase qui le dit sans dire pourquoi, au lieu de laisser croire à
+         une panne (seconde relecture du 31/10). */
+      showErreur(e && e.code === '42501'
+        ? CONVERSATION_IMPOSSIBLE
+        : "La conversation n'a pas pu être ouverte.");
       return false;
     }
     let conv = conversations.find((c) => c.id === issue.id) || null;
@@ -5326,6 +5361,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             chargement={profilPublicCharge}
             echec={profilPublicEchec}
             onReessayer={relireProfilPublic}
+            onRelireDemandes={relireDemandesDuProfil}
             jeSuisPro={canPublish}
             monId={api.getUserId()}
             onContacter={contacterParticulier}

@@ -52,10 +52,15 @@ export function demandesAMontrer(demandes, { jeSuisPro = false } = {}) {
 /**
  * Le bouton « Envoyer un message » sur la fiche d'un particulier : à un
  * PROFESSIONNEL seulement (décision du 30/10 — la base refuse aussi une
- * conversation entre deux particuliers), et jamais sur sa propre fiche.
+ * conversation entre deux particuliers), jamais sur sa propre fiche, ni
+ * sur celle d'une personne qu'on a bloquée (`bloque`) : la base refuse, et
+ * l'écran proposait un geste voué à l'échec (seconde relecture du 31/10).
+ * Un blocage posé PAR l'autre n'est pas connu ici — c'est voulu : il ne
+ * se lit pas ; la base refuse, et l'écran le dit sans dire pourquoi.
  */
 export function peutEcrireDepuisLaFiche({ profil = null, monId = null, jeSuisPro = false } = {}) {
   if (!profil || !jeSuisPro) return false;
+  if (profil.bloque) return false;
   /* Le TYPE doit être connu, et particulier : pendant la lecture, ou après
      un échec, la fiche n'a qu'un nom venu d'un commentaire — le bouton y
      était proposé comme si l'on savait (relecture du 30/10). */
@@ -69,6 +74,13 @@ export function peutEcrireDepuisLaFiche({ profil = null, monId = null, jeSuisPro
  * « cette personne n'a publié aucune demande » : une demande pourvue, ou
  * cachée par un blocage, n'est pas une demande qui n'existe pas.
  */
+/**
+ * Ce que l'écran dit quand la base refuse d'ouvrir la conversation (un
+ * blocage, dans un sens ou dans l'autre). Elle ne dit pas pourquoi : être
+ * bloqué se SAIT déjà par d'autres signes, l'écran n'en ajoute pas un.
+ */
+export const CONVERSATION_IMPOSSIBLE = 'Vous ne pouvez pas écrire à cette personne depuis Opus.';
+
 export const AUCUNE_DEMANDE_A_MONTRER = 'Aucune demande en cours à afficher.';
 
 /**

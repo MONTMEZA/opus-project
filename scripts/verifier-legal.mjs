@@ -2192,20 +2192,24 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
   const section = (liste, titre) => (liste.find((b) => b.titre === titre) || { texte: '' }).texte;
   const TEXTES = {
     'CONFIDENTIALITE:Ce que d’autres écrivent sur vous': [section(CONFIDENTIALITE, 'Ce que d’autres écrivent sur vous'),
-      '60e815c4f210ac0d44f77624394c69a27de4a6ade394f0170ace5cc6a69d6e9a'],
+      '0a656d58e78f9f2bc134e8de9d8b7c5935f8512100f62ca9a96f375d7d4d804d'],
     'CONFIDENTIALITE:Combien de temps': [section(CONFIDENTIALITE, 'Combien de temps').split(CE_QUI_RESTE_EN_LIGNE).join('[CE_QUI_RESTE_EN_LIGNE]'),
-      '64a8df978ffacc46e148b00f0cbd9211f920d4681af5c11e8c977081faf2fd76'],
+      '9032ad19d07c2c95026b2de18442ee3f336888349cbef0c7bd8d6b6c1aa7f645'],
     'CONFIDENTIALITE:Vos droits, et comment les exercer ICI': [section(CONFIDENTIALITE, 'Vos droits, et comment les exercer ICI').split('Opposition et limitation')[0],
-      '2a94924273307865bc33dfb0ac4e16365394c1f8dcc9f9f4c9bb8371507f7208'],
+      '5601e93511a41c2f30600cb8eedd899298e949fc8306d2796ecefef119413556'],
     'CONFIDENTIALITE:Cookies et traceurs': [section(CONFIDENTIALITE, 'Cookies et traceurs'),
-      '23364241ccb449c217ffce4ad10a52975f61979564762b60a443a8cdfd538093'],
+      'e54cdc320c6dfab625dff22464d7a5824e3da32bf5a4f8ea3ba4af6d0a4fd6d2'],
     'CONFIDENTIALITE:À qui vos données sont transmises': [section(CONFIDENTIALITE, 'À qui vos données sont transmises'),
-      'ad8155ee4f074c5b1fd11915eea253647f6600287107a3a06286878a0115d08e'],
+      'b67871c0b4533494aa7dea5bf6073f67e8355e63138882c0d24c1af2d2000ebf'],
     'CGU:Qui peut s’inscrire': [section(CGU, 'Qui peut s’inscrire'),
-      '074e5e6ccd336f28504d71f02c26e0decda78285e226df5483809267db505d37'],
-    EXCLUSIONS_DE_L_EXPORT: [EXCLUSIONS_DE_L_EXPORT, 'a7cbc7c71775e55ae5a7310ccdbad57e7bc2ef07e4d19ab3b9df6d96b6264b15'],
-    BORNES_DE_L_EXPORT: [BORNES_DE_L_EXPORT, 'a9327f02e6aa6c8f9bd5e6d4fa5fc1a49169f04e983bf05066984a61a168a44c'],
+      '0fe83b44e5b708324e1c9ccf090af824b20e543de3da53390ca7fd2a3f626bfa'],
+    EXCLUSIONS_DE_L_EXPORT: [EXCLUSIONS_DE_L_EXPORT, 'ffff7c4aeee093673877bbd28abf083dabc63f35aacd86707697e4df5dd898ee'],
+    BORNES_DE_L_EXPORT: [BORNES_DE_L_EXPORT, '4f4390b9444521024b15b0a74608e379218a03218e925375d389b234d28fccff'],
     CE_QUI_EST_GARDE: [CE_QUI_EST_GARDE, '1df85a6fb5f6ab369a2201506a32d7e9cdc6ed63dd4a70e0506505ae059e42c8'],
+    /* Et la copie d'inscription corrigée (seconde relecture du 31/10,
+       R2T-11) : elle n'avait pas d'empreinte. */
+    'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
+      'f7a21e93987bcec0e26342648c778f8457e973e9cde287edf472d15565ed37ac'],
   };
   for (const [nom, [texte, attendue]] of Object.entries(TEXTES)) {
     const e = empreinte(texte);
@@ -2227,7 +2231,10 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
      l'écrire (« un an », « douze mois », « 30 jours ») : aucune purge ne
      tient de durée aujourd'hui. Les heures restent permises — « examen sous
      48 heures » est un délai de traitement, pas de conservation. */
-  const DUREE_SIG = /(?:^|[^\p{L}\d])(?:\d+|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|quinze|vingt|trente)\s+(?:ans?|années?|mois|semaines?|jours?)(?![\p{L}])/iu;
+  /* N'IMPORTE QUELLE UNITÉ de durée, quel que soit le nombre (seconde
+     relecture du 31/10, R2T-10) : la liste des nombres s'arrêtait à
+     « trente », et « un semestre » ou « soixante jours » passaient. */
+  const DUREE_SIG = /(?:^|[^\p{L}\d])(?:ans?|années?|mois|semaines?|jours?|trimestres?|semestres?|quinzaines?|décennies?)(?![\p{L}])/iu;
   const promesses = [];
   for (const t of tous) {
     for (const m of t.matchAll(/signalement/giu)) {
@@ -2246,6 +2253,18 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
     /\{EXCLUSIONS_DE_L_EXPORT\}/.test(mesDonnees) && /\{BORNES_DE_L_EXPORT\}/.test(mesDonnees)
     && /import\s*\{[^}]*\bEXCLUSIONS_DE_L_EXPORT\b[^}]*\bBORNES_DE_L_EXPORT\b[^}]*\}\s*from\s*'\.\.\/data\/legal'/.test(ecranConf)
     && !/tout ce qu/i.test(mesDonnees));
+  /* …et sa phrase d'introduction, mot pour mot (R2T-11) : seule « tout ce
+     qu » y était refusée. */
+  const EMPREINTE_ECRAN = 'd35b068af85c39615ce5a5dda638b14055afe8e3ec2337f956f6b4a6906dde5a';
+  verifier('…et la phrase de l’écran « Mes données » est celle qui a été relue (empreinte)',
+    mesDonnees.length > 0 && empreinte(mesDonnees) === EMPREINTE_ECRAN, `empreinte ${empreinte(mesDonnees)}`);
+  /* DEUX BLOCS DE MÊME TITRE : `section()` lit le premier, et le second
+     échappait à toute empreinte (R2T-11). */
+  for (const [nomListe, liste] of [['MENTIONS', MENTIONS], ['CGU', CGU], ['CONFIDENTIALITE', CONFIDENTIALITE]]) {
+    const titres = liste.map((b) => b.titre);
+    const doubles = titres.filter((t, k) => titres.indexOf(t) !== k);
+    verifier(`${nomListe} : aucun titre n’est écrit deux fois`, doubles.length === 0, doubles.join(', '));
+  }
 }
 
 console.log('');

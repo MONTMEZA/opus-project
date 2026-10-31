@@ -117,7 +117,22 @@ const EXPO_MINIMUM = 57;
    0 occurrence chacun — et le témoin `accentTexte` (une couleur de
    `theme.js`) : 1. Un mot ASCII survit dans la table des chaînes de
    Hermes ; s'il n'y est pas, le code n'y est pas. */
-const OUTILS = ['@expo/cli', '@expo/config-plugins', '@expo/metro', '@expo/config'];
+/* ET `@expo/fingerprint` ET `@expo/metro-config`, ajoutés le 31/10/2026 —
+   même famille, même preuve. Ce jour-là, le contrôle a rougi sans qu'une
+   ligne du projet ait bougé : des avis neufs sur `glob` et `minimatch`, par
+   `expo > @expo/fingerprint > glob|minimatch` et
+   `expo > @expo/metro-config > glob`. `@expo/fingerprint` calcule
+   l'empreinte du projet natif pour un build ou une mise à jour ;
+   `@expo/metro-config` est la configuration du bundler (`metro.config.js`) :
+   les deux tournent sur l'ordinateur. Mesuré sur le paquet iOS exporté
+   (6,1 Mo de bytecode Hermes) : `GLOBSTAR`, `braceExpand`, `minimatch`,
+   `PathScurry`, `GlobStream`, `escapePath`, `globSync` (le code de `glob`
+   et de `minimatch`), `createFingerprintAsync` et `getDefaultConfig` :
+   0 occurrence chacun. Un seul « makeRe » : un morceau de
+   « _makeReferrer-Policy » dans la table des chaînes, pas une fonction de
+   `minimatch`. Témoin `accentTexte` : 1. */
+const OUTILS = ['@expo/cli', '@expo/config-plugins', '@expo/metro', '@expo/config',
+  '@expo/fingerprint', '@expo/metro-config'];
 const PAQUET = JSON.parse(readFileSync('package.json', 'utf8'));
 const DEV = Object.keys(PAQUET.devDependencies || {});
 

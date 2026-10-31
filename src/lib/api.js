@@ -1579,11 +1579,12 @@ async function chargerProfilPublicDemo(userId, { jeSuisPro = false } = {}) {
     ville: villeVisible({ personne, regardeur }),
     demandes: demandesAMontrer(siennes, { jeSuisPro }).map(versDemandeDeFiche),
     demandesEchec: false,
+    bloque: demoBlocages.has(String(userId)),
   };
 }
 
 export const chargerProfilPublic = !hasSupabase ? chargerProfilPublicDemo : async (userId, { jeSuisPro = false } = {}) => {
-  const [uRes, dRes] = await Promise.all([
+  const [uRes, dRes, bRes] = await Promise.all([
     supabase.rpc('profil_public', { p_id: userId }).maybeSingle(),
     jeSuisPro
       ? supabase.from('demandes').select('id, metier, ville, texte, media, statut, created_at')
@@ -1591,9 +1592,18 @@ export const chargerProfilPublic = !hasSupabase ? chargerProfilPublicDemo : asyn
         .order('created_at', { ascending: false })
         .limit(DEMANDES_SUR_UNE_FICHE)
       : Promise.resolve({ data: [] }),
+    /* Ai-JE bloqué cette personne ? Une lecture de MES blocages, qu'on peut
+       faire ; l'inverse (m'a-t-elle bloqué ?) ne se lit pas, et c'est voulu.
+       Une lecture ratée vaut « non » : la base refusera le geste, et l'écran
+       le dira (seconde relecture du 31/10). */
+    supabase.from('blocages').select('bloque_id')
+      .eq('bloqueur_id', currentUserId).eq('bloque_id', userId).limit(1),
   ]);
   if (uRes.error) throw uRes.error;
   if (!uRes.data) return null;
+  /* Les demandes ne valent que sur la fiche d'un PARTICULIER : celles d'un
+     compte passé pro s'affichaient sans leur titre (seconde relecture). */
+  const particulier = uRes.data.type === 'particulier';
   return {
     id: uRes.data.id,
     nom: uRes.data.nom,
@@ -1602,8 +1612,9 @@ export const chargerProfilPublic = !hasSupabase ? chargerProfilPublicDemo : asyn
     ville: uRes.data.ville || null,
     /* Une lecture des demandes ratée n'est pas « aucune demande » : elle se
        DIT (relecture du 30/10 — l'erreur n'était jamais lue). */
-    demandes: dRes.error ? [] : demandesAMontrer(dRes.data || [], { jeSuisPro }).map(versDemandeDeFiche),
-    demandesEchec: !!dRes.error,
+    demandes: !particulier || dRes.error ? [] : demandesAMontrer(dRes.data || [], { jeSuisPro }).map(versDemandeDeFiche),
+    demandesEchec: particulier && !!dRes.error,
+    bloque: !bRes.error && Array.isArray(bRes.data) && bRes.data.length > 0,
   };
 };
 
@@ -2622,7 +2633,19 @@ export const createConversation = !hasSupabase ? noop : async (proId) => {
 };
 
 /** Côté professionnel : ouvrir une conversation avec le particulier auteur d'une demande. */
-export const createConversationWithClient = !hasSupabase ? noop : async (clientId) => {
+/* En démonstration, la même règle que la base : on n'écrit pas à une
+   personne qu'on a bloquée (la règle « creation conversation » refuse, en
+   42501). Elle ouvrait la conversation (seconde relecture du 31/10). */
+async function createConversationWithClientDemo(clientId) {
+  if (demoBlocages.has(String(clientId))) {
+    const e = new Error('new row violates row-level security policy for table "conversations"');
+    e.code = '42501';
+    throw e;
+  }
+  return null;
+}
+
+export const createConversationWithClient = !hasSupabase ? createConversationWithClientDemo : async (clientId) => {
   const { data, error } = await supabase.from('conversations')
     .insert({ client_id: clientId, professional_id: currentUserId })
     .select().single();
