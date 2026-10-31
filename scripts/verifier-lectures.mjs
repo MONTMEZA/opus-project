@@ -598,8 +598,10 @@ for (const a of appels.filter((x) => x.fichier === 'src/lib/api.js' && x.methode
     const premierF = argsF[0] || '';
     let colonnesF = [];
     if (fm.methode === 'or') {
+      /* Une colonne JOINTE se filtre aussi dans un `.or()` (« users.email.eq.… ») :
+         elle est lue avec son préfixe, et vérifiée sur SA table (banc du 31/10, Y15c). */
       const brut = premierF.replace(/\$\{[^}]*\}/g, 'X').replace(/[`'"+\s]/g, '');
-      colonnesF = [...brut.matchAll(/(?:^|[,(])(\w+)\.(?:not\.)?(?:eq|neq|gt|gte|lt|lte|like|ilike|is|in|cs|cd|ov|sl|sr|nxr|nxl|adj|fts|plfts|phfts|wfts|match|imatch)\./g)].map((x) => x[1]);
+      colonnesF = [...brut.matchAll(/(?:^|[,(])(\w+(?:\.(?!not\.)\w+)?)\.(?:not\.)?(?:eq|neq|gt|gte|lt|lte|like|ilike|is|in|cs|cd|ov|sl|sr|nxr|nxl|adj|fts|plfts|phfts|wfts|match|imatch)\./g)].map((x) => x[1]);
       if (colonnesF.length === 0) { filtresIllisibles.push(`.or(${premierF.slice(0, 50)})`); continue; }
     } else if (fm.methode === 'match') {
       const cles = [...premierF.matchAll(/(\w+)\s*:/g)].map((x) => x[1]);
