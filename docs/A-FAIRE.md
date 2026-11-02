@@ -2748,14 +2748,22 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
 **Ensuite, l'étape M2** — votre téléphone a déjà le code qui la supporte
 (le `git pull` de M1d) ; ce qui reste, c'est l'ordre :
 
-- [ ] fermer, par des droits de colonne, la ville, le code postal et la date
+- [x] **FAIT le 02/11/2026 au soir** (CLAUDE.md, « Ce que chacun lit des
+  autres — lot S-d, étape M2 ») : appliquée, essayée par le chemin de
+  l'application (43 vérifications justes) et au navigateur.
+- [ ] **À vous, maintenant : `git pull`, puis `npx expo start -c`**, et
+  l'essai sur l'iPhone (aucun module natif : rien à reconstruire). Ce qui
+  se voit : la phrase sous « Ville » d'un compte particulier, dans
+  « Modifier mon profil », et la section « Ce que les autres voient de
+  vous » de la politique de confidentialité.
+- [x] fermer, par des droits de colonne, la ville, le code postal et la date
   d'inscription de `users` (liste blanche : `id`, `type`, `nom`,
   `avatar_url`), et les huit colonnes privées des fiches pro
   (`badge_suspendu_le`, `verification_note`, `demandes_vues_le`,
   `agent_propositions`, `siret`, `rge_numero`, `code_insee`, `created_at`).
   Construite, relue (quatre relecteurs, 23 constats, corrigés), simulée sur
   une imitation de la vraie base : elle attend votre accord.
-- [ ] **NOUVEL ORDRE pour M2 (relecture du 02/11, T-M2-7) : la base
+- [x] **NOUVEL ORDRE pour M2 (relecture du 02/11, T-M2-7) : la base
   D'ABORD, puis votre `git pull`.** Les textes nouveaux (« Ce que les autres
   voient de vous », `VERSION = '2026-11-02'`) décrivent l'état APRÈS M2 :
   tirés avant, ils affirmeraient une protection que la base ne tient pas

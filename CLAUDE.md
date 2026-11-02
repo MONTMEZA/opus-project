@@ -10587,6 +10587,134 @@ directe, la ville, le code postal et la date d'inscription d'un autre compte
 porte n'est fermée que par M2 — qui passe APRÈS le `git pull`. La suite est dans `docs/A-FAIRE.md`, « Après l'étape
 M1d du lot S-d ».
 
+> **M2 est faite depuis le 02/11/2026 au soir** : section suivante. Et
+> l'ordre annoncé ici s'est inversé en cours de route — voir pourquoi.
+
+### Ce que chacun lit des autres — lot S-d, étape M2 (02/11/2026)
+
+Sections 18.1 et 53.9 de `schema.sql`, `scripts/verifier-lectures.mjs`,
+`scripts/verifier-legal.mjs` (« Ce que les autres voient de vous »),
+`supabase/essais-section-51d.sql` (parties L et M). La seconde moitié du
+lot S-d : ce que l'étape M1d laissait encore lire à tout compte connecté
+par une requête directe est fermé par des **droits de colonne**.
+
+| | avant M2 | après |
+|---|---|---|
+| `users`, pour un compte connecté | id, type, nom, photo, **ville, code postal, date d'inscription**, deux colonnes de CGU | **id, type, nom, photo** — rien d'autre |
+| `users`, pour un visiteur | rien | rien |
+| une fiche pro, pour tous | la table entière | **38 colonnes** de vitrine ; les huit privées (motif d'un refus, date d'une suspension du badge, dernière visite des Demandes, compteur de la fenêtre de l'agent, ancien SIRET libre, n° RGE, code INSEE, date de création) **ne se lisent plus** |
+
+Chacun relit SA ligne entière par `mon_compte()` et `ma_fiche_pro()`, la
+ville d'un particulier passe par `profil_public()` (aux pros connectés), et
+l'administration par ses fonctions — toutes `security definer`.
+
+#### Une LISTE BLANCHE, et le `revoke` qui emporte tout
+
+`revoke select on <table>` retire AUSSI les droits de colonne (mesuré) : la
+forme est donc « retirer la table, puis rendre colonne par colonne ».
+Une colonne ajoutée demain **naît fermée** : un oubli se voit tout de suite
+(la lecture de l'application échoue en entier), une fuite ne se verrait
+jamais. `verifier-lectures` recalcule les colonnes de la table depuis le
+schéma et exige « toutes moins les huit », puis compare **chaque colonne que
+l'application lit — sélection, filtre, tri — à la liste blanche**.
+
+#### L'ordre s'est INVERSÉ, et c'est la relecture qui l'a vu
+
+M1d disait : « M2 passe APRÈS le `git pull` » — l'ancien code lisait ces
+colonnes. Vrai pour le code. Mais les **textes** livrés avec M2 (« Ce que
+les autres voient de vous », `VERSION = '2026-11-02'`) décrivent l'état
+APRÈS : tirés avant la migration, ils auraient affirmé une protection que la
+base ne tenait pas encore (relecture T-M2-7).
+
+> **Quand le code et les textes d'un lot n'ont pas le même ordre, on les
+> sépare.** Le code qui supporte M2 était sur le téléphone depuis M1d
+> (relevé dans les journaux : plus aucune lecture d'une colonne fermée) ;
+> la base est passée D'ABORD, les textes ensuite, par le `git pull`.
+
+#### La relecture : 23 constats, et la même leçon trois fois
+
+Quatre relecteurs, un contradicteur par constat. Côté base, **aucune
+régression** (toutes les fonctions, les écritures, l'administration, la
+suppression de compte relues). Côté textes et contrôles, ce que ce document
+dit depuis le lot S-b, encore :
+
+> **Un contrôle de texte ne voit que la forme qu'il cherche.** Un `grant`
+> dans un bloc `do`, `grant all (col)`, un ordre concaténé
+> (`'gr' || 'ant …'`), `owner to`, une vue `recursive`, un
+> `create table … as`, une seconde révocation après la liste blanche, une
+> colonne ajoutée sans le mot `column`, l'option `referencedTable` d'un tri,
+> une adresse `/rest/v1/` écrite à la main, une fonction Edge qui lirait avec
+> le jeton de l'appelant : chacun **rouvrait ou cassait M2 au vert**. Les
+> contrôles lisent désormais le schéma ENTIER, corps compris, et les
+> fonctions Edge ; 44 sabotages, les 44 refusés.
+
+Deux angles que seule la base pouvait montrer :
+
+- **une fonction `security invoker` qui nommerait une colonne fermée
+  échouerait EN ENTIER** — et `mes_conversations` en premier, dont `loadAll`
+  avale l'échec : Messages resterait vide sans un mot. Les huit fonctions
+  invoker qui nomment `users` ou une fiche pro sont une **liste fermée**,
+  relevée dans le catalogue par l'essai (L1 bis) et dans le texte par
+  `verifier-lectures`, et chacune est APPELÉE par l'essai (M12, M12 bis) ;
+- **le contrôle des textes relève lui-même ce que la base ouvre** : toutes
+  les tables de `public` (RLS exigée), les règles de lecture lues de façon
+  tolérante, les tables « soi seul » comparées à leurs formes exactes, et
+  **chacune des 38 + 8 + 4 colonnes rattachée à sa phrase** de la section.
+
+Et deux vérités que les textes taisaient :
+
+- **passer en compte professionnel rend public le nom du profil** :
+  `devenir_pro()` le recopie dans le nom et l'entreprise de la fiche,
+  lisibles sans compte. C'est dit ; le changer est une décision
+  (`docs/A-FAIRE.md`) ;
+- **être bloqué se sait, et se liste** : `est_masque()` répond sur
+  l'appelant, et tout connecté lit l'identifiant de chacun — une personne
+  bloquée peut parcourir les comptes un par un. C'est la règle déjà écrite
+  (« elle peut s'en apercevoir ») ; le commentaire de la fonction disait
+  « ne permet jamais de lister » : c'était faux, il le dit maintenant.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur une base neuve (empreinte du catalogue
+identique à la précédente), les 31 essais comparés à l'état M1d (seuls les
+cas M et les deux nouveaux de 51d bougent), l'essai 51d identique sur
+l'imitation migrée de la vraie base, les 56 contrôles, le linter à 32, les
+paquets iOS et Android lus.
+
+**Appliquée le 02/11/2026 au soir**, avec l'accord du propriétaire, Opus
+fermé sur son iPhone, zéro requête active. Relevé AVANT : la vraie base
+identique à son imitation (au droit MAINTAIN près). Relevé APRÈS : droits de
+table et de colonne de `users` et des fiches pro **identiques à l'imitation
+migrée**. Puis par le chemin de l'application, avec deux artisans et un
+particulier jetables à Brest — **43 vérifications justes, aucune en échec** :
+
+| | résultat |
+|---|---|
+| un pro lit le nom, la photo, le type d'un particulier | oui |
+| …sa ville, son code postal, sa date d'inscription, ses CGU | **42501** ×6, et en filtrant sur la ville aussi |
+| un visiteur lit `users` | **401 · 42501** |
+| la ville par `profil_public` (pro) · sa ligne par `mon_compte` (lui) | oui · oui |
+| un visiteur et un pro lisent les 38 colonnes de la vitrine | 200 |
+| …une des huit colonnes · `select=*` · un filtre sur `created_at` | **42501** ×8 · 42501 · 42501 |
+| l'artisan relit sa fiche entière (`ma_fiche_pro`) et l'écrit (Demandes vues, compteur, présentation) | oui, 204 ×3 |
+| le fil (visiteur, particulier), l'urgence, `emetteur_incomplet`, `mes_conversations` (avec le nom de l'artisan), `ajoute_au_portfolio`, l'export | 200 partout |
+| **au navigateur**, l'artisan puis le particulier démarrent | **33 et 24 requêtes, aucune refusée**, aucun bandeau |
+| …« Modifier mon profil » du particulier | la ville relue (« Brest (29) ») et la phrase sous « Ville » |
+
+Comptes supprimés par le chemin de l'application ; base revenue à
+14 comptes / 8 fiches / 21 publications, aucun compte `@exemple-opus.test`,
+aucun SIREN d'essai réservé. Les deux preuves SIRET `essai` réécrites pour
+l'essai expirent d'elles-mêmes.
+
+#### Ce qui n'a PAS été vérifié
+
+Rien sur l'iPhone après le `git pull` (les textes nouveaux, la phrase sous
+« Ville ») ; l'export à grande échelle en production. **Ce qui reste
+ouvert** : un visiteur garde des droits d'ÉCRITURE de table sur 25 tables,
+que la RLS arrête (un `revoke` général, dans un lot à part) ; `loadAll`
+avale encore l'échec de `mes_conversations` ; le nom recopié par
+`devenir_pro()` — `docs/A-FAIRE.md`, « Après l'étape M1d du lot S-d ».
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :
