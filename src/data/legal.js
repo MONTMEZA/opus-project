@@ -29,7 +29,27 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-10-31';
+export const VERSION = '2026-11-02';
+/* 02/11/2026 — CE QUE CHACUN LIT DES AUTRES, SECONDE ÉTAPE (lot S-d, étape
+   M2 : les droits de colonne de `users` et des fiches pro). Ce qui a changé
+   DE FOND :
+     - « CE QUE LES AUTRES VOIENT DE VOUS », SECTION NOUVELLE, écrite table
+       par table d'après les règles réelles de la base : un visiteur ne voit
+       aucun particulier ; connecté, chacun voit le nom, la photo et le type
+       de compte de chacun ; la ville d'un particulier, par son profil, aux
+       professionnels connectés seulement (décision D3 du 25/10) ; ses
+       demandes, à tous les professionnels connectés, même refermées ; les
+       j'aime, abonnements, enregistrements et vues : à soi seul, les NOMBRES
+       restant publics ; huit informations d'une fiche pro, à son titulaire
+       et à l'administration ; et ce que l'administration lit en plus ;
+     - L'ANCIEN SIRET SAISI À LA MAIN « reste lisible par l'interface
+       publique » : ce n'est plus vrai, il n'est plus lisible que par son
+       titulaire et l'administration ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions, et le préavis de quinze jours du règlement
+       2019/1150 (art. 3.2) s'appliquerait. Sans effet tant que STATUT vaut
+       'essai' ; à organiser avant l'ouverture au public (A-FAIRE). */
+/* VERSION PRÉCÉDENTE : '2026-10-31'. */
 /* 31/10/2026 — CE QUE CHACUN LIT DES AUTRES, PREMIÈRE ÉTAPE (lot S-d du lot
    de sécurité). Le texte du 30/10 a été commité (`0b01d1b`) : celui-ci prend
    la date du jour suivant, pour que deux textes ne portent jamais la même
@@ -1399,9 +1419,9 @@ export const CONFIDENTIALITE = [
       + 'VIES, le service de la Commission européenne, l’a reconnu. Ces informations sont rangées '
       + 'à part de votre fiche : '
       + 'seuls vous et l’administration d’Opus pouvez les lire. Un numéro saisi à la '
-      + 'main dans l’ancien champ « SIRET » de la fiche, avant le 15/10/2026, reste '
-      + 'lisible par l’interface publique d’Opus, même s’il ne s’affiche plus nulle '
-      + 'part dans l’application. Si vous demandez l’ouverture d’un compte '
+      + 'main dans l’ancien champ « SIRET » de la fiche, avant le 15/10/2026, n’est plus '
+      + 'lisible que par vous et l’administration d’Opus, et ne s’affiche nulle part '
+      + 'dans l’application. Si vous demandez l’ouverture d’un compte '
       + 'professionnel à la main : le numéro saisi, la raison pour laquelle la '
       + 'consultation automatique n’a pas abouti, votre message, et le justificatif '
       + 'que vous choisissez de joindre. Quand un numéro SIRET est consulté au '
@@ -1461,6 +1481,70 @@ export const CONFIDENTIALITE = [
       + 'que vous proposez ou votre entreprise, avec leur motif. Tout cela figure dans '
       + '« Récupérer mes données », dans les limites que précise « Vos droits », sauf ce '
       + 'qu’énumère sa liste fermée — dont l’identité de qui a signalé un de vos contenus.',
+  },
+  {
+    titre: 'Ce que les autres voient de vous',
+    /* LOT S-d, ÉTAPE M2 (02/11/2026). Écrite TABLE PAR TABLE d'après les
+       règles réelles de la base (`pg_policies` et les droits de colonne,
+       relevés sur une base rejouée), avec la charpente de « Vos tarifs et
+       vos prix » : d'abord ce que les autres utilisateurs peuvent lire, puis
+       l'administration et l'éditeur. Elle dit ce que la BASE permet, pas
+       seulement ce que les écrans affichent : un client modifié lit tout ce
+       que la base lui laisse lire.
+
+       À tenir à jour : une table, une colonne ou une règle de lecture
+       nouvelle se relit contre ce texte, dans le même lot. `verifier-legal`
+       en garde l'empreinte, et `verifier-lectures` la liste des colonnes
+       ouvertes de `users` et des fiches pro (USERS_OUVERTES, PRO_FERMEES). */
+    texte: 'Parmi les utilisateurs d’Opus, voici qui peut lire quoi. C’est la base de données '
+      + 'd’Opus qui le tient, pas seulement l’écran. Sans compte, un visiteur ne voit aucun '
+      + 'particulier : ni son nom, ni sa photo, ni sa ville. Il voit les fiches des '
+      + 'professionnels, leurs publications et leurs chantiers, les commentaires et les avis — '
+      + 'sans le nom des particuliers qui les ont écrits. Avec un compte, chacun voit le nom, '
+      + 'la photo et le type de compte (particulier ou professionnel) de chacun. La ville d’un '
+      + 'particulier, sur son profil, ne se lit que par lui-même et par les professionnels '
+      + 'connectés — sauf si l’un a bloqué l’autre ; son code postal et sa date d’inscription, '
+      + 'par aucun autre utilisateur. Les demandes qu’un particulier publie — leur texte, leur '
+      + 'commune et sa position, leur code postal, leur budget et leurs photos — se lisent par '
+      + 'tous les professionnels connectés, sauf blocage, y compris une fois refermées. Une '
+      + 'demande de devis, de rappel ou d’urgence ne se lit que par celui qui l’envoie et par '
+      + 'l’artisan à qui elle est adressée, avec tout ce qu’elle contient, dont le numéro de '
+      + 'téléphone qui y est écrit. La réponse d’un professionnel à une demande se lit par lui '
+      + 'et par la personne qui a publié la demande, même si l’un a bloqué l’autre. Vos '
+      + 'messages se lisent par vous et par la personne avec qui vous échangez. Vos « j’aime », '
+      + 'les professionnels que vous suivez, les publications que vous enregistrez et celles '
+      + 'que vous avez regardées, les personnes que vous bloquez et vos notifications ne se '
+      + 'lisent que par vous ; seuls des NOMBRES sont lisibles par les autres — les « j’aime » '
+      + 'et les vues d’une publication, les abonnés d’un professionnel. Pour un professionnel, '
+      + 'la fiche se lit par tous, visiteurs compris : son entreprise, ses métiers, sa commune '
+      + 'et son code postal, sa présentation, ses réalisations, ses notes, son téléphone et son '
+      + 'e-mail de contact s’il les renseigne, l’état de ses justificatifs (reçu, à jour, '
+      + 'refusé — jamais le document lui-même), et le nom qu’il donne à son agent ; passer en '
+      + 'compte professionnel rend donc votre commune publique. Huit informations de la fiche '
+      + 'ne se lisent que par son titulaire et par l’administration d’Opus : le motif d’un refus '
+      + 'de vérification, la date d’une suspension du badge, la date de la dernière visite de '
+      + 'l’onglet Demandes, le nombre de fois où la fenêtre « nommez votre agent » a été '
+      + 'proposée, un ancien numéro SIRET saisi à la main, le numéro RGE déclaré, le code INSEE '
+      + 'de la commune et la date de création de la fiche. Les annonces de la Place des pros se '
+      + 'lisent par les professionnels connectés, sauf blocage ; une réponse à une annonce, par '
+      + 'son auteur et, sauf blocage, par celui de l’annonce. Un partenariat accepté se lit par les '
+      + 'utilisateurs connectés, sauf blocage ; une demande de partenariat, par les deux '
+      + 'professionnels concernés. La disponibilité aux urgences — métier d’urgence, rayon, '
+      + 'délai — se lit par les utilisateurs connectés ; les tarifs, seulement s’ils sont '
+      + 'affichés, et seulement par les particuliers connectés (« Vos tarifs et vos prix », '
+      + 'dans les conditions d’utilisation). Les photos et les vidéos que vous publiez — photo '
+      + 'de profil, bannière, publications, photos d’une demande ou d’une annonce — sont '
+      + 'rangées à une adresse publique : quiconque la connaît peut les ouvrir ; vos '
+      + 'justificatifs et les pièces jointes des messages, eux, sont rangés dans des espaces '
+      + 'privés. Un blocage, dans un sens comme dans l’autre, retire en plus à l’autre personne '
+      + 'la ville de votre profil ; ce qu’il retire d’autre est dit dans « Bloquer quelqu’un », '
+      + 'dans les conditions d’utilisation. '
+      + 'L’administration d’Opus lit en plus ce que ses outils lui montrent : les fiches à '
+      + 'contrôler et leurs justificatifs, les signalements, et les demandes d’ouverture de '
+      + 'compte professionnel, avec la ville de la personne qui la demande. L’éditeur d’Opus, '
+      + 'qui administre la base de données, pourrait techniquement lire davantage avec les '
+      + 'outils d’administration de l’hébergeur ; pour vos tarifs et vos prix, il prend '
+      + 'l’engagement écrit dans les conditions d’utilisation.',
   },
   {
     titre: 'Ce que nous ne collectons pas',

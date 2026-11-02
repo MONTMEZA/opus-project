@@ -18,15 +18,15 @@
 --  commit 0b01d1b (juste avant S-d) — la critique adverse et les
 --  reproductions du 30/10.
 --
---  ÉTAPE M1d : ce fichier prouve l'état que `schema.sql` décrit aujourd'hui.
---  Les droits de colonne de `users` et des fiches pro (étape M2) s'y
---  ajouteront avec elle.
+--  DEUX ÉTAPES : A à L prouvent l'étape M1d (appliquée le 02/11/2026) ;
+--  M prouve l'étape M2 — les droits de colonne de `users` et des fiches pro.
 --
 --  ORDRE : A. la donnée existe ; B. `users` et `profil_public()` ;
 --  C. j'aime et abonnements ; D. les réponses aux demandes ; E. les droits
 --  de table ; F. les signalements ; G. les conversations ; H. la
 --  disponibilité aux urgences ; I. la fiche pro privée ; J. l'export ;
---  K. les notifications d'un compte qui part ; L. les fonctions ouvertes.
+--  K. les notifications d'un compte qui part ; L. les fonctions ouvertes ;
+--  M. les droits de colonne (étape M2).
 --
 --  Les SIRET sont fictifs, à clé de contrôle juste (ceux de
 --  essais-section-45.sql), les comptes sont préfixés a51d0000.
@@ -960,7 +960,7 @@ select confdeltype from pg_constraint where conname = 'notifications_acteur_id_f
 -- ==========================================================================
 --  L. Les fonctions ouvertes, et ce qu'elles nomment
 -- ==========================================================================
-\echo '--- L1. Aucune fonction INVOKER exécutable par un visiteur ne nomme une table qu un visiteur ne peut plus lire (attendu : aucune ligne — sinon elle tomberait sur « permission denied »)'
+\echo '--- L1. Aucune fonction INVOKER exécutable par un visiteur ne nomme une table dont un visiteur ne peut lire AUCUNE colonne (attendu : aucune ligne — sinon elle tomberait sur « permission denied » ; celles qui ne lisent que des colonnes ouvertes sont éprouvées en M12)'
 select p.proname as fonction, c.relname as table_nommee
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
@@ -971,7 +971,7 @@ select p.proname as fonction, c.relname as table_nommee
    and not p.prosecdef
    and p.prorettype <> 'pg_catalog.trigger'::regtype
    and has_function_privilege('anon', p.oid, 'execute')
-   and not has_table_privilege('anon', c.oid, 'select')
+   and not has_any_column_privilege('anon', c.oid, 'select')
    and p.prosrc ~* ('public\.' || c.relname || '\M')
  order by 1, 2;
 
@@ -992,6 +992,138 @@ select p.prosecdef as definer,
   from pg_proc p
  where p.pronamespace = 'public'::regnamespace and p.proname = 'tient_le_signalement';
 
+-- ==========================================================================
+--  M. ÉTAPE M2 — les droits de colonne de `users` (18.1) et des fiches pro
+--     (53.9), posés le 02/11/2026
+--
+--  « avant » : mesuré en jouant cette partie sur le schéma de l'étape M1d
+--  (commit b6955ee), c'est-à-dire la vraie base avant M2.
+-- ==========================================================================
+\echo '--- M1. `users` : un compte connecté ne lit plus que QUATRE colonnes, et plus la table entière ; un visiteur, aucune (attendu : avatar_url, id, nom, type | f | 0 — avant : dix colonnes, ville, code postal et date d inscription comprises)'
+select string_agg(column_name, ', ' order by column_name)
+         filter (where has_column_privilege('authenticated', 'public.users', column_name, 'select')) as connecte_lit,
+       has_table_privilege('authenticated', 'public.users', 'select') as connecte_lit_la_table,
+       count(*) filter (where has_column_privilege('anon', 'public.users', column_name, 'select')) as visiteur_lit
+  from information_schema.columns
+ where table_schema = 'public' and table_name = 'users';
+
+\echo '--- M2. Fiches pro : aucune des HUIT colonnes privées ne se lit, les 38 de la vitrine oui, pour un visiteur comme pour un compte connecté ; plus personne ne lit la table entière (attendu : 0 | 38 | 38 | 46 | f | agent_propositions, badge_suspendu_le, code_insee, created_at, demandes_vues_le, rge_numero, siret, verification_note — avant : 8 | 46 | 46 | 46 | t)'
+select count(*) filter (where column_name in ('badge_suspendu_le', 'verification_note', 'demandes_vues_le', 'agent_propositions', 'siret', 'rge_numero', 'code_insee', 'created_at')
+                          and (has_column_privilege('anon', 'public.professional_profiles', column_name, 'select')
+                               or has_column_privilege('authenticated', 'public.professional_profiles', column_name, 'select'))) as privees_lisibles,
+       count(*) filter (where has_column_privilege('anon', 'public.professional_profiles', column_name, 'select')) as visiteur_lit,
+       count(*) filter (where has_column_privilege('authenticated', 'public.professional_profiles', column_name, 'select')) as connecte_lit,
+       count(*) as colonnes,
+       has_table_privilege('anon', 'public.professional_profiles', 'select')
+         or has_table_privilege('authenticated', 'public.professional_profiles', 'select') as table_entiere,
+       string_agg(column_name, ', ' order by column_name)
+         filter (where not has_column_privilege('authenticated', 'public.professional_profiles', column_name, 'select')) as fermees
+  from information_schema.columns
+ where table_schema = 'public' and table_name = 'professional_profiles';
+
+\echo '--- M3. Q (connecté) lit le nom, la photo et le type de P (attendu : Paule P. | particulier)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+select nom, type from public.users where id = :P;
+rollback;
+
+\echo '--- M4. … mais plus sa ville (attendu : ERROR permission denied for table users — avant : Brest (29))'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+select ville from public.users where id = :P;
+rollback;
+
+\echo '--- M5. … ni sa date d inscription, ni son code postal, même en filtrant dessus (attendu : ERROR permission denied for table users — avant : 1)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000002';
+select count(*) from public.users where code_postal = '29200' and created_at is not null;
+rollback;
+
+\echo '--- M6. Un VISITEUR ne lit plus le motif de refus de A (attendu : ERROR permission denied for table professional_profiles — avant : Kbis illisible)'
+begin;
+set local role anon;
+select verification_note from public.professional_profiles where id = :A;
+rollback;
+
+\echo '--- M7. … ni B (pro connecté) son n° RGE déclaré, même par un filtre (attendu : ERROR permission denied for table professional_profiles — avant : 1)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000b';
+select count(*) from public.professional_profiles where id = :A and rge_numero like 'RGE%';
+rollback;
+
+\echo '--- M8. La VITRINE se lit, colonne par colonne, telle que l application la demande — par un visiteur et par B (attendu : 1 | 1)'
+begin;
+set local role anon;
+select count(*) as visiteur from (select id, nom, entreprise, metier, metiers, ville, verifie, experience_annees, followers_count, assurance_valide, assurance_expire, kbis_valide, kbis_maj, avatar_url, banner_url, kbis_url, assurance_url, verification_statut, verifie_le, code_postal, latitude, longitude, avis_count, note_delais, note_qualite, note_tarif, telephone, email_pro, zone_km, specialites, horaires, rge, rge_declare, rge_expire, rge_url, agent_nom, bio, portfolio from public.professional_profiles where id = :A) v \gset m8_
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000b';
+select :m8_visiteur as visiteur, count(*) as pro_b
+  from (select id, nom, entreprise, metier, metiers, ville, verifie, experience_annees, followers_count, assurance_valide, assurance_expire, kbis_valide, kbis_maj, avatar_url, banner_url, kbis_url, assurance_url, verification_statut, verifie_le, code_postal, latitude, longitude, avis_count, note_delais, note_qualite, note_tarif, telephone, email_pro, zone_km, specialites, horaires, rge, rge_declare, rge_expire, rge_url, agent_nom, bio, portfolio from public.professional_profiles where id = :A) v;
+rollback;
+
+\echo '--- M9. `select *` sur une fiche pro est refusé — l application ne le fait plus (attendu : ERROR permission denied for table professional_profiles — avant : 1 ligne)'
+begin;
+set local role anon;
+select * from public.professional_profiles where id = :A;
+rollback;
+
+\echo '--- M10. A ÉCRIT toujours ce que l application écrit — la visite des Demandes, son n° RGE, le compteur de l agent — et le relit par `ma_fiche_pro()` (attendu : UPDATE 1 ×3 puis t | RGE-0002 | 1)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+update public.professional_profiles set demandes_vues_le = now() where id = :A;
+update public.professional_profiles set rge_numero = 'RGE-0002' where id = :A;
+update public.professional_profiles set agent_propositions = 1 where id = :A;
+select demandes_vues_le is not null as vu, rge_numero, agent_propositions from public.ma_fiche_pro();
+rollback;
+
+\echo '--- M11. P enregistre toujours sa ville, son code postal et sa position, et la relit par `mon_compte()` (attendu : UPDATE 1 puis Lille (59) | 59000)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
+update public.users set ville = 'Lille (59)', code_postal = '59000', latitude = 50.63, longitude = 3.06 where id = :P;
+select ville, code_postal from public.mon_compte();
+rollback;
+
+\echo '--- M12. Les fonctions INVOKER qui nomment `users` ou les fiches pro marchent toujours, pour un visiteur comme pour un compte connecté (attendu : t | t | t | t | t | t | t)'
+begin;
+set local role anon;
+select count(*) >= 1 as fil_visiteur from public.fil_filtre() \gset m12_
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
+select count(*) >= 0 as urgences from public.artisans_urgence('plomberie', 48.39, -4.49) \gset m12_
+select count(*) >= 1 as conversations from public.mes_conversations() \gset m12_
+select public.mes_donnees() is not null as export_p \gset m12_
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+select :'m12_fil_visiteur'::boolean as fil_visiteur, :'m12_urgences'::boolean as urgences,
+       :'m12_conversations'::boolean as conversations, :'m12_export_p'::boolean as export_p,
+       public.emetteur_incomplet(:A) is not null as emetteur_de_a,
+       public.est_un_pro() as a_est_pro,
+       (public.mes_donnees() -> 'fiche_professionnelle' ->> 'verification_note') = 'Kbis illisible' as export_a_entier;
+rollback;
+
+\echo '--- M13. Aucune POLITIQUE ne nomme une colonne fermée de `users` ou des fiches pro — une politique s exécute avec les droits de celui qui lit, elle tomberait sur « permission denied » (attendu : aucune ligne)'
+select tablename, policyname
+  from pg_policies
+ where schemaname in ('public', 'storage')
+   and (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~* '\m(users|professional_profiles)\M'
+   and (coalesce(qual, '') || ' ' || coalesce(with_check, ''))
+       ~* '\.(ville|code_postal|created_at|avatar_seed|cgu_version|cgu_acceptees_le|email|telephone|latitude|longitude|badge_suspendu_le|verification_note|demandes_vues_le|agent_propositions|siret|rge_numero|code_insee)\M'
+ order by 1, 2;
+
+\echo '--- M14. La seconde porte de la section 44 reste fermée : P, données effacées, recrée sa ligne — en particulier, et sans relire de colonne fermée (attendu : INSERT 0 1 puis particulier)'
+begin;
+delete from public.users where id = :P;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
+insert into public.users (id, nom) values (:P, 'Paule P.');
+select type from public.users where id = :P;
+rollback;
+
 -- Ménage.
 \set QUIET on
 delete from public.administrateurs where user_id = :ADMIN;
@@ -1006,4 +1138,4 @@ delete from public.signalements
 delete from auth.users where id::text like 'a51d0000-0000-4000-8000-%';
 delete from public.preuves_siret where siret in ('00000024000010', '00000025700014');
 \set QUIET off
-\echo 'FIN des essais du lot S-d (étape M1d)'
+\echo 'FIN des essais du lot S-d (étapes M1d et M2)'

@@ -528,6 +528,15 @@ export default function ProfilEditScreen({
 
             <Text style={s.label}>Ville</Text>
             <ChampVille valeur={lieu.affichage} onChange={setLieu} />
+            {/* Qui la voit : la base le tient depuis l'étape M2 du lot S-d
+                (`profil_public()`, droits de colonne de `users`) — décision
+                D3 du 25/10. La commune d'une DEMANDE, elle, est lue par tous
+                les pros : la dire ici évite de croire la ville cachée de tous. */}
+            <Text style={s.aide}>
+              Votre profil ne la montre qu'aux professionnels connectés. La
+              commune d'une demande que vous publiez est lue par tous les
+              professionnels.
+            </Text>
 
             {/* Renseigné ici une fois, le numéro pré-remplit ensuite toutes
                 les demandes de devis et de rappel. */}

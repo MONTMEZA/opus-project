@@ -2209,7 +2209,10 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
     /* Et la copie d'inscription corrigée (seconde relecture du 31/10,
        R2T-11) : elle n'avait pas d'empreinte. */
     'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
-      'f7a21e93987bcec0e26342648c778f8457e973e9cde287edf472d15565ed37ac'],
+      '96e073c58ed174a63b27c383910902b352479bba7a5055c5ad886d8bc2d4bb08'],
+    /* Étape M2 (02/11/2026) : la section qui dit qui lit quoi. */
+    'CONFIDENTIALITE:Ce que les autres voient de vous': [section(CONFIDENTIALITE, 'Ce que les autres voient de vous'),
+      '9a43758f13d641a24ce155482a85c9970d8c5f66d77671f52bc312e190dee191'],
   };
   for (const [nom, [texte, attendue]] of Object.entries(TEXTES)) {
     const e = empreinte(texte);
@@ -2265,6 +2268,93 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
     const doubles = titres.filter((t, k) => titres.indexOf(t) !== k);
     verifier(`${nomListe} : aucun titre n’est écrit deux fois`, doubles.length === 0, doubles.join(', '));
   }
+}
+
+/* « CE QUE LES AUTRES VOIENT DE VOUS » (lot S-d, étape M2, 02/11/2026).
+   Cette section dit ce que la BASE laisse lire, table par table. Elle ne
+   reste vraie que si chaque table qu'une règle laisse lire y est CLASSÉE :
+   le contrôle relève toutes les politiques de lecture de `schema.sql`, et
+   refuse une table qui n'est pas dans la liste fermée ci-dessous. Une table
+   que d'AUTRES peuvent lire doit y être nommée par sa phrase ; une table
+   qu'on ne lit que soi-même (ou que seule l'administration lit) est classée
+   comme telle, avec sa raison. Ajouter une table se DÉCIDE ici. */
+console.log('\n« Ce que les autres voient de vous » : chaque table lisible est classée');
+{
+  const sqlNu = readFileSync('supabase/schema.sql', 'utf8').replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const tablesLues = new Set();
+  for (const m of sqlNu.matchAll(/create policy\s+"[^"]+"\s+on\s+public\.(\w+)\s+for\s+(select|all)\b/gi)) tablesLues.add(m[1]);
+  for (const m of sqlNu.matchAll(/create policy\s+"[^"]+"\s+on\s+public\.(\w+)\s+(?:as\s+\w+\s+)?(?:to\s+\w+\s+)?using\b/gi)) tablesLues.add(m[1]);
+  const section = (CONFIDENTIALITE.find((b) => b.titre === 'Ce que les autres voient de vous') || { texte: '' }).texte;
+  /* [table, phrase attendue dans la section] — ou [table, null, raison]. */
+  const CLASSEMENT = [
+    ['users', 'le nom, la photo et le type de compte'],
+    ['professional_profiles', 'Huit informations de la fiche'],
+    ['posts', 'leurs publications'],
+    ['comments', 'les commentaires'],
+    ['reviews', 'les avis'],
+    ['chantiers', 'leurs chantiers'],
+    ['demandes', 'Les demandes qu’un particulier publie'],
+    ['demande_reponses', 'La réponse d’un professionnel à une demande'],
+    ['quote_requests', 'demande de devis, de rappel ou d’urgence'],
+    ['callback_requests', 'demande de devis, de rappel ou d’urgence'],
+    ['sos_requests', 'demande de devis, de rappel ou d’urgence'],
+    ['conversations', 'Vos messages'],
+    ['messages', 'Vos messages'],
+    ['post_likes', 'Vos « j’aime »'],
+    ['follows', 'les professionnels que vous suivez'],
+    ['saved_posts', 'les publications que vous enregistrez'],
+    ['post_vues', 'celles que vous avez regardées'],
+    ['blocages', 'les personnes que vous bloquez'],
+    ['notifications', 'vos notifications'],
+    ['annonces_pro', 'Les annonces de la Place des pros'],
+    ['annonce_reponses', 'une réponse à une annonce'],
+    ['professional_partners', 'Un partenariat accepté'],
+    ['sos_availability', 'La disponibilité aux urgences'],
+    ['tarifs_pro', 'les tarifs, seulement s’ils sont affichés'],
+    ['signalements', 'les signalements'],
+    ['demandes_pro', 'les demandes d’ouverture de compte professionnel'],
+    ['administrateurs', null, 'la liste des administrateurs, lue par l’administration seule'],
+    ['journal_admin', null, 'le journal de l’administration, lu par elle seule'],
+    ['journal_ia', null, 'ce que votre agent a fait : vous seul (« Ce que nous collectons »)'],
+    ['remontees', null, 'l’historique de vos remises en avant : vous seul (« Ce que nous collectons »)'],
+    ['metier_demandes', null, 'vos demandes de métier : vous seul'],
+    ['specialites_proposees', null, 'vos spécialités proposées : vous seul'],
+    ['clients', null, 'le carnet d’un artisan : lui seul (« Les clients que vous enregistrez »)'],
+    ['devis', null, 'les devis d’un artisan : lui seul'],
+    ['devis_lignes', null, 'les devis d’un artisan : lui seul'],
+    ['devis_tva', null, 'les devis d’un artisan : lui seul'],
+    ['base_postes', null, 'la base de postes : lui seul (« Vos tarifs et vos prix »)'],
+    ['emetteur', null, 'ses informations de devis : lui seul'],
+    ['emetteur_assurances', null, 'ses assurances : lui seul'],
+    ['entreprise_registre', null, 'son entreprise lue au répertoire : lui et l’administration'],
+    ['preuves_tva', null, 'sa preuve de TVA : lui seul'],
+    ['metiers_catalogue', null, 'le catalogue des métiers : une donnée d’Opus, sur personne'],
+    ['metiers_categories', null, 'les catégories de métiers : une donnée d’Opus, sur personne'],
+  ];
+  const classees = new Set(CLASSEMENT.map((c) => c[0]));
+  const nonClassees = [...tablesLues].filter((t) => !classees.has(t));
+  verifier('les politiques de lecture sont relevées (sinon ce contrôle ne regarde rien)', tablesLues.size >= 40,
+    `${tablesLues.size} tables`);
+  verifier('chaque table qu’une règle laisse lire est CLASSÉE (nommée dans la section, ou « soi seul » avec sa raison)',
+    nonClassees.length === 0, `à décider : ${nonClassees.join(', ')}`);
+  const fantomes = [...classees].filter((t) => !tablesLues.has(t));
+  verifier('…et la liste ne garde aucune table qui n’a plus de règle de lecture', fantomes.length === 0, fantomes.join(', '));
+  const absentes = CLASSEMENT.filter(([, phrase]) => phrase && !section.includes(phrase));
+  verifier('chaque table que d’autres peuvent lire est NOMMÉE dans « Ce que les autres voient de vous »',
+    section.length > 0 && absentes.length === 0, absentes.map(([t, ph]) => `${t} (« ${ph} »)`).join(' | '));
+  /* La vérité que l'étape M2 rend vraie, mot pour mot. */
+  verifier('…la ville d’un particulier : par lui et les professionnels connectés, son code postal : par aucun autre',
+    /La ville d’un particulier, sur son profil, ne se lit que par lui-même et par les professionnels connectés — sauf si l’un a bloqué l’autre ; son code postal et sa date d’inscription, par aucun autre utilisateur\./.test(section));
+  verifier('…un visiteur sans compte ne voit aucun particulier',
+    /Sans compte, un visiteur ne voit aucun particulier : ni son nom, ni sa photo, ni sa ville\./.test(section));
+  verifier('l’ancien SIRET saisi à la main n’est plus dit « lisible par l’interface publique »',
+    !/interface publique/.test([...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte).join(' ')));
+  verifier('VERSION est au moins celle de l’étape M2 du lot S-d (02/11/2026) : un changement de fond, sous une version nouvelle',
+    VERSION >= '2026-11-02', `VERSION = ${VERSION}`);
+  /* La phrase sous « Ville » d'un particulier, dans « Modifier mon profil ». */
+  const ecranEdit = readFileSync('src/screens/ProfilEditScreen.js', 'utf8').replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '');
+  verifier('« Modifier mon profil » dit, sous la ville d’un particulier, qui la voit',
+    /Votre profil ne la montre qu'aux professionnels connectés\. La\s+commune d'une demande que vous publiez est lue par tous les\s+professionnels\./.test(ecranEdit));
 }
 
 console.log('');

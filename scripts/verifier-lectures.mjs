@@ -819,8 +819,55 @@ for (const [nom, table, attendu] of POLITIQUES) {
    moment de PRÉPARER la requête (mesuré : tout le fil tombait). */
 verifier('`users` : plus rien pour un visiteur (`revoke all … from anon`), et 18.1 ne rend qu’aux connectés',
   /revoke all on public\.users from anon;/.test(sql)
-  && /execute format\('grant select \(%s\) on public\.users to authenticated', permises\);/.test(sql)
   && !/grant select[^;]*on public\.users to [^;]*\banon\b/.test(sql));
+/* ÉTAPE M2 (02/11/2026) : 18.1 est une LISTE BLANCHE. Retirer la table
+   (ce qui emporte les droits de colonne, mesuré), puis rendre QUATRE
+   colonnes — et rien d'autre, nulle part. L'ordre compte : un `grant` posé
+   AVANT le `revoke` serait emporté par lui. */
+{
+  const iRevoke = sql.indexOf('revoke select on public.users from anon, authenticated;');
+  const grantsUsers = [...sql.matchAll(/grant select \(([^)]*)\) on public\.users to authenticated;/g)];
+  verifier('`users` (M2) : `revoke select` sur la table, PUIS une seule liste blanche de quatre colonnes',
+    iRevoke > 0 && grantsUsers.length === 1 && grantsUsers[0].index > iRevoke
+    && colonnes(grantsUsers[0][1]).sort().join(',') === [...USERS_OUVERTES].sort().join(','),
+    grantsUsers.map((m) => m[1]).join(' | '));
+  verifier('`users` (M2) : plus de boucle qui rendrait « toutes les colonnes sauf les secrètes »',
+    !/\bsecretes\b/.test(sql) && !/\bpermises\b/.test(sql)
+    && !/table_name = 'users'[\s\S]{0,400}grant select/.test(sql));
+}
+/* ÉTAPE M2 : les fiches pro. La liste des colonnes de la table est
+   RECALCULÉE depuis le schéma (création, puis chaque `add column`) : la
+   liste blanche doit être exactement « toutes, moins les huit fermées ».
+   Une colonne ajoutée demain fait rougir ce contrôle tant qu'on n'a pas
+   DÉCIDÉ si elle est publique (dans le `grant`) ou privée (dans
+   PRO_FERMEES, plus haut). */
+{
+  const creation = /create table if not exists public\.professional_profiles \(([\s\S]*?)\n\);/.exec(sql);
+  const colsPro = new Set();
+  if (creation) {
+    for (const ligne of decouper(creation[1], ',')) {
+      const m = /^\s*(\w+)\s+\w/.exec(ligne);
+      if (m && !/^(?:primary|unique|constraint|check|foreign)$/i.test(m[1])) colsPro.add(m[1]);
+    }
+  }
+  for (const m of sql.matchAll(/alter table public\.professional_profiles\s+add column if not exists (\w+)/g)) colsPro.add(m[1]);
+  for (const m of sql.matchAll(/alter table public\.professional_profiles\s+((?:add column if not exists \w+[^,;]*,\s*)+add column if not exists \w+[^;]*);/g)) {
+    for (const c of m[1].matchAll(/add column if not exists (\w+)/g)) colsPro.add(c[1]);
+  }
+  const iRevokePro = sql.indexOf('revoke select on public.professional_profiles from anon, authenticated;');
+  const grantsPro = [...sql.matchAll(/grant select \(([^)]*)\)\s*on public\.professional_profiles to anon, authenticated;/g)];
+  const ouvertesAttendues = [...colsPro].filter((c) => !PRO_FERMEES.includes(c)).sort();
+  const ouvertesEcrites = grantsPro.length === 1 ? colonnes(grantsPro[0][1]).sort() : [];
+  verifier(`fiches pro : ${colsPro.size} colonnes lues dans le schéma (sinon ce contrôle ne regarde rien)`,
+    colsPro.size >= 46 && PRO_FERMEES.every((c) => colsPro.has(c)), [...colsPro].join(','));
+  verifier('fiches pro (M2) : `revoke select` sur la table, PUIS une seule liste blanche = toutes les colonnes moins les huit fermées',
+    iRevokePro > 0 && grantsPro.length === 1 && grantsPro[0].index > iRevokePro
+    && ouvertesEcrites.join(',') === ouvertesAttendues.join(','),
+    `en trop : ${ouvertesEcrites.filter((c) => !ouvertesAttendues.includes(c)).join(',') || '—'} ; manquantes : ${ouvertesAttendues.filter((c) => !ouvertesEcrites.includes(c)).join(',') || '—'}`);
+  const dernierAjout = Math.max(...[...sql.matchAll(/alter table public\.professional_profiles\s+add column/g)].map((m) => m.index));
+  verifier('…posée APRÈS le dernier `add column` de la table (sinon le `grant` nommerait une colonne pas encore née)',
+    grantsPro.length === 1 && grantsPro[0].index > dernierAjout);
+}
 verifier('les « j’aime » et les abonnements : `anon` perd l’écriture, GARDE la lecture (le fil des visiteurs)',
   /revoke insert, update, delete on public\.post_likes, public\.follows from anon;/.test(sql)
   && !/revoke (?:all|select)[^;]*on [^;]*public\.(?:post_likes|follows)\b[^;]*from [^;]*\banon\b/.test(sql)
@@ -849,12 +896,6 @@ verifier('le schéma n’a aucun commentaire AMBIGU (un `/*` dans un commentaire
 const vues = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(?:temp\w*\s+)?(?:materialized\s+)?view\b[^;]*/gi)].map((m) => m[0]);
 verifier('aucune vue dans le schéma sans `security_invoker` (elle lirait tout avec les droits de son propriétaire)',
   vues.every((v) => /security_invoker\s*=\s*(?:true|on)\b/i.test(v) && !/materialized/i.test(v)), vues.join(' | '));
-/* LE TABLEAU DES COLONNES SECRÈTES de `users` (section 18.1), figé : en
-   retirer `email`, et la boucle la rendait à tout compte connecté. */
-verifier('`users` : le tableau `secretes` de la section 18.1 est figé (email, téléphone, latitude, longitude)',
-  (sql.match(/secretes text\[\] := array\['email', 'telephone', 'latitude', 'longitude'\];/g) || []).length === 1
-  && (sql.match(/\bsecretes\b/g) || []).length === 2
-  && /and not \(column_name = any\(secretes\)\);/.test(sql));
 /* UN DROIT CONSTRUIT DANS UNE CHAÎNE (`execute format('grant …')`) ne se
    lit pas comme un ordre : chaque chaîne qui nomme `grant` est dans une
    liste FERMÉE, avec son nombre. */
@@ -874,14 +915,13 @@ for (let k = 0; k < sql.length; k += 1) {
 }
 const GRANTS_CONSTRUITS = new Map([
   ['grant execute on function %s to authenticated', 5],
-  ['grant select (%s) on public.users to authenticated', 1],
   ['grant execute on function public.compter_appel_siret(text, timestamptz, int) to service_role', 1],
   ['grant execute on function public.compter_essai_tva(text, timestamptz, int, timestamptz, int) to service_role', 1],
 ]);
 const grantsConstruits = new Map();
 for (const c of chainesSql.filter((x) => /\bgrant\b/i.test(x))) grantsConstruits.set(c, (grantsConstruits.get(c) || 0) + 1);
 const grantsInattendus = [...grantsConstruits].filter(([c, n]) => GRANTS_CONSTRUITS.get(c) !== n);
-verifier('un droit construit dans une chaîne (`execute format(\'grant …\')`) est l’un des quatre connus, autant de fois',
+verifier('un droit construit dans une chaîne (`execute format(\'grant …\')`) est l’un des trois connus, autant de fois',
   grantsInattendus.length === 0 && grantsConstruits.size === GRANTS_CONSTRUITS.size,
   grantsInattendus.map(([c, n]) => `${n} × « ${c} »`).join(' | '));
 const sqlCorpsAPart = sql.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, (_m, t) => `$${t}$corps$${t}$`);
@@ -898,11 +938,23 @@ const surTable = (i, table) => {
   const m = / on (?!function |schema |sequence |all )(.+?) to /.exec(i.x);
   return !!m && m[1].split(',').map((t) => t.trim()).includes(table);
 };
-for (const table of ['users', 'sos_availability', 'signalements']) {
+for (const table of ['users', 'sos_availability', 'signalements']) {  // fiches pro : plus bas
   const fautives = attributions.filter((i) => surTable(i, table) && PUBLICS.test(i.x.split(' to ').pop()));
   verifier(`\`${table}\` : aucun droit, sous aucune forme, pour un visiteur (\`anon\`, \`public\`)`,
     fautives.length === 0, fautives.map((i) => i.x).join(' | '));
 }
+/* Et aucune lecture de TABLE ENTIÈRE sur les fiches pro, sous aucune forme
+   (`on table`, majuscules, `all privileges`) : elle rouvrirait les huit
+   colonnes fermées. Seule la liste blanche lit. */
+const proEntiere = attributions.filter((i) => surTable(i, 'professional_profiles')
+  && decouper(i.x.replace(/^grant /, '').replace(/ on .*$/, ''), ',').some((p) => /^(?:select|all)$/.test(p.trim())));
+verifier('fiches pro : aucun droit de lecture de la TABLE entière, sous aucune forme', proEntiere.length === 0,
+  proEntiere.map((i) => i.x).join(' | '));
+const proFermeeLue = attributions.filter((i) => surTable(i, 'professional_profiles')
+  && decouper(i.x.replace(/^grant /, '').replace(/ on .*$/, ''), ',')
+    .some((p) => /^select\b/.test(p.trim()) && PRO_FERMEES.some((c) => new RegExp(`\\b${c}\\b`).test(p))));
+verifier('fiches pro : aucun `grant select (…)` ne nomme une des huit colonnes fermées', proFermeeLue.length === 0,
+  proFermeeLue.map((i) => i.x).join(' | '));
 const surTout = attributions.filter((i) => / on all (?:tables|sequences|functions) in schema /.test(i.x));
 verifier('aucun `grant … on all tables in schema` (il rouvrirait toutes les colonnes fermées d’un coup)',
   surTout.length === 0, surTout.map((i) => i.x).join(' | '));

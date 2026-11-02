@@ -3486,42 +3486,37 @@ create index if not exists idx_pro_specialites on public.professional_profiles u
 --  lisaient encore. Vérifié sur PostgreSQL 16.
 --
 --  Il faut retirer le droit sur la table, PUIS le rendre colonne par
---  colonne. D'où la boucle ci-dessous : elle dresse la liste des colonnes
---  au moment où elle s'exécute, ce qui veut dire qu'une colonne ajoutée
---  plus tard sera automatiquement couverte au prochain passage du fichier.
---  Une colonne sensible de plus n'aura qu'à rejoindre la liste `SECRETES`.
-do $$
-declare
-  secretes text[] := array['email', 'telephone', 'latitude', 'longitude'];
-  toutes   text;
-  permises text;
-begin
-  select string_agg(quote_ident(column_name), ', ' order by ordinal_position)
-    into toutes
-    from information_schema.columns
-   where table_schema = 'public' and table_name = 'users';
-
-  select string_agg(quote_ident(column_name), ', ' order by ordinal_position)
-    into permises
-    from information_schema.columns
-   where table_schema = 'public' and table_name = 'users'
-     and not (column_name = any(secretes));
-
-  -- 1. plus aucun droit de lecture, ni sur la table ni sur les colonnes
-  execute 'revoke select on public.users from anon, authenticated';
-  execute format('revoke select (%s) on public.users from anon, authenticated', toutes);
-  -- 2. puis on rend, une par une, celles qui peuvent être lues — aux comptes
-  --    CONNECTÉS seulement depuis le lot S-d (30/10/2026)
-  execute format('grant select (%s) on public.users to authenticated', permises);
-end $$;
-
--- SANS COMPTE, PLUS RIEN (lot S-d, 30/10/2026). Un visiteur lisait le nom,
--- la photo, la ville, le code postal et la date d'inscription de chaque
--- compte, avec la seule clé publiable. Aucun écran ne lit `users` sans
--- compte : on retire TOUT à `anon` — lecture, écriture, et ses droits de
--- colonne avec (un `revoke all` sur la table les emporte, mesuré). `anon`
--- n'a aucune règle d'écriture sur cette table : ces droits ne servaient à
--- rien, sinon à attendre qu'une politique les rattrape.
+--  colonne. Et dans ce sens-là, PostgreSQL fait le ménage tout seul : un
+--  `revoke select` sur la TABLE retire aussi les droits accordés colonne
+--  par colonne (mesuré le 02/11/2026, sur une base qui les avait).
+--
+--  UNE LISTE BLANCHE, PLUS UNE LISTE NOIRE (lot S-d, étape M2, 02/11/2026)
+--  -----------------------------------------------------------------------
+--  Jusqu'au 02/11, une boucle rendait TOUTES les colonnes sauf une liste de
+--  secrètes (e-mail, téléphone, coordonnées GPS). Deux défauts :
+--
+--    - tout compte connecté lisait encore la ville, le code postal, la date
+--      d'inscription et la version des conditions acceptée de chacun, alors
+--      que la décision D3 (25/10) réserve la ville d'un particulier aux
+--      artisans connectés, par sa fiche (`profil_public()`, section 53.1) ;
+--    - une colonne ajoutée PLUS BAS dans ce fichier n'était ouverte qu'au
+--      SECOND rejeu : l'état dépendait du nombre de passages.
+--
+--  Désormais : quatre colonnes, rien d'autre — l'identifiant, le type de
+--  compte, le nom et la photo, ce que le fil, les commentaires et les
+--  conversations affichent. Une colonne née plus bas naît FERMÉE, et le
+--  reste ne se lit que par une fonction qui décide : `mon_compte()` pour sa
+--  propre ligne, `profil_public()` pour la fiche d'un autre.
+--
+--  Et SANS COMPTE, PLUS RIEN (étape M1d, 30/10/2026). Un visiteur lisait le
+--  nom, la photo, la ville, le code postal et la date d'inscription de
+--  chaque compte, avec la seule clé publiable. Aucun écran ne lit `users`
+--  sans compte : on retire TOUT à `anon` — lecture, écriture, et ses droits
+--  de colonne avec. `anon` n'a aucune règle d'écriture sur cette table : ces
+--  droits ne servaient à rien, sinon à attendre qu'une politique les
+--  rattrape.
+revoke select on public.users from anon, authenticated;
+grant select (id, type, nom, avatar_url) on public.users to authenticated;
 revoke all on public.users from anon;
 
 -- Écrire reste permis : c'est bien son propre numéro qu'on enregistre, et
@@ -15370,11 +15365,12 @@ grant execute on function public.remonter_publication(uuid) to authenticated;
 --
 --  DEUX ÉTAPES, et ce fichier dit toujours l'état de la vraie base
 --  ----------------------------------------------------------------
---  M1d (aujourd'hui) se pose sur une base qui sert encore l'application
---  d'avant : rien de ce qu'elle lit ne lui est retiré. M2 — les droits de
---  colonne de `users` et des fiches pro — ne se pose qu'une fois le
---  téléphone du propriétaire à jour : l'application d'avant lit ces
---  colonnes AU DÉMARRAGE, et ne démarrerait plus du tout.
+--  M1d (appliquée le 02/11/2026) se posait sur une base qui servait encore
+--  l'application d'avant : rien de ce qu'elle lisait ne lui était retiré.
+--  M2 — les droits de colonne de `users` (18.1) et des fiches pro (53.9) —
+--  ne se pose qu'une fois le téléphone du propriétaire à jour : l'application
+--  d'avant lisait ces colonnes AU DÉMARRAGE, et ne démarrerait plus du tout.
+--  Les deux sont écrites ici : ce fichier dit l'état M2.
 --
 --  Les politiques réécrites le sont À LEUR PLACE (sections 13 et 13.5) ;
 --  ce qui est neuf vit ici.
@@ -15433,9 +15429,9 @@ grant execute on function public.profil_public(uuid) to authenticated;
 --  main, le n° RGE déclaré, le code INSEE et la date de création. Elles ne
 --  s'affichaient nulle part, et n'importe qui les lisait, même sans compte.
 --
---  Leur fermeture est l'étape M2 (droits de colonne). Ces deux fonctions
---  naissent AVANT, à l'étape M1d, pour que l'application les appelle déjà
---  le jour où la colonne se ferme : c'est le modèle de `mon_compte()`
+--  Leur fermeture est l'étape M2 (droits de colonne, 53.9). Ces deux
+--  fonctions sont nées AVANT, à l'étape M1d, pour que l'application les
+--  appelle déjà le jour où la colonne se ferme : c'est le modèle de `mon_compte()`
 --  (section 18), qui rend SA ligne de `users` entière.
 --
 --  `admin_etat_des_fiches()` rend l'identifiant et la date de suspension
@@ -16021,6 +16017,54 @@ alter table public.signalements drop constraint if exists signalements_extrait_c
 alter table public.signalements add constraint signalements_extrait_check check (extrait is null or char_length(extrait) <= 500);
 alter table public.signalements drop constraint if exists signalements_details_check;
 alter table public.signalements add constraint signalements_details_check check (details is null or char_length(details) <= 1000);
+
+-- --------------------------------------------------------------------------
+--  53.9  Les huit colonnes privées d'une fiche pro se FERMENT (étape M2,
+--        02/11/2026 — décision du 30/10)
+--
+--  Une fiche pro est une VITRINE : son nom, ses métiers, sa ville, ses notes,
+--  son téléphone et son e-mail de contact, l'état de ses pièces (reçue, à
+--  jour, refusée — jamais le document ni le motif) se lisent par tous,
+--  visiteurs compris. Huit colonnes, elles, ne concernent que son titulaire
+--  et l'administration, et ne s'affichent nulle part :
+--
+--    - `verification_note`   le motif écrit par l'administration ;
+--    - `badge_suspendu_le`   la date d'un badge suspendu ;
+--    - `demandes_vues_le`    la dernière visite de l'onglet Demandes ;
+--    - `agent_propositions`  le compteur de la fenêtre « nommez votre agent » ;
+--    - `siret`               l'ancien SIRET tapé à la main (section 45) ;
+--    - `rge_numero`          le n° RGE déclaré ;
+--    - `code_insee`, `created_at`.
+--
+--  Elles se lisent désormais par `ma_fiche_pro()` (le titulaire) et par les
+--  fonctions de l'administration (53.2), qui sont `security definer`.
+--
+--  LA MÊME FORME QU'EN 18.1, et le même piège : retirer le droit de lire la
+--  TABLE (qui emporte les droits de colonne), puis rendre les colonnes de la
+--  vitrine, une par une. C'est une LISTE BLANCHE : une colonne ajoutée plus
+--  bas naît fermée, et il faudra l'ajouter ici pour qu'elle s'affiche — un
+--  oubli se voit tout de suite (la lecture de l'application échoue en
+--  entier), une fuite ne se voit jamais.
+--
+--  Écrire n'est pas touché : chacun modifie toujours SA fiche (« ecriture
+--  mon profil »), y compris ces huit colonnes quand l'application les écrit
+--  (`demandes_vues_le`, `rge_numero`), et une modification qui filtre par
+--  `id` ne lit que `id`.
+--
+--  POSÉE ICI, APRÈS la dernière colonne PUBLIQUE ajoutée à la table
+--  (`agent_nom`, section 40) : un `grant` qui nommerait une colonne pas
+--  encore née ferait échouer le fichier.
+-- --------------------------------------------------------------------------
+revoke select on public.professional_profiles from anon, authenticated;
+grant select (
+  id, nom, entreprise, metier, ville, bio, experience_annees, verifie,
+  followers_count, assurance_valide, assurance_expire, kbis_valide,
+  kbis_maj, rge, portfolio, avatar_url, banner_url, kbis_url,
+  assurance_url, verification_statut, verifie_le, code_postal, latitude,
+  longitude, metiers, avis_count, note_delais, note_qualite, note_tarif,
+  telephone, zone_km, specialites, rge_declare, rge_expire, rge_url,
+  horaires, email_pro, agent_nom
+) on public.professional_profiles to anon, authenticated;
 
 -- --------------------------------------------------------------------------
 --  42. L'EXPORT RGPD — et pourquoi il est le DERNIER
