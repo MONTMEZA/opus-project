@@ -2745,17 +2745,23 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
   particuliers ; signaler un contenu ; « Récupérer mes données », plus
   complet. **Fermez Opus sur l'iPhone le jour où l'on applique M2.**
 
-**Ensuite, l'étape M2** — après votre `git pull`, jamais avant :
+**Ensuite, l'étape M2** — votre téléphone a déjà le code qui la supporte
+(le `git pull` de M1d) ; ce qui reste, c'est l'ordre :
 
 - [ ] fermer, par des droits de colonne, la ville, le code postal et la date
   d'inscription de `users` (liste blanche : `id`, `type`, `nom`,
   `avatar_url`), et les huit colonnes privées des fiches pro
   (`badge_suspendu_le`, `verification_note`, `demandes_vues_le`,
   `agent_propositions`, `siret`, `rge_numero`, `code_insee`, `created_at`).
-  L'ancien code de l'application LIT ces colonnes sur toutes les fiches :
-  appliquée avant votre `git pull`, M2 ferait échouer le démarrage de tout
-  compte connecté. Avec elle : les textes de la partie 2 (« Ce que les autres
-  voient de vous ») et une nouvelle `VERSION`.
+  Construite, relue (quatre relecteurs, 23 constats, corrigés), simulée sur
+  une imitation de la vraie base : elle attend votre accord.
+- [ ] **NOUVEL ORDRE pour M2 (relecture du 02/11, T-M2-7) : la base
+  D'ABORD, puis votre `git pull`.** Les textes nouveaux (« Ce que les autres
+  voient de vous », `VERSION = '2026-11-02'`) décrivent l'état APRÈS M2 :
+  tirés avant, ils affirmeraient une protection que la base ne tient pas
+  encore. Votre application actuelle, elle, ne lit déjà plus aucune colonne
+  fermée (relevé dans les journaux de Supabase) : elle ne casse pas quand M2
+  passe. **Fermez Opus sur l'iPhone pendant qu'on l'applique.**
 
 **Ce que les relectures du lot laissent ouvert :**
 
@@ -2774,6 +2780,32 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
   (sections 24 et 37, depuis le 06/10) : la seconde gagne au rejeu. C'est la
   règle « une fonction ne se définit qu'à un endroit », violée avant ce lot ;
   trouvé en préparant l'essai. À fondre en une.
+- [ ] **Un visiteur sans compte peut encore ÉCRIRE dans 25 tables** au
+  niveau des droits de table (`insert`, `update`, `delete` accordés d'office
+  par Supabase à `anon`) — dont les fiches pro. Les règles RLS l'arrêtent
+  aujourd'hui (celles qui valent pour `anon` demandent `auth.uid()`, vide
+  pour un visiteur ; mesuré par la relecture sur les fiches pro seulement :
+  une insertion y tombe sur OP010, une modification ou une suppression sur
+  zéro ligne), mais un droit
+  qui n'a aucune raison d'exister ne devrait pas attendre qu'une règle le
+  rattrape (la leçon de la section 18.2). Un `revoke` général, dans un lot à
+  part, avec le relevé « avant / après » de chaque écriture d'un visiteur
+  (relecture M2, BASE-2).
+- [ ] **`loadAll` avale l'échec de `mes_conversations()`** : si cette
+  lecture tombait, Messages resterait vide sans un mot (relecture M2,
+  APP-M2-2). La fonction est désormais gardée (liste fermée dans
+  `verifier-lectures`, appelée par l'essai 51d) ; l'écran, lui, devrait dire
+  « Lecture impossible » comme ailleurs.
+- [ ] **Passer en compte professionnel rend public le NOM du profil
+  particulier** : `devenir_pro()` le recopie dans le nom et l'entreprise de
+  la fiche, lisibles sans compte. Les textes le disent depuis M2. Le changer
+  (demander le nom de l'entreprise au lieu de le recopier) suppose d'abord
+  une mise à jour de l'application : à décider avec vous.
+- [ ] **Le texte d'exemple du champ « Votre nom » est un vrai prénom**
+  (à l'inscription et dans « Modifier mon profil »), et
+  `src/data/legal.js` cite un nom complet dans un commentaire. Trouvé le
+  02/11 en relisant la branche particulier. Un texte d'exemple qui
+  ressemble à une donnée est lu comme une donnée (29/10) : « Prénom N. ».
 - [ ] **Le signalement de l'essai du 02/11 reste en base**, clos
   (« rejeté », avec une note qui dit que c'est un essai) : le connecteur
   refuse de supprimer une ligne. Il ne gêne rien ; le supprimer est un geste

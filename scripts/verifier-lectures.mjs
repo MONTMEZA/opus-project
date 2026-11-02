@@ -596,6 +596,20 @@ for (const a of appels.filter((x) => x.fichier === 'src/lib/api.js' && x.methode
   for (const fm of appelsDeLaChaine(chaine).filter((x) => FILTRES.has(x.methode))) {
     const argsF = decouper(fm.interieur, ',');
     const premierF = argsF[0] || '';
+    /* L'OPTION `referencedTable` (ou l'ancien `foreignTable`) déplace le
+       filtre ou le tri sur une table JOINTE : postgrest-js écrit alors
+       `users.order=…` ou `users.or=(…)`. Lue comme avant, la colonne était
+       rattachée à la table de BASE (relecture M2 du 02/11, APP-M2-1 et
+       CTL-M2-7) : elle l'est désormais à la table jointe, retrouvée par sa
+       clé ou par son nom ; une option qu'on ne sait pas résoudre est
+       refusée. `unDevis` s'en sert pour trier ses lignes. */
+    const optionF = argsF.slice(1).find((x) => /\b(?:referencedTable|foreignTable)\b/.test(x));
+    let surJointe = null;
+    if (optionF) {
+      const ref = (/\b(?:referencedTable|foreignTable)\s*:\s*(['"])(\w+)\1/.exec(optionF) || [])[2];
+      if (!ref || !/^\s*\{[^{}]*\}\s*$/.test(optionF)) { filtresIllisibles.push(`.${fm.methode}(…, ${optionF.slice(0, 50)}) — option illisible`); continue; }
+      surJointe = ref;
+    }
     let colonnesF = [];
     if (fm.methode === 'or') {
       /* Une colonne JOINTE se filtre aussi dans un `.or()` (« users.email.eq.… ») :
@@ -612,14 +626,16 @@ for (const a of appels.filter((x) => x.fichier === 'src/lib/api.js' && x.methode
       if (!rf.ok) { filtresIllisibles.push(`.${fm.methode}(${premierF.slice(0, 40)}) — ${rf.raison}`); continue; }
       colonnesF = Array.isArray(rf.valeur) ? rf.valeur : [rf.valeur];
     }
-    for (const t of tables) {
+    for (const t0 of tables) {
+      const t = surJointe ? (CLES.get(`${t0}.${surJointe}`) || (TABLES.has(surJointe) ? surJointe : null)) : t0;
+      if (!t) { filtresIllisibles.push(`.${fm.methode}(…, { referencedTable: '${surJointe}' }) — table jointe inconnue depuis ${t0}`); continue; }
       for (const brute of colonnesF) {
         const col = String(brute).replace(/\s*->>?.*$/, '').trim();
         const points = col.split('.');
         const visee = points.length === 2 ? (CLES.get(`${t}.${points[0]}`) || (TABLES.has(points[0]) ? points[0] : null)) : t;
         const nomCol = points[points.length - 1];
         if (!visee || !/^\w+$/.test(nomCol)) { filtresIllisibles.push(`.${fm.methode}(${col})`); continue; }
-        lectures.push({ table: visee, colonne: nomCol, chemin: `${t} (filtre .${fm.methode})`, filtre: true, ordre: espaces(chaine).slice(0, 100) });
+        lectures.push({ table: visee, colonne: nomCol, chemin: `${t0}${surJointe ? ` → ${t}` : ''} (filtre .${fm.methode})`, filtre: true, ordre: espaces(chaine).slice(0, 100) });
       }
     }
   }
@@ -825,7 +841,9 @@ verifier('`users` : plus rien pour un visiteur (`revoke all … from anon`), et 
    colonnes — et rien d'autre, nulle part. L'ordre compte : un `grant` posé
    AVANT le `revoke` serait emporté par lui. */
 {
-  const iRevoke = sql.indexOf('revoke select on public.users from anon, authenticated;');
+  /* Le DERNIER revoke (relecture M2, CTL-M2-5) : vérifié contre le premier,
+     un second `revoke select` posé après la liste blanche passait. */
+  const iRevoke = sql.lastIndexOf('revoke select on public.users from anon, authenticated;');
   const grantsUsers = [...sql.matchAll(/grant select \(([^)]*)\) on public\.users to authenticated;/g)];
   verifier('`users` (M2) : `revoke select` sur la table, PUIS une seule liste blanche de quatre colonnes',
     iRevoke > 0 && grantsUsers.length === 1 && grantsUsers[0].index > iRevoke
@@ -850,11 +868,18 @@ verifier('`users` : plus rien pour un visiteur (`revoke all … from anon`), et 
       if (m && !/^(?:primary|unique|constraint|check|foreign)$/i.test(m[1])) colsPro.add(m[1]);
     }
   }
-  for (const m of sql.matchAll(/alter table public\.professional_profiles\s+add column if not exists (\w+)/g)) colsPro.add(m[1]);
-  for (const m of sql.matchAll(/alter table public\.professional_profiles\s+((?:add column if not exists \w+[^,;]*,\s*)+add column if not exists \w+[^;]*);/g)) {
-    for (const c of m[1].matchAll(/add column if not exists (\w+)/g)) colsPro.add(c[1]);
+  /* Les ajouts de colonne, lus de façon TOLÉRANTE (relecture M2,
+     CTL-M2-6) : `alter table [if exists] [only] [public.]professional_profiles
+     add [column] [if not exists] <nom>`, casse ignorée, plusieurs ajouts
+     dans le même ordre. Une colonne ajoutée sous une autre écriture
+     échappait au relevé. */
+  const ajoutsPro = [...sql.matchAll(/\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:"?public"?\s*\.\s*)?"?professional_profiles"?\s+([^;]*);/gi)];
+  for (const m of ajoutsPro) {
+    for (const c of m[1].matchAll(/(?:^|,)\s*add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?(\w+)"?/gi)) {
+      if (!/^(?:constraint|primary|unique|check|foreign)$/i.test(c[1])) colsPro.add(c[1].toLowerCase());
+    }
   }
-  const iRevokePro = sql.indexOf('revoke select on public.professional_profiles from anon, authenticated;');
+  const iRevokePro = sql.lastIndexOf('revoke select on public.professional_profiles from anon, authenticated;');
   const grantsPro = [...sql.matchAll(/grant select \(([^)]*)\)\s*on public\.professional_profiles to anon, authenticated;/g)];
   const ouvertesAttendues = [...colsPro].filter((c) => !PRO_FERMEES.includes(c)).sort();
   const ouvertesEcrites = grantsPro.length === 1 ? colonnes(grantsPro[0][1]).sort() : [];
@@ -864,9 +889,34 @@ verifier('`users` : plus rien pour un visiteur (`revoke all … from anon`), et 
     iRevokePro > 0 && grantsPro.length === 1 && grantsPro[0].index > iRevokePro
     && ouvertesEcrites.join(',') === ouvertesAttendues.join(','),
     `en trop : ${ouvertesEcrites.filter((c) => !ouvertesAttendues.includes(c)).join(',') || '—'} ; manquantes : ${ouvertesAttendues.filter((c) => !ouvertesEcrites.includes(c)).join(',') || '—'}`);
-  const dernierAjout = Math.max(...[...sql.matchAll(/alter table public\.professional_profiles\s+add column/g)].map((m) => m.index));
+  const dernierAjout = Math.max(...ajoutsPro.filter((m) => /(?:^|,)\s*add\b/i.test(m[1])).map((m) => m.index));
   verifier('…posée APRÈS le dernier `add column` de la table (sinon le `grant` nommerait une colonne pas encore née)',
     grantsPro.length === 1 && grantsPro[0].index > dernierAjout);
+  /* CE QUE L'APPLICATION LIT, comparé à la liste BLANCHE effectivement
+     accordée — pas seulement à la liste noire des huit (relecture M2,
+     CTL-M2-6) : une colonne de demain naît fermée, et la lire ferait
+     échouer la requête entière. */
+  const horsListeApp = surPro.filter((l) => l.colonne !== '*' && !ouvertesEcrites.includes(l.colonne));
+  verifier('fiches pro : chaque colonne que l’application lit (sélection, filtre, tri) est dans la liste blanche de 53.9',
+    ouvertesEcrites.length > 0 && horsListeApp.length === 0,
+    horsListeApp.map((l) => `${l.colonne} (${l.chemin}) — dans ${l.ordre}`).join(' | '));
+  verifier('…et `COLONNES_PRO_LISTE` aussi, colonne par colonne',
+    colsListe.length > 0 && colsListe.every((c) => ouvertesEcrites.includes(c)),
+    colsListe.filter((c) => !ouvertesEcrites.includes(c)).join(', '));
+  /* Aucune révocation APRÈS la liste blanche (CTL-M2-5), même dans un
+     corps de fonction ou de bloc `do` : la vitrine et `users` deviendraient
+     illisibles, et l'application ne démarrerait plus. */
+  const iGrantUsers = sql.search(/grant select \([^)]*\) on public\.users to authenticated;/);
+  const revocationsTardives = [
+    ...[...sql.matchAll(/\brevoke\b[^;]*\bon\s+(?:table\s+)?(?:"?public"?\s*\.\s*)?"?professional_profiles"?\b[^;]*/gi)]
+      .filter((m) => grantsPro.length === 1 && m.index > grantsPro[0].index && /\b(?:select|all)\b/i.test(m[0].split(/\bon\b/i)[0])
+        && /\bfrom\b[^;]*\b(?:anon|authenticated|public)\b/i.test(m[0])),
+    ...[...sql.matchAll(/\brevoke\b[^;]*\bon\s+(?:table\s+)?(?:"?public"?\s*\.\s*)?"?users"?\b[^;]*/gi)]
+      .filter((m) => iGrantUsers > 0 && m.index > iGrantUsers && /\b(?:select|all)\b/i.test(m[0].split(/\bon\b/i)[0])
+        && /\bfrom\b[^;]*\b(?:authenticated|public)\b/i.test(m[0])),
+  ].map((m) => espaces(m[0]));
+  verifier('aucune lecture n’est RETIRÉE après les listes blanches de `users` et des fiches pro (corps compris)',
+    revocationsTardives.length === 0, revocationsTardives.join(' | '));
 }
 verifier('les « j’aime » et les abonnements : `anon` perd l’écriture, GARDE la lecture (le fil des visiteurs)',
   /revoke insert, update, delete on public\.post_likes, public\.follows from anon;/.test(sql)
@@ -893,7 +943,7 @@ verifier('le schéma n’a aucun commentaire AMBIGU (un `/*` dans un commentaire
 /* UNE VUE tourne avec les droits de son propriétaire : sans
    `security_invoker`, elle rouvre une table sans RLS ni droits de colonne
    (seconde relecture du 31/10, R2T-5). Le schéma n'en a aucune. */
-const vues = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(?:temp\w*\s+)?(?:materialized\s+)?view\b[^;]*/gi)].map((m) => m[0]);
+const vues = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(?:temp\w*\s+)?(?:recursive\s+)?(?:materialized\s+)?view\b[^;]*/gi)].map((m) => m[0]);
 verifier('aucune vue dans le schéma sans `security_invoker` (elle lirait tout avec les droits de son propriétaire)',
   vues.every((v) => /security_invoker\s*=\s*(?:true|on)\b/i.test(v) && !/materialized/i.test(v)), vues.join(' | '));
 /* UN DROIT CONSTRUIT DANS UNE CHAÎNE (`execute format('grant …')`) ne se
@@ -1030,6 +1080,126 @@ const dynamiques = [
   ...sqlNormalise.matchAll(/grant (?!execute|select|insert|update|delete|truncate|references|trigger|usage|all|connect|create|temp)\w+(?:, ?\w+)* to [^;']*?\b(?:anon|authenticated|public)\b/g),
 ].map((m) => m[0]);
 verifier('…ni par un ordre construit dans un corps de fonction ou de bloc `do`', dynamiques.length === 0, dynamiques.join(' | '));
+
+/* LES DROITS LUS JUSQUE DANS LES CORPS (relecture M2 du 02/11, CTL-M2-1).
+   Un `grant` statique s'exécute aussi dans un bloc `do` ; `all (col)` donne
+   le droit de LIRE la colonne ; et un ordre peut se construire par
+   concaténation (`'gr' || 'ant …'`). Ici le schéma ENTIER est normalisé,
+   corps compris, et chaque `grant` qui touche une fiche pro ou `users` est
+   relu pour ce qu'il donne. */
+const sqlToutNormalise = normaliser(sql.replace(/'(?:[^']|'')*'/g, (m) => m.replace(/;/g, ',')));
+const grantsPartout = [...sqlToutNormalise.matchAll(/(?<![\w'])grant ([^;']*?) on ([^;']*?) to ([^;']*)/g)]
+  .map((m) => ({ privileges: m[1], cible: m[2].replace(/^table /, '').trim(), roles: m[3], x: m[0] }));
+const nommeTable = (g, table) => g.cible.split(',').map((t) => t.trim()).includes(table);
+const privilegesDe = (g) => decouper(g.privileges, ',').map((p) => p.trim());
+const LIT = /^(?:select|all)\b/;
+const proPartout = grantsPartout.filter((g) => nommeTable(g, 'professional_profiles') && /\b(?:anon|authenticated|public)\b/.test(g.roles));
+const proFautifs = proPartout.filter((g) => privilegesDe(g).some((p) => {
+  if (!LIT.test(p)) return false;
+  const m = /\(([^)]*)\)/.exec(p);
+  if (!m) return true;                                   // la table entière
+  return colonnes(m[1]).some((c) => PRO_FERMEES.includes(c));
+}));
+verifier('fiches pro : aucun `grant` (bloc `do` compris, `all (col)` compris) ne rend la table entière ni une des huit colonnes fermées',
+  proPartout.length >= 1 && proFautifs.length === 0, proFautifs.map((g) => g.x).join(' | '));
+const usersPartout = grantsPartout.filter((g) => nommeTable(g, 'users') && /\b(?:anon|authenticated|public)\b/.test(g.roles));
+const usersFautifs = usersPartout.filter((g) => privilegesDe(g).some((p) => {
+  if (!LIT.test(p)) return false;
+  if (/\b(?:anon|public)\b/.test(g.roles)) return true;  // un visiteur ne lit rien de `users`
+  const m = /\(([^)]*)\)/.exec(p);
+  return !m || colonnes(m[1]).some((c) => !USERS_OUVERTES.includes(c));
+}));
+verifier(`\`users\` : aucun \`grant\` (bloc \`do\` compris, \`all (col)\` compris) ne rend autre chose que ${USERS_OUVERTES.join(', ')} aux connectés`,
+  usersPartout.length >= 1 && usersFautifs.length === 0, usersFautifs.map((g) => g.x).join(' | '));
+/* Un ordre CONSTRUIT par concaténation : chaque `execute '…' || …` est
+   relevé ; seul celui dont TOUS les morceaux sont des chaînes est lu (et
+   ses morceaux recollés ne nomment pas `grant`, sauf les trois connus). */
+const concatenations = [...sql.matchAll(/\bexecute\s+('(?:[^']|'')*'(?:\s*\|\|\s*(?:'(?:[^']|'')*'|[^;']+?))+)\s*;/gi)].map((m) => m[1]);
+const concatInconnues = concatenations.filter((c) => {
+  const morceaux = c.split(/\s*\|\|\s*/);
+  if (!morceaux.every((x) => /^'(?:[^']|'')*'$/.test(x.trim()))) return true;
+  const recolle = morceaux.map((x) => x.trim().slice(1, -1).replace(/''/g, "'")).join('');
+  return /\bgrant\b/i.test(recolle) && GRANTS_CONSTRUITS.get(recolle) == null;
+});
+verifier('aucun ordre `execute` n’est construit par une concaténation qui ne serait pas faite QUE de chaînes connues',
+  concatenations.length >= 1 && concatInconnues.length === 0, concatInconnues.join(' | '));
+/* LE PROPRIÉTAIRE d'une table lit tout, RLS comprise (CTL-M2-2) : aucun
+   `owner to`, nulle part. */
+verifier('aucune table ni fonction ne change de PROPRIÉTAIRE (`owner to`, corps compris)', !/\bowner\s+to\b/i.test(sql));
+verifier('aucune table de `public` ne naît d’un `create table … as` (une copie sans RLS ni droits de colonne)',
+  ![...sql.matchAll(/\bcreate\s+((?:global\s+|local\s+)?(?:temp|temporary)\s+)?(?:unlogged\s+)?table\b[^;(]*?\bas\s*\(?\s*(?:select|with|values|table|execute)\b/gi)].some((m) => !m[1]));
+
+/* LES FONCTIONS QUI LISENT `users` OU UNE FICHE PRO AVEC LES DROITS DE
+   L'APPELANT (relecture M2, APP-M2-2 et BASE-1). Après M2, une telle
+   fonction qui nommerait une colonne fermée échouerait EN ENTIER — et
+   `mes_conversations` en premier : `loadAll` avale son échec, Messages
+   resterait vide sans un mot. Leur liste est FERMÉE ; chacune est appelée
+   par l'essai 51d (M12) ; et un alias de ces deux tables ne lit, dans leur
+   corps, que les colonnes ouvertes. */
+const INVOKER_LECTRICES = ['ajoute_au_portfolio', 'artisans_urgence', 'emetteur_incomplet', 'est_un_pro',
+  'exige_un_compte_pro', 'fil_filtre', 'mes_conversations', 'tient_l_urgence'];
+const invokerTrouvees = new Map();
+for (const m of sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+(?:"?public"?\s*\.\s*)?"?(\w+)"?\s*\(/gi)) {
+  const reste = sql.slice(m.index);
+  const tag = /\bas\s+(\$\w*\$)/i.exec(reste);
+  if (!tag) continue;
+  const corps = reste.slice(tag.index + tag[0].length, reste.indexOf(tag[1], tag.index + tag[0].length));
+  if (/security\s+definer/i.test(reste.slice(0, tag.index))) continue;
+  const sansChaines = corps.replace(/'(?:[^']|'')*'/g, "''").replace(/\bauth\s*\.\s*users\b/gi, '');
+  if (/\b(?:users|professional_profiles)\b(?!\s*\()/i.test(sansChaines)) invokerTrouvees.set(m[1].toLowerCase(), sansChaines);
+}
+const invEnTrop = [...invokerTrouvees.keys()].filter((n) => !INVOKER_LECTRICES.includes(n));
+const invManquantes = INVOKER_LECTRICES.filter((n) => !invokerTrouvees.has(n));
+verifier(`les fonctions \`security invoker\` qui nomment \`users\` ou une fiche pro sont EXACTEMENT les ${INVOKER_LECTRICES.length} de la liste fermée`,
+  invEnTrop.length === 0 && invManquantes.length === 0,
+  `en trop : ${invEnTrop.join(', ') || '—'} ; manquantes : ${invManquantes.join(', ') || '—'}`);
+const lecturesFermees = [];
+for (const [nom, corps] of invokerTrouvees) {
+  const bas = corps.toLowerCase();
+  for (const [table, ouverte] of [['users', (c) => USERS_OUVERTES.includes(c)], ['professional_profiles', (c) => !PRO_FERMEES.includes(c)]]) {
+    const aliases = [...bas.matchAll(new RegExp(String.raw`\b(?:public\s*\.\s*)?${table}\s+(?:as\s+)?(\w+)`, 'g'))]
+      .map((a) => a[1]).filter((a) => !/^(?:where|on|join|left|inner|using|set|for|limit|order|group|returning|and|or|union|cross|natural|full|right|lateral|having|window|values|select|from)$/.test(a));
+    for (const a of new Set(aliases)) {
+      for (const c of bas.matchAll(new RegExp(String.raw`\b${a}\s*\.\s*(\w+|\*)`, 'g'))) {
+        if (c[1] === '*' || !ouverte(c[1])) lecturesFermees.push(`${nom} : ${a}.${c[1]} (${table})`);
+      }
+      if (new RegExp(String.raw`\bto_jsonb\s*\(\s*${a}\s*\)|\brow_to_json\s*\(\s*${a}\s*\)`).test(bas)) lecturesFermees.push(`${nom} : to_jsonb(${a}) (${table})`);
+    }
+  }
+}
+verifier('…et aucune ne lit, par un alias de ces tables, une colonne fermée (ni `*`, ni la ligne entière)',
+  lecturesFermees.length === 0, lecturesFermees.join(' | '));
+
+/* LES FONCTIONS EDGE (relecture M2, APP-M2-3) : elles ne parlent à la base
+   que par le client `admin`, créé avec la clé de service — qui n'est pas
+   touchée par M2. Un client créé avec le jeton de l'appelant qui lirait
+   `users` ou une fiche pro tomberait sur les droits de colonne. */
+const FICHIERS_EDGE = execSync('git ls-files supabase/functions', { encoding: 'utf8' }).split('\n')
+  .filter((f) => /\.(?:js|ts)$/.test(f));
+const appelsEdge = [];
+for (const f of FICHIERS_EDGE) {
+  const texte = sansCommentaires(lire(f));
+  for (const m of texte.matchAll(/(\w+)\s*\.\s*(from|rpc|schema)\s*\(/g)) {
+    if (m[2] === 'from' && /^(?:Array|Buffer|Uint8Array|storage)$/.test(m[1])) continue;
+    appelsEdge.push({ f, client: m[1], methode: m[2] });
+  }
+}
+const horsAdmin = appelsEdge.filter((a) => a.client !== 'admin');
+verifier('les fonctions Edge ne lisent la base que par le client `admin` (sinon une lecture avec le jeton de l’appelant échapperait au contrôle)',
+  appelsEdge.length >= 10 && horsAdmin.length === 0, horsAdmin.map((a) => `${a.f} (${a.client}.${a.methode})`).join(', '));
+const sansCleService = FICHIERS_EDGE.filter((f) => /\badmin\s*\.\s*(?:from|rpc|schema)\s*\(/.test(lire(f)))
+  .filter((f) => {
+    const t = sansCommentaires(lire(f));
+    return !/const admin = createClient\(\w+, cleService, \{ auth: \{ persistSession: false \} \}\);/.test(t)
+      || !/const cleService = Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\);/.test(t)
+      || (t.match(/\b(?:const|let|var)\s+admin\b/g) || []).length !== 1;
+  });
+verifier('…et ce client `admin` est créé UNE fois, avec la clé de service', sansCleService.length === 0, sansCleService.join(', '));
+/* Une adresse REST écrite à la main (`fetch(…/rest/v1/users?select=…)`)
+   ne passe par aucun `.from()` : elle est refusée partout. */
+const appelsRest = [...FICHIERS, ...FICHIERS_EDGE].filter((f) => /rest\s*\/\s*v1\b|['"`]\s*\/?\s*rest\s*\/?\s*['"`]|['"`]\s*\/?\s*v1\s*\/?\s*['"`]/.test(sansCommentaires(lire(f))));
+verifier('aucune adresse REST de la base écrite à la main (`/rest/v1/…`), ni dans l’application ni dans les fonctions Edge',
+  appelsRest.length === 0, appelsRest.join(', '));
 
 verifier('une notification part avec le compte qui l’a déclenchée (`acteur_id … on delete cascade`)',
   /add constraint notifications_acteur_id_fkey\s+foreign key \(acteur_id\) references public\.users\(id\) on delete cascade;/.test(sql)

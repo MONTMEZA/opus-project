@@ -2067,10 +2067,15 @@ create index if not exists idx_blocages_bloque on public.blocages (bloque_id);
  * « permission denied for function ». Les politiques ci-dessous s'en
  * servent : elle doit rester exécutable par `authenticated`.
  *
- * Ce qu'elle laisse filtrer, et pourquoi c'est acceptable : elle ne répond
- * que sur l'appelant lui-même (`auth.uid()`), un identifiant à la fois, et
- * seulement à quelqu'un qui connaît déjà cet identifiant. Elle ne permet
- * jamais de LISTER qui que ce soit.
+ * Ce qu'elle laisse filtrer, et pourquoi c'est accepté : elle ne répond
+ * que sur l'appelant lui-même (`auth.uid()`), un identifiant à la fois.
+ * Mais tout compte connecté lit l'identifiant de chacun (`users.id`,
+ * section 18.1) : en l'appelant compte par compte, une personne bloquée
+ * peut dresser la LISTE de ceux qui l'ont bloquée (mesuré le 02/11/2026,
+ * relecture de l'étape M2 du lot S-d). C'est la règle déjà écrite : « être
+ * bloqué se sait » — la CGU « Bloquer quelqu'un » dit « elle peut s'en
+ * apercevoir ». Rendre le blocage indétectable demanderait de répondre
+ * faux ; c'est une décision à prendre, pas une ligne à changer.
  */
 create or replace function public.est_masque(p_autre uuid)
 returns boolean
@@ -2816,9 +2821,10 @@ end $$;
 --  Elles restent appelables par `authenticated`, et c'est VOULU :
 --    - `est_masque` est appelée par les règles RLS ci-dessus. Vérifié sur
 --      PostgreSQL : une règle qui appelle une fonction interdite à
---      l'appelant échoue au lieu de filtrer. Ce qu'elle laisse filtrer est
---      minime : elle ne répond que sur l'appelant, un identifiant à la
---      fois, et ne permet jamais de lister qui que ce soit ;
+--      l'appelant échoue au lieu de filtrer. Ce qu'elle laisse filtrer :
+--      elle ne répond que sur l'appelant, un identifiant à la fois — mais
+--      une personne bloquée peut la parcourir compte par compte et savoir
+--      qui l'a bloquée (voir sa définition, plus haut) ;
 --    - `preparer_suppression_compte` doit évidemment pouvoir être appelée
 --      par la personne qui supprime son propre compte. Elle ne touche que
 --      les lignes de `auth.uid()`, et refuse tout net sans session.

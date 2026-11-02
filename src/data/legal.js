@@ -45,6 +45,16 @@ export const VERSION = '2026-11-02';
      - L'ANCIEN SIRET SAISI À LA MAIN « reste lisible par l'interface
        publique » : ce n'est plus vrai, il n'est plus lisible que par son
        titulaire et l'administration ;
+     - RELU AVANT TOUTE PUBLICATION (relecture adverse du 02/11, sous la même
+       version : aucun téléphone n'avait ce texte, la migration M2 n'étant
+       pas appliquée). La section dit en plus : le nom du profil d'un
+       professionnel est public (passer pro le rend public, avec la
+       commune) ; la fiche pro énumérée EN ENTIER, colonne par colonne ; une
+       demande publiée porte le nom et la photo de son auteur ; une personne
+       bloquée peut s'apercevoir du blocage, et ce qu'un blocage masque en
+       plus (chantiers, annonces, demandes, tarifs, partenariats, avis) ;
+       un message signalé est lu en extrait par l'administration ; ce que
+       lit l'administration, en entier ; quatre paragraphes au lieu d'un ;
      - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
        ré-accepter les conditions, et le préavis de quinze jours du règlement
        2019/1150 (art. 3.2) s'appliquerait. Sans effet tant que STATUT vaut
@@ -1496,55 +1506,69 @@ export const CONFIDENTIALITE = [
        nouvelle se relit contre ce texte, dans le même lot. `verifier-legal`
        en garde l'empreinte, et `verifier-lectures` la liste des colonnes
        ouvertes de `users` et des fiches pro (USERS_OUVERTES, PRO_FERMEES). */
-    texte: 'Parmi les utilisateurs d’Opus, voici qui peut lire quoi. C’est la base de données '
+    texte: 'Voici qui peut lire quoi, que l’on ait un compte Opus ou non. C’est la base de données '
       + 'd’Opus qui le tient, pas seulement l’écran. Sans compte, un visiteur ne voit aucun '
       + 'particulier : ni son nom, ni sa photo, ni sa ville. Il voit les fiches des '
       + 'professionnels, leurs publications et leurs chantiers, les commentaires et les avis — '
-      + 'sans le nom des particuliers qui les ont écrits. Avec un compte, chacun voit le nom, '
-      + 'la photo et le type de compte (particulier ou professionnel) de chacun. La ville d’un '
-      + 'particulier, sur son profil, ne se lit que par lui-même et par les professionnels '
-      + 'connectés — sauf si l’un a bloqué l’autre ; son code postal et sa date d’inscription, '
-      + 'par aucun autre utilisateur. Les demandes qu’un particulier publie — leur texte, leur '
-      + 'commune et sa position, leur code postal, leur budget et leurs photos — se lisent par '
-      + 'tous les professionnels connectés, sauf blocage, y compris une fois refermées. Une '
-      + 'demande de devis, de rappel ou d’urgence ne se lit que par celui qui l’envoie et par '
-      + 'l’artisan à qui elle est adressée, avec tout ce qu’elle contient, dont le numéro de '
-      + 'téléphone qui y est écrit. La réponse d’un professionnel à une demande se lit par lui '
-      + 'et par la personne qui a publié la demande, même si l’un a bloqué l’autre. Vos '
-      + 'messages se lisent par vous et par la personne avec qui vous échangez. Vos « j’aime », '
-      + 'les professionnels que vous suivez, les publications que vous enregistrez et celles '
-      + 'que vous avez regardées, les personnes que vous bloquez et vos notifications ne se '
-      + 'lisent que par vous ; seuls des NOMBRES sont lisibles par les autres — les « j’aime » '
-      + 'et les vues d’une publication, les abonnés d’un professionnel. Pour un professionnel, '
-      + 'la fiche se lit par tous, visiteurs compris : son entreprise, ses métiers, sa commune '
-      + 'et son code postal, sa présentation, ses réalisations, ses notes, son téléphone et son '
-      + 'e-mail de contact s’il les renseigne, l’état de ses justificatifs (reçu, à jour, '
-      + 'refusé — jamais le document lui-même), et le nom qu’il donne à son agent ; passer en '
-      + 'compte professionnel rend donc votre commune publique. Huit informations de la fiche '
-      + 'ne se lisent que par son titulaire et par l’administration d’Opus : le motif d’un refus '
-      + 'de vérification, la date d’une suspension du badge, la date de la dernière visite de '
-      + 'l’onglet Demandes, le nombre de fois où la fenêtre « nommez votre agent » a été '
-      + 'proposée, un ancien numéro SIRET saisi à la main, le numéro RGE déclaré, le code INSEE '
-      + 'de la commune et la date de création de la fiche. Les annonces de la Place des pros se '
-      + 'lisent par les professionnels connectés, sauf blocage ; une réponse à une annonce, par '
-      + 'son auteur et, sauf blocage, par celui de l’annonce. Un partenariat accepté se lit par les '
-      + 'utilisateurs connectés, sauf blocage ; une demande de partenariat, par les deux '
-      + 'professionnels concernés. La disponibilité aux urgences — métier d’urgence, rayon, '
-      + 'délai — se lit par les utilisateurs connectés ; les tarifs, seulement s’ils sont '
-      + 'affichés, et seulement par les particuliers connectés (« Vos tarifs et vos prix », '
-      + 'dans les conditions d’utilisation). Les photos et les vidéos que vous publiez — photo '
-      + 'de profil, bannière, publications, photos d’une demande ou d’une annonce — sont '
-      + 'rangées à une adresse publique : quiconque la connaît peut les ouvrir ; vos '
-      + 'justificatifs et les pièces jointes des messages, eux, sont rangés dans des espaces '
-      + 'privés. Un blocage, dans un sens comme dans l’autre, retire en plus à l’autre personne '
-      + 'la ville de votre profil ; ce qu’il retire d’autre est dit dans « Bloquer quelqu’un », '
-      + 'dans les conditions d’utilisation. '
-      + 'L’administration d’Opus lit en plus ce que ses outils lui montrent : les fiches à '
-      + 'contrôler et leurs justificatifs, les signalements, et les demandes d’ouverture de '
-      + 'compte professionnel, avec la ville de la personne qui la demande. L’éditeur d’Opus, '
-      + 'qui administre la base de données, pourrait techniquement lire davantage avec les '
-      + 'outils d’administration de l’hébergeur ; pour vos tarifs et vos prix, il prend '
-      + 'l’engagement écrit dans les conditions d’utilisation.',
+      + 'sans le nom des particuliers qui les ont écrits.\n\n'
+      + 'Avec un compte, chacun voit le nom, la photo et le type de compte (particulier ou '
+      + 'professionnel) de chacun. La ville d’un particulier, sur son profil, ne se lit que par '
+      + 'lui-même et par les professionnels connectés — sauf si l’un a bloqué l’autre ; son '
+      + 'code postal et sa date d’inscription, par aucun autre utilisateur. Les demandes qu’un '
+      + 'particulier publie — avec son nom et sa photo, leur texte, leur commune et sa '
+      + 'position, leur code postal, leur budget et leurs photos — se lisent par tous les '
+      + 'professionnels connectés, sauf blocage, y compris une fois refermées. Une demande de '
+      + 'devis, de rappel ou d’urgence ne se lit que par celui qui l’envoie et par l’artisan à '
+      + 'qui elle est adressée, avec tout ce qu’elle contient, dont le numéro de téléphone qui '
+      + 'y est écrit. La réponse d’un professionnel à une demande se lit par lui et par la '
+      + 'personne qui a publié la demande, même si l’un a bloqué l’autre. Vos messages se '
+      + 'lisent par vous et par la personne avec qui vous échangez ; si l’un d’eux est signalé, '
+      + 'l’administration d’Opus en lit un court extrait. Vos « j’aime », les professionnels '
+      + 'que vous suivez, les publications que vous enregistrez et celles que vous avez '
+      + 'regardées, et vos notifications ne se lisent que par vous ; seuls des NOMBRES sont '
+      + 'lisibles par les autres — les « j’aime » et les vues d’une publication, les abonnés '
+      + 'd’un professionnel. La liste des personnes que vous bloquez ne se lit que par vous, '
+      + 'mais une personne que vous avez bloquée peut s’en apercevoir (« Bloquer quelqu’un », '
+      + 'dans les conditions d’utilisation). Un blocage, dans un sens comme dans l’autre, '
+      + 'masque aussi à l’autre personne vos chantiers, vos annonces, vos demandes, vos tarifs '
+      + 'affichés, vos partenariats avec d’autres professionnels et vos avis — sauf un avis que '
+      + 'vous avez écrit sur elle, si elle est artisan : elle le lit toujours —, et, si vous '
+      + 'êtes particulier, la ville de votre profil.\n\n'
+      + 'Si vous êtes professionnel, votre fiche se lit par tous, visiteurs compris : le nom de '
+      + 'votre profil et celui de votre entreprise, vos métiers et vos spécialités, vos années '
+      + 'd’expérience, votre commune, son code postal et sa position, votre zone '
+      + 'd’intervention, vos horaires, votre présentation et vos réalisations, votre photo et '
+      + 'votre bannière, vos notes, votre nombre d’avis et d’abonnés, votre téléphone et votre '
+      + 'e-mail de contact si vous les renseignez, votre badge, l’état et les dates de vos '
+      + 'justificatifs et de leur vérification (reçu, à jour, refusé — jamais le document '
+      + 'lui-même ni le motif d’un refus ; l’adresse interne où chaque pièce est rangée ne '
+      + 'permet pas de l’ouvrir), et le nom que vous donnez à votre agent. Passer en compte '
+      + 'professionnel rend donc publics le nom de votre profil et votre commune. Huit '
+      + 'informations de la fiche ne se lisent que par vous (et, pour certaines, par '
+      + 'l’administration d’Opus) : le motif d’un refus de vérification, la date d’une '
+      + 'suspension du badge, la date de votre dernière visite de l’onglet Demandes, le nombre '
+      + 'de fois où la fenêtre « nommez votre agent » vous a été proposée, un ancien numéro '
+      + 'SIRET saisi à la main, le numéro RGE que vous déclarez, le code de votre commune '
+      + 'utilisé par l’INSEE et la date de création de la fiche. Les annonces de la Place des '
+      + 'pros se lisent par les professionnels connectés, sauf blocage ; une réponse à une '
+      + 'annonce, par son auteur et, sauf blocage, par celui de l’annonce. Un partenariat '
+      + 'accepté se lit par les utilisateurs connectés, sauf blocage ; une demande de '
+      + 'partenariat, par les deux professionnels concernés. La disponibilité aux urgences — '
+      + 'métier d’urgence, rayon, délai — se lit par les utilisateurs connectés ; les tarifs, '
+      + 'seulement s’ils sont affichés, et seulement par les particuliers connectés (« Vos '
+      + 'tarifs et vos prix », dans les conditions d’utilisation).\n\n'
+      + 'Les photos et les vidéos que vous publiez — photo de profil, bannière, publications, '
+      + 'photos d’une demande ou d’une annonce — sont rangées à une adresse publique : '
+      + 'quiconque la connaît peut les ouvrir ; vos justificatifs et les pièces jointes des '
+      + 'messages, eux, sont rangés dans des espaces privés. L’administration d’Opus lit en '
+      + 'plus ce que ses outils lui montrent : les fiches à contrôler et leurs justificatifs ; '
+      + 'les signalements, avec un court extrait du contenu signalé ; les demandes d’ouverture '
+      + 'de compte professionnel, avec le nom, la ville et la date d’inscription de la personne '
+      + 'qui la demande ; les demandes de changement de métier et les spécialités proposées, '
+      + 'avec le nom de leur auteur ; et l’entreprise rattachée à chaque compte professionnel. '
+      + 'L’éditeur d’Opus, qui administre la base de données, pourrait techniquement lire '
+      + 'davantage avec les outils d’administration de l’hébergeur ; pour vos tarifs et vos '
+      + 'prix, il prend l’engagement écrit dans les conditions d’utilisation.',
   },
   {
     titre: 'Ce que nous ne collectons pas',

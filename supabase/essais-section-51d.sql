@@ -975,6 +975,16 @@ select p.proname as fonction, c.relname as table_nommee
    and p.prosrc ~* ('public\.' || c.relname || '\M')
  order by 1, 2;
 
+\echo '--- L1 bis. Les fonctions INVOKER (déclencheurs compris) dont le corps nomme `users` ou une fiche pro sont EXACTEMENT ces huit, chacune appelée en M12 ou en M12 bis — après M2, une colonne fermée nommée par l une d elles la ferait échouer EN ENTIER (relecture M2, BASE-1 et APP-M2-2 ; attendu : ajoute_au_portfolio, artisans_urgence, emetteur_incomplet, est_un_pro, exige_un_compte_pro, fil_filtre, mes_conversations, tient_l_urgence)'
+select p.proname as fonction
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and not p.prosecdef
+   and regexp_replace(regexp_replace(regexp_replace(p.prosrc, '/\*.*?\*/', '', 'g'), '--[^\n]*', '', 'g'), 'auth\.users', '', 'gi')
+       ~* '\m(users|professional_profiles)\M'
+ order by 1;
+
 \echo '--- L2. Les quatre fonctions du lot : definer, appelables par un compte connecté, jamais par un visiteur (attendu : 4 | 4 | 0)'
 select count(*) filter (where p.prosecdef) as definer,
        count(*) filter (where has_function_privilege('authenticated', p.oid, 'execute')) as connecte,
@@ -1104,6 +1114,37 @@ select :'m12_fil_visiteur'::boolean as fil_visiteur, :'m12_urgences'::boolean as
        public.emetteur_incomplet(:A) is not null as emetteur_de_a,
        public.est_un_pro() as a_est_pro,
        (public.mes_donnees() -> 'fiche_professionnelle' ->> 'verification_note') = 'Kbis illisible' as export_a_entier;
+rollback;
+
+\echo '--- M12 bis. Les trois autres fonctions INVOKER de la liste (L1 bis) marchent toujours : A ajoute une réalisation à son portfolio, P envoie une urgence à A, et une fiche insérée depuis un client est refusée par SA règle (OP010), jamais par un droit de colonne (attendu : t | t | OP010)'
+begin;
+insert into public.tarifs_pro (pro_id, frais_deplacement_centimes, taux_horaire_centimes, majoration_pct, affiche)
+values (:A, 4500, 6200, 40, true)
+on conflict (pro_id) do update set frais_deplacement_centimes = 4500, taux_horaire_centimes = 6200,
+                                   majoration_pct = 40, affiche = true;
+set local role authenticated;
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-00000000000a';
+select coalesce(array_length(public.ajoute_au_portfolio('https://exemple-opus.test/m12bis.jpg'), 1), 0) >= 1 as portfolio \gset m12b_
+set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
+insert into public.sos_requests (client_id, professional_id, metier_key, probleme_key)
+values (:P, :A, 'plomberie', 'fuite');
+select count(*) = 1 as urgence from public.sos_requests where client_id = :P and professional_id = :A and probleme_key = 'fuite' \gset m12b_
+-- Le déclencheur `exige_un_compte_pro()` lit le type du compte : dans un
+-- bloc `do`, un DÉCLENCHEUR s exécute quoi qu il arrive (c est la RLS qui
+-- n y est pas éprouvée), et l on veut ici le CODE du refus.
+create temporary table m12b_refus (code text) on commit drop;
+do $m12b$
+begin
+  begin
+    insert into public.professional_profiles (id, nom, entreprise, metier, ville)
+    values ('a51d0000-0000-4000-8000-000000000001', 'Paule P.', 'Paule SARL', 'plombier', 'Brest (29)');
+    insert into m12b_refus values ('INSÉRÉE');
+  exception when others then
+    insert into m12b_refus values (sqlstate);
+  end;
+end $m12b$;
+select :'m12b_portfolio'::boolean as portfolio, :'m12b_urgence'::boolean as urgence,
+       (select code from m12b_refus) as fiche_inseree_par_un_client;
 rollback;
 
 \echo '--- M13. Aucune POLITIQUE ne nomme une colonne fermée de `users` ou des fiches pro — une politique s exécute avec les droits de celui qui lit, elle tomberait sur « permission denied » (attendu : aucune ligne)'
