@@ -2737,7 +2737,8 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
 
 **À vous, maintenant :**
 
-- [ ] **`git pull`, puis `npx expo start -c`**, et l'essai sur l'iPhone
+- [x] **`git pull`, puis `npx expo start -c`**, et l'essai sur l'iPhone —
+  **fait le 02/11** : « tout fonctionne sur mon iPhone »
   (aucun module natif : rien à reconstruire). Ce qui a changé et se voit :
   la fiche d'un particulier (son nom, sa ville pour un compte pro, ses
   demandes) ; « Envoyer un message » n'apparaît plus entre deux

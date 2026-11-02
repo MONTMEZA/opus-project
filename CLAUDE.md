@@ -10571,10 +10571,15 @@ a tué mon propre terminal**, avant le `rm .env` de la même commande. Le
 `.env` est resté une minute de trop. On arrête un serveur par son NUMÉRO, et
 on retire le `.env` dans une commande à part.
 
+**ESSAYÉ SUR L'IPHONE le 02/11/2026**, par le propriétaire, dans le build de
+développement, après `git pull` : « j'ai testé, tout fonctionne sur mon
+iPhone ». Sans détailler point par point.
+
 #### Ce qui n'a PAS été vérifié
 
-Rien sur l'iPhone ; le temps réel ; l'export à grande échelle sur la vraie
-base (mesuré sur PostgreSQL 16, pas en production). Et **M2 n'est pas
+Le détail au doigt (la fiche d'un particulier vue depuis un compte pro, le
+signalement, l'export) ; le temps réel ; l'export à grande échelle sur la
+vraie base (mesuré sur PostgreSQL 16, pas en production). Et **M2 n'est pas
 faite**. Jusqu'à elle, tout compte CONNECTÉ lit encore, par une requête
 directe, la ville, le code postal et la date d'inscription d'un autre compte
 (`users`), et les huit colonnes privées des fiches pro (`badge_suspendu_le`,
