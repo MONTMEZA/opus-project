@@ -21,7 +21,7 @@
     "android": {
       "package": "com.opusproject.app",
       "adaptiveIcon": {
-        "backgroundColor": "#1A1B19",
+        "backgroundColor": "#E85C1F",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

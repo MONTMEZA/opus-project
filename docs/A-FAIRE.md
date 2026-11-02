@@ -2751,11 +2751,12 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
 - [x] **FAIT le 02/11/2026 au soir** (CLAUDE.md, « Ce que chacun lit des
   autres — lot S-d, étape M2 ») : appliquée, essayée par le chemin de
   l'application (43 vérifications justes) et au navigateur.
-- [ ] **À vous, maintenant : `git pull`, puis `npx expo start -c`**, et
-  l'essai sur l'iPhone (aucun module natif : rien à reconstruire). Ce qui
-  se voit : la phrase sous « Ville » d'un compte particulier, dans
-  « Modifier mon profil », et la section « Ce que les autres voient de
-  vous » de la politique de confidentialité.
+- [x] **À vous, maintenant : `git pull`, puis `npx expo start -c`**, et
+  l'essai sur l'iPhone — **fait le 02/11** : « oui tout fonctionne
+  correctement ». Ce qui se voit : la phrase sous « Ville » d'un compte
+  particulier, dans « Modifier mon profil », et la section « Ce que les
+  autres voient de vous » de la politique de confidentialité. **Le lot S
+  est terminé** ; ses cahiers sont dans `docs/CAHIER-LOT-S.md`.
 - [x] fermer, par des droits de colonne, la ville, le code postal et la date
   d'inscription de `users` (liste blanche : `id`, `type`, `nom`,
   `avatar_url`), et les huit colonnes privées des fiches pro
@@ -2818,6 +2819,29 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
   (« rejeté », avec une note qui dit que c'est un essai) : le connecteur
   refuse de supprimer une ligne. Il ne gêne rien ; le supprimer est un geste
   à vous, dans l'éditeur SQL, si vous le souhaitez.
+
+### L'icône d'Opus — votre logo, posé le 02/11/2026
+
+Votre image (le casque et « OPUS », noir sur orange) est devenue l'icône de
+l'application, pour l'iPhone et pour Android (détail dans CLAUDE.md,
+« L'icône d'Opus »).
+
+- [ ] **À vous, quand vous voulez : reconstruire le build de développement**
+  (`eas build --platform ios --profile development`, puis l'installer par le
+  lien ou le code QR qu'EAS donne). Une icône est gravée dans l'application à
+  sa construction : `git pull` ne la change pas sur le téléphone. Rien ne
+  presse et rien ne casse en attendant — l'ancienne icône reste, c'est tout.
+  Le plus économique : la faire en même temps que la prochaine
+  reconstruction dont on aura besoin de toute façon.
+- [ ] **À décider : le nom sous l'icône.** Il est écrit « Opus-Project »
+  (`app.json`, `name`). Votre logo dit « OPUS ». Le changer se fait en une
+  ligne, mais seulement visible après la même reconstruction : autant le
+  décider avant.
+- [ ] **À décider : l'écran de lancement.** Celui qui apparaît une fraction
+  de seconde avant les barrières n'est pas réglé (le réglage de `app.json`
+  n'est plus lu par Expo 57, et le module qui le remplace n'est pas
+  installé). Y mettre votre logo demande un module natif de plus
+  (`expo-splash-screen`), donc la même reconstruction.
 
 ### La démonstration et la publicité — décidé le 26/10/2026
 

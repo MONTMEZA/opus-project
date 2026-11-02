@@ -10706,14 +10706,59 @@ Comptes supprimés par le chemin de l'application ; base revenue à
 aucun SIREN d'essai réservé. Les deux preuves SIRET `essai` réécrites pour
 l'essai expirent d'elles-mêmes.
 
+**ESSAYÉ SUR L'IPHONE le 02/11/2026**, par le propriétaire, dans le build de
+développement, après `git pull` : « oui tout fonctionne correctement ». Sans
+détailler point par point. **Le lot S est terminé** : ses cahiers sont
+archivés dans `docs/CAHIER-LOT-S.md`.
+
 #### Ce qui n'a PAS été vérifié
 
-Rien sur l'iPhone après le `git pull` (les textes nouveaux, la phrase sous
-« Ville ») ; l'export à grande échelle en production. **Ce qui reste
+Le détail au doigt (la phrase sous « Ville », la section « Ce que les autres
+voient de vous ») ; l'export à grande échelle en production. **Ce qui reste
 ouvert** : un visiteur garde des droits d'ÉCRITURE de table sur 25 tables,
 que la RLS arrête (un `revoke` général, dans un lot à part) ; `loadAll`
 avale encore l'échec de `mes_conversations` ; le nom recopié par
 `devenir_pro()` — `docs/A-FAIRE.md`, « Après l'étape M1d du lot S-d ».
+
+## L'icône d'Opus — le logo du propriétaire (02/11/2026)
+
+Remise par lui le 02/11 : le casque de chantier et le mot « OPUS », en encre
+`#1A1B19` sur l'orange `#E85C1F` — exactement les deux couleurs de
+l'identité (mesuré sur l'image). Elle remplace l'icône d'Expo, restée par
+défaut depuis le début. Les fichiers sont FABRIQUÉS depuis son image, et il
+faut savoir pourquoi avant de les retoucher :
+
+- **iPhone** (`assets/icon.png`) : l'image telle quelle, 1024 × 1024, **sans
+  transparence** — Apple refuse une icône transparente. Le téléphone arrondit
+  les angles lui-même ;
+- **Android** : une icône « adaptative », en deux couches. Le fond est
+  l'orange plein (`android-icon-background.png`, et `backgroundColor` de
+  `app.json`) ; le premier plan est le dessin SEUL sur fond transparent
+  (`android-icon-foreground.png`). **Chaque marque découpe l'icône à sa
+  façon** (cercle, carré arrondi, goutte) : seul le cercle central de 66 dp
+  sur 108 est garanti visible. Le dessin y est donc ramené à 71 % de sa
+  taille — sans ça, le « O » et le « S » sont coupés sur un téléphone à
+  icônes rondes ;
+- **Android 13 et plus**, icône « à thème » (`android-icon-monochrome.png`) :
+  la silhouette seule, que le téléphone teinte. Même zone sûre ;
+- le navigateur : `favicon.png`, 48 × 48.
+
+> **Une icône est une donnée NATIVE.** Elle est gravée dans l'application au
+> moment de sa construction : `git pull` ne la change pas sur le téléphone.
+> Elle n'apparaît qu'après un nouveau `eas build --platform ios --profile
+> development` et la réinstallation. Et c'est sans risque dans l'autre sens :
+> l'application déjà installée ne lit pas ces fichiers, rien ne peut planter.
+
+**L'écran de lancement, lui, n'est PAS réglé.** La clé `splash` de
+`app.json` n'est plus lue par Expo 57 sur le téléphone (vérifié dans
+`@expo/config-types` : elle n'existe plus que pour le web), et le module qui
+la remplace, `expo-splash-screen`, n'est pas installé. Le téléphone affiche
+donc l'écran de lancement par défaut une fraction de seconde, puis
+l'ouverture d'Opus (les barrières). Le régler, c'est un module natif de plus,
+donc une reconstruction : à décider avec lui (`docs/A-FAIRE.md`).
+
+Ce qui n'a PAS été vérifié : l'icône sur un vrai téléphone — elle n'a été vue
+qu'en aperçu, découpée comme le ferait iOS et deux marques d'Android.
 
 ## Dépendances : vérifier avant de proposer
 
