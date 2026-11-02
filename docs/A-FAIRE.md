@@ -2477,7 +2477,8 @@ dates, remontée — Q3 : 3 remontées par artisan et par semaine), S-d
 - [ ] **`badge_suspendu_le` est lisible par tout compte connecté** (B4,
   mesuré sur la vraie base le 26/10). L'application ne la lit que pour sa
   propre fiche ; c'est une colonne à fermer avec les autres droits de colonne,
-  dans S-d.
+  dans S-d — **à l'étape M2**, pas encore faite (voir « Après l'étape M1d du
+  lot S-d »).
 - [ ] **Supprimer une publication laisse son entrée de portfolio** (une
   publication « Les deux »). Les textes le disent désormais ; la retirer aussi
   est **une décision à vous**.
@@ -2727,6 +2728,55 @@ ceux-ci restent, et chacun a sa raison :
   disent désormais ; vider `cible_auteur_id` à la suppression est une
   décision à prendre (le signalement servirait encore à la modération, sans
   dire à qui il se rapportait).
+
+### Après l'étape M1d du lot S-d (02/11/2026)
+
+La migration M1d est sur la vraie base depuis le 02/11 (détail dans
+CLAUDE.md, « Ce que chacun lit des autres — lot S-d, étape M1d »). Les
+avertissements « pas de `git pull` » des commits du lot ne valent plus.
+
+**À vous, maintenant :**
+
+- [ ] **`git pull`, puis `npx expo start -c`**, et l'essai sur l'iPhone
+  (aucun module natif : rien à reconstruire). Ce qui a changé et se voit :
+  la fiche d'un particulier (son nom, sa ville pour un compte pro, ses
+  demandes) ; « Envoyer un message » n'apparaît plus entre deux
+  particuliers ; signaler un contenu ; « Récupérer mes données », plus
+  complet. **Fermez Opus sur l'iPhone le jour où l'on applique M2.**
+
+**Ensuite, l'étape M2** — après votre `git pull`, jamais avant :
+
+- [ ] fermer, par des droits de colonne, la ville, le code postal et la date
+  d'inscription de `users` (liste blanche : `id`, `type`, `nom`,
+  `avatar_url`), et les huit colonnes privées des fiches pro
+  (`badge_suspendu_le`, `verification_note`, `demandes_vues_le`,
+  `agent_propositions`, `siret`, `rge_numero`, `code_insee`, `created_at`).
+  L'ancien code de l'application LIT ces colonnes sur toutes les fiches :
+  appliquée avant votre `git pull`, M2 ferait échouer le démarrage de tout
+  compte connecté. Avec elle : les textes de la partie 2 (« Ce que les autres
+  voient de vous ») et une nouvelle `VERSION`.
+
+**Ce que les relectures du lot laissent ouvert :**
+
+- [ ] **Les copies temporaires des photos ne sont pas effacées à la
+  déconnexion** (le cache d'images, lui, l'est). Les textes le disent.
+- [ ] **Un signalement déposé AVANT M1d** gardait l'auteur et l'extrait que
+  le téléphone envoyait. La vraie base n'en compte qu'un, et il porte le bon
+  auteur : rien à corriger aujourd'hui.
+- [ ] **Aucune longueur maximale sur le nom d'un compte** (`users.nom`).
+  L'export le compte dans sa taille, mais un nom de plusieurs Mo reste
+  possible. Une contrainte, à poser avec le prochain lot qui touche `users`.
+- [ ] **Le refus OP026 dit qu'un identifiant ne mène à rien de signalable
+  pour vous.** Sur une publication, publique de toute façon, ça n'apprend
+  rien ; à garder en tête le jour où l'on signalera une cible privée.
+- [ ] **`notifie_demande()` est définie DEUX fois dans `schema.sql`**
+  (sections 24 et 37, depuis le 06/10) : la seconde gagne au rejeu. C'est la
+  règle « une fonction ne se définit qu'à un endroit », violée avant ce lot ;
+  trouvé en préparant l'essai. À fondre en une.
+- [ ] **Le signalement de l'essai du 02/11 reste en base**, clos
+  (« rejeté », avec une note qui dit que c'est un essai) : le connecteur
+  refuse de supprimer une ligne. Il ne gêne rien ; le supprimer est un geste
+  à vous, dans l'éditeur SQL, si vous le souhaitez.
 
 ### La démonstration et la publicité — décidé le 26/10/2026
 

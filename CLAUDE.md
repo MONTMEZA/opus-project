@@ -10425,6 +10425,163 @@ RÉUSSIE au doigt (sur la vraie base, seule l'API l'a faite — l'écran n'a
 montré que le refus) ; VoiceOver sur la mention « remise en avant ». La
 suite est dans `docs/A-FAIRE.md`, « Après le lot S-c ».
 
+### Ce que chacun lit des autres — lot S-d, étape M1d (30/10-02/11/2026)
+
+Section 53 de `schema.sql` (et, en place : 13, 13.5, 18.1, 42),
+`src/lib/profil-public.js`, `scripts/verifier-lectures.mjs`,
+`supabase/essais-section-51d.sql`. Quatrième et dernier sous-lot du lot S.
+Il se fait en DEUX migrations, et leur ordre est l'inverse l'une de l'autre :
+
+| | ce qu'elle fait | l'ordre |
+|---|---|---|
+| **M1d** (appliquée le 02/11) | ferme les lectures, pose les portes nouvelles (`profil_public`, `ma_fiche_pro`, `admin_etat_des_fiches`), refait l'export | la base D'ABORD, puis `git pull` : le code poussé appelle ces portes, et un compte pro ne démarrait plus sans elles |
+| **M2** (à venir) | ferme les huit colonnes privées des fiches pro | `git pull` D'ABORD, puis la base : l'ancien code lit ces colonnes sur toutes les fiches, et le démarrage de TOUT compte connecté échouerait |
+
+#### Les décisions du propriétaire, le 30/10
+
+| question | réponse |
+|---|---|
+| les colonnes privées des fiches pro (motif de refus, date de suspension, RGE déclaré…) | **les fermer** (étape M2) |
+| les notifications d'un compte qui part | **elles partent avec lui** (`on delete cascade`) |
+| qui écrit à un particulier | **les pros seulement** : une conversation a toujours un professionnel |
+| les « j'aime » et abonnements | **seulement soi-même** ; les compteurs restent publics |
+| (25/10, D3) la ville d'un particulier | **aux artisans connectés seulement**, par `profil_public()` |
+
+#### Ce qui est fermé par M1d
+
+- **un visiteur sans compte ne lit plus rien de `users`**, ni les « j'aime »,
+  ni les abonnements, ni les disponibilités aux urgences. Le fil, lui, se lit
+  toujours (`fil_filtre` nomme `follows` : `anon` garde son droit de lecture
+  de table, que la politique `to authenticated` rend vide — sans lui,
+  PostgreSQL refusait la requête entière au moment de la préparer, et le fil
+  tombait pour tout visiteur, mesuré le 30/10) ;
+- **la réponse d'un pro à une demande** ne se lit plus qu'entre ses deux
+  parties ;
+- **celui qui signale ne relit ni l'extrait, ni l'auteur visé, ni la note
+  de l'administration** : signaler était un moyen de LIRE ;
+- **TRUNCATE, REFERENCES, TRIGGER** retirés à `anon` et `authenticated`, sur
+  toutes les tables et dans les droits par défaut (et MAINTAIN, PostgreSQL 17,
+  dans un appel à part).
+
+#### Un signalement dit la vérité sur ce qu'il vise — OP026
+
+`tient_le_signalement()` (53.8) **relève l'auteur et l'extrait du VRAI
+contenu** et écrase ce que le téléphone envoie. Une cible disparue, un
+message qui ne vous est pas adressé, ou un signalement déposé au nom d'un
+autre : **le même refus partout** (OP026), pour ne rien apprendre de plus.
+Vérifié sur la vraie base : un faux auteur et un faux extrait envoyés par le
+téléphone sont remplacés, et l'export de l'artisan visé montre l'extrait
+RELEVÉ par la base, sans dire qui l'a signalé.
+
+#### L'export : borné en nombre, puis en taille — et MESURÉ
+
+« Récupérer mes données » rend désormais ce qui manquait (conversations,
+messages et commentaires reçus, réponses, avis reçus, décisions de
+l'administration, notifications…), sauf une liste fermée écrite une fois
+(`EXCLUSIONS_DE_L_EXPORT`). Ce que d'AUTRES remplissent est borné, et la
+forme compte autant que la borne :
+
+1. **limiter D'ABORD** (les 5 000 plus récentes) — trier tout avant de couper
+   faisait un tri sur disque : 1,0 s au lieu de 1,6 à 1,9 s pour
+   600 000 messages ;
+2. **la taille de la ligne ENTIÈRE** : toutes ses colonnes de longueur
+   variable, plus 600 octets. **Pas `to_jsonb(ligne)`** : 2,1 s au lieu de
+   0,1 pour 5 000 messages de 56 ko — `octet_length` lit la longueur sans
+   décompresser. Une liste partielle oubliait des colonnes qu'un tiers
+   remplissait : `verifier-lectures` et l'essai (J1 ter) comparent la liste
+   aux colonnes de la table, LUES DANS LE CATALOGUE ;
+3. **une ligne de plus de 1 Mo est écartée et comptée** : seule en tête, elle
+   vidait toute sa partie ;
+4. **`limites` dit, partie par partie, le total, le rendu et l'écarté.** Un
+   export coupé sans le dire ressemblerait à un export complet.
+
+#### Appliquer pendant que l'application tourne : un interblocage possible
+
+Trouvé par la relecture de la migration, reproduit deux fois. La migration
+prend un verrou exclusif sur `users`, le garde, puis attend les autres
+tables ; une requête de l'application qui lit une de ces tables PUIS `users`
+(les notifications avec leur acteur, les conversations avec leur client)
+peut s'interbloquer avec elle. PostgreSQL annule l'une des deux, en entier.
+
+> **Une migration qui touche `users` s'applique application FERMÉE**, et
+> s'envoie de nouveau telle quelle si elle rend 40P01 ou 55P03 : elle est
+> idempotente. Avant d'appliquer M1d : zéro requête active sur la vraie base.
+
+#### La migration, gardée par son empreinte
+
+Construite par un script qui PREND chaque objet dans `schema.sql`
+(`construire53.py`, dans le dossier de travail), 44 Ko, aucun ordre qui
+commence par `drop`, `delete` ou `truncate`, `set local lock_timeout = '5s'`,
+et un bloc `do` qui compare le md5 du texte reçu et n'exécute rien s'il
+diffère. Simulée deux fois sur une imitation de la vraie base : catalogue
+identique à une base neuve (1 341 lignes), essai 51d identique. Relue par une
+dernière relecture adverse (trois angles, un contradicteur par constat) :
+aucun défaut bloquant, deux risques mineurs (l'interblocage ci-dessus).
+
+**Appliquée le 02/11/2026** (trois appels : la migration, les droits par
+défaut, MAINTAIN), avec l'accord du propriétaire, Opus fermé sur son iPhone.
+Relevé AVANT : la vraie base identique à l'imitation sur les 210 objets
+touchés (au droit MAINTAIN près). Relevé APRÈS : **256 objets identiques à
+l'imitation migrée** (fonctions, politiques, droits de table et de colonne,
+contraintes, déclencheurs, index), les six fonctions au md5 près.
+
+**Les avertissements des commits `e92a4f2`, `dbcc443`, `9731afe` et
+`8d1ff65` — « ne pas faire `git pull` » — ne valent plus depuis ce jour-là.**
+
+#### Essayé sur la vraie base
+
+Par le chemin de l'application, avec deux artisans A et B et deux
+particuliers P et Q **à Brest**, jetables (les deux preuves SIRET `essai`
+déjà en base, réécrites pour leurs adresses) — **50 vérifications justes**.
+Trois autres ont d'abord échoué, et c'était MON script : il signalait avec
+le type « post », que ni la base ni l'application ne connaissent
+(« publication ») ; refaites avec le bon mot, les cinq passent :
+
+| | résultat |
+|---|---|
+| un visiteur lit `users` · `sos_availability` | **401 · 42501** ×2 |
+| …les « j'aime », les abonnements | `[]` ×2 |
+| …le fil | **200** |
+| P lit le nom de A · son e-mail | oui · **42501** |
+| A lit QUI a aimé sa publication · B les abonnés de A | `[]` · `[]` ; chacun relit les siens ; le compteur reste public |
+| `profil_public(P)` lu par A (pro) · par Q (particulier) · par P | « Brest (29) » · **sans ville** · « Brest (29) » |
+| …par B, que P a bloqué | **sans ville** |
+| `ma_fiche_pro()` : A · P | sa fiche entière · `[]` ; `admin_etat_des_fiches` par A : refusé |
+| P ouvre une conversation avec Q (particulier) | **refusé** ; A → P et Q → A : 201 |
+| les réponses à la demande de P : P · Q · A | 1 · `[]` · la sienne |
+| P signale avec un faux auteur et un faux extrait | 201, **remplacés par la base** |
+| P relit l'extrait · l'auteur visé | **42501** ×2 ; au nom de Q, ou sur une publication inventée : **OP026** |
+| l'export de P · de A | son signalement sans extrait ni auteur · le signalement visant sa publication, extrait relevé, sans qui |
+| P part | **ses notifications chez A disparaissent** (1 → 0) |
+| **au navigateur**, A (pro) puis P démarrent | 32 et 24 requêtes, **aucune refusée** ; `ma_fiche_pro`, `profil_public` en 200 |
+| …A ouvre la notification du commentaire de P, puis la fiche de P | « Brest (29) » et sa demande |
+
+Comptes supprimés par le chemin de l'application ; base revenue à
+14 comptes / 8 fiches / 21 publications, aucun compte `@exemple-opus.test`.
+
+> **Un essai qui SIGNALE laisse une trace dans la file de
+> l'administration.** Le signalement de P a survécu à son compte (c'est la
+> règle : il est anonymisé, pas supprimé) et visait une publication déjà
+> partie. Le connecteur refuse un `delete` : il a été **clos** (« rejeté »,
+> avec une note qui dit d'où il vient). Au ménage d'un essai, chercher aussi
+> les signalements.
+
+Et une faute refaite, pourtant écrite plus haut : **`pkill -f "expo start…"`
+a tué mon propre terminal**, avant le `rm .env` de la même commande. Le
+`.env` est resté une minute de trop. On arrête un serveur par son NUMÉRO, et
+on retire le `.env` dans une commande à part.
+
+#### Ce qui n'a PAS été vérifié
+
+Rien sur l'iPhone ; le temps réel ; l'export à grande échelle sur la vraie
+base (mesuré sur PostgreSQL 16, pas en production). Et **M2 n'est pas
+faite**. Jusqu'à elle, tout compte CONNECTÉ lit encore, par une requête
+directe, la ville, le code postal et la date d'inscription d'un autre compte
+(`users`), et les huit colonnes privées des fiches pro (`badge_suspendu_le`,
+`verification_note`, `rge_numero`…) : l'application ne les lit plus, mais la
+porte n'est fermée que par M2 — qui passe APRÈS le `git pull`. La suite est dans `docs/A-FAIRE.md`, « Après l'étape
+M1d du lot S-d ».
+
 ## Dépendances : vérifier avant de proposer
 
 Deux paquets ont déjà été écartés après vérification sur npm :
