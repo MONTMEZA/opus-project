@@ -62,7 +62,7 @@ import { SOS_ARTISANS, envoiSosDemo, sosDisponiblesDemo } from '../data/urgences
 import { creerFileEcriture, DELAI_ECRITURE } from './file-ecriture';
 import { nouvelIdentifiant } from './identifiant';
 import {
-  choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
+  choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PAIRES_DEVIS, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
   texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, originesDuDevis,
 } from './devis';
 import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
@@ -2898,9 +2898,23 @@ function rowToDevis(d) {
     lieuVille: d.lieu_ville ?? null,
     delaiExecution: d.delai_execution ?? null,
     retenueGarantieCentiemes: nombreOuNul(d.retenue_garantie_centiemes),
+    /* LES CONDITIONS (lot 2a), relues comme le reste : un devis rouvert dont
+       on a retiré la réduction doit la montrer retirée — sans ces lignes,
+       la file la croirait toujours là, et l'annoncerait enregistrée. */
+    remiseCentiemes: nombreOuNul(d.remise_centiemes),
+    remiseCentimes: nombreOuNul(d.remise_centimes),
+    acompteCentiemes: nombreOuNul(d.acompte_centiemes),
+    acompteCentimes: nombreOuNul(d.acompte_centimes),
+    acompteNature: d.acompte_nature ?? null,
+    validiteJours: nombreOuNul(d.validite_jours),
     totalHtCentimes: nombreOuNul(d.total_ht_centimes),
     totalTvaCentimes: nombreOuNul(d.total_tva_centimes),
     totalTtcCentimes: nombreOuNul(d.total_ttc_centimes),
+    /* Ce que la BASE a calculé des conditions : la réduction effective, l'acompte
+       effectif, le total toutes options comprises. Jamais envoyés. */
+    remiseHtCentimes: nombreOuNul(d.remise_ht_centimes),
+    acompteTtcCentimes: nombreOuNul(d.acompte_ttc_centimes),
+    totalTtcOptionsCentimes: nombreOuNul(d.total_ttc_options_centimes),
     generation: nombreOuNul(d.generation),
     createdAt: d.created_at ?? null,
     modifieLe: d.modifie_le ?? null,
@@ -2972,6 +2986,14 @@ function devisVersBase(v, { creation = false, proId = null } = {}) {
   poser('lieu_ville', 'lieuVille');
   poser('delai_execution', 'delaiExecution');
   poser('retenue_garantie_centiemes', 'retenueGarantieCentiemes');
+  /* Les conditions (lot 2a) : par PAIRES, en une écriture — l'écran pose les
+     deux colonnes d'une réduction ensemble, l'une à `null` (PAIRES_DEVIS). */
+  poser('remise_centiemes', 'remiseCentiemes');
+  poser('remise_centimes', 'remiseCentimes');
+  poser('acompte_centiemes', 'acompteCentiemes');
+  poser('acompte_centimes', 'acompteCentimes');
+  poser('acompte_nature', 'acompteNature');
+  poser('validite_jours', 'validiteJours');
   if (creation) {
     poser('id', 'id');
     poser('source', 'source');
@@ -3042,10 +3064,19 @@ function ligneIntrouvable() {
    lignes (un taux disparu reste à zéro dans `devis_tva`, faute de pouvoir
    y écrire `delete`), du plus fort au plus faible. */
 function totauxDepuisBase(d) {
+  const ht = nombreOuNul(d.total_ht_centimes);
+  const reduction = nombreOuNul(d.remise_ht_centimes);
   return {
-    ht: nombreOuNul(d.total_ht_centimes),
+    ht,
     tva: nombreOuNul(d.total_tva_centimes),
     ttc: nombreOuNul(d.total_ttc_centimes),
+    /* Les conditions telles que la BASE les a calculées (lot 2a) : la
+       réduction et l'acompte EFFECTIFS — ramenés au total quand ils le
+       dépassent —, le brut, et le total toutes options comprises. */
+    reduction,
+    brut: ht === null || reduction === null ? null : ht + reduction,
+    acompte: nombreOuNul(d.acompte_ttc_centimes),
+    ttcOptions: nombreOuNul(d.total_ttc_options_centimes),
     generation: nombreOuNul(d.generation),
     /* L'heure de la BASE, pour ranger la carte dans « Mes devis » : sans
        elle, la carte était datée à l'heure du téléphone (relecture
@@ -3055,7 +3086,7 @@ function totauxDepuisBase(d) {
       .filter((t) => Number(t.nb_lignes) > 0)
       .map((t) => ({
         taux: Number(t.taux_tva_centiemes), base: Number(t.base_centimes),
-        tva: Number(t.tva_centimes), nbLignes: Number(t.nb_lignes),
+        remise: Number(t.remise_centimes ?? 0), tva: Number(t.tva_centimes), nbLignes: Number(t.nb_lignes),
       }))
       .sort((a, b) => b.taux - a.taux),
   };
@@ -3191,8 +3222,9 @@ const relireUnDevis = hasSupabase ? relireUnDevisSupabase : relireUnDevisDemo;
    L'écran affiche CEUX-LÀ, pas ceux du téléphone. */
 async function relireTotauxDevisSupabase(devisId) {
   const { data, error } = await supabase.from('devis')
-    .select('total_ht_centimes, total_tva_centimes, total_ttc_centimes, generation, modifie_le, '
-      + 'devis_tva(taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)')
+    .select('total_ht_centimes, total_tva_centimes, total_ttc_centimes, remise_ht_centimes, acompte_ttc_centimes, '
+      + 'total_ttc_options_centimes, generation, modifie_le, '
+      + 'devis_tva(taux_tva_centiemes, base_centimes, remise_centimes, tva_centimes, nb_lignes)')
     .eq('id', devisId)
     .maybeSingle();
   if (error) throw error;
@@ -3240,6 +3272,8 @@ export function fileDuDevis({ devisId, devis = {}, devisEnBase = false, lignesEn
     avecDelai,
     nouvelIdentifiant,
     horloge: Number(horloge) || 0,
+    /* Une paire (réduction, acompte et sa nature) part entière : 49.4 bis. */
+    paires: PAIRES_DEVIS,
   });
   const enveloppe = {
     ...file,
@@ -3335,7 +3369,7 @@ async function unDevisSupabase(id) {
   const { data, error } = await lectureDevis('La lecture de ce devis', (signal) => avecSignal(
     supabase.from('devis')
       .select(`${LIENS_DU_DEVIS_OUVERT}, devis_lignes(*), `
-        + 'devis_tva(taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)')
+        + 'devis_tva(taux_tva_centiemes, base_centimes, remise_centimes, tva_centimes, nb_lignes)')
       .eq('id', id)
       .order('ordre', { referencedTable: 'devis_lignes' })
       .order('id', { referencedTable: 'devis_lignes' })

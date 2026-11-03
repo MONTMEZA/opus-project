@@ -15,7 +15,11 @@
 --  gouv.fr) le 21/10/2026 : aucun résultat. CLAUDE.md interdit le SIRET
 --  d'une vraie entreprise, même pour un essai.
 --
---  DES CAS ATTENDENT UNE ERREUR — 73 refus, et c'est le but : un essai de
+--  DES CAS ATTENDENT UNE ERREUR — 79 refus (74 avant le lot 2a, et le
+--  « 73 » que ce commentaire écrivait était déjà périmé : six refus de
+--  droit de colonne de plus — cas 4 bis, 5a, 10a, 15a, 19a, 19a bis — et
+--  un refus de RLS de moins, cas 15, que le droit de colonne attrape
+--  avant), et c'est le but : un essai de
 --  sécurité qui ne montre aucun refus n'éprouve rien. Chacun est annoncé
 --  dans son `\echo` PAR SON NOM : la contrainte (`devis_ligne_…_check`), le
 --  code (`OP013`, `OP014`, `OP015`, `OP016`, `OP017`, `23505`), « permission
@@ -263,14 +267,14 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 1. LES COLONNES — la liste FERMÉE (cahier §2.2-2.4, plus `generation`, 49.5 bis) ==='
+\echo '=== 1. LES COLONNES — la liste FERMÉE (cahier §2.2-2.4, plus `generation`, 49.5 bis, plus les CONDITIONS du lot 2a, 49.4 bis : neuf sur devis, une sur devis_tva) ==='
 -- ==========================================================================
 select t.table_name,
        string_agg(c.column_name || ':' || c.data_type || ':' || c.is_nullable, ',' order by c.ordinal_position)
          = case t.table_name
-             when 'devis' then 'id:uuid:NO,pro_id:uuid:NO,client_id:uuid:YES,quote_request_id:uuid:YES,sos_request_id:uuid:YES,source:text:NO,statut:text:NO,objet:text:YES,lieu_adresse:text:YES,lieu_code_postal:text:YES,lieu_ville:text:YES,delai_execution:text:YES,retenue_garantie_centiemes:integer:YES,total_ht_centimes:bigint:NO,total_tva_centimes:bigint:NO,total_ttc_centimes:bigint:NO,generation:bigint:NO,created_at:timestamp with time zone:NO,modifie_le:timestamp with time zone:NO'
+             when 'devis' then 'id:uuid:NO,pro_id:uuid:NO,client_id:uuid:YES,quote_request_id:uuid:YES,sos_request_id:uuid:YES,source:text:NO,statut:text:NO,objet:text:YES,lieu_adresse:text:YES,lieu_code_postal:text:YES,lieu_ville:text:YES,delai_execution:text:YES,retenue_garantie_centiemes:integer:YES,total_ht_centimes:bigint:NO,total_tva_centimes:bigint:NO,total_ttc_centimes:bigint:NO,generation:bigint:NO,created_at:timestamp with time zone:NO,modifie_le:timestamp with time zone:NO,remise_centiemes:integer:YES,remise_centimes:bigint:YES,acompte_centiemes:integer:YES,acompte_centimes:bigint:YES,acompte_nature:text:YES,validite_jours:integer:YES,remise_ht_centimes:bigint:NO,acompte_ttc_centimes:bigint:NO,total_ttc_options_centimes:bigint:NO'
              when 'devis_lignes' then 'id:uuid:NO,devis_id:uuid:NO,ordre:integer:NO,type:text:NO,designation:text:YES,quantite_milliemes:bigint:YES,unite:text:YES,prix_unitaire_centimes:bigint:YES,taux_tva_centiemes:integer:YES,total_centimes:bigint:YES,offert:boolean:NO,main_oeuvre:boolean:NO,fourniture_non_comprise:boolean:NO,surface_sol_milliemes:bigint:YES,surface_murs_milliemes:bigint:YES,generation:bigint:NO,modifie_le:timestamp with time zone:NO'
-             when 'devis_tva' then 'devis_id:uuid:NO,taux_tva_centiemes:integer:NO,base_centimes:bigint:NO,tva_centimes:bigint:NO,nb_lignes:integer:NO'
+             when 'devis_tva' then 'devis_id:uuid:NO,taux_tva_centiemes:integer:NO,base_centimes:bigint:NO,tva_centimes:bigint:NO,nb_lignes:integer:NO,remise_centimes:bigint:NO'
            end as liste_fermee_attendu_t,
        count(*) as colonnes
   from (values ('devis'), ('devis_lignes'), ('devis_tva')) t(table_name)
@@ -286,9 +290,9 @@ select count(*) as colonnes_interdites_attendu_0
 
 -- ==========================================================================
 \echo ''
-\echo '=== 2. LES CONTRAINTES — 23 check, toutes en _check, aucune numérotée ==='
+\echo '=== 2. LES CONTRAINTES — 32 check (23 du lot 1, neuf du lot 2a : acompte, acompte_nature, acompte_une_forme, calculs, remise, remise_une_forme, validite, tva_remise, tva_vide), toutes en _check, aucune numérotée ==='
 -- ==========================================================================
-select count(*) as check_attendu_23,
+select count(*) as check_attendu_32,
        count(*) filter (where conname !~ '_check$') as non_suffixees_attendu_0,
        count(*) filter (where conname ~ '_check[0-9]+$') as numerotees_attendu_0
   from pg_constraint
@@ -412,8 +416,12 @@ rollback;
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 insert into public.devis (pro_id, source, generation) values (:A, 'qr', 1);
 rollback;
-\echo '--- statut « remis » → devis_statut_check'
+\echo '--- statut « remis » écrit par un CLIENT → permission denied for table devis (lot 2a : le droit de colonne refuse AVANT la contrainte, 49.7)'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.devis (pro_id, statut, generation) values (:A, 'remis', 1);
+rollback;
+\echo '--- statut « remis » écrit en SUPERUTILISATEUR (la contrainte reste la garde de tout ce qui n est pas un client) → devis_statut_check'
+begin;
 insert into public.devis (pro_id, statut, generation) values (:A, 'remis', 1);
 rollback;
 \echo '--- code postal « 1341 » → devis_lieu_code_postal_check'
@@ -477,9 +485,19 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 5. LE TOTAL D UNE LIGNE VIENT DE LA BASE — A envoie total_centimes = 1 sur 2,5 m² à 33,33 € ==='
+\echo '=== 5. LE TOTAL D UNE LIGNE VIENT DE LA BASE — total_centimes = 1 sur 2,5 m² à 33,33 € ==='
 -- ==========================================================================
+-- Depuis le lot 2a (49.7), un CLIENT ne peut plus l'envoyer : le droit de
+-- colonne refuse avant le déclencheur. Le déclencheur reste la garde de
+-- tout ce qui n'est pas un client (l'éditeur SQL, une fonction) : il est
+-- éprouvé en superutilisateur.
+\echo '--- 5a. envoyé par A → permission denied for table devis_lignes'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A; execute devis_vide;
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite, prix_unitaire_centimes, taux_tva_centiemes, total_centimes, generation)
+values (:LX, :DV, 1000, 'poste', 'Ragréage', 2500, 'm2', 3333, 2000, 1, 2);
+rollback;
+\echo '--- 5b. envoyé en superutilisateur : remplacé par la base'
+begin; execute devis_vide;
 insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite, prix_unitaire_centimes, taux_tva_centiemes, total_centimes, generation)
 values (:LX, :DV, 1000, 'poste', 'Ragréage', 2500, 'm2', 3333, 2000, 1, 2);
 select total_centimes as total_attendu_8333 from public.devis_lignes where id = :LX;
@@ -579,9 +597,15 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 10. LES TOTAUX NE S ÉCRIVENT PAS — A envoie 100 / 100 ==='
+\echo '=== 10. LES TOTAUX NE S ÉCRIVENT PAS — 100 / 100 envoyés ==='
 -- ==========================================================================
+\echo '--- 10a. par A → permission denied for table devis (lot 2a : le droit de colonne, 49.7)'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+execute devis_ref; execute lignes_ref;
+update public.devis set total_ht_centimes = 100, total_tva_centimes = 0, total_ttc_centimes = 100, generation = 11 where id = :DREF;
+rollback;
+\echo '--- 10b. en superutilisateur : la base les RELIT quand même'
+begin;
 execute devis_ref; execute lignes_ref;
 update public.devis set total_ht_centimes = 100, total_tva_centimes = 0, total_ttc_centimes = 100, generation = 11 where id = :DREF;
 \echo '-- attendu : relus, 155045 | 20904 | 175949'
@@ -803,22 +827,27 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 15. UNE LIGNE CHANGE DE DEVIS — les deux totaux suivent ; chez B, refusé ==='
+\echo '=== 15. UNE LIGNE CHANGE DE DEVIS — par un client, refusé ; en superutilisateur, les deux totaux suivent ==='
 -- ==========================================================================
+-- Depuis le lot 2a (49.7, relecture BASE-9), un client n'a plus
+-- `update (devis_id)` : aucun écran ne déplace une ligne. La règle de
+-- 49.5 bis, point 6, reste pour l'éditeur SQL : elle est éprouvée en
+-- superutilisateur.
+\echo '--- 15a. A déplace le receveur dans son second devis → permission denied for table devis_lignes'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_ref; execute lignes_ref;
 insert into public.devis (id, pro_id, generation) values (:D2, :A, 1);
-\echo '-- le receveur (389,90 € à 20 %) passe dans le second devis de A'
+update public.devis_lignes set devis_id = :D2, generation = 11 where id = :L5;
+rollback;
+\echo '--- 15b. en superutilisateur : le receveur (389,90 € à 20 %) passe dans le second devis'
+begin;
+execute devis_ref; execute lignes_ref;
+insert into public.devis (id, pro_id, generation) values (:D2, :A, 1);
 update public.devis_lignes set devis_id = :D2, generation = 11 where id = :L5;
 \echo '-- attendu : 116055 | 13106 | 129161 | 1000:101055:10106:3,2000:15000:3000:1 | horloge 11 — le devis QUITTÉ reçoit AUSSI le numéro du déplacement (49.5 bis, point 6)'
 execute totaux(:DREF);
 \echo '-- attendu : 38990 | 7798 | 46788 | 2000:38990:7798:1'
 execute totaux(:D2);
-set local request.jwt.claim.sub = :B;
-insert into public.devis (id, pro_id, generation) values (:DB, :B, 1);
-set local request.jwt.claim.sub = :A;
-\echo '-- puis vers le devis de B → new row violates row-level security policy for table "devis_lignes"'
-update public.devis_lignes set devis_id = :DB, generation = 12 where id = :L5;
 rollback;
 
 
@@ -877,7 +906,9 @@ rollback;
 -- ==========================================================================
 -- Seule l'insertion était éprouvée (16 bis) ; un déplacement passe par le
 -- même recalcul, sous le même verrou, et doit buter sur la même borne.
-begin; set local role authenticated; set local request.jwt.claim.sub = :A; execute devis_vide;
+-- En SUPERUTILISATEUR depuis le lot 2a : un client ne déplace plus de ligne
+-- (15a).
+begin; execute devis_vide;
 insert into public.devis_lignes (devis_id, ordre, type, designation, quantite_milliemes, unite, prix_unitaire_centimes, taux_tva_centiemes, generation)
 select :DV, g * 1000, 'poste', 'Ligne ' || g, 1000, 'u', 100, 1000, 1 + g from generate_series(1, 500) g;
 insert into public.devis (id, pro_id, generation) values (:D2, :A, 1);
@@ -921,7 +952,20 @@ rollback;
 \echo ''
 \echo '=== 19. CE QUE LA BASE POSE — la date de création, la source ==='
 -- ==========================================================================
+-- Depuis le lot 2a (49.7), un client n'écrit ni une date ni la source après
+-- la création : 19a. Le déclencheur reste la garde du reste : 19b, en
+-- superutilisateur.
+\echo '--- 19a. A envoie une date de création → permission denied for table devis'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.devis (id, pro_id, created_at, source, generation) values (:DX, :A, '2001-01-01', 'demande', 1);
+rollback;
+\echo '--- 19a bis. A change la source → permission denied for table devis'
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.devis (id, pro_id, source, generation) values (:DX, :A, 'demande', 1);
+update public.devis set source = 'manuelle', generation = 2 where id = :DX;
+rollback;
+\echo '--- 19b. en superutilisateur : la date et la source posées par la base'
+begin;
 insert into public.devis (id, pro_id, created_at, source, generation) values (:DX, :A, '2001-01-01', 'demande', 1);
 select created_at > now() - interval '1 hour' as cree_aujourd_hui_attendu_t, source as source_attendu_demande
   from public.devis where id = :DX;
@@ -1099,14 +1143,14 @@ select t as table_, bool_or(has_table_privilege('anon', t, p)) as anon_un_droit_
   from unnest(array['public.devis', 'public.devis_lignes', 'public.devis_tva']) t,
        unnest(array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']) p
  group by t order by t;
-\echo '-- authenticated : lire et écrire devis et lignes ; LIRE la ventilation ; rien d autre — ni truncate, ni references, ni trigger (relecture sécurité, M2)'
+\echo '-- authenticated : LIRE et SUPPRIMER devis et lignes au niveau de la table — l écriture se donne COLONNE PAR COLONNE depuis le lot 2a (49.7 ; la liste est lue colonne par colonne par essais-section-49-conditions.sql, cas 18) ; LIRE la ventilation ; rien d autre — ni truncate, ni references, ni trigger (relecture sécurité, M2)'
 select t as table_,
        string_agg(p, ',' order by p) filter (where has_table_privilege('authenticated', t, p)) as droits_authentifie
   from unnest(array['public.devis', 'public.devis_lignes', 'public.devis_tva']) t,
        unnest(array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']) p
  group by t order by t;
-select bool_and(has_table_privilege('authenticated', t, p) = (p in ('select', 'insert', 'update', 'delete')))
-         filter (where t <> 'public.devis_tva') as devis_et_lignes_exactement_quatre_attendu_t,
+select bool_and(has_table_privilege('authenticated', t, p) = (p in ('select', 'delete')))
+         filter (where t <> 'public.devis_tva') as devis_et_lignes_table_select_delete_attendu_t,
        bool_and(has_table_privilege('authenticated', t, p) = (p = 'select'))
          filter (where t = 'public.devis_tva') as ventilation_lecture_seule_attendu_t
   from unnest(array['public.devis', 'public.devis_lignes', 'public.devis_tva']) t,
@@ -1114,12 +1158,13 @@ select bool_and(has_table_privilege('authenticated', t, p) = (p in ('select', 'i
 select has_function_privilege('public', 'public.recalcule_devis(uuid, bigint)', 'execute') as recalcule_public_attendu_f,
        has_function_privilege('anon', 'public.recalcule_devis(uuid, bigint)', 'execute') as recalcule_anon_attendu_f,
        has_function_privilege('authenticated', 'public.recalcule_devis(uuid, bigint)', 'execute') as recalcule_authentifie_attendu_f;
-\echo '-- les trois fonctions de déclencheur, pour les TROIS rôles (relecture des essais, M7) : f partout'
+\echo '-- les QUATRE fonctions de déclencheur (recalcule_apres_reduction depuis le lot 2a), pour les TROIS rôles (relecture des essais, M7) : f partout'
 select f as fonction,
        has_function_privilege('public', f, 'execute') as public_attendu_f,
        has_function_privilege('anon', f, 'execute') as anon_attendu_f,
        has_function_privilege('authenticated', f, 'execute') as authentifie_attendu_f
-  from unnest(array['public.tient_le_devis()', 'public.tient_la_ligne_de_devis()', 'public.recalcule_apres_ligne_de_devis()']) f
+  from unnest(array['public.tient_le_devis()', 'public.tient_la_ligne_de_devis()', 'public.recalcule_apres_ligne_de_devis()',
+                    'public.recalcule_apres_reduction()']) f
  order by 1;
 \echo '-- les gardiennes : appelées par une contrainte (les deux arrondis) ou par les politiques (mes_entreprises) — t pour authenticated, f pour anon'
 select f as fonction,
@@ -1228,19 +1273,19 @@ select count(*) as definer_ouvertes_attendu_31,
          'preparer_suppression_compte', 'profil_public', 'rattacher_mon_siret',
          'remonter_publication')), '—') as nouvelles_attendu_tiret
   from ouvertes;
-\echo '--- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026, plus trois du lot S-b (26/10/2026) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT), et une du lot S-d (30/10/2026) : tient_le_signalement (il relève l auteur et l extrait VRAIS de la cible d un signalement, même cachée à celui qui signale) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)'
+\echo '--- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026, plus trois du lot S-b (26/10/2026) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT), et une du lot S-d (30/10/2026) : tient_le_signalement (il relève l auteur et l extrait VRAIS de la cible d un signalement, même cachée à celui qui signale), et une du lot 2a (03/11/2026) : recalcule_apres_reduction (il appelle le recalcul quand la réduction sur le total change) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)'
 with fermees as (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prosecdef
      and not (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
 )
-select count(*) as definer_fermees_attendu_31,
+select count(*) as definer_fermees_attendu_32,
        coalesce(string_agg(proname, ', ' order by proname) filter (where proname not in (
          'admin_exige_droit', 'anonymise_actes_admin', 'calcule_client_verifie', 'compter_appel_siret', 'compter_essai_tva',
          'cree_fiche_utilisateur', 'enregistrer_appel_ia', 'fiche_pro_indestructible', 'maj_chantier', 'maj_comments_count',
          'maj_followers_count', 'maj_likes_count', 'maj_nb_reponses', 'maj_nb_reponses_demande', 'maj_notes_pro', 'maj_vues_count', 'notifie_commentaire',
          'notifie_demande', 'notifie_demande_pro', 'notifie_partenariat', 'notifie_reponse_annonce', 'pose_le_lieu_du_post',
-         'recalcule_apres_ligne_de_devis', 'recalcule_chantier', 'recalcule_devis', 'recalcule_notes_pro', 'siren_reserve',
+         'recalcule_apres_ligne_de_devis', 'recalcule_apres_reduction', 'recalcule_chantier', 'recalcule_devis', 'recalcule_notes_pro', 'siren_reserve',
          'tait_les_notifications_bloquees', 'tient_le_chantier_du_post', 'tient_le_lien_du_devis',
          'tient_le_signalement')), '—') as nouvelles_attendu_tiret
   from fermees;
@@ -1255,9 +1300,9 @@ select count(distinct v.oid) as vues_ou_regles_attendu_0
   join pg_class v on v.oid = r.ev_class
  where d.refobjid in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass)
    and v.oid not in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass);
-\echo '--- 27f. sans texte : les déclencheurs posés sur les trois tables (hors clés étrangères) — exactement les quatre nommés (trg_tient_le_lien_du_devis depuis le lot S-b : un nouveau lien vers la demande d une personne en blocage, OP020), et aucune règle sur elles'
+\echo '--- 27f. sans texte : les déclencheurs posés sur les trois tables (hors clés étrangères) — exactement les cinq nommés (trg_tient_le_lien_du_devis depuis le lot S-b : un nouveau lien vers la demande d une personne en blocage, OP020 ; trg_recalcule_apres_reduction depuis le lot 2a : la réduction change, la ventilation se refait), et aucune règle sur elles'
 select string_agg(c.relname || '.' || t.tgname, ', ' order by c.relname, t.tgname)
-         = 'devis.trg_tient_le_devis, devis.trg_tient_le_lien_du_devis, devis_lignes.trg_recalcule_devis, devis_lignes.trg_tient_la_ligne_de_devis' as declencheurs_exacts_attendu_t,
+         = 'devis.trg_recalcule_apres_reduction, devis.trg_tient_le_devis, devis.trg_tient_le_lien_du_devis, devis_lignes.trg_recalcule_devis, devis_lignes.trg_tient_la_ligne_de_devis' as declencheurs_exacts_attendu_t,
        string_agg(c.relname || '.' || t.tgname, ', ' order by c.relname, t.tgname) as declencheurs,
        (select count(*) from pg_rewrite r
          where r.ev_class in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass)) as regles_sur_elles_attendu_0
@@ -1337,14 +1382,29 @@ begin
          where t.id = lid;
       elsif op->>'op' = 'retirer' then
         delete from public.devis_lignes where id = (ids->>(op->>'ligne'))::uuid;
+      elsif op->>'op' = 'devis' then
+        -- Les conditions du devis (lot 2a) : une écriture du DEVIS, avec son
+        -- numéro. Le déclencheur de la réduction refait le recalcul.
+        update public.devis t set (remise_centiemes, remise_centimes, acompte_centiemes, acompte_centimes, acompte_nature,
+            validite_jours, retenue_garantie_centiemes, generation)
+          = (select r.remise_centiemes, r.remise_centimes, r.acompte_centiemes, r.acompte_centimes, r.acompte_nature,
+            r.validite_jours, r.retenue_garantie_centiemes, num
+             from jsonb_populate_record(t, op->'valeurs') r)
+         where t.id = d;
       else raise exception 'opération inconnue %', op->>'op';
       end if;
     end loop;
     select concat_ws('|', v.total_ht_centimes, v.total_tva_centimes, v.total_ttc_centimes,
-      coalesce((select string_agg(concat_ws(':', t.taux_tva_centiemes, t.base_centimes, t.tva_centimes, t.nb_lignes), ',' order by t.taux_tva_centiemes desc)
+      coalesce((select string_agg(case when c->>'forme' = 'conditions'
+                                       then concat_ws(':', t.taux_tva_centiemes, t.base_centimes, t.remise_centimes, t.tva_centimes, t.nb_lignes)
+                                       else concat_ws(':', t.taux_tva_centiemes, t.base_centimes, t.tva_centimes, t.nb_lignes) end,
+                                  ',' order by t.taux_tva_centiemes desc)
                   from public.devis_tva t where t.devis_id = d and t.nb_lignes > 0), '—'),
       coalesce((select string_agg(concat_ws(':', l.taux_tva_centiemes, l.total_centimes), ',' order by l.ordre, l.id)
-                  from public.devis_lignes l where l.devis_id = d and l.type = 'option'), '—'))
+                  from public.devis_lignes l where l.devis_id = d and l.type = 'option'), '—'),
+      case when c->>'forme' = 'conditions' then v.remise_ht_centimes end,
+      case when c->>'forme' = 'conditions' then v.acompte_ttc_centimes end,
+      case when c->>'forme' = 'conditions' then v.total_ttc_options_centimes end)
       into res from public.devis v where v.id = d;
     raise exception 'FIN_DU_CAS' using detail = res;
   exception when others then
@@ -1357,14 +1417,17 @@ create or replace function pg_temp.jouer_fonction(f jsonb) returns text language
   select case f->>'nom'
     when 'devis_tva_de' then coalesce(public.devis_tva_de((f->'args'->>0)::bigint, (f->'args'->>1)::int)::text, 'null')
     when 'devis_total_ligne' then coalesce(public.devis_total_ligne((f->'args'->>0)::bigint, (f->'args'->>1)::bigint)::text, 'null')
+    when 'repartir_au_plus_fort_reste' then coalesce(public.repartir_au_plus_fort_reste((f->'args'->>0)::bigint,
+      array(select x::bigint from jsonb_array_elements_text(f->'args'->1) with ordinality as e(x, n) order by n))::text, 'null')
   end $$;
 
 \set cas `cat supabase/cas-devis.json`
-select (:'cas'::jsonb->>'nombre')::int as nombre_annonce_attendu_44,
-       count(*) as cas_lus_attendu_44,
-       count(*) filter (where c->'operations' is not null) as suites_attendu_43,
-       (select count(*) from jsonb_array_elements(:'cas'::jsonb->'cas') x, jsonb_array_elements(coalesce(x->'fonctions', '[]')) f) as appels_attendu_8,
-       count(*) filter (where c->>'attendu' like 'REFUS:%') as refus_attendus_23
+select (:'cas'::jsonb->>'nombre')::int as nombre_annonce_attendu_69,
+       count(*) as cas_lus_attendu_69,
+       count(*) filter (where c->'operations' is not null) as suites_attendu_66,
+       count(*) filter (where c->>'forme' = 'conditions') as conditions_attendu_23,
+       (select count(*) from jsonb_array_elements(:'cas'::jsonb->'cas') x, jsonb_array_elements(coalesce(x->'fonctions', '[]')) f) as appels_attendu_19,
+       count(*) filter (where c->>'attendu' like 'REFUS:%') as refus_attendus_30
   from jsonb_array_elements(:'cas'::jsonb->'cas') c;
 \echo '-- les écarts, un par ligne (VIDE = aucun)'
 select c->>'id' as cas, pg_temp.jouer_cas(c, :A) as obtenu, c->>'attendu' as attendu
@@ -1377,9 +1440,9 @@ select 'écarts : ' || ((select count(*) from jsonb_array_elements(:'cas'::jsonb
     where c->'operations' is not null and pg_temp.jouer_cas(c, :A) is distinct from c->>'attendu')
   + (select count(*) from jsonb_array_elements(:'cas'::jsonb->'cas') c, jsonb_array_elements(coalesce(c->'fonctions', '[]')) f
     where pg_temp.jouer_fonction(f) is distinct from coalesce(f->>'attendu', 'null'))) as bilan_attendu_ecarts_0;
-\echo '-- et la preuve que le joueur JOUE : trois cas lus en entier (un accepté, un refusé, un retrait)'
+\echo '-- et la preuve que le joueur JOUE : cinq cas lus en entier (un accepté, un refusé, un retrait ; une réduction répartie, une condition refusée)'
 select c->>'id' as cas, pg_temp.jouer_cas(c, :A) as obtenu
-  from jsonb_array_elements(:'cas'::jsonb->'cas') c where c->>'id' in ('C01', 'C09', 'C14c') order by 1;
+  from jsonb_array_elements(:'cas'::jsonb->'cas') c where c->>'id' in ('C01', 'C09', 'C14c', 'R01', 'R18') order by 1;
 select count(*) as devis_restants_attendu_0 from public.devis where pro_id = :A;
 
 
@@ -1389,7 +1452,7 @@ select count(*) as devis_restants_attendu_0 from public.devis where pro_id = :A;
 -- ==========================================================================
 select string_agg(case when tgname like 'RI_ConstraintTrigger_c_%' then 'RI_ConstraintTrigger_c_…' else tgname end, ' → ' order by tgname) as ordre_attendu_RI_puis_trg_recalcule_devis
   from pg_trigger where tgrelid = 'public.devis_lignes'::regclass and tgtype & 3 = 1;
-select string_agg(tgname, ', ' order by tgname) as les_quatre_declencheurs_nommes
+select string_agg(tgname, ', ' order by tgname) as les_cinq_declencheurs_nommes
   from pg_trigger where not tgisinternal
    and tgrelid in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass);
 
@@ -1474,8 +1537,8 @@ execute devis_ref; execute lignes_ref;
 select generation as horloge_attendu_10 from public.devis where id = :DREF;
 update public.devis_lignes set designation = 'Même numéro que l horloge', generation = 10 where id = :L5;
 rollback;
-\echo '--- 32l. LE DÉPLACEMENT TARDIF (49.5 bis, point 6) : la ligne est retouchée au n° 20 dans son devis ; un déplacement plus ancien (n° 15) vers un second devis (horloge 1) arrive ensuite → OP015'
-begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+\echo '--- 32l. LE DÉPLACEMENT TARDIF (49.5 bis, point 6) : la ligne est retouchée au n° 20 dans son devis ; un déplacement plus ancien (n° 15) vers un second devis (horloge 1) arrive ensuite → OP015 — en SUPERUTILISATEUR depuis le lot 2a : un client ne déplace plus de ligne (15a)'
+begin;
 execute devis_ref; execute lignes_ref;
 insert into public.devis (id, pro_id, generation) values (:D2, :A, 1);
 update public.devis_lignes set designation = 'Retouchée', generation = 20 where id = :L5;

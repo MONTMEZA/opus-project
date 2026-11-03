@@ -1468,6 +1468,9 @@ await section('Le délai d’exécution', async () => {
 });
 
 await section('La retenue de garantie', async () => {
+  /* Depuis le lot 2a, la retenue vit dans la carte « Conditions », avec la
+     réduction, l'acompte et la validité : une rangée du bas l'ouvre. */
+  await toucher(page.getByLabel(/^Conditions : /).first());
   const sw = page.getByRole('switch', { name: /^Retenue de garantie/ });
   verifier('l’interrupteur est allumé sur ce devis (5 %)', (await sw.getAttribute('aria-checked')) === 'true');
   await toucher(sw);
@@ -1475,13 +1478,89 @@ await section('La retenue de garantie', async () => {
   await toucher(sw);
   const v = await parLibelle('Taux de la retenue de garantie, en pour cent').inputValue();
   verifier(`rallumé, « 5 » est proposé (« ${v} »)`, v === '5' || v === '5,00');
-  const bloc = await page.evaluate(() => {
-    const s = document.querySelector('[role="switch"][aria-label^="Retenue de garantie"]');
-    return s ? (s.parentElement.innerText || '').replace(/[  ]/g, ' ') : '';
-  });
+  /* LA PHRASE DE LA LOI, lue seule : la carte porte aussi les totaux, mais
+     la phrase de la retenue ne doit porter AUCUN montant (son assiette est
+     une question posée au juriste). */
+  const bloc = await page.evaluate((debut) => {
+    const plat = (x) => (x || '').replace(/[  ]/g, ' ');
+    const n = [...document.querySelectorAll('div')].find((e) => e.children.length === 0 && plat(e.innerText).startsWith(debut));
+    return n ? plat(n.innerText) : '';
+  }, net(PHRASE_RETENUE).slice(0, 30));
   verifier('PHRASE_RETENUE est écrite', bloc.includes(net(PHRASE_RETENUE).slice(0, 50)), bloc);
-  verifier('…et AUCUN montant dans les conditions', !/\d,\d\d €/.test(bloc), bloc);
+  verifier('…et AUCUN montant dans la phrase de la retenue', !/\d,\d\d €/.test(bloc), bloc);
   await capture('13-retenue');
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+});
+
+await section('La carte « Conditions » : réduction, acompte, validité, puis la garde (lot 2a)', async () => {
+  const montantsDe = (t) => [...net(t).matchAll(/(\d[\d ]*,\d\d) €/g)].map((m) => Math.round(Number(m[1].replace(/ /g, '').replace(',', '.')) * 100));
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  verifier('la carte s’ouvre : réduction, acompte, validité, retenue', /Validité de l’offre/.test(await texte()) && /Retenue de garantie/.test(await texte()));
+  await jugerCibles('La carte « Conditions »', (c) => !/^Retenue de garantie/.test(c.libelle));
+  /* 10 % : l'effet DIT l'arithmétique, et on la refait sur ses deux montants. */
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '10');
+  await toucher(parLibelle('Acompte, en pour cent'));
+  const effet = await jusqua(async () => ((await texte()).match(/Le total HT des postes passe de [^.]+\./) || [])[0], DELAI_ECRITURE + 3000);
+  const [avant, apres] = montantsDe(effet || '');
+  verifier(`10 % : « ${effet || '—'} » — le second montant est le premier moins 10 %, au centime, demi vers le haut`,
+    !!effet && avant > 0 && apres === avant - Math.floor((avant * 1000 + 5000) / 10000));
+  /* En euros, plus grand que les postes : RAMENÉE, jamais refusée. */
+  await toucher(parLibelle('Réduction en euros'));
+  await viderEtTaper(parLibelle('Réduction, en euros'), '9999999');
+  await toucher(parLibelle('Acompte, en pour cent'));
+  const ramenee = await jusqua(async () => /Ramenée à [\d ]+,\d\d € : le total des postes est plus petit/.test(await texte()), DELAI_ECRITURE + 3000);
+  verifier('une réduction en euros plus grande que les postes : « Ramenée à … », aucun refus', !!ramenee
+    && !/n’a pas pu être enregistrée/.test(await texte()));
+  await capture('13b-conditions-ramenee');
+  await toucher(parLibelle('Réduction en pourcentage'));
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '10');
+  /* « ,5 » vaut 0,5 % ; la nature se choisit, rien n'est pré-choisi. */
+  await viderEtTaper(parLibelle('Acompte, en pour cent'), ',5');
+  await toucher(parLibelle('Réduction, en pour cent'));
+  const sansNature = await jusqua(async () => {
+    const l = await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => '');
+    return /Acompte ou arrhes \? à choisir/.test(net(l || '')) ? l : null;
+  }, 1500);
+  verifier('un acompte sans nature : rien n’est choisi à sa place (« Acompte ou arrhes ? à choisir »)',
+    (await page.getByRole('radio', { name: 'C’est des arrhes', checked: true }).count()) === 0
+    || !!sansNature);
+  await toucher(parLibelle('C’est des arrhes'));
+  await toucher(parLibelle('Valable 30 jours'));
+  const reste = await jusqua(async () => ((await texte()).match(/[\d ]+,\d\d € TTC — reste à payer[^\n]+/) || [])[0], DELAI_ECRITURE + 3000);
+  verifier(`l’acompte dit le reste, « avant la retenue de garantie » (« ${reste || '—'} »)`, !!reste && /avant la retenue de garantie/.test(reste));
+  await capture('13c-conditions-remplies');
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+  const rangee = await jusqua(async () => {
+    const l = net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => ''));
+    return /Réduction 10 % · Arrhes 0,5 % · Valable 30 jours/.test(l) ? l : null;
+  }, DELAI_ECRITURE + 3000);
+  verifier(`la rangée résume, sans rien qui manque (« ${rangee || '—'} »)`, !!rangee && !/à choisir/.test(rangee));
+  const pied = await jusqua(async () => /Total TTC · réduction comprise/.test(await texte()), DELAI_ECRITURE + 3000);
+  verifier('le pied : « Total TTC · réduction comprise » (une seule mention)', !!pied);
+  const ventil = await page.evaluate(() => [...document.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label'))
+    .filter((x) => /^(Total HT avant réduction|Réduction|Arrhes|Reste à payer)/.test(x)));
+  verifier('le bas du devis : avant réduction, la réduction (dite sans trait d’union), les arrhes, le reste avant la retenue',
+    ventil.some((x) => /^Total HT avant réduction/.test(x)) && ventil.some((x) => /^Réduction 10/.test(x) && !/[-−]/.test(x))
+    && ventil.some((x) => /^Arrhes 0,5/.test(net(x))) && ventil.some((x) => /^Reste à payer, avant la retenue de garantie/.test(x)),
+  ventil.join(' | '));
+  await capture('13d-conditions-bas');
+  /* LA GARDE : 150 % refusé par l'écran, puis la barre du bas. */
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '150');
+  await toucher(page.getByRole('tab', { name: 'Accueil' }));
+  const bande = await jusqua(async () => /« Réduction[^»]*» : ce que vous avez écrit n’est pas enregistré/.test(await texte()), DELAI_ECRITURE + 3000);
+  verifier('150 % puis la barre du bas : la bande NOMME la réduction, et l’écran ne part PAS', !!bande && await dansLaSaisie());
+  await toucher(bouton('Corriger'));
+  const champ = await jusqua(async () => (await page.getByLabel('Réduction, en pour cent', { exact: true }).count())
+    && page.getByLabel('Réduction, en pour cent', { exact: true }).inputValue(), 3000);
+  verifier(`« Corriger » ROUVRE la carte, le texte tapé est revenu (« ${champ || '—'} »), avec sa phrase`,
+    champ === '150' && /Un pourcentage ne dépasse pas 100 %\./.test(await texte()));
+  /* On remet le devis comme on l'a trouvé : sans réduction ni acompte. */
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '');
+  await viderEtTaper(parLibelle('Acompte, en pour cent'), '');
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+  const vide = await jusqua(async () => !/Réduction|Arrhes/.test(net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => 'x'))), DELAI_ECRITURE + 3000);
+  verifier('vidés, la réduction et l’acompte quittent le résumé', !!vide);
 });
 
 await section('Une écriture qui ne revient pas : « Non enregistrée — Réessayer »', async () => {

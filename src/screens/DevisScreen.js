@@ -51,7 +51,7 @@ const FOND_BROUILLON = C.accent2;
 
 /* Une carte par devis, mémorisée : elle ne reçoit que des VALEURS. */
 const CarteDevis = React.memo(function CarteDevis({
-  id, objet, client, origine, total, libelleTotal, modifie, commence, onOuvrir,
+  id, objet, client, origine, total, libelleTotal, reduction = false, modifie, commence, onOuvrir,
 }) {
   return (
     <Pressable
@@ -78,6 +78,8 @@ const CarteDevis = React.memo(function CarteDevis({
         <View style={s.droite}>
           <Text style={s.libelle}>{libelleTotal}</Text>
           <Montant centimes={total} fort />
+          {/* Le total est NET : une réduction se dit sous lui (lot 2a). */}
+          {reduction && <Text style={s.libelle}>réduction comprise</Text>}
         </View>
         <ChevronRight size={15} color={C.muted} />
       </View>
@@ -187,6 +189,7 @@ export default function DevisScreen({
           origine={origineLisible(item)}
           total={item.totalTtcCentimes}
           libelleTotal={libelleTotal}
+          reduction={Number(item.remiseHtCentimes) > 0}
           modifie={depuisLisible(item.modifieLe)}
           commence={dateFrancaise(item.createdAt)}
           onOuvrir={ouvrir}

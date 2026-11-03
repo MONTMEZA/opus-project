@@ -1055,7 +1055,12 @@ const DEFINER_ATTENDUES = [
   'mes_donnees_sans_masquage', 'mon_compte', 'notifie_commentaire', 'notifie_demande',
   'notifie_demande_pro', 'notifie_partenariat', 'notifie_reponse_annonce', 'peut_faire_un_devis',
   'pose_le_lieu_du_post', 'preparer_suppression_compte', 'profil_public', 'rattacher_mon_siret',
-  'recalcule_apres_ligne_de_devis', 'recalcule_chantier', 'recalcule_devis', 'recalcule_notes_pro',
+  'recalcule_apres_ligne_de_devis',
+  /* Lot 2a : le déclencheur de la RÉDUCTION sur le total. Il appelle
+     `recalcule_devis(id, NULL)` — exécutable par aucun client — avec les
+     droits du propriétaire, comme celui des lignes. */
+  'recalcule_apres_reduction',
+  'recalcule_chantier', 'recalcule_devis', 'recalcule_notes_pro',
   'remonter_publication', 'siren_reserve', 'tait_les_notifications_bloquees',
   'tient_le_chantier_du_post', 'tient_le_lien_du_devis', 'tient_le_signalement',
 ];

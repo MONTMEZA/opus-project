@@ -48,7 +48,7 @@
  * camelCase (`prixUnitaireCentimes` pour `prix_unitaire_centimes`) :
  * `api.js` traduit, une fois, à l'aller et au retour.
  */
-import { centimesLisibles } from './centimes.js';
+import { centimesLisibles, versCentimes } from './centimes.js';
 import { dateFrancaise, isoLisible } from './entreprise.js';
 import { cleDeRapprochement, aPlat } from './rapprochement.js';
 
@@ -109,6 +109,18 @@ export const SURFACE_MAX = 99_999_999;
 /** La retenue de garantie : au plus 5 % (loi n° 71-584, art. 1er). */
 export const RETENUE_MAX = 500;
 
+/** LES CONDITIONS DU DEVIS (lot 2a, section 49.4 bis). Un pourcentage de
+ *  réduction ou d'acompte, en centièmes de point : de 0,01 % à 100 %
+ *  (`devis_remise_check`, `devis_acompte_check`). */
+export const POURCENT_MAX = 10000;
+/** L'acompte a une NATURE, choisie à chaque devis, sans défaut : la loi ne
+ *  traite pas un acompte et des arrhes pareil (C. conso. L. 214-1). */
+export const NATURES_ACOMPTE = Object.freeze(['acompte', 'arrhes']);
+/** La validité, en jours (`devis_validite_check`), et les durées que les
+ *  pastilles proposent — rien n'est choisi d'avance (décision du 03/11). */
+export const VALIDITE_MAX = 365;
+export const VALIDITES_PROPOSEES = Object.freeze([15, 30, 60, 90]);
+
 /** Les longueurs des textes, en CARACTÈRES (comme `char_length`). */
 export const LONGUEURS = Object.freeze({
   designation: 2000,
@@ -147,20 +159,28 @@ export const CONTRAINTES_LIGNE = Object.freeze([
   'devis_ligne_unite_check',
 ]);
 
-/** Les dix contraintes de `devis`, triées de même. `validerDevis()` teste
- *  celles qui portent sur ce que l'artisan écrit ; `devis_plafond_check` est
- *  tenu par `totauxDevis()`, `devis_totaux_check` par la base seule. */
+/** Les dix-sept contraintes de `devis`, triées de même (dix au lot 1, sept
+ *  au lot 2a). `validerDevis()` teste celles qui portent sur ce que
+ *  l'artisan écrit ; `devis_plafond_check` est tenu par `totauxDevis()` ;
+ *  `devis_totaux_check` et `devis_calculs_check` par la base seule. */
 export const CONTRAINTES_DEVIS = Object.freeze([
+  'devis_acompte_check',
+  'devis_acompte_nature_check',
+  'devis_acompte_une_forme_check',
+  'devis_calculs_check',
   'devis_delai_check',
   'devis_lieu_adresse_check',
   'devis_lieu_code_postal_check',
   'devis_lieu_ville_check',
   'devis_objet_check',
   'devis_plafond_check',
+  'devis_remise_check',
+  'devis_remise_une_forme_check',
   'devis_retenue_check',
   'devis_source_check',
   'devis_statut_check',
   'devis_totaux_check',
+  'devis_validite_check',
 ]);
 
 /**
@@ -239,6 +259,15 @@ export const DEVIS_PAR_DEMANDE_MAX = 20;
 export const CHAMPS_DEVIS = Object.freeze([
   'clientId', 'quoteRequestId', 'sosRequestId', 'source', 'objet', 'lieuAdresse', 'lieuCodePostal',
   'lieuVille', 'delaiExecution', 'retenueGarantieCentiemes',
+  'remiseCentiemes', 'remiseCentimes', 'acompteCentiemes', 'acompteCentimes', 'acompteNature', 'validiteJours',
+]);
+/** LES PAIRES qui s'écrivent ENSEMBLE, en une écriture (relecture BASE-2) :
+ *  la réduction (pourcentage OU montant), l'acompte (pourcentage OU montant,
+ *  et sa nature). Écrites champ par champ, l'une avant l'autre, elles
+ *  passeraient par un état que la base refuse — les deux formes à la fois. */
+export const PAIRES_DEVIS = Object.freeze([
+  Object.freeze(['remiseCentiemes', 'remiseCentimes']),
+  Object.freeze(['acompteCentiemes', 'acompteCentimes', 'acompteNature']),
 ]);
 export const CHAMPS_LIGNE = Object.freeze([
   'ordre', 'type', 'designation', 'quantiteMilliemes', 'unite', 'prixUnitaireCentimes', 'tauxTvaCentiemes',
@@ -400,6 +429,131 @@ export function tvaDe(base, taux) {
 }
 
 /* ================================================================== */
+/*  LES CONDITIONS — la réduction, l'acompte (lot 2a, section 49.4 bis)  */
+/* ================================================================== */
+
+/* Les entiers de la répartition, en BigInt : le produit total × poids
+   dépasse ce que JavaScript calcule exactement dès quelques millions
+   d'euros (mesuré : le reste devient faux vers 3 M€ pour une réduction de
+   10 %). `BigInt(0)` et non le littéral : une seule écriture, lisible par
+   tout outil qui lit ce fichier. */
+const ZERO = BigInt(0);
+const UN = BigInt(1);
+function enGrand(v) {
+  if (typeof v === 'bigint') return v;
+  if (typeof v === 'number') return Number.isSafeInteger(v) ? BigInt(v) : null;
+  if (typeof v === 'string' && /^-?[0-9]+$/.test(v)) return BigInt(v);
+  return null;
+}
+
+/**
+ * LA RÉPARTITION AU PLUS FORT RESTE — le miroir EXACT de
+ * `repartir_au_plus_fort_reste(total, poids)` (section 49.1).
+ *
+ * Partage `total` entre les `poids`, au centime près : chaque part reçoit
+ * d'abord sa part entière, total × poids ÷ somme ; les centimes qui restent
+ * vont un par un aux plus GRANDS RESTES, et à reste égal à la PREMIÈRE part
+ * du tableau — les appelants passent les taux du plus fort au plus faible.
+ * Une part de poids nul reste nulle.
+ *
+ * Les bords, écrits comme en SQL : un tableau vide rend `[]` si le total
+ * est nul, `null` sinon ; une somme de poids nulle rend des zéros ; un
+ * total négatif, un poids négatif ou absent, un total plus grand que la
+ * somme des poids : `null`, jamais une erreur.
+ *
+ * Des NOMBRES en entrée rendent des nombres (chaque part est plus petite
+ * que le total, donc exacte) ; un BigInt ou une chaîne de chiffres en
+ * entrée rendent des BigInt — c'est ainsi qu'un cas au-delà de 2^53 se
+ * compare à PostgreSQL.
+ */
+export function repartirAuPlusFortReste(total, poids) {
+  if (!Array.isArray(poids)) return null;
+  const t = enGrand(total);
+  if (t === null || t < ZERO) return null;
+  const p = poids.map(enGrand);
+  if (p.some((x) => x === null || x < ZERO)) return null;
+  const enNombres = typeof total === 'number' && poids.every((x) => typeof x === 'number');
+  const rendre = (parts) => (enNombres ? parts.map(Number) : parts);
+  if (p.length === 0) return t === ZERO ? [] : null;
+  const somme = p.reduce((s, x) => s + x, ZERO);
+  if (t > somme) return null;
+  if (somme === ZERO) return rendre(p.map(() => ZERO));
+  /* Tout est positif : la division entière de BigInt tronque, c'est donc
+     la partie entière, comme `div()` en SQL. */
+  const parts = p.map((x) => (t * x) / somme);
+  const restes = p.map((x) => (t * x) % somme);
+  let manque = t - parts.reduce((s, x) => s + x, ZERO);
+  while (manque > ZERO) {
+    let choix = -1;
+    for (let i = 0; i < p.length; i += 1) {
+      if (restes[i] > ZERO && (choix < 0 || restes[i] > restes[choix])) choix = i;
+    }
+    /* Impossible : la somme des restes vaut `manque` × somme, et chacun est
+       plus petit que la somme. Écrit plutôt que de boucler. */
+    if (choix < 0) return null;
+    parts[choix] += UN;
+    restes[choix] = ZERO;
+    manque -= UN;
+  }
+  return rendre(parts);
+}
+
+/**
+ * LA RÉDUCTION EFFECTIVE, comme `recalcule_devis()` la pose : sur le BRUT
+ * (les postes ; jamais une option), `{ forme, demande, effectif, borne }`.
+ *   - en MONTANT (`remiseCentimes`) : ce montant, RAMENÉ au brut s'il le
+ *     dépasse — `borne` le dit, et l'écran aussi (« Ramenée à … ») : une
+ *     réduction valable à la saisie dépasse le total dès qu'on retire une
+ *     ligne, et la refuser empêcherait de retirer la ligne ;
+ *   - en POURCENTAGE (`remiseCentiemes`, en centièmes de point) : le brut ×
+ *     ce taux, au centime, demi vers le haut ; jamais plus que le brut ;
+ *   - rien de demandé : `{ forme: null, demande: null, effectif: 0 }`.
+ * Le montant l'emporte si les deux sont écrits, comme en SQL — mais la
+ * base refuse les deux ensemble (`devis_remise_une_forme_check`), et
+ * `totauxDevis` aussi. `null` pour une entrée hors des bornes.
+ */
+export function remiseEffective(brut, conditions = null) {
+  if (!entier(brut) || brut < 0) return null;
+  const c = conditions || {};
+  if (present(c.remiseCentimes)) {
+    const d = c.remiseCentimes;
+    if (!entier(d) || d < 1) return null;
+    return { forme: 'montant', demande: d, effectif: Math.min(d, brut), borne: d > brut };
+  }
+  if (present(c.remiseCentiemes)) {
+    const d = c.remiseCentiemes;
+    if (!entier(d) || d < 1 || d > POURCENT_MAX) return null;
+    const e = diviserArrondi(brut * d, 10000);
+    return e == null ? null : { forme: 'pourcent', demande: d, effectif: e, borne: false };
+  }
+  return { forme: null, demande: null, effectif: 0, borne: false };
+}
+
+/**
+ * L'ACOMPTE EFFECTIF, comme `tient_le_devis()` le pose : sur le TTC HORS
+ * options (une option n'est pas commandée), `{ forme, demande, effectif,
+ * borne }` — en montant, ramené au TTC s'il le dépasse ; en pourcentage, au
+ * centime, demi vers le haut. Jamais refusé : 2b fera d'un acompte ramené
+ * un motif de refus de la remise du devis, pas la base.
+ */
+export function acompteEffectif(ttc, conditions = null) {
+  if (!entier(ttc) || ttc < 0) return null;
+  const c = conditions || {};
+  if (present(c.acompteCentimes)) {
+    const d = c.acompteCentimes;
+    if (!entier(d) || d < 1) return null;
+    return { forme: 'montant', demande: d, effectif: Math.min(d, ttc), borne: d > ttc };
+  }
+  if (present(c.acompteCentiemes)) {
+    const d = c.acompteCentiemes;
+    if (!entier(d) || d < 1 || d > POURCENT_MAX) return null;
+    const e = diviserArrondi(ttc * d, 10000);
+    return e == null ? null : { forme: 'pourcent', demande: d, effectif: Math.min(e, ttc), borne: false };
+  }
+  return { forme: null, demande: null, effectif: 0, borne: false };
+}
+
+/* ================================================================== */
 /*  CE QU'ON TAPE                                                       */
 /* ================================================================== */
 
@@ -503,22 +657,50 @@ export function versCentiemes(texte) {
   if (brut.startsWith('-')) {
     return { ok: false, centiemes: null, message: 'Un pourcentage ne peut pas être négatif.' };
   }
-  const m = brut.match(/^(\d+)(?:[.,](\d*))?$/);
-  if (!m) {
+  /* « ,5 » vaut 0,5 % : sur un pavé décimal, on tape la virgule d'abord —
+     la correction C7 de `versCentimes`, portée ici au lot 2a (ECRAN-13).
+     Une virgule SEULE reste refusée. */
+  const m = brut.match(/^(\d*)(?:[.,](\d*))?$/);
+  if (!m || !/\d/.test(brut)) {
     return {
       ok: false, centiemes: null,
       message: 'Écrivez un pourcentage avec une seule virgule : par exemple 5 ou 2,5.',
     };
   }
-  const unites = m[1].replace(/^0+(?=\d)/, '');
+  const unites = (m[1] || '0').replace(/^0+(?=\d)/, '');
   const decimales = m[2] || '';
   if (decimales.length > 2) {
     return { ok: false, centiemes: null, message: 'Un pourcentage s’écrit avec deux chiffres après la virgule au plus.' };
   }
   if (unites.length > 3) {
-    return { ok: false, centiemes: null, message: 'Ce pourcentage est trop grand.' };
+    return { ok: false, centiemes: null, message: POURCENT_TROP_GRAND };
   }
   return { ok: true, centiemes: Number(`${unites}${decimales.padEnd(2, '0')}`), message: null };
+}
+const POURCENT_TROP_GRAND = 'Ce pourcentage est trop grand.';
+
+/**
+ * Le pourcentage d'une RÉDUCTION ou d'un ACOMPTE : `versCentiemes`, puis
+ * les bornes de `devis_remise_check` et `devis_acompte_check` — au plus
+ * 100 %, et jamais 0. « 0 » ne veut pas dire « aucune réduction » : c'est
+ * le champ VIDE qui le dit, et la base refuserait 0. Les deux refus ont
+ * leur phrase, à l'écran, avant tout envoi.
+ */
+export function versPourcentDeDevis(texte) {
+  const r = versCentiemes(texte);
+  if (!r.ok) {
+    return r.message === POURCENT_TROP_GRAND
+      ? { ok: false, centiemes: null, message: 'Un pourcentage ne dépasse pas 100 %.' }
+      : r;
+  }
+  if (r.centiemes === null) return r;
+  if (r.centiemes === 0) {
+    return { ok: false, centiemes: null, message: '0 % ne s’écrit pas : pour ne rien demander, laissez le champ vide.' };
+  }
+  if (r.centiemes > POURCENT_MAX) {
+    return { ok: false, centiemes: null, message: 'Un pourcentage ne dépasse pas 100 %.' };
+  }
+  return r;
 }
 
 /**
@@ -677,7 +859,24 @@ export function nettoyerDevis(d) {
   return x;
 }
 
+/* Un pourcentage de condition : un entier de 1 à 10 000. Un montant : de 1 au
+   plafond. `null` passe (rien de demandé). */
+const pourcentOk = (v) => !present(v) || (entier(v) && v >= 1 && v <= POURCENT_MAX);
+const montantOk = (v) => !present(v) || (entier(v) && v >= 1 && v <= PLAFOND);
+
 const REGLES_DEVIS = {
+  devis_acompte_check: (d) => (!pourcentOk(d.acompteCentiemes) ? 'acompteCentiemes'
+    : (!montantOk(d.acompteCentimes) ? 'acompteCentimes' : null)),
+  devis_acompte_nature_check: (d) => (!present(d.acompteNature) || NATURES_ACOMPTE.includes(d.acompteNature)
+    ? null : 'acompteNature'),
+  devis_acompte_une_forme_check: (d) => (present(d.acompteCentiemes) && present(d.acompteCentimes)
+    ? 'acompteCentimes' : null),
+  devis_remise_check: (d) => (!pourcentOk(d.remiseCentiemes) ? 'remiseCentiemes'
+    : (!montantOk(d.remiseCentimes) ? 'remiseCentimes' : null)),
+  devis_remise_une_forme_check: (d) => (present(d.remiseCentiemes) && present(d.remiseCentimes)
+    ? 'remiseCentimes' : null),
+  devis_validite_check: (d) => (!present(d.validiteJours)
+    || (entier(d.validiteJours) && d.validiteJours >= 1 && d.validiteJours <= VALIDITE_MAX) ? null : 'validiteJours'),
   devis_delai_check: (d) => (!present(d.delaiExecution) || longueur(d.delaiExecution) <= LONGUEURS.delaiExecution
     ? null : 'delaiExecution'),
   devis_lieu_adresse_check: (d) => (!present(d.lieuAdresse) || longueur(d.lieuAdresse) <= LONGUEURS.lieuAdresse
@@ -695,7 +894,8 @@ const REGLES_DEVIS = {
 };
 
 /** Un devis est-il recevable ? `{ ok, contrainte, champ }`, sur l'objet, le
- *  lieu, le délai, la retenue — dans l'ordre alphabétique des contraintes. */
+ *  lieu, le délai, la retenue et les conditions (lot 2a) — dans l'ordre
+ *  alphabétique des contraintes. */
 export function validerDevis(d) {
   const x = nettoyerDevis(d);
   for (const nom of CONTRAINTES_DEVIS) {
@@ -752,7 +952,7 @@ function regrouperParTaux(tri) {
   const parTaux = new Map();
   for (const l of tri) {
     if (typeDe(l) !== 'poste') continue;
-    const e = parTaux.get(l.tauxTvaCentiemes) || { taux: l.tauxTvaCentiemes, base: 0, tva: null, nbLignes: 0 };
+    const e = parTaux.get(l.tauxTvaCentiemes) || { taux: l.tauxTvaCentiemes, base: 0, remise: 0, tva: null, nbLignes: 0 };
     e.base += totalLigne(l);
     e.nbLignes += 1;
     parTaux.set(l.tauxTvaCentiemes, e);
@@ -778,38 +978,84 @@ export function ventilationParTaux(lignes) {
   return poserLaTva(ventilation) ? ventilation : null;
 }
 
+/* Les contraintes de `devis` que le CALCUL lit, ou qui accompagnent ce qu'il
+   lit — dans l'ordre alphabétique, comme `CONTRAINTES_DEVIS`. */
+const CONTRAINTES_DES_CONDITIONS = Object.freeze(CONTRAINTES_DEVIS.filter((n) => [
+  'devis_acompte_check', 'devis_acompte_nature_check', 'devis_acompte_une_forme_check',
+  'devis_remise_check', 'devis_remise_une_forme_check', 'devis_validite_check',
+].includes(n)));
+
 /**
- * Les totaux d'un devis : `{ ok: true, ht, tva, ttc, ventilation, options }`,
- * ou `{ ok: false, contrainte, champ, ligneId }`.
+ * Les totaux d'un devis : `{ ok: true, brut, ht, tva, ttc, ventilation,
+ * options, reduction, acompte, ttcOptions }`, ou `{ ok: false, contrainte,
+ * champ, ligneId }`.
  *
- * Le HT est la somme des bases ; la TVA, la somme des TVA par taux ; le TTC,
- * les deux — des sommes d'entiers, aucun arrondi de plus. Refusé, comme par
- * `devis_plafond_check`, si le HT PUIS le TTC dépassent 99 999 999,99 €.
+ * `conditions` (lot 2a) : la réduction et l'acompte du devis, tels qu'ils
+ * sont rangés (`remiseCentiemes` ou `remiseCentimes`, `acompteCentiemes`
+ * ou `acompteCentimes`). Sans eux, rien ne change au calcul du lot 1 : les
+ * 44 premiers cas communs le prouvent.
  *
- * LES OPTIONS NE SONT DANS AUCUN TOTAL, et cette fonction n'en rend aucun
- * total : une option de 33,33 € à 10 % coûte 36,66 € seule, mais ajoute
- * 36,67 € au devis (C05b). Le TTC « option comprise » se calcule en
- * appelant cette même fonction sur l'UNION des postes et de l'option —
- * jamais en additionnant deux totaux.
+ * LE CALCUL, dans l'ordre de `recalcule_devis()` puis `tient_le_devis()` :
+ *   1. le BRUT par taux (les postes seulement ; une ligne offerte compte 0) ;
+ *      refusé, comme par `devis_plafond_check`, au-delà de 99 999 999,99 € —
+ *      c'est le brut qui est borné, pas le net (une réduction contournerait
+ *      le plafond) ;
+ *   2. la RÉDUCTION effective (`remiseEffective`), répartie entre les taux
+ *      AU PLUS FORT RESTE, au prorata des bruts, du taux le plus fort au plus
+ *      faible ; la base de chaque taux est NETTE de sa part
+ *      (`ventilation[i].remise`), et sa TVA se calcule sur ce net, une fois
+ *      par taux ;
+ *   3. HT = brut − réduction ; TVA = somme des TVA ; TTC = les deux ;
+ *   4. le TOTAL TOUTES OPTIONS COMPRISES (`ttcOptions`) : sur l'UNION des
+ *      bases nettes et des options, taux par taux, la TVA arrondie une fois
+ *      par taux — jamais l'addition de deux totaux (une option de 33,33 € à
+ *      10 % coûte 36,66 € seule, mais 36,67 € de plus sur le devis, C05b) ;
+ *      la réduction ne porte jamais sur une option ;
+ *   5. l'ACOMPTE effectif (`acompteEffectif`), sur le TTC HORS options.
+ *
+ * LES OPTIONS NE SONT PAS DANS LE TTC : elles ne sont pas commandées tant
+ * que le client ne les a pas choisies. `ttcOptions` dit ce que coûterait le
+ * devis s'il les prenait toutes — c'est ce qu'il faut savoir avant de
+ * dépasser un plafond, ou un budget.
  */
-export function totauxDevis(lignes) {
+export function totauxDevis(lignes, conditions = null) {
   const tri = trierLignes(lignes);
   for (const l of tri) {
     const v = validerLigne(l);
     if (!v.ok) return { ok: false, contrainte: v.contrainte, champ: v.champ, ligneId: l.id ?? null };
   }
+  if (conditions) {
+    for (const nom of CONTRAINTES_DES_CONDITIONS) {
+      const champ = REGLES_DEVIS[nom](conditions);
+      if (champ) return { ok: false, contrainte: nom, champ, ligneId: null };
+    }
+  }
+  const refus = { ok: false, contrainte: 'devis_plafond_check', champ: null, ligneId: null };
   const ventilation = regrouperParTaux(tri);
-  const ht = ventilation.reduce((s, e) => s + e.base, 0);
-  /* Le HT d'abord : sous le plafond, chaque base × taux reste un entier exact. */
-  if (ht > PLAFOND) return { ok: false, contrainte: 'devis_plafond_check', champ: null, ligneId: null };
+  const brut = ventilation.reduce((s, e) => s + e.base, 0);
+  /* Le BRUT d'abord : sous le plafond, chaque base × taux reste un entier exact. */
+  if (brut > PLAFOND) return refus;
+  const reduction = remiseEffective(brut, conditions);
+  const parts = repartirAuPlusFortReste(reduction.effectif, ventilation.map((e) => e.base));
+  ventilation.forEach((e, i) => { e.remise = parts[i]; e.base -= parts[i]; });
   poserLaTva(ventilation);
+  const ht = brut - reduction.effectif;
   const tva = ventilation.reduce((s, e) => s + e.tva, 0);
   const ttc = ht + tva;
-  if (ttc > PLAFOND) return { ok: false, contrainte: 'devis_plafond_check', champ: null, ligneId: null };
+  if (ttc > PLAFOND) return refus;
   const options = tri.filter((l) => l.type === 'option').map((l) => ({
     id: l.id ?? null, designation: l.designation ?? null, total: totalLigne(l), taux: l.tauxTvaCentiemes,
   }));
-  return { ok: true, ht, tva, ttc, ventilation, options };
+  /* L'union, taux par taux. La somme des bases d'abord : sous le plafond,
+     chaque TVA reste exacte ; au-dessus, le total toutes options le
+     dépasserait de toute façon (il vaut au moins cette somme). */
+  const union = new Map(ventilation.map((e) => [e.taux, e.base]));
+  options.forEach((o) => union.set(o.taux, (union.get(o.taux) || 0) + o.total));
+  if ([...union.values()].reduce((s, b) => s + b, 0) > PLAFOND) return refus;
+  const ttcOptions = [...union].reduce((s, [taux, base]) => s + base + tvaDe(base, taux), 0);
+  if (ttcOptions > PLAFOND) return refus;
+  const acompte = acompteEffectif(ttc, conditions);
+  return { ok: true, brut, ht, tva, ttc, ventilation, options, reduction, acompte, ttcOptions };
 }
 
 /* Le niveau d'un titre : une zone contient des pièces, une pièce des lignes. */
@@ -1576,6 +1822,302 @@ export function tauxProposes(etatRegime) {
   if (regime === 'reel') return [2000, 1000, 550];
   if (regime === 'non_declare') return [];
   return null;
+}
+
+/**
+ * LES LIBELLÉS DES TOTAUX — la seule source du pied, de la ventilation et
+ * de la carte « Conditions » (cahier du lot 2, §2.7, règle C2 du lot 1).
+ *
+ * L'écran ne NOMME la taxe qu'au régime réel. En franchise, en lecture, en
+ * échec ou non déclaré, « Total », sans « HT », sans « TTC » et sans
+ * « TVA » : un régime qu'on n'a pas pu lire ne permet pas de dire qu'il y a
+ * une TVA, et un artisan en franchise n'en facture pas.
+ *
+ * Le rabais s'appelle « Réduction » (décision du 03/11) : « remise » veut
+ * déjà dire « remettre le devis au client », et la remise en avant d'une
+ * publication.
+ */
+export function libellesDesTotaux(etatRegime) {
+  const reel = regimeConnu(etatRegime) === 'reel';
+  return Object.freeze(reel ? {
+    taxe: true,
+    brut: 'Total HT avant réduction',
+    reduction: 'Réduction',
+    net: 'Total HT',
+    tva: 'TVA',
+    total: 'Total TTC',
+    totalOptions: 'Total TTC, options comprises',
+    unite: 'TTC',
+    option: 'HT',
+  } : {
+    taxe: false,
+    brut: 'Total avant réduction',
+    reduction: 'Réduction',
+    net: null,
+    tva: null,
+    total: 'Total',
+    totalOptions: 'Total, options comprises',
+    unite: null,
+    option: null,
+  });
+}
+
+/* ================================================================== */
+/*  CE QUE L'ÉCRAN MONTRE DES CONDITIONS (lot 2a)                      */
+/* ================================================================== */
+
+/* LES PHRASES DE LA CARTE « CONDITIONS » QUI PORTENT DU DROIT — écrites
+   UNE fois, ici, et relues sur Légifrance le 03/11/2026 (versions en
+   vigueur à cette date). Ce sont des AIDES pour l'artisan : le texte qui
+   s'imprimera sur le devis s'écrit en 2c, avec le juriste (DROIT-10). */
+
+/** Code de la consommation, art. L. 214-1 : « Sauf stipulation contraire
+ *  […], les sommes versées d'avance sont des arrhes […]. Dans ce cas, chacun
+ *  des contractants peut revenir sur son engagement, le consommateur en
+ *  perdant les arrhes, le professionnel en les restituant au double. » */
+export const AIDE_NATURE_ACOMPTE = 'Des arrhes : chacun peut renoncer — le client en les perdant, vous en lui '
+  + 'rendant le double. Un acompte engage les deux. Si rien n’est écrit, une somme versée d’avance par un '
+  + 'particulier vaut des arrhes (Code de la consommation, art. L. 214-1).';
+
+/** Code de la consommation, art. L. 221-10, premier alinéa : « Le
+ *  professionnel ne peut recevoir aucun paiement […] avant l'expiration d'un
+ *  délai de sept jours à compter de la conclusion du contrat hors
+ *  établissement. » — sauf, notamment (4°), des travaux d'entretien ou de
+ *  réparation urgents expressément sollicités. 2a ne sait pas encore où le
+ *  devis sera signé (2b le demandera) : la phrase dit la règle, pas une
+ *  date, et dit pourquoi elle est rappelée. */
+export const ECHEANCE_ACOMPTE = 'Quand un particulier signe hors de vos locaux (chez lui, sur le chantier), vous ne '
+  + 'pouvez rien encaisser avant le 8e jour après la signature, sauf des travaux urgents qu’il vous a demandés '
+  + '(Code de la consommation, art. L. 221-10). Opus ne sait pas encore où ce devis sera signé : comptez ce délai.';
+
+/** La réduction et l'acompte ne regardent jamais les OPTIONS (DROIT-6) :
+ *  une option n'est pas commandée tant que le client ne l'a pas choisie. */
+export const AIDE_REDUCTION = 'Elle porte sur les postes, jamais sur une option : une option n’est pas commandée '
+  + 'tant que le client ne l’a pas choisie.';
+export const AIDE_ACOMPTE = 'Calculé sur le total sans les options : avant la signature, on ne sait pas '
+  + 'lesquelles le client prendra.';
+/** La validité court à partir de la DATE DU DEVIS (réponse du 03/11). */
+export const AIDE_VALIDITE = 'À compter de la date du devis.';
+
+/* CE QU'UNE CONTRAINTE DU DEVIS NOMME, pour dire QUEL champ n'est pas parti
+   (cahier du lot 2, ECRAN-15) : « Le brouillon n'a pas pu être enregistré »
+   ne sert plus qu'à un échec de CRÉATION. */
+const ECHEC_PAR_CONTRAINTE = Object.freeze({
+  devis_acompte_check: 'L’acompte n’a pas pu être enregistré.',
+  devis_acompte_nature_check: 'La nature de l’acompte n’a pas pu être enregistrée.',
+  devis_acompte_une_forme_check: 'L’acompte n’a pas pu être enregistré.',
+  devis_delai_check: 'Le délai d’exécution n’a pas pu être enregistré.',
+  devis_lieu_adresse_check: 'Le lieu des travaux n’a pas pu être enregistré.',
+  devis_lieu_code_postal_check: 'Le lieu des travaux n’a pas pu être enregistré.',
+  devis_lieu_ville_check: 'Le lieu des travaux n’a pas pu être enregistré.',
+  devis_objet_check: 'L’objet du devis n’a pas pu être enregistré.',
+  devis_remise_check: 'La réduction n’a pas pu être enregistrée.',
+  devis_remise_une_forme_check: 'La réduction n’a pas pu être enregistrée.',
+  devis_retenue_check: 'La retenue de garantie n’a pas pu être enregistrée.',
+  devis_validite_check: 'La validité de l’offre n’a pas pu être enregistrée.',
+});
+
+/**
+ * LA PHRASE D'UN ÉCHEC DE L'EN-TÊTE DU DEVIS : avant que le brouillon existe
+ * en base, c'est lui qui n'a pas pu être enregistré ; après, c'est un CHAMP
+ * — celui que nomme la contrainte refusée, ou « l'objet, le lieu, le délai
+ * ou les conditions » quand on ne sait pas lequel (une coupure de réseau).
+ */
+export function phraseEchecDuDevis({ enBase = false, erreur = null } = {}) {
+  if (!enBase) return 'Le brouillon n’a pas pu être enregistré.';
+  const brut = erreur && typeof erreur === 'object'
+    ? `${erreur.message || ''} ${erreur.details || ''} ${erreur.constraint || ''}` : '';
+  const nom = (brut.match(/\b(devis_[a-z0-9_]+_check)\b/) || [])[1];
+  return ECHEC_PAR_CONTRAINTE[nom]
+    || 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai ou les conditions.';
+}
+
+/* Un nombre de jours tapé dans « Autre » : un entier de 1 à `VALIDITE_MAX`,
+   vide = rien. Pas de virgule : une offre ne vaut pas « 30,5 jours ». */
+export function versJours(texte) {
+  const brut = String(texte == null ? '' : texte).replace(ESPACES_TAPES, '').replace(/jours?$/i, '');
+  if (brut === '') return { ok: true, jours: null, message: null };
+  if (!/^[0-9]+$/.test(brut)) {
+    return { ok: false, jours: null, message: 'Écrivez un nombre de jours entier : par exemple 45.' };
+  }
+  const n = Number(brut);
+  if (n < 1 || n > VALIDITE_MAX) {
+    return { ok: false, jours: null, message: `Une durée de validité va de 1 à ${VALIDITE_MAX} jours.` };
+  }
+  return { ok: true, jours: n, message: null };
+}
+
+/* Un montant de condition (réduction ou acompte en euros) : `versCentimes`,
+   puis les bornes de la base — jamais 0 (le champ VIDE dit « rien »), jamais
+   au-delà du plafond. */
+export function versMontantDeDevis(texte) {
+  const r = versCentimes(texte);
+  if (!r.ok || r.centimes === null) return r;
+  if (r.centimes === 0) {
+    return { ok: false, centimes: null, message: 'Un montant de 0 ne s’écrit pas : pour ne rien demander, laissez le champ vide.' };
+  }
+  if (r.centimes > PLAFOND) {
+    return { ok: false, centimes: null, message: `Ce montant dépasse ce qu’un devis peut porter (${centimesLisibles(PLAFOND)}).` };
+  }
+  return r;
+}
+
+/* Une condition, dite en clair : « 5 % » ou « 50,00 € ». */
+function valeurDeCondition(pourcent, montant) {
+  if (present(montant)) return centimesLisibles(montant);
+  if (present(pourcent)) return tauxLisible(pourcent);
+  return null;
+}
+
+/**
+ * LE RÉSUMÉ DES CONDITIONS, la rangée qui ouvre la carte « Conditions » :
+ * ce qui MANQUE d'abord (un acompte sans sa nature, une validité pas
+ * choisie), puis ce qui est posé — « Réduction 5 % · Acompte 30 % · Valable
+ * 30 jours ». Rien de posé : « Aucune condition — touchez pour en poser ».
+ * Une phrase, que l'écran coupe à deux lignes.
+ */
+export function resumeDesConditions(d) {
+  const x = d || {};
+  const reduction = valeurDeCondition(x.remiseCentiemes, x.remiseCentimes);
+  const acompte = valeurDeCondition(x.acompteCentiemes, x.acompteCentimes);
+  const retenue = present(x.retenueGarantieCentiemes) ? tauxLisible(x.retenueGarantieCentiemes) : null;
+  if (!reduction && !acompte && !present(x.validiteJours) && !retenue) {
+    return 'Aucune condition — touchez pour en poser';
+  }
+  const manque = [];
+  if (acompte && !present(x.acompteNature)) manque.push('Acompte ou arrhes ? à choisir');
+  if (!present(x.validiteJours)) manque.push('Validité à choisir');
+  const pose = [];
+  if (reduction) pose.push(`Réduction ${reduction}`);
+  if (acompte) pose.push(`${libelleAcompte(x.acompteNature)} ${acompte}`);
+  if (present(x.validiteJours)) pose.push(`Valable ${x.validiteJours} jour${x.validiteJours > 1 ? 's' : ''}`);
+  if (retenue) pose.push(`Retenue ${retenue}`);
+  return [...manque, ...pose].join(' · ');
+}
+
+/**
+ * LES RANGÉES DES TOTAUX — la seule source de la ventilation du bas du
+ * devis et du haut de la carte « Conditions ». Des rangées `{ cle, libelle,
+ * centimes, fort, moins, aDire }`, dans l'ordre où elles se lisent :
+ *   - avec une RÉDUCTION : le total avant réduction, puis la réduction ;
+ *   - au régime réel : le total HT, la TVA de chaque taux (sur sa base
+ *     NETTE), la TVA, le total TTC ; sinon « Total » seul (règle C2 : un
+ *     régime qu'on ne connaît pas ne fait pas nommer la taxe) ;
+ *   - avec des OPTIONS : le total toutes options comprises ;
+ *   - avec un ACOMPTE : l'acompte (ou les arrhes) et le reste à payer —
+ *     « avant la retenue de garantie » quand il y en a une (DROIT-7).
+ * `moins` : la réduction s'affiche « − 50,00 € », mais se DIT comme un
+ * montant positif sous son libellé (`aDire`) — jamais avec un trait
+ * d'union, que VoiceOver lit « tiret ». Les montants sont ceux que la BASE
+ * a calculés (`totaux`), jamais refaits ici.
+ */
+export function rangeesDesTotaux(totaux, etatRegime, { devis = {}, nbOptions = 0 } = {}) {
+  if (!totaux) return [];
+  const L = libellesDesTotaux(etatRegime);
+  const x = devis || {};
+  const r = [];
+  const reduction = Number(totaux.reduction) || 0;
+  /* « Total avant réduction » est un montant HORS TAXE : quand l'écran ne
+     nomme pas la taxe et que les lignes en portent (un régime en lecture,
+     ou illisible), le comparer au « Total », qui la comprend, ferait lire
+     deux montants qui ne se soustraient pas. La réduction ne se montre alors
+     que dans la carte « Conditions ». */
+  if (reduction > 0 && (L.taxe || !(Number(totaux.tva) > 0))) {
+    const brut = present(totaux.brut) ? totaux.brut : (Number(totaux.ht) || 0) + reduction;
+    r.push({ cle: 'brut', libelle: L.brut, centimes: brut });
+    const pct = present(x.remiseCentiemes) && !present(x.remiseCentimes) ? ` ${tauxLisible(x.remiseCentiemes)}` : '';
+    r.push({ cle: 'reduction', libelle: `${L.reduction}${pct}`, centimes: reduction, moins: true });
+  }
+  if (L.taxe) {
+    r.push({ cle: 'net', libelle: L.net, centimes: totaux.ht });
+    (totaux.ventilation || []).forEach((v) => {
+      const taux = tauxLisible(v.taux);
+      r.push({
+        cle: `tva:${v.taux}`, libelle: taux ? `TVA ${taux} sur` : 'Sans TVA, sur', base: v.base, centimes: v.tva,
+      });
+    });
+    r.push({ cle: 'tva', libelle: L.tva, centimes: totaux.tva });
+  }
+  r.push({ cle: 'total', libelle: L.total, centimes: totaux.ttc, fort: true });
+  if (nbOptions > 0 && present(totaux.ttcOptions)) {
+    r.push({ cle: 'options', libelle: L.totalOptions, centimes: totaux.ttcOptions });
+  }
+  const acompte = Number(totaux.acompte) || 0;
+  if (acompte > 0) {
+    const pct = present(x.acompteCentiemes) && !present(x.acompteCentimes) ? ` ${tauxLisible(x.acompteCentiemes)}` : '';
+    r.push({ cle: 'acompte', libelle: `${libelleAcompte(x.acompteNature)}${pct}`, centimes: acompte });
+    r.push({
+      cle: 'reste',
+      libelle: present(x.retenueGarantieCentiemes) ? 'Reste à payer, avant la retenue de garantie' : 'Reste à payer',
+      centimes: (Number(totaux.ttc) || 0) - acompte,
+    });
+  }
+  return r.map((e) => ({ ...e, aDire: `${e.libelle}${e.base != null ? ` ${centimesLisibles(e.base)}` : ''}, ${centimesLisibles(e.centimes) || 'montant inconnu'}` }));
+}
+
+/**
+ * LE SUFFIXE DU PIED, qui reste UNE rangée (décision du lot 1) : ce qui
+ * n'est pas parti passe avant tout, puis l'envoi en cours, puis « réduction
+ * comprise ». Une seule mention à la fois : à 320 points, deux se coupaient.
+ */
+export function suffixeDuPied({ nbNonEnregistrees = 0, enCours = false, reduction = 0 } = {}) {
+  if (nbNonEnregistrees > 0) {
+    return ` · ${nbNonEnregistrees} ${nbNonEnregistrees > 1 ? 'lignes non enregistrées' : 'ligne non enregistrée'}`;
+  }
+  if (enCours) return ' · enregistrement en cours';
+  if (reduction > 0) return ' · réduction comprise';
+  return '';
+}
+
+/**
+ * CE QUE LA CARTE DIT DE LA RÉDUCTION ET DE L'ACOMPTE, sous chaque champ :
+ * l'effet en clair, et le mot qui dit qu'une demande a été RAMENÉE au total
+ * (elle n'est jamais refusée : retirer une ligne doit rester possible).
+ * Des phrases faites de MORCEAUX (`avant`, des montants, `apres`) : l'écran
+ * pose les montants avec `Montant` (chiffres tabulaires, espaces
+ * insécables), et VoiceOver lit `aDire`.
+ */
+export function effetDeLaReduction(totaux, devis = {}, etatRegime = undefined) {
+  if (!totaux) return null;
+  const ht = libellesDesTotaux(etatRegime).taxe ? ' HT' : '';
+  const x = devis || {};
+  const reduction = Number(totaux.reduction) || 0;
+  if (!present(x.remiseCentiemes) && !present(x.remiseCentimes)) return null;
+  const brut = present(totaux.brut) ? totaux.brut : (Number(totaux.ht) || 0) + reduction;
+  if (present(x.remiseCentimes) && reduction < x.remiseCentimes) {
+    return {
+      ramenee: true,
+      aDire: `Ramenée à ${centimesLisibles(reduction)} : le total des postes est plus petit que la réduction demandée.`,
+    };
+  }
+  return {
+    ramenee: false,
+    aDire: `Le total${ht} des postes passe de ${centimesLisibles(brut)} à ${centimesLisibles(brut - reduction)}.`,
+  };
+}
+export function effetDeLAcompte(totaux, devis = {}, etatRegime = undefined) {
+  if (!totaux) return null;
+  const x = devis || {};
+  if (!present(x.acompteCentiemes) && !present(x.acompteCentimes)) return null;
+  const acompte = Number(totaux.acompte) || 0;
+  const ttc = Number(totaux.ttc) || 0;
+  const reste = present(x.retenueGarantieCentiemes) ? 'reste à payer, avant la retenue de garantie' : 'reste à payer';
+  if (present(x.acompteCentimes) && acompte < x.acompteCentimes) {
+    return {
+      ramene: true,
+      aDire: `Ramené à ${centimesLisibles(acompte)} : le total est plus petit que le montant demandé.`,
+    };
+  }
+  const unite = libellesDesTotaux(etatRegime).taxe ? ' TTC' : '';
+  return { ramene: false, aDire: `${centimesLisibles(acompte)}${unite} — ${reste} ${centimesLisibles(ttc - acompte)}${unite}.` };
+}
+
+/** Le nom d'un acompte selon sa NATURE — jamais l'un pour l'autre : des
+ *  arrhes permettent de se dédire en les perdant, un acompte engage
+ *  (C. conso. L. 214-1). Sans nature, « Acompte » : l'écran demande la
+ *  nature à côté. */
+export function libelleAcompte(nature) {
+  return nature === 'arrhes' ? 'Arrhes' : 'Acompte';
 }
 
 /* Les tarifs, tels que l'écran les tient (`mesTarifs`) : la ligne de

@@ -479,15 +479,22 @@ export function creerBaseDevisDemo({
 
   const lignesDe = (devisId) => [...lignes.values()].filter((l) => l.devisId === devisId);
   const horodatage = () => maintenant().toISOString();
+  /* Les CONDITIONS d'un devis (lot 2a) — la réduction et l'acompte —, telles
+     qu'il les porte : le calcul les lit à chaque fois, comme
+     `recalcule_devis()` et `tient_le_devis()`. */
+  const conditionsDe = (d) => choisirChamps(d, CHAMPS_DEVIS);
   const poserTotaux = (d, t) => {
     d.totalHtCentimes = t.ht;
     d.totalTvaCentimes = t.tva;
     d.totalTtcCentimes = t.ttc;
+    d.remiseHtCentimes = t.reduction.effectif;
+    d.acompteTtcCentimes = t.acompte.effectif;
+    d.totalTtcOptionsCentimes = t.ttcOptions;
   };
 
   /* LES TOTAUX DU JEU, CALCULÉS — jamais lus dans les données. */
   devis.forEach((d) => {
-    const t = totauxDevis(lignesDe(d.id));
+    const t = totauxDevis(lignesDe(d.id), conditionsDe(d));
     if (!t.ok) throw new Error(`Devis de démonstration irrecevable (${t.contrainte}) : corrigez devis-demo.js.`);
     poserTotaux(d, t);
   });
@@ -540,7 +547,7 @@ export function creerBaseDevisDemo({
   function recalculer(d, generation, finales) {
     if (generation != null && generation <= d.generation) throw refus('OP015', REFUS_DEVIS.OP015_ligne);
     if (generation != null && finales.length > LIGNES_MAX) throw refus('OP014', REFUS_DEVIS.OP014);
-    const t = totauxDevis(finales);
+    const t = totauxDevis(finales, conditionsDe(d));
     if (!t.ok) throw refusCheck(t.contrainte === 'devis_plafond_check' ? 'devis' : 'devis_lignes', t.contrainte);
     return t;
   }
@@ -573,6 +580,9 @@ export function creerBaseDevisDemo({
       totalHtCentimes: 0,
       totalTvaCentimes: 0,
       totalTtcCentimes: 0,
+      remiseHtCentimes: 0,
+      acompteTtcCentimes: 0,
+      totalTtcOptionsCentimes: 0,
       generation: op.generation,
       createdAt: n,
       modifieLe: n,
@@ -592,7 +602,14 @@ export function creerBaseDevisDemo({
     verifierPlafond(proId, x, d, d.id);
     const c = validerDevis(x);
     if (!c.ok) throw refusCheck('devis', c.contrainte);
+    /* LES CONDITIONS CHANGENT LES TOTAUX (lot 2a) : la réduction refait la
+       ventilation (le déclencheur `trg_recalcule_apres_reduction`), l'acompte
+       se repose à chaque écriture (`tient_le_devis()`). Recalculé avant
+       d'écrire : une réduction ne fait jamais dépasser un plafond. */
+    const t = totauxDevis(lignesDe(d.id), conditionsDe(x));
+    if (!t.ok) throw refusCheck(t.contrainte === 'devis_plafond_check' ? 'devis' : 'devis_lignes', t.contrainte);
     Object.assign(d, choisirChamps(x, CHAMPS_DEVIS), { source: d.source, generation: op.generation, modifieLe: horodatage() });
+    poserTotaux(d, t);
   }
 
   function supprimerDevis(proId, op) {
@@ -863,7 +880,7 @@ export function creerBaseDevisDemo({
   }
 
   function ventilationDe(devisId) {
-    const t = totauxDevis(lignesDe(devisId));
+    const t = totauxDevis(lignesDe(devisId), conditionsDe(devis.get(devisId) || {}));
     return t.ok ? t.ventilation.filter((v) => v.nbLignes > 0) : [];
   }
 
@@ -894,6 +911,8 @@ export function creerBaseDevisDemo({
       if (!estAMoi(d, proId)) return null;
       return {
         ht: d.totalHtCentimes, tva: d.totalTvaCentimes, ttc: d.totalTtcCentimes,
+        reduction: d.remiseHtCentimes, brut: d.totalHtCentimes + d.remiseHtCentimes,
+        acompte: d.acompteTtcCentimes, ttcOptions: d.totalTtcOptionsCentimes,
         ventilation: ventilationDe(d.id), generation: d.generation, modifieLe: d.modifieLe,
       };
     },

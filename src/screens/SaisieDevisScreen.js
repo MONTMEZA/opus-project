@@ -48,7 +48,7 @@
  * « non enregistrée » s'y voient sans fichier `.env`.
  */
 import React, {
-  forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
   View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet,
@@ -57,15 +57,14 @@ import {
   C, F, T, S, R, GOUTTIERE, CARTE, TOUCHE, APPUI, interligne, surFond,
 } from '../theme';
 import {
-  BtnOutline, Pastille, Interrupteur, Montant,
+  BtnOutline, Pastille, Montant,
 } from '../components/ui';
-import { ChevronDown, ChevronRight } from '../components/icons';
+import { ChevronRight } from '../components/icons';
 import EnteteDevis from '../components/EnteteDevis';
 import CarteLigne, { MANQUE } from '../components/CarteLigne';
 import ChoixClientDevis from '../components/ChoixClientDevis';
 import FeuilleAjoutPoste from '../components/FeuilleAjoutPoste';
 import FeuillePoste from '../components/FeuillePoste';
-import ChampMontant from '../components/ChampMontant';
 import * as api from '../lib/api';
 import * as retour from '../lib/retour';
 import { CLAVIER } from '../lib/clavier';
@@ -74,13 +73,15 @@ import { DELAI_ECRITURE } from '../lib/file-ecriture';
 import { nouvelIdentifiant, IDENTIFIANT_IMPOSSIBLE } from '../lib/identifiant';
 import { clientDepuisDemande } from '../lib/clients';
 import {
-  UNITES, TYPES_CHIFFRES, MENTION_FRANCHISE, PHRASE_RETENUE, CHAMPS_DEVIS,
+  UNITES, TYPES_CHIFFRES, MENTION_FRANCHISE, CHAMPS_DEVIS,
   validerLigne, validerDevis, nettoyerDevis, trierLignes, sousTotaux, totalLigne,
   lignesDeLaPiece, titreQuiRecoit, pieceDeLaLigne, ligneVierge, ordreEntre, renumeroter,
   monter, descendre, tauxLisible, tauxProposes, tauxHorairePropose, coherenceRegime,
-  devisDepuisClient, milliemesLisibles, versCentiemes, centiemesEnSaisie, texteNet, choisirChamps,
+  devisDepuisClient, milliemesLisibles, texteNet, choisirChamps,
   fusionnerAvecLaFile, proprietesDeLaRangee,
+  rangeesDesTotaux, resumeDesConditions, suffixeDuPied, libellesDesTotaux, phraseEchecDuDevis,
 } from '../lib/devis';
+import ConditionsDevis from '../components/ConditionsDevis';
 import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
 
 /* Ce que nomme la bande de la garde quand un champ de l'en-tête a été REFUSÉ
@@ -93,7 +94,27 @@ const NOMS_ENTETE = Object.freeze({
   delaiExecution: 'Délai d’exécution',
   retenueGarantieCentiemes: 'Taux de la retenue',
   clientId: 'Pour qui ?',
+  remiseCentiemes: 'Réduction',
+  remiseCentimes: 'Réduction',
+  acompteCentiemes: 'Acompte',
+  acompteCentimes: 'Acompte',
+  acompteNature: 'Acompte ou arrhes',
+  validiteJours: 'Validité de l’offre',
 });
+
+/* LES CHAMPS DE LA CARTE « CONDITIONS » (lot 2a) : « Corriger » rouvre la
+   carte quand l'un d'eux a été refusé. */
+const CHAMPS_CONDITIONS = Object.freeze([
+  'remiseCentiemes', 'remiseCentimes', 'acompteCentiemes', 'acompteCentimes', 'acompteNature', 'validiteJours',
+  'retenueGarantieCentiemes',
+]);
+
+/* L'UNIQUE ÉTAT DE CARTE (cahier du lot 2, §3.4) : `null`, l'identifiant
+   d'une LIGNE, ou `CARTE_CONDITIONS`. Une seule valeur, jamais deux
+   booléens : deux cartes ne peuvent pas être ouvertes ensemble, et le
+   retour, la garde et VoiceOver les traitent pareil. Un identifiant de ligne
+   est un UUID : il ne vaut jamais « conditions ». */
+const CARTE_CONDITIONS = 'conditions';
 
 const uniteDe = (cle) => UNITES.find((u) => u.cle === cle) || null;
 const NIVEAU = { zone: 1, piece: 2 };
@@ -216,25 +237,14 @@ function Intervalle() {
    conditions, la suppression. Un composant à lui, posé comme un ÉLÉMENT
    (`ListFooterComponent={bas}`) : le champ de la retenue garde son texte.
    -------------------------------------------------------------------------- */
-const BasDuDevis = forwardRef(function BasDuDevis({
-  options, franchise, reel, propositions, regimeEnEchec, totaux, totauxIllisibles, retenue, erreurs,
-  onOuvrir, onAjouter, onRelireTotaux, onRetenue, onSupprimer, confirmeSuppression, phraseSuppression,
-}, ref) {
-  const refRetenue = useRef(null);
-  const [ouvert, setOuvert] = useState(retenue != null);
-
-  const lireRetenue = () => {
-    if (!refRetenue.current) return;
-    const lu = versCentiemes(refRetenue.current.lire());
-    onRetenue(lu.ok ? lu.centiemes : undefined, lu.ok ? null : lu.message);
-  };
-  useImperativeHandle(ref, () => ({ enregistrer: lireRetenue }));
-
+function BasDuDevis({
+  options, franchise, reel, regime, propositions, regimeEnEchec, totaux, totauxIllisibles, devis, erreurs,
+  onOuvrir, onAjouter, onRelireTotaux, onOuvrirConditions, onSupprimer, confirmeSuppression, phraseSuppression,
+}) {
   /* Les postes attendent le régime : `null` = on ne sait pas encore (en
      lecture, ou la lecture a échoué) ; `[]` = non déclaré — seuls les titres
      et les réserves se posent alors. */
   const chiffrerPossible = Array.isArray(propositions) && propositions.length > 0;
-  const ventilation = (totaux && totaux.ventilation) || [];
 
   return (
     <View style={s.bas}>
@@ -295,44 +305,33 @@ const BasDuDevis = forwardRef(function BasDuDevis({
           régime qu'on n'a pas pu lire ne permet pas de dire qu'il y a une
           TVA (relecture « écran » des étapes 4 à 7, C2). */}
       <View style={s.ventilation}>
-        {!franchise && !reel ? (
-          <View style={s.ligneTotal}>
-            <Text style={s.libelleTotal}>Total</Text>
-            <Montant centimes={totaux ? totaux.ttc : null} fort />
+        {/* LES RANGÉES viennent de `rangeesDesTotaux` (devis.js), la MÊME
+            fonction que la carte « Conditions » : total avant réduction et
+            réduction s'il y en a une, HT et TVA par taux AU RÉGIME RÉEL
+            SEULEMENT, total, total toutes options comprises, acompte et
+            reste à payer. Une réduction se DIT en montant positif (`aDire`),
+            jamais avec un trait d'union. */}
+        {rangeesDesTotaux(totaux || { ht: null, tva: null, ttc: null, ventilation: [] }, regime,
+          { devis, nbOptions: options.length }).map((r) => (
+          <View key={r.cle} style={s.ligneTotal} accessible accessibilityLabel={r.aDire}>
+            <Text style={r.fort ? s.libelleTotal : s.libelle}>
+              {r.libelle}
+              {r.base != null && (
+                <>
+                  {' '}
+                  <Montant centimes={r.base} enLigne style={s.libelleMontant} />
+                </>
+              )}
+            </Text>
+            {/* Le montant à DROITE, sans `flex` : il prend sa largeur, le
+                libellé prend le reste — les montants tombent en colonne. */}
+            <Text style={r.fort ? s.valeurTotal : s.valeur}>
+              {r.moins ? '− ' : ''}
+              <Montant centimes={r.centimes} enLigne fort={!!r.fort} />
+            </Text>
           </View>
-        ) : franchise ? (
-          <>
-            <View style={s.ligneTotal}>
-              <Text style={s.libelleTotal}>Total</Text>
-              <Montant centimes={totaux ? totaux.ttc : null} fort />
-            </View>
-            <Text style={s.mention}>{MENTION_FRANCHISE}</Text>
-          </>
-        ) : (
-          <>
-            <View style={s.ligneTotal}>
-              <Text style={s.libelle}>Total HT</Text>
-              <Montant centimes={totaux ? totaux.ht : null} />
-            </View>
-            {ventilation.map((v) => (
-              <View key={v.taux} style={s.ligneTotal}>
-                <Text style={s.libelle}>
-                  {tauxLisible(v.taux) ? `TVA ${tauxLisible(v.taux)} sur ` : 'Sans TVA, sur '}
-                  <Montant centimes={v.base} enLigne style={s.libelleMontant} />
-                </Text>
-                <Montant centimes={v.tva} />
-              </View>
-            ))}
-            <View style={s.ligneTotal}>
-              <Text style={s.libelle}>TVA</Text>
-              <Montant centimes={totaux ? totaux.tva : null} />
-            </View>
-            <View style={s.ligneTotal}>
-              <Text style={s.libelleTotal}>Total TTC</Text>
-              <Montant centimes={totaux ? totaux.ttc : null} fort />
-            </View>
-          </>
-        )}
+        ))}
+        {franchise && <Text style={s.mention}>{MENTION_FRANCHISE}</Text>}
         {totauxIllisibles && (
           <View style={s.illisibles}>
             <Text style={s.etatPhrase}>Les totaux n’ont pas pu être relus : ceux-ci peuvent dater.</Text>
@@ -341,54 +340,23 @@ const BasDuDevis = forwardRef(function BasDuDevis({
         )}
       </View>
 
-      {/* LES CONDITIONS, repliées. */}
+      {/* LES CONDITIONS — une rangée qui les RÉSUME et ouvre leur carte
+          (lot 2a). Ce qui manque passe d'abord ; un champ refusé se dit. */}
       <Pressable
-        onPress={() => setOuvert((o) => !o)}
+        onPress={onOuvrirConditions}
         accessibilityRole="button"
-        accessibilityLabel={ouvert ? 'Replier les conditions' : 'Déplier les conditions'}
-        style={({ pressed }) => [s.replie, pressed && APPUI.discret]}
+        accessibilityLabel={`Conditions : ${resumeDesConditions(devis)}. Ouvrir`}
+        style={({ pressed }) => [s.resume, pressed && APPUI.discret]}
       >
-        {ouvert ? <ChevronDown size={16} color={C.accent2} /> : <ChevronRight size={16} color={C.accent2} />}
-        <Text style={s.replieTexte}>Conditions</Text>
-      </Pressable>
-      {ouvert && (
-        <View style={s.conditions}>
-          <Interrupteur
-            actif={retenue != null}
-            libelle="Retenue de garantie"
-            /* JAMAIS LA DURÉE SANS SA RÉSERVE (loi n° 71-584, art. 2) : cette
-               aide s'affiche SEULE quand la retenue est éteinte — « rendus un
-               an après » promettrait à l'artisan un remboursement que le
-               client peut bloquer. `verifier-devis` (A-5) relit désormais
-               TOUTES les chaînes du module, attributs JSX compris. */
-            aide={'Au plus 5 % des acomptes, rendus un an après la réception des travaux, sauf si le client '
-              + 'notifie une opposition motivée.'}
-            onPress={() => {
-              if (retenue != null) { onRetenue(null, null); return; }
-              if (refRetenue.current) refRetenue.current.ecrire('5');
-              onRetenue(500, null);
-            }}
-          />
-          {retenue != null && (
-            <>
-              <Text style={s.etiquette}>Taux de la retenue (%)</Text>
-              <ChampMontant
-                ref={refRetenue}
-                defaut={centiemesEnSaisie(retenue)}
-                placeholder="5"
-                accessibilityLabel="Taux de la retenue de garantie, en pour cent"
-                onBlur={lireRetenue}
-              />
-              {!!erreurs && !!erreurs.retenueGarantieCentiemes && (
-                <Text style={s.erreur}>{erreurs.retenueGarantieCentiemes}</Text>
-              )}
-              {/* La phrase de la loi, SANS AUCUN MONTANT : l'assiette de la
-                  retenue est une question posée au juriste. */}
-              <Text style={s.aide}>{PHRASE_RETENUE}</Text>
-            </>
+        <View style={s.resumeTexte}>
+          <Text style={s.replieTexte}>Conditions</Text>
+          <Text style={s.aide} numberOfLines={2}>{resumeDesConditions(devis)}</Text>
+          {CHAMPS_CONDITIONS.some((c) => erreurs && erreurs[c]) && (
+            <Text style={s.erreur}>Une condition n’est pas enregistrée : touchez pour la corriger.</Text>
           )}
         </View>
-      )}
+        <ChevronRight size={16} color={C.accent2} />
+      </Pressable>
 
       {/* SUPPRIMER CE BROUILLON, en deux appuis — et le second le DIT. */}
       <Pressable
@@ -406,7 +374,7 @@ const BasDuDevis = forwardRef(function BasDuDevis({
       {confirmeSuppression && <Text style={s.aide}>{phraseSuppression}</Text>}
     </View>
   );
-});
+}
 
 /* ========================================================================== */
 
@@ -449,9 +417,13 @@ export default function SaisieDevisScreen({
      un mot). */
   const [erreursEntete, setErreursEntete] = useState({});
   const refusEntete = useRef({});
-  const [totaux, setTotaux] = useState(() => (ouverture.devisId ? null : { ht: 0, tva: 0, ttc: 0, ventilation: [] }));
+  const [totaux, setTotaux] = useState(() => (ouverture.devisId ? null : {
+    ht: 0, tva: 0, ttc: 0, brut: 0, reduction: 0, acompte: 0, ttcOptions: 0, ventilation: [],
+  }));
   const [totauxIllisibles, setTotauxIllisibles] = useState(false);
-  const [attente, setAttente] = useState({ nb: 0, enCours: false, devisErreur: null, retraitsEnEchec: 0 });
+  const [attente, setAttente] = useState({
+    nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0,
+  });
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
   const [memoire, setMemoire] = useState(null);
@@ -474,7 +446,11 @@ export default function SaisieDevisScreen({
   const memoireDemandee = useRef(false);
   const refEntete = useRef(null);
   const refCarte = useRef(null);
-  const refBas = useRef(null);
+  const refConditions = useRef(null);
+  /* Le TEXTE tapé dans la carte « Conditions » quand une valeur y a été
+     refusée : la carte rouverte par « Corriger » le montre encore, au lieu
+     de la dernière valeur enregistrée. */
+  const [textesConditions, setTextesConditions] = useState(null);
   /* Les rappels d'`OpusApp`, toujours les derniers : la file écoute depuis
      son ouverture, et un rappel capturé ce jour-là serait périmé. */
   const rappels = useRef({});
@@ -529,6 +505,9 @@ export default function SaisieDevisScreen({
       nb: f.enAttente(),
       enCours: Object.values(e).includes('en_cours') || f.etatDe('devis') === 'en_cours',
       devisErreur: f.etatDe('devis') === 'echec' ? (f.erreurDe('devis') || true) : null,
+      /* Le brouillon est-il DÉJÀ en base ? Alors un échec de l'en-tête est
+         celui d'un CHAMP (`phraseEchecDuDevis`), pas du brouillon. */
+      devisEnBase: f.devisEnBase(),
       retraitsEnEchec: retraits,
     });
   };
@@ -543,7 +522,10 @@ export default function SaisieDevisScreen({
       ...choisirChamps(d, CHAMPS_DEVIS),
       id: f.devisId(), statut: 'brouillon', demande: d.demande || null, urgence: d.urgence || null,
       client: d.clientId && clientAffiche ? { nom: clientAffiche.nom } : (d.client || null),
-      ...(t ? { totalHtCentimes: t.ht, totalTvaCentimes: t.tva, totalTtcCentimes: t.ttc } : {}),
+      ...(t ? {
+        totalHtCentimes: t.ht, totalTvaCentimes: t.tva, totalTtcCentimes: t.ttc,
+        remiseHtCentimes: t.reduction ?? 0, acompteTtcCentimes: t.acompte ?? 0, totalTtcOptionsCentimes: t.ttcOptions ?? t.ttc,
+      } : {}),
       ...(t && t.modifieLe ? { modifieLe: t.modifieLe } : {}),
     });
   };
@@ -569,7 +551,7 @@ export default function SaisieDevisScreen({
         if (ev.etat === 'echec') {
           retour.echec();
           retour.annoncer(ev.cle === 'devis'
-            ? 'Le brouillon n’a pas pu être enregistré.'
+            ? phraseEchecDuDevis({ enBase: !!(fileRef.current && fileRef.current.devisEnBase()), erreur: ev.erreur })
             : 'Une ligne n’a pas pu être enregistrée.');
         }
         if (ev.cle === 'devis' && ev.etat === 'enregistree') rangerRef.current();
@@ -632,6 +614,11 @@ export default function SaisieDevisScreen({
         r.lignes.forEach((l) => { derniereEnvoyee.current[l.id] = l; });
         setTotaux({
           ht: r.devis.totalHtCentimes, tva: r.devis.totalTvaCentimes, ttc: r.devis.totalTtcCentimes,
+          /* Les conditions telles que la BASE les a calculées (lot 2a). */
+          reduction: r.devis.remiseHtCentimes ?? 0,
+          brut: (r.devis.totalHtCentimes ?? 0) + (r.devis.remiseHtCentimes ?? 0),
+          acompte: r.devis.acompteTtcCentimes ?? 0,
+          ttcOptions: r.devis.totalTtcOptionsCentimes ?? r.devis.totalTtcCentimes,
           ventilation: r.ventilation || [],
         });
       } else {
@@ -706,7 +693,15 @@ export default function SaisieDevisScreen({
     for (let i = Object.keys(changements).length; i >= 0; i -= 1) {
       const v = validerDevis({ ...avant, ...recevables });
       if (v.ok) break;
-      if (!Object.prototype.hasOwnProperty.call(recevables, v.champ)) { recevables = {}; break; }
+      /* Le refus vise un champ que cette écriture ne porte PAS (une paire
+         écrite à moitié, un état déjà refusé) : rien ne part, et CHAQUE champ
+         jeté le DIT. Avant le lot 2a, la boucle vidait l'écriture et rendait
+         `ok: true` — l'écriture disparaissait en silence (cahier §2.4). */
+      if (!Object.prototype.hasOwnProperty.call(recevables, v.champ)) {
+        Object.keys(recevables).forEach((k) => { refus[k] = messageDeContrainte(v.contrainte); });
+        recevables = {};
+        break;
+      }
       refus[v.champ] = messageDeContrainte(v.contrainte);
       delete recevables[v.champ];
     }
@@ -757,10 +752,28 @@ export default function SaisieDevisScreen({
     return true;
   };
 
+  /* LES CONDITIONS (lot 2a) : ce qui se lit part par l'en-tête — les PAIRES
+     entières, en une écriture —, ce qui ne se lit pas est REFUSÉ par
+     l'écran, avec sa phrase, et la garde le saura. */
+  const enregistrerConditions = (changements, erreursSaisie = {}, textes = null) => {
+    const fautes = Object.keys(erreursSaisie || {});
+    setTextesConditions(fautes.length ? textes : null);
+    const r = enregistrerEntete(changements);
+    if (fautes.length) {
+      poserRefusEntete([], Object.fromEntries(fautes.map((k) => [k, erreursSaisie[k]])));
+      retour.echec();
+    }
+    return r;
+  };
+
   /* La carte ouverte : lue, puis enregistrée — ou oubliée si elle n'a jamais
      rien été. */
   const enregistrerCarte = () => {
     const id = carteRef.current;
+    if (id === CARTE_CONDITIONS) {
+      if (refConditions.current) refConditions.current.enregistrer();
+      return;
+    }
     if (!id || !refCarte.current) return;
     const lu = refCarte.current.lire();
     const f = fileRef.current;
@@ -810,6 +823,16 @@ export default function SaisieDevisScreen({
     enregistrerCarte();
     poserCarte(null);
     if (rappels.current.onCarte) rappels.current.onCarte(null);
+  };
+
+  /* La carte « Conditions » : la carte ouverte s'enregistre d'abord, comme
+     pour une ligne. */
+  const ouvrirConditions = () => {
+    if (carteRef.current && carteRef.current !== CARTE_CONDITIONS) enregistrerCarte();
+    if (refEntete.current) refEntete.current.enregistrer();
+    poserCarte(CARTE_CONDITIONS);
+    setCleCarte((k) => k + 1);
+    if (rappels.current.onCarte) rappels.current.onCarte('Conditions');
   };
 
   /* ------------------------------------------------------------------ */
@@ -982,19 +1005,8 @@ export default function SaisieDevisScreen({
   const relirePostes = () => (onChargerPostes ? onChargerPostes() : Promise.resolve(null));
 
   /* ------------------------------------------------------------------ */
-  /*  LA RETENUE, LA SUPPRESSION, LES TOTAUX                               */
+  /*  LA SUPPRESSION, LES TOTAUX                                           */
   /* ------------------------------------------------------------------ */
-  const changerRetenue = (centiemes, message) => {
-    if (message) {
-      /* Illisible (« abc ») : REFUSÉE, et la garde le saura. */
-      poserRefusEntete(['retenueGarantieCentiemes'], { retenueGarantieCentiemes: messageDeContrainte('devis_retenue_check') });
-      retour.echec();
-      return;
-    }
-    if (centiemes === undefined) return;
-    enregistrerEntete({ retenueGarantieCentiemes: centiemes });
-  };
-
   const supprimer = async () => {
     if (!confirmeSuppression) { setConfirmeSuppression(true); return; }
     const f = fileRef.current;
@@ -1049,13 +1061,12 @@ export default function SaisieDevisScreen({
     };
   };
 
-  /** Tout lire (la carte ouverte, l'en-tête, la retenue), tout envoyer, et
+  /** Tout lire (la carte ouverte — une ligne ou les conditions —, l'en-tête), tout envoyer, et
    *  attendre la file — huit secondes au plus. `pendantLAttente` : appelé
    *  AVANT d'attendre, si la file a quelque chose en vol. */
   const enregistrerTout = async ({ pendantLAttente = null } = {}) => {
     if (carteRef.current) fermerCarte();
     if (refEntete.current) refEntete.current.enregistrer();
-    if (refBas.current) refBas.current.enregistrer();
     const f = fileRef.current;
     if (f && !f.vide() && pendantLAttente) pendantLAttente();
     if (f) await f.attendre(DELAI_ECRITURE);
@@ -1140,15 +1151,15 @@ export default function SaisieDevisScreen({
     poserGarde({ ...r, jeton: g && g.jeton, resoudre: g && g.resoudre, phase: 'bilan' });
   };
 
-  /* « Corriger » : on reste, et la liste revient au champ refusé — en haut
-     pour l'en-tête, en bas pour la retenue. */
+  /* « Corriger » : on reste, et l'on revient au champ refusé — en haut de la
+     liste pour l'en-tête, dans la carte « Conditions » pour une condition. */
   const corrigerEntete = () => {
     const g = gardeRef.current;
     const champ = g && g.enteteRefuse ? g.enteteRefuse[0] : null;
     repondreGarde(false);
+    if (CHAMPS_CONDITIONS.includes(champ)) { ouvrirConditions(); return; }
     if (!refListe.current) return;
-    if (champ === 'retenueGarantieCentiemes') refListe.current.scrollToEnd({ animated: true });
-    else refListe.current.scrollToOffset({ offset: 0, animated: true });
+    refListe.current.scrollToOffset({ offset: 0, animated: true });
   };
 
   /* « Quitter sans l'enregistrer » : ce qui a été refusé est abandonné EN LE
@@ -1156,6 +1167,7 @@ export default function SaisieDevisScreen({
   const abandonnerEntete = () => {
     const g = gardeRef.current;
     poserRefusEntete(Object.keys(refusEntete.current));
+    setTextesConditions(null);
     reprendreLeBilan(g);
   };
 
@@ -1244,9 +1256,9 @@ export default function SaisieDevisScreen({
   const nbEchecs = Object.keys(etats).filter((id) => id !== 'devis' && etats[id] === 'echec').length;
   const nbNonEnregistrees = nbIncompletes + nbEchecs;
   const chiffrerPossible = Array.isArray(propositions) && propositions.length > 0;
-  let suffixe = '';
-  if (nbNonEnregistrees) suffixe = ` · ${nbNonEnregistrees} ${nbNonEnregistrees > 1 ? 'lignes non enregistrées' : 'ligne non enregistrée'}`;
-  else if (attente.enCours) suffixe = ' · ligne en cours';
+  const suffixe = suffixeDuPied({
+    nbNonEnregistrees, enCours: attente.enCours, reduction: totaux ? Number(totaux.reduction) || 0 : 0,
+  });
 
   /* LA FEUILLE, UN SEUL `switch` : une seule à l'écran, par construction. */
   const rendreLaFeuille = () => {
@@ -1331,20 +1343,20 @@ export default function SaisieDevisScreen({
 
   const bas = (
     <BasDuDevis
-      ref={refBas}
       options={options}
       franchise={franchise}
       reel={reel}
+      regime={regime}
       propositions={propositions}
       regimeEnEchec={regimeEnEchec}
       totaux={totaux}
       totauxIllisibles={totauxIllisibles}
-      retenue={devis.retenueGarantieCentiemes == null ? null : devis.retenueGarantieCentiemes}
+      devis={devis}
       erreurs={erreursEntete}
       onOuvrir={ouvrirCarte}
       onAjouter={ajouter}
       onRelireTotaux={relireTotaux}
-      onRetenue={changerRetenue}
+      onOuvrirConditions={ouvrirConditions}
       onSupprimer={supprimer}
       confirmeSuppression={confirmeSuppression}
       phraseSuppression={phraseSuppressionDuBrouillon({ postes, postesEtat, devisId: devisIdInitial })}
@@ -1399,8 +1411,8 @@ export default function SaisieDevisScreen({
         {!!attente.devisErreur && (
           <View style={s.bande}>
             <Text style={s.bandeTexte}>
-              {`Le brouillon n’a pas pu être enregistré. ${typeof attente.devisErreur === 'object'
-                ? messageClair(attente.devisErreur, '') : ''}`}
+              {`${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur })} ${
+                typeof attente.devisErreur === 'object' ? messageClair(attente.devisErreur, '') : ''}`}
             </Text>
             {!estUnRefusDefinitif(attente.devisErreur) && (
               <BtnOutline label="Réessayer" onPress={() => fileRef.current && fileRef.current.reessayer('devis')} />
@@ -1479,7 +1491,8 @@ export default function SaisieDevisScreen({
                    (relecture « données », I2). */
                 garde.enCours > 1 ? `${garde.enCours} lignes ne sont pas encore enregistrées : l’envoi continue, mais rien ne garantit qu’il aboutira.` : null,
                 garde.enCours === 1 ? 'Une ligne n’est pas encore enregistrée : l’envoi continue, mais rien ne garantit qu’il aboutira.' : null,
-                !garde.enEchec && !garde.enCours ? 'Le brouillon n’a pas pu être enregistré.' : null,
+                !garde.enEchec && !garde.enCours
+                  ? phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur }) : null,
               ].filter(Boolean).join(' ')}
             </Text>
             <View style={s.bandeBoutons}>
@@ -1512,7 +1525,7 @@ export default function SaisieDevisScreen({
             <Pastille label="+ Poste" nom="Ajouter un premier poste chiffré" onPress={() => ajouter('poste')} />
           )}
           <Text style={s.piedLibelle} numberOfLines={1}>
-            {reel ? 'Total TTC' : 'Total'}
+            {libellesDesTotaux(regime).total}
             <Text style={s.piedSuffixe}>{suffixe}</Text>
           </Text>
           <Montant centimes={totaux ? totaux.ttc : null} fort style={s.piedMontant} />
@@ -1551,6 +1564,21 @@ export default function SaisieDevisScreen({
           onMonter={() => deplacer(-1)}
           onDescendre={() => deplacer(1)}
           onRetirer={retirer}
+        />
+      )}
+
+      {carte === CARTE_CONDITIONS && (
+        <ConditionsDevis
+          key={`conditions-${cleCarte}`}
+          ref={refConditions}
+          devis={devis}
+          totaux={totaux}
+          regime={regime}
+          nbOptions={options.length}
+          erreurs={erreursEntete}
+          textes={textesConditions}
+          onEnregistrer={enregistrerConditions}
+          onFermer={fermerCarte}
         />
       )}
 
@@ -1609,11 +1637,18 @@ const s = StyleSheet.create({
   libelle: { flex: 1, minWidth: 0, fontFamily: F.inter, fontSize: T.corps, color: C.ink },
   libelleMontant: { fontFamily: F.inter, color: C.ink },
   libelleTotal: { flex: 1, minWidth: 0, fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
+  valeur: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, textAlign: 'right' },
+  valeurTotal: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink, textAlign: 'right' },
   mention: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
   illisibles: { gap: S.xs, marginTop: S.sm },
-  replie: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: TOUCHE, marginTop: S.md },
+  /* La rangée qui résume les conditions : une cible qui OUVRE une carte,
+     44 points au moins, comme une ligne de devis. */
+  resume: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: TOUCHE, marginTop: S.md,
+    paddingVertical: S.sm,
+  },
+  resumeTexte: { flex: 1, minWidth: 0, gap: S.xs },
   replieTexte: { fontFamily: F.oswald6, fontSize: T.corps, color: C.accent2 },
-  conditions: { ...CARTE, padding: S.md, gap: S.sm },
   etiquette: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
   erreur: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit) },

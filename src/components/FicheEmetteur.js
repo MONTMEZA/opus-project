@@ -1006,8 +1006,9 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
           defaut={avisPaiementTexte}
         />
         <Aide>
-          Les modalités s’impriment sur tous vos devis. L’acompte et sa date se fixeront sur
-          chaque devis.
+          Les modalités s’impriment sur tous vos devis. N’y écrivez pas d’acompte : il se fixe
+          sur chaque devis, dans ses conditions — deux montants différents sur le même devis
+          ne se comprendraient pas.
         </Aide>
         {sous('modalites_paiement_texte')}
         <Text style={s.label}>Modalités d’exécution</Text>

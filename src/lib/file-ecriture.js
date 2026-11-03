@@ -193,12 +193,24 @@ const sansNumero = (v) => {
    jamais ; et le NUMÉRO d'écriture (`generation`) n'est pas une valeur de
    l'écran : il voyage à côté (49.5 bis). Une ligne relue en base le porte —
    le comparer ferait renvoyer un ANCIEN numéro, que la base refuserait. */
-function changements(voulu, confirme) {
+function changements(voulu, confirme, paires = []) {
   const diff = {};
   Object.keys(voulu).forEach((c) => {
     if (c === 'id' || c === 'generation' || voulu[c] === undefined) return;
     const avant = confirme && confirme[c] !== undefined ? confirme[c] : null;
     if (!Object.is(voulu[c], avant)) diff[c] = voulu[c];
+  });
+  /* UNE PAIRE PART ENTIÈRE (lot 2a) : la réduction en pourcentage OU en
+     montant, l'acompte et sa nature. Dès qu'une colonne d'une paire change,
+     TOUTES ses colonnes partent, avec ce que l'écran veut. Sans cela, après
+     une écriture partie sans réponse (« on ne sait pas si elle est
+     passée »), la file croit la base vide là où elle porte déjà l'autre
+     forme : elle n'enverrait que le montant, et la base le refuserait
+     (`devis_remise_une_forme_check` : les deux formes à la fois). */
+  paires.forEach((p) => {
+    if (p.some((c) => Object.prototype.hasOwnProperty.call(diff, c))) {
+      p.forEach((c) => { if (voulu[c] !== undefined) diff[c] = voulu[c]; });
+    }
   });
   return diff;
 }
@@ -269,6 +281,7 @@ export function creerFileEcriture({
   delaiMs = DELAI_ECRITURE,
   horloge = 0,
   horlogeTelephone = () => Date.now(),
+  paires = [],
 } = {}) {
   /* Sans délai, une requête qui ne revient jamais laisserait la ligne « en
      cours » pour toujours : la file refuse de naître sans lui. */
@@ -280,6 +293,10 @@ export function creerFileEcriture({
     throw new Error('La file d’écriture d’un devis exige `ecrire` et `relireUn`.');
   }
   if (!devisId) throw new Error('La file d’écriture d’un devis exige l’identifiant du devis.');
+  /* Les PAIRES du devis (`PAIRES_DEVIS`, passées par `api.js` : ce fichier
+     n'importe rien) — une liste de listes de noms de champs. */
+  const pairesDuDevis = Array.isArray(paires)
+    ? paires.filter((p) => Array.isArray(p) && p.length > 1 && p.every((c) => typeof c === 'string')) : [];
 
   /* Une entrée par objet : le devis (clé 'devis') et chaque ligne (son id).
        voulu    : les valeurs COMPLÈTES que l'écran veut voir en base ;
@@ -390,7 +407,7 @@ export function creerFileEcriture({
       return { quoi, action: 'supprimer', id: e.voulu.id, lever: quoi === 'ligne' && Boolean(e.insertionSansReponse) };
     }
     if (!e.confirme) return { quoi, action: 'inserer', id: e.voulu.id, valeurs: sansNumero(e.voulu) };
-    const diff = changements(e.voulu, e.confirme);
+    const diff = changements(e.voulu, e.confirme, quoi === 'devis' ? pairesDuDevis : []);
     if (!Object.keys(diff).length) return null;
     return { quoi, action: 'modifier', id: e.voulu.id, valeurs: diff };
   }

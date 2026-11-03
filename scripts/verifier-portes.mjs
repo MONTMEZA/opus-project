@@ -178,12 +178,20 @@ verifier('`recalcule_chantier` est retirée à la main — elle ne rend pas `tri
   const i = nuSansChaines.indexOf('function public.recalcule_apres_ligne_de_devis()');
   const corps = i > 0 ? nuSansChaines.slice(i, nuSansChaines.indexOf('$$;', i)) : '';
   const dedans = (corps.match(/\brecalcule_devis\s*\(/g) || []).length;
-  verifier('…et elle n’a aucun appelant hors de `recalcule_apres_ligne_de_devis()`',
-    dedans >= 4 && appels === dedans + 3,
-    `${appels} mention(s) dans le code, dont ${dedans} dans le déclencheur (les trois autres : sa déclaration, sa `
-    + 'révocation, son `comment on`). Un appelant de plus, et la révocation le casserait.');
-  verifier('…dont l’appelant est bien `security definer`',
-    /function public\.recalcule_apres_ligne_de_devis\(\)[\s\S]{0,120}security definer/.test(nu),
+  /* LOT 2a : un SECOND appelant, nommé — le déclencheur de la réduction
+     (`recalcule_apres_reduction`), qui l'appelle une fois, avec un numéro
+     VIDE. */
+  const j = nuSansChaines.indexOf('function public.recalcule_apres_reduction()');
+  const corpsR = j > 0 ? nuSansChaines.slice(j, nuSansChaines.indexOf('$$;', j)) : '';
+  const dedansR = (corpsR.match(/\brecalcule_devis\s*\(/g) || []).length;
+  verifier('…et elle n’a aucun appelant hors de `recalcule_apres_ligne_de_devis()` et de `recalcule_apres_reduction()` (lot 2a, '
+    + 'un seul appel, numéro vide)',
+  dedans >= 4 && dedansR === 1 && /\brecalcule_devis\(new\.id, null\)/.test(corpsR) && appels === dedans + dedansR + 3,
+  `${appels} mention(s) dans le code, dont ${dedans} dans le déclencheur des lignes et ${dedansR} dans celui de la réduction (les `
+    + 'trois autres : sa déclaration, sa révocation, son `comment on`). Un appelant de plus, et la révocation le casserait.');
+  verifier('…dont les deux appelants sont bien `security definer`',
+    /function public\.recalcule_apres_ligne_de_devis\(\)[\s\S]{0,120}security definer/.test(nu)
+    && /function public\.recalcule_apres_reduction\(\)[\s\S]{0,120}security definer/.test(nu),
     'En `security invoker`, l’appel interne serait contrôlé contre l’artisan, qui n’a pas le droit : plus '
     + 'aucune ligne de devis ne s’enregistrerait.');
   /* …ET RIEN NE LA REND, même sans la nommer (relecture des essais, I-4,

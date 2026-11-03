@@ -12640,10 +12640,9 @@ end $$;
 --  'brouillon', numéro, figeage, instantané de l'émetteur et du client
 --  (dont le régime de TVA), PDF, qualité du destinataire, caractère payant
 --  du devis, déchets, marqueur « construction » ou « urgence » par ligne,
---  acompte, remise sur le total (décidée le 21/10, construite au lot 2,
---  avant le PDF — et `devis_tva`, recalculée en entier à chaque écriture,
---  l'accueillera sans réécrire un devis), certification du preneur, taux
---  d'outre-mer, signature.
+--  certification du preneur, taux d'outre-mer, signature. La RÉDUCTION sur
+--  le total, l'ACOMPTE et la VALIDITÉ sont posés au lot 2a (03/11/2026,
+--  49.4 bis), avec l'écriture fermée colonne par colonne (49.7).
 --
 --  LES PRIX D'UN ARTISAN NE SE LISENT PAS PAR UN AUTRE. Aucune fonction
 --  `admin_*` ne nomme ces tables ; la liste FERMÉE des fonctions qui les
@@ -12718,6 +12717,102 @@ comment on function public.devis_total_ligne(bigint, bigint) is
 comment on function public.devis_tva_de(bigint, integer) is
   'La TVA d''un taux : base en centimes × taux en centièmes de point, ramenée au centime, '
   'demi vers le haut, arrondie UNE fois par taux. NULL hors des bornes. Section 49.1.';
+
+/* LA RÉPARTITION AU PLUS FORT RESTE (lot 2a, 03/11/2026) — la réduction sur
+   le total aujourd'hui (49.6, `recalcule_devis`), l'acompte d'une facture
+   demain (PLAN:2939) : UNE écriture de la règle, et son miroir JavaScript
+   (`repartirAuPlusFortReste`, `src/lib/devis.js`), éprouvés sur les mêmes
+   cas (`supabase/cas-devis.json`). Décidée le 21/10 (Q3) : sans elle, une
+   réduction de 1 000 c sur trois taux égaux rendait 334 au lieu de 333.
+
+   La règle : chaque part reçoit d'abord `total × poids / somme`, arrondi
+   vers le bas ; les centimes qui manquent vont, un par un, aux plus grands
+   restes ; À RESTE ÉGAL, À LA PREMIÈRE PART DU TABLEAU. La fonction ne voit
+   que l'ordre du tableau : ses deux appelants le passent par taux
+   DÉCROISSANT, et c'est écrit dans chacun (relecture BASE-5).
+
+   EN `numeric`, jamais en `bigint` : `total × poids` déborde un `bigint`
+   dès 10^19 (mesuré : « bigint out of range », en anglais). Et par `div()`
+   et `mod()`, jamais par `floor(a / b)` : une division `numeric` s'arrête à
+   un nombre de décimales, et 2,999…9 arrondi à 3 donnerait une part de
+   trop. `div` et `mod` sont exacts. Le miroir
+   JavaScript calcule en `BigInt` pour la même raison (un `Number` n'est plus
+   exact au-delà de 2^53).
+
+   LES BORDS, écrits plutôt que laissés au hasard :
+     - un tableau vide rend un tableau vide ;
+     - une somme de poids nulle rend des zéros — si le total est nul aussi ;
+     - un total négatif, un poids négatif ou NULL, un total qui dépasse la
+       somme des poids : NULL, jamais une erreur. Le recalcul borne la
+       réduction AVANT de l'appeler ; un NULL ici serait un défaut du
+       recalcul, et la contrainte `devis_tva_arrondi_check` le refuserait.
+   Aucune part ne dépasse son poids, et une part de poids nul reste nulle :
+   le reste d'un poids nul est nul, il ne gagne jamais un centime tant qu'un
+   reste positif en attend un (la somme des restes est un entier inférieur
+   au nombre de restes positifs).
+
+   Exécutable par AUCUN client : seul le recalcul l'appelle, avec ses droits. */
+create or replace function public.repartir_au_plus_fort_reste(p_total bigint, p_poids bigint[])
+returns bigint[]
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_n      integer := coalesce(cardinality(p_poids), 0);
+  v_somme  numeric := 0;
+  v_parts  bigint[];
+  v_restes numeric[];
+  v_manque bigint;
+  v_i      integer;
+  v_j      integer;
+  v_choix  integer;
+begin
+  if p_total is null or p_total < 0 then
+    return null;
+  end if;
+  if v_n = 0 then
+    return case when p_total = 0 then '{}'::bigint[] end;
+  end if;
+  for v_i in 1 .. v_n loop
+    if p_poids[v_i] is null or p_poids[v_i] < 0 then
+      return null;
+    end if;
+    v_somme := v_somme + p_poids[v_i];
+  end loop;
+  if p_total > v_somme then
+    return null;
+  end if;
+  v_parts  := array_fill(0::bigint, array[v_n]);
+  if v_somme = 0 then
+    return v_parts;
+  end if;
+  v_restes := array_fill(0::numeric, array[v_n]);
+  for v_i in 1 .. v_n loop
+    v_parts[v_i]  := div(p_total::numeric * p_poids[v_i], v_somme)::bigint;
+    v_restes[v_i] := mod(p_total::numeric * p_poids[v_i], v_somme);
+  end loop;
+  v_manque := p_total - (select sum(x) from unnest(v_parts) x)::bigint;
+  for v_j in 1 .. v_manque loop
+    v_choix := null;
+    for v_i in 1 .. v_n loop
+      if v_restes[v_i] > 0 and (v_choix is null or v_restes[v_i] > v_restes[v_choix]) then
+        v_choix := v_i;
+      end if;
+    end loop;
+    v_parts[v_choix]  := v_parts[v_choix] + 1;
+    v_restes[v_choix] := 0;
+  end loop;
+  return v_parts;
+end;
+$$;
+
+revoke all on function public.repartir_au_plus_fort_reste(bigint, bigint[]) from public, anon, authenticated;
+
+comment on function public.repartir_au_plus_fort_reste(bigint, bigint[]) is
+  'Répartit un total entre des poids, au centime près : la part entière d''abord, puis les centimes '
+  'restants aux plus grands restes, à reste égal à la PREMIÈRE part du tableau (les appelants passent '
+  'les taux décroissants). En numeric. NULL pour une entrée hors des bornes. Section 49.1.';
 
 -- --------------------------------------------------------------------------
 --  49.2 `public.devis` — le document, en brouillon
@@ -12811,7 +12906,89 @@ create table if not exists public.devis_tva (
 );
 
 -- --------------------------------------------------------------------------
---  49.5 Les contraintes — vingt-trois, toutes en `_check`
+--  49.4 bis LES CONDITIONS DU DEVIS — réduction, acompte, validité
+--           (lot 2a, 03/11/2026)
+--
+--  Ajoutées ICI, dans la section du devis, et pas dans une section neuve :
+--  les droits d'écriture vivent en 49.7, et une seconde section les aurait
+--  écrits deux fois (relecture BASE-10) ; les contrôles lisent les colonnes
+--  de la section 49 (DECOUPAGE-3). `add column if not exists` : une base
+--  qui a déjà ses devis les reçoit sans rien perdre.
+--
+--  CE QUE L'ARTISAN ÉCRIT — les décisions du propriétaire du 03/11 :
+--    - la RÉDUCTION sur le total (« Réduction », jamais « Remise » à
+--      l'écran : ce mot est pris par le geste de remettre le devis), en
+--      pourcentage OU en montant, au choix ; elle ne porte JAMAIS sur une
+--      option ;
+--    - l'ACOMPTE, en pourcentage OU en montant, au choix, sur le total HORS
+--      options, avec sa NATURE (acompte ou arrhes) choisie à chaque devis,
+--      sans défaut — la loi ne les traite pas pareil (C. conso. L. 214-1) ;
+--    - la VALIDITÉ, en jours (des pastilles 15, 30, 60, 90 et « Autre »),
+--      comptée à partir de la date du devis.
+--  Une paire (pourcentage, montant) s'écrit en UNE écriture : l'écran pose
+--  les deux colonnes ensemble, l'une vide (relecture BASE-2).
+--
+--  CE QUE LA BASE POSE, et qu'aucun client n'écrit (49.7, droits de
+--  colonne) : la réduction EFFECTIVE (`remise_ht_centimes`), l'acompte
+--  EFFECTIF (`acompte_ttc_centimes`) et le total TOUTES OPTIONS COMPRISES
+--  (`total_ttc_options_centimes`). Effectifs : une réduction plus grande que
+--  le total est RAMENÉE au total, un acompte plus grand que le TTC aussi —
+--  jamais refusés par une contrainte, parce qu'une réduction valable à la
+--  saisie dépasse le total dès qu'on retire une ligne, et l'artisan ne
+--  pourrait plus retirer une ligne de son propre devis (DROIT-14, mesuré).
+--  L'écran montre la valeur ramenée ; la remise au client (lot 2c) la
+--  refusera.
+--
+--  LES NOMS DES COLONNES GARDENT « remise » : ils ne s'affichent jamais, et
+--  le plan comme les contrôles les nomment ainsi depuis le 21/10.
+-- --------------------------------------------------------------------------
+alter table public.devis add column if not exists remise_centiemes           integer;
+alter table public.devis add column if not exists remise_centimes            bigint;
+alter table public.devis add column if not exists acompte_centiemes          integer;
+alter table public.devis add column if not exists acompte_centimes           bigint;
+alter table public.devis add column if not exists acompte_nature             text;
+alter table public.devis add column if not exists validite_jours             integer;
+alter table public.devis add column if not exists remise_ht_centimes         bigint not null default 0;
+alter table public.devis add column if not exists acompte_ttc_centimes       bigint not null default 0;
+alter table public.devis add column if not exists total_ttc_options_centimes bigint not null default 0;
+alter table public.devis_tva add column if not exists remise_centimes        bigint not null default 0;
+
+comment on column public.devis.remise_centiemes is
+  'La RÉDUCTION sur le total demandée en pourcentage, en CENTIÈMES DE POINT (1 000 = 10 %), de 1 à '
+  '10 000 ; vide = pas en pourcentage. Jamais avec remise_centimes. Jamais sur une option. 49.4 bis.';
+comment on column public.devis.remise_centimes is
+  'La RÉDUCTION sur le total demandée en montant, en CENTIMES (HT au régime réel). Jamais avec '
+  'remise_centiemes. Ramenée au total si elle le dépasse (remise_ht_centimes). 49.4 bis.';
+comment on column public.devis.acompte_centiemes is
+  'L''ACOMPTE demandé en pourcentage du TTC HORS options, en centièmes de point, de 1 à 10 000. '
+  'Jamais avec acompte_centimes. 49.4 bis.';
+comment on column public.devis.acompte_centimes is
+  'L''ACOMPTE demandé en montant TTC, en CENTIMES. Jamais avec acompte_centiemes. Ramené au TTC '
+  's''il le dépasse (acompte_ttc_centimes). 49.4 bis.';
+comment on column public.devis.acompte_nature is
+  'acompte ou arrhes — choisi à chaque devis, sans défaut : la loi ne les traite pas pareil '
+  '(C. conso. L. 214-1). Vide sans acompte. Un acompte sans nature est un motif de refus de la '
+  'remise au client (lot 2b), jamais une contrainte. 49.4 bis.';
+comment on column public.devis.validite_jours is
+  'La durée de validité de l''offre, en JOURS (1 à 365), comptée à partir de la date du devis. 49.4 bis.';
+comment on column public.devis.remise_ht_centimes is
+  'La réduction EFFECTIVE, en CENTIMES : la somme des parts de devis_tva, posée par la base '
+  '(tient_le_devis). Aucun client ne l''écrit (droits de colonne, 49.7). 49.4 bis.';
+comment on column public.devis.acompte_ttc_centimes is
+  'L''acompte EFFECTIF, en CENTIMES TTC, ramené au TTC : posé par la base (tient_le_devis), recalculé '
+  'à chaque écriture du devis. 49.4 bis.';
+comment on column public.devis.total_ttc_options_centimes is
+  'Le TTC TOUTES OPTIONS COMPRISES, en CENTIMES : les bases nettes des postes plus les options, taux par '
+  'taux, la TVA arrondie UNE fois par taux sur l''union — jamais une addition. Égal au TTC sans option. '
+  'Posé par la base (tient_le_devis). 49.4 bis.';
+comment on column public.devis_tva.remise_centimes is
+  'La part de la réduction portée par ce taux, en CENTIMES, répartie au plus fort reste. La base de '
+  'ce taux (base_centimes) est NETTE de cette part. 49.4 bis.';
+
+-- --------------------------------------------------------------------------
+--  49.5 Les contraintes — trente et une ici, toutes en `_check`, et une
+--       trente-deuxième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
+--       rattrapage)
 --
 --  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
 --  donne à chacune une phrase qui dit QUOI FAIRE (`MESSAGES_CONTRAINTE`).
@@ -12849,11 +13026,19 @@ alter table public.devis add constraint devis_lieu_ville_check
 alter table public.devis drop constraint if exists devis_objet_check;
 alter table public.devis add constraint devis_objet_check
   check (objet is null or char_length(objet) <= 1000);
+/* LE PLAFOND PORTE SUR LE BRUT (lot 2a, relecture BASE-6) : avant la
+   réduction, `total_ht_centimes + remise_ht_centimes`. Sur le HT net, une
+   réduction l'aurait contourné — et retirer ensuite la réduction aurait
+   été refusé —, pendant que `totauxDevis()` juge le brut. Le total toutes
+   options comprises y est borné aussi : une option qui le ferait dépasser
+   est refusée sous le même nom. */
 alter table public.devis drop constraint if exists devis_plafond_check;
 alter table public.devis add constraint devis_plafond_check
-  check (total_ht_centimes between 0 and 9999999999
+  check (total_ht_centimes >= 0
+         and total_ht_centimes + remise_ht_centimes <= 9999999999
          and total_tva_centimes >= 0
-         and total_ttc_centimes <= 9999999999);
+         and total_ttc_centimes <= 9999999999
+         and total_ttc_options_centimes <= 9999999999);
 /* La retenue de garantie : loi n° 71-584 du 16/07/1971, art. 1er — « au
    plus 5 p. 100 ». En centièmes de point, comme un taux de TVA : une seule
    unité de pourcentage dans le module. `null` = aucune retenue stipulée. */
@@ -12872,6 +13057,37 @@ alter table public.devis add constraint devis_statut_check
 alter table public.devis drop constraint if exists devis_totaux_check;
 alter table public.devis add constraint devis_totaux_check
   check (total_ttc_centimes = total_ht_centimes + total_tva_centimes);
+/* LES CONDITIONS (49.4 bis). Chaque contrainte ne regarde QUE ce qui ne
+   dépend pas de l'ordre de saisie (relecture BASE-2) : une règle qui lie
+   deux colonnes d'un brouillon écrit champ par champ refuserait la saisie à
+   mi-chemin. Donc ni « une nature exige un acompte », ni l'inverse — un
+   acompte sans nature est un motif de refus de la REMISE (lot 2b), jamais
+   une contrainte. Mais « pas les deux formes » ne dépend d'aucun ordre :
+   l'écran écrit la paire en UNE écriture, l'une des deux vide. Sans cette
+   garde, l'acompte sous ses deux formes passait, et le montant gagnait en
+   silence (relecture BASE-3, mesuré). */
+alter table public.devis drop constraint if exists devis_acompte_check;
+alter table public.devis add constraint devis_acompte_check
+  check ((acompte_centiemes is null or acompte_centiemes between 1 and 10000)
+         and (acompte_centimes is null or acompte_centimes between 1 and 9999999999));
+alter table public.devis drop constraint if exists devis_acompte_nature_check;
+alter table public.devis add constraint devis_acompte_nature_check
+  check (acompte_nature is null or acompte_nature in ('acompte', 'arrhes'));
+alter table public.devis drop constraint if exists devis_acompte_une_forme_check;
+alter table public.devis add constraint devis_acompte_une_forme_check
+  check (acompte_centiemes is null or acompte_centimes is null);
+alter table public.devis drop constraint if exists devis_remise_check;
+alter table public.devis add constraint devis_remise_check
+  check ((remise_centiemes is null or remise_centiemes between 1 and 10000)
+         and (remise_centimes is null or remise_centimes between 1 and 9999999999));
+alter table public.devis drop constraint if exists devis_remise_une_forme_check;
+alter table public.devis add constraint devis_remise_une_forme_check
+  check (remise_centiemes is null or remise_centimes is null);
+/* La validité, en JOURS : 1 à 365. Un an de plus qu'un devis n'en demande ;
+   au-delà, ce n'est plus une offre qu'on tient. */
+alter table public.devis drop constraint if exists devis_validite_check;
+alter table public.devis add constraint devis_validite_check
+  check (validite_jours is null or validite_jours between 1 and 365);
 
 alter table public.devis_lignes drop constraint if exists devis_ligne_designation_check;
 alter table public.devis_lignes add constraint devis_ligne_designation_check
@@ -12949,9 +13165,21 @@ alter table public.devis_tva add constraint devis_tva_arrondi_check
 alter table public.devis_tva drop constraint if exists devis_tva_nb_check;
 alter table public.devis_tva add constraint devis_tva_nb_check
   check (nb_lignes >= 0);
+/* La part de la réduction portée par ce taux (lot 2a) : jamais négative. */
+alter table public.devis_tva drop constraint if exists devis_tva_remise_check;
+alter table public.devis_tva add constraint devis_tva_remise_check
+  check (remise_centimes >= 0);
 alter table public.devis_tva drop constraint if exists devis_tva_taux_check;
 alter table public.devis_tva add constraint devis_tva_taux_check
   check (taux_tva_centiemes in (0, 550, 1000, 2000));
+/* UN TAUX QUI A DISPARU EST À ZÉRO EN ENTIER (lot 2a, relecture BASE-4) :
+   sa base, sa TVA ET sa part de réduction. La remise à zéro du recalcul
+   nomme ses colonnes une par une ; en oublier une laisserait une réduction
+   « relue » plus grande que la vraie (mesuré : 2 000 c au lieu de 1 000).
+   Cette contrainte attrape l'oubli. */
+alter table public.devis_tva drop constraint if exists devis_tva_vide_check;
+alter table public.devis_tva add constraint devis_tva_vide_check
+  check (nb_lignes > 0 or (base_centimes = 0 and tva_centimes = 0 and remise_centimes = 0));
 
 comment on table public.devis is
   'Un devis en BROUILLON (lot 1) : un DOCUMENT, à ne pas confondre avec quote_requests, '
@@ -13001,7 +13229,8 @@ comment on column public.devis_lignes.generation is
   'Le numéro de la DERNIÈRE écriture de cette ligne, posé par le téléphone. Une écriture dont le '
   'numéro ne dépasse pas l''horloge du devis est refusée (OP015). Section 49.5 bis.';
 comment on column public.devis_tva.base_centimes is
-  'En CENTIMES : la somme des totaux des POSTES de ce taux (les options n''y entrent pas).';
+  'En CENTIMES : la base NETTE de ce taux — la somme des totaux des POSTES (les options n''y entrent '
+  'pas), moins sa part de la réduction (remise_centimes). Le brut = base + remise.';
 comment on column public.devis_tva.tva_centimes is
   'En CENTIMES : devis_tva_de(base, taux), arrondie UNE fois.';
 comment on column public.devis_tva.taux_tva_centiemes is
@@ -13070,8 +13299,11 @@ comment on column public.devis_tva.taux_tva_centiemes is
 --       le devis d'arrivée : un déplacement tardif (n° 15) écrasait une
 --       retouche plus récente de la même ligne (n° 20), et le numéro de la
 --       ligne RECULAIT (relecture de l'étape 3, prouvé à deux sessions).
---       Aucun écran du lot 1 ne déplace une ligne ; la politique, elle, le
---       permet, et le lot qui l'offrira aurait hérité du trou ;
+--       Aucun écran ne déplace une ligne. Depuis le lot 2a (03/11/2026),
+--       un client ne le PEUT plus : le droit de colonne (49.7) ne lui rend
+--       pas `update (devis_id)` — une ligne ne change plus de devis par
+--       l'application (relecture BASE-9). La règle reste, pour l'éditeur SQL
+--       et pour un lot qui offrirait un jour le déplacement ;
 --    7. le numéro est BORNÉ, de 1 à 2^53 − 1 (9 007 199 254 740 991), par
 --       les deux déclencheurs `before` : absent (NULL), nul, négatif ou
 --       au-delà, l'écriture est refusée par `OP016`, qui dit « mettez Opus à
@@ -13081,7 +13313,12 @@ comment on column public.devis_tva.taux_tva_centiemes is
 --       s'écrivait plus, ni ne se supprimait par la file ; et au-delà de
 --       2^53, le téléphone ne sait plus compter juste (un nombre JavaScript
 --       n'est exact que jusque-là). `NUMERO_MAX` (`src/lib/file-ecriture.js`)
---       est la même borne, et `verifier-devis` les compare.
+--       est la même borne, et `verifier-devis` les compare. À LA BORNE MÊME
+--       (2^53 − 1), un devis ne s'écrit plus, mais se SUPPRIME : plus aucun
+--       numéro ne la dépasse, donc l'en-tête et toute ligne sont refusés
+--       pour toujours ; la suppression, conditionnée par `generation < N`,
+--       passe encore. Seul un client modifié y porte son devis (relecture
+--       SQL du 2e tour de l'étape 3, mineur 3 ; dit au lot 2a).
 --
 --  LE CONTRAT, POUR TOUT CE QUI ÉCRIRA DANS CES TABLES (relecture de l'étape
 --  3 : il n'était écrit nulle part, et le lot 2 l'aurait rencontré) :
@@ -13101,10 +13338,16 @@ comment on column public.devis_tva.taux_tva_centiemes is
 --      écriture « directe » à `pg_trigger_depth() = 1`. C'est sûr parce que
 --      les SEULS chemins qui écrivent `public.devis` plus profond sont le
 --      recalcul (`modifie_le` et `generation`, colonnes fixes) et les
---      cascades `set null`. Le jour où un déclencheur du lot 2 écrira
---      `devis`, il passera sans numéro : la liste FERMÉE des fonctions qui
---      nomment ces tables (`verifier-devis`, `verifier-legal`) le fera
---      voir, et c'est à ce moment-là qu'il faudra revoir cette règle.
+--      cascades `set null`. REVU AU LOT 2a (03/11/2026) : le recalcul a
+--      désormais DEUX déclencheurs — une écriture de ligne, et une écriture
+--      de la RÉDUCTION sur le devis (`trg_recalcule_apres_reduction`, 49.6).
+--      Le second tourne après une écriture DIRECTE du devis, déjà jugée sur
+--      l'horloge à la profondeur 1 ; le recalcul qu'il appelle réécrit le
+--      devis à la profondeur 2, avec les mêmes colonnes fixes et sans
+--      numéro neuf. La règle tient donc telle quelle. Un déclencheur
+--      futur qui écrirait d'autres colonnes de `devis` la ferait revoir : la
+--      liste FERMÉE des fonctions qui nomment ces tables (`verifier-devis`,
+--      `verifier-legal`) le fera voir.
 --
 --  CE QUE ÇA NE COUVRE PAS, ET C'EST DIT : la CRÉATION du devis en retard
 --  après sa suppression. Il n'y a rien au-dessus d'un devis pour porter une
@@ -13194,6 +13437,9 @@ as $$
 declare
   v_ht      bigint;
   v_tva     bigint;
+  v_remise  bigint;
+  v_ttc     bigint;
+  v_options bigint;
   v_plafond constant integer := 20;   -- devis d'une entreprise par demande, et par urgence (OP017)
 begin
   -- 1. Les textes : un blanc n'est pas une valeur (la classe de la section 47).
@@ -13313,13 +13559,52 @@ begin
   --    `for all` : l'artisan récrirait son total. `sum(bigint)` rend un
   --    `numeric`, et `sum` sur zéro ligne rend NULL : d'où le `::bigint` et
   --    les `coalesce`.
-  select coalesce(sum(t.base_centimes), 0)::bigint, coalesce(sum(t.tva_centimes), 0)::bigint
-    into v_ht, v_tva
+  --    Depuis le lot 2a, la base de chaque taux est NETTE de sa part de la
+  --    réduction, et la réduction effective est la somme de ces parts.
+  select coalesce(sum(t.base_centimes), 0)::bigint, coalesce(sum(t.tva_centimes), 0)::bigint,
+         coalesce(sum(t.remise_centimes), 0)::bigint
+    into v_ht, v_tva, v_remise
     from public.devis_tva t
    where t.devis_id = new.id;
+  v_ttc := v_ht + v_tva;
   new.total_ht_centimes  := v_ht;
   new.total_tva_centimes := v_tva;
-  new.total_ttc_centimes := v_ht + v_tva;
+  new.total_ttc_centimes := v_ttc;
+  new.remise_ht_centimes := v_remise;
+
+  -- 5. LE TOTAL TOUTES OPTIONS COMPRISES (lot 2a, 49.4 bis) : sur l'UNION
+  --    des bases nettes des postes et des options, taux par taux, la TVA
+  --    arrondie UNE fois par taux — jamais une addition de deux totaux (une
+  --    option de 33,33 € à 10 % coûte 36,66 € seule, mais 36,67 € de plus
+  --    sur le devis). La réduction ne porte jamais sur une option. Égal au
+  --    TTC quand il n'y a pas d'option. Les options se lisent sous la règle
+  --    d'accès de celui qui écrit (`security invoker`) : ce sont SES lignes.
+  select coalesce(sum(u.base + public.devis_tva_de(u.base, u.taux)), 0)::bigint
+    into v_options
+    from (select x.taux, sum(x.base)::bigint as base
+            from (select t.taux_tva_centiemes as taux, t.base_centimes as base
+                    from public.devis_tva t
+                   where t.devis_id = new.id
+                  union all
+                  select l.taux_tva_centiemes, l.total_centimes
+                    from public.devis_lignes l
+                   where l.devis_id = new.id and l.type = 'option') x
+           group by x.taux) u;
+  new.total_ttc_options_centimes := v_options;
+
+  -- 6. L'ACOMPTE EFFECTIF (lot 2a) : sur le TTC HORS options qui vient
+  --    d'être relu — c'est pourquoi il se pose ICI, et non dans le recalcul :
+  --    calculé là, il lisait le TTC d'avant le recalcul, et retirer la
+  --    dernière ligne d'un devis à acompte était refusé (relecture BASE-1,
+  --    mesuré). En pourcentage, arrondi au centime, demi vers le haut ; en
+  --    montant, tel quel. Ramené au TTC s'il le dépasse, jamais refusé. Aucun
+  --    déclencheur de plus : il suit chaque écriture du devis, recalcul
+  --    compris.
+  new.acompte_ttc_centimes := case
+    when new.acompte_centimes is not null then least(new.acompte_centimes, v_ttc)
+    when new.acompte_centiemes is not null then least((v_ttc * new.acompte_centiemes + 5000) / 10000, v_ttc)
+    else 0
+  end;
   return new;
 end;
 $$;
@@ -13384,8 +13669,17 @@ $$;
    L'HORLOGE (49.5 bis) se lit SOUS ce verrou : la plus ancienne de deux
    écritures croisées, si elle arrive la seconde, trouve l'horloge déjà
    avancée, et elle est refusée. `p_generation` est le numéro de l'écriture
-   de LIGNE qui déclenche le recalcul ; il est vide pour une suppression,
-   qui ne porte pas de valeur.
+   de LIGNE qui déclenche le recalcul ; il est VIDE pour une suppression,
+   qui ne porte pas de valeur, et pour une écriture de la RÉDUCTION (lot 2a,
+   `recalcule_apres_reduction`) : celle-là est une écriture du devis, déjà
+   jugée sur l'horloge par `tient_le_devis()` avant d'arriver ici. VIDE veut
+   donc dire « un recalcul sans écriture de ligne » : ni l'horloge (OP015)
+   ni le plafond de lignes (OP014) ne sont revérifiés, et l'horloge ne bouge
+   pas (`coalesce`).
+
+   LA RÉDUCTION (lot 2a) se lit sur le devis, SOUS le même verrou, et se
+   répartit entre les taux au plus fort reste (49.1) : chaque taux de
+   `devis_tva` reçoit sa base NETTE, sa part, et la TVA de sa base nette.
 
    La cascade : un devis supprimé emporte ses lignes ; leur recalcul trouve
    le devis absent et ne fait rien. */
@@ -13396,9 +13690,17 @@ security definer
 set search_path = public
 as $$
 declare
-  v_horloge bigint;
+  v_horloge    bigint;
+  v_pct        integer;
+  v_montant    bigint;
+  v_taux       integer[];
+  v_brut       bigint[];
+  v_nb         integer[];
+  v_total_brut bigint;
+  v_remise     bigint;
+  v_parts      bigint[];
 begin
-  select d.generation into v_horloge
+  select d.generation, d.remise_centiemes, d.remise_centimes into v_horloge, v_pct, v_montant
     from public.devis d
    where d.id = p_devis
      for no key update;
@@ -13423,23 +13725,49 @@ begin
       using errcode = 'OP014';
   end if;
 
-  insert into public.devis_tva as t
-         (devis_id, taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)
-  select p_devis, l.taux_tva_centiemes, sum(l.total_centimes)::bigint,
-         public.devis_tva_de(sum(l.total_centimes)::bigint, l.taux_tva_centiemes), count(*)
-    from public.devis_lignes l
-   where l.devis_id = p_devis and l.type = 'poste'
-   group by l.taux_tva_centiemes
-  on conflict (devis_id, taux_tva_centiemes) do update
-     set base_centimes = excluded.base_centimes,
-         tva_centimes  = excluded.tva_centimes,
-         nb_lignes     = excluded.nb_lignes;
+  -- LE BRUT PAR TAUX (les postes ; une option n'y entre pas), du taux le
+  -- plus fort au plus faible : c'est l'ordre que la répartition voit, et
+  -- celui qui départage deux restes égaux (49.1).
+  select coalesce(array_agg(x.taux order by x.taux desc), '{}'),
+         coalesce(array_agg(x.brut order by x.taux desc), '{}'),
+         coalesce(array_agg(x.nb   order by x.taux desc), '{}')
+    into v_taux, v_brut, v_nb
+    from (select l.taux_tva_centiemes as taux, sum(l.total_centimes)::bigint as brut, count(*)::integer as nb
+            from public.devis_lignes l
+           where l.devis_id = p_devis and l.type = 'poste'
+           group by l.taux_tva_centiemes) x;
+  v_total_brut := coalesce((select sum(b) from unnest(v_brut) b), 0)::bigint;
 
-  -- Un taux qui a disparu reste, À ZÉRO : ce corps ne retire aucune ligne
-  -- (le connecteur refuserait l'ordre de suppression, même ici, et même
-  -- nommé dans un commentaire). Les lecteurs filtrent nb_lignes > 0.
+  -- LA RÉDUCTION EFFECTIVE (lot 2a, 49.4 bis) : le montant demandé, ramené
+  -- au brut ; ou le pourcentage du brut, arrondi au centime, demi vers le
+  -- haut — jamais plus que le brut, puisque le pourcentage ne dépasse pas
+  -- 100 %. Puis répartie entre les taux AU PLUS FORT RESTE, au prorata des
+  -- bases brutes : chaque taux porte sa part, et sa TVA se calcule sur ce
+  -- qui est réellement facturé.
+  v_remise := case
+    when v_montant is not null then least(v_montant, v_total_brut)
+    when v_pct is not null then (v_total_brut * v_pct + 5000) / 10000
+    else 0
+  end;
+  v_parts := public.repartir_au_plus_fort_reste(v_remise, v_brut);
+
+  insert into public.devis_tva as t
+         (devis_id, taux_tva_centiemes, base_centimes, remise_centimes, tva_centimes, nb_lignes)
+  select p_devis, v_taux[i], v_brut[i] - v_parts[i], v_parts[i],
+         public.devis_tva_de(v_brut[i] - v_parts[i], v_taux[i]), v_nb[i]
+    from generate_subscripts(v_taux, 1) as i
+  on conflict (devis_id, taux_tva_centiemes) do update
+     set base_centimes   = excluded.base_centimes,
+         remise_centimes = excluded.remise_centimes,
+         tva_centimes    = excluded.tva_centimes,
+         nb_lignes       = excluded.nb_lignes;
+
+  -- Un taux qui a disparu reste, À ZÉRO EN ENTIER — base, TVA et part de
+  -- réduction (`devis_tva_vide_check` attrape un oubli) : ce corps ne retire
+  -- aucune ligne (le connecteur refuserait l'ordre de suppression, même ici,
+  -- et même nommé dans un commentaire). Les lecteurs filtrent nb_lignes > 0.
   update public.devis_tva t
-     set base_centimes = 0, tva_centimes = 0, nb_lignes = 0
+     set base_centimes = 0, tva_centimes = 0, remise_centimes = 0, nb_lignes = 0
    where t.devis_id = p_devis and t.nb_lignes > 0
      and not exists (select 1 from public.devis_lignes l
                       where l.devis_id = p_devis and l.type = 'poste'
@@ -13507,6 +13835,56 @@ create or replace trigger trg_recalcule_devis
   after insert or update or delete on public.devis_lignes
   for each row execute function public.recalcule_apres_ligne_de_devis();
 
+/* 5. LA RÉDUCTION CHANGE : LE RECALCUL (lot 2a) — `security definer`,
+   comme celui des lignes. Une écriture de la réduction est une écriture du
+   DEVIS : `trg_recalcule_devis`, posé sur les lignes, ne la voit pas, et
+   la ventilation garderait l'ancienne réduction. `tient_le_devis()`
+   (`before`) ne peut pas recalculer : la ventilation se refait APRÈS que la
+   réduction est écrite, et un `before` ne peut pas réécrire la ligne qu'il
+   est en train d'écrire.
+
+   LES TROIS CONDITIONS, MESURÉES À DEUX SESSIONS (relecture BASE-11) :
+     1. il appelle `recalcule_devis(id, NULL)` — un recalcul sans écriture
+        de ligne. Avec le numéro de l'écriture, le recalcul le comparerait
+        à une horloge que cette écriture vient d'avancer : OP015 à chaque
+        réduction (mesuré) ;
+     2. il est `security definer`, et `recalcule_devis` reste fermée à tout
+        client : ouverte à `authenticated`, un autre artisan avançait
+        l'horloge d'un devis qui n'est pas le sien (mesuré) ;
+     3. LA RÉPONSE D'UNE ÉCRITURE DE RÉDUCTION PORTE LES TOTAUX D'AVANT : le
+        recalcul tourne après l'écriture, et réécrit le devis dans un ordre
+        imbriqué. L'application ne demande donc jamais un montant en retour
+        d'une écriture d'en-tête (`.select('id')` seulement) et RELIT les
+        totaux, comme après toute écriture — `verifier-devis` le tient.
+
+   LA PROFONDEUR : l'écriture de la réduction est à la profondeur 1 (jugée
+   sur l'horloge par `tient_le_devis()`) ; ce déclencheur `after` tourne à
+   la profondeur 1, et l'écriture du devis que fait le recalcul arrive à la
+   profondeur 2 — sans numéro neuf, comme le recalcul d'une ligne. Elle ne
+   nomme pas les colonnes de la réduction : ce déclencheur ne se réveille
+   pas lui-même.
+
+   Il ne joue qu'à une MODIFICATION qui change la réduction : un devis créé
+   n'a encore aucune ligne, sa ventilation est vide. */
+create or replace function public.recalcule_apres_reduction()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.recalcule_devis(new.id, null);
+  return null;
+end;
+$$;
+
+create or replace trigger trg_recalcule_apres_reduction
+  after update of remise_centiemes, remise_centimes on public.devis
+  for each row
+  when (old.remise_centiemes is distinct from new.remise_centiemes
+        or old.remise_centimes is distinct from new.remise_centimes)
+  execute function public.recalcule_apres_reduction();
+
 comment on function public.tient_le_devis() is
   'Nettoie un devis (blancs, code postal), pose ses dates, fige sa source, refuse un numéro '
   'd''écriture absent ou hors bornes (OP016), une écriture plus ancienne que son horloge (OP015), '
@@ -13517,10 +13895,14 @@ comment on function public.tient_la_ligne_de_devis() is
   'pas une valeur), pose son total et sa date. Section 49.6.';
 comment on function public.recalcule_devis(uuid, bigint) is
   'Recalcule EN ENTIER la ventilation d''un devis, sous FOR NO KEY UPDATE, après avoir refusé une '
-  'écriture de ligne plus ancienne que l''horloge du devis (OP015) et la 501e ligne (OP014). Exécutable par '
-  'aucun client. Section 49.6.';
+  'écriture de ligne plus ancienne que l''horloge du devis (OP015) et la 501e ligne (OP014) ; répartit '
+  'la réduction sur le total entre les taux, au plus fort reste (lot 2a). Un numéro VIDE = un recalcul '
+  'sans écriture de ligne (suppression, réduction). Exécutable par aucun client. Section 49.6.';
 comment on function public.recalcule_apres_ligne_de_devis() is
   'Après chaque écriture d''une ligne : appelle recalcule_devis(), dans l''ordre des identifiants. Section 49.6.';
+comment on function public.recalcule_apres_reduction() is
+  'Après une modification de la réduction sur le total : appelle recalcule_devis(id, NULL), un recalcul '
+  'sans écriture de ligne. Section 49.6 (lot 2a).';
 
 -- --------------------------------------------------------------------------
 --  49.6 bis  UN NOUVEAU DEVIS NE SE RATTACHE PAS À LA DEMANDE D'UNE PERSONNE
@@ -13632,6 +14014,37 @@ comment on function public.peut_faire_un_devis(uuid, uuid) is
   'l''appelant et aucun blocage n''existe entre eux. Faux sinon, sans dire pourquoi. Section 49.6 bis.';
 
 -- --------------------------------------------------------------------------
+--  49.6 ter LE RATTRAPAGE DES DEVIS DÉJÀ EN BASE, puis la dernière
+--           contrainte (lot 2a, 03/11/2026)
+--
+--  Un devis enregistré avant le lot 2a a ses trois colonnes calculées à
+--  leur défaut : 0. Pour la réduction et l'acompte, c'est la vérité (il n'y
+--  en avait pas). Pour le total toutes options comprises, non : il vaut au
+--  moins le TTC. Le recalcul ne s'appelle pas d'ici (hors d'un déclencheur,
+--  il est refusé OP015 : relecture BASE-12) ; une écriture DIRECTE qui fait
+--  monter l'horloge suffit — c'est le contrat de 49.5 bis, « une migration
+--  qui récrit un devis fait monter son horloge » —, et `tient_le_devis()`
+--  pose les trois colonnes. Rejouable : au second passage, plus aucun devis
+--  ne correspond. Les totaux, eux, ne bougent pas : la ventilation n'est pas
+--  touchée, et elle n'avait aucune réduction.
+--
+--  `devis_calculs_check` est posée APRÈS, et c'est pour cela qu'elle vit
+--  ici et pas en 49.5 : avant le rattrapage, un devis existant la violerait,
+--  et une base déjà en service refuserait de rejouer ce fichier.
+-- --------------------------------------------------------------------------
+update public.devis
+   set generation = generation + 1
+ where total_ttc_options_centimes < total_ttc_centimes;
+
+/* Un garde-fou, comme `devis_totaux_check` : `tient_le_devis()` la rend
+   vraie par construction. */
+alter table public.devis drop constraint if exists devis_calculs_check;
+alter table public.devis add constraint devis_calculs_check
+  check (remise_ht_centimes >= 0
+         and acompte_ttc_centimes between 0 and total_ttc_centimes
+         and total_ttc_options_centimes >= total_ttc_centimes);
+
+-- --------------------------------------------------------------------------
 --  49.7 Qui lit, qui écrit
 --
 --  `est_mon_entreprise()` DÉCIDE — elle exige `est_un_pro()` —, jamais un
@@ -13723,9 +14136,55 @@ create policy "ventilation de mes devis" on public.devis_tva
    `trigger` — inutilisables sans un ordre de définition que PostgREST
    n'émet pas, mais un droit sans raison n'attend pas qu'on lui en trouve
    une ; ni, sur PostgreSQL 17, `maintain` (relecture sécurité de l'étape
-   3). Et sur la ventilation, la lecture seule. */
+   3). Et sur la ventilation, la lecture seule.
+
+   L'ÉCRITURE SE DONNE COLONNE PAR COLONNE (lot 2a, 03/11/2026). Jusque-là,
+   `authenticated` écrivait TOUTES les colonnes, et une politique `for all`
+   ne distingue pas une colonne d'une autre : un client modifié pouvait
+   envoyer un total, une réduction effective, un acompte effectif — que les
+   déclencheurs remplaçaient —, et surtout `statut`, que le lot 2c fera
+   passer à « remis ». Le figeage protégerait alors un faux. Les droits de
+   colonne ferment la porte AVANT les déclencheurs : une écriture de
+   `statut`, d'un total ou d'une date rend « permission denied » (42501).
+   La LECTURE ne change pas (`select *` reste possible : rien de ce que ces
+   tables portent n'est caché à leur propriétaire).
+
+   LA LISTE EST CELLE QUE L'APPLICATION ENVOIE, relevée dans le code et non
+   supposée (`devisVersBase`, `ligneVersBase`, `ecrireDevisSupabase`) :
+     - un devis NAÎT avec son identifiant, son entreprise, sa source, ses
+       liens, son en-tête, ses conditions et son numéro d'écriture ; il se
+       MODIFIE sur les mêmes, sans l'identifiant, l'entreprise ni la source
+       (D3 : la source est figée) — et la « levée » de l'horloge est une
+       modification de `generation` seul ;
+     - une ligne NAÎT entière, avec son devis ; elle se MODIFIE sans son
+       devis : une ligne ne change pas de devis par l'application (relecture
+       BASE-9 ; 49.5 bis, point 6) ;
+     - JAMAIS : `statut`, les totaux, la réduction et l'acompte effectifs, le
+       total toutes options comprises, le total d'une ligne, les dates.
+   Une colonne que l'application enverrait sans que la liste la rende ferait
+   refuser la requête ENTIÈRE (42501) : c'est pourquoi `verifier-devis`
+   compare cette liste à ce que l'application envoie, et l'essai du lot 2a la
+   relit dans le catalogue, colonne par colonne. */
 revoke all on public.devis, public.devis_lignes, public.devis_tva from anon, authenticated;
-grant select, insert, update, delete on public.devis, public.devis_lignes to authenticated;
+grant select, delete on public.devis, public.devis_lignes to authenticated;
+grant insert (id, pro_id, source, client_id, quote_request_id, sos_request_id, objet,
+              lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
+              retenue_garantie_centiemes, remise_centiemes, remise_centimes,
+              acompte_centiemes, acompte_centimes, acompte_nature, validite_jours, generation)
+  on public.devis to authenticated;
+grant update (client_id, quote_request_id, sos_request_id, objet,
+              lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
+              retenue_garantie_centiemes, remise_centiemes, remise_centimes,
+              acompte_centiemes, acompte_centimes, acompte_nature, validite_jours, generation)
+  on public.devis to authenticated;
+grant insert (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
+              prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
+              fourniture_non_comprise, surface_sol_milliemes, surface_murs_milliemes, generation)
+  on public.devis_lignes to authenticated;
+grant update (ordre, type, designation, quantite_milliemes, unite,
+              prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
+              fourniture_non_comprise, surface_sol_milliemes, surface_murs_milliemes, generation)
+  on public.devis_lignes to authenticated;
 grant select on public.devis_tva to authenticated;
 
 -- --------------------------------------------------------------------------

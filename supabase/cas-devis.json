@@ -1,11 +1,11 @@
 {
-  "description": "Les cas d’argent du lot 1 du module devis (cahier §3.5). Les attendus sont écrits UNE fois, ici : `npm run verifier-devis` les joue en JavaScript (src/lib/devis.js) à chaque passage, et `supabase/essais-section-49.sql` (cas 30) les joue en PostgreSQL, ligne par ligne, déclencheurs et contraintes compris. Les deux se comparent aux MÊMES attendus.",
+  "description": "Les cas d’argent du module devis : ceux du lot 1 (cahier §3.5), puis ceux du lot 2a — la réduction, l’acompte, le total toutes options comprises (R01 à R23, RF1, RF2). Les attendus sont écrits UNE fois, ici : `npm run verifier-devis` les joue en JavaScript (src/lib/devis.js) à chaque passage, et `supabase/essais-section-49.sql` (cas 30) les joue en PostgreSQL, ligne par ligne, déclencheurs et contraintes compris. Les deux se comparent aux MÊMES attendus.",
   "format": {
-      "operations": "Une suite d’opérations sur UN devis neuf : « ajouter » une ligne (sa clé locale et ses colonnes), « modifier » des colonnes d’une ligne déjà ajoutée, « retirer » une ligne. Les noms de colonnes sont ceux de `devis_lignes`. L’ordre d’une ligne ajoutée vaut 1 000 × son rang parmi les « ajouter » du cas. Une colonne absente prend le défaut de la table : `type` vaut « poste », les trois booléens valent faux, le reste est vide. La première opération refusée arrête le cas.",
-      "attendu": "HT|TVA|TTC|ventilation|options, en centimes. La ventilation : « taux:base:tva:nb » pour chaque taux à `nb_lignes > 0`, du plus fort au plus faible, séparés par des virgules, ou « — ». Les options : « taux:total » dans l’ordre des lignes, ou « — ». Ou bien « REFUS:<nom de la contrainte> ».",
-      "fonctions": "Des appels aux deux fonctions de calcul, `devis_total_ligne(quantité, prix)` et `devis_tva_de(base, taux)`, et ce qu’elles doivent rendre (`null` compris). Le miroir JavaScript de `devis_total_ligne` s’arrête au plafond : ces appels restent en dessous."
+      "operations": "Une suite d’opérations sur UN devis neuf : « ajouter » une ligne (sa clé locale et ses colonnes), « modifier » des colonnes d’une ligne déjà ajoutée, « retirer » une ligne, et « devis » (lot 2a) : écrire des colonnes du DEVIS — la réduction, l’acompte et sa nature, la validité, la retenue. Les noms de colonnes sont ceux de `devis_lignes`, ou de `devis` pour « devis ». L’ordre d’une ligne ajoutée vaut 1 000 × son rang parmi les « ajouter » du cas. Une colonne absente prend le défaut de la table : `type` vaut « poste », les trois booléens valent faux, le reste est vide. La première opération refusée arrête le cas.",
+      "attendu": "HT|TVA|TTC|ventilation|options, en centimes. La ventilation : « taux:base:tva:nb » pour chaque taux à `nb_lignes > 0`, du plus fort au plus faible, séparés par des virgules, ou « — ». Les options : « taux:total » dans l’ordre des lignes, ou « — ». Ou bien « REFUS:<nom de la contrainte> ». Un cas marqué « forme : conditions » (lot 2a) écrit sa ventilation « taux:base:réduction:tva:nb » (la base est NETTE de la part de réduction du taux) et ajoute trois champs : la réduction effective, l’acompte effectif, le total toutes options comprises.",
+      "fonctions": "Des appels aux trois fonctions de calcul, `devis_total_ligne(quantité, prix)`, `devis_tva_de(base, taux)` et `repartir_au_plus_fort_reste(total, poids)` (lot 2a), et ce qu’elles doivent rendre (`null` compris). Le miroir JavaScript de `devis_total_ligne` s’arrête au plafond : ces appels restent en dessous. La répartition rend un tableau écrit comme PostgreSQL l’écrit, « {a,b} » ; un nombre au-delà de 2^53 s’écrit en chaîne de chiffres, pour que JavaScript ne l’arrondisse pas en le lisant."
   },
-  "nombre": 44,
+  "nombre": 69,
   "cas": [
     {
       "id": "C01",
@@ -497,6 +497,279 @@
         {"op":"ajouter","ligne":"s","valeurs":{"type":"piece","designation":"Cuisine","surface_sol_milliemes":0}}
       ],
       "attendu": "REFUS:devis_ligne_surfaces_check"
+    },
+    {
+      "id": "R01",
+      "titre": "1,00 € de réduction sur trois taux de même brut : 34 / 33 / 33 c, le centime en trop au taux le plus FORT (égalité de reste)",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Démolition","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Plâtrerie","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"Isolation","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":550}},
+        {"op":"devis","valeurs":{"remise_centimes":100}}
+      ],
+      "attendu": "29900|3538|33438|2000:9966:34:1993:1,1000:9967:33:997:1,550:9967:33:548:1|—|100|0|33438"
+    },
+    {
+      "id": "R02",
+      "titre": "le même devis, lignes ajoutées dans l’ordre INVERSE : la répartition ne dépend que des taux, jamais de l’ordre d’écriture",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"Isolation","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":550}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Plâtrerie","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Démolition","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":2000}},
+        {"op":"devis","valeurs":{"remise_centimes":100}}
+      ],
+      "attendu": "29900|3538|33438|2000:9966:34:1993:1,1000:9967:33:997:1,550:9967:33:548:1|—|100|0|33438"
+    },
+    {
+      "id": "R03",
+      "titre": "10 % sur 3 × 33,33 € à 10 % : 999,9 c → 1 000 c de réduction (demi vers le haut), TVA sur le NET",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"Poste C","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"remise_centiemes":1000}}
+      ],
+      "attendu": "8999|900|9899|1000:8999:1000:900:3|—|1000|0|9899"
+    },
+    {
+      "id": "R04",
+      "titre": "333 / 334 : 10,00 € répartis sur 33,33 € à 20 %, 33,33 € à 10 % et 33,34 € à 5,5 %",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"Poste C","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3334,"taux_tva_centiemes":550}},
+        {"op":"devis","valeurs":{"remise_centimes":1000}}
+      ],
+      "attendu": "9000|1065|10065|2000:3000:333:600:1,1000:3000:333:300:1,550:3000:334:165:1|—|1000|0|10065"
+    },
+    {
+      "id": "R05",
+      "titre": "100 % de réduction : HT, TVA et TTC à zéro — l’option reste dans le total toutes options comprises",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Dépose","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":25000,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"o","valeurs":{"type":"option","designation":"Option peinture","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":12000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"remise_centiemes":10000}}
+      ],
+      "attendu": "0|0|0|2000:0:25000:0:1|1000:12000|25000|0|13200"
+    },
+    {
+      "id": "R06",
+      "titre": "une réduction en montant PLUS GRANDE que le brut : ramenée au brut, jamais refusée",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Petite reprise","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":4000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"remise_centimes":999999}}
+      ],
+      "attendu": "0|0|0|1000:0:4000:0:1|—|4000|0|0"
+    },
+    {
+      "id": "R07",
+      "titre": "une ligne OFFERTE pèse zéro : son taux ne reçoit aucune part de la réduction",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Fourniture","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":20000,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Déplacement","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3000,"taux_tva_centiemes":1000,"offert":true}},
+        {"op":"devis","valeurs":{"remise_centimes":1001}}
+      ],
+      "attendu": "18999|3800|22799|2000:18999:1001:3800:1,1000:0:0:0:1|—|1001|0|22799"
+    },
+    {
+      "id": "R08",
+      "titre": "réduction et option au MÊME taux : le total toutes options se calcule sur l’union (13 574 c), pas en additionnant deux TTC (13 575 c)",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"o","valeurs":{"type":"option","designation":"Option","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3335,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"remise_centimes":995}}
+      ],
+      "attendu": "9005|901|9906|1000:9005:995:901:1|1000:3335|995|0|13574"
+    },
+    {
+      "id": "R09",
+      "titre": "un acompte de « ,5 » % : 0,5 % de 11,00 € = 5,5 c → 6 c",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Petit poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"acompte_centiemes":50,"acompte_nature":"acompte"}}
+      ],
+      "attendu": "1000|100|1100|1000:1000:0:100:1|—|0|6|1100"
+    },
+    {
+      "id": "R10",
+      "titre": "un acompte en MONTANT, puis une ligne retirée : ramené au nouveau TTC, et le retrait n’est PAS refusé",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Gros œuvre","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":40000,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Finitions","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":2000}},
+        {"op":"devis","valeurs":{"acompte_centimes":50000,"acompte_nature":"arrhes"}},
+        {"op":"retirer","ligne":"a"}
+      ],
+      "attendu": "10000|2000|12000|2000:10000:0:2000:1|—|0|12000|12000"
+    },
+    {
+      "id": "R11",
+      "titre": "une réduction en POURCENTAGE, puis une ligne ajoutée : recalculée sur le nouveau brut",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"remise_centiemes":500}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":5000,"taux_tva_centiemes":2000}}
+      ],
+      "attendu": "14250|1900|16150|2000:4750:250:950:1,1000:9500:500:950:1|—|750|0|16150"
+    },
+    {
+      "id": "R12",
+      "titre": "un acompte et une retenue de garantie : la retenue ne change aucun total",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Chape","quantite_milliemes":20000,"unite":"m2","prix_unitaire_centimes":2500,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"acompte_centiemes":3000,"acompte_nature":"acompte","retenue_garantie_centiemes":500}}
+      ],
+      "attendu": "50000|5000|55000|1000:50000:0:5000:1|—|0|16500|55000"
+    },
+    {
+      "id": "R13",
+      "titre": "le PLAFOND porte sur le BRUT : 50 % de réduction ne laisse pas passer 99 999 999,99 € + 1 c",
+      "forme": "conditions",
+      "operations": [
+        {"op":"devis","valeurs":{"remise_centiemes":5000}},
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Très gros poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":9999999999,"taux_tva_centiemes":0}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Un centime de trop","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "REFUS:devis_plafond_check"
+    },
+    {
+      "id": "R14",
+      "titre": "le total toutes options comprises est BORNÉ aussi : une option qui le ferait dépasser est refusée",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Gros poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":9999999000,"taux_tva_centiemes":0}},
+        {"op":"ajouter","ligne":"o","valeurs":{"type":"option","designation":"Option de trop","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1000,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "REFUS:devis_plafond_check"
+    },
+    {
+      "id": "R15",
+      "titre": "l’unité « jour » : 2,5 jours × 450,00 € à 20 %, et 50,00 € de réduction",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Main-d’œuvre","quantite_milliemes":2500,"unite":"jour","prix_unitaire_centimes":45000,"taux_tva_centiemes":2000,"main_oeuvre":true}},
+        {"op":"devis","valeurs":{"remise_centimes":5000}}
+      ],
+      "attendu": "107500|21500|129000|2000:107500:5000:21500:1|—|5000|0|129000"
+    },
+    {
+      "id": "R16",
+      "titre": "une réduction RETIRÉE : les totaux reviennent au brut, au centime",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":12345,"taux_tva_centiemes":2000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":6789,"taux_tva_centiemes":550}},
+        {"op":"devis","valeurs":{"remise_centiemes":1250}},
+        {"op":"devis","valeurs":{"remise_centiemes":null}}
+      ],
+      "attendu": "19134|2842|21976|2000:12345:0:2469:1,550:6789:0:373:1|—|0|0|21976"
+    },
+    {
+      "id": "R17",
+      "titre": "au-delà de 2^53 dans la répartition : 10 % de 99 999 999,90 € HT sur trois taux (le produit brut × poids dépasse ce qu’un nombre JavaScript tient exactement)",
+      "forme": "conditions",
+      "operations": [
+        {"op":"devis","valeurs":{"remise_centiemes":1000}},
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste A","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":4999999990,"taux_tva_centiemes":1000}},
+        {"op":"ajouter","ligne":"b","valeurs":{"type":"poste","designation":"Poste B","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":3333333331,"taux_tva_centiemes":550}},
+        {"op":"ajouter","ligne":"c","valeurs":{"type":"poste","designation":"Poste C","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":1666666669,"taux_tva_centiemes":0}}
+      ],
+      "attendu": "8999999991|614999999|9614999990|1000:4499999991:499999999:449999999:1,550:2999999998:333333333:165000000:1,0:1500000002:166666667:0:1|—|999999999|0|9614999990"
+    },
+    {
+      "id": "R18",
+      "titre": "réduction en pourcentage ET en montant à la fois : refusé",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"remise_centiemes":500,"remise_centimes":500}}
+      ],
+      "attendu": "REFUS:devis_remise_une_forme_check"
+    },
+    {
+      "id": "R19",
+      "titre": "acompte en pourcentage ET en montant à la fois : refusé (sans la garde, le montant gagnait en silence)",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"acompte_centiemes":500,"acompte_centimes":500,"acompte_nature":"acompte"}}
+      ],
+      "attendu": "REFUS:devis_acompte_une_forme_check"
+    },
+    {
+      "id": "R20",
+      "titre": "une réduction de 100,01 % : refusée",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"remise_centiemes":10001}}
+      ],
+      "attendu": "REFUS:devis_remise_check"
+    },
+    {
+      "id": "R21",
+      "titre": "une nature d’acompte inconnue : refusée",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"acompte_centiemes":3000,"acompte_nature":"caution"}}
+      ],
+      "attendu": "REFUS:devis_acompte_nature_check"
+    },
+    {
+      "id": "R22",
+      "titre": "une validité de 366 jours : refusée (365 au plus)",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"validite_jours":366}}
+      ],
+      "attendu": "REFUS:devis_validite_check"
+    },
+    {
+      "id": "R23",
+      "titre": "un acompte sans nature : ACCEPTÉ — c’est un motif de refus de la remise (lot 2b), jamais une contrainte",
+      "forme": "conditions",
+      "operations": [
+        {"op":"ajouter","ligne":"a","valeurs":{"type":"poste","designation":"Poste","quantite_milliemes":1000,"unite":"u","prix_unitaire_centimes":10000,"taux_tva_centiemes":1000}},
+        {"op":"devis","valeurs":{"acompte_centiemes":3000}},
+        {"op":"devis","valeurs":{"validite_jours":30}}
+      ],
+      "attendu": "10000|1000|11000|1000:10000:0:1000:1|—|0|3300|11000"
+    },
+    {
+      "id": "RF1",
+      "titre": "la répartition au plus fort reste, ses cas simples et ses bords",
+      "fonctions": [
+        {"nom":"repartir_au_plus_fort_reste","args":[1000,[333,333,334]],"attendu":"{333,333,334}"},
+        {"nom":"repartir_au_plus_fort_reste","args":[1,[1,1,1]],"attendu":"{1,0,0}"},
+        {"nom":"repartir_au_plus_fort_reste","args":[2,[1,0,1]],"attendu":"{1,0,1}"},
+        {"nom":"repartir_au_plus_fort_reste","args":[0,[]],"attendu":"{}"},
+        {"nom":"repartir_au_plus_fort_reste","args":[5,[]],"attendu":null},
+        {"nom":"repartir_au_plus_fort_reste","args":[0,[0,0]],"attendu":"{0,0}"},
+        {"nom":"repartir_au_plus_fort_reste","args":[5,[0,0]],"attendu":null},
+        {"nom":"repartir_au_plus_fort_reste","args":[10,[3,-1]],"attendu":null},
+        {"nom":"repartir_au_plus_fort_reste","args":[-1,[1]],"attendu":null}
+      ]
+    },
+    {
+      "id": "RF2",
+      "titre": "la répartition au-delà de 2^53 : des chaînes de chiffres, comparées à PostgreSQL au chiffre près",
+      "fonctions": [
+        {"nom":"repartir_au_plus_fort_reste","args":["9007199254740993",["9007199254740993","9007199254740993"]],"attendu":"{4503599627370497,4503599627370496}"},
+        {"nom":"repartir_au_plus_fort_reste","args":[999999999,[9999999999,1,7]],"attendu":"{999999998,0,1}"}
+      ]
     }
   ]
 }

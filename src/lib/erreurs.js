@@ -177,7 +177,7 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   client_ville_check: TEXTE_TROP_LONG,
 
   /* --- Le chiffrage d'un devis : section 49 (lot 1 du module devis) ---
-     LES VINGT-TROIS, et pas seulement celles qu'on tape. L'écran refuse
+     LES TRENTE (vingt-trois au lot 1, sept au lot 2a), et pas seulement celles qu'on tape. L'écran refuse
      AVANT d'envoyer (`validerLigne`, `validerDevis`, dans `devis.js`, avec
      les mêmes noms) : ces phrases sortent donc d'une version en retard,
      d'un client modifié — ou de la base qui voit ce que l'écran ne voit
@@ -188,6 +188,22 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
      pas été rejoué » : la contrainte existe, c'est la valeur reçue qui ne
      vient pas de cette version. `verifier-devis` compare cette liste aux
      contraintes de la section 49, dans les deux sens. */
+  /* LES CONDITIONS (lot 2a). L'écran refuse avant d'envoyer, avec une
+     phrase plus précise (`versPourcentDeDevis`, `versMontantDeDevis`,
+     `versJours`) ; celles-ci disent les mêmes bornes, pour une version en
+     retard. Une réduction ou un acompte plus grand que le total n'est JAMAIS
+     refusé : la base le ramène. */
+  devis_acompte_check: 'un acompte s’écrit entre 0,01 % et 100 %, ou en euros jusqu’à '
+    + '99 999 999,99 €. Sans acompte, laissez le champ vide.',
+  devis_acompte_nature_check: 'choisissez « Acompte » ou « Arrhes ».',
+  devis_acompte_une_forme_check: 'un acompte s’écrit en pourcentage OU en euros, pas les deux : choisissez l’unité, '
+    + 'puis réécrivez-le.',
+  devis_calculs_check: APPLICATION_EN_RETARD,
+  devis_remise_check: 'une réduction s’écrit entre 0,01 % et 100 %, ou en euros jusqu’à '
+    + '99 999 999,99 €. Sans réduction, laissez le champ vide.',
+  devis_remise_une_forme_check: 'une réduction s’écrit en pourcentage OU en euros, pas les deux : choisissez l’unité, '
+    + 'puis réécrivez-la.',
+  devis_validite_check: 'une offre est valable de 1 à 365 jours.',
   devis_delai_check: TEXTE_TROP_LONG,
   devis_lieu_adresse_check: TEXTE_TROP_LONG,
   devis_lieu_code_postal_check: 'un code postal fait cinq chiffres.',
@@ -220,7 +236,9 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   devis_ligne_unite_check: 'choisissez une unité dans la liste.',
   devis_tva_arrondi_check: APPLICATION_EN_RETARD,
   devis_tva_nb_check: APPLICATION_EN_RETARD,
+  devis_tva_remise_check: APPLICATION_EN_RETARD,
   devis_tva_taux_check: APPLICATION_EN_RETARD,
+  devis_tva_vide_check: APPLICATION_EN_RETARD,
 
   /* --- Les compteurs et les dates : section 52 (lot S-c) ---
      UN SECOND AVIS du même client sur le même artisan. L'écran cache
