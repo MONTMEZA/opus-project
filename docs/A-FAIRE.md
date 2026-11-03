@@ -3119,6 +3119,24 @@ temps dure une disponibilité « maintenant » ?
 laisse envoyer une urgence à n'importe quel artisan, même s'il ne fait pas
 ce métier (voir plus haut, « Les défauts relevés au tournage »).
 
+### Le parrainage — votre idée, PAS construite (03/11/2026)
+
+Le plan complet, relu par quatre relecteurs (68 remarques contre-examinées) :
+**`docs/PLAN-PARRAINAGE.md`**. Il attend votre accord ; rien n'est construit.
+
+Ce qu'il faut retenir d'ici là :
+
+- **le format du code est figé dans ce plan** (7 signes dont un de contrôle,
+  30 signes possibles, `K7P-Q4MB`). Si la page d'accueil se fait avant le
+  reste, elle ne propose **aucun** code : sinon ils ne seront pas les mêmes ;
+- **le bouton « Inviter » ne sortira qu'avec une page qui répond** : le
+  03/11, `opus-project.com` répond 403 et `/i/…` est redirigé, et Opus n'est
+  sur aucun magasin ;
+- la page d'accueil est une **mise en ligne publique** : éditeur nommé, boîte
+  aux lettres créée, fournisseur d'e-mails déclaré, mentions du site, AVANT de
+  recueillir une seule adresse ;
+- **le devis reste la priorité.**
+
 ### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
 
 Le document : `docs/ADDENDUM-QR-DOSSIER-TRAVAUX.md` (le PDF fait foi).
