@@ -1,9 +1,15 @@
 # Le parrainage dans Opus — PLAN (version 3, 03/11/2026)
 
 > **Version 3, du 03/11/2026. RIEN N'EST CONSTRUIT** : aucune ligne de code,
-> aucune table, aucune écriture dans Supabase. C'est une proposition, en
-> attente de votre accord — vous l'avez demandé ainsi : « Avant de coder,
-> propose-moi un plan et attends mon accord. »
+> aucune table, aucune écriture dans Supabase. Vous l'avez demandé ainsi :
+> « Avant de coder, propose-moi un plan et attends mon accord. »
+>
+> **Vos réponses aux quatre questions, le 03/11/2026** (les quatre
+> recommandations) : construire **après le lot 5 du devis** ; la page
+> d'accueil **dans le dépôt d'Opus** ; une entreprise retirée ou transférée
+> par l'administration **cesse de compter** ; un filleul qui supprime son
+> compte **sort du décompte sans laisser de trace**. Rien ne se construit
+> avant la fin du devis ; les questions Q5 à Q19 attendent leur moment (§7).
 >
 > **Ce qui a changé depuis la version 2.** Elle a été relue par quatre
 > relecteurs (la base, le droit, le téléphone et le site, la cohérence) :
@@ -95,6 +101,10 @@ la **confirmation par e-mail** des comptes, activée.
   donnée personnelle sans usage. Le prix : le jour des récompenses, une
   entreprise partie puis revenue avec un autre code ne sera pas reconnue
   pour les parrainages d'avant.
+
+**Vos réponses, le 03/11/2026 : les quatre recommandations.** Q1 — après le
+lot 5 du devis ; Q2 — dans le dépôt d'Opus ; Q3 — il cesse de compter ; Q4 —
+oui, sans laisser de trace.
 
 Q3 et Q4 décident de la forme de la base : elles doivent être tranchées
 avant d'en écrire le cahier.
