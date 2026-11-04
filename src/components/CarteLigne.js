@@ -105,6 +105,10 @@ const CarteLigne = forwardRef(function CarteLigne({
   ligne, franchise = false, tauxProposes = null, regimeEnEchec = false,
   piece = null, sousTotalPiece = null, sousTotalPropre = null,
   memoire = null, memoireEchec = false, onRelireMemoire = null, erreur = null, tauxHoraire = null, retrait = null,
+  /* POURQUOI LA LIGNE N'EST PAS ENREGISTRÉE (reprise « écran » du lot 2a,
+     point 1) — la phrase de sa rangée, ou `null`. La carte prend l'écran :
+     sans elle, on corrigeait une ligne refusée sans savoir ce qui l'était. */
+  echec = null,
   peutMonter = false, peutDescendre = false,
   /* La base de postes (lot P) : le tableau lu par `OpusApp` (le MÊME objet
      d'un rendu à l'autre : ses clés restent en cache, `postesPrepares`),
@@ -291,6 +295,15 @@ const CarteLigne = forwardRef(function CarteLigne({
         keyboardDismissMode="on-drag"
         contentContainerStyle={s.contenu}
       >
+        {/* L'ÉCHEC, EN TÊTE — et rien qui promette un renvoi : refermer la
+            carte sans rien changer ne renvoie pas une ligne refusée
+            (`renvoyerLaLigne`, devis.js). */}
+        {!!echec && (
+          <Text style={s.echec} accessibilityLiveRegion="polite">
+            <Text style={s.echecMot}>Non enregistrée. </Text>
+            {echec}
+          </Text>
+        )}
         <Text style={s.type}>{TITRES[ligne.type]}</Text>
         <Text style={s.etiquette}>
           {ligne.type === 'reserve' ? 'La réserve' : estPiece || ligne.type === 'zone' ? 'Le titre' : 'Désignation'}
@@ -597,6 +610,10 @@ const s = StyleSheet.create({
      demandé, se lisait comme un avertissement de doublon (ECRAN9). */
   bloc: { gap: S.xs, marginTop: S.sm },
   erreur: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit), marginTop: S.xs },
+  /* L'échec de la ligne, sur la carte blanche : le rouge brique y fait
+     5,56 : 1. */
+  echec: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit), marginBottom: S.sm },
+  echecMot: { fontFamily: F.inter6 },
   retrait: { marginTop: S.xl, gap: S.sm, borderTopWidth: 1, borderTopColor: C.line, paddingTop: S.md },
   action: {
     minHeight: TOUCHE, justifyContent: 'center', paddingHorizontal: S.md,

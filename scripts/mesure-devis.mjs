@@ -281,7 +281,12 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
      (`__opusPausePostes`, en millisecondes ; `null` = la vraie). */
   window.__opusRequetesPostes = 0;
   window.__opusPausePostes = null;
+  /* LES ÉCRITURES DE LA DÉMONSTRATION, COMPTÉES (reprise « écran » du lot 2a) :
+     chacune passe par cette minuterie, appelée depuis l'écrivain. Une ligne
+     refusée qu'on renvoie à l'identique se COMPTE ici. */
+  window.__opusEcritures = 0;
   window.setTimeout = (f, ms, ...reste) => {
+    if (ms === pause && /\becrire\b/.test(String(new Error().stack))) window.__opusEcritures += 1;
     if (window.__opusSuspendreEcritures && ms === pause && /\becrire\b/.test(String(new Error().stack))) {
       return origine(f, 60000, ...reste);
     }
@@ -3089,6 +3094,149 @@ await section('Un devis neuf : « + Poste » sans défiler, et la sixième porte
   await toucher(bouton('L’abandonner'));
   await jusqua(async () => !(await dansLaSaisie()), 6000);
   verifier('« L’abandonner » : on revient à « Mes devis »', !(await dansLaSaisie()));
+});
+
+await section('Le plafond : une ligne et une option refusées, la réduction retirée, puis la ligne baissée (lot 2a, reprise « écran »)', async () => {
+  /* CE QUE LA REPRISE « ÉCRAN » DU LOT 2A A CORRIGÉ, mesuré au doigt :
+       1. une ligne refusée par le plafond ne propose plus « Réessayer » (qui
+          échouait à l'identique) : « La corriger », qui ouvre sa carte, et la
+          carte dit pourquoi ; la refermer sans rien changer n'écrit RIEN ;
+          une OPTION refusée le dit aussi (sa rangée ne disait rien) ; et une
+          ligne refusée puis retirée ne compte plus au pied ;
+       2. la réduction retirée, refusée par le plafond, repart TOUTE SEULE
+          quand la ligne trop chère est baissée — la base et l'écran
+          retombent d'accord, et VoiceOver l'entend ;
+       3. chaque chemin a sa phrase : la ligne (sa quantité ou son prix),
+          l'option (« options comprises »), l'en-tête (« la réduction
+          d'avant »). Les phrases sont cherchées ici EN TOUTES LETTRES, jamais
+          importées du code qu'on mesure. */
+  const ecritures = () => page.evaluate(() => window.__opusEcritures);
+  const enAttente = async () => jusqua(async () => !/enregistrement…|Enregistrement en cours/.test(await texte()), DELAI_ECRITURE + 3000);
+  const nouveauPoste = async (libelle, designation, prix, { taux = true } = {}) => {
+    await toucher(parLibelle(libelle));
+    await taper(designation);
+    await toucher(parLibelle('forfait'));
+    await viderEtTaper(parLibelle('Quantité'), '1');
+    await viderEtTaper(parLibelle('Prix unitaire HT'), prix);
+    if (taux) await toucher(parLibelle('TVA à 20 %'));
+    await fermerCarte();
+    await enAttente();
+    await attendre(PAUSE_DEMO + 400);
+  };
+  const lireDevis = () => page.evaluate(async () => {
+    const api = window.__opusModule('src/lib/api.js');
+    const l = await api.mesDevis();
+    const d = (l.devis || []).find((x) => x.objet === 'Plafond (mesure)');
+    if (!d) return null;
+    const r = await api.unDevis(d.id);
+    return { remise: r.devis.remiseCentiemes, lignes: r.lignes.map((x) => ({ d: x.designation, prix: x.prixUnitaireCentimes })) };
+  });
+  await toucher(bouton('Nouveau devis'));
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(600);
+  await viderEtTaper(parLibelle('Objet du devis'), 'Plafond (mesure)');
+  /* 50 % d'abord : 90 000 000,00 € HT font alors 54 000 000,00 € TTC. */
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '50');
+  await toucher(parLibelle('Valable 30 jours'));
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+  await enAttente();
+  await nouveauPoste('Ajouter un premier poste chiffré', 'Gros œuvre', '90000000');
+  exiger(JSON.stringify(await lireDevis()) === JSON.stringify({ remise: 5000, lignes: [{ d: 'Gros œuvre', prix: 9000000000 }] }),
+    'le brouillon « Plafond (mesure) » porte 50 % et le gros œuvre à 90 000 000,00 €');
+
+  /* 1. LA LIGNE DE TROP. */
+  await nouveauPoste('Ajouter un poste chiffré', 'Zéro de trop', '99999999,99', { taux: false });
+  const corriger = await jusqua(async () => (await page.getByLabel('Ligne non enregistrée. La corriger', { exact: true }).count()) === 1, DELAI_ECRITURE + 3000);
+  const t1 = await texte();
+  verifier('la ligne qui fait passer le devis au-delà de la borne : « Non enregistrée — La corriger », et AUCUN « Réessayer »',
+    !!corriger && (await page.getByLabel('Ligne non enregistrée. Réessayer', { exact: true }).count()) === 0 && !/Non enregistrée — Réessayer/.test(t1));
+  verifier('…sa phrase dit le chemin d’une LIGNE : sa quantité ou son prix, et qu’Opus la renverra si c’est une autre ligne',
+    /Avec cette ligne, le devis dépasserait 99 999 999,99 €, la plus grande somme qu’un devis peut porter : il y a sans doute un zéro de trop dans sa quantité ou son prix\. Si le zéro de trop est dans une autre ligne, corrigez celle-là : Opus renverra alors celle-ci tout seul\./.test(t1),
+    (t1.match(/Avec cette ligne[^\n]*/) || ['(aucune)'])[0]);
+  const bc = await parLibelle('Ligne non enregistrée. La corriger').boundingBox();
+  verifier(`…« La corriger » est un vrai bouton de 44 points (${bc && Math.round(bc.width)} × ${bc && Math.round(bc.height)})`,
+    !!bc && bc.height >= TOUCHE - 0.5 && bc.width >= TOUCHE - 0.5);
+  await capture('32-plafond-ligne');
+  await toucher(parLibelle('Ligne non enregistrée. La corriger'));
+  const texteCarte = net(await page.evaluate((retour) => {
+    let c = document.querySelector(`[aria-label="${retour}"]`);
+    while (c && c.parentElement && getComputedStyle(c).position !== 'absolute') c = c.parentElement;
+    return c ? c.innerText : '';
+  }, RETOUR_CARTE));
+  verifier('« La corriger » ouvre la CARTE de cette ligne, qui dit en tête « Non enregistrée. » et pourquoi — sans « Réessayer »',
+    (await carteOuverte()) && /Non enregistrée\. Avec cette ligne, le devis dépasserait 99 999 999,99 €/.test(texteCarte)
+    && !/Réessayer/.test(texteCarte), texteCarte.slice(0, 160));
+  await capture('32a-plafond-carte');
+  const e0 = await ecritures();
+  await fermerCarte();
+  await attendre(PAUSE_DEMO + 600);
+  verifier(`…la refermer SANS RIEN CHANGER n’écrit rien (${(await ecritures()) - e0} écriture) — avant, la ligne repartait telle quelle, refusée pareil`,
+    (await ecritures()) === e0);
+  /* La garde, carte OUVERTE sur la ligne refusée : elle ferme la carte, et
+     ne doit pas renvoyer la ligne non plus. */
+  await toucher(parLibelle('Ligne non enregistrée. La corriger'));
+  const e1 = await ecritures();
+  await toucher(page.getByRole('tab', { name: 'Accueil' }));
+  const garde = await jusqua(async () => /n’a pas pu être enregistrée/.test(await texte()), DELAI_ECRITURE + 3000);
+  verifier(`la barre du bas, carte ouverte sur la ligne refusée : la garde le dit, l’écran ne part pas, et RIEN n’est renvoyé (${(await ecritures()) - e1})`,
+    !!garde && (await dansLaSaisie()) && (await ecritures()) === e1);
+  await toucher(bouton('Rester'));
+
+  /* L'OPTION DE TROP : sa rangée dit son état, avec la phrase d'une option. */
+  await nouveauPoste('Ajouter une option', 'Option trop chère', '99990000');
+  await jusqua(async () => (await page.getByLabel('Ligne non enregistrée. La corriger', { exact: true }).count()) === 2, DELAI_ECRITURE + 3000);
+  const rangeeOption = net(await page.evaluate(() => {
+    const b = document.querySelector('[aria-label^="Option : Option trop chère"]');
+    return b ? b.parentElement.innerText : '';
+  }));
+  verifier('une OPTION refusée le dit SUR SA RANGÉE (avant : rien), avec la phrase d’une option — « options comprises »',
+    /Non enregistrée — La corriger/.test(rangeeOption)
+    && /Avec cette option, le devis, options comprises, dépasserait 99 999 999,99 €/.test(rangeeOption), rangeeOption.slice(0, 200));
+  await jugerCibles('Les rangées refusées', (c) => /^Ligne non enregistrée\. La corriger$/.test(c.libelle));
+  await capture('32b-plafond-option');
+  /* Les retirer : le pied ne les compte plus (avant : « 2 lignes non
+     enregistrées », pour un devis tout en base). */
+  for (const debut of ['Option : Option trop chère', 'Zéro de trop']) {
+    await toucher(page.locator(`[aria-label^="${debut}"]`).first());
+    await toucher(parLibelle('Retirer cette ligne'));
+    await toucher(parLibelle('Confirmer : retirer cette ligne'));
+    await attendre(500);
+  }
+  const p1 = await pied();
+  verifier(`retirées, l’option et la ligne refusées ne comptent plus au pied (« ${p1.texte} »)`, !/non enregistrée/.test(p1.texte) && p1.centimes === 5400000000);
+
+  /* 2 et 3. LA RÉDUCTION RETIRÉE, REFUSÉE ; PUIS LA LIGNE BAISSÉE. */
+  await oublierAnnonces();
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '');
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+  const bande = await jusqua(async () => ((await texte()).match(/La réduction n’a pas pu être changée\.[^\n]*/) || [])[0], DELAI_ECRITURE + 3000);
+  verifier('retirer la réduction qui tenait le devis sous la borne : la bande dit le chemin de l’EN-TÊTE — « la réduction d’avant » —, '
+    + 'jamais « un zéro de trop dans une ligne », et aucun « Réessayer »',
+  /^La réduction n’a pas pu être changée\. Avec ce changement, le devis dépasserait 99 999 999,99 €, la plus grande somme qu’un devis peut porter : c’est la réduction d’avant qui le tenait en dessous\. Remettez-la, ou baissez d’abord la ligne trop chère — il y a sans doute un zéro de trop : Opus renverra alors ce changement tout seul\.$/.test(bande || '')
+    && (await bouton('Réessayer').count()) === 0, bande || '(aucune bande)');
+  await capture('33-plafond-reduction');
+  verifier('…la base garde sa réduction de 50 % (l’écran ne la montre plus : la bande le dit)', (await lireDevis()).remise === 5000);
+  const e2 = await ecritures();
+  await ouvrirRangee('Gros œuvre');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '1000');
+  await fermerCarte();
+  const partie = await jusqua(async () => !/La réduction n’a pas pu être changée/.test(await texte()) && !/enregistrement…/.test(await texte()), 2 * DELAI_ECRITURE);
+  await attendre(PAUSE_DEMO + 800);
+  const apres = await lireDevis();
+  verifier(`la ligne baissée à 1 000,00 € : la réduction retirée repart TOUTE SEULE, la bande s’en va, et la base est d’accord avec l’écran `
+    + `(réduction ${apres.remise === null ? 'retirée' : apres.remise} ; ${(await ecritures()) - e2} écritures : la ligne, puis l’en-tête)`,
+  !!partie && apres.remise === null && (await ecritures()) - e2 === 2
+    && !/Réduction/.test(net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label'))));
+  const p2 = await pied();
+  verifier(`…le pied : « ${p2.texte} » (1 200,00 € TTC, sans réduction)`, p2.centimes === 120000 && !/réduction comprise|non enregistrée/.test(p2.texte));
+  verifier('…et VoiceOver l’entend : « La réduction est maintenant enregistrée. »', (await annonces()).includes('La réduction est maintenant enregistrée.'),
+    JSON.stringify(await annonces()));
+  await capture('33a-plafond-apres');
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  verifier('tout est en base : le retour quitte la saisie sans garde', !(await dansLaSaisie()));
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {

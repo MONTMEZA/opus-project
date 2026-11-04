@@ -103,6 +103,7 @@
  */
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -2385,6 +2386,178 @@ console.log('\n  12 bis. aucune table du devis ne change de FORME après sa cré
   tousLesNoms.length === 32 && malComptees.length === 0 && desordre.length === 0, [...malComptees, ...desordre].join(' | '));
 }
 
+/* LA FIN D'UN ORDRE SQL, en sautant ses chaînes (`'…'`, `E'…'` et ses
+   `\'`) et ses corps entre dollars (`$$…$$`, `$q$…$q$`) : un point-virgule
+   DANS une chaîne n'arrête rien. Partagé par la section 12 ter (le SQL
+   fabriqué) et la 26 ter (les ordres des essais). */
+function finDOrdreSql(t, depart) {
+  let i = depart;
+  while (i < t.length) {
+    const c = t[i];
+    if (c === "'") {
+      const echappe = /[eE]/.test(t[i - 1] || '') && !/[\w$]/.test(t[i - 2] || '');
+      let j = i + 1;
+      while (j < t.length) {
+        if (echappe && t[j] === '\\') { j += 2; continue; }
+        if (t[j] === "'" && t[j + 1] === "'") { j += 2; continue; }
+        if (t[j] === "'") break;
+        j += 1;
+      }
+      i = j + 1;
+      continue;
+    }
+    if (c === '$' && !/[\w$]/.test(t[i - 1] || '')) {
+      const m = /^\$([A-Za-z_]\w*)?\$/.exec(t.slice(i, i + 64));
+      if (m) {
+        const f = t.indexOf(m[0], i + m[0].length);
+        i = f < 0 ? t.length : f + m[0].length;
+        continue;
+      }
+    }
+    if (c === ';') return i;
+    i += 1;
+  }
+  return t.length;
+}
+
+/* LA FORME CANONIQUE D'UN ORDRE : hors des chaînes, les blancs réduits à un
+   seul, et aucun blanc autour de `(`, `)`, `,` et `;` ; dans une chaîne, les
+   blancs réduits à un seul, mais jamais retirés (un ordre passé à `execute`
+   s'écrit sur plusieurs lignes ; « 1, 2 » et « 1,2 » ne sont pas le même
+   attendu). Une
+   comparaison de texte qui accuserait un ordre JUSTE parce qu'il est écrit
+   sur trois lignes exigerait une syntaxe, pas une propriété. */
+function formeCanonique(t) {
+  let s = '';
+  let i = 0;
+  while (i < t.length) {
+    const c = t[i];
+    if (c === "'") {
+      const f = (() => {
+        const echappe = /[eE]/.test(t[i - 1] || '') && !/[\w$]/.test(t[i - 2] || '');
+        let j = i + 1;
+        while (j < t.length) {
+          if (echappe && t[j] === '\\') { j += 2; continue; }
+          if (t[j] === "'" && t[j + 1] === "'") { j += 2; continue; }
+          if (t[j] === "'") break;
+          j += 1;
+        }
+        return j;
+      })();
+      s += t.slice(i, f + 1).replace(/\s+/g, ' ');
+      i = f + 1;
+      continue;
+    }
+    if (/\s/.test(c)) {
+      while (i < t.length && /\s/.test(t[i])) i += 1;
+      if (s && !/[(),;\s]$/.test(s) && i < t.length && !/[(),;]/.test(t[i])) s += ' ';
+      continue;
+    }
+    s += c;
+    i += 1;
+  }
+  return s.trim();
+}
+
+console.log('\n  12 ter. le SQL FABRIQUÉ à l’exécution, le catalogue système, et qui ÉCRIT les tables du devis — dans TOUT le fichier');
+{
+  /* POURQUOI (banc adverse du 04/11/2026, sabotages N01 à N17 : dix défauts
+     VERTS aux 56 contrôles) : 12 bis, 18 bis, 21 ter et 22 lisent des
+     ordres ÉCRITS. Un ordre FABRIQUÉ — `execute format('alter table
+     public.%I …', 'devis')`, `execute 'alter table public.' || 'devis …'`,
+     `format(E'grant …')`, `format($q$grant …$q$)`, une fonction redéfinie ou
+     un déclencheur posé par `execute`, un `update public.%I` dans une
+     fonction `definer` — ne se lit qu'à l'exécution : aucun lecteur de texte
+     ne peut savoir ce qu'il fera. On n'en accepte donc QUE des relus, en
+     liste FERMÉE avec leur nombre : un ordre fabriqué nouveau ou changé se
+     DÉCIDE (le schéma, l'essai qui le joue, et cette liste, dans le même
+     lot). Et trois propriétés de plus, qu'aucun lecteur ne tenait : le
+     catalogue système ne s'écrit pas (`update pg_catalog.pg_attribute set
+     attnotnull = false` rendait l'acompte effectif NULLABLE sans un mot) ;
+     aucune méta-commande de psql (`\gexec` exécute ce qu'un `select`
+     fabrique) ; et les tables du devis ne s'ÉCRIVENT qu'à deux endroits,
+     tous deux comparés ENTIERS en 18 bis — `recalcule_devis` et le
+     rattrapage de 49.6 ter. Un second `update public.devis set generation =
+     generation + 1`, sans borne, faisait monter chaque horloge à chaque
+     rejeu, jusqu'à OP016. */
+  const EXECUTES_RELUS_ECRITS = [
+    ["execute format('revoke execute on function %s from public', f);", 7],
+    ["execute format('revoke execute on function %s from anon, authenticated', f);", 3],
+    ["execute format('grant execute on function %s to authenticated', f);", 5],
+    ["execute format('revoke execute on function %s from anon', f);", 4],
+    ["execute 'revoke execute on function public.maj_comments_count() from public';", 1],
+    ["execute 'revoke execute on function public.maj_comments_count() from anon, authenticated';", 1],
+    ["execute 'revoke execute on function public.est_admin() from public';", 1],
+    ["execute 'revoke execute on function public.est_admin() from anon';", 1],
+    ["execute 'drop policy if exists \"lecture des administrateurs\" on public.administrateurs';", 1],
+    ["execute 'drop policy if exists \"lecture du journal\" on public.journal_admin';", 1],
+    ["execute 'drop policy if exists \"lecture des documents par l administration\" on storage.objects';", 1],
+    ["execute 'grant execute on function public.compter_appel_siret(text, timestamptz, int) to service_role';", 1],
+    ["execute 'insert into public.sirens_reserves (siren, reserve_le) select siren, max(coalesce(retiree_le, clock_timestamp())) from public.entreprise_registre where gele group by siren on conflict (siren) do nothing';", 1],
+    ["execute format('comment on column public.sos_availability.%i is %l', c, 'morte depuis la section 47 (lot t) : ni lue ni écrite par l’application. les tarifs vivent dans ' || 'tarifs_pro. toujours 0 ; toute autre valeur est refusée (op012, refuse_les_colonnes_mortes_du_sos).');", 1],
+    ["execute 'grant execute on function public.compter_essai_tva(text, timestamptz, int, timestamptz, int) to service_role';", 1],
+    ["execute format('revoke truncate, references, trigger on %s from anon, authenticated', t.nom);", 1],
+    ["execute format('revoke maintain on %s from anon, authenticated', t.nom);", 1],
+    ["execute 'alter default privileges for role postgres in schema public ' || 'revoke truncate, references, trigger on tables from anon, authenticated';", 1],
+    ["execute 'alter default privileges for role postgres in schema public ' || 'revoke maintain on tables from anon, authenticated';", 1],
+    ["execute format('revoke all on function %s from public, anon, authenticated', f.signature);", 1],
+  ];
+  const EXECUTES_RELUS = new Map(EXECUTES_RELUS_ECRITS.map(([f, n]) => [formeCanonique(f).toLowerCase(), n]));
+  /* Un `execute` qui n'est NI `execute function|procedure` (un
+     déclencheur), NI le privilège `execute on` d'un `grant`/`revoke`, est
+     un ordre fabriqué — dans un corps plpgsql, un bloc `do`, ou une chaîne. */
+  const fabriques = [...SQL.matchAll(/(?<![\w$])execute\b(?!\s+(?:function|procedure|on)\b)/gi)]
+    .map((m) => formeCanonique(SQL.slice(m.index, finDOrdreSql(SQL, m.index) + 1)).toLowerCase());
+  const lusParForme = new Map();
+  for (const f of fabriques) lusParForme.set(f, (lusParForme.get(f) || 0) + 1);
+  const horsListe = [...lusParForme].filter(([f, n]) => n > (EXECUTES_RELUS.get(f) || 0)).map(([f, n]) => `${f.slice(0, 150)} ×${n}`);
+  const manquants = [...EXECUTES_RELUS].filter(([f, n]) => (lusParForme.get(f) || 0) !== n).map(([f, n]) => `${f.slice(0, 90)} ×${lusParForme.get(f) || 0}/${n}`);
+  verifier(`chaque ordre FABRIQUÉ à l’exécution (\`execute <chaîne>\`, ${fabriques.length} lus dans tout le fichier) est l’un des `
+    + `${[...EXECUTES_RELUS.values()].reduce((a, b) => a + b, 0)} relus, en liste FERMÉE avec leur nombre — un \`alter table\`, une `
+    + 'fonction, un déclencheur ou un droit FABRIQUÉS ne se lisent nulle part ailleurs',
+  horsListe.length === 0 && manquants.length === 0,
+  `hors liste : ${horsListe.join(' | ') || '—'} ; changés ou disparus : ${manquants.join(' | ') || '—'}`);
+
+  /* Aucune méta-commande de psql : hors des chaînes, pas une seule barre
+     oblique inverse (`\gexec`, `\i`, `\if`, `\q`… ; et l'éditeur SQL de
+     Supabase ne les comprendrait pas). */
+  const horsChaines = SQL.replace(/[eE]'(?:[^'\\]|\\.|'')*'|'(?:[^']|'')*'/g, "''");
+  const meta = [...horsChaines.matchAll(/\\[A-Za-z!?]*/g)].map((m) => horsChaines.slice(Math.max(0, m.index - 40), m.index + 20));
+  verifier('aucune méta-commande de psql dans `schema.sql` (`\\gexec` exécute ce qu’un `select` fabrique) : hors des chaînes, aucune '
+    + 'barre oblique inverse', meta.length === 0, meta.map(sansEspaces).join(' | '));
+
+  /* Le catalogue système ne s'écrit pas — ni en clair, ni dans une chaîne. */
+  const catalogue = [...SQL.matchAll(/\b(?:update|insert\s+into|delete\s+from|truncate(?:\s+table)?|merge\s+into|alter\s+table)\s+(?:only\s+)?(?:(?:pg_catalog|information_schema)\s*\.\s*)?(?:pg_[a-z_]+|information_schema\.\w+)\b/gi)]
+    .map((m) => sansEspaces(SQL.slice(m.index, m.index + 120)));
+  verifier('aucun ordre n’ÉCRIT le catalogue système (`update pg_catalog.pg_attribute …` change une table sans `alter table`)',
+    catalogue.length === 0, catalogue.join(' | '));
+
+  /* Les tables du devis ne s'écrivent que dans `recalcule_devis` (trois
+     ordres) et le rattrapage de 49.6 ter (un), tous deux comparés ENTIERS
+     en 18 bis. Un `truncate` qui les nomme, où qu'elles soient dans sa
+     liste, compte aussi. */
+  const iRecalcule = SQL.search(/create\s+(?:or\s+replace\s+)?function\s+(?:public\s*\.\s*)?recalcule_devis\s*\(/i);
+  const finRecalcule = iRecalcule >= 0 ? finDOrdreSql(SQL, iRecalcule) : -1;
+  const iGarde = SQL.search(/\bdo\s+\$garde_rattrapage_49\$/i);
+  const iContrainte = iGarde >= 0 ? SQL.slice(iGarde).search(/\badd\s+constraint\s+devis_calculs_check\b/i) : -1;
+  const finRattrapage = iContrainte >= 0 ? SQL.indexOf(';', iGarde + iContrainte) : -1;
+  const ecritures = [
+    ...[...SQL.matchAll(/\b(?:update|insert\s+into|delete\s+from|merge\s+into|copy)\s+(?:only\s+)?(?:public\s*\.\s*)?(?:devis_lignes|devis_tva|devis)\b(?!\s*\.)/gi)]
+      .map((m) => ({ i: m.index, t: m[0] })),
+    ...[...SQL.matchAll(/\btruncate\b[^;]*/gi)].filter((m) => /\b(?:devis_lignes|devis_tva|devis)\b(?!\s*\.)/i.test(m[0]))
+      .map((m) => ({ i: m.index, t: m[0] })),
+  ];
+  const dans = (e, a, b) => a >= 0 && b > a && e.i > a && e.i < b;
+  const ailleurs = ecritures.filter((e) => !dans(e, iRecalcule, finRecalcule) && !dans(e, iGarde, finRattrapage))
+    .map((e) => sansEspaces(SQL.slice(e.i, e.i + 120)));
+  const nRecalcule = ecritures.filter((e) => dans(e, iRecalcule, finRecalcule)).length;
+  const nRattrapage = ecritures.filter((e) => dans(e, iGarde, finRattrapage)).length;
+  verifier('les tables du devis ne s’ÉCRIVENT (`update`, `insert`, `delete`, `merge`, `copy`, `truncate`) que dans `recalcule_devis` '
+    + '(trois ordres) et dans le rattrapage de 49.6 ter (un) — tous deux comparés ENTIERS en 18 bis ; nulle part ailleurs dans le fichier',
+  ailleurs.length === 0 && nRecalcule === 3 && nRattrapage === 1,
+  `ailleurs : ${ailleurs.join(' | ') || '—'} ; recalcule_devis ${nRecalcule}/3, rattrapage ${nRattrapage}/1`);
+}
+
 console.log('\n  13. les colonnes interdites, et aucun `numeric`');
 {
   const INTERDITES = ['compte_id', 'particulier_id', 'demande_id', 'visite_id', 'dossier_id', 'nature', 'date_redaction',
@@ -3139,9 +3312,14 @@ console.log('\n  21 ter. dans TOUT le fichier : les déclencheurs des trois tabl
   const DECLENCHEURS = ['trg_recalcule_apres_reduction', 'trg_recalcule_devis', 'trg_tient_la_ligne_de_devis', 'trg_tient_le_devis',
     'trg_tient_le_lien_du_devis'];
   const surDevis = new RegExp(String.raw`\bon\s+${TABLE_DEVIS}`, 'i');
-  const decl = [...SQL.matchAll(/\bcreate\s+(?:or\s+replace\s+)?(?:constraint\s+)?trigger\s+([\w$]+)\s+([\s\S]*?)\bexecute\s+(?:function|procedure)\b/gi)]
+  /* LE NOM, ENTRE GUILLEMETS AUSSI (banc adverse du 04/11, N11) : `create
+     trigger "Zz_Nature" …` — un nom avec une majuscule n'est pas déplié —
+     échappait au lecteur, qui n'attendait que `[\w$]+` : un déclencheur
+     « nature = acompte par défaut » passait au vert. */
+  const NOM_SQL = String.raw`(?:[\w$]+|"(?:[^"]|"")+")`;
+  const decl = [...SQL.matchAll(new RegExp(String.raw`\bcreate\s+(?:or\s+replace\s+)?(?:constraint\s+)?trigger\s+(${NOM_SQL})\s+([\s\S]*?)\bexecute\s+(?:function|procedure)\b`, 'gi'))]
     .filter((m) => surDevis.test(m[2])).map((m) => m[1].toLowerCase()).sort();
-  const retires = [...SQL.matchAll(new RegExp(String.raw`\b(?:drop|alter)\s+trigger\s+(?:if\s+exists\s+)?[\w$]+\s+on\s+${TABLE_DEVIS}[^;']*`, 'gi'))]
+  const retires = [...SQL.matchAll(new RegExp(String.raw`\b(?:drop|alter)\s+trigger\s+(?:if\s+exists\s+)?${NOM_SQL}\s+on\s+${TABLE_DEVIS}[^;']*`, 'gi'))]
     .map((m) => sansEspaces(m[0]));
   verifier('dans TOUT le fichier, les déclencheurs posés sur `devis`, `devis_lignes` et `devis_tva` sont EXACTEMENT les cinq de la '
     + 'section 49, chacun une fois — et aucun `drop trigger` ni `alter trigger` ne les touche',
@@ -3544,6 +3722,179 @@ console.log('\n  26 bis. l’essai des conditions et l’essai du rattrapage (lo
   brutR.length > 3000 && irs >= 4 && ['1', '2', '3'].every((n) => new RegExp(String.raw`\\echo\s+'===\s+${n}\.\s`).test(ratt))
     && /_attendu_t\b/.test(ratt) && /\\set\s+ON_ERROR_ROLLBACK\s+on/i.test(ratt) && copies === 0,
   `${irs} \\ir ; ${copies} copie(s) de l’update`);
+}
+
+console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu — ni coupés, ni aveuglés, ni recopiés');
+{
+  /* POURQUOI (banc adverse du 04/11/2026 : sept défauts verts, tous dans
+     les ESSAIS, que `npm run verifier` ne joue pas — A-FAIRE §2.3) : le
+     retrait du cas 13 bis (B6a — l'ERROR attendu disparaissait, et rien ne
+     le comptait) ; un `relire()` qui ne juge plus rien (B6c — « t » quoi
+     qu'il arrive) ; un `\q` ou un `\if false` qui coupent les parties 2 et
+     3 du rattrapage (N19, N20) ; un cas 23 filtré par `where false`, ou qui
+     n'affiche plus que les colonnes justes (N21, N22) ; et l'ordre du
+     rattrapage RECOPIÉ sous une autre forme dans l'essai (N23), qui le
+     rendait aveugle au retrait du rattrapage. Ce que fait un essai ne se
+     SAIT qu'en le jouant ; ce contrôle tient trois propriétés de son TEXTE :
+     (1) aucune méta-commande ne le coupe, ne le saute ni ne le conditionne ;
+     (2) ses trois JUGES (`relire`, `lire`, le cas 23) ont la forme relue ;
+     (3) il joue EXACTEMENT les ordres relus, dans cet ordre — une EMPREINTE
+     par ordre (commentaires et `\echo` retirés, blancs réduits).
+     CHANGER UN ESSAI SE DÉCIDE : le rejouer sur une base neuve (le schéma
+     deux fois), lire chaque `…_attendu_t` et chaque ERROR annoncé, puis
+     `node scripts/verifier-devis.mjs --empreinte-essais` donne l'empreinte
+     nouvelle à recopier ici. */
+  const ordresDeLEssai = (brut) => {
+    const res = [];
+    let sql = '';
+    const vider = () => {
+      let i = 0;
+      while (i < sql.length) {
+        while (i < sql.length && /\s/.test(sql[i])) i += 1;
+        if (i >= sql.length) break;
+        const f = finDOrdreSql(sql, i);
+        const o = formeCanonique(sql.slice(i, f + 1));
+        if (o) res.push(o);
+        i = f + 1;
+      }
+      sql = '';
+    };
+    for (const l of sansCommentairesSql(brut).split('\n')) {
+      if (/^\s*\\/.test(l)) {
+        if (/^\s*\\echo\b/.test(l)) continue;
+        vider();
+        res.push(formeCanonique(l));
+      } else sql += `${l}\n`;
+    }
+    vider();
+    return res;
+  };
+  const empreinteDe = (o) => createHash('sha256').update(o).digest('hex').slice(0, 8);
+  const ecartDeTextes = (vu, attendu) => {
+    let i = 0;
+    while (i < vu.length && i < attendu.length && vu[i] === attendu[i]) i += 1;
+    return `diffère au caractère ${i} : « …${vu.slice(Math.max(0, i - 30), i + 60)}… », attendu « …${attendu.slice(Math.max(0, i - 30), i + 60)}… »`;
+  };
+  const EMPREINTES = {
+    'supabase/essais-section-49-conditions.sql': `
+      ea204fd0 a42b5839 e6d39479 11f916d2 9ae9ffe7 539ea4c9 fe7a39a2 bf46f024 58364e28 9e84eb77 819a22c5 9535a418
+      085b0ee8 3877bf7f 5cd053aa 03edac1b edd65695 8808baf6 364647c8 350fa2c4 16ef89c9 388cebd2 edd65695 19ccc5ce
+      95c8eec7 8e18d6e4 78f8158f 4013b479 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c7ba749f 64b38cfb
+      1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 2152cc4b 3e6917f1 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      62ffae9a 78f8158f 3e6917f1 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c3958304 44ee60e2 1a2a6843
+      edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 1bf8ad18 44ee60e2 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4
+      78f8158f 2152cc4b 04cb23cd f92f35fd 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 2152cc4b ff0cc6c8
+      4904ad7b 1a2a6843 edd65695 19ccc5ce 95c8eec7 9d578183 8f37b74c 25e9e855 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 78f8158f dda01f11 594af12f 58ec85c8 5ac61542 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f
+      771672ba a59af5b2 cf61d1df c22bc682 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f bea7c175 87b60896
+      d307c3fa 04cb23cd 6348b615 ae1e7562 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 64e256eb a8ba364e c7a5b5dd
+      ef26e1d2 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 7ceb33f3 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4
+      c2387a8f 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 cef63aef 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4
+      165de478 1a2a6843 edd65695 19ccc5ce 95c8eec7 9d578183 6a100fb5 671dfbfd 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 3901736e 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 b18b7d04 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 880b6d3d 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 35f500c5 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 d9e37294 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 27b62650 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 4e112200 ed8cb8c7 1a2a6843 edd65695 19ccc5ce 95c8eec7 9318d6e1 eaf42292 1a2a6843 edd65695 19ccc5ce
+      95c8eec7 9d578183 026d464a 1a2a6843 edd65695 19ccc5ce 95c8eec7 1e403c83 a3a588e2 27896266 f93f5494 f5a298e2
+      8987c181 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 1a3877fe 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 78f8158f d526dec5 e0cac331 1a2a6843 edd65695 19ccc5ce 95c8eec7 12f96fe4 b9e233f9 00c45eb1 c7cd65de
+      c8a15988 73b093f4 bef0bbaf 1a2a6843 edd65695 19ccc5ce 95c8eec7 cb023507 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 4349f47a 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 197321de 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 ef52d54f 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 53d55c1e 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 45d1cebf 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 06c1e1c4 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 77b8828c 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 b9e79b8f 1a2a6843 edd65695 19ccc5ce 95c8eec7
+      8e18d6e4 78f8158f 67bfd527 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 12f16112 1a2a6843 edd65695
+      19ccc5ce 95c8eec7 8e18d6e4 78f8158f a0217a90 1a2a6843 cdc577fe 88eb1bd7 248556d1 4b439408 4d880d4c 13912acb
+      1441f239 3771726b edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c43faebb a59edfec a54b0e4f bd2af069 95c8eec7
+      0b57b066 1a2a6843 3019c1ab 710f3690`,
+    'supabase/essais-section-49-rattrapage.sql': `
+      ea204fd0 a42b5839 487feef8 e6d39479 11f916d2 40b5e395 910964bd bbe8eece 9a0b1f3e e85833ec 4910e716 06c1e0f2
+      c4f022d1 adac5bc7 2ac8c3b8 5cd053aa c9dc7baa edd65695 2480b900 364647c8 94f16cc3 edd65695 b61a7250 8e64dc2e
+      e4628805 263ed406 176aa82e 982dcf16 eb02f8cb 8f2b7c66 3ffecb82 4670ad52 30d72b2b 4cca38df a518b040 28cf07d7
+      9b78afba 40a292ba 3bbca5dc 91c07051 ed695e67 3ffecb82 4670ad52 30d72b2b 4cca38df a518b040 28cf07d7 9b78afba
+      40a292ba 3bbca5dc 91c07051 ed695e67 5f22fc60 1a2a6843 edd65695 b61a7250 8e64dc2e 0d6ac72a 35e0bc00 982dcf16
+      8f2b7c66 3ffecb82 4670ad52 30d72b2b 8d2f9989 1a2a6843 edd65695 b61a7250 8e64dc2e 554b27f7 84775eca 458aa20c
+      982dcf16 8f2b7c66 3ffecb82 4670ad52 30d72b2b f37ef7df 1a2a6843 a9cfd3c6 d4da5e3f`,
+  };
+  const JUGES = {
+    'supabase/essais-section-49-conditions.sql': [
+      ['`relire()`, le juge des cas 0 à 13 bis', String.raw`prepare relire(uuid, text) as select r.*, concat_ws('|', r.ht, r.tva, r.ttc, r.reduction, r.acompte, r.options, r.ventilation) = $2 as valeurs_attendu_t from (select d.total_ht_centimes as ht, d.total_tva_centimes as tva, d.total_ttc_centimes as ttc, d.remise_ht_centimes as reduction, d.acompte_ttc_centimes as acompte, d.total_ttc_options_centimes as options, coalesce((select string_agg(concat_ws(':', t.taux_tva_centiemes, t.base_centimes, t.remise_centimes, t.tva_centimes, t.nb_lignes), ',' order by t.taux_tva_centiemes desc) from public.devis_tva t where t.devis_id = d.id), '—') as ventilation, d.generation as horloge from public.devis d where d.id = $1) r;`],
+      ['le cas 23, le juge des défauts et du « not null »', String.raw`with attendu(tab, col, defaut, nullable) as (values ('devis', 'remise_centiemes', null, 'YES'), ('devis', 'remise_centimes', null, 'YES'), ('devis', 'acompte_centiemes', null, 'YES'), ('devis', 'acompte_centimes', null, 'YES'), ('devis', 'acompte_nature', null, 'YES'), ('devis', 'validite_jours', null, 'YES'), ('devis', 'retenue_garantie_centiemes', null, 'YES'), ('devis', 'remise_ht_centimes', '0', 'NO'), ('devis', 'acompte_ttc_centimes', '0', 'NO'), ('devis', 'total_ttc_options_centimes', '0', 'NO'), ('devis_tva', 'remise_centimes', '0', 'NO') ) select a.tab || '.' || a.col as colonne, c.column_default as defaut_lu, c.is_nullable as nullable_lu, coalesce(c.column_default is not distinct from a.defaut and c.is_nullable = a.nullable, false) as forme_attendu_t from attendu a left join information_schema.columns c on c.table_schema = 'public' and c.table_name = a.tab and c.column_name = a.col order by a.tab, a.col;`],
+    ],
+    'supabase/essais-section-49-rattrapage.sql': [
+      ['`lire()`, le juge des trois parties', String.raw`prepare lire(uuid, text) as select d.objet, d.total_ht_centimes as ht, d.total_tva_centimes as tva, d.total_ttc_centimes as ttc, d.remise_ht_centimes as reduction, d.acompte_ttc_centimes as acompte, d.total_ttc_options_centimes as options, d.generation as horloge, concat_ws('|', d.total_ht_centimes, d.total_tva_centimes, d.total_ttc_centimes, d.remise_ht_centimes, d.acompte_ttc_centimes, d.total_ttc_options_centimes, d.generation) = $2 as valeurs_attendu_t from public.devis d where d.id = $1;`],
+    ],
+  };
+  const essais = Object.keys(EMPREINTES).map((f) => {
+    let brut = '';
+    try { brut = lire(f); } catch (e) { brut = ''; }
+    return { f, brut, ordres: brut ? ordresDeLEssai(brut) : [] };
+  });
+  if (process.argv[2] === '--empreinte-essais') {
+    for (const e of essais) {
+      const h = e.ordres.map(empreinteDe);
+      const lignes = [];
+      for (let i = 0; i < h.length; i += 12) lignes.push(`      ${h.slice(i, i + 12).join(' ')}`);
+      console.log(`\n    '${e.f}' (${h.length} ordres) :\n${lignes.join('\n')}`);
+    }
+  }
+
+  /* (1) LES MÉTA-COMMANDES : `\echo`, `\set`, `\pset`, `\o` (vers
+     `/dev/null`, ou rendu) et `\ir schema.sql` — rien d'autre, et rien au
+     milieu d'une ligne (`select 1 \gexec`, `… \q`). Une chaîne est vidée
+     avant de chercher. */
+  const PERMISES = new Set(['echo', 'set', 'pset', 'o', 'ir']);
+  const metaFautives = [];
+  for (const e of essais) {
+    for (const l of sansCommentairesSql(e.brut).split('\n')) {
+      const videe = l.replace(/[eE]'(?:[^'\\]|\\.|'')*'|'(?:[^']|'')*'/g, "''");
+      const cmds = [...videe.matchAll(/\\([A-Za-z!?]*)/g)];
+      cmds.forEach((m, k) => {
+        const debutDeLigne = k === 0 && /^\s*$/.test(videe.slice(0, m.index));
+        const ok = debutDeLigne && PERMISES.has(m[1])
+          && (m[1] !== 'o' || /^\s*\\o(?:\s+\/dev\/null)?\s*$/.test(l))
+          && (m[1] !== 'ir' || /^\s*\\ir\s+schema\.sql\s*$/.test(l));
+        if (!ok) metaFautives.push(`${e.f.replace('supabase/essais-section-49-', '')} : ${sansEspaces(l).slice(0, 80)}`);
+      });
+    }
+  }
+  verifier('les deux essais du lot 2a ne portent AUCUNE méta-commande qui les coupe, les saute ou les conditionne (`\\q`, `\\if`, '
+    + '`\\gexec`, `\\i` d’un autre fichier…) : seulement `\\echo`, `\\set`, `\\pset`, `\\o` vers `/dev/null` et `\\ir schema.sql`, '
+    + 'chacune en tête de sa ligne',
+  essais.every((e) => e.brut.length > 3000) && metaFautives.length === 0, metaFautives.join(' | '));
+
+  /* (2) LES JUGES, ENTIERS. */
+  const jugesFaux = [];
+  for (const e of essais) {
+    for (const [quoi, ecrit] of JUGES[e.f] || []) {
+      const attendu = formeCanonique(ecrit);
+      const debut = attendu.slice(0, 24);
+      const vus = e.ordres.filter((o) => o.startsWith(debut));
+      if (vus.length !== 1 || vus[0] !== attendu) {
+        jugesFaux.push(`${quoi} : ${vus.length} ordre(s) ${vus.length === 1 ? ecartDeTextes(vus[0], attendu) : ''}`);
+      }
+    }
+  }
+  verifier('les JUGES des deux essais ont EXACTEMENT la forme relue : `relire()` compare les sept valeurs relues à l’attendu, le cas 23 '
+    + 'lit les onze colonnes dans `information_schema.columns` sans filtre et juge chacune, `lire()` compare les sept valeurs du '
+    + 'rattrapage — un juge affaibli rend « t » quoi qu’il arrive',
+  jugesFaux.length === 0, jugesFaux.join(' | '));
+
+  /* (3) LES ORDRES, UN PAR UN, DANS L'ORDRE. */
+  const ecartsOrdres = [];
+  for (const e of essais) {
+    const attendues = EMPREINTES[e.f].trim().split(/\s+/);
+    const vues = e.ordres.map(empreinteDe);
+    let i = 0;
+    while (i < vues.length && i < attendues.length && vues[i] === attendues[i]) i += 1;
+    if (i < vues.length || i < attendues.length) {
+      ecartsOrdres.push(`${e.f.replace('supabase/', '')} : ${vues.length} ordres pour ${attendues.length} relus ; le n° ${i + 1} `
+        + `diffère — « ${(e.ordres[i] || '(plus rien)').slice(0, 140)} »`);
+    }
+  }
+  verifier('les deux essais jouent EXACTEMENT les ordres relus, dans cet ordre (une empreinte par ordre) : aucun cas retiré, aucun '
+    + 'ordre ajouté — un ordre du rattrapage recopié dans l’essai le rendrait aveugle à son retrait du schéma',
+  ecartsOrdres.length === 0, ecartsOrdres.join(' | '));
 }
 
 /* ================================================================== */
@@ -5550,9 +5901,12 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
   `refus ${refusP && refusP.code} ; non définitifs : ${pasDefinitifs.join(', ') || '—'} ; réessayables pris pour définitifs : ${reessayables.length}`);
   /* …la PHRASE de ce refus, ENTIÈRE, des deux côtés : l'en-tête nomme la
      réduction (seul chemin de l'en-tête vers ce plafond, BASE-4), la phrase
-     commune parle de « ce changement » (pas « de cette ligne »). */
-  const PHRASE_PLAFOND = 'ce devis dépasserait 99\u00a0999\u00a0999,99\u00a0€ : il y a sans doute un zéro de trop dans une ligne. '
-    + 'Ce changement n’a pas été enregistré.';
+     commune parle de « ce changement » (pas « de cette ligne »). Depuis la
+     reprise « écran » (point 3), la phrase COMMUNE ne dit plus qu'il y a « un
+     zéro de trop dans une ligne » — faux pour la réduction : c'est le repli,
+     vrai partout ; chaque chemin a la sienne (section 37). */
+  const PHRASE_PLAFOND = 'ce devis dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus grande somme qu’un devis peut '
+    + 'porter. Ce changement n’a pas été enregistré.';
   verifier('…la phrase de ce refus, ENTIÈRE : « La réduction n’a pas pu être changée. » puis celle de `devis_plafond_check` (« ce '
     + 'changement », jamais « cette ligne ») ; et l’écran (la bande, la carte) ne propose « Réessayer » que pour un refus qui n’est '
     + 'PAS définitif',
@@ -5562,6 +5916,536 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     && /\{!estUnRefusDefinitif\(attente\.devisErreur\) && \(\s*<BtnOutline label="Réessayer"/.test(ECR.saisie)
     && /reessayable: !!attente\.devisErreur && !estUnRefusDefinitif\(attente\.devisErreur\)/.test(ECR.saisie),
   `${D.phraseEchecDuDevis({ enBase: true, erreur: refusP })} | ${ERR.messageClair(refusP, '')}`);
+}
+
+console.log('\n  37. le lot 2a — la reprise « écran » : le refus définitif d’une ligne, le plafond renvoyé, une phrase par chemin, FAITS TOURNER');
+{
+  const pg = (nom, ou = 'message') => {
+    const e = { code: '23514', message: 'new row for relation "devis" violates check constraint', details: null, hint: null };
+    if (ou === 'message') e.message = `new row for relation "devis" violates check constraint "${nom}"`;
+    if (ou === 'details') e.details = `Failing row contains (…) — "${nom}"`;
+    if (ou === 'constraint') e.constraint = nom;
+    return e;
+  };
+
+  /* a. UNE PHRASE PAR CHEMIN (point 3) — écrites ICI en toutes lettres : la
+        ligne (un zéro de trop dans SA quantité ou SON prix), l'option (le
+        total options comprises), l'en-tête (c'est la réduction d'avant qui
+        tenait le devis : aucun « zéro de trop dans une ligne » n'est la cause
+        de ce geste). */
+  const ATTENDUES = {
+    ligne: 'Avec cette ligne, le devis dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus grande somme qu’un devis peut porter : il y a '
+      + 'sans doute un zéro de trop dans sa quantité ou son prix. Si le zéro de trop est dans une autre ligne, corrigez celle-là : '
+      + 'Opus renverra alors celle-ci tout seul.',
+    option: 'Avec cette option, le devis, options comprises, dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus grande somme qu’un '
+      + 'devis peut porter : il y a sans doute un zéro de trop dans sa quantité ou son prix. Si le zéro de trop est dans une '
+      + 'ligne, corrigez-la : Opus renverra alors cette option tout seul.',
+    entete: 'Avec ce changement, le devis dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus grande somme qu’un devis peut porter : '
+      + 'c’est la réduction d’avant qui le tenait en dessous. Remettez-la, ou baissez d’abord la ligne trop chère — il y a sans '
+      + 'doute un zéro de trop : Opus renverra alors ce changement tout seul.',
+  };
+  const formes = [pg('devis_plafond_check'), pg('devis_plafond_check', 'details'), pg('devis_plafond_check', 'constraint')];
+  const parChemin = ['ligne', 'option', 'entete'].filter((c) => formes.every((e) => ERR.messageDEcritureDuDevis(e, c) === ATTENDUES[c]));
+  verifier('une phrase par CHEMIN pour le plafond — la ligne, l’option, l’en-tête —, écrites en toutes lettres, sous les trois formes '
+    + 'de PostgREST (le nom dans le message, le détail, `constraint`) ; l’en-tête ne dit pas qu’« un zéro de trop dans une '
+    + 'ligne » a causé le refus — il nomme la réduction d’avant —, et l’option nomme le total « options comprises »',
+  json(Object.keys(ERR.PHRASES_DU_PLAFOND).sort()) === json(['entete', 'ligne', 'option']) && parChemin.length === 3
+    && json(ERR.PHRASES_DU_PLAFOND) === json(ATTENDUES)
+    && !/dans une ligne/.test(ATTENDUES.entete) && /réduction d’avant/.test(ATTENDUES.entete)
+    && /options comprises/.test(ATTENDUES.option) && !/options comprises/.test(ATTENDUES.ligne),
+  `chemins justes : ${parChemin.join(', ')}`);
+  /* …et TOUT LE RESTE garde sa phrase : un autre 23514, une coupure, un
+     délai, un code maison, rien du tout — et un chemin inconnu retombe sur
+     `messageClair`, jamais sur la phrase d'un autre chemin. Le repli de
+     `devis_plafond_check` ne parle d'aucune ligne. */
+  const autres = [pg('devis_remise_check'), { message: 'Network request failed' }, { code: '57014', message: 'canceling statement' },
+    { code: 'OP015', message: 'Cette écriture est plus ancienne…' }, null, { code: '40P01' }];
+  const restes = autres.flatMap((e) => ['ligne', 'option', 'entete'].filter((c) => ERR.messageDEcritureDuDevis(e, c) !== ERR.messageClair(e, '')));
+  verifier('…tout ce qui n’est pas le plafond garde la phrase de `messageClair`, sur les trois chemins ; un chemin inconnu aussi ; et la '
+    + 'phrase de REPLI du plafond ne désigne aucune ligne (« un zéro de trop dans une ligne » était faux pour la réduction)',
+  restes.length === 0 && ERR.messageDEcritureDuDevis(pg('devis_plafond_check'), 'inconnu') === ERR.messageClair(pg('devis_plafond_check'), '')
+    && !/ligne|zéro de trop/.test(ERR.MESSAGES_CONTRAINTE.devis_plafond_check), json(restes));
+
+  /* b. LES DEUX LECTURES DU MÊME REFUS S'ACCORDENT : `devis.js` décide de le
+        renvoyer (`estUnRefusDuPlafond`), `erreurs.js` en choisit la phrase.
+        Deux écritures d'une règle, tenues ensemble ici, sur les mêmes
+        erreurs — y compris celles de la démonstration, fabriquées par la
+        VRAIE file. */
+  const baseA = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
+  const IDA = (k) => `de0000ee-0000-4000-8000-0000000037${String(k).padStart(2, '0')}`;
+  const fileA = F.creerFileEcriture({
+    devisId: IDA(1), devis: { objet: 'Plafond', source: 'manuelle', remiseCentiemes: 5000 }, devisEnBase: false,
+    ecrire: (op) => baseA.ecrire('1', op), relireUn: (q) => baseA.relireUn('1', q),
+    relireTotaux: (id) => baseA.relireTotaux('1', id), avecDelai: ERR.avecDelai, nouvelIdentifiant: I.nouvelIdentifiant,
+  });
+  fileA.ligne({ id: IDA(11), ordre: 1000, type: 'poste', designation: 'Gros œuvre', quantiteMilliemes: 1000, unite: 'forfait',
+    prixUnitaireCentimes: 9000000000, tauxTvaCentiemes: 2000 });
+  await fileA.attendre(5000);
+  fileA.ligne({ id: IDA(12), ordre: 2000, type: 'poste', designation: 'Zéro de trop', quantiteMilliemes: 1000, unite: 'forfait',
+    prixUnitaireCentimes: 9999999999, tauxTvaCentiemes: 2000 });
+  await fileA.attendre(5000);
+  const refusDemo = fileA.erreurDe(IDA(12));
+  const essais = [...formes, refusDemo, ...autres, pg('devis_plafond_check_x'), { code: '23505', message: '"devis_plafond_check"' }];
+  const desaccords = essais.filter((e) => D.estUnRefusDuPlafond(e) !== (ERR.messageDEcritureDuDevis(e, 'ligne') === ATTENDUES.ligne));
+  verifier('`estUnRefusDuPlafond` (devis.js) et la phrase d’`erreurs.js` reconnaissent EXACTEMENT les mêmes refus — sous les trois formes '
+    + 'de PostgREST, celle de la démonstration (une ligne refusée par la vraie file), et pas un autre 23514, ni une autre contrainte qui '
+    + 'commence pareil, ni un autre code',
+  desaccords.length === 0 && !!refusDemo && D.estUnRefusDuPlafond(refusDemo) && ERR.estUnRefusDefinitif(refusDemo)
+    && formes.every((e) => D.estUnRefusDuPlafond(e)) && !D.estUnRefusDuPlafond(pg('devis_plafond_check_x')),
+  `${desaccords.length} désaccord(s)`);
+
+  /* c. LA RANGÉE D'UNE LIGNE REFUSÉE (point 1) : `refusDeLaLigne` décide de
+        ce qui est refusé — la LIGNE (le devis est en base : « La corriger »),
+        le BROUILLON (sa création a été refusée, la ligne l'attend : rien à
+        corriger en elle) —, et rien pour un échec qui se réessaie ;
+        `proprietesDeLaRangee` ne le rend que pour une rangée EN ÉCHEC. */
+  const r = D.refusDeLaLigne;
+  const lg = { id: 'x', type: 'poste', designation: 'x', quantiteMilliemes: 1000, unite: 'u', prixUnitaireCentimes: 100, tauxTvaCentiemes: 2000 };
+  const pr = (etat, def) => D.proprietesDeLaRangee(lg, { etats: { x: etat }, phrasesEchec: { x: 'p' }, definitifs: { x: def } }).definitif;
+  verifier('`refusDeLaLigne` : un refus définitif d’une ligne d’un devis en base → « ligne » ; d’une ligne qui attend un brouillon refusé → '
+    + '« brouillon » ; un échec qui se réessaie → rien ; et la rangée ne porte ce refus QUE si elle est en échec — jamais une autre valeur',
+  r({ definitif: true, devisEnBase: true }) === 'ligne' && r({ definitif: true, devisEnBase: false }) === 'brouillon'
+    && r({ definitif: false, devisEnBase: true }) === null && r({ definitif: false, devisEnBase: false }) === null && r() === null
+    && pr('echec', 'ligne') === 'ligne' && pr('echec', 'brouillon') === 'brouillon' && pr('echec', 'autre') === null
+    && pr('enregistree', 'ligne') === null && pr('en_cours', 'ligne') === null && pr('echec', undefined) === null
+    && D.PROPRIETES_DE_LA_RANGEE.includes('definitif'));
+  /* …et la ligne refusée, INCHANGÉE, ne repart pas (fermer sa carte la
+     renvoyait telle quelle, refusée pareil — mesuré au navigateur) ;
+     changée — un seul champ —, elle part ; un échec qui se réessaie part. */
+  const rv = D.renvoyerLaLigne;
+  const changees = D.CHAMPS_LIGNE.filter((c) => !rv({ valeurs: { ...lg, [c]: c === 'designation' ? 'y' : (c === 'type' ? 'option' : 7) }, derniere: lg, etat: 'echec', refus: 'ligne' }));
+  verifier('`renvoyerLaLigne` : une ligne refusée définitivement et INCHANGÉE ne repart pas (« ligne » comme « brouillon ») ; un seul champ '
+    + 'changé — chacun des douze —, elle repart ; un échec qui se réessaie, une ligne enregistrée, une ligne sans dernière écriture '
+    + 'connue repartent ; l’identifiant et le devis ne comptent pas',
+  rv({ valeurs: { ...lg }, derniere: lg, etat: 'echec', refus: 'ligne' }) === false
+    && rv({ valeurs: { ...lg, id: 'autre', devisId: 'd' }, derniere: lg, etat: 'echec', refus: 'brouillon' }) === false
+    && changees.length === 0 && D.CHAMPS_LIGNE.length === 12
+    && rv({ valeurs: lg, derniere: lg, etat: 'echec', refus: null }) === true
+    && rv({ valeurs: lg, derniere: lg, etat: 'enregistree', refus: 'ligne' }) === true
+    && rv({ valeurs: lg, derniere: null, etat: 'echec', refus: 'ligne' }) === true,
+  `champs qui ne font pas repartir : ${changees.join(', ') || '—'}`);
+
+  /* d. LE PLAFOND RENVOYÉ (point 2), par la VRAIE file et la base de
+        démonstration, avec l'écoute que pose la saisie : à l'événement
+        `totaux`, `rejouerLesRefusDuPlafond`. On COMPTE les écritures. */
+  const monter = (ecrireAussi = null) => {
+    const base = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
+    const etat = { n: 0, rejoues: [] };
+    const file = F.creerFileEcriture({
+      devisId: IDA(1), devis: { objet: 'Plafond', source: 'manuelle', remiseCentiemes: 5000 }, devisEnBase: false,
+      ecrire: (op) => { etat.n += 1; return ecrireAussi ? ecrireAussi(op, () => base.ecrire('1', op)) : base.ecrire('1', op); },
+      relireUn: (q) => base.relireUn('1', q), relireTotaux: (id) => base.relireTotaux('1', id),
+      avecDelai: ERR.avecDelai, nouvelIdentifiant: I.nouvelIdentifiant,
+    });
+    file.abonner((ev) => {
+      if (ev.type === 'totaux') Promise.resolve().then(() => etat.rejoues.push(...D.rejouerLesRefusDuPlafond(file)));
+    });
+    return { base, file, etat };
+  };
+  const auRepos = async (f) => { for (let k = 0; k < 6; k += 1) { await f.attendre(5000); await new Promise((ok) => { setTimeout(ok, 10); }); } };
+  const GROS = { id: IDA(11), ordre: 1000, type: 'poste', designation: 'Gros œuvre', quantiteMilliemes: 1000, unite: 'forfait',
+    prixUnitaireCentimes: 9000000000, tauxTvaCentiemes: 2000 };
+  const remiseEnBase = async (b) => (await b.relireUn('1', { quoi: 'devis', id: IDA(1) })).remiseCentiemes;
+  {
+    const { base, file, etat } = monter();
+    file.ligne(GROS); await auRepos(file);
+    file.devis({ remiseCentiemes: null }); await auRepos(file);
+    const refuse = file.etatDe('devis') === 'echec' && D.estUnRefusDuPlafond(file.erreurDe('devis'));
+    const n0 = etat.n;
+    file.ligne({ ...GROS, prixUnitaireCentimes: 8500000000 }); await auRepos(file);
+    const pasAssez = { ecritures: etat.n - n0, rejoues: etat.rejoues.length, entete: file.etatDe('devis'), remise: await remiseEnBase(base) };
+    const n1 = etat.n;
+    file.ligne({ ...GROS, prixUnitaireCentimes: 100000 }); await auRepos(file);
+    const assez = { ecritures: etat.n - n1, rejoues: [...etat.rejoues], entete: file.etatDe('devis'), remise: await remiseEnBase(base) };
+    verifier('l’en-tête refusé par le plafond (la réduction retirée) : la ligne baissée PAS ASSEZ (85 000 000,00 €) → rien n’est renvoyé '
+      + '(une écriture, la ligne) ; baissée ASSEZ → l’en-tête repart TOUT SEUL, une fois, et passe : la base n’a plus de réduction, '
+      + 'comme l’écran',
+    refuse && pasAssez.ecritures === 1 && pasAssez.rejoues === 0 && pasAssez.entete === 'echec' && pasAssez.remise === 5000
+      && assez.ecritures === 2 && json(assez.rejoues) === json(['devis']) && assez.entete === 'enregistree' && assez.remise === null,
+    `${json(pasAssez)} | ${json(assez)}`);
+  }
+  {
+    /* Une LIGNE refusée, puis une AUTRE baissée : la refusée repart ; une
+       OPTION refusée (le total options comprises), pareil. */
+    const { base, file, etat } = monter();
+    /* 80 000 000,00 € à 50 % : TTC 48 000 000,00 €. L'option (45 000 000,00 €)
+       ferait 102 000 000,00 € options comprises ; la ligne (30 000 000,00 €),
+       un HT avant réduction de 110 000 000,00 €. Le gros poste ramené à
+       1 000,00 € : 18 000 000,00 € TTC, 72 000 000,00 € options comprises —
+       les DEUX tiennent ENSEMBLE (le calcul est fait sur tout le devis voulu,
+       jamais sur un morceau). */
+    file.ligne({ ...GROS, prixUnitaireCentimes: 8000000000 }); await auRepos(file);
+    const TROP = { id: IDA(12), ordre: 2000, type: 'poste', designation: 'Trop', quantiteMilliemes: 1000, unite: 'forfait',
+      prixUnitaireCentimes: 3000000000, tauxTvaCentiemes: 2000 };
+    const OPT = { id: IDA(13), ordre: 3000, type: 'option', designation: 'Option', quantiteMilliemes: 1000, unite: 'forfait',
+      prixUnitaireCentimes: 4500000000, tauxTvaCentiemes: 2000 };
+    file.ligne(OPT); await auRepos(file);
+    file.ligne(TROP); await auRepos(file);
+    const refusees = [IDA(12), IDA(13)].filter((k) => file.etatDe(k) === 'echec' && D.estUnRefusDuPlafond(file.erreurDe(k)));
+    file.ligne({ ...GROS, prixUnitaireCentimes: 100000 }); await auRepos(file);
+    const enBase = await Promise.all([IDA(12), IDA(13)].map((k) => base.relireUn('1', { quoi: 'ligne', id: k })));
+    verifier('une LIGNE et une OPTION refusées par le plafond repartent toutes seules quand une AUTRE ligne baisse assez — et passent',
+      refusees.length === 2 && file.etatDe(IDA(12)) === 'enregistree' && file.etatDe(IDA(13)) === 'enregistree'
+      && enBase.every(Boolean) && json([...etat.rejoues].sort()) === json([IDA(12), IDA(13)].sort()),
+    `${refusees.length} refusée(s) ; ${file.etatDe(IDA(12))} / ${file.etatDe(IDA(13))} ; rejouées ${json(etat.rejoues)}`);
+  }
+  {
+    /* PAS DE BOUCLE : une base qui refuse l'en-tête quoi que dise le calcul.
+       Le renvoi part UNE fois après la ligne enregistrée, il échoue, et rien
+       ne repart — un refus 23514 ne fait pas relire les totaux. */
+    let tetue = false;
+    const { file, etat } = monter((op, normal) => {
+      if (tetue && op.quoi === 'devis') {
+        const e = new Error('new row for relation "devis" violates check constraint "devis_plafond_check"');
+        e.code = '23514';
+        return Promise.reject(e);
+      }
+      return normal();
+    });
+    file.ligne(GROS); await auRepos(file);
+    tetue = true;
+    file.devis({ remiseCentiemes: null }); await auRepos(file);
+    const n0 = etat.n;
+    file.ligne({ ...GROS, prixUnitaireCentimes: 100000 }); await auRepos(file);
+    await new Promise((ok) => { setTimeout(ok, 200); }); await auRepos(file);
+    verifier('pas de boucle : une base qui refuse encore → UN renvoi après la ligne enregistrée, puis plus rien (deux écritures en tout) ; '
+      + 'l’en-tête reste en échec, et son refus reste définitif',
+    etat.n - n0 === 2 && etat.rejoues.length === 1 && file.etatDe('devis') === 'echec' && ERR.estUnRefusDefinitif(file.erreurDe('devis')),
+    `écritures ${etat.n - n0}, renvois ${etat.rejoues.length}`);
+  }
+  {
+    /* RETIRER UNE LIGNE REFUSÉE n'écrit rien (elle n'a jamais été en base) :
+       la saisie regarde quand même — sinon la réduction refusée à cause du
+       devis VOULU (avec cette ligne) le restait. Ici : la ligne baissée ne
+       suffit pas, parce que la ligne refusée est encore voulue ; retirée,
+       l'en-tête repart. */
+    const { base, file, etat } = monter();
+    file.ligne(GROS); await auRepos(file);
+    const ENORME = { id: IDA(14), ordre: 2000, type: 'poste', designation: 'Énorme', quantiteMilliemes: 1000, unite: 'forfait',
+      prixUnitaireCentimes: 9900000000, tauxTvaCentiemes: 2000 };
+    file.ligne(ENORME); await auRepos(file);
+    file.devis({ remiseCentiemes: null }); await auRepos(file);
+    file.ligne({ ...GROS, prixUnitaireCentimes: 100000 }); await auRepos(file);
+    const avant = { rejoues: etat.rejoues.length, entete: file.etatDe('devis') };
+    file.retirerLigne(IDA(14));
+    const renvoyes = D.rejouerLesRefusDuPlafond(file);
+    await auRepos(file);
+    verifier('une ligne refusée ENCORE VOULUE retient l’en-tête (le devis voulu dépasserait) ; RETIRÉE — sans aucune écriture —, '
+      + 'l’appel que fait la saisie renvoie l’en-tête, qui passe',
+    avant.rejoues === 0 && avant.entete === 'echec' && json(renvoyes) === json(['devis']) && file.etatDe('devis') === 'enregistree'
+      && (await remiseEnBase(base)) === null && file.etatDe(IDA(14)) === null, `${json(avant)} ; renvoyés ${json(renvoyes)}`);
+  }
+  /* `clesARejouerApresLePlafond` ne prend que des refus du PLAFOND en échec,
+     jamais une ligne retirée, ni locale dans le calcul — et rien si le devis
+     voulu ne tiendrait pas. */
+  const E = (cle, etat, erreur, voulu, x = {}) => ({ cle, etat, erreur, voulu, retire: false, locale: false, ...x });
+  const PLAF = pg('devis_plafond_check');
+  const petit = { ...lg, id: 'p', prixUnitaireCentimes: 100 };
+  const grosV = { ...lg, id: 'g', prixUnitaireCentimes: 9999999999 };
+  const cas = [
+    [[E('devis', 'echec', PLAF, {}), E('p', 'enregistree', null, petit)], ['devis']],
+    [[E('devis', 'echec', PLAF, {}), E('g', 'enregistree', null, grosV)], []],
+    [[E('devis', 'echec', pg('devis_remise_check'), {}), E('p', 'enregistree', null, petit)], []],
+    [[E('devis', 'echec', { message: 'Network request failed' }, {}), E('p', 'enregistree', null, petit)], []],
+    [[E('devis', 'enregistree', null, {}), E('g', 'echec', PLAF, grosV, { retire: true })], []],
+    [[E('devis', 'enregistree', null, {}), E('p', 'echec', PLAF, petit), E('g', 'locale', null, { ...grosV, quantiteMilliemes: null }, { locale: true })], ['p']],
+    [[E('devis', 'enregistree', null, {}), E('p', 'echec', PLAF, petit), E('g', 'enregistree', null, grosV, { retire: true })], ['p']],
+  ];
+  const fautes = cas.filter(([entrees, attendu]) => json(D.clesARejouerApresLePlafond(entrees)) !== json(attendu));
+  verifier('`clesARejouerApresLePlafond` : seulement des refus du PLAFOND en échec ; rien si le devis voulu ne tiendrait pas ; une '
+    + 'ligne retirée ou locale ne compte pas dans le calcul ; un autre refus, une coupure, ne se renvoient pas ici',
+  fautes.length === 0, fautes.map(([, a]) => json(a)).join(' | '));
+
+  /* e. CE QUE L'ÉCRAN FAIT DE TOUT CELA — lu dans la saisie, sans ses
+        commentaires. Chaque appel est cherché DANS sa fonction. */
+  const S = ECR.saisie;
+  const etatRangee = corpsDeFonction(S, 'EtatDeLaRangee') || '';
+  const bloc = (src, debut) => {
+    const i = src.indexOf(debut);
+    if (i < 0) return '';
+    let p = 0;
+    for (let j = i + debut.length - 1; j < src.length; j += 1) {
+      if (src[j] === '(') p += 1;
+      else if (src[j] === ')') { p -= 1; if (p === 0) return src.slice(i, j + 1); }
+    }
+    return '';
+  };
+  const brancheLigne = bloc(etatRangee, "{definitif === 'ligne' && (");
+  const brancheBrouillon = (etatRangee.match(/\{definitif === 'brouillon' && <Text[^>]*>[^<]*<\/Text>\}/) || [])[0] || '';
+  const brancheReessai = bloc(etatRangee, '{!definitif && (');
+  verifier('la rangée (`EtatDeLaRangee`) : « Réessayer » et `onReessayer` n’existent QUE sous `!definitif` ; « Non enregistrée — La '
+    + 'corriger » ouvre la CARTE (`onOuvrir(id)`) sous `definitif === \'ligne\'` ; un brouillon refusé ne propose AUCUN geste',
+  /Non enregistrée — Réessayer/.test(brancheReessai) && /onPress=\{\(\) => onReessayer\(id\)\}/.test(brancheReessai)
+    /* TOUS les « Réessayer » et TOUS les `onReessayer` du corps vivent dans cette branche — pas un de plus ailleurs. */
+    && (etatRangee.match(/onReessayer/g) || []).length === (brancheReessai.match(/onReessayer/g) || []).length
+    && (etatRangee.match(/Réessayer/g) || []).length === (brancheReessai.match(/Réessayer/g) || []).length
+    && (brancheReessai.match(/Réessayer/g) || []).length === 2
+    && /Non enregistrée — La corriger/.test(brancheLigne) && /onPress=\{\(\) => onOuvrir\(id\)\}/.test(brancheLigne)
+    && !/onReessayer|Réessayer/.test(brancheLigne) && !!brancheBrouillon && !/onPress|Réessayer|corriger/i.test(brancheBrouillon));
+  const rangee = (S.match(/const RangeeLigne = React\.memo\(function RangeeLigne\([\s\S]*?\n\}\);/) || [])[0] || '';
+  const basDuDevis = corpsDeFonction(S, 'BasDuDevis') || '';
+  const rendusEtat = balises(S, 'EtatDeLaRangee');
+  verifier('…la rangée d’une LIGNE et celle d’une OPTION passent toutes deux par `EtatDeLaRangee`, avec leur `definitif` ; l’option '
+    + 'reçoit l’état que `proprietesDeLaRangee` rend avec les mêmes `definitifs` (une option refusée ne disait RIEN)',
+  rendusEtat.length === 2 && balises(rangee, 'EtatDeLaRangee').length === 1 && /definitif=\{definitif\}/.test(balises(rangee, 'EtatDeLaRangee')[0] || '')
+    && balises(basDuDevis, 'EtatDeLaRangee').length === 1 && /definitif=\{e\.definitif\}/.test(balises(basDuDevis, 'EtatDeLaRangee')[0] || '')
+    && /const e = etatDeLOption\(o\);/.test(basDuDevis)
+    && /etatDeLOption=\{\(o\) => proprietesDeLaRangee\(o, \{ etats, erreurs, phrasesEchec, definitifs \}\)\}/.test(S)
+    && !/Réessayer|onReessayer\(/.test(rangee));
+  const ecouter = corpsFleche(S, 'const ecouter = (ev) =>');
+  const brancheEtat = (ecouter.match(/if \(ev\.type === 'etat'\) \{[\s\S]*?\n {6}\} else if \(ev\.type === 'totaux'\)/) || [])[0] || '';
+  const brancheTotaux = (ecouter.match(/\} else if \(ev\.type === 'totaux'\) \{[\s\S]*?\n {6}\} else if/) || [])[0] || '';
+  const brancheSupprimee = (ecouter.match(/\} else if \(ev\.type === 'supprimee' && ev\.cle !== 'devis'\) \{[\s\S]*?\n {6}\}/) || [])[0] || '';
+  verifier('…l’écoute de la file : la phrase d’un échec vient de `messageDEcritureDuDevis` AVEC SON CHEMIN (`cheminDeLEcriture`), jamais de '
+    + '`messageClair` seul ; ce qui est refusé définitivement est posé par `refusDeLaLigne` sur `estUnRefusDefinitif` et le brouillon '
+    + 'en base ; à `totaux`, le plafond est renvoyé (`rejouerLePlafond` → `rejouerLesRefusDuPlafond`) ; une ligne que la file ne '
+    + 'connaît plus perd son état, sa phrase et son refus (le pied comptait « 2 lignes non enregistrées » pour des lignes retirées)',
+  /const chemin = cheminDeLEcriture\(ev\.cle, ligne\);/.test(brancheEtat)
+    && /y\[ev\.cle\] = messageDEcritureDuDevis\(ev\.erreur, chemin\)/.test(brancheEtat) && !/messageClair\(ev\.erreur/.test(ecouter)
+    /* …et cet appel est le PREMIER du bloc qui ne vaut que pour une ligne (S25 du banc : sous `if (false)`, l'appel
+       restait écrit, et le contrôle passait). */
+    && /if \(ev\.cle !== 'devis'\) \{\s*poserDefinitif\(ev\.cle, ev\.etat === 'echec' \? refusDeLaLigne\(\{\s*definitif: estUnRefusDefinitif\(ev\.erreur\), devisEnBase: !!\(fileRef\.current && fileRef\.current\.devisEnBase\(\)\),\s*\}\) : null\);\s*\}/.test(brancheEtat)
+    && (brancheEtat.match(/poserDefinitif\(/g) || []).length === 1
+    && /rejouerLePlafond\(\)/.test(brancheTotaux)
+    && /const f = fileRef\.current;\s*rejouerLesRefusDuPlafond\(f\)/.test(corpsFleche(S, 'const rejouerLePlafond = () =>'))
+    && /setEtats\(sans\);/.test(brancheSupprimee) && /setPhrasesEchec\(sans\);/.test(brancheSupprimee) && /poserDefinitif\(ev\.cle, null\);/.test(brancheSupprimee));
+  const enregistrer = corpsFleche(S, 'const enregistrerLigne = (valeurs, erreursSaisie = {}) =>');
+  const iRenvoi = enregistrer.indexOf('renvoyerLaLigne(');
+  const iEnvoi = enregistrer.indexOf('f.ligne(valeurs);');
+  const retirerC = corpsFleche(S, 'const retirer = (avecLignes) =>');
+  verifier('…`enregistrerLigne` demande `renvoyerLaLigne` (la dernière écriture, l’état de la file, ce qui est refusé) AVANT d’envoyer, et '
+    + 'n’envoie pas sinon ; `retirer` regarde le plafond (retirer une ligne refusée n’écrit rien, donc ne relit aucun total)',
+  iRenvoi > 0 && iEnvoi > iRenvoi && /if \(!renvoyerLaLigne\(\{\s*valeurs, derniere: derniereEnvoyee\.current\[valeurs\.id\], etat: f\.etatDe\(valeurs\.id\), refus: definitifsRef\.current\[valeurs\.id\],\s*\}\)\) return false;/.test(enregistrer)
+    && (enregistrer.match(/f\.ligne\(/g) || []).length === 1 && /rejouerLePlafond\(\);\s*\}$/.test(retirerC.trim()));
+  verifier('…la bande du bas et la ligne d’état de la carte « Conditions » disent l’en-tête par `messageDEcritureDuDevis(…, \'entete\')` — '
+    + 'plus aucun `messageClair(attente.devisErreur` —, et la carte d’une ligne reçoit son échec (`echec`), qu’elle affiche sans aucun '
+    + '« Réessayer »',
+  (S.match(/messageDEcritureDuDevis\(attente\.devisErreur, 'entete'\)/g) || []).length === 2 && !/messageClair\(attente\.devisErreur/.test(S)
+    && /echec=\{etats\[ligneOuverte\.id\] === 'echec'\s*\? \(phrasesEchec\[ligneOuverte\.id\] \|\| '[^']+'\) : null\}/.test(balises(S, 'CarteLigne')[0] || '')
+    && /\{!!echec && \(\s*<Text style=\{s\.echec\}[^>]*>\s*<Text style=\{s\.echecMot\}>Non enregistrée\. <\/Text>\s*\{echec\}\s*<\/Text>\s*\)\}/.test(ECR.carte)
+    && !/Réessayer/.test(ECR.carte));
+
+  /* f. LA RÉOUVERTURE : une saisie rouverte sur une file qui avait encore de
+        quoi écrire y retrouve ses échecs — et `echecsDeLaFile` en refait les
+        phrases et les refus, fait tourner sur la VRAIE file (une ligne et une
+        option refusées par le plafond, une ligne coupée du réseau). */
+  {
+    let coupee = false;
+    const { file } = monter((op, normal) => {
+      if (coupee && op.quoi === 'ligne' && op.id === IDA(16)) return Promise.reject(new Error('Network request failed'));
+      return normal();
+    });
+    file.ligne(GROS); await auRepos(file);
+    file.ligne({ id: IDA(15), ordre: 2000, type: 'poste', designation: 'Trop', quantiteMilliemes: 1000, unite: 'forfait',
+      prixUnitaireCentimes: 9999999999, tauxTvaCentiemes: 2000 });
+    file.ligne({ id: IDA(17), ordre: 3000, type: 'option', designation: 'Option', quantiteMilliemes: 1000, unite: 'forfait',
+      prixUnitaireCentimes: 9999000000, tauxTvaCentiemes: 2000 });
+    coupee = true;
+    file.ligne({ id: IDA(16), ordre: 4000, type: 'poste', designation: 'Coupée', quantiteMilliemes: 1000, unite: 'forfait',
+      prixUnitaireCentimes: 100, tauxTvaCentiemes: 2000 });
+    await auRepos(file);
+    const ech = D.echecsDeLaFile(file.entreesVoulues().map((x) => ({ ...x, erreur: file.erreurDe(x.cle) })), {
+      devisEnBase: file.devisEnBase(), estDefinitif: ERR.estUnRefusDefinitif, phraseDe: ERR.messageDEcritureDuDevis,
+    });
+    verifier('`echecsDeLaFile` (la réouverture) : la ligne refusée par le plafond → sa phrase de LIGNE et « ligne » ; l’option → sa phrase '
+      + 'd’OPTION et « ligne » ; la ligne coupée du réseau → la phrase du réseau, et AUCUN refus définitif (elle se réessaie)',
+    ech.phrases[IDA(15)] === ATTENDUES.ligne && ech.definitifs[IDA(15)] === 'ligne'
+      && ech.phrases[IDA(17)] === ATTENDUES.option && ech.definitifs[IDA(17)] === 'ligne'
+      && ech.phrases[IDA(16)] === ERR.messageClair({ message: 'Network request failed' }, '') && !(IDA(16) in ech.definitifs)
+      && !('devis' in ech.definitifs), json(ech.definitifs));
+    const ouverture = (S.match(/fileRef\.current = f;[\s\S]*?setEtat\('pret'\);/) || [])[0] || '';
+    verifier('…et la saisie s’en sert À L’OUVERTURE (avec `estUnRefusDefinitif` et `messageDEcritureDuDevis`) ; `rejouerLePlafond` '
+      + 'ne retient pour l’annonce qu’une clé qui n’est pas déjà enregistrée',
+    /const echecs = echecsDeLaFile\(f\.entreesVoulues\(\)\.map\(\(x\) => \(\{ \.\.\.x, erreur: f\.erreurDe\(x\.cle\) \}\)\), \{\s*devisEnBase: f\.devisEnBase\(\), estDefinitif: estUnRefusDefinitif, phraseDe: messageDEcritureDuDevis,\s*\}\);/.test(ouverture)
+      && /setPhrasesEchec\(echecs\.phrases\);/.test(ouverture) && /definitifsRef\.current = echecs\.definitifs;/.test(ouverture)
+      && /rejouerLesRefusDuPlafond\(f\)\.forEach\(\(c\) => \{ if \(f\.etatDe\(c\) !== 'enregistree'\) rejoues\.current\.add\(c\); \}\);/
+        .test(corpsFleche(S, 'const rejouerLePlafond = () =>')));
+  }
+}
+
+console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert à l’écran, FAIT TOURNER');
+{
+  /* POURQUOI (banc adverse du lot 2a, 04/11/2026) : douze défauts d'écran
+     remis à la main passaient les 56 contrôles. Chacun est tenu ici par la
+     PROPRIÉTÉ qu'il cassait, et les fonctions pures tournent pour de bon. */
+  const n = (t) => String(t == null ? '' : t).replace(/[\u00a0\u202f]/g, ' ');
+  const dd = D.demandeDuDevis;
+  const vide0 = D.etatInitialConditions({});
+
+  /* a. LA NATURE PART AVEC L'ACOMPTE (E05, E05b) : un acompte tapé — en
+        pourcentage comme en euros — emporte la nature CHOISIE ; sans nature,
+        rien n'est inventé ; un acompte vidé vide la nature ; une faute
+        n'écrit rien. Le défaut passait : seule la branche « unité en
+        attente » était éprouvée. */
+  const lc = (choix, acompte, devis = {}) => D.lireConditions({ choix, tapes: { reduction: '', acompte }, devis });
+  const NATURE = [
+    ['30 % et « arrhes »', lc({ ...vide0, nature: 'arrhes' }, '30'), { acompteCentiemes: 3000, acompteCentimes: null, acompteNature: 'arrhes' }],
+    ['30 % et « acompte »', lc({ ...vide0, nature: 'acompte' }, '30'), { acompteCentiemes: 3000, acompteCentimes: null, acompteNature: 'acompte' }],
+    ['150 € et « arrhes »', lc({ ...vide0, uniteAcompte: 'montant', nature: 'arrhes' }, '150'), { acompteCentimes: 15000, acompteCentiemes: null, acompteNature: 'arrhes' }],
+    ['30 % sans nature', lc({ ...vide0, nature: null }, '30'), { acompteCentiemes: 3000, acompteCentimes: null, acompteNature: null }],
+    ['acompte vidé', lc(D.etatInitialConditions({ acompteCentiemes: 3000, acompteNature: 'arrhes' }), '', { acompteCentiemes: 3000, acompteNature: 'arrhes' }),
+      { acompteCentiemes: null, acompteCentimes: null, acompteNature: null }],
+  ];
+  const natureFausse = NATURE.filter(([, l, attendu]) => Object.entries(attendu).some(([k, v]) => l.changements[k] !== v) || Object.keys(l.erreurs).length)
+    .map(([k, l]) => `${k} : ${json(l.changements)}`);
+  const faute = lc({ ...vide0, nature: 'arrhes' }, 'abc');
+  verifier('`lireConditions`, FAIT TOURNER : un acompte TAPÉ (30 %, 150 €) emporte la nature choisie (« arrhes », « acompte ») dans la même '
+    + 'écriture ; sans nature, `null` ; un acompte vidé vide la nature ; un acompte illisible n’écrit ni l’acompte ni la nature',
+  natureFausse.length === 0 && !('acompteNature' in faute.changements) && !('acompteCentiemes' in faute.changements)
+    && !!faute.erreurs.acompteCentiemes, natureFausse.join(' | ') || json(faute));
+
+  /* b. « CORRIGER » ROUVRE CHAQUE CHOIX GARDÉ (É03) : l'unité de l'acompte
+        oubliée rouvrait sous « % » un acompte refusé en euros (« 150 »
+        devenait 150 %). Les SIX choix gardés, chacun contraire à ce que le
+        devis enregistré donnerait, dans les deux sens. */
+  const garde1 = { uniteReduction: 'montant', uniteAcompte: 'montant', nature: 'arrhes', validite: 60, validiteAutre: false, retenue: true };
+  const r1 = D.etatInitialConditions({ remiseCentiemes: 700, acompteCentiemes: 3000, acompteNature: 'acompte', validiteJours: 30 },
+    { reduction: '12', acompte: '150', choix: garde1 });
+  const garde2 = { uniteReduction: 'pourcent', uniteAcompte: 'pourcent', nature: null, validite: null, validiteAutre: false, retenue: false };
+  const r2 = D.etatInitialConditions({ remiseCentimes: 5000, acompteCentimes: 15000, acompteNature: 'arrhes', validiteJours: 60,
+    retenueGarantieCentiemes: 500 }, { reduction: '5', acompte: '10', choix: garde2 });
+  verifier('`etatInitialConditions`, FAIT TOURNER : « Corriger » rouvre la carte sur les SIX choix gardés — l’unité de la réduction, '
+    + 'CELLE DE L’ACOMPTE, la nature, la validité, « Autre », la retenue — même quand le devis enregistré dit le contraire, dans les deux sens',
+  json(r1) === json(garde1) && json(r2) === json(garde2), `${json(r1)} | ${json(r2)}`);
+
+  /* c. LES PHRASES D'EFFET, LES CAS QUE LES DIX DE 36 a NE COUVRAIENT PAS
+        (N26) : l'acompte EN EUROS au régime réel (il perdait « TTC » sans
+        un ✘), en pourcentage en franchise, sans régime connu, avec la
+        retenue ; la réduction en euros au régime réel. */
+  const EFFETS2 = [
+    ['acompte 300,00 €, réel', D.effetDeLAcompte({ ttc: 120000, acompte: 30000, demande: dd({ acompteCentimes: 30000 }) }, { acompteCentimes: 30000 }, 'reel'),
+      '300,00 € TTC — reste à payer 900,00 € TTC.'],
+    ['acompte 30 %, franchise', D.effetDeLAcompte({ ttc: 120000, acompte: 36000, demande: dd({ acompteCentiemes: 3000 }) }, { acompteCentiemes: 3000 }, 'franchise'),
+      '360,00 € — reste à payer 840,00 €.'],
+    ['acompte 300,00 €, régime inconnu', D.effetDeLAcompte({ ttc: 120000, acompte: 30000, demande: dd({ acompteCentimes: 30000 }) }, { acompteCentimes: 30000 }, undefined),
+      '300,00 € — reste à payer 900,00 €.'],
+    ['acompte 300,00 €, réel, retenue', D.effetDeLAcompte({ ttc: 120000, acompte: 30000, demande: dd({ acompteCentimes: 30000, retenueGarantieCentiemes: 500 }) },
+      { acompteCentimes: 30000 }, 'reel'), '300,00 € TTC — reste à payer, avant la retenue de garantie 900,00 € TTC.'],
+    ['réduction 50,00 €, réel', D.effetDeLaReduction({ ht: 95000, tva: 19000, ttc: 114000, brut: 100000, reduction: 5000, demande: dd({ remiseCentimes: 5000 }) },
+      { remiseCentimes: 5000 }, 'reel'), 'Le total HT des postes passe de 1 000,00 € à 950,00 €.'],
+  ];
+  const effets2Faux = EFFETS2.filter(([, e, a]) => !e || n(e.aDire) !== a).map(([k, e]) => `${k} : « ${e && n(e.aDire)} »`);
+  verifier('les phrases d’effet, FAITES TOURNER sur cinq cas de plus : l’acompte EN EUROS au régime réel garde « TTC » des deux côtés, '
+    + 'la franchise et un régime inconnu n’en mettent jamais, la retenue se dit, la réduction en euros au réel — chaque phrase ENTIÈRE',
+  effets2Faux.length === 0, effets2Faux.join(' | '));
+
+  /* d. ZÉRO N'EST PAS VIDE (N27) : `nombreOuNul` qui lisait 0 comme vide
+        changeait une réduction effective de 0 en « illisible » et un total
+        de 0 en `null`, dans `devis.js` ET dans `api.js` (les deux restaient
+        égaux, la section 36 c passait). Les zéros de la base, relus. */
+  const zero = D.rowToDevis({ id: 'd', pro_id: 'p', total_ht_centimes: 0, total_tva_centimes: 0, total_ttc_centimes: 0, remise_ht_centimes: 0,
+    acompte_ttc_centimes: 0, total_ttc_options_centimes: '0', validite_jours: null, generation: 0 });
+  const zeroT = D.totauxDepuisBase({ total_ht_centimes: 0, total_tva_centimes: 0, total_ttc_centimes: 0, remise_ht_centimes: 0, acompte_ttc_centimes: 0,
+    total_ttc_options_centimes: 0, remise_centimes: null, remise_centiemes: null, acompte_centimes: null, acompte_centiemes: null, acompte_nature: null,
+    retenue_garantie_centiemes: null, generation: 0, modifie_le: null, devis_tva: [] });
+  verifier('`rowToDevis` et `totauxDepuisBase`, FAITS TOURNER sur des ZÉROS : un total, une réduction effective, un acompte effectif à 0 '
+    + 'se relisent 0 — jamais `null` (« illisible »), et le brut d’un devis vide vaut 0',
+  [zero.totalHtCentimes, zero.totalTvaCentimes, zero.totalTtcCentimes, zero.remiseHtCentimes, zero.acompteTtcCentimes,
+    zero.totalTtcOptionsCentimes, zero.generation].every((v) => v === 0)
+    && [zeroT.ht, zeroT.tva, zeroT.ttc, zeroT.reduction, zeroT.brut, zeroT.acompte, zeroT.ttcOptions].every((v) => v === 0),
+  `${json(zero)} | ${json(zeroT)}`);
+
+  /* e. LES AIDES SE LISENT (N24, N25) : écrites dans la couleur du FOND
+        de la carte (`C.surface`), ou dans une vue parente `display: 'none'`,
+        elles passaient. La couleur du style `aide` est relue dans
+        `theme.js` et son contraste CALCULÉ sur le fond de la carte (4,5 au
+        moins) ; et rien dans la carte n'est caché par un style. */
+  const carte38 = sansCommentairesJs(lire('src/components/ConditionsDevis.js'));
+  const THEME = lire('src/theme.js');
+  const palette = (/export const C = \{([\s\S]*?)\n\};/.exec(THEME) || [])[1] || '';
+  const hexDe = (expr) => {
+    const v = String(expr || '').trim();
+    if (/^['"]#[0-9a-f]{6}['"]$/i.test(v)) return v.slice(1, -1);
+    const m = /^C\.(\w+)$/.exec(v);
+    const h = m ? new RegExp(String.raw`\b${m[1]}\s*:\s*'(#[0-9A-Fa-f]{6})'`).exec(palette) : null;
+    return h ? h[1] : null;
+  };
+  const lum = (hex) => {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  const contraste = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const styleDe = (nom) => (new RegExp(String.raw`\n\s{2}${nom}:\s*\{([^}]*)\}`).exec(carte38) || [])[1] || '';
+  const couleurAide = hexDe((/\bcolor\s*:\s*([^,}\n]+)/.exec(styleDe('aide')) || [])[1]);
+  const fondCarte = hexDe((/\bbackgroundColor\s*:\s*([^,}\n]+)/.exec(styleDe('ecran')) || [])[1]);
+  const ratio = couleurAide && fondCarte ? contraste(couleurAide, fondCarte) : 0;
+  verifier(`les aides de la carte se LISENT : la couleur du style \`aide\` (${couleurAide || '?'}), relue dans \`theme.js\`, donne `
+    + `${ratio.toFixed(2)} : 1 sur le fond de la carte (${fondCarte || '?'}) — 4,5 au moins`,
+  ratio >= 4.5, `aide ${couleurAide} sur ${fondCarte}`);
+  const CACHENT = [
+    [/\bdisplay\s*:\s*['"]none['"]/, '`display: \'none\'`'],
+    [/\bopacity\s*:\s*0*(?:\.[0-2]\d*)?\s*(?=[,}\n])/, 'une opacité de 0,2 au plus'],
+    [/\b(?:height|maxHeight|width|maxWidth|fontSize)\s*:\s*0(?![.\d])/, 'une taille nulle'],
+    [/\bscale[XY]?\s*:\s*0(?![.\d])/, 'une échelle nulle'],
+    [/\bcolor\s*:\s*['"]transparent['"]/, 'un texte transparent'],
+  ].filter(([re]) => re.test(carte38)).map(([, quoi]) => quoi);
+  verifier('…et rien dans la carte « Conditions » n’est caché par un STYLE — ni `display: \'none\'`, ni opacité nulle, ni taille ou '
+    + 'échelle nulle, ni texte transparent (une vue parente cachait l’aide de la validité sans que ses conditions changent)',
+  carte38.length > 3000 && CACHENT.length === 0, CACHENT.join(', '));
+
+  /* f. « RÉESSAYER » NE RENVOIE PAS UN REFUS DÉFINITIF (N28, N29) : un
+        second bouton qui renvoyait l'en-tête dans la bande, sans la garde,
+        passait ; la carte qui proposait « Réessayer » sur TOUT échec (elle
+        lisait `echec` au lieu de `reessayable`) aussi. Chaque appel qui
+        renvoie l'en-tête (`reessayer('devis')`) est sous la garde du refus
+        définitif, ou il est le `onReessayer` de la carte, dont l'écran pose
+        `reessayable` avec cette garde ; et la carte prend `reessayable`
+        TEL QUEL. */
+  const S38 = ECR.saisie;
+  const blanchi = S38.replace(/`(?:[^`\\]|\\.)*`/g, (m) => '`' + ' '.repeat(m.length - 2) + '`')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, (m) => "'" + ' '.repeat(m.length - 2) + "'");
+  const finDeParenthese = (t, i) => { let p = 0; for (let j = i; j < t.length; j += 1) { if (t[j] === '(') p += 1; if (t[j] === ')') { p -= 1; if (p === 0) return j; } } return -1; };
+  const gardes = [...blanchi.matchAll(/\{!estUnRefusDefinitif\(attente\.devisErreur\) && \(/g)]
+    .map((m) => [m.index, finDeParenthese(blanchi, m.index + m[0].length - 1)]);
+  const balise38 = balises(S38, 'ConditionsDevis')[0] || '';
+  const iBalise = balise38 ? S38.indexOf(balise38) : -1;
+  const renvois = [...S38.matchAll(/\breessayer\(\s*'devis'\s*\)/g)].map((m) => m.index);
+  const sousGarde = renvois.filter((i) => gardes.some(([a, b]) => i > a && i < b));
+  const dansLaCarte = renvois.filter((i) => iBalise >= 0 && i > iBalise && i < iBalise + balise38.length);
+  const nus = renvois.filter((i) => !sousGarde.includes(i) && !dansLaCarte.includes(i)).map((i) => sansEspaces(S38.slice(Math.max(0, i - 90), i + 20)));
+  verifier('chaque renvoi de l’EN-TÊTE (`reessayer(\'devis\')`) est sous la garde du refus définitif (la bande) ou il est le '
+    + '`onReessayer` de la carte, dont `reessayable` porte cette garde — aucun autre bouton ne renvoie un refus définitif',
+  renvois.length === 2 && sousGarde.length === 1 && dansLaCarte.length === 1 && nus.length === 0
+    && /reessayable: !!attente\.devisErreur && !estUnRefusDefinitif\(attente\.devisErreur\)/.test(balise38)
+    && /onReessayer=\{\(\) => fileRef\.current && fileRef\.current\.reessayer\('devis'\)\}/.test(balise38),
+  `${renvois.length} renvoi(s), ${sousGarde.length} sous garde, ${dansLaCarte.length} dans la carte ; nus : ${nus.join(' | ') || '—'}`);
+  const clesReessayable = [...carte38.matchAll(/\breessayable\s*:\s*([^,\n]+),/g)].map((m) => sansEspaces(m[1]));
+  verifier('…et la carte prend `reessayable` de l’écran TEL QUEL (`!!(etatEcriture && etatEcriture.reessayable)`), une seule fois — '
+    + 'jamais `echec`, qui proposerait « Réessayer » sur un refus définitif',
+  json(clesReessayable) === json(['!!(etatEcriture && etatEcriture.reessayable)']), json(clesReessayable));
+
+  /* g. CE QUE DIT LA GARDE EN PARTANT (R1d) : « Opus les renverra tout
+        seul » ajouté à la phrase des lignes en échec passait — or rien
+        n'est renvoyé après le départ. Le bilan, ENTIER : les lignes qui
+        n'ont pas pu partir, celles dont l'envoi continue SANS garantie, et
+        sinon la phrase de l'en-tête. */
+  const BILAN = "{[ garde.enEchec > 1 ? `${garde.enEchec} lignes n’ont pas pu être enregistrées.` : null, garde.enEchec === 1 ? 'Une ligne n’a pas pu être enregistrée.' : null, garde.enCours > 1 ? `${garde.enCours} lignes ne sont pas encore enregistrées : l’envoi continue, mais rien ne garantit qu’il aboutira.` : null, garde.enCours === 1 ? 'Une ligne n’est pas encore enregistrée : l’envoi continue, mais rien ne garantit qu’il aboutira.' : null, !garde.enEchec && !garde.enCours ? phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur }) : null, ].filter(Boolean).join(' ')";
+  const iBilan = S38.indexOf("garde.phase === 'bilan' && garde.incompletes.length === 0 && garde.enteteRefuse.length === 0");
+  const aB = iBilan >= 0 ? S38.indexOf('{[', iBilan) : -1;
+  const bB = aB >= 0 ? S38.indexOf(".filter(Boolean).join(' ')", aB) : -1;
+  const bilan = bB > 0 ? sansEspaces(S38.slice(aB, bB + ".filter(Boolean).join(' ')".length)) : '';
+  verifier('la garde de sortie dit, en partant, EXACTEMENT ce qui est vrai : les lignes qui n’ont pas pu être enregistrées, celles dont '
+    + 'l’envoi continue SANS garantie, sinon la phrase de l’en-tête — jamais un renvoi promis après le départ',
+  bilan === BILAN, bilan ? bilan.slice(0, 300) : 'bilan introuvable');
+
+  /* h. LA MESURE AU NAVIGATEUR NE REDEVIENT PAS UNE TAUTOLOGIE (É11) :
+        `mesure-devis` vérifie que rien n'est pré-choisi en lisant les DEUX
+        pastilles de nature, des BOUTONS (`aria-selected`), et le résumé —
+        une seule lecture de « radio », ou un `||`, la rendait vraie quoi
+        qu'il arrive. */
+  const M38 = sansCommentairesJs(lire('scripts/mesure-devis.mjs'));
+  const DEF_NATURE = "const choisieNature = async (nom) => page.getByRole('button', { name: nom, exact: true }).first().getAttribute('aria-selected');";
+  const iV = M38.indexOf('un acompte sans nature : rien');
+  const appel = iV >= 0 ? sansEspaces(M38.slice(M38.lastIndexOf('verifier(', iV), M38.indexOf(');', iV) + 2)) : '';
+  verifier('`mesure-devis` : « rien n’est pré-choisi » lit les DEUX pastilles de nature comme des BOUTONS (`aria-selected`) et le '
+    + 'résumé, et ne passe que si les trois le disent — aucune lecture de « radio », aucun `||`',
+  M38.split('\n').some((l) => sansEspaces(l) === DEF_NATURE)
+    && /const arrhesChoisies = await choisieNature\('C’est des arrhes'\);/.test(M38)
+    && /const acompteChoisi = await choisieNature\('C’est un acompte'\);/.test(M38)
+    && appel.endsWith(", arrhesChoisies === 'false' && acompteChoisi === 'false' && !!sansNature);")
+    && !/\|\|/.test(appel.slice(appel.lastIndexOf(', arrhesChoisies')))
+    && !/getByRole\(\s*'radio'\s*,\s*\{\s*name:[^)]*(?:arrhes|acompte)/i.test(M38),
+  appel.slice(-160));
 }
 
 console.log('');

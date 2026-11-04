@@ -2777,10 +2777,13 @@ try {
         || /r[ée]f/i.test(json(r)) || r.erreurTexte !== 'non enregistrée';
     });
     const avecRef = sejour.filter((l) => P.referenceDuPoste(l, POSTES));
-    verifier('la rangée de la liste du devis (`proprietesDeLaRangee`) reçoit EXACTEMENT les treize valeurs de '
+    /* QUATORZE depuis la reprise « écran » du lot 2a (04/11/2026) :
+       `definitif`, ce qu'un refus DÉFINITIF vise (la ligne, le brouillon) — la rangée ne propose plus « Réessayer »
+       qui échouerait à l'identique. Rien de la base de postes. */
+    verifier('la rangée de la liste du devis (`proprietesDeLaRangee`) reçoit EXACTEMENT les quatorze valeurs de '
       + '`PROPRIETES_DE_LA_RANGEE` — la phrase de la ligne mot pour mot, son total, son état — et rien de la base de postes : la liste '
       + 'est l’écran qu’on montre à un client (Q3 a ; la relecture y avait écrit la phrase de référence sans qu’un contrôle rougisse)',
-    sejour.length === 6 && avecRef.length >= 2 && fautes.length === 0 && D.PROPRIETES_DE_LA_RANGEE.length === 13
+    sejour.length === 6 && avecRef.length >= 2 && fautes.length === 0 && D.PROPRIETES_DE_LA_RANGEE.length === 14
       && D.proprietesDeLaRangee.length === 1, fautes.map((l) => l.designation).join(' | '));
   }
 
@@ -2910,8 +2913,8 @@ try {
     verifier('`SaisieDevisScreen` : la rangée de la liste reçoit `proprietesDeLaRangee(item, …)` ET RIEN D’AUTRE que ses deux '
       + 'rappels — l’élément est écrit EXACTEMENT ainsi : une valeur ajoutée, une désignation retouchée font rougir',
     balises.length === 1 && norm(element) === norm('<RangeeLigne {...proprietesDeLaRangee(item, { sousTotaux: sous, etats, erreurs, '
-      + 'phrasesEchec })} onOuvrir={ouvrirStable} onReessayer={reessayerStable} />'), norm(element).slice(0, 220));
-    verifier('…`RangeeLigne` n’accepte que les treize valeurs et les deux rappels ; la feuille d’ajout reçoit `postesLus(postes, postesEtat)`',
+      + 'phrasesEchec, definitifs })} onOuvrir={ouvrirStable} onReessayer={reessayerStable} />'), norm(element).slice(0, 220));
+    verifier('…`RangeeLigne` n’accepte que les quatorze valeurs et les deux rappels ; la feuille d’ajout reçoit `postesLus(postes, postesEtat)`',
       json(params) === json([...D.PROPRIETES_DE_LA_RANGEE, 'onOuvrir', 'onReessayer'].sort())
       && /postes=\{postesLus\(postes, postesEtat\)\}/.test(balisesE(s, 'FeuilleAjoutPoste')[0] || ''), json(params));
   }

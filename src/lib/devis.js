@@ -1193,7 +1193,7 @@ export function ligneVierge(l) {
 /** Ce qu'une rangée de la LISTE du devis reçoit — et rien d'autre. */
 export const PROPRIETES_DE_LA_RANGEE = Object.freeze([
   'id', 'type', 'designation', 'total', 'offert', 'fournitureNonComprise', 'quantite', 'unite', 'prix', 'sousTotal',
-  'etat', 'erreurTexte', 'incomplete',
+  'etat', 'erreurTexte', 'incomplete', 'definitif',
 ]);
 
 /**
@@ -1213,10 +1213,16 @@ export const PROPRIETES_DE_LA_RANGEE = Object.freeze([
  * entier et seul.
  *   - `sousTotaux` : `sousTotaux(lignes)`, pour une zone ou une pièce ;
  *   - `etats`, `erreurs`, `phrasesEchec` : par identifiant, ceux de la
- *     saisie (`'en_cours'`, `'echec'`, `'locale'`…).
+ *     saisie (`'en_cours'`, `'echec'`, `'locale'`…) ;
+ *   - `definitifs` : par identifiant, ce qui est refusé DÉFINITIVEMENT
+ *     (`refusDeLaLigne` : `'ligne'` ou `'brouillon'`) — la rangée ne propose
+ *     alors plus « Réessayer », qui échouerait à l'identique (reprise
+ *     « écran » du lot 2a, point 1). Il ne vaut que pour une rangée en échec.
+ *     (Pas « refus » : la clé serait lue comme une référence par le contrôle
+ *     de Q3 a, qui cherche « réf » dans tout ce que rend la rangée.)
  */
 export function proprietesDeLaRangee(l, {
-  sousTotaux: sous = {}, etats = {}, erreurs = {}, phrasesEchec = {},
+  sousTotaux: sous = {}, etats = {}, erreurs = {}, phrasesEchec = {}, definitifs = {},
 } = {}) {
   const etat = (etats && etats[l.id]) || null;
   return {
@@ -1233,6 +1239,8 @@ export function proprietesDeLaRangee(l, {
     etat,
     erreurTexte: etat === 'echec' ? ((phrasesEchec && phrasesEchec[l.id]) || null) : null,
     incomplete: !!(erreurs && erreurs[l.id]) || etat === 'locale',
+    definitif: etat === 'echec' && definitifs && (definitifs[l.id] === 'ligne' || definitifs[l.id] === 'brouillon')
+      ? definitifs[l.id] : null,
   };
 }
 
@@ -2161,12 +2169,168 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
  */
 export function phraseEchecDuDevis({ enBase = false, erreur = null } = {}) {
   if (!enBase) return 'Le brouillon n’a pas pu être enregistré.';
-  const brut = erreur && typeof erreur === 'object'
-    ? `${erreur.message || ''} ${erreur.details || ''} ${erreur.constraint || ''}` : '';
-  const nom = (brut.match(/\b(devis_[a-z0-9_]+_check)\b/) || [])[1];
-  return ECHEC_PAR_CONTRAINTE[nom]
+  return ECHEC_PAR_CONTRAINTE[contrainteDuDevis(erreur)]
     || 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai ou les conditions.';
 }
+
+/* La contrainte du devis qu'une erreur de la base cite — dans son message,
+   son détail ou son champ `constraint` (PostgREST, la démonstration). */
+function contrainteDuDevis(erreur) {
+  const brut = erreur && typeof erreur === 'object'
+    ? `${erreur.message || ''} ${erreur.details || ''} ${erreur.constraint || ''}` : '';
+  return (brut.match(/\b(devis_[a-z0-9_]+_check)\b/) || [])[1] || null;
+}
+
+/* ------------------------------------------------------------------------ */
+/*  LE PLAFOND REFUSÉ — ce qu'on dit, ce qu'on renvoie (reprise « écran »   */
+/*  du lot 2a, 04/11/2026)                                                  */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * UN REFUS DU PLAFOND : 23514 sur `devis_plafond_check` — par une ligne, une
+ * option ou le changement de la réduction. C'est un refus DÉFINITIF pour
+ * l'écriture qui l'a reçu (`estUnRefusDefinitif`, erreurs.js : renvoyée
+ * telle quelle, elle est refusée pareil), mais pas pour TOUJOURS : il tient
+ * aux AUTRES écritures du devis. Baisser la ligne trop chère, et la
+ * réduction retirée passe ; baisser une autre ligne, et celle-ci passe.
+ * `erreurs.js` reconnaît le même refus pour en choisir la phrase
+ * (`messageDEcritureDuDevis`) : `verifier-devis` fait tourner les deux sur
+ * les mêmes erreurs, et elles doivent répondre pareil.
+ */
+export function estUnRefusDuPlafond(erreur) {
+  return !!erreur && String(erreur.code || '') === '23514' && contrainteDuDevis(erreur) === 'devis_plafond_check';
+}
+
+/**
+ * LE CHEMIN D'UNE ÉCRITURE, pour sa phrase (`messageDEcritureDuDevis`) : le
+ * devis lui-même (`'entete'`), une OPTION, ou une autre ligne. Une option ne
+ * dépasse que le total toutes options comprises : sa phrase n'est pas celle
+ * d'un poste.
+ */
+export function cheminDeLEcriture(cle, ligne = null) {
+  if (cle === 'devis') return 'entete';
+  return ligne && ligne.type === 'option' ? 'option' : 'ligne';
+}
+
+/**
+ * LA NATURE D'UN ÉCHEC DÉFINITIF D'UNE LIGNE (point 1) — `null` quand
+ * l'échec se réessaie (une coupure, un délai, un interblocage) :
+ *   - `'ligne'` : c'est CETTE écriture qui a été refusée (le devis est en
+ *     base) — la rangée dit « La corriger » et ouvre la carte ;
+ *   - `'brouillon'` : la ligne attend un brouillon dont la CRÉATION a été
+ *     refusée (`file-ecriture.js` lui donne l'erreur du devis) — la corriger
+ *     n'y changerait rien, et « Réessayer » renverrait la même création : la
+ *     rangée ne propose ni l'un ni l'autre, la bande du bas dit pourquoi.
+ */
+export function refusDeLaLigne({ definitif = false, devisEnBase = false } = {}) {
+  if (!definitif) return null;
+  return devisEnBase ? 'ligne' : 'brouillon';
+}
+
+/**
+ * RENVOYER UNE LIGNE QUE L'ÉCRAN ENREGISTRE ? Oui, sauf une ligne refusée
+ * DÉFINITIVEMENT dont rien n'a changé depuis l'écriture refusée : fermer sa
+ * carte, toucher « Poste suivant » ou la barre du bas la renvoyait telle
+ * quelle — refusée pareil, une vibration et une annonce de plus pour rien
+ * (mesuré au navigateur : une écriture partie en fermant la carte sans rien
+ * toucher). Une ligne CHANGÉE part toujours : c'est la correction qu'on
+ * attend, et la file doit la connaître même si elle ne passe pas.
+ */
+export function renvoyerLaLigne({
+  valeurs = null, derniere = null, etat = null, refus = null,
+} = {}) {
+  if (etat !== 'echec' || !refus || !derniere || !valeurs) return true;
+  const a = choisirChamps(valeurs, CHAMPS_LIGNE);
+  const b = choisirChamps(derniere, CHAMPS_LIGNE);
+  return CHAMPS_LIGNE.some((c) => !Object.is(a[c] ?? null, b[c] ?? null));
+}
+
+/**
+ * LE DEVIS, TEL QUE L'ÉCRAN LE VEUT, TIENDRAIT-IL SOUS LA BORNE ? Le calcul de
+ * la base (`totauxDevis`, le même au centime — `verifier-devis` le joue sur
+ * les cas de PostgreSQL), fait sur ce que la file VEUT : l'en-tête et les
+ * lignes, sans celles qu'on retire, sans celles qui ne sont pas parties
+ * (« locales » : incomplètes), sans une ligne irrecevable. `entrees` : ce que
+ * rend `entreesVoulues()` de la file.
+ */
+export function tiendraitSousLePlafond(entrees) {
+  const liste = Array.isArray(entrees) ? entrees : [];
+  const d = liste.find((e) => e && e.cle === 'devis');
+  const lignes = liste.filter((e) => e && e.cle !== 'devis' && !e.retire && !e.locale && e.voulu)
+    .map((e) => e.voulu).filter((l) => validerLigne(l).ok);
+  return totauxDevis(lignes, d && d.voulu ? d.voulu : null).ok === true;
+}
+
+/**
+ * CE QU'IL FAUT RENVOYER APRÈS UNE ÉCRITURE RÉUSSIE (point 2) : chaque
+ * écriture en échec par un refus du plafond — l'en-tête comme une ligne ou
+ * une option —, mais SEULEMENT si le devis voulu tiendrait sous la borne.
+ * Sinon rien : renvoyer ce qui serait refusé pareil ferait vibrer et
+ * clignoter l'écran à chaque ligne enregistrée, et ne réparerait rien.
+ * `entrees` : `entreesVoulues()`, chacune avec son `erreur` (`erreurDe`).
+ */
+export function clesARejouerApresLePlafond(entrees) {
+  const liste = Array.isArray(entrees) ? entrees : [];
+  const refusees = liste.filter((e) => e && e.etat === 'echec' && !e.retire && estUnRefusDuPlafond(e.erreur))
+    .map((e) => e.cle);
+  if (!refusees.length || !tiendraitSousLePlafond(liste)) return [];
+  return refusees;
+}
+
+/**
+ * RENVOYER LES REFUS DU PLAFOND QUI PASSERAIENT MAINTENANT — UNE fois par
+ * écriture réussie, et jamais en boucle (point 2). L'écran l'appelle quand
+ * la file a relu ses totaux (l'événement `totaux` : elle est au repos, et
+ * une écriture vient d'être confirmée) et quand il retire une ligne. Un
+ * renvoi qui échoue encore ne rappelle rien : un refus 23514 ne fait pas
+ * relire les totaux (`file-ecriture.js` ne relit qu'après une écriture
+ * confirmée, ou dont l'issue est inconnue) — il reste définitif, et sa phrase
+ * le dit. Rend les clés renvoyées.
+ *
+ * POURQUOI RENVOYER, ET NE PAS SEULEMENT LE DIRE : l'écran MONTRE déjà la
+ * valeur voulue (la réduction retirée, la ligne corrigée) ; la base, elle,
+ * garde l'ancienne. Tant que rien ne repart, l'écran affiche une valeur que
+ * la base n'a pas — et « touchez la réduction pour l'enregistrer de
+ * nouveau » serait faux : la reporter à l'identique n'envoie rien (l'écran
+ * ne renvoie que ce qui CHANGE, mesuré au navigateur).
+ */
+export function rejouerLesRefusDuPlafond(file) {
+  if (!file || typeof file.entreesVoulues !== 'function' || typeof file.reessayer !== 'function') return [];
+  const entrees = file.entreesVoulues().map((e) => ({ ...e, erreur: file.erreurDe(e.cle) }));
+  const cles = clesARejouerApresLePlafond(entrees);
+  cles.forEach((c) => file.reessayer(c));
+  return cles;
+}
+
+/**
+ * CE QUE LES RANGÉES DOIVENT DIRE À L'OUVERTURE, quand la saisie se rouvre
+ * sur une file qui avait encore de quoi écrire (`fileExistante`) : ses
+ * échecs y sont toujours, et les rangées les montraient « Non enregistrée —
+ * Réessayer », SANS phrase et SANS savoir qu'un refus était définitif — le
+ * mensonge du point 1, par la porte de la réouverture. `entrees` :
+ * `entreesVoulues()`, chacune avec son `erreur` ; `estDefinitif` et
+ * `phraseDe(erreur, chemin)` viennent d'`erreurs.js` (ce fichier n'importe
+ * pas `erreurs.js`). Rend `{ phrases, definitifs }`, par clé.
+ */
+export function echecsDeLaFile(entrees, { devisEnBase = false, estDefinitif = () => false, phraseDe = () => null } = {}) {
+  const phrases = {};
+  const definitifs = {};
+  (Array.isArray(entrees) ? entrees : []).filter((e) => e && e.etat === 'echec').forEach((e) => {
+    phrases[e.cle] = phraseDe(e.erreur, cheminDeLEcriture(e.cle, e.voulu));
+    if (e.cle === 'devis') return;
+    const r = refusDeLaLigne({ definitif: !!estDefinitif(e.erreur), devisEnBase });
+    if (r) definitifs[e.cle] = r;
+  });
+  return { phrases, definitifs };
+}
+
+/** Ce qu'on annonce à VoiceOver quand un refus du plafond, renvoyé tout
+ *  seul, passe enfin : la bande s'efface, et ça doit s'entendre. */
+export const PHRASES_DU_REJEU = Object.freeze({
+  entete: 'La réduction est maintenant enregistrée.',
+  ligne: 'Une ligne refusée tout à l’heure est maintenant enregistrée.',
+  option: 'Une option refusée tout à l’heure est maintenant enregistrée.',
+});
 
 /* Un nombre de jours tapé dans « Autre » : un entier de 1 à `VALIDITE_MAX`,
    vide = rien. Pas de virgule : une offre ne vaut pas « 30,5 jours ». */

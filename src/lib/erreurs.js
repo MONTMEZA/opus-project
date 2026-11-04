@@ -209,14 +209,18 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   devis_lieu_code_postal_check: 'un code postal fait cinq chiffres.',
   devis_lieu_ville_check: TEXTE_TROP_LONG,
   devis_objet_check: TEXTE_TROP_LONG,
-  /* LE PLAFOND : une LIGNE le fait dépasser, ou le CHANGEMENT DE LA RÉDUCTION — la base borne le
-     TTC net de la réduction (`devis_plafond_check`, section 49.5) : la retirer, ou la baisser,
-     peut faire repasser la borne, et c'est refusé sous ce nom (relecture BASE-4 du lot 2a,
-     mesuré). La phrase vaut donc pour les DEUX chemins : « ce changement », et non plus
-     « pour cette ligne », que la bande de l'en-tête affichait après une réduction refusée.
-     Le champ en cause, l'en-tête le dit avant elle (`phraseEchecDuDevis`, devis.js). */
-  devis_plafond_check: 'ce devis dépasserait 99\u00a0999\u00a0999,99\u00a0€ : il y a sans doute un zéro de trop dans '
-    + 'une ligne. Ce changement n’a pas été enregistré.',
+  /* LE PLAFOND — LA PHRASE DE REPLI, vraie quel que soit le chemin. Trois
+     écritures y mènent, et chacune a SA phrase (`PHRASES_DU_PLAFOND`, plus
+     bas, que l'écran demande par `messageDEcritureDuDevis`) : une LIGNE, une
+     OPTION, ou le CHANGEMENT DE LA RÉDUCTION — la base borne le TTC net de la
+     réduction (`devis_plafond_check`, section 49.5) : la retirer, ou la
+     baisser, peut faire repasser la borne (relecture BASE-4 du lot 2a,
+     mesuré). Celle-ci disait « il y a sans doute un zéro de trop dans une
+     ligne » à quelqu'un qui n'avait touché que la réduction (reprise
+     « écran » du lot 2a, point 3) : elle ne dit plus que ce qui est vrai
+     partout. */
+  devis_plafond_check: 'ce devis dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus grande somme qu’un devis '
+    + 'peut porter. Ce changement n’a pas été enregistré.',
   /* LES DEUX BORNES, et le moyen de ne pas en mettre : « au plus 5 % »
      seul serait FAUX pour un « 0 » tapé, que la base refuse aussi (la
      retenue va de 0,01 % à 5 %). Sans retenue, le champ reste vide —
@@ -426,6 +430,55 @@ export class ErreurDeLaBase extends Error {
 export function estUnRefusDefinitif(e) {
   const code = String((e && e.code) || '');
   return /^OP0(13|19|20|21|25)$/.test(code) || code === 'REPONSE_FERMEE' || code === '23514';
+}
+
+/**
+ * LE PLAFOND D'UN DEVIS, CHEMIN PAR CHEMIN (reprise « écran » du lot 2a,
+ * point 3, 04/11/2026). `devis_plafond_check` refuse trois écritures, et la
+ * même phrase ne peut pas être vraie pour les trois :
+ *   - une LIGNE (un poste) : elle fait passer le devis au-delà de la borne —
+ *     le plus souvent, un zéro de trop dans SA quantité ou SON prix ;
+ *   - une OPTION : elle ne touche ni le HT ni le TTC, seulement le total
+ *     toutes options comprises — la phrase le dit ;
+ *   - l'EN-TÊTE : seule la RÉDUCTION y mène (BASE-4) — c'était elle qui
+ *     tenait le devis sous la borne ; aucun zéro de trop « dans une ligne »
+ *     n'est en cause dans ce geste-là, même s'il l'est dans le devis.
+ * Chacune dit QUOI FAIRE, et rien qui ne se fasse : « Opus renverra … tout
+ * seul » est tenu par `rejouerLesRefusDuPlafond` (devis.js), qui renvoie un
+ * refus du plafond dès qu'une autre écriture a réussi et que le devis
+ * tiendrait — et ne le renvoie pas sinon.
+ */
+export const PHRASES_DU_PLAFOND = Object.freeze({
+  ligne: 'Avec cette ligne, le devis dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus grande somme qu’un '
+    + 'devis peut porter : il y a sans doute un zéro de trop dans sa quantité ou son prix. Si le zéro de trop est dans une '
+    + 'autre ligne, corrigez celle-là : Opus renverra alors celle-ci tout seul.',
+  option: 'Avec cette option, le devis, options comprises, dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus '
+    + 'grande somme qu’un devis peut porter : il y a sans doute un zéro de trop dans sa quantité ou son prix. Si le zéro de '
+    + 'trop est dans une ligne, corrigez-la : Opus renverra alors cette option tout seul.',
+  entete: 'Avec ce changement, le devis dépasserait 99\u00a0999\u00a0999,99\u00a0€, la plus grande somme '
+    + 'qu’un devis peut porter : c’est la réduction d’avant qui le tenait en dessous. Remettez-la, ou baissez d’abord la '
+    + 'ligne trop chère — il y a sans doute un zéro de trop : Opus renverra alors ce changement tout seul.',
+});
+
+/* Le nom de la contrainte qu'une erreur de la base cite — dans son message,
+   son détail ou son champ `constraint` (PostgREST, la démonstration). */
+function contrainteCitee(e) {
+  if (!e || typeof e !== 'object') return null;
+  const brut = `${e.message || ''} ${e.details || ''} ${e.constraint || ''}`;
+  return (brut.match(/\b([a-z0-9_]+_check\d*)\b/i) || [])[1] || null;
+}
+
+/**
+ * LA PHRASE D'UNE ÉCRITURE DU DEVIS QUI A ÉCHOUÉ, selon son CHEMIN :
+ * `'ligne'`, `'option'` ou `'entete'`. Un refus du plafond prend la phrase de
+ * son chemin (`PHRASES_DU_PLAFOND`) ; tout le reste, celle de `messageClair`,
+ * inchangée. Un chemin inconnu retombe sur `messageClair` : jamais une phrase
+ * d'un autre chemin.
+ */
+export function messageDEcritureDuDevis(e, chemin) {
+  const plafond = String((e && e.code) || '') === '23514' && contrainteCitee(e) === 'devis_plafond_check';
+  if (plafond && Object.prototype.hasOwnProperty.call(PHRASES_DU_PLAFOND, chemin)) return PHRASES_DU_PLAFOND[chemin];
+  return messageClair(e, '');
 }
 
 /**
