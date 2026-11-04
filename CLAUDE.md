@@ -10720,6 +10720,228 @@ que la RLS arrête (un `revoke` général, dans un lot à part) ; `loadAll`
 avale encore l'échec de `mes_conversations` ; le nom recopié par
 `devenir_pro()` — `docs/A-FAIRE.md`, « Après l'étape M1d du lot S-d ».
 
+### Réduction, acompte, validité — lot 2a (02-04/11/2026)
+
+Section 49 de `schema.sql` (49.1 la répartition, 49.4 bis les colonnes, 49.5
+les contraintes, 49.6 les recalculs, 49.6 ter le rattrapage, 49.7 les droits
+de colonne), `devis.js`, `file-ecriture.js`, `ConditionsDevis.js`,
+`SaisieDevisScreen.js`, deux essais (`essais-section-49-conditions.sql`,
+`-rattrapage.sql`), `verifier-devis` et `mesure-devis`. Le cahier :
+`docs/CAHIER-LOT-2A.md` (archivé tel qu'il a servi ; en cas de désaccord,
+cette section et le code disent vrai).
+
+Le lot 2 est découpé en trois : **2a le calcul**, 2b ce que le devis doit
+dire, 2c le document et sa remise. Dans une carte « Conditions » plein écran,
+l'artisan pose une **réduction**, un **acompte** (ou des arrhes), une
+**validité**, et la retenue de garantie, qui y a déménagé. La base calcule ;
+l'écran montre avant et après la réduction, la TVA par taux, le **total
+toutes options comprises**, l'acompte et le reste à payer. **Rien ne sort
+encore** : ni numéro, ni PDF, ni remise au client. Aucun module natif.
+
+#### Les décisions du propriétaire, le 03/11
+
+| question | réponse |
+|---|---|
+| le PDF | « le pdf est generer au moment de mettre le numero mais il faut un apercu avant de valider le pdf pour pouvoir voir si tout est corect la mise en page etc […] » : **aucun PDF avant son numéro** (2c), et un aperçu au format final avant, qui ne sort pas du téléphone |
+| le rabais | **« Réduction », en % ou en €, au choix** — jamais « remise » à l'écran : ce mot désigne déjà le geste de remettre le devis (les colonnes, qui ne s'affichent pas, gardent `remise_*`) |
+| l'acompte | **en % ou en €, au choix** ; sa nature, acompte ou arrhes, **à chaque devis, sans défaut** ; sur le total **hors options** |
+| la validité | **pastilles 15 · 30 · 60 · 90 jours + « Autre »**, rien de pré-choisi, à compter de la date du devis |
+
+#### Ce que l'artisan écrit, ce que la base pose
+
+L'artisan écrit la DEMANDE (`remise_centiemes` OU `remise_centimes`, de même
+pour l'acompte, `acompte_nature`, `validite_jours`) ; la base pose l'EFFECTIF
+(`remise_ht_centimes`, `acompte_ttc_centimes`, `total_ttc_options_centimes`,
+et la part de chaque taux dans `devis_tva.remise_centimes`).
+
+> **Une demande trop grande est RAMENÉE, jamais refusée.** Une réduction
+> valable à la saisie dépasse le total dès qu'on retire une ligne : une
+> contrainte empêcherait l'artisan de retirer une ligne de son propre devis.
+> L'écran dit « Ramenée à … » ; la remise au client (2b-2c) la refusera.
+>
+> **Ce que la base calcule ne s'écrit plus depuis le téléphone (49.7).**
+> Au lot 1, un client modifié pouvait encore envoyer `statut`, que 2c fera
+> passer à « remis » : le figeage aurait protégé un faux. Désormais
+> `revoke`, puis `grant insert (…)` et `grant update (…)` colonne par
+> colonne : un total, une date, `statut` rendent 42501. Le revers : une
+> colonne envoyée hors de la liste fait refuser la requête ENTIÈRE —
+> `verifier-devis` compare la liste à ce qu'`api.js` envoie.
+
+Trois règles de construction, chacune mesurée : **l'acompte se calcule dans
+`tient_le_devis()`**, sur le TTC qu'il vient de relire (calculé dans le
+recalcul, il lisait le TTC d'avant, et retirer la dernière ligne d'un devis à
+acompte était refusé) ; **une réduction qui change refait la ventilation** par
+un déclencheur `after` qui appelle `recalcule_devis(id, NULL)` (NULL : un
+recalcul sans écriture de ligne — avec le numéro de l'écriture, c'était
+OP015 à chaque réduction) ; et **la réponse d'une écriture de réduction porte
+les totaux d'AVANT** : l'application ne demande jamais un montant en retour
+d'une écriture d'en-tête, elle RELIT.
+
+#### La répartition au plus fort reste
+
+Une réduction se répartit entre les taux, au prorata des bases brutes : la
+TVA se calcule sur ce qui est réellement facturé.
+`repartir_au_plus_fort_reste()` (49.1) et son miroir `repartirAuPlusFortReste`
+(`devis.js`) donnent à chaque taux sa part entière, puis les centimes qui
+manquent aux plus grands restes — sans cette règle, 1 000 c sur trois taux
+égaux donnaient 334 au lieu de 333.
+
+> **À reste égal, la PREMIÈRE part du tableau gagne** : la fonction ne voit
+> que l'ordre qu'on lui passe, et `recalcule_devis()` comme `totauxDevis()`
+> passent les taux du plus fort au plus faible. Changer cet ordre change des
+> centimes, sans une erreur. **Et le calcul se fait en `numeric` et en
+> `BigInt`, par `div()` et `mod()`** : le produit déborde un `bigint` dès
+> 10^19 (en anglais), un `Number` n'est plus exact au-delà de 2^53, et
+> `floor(a / b)` sur un `numeric` peut arrondir 2,999…9 à 3.
+
+`supabase/cas-devis.json` : 69 cas d'argent joués des deux côtés, 0 écart.
+Sur la vraie base, 100,00 € de réduction sur deux taux font 56,44 € et
+43,56 €, comme le calcule le téléphone.
+
+#### Acompte ou arrhes, HT ou TTC : ce que l'écran doit dire
+
+- **la nature n'a pas de défaut**, et un contrôle le tient : des arrhes se
+  perdent ou se rendent au double, un acompte engage les deux (L. 214-1).
+  Sans nature : un motif de refus de la remise (2b), jamais une contrainte ;
+- **au régime réel, une réduction en euros est HT, un acompte en euros TTC.**
+  Mesuré : 100,00 € de réduction sur un poste de 1 000,00 € HT à 20 %, et le
+  client paie 120 € de moins. Les champs disent « Réduction HT, en euros » et
+  « … TTC », avec leur aide ; en franchise, ni HT ni TTC. Tous les libellés
+  des totaux sortent de `libellesDesTotaux(regime)` ;
+- **les aides de droit** (`ECHEANCE_ACOMPTE`, le 8e jour de L. 221-10 ;
+  `AIDE_NATURE_ACOMPTE` ; `PHRASE_RETENUE` et `AIDE_RETENUE` ;
+  `AIDE_VALIDITE`), constantes de `devis.js` comparées mot pour mot, disaient
+  d'abord moins que la loi, dans le sens qui expose l'artisan (« rien
+  encaisser » là où L. 221-10 dit « recevoir aucun paiement »). Relues dans
+  le dump LEGI du 17/10 et ses différentiels jusqu'au 02/11, **pas sur
+  Légifrance** (403 au conteneur). **Ce sont des AIDES, pas le texte
+  imprimé** : écrites pour l'artisan, imprimées elles diraient au CLIENT que
+  la somme retenue « vous revient ». Le texte imprimé s'écrit en 2c ;
+- **la validité court depuis la date de REMISE**, celle qui s'imprimera
+  (`docs/PLAN-DEVIS.md` §2.0) : un brouillon de septembre remis en novembre
+  ne doit pas arriver périmé. Le passage des jours à une date est pour 2c.
+
+#### Ce que les relectures ont trouvé de plus instructif
+
+Relectures adverses du 03/11 (32 constats, aucun réfuté) et du 04/11 (14,
+puis 3 de sa contre-vérification). Ce qu'il ne faut pas redécouvrir :
+
+> **Une contrainte nouvelle sur une valeur RECALCULÉE se viole au premier
+> recalcul d'un ancien devis — et ce recalcul peut être la cascade d'un
+> TIERS.** Avant le lot, rien ne bornait les options : deux options de
+> 60 000 000,00 € passaient. Le lot les borne (`devis_plafond_check`).
+> Mesuré : la migration échouait ; ou, plus tard, la suppression du compte du
+> particulier dont la demande portait ce devis était refusée — son droit à
+> l'effacement bloqué par l'artisan. D'où la **garde** de 49.6 ter, qui
+> arrête la migration AVANT d'écrire, en français, en nommant les devis. Et
+> le rattrapage lui-même oubliait les devis aux options seules (TTC 0) et
+> butait sur ceux à l'horloge maximale (OP016).
+
+- **l'erreur 22003 évitée** : `tient_le_devis()` (`before`) tourne AVANT les
+  contraintes, et un pourcentage hors bornes débordait le `bigint`. Hors de
+  1 à 10 000 il ne calcule plus rien : `devis_acompte_check` refuse ;
+- **le plafond juge le HT BRUT, le TTC et les options NETS** : une réduction
+  peut faire tenir sous 99 999 999,99 € un TTC qui la dépasserait sans elle,
+  et la retirer est alors refusé — le premier commentaire promettait
+  l'inverse. Ce refus est définitif : « La corriger », plus « Réessayer »
+  (qui échouait à l'identique), et la file d'écriture tient la réduction
+  refusée À PART, pour que l'objet changé ensuite parte seul ;
+- **« Ramenée à 0,00 € » s'affichait pendant l'envoi d'une réduction en euros
+  qui monte**, et restait après un échec : la phrase comparait la demande de
+  l'écran aux totaux encore anciens. Elle se juge désormais contre la demande
+  que la BASE a vue, relue avec les totaux : « Calcul en cours… » pendant
+  l'envoi, rien après un échec, que la carte dit elle-même. **Un écran dit
+  « fait » d'après ce que la base a relu, jamais d'après ce qu'il a envoyé** ;
+- **une paire part entière, à l'écran ET dans la file** : après une écriture
+  d'issue inconnue, la file aurait envoyé le montant seul à une base qui
+  portait le pourcentage — refusé par `devis_remise_une_forme_check`. Une
+  règle qui lie deux colonnes d'un brouillon écrit champ par champ ne s'écrit
+  jamais en contrainte : elle refuserait la saisie à mi-chemin.
+
+> **Les contrôles ne comparaient aucun corps de calcul.** Sur 25 défauts
+> remis à la main au premier commit du lot — les taux dans l'ordre inverse,
+> un arrondi sans son demi, l'acompte calculé sur les options, une nature
+> `'acompte'` par défaut, une aide qui dit le contraire de la loi —, **les 25
+> passaient les 56 contrôles**. `verifier-devis` compare désormais ENTIERS les
+> corps SQL de calcul et le rattrapage : changer une formule est une décision.
+>
+> **Une erreur annoncée qui MANQUE ne laisse aucun `f`.** Garde neutralisée,
+> l'essai du rattrapage rendait 2 erreurs au lieu de 4, toutes ses colonnes à
+> `t`. Les essais annoncent donc leur NOMBRE exact d'erreurs (27 ; 4 dont 2 de
+> la garde), et le refus du cas 13 bis se juge en SQL (`:ERROR`, puis
+> `LAST_ERROR_MESSAGE`). Ce compte ne se lit qu'en jouant l'essai :
+> `npm run verifier` ne joue aucun SQL.
+
+#### La migration, gardée par son empreinte
+
+Construite par un script depuis `schema.sql` (52 ordres, aucun qui commence
+par `drop`, `delete` ou `truncate`, `set local lock_timeout = '5s'`, le
+`revoke` de 49.7 rejoué — sans lui, le droit de table du lot 1 restait et les
+droits de colonne ne fermaient rien). Simulée deux fois sur l'imitation
+`a3c910d` : l'empreinte d'une base neuve, au transport du connecteur près.
+Relevé avant : 3 devis, aucune option ni horloge maximale — la garde ne
+mordait pas.
+
+**Appliquée le 04/11/2026 à 16 h 40 (heure de Paris)** — migration
+`lot_2a_reduction_acompte_validite`, version `20261104154007` en UTC —, avec
+l'accord du propriétaire, Opus fermé sur son iPhone, sous forme GARDÉE : un
+bloc `do` qui compare le md5 du texte reçu à celui du fichier simulé
+(`dfe3fba1ab67ddb1b16d514507493fc7`, sa version « reçue », après le
+transport) et n'exécute rien s'il diffère. Relevé après : les 143 lignes de
+catalogue des objets touchés identiques à l'imitation migrée (md5
+`766ce9ca1e5774752f96f378b1d79661`), au transport près (seule
+`tient_la_ligne_de_devis`, non touchée) et au droit MAINTAIN de PostgreSQL 17
+près ; les 3 devis intacts ; les contraintes validées. **Le rattrapage a
+changé la date « modifié » de 2 brouillons** (annoncé avant l'accord) :
+`tient_le_devis()` pose `modifie_le` à chaque écriture ; les montants, eux,
+n'ont pas bougé. **Les avertissements des commits `2e18d85`, `6791764`,
+`12ffcee` et `90b148c` (« ne pas faire `git pull` avant la migration ») ne
+valent plus** : un message de commit ne se récrit pas, c'est ici qu'on le dit.
+
+#### Essayé sur la vraie base
+
+Par le chemin de l'application, deux artisans jetables à Brest (régime réel,
+SIRET fictifs, supprimés ensuite) — **33 vérifications justes, aucune en
+échec** :
+
+| | relevé |
+|---|---|
+| trois postes à deux taux, et une option | HT 1 262,40 €, TVA 197,49 €, TTC 1 459,89 €, toutes options 1 496,52 € — **identiques au calcul du téléphone** |
+| réduction de 10 % | 126,24 €, répartie 71,25 € (20 %) et 54,99 € (10 %) |
+| les deux formes à la fois | **400 · `devis_remise_une_forme_check`**, l'ancienne gardée |
+| acompte de 2 000 000 000 centièmes · nature « autre » · 366 jours · une ligne au-delà du plafond | **23514**, chacun sous SA contrainte — jamais 22003 |
+| écrire les trois colonnes calculées | **403 · 42501** ×3, rien ne bouge |
+| retirer la dernière ligne d'un devis à acompte | passe ; l'acompte retombe à 0 |
+| l'autre artisan lit, modifie, supprime · un visiteur | `[]`, aucune ligne touchée · **401** ×3 |
+| l'export RGPD | les colonnes du lot ; rien de l'un chez l'autre |
+
+Base revenue à 14 comptes / 8 fiches / 21 publications / 3 devis / 11 lignes,
+aucun SIREN d'essai réservé ; deux preuves SIRET `essai` restent (elles
+expirent, le connecteur refuse un `delete`).
+
+#### ESSAYÉ SUR L'IPHONE le 04/11/2026
+
+Par le propriétaire, mot pour mot : « ok jai tester les condition est tous
+fonctionne tres bien la remise s'aplique l'accompte et le delais de validiter
+aussi tout fonctionne ». Relevé par la FORME seulement : 1 devis porte une
+réduction, un acompte calculé, sa nature et une validité. **Les options, il
+ne les a pas essayées.**
+
+Le commit `68161d6` (le 04/11 au soir, `schema.sql` inchangé) corrige les
+17 derniers constats ; vérifié par l'essai 49 (79 refus, 0 écart), les deux
+essais du lot (27 ; 4), les 56 contrôles, le linter à 32, les paquets iOS et
+Android et `mesure-devis` (506 mesures). **Rien de ces corrections n'a été vu
+sur l'iPhone.**
+
+#### Ce qui n'a PAS été vérifié
+
+VoiceOver, le clavier sous la carte « Conditions », la gélule « La corriger »
+au doigt, Hermes ; les options sur l'iPhone ; sur la vraie base, le régime
+franchise, les arrhes en montant, une réduction plus grande que le brut, la
+file d'écriture elle-même (ses requêtes reproduites à la main). **Aucun vrai
+devis n'a été remis** : c'est le lot 2c. La suite — le juriste, l'écran, les
+contrôles — est dans `docs/A-FAIRE.md`, « Après le lot 2a — ce qui reste ».
+
 ## L'icône d'Opus — le logo du propriétaire (02/11/2026)
 
 Remise par lui le 02/11 : le casque de chantier et le mot « OPUS », en encre

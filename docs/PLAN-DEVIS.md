@@ -3184,7 +3184,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 - **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
 - **Lot 1** **(FAIT le 23/10/2026 — 10.16 ; la main-d'œuvre y est un drapeau SANS contrainte d'unité)** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
 - **Lot P — la base de postes** **(FAIT le 25/10/2026 — 10.17 ; aucune colonne métier, tranché le 23/10)** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier devait s'y trancher avant (10.6) : c'est fait, aucune.
-- **Lot 2** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
+- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b et 2c restent)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
 - **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
 - **Lot 5** : trois modèles au lieu de cinq.
 
@@ -3844,3 +3844,5 @@ remplie ; le contrôle qu'elle demande (« aucune règle ne permet de modifier
 ou supprimer un fichier de l'espace `devis` ») est `verifier-stockage`, qui
 range déjà `devis` parmi les espaces figés. Restent S-b, S-c et S-d (CLAUDE.md,
 « Le stockage et le badge suspendu — lot S-a »).
+
+**Le lot S est terminé le 02/11/2026** (`docs/CAHIER-LOT-S.md`), et **le sous-lot 2a — la réduction, l'acompte, la validité — est FAIT le 04/11/2026**, appliqué sur la vraie base et essayé sur l'iPhone (CLAUDE.md, « Réduction, acompte, validité — lot 2a » ; le cahier : `docs/CAHIER-LOT-2A.md`). Suivent 2b, puis 2c.
