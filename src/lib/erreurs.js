@@ -209,8 +209,14 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   devis_lieu_code_postal_check: 'un code postal fait cinq chiffres.',
   devis_lieu_ville_check: TEXTE_TROP_LONG,
   devis_objet_check: TEXTE_TROP_LONG,
+  /* LE PLAFOND : une LIGNE le fait dépasser, ou le CHANGEMENT DE LA RÉDUCTION — la base borne le
+     TTC net de la réduction (`devis_plafond_check`, section 49.5) : la retirer, ou la baisser,
+     peut faire repasser la borne, et c'est refusé sous ce nom (relecture BASE-4 du lot 2a,
+     mesuré). La phrase vaut donc pour les DEUX chemins : « ce changement », et non plus
+     « pour cette ligne », que la bande de l'en-tête affichait après une réduction refusée.
+     Le champ en cause, l'en-tête le dit avant elle (`phraseEchecDuDevis`, devis.js). */
   devis_plafond_check: 'ce devis dépasserait 99\u00a0999\u00a0999,99\u00a0€ : il y a sans doute un zéro de trop dans '
-    + 'une ligne. Rien n’a été enregistré pour cette ligne.',
+    + 'une ligne. Ce changement n’a pas été enregistré.',
   /* LES DEUX BORNES, et le moyen de ne pas en mettre : « au plus 5 % »
      seul serait FAUX pour un « 0 » tapé, que la base refuse aussi (la
      retenue va de 0,01 % à 5 %). Sans retenue, le champ reste vide —

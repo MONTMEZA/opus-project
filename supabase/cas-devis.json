@@ -634,7 +634,7 @@
     },
     {
       "id": "R13",
-      "titre": "le PLAFOND porte sur le BRUT : 50 % de réduction ne laisse pas passer 99 999 999,99 € + 1 c",
+      "titre": "le plafond du HT porte sur le BRUT : 50 % de réduction ne laisse pas passer 99 999 999,99 € + 1 c",
       "forme": "conditions",
       "operations": [
         {"op":"devis","valeurs":{"remise_centiemes":5000}},

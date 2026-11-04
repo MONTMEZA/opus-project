@@ -1131,10 +1131,29 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
        c'est elle qui porte l'aide « un an ». */
     && phrasesDe(lire('src/components/ConditionsDevis.js')).some((p) => UN_AN.test(p)),
     sansReserve.map(({ f, p }) => `${f} : « ${p.slice(0, 90)} »`).join(' | ') || `${phrasesModule.length} phrases lues`);
-  verifier('`PHRASE_RETENUE` : au plus 5 %, le consignataire, la caution d’une « société de caution mutuelle » — pas une '
-    + 'caution « bancaire » seule', /5\u00a0%/.test(D.PHRASE_RETENUE) && /consignataire/.test(D.PHRASE_RETENUE)
+  /* Et, depuis la relecture CONTROLES-11 du lot 2a : la caution est
+     « personnelle et solidaire » (art. 1er al. 4), et l'opposition se notifie
+     AU CONSIGNATAIRE (ou à la caution), par lettre recommandée (art. 2) —
+     sans le destinataire, l'artisan pouvait croire qu'une lettre à LUI
+     suffisait. « Un an après la RÉCEPTION des travaux » : le sabotage J12
+     (« un an après la signature ») passait au vert, la phrase n'étant
+     contrôlée que par la présence d'« opposition ». La forme ENTIÈRE est
+     exigée plus bas (« LES AIDES DE DROIT, MOT POUR MOT »). Et, depuis la
+     contre-vérification du lot 2a : « la caution est LIBÉRÉE » — l'art. 2
+     nomme deux cas, et « Elle vous revient … (ou à la caution) » disait
+     qu'une somme revient là où, avec une caution, rien n'a été retenu. */
+  verifier('`PHRASE_RETENUE` : au plus 5 %, le consignataire, la caution « personnelle et solidaire » d’une « société de '
+    + 'caution mutuelle » — pas une caution « bancaire » seule —, un an après la RÉCEPTION, sauf opposition notifiée AU '
+    + 'CONSIGNATAIRE (ou à la caution) par lettre recommandée', /5\u00a0%/.test(D.PHRASE_RETENUE)
+    && /consignataire/.test(D.PHRASE_RETENUE)
     && /société de caution mutuelle/.test(D.PHRASE_RETENUE) && /établissement financier habilité/.test(D.PHRASE_RETENUE)
-    && !/bancaire/.test(D.PHRASE_RETENUE) && /lettre recommandée/.test(D.PHRASE_RETENUE));
+    && !/bancaire/.test(D.PHRASE_RETENUE) && /lettre recommandée/.test(D.PHRASE_RETENUE)
+    && /caution personnelle et solidaire/.test(D.PHRASE_RETENUE)
+    && /un an après la réception des travaux/.test(D.PHRASE_RETENUE)
+    && /notifié au consignataire \(ou à la caution\), par lettre recommandée, une opposition motivée/.test(D.PHRASE_RETENUE)
+    && /La somme retenue vous revient \(ou la caution est libérée\) un an après la réception des travaux/.test(D.PHRASE_RETENUE)
+    && !/Elle vous revient/.test(D.PHRASE_RETENUE),
+    D.PHRASE_RETENUE);
   verifier('`MENTION_FRANCHISE` est exactement « TVA non applicable, article 293 B du CGI »',
     D.MENTION_FRANCHISE === 'TVA non applicable, article 293 B du CGI');
 }
@@ -3879,7 +3898,10 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
     && /^=> \{\s*enregistrerCarte\(\);\s*poserCarte\(null\);/.test(fermerCorps)
     && /^=> \{\s*const id = carteRef\.current;\s*if \(id === CARTE_CONDITIONS\) \{\s*if \(refConditions\.current\) refConditions\.current\.enregistrer\(\);\s*return;\s*\}/.test(carteCorps)
     && /useImperativeHandle\(ref, \(\) => \(\{ lire, enregistrer \}\)\)/.test(lire('src/components/ConditionsDevis.js'))
-    && /<ConditionsDevis[^>]*onEnregistrer=\{enregistrerConditions\}[^>]*onFermer=\{fermerCarte\}/.test(ECR.saisie),
+    /* La balise se lit par `balises` (accolades comptées) : depuis la relecture
+       ÉCRAN-2 du lot 2a, elle porte des flèches, donc des « > ». */
+    && /onEnregistrer=\{enregistrerConditions\}/.test(balises(ECR.saisie, 'ConditionsDevis')[0] || '')
+    && /onFermer=\{fermerCarte\}/.test(balises(ECR.saisie, 'ConditionsDevis')[0] || ''),
   `${sansEspaces(toutCorps).slice(0, 200)} | ${sansEspaces(carteCorps).slice(0, 160)}`);
   /* LA SIXIÈME PORTE (relecture « écran » des étapes 4 à 7, bloquant A1) :
      la liste des cinq portes ne voyait pas « l'autre fiche → Faire un
@@ -3973,8 +3995,31 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
        7 %, un pourcentage de 150) est COMPTÉ par la garde, PENDANT que les
        champs recevables de la même carte partent ; « Corriger » rouvre la
        carte, et son texte tapé y revient (`textesConditions`). */
-    && /const r = enregistrerEntete\(changements\);\s*if \(fautes\.length\) \{\s*poserRefusEntete\(\[\], /.test(corpsFleche(ECR.saisie, 'const enregistrerConditions = '))
-    && /setTextesConditions\(fautes\.length \? textes : null\)/.test(corpsFleche(ECR.saisie, 'const enregistrerConditions = '))
+    /* Relecture du lot 2a : la carte RELUE ENTIÈRE efface d'abord tous ses
+       refus — les deux clés de chaque paire (ÉCRAN-6) —, puis pose ceux
+       d'`enregistrerEntete` et ses fautes de saisie ; ses textes et ses choix
+       restent gardés pour un refus de l'écran OU d'`enregistrerEntete`
+       (ÉCRAN-5) ; et elle ne vibre que pour le geste qu'on vient de faire
+       (ÉCRAN-13). La bande nomme chaque champ UNE fois. */
+    /* Contre-vérification : les fautes DÉJÀ dites sont relevées AVANT
+       l'effacement, et passées à `vibrerPourLaCarte` — une faute née à la
+       fermeture (le champ jamais quitté) vibre une fois. */
+    && /^=> \{\s*const fautes = Object\.keys\(erreursSaisie \|\| \{\}\);\s*const deja = CHAMPS_CONDITIONS\.filter\(\(k\) => refusEntete\.current\[k\]\);\s*poserRefusEntete\(CHAMPS_CONDITIONS\);\s*const r = enregistrerEntete\(changements, \{ vibrer: false \}\);\s*if \(fautes\.length\) \{\s*poserRefusEntete\(\[\], /.test(sansCommentairesJs(corpsFleche(ECR.saisie, 'const enregistrerConditions = ')))
+    && /const refusees = \[\.\.\.fautes, \.\.\.Object\.keys\(r\.refus \|\| \{\}\)\];\s*setTextesConditions\(refusees\.length \? textes : null\);\s*if \(vibrerPourLaCarte\(geste, refusees, deja\)\) retour\.echec\(\);/.test(corpsFleche(ECR.saisie, 'const enregistrerConditions = '))
+    && (corpsFleche(ECR.saisie, 'const enregistrerConditions = ').match(/retour\.echec\(\)/g) || []).length === 1
+    && /if \(!ok && vibrer\) retour\.echec\(\);/.test(corpsFleche(ECR.saisie, 'const enregistrerEntete = '))
+    && ['remiseCentiemes', 'remiseCentimes', 'acompteCentiemes', 'acompteCentimes', 'acompteNature', 'validiteJours',
+      'retenueGarantieCentiemes'].every((c) => (/const CHAMPS_CONDITIONS = Object\.freeze\(\[([^\]]*)\]/.exec(ECR.saisie) || ['', ''])[1]
+      .includes(`'${c}'`))
+    /* La bande nomme chaque champ UNE fois, et l'acompte sous le nom de sa
+       NATURE (contre-vérification d'ÉCRAN-8) : `nomsDesRefus` le fait. */
+    && /nomsDesRefus\(garde\.enteteRefuse, \{\s*noms: NOMS_ENTETE,\s*nature: textesConditions && textesConditions\.choix \? textesConditions\.choix\.nature : devis\.acompteNature,\s*\}\)/.test(ECR.saisie)
+    && !/acompteCentiemes: 'Acompte'|acompteCentimes: 'Acompte'/.test(sansCommentairesJs(ECR.saisie))
+    && json(D.nomsDesRefus(['remiseCentimes', 'remiseCentiemes'], { noms: { remiseCentimes: 'Réduction', remiseCentiemes: 'Réduction' } }))
+      === json(['Réduction'])
+    && json(D.nomsDesRefus(['acompteCentiemes', 'acompteNature'], { noms: { acompteNature: 'Acompte ou arrhes' } })) === json(['Acompte ou arrhes'])
+    && json(D.nomsDesRefus(['acompteCentimes'], { noms: {}, nature: 'arrhes' })) === json(['Arrhes'])
+    && json(D.nomsDesRefus(['acompteCentimes'], { noms: {}, nature: 'acompte' })) === json(['Acompte'])
     && /if \(CHAMPS_CONDITIONS\.includes\(champ\)\) \{ ouvrirConditions\(\); return; \}/.test(corpsFleche(ECR.saisie, 'const corrigerEntete = '))
     && !/changerRetenue|refBas/.test(sansCommentairesJs(ECR.saisie)));
   /* ROUVRIR UN DEVIS DONT LA FILE ÉCRIT ENCORE (I2) ; « RELIRE » PAR LA FILE (I3). */
@@ -4339,15 +4384,17 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     { remiseCentiemes: 1000, acompteCentiemes: 3000 });
   /* La forme que l'écran reçoit (la base, ou la démonstration) : des
      NOMBRES — `totauxDevis` rend des objets « effectifs ». */
-  const tEcran = { ht: tc.ht, tva: tc.tva, ttc: tc.ttc, brut: tc.brut, reduction: tc.reduction.effectif, acompte: tc.acompte.effectif,
-    ttcOptions: tc.ttcOptions, ventilation: tc.ventilation };
   const dv = { remiseCentiemes: 1000, acompteCentiemes: 3000, acompteNature: 'arrhes', retenueGarantieCentiemes: 500 };
+  /* …et la DEMANDE que la base a vue (relecture ÉCRAN-1 du lot 2a) : c'est
+     contre elle que la carte juge, et d'elle que la rangée tire son « 10 % ». */
+  const tEcran = { ht: tc.ht, tva: tc.tva, ttc: tc.ttc, brut: tc.brut, reduction: tc.reduction.effectif, acompte: tc.acompte.effectif,
+    ttcOptions: tc.ttcOptions, ventilation: tc.ventilation, demande: D.demandeDuDevis(dv) };
   const cles = (e, t = tEcran) => D.rangeesDesTotaux(t, e, { devis: dv, nbOptions: 1 }).map((r) => r.cle);
   /* En franchise, les lignes ne portent AUCUNE TVA : un devis cohérent. */
   const tf = D.totauxDevis([Lg('a', 1, 'poste', 10000, 0), Lg('b', 2, 'poste', 5000, 0), Lg('c', 3, 'option', 2000, 0)],
     { remiseCentiemes: 1000, acompteCentiemes: 3000 });
   const tEcranF = { ht: tf.ht, tva: tf.tva, ttc: tf.ttc, brut: tf.brut, reduction: tf.reduction.effectif, acompte: tf.acompte.effectif,
-    ttcOptions: tf.ttcOptions, ventilation: tf.ventilation };
+    ttcOptions: tf.ttcOptions, ventilation: tf.ventilation, demande: D.demandeDuDevis(dv) };
   const reel = D.rangeesDesTotaux(tEcran, 'reel', { devis: dv, nbOptions: 1 });
   const red = reel.find((r) => r.cle === 'reduction') || {};
   const reste = reel.find((r) => r.cle === 'reste') || {};
@@ -4363,7 +4410,10 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
   red.moins === true && red.centimes === tc.reduction.effectif && !/[-−]/.test(red.aDire || '-')
     && /^Réduction 10/.test(red.libelle || '') && reste.libelle === 'Reste à payer, avant la retenue de garantie'
     && reste.centimes === tc.ttc - tc.acompte.effectif && (reel.find((r) => r.cle === 'acompte') || {}).libelle.startsWith('Arrhes')
-    && D.libelleAcompte('arrhes') === 'Arrhes' && D.libelleAcompte('acompte') === 'Acompte' && D.libelleAcompte(null) === 'Acompte',
+    /* Sans nature, un nom NEUTRE — jamais « Acompte » seul (relecture ÉCRAN-8,
+       CONTROLES-10 du lot 2a). */
+    && D.libelleAcompte('arrhes') === 'Arrhes' && D.libelleAcompte('acompte') === 'Acompte'
+    && D.libelleAcompte(null) === 'Acompte ou arrhes' && D.libelleAcompte(undefined) === 'Acompte ou arrhes',
   json(reel.map((r) => r.aDire)));
   /* En LECTURE (régime pas encore lu) avec de la TVA : le brut est HORS
      taxe et le total la comprend — ils ne se soustraient pas ; la réduction
@@ -4377,12 +4427,13 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     && D.suffixeDuPied({ reduction: 5 }) === ' · réduction comprise' && D.suffixeDuPied({}) === '');
   verifier('`resumeDesConditions` : rien → l’invitation ; ce qui MANQUE d’abord (la nature, la validité), puis ce qui est posé',
     D.resumeDesConditions({}) === 'Aucune condition — touchez pour en poser'
-    && D.resumeDesConditions({ acompteCentiemes: 3000 }) === 'Acompte ou arrhes ? à choisir · Validité à choisir · Acompte 30 %'
+    && D.resumeDesConditions({ acompteCentiemes: 3000 }) === 'Acompte ou arrhes ? à choisir · Validité à choisir · Acompte ou arrhes 30 %'
     && D.resumeDesConditions(dv) === 'Validité à choisir · Réduction 10 % · Arrhes 30 % · Retenue 5 %'
     && D.resumeDesConditions({ validiteJours: 1 }) === 'Valable 1 jour'
     && D.resumeDesConditions({ validiteJours: 30, remiseCentimes: 5000 }) === `Réduction ${D.montantDevis(5000)} · Valable 30 jours`,
   D.resumeDesConditions(dv));
-  const eR = D.effetDeLaReduction({ ht: 0, ttc: 0, reduction: 0, brut: 0 }, { remiseCentimes: 5000 }, 'reel');
+  const eR = D.effetDeLaReduction({ ht: 0, ttc: 0, reduction: 0, brut: 0, demande: D.demandeDuDevis({ remiseCentimes: 5000 }) },
+    { remiseCentimes: 5000 }, 'reel');
   const eA = D.effetDeLAcompte(tEcran, dv, 'reel');
   const eAf = D.effetDeLAcompte(tEcran, dv, 'franchise');
   verifier('les phrases d’effet : une réduction en montant plus grande que les postes est dite RAMENÉE ; l’acompte dit le reste, '
@@ -4402,12 +4453,353 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     && sansPhrase.length === 0
     && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_validite_check"' } }) === 'La validité de l’offre n’a pas pu être enregistrée.',
   sansPhrase.join(', '));
-  verifier('les aides de droit citent leur article (L. 214-1 pour les arrhes, L. 221-10 pour le délai de sept jours) et ne '
-    + 'promettent aucune date ; « À compter de la date du devis » pour la validité',
+  /* Les mots qui portent la règle — et, depuis la relecture du lot 2a, ceux
+     qui manquaient (CONTROLES-8 : « recevoir », pas « encaisser » ; le
+     chèque ; la petite entreprise de L. 221-3 ; l'exception limitée à
+     l'entretien ou à la réparation expressément demandés, et aux pièces et
+     travaux strictement nécessaires. CONTROLES-9 : la présomption d'arrhes
+     dite comme une POSITION de l'administration ; la rétractation de 14 jours
+     et le remboursement de tout, L. 221-18 et L. 221-24. CONTROLES-12 : la
+     date du devis est celle qui sera IMPRIMÉE, à la REMISE, pas celle du
+     brouillon). La validité était comparée à « À compter de la date du
+     devis. » : elle l'est désormais à sa forme entière, plus bas.
+     CONTRE-VÉRIFICATION du lot 2a : « strictement nécessaires À L'URGENCE »
+     (sans ces mots, on lisait « nécessaires au chantier », tout le devis) ;
+     l'exemple d'exception à la rétractation porte SA limite (« le strict
+     nécessaire d'un dépannage urgent » — « un dépannage urgent » seul
+     laissait croire que tout le devis y échappe, le sens qui expose
+     l'artisan) ; et « s'il se rétracte, vous lui rendez », pas « : vous lui
+     rendez alors » juste après l'exception, qui se lisait « dans ce cas-là ». */
+  verifier('les aides de droit citent leur article (L. 214-1 pour les arrhes ; L. 221-18 et L. 221-24 pour la rétractation ; '
+    + 'L. 221-10 et L. 221-3 pour le délai de sept jours), disent « recevoir », jamais « rien encaisser », et ne promettent '
+    + 'aucune date ; la validité court depuis la date IMPRIMÉE, à la remise',
   /L\.\s214-1/.test(D.AIDE_NATURE_ACOMPTE) && /double/.test(D.AIDE_NATURE_ACOMPTE) && /L\.\s221-10/.test(D.ECHEANCE_ACOMPTE)
     && /8e jour/.test(D.ECHEANCE_ACOMPTE) && /urgents/.test(D.ECHEANCE_ACOMPTE) && /option/.test(D.AIDE_REDUCTION)
-    && /options/.test(D.AIDE_ACOMPTE) && D.AIDE_VALIDITE === 'À compter de la date du devis.'
-    && ![D.AIDE_NATURE_ACOMPTE, D.ECHEANCE_ACOMPTE, D.AIDE_REDUCTION, D.AIDE_ACOMPTE, D.AIDE_VALIDITE].some((t) => /€|20\d\d/.test(t)));
+    && /options/.test(D.AIDE_ACOMPTE)
+    && /l’administration considère qu’une somme versée d’avance par un particulier vaut des arrhes/.test(D.AIDE_NATURE_ACOMPTE)
+    && /14\sjours pour se rétracter/.test(D.AIDE_NATURE_ACOMPTE) && /L\.\s221-18/.test(D.AIDE_NATURE_ACOMPTE)
+    && /L\.\s221-24/.test(D.AIDE_NATURE_ACOMPTE) && /tout ce qu’il a versé, acompte ou arrhes/.test(D.AIDE_NATURE_ACOMPTE)
+    && /recevoir aucun paiement/.test(D.ECHEANCE_ACOMPTE) && !/pouvez rien encaisser/.test(D.ECHEANCE_ACOMPTE)
+    && /pas même un chèque/.test(D.ECHEANCE_ACOMPTE) && /L\.\s221-3(?!\d)/.test(D.ECHEANCE_ACOMPTE)
+    && /5\ssalariés au plus pour des travaux hors de son métier/.test(D.ECHEANCE_ACOMPTE)
+    && /d’entretien ou de réparation urgents qu’il vous a expressément demandés/.test(D.ECHEANCE_ACOMPTE)
+    && /strictement nécessaires à l’urgence \(/.test(D.ECHEANCE_ACOMPTE)
+    && /sauf exceptions \(par exemple, le strict nécessaire d’un dépannage urgent/.test(D.AIDE_NATURE_ACOMPTE)
+    && /s’il se rétracte, vous lui rendez tout ce qu’il a versé/.test(D.AIDE_NATURE_ACOMPTE)
+    && !/rendez alors/.test(D.AIDE_NATURE_ACOMPTE)
+    && /celle qui sera imprimée dessus/.test(D.AIDE_VALIDITE) && /remettrez au client/.test(D.AIDE_VALIDITE)
+    && ![D.AIDE_NATURE_ACOMPTE, D.ECHEANCE_ACOMPTE, D.AIDE_REDUCTION, D.AIDE_ACOMPTE, D.AIDE_VALIDITE].some((t) => /€|20\d\d/.test(t)),
+  json([D.AIDE_NATURE_ACOMPTE, D.ECHEANCE_ACOMPTE, D.AIDE_VALIDITE]));
+
+  /* LES AIDES DE DROIT, MOT POUR MOT (relecture CONTROLES-4, 8, 9, 11 et 12
+     du lot 2a). Contrôlées par des MOTS, leur contraire passait au vert :
+     « vaut un acompte », « dans vos locaux », « un an après la signature ».
+     Chacune est donc comparée ENTIÈRE à la forme écrite ICI. La changer se
+     DÉCIDE : ici, dans `devis.js` (ou l'écran) et dans le même lot, en disant
+     pourquoi — comme `ORDRE_DU_FIL` (`verifier-remontee`). Les mots exigés
+     au-dessus restent : une forme recopiée de travers ici se verrait aussi.
+     L'aide de l'interrupteur « Retenue de garantie » vit dans l'ÉCRAN (un
+     attribut JSX) : elle est RELUE dans `ConditionsDevis.js`, morceaux
+     recousus et séquences « \u00a0 » décodées. */
+  const AIDES_DE_DROIT_ATTENDUES = Object.freeze({
+    AIDE_NATURE_ACOMPTE: 'Des arrhes : chacun peut renoncer — le client en les perdant, vous en lui rendant le double. '
+      + 'Un acompte engage les deux. Si rien n’est écrit, l’administration considère qu’une somme versée d’avance par un '
+      + 'particulier vaut des arrhes (Code de la consommation, art. L.\u00a0214-1). Mais un devis signé hors de vos locaux '
+      + 'ou à distance laisse au client 14\u00a0jours pour se rétracter, sauf exceptions (par exemple, le strict nécessaire '
+      + 'd’un dépannage urgent qu’il vous a demandé chez lui) : s’il se rétracte, vous lui rendez tout ce qu’il a versé, '
+      + 'acompte ou arrhes (art. L.\u00a0221-18 et L.\u00a0221-24).',
+    ECHEANCE_ACOMPTE: 'Devis signé hors de vos locaux (chez le client, sur le chantier) par un particulier, ou par une '
+      + 'entreprise de 5\u00a0salariés au plus pour des travaux hors de son métier : vous ne pouvez recevoir aucun paiement '
+      + 'avant le 8e jour après la signature — pas même un chèque à encaisser plus tard. Seule exception : des travaux '
+      + 'd’entretien ou de réparation urgents qu’il vous a expressément demandés chez lui, et seulement pour les pièces '
+      + 'et travaux strictement nécessaires à l’urgence (Code de la consommation, art. L.\u00a0221-10 et L.\u00a0221-3). '
+      + 'Opus ne sait '
+      + 'pas encore où ce devis sera signé : comptez ce délai.',
+    AIDE_VALIDITE: 'À compter de la date du devis, celle qui sera imprimée dessus : le jour où vous le remettrez au client, '
+      + 'pas celui où vous l’avez commencé.',
+    PHRASE_RETENUE: 'Retenue sur les acomptes, au plus 5\u00a0% (loi n°\u00a071-584 du 16/07/1971). Le client consigne la '
+      + 'somme retenue chez un consignataire accepté par vous deux — à défaut, désigné par le président du tribunal. '
+      + 'Elle n’est pas retenue si vous fournissez une caution personnelle et solidaire d’un montant égal (banque, '
+      + 'établissement financier habilité ou société de caution mutuelle). La somme retenue vous revient (ou la caution '
+      + 'est libérée) un an après la réception des travaux, sauf si le client a notifié au consignataire (ou à la '
+      + 'caution), par lettre recommandée, une '
+      + 'opposition motivée par l’inexécution de vos obligations.',
+  });
+  const AIDE_INTERRUPTEUR_RETENUE = 'Au plus 5\u00a0% des acomptes, rendue un an après la réception des travaux, sauf '
+    + 'opposition motivée que le client notifie au consignataire (ou à la caution) par lettre recommandée.';
+  const ecartsAides = Object.entries(AIDES_DE_DROIT_ATTENDUES).filter(([k, v]) => D[k] !== v).map(([k]) => k);
+  verifier('les aides de droit de la carte « Conditions » sont ÉCRITES MOT POUR MOT : la nature de l’acompte, le 8e jour, '
+    + 'la validité, la retenue de garantie',
+  ecartsAides.length === 0,
+  ecartsAides.map((k) => `${k} : « ${D[k]} »`).join(' | '));
+  {
+    /* L'attribut `aide` qui suit le libellé « Retenue de garantie », SANS les
+       commentaires (une explication qui cite la faute ne la commet pas). */
+    const src = sansCommentairesJs(lire('src/components/ConditionsDevis.js'));
+    const m = src.match(/libelle="Retenue de garantie"[\s\S]*?aide=\{([^}]*)\}/);
+    const lue = m ? [...m[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((x) => x[1]).join('')
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))) : null;
+    verifier('l’aide de l’interrupteur « Retenue de garantie » est écrite MOT POUR MOT : « rendue » (la retenue), un an '
+      + 'après la RÉCEPTION, sauf opposition notifiée AU CONSIGNATAIRE (ou à la caution) par lettre recommandée',
+    lue === AIDE_INTERRUPTEUR_RETENUE, `lue : « ${lue} »`);
+  }
+
+  /* ================================================================
+     LA CARTE « CONDITIONS » — ce que la relecture « écran » du lot 2a a
+     corrigé (ÉCRAN-1 à ÉCRAN-14, CONTROLES-2, CONTROLES-10). Chaque règle vit
+     dans une fonction PURE de `devis.js`, et on la FAIT TOURNER ici : un
+     composant React ne se fait pas tourner par `node`.
+     ================================================================ */
+  {
+    /* Les espaces INSÉCABLES (milliers, « % », « € ») lues comme des espaces. */
+    const n = (t) => String(t == null ? '' : t).replace(/[\u00a0\u202f]/g, ' ');
+    const vierge = D.demandeDuDevis({});
+    /* Un devis de 1 000,00 € HT à 20 %, tel que la base le relit. */
+    const t0 = { ht: 100000, tva: 20000, ttc: 120000, brut: 100000, reduction: 0, acompte: 0, ttcOptions: 120000,
+      ventilation: [{ taux: 2000, base: 100000, tva: 20000 }], demande: vierge };
+    const t50 = { ...t0, ht: 95000, tva: 19000, ttc: 114000, reduction: 5000, demande: D.demandeDuDevis({ remiseCentimes: 5000 }) };
+    const tTout = { ...t0, ht: 0, tva: 0, ttc: 0, reduction: 100000, demande: D.demandeDuDevis({ remiseCentimes: 200000 }) };
+    const volR = D.effetDeLaReduction(t0, { remiseCentimes: 5000 }, 'reel');
+    const vol80 = D.effetDeLaReduction(t50, { remiseCentimes: 8000 }, 'reel');
+    const echec80 = D.effetDeLaReduction(t50, { remiseCentimes: 8000 }, 'reel', { enEchec: true });
+    const vue50 = D.effetDeLaReduction(t50, { remiseCentimes: 5000 }, 'reel');
+    const vraie = D.effetDeLaReduction(tTout, { remiseCentimes: 200000 }, 'reel');
+    const sansDemande = D.effetDeLaReduction({ ...tTout, demande: undefined }, { remiseCentimes: 200000 }, 'reel');
+    const volA = D.effetDeLAcompte(t0, { acompteCentimes: 30000 }, 'reel');
+    const echecA = D.effetDeLAcompte(t0, { acompteCentimes: 30000 }, 'reel', { enEchec: true });
+    const vraiA = D.effetDeLAcompte({ ...t0, acompte: 120000, demande: D.demandeDuDevis({ acompteCentimes: 999999 }) },
+      { acompteCentimes: 999999 }, 'reel');
+    verifier('ÉCRAN-1 : « Ramenée à … » ne se juge QUE contre la demande que la base a vue (`totaux.demande`) — pendant l’envoi '
+      + '« Calcul en cours… », après un échec RIEN, et « ramenée » seulement quand la base a vu la demande et l’a ramenée',
+    volR && volR.enCours === true && volR.ramenee === false && volR.aDire === D.CALCUL_EN_COURS
+      && vol80 && vol80.enCours === true && !vol80.ramenee && echec80 === null
+      && vue50 && !vue50.ramenee && /passe de 1 000,00 € à 950,00 €/.test(n(vue50.aDire))
+      && vraie && vraie.ramenee === true && /^Ramenée à 1 000,00 €/.test(n(vraie.aDire))
+      && sansDemande && sansDemande.enCours === true && !sansDemande.ramenee
+      && volA && volA.enCours === true && !volA.ramene && echecA === null && vraiA && vraiA.ramene === true,
+    json([volR, vol80, echec80, vue50, vraie, volA, echecA, vraiA].map((e) => e && n(e.aDire))));
+    /* …et la carte l'ANNONCE à VoiceOver, seulement quand c'est vrai. */
+    const carte = sansCommentairesJs(lire('src/components/ConditionsDevis.js'));
+    verifier('…et la carte ANNONCE « Ramenée à … » à VoiceOver (`retour.annoncer`), une fois par phrase, et passe `enEchec` '
+      + '(un échec de l’écriture OU des totaux illisibles) aux deux phrases d’effet',
+    /effetR && effetR\.ramenee \? effetR\.aDire : null/.test(carte) && /effetA && effetA\.ramene \? effetA\.aDire : null/.test(carte)
+      && /if \(ramenees && ramenees !== annonce\.current\) retour\.annoncer\(ramenees\);/.test(carte)
+      && /const enEchec = !!\(etatEcriture && etatEcriture\.echec\) \|\| totauxIllisibles;/.test(carte)
+      && /effetDeLaReduction\(totaux, devis, regime, \{ enEchec \}\)/.test(carte) && /effetDeLAcompte\(totaux, devis, regime, \{ enEchec \}\)/.test(carte));
+    /* La demande relue : `select` et lecture de `totauxDepuisBase`, dans les
+       DEUX sens — oublier une colonne au `select` rendrait `null`, et la carte
+       dirait « Calcul en cours… » pour toujours sur la vraie base. */
+    const API = lire('src/lib/api.js');
+    const selectTotaux = (/async function relireTotauxDevisSupabase[\s\S]*?\.select\(([\s\S]*?)\)\s*\.eq/.exec(API) || [])[1] || '';
+    const corpsTotaux = corpsDeFonction(API, 'totauxDepuisBase') || '';
+    /* …et les deux colonnes qui NOMMENT les rangées (la nature, la retenue :
+       contre-vérification d'ÉCRAN-2). */
+    const colonnesDemande = ['remise_centimes', 'remise_centiemes', 'acompte_centimes', 'acompte_centiemes',
+      'acompte_nature', 'retenue_garantie_centiemes'];
+    verifier('ÉCRAN-1 : la demande vue par la base est RELUE avec les totaux — ses quatre colonnes (et la nature, la retenue, '
+      + 'qui nomment les rangées) au `select` de '
+      + '`relireTotauxDevisSupabase`, lues par `totauxDepuisBase` sous `demande`, et la démonstration rend la même forme',
+    colonnesDemande.every((c) => new RegExp(`\\b${c}\\b`).test(selectTotaux.replace(/devis_tva\([^)]*\)/, '')))
+      && colonnesDemande.every((c) => new RegExp(`\\bd\\.${c}\\b`).test(corpsTotaux))
+      && /demande: \{/.test(corpsTotaux) && /demande: demandeDuDevis\(d\)/.test(lire('src/data/devis-demo.js'))
+      && json(D.COLONNES_DE_LA_DEMANDE) === json(['remiseCentimes', 'remiseCentiemes', 'acompteCentimes', 'acompteCentiemes'])
+      && /demande: demandeDuDevis\(\{\}\)/.test(ECR.saisie) && /demande: demandeDuDevis\(r\.devis\)/.test(ECR.saisie),
+    selectTotaux.slice(0, 220));
+
+    /* ÉCRAN-2 : le pourcentage du libellé vient de la demande RELUE. */
+    const t5 = { ...t0, ht: 95000, tva: 19000, ttc: 114000, reduction: 5000, demande: D.demandeDuDevis({ remiseCentiemes: 500 }) };
+    const rangVol = D.rangeesDesTotaux(t5, 'reel', { devis: { remiseCentiemes: 2000 } }).find((r) => r.cle === 'reduction') || {};
+    const etats = [D.ligneDEtatDeLaCarte({}), D.ligneDEtatDeLaCarte({ enCours: true }),
+      D.ligneDEtatDeLaCarte({ echec: 'x', reessayable: true }), D.ligneDEtatDeLaCarte({ echec: 'x', reessayable: false }),
+      D.ligneDEtatDeLaCarte({ totauxIllisibles: true }), D.ligneDEtatDeLaCarte({ echec: 'x', reessayable: true, totauxIllisibles: true })];
+    const balise = balises(ECR.saisie, 'ConditionsDevis')[0] || '';
+    verifier('ÉCRAN-2 : la rangée « Réduction » prend son pourcentage dans la demande RELUE (5 %, jamais les 20 % encore en route) ; '
+      + 'la carte reçoit l’état de la file et `totauxIllisibles`, et sa ligne d’état dit l’envoi, l’échec (« Réessayer »), '
+      + 'les totaux pas relus (« Relire »)',
+    n(rangVol.aDire) === 'Réduction 5 %, 50,00 €'
+      && etats[0].ton === 'neutre' && etats[0].action === null && etats[1].texte === 'Enregistrement en cours…'
+      && etats[2].ton === 'echec' && etats[2].action === 'reessayer' && etats[3].action === null
+      && etats[4].action === 'relire' && etats[5].action === 'reessayer'
+      && /etatEcriture=\{\{/.test(balise) && /totauxIllisibles=\{totauxIllisibles\}/.test(balise)
+      && /onReessayer=\{/.test(balise) && /onRelireTotaux=\{relireTotaux\}/.test(balise)
+      && /etat\.action === 'reessayer'[\s\S]{0,200}onPress=\{onReessayer\}/.test(carte)
+      && /etat\.action === 'relire'[\s\S]{0,200}onPress=\{onRelireTotaux\}/.test(carte),
+    `${n(rangVol.aDire)} ; ${json(etats.map((e) => e.action))}`);
+
+    /* CONTRE-VÉRIFICATION d'ÉCRAN-2 (mesurée au navigateur) : le pourcentage
+       venait de la demande relue, mais la NATURE et la RETENUE venaient
+       encore du devis de l'écran — après une écriture ratée, la rangée
+       disait « Arrhes 30 %, 444,87 € » quand la base avait gardé un acompte,
+       et « Reste à payer » sans « avant la retenue » quand la base l'avait. */
+    const tVu = { ...t0, acompte: 36000, demande: D.demandeDuDevis({ acompteCentiemes: 3000, acompteNature: 'acompte', retenueGarantieCentiemes: 500 }) };
+    const localEnAvance = { acompteCentiemes: 3000, acompteNature: 'arrhes', retenueGarantieCentiemes: null };
+    const rangMix = D.rangeesDesTotaux(tVu, 'reel', { devis: localEnAvance });
+    const effetMix = D.effetDeLAcompte(tVu, localEnAvance, 'reel');
+    verifier('contre-vérification d’ÉCRAN-2 : la NATURE et la RETENUE des rangées viennent aussi de la demande RELUE '
+      + '(« Acompte 30 % », « avant la retenue de garantie »), jamais du devis de l’écran en avance sur la base ; '
+      + '`demandeDuDevis` les porte, et la phrase de l’acompte suit la même règle',
+    n((rangMix.find((r) => r.cle === 'acompte') || {}).libelle) === 'Acompte 30 %'
+      && (rangMix.find((r) => r.cle === 'reste') || {}).libelle === 'Reste à payer, avant la retenue de garantie'
+      && / TTC — reste à payer, avant la retenue de garantie /.test(n((effetMix || {}).aDire))
+      && json(D.LIBELLES_DE_LA_DEMANDE) === json(['acompteNature', 'retenueGarantieCentiemes'])
+      && json(D.demandeDuDevis({ acompteNature: 'inconnue', retenueGarantieCentiemes: '500' }))
+        === json({ remiseCentimes: null, remiseCentiemes: null, acompteCentimes: null, acompteCentiemes: null,
+          acompteNature: null, retenueGarantieCentiemes: 500 })
+      /* Sans demande relue, aucune nature n'est inventée : le nom NEUTRE. */
+      && n((D.rangeesDesTotaux({ ...t0, acompte: 36000 }, 'reel', { devis: localEnAvance }).find((r) => r.cle === 'acompte') || {}).libelle)
+        === 'Acompte ou arrhes'
+      && /\bd\.acompte_nature\b/.test(corpsTotaux) && /\bd\.retenue_garantie_centiemes\b/.test(corpsTotaux),
+    json(rangMix.map((r) => r.aDire)));
+
+    /* CONTROLES-2 : l'état initial, sur un devis vierge, ne choisit RIEN. */
+    const vide = D.etatInitialConditions({});
+    verifier('CONTROLES-2 : `etatInitialConditions` — sur un devis VIERGE, ni nature, ni validité, ni « Autre », ni retenue ; '
+      + 'et la carte part d’ELLE (`useState(() => etatInitialConditions(devis, textes))`), sans autre défaut écrit à la main',
+    json(vide) === json({ uniteReduction: 'pourcent', uniteAcompte: 'pourcent', nature: null, validite: null, validiteAutre: false, retenue: false })
+      && D.etatInitialConditions({ acompteNature: 'inconnue' }).nature === null
+      && D.etatInitialConditions({ validiteJours: 45 }).validiteAutre === true && D.etatInitialConditions({ validiteJours: 30 }).validite === 30
+      && /const \[initial\] = useState\(\(\) => etatInitialConditions\(devis, textes\)\);/.test(carte)
+      && !/acompteNature \?\?|nature: devis\./.test(carte), json(vide));
+
+    /* ÉCRAN-3 et ÉCRAN-4 : « Corriger » rouvre la carte comme on l'a laissée. */
+    const choixEuros = { ...vide, uniteReduction: 'montant' };
+    const rouverte = D.etatInitialConditions({}, { reduction: '12,5,3', choix: choixEuros });
+    const rouverteVide = D.etatInitialConditions({ remiseCentiemes: 700 }, { reduction: '', choix: choixEuros });
+    const autre = D.lireConditions({ choix: { ...D.etatInitialConditions({ validiteJours: 30 }), validiteAutre: true, validite: null },
+      tapes: { reduction: '', acompte: '' }, devis: { validiteJours: 30 } });
+    const autre400 = D.etatInitialConditions({}, { validite: '400' });
+    verifier('ÉCRAN-3 / ÉCRAN-4 : un montant refusé en EUROS rouvre sous « € » (jamais sous « % », où « 35,50 » ferait 35,5 %) ; '
+      + 'un champ gardé vide rouvre dans l’unité de la valeur ; toucher « Autre » n’EFFACE PAS 30 jours ; une validité '
+      + 'refusée rouvre « Autre » avec son champ',
+    rouverte.uniteReduction === 'montant' && rouverteVide.uniteReduction === 'pourcent'
+      && autre.changements.validiteJours === 30 && !autre.erreurs.validiteJours
+      && autre400.validiteAutre === true && autre400.validite === null
+      /* La saisie garde les CHOIX avec les textes, et la carte les lui passe. */
+      && /onEnregistrer\(l\.changements, l\.erreurs, \{ \.\.\.l\.textes, choix: choix\.current \}, geste\)/.test(carte),
+    json([rouverte, rouverteVide, autre.changements.validiteJours, autre400]));
+
+    /* ÉCRAN-5 : la retenue se borne DANS la carte. */
+    const r6 = D.versRetenueDeDevis('6');
+    const lu6 = D.lireConditions({ choix: { ...vide, retenue: true }, tapes: { reduction: '', acompte: '', retenue: '6' }, devis: {} });
+    verifier('ÉCRAN-5 : une retenue de 6 % (ou 0) est refusée PAR LA CARTE, sous son champ, avec le texte tapé gardé ; 0,01 à 5 % '
+      + 'passent ; vide = rien',
+    r6.ok === false && /0,01 % et 5 %/.test(n(r6.message)) && D.versRetenueDeDevis('0').ok === false
+      && D.versRetenueDeDevis('5').centiemes === 500 && D.versRetenueDeDevis('0,01').centiemes === 1
+      && D.versRetenueDeDevis('').ok === true && D.versRetenueDeDevis('').centiemes === null
+      && !!lu6.erreurs.retenueGarantieCentiemes && lu6.textes.retenue === '6'
+      && !Object.prototype.hasOwnProperty.call(lu6.changements, 'retenueGarantieCentiemes'),
+    json([r6, lu6.erreurs]));
+
+    /* ÉCRAN-9 : une pastille d'unité n'écrit RIEN. */
+    const devis7 = { remiseCentiemes: 700 };
+    const enAttente = D.lireConditions({ choix: { ...D.etatInitialConditions(devis7), uniteReduction: 'montant' },
+      tapes: { reduction: '', acompte: '' }, devis: devis7 });
+    const remplace = D.lireConditions({ choix: { ...D.etatInitialConditions(devis7), uniteReduction: 'montant' },
+      tapes: { reduction: '25', acompte: '' }, devis: devis7 });
+    const retire = D.lireConditions({ choix: D.etatInitialConditions(devis7), tapes: { reduction: '', acompte: '' }, devis: devis7 });
+    const acompteEnAttente = D.lireConditions({ choix: { ...D.etatInitialConditions({ acompteCentiemes: 3000 }), uniteAcompte: 'montant', nature: 'arrhes' },
+      tapes: { reduction: '', acompte: '' }, devis: { acompteCentiemes: 3000 } });
+    verifier('ÉCRAN-9 : 7 % enregistrés, la pastille « € » et le champ vide → AUCUNE colonne de la réduction ne part, et la carte '
+      + 'dit « Enregistrée : 7 % — écrivez un montant en euros pour la remplacer. » — SEULEMENT si la base a vu ces 7 %, '
+      + 'sinon « Pas encore enregistrée » ; « 25 » tapé → 25,00 € ; vidé dans l’unité '
+      + 'de la valeur → la réduction est retirée ; la nature d’un acompte en attente part quand même',
+    !('remiseCentimes' in enAttente.changements) && !('remiseCentiemes' in enAttente.changements) && !Object.keys(enAttente.erreurs).length
+      && n(D.phraseUniteEnAttente(devis7, 'remise', 'montant', null, D.demandeDuDevis(devis7)))
+        === 'Enregistrée : 7 % — écrivez un montant en euros pour la remplacer.'
+      /* Contre-vérification : pendant l'envoi, ou après un échec, la base n'a
+         pas vu la valeur — jamais « Enregistrée ». */
+      && n(D.phraseUniteEnAttente(devis7, 'remise', 'montant', null, D.demandeDuDevis({ remiseCentimes: 5000 })))
+        === 'Pas encore enregistrée : 7 % — écrivez un montant en euros pour la remplacer.'
+      && n(D.phraseUniteEnAttente(devis7, 'remise', 'montant')) === 'Pas encore enregistrée : 7 % — écrivez un montant en euros pour la remplacer.'
+      && n(D.phraseUniteEnAttente({ acompteCentiemes: 3000 }, 'acompte', 'montant', 'arrhes', D.demandeDuDevis({ acompteCentiemes: 3000 })))
+        === 'Enregistrées : 30 % — écrivez un montant en euros pour les remplacer.'
+      && /phraseUniteEnAttente\(devis, 'remise', c\.uniteReduction, null, demandeVue\)/.test(carte)
+      && /phraseUniteEnAttente\(devis, 'acompte', c\.uniteAcompte, c\.nature, demandeVue\)/.test(carte)
+      && /const demandeVue = totaux && totaux\.demande;/.test(carte)
+      && D.phraseUniteEnAttente(devis7, 'remise', 'pourcent') === null && D.phraseUniteEnAttente({}, 'remise', 'montant') === null
+      && remplace.changements.remiseCentimes === 2500 && remplace.changements.remiseCentiemes === null
+      && retire.changements.remiseCentiemes === null && retire.changements.remiseCentimes === null
+      && acompteEnAttente.changements.acompteNature === 'arrhes' && !('acompteCentimes' in acompteEnAttente.changements)
+      && D.texteEnregistreDans(devis7, 'remise', 'pourcent') === '7' && D.texteEnregistreDans(devis7, 'remise', 'montant') === ''
+      /* Et la pastille d'unité passe par `changerUnite`, jamais par `choisir`. */
+      && /onPress=\{\(\) => changerUnite\('remise', 'pourcent'\)\}/.test(carte) && /onPress=\{\(\) => changerUnite\('remise', 'montant'\)\}/.test(carte)
+      && /onPress=\{\(\) => changerUnite\('acompte', 'pourcent'\)\}/.test(carte) && /onPress=\{\(\) => changerUnite\('acompte', 'montant'\)\}/.test(carte)
+      && /champ\.current\.ecrire\(texteEnregistreDans\(devis, prefixe, unite\)\)/.test(carte),
+    json([enAttente.changements, remplace.changements, acompteEnAttente.changements]));
+
+    /* ÉCRAN-10 : la phrase d'effet suit la règle de `rangeesDesTotaux`. */
+    const t10 = { ...t0, ht: 90000, tva: 18000, ttc: 108000, reduction: 10000, demande: D.demandeDuDevis({ remiseCentiemes: 1000 }) };
+    const sansTaxe = ['franchise', null, { echec: true }, { chargement: true }]
+      .map((reg) => n((D.effetDeLaReduction(t10, { remiseCentiemes: 1000 }, reg) || {}).aDire));
+    const franchiseSansTva = D.effetDeLaReduction({ ...t10, tva: 0, ttc: 90000 }, { remiseCentiemes: 1000 }, 'franchise');
+    verifier('ÉCRAN-10 : régime en lecture, en échec, non déclaré, ou franchise dont des lignes portent de la TVA — la phrase ne '
+      + 'compare pas un « avant/après » HT au « Total » qui la comprend ; au réel, « Le total HT » ; en franchise sans TVA, '
+      + '« Le total des postes »',
+    sansTaxe.every((x) => x === 'Réduction appliquée aux postes : 100,00 €.')
+      && /^Le total HT des postes passe de 1 000,00 € à 900,00 €\.$/.test(n(D.effetDeLaReduction(t10, { remiseCentiemes: 1000 }, 'reel').aDire))
+      && /^Le total des postes passe de /.test(n(franchiseSansTva.aDire)), json(sansTaxe));
+
+    /* ÉCRAN-7 et ÉCRAN-8 : les noms des champs. */
+    const reel = D.libellesDesConditions('reel', null);
+    const fr = D.libellesDesConditions('franchise', 'arrhes');
+    verifier('ÉCRAN-7 / ÉCRAN-8 : au réel « Réduction HT, en euros » (« Montant HT ») et « … TTC, en euros », et les aides le '
+      + 'disent ; hors du réel, ni HT ni TTC ; l’acompte sans nature s’appelle « Acompte ou arrhes » PARTOUT — titre, champs, '
+      + 'pastilles, rangée, résumé — jamais « Acompte » seul',
+    reel.reductionMontant === 'Réduction HT, en euros' && reel.reductionExemple === 'Montant HT'
+      && reel.acompteMontant === 'Acompte ou arrhes TTC, en euros' && reel.acompteExemple === 'Montant TTC'
+      && /hors taxes/.test(reel.aideReductionMontant) && /toutes taxes comprises/.test(reel.aideAcompteMontant)
+      && fr.reductionMontant === 'Réduction, en euros' && fr.acompteMontant === 'Arrhes, en euros' && fr.aideReductionMontant === null
+      && reel.acompte === 'Acompte ou arrhes' && reel.acomptePourcent === 'Acompte ou arrhes, en pour cent'
+      && reel.acompteEnPourcentage === 'Acompte ou arrhes en pourcentage'
+      && n((D.rangeesDesTotaux({ ...t0, acompte: 36000, demande: D.demandeDuDevis({ acompteCentiemes: 3000 }) }, 'reel',
+        { devis: { acompteCentiemes: 3000 } }).find((r) => r.cle === 'acompte') || {}).libelle) === 'Acompte ou arrhes 30 %'
+      && /accessibilityRole="header">\{noms\.acompte\}</.test(carte) && !/>Acompte</.test(carte)
+      && /accessibilityLabel=\{c\.uniteReduction === 'montant' \? noms\.reductionMontant : noms\.reductionPourcent\}/.test(carte)
+      && /accessibilityLabel=\{c\.uniteAcompte === 'montant' \? noms\.acompteMontant : noms\.acomptePourcent\}/.test(carte)
+      && !/'Montant en euros'|'Réduction, en euros'|'Acompte, en euros'|'Acompte, en pour cent'/.test(carte),
+    json(reel));
+
+    /* ÉCRAN-12 : une place réservée sous chaque montant. */
+    verifier('ÉCRAN-12 : sous la réduction ET sous l’acompte, une ZONE de hauteur fixe (deux lignes) porte la faute, la valeur en '
+      + 'attente ou l’effet — rien ne pousse la carte au moment où l’on vise ; la ligne du reste, dans la barre, a sa place '
+      + 'même vide',
+    /zone: \{ minHeight: 2 \* interligne\(T\.petit\) \+ S\.xs, marginTop: S\.xs \}/.test(carte)
+      /* Contre-vérification : sous une faute, l'effet de la valeur enregistrée
+         se TAIT (il se lisait comme l'effet du texte refusé, et la carte
+         sautait de 36 px). */
+      && /: !faute && !!effet && <Text style=\{ramene \? s\.rameneZone : s\.aideZone\}>\{effet\.aDire\}<\/Text>/.test(carte)
+      && /\{zone\(sous\('remiseCentiemes', 'remiseCentimes'\), attenteR, effetR,/.test(carte)
+      && /\{zone\(sous\('acompteCentiemes', 'acompteCentimes'\), attenteA, effetA,/.test(carte)
+      && /ligneReste: \{ minHeight: interligne\(T\.petit\) \}/.test(carte) && /<View style=\{s\.ligneReste\}>/.test(carte)
+      && /etat: \{[^}]*minHeight: interligne\(T\.petit\) \+ 2 \* S\.xs/.test(carte));
+
+    /* ÉCRAN-13 : on vibre pour le geste qu'on vient de faire. */
+    verifier('ÉCRAN-13 : `vibrerPourLaCarte` — une faute de la validité ne fait PAS vibrer un appui sur la nature, une unité ou '
+      + 'la retenue ; elle fait vibrer la sortie de son champ ; fermer la carte ne REvibre pas une faute déjà dite, mais une '
+      + 'faute NOUVELLE vibre une fois, quel que soit le geste ; et chaque geste de la carte se nomme',
+    D.vibrerPourLaCarte('nature', ['validiteJours']) === false && D.vibrerPourLaCarte('unite', ['validiteJours']) === false
+      && D.vibrerPourLaCarte('retenue', ['validiteJours']) === false && D.vibrerPourLaCarte('validite', ['validiteJours']) === true
+      && D.vibrerPourLaCarte('reduction', ['remiseCentimes']) === true && D.vibrerPourLaCarte('nature', ['acompteCentiemes']) === true
+      && D.vibrerPourLaCarte('fermer', ['validiteJours']) === false
+      /* Contre-vérification : une faute NOUVELLE (jamais dite) vibre une fois,
+         quel que soit le geste ; une faute déjà dite ne revibre pas. */
+      && D.vibrerPourLaCarte('fermer', ['validiteJours'], []) === true
+      && D.vibrerPourLaCarte('fermer', ['validiteJours'], ['validiteJours']) === false
+      && D.vibrerPourLaCarte('nature', ['validiteJours'], ['validiteJours']) === false
+      && D.vibrerPourLaCarte('unite', ['remiseCentiemes'], ['remiseCentimes']) === true
+      && D.vibrerPourLaCarte('validite', ['validiteJours'], ['validiteJours']) === true
+      && ["enregistrer('reduction')", "enregistrer('acompte')", "enregistrer('validite')", "enregistrer('retenue')",
+        "choisir({ nature: n }, 'nature')", "'validite')}", "choisir({ retenue: !c.retenue }, 'retenue')", "enregistrer('unite')"]
+        .every((x) => carte.includes(x)) && !/onBlur=\{enregistrer\}/.test(carte));
+
+    /* ÉCRAN-14 : VoiceOver dit le total et « réduction comprise ». */
+    const ecranDevis = sansCommentairesJs(lire('src/screens/DevisScreen.js'));
+    verifier('ÉCRAN-14 : la carte d’un brouillon dans « Mes devis » DIT son total TTC et « réduction comprise » (`libelleCarteDevis`)',
+      n(D.libelleCarteDevis({ objet: 'Salle de bains', client: 'Mme Martin', libelleTotal: 'Total TTC', total: 137910, reduction: true }))
+        === 'Ouvrir le brouillon Salle de bains, Mme Martin, Total TTC 1 379,10 €, réduction comprise'
+      && n(D.libelleCarteDevis({ total: 0 })) === 'Ouvrir le brouillon sans objet, client à choisir, Total 0,00 €'
+      && /accessibilityLabel=\{libelleCarteDevis\(\{\s*objet, client, libelleTotal, total, reduction,\s*\}\)\}/.test(ecranDevis));
+  }
 
   /* LES PAIRES, par la FILE : une écriture partie sans réponse a peut-être
      posé le pourcentage ; passer au montant doit envoyer la paire ENTIÈRE,
@@ -4448,9 +4840,12 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     const t = await baseDemo.relireTotaux('1', unDevis.id);
     const lu = await baseDemo.un('1', unDevis.id);
     const refait = D.totauxDevis(lu.lignes, { remiseCentiemes: 1000, acompteCentimes: 9999999999 });
-    const clesApi = ['ht', 'tva', 'ttc', 'reduction', 'brut', 'acompte', 'ttcOptions', 'generation', 'modifieLe', 'ventilation'];
+    const clesApi = ['ht', 'tva', 'ttc', 'reduction', 'brut', 'acompte', 'ttcOptions', 'demande', 'generation', 'modifieLe', 'ventilation'];
     const srcApi = corpsDeFonction(lire('src/lib/api.js'), 'totauxDepuisBase') || '';
     okDemo = !!t && t.reduction === refait.reduction.effectif && t.acompte === refait.acompte.effectif && t.acompte === t.ttc
+      /* La demande que la base a vue revient avec les totaux (ÉCRAN-1). */
+      && json(t.demande) === json({ remiseCentimes: null, remiseCentiemes: 1000, acompteCentimes: 9999999999, acompteCentiemes: null,
+        acompteNature: 'acompte', retenueGarantieCentiemes: lu.devis.retenueGarantieCentiemes ?? null })
       && t.brut === t.ht + t.reduction && t.ttcOptions === refait.ttcOptions && typeof t.reduction === 'number'
       && json(Object.keys(t).sort()) === json([...clesApi].sort())
       && clesApi.every((k) => new RegExp(`\\b${k}\\b\\s*[:,]`).test(srcApi));

@@ -1494,36 +1494,69 @@ await section('La retenue de garantie', async () => {
 
 await section('La carte « Conditions » : réduction, acompte, validité, puis la garde (lot 2a)', async () => {
   const montantsDe = (t) => [...net(t).matchAll(/(\d[\d ]*,\d\d) €/g)].map((m) => Math.round(Number(m[1].replace(/ /g, '').replace(',', '.')) * 100));
+  /* LES NOMS DES CHAMPS (relecture du lot 2a) : l'acompte porte le nom de sa
+     NATURE — « Acompte ou arrhes » tant qu'elle n'est pas choisie (ÉCRAN-8) ;
+     la réduction en euros dit « HT » au régime réel (ÉCRAN-7), celui de la
+     démonstration. */
+  const acomptePct = () => page.getByLabel(/^(Acompte ou arrhes|Acompte|Arrhes), en pour cent$/).first();
+  const REDUCTION_EUROS = 'Réduction HT, en euros';
   await toucher(page.getByLabel(/^Conditions : /).first());
   verifier('la carte s’ouvre : réduction, acompte, validité, retenue', /Validité de l’offre/.test(await texte()) && /Retenue de garantie/.test(await texte()));
   await jugerCibles('La carte « Conditions »', (c) => !/^Retenue de garantie/.test(c.libelle));
   /* 10 % : l'effet DIT l'arithmétique, et on la refait sur ses deux montants. */
   await viderEtTaper(parLibelle('Réduction, en pour cent'), '10');
-  await toucher(parLibelle('Acompte, en pour cent'));
+  await toucher(acomptePct());
   const effet = await jusqua(async () => ((await texte()).match(/Le total HT des postes passe de [^.]+\./) || [])[0], DELAI_ECRITURE + 3000);
   const [avant, apres] = montantsDe(effet || '');
   verifier(`10 % : « ${effet || '—'} » — le second montant est le premier moins 10 %, au centime, demi vers le haut`,
     !!effet && avant > 0 && apres === avant - Math.floor((avant * 1000 + 5000) / 10000));
   /* En euros, plus grand que les postes : RAMENÉE, jamais refusée. */
   await toucher(parLibelle('Réduction en euros'));
-  await viderEtTaper(parLibelle('Réduction, en euros'), '9999999');
-  await toucher(parLibelle('Acompte, en pour cent'));
-  const ramenee = await jusqua(async () => /Ramenée à [\d ]+,\d\d € : le total des postes est plus petit/.test(await texte()), DELAI_ECRITURE + 3000);
-  verifier('une réduction en euros plus grande que les postes : « Ramenée à … », aucun refus', !!ramenee
-    && !/n’a pas pu être enregistrée/.test(await texte()));
+  await viderEtTaper(parLibelle(REDUCTION_EUROS), '9999999');
+  await toucher(acomptePct());
+  /* « RAMENÉE » SE JUGE SUR L'ÉTAT STABLE, JAMAIS SUR UN FLASH (relecture
+     ÉCRAN-1 du lot 2a) : l'ancienne vérification était satisfaite par la phrase
+     qui passait PENDANT l'envoi (la base portait encore 10 €). On attend la fin
+     du calcul, on relit la phrase une PAUSE de base plus tard, et le montant
+     ramené doit être le total des postes — celui que la base a relu. */
+  const phraseRamenee = async () => (net(await texte()).match(/Ramenée à ([\d ]+,\d\d) € : le total des postes est plus petit[^.]*\./) || [])[0];
+  const ramenee = await jusqua(async () => !/Calcul en cours…/.test(await texte()) && phraseRamenee(), DELAI_ECRITURE + 3000);
+  await page.waitForTimeout(PAUSE_DEMO + 1200);
+  const ramenee2 = await phraseRamenee();
+  const brutLu = await page.evaluate(() => [...document.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label'))
+    .find((x) => /^Total HT avant réduction, /.test(x)) || '');
+  const reductionLue = await page.evaluate(() => [...document.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label'))
+    .find((x) => /^Réduction, /.test(x)) || '');
+  verifier(`une réduction en euros plus grande que les postes : « Ramenée à … » STABLE, au montant des postes relus, aucun refus `
+    + `(« ${ramenee2 || '—'} »)`, !!ramenee && ramenee2 === ramenee
+    && montantsDe(ramenee2)[0] === montantsDe(brutLu)[0] && montantsDe(reductionLue)[0] === montantsDe(brutLu)[0]
+    && !/n’a pas pu être enregistrée/.test(await texte()), `${brutLu} | ${reductionLue}`);
   await capture('13b-conditions-ramenee');
   await toucher(parLibelle('Réduction en pourcentage'));
   await viderEtTaper(parLibelle('Réduction, en pour cent'), '10');
   /* « ,5 » vaut 0,5 % ; la nature se choisit, rien n'est pré-choisi. */
-  await viderEtTaper(parLibelle('Acompte, en pour cent'), ',5');
+  await viderEtTaper(acomptePct(), ',5');
   await toucher(parLibelle('Réduction, en pour cent'));
   const sansNature = await jusqua(async () => {
     const l = await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => '');
     return /Acompte ou arrhes \? à choisir/.test(net(l || '')) ? l : null;
   }, 1500);
-  verifier('un acompte sans nature : rien n’est choisi à sa place (« Acompte ou arrhes ? à choisir »)',
-    (await page.getByRole('radio', { name: 'C’est des arrhes', checked: true }).count()) === 0
-    || !!sansNature);
+  /* LES PASTILLES SONT DES BOUTONS (`Pastille`, `aria-selected`), pas des
+     « radio » : l'ancienne vérification comptait des radios — toujours 0 —,
+     et son « || » la rendait vraie quoi qu'il arrive (relecture CONTROLES-3,
+     ÉCRAN-11 du lot 2a). Les DEUX natures sont lues, et le résumé l'exige. */
+  const choisieNature = async (nom) => page.getByRole('button', { name: nom, exact: true }).first().getAttribute('aria-selected');
+  const arrhesChoisies = await choisieNature('C’est des arrhes');
+  const acompteChoisi = await choisieNature('C’est un acompte');
+  verifier(`un acompte sans nature : rien n’est choisi à sa place — « C’est des arrhes » aria-selected=${arrhesChoisies}, `
+    + `« C’est un acompte » aria-selected=${acompteChoisi}, et le résumé dit « Acompte ou arrhes ? à choisir »`,
+  arrhesChoisies === 'false' && acompteChoisi === 'false' && !!sansNature);
+  /* …et l'acompte sans nature s'appelle « Acompte ou arrhes », jamais
+     « Acompte » seul (ÉCRAN-8) — dans la carte comme dans le résumé. */
+  verifier('…et l’acompte sans nature s’appelle « Acompte ou arrhes » (titre et champ), jamais « Acompte » seul',
+    (await page.getByLabel('Acompte ou arrhes, en pour cent', { exact: true }).count()) === 1
+    && (await page.getByRole('heading', { name: 'Acompte ou arrhes', exact: true }).count()) === 1
+    && /Acompte ou arrhes 0,5 %/.test(net(sansNature || '')), net(sansNature || ''));
   await toucher(parLibelle('C’est des arrhes'));
   await toucher(parLibelle('Valable 30 jours'));
   const reste = await jusqua(async () => ((await texte()).match(/[\d ]+,\d\d € TTC — reste à payer[^\n]+/) || [])[0], DELAI_ECRITURE + 3000);
@@ -1557,7 +1590,7 @@ await section('La carte « Conditions » : réduction, acompte, validité, puis 
     champ === '150' && /Un pourcentage ne dépasse pas 100 %\./.test(await texte()));
   /* On remet le devis comme on l'a trouvé : sans réduction ni acompte. */
   await viderEtTaper(parLibelle('Réduction, en pour cent'), '');
-  await viderEtTaper(parLibelle('Acompte, en pour cent'), '');
+  await viderEtTaper(acomptePct(), '');
   await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
   const vide = await jusqua(async () => !/Réduction|Arrhes/.test(net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => 'x'))), DELAI_ECRITURE + 3000);
   verifier('vidés, la réduction et l’acompte quittent le résumé', !!vide);

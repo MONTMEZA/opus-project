@@ -13026,12 +13026,34 @@ alter table public.devis add constraint devis_lieu_ville_check
 alter table public.devis drop constraint if exists devis_objet_check;
 alter table public.devis add constraint devis_objet_check
   check (objet is null or char_length(objet) <= 1000);
-/* LE PLAFOND PORTE SUR LE BRUT (lot 2a, relecture BASE-6) : avant la
-   réduction, `total_ht_centimes + remise_ht_centimes`. Sur le HT net, une
-   réduction l'aurait contourné — et retirer ensuite la réduction aurait
-   été refusé —, pendant que `totauxDevis()` juge le brut. Le total toutes
-   options comprises y est borné aussi : une option qui le ferait dépasser
-   est refusée sous le même nom. */
+/* LE PLAFOND — CE QU'IL BORNE SUR LE BRUT, ET CE QU'IL BORNE NET (lot 2a ;
+   relecture BASE-6 de l'étape 1, puis BASE-4 de la relecture du 03/11).
+     - Le HT est borné sur le BRUT, avant la réduction :
+       `total_ht_centimes + remise_ht_centimes`. Des lignes qui dépassent
+       99 999 999,99 € ne passent pas sous le plafond grâce à une réduction.
+     - Le TTC et le total toutes options comprises, eux, sont bornés NETS de
+       la réduction. Une réduction PEUT donc faire tenir sous le plafond un
+       TTC qui, sans elle, le dépasserait — mesuré : un poste de
+       90 000 000,00 € à 20 % et 50 % de réduction donnent un HT brut de
+       9·10^9 (sous la borne) et un TTC net de 5,4·10^9 : accepté.
+   CONSÉQUENCE, ET ELLE EST JUSTE : retirer cette réduction, ou la baisser
+   au point que le TTC net (ou le total toutes options) repasse la borne,
+   est REFUSÉ sous ce nom — un devis ne peut pas dépasser 99 999 999,99 €,
+   avec ou sans réduction. La première version de ce commentaire promettait
+   le contraire (« une réduction ne contourne pas le plafond ») : c'était
+   vrai du HT seul. L'écran le dit sans parler d'une ligne : « La réduction
+   n'a pas pu être changée » (`phraseEchecDuDevis`, `src/lib/devis.js`).
+   `totauxDevis()` juge EXACTEMENT pareil — le brut pour le HT, le net pour
+   le TTC et les options. Ce que chaque essai tient, sans en dire plus
+   (contre-vérification du 03/11) : le HT brut, cas R13, et le total
+   toutes options, cas R14, de `supabase/cas-devis.json`, joués des DEUX
+   côtés — mais sans réduction pour R14, donc sans rien prouver du « net » ;
+   le TTC net qu'une réduction fait tenir sous la borne, et son retrait
+   refusé, cas 13 bis de `essais-section-49-conditions.sql`, joué par la
+   BASE SEULE. La parité de ce dernier cas a été mesurée le 03/11 (même
+   réponse des deux côtés, au centime), mais aucun cas commun ne la tient
+   encore. Une option qui ferait dépasser le total toutes options est
+   refusée sous le même nom. */
 alter table public.devis drop constraint if exists devis_plafond_check;
 alter table public.devis add constraint devis_plafond_check
   check (total_ht_centimes >= 0
@@ -13600,9 +13622,20 @@ begin
   --    montant, tel quel. Ramené au TTC s'il le dépasse, jamais refusé. Aucun
   --    déclencheur de plus : il suit chaque écriture du devis, recalcul
   --    compris.
+  --    LE POURCENTAGE N'EST MULTIPLIÉ QUE DANS SES BORNES (relecture BASE-5,
+  --    03/11/2026, mesuré) : ce déclencheur `before` tourne AVANT les
+  --    contraintes. Un pourcentage hors bornes envoyé par un client modifié
+  --    — 2 000 000 000 centièmes sur un TTC de 84 000 000,00 € — faisait
+  --    déborder le produit `bigint` : « bigint out of range » (22003), au
+  --    lieu du refus nommé `devis_acompte_check`. Hors de 1 à 10 000, on ne
+  --    calcule rien (0) et la contrainte refuse, sous son nom — la règle de
+  --    49.1 : « c'est la contrainte nommée qui refuse ». Dans les bornes, le
+  --    produit tient : un TTC ne dépasse pas 10^13 c avant le plafond (500
+  --    lignes au plus), × 10 000 = 10^17, sous les 9,2·10^18 d'un `bigint`.
+  --    Le montant, lui, ne multiplie rien : `least` ne déborde pas.
   new.acompte_ttc_centimes := case
     when new.acompte_centimes is not null then least(new.acompte_centimes, v_ttc)
-    when new.acompte_centiemes is not null then least((v_ttc * new.acompte_centiemes + 5000) / 10000, v_ttc)
+    when new.acompte_centiemes between 1 and 10000 then least((v_ttc * new.acompte_centiemes + 5000) / 10000, v_ttc)
     else 0
   end;
   return new;
@@ -14014,27 +14047,125 @@ comment on function public.peut_faire_un_devis(uuid, uuid) is
   'l''appelant et aucun blocage n''existe entre eux. Faux sinon, sans dire pourquoi. Section 49.6 bis.';
 
 -- --------------------------------------------------------------------------
---  49.6 ter LE RATTRAPAGE DES DEVIS DÉJÀ EN BASE, puis la dernière
---           contrainte (lot 2a, 03/11/2026)
+--  49.6 ter LE RATTRAPAGE DES DEVIS DÉJÀ EN BASE, sa GARDE, puis la
+--           dernière contrainte (lot 2a, 03/11/2026 ; relecture BASE-1 à
+--           BASE-3 du même jour, toutes mesurées sur une imitation de la
+--           base d'avant le lot)
 --
 --  Un devis enregistré avant le lot 2a a ses trois colonnes calculées à
 --  leur défaut : 0. Pour la réduction et l'acompte, c'est la vérité (il n'y
---  en avait pas). Pour le total toutes options comprises, non : il vaut au
---  moins le TTC. Le recalcul ne s'appelle pas d'ici (hors d'un déclencheur,
---  il est refusé OP015 : relecture BASE-12) ; une écriture DIRECTE qui fait
---  monter l'horloge suffit — c'est le contrat de 49.5 bis, « une migration
---  qui récrit un devis fait monter son horloge » —, et `tient_le_devis()`
---  pose les trois colonnes. Rejouable : au second passage, plus aucun devis
---  ne correspond. Les totaux, eux, ne bougent pas : la ventilation n'est pas
---  touchée, et elle n'avait aucune réduction.
+--  en avait pas). Pour le total toutes options comprises, non — et pas
+--  seulement quand il vaut moins que le TTC. La première version ne
+--  rattrapait que `options < TTC`, au motif qu'« il vaut au moins le TTC » :
+--  c'est vrai, mais ça ne suffit pas. Un devis aux OPTIONS SEULES, ou aux
+--  postes tous OFFERTS plus une option, a un TTC de 0 : `0 < 0` est faux,
+--  il restait à 0, et l'écran affichait « Total toutes options comprises
+--  0,00 € » sur un devis qui en a (relecture BASE-1).
+--
+--  CE QUI EST RATTRAPÉ, et pourquoi la condition ne vaut plus rien au
+--  second passage (le fichier se rejoue sans faire monter l'horloge d'un
+--  devis à chaque fois — une condition qui le ferait est refusée) :
+--    - un total toutes options comprises plus petit que le TTC : une fois
+--      posé par `tient_le_devis()`, il vaut au moins le TTC ;
+--    - un total à 0 alors qu'une option coûte quelque chose : une fois posé,
+--      il vaut au moins le prix de cette option. Une option OFFERTE (total
+--      0) ne compte pas : son devis vaut bien 0, on n'y touche pas.
+--  Le recalcul ne s'appelle pas d'ici (hors d'un déclencheur, il est refusé
+--  OP015 : relecture BASE-12) ; une écriture DIRECTE qui fait monter
+--  l'horloge suffit — c'est le contrat de 49.5 bis, « une migration qui
+--  récrit un devis fait monter son horloge » —, et `tient_le_devis()` pose
+--  les trois colonnes. Les totaux, eux, ne bougent pas : la ventilation
+--  n'est pas touchée, et elle n'avait aucune réduction.
+--
+--  LES DEVIS À L'HORLOGE MAXIMALE SONT EXCLUS (`generation <
+--  9007199254740991`, la borne d'OP016 — relecture BASE-2) : `generation +
+--  1` sortait de la borne, OP016 arrêtait le fichier, et sur la vraie base
+--  la migration entière. Seule une application MODIFIÉE a pu écrire ce
+--  numéro, et un tel devis ne s'écrit plus de toute façon. Exclu, il garde
+--  son total toutes options à 0 :
+--    - s'il a un TTC, `devis_calculs_check` (posée juste après) le
+--      refuserait sous un nom qui ne dit rien de la cause : la GARDE
+--      l'arrête avant, le nomme, et dit quoi faire ;
+--    - s'il n'a que des options, il garde « 0 » — le moindre mal pour un
+--      devis déjà inutilisable.
+--
+--  LA GARDE (relecture BASE-3) : avant le lot 2a, RIEN ne bornait les
+--  options — deux options de 60 000 000,00 € passaient (mesuré). Le lot 2a
+--  les borne (`devis_plafond_check`, 49.5), et c'est une contrainte sur une
+--  valeur RECALCULÉE : le premier recalcul d'un tel devis la viole. Si ce
+--  recalcul est ce rattrapage, la migration échouait sous un nom sans
+--  rapport. S'il ne l'est pas (un devis aux options seules, que la première
+--  version ne rattrapait pas), c'était PLUS TARD, pendant une cascade : la
+--  suppression du compte d'un PARTICULIER dont la demande porte ce devis
+--  était refusée (mesuré, par `preparer_suppression_compte()`) — son droit
+--  à l'effacement bloqué par un tiers, la famille d'OP017, sous la phrase
+--  « un zéro de trop dans une ligne ».
+--  D'où ce bloc, JUSTE AVANT le rattrapage : il calcule ce que
+--  `tient_le_devis()` poserait — la règle de son point 5, recopiée ICI POUR
+--  JUGER SEULEMENT (si ce point 5 change, cette copie change avec lui) —,
+--  sur TOUS les devis, horloge maximale comprise, et arrête le fichier, en
+--  français, en nommant les devis, tant qu'un seul dépasserait la borne.
+--  L'échec arrive donc au moment où l'on APPLIQUE la migration, jamais
+--  pendant la cascade d'un autre. Sur une base déjà à jour, il ne trouve
+--  rien : la contrainte tient chaque devis depuis le lot 2a.
+--
+--  ÉPROUVÉ PAR `essais-section-49-rattrapage.sql`, qui pose d'anciens devis
+--  et REJOUE CE FICHIER-CI deux fois — jamais une copie de l'ordre `update`
+--  (relecture BASE-6 : la copie ne voyait aucun des trois défauts).
 --
 --  `devis_calculs_check` est posée APRÈS, et c'est pour cela qu'elle vit
 --  ici et pas en 49.5 : avant le rattrapage, un devis existant la violerait,
 --  et une base déjà en service refuserait de rejouer ce fichier.
 -- --------------------------------------------------------------------------
+do $garde_rattrapage_49$
+declare
+  v_plafond constant bigint := 9999999999;          -- la borne de devis_plafond_check
+  v_borne   constant bigint := 9007199254740991;    -- la borne d'OP016 (49.5 bis, point 7)
+  v_n       integer;
+  v_ids     text;
+begin
+  -- 1. Un devis dont le total toutes options comprises, RECALCULÉ, passerait
+  --    la borne. La règle du point 5 de tient_le_devis() : l'union, taux par
+  --    taux, des bases nettes (devis_tva) et des options, la TVA arrondie une
+  --    fois par taux.
+  select count(*), string_agg(x.id::text, ', ' order by x.id)
+    into v_n, v_ids
+    from (select d.id,
+                 (select coalesce(sum(u.base + public.devis_tva_de(u.base, u.taux)), 0)
+                    from (select y.taux, sum(y.base)::bigint as base
+                            from (select t.taux_tva_centiemes as taux, t.base_centimes as base
+                                    from public.devis_tva t
+                                   where t.devis_id = d.id
+                                  union all
+                                  select l.taux_tva_centiemes, l.total_centimes
+                                    from public.devis_lignes l
+                                   where l.devis_id = d.id and l.type = 'option') y
+                           group by y.taux) u) as options
+            from public.devis d) x
+   where x.options > v_plafond;
+  if v_n > 0 then
+    raise exception 'Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d''écrire quoi que ce soit. Devis dont le total toutes options comprises, une fois recalculé, dépasserait 99 999 999,99 € — le plafond que le lot 2a impose désormais : %. Laissé ainsi, un tel devis ferait échouer plus tard une écriture qui ne le regarde pas, comme la suppression du compte d''un client. Retirez-lui l''option de trop (ou le brouillon entier), puis rejouez. Devis concernés : %.', v_n, v_ids;
+  end if;
+
+  -- 2. Un devis à l'horloge maximale que le rattrapage devrait récrire, et
+  --    ne peut pas : devis_calculs_check le refuserait juste après.
+  select count(*), string_agg(d.id::text, ', ' order by d.id)
+    into v_n, v_ids
+    from public.devis d
+   where d.generation >= v_borne
+     and d.total_ttc_options_centimes < d.total_ttc_centimes;
+  if v_n > 0 then
+    raise exception 'Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d''écrire quoi que ce soit. Devis dont le numéro d''écriture est à la borne (9 007 199 254 740 991) et que le rattrapage devrait récrire : %. Seule une application modifiée a pu y mettre ce numéro, et un tel devis ne peut plus être récrit : son total toutes options comprises ne peut pas être posé, et devis_calculs_check le refuserait. Retirez ces brouillons depuis l''éditeur SQL de Supabase, puis rejouez. Devis concernés : %.', v_n, v_ids;
+  end if;
+end $garde_rattrapage_49$;
+
 update public.devis
    set generation = generation + 1
- where total_ttc_options_centimes < total_ttc_centimes;
+ where generation < 9007199254740991
+   and (total_ttc_options_centimes < total_ttc_centimes
+        or (total_ttc_options_centimes = 0
+            and exists (select 1 from public.devis_lignes l
+                         where l.devis_id = devis.id and l.type = 'option' and l.total_centimes > 0)));
 
 /* Un garde-fou, comme `devis_totaux_check` : `tient_le_devis()` la rend
    vraie par construction. */

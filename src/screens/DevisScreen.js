@@ -42,7 +42,9 @@ import {
 } from '../components/ui';
 import { FileText, ChevronRight } from '../components/icons';
 import { CLAVIER } from '../lib/clavier';
-import { PLAFOND_LISTE, origineLisible, depuisLisible } from '../lib/devis';
+import {
+  PLAFOND_LISTE, origineLisible, depuisLisible, libelleCarteDevis,
+} from '../lib/devis';
 import { dateFrancaise } from '../lib/entreprise';
 
 /* Le fond de la pastille « Brouillon » — son ENCRE se calcule (`surFond`) :
@@ -57,7 +59,12 @@ const CarteDevis = React.memo(function CarteDevis({
     <Pressable
       onPress={() => onOuvrir(id)}
       accessibilityRole="button"
-      accessibilityLabel={`Ouvrir le brouillon ${objet || 'sans objet'}, ${client || 'client à choisir'}`}
+      /* Sur iOS, cette étiquette REMPLACE celles des enfants : elle dit donc
+         aussi le total et « réduction comprise », écrits dessous (relecture
+         ÉCRAN-14 du lot 2a). */
+      accessibilityLabel={libelleCarteDevis({
+        objet, client, libelleTotal, total, reduction,
+      })}
       style={({ pressed }) => [s.carte, pressed && APPUI.discret]}
     >
       <View style={s.haut}>

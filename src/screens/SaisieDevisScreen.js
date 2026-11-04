@@ -80,6 +80,7 @@ import {
   devisDepuisClient, milliemesLisibles, texteNet, choisirChamps,
   fusionnerAvecLaFile, proprietesDeLaRangee,
   rangeesDesTotaux, resumeDesConditions, suffixeDuPied, libellesDesTotaux, phraseEchecDuDevis,
+  demandeDuDevis, vibrerPourLaCarte, nomsDesRefus,
 } from '../lib/devis';
 import ConditionsDevis from '../components/ConditionsDevis';
 import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
@@ -96,8 +97,9 @@ const NOMS_ENTETE = Object.freeze({
   clientId: 'Pour qui ?',
   remiseCentiemes: 'Réduction',
   remiseCentimes: 'Réduction',
-  acompteCentiemes: 'Acompte',
-  acompteCentimes: 'Acompte',
+  /* Les deux montants de l'acompte n'ont PAS de nom fixe : ils prennent celui
+     de leur nature (`nomsDesRefus`, devis.js) — « Acompte ou arrhes » tant
+     qu'elle n'est pas choisie, jamais « Acompte » seul. */
   acompteNature: 'Acompte ou arrhes',
   validiteJours: 'Validité de l’offre',
 });
@@ -312,7 +314,7 @@ function BasDuDevis({
             reste à payer. Une réduction se DIT en montant positif (`aDire`),
             jamais avec un trait d'union. */}
         {rangeesDesTotaux(totaux || { ht: null, tva: null, ttc: null, ventilation: [] }, regime,
-          { devis, nbOptions: options.length }).map((r) => (
+          { nbOptions: options.length }).map((r) => (
           <View key={r.cle} style={s.ligneTotal} accessible accessibilityLabel={r.aDire}>
             <Text style={r.fort ? s.libelleTotal : s.libelle}>
               {r.libelle}
@@ -419,6 +421,9 @@ export default function SaisieDevisScreen({
   const refusEntete = useRef({});
   const [totaux, setTotaux] = useState(() => (ouverture.devisId ? null : {
     ht: 0, tva: 0, ttc: 0, brut: 0, reduction: 0, acompte: 0, ttcOptions: 0, ventilation: [],
+    /* Un brouillon neuf : la base n'a vu AUCUNE demande (relecture ÉCRAN-1
+       du lot 2a — la carte ne juge « ramenée » que contre elle). */
+    demande: demandeDuDevis({}),
   }));
   const [totauxIllisibles, setTotauxIllisibles] = useState(false);
   const [attente, setAttente] = useState({
@@ -619,6 +624,9 @@ export default function SaisieDevisScreen({
           brut: (r.devis.totalHtCentimes ?? 0) + (r.devis.remiseHtCentimes ?? 0),
           acompte: r.devis.acompteTtcCentimes ?? 0,
           ttcOptions: r.devis.totalTtcOptionsCentimes ?? r.devis.totalTtcCentimes,
+          /* La demande que la base a vue, lue dans la MÊME photo que les
+             totaux (relecture ÉCRAN-1 du lot 2a). */
+          demande: demandeDuDevis(r.devis),
           ventilation: r.ventilation || [],
         });
       } else {
@@ -684,7 +692,7 @@ export default function SaisieDevisScreen({
    *  qu'il en a dit. Les AUTRES partent quand même : un code postal faux
    *  n'emporte pas la rue et la ville tapées avec lui (le lieu part en
    *  bloc). */
-  const enregistrerEntete = (changements) => {
+  const enregistrerEntete = (changements, { vibrer = true } = {}) => {
     const f = fileRef.current;
     if (!f) return { ok: false, refus: {} };
     const avant = devisRef.current;
@@ -707,7 +715,9 @@ export default function SaisieDevisScreen({
     }
     poserRefusEntete(Object.keys(changements), refus);
     const ok = Object.keys(refus).length === 0;
-    if (!ok) retour.echec();
+    /* La carte « Conditions » décide elle-même de vibrer (ÉCRAN-13) : elle
+       sait quel champ on vient de quitter. */
+    if (!ok && vibrer) retour.echec();
     /* Ce que la base rangerait (blancs retirés, code postal sans espaces),
        comparé à ce qu'elle a : seul ce qui CHANGE part. */
     const net = nettoyerDevis({ ...avant, ...recevables });
@@ -754,15 +764,33 @@ export default function SaisieDevisScreen({
 
   /* LES CONDITIONS (lot 2a) : ce qui se lit part par l'en-tête — les PAIRES
      entières, en une écriture —, ce qui ne se lit pas est REFUSÉ par
-     l'écran, avec sa phrase, et la garde le saura. */
-  const enregistrerConditions = (changements, erreursSaisie = {}, textes = null) => {
+     l'écran, avec sa phrase, et la garde le saura.
+
+     Trois règles de la relecture du lot 2a :
+       - LA CARTE EST RELUE ENTIÈRE à chaque fois : ses refus repartent de
+         zéro — les DEUX clés de chaque paire, et tous ses autres champs
+         (ÉCRAN-6). Sinon une réduction refusée en euros, puis retapée en
+         pour cent, laissait ses deux refus : la bande disait « « Réduction »,
+         « Réduction » », avec le message des euros sous un champ en % ;
+       - les TEXTES et les CHOIX de la carte sont gardés tant qu'une valeur
+         est refusée — par l'écran (une saisie illisible) OU par
+         `enregistrerEntete` (ÉCRAN-5) : « Corriger » la rouvre telle qu'on
+         l'a laissée (ÉCRAN-3, ÉCRAN-4) ;
+       - on ne vibre que pour la faute du champ, ou de la pastille, qu'on
+         VIENT de toucher (`geste`, ÉCRAN-13). */
+  const enregistrerConditions = (changements, erreursSaisie = {}, textes = null, geste = 'fermer') => {
     const fautes = Object.keys(erreursSaisie || {});
-    setTextesConditions(fautes.length ? textes : null);
-    const r = enregistrerEntete(changements);
+    /* Les fautes DÉJÀ dites, avant ce geste : une faute nouvelle vibre une
+       fois, même à la fermeture (`vibrerPourLaCarte`). */
+    const deja = CHAMPS_CONDITIONS.filter((k) => refusEntete.current[k]);
+    poserRefusEntete(CHAMPS_CONDITIONS);
+    const r = enregistrerEntete(changements, { vibrer: false });
     if (fautes.length) {
       poserRefusEntete([], Object.fromEntries(fautes.map((k) => [k, erreursSaisie[k]])));
-      retour.echec();
     }
+    const refusees = [...fautes, ...Object.keys(r.refus || {})];
+    setTextesConditions(refusees.length ? textes : null);
+    if (vibrerPourLaCarte(geste, refusees, deja)) retour.echec();
     return r;
   };
 
@@ -1467,7 +1495,13 @@ export default function SaisieDevisScreen({
         {!!garde && garde.phase === 'bilan' && garde.incompletes.length === 0 && garde.enteteRefuse.length > 0 && (
           <View style={s.bande} accessibilityLiveRegion="assertive">
             <Text style={s.bandeTexte}>
-              {`${garde.enteteRefuse.map((c) => `« ${NOMS_ENTETE[c] || c} »`).join(', ')} : ce que vous avez écrit n’est `
+              {/* Un nom par champ, même quand les deux formes d'une paire sont
+                  refusées (ÉCRAN-6) : jamais « « Réduction », « Réduction » » ;
+                  et l'acompte sous le nom de la nature que la carte montrait. */}
+              {`${nomsDesRefus(garde.enteteRefuse, {
+                noms: NOMS_ENTETE,
+                nature: textesConditions && textesConditions.choix ? textesConditions.choix.nature : devis.acompteNature,
+              }).map((n) => `« ${n} »`).join(', ')} : ce que vous avez écrit n’est `
                 + `pas enregistré. ${erreursEntete[garde.enteteRefuse[0]] || ''}`}
             </Text>
             <View style={s.bandeBoutons}>
@@ -1577,6 +1611,21 @@ export default function SaisieDevisScreen({
           nbOptions={options.length}
           erreurs={erreursEntete}
           textes={textesConditions}
+          /* LA CARTE PREND L'ÉCRAN, par-dessus les bandes et le pied : elle
+             doit DIRE elle-même l'écriture en cours, l'échec et « Réessayer »,
+             et des totaux qui n'ont pas pu être relus (relecture ÉCRAN-2 du
+             lot 2a). La même phrase que la bande du bas. */
+          etatEcriture={{
+            enCours: attente.enCours,
+            echec: attente.devisErreur
+              ? `${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur })} ${
+                typeof attente.devisErreur === 'object' ? messageClair(attente.devisErreur, '') : ''}`.trim()
+              : null,
+            reessayable: !!attente.devisErreur && !estUnRefusDefinitif(attente.devisErreur),
+          }}
+          totauxIllisibles={totauxIllisibles}
+          onReessayer={() => fileRef.current && fileRef.current.reessayer('devis')}
+          onRelireTotaux={relireTotaux}
           onEnregistrer={enregistrerConditions}
           onFermer={fermerCarte}
         />

@@ -76,7 +76,7 @@
 import {
   nettoyerDevis, validerDevis, nettoyerLigne, validerLigne, totauxDevis, trierLignes, trierDevis,
   devisDepuisClient, choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, TYPES_CHIFFRES, LIGNES_MAX,
-  DEVIS_PAR_DEMANDE_MAX, PLAFOND_LISTE, MEMOIRE_MAX, DELAI_PAR_DEFAUT, cleDeLigne,
+  DEVIS_PAR_DEMANDE_MAX, PLAFOND_LISTE, MEMOIRE_MAX, DELAI_PAR_DEFAUT, cleDeLigne, demandeDuDevis,
 } from '../lib/devis.js';
 import { nettoyerPoste, validerPoste, POSTES_MAX } from '../lib/postes.js';
 import { REFUS_DEVIS, SUPPRESSION_DEPASSEE, REFUS_POSTES, REFUS_DEMANDES } from '../lib/erreurs.js';
@@ -605,7 +605,13 @@ export function creerBaseDevisDemo({
     /* LES CONDITIONS CHANGENT LES TOTAUX (lot 2a) : la réduction refait la
        ventilation (le déclencheur `trg_recalcule_apres_reduction`), l'acompte
        se repose à chaque écriture (`tient_le_devis()`). Recalculé avant
-       d'écrire : une réduction ne fait jamais dépasser un plafond. */
+       d'écrire : un changement de réduction qui ferait dépasser le plafond
+       est REFUSÉ, comme par la base — y compris la RETIRER, ou la baisser,
+       quand c'est elle qui faisait tenir le TTC sous la borne (le HT est
+       borné sur le brut, le TTC et les options nets : relecture BASE-4 du
+       lot 2a). Cette ligne disait « une réduction ne fait jamais dépasser
+       un plafond » : on pouvait la lire comme « retirer une réduction passe
+       toujours », ce qui est faux. */
     const t = totauxDevis(lignesDe(d.id), conditionsDe(x));
     if (!t.ok) throw refusCheck(t.contrainte === 'devis_plafond_check' ? 'devis' : 'devis_lignes', t.contrainte);
     Object.assign(d, choisirChamps(x, CHAMPS_DEVIS), { source: d.source, generation: op.generation, modifieLe: horodatage() });
@@ -913,6 +919,9 @@ export function creerBaseDevisDemo({
         ht: d.totalHtCentimes, tva: d.totalTvaCentimes, ttc: d.totalTtcCentimes,
         reduction: d.remiseHtCentimes, brut: d.totalHtCentimes + d.remiseHtCentimes,
         acompte: d.acompteTtcCentimes, ttcOptions: d.totalTtcOptionsCentimes,
+        /* La demande que la base a vue, comme `totauxDepuisBase` (relecture
+           ÉCRAN-1 du lot 2a) : la carte ne juge « ramenée » que contre elle. */
+        demande: demandeDuDevis(d),
         ventilation: ventilationDe(d.id), generation: d.generation, modifieLe: d.modifieLe,
       };
     },

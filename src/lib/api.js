@@ -3077,6 +3077,25 @@ function totauxDepuisBase(d) {
     brut: ht === null || reduction === null ? null : ht + reduction,
     acompte: nombreOuNul(d.acompte_ttc_centimes),
     ttcOptions: nombreOuNul(d.total_ttc_options_centimes),
+    /* LA DEMANDE QUE LA BASE A VUE, relue AVEC les totaux (relecture ÉCRAN-1
+       du lot 2a) : la carte « Conditions » ne dit « Ramenée à … » que contre
+       ELLE. Comparée à la demande de l'écran — changée AVANT l'envoi —, une
+       réduction encore en route se lisait « ramenée à 0,00 € », et pour
+       toujours après un envoi raté. Les quatre colonnes sont dans le
+       `select` de `relireTotauxDevisSupabase` : `verifier-devis` compare les
+       deux listes. */
+    demande: {
+      remiseCentimes: nombreOuNul(d.remise_centimes),
+      remiseCentiemes: nombreOuNul(d.remise_centiemes),
+      acompteCentimes: nombreOuNul(d.acompte_centimes),
+      acompteCentiemes: nombreOuNul(d.acompte_centiemes),
+      /* …et ce qui NOMME les rangées, relu dans la même photo : la nature de
+         l'acompte et la retenue (contre-vérification du lot 2a — après une
+         écriture ratée, la rangée disait « Arrhes » quand la base avait
+         gardé un acompte). La forme de `demandeDuDevis` (devis.js). */
+      acompteNature: d.acompte_nature === 'acompte' || d.acompte_nature === 'arrhes' ? d.acompte_nature : null,
+      retenueGarantieCentiemes: nombreOuNul(d.retenue_garantie_centiemes),
+    },
     generation: nombreOuNul(d.generation),
     /* L'heure de la BASE, pour ranger la carte dans « Mes devis » : sans
        elle, la carte était datée à l'heure du téléphone (relecture
@@ -3223,7 +3242,8 @@ const relireUnDevis = hasSupabase ? relireUnDevisSupabase : relireUnDevisDemo;
 async function relireTotauxDevisSupabase(devisId) {
   const { data, error } = await supabase.from('devis')
     .select('total_ht_centimes, total_tva_centimes, total_ttc_centimes, remise_ht_centimes, acompte_ttc_centimes, '
-      + 'total_ttc_options_centimes, generation, modifie_le, '
+      + 'total_ttc_options_centimes, remise_centimes, remise_centiemes, acompte_centimes, acompte_centiemes, '
+      + 'acompte_nature, retenue_garantie_centiemes, generation, modifie_le, '
       + 'devis_tva(taux_tva_centiemes, base_centimes, remise_centimes, tva_centimes, nb_lignes)')
     .eq('id', devisId)
     .maybeSingle();

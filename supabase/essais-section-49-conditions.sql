@@ -29,6 +29,18 @@
 --  recalculés indépendamment (une règle écrite en Python, hors du dépôt)
 --  avant d'être écrits ici.
 --
+--  ET CHAQUE VALEUR DES CAS 0 À 11 SE JUGE PAR UNE COLONNE `…_attendu_t`,
+--  qui vaut `t` quand la valeur lue est l'attendue (relecture BASE-6 du
+--  03/11) : avant, ces cas imprimaient une valeur et un `\echo attendu` à
+--  comparer À L'ŒIL — une régression d'un centime sortait sans un seul
+--  « ERROR ». Un `f`, ou une colonne vide, est un ÉCHEC de l'essai. Les
+--  valeurs passent par `relire(id, attendu)` : `ht|tva|ttc|réduction|
+--  acompte|options|ventilation`, dans cet ordre, écrites à la main dans
+--  l'appel, à côté de l'`\echo` qui les explique.
+--
+--  LE RATTRAPAGE DE 49.6 ter N'EST PLUS ICI (cas 21) : il s'éprouve en
+--  rejouant `schema.sql` lui-même, dans `essais-section-49-rattrapage.sql`.
+--
 --  CE QUI NE SE JOUE PAS DANS CE FICHIER : les DEUX SESSIONS (une réduction
 --  et une ligne écrites en même temps, une réduction tardive). Elles se
 --  jouent à la main, comme les procédures A à C de l'essai 49 :
@@ -97,28 +109,34 @@ prepare lignes_cond as
    (:K3, :DR, 3000, 'poste', 'Poste à 5,5 %', 1000, 'forfait', 100000,  550, 4);
 -- Ce qu'on relit d'un devis, en une ligne : les totaux, la réduction et
 -- l'acompte EFFECTIFS, le total toutes options comprises, et la ventilation
--- taux:base_nette:part_de_réduction:tva:nb_lignes (toutes ses lignes).
-prepare relire(uuid) as
-  select d.total_ht_centimes as ht, d.total_tva_centimes as tva, d.total_ttc_centimes as ttc,
-         d.remise_ht_centimes as reduction, d.acompte_ttc_centimes as acompte,
-         d.total_ttc_options_centimes as options,
-         coalesce((select string_agg(concat_ws(':', t.taux_tva_centiemes, t.base_centimes, t.remise_centimes,
-                                               t.tva_centimes, t.nb_lignes),
-                                     ',' order by t.taux_tva_centiemes desc)
-                     from public.devis_tva t where t.devis_id = d.id), '—') as ventilation,
-         d.generation as horloge
-    from public.devis d where d.id = $1;
+-- taux:base_nette:part_de_réduction:tva:nb_lignes (toutes ses lignes) —
+-- puis `valeurs_attendu_t`, qui compare les sept premières à l'attendu
+-- passé en second paramètre (`ht|tva|ttc|réduction|acompte|options|
+-- ventilation`). L'horloge est lue, pas jugée : chaque cas dit la sienne.
+prepare relire(uuid, text) as
+  select r.*,
+         concat_ws('|', r.ht, r.tva, r.ttc, r.reduction, r.acompte, r.options, r.ventilation) = $2
+           as valeurs_attendu_t
+    from (select d.total_ht_centimes as ht, d.total_tva_centimes as tva, d.total_ttc_centimes as ttc,
+                 d.remise_ht_centimes as reduction, d.acompte_ttc_centimes as acompte,
+                 d.total_ttc_options_centimes as options,
+                 coalesce((select string_agg(concat_ws(':', t.taux_tva_centiemes, t.base_centimes, t.remise_centimes,
+                                                       t.tva_centimes, t.nb_lignes),
+                                             ',' order by t.taux_tva_centiemes desc)
+                             from public.devis_tva t where t.devis_id = d.id), '—') as ventilation,
+                 d.generation as horloge
+            from public.devis d where d.id = $1) r;
 
 
 -- ==========================================================================
 \echo ''
 \echo '=== 0. LA DONNÉE EXISTE — sans aucune condition, les totaux du lot 1, au centime ==='
 \echo '    attendu : ht 300000, tva 35500, ttc 335500, réduction 0, acompte 0, options 335500,'
-\echo '    ventilation 2000:100000:0:20000:1,1000:100000:0:10000:1,550:100000:0:5500:1'
+\echo '    ventilation 2000:100000:0:20000:1,1000:100000:0:10000:1,550:100000:0:5500:1 ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
-execute relire(:DR);
+execute relire(:DR, '300000|35500|335500|0|0|335500|2000:100000:0:20000:1,1000:100000:0:10000:1,550:100000:0:5500:1');
 rollback;
 
 
@@ -126,12 +144,12 @@ rollback;
 \echo ''
 \echo '=== 1. RÉDUCTION EN MONTANT : 10,00 € sur trois taux égaux → 334 / 333 / 333 (le plus fort reste ; à reste égal, le taux le plus fort) ==='
 \echo '    attendu : ventilation 2000:99666:334:19933:1,1000:99667:333:9967:1,550:99667:333:5482:1'
-\echo '              ht 299000, tva 35382, ttc 334382, réduction 1000, options 334382'
+\echo '              ht 299000, tva 35382, ttc 334382, réduction 1000, options 334382 ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set remise_centimes = 1000, generation = 10 where id = :DR;
-execute relire(:DR);
+execute relire(:DR, '299000|35382|334382|1000|0|334382|2000:99666:334:19933:1,1000:99667:333:9967:1,550:99667:333:5482:1');
 rollback;
 
 
@@ -139,48 +157,49 @@ rollback;
 \echo ''
 \echo '=== 2. RÉDUCTION EN POURCENTAGE : 10 % → 10 000 c par taux ; la TVA se calcule sur la base NETTE ==='
 \echo '    attendu : ventilation 2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1'
-\echo '              ht 270000, tva 31950, ttc 301950, réduction 30000'
+\echo '              ht 270000, tva 31950, ttc 301950, réduction 30000, options 301950 ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set remise_centiemes = 1000, generation = 10 where id = :DR;
-execute relire(:DR);
+execute relire(:DR, '270000|31950|301950|30000|0|301950|2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1');
 rollback;
 
 
 -- ==========================================================================
 \echo ''
 \echo '=== 3. LA RÉDUCTION POSÉE AVANT LES LIGNES : elle s applique aux lignes qui arrivent ensuite ==='
-\echo '    attendu : comme au cas 2 (ht 270000, tva 31950, ttc 301950, réduction 30000)'
+\echo '    attendu : comme au cas 2 (ht 270000, tva 31950, ttc 301950, réduction 30000, options = ttc) ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 insert into public.devis (id, pro_id, remise_centiemes, generation) values (:DR, :A, 1000, 1);
 execute lignes_cond;
-execute relire(:DR);
+execute relire(:DR, '270000|31950|301950|30000|0|301950|2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1');
 rollback;
 
 
 -- ==========================================================================
 \echo ''
 \echo '=== 4. RÉDUCTION PLUS GRANDE QUE LE TOTAL : 4 000,00 € sur 3 000,00 € — RAMENÉE au brut, jamais refusée ==='
-\echo '    attendu : réduction 300000, ht 0, tva 0, ttc 0 ; aucune base ni TVA négative'
+\echo '    attendu : réduction 300000, ht 0, tva 0, ttc 0, options 0 ; ventilation 2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1 ;'
+\echo '              aucune base ni TVA négative ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set remise_centimes = 400000, generation = 10 where id = :DR;
-execute relire(:DR);
+execute relire(:DR, '0|0|0|300000|0|0|2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1');
 rollback;
 
 
 -- ==========================================================================
 \echo ''
 \echo '=== 5. RÉDUCTION DE 100 % — tout à zéro, aucune TVA négative ==='
-\echo '    attendu : ventilation 2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1 ; ttc 0'
+\echo '    attendu : ventilation 2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1 ; ttc 0, réduction 300000 ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set remise_centiemes = 10000, generation = 10 where id = :DR;
-execute relire(:DR);
+execute relire(:DR, '0|0|0|300000|0|0|2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1');
 rollback;
 
 
@@ -188,13 +207,14 @@ rollback;
 \echo ''
 \echo '=== 6. UN TAUX QUI DISPARAÎT EST À ZÉRO EN ENTIER, sa part de réduction comprise (relecture BASE-4) ==='
 \echo '    réduction 10 %, puis la ligne à 10 % retirée : brut 200000, réduction 20000'
-\echo '    attendu : ventilation 2000:90000:10000:18000:1,1000:0:0:0:0,550:90000:10000:4950:1 ; réduction 20000'
+\echo '    attendu : ventilation 2000:90000:10000:18000:1,1000:0:0:0:0,550:90000:10000:4950:1 ; réduction 20000 ;'
+\echo '              ht 200000 - 20000 = 180000 ; tva 18000 + 4950 = 22950 ; ttc 202950 = options ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set remise_centiemes = 1000, generation = 10 where id = :DR;
 delete from public.devis_lignes where id = :K2 and generation < 11;
-execute relire(:DR);
+execute relire(:DR, '180000|22950|202950|20000|0|202950|2000:90000:10000:18000:1,1000:0:0:0:0,550:90000:10000:4950:1');
 rollback;
 
 
@@ -204,7 +224,7 @@ rollback;
 \echo '    réduction 10 % ; option 1 : 333,33 € à 10 % ; option 2 : 123,45 € sans TVA'
 \echo '    union : 20 % 90000 → 108000 ; 10 % 90000+33333=123333 → tva 12333 → 135666 ;'
 \echo '            5,5 % 90000 → 94950 ; 0 % 12345 → 12345 ; total 350961'
-\echo '    attendu : ttc 301950 (les options n y entrent pas), réduction 30000, options 350961'
+\echo '    attendu : ttc 301950 (les options n y entrent pas), réduction 30000, options 350961 ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
@@ -213,7 +233,7 @@ insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantit
                                  prix_unitaire_centimes, taux_tva_centiemes, generation)
 values (:K4, :DR, 4000, 'option', 'Option à 10 %', 1000, 'u', 33333, 1000, 11),
        (:K5, :DR, 5000, 'option', 'Option sans TVA', 1000, 'u', 12345, 0, 12);
-execute relire(:DR);
+execute relire(:DR, '270000|31950|301950|30000|0|350961|2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1');
 rollback;
 
 
@@ -223,7 +243,7 @@ rollback;
 \echo '    option 33,33 € à 10 % : seule 3333 + 333 (333,3) = 3666 ;'
 \echo '    poste 0,04 € à 10 % : base 4, tva 0 (0,4) → 4 ; addition 4 + 3666 = 3670 ;'
 \echo '    union : 3337 → tva 334 (333,7) → 3671'
-\echo '    attendu : ttc 4, options 3671 (et non 3670)'
+\echo '    attendu : ttc 4, options 3671 (et non 3670) ; valeurs_attendu_t t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 insert into public.devis (id, pro_id, generation) values (:DR, :A, 1);
@@ -231,7 +251,7 @@ insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantit
                                  prix_unitaire_centimes, taux_tva_centiemes, generation)
 values (:K1, :DR, 1000, 'poste',  'Poste de 4 centimes', 1000, 'u', 4, 1000, 2),
        (:K4, :DR, 2000, 'option', 'Option',              1000, 'u', 3333, 1000, 3);
-execute relire(:DR);
+execute relire(:DR, '4|0|4|0|0|3671|1000:4:0:0:1');
 rollback;
 
 
@@ -239,30 +259,35 @@ rollback;
 \echo ''
 \echo '=== 8. L ACOMPTE EN POURCENTAGE : sur le TTC HORS options, arrondi au centime, le demi vers le haut ==='
 \echo '    30 % de 335500 = 100650 ; 0,10 % de 335500 = 335,5 → 336'
-\echo '    attendu : acompte 100650, puis acompte 336'
+\echo '    attendu : acompte 100650, puis acompte 336 ; les deux colonnes _attendu_t à t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set acompte_centiemes = 3000, acompte_nature = 'acompte', generation = 10 where id = :DR;
-select acompte_ttc_centimes as acompte_30_pourcent from public.devis where id = :DR;
+select acompte_ttc_centimes as acompte_30_pourcent, acompte_ttc_centimes = 100650 as acompte_30_pourcent_attendu_t
+  from public.devis where id = :DR;
 update public.devis set acompte_centiemes = 10, generation = 11 where id = :DR;
-select acompte_ttc_centimes as acompte_0_10_pourcent from public.devis where id = :DR;
+select acompte_ttc_centimes as acompte_0_10_pourcent, acompte_ttc_centimes = 336 as acompte_0_10_pourcent_attendu_t
+  from public.devis where id = :DR;
 rollback;
 
 
 -- ==========================================================================
 \echo ''
 \echo '=== 9. L ACOMPTE SUIT LE TOTAL : réduction 10 % puis acompte 30 % → 30 % de 301950 = 90585 ; une option ne le change pas ==='
-\echo '    attendu : acompte 90585, puis, après l option, acompte 90585 et options > ttc'
+\echo '    attendu : acompte 90585, puis, après l option, acompte 90585 et options > ttc :'
+\echo '              union 20 % 90000 + 50000 = 140000 → 168000 ; 10 % 99000 ; 5,5 % 94950 → options 361950 ;'
+\echo '              les deux colonnes _attendu_t à t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set remise_centiemes = 1000, acompte_centiemes = 3000, acompte_nature = 'arrhes', generation = 10 where id = :DR;
-select acompte_ttc_centimes as acompte from public.devis where id = :DR;
+select acompte_ttc_centimes as acompte, acompte_ttc_centimes = 90585 as acompte_attendu_t from public.devis where id = :DR;
 insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
                                  prix_unitaire_centimes, taux_tva_centiemes, generation)
 values (:K4, :DR, 4000, 'option', 'Option', 1000, 'u', 50000, 2000, 11);
-select acompte_ttc_centimes as acompte, total_ttc_centimes as ttc, total_ttc_options_centimes as options
+select acompte_ttc_centimes as acompte, total_ttc_centimes as ttc, total_ttc_options_centimes as options,
+       (acompte_ttc_centimes, total_ttc_centimes, total_ttc_options_centimes) = (90585, 301950, 361950) as apres_option_attendu_t
   from public.devis where id = :DR;
 rollback;
 
@@ -270,28 +295,35 @@ rollback;
 -- ==========================================================================
 \echo ''
 \echo '=== 10. ACOMPTE EN MONTANT PLUS GRAND QUE LE TTC : RAMENÉ ; puis TOUTES les lignes retirées — la suppression PASSE (relecture BASE-1) ==='
-\echo '    attendu : acompte 335500 ; après les trois suppressions : ttc 0, acompte 0, sans erreur'
+\echo '    attendu : acompte 335500 ; après les trois suppressions : ttc 0, acompte 0, sans erreur ;'
+\echo '              ventilation 2000:0:0:0:0,1000:0:0:0:0,550:0:0:0:0 ; les deux colonnes _attendu_t à t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond; execute lignes_cond;
 update public.devis set acompte_centimes = 500000, acompte_nature = 'acompte', generation = 10 where id = :DR;
-select acompte_ttc_centimes as acompte from public.devis where id = :DR;
+select acompte_ttc_centimes as acompte, acompte_ttc_centimes = 335500 as acompte_ramene_attendu_t from public.devis where id = :DR;
 delete from public.devis_lignes where id = :K1 and generation < 11;
 delete from public.devis_lignes where id = :K2 and generation < 11;
 delete from public.devis_lignes where id = :K3 and generation < 11;
-execute relire(:DR);
+execute relire(:DR, '0|0|0|0|0|0|2000:0:0:0:0,1000:0:0:0:0,550:0:0:0:0');
 rollback;
 
 
 -- ==========================================================================
 \echo ''
 \echo '=== 11. LA NATURE SANS ACOMPTE PASSE — et l acompte sans nature aussi : c est un motif de refus de la remise (lot 2b), jamais une contrainte (relecture BASE-2) ==='
-\echo '    attendu : deux UPDATE 1, sans erreur'
+\echo '    attendu : deux UPDATE 1, sans erreur ; les deux colonnes _attendu_t à t'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond;
 update public.devis set acompte_nature = 'arrhes', generation = 10 where id = :DR;
+select acompte_nature as nature, acompte_centiemes as pourcentage,
+       acompte_nature is not distinct from 'arrhes' and acompte_centiemes is null as nature_seule_attendu_t
+  from public.devis where id = :DR;
 update public.devis set acompte_nature = null, acompte_centiemes = 3000, generation = 11 where id = :DR;
+select acompte_nature as nature, acompte_centiemes as pourcentage,
+       acompte_nature is null and acompte_centiemes is not distinct from 3000 as acompte_seul_attendu_t
+  from public.devis where id = :DR;
 rollback;
 
 
@@ -318,6 +350,15 @@ rollback;
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 execute devis_cond;
 update public.devis set acompte_centimes = 0, generation = 10 where id = :DR;
+rollback;
+\echo '--- acompte de 20 000 000 % sur un devis de 84 000 000,00 € TTC → devis_acompte_check, et NON « bigint out of range » (22003) :'
+\echo '    le déclencheur ne multiplie le pourcentage que dans ses bornes, la contrainte refuse sous son nom (relecture BASE-5)'
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.devis (id, pro_id, generation) values (:DR, :A, 1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
+                                 prix_unitaire_centimes, taux_tva_centiemes, generation)
+values (:K1, :DR, 1000, 'poste', 'Gros poste', 1000, 'forfait', 7000000000, 2000, 2);
+update public.devis set acompte_centiemes = 2000000000, generation = 3 where id = :DR;
 rollback;
 \echo '--- nature « caution » → devis_acompte_nature_check'
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
@@ -359,8 +400,8 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 13. LE PLAFOND PORTE SUR LE BRUT (relecture BASE-6) : trois postes de 90 000 000,00 € et une réduction de 100 % → devis_plafond_check ==='
-\echo '    (sans la règle, le net 0 passait, et retirer ensuite la réduction était refusé)'
+\echo '=== 13. LE HT EST BORNÉ SUR LE BRUT (relecture BASE-6) : trois postes de 90 000 000,00 € et une réduction de 100 % → devis_plafond_check ==='
+\echo '    (sans la règle, le net 0 passait : des lignes au-delà de la borne tenaient sous elle grâce à la réduction)'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 insert into public.devis (id, pro_id, remise_centiemes, generation) values (:DR, :A, 10000, 1);
@@ -378,6 +419,28 @@ values (:K1, :DR, 1000, 'poste',  'Poste',  1000, 'forfait', 5000000000, 2000, 2
        (:K4, :DR, 2000, 'option', 'Option', 1000, 'forfait', 5000000000, 2000, 3);
 rollback;
 
+
+-- ==========================================================================
+\echo ''
+\echo '=== 13 bis. RETIRER LA RÉDUCTION PRÈS DU PLAFOND DU TTC → devis_plafond_check (relecture BASE-4 du 03/11) ==='
+\echo '    Le HT est borné sur le brut, le TTC NET de la réduction : un poste de 90 000 000,00 € à 20 %'
+\echo '    et 50 % de réduction donnent ht 45·10^8, réduction 45·10^8, tva 9·10^8, ttc 54·10^8 — accepté.'
+\echo '    Sans la réduction, le ttc vaudrait 108·10^8, au-delà de 99 999 999,99 € : la retirer est REFUSÉ,'
+\echo '    et c est juste (un devis ne dépasse pas la borne, avec ou sans réduction). L écran dit alors'
+\echo '    « La réduction n a pas pu être changée », pas « pour cette ligne » (erreurs.js, devis.js).'
+\echo '    attendu : valeurs_attendu_t t ; puis la baisse à 20 % passe (ttc 86,4·10^8, attendu_t t) ;'
+\echo '              puis le retrait → devis_plafond_check'
+-- ==========================================================================
+begin; set local role authenticated; set local request.jwt.claim.sub = :A;
+insert into public.devis (id, pro_id, remise_centiemes, generation) values (:DR, :A, 5000, 1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
+                                 prix_unitaire_centimes, taux_tva_centiemes, generation)
+values (:K1, :DR, 1000, 'poste', 'Gros poste', 1000, 'forfait', 9000000000, 2000, 2);
+execute relire(:DR, '4500000000|900000000|5400000000|4500000000|0|5400000000|2000:4500000000:4500000000:900000000:1');
+update public.devis set remise_centiemes = 2000, generation = 3 where id = :DR;
+execute relire(:DR, '7200000000|1440000000|8640000000|1800000000|0|8640000000|2000:7200000000:1800000000:1440000000:1');
+update public.devis set remise_centiemes = null, generation = 4 where id = :DR;
+rollback;
 
 -- ==========================================================================
 \echo ''
@@ -601,32 +664,12 @@ select public.repartir_au_plus_fort_reste(9999999999, '{9999999999,9999999999}')
 
 -- ==========================================================================
 \echo ''
-\echo '=== 21. LE RATTRAPAGE DE 49.6 ter : un devis d AVANT le lot 2a (total toutes options comprises à 0) reçoit le sien ==='
-\echo '    attendu : avant 0 ; puis UPDATE 1 ; après 335500 ; l horloge a monté de 1 ; les totaux n ont pas bougé'
+\echo '=== 21. LE RATTRAPAGE DE 49.6 ter — il ne se joue plus ici : voir essais-section-49-rattrapage.sql ==='
+\echo '    Ce cas recopiait l ordre `update` du rattrapage : il éprouvait sa COPIE, et la copie ne voyait'
+\echo '    ni les devis aux options seules, ni l horloge à la borne, ni les options au-delà du plafond'
+\echo '    (relecture BASE-1 à BASE-3 et BASE-6 du 03/11). L essai dédié pose d anciens devis, puis'
+\echo '    REJOUE schema.sql lui-même (deux fois), et éprouve sa garde.'
 -- ==========================================================================
-begin;
-alter table public.devis drop constraint devis_calculs_check;
--- En réplication, aucun déclencheur ne tourne (les contraintes, si) : on
--- pose à la main ce que le lot 1 aurait laissé — le devis et ses totaux,
--- les lignes et leur total, la ventilation —, sans la colonne nouvelle.
-set local session_replication_role = replica;
-insert into public.devis (id, pro_id, objet, total_ht_centimes, total_tva_centimes, total_ttc_centimes,
-                          total_ttc_options_centimes, generation)
-values (:DR, :A, 'Conditions', 300000, 35500, 335500, 0, 4);
-insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
-                                 prix_unitaire_centimes, taux_tva_centiemes, total_centimes, generation)
-values (:K1, :DR, 1000, 'poste', 'Poste à 20 %',  1000, 'forfait', 100000, 2000, 100000, 2),
-       (:K2, :DR, 2000, 'poste', 'Poste à 10 %',  1000, 'forfait', 100000, 1000, 100000, 3),
-       (:K3, :DR, 3000, 'poste', 'Poste à 5,5 %', 1000, 'forfait', 100000,  550, 100000, 4);
-insert into public.devis_tva (devis_id, taux_tva_centiemes, base_centimes, tva_centimes, nb_lignes)
-values (:DR, 2000, 100000, 20000, 1), (:DR, 1000, 100000, 10000, 1), (:DR, 550, 100000, 5500, 1);
-set local session_replication_role = origin;
-select total_ttc_options_centimes as avant from public.devis where id = :DR;
-update public.devis
-   set generation = generation + 1
- where total_ttc_options_centimes < total_ttc_centimes;
-execute relire(:DR);
-rollback;
 
 
 -- ==========================================================================

@@ -2820,6 +2820,119 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
   refuse de supprimer une ligne. Il ne gêne rien ; le supprimer est un geste
   à vous, dans l'éditeur SQL, si vous le souhaitez.
 
+### Après le lot 2a — ce qui reste (03/11/2026)
+
+Le lot 2a (la réduction, l'acompte, la validité, le total toutes options
+comprises, la carte « Conditions ») a été relu de façon adverse le 03/11.
+Cette section commence par ce que la relecture « contrôles et droit » laisse
+ouvert sur les **aides de droit** de la carte (constats CONTROLES-8, 9, 11 et
+12, des documents de travail de la session, pas dans le dépôt) ; le reste du
+lot s'y ajoutera. Les articles cités ont été relus dans le dump LEGI local du
+17/10/2026 et dans les textes copiés pendant le lot 1, **pas sur Légifrance en
+direct**.
+
+**Les aides corrigées le 03/11, dans le sens prudent** (`src/lib/devis.js`,
+`src/components/ConditionsDevis.js`, comparées mot pour mot par
+`verifier-devis`) : le 8e jour dit « recevoir aucun paiement, pas même un
+chèque » et nomme la petite entreprise de L. 221-3 et la seule exception
+(entretien ou réparation urgents, expressément demandés, pour le strictement
+nécessaire **à l'urgence**) ; la nature de l'acompte dit la rétractation de
+14 jours et dit la présomption d'arrhes comme une POSITION de
+l'administration ; la retenue de garantie dit à qui l'opposition est notifiée
+(au consignataire, ou à la caution, par lettre recommandée) et que la caution
+est « personnelle et solidaire ». Ce sont des AIDES pour l'artisan ; le texte
+qui s'imprimera sur le devis s'écrit en 2c, avec le juriste.
+
+**Contre-vérifiées le 04/11** (relues contre les articles, même dump) : trois
+phrases disaient encore moins que la loi, et sont corrigées. « Strictement
+nécessaires » tout court se lisait « nécessaires au chantier » : c'est
+« nécessaires **à l'urgence** » (L. 221-10 4°). L'exemple d'exception à la
+rétractation, « un dépannage urgent », laissait croire que tout un devis de
+dépannage y échappe — le sens qui expose l'artisan (sans formulaire de
+rétractation, le délai du client s'allonge de douze mois, L. 221-20, et
+l'absence du formulaire est punie, L. 242-6) : il dit « le strict nécessaire
+d'un dépannage urgent », et « s'il se rétracte, vous lui rendez tout » au lieu
+d'un « alors » qui se lisait « dans ce cas d'exception ». Et la phrase de la
+retenue disait « Elle vous revient… (ou à la caution) » juste après « Elle
+n'est pas retenue si vous fournissez une caution » : elle nomme maintenant les
+deux cas de l'art. 2 — la somme retenue revient, **ou la caution est
+libérée**. « Seule exception » (le 8e jour) reste plus étroit que L. 221-10,
+qui en compte trois autres qu'un devis de travaux ne rencontre pas (abonnement
+à un quotidien, services à la personne d'un organisme agréé, ventes en
+réunion) : c'est voulu, c'est le sens prudent.
+
+**La « date du devis » sera la date de REMISE (lots 2b et 2c) :**
+
+- [ ] Le lot 2a range une validité en JOURS (`validite_jours`) et n'a encore
+  **aucune date du devis** : la table ne porte que `created_at` (la naissance
+  du BROUILLON) et `modifie_le`. C'est déjà décidé (`docs/PLAN-DEVIS.md`
+  §2.0) : la date imprimée est `remis_le`, posée par la base à la remise, et
+  `created_at` ne s'imprime jamais. L'aide de la carte le dit dès
+  maintenant — « À compter de la date du devis, celle qui sera imprimée
+  dessus : le jour où vous le remettrez au client, pas celui où vous l'avez
+  commencé » —, et **2c ne doit pas la démentir** : un brouillon commencé en
+  septembre, remis en novembre, « valable 30 jours », ne doit pas arriver
+  périmé chez le client.
+- [ ] **La règle qui passe des JOURS à une DATE s'écrit en 2c**, et elle a
+  deux pièges (contre-examen de CONTROLES-12) : le plan décrit la validité
+  comme une DATE choisie au calendrier (`validite_jusqu_au`) quand le lot 2a
+  range des jours ; et il la pose à la PRÉPARATION (`preparer_remise_devis`)
+  alors que `remis_le` naît à la CONFIRMATION (`confirmer_remise_devis`) —
+  deux instants qui peuvent tomber de part et d'autre de minuit. La date de
+  fin imprimée se compte depuis la date IMPRIMÉE, à l'heure de Paris.
+
+**À faire relire par un juriste, avant le texte IMPRIMÉ (2c) :**
+
+- [ ] **La présomption d'arrhes vaut-elle pour un devis du bâtiment ?**
+  L. 214-1 : « sauf stipulation contraire », une somme versée d'avance est
+  des arrhes. Mais **L. 214-3 écarte tout ce chapitre pour les « commandes
+  spéciales sur devis »**. L'administration (service-public.fr, fiche F31144)
+  applique pourtant la présomption aux devis de travaux, et
+  `docs/PLAN-DEVIS.md` écrit « la présomption ne joue probablement pas ».
+  L'aide dit aujourd'hui « l'administration considère… » : une position, pas
+  la loi. La nature se CHOISIT à chaque devis, sans défaut : la réponse ne
+  change que ce que voudrait dire un acompte sans nature — or un acompte
+  sans nature est déjà un motif de refus de la remise (lot 2b).
+- [ ] **L. 242-7 n'a pas été relu** : il manque au dump local. Le plan lui
+  rattache le paiement reçu avant le 8e jour (« exiger ou obtenir », deux ans
+  et 150 000 €). À relire avant d'imprimer la moindre échéance d'acompte.
+- [ ] **Les exceptions à la rétractation, sur le texte imprimé.** L'aide dit
+  « sauf exceptions (par exemple, le strict nécessaire d'un dépannage urgent
+  qu'il vous a demandé chez lui) ». Le devis devra dire lesquelles valent
+  pour LUI : L. 221-28 8° (entretien ou réparation urgents demandés au
+  domicile, dans la limite du strictement nécessaire pour répondre à
+  l'urgence) et L. 221-2 12° (construction neuve, « transformation
+  importante » d'un immeuble existant — où commence-t-elle ?).
+- [ ] **Ce que l'aide tait, à dessein : la part déjà faite.** Elle dit « s'il
+  se rétracte, vous lui rendez tout ce qu'il a versé » (L. 221-24). Mais si le
+  client a expressément demandé que les travaux commencent avant la fin des
+  14 jours (sur papier, pour un devis signé hors de vos locaux), il doit la
+  part déjà faite (L. 221-25) — et, les travaux entièrement faits avec son
+  accord exprès et sa reconnaissance qu'il perd ce droit, il ne peut plus se
+  rétracter (L. 221-28 1°). L'aide se trompe donc dans le sens prudent ; le
+  texte imprimé, lui, devra savoir si cette demande existe.
+- [ ] **« Hors établissement » ne veut pas dire seulement « signé ailleurs
+  que dans vos locaux ».** L. 221-1 2° : c'en est un aussi quand le client
+  vous a fait venir lui-même (a), et quand il signe DANS vos locaux juste
+  après que vous l'avez sollicité chez lui ou sur le chantier (b). Les aides
+  disent « hors de vos locaux (chez le client, sur le chantier) » et
+  concluent « comptez ce délai » : c'est prudent. Mais quand 2b demandera où
+  le devis est signé, la question devra couvrir le cas (b).
+- [ ] **L. 221-3 dans les deux sens.** L'entreprise de cinq salariés au plus,
+  pour des travaux hors de son activité principale, a le délai de sept jours
+  ET la rétractation — pour un devis signé hors de vos locaux seulement, pas
+  à distance — mais PAS la présomption d'arrhes (L. 214-1 ne vise que le
+  consommateur). Le texte imprimé devra savoir qui est le client : 2b
+  demandera où le devis est signé, rien ne demande encore la taille d'une
+  entreprise cliente ni son métier.
+- [ ] Toujours ouverts depuis le lot 1 (« Après le lot 1 », plus haut) :
+  l'assiette de la retenue de garantie (HT ou TTC), et une retenue sur un
+  paiement unique.
+
+**Ce qui n'a pas été vérifié :** les aides, plus longues, ont été mesurées au
+navigateur à 320 et 390 points de large (en démonstration) ; ni au doigt sur
+l'iPhone, ni lues par VoiceOver.
+
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 
 Votre image (le casque et « OPUS », noir sur orange) est devenue l'icône de

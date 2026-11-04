@@ -200,17 +200,38 @@ export const MENTION_FRANCHISE = 'TVA non applicable, article 293 B du CGI';
 /**
  * La retenue de garantie, dite telle que la loi la dit — et jamais la
  * durée sans sa réserve. Loi n° 71-584 du 16/07/1971, art. 1er (au plus
- * 5 % des acomptes ; la consignation ; la caution qui l'écarte) et art. 2
- * (rendue un an après la réception, SAUF opposition motivée notifiée par
- * lettre recommandée) ; décret n° 71-1058, art. 1er (qui peut se porter
+ * 5 % des acomptes ; la consignation ; la caution « personnelle et
+ * solidaire » qui l'écarte) et art. 2 (rendue un an après la réception,
+ * SAUF opposition motivée notifiée « à la caution ou au consignataire, par
+ * lettre recommandée ») ; décret n° 71-1058, art. 1er (qui peut se porter
  * caution). Le lot 2 l'imprimera telle quelle.
+ *
+ * POURQUOI LE DESTINATAIRE DE L'OPPOSITION EST ÉCRIT (relecture CONTROLES-11
+ * du lot 2a) : la phrase disait « sauf si le client a notifié, par lettre
+ * recommandée, une opposition », sans dire À QUI. L'artisan pouvait croire
+ * qu'une lettre reçue par LUI suffisait, ou qu'aucune lettre ne lui étant
+ * arrivée, la somme lui revenait d'office. La loi dit l'inverse : c'est le
+ * consignataire (ou la caution) qui reçoit l'opposition, et qui garde alors
+ * la somme. Et la caution est « personnelle et solidaire » : une simple
+ * promesse de payer ne l'écarte pas. Relu dans la version en vigueur de
+ * l'art. 1er (depuis le 01/01/2020, « tribunal judiciaire ») et de l'art. 2.
+ *
+ * LES DEUX CAS DE L'ART. 2 (contre-vérification du lot 2a) : la fin disait
+ * « Elle vous revient … sauf si le client a notifié au consignataire (ou à
+ * la caution) », juste après « Elle n'est pas retenue si vous fournissez une
+ * caution ». Quand il y a caution, rien n'a été retenu : rien ne « revient ».
+ * La loi dit « la caution est libérée OU les sommes consignées sont versées
+ * à l'entrepreneur ». La phrase nomme donc les deux — elle sera imprimée
+ * telle quelle sur le devis, et elle doit se lire juste dans les deux cas.
  */
 export const PHRASE_RETENUE = 'Retenue sur les acomptes, au plus 5\u00a0% (loi n°\u00a071-584 du 16/07/1971). '
   + 'Le client consigne la somme retenue chez un consignataire accepté par vous deux — à défaut, '
   + 'désigné par le président du tribunal. Elle n’est pas retenue si vous fournissez une caution '
-  + 'd’un montant égal (banque, établissement financier habilité ou société de caution mutuelle). '
-  + 'Elle vous revient un an après la réception des travaux, sauf si le client a notifié, par '
-  + 'lettre recommandée, une opposition motivée par l’inexécution de vos obligations.';
+  + 'personnelle et solidaire d’un montant égal (banque, établissement financier habilité ou société '
+  + 'de caution mutuelle). La somme retenue vous revient (ou la caution est libérée) un an après la '
+  + 'réception des travaux, sauf si le client a '
+  + 'notifié au consignataire (ou à la caution), par lettre recommandée, une opposition motivée par '
+  + 'l’inexécution de vos obligations.';
 
 /**
  * Le délai qu'un appui propose, et POURQUOI : face à un consommateur, sans
@@ -997,9 +1018,16 @@ const CONTRAINTES_DES_CONDITIONS = Object.freeze(CONTRAINTES_DEVIS.filter((n) =>
  *
  * LE CALCUL, dans l'ordre de `recalcule_devis()` puis `tient_le_devis()` :
  *   1. le BRUT par taux (les postes seulement ; une ligne offerte compte 0) ;
- *      refusé, comme par `devis_plafond_check`, au-delà de 99 999 999,99 € —
- *      c'est le brut qui est borné, pas le net (une réduction contournerait
- *      le plafond) ;
+ *      refusé, comme par `devis_plafond_check`, au-delà de 99 999 999,99 € :
+ *      le HT est borné sur le BRUT, avant la réduction — des lignes qui
+ *      dépassent la borne n'y passent pas grâce à une réduction. Le TTC (3)
+ *      et le total toutes options (4), eux, sont bornés NETS de la réduction,
+ *      comme dans la base : une réduction peut faire tenir sous la borne un
+ *      TTC qui, sans elle, la dépasserait, et la retirer (ou la baisser) est
+ *      alors REFUSÉ — c'est juste, un devis ne dépasse pas 99 999 999,99 €,
+ *      avec ou sans réduction. Cette ligne disait « une réduction
+ *      contournerait le plafond » : c'était vrai du HT seul (relecture BASE-4
+ *      du lot 2a) ;
  *   2. la RÉDUCTION effective (`remiseEffective`), répartie entre les taux
  *      AU PLUS FORT RESTE, au prorata des bruts, du taux le plus fort au plus
  *      faible ; la base de chaque taux est NETTE de sa part
@@ -1874,21 +1902,90 @@ export function libellesDesTotaux(etatRegime) {
 /** Code de la consommation, art. L. 214-1 : « Sauf stipulation contraire
  *  […], les sommes versées d'avance sont des arrhes […]. Dans ce cas, chacun
  *  des contractants peut revenir sur son engagement, le consommateur en
- *  perdant les arrhes, le professionnel en les restituant au double. » */
+ *  perdant les arrhes, le professionnel en les restituant au double. »
+ *
+ *  DEUX RÉSERVES, dites depuis la relecture CONTROLES-9 du lot 2a :
+ *  - LA PRÉSOMPTION D'ARRHES N'EST PAS UNE CERTITUDE pour un devis du
+ *    bâtiment. L. 214-3 écarte tout ce chapitre pour les « commandes
+ *    spéciales sur devis » ; l'administration (service-public.fr, fiche
+ *    F31144) l'applique pourtant aux devis de travaux. L'aide dit donc
+ *    « l'administration considère », pas « vaut » : c'est une position,
+ *    pas la loi. La question est posée au juriste (docs/A-FAIRE.md,
+ *    « Après le lot 2a ») avant le texte IMPRIMÉ (2c) ;
+ *  - HORS DES LOCAUX OU À DISTANCE, la rétractation passe AVANT : 14 jours
+ *    (L. 221-18), et tout ce qui a été versé est rendu, acompte ou arrhes
+ *    (L. 221-24). « Un acompte engage les deux » et « le client renonce en
+ *    les perdant » sont faux pendant ce délai — et l'aide d'en dessous
+ *    (`ECHEANCE_ACOMPTE`) parle justement du devis signé hors des locaux.
+ *    « Sauf exceptions » : L. 221-28 8° (le dépannage urgent demandé par le
+ *    client) et L. 221-2 12° (la construction neuve, la transformation
+ *    importante) l'écartent — l'artisan qui se croit tenu de rendre se
+ *    trompe dans le sens prudent, le contraire l'exposerait.
+ *
+ *  L'EXEMPLE PORTE SA LIMITE (contre-vérification du lot 2a). L'aide disait
+ *  « (un dépannage urgent, par exemple) ». Or L. 221-28 8° n'écarte la
+ *  rétractation que « dans la limite des pièces de rechange et travaux
+ *  strictement nécessaires pour répondre à l'urgence ». Sans cette limite,
+ *  l'exemple laissait croire que TOUT un devis « de dépannage » échappe à
+ *  la rétractation — le sens qui expose l'artisan : sans le formulaire de
+ *  rétractation, le délai du client s'allonge de douze mois (L. 221-20), et
+ *  ne pas le remettre est puni (L. 242-6). Et « : vous lui rendez alors »,
+ *  juste après l'exception, se lisait « dans ce cas d'exception, vous
+ *  rendez tout » : la phrase dit maintenant « s'il se rétracte ».
+ *  Ce qu'elle ne dit pas, à dessein (trop long pour une aide ; posé au
+ *  juriste, docs/A-FAIRE.md) : si le client a EXPRESSÉMENT demandé que
+ *  les travaux commencent avant la fin du délai, il doit la part déjà
+ *  faite (L. 221-25). « Tout » se trompe alors dans le sens prudent. */
 export const AIDE_NATURE_ACOMPTE = 'Des arrhes : chacun peut renoncer — le client en les perdant, vous en lui '
-  + 'rendant le double. Un acompte engage les deux. Si rien n’est écrit, une somme versée d’avance par un '
-  + 'particulier vaut des arrhes (Code de la consommation, art. L. 214-1).';
+  + 'rendant le double. Un acompte engage les deux. Si rien n’est écrit, l’administration considère qu’une '
+  + 'somme versée d’avance par un particulier vaut des arrhes (Code de la consommation, art. L.\u00a0214-1). '
+  + 'Mais un devis signé hors de vos locaux ou à distance laisse au client 14\u00a0jours pour se rétracter, '
+  + 'sauf exceptions (par exemple, le strict nécessaire d’un dépannage urgent qu’il vous a demandé chez lui) : '
+  + 's’il se rétracte, vous lui rendez tout ce qu’il a versé, '
+  + 'acompte ou arrhes (art. L.\u00a0221-18 et L.\u00a0221-24).';
 
 /** Code de la consommation, art. L. 221-10, premier alinéa : « Le
- *  professionnel ne peut recevoir aucun paiement […] avant l'expiration d'un
- *  délai de sept jours à compter de la conclusion du contrat hors
- *  établissement. » — sauf, notamment (4°), des travaux d'entretien ou de
- *  réparation urgents expressément sollicités. 2a ne sait pas encore où le
- *  devis sera signé (2b le demandera) : la phrase dit la règle, pas une
- *  date, et dit pourquoi elle est rappelée. */
-export const ECHEANCE_ACOMPTE = 'Quand un particulier signe hors de vos locaux (chez lui, sur le chantier), vous ne '
-  + 'pouvez rien encaisser avant le 8e jour après la signature, sauf des travaux urgents qu’il vous a demandés '
-  + '(Code de la consommation, art. L. 221-10). Opus ne sait pas encore où ce devis sera signé : comptez ce délai.';
+ *  professionnel ne peut recevoir aucun paiement ou aucune contrepartie,
+ *  sous quelque forme que ce soit, de la part du consommateur avant
+ *  l'expiration d'un délai de sept jours à compter de la conclusion du
+ *  contrat hors établissement. » — sauf, notamment (4°), « des travaux
+ *  d'entretien ou de réparation à réaliser en urgence au domicile du
+ *  consommateur et expressément sollicités par lui, dans la limite des
+ *  pièces de rechange et travaux strictement nécessaires pour répondre à
+ *  l'urgence ». 2a ne sait pas encore où le devis sera signé (2b le
+ *  demandera) : la phrase dit la règle, pas une date, et dit pourquoi elle
+ *  est rappelée.
+ *
+ *  CE QUE LA PHRASE DISAIT DE MOINS QUE LA LOI, DANS LE SENS QUI EXPOSE
+ *  L'ARTISAN (relecture CONTROLES-8 du lot 2a) :
+ *  - « encaisser » : la loi dit RECEVOIR, sous quelque forme que ce soit.
+ *    Un chèque reçu le jour de la signature et encaissé le 10e jour est
+ *    déjà interdit ; « encaisser » laissait croire le contraire. Le plan
+ *    (docs/PLAN-DEVIS.md) rattache ce paiement anticipé à L. 242-7 (deux
+ *    ans, 150 000 €) — non relu ici, l'article manque au dump local ;
+ *  - « un particulier » : L. 221-3 étend la règle à une entreprise de cinq
+ *    salariés au plus, quand l'objet du contrat n'entre pas dans son
+ *    activité principale (la boulangerie qui fait refaire sa vitrine) ;
+ *  - « des travaux urgents » : l'exception ne vaut que pour l'entretien ou
+ *    la réparation demandés expressément, au domicile, et seulement pour
+ *    les pièces et travaux strictement nécessaires — pas pour tout
+ *    l'acompte d'un devis « urgent ». « À l'urgence » est écrit en toutes
+ *    lettres (contre-vérification du lot 2a) : « strictement nécessaires »
+ *    tout court se lisait « nécessaires au chantier », c'est-à-dire tout le
+ *    devis — exactement l'erreur que la phrase veut éviter.
+ *
+ *  « SEULE EXCEPTION » EST PLUS ÉTROIT QUE LA LOI, et c'est voulu : L. 221-10
+ *  en compte trois autres (l'abonnement à un quotidien, les services à la
+ *  personne d'un organisme agréé payés au fil d'un contrat continu, les
+ *  ventes en réunion à domicile), qu'un devis de travaux ne rencontre pas.
+ *  Les taire fait croire à l'artisan qu'il doit attendre là où il pourrait
+ *  être payé : c'est le sens prudent, jamais celui qui l'expose. */
+export const ECHEANCE_ACOMPTE = 'Devis signé hors de vos locaux (chez le client, sur le chantier) par un particulier, '
+  + 'ou par une entreprise de 5\u00a0salariés au plus pour des travaux hors de son métier : vous ne pouvez '
+  + 'recevoir aucun paiement avant le 8e jour après la signature — pas même un chèque à encaisser plus tard. '
+  + 'Seule exception : des travaux d’entretien ou de réparation urgents qu’il vous a expressément demandés chez '
+  + 'lui, et seulement pour les pièces et travaux strictement nécessaires à l’urgence (Code de la consommation, '
+  + 'art. L.\u00a0221-10 et L.\u00a0221-3). Opus ne sait pas encore où ce devis sera signé : comptez ce délai.';
 
 /** La réduction et l'acompte ne regardent jamais les OPTIONS (DROIT-6) :
  *  une option n'est pas commandée tant que le client ne l'a pas choisie. */
@@ -1896,8 +1993,20 @@ export const AIDE_REDUCTION = 'Elle porte sur les postes, jamais sur une option 
   + 'tant que le client ne l’a pas choisie.';
 export const AIDE_ACOMPTE = 'Calculé sur le total sans les options : avant la signature, on ne sait pas '
   + 'lesquelles le client prendra.';
-/** La validité court à partir de la DATE DU DEVIS (réponse du 03/11). */
-export const AIDE_VALIDITE = 'À compter de la date du devis.';
+/** La validité court à partir de la DATE DU DEVIS (réponse du 03/11).
+ *
+ *  QUELLE DATE (relecture CONTROLES-12 du lot 2a) : le lot 2a n'en a pas
+ *  encore. Le devis ne porte que `created_at` — la naissance du BROUILLON —
+ *  et `modifie_le`. La date qui s'imprimera est celle de la REMISE
+ *  (`remis_le`, posée par la base à la remise, lots 2b-2c ;
+ *  docs/PLAN-DEVIS.md §2.0 : « `created_at` ne s'imprime JAMAIS »). Dire
+ *  seulement « la date du devis » laissait croire qu'un brouillon commencé
+ *  en septembre et remis en novembre, « valable 30 jours », serait périmé
+ *  en arrivant chez le client. L'aide nomme donc la date imprimée et le
+ *  geste qui la pose ; la règle qui passe des JOURS à une DATE s'écrit en
+ *  2c (docs/A-FAIRE.md, « Après le lot 2a »). */
+export const AIDE_VALIDITE = 'À compter de la date du devis, celle qui sera imprimée dessus : le jour où vous le '
+  + 'remettrez au client, pas celui où vous l’avez commencé.';
 
 /* CE QU'UNE CONTRAINTE DU DEVIS NOMME, pour dire QUEL champ n'est pas parti
    (cahier du lot 2, ECRAN-15) : « Le brouillon n'a pas pu être enregistré »
@@ -1911,6 +2020,15 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
   devis_lieu_code_postal_check: 'Le lieu des travaux n’a pas pu être enregistré.',
   devis_lieu_ville_check: 'Le lieu des travaux n’a pas pu être enregistré.',
   devis_objet_check: 'L’objet du devis n’a pas pu être enregistré.',
+  /* SUR L'EN-TÊTE, LE PLAFOND NE PEUT VENIR QUE DE LA RÉDUCTION (relecture BASE-4
+     du lot 2a, mesuré) : une écriture d'en-tête relit les totaux tels que le
+     dernier recalcul les a laissés, sous la borne — sauf quand elle change la
+     réduction, qui refait la ventilation. Et la base borne le TTC NET de la
+     réduction : la retirer, ou la baisser, peut le faire repasser. Avant, la
+     bande disait « l'objet, le lieu, le délai ou les conditions », puis « Rien
+     n'a été enregistré pour cette ligne » — à quelqu'un qui n'avait touché
+     que la réduction. */
+  devis_plafond_check: 'La réduction n’a pas pu être changée.',
   devis_remise_check: 'La réduction n’a pas pu être enregistrée.',
   devis_remise_une_forme_check: 'La réduction n’a pas pu être enregistrée.',
   devis_retenue_check: 'La retenue de garantie n’a pas pu être enregistrée.',
@@ -2011,10 +2129,19 @@ export function resumeDesConditions(d) {
  * d'union, que VoiceOver lit « tiret ». Les montants sont ceux que la BASE
  * a calculés (`totaux`), jamais refaits ici.
  */
-export function rangeesDesTotaux(totaux, etatRegime, { devis = {}, nbOptions = 0 } = {}) {
+export function rangeesDesTotaux(totaux, etatRegime, { nbOptions = 0 } = {}) {
   if (!totaux) return [];
   const L = libellesDesTotaux(etatRegime);
-  const x = devis || {};
+  /* LE DEVIS DE L'ÉCRAN N'EST PLUS LU ICI : pourcentages, nature, retenue,
+     tout vient de la demande RELUE (`totaux.demande`), comme les montants —
+     l'écran précède la base pendant un envoi, et après un envoi raté. */
+  /* LE POURCENTAGE DU LIBELLÉ VIENT DE LA DEMANDE QUE LA BASE A VUE
+     (`totaux.demande`), comme le montant à côté de lui : pendant un envoi,
+     ou après un envoi raté, la demande de l'écran le précède, et la rangée
+     disait « Réduction 20 %, 65,95 € » — 65,95 €, c'était 5 % (relecture
+     ÉCRAN-2 du lot 2a, mesuré). Les totaux sans demande (une forme
+     ancienne) ne disent pas de pourcentage. */
+  const vue = totaux.demande && typeof totaux.demande === 'object' ? totaux.demande : {};
   const r = [];
   const reduction = Number(totaux.reduction) || 0;
   /* « Total avant réduction » est un montant HORS TAXE : quand l'écran ne
@@ -2025,7 +2152,7 @@ export function rangeesDesTotaux(totaux, etatRegime, { devis = {}, nbOptions = 0
   if (reduction > 0 && (L.taxe || !(Number(totaux.tva) > 0))) {
     const brut = present(totaux.brut) ? totaux.brut : (Number(totaux.ht) || 0) + reduction;
     r.push({ cle: 'brut', libelle: L.brut, centimes: brut });
-    const pct = present(x.remiseCentiemes) && !present(x.remiseCentimes) ? ` ${tauxLisible(x.remiseCentiemes)}` : '';
+    const pct = present(vue.remiseCentiemes) && !present(vue.remiseCentimes) ? ` ${tauxLisible(vue.remiseCentiemes)}` : '';
     r.push({ cle: 'reduction', libelle: `${L.reduction}${pct}`, centimes: reduction, moins: true });
   }
   if (L.taxe) {
@@ -2044,11 +2171,13 @@ export function rangeesDesTotaux(totaux, etatRegime, { devis = {}, nbOptions = 0
   }
   const acompte = Number(totaux.acompte) || 0;
   if (acompte > 0) {
-    const pct = present(x.acompteCentiemes) && !present(x.acompteCentimes) ? ` ${tauxLisible(x.acompteCentiemes)}` : '';
-    r.push({ cle: 'acompte', libelle: `${libelleAcompte(x.acompteNature)}${pct}`, centimes: acompte });
+    const pct = present(vue.acompteCentiemes) && !present(vue.acompteCentimes) ? ` ${tauxLisible(vue.acompteCentiemes)}` : '';
+    /* La NATURE et la RETENUE, elles aussi, de la demande RELUE : un libellé
+       et le montant à côté de lui viennent de la même photo de la base. */
+    r.push({ cle: 'acompte', libelle: `${libelleAcompte(vue.acompteNature)}${pct}`, centimes: acompte });
     r.push({
       cle: 'reste',
-      libelle: present(x.retenueGarantieCentiemes) ? 'Reste à payer, avant la retenue de garantie' : 'Reste à payer',
+      libelle: present(vue.retenueGarantieCentiemes) ? 'Reste à payer, avant la retenue de garantie' : 'Reste à payer',
       centimes: (Number(totaux.ttc) || 0) - acompte,
     });
   }
@@ -2069,55 +2198,468 @@ export function suffixeDuPied({ nbNonEnregistrees = 0, enCours = false, reductio
   return '';
 }
 
+/* ------------------------------------------------------------------ */
+/*  LA DEMANDE QUE LA BASE A VUE (relecture ÉCRAN-1 du lot 2a)          */
+/* ------------------------------------------------------------------ */
+
+/** Les quatre colonnes de la DEMANDE — ce que l'artisan a écrit dans la
+ *  carte « Conditions » —, à côté de ce que la base en a fait (la réduction
+ *  et l'acompte EFFECTIFS, ramenés au total quand ils le dépassent). */
+export const COLONNES_DE_LA_DEMANDE = Object.freeze(['remiseCentimes', 'remiseCentiemes', 'acompteCentimes', 'acompteCentiemes']);
+
+/**
+ * LA DEMANDE D'UN DEVIS, telle qu'une ligne la porte : ces quatre colonnes,
+ * `null` pour une absente. Les totaux relus la portent (`totaux.demande`,
+ * `totauxDepuisBase` dans `api.js`, et la démonstration) : c'est CONTRE
+ * ELLE qu'un montant se juge « ramené ».
+ *
+ * POURQUOI : l'écran change sa demande AVANT l'envoi (`changerDevis`), et
+ * les totaux ne sont relus qu'APRÈS (quand la file devient inactive).
+ * Comparer la demande de l'écran aux totaux relus faisait dire « Ramenée à
+ * 0,00 € : le total des postes est plus petit que la réduction demandée »
+ * pendant chaque envoi — et POUR TOUJOURS après un envoi raté : la base
+ * n'avait simplement pas encore vu la demande (relecture ÉCRAN-1, mesuré).
+ */
+export function demandeDuDevis(d) {
+  const x = d || {};
+  return {
+    ...Object.fromEntries(COLONNES_DE_LA_DEMANDE.map((c) => [c, present(x[c]) ? Number(x[c]) : null])),
+    /* …ET CE QUI NOMME LES RANGÉES (contre-vérification de la relecture
+       ÉCRAN-2 du lot 2a, mesurée au navigateur) : la NATURE de l'acompte et
+       la RETENUE ne changent aucun montant, mais elles changent les libellés
+       — « Arrhes 30 % », « reste à payer, avant la retenue de garantie ».
+       Lus dans le devis de l'écran, ils précédaient la base : après une
+       écriture ratée, la rangée disait « Arrhes 30 %, 444,87 € » quand la
+       base avait gardé un ACOMPTE, et taisait une retenue que la base avait
+       encore. Une rangée dit ce que la base a, libellé ET montant. */
+    acompteNature: NATURES_ACOMPTE.includes(x.acompteNature) ? x.acompteNature : null,
+    retenueGarantieCentiemes: present(x.retenueGarantieCentiemes) ? Number(x.retenueGarantieCentiemes) : null,
+  };
+}
+
+/** Les deux colonnes de la demande relue qui ne servent qu'aux LIBELLÉS. */
+export const LIBELLES_DE_LA_DEMANDE = Object.freeze(['acompteNature', 'retenueGarantieCentiemes']);
+
+/* La paire `remise` ou `acompte` est-elle LA MÊME dans la demande de
+   l'écran et dans celle que la base a vue ? Sans demande relue (une forme
+   ancienne des totaux), on ne sait pas : non. */
+function memePaire(locale, vue, prefixe) {
+  if (!vue || typeof vue !== 'object') return false;
+  return [`${prefixe}Centimes`, `${prefixe}Centiemes`].every((c) => {
+    const a = present(locale[c]) ? Number(locale[c]) : null;
+    const b = present(vue[c]) ? Number(vue[c]) : null;
+    return a === b;
+  });
+}
+
+/** Ce que dit la carte tant que la base n'a pas encore vu la demande. */
+export const CALCUL_EN_COURS = 'Calcul en cours…';
+
 /**
  * CE QUE LA CARTE DIT DE LA RÉDUCTION ET DE L'ACOMPTE, sous chaque champ :
  * l'effet en clair, et le mot qui dit qu'une demande a été RAMENÉE au total
  * (elle n'est jamais refusée : retirer une ligne doit rester possible).
- * Des phrases faites de MORCEAUX (`avant`, des montants, `apres`) : l'écran
- * pose les montants avec `Montant` (chiffres tabulaires, espaces
- * insécables), et VoiceOver lit `aDire`.
+ * VoiceOver lit `aDire`.
+ *
+ * TROIS RÈGLES, et aucune n'est décorative (relecture ÉCRAN-1 et ÉCRAN-10
+ * du lot 2a) :
+ *   - on ne juge QUE contre la demande que la base a vue (`totaux.demande`).
+ *     Tant que la demande de l'écran en diffère, l'envoi n'est pas fini :
+ *     « Calcul en cours… » ;
+ *   - APRÈS UN ÉCHEC (`enEchec` : l'écriture n'est pas partie, ou les totaux
+ *     n'ont pas pu être relus), on se TAIT plutôt que de dire une phrase
+ *     fausse : la ligne d'état de la carte dit l'échec, et « Réessayer » ;
+ *   - la phrase suit la règle de `rangeesDesTotaux` : quand l'écran ne
+ *     nomme pas la taxe (régime en lecture, en échec, non déclaré, ou une
+ *     franchise dont des lignes portent quand même de la TVA), elle ne
+ *     compare pas un montant HORS TAXE au « Total » affiché au-dessus, qui
+ *     la comprend. Elle dit la réduction appliquée, sans « avant » ni
+ *     « après ».
  */
-export function effetDeLaReduction(totaux, devis = {}, etatRegime = undefined) {
+export function effetDeLaReduction(totaux, devis = {}, etatRegime = undefined, { enEchec = false } = {}) {
   if (!totaux) return null;
-  const ht = libellesDesTotaux(etatRegime).taxe ? ' HT' : '';
   const x = devis || {};
-  const reduction = Number(totaux.reduction) || 0;
   if (!present(x.remiseCentiemes) && !present(x.remiseCentimes)) return null;
-  const brut = present(totaux.brut) ? totaux.brut : (Number(totaux.ht) || 0) + reduction;
-  if (present(x.remiseCentimes) && reduction < x.remiseCentimes) {
+  if (!memePaire(x, totaux.demande, 'remise')) {
+    return enEchec ? null : { enCours: true, ramenee: false, aDire: CALCUL_EN_COURS };
+  }
+  const vue = totaux.demande;
+  const reduction = Number(totaux.reduction) || 0;
+  if (present(vue.remiseCentimes) && reduction < vue.remiseCentimes) {
     return {
       ramenee: true,
       aDire: `Ramenée à ${centimesLisibles(reduction)} : le total des postes est plus petit que la réduction demandée.`,
     };
   }
+  const L = libellesDesTotaux(etatRegime);
+  if (!L.taxe && Number(totaux.tva) > 0) {
+    return { ramenee: false, aDire: `Réduction appliquée aux postes : ${centimesLisibles(reduction)}.` };
+  }
+  const brut = present(totaux.brut) ? totaux.brut : (Number(totaux.ht) || 0) + reduction;
   return {
     ramenee: false,
-    aDire: `Le total${ht} des postes passe de ${centimesLisibles(brut)} à ${centimesLisibles(brut - reduction)}.`,
+    aDire: `Le total${L.taxe ? ' HT' : ''} des postes passe de ${centimesLisibles(brut)} à ${centimesLisibles(brut - reduction)}.`,
   };
 }
-export function effetDeLAcompte(totaux, devis = {}, etatRegime = undefined) {
+export function effetDeLAcompte(totaux, devis = {}, etatRegime = undefined, { enEchec = false } = {}) {
   if (!totaux) return null;
   const x = devis || {};
   if (!present(x.acompteCentiemes) && !present(x.acompteCentimes)) return null;
+  if (!memePaire(x, totaux.demande, 'acompte')) {
+    return enEchec ? null : { enCours: true, ramene: false, aDire: CALCUL_EN_COURS };
+  }
+  const vue = totaux.demande;
   const acompte = Number(totaux.acompte) || 0;
   const ttc = Number(totaux.ttc) || 0;
-  const reste = present(x.retenueGarantieCentiemes) ? 'reste à payer, avant la retenue de garantie' : 'reste à payer';
-  if (present(x.acompteCentimes) && acompte < x.acompteCentimes) {
+  /* « Avant la retenue » selon la BASE, comme les montants de la phrase. */
+  const reste = present(vue.retenueGarantieCentiemes) ? 'reste à payer, avant la retenue de garantie' : 'reste à payer';
+  if (present(vue.acompteCentimes) && acompte < vue.acompteCentimes) {
     return {
       ramene: true,
       aDire: `Ramené à ${centimesLisibles(acompte)} : le total est plus petit que le montant demandé.`,
     };
   }
+  /* Le reste se compte sur le « Total » affiché au-dessus (le TTC) : il se
+     soustrait toujours à lui, quel que soit le régime. */
   const unite = libellesDesTotaux(etatRegime).taxe ? ' TTC' : '';
   return { ramene: false, aDire: `${centimesLisibles(acompte)}${unite} — ${reste} ${centimesLisibles(ttc - acompte)}${unite}.` };
 }
 
 /** Le nom d'un acompte selon sa NATURE — jamais l'un pour l'autre : des
  *  arrhes permettent de se dédire en les perdant, un acompte engage
- *  (C. conso. L. 214-1). Sans nature, « Acompte » : l'écran demande la
- *  nature à côté. */
+ *  (C. conso. L. 214-1). SANS NATURE, UN NOM NEUTRE, « Acompte ou arrhes »
+ *  (relecture ÉCRAN-8 et CONTROLES-10 du lot 2a) : la carte refuse de
+ *  pré-choisir la nature, et l'écran ne doit pas la nommer à sa place —
+ *  face à un particulier, à défaut d'écrit, la somme versée d'avance vaut
+ *  même des ARRHES, l'inverse de « Acompte ». */
 export function libelleAcompte(nature) {
-  return nature === 'arrhes' ? 'Arrhes' : 'Acompte';
+  if (nature === 'arrhes') return 'Arrhes';
+  if (nature === 'acompte') return 'Acompte';
+  return 'Acompte ou arrhes';
+}
+
+/* ================================================================== */
+/*  LA CARTE « CONDITIONS » : SON ÉTAT, SA LECTURE (relecture du lot 2a) */
+/* ================================================================== */
+/* Tout ce que la carte DÉCIDE vit ici, en fonctions pures, pour que
+   `verifier-devis` les fasse TOURNER (la leçon de `cloudinary-adresses.js`) :
+   un composant React ne se fait pas tourner par `node`. */
+
+const UNITES_DE_CONDITION = Object.freeze(['pourcent', 'montant']);
+const estVide = (t) => String(t == null ? '' : t).replace(ESPACES_TAPES, '') === '';
+
+/* L'unité de la valeur ENREGISTRÉE (la demande de l'écran) : 'montant',
+   'pourcent', ou `null` quand il n'y en a pas. `prefixe` : 'remise' ou
+   'acompte'. */
+function uniteEnregistree(devis, prefixe) {
+  const x = devis || {};
+  if (present(x[`${prefixe}Centimes`])) return 'montant';
+  if (present(x[`${prefixe}Centiemes`])) return 'pourcent';
+  return null;
+}
+
+/** Le texte d'un champ de la carte pour UNE unité : la valeur enregistrée
+ *  quand elle est dans cette unité, sinon le champ vide. C'est ce qu'écrit
+ *  une pastille d'unité dans le champ (ÉCRAN-9) : jamais le nombre tapé
+ *  dans l'autre unité, qui voudrait dire autre chose. */
+export function texteEnregistreDans(devis, prefixe, unite) {
+  const x = devis || {};
+  if (unite === 'montant') return centimesEnSaisie(x[`${prefixe}Centimes`]);
+  return centiemesEnSaisie(x[`${prefixe}Centiemes`]);
+}
+
+/**
+ * L'ÉTAT DE LA CARTE À SON OUVERTURE (relecture CONTROLES-2, ÉCRAN-3 et
+ * ÉCRAN-4 du lot 2a) : les unités, la nature, la validité, la retenue.
+ *
+ * - SUR UN DEVIS VIERGE, RIEN N'EST CHOISI À LA PLACE DE L'ARTISAN : ni
+ *   nature (`null`), ni validité (`null`), ni « Autre », ni retenue
+ *   (décisions du 03/11). Seules les UNITÉS ont une position de départ, le
+ *   pourcentage : une unité n'est pas une valeur.
+ * - `textes` : ce que la saisie a GARDÉ d'une carte refusée (`lireConditions`
+ *   le rend, la saisie le garde tant qu'une valeur est refusée) — les
+ *   textes tapés, et les CHOIX de la carte (`textes.choix`). « Corriger »
+ *   rouvre donc la carte comme on l'a laissée : un montant refusé en euros
+ *   revient sous la pastille « € », pas sous « % », où « 35,50 » serait
+ *   devenu 35,5 % (ÉCRAN-3, mesuré). Un champ resté VIDE n'a rien à
+ *   corriger : il rouvre dans l'unité de la valeur enregistrée (ÉCRAN-9).
+ * - Un texte de validité refusé rouvre « Autre », avec son champ ; un texte
+ *   de retenue refusé rouvre l'interrupteur (ÉCRAN-4 : le message « de 1 à
+ *   365 jours » s'affichait sans le champ qu'il visait).
+ */
+export function etatInitialConditions(devis, textes = null) {
+  const x = devis || {};
+  const t = textes && typeof textes === 'object' ? textes : null;
+  const proposee = present(x.validiteJours) && VALIDITES_PROPOSEES.includes(x.validiteJours);
+  const etat = {
+    uniteReduction: uniteEnregistree(x, 'remise') || 'pourcent',
+    uniteAcompte: uniteEnregistree(x, 'acompte') || 'pourcent',
+    nature: NATURES_ACOMPTE.includes(x.acompteNature) ? x.acompteNature : null,
+    validite: proposee ? x.validiteJours : null,
+    validiteAutre: present(x.validiteJours) && !proposee,
+    retenue: present(x.retenueGarantieCentiemes),
+  };
+  const garde = t && t.choix && typeof t.choix === 'object' ? t.choix : null;
+  if (garde) {
+    if (UNITES_DE_CONDITION.includes(garde.uniteReduction) && !estVide(t.reduction)) etat.uniteReduction = garde.uniteReduction;
+    if (UNITES_DE_CONDITION.includes(garde.uniteAcompte) && !estVide(t.acompte)) etat.uniteAcompte = garde.uniteAcompte;
+    if (garde.nature === null || NATURES_ACOMPTE.includes(garde.nature)) etat.nature = garde.nature;
+    if (garde.validite === null || VALIDITES_PROPOSEES.includes(garde.validite)) etat.validite = garde.validite;
+    if (typeof garde.validiteAutre === 'boolean') etat.validiteAutre = garde.validiteAutre;
+    if (typeof garde.retenue === 'boolean') etat.retenue = garde.retenue;
+  }
+  if (t && !estVide(t.validite)) { etat.validiteAutre = true; etat.validite = null; }
+  if (t && !estVide(t.retenue)) etat.retenue = true;
+  return etat;
+}
+
+/**
+ * LA RETENUE DE GARANTIE TAPÉE dans la carte : `versCentiemes`, puis les
+ * bornes de `devis_retenue_check` — de 0,01 % à 5 % (loi n° 71-584,
+ * art. 1er). Bornée ICI, la faute se dit sous le champ, avec le texte
+ * tapé ; laissée à `validerDevis`, « 6 » était refusé AILLEURS, son texte
+ * jeté, et « Corriger » rouvrait la carte sur « 5 » avec, dessous, le
+ * message du refus — on lisait que « 5 » était refusé (relecture ÉCRAN-5).
+ */
+export function versRetenueDeDevis(texte) {
+  const r = versCentiemes(texte);
+  if (!r.ok || r.centiemes === null) return r;
+  if (r.centiemes < 1 || r.centiemes > RETENUE_MAX) {
+    return {
+      ok: false,
+      centiemes: null,
+      message: `Une retenue de garantie s’écrit entre ${tauxLisible(1)} et ${tauxLisible(RETENUE_MAX)} (loi n°\u00a071-584, art. 1er). `
+        + 'Si vous n’en prévoyez pas, éteignez l’interrupteur.',
+    };
+  }
+  return r;
+}
+
+/**
+ * CE QUE LA CARTE PORTE À CET INSTANT : `changements` (les PAIRES entières),
+ * `erreurs` (ce qui ne se lit pas, champ par champ, avec sa phrase) et
+ * `textes` (ce qui est tapé). `tapes` : le texte de chaque champ MONTÉ —
+ * `undefined` pour un champ qui ne l'est pas encore (on vient de toucher
+ * « Autre », ou d'allumer la retenue).
+ *
+ * TROIS RÈGLES, chacune née d'un défaut mesuré (relecture du lot 2a) :
+ *   - UNE PASTILLE D'UNITÉ N'ÉCRIT RIEN (ÉCRAN-9). Elle vide le champ (ou y
+ *     remet la valeur enregistrée dans cette unité) ; un champ VIDE dans une
+ *     autre unité que la valeur enregistrée ne dit rien, et la valeur RESTE
+ *     jusqu'à ce qu'un nombre soit tapé. Avant, « 10 % » puis la pastille
+ *     « € » enregistrait 10,00 €, sans rien retaper. Retirer une réduction
+ *     reste possible : on vide le champ DANS l'unité de la valeur ;
+ *   - « AUTRE » N'EFFACE PAS UNE VALIDITÉ (ÉCRAN-4) : le champ n'est pas
+ *     encore monté au moment de l'appui ; il naît avec la valeur
+ *     enregistrée, et c'est elle qui part — comme la retenue rallumée ;
+ *   - LA RETENUE SE BORNE ICI (ÉCRAN-5, `versRetenueDeDevis`).
+ */
+export function lireConditions({ choix = null, tapes = {}, devis = {} } = {}) {
+  const x = devis || {};
+  const c = choix || etatInitialConditions(x);
+  const changements = {};
+  const erreurs = {};
+  const textes = {};
+
+  /* Une paire — la réduction ou l'acompte. Rend `null` quand la paire ne
+     dit rien (le champ vide d'une unité en attente), sinon `{ lu }` ou
+     `{ faute }`. */
+  const paire = (prefixe, unite, texte) => {
+    const enregistree = uniteEnregistree(x, prefixe);
+    if (estVide(texte) && enregistree && enregistree !== unite) return null;
+    if (unite === 'montant') {
+      const r = versMontantDeDevis(texte);
+      if (!r.ok) { erreurs[`${prefixe}Centimes`] = r.message; return { faute: true }; }
+      Object.assign(changements, { [`${prefixe}Centimes`]: r.centimes, [`${prefixe}Centiemes`]: null });
+      return { lu: r.centimes !== null };
+    }
+    const r = versPourcentDeDevis(texte);
+    if (!r.ok) { erreurs[`${prefixe}Centiemes`] = r.message; return { faute: true }; }
+    Object.assign(changements, { [`${prefixe}Centiemes`]: r.centiemes, [`${prefixe}Centimes`]: null });
+    return { lu: r.centiemes !== null };
+  };
+
+  textes.reduction = tapes.reduction == null ? '' : String(tapes.reduction);
+  paire('remise', c.uniteReduction, textes.reduction);
+
+  textes.acompte = tapes.acompte == null ? '' : String(tapes.acompte);
+  const acompte = paire('acompte', c.uniteAcompte, textes.acompte);
+  /* La nature part AVEC l'acompte ; retirer l'acompte la vide dans la même
+     écriture (une nature sans acompte ne veut rien dire). Une unité en
+     attente garde l'acompte enregistré : sa nature peut changer. */
+  if (acompte === null) changements.acompteNature = c.nature;
+  else if (!acompte.faute) changements.acompteNature = acompte.lu ? c.nature : null;
+
+  if (c.validiteAutre) {
+    textes.validite = tapes.validite == null
+      ? (present(x.validiteJours) ? String(x.validiteJours) : '') : String(tapes.validite);
+    const r = versJours(textes.validite);
+    if (r.ok) changements.validiteJours = r.jours;
+    else erreurs.validiteJours = r.message;
+  } else {
+    changements.validiteJours = c.validite;
+  }
+
+  if (c.retenue) {
+    /* L'interrupteur vient d'être allumé : le champ n'est pas encore monté.
+       Il naît avec la valeur enregistrée, ou 5 % — c'est celle-là qui part. */
+    textes.retenue = tapes.retenue == null
+      ? (present(x.retenueGarantieCentiemes) ? centiemesEnSaisie(x.retenueGarantieCentiemes) : '5') : String(tapes.retenue);
+    const r = versRetenueDeDevis(textes.retenue);
+    if (r.ok) changements.retenueGarantieCentiemes = r.centiemes;
+    else erreurs.retenueGarantieCentiemes = r.message;
+  } else {
+    changements.retenueGarantieCentiemes = null;
+  }
+  return { changements, erreurs, textes };
+}
+
+/**
+ * LA PHRASE D'UNE UNITÉ EN ATTENTE (ÉCRAN-9) : la pastille a vidé le champ,
+ * et la valeur de l'écran — dans l'AUTRE unité — reste. La carte le DIT,
+ * pour qu'un appui par erreur ne laisse pas croire la réduction retirée.
+ * `null` quand l'unité choisie est celle de la valeur, ou qu'il n'y en a pas.
+ *
+ * « ENREGISTRÉE » SEULEMENT QUAND C'EST VRAI (contre-vérification du lot 2a,
+ * mesurée au navigateur) : `demandeVue`, la demande que la BASE a relue
+ * (`totaux.demande`). La phrase disait « Enregistrée : 60,00 € » pendant
+ * l'envoi, et APRÈS UN ÉCHEC — juste sous la ligne d'état qui disait
+ * « n'a pas pu être enregistré », pendant que la base gardait 50 €. Tant
+ * que la base n'a pas vu cette valeur : « Pas encore enregistrée ». La
+ * règle de `effetDeLaReduction` : on ne juge que contre la demande relue.
+ */
+export function phraseUniteEnAttente(devis, prefixe, unite, nature = null, demandeVue = null) {
+  const x = devis || {};
+  const enregistree = uniteEnregistree(x, prefixe);
+  if (!enregistree || enregistree === unite) return null;
+  const valeur = enregistree === 'montant' ? centimesLisibles(x[`${prefixe}Centimes`]) : tauxLisible(x[`${prefixe}Centiemes`]);
+  const quoi = unite === 'montant' ? 'un montant en euros' : 'un pourcentage';
+  const vue = memePaire(x, demandeVue, prefixe);
+  const mot = (e) => (vue ? `Enregistr${e}` : `Pas encore enregistr${e}`);
+  if (prefixe === 'remise') return `${mot('ée')} : ${valeur} — écrivez ${quoi} pour la remplacer.`;
+  if (nature === 'arrhes') return `${mot('ées')} : ${valeur} — écrivez ${quoi} pour les remplacer.`;
+  return `${mot('é')} : ${valeur} — écrivez ${quoi} pour le remplacer.`;
+}
+
+/** Ce qu'ajoutent les aides au RÉGIME RÉEL (relecture ÉCRAN-7 du lot 2a) :
+ *  la base range une réduction en euros HORS TAXES (elle baisse la base de
+ *  TVA, `remise_centimes`) et un acompte en euros TOUTES TAXES COMPRISES
+ *  (`acompte_centimes`). Les deux champs se présentaient pareil, et un
+ *  artisan qui tapait la remise promise au client (100 €, un montant TTC
+ *  pour un particulier) en accordait 110 ou 120 € TTC. En franchise, il n'y
+ *  a pas de TVA : rien à ajouter. */
+export const AIDE_REDUCTION_HT = 'En euros, la réduction est hors taxes : elle baisse le total HT, et la TVA avec lui.';
+export const AIDE_ACOMPTE_TTC = 'En euros, la somme est toutes taxes comprises : c’est ce que le client verse.';
+
+/**
+ * LES NOMS DES CHAMPS ET DES PASTILLES DE LA CARTE, selon le régime et la
+ * nature :
+ *   - au régime réel, « Réduction HT, en euros » et « … TTC, en euros »
+ *     (ÉCRAN-7) ; hors du réel, on ne nomme pas la taxe (règle C2) ;
+ *   - l'acompte porte le nom de sa NATURE, et « Acompte ou arrhes » tant
+ *     qu'elle n'est pas choisie (ÉCRAN-8, CONTROLES-10) — jamais
+ *     « Acompte » seul.
+ */
+export function libellesDesConditions(etatRegime, nature = null) {
+  const reel = libellesDesTotaux(etatRegime).taxe;
+  const nom = libelleAcompte(nature);
+  return {
+    reductionPourcent: 'Réduction, en pour cent',
+    reductionMontant: reel ? 'Réduction HT, en euros' : 'Réduction, en euros',
+    reductionExemple: reel ? 'Montant HT' : 'Montant en euros',
+    acompte: nom,
+    acomptePourcent: `${nom}, en pour cent`,
+    acompteMontant: reel ? `${nom} TTC, en euros` : `${nom}, en euros`,
+    acompteExemple: reel ? 'Montant TTC' : 'Montant en euros',
+    acompteEnPourcentage: `${nom} en pourcentage`,
+    acompteEnEuros: `${nom} en euros`,
+    aideReductionMontant: reel ? AIDE_REDUCTION_HT : null,
+    aideAcompteMontant: reel ? AIDE_ACOMPTE_TTC : null,
+  };
+}
+
+/** La ligne d'état de la carte quand rien ne se passe. */
+export const CARTE_AU_REPOS = 'Chaque champ s’enregistre quand vous le quittez.';
+
+/**
+ * LA LIGNE D'ÉTAT DE LA CARTE, sous sa barre (relecture ÉCRAN-2 du lot 2a) :
+ * la carte prend l'écran, par-dessus la liste ET le pied, et elle cachait
+ * tout ce qui disait l'écriture — l'envoi en cours, l'échec, « Réessayer »,
+ * « Relire ». Une écriture ratée se lisait « Ramenée à … ».
+ * `{ ton: 'neutre' | 'echec', texte, action: 'reessayer' | 'relire' | null }`.
+ */
+export function ligneDEtatDeLaCarte({
+  echec = null, reessayable = false, enCours = false, totauxIllisibles = false,
+} = {}) {
+  if (echec) return { ton: 'echec', texte: String(echec), action: reessayable ? 'reessayer' : null };
+  if (totauxIllisibles) {
+    return { ton: 'echec', texte: 'Les totaux n’ont pas pu être relus : ceux-ci peuvent dater.', action: 'relire' };
+  }
+  if (enCours) return { ton: 'neutre', texte: 'Enregistrement en cours…', action: null };
+  return { ton: 'neutre', texte: CARTE_AU_REPOS, action: null };
+}
+
+/* Les champs que vise chaque geste de la carte. */
+const CLES_DU_GESTE = Object.freeze({
+  reduction: Object.freeze(['remiseCentiemes', 'remiseCentimes']),
+  acompte: Object.freeze(['acompteCentiemes', 'acompteCentimes', 'acompteNature']),
+  nature: Object.freeze(['acompteCentiemes', 'acompteCentimes', 'acompteNature']),
+  validite: Object.freeze(['validiteJours']),
+  retenue: Object.freeze(['retenueGarantieCentiemes']),
+});
+
+/**
+ * VIBRER, OU PAS (relecture ÉCRAN-13 du lot 2a) : la carte relit TOUS ses
+ * champs à chaque appui, et vibrait dès qu'il restait une faute — une
+ * validité « 400 » laissée en l'état faisait vibrer chaque appui sur une
+ * AUTRE pastille. La règle de `retour.js` : on vibre pour ce qu'on VIENT
+ * de faire. `geste` : le champ quitté, ou la pastille touchée ; `cles` :
+ * les champs en faute.
+ *
+ * `deja` : les champs DÉJÀ en faute avant ce geste. Une faute NOUVELLE
+ * vibre, quel que soit le geste (contre-vérification du lot 2a) : la règle
+ * disait « fermer la carte ne revibre pas, la faute a été signalée quand on
+ * a quitté son champ » — mais on peut fermer SANS avoir quitté le champ.
+ * Sur l'iPhone, « ‹ Devis » est dans la barre, hors du défilement : le
+ * toucher ne retire pas le clavier, le champ garde sa saisie refusée, et
+ * la faute naît à la fermeture — sans une vibration. Une faute ancienne,
+ * elle, ne revibre que quand on quitte SON champ.
+ */
+export function vibrerPourLaCarte(geste, cles, deja = null) {
+  const liste = Array.isArray(cles) ? cles : [];
+  if (Array.isArray(deja) && liste.some((k) => !deja.includes(k))) return true;
+  const visees = CLES_DU_GESTE[geste];
+  if (!visees) return false;
+  return liste.some((k) => visees.includes(k));
+}
+
+/**
+ * LES NOMS DE LA BANDE DE LA GARDE, une fois chacun (relecture ÉCRAN-6) —
+ * et l'ACOMPTE sous le nom de sa nature (contre-vérification d'ÉCRAN-8 :
+ * la bande disait « « Acompte » : ce que vous avez écrit n'est pas
+ * enregistré » sous une carte titrée « Acompte ou arrhes », ou « Arrhes »).
+ * `noms` : le nom de chaque champ de l'en-tête ; `nature` : celle que la
+ * carte montrait (son choix gardé avec les textes refusés, sinon celle du
+ * devis).
+ */
+export function nomsDesRefus(cles, { noms = {}, nature = null } = {}) {
+  const montantsDAcompte = ['acompteCentiemes', 'acompteCentimes'];
+  return [...new Set((Array.isArray(cles) ? cles : [])
+    .map((c) => (montantsDAcompte.includes(c) ? libelleAcompte(nature) : (noms[c] || c))))];
+}
+
+/**
+ * CE QUE VOICEOVER DIT D'UN BROUILLON DANS « MES DEVIS » (relecture
+ * ÉCRAN-14 du lot 2a) : sur iOS, l'étiquette d'une carte qu'on touche
+ * REMPLACE celles de ses enfants. Elle ne disait que l'objet et le client
+ * — ni le total, ni « réduction comprise », écrits dessous.
+ */
+export function libelleCarteDevis({
+  objet = null, client = null, libelleTotal = 'Total', total = null, reduction = false,
+} = {}) {
+  const montant = present(total) ? centimesLisibles(total) : 'montant inconnu';
+  return `Ouvrir le brouillon ${objet || 'sans objet'}, ${client || 'client à choisir'}, ${libelleTotal} ${montant}`
+    + `${reduction ? ', réduction comprise' : ''}`;
 }
 
 /* Les tarifs, tels que l'écran les tient (`mesTarifs`) : la ligne de

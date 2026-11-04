@@ -9,10 +9,17 @@
  * serait cachée pendant qu'on tape. Une carte, pas une `Modal` : la saisie
  * tient UN état de carte (`carte`), et il n'y en a jamais deux.
  *
- * QUAND ELLE ENREGISTRE : un champ quitté ; une PASTILLE touchée (une unité,
- * une nature, une durée) ; la carte fermée. À chaque fois, elle LIT tous ses
- * champs (`lire()`) : une pastille touchée pendant qu'on tape le montant
- * enregistre aussi le montant.
+ * QUAND ELLE ENREGISTRE : un champ quitté ; une PASTILLE touchée (une nature,
+ * une durée, l'interrupteur de la retenue) ; la carte fermée. À chaque fois,
+ * elle LIT tous ses champs (`lireConditions`, `devis.js`) : une pastille
+ * touchée pendant qu'on tape le montant enregistre aussi le montant.
+ *
+ * UNE PASTILLE D'UNITÉ (« % » / « € ») N'ÉCRIT RIEN (relecture ÉCRAN-9 du
+ * lot 2a) : elle vide le champ, ou y remet la valeur enregistrée dans cette
+ * unité, et la carte DIT la valeur qui reste (« Enregistrée : 10 % — écrivez
+ * un montant en euros pour la remplacer »). Avant, « 10 % » puis « € »
+ * enregistrait 10,00 € sans rien retaper : un appui par erreur changeait le
+ * devis.
  *
  * LES PAIRES PARTENT ENSEMBLE (relecture BASE-2) : la réduction pose ses
  * DEUX colonnes en une écriture (`remiseCentiemes` ou `remiseCentimes`,
@@ -22,14 +29,19 @@
  *
  * LES MONTANTS AFFICHÉS SONT CEUX DE LA BASE (`totaux`, relus après chaque
  * écriture) : la carte ne calcule rien. Une réduction ou un acompte plus
- * grand que le total n'est jamais refusé — il est RAMENÉ, et la carte le dit.
+ * grand que le total n'est jamais refusé — il est RAMENÉ, et la carte le dit
+ * (à VoiceOver aussi). Mais « ramené » ne se juge que contre la demande que
+ * la BASE a vue (`totaux.demande`) : tant que l'envoi n'est pas fini, la
+ * carte dit « Calcul en cours… », et après un échec elle se tait — sa ligne
+ * d'état, sous la barre, dit l'échec et « Réessayer » (relecture ÉCRAN-1 et
+ * ÉCRAN-2 du lot 2a).
  *
  * Ce qui ne se lit pas (« 12,5,3 ») n'est pas envoyé : `lire()` le rend dans
  * `erreurs`, avec le TEXTE tapé (`textes`), que la saisie garde pour qu'une
  * carte rouverte par « Corriger » le montre encore.
  */
 import React, {
-  forwardRef, useImperativeHandle, useRef, useState,
+  forwardRef, useEffect, useImperativeHandle, useRef, useState,
 } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet,
@@ -37,24 +49,31 @@ import {
 import {
   C, F, T, S, TOUCHE, APPUI, interligne,
 } from '../theme';
-import { Pastille, Interrupteur, Montant } from './ui';
+import {
+  Pastille, Interrupteur, Montant, BtnOutline,
+} from './ui';
 import ChampMontant from './ChampMontant';
 import { CLAVIER } from '../lib/clavier';
+import * as retour from '../lib/retour';
 import {
   NATURES_ACOMPTE, VALIDITES_PROPOSEES, PHRASE_RETENUE,
   AIDE_NATURE_ACOMPTE, ECHEANCE_ACOMPTE, AIDE_REDUCTION, AIDE_ACOMPTE, AIDE_VALIDITE,
-  versPourcentDeDevis, versMontantDeDevis, versJours, versCentiemes, centiemesEnSaisie, centimesEnSaisie,
-  rangeesDesTotaux, effetDeLaReduction, effetDeLAcompte, libelleAcompte,
+  centiemesEnSaisie, rangeesDesTotaux, effetDeLaReduction, effetDeLAcompte, libelleAcompte,
+  etatInitialConditions, lireConditions, texteEnregistreDans, phraseUniteEnAttente, libellesDesConditions,
+  ligneDEtatDeLaCarte,
 } from '../lib/devis';
 
 const present = (v) => v !== null && v !== undefined;
 
 /* Le texte d'un champ à l'ouverture : celui que la saisie a gardé (un texte
-   refusé, rouvert par « Corriger »), sinon la valeur enregistrée. */
-const texteDe = (textes, cle, valeur) => (textes && present(textes[cle]) ? textes[cle] : valeur);
+   refusé, rouvert par « Corriger »), sinon la valeur enregistrée. Un texte
+   gardé VIDE n'a rien à corriger : la valeur enregistrée. */
+const texteDe = (textes, cle, valeur) => (textes && present(textes[cle]) && String(textes[cle]).trim() !== ''
+  ? textes[cle] : valeur);
 
 const ConditionsDevis = forwardRef(function ConditionsDevis({
   devis = {}, totaux = null, regime, nbOptions = 0, erreurs = {}, textes = null,
+  etatEcriture = null, totauxIllisibles = false, onReessayer, onRelireTotaux,
   onEnregistrer, onFermer,
 }, ref) {
   const refReduction = useRef(null);
@@ -63,102 +82,118 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
   const refRetenue = useRef(null);
 
   /* Les choix faits d'un appui : une RÉFÉRENCE (lue par `lire()` dans la
-     même boucle que l'appui) ET un état (pour le dessin). */
-  const [initial] = useState(() => ({
-    uniteReduction: present(devis.remiseCentimes) ? 'montant' : 'pourcent',
-    uniteAcompte: present(devis.acompteCentimes) ? 'montant' : 'pourcent',
-    nature: devis.acompteNature ?? null,
-    validite: present(devis.validiteJours) && VALIDITES_PROPOSEES.includes(devis.validiteJours) ? devis.validiteJours : null,
-    validiteAutre: present(devis.validiteJours) && !VALIDITES_PROPOSEES.includes(devis.validiteJours),
-    retenue: present(devis.retenueGarantieCentiemes),
-  }));
+     même boucle que l'appui) ET un état (pour le dessin). L'état de départ
+     vient de `etatInitialConditions` (`devis.js`, que `verifier-devis` fait
+     tourner) : sur un devis vierge, RIEN n'est choisi à la place de
+     l'artisan ; rouverte par « Corriger », la carte reprend ses choix
+     (relecture CONTROLES-2, ÉCRAN-3, ÉCRAN-4 du lot 2a). */
+  const [initial] = useState(() => etatInitialConditions(devis, textes));
   const choix = useRef(initial);
   const [c, setC] = useState(initial);
   const poser = (x) => { choix.current = { ...choix.current, ...x }; setC(choix.current); };
 
-  /* TOUT CE QUE LA CARTE PORTE À CET INSTANT : `changements` (les paires
-     entières), `erreurs` (ce qui ne se lit pas, champ par champ, avec sa
-     phrase) et `textes` (ce qui est tapé). */
+  /* TOUT CE QUE LA CARTE PORTE À CET INSTANT — la règle vit dans
+     `lireConditions` (`devis.js`). Un champ PAS ENCORE MONTÉ (on vient de
+     toucher « Autre », ou d'allumer la retenue) se lit `undefined` : il
+     naîtra avec la valeur enregistrée, et c'est elle qui part. Les choix
+     sont ceux DU MOMENT, pas ceux du dernier rendu : un appui pose son choix
+     PUIS enregistre, dans la même boucle. */
   const lire = () => {
-    /* Les choix DU MOMENT, pas ceux du dernier rendu : un appui pose son
-       choix PUIS enregistre, dans la même boucle. */
-    const c = choix.current;
-    const changements = {};
-    const fautes = {};
-    const tapes = {};
-    const lu = (r) => (r.current ? r.current.lire() : '');
-
-    tapes.reduction = lu(refReduction);
-    if (c.uniteReduction === 'montant') {
-      const r = versMontantDeDevis(tapes.reduction);
-      if (r.ok) Object.assign(changements, { remiseCentimes: r.centimes, remiseCentiemes: null });
-      else fautes.remiseCentimes = r.message;
-    } else {
-      const r = versPourcentDeDevis(tapes.reduction);
-      if (r.ok) Object.assign(changements, { remiseCentiemes: r.centiemes, remiseCentimes: null });
-      else fautes.remiseCentiemes = r.message;
-    }
-
-    tapes.acompte = lu(refAcompte);
-    let acompteLu = false;
-    if (c.uniteAcompte === 'montant') {
-      const r = versMontantDeDevis(tapes.acompte);
-      if (r.ok) { Object.assign(changements, { acompteCentimes: r.centimes, acompteCentiemes: null }); acompteLu = r.centimes !== null; }
-      else fautes.acompteCentimes = r.message;
-    } else {
-      const r = versPourcentDeDevis(tapes.acompte);
-      if (r.ok) { Object.assign(changements, { acompteCentiemes: r.centiemes, acompteCentimes: null }); acompteLu = r.centiemes !== null; }
-      else fautes.acompteCentiemes = r.message;
-    }
-    /* La nature part AVEC l'acompte ; retirer l'acompte la vide dans la même
-       écriture (une nature sans acompte ne veut rien dire). */
-    if (!fautes.acompteCentimes && !fautes.acompteCentiemes) {
-      changements.acompteNature = acompteLu ? c.nature : null;
-    }
-
-    if (c.validiteAutre) {
-      tapes.validite = lu(refValidite);
-      const r = versJours(tapes.validite);
-      if (r.ok) changements.validiteJours = r.jours;
-      else fautes.validiteJours = r.message;
-    } else {
-      changements.validiteJours = c.validite;
-    }
-
-    if (c.retenue) {
-      /* L'interrupteur vient d'être allumé : le champ n'est pas encore
-         monté. Il naît avec la valeur enregistrée, ou 5 % — c'est celle-là
-         qui part. */
-      tapes.retenue = refRetenue.current ? refRetenue.current.lire()
-        : (present(devis.retenueGarantieCentiemes) ? centiemesEnSaisie(devis.retenueGarantieCentiemes) : '5');
-      const r = versCentiemes(tapes.retenue);
-      if (r.ok) changements.retenueGarantieCentiemes = r.centiemes;
-      else fautes.retenueGarantieCentiemes = r.message;
-    } else {
-      changements.retenueGarantieCentiemes = null;
-    }
-    return { changements, erreurs: fautes, textes: tapes };
+    const lu = (r) => (r.current ? r.current.lire() : undefined);
+    return lireConditions({
+      choix: choix.current,
+      tapes: {
+        reduction: lu(refReduction), acompte: lu(refAcompte), validite: lu(refValidite), retenue: lu(refRetenue),
+      },
+      devis,
+    });
   };
 
-  const enregistrer = () => {
+  /* `geste` : le champ quitté ou la pastille touchée — la saisie ne vibre
+     que pour SA faute (relecture ÉCRAN-13). Les choix partent avec les
+     textes : la saisie les garde tant qu'une valeur est refusée. */
+  const enregistrer = (geste = 'fermer') => {
     const l = lire();
-    if (onEnregistrer) onEnregistrer(l.changements, l.erreurs, l.textes);
+    if (onEnregistrer) onEnregistrer(l.changements, l.erreurs, { ...l.textes, choix: choix.current }, geste);
+    return l;
   };
   useImperativeHandle(ref, () => ({ lire, enregistrer }));
 
   /* Un APPUI change un choix, PUIS la carte s'enregistre entière. */
-  const choisir = (x) => { poser(x); enregistrer(); };
+  const choisir = (x, geste) => { poser(x); enregistrer(geste); };
+
+  /* UNE PASTILLE D'UNITÉ N'ÉCRIT RIEN DE CE QUI EST TAPÉ (ÉCRAN-9) : le champ
+     prend la valeur enregistrée DANS CETTE UNITÉ, ou se vide ; un champ vide
+     dans une autre unité que la valeur enregistrée ne dit rien
+     (`lireConditions`), et la valeur reste. L'enregistrement qui suit ne
+     relit que les AUTRES champs — et efface le refus d'un texte qu'on vient
+     d'abandonner en changeant d'unité. */
+  const changerUnite = (prefixe, unite) => {
+    const cle = prefixe === 'remise' ? 'uniteReduction' : 'uniteAcompte';
+    if (choix.current[cle] === unite) return;
+    poser({ [cle]: unite });
+    const champ = prefixe === 'remise' ? refReduction : refAcompte;
+    if (champ.current) champ.current.ecrire(texteEnregistreDans(devis, prefixe, unite));
+    enregistrer('unite');
+  };
 
   const sous = (...cles) => {
     const cle = cles.find((k) => erreurs && erreurs[k]);
     return cle ? <Text style={s.erreur} accessibilityLiveRegion="polite">{erreurs[cle]}</Text> : null;
   };
 
-  const rangees = rangeesDesTotaux(totaux, regime, { devis, nbOptions });
+  const noms = libellesDesConditions(regime, c.nature);
+  const rangees = rangeesDesTotaux(totaux, regime, { nbOptions });
   const total = rangees.find((r) => r.cle === 'total');
   const reste = rangees.find((r) => r.cle === 'reste');
-  const effetR = effetDeLaReduction(totaux, devis, regime);
-  const effetA = effetDeLAcompte(totaux, devis, regime);
+  /* APRÈS UN ÉCHEC, AUCUNE PHRASE D'EFFET QUI MENTE : une demande que la
+     base n'a pas vue ne se dit ni « ramenée », ni « appliquée » (ÉCRAN-1). */
+  const enEchec = !!(etatEcriture && etatEcriture.echec) || totauxIllisibles;
+  const effetR = effetDeLaReduction(totaux, devis, regime, { enEchec });
+  const effetA = effetDeLAcompte(totaux, devis, regime, { enEchec });
+  /* « Enregistrée » seulement si la BASE a vu cette valeur (la demande
+     relue) : pendant l'envoi, ou après un échec, « Pas encore enregistrée ». */
+  const demandeVue = totaux && totaux.demande;
+  const attenteR = phraseUniteEnAttente(devis, 'remise', c.uniteReduction, null, demandeVue);
+  const attenteA = phraseUniteEnAttente(devis, 'acompte', c.uniteAcompte, c.nature, demandeVue);
+  const etat = ligneDEtatDeLaCarte({
+    echec: etatEcriture && etatEcriture.echec,
+    reessayable: !!(etatEcriture && etatEcriture.reessayable),
+    enCours: !!(etatEcriture && etatEcriture.enCours),
+    totauxIllisibles,
+  });
+
+  /* « RAMENÉE À … » SE DIT AUSSI À VOICEOVER (ÉCRAN-1) : la phrase apparaît
+     sous un champ qu'on vient de quitter, et rien ne l'annonçait. Une fois
+     par phrase nouvelle — et seulement quand c'est vrai : contre la demande
+     que la base a vue. */
+  const ramenees = [effetR && effetR.ramenee ? effetR.aDire : null, effetA && effetA.ramene ? effetA.aDire : null]
+    .filter(Boolean).join(' ');
+  const annonce = useRef('');
+  useEffect(() => {
+    if (ramenees && ramenees !== annonce.current) retour.annoncer(ramenees);
+    annonce.current = ramenees;
+  }, [ramenees]);
+
+  /* SOUS CHAQUE MONTANT, UNE PLACE RÉSERVÉE (ÉCRAN-12) : la faute, la valeur
+     en attente d'une unité, ou l'effet — la place est là avant eux, et rien
+     ne saute au moment où l'on vise le champ suivant.
+
+     SOUS UNE FAUTE, PAS D'EFFET (contre-vérification du lot 2a, mesurée) :
+     l'effet est celui de la valeur ENREGISTRÉE, pas du texte refusé qu'on
+     lit juste au-dessus — « 400,38 € TTC — reste à payer… » sous « 30,5,5 »
+     se lisait comme l'effet de ce qu'on venait de taper. Et la faute plus
+     l'effet faisaient trois ou quatre lignes : la carte sautait de 36 px au
+     moment même où l'on visait le champ suivant. La valeur en attente
+     d'une unité, elle, reste dite : elle dit ce qui n'a PAS changé. */
+  const zone = (faute, attente, effet, ramene) => (
+    <View style={s.zone}>
+      {faute}
+      {attente
+        ? <Text style={s.aideZone}>{attente}</Text>
+        : !faute && !!effet && <Text style={ramene ? s.rameneZone : s.aideZone}>{effet.aDire}</Text>}
+    </View>
+  );
 
   return (
     /* MODALE pour VoiceOver, comme la carte d'une ligne : sous elle, la
@@ -176,14 +211,33 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         <View style={s.milieu} accessibilityLabel={[total && total.aDire, reste && reste.aDire].filter(Boolean).join('. ')}>
           <Text style={s.barreTitre} numberOfLines={1}>Conditions</Text>
           {!!total && <Montant centimes={total.centimes} style={s.barreMontant} />}
-          {!!reste && (
-            <Text style={s.barreReste} numberOfLines={1}>
-              {'Reste à payer '}
-              <Montant centimes={reste.centimes} enLigne style={s.barreReste} />
-            </Text>
-          )}
+          {/* La ligne du reste a sa place même vide : qu'un acompte arrive, et
+              la barre grandissait — tout le contenu descendait de 4 px au
+              moment où l'on visait le champ suivant (ÉCRAN-12, mesuré). */}
+          <View style={s.ligneReste}>
+            {!!reste && (
+              <Text style={s.barreReste} numberOfLines={1}>
+                {'Reste à payer '}
+                <Montant centimes={reste.centimes} enLigne style={s.barreReste} />
+              </Text>
+            )}
+          </View>
         </View>
         <View style={s.place} />
+      </View>
+
+      {/* LA LIGNE D'ÉTAT, sous la barre et hors du défilement : la carte
+          couvre les bandes du bas, elle dit donc elle-même l'envoi en cours,
+          l'échec (« Réessayer ») et des totaux pas relus (« Relire »)
+          — relecture ÉCRAN-2. Sa place est réservée même au repos. */}
+      <View style={s.etat} accessibilityLiveRegion="polite">
+        <Text style={etat.ton === 'echec' ? s.etatEchec : s.etatTexte}>{etat.texte}</Text>
+        {etat.action === 'reessayer' && (
+          <BtnOutline label="Réessayer" accessibilityLabel="Réessayer l’enregistrement des conditions" onPress={onReessayer} />
+        )}
+        {etat.action === 'relire' && (
+          <BtnOutline label="Relire" accessibilityLabel="Relire les totaux" onPress={onRelireTotaux} />
+        )}
       </View>
 
       <ScrollView {...CLAVIER} keyboardDismissMode="on-drag" contentContainerStyle={s.contenu}>
@@ -191,46 +245,46 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         <Text style={s.titre} accessibilityRole="header">Réduction</Text>
         <View style={s.pastilles}>
           <Pastille label="%" nom="Réduction en pourcentage" choisie={c.uniteReduction === 'pourcent'}
-            onPress={() => choisir({ uniteReduction: 'pourcent' })} />
+            onPress={() => changerUnite('remise', 'pourcent')} />
           <Pastille label="€" nom="Réduction en euros" choisie={c.uniteReduction === 'montant'}
-            onPress={() => choisir({ uniteReduction: 'montant' })} />
+            onPress={() => changerUnite('remise', 'montant')} />
         </View>
         <ChampMontant
           ref={refReduction}
-          defaut={texteDe(textes, 'reduction', c.uniteReduction === 'montant'
-            ? centimesEnSaisie(devis.remiseCentimes) : centiemesEnSaisie(devis.remiseCentiemes))}
-          placeholder={c.uniteReduction === 'montant' ? 'Montant en euros' : 'Pourcentage'}
-          accessibilityLabel={c.uniteReduction === 'montant' ? 'Réduction, en euros' : 'Réduction, en pour cent'}
-          onBlur={enregistrer}
+          defaut={texteDe(textes, 'reduction', texteEnregistreDans(devis, 'remise', c.uniteReduction))}
+          placeholder={c.uniteReduction === 'montant' ? noms.reductionExemple : 'Pourcentage'}
+          accessibilityLabel={c.uniteReduction === 'montant' ? noms.reductionMontant : noms.reductionPourcent}
+          onBlur={() => enregistrer('reduction')}
         />
-        {sous('remiseCentiemes', 'remiseCentimes')}
-        {!!effetR && <Text style={effetR.ramenee ? s.ramene : s.aide}>{effetR.aDire}</Text>}
+        {zone(sous('remiseCentiemes', 'remiseCentimes'), attenteR, effetR, !!(effetR && effetR.ramenee))}
         <Text style={s.aide}>{AIDE_REDUCTION}</Text>
+        {!!noms.aideReductionMontant && <Text style={s.aide}>{noms.aideReductionMontant}</Text>}
 
-        {/* L'ACOMPTE — au choix % ou €, et sa NATURE, sans défaut. */}
-        <Text style={s.titre} accessibilityRole="header">Acompte</Text>
+        {/* L'ACOMPTE — au choix % ou €, et sa NATURE, sans défaut. Tant
+            qu'elle n'est pas choisie, son nom est NEUTRE : « Acompte ou
+            arrhes », jamais « Acompte » seul (ÉCRAN-8). */}
+        <Text style={s.titre} accessibilityRole="header">{noms.acompte}</Text>
         <View style={s.pastilles}>
-          <Pastille label="%" nom="Acompte en pourcentage" choisie={c.uniteAcompte === 'pourcent'}
-            onPress={() => choisir({ uniteAcompte: 'pourcent' })} />
-          <Pastille label="€" nom="Acompte en euros" choisie={c.uniteAcompte === 'montant'}
-            onPress={() => choisir({ uniteAcompte: 'montant' })} />
+          <Pastille label="%" nom={noms.acompteEnPourcentage} choisie={c.uniteAcompte === 'pourcent'}
+            onPress={() => changerUnite('acompte', 'pourcent')} />
+          <Pastille label="€" nom={noms.acompteEnEuros} choisie={c.uniteAcompte === 'montant'}
+            onPress={() => changerUnite('acompte', 'montant')} />
         </View>
         <ChampMontant
           ref={refAcompte}
-          defaut={texteDe(textes, 'acompte', c.uniteAcompte === 'montant'
-            ? centimesEnSaisie(devis.acompteCentimes) : centiemesEnSaisie(devis.acompteCentiemes))}
-          placeholder={c.uniteAcompte === 'montant' ? 'Montant en euros' : 'Pourcentage'}
-          accessibilityLabel={c.uniteAcompte === 'montant' ? 'Acompte, en euros' : 'Acompte, en pour cent'}
-          onBlur={enregistrer}
+          defaut={texteDe(textes, 'acompte', texteEnregistreDans(devis, 'acompte', c.uniteAcompte))}
+          placeholder={c.uniteAcompte === 'montant' ? noms.acompteExemple : 'Pourcentage'}
+          accessibilityLabel={c.uniteAcompte === 'montant' ? noms.acompteMontant : noms.acomptePourcent}
+          onBlur={() => enregistrer('acompte')}
         />
-        {sous('acompteCentiemes', 'acompteCentimes')}
-        {!!effetA && <Text style={effetA.ramene ? s.ramene : s.aide}>{effetA.aDire}</Text>}
+        {zone(sous('acompteCentiemes', 'acompteCentimes'), attenteA, effetA, !!(effetA && effetA.ramene))}
         <Text style={s.aide}>{AIDE_ACOMPTE}</Text>
+        {!!noms.aideAcompteMontant && <Text style={s.aide}>{noms.aideAcompteMontant}</Text>}
         <Text style={s.etiquette}>Acompte ou arrhes ?</Text>
         <View style={s.pastilles}>
           {NATURES_ACOMPTE.map((n) => (
             <Pastille key={n} label={libelleAcompte(n)} nom={`C’est ${n === 'arrhes' ? 'des arrhes' : 'un acompte'}`}
-              choisie={c.nature === n} onPress={() => choisir({ nature: n })} />
+              choisie={c.nature === n} onPress={() => choisir({ nature: n }, 'nature')} />
           ))}
         </View>
         {sous('acompteNature')}
@@ -244,10 +298,10 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
           {VALIDITES_PROPOSEES.map((j) => (
             <Pastille key={j} label={`${j} jours`} nom={`Valable ${j} jours`}
               choisie={!c.validiteAutre && c.validite === j}
-              onPress={() => choisir({ validite: c.validite === j && !c.validiteAutre ? null : j, validiteAutre: false })} />
+              onPress={() => choisir({ validite: c.validite === j && !c.validiteAutre ? null : j, validiteAutre: false }, 'validite')} />
           ))}
           <Pastille label="Autre" nom="Une autre durée de validité" choisie={c.validiteAutre}
-            onPress={() => choisir({ validiteAutre: !c.validiteAutre, validite: null })} />
+            onPress={() => choisir({ validiteAutre: !c.validiteAutre, validite: null }, 'validite')} />
         </View>
         {c.validiteAutre && (
           <ChampMontant
@@ -255,7 +309,7 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
             defaut={texteDe(textes, 'validite', present(devis.validiteJours) ? String(devis.validiteJours) : '')}
             placeholder="Nombre de jours"
             accessibilityLabel="Durée de validité, en jours"
-            onBlur={enregistrer}
+            onBlur={() => enregistrer('validite')}
             maxLength={4}
           />
         )}
@@ -268,12 +322,17 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         <Interrupteur
           actif={c.retenue}
           libelle="Retenue de garantie"
-          /* JAMAIS LA DURÉE SANS SA RÉSERVE (loi n° 71-584, art. 2) : « rendus
-             un an après » promettrait à l'artisan un remboursement que le
-             client peut bloquer. */
-          aide={'Au plus 5 % des acomptes, rendus un an après la réception des travaux, sauf si le client '
-            + 'notifie une opposition motivée.'}
-          onPress={() => choisir({ retenue: !c.retenue })}
+          /* JAMAIS LA DURÉE SANS SA RÉSERVE (loi n° 71-584, art. 2) : « rendue
+             un an après » sans l'opposition promettrait à l'artisan un
+             remboursement que le client peut bloquer. Et l'aide dit À QUI le
+             client notifie l'opposition — au consignataire (ou à la caution),
+             par lettre recommandée —, pas « à vous » : l'artisan qui n'a rien
+             reçu ne doit pas en conclure que la somme lui revient (relecture
+             CONTROLES-11 du lot 2a). « RendUE » s'accorde avec la RETENUE :
+             « des acomptes, rendus » se lisait « les acomptes sont rendus ». */
+          aide={'Au plus 5\u00a0% des acomptes, rendue un an après la réception des travaux, sauf opposition '
+            + 'motivée que le client notifie au consignataire (ou à la caution) par lettre recommandée.'}
+          onPress={() => choisir({ retenue: !c.retenue }, 'retenue')}
         />
         {c.retenue && (
           <>
@@ -284,7 +343,7 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
                 ? centiemesEnSaisie(devis.retenueGarantieCentiemes) : '5')}
               placeholder="5"
               accessibilityLabel="Taux de la retenue de garantie, en pour cent"
-              onBlur={enregistrer}
+              onBlur={() => enregistrer('retenue')}
             />
             {sous('retenueGarantieCentiemes')}
             {/* La phrase de la loi, SANS AUCUN MONTANT : l'assiette de la
@@ -330,17 +389,36 @@ const s = StyleSheet.create({
   milieu: { flex: 1, minWidth: 0, alignItems: 'center' },
   barreTitre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink },
   barreMontant: { fontSize: T.petit, color: C.ink, textAlign: 'center' },
-  barreReste: { fontFamily: F.inter, fontSize: T.petit, color: C.muted },
+  barreReste: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
+  ligneReste: { minHeight: interligne(T.petit) },
   place: { minWidth: TOUCHE },
   contenu: { padding: S.lg, paddingBottom: S.xxl * 3, gap: S.xs },
   titre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, marginTop: S.lg },
   etiquette: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, marginTop: S.md, marginBottom: S.xs },
   pastilles: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs, marginBottom: S.xs },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit), marginTop: S.xs },
+  /* LA PLACE RÉSERVÉE sous un montant (ÉCRAN-12) : deux lignes, la longueur
+     des phrases d'effet et des fautes courantes, même à 320 points. Mesuré
+     au navigateur avant la correction : la carte sautait de 24 px, puis de
+     4, au moment où l'on visait le champ suivant. */
+  /* …plus la marge haute d'une faute (`erreur`, `S.xs`) : une faute de deux
+     lignes y tient aussi — mesuré, elle poussait encore la carte de 4 px. */
+  zone: { minHeight: 2 * interligne(T.petit) + S.xs, marginTop: S.xs },
+  aideZone: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
   /* Une demande RAMENÉE au total : de l'encre, pas le rouge des refus — rien
      n'est refusé, la phrase dit ce que le devis portera. */
-  ramene: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit), marginTop: S.xs },
+  rameneZone: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit) },
   erreur: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit), marginTop: S.xs },
+  /* LA LIGNE D'ÉTAT (ÉCRAN-2) : une ligne réservée même au repos — l'envoi
+     qui commence ne pousse pas la carte. L'échec, plus long, et son bouton,
+     la font grandir : c'est le moment où elle doit se voir. */
+  etat: {
+    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: S.sm,
+    minHeight: interligne(T.petit) + 2 * S.xs, paddingHorizontal: S.lg, paddingVertical: S.xs,
+    borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.surface,
+  },
+  etatTexte: { flex: 1, minWidth: 0, fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
+  etatEchec: { flex: 1, minWidth: 0, fontFamily: F.inter6, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit) },
   recap: { marginTop: S.xl, gap: S.xs, borderTopWidth: 1, borderTopColor: C.line, paddingTop: S.md },
   rangee: { flexDirection: 'row', justifyContent: 'space-between', gap: S.sm },
   libelle: { flexShrink: 1, fontFamily: F.inter, fontSize: T.petit, color: C.ink },
