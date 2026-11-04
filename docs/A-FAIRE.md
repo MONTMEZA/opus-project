@@ -1585,6 +1585,7 @@ peut s'inscrire aujourd'hui.
 | Supabase → Authentication → Policies | Activer la protection contre les mots de passe compromis | ⏳ à faire |
 | Anthropic → Settings → Limits | Poser un plafond de dépense | ⏳ conseillé |
 | Cloudinary | Plan gratuit : 25 crédits/mois, à surveiller | ⏳ à surveiller |
+| Supabase → Billing | Choisir le plan : le plan gratuit met en pause un projet peu actif pendant 7 jours, et une pause coupe TOUT Opus. Si le plan reste gratuit, vérifier que l'adresse du compte Supabase reçoit l'avertissement (plan du parrainage, préalable 6) | ⏳ à décider avant toute page publique |
 
 ---
 
@@ -3234,21 +3235,62 @@ ce métier (voir plus haut, « Les défauts relevés au tournage »).
 
 ### Le parrainage — votre idée, PAS construite (03/11/2026)
 
-Le plan complet, relu par quatre relecteurs (68 remarques contre-examinées) :
-**`docs/PLAN-PARRAINAGE.md`**. Il attend votre accord ; rien n'est construit.
+Le plan complet (version 3), relu par quatre relecteurs (68 remarques
+contre-examinées, 165 corrections arbitrées) : **`docs/PLAN-PARRAINAGE.md`**.
+Rien n'est construit.
+
+**Vos réponses aux quatre questions, le 03/11/2026** (les quatre
+recommandations) :
+
+- **Q1 — quand** : après le lot 5 du devis. **Aucun code de parrainage
+  avant la fin du devis** ;
+- **Q2 — la page d'accueil** : dans le dépôt d'Opus ;
+- **Q3 — une entreprise retirée ou transférée par l'administration** :
+  elle cesse de compter ;
+- **Q4 — un filleul qui supprime son compte** : il sort du décompte, sans
+  laisser de trace.
+
+Les questions Q5 à Q19 attendent leur moment (plan, §7).
 
 Ce qu'il faut retenir d'ici là :
 
-- **le format du code est figé dans ce plan** (7 signes dont un de contrôle,
-  30 signes possibles, `K7P-Q4MB`). Si la page d'accueil se fait avant le
-  reste, elle ne propose **aucun** code : sinon ils ne seront pas les mêmes ;
+- **le format du code est figé dans ce plan** : 7 signes dont un de
+  contrôle, 30 signes possibles. `K7P-Q4MB` est un **exemple de forme** :
+  son dernier signe sera recalculé au lot R1 ;
+- **tant que la liste d'attente d'Opus n'existe pas, aucune page ne propose
+  de code ni de lien de parrainage** : sinon les codes ne seront pas les
+  mêmes ;
 - **le bouton « Inviter » ne sortira qu'avec une page qui répond** : le
-  03/11, `opus-project.com` répond 403 et `/i/…` est redirigé, et Opus n'est
-  sur aucun magasin ;
+  03/11, `opus-project.com/i/…` est redirigé, puis tombe en 404, et Opus
+  n'est sur aucun magasin ;
 - la page d'accueil est une **mise en ligne publique** : éditeur nommé, boîte
-  aux lettres créée, fournisseur d'e-mails déclaré, mentions du site, AVANT de
-  recueillir une seule adresse ;
+  aux lettres créée, fournisseur d'e-mails déclaré, mentions du site, AVANT
+  de recueillir une seule adresse (les six préalables du plan) ;
 - **le devis reste la priorité.**
+
+**Trouvé en écrivant le plan, et qui ne dépend pas du parrainage** :
+
+- [ ] **les textes devenus faux depuis l'étape M1d (02/11)** : ils disent
+  encore que les données d'inscription sont « hors de l'export RGPD », alors
+  que l'export les rend (`metadonnees_d_inscription`) — `CLAUDE.md` (section
+  du SIRET, « Ce qui reste ouvert », point 4), `src/lib/api.js:325-328`,
+  `src/OpusApp.js:123-124` et `:805`, `supabase/schema.sql:10049`. À
+  corriger dans un lot de documentation ;
+- [ ] **un petit lot « LCEN »**, sans attendre : remplacer la référence
+  périmée « 6-III » (`src/data/legal.js`, `scripts/verifier-legal.mjs`, et
+  le haut de ce fichier) par l'article 1-1 de la loi pour la confiance dans
+  l'économie numérique, relu sur Légifrance au moment de corriger (plan,
+  A.3) ;
+- [ ] **« Publication partagée. » s'affiche sur Android même quand on
+  referme la feuille sans rien envoyer** (`src/lib/partage.js:51`). À
+  corriger à part ;
+- [ ] **le registre des traitements du responsable** (RGPD, art. 30.1)
+  n'existe pas : à créer, avec la liste d'attente et le parrainage (plan,
+  A.4) ;
+- [ ] **« Mot de passe oublié »** (plan, Q17) : Opus n'en a pas. Quelqu'un
+  qui crée un compte avec l'adresse d'un autre la bloque. À faire avant
+  d'ouvrir au public, et avant que la liste d'attente donne accès à un
+  compte.
 
 ### L'addendum « QR & Dossier Travaux » — audité, PAS construit (19/10/2026)
 

@@ -1019,8 +1019,8 @@ tranchée. Les quatre premières (Q1 à Q4) sont dans « En bref ».
 
 ## À reporter dans `docs/A-FAIRE.md`
 
-Ce plan ne modifie pas `docs/A-FAIRE.md` : un autre travail l'édite en ce
-moment. À y noter ensuite, chacun à sa place :
+**Reporté le 04/11/2026** dans `docs/A-FAIRE.md` (section « Le parrainage »
+et tableau §4). Ce qui suit reste comme trace de ce qui a été reporté :
 
 - **les textes devenus faux depuis l'étape M1d (02/11)**, qui disent encore
   que les données d'inscription sont « hors de l'export RGPD » — l'export
