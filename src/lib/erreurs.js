@@ -408,10 +408,24 @@ export class ErreurDeLaBase extends Error {
  * OP019 (l'état a changé), OP020 (on n'ouvre plus rien entre ces deux
  * personnes), OP013 (ce n'est pas à vous), OP021, OP025. L'écran ne propose
  * donc PAS « Réessayer » : il dit ce qui reste possible, ou relit.
+ *
+ * …ET UNE CONTRAINTE `check` QUI REFUSE (23514 — relecture du lot 2a, point
+ * transmis par les groupes BASE et ÉCRAN, mesuré par la vraie file et la base
+ * de démonstration). Une contrainte juge la LIGNE que la base allait ranger :
+ * renvoyée telle quelle, la même écriture est refusée pareil. Le cas qui l'a
+ * montré : retirer la réduction d'un devis près du plafond — le TTC, net de
+ * la réduction, repasserait 99 999 999,99 € (`devis_plafond_check`). La bande
+ * proposait « Réessayer », et « Réessayer » échouait à l'identique, autant de
+ * fois qu'on le touchait. Il faut CHANGER la valeur (remettre une réduction,
+ * baisser une ligne) : la phrase de la contrainte le dit, pas un bouton. Les
+ * autres contraintes de l'en-tête — les conditions du lot 2a comprises — sont
+ * dans le même cas, et celles que seule la base pose (« mettez Opus à jour »)
+ * aussi. Une modification suivante de l'en-tête repart avec ce qui n'a pas
+ * été enregistré : rien n'est perdu, rien n'est réessayé pour rien.
  */
 export function estUnRefusDefinitif(e) {
   const code = String((e && e.code) || '');
-  return /^OP0(13|19|20|21|25)$/.test(code) || code === 'REPONSE_FERMEE';
+  return /^OP0(13|19|20|21|25)$/.test(code) || code === 'REPONSE_FERMEE' || code === '23514';
 }
 
 /**

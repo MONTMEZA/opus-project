@@ -1020,7 +1020,9 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
         && /urgence:sos_request_id\(created_at, probleme_label, details\)/.test(D.LIENS_DU_DEVIS_OUVERT)
         && !/description|details|probleme_label/.test(D.LIENS_DU_DEVIS));
     const unDevisApi = corpsDeFonction(API_TEXTE, 'unDevisSupabase') || '';
-    const versDevis = corpsDeFonction(API_TEXTE, 'rowToDevis') || '';
+    /* `rowToDevis` vit dans `devis.js` depuis la relecture CONTROLES-5 du lot
+       2a : `node` la fait tourner (section 35 ter) ; ici, sa forme. */
+    const versDevis = corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'rowToDevis') || '';
     verifier('…et l’API s’en sert : `unDevis` lit `LIENS_DU_DEVIS_OUVERT`, `rowToDevis` passe par `originesDuDevis`, sans liens à elle',
       /\.select\(`\$\{LIENS_DU_DEVIS_OUVERT\}, devis_lignes\(\*\), `/.test(unDevisApi)
         && /\.\.\.originesDuDevis\(d\),/.test(versDevis) && !/\bdemande:|\burgence:/.test(versDevis)
@@ -2235,6 +2237,22 @@ const listeDe = (nom, colonne) => {
   return m ? m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')) : null;
 };
 
+/* LES DIX COLONNES QUE LE LOT 2a AJOUTE à une table déjà en place (49.4
+   bis), nommées une par une — lues par la section 12 (la liste fermée des
+   colonnes) et par la section 12 bis (les seules `alter table` permises). */
+const AJOUTS_2A = [
+  'devis: add column if not exists remise_centiemes integer',
+  'devis: add column if not exists remise_centimes bigint',
+  'devis: add column if not exists acompte_centiemes integer',
+  'devis: add column if not exists acompte_centimes bigint',
+  'devis: add column if not exists acompte_nature text',
+  'devis: add column if not exists validite_jours integer',
+  'devis: add column if not exists remise_ht_centimes bigint not null default 0',
+  'devis: add column if not exists acompte_ttc_centimes bigint not null default 0',
+  'devis: add column if not exists total_ttc_options_centimes bigint not null default 0',
+  'devis_tva: add column if not exists remise_centimes bigint not null default 0',
+];
+
 console.log('\n  12. les colonnes — une liste FERMÉE');
 {
   /* Le cahier §2.2-2.4, plus `generation` (49.5 bis, la parade de la
@@ -2278,18 +2296,6 @@ console.log('\n  12. les colonnes — une liste FERMÉE');
      colonnes des conditions, chacune une fois, et DANS la section 49.
      Toute autre forme reste refusée — une colonne de plus se décide, elle
      entre dans cette liste ET dans `FERMEE`. */
-  const AJOUTS_2A = [
-    'devis: add column if not exists remise_centiemes integer',
-    'devis: add column if not exists remise_centimes bigint',
-    'devis: add column if not exists acompte_centiemes integer',
-    'devis: add column if not exists acompte_centimes bigint',
-    'devis: add column if not exists acompte_nature text',
-    'devis: add column if not exists validite_jours integer',
-    'devis: add column if not exists remise_ht_centimes bigint not null default 0',
-    'devis: add column if not exists acompte_ttc_centimes bigint not null default 0',
-    'devis: add column if not exists total_ttc_options_centimes bigint not null default 0',
-    'devis_tva: add column if not exists remise_centimes bigint not null default 0',
-  ];
   const ajoutsDe = (texte) => [...texte.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?public\.(devis(?:_lignes|_tva)?)\b([^;]*);/gi)]
     .flatMap((m) => [...m[2].matchAll(/\badd\b(?!\s+constraint\s+\w+\s+check\b)\s*[^,;]*/gi)].map((a) => `${m[1]}: ${sansEspaces(a[0])}`));
   const ajouts = ajoutsDe(SQL);
@@ -2300,6 +2306,83 @@ console.log('\n  12. les colonnes — une liste FERMÉE');
     + '`add if not exists`, ni une contrainte anonyme) — sauf les dix colonnes des conditions (lot 2a), chacune une fois, dans la '
     + 'section 49', horsListe.length === 0 && malComptes.length === 0 && ajouts.length === AJOUTS_2A.length,
   `hors liste : ${horsListe.join(' | ') || '—'} ; manquants ou en double : ${malComptes.join(' | ') || '—'}`);
+}
+
+console.log('\n  12 bis. aucune table du devis ne change de FORME après sa création — `alter table` en liste FERMÉE, dans TOUT le fichier');
+{
+  /* POURQUOI (relecture « contrôles » du lot 2a, CONTROLES-2 et CONTROLES-6,
+     prouvé sur PostgreSQL 16) : ce contrôle lisait les colonnes dans le
+     `create table` et les `add column`, et RIEN d'autre. Posés plus bas dans
+     le fichier, `alter column acompte_nature set default 'acompte'` — la
+     nature PRÉ-CHOISIE que le propriétaire a refusée le 03/11 —, `alter
+     column validite_jours set default 30` et `alter column
+     acompte_ttc_centimes drop not null` passaient les 56 contrôles ET les
+     deux essais : un devis inséré sans nature rendait « acompte ». Une
+     liste de verbes interdits en oublierait un (`alter` sans le mot
+     `column`, `type`, `set data type`, `drop default`, `rename`, `owner to`,
+     `disable row level security`, `disable trigger`, `not valid`…).
+     D'où une PROPRIÉTÉ : sur ces trois tables, dans TOUT le fichier, une
+     instruction `alter table` ne porte qu'UNE action, et c'est l'une de
+     celles-ci — `enable row level security` (une fois par table), `drop
+     constraint if exists <nom>` puis `add constraint <nom> check (…)` (une
+     fois chacune, dans cet ordre, pour les trente-deux noms attendus, dans la
+     section 49), ou l'un des dix `add column if not exists` du lot 2a
+     (section 12). Tout le reste se DÉCIDE : la base, l'essai et cette liste,
+     dans le même lot.
+     LECTURE TOLÉRANTE : la casse, les blancs, les guillemets (dépliés), le
+     schéma facultatif, `if exists`, `only` — et dans les CHAÎNES aussi
+     (`execute 'alter table …'`) : le texte lu garde ses chaînes. */
+  const CONTRAINTES_ATTENDUES = {
+    devis: [...D.CONTRAINTES_DEVIS],
+    devis_lignes: [...D.CONTRAINTES_LIGNE],
+    devis_tva: ['devis_tva_arrondi_check', 'devis_tva_nb_check', 'devis_tva_remise_check', 'devis_tva_taux_check',
+      'devis_tva_vide_check'],
+  };
+  const tousLesNoms = Object.values(CONTRAINTES_ATTENDUES).flat();
+  /* Une parenthèse ouverte est fermée, et la dernière ferme la première. */
+  const fermeEnEntier = (t) => {
+    let p = 0;
+    for (let i = 0; i < t.length; i += 1) {
+      if (t[i] === '(') p += 1;
+      else if (t[i] === ')') { p -= 1; if (p === 0 && i !== t.length - 1) return false; }
+      if (p < 0) return false;
+    }
+    return p === 0;
+  };
+  const lireAlters = (texte) => [...texte.matchAll(/\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:public\s*\.\s*)?(devis_lignes|devis_tva|devis)\b(?!\s*\.)([^;]*)/gi)]
+    .map((m) => ({ table: m[1].toLowerCase(), action: sansEspaces(m[2]).toLowerCase(), brut: sansEspaces(m[0]), index: m.index }));
+  const alters = lireAlters(SQL);
+  const alters49 = lireAlters(S49).map((a) => a.brut);
+  const permise = (a) => {
+    if (a.action === 'enable row level security') return `rls ${a.table}`;
+    let m = /^drop constraint if exists ([a-z0-9_]+)$/.exec(a.action);
+    if (m && CONTRAINTES_ATTENDUES[a.table].includes(m[1])) return `drop ${m[1]}`;
+    m = /^add constraint ([a-z0-9_]+) check (\(.*\))$/.exec(a.action);
+    if (m && CONTRAINTES_ATTENDUES[a.table].includes(m[1]) && fermeEnEntier(m[2])) return `add ${m[1]}`;
+    if (/^add column if not exists /.test(a.action) && AJOUTS_2A.includes(`${a.table}: ${a.action}`)) return `colonne ${a.action}`;
+    return null;
+  };
+  const lues = alters.map((a) => ({ ...a, cle: permise(a) }));
+  const horsListe = lues.filter((a) => !a.cle).map((a) => a.brut.slice(0, 160));
+  const compte = (cle) => lues.filter((a) => a.cle === cle).length;
+  const malComptees = [
+    ...TABLES49.filter((t) => compte(`rls ${t}`) !== 1).map((t) => `rls ${t} ×${compte(`rls ${t}`)}`),
+    ...tousLesNoms.filter((n) => compte(`drop ${n}`) !== 1 || compte(`add ${n}`) !== 1)
+      .map((n) => `${n} : drop ×${compte(`drop ${n}`)}, add ×${compte(`add ${n}`)}`),
+  ];
+  const desordre = tousLesNoms.filter((n) => {
+    const d = lues.find((a) => a.cle === `drop ${n}`);
+    const ad = lues.find((a) => a.cle === `add ${n}`);
+    return d && ad && !(d.index < ad.index && alters49.includes(d.brut) && alters49.includes(ad.brut));
+  });
+  verifier(`sur les trois tables, chaque \`alter table\` du fichier (${alters.length} lus) est l’une des formes PERMISES : la RLS, une `
+    + 'contrainte refaite (`drop constraint if exists` puis `add constraint … check`), ou une des dix colonnes du lot 2a — ni '
+    + '`alter column` (un défaut, un type, un `drop not null`), ni `drop column`, ni `rename`, ni `owner to`, ni `disable`, ni '
+    + '`not valid`',
+  alters.length >= 69 && horsListe.length === 0, horsListe.join(' | ') || `${alters.length} lus — le lecteur a perdu sa cible`);
+  verifier(`…chaque table voit sa RLS posée une fois, et chacune des ${tousLesNoms.length} contraintes est retirée UNE fois puis `
+    + 'reposée UNE fois, dans cet ordre et dans la section 49 — aucune n’est refaite plus bas, sous le même nom, avec une autre règle',
+  tousLesNoms.length === 32 && malComptees.length === 0 && desordre.length === 0, [...malComptees, ...desordre].join(' | '));
 }
 
 console.log('\n  13. les colonnes interdites, et aucun `numeric`');
@@ -2652,6 +2735,115 @@ console.log('\n  18. les formules — écrites une fois, en entiers, et deux ég
     && !/prix_unitaire_centimes\s*>\s*0/i.test(regleDe('devis_ligne_offert_check')));
 }
 
+console.log('\n  18 bis. les calculs d’argent du lot 2a, côté BASE, ENTIERS — et la garde du rattrapage');
+{
+  /* POURQUOI (relecture « contrôles » du lot 2a, CONTROLES-1, CONTROLES-7,
+     et les restes transmis par le groupe BASE) : de `recalcule_devis`, ce
+     contrôle ne lisait que le verrou, OP014, OP015 et l'horloge ; de la
+     répartition, l'absence de `/` ; de `tient_le_devis`, rien du calcul.
+     Sept défauts remis à la main passaient les 56 contrôles au vert — les
+     taux passés croissants à la répartition, la réduction ou l'acompte en
+     pourcentage TRONQUÉS (le demi vers le haut perdu), l'acompte calculé sur
+     le total OPTIONS COMPRISES, le total toutes options comprises fait par
+     ADDITION au lieu de l'union, « à reste égal, la dernière part », une
+     réduction effective jamais posée — et le RATTRAPAGE de 49.6 ter, retiré,
+     passait aussi : chacun change un montant affiché à l'artisan et rangé en
+     base. Seuls les essais SQL les voyaient, et `npm run verifier` n'en joue
+     aucun (A-FAIRE §2.3) — il tourne aussi sur GitHub, SANS PostgreSQL.
+     Les corps se comparent donc ENTIERS, commentaires retirés et blancs
+     réduits, à la forme écrite ICI — le procédé des contraintes du lot 2a
+     (`FORMES_2A`), de `verifier-remontee` et de `verifier-moderation`.
+     CHANGER UNE FORMULE SE DÉCIDE : la base, l'essai (`essais-section-49.sql`,
+     `essais-section-49-conditions.sql`, `essais-section-49-rattrapage.sql`)
+     et la forme ci-dessous, dans le même lot, en disant pourquoi.
+     La forme d'une fonction : sa signature et ses attributs (`immutable`,
+     `security definer` ou `invoker`), puis son corps — et UNE seule
+     définition dans tout le fichier (une seconde, plus bas, gagnerait). */
+  const FORMES_CALCUL = Object.freeze({
+    devis_total_ligne: String.raw`p_quantite bigint, p_prix bigint) returns bigint language sql immutable set search_path = public $$ select case when p_quantite between 1 and 99999999 and p_prix between 0 and 9999999999 then (p_quantite * p_prix + 500) / 1000 end $$`,
+    devis_tva_de: String.raw`p_base bigint, p_taux integer) returns bigint language sql immutable set search_path = public $$ select case when p_base between 0 and 999999999999999 and p_taux between 0 and 9000 then (p_base * p_taux + 5000) / 10000 end $$`,
+    repartir_au_plus_fort_reste: String.raw`p_total bigint, p_poids bigint[]) returns bigint[] language plpgsql immutable set search_path = public $$ declare v_n integer := coalesce(cardinality(p_poids), 0); v_somme numeric := 0; v_parts bigint[]; v_restes numeric[]; v_manque bigint; v_i integer; v_j integer; v_choix integer; begin if p_total is null or p_total < 0 then return null; end if; if v_n = 0 then return case when p_total = 0 then '{}'::bigint[] end; end if; for v_i in 1 .. v_n loop if p_poids[v_i] is null or p_poids[v_i] < 0 then return null; end if; v_somme := v_somme + p_poids[v_i]; end loop; if p_total > v_somme then return null; end if; v_parts := array_fill(0::bigint, array[v_n]); if v_somme = 0 then return v_parts; end if; v_restes := array_fill(0::numeric, array[v_n]); for v_i in 1 .. v_n loop v_parts[v_i] := div(p_total::numeric * p_poids[v_i], v_somme)::bigint; v_restes[v_i] := mod(p_total::numeric * p_poids[v_i], v_somme); end loop; v_manque := p_total - (select sum(x) from unnest(v_parts) x)::bigint; for v_j in 1 .. v_manque loop v_choix := null; for v_i in 1 .. v_n loop if v_restes[v_i] > 0 and (v_choix is null or v_restes[v_i] > v_restes[v_choix]) then v_choix := v_i; end if; end loop; v_parts[v_choix] := v_parts[v_choix] + 1; v_restes[v_choix] := 0; end loop; return v_parts; end; $$`,
+    recalcule_devis: String.raw`p_devis uuid, p_generation bigint) returns void language plpgsql security definer set search_path = public $$ declare v_horloge bigint; v_pct integer; v_montant bigint; v_taux integer[]; v_brut bigint[]; v_nb integer[]; v_total_brut bigint; v_remise bigint; v_parts bigint[]; begin select d.generation, d.remise_centiemes, d.remise_centimes into v_horloge, v_pct, v_montant from public.devis d where d.id = p_devis for no key update; if not found then return; end if; if p_generation is not null and p_generation <= v_horloge then raise exception 'Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n''a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n''est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.' using errcode = 'OP015'; end if; if p_generation is not null and (select count(*) from public.devis_lignes l where l.devis_id = p_devis) > 500 then raise exception 'Un devis porte au plus 500 lignes : celui-ci est plein. Commencez-en un second, ou regroupez des lignes.' using errcode = 'OP014'; end if; select coalesce(array_agg(x.taux order by x.taux desc), '{}'), coalesce(array_agg(x.brut order by x.taux desc), '{}'), coalesce(array_agg(x.nb order by x.taux desc), '{}') into v_taux, v_brut, v_nb from (select l.taux_tva_centiemes as taux, sum(l.total_centimes)::bigint as brut, count(*)::integer as nb from public.devis_lignes l where l.devis_id = p_devis and l.type = 'poste' group by l.taux_tva_centiemes) x; v_total_brut := coalesce((select sum(b) from unnest(v_brut) b), 0)::bigint; v_remise := case when v_montant is not null then least(v_montant, v_total_brut) when v_pct is not null then (v_total_brut * v_pct + 5000) / 10000 else 0 end; v_parts := public.repartir_au_plus_fort_reste(v_remise, v_brut); insert into public.devis_tva as t (devis_id, taux_tva_centiemes, base_centimes, remise_centimes, tva_centimes, nb_lignes) select p_devis, v_taux[i], v_brut[i] - v_parts[i], v_parts[i], public.devis_tva_de(v_brut[i] - v_parts[i], v_taux[i]), v_nb[i] from generate_subscripts(v_taux, 1) as i on conflict (devis_id, taux_tva_centiemes) do update set base_centimes = excluded.base_centimes, remise_centimes = excluded.remise_centimes, tva_centimes = excluded.tva_centimes, nb_lignes = excluded.nb_lignes; update public.devis_tva t set base_centimes = 0, tva_centimes = 0, remise_centimes = 0, nb_lignes = 0 where t.devis_id = p_devis and t.nb_lignes > 0 and not exists (select 1 from public.devis_lignes l where l.devis_id = p_devis and l.type = 'poste' and l.taux_tva_centiemes = t.taux_tva_centiemes); update public.devis set modifie_le = clock_timestamp(), generation = coalesce(p_generation, generation) where id = p_devis; end; $$`,
+    recalcule_apres_reduction: String.raw`) returns trigger language plpgsql security definer set search_path = public $$ begin perform public.recalcule_devis(new.id, null); return null; end; $$`,
+    tient_le_devis: String.raw`) returns trigger language plpgsql security invoker set search_path = public $$ declare v_ht bigint; v_tva bigint; v_remise bigint; v_ttc bigint; v_options bigint; v_plafond constant integer := 20; begin new.objet := nullif(btrim(coalesce(new.objet, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), ''); new.lieu_adresse := nullif(btrim(coalesce(new.lieu_adresse, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), ''); new.lieu_ville := nullif(btrim(coalesce(new.lieu_ville, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), ''); new.delai_execution := nullif(btrim(coalesce(new.delai_execution, ''), E' \t\r\n\u00a0\u200b\u200c\u200d\u2060\ufeff'), ''); new.lieu_code_postal := nullif(regexp_replace(coalesce(new.lieu_code_postal, ''), E'[ \\t\\n\\v\\f\\r\\u00a0\\u202f]', '', 'g'), ''); if new.generation is null or new.generation not between 1 and 9007199254740991 then raise exception 'Cette version d''Opus n''envoie pas de numéro d''écriture valable pour ce devis : rien n''a été enregistré. Mettez l''application à jour, puis réessayez.' using errcode = 'OP016'; end if; if tg_op = 'INSERT' then new.created_at := clock_timestamp(); else new.created_at := old.created_at; new.source := old.source; if (pg_trigger_depth() = 1 and new.generation <= old.generation) or new.generation < old.generation then raise exception 'Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n''a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n''est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.' using errcode = 'OP015'; end if; end if; new.modifie_le := clock_timestamp(); if new.client_id is not null and (tg_op = 'INSERT' or new.client_id is distinct from old.client_id) and not exists (select 1 from public.clients c where c.id = new.client_id and c.pro_id = new.pro_id) then raise exception 'Cette fiche n''est pas dans votre carnet : un devis ne se rattache qu''à vos propres clients.' using errcode = 'OP013'; end if; if new.quote_request_id is not null and (tg_op = 'INSERT' or new.quote_request_id is distinct from old.quote_request_id) and not exists (select 1 from public.quote_requests q where q.id = new.quote_request_id and q.professional_id = new.pro_id) then raise exception 'Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu''à vos propres demandes.' using errcode = 'OP013'; end if; if new.sos_request_id is not null and (tg_op = 'INSERT' or new.sos_request_id is distinct from old.sos_request_id) and not exists (select 1 from public.sos_requests s where s.id = new.sos_request_id and s.professional_id = new.pro_id) then raise exception 'Cette urgence ne vous a pas été adressée : un devis ne se rattache qu''à vos propres urgences.' using errcode = 'OP013'; end if; if new.quote_request_id is not null and (tg_op = 'INSERT' or new.quote_request_id is distinct from old.quote_request_id) then perform pg_advisory_xact_lock(hashtextextended('devis:demande:' || new.quote_request_id::text, 0)); if (select count(*) from public.devis d where d.quote_request_id = new.quote_request_id and d.pro_id = new.pro_id and d.id <> new.id) >= v_plafond then raise exception 'Vous avez déjà % devis pour cette demande : supprimez un brouillon dont vous n''avez plus besoin avant d''en commencer un autre.', v_plafond using errcode = 'OP017'; end if; end if; if new.sos_request_id is not null and (tg_op = 'INSERT' or new.sos_request_id is distinct from old.sos_request_id) then perform pg_advisory_xact_lock(hashtextextended('devis:urgence:' || new.sos_request_id::text, 0)); if (select count(*) from public.devis d where d.sos_request_id = new.sos_request_id and d.pro_id = new.pro_id and d.id <> new.id) >= v_plafond then raise exception 'Vous avez déjà % devis pour cette urgence : supprimez un brouillon dont vous n''avez plus besoin avant d''en commencer un autre.', v_plafond using errcode = 'OP017'; end if; end if; select coalesce(sum(t.base_centimes), 0)::bigint, coalesce(sum(t.tva_centimes), 0)::bigint, coalesce(sum(t.remise_centimes), 0)::bigint into v_ht, v_tva, v_remise from public.devis_tva t where t.devis_id = new.id; v_ttc := v_ht + v_tva; new.total_ht_centimes := v_ht; new.total_tva_centimes := v_tva; new.total_ttc_centimes := v_ttc; new.remise_ht_centimes := v_remise; select coalesce(sum(u.base + public.devis_tva_de(u.base, u.taux)), 0)::bigint into v_options from (select x.taux, sum(x.base)::bigint as base from (select t.taux_tva_centiemes as taux, t.base_centimes as base from public.devis_tva t where t.devis_id = new.id union all select l.taux_tva_centiemes, l.total_centimes from public.devis_lignes l where l.devis_id = new.id and l.type = 'option') x group by x.taux) u; new.total_ttc_options_centimes := v_options; new.acompte_ttc_centimes := case when new.acompte_centimes is not null then least(new.acompte_centimes, v_ttc) when new.acompte_centiemes between 1 and 10000 then least((v_ttc * new.acompte_centiemes + 5000) / 10000, v_ttc) else 0 end; return new; end; $$`,
+  });
+  /* Où deux textes commencent à différer : la cause se lit d'un coup d'œil. */
+  const ecart = (vu, attendu) => {
+    let i = 0;
+    while (i < vu.length && i < attendu.length && vu[i] === attendu[i]) i += 1;
+    return `diffère au caractère ${i} : reçu « …${vu.slice(Math.max(0, i - 40), i + 80)}… », attendu « …${attendu.slice(Math.max(0, i - 40), i + 80)}… »`;
+  };
+  const formeSqlDe = (nom) => {
+    const fs = FONCTIONS.filter((f) => f.nom === nom);
+    return fs.length === 1 ? `${sansEspaces(fs[0].attributs)} $$ ${sansEspaces(fs[0].corps)} $$` : `(${fs.length} définition(s) dans le fichier)`;
+  };
+  for (const [nom, attendu] of Object.entries(FORMES_CALCUL)) {
+    const vu = formeSqlDe(nom);
+    verifier(`\`${nom}\` a EXACTEMENT la forme relue et éprouvée par les essais — une seule définition, signature et attributs compris`,
+      vu === attendu, vu.startsWith('(') ? vu : ecart(vu, attendu));
+  }
+
+  /* LE RATTRAPAGE DE 49.6 ter, AVEC SA GARDE, ENTIER (CONTROLES-7 : son
+     retrait ne changeait RIEN aux deux essais, qui en rejouaient une copie,
+     ni aux 56 contrôles) : le bloc `do $garde_rattrapage_49$`, puis l'ordre
+     `update`, puis la contrainte `devis_calculs_check` — dans cet ORDRE, d'un
+     seul tenant, dans la section 49, APRÈS le déclencheur qui pose les trois
+     colonnes calculées (c'est lui que l'`update` réveille). */
+  const RATTRAPAGE_49_6_TER = String.raw`do $garde_rattrapage_49$ declare v_plafond constant bigint := 9999999999; v_borne constant bigint := 9007199254740991; v_n integer; v_ids text; begin select count(*), string_agg(x.id::text, ', ' order by x.id) into v_n, v_ids from (select d.id, (select coalesce(sum(u.base + public.devis_tva_de(u.base, u.taux)), 0) from (select y.taux, sum(y.base)::bigint as base from (select t.taux_tva_centiemes as taux, t.base_centimes as base from public.devis_tva t where t.devis_id = d.id union all select l.taux_tva_centiemes, l.total_centimes from public.devis_lignes l where l.devis_id = d.id and l.type = 'option') y group by y.taux) u) as options from public.devis d) x where x.options > v_plafond; if v_n > 0 then raise exception 'Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d''écrire quoi que ce soit. Devis dont le total toutes options comprises, une fois recalculé, dépasserait 99 999 999,99 € — le plafond que le lot 2a impose désormais : %. Laissé ainsi, un tel devis ferait échouer plus tard une écriture qui ne le regarde pas, comme la suppression du compte d''un client. Retirez-lui l''option de trop (ou le brouillon entier), puis rejouez. Devis concernés : %.', v_n, v_ids; end if; select count(*), string_agg(d.id::text, ', ' order by d.id) into v_n, v_ids from public.devis d where d.generation >= v_borne and d.total_ttc_options_centimes < d.total_ttc_centimes; if v_n > 0 then raise exception 'Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d''écrire quoi que ce soit. Devis dont le numéro d''écriture est à la borne (9 007 199 254 740 991) et que le rattrapage devrait récrire : %. Seule une application modifiée a pu y mettre ce numéro, et un tel devis ne peut plus être récrit : son total toutes options comprises ne peut pas être posé, et devis_calculs_check le refuserait. Retirez ces brouillons depuis l''éditeur SQL de Supabase, puis rejouez. Devis concernés : %.', v_n, v_ids; end if; end $garde_rattrapage_49$; update public.devis set generation = generation + 1 where generation < 9007199254740991 and (total_ttc_options_centimes < total_ttc_centimes or (total_ttc_options_centimes = 0 and exists (select 1 from public.devis_lignes l where l.devis_id = devis.id and l.type = 'option' and l.total_centimes > 0))); alter table public.devis drop constraint if exists devis_calculs_check; alter table public.devis add constraint devis_calculs_check check (remise_ht_centimes >= 0 and acompte_ttc_centimes between 0 and total_ttc_centimes and total_ttc_options_centimes >= total_ttc_centimes);`;
+  const nbGardes = (SQL.match(/\$garde_rattrapage_49\$/g) || []).length;
+  const iGarde = S49.search(/\bdo\s+\$garde_rattrapage_49\$/i);
+  const iContrainte = iGarde >= 0 ? S49.slice(iGarde).search(/\badd\s+constraint\s+devis_calculs_check\b/i) : -1;
+  const iFin = iContrainte >= 0 ? S49.indexOf(';', iGarde + iContrainte) : -1;
+  const rattrapage = iFin > 0 ? sansEspaces(S49.slice(iGarde, iFin + 1)) : '';
+  const iDeclencheur = S49.search(/create\s+or\s+replace\s+trigger\s+trg_tient_le_devis\b/i);
+  verifier('le rattrapage de 49.6 ter — sa GARDE, son `update`, puis `devis_calculs_check` — a EXACTEMENT la forme relue et éprouvée '
+    + 'par `essais-section-49-rattrapage.sql`, d’un seul tenant, une seule fois, après `trg_tient_le_devis`',
+  nbGardes === 2 && rattrapage === RATTRAPAGE_49_6_TER && iDeclencheur >= 0 && iGarde > iDeclencheur,
+  nbGardes !== 2 ? `${nbGardes / 2} bloc(s) $garde_rattrapage_49$` : (rattrapage ? ecart(rattrapage, RATTRAPAGE_49_6_TER) : 'introuvable dans la section 49'));
+
+  /* LA GARDE RECOPIE LA RÈGLE DU POINT 5 DE `tient_le_devis()` POUR JUGER
+     (49.6 ter le dit). Les deux formes ci-dessus se comparent chacune à
+     elle-même : changer le point 5 ET sa forme attendue, en oubliant la
+     garde, passait encore. On compare donc les DEUX COPIES entre elles — le
+     même calcul, aux noms près (`new.id` dans le déclencheur, `d.id` dans la
+     garde ; l'alias de la sous-requête). */
+  const regleOptions = (texte, cible) => {
+    const m = new RegExp(String.raw`coalesce\(sum\(u\.base \+ public\.devis_tva_de\(u\.base, u\.taux\)\), 0\)(?:::bigint into v_options)? from \(select (\w+)\.taux, sum\(\1\.base\)::bigint as base from \(([\s\S]*?)\) \1 group by \1\.taux\) u\b`).exec(texte);
+    return m ? m[2].split(cible).join(':devis') : null;
+  };
+  const regleT = regleOptions(sansEspaces(corpsDe('tient_le_devis')), 'new.id');
+  const regleG = regleOptions(rattrapage, 'd.id');
+  verifier('…et la garde recopie la règle du total toutes options comprises de `tient_le_devis()` (point 5) MOT POUR MOT : l’union, '
+    + 'taux par taux, des bases nettes et des options, la TVA arrondie une fois par taux',
+  !!regleT && regleT === regleG, `déclencheur : ${regleT} | garde : ${regleG}`);
+
+  /* LES BORNES QUE LA GARDE ET LES CALCULS RECOPIENT : le plafond de
+     `devis_plafond_check`, la borne d'OP016 (`NUMERO_MAX`), et la borne de
+     l'acompte en pourcentage (relecture BASE-5 : hors de 1 à 10 000, on ne
+     multiplie rien et `devis_acompte_check` refuse sous son nom — sans cette
+     borne, un client modifié faisait déborder le `bigint`). Une borne
+     changée d'un côté sans l'autre se lit ici. */
+  const nombre = (re, t) => { const m = re.exec(t || ''); return m ? Number(m[1]) : null; };
+  const plafondGarde = nombre(/\bv_plafond\s+constant\s+bigint\s*:=\s*(\d+)\s*;/i, rattrapage);
+  const borneGarde = nombre(/\bv_borne\s+constant\s+bigint\s*:=\s*(\d+)\s*;/i, rattrapage);
+  const borneUpdate = nombre(/update\s+public\.devis\s+set\s+generation\s*=\s*generation\s*\+\s*1\s+where\s+generation\s*<\s*(\d+)\s+and\b/i, rattrapage);
+  const tD = sansEspaces(corpsDe('tient_le_devis'));
+  const rD = sansEspaces(corpsDe('recalcule_devis'));
+  const borneAcompte = nombre(/when new\.acompte_centiemes between 1 and (\d+) then least\(\(v_ttc \* new\.acompte_centiemes \+ 5000\) \/ \d+, v_ttc\)/, tD);
+  const diviseurAcompte = nombre(/least\(\(v_ttc \* new\.acompte_centiemes \+ 5000\) \/ (\d+), v_ttc\)/, tD);
+  const diviseurReduction = nombre(/when v_pct is not null then \(v_total_brut \* v_pct \+ 5000\) \/ (\d+)/, rD);
+  const borneContrainte = nombre(/acompte_centiemes\s+between\s+1\s+and\s+(\d+)/i, regleDe('devis_acompte_check'));
+  verifier('…et ses BORNES sont celles des contraintes et de la file : le plafond de la garde est `PLAFOND` (devis_plafond_check), la '
+    + 'borne de l’horloge (garde, `update`) est `NUMERO_MAX` (OP016) ; l’acompte en pourcentage n’est multiplié qu’entre 1 et '
+    + '`POURCENT_MAX` (la borne de devis_acompte_check), et les deux pourcentages se divisent par `POURCENT_MAX`',
+  plafondGarde === D.PLAFOND && borneGarde === F.NUMERO_MAX && borneUpdate === F.NUMERO_MAX
+    && /d\.generation\s*>=\s*v_borne/i.test(rattrapage)
+    && borneAcompte === D.POURCENT_MAX && borneContrainte === D.POURCENT_MAX && diviseurAcompte === D.POURCENT_MAX
+    && diviseurReduction === D.POURCENT_MAX,
+  json({ plafondGarde, borneGarde, borneUpdate, borneAcompte, borneContrainte, diviseurAcompte, diviseurReduction,
+    PLAFOND: D.PLAFOND, NUMERO_MAX: F.NUMERO_MAX, POURCENT_MAX: D.POURCENT_MAX }));
+}
+
 console.log('\n  19. le statut, et le tri de la liste');
 {
   const statuts = listeDe('devis_statut_check', 'statut') || [];
@@ -2930,6 +3122,139 @@ console.log('\n  21 bis. la requête tardive (49.5 bis) — la parade est tenue 
     && !/OP014/.test(corpsDe('tient_la_ligne_de_devis')));
 }
 
+console.log('\n  21 ter. dans TOUT le fichier : les déclencheurs des trois tables, les fonctions du devis, chaque `grant` et chaque `revoke`');
+{
+  /* POURQUOI (relecture « contrôles » du lot 2a, CONTROLES-6, trois formes
+     prouvées au vert) : le compte des déclencheurs ne lisait que la section
+     49 — un déclencheur « nature = acompte par défaut » posé APRÈS le titre
+     de la section 50 passait ; la section 20 ne lisait qu'UN `revoke`, sous
+     sa forme exacte — `revoke update (validite_jours) on public.devis from
+     authenticated` posé après les six `grant` passait, et toute écriture des
+     conditions aurait rendu 42501. Ces propriétés sont celles des TABLES et
+     des FONCTIONS : elles se lisent dans tout le fichier, chaînes comprises
+     (un ordre passé à `execute` est un ordre). */
+  const TABLE_DEVIS = String.raw`(?:only\s+)?(?:public\s*\.\s*)?(?:devis_lignes|devis_tva|devis)\b(?!\s*\.)`;
+  /* 1. LES DÉCLENCHEURS : exactement les cinq de la section 49, chacun une
+        fois ; aucun `drop trigger` ni `alter trigger` sur ces tables. */
+  const DECLENCHEURS = ['trg_recalcule_apres_reduction', 'trg_recalcule_devis', 'trg_tient_la_ligne_de_devis', 'trg_tient_le_devis',
+    'trg_tient_le_lien_du_devis'];
+  const surDevis = new RegExp(String.raw`\bon\s+${TABLE_DEVIS}`, 'i');
+  const decl = [...SQL.matchAll(/\bcreate\s+(?:or\s+replace\s+)?(?:constraint\s+)?trigger\s+([\w$]+)\s+([\s\S]*?)\bexecute\s+(?:function|procedure)\b/gi)]
+    .filter((m) => surDevis.test(m[2])).map((m) => m[1].toLowerCase()).sort();
+  const retires = [...SQL.matchAll(new RegExp(String.raw`\b(?:drop|alter)\s+trigger\s+(?:if\s+exists\s+)?[\w$]+\s+on\s+${TABLE_DEVIS}[^;']*`, 'gi'))]
+    .map((m) => sansEspaces(m[0]));
+  verifier('dans TOUT le fichier, les déclencheurs posés sur `devis`, `devis_lignes` et `devis_tva` sont EXACTEMENT les cinq de la '
+    + 'section 49, chacun une fois — et aucun `drop trigger` ni `alter trigger` ne les touche',
+  json(decl) === json(DECLENCHEURS) && retires.length === 0, `${json(decl)} ${retires.join(' | ')}`);
+
+  /* 2. LES FONCTIONS DE LA SECTION 49 : une définition chacune, et aucun
+        `alter function` ne change après coup ce que la forme a relu
+        (`security definer`, `set search_path`, un propriétaire). */
+  const plusieurs = NOMS49.filter((n) => FONCTIONS.filter((f) => f.nom === n).length !== 1);
+  const alterees = [...SQL.matchAll(new RegExp(String.raw`\balter\s+(?:function|procedure|routine)\s+(?:public\s*\.\s*)?(${NOMS49.join('|')})\b[^;']*`, 'gi'))]
+    .map((m) => sansEspaces(m[0]));
+  verifier(`les ${NOMS49.length} fonctions de la section 49 ont UNE définition chacune dans tout le fichier, et aucune n’est modifiée `
+    + 'par un `alter function` (attributs, propriétaire, `search_path`)',
+  NOMS49.length >= 11 && plusieurs.length === 0 && alterees.length === 0, `${plusieurs.join(', ')} ${alterees.join(' | ')}`);
+
+  /* 3. CHAQUE `grant` ET CHAQUE `revoke` QUI NOMME UNE TABLE OU UNE FONCTION
+        DU DEVIS, lus comme des ENSEMBLES (privilèges, colonnes, cibles,
+        rôles — l'ordre des mots ne change rien aux droits), comparés à la
+        liste FERMÉE ci-dessous, écrite en SQL. Un droit de plus ou de moins
+        se DÉCIDE : la base, l'essai (cas 18 de l'essai des conditions, cas 26
+        et 27 de l'essai 49), et cette liste, dans le même lot. */
+  const decouper = (t) => {
+    const parts = []; let p = 0; let cur = '';
+    for (const ch of t) {
+      if (ch === '(') p += 1;
+      if (ch === ')') p -= 1;
+      if (ch === ',' && p === 0) { parts.push(cur.trim()); cur = ''; } else cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    return parts;
+  };
+  const canon = (texte) => {
+    const t = sansEspaces(texte).toLowerCase();
+    const m = /^(grant|revoke)\s+(.+?)\s+on\s+(?:(table|function|procedure|routine)\s+)?(.+?)\s+(to|from)\s+(.+)$/.exec(t);
+    if (!m) return `illisible : ${t}`;
+    const privs = decouper(m[2]).map((x) => {
+      const c = /^(\w+)\s*\((.*)\)$/.exec(x);
+      return c ? `${c[1]}(${decouper(c[2]).sort().join(',')})` : x;
+    }).sort();
+    const sortePourFonction = m[3] && m[3] !== 'table';
+    const cibles = sortePourFonction ? [m[4].replace(/\s+/g, '').replace(/^public\./, '')]
+      : decouper(m[4]).map((x) => x.replace(/\s+/g, '').replace(/^public\./, '')).sort();
+    return json([m[1], privs, sortePourFonction ? 'fonction' : 'table', cibles, decouper(m[6]).sort()]);
+  };
+  const DROITS_DU_DEVIS = [
+    'revoke all on function public.devis_total_ligne(bigint, bigint) from public, anon',
+    'grant execute on function public.devis_total_ligne(bigint, bigint) to authenticated',
+    'revoke all on function public.devis_tva_de(bigint, integer) from public, anon',
+    'grant execute on function public.devis_tva_de(bigint, integer) to authenticated',
+    'revoke all on function public.repartir_au_plus_fort_reste(bigint, bigint[]) from public, anon, authenticated',
+    'revoke all on function public.recalcule_devis(uuid, bigint) from public, anon, authenticated',
+    'revoke all on function public.peut_faire_un_devis(uuid, uuid) from public, anon',
+    'grant execute on function public.peut_faire_un_devis(uuid, uuid) to authenticated',
+    'revoke all on function public.mes_entreprises() from public, anon',
+    'grant execute on function public.mes_entreprises() to authenticated',
+    'revoke all on public.devis, public.devis_lignes, public.devis_tva from anon, authenticated',
+    'grant select, delete on public.devis, public.devis_lignes to authenticated',
+    `grant insert (${DROITS_DE_COLONNE['insert devis'].join(', ')}) on public.devis to authenticated`,
+    `grant update (${DROITS_DE_COLONNE['update devis'].join(', ')}) on public.devis to authenticated`,
+    `grant insert (${DROITS_DE_COLONNE['insert devis_lignes'].join(', ')}) on public.devis_lignes to authenticated`,
+    `grant update (${DROITS_DE_COLONNE['update devis_lignes'].join(', ')}) on public.devis_lignes to authenticated`,
+    'grant select on public.devis_tva to authenticated',
+  ].map(canon).sort();
+  const nommeLeDevis = new RegExp(String.raw`\b(?:devis_lignes|devis_tva|devis)\b(?!\s*\.)|\b(?:${NOMS49.join('|')})\b`, 'i');
+  const ordres = [...SQL.matchAll(/\b(grant|revoke)\b([^;']*)/gi)]
+    .map((m) => ({ texte: sansEspaces(m[0]), index: m.index }))
+    .filter((o) => /\bon\b/i.test(o.texte) && nommeLeDevis.test(o.texte.replace(/^\S+\s+[\s\S]*?\bon\s+/i, 'on ')));
+  const lus = ordres.map((o) => canon(o.texte)).sort();
+  const enTrop = lus.filter((x, i) => lus.indexOf(x) === i && lus.filter((y) => y === x).length > DROITS_DU_DEVIS.filter((y) => y === x).length);
+  const enMoins = DROITS_DU_DEVIS.filter((x, i) => DROITS_DU_DEVIS.indexOf(x) === i
+    && DROITS_DU_DEVIS.filter((y) => y === x).length > lus.filter((y) => y === x).length);
+  verifier(`chaque \`grant\` et chaque \`revoke\` qui nomme une table ou une fonction du devis (${ordres.length} lus dans tout le fichier, `
+    + 'chaînes comprises) est dans la liste FERMÉE — ni un droit de colonne RETIRÉ après les `grant`, ni un droit RENDU à un autre rôle',
+  ordres.length === DROITS_DU_DEVIS.length && json(lus) === json(DROITS_DU_DEVIS),
+  `en trop : ${enTrop.join(' | ') || '—'} ; en moins : ${enMoins.join(' | ') || '—'}`);
+  /* …les `grant` de table APRÈS le `revoke` des tables (un `grant` posé avant
+     serait emporté par lui). */
+  const iRevokeTables = (ordres.find((o) => /^revoke all on public\.devis, public\.devis_lignes, public\.devis_tva from\b/i.test(o.texte)) || {}).index;
+  const grantsAvant = ordres.filter((o) => /^grant\b/i.test(o.texte) && !/\bon\s+function\b/i.test(o.texte) && !(o.index > iRevokeTables));
+  verifier('…les `grant` de table viennent APRÈS le `revoke` des trois tables', iRevokeTables >= 0 && grantsAvant.length === 0,
+    grantsAvant.map((o) => o.texte).join(' | '));
+  /* 4. EN MASSE : aucun `grant` NI `revoke` `on all … in schema` après la
+        création des tables du devis (la section 20 ne lisait que les
+        `grant`). Et un ordre FABRIQUÉ (`execute format('… on %s …')`) qui ne
+        vise pas une fonction ne fait que RETIRER `truncate`, `references`,
+        `trigger` ou `maintain` — c'est la boucle de la section 53 ; un autre
+        rendrait ou retirerait un droit sans nommer la table. */
+  const iTables = SQL.search(/create\s+table\s+if\s+not\s+exists\s+public\.devis\s*\(/i);
+  const enMasse = [...SQL.matchAll(/\b(?:grant|revoke)\b[^;']*\bon\s+all\s+(?:tables|sequences|functions|routines|procedures)\s+in\s+schema\b[^;']*/gi)]
+    .filter((m) => iTables > 0 && m.index > iTables).map((m) => sansEspaces(m[0]));
+  const fabriques = [...SQL.matchAll(/\bformat\s*\(\s*'\s*((?:grant|revoke)\b(?:[^']|'')*)'/gi)].map((m) => sansEspaces(m[1]).toLowerCase())
+    .filter((t) => !/\bon\s+function\b/.test(t))
+    .filter((t) => {
+      const m = /^revoke\s+(.+?)\s+on\s+/.exec(t);
+      return !m || !decouper(m[1]).every((p) => ['truncate', 'references', 'trigger', 'maintain'].includes(p));
+    });
+  verifier('…aucun `grant` ni `revoke` « on all … in schema » après les tables du devis, et aucun ordre fabriqué par `format` qui '
+    + 'touche une table autrement qu’en RETIRANT `truncate`, `references`, `trigger` ou `maintain`',
+  iTables > 0 && enMasse.length === 0 && fabriques.length === 0, [...enMasse, ...fabriques].join(' | '));
+  /* 5. UNE FONCTION DU DEVIS NE SE NOMME DANS UNE CHAÎNE QUE POUR LA
+        DOCUMENTER (`comment on … is '…'`) : nommée dans une liste d'une
+        boucle (`foreach f in array array['public.recalcule_devis(…)']`), elle
+        recevrait un droit que le texte ci-dessus ne voit pas. */
+  const chaines = [];
+  for (const m of SQL.matchAll(/(?<![\w$])[eE]?'((?:[^']|'')*)'/g)) {
+    if (!new RegExp(String.raw`\b(?:${NOMS49.join('|')})\s*\(`).test(m[1])) continue;
+    const debut = SQL.lastIndexOf(';', m.index) + 1;
+    if (!/^\s*comment\s+on\b/i.test(SQL.slice(debut, m.index))) chaines.push(sansEspaces(SQL.slice(debut, m.index + 80)).slice(0, 160));
+  }
+  verifier('…et une fonction du devis n’est nommée dans une CHAÎNE que par un `comment on` (jamais dans la liste d’une boucle de droits)',
+    chaines.length === 0, chaines.join(' | '));
+}
+
 console.log('\n  22. qui nomme les tables du devis — une liste FERMÉE');
 {
   /* LE NOM QUALIFIÉ, jamais le mot : « devis » est dans les chaînes de cinq
@@ -3158,6 +3483,67 @@ console.log('\n  26. l’essai et le témoin');
   verifier('le témoin de concurrence vit dans `supabase/essais-section-49-temoin.sql` (le déclencheur `S_attente`)…',
     /create\s+trigger\s+"S_attente"/i.test(sansCommentairesSql(temoin)) && /pg_sleep\(2\)/.test(temoin));
   verifier('…et JAMAIS dans `schema.sql`', !/S_attente|temoin_attente_essai_49/.test(SQL));
+}
+
+console.log('\n  26 bis. l’essai des conditions et l’essai du rattrapage (lot 2a)');
+{
+  /* Aucun contrôle ne lisait ces deux fichiers. Ce qu'ils doivent contenir
+     se garde ici — le JOUER reste l'affaire de PostgreSQL, à la main
+     (A-FAIRE §2.3). */
+  let brutC = ''; let brutR = '';
+  try { brutC = lire('supabase/essais-section-49-conditions.sql'); } catch (e) { brutC = ''; }
+  try { brutR = lire('supabase/essais-section-49-rattrapage.sql'); } catch (e) { brutR = ''; }
+  const cond = sansCommentairesSql(brutC);
+  const ratt = sansCommentairesSql(brutR);
+  /* LES DÉFAUTS DES COLONNES DU LOT 2a, RELUS DANS LE CATALOGUE (relecture
+     CONTROLES-2) : « nature sans défaut » et « validité : rien de
+     pré-choisi » (décisions du 03/11) n'étaient tenues NULLE PART — un
+     `alter column … set default` posé plus bas passait les deux essais.
+     Le cas 23 lit `column_default` et `is_nullable` des onze colonnes, et
+     juge chacune par une colonne `…_attendu_t`. La liste est écrite ici ET
+     dans l'essai : chacune garde l'autre. */
+  const DEFAUTS_ATTENDUS = [
+    ['devis', 'remise_centiemes', null, 'YES'], ['devis', 'remise_centimes', null, 'YES'],
+    ['devis', 'acompte_centiemes', null, 'YES'], ['devis', 'acompte_centimes', null, 'YES'],
+    ['devis', 'acompte_nature', null, 'YES'], ['devis', 'validite_jours', null, 'YES'],
+    ['devis', 'retenue_garantie_centiemes', null, 'YES'],
+    ['devis', 'remise_ht_centimes', '0', 'NO'], ['devis', 'acompte_ttc_centimes', '0', 'NO'],
+    ['devis', 'total_ttc_options_centimes', '0', 'NO'], ['devis_tva', 'remise_centimes', '0', 'NO'],
+  ];
+  const c23 = (/\\echo\s+'===\s+23\.[\s\S]*$/.exec(cond) || [''])[0];
+  const tuple = ([t, c, d, n]) => new RegExp(String.raw`\(\s*'${t}'\s*,\s*'${c}'\s*,\s*${d === null ? 'null' : `'${d}'`}\s*,\s*'${n}'\s*\)`, 'i');
+  const absents = DEFAUTS_ATTENDUS.filter((x) => !tuple(x).test(c23)).map((x) => x.slice(0, 2).join('.'));
+  /* …et le JUGEMENT lit le catalogue : la jointure qui nourrit
+     `forme_attendu_t` est celle de `information_schema.columns`, sur la
+     table et la colonne attendues, et la comparaison porte sur le défaut ET
+     le « not null » (sabotage Q47 du banc : la jointure passée sur une autre
+     vue laissait un `information_schema.columns` ailleurs dans le cas, et le
+     contrôle passait pendant que le cas tombait en erreur). */
+  const c23plat = sansEspaces(c23).toLowerCase();
+  const jugement = [
+    ['from attendu a', 'la liste des onze colonnes n’est pas la source du jugement'],
+    ["left join information_schema.columns c on c.table_schema = 'public' and c.table_name = a.tab and c.column_name = a.col",
+      'la jointure du jugement ne lit pas `information_schema.columns` sur la table et la colonne attendues'],
+    ['coalesce(c.column_default is not distinct from a.defaut and c.is_nullable = a.nullable, false) as forme_attendu_t',
+      '`forme_attendu_t` ne compare pas le défaut ET le « not null » lus aux attendus (un manquant = faux)'],
+  ].filter(([forme]) => !c23plat.includes(forme)).map(([, quoi]) => quoi);
+  verifier('l’essai des conditions relit, cas 23, le DÉFAUT et le « not null » des onze colonnes du lot 2a (et de la retenue) dans '
+    + '`information_schema.columns` — aucune valeur par défaut pour ce que l’artisan choisit, 0 pour ce que la base calcule — et '
+    + 'juge chacune par une colonne `…_attendu_t`',
+  brutC.length > 5000 && /information_schema\.columns/i.test(c23) && /\bcolumn_default\b/i.test(c23) && /\bis_nullable\b/i.test(c23)
+    && /is\s+not\s+distinct\s+from/i.test(c23) && /_attendu_t\b/.test(c23) && absents.length === 0 && jugement.length === 0,
+  absents.length ? `absents du cas 23 : ${absents.join(', ')}` : (jugement.join(' | ') || 'cas 23 introuvable, ou sans lecture du catalogue'));
+  /* LE RATTRAPAGE S'ÉPROUVE PAR schema.sql LUI-MÊME (relecture CONTROLES-7 et
+     BASE-6) : l'essai pose d'anciens devis puis REJOUE le schéma (`\ir`),
+     deux fois en partie 1, une fois par refus de la garde — et ne recopie
+     JAMAIS l'ordre `update` : une copie ne voyait aucun des trois défauts. */
+  const irs = (ratt.match(/^\s*\\ir\s+schema\.sql\s*$/gim) || []).length;
+  const copies = [cond, ratt].filter((t) => /set\s+generation\s*=\s*generation\s*\+\s*1\b/i.test(t)).length;
+  verifier('l’essai du rattrapage REJOUE `schema.sql` (`\\ir`, au moins quatre fois : deux rejeux, puis les deux refus de la garde), en '
+    + 'trois parties jugées par des colonnes `…_attendu_t` — et aucun des deux essais ne recopie l’ordre `update` du rattrapage',
+  brutR.length > 3000 && irs >= 4 && ['1', '2', '3'].every((n) => new RegExp(String.raw`\\echo\s+'===\s+${n}\.\s`).test(ratt))
+    && /_attendu_t\b/.test(ratt) && /\\set\s+ON_ERROR_ROLLBACK\s+on/i.test(ratt) && copies === 0,
+  `${irs} \\ir ; ${copies} copie(s) de l’update`);
 }
 
 /* ================================================================== */
@@ -4442,16 +4828,20 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     && !/TTC|HT/.test(eAf.aDire) && D.effetDeLaReduction(tEcran, {}, 'reel') === null && D.effetDeLAcompte(tEcran, {}, 'reel') === null,
   json([eR, eA, eAf]));
   /* Une phrase d'échec par contrainte que l'APPLICATION peut violer : les
-     dix-sept moins les cinq que la base pose seule. */
-  const parLaBase = ['devis_calculs_check', 'devis_plafond_check', 'devis_source_check', 'devis_statut_check', 'devis_totaux_check'];
+     dix-sept moins les QUATRE que la base pose seule. `devis_plafond_check`
+     n'en est plus (relecture BASE-4 du lot 2a, mesuré) : retirer ou baisser
+     la réduction d'un devis près du plafond la viole depuis l'en-tête, et sa
+     phrase dit « La réduction n'a pas pu être changée. » (section 36, d). */
+  const parLaBase = ['devis_calculs_check', 'devis_source_check', 'devis_statut_check', 'devis_totaux_check'];
   const generique = D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'réseau' } });
   const sansPhrase = D.CONTRAINTES_DEVIS.filter((n) => !parLaBase.includes(n))
     .filter((n) => D.phraseEchecDuDevis({ enBase: true, erreur: { message: `violates check constraint "${n}"` } }) === generique);
   verifier('`phraseEchecDuDevis` : avant la base, « le brouillon » ; après, le CHAMP que nomme la contrainte — pour chacune des '
-    + 'douze que l’application peut violer ; sinon la phrase générale',
+    + 'treize que l’application peut violer (le plafond compris) ; sinon la phrase générale',
   D.phraseEchecDuDevis({ enBase: false }) === 'Le brouillon n’a pas pu être enregistré.' && /les conditions/.test(generique)
     && sansPhrase.length === 0
-    && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_validite_check"' } }) === 'La validité de l’offre n’a pas pu être enregistrée.',
+    && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_validite_check"' } }) === 'La validité de l’offre n’a pas pu être enregistrée.'
+    && parLaBase.length === 4 && D.CONTRAINTES_DEVIS.length - parLaBase.length === 13,
   sansPhrase.join(', '));
   /* Les mots qui portent la règle — et, depuis la relecture du lot 2a, ceux
      qui manquaient (CONTROLES-8 : « recevoir », pas « encaisser » ; le
@@ -4517,6 +4907,15 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
       + 'pas encore où ce devis sera signé : comptez ce délai.',
     AIDE_VALIDITE: 'À compter de la date du devis, celle qui sera imprimée dessus : le jour où vous le remettrez au client, '
       + 'pas celui où vous l’avez commencé.',
+    /* …ET LES QUATRE AUTRES AIDES DE LA CARTE (relecture CONTROLES-4 : « porte
+       sur les postes et sur chaque option », « options comprises » passaient
+       au vert — le CONTRAIRE de la base, qui ne réduit jamais une option et
+       calcule l'acompte sans elles). */
+    AIDE_REDUCTION: 'Elle porte sur les postes, jamais sur une option : une option n’est pas commandée tant que le client ne '
+      + 'l’a pas choisie.',
+    AIDE_ACOMPTE: 'Calculé sur le total sans les options : avant la signature, on ne sait pas lesquelles le client prendra.',
+    AIDE_REDUCTION_HT: 'En euros, la réduction est hors taxes : elle baisse le total HT, et la TVA avec lui.',
+    AIDE_ACOMPTE_TTC: 'En euros, la somme est toutes taxes comprises : c’est ce que le client verse.',
     PHRASE_RETENUE: 'Retenue sur les acomptes, au plus 5\u00a0% (loi n°\u00a071-584 du 16/07/1971). Le client consigne la '
       + 'somme retenue chez un consignataire accepté par vous deux — à défaut, désigné par le président du tribunal. '
       + 'Elle n’est pas retenue si vous fournissez une caution personnelle et solidaire d’un montant égal (banque, '
@@ -4528,8 +4927,8 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
   const AIDE_INTERRUPTEUR_RETENUE = 'Au plus 5\u00a0% des acomptes, rendue un an après la réception des travaux, sauf '
     + 'opposition motivée que le client notifie au consignataire (ou à la caution) par lettre recommandée.';
   const ecartsAides = Object.entries(AIDES_DE_DROIT_ATTENDUES).filter(([k, v]) => D[k] !== v).map(([k]) => k);
-  verifier('les aides de droit de la carte « Conditions » sont ÉCRITES MOT POUR MOT : la nature de l’acompte, le 8e jour, '
-    + 'la validité, la retenue de garantie',
+  verifier('les aides de la carte « Conditions » sont ÉCRITES MOT POUR MOT : la nature de l’acompte, le 8e jour, '
+    + 'la validité, la retenue de garantie — et la réduction, l’acompte, et leurs deux aides « en euros »',
   ecartsAides.length === 0,
   ecartsAides.map((k) => `${k} : « ${D[k]} »`).join(' | '));
   {
@@ -4591,7 +4990,7 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
        dirait « Calcul en cours… » pour toujours sur la vraie base. */
     const API = lire('src/lib/api.js');
     const selectTotaux = (/async function relireTotauxDevisSupabase[\s\S]*?\.select\(([\s\S]*?)\)\s*\.eq/.exec(API) || [])[1] || '';
-    const corpsTotaux = corpsDeFonction(API, 'totauxDepuisBase') || '';
+    const corpsTotaux = corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'totauxDepuisBase') || '';
     /* …et les deux colonnes qui NOMMENT les rangées (la nature, la retenue :
        contre-vérification d'ÉCRAN-2). */
     const colonnesDemande = ['remise_centimes', 'remise_centiemes', 'acompte_centimes', 'acompte_centiemes',
@@ -4841,7 +5240,7 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     const lu = await baseDemo.un('1', unDevis.id);
     const refait = D.totauxDevis(lu.lignes, { remiseCentiemes: 1000, acompteCentimes: 9999999999 });
     const clesApi = ['ht', 'tva', 'ttc', 'reduction', 'brut', 'acompte', 'ttcOptions', 'demande', 'generation', 'modifieLe', 'ventilation'];
-    const srcApi = corpsDeFonction(lire('src/lib/api.js'), 'totauxDepuisBase') || '';
+    const srcApi = corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'totauxDepuisBase') || '';
     okDemo = !!t && t.reduction === refait.reduction.effectif && t.acompte === refait.acompte.effectif && t.acompte === t.ttc
       /* La demande que la base a vue revient avec les totaux (ÉCRAN-1). */
       && json(t.demande) === json({ remiseCentimes: null, remiseCentiemes: 1000, acompteCentimes: 9999999999, acompteCentiemes: null,
@@ -4853,6 +5252,316 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
   }
   verifier('l’aller-retour par la démonstration : la réduction et l’acompte (ramené au TTC) relus en NOMBRES, égaux à ce que '
     + '`totauxDevis` refait, sous les MÊMES clés que `totauxDepuisBase` (la vraie base)', okDemo, detDemo);
+}
+
+console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu passer au vert, FAIT TOURNER');
+{
+  const n = (t) => String(t == null ? '' : t).replace(/[\u00a0\u202f]/g, ' ');
+  const dd = D.demandeDuDevis;
+
+  /* a. LES PHRASES D'EFFET, AVEC DES MONTANTS CALCULÉS À LA MAIN (relecture
+        CONTROLES-4, J10 et J11) : la forme seule était lue (« passe de »,
+        « reste à payer ») — un reste égal au TTC PLUS l'acompte, ou « passe
+        de 1 319,00 € à 1 319,00 € », passaient au vert. Chaque montant
+        ci-dessous est posé à la main : 131 900 − 13 190 = 118 710 ;
+        133 461 − 40 038 = 93 423 ; 120 000 − 30 000 = 90 000. */
+  const EFFETS = [
+    ['R1 réel, 10 %', D.effetDeLaReduction({ ht: 118710, tva: 12000, ttc: 130710, brut: 131900, reduction: 13190, demande: dd({ remiseCentiemes: 1000 }) }, { remiseCentiemes: 1000 }, 'reel'),
+      'Le total HT des postes passe de 1 319,00 € à 1 187,10 €.'],
+    ['R2 franchise, 50,00 €', D.effetDeLaReduction({ ht: 95000, tva: 0, ttc: 95000, brut: 100000, reduction: 5000, demande: dd({ remiseCentimes: 5000 }) }, { remiseCentimes: 5000 }, 'franchise'),
+      'Le total des postes passe de 1 000,00 € à 950,00 €.'],
+    ['R3 ramenée', D.effetDeLaReduction({ ht: 0, tva: 0, ttc: 0, brut: 100000, reduction: 100000, demande: dd({ remiseCentimes: 200000 }) }, { remiseCentimes: 200000 }, 'reel'),
+      'Ramenée à 1 000,00 € : le total des postes est plus petit que la réduction demandée.'],
+    ['R4 franchise avec TVA', D.effetDeLaReduction({ ht: 90000, tva: 18000, ttc: 108000, brut: 100000, reduction: 10000, demande: dd({ remiseCentiemes: 1000 }) }, { remiseCentiemes: 1000 }, 'franchise'),
+      'Réduction appliquée aux postes : 100,00 €.'],
+    ['R5 sans brut relu', D.effetDeLaReduction({ ht: 90000, tva: 18000, ttc: 108000, reduction: 10000, demande: dd({ remiseCentiemes: 1000 }) }, { remiseCentiemes: 1000 }, 'reel'),
+      'Le total HT des postes passe de 1 000,00 € à 900,00 €.'],
+    ['A1 réel, 30 %', D.effetDeLAcompte({ ttc: 133461, acompte: 40038, demande: dd({ acompteCentiemes: 3000 }) }, { acompteCentiemes: 3000 }, 'reel'),
+      '400,38 € TTC — reste à payer 934,23 € TTC.'],
+    ['A2 réel, 30 %, retenue', D.effetDeLAcompte({ ttc: 133461, acompte: 40038, demande: dd({ acompteCentiemes: 3000, retenueGarantieCentiemes: 500 }) }, { acompteCentiemes: 3000 }, 'reel'),
+      '400,38 € TTC — reste à payer, avant la retenue de garantie 934,23 € TTC.'],
+    ['A3 franchise, 300,00 €', D.effetDeLAcompte({ ttc: 120000, acompte: 30000, demande: dd({ acompteCentimes: 30000 }) }, { acompteCentimes: 30000 }, 'franchise'),
+      '300,00 € — reste à payer 900,00 €.'],
+    ['A4 ramené', D.effetDeLAcompte({ ttc: 120000, acompte: 120000, demande: dd({ acompteCentimes: 999999 }) }, { acompteCentimes: 999999 }, 'reel'),
+      'Ramené à 1 200,00 € : le total est plus petit que le montant demandé.'],
+    ['A5 100 %', D.effetDeLAcompte({ ttc: 120000, acompte: 120000, demande: dd({ acompteCentiemes: 10000 }) }, { acompteCentiemes: 10000 }, 'reel'),
+      '1 200,00 € TTC — reste à payer 0,00 € TTC.'],
+  ];
+  const effetsFaux = EFFETS.filter(([, e, attendu]) => !e || n(e.aDire) !== attendu).map(([k, e]) => `${k} : « ${e && n(e.aDire)} »`);
+  verifier('les phrases d’effet de la carte, FAITES TOURNER sur dix cas aux montants posés à la main : la réduction (%, €, ramenée, '
+    + 'franchise, franchise avec TVA, sans brut relu) et l’acompte (%, retenue, €, ramené, 100 %) — chaque phrase ENTIÈRE',
+  effetsFaux.length === 0 && EFFETS.filter(([k]) => /^R3|^A4/.test(k)).every(([, e]) => e && (e.ramenee === true || e.ramene === true)),
+  effetsFaux.join(' | '));
+
+  /* b. LA CARTE AFFICHE CHAQUE AIDE (relecture CONTROLES-4, E03b et E04b) :
+        une aide retirée de l'écran n'était refusée que par le cliquet du
+        linter (l'import devenu mort) ; mise sous `{false && …}`, l'import
+        restant employé, elle passait au vert. On lit l'ÉCRAN, commentaires
+        retirés : chaque aide est un enfant `{AIDE_…}` d'un `<Text
+        style={s.aide}>`, et les accolades encore OUVERTES autour d'elle
+        — ses CONDITIONS d'affichage — sont exactement celles attendues
+        (aucune pour les six aides de toujours ; la retenue ouverte pour la
+        phrase de la loi ; le régime réel pour les deux aides « en euros »). */
+  const carteSrc = sansCommentairesJs(lire('src/components/ConditionsDevis.js'));
+  const iEcran = carteSrc.indexOf('<View style={s.ecran}');
+  /* Les chaînes et les gabarits VIDÉS (leurs accolades ne comptent pas). */
+  const vide = (t) => t.replace(/`(?:[^`\\]|\\.)*`/g, (m) => '`' + ' '.repeat(m.length - 2) + '`')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, (m) => "'" + ' '.repeat(m.length - 2) + "'")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, (m) => '"' + ' '.repeat(m.length - 2) + '"');
+  const plat = iEcran >= 0 ? vide(carteSrc) : '';
+  const gardesDe = (motif) => {
+    const res = [];
+    const re = new RegExp(motif, 'g');
+    let m;
+    while ((m = re.exec(plat))) {
+      if (m.index < iEcran) continue;
+      const pile = [];
+      for (let i = iEcran; i < m.index; i += 1) {
+        if (plat[i] === '{') pile.push(i);
+        else if (plat[i] === '}') pile.pop();
+      }
+      /* La condition ENTIÈRE, de l'accolade jusqu'à l'élément qu'elle
+         affiche (`<Text`, `<>`) — pas seulement son premier `&&` : une
+         condition ALLONGÉE (`{!!a && !!b && <Text…`) cachait l'aide quand
+         `b` manquait, et passait (sabotage Q52 du banc). */
+      res.push(pile.map((p) => {
+        const suite = plat.slice(p + 1, m.index);
+        const fin = suite.search(/<[A-Za-z>]/);
+        return sansEspaces((fin >= 0 ? suite.slice(0, fin) : suite).replace(/\(\s*$/, ''));
+      }));
+    }
+    return res;
+  };
+  const AFFICHAGES = [
+    ['AIDE_REDUCTION', String.raw`<Text style=\{s\.aide\}>\{AIDE_REDUCTION\}</Text>`, []],
+    ['AIDE_ACOMPTE', String.raw`<Text style=\{s\.aide\}>\{AIDE_ACOMPTE\}</Text>`, []],
+    ['AIDE_NATURE_ACOMPTE', String.raw`<Text style=\{s\.aide\}>\{AIDE_NATURE_ACOMPTE\}</Text>`, []],
+    ['ECHEANCE_ACOMPTE', String.raw`<Text style=\{s\.aide\}>\{ECHEANCE_ACOMPTE\}</Text>`, []],
+    ['AIDE_VALIDITE', String.raw`<Text style=\{s\.aide\}>\{AIDE_VALIDITE\}</Text>`, []],
+    ['PHRASE_RETENUE', String.raw`<Text style=\{s\.aide\}>\{PHRASE_RETENUE\}</Text>`, ['c.retenue &&']],
+    ['aideReductionMontant (AIDE_REDUCTION_HT)', String.raw`<Text style=\{s\.aide\}>\{noms\.aideReductionMontant\}</Text>`, ['!!noms.aideReductionMontant &&']],
+    ['aideAcompteMontant (AIDE_ACOMPTE_TTC)', String.raw`<Text style=\{s\.aide\}>\{noms\.aideAcompteMontant\}</Text>`, ['!!noms.aideAcompteMontant &&']],
+    ['l’aide de « Retenue de garantie »', String.raw`<Interrupteur\s+actif=\{c\.retenue\}\s+libelle="\s*"\s+aide=\{`, []],
+  ];
+  const malAffichees = AFFICHAGES.map(([k, motif, attendu]) => {
+    const g = gardesDe(motif);
+    return g.length === 1 && json(g[0]) === json(attendu) ? null : `${k} : ${g.length} occurrence(s), conditions ${json(g)}`;
+  }).filter(Boolean);
+  const styleAide = (/\n\s{2}aide:\s*\{([^}]*)\}/.exec(carteSrc) || [])[1] || '';
+  verifier('la carte « Conditions » AFFICHE chaque aide : un enfant `{AIDE_…}` d’un `<Text style={s.aide}>`, une seule fois, sous '
+    + 'EXACTEMENT ses conditions (aucune pour les six de toujours, la retenue ouverte, le régime réel pour les deux « en euros ») — et '
+    + 'le style `aide` ne la cache pas',
+  iEcran >= 0 && malAffichees.length === 0 && styleAide.length > 10
+    && !/\b(display|opacity|height|maxHeight|width|position|overflow)\s*:|transparent|fontSize:\s*0\b/.test(styleAide),
+  [...malAffichees, styleAide ? '' : 'style `aide` introuvable'].filter(Boolean).join(' | '));
+  /* …et les deux aides « en euros » sont celles que `libellesDesConditions`
+     rend au régime réel — et seulement là (hors du réel, l'euro n'est ni HT
+     ni TTC). */
+  const reel = D.libellesDesConditions('reel');
+  const franchise = D.libellesDesConditions('franchise');
+  verifier('…les deux aides « en euros » viennent de `libellesDesConditions` — au régime réel seulement',
+    reel.aideReductionMontant === D.AIDE_REDUCTION_HT && reel.aideAcompteMontant === D.AIDE_ACOMPTE_TTC
+    && franchise.aideReductionMontant === null && franchise.aideAcompteMontant === null
+    && D.libellesDesConditions(null).aideReductionMontant === null,
+  json([reel.aideReductionMontant, franchise.aideReductionMontant]));
+
+  /* c. LA LECTURE PAR LA VRAIE BASE, FAITE TOURNER (relecture CONTROLES-5,
+        A02 à A04) : `rowToDevis` et `totauxDepuisBase` vivaient dans
+        `api.js`, que `node` n'ouvre pas — et la section 35 ne comparait que
+        les CLÉS, par la démonstration. Une colonne retirée du `select`,
+        une colonne non relue, l'acompte relu dans la colonne du total toutes
+        options comprises : trois défauts verts, visibles sur la vraie base
+        seulement (la règle n° 1 de CLAUDE.md). Elles vivent dans `devis.js`
+        et tournent ici sur une ligne FABRIQUÉE comme PostgREST la rend :
+        des noms de colonnes, des nombres JSON — deux en chaîne, pour la
+        conversion —, chaque montant DIFFÉRENT des autres (un échange de deux
+        colonnes se voit). */
+  const ligneDevis = {
+    id: 'd-1', pro_id: 'p-1', client_id: 'c-1', quote_request_id: 'q-1', sos_request_id: null, source: 'demande', statut: 'brouillon',
+    objet: 'Salle de bains', lieu_adresse: '4 rue des Essais', lieu_code_postal: '13410', lieu_ville: 'Lambesc', delai_execution: '3 semaines',
+    retenue_garantie_centiemes: 500, remise_centiemes: 1000, remise_centimes: null, acompte_centiemes: null, acompte_centimes: 35000,
+    acompte_nature: 'arrhes', validite_jours: '45', total_ht_centimes: 118710, total_tva_centimes: 15616, total_ttc_centimes: 134326,
+    remise_ht_centimes: 13190, acompte_ttc_centimes: 34999, total_ttc_options_centimes: '150826', generation: 1793746523496,
+    created_at: '2026-11-01T10:00:00+00:00', modifie_le: '2026-11-03T09:30:00.123456+00:00',
+    client: { nom: 'Mme Essai' },
+    demande: { created_at: '2026-10-29T08:00:00Z', budget: '500-1000', description: 'Refaire la salle de bains' },
+    urgence: { created_at: '2026-10-30T07:00:00Z', probleme_label: 'Fuite', details: 'Sous l’évier' },
+  };
+  const DEVIS_ATTENDU = {
+    id: 'd-1', proId: 'p-1', clientId: 'c-1', quoteRequestId: 'q-1', sosRequestId: null, source: 'demande', statut: 'brouillon',
+    objet: 'Salle de bains', lieuAdresse: '4 rue des Essais', lieuCodePostal: '13410', lieuVille: 'Lambesc', delaiExecution: '3 semaines',
+    retenueGarantieCentiemes: 500, remiseCentiemes: 1000, remiseCentimes: null, acompteCentiemes: null, acompteCentimes: 35000,
+    acompteNature: 'arrhes', validiteJours: 45, totalHtCentimes: 118710, totalTvaCentimes: 15616, totalTtcCentimes: 134326,
+    remiseHtCentimes: 13190, acompteTtcCentimes: 34999, totalTtcOptionsCentimes: 150826, generation: 1793746523496,
+    createdAt: '2026-11-01T10:00:00+00:00', modifieLe: '2026-11-03T09:30:00.123456+00:00',
+    client: { nom: 'Mme Essai' },
+    demande: { createdAt: '2026-10-29T08:00:00Z', budget: '500-1000', texte: 'Refaire la salle de bains' },
+    urgence: { createdAt: '2026-10-30T07:00:00Z', texte: 'Fuite — Sous l’évier' },
+  };
+  const ligneTotaux = {
+    total_ht_centimes: 118710, total_tva_centimes: 15616, total_ttc_centimes: 134326, remise_ht_centimes: 13190,
+    acompte_ttc_centimes: 34999, total_ttc_options_centimes: 150826, remise_centimes: null, remise_centiemes: 1000,
+    acompte_centimes: 35000, acompte_centiemes: null, acompte_nature: 'arrhes', retenue_garantie_centiemes: 500,
+    generation: 1793746523496, modifie_le: '2026-11-03T09:30:00.123456+00:00',
+    devis_tva: [
+      { taux_tva_centiemes: 1000, base_centimes: 59355, remise_centimes: 6595, tva_centimes: 5936, nb_lignes: 2 },
+      { taux_tva_centiemes: 2000, base_centimes: 59355, remise_centimes: 6595, tva_centimes: 11871, nb_lignes: '3' },
+      { taux_tva_centiemes: 550, base_centimes: 0, remise_centimes: 0, tva_centimes: 0, nb_lignes: 0 },
+    ],
+  };
+  const TOTAUX_ATTENDUS = {
+    ht: 118710, tva: 15616, ttc: 134326, reduction: 13190, brut: 131900, acompte: 34999, ttcOptions: 150826,
+    demande: { remiseCentimes: null, remiseCentiemes: 1000, acompteCentimes: 35000, acompteCentiemes: null, acompteNature: 'arrhes',
+      retenueGarantieCentiemes: 500 },
+    generation: 1793746523496, modifieLe: '2026-11-03T09:30:00.123456+00:00',
+    ventilation: [{ taux: 2000, base: 59355, remise: 6595, tva: 11871, nbLignes: 3 }, { taux: 1000, base: 59355, remise: 6595, tva: 5936, nbLignes: 2 }],
+  };
+  /* Une comparaison PROFONDE, clés triées : l'ordre des clés n'est pas une
+     règle, leur liste et leurs valeurs (et leur TYPE : 45 n'est pas '45') si. */
+  const trie = (x) => (Array.isArray(x) ? x.map(trie) : x && typeof x === 'object'
+    ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, trie(x[k])])) : x);
+  let luDevis = null; let luTotaux = null; let luVide = null;
+  try {
+    luDevis = D.rowToDevis(ligneDevis);
+    luTotaux = D.totauxDepuisBase(ligneTotaux);
+    luVide = D.totauxDepuisBase({ total_ht_centimes: null, remise_ht_centimes: 5, acompte_nature: 'inconnue' });
+  } catch (e) { luDevis = { plante: String(e && e.message) }; }
+  verifier('`rowToDevis` (devis.js), FAIT TOURNER sur une ligne comme PostgREST la rend : chaque colonne à SON nom, les nombres en '
+    + 'nombres (« 45 » relu 45), la validité, la nature, les trois montants que la base calcule — chacun dans sa colonne —, et les '
+    + 'liens de l’en-tête',
+  json(trie(luDevis)) === json(trie(DEVIS_ATTENDU)) && D.rowToDevis(null) === null,
+  `reçu ${json(luDevis)}`);
+  verifier('`totauxDepuisBase` (devis.js), FAIT TOURNER : l’acompte EFFECTIF (pas le total toutes options comprises), la réduction, le '
+    + 'brut = HT + réduction, la demande relue (une nature inconnue ne passe pas), la ventilation sans les taux à zéro, du plus fort '
+    + 'au plus faible ; un HT illisible ne fabrique pas de brut',
+  json(trie(luTotaux)) === json(trie(TOTAUX_ATTENDUS))
+    && !!luVide && luVide.brut === null && luVide.demande.acompteNature === null && json(luVide.ventilation) === '[]',
+  `reçu ${json(luTotaux)} ; vide ${json(luVide)}`);
+  /* …et le `select` de chaque lecture, comparé aux colonnes que ces
+     fonctions LISENT, DANS LES DEUX SENS : on les fait tourner sur une ligne
+     qui NOTE chaque colonne lue. */
+  const espion = (base, lues) => new Proxy(base, {
+    get(cible, cle) {
+      if (typeof cle === 'string') lues.add(cle);
+      return cible[cle];
+    },
+  });
+  const luesTotaux = new Set(); const luesVentilation = new Set();
+  D.totauxDepuisBase(espion({ ...ligneTotaux, devis_tva: ligneTotaux.devis_tva.map((t) => espion({ ...t, nb_lignes: 1 }, luesVentilation)) }, luesTotaux));
+  const API = sansCommentairesJs(lire('src/lib/api.js'));
+  const argSelect = (corps) => {
+    const m = /\.select\(([\s\S]*?)\)\s*\.eq\(/.exec(corps || '');
+    if (!m) return null;
+    return m[1].replace(/\$\{LIENS_DU_DEVIS_OUVERT\}/g, D.LIENS_DU_DEVIS_OUVERT).replace(/\$\{LIENS_DU_DEVIS\}/g, D.LIENS_DU_DEVIS)
+      .replace(/['`]\s*\+\s*['`]/g, '').replace(/^\s*['`]|['`]\s*$/g, '');
+  };
+  /* Une liste de `select` PostgREST : `{ colonnes, liens: { nom: [colonnes] } }` ;
+     `alias:colonne(…)` est rangé sous l'alias. */
+  const lireSelect = (t) => {
+    const res = { colonnes: [], liens: {} };
+    const parts = []; let p = 0; let cur = '';
+    for (const ch of t || '') {
+      if (ch === '(') p += 1;
+      if (ch === ')') p -= 1;
+      if (ch === ',' && p === 0) { parts.push(cur.trim()); cur = ''; } else cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    for (const x of parts) {
+      const m = /^(?:(\w+):)?(\w+)\((.*)\)$/.exec(x);
+      if (m) res.liens[m[1] || m[2]] = m[3].split(',').map((c) => c.trim()).filter(Boolean);
+      else res.colonnes.push(x);
+    }
+    return res;
+  };
+  const selTotaux = lireSelect(argSelect(corpsDeFonction(API, 'relireTotauxDevisSupabase')));
+  const attenduTotaux = [...selTotaux.colonnes, 'devis_tva'].sort();
+  const luTotauxListe = [...luesTotaux].sort();
+  verifier('`relireTotauxDevisSupabase` : son `select` porte EXACTEMENT les colonnes que `totauxDepuisBase` lit — et la ventilation '
+    + 'jointe, exactement celles qu’elle en lit (une colonne oubliée au `select` serait relue `null` sur la vraie base seulement)',
+  json(luTotauxListe) === json(attenduTotaux)
+    && json([...luesVentilation].sort()) === json([...(selTotaux.liens.devis_tva || [])].sort()),
+  `select ${json(attenduTotaux)} | lues ${json(luTotauxListe)} | ventilation select ${json(selTotaux.liens.devis_tva)} lues ${json([...luesVentilation].sort())}`);
+  /* `unDevis` : `*` (toutes les colonnes de `devis`, lues dans le SCHÉMA),
+     les liens de l'en-tête, la ventilation. */
+  const luesDevis = new Set(); const luesLiens = { client: new Set(), demande: new Set(), urgence: new Set() };
+  D.rowToDevis(espion({
+    ...ligneDevis,
+    client: espion({ ...ligneDevis.client }, luesLiens.client),
+    demande: espion({ ...ligneDevis.demande }, luesLiens.demande),
+    urgence: espion({ ...ligneDevis.urgence }, luesLiens.urgence),
+  }, luesDevis));
+  const selUn = lireSelect(argSelect(corpsDeFonction(API, 'unDevisSupabase')));
+  const colonnesDevis = (colonnesDe('devis') || []).map((c) => c.nom).sort();
+  const luesColonnes = [...luesDevis].filter((c) => !['client', 'demande', 'urgence'].includes(c)).sort();
+  const liensFaux = ['client', 'demande', 'urgence'].filter((l) => json([...luesLiens[l]].sort()) !== json([...(selUn.liens[l] || [])].sort()));
+  const luesVentilationUn = new Set();
+  D.totauxDepuisBase({ devis_tva: ligneTotaux.devis_tva.map((t) => espion({ ...t, nb_lignes: 1 }, luesVentilationUn)) });
+  verifier('`unDevisSupabase` : `*` — `rowToDevis` lit CHACUNE des colonnes de `devis` du schéma, et aucune autre ; chaque lien '
+    + '(client, demande, urgence) est lu exactement comme il est joint ; la ventilation jointe est celle que `totauxDepuisBase` lit',
+  json(selUn.colonnes) === json(['*']) && colonnesDevis.length >= 28 && json(luesColonnes) === json(colonnesDevis)
+    && liensFaux.length === 0 && 'devis_lignes' in selUn.liens
+    && json([...luesVentilationUn].sort()) === json([...(selUn.liens.devis_tva || [])].sort()),
+  `lues ${json(luesColonnes)} | schéma ${json(colonnesDevis)} | liens faux ${json(liensFaux)}`);
+  /* …et `api.js` ne les définit plus : il les IMPORTE de `devis.js` (une
+     seule écriture), et sa propre lecture des nombres est la même. */
+  const defNombre = (src) => sansEspaces((/\bconst\s+nombreOuNul\s*=\s*([^;]+);/.exec(src) || [])[1] || '');
+  verifier('…`api.js` ne définit plus ni `rowToDevis` ni `totauxDepuisBase` : il les importe de `devis.js` et s’en sert pour relire '
+    + 'les totaux et le devis ouvert ; ses nombres se lisent comme ceux de `devis.js`',
+  !/\bfunction\s+(rowToDevis|totauxDepuisBase)\b/.test(API)
+    && /import\s*\{[^}]*\browToDevis\b[^}]*\btotauxDepuisBase\b[^}]*\}\s*from\s*'\.\/devis'/.test(API)
+    && /return data \? totauxDepuisBase\(data\) : null;/.test(corpsDeFonction(API, 'relireTotauxDevisSupabase') || '')
+    && /devis: rowToDevis\(devis\),/.test(corpsDeFonction(API, 'unDevisSupabase') || '')
+    && defNombre(API) !== '' && defNombre(API) === defNombre(sansCommentairesJs(lire('src/lib/devis.js'))));
+
+  /* d. UN REFUS DE CONTRAINTE EST DÉFINITIF (point transmis par les groupes
+        BASE et ÉCRAN, mesuré) : retirer la réduction d'un devis près du
+        plafond est refusé par `devis_plafond_check` — la bande proposait
+        « Réessayer », qui échouait à l'identique. Fait tourner par la VRAIE
+        file et la base de démonstration, puis sous la forme de PostgREST pour
+        chacune des dix-sept contraintes du devis ; une coupure, un délai, un
+        interblocage et une écriture dépassée, eux, se réessaient. */
+  const baseP = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
+  const IDP = (k) => `de0000ee-0000-4000-8000-0000000036${String(k).padStart(2, '0')}`;
+  const fileP = F.creerFileEcriture({
+    devisId: IDP(1), devis: { objet: 'Plafond', source: 'manuelle', remiseCentiemes: 5000 }, devisEnBase: false,
+    ecrire: (op) => baseP.ecrire('1', op), relireUn: (q) => baseP.relireUn('1', q),
+    relireTotaux: (id) => baseP.relireTotaux('1', id), avecDelai: ERR.avecDelai, nouvelIdentifiant: I.nouvelIdentifiant,
+  });
+  /* 90 000 000,00 € HT à 20 % : avec 50 %, 54 000 000,00 € TTC ; sans, 108 000 000,00 € — au-delà du plafond. */
+  fileP.ligne({ id: IDP(11), ordre: 1000, type: 'poste', designation: 'Gros œuvre', quantiteMilliemes: 1000, unite: 'forfait',
+    prixUnitaireCentimes: 9000000000, tauxTvaCentiemes: 2000 });
+  await fileP.attendre(5000);
+  fileP.devis({ remiseCentiemes: null });
+  await fileP.attendre(5000);
+  const refusP = fileP.erreurDe('devis');
+  fileP.reessayer('devis');
+  await fileP.attendre(5000);
+  const encoreP = fileP.erreurDe('devis');
+  const pgDe = (nom) => ({ code: '23514', message: `new row for relation "devis" violates check constraint "${nom}"`, details: 'Failing row contains (…)', hint: null });
+  const pasDefinitifs = D.CONTRAINTES_DEVIS.filter((nom) => !ERR.estUnRefusDefinitif(pgDe(nom)));
+  const reessayables = [{ message: 'Network request failed' }, { code: '57014' }, { code: '40P01' }, { code: 'OP015' }, { code: 'PGRST116' }, null]
+    .filter((e) => ERR.estUnRefusDefinitif(e));
+  verifier('retirer la réduction d’un devis près du plafond : refus 23514 `devis_plafond_check` par la vraie file, et ce refus est '
+    + 'DÉFINITIF (« Réessayer » échouerait à l’identique — vérifié) ; les dix-sept contraintes du devis, sous la forme de PostgREST, '
+    + 'aussi ; une coupure, un délai, un interblocage, une écriture dépassée restent réessayables',
+  fileP.etatDe('devis') === 'echec' && !!refusP && refusP.code === '23514' && /"devis_plafond_check"/.test(refusP.message || '')
+    && ERR.estUnRefusDefinitif(refusP) === true && !!encoreP && encoreP.code === '23514'
+    && D.CONTRAINTES_DEVIS.length === 17 && pasDefinitifs.length === 0 && reessayables.length === 0,
+  `refus ${refusP && refusP.code} ; non définitifs : ${pasDefinitifs.join(', ') || '—'} ; réessayables pris pour définitifs : ${reessayables.length}`);
+  /* …la PHRASE de ce refus, ENTIÈRE, des deux côtés : l'en-tête nomme la
+     réduction (seul chemin de l'en-tête vers ce plafond, BASE-4), la phrase
+     commune parle de « ce changement » (pas « de cette ligne »). */
+  const PHRASE_PLAFOND = 'ce devis dépasserait 99\u00a0999\u00a0999,99\u00a0€ : il y a sans doute un zéro de trop dans une ligne. '
+    + 'Ce changement n’a pas été enregistré.';
+  verifier('…la phrase de ce refus, ENTIÈRE : « La réduction n’a pas pu être changée. » puis celle de `devis_plafond_check` (« ce '
+    + 'changement », jamais « cette ligne ») ; et l’écran (la bande, la carte) ne propose « Réessayer » que pour un refus qui n’est '
+    + 'PAS définitif',
+  D.phraseEchecDuDevis({ enBase: true, erreur: refusP }) === 'La réduction n’a pas pu être changée.'
+    && ERR.MESSAGES_CONTRAINTE.devis_plafond_check === PHRASE_PLAFOND
+    && ERR.messageClair(refusP, '') === `${PHRASE_PLAFOND.charAt(0).toUpperCase()}${PHRASE_PLAFOND.slice(1)}`
+    && /\{!estUnRefusDefinitif\(attente\.devisErreur\) && \(\s*<BtnOutline label="Réessayer"/.test(ECR.saisie)
+    && /reessayable: !!attente\.devisErreur && !estUnRefusDefinitif\(attente\.devisErreur\)/.test(ECR.saisie),
+  `${D.phraseEchecDuDevis({ enBase: true, erreur: refusP })} | ${ERR.messageClair(refusP, '')}`);
 }
 
 console.log('');

@@ -688,3 +688,49 @@ set local request.jwt.claim.sub = :A;
 select remise_centiemes as reduction_gardee from public.devis where id = :DR;
 rollback;
 \echo '    attendu (dernière ligne) : réduction_gardee vide'
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 23. LES DÉFAUTS DES COLONNES DU LOT 2a, RELUS DANS LE CATALOGUE : rien de pré-choisi pour ce que l artisan choisit, 0 pour ce que la base calcule ==='
+\echo '    attendu : onze lignes, toutes avec forme_attendu_t = t ; puis colonnes_lues_attendu_t = t'
+-- ==========================================================================
+-- Relecture CONTROLES-2 (04/11) : « la nature n a pas de défaut » et « la
+-- validité : rien de pré-choisi » (décisions du 03/11) n étaient tenues par
+-- AUCUN essai. Un `alter table … alter column … set default …` posé plus bas
+-- dans schema.sql passait tous les cas : ils écrivent chaque colonne, donc
+-- ne lisent jamais sa valeur par défaut. Ce cas la lit dans le catalogue de
+-- la base rejouée. La même liste est écrite dans scripts/verifier-devis.mjs
+-- (26 bis) : chacune garde l autre.
+with attendu(tab, col, defaut, nullable) as (values
+  ('devis', 'remise_centiemes', null, 'YES'),
+  ('devis', 'remise_centimes', null, 'YES'),
+  ('devis', 'acompte_centiemes', null, 'YES'),
+  ('devis', 'acompte_centimes', null, 'YES'),
+  ('devis', 'acompte_nature', null, 'YES'),
+  ('devis', 'validite_jours', null, 'YES'),
+  ('devis', 'retenue_garantie_centiemes', null, 'YES'),
+  ('devis', 'remise_ht_centimes', '0', 'NO'),
+  ('devis', 'acompte_ttc_centimes', '0', 'NO'),
+  ('devis', 'total_ttc_options_centimes', '0', 'NO'),
+  ('devis_tva', 'remise_centimes', '0', 'NO')
+)
+select a.tab || '.' || a.col as colonne,
+       c.column_default as defaut_lu,
+       c.is_nullable as nullable_lu,
+       coalesce(c.column_default is not distinct from a.defaut and c.is_nullable = a.nullable, false) as forme_attendu_t
+  from attendu a
+  left join information_schema.columns c
+    on c.table_schema = 'public' and c.table_name = a.tab and c.column_name = a.col
+ order by a.tab, a.col;
+-- Les onze colonnes existent, une fois chacune (une colonne renommée
+-- donnerait une ligne vide ci-dessus, et un faux « t » nulle part).
+select count(*) = 11 as colonnes_lues_attendu_t
+  from information_schema.columns c
+ where c.table_schema = 'public'
+   and (c.table_name, c.column_name) in (
+     ('devis', 'remise_centiemes'), ('devis', 'remise_centimes'), ('devis', 'acompte_centiemes'),
+     ('devis', 'acompte_centimes'), ('devis', 'acompte_nature'), ('devis', 'validite_jours'),
+     ('devis', 'retenue_garantie_centiemes'), ('devis', 'remise_ht_centimes'),
+     ('devis', 'acompte_ttc_centimes'), ('devis', 'total_ttc_options_centimes'),
+     ('devis_tva', 'remise_centimes'));

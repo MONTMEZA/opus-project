@@ -3072,8 +3072,18 @@ try {
   /* Les lecteurs d'un POSTE : le calcul et les écrans qui en montrent un —
      pas `OpusApp`, la saisie ni les portes, qui le passent sans le lire (et
      où `proId`, par exemple, désigne autre chose). */
+  /* …sans `rowToDevis` ni `totauxDepuisBase` (04/11/2026) : sortis d'`api.js`
+     vers `devis.js` pour que `verifier-devis` les fasse tourner, elles lisent
+     une ligne de DEVIS — son `proId` est celui du devis, pas celui d'un
+     poste, et le compter ici retirait à `pro_id` son exception nommée sans
+     qu'aucun écran ne lise l'appartenance d'un poste. */
+  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase'].reduce((s, nom) => {
+    const f = fonctionJs(s, nom);
+    return f ? s.slice(0, f.debut) + s.slice(f.fin) : s;
+  }, t);
   const LECTEURS = ['src/lib/postes.js', 'src/lib/devis.js', ...['carte', 'designation', 'ajout', 'poste', 'page'].map((k) => ECRANS_BASE[k])]
-    .map((f) => (existsSync(path.join(RACINE, f)) ? sansCommentairesJs(lire(f)) : '')).join('\n');
+    .map((f) => (existsSync(path.join(RACINE, f)) ? sansCommentairesJs(lire(f)) : ''))
+    .map((t, i) => (i === 1 ? sansLecturesDuDevis(t) : t)).join('\n');
   const camel = (c) => c.replace(/_([a-z])/g, (x, l) => l.toUpperCase());
   const politique = (S50.match(/create\s+policy[\s\S]*?;/gi) || []).join('\n');
   const index = (/create\s+unique\s+index\s+if\s+not\s+exists\s+idx_base_postes_rapprochement[\s\S]*?;/i.exec(S50) || [''])[0];

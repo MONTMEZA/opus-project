@@ -63,7 +63,7 @@ import { creerFileEcriture, DELAI_ECRITURE } from './file-ecriture';
 import { nouvelIdentifiant } from './identifiant';
 import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PAIRES_DEVIS, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
-  texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, originesDuDevis,
+  texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, rowToDevis, totauxDepuisBase,
 } from './devis';
 import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
 /* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
@@ -2879,53 +2879,13 @@ export const repondreDemandeRecue = hasSupabase ? repondreDemandeSupabase : repo
    2^53 — les montants s'arrêtent à 10^10, les numéros d'écriture à 2^53 − 1). */
 const nombreOuNul = (v) => (v === null || v === undefined ? null : Number(v));
 
-/** Un devis de la base, aux noms de l'application — avec ce que la requête y
- *  a joint : le nom du client, la date et le budget de la demande, la date
- *  de l'urgence. */
-function rowToDevis(d) {
-  if (!d) return null;
-  return {
-    id: d.id,
-    proId: d.pro_id,
-    clientId: d.client_id ?? null,
-    quoteRequestId: d.quote_request_id ?? null,
-    sosRequestId: d.sos_request_id ?? null,
-    source: d.source,
-    statut: d.statut,
-    objet: d.objet ?? null,
-    lieuAdresse: d.lieu_adresse ?? null,
-    lieuCodePostal: d.lieu_code_postal ?? null,
-    lieuVille: d.lieu_ville ?? null,
-    delaiExecution: d.delai_execution ?? null,
-    retenueGarantieCentiemes: nombreOuNul(d.retenue_garantie_centiemes),
-    /* LES CONDITIONS (lot 2a), relues comme le reste : un devis rouvert dont
-       on a retiré la réduction doit la montrer retirée — sans ces lignes,
-       la file la croirait toujours là, et l'annoncerait enregistrée. */
-    remiseCentiemes: nombreOuNul(d.remise_centiemes),
-    remiseCentimes: nombreOuNul(d.remise_centimes),
-    acompteCentiemes: nombreOuNul(d.acompte_centiemes),
-    acompteCentimes: nombreOuNul(d.acompte_centimes),
-    acompteNature: d.acompte_nature ?? null,
-    validiteJours: nombreOuNul(d.validite_jours),
-    totalHtCentimes: nombreOuNul(d.total_ht_centimes),
-    totalTvaCentimes: nombreOuNul(d.total_tva_centimes),
-    totalTtcCentimes: nombreOuNul(d.total_ttc_centimes),
-    /* Ce que la BASE a calculé des conditions : la réduction effective, l'acompte
-       effectif, le total toutes options comprises. Jamais envoyés. */
-    remiseHtCentimes: nombreOuNul(d.remise_ht_centimes),
-    acompteTtcCentimes: nombreOuNul(d.acompte_ttc_centimes),
-    totalTtcOptionsCentimes: nombreOuNul(d.total_ttc_options_centimes),
-    generation: nombreOuNul(d.generation),
-    createdAt: d.created_at ?? null,
-    modifieLe: d.modifie_le ?? null,
-    client: d.client ? { nom: d.client.nom ?? null } : null,
-    /* Le TEXTE de la demande (sa description) et le problème de l'urgence
-       n'arrivent qu'avec `unDevis` (`LIENS_DU_DEVIS_OUVERT`) : l'en-tête de la
-       saisie les affiche, jamais recopiés dans le devis (29/10/2026). La
-       lecture vit dans `devis.js`, que `verifier-devis` fait tourner. */
-    ...originesDuDevis(d),
-  };
-}
+/* `rowToDevis` et `totauxDepuisBase` VIVENT DANS `devis.js` (relecture
+   CONTROLES-5 du lot 2a) : écrites ici, `node` ne pouvait pas les ouvrir — ce
+   fichier charge Supabase —, et la lecture des conditions par la vraie base
+   n'était éprouvée que par la démonstration. Trois défauts remis à la main
+   (une colonne retirée du `select`, une colonne non relue, l'acompte relu dans
+   la mauvaise colonne) passaient au vert. `verifier-devis` les fait désormais
+   tourner sur une ligne fabriquée comme PostgREST la rend. */
 
 /** Une ligne de la base, aux noms de l'application. Les nombres en nombres et
  *  les booléens en booléens : la file compare ce qu'on veut à ce que la base
@@ -3060,56 +3020,6 @@ function ligneIntrouvable() {
   return e;
 }
 
-/* La ventilation telle que la base l'a calculée : les taux qui ont des
-   lignes (un taux disparu reste à zéro dans `devis_tva`, faute de pouvoir
-   y écrire `delete`), du plus fort au plus faible. */
-function totauxDepuisBase(d) {
-  const ht = nombreOuNul(d.total_ht_centimes);
-  const reduction = nombreOuNul(d.remise_ht_centimes);
-  return {
-    ht,
-    tva: nombreOuNul(d.total_tva_centimes),
-    ttc: nombreOuNul(d.total_ttc_centimes),
-    /* Les conditions telles que la BASE les a calculées (lot 2a) : la
-       réduction et l'acompte EFFECTIFS — ramenés au total quand ils le
-       dépassent —, le brut, et le total toutes options comprises. */
-    reduction,
-    brut: ht === null || reduction === null ? null : ht + reduction,
-    acompte: nombreOuNul(d.acompte_ttc_centimes),
-    ttcOptions: nombreOuNul(d.total_ttc_options_centimes),
-    /* LA DEMANDE QUE LA BASE A VUE, relue AVEC les totaux (relecture ÉCRAN-1
-       du lot 2a) : la carte « Conditions » ne dit « Ramenée à … » que contre
-       ELLE. Comparée à la demande de l'écran — changée AVANT l'envoi —, une
-       réduction encore en route se lisait « ramenée à 0,00 € », et pour
-       toujours après un envoi raté. Les quatre colonnes sont dans le
-       `select` de `relireTotauxDevisSupabase` : `verifier-devis` compare les
-       deux listes. */
-    demande: {
-      remiseCentimes: nombreOuNul(d.remise_centimes),
-      remiseCentiemes: nombreOuNul(d.remise_centiemes),
-      acompteCentimes: nombreOuNul(d.acompte_centimes),
-      acompteCentiemes: nombreOuNul(d.acompte_centiemes),
-      /* …et ce qui NOMME les rangées, relu dans la même photo : la nature de
-         l'acompte et la retenue (contre-vérification du lot 2a — après une
-         écriture ratée, la rangée disait « Arrhes » quand la base avait
-         gardé un acompte). La forme de `demandeDuDevis` (devis.js). */
-      acompteNature: d.acompte_nature === 'acompte' || d.acompte_nature === 'arrhes' ? d.acompte_nature : null,
-      retenueGarantieCentiemes: nombreOuNul(d.retenue_garantie_centiemes),
-    },
-    generation: nombreOuNul(d.generation),
-    /* L'heure de la BASE, pour ranger la carte dans « Mes devis » : sans
-       elle, la carte était datée à l'heure du téléphone (relecture
-       « données » des étapes 4 à 7, mineur 6). */
-    modifieLe: d.modifie_le ?? null,
-    ventilation: (d.devis_tva || [])
-      .filter((t) => Number(t.nb_lignes) > 0)
-      .map((t) => ({
-        taux: Number(t.taux_tva_centiemes), base: Number(t.base_centimes),
-        remise: Number(t.remise_centimes ?? 0), tva: Number(t.tva_centimes), nbLignes: Number(t.nb_lignes),
-      }))
-      .sort((a, b) => b.taux - a.taux),
-  };
-}
 
 /* UNE LECTURE PORTE UN DÉLAI ET S'ANNULE, comme une écriture : une requête
    qui ne revient jamais n'atteint jamais le `catch` (l'incident du 01/10),
