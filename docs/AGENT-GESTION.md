@@ -378,6 +378,19 @@ aux courriers.
 C'est le §13 de votre cahier. Elle reste indispensable pour les tickets de
 comptoir et pour les fournisseurs qui n'émettent pas encore en électronique.
 
+> **Votre décision, le 04/11/2026 :** « je suis daccord avec toi pour la
+> facturation electronique mais il faut qu'il puisse aussi prendre en photo
+> pour enregistrer leur ticket de caisse etc ».
+>
+> **Les deux portes coexistent, et aucune ne remplace l'autre.** La
+> facture électronique est la porte principale pour les achats entre
+> entreprises ; la photo reste pour tout le reste : le ticket de caisse du
+> comptoir, l'essence, le péage, le petit achat payé par carte, la facture
+> papier d'un fournisseur qui n'émet pas encore en électronique. Un ticket
+> n'est pas une facture électronique (voir « les tickets de comptoir »,
+> plus haut) : sans la photo, ces dépenses-là n'entreraient jamais dans
+> Opus.
+
 - **un appel d'IA par facture**, compté dans la limite de 60 appels par
   jour et par compte. Un gros paquet de photos s'étalera sur plusieurs
   jours, et l'écran le dira (`docs/COMPARATEUR-MATERIAUX.md` §3.1) ;
