@@ -1131,8 +1131,11 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
     + '« opposition » : jamais la durée sans sa réserve',
     phrasesModule.length > 300 && ecransLus && sansReserve.length === 0 && UN_AN.test(D.PHRASE_RETENUE)
     /* Depuis le lot 2a, la retenue se règle dans la carte « Conditions » :
-       c'est elle qui porte l'aide « un an ». */
-    && phrasesDe(lire('src/components/ConditionsDevis.js')).some((p) => UN_AN.test(p)),
+       c'est elle qui porte l'aide « un an » — depuis la relecture finale
+       (TC-3), par la constante `AIDE_RETENUE` de `devis.js`, lue ici dans
+       les exports (`exportees`) et affichée telle quelle par la carte. */
+    && UN_AN.test(D.AIDE_RETENUE)
+    && /aide=\{AIDE_RETENUE\}/.test(sansCommentairesJs(lire('src/components/ConditionsDevis.js'))),
     sansReserve.map(({ f, p }) => `${f} : « ${p.slice(0, 90)} »`).join(' | ') || `${phrasesModule.length} phrases lues`);
   /* Et, depuis la relecture CONTROLES-11 du lot 2a : la caution est
      « personnelle et solidaire » (art. 1er al. 4), et l'opposition se notifie
@@ -3776,6 +3779,9 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
     return `diffère au caractère ${i} : « …${vu.slice(Math.max(0, i - 30), i + 60)}… », attendu « …${attendu.slice(Math.max(0, i - 30), i + 60)}… »`;
   };
   const EMPREINTES = {
+    /* Relecture finale du lot 2a (RBM-1) : le cas 13 bis relit `:ERROR`
+       (`\set refus_13bis :ERROR`) et juge son refus en SQL — deux empreintes
+       de plus, après avoir rejoué l'essai sur une base neuve (27 ERROR, 32 `t`). */
     'supabase/essais-section-49-conditions.sql': `
       ea204fd0 a42b5839 e6d39479 11f916d2 9ae9ffe7 539ea4c9 fe7a39a2 bf46f024 58364e28 9e84eb77 819a22c5 9535a418
       085b0ee8 3877bf7f 5cd053aa 03edac1b edd65695 8808baf6 364647c8 350fa2c4 16ef89c9 388cebd2 edd65695 19ccc5ce
@@ -3796,17 +3802,17 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
       8e18d6e4 d9e37294 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 27b62650 1a2a6843 edd65695 19ccc5ce 95c8eec7
       8e18d6e4 4e112200 ed8cb8c7 1a2a6843 edd65695 19ccc5ce 95c8eec7 9318d6e1 eaf42292 1a2a6843 edd65695 19ccc5ce
       95c8eec7 9d578183 026d464a 1a2a6843 edd65695 19ccc5ce 95c8eec7 1e403c83 a3a588e2 27896266 f93f5494 f5a298e2
-      8987c181 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 1a3877fe 1a2a6843 edd65695 19ccc5ce 95c8eec7
-      8e18d6e4 78f8158f d526dec5 e0cac331 1a2a6843 edd65695 19ccc5ce 95c8eec7 12f96fe4 b9e233f9 00c45eb1 c7cd65de
-      c8a15988 73b093f4 bef0bbaf 1a2a6843 edd65695 19ccc5ce 95c8eec7 cb023507 1a2a6843 edd65695 19ccc5ce 95c8eec7
-      8e18d6e4 4349f47a 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 197321de 1a2a6843 edd65695 19ccc5ce 95c8eec7
-      8e18d6e4 ef52d54f 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 53d55c1e 1a2a6843 edd65695 19ccc5ce 95c8eec7
-      8e18d6e4 45d1cebf 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 06c1e1c4 1a2a6843 edd65695 19ccc5ce 95c8eec7
-      8e18d6e4 77b8828c 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 b9e79b8f 1a2a6843 edd65695 19ccc5ce 95c8eec7
-      8e18d6e4 78f8158f 67bfd527 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 12f16112 1a2a6843 edd65695
-      19ccc5ce 95c8eec7 8e18d6e4 78f8158f a0217a90 1a2a6843 cdc577fe 88eb1bd7 248556d1 4b439408 4d880d4c 13912acb
-      1441f239 3771726b edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c43faebb a59edfec a54b0e4f bd2af069 95c8eec7
-      0b57b066 1a2a6843 3019c1ab 710f3690`,
+      8987c181 0d4100cc 1a2a6843 c9404ff8 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 1a3877fe 1a2a6843 edd65695
+      19ccc5ce 95c8eec7 8e18d6e4 78f8158f d526dec5 e0cac331 1a2a6843 edd65695 19ccc5ce 95c8eec7 12f96fe4 b9e233f9
+      00c45eb1 c7cd65de c8a15988 73b093f4 bef0bbaf 1a2a6843 edd65695 19ccc5ce 95c8eec7 cb023507 1a2a6843 edd65695
+      19ccc5ce 95c8eec7 8e18d6e4 4349f47a 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 197321de 1a2a6843 edd65695
+      19ccc5ce 95c8eec7 8e18d6e4 ef52d54f 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 53d55c1e 1a2a6843 edd65695
+      19ccc5ce 95c8eec7 8e18d6e4 45d1cebf 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 06c1e1c4 1a2a6843 edd65695
+      19ccc5ce 95c8eec7 8e18d6e4 77b8828c 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 b9e79b8f 1a2a6843 edd65695
+      19ccc5ce 95c8eec7 8e18d6e4 78f8158f 67bfd527 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 12f16112
+      1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f a0217a90 1a2a6843 cdc577fe 88eb1bd7 248556d1 4b439408
+      4d880d4c 13912acb 1441f239 3771726b edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c43faebb a59edfec a54b0e4f
+      bd2af069 95c8eec7 0b57b066 1a2a6843 3019c1ab 710f3690`,
     'supabase/essais-section-49-rattrapage.sql': `
       ea204fd0 a42b5839 487feef8 e6d39479 11f916d2 40b5e395 910964bd bbe8eece 9a0b1f3e e85833ec 4910e716 06c1e0f2
       c4f022d1 adac5bc7 2ac8c3b8 5cd053aa c9dc7baa edd65695 2480b900 364647c8 94f16cc3 edd65695 b61a7250 8e64dc2e
@@ -3895,6 +3901,26 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
   verifier('les deux essais jouent EXACTEMENT les ordres relus, dans cet ordre (une empreinte par ordre) : aucun cas retiré, aucun '
     + 'ordre ajouté — un ordre du rattrapage recopié dans l’essai le rendrait aveugle à son retrait du schéma',
   ecartsOrdres.length === 0, ecartsOrdres.join(' | '));
+
+  /* (4) LE NOMBRE D'ERREURS ANNONCÉ (relecture finale du lot 2a, RBM-1).
+     Une erreur annoncée qui MANQUE ne laisse aucun `f` : la garde de 49.6 ter
+     neutralisée laissait l'essai du rattrapage à zéro `f`, deux « ERROR » au
+     lieu de quatre. Ce que l'essai FAIT ne se sait qu'en le jouant ; ce
+     contrôle tient seulement que l'ANNONCE est là, et la même en tête et à la
+     fin — sans elle, la seule parade disparaît sans bruit. Changer ce nombre
+     se décide, comme une empreinte : après avoir rejoué l'essai. */
+  const ANNONCES = {
+    'supabase/essais-section-49-conditions.sql': [/EXACTEMENT 27 lignes\s+--\s+`psql:… ERROR`/, /grep -c '\^psql:\.\*ERROR:'` → 27\)/,
+      /\\echo '=== FIN — ce fichier a écrit EXACTEMENT 27 lignes « psql:… ERROR »/],
+    'supabase/essais-section-49-rattrapage.sql': [/EXACTEMENT QUATRE lignes `psql:… ERROR`/, /grep -c '\^psql:\.\*ERROR:'\n--\s+→ 4\n/,
+      /grep -c '\^psql:\.\*ERROR:  P0001: Rattrapage du lot 2a'\n--\s+→ 2\n/,
+      /\\echo '    et ce fichier a écrit EXACTEMENT 4 lignes « psql:… ERROR », dont 2 « P0001: Rattrapage du lot 2a »'/],
+  };
+  const sansAnnonce = essais.flatMap((e) => (ANNONCES[e.f] || []).filter((re) => !re.test(e.brut))
+    .map((re) => `${e.f.replace('supabase/essais-section-49-', '')} : ${String(re).slice(1, 60)}`));
+  verifier('les deux essais ANNONCENT leur nombre exact d’erreurs (27 pour les conditions ; 4 pour le rattrapage, dont 2 « P0001: '
+    + 'Rattrapage du lot 2a »), en tête et à la fin — une erreur annoncée qui manque est un échec, et seul ce compte la voit',
+  sansAnnonce.length === 0, sansAnnonce.join(' | '));
 }
 
 /* ================================================================== */
@@ -5210,7 +5236,11 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
      nécessaire d'un dépannage urgent » — « un dépannage urgent » seul
      laissait croire que tout le devis y échappe, le sens qui expose
      l'artisan) ; et « s'il se rétracte, vous lui rendez », pas « : vous lui
-     rendez alors » juste après l'exception, qui se lisait « dans ce cas-là ». */
+     rendez alors » juste après l'exception, qui se lisait « dans ce cas-là ».
+     RELECTURE FINALE du lot 2a (TC-8) : l'exemple dit « qu'il vous a
+     EXPRESSÉMENT demandé » — L. 221-28 8° dit « expressément sollicités par
+     lui », le même mot que l'aide du 8e jour ; sans lui, l'exception
+     s'élargit au dépannage que l'artisan a lui-même proposé. */
   verifier('les aides de droit citent leur article (L. 214-1 pour les arrhes ; L. 221-18 et L. 221-24 pour la rétractation ; '
     + 'L. 221-10 et L. 221-3 pour le délai de sept jours), disent « recevoir », jamais « rien encaisser », et ne promettent '
     + 'aucune date ; la validité court depuis la date IMPRIMÉE, à la remise',
@@ -5225,7 +5255,8 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     && /5\ssalariés au plus pour des travaux hors de son métier/.test(D.ECHEANCE_ACOMPTE)
     && /d’entretien ou de réparation urgents qu’il vous a expressément demandés/.test(D.ECHEANCE_ACOMPTE)
     && /strictement nécessaires à l’urgence \(/.test(D.ECHEANCE_ACOMPTE)
-    && /sauf exceptions \(par exemple, le strict nécessaire d’un dépannage urgent/.test(D.AIDE_NATURE_ACOMPTE)
+    && /sauf exceptions \(par exemple, le strict nécessaire d’un dépannage urgent qu’il vous a expressément demandé chez lui\)/
+      .test(D.AIDE_NATURE_ACOMPTE)
     && /s’il se rétracte, vous lui rendez tout ce qu’il a versé/.test(D.AIDE_NATURE_ACOMPTE)
     && !/rendez alors/.test(D.AIDE_NATURE_ACOMPTE)
     && /celle qui sera imprimée dessus/.test(D.AIDE_VALIDITE) && /remettrez au client/.test(D.AIDE_VALIDITE)
@@ -5247,7 +5278,8 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
       + 'Un acompte engage les deux. Si rien n’est écrit, l’administration considère qu’une somme versée d’avance par un '
       + 'particulier vaut des arrhes (Code de la consommation, art. L.\u00a0214-1). Mais un devis signé hors de vos locaux '
       + 'ou à distance laisse au client 14\u00a0jours pour se rétracter, sauf exceptions (par exemple, le strict nécessaire '
-      + 'd’un dépannage urgent qu’il vous a demandé chez lui) : s’il se rétracte, vous lui rendez tout ce qu’il a versé, '
+      + 'd’un dépannage urgent qu’il vous a expressément demandé chez lui) : s’il se rétracte, vous lui rendez tout ce qu’il '
+      + 'a versé, '
       + 'acompte ou arrhes (art. L.\u00a0221-18 et L.\u00a0221-24).',
     ECHEANCE_ACOMPTE: 'Devis signé hors de vos locaux (chez le client, sur le chantier) par un particulier, ou par une '
       + 'entreprise de 5\u00a0salariés au plus pour des travaux hors de son métier : vous ne pouvez recevoir aucun paiement '
@@ -5274,24 +5306,91 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
       + 'est libérée) un an après la réception des travaux, sauf si le client a notifié au consignataire (ou à la '
       + 'caution), par lettre recommandée, une '
       + 'opposition motivée par l’inexécution de vos obligations.',
+    /* L'aide de l'interrupteur « Retenue de garantie » : « rendue » (la
+       retenue), un an après la RÉCEPTION, sauf opposition notifiée AU
+       CONSIGNATAIRE (ou à la caution) par lettre recommandée. Elle vivait en
+       attribut JSX dans l'écran, relue par ses seuls littéraux : une
+       constante concaténée ou une prop étalée la contredisaient au vert
+       (relecture finale du lot 2a, TC-3). Elle est dans `devis.js`, comparée
+       par sa VALEUR. */
+    AIDE_RETENUE: 'Au plus 5\u00a0% des acomptes, rendue un an après la réception des travaux, sauf opposition motivée '
+      + 'que le client notifie au consignataire (ou à la caution) par lettre recommandée.',
   });
-  const AIDE_INTERRUPTEUR_RETENUE = 'Au plus 5\u00a0% des acomptes, rendue un an après la réception des travaux, sauf '
-    + 'opposition motivée que le client notifie au consignataire (ou à la caution) par lettre recommandée.';
   const ecartsAides = Object.entries(AIDES_DE_DROIT_ATTENDUES).filter(([k, v]) => D[k] !== v).map(([k]) => k);
   verifier('les aides de la carte « Conditions » sont ÉCRITES MOT POUR MOT : la nature de l’acompte, le 8e jour, '
-    + 'la validité, la retenue de garantie — et la réduction, l’acompte, et leurs deux aides « en euros »',
+    + 'la validité, la retenue de garantie (sa phrase et l’aide de son interrupteur) — et la réduction, l’acompte, et leurs '
+    + 'deux aides « en euros »',
   ecartsAides.length === 0,
   ecartsAides.map((k) => `${k} : « ${D[k]} »`).join(' | '));
   {
-    /* L'attribut `aide` qui suit le libellé « Retenue de garantie », SANS les
-       commentaires (une explication qui cite la faute ne la commet pas). */
+    /* L'INTERRUPTEUR « Retenue de garantie », LU ENTIER (relecture finale du
+       lot 2a, TC-3). Le contrôle d'avant lisait l'attribut `aide` et n'en
+       recousait que les littéraux : `+ SUITE_RETENUE` au bout, ou
+       `{...{ aide: '…par courriel' }}` après lui (JSX : la dernière prop
+       gagne), passaient au vert. L'élément — de `<Interrupteur` à sa fin,
+       accolades comptées, SANS les commentaires — porte donc exactement
+       `aide={AIDE_RETENUE}`, une seule fois, et aucune prop étalée ; un seul
+       interrupteur porte ce libellé. La constante, elle, est comparée par sa
+       VALEUR plus haut, et son import est tenu par la règle de TC-2 (sans
+       alias, aucune déclaration locale du même nom). */
     const src = sansCommentairesJs(lire('src/components/ConditionsDevis.js'));
-    const m = src.match(/libelle="Retenue de garantie"[\s\S]*?aide=\{([^}]*)\}/);
-    const lue = m ? [...m[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((x) => x[1]).join('')
-      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))) : null;
-    verifier('l’aide de l’interrupteur « Retenue de garantie » est écrite MOT POUR MOT : « rendue » (la retenue), un an '
-      + 'après la RÉCEPTION, sauf opposition notifiée AU CONSIGNATAIRE (ou à la caution) par lettre recommandée',
-    lue === AIDE_INTERRUPTEUR_RETENUE, `lue : « ${lue} »`);
+    const elements = balises(src, 'Interrupteur').filter((b) => /libelle="Retenue de garantie"/.test(b));
+    const el = elements[0] || '';
+    verifier('l’interrupteur « Retenue de garantie » porte EXACTEMENT `aide={AIDE_RETENUE}`, une seule fois, sans morceau '
+      + 'ajouté ni prop étalée — un seul interrupteur porte ce libellé',
+    elements.length === 1 && balises(src, 'Interrupteur').length === 1
+      && (el.match(/\baide\s*=/g) || []).length === 1 && /\baide=\{AIDE_RETENUE\}/.test(el) && !/\{\s*\.\.\./.test(el)
+      && D.AIDE_RETENUE === AIDES_DE_DROIT_ATTENDUES.AIDE_RETENUE,
+    `${elements.length} interrupteur(s) : « ${sansEspaces(el).slice(0, 200)} »`);
+  }
+  {
+    /* …ET CE QUE L'INTERRUPTEUR EN ÉCRIT À L'ÉCRAN (banc final du lot 2a,
+       N10). La carte lui passe `aide={AIDE_RETENUE}` mot pour mot, mais c'est
+       `Interrupteur` (ui.js) qui l'affiche : `{aide.split(', sauf')[0]}` y
+       faisait lire « rendue un an après la réception des travaux » SANS
+       l'opposition — exactement ce que l'aide existe pour empêcher —, vert
+       contre les 56 contrôles (seul `mesure-devis`, au navigateur, le
+       voyait). L'aide s'y affiche ENTIÈRE et telle quelle, une seule fois,
+       jamais transformée (`aide.…`, `aide[…]`, une concaténation) ;
+       VoiceOver la lit avec le libellé ; son style ne la cache pas, n'étale
+       rien, et sa couleur se lit sur le fond de l'interrupteur (4,5 : 1). */
+    const UIsrc = sansCommentairesJs(lire('src/components/ui.js'));
+    const corpsI = corpsDeFonction(UIsrc, 'Interrupteur') || '';
+    const styleI = (/\n\s{2}interrupteurAide:\s*\{([^}]*)\}/.exec(UIsrc) || [])[1] || '';
+    const fondI = (/\n\s{2}interrupteur:\s*\{([^}]*)\}/.exec(UIsrc) || [])[1] || '';
+    const paletteI = (/export const C = \{([\s\S]*?)\n\};/.exec(lire('src/theme.js')) || [])[1] || '';
+    const hexI = (expr) => {
+      const m = /^C\.(\w+)$/.exec(String(expr || '').trim());
+      const h = m ? new RegExp(String.raw`\b${m[1]}\s*:\s*'(#[0-9A-Fa-f]{6})'`).exec(paletteI) : null;
+      return h ? h[1] : null;
+    };
+    const lumI = (hex) => {
+      const c = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const encreI = hexI((/\bcolor\s*:\s*([^,}\n]+)/.exec(styleI) || [])[1]);
+    const papierI = hexI((/\bbackgroundColor\s*:\s*([^,}\n]+)/.exec(fondI) || [])[1]);
+    const ratioI = encreI && papierI ? (() => { const [x, y] = [lumI(encreI), lumI(papierI)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); })() : 0;
+    const enfants = (corpsI.match(/<Text\b[^>]*>\{[^}]*\baide\b[^}]*\}<\/Text>/g) || []);
+    /* …et ce qui l'enveloppe ne la cache pas davantage : la case
+       (`interrupteur`) et le bloc du texte (`interrupteurTexte`), où elle vit
+       directement. */
+    const CACHE_I = /\b(display|opacity|height|maxHeight|width|maxWidth|position|overflow|transform|zIndex)\s*:|\.\.\.|transparent/;
+    const cadres = ['interrupteur', 'interrupteurTexte'].map((n) => [n, (new RegExp(String.raw`\n\s{2}${n}:\s*\{([^}]*)\}`).exec(UIsrc) || [])[1] || '']);
+    const cadresFautifs = cadres.filter(([, c]) => !c || CACHE_I.test(c)).map(([n]) => n);
+    const directe = /<View style=\{s\.interrupteurTexte\}>\s*<Text style=\{s\.interrupteurLibelle\}>\{libelle\}<\/Text>\s*\{!!aide && \(?\s*<Text style=\{s\.interrupteurAide\}>\{aide\}<\/Text>\s*\)?\s*\}\s*<\/View>/.test(corpsI);
+    verifier('`Interrupteur` (ui.js) écrit l’aide ENTIÈRE, telle quelle : `{!!aide && <Text style={s.interrupteurAide}>{aide}</Text>}`, '
+      + 'une seule fois, jamais transformée (`aide.…`, `aide[…]`, `aide +`) ; VoiceOver la lit (`${libelle}. ${aide}`) ; son style ne '
+      + `la cache pas et se lit sur le fond (${ratioI.toFixed(2)} : 1, 4,5 au moins)`,
+    corpsI.length > 100 && enfants.length === 1 && enfants[0] === '<Text style={s.interrupteurAide}>{aide}</Text>'
+      && /\{!!aide && \(?\s*<Text style=\{s\.interrupteurAide\}>\{aide\}<\/Text>\s*\)?\s*\}/.test(corpsI)
+      && !/\baide\s*(?:\?\.|\.|\[|\+)/.test(corpsI.replace(/aide \? `\$\{libelle\}\. \$\{aide\}` : libelle/, ''))
+      && /accessibilityLabel=\{aide \? `\$\{libelle\}\. \$\{aide\}` : libelle\}/.test(corpsI)
+      && styleI.length > 10 && !/\.\.\./.test(styleI)
+      && !/\b(display|opacity|height|maxHeight|width|position|overflow|transform)\s*:|transparent|fontSize:\s*0\b/.test(styleI)
+      && ratioI >= 4.5 && directe && cadresFautifs.length === 0,
+    `${enfants.length} enfant(s) : ${json(enfants)} ; style « ${sansEspaces(styleI)} » ; fond « ${sansEspaces(fondI).slice(0, 120)} » ; `
+      + `dans le bloc du texte : ${directe} ; cadres fautifs ${json(cadresFautifs)}`);
   }
 
   /* ================================================================
@@ -5684,25 +5783,39 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     return res;
   };
   const AFFICHAGES = [
-    ['AIDE_REDUCTION', String.raw`<Text style=\{s\.aide\}>\{AIDE_REDUCTION\}</Text>`, []],
-    ['AIDE_ACOMPTE', String.raw`<Text style=\{s\.aide\}>\{AIDE_ACOMPTE\}</Text>`, []],
-    ['AIDE_NATURE_ACOMPTE', String.raw`<Text style=\{s\.aide\}>\{AIDE_NATURE_ACOMPTE\}</Text>`, []],
-    ['ECHEANCE_ACOMPTE', String.raw`<Text style=\{s\.aide\}>\{ECHEANCE_ACOMPTE\}</Text>`, []],
-    ['AIDE_VALIDITE', String.raw`<Text style=\{s\.aide\}>\{AIDE_VALIDITE\}</Text>`, []],
-    ['PHRASE_RETENUE', String.raw`<Text style=\{s\.aide\}>\{PHRASE_RETENUE\}</Text>`, ['c.retenue &&']],
-    ['aideReductionMontant (AIDE_REDUCTION_HT)', String.raw`<Text style=\{s\.aide\}>\{noms\.aideReductionMontant\}</Text>`, ['!!noms.aideReductionMontant &&']],
-    ['aideAcompteMontant (AIDE_ACOMPTE_TTC)', String.raw`<Text style=\{s\.aide\}>\{noms\.aideAcompteMontant\}</Text>`, ['!!noms.aideAcompteMontant &&']],
-    ['l’aide de « Retenue de garantie »', String.raw`<Interrupteur\s+actif=\{c\.retenue\}\s+libelle="\s*"\s+aide=\{`, []],
+    ['AIDE_REDUCTION', String.raw`<Text style=\{s\.aide\}\s*>\{\s*AIDE_REDUCTION\s*\}</Text>`, []],
+    ['AIDE_ACOMPTE', String.raw`<Text style=\{s\.aide\}\s*>\{\s*AIDE_ACOMPTE\s*\}</Text>`, []],
+    ['AIDE_NATURE_ACOMPTE', String.raw`<Text style=\{s\.aide\}\s*>\{\s*AIDE_NATURE_ACOMPTE\s*\}</Text>`, []],
+    ['ECHEANCE_ACOMPTE', String.raw`<Text style=\{s\.aide\}\s*>\{\s*ECHEANCE_ACOMPTE\s*\}</Text>`, []],
+    ['AIDE_VALIDITE', String.raw`<Text style=\{s\.aide\}\s*>\{\s*AIDE_VALIDITE\s*\}</Text>`, []],
+    ['PHRASE_RETENUE', String.raw`<Text style=\{s\.aide\}\s*>\{\s*PHRASE_RETENUE\s*\}</Text>`, ['c.retenue &&']],
+    ['aideReductionMontant (AIDE_REDUCTION_HT)', String.raw`<Text style=\{s\.aide\}\s*>\{\s*noms\.aideReductionMontant\s*\}</Text>`, ['!!noms.aideReductionMontant &&']],
+    ['aideAcompteMontant (AIDE_ACOMPTE_TTC)', String.raw`<Text style=\{s\.aide\}\s*>\{\s*noms\.aideAcompteMontant\s*\}</Text>`, ['!!noms.aideAcompteMontant &&']],
+    ['l’aide de « Retenue de garantie »', String.raw`<Interrupteur\b`, []],
   ];
+  /* CE CONTRÔLE EXIGE UNE FORME (contre-vérification finale du lot 2a,
+     N2) : `<Text style={s.aide}>{AIDE_…}</Text>`, un seul import, un titre
+     en chaîne simple. Du code JUSTE écrit autrement — `style={[s.aide]}`,
+     `libelle={'…'}`, une seconde ligne d'import — est refusé aussi, et
+     l'aide se dit alors « introuvable ». C'est voulu (une forme exacte ne
+     laisse rien passer au vert), mais le message doit le dire : il ne
+     prétend pas que l'aide est cachée. */
+  const FORME_ATTENDUE = ' — introuvable SOUS LA FORME ATTENDUE `<Text style={s.aide}>{AIDE_…}</Text>` (un seul import de '
+    + '`../lib/devis`, un titre en chaîne simple) : si le code est juste et écrit autrement, c’est la forme de ce contrôle qu’on met '
+    + 'à jour, avec sa raison';
   const malAffichees = AFFICHAGES.map(([k, motif, attendu]) => {
     const g = gardesDe(motif);
-    return g.length === 1 && json(g[0]) === json(attendu) ? null : `${k} : ${g.length} occurrence(s), conditions ${json(g)}`;
+    return g.length === 1 && json(g[0]) === json(attendu) ? null
+      : `${k} : ${g.length} occurrence(s), conditions ${json(g)}${g.length === 0 ? FORME_ATTENDUE : ''}`;
   }).filter(Boolean);
   const styleAide = (/\n\s{2}aide:\s*\{([^}]*)\}/.exec(carteSrc) || [])[1] || '';
+  /* …et le style `aide` n'ÉTALE rien (banc final du lot 2a, N02) :
+     `aide: { ...VOILE, fontFamily: … }` avec `VOILE = { opacity: 0.3 }`
+     cachait les huit aides à la fois, au vert — ce qu'il étale ne se lit pas. */
   verifier('la carte « Conditions » AFFICHE chaque aide : un enfant `{AIDE_…}` d’un `<Text style={s.aide}>`, une seule fois, sous '
     + 'EXACTEMENT ses conditions (aucune pour les six de toujours, la retenue ouverte, le régime réel pour les deux « en euros ») — et '
-    + 'le style `aide` ne la cache pas',
-  iEcran >= 0 && malAffichees.length === 0 && styleAide.length > 10
+    + 'le style `aide` ne la cache pas, ni n’étale un autre style',
+  iEcran >= 0 && malAffichees.length === 0 && styleAide.length > 10 && !/\.\.\./.test(styleAide)
     && !/\b(display|opacity|height|maxHeight|width|position|overflow)\s*:|transparent|fontSize:\s*0\b/.test(styleAide),
   [...malAffichees, styleAide ? '' : 'style `aide` introuvable'].filter(Boolean).join(' | '));
   /* …et les deux aides « en euros » sont celles que `libellesDesConditions`
@@ -5715,6 +5828,176 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     && franchise.aideReductionMontant === null && franchise.aideAcompteMontant === null
     && D.libellesDesConditions(null).aideReductionMontant === null,
   json([reel.aideReductionMontant, franchise.aideReductionMontant]));
+
+  /* b bis. CHAQUE AIDE EST LA SIENNE, SOUS SON TITRE, ET RIEN NE LA CACHE
+        (relecture finale du lot 2a, TC-2). La vérification d'au-dessus lit
+        des NOMS : `{AIDE_VALIDITE}` sous `<Text style={s.aide}>`. Elle ne
+        voyait ni ce que le nom DÉSIGNE, ni la PLACE de l'aide, ni ce que fait
+        une vue autour d'elle. Six défauts passaient au vert, contre ce
+        contrôle comme contre les 56 :
+        - `AIDE_VALIDITE as ECHEANCE_ACOMPTE` dans l'import : la règle du
+          8e jour (L. 221-10) quittait la carte, remplacée par la validité ;
+        - deux alias croisés : la réduction et l'acompte échangeaient leurs
+          aides ;
+        - deux aides échangeaient leur PLACE (« À compter de la date du
+          devis… » sous « Réduction ») ;
+        - une vue autour d'une aide, `maxHeight: 2, overflow: 'hidden'`,
+          `opacity: 0.3` (contraste rendu 1,53 : 1), ou
+          `position: 'absolute', left: -9999` : l'aide était là, et ne se
+          lisait pas ;
+        - et une constante LOCALE du même nom masquait l'import (seul le
+          cliquet du linter l'attrapait, par hasard).
+        D'où trois règles, sur l'écran SANS ses commentaires :
+        1. chaque aide de droit est importée de `../lib/devis` SOUS SON NOM
+           (aucun `as`), et son nom n'apparaît que DEUX fois dans le code :
+           l'import, puis l'endroit où elle s'affiche — aucune déclaration,
+           aucun paramètre, aucun alias ne peut la remplacer ;
+        2. les quatre titres de la carte sont là, une fois chacun, dans
+           l'ordre (Réduction, l'acompte, Validité de l'offre, Retenue de
+           garantie), et chaque aide s'affiche sous LE SIEN, dans l'ordre
+           attendu ;
+        3. entre le début du CONTENU de la carte (après l'ouverture du
+           `ScrollView`, jamais le `ScrollView` lui-même, ni la carte) et une
+           aide, aucun élément ouvert autour d'elle n'a de style qui la
+           cache, la rogne, la déplace ou l'efface — ni opacité, ni hauteur
+           ou largeur, ni `overflow`, ni `position`, ni `transform`, ni
+           `display` —, ni `numberOfLines`, ni de quoi la taire à VoiceOver,
+           ni de prop étalée. Un fragment (`<>`) ne porte rien : il passe.
+        Ce que le texte ne peut pas dire — une vue AUTOUR de la carte, un
+        composant qui changerait ailleurs — se MESURE au navigateur
+        (`mesure-devis`, « Les aides de droit de la carte ») : la boîte,
+        l'opacité calculée avec tous les ancêtres, le contraste rendu,
+        l'ordre, contre des textes écrits en toutes lettres. */
+  {
+    const AIDES_DE_DROIT = ['AIDE_REDUCTION', 'AIDE_ACOMPTE', 'AIDE_NATURE_ACOMPTE', 'ECHEANCE_ACOMPTE', 'AIDE_VALIDITE',
+      'AIDE_RETENUE', 'PHRASE_RETENUE'];
+    /* 1. L'import, et les deux seules apparitions de chaque nom. */
+    const importsDe = [...carteSrc.matchAll(/\bimport\s+([\s\S]*?)\s+from\s+'([^']+)'/g)].map((m) => ({ quoi: m[1], de: m[2] }));
+    const deDevis = importsDe.filter((i) => i.de === '../lib/devis');
+    const specs = deDevis.length === 1 ? (/\{([\s\S]*)\}/.exec(deDevis[0].quoi) || [])[1] || '' : '';
+    const noms = specs.split(',').map((x) => sansEspaces(x)).filter(Boolean);
+    const fautesImport = AIDES_DE_DROIT.filter((nom) => {
+      const sous = noms.filter((x) => x === nom).length === 1;
+      const alias = noms.some((x) => new RegExp(`\\b${nom}\\b`).test(x) && x !== nom);
+      const ailleurs = importsDe.some((i) => i.de !== '../lib/devis' && new RegExp(`\\b${nom}\\b`).test(i.quoi));
+      const fois = (plat.match(new RegExp(`(?<![\\w$])${nom}(?![\\w$])`, 'g')) || []).length;
+      return !sous || alias || ailleurs || fois !== 2;
+    });
+    verifier('TC-2 : chaque aide de droit de la carte est importée de `../lib/devis` SOUS SON NOM (aucun `as`), et son nom '
+      + 'n’apparaît que deux fois — l’import, puis son affichage : aucune déclaration locale, aucun alias ne la remplace',
+    deDevis.length === 1 && noms.length > 10 && fautesImport.length === 0,
+    `${deDevis.length} import(s) de ../lib/devis ; en faute : ${fautesImport.join(', ') || '—'}`);
+
+    /* 2. Les titres, et l'aide sous le sien. Positions lues dans `plat`
+       (les chaînes vidées, même longueur), textes lus dans `carteSrc`. */
+    const iScroll = plat.indexOf('<ScrollView', iEcran);
+    const ouvreScroll = iScroll >= 0 ? baliseOuvrante(plat, iScroll) : '';
+    const debutContenu = iScroll >= 0 ? iScroll + ouvreScroll.length : -1;
+    const finContenu = plat.indexOf('</ScrollView>', debutContenu);
+    const TITRES = ['Réduction', '{noms.acompte}', 'Validité de l’offre', 'Retenue de garantie'];
+    const titres = [];
+    const reTitre = /<Text style=\{s\.titre\}[^>]*>([\s\S]*?)<\/Text>/g;
+    let mt;
+    while (debutContenu >= 0 && (mt = reTitre.exec(plat))) {
+      if (mt.index < debutContenu || mt.index > finContenu) continue;
+      titres.push({ i: mt.index, texte: sansEspaces(carteSrc.slice(mt.index + mt[0].length - mt[1].length - 7, mt.index + mt[0].length - 7)) });
+    }
+    const entetes = (carteSrc.slice(Math.max(debutContenu, 0), finContenu).match(/accessibilityRole="header"/g) || []).length;
+    const AIDES_PAR_TITRE = [
+      ['AIDE_REDUCTION', 0], ['noms.aideReductionMontant', 0],
+      ['AIDE_ACOMPTE', 1], ['noms.aideAcompteMontant', 1], ['AIDE_NATURE_ACOMPTE', 1], ['ECHEANCE_ACOMPTE', 1],
+      ['AIDE_VALIDITE', 2],
+      ['AIDE_RETENUE', 3], ['PHRASE_RETENUE', 3],
+    ];
+    const ouEst = (nom) => {
+      if (nom === 'AIDE_RETENUE') {
+        const m = /<Interrupteur\b/.exec(plat.slice(debutContenu));
+        return m && /\baide=\{AIDE_RETENUE\}/.test(baliseOuvrante(plat, debutContenu + m.index)) ? debutContenu + m.index : -1;
+      }
+      const re = new RegExp(String.raw`<Text style=\{s\.aide\}\s*>\{\s*${nom.replace('.', '\\.')}\s*\}</Text>`, 'g');
+      const t = [...plat.matchAll(re)].map((m) => m.index).filter((i) => i > debutContenu && i < finContenu);
+      return t.length === 1 ? t[0] : -1;
+    };
+    const bornes = titres.map((t) => t.i).concat(finContenu);
+    const places = AIDES_PAR_TITRE.map(([nom, k]) => ({ nom, k, i: ouEst(nom) }));
+    const malPlacees = places.filter(({ k, i }) => !(i > bornes[k] && i < bornes[k + 1])).map(({ nom }) => nom);
+    const dansLOrdre = places.every((p, j) => j === 0 || p.i > places[j - 1].i);
+    verifier('TC-2 : les quatre titres de la carte sont là, une fois chacun et dans l’ordre (Réduction, l’acompte, Validité de '
+      + 'l’offre, Retenue de garantie), aucun autre titre ; et chaque aide s’affiche sous LE SIEN, dans l’ordre attendu',
+    debutContenu > 0 && finContenu > debutContenu && json(titres.map((t) => t.texte)) === json(TITRES) && entetes === 4
+      && malPlacees.length === 0 && dansLOrdre,
+    `titres ${json(titres.map((t) => t.texte))}, ${entetes} en-tête(s) ; mal placées : ${malPlacees.join(', ') || '—'} ; `
+      + `ordre ${dansLOrdre ? 'juste' : 'faux'}`);
+
+    /* 3. Les éléments OUVERTS autour de chaque aide, depuis le début du
+       contenu : un fragment passe, tout autre élément est jugé. */
+    const ouverts = (jusqua) => {
+      const pile = [];
+      let i = debutContenu;
+      while (i < jusqua) {
+        if (plat[i] !== '<') { i += 1; continue; }
+        if (plat[i + 1] === '/') {
+          const f = plat.indexOf('>', i);
+          const nom = plat.slice(i + 2, f).trim();
+          let k = pile.length - 1;
+          while (k >= 0 && pile[k].nom !== nom) k -= 1;
+          pile.length = Math.max(k, 0);
+          i = f + 1;
+        } else if (plat[i + 1] === '>') {
+          pile.push({ nom: '', balise: '<>' }); i += 2;
+        } else if (/[A-Za-z]/.test(plat[i + 1])) {
+          const balise = baliseOuvrante(plat, i);
+          if (i + balise.length > jusqua) break;
+          if (!/\/>$/.test(balise)) pile.push({ nom: /^<([\w.]+)/.exec(balise)[1], balise });
+          i += balise.length;
+        } else i += 1;
+      }
+      return pile;
+    };
+    /* Un style qui ÉTALE quelque chose (`{ ...VOILE }`, ou `voile: { ...VOILE }`
+       dans la feuille de styles) est illisible ici : ce qu'il étale ne se lit
+       pas, et c'est par là qu'une opacité de 0,3 passait au vert (banc final
+       du lot 2a, N03). */
+    const stylesDe = (expr) => {
+      const e = sansEspaces(expr);
+      const corps = (nom) => (new RegExp(String.raw`\n\s{2}${nom}:\s*\{([^}]*)\}`).exec(carteSrc) || [])[1];
+      if (/^\{\{[\s\S]*\}\}$/.test(e)) return /\.\.\./.test(e) ? null : [e.slice(2, -2)];
+      const noms = /^\{\[?((?:\s*s\.\w+\s*,?)+)\]?\}$/.exec(e);
+      if (!noms) return null;
+      const r = noms[1].split(',').map((x) => x.trim()).filter(Boolean).map((x) => corps(x.slice(2)));
+      return r.every((x) => typeof x === 'string' && !/\.\.\./.test(x)) ? r : null;
+    };
+    const QUI_CACHE = /\b(opacity|height|maxHeight|minHeight|width|maxWidth|overflow|position|left|right|top|bottom|transform|display|zIndex|scale\w*)\s*:/;
+    const cachees = [];
+    places.forEach(({ nom, i }) => {
+      if (i < 0) return;
+      ouverts(i).forEach(({ nom: el, balise }) => {
+        if (el === '') return;
+        const style = /\bstyle=(\{[\s\S]*?\})(?=\s+\w+=|\s*\/?>$)/.exec(balise);
+        const corps = style ? stylesDe(style[1]) : [];
+        /* SEULE UNE VUE SIMPLE (banc final du lot 2a, N01) : une `<Modal
+           visible={false}>` n'a aucun style, aucune prop étalée, rien de ce
+           que la liste ci-dessous connaît — et l'aide du 8e jour n'était
+           jamais montrée, au vert. Un `ScrollView` horizontal décalé, une
+           `Animated.View`, un `Pressable` : la liste des façons de cacher ne
+           se ferme pas, celle de ce qui est PERMIS, si — un fragment, ou une
+           `View` au style anodin. */
+        const faute = el !== 'View' ? `un élément <${el}> (seuls un fragment ou une \`View\` simple peuvent envelopper une aide)`
+          : /\{\s*\.\.\./.test(balise) ? 'une prop étalée'
+          : /\bnumberOfLines\b/.test(balise) ? '`numberOfLines`'
+            : /\b(accessibilityElementsHidden|importantForAccessibility|aria-hidden)\b/.test(balise) ? 'cachée à VoiceOver'
+              : corps === null ? 'un style illisible ici'
+                : corps.some((c) => QUI_CACHE.test(c)) ? `un style qui cache (${corps.join(' ; ').slice(0, 80)})` : null;
+        if (faute) cachees.push(`${nom} dans <${el}> : ${faute}`);
+      });
+    });
+    verifier('TC-2 : entre le début du contenu de la carte et chaque aide, aucun élément ouvert autour d’elle ne la cache — '
+      + 'seulement un fragment ou une `View` simple (jamais une `Modal`, un `ScrollView`…), et ni opacité, ni taille, ni '
+      + '`overflow`, ni `position`, ni `transform`, ni `display`, ni style étalé, ni `numberOfLines`, ni de quoi la taire à '
+      + 'VoiceOver, ni prop étalée (le `ScrollView` et la carte elle-même ne sont pas jugés ici)',
+    debutContenu > 0 && places.every(({ i }) => i > 0) && cachees.length === 0,
+    cachees.join(' | ') || `${places.filter(({ i }) => i < 0).map(({ nom }) => nom).join(', ')}${FORME_ATTENDUE}`);
+  }
 
   /* c. LA LECTURE PAR LA VRAIE BASE, FAITE TOURNER (relecture CONTROLES-5,
         A02 à A04) : `rowToDevis` et `totauxDepuisBase` vivaient dans
@@ -6150,11 +6433,72 @@ console.log('\n  37. le lot 2a — la reprise « écran » : le refus définitif
     [[E('devis', 'enregistree', null, {}), E('g', 'echec', PLAF, grosV, { retire: true })], []],
     [[E('devis', 'enregistree', null, {}), E('p', 'echec', PLAF, petit), E('g', 'locale', null, { ...grosV, quantiteMilliemes: null }, { locale: true })], ['p']],
     [[E('devis', 'enregistree', null, {}), E('p', 'echec', PLAF, petit), E('g', 'enregistree', null, grosV, { retire: true })], ['p']],
+    /* UNE LIGNE QUI A UNE VERSION EN BASE, et que rien ne renverra
+       (relecture finale du lot 2a, ÉCRAN-F2) : la prédiction compte ce que
+       la BASE a — sinon l'en-tête « tiendrait », repartait, et la base le
+       refusait de nouveau après CHAQUE écriture réussie. La ligne locale
+       JAMAIS insérée, juste au-dessus, ne compte toujours pas. */
+    [[E('devis', 'echec', PLAF, {}), E('p', 'enregistree', null, petit),
+      E('g', 'locale', null, { ...grosV, prixUnitaireCentimes: null }, { locale: true, confirme: grosV })], []],
+    [[E('devis', 'echec', PLAF, {}), E('p', 'enregistree', null, petit),
+      E('g', 'echec', { message: 'Network request failed' }, petit, { confirme: grosV })], []],
+    [[E('devis', 'echec', PLAF, {}), E('p', 'enregistree', null, petit),
+      E('g', 'echec', { message: 'Network request failed' }, petit, { confirme: { ...grosV }, inconnues: ['prixUnitaireCentimes'] })], []],
+    [[E('devis', 'echec', PLAF, {}), E('p', 'enregistree', null, petit),
+      E('g', 'echec', { message: 'Network request failed' }, grosV, { retire: true, confirme: grosV })], []],
+    [[E('devis', 'echec', PLAF, {}), E('p', 'enregistree', null, petit),
+      E('g', 'echec', { message: 'Network request failed' }, grosV, { peutEtreInseree: true })], []],
+    /* …et la version en base PETITE : on renvoie (ce n'est pas un refus de principe). */
+    [[E('devis', 'echec', PLAF, {}), E('p', 'enregistree', null, petit),
+      E('g', 'locale', null, { ...grosV, prixUnitaireCentimes: null }, { locale: true, confirme: petit })], ['devis']],
+    /* L'en-tête lui-même, en échec pour une coupure sur la réduction : on ne sait pas laquelle la base a. */
+    [[E('devis', 'echec', { message: 'Network request failed' }, {}, { confirme: {}, inconnues: ['remiseCentiemes'] }),
+      E('p', 'echec', PLAF, petit)], []],
+    [[E('devis', 'echec', { message: 'Network request failed' }, {}, { confirme: {}, inconnues: ['objet'] }),
+      E('p', 'echec', PLAF, petit)], ['p']],
   ];
   const fautes = cas.filter(([entrees, attendu]) => json(D.clesARejouerApresLePlafond(entrees)) !== json(attendu));
-  verifier('`clesARejouerApresLePlafond` : seulement des refus du PLAFOND en échec ; rien si le devis voulu ne tiendrait pas ; une '
-    + 'ligne retirée ou locale ne compte pas dans le calcul ; un autre refus, une coupure, ne se renvoient pas ici',
+  verifier('`clesARejouerApresLePlafond` : seulement des refus du PLAFOND en échec ; rien si le devis ne tiendrait pas ; une ligne '
+    + 'retirée en cours, ou locale JAMAIS insérée, ne compte pas ; une ligne qui a une version EN BASE et que rien ne renverra '
+    + '(locale, en échec pour une coupure, un retrait qui n’a pas pu se faire, une insertion sans réponse) compte pour ce que la '
+    + 'base a — et rien ne part quand on ne sait pas ce qu’elle a (une colonne qui compte, partie sans réponse)',
   fautes.length === 0, fautes.map(([, a]) => json(a)).join(' | '));
+  /* …et PAR LA VRAIE FILE (les deux formes reproduites par la relecture) :
+     une ligne en base rendue « locale », et une ligne baissée dont l'écriture
+     s'est perdue. Trois petites lignes écrites ensuite : AUCUN renvoi, AUCUN
+     refus de plus de l'en-tête, AUCUN signal (`echecASignaler`). */
+  for (const variante of ['locale', 'coupure']) {
+    let coupe = false;
+    const { base, file, etat } = monter((op, normal) => {
+      if (coupe && op.quoi === 'ligne' && op.id === GROS.id) return Promise.reject(new Error('Network request failed'));
+      return normal();
+    });
+    /* `monter` renvoie déjà le plafond à chaque `totaux` (`etat.rejoues`) :
+       on n'écoute ici que les échecs, et ce qu'ils signaleraient. */
+    const signaux = { n: 0, refusEntete: 0 };
+    file.abonner((ev) => {
+      if (ev.type !== 'etat') return;
+      if (D.echecASignaler({ etat: ev.etat, automatique: false, retenu: ev.retenu === true })) signaux.n += 1;
+      if (ev.cle === 'devis' && ev.etat === 'echec') signaux.refusEntete += 1;
+    });
+    file.ligne(GROS); await auRepos(file);
+    file.devis({ remiseCentiemes: null }); await auRepos(file);
+    if (variante === 'locale') file.marquerLocale(GROS.id, { ...GROS, prixUnitaireCentimes: null });
+    else { coupe = true; file.ligne({ ...GROS, prixUnitaireCentimes: 100000 }); await auRepos(file); coupe = false; }
+    const r0 = { n: etat.n, rejoues: etat.rejoues.length, signaux: signaux.n, refus: signaux.refusEntete };
+    for (let k = 1; k <= 3; k += 1) {
+      file.ligne({ id: IDA(40 + k), ordre: 5000 + k, type: 'poste', designation: `Petit ${k}`, quantiteMilliemes: 1000, unite: 'forfait',
+        prixUnitaireCentimes: 10000, tauxTvaCentiemes: 2000 });
+      await auRepos(file);
+    }
+    const apres = { ecritures: etat.n - r0.n, renvois: etat.rejoues.length - r0.rejoues, signaux: signaux.n - r0.signaux,
+      refus: signaux.refusEntete - r0.refus, remise: await remiseEnBase(base), gros: file.etatDe(GROS.id) };
+    verifier(`la vraie file, une ligne en base ${variante === 'locale' ? 'rendue « locale »' : 'baissée sans réponse (une coupure)'} : trois `
+      + 'petites lignes écrites ensuite font TROIS écritures — aucun renvoi de l’en-tête, aucun refus de plus, aucune vibration ni '
+      + 'annonce —, et la base garde sa réduction',
+    apres.ecritures === 3 && apres.renvois === 0 && apres.signaux === 0 && apres.refus === 0 && apres.remise === 5000
+      && apres.gros === (variante === 'locale' ? 'locale' : 'echec'), json(apres));
+  }
 
   /* e. CE QUE L'ÉCRAN FAIT DE TOUT CELA — lu dans la saisie, sans ses
         commentaires. Chaque appel est cherché DANS sa fonction. */
@@ -6207,7 +6551,7 @@ console.log('\n  37. le lot 2a — la reprise « écran » : le refus définitif
     && /if \(ev\.cle !== 'devis'\) \{\s*poserDefinitif\(ev\.cle, ev\.etat === 'echec' \? refusDeLaLigne\(\{\s*definitif: estUnRefusDefinitif\(ev\.erreur\), devisEnBase: !!\(fileRef\.current && fileRef\.current\.devisEnBase\(\)\),\s*\}\) : null\);\s*\}/.test(brancheEtat)
     && (brancheEtat.match(/poserDefinitif\(/g) || []).length === 1
     && /rejouerLePlafond\(\)/.test(brancheTotaux)
-    && /const f = fileRef\.current;\s*rejouerLesRefusDuPlafond\(f\)/.test(corpsFleche(S, 'const rejouerLePlafond = () =>'))
+    && /const f = fileRef\.current;\s*if \(f\) renvois\.rejouer\(f\);/.test(corpsFleche(S, 'const rejouerLePlafond = () =>'))
     && /setEtats\(sans\);/.test(brancheSupprimee) && /setPhrasesEchec\(sans\);/.test(brancheSupprimee) && /poserDefinitif\(ev\.cle, null\);/.test(brancheSupprimee));
   const enregistrer = corpsFleche(S, 'const enregistrerLigne = (valeurs, erreursSaisie = {}) =>');
   const iRenvoi = enregistrer.indexOf('renvoyerLaLigne(');
@@ -6258,8 +6602,20 @@ console.log('\n  37. le lot 2a — la reprise « écran » : le refus définitif
       + 'ne retient pour l’annonce qu’une clé qui n’est pas déjà enregistrée',
     /const echecs = echecsDeLaFile\(f\.entreesVoulues\(\)\.map\(\(x\) => \(\{ \.\.\.x, erreur: f\.erreurDe\(x\.cle\) \}\)\), \{\s*devisEnBase: f\.devisEnBase\(\), estDefinitif: estUnRefusDefinitif, phraseDe: messageDEcritureDuDevis,\s*\}\);/.test(ouverture)
       && /setPhrasesEchec\(echecs\.phrases\);/.test(ouverture) && /definitifsRef\.current = echecs\.definitifs;/.test(ouverture)
-      && /rejouerLesRefusDuPlafond\(f\)\.forEach\(\(c\) => \{ if \(f\.etatDe\(c\) !== 'enregistree'\) rejoues\.current\.add\(c\); \}\);/
-        .test(corpsFleche(S, 'const rejouerLePlafond = () =>')));
+      && /const \[renvois\] = useState\(creerRenvoisAutomatiques\);/.test(S)
+      && /const f = fileRef\.current;\s*if \(f\) renvois\.rejouer\(f\);/.test(corpsFleche(S, 'const rejouerLePlafond = () =>'))
+      /* …et `rejouer` ne retient pas une clé déjà enregistrée au retour, FAIT TOURNER sur une file factice. */
+      && (() => {
+        const r = D.creerRenvoisAutomatiques();
+        const faux = {
+          entreesVoulues: () => [{ cle: 'devis', etat: 'echec' }, { cle: 'L', etat: 'echec' }],
+          erreurDe: () => Object.assign(new Error('x "devis_plafond_check"'), { code: '23514' }),
+          reessayer: () => {}, etatDe: (c) => (c === 'devis' ? 'enregistree' : 'en_cours'), gestesDe: () => 0,
+        };
+        const parti = r.rejouer(faux);
+        return Array.isArray(parti) && !r.issue(faux, { cle: 'devis', etat: 'enregistree' })
+          && (parti.includes('L') ? r.issue(faux, { cle: 'L', etat: 'enregistree' }) : true);
+      })());
   }
 }
 
@@ -6386,29 +6742,167 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
   /* f. « RÉESSAYER » NE RENVOIE PAS UN REFUS DÉFINITIF (N28, N29) : un
         second bouton qui renvoyait l'en-tête dans la bande, sans la garde,
         passait ; la carte qui proposait « Réessayer » sur TOUT échec (elle
-        lisait `echec` au lieu de `reessayable`) aussi. Chaque appel qui
-        renvoie l'en-tête (`reessayer('devis')`) est sous la garde du refus
-        définitif, ou il est le `onReessayer` de la carte, dont l'écran pose
-        `reessayable` avec cette garde ; et la carte prend `reessayable`
-        TEL QUEL. */
+        lisait `echec` au lieu de `reessayable`) aussi.
+
+        ET LE CONTRÔLE NE VOYAIT QU'UNE ÉCRITURE (relecture finale du lot 2a,
+        TC-1) : il ne comptait que `reessayer('devis')`, apostrophes et clé en
+        toutes lettres. La bande des lignes retirées appelait `reessayer()`
+        SANS clé — qui renvoie l'en-tête et les lignes refusés pour de bon —,
+        et `reessayer("devis")` ou `reessayerStable('devis')` hors garde
+        passaient au vert. Il relève désormais CHAQUE appel de la file, quelle
+        que soit l'écriture de l'argument, et chacun doit être l'un des trois
+        permis : la rangée (`reessayerStable(id)`, dont `EtatDeLaRangee` ne
+        se sert que sous `!definitif` — section 37 e), la bande de l'en-tête
+        sous la garde, la carte « Conditions ». La bande des retraits passe
+        par `renvoyerLesRetraits`, FAIT TOURNER plus bas sur une vraie file. */
   const S38 = ECR.saisie;
   const blanchi = S38.replace(/`(?:[^`\\]|\\.)*`/g, (m) => '`' + ' '.repeat(m.length - 2) + '`')
-    .replace(/'(?:[^'\\\n]|\\.)*'/g, (m) => "'" + ' '.repeat(m.length - 2) + "'");
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, (m) => "'" + ' '.repeat(m.length - 2) + "'")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, (m) => '"' + ' '.repeat(m.length - 2) + '"');
   const finDeParenthese = (t, i) => { let p = 0; for (let j = i; j < t.length; j += 1) { if (t[j] === '(') p += 1; if (t[j] === ')') { p -= 1; if (p === 0) return j; } } return -1; };
   const gardes = [...blanchi.matchAll(/\{!estUnRefusDefinitif\(attente\.devisErreur\) && \(/g)]
     .map((m) => [m.index, finDeParenthese(blanchi, m.index + m[0].length - 1)]);
   const balise38 = balises(S38, 'ConditionsDevis')[0] || '';
   const iBalise = balise38 ? S38.indexOf(balise38) : -1;
-  const renvois = [...S38.matchAll(/\breessayer\(\s*'devis'\s*\)/g)].map((m) => m.index);
-  const sousGarde = renvois.filter((i) => gardes.some(([a, b]) => i > a && i < b));
-  const dansLaCarte = renvois.filter((i) => iBalise >= 0 && i > iBalise && i < iBalise + balise38.length);
-  const nus = renvois.filter((i) => !sousGarde.includes(i) && !dansLaCarte.includes(i)).map((i) => sansEspaces(S38.slice(Math.max(0, i - 90), i + 20)));
-  verifier('chaque renvoi de l’EN-TÊTE (`reessayer(\'devis\')`) est sous la garde du refus définitif (la bande) ou il est le '
-    + '`onReessayer` de la carte, dont `reessayable` porte cette garde — aucun autre bouton ne renvoie un refus définitif',
-  renvois.length === 2 && sousGarde.length === 1 && dansLaCarte.length === 1 && nus.length === 0
+  /* TOUS les appels à la file, l'argument écrit comme on voudra — et aucun
+     accès détourné (`const { reessayer } = …`, `f['reessayer']`). */
+  const appelsFile = [...blanchi.matchAll(/\.\s*reessayer\b/g)].map((m) => m.index);
+  const detournes = [...blanchi.matchAll(/(?<![.\w])reessayer\b/g)].length + (S38.match(/\[\s*['"`]reessayer['"`]\s*\]/g) || []).length;
+  const appelDe = (i) => sansEspaces(S38.slice(i, finDeParenthese(S38, S38.indexOf('(', i)) + 1))
+    .replace(/^\.reessayer\(\s*["`]devis["`]\s*\)$/, ".reessayer('devis')");
+  const DEF_STABLE = 'const reessayerStable = useCallback((id) => { if (fileRef.current) fileRef.current.reessayer(id); }, []);';
+  const iStable = sansEspaces(S38).indexOf(DEF_STABLE);
+  const classe = appelsFile.map((i) => {
+    const appel = appelDe(i);
+    if (appel === ".reessayer('devis')" && gardes.some(([a, b]) => i > a && i < b)) return 'bande';
+    if (appel === ".reessayer('devis')" && iBalise >= 0 && i > iBalise && i < iBalise + balise38.length) return 'carte';
+    if (appel === '.reessayer(id)' && /const reessayerStable = useCallback\(\(id\) => \{ if \(fileRef\.current\) fileRef\.current$/.test(sansEspaces(S38.slice(Math.max(0, i - 120), i)))) return 'rangee';
+    return `NU : ${appel} — ${sansEspaces(S38.slice(Math.max(0, i - 80), i))}`;
+  });
+  const nus = classe.filter((c) => c.startsWith('NU'));
+  /* `reessayerStable` : sa définition, et deux passages `onReessayer={reessayerStable}` — jamais appelé avec une clé. */
+  const stables = [...blanchi.matchAll(/\breessayerStable\b/g)].map((m) => sansEspaces(S38.slice(m.index - 14, m.index + 'reessayerStable'.length + 1)));
+  const passages = stables.filter((t) => t === 'onReessayer={reessayerStable}').length;
+  verifier('CHAQUE renvoi par la file (`.reessayer(`, quelle que soit l’écriture de l’argument) est l’un des trois permis : la bande de '
+    + 'l’en-tête sous la garde du refus définitif, la carte « Conditions » (dont `reessayable` porte cette garde), la rangée '
+    + '(`reessayerStable(id)`, passé tel quel aux rangées) — aucun `reessayer()` sans clé, aucun accès détourné, aucun '
+    + '`reessayerStable(…)` appelé à la main',
+  appelsFile.length === 3 && json(classe.slice().sort()) === json(['bande', 'carte', 'rangee']) && nus.length === 0 && detournes === 0
+    && iStable >= 0 && stables.length === 3 && passages === 2
     && /reessayable: !!attente\.devisErreur && !estUnRefusDefinitif\(attente\.devisErreur\)/.test(balise38)
-    && /onReessayer=\{\(\) => fileRef\.current && fileRef\.current\.reessayer\('devis'\)\}/.test(balise38),
-  `${renvois.length} renvoi(s), ${sousGarde.length} sous garde, ${dansLaCarte.length} dans la carte ; nus : ${nus.join(' | ') || '—'}`);
+    && /onReessayer=\{\(\) => fileRef\.current && fileRef\.current\.reessayer\((['\"`])devis\1\)\}/.test(balise38),
+  `${appelsFile.length} appel(s) : ${classe.join(' | ')} ; reessayerStable : ${json(stables)} ; détournés ${detournes}`);
+  {
+    /* …ET PAR AUCUNE AUTRE PORTE (banc final du lot 2a, N13 à N15). Trois
+       façons de renvoyer un refus définitif passaient encore au vert, contre
+       ce contrôle comme contre les 56 :
+       - un accès CALCULÉ sur la file (`fileRef.current['rees' + 'sayer']()`) :
+         une chaîne recousue ne se lit pas ;
+       - une fonction d'un AUTRE fichier qui renvoie tout pour l'écran
+         (`toutRenvoyer(file)` → `file.reessayer()`, dans devis.js) ;
+       - un second appel de `renvoyerLesRetraits` SANS le refus définitif.
+       D'où, sur le code sans ses commentaires ni ses chaînes : aucun accès
+       calculé sur la file (l'écran et devis.js) ; dans TOUT `src/`,
+       `.reessayer(` n'est appelé que par l'écran (les trois permis, plus
+       haut) et, dans devis.js, par les deux seules fonctions qui ont à le
+       faire (`rejouerLesRefusDuPlafond`, `renvoyerLesRetraits`) ; et ces
+       deux-là ne sont appelées, dans tout `src/`, qu'une fois chacune — par
+       l'écran (la bande des retraits est vérifiée plus bas, avec son refus
+       définitif). */
+    const vider38 = (t) => t.replace(/`(?:[^`\\]|\\.)*`/g, (m) => '`' + ' '.repeat(m.length - 2) + '`')
+      .replace(/'(?:[^'\\\n]|\\.)*'/g, (m) => "'" + ' '.repeat(m.length - 2) + "'")
+      .replace(/"(?:[^"\\\n]|\\.)*"/g, (m) => '"' + ' '.repeat(m.length - 2) + '"');
+    const SAISIE38 = 'src/screens/SaisieDevisScreen.js';
+    const DEVIS38 = 'src/lib/devis.js';
+    const fichiers38 = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { cwd: RACINE, encoding: 'utf8' })
+      .stdout.split('\n').filter((f) => /\.(js|jsx|ts|tsx)$/.test(f));
+    const plats38 = Object.fromEntries(fichiers38.map((f) => [f, vider38(sansCommentairesJs(lire(f)))]));
+    const nomsFile = ['fileRef\\.current', ...[...(plats38[SAISIE38] || '').matchAll(/\bconst\s+(\w+)\s*=\s*fileRef\.current\b/g)].map((m) => m[1])];
+    const calcules = [
+      ...nomsFile.flatMap((n) => [...(plats38[SAISIE38] || '').matchAll(new RegExp(String.raw`(?<![\w.$])${n}\s*(?:\?\.)?\s*\[`, 'g'))]
+        .map((m) => `l’écran : ${sansEspaces((plats38[SAISIE38] || '').slice(m.index, m.index + 40))}`)),
+      ...[...(plats38[DEVIS38] || '').matchAll(/(?<![\w.$])(?:file|f)\s*(?:\?\.)?\s*\[/g)]
+        .map((m) => `devis.js : ${sansEspaces((plats38[DEVIS38] || '').slice(m.index, m.index + 40))}`),
+    ];
+    const permis = ['rejouerLesRefusDuPlafond', 'renvoyerLesRetraits'].map((n) => {
+      const corps = corpsDeFonction(plats38[DEVIS38] || '', n) || '';
+      const a = corps ? (plats38[DEVIS38] || '').indexOf(corps) : -1;
+      return [a, a + corps.length];
+    });
+    const sitesHors = fichiers38.filter((f) => f !== SAISIE38).flatMap((f) => [...plats38[f].matchAll(/\.\s*reessayer\s*\(/g)]
+      .filter((m) => !(f === DEVIS38 && permis.some(([a, b]) => a >= 0 && m.index > a && m.index < b)))
+      .map((m) => `${f} : ${sansEspaces(plats38[f].slice(Math.max(0, m.index - 50), m.index + 20))}`));
+    const appelsDe = (nom) => fichiers38.flatMap((f) => [...plats38[f].matchAll(new RegExp(String.raw`(?<![\w.$])${nom}\s*\(`, 'g'))]
+      .filter((m) => !/function\s+$/.test(plats38[f].slice(Math.max(0, m.index - 10), m.index))).map(() => f));
+    const appelsRejouer = appelsDe('rejouerLesRefusDuPlafond');
+    /* Depuis N1, le renvoi du plafond passe par `creerRenvoisAutomatiques`
+       (devis.js), que l'écran tient UNE fois (`useState`) : l'appel de
+       `rejouerLesRefusDuPlafond` vit DANS son corps, et `renvois.rejouer(`
+       n'est écrit qu'une fois, dans l'écran. */
+    const corpsRenvois = corpsDeFonction(plats38[DEVIS38] || '', 'creerRenvoisAutomatiques') || '';
+    const rejouerDansRenvois = (corpsRenvois.match(/(?<![\w.$])rejouerLesRefusDuPlafond\s*\(/g) || []).length === 1;
+    const renvoisDansEcran = fichiers38.flatMap((f) => [...plats38[f].matchAll(/\.\s*rejouer\s*\(/g)].map(() => f));
+    const appelsRetraits = appelsDe('renvoyerLesRetraits');
+    verifier('« Réessayer » ne passe par AUCUNE autre porte : aucun accès calculé sur la file (`fileRef.current[…]`, `file[…]`) ; dans '
+      + 'tout `src/`, `.reessayer(` n’est appelé que par l’écran et, dans devis.js, par `rejouerLesRefusDuPlafond` et '
+      + '`renvoyerLesRetraits` seules ; et ces deux-là ne sont appelées qu’une fois chacune, par l’écran',
+    fichiers38.length > 50 && !!plats38[SAISIE38] && !!plats38[DEVIS38] && calcules.length === 0 && sitesHors.length === 0
+      && permis.every(([a]) => a >= 0) && json(appelsRejouer) === json([DEVIS38]) && rejouerDansRenvois
+      && json(renvoisDansEcran) === json([SAISIE38]) && json(appelsRetraits) === json([SAISIE38]),
+    `calculés ${json(calcules)} ; hors permis ${json(sitesHors)} ; rejouer ${json(appelsRejouer)} (dans creerRenvoisAutomatiques : `
+      + `${rejouerDansRenvois}) ; .rejouer( ${json(renvoisDansEcran)} ; retraits ${json(appelsRetraits)}`);
+  }
+  /* …la bande des retraits passe par `renvoyerLesRetraits`, avec le refus
+     définitif de l'écran, sous `retraitsRenvoyables` ; et la règle TOURNE
+     sur une vraie file : l'en-tête et une ligne refusés par le plafond, un
+     retrait coupé du réseau — SEUL le retrait repart. */
+  const iRetraits = S38.indexOf('attente.retraitsEnEchec > 0 && (');
+  const bandeRetraits = iRetraits >= 0 ? sansEspaces(S38.slice(iRetraits, finDeParenthese(S38, S38.indexOf('(', iRetraits + 'attente.retraitsEnEchec > 0 && '.length)) + 1)) : '';
+  const journalTc1 = [];
+  const plafondTc1 = () => Object.assign(new Error('new row for relation "devis" violates check constraint "devis_plafond_check"'), { code: '23514' });
+  let couperTc1 = true;
+  const baseTc1 = new Map([['L1', { id: 'L1' }], ['L2', { id: 'L2' }]]);
+  const ligneTc1 = (id, plus = {}) => ({ id, ordre: 1000, type: 'poste', designation: 'Chape', quantiteMilliemes: 1000, unite: 'm2',
+    prixUnitaireCentimes: 4500, tauxTvaCentiemes: 1000, offert: false, ...plus });
+  const fileTc1 = F.creerFileEcriture({
+    devisId: 'D1', devis: { source: 'manuelle', remiseCentiemes: 5000 }, devisEnBase: true, lignesEnBase: [ligneTc1('L1'), ligneTc1('L2')],
+    ecrire: async (op) => {
+      journalTc1.push(`${op.action} ${op.quoi}${op.quoi === 'ligne' ? ` ${op.id}` : ''}`);
+      if (op.quoi === 'devis' && op.action === 'modifier') throw plafondTc1();
+      if (op.quoi === 'ligne' && op.id === 'L3') throw plafondTc1();
+      if (op.action === 'supprimer' && couperTc1) throw new TypeError('Network request failed');
+      return null;
+    },
+    relireUn: async ({ quoi, id }) => (quoi === 'ligne' ? (baseTc1.get(id) || null) : { id }),
+    avecDelai: ERR.avecDelai, delaiMs: 40, nouvelIdentifiant: () => null, paires: D.PAIRES_DEVIS, aPart: D.colonnesDuRefus,
+  });
+  fileTc1.devis({ remiseCentiemes: null });
+  fileTc1.ligne(ligneTc1('L3', { prixUnitaireCentimes: 999999999 }));
+  fileTc1.retirerLigne('L2');
+  await new Promise((ok) => { setTimeout(ok, 300); });
+  const avantTc1 = { devis: fileTc1.etatDe('devis'), l3: fileTc1.etatDe('L3'), l2: fileTc1.etatDe('L2'), retiree: fileTc1.retiree('L2'),
+    definitifs: [ERR.estUnRefusDefinitif(fileTc1.erreurDe('devis')), ERR.estUnRefusDefinitif(fileTc1.erreurDe('L3'))] };
+  const n0Tc1 = journalTc1.length;
+  couperTc1 = false;
+  const renvoyesTc1 = D.renvoyerLesRetraits(fileTc1, { estDefinitif: ERR.estUnRefusDefinitif });
+  await new Promise((ok) => { setTimeout(ok, 300); });
+  const partisTc1 = journalTc1.slice(n0Tc1);
+  verifier('« Réessayer » de la bande des lignes RETIRÉES ne renvoie QUE les retraits : `renvoyerLesRetraits(fileRef.current, { estDefinitif: '
+    + 'estUnRefusDefinitif })`, sous `retraitsRenvoyables` — et, FAIT TOURNER sur une vraie file (l’en-tête et une ligne refusés par le '
+    + 'plafond, un retrait coupé), seul le retrait repart ; l’en-tête et la ligne restent refusés, sans une écriture de plus',
+  /attente\.retraitsRenvoyables > 0 && \(\s*<BtnOutline label="Réessayer" onPress=\{\(\) => fileRef\.current && renvoyerLesRetraits\(fileRef\.current, \{ estDefinitif: estUnRefusDefinitif \}\)\} \/>\s*\)/.test(bandeRetraits)
+    && !/\.reessayer\(/.test(bandeRetraits)
+    && avantTc1.devis === 'echec' && avantTc1.l3 === 'echec' && avantTc1.l2 === 'echec' && avantTc1.retiree && avantTc1.definitifs.every(Boolean)
+    && json(renvoyesTc1) === json(['L2']) && json(partisTc1) === json(['supprimer ligne L2'])
+    && fileTc1.etatDe('devis') === 'echec' && fileTc1.etatDe('L3') === 'echec' && fileTc1.etatDe('L2') === null,
+  `${json(avantTc1)} → renvoyés ${json(renvoyesTc1)}, partis ${json(partisTc1)} ; bande : ${bandeRetraits.slice(0, 220)}`);
+  /* …et `retraitsARenvoyer` laisse un retrait refusé pour de bon, l'en-tête et une ligne non retirée. */
+  const ER = (cle, etat, erreur, x = {}) => ({ cle, etat, erreur, voulu: {}, retire: false, ...x });
+  const casRetraits = D.retraitsARenvoyer([ER('devis', 'echec', plafondTc1(), { retire: true }), ER('a', 'echec', { message: 'Network request failed' }, { retire: true }),
+    ER('b', 'echec', plafondTc1(), { retire: true }), ER('c', 'echec', { message: 'Network request failed' }), ER('d', 'en_cours', null, { retire: true })],
+  { estDefinitif: ERR.estUnRefusDefinitif });
+  verifier('`retraitsARenvoyer` : un retrait coupé du réseau, oui ; un retrait refusé pour de bon, l’en-tête, une ligne non retirée, un '
+    + 'retrait en cours, non', json(casRetraits) === json(['a']), json(casRetraits));
   const clesReessayable = [...carte38.matchAll(/\breessayable\s*:\s*([^,\n]+),/g)].map((m) => sansEspaces(m[1]));
   verifier('…et la carte prend `reessayable` de l’écran TEL QUEL (`!!(etatEcriture && etatEcriture.reessayable)`), une seule fois — '
     + 'jamais `echec`, qui proposerait « Réessayer » sur un refus définitif',
@@ -6416,17 +6910,42 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
 
   /* g. CE QUE DIT LA GARDE EN PARTANT (R1d) : « Opus les renverra tout
         seul » ajouté à la phrase des lignes en échec passait — or rien
-        n'est renvoyé après le départ. Le bilan, ENTIER : les lignes qui
-        n'ont pas pu partir, celles dont l'envoi continue SANS garantie, et
-        sinon la phrase de l'en-tête. */
-  const BILAN = "{[ garde.enEchec > 1 ? `${garde.enEchec} lignes n’ont pas pu être enregistrées.` : null, garde.enEchec === 1 ? 'Une ligne n’a pas pu être enregistrée.' : null, garde.enCours > 1 ? `${garde.enCours} lignes ne sont pas encore enregistrées : l’envoi continue, mais rien ne garantit qu’il aboutira.` : null, garde.enCours === 1 ? 'Une ligne n’est pas encore enregistrée : l’envoi continue, mais rien ne garantit qu’il aboutira.' : null, !garde.enEchec && !garde.enCours ? phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur }) : null, ].filter(Boolean).join(' ')";
+        n'est renvoyé après le départ. ET (relecture finale du lot 2a,
+        ÉCRAN-F1) : l'en-tête n'était dit que quand AUCUNE ligne n'était en
+        cause, et le bouton disait « Quitter sans elles » pour un en-tête
+        seul. La règle vit dans `bilanDeLaGarde` (devis.js), FAITE TOURNER
+        ici, phrase ENTIÈRE et bouton, cas par cas ; l'écran la prend telle
+        quelle. */
+  const PH = D.phraseEchecDuDevis({ enBase: true, erreur: { code: '23514', message: 'x "devis_plafond_check"' } });
+  const GARDES = [
+    [{ enEchec: 2 }, '2 lignes n’ont pas pu être enregistrées.', 'Quitter sans elles'],
+    [{ enEchec: 1 }, 'Une ligne n’a pas pu être enregistrée.', 'Quitter sans elles'],
+    [{ enCours: 2 }, '2 lignes ne sont pas encore enregistrées : l’envoi continue, mais rien ne garantit qu’il aboutira.', 'Quitter quand même'],
+    [{ enCours: 1 }, 'Une ligne n’est pas encore enregistrée : l’envoi continue, mais rien ne garantit qu’il aboutira.', 'Quitter quand même'],
+    [{ entete: PH }, 'La réduction n’a pas pu être changée.', 'Quitter sans l’enregistrer'],
+    [{ entete: D.ENTETE_EN_COURS }, 'L’en-tête du devis n’est pas encore enregistré : l’envoi continue, mais rien ne garantit qu’il aboutira.', 'Quitter quand même'],
+    [{ enEchec: 1, entete: PH }, 'Une ligne n’a pas pu être enregistrée. La réduction n’a pas pu être changée.', 'Quitter quand même'],
+    [{ enEchec: 1, enCours: 1 }, 'Une ligne n’a pas pu être enregistrée. Une ligne n’est pas encore enregistrée : l’envoi continue, mais rien ne garantit qu’il aboutira.', 'Quitter quand même'],
+  ];
+  const gardesFausses = GARDES.filter(([arg, phrase, quitter]) => { const r = D.bilanDeLaGarde(arg); return r.phrase !== phrase || r.quitter !== quitter; })
+    .map(([arg]) => `${json(arg)} → ${json(D.bilanDeLaGarde(arg))}`);
+  verifier('`bilanDeLaGarde`, FAITE TOURNER : la garde dit, en partant, EXACTEMENT ce qui n’est pas en base — les lignes refusées, celles dont '
+    + 'l’envoi continue SANS garantie, et l’EN-TÊTE même avec des lignes (refusé, ou encore en route) ; jamais un renvoi promis après le '
+    + 'départ ; le bouton ne dit « sans elles » que pour des lignes, « sans l’enregistrer » pour l’en-tête seul et refusé, « quand même » '
+    + 'quand un envoi continue',
+  gardesFausses.length === 0 && GARDES.every(([arg]) => !/renverra|tout seul/.test(D.bilanDeLaGarde(arg).phrase)), gardesFausses.join(' | '));
+  const bilanEcran = corpsFleche(S38, 'const bilan = () =>');
   const iBilan = S38.indexOf("garde.phase === 'bilan' && garde.incompletes.length === 0 && garde.enteteRefuse.length === 0");
-  const aB = iBilan >= 0 ? S38.indexOf('{[', iBilan) : -1;
-  const bB = aB >= 0 ? S38.indexOf(".filter(Boolean).join(' ')", aB) : -1;
-  const bilan = bB > 0 ? sansEspaces(S38.slice(aB, bB + ".filter(Boolean).join(' ')".length)) : '';
-  verifier('la garde de sortie dit, en partant, EXACTEMENT ce qui est vrai : les lignes qui n’ont pas pu être enregistrées, celles dont '
-    + 'l’envoi continue SANS garantie, sinon la phrase de l’en-tête — jamais un renvoi promis après le départ',
-  bilan === BILAN, bilan ? bilan.slice(0, 300) : 'bilan introuvable');
+  const bandeBilan = iBilan >= 0 ? sansEspaces(S38.slice(iBilan, S38.indexOf('</View>\n        )}', iBilan))) : '';
+  verifier('…et la saisie la prend TELLE QUELLE : `bilan()` appelle `bilanDeLaGarde({ enEchec, enCours, entete })` — l’en-tête refusé par '
+    + '`phraseEchecDuDevis` avec ce qui reste tenu à part, ou `ENTETE_EN_COURS` —, la bande écrit `garde.texte`, le bouton `garde.quitter` ; '
+    + 'aucune phrase de bilan écrite dans l’écran',
+  /const \{ phrase, quitter \} = bilanDeLaGarde\(\{ enEchec, enCours, entete \}\);/.test(bilanEcran)
+    && /if \(etatEntete === 'echec'\) \{\s*entete = phraseEchecDuDevis\(\{ enBase: f\.devisEnBase\(\), erreur: f\.erreurDe\('devis'\), retenue: f\.retenueDe\('devis'\) \}\);\s*\} else if \(etatEntete === 'en_cours'\) entete = ENTETE_EN_COURS;/.test(bilanEcran)
+    && /texte: phrase, quitter/.test(bilanEcran)
+    && /<Text style=\{s\.bandeTexte\}>\{garde\.texte\}<\/Text>/.test(bandeBilan) && /<BtnOutline label=\{garde\.quitter\} onPress=\{\(\) => repondreGarde\(true\)\} \/>/.test(bandeBilan)
+    && !/n’ont pas pu être enregistrées|Quitter sans elles|Quitter quand même/.test(S38),
+  bandeBilan.slice(0, 260));
 
   /* h. LA MESURE AU NAVIGATEUR NE REDEVIENT PAS UNE TAUTOLOGIE (É11) :
         `mesure-devis` vérifie que rien n'est pré-choisi en lisant les DEUX
@@ -6446,6 +6965,428 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
     && !/\|\|/.test(appel.slice(appel.lastIndexOf(', arrhesChoisies')))
     && !/getByRole\(\s*'radio'\s*,\s*\{\s*name:[^)]*(?:arrhes|acompte)/i.test(M38),
   appel.slice(-160));
+  {
+    /* i. LES AIDES QUE LA MESURE CHERCHE SONT CELLES DE `devis.js` (banc
+          final du lot 2a, N42). `mesure-devis` écrit les neuf aides EN TOUTES
+          LETTRES — exprès, pour ne pas devenir une tautologie : il compare
+          l'écran à SA copie. Mais rien ne tenait cette copie : « expressément »
+          retiré de la mesure passait au vert ici (et la mesure n'est pas dans
+          `npm run verifier`). La copie de la mesure est donc comparée, mot
+          pour mot, aux constantes de `devis.js` (espaces insécables lues comme
+          des espaces, comme la mesure les lit à l'écran), dans l'ordre et sous
+          les titres de la carte. */
+    const blocA = (/const ATTENDUES = \[([\s\S]*?)\n {2}\];/.exec(M38) || [])[1] || '';
+    const lues = [...blocA.matchAll(/\{\s*titre:\s*'([^']*)',\s*aide:\s*((?:'(?:[^'\\]|\\.)*'\s*\+?\s*)+)\}/g)]
+      .map((m) => [m[1], [...m[2].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((x) => x[1]).join('')]);
+    const plat2 = (t) => String(t || '').replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
+    const REFERENCE = [['Réduction', D.AIDE_REDUCTION], ['Réduction', D.AIDE_REDUCTION_HT], ['Acompte', D.AIDE_ACOMPTE],
+      ['Acompte', D.AIDE_ACOMPTE_TTC], ['Acompte', D.AIDE_NATURE_ACOMPTE], ['Acompte', D.ECHEANCE_ACOMPTE],
+      ['Validité de l’offre', D.AIDE_VALIDITE], ['Retenue de garantie', D.AIDE_RETENUE], ['Retenue de garantie', D.PHRASE_RETENUE]];
+    const ecarts = REFERENCE.map(([t, a], k) => (lues[k] && lues[k][0] === t && plat2(lues[k][1]) === plat2(a) ? null
+      : `${k + 1} (${t}) : « ${lues[k] ? plat2(lues[k][1]).slice(0, 80) : '—'} »`)).filter(Boolean);
+    verifier('`mesure-devis` cherche à l’écran EXACTEMENT les neuf aides de `devis.js` — sa copie écrite en toutes lettres est comparée '
+      + 'mot pour mot aux constantes, dans l’ordre et sous leurs titres (une mesure qui perdrait « expressément » accepterait l’ancienne aide)',
+    lues.length === REFERENCE.length && ecarts.length === 0, `${lues.length} aide(s) lue(s) ; écarts : ${ecarts.join(' | ') || '—'}`);
+  }
+}
+
+console.log('\n  39. la relecture finale du 04/11 — l’en-tête refusé n’emporte plus le reste, un renvoi automatique se tait, FAITS TOURNER');
+{
+  /* POURQUOI (relecture finale du lot 2a, ÉCRAN-F1 = TC-4, F2, F3, F4) :
+     après un refus du plafond sur la réduction, l'objet tapé ensuite
+     partait AVEC elle, était refusé avec elle, n'était nommé nulle part,
+     et « Mes devis » l'affichait quand même ; un renvoi automatique refusé
+     vibrait ; VoiceOver entendait « La réduction est maintenant
+     enregistrée » quand elle venait d'être RETIRÉE ; la gélule de l'option
+     refusée avait perdu son remplissage. Tout est FAIT TOURNER, par la
+     VRAIE file configurée comme `api.js` la configure. */
+  const IDZ = (k) => `de0000ee-0000-4000-8000-0000000039${String(k).padStart(2, '0')}`;
+  const API39 = sansCommentairesJs(lire('src/lib/api.js'));
+  verifier('`api.js` donne à la file ce qu’un refus met à part : `aPart: colonnesDuRefus` (devis.js) — et `colonnesDuRefus` ne nomme que la '
+    + 'paire de la réduction, et seulement pour un refus du plafond',
+  /paires: PAIRES_DEVIS,\s*aPart: colonnesDuRefus,\s*\}\);/.test(API39)
+    && json(D.colonnesDuRefus({ code: '23514', message: 'x "devis_plafond_check"' })) === json(['remiseCentiemes', 'remiseCentimes'])
+    && D.colonnesDuRefus({ code: '23514', message: 'x "devis_validite_check"' }) === null
+    && D.colonnesDuRefus({ message: 'Network request failed' }) === null && D.colonnesDuRefus(null) === null);
+
+  /* UNE BOUCLE DE RENVOI NE TIENT PAS LE CONTRÔLE SANS FIN (banc final du
+     lot 2a, N73) : les deux barrières de la file retirées (les colonnes
+     tenues repartaient avec l'objet, et `dejaReparti` ne bornait plus le
+     départ « sans la réduction »), le renvoi était refusé pareil, à
+     l'infini — ce contrôle ne finissait JAMAIS, donc ne rougissait jamais,
+     et `npm run verifier` n'a pas de délai par contrôle. Au-delà de
+     `PLAFOND39` écritures, le faux serveur refuse tout (une coupure, qui ne
+     relance rien), et le compte des emballements est relevé à la fin. */
+  const PLAFOND39 = 300;
+  let emballements39 = 0;
+  let ecrituresMax39 = 0;
+  const monter39 = (intercepter = null) => {
+    const base = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
+    const etat = { n: 0, ops: [], evenements: [], signaux: 0, annonces: [], renvois: D.creerRenvoisAutomatiques() };
+    const file = F.creerFileEcriture({
+      devisId: IDZ(1), devis: { objet: 'Ancien objet', source: 'manuelle', remiseCentiemes: 5000 }, devisEnBase: false,
+      ecrire: (op) => {
+        etat.n += 1;
+        ecrituresMax39 = Math.max(ecrituresMax39, etat.n);
+        if (etat.n > PLAFOND39) {
+          if (etat.n === PLAFOND39 + 1) emballements39 += 1;
+          return Promise.reject(new Error('Network request failed'));
+        }
+        etat.ops.push(`${op.action} ${op.quoi}${op.quoi === 'devis' ? ` ${json(op.valeurs || {})}` : ''}`);
+        return intercepter ? intercepter(op, () => base.ecrire('1', op)) : base.ecrire('1', op);
+      },
+      relireUn: (q) => base.relireUn('1', q), relireTotaux: (id) => base.relireTotaux('1', id),
+      avecDelai: ERR.avecDelai, nouvelIdentifiant: I.nouvelIdentifiant, paires: D.PAIRES_DEVIS, aPart: D.colonnesDuRefus,
+    });
+    /* L'écoute de la saisie, réduite à ce qui décide : le renvoi au repos,
+       le signal d'un échec, l'annonce d'un renvoi qui passe. */
+    file.abonner((ev) => {
+      if (ev.type === 'totaux') {
+        Promise.resolve().then(() => etat.renvois.rejouer(file));
+      }
+      if (ev.type !== 'etat') return;
+      etat.evenements.push(`${ev.cle === 'devis' ? 'devis' : 'ligne'}:${ev.etat}${ev.retenu ? ':retenu' : ''}`);
+      const automatique = etat.renvois.issue(file, ev);
+      if (automatique && ev.etat === 'enregistree') etat.annonces.push(D.phraseDuRejeu(ev.cle === 'devis' ? 'entete' : 'ligne', file.entreesVoulues().find((x) => x.cle === 'devis').voulu));
+      if (D.echecASignaler({ etat: ev.etat, automatique, retenu: ev.retenu === true })) etat.signaux += 1;
+    });
+    return { base, file, etat };
+  };
+  const repos39 = async (f) => { for (let k = 0; k < 6; k += 1) { await f.attendre(5000); await new Promise((ok) => { setTimeout(ok, 10); }); } };
+  const GROS39 = { id: IDZ(11), ordre: 1000, type: 'poste', designation: 'Gros œuvre', quantiteMilliemes: 1000, unite: 'forfait',
+    prixUnitaireCentimes: 9000000000, tauxTvaCentiemes: 2000 };
+  const enBase39 = async (b) => b.relireUn('1', { quoi: 'devis', id: IDZ(1) });
+
+  /* a. L'OBJET ET LA VALIDITÉ, APRÈS LA RÉDUCTION REFUSÉE (F1 = TC-4). */
+  {
+    const { base, file, etat } = monter39();
+    file.ligne(GROS39); await repos39(file);
+    file.devis({ remiseCentiemes: null }); await repos39(file);
+    const refuse = { etat: file.etatDe('devis'), signaux: etat.signaux, plafond: D.estUnRefusDuPlafond(file.erreurDe('devis')) };
+    const n0 = etat.ops.length; const s0 = etat.signaux; const e0 = etat.evenements.length;
+    file.devis({ objet: 'Nouvel objet' }); await repos39(file);
+    file.devis({ validiteJours: 60 }); await repos39(file);
+    const b = await enBase39(base);
+    const partis = etat.ops.slice(n0);
+    const conf = file.entreesVoulues().find((x) => x.cle === 'devis');
+    verifier('après la réduction refusée par le plafond, l’OBJET puis la VALIDITÉ partent SEULS — deux écritures, sans la réduction — et '
+      + 'sont EN BASE ; la réduction refusée reste tenue (la base garde 50 %), l’en-tête reste « en échec » sur ce refus-là, re-posé '
+      + 'SANS signal neuf (aucune vibration, aucune annonce : l’objet, lui, est enregistré)',
+    refuse.etat === 'echec' && refuse.plafond && refuse.signaux === 1
+      && json(partis) === json(['modifier devis {"objet":"Nouvel objet"}', 'modifier devis {"validiteJours":60}'])
+      && b.objet === 'Nouvel objet' && b.validiteJours === 60 && b.remiseCentiemes === 5000
+      && file.etatDe('devis') === 'echec' && D.estUnRefusDuPlafond(file.erreurDe('devis')) && D.estUnRefusDuPlafond(file.retenueDe('devis'))
+      && etat.signaux - s0 === 0 && etat.evenements.slice(e0).filter((x) => x === 'devis:echec:retenu').length === 2
+      && Array.isArray(conf.tenue) && conf.tenue.includes('remiseCentiemes') && conf.tenue.every((c) => D.PAIRES_DEVIS[0].includes(c)),
+    `${json(refuse)} ; partis ${json(partis)} ; base ${json({ objet: b.objet, validite: b.validiteJours, remise: b.remiseCentiemes })} ; `
+      + `événements ${json(etat.evenements.slice(e0))}`);
+    verifier('…« Mes devis » reçoit ce que la BASE a (`devisPourMesDevis` sur la version confirmée) : le nouvel objet, une fois enregistré, '
+      + 'et la réduction de la base — jamais celle que l’écran montre',
+    D.devisPourMesDevis({ confirme: conf.confirme, local: { objet: 'Nouvel objet', remiseCentiemes: null } }).objet === 'Nouvel objet'
+      && D.devisPourMesDevis({ confirme: conf.confirme, local: { remiseCentiemes: null } }).remiseCentiemes === 5000);
+    /* « Remettez-la » : rien ne part, la bande s'en va. */
+    const n1 = etat.n;
+    file.devis({ remiseCentiemes: 5000 }); await repos39(file);
+    verifier('…remettre la réduction comme en base n’envoie RIEN (0 écriture) et l’en-tête redevient « enregistrée » : plus rien n’est tenu',
+      etat.n === n1 && file.etatDe('devis') === 'enregistree' && file.retenueDe('devis') === null, `${etat.n - n1} écriture(s), ${file.etatDe('devis')}`);
+  }
+  {
+    /* UNE AUTRE VALEUR, TAPÉE APRÈS LE REFUS, PART TOUT DE SUITE (banc final
+       du lot 2a, N19). Ce qui est tenu à part cesse de l'être quand l'artisan
+       demande AUTRE CHOSE (point 17 de file-ecriture.js). Que la file ne le
+       libère plus que « remis comme en base », et la réduction de 20 %
+       tapée après le refus du retrait restait en attente, sans un mot, jusqu'au
+       prochain changement des totaux : seul le linter le voyait, par hasard
+       (une variable devenue inutile) ; écrite autrement, plus rien. */
+    const { base, file, etat } = monter39();
+    file.ligne(GROS39); await repos39(file);
+    file.devis({ remiseCentiemes: null }); await repos39(file);
+    const refuse = file.etatDe('devis') === 'echec' && D.estUnRefusDuPlafond(file.retenueDe('devis'));
+    const n0 = etat.ops.length; const s0 = etat.signaux;
+    file.devis({ remiseCentiemes: 2000 }); await repos39(file);
+    const partis = etat.ops.slice(n0);
+    const b = await enBase39(base);
+    verifier('…une AUTRE réduction tapée après le refus (20 %, qui tient) part TOUT DE SUITE — une écriture, en base — et l’en-tête '
+      + 'redevient « enregistrée » : ce qui était tenu ne l’est plus, et rien ne vibre',
+    refuse && partis.length === 1 && /"remiseCentiemes":2000/.test(partis[0]) && b.remiseCentiemes === 2000
+      && file.etatDe('devis') === 'enregistree' && file.retenueDe('devis') === null && etat.signaux === s0,
+    `${json(partis)} ; base ${b.remiseCentiemes} ; ${file.etatDe('devis')}`);
+  }
+  {
+    /* Dans la MÊME écriture que la réduction (elles attendaient ensemble) :
+       l'objet repart SEUL aussitôt après le refus. */
+    let retenir = true;
+    const fileEnVol = [];
+    const { base, file, etat } = monter39((op, normal) => {
+      if (retenir && op.quoi === 'devis' && op.action === 'modifier') return new Promise((ok, ko) => { fileEnVol.push(() => normal().then(ok, ko)); });
+      return normal();
+    });
+    retenir = false;
+    file.ligne(GROS39); await repos39(file);
+    retenir = true;
+    file.devis({ objet: 'Pendant' });
+    await new Promise((ok) => { setTimeout(ok, 30); });
+    file.devis({ remiseCentiemes: null, objet: 'Ensemble' });
+    retenir = false;
+    fileEnVol.splice(0).forEach((f) => f());
+    await repos39(file);
+    const b = await enBase39(base);
+    verifier('…la réduction et l’objet partis dans la MÊME écriture, refusés ensemble : l’objet repart SEUL aussitôt, et il est en base ; '
+      + 'la réduction reste refusée — UN signal, celui du geste',
+    b.objet === 'Ensemble' && b.remiseCentiemes === 5000 && file.etatDe('devis') === 'echec' && etat.signaux === 1
+      && etat.ops.includes('modifier devis {"objet":"Ensemble"}'), `${json(etat.ops)} ; signaux ${etat.signaux}`);
+  }
+  {
+    /* « Réessayer » d'une coupure ne renvoie pas le refus tenu ; le renvoi
+       du plafond (`retenues: true`), si. */
+    let couper = false;
+    const { base, file, etat } = monter39((op, normal) => {
+      if (couper && op.quoi === 'devis') return Promise.reject(new Error('Network request failed'));
+      return normal();
+    });
+    file.ligne(GROS39); await repos39(file);
+    file.devis({ remiseCentiemes: null }); await repos39(file);
+    couper = true;
+    file.devis({ objet: 'Coupé' }); await repos39(file);
+    couper = false;
+    /* CE QUE LA FILE DIT DE LA BASE pendant la coupure (banc final du lot
+       2a, N21) : l'objet parti sans réponse n'a PAS de valeur connue — il
+       est nommé dans `inconnues`, ABSENT de `confirme`, et « Mes devis » ne
+       reçoit pas d'objet. `confirme` exposé tel quel (symbole compris)
+       passait au vert : le symbole serait allé jusqu'à l'écran de la liste,
+       où un `<Text>` ne sait pas l'écrire. */
+    const pendant = file.entreesVoulues().find((x) => x.cle === 'devis');
+    const valeursPendant = pendant && pendant.confirme ? Object.values(pendant.confirme) : [];
+    verifier('…pendant la coupure, la file dit ce qu’elle ne sait pas : l’objet est dans `inconnues`, absent de `confirme` (aucun symbole '
+      + 'n’en sort), et « Mes devis » (`devisPourMesDevis`) ne reçoit pas d’objet',
+    !!pendant && Array.isArray(pendant.inconnues) && pendant.inconnues.includes('objet') && !!pendant.confirme
+      && !Object.prototype.hasOwnProperty.call(pendant.confirme, 'objet') && valeursPendant.every((v) => typeof v !== 'symbol')
+      && !Object.prototype.hasOwnProperty.call(D.devisPourMesDevis({ confirme: pendant.confirme, local: { objet: 'Coupé' } }), 'objet'),
+    json({ inconnues: pendant && pendant.inconnues, confirme: pendant && pendant.confirme && Object.keys(pendant.confirme) }));
+    const phrase = D.phraseEchecDuDevis({ enBase: true, erreur: file.erreurDe('devis'), retenue: file.retenueDe('devis') });
+    const n0 = etat.ops.length;
+    file.reessayer('devis'); await repos39(file);
+    const partis = etat.ops.slice(n0);
+    const n1 = etat.ops.length;
+    file.reessayer('devis', { retenues: true }); await repos39(file);
+    const partis2 = etat.ops.slice(n1);
+    verifier('…une COUPURE sur l’objet : la phrase nomme les deux — l’en-tête, et la réduction toujours refusée (`retenue`) ; « Réessayer » '
+      + '(sans `retenues`) ne renvoie QUE l’objet ; le renvoi du plafond (`retenues: true`) renvoie la réduction, refusée pareil, sans boucle',
+    phrase === 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai ou les conditions. La réduction n’a pas pu être changée.'
+      && json(partis) === json(['modifier devis {"objet":"Coupé"}']) && (await enBase39(base)).objet === 'Coupé'
+      && partis2.length === 1 && /"remiseCentiemes":null/.test(partis2[0]) && file.etatDe('devis') === 'echec',
+    `${phrase} | ${json(partis)} | ${json(partis2)}`);
+  }
+
+  /* b. LA PHRASE DU RENVOI QUI PASSE (F3) : la réduction RETIRÉE ne se dit
+        pas « enregistrée » ; BAISSÉE (50 % → 5 %, refusée, puis la ligne
+        baissée), elle l'est. */
+  {
+    const { base, file, etat } = monter39();
+    file.ligne(GROS39); await repos39(file);
+    file.devis({ remiseCentiemes: null }); await repos39(file);
+    file.ligne({ ...GROS39, prixUnitaireCentimes: 100000 }); await repos39(file);
+    const retiree = { annonces: [...etat.annonces], remise: (await enBase39(base)).remiseCentiemes };
+    const m = monter39();
+    m.file.ligne(GROS39); await repos39(m.file);
+    m.file.devis({ remiseCentiemes: 500 }); await repos39(m.file);
+    const refusee = m.file.etatDe('devis');
+    m.file.ligne({ ...GROS39, prixUnitaireCentimes: 100000 }); await repos39(m.file);
+    const baissee = { annonces: [...m.etat.annonces], remise: (await enBase39(m.base)).remiseCentiemes };
+    verifier('VoiceOver entend ce qui est PARTI : la réduction retirée → « La réduction est maintenant retirée du devis. » ; baissée à 5 % → '
+      + '« La réduction est maintenant enregistrée. » ; et `phraseDuRejeu` garde la phrase d’une ligne et d’une option',
+    json(retiree) === json({ annonces: ['La réduction est maintenant retirée du devis.'], remise: null })
+      && refusee === 'echec' && json(baissee) === json({ annonces: ['La réduction est maintenant enregistrée.'], remise: 500 })
+      && D.phraseDuRejeu('entete', { remiseCentimes: 2000, remiseCentiemes: null }) === 'La réduction est maintenant enregistrée.'
+      && D.phraseDuRejeu('ligne') === 'Une ligne refusée tout à l’heure est maintenant enregistrée.'
+      && D.phraseDuRejeu('option') === 'Une option refusée tout à l’heure est maintenant enregistrée.'
+      && D.phraseDuRejeu('enteteSansReduction') === null && D.phraseDuRejeu('inconnu') === null,
+    `${json(retiree)} | ${refusee} | ${json(baissee)}`);
+  }
+
+  /* c. UN RENVOI AUTOMATIQUE REFUSÉ SE TAIT (F2) : une base qui refuse
+        l'en-tête quoi que dise le calcul — le renvoi part une fois, il est
+        refusé, et rien ne vibre. */
+  {
+    let tetue = false;
+    const { file, etat } = monter39((op, normal) => {
+      if (tetue && op.quoi === 'devis') {
+        return Promise.reject(Object.assign(new Error('new row for relation "devis" violates check constraint "devis_plafond_check"'), { code: '23514' }));
+      }
+      return normal();
+    });
+    file.ligne(GROS39); await repos39(file);
+    tetue = true;
+    file.devis({ remiseCentiemes: null }); await repos39(file);
+    const s0 = etat.signaux; const n0 = etat.n;
+    file.ligne({ ...GROS39, prixUnitaireCentimes: 100000 }); await repos39(file);
+    verifier('un renvoi AUTOMATIQUE du plafond, refusé encore : UNE écriture de plus que la ligne, et AUCUN signal (ni vibration, ni '
+      + 'annonce : l’artisan n’a rien fait, la bande suffit) ; `echecASignaler` ne signale qu’un échec de GESTE',
+    etat.n - n0 === 2 && etat.signaux === s0 && file.etatDe('devis') === 'echec'
+      && D.echecASignaler({ etat: 'echec' }) && !D.echecASignaler({ etat: 'echec', automatique: true })
+      && !D.echecASignaler({ etat: 'echec', retenu: true }) && !D.echecASignaler({ etat: 'enregistree' }) && !D.echecASignaler({ etat: 'en_cours' }),
+    `écritures ${etat.n - n0}, signaux ${etat.signaux - s0}`);
+  }
+
+  /* c bis. UN GESTE PENDANT LE RENVOI AUTOMATIQUE (contre-vérification
+     finale du lot 2a, N1) : le plafond renvoie L12 tout seul ; PENDANT cet
+     envoi, l'artisan la remonte à un prix refusé. L'échec est celui de SON
+     geste — il se signale (vibration, annonce). Avant, la clé était encore
+     « renvoyée tout seul » et l'échec se taisait (reproduit par la vraie
+     file). Et `gestesDe` ne compte que les gestes : le renvoi automatique
+     n'en est pas un. */
+  {
+    const IDN = (k) => `de0000ee-0000-4000-8000-0000000098${String(k).padStart(2, '0')}`;
+    const LN = (k, prix) => ({ id: IDN(k), ordre: 1000 * k, type: 'poste', designation: `L${k}`, quantiteMilliemes: 1000, unite: 'forfait',
+      prixUnitaireCentimes: prix, tauxTvaCentiemes: 2000 });
+    const baseN = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
+    const renvoisN = D.creerRenvoisAutomatiques();
+    const etatN = { signaux: [], annonces: 0, envoisL12: 0, arme: false, fait: false };
+    let fileN = null;
+    fileN = F.creerFileEcriture({
+      devisId: IDN(1), devis: { objet: 'X', source: 'manuelle' }, devisEnBase: false,
+      ecrire: (op) => {
+        if (op.quoi === 'ligne' && op.id === IDN(12)) {
+          etatN.envoisL12 += 1;
+          if (etatN.arme && !etatN.fait) { etatN.fait = true; fileN.ligne(LN(12, 99999999900)); }
+        }
+        return baseN.ecrire('1', op);
+      },
+      relireUn: (q) => baseN.relireUn('1', q), relireTotaux: (id) => baseN.relireTotaux('1', id),
+      avecDelai: ERR.avecDelai, nouvelIdentifiant: I.nouvelIdentifiant, paires: D.PAIRES_DEVIS, aPart: D.colonnesDuRefus,
+    });
+    fileN.abonner((ev) => {
+      if (ev.type === 'totaux') Promise.resolve().then(() => renvoisN.rejouer(fileN));
+      if (ev.type !== 'etat') return;
+      const automatique = renvoisN.issue(fileN, ev);
+      if (automatique && ev.etat === 'enregistree') etatN.annonces += 1;
+      if (D.echecASignaler({ etat: ev.etat, automatique, retenu: ev.retenu === true })) etatN.signaux.push(ev.cle);
+    });
+    fileN.ligne(LN(11, 5000000000)); await repos39(fileN);
+    fileN.ligne(LN(12, 4000000000)); await repos39(fileN);
+    const refusee = { etat: fileN.etatDe(IDN(12)), signaux: etatN.signaux.length, gestes: fileN.gestesDe(IDN(12)) };
+    const s0 = etatN.signaux.length; const e0 = etatN.envoisL12;
+    etatN.arme = true;
+    fileN.ligne(LN(11, 100000)); await repos39(fileN);
+    const apres = {
+      geste: etatN.fait, envois: etatN.envoisL12 - e0, etat: fileN.etatDe(IDN(12)), code: (fileN.erreurDe(IDN(12)) || {}).code,
+      signaux: etatN.signaux.slice(s0), gestes: fileN.gestesDe(IDN(12)), annonces: etatN.annonces,
+    };
+    verifier('un GESTE pendant le renvoi automatique du plafond (N1) : L12 renvoyée toute seule, remontée PENDANT l’envoi à un prix '
+      + 'refusé → l’échec est celui du geste, et il se SIGNALE (un signal sur L12) ; aucun « enfin enregistrée » annoncé ; `gestesDe` compte '
+      + '2 gestes (la saisie et la remontée), jamais le renvoi automatique',
+    refusee.etat === 'echec' && refusee.signaux === 1 && refusee.gestes === 1
+      && apres.geste === true && apres.envois === 2 && apres.etat === 'echec' && apres.code === '23514'
+      && json(apres.signaux) === json([IDN(12)]) && apres.gestes === 2 && apres.annonces === 0,
+    `${json(refusee)} → ${json(apres)}`);
+    /* La règle de l'issue, sur une file factice : un renvoi qui finit SANS
+       geste depuis est automatique ; avec un geste, non ; une clé jamais
+       renvoyée, non ; « en cours » ne la consomme pas. */
+    let g = 0;
+    const fausse = {
+      entreesVoulues: () => [{ cle: 'L', etat: 'echec' }],
+      erreurDe: () => Object.assign(new Error('x "devis_plafond_check"'), { code: '23514' }),
+      reessayer: () => {}, etatDe: () => 'en_cours', gestesDe: () => g,
+    };
+    const r1 = D.creerRenvoisAutomatiques();
+    const partis1 = r1.rejouer(fausse);
+    const sansGeste = r1.issue(fausse, { cle: 'L', etat: 'en_cours' }) === false && r1.issue(fausse, { cle: 'L', etat: 'echec' }) === true
+      && r1.issue(fausse, { cle: 'L', etat: 'echec' }) === false;
+    const r2 = D.creerRenvoisAutomatiques();
+    r2.rejouer(fausse); g += 1;
+    const avecGeste = r2.issue(fausse, { cle: 'L', etat: 'echec' }) === false;
+    verifier('…`creerRenvoisAutomatiques` : l’issue d’un renvoi sans geste depuis est automatique (une fois) ; après un geste, elle ne '
+      + 'l’est plus ; « en cours » ne la consomme pas ; et une file sait compter : `reessayer(…, { automatique: true })` n’est pas un geste, '
+      + '`reessayer(…)` en est un',
+    json(partis1) === json(['L']) && sansGeste && avecGeste
+      && /cles\.forEach\(\(c\) => file\.reessayer\(c, \{ retenues: true, automatique: true \}\)\);/
+        .test(sansCommentairesJs(corpsDeFonction(lire('src/lib/devis.js'), 'rejouerLesRefusDuPlafond') || ''))
+      && /if \(automatique !== true\) unGeste\(e\);/.test(sansCommentairesJs(lire('src/lib/file-ecriture.js'))),
+    `partis ${json(partis1)} ; sans geste ${sansGeste} ; avec geste ${avecGeste}`);
+  }
+
+  /* d. CE QUE L'ÉCRAN EN FAIT — lu dans la saisie, sans ses commentaires. */
+  const S39 = ECR.saisie;
+  const ecouter39 = corpsFleche(S39, 'const ecouter = (ev) =>');
+  const brancheEtat39 = (ecouter39.match(/if \(ev\.type === 'etat'\) \{[\s\S]*?\n {6}\} else if \(ev\.type === 'totaux'\)/) || [])[0] || '';
+  const vibrations = [...brancheEtat39.matchAll(/retour\.echec\(\)/g)].length;
+  verifier('l’écoute : `automatique` vient de `renvois.issue(fileRef.current, ev)` (le renvoi qui finit, sans geste depuis : N1) ; la '
+    + 'phrase du renvoi qui passe est `phraseDuRejeu(chemin, devisRef.current)` ; la SEULE vibration est sous `echecASignaler({ etat, '
+    + 'automatique, retenu })`',
+  /const automatique = renvois\.issue\(fileRef\.current, ev\);/.test(brancheEtat39)
+    && (brancheEtat39.match(/renvois\.issue\(/g) || []).length === 1
+    && /if \(automatique && ev\.etat === 'enregistree'\) retour\.annoncer\(phraseDuRejeu\(chemin, devisRef\.current\)\);/.test(brancheEtat39)
+    && vibrations === 1 && /if \(echecASignaler\(\{ etat: ev\.etat, automatique, retenu: ev\.retenu === true \}\)\) \{\s*retour\.echec\(\);/.test(brancheEtat39)
+    && !/PHRASES_DU_REJEU/.test(S39), brancheEtat39.slice(0, 200));
+  const ranger39 = corpsFleche(S39, 'const ranger = (t = null) =>');
+  verifier('« Mes devis » reçoit ce que la base a : `ranger` passe par `devisPourMesDevis` sur la version CONFIRMÉE de la file — plus aucun '
+    + 'champ de l’en-tête copié de l’écran',
+  /const enBase = f\.entreesVoulues\(\)\.find\(\(x\) => x\.cle === 'devis'\);/.test(ranger39)
+    && /\.\.\.devisPourMesDevis\(\{ confirme: enBase \? enBase\.confirme : null, local: d, client: clientAffiche \}\),/.test(ranger39)
+    && !/choisirChamps\(/.test(ranger39) && !/CHAMPS_DEVIS/.test(ranger39), ranger39.slice(0, 200));
+  verifier('la bande de l’en-tête et la carte « Conditions » nomment aussi ce qui reste TENU à part (`retenue: attente.devisRetenue`), et '
+    + '`majAttente` le lit dans la file (`retenueDe`)',
+  (S39.match(/phraseEchecDuDevis\(\{ enBase: attente\.devisEnBase, erreur: attente\.devisErreur, retenue: attente\.devisRetenue \}\)/g) || []).length === 2
+    && /devisRetenue: f\.etatDe\('devis'\) === 'echec' \? f\.retenueDe\('devis'\) : null,/.test(S39));
+  /* LA DEVIS-DEMO de `devisPourMesDevis` : une colonne inconnue manque ; le client n'est nommé que s'il est le client confirmé. */
+  const pm = D.devisPourMesDevis({ confirme: { objet: 'Base', clientId: 'c1' }, local: { objet: 'Écran', clientId: 'c2' }, client: { nom: 'Mme Écran' } });
+  const pm2 = D.devisPourMesDevis({ confirme: { objet: 'Base', clientId: 'c1' }, local: { objet: 'Écran', clientId: 'c1' }, client: { nom: 'Mme Base' } });
+  verifier('`devisPourMesDevis`, FAIT TOURNER : l’objet de la base, jamais celui de l’écran ; un client changé à l’écran mais pas en base '
+    + 'n’est pas nommé (la liste garde le sien) ; le client confirmé, si ; une colonne partie sans réponse (absente de `confirme`) n’est pas '
+    + 'envoyée',
+  pm.objet === 'Base' && !('client' in pm) && json(pm2.client) === json({ nom: 'Mme Base' })
+    && !('objet' in D.devisPourMesDevis({ confirme: { clientId: null }, local: { objet: 'x' } })), `${json(pm)} | ${json(pm2)}`);
+  /* …et quand la file ne sait RIEN de la base (`confirme: null`, ce que rend
+     `entreesVoulues()` tant que rien n'est confirmé) : rien de l'écran ne part
+     vers la liste (banc final du lot 2a, N66 — `confirme || local` passait au
+     vert : aucun cas ne donnait `null` avec un objet à l'écran). */
+  const pmRien = D.devisPourMesDevis({ confirme: null, local: { objet: 'Écran', clientId: 'c2', client: { nom: 'Mme Écran' } }, client: { nom: 'Mme Écran' } });
+  const pmRien2 = D.devisPourMesDevis({ local: { objet: 'Écran' } });
+  verifier('`devisPourMesDevis`, FAIT TOURNER : quand la file ne sait rien de la base (`confirme` absent ou `null`), « Mes devis » ne reçoit '
+    + 'RIEN de l’écran — ni objet, ni client',
+  json(pmRien) === '{}' && json(pmRien2) === '{}', `${json(pmRien)} | ${json(pmRien2)}`);
+  /* LA PHRASE D'UN ÉCHEC ne dit pas deux fois la même chose (banc final du
+     lot 2a, N67 — `q ? …` au lieu de `q && q !== p ? …` passait au vert) :
+     le renvoi du plafond refusé PAREIL rend une erreur et une retenue
+     DISTINCTES, de la même contrainte ; deux contraintes de la réduction
+     disent aussi la même phrase. Une retenue de phrase différente, elle, est
+     dite. */
+  const refusPla1 = { code: '23514', message: 'x "devis_plafond_check"' };
+  const refusPla2 = { code: '23514', message: 'y "devis_plafond_check"' };
+  const phrasesDouble = [
+    D.phraseEchecDuDevis({ enBase: true, erreur: refusPla2, retenue: refusPla1 }),
+    D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_remise_check"' }, retenue: { message: 'y "devis_remise_une_forme_check"' } }),
+    D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'réseau' }, retenue: refusPla1 }),
+  ];
+  verifier('`phraseEchecDuDevis`, FAIT TOURNER : une retenue DISTINCTE de l’erreur mais de même phrase (le plafond refusé deux fois ; deux '
+    + 'contraintes de la réduction) n’est pas écrite deux fois ; une retenue de phrase différente (une coupure, puis le plafond), si',
+  phrasesDouble[0] === 'La réduction n’a pas pu être changée.'
+    && phrasesDouble[1] === 'La réduction n’a pas pu être enregistrée.'
+    && phrasesDouble[2] === 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai ou les conditions. '
+      + 'La réduction n’a pas pu être changée.',
+  json(phrasesDouble));
+
+  /* e. L'OPTION REFUSÉE (F4) : sa gélule garde son remplissage — seule sa
+        MARGE tombe dans le bloc des options —, et VoiceOver dit « Option ».
+        (Le remplissage MESURÉ au navigateur : `mesure-devis`.) */
+  const styleDe39 = (nom) => (new RegExp(String.raw`\n\s{2}${nom}:\s*\{([^}]*)\}`).exec(S39) || [])[1] || '';
+  const etatRangee39 = corpsDeFonction(S39, 'EtatDeLaRangee') || '';
+  verifier('l’option refusée : le bouton garde son remplissage (`etatBoutonAligne` ne retire que la MARGE ; `etatBoiteAligne` le '
+    + 'remplissage de la BOÎTE) ; ses trois étiquettes disent « Option … » (`option`, passé par le bloc des options), la ligne « Ligne … »',
+  sansEspaces(styleDe39('etatBoutonAligne')) === 'marginHorizontal: 0' && sansEspaces(styleDe39('etatBoiteAligne')) === 'paddingHorizontal: 0'
+    && !/etatAligne\b/.test(S39) && /\[s\.etatBouton, aligne && s\.etatBoutonAligne, pressed && APPUI\.plein\]/.test(etatRangee39)
+    && /const quoi = option \? 'Option' : 'Ligne';/.test(etatRangee39)
+    && (etatRangee39.match(/accessibilityLabel=\{`\$\{quoi\} (?:non enregistrée\. La corriger|non enregistrée\. Réessayer|incomplète\. La compléter)`\}/g) || []).length === 3
+    && !/accessibilityLabel="Ligne /.test(etatRangee39)
+    && /aligne\s+option\s*\/>/.test(balises(corpsDeFonction(S39, 'BasDuDevis') || '', 'EtatDeLaRangee')[0] || '')
+    && !/option/.test(balises((S39.match(/const RangeeLigne = React\.memo\(function RangeeLigne\([\s\S]*?\n\}\);/) || [])[0] || '', 'EtatDeLaRangee')[0] || ''));
+
+  /* f. AUCUNE FILE DE CETTE SECTION N'A BOUCLÉ (N73) : le relevé du faux
+        serveur, une fois tous les cas joués. */
+  verifier('aucune file de cette section n’a renvoyé en boucle : chaque cas reste sous '
+    + `${PLAFOND39} écritures (un renvoi refusé pareil ne repart pas sans fin)`,
+  emballements39 === 0 && ecrituresMax39 > 0 && ecrituresMax39 <= PLAFOND39,
+  `${emballements39} emballement(s) ; au plus ${ecrituresMax39} écriture(s) dans un cas`);
 }
 
 console.log('');

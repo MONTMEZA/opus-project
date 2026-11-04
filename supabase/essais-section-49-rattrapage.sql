@@ -43,6 +43,27 @@
 --  lue est l'attendue. Un `f`, une colonne vide, ou un « ERROR » qui n'est
 --  pas annoncé mot pour mot dans son `\echo` est un ÉCHEC de l'essai.
 --  Les montants attendus sont calculés à la main dans chaque `\echo`.
+--
+--  ET UN « ERROR » ANNONCÉ QUI MANQUE EST UN ÉCHEC AUSSI (relecture finale
+--  du lot 2a, RBM-1). La garde de 49.6 ter vit DANS `\ir schema.sql`, et le
+--  rejeu continue après elle : aucune colonne ne peut la juger. L'état de la
+--  base est le même qu'elle se déclenche ou non (`ON_ERROR_ROLLBACK` annule
+--  les deux refus), et `LAST_ERROR_MESSAGE` ne garde que la DERNIÈRE erreur
+--  — celle d'après la garde. Neutralisée (`if v_n > 1` à ses deux
+--  endroits), elle laissait cet essai à zéro `f`, code de sortie 0 : seules
+--  manquaient deux lignes « ERROR ». On COMPTE donc. Joué comme ci-dessus,
+--  ce fichier écrit EXACTEMENT QUATRE lignes `psql:… ERROR`, dans cet ordre :
+--      partie 2 : P0001 « Rattrapage du lot 2a … », puis 23514 devis_plafond_check ;
+--      partie 3 : P0001 « Rattrapage du lot 2a … », puis 23514 devis_calculs_check.
+--  Pour compter :
+--      … -f supabase/essais-section-49-rattrapage.sql 2>&1 | grep -c '^psql:.*ERROR:'
+--          → 4
+--      … -f supabase/essais-section-49-rattrapage.sql 2>&1 \
+--          | grep -c '^psql:.*ERROR:  P0001: Rattrapage du lot 2a'
+--          → 2
+--  Un autre compte est un ÉCHEC, même quand toutes les colonnes valent `t`.
+--  (Mesuré le 04/11/2026 : garde neutralisée à ses deux endroits, 2 et 0 ;
+--  à un seul, 3 et 1.)
 -- ==========================================================================
 
 \set VERBOSITY verbose
@@ -253,6 +274,8 @@ rollback;
 
 \echo ''
 \echo '=== FIN — la base est revenue à son état de départ (chaque partie s est annulée) ==='
+\echo '    et ce fichier a écrit EXACTEMENT 4 lignes « psql:… ERROR », dont 2 « P0001: Rattrapage du lot 2a »'
+\echo '    (parties 2 et 3) : un autre compte est un ÉCHEC — la garde ne se juge que comme ça (en-tête).'
 select count(*) = 0 as aucun_devis_de_l_essai_attendu_t
   from public.devis where id::text like 'd4930000-%';
 select count(*) = 1 as devis_calculs_check_en_place_attendu_t

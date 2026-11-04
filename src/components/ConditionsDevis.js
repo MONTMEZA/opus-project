@@ -57,7 +57,7 @@ import { CLAVIER } from '../lib/clavier';
 import * as retour from '../lib/retour';
 import {
   NATURES_ACOMPTE, VALIDITES_PROPOSEES, PHRASE_RETENUE,
-  AIDE_NATURE_ACOMPTE, ECHEANCE_ACOMPTE, AIDE_REDUCTION, AIDE_ACOMPTE, AIDE_VALIDITE,
+  AIDE_NATURE_ACOMPTE, ECHEANCE_ACOMPTE, AIDE_REDUCTION, AIDE_ACOMPTE, AIDE_VALIDITE, AIDE_RETENUE,
   centiemesEnSaisie, rangeesDesTotaux, effetDeLaReduction, effetDeLAcompte, libelleAcompte,
   etatInitialConditions, lireConditions, texteEnregistreDans, phraseUniteEnAttente, libellesDesConditions,
   ligneDEtatDeLaCarte,
@@ -322,16 +322,11 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         <Interrupteur
           actif={c.retenue}
           libelle="Retenue de garantie"
-          /* JAMAIS LA DURÉE SANS SA RÉSERVE (loi n° 71-584, art. 2) : « rendue
-             un an après » sans l'opposition promettrait à l'artisan un
-             remboursement que le client peut bloquer. Et l'aide dit À QUI le
-             client notifie l'opposition — au consignataire (ou à la caution),
-             par lettre recommandée —, pas « à vous » : l'artisan qui n'a rien
-             reçu ne doit pas en conclure que la somme lui revient (relecture
-             CONTROLES-11 du lot 2a). « RendUE » s'accorde avec la RETENUE :
-             « des acomptes, rendus » se lisait « les acomptes sont rendus ». */
-          aide={'Au plus 5\u00a0% des acomptes, rendue un an après la réception des travaux, sauf opposition '
-            + 'motivée que le client notifie au consignataire (ou à la caution) par lettre recommandée.'}
+          /* JAMAIS LA DURÉE SANS SA RÉSERVE (loi n° 71-584, art. 2) : la
+             phrase vit dans `devis.js` (`AIDE_RETENUE`), comparée par sa
+             valeur. Ici, ELLE SEULE : ni morceau ajouté, ni prop étalée qui
+             la remplacerait (relecture finale du lot 2a, TC-3). */
+          aide={AIDE_RETENUE}
           onPress={() => choisir({ retenue: !c.retenue }, 'retenue')}
         />
         {c.retenue && (

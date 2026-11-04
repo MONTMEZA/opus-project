@@ -424,8 +424,18 @@ export class ErreurDeLaBase extends Error {
  * baisser une ligne) : la phrase de la contrainte le dit, pas un bouton. Les
  * autres contraintes de l'en-tête — les conditions du lot 2a comprises — sont
  * dans le même cas, et celles que seule la base pose (« mettez Opus à jour »)
- * aussi. Une modification suivante de l'en-tête repart avec ce qui n'a pas
- * été enregistré : rien n'est perdu, rien n'est réessayé pour rien.
+ * aussi.
+ *
+ * CE QUI SUIT LE REFUS (relecture finale du lot 2a, ÉCRAN-F1 et TC-4). Ce
+ * commentaire disait : « une modification suivante de l'en-tête repart avec
+ * ce qui n'a pas été enregistré : rien n'est perdu, rien n'est réessayé pour
+ * rien ». C'était FAUX : l'objet tapé après la réduction refusée partait
+ * AVEC elle, était refusé avec elle — perdu en quittant —, et la réduction
+ * était renvoyée pour rien à chaque changement. Désormais la file TIENT À
+ * PART ce que le refus vise (`colonnesDuRefus`, devis.js ; points 16 et 17
+ * de file-ecriture.js) : le reste de l'en-tête part seul, et la réduction
+ * refusée ne repart que changée par l'artisan, ou renvoyée quand le devis
+ * tiendrait (`rejouerLesRefusDuPlafond`).
  */
 export function estUnRefusDefinitif(e) {
   const code = String((e && e.code) || '');

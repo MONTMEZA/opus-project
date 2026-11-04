@@ -2823,6 +2823,22 @@ avertissements « pas de `git pull` » des commits du lot ne valent plus.
 
 ### Après le lot 2a — ce qui reste (03/11/2026)
 
+> **La migration du lot 2a est APPLIQUÉE sur la vraie base depuis le
+> 04/11/2026**, avec votre accord, Opus fermé sur l'iPhone (voir CLAUDE.md,
+> « Réduction, acompte, validité — lot 2a »). Les avertissements « ne faites
+> pas `git pull` avant la migration » des commits du lot ne valent plus.
+>
+> **Elle a changé la date « modifié » de deux de vos brouillons**
+> (relecture finale, RBM-2), comme annoncé avant l'accord. Le rattrapage du
+> total toutes options comprises (`schema.sql`, section 49.6 ter) a récrit
+> les 2 devis de la vraie base qui avaient un total ; leurs montants n'ont
+> pas bougé (relevé après). Dans « Mes devis », ils sont remontés en tête,
+> « modifié » le 04/11 ; une suggestion de prix venue de l'un d'eux est
+> datée de ce jour-là. Le commentaire de 49.6 ter ne dit encore que « les
+> totaux ne bougent pas » : la phrase s'ajoutera au prochain changement de
+> `schema.sql` (la migration a été construite et simulée sur sa version
+> d'alors, on ne le retouche pas pour un commentaire).
+
 Le lot 2a (la réduction, l'acompte, la validité, le total toutes options
 comprises, la carte « Conditions ») a été relu de façon adverse le 03/11.
 Cette section commence par ce que la relecture « contrôles et droit » laisse
@@ -2899,7 +2915,7 @@ réunion) : c'est voulu, c'est le sens prudent.
   et 150 000 €). À relire avant d'imprimer la moindre échéance d'acompte.
 - [ ] **Les exceptions à la rétractation, sur le texte imprimé.** L'aide dit
   « sauf exceptions (par exemple, le strict nécessaire d'un dépannage urgent
-  qu'il vous a demandé chez lui) ». Le devis devra dire lesquelles valent
+  qu'il vous a expressément demandé chez lui) ». Le devis devra dire lesquelles valent
   pour LUI : L. 221-28 8° (entretien ou réparation urgents demandés au
   domicile, dans la limite du strictement nécessaire pour répondre à
   l'urgence) et L. 221-2 12° (construction neuve, « transformation
@@ -2929,10 +2945,97 @@ réunion) : c'est voulu, c'est le sens prudent.
 - [ ] Toujours ouverts depuis le lot 1 (« Après le lot 1 », plus haut) :
   l'assiette de la retenue de garantie (HT ou TTC), et une retenue sur un
   paiement unique.
+- [ ] **La phrase de la retenue n'est PAS le texte imprimé** (relecture
+  finale, TC-6). `PHRASE_RETENUE` est une aide écrite pour l'artisan : « par
+  vous deux », « si vous fournissez une caution », « vous revient », « vos
+  obligations ». Imprimée sur un devis — que lit le CLIENT —, « vous »
+  désignerait le client, et lui dirait que la somme retenue lui revient. Le
+  texte imprimé nommera « l'entrepreneur » et « le maître de l'ouvrage » ; il
+  s'écrira en 2c, avec le juriste, dans une constante À PART, comparée mot
+  pour mot à son tour. **`docs/CAHIER-LOT-1.md` (lignes 243 et 436) promet
+  encore que le lot 2 l'imprimera « telle quelle » : c'est dépassé.** C'est
+  une archive, elle ne se modifie pas ; c'est ici qu'on dit qu'elle a vieilli.
 
 **Ce qui n'a pas été vérifié :** les aides, plus longues, ont été mesurées au
 navigateur à 320 et 390 points de large (en démonstration) ; ni au doigt sur
 l'iPhone, ni lues par VoiceOver.
+
+**Ce qui reste du lot 2a — l'écran, les contrôles, les essais** (relecture
+finale du 04/11/2026 et ses corrections ; les comptes rendus sont des
+documents de travail de la session, pas dans le dépôt) :
+
+- [ ] **Rien de la relecture finale n'a été vu sur l'iPhone** : la gélule
+  « Option non enregistrée. La corriger » au doigt, ce que VoiceOver annonce
+  (« La réduction est maintenant retirée du devis »), le clavier sous la
+  carte « Conditions », Hermes. Tout a tourné sous `node` et dans Chromium.
+- [ ] **`mesure-devis` n'est pas dans `npm run verifier`** (il lui faut un
+  serveur). C'est pourtant lui seul qui voit une aide de droit cachée par une
+  vue posée AUTOUR de la carte « Conditions », ou par un composant changé
+  ailleurs (la couleur de l'aide de `Interrupteur`, dans `ui.js`) : mesuré le
+  04/11, le contrôle de texte reste vert dans ces deux cas, `mesure-devis` les
+  refuse. Le contrôle de texte (`verifier-devis`, TC-2) ne juge que ce qui est
+  ouvert entre le début du CONTENU de la carte et chaque aide. **À lancer
+  avant toute livraison qui touche l'écran du devis.**
+- [ ] **`npm run verifier` ne joue toujours aucun essai SQL** (§2.3). Les deux
+  essais du lot 2a annoncent désormais leur nombre EXACT d'erreurs — 27 pour
+  `essais-section-49-conditions.sql` ; 4 pour
+  `essais-section-49-rattrapage.sql`, dont 2 « P0001: Rattrapage du lot 2a »
+  —, parce qu'une erreur annoncée qui MANQUE ne laisse aucun `f` (la garde de
+  49.6 ter neutralisée : 2 erreurs au lieu de 4, zéro `f`, mesuré). Ce compte
+  ne se lit qu'en jouant l'essai ; `verifier-devis` tient seulement que
+  l'annonce est là et que les ordres joués sont ceux relus.
+- [ ] **La liste fermée des ordres fabriqués (`execute <chaîne>`) et les
+  empreintes des essais du lot 2a se décident** : toute section future qui
+  ajoute un `execute`, tout cas ajouté à un de ces essais, met à jour la liste
+  (avec sa raison) ou l'empreinte, après avoir rejoué l'essai sur une base
+  neuve (`node scripts/verifier-devis.mjs --empreinte-essais`).
+- [ ] **Seul un refus du PLAFOND met des colonnes à part dans la file
+  d'écriture** (F1) : l'objet changé après une réduction refusée repart seul.
+  Les autres refus définitifs de l'en-tête (OP013, OP020, une contrainte
+  `devis_*_check`) refusent encore toute l'écriture avec eux. Rare — le
+  plafond ne mord qu'avec un devis qui frôle 100 M€ —, mais pas fermé.
+- [ ] **Après une coupure réseau**, la phrase de l'en-tête reste générale, et
+  la réduction tenue à part ne repart qu'au prochain changement des totaux
+  (« Réessayer » ne la libère pas).
+- [ ] **Un refus « brouillon »** (le devis refusé à sa création) : une ligne
+  qu'on change repart encore, et reçoit le même refus tant que la bande n'est
+  pas réglée. **Déplacer une ligne refusée** la renvoie aussi, refusée pareil.
+- [ ] **OP014, OP016, OP017 et 22003 restent « réessayables »** alors qu'ils se
+  répètent à l'identique : « Réessayer » les renvoie pour rien.
+- [ ] **La garde de sortie n'a pas de bouton « La corriger »** : elle laisse
+  partir ou rester, sans renvoyer.
+- [ ] **La prédiction du renvoi et la base peuvent ne pas être d'accord** (une
+  base qui refuse quand même) : un renvoi, puis plus rien ; l'état reste dit.
+- [ ] **Deux gardes sans contrôle à elles** : `dejaReparti`, dans la file (elle
+  empêche de renvoyer sans fin une écriture refusée ; dans le flux normal, la
+  retirer ne change rien), et le commentaire corrigé d'`erreurs.js` sur le
+  refus du plafond.
+- [ ] **Le lien `node_modules/node_modules`** du dépôt pointe vers
+  `node_modules` lui-même (créé le 26/10, non versionné). Sans effet dans le
+  dépôt ; mais une copie faite par `cp -al` pour un essai au navigateur charge
+  alors deux copies de React et ne démarre pas (« Invalid hook call ») : on
+  retire le lien sur la COPIE. Le retirer du dépôt : à décider.
+- [x] **La migration** — appliquée le 04/11/2026 sous sa forme gardée (un
+  seul ordre, son md5 vérifié avant toute exécution), après un relevé de la
+  forme de la vraie base, Opus fermé. Empreinte comparée après : identique à
+  l'imitation migrée.
+- [x] **Un renvoi automatique du plafond et un geste en même temps** (contre-
+  vérification finale, N1) — **corrigé le 04/11** : la file compte les gestes
+  de l'artisan par clé (`gestesDe`), et `creerRenvoisAutomatiques` (devis.js)
+  ne prend un échec pour celui du renvoi automatique que si l'artisan n'a pas
+  écrit sur la clé depuis. Une ligne remontée PENDANT son renvoi automatique,
+  refusée, vibre et s'annonce à VoiceOver. `verifier-devis` le fait tourner
+  sur la vraie file (section 39 c bis) ; six sabotages, les six refusés.
+  **Pas vérifié sur l'iPhone** (VoiceOver).
+- [ ] **`verifier-devis` exige une FORME pour les aides de la carte
+  « Conditions »** (N2) : `<Text style={s.aide}>{AIDE_…}</Text>`, un seul
+  import de `../lib/devis`, un titre en chaîne simple. Du code juste écrit
+  autrement (`style={[s.aide]}`, `libelle={'…'}`, une seconde ligne
+  d'import) est refusé aussi. C'est voulu ; le message le dit désormais
+  (« introuvable sous la forme attendue… c'est la forme de ce contrôle qu'on
+  met à jour, avec sa raison ») au lieu de laisser croire l'aide cachée. Le
+  jour où une aide recevra un style conditionnel, le contrôle s'apprend en
+  même temps.
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 

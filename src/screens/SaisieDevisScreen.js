@@ -78,15 +78,16 @@ import { DELAI_ECRITURE } from '../lib/file-ecriture';
 import { nouvelIdentifiant, IDENTIFIANT_IMPOSSIBLE } from '../lib/identifiant';
 import { clientDepuisDemande } from '../lib/clients';
 import {
-  UNITES, TYPES_CHIFFRES, MENTION_FRANCHISE, CHAMPS_DEVIS,
+  UNITES, TYPES_CHIFFRES, MENTION_FRANCHISE,
   validerLigne, validerDevis, nettoyerDevis, trierLignes, sousTotaux, totalLigne,
   lignesDeLaPiece, titreQuiRecoit, pieceDeLaLigne, ligneVierge, ordreEntre, renumeroter,
   monter, descendre, tauxLisible, tauxProposes, tauxHorairePropose, coherenceRegime,
-  devisDepuisClient, milliemesLisibles, texteNet, choisirChamps,
+  devisDepuisClient, milliemesLisibles, texteNet,
   fusionnerAvecLaFile, proprietesDeLaRangee,
   rangeesDesTotaux, resumeDesConditions, suffixeDuPied, libellesDesTotaux, phraseEchecDuDevis,
   demandeDuDevis, vibrerPourLaCarte, nomsDesRefus,
-  cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, rejouerLesRefusDuPlafond, PHRASES_DU_REJEU, echecsDeLaFile,
+  cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, creerRenvoisAutomatiques, phraseDuRejeu, echecsDeLaFile,
+  echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
 } from '../lib/devis';
 import ConditionsDevis from '../components/ConditionsDevis';
 import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
@@ -161,21 +162,26 @@ const ordreMax = (lignes) => (lignes.length ? Math.max(...lignes.map((l) => Numb
    une ligne qui attend un brouillon refusé n'a rien à corriger elle-même
    (`definitif === 'brouillon'`), la bande du bas dit pourquoi. */
 function EtatDeLaRangee({
-  id, etat, erreurTexte, incomplete, definitif, onOuvrir, onReessayer, aligne = false,
+  id, etat, erreurTexte, incomplete, definitif, onOuvrir, onReessayer, aligne = false, option = false,
 }) {
   /* `aligne` : dans le bloc des options, qui a déjà sa marge — le bouton
-     s'aligne sur le texte de l'option au lieu de reculer deux fois. */
-  const bouton = ({ pressed }) => [s.etatBouton, aligne && s.etatAligne, pressed && APPUI.plein];
+     s'aligne sur le texte de l'option au lieu de reculer deux fois. Il
+     perd sa MARGE, jamais son remplissage : sans lui, le texte touchait le
+     bord arrondi de la gélule (relecture finale, ÉCRAN-F4 — un texte de
+     135 points dans une gélule de 137). La boîte, elle, perd le sien. */
+  const bouton = ({ pressed }) => [s.etatBouton, aligne && s.etatBoutonAligne, pressed && APPUI.plein];
+  /* VoiceOver dit ce qu'est la rangée : une option n'est pas une « ligne ». */
+  const quoi = option ? 'Option' : 'Ligne';
   return (
     <>
-      {etat === 'en_cours' && <Text style={[s.etat, aligne && s.etatAligne]}>enregistrement…</Text>}
+      {etat === 'en_cours' && <Text style={[s.etat, aligne && s.etatBoiteAligne]}>enregistrement…</Text>}
       {etat === 'echec' && (
-        <View style={[s.etatBoite, aligne && s.etatAligne]}>
+        <View style={[s.etatBoite, aligne && s.etatBoiteAligne]}>
           {definitif === 'ligne' && (
             <Pressable
               onPress={() => onOuvrir(id)}
               accessibilityRole="button"
-              accessibilityLabel="Ligne non enregistrée. La corriger"
+              accessibilityLabel={`${quoi} non enregistrée. La corriger`}
               style={bouton}
             >
               <Text style={s.etatBoutonTexte}>Non enregistrée — La corriger</Text>
@@ -186,7 +192,7 @@ function EtatDeLaRangee({
             <Pressable
               onPress={() => onReessayer(id)}
               accessibilityRole="button"
-              accessibilityLabel="Ligne non enregistrée. Réessayer"
+              accessibilityLabel={`${quoi} non enregistrée. Réessayer`}
               style={bouton}
             >
               <Text style={s.etatBoutonTexte}>Non enregistrée — Réessayer</Text>
@@ -199,7 +205,7 @@ function EtatDeLaRangee({
         <Pressable
           onPress={() => onOuvrir(id)}
           accessibilityRole="button"
-          accessibilityLabel="Ligne incomplète. La compléter"
+          accessibilityLabel={`${quoi} incomplète. La compléter`}
           style={bouton}
         >
           <Text style={s.etatBoutonTexte}>Incomplète — La compléter</Text>
@@ -334,6 +340,7 @@ function BasDuDevis({
                   onOuvrir={onOuvrir}
                   onReessayer={onReessayer}
                   aligne
+                  option
                 />
               </View>
             );
@@ -481,9 +488,11 @@ export default function SaisieDevisScreen({
      inchangée. Une référence aussi : `enregistrerLigne` la lit. */
   const [definitifs, setDefinitifs] = useState({});
   const definitifsRef = useRef({});
-  /* Les refus du plafond renvoyés TOUT SEULS (`rejouerLesRefusDuPlafond`) :
-     quand l'un passe, on l'annonce. */
-  const rejoues = useRef(new Set());
+  /* Les refus du plafond renvoyés TOUT SEULS (`creerRenvoisAutomatiques`,
+     devis.js) : quand l'un passe, on l'annonce ; s'il est refusé encore,
+     rien ne se signale — sauf si l'artisan a écrit sur la clé entre-temps
+     (N1 : c'est alors l'échec de SON geste). */
+  const [renvois] = useState(creerRenvoisAutomatiques);
   const [erreurs, setErreurs] = useState({});
   /* LES CHAMPS DE L'EN-TÊTE REFUSÉS PAR L'ÉCRAN, champ par champ, et ce
      qu'il en a dit. Une référence ET un état : la garde de sortie les lit
@@ -571,9 +580,7 @@ export default function SaisieDevisScreen({
      le retenir pour l'annoncer quand ça passe. */
   const rejouerLePlafond = () => {
     const f = fileRef.current;
-    /* Une clé déjà « enregistrée » au retour n'avait rien à envoyer : rien
-       ne passe « enfin », il n'y a rien à annoncer. */
-    rejouerLesRefusDuPlafond(f).forEach((c) => { if (f.etatDe(c) !== 'enregistree') rejoues.current.add(c); });
+    if (f) renvois.rejouer(f);
   };
   const poserGarde = (g) => {
     gardeRef.current = g;
@@ -598,10 +605,18 @@ export default function SaisieDevisScreen({
       nb: f.enAttente(),
       enCours: Object.values(e).includes('en_cours') || f.etatDe('devis') === 'en_cours',
       devisErreur: f.etatDe('devis') === 'echec' ? (f.erreurDe('devis') || true) : null,
+      /* Ce que l'en-tête tient À PART (la réduction refusée par le plafond) :
+         la phrase le nomme encore quand une AUTRE écriture a échoué depuis
+         (ÉCRAN-F1). */
+      devisRetenue: f.etatDe('devis') === 'echec' ? f.retenueDe('devis') : null,
       /* Le brouillon est-il DÉJÀ en base ? Alors un échec de l'en-tête est
          celui d'un CHAMP (`phraseEchecDuDevis`), pas du brouillon. */
       devisEnBase: f.devisEnBase(),
       retraitsEnEchec: retraits,
+      /* Ceux que « Réessayer » de leur bande peut renvoyer : jamais un refus
+         définitif (TC-1). */
+      retraitsRenvoyables: retraitsARenvoyer(f.entreesVoulues().map((x) => ({ ...x, erreur: f.erreurDe(x.cle) })),
+        { estDefinitif: estUnRefusDefinitif }).length,
     });
   };
 
@@ -611,10 +626,12 @@ export default function SaisieDevisScreen({
     const f = fileRef.current;
     if (!f || !f.devisEnBase() || !rappels.current.onRanger) return;
     const d = devisRef.current;
+    /* CE QUE LA BASE A, jamais ce que l'écran voudrait (ÉCRAN-F1) : un objet
+       refusé, ou parti sans réponse, ne s'affiche pas dans « Mes devis ». */
+    const enBase = f.entreesVoulues().find((x) => x.cle === 'devis');
     rappels.current.onRanger({
-      ...choisirChamps(d, CHAMPS_DEVIS),
+      ...devisPourMesDevis({ confirme: enBase ? enBase.confirme : null, local: d, client: clientAffiche }),
       id: f.devisId(), statut: 'brouillon', demande: d.demande || null, urgence: d.urgence || null,
-      client: d.clientId && clientAffiche ? { nom: clientAffiche.nom } : (d.client || null),
       ...(t ? {
         totalHtCentimes: t.ht, totalTvaCentimes: t.tva, totalTtcCentimes: t.ttc,
         remiseHtCentimes: t.reduction ?? 0, acompteTtcCentimes: t.acompte ?? 0, totalTtcOptionsCentimes: t.ttcOptions ?? t.ttc,
@@ -650,11 +667,15 @@ export default function SaisieDevisScreen({
             definitif: estUnRefusDefinitif(ev.erreur), devisEnBase: !!(fileRef.current && fileRef.current.devisEnBase()),
           }) : null);
         }
-        if (rejoues.current.has(ev.cle) && ev.etat !== 'en_cours') {
-          rejoues.current.delete(ev.cle);
-          if (ev.etat === 'enregistree') retour.annoncer(PHRASES_DU_REJEU[chemin]);
-        }
-        if (ev.etat === 'echec') {
+        /* UN RENVOI AUTOMATIQUE (le plafond, renvoyé tout seul) : s'il passe,
+           on l'annonce — la phrase de ce qui est PARTI (une réduction retirée
+           ne se dit pas « enregistrée », ÉCRAN-F3) ; s'il est refusé encore,
+           rien ne vibre ni ne s'annonce : l'artisan n'a rien fait, la bande
+           suffit (ÉCRAN-F2). Un refus TENU re-posé par la file non plus :
+           l'objet, lui, vient d'être enregistré (ÉCRAN-F1). */
+        const automatique = renvois.issue(fileRef.current, ev);
+        if (automatique && ev.etat === 'enregistree') retour.annoncer(phraseDuRejeu(chemin, devisRef.current));
+        if (echecASignaler({ etat: ev.etat, automatique, retenu: ev.retenu === true })) {
           retour.echec();
           retour.annoncer(ev.cle === 'devis'
             ? phraseEchecDuDevis({ enBase: !!(fileRef.current && fileRef.current.devisEnBase()), erreur: ev.erreur })
@@ -1220,10 +1241,18 @@ export default function SaisieDevisScreen({
       .map((l) => l.id);
     const enCours = Object.keys(e).filter((id) => e[id] === 'en_cours').length;
     const enEchec = Object.keys(e).filter((id) => e[id] === 'echec').length;
-    const devisEnEchec = ['en_cours', 'echec'].includes(f.etatDe('devis'));
+    const etatEntete = f.etatDe('devis');
+    const devisEnEchec = ['en_cours', 'echec'].includes(etatEntete);
+    /* La phrase de l'en-tête qui n'est pas en base : refusé (le champ, et ce
+       qui reste tenu à part), ou encore en route. */
+    let entete = null;
+    if (etatEntete === 'echec') {
+      entete = phraseEchecDuDevis({ enBase: f.devisEnBase(), erreur: f.erreurDe('devis'), retenue: f.retenueDe('devis') });
+    } else if (etatEntete === 'en_cours') entete = ENTETE_EN_COURS;
+    const { phrase, quitter } = bilanDeLaGarde({ enEchec, enCours, entete });
     return {
       ok: !incompletes.length && !enCours && !enEchec && !devisEnEchec && !enteteRefuse.length,
-      incompletes, enCours, enEchec, nonEnregistrees: enCours + enEchec, devisEnEchec, enteteRefuse,
+      incompletes, enCours, enEchec, nonEnregistrees: enCours + enEchec, devisEnEchec, enteteRefuse, texte: phrase, quitter,
     };
   };
 
@@ -1579,7 +1608,7 @@ export default function SaisieDevisScreen({
         {!!attente.devisErreur && (
           <View style={s.bande}>
             <Text style={s.bandeTexte}>
-              {`${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur })} ${
+              {`${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur, retenue: attente.devisRetenue })} ${
                 typeof attente.devisErreur === 'object' ? messageDEcritureDuDevis(attente.devisErreur, 'entete') : ''}`}
             </Text>
             {!estUnRefusDefinitif(attente.devisErreur) && (
@@ -1594,7 +1623,14 @@ export default function SaisieDevisScreen({
                 ? `${attente.retraitsEnEchec} lignes retirées n’ont pas pu être supprimées : elles sont encore dans le devis.`
                 : 'Une ligne retirée n’a pas pu être supprimée : elle est encore dans le devis.'}
             </Text>
-            <BtnOutline label="Réessayer" onPress={() => fileRef.current && fileRef.current.reessayer()} />
+            {/* LES RETRAITS SEULEMENT (TC-1) : jamais l'en-tête ni une ligne
+                refusés pour de bon, que `reessayer()` sans clé renvoyait. */}
+            {attente.retraitsRenvoyables > 0 && (
+              <BtnOutline
+                label="Réessayer"
+                onPress={() => fileRef.current && renvoyerLesRetraits(fileRef.current, { estDefinitif: estUnRefusDefinitif })}
+              />
+            )}
           </View>
         )}
 
@@ -1656,25 +1692,19 @@ export default function SaisieDevisScreen({
         )}
         {!!garde && garde.phase === 'bilan' && garde.incompletes.length === 0 && garde.enteteRefuse.length === 0 && (
           <View style={s.bande} accessibilityLiveRegion="assertive">
-            <Text style={s.bandeTexte}>
-              {[
-                garde.enEchec > 1 ? `${garde.enEchec} lignes n’ont pas pu être enregistrées.` : null,
-                garde.enEchec === 1 ? 'Une ligne n’a pas pu être enregistrée.' : null,
-                /* EN COURS n'est pas REFUSÉE : l'envoi continue après le
-                   départ, et il peut aboutir — dire « n'a pas pu » était faux
-                   (relecture « données », I2). */
-                garde.enCours > 1 ? `${garde.enCours} lignes ne sont pas encore enregistrées : l’envoi continue, mais rien ne garantit qu’il aboutira.` : null,
-                garde.enCours === 1 ? 'Une ligne n’est pas encore enregistrée : l’envoi continue, mais rien ne garantit qu’il aboutira.' : null,
-                !garde.enEchec && !garde.enCours
-                  ? phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur }) : null,
-              ].filter(Boolean).join(' ')}
-            </Text>
+            {/* CE QUI N'EST PAS EN BASE, ET RIEN D'AUTRE (`bilanDeLaGarde`,
+                devis.js) : les lignes refusées, celles dont l'envoi continue
+                — « n'a pas pu » serait faux, il peut aboutir (relecture
+                « données », I2) —, et l'en-tête s'il n'y est pas, même avec
+                des lignes ; le bouton ne dit « sans elles » que pour des
+                lignes (ÉCRAN-F1). */}
+            <Text style={s.bandeTexte}>{garde.texte}</Text>
             <View style={s.bandeBoutons}>
               <View style={s.moitie}>
                 <BtnOutline label="Rester" onPress={() => repondreGarde(false)} />
               </View>
               <View style={s.moitie}>
-                <BtnOutline label={garde.enEchec || !garde.enCours ? 'Quitter sans elles' : 'Quitter quand même'} onPress={() => repondreGarde(true)} />
+                <BtnOutline label={garde.quitter} onPress={() => repondreGarde(true)} />
               </View>
             </View>
           </View>
@@ -1763,7 +1793,7 @@ export default function SaisieDevisScreen({
           etatEcriture={{
             enCours: attente.enCours,
             echec: attente.devisErreur
-              ? `${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur })} ${
+              ? `${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur, retenue: attente.devisRetenue })} ${
                 typeof attente.devisErreur === 'object' ? messageDEcritureDuDevis(attente.devisErreur, 'entete') : ''}`.trim()
               : null,
             reessayable: !!attente.devisErreur && !estUnRefusDefinitif(attente.devisErreur),
@@ -1819,8 +1849,11 @@ const s = StyleSheet.create({
   },
   etatBoutonTexte: { fontFamily: F.oswald6, fontSize: T.petit, color: C.bad },
   etatMot: { fontFamily: F.oswald6, fontSize: T.petit, color: C.bad, marginBottom: S.xs },
-  /* Dans le bloc des options : sans retrait de plus (le bloc a sa marge). */
-  etatAligne: { paddingHorizontal: 0, marginHorizontal: 0 },
+  /* Dans le bloc des options : sans retrait de plus (le bloc a sa marge) —
+     la BOÎTE perd son remplissage, le BOUTON sa marge seulement : sa gélule
+     garde le sien (ÉCRAN-F4). */
+  etatBoiteAligne: { paddingHorizontal: 0 },
+  etatBoutonAligne: { marginHorizontal: 0 },
   etatPhrase: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit) },
 
   bas: { marginTop: S.lg, gap: S.sm },

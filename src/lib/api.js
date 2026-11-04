@@ -63,7 +63,7 @@ import { creerFileEcriture, DELAI_ECRITURE } from './file-ecriture';
 import { nouvelIdentifiant } from './identifiant';
 import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PAIRES_DEVIS, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
-  texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, rowToDevis, totauxDepuisBase,
+  texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, rowToDevis, totauxDepuisBase, colonnesDuRefus,
 } from './devis';
 import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
 /* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
@@ -3204,6 +3204,10 @@ export function fileDuDevis({ devisId, devis = {}, devisEnBase = false, lignesEn
     horloge: Number(horloge) || 0,
     /* Une paire (réduction, acompte et sa nature) part entière : 49.4 bis. */
     paires: PAIRES_DEVIS,
+    /* Ce qu'un refus de l'en-tête vise — la réduction, pour le plafond —
+       est tenu à part : le reste de l'en-tête part sans lui (relecture
+       finale du lot 2a, ÉCRAN-F1). */
+    aPart: colonnesDuRefus,
   });
   const enveloppe = {
     ...file,

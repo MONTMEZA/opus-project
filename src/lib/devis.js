@@ -204,7 +204,17 @@ export const MENTION_FRANCHISE = 'TVA non applicable, article 293 B du CGI';
  * solidaire » qui l'écarte) et art. 2 (rendue un an après la réception,
  * SAUF opposition motivée notifiée « à la caution ou au consignataire, par
  * lettre recommandée ») ; décret n° 71-1058, art. 1er (qui peut se porter
- * caution). Le lot 2 l'imprimera telle quelle.
+ * caution).
+ *
+ * C'EST UNE AIDE POUR L'ARTISAN, PAS LE TEXTE DU DEVIS (relecture finale
+ * du lot 2a, TC-6). Ce commentaire disait « Le lot 2 l'imprimera telle
+ * quelle ». Or la phrase parle à l'ARTISAN : « accepté par vous deux »,
+ * « si vous fournissez une caution », « vous revient », « vos
+ * obligations ». Imprimée sur un devis — que lit le CLIENT —, « vous »
+ * désignerait le client : elle lui dirait que la somme retenue lui revient.
+ * Le texte imprimé nommera « l'entrepreneur » et « le maître de l'ouvrage » ;
+ * il s'écrit en 2c, avec le juriste, dans une constante À PART, comparée
+ * mot pour mot à son tour.
  *
  * POURQUOI LE DESTINATAIRE DE L'OPPOSITION EST ÉCRIT (relecture CONTROLES-11
  * du lot 2a) : la phrase disait « sauf si le client a notifié, par lettre
@@ -221,8 +231,8 @@ export const MENTION_FRANCHISE = 'TVA non applicable, article 293 B du CGI';
  * la caution) », juste après « Elle n'est pas retenue si vous fournissez une
  * caution ». Quand il y a caution, rien n'a été retenu : rien ne « revient ».
  * La loi dit « la caution est libérée OU les sommes consignées sont versées
- * à l'entrepreneur ». La phrase nomme donc les deux — elle sera imprimée
- * telle quelle sur le devis, et elle doit se lire juste dans les deux cas.
+ * à l'entrepreneur ». La phrase nomme donc les deux : l'artisan qui la lit
+ * doit la comprendre juste dans les deux cas.
  */
 export const PHRASE_RETENUE = 'Retenue sur les acomptes, au plus 5\u00a0% (loi n°\u00a071-584 du 16/07/1971). '
   + 'Le client consigne la somme retenue chez un consignataire accepté par vous deux — à défaut, '
@@ -2021,9 +2031,17 @@ export function libellesDesTotaux(etatRegime) {
 /* ================================================================== */
 
 /* LES PHRASES DE LA CARTE « CONDITIONS » QUI PORTENT DU DROIT — écrites
-   UNE fois, ici, et relues sur Légifrance le 03/11/2026 (versions en
-   vigueur à cette date). Ce sont des AIDES pour l'artisan : le texte qui
-   s'imprimera sur le devis s'écrit en 2c, avec le juriste (DROIT-10). */
+   UNE fois, ici. Les articles ont été relus dans les données LEGI de la
+   DILA (la base dont Légifrance est tirée) : le dump local du 17/10/2026,
+   et ses différentiels jusqu'au 02/11/2026, où aucun article cité n'a
+   changé. PAS sur Légifrance en direct : le site répond 403 depuis le
+   conteneur de travail, et la relecture « avec le navigateur du
+   propriétaire » reste à faire (docs/A-FAIRE.md). Rien n'a été revérifié
+   après le 02/11.
+   (Ce commentaire disait « relues sur Légifrance le 03/11/2026 » : c'était
+   faux — relecture finale du lot 2a, TC-5.)
+   Ce sont des AIDES pour l'artisan : le texte qui s'imprimera sur le devis
+   s'écrit en 2c, avec le juriste (DROIT-10). */
 
 /** Code de la consommation, art. L. 214-1 : « Sauf stipulation contraire
  *  […], les sommes versées d'avance sont des arrhes […]. Dans ce cas, chacun
@@ -2043,8 +2061,8 @@ export function libellesDesTotaux(etatRegime) {
  *    (L. 221-24). « Un acompte engage les deux » et « le client renonce en
  *    les perdant » sont faux pendant ce délai — et l'aide d'en dessous
  *    (`ECHEANCE_ACOMPTE`) parle justement du devis signé hors des locaux.
- *    « Sauf exceptions » : L. 221-28 8° (le dépannage urgent demandé par le
- *    client) et L. 221-2 12° (la construction neuve, la transformation
+ *    « Sauf exceptions » : L. 221-28 8° (le dépannage urgent expressément
+ *    demandé par le client) et L. 221-2 12° (la construction neuve, la transformation
  *    importante) l'écartent — l'artisan qui se croit tenu de rendre se
  *    trompe dans le sens prudent, le contraire l'exposerait.
  *
@@ -2061,12 +2079,21 @@ export function libellesDesTotaux(etatRegime) {
  *  Ce qu'elle ne dit pas, à dessein (trop long pour une aide ; posé au
  *  juriste, docs/A-FAIRE.md) : si le client a EXPRESSÉMENT demandé que
  *  les travaux commencent avant la fin du délai, il doit la part déjà
- *  faite (L. 221-25). « Tout » se trompe alors dans le sens prudent. */
+ *  faite (L. 221-25). « Tout » se trompe alors dans le sens prudent.
+ *
+ *  « EXPRESSÉMENT DEMANDÉ » (relecture finale du lot 2a, TC-8). L'exemple
+ *  disait « qu'il vous a demandé chez lui ». L. 221-28 8° dit « expressément
+ *  sollicités par lui » — le même critère que L. 221-10 4°, que l'aide du
+ *  8e jour (`ECHEANCE_ACOMPTE`) écrivait déjà en entier. Sans ce mot,
+ *  l'exception s'élargit : un dépannage que l'artisan a lui-même proposé
+ *  (le démarchage) et que le client a accepté a été « demandé », mais pas
+ *  « expressément sollicité ». C'est le sens qui expose l'artisan. */
 export const AIDE_NATURE_ACOMPTE = 'Des arrhes : chacun peut renoncer — le client en les perdant, vous en lui '
   + 'rendant le double. Un acompte engage les deux. Si rien n’est écrit, l’administration considère qu’une '
   + 'somme versée d’avance par un particulier vaut des arrhes (Code de la consommation, art. L.\u00a0214-1). '
   + 'Mais un devis signé hors de vos locaux ou à distance laisse au client 14\u00a0jours pour se rétracter, '
-  + 'sauf exceptions (par exemple, le strict nécessaire d’un dépannage urgent qu’il vous a demandé chez lui) : '
+  + 'sauf exceptions (par exemple, le strict nécessaire d’un dépannage urgent qu’il vous a expressément demandé '
+  + 'chez lui) : '
   + 's’il se rétracte, vous lui rendez tout ce qu’il a versé, '
   + 'acompte ou arrhes (art. L.\u00a0221-18 et L.\u00a0221-24).';
 
@@ -2134,6 +2161,29 @@ export const AIDE_ACOMPTE = 'Calculé sur le total sans les options : avant la s
 export const AIDE_VALIDITE = 'À compter de la date du devis, celle qui sera imprimée dessus : le jour où vous le '
   + 'remettrez au client, pas celui où vous l’avez commencé.';
 
+/** L'aide de l'interrupteur « Retenue de garantie », sous son libellé.
+ *
+ *  JAMAIS LA DURÉE SANS SA RÉSERVE (loi n° 71-584, art. 2) : « rendue un an
+ *  après » sans l'opposition promettrait à l'artisan un remboursement que le
+ *  client peut bloquer. Et l'aide dit À QUI le client notifie l'opposition —
+ *  au consignataire (ou à la caution), par lettre recommandée —, pas « à
+ *  vous » : l'artisan qui n'a rien reçu ne doit pas en conclure que la somme
+ *  lui revient (relecture CONTROLES-11 du lot 2a). « RendUE » s'accorde avec
+ *  la RETENUE : « des acomptes, rendus » se lisait « les acomptes sont
+ *  rendus ».
+ *
+ *  POURQUOI ELLE VIT ICI ET PLUS DANS L'ÉCRAN (relecture finale du lot 2a,
+ *  TC-3). Elle était écrite en attribut JSX dans `ConditionsDevis.js`, et le
+ *  contrôle « mot pour mot » ne recousait que les littéraux entre
+ *  apostrophes : une constante concaténée au bout (« Sans lettre reçue de
+ *  vous, elle vous revient d’office. ») ou une prop étalée après elle
+ *  (« …que le client vous adresse par courriel ») lui faisaient dire le
+ *  contraire de la loi, au vert. Ici, elle est comparée par sa VALEUR, comme
+ *  les autres aides ; et l'écran doit porter exactement `aide={AIDE_RETENUE}`,
+ *  une fois, sans prop étalée (`verifier-devis`). */
+export const AIDE_RETENUE = 'Au plus 5\u00a0% des acomptes, rendue un an après la réception des travaux, sauf '
+  + 'opposition motivée que le client notifie au consignataire (ou à la caution) par lettre recommandée.';
+
 /* CE QU'UNE CONTRAINTE DU DEVIS NOMME, pour dire QUEL champ n'est pas parti
    (cahier du lot 2, ECRAN-15) : « Le brouillon n'a pas pu être enregistré »
    ne sert plus qu'à un échec de CRÉATION. */
@@ -2167,10 +2217,16 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
  * — celui que nomme la contrainte refusée, ou « l'objet, le lieu, le délai
  * ou les conditions » quand on ne sait pas lequel (une coupure de réseau).
  */
-export function phraseEchecDuDevis({ enBase = false, erreur = null } = {}) {
+export function phraseEchecDuDevis({ enBase = false, erreur = null, retenue = null } = {}) {
   if (!enBase) return 'Le brouillon n’a pas pu être enregistré.';
-  return ECHEC_PAR_CONTRAINTE[contrainteDuDevis(erreur)]
+  const p = ECHEC_PAR_CONTRAINTE[contrainteDuDevis(erreur)]
     || 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai ou les conditions.';
+  /* CE QUI RESTE TENU À PART (relecture finale, ÉCRAN-F1) : une autre
+     écriture de l'en-tête a échoué depuis (une coupure) — la réduction que
+     le plafond a refusée n'est toujours pas en base, et la phrase le dit
+     encore. */
+  const q = retenue && retenue !== erreur ? ECHEC_PAR_CONTRAINTE[contrainteDuDevis(retenue)] : null;
+  return q && q !== p ? `${p} ${q}` : p;
 }
 
 /* La contrainte du devis qu'une erreur de la base cite — dans son message,
@@ -2245,20 +2301,66 @@ export function renvoyerLaLigne({
   return CHAMPS_LIGNE.some((c) => !Object.is(a[c] ?? null, b[c] ?? null));
 }
 
+/* LA VERSION D'UN OBJET QUE LA BASE AURA quand le renvoi y arrivera
+   (relecture finale du lot 2a, ÉCRAN-F2). La prédiction se faisait sur ce
+   que l'écran VEUT, et oubliait ce que la base GARDE : une ligne en base
+   rendue incomplète (« locale » : son prix effacé pour le retaper), ou
+   baissée sans réponse (une coupure), n'était pas comptée — l'en-tête
+   « tiendrait », repartait, et la base le refusait de nouveau, APRÈS CHAQUE
+   écriture réussie, avec une vibration et une annonce (reproduit par la
+   vraie file). Désormais :
+     - ce qui PART avant le renvoi, ou avec lui, compte pour ce que l'écran
+       veut : enregistré, en cours d'envoi, ou refusé par le plafond (le
+       renvoi le renvoie) ;
+     - un retrait en cours d'envoi part avant : il ne compte pas ;
+     - ce que rien ne renverra compte pour ce que la BASE a : une ligne
+       « locale », une ligne en échec pour une autre raison, un retrait qui
+       n'a pas pu se faire — sa version confirmée ; une insertion partie
+       sans réponse, la ligne telle qu'envoyée (absente ou présente : la plus
+       chère des deux, puisqu'un total n'est jamais négatif) ; rien, si elle
+       n'a jamais été en base ;
+     - une colonne partie sans réponse (la base a PEUT-ÊTRE l'une, peut-être
+       l'autre valeur) : on ne sait pas, et l'on ne renvoie RIEN. */
+const VERSION_INCONNUE = Symbol('version inconnue en base');
+function versionAuRenvoi(e, colonnesQuiComptent = null) {
+  /* L'en-tête n'est jamais « locale » : un brouillon qui n'existe pas
+     encore part avant ses lignes (`enfiler`, file-ecriture.js). */
+  const locale = e.cle !== 'devis' && (!!e.locale || e.etat === 'locale');
+  if (!e.retire && !locale && (e.etat !== 'echec' || estUnRefusDuPlafond(e.erreur))) return e.voulu;
+  if (e.retire && e.etat !== 'echec') return null;
+  const inconnues = (Array.isArray(e.inconnues) ? e.inconnues : [])
+    .filter((c) => !colonnesQuiComptent || colonnesQuiComptent.includes(c));
+  if (inconnues.length) return VERSION_INCONNUE;
+  if (e.confirme) return e.confirme;
+  if (e.peutEtreInseree) return e.voulu;
+  return null;
+}
+
 /**
- * LE DEVIS, TEL QUE L'ÉCRAN LE VEUT, TIENDRAIT-IL SOUS LA BORNE ? Le calcul de
- * la base (`totauxDevis`, le même au centime — `verifier-devis` le joue sur
- * les cas de PostgreSQL), fait sur ce que la file VEUT : l'en-tête et les
- * lignes, sans celles qu'on retire, sans celles qui ne sont pas parties
- * (« locales » : incomplètes), sans une ligne irrecevable. `entrees` : ce que
- * rend `entreesVoulues()` de la file.
+ * LE DEVIS TIENDRAIT-IL SOUS LA BORNE, une fois renvoyé ce que le plafond a
+ * refusé ? Le calcul de la base (`totauxDevis`, le même au centime —
+ * `verifier-devis` le joue sur les cas de PostgreSQL), fait sur la version
+ * que la base AURA de chaque objet (`versionAuRenvoi`, ci-dessus) : ce que
+ * l'écran veut pour ce qui part, ce que la base garde pour le reste — et
+ * NON quand on ne peut pas le savoir. Une ligne irrecevable ne compte pas.
+ * `entrees` : ce que rend `entreesVoulues()` de la file, chacune avec son
+ * `erreur` (`erreurDe`).
  */
 export function tiendraitSousLePlafond(entrees) {
   const liste = Array.isArray(entrees) ? entrees : [];
   const d = liste.find((e) => e && e.cle === 'devis');
-  const lignes = liste.filter((e) => e && e.cle !== 'devis' && !e.retire && !e.locale && e.voulu)
-    .map((e) => e.voulu).filter((l) => validerLigne(l).ok);
-  return totauxDevis(lignes, d && d.voulu ? d.voulu : null).ok === true;
+  /* L'en-tête : seule la réduction change les totaux (BASE-4). */
+  const entete = d && d.voulu ? versionAuRenvoi(d, PAIRES_DEVIS[0]) : null;
+  if (entete === VERSION_INCONNUE) return false;
+  const lignes = [];
+  for (const e of liste) {
+    if (e && e.cle !== 'devis' && e.voulu) {
+      const v = versionAuRenvoi(e);
+      if (v === VERSION_INCONNUE) return false;
+      if (v && validerLigne(v).ok) lignes.push(v);
+    }
+  }
+  return totauxDevis(lignes, entete && d ? { ...d.voulu, ...entete } : null).ok === true;
 }
 
 /**
@@ -2298,8 +2400,47 @@ export function rejouerLesRefusDuPlafond(file) {
   if (!file || typeof file.entreesVoulues !== 'function' || typeof file.reessayer !== 'function') return [];
   const entrees = file.entreesVoulues().map((e) => ({ ...e, erreur: file.erreurDe(e.cle) }));
   const cles = clesARejouerApresLePlafond(entrees);
-  cles.forEach((c) => file.reessayer(c));
+  /* `retenues` : ce que le plafond avait mis à part (la réduction refusée)
+     repart cette fois avec le reste — c'est tout l'objet du renvoi. */
+  /* `automatique` : ce renvoi n'est pas un geste de l'artisan (`gestesDe`,
+     file-ecriture.js). */
+  cles.forEach((c) => file.reessayer(c, { retenues: true, automatique: true }));
   return cles;
+}
+
+/**
+ * LES RENVOIS AUTOMATIQUES EN COURS, et leur issue (relecture finale du lot
+ * 2a, N1). `rejouer(file)` renvoie le plafond (`rejouerLesRefusDuPlafond`)
+ * et retient chaque clé partie — sauf une déjà « enregistrée » au retour,
+ * qui n'avait rien à envoyer : rien ne passera « enfin » — avec le nombre
+ * de gestes de l'artisan sur elle à cet instant (`gestesDe`).
+ *
+ * `issue(file, ev)`, à l'arrivée d'un état : vrai si c'est CE renvoi qui
+ * finit, sans que l'artisan ait écrit sur la clé depuis. La clé est oubliée
+ * à son premier état qui n'est pas « en cours ».
+ *
+ * POURQUOI LE COMPTE DES GESTES : sans lui, une ligne que l'artisan
+ * remontait pendant que le plafond la renvoyait tout seul était refusée
+ * SANS vibration ni annonce — la clé était encore « renvoyée tout seul »,
+ * et `echecASignaler` taisait l'échec d'un geste (reproduit par la vraie
+ * file : la rangée disait « Non enregistrée », VoiceOver ne disait rien).
+ */
+export function creerRenvoisAutomatiques() {
+  const partis = new Map();
+  const gestes = (file, c) => (file && typeof file.gestesDe === 'function' ? file.gestesDe(c) : 0);
+  return {
+    rejouer(file) {
+      const cles = rejouerLesRefusDuPlafond(file);
+      cles.forEach((c) => { if (file.etatDe(c) !== 'enregistree') partis.set(c, gestes(file, c)); });
+      return cles;
+    },
+    issue(file, ev) {
+      if (!ev || ev.etat === 'en_cours' || !partis.has(ev.cle)) return false;
+      const avant = partis.get(ev.cle);
+      partis.delete(ev.cle);
+      return gestes(file, ev.cle) === avant;
+    },
+  };
 }
 
 /**
@@ -2325,12 +2466,145 @@ export function echecsDeLaFile(entrees, { devisEnBase = false, estDefinitif = ()
 }
 
 /** Ce qu'on annonce à VoiceOver quand un refus du plafond, renvoyé tout
- *  seul, passe enfin : la bande s'efface, et ça doit s'entendre. */
+ *  seul, passe enfin : la bande s'efface, et ça doit s'entendre.
+ *
+ *  DEUX PHRASES POUR L'EN-TÊTE (relecture finale du lot 2a, ÉCRAN-F3) : le
+ *  plafond ne refuse l'en-tête que quand la réduction BAISSE ou est RETIRÉE
+ *  — et le cas même pour lequel le renvoi a été écrit est le RETRAIT.
+ *  « La réduction est maintenant enregistrée » faisait croire, à qui
+ *  n'entend que VoiceOver, qu'une réduction figurait au devis : il n'y en
+ *  avait plus. La phrase se choisit par `phraseDuRejeu`. */
 export const PHRASES_DU_REJEU = Object.freeze({
   entete: 'La réduction est maintenant enregistrée.',
+  enteteSansReduction: 'La réduction est maintenant retirée du devis.',
   ligne: 'Une ligne refusée tout à l’heure est maintenant enregistrée.',
   option: 'Une option refusée tout à l’heure est maintenant enregistrée.',
 });
+
+/** La phrase du renvoi qui passe, selon son chemin — et, pour l'en-tête,
+ *  selon ce qui est parti : une réduction RETIRÉE (les deux formes vides)
+ *  ne se dit pas « enregistrée ». `devis` : l'en-tête tel que l'écran le
+ *  veut (ce qui vient de partir). */
+export function phraseDuRejeu(chemin, devis = null) {
+  if (chemin === 'entete') {
+    const sans = !devis || PAIRES_DEVIS[0].every((c) => devis[c] === null || devis[c] === undefined);
+    return sans ? PHRASES_DU_REJEU.enteteSansReduction : PHRASES_DU_REJEU.entete;
+  }
+  return Object.prototype.hasOwnProperty.call(PHRASES_DU_REJEU, chemin) && chemin !== 'enteteSansReduction'
+    ? PHRASES_DU_REJEU[chemin] : null;
+}
+
+/**
+ * CE QU'UN REFUS DE L'EN-TÊTE VISE — les colonnes que la file d'écriture
+ * TIENT À PART (`aPart`, file-ecriture.js, points 16 et 17), pour que le
+ * reste de l'en-tête parte sans elles (relecture finale du lot 2a,
+ * ÉCRAN-F1 et TC-4). Sur l'en-tête, `devis_plafond_check` ne peut venir que
+ * de la RÉDUCTION (BASE-4) : la contrainte ne juge que les totaux, et seule
+ * la paire de la réduction les change. Avant, l'objet tapé après une
+ * réduction refusée partait AVEC elle, était refusé avec elle, et n'était
+ * nommé nulle part. Les autres contraintes de l'en-tête jugent un champ que
+ * l'écran a déjà validé par la même règle (`validerDevis`) : rien de plus
+ * n'est tenu — `null`.
+ */
+export function colonnesDuRefus(erreur) {
+  return estUnRefusDuPlafond(erreur) ? [...PAIRES_DEVIS[0]] : null;
+}
+
+/**
+ * « RÉESSAYER » DES LIGNES RETIRÉES ne renvoie QUE les retraits (relecture
+ * finale du lot 2a, TC-1). La bande appelait `reessayer()` SANS clé, qui
+ * renvoie tout ce qui a échoué — l'en-tête et les lignes refusés
+ * DÉFINITIVEMENT compris, que tous les autres boutons venaient d'apprendre à
+ * ne plus renvoyer : une vibration, une annonce et un refus de plus, pour
+ * rien (reproduit par la vraie file). `estDefinitif` vient de l'écran
+ * (`estUnRefusDefinitif`, erreurs.js : ce fichier ne l'importe pas) ; un
+ * retrait refusé pour de bon ne repart pas non plus. `entrees` :
+ * `entreesVoulues()`, chacune avec son `erreur`.
+ */
+export function retraitsARenvoyer(entrees, { estDefinitif = () => false } = {}) {
+  return (Array.isArray(entrees) ? entrees : [])
+    .filter((e) => e && e.cle !== 'devis' && e.retire && e.etat === 'echec' && !estDefinitif(e.erreur))
+    .map((e) => e.cle);
+}
+
+/** Le geste de la bande : renvoie les retraits à renvoyer, un par un, par
+ *  leur clé. Rend les clés renvoyées. */
+export function renvoyerLesRetraits(file, { estDefinitif = () => false } = {}) {
+  if (!file || typeof file.entreesVoulues !== 'function' || typeof file.reessayer !== 'function') return [];
+  const cles = retraitsARenvoyer(file.entreesVoulues().map((e) => ({ ...e, erreur: file.erreurDe(e.cle) })), { estDefinitif });
+  cles.forEach((c) => file.reessayer(c));
+  return cles;
+}
+
+/**
+ * UN ÉCHEC SE SIGNALE-T-IL — une vibration, une annonce à VoiceOver ? Celui
+ * d'un GESTE de l'artisan, oui. Pas (relecture finale du lot 2a, ÉCRAN-F2) :
+ *   - celui d'un renvoi AUTOMATIQUE du plafond (`automatique` : la clé est
+ *     dans ce que la saisie a renvoyé toute seule) — l'artisan n'a rien
+ *     fait, la bande suffit ;
+ *   - un refus TENU à part, re-posé par la file après que le reste de
+ *     l'en-tête est parti (`retenu`, file-ecriture.js, 16) — rien de neuf
+ *     n'a échoué : l'objet, lui, vient d'être enregistré.
+ */
+export function echecASignaler({ etat = null, automatique = false, retenu = false } = {}) {
+  return etat === 'echec' && automatique !== true && retenu !== true;
+}
+
+/**
+ * CE QUE DIT LA GARDE EN PARTANT, et le nom de son bouton (relecture finale
+ * du lot 2a, ÉCRAN-F1) — exactement ce qui n'est pas en base :
+ *   - les lignes qui n'ont pas pu être enregistrées ;
+ *   - celles dont l'envoi continue, SANS garantie (jamais un renvoi promis
+ *     après le départ : R1d) ;
+ *   - l'en-tête, s'il n'est pas en base — `entete` : sa phrase, déjà faite
+ *     par l'écran. Il n'était dit que quand AUCUNE ligne n'était en cause :
+ *     un objet perdu avec une ligne refusée partait sans un mot.
+ * Le bouton : « Quitter sans elles » quand ce sont des lignes, et elles
+ * seules ; « Quitter sans l’enregistrer » quand c'est l'en-tête seul, refusé
+ * (il disait « sans elles » sans qu'aucune ligne soit en cause) ; « Quitter
+ * quand même » quand un envoi continue — l'en-tête encore en route compris
+ * (`ENTETE_EN_COURS`) —, ou que les deux sont en cause.
+ */
+export function bilanDeLaGarde({ enEchec = 0, enCours = 0, entete = null } = {}) {
+  const phrases = [
+    enEchec > 1 ? `${enEchec} lignes n’ont pas pu être enregistrées.` : null,
+    enEchec === 1 ? 'Une ligne n’a pas pu être enregistrée.' : null,
+    enCours > 1 ? `${enCours} lignes ne sont pas encore enregistrées : l’envoi continue, mais rien ne garantit qu’il aboutira.` : null,
+    enCours === 1 ? 'Une ligne n’est pas encore enregistrée : l’envoi continue, mais rien ne garantit qu’il aboutira.' : null,
+    entete || null,
+  ].filter(Boolean);
+  /* L'en-tête encore en route se dit comme une ligne en cours : l'envoi continue. */
+  const enteteRefuse = !!entete && entete !== ENTETE_EN_COURS;
+  let quitter = 'Quitter quand même';
+  if (enEchec > 0 && !enCours && !entete) quitter = 'Quitter sans elles';
+  else if (!enEchec && !enCours && enteteRefuse) quitter = 'Quitter sans l’enregistrer';
+  return { phrase: phrases.join(' '), quitter };
+}
+
+/** L'en-tête qui n'est pas encore en base parce que son envoi CONTINUE :
+ *  la garde ne dit pas qu'il « n'a pas pu » l'être. */
+export const ENTETE_EN_COURS = 'L’en-tête du devis n’est pas encore enregistré : l’envoi continue, mais rien ne garantit '
+  + 'qu’il aboutira.';
+
+/**
+ * CE QUE « MES DEVIS » MONTRE D'UN BROUILLON EN SAISIE — ce que la BASE a,
+ * jamais ce que l'écran voudrait (relecture finale du lot 2a, ÉCRAN-F1) :
+ * après un refus, l'objet tapé à l'écran partait vers la liste comme s'il
+ * était enregistré, et « Mes devis » affichait un objet que la base n'avait
+ * pas. `confirme` : ce que la file sait de la base (`entreesVoulues()`,
+ * une colonne inconnue y manque — la liste garde alors ce qu'elle avait) ;
+ * `local` : l'en-tête de l'écran ; `client` : la fiche que l'écran montre.
+ * Le nom du client n'est donné que si c'est bien le client CONFIRMÉ.
+ */
+export function devisPourMesDevis({ confirme = null, local = null, client = null } = {}) {
+  const c = confirme || {};
+  const r = choisirChamps(c, CHAMPS_DEVIS);
+  const l = local || {};
+  const memeClient = Object.prototype.hasOwnProperty.call(c, 'clientId')
+    && String(c.clientId ?? '') === String(l.clientId ?? '');
+  if (memeClient) r.client = c.clientId && client ? { nom: client.nom } : (l.client || null);
+  return r;
+}
 
 /* Un nombre de jours tapé dans « Autre » : un entier de 1 à `VALIDITE_MAX`,
    vide = rien. Pas de virgule : une offre ne vaut pas « 30,5 jours ». */

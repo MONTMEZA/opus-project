@@ -100,6 +100,25 @@
  *      `NUMERO_MAX` — n'est PAS un autre appareil : c'est cette version de
  *      l'application qui écrit mal. La ligne passe en échec, et la file NE
  *      relit PAS l'horloge (la relire ne réparerait rien).
+ *
+ * CE QU'UN REFUS MET À PART (relecture finale du lot 2a, ÉCRAN-F1 et TC-4,
+ * 04/11/2026). L'en-tête est UNE écriture, qui porte tout ce qui n'est pas
+ * en base. Un refus définitif d'une partie le faisait retomber sur TOUT ce
+ * qui suivait : la réduction retirée, refusée par le plafond, repartait avec
+ * l'objet tapé ensuite — refusés ensemble, et l'écran ne parlait que de la
+ * réduction (reproduit par la vraie file et la base de démonstration).
+ *  16. `aPart(erreur)` (passé par `api.js` : ce fichier n'importe rien) dit
+ *      les colonnes que vise un refus de l'en-tête — `devis_plafond_check`
+ *      ne peut venir que de la réduction. Ces colonnes sont TENUES à part,
+ *      avec la valeur refusée : ce qui ne les touche pas part SEUL, tout de
+ *      suite (la contrainte ne juge que les totaux), et la ligne d'état reste
+ *      « en échec » sur le refus tenu — re-posée SANS signal neuf (`retenu`
+ *      dans l'événement : l'écran ne vibre pas pour un objet enregistré) ;
+ *  17. ce qui est tenu repart quand l'artisan le CHANGE (une autre valeur),
+ *      s'en va quand il le REMET comme en base, et part sur demande expresse
+ *      seulement : `reessayer(cle, { retenues: true })`, que fait le renvoi
+ *      du plafond (`rejouerLesRefusDuPlafond`, devis.js). Un « Réessayer »
+ *      ordinaire renvoie le reste, jamais le refus tenu.
  * Ce qui reste, et la base le dit aussi :
  *   - la CRÉATION d'un brouillon arrivée après sa suppression le fait
  *     réapparaître (rien au-dessus d'un devis ne porte d'horloge) — VIDE le
@@ -282,6 +301,7 @@ export function creerFileEcriture({
   horloge = 0,
   horlogeTelephone = () => Date.now(),
   paires = [],
+  aPart = null,
 } = {}) {
   /* Sans délai, une requête qui ne revient jamais laisserait la ligne « en
      cours » pour toujours : la file refuse de naître sans lui. */
@@ -297,6 +317,16 @@ export function creerFileEcriture({
      n'importe rien) — une liste de listes de noms de champs. */
   const pairesDuDevis = Array.isArray(paires)
     ? paires.filter((p) => Array.isArray(p) && p.length > 1 && p.every((c) => typeof c === 'string')) : [];
+  /* Les colonnes qu'un refus de l'en-tête met à part (16), parmi celles que
+     l'écriture refusée portait. Sans `aPart`, ou s'il ne nomme rien de ce
+     qui est parti, rien n'est tenu : la file fait comme avant. */
+  const colonnesAPart = (erreur, valeurs) => {
+    if (typeof aPart !== 'function') return [];
+    let brut = null;
+    try { brut = aPart(erreur); } catch (x) { brut = null; }
+    return Array.isArray(brut)
+      ? brut.filter((c) => typeof c === 'string' && Object.prototype.hasOwnProperty.call(valeurs || {}, c)) : [];
+  };
 
   /* Une entrée par objet : le devis (clé 'devis') et chaque ligne (son id).
        voulu    : les valeurs COMPLÈTES que l'écran veut voir en base ;
@@ -351,11 +381,17 @@ export function creerFileEcriture({
   const prevenir = (evenement) => abonnes.forEach((f) => {
     try { f(evenement); } catch (e) { /* un écran qui casse n'arrête pas la file */ }
   });
-  const poser = (e, etat, erreur = null) => {
+  /* `retenu` : l'échec re-posé est celui, déjà dit, d'un refus TENU à part
+     (16) — rien de neuf n'a échoué, l'écran ne le signale pas une seconde
+     fois. */
+  const poser = (e, etat, erreur = null, { retenu = false } = {}) => {
     e.etat = etat;
     e.erreur = erreur;
-    prevenir({ type: 'etat', cle: e.cle, etat, erreur });
+    prevenir(retenu ? { type: 'etat', cle: e.cle, etat, erreur, retenu: true } : { type: 'etat', cle: e.cle, etat, erreur });
   };
+  /* UN GESTE DE L'ARTISAN sur cette clé (N1) : compté, jamais remis à
+     zéro — `gestesDe`. */
+  const unGeste = (e) => { e.gestes = (Number.isInteger(e.gestes) ? e.gestes : 0) + 1; };
   const estVide = () => attente.length === 0 && enVol === null && enRelecture === 0;
   const verifierFermetures = () => {
     if (!estVide()) return;
@@ -408,6 +444,17 @@ export function creerFileEcriture({
     }
     if (!e.confirme) return { quoi, action: 'inserer', id: e.voulu.id, valeurs: sansNumero(e.voulu) };
     const diff = changements(e.voulu, e.confirme, quoi === 'devis' ? pairesDuDevis : []);
+    /* CE QU'UN REFUS A MIS À PART (16, 17) ne repart pas avec le reste. Il
+       cesse d'être tenu quand l'écran ne le demande plus (remis comme en
+       base) ou demande AUTRE CHOSE (une nouvelle valeur : un nouvel essai). */
+    if (e.tenue) {
+      const t = e.tenue;
+      const encore = t.colonnes.some((c) => Object.prototype.hasOwnProperty.call(diff, c));
+      const meme = t.colonnes.every((c) => Object.is(e.voulu[c] === undefined ? null : e.voulu[c],
+        t.valeurs[c] === undefined ? null : t.valeurs[c]));
+      if (!encore || !meme) e.tenue = null;
+      else t.colonnes.forEach((c) => { delete diff[c]; });
+    }
     if (!Object.keys(diff).length) return null;
     return { quoi, action: 'modifier', id: e.voulu.id, valeurs: diff };
   }
@@ -512,6 +559,10 @@ export function creerFileEcriture({
       if (e.retire) {
         entrees.delete(cle);
         prevenir({ type: 'supprimee', cle });
+      } else if (e.tenue) {
+        /* Tout le reste est parti : il ne reste que le refus tenu. La ligne
+           d'état le redit, sans signal neuf (16). */
+        poser(e, 'echec', e.tenue.erreur, { retenu: true });
       } else {
         poser(e, e.locale ? 'locale' : 'enregistree');
       }
@@ -573,13 +624,34 @@ export function creerFileEcriture({
             e.confirme = c;
           }
         }
+        /* UN REFUS QUI VISE UNE PARTIE DE L'EN-TÊTE (16) : cette partie est
+           TENUE, avec la valeur refusée ; le reste de l'écriture — l'objet
+           tapé pendant que la réduction attendait — repart AUSSITÔT, seul. */
+        const aPartIci = op.quoi === 'devis' && op.action === 'modifier' && !issueInconnue(err)
+          ? colonnesAPart(err, op.valeurs) : [];
+        if (aPartIci.length) {
+          e.tenue = {
+            colonnes: aPartIci, erreur: err, valeurs: Object.fromEntries(aPartIci.map((c) => [c, op.valeurs[c]])),
+          };
+        }
         poser(e, 'echec', err);
+        /* UNE FOIS par refus, jamais en boucle : si l'envoi « sans la
+           réduction » était encore refusé avec elle, un second départ
+           repartirait pareil — à l'infini, sans un geste de l'artisan. Le
+           droit à ce départ revient à chaque nouveau geste (`devis`,
+           `reessayer`) et à chaque écriture qui passe. */
+        if (aPartIci.length && !e.dejaReparti && Object.keys(op.valeurs).some((c) => !aPartIci.includes(c))
+          && !attente.includes(e.cle)) {
+          e.dejaReparti = true;
+          attente.push(e.cle);
+        }
       }
     }
     liberer();
 
     if (fini) {
       aRelire = true;
+      e.dejaReparti = false;
       if (op.action === 'supprimer') {
         if (e.retire) {
           entrees.delete(e.cle);
@@ -694,6 +766,8 @@ export function creerFileEcriture({
       refuserSiSupprime();
       const e = entrees.get(DEVIS);
       e.voulu = { ...e.voulu, ...valeurs, id: e.voulu.id };
+      e.dejaReparti = false;
+      unGeste(e);
       enfiler(DEVIS);
     },
 
@@ -708,10 +782,11 @@ export function creerFileEcriture({
         ancienne.voulu = { ...ancienne.voulu, ...valeurs, devisId: devisIdCourant };
         ancienne.retire = false;
         ancienne.locale = false;
+        unGeste(ancienne);
       } else {
         entrees.set(valeurs.id, {
           cle: valeurs.id, voulu: { ...valeurs, devisId: devisIdCourant }, confirme: null,
-          retire: false, etat: 'locale', erreur: null,
+          retire: false, etat: 'locale', erreur: null, gestes: 1,
         });
       }
       enfiler(valeurs.id);
@@ -725,6 +800,7 @@ export function creerFileEcriture({
       e.voulu = { ...e.voulu, ...changementsVoulus, id };
       e.retire = false;
       e.locale = false;
+      unGeste(e);
       enfiler(id);
     },
 
@@ -736,6 +812,7 @@ export function creerFileEcriture({
       e.retire = true;
       /* Retirer n'est pas « locale » : l'artisan veut qu'elle parte. */
       e.locale = false;
+      unGeste(e);
       if (!e.confirme && !e.peutEtreInseree && enVol !== id) {
         /* Jamais en base : rien à supprimer, et surtout pas de devis à
            créer pour l'occasion. */
@@ -761,6 +838,7 @@ export function creerFileEcriture({
         e = { cle: id, voulu: { ...(valeurs || {}), id }, confirme: null, retire: false, etat: 'locale', erreur: null };
         entrees.set(id, e);
       }
+      unGeste(e);
       const i = attente.indexOf(id);
       if (i >= 0) attente.splice(i, 1);
       /* Si une écriture plus ancienne est en vol, elle finit — mais la ligne
@@ -770,13 +848,26 @@ export function creerFileEcriture({
       verifierFermetures();
     },
 
-    /** « Réessayer » : une ligne en échec, ou tout ce qui a échoué (le devis d'abord). */
-    reessayer(id = null) {
+    /** « Réessayer » : une ligne en échec, ou tout ce qui a échoué (le devis
+     *  d'abord). Ce qu'un refus a mis À PART ne repart qu'avec
+     *  `{ retenues: true }` (17) : le renvoi du plafond, quand le devis
+     *  voulu tiendrait — jamais un « Réessayer » qui renverrait, refusée
+     *  pareil, la valeur que la base vient de refuser.
+     *
+     *  `automatique` : ce renvoi n'est PAS un geste de l'artisan (le renvoi
+     *  du plafond, `rejouerLesRefusDuPlafond`) — il ne compte pas dans
+     *  `gestesDe`. Tout autre « Réessayer » en est un. */
+    reessayer(id = null, { retenues = false, automatique = false } = {}) {
       refuserSiSupprime();
       const cles = id ? [id] : [...entrees.values()].filter((e) => e.etat === 'echec').map((e) => e.cle);
       cles.sort((a, b) => (a === DEVIS ? -1 : b === DEVIS ? 1 : 0)).forEach((c) => {
         const e = entrees.get(c);
-        if (e && e.etat === 'echec') enfiler(c);
+        if (e && e.etat === 'echec') {
+          if (retenues === true) e.tenue = null;
+          e.dejaReparti = false;
+          if (automatique !== true) unGeste(e);
+          enfiler(c);
+        }
       });
     },
 
@@ -849,6 +940,18 @@ export function creerFileEcriture({
 
     /** L'état d'une ligne (ou du devis, clé `'devis'`) ; `null` si la file
      *  ne la connaît plus (retirée, ou le devis supprimé). */
+    /** Combien de fois l'ARTISAN a écrit sur cette clé (relecture finale
+     *  du lot 2a, N1) : `devis`, `ligne`, `modifierLigne`, `retirerLigne`,
+     *  `marquerLocale` et un « Réessayer » qui n'est pas automatique. Un
+     *  renvoi automatique qui finit après un geste n'est plus le sien :
+     *  l'écran compare ce nombre à celui du départ
+     *  (`creerRenvoisAutomatiques`, devis.js), et l'échec du geste se
+     *  signale. Une clé inconnue : 0. */
+    gestesDe(id) {
+      const e = entrees.get(id);
+      return e && Number.isInteger(e.gestes) ? e.gestes : 0;
+    },
+
     etatDe(id) {
       if (supprime) return null;
       const e = entrees.get(id);
@@ -903,9 +1006,26 @@ export function creerFileEcriture({
     entreesVoulues() {
       const r = [];
       entrees.forEach((e, c) => {
-        r.push({ cle: c, voulu: { ...e.voulu }, etat: e.etat, retire: Boolean(e.retire), locale: Boolean(e.locale) });
+        /* …et ce que la BASE a confirmé (relecture finale, ÉCRAN-F1 et F2) :
+           la prédiction du plafond compte la version en base d'une ligne qui
+           ne repartira pas, et « Mes devis » ne montre que ce qui est en
+           base. Une colonne partie sans réponse n'a pas de valeur connue :
+           elle est nommée dans `inconnues`, absente de `confirme`. */
+        const inconnues = e.confirme ? Object.keys(e.confirme).filter((k) => e.confirme[k] === INCONNU) : [];
+        const confirme = e.confirme
+          ? Object.fromEntries(Object.entries(e.confirme).filter(([, v]) => v !== INCONNU)) : null;
+        r.push({
+          cle: c, voulu: { ...e.voulu }, etat: e.etat, retire: Boolean(e.retire), locale: Boolean(e.locale),
+          confirme, inconnues, peutEtreInseree: Boolean(e.peutEtreInseree), tenue: e.tenue ? [...e.tenue.colonnes] : null,
+        });
       });
       return r;
+    },
+    /** Le refus qu'une clé tient À PART (16), ou `null` : l'écran le nomme
+     *  encore quand une AUTRE écriture de l'en-tête a échoué depuis. */
+    retenueDe(id) {
+      const e = entrees.get(id);
+      return e && e.tenue ? e.tenue.erreur : null;
     },
     /** Une promesse qui se résout à `true` quand la file est vide, ou à
      *  `false` au bout de `ms` — la garde de sortie attend 8 s au plus. */

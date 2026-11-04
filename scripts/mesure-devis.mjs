@@ -1497,6 +1497,139 @@ await section('La retenue de garantie', async () => {
   await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
 });
 
+await section('Les aides de droit de la carte « Conditions » : chacune lisible, sous son titre, dans l’ordre (relecture finale du lot 2a, TC-2)', async () => {
+  /* CE QUE LE TEXTE NE PEUT PAS DIRE, MESURÉ ICI (relecture finale du lot
+     2a, TC-2). `verifier-devis` lit des NOMS et des places dans le code ;
+     une vue posée AUTOUR de la carte, un composant (`Interrupteur`) qui
+     changerait ailleurs, un alias qui ferait afficher une aide à la place
+     d'une autre, ne se voient qu'ici. Pour chaque aide de droit :
+       - son texte ENTIER, comparé à celui écrit ICI EN TOUTES LETTRES —
+         jamais la constante importée de `devis.js` : une aide changée dans
+         le code le serait aussi dans la mesure, qui ne verrait rien ;
+       - trouvée UNE fois dans la carte, sous SON titre, dans l'ordre (celui
+         du document ET celui de l'écran : une aide « déplacée » par un
+         style se verrait dans le second) ;
+       - une boîte de vraie taille, dans la largeur de l'écran, que rien ne
+         rogne (aucun ancêtre qui la coupe) et que rien ne recouvre (le
+         point du milieu de sa première ligne tombe sur ELLE) ;
+       - une opacité de 1 sur toute la chaîne de ses ancêtres ;
+       - un contraste RENDU (couleur du texte, opacité comprise, sur le fond
+         réellement peint derrière) de 4,5 : 1 au moins.
+     Espaces insécables lues comme des espaces : `verifier-devis` tient la
+     forme exacte. La démonstration est au régime réel (les deux aides « en
+     euros » s'affichent), et la retenue y est allumée (sa phrase aussi). */
+  const ATTENDUES = [
+    { titre: 'Réduction', aide: 'Elle porte sur les postes, jamais sur une option : une option n’est pas commandée tant que '
+      + 'le client ne l’a pas choisie.' },
+    { titre: 'Réduction', aide: 'En euros, la réduction est hors taxes : elle baisse le total HT, et la TVA avec lui.' },
+    { titre: 'Acompte', aide: 'Calculé sur le total sans les options : avant la signature, on ne sait pas lesquelles le '
+      + 'client prendra.' },
+    { titre: 'Acompte', aide: 'En euros, la somme est toutes taxes comprises : c’est ce que le client verse.' },
+    { titre: 'Acompte', aide: 'Des arrhes : chacun peut renoncer — le client en les perdant, vous en lui rendant le double. '
+      + 'Un acompte engage les deux. Si rien n’est écrit, l’administration considère qu’une somme versée d’avance par un '
+      + 'particulier vaut des arrhes (Code de la consommation, art. L. 214-1). Mais un devis signé hors de vos locaux ou '
+      + 'à distance laisse au client 14 jours pour se rétracter, sauf exceptions (par exemple, le strict nécessaire d’un '
+      + 'dépannage urgent qu’il vous a expressément demandé chez lui) : s’il se rétracte, vous lui rendez tout ce qu’il a '
+      + 'versé, acompte ou arrhes (art. L. 221-18 et L. 221-24).' },
+    { titre: 'Acompte', aide: 'Devis signé hors de vos locaux (chez le client, sur le chantier) par un particulier, ou par '
+      + 'une entreprise de 5 salariés au plus pour des travaux hors de son métier : vous ne pouvez recevoir aucun paiement '
+      + 'avant le 8e jour après la signature — pas même un chèque à encaisser plus tard. Seule exception : des travaux '
+      + 'd’entretien ou de réparation urgents qu’il vous a expressément demandés chez lui, et seulement pour les pièces et '
+      + 'travaux strictement nécessaires à l’urgence (Code de la consommation, art. L. 221-10 et L. 221-3). Opus ne sait '
+      + 'pas encore où ce devis sera signé : comptez ce délai.' },
+    { titre: 'Validité de l’offre', aide: 'À compter de la date du devis, celle qui sera imprimée dessus : le jour où vous '
+      + 'le remettrez au client, pas celui où vous l’avez commencé.' },
+    { titre: 'Retenue de garantie', aide: 'Au plus 5 % des acomptes, rendue un an après la réception des travaux, sauf '
+      + 'opposition motivée que le client notifie au consignataire (ou à la caution) par lettre recommandée.' },
+    { titre: 'Retenue de garantie', aide: 'Retenue sur les acomptes, au plus 5 % (loi n° 71-584 du 16/07/1971). Le client '
+      + 'consigne la somme retenue chez un consignataire accepté par vous deux — à défaut, désigné par le président du '
+      + 'tribunal. Elle n’est pas retenue si vous fournissez une caution personnelle et solidaire d’un montant égal '
+      + '(banque, établissement financier habilité ou société de caution mutuelle). La somme retenue vous revient (ou la '
+      + 'caution est libérée) un an après la réception des travaux, sauf si le client a notifié au consignataire (ou à la '
+      + 'caution), par lettre recommandée, une opposition motivée par l’inexécution de vos obligations.' },
+  ];
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  const allumee = await page.getByRole('switch', { name: /^Retenue de garantie/ }).getAttribute('aria-checked');
+  verifier('la retenue est allumée (sa phrase doit donc se lire)', allumee === 'true');
+  const mesures = [];
+  for (let k = 0; k < ATTENDUES.length; k += 1) {
+    /* Une aide à la fois : on la fait venir au milieu de l'écran, puis on
+       mesure ce que l'œil verrait. */
+    mesures.push(await page.evaluate(({ attendue, rang }) => {
+      const plat = (x) => (x || '').replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
+      const trouvees = [...document.querySelectorAll('div, span')].filter((e) => e.children.length === 0 && plat(e.innerText) === plat(attendue));
+      if (trouvees.length !== 1) return { rang, trouvees: trouvees.length };
+      const el = trouvees[0];
+      const defile = (() => { let a = el.parentElement; while (a) { const o = getComputedStyle(a).overflowY; if (o === 'auto' || o === 'scroll') return a; a = a.parentElement; } return null; })();
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      const ancetres = [];
+      for (let a = el; a; a = a.parentElement) ancetres.push(a);
+      const opacite = ancetres.reduce((p, a) => p * Number(getComputedStyle(a).opacity || 1), 1);
+      const rognee = ancetres.slice(1).some((a) => {
+        const st = getComputedStyle(a);
+        if (st.overflowX === 'visible' && st.overflowY === 'visible') return false;
+        const b = a.getBoundingClientRect();
+        return r.left < b.left - 1 || r.right > b.right + 1 || r.top < b.top - 1 || r.bottom > b.bottom + 1;
+      });
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 16;
+      const sous = document.elementFromPoint(r.left + Math.min(8, r.width / 2), r.top + Math.min(lh / 2, r.height / 2));
+      const recouverte = !(sous && (sous === el || el.contains(sous)));
+      const rgba = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return null; const v = m[1].split(',').map((x) => parseFloat(x)); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; };
+      let fond = { r: 255, g: 255, b: 255, a: 1 };
+      for (const a of ancetres) { const c = rgba(getComputedStyle(a).backgroundColor); if (c && c.a > 0) { fond = c; break; } }
+      const encre = rgba(getComputedStyle(el).color) || { r: 0, g: 0, b: 0, a: 1 };
+      const alpha = encre.a * opacite;
+      const peinte = ['r', 'g', 'b'].map((x) => encre[x] * alpha + fond[x] * (1 - alpha));
+      const lum = (v) => { const c = v.map((x) => x / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+      const [l1, l2] = [lum(peinte), lum([fond.r, fond.g, fond.b])].sort((x, y) => y - x);
+      /* L'ordre : dans le document, et sur l'écran (dans le contenu qui défile). */
+      const y = defile ? r.top - defile.getBoundingClientRect().top + defile.scrollTop : r.top + window.scrollY;
+      const titres = defile ? [...defile.querySelectorAll('[role="heading"]')] : [];
+      const avant = titres.filter((t) => t.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const titre = avant.length ? plat(avant[avant.length - 1].innerText) : null;
+      const titresY = titres.map((t) => ({ t: plat(t.innerText), y: defile ? t.getBoundingClientRect().top - defile.getBoundingClientRect().top + defile.scrollTop : 0 }));
+      return {
+        rang, trouvees: 1, titre, titresY, y, l: r.left, d: r.right, h: r.height, w: r.width, largeur: window.innerWidth,
+        haut: r.top, bas: r.bottom, hauteurFenetre: window.innerHeight, opacite, rognee, recouverte,
+        contraste: (l1 + 0.05) / (l2 + 0.05), dansLaCarte: !!defile,
+        ordreDoc: [...document.querySelectorAll('div, span')].indexOf(el),
+      };
+    }, { attendue: ATTENDUES[k].aide, rang: k }));
+  }
+  const titreAttendu = (t) => (t === 'Acompte' ? /^(Acompte ou arrhes|Acompte|Arrhes)$/ : new RegExp(`^${t}$`));
+  ATTENDUES.forEach(({ titre, aide }, k) => {
+    const m = mesures[k];
+    const nom = `« ${aide.slice(0, 48)}… »`;
+    if (!m || m.trouvees !== 1) { verifier(`${nom} : trouvée une fois, mot pour mot, dans la carte`, false, `${m ? m.trouvees : 0} fois`); return; }
+    verifier(`${nom} : sous « ${titre} », visible (${Math.round(m.w)} × ${Math.round(m.h)}, dans l’écran), ni rognée ni `
+      + `recouverte, opacité ${m.opacite.toFixed(2)}, contraste rendu ${m.contraste.toFixed(2)} : 1`,
+    m.dansLaCarte && titreAttendu(titre).test(m.titre || '') && m.w > 100 && m.h >= 12 && m.l >= 0 && m.d <= m.largeur + 0.5
+      && m.haut >= 0 && m.bas <= m.hauteurFenetre && !m.rognee && !m.recouverte && m.opacite > 0.999 && m.contraste >= 4.5,
+    JSON.stringify({ titre: m.titre, l: m.l, d: m.d, h: m.h, haut: m.haut, bas: m.bas, opacite: m.opacite, rognee: m.rognee, recouverte: m.recouverte, contraste: m.contraste }));
+  });
+  const lues = mesures.filter((m) => m && m.trouvees === 1);
+  const croissant = (v) => v.every((x, j) => j === 0 || x > v[j - 1]);
+  /* Sur l'ÉCRAN, chaque aide tombe entre son titre et le suivant. */
+  const titresY = (lues[0] && lues[0].titresY) || [];
+  const yDuTitre = (t) => (titresY.find((x) => titreAttendu(t).test(x.t)) || {}).y;
+  const ordreTitres = ['Réduction', 'Acompte', 'Validité de l’offre', 'Retenue de garantie'];
+  const entreSesTitres = ATTENDUES.every(({ titre }, k) => {
+    const m = mesures[k];
+    const j = ordreTitres.indexOf(titre);
+    const haut = yDuTitre(titre);
+    const bas = j + 1 < ordreTitres.length ? yDuTitre(ordreTitres[j + 1]) : Infinity;
+    return m && m.trouvees === 1 && haut != null && m.y > haut && m.y < bas;
+  });
+  verifier(`les neuf aides sont dans l’ORDRE, dans le document comme sur l’écran, et chacune entre son titre et le suivant `
+    + `(${titresY.map((x) => x.t).join(' → ')})`,
+  lues.length === ATTENDUES.length && croissant(lues.map((m) => m.ordreDoc)) && croissant(lues.map((m) => m.y))
+    && croissant(ordreTitres.map(yDuTitre).map((v) => (v == null ? -1 : v))) && entreSesTitres,
+  JSON.stringify(lues.map((m) => [m.rang, Math.round(m.y), m.ordreDoc])));
+  await capture('13a-conditions-aides');
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+});
+
 await section('La carte « Conditions » : réduction, acompte, validité, puis la garde (lot 2a)', async () => {
   const montantsDe = (t) => [...net(t).matchAll(/(\d[\d ]*,\d\d) €/g)].map((m) => Math.round(Number(m[1].replace(/ /g, '').replace(',', '.')) * 100));
   /* LES NOMS DES CHAMPS (relecture du lot 2a) : l'acompte porte le nom de sa
@@ -3131,6 +3264,29 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
     const r = await api.unDevis(d.id);
     return { remise: r.devis.remiseCentiemes, lignes: r.lignes.map((x) => ({ d: x.designation, prix: x.prixUnitaireCentimes })) };
   });
+  /* LES VIBRATIONS (relecture finale du lot 2a, ÉCRAN-F1 et F2) : `retour.echec`
+     ne fait rien au navigateur — on le COMPTE, dans le module chargé. */
+  const vibrations = () => page.evaluate(() => window.__opusVibrations || 0);
+  exiger(await page.evaluate(() => {
+    const ex = window.__opusModule('src/lib/retour.js');
+    if (!ex || typeof ex.echec !== 'function') return false;
+    if (!ex.opusCompte) {
+      const avant = ex.echec;
+      window.__opusVibrations = 0;
+      Object.defineProperty(ex, 'echec', { configurable: true, enumerable: true, writable: true,
+        value: (...r) => { window.__opusVibrations += 1; return avant(...r); } });
+      Object.defineProperty(ex, 'opusCompte', { configurable: true, value: true });
+    }
+    return true;
+  }), 'les vibrations d’échec se comptent (`retour.echec`, dans le module chargé)');
+  const lireEnTete = () => page.evaluate(async () => {
+    const api = window.__opusModule('src/lib/api.js');
+    const l = await api.mesDevis();
+    const d = (l.devis || []).find((x) => x.objet === 'Plafond (mesure)');
+    if (!d) return null;
+    const r = await api.unDevis(d.id);
+    return { remise: r.devis.remiseCentiemes, validite: r.devis.validiteJours };
+  });
   await toucher(bouton('Nouveau devis'));
   await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
   await attendre(600);
@@ -3185,7 +3341,10 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
 
   /* L'OPTION DE TROP : sa rangée dit son état, avec la phrase d'une option. */
   await nouveauPoste('Ajouter une option', 'Option trop chère', '99990000');
-  await jusqua(async () => (await page.getByLabel('Ligne non enregistrée. La corriger', { exact: true }).count()) === 2, DELAI_ECRITURE + 3000);
+  /* VoiceOver dit ce qu'est la rangée : « Option non enregistrée », jamais « Ligne » (ÉCRAN-F4). */
+  const optionLue = await jusqua(async () => (await page.getByLabel('Option non enregistrée. La corriger', { exact: true }).count()) === 1, DELAI_ECRITURE + 3000);
+  verifier('l’option refusée s’annonce « Option non enregistrée. La corriger » — la ligne, toujours « Ligne … »',
+    !!optionLue && (await page.getByLabel('Ligne non enregistrée. La corriger', { exact: true }).count()) === 1);
   const rangeeOption = net(await page.evaluate(() => {
     const b = document.querySelector('[aria-label^="Option : Option trop chère"]');
     return b ? b.parentElement.innerText : '';
@@ -3193,7 +3352,24 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
   verifier('une OPTION refusée le dit SUR SA RANGÉE (avant : rien), avec la phrase d’une option — « options comprises »',
     /Non enregistrée — La corriger/.test(rangeeOption)
     && /Avec cette option, le devis, options comprises, dépasserait 99 999 999,99 €/.test(rangeeOption), rangeeOption.slice(0, 200));
-  await jugerCibles('Les rangées refusées', (c) => /^Ligne non enregistrée\. La corriger$/.test(c.libelle));
+  await jugerCibles('Les rangées refusées', (c) => /^(Ligne|Option) non enregistrée\. La corriger$/.test(c.libelle));
+  /* SA GÉLULE GARDE SON REMPLISSAGE (ÉCRAN-F4) : le style « aligné » retirait la
+     marge ET le remplissage — un texte de 135 points dans une gélule de 137,
+     collé au bord arrondi. Seule la MARGE tombe dans le bloc des options. */
+  const gelule = await page.evaluate(() => {
+    const b = document.querySelector('[aria-label="Option non enregistrée. La corriger"]');
+    if (!b) return null;
+    const cs = getComputedStyle(b);
+    const t = b.querySelector('div[dir], div') || b;
+    const rb = b.getBoundingClientRect();
+    const rt = [...b.querySelectorAll('*')].map((x) => x.getBoundingClientRect()).filter((r) => r.width > 0)
+      .reduce((a, r) => ({ g: Math.min(a.g, r.left), d: Math.max(a.d, r.right) }), { g: Infinity, d: -Infinity });
+    return { gauche: parseFloat(cs.paddingLeft), droite: parseFloat(cs.paddingRight), marge: parseFloat(cs.marginLeft),
+      ecartG: rt.g - rb.left, ecartD: rb.right - rt.d, largeur: rb.width, t: !!t };
+  });
+  verifier(`…sa gélule garde son remplissage (${gelule && gelule.gauche} / ${gelule && gelule.droite} px ; le texte à ${gelule && Math.round(gelule.ecartG)} et `
+    + `${gelule && Math.round(gelule.ecartD)} px des bords) — seule sa marge tombe (${gelule && gelule.marge} px)`,
+  !!gelule && gelule.gauche >= 12 && gelule.droite >= 12 && gelule.ecartG >= 11 && gelule.ecartD >= 11 && gelule.marge === 0, JSON.stringify(gelule));
   await capture('32b-plafond-option');
   /* Les retirer : le pied ne les compte plus (avant : « 2 lignes non
      enregistrées », pour un devis tout en base). */
@@ -3218,6 +3394,39 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
     && (await bouton('Réessayer').count()) === 0, bande || '(aucune bande)');
   await capture('33-plafond-reduction');
   verifier('…la base garde sa réduction de 50 % (l’écran ne la montre plus : la bande le dit)', (await lireDevis()).remise === 5000);
+  /* UN AUTRE CHANGEMENT DE L'EN-TÊTE, APRÈS CE REFUS (relecture finale, ÉCRAN-F1
+     = TC-4) : la validité partait AVEC la réduction refusée, était refusée avec
+     elle, n'était nommée nulle part — et la garde laissait partir « sans elles ».
+     Elle part SEULE, elle est en base, rien ne vibre ni ne s'annonce, et la bande
+     ne parle toujours que de ce qui reste refusé : la réduction. */
+  await oublierAnnonces();
+  const v0 = await vibrations();
+  const ev = await ecritures();
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  await toucher(parLibelle('Valable 60 jours'));
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+  const enTeteValidite = await jusqua(async () => {
+    const x = await lireEnTete();
+    return x && x.validite === 60 && /La réduction n’a pas pu être changée\./.test(await texte()) ? x : null;
+  }, DELAI_ECRITURE + 3000);
+  await attendre(PAUSE_DEMO + 600);
+  verifier(`la VALIDITÉ changée après le refus part SEULE (${(await ecritures()) - ev} écriture) : la base a 60 jours et garde sa réduction de 50 %, `
+    + `la rangée dit « Valable 60 jours », la bande ne parle que de la réduction — et rien ne vibre (${(await vibrations()) - v0}) ni ne s’annonce`,
+  !!enTeteValidite && enTeteValidite.remise === 5000 && (await ecritures()) - ev === 1 && (await vibrations()) === v0
+    && (await annonces()).length === 0 && /Valable 60 jours/.test(net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label'))),
+  JSON.stringify({ enTete: enTeteValidite, annonces: await annonces() }));
+  await capture('33b-plafond-validite');
+  /* La garde : elle nomme ce qui n'est pas en base — la réduction —, et son bouton
+     ne dit plus « sans elles » quand aucune ligne n'est en cause. */
+  await toucher(page.getByRole('tab', { name: 'Accueil' }));
+  const gardeEnTete = await jusqua(async () => ((await texte()).match(/La réduction n’a pas pu être changée\.[^\n]*\n[^\n]*/) || [])[0]
+    && (await bouton('Quitter sans l’enregistrer').count()) === 1, DELAI_ECRITURE + 3000);
+  verifier('…la garde : « La réduction n’a pas pu être changée. », « Rester » / « Quitter sans l’enregistrer » — plus « Quitter sans elles » '
+    + 'quand aucune ligne n’est en cause ; l’écran ne part pas',
+  !!gardeEnTete && (await bouton('Quitter sans elles').count()) === 0 && (await dansLaSaisie()));
+  await capture('33c-plafond-garde');
+  await toucher(bouton('Rester'));
+  await attendre(400);
   const e2 = await ecritures();
   await ouvrirRangee('Gros œuvre');
   await viderEtTaper(parLibelle('Prix unitaire HT'), '1000');
@@ -3231,7 +3440,11 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
     && !/Réduction/.test(net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label'))));
   const p2 = await pied();
   verifier(`…le pied : « ${p2.texte} » (1 200,00 € TTC, sans réduction)`, p2.centimes === 120000 && !/réduction comprise|non enregistrée/.test(p2.texte));
-  verifier('…et VoiceOver l’entend : « La réduction est maintenant enregistrée. »', (await annonces()).includes('La réduction est maintenant enregistrée.'),
+  /* CE QUI EST PARTI, C'EST UN RETRAIT (relecture finale, ÉCRAN-F3) : « La
+     réduction est maintenant enregistrée » faisait croire qu'une réduction
+     figurait au devis — il n'y en a plus. */
+  verifier('…et VoiceOver entend ce qui est parti : « La réduction est maintenant retirée du devis. » — jamais « enregistrée »',
+    (await annonces()).includes('La réduction est maintenant retirée du devis.') && !(await annonces()).includes('La réduction est maintenant enregistrée.'),
     JSON.stringify(await annonces()));
   await capture('33a-plafond-apres');
   await toucher(parLibelle('Revenir en arrière'));

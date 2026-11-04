@@ -19,6 +19,25 @@
 --  « permission denied for table … ». Un « ERROR » qui ne porte pas le nom
 --  annoncé est un ÉCHEC de l'essai.
 --
+--  ET UN « ERROR » ANNONCÉ QUI MANQUE EN EST UN AUSSI (relecture finale du
+--  lot 2a, RBM-1) : une erreur qui ne vient plus ne laisse aucun `f`. Le
+--  refus final du cas 13 bis — celui qui protège l'écran — est donc JUGÉ EN
+--  SQL : `:ERROR` est relu juste après l'ordre (vrai s'il a échoué), puis,
+--  la transaction annulée, `LAST_ERROR_SQLSTATE` et `LAST_ERROR_MESSAGE`
+--  disent lequel. `:ERROR` d'abord, parce que le cas 13 finit lui aussi sur
+--  `devis_plafond_check` : un retrait devenu ACCEPTÉ laisserait
+--  `LAST_ERROR_MESSAGE` à l'erreur du cas 13, et le juge à `t`.
+--  Les autres refus ne se jugent que par leur NOMBRE : joué comme ci-dessus
+--  sur une base neuve, ce fichier écrit EXACTEMENT 27 lignes
+--  `psql:… ERROR` (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 27). Un autre
+--  compte est un ÉCHEC, même quand toutes les colonnes valent `t`. (Mesuré le
+--  04/11/2026, sur une copie du schéma : les DEUX bornes du plafond
+--  relâchées — le TTC et le total toutes options comprises —, deux refus
+--  disparaissaient — celui de l'option du cas 13, et le retrait du 13 bis —,
+--  25 au lieu de 27 ; avant la colonne du 13 bis, avec zéro `f` ; depuis,
+--  cette colonne vaut `f`. Le TTC relâché SEUL ne change rien — 27 erreurs,
+--  13 bis à `t` — : la borne du total options comprises refuse encore.)
+--
 --  LES RÈGLES DE L'ESSAI 49 VALENT ICI : chaque cas dans son `begin …
 --  rollback` et construisant son propre état ; chaque ordre qui doit
 --  échouer est le dernier de sa transaction ; aucun cas de droits ou de RLS
@@ -429,7 +448,8 @@ rollback;
 \echo '    et c est juste (un devis ne dépasse pas la borne, avec ou sans réduction). L écran dit alors'
 \echo '    « La réduction n a pas pu être changée », pas « pour cette ligne » (erreurs.js, devis.js).'
 \echo '    attendu : valeurs_attendu_t t ; puis la baisse à 20 % passe (ttc 86,4·10^8, attendu_t t) ;'
-\echo '              puis le retrait → devis_plafond_check'
+\echo '              puis le retrait → devis_plafond_check, JUGÉ après l annulation :'
+\echo '              retrait_refuse_par_le_plafond_attendu_t t (relecture finale du lot 2a, RBM-1)'
 -- ==========================================================================
 begin; set local role authenticated; set local request.jwt.claim.sub = :A;
 insert into public.devis (id, pro_id, remise_centiemes, generation) values (:DR, :A, 5000, 1);
@@ -440,7 +460,10 @@ execute relire(:DR, '4500000000|900000000|5400000000|4500000000|0|5400000000|200
 update public.devis set remise_centiemes = 2000, generation = 3 where id = :DR;
 execute relire(:DR, '7200000000|1440000000|8640000000|1800000000|0|8640000000|2000:7200000000:1800000000:1440000000:1');
 update public.devis set remise_centiemes = null, generation = 4 where id = :DR;
+\set refus_13bis :ERROR
 rollback;
+select :'refus_13bis' = 'true' and :'LAST_ERROR_SQLSTATE' = '23514'
+       and :'LAST_ERROR_MESSAGE' ~ 'devis_plafond_check' as retrait_refuse_par_le_plafond_attendu_t;
 
 -- ==========================================================================
 \echo ''
@@ -734,3 +757,7 @@ select count(*) = 11 as colonnes_lues_attendu_t
      ('devis', 'retenue_garantie_centiemes'), ('devis', 'remise_ht_centimes'),
      ('devis', 'acompte_ttc_centimes'), ('devis', 'total_ttc_options_centimes'),
      ('devis_tva', 'remise_centimes'));
+
+\echo ''
+\echo '=== FIN — ce fichier a écrit EXACTEMENT 27 lignes « psql:… ERROR », chacune annoncée par son nom :'
+\echo '    un autre compte est un ÉCHEC (en-tête, relecture finale du lot 2a, RBM-1) ==='
