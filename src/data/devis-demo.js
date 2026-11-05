@@ -67,7 +67,17 @@
  *      orthographes qui se regroupent, une ligne qui porte un poste écrit
  *      autrement) : la mémoire, sur « chape », rend désormais DEUX
  *      propositions (52 € puis 45 € dans la même, et 38 € « fourniture non
- *      comprise »), la base de postes en tête quand elle les connaît.
+ *      comprise »), la base de postes en tête quand elle les connaît ;
+ *   5. depuis le lot 2b-1, deux brouillons de plus pour Mme Martin, plus
+ *      anciens que les deux premiers (« Mes devis » les range en bas) :
+ *      « Muret de clôture », dont « Ce devis » est COMPLET (client, lieu,
+ *      délai, validité, poste, acompte avec sa nature) — la liste « Ce qu'il
+ *      manque pour remettre ce devis » y dit « rien ne manque » pour le devis,
+ *      et garde les cinq manques de l'entreprise de démonstration ; et
+ *      « Terrasse en bois », à qui il ne manque que la validité et la nature
+ *      de l'acompte. Sans eux, ces deux états ne se verraient nulle part sans
+ *      `.env` (critique E-14). « Mes devis » montre donc QUATRE brouillons :
+ *      les contrôles qui en comptaient deux changent avec cette raison.
  *
  * L'artisan est la fiche `1` — un NOMBRE ici, une CHAÎNE ailleurs
  * (`Object.keys()`) : toute comparaison passe par `String()`, le piège des
@@ -89,15 +99,29 @@ const MINUTE = 60_000;
 const HEURE = 60 * MINUTE;
 const JOUR = 24 * HEURE;
 
-/** Les identifiants des deux devis de démonstration — des UUID v4, comme
- *  ceux que le téléphone fabrique (`identifiant.js`). */
+/** Les identifiants des devis de démonstration — des UUID v4, comme ceux
+ *  que le téléphone fabrique (`identifiant.js`). Deux depuis le lot 1 ;
+ *  deux de plus au lot 2b-1 (`muret`, `terrasse`), pour la liste « Ce qu'il
+ *  manque pour remettre ce devis » — voir `fabriquerDevisDemo`. */
 export const DEVIS_DEMO_IDS = Object.freeze({
   renovation: 'de000001-0000-4000-8000-000000000001',
   sejour: 'de000002-0000-4000-8000-000000000002',
+  muret: 'de000003-0000-4000-8000-000000000003',
+  terrasse: 'de000004-0000-4000-8000-000000000004',
 });
 
-/* L'identifiant d'une ligne de démonstration : le devis, puis son rang. */
-const idLigne = (devis, rang) => `${devis === 1 ? 'de0001a0' : 'de0002a0'}-0000-4000-8000-${String(rang).padStart(12, '0')}`;
+/* Le devis d'une ligne de démonstration, par son numéro (1 à 4). */
+const DEVIS_PAR_NUMERO = Object.freeze({
+  1: DEVIS_DEMO_IDS.renovation,
+  2: DEVIS_DEMO_IDS.sejour,
+  3: DEVIS_DEMO_IDS.muret,
+  4: DEVIS_DEMO_IDS.terrasse,
+});
+
+/* L'identifiant d'une ligne de démonstration : le devis, puis son rang —
+   `de0001a0-…` pour le premier devis, `de0002a0-…` pour le second, comme
+   depuis le lot 1 (des contrôles les nomment), puis `de0003a0`, `de0004a0`. */
+const idLigne = (devis, rang) => `de${String(devis).padStart(4, '0')}a0-0000-4000-8000-${String(rang).padStart(12, '0')}`;
 
 /**
  * L'ANCIENNETÉ DES DEMANDES DE DÉMONSTRATION.
@@ -173,12 +197,62 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       createdAt: il(26 * HEURE),
       modifieLe: il(2 * HEURE),
     },
+    /* LES DEUX BROUILLONS DE LA LISTE « CE QU'IL MANQUE POUR REMETTRE CE
+       DEVIS » (lot 2b-1, critique E-14 : sans eux, « rien ne manque » ne se
+       voyait nulle part sans `.env`). Ajoutés APRÈS les deux premiers, et
+       plus ANCIENS qu'eux : « Mes devis » les range en bas, et les contrôles
+       qui cherchent le premier devis de Mme Martin trouvent toujours la
+       rénovation.
+         - « Muret de clôture » : « Ce devis » est COMPLET — un client, le
+           lieu (copié de sa fiche), un délai, une validité, un poste, un
+           acompte AVEC sa nature. La partie « Ce devis » dit « rien ne
+           manque » ; « Votre entreprise » garde les cinq manques de la
+           fiche de démonstration (`emetteur-demo.js`), exprès, comme chez
+           le propriétaire tant que son n° de TVA est refusé par VIES ;
+         - « Terrasse en bois » : tout est là SAUF la validité et la nature
+           de l'acompte — exactement deux points dans « Ce devis ».
+       Aucune réduction : le contrôle §7 de `verifier-devis` compare les
+       totaux de la base de démonstration à ceux des lignes seules. */
+    {
+      id: DEVIS_DEMO_IDS.muret,
+      proId: PRO_DEMO_DEVIS,
+      quoteRequestId: null,
+      sosRequestId: null,
+      ...devisDepuisClient(martin),
+      statut: 'brouillon',
+      objet: 'Muret de clôture',
+      delaiExecution: DELAI_PAR_DEFAUT.texte,
+      retenueGarantieCentiemes: null,
+      validiteJours: 30,
+      acompteCentiemes: 3000,
+      acompteNature: 'acompte',
+      generation: num(8 * JOUR),
+      createdAt: il(9 * JOUR),
+      modifieLe: il(8 * JOUR),
+    },
+    {
+      id: DEVIS_DEMO_IDS.terrasse,
+      proId: PRO_DEMO_DEVIS,
+      quoteRequestId: null,
+      sosRequestId: null,
+      ...devisDepuisClient(martin),
+      statut: 'brouillon',
+      objet: 'Terrasse en bois',
+      delaiExecution: DELAI_PAR_DEFAUT.texte,
+      retenueGarantieCentiemes: null,
+      validiteJours: null,
+      acompteCentiemes: 3000,
+      acompteNature: null,
+      generation: num(6 * JOUR),
+      createdAt: il(7 * JOUR),
+      modifieLe: il(6 * JOUR),
+    },
   ];
 
   /* Une ligne, toutes colonnes dites : ce que la base rangerait. */
   const ligne = (devisNo, rang, valeurs, age) => ({
     id: idLigne(devisNo, rang),
-    devisId: devisNo === 1 ? DEVIS_DEMO_IDS.renovation : DEVIS_DEMO_IDS.sejour,
+    devisId: DEVIS_PAR_NUMERO[devisNo],
     ordre: rang * 1000,
     type: 'poste',
     designation: null,
@@ -280,6 +354,26 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       designation: 'evacuation des gravats en dechetterie', unite: 'forfait',
       quantiteMilliemes: 1000, prixUnitaireCentimes: 18000, tauxTvaCentiemes: 1000,
     }, 2 * HEURE),
+
+    /* LES LIGNES DES DEUX BROUILLONS DU LOT 2b-1, chacune au plus l'horloge
+       de son devis. Leurs mots ne croisent AUCUN de ceux que la mémoire et
+       la base de postes font chercher aux contrôles (« chape », « Pos »,
+       « faience », « Dalles », « beton », « carrelages », « seuils »,
+       « gravats ») ni de ceux que `mesure-devis` tape : elles nourrissent la
+       mémoire sans changer une seule proposition attendue. Un taux de 10 % :
+       l'aide du taux réduit (`AIDE_TAUX_REDUIT`) s'y voit. */
+    ligne(3, 1, {
+      designation: 'Muret en blocs à bancher, hauteur 1 m', unite: 'm',
+      quantiteMilliemes: 12000, prixUnitaireCentimes: 9500, tauxTvaCentiemes: 1000,
+    }, 8 * JOUR + 2 * MINUTE),
+    ligne(3, 2, {
+      designation: 'Crépi gratté, deux faces du muret', unite: 'm2',
+      quantiteMilliemes: 24000, prixUnitaireCentimes: 3200, tauxTvaCentiemes: 1000,
+    }, 8 * JOUR + MINUTE),
+    ligne(4, 1, {
+      designation: 'Platelage de terrasse en pin traité', unite: 'm2',
+      quantiteMilliemes: 18000, prixUnitaireCentimes: 7800, tauxTvaCentiemes: 1000,
+    }, 6 * JOUR + MINUTE),
   ];
 
   return { devis, lignes };

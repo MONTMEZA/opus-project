@@ -18,6 +18,14 @@
  * L'écran le LIT aussi (`lire()`, `enregistrer()`) au moment où l'on ouvre
  * une carte et à la garde de sortie : un lieu tapé sans choisir de
  * suggestion, puis l'écran quitté, ne doit pas se perdre.
+ *
+ * LOT 2b-1 — « POUR LE REMETTRE » : la ligne qui résume ce qu'il manque pour
+ * remettre ce devis est posée SOUS LE BANDEAU (`ligneRemise`, un élément que
+ * la saisie fabrique) : c'est le seul endroit visible à l'ouverture
+ * (critique E-3). Et la liste mène ici quand il manque le délai ou le lieu :
+ * `focusChamp('delai' | 'lieu')` donne le focus au champ — sur l'iPhone, le
+ * contenu remonte alors jusqu'au curseur (`CLAVIER`). Ça ne se vérifie qu'au
+ * doigt (cahier §3.9).
  */
 import React, {
   forwardRef, useImperativeHandle, useRef, useState,
@@ -40,7 +48,7 @@ export const BANDEAU_CHIFFRAGE = 'Chiffrage — ce brouillon ne part pas encore.
 const texte = (v) => (v == null ? '' : String(v));
 
 const EnteteDevis = forwardRef(function EnteteDevis({
-  devis, client = null, avisRegime = null, erreurs = {}, phraseLieu = null,
+  devis, client = null, avisRegime = null, erreurs = {}, phraseLieu = null, ligneRemise = null,
   onEnregistrer, onChoisirClient, onNouveauClient, onMonEntreprise, onRelireRegime,
 }, ref) {
   /* Le lieu, tenu ICI : `ChampVille` remonte chaque lettre, et l'écran n'a
@@ -53,6 +61,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
   const lieuVif = useRef(lieu);
   const [avertissement, setAvertissement] = useState(() => avertissementDelai(devis.delaiExecution));
   const refObjet = useRef(null);
+  const refRue = useRef(null);
   const refDelai = useRef(null);
   const refCp = useRef(null);
   const refVille = useRef(null);
@@ -82,6 +91,12 @@ const EnteteDevis = forwardRef(function EnteteDevis({
       });
       if (refCp.current) refCp.current.ecrire(texte(v.lieuCodePostal));
       if (refVille.current) refVille.current.ecrire(texte(v.lieuVille));
+    },
+    /** Donner le focus au délai ou au lieu (la rue) : la liste « Pour le
+     *  remettre » y mène quand ils manquent (lot 2b-1, critique E-16). */
+    focusChamp: (champ) => {
+      const cible = { lieu: refRue, delai: refDelai }[champ];
+      if (cible && cible.current && cible.current.focus) cible.current.focus();
     },
   }));
 
@@ -113,6 +128,10 @@ const EnteteDevis = forwardRef(function EnteteDevis({
             calcul, et ne s'additionne à rien. */}
         {!!budget && <Text style={s.origine}>{`Budget indiqué par le client : ${budget}`}</Text>}
       </View>
+
+      {/* « POUR LE REMETTRE » — SOUS le bandeau, visible à l'ouverture
+          (lot 2b-1). La saisie la fabrique : l'en-tête ne fait que la poser. */}
+      {ligneRemise}
 
       {/* CE QUE LE CLIENT A DEMANDÉ — affiché, jamais imprimé (décision du
           propriétaire, 29/10/2026). Il était recopié dans l'OBJET, qui
@@ -177,6 +196,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
           « introuvable », elle rend une AUTRE adresse — on lit, et on sait.
           Un choix remplit les trois cases, et s'enregistre aussitôt. */}
       <ChampVille
+        ref={refRue}
         type="rue"
         placeholder="N° et rue"
         valeur={lieu.lieuAdresse}

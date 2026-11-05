@@ -80,7 +80,7 @@ import { CLAVIER } from '../lib/clavier';
 import { versCentimes } from '../lib/centimes';
 import {
   UNITES, UNITE_MAIN_OEUVRE, tauxLisible, versMilliemes, milliemesEnSaisie, centimesEnSaisie,
-  milliemesLisibles,
+  milliemesLisibles, AIDE_TAUX_REDUIT,
 } from '../lib/devis';
 import {
   vueDeLaBase, posteDeLaLigne, posteDepuisLaLigne, valeursDeLaProposition, prixAEcrire, phraseUniteApres, PHRASE_UNITE_VIDE,
@@ -97,6 +97,11 @@ export const MANQUE = Object.freeze({
 });
 
 const TITRES = { zone: 'Zone', piece: 'Pièce', reserve: 'Réserve', option: 'Option', poste: 'Poste' };
+
+/* Les deux taux RÉDUITS du bâtiment, en centièmes de point (10 % et 5,5 %) :
+   ceux sous lesquels le client certifiera l'âge du logement (CGI 279-0 bis 3,
+   278-0 bis A IV). */
+const TAUX_REDUITS = Object.freeze([1000, 550]);
 
 /** Le texte d'un prix dans son champ : une ligne offerte sans valeur reste VIDE. */
 const prixEnSaisie = (l) => (l.offert && l.prixUnitaireCentimes === 0 ? '' : centimesEnSaisie(l.prixUnitaireCentimes));
@@ -117,6 +122,9 @@ const CarteLigne = forwardRef(function CarteLigne({
      demandes de feuille, que la SAISIE exauce. */
   postes = null, postesEtat = 'vide', onRelirePostes = null, regimeDeclareLe = null,
   onAjouterALaBase = null, onOuvrirPoste = null,
+  /* OUVERTE DEPUIS « POUR LE REMETTRE » (lot 2b-1) : son retour ramène à la
+     LISTE de ce qui manque, et le dit. */
+  depuisLaListe = false,
   onEnregistrer, onFermer, onPosteSuivant, onPosteDansPiece, onMonter, onDescendre, onRetirer,
 }, ref) {
   const refDesignation = useRef(null);
@@ -265,10 +273,12 @@ const CarteLigne = forwardRef(function CarteLigne({
         <Pressable
           onPress={onFermer}
           accessibilityRole="button"
-          accessibilityLabel="Enregistrer cette ligne et revenir au devis"
+          accessibilityLabel={depuisLaListe
+            ? 'Enregistrer cette ligne et revenir à ce qu’il manque pour remettre ce devis'
+            : 'Enregistrer cette ligne et revenir au devis'}
           style={({ pressed }) => [s.retour, pressed && APPUI.discret]}
         >
-          <Text style={s.retourTexte}>‹ Devis</Text>
+          <Text style={s.retourTexte}>{depuisLaListe ? '‹ Liste' : '‹ Devis'}</Text>
         </Pressable>
         <View style={s.milieu}>
           <Text style={s.barreTitre} numberOfLines={1}>{titreBarre || TITRES[ligne.type]}</Text>
@@ -385,6 +395,16 @@ const CarteLigne = forwardRef(function CarteLigne({
                     />
                   ))}
                 </View>
+                {/* À 10 % OU 5,5 % (réponse 3 du propriétaire, le 05/11 :
+                    « tout permettre ») : aucun refus — une AIDE, qui dit
+                    que le client certifiera sur le devis que le logement a
+                    plus de deux ans, et qu'Opus imprimera cette phrase avec
+                    la place de signer (lot 2c). Sous le taux CHOISI
+                    seulement : une aide sous chaque ligne à 20 % ne dirait
+                    rien. */}
+                {TAUX_REDUITS.includes(Number(ligne.tauxTvaCentiemes)) && (
+                  <Text style={s.aide}>{AIDE_TAUX_REDUIT}</Text>
+                )}
               </>
             )}
             {franchise && ligne.tauxTvaCentiemes != null && ligne.tauxTvaCentiemes !== 0 && (

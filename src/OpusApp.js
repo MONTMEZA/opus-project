@@ -369,6 +369,14 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      une `const` lue avant sa déclaration, c'est l'écran blanc. */
   const [entrepriseOuverte, setEntrepriseOuverte] = useState(false);
   const [ouvertureEntreprise, setOuvertureEntreprise] = useState({ cle: 0, section: null });
+  /* CHAQUE FERMETURE DE « MON ENTREPRISE » (lot 2b-1) : un compteur que la
+     saisie d'un devis regarde pour RELIRE « ce qu'il manque pour remettre ce
+     devis ». La fenêtre écrit par d'autres chemins que la file du devis (la
+     fiche, les assurances, les tarifs, la preuve VIES) : sans ce signal, un
+     médiateur choisi là restait signalé au retour (critique E-1). La
+     FERMETURE, et pas `surEmetteur` seul : elle couvre tous ces chemins, et
+     un régime inchangé ne change rien à ce que `surEmetteur` remonte. */
+  const [retourEntreprise, setRetourEntreprise] = useState(0);
   const [maDemandePro, setMaDemandePro] = useState(null);
   const [demandeProEtat, setDemandeProEtat] = useState('jamais');
   /* Le SIRET avec lequel « Passer en compte professionnel » s'ouvre :
@@ -5309,6 +5317,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onGarde={inscrireGarde}
             onRelireRegime={() => lireRegime()}
             onMonEntreprise={(section) => ouvrirMonEntreprise(section)}
+            /* Lot 2b-1 : « Mon entreprise » vient de se fermer — la saisie
+               relit ce qu'il manque pour remettre le devis. */
+            retourEntreprise={retourEntreprise}
             onChargerClients={chargerClients}
             onNouveauClient={(depuis, apres) => ouvrirFicheClient(null, depuis, apres)}
             onCarte={setTitreCarteDevis}
@@ -5514,7 +5525,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         <MonEntreprise
           key={`mon-entreprise-${ouvertureEntreprise.cle}`}
           sectionInitiale={ouvertureEntreprise.section}
-          onFermer={() => setEntrepriseOuverte(false)}
+          onFermer={() => { setEntrepriseOuverte(false); setRetourEntreprise((n) => n + 1); }}
           entreprise={monEntreprise}
           entrepriseRetiree={entrepriseRetiree}
           badge={!!(pros[myProId] && pros[myProId].verifie)}

@@ -340,6 +340,30 @@ export const REFUS_DEVIS = Object.freeze({
 });
 
 /**
+ * LE REFUS DE LA LISTE « CE QU'IL MANQUE POUR REMETTRE CE DEVIS » (section
+ * 49.9 de `schema.sql`, lot 2b-1), AU MOT PRÈS — OP027.
+ *
+ * `motifs_refus_remise(p_devis)` le lève quand le devis n'existe pas OU
+ * n'est pas à celui qui demande : le MÊME code et la MÊME phrase pour les
+ * deux, d'où qu'on l'appelle (avec un jeton, depuis une fonction de la base,
+ * par la clé de service) — dire « il n'existe pas » à l'un et « pas à vous »
+ * à l'autre apprendrait qu'un devis existe chez quelqu'un d'autre.
+ *
+ * La même raison que `REFUS_DEVIS` : `messageClair` rend la phrase de la
+ * base TELLE QUELLE ; cette copie sert à la DÉMONSTRATION (`api.js`), qui
+ * refuse avec les mots exacts de la base. Elle vit À PART de `REFUS_DEVIS`,
+ * dont le contrôle compare chaque phrase aux refus OP013 à OP017 de la
+ * section 49.6 — celle-ci vient de la section 49.9.
+ *
+ * L'APOSTROPHE EST TYPOGRAPHIQUE ici, contrairement à `REFUS_DEVIS` : la
+ * fonction de la base l'écrit ainsi (annexe B.1 du cahier du lot 2b), et
+ * c'est la sienne qui s'affiche.
+ */
+export const REFUS_REMISE = Object.freeze({
+  OP027: 'Ce devis n’existe pas, ou il n’est pas le vôtre.',
+});
+
+/**
  * LE REFUS QUE LA BASE ÉCRIT ELLE-MÊME POUR UN POSTE (section 50.4 de
  * `schema.sql`), AU MOT PRÈS — OP018, le plafond de 1 000 postes par
  * entreprise.
@@ -410,7 +434,10 @@ export class ErreurDeLaBase extends Error {
 /**
  * UN REFUS DÉFINITIF : la même demande, renvoyée, recevra la même réponse.
  * OP019 (l'état a changé), OP020 (on n'ouvre plus rien entre ces deux
- * personnes), OP013 (ce n'est pas à vous), OP021, OP025. L'écran ne propose
+ * personnes), OP013 (ce n'est pas à vous), OP021, OP025, et OP027 (lot
+ * 2b-1 : ce devis n'existe pas, ou il n'est pas le vôtre — la liste de ce
+ * qu'il manque pour le remettre ne se lira pas mieux la seconde fois ; il
+ * a été supprimé, ou l'écran s'est trompé de devis). L'écran ne propose
  * donc PAS « Réessayer » : il dit ce qui reste possible, ou relit.
  *
  * …ET UNE CONTRAINTE `check` QUI REFUSE (23514 — relecture du lot 2a, point
@@ -439,7 +466,7 @@ export class ErreurDeLaBase extends Error {
  */
 export function estUnRefusDefinitif(e) {
   const code = String((e && e.code) || '');
-  return /^OP0(13|19|20|21|25)$/.test(code) || code === 'REPONSE_FERMEE' || code === '23514';
+  return /^OP0(13|19|20|21|25|27)$/.test(code) || code === 'REPONSE_FERMEE' || code === '23514';
 }
 
 /**
@@ -776,7 +803,9 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      OP023 — une trace des conditions ou une adresse de compte qu'on ne
      récrit pas — avec le lot S-c, section 52 ; OP026 — un signalement
      d'un contenu qui n'existe plus, ou qui ne vous est pas adressé — avec
-     le lot S-d, section 53.8)
+     le lot S-d, section 53.8 ; OP027 — la liste de ce qu'il manque pour
+     remettre un devis qui n'existe pas, ou qui n'est pas le vôtre — avec
+     le lot 2b-1, section 49.9)
      PORTENT DÉJÀ LEUR PHRASE,
      en français, et elle dit quoi faire : « touchez « Vérifier » à
      nouveau », « Profil → Passer en compte professionnel ». La reformuler
@@ -945,16 +974,26 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      "public.devis" does not exist » sortait tel quel, en anglais ; et
      surtout, une liste de devis qui ne peut pas se lire ne doit jamais
      ressembler à « Aucun devis » (lot 1 du module devis). */
+  /* …ET UNE FONCTION QUE LA BASE N'A PAS (lot 2b-1, `motifs_refus_remise`) :
+     PostgREST dit PGRST202 « … in the schema cache » (déjà ci-dessous), mais
+     PostgreSQL lui-même dit 42883 « function public.x(uuid) does not
+     exist », qui sortait tel quel, en anglais (mesuré par l'essai du calcul
+     de 2b-1). Seul le texte « function … does not exist » est visé, pas le
+     code : 42883 désigne aussi un OPÉRATEUR introuvable (« operator does not
+     exist: uuid = text »), qui n'est pas une base en retard. */
   if (code === 'PGRST204' || code === '42703' || code === 'PGRST205' || code === '42P01'
     || m.includes('in the schema cache')
-    || /column "?[a-z0-9_.]+"? does not exist/.test(m) || /relation "?[a-z0-9_.]+"? does not exist/.test(m)) {
+    || /column "?[a-z0-9_.]+"? does not exist/.test(m) || /relation "?[a-z0-9_.]+"? does not exist/.test(m)
+    || /function "?[a-z0-9_.]+"?\(.*\) does not exist/.test(m)) {
     const colonne = (brut.match(/the '([a-z0-9_]+)' column/i)
       || brut.match(/column "?(?:[a-z0-9_]+\.)?([a-z0-9_]+)"? does not exist/i) || [])[1];
     const table = colonne ? null : (brut.match(/the table '(?:[a-z0-9_]+\.)?([a-z0-9_]+)'/i)
       || brut.match(/relation "?(?:[a-z0-9_]+\.)?([a-z0-9_]+)"? does not exist/i) || [])[1];
+    const fonction = colonne || table ? null : (brut.match(/function "?(?:[a-z0-9_]+\.)?([a-z0-9_]+)"?\(/i) || [])[1];
     return phrase(sujet, 'la base d’Opus n’a pas encore reçu la mise à jour de l’application'
       + (colonne ? ` (la colonne « ${colonne} » lui manque)` : '')
       + (table ? ` (la table « ${table} » lui manque)` : '')
+      + (fonction ? ` (la fonction « ${fonction} » lui manque)` : '')
       + ' : ce n’est pas de votre fait. Le plus souvent, `supabase/schema.sql` n’a pas été rejoué.');
   }
 

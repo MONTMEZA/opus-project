@@ -809,9 +809,24 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
      `tient_l_urgence()` (lot S-b) y entre aussi : elle REFUSE une urgence
      vers un artisan qui n'apparaîtrait pas dans la recherche, avec les
      mêmes conditions, en `security invoker` — elle ne rend aucun tarif. */
+  /* `motifs_refus_remise()` ENTRE DANS DEUX LISTES AU LOT 2b-1 (section
+     49.9, 05/11/2026) — « ce qu'il manque pour remettre ce devis » :
+       - la liste « émetteur » : elle lit le RÉGIME de TVA de l'entreprise
+         (`emetteur.regime_tva`), pour juger le taux de chaque ligne. Une
+         liste fermée ouvre la TABLE ; c'est sa forme ENTIÈRE, comparée par
+         `verifier-devis` (section 40), et la lecture d'UNE colonne exigée
+         par `verifier-emetteur`, qui la restreignent au régime (critique B4).
+         Elle n'entre pas dans la liste « tarifs » : elle appelle
+         `emetteur_incomplet`, sans nommer `tarifs_pro` ;
+       - la liste « devis » : elle lit le devis et ses lignes, pour
+         l'entreprise de l'appelant seule (la garde `est_mon_entreprise` est
+         dans sa lecture), en `security invoker`, sans rien écrire.
+     Aucun écran ne montre à un artisan les prix d'un autre : elle ne rend
+     aucun montant, seulement des phrases (« Vos tarifs et vos prix » ne
+     change pas). */
   const LISTES = [
     { tables: /\b(emetteur_assurances|emetteur)\b/,
-      permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees'] },
+      permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees', 'motifs_refus_remise'] },
     { tables: /\btarifs_pro\b/,
       permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence'] },
     /* LA TROISIÈME, au lot 1 du devis : les prix des lignes. Le cahier y
@@ -819,7 +834,7 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
        que le plafond de lignes compte sous le verrou de `recalcule_devis`
        (étape 3, 21/10/2026 — `verifier-devis` B-22 tient la liste EXACTE). */
     { tables: DEVIS_NOMME,
-      permises: ['tient_le_devis', 'recalcule_devis', 'mes_donnees'] },
+      permises: ['tient_le_devis', 'recalcule_devis', 'mes_donnees', 'motifs_refus_remise'] },
     /* LA QUATRIÈME, au lot P (section 50) : les phrases et les prix de
        référence de la base de postes. Son déclencheur et l'export, rien
        d'autre — ni une fonction `admin_*`, ni une fonction de la section 49.

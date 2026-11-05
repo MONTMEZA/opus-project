@@ -14076,6 +14076,17 @@ comment on function public.peut_faire_un_devis(uuid, uuid) is
 --  récrit un devis fait monter son horloge » —, et `tient_le_devis()` pose
 --  les trois colonnes. Les totaux, eux, ne bougent pas : la ventilation
 --  n'est pas touchée, et elle n'avait aucune réduction.
+--  MAIS LA DATE « MODIFIÉ » BOUGE, et c'est arrivé (relecture finale du
+--  lot 2a, RBM-2) : `tient_le_devis()` pose `modifie_le` à CHAQUE écriture,
+--  ce rattrapage compris. Sur la vraie base, le 04/11/2026, les 2 brouillons
+--  qui avaient un total ont été récrits : leurs montants n'ont pas bougé
+--  (relevé après), mais ils sont remontés en tête de « Mes devis »,
+--  « modifié » le 04/11, et une suggestion de prix venue de l'un d'eux est
+--  datée de ce jour-là. Cette phrase n'a été écrite qu'au changement suivant
+--  de ce fichier (lot 2b, étape 2b-1, 05/11/2026) : la migration du lot 2a
+--  avait été construite et simulée sur la version d'alors, et on ne la
+--  retouche pas pour un commentaire. Rejoué sur une base déjà à jour, ce
+--  rattrapage ne trouve plus rien : aucune date ne bouge.
 --
 --  LES DEVIS À L'HORLOGE MAXIMALE SONT EXCLUS (`generation <
 --  9007199254740991`, la borne d'OP016 — relecture BASE-2) : `generation +
@@ -14334,6 +14345,285 @@ create index if not exists idx_devis_emis_client  on public.devis (client_id);
 create index if not exists idx_devis_emis_demande on public.devis (quote_request_id);
 create index if not exists idx_devis_emis_urgence on public.devis (sos_request_id);
 create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_id, ordre, id);
+
+-- --------------------------------------------------------------------------
+--  49.9 CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b, étape 2b-1,
+--       05/11/2026) — `motifs_refus_remise(p_devis)`
+--
+--  CE QU'ELLE FAIT. Elle dit, pour UN devis, tout ce qui manque pour qu'il
+--  puisse être remis au client : ce qui manque au devis lui-même, puis ce
+--  qui manque à l'entreprise qui l'émet (`emetteur_incomplet()`, section
+--  46.6). L'écran l'affiche sous le titre « Ce qu'il manque pour remettre ce
+--  devis » ; la remise de 2c refusera tant qu'elle n'est pas VIDE — la MÊME
+--  liste, jamais une seconde écriture de la règle. Rien n'est remis en 2b :
+--  aujourd'hui elle ne bloque rien, elle renseigne.
+--
+--  « RIEN NE MANQUE » = ZÉRO LIGNE. Et seulement cela : une lecture qui
+--  échoue, ou un brouillon que la base n'a pas encore (rien tapé), n'est
+--  JAMAIS « rien ne manque ». C'est l'écran qui le tient (il n'appelle pas
+--  la fonction pour un brouillon pas encore en base, qui rendrait OP027).
+--
+--  TROIS NATURES, et l'écran dit laquelle (cahier 2b, §2.1) :
+--    loi         la loi le demande, ici et maintenant ;
+--    prudence    Opus ne connaît pas encore le cas (pour qui le client
+--                commande, si le devis est un dépannage…) : il compte le
+--                plus protecteur. Ces motifs-là se lèveront quand le fait
+--                qui les décide sera dit (étapes 2b-2 à 2b-4) ;
+--    regle_opus  une règle PLUS STRICTE que la loi, choisie par le
+--                propriétaire. LE 05/11/2026, IL EN A GARDÉ QUATRE : relire le
+--                SIRET chaque année (`entreprise_ancienne`), le n° de TVA
+--                reconnu par VIES pour un devis à un particulier
+--                (`conso_tva_intra`), les frais de déplacement dits sur tous
+--                les devis (`frais_deplacement`), et le délai d'exécution
+--                écrit sur tous les devis (`devis_delai`, que 2b-2 ne lèvera
+--                donc pas, et sa phrase le dit). Et la TVA à 10 % ou 5,5 % :
+--                « tout permettre » — AUCUN motif de taux réduit ; c'est 2c
+--                qui imprimera la certification que le client signe.
+--  Tout le reste est un AVIS, qui ne bloque rien.
+--
+--  LES AVIS NE SONT PAS ICI, et c'est voulu (critique B6) : la remise de 2c
+--  refusera sur CETTE liste ; un avis rangé ici bloquerait une remise. Ils
+--  se calculent dans l'application (`avisDuDevis()`, `src/lib/devis.js`,
+--  une fonction pure), et ne s'affichent jamais dans le compte des points.
+--
+--  AUCUN MOTIF NE NOMME UNE ORIGINE (D4-c, validée par le propriétaire le
+--  19/10/2026, `docs/PLAN-DEVIS.md` §10.15). Un devis venu d'une demande,
+--  d'une urgence ou d'aucune des deux doit manquer EXACTEMENT des mêmes
+--  choses. D'où ce que la fonction ne lit JAMAIS : les deux liens d'origine
+--  du devis, le geste qui a ouvert le brouillon, les tables des demandes et
+--  des urgences, ni un mot d'origine — et ni `select *`, ni `to_jsonb`, ni
+--  `%rowtype` : ses colonnes sont NOMMÉES une par une (un enregistrement
+--  entier lirait l'origine sans la nommer — critique B5). La preuve qui
+--  compte est dans `essais-section-49-remise.sql` : deux devis identiques
+--  sauf leurs liens et la façon dont ils ont été ouverts rendent les MÊMES
+--  motifs. Conséquence assumée : la liste ne voit pas qu'un client a bloqué
+--  l'artisan ; c'est la REMISE (2c) qui la refusera (règle du 25/10).
+--
+--  POURQUOI UNE TABLE, ET PAS UN `text[]` comme `emetteur_incomplet()`
+--  (critique « découpage » 1). Un motif de LIGNE doit désigner sa ligne
+--  (`ligne_id`), l'écran doit savoir dans quel ordre les dire (`rang`) et
+--  comment (`nature`) — un tableau de « clé: phrase » n'a pas la place. Et
+--  cette forme ne pourra plus changer : changer le type de retour d'une
+--  fonction demande un `drop function`, que le connecteur Supabase refuse ;
+--  lui ajouter un paramètre crée une SURCHARGE, et l'appel de l'application
+--  devient ambigu (section 34). Elle est donc choisie pour 2b-1 à 2b-4 et
+--  pour 2c en une fois.
+--
+--  LA GARDE EST ÉCRITE DANS LA LECTURE — `where d.id = p_devis and
+--  est_mon_entreprise(d.pro_id)` —, pas laissée à la RLS (critique B1,
+--  mesurée). Appelée depuis une fonction `security definer` (la remise de
+--  2c le sera) ou par la clé de service, la RLS ne filtre plus : le devis
+--  d'un AUTRE était trouvé, et c'est `emetteur_incomplet()` qui refusait,
+--  sous un autre code (OP011), alors qu'un identifiant inventé rendait
+--  OP027 — le refus disait « il existe, chez un autre ». Ici, les deux cas
+--  rendent le MÊME code et le MÊME message, d'où qu'on appelle. Le TEMPS de
+--  réponse, lui, diffère (≈ 180 µs, mesuré) : c'est dit, pas promis — la
+--  même existence se lit déjà par 23505 à la création d'un devis (lot 1),
+--  et un UUID v4 ne se devine pas. Un visiteur n'a pas le droit de
+--  l'appeler (`revoke`) ; un particulier reçoit OP027 (il n'a pas de fiche
+--  pro). OP027 change de sens par rapport au cahier 2a archivé, qui le
+--  réservait à une garde d'urgence restée sans objet : si elle naît en
+--  2b-3, elle prendra OP028.
+--
+--  « VIDE » = `null`, ET C'EST EXACT ICI. `tient_le_devis()` (49.6, point 1)
+--  range un objet, une adresse, une ville ou un délai faits de blancs comme
+--  `null`, et un code postal fait d'espaces aussi : aucune chaîne vide n'est
+--  jamais rangée dans ces colonnes. Les tester par `is null` suffit, sans
+--  recopier une huitième fois la classe de blancs — l'essai le prouve en
+--  écrivant des espaces et une espace insécable par le chemin d'un client.
+--
+--  « RAMENÉ » : EN EUROS SEULEMENT, et la condition est celle de l'écran
+--  (`effetDeLaReduction`, `effetDeLAcompte`, `src/lib/devis.js`) : la
+--  demande que la base a vue dépasse ce qu'elle a appliqué. La réduction
+--  effective est `least(montant, brut)` (`recalcule_devis`), l'acompte
+--  effectif `least(montant, TTC)` (`tient_le_devis`, point 6). Un
+--  POURCENTAGE ne peut jamais être ramené (borné à 100 % : prouvé sur
+--  140 007 cas, critique B8) ; aucun pourcentage n'est donc recalculé ici.
+--  Aucune phrase ne porte de montant : la base ne formate pas d'euros, et la
+--  carte « Conditions » dit déjà « Ramenée à … ».
+--
+--  RÉGIME ↔ TAUX : la règle de `coherenceRegime()` (`src/lib/devis.js`),
+--  UNE LIGNE PAR LIGNE FAUTIVE — un poste ou une option, offerte comprise,
+--  à un taux non nul en franchise, ou à 0 au régime réel. Elle se lit dans
+--  les LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
+--  critique B7). Régime non déclaré : aucun motif de ligne — celui de
+--  l'entreprise, `regime_tva`, le dit déjà.
+--
+--  LES LIGNES SONT LUES UNE FOIS, agrégées (critique B3). La politique des
+--  lignes parcourt aujourd'hui tous les devis de la plateforme (36 ms à
+--  102 000 devis, mesuré) : un défaut EXISTANT, noté dans `docs/A-FAIRE.md`,
+--  que trois lectures auraient triplé.
+--
+--  LES MOTIFS DE L'ENTREPRISE : rang `100 + position` dans
+--  `emetteur_incomplet()`, clé et phrase = les deux moitiés de « clé:
+--  phrase », coupées au PREMIER « : » (deux-points et espace). Nature :
+--  `regle_opus` pour les trois règles de l'entreprise que le propriétaire a
+--  gardées, `prudence` pour la profession réglementée (la loi demande titre,
+--  État et ordre, qu'Opus ne sait pas encore écrire), `loi` pour les autres.
+--  Les onze motifs `conso_` restent TOUS en 2b-1 : Opus ne sait pas encore
+--  pour qui le client commande (2b-2).
+--
+--  LES PHRASES sont écrites en CARACTÈRES — l'apostrophe typographique ’,
+--  les espaces ordinaires avant « : », comme celles d'`emetteur_incomplet()`
+--  —, jamais par une séquence d'échappement : le transport du connecteur
+--  Supabase les change en caractères (lots 0a, T et 1). Elles sont
+--  recopiées OCTET POUR OCTET dans `MOTIFS_DEVIS` (`src/lib/devis.js`), et
+--  la parité se prouve sur `supabase/cas-remise.json`, que
+--  `scripts/generer-cas-remise.mjs` fait jouer par CETTE fonction : à
+--  relancer, et à commiter, dès que la règle change.
+--
+--  `plpgsql`, `stable`, `security invoker` : elle ne fait que lire, sous les
+--  droits de l'appelant. Pas en corps SQL standard (`begin atomic`) : la base
+--  l'enregistrerait comme dépendante des tables du devis, et l'essai 49
+--  (cas 27d) rougirait. Son corps ne nomme pas un mot de plus que ce qu'elle
+--  lit : plusieurs essais et contrôles relisent le texte des fonctions.
+-- --------------------------------------------------------------------------
+create or replace function public.motifs_refus_remise(p_devis uuid)
+returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid)
+language plpgsql
+stable
+security invoker
+set search_path = public
+as $$
+declare
+  v_pro          uuid;
+  v_client       uuid;
+  v_adresse      text;
+  v_code_postal  text;
+  v_ville        text;
+  v_delai        text;
+  v_validite     integer;
+  v_acompte_pct  integer;
+  v_acompte_eur  bigint;
+  v_acompte_nat  text;
+  v_acompte_eff  bigint;
+  v_remise_eur   bigint;
+  v_remise_eff   bigint;
+  v_regime       text;
+  v_un_poste     boolean;
+  v_fautives     uuid[];
+  v_ligne        uuid;
+  v_motif        text;
+  v_position     bigint;
+begin
+  -- 1. Le devis, s'il est à l'entreprise de l'appelant. La garde est DANS la
+  --    lecture : elle tient d'où qu'on appelle.
+  select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville,
+         d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes,
+         d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes
+    into v_pro, v_client, v_adresse, v_code_postal, v_ville,
+         v_delai, v_validite, v_acompte_pct, v_acompte_eur,
+         v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff
+    from public.devis d
+   where d.id = p_devis
+     and public.est_mon_entreprise(d.pro_id);
+  if not found then
+    raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
+      using errcode = 'OP027';
+  end if;
+
+  -- 2. Le régime de TVA déclaré (vide s'il ne l'est pas).
+  select e.regime_tva into v_regime
+    from public.emetteur e
+   where e.pro_id = v_pro;
+
+  -- 3. Les lignes, lues UNE fois : y a-t-il un poste, et quelles lignes
+  --    chiffrées contredisent le régime, dans l'ordre du devis.
+  select coalesce(bool_or(l.type = 'poste'), false),
+         coalesce(array_agg(l.id order by l.ordre, l.id)
+                    filter (where l.type in ('poste', 'option')
+                              and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0)
+                                   or (v_regime = 'reel' and l.taux_tva_centiemes = 0))),
+                  '{}')
+    into v_un_poste, v_fautives
+    from public.devis_lignes l
+   where l.devis_id = p_devis;
+
+  -- 4. Les motifs du devis, rang par rang.
+  ligne_id := null;
+  if v_client is null then
+    rang := 1; cle := 'devis_client'; nature := 'loi';
+    phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client.';
+    return next;
+  end if;
+  if not v_un_poste then
+    rang := 2; cle := 'devis_lignes'; nature := 'loi';
+    phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste.';
+    return next;
+  end if;
+  foreach v_ligne in array v_fautives loop
+    rang := 3; cle := 'devis_taux_regime'; nature := 'loi'; ligne_id := v_ligne;
+    phrase := 'Le taux de TVA de cette ligne ne correspond pas à votre régime de TVA : corrigez-la.';
+    return next;
+  end loop;
+  ligne_id := null;
+  if v_adresse is null and v_code_postal is null and v_ville is null then
+    rang := 4; cle := 'devis_lieu'; nature := 'prudence';
+    phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.';
+    return next;
+  end if;
+  if v_delai is null then
+    rang := 5; cle := 'devis_delai'; nature := 'regle_opus';
+    phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour un particulier et pour un devis signé chez le client ; Opus le demande pour tous vos devis.';
+    return next;
+  end if;
+  if v_validite is null then
+    rang := 6; cle := 'devis_validite'; nature := 'prudence';
+    phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.';
+    return next;
+  end if;
+  if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then
+    rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence';
+    phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.';
+    return next;
+  end if;
+  if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then
+    rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence';
+    phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.';
+    return next;
+  end if;
+  if v_remise_eur is not null and v_remise_eff < v_remise_eur then
+    rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence';
+    phrase := 'La réduction en euros dépasse le total du devis : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.';
+    return next;
+  end if;
+
+  -- 5. Les motifs de l'entreprise, dans leur ordre, coupés au premier ': '.
+  for v_motif, v_position in
+    select u.m, u.o
+      from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o)
+     order by u.o
+  loop
+    rang := 100 + v_position;
+    cle := split_part(v_motif, ': ', 1);
+    phrase := substr(v_motif, char_length(cle) + 3);
+    nature := case
+      when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus'
+      when cle = 'conso_profession_reglementee' then 'prudence'
+      else 'loi'
+    end;
+    ligne_id := null;
+    return next;
+  end loop;
+  return;
+end;
+$$;
+
+/* Retirée à PUBLIC ET à `anon` — PostgreSQL accorde `execute` à PUBLIC sur
+   toute fonction neuve, et Supabase l'accorde aussi à `anon` directement
+   (le piège de la section 38). Un visiteur n'a pas de devis. La clé de
+   service garde le sien (Supabase le lui accorde d'office) : sans jeton,
+   elle n'est l'entreprise de personne, et reçoit OP027. */
+revoke all on function public.motifs_refus_remise(uuid) from public, anon;
+grant execute on function public.motifs_refus_remise(uuid) to authenticated;
+
+comment on function public.motifs_refus_remise(uuid) is
+  'Ce qu''il manque pour remettre le devis p_devis : une ligne par motif (rang, cle, phrase, '
+  'nature loi | prudence | regle_opus, ligne_id pour un motif de ligne), ceux du devis (rangs 1 '
+  'à 9) puis ceux de l''entreprise (100 + position dans emetteur_incomplet). Aucune ligne = rien '
+  'ne manque de ce qu''Opus vérifie aujourd''hui. Réservée au titulaire du devis (OP027, le même '
+  'refus pour un devis d''un autre et pour un devis qui n''existe pas). Ne lit jamais l''origine '
+  'du devis (D4-c). Phrases identiques à MOTIFS_DEVIS (src/lib/devis.js). Section 49.9.';
 
 -- ==========================================================================
 --  50. LA BASE DE POSTES — ce que l'artisan FIXE lui-même (lot P)

@@ -754,9 +754,11 @@ select string_agg(p.proname, ', ' order by p.proname) as nomment_tarifs_pro,
          = 'artisans_urgence, emetteur_incomplet, mes_donnees, tient_l_urgence' as liste_fermee_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\mtarifs_pro\M';
+-- `motifs_refus_remise` depuis le lot 2b (05/11/2026) : elle lit le régime
+-- de TVA de la fiche de son appelant (section 49.9, et l'essai 46, cas 26 bis).
 select string_agg(p.proname, ', ' order by p.proname) as nomment_emetteur,
        string_agg(p.proname, ', ' order by p.proname)
-         = 'emetteur_incomplet, mes_donnees' as liste_fermee_attendu_t
+         = 'emetteur_incomplet, mes_donnees, motifs_refus_remise' as liste_fermee_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_assurances|emetteur)\M';
 select count(*) filter (where p.prosecdef) as definer_attendu_0

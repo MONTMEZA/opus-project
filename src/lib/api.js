@@ -37,6 +37,7 @@ import { analyserNumeroTva, ESSAIS_VIES } from './tva';
 import { NOM_ENTREPRISE_MAX } from './entreprise';
 import {
   issueDeVerification, avecDelai, REFUS_DEVIS, SUPPRESSION_DEPASSEE, ErreurPoste, REFUS_DEMANDES, ErreurDeLaBase, REPONSE_FERMEE,
+  REFUS_REMISE,
 } from './erreurs';
 import { GENRES_DEMANDE, refusDeTransition } from './transitions-demandes';
 import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
@@ -64,6 +65,7 @@ import { nouvelIdentifiant } from './identifiant';
 import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PAIRES_DEVIS, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
   texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, rowToDevis, totauxDepuisBase, colonnesDuRefus,
+  motifsDeRemise, rowToMotifDeRemise,
 } from './devis';
 import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
 /* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
@@ -2345,18 +2347,27 @@ async function emetteurIncompletSupabase() {
   return lireMotifs(Array.isArray(data) ? data : []);
 }
 
-async function emetteurIncompletDemo() {
-  const moi = moiEnDemo();
+/* CE QUE LE MIROIR `motifsEmetteur()` LIT, en démonstration — écrit UNE
+   fois : « Mon entreprise » (`emetteurIncompletDemo`) et la liste « Ce qu'il
+   manque pour remettre ce devis » (`motifsRefusRemiseDemo`, lot 2b-1) font
+   tourner le MÊME miroir sur les MÊMES données. Deux copies de cette lecture
+   finiraient par dire deux choses de la même fiche — et la base, elle, n'a
+   qu'une `emetteur_incomplet()`, que `motifs_refus_remise()` appelle. */
+function entreeDesMotifsEmetteurDemo(moi) {
   const f = ficheEmetteurDemo(moi);
   const fiche = prosAjoutesDemo[moi] || demoPros[moi] || {};
-  return lireMotifs(motifsEmetteur({
+  return {
     entreprise: entreprisesDemo[moi] || null,
     emetteur: f.emetteur,
     tarifs: f.tarifs,
     metiers: fiche.metiers || [],
     maintenant: new Date(),
     preuveTva: preuvesTvaDemo[String(moi)] || null,
-  }));
+  };
+}
+
+async function emetteurIncompletDemo() {
+  return lireMotifs(motifsEmetteur(entreeDesMotifsEmetteurDemo(moiEnDemo())));
 }
 
 export const emetteurIncomplet = hasSupabase ? emetteurIncompletSupabase : emetteurIncompletDemo;
@@ -3321,6 +3332,69 @@ async function unDevisDemo(id) {
   return baseDevisDeDemo().un(moiEnDemo(), id);
 }
 export const unDevis = hasSupabase ? unDevisSupabase : unDevisDemo;
+
+/* --------------------------------------------------------------------------
+   CE QU'IL MANQUE POUR REMETTRE CE DEVIS — `motifs_refus_remise(p_devis)`,
+   section 49.9 de `schema.sql` (lot 2b-1 du module devis).
+
+   LA BASE EST LA SEULE AUTORITÉ : c'est sa liste qui s'affiche, et c'est
+   elle que la remise (lot 2c) consultera. Rend `[{ rang, cle, phrase,
+   nature, ligneId }]` (`rowToMotifDeRemise`, dans `devis.js`, que `node`
+   fait tourner) ; l'écran la range par `lireMotifsDeRemise`.
+
+   LA MÊME FORME D'ERREUR QUE `unDevis` : un délai et une annulation
+   (`lectureDevis`), et une lecture ratée LÈVE — jamais une liste vide. Une
+   liste vide veut dire « rien ne manque » : la rendre sur un échec dirait
+   à l'artisan que son devis est prêt alors qu'on n'a rien pu lire. Le
+   devis d'un autre, ou un devis qui n'existe plus, rend OP027 (la même
+   phrase pour les deux) : l'erreur de la base TELLE QUELLE, son code
+   compris — `estUnRefusDefinitif` le reconnaît, et l'écran ne propose pas
+   « Réessayer » pour rien. Une base où la section 49.9 n'est pas encore
+   posée (la fonction absente : PGRST202, ou 42883 de PostgreSQL) le DIT
+   (`baseEnRetard`), comme une table absente.
+
+   L'ÉCRAN N'APPELLE PAS cette fonction pour un brouillon qui n'est pas
+   encore en base (cahier, §3.1) : elle rendrait OP027 pour un devis qu'elle
+   ne trouve pas.
+
+   LA DÉMONSTRATION fait tourner le miroir `motifsDeRemise` sur le devis et
+   les lignes de la base de démonstration, le régime de « Mon entreprise » de
+   démonstration, et les motifs que `motifsEmetteur` y calcule — la MÊME
+   lecture que « Mon entreprise » (`entreeDesMotifsEmetteurDemo`). Le devis
+   d'un autre, ou un devis inconnu, y rend OP027 avec la phrase de la base.
+   -------------------------------------------------------------------------- */
+/** « Cette fonction n'existe pas » : PGRST202 (PostgREST) ou 42883 (PostgreSQL). */
+function fonctionAbsente(erreur) {
+  return !!erreur && (erreur.code === 'PGRST202' || erreur.code === '42883');
+}
+
+async function motifsRefusRemiseSupabase(devisId) {
+  const { data, error } = await lectureDevis('La liste de ce qu’il manque pour remettre ce devis', (signal) => avecSignal(
+    supabase.rpc('motifs_refus_remise', { p_devis: devisId }), signal));
+  if (error) {
+    if (fonctionAbsente(error)) error.baseEnRetard = true;
+    leverLecture(error);
+  }
+  /* Une réponse qui n'est pas une liste n'est pas « rien ne manque ». La
+     phrase commence par une minuscule : l'écran la passe par
+     `messageClair(e, 'La liste …')`, qui la pose après son sujet. */
+  if (!Array.isArray(data)) {
+    throw new Error('la base n’a pas rendu de liste lisible. Ce n’est pas que rien ne manque : réessayez.');
+  }
+  return data.map(rowToMotifDeRemise);
+}
+async function motifsRefusRemiseDemo(devisId) {
+  const moi = moiEnDemo();
+  const lu = await baseDevisDeDemo().un(moi, devisId);
+  if (!lu) throw new ErreurDeLaBase('OP027', REFUS_REMISE.OP027);
+  return motifsDeRemise({
+    devis: lu.devis,
+    lignes: lu.lignes,
+    regime: regimeEtSaDate(ficheEmetteurDemo(moi)).regime,
+    motifsEmetteur: motifsEmetteur(entreeDesMotifsEmetteurDemo(moi)),
+  });
+}
+export const motifsRefusRemise = hasSupabase ? motifsRefusRemiseSupabase : motifsRefusRemiseDemo;
 
 /** Les devis d'une fiche du carnet — 21 au plus : la fiche en montre 20, et
  *  dit qu'il y en a d'autres. */

@@ -1237,6 +1237,13 @@ select t as table_,
 -- quelle qu'elle soit et quel que soit son corps, fait rougir 27b ou 27c :
 -- c'est voulu. Si elle est légitime, elle entre dans la liste, avec sa
 -- raison, dans le même lot.
+--
+-- LA LISTE DE 27a A GRANDI AU LOT 2b (étape 2b-1, 05/11/2026) :
+-- `motifs_refus_remise()` (49.9) lit le devis et ses lignes pour dire ce qui
+-- manque à la remise. Elle est `security invoker`, sa garde
+-- (`est_mon_entreprise`) est écrite dans sa lecture, elle n'écrit RIEN, et
+-- elle n'entre dans aucune des deux listes `definer` (27b, 27c : inchangées).
+-- Son essai est `essais-section-49-remise.sql`.
 \echo '--- 27a. le motif : qui nomme les tables (prosrc + prosqlbody, guillemets dépliés, commentaires et chaînes retirés, AUCUN regard en avant)'
 with corps as (
   select n.nspname, p.proname, p.prosecdef,
@@ -1252,7 +1259,7 @@ with corps as (
    where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prokind in ('f', 'p')
 )
 select string_agg(nspname || '.' || proname, ', ' order by proname) filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M')
-         = 'public.mes_donnees, public.recalcule_devis, public.tient_le_devis' as liste_fermee_attendu_t,
+         = 'public.mes_donnees, public.motifs_refus_remise, public.recalcule_devis, public.tient_le_devis' as liste_fermee_attendu_t,
        string_agg(nspname || '.' || proname, ', ' order by proname) filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M') as qui_les_nomme,
        string_agg(proname, ', ') filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and prosecdef) as definer_attendu_recalcule_devis,
        count(*) filter (where src ~* '\m(public\s*\.\s*)?devis(_lignes|_tva)?\M' and proname ~ '^admin_') as admin_attendu_0

@@ -1960,12 +1960,16 @@ export function coherenceRegime(lignes, etatRegime) {
     return 'Votre régime de TVA n’est pas déclaré : ce devis porte des lignes chiffrées, mais Opus ne '
       + 'sait pas s’il faut y ajouter la TVA. Déclarez-le dans « Mon entreprise ».';
   }
-  /* Une ligne sans taux encore (incomplète, pas enregistrée) ne contredit rien. */
-  if (regime === 'franchise' && chiffrees.some((l) => present(l.tauxTvaCentiemes) && l.tauxTvaCentiemes !== 0)) {
+  /* Une ligne sans taux encore (incomplète, pas enregistrée) ne contredit rien.
+     La règle de chaque ligne est `ligneContreditLeRegime` (plus bas) : UNE
+     écriture, que le motif `devis_taux_regime` (lot 2b-1) lit aussi —
+     cette phrase et la liste « Ce qu'il manque » ne doivent jamais se
+     contredire. */
+  if (regime === 'franchise' && chiffrees.some((l) => ligneContreditLeRegime(l, 'franchise'))) {
     return 'Vous êtes déclaré en franchise de TVA, mais des lignes portent un taux de TVA : en franchise, '
       + 'vous n’en facturez pas. Corrigez ces lignes, ou votre régime dans « Mon entreprise ».';
   }
-  if (regime === 'reel' && chiffrees.some((l) => l.tauxTvaCentiemes === 0)) {
+  if (regime === 'reel' && chiffrees.some((l) => ligneContreditLeRegime(l, 'reel'))) {
     return 'Vous êtes déclaré au régime réel de TVA, mais des lignes n’ont pas de taux : choisissez '
       + '20\u00a0%, 10\u00a0% ou 5,5\u00a0% sur chacune. Ou corrigez votre régime dans « Mon entreprise ».';
   }
@@ -2647,17 +2651,22 @@ function valeurDeCondition(pourcent, montant) {
  * LE RÉSUMÉ DES CONDITIONS, la rangée qui ouvre la carte « Conditions » :
  * ce qui MANQUE d'abord (un acompte sans sa nature, une validité pas
  * choisie), puis ce qui est posé — « Réduction 5 % · Acompte 30 % · Valable
- * 30 jours ». Rien de posé : « Aucune condition — touchez pour en poser ».
- * Une phrase, que l'écran coupe à deux lignes.
+ * 30 jours ». Une phrase, que l'écran coupe à deux lignes.
+ *
+ * RIEN DE POSÉ : « Validité à choisir » (lot 2b-1, critique E-12). Ce résumé
+ * disait « Aucune condition — touchez pour en poser » : une invitation
+ * facultative, juste au-dessus de la liste « Ce qu'il manque pour remettre
+ * ce devis », qui compte la validité comme un point à compléter. Deux
+ * rangées voisines se contredisaient. Le cas « rien de posé » n'a plus de
+ * phrase à lui : sans validité, elle MANQUE, et le résumé le dit comme il le
+ * disait déjà quand une autre condition était posée — il n'est donc jamais
+ * vide.
  */
 export function resumeDesConditions(d) {
   const x = d || {};
   const reduction = valeurDeCondition(x.remiseCentiemes, x.remiseCentimes);
   const acompte = valeurDeCondition(x.acompteCentiemes, x.acompteCentimes);
   const retenue = present(x.retenueGarantieCentiemes) ? tauxLisible(x.retenueGarantieCentiemes) : null;
-  if (!reduction && !acompte && !present(x.validiteJours) && !retenue) {
-    return 'Aucune condition — touchez pour en poser';
-  }
   const manque = [];
   if (acompte && !present(x.acompteNature)) manque.push('Acompte ou arrhes ? à choisir');
   if (!present(x.validiteJours)) manque.push('Validité à choisir');
@@ -3272,12 +3281,487 @@ export function tauxHorairePropose(etatTarifs, etatRegime) {
 /**
  * Un délai « indicatif » : un avertissement, JAMAIS un refus. Face à un
  * consommateur, une date ou un délai indicatif d'exécution est présumé
- * abusif (code de la consommation, art. R. 212-2, 7°). La seule règle plus
- * stricte que la loi que garde Opus est la relecture annuelle du SIRET ;
- * celle-ci n'en ajoute pas.
+ * abusif (code de la consommation, art. R. 212-2, 7°). Ce n'est pas une
+ * règle d'Opus de plus : les règles plus strictes que la loi sont celles que
+ * le propriétaire a choisies le 05/11 (le SIRET relu chaque année, le n° de
+ * TVA reconnu par VIES, les frais de déplacement et le délai d'exécution
+ * dits sur tous les devis — `NATURE_DU_MOTIF_ENTREPRISE`, `MOTIFS_DEVIS`).
+ * Cette phrase disait « la seule … est la relecture annuelle du SIRET » :
+ * c'était vrai avant le lot 2b.
  */
 export function avertissementDelai(texte) {
   if (!pourChercher(texte).includes('indicati')) return null;
   return 'Face à un particulier, une date ou un délai « indicatif » est présumé abusif (code de la '
     + 'consommation, art. R.\u00a0212-2, 7°) : écrivez une date ou un délai ferme.';
 }
+
+/* ================================================================== */
+/*  CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b-1, 05/11/2026)      */
+/* ================================================================== */
+/*
+ * LA BASE EST LA SEULE AUTORITÉ. `motifs_refus_remise(p_devis)` (section
+ * 49.9 de `schema.sql`) dit ce qui manque pour remettre un devis au client ;
+ * la remise elle-même (lot 2c) refusera tant qu'elle rend une ligne. Ce qui
+ * suit sert aux trois mêmes choses que le reste de ce fichier :
+ *   - faire VIVRE la démonstration, où il n'y a pas de base
+ *     (`motifsDeRemise`, le miroir de la fonction) ;
+ *   - être éprouvé par `verifier-devis` sur les MÊMES entrées que la vraie
+ *     fonction (`supabase/cas-remise.json`, joué par PostgreSQL : zéro écart
+ *     exigé, comme les 768 cas du badge) ;
+ *   - préparer pour l'écran la liste que la BASE a rendue
+ *     (`lireMotifsDeRemise`) : c'est sa phrase qui s'affiche, jamais une
+ *     copie d'ici.
+ * Le contrat — clés, rangs, natures, phrases — est l'annexe B du cahier du
+ * lot 2b, figée avant la construction. Une phrase changée ici sans l'être
+ * en SQL fait rougir le contrôle : la règle d'une écriture tenue à deux
+ * endroits ne vaut que si un contrôle tient les deux.
+ *
+ * TROIS SORTES DE MOTIFS, et l'écran dit laquelle (§2.1 du cahier) :
+ *   - `loi` : la loi le demande ;
+ *   - `prudence` : Opus ne connaît pas encore le cas (pour qui le client
+ *     commande, quel travail c'est), et il compte le plus protecteur ;
+ *   - `regle_opus` : une règle plus stricte que la loi, que le propriétaire
+ *     a CHOISIE le 05/11 (le SIRET relu chaque année, le n° de TVA reconnu
+ *     par VIES, les frais de déplacement et le délai d'exécution dits sur
+ *     tous les devis). Elle se dit comme un choix d'Opus, jamais comme la
+ *     loi : une règle d'Opus présentée comme la loi serait une information
+ *     fausse donnée à l'artisan.
+ * UN AVIS N'EST PAS UN MOTIF : il ne bloque rien. C'est pour ça qu'il ne
+ * vit PAS dans la fonction de la base (critique B6) : aucun avis ne doit
+ * pouvoir, un jour, bloquer une remise par erreur. `avisDuDevis`, plus bas.
+ */
+
+/** Les trois natures d'un motif — la colonne `nature` de la base. */
+export const NATURES_DE_MOTIF = Object.freeze(['loi', 'prudence', 'regle_opus']);
+
+/**
+ * LES NEUF MOTIFS DU DEVIS (annexe B.2), recopiés OCTET POUR OCTET de la
+ * fonction de la base : le rang (l'ordre de la liste), la nature, la phrase.
+ *
+ * Trois règles de forme, et aucune n'est cosmétique :
+ *   - AUCUN montant dans une phrase : la base ne met pas d'euros en forme,
+ *     et une phrase de la base avec « 1234.5 » serait pire que pas de
+ *     montant. L'écran affiche le montant à côté ;
+ *   - l'apostrophe TYPOGRAPHIQUE ’, comme dans `emetteur_incomplet()` ;
+ *   - des espaces ORDINAIRES, avant « : » aussi : c'est ainsi que
+ *     `emetteur.js` recopie les phrases de la base (`MOTIFS`), et
+ *     `schema.sql` ne porte aucune espace insécable — le transport du
+ *     connecteur Supabase change une séquence d'échappement écrite dans le
+ *     SQL (CLAUDE.md).
+ *
+ * `devis_delai` est une RÈGLE D'OPUS (réponse du propriétaire du 05/11) :
+ * la loi ne demande le délai que pour un particulier, et pour un devis
+ * signé chez le client ; sa phrase le dit, et elle ne sera pas levée par
+ * l'étape 2b-2. `devis_lieu` et `devis_validite` sont des PRUDENCES : l'arrêté
+ * du 24/01/2017 ne les demande que pour un dépannage, une réparation ou un
+ * entretien, et Opus ne sait pas encore si le devis en est un (2b-4).
+ */
+export const MOTIFS_DEVIS = Object.freeze({
+  devis_client: Object.freeze({
+    rang: 1,
+    nature: 'loi',
+    phrase: 'Ce devis ne s’adresse encore à personne : choisissez le client.',
+  }),
+  devis_lignes: Object.freeze({
+    rang: 2,
+    nature: 'loi',
+    phrase: 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste.',
+  }),
+  devis_taux_regime: Object.freeze({
+    rang: 3,
+    nature: 'loi',
+    phrase: 'Le taux de TVA de cette ligne ne correspond pas à votre régime de TVA : corrigez-la.',
+  }),
+  devis_lieu: Object.freeze({
+    rang: 4,
+    nature: 'prudence',
+    phrase: 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien, et '
+      + 'Opus ne sait pas encore si ce devis en est un.',
+  }),
+  devis_delai: Object.freeze({
+    rang: 5,
+    nature: 'regle_opus',
+    phrase: 'Écrivez le délai d’exécution des travaux. La loi le demande pour un particulier et pour un devis signé '
+      + 'chez le client ; Opus le demande pour tous vos devis.',
+  }),
+  devis_validite: Object.freeze({
+    rang: 6,
+    nature: 'prudence',
+    phrase: 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un '
+      + 'entretien, et Opus ne sait pas encore si ce devis en est un.',
+  }),
+  devis_acompte_nature: Object.freeze({
+    rang: 7,
+    nature: 'prudence',
+    phrase: 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, '
+      + 'et Opus ne choisit pas à votre place.',
+  }),
+  devis_acompte_ramene: Object.freeze({
+    rang: 8,
+    nature: 'prudence',
+    phrase: 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce '
+      + 'que vous voulez.',
+  }),
+  devis_reduction_ramenee: Object.freeze({
+    rang: 9,
+    nature: 'prudence',
+    phrase: 'La réduction en euros dépasse le total du devis : Opus l’a ramenée. Corrigez-la pour que le devis dise '
+      + 'ce que vous voulez.',
+  }),
+});
+
+/**
+ * LES MOTIFS DE L'ENTREPRISE (annexe B.3) — ceux de `emetteur_incomplet()`,
+ * que la fonction de la base APPELLE et range après ceux du devis : rang
+ * `100 + position` (1 à 21), dans l'ordre où elle les rend.
+ *
+ * Seules les EXCEPTIONS sont écrites ici ; tout autre motif est `loi`.
+ * Trois règles d'Opus (le SIRET relu chaque année, le n° de TVA reconnu par
+ * VIES, les frais de déplacement dits sur tous les devis — gardées par le
+ * propriétaire le 05/11), et une PRUDENCE : la profession réglementée. La
+ * loi demande titre, État et ordre (R. 111-2), Opus ne sait pas encore les
+ * écrire ; ce n'est pas la loi qui bloque, c'est ce qu'Opus ne sait pas.
+ */
+export const NATURE_DU_MOTIF_ENTREPRISE = Object.freeze({
+  entreprise_ancienne: 'regle_opus',
+  conso_tva_intra: 'regle_opus',
+  frais_deplacement: 'regle_opus',
+  conso_profession_reglementee: 'prudence',
+});
+
+/** Le rang du premier motif de l'entreprise, moins un : les rangs du devis
+ *  restent sous 100, ceux de l'entreprise au-dessus. */
+export const RANG_DE_L_ENTREPRISE = 100;
+
+const aLaCle = (o, cle) => cle != null && Object.prototype.hasOwnProperty.call(o, cle);
+
+/** La nature d'un motif de l'entreprise : l'exception écrite, ou `loi`. */
+export function natureDuMotifEntreprise(cle) {
+  return aLaCle(NATURE_DU_MOTIF_ENTREPRISE, cle) ? NATURE_DU_MOTIF_ENTREPRISE[cle] : 'loi';
+}
+
+/* « cle: phrase », la forme d'`emetteur_incomplet()`, coupée au PREMIER
+   deux-points (annexe B.3) : la clé n'en porte jamais (`[a-z_]+`), la phrase
+   souvent (« Pour un devis à un particulier : … »). L'espace qui suit le
+   deux-points part avec lui. Un élément déjà lu (`{ cle, phrase }`, ce que
+   rend `lireMotifs` d'`emetteur.js`) passe tel quel : la démonstration et
+   les cas de parité ne passent pas par le même chemin. */
+function couperMotifEntreprise(brut) {
+  if (brut && typeof brut === 'object') {
+    return { cle: typeof brut.cle === 'string' ? brut.cle : null, phrase: brut.phrase == null ? '' : String(brut.phrase) };
+  }
+  const texte = brut == null ? '' : String(brut);
+  const i = texte.indexOf(':');
+  if (i < 0) return { cle: null, phrase: texte };
+  return { cle: texte.slice(0, i), phrase: texte.slice(i + 1).replace(/^ /, '') };
+}
+
+/**
+ * UNE LIGNE CONTREDIT-ELLE LE RÉGIME DE TVA ? — la règle de
+ * `devis_taux_regime`, ligne par ligne, et celle de `coherenceRegime`, qui
+ * l'appelle : UNE écriture. Un poste OU une option (une option non commandée
+ * porte quand même un taux qui s'imprimera), offerte comprise :
+ *   - en franchise, tout taux autre que 0 (CGI 293 B : pas de TVA facturée) ;
+ *   - au régime réel, un taux de 0 (un taux est dû) ;
+ *   - régime non déclaré, en lecture ou en échec : jamais — on ne juge pas
+ *     ce qu'on ne connaît pas, et le motif `regime_tva` de l'entreprise dit
+ *     déjà qu'il manque.
+ * Une ligne SANS taux (incomplète, pas encore enregistrée) ne contredit
+ * rien : la base, où une ligne chiffrée porte toujours un taux, dirait
+ * `null` — ni vrai ni faux.
+ */
+export function ligneContreditLeRegime(l, regime) {
+  if (!l || !TYPES_CHIFFRES.includes(typeDe(l)) || !present(l.tauxTvaCentiemes)) return false;
+  const t = Number(l.tauxTvaCentiemes);
+  if (regime === 'franchise') return t !== 0;
+  if (regime === 'reel') return t === 0;
+  return false;
+}
+
+/**
+ * LE MIROIR DE `motifs_refus_remise()` — même entrée, même sortie.
+ *
+ * Entrée (annexe B.4) : le devis et ses lignes AUX NOMS DE L'APPLICATION
+ * (`rowToDevis`, `rowToLigne`), le régime de TVA (`'franchise'`, `'reel'`
+ * ou `null`, la colonne `emetteur.regime_tva`), et ce que rend
+ * `emetteur_incomplet()` (« cle: phrase », dans son ordre).
+ *
+ * Sortie : `[{ rang, cle, phrase, nature, ligneId }]`, rangée comme la
+ * base — le rang croissant, puis, pour les lignes fautives, l'ordre des
+ * lignes (`ordre`, puis `id`). `ligneId` désigne la ligne fautive, `null`
+ * pour tout autre motif.
+ *
+ * « VIDE » VEUT DIRE CE QUE LA BASE RANGE : `null`, ou un texte fait de
+ * blancs (invisibles compris), ou un code postal fait d'espaces. La base ne
+ * range jamais un blanc (`tient_le_devis()` le change en `null`) : le
+ * miroir lit donc le devis à travers `nettoyerDevis`, le même nettoyage, et
+ * un devis de l'écran pas encore relu se juge comme la base le jugera.
+ *
+ * « RAMENÉ » se juge comme la carte « Conditions » (`effetDeLaReduction`,
+ * `effetDeLAcompte`) : la demande EN EUROS que la base a vue dépasse ce
+ * qu'elle a appliqué. En pourcentage, jamais : une réduction ou un acompte
+ * de 100 % au plus ne dépasse pas ce sur quoi il porte (prouvé sur 140 007
+ * cas, critique B8). Un effectif ABSENT ne se compare pas (en SQL, `null <
+ * x` n'est pas vrai) : la base en porte toujours un (`not null default 0`).
+ */
+export function motifsDeRemise({ devis = null, lignes = [], regime = null, motifsEmetteur = [] } = {}) {
+  const d = nettoyerDevis(devis || {});
+  const sortie = [];
+  const motif = (cle, ligneId = null) => {
+    const m = MOTIFS_DEVIS[cle];
+    sortie.push({ rang: m.rang, cle, phrase: m.phrase, nature: m.nature, ligneId });
+  };
+  const tri = trierLignes(Array.isArray(lignes) ? lignes : []);
+  const ramene = (demande, effectif) => present(d[demande]) && present(d[effectif])
+    && Number(d[effectif]) < Number(d[demande]);
+
+  if (!present(d.clientId)) motif('devis_client');
+  if (!tri.some((l) => typeDe(l) === 'poste')) motif('devis_lignes');
+  tri.forEach((l) => { if (ligneContreditLeRegime(l, regime)) motif('devis_taux_regime', l.id ?? null); });
+  if (!present(d.lieuAdresse) && !present(d.lieuCodePostal) && !present(d.lieuVille)) motif('devis_lieu');
+  if (!present(d.delaiExecution)) motif('devis_delai');
+  if (!present(d.validiteJours)) motif('devis_validite');
+  if ((present(d.acompteCentiemes) || present(d.acompteCentimes)) && !present(d.acompteNature)) motif('devis_acompte_nature');
+  if (ramene('acompteCentimes', 'acompteTtcCentimes')) motif('devis_acompte_ramene');
+  if (ramene('remiseCentimes', 'remiseHtCentimes')) motif('devis_reduction_ramenee');
+
+  (Array.isArray(motifsEmetteur) ? motifsEmetteur : []).forEach((brut, i) => {
+    const { cle, phrase } = couperMotifEntreprise(brut);
+    sortie.push({ rang: RANG_DE_L_ENTREPRISE + i + 1, cle, phrase, nature: natureDuMotifEntreprise(cle), ligneId: null });
+  });
+
+  /* Le rang d'abord, puis l'ordre d'arrivée — celui des lignes rangées pour
+     les lignes fautives. L'indice départage : le tri ne dépend pas de la
+     stabilité de `sort` du moteur (Hermes, `node`). */
+  return sortie.map((m, i) => ({ m, i })).sort((a, b) => (a.m.rang - b.m.rang) || (a.i - b.i)).map((x) => x.m);
+}
+
+/**
+ * Une ligne rendue par `motifs_refus_remise()`, aux noms de l'application.
+ * Ici, et pas dans `api.js` : `node` fait tourner ce fichier, et
+ * `verifier-devis` peut éprouver la traduction sur une ligne fabriquée comme
+ * PostgREST la rend (la leçon de `rowToDevis`, relecture CONTROLES-5 du
+ * lot 2a).
+ */
+export function rowToMotifDeRemise(m) {
+  const x = m && typeof m === 'object' ? m : {};
+  return {
+    rang: nombreOuNul(x.rang),
+    cle: x.cle ?? null,
+    phrase: x.phrase ?? null,
+    nature: x.nature ?? null,
+    ligneId: x.ligne_id ?? null,
+  };
+}
+
+/** Ce que l'écran dit de la NATURE d'un motif (annexe B.8). */
+export const ETIQUETTE_DE_NATURE = Object.freeze({
+  loi: 'La loi',
+  prudence: 'Par prudence',
+  regle_opus: 'Règle d’Opus',
+});
+
+/**
+ * OÙ L'ÉCRAN MÈNE L'ARTISAN pour chaque motif du devis : le choix du client,
+ * la liste des lignes, LA ligne fautive, le lieu, le délai (qui prend le
+ * focus), ou la carte « Conditions » ouverte SUR SON CHAMP — la validité, la
+ * nature de l'acompte, l'acompte, la réduction (critique E-13 : la carte
+ * s'ouvrait en haut, et la validité était hors de l'écran sur les trois
+ * tailles mesurées).
+ *
+ * Les motifs de l'ENTREPRISE ne sont pas écrits ici : ils mènent à « Mon
+ * entreprise », sur la section que dit la table d'`emetteur.js`
+ * (`SECTION_DU_MOTIF`). Ce fichier n'importe pas `emetteur.js` — sa liste
+ * d'imports est tenue par `verifier-devis` —, et une COPIE de cette table
+ * divergerait le jour où un motif change de section : l'écran la passe
+ * (`endroitDuMotif(motif, { sections: SECTION_DU_MOTIF })`).
+ */
+export const ENDROIT_DU_MOTIF = Object.freeze({
+  devis_client: Object.freeze({ endroit: 'client' }),
+  devis_lignes: Object.freeze({ endroit: 'lignes' }),
+  devis_taux_regime: Object.freeze({ endroit: 'ligne' }),
+  devis_lieu: Object.freeze({ endroit: 'lieu' }),
+  devis_delai: Object.freeze({ endroit: 'delai' }),
+  devis_validite: Object.freeze({ endroit: 'conditions', champ: 'validite' }),
+  devis_acompte_nature: Object.freeze({ endroit: 'conditions', champ: 'nature' }),
+  devis_acompte_ramene: Object.freeze({ endroit: 'conditions', champ: 'acompte' }),
+  devis_reduction_ramenee: Object.freeze({ endroit: 'conditions', champ: 'reduction' }),
+});
+
+/**
+ * L'endroit d'UN motif : `{ endroit, champ?, ligneId?, section? }`, ou
+ * `null` quand l'écran ne sait mener nulle part — une clé inconnue (une base
+ * plus récente que l'application) s'affiche quand même, sans bouton.
+ *   - une ligne fautive SANS identifiant mène à la liste des lignes ;
+ *   - un motif de l'entreprise mène à « Mon entreprise », sur sa section ;
+ *     une section `null` veut dire, comme dans `emetteur.js`, « rien à
+ *     compléter dans Opus aujourd'hui » (la profession réglementée).
+ */
+export function endroitDuMotif(motif, { sections = null } = {}) {
+  const cle = motif && typeof motif.cle === 'string' ? motif.cle : null;
+  if (aLaCle(ENDROIT_DU_MOTIF, cle)) {
+    const e = ENDROIT_DU_MOTIF[cle];
+    if (e.endroit === 'ligne') {
+      const id = motif.ligneId ?? null;
+      return id ? { endroit: 'ligne', ligneId: id } : { endroit: 'lignes' };
+    }
+    return { ...e };
+  }
+  if (sections && typeof sections === 'object' && aLaCle(sections, cle)) {
+    return { endroit: 'entreprise', section: sections[cle] ?? null };
+  }
+  return null;
+}
+
+/** Les trois parties de la liste, dans l'ordre de l'écran (§3.1 du cahier).
+ *  « Mentions dues à un particulier » : les motifs `conso_` de l'entreprise,
+ *  tous gardés à l'étape 2b-1 — Opus ne sait pas encore pour qui le client
+ *  commande (2b-2). */
+export const PARTIES_DE_LA_LISTE = Object.freeze([
+  Object.freeze({ cle: 'devis', titre: 'Ce devis' }),
+  Object.freeze({ cle: 'entreprise', titre: 'Votre entreprise' }),
+  Object.freeze({ cle: 'particulier', titre: 'Mentions dues à un particulier' }),
+]);
+
+/* Ce que l'écran montre d'un élément qu'il ne sait pas lire : la règle de
+   `lireMotifs` (emetteur.js), mot pour mot. */
+const MOTIF_ILLISIBLE = 'Un élément manque, mais il n’a pas pu être lu : réessayez.';
+
+/**
+ * CE QUE LA BASE A RENDU, prêt pour l'écran — rangé en trois parties, avec
+ * le compte de CHACUNE (critique E-4 : un compte unique ne s'éteindrait
+ * jamais chez le propriétaire, dont le n° de TVA est refusé par VIES).
+ *
+ * `liste` : ce que rend `api.motifsRefusRemise` (`[{ rang, cle, phrase,
+ * nature, ligneId }]`). `sections` : la table `SECTION_DU_MOTIF`
+ * d'`emetteur.js`, que l'écran passe (voir `ENDROIT_DU_MOTIF`).
+ *
+ * Rend `{ parties: { devis, entreprise, particulier }, comptes: { devis,
+ * entreprise, particulier }, total }` ; chaque élément porte `{ rang, cle,
+ * phrase, nature, etiquette, ligneId, endroit, partie, connu }`.
+ *
+ * LA RÈGLE DE `lireMotifs` (emetteur.js), tenue ici aussi : c'est la phrase
+ * DE LA BASE qui s'affiche, et une clé INCONNUE — une base plus récente que
+ * l'application — s'affiche QUAND MÊME, et ne compte JAMAIS parmi les
+ * mentions dues à un particulier : une version en retard ne doit pas
+ * pouvoir faire passer un motif nouveau pour une mention secondaire. Elle va
+ * dans « Votre entreprise » si son rang le dit (100 et au-delà), dans « Ce
+ * devis » sinon. Sans `sections`, aucun motif de l'entreprise n'est
+ * « connu » : tous restent dans « Votre entreprise », sans bouton — la
+ * forme prudente de l'oubli.
+ *
+ * L'ordre est celui de la base, jamais refait ici : elle range déjà par
+ * rang, et l'ordre des lignes fautives ne se lit pas dans cette liste.
+ */
+export function lireMotifsDeRemise(liste, { sections = null } = {}) {
+  const table = sections && typeof sections === 'object' ? sections : null;
+  const parties = { devis: [], entreprise: [], particulier: [] };
+  (Array.isArray(liste) ? liste : []).forEach((brut) => {
+    const m = brut && typeof brut === 'object' ? brut : { phrase: brut };
+    const cle = typeof m.cle === 'string' && m.cle !== '' ? m.cle : null;
+    const rang = Number.isSafeInteger(m.rang) ? m.rang : null;
+    const duDevis = aLaCle(MOTIFS_DEVIS, cle);
+    const deLEntreprise = !duDevis && table !== null && aLaCle(table, cle);
+    const texte = m.phrase == null ? '' : String(m.phrase).trim();
+    const phrase = texte || (duDevis ? MOTIFS_DEVIS[cle].phrase : MOTIF_ILLISIBLE);
+    const natureLue = NATURES_DE_MOTIF.includes(m.nature) ? m.nature : null;
+    const nature = natureLue || (duDevis ? MOTIFS_DEVIS[cle].nature : (deLEntreprise ? natureDuMotifEntreprise(cle) : null));
+    let partie = 'devis';
+    if (deLEntreprise && cle.startsWith('conso_')) partie = 'particulier';
+    else if (deLEntreprise || (!duDevis && rang !== null && rang > RANG_DE_L_ENTREPRISE)) partie = 'entreprise';
+    const ligneId = m.ligneId ?? null;
+    parties[partie].push({
+      rang,
+      cle,
+      phrase,
+      nature,
+      etiquette: nature ? ETIQUETTE_DE_NATURE[nature] : null,
+      ligneId,
+      endroit: endroitDuMotif({ cle, ligneId }, { sections: table }),
+      partie,
+      connu: duDevis || deLEntreprise,
+    });
+  });
+  const comptes = {
+    devis: parties.devis.length,
+    entreprise: parties.entreprise.length,
+    particulier: parties.particulier.length,
+  };
+  return { parties, comptes, total: comptes.devis + comptes.entreprise + comptes.particulier };
+}
+
+/* ------------------------------------------------------------------ */
+/*  LES AVIS — jamais bloquants (annexe B.7)                            */
+/* ------------------------------------------------------------------ */
+
+/** Les avis de l'étape 2b-1 : ils s'affichent SOUS la liste, à part. */
+export const AVIS_DU_DEVIS = Object.freeze({
+  avis_objet: 'Ce devis n’a pas de titre : le document dira seulement « Devis ».',
+  avis_gratuit: 'Ce devis ne coûte rien au client : vérifiez que c’est voulu.',
+});
+
+/**
+ * Les AVIS d'un devis : `[{ cle, phrase }]`. Calculés ici et nulle part en
+ * base : un avis ne bloque rien, et une fonction de la base qui les rendrait
+ * mêlés aux motifs pourrait un jour en faire bloquer un (critique B6).
+ *   - `avis_objet` : un devis sans objet s'intitulera « Devis » tout court ;
+ *   - `avis_gratuit` : au moins un poste, et un total TTC de 0 — tout est
+ *     offert (ou réduit à rien). Le TTC est celui que la BASE a calculé
+ *     (`totaux.ttc`, sinon `devis.totalTtcCentimes`) ; inconnu, on se tait :
+ *     on n'avertit pas sur un total qu'on n'a pas lu.
+ * Sans devis (un brouillon pas encore en base), aucun avis.
+ */
+export function avisDuDevis({ devis = null, lignes = [], totaux = null } = {}) {
+  if (!devis) return [];
+  const avis = [];
+  if (texteNet(devis.objet) === null) avis.push({ cle: 'avis_objet', phrase: AVIS_DU_DEVIS.avis_objet });
+  const aUnPoste = (Array.isArray(lignes) ? lignes : []).some((l) => typeDe(l) === 'poste');
+  let ttc = null;
+  if (totaux && present(totaux.ttc)) ttc = Number(totaux.ttc);
+  else if (present(devis.totalTtcCentimes)) ttc = Number(devis.totalTtcCentimes);
+  if (aUnPoste && ttc === 0) avis.push({ cle: 'avis_gratuit', phrase: AVIS_DU_DEVIS.avis_gratuit });
+  return avis;
+}
+
+/* ------------------------------------------------------------------ */
+/*  LES PHRASES DE L'ÉCRAN (annexe B.8) — une seule écriture de chacune */
+/* ------------------------------------------------------------------ */
+
+/** En tête des « Mentions dues à un particulier » — elle disparaît à
+ *  l'étape 2b-2, quand le devis saura pour qui le client commande. */
+export const MENTIONS_PARTICULIER_PAR_PRUDENCE = 'Opus ne sait pas encore pour qui le client commande : dans le '
+  + 'doute, il compte ce qu’on doit à un particulier.';
+
+/**
+ * CE QU'OPUS NE VÉRIFIE PAS ENCORE — dit sous « rien ne manque » (critique
+ * D2 : sans cette phrase, « rien ne manque » mentirait). Aucune date, aucun
+ * « prochain lot » (critique E-11) : on dit ce qui manque, pas quand.
+ */
+export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : pour qui le client commande, le moment de la signature, '
+  + 'l’urgence, la garantie décennale, le prix du devis et les déchets de chantier.';
+
+/** Rien ne manque pour CE devis — jamais « rien ne manque » tout court. */
+export const RIEN_NE_MANQUE_POUR_CE_DEVIS = 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.';
+
+/** Le brouillon n'est pas encore en base : AUCUN appel (la fonction
+ *  rendrait OP027 pour un devis qu'elle ne trouve pas — critique E-2/N1). */
+export const LISTE_AVANT_LA_PREMIERE_LIGNE = 'Écrivez une première ligne : la liste se calculera ensuite.';
+
+/** Des écritures en route : la dernière liste sûre reste affichée. */
+export const LISTE_EN_ROUTE = 'Des changements partent : la liste sera à jour juste après.';
+
+/** Une lecture ratée — jamais « Rien ne manque ». */
+export const LISTE_NON_LUE = 'Liste non lue — Réessayer';
+
+/**
+ * L'aide sous un taux de 10 % ou de 5,5 % (réponse 3 du propriétaire, le
+ * 05/11 : « tout permettre ») : le client certifiera, SUR le devis, que le
+ * logement a plus de deux ans (CGI 279-0 bis 3 et 278-0 bis A IV, depuis
+ * 2025) ; Opus imprimera cette certification, avec la place de signer, à
+ * la remise (2c). Aucun motif ne bloque un taux réduit.
+ * Les espaces avant « % » sont INSÉCABLES, comme toutes les aides de ce
+ * fichier qui écrivent un pourcentage : « 10 » ne doit pas finir une ligne
+ * et « % » commencer la suivante.
+ */
+export const AIDE_TAUX_REDUIT = 'À 10\u00a0% ou 5,5\u00a0%, le client certifiera sur le devis que le logement a plus '
+  + 'de deux ans : Opus imprimera cette phrase avec la place de signer.';

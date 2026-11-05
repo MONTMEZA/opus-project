@@ -62,6 +62,7 @@
     "verifier-carte": "node scripts/verifier-carte.mjs",
     "generer-catalogue": "node scripts/generer-catalogue.mjs",
     "generer-rapprochement": "node scripts/generer-rapprochement.mjs",
+    "generer-cas-remise": "node scripts/generer-cas-remise.mjs",
     "verifier-imports": "node scripts/verifier-imports.mjs",
     "verifier-retour": "node scripts/verifier-retour.mjs",
     "verifier-demandes": "node scripts/verifier-demandes.mjs",

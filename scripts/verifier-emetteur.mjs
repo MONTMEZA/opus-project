@@ -1261,10 +1261,21 @@ if (!E) {
        `tient_l_urgence()` (lot S-b, 26/10/2026) y entre aussi : elle refuse
        une urgence vers un artisan absent de la recherche, avec les mêmes
        conditions, en `security invoker` — elle ne rend aucun tarif. */
+    /* …ET `motifs_refus_remise()` DEPUIS LE LOT 2b-1 (section 49.9,
+       05/11/2026) : ce qu'il manque pour remettre un devis. Elle lit le
+       RÉGIME de TVA de l'entreprise (`emetteur.regime_tva`), pour dire
+       qu'une ligne porte un taux que ce régime contredit — en `security
+       invoker`, pour l'entreprise de l'appelant seule (la garde est dans sa
+       lecture). Entrer dans cette liste ouvre la TABLE ENTIÈRE : c'est sa
+       FORME, comparée en entier par `verifier-devis` (section 40) et
+       restreinte ci-dessous à UNE lecture d'UNE colonne, qui la limite au
+       régime (critique B4 du lot 2b). Elle n'entre PAS dans la liste
+       « tarifs » : elle appelle `emetteur_incomplet`, sans nommer
+       `tarifs_pro`. */
     const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
     const LISTES = [
       { tables: /\b(emetteur_assurances|emetteur)\b/,
-        permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees'] },
+        permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees', 'motifs_refus_remise'] },
       { tables: /\btarifs_pro\b/,
         permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence'] },
     ];
@@ -1283,6 +1294,20 @@ if (!E) {
     verifier('…aucune de celles qui les lisent n’est `security definer`, et aucune vue ne les nomme',
       lisent.length >= 2 && definer.length === 0 && vues.length === 0,
       `${definer.join(', ')} ${vues.length} vue(s)`);
+    /* LA PORTE ÉTROITE DE `motifs_refus_remise` (lot 2b-1) : ses corps, sans
+       commentaires ni chaînes, nomment `emetteur` UNE fois, dans UNE lecture
+       d'UNE colonne — le régime. Une seconde lecture (le nom de
+       l'entreprise, son médiateur…), ou `select *`, la ferait sortir de la
+       raison pour laquelle elle est dans la liste ci-dessus. */
+    const mrr = fonctions.filter((f) => f.nom === 'motifs_refus_remise');
+    const mrrCode = mrr.length === 1 ? mrr[0].corps.replace(/--[^\n]*/g, ' ').replace(/'(?:[^']|'')*'/g, "''") : '';
+    const mentions = (mrrCode.match(/\bemetteur\b/gi) || []).length;
+    const lecture = /\bselect\s+e\.regime_tva\s+into\s+v_regime\s+from\s+public\.emetteur\s+e\s+where\s+e\.pro_id\s*=\s*v_pro\s*;/i.test(mrrCode);
+    verifier('…et `motifs_refus_remise` (lot 2b-1) ne lit de l’émetteur QUE le régime de TVA : une seule mention de la table, dans '
+      + '`select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro`, et jamais `emetteur_assurances` ni '
+      + '`tarifs_pro`',
+    mrr.length === 1 && mentions === 1 && lecture && !/\b(emetteur_assurances|tarifs_pro)\b/i.test(mrrCode),
+    `${mrr.length} définition(s) ; ${mentions} mention(s) ; lecture du seul régime : ${lecture}`);
   }
 
   /* --- 6.3-22 : rien n'est `not null` hors des clés --- */

@@ -866,6 +866,17 @@ select t, has_table_privilege('anon', t, 'select') as anon_select_attendu_f,
 -- vers un artisan qui n'apparaîtrait pas dans `artisans_urgence()` — les
 -- mêmes conditions, tarifs affichés compris. `security invoker` elle aussi :
 -- elle lit à travers « tarifs affiches », et ne RENDS rien, elle refuse.
+--
+-- ET PAR LE LOT 2b (étape 2b-1, 05/11/2026) : `motifs_refus_remise()` (49.9)
+-- lit le RÉGIME DE TVA de l'entreprise — `emetteur.regime_tva`, et rien
+-- d'autre de cette table — pour juger le taux de chaque ligne. Elle est
+-- `security invoker` et ne lit que la fiche de SON appelant (sa garde
+-- `est_mon_entreprise` est dans la lecture du devis) ; elle n'entre dans
+-- aucune liste « tarifs » : elle APPELLE `emetteur_incomplet()`, qui reste
+-- la seule à nommer `tarifs_pro` pour le devis. Entrer dans cette liste lui
+-- ouvre la TABLE entière : c'est sa forme entière, comparée par
+-- `verifier-devis`, et l'essai 49-remise (cas 14 c), qui la restreignent à
+-- la colonne du régime.
 -- --------------------------------------------------------------------------
 select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
          as hors_liste_attendu_aucune
@@ -873,12 +884,13 @@ select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
  where ns.nspname = 'public'
    and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M'
    and p.proname <> all (array['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs',
-                               'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence']);
+                               'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence',
+                               'motifs_refus_remise']);
 select count(*) filter (where p.prosecdef) as definer_attendu_0,
        string_agg(p.proname, ', ' order by p.proname)
          as les_nomment,
        string_agg(p.proname, ', ' order by p.proname)
-         = 'artisans_urgence, emetteur_incomplet, mes_donnees, tient_l_urgence' as liste_attendu_t
+         = 'artisans_urgence, emetteur_incomplet, mes_donnees, motifs_refus_remise, tient_l_urgence' as liste_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M';
 select (select count(*) from pg_views

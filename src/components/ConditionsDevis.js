@@ -39,6 +39,14 @@
  * Ce qui ne se lit pas (« 12,5,3 ») n'est pas envoyé : `lire()` le rend dans
  * `erreurs`, avec le TEXTE tapé (`textes`), que la saisie garde pour qu'une
  * carte rouverte par « Corriger » le montre encore.
+ *
+ * OUVERTE DEPUIS « POUR LE REMETTRE » (lot 2b-1, critique E-13) : la carte
+ * s'ouvre SUR LE CHAMP qui manque (`champInitial` : la réduction, l'acompte,
+ * sa nature, la validité) — mesuré, la validité était à y = 1 132 à
+ * l'ouverture, hors de l'écran sur les trois tailles —, et son retour dit
+ * qu'il ramène à la LISTE (`depuisLaListe`), où la saisie la rouvre. Le
+ * défilement se pose une fois, quand le titre du champ a sa place : avant,
+ * on ne sait pas où il est.
  */
 import React, {
   forwardRef, useEffect, useImperativeHandle, useRef, useState,
@@ -74,12 +82,22 @@ const texteDe = (textes, cle, valeur) => (textes && present(textes[cle]) && Stri
 const ConditionsDevis = forwardRef(function ConditionsDevis({
   devis = {}, totaux = null, regime, nbOptions = 0, erreurs = {}, textes = null,
   etatEcriture = null, totauxIllisibles = false, onReessayer, onRelireTotaux,
-  onEnregistrer, onFermer,
+  onEnregistrer, onFermer, champInitial = null, depuisLaListe = false,
 }, ref) {
   const refReduction = useRef(null);
   const refAcompte = useRef(null);
   const refValidite = useRef(null);
   const refRetenue = useRef(null);
+  /* LE CHAMP SUR LEQUEL LA CARTE S'OUVRE (lot 2b-1) : le défilement, et la
+     place de chaque titre dans le contenu, relevée à sa mise en page. Le
+     défilement se pose UNE fois — après, c'est l'artisan qui défile. */
+  const refDefile = useRef(null);
+  const place = useRef(false);
+  const ancre = (cle) => (e) => {
+    if (place.current || cle !== champInitial || !refDefile.current) return;
+    place.current = true;
+    refDefile.current.scrollTo({ y: Math.max(0, e.nativeEvent.layout.y - S.md), animated: false });
+  };
 
   /* Les choix faits d'un appui : une RÉFÉRENCE (lue par `lire()` dans la
      même boucle que l'appui) ET un état (pour le dessin). L'état de départ
@@ -203,10 +221,12 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         <Pressable
           onPress={onFermer}
           accessibilityRole="button"
-          accessibilityLabel="Enregistrer les conditions et revenir au devis"
+          accessibilityLabel={depuisLaListe
+            ? 'Enregistrer les conditions et revenir à ce qu’il manque pour remettre ce devis'
+            : 'Enregistrer les conditions et revenir au devis'}
           style={({ pressed }) => [s.retour, pressed && APPUI.discret]}
         >
-          <Text style={s.retourTexte}>‹ Devis</Text>
+          <Text style={s.retourTexte}>{depuisLaListe ? '‹ Liste' : '‹ Devis'}</Text>
         </Pressable>
         <View style={s.milieu} accessibilityLabel={[total && total.aDire, reste && reste.aDire].filter(Boolean).join('. ')}>
           <Text style={s.barreTitre} numberOfLines={1}>Conditions</Text>
@@ -240,9 +260,9 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         )}
       </View>
 
-      <ScrollView {...CLAVIER} keyboardDismissMode="on-drag" contentContainerStyle={s.contenu}>
+      <ScrollView ref={refDefile} {...CLAVIER} keyboardDismissMode="on-drag" contentContainerStyle={s.contenu}>
         {/* LA RÉDUCTION — « Réduction », en % ou en € (décision du 03/11). */}
-        <Text style={s.titre} accessibilityRole="header">Réduction</Text>
+        <Text style={s.titre} onLayout={ancre('reduction')} accessibilityRole="header">Réduction</Text>
         <View style={s.pastilles}>
           <Pastille label="%" nom="Réduction en pourcentage" choisie={c.uniteReduction === 'pourcent'}
             onPress={() => changerUnite('remise', 'pourcent')} />
@@ -263,7 +283,7 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         {/* L'ACOMPTE — au choix % ou €, et sa NATURE, sans défaut. Tant
             qu'elle n'est pas choisie, son nom est NEUTRE : « Acompte ou
             arrhes », jamais « Acompte » seul (ÉCRAN-8). */}
-        <Text style={s.titre} accessibilityRole="header">{noms.acompte}</Text>
+        <Text style={s.titre} onLayout={ancre('acompte')} accessibilityRole="header">{noms.acompte}</Text>
         <View style={s.pastilles}>
           <Pastille label="%" nom={noms.acompteEnPourcentage} choisie={c.uniteAcompte === 'pourcent'}
             onPress={() => changerUnite('acompte', 'pourcent')} />
@@ -280,7 +300,7 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         {zone(sous('acompteCentiemes', 'acompteCentimes'), attenteA, effetA, !!(effetA && effetA.ramene))}
         <Text style={s.aide}>{AIDE_ACOMPTE}</Text>
         {!!noms.aideAcompteMontant && <Text style={s.aide}>{noms.aideAcompteMontant}</Text>}
-        <Text style={s.etiquette}>Acompte ou arrhes ?</Text>
+        <Text style={s.etiquette} onLayout={ancre('nature')}>Acompte ou arrhes ?</Text>
         <View style={s.pastilles}>
           {NATURES_ACOMPTE.map((n) => (
             <Pastille key={n} label={libelleAcompte(n)} nom={`C’est ${n === 'arrhes' ? 'des arrhes' : 'un acompte'}`}
@@ -293,7 +313,7 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
 
         {/* LA VALIDITÉ — 15, 30, 60, 90 jours ou « Autre » ; RIEN de
             pré-choisi : la durée se confirme d'un appui (décision du 03/11). */}
-        <Text style={s.titre} accessibilityRole="header">Validité de l’offre</Text>
+        <Text style={s.titre} onLayout={ancre('validite')} accessibilityRole="header">Validité de l’offre</Text>
         <View style={s.pastilles}>
           {VALIDITES_PROPOSEES.map((j) => (
             <Pastille key={j} label={`${j} jours`} nom={`Valable ${j} jours`}

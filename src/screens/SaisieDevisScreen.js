@@ -45,6 +45,25 @@
  * et non par trois booléens »). Deux feuilles ne peuvent donc pas être
  * demandées ensemble, par construction.
  *
+ * « POUR LE REMETTRE » (lot 2b-1, 05/11/2026) — ce qu'il manque pour
+ * remettre ce devis, dit par la BASE (`motifs_refus_remise`) : une ligne
+ * sous le bandeau du haut, une rangée sous « Conditions », et la carte
+ * qu'elles ouvrent (`PourRemettre`, une valeur de plus de l'état `carte`).
+ * La liste se LIT :
+ *   - à l'ouverture d'un devis déjà en base — jamais avant (un brouillon
+ *     qui n'est pas en base rendrait OP027) ;
+ *   - après chaque relecture des totaux lancée par la file (l'événement
+ *     `totaux`), sous la MÊME garde : la génération de la file. Une réponse
+ *     partie avant une écriture est écartée, comme les totaux (I3) ;
+ *   - au retour de « Mon entreprise », qui écrit par d'autres chemins que
+ *     la file (`retourEntreprise`, un compteur d'`OpusApp`) ;
+ *   - sur « Réessayer ».
+ * Pendant un envoi, la dernière liste sûre reste affichée : elle ne
+ * clignote pas. Un appui mène à l'endroit de chaque point — le client, la
+ * ligne fautive, le délai ou le lieu (qui prennent le focus), la carte
+ * « Conditions » ouverte SUR son champ (et « ‹ » y ramène à la liste), ou
+ * « Mon entreprise » sur sa section.
+ *
  * EN DÉMONSTRATION, tout cela VIT : la base en mémoire de
  * `src/data/devis-demo.js` refuse avec les mots de la vraie base, une
  * écriture y prend un tiers de seconde, et les états « enregistrement… » ou
@@ -54,7 +73,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet,
+  View, Text, FlatList, Pressable, ActivityIndicator, Keyboard, StyleSheet,
 } from 'react-native';
 import {
   C, F, T, S, R, GOUTTIERE, CARTE, TOUCHE, APPUI, interligne, surFond,
@@ -88,8 +107,13 @@ import {
   demandeDuDevis, vibrerPourLaCarte, nomsDesRefus,
   cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, creerRenvoisAutomatiques, phraseDuRejeu, echecsDeLaFile,
   echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
+  lireMotifsDeRemise, avisDuDevis,
 } from '../lib/devis';
+import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
+import PourRemettre, {
+  LigneRemise, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe,
+} from '../components/PourRemettre';
 import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
 
 /* Ce que nomme la bande de la garde quand un champ de l'en-tête a été REFUSÉ
@@ -119,10 +143,11 @@ const CHAMPS_CONDITIONS = Object.freeze([
 ]);
 
 /* L'UNIQUE ÉTAT DE CARTE (cahier du lot 2, §3.4) : `null`, l'identifiant
-   d'une LIGNE, ou `CARTE_CONDITIONS`. Une seule valeur, jamais deux
-   booléens : deux cartes ne peuvent pas être ouvertes ensemble, et le
+   d'une LIGNE, `CARTE_CONDITIONS`, ou `CARTE_POUR_REMETTRE` (lot 2b-1,
+   « ce qu'il manque pour remettre ce devis »). Une seule valeur, jamais
+   deux booléens : deux cartes ne peuvent pas être ouvertes ensemble, et le
    retour, la garde et VoiceOver les traitent pareil. Un identifiant de ligne
-   est un UUID : il ne vaut jamais « conditions ». */
+   est un UUID : il ne vaut jamais « conditions » ni « pour_remettre ». */
 const CARTE_CONDITIONS = 'conditions';
 
 const uniteDe = (cle) => UNITES.find((u) => u.cle === cle) || null;
@@ -297,6 +322,7 @@ function BasDuDevis({
   options, franchise, reel, regime, propositions, regimeEnEchec, totaux, totauxIllisibles, devis, erreurs,
   etatDeLOption, onReessayer,
   onOuvrir, onAjouter, onRelireTotaux, onOuvrirConditions, onSupprimer, confirmeSuppression, phraseSuppression,
+  rangeeRemise = null,
 }) {
   /* Les postes attendent le régime : `null` = on ne sait pas encore (en
      lecture, ou la lecture a échoué) ; `[]` = non déclaré — seuls les titres
@@ -433,6 +459,11 @@ function BasDuDevis({
         <ChevronRight size={16} color={C.accent2} />
       </Pressable>
 
+      {/* « POUR LE REMETTRE » (lot 2b-1) — la même ligne que sous le bandeau,
+          pour qui arrive en fin de chiffrage. Son étiquette ne commence pas
+          par « Conditions : » : c'est une autre rangée. */}
+      {rangeeRemise}
+
       {/* SUPPRIMER CE BROUILLON, en deux appuis — et le second le DIT. */}
       <Pressable
         onPress={onSupprimer}
@@ -462,6 +493,9 @@ export default function SaisieDevisScreen({
      `regimeDeclareLe` : une référence fixée avant la déclaration du régime
      de TVA actuel se vérifie au lieu de se comparer. */
   postes = null, postesEtat = 'vide', regimeDeclareLe = null, onChargerPostes = null, onRangerPoste = null,
+  /* LOT 2b-1 : un compteur qu'`OpusApp` incrémente à chaque fermeture de
+     « Mon entreprise » — la liste de ce qu'il manque se relit alors. */
+  retourEntreprise = 0,
 }) {
   /* L'identifiant d'un brouillon NEUF vient du téléphone (une écriture
      renvoyée n'est jamais un doublon) ; s'il ne sait pas en fabriquer,
@@ -539,6 +573,28 @@ export default function SaisieDevisScreen({
      refusée : la carte rouverte par « Corriger » le montre encore, au lieu
      de la dernière valeur enregistrée. */
   const [textesConditions, setTextesConditions] = useState(null);
+  /* LA LISTE « POUR LE REMETTRE » (lot 2b-1) — ce que la base a rendu :
+       motifs   : la DERNIÈRE liste sûre (`null` : jamais lue, ou la
+                  dernière lecture a échoué — elle ne peut plus être dite
+                  sûre) ;
+       erreur   : l'échec de la dernière lecture ;
+       enLecture: une lecture est partie.
+     `lectureListe` numérote les lectures : seule la DERNIÈRE partie
+     s'affiche. `monte` : une réponse qui arrive après le démontage ne
+     touche à rien. */
+  const [liste, setListe] = useState({ motifs: null, erreur: null, enLecture: false });
+  const lectureListe = useRef(0);
+  const monte = useRef(true);
+  useEffect(() => () => { monte.current = false; }, []);
+  /* OÙ REVIENT LA CARTE OUVERTE DEPUIS LA LISTE : `CARTE_POUR_REMETTRE`, ou
+     `null` (au devis). Une RÉFÉRENCE (`fermerCarte` la lit) et un état (le
+     libellé « ‹ Liste » de la carte). Une seule valeur (critique E-13). */
+  const retourRef = useRef(null);
+  const [retourCarte, setRetourCarte] = useState(null);
+  /* Le champ sur lequel « Conditions » s'ouvre, et le champ de l'en-tête
+     qui doit prendre le focus une fois la liste fermée. */
+  const [champConditions, setChampConditions] = useState(null);
+  const [focusDemande, setFocusDemande] = useState(null);
   /* Les rappels d'`OpusApp`, toujours les derniers : la file écoute depuis
      son ouverture, et un rappel capturé ce jour-là serait périmé. */
   const rappels = useRef({});
@@ -569,6 +625,10 @@ export default function SaisieDevisScreen({
   const poserCarte = (id) => {
     carteRef.current = id;
     setCarte(id);
+  };
+  const poserRetour = (v) => {
+    retourRef.current = v;
+    setRetourCarte(v);
   };
   const poserDefinitif = (id, r) => {
     const x = { ...definitifsRef.current };
@@ -643,6 +703,49 @@ export default function SaisieDevisScreen({
   useEffect(() => { rangerRef.current = ranger; });
 
   /* ------------------------------------------------------------------ */
+  /*  LA LISTE « POUR LE REMETTRE » — lue par la base (lot 2b-1)          */
+  /* ------------------------------------------------------------------ */
+  /* AUCUN APPEL tant que le brouillon n'est pas en base : la fonction
+     rendrait OP027 pour un devis qu'elle ne trouve pas, et « Réessayer » le
+     rendrait à l'infini (critique E-2).
+
+     LA MÊME GARDE QUE LES TOTAUX (`relire()`, file-ecriture.js) : la
+     génération de la file est relevée au départ ; si une écriture est
+     partie pendant la lecture, la réponse peut dater, et elle est ÉCARTÉE.
+     L'écriture, une fois confirmée, relira les totaux, donc la liste ; si
+     elle est refusée, rien ne relira — d'où la relecture quand la file a
+     fini, si aucune autre n'est partie depuis. Un appel À CÔTÉ de la file,
+     sans cette garde, écrasait une valeur plus récente (I3, lot 1).
+
+     Elle ne touche que des références et des fonctions d'état : la
+     version écoutée par la file depuis l'ouverture reste juste. */
+  const lireLaListe = () => {
+    const f = fileRef.current;
+    if (!f || !f.devisEnBase()) return;
+    lectureListe.current += 1;
+    const n = lectureListe.current;
+    const g = f.generation();
+    setListe((l) => ({ ...l, erreur: null, enLecture: true }));
+    api.motifsRefusRemise(f.devisId())
+      .then((motifs) => ({ motifs }), (erreur) => ({ erreur }))
+      .then((r) => {
+        if (!monte.current || n !== lectureListe.current || fileRef.current !== f) return;
+        if (g !== f.generation()) {
+          f.attendre(DELAI_ECRITURE).then(() => {
+            if (monte.current && n === lectureListe.current) lireLaListe();
+          });
+          return;
+        }
+        /* UN ÉCHEC EFFACE LA LISTE : celle d'avant date d'avant l'écriture
+           qui a lancé cette lecture, elle n'est plus sûre. L'écran dit
+           « Liste non lue », jamais « rien ne manque ». */
+        setListe(r.erreur
+          ? { motifs: null, erreur: r.erreur, enLecture: false }
+          : { motifs: Array.isArray(r.motifs) ? r.motifs : null, erreur: null, enLecture: false });
+      });
+  };
+
+  /* ------------------------------------------------------------------ */
   /*  L'OUVERTURE — le devis lu en base, ou un brouillon neuf              */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
@@ -691,6 +794,9 @@ export default function SaisieDevisScreen({
            une fois. Après l'événement, pas pendant : la file finit de le
            distribuer d'abord. */
         Promise.resolve().then(() => { if (vivant) rejouerLePlafond(); });
+        /* …ET LA LISTE « POUR LE REMETTRE » SE RELIT (lot 2b-1), sous la
+           même génération que ces totaux. */
+        lireLaListe();
       } else if (ev.type === 'totaux_illisibles') {
         setTotauxIllisibles(true);
       } else if (ev.type === 'renomme' && ev.quoi === 'ligne') {
@@ -786,6 +892,9 @@ export default function SaisieDevisScreen({
       setDefinitifs(echecs.definitifs);
       majAttente();
       setEtat('pret');
+      /* UN DEVIS DÉJÀ EN BASE : sa liste se lit à l'ouverture (critique
+         E-2). Un brouillon neuf attend son premier enregistrement. */
+      lireLaListe();
     })();
     return () => {
       vivant = false;
@@ -795,6 +904,26 @@ export default function SaisieDevisScreen({
       if (fileRef.current) api.laisserFileDuDevis(fileRef.current.devisId());
     };
   }, [tentative]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* « MON ENTREPRISE » VIENT DE SE FERMER (lot 2b-1, critique E-1) : elle
+     écrit par d'autres chemins que la file — la fiche, les assurances, les
+     tarifs, la preuve VIES —, aucune écriture du devis ne relirait donc la
+     liste. Sans ce signal, le médiateur choisi là restait signalé au
+     retour : le geste central de la liste (voir, corriger, revenir)
+     échouait pour tous les points de l'entreprise. La valeur de départ ne
+     relit rien : l'ouverture s'en charge. */
+  const retourEntrepriseVu = useRef(retourEntreprise);
+  useEffect(() => {
+    if (retourEntrepriseVu.current === retourEntreprise) return;
+    retourEntrepriseVu.current = retourEntreprise;
+    lireLaListe();
+  }, [retourEntreprise]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* LE CHAMP DE L'EN-TÊTE QUI PREND LE FOCUS — après le rendu qui a fermé
+     la liste : la carte n'est plus par-dessus. */
+  useEffect(() => {
+    if (focusDemande && refEntete.current) refEntete.current.focusChamp(focusDemande.champ);
+  }, [focusDemande]);
 
   /* ------------------------------------------------------------------ */
   /*  LE RÉGIME — cinq états, et un échec n'est JAMAIS « non déclaré »     */
@@ -956,6 +1085,8 @@ export default function SaisieDevisScreen({
       if (refConditions.current) refConditions.current.enregistrer();
       return;
     }
+    /* La liste « Pour le remettre » ne porte aucun champ : rien à lire. */
+    if (id === CARTE_POUR_REMETTRE) return;
     if (!id || !refCarte.current) return;
     const lu = refCarte.current.lire();
     const f = fileRef.current;
@@ -987,6 +1118,9 @@ export default function SaisieDevisScreen({
 
   const ouvrirCarte = (id) => {
     if (carteRef.current && carteRef.current !== id) enregistrerCarte();
+    /* Ouverte ici, la carte revient au devis ; c'est la liste qui dit le
+       contraire, APRÈS cet appel (`agirSurLePoint`). */
+    poserRetour(null);
     /* Le lieu tapé sans suggestion s'enregistre à l'ouverture d'une carte. */
     if (refEntete.current) refEntete.current.enregistrer();
     const l = lignesRef.current.find((x) => x.id === id);
@@ -1005,6 +1139,12 @@ export default function SaisieDevisScreen({
     enregistrerCarte();
     poserCarte(null);
     if (rappels.current.onCarte) rappels.current.onCarte(null);
+    /* OUVERTE DEPUIS LA LISTE « POUR LE REMETTRE », la carte y RAMÈNE
+       (critique E-13) : on revient voir le point suivant, pas le haut du
+       devis. Une fois. */
+    const vers = retourRef.current;
+    poserRetour(null);
+    if (vers === CARTE_POUR_REMETTRE) ouvrirPourRemettre();
   };
 
   /* La carte « Conditions » : la carte ouverte s'enregistre d'abord, comme
@@ -1012,9 +1152,37 @@ export default function SaisieDevisScreen({
   const ouvrirConditions = () => {
     if (carteRef.current && carteRef.current !== CARTE_CONDITIONS) enregistrerCarte();
     if (refEntete.current) refEntete.current.enregistrer();
+    poserRetour(null);
+    setChampConditions(null);
     poserCarte(CARTE_CONDITIONS);
     setCleCarte((k) => k + 1);
     if (rappels.current.onCarte) rappels.current.onCarte('Conditions');
+  };
+
+  /* « CONDITIONS », OUVERTE DEPUIS LA LISTE SUR UN CHAMP (lot 2b-1) : la
+     validité, la nature de l'acompte, l'acompte ou la réduction. Mesuré, la
+     validité était à y = 1 132 à l'ouverture — hors de l'écran sur les trois
+     tailles (critique E-13). « ‹ » ramène à la liste. */
+  const ouvrirConditionsSur = (champ) => {
+    ouvrirConditions();
+    setChampConditions(champ || null);
+    poserRetour(CARTE_POUR_REMETTRE);
+  };
+
+  /* LA LISTE « POUR LE REMETTRE » (lot 2b-1). Ce qui est tapé dans
+     l'en-tête sans avoir quitté le champ part d'abord — un délai tapé, puis
+     un appui sur la ligne du haut : `CLAVIER` garde le clavier ouvert sur un
+     appui, le champ ne perd pas le focus, et la liste dirait « le délai
+     manque » devant un délai écrit. Le clavier se ferme : il n'y a rien à
+     écrire dans cette carte. */
+  const ouvrirPourRemettre = () => {
+    if (carteRef.current && carteRef.current !== CARTE_POUR_REMETTRE) enregistrerCarte();
+    if (refEntete.current) refEntete.current.enregistrer();
+    Keyboard.dismiss();
+    poserRetour(null);
+    poserCarte(CARTE_POUR_REMETTRE);
+    setCleCarte((k) => k + 1);
+    if (rappels.current.onCarte) rappels.current.onCarte(TITRE_POUR_REMETTRE);
   };
 
   /* ------------------------------------------------------------------ */
@@ -1092,6 +1260,10 @@ export default function SaisieDevisScreen({
     const ids = avecLignes ? [id, ...lignesDeLaPiece(lignesRef.current, id).map((l) => l.id)] : [id];
     poserCarte(null);
     if (rappels.current.onCarte) rappels.current.onCarte(null);
+    /* Une ligne ouverte depuis la liste « Pour le remettre », puis retirée :
+       on revient à la liste, comme par « ‹ ». */
+    const vers = retourRef.current;
+    poserRetour(null);
     ids.forEach((x) => {
       /* Une ligne jamais envoyée disparaît sans requête ; une ligne en base
          part par la file — et tant que sa suppression n'est pas faite, le
@@ -1102,6 +1274,7 @@ export default function SaisieDevisScreen({
       delete derniereEnvoyee.current[x];
     });
     majAttente();
+    if (vers === CARTE_POUR_REMETTRE) ouvrirPourRemettre();
     /* RETIRER UNE LIGNE REFUSÉE N'ÉCRIT RIEN (elle n'a jamais été en base) :
        aucune écriture confirmée, donc aucune relecture des totaux, et la
        réduction refusée à cause d'elle restait refusée. Retirer peut faire
@@ -1161,6 +1334,56 @@ export default function SaisieDevisScreen({
     setFeuille(null);
     const depuis = ouverture.demandeSource ? clientDepuisDemande(ouverture.demandeSource) : null;
     if (rappels.current.onNouveauClient) rappels.current.onNouveauClient(depuis, choisirClient);
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  « POUR LE REMETTRE » — chaque point mène à son endroit (lot 2b-1)   */
+  /* ------------------------------------------------------------------ */
+  /* L'endroit vient de `endroitDuMotif` (devis.js) ; l'écran ne fait que
+     l'exécuter :
+       - le client : la feuille « Pour qui ? » se pose PAR-DESSUS la liste
+         (elle n'est pas une `Modal`) — choisir écrit, et la liste se relit ;
+       - une ligne fautive, ou un premier poste : sa carte, et « ‹ » ramène
+         à la liste ;
+       - le délai, le lieu : la liste se ferme et le champ prend le focus ;
+       - une condition : la carte « Conditions » ouverte SUR son champ ;
+       - l'entreprise : « Mon entreprise » sur SA section — un bouton par
+         point (critique E-8) ; sa fermeture relit la liste. */
+  const agirSurLePoint = (point) => {
+    const e = point && point.endroit;
+    if (!e) return;
+    switch (e.endroit) {
+      case 'client':
+        ouvrirChoixClient();
+        return;
+      case 'entreprise':
+        if (e.section && onMonEntreprise) onMonEntreprise(e.section);
+        return;
+      case 'conditions':
+        ouvrirConditionsSur(e.champ);
+        return;
+      case 'ligne':
+        if (!lignesRef.current.some((l) => String(l.id) === String(e.ligneId))) return;
+        ouvrirCarte(e.ligneId);
+        poserRetour(CARTE_POUR_REMETTRE);
+        return;
+      case 'lignes': {
+        if (!(Array.isArray(propositions) && propositions.length > 0)) return;
+        if (carteRef.current) enregistrerCarte();
+        const id = inserer('poste', null);
+        if (!id) return;
+        ouvrirCarte(id);
+        poserRetour(CARTE_POUR_REMETTRE);
+        return;
+      }
+      case 'lieu':
+      case 'delai':
+        poserCarte(null);
+        if (rappels.current.onCarte) rappels.current.onCarte(null);
+        setFocusDemande((x) => ({ champ: e.endroit, n: ((x && x.n) || 0) + 1 }));
+        return;
+      default:
+    }
   };
 
   /* ------------------------------------------------------------------ */
@@ -1260,6 +1483,9 @@ export default function SaisieDevisScreen({
    *  attendre la file — huit secondes au plus. `pendantLAttente` : appelé
    *  AVANT d'attendre, si la file a quelque chose en vol. */
   const enregistrerTout = async ({ pendantLAttente = null } = {}) => {
+    /* On PART : une carte ouverte depuis la liste ne la rouvre pas — la
+       garde se dit à l'écran, jamais sous une carte. */
+    poserRetour(null);
     if (carteRef.current) fermerCarte();
     if (refEntete.current) refEntete.current.enregistrer();
     const f = fileRef.current;
@@ -1407,6 +1633,14 @@ export default function SaisieDevisScreen({
     ];
   }, [memoire, lignes, devisIdInitial, devis.objet, devis.source, devis.modifieLe]);
 
+  /* « POUR LE REMETTRE » : ce que la base a rendu, rangé en trois parties
+     comptées (`lireMotifsDeRemise`, devis.js), avec la table des sections
+     d'« Mon entreprise » — la même que `PretAEmettre` ; et les AVIS, calculés
+     ici sur ce que l'écran a, jamais comptés. */
+  const lue = useMemo(() => (Array.isArray(liste.motifs)
+    ? lireMotifsDeRemise(liste.motifs, { sections: SECTION_DU_MOTIF }) : null), [liste.motifs]);
+  const avis = useMemo(() => avisDuDevis({ devis, lignes, totaux }), [devis, lignes, totaux]);
+
   if (etat === 'impossible') {
     return <View style={s.centre}><Text style={s.texteCentre}>{IDENTIFIANT_IMPOSSIBLE}</Text></View>;
   }
@@ -1454,6 +1688,41 @@ export default function SaisieDevisScreen({
   const suffixe = suffixeDuPied({
     nbNonEnregistrees, enCours: attente.enCours, reduction: totaux ? Number(totaux.reduction) || 0 : 0,
   });
+
+  /* L'ÉTAT DE LA LISTE « POUR LE REMETTRE », dans l'ordre du cahier
+     (`etatDeLaListe`) : pas encore en base, des changements en route ou
+     pas enregistrés (des lignes, l'en-tête refusé, un champ refusé par
+     l'écran), un échec, la liste. */
+  const etatListe = etatDeLaListe({
+    enBase: attente.devisEnBase,
+    enRoute: attente.enCours,
+    nonParties: nbNonEnregistrees > 0 || attente.nb > 0 || !!attente.devisErreur || Object.keys(erreursEntete).length > 0,
+    erreur: liste.erreur,
+    lue,
+  });
+  let erreurListe = null;
+  if (liste.erreur) {
+    erreurListe = liste.erreur.baseEnRetard
+      ? 'La base n’est pas encore à jour pour cette liste : ce n’est pas que rien ne manque.'
+      : messageClair(liste.erreur, 'La liste de ce qu’il manque pour remettre ce devis', { rienAffiche: true });
+  }
+  const listeReessayable = !!liste.erreur && !estUnRefusDefinitif(liste.erreur);
+  /* La ligne du haut et la rangée du bas : le MÊME composant, la même
+     règle — deux écritures de la même vérité finiraient par se contredire
+     (la leçon des voyants du 04/10). */
+  const ligneRemise = (variante) => (
+    <LigneRemise
+      variante={variante}
+      etat={etatListe}
+      lue={lue}
+      enRoute={attente.enCours}
+      enLecture={liste.enLecture}
+      erreurReessayable={listeReessayable}
+      erreurPhrase={erreurListe}
+      onOuvrir={ouvrirPourRemettre}
+      onReessayer={lireLaListe}
+    />
+  );
 
   /* LA FEUILLE, UN SEUL `switch` : une seule à l'écran, par construction. */
   const rendreLaFeuille = () => {
@@ -1533,6 +1802,7 @@ export default function SaisieDevisScreen({
       onNouveauClient={nouveauClient}
       onMonEntreprise={() => onMonEntreprise('tva')}
       onRelireRegime={onRelireRegime}
+      ligneRemise={ligneRemise('haut')}
     />
   );
 
@@ -1557,6 +1827,7 @@ export default function SaisieDevisScreen({
       onSupprimer={supprimer}
       confirmeSuppression={confirmeSuppression}
       phraseSuppression={phraseSuppressionDuBrouillon({ postes, postesEtat, devisId: devisIdInitial })}
+      rangeeRemise={ligneRemise('bas')}
     />
   );
 
@@ -1773,6 +2044,7 @@ export default function SaisieDevisScreen({
           onMonter={() => deplacer(-1)}
           onDescendre={() => deplacer(1)}
           onRetirer={retirer}
+          depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
         />
       )}
 
@@ -1802,6 +2074,29 @@ export default function SaisieDevisScreen({
           onReessayer={() => fileRef.current && fileRef.current.reessayer('devis')}
           onRelireTotaux={relireTotaux}
           onEnregistrer={enregistrerConditions}
+          onFermer={fermerCarte}
+          champInitial={champConditions}
+          depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
+        />
+      )}
+
+      {/* « CE QU'IL MANQUE POUR REMETTRE CE DEVIS » (lot 2b-1) — une carte
+          comme les autres : elle prend l'écran, et une feuille (« Pour
+          qui ? ») peut se poser par-dessus sans la quitter. */}
+      {carte === CARTE_POUR_REMETTRE && (
+        <PourRemettre
+          key={`pour-remettre-${cleCarte}`}
+          etat={etatListe}
+          lue={lue}
+          enRoute={attente.enCours}
+          enLecture={liste.enLecture}
+          erreurPhrase={erreurListe}
+          erreurReessayable={listeReessayable}
+          avis={avis}
+          lignes={lignes}
+          chiffrerPossible={chiffrerPossible}
+          onAgir={agirSurLePoint}
+          onReessayer={lireLaListe}
           onFermer={fermerCarte}
         />
       )}
