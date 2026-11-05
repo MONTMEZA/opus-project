@@ -240,6 +240,12 @@ const verifier = (nom, ok, detail = '') => {
 };
 const noter = (k, v) => { console.log(`    · ${k} : ${v}`); };
 const net = (t) => String(t || '').replace(/[  ]/g, ' ');
+/* Ce que la liste « Pour le remettre » dit d'une ligne qui n'est pas
+   enregistrée (lot 2b-1, écart 8), en TOUTES LETTRES : une mesure qui
+   l'importerait du code ne vérifierait rien. */
+const PAS_COMPTE_1 = '1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste.';
+/* …et pendant que des changements partent (annexe B.8). */
+const EN_ROUTE_LIGNE = 'Des changements partent : la liste sera à jour juste après.';
 const euros = (c) => (c == null ? '—' : net(centimesLisibles(c)));
 
 /* ======================================================================== */
@@ -1235,6 +1241,12 @@ await section('Un prix à 0 sans « Offert »', async () => {
   verifier(`…un vrai bouton de 44 points (${b && Math.round(b.width)} × ${b && Math.round(b.height)})`, !!b && b.height >= TOUCHE - 0.5 && b.width >= TOUCHE - 0.5);
   const p = await pied();
   verifier(`le pied le dit, et garde la dernière valeur sûre (« ${p.texte} »)`, /1 ligne non enregistrée/.test(p.texte) && p.centimes === totaux().ttc);
+  /* …ET « POUR LE REMETTRE » AUSSI (vérification de construction du lot
+     2b-1, écart 8) : la base ne voit pas une ligne refusée, la liste ne la
+     compte pas — et le DIT, avec le compte du pied. */
+  const pasCompteLu = await jusqua(async () => net((await page.locator('[aria-label^="Pour le remettre"]').first()
+    .getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '').includes(PAS_COMPTE_1), 4000);
+  verifier('…et la ligne « Pour le remettre » le dit : « 1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste. »', !!pasCompteLu);
   await toucher(c);
   verifier('« La compléter » rouvre sa carte', await carteOuverte());
   await viderEtTaper(parLibelle('Prix unitaire HT'), '180');
@@ -1817,6 +1829,9 @@ await section('Une écriture qui ne revient pas : « Non enregistrée — Réess
   const p = await pied();
   const avantEchec = totauxDevis(modele.map((l) => (l.designation === 'Pose d’un meuble vasque' ? { ...l, quantiteMilliemes: 1000 } : l))).ttc;
   verifier(`le pied le dit, et garde la dernière valeur SÛRE (« ${p.texte} » ; ${euros(avantEchec)} attendus)`, /1 ligne non enregistrée/.test(p.texte) && p.centimes === avantEchec);
+  const pasCompteEchec = await jusqua(async () => net((await page.locator('[aria-label^="Pour le remettre"]').first()
+    .getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '').includes(PAS_COMPTE_1), 4000);
+  verifier('…et la ligne « Pour le remettre » dit que cette ligne n’est pas comptée (le compte du pied, pas un second)', !!pasCompteEchec);
   await capture('14-non-enregistree');
   await page.evaluate(() => { window.__opusSuspendreEcritures = false; });
   await toucher(parLibelle('Ligne non enregistrée. Réessayer'));
@@ -3568,10 +3583,18 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
   verifier('le résumé « Conditions » ne dit jamais « Aucune condition »', !/Aucune condition/.test(await texte()));
   await capture('40-remettre-muret');
 
-  /* PENDANT UN ENVOI, la liste ne clignote pas (E-6) : le titre écrit, la
-     ligne relevée toutes les 40 ms pendant deux secondes. */
+  /* PENDANT LA FRAPPE puis PENDANT UN ENVOI (E-6, et l'écart 7 de la
+     vérification de construction) : la ligne dit « Des changements
+     partent… » dès qu'un champ de l'en-tête est tapé — avant même qu'on le
+     quitte —, puis pendant l'envoi ; sinon le compte, le MÊME. Jamais
+     « Lecture… », ni « non lue », ni « rien ne manque ». Et sa hauteur ne
+     bouge pas : deux lignes réservées. */
   const objet = parLibelle('Objet du devis');
   await objet.fill('Muret de clôture (rehaussé)');
+  const pendantFrappe = await jusqua(async () => (await libelleLigne()).startsWith(`Pour le remettre : ${EN_ROUTE_LIGNE}`), 3000);
+  verifier('pendant la FRAPPE (champ pas encore quitté), la ligne dit « Des changements partent : la liste sera à jour juste après. », '
+    + 'et garde le compte d’avant dans son étiquette parlée', !!pendantFrappe && (await libelleLigne()).includes('Dernière liste : ce devis — aucun point'),
+  await libelleLigne());
   await objet.evaluate((e) => e.blur());
   const vus = new Set();
   const hs = new Set();
@@ -3582,9 +3605,14 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
     if (bx) hs.add(Math.round(bx.height));
     await attendre(40);
   }
-  verifier('pendant l’envoi, la ligne GARDE son compte (jamais « Lecture… », ni « non lue », ni « rien ne manque »)',
-    [...vus].every((v) => COMPTE.test(v) && COMPTE.exec(v)[1] === 'aucun point' && nombre(COMPTE.exec(v)[2]) === pointsEntreprise),
-    JSON.stringify([...vus]));
+  const enRouteVu = (v) => v.startsWith(`Pour le remettre : ${EN_ROUTE_LIGNE} Dernière liste : ce devis — aucun point`);
+  verifier('pendant l’envoi, la ligne dit « Des changements partent… » ou garde son compte — jamais « Lecture… », ni « non lue », ni '
+    + '« rien ne manque »',
+  [...vus].every((v) => enRouteVu(v) || (COMPTE.test(v) && COMPTE.exec(v)[1] === 'aucun point' && nombre(COMPTE.exec(v)[2]) === pointsEntreprise)),
+  JSON.stringify([...vus]));
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 2000);
+  verifier('…puis, l’envoi fini, le compte revient, le MÊME', COMPTE.test(await libelleLigne())
+    && COMPTE.exec(await libelleLigne())[1] === 'aucun point' && nombre(COMPTE.exec(await libelleLigne())[2]) === pointsEntreprise, await libelleLigne());
   verifier(`…et sa hauteur ne bouge pas (${[...hs].join(', ')})`, hs.size === 1 && hs.has(Math.round(b.height)));
 
   await toucher(ligneHaut());

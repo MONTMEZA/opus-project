@@ -107,13 +107,11 @@ import {
   demandeDuDevis, vibrerPourLaCarte, nomsDesRefus,
   cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, creerRenvoisAutomatiques, phraseDuRejeu, echecsDeLaFile,
   echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
-  lireMotifsDeRemise, avisDuDevis,
+  lireMotifsDeRemise, avisDuDevis, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe, ceQueLaListeNeComptePas,
 } from '../lib/devis';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
-import PourRemettre, {
-  LigneRemise, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe,
-} from '../components/PourRemettre';
+import PourRemettre, { LigneRemise } from '../components/PourRemettre';
 import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
 
 /* Ce que nomme la bande de la garde quand un champ de l'en-tête a été REFUSÉ
@@ -535,6 +533,12 @@ export default function SaisieDevisScreen({
      I1 : un code postal de quatre chiffres, une retenue de 6 %, partis sans
      un mot). */
   const [erreursEntete, setErreursEntete] = useState({});
+  /* UN CHAMP DE L'EN-TÊTE TAPÉ ET PAS ENCORE QUITTÉ (l'objet, le lieu, le
+     délai) : ce qui y est écrit n'est pas encore parti, et la liste « Pour
+     le remettre » ne le connaît pas — elle dit « Des changements
+     partent… » (cahier §3.1, annexe B.8). L'en-tête le signale UNE fois
+     par saisie (`onFrappe`), jamais à chaque lettre. */
+  const [champOuvert, setChampOuvert] = useState(false);
   const refusEntete = useRef({});
   const [totaux, setTotaux] = useState(() => (ouverture.devisId ? null : {
     ht: 0, tva: 0, ttc: 0, brut: 0, reduction: 0, acompte: 0, ttcOptions: 0, ventilation: [],
@@ -1690,15 +1694,21 @@ export default function SaisieDevisScreen({
   });
 
   /* L'ÉTAT DE LA LISTE « POUR LE REMETTRE », dans l'ordre du cahier
-     (`etatDeLaListe`) : pas encore en base, des changements en route ou
-     pas enregistrés (des lignes, l'en-tête refusé, un champ refusé par
-     l'écran), un échec, la liste. */
+     (`etatDeLaListe`, devis.js) : pas encore en base, des changements en
+     route (une écriture, ou un champ de l'en-tête tapé et pas encore
+     quitté), un échec, la liste. Ce qui n'est PAS ENREGISTRÉ se dit à côté
+     (`ceQueLaListeNeComptePas`), avec LE compte du pied
+     (`nbNonEnregistrees`) — jamais un second. */
   const etatListe = etatDeLaListe({
     enBase: attente.devisEnBase,
     enRoute: attente.enCours,
-    nonParties: nbNonEnregistrees > 0 || attente.nb > 0 || !!attente.devisErreur || Object.keys(erreursEntete).length > 0,
+    champOuvert,
     erreur: liste.erreur,
     lue,
+  });
+  const pasCompte = ceQueLaListeNeComptePas({
+    nbLignes: nbNonEnregistrees,
+    entete: !!attente.devisErreur || Object.keys(erreursEntete).length > 0,
   });
   let erreurListe = null;
   if (liste.erreur) {
@@ -1715,8 +1725,8 @@ export default function SaisieDevisScreen({
       variante={variante}
       etat={etatListe}
       lue={lue}
-      enRoute={attente.enCours}
       enLecture={liste.enLecture}
+      pasCompte={pasCompte}
       erreurReessayable={listeReessayable}
       erreurPhrase={erreurListe}
       onOuvrir={ouvrirPourRemettre}
@@ -1798,6 +1808,7 @@ export default function SaisieDevisScreen({
       erreurs={erreursEntete}
       phraseLieu={phraseLieu}
       onEnregistrer={enregistrerEntete}
+      onFrappe={setChampOuvert}
       onChoisirClient={ouvrirChoixClient}
       onNouveauClient={nouveauClient}
       onMonEntreprise={() => onMonEntreprise('tva')}
@@ -2088,8 +2099,8 @@ export default function SaisieDevisScreen({
           key={`pour-remettre-${cleCarte}`}
           etat={etatListe}
           lue={lue}
-          enRoute={attente.enCours}
           enLecture={liste.enLecture}
+          pasCompte={pasCompte}
           erreurPhrase={erreurListe}
           erreurReessayable={listeReessayable}
           avis={avis}

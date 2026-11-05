@@ -7555,11 +7555,14 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
           ni sur un brouillon pas encore en base, la phrase « Pas encore
           vérifié », les relectures, un bouton par point de l'entreprise, le
           retour à la liste depuis « Conditions », les avis jamais comptés.
-     Ses fonctions pures de l'écran (`etatDeLaListe`, `actionDuPoint`…)
-     vivent dans `PourRemettre.js`, qui charge React Native : `node` ne
-     l'ouvre pas. Leur RÉGION (sans JSX, sans import) est extraite et FAITE
-     TOURNER — et ce contrôle refuse qu'elle se mette à dépendre d'un import :
-     leur place est `devis.js` (la leçon de `cloudinary-adresses.js`). */
+     Ses fonctions pures de l'écran (`etatDeLaListe`, `texteDeLaLigneRemise`,
+     `ceQueDitLaCarte`, `ceQueLaListeNeComptePas`, `actionDuPoint`…) vivent
+     dans `devis.js` depuis la vérification de construction (écart 9) : ce
+     contrôle les IMPORTE et les fait tourner. Elles vivaient dans
+     `PourRemettre.js`, qui charge React Native, et ce contrôle les
+     EXTRAYAIT par leur texte (`new Function`) — un contrôle qui lit un
+     morceau de fichier perd sa cible au premier déménagement. Il refuse
+     désormais qu'elles y reviennent (la leçon de `cloudinary-adresses.js`). */
   const egal = (a, b) => json(a) === json(b);
   const net = (t) => String(t == null ? '' : t).replace(/[\u00a0\u202f]/g, ' ');
   const ecart40 = (vu, attendu) => {
@@ -7639,6 +7642,32 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       motifsEmetteur: ['conso_mediateur: Pour un devis : le médiateur.', 'frais_deplacement: Vos frais : à dire.'] })
       .map((m) => [m.rang, m.cle, m.phrase, m.nature]),
     [[101, 'conso_mediateur', 'Pour un devis : le médiateur.', 'loi'], [102, 'frais_deplacement', 'Vos frais : à dire.', 'regle_opus']]));
+  /* LA COUPURE « cle: phrase » EST CELLE DE LA BASE (vérification de
+     construction, écart 4) : `split_part(v_motif, ': ', 1)` et
+     `substr(v_motif, char_length(cle) + 3)` — au PREMIER « : » SUIVI D'UNE
+     ESPACE. Les sorties attendues ci-dessous ont été RELEVÉES sur PostgreSQL
+     16 avec ces deux expressions (compte rendu de la correction, point 2) ;
+     la forme ENTIÈRE de la fonction (a.) garantit que la base coupe bien
+     ainsi. Le second motif DÉPARTAGE les deux règles : coupé au premier
+     « : » seul, il rendait « a » / « b: phrase ». */
+  const COUPURES = [
+    ['cle: phrase avec a:b et : c', 'cle', 'phrase avec a:b et : c'],
+    ['a:b: phrase', 'a:b', 'phrase'],
+    ['sans separateur', 'sans separateur', ''],
+    ['cle:', 'cle:', ''],
+    ['', '', ''],
+  ];
+  const coupuresFausses = COUPURES.filter(([m, cle, phrase]) => {
+    const r = D.motifsDeRemise({ devis: { clientId: 'c', lieuVille: 'x', delaiExecution: 'x', validiteJours: 30 },
+      lignes: [{ id: 'l', type: 'poste', ordre: 1000, prixUnitaireCentimes: 100, tauxTvaCentiemes: 0 }], regime: 'franchise', motifsEmetteur: [m] });
+    const e = r.find((x) => x.rang === 101);
+    return !e || e.cle !== cle || e.phrase !== phrase;
+  }).map(([m]) => m);
+  verifier('…la coupure « clé: phrase » est CELLE DE LA BASE — au premier « : » SUIVI D’UNE ESPACE, et sans séparateur toute la '
+    + 'chaîne en clé, une phrase vide (`split_part` / `substr`) : « a:b: phrase » rend « a:b » / « phrase »',
+  coupuresFausses.length === 0 && /split_part\(v_motif, ': ', 1\)/.test(FORME_MOTIFS_REFUS_REMISE)
+    && /substr\(v_motif, char_length\(cle\) \+ 3\)/.test(FORME_MOTIFS_REFUS_REMISE)
+    && json(D.couperMotifEntreprise(null)) === json({ cle: null, phrase: null }), coupuresFausses.join(' | '));
   /* LES PHRASES DE L'ÉCRAN (annexe B.8) et les AVIS (B.7), en toutes lettres
      — aux espaces insécables près, que `devis.js` pose devant « % » et « : »
      où la typographie le veut. */
@@ -7653,6 +7682,15 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   };
   const B8faux = Object.entries(B8).filter(([k, v]) => net(D[k]) !== v).map(([k]) => k);
   verifier('…les phrases de l’écran (annexe B.8) sont celles du contrat, mot pour mot', B8faux.length === 0, B8faux.join(', '));
+  /* …ET L'AIDE DU TAUX RÉDUIT GARDE SES ESPACES INSÉCABLES avant « % »
+     (vérification de construction, écart 5) : la comparaison ci-dessus les
+     ramène à des espaces ordinaires (`net`), elle ne verrait pas qu'on les
+     perd — « 10 » finirait une ligne et « % » commencerait la suivante. Et
+     elles sont ÉCRITES `\u00a0` dans le source, comme toutes les insécables
+     de `devis.js` : un caractère invisible collé ne se relit pas. */
+  verifier('…l’aide du taux réduit garde ses deux espaces INSÉCABLES avant « % », écrites `\\u00a0` dans le source',
+    D.AIDE_TAUX_REDUIT === `À 10${'\u00a0'}% ou 5,5${'\u00a0'}%, le client certifiera sur le devis que le logement a plus de deux ans : Opus imprimera cette phrase avec la place de signer.`
+    && /export const AIDE_TAUX_REDUIT = 'À 10\\u00a0% ou 5,5\\u00a0%, /.test(lire('src/lib/devis.js')));
   verifier('…les étiquettes de nature disent « La loi », « Par prudence », « Règle d’Opus » — et les avis (B.7) leurs deux phrases',
     egal(D.ETIQUETTE_DE_NATURE, { loi: 'La loi', prudence: 'Par prudence', regle_opus: 'Règle d’Opus' })
     && egal(Object.fromEntries(Object.entries(D.AVIS_DU_DEVIS || {}).map(([k, v]) => [k, net(v)])), {
@@ -7843,6 +7881,35 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /set\s+local\s+role\s+service_role\s*;/i.test(essE) && /security\s+definer/i.test(essE) && /set\s+local\s+role\s+anon\s*;/i.test(essE)
     && (essE.match(/motifs_refus_remise\s*\(/g) || []).length >= 30,
   `${errs} erreur(s) relevée(s), ${juges} jugée(s), ${blocsDo.length} bloc(s) do`);
+  /* …ET IL SE PROTÈGE LUI-MÊME D'UN REFUS RETIRÉ (vérification de
+     construction, constat T01 : le cas 12 h retiré, le fichier écrivait
+     encore 11 erreurs — une variable indéfinie en levait une autre — et le
+     juge rendait 0 écart sur 120 valeurs au lieu de 126). Trois gardes :
+       - les 33 variables des refus DÉCLARÉES D'AVANCE (« jamais relevé ») :
+         un cas retiré laisse un `f`, pas une erreur de syntaxe ;
+       - le nombre de valeurs jugées ANNONCÉ (`VALEURS_ANNONCEES`, 126), et
+         CHAQUE valeur jugée passée par `pg_temp.v(…)`, qui avance une
+         séquence temporaire (aucun `rollback` ne l'annule) ;
+       - un jugement final EN SQL qui compare le compte à l'annonce. */
+  const aliasJuges = (essE.match(/\bas\s+[a-z0-9_]*_attendu_[a-z0-9]+\b/g) || []).length;
+  /* `pg_temp.v(` moins sa définition : les valeurs ENVELOPPÉES. */
+  const enveloppes = (essE.match(/pg_temp\.v\(/g) || []).length - (essE.match(/create function pg_temp\.v\(/g) || []).length;
+  const declarees = ['e12a', 'e12b', 'e12c', 'e12d', 'e12e', 'e12f1', 'e12f2', 'e12g1', 'e12g2', 'e12g3', 'e12h']
+    .every((v) => ['err', 'code', 'msg'].every((x) => {
+      const i = essE.indexOf(`\\set ${v}_${x} 'jamais relevé'`);
+      const j = essE.indexOf(`\\set ${v}_${x} :`);
+      return i >= 0 && j > i;
+    }));
+  const valeursAnnoncees = Number((/\\set\s+VALEURS_ANNONCEES\s+(\d+)/.exec(essE) || [])[1]);
+  verifier('…il ANNONCE ses 126 valeurs jugées, les COMPTE (chaque valeur passe par `pg_temp.v`, une séquence que `rollback` n’annule '
+    + 'pas) et un jugement final EN SQL refuse un autre compte ; les 33 variables des refus sont déclarées d’avance (un cas retiré laisse '
+    + 'un `f`, pas une autre erreur)',
+  valeursAnnoncees === 126 && /JUGE EXACTEMENT 126 VALEURS/.test(brutE)
+    && /create temporary sequence essai_valeurs;/.test(essE)
+    && /create function pg_temp\.v\(x anyelement\) returns anyelement\s+language plpgsql volatile security definer as \$v\$\s+begin\s+perform nextval\('pg_temp\.essai_valeurs'\);\s+return x;\s+end;\s+\$v\$;/.test(essE)
+    && /select pg_temp\.valeurs_jugees\(\) = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,/.test(essE)
+    && aliasJuges === enveloppes + 1 && declarees,
+  `${aliasJuges} colonne(s) jugée(s), ${enveloppes} enveloppée(s), annonce ${valeursAnnoncees}, déclarées d’avance : ${declarees}`);
   /* LA PREUVE QUI COMPTE POUR D4-c EST LA PROPRIÉTÉ (critique B5) : trois
      devis identiques sauf leurs liens et leur source, comparés sur leur
      signature ENTIÈRE ; et le catalogue relu (`prosrc`, `prosecdef`). */
@@ -7889,37 +7956,100 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   /* ---------------- f. L'ÉCRAN ---------------- */
   const PRb = lireSiExiste('src/components/PourRemettre.js') || '';
   const PR = sansCommentairesJs(PRb);
-  /* LA RÉGION PURE, FAITE TOURNER : de `CARTE_POUR_REMETTRE` à `LigneRemise`.
-     Elle ne doit contenir ni JSX ni import ; si elle s'en met à dépendre,
-     elle plante ici — sa place est alors `devis.js`. */
-  const iR = PR.indexOf('export const CARTE_POUR_REMETTRE');
-  const jR = PR.indexOf('export function LigneRemise');
-  const region = iR >= 0 && jR > iR ? PR.slice(iR, jR).replace(/\bexport\s+/g, '') : '';
-  let P = null;
-  try {
-    P = new Function(`"use strict";\n${region}\nreturn { CARTE_POUR_REMETTRE, etatDeLaListe, comptesParEndroit, phraseDesEndroits, premierePhrase, actionDuPoint, SEUIL_LIRE_LA_SUITE };`)();
-  } catch (e) {
-    P = null;
-  }
-  verifier('f. `PourRemettre.js` existe, et sa région pure (de `CARTE_POUR_REMETTRE` à `LigneRemise`) se lit sans JSX et se FAIT TOURNER '
-    + 'seule — `CARTE_POUR_REMETTRE` vaut `pour_remettre`, jamais `remise` (la réduction, E-18) ni `conditions`',
-  PRb.length > 3000 && !!P && !/<[A-Za-z]/.test(region) && P.CARTE_POUR_REMETTRE === 'pour_remettre');
-  if (P) {
+  /* CE QUE L'ÉCRAN DÉCIDE VIT DANS `devis.js`, IMPORTÉ ET FAIT TOURNER
+     (vérification de construction, écart 9). `PourRemettre.js` n'en définit
+     plus aucun : il les importe. S'ils y revenaient, `node` ne pourrait plus
+     les faire tourner — on le refuse. */
+  const P = D;
+  const NOMS_PURS = ['CARTE_POUR_REMETTRE', 'TITRE_POUR_REMETTRE', 'etatDeLaListe', 'points', 'comptesParEndroit', 'phraseDesEndroits',
+    'premierePhrase', 'SEUIL_LIRE_LA_SUITE', 'actionDuPoint', 'texteDeLaLigneRemise', 'ceQueDitLaCarte', 'ceQueLaListeNeComptePas',
+    'LISTE_EN_LECTURE', 'LISTE_MISE_A_JOUR', 'ENTETE_PAS_COMPTE'];
+  const redefinis = NOMS_PURS.filter((n) => new RegExp(`(?:function|const|let|var)\\s+${n}\\b`).test(PR));
+  const importeDe = (/import\s*\{([^}]*)\}\s*from\s*'\.\.\/lib\/devis'/.exec(PR) || ['', ''])[1];
+  verifier('f. `PourRemettre.js` existe et ne garde que le DESSIN : ce que l’écran décide (`etatDeLaListe`, `texteDeLaLigneRemise`, '
+    + '`ceQueDitLaCarte`, `premierePhrase`, `actionDuPoint`…) vit dans `devis.js`, IMPORTÉ — aucun n’est redéfini dans le composant ; '
+    + '`CARTE_POUR_REMETTRE` vaut `pour_remettre`, jamais `remise` (la réduction, E-18) ni `conditions`',
+  PRb.length > 3000 && redefinis.length === 0 && NOMS_PURS.every((n) => n in D)
+    && ['texteDeLaLigneRemise', 'ceQueDitLaCarte', 'actionDuPoint', 'premierePhrase'].every((n) => new RegExp(`\\b${n}\\b`).test(importeDe))
+    && P.CARTE_POUR_REMETTRE === 'pour_remettre' && P.TITRE_POUR_REMETTRE === 'Pour le remettre',
+  `redéfinis ici : ${redefinis.join(', ') || '—'} ; importés : ${sansEspaces(importeDe)}`);
+  {
     const lue2 = D.lireMotifsDeRemise([{ rang: 1, cle: 'devis_client', phrase: 'x', nature: 'loi' }]);
     const err = new Error('x');
     const etats = [
       P.etatDeLaListe({ enBase: false, enRoute: true, erreur: err, lue: lue2 }),
       P.etatDeLaListe({ enBase: true, enRoute: true, erreur: err, lue: lue2 }),
-      P.etatDeLaListe({ enBase: true, nonParties: true, erreur: err, lue: lue2 }),
+      P.etatDeLaListe({ enBase: true, champOuvert: true, erreur: err, lue: lue2 }),
       P.etatDeLaListe({ enBase: true, erreur: err, lue: lue2 }),
-      P.etatDeLaListe({ enBase: true, nonParties: true, lue: lue2 }),
+      P.etatDeLaListe({ enBase: true, champOuvert: true }),
       P.etatDeLaListe({ enBase: true }),
       P.etatDeLaListe({ enBase: true, lue: lue2 }),
       P.etatDeLaListe(),
     ];
-    verifier('…`etatDeLaListe`, FAIT TOURNER, dans l’ordre du cahier (§3.1) : pas en base AVANT TOUT ; une écriture en vol ; un ÉCHEC avant '
-      + '« pas enregistré » et JAMAIS « liste » sur un échec ; rien de lu → « lecture », jamais « liste »',
-    egal(etats, ['pas_en_base', 'en_route', 'echec', 'echec', 'en_route', 'lecture', 'liste', 'pas_en_base']), json(etats));
+    verifier('…`etatDeLaListe`, FAIT TOURNER, dans l’ordre du cahier (§3.1) : pas en base AVANT TOUT ; des changements en route — une '
+      + 'écriture, OU un champ de l’en-tête tapé et pas quitté — AVANT l’échec ; JAMAIS « liste » sur un échec ; rien de lu → « lecture »',
+    egal(etats, ['pas_en_base', 'en_route', 'en_route', 'echec', 'en_route', 'lecture', 'liste', 'pas_en_base']), json(etats));
+    /* CE QUE LA LISTE NE COMPTE PAS (écart 8) : LE compte du pied, dit en
+       toutes lettres — et l'en-tête refusé, quand aucune ligne ne l'est. */
+    const nc = P.ceQueLaListeNeComptePas;
+    verifier('…`ceQueLaListeNeComptePas`, FAIT TOURNER : « 1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste. », '
+      + 'le pluriel, l’en-tête refusé quand aucune ligne ne l’est, et RIEN quand tout est enregistré',
+    nc({ nbLignes: 1 }) === '1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste.'
+    && nc({ nbLignes: 3, entete: true }) === '3 lignes ne sont pas enregistrées : elles ne sont pas comptées dans cette liste.'
+    && nc({ entete: true }) === 'Un champ du devis n’est pas enregistré : il n’est pas compté dans cette liste.'
+    && nc({}) === null && nc({ nbLignes: 0, entete: false }) === null && nc() === null && nc({ nbLignes: -2 }) === null,
+    json([nc({ nbLignes: 1 }), nc({ nbLignes: 2 }), nc({ entete: true })]));
+    /* LA LIGNE (en haut et en bas), FAITE TOURNER : la phrase EXACTE du
+       contrat en route (B.8), le compte d'avant gardé dans l'étiquette
+       parlée ; « pas compté » DEVANT le compte ; pas en base, ce n'est pas
+       une cible ; en échec, « Réessayer » ; « mise à jour » seulement pendant
+       une RELECTURE (rien ne part). */
+    const lig = (o) => P.texteDeLaLigneRemise({ lue: lue2, ...o });
+    const enRoute = lig({ etat: 'en_route' });
+    const pc = nc({ nbLignes: 1 });
+    const parLigne = [
+      [lig({ etat: 'pas_en_base' }), D.LISTE_AVANT_LA_PREMIERE_LIGNE, null],
+      [enRoute, D.LISTE_EN_ROUTE, 'ouvrir'],
+      [lig({ etat: 'en_route', lue: null }), D.LISTE_EN_ROUTE, 'ouvrir'],
+      [lig({ etat: 'en_route', pasCompte: pc }), D.LISTE_EN_ROUTE, 'ouvrir'],
+      [lig({ etat: 'echec' }), D.LISTE_NON_LUE, 'reessayer'],
+      [lig({ etat: 'echec', erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas.' }), 'Ce devis n’existe pas.', 'ouvrir'],
+      [lig({ etat: 'echec', pasCompte: pc }), D.LISTE_NON_LUE, 'reessayer'],
+      [lig({ etat: 'lecture', lue: null }), D.LISTE_EN_LECTURE, 'ouvrir'],
+      [lig({ etat: 'liste' }), 'ce devis — 1 point · votre entreprise — aucun point', 'ouvrir'],
+      [lig({ etat: 'liste', enLecture: true }), 'ce devis — 1 point · votre entreprise — aucun point · mise à jour…', 'ouvrir'],
+      [lig({ etat: 'liste', pasCompte: pc }), pc, 'ouvrir'],
+    ];
+    const lignesFausses = parLigne.filter(([r, c, a]) => !r || r.contenu !== c || r.action !== a).map(([r]) => json(r));
+    verifier('…`texteDeLaLigneRemise`, FAIT TOURNER : en route, la phrase EXACTE « Des changements partent : la liste sera à jour juste '
+      + 'après. » (jamais « · mise à jour… », réservé à une relecture) ; ce que la liste ne compte pas passe DEVANT le compte ; pas en '
+      + 'base → pas une cible ; échec → « Réessayer »',
+    lignesFausses.length === 0 && D.LISTE_EN_ROUTE === 'Des changements partent : la liste sera à jour juste après.'
+      && enRoute.aDire === 'Pour le remettre : Des changements partent : la liste sera à jour juste après. Dernière liste : ce devis — 1 point · votre entreprise — aucun point. Ouvrir la liste'
+      && lig({ etat: 'liste', pasCompte: pc }).aDire.includes('ce devis — 1 point')
+      && lig({ etat: 'pas_en_base' }).aDire === 'Pour le remettre : Écrivez une première ligne : la liste se calculera ensuite.'
+      && lig({ etat: 'echec' }).aDire === 'Liste de ce qu’il manque non lue. Réessayer'
+      && lig({ etat: 'liste' }).aDire === 'Pour le remettre : ce devis — 1 point · votre entreprise — aucun point. Ouvrir la liste'
+      && lig({ etat: 'liste', enLecture: true }).aDire === 'Pour le remettre : ce devis — 1 point · votre entreprise — aucun point · mise à jour… Ouvrir la liste',
+    lignesFausses.join(' | '));
+    /* LA CARTE, FAITE TOURNER : la dernière liste sûre en `liste` ET en
+       `en_route` — jamais sur un échec ni avant la première lecture ; ses
+       phrases d'état, dans l'ordre ; « pas compté » dit DANS LA CARTE aussi,
+       sur la liste comme sur un échec. */
+    const ca = (o) => P.ceQueDitLaCarte({ lue: lue2, ...o });
+    const textes = (o) => ca(o).phrases.map((x) => x.texte);
+    verifier('…`ceQueDitLaCarte`, FAIT TOURNER : la liste se montre en `liste` et en `en_route` (sans clignoter), JAMAIS sur un échec, '
+      + 'une lecture ou un brouillon pas en base ; en route, la phrase EXACTE du contrat ; ce qui n’est pas compté est DIT',
+    ca({ etat: 'liste' }).montrerLaListe === true && ca({ etat: 'en_route' }).montrerLaListe === true
+      && ca({ etat: 'echec' }).montrerLaListe === false && ca({ etat: 'lecture' }).montrerLaListe === false
+      && ca({ etat: 'pas_en_base' }).montrerLaListe === false && ca({ etat: 'en_route', lue: null }).montrerLaListe === false
+      && egal(textes({ etat: 'en_route' }), [D.LISTE_EN_ROUTE])
+      && egal(textes({ etat: 'en_route', pasCompte: pc }), [D.LISTE_EN_ROUTE, pc])
+      && egal(textes({ etat: 'liste', pasCompte: pc }), [pc]) && egal(textes({ etat: 'echec', pasCompte: pc }), [pc])
+      && egal(textes({ etat: 'liste' }), []) && egal(textes({ etat: 'liste', enLecture: true }), [D.LISTE_MISE_A_JOUR])
+      && egal(textes({ etat: 'pas_en_base', pasCompte: pc }), [D.LISTE_AVANT_LA_PREMIERE_LIGNE])
+      && egal(textes({ etat: 'lecture', lue: null }), [D.LISTE_EN_LECTURE]),
+    json([textes({ etat: 'en_route', pasCompte: pc }), textes({ etat: 'liste', pasCompte: pc })]));
     const l3 = D.lireMotifsDeRemise([
       { rang: 1, cle: 'devis_client' }, { rang: 6, cle: 'devis_validite' },
       { rang: 101, cle: 'identite' }, { rang: 102, cle: 'conso_mediateur' },
@@ -7929,7 +8059,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     P.phraseDesEndroits(l3) === 'ce devis — 2 points · votre entreprise — 2 points'
     && P.phraseDesEndroits(D.lireMotifsDeRemise([{ rang: 101, cle: 'identite' }], { sections: E.SECTION_DU_MOTIF })) === 'ce devis — aucun point · votre entreprise — 1 point'
     && egal(P.comptesParEndroit({ comptes: { devis: 1, entreprise: 1, particulier: 1 }, avis: [1, 2, 3] }), { devis: 1, entreprise: 2 })
-    && !/avis/.test(corpsDeFonction(region, 'comptesParEndroit') || 'avis'), P.phraseDesEndroits(l3));
+    && !/avis/.test(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'comptesParEndroit') || 'avis'), P.phraseDesEndroits(l3));
     const tva = (E.MOTIFS.find((m) => m.cle === 'conso_tva_intra') || {}).phrase || '';
     const pp = P.premierePhrase(tva);
     const court = P.premierePhrase(D.MOTIFS_DEVIS.devis_lieu.phrase);
@@ -7957,9 +8087,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      que si `lue` existe ET que l'état est `liste` ou `en_route` — jamais sur
      un échec, jamais sur un brouillon pas en base. */
   const prE = sansEspaces(PR);
-  verifier('la carte ne dit « rien ne manque » QUE dans la partie « Ce devis » d’une liste LUE (`montrer` : `lue` ET l’état `liste` ou '
-    + '`en_route`), UNE fois, immédiatement suivi de « Pas encore vérifié »',
-  /const montrer = !!lue && \(etat === 'liste' \|\| etat === 'en_route'\); const parties = montrer \? lue\.parties : null;/.test(prE)
+  verifier('la carte ne dit « rien ne manque » QUE dans la partie « Ce devis » d’une liste LUE (`montrer`, décidé par `ceQueDitLaCarte` : '
+    + '`lue` ET l’état `liste` ou `en_route`), UNE fois, immédiatement suivi de « Pas encore vérifié » ; ses phrases d’état sont celles de '
+    + '`ceQueDitLaCarte`, et aucune n’est écrite dans le composant',
+  /const \{ phrases, montrerLaListe: montrer \} = ceQueDitLaCarte\(\{ etat, lue, enLecture, pasCompte, \}\); const parties = montrer \? lue\.parties : null;/.test(prE)
+    && /\{phrases\.map\(\(p\) => \( <Text key=\{p\.texte\}/.test(prE)
+    && !/LISTE_EN_ROUTE|LISTE_AVANT_LA_PREMIERE_LIGNE|LISTE_EN_LECTURE|LISTE_MISE_A_JOUR|ceQueLaListeNeComptePas\(/.test(PR)
     && (prE.match(/\{RIEN_NE_MANQUE_POUR_CE_DEVIS\}/g) || []).length === 1
     && /\{!!parties && \( <> .*?parties\.devis\.length === 0 \? \( <View style=\{s\.rien\}> <Text style=\{s\.rienTexte\}>\{RIEN_NE_MANQUE_POUR_CE_DEVIS\}<\/Text> (?:\{ ?\} )?<Text style=\{s\.aide\}>\{PAS_ENCORE_VERIFIE\}<\/Text> <\/View> \) : parties\.devis\.map\(rendrePoint\)\}/.test(prE));
   /* AUCUN « RIEN NE MANQUE » ÉCRIT EN DUR dans les écrans du devis : la seule
@@ -7988,11 +8121,11 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   verifier('…ni en morceaux recollés (`\'Rien ne \' + \'manque\'`), ni en texte JSX : relu concaténations recollées, la phrase n’apparaît que NIÉE',
     enMorceaux.length === 0, enMorceaux.join(' | '));
   const ligne = sansEspaces(corpsDeFonction(PR, 'LigneRemise') || '');
-  verifier('la LIGNE (haut et bas) : pas en base → « Écrivez une première ligne… », et ce n’est PAS une cible ; en échec → « Liste non '
-    + 'lue — Réessayer », qui RELIT ; le compte par endroit n’est dit que dans le dernier cas',
-  /if \(etat === 'pas_en_base'\) \{ contenu = LISTE_AVANT_LA_PREMIERE_LIGNE; action = null; \} else if \(etat === 'echec'\) \{ if \(erreurReessayable\) \{ contenu = LISTE_NON_LUE; action = onReessayer;/.test(ligne)
-    && (ligne.match(/phraseDesEndroits\(/g) || []).length === 1
-    && /\} else \{ contenu = `\$\{phraseDesEndroits\(lue\)\}/.test(ligne) && /if \(!action\) \{ return <View/.test(ligne));
+  verifier('la LIGNE (haut et bas) dit ce que décide `texteDeLaLigneRemise` (fait tourner plus haut), et rien d’autre : aucune phrase '
+    + 'ni aucun compte écrit dans le composant ; `ouvrir` ouvre la carte, `reessayer` RELIT, sinon ce n’est PAS une cible',
+  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, \}\); const \{ contenu, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
+    && !/phraseDesEndroits|LISTE_|MISE_A_JOUR/.test(ligne) && /if \(!action\) \{ return <View/.test(ligne)
+    && /numberOfLines=\{3\}>\{contenu\}<\/Text>/.test(ligne), ligne.slice(0, 300));
   verifier('…et la carte, en échec, propose « Liste non lue — Réessayer » (`onReessayer`), sans liste dessous',
     /\{etat === 'echec' && \( <View style=\{s\.echec\}> \{erreurReessayable \? \( <Pressable onPress=\{onReessayer\}[^]*?\{LISTE_NON_LUE\}/.test(prE));
   /* UN BOUTON PAR POINT : chaque point de chaque partie est rendu par
@@ -8047,6 +8180,31 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /lireMotifsDeRemise\(liste\.motifs, \{ sections: SECTION_DU_MOTIF \}\)/.test(saE) && /Array\.isArray\(liste\.motifs\) \?/.test(saE)
     && /erreur: liste\.erreur,/.test(saE) && /enBase: attente\.devisEnBase,/.test(saE)
     && balises(SA, 'LigneRemise').every((b) => !/\bavis\b/.test(b)) && balises(SA, 'PourRemettre').some((b) => /avis=\{avis\}/.test(b)));
+  /* LES ÉTATS DE LA SAISIE (écarts 7 et 8) : « des changements partent »
+     pendant une écriture ET pendant la frappe d'un champ de l'en-tête — que
+     l'en-tête signale UNE fois par saisie, et retire en s'enregistrant ; ce
+     que la liste ne compte pas, avec LE compte du pied (`nbNonEnregistrees`,
+     que `suffixeDuPied` reçoit aussi) — jamais un second compte. */
+  const corpsEntete = sansEspaces(ECR.entete);
+  const champsFrappe = balises(ECR.entete, 'ChampLocal').filter((b) => /surPremiereFrappe=\{\(\) => signalerFrappe\(true\)\}/.test(b));
+  verifier('la saisie : « des changements partent » pendant une écriture (`attente.enCours`) ET pendant la frappe d’un champ de l’en-tête '
+    + '(`champOuvert`, que l’en-tête signale par `onFrappe`) ; ce que la liste ne compte pas vient de `ceQueLaListeNeComptePas` avec LE '
+    + 'compte du pied (`nbNonEnregistrees`), et passe à la ligne ET à la carte',
+  /const etatListe = etatDeLaListe\(\{ enBase: attente\.devisEnBase, enRoute: attente\.enCours, champOuvert, erreur: liste\.erreur, lue, \}\);/.test(saE)
+    && /const pasCompte = ceQueLaListeNeComptePas\(\{ nbLignes: nbNonEnregistrees, entete: !!attente\.devisErreur \|\| Object\.keys\(erreursEntete\)\.length > 0, \}\);/.test(saE)
+    && /const suffixe = suffixeDuPied\(\{ nbNonEnregistrees,/.test(saE)
+    && (saE.match(/pasCompte=\{pasCompte\}/g) || []).length === 2
+    && /const \[champOuvert, setChampOuvert\] = useState\(false\);/.test(saE) && /onFrappe=\{setChampOuvert\}/.test(saE)
+    && !/\bnonParties\b/.test(saE) && !/enRoute=\{attente\.enCours\}/.test(saE));
+  verifier('…et l’en-tête signale la frappe UNE fois (`surPremiereFrappe` sur l’objet, le code postal, la ville et le délai ; la première '
+    + 'lettre de la rue), et la retire quand le champ s’enregistre (chaque `onBlur`, le lieu, `enregistrer()`), réarmant ses champs',
+  champsFrappe.length === 4
+    && /const signalerFrappe = \(oui\) => \{ if \(enFrappe\.current === oui\) return; enFrappe\.current = oui; if \(onFrappe\) onFrappe\(oui\); \};/.test(corpsEntete)
+    && /\[refObjet, refDelai, refCp, refVille\]\.forEach\(\(r\) => \{ if \(r\.current && r\.current\.rearmer\) r\.current\.rearmer\(\); \}\); signalerFrappe\(false\);/.test(corpsEntete)
+    && /enregistrer: \(\) => \{ onEnregistrer\(lire\(\)\); frappeFinie\(\); \},/.test(corpsEntete)
+    && /\} else \{ signalerFrappe\(true\); \}/.test(corpsEntete)
+    && (corpsEntete.match(/frappeFinie\(\);/g) || []).length >= 4,
+  `${champsFrappe.length} champ(s) qui signalent la frappe`);
   /* LE RETOUR À LA LISTE DEPUIS « CONDITIONS » (critique E-13) : ouverte
      depuis la liste sur son champ, la carte y RAMÈNE ; ouverte autrement,
      elle revient au devis. */

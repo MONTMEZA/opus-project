@@ -3440,20 +3440,30 @@ export function natureDuMotifEntreprise(cle) {
   return aLaCle(NATURE_DU_MOTIF_ENTREPRISE, cle) ? NATURE_DU_MOTIF_ENTREPRISE[cle] : 'loi';
 }
 
-/* « cle: phrase », la forme d'`emetteur_incomplet()`, coupée au PREMIER
-   deux-points (annexe B.3) : la clé n'en porte jamais (`[a-z_]+`), la phrase
-   souvent (« Pour un devis à un particulier : … »). L'espace qui suit le
-   deux-points part avec lui. Un élément déjà lu (`{ cle, phrase }`, ce que
-   rend `lireMotifs` d'`emetteur.js`) passe tel quel : la démonstration et
-   les cas de parité ne passent pas par le même chemin. */
-function couperMotifEntreprise(brut) {
+/* « cle: phrase », la forme d'`emetteur_incomplet()`, coupée EXACTEMENT
+   comme la base la coupe (section 49.9) : au PREMIER « : » SUIVI D'UNE
+   ESPACE — `split_part(v_motif, ': ', 1)` pour la clé, et la phrase à partir
+   du troisième caractère après elle (`substr(v_motif, char_length(cle) +
+   3)`). La clé n'a jamais de deux-points (`[a-z_]+`), la phrase souvent
+   (« Pour un devis à un particulier : … ») : sur tout motif réel, couper au
+   premier « : » seul rendait la même chose. Mais pas sur « a:b: phrase »
+   (« a » / « b: phrase » contre « a:b » / « phrase ») ni sur un élément
+   sans « : » (la base rend tout le texte en clé et une phrase VIDE) : le
+   miroir rend ce que la base rend, même là où elle n'ira jamais
+   (vérification de construction du lot 2b-1, écart 4 ; `verifier-devis`,
+   section 40, départage les deux règles). Un élément déjà lu (`{ cle,
+   phrase }`, ce que rend `lireMotifs` d'`emetteur.js`) passe tel quel : la
+   démonstration et les cas de parité ne passent pas par le même chemin. */
+export function couperMotifEntreprise(brut) {
   if (brut && typeof brut === 'object') {
     return { cle: typeof brut.cle === 'string' ? brut.cle : null, phrase: brut.phrase == null ? '' : String(brut.phrase) };
   }
-  const texte = brut == null ? '' : String(brut);
-  const i = texte.indexOf(':');
-  if (i < 0) return { cle: null, phrase: texte };
-  return { cle: texte.slice(0, i), phrase: texte.slice(i + 1).replace(/^ /, '') };
+  /* Un élément vide (`null`) : `split_part` et `substr` rendent `null`. */
+  if (brut == null) return { cle: null, phrase: null };
+  const texte = String(brut);
+  const i = texte.indexOf(': ');
+  if (i < 0) return { cle: texte, phrase: '' };
+  return { cle: texte.slice(0, i), phrase: texte.slice(i + 2) };
 }
 
 /**
@@ -3752,6 +3762,244 @@ export const LISTE_EN_ROUTE = 'Des changements partent : la liste sera à jour j
 
 /** Une lecture ratée — jamais « Rien ne manque ». */
 export const LISTE_NON_LUE = 'Liste non lue — Réessayer';
+
+/* ------------------------------------------------------------------ */
+/*  « POUR LE REMETTRE » — ce que l'écran DÉCIDE (lot 2b-1)             */
+/* ------------------------------------------------------------------ */
+/* Ces constantes et ces fonctions vivaient dans `PourRemettre.js`, qui
+   charge React Native : `node` ne pouvait pas les faire tourner, et
+   `verifier-devis` les EXTRAYAIT par leur texte (`new Function`) — un
+   contrôle qui lit un morceau de fichier perd sa cible au premier
+   déménagement (vérification de construction du lot 2b-1, écart 9 ; la
+   leçon de `cloudinary-adresses.js`). Elles vivent ici, sans JSX, et
+   `verifier-devis` les IMPORTE. `PourRemettre.js` ne garde que le dessin. */
+
+/** La valeur de l'état `carte` de la saisie quand la liste est ouverte —
+ *  jamais `'remise'`, qui désigne déjà la RÉDUCTION dans le code (E-18). */
+export const CARTE_POUR_REMETTRE = 'pour_remettre';
+
+/** Le titre de la ligne et de la carte. */
+export const TITRE_POUR_REMETTRE = 'Pour le remettre';
+
+/** La première lecture, pas encore revenue. */
+export const LISTE_EN_LECTURE = 'Lecture de la liste…';
+
+/** Une RELECTURE repart (après une écriture confirmée, au retour de « Mon
+ *  entreprise ») : la liste affichée reste, et ceci le dit, sans changer de
+ *  place. Ce n'est PAS « des changements partent » : rien ne part, on lit. */
+export const LISTE_MISE_A_JOUR = 'Mise à jour de la liste…';
+
+/* La même chose sur la ligne, à la suite du compte : une MENTION, qui ne
+   change pas la hauteur de la ligne (E-6). */
+const MISE_A_JOUR_DE_LA_LIGNE = ' · mise à jour…';
+
+/** Un champ de l'EN-TÊTE refusé (par l'écran ou par la base) : la base a
+ *  gardé l'ancienne valeur, que la liste juge. */
+export const ENTETE_PAS_COMPTE = 'Un champ du devis n’est pas enregistré : il n’est pas compté dans cette liste.';
+
+/**
+ * CE QUE LA LISTE NE COMPTE PAS, dit en toutes lettres — ou `null`.
+ *   `nbLignes` : les lignes NON ENREGISTRÉES — LE MÊME COMPTE que le pied
+ *                (`suffixeDuPied`) et la garde de sortie : incomplètes,
+ *                refusées ou en échec. On n'en invente pas un second : deux
+ *                comptes d'une même vérité finissent par se contredire (la
+ *                leçon des voyants du 04/10) ;
+ *   `entete`   : un champ de l'en-tête refusé.
+ *
+ * POURQUOI (vérification de construction du lot 2b-1, écart 8) : la base ne
+ * voit pas une ligne qu'elle a refusée. Le seul poste d'un devis refusé, la
+ * liste dit « Ce devis ne chiffre encore aucun travail » SOUS une ligne
+ * visible — vrai pour la base, faux pour l'artisan qui la regarde, s'il
+ * n'est pas DIT pourquoi. Les lignes passent avant l'en-tête : ce sont elles
+ * que la liste juge le plus (le poste, le taux).
+ */
+export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false } = {}) {
+  const n = Number.isSafeInteger(nbLignes) && nbLignes > 0 ? nbLignes : 0;
+  if (n === 1) return '1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste.';
+  if (n > 1) return `${n} lignes ne sont pas enregistrées : elles ne sont pas comptées dans cette liste.`;
+  return entete ? ENTETE_PAS_COMPTE : null;
+}
+
+/**
+ * L'ÉTAT DE LA LISTE — l'ordre du cahier (§3.1), et rien d'autre ne décide :
+ *   1. `pas_en_base` : le brouillon n'existe pas encore en base — AUCUN
+ *      appel (la fonction rendrait OP027) ;
+ *   2. `en_route`    : des changements partent — une écriture en vol ou en
+ *      attente (`enRoute`), ou un champ de l'en-tête ouvert et tapé mais pas
+ *      encore quitté (`champOuvert`) : la dernière liste sûre reste, avec
+ *      « Des changements partent… » (annexe B.8) ;
+ *   3. `echec`       : la DERNIÈRE lecture a échoué ;
+ *   4. `lecture`     : rien de lu encore ;
+ *   5. `liste`.
+ * Ce qui n'est PAS ENREGISTRÉ (une ligne refusée, rien ne part) n'est pas
+ * un état : rien ne le relira tout seul, la liste lue reste juste pour ce
+ * que la base a — `ceQueLaListeNeComptePas` le DIT à côté, dans n'importe
+ * quel état où une liste ou un échec s'affiche.
+ *
+ * UN ÉCHEC QUI SUIT UNE LISTE SÛRE l'EFFACE (`lireLaListe` pose `motifs:
+ * null`) : cette liste date d'avant l'écriture qui a lancé la lecture
+ * ratée, elle n'est plus sûre. La garder sous « Liste non lue » montrerait
+ * peut-être « Ce devis : rien ne manque… » pour un devis qui vient de
+ * perdre son seul poste — un travail qui n'a pas pu se faire ressemblerait
+ * à un travail fait. D'où `echec` AVANT `lecture` et `liste`, et la carte
+ * qui ne montre aucune partie sur un échec.
+ */
+export function etatDeLaListe({
+  enBase = false, enRoute = false, champOuvert = false, erreur = null, lue = null,
+} = {}) {
+  if (!enBase) return 'pas_en_base';
+  if (enRoute || champOuvert) return 'en_route';
+  if (erreur) return 'echec';
+  if (!lue) return 'lecture';
+  return 'liste';
+}
+
+/** « aucun point », « 1 point », « 3 points ». */
+export function points(n) {
+  if (!n) return 'aucun point';
+  return n > 1 ? `${n} points` : '1 point';
+}
+
+/** Le compte PAR ENDROIT : le devis, et l'entreprise (ses mentions dues à
+ *  un particulier comprises — elles se corrigent au même endroit). Les AVIS
+ *  ne comptent jamais. */
+export function comptesParEndroit(lue) {
+  const c = (lue && lue.comptes) || {};
+  return { devis: c.devis || 0, entreprise: (c.entreprise || 0) + (c.particulier || 0) };
+}
+
+/** « ce devis — 2 points · votre entreprise — 1 point ». */
+export function phraseDesEndroits(lue) {
+  const c = comptesParEndroit(lue);
+  return `ce devis — ${points(c.devis)} · votre entreprise — ${points(c.entreprise)}`;
+}
+
+/**
+ * CE QUE DIT LA LIGNE (en haut et en bas) : `{ contenu, action, aDire }`.
+ *   `action` : `'ouvrir'` (la carte), `'reessayer'` (relire) ou `null` (pas
+ *              une cible : il n'y a rien à ouvrir) ;
+ *   `aDire`  : l'étiquette pour VoiceOver.
+ *
+ * En `en_route`, la ligne dit la phrase EXACTE du contrat (B.8), « Des
+ * changements partent : la liste sera à jour juste après. », et le compte de
+ * la dernière liste sûre reste dans l'étiquette parlée : DEUX lignes
+ * réservées ne portent pas les deux phrases à 320 points de large, et c'est
+ * la carte qui garde la liste entière — elle ne clignote pas.
+ * Ce que la liste ne compte pas (`pasCompte`) passe devant le compte : le
+ * compte d'avant pourrait dire « aucun travail » sous une ligne visible.
+ */
+export function texteDeLaLigneRemise({
+  etat, lue = null, enLecture = false, erreurReessayable = true, erreurPhrase = null, pasCompte = null,
+} = {}) {
+  let contenu;
+  let action = 'ouvrir';
+  let aDire = null;
+  let compte = null;
+  if (etat === 'pas_en_base') {
+    contenu = LISTE_AVANT_LA_PREMIERE_LIGNE;
+    action = null;
+  } else if (etat === 'echec') {
+    if (erreurReessayable) {
+      contenu = LISTE_NON_LUE;
+      action = 'reessayer';
+      aDire = 'Liste de ce qu’il manque non lue. Réessayer';
+    } else {
+      contenu = erreurPhrase || LISTE_NON_LUE;
+    }
+  } else if (etat === 'lecture') {
+    contenu = pasCompte || LISTE_EN_LECTURE;
+  } else if (etat === 'en_route') {
+    contenu = LISTE_EN_ROUTE;
+    compte = lue ? phraseDesEndroits(lue) : null;
+  } else if (pasCompte) {
+    contenu = pasCompte;
+    compte = lue ? phraseDesEndroits(lue) : null;
+  } else {
+    contenu = `${phraseDesEndroits(lue)}${enLecture ? MISE_A_JOUR_DE_LA_LIGNE : ''}`;
+  }
+  if (!aDire) {
+    /* Une phrase qui finit déjà par un point, ou par « … », n'en reçoit pas
+       un second. */
+    const fin = (t) => (/[.…]$/.test(t) ? ' ' : '. ');
+    let dit = contenu;
+    if (compte) dit = `${dit}${fin(dit)}Dernière liste : ${compte}`;
+    aDire = `${TITRE_POUR_REMETTRE} : ${action ? `${dit}${fin(dit)}Ouvrir la liste` : dit}`;
+  }
+  return { contenu, action, aDire };
+}
+
+/**
+ * CE QUE DIT LA CARTE, au-dessus des parties : `{ phrases, montrerLaListe }`.
+ * `phrases` : `[{ texte, ton }]`, dans l'ordre — `ton` vaut `'etat'` (une
+ * phrase d'état), `'aide'` (discrète) ou `'erreur'`. La DERNIÈRE liste sûre
+ * se montre en `liste` ET en `en_route` (elle ne clignote pas pendant un
+ * envoi) ; jamais sur un échec, ni avant la première lecture, ni sur un
+ * brouillon pas en base. L'échec lui-même (« Réessayer », la phrase de
+ * l'erreur) est dessiné par la carte : ce n'est pas une phrase, c'est un
+ * bouton.
+ */
+export function ceQueDitLaCarte({
+  etat, lue = null, enLecture = false, pasCompte = null,
+} = {}) {
+  const phrases = [];
+  if (etat === 'pas_en_base') phrases.push({ texte: LISTE_AVANT_LA_PREMIERE_LIGNE, ton: 'etat' });
+  else if (etat === 'lecture') phrases.push({ texte: LISTE_EN_LECTURE, ton: 'etat' });
+  else if (etat === 'en_route') phrases.push({ texte: LISTE_EN_ROUTE, ton: 'etat' });
+  else if (etat === 'liste' && enLecture) phrases.push({ texte: LISTE_MISE_A_JOUR, ton: 'aide' });
+  if (pasCompte && etat !== 'pas_en_base') phrases.push({ texte: pasCompte, ton: 'etat' });
+  return { phrases, montrerLaListe: !!lue && (etat === 'liste' || etat === 'en_route') };
+}
+
+/**
+ * LA PREMIÈRE PHRASE d'un texte long, et s'il en reste : `{ debut, suite }`.
+ * Une phrase finit sur « . », « ! » ou « ? » suivi d'un blanc et d'une
+ * MAJUSCULE (ou d'un guillemet ouvrant) — jamais sur « L. 111-1 » ni
+ * « R. 123-237 » (un chiffre suit), ni sur une initiale seule. Un texte
+ * court se montre en entier : on ne coupe pas une phrase de 150 caractères
+ * pour économiser deux lignes.
+ */
+export const SEUIL_LIRE_LA_SUITE = 200;
+export function premierePhrase(texte) {
+  const t = texte == null ? '' : String(texte);
+  if (t.length <= SEUIL_LIRE_LA_SUITE) return { debut: t, suite: false };
+  const re = /[.!?](?=\s+[«A-ZÀ-ÖØ-Þ])/g;
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    const avant = t.slice(Math.max(0, m.index - 2), m.index);
+    /* Une initiale seule (« M. », « L. ») n'est pas une fin de phrase. */
+    if (/(^|\s)[A-ZÀ-ÖØ-Þ]$/.test(avant)) continue;
+    const debut = t.slice(0, m.index + 1);
+    if (t.slice(m.index + 1).trim()) return { debut, suite: true };
+    break;
+  }
+  return { debut: t, suite: false };
+}
+
+/**
+ * L'ACTION D'UN POINT — son libellé, ou `null` quand l'écran ne sait mener
+ * nulle part (une clé inconnue, la profession réglementée, ou un poste à
+ * ajouter alors que le régime de TVA ne permet pas encore de chiffrer).
+ * `ligneExiste` : la ligne fautive est-elle à l'écran ? Sinon, aucune
+ * cible : ouvrir une carte sur une ligne absente montrerait un écran vide.
+ */
+export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = () => false } = {}) {
+  const e = point && point.endroit;
+  if (!e) return null;
+  switch (e.endroit) {
+    case 'client': return { libelle: 'Choisir le client' };
+    case 'lignes': return chiffrerPossible ? { libelle: 'Ajouter un poste' } : null;
+    case 'ligne': return ligneExiste(e.ligneId) ? { libelle: 'Ouvrir cette ligne' } : null;
+    case 'lieu': return { libelle: 'Écrire le lieu' };
+    case 'delai': return { libelle: 'Écrire le délai' };
+    case 'conditions':
+      if (e.champ === 'validite') return { libelle: 'Choisir la validité' };
+      if (e.champ === 'nature') return { libelle: 'Choisir : acompte ou arrhes' };
+      return { libelle: 'Corriger dans les conditions' };
+    case 'entreprise':
+      return e.section ? { libelle: 'Compléter dans « Mon entreprise »' } : null;
+    default: return null;
+  }
+}
 
 /**
  * L'aide sous un taux de 10 % ou de 5,5 % (réponse 3 du propriétaire, le

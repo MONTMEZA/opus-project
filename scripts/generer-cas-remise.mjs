@@ -176,6 +176,14 @@ const SITUATIONS = [
   { nom: 'lieu : l’adresse seule', e: 'franchise', devis: { lieu_code_postal: null, lieu_ville: null }, lignes: UN_POSTE_0 },
   { nom: 'lieu fait de blancs (rangé vide par la base)', e: 'franchise',
     devis: { lieu_adresse: '   ', lieu_code_postal: ' ', lieu_ville: '  ' }, lignes: UN_POSTE_0 },
+  // La base ne compte PAS l'espace fine (U+202F) parmi les blancs de la VILLE
+  // (`tient_le_devis()` : seulement pour le code postal) : une ville faite d'un
+  // U+202F, écrite par le chemin d'un client, est rangée telle quelle, et le
+  // lieu passe pour écrit. Le miroir rend ce que la base rend (correction de
+  // la vérification du lot 2b-1, point 6) ; corriger la classe des blancs est
+  // une affaire du lot S, pas d'ici.
+  { nom: 'lieu : une ville faite d’une seule espace fine (U+202F) — rangée telle quelle par la base, le lieu passe pour écrit',
+    e: 'franchise', devis: { lieu_adresse: null, lieu_code_postal: null, lieu_ville: '\u202f' }, lignes: UN_POSTE_0 },
   // --- devis_delai, devis_validite
   { nom: 'délai vide', e: 'franchise', devis: { delai_execution: null }, lignes: UN_POSTE_0 },
   { nom: 'délai fait de blancs (rangé vide par la base)', e: 'franchise', devis: { delai_execution: '   ' }, lignes: UN_POSTE_0 },

@@ -49,7 +49,7 @@ const texte = (v) => (v == null ? '' : String(v));
 
 const EnteteDevis = forwardRef(function EnteteDevis({
   devis, client = null, avisRegime = null, erreurs = {}, phraseLieu = null, ligneRemise = null,
-  onEnregistrer, onChoisirClient, onNouveauClient, onMonEntreprise, onRelireRegime,
+  onEnregistrer, onFrappe = null, onChoisirClient, onNouveauClient, onMonEntreprise, onRelireRegime,
 }, ref) {
   /* Le lieu, tenu ICI : `ChampVille` remonte chaque lettre, et l'écran n'a
      pas à le savoir. */
@@ -65,6 +65,25 @@ const EnteteDevis = forwardRef(function EnteteDevis({
   const refDelai = useRef(null);
   const refCp = useRef(null);
   const refVille = useRef(null);
+
+  /* « UN CHAMP EST EN COURS DE FRAPPE » (lot 2b-1, vérification de
+     construction, écart 7) : ce qui est tapé dans l'objet, le lieu ou le
+     délai n'est pas encore parti — la liste « Pour le remettre », posée
+     juste au-dessus, ne le connaît pas, et doit dire « Des changements
+     partent… » au lieu d'un compte qui ignore la frappe. Signalé UNE fois
+     au début d'une saisie (`surPremiereFrappe`, ou la première lettre de la
+     rue), et retiré quand le champ s'enregistre : jamais à chaque lettre —
+     l'écran entier se redessinerait (`ChampLocal`). */
+  const enFrappe = useRef(false);
+  const signalerFrappe = (oui) => {
+    if (enFrappe.current === oui) return;
+    enFrappe.current = oui;
+    if (onFrappe) onFrappe(oui);
+  };
+  const frappeFinie = () => {
+    [refObjet, refDelai, refCp, refVille].forEach((r) => { if (r.current && r.current.rearmer) r.current.rearmer(); });
+    signalerFrappe(false);
+  };
 
   const poserLieu = (v) => {
     lieuVif.current = { ...lieuVif.current, ...v };
@@ -83,7 +102,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
   useImperativeHandle(ref, () => ({
     lire,
     /** Tout ce qui est tapé, envoyé d'un coup (la carte qui s'ouvre, la garde). */
-    enregistrer: () => onEnregistrer(lire()),
+    enregistrer: () => { onEnregistrer(lire()); frappeFinie(); },
     /** L'adresse du client PROPOSÉE comme lieu (le lieu était vide). */
     poserLieu: (v) => {
       poserLieu({
@@ -103,6 +122,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
   const enregistrerLieu = () => {
     const l = lire();
     onEnregistrer({ lieuAdresse: l.lieuAdresse, lieuCodePostal: l.lieuCodePostal, lieuVille: l.lieuVille });
+    frappeFinie();
   };
 
   /* Chaque champ refusé a SA phrase, et elle reste tant qu'il est refusé :
@@ -187,7 +207,8 @@ const EnteteDevis = forwardRef(function EnteteDevis({
         maxLength={LONGUEURS.objet}
         accessibilityLabel="Objet du devis"
         returnKeyType="done"
-        onBlur={() => onEnregistrer({ objet: refObjet.current ? refObjet.current.lire() : '' })}
+        surPremiereFrappe={() => signalerFrappe(true)}
+        onBlur={() => { onEnregistrer({ objet: refObjet.current ? refObjet.current.lire() : '' }); frappeFinie(); }}
       />
       {sous('objet')}
 
@@ -212,6 +233,8 @@ const EnteteDevis = forwardRef(function EnteteDevis({
             if (refCp.current) refCp.current.ecrire(lieuVif.current.lieuCodePostal);
             if (refVille.current) refVille.current.ecrire(lieuVif.current.lieuVille);
             enregistrerLieu();
+          } else {
+            signalerFrappe(true);
           }
         }}
       />
@@ -234,6 +257,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
             keyboardType="number-pad"
             maxLength={5}
             accessibilityLabel="Code postal du lieu des travaux"
+            surPremiereFrappe={() => signalerFrappe(true)}
             onBlur={enregistrerLieu}
           />
         </View>
@@ -246,6 +270,7 @@ const EnteteDevis = forwardRef(function EnteteDevis({
             maxLength={LONGUEURS.lieuVille}
             accessibilityLabel="Ville du lieu des travaux"
             returnKeyType="done"
+            surPremiereFrappe={() => signalerFrappe(true)}
             onBlur={enregistrerLieu}
           />
         </View>
@@ -261,10 +286,12 @@ const EnteteDevis = forwardRef(function EnteteDevis({
         maxLength={LONGUEURS.delaiExecution}
         accessibilityLabel="Délai d’exécution"
         returnKeyType="done"
+        surPremiereFrappe={() => signalerFrappe(true)}
         onBlur={() => {
           const t = refDelai.current ? refDelai.current.lire() : '';
           setAvertissement(avertissementDelai(t));
           onEnregistrer({ delaiExecution: t });
+          frappeFinie();
         }}
       />
       {sous('delaiExecution')}

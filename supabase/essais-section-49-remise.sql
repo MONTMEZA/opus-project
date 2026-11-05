@@ -36,7 +36,19 @@
 --  `:ERROR`, `LAST_ERROR_SQLSTATE` et `LAST_ERROR_MESSAGE` sont relevés
 --  juste après l'ordre, puis comparés, la transaction annulée, au code et au
 --  message attendus — le MÊME message pour les dix OP027. Un refus qui
---  manque laisse un `f`, pas seulement une ligne de moins.
+--  manque laisse un `f`, pas seulement une ligne de moins. Les trente-trois
+--  variables sont DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
+--  entier laisse un `f` à sa place, au lieu d'une erreur de syntaxe qui
+--  remplacerait la sienne dans le compte (constat T01 de la vérification du
+--  lot 2b-1 : le cas 12 h retiré, le fichier écrivait encore 11 erreurs).
+--
+--  ET IL JUGE EXACTEMENT 126 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
+--  puis une 127e qui les compte (cas 15) : chaque valeur jugée passe par
+--  `pg_temp.v(…)`, qui avance une séquence temporaire — qu'aucun `rollback`
+--  n'annule. Une valeur qui ne s'est pas calculée (un ordre en erreur, une
+--  transaction déjà annulée, un cas retiré) manque au compte, et le cas 15
+--  vaut `f`. Joué comme ci-dessus, le juge relit 127 colonnes `…_attendu_`
+--  et AUCUN écart ; une autre somme est un ÉCHEC.
 --
 --  LES RÈGLES DE L'ESSAI 49 VALENT ICI : chaque cas dans son `begin …
 --  rollback`, construisant son propre état ; chaque ordre qui doit échouer
@@ -86,6 +98,68 @@
 
 -- Le message d'OP027, écrit une fois : celui que tous les refus doivent porter.
 \set MSG_OP027 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
+
+-- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 126. Toute valeur
+-- jugée passe par `pg_temp.v(…)`, qui avance une SÉQUENCE temporaire — une
+-- séquence n'est pas annulée par `rollback` : une valeur calculée dans un
+-- cas annulé compte, une valeur qui n'a pas pu se calculer (un ordre en
+-- erreur, une transaction déjà annulée, une variable indéfinie) ne compte
+-- pas. Le jugement final (cas 15) compare le compte à l'annonce.
+\set VALEURS_ANNONCEES 126
+create temporary sequence essai_valeurs;
+-- `security definer` : la séquence appartient à `postgres`, et la valeur se
+-- calcule aussi sous `authenticated`, `service_role` et `anon`. Elle vit dans
+-- `pg_temp` : le relevé des fonctions `security definer` du cas 14 e (et de
+-- l'essai 49, cas 27 b) ne regarde pas les schémas `pg_*`.
+create function pg_temp.v(x anyelement) returns anyelement
+language plpgsql volatile security definer as $v$
+begin
+  perform nextval('pg_temp.essai_valeurs');
+  return x;
+end;
+$v$;
+create function pg_temp.valeurs_jugees() returns bigint
+language sql volatile as $c$
+  select case when is_called then last_value else 0 end from pg_temp.essai_valeurs;
+$c$;
+
+-- LES ONZE REFUS ATTENDUS, DÉCLARÉS D'AVANCE : un cas retiré ne rend pas son
+-- jugement illisible (une variable indéfinie ferait échouer l'ordre — une
+-- AUTRE erreur à la place de la sienne, et six valeurs de moins), il laisse
+-- un `f` à sa place.
+\set e12a_err 'jamais relevé'
+\set e12a_code 'jamais relevé'
+\set e12a_msg 'jamais relevé'
+\set e12b_err 'jamais relevé'
+\set e12b_code 'jamais relevé'
+\set e12b_msg 'jamais relevé'
+\set e12c_err 'jamais relevé'
+\set e12c_code 'jamais relevé'
+\set e12c_msg 'jamais relevé'
+\set e12d_err 'jamais relevé'
+\set e12d_code 'jamais relevé'
+\set e12d_msg 'jamais relevé'
+\set e12e_err 'jamais relevé'
+\set e12e_code 'jamais relevé'
+\set e12e_msg 'jamais relevé'
+\set e12f1_err 'jamais relevé'
+\set e12f1_code 'jamais relevé'
+\set e12f1_msg 'jamais relevé'
+\set e12f2_err 'jamais relevé'
+\set e12f2_code 'jamais relevé'
+\set e12f2_msg 'jamais relevé'
+\set e12g1_err 'jamais relevé'
+\set e12g1_code 'jamais relevé'
+\set e12g1_msg 'jamais relevé'
+\set e12g2_err 'jamais relevé'
+\set e12g2_code 'jamais relevé'
+\set e12g2_msg 'jamais relevé'
+\set e12g3_err 'jamais relevé'
+\set e12g3_code 'jamais relevé'
+\set e12g3_msg 'jamais relevé'
+\set e12h_err 'jamais relevé'
+\set e12h_code 'jamais relevé'
+\set e12h_msg 'jamais relevé'
 
 -- --------------------------------------------------------------------------
 --  LE MÉNAGE DE TÊTE — le fichier se rejoue (en local seulement).
@@ -160,16 +234,16 @@ prepare titre(uuid, uuid, integer, text, bigint) as
 -- comparaison à l'attendu (« — » = aucune ligne).
 prepare motifs(uuid, text) as
   select coalesce(string_agg(m.cle, ',' order by m.o), '—') as cles,
-         coalesce(string_agg(m.cle, ',' order by m.o), '—') = $2 as motifs_attendu_t
+         pg_temp.v(coalesce(string_agg(m.cle, ',' order by m.o), '—') = $2) as motifs_attendu_t
     from public.motifs_refus_remise($1) with ordinality as m(rang, cle, phrase, nature, ligne_id, o);
 -- Les lignes désignées par les motifs de LIGNE, dans l'ordre de sortie.
 -- Toute la liste est lue (pas seulement les motifs de ligne) : un motif qui
 -- n'est pas de ligne et qui porterait une ligne serait vu.
 prepare fautives(uuid, text) as
-  select coalesce(string_agg(m.ligne_id::text, ',' order by m.o)
-                    filter (where m.cle = 'devis_taux_regime'), '—') = $2 as lignes_attendu_t,
-         count(*) filter (where m.cle = 'devis_taux_regime' and m.ligne_id is null) as sans_ligne_attendu_0,
-         count(*) filter (where m.cle <> 'devis_taux_regime' and m.ligne_id is not null) as ligne_en_trop_attendu_0
+  select pg_temp.v(coalesce(string_agg(m.ligne_id::text, ',' order by m.o)
+                    filter (where m.cle = 'devis_taux_regime'), '—') = $2) as lignes_attendu_t,
+         pg_temp.v(count(*) filter (where m.cle = 'devis_taux_regime' and m.ligne_id is null)) as sans_ligne_attendu_0,
+         pg_temp.v(count(*) filter (where m.cle <> 'devis_taux_regime' and m.ligne_id is not null)) as ligne_en_trop_attendu_0
     from public.motifs_refus_remise($1) with ordinality as m(rang, cle, phrase, nature, ligne_id, o);
 -- LES TROIS LISTES du cas 13 : chacune réduite à sa SIGNATURE complète —
 -- rang, clé, nature, phrase, et l'ORDRE de la ligne désignée (pas son
@@ -187,8 +261,8 @@ prepare trois_listes(uuid, uuid, uuid, text) as
               from public.motifs_refus_remise(v.id) with ordinality as m(rang, cle, phrase, nature, ligne_id, o)) as cles
       from (values (1, $1), (2, $2), (3, $3)) as v(n, id))
   select (select cles from sig where n = 1) as cles_de_x,
-         (select cles from sig where n = 1) = $4 as cles_attendu_t,
-         count(distinct s) = 1 and count(*) = 3 as x_y_z_identiques_attendu_t
+         pg_temp.v((select cles from sig where n = 1) = $4) as cles_attendu_t,
+         pg_temp.v(count(distinct s) = 1 and count(*) = 3) as x_y_z_identiques_attendu_t
     from sig;
 
 
@@ -204,9 +278,9 @@ set local role authenticated;
 set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
-select (select count(*) from public.devis where id = :D1) as devis_attendu_1,
-       (select count(*) from public.devis_lignes where devis_id = :D1) as lignes_attendu_1,
-       (select count(*) from public.motifs_refus_remise(:D1)) as lignes_rendues_attendu_0;
+select pg_temp.v((select count(*) from public.devis where id = :D1)) as devis_attendu_1,
+       pg_temp.v((select count(*) from public.devis_lignes where devis_id = :D1)) as lignes_attendu_1,
+       pg_temp.v((select count(*) from public.motifs_refus_remise(:D1))) as lignes_rendues_attendu_0;
 execute motifs(:D1, '—');
 rollback;
 
@@ -324,14 +398,14 @@ set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 2000, false, 2);
 execute chiffree(:L2, :D1, 2000, 'option', 10000, 0, false, 3);
-select count(*) filter (where cle = 'devis_taux_regime') as taux_regime_sans_fiche_attendu_0,
-       count(*) filter (where cle = 'regime_tva') as regime_tva_attendu_1
+select pg_temp.v(count(*) filter (where cle = 'devis_taux_regime')) as taux_regime_sans_fiche_attendu_0,
+       pg_temp.v(count(*) filter (where cle = 'regime_tva')) as regime_tva_attendu_1
   from public.motifs_refus_remise(:D1);
 reset role;
 execute fiche_a(null);
 set local role authenticated;
-select count(*) filter (where cle = 'devis_taux_regime') as taux_regime_fiche_sans_regime_attendu_0,
-       count(*) filter (where cle = 'regime_tva') as regime_tva_attendu_1
+select pg_temp.v(count(*) filter (where cle = 'devis_taux_regime')) as taux_regime_fiche_sans_regime_attendu_0,
+       pg_temp.v(count(*) filter (where cle = 'regime_tva')) as regime_tva_attendu_1
   from public.motifs_refus_remise(:D1);
 rollback;
 
@@ -353,7 +427,7 @@ update public.devis
    set lieu_adresse = '   ', lieu_code_postal = ' ' || chr(160) || chr(8239),
        lieu_ville = chr(160) || chr(8203) || ' ', generation = 3
  where id = :D1;
-select lieu_adresse is null and lieu_code_postal is null and lieu_ville is null as ranges_vides_attendu_t
+select pg_temp.v(lieu_adresse is null and lieu_code_postal is null and lieu_ville is null) as ranges_vides_attendu_t
   from public.devis where id = :D1;
 execute motifs(:D1, 'devis_lieu');
 update public.devis set lieu_ville = 'Lambesc', generation = 4 where id = :D1;
@@ -378,9 +452,9 @@ set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
 update public.devis set delai_execution = ' ' || chr(160) || ' ', generation = 3 where id = :D1;
-select delai_execution is null as range_vide_attendu_t from public.devis where id = :D1;
+select pg_temp.v(delai_execution is null) as range_vide_attendu_t from public.devis where id = :D1;
 execute motifs(:D1, 'devis_delai');
-select rang = 5 and nature = 'regle_opus' and ligne_id is null as rang_nature_attendu_t
+select pg_temp.v(rang = 5 and nature = 'regle_opus' and ligne_id is null) as rang_nature_attendu_t
   from public.motifs_refus_remise(:D1) where cle = 'devis_delai';
 update public.devis set delai_execution = 'Deux semaines', generation = 4 where id = :D1;
 execute motifs(:D1, '—');
@@ -449,12 +523,12 @@ execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 50000, 0, false, 2);
 execute chiffree(:L2, :D1, 2000, 'poste', 50000, 0, false, 3);
 update public.devis set acompte_centimes = 200000, acompte_nature = 'acompte', generation = 4 where id = :D1;
-select acompte_ttc_centimes = 100000 as acompte_applique_attendu_t from public.devis where id = :D1;
+select pg_temp.v(acompte_ttc_centimes = 100000) as acompte_applique_attendu_t from public.devis where id = :D1;
 execute motifs(:D1, 'devis_acompte_ramene');
 update public.devis set acompte_centimes = 100000, generation = 5 where id = :D1;
 execute motifs(:D1, '—');
 delete from public.devis_lignes where id = :L2;
-select acompte_ttc_centimes = 50000 as acompte_ramene_par_le_retrait_attendu_t from public.devis where id = :D1;
+select pg_temp.v(acompte_ttc_centimes = 50000) as acompte_ramene_par_le_retrait_attendu_t from public.devis where id = :D1;
 execute motifs(:D1, 'devis_acompte_ramene');
 update public.devis set acompte_centimes = null, acompte_centiemes = 10000, generation = 6 where id = :D1;
 execute motifs(:D1, '—');
@@ -478,14 +552,14 @@ set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
 update public.devis set remise_centimes = 200000, generation = 3 where id = :D1;
-select remise_ht_centimes = 100000 as reduction_appliquee_attendu_t from public.devis where id = :D1;
+select pg_temp.v(remise_ht_centimes = 100000) as reduction_appliquee_attendu_t from public.devis where id = :D1;
 execute motifs(:D1, 'devis_reduction_ramenee');
 update public.devis set remise_centimes = 100000, generation = 4 where id = :D1;
 execute motifs(:D1, '—');
 update public.devis set remise_centimes = 50000, generation = 5 where id = :D1;
 execute motifs(:D1, '—');
 update public.devis set remise_centimes = null, remise_centiemes = 10000, generation = 6 where id = :D1;
-select remise_ht_centimes = 100000 as cent_pour_cent_attendu_t from public.devis where id = :D1;
+select pg_temp.v(remise_ht_centimes = 100000) as cent_pour_cent_attendu_t from public.devis where id = :D1;
 execute motifs(:D1, '—');
 delete from public.devis_lignes where id = :L1;
 update public.devis set remise_centiemes = null, remise_centimes = 1, generation = 7 where id = :D1;
@@ -523,16 +597,16 @@ with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(ra
   (7, 'devis_acompte_nature',    'prudence',   'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'),
   (8, 'devis_acompte_ramene',    'prudence',   'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'),
   (9, 'devis_reduction_ramenee', 'prudence',   'La réduction en euros dépasse le total du devis : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'))
-select (select count(*) from m) as lignes_attendu_9,
-       (select string_agg(rang::text, ',' order by o) from m) = '1,2,3,4,5,6,7,8,9' as rangs_dans_l_ordre_attendu_t,
-       (select count(*) from m join contrat c using (rang)
-         where m.cle = c.cle and m.nature = c.nature and m.phrase = c.phrase) as conformes_au_contrat_attendu_9,
-       (select bool_and((m.ligne_id is not null) = (m.cle = 'devis_taux_regime')) from m) as ligne_id_seulement_au_3_attendu_t,
-       (select ligne_id = :L1 from m where cle = 'devis_taux_regime') as la_bonne_ligne_attendu_t,
-       (select bool_and(phrase !~ '[0-9€]' and position('''' in phrase) = 0
+select pg_temp.v((select count(*) from m)) as lignes_attendu_9,
+       pg_temp.v((select string_agg(rang::text, ',' order by o) from m) = '1,2,3,4,5,6,7,8,9') as rangs_dans_l_ordre_attendu_t,
+       pg_temp.v((select count(*) from m join contrat c using (rang)
+         where m.cle = c.cle and m.nature = c.nature and m.phrase = c.phrase)) as conformes_au_contrat_attendu_9,
+       pg_temp.v((select bool_and((m.ligne_id is not null) = (m.cle = 'devis_taux_regime')) from m)) as ligne_id_seulement_au_3_attendu_t,
+       pg_temp.v((select ligne_id = :L1 from m where cle = 'devis_taux_regime')) as la_bonne_ligne_attendu_t,
+       pg_temp.v((select bool_and(phrase !~ '[0-9€]' and position('''' in phrase) = 0
                         and position(chr(160) in phrase) = 0 and position(chr(8239) in phrase) = 0
-                        and position(chr(92) in phrase) = 0) from m) as phrases_propres_attendu_t,
-       (select pg_typeof(rang)::text from m limit 1) = 'smallint' as rang_smallint_attendu_t;
+                        and position(chr(92) in phrase) = 0) from m)) as phrases_propres_attendu_t,
+       pg_temp.v((select pg_typeof(rang)::text from m limit 1) = 'smallint') as rang_smallint_attendu_t;
 rollback;
 
 
@@ -551,19 +625,19 @@ execute chiffree(:L1, :D1, 1000, 'poste', 100000, 2000, false, 2);
 with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(rang, cle, phrase, nature, ligne_id, o)
             where x.rang >= 100),
      e as (select * from unnest(public.emetteur_incomplet(:A)) with ordinality as y(motif, pos))
-select (select count(*) from m) as motifs_entreprise_attendu_11,
-       (select count(*) from m join e on e.pos = m.rang - 100
-         where m.cle || ': ' || m.phrase = e.motif) as recomposes_attendu_11,
-       (select string_agg(rang::text, ',' order by o) from m)
-         = '101,102,103,104,105,106,107,108,109,110,111' as rangs_attendu_t,
-       (select string_agg(cle || '=' || nature, ',' order by o) from m)
+select pg_temp.v((select count(*) from m)) as motifs_entreprise_attendu_11,
+       pg_temp.v((select count(*) from m join e on e.pos = m.rang - 100
+         where m.cle || ': ' || m.phrase = e.motif)) as recomposes_attendu_11,
+       pg_temp.v((select string_agg(rang::text, ',' order by o) from m)
+         = '101,102,103,104,105,106,107,108,109,110,111') as rangs_attendu_t,
+       pg_temp.v((select string_agg(cle || '=' || nature, ',' order by o) from m)
          = 'registre=loi,capital=loi,conso_telephone=loi,conso_email=loi,regime_tva=loi,conso_mediateur=loi,'
            'conso_garantie_legale=loi,conso_modalites_paiement=loi,conso_modalites_execution=loi,'
-           'conso_reclamations=loi,frais_deplacement=regle_opus' as cles_natures_attendu_t,
-       (select count(*) filter (where ligne_id is not null) from m) as ligne_id_attendu_0,
-       (select count(*) filter (where phrase ~ '^\s' or phrase = '') from m) as phrases_mal_coupees_attendu_0;
+           'conso_reclamations=loi,frais_deplacement=regle_opus') as cles_natures_attendu_t,
+       pg_temp.v((select count(*) filter (where ligne_id is not null) from m)) as ligne_id_attendu_0,
+       pg_temp.v((select count(*) filter (where phrase ~ '^\s' or phrase = '') from m)) as phrases_mal_coupees_attendu_0;
 -- Et les motifs du DEVIS viennent AVANT : ici il n'y en a aucun.
-select count(*) filter (where rang < 100) as motifs_du_devis_attendu_0
+select pg_temp.v(count(*) filter (where rang < 100)) as motifs_du_devis_attendu_0
   from public.motifs_refus_remise(:D1);
 rollback;
 
@@ -580,8 +654,8 @@ set local role authenticated;
 set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 2000, false, 2);
-select string_agg(cle || '=' || nature, ',' order by rang)
-         = 'entreprise_ancienne=regle_opus,conso_tva_intra=regle_opus,frais_deplacement=regle_opus'
+select pg_temp.v(string_agg(cle || '=' || nature, ',' order by rang)
+         = 'entreprise_ancienne=regle_opus,conso_tva_intra=regle_opus,frais_deplacement=regle_opus')
          as trois_regles_d_opus_attendu_t,
        string_agg(cle || '=' || nature, ',' order by rang) as lues
   from public.motifs_refus_remise(:D1);
@@ -599,8 +673,8 @@ set local role authenticated;
 set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
-select string_agg(cle || '=' || nature, ',' order by rang)
-         = 'conso_profession_reglementee=prudence' as prudence_attendu_t,
+select pg_temp.v(string_agg(cle || '=' || nature, ',' order by rang)
+         = 'conso_profession_reglementee=prudence') as prudence_attendu_t,
        string_agg(cle || '=' || nature, ',' order by rang) as lues
   from public.motifs_refus_remise(:D1);
 rollback;
@@ -619,8 +693,8 @@ begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :B;
 insert into public.devis (id, pro_id, generation) values (:DB, :B, 1);
-select count(*) as b_lit_son_devis_attendu_1 from public.devis where id = :DB;
-select count(*) > 0 as b_a_sa_liste_attendu_t from public.motifs_refus_remise(:DB);
+select pg_temp.v(count(*)) as b_lit_son_devis_attendu_1 from public.devis where id = :DB;
+select pg_temp.v(count(*) > 0) as b_a_sa_liste_attendu_t from public.motifs_refus_remise(:DB);
 set local request.jwt.claim.sub = :A;
 select * from public.motifs_refus_remise(:DB);
 \set e12a_err :ERROR
@@ -653,7 +727,7 @@ begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
-select count(*) > 0 as a_a_sa_liste_attendu_t from public.motifs_refus_remise(:D1);
+select pg_temp.v(count(*) > 0) as a_a_sa_liste_attendu_t from public.motifs_refus_remise(:D1);
 set local request.jwt.claim.sub = :P;
 select * from public.motifs_refus_remise(:D1);
 \set e12d_err :ERROR
@@ -691,7 +765,7 @@ set local request.jwt.claim.sub = :B;
 insert into public.devis (id, pro_id, generation) values (:DB, :B, 1);
 set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
-select count(*) > 0 as a_passe_par_l_enveloppe_attendu_t from public.essai_remise_enveloppe(:D1);
+select pg_temp.v(count(*) > 0) as a_passe_par_l_enveloppe_attendu_t from public.essai_remise_enveloppe(:D1);
 savepoint s1;
 select * from public.essai_remise_enveloppe(:DB);
 \set e12f1_err :ERROR
@@ -705,7 +779,7 @@ select * from public.essai_remise_enveloppe(:DI);
 \set e12f2_msg :LAST_ERROR_MESSAGE
 rollback to savepoint s2;
 rollback;
-select count(*) as enveloppe_retiree_attendu_0 from pg_proc where proname = 'essai_remise_enveloppe';
+select pg_temp.v(count(*)) as enveloppe_retiree_attendu_0 from pg_proc where proname = 'essai_remise_enveloppe';
 
 \echo '--- 12 g. PAR LA CLÉ DE SERVICE (bypassrls) — jeton de A : son devis passe (attendu t), le devis de B → OP027'
 \echo '          (refus 8/11), un identifiant inventé → OP027 (refus 9/11) ; SANS jeton, le devis de A lui-même'
@@ -717,7 +791,7 @@ insert into public.devis (id, pro_id, generation) values (:DB, :B, 1);
 set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 set local role service_role;
-select count(*) > 0 as service_jeton_a_son_devis_attendu_t from public.motifs_refus_remise(:D1);
+select pg_temp.v(count(*) > 0) as service_jeton_a_son_devis_attendu_t from public.motifs_refus_remise(:D1);
 select * from public.motifs_refus_remise(:DB);
 \set e12g1_err :ERROR
 \set e12g1_code :LAST_ERROR_SQLSTATE
@@ -754,18 +828,18 @@ rollback;
 
 \echo ''
 \echo '--- 12 i. LE JUGEMENT : dix OP027 au MÊME message, et le refus du visiteur (attendu : t partout)'
-select :'e12a_err'  = 'true' and :'e12a_code'  = 'OP027' and :'e12a_msg'  = :'MSG_OP027' as a_devis_de_b_attendu_t,
-       :'e12b_err'  = 'true' and :'e12b_code'  = 'OP027' and :'e12b_msg'  = :'MSG_OP027' as b_invente_attendu_t,
-       :'e12c_err'  = 'true' and :'e12c_code'  = 'OP027' and :'e12c_msg'  = :'MSG_OP027' as c_vide_attendu_t,
-       :'e12d_err'  = 'true' and :'e12d_code'  = 'OP027' and :'e12d_msg'  = :'MSG_OP027' as d_particulier_attendu_t,
-       :'e12e_err'  = 'true' and :'e12e_code'  = 'OP027' and :'e12e_msg'  = :'MSG_OP027' as e_particulier_invente_attendu_t;
-select :'e12f1_err' = 'true' and :'e12f1_code' = 'OP027' and :'e12f1_msg' = :'MSG_OP027' as f_definer_devis_de_b_attendu_t,
-       :'e12f2_err' = 'true' and :'e12f2_code' = 'OP027' and :'e12f2_msg' = :'MSG_OP027' as f_definer_invente_attendu_t,
-       :'e12g1_err' = 'true' and :'e12g1_code' = 'OP027' and :'e12g1_msg' = :'MSG_OP027' as g_service_devis_de_b_attendu_t,
-       :'e12g2_err' = 'true' and :'e12g2_code' = 'OP027' and :'e12g2_msg' = :'MSG_OP027' as g_service_invente_attendu_t,
-       :'e12g3_err' = 'true' and :'e12g3_code' = 'OP027' and :'e12g3_msg' = :'MSG_OP027' as g_service_sans_jeton_attendu_t,
-       :'e12h_err'  = 'true' and :'e12h_code'  = '42501'
-         and :'e12h_msg' = 'permission denied for function motifs_refus_remise' as h_visiteur_attendu_t;
+select pg_temp.v(:'e12a_err'  = 'true' and :'e12a_code'  = 'OP027' and :'e12a_msg'  = :'MSG_OP027') as a_devis_de_b_attendu_t,
+       pg_temp.v(:'e12b_err'  = 'true' and :'e12b_code'  = 'OP027' and :'e12b_msg'  = :'MSG_OP027') as b_invente_attendu_t,
+       pg_temp.v(:'e12c_err'  = 'true' and :'e12c_code'  = 'OP027' and :'e12c_msg'  = :'MSG_OP027') as c_vide_attendu_t,
+       pg_temp.v(:'e12d_err'  = 'true' and :'e12d_code'  = 'OP027' and :'e12d_msg'  = :'MSG_OP027') as d_particulier_attendu_t,
+       pg_temp.v(:'e12e_err'  = 'true' and :'e12e_code'  = 'OP027' and :'e12e_msg'  = :'MSG_OP027') as e_particulier_invente_attendu_t;
+select pg_temp.v(:'e12f1_err' = 'true' and :'e12f1_code' = 'OP027' and :'e12f1_msg' = :'MSG_OP027') as f_definer_devis_de_b_attendu_t,
+       pg_temp.v(:'e12f2_err' = 'true' and :'e12f2_code' = 'OP027' and :'e12f2_msg' = :'MSG_OP027') as f_definer_invente_attendu_t,
+       pg_temp.v(:'e12g1_err' = 'true' and :'e12g1_code' = 'OP027' and :'e12g1_msg' = :'MSG_OP027') as g_service_devis_de_b_attendu_t,
+       pg_temp.v(:'e12g2_err' = 'true' and :'e12g2_code' = 'OP027' and :'e12g2_msg' = :'MSG_OP027') as g_service_invente_attendu_t,
+       pg_temp.v(:'e12g3_err' = 'true' and :'e12g3_code' = 'OP027' and :'e12g3_msg' = :'MSG_OP027') as g_service_sans_jeton_attendu_t,
+       pg_temp.v(:'e12h_err'  = 'true' and :'e12h_code'  = '42501'
+         and :'e12h_msg' = 'permission denied for function motifs_refus_remise') as h_visiteur_attendu_t;
 
 
 -- ==========================================================================
@@ -787,8 +861,8 @@ insert into public.devis (id, pro_id, client_id, quote_request_id, sos_request_i
  (:DX, :A, :C1, null, null, 'manuelle', 'Salle de bain', '4 rue de l''Essai', '13410', 'Lambesc', 3000, 1),
  (:DY, :A, :C1, :QA,  :SA,  'demande',  'Salle de bain', '4 rue de l''Essai', '13410', 'Lambesc', 3000, 1),
  (:DZ, :A, :C1, null, :SA,  'urgence',  'Salle de bain', '4 rue de l''Essai', '13410', 'Lambesc', 3000, 1);
-select string_agg(source || ':' || (quote_request_id is not null) || ':' || (sos_request_id is not null), ',' order by id)
-         = 'manuelle:false:false,demande:true:true,urgence:false:true' as origines_differentes_attendu_t
+select pg_temp.v(string_agg(source || ':' || (quote_request_id is not null) || ':' || (sos_request_id is not null), ',' order by id)
+         = 'manuelle:false:false,demande:true:true,urgence:false:true') as origines_differentes_attendu_t
   from public.devis where id in (:DX, :DY, :DZ);
 execute chiffree('f4930000-0000-4000-8000-0000000000a1', :DX, 1000, 'poste',  100000, 0,    false, 2);
 execute chiffree('f4930000-0000-4000-8000-0000000000a2', :DX, 2000, 'option', 10000,  2000, false, 3);
@@ -816,25 +890,25 @@ rollback;
 \echo '=== 14. LE CATALOGUE — la forme, les droits, ce que le corps lit et ce qu’il ne lit JAMAIS ==='
 -- ==========================================================================
 \echo '--- 14 a. une seule fonction de ce nom (aucune surcharge), sa signature et son type de retour (attendu : t partout)'
-select (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-         where p.proname = 'motifs_refus_remise') = 1 as une_seule_attendu_t,
-       pg_get_function_identity_arguments(p.oid) = 'p_devis uuid' as argument_attendu_t,
-       pg_get_function_result(p.oid)
-         = 'TABLE(rang smallint, cle text, phrase text, nature text, ligne_id uuid)' as retour_attendu_t,
-       p.proretset as ensemble_attendu_t,
-       not p.prosecdef as invoker_attendu_t,
-       p.provolatile = 's' as stable_attendu_t,
-       (select l.lanname from pg_language l where l.oid = p.prolang) = 'plpgsql' as plpgsql_attendu_t,
-       p.proconfig = array['search_path=public'] as search_path_attendu_t,
-       obj_description(p.oid, 'pg_proc') ~ 'Section 49\.9' as commentaire_attendu_t
+select pg_temp.v((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where p.proname = 'motifs_refus_remise') = 1) as une_seule_attendu_t,
+       pg_temp.v(pg_get_function_identity_arguments(p.oid) = 'p_devis uuid') as argument_attendu_t,
+       pg_temp.v(pg_get_function_result(p.oid)
+         = 'TABLE(rang smallint, cle text, phrase text, nature text, ligne_id uuid)') as retour_attendu_t,
+       pg_temp.v(p.proretset) as ensemble_attendu_t,
+       pg_temp.v(not p.prosecdef) as invoker_attendu_t,
+       pg_temp.v(p.provolatile = 's') as stable_attendu_t,
+       pg_temp.v((select l.lanname from pg_language l where l.oid = p.prolang) = 'plpgsql') as plpgsql_attendu_t,
+       pg_temp.v(p.proconfig = array['search_path=public']) as search_path_attendu_t,
+       pg_temp.v(obj_description(p.oid, 'pg_proc') ~ 'Section 49\.9') as commentaire_attendu_t
   from pg_proc p
  where p.oid = 'public.motifs_refus_remise(uuid)'::regprocedure;
 
 \echo '--- 14 b. les droits : ni PUBLIC, ni visiteur ; un compte connecté et la clé de service, oui (attendu : t | f | t | t)'
-select p.proacl::text !~ '(^\{|,)=X' as pas_public_attendu_t,
-       has_function_privilege('anon', p.oid, 'execute') as anon_attendu_f,
-       has_function_privilege('authenticated', p.oid, 'execute') as connecte_attendu_t,
-       has_function_privilege('service_role', p.oid, 'execute') as service_attendu_t
+select pg_temp.v(p.proacl::text !~ '(^\{|,)=X') as pas_public_attendu_t,
+       pg_temp.v(has_function_privilege('anon', p.oid, 'execute')) as anon_attendu_f,
+       pg_temp.v(has_function_privilege('authenticated', p.oid, 'execute')) as connecte_attendu_t,
+       pg_temp.v(has_function_privilege('service_role', p.oid, 'execute')) as service_attendu_t
   from pg_proc p
  where p.oid = 'public.motifs_refus_remise(uuid)'::regprocedure;
 
@@ -852,20 +926,20 @@ with corps as (
          p.prosrc as brut
     from pg_proc p where p.oid = 'public.motifs_refus_remise(uuid)'::regprocedure
 )
-select (select string_agg(distinct x[1], ',' order by x[1])
+select pg_temp.v((select string_agg(distinct x[1], ',' order by x[1])
           from regexp_matches(src, 'public\s*\.\s*([a-z_][a-z0-9_]*)', 'g') as x)
-         = 'devis,devis_lignes,emetteur,emetteur_incomplet,est_mon_entreprise' as nomme_exactement_attendu_t,
-       (select count(*) from regexp_matches(src,
+         = 'devis,devis_lignes,emetteur,emetteur_incomplet,est_mon_entreprise') as nomme_exactement_attendu_t,
+       pg_temp.v((select count(*) from regexp_matches(src,
           '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre)\M',
-          'gi')) as mots_interdits_attendu_0,
-       (select count(*) from regexp_matches(src, '(%\s*rowtype|select\s+\*|\.\s*\*)', 'gi')) as lectures_entieres_attendu_0,
-       (select count(*) from regexp_matches(brut, '''(qr|visite|dossier)''', 'gi')) as mots_d_origine_attendu_0,
-       position(chr(92) in brut) = 0 and position(chr(160) in brut) = 0 and position(chr(8239) in brut) = 0
+          'gi'))) as mots_interdits_attendu_0,
+       pg_temp.v((select count(*) from regexp_matches(src, '(%\s*rowtype|select\s+\*|\.\s*\*)', 'gi'))) as lectures_entieres_attendu_0,
+       pg_temp.v((select count(*) from regexp_matches(brut, '''(qr|visite|dossier)''', 'gi'))) as mots_d_origine_attendu_0,
+       pg_temp.v(position(chr(92) in brut) = 0 and position(chr(160) in brut) = 0 and position(chr(8239) in brut) = 0)
          as aucune_sequence_ni_insecable_attendu_t
   from corps;
 
 \echo '--- 14 d. la base ne l’enregistre comme dépendante d’AUCUNE table (plpgsql, pas un corps SQL standard : attendu 0)'
-select count(*) as dependances_attendu_0
+select pg_temp.v(count(*)) as dependances_attendu_0
   from pg_depend d
  where d.classid = 'pg_proc'::regclass
    and d.objid = 'public.motifs_refus_remise(uuid)'::regprocedure
@@ -873,13 +947,22 @@ select count(*) as dependances_attendu_0
 
 \echo '--- 14 e. les deux listes security definer NE BOUGENT PAS (essai 49, cas 27b et 27c ; essai 50, cas 13i) :'
 \echo '          31 ouvertes, 32 fermées, et motifs_refus_remise dans aucune (attendu : 31 | 32 | 0)'
-select count(*) filter (where has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
+select pg_temp.v(count(*) filter (where has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute')))
          as definer_ouvertes_attendu_31,
-       count(*) filter (where not (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute')))
+       pg_temp.v(count(*) filter (where not (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))))
          as definer_fermees_attendu_32,
-       count(*) filter (where p.proname = 'motifs_refus_remise') as elle_n_y_est_pas_attendu_0
+       pg_temp.v(count(*) filter (where p.proname = 'motifs_refus_remise')) as elle_n_y_est_pas_attendu_0
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_' and p.prosecdef;
+
+-- ==========================================================================
+\echo ''
+\echo '=== 15. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et 126) ==='
+\echo '    Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs'
+\echo '    manquent, et ceci vaut f. C’est la 127e colonne « …_attendu_ » du fichier.'
+-- ==========================================================================
+select pg_temp.valeurs_jugees() = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,
+       pg_temp.valeurs_jugees() as valeurs_jugees;
 
 \set VERBOSITY default
 \set SHOW_CONTEXT errors
