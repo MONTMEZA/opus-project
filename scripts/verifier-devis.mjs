@@ -8195,8 +8195,8 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const P = D;
   const NOMS_PURS = ['CARTE_POUR_REMETTRE', 'TITRE_POUR_REMETTRE', 'etatDeLaListe', 'points', 'comptesParEndroit', 'phraseDesEndroits',
     'premierePhrase', 'SEUIL_LIRE_LA_SUITE', 'actionDuPoint', 'texteDeLaLigneRemise', 'ceQueDitLaCarte', 'ceQueLaListeNeComptePas',
-    'LISTE_EN_LECTURE', 'LISTE_MISE_A_JOUR', 'ENTETE_PAS_COMPTE', 'regimePourLaListe', 'causesAuRetourDeLEntreprise',
-    'REGIME_INCONNU', 'regimeAdopte', 'decisionDuRegime'];
+    'LISTE_EN_LECTURE', 'LISTE_MISE_A_JOUR', 'ENTETE_PAS_COMPTE', 'phraseEnRoute', 'GABARITS_DE_LA_LIGNE',
+    'CHIFFRE_LE_PLUS_LARGE'];
   const redefinis = NOMS_PURS.filter((n) => new RegExp(`(?:function|const|let|var)\\s+${n}\\b`).test(PR));
   const importeDe = (/import\s*\{([^}]*)\}\s*from\s*'\.\.\/lib\/devis'/.exec(PR) || ['', ''])[1];
   verifier('f. `PourRemettre.js` existe et ne garde que le DESSIN : ce que l’écran décide (`etatDeLaListe`, `texteDeLaLigneRemise`, '
@@ -8213,6 +8213,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        écriture du devis confirmée, ou « Mon entreprise » refermée. */
     const RD = { devis: true, entreprise: false };
     const RE = { devis: false, entreprise: true };
+    /* LE RETOUR DE « MON ENTREPRISE » relit TOUJOURS les deux causes
+       (relecture 4 de 2b-1, 06/11/2026) : c'est la relecture qu'il note. */
+    const RDE = { devis: true, entreprise: true };
     const etats = [
       P.etatDeLaListe({ enBase: false, enRoute: true, erreur: err, lue: lue2 }),
       P.etatDeLaListe({ enBase: true, enRoute: true, erreur: err, lue: lue2 }),
@@ -8231,18 +8234,24 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       P.etatDeLaListe({ enBase: true, erreur: err, lue: null, champOuvert: false }),
       /* LA LECTURE QUI SUIT UNE ÉCRITURE DU DEVIS fait partie du même temps
          (ECR-1) : `en_route`, liste lue ou non ; celle qui suit « Mon
-         entreprise » ne change pas l'état. */
+         entreprise » aussi (relecture 4 de 2b-1 : elle relit les deux causes,
+         et rien ne relit plus l'entreprise SEULE — une relecture de la seule
+         entreprise, si elle revenait, serait « en route » elle aussi, jamais
+         une liste dont une partie se tait sous un compte qui ne bouge pas). */
       P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RD }),
       P.etatDeLaListe({ enBase: true, relecture: RD }),
       P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RE }),
       P.etatDeLaListe({ enBase: false, relecture: RD }),
+      P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RDE }),
+      P.etatDeLaListe({ enBase: true, erreur: err, relecture: RDE }),
+      P.etatDeLaListe({ enBase: true, lue: lue2, relecture: { devis: false, entreprise: false } }),
     ];
     verifier('…`etatDeLaListe`, FAIT TOURNER, dans l’ordre du cahier (§3.1) : pas en base AVANT TOUT ; des changements en route — une '
       + 'écriture, un champ de l’en-tête tapé et pas quitté, OU la lecture qui suit une écriture du devis — AVANT l’échec ; JAMAIS « liste » '
-      + 'sur un échec ; le VRAI échec (liste effacée, `lue` nul) → « echec » ; rien de lu → « lecture » ; la relecture de l’entreprise ne '
-      + 'change pas l’état',
+      + 'sur un échec ; le VRAI échec (liste effacée, `lue` nul) → « echec » ; rien de lu → « lecture » ; la relecture qui suit « Mon '
+      + 'entreprise » (les deux causes) est « en route » elle aussi, avant l’échec',
     egal(etats, ['pas_en_base', 'en_route', 'en_route', 'echec', 'en_route', 'lecture', 'liste', 'pas_en_base',
-      'echec', 'echec', 'en_route', 'en_route', 'liste', 'pas_en_base']), json(etats));
+      'echec', 'echec', 'en_route', 'en_route', 'en_route', 'pas_en_base', 'en_route', 'en_route', 'liste']), json(etats));
     /* CE QUE LA LISTE NE COMPTE PAS (écart 8) : LE compte du pied, dit en
        toutes lettres — et l'en-tête refusé, quand aucune ligne ne l'est. Sur
        un brouillon PAS ENCORE EN BASE (ECR-3), la liste se calculera
@@ -8267,43 +8276,45 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        et LE COMPTE AVEC LUI (décision D-A) ; pas en base, ce n'est pas une
        cible, et une ligne pas enregistrée le dit (ECR-3) ; en échec,
        « Réessayer » ; « mise à jour » seulement pendant une RELECTURE sans
-       cause ; pendant la relecture de l'entreprise, son compte ne se dit
-       pas. Cinquième colonne : les GABARITS qui donnent la hauteur (REL-1 ;
-       D-A bis, 06/11 : les DEUX formes du décompte, quelle que soit la
-       relecture — le plus grand donne la hauteur). */
+       cause ; pendant la relecture qui suit « Mon entreprise », « Mise à jour
+       de la liste… » seule (relecture 4 : rien ne prouve qu'on y a changé
+       quoi que ce soit). Cinquième colonne : les GABARITS qui donnent la
+       hauteur — la liste FIXE `GABARITS_DE_LA_LIGNE` dès que quelque chose
+       n'est pas compté sur un devis en base (REL-1, D-A bis, RELIRE3-1). */
     const lig = (o) => P.texteDeLaLigneRemise({ lue: lue2, ...o });
     const enRoute = lig({ etat: 'en_route' });
     const pc = nc({ nbLignes: 1 });
     const pcNeuf = nc({ nbLignes: 1, enBase: false });
     const pcNeuf2 = nc({ nbLignes: 2, enBase: false });
     const compte2 = 'ce devis — 1 point · votre entreprise — aucun point';
-    const compteRE = 'ce devis — 1 point · votre entreprise — mise à jour…';
-    const gabs2 = [`${pc}\n${compte2}`, `${pc}\n${compteRE}`];
+    const G = D.GABARITS_DE_LA_LIGNE;
     const parLigne = [
       [lig({ etat: 'pas_en_base' }), D.LISTE_AVANT_LA_PREMIERE_LIGNE, null, null, null],
       [lig({ etat: 'pas_en_base', pasCompte: pcNeuf }), '1 ligne n’est pas encore enregistrée : la liste se calculera ensuite.', null, null, null],
       [lig({ etat: 'pas_en_base', pasCompte: pcNeuf2 }), '2 lignes ne sont pas encore enregistrées : la liste se calculera ensuite.', null, null, null],
       [enRoute, D.LISTE_EN_ROUTE, 'ouvrir', null, null],
       [lig({ etat: 'en_route', lue: null }), D.LISTE_EN_ROUTE, 'ouvrir', null, null],
-      [lig({ etat: 'en_route', pasCompte: pc }), D.LISTE_EN_ROUTE, 'ouvrir', null, gabs2],
+      [lig({ etat: 'en_route', pasCompte: pc }), D.LISTE_EN_ROUTE, 'ouvrir', null, G],
       [lig({ etat: 'en_route', relecture: RD, enLecture: true }), D.LISTE_EN_ROUTE, 'ouvrir', null, null],
+      [lig({ etat: 'en_route', relecture: RDE, enLecture: true }), D.LISTE_MISE_A_JOUR, 'ouvrir', null, null],
+      [lig({ etat: 'en_route', relecture: RDE, enLecture: true, pasCompte: pc }), D.LISTE_MISE_A_JOUR, 'ouvrir', null, G],
+      [lig({ etat: 'en_route', relecture: RDE, enLecture: true, lue: null, pasCompte: pc }), D.LISTE_MISE_A_JOUR, 'ouvrir', null, G],
       [lig({ etat: 'echec' }), D.LISTE_NON_LUE, 'reessayer', null, null],
       [lig({ etat: 'echec', erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas.' }), 'Ce devis n’existe pas.', 'ouvrir', null, null],
-      [lig({ etat: 'echec', pasCompte: pc }), D.LISTE_NON_LUE, 'reessayer', null, gabs2],
+      [lig({ etat: 'echec', pasCompte: pc }), D.LISTE_NON_LUE, 'reessayer', null, G],
       [lig({ etat: 'lecture', lue: null }), D.LISTE_EN_LECTURE, 'ouvrir', null, null],
-      [lig({ etat: 'lecture', lue: null, pasCompte: pc }), pc, 'ouvrir', null, null],
+      [lig({ etat: 'lecture', lue: null, pasCompte: pc }), pc, 'ouvrir', null, G],
       [lig({ etat: 'liste' }), compte2, 'ouvrir', null, null],
       [lig({ etat: 'liste', enLecture: true }), `${compte2} · mise à jour…`, 'ouvrir', null, null],
-      [lig({ etat: 'liste', pasCompte: pc }), pc, 'ouvrir', compte2, gabs2],
-      [lig({ etat: 'liste', relecture: RE, enLecture: true }), compteRE, 'ouvrir', null, null],
-      [lig({ etat: 'liste', relecture: RE, enLecture: true, pasCompte: pc }), pc, 'ouvrir', compteRE, gabs2],
+      [lig({ etat: 'liste', pasCompte: pc }), pc, 'ouvrir', compte2, G],
     ];
     const lignesFausses = parLigne.filter(([r, c, a, k, g]) => !r || r.contenu !== c || r.action !== a || r.compte !== k || !egal(r.gabarits, g)
       || 'lignes' in r || 'gabarit' in r).map(([r]) => json(r));
     verifier('…`texteDeLaLigneRemise`, FAIT TOURNER : en route, la phrase EXACTE « Des changements partent : la liste sera à jour juste '
       + 'après. » SEULE (jamais le compte d’avant, ni à l’écran ni dans l’étiquette parlée — ECR-1) ; ce que la liste ne compte pas passe '
       + 'DEVANT le compte, ET le compte reste (D-A) ; pas en base → pas une cible, et une ligne pas enregistrée le dit (ECR-3) ; échec → '
-      + '« Réessayer » ; relecture de l’entreprise → jamais son ancien compte ; et les GABARITS de chaque état (REL-1, D-A bis), plus aucun '
+      + '« Réessayer » ; la relecture qui suit « Mon entreprise » → « Mise à jour de la liste… » seule, jamais « Des changements partent » '
+      + '(rien ne prouve qu’on y a changé quoi que ce soit) ; et les GABARITS de chaque état (REL-1, D-A bis, RELIRE3-1), plus aucun '
       + '« lignes » ni un seul « gabarit »',
     lignesFausses.length === 0 && D.LISTE_EN_ROUTE === 'Des changements partent : la liste sera à jour juste après.'
       && enRoute.aDire === 'Pour le remettre : Des changements partent : la liste sera à jour juste après. Ouvrir la liste'
@@ -8313,73 +8324,92 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       && lig({ etat: 'pas_en_base', pasCompte: pcNeuf }).aDire === `Pour le remettre : ${pcNeuf}`
       && lig({ etat: 'echec' }).aDire === 'Liste de ce qu’il manque non lue. Réessayer'
       && lig({ etat: 'liste' }).aDire === `Pour le remettre : ${compte2}. Ouvrir la liste`
-      && lig({ etat: 'liste', enLecture: true }).aDire === `Pour le remettre : ${compte2} · mise à jour… Ouvrir la liste`,
+      && lig({ etat: 'liste', enLecture: true }).aDire === `Pour le remettre : ${compte2} · mise à jour… Ouvrir la liste`
+      && D.LISTE_MISE_A_JOUR === 'Mise à jour de la liste…'
+      && lig({ etat: 'en_route', relecture: RDE, enLecture: true, pasCompte: pc }).aDire === 'Pour le remettre : Mise à jour de la liste… Ouvrir la liste'
+      /* `phraseEnRoute`, FAITE TOURNER : « Mise à jour de la liste… » pour
+         la relecture qui suit « Mon entreprise » (une seule de ses causes
+         suffit), « Des changements partent » sinon. */
+      && P.phraseEnRoute(null) === D.LISTE_EN_ROUTE && P.phraseEnRoute(RD) === D.LISTE_EN_ROUTE && P.phraseEnRoute() === D.LISTE_EN_ROUTE
+      && P.phraseEnRoute(RE) === D.LISTE_MISE_A_JOUR && P.phraseEnRoute(RDE) === D.LISTE_MISE_A_JOUR,
     lignesFausses.join(' | '));
-    /* LA HAUTEUR DE LA LIGNE NE BOUGE PAS TANT QUE QUELQUE CHOSE N'EST PAS
-       COMPTÉ (relecture 2 de 2b-1, REL-1 ; décision D-A bis du propriétaire,
-       06/11/2026). Ce contrôle exigeait 3 lignes en `liste` + `pasCompte` et
-       2 en `en_route` + `pasCompte` : il CONSACRAIT le saut — 92 → 74 points
-       à la première lettre tapée dans l'en-tête, 110 → 74 à 320, puis retour
-       au retour de la liste. Puis il exigeait UN gabarit, qui suivait la
-       relecture de « Mon entreprise » : il consacrait le SECOND saut (≈ 92 →
-       110 points de 381 à 407 points de large — et 88 → 104 sur la ligne du
-       bas de 329 à 352 —, le temps de cette relecture,
-       relecture 3, RELIRE-2). Il exige désormais la MÊME LISTE de gabarits —
-       « phrase + décompte » sous ses DEUX formes, le compte de l'entreprise
-       puis « mise à jour… » — de part et d'autre de TOUTES les transitions :
-       liste ↔ en route ↔ lecture ↔ échec (réessayable ou non) ↔ relecture de
-       l'entreprise, dès qu'une liste a été lue (`derniere`, gardée même
-       quand un échec efface `lue`) ; aucun gabarit sans liste, sans « pas
-       compté », ni sur un brouillon pas en base ; et, dans tous ces états,
-       un texte LU qui est l'un des gabarits, ou plus court que CHACUN (ni
-       plus de caractères, ni plus de retours à la ligne) : posé en couche
-       sur eux, il ne doit jamais donner la hauteur. Dans l'état `liste`, le
-       texte lu EST le premier gabarit — et le second pendant la relecture de
-       l'entreprise. */
-    const RDE = { devis: true, entreprise: true };
-    const pcs = [pc, nc({ nbLignes: 12 }), nc({ entete: true }), nc({ nbLignes: 1, entete: true })];
+    /* LA PLACE DE LA LIGNE NE DÉPEND NI DE L'ÉTAT, NI DES NOMBRES, NI DE LA
+       PHRASE, tant que quelque chose n'est pas compté sur un devis en base
+       (relecture 2 de 2b-1, REL-1 ; décision D-A bis du propriétaire,
+       06/11/2026 ; relecture 4, RELIRE3-1). Ce contrôle exigeait d'abord 3
+       lignes réservées dans un état et 2 dans un autre : il consacrait le
+       saut 92 → 74 points de la première lettre tapée. Puis il exigeait la
+       MÊME paire de gabarits « phrase + décompte » DE LA LISTE LUE de part et
+       d'autre des transitions : il consacrait le saut que la relecture 3 a
+       trouvé — la place suivait les NOMBRES (92 → 110 points à 393 quand le
+       dernier point du devis était corrigé), et à la première lecture, sans
+       liste, il n'y avait aucun gabarit. Il exige désormais :
+         1. LA MÊME LISTE, `GABARITS_DE_LA_LIGNE` (le même objet), dans TOUS
+            les états où quelque chose n'est pas compté sur un devis en base —
+            liste, en route (une écriture, la relecture qui la suit, celle qui
+            suit « Mon entreprise »), lecture, échec, OP027 —, avec ou sans
+            liste lue, quels que soient les nombres et la phrase ; `null` sans
+            « pas compté » ou sur un brouillon pas en base ;
+         2. SA COMPOSITION : chaque phrase « pas compté » d'un devis en base
+            (une ligne, N lignes, le champ de l'en-tête) sous sa forme la plus
+            large, croisée avec chaque décompte le plus large, puis les
+            phrases d'état ;
+         3. LES BORNES qui la rendent suffisante : trois chiffres au plus pour
+            les points du devis (huit motifs + un par ligne, 500 lignes) et
+            pour les lignes non enregistrées, deux pour l'entreprise (21
+            motifs) ;
+         4. LE TEXTE LU de chacun de ces états, ramené à ses formes les plus
+            larges (chaque nombre écrit avec le chiffre le plus large, « 1
+            point » lu comme « aucun point »), est l'un des gabarits — ou la
+            première moitié de l'un (la phrase seule, en lecture) —, ou la
+            phrase d'un refus définitif : il n'agrandit pas la place. Que ces
+            formes soient bien les plus LARGES est une affaire de police :
+            `mesure-devis` le mesure dans la page, et balaie les hauteurs de
+            320 à 440 points. */
+    const pcsTous = [nc({ nbLignes: 1 }), nc({ nbLignes: 2 }), nc({ nbLignes: 12 }), nc({ nbLignes: 444 }), nc({ nbLignes: 500 }),
+      nc({ nbLignes: 999 }), nc({ entete: true }), nc({ nbLignes: 1, entete: true }), nc({ nbLignes: 7, entete: true })];
+    const listes = [null, ...[[0, 0, 0], [1, 5, 0], [2, 5, 3], [10, 0, 0], [0, 21, 0], [508, 18, 3], [99, 9, 0], [1, 1, 1]]
+      .map(([devis, entreprise, particulier]) => ({ comptes: { devis, entreprise, particulier } }))];
     const op027 = 'Ce devis n’existe pas, ou il n’est pas le vôtre.';
-    const transitions = pcs.map((q) => {
-      const g = (o) => P.texteDeLaLigneRemise({ pasCompte: q, ...o });
-      return [g({ etat: 'liste', lue: lue2 }), g({ etat: 'en_route', lue: lue2 }), g({ etat: 'en_route', lue: lue2, relecture: RD, enLecture: true }),
-        g({ etat: 'lecture', lue: null, derniere: lue2 }), g({ etat: 'echec', lue: null, derniere: lue2 }),
-        g({ etat: 'echec', lue: null, derniere: lue2, erreurReessayable: false, erreurPhrase: op027 }),
-        g({ etat: 'liste', lue: lue2, derniere: lue2 }), g({ etat: 'en_route', lue: lue2, derniere: lue2 }),
-        g({ etat: 'liste', lue: lue2, relecture: RE, enLecture: true }), g({ etat: 'liste', lue: lue2, derniere: lue2, relecture: RE, enLecture: true }),
-        g({ etat: 'en_route', lue: lue2, relecture: RDE, enLecture: true }), g({ etat: 'lecture', lue: null, derniere: lue2, relecture: RE, enLecture: true }),
-        g({ etat: 'echec', lue: null, derniere: lue2, relecture: RE })];
-    });
-    const gabaritsDiffs = transitions.filter((grp) => !Array.isArray(grp[0].gabarits) || grp[0].gabarits.length !== 2
-      || grp.some((r) => !egal(r.gabarits, grp[0].gabarits))).map((grp) => json(grp.map((r) => r.gabarits)));
-    const lu = (r) => (r.compte ? `${r.contenu}\n${r.compte}` : r.contenu);
-    const nl = (t) => (t.match(/\n/g) || []).length;
-    const depasse = transitions.flat().filter((r) => !Array.isArray(r.gabarits)
-      || !(r.gabarits.includes(lu(r)) || r.gabarits.every((g) => lu(r).length <= g.length && nl(lu(r)) <= nl(g)))).map((r) => lu(r));
-    const sansListe = [
-      P.texteDeLaLigneRemise({ etat: 'lecture', lue: null, pasCompte: pc }),
-      P.texteDeLaLigneRemise({ etat: 'echec', lue: null, pasCompte: pc }),
-      P.texteDeLaLigneRemise({ etat: 'en_route', lue: null, pasCompte: pc }),
-      P.texteDeLaLigneRemise({ etat: 'pas_en_base', lue: lue2, derniere: lue2, pasCompte: pcNeuf }),
-      P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, derniere: lue2 }),
-      P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, derniere: lue2, relecture: RE, enLecture: true }),
-      P.texteDeLaLigneRemise({ etat: 'en_route', lue: lue2, derniere: lue2 }),
-      P.texteDeLaLigneRemise({ etat: 'echec', lue: null, derniere: lue2 }),
+    const etatsPasCompte = (lue) => [
+      ...(lue ? [{ etat: 'liste', lue }, { etat: 'liste', lue, enLecture: true }] : []),
+      { etat: 'en_route', lue }, { etat: 'en_route', lue, relecture: RD, enLecture: true }, { etat: 'en_route', lue, relecture: RDE, enLecture: true },
+      { etat: 'lecture', lue: null }, { etat: 'echec', lue: null }, { etat: 'echec', lue: null, erreurReessayable: false, erreurPhrase: op027 },
+    ];
+    const vus = pcsTous.flatMap((q) => listes.flatMap((l) => etatsPasCompte(l).map((o) => P.texteDeLaLigneRemise({ pasCompte: q, ...o }))));
+    const horsDeLaListe = vus.filter((r) => r.gabarits !== D.GABARITS_DE_LA_LIGNE).map((r) => json(r));
+    const sansGabarit = [
+      ...listes.flatMap((l) => [...(l ? [{ etat: 'liste', lue: l }] : []), { etat: 'en_route', lue: l }, { etat: 'lecture', lue: null },
+        { etat: 'echec', lue: null }, { etat: 'en_route', lue: l, relecture: RDE }].map((o) => P.texteDeLaLigneRemise(o))),
+      P.texteDeLaLigneRemise({ etat: 'pas_en_base', pasCompte: pcNeuf }), P.texteDeLaLigneRemise({ etat: 'pas_en_base', pasCompte: pcNeuf2 }),
+      P.texteDeLaLigneRemise({ etat: 'pas_en_base', pasCompte: nc({ entete: true, enBase: false }) }),
     ].filter((r) => r.gabarits !== null).map((r) => json(r));
-    verifier('…REL-1 et D-A bis : la MÊME liste de gabarits — « phrase + décompte » sous ses DEUX formes (le compte de l’entreprise, puis '
-      + '« mise à jour… ») — de part et d’autre de TOUTES les transitions (liste ↔ en route ↔ lecture ↔ échec ↔ relecture de « Mon '
-      + 'entreprise »), tant que quelque chose n’est pas compté sur un devis en base et qu’une liste a été lue — même EFFACÉE par un échec '
-      + '(`derniere`) ; aucun gabarit sans liste lue, sans « pas compté » ni sur un brouillon pas en base ; le texte lu est l’un des '
-      + 'gabarits ou plus court que chacun, et dans l’état `liste` il EST le premier (le second pendant la relecture de l’entreprise)',
-    gabaritsDiffs.length === 0 && depasse.length === 0 && sansListe.length === 0 && transitions.length === 4
-      && transitions.every((grp) => grp.length === 13)
-      && pcs.every((q) => egal(P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, pasCompte: q }).gabarits, [`${q}\n${compte2}`, `${q}\n${compteRE}`]))
-      && pcs.every((q) => { const r = P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, pasCompte: q }); return lu(r) === r.gabarits[0]; })
-      && pcs.every((q) => {
-        const r = P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, pasCompte: q, relecture: RE, enLecture: true });
-        return lu(r) === r.gabarits[1];
-      })
-      && egal(P.texteDeLaLigneRemise({ etat: 'en_route', lue: null, derniere: lue2, pasCompte: pc }).gabarits, gabs2),
-    `${gabaritsDiffs.join(' | ')} ${depasse.join(' | ')} ${sansListe.join(' | ')}`);
+    const W = P.CHIFFRE_LE_PLUS_LARGE;
+    const phrasesG = [nc({ nbLignes: 1 }), nc({ nbLignes: Number(W.repeat(3)) }), nc({ entete: true })];
+    const decomptesG = [0, Number(W.repeat(3))].flatMap((d) => [0, Number(W.repeat(2))]
+      .map((e) => `ce devis — ${P.points(d)} · votre entreprise — ${P.points(e)}`));
+    const attendus = [...phrasesG.flatMap((p) => decomptesG.map((d) => `${p}\n${d}`)), D.LISTE_EN_ROUTE, D.LISTE_MISE_A_JOUR, D.LISTE_NON_LUE];
+    /* un seul des deux motifs de taux par devis, un par ligne fautive */
+    const pointsDuDevisMax = Object.keys(D.MOTIFS_DEVIS).length - 2 + D.LIGNES_MAX;
+    const pointsEntrepriseMax = E.MOTIFS.length;
+    const largeDe = (t) => t
+      .replace(/^\d{1,3} lignes ne sont pas/, `${W.repeat(3)} lignes ne sont pas`)
+      .replace(/ce devis — (?:1 point|\d{1,3} points)(?= ·)/, (m) => (m.endsWith(' 1 point') ? 'ce devis — aucun point' : `ce devis — ${W.repeat(3)} points`))
+      .replace(/votre entreprise — (?:1 point|\d{1,2} points)$/, (m) => (m.endsWith(' 1 point') ? 'votre entreprise — aucun point'
+        : `votre entreprise — ${W.repeat(2)} points`));
+    const lu = (r) => (r.compte ? `${r.contenu}\n${r.compte}` : r.contenu);
+    const nonCouverts = vus.map(lu).filter((t) => t !== op027 && !G.includes(largeDe(t)) && !G.some((g) => g.split('\n')[0] === largeDe(t)));
+    verifier('…REL-1, D-A bis et RELIRE3-1 : les gabarits de la ligne sont la liste FIXE `GABARITS_DE_LA_LIGNE` — le même objet — dans TOUS '
+      + 'les états où quelque chose n’est pas compté sur un devis en base (liste, en route, la relecture qui suit une écriture et celle qui '
+      + 'suit « Mon entreprise », lecture, échec, OP027), avec ou sans liste lue, quels que soient les nombres (0 à 508 points) et la phrase '
+      + '(1 à 999 lignes, le champ de l’en-tête) ; aucun gabarit sans « pas compté » ni sur un brouillon pas en base ; la liste croise '
+      + 'chaque phrase et chaque décompte sous leur forme la plus large (le chiffre le plus large d’Inter, « 4 »), puis les phrases d’état ; '
+      + 'et le texte lu, ramené à ses formes les plus larges, est l’un d’eux, la première moitié de l’un, ou la phrase d’un refus définitif',
+    horsDeLaListe.length === 0 && vus.length === pcsTous.length * (6 + 8 * 8) && sansGabarit.length === 0
+      && egal([...G], attendus) && Object.isFrozen(G) && G.length === 15 && W === '4'
+      && String(pointsDuDevisMax).length <= 3 && String(pointsEntrepriseMax).length <= 2 && String(D.LIGNES_MAX).length <= 3
+      && nonCouverts.length === 0 && largeDe('ce devis — 1 point · votre entreprise — 5 points') === decomptesG[1],
+    `${horsDeLaListe.slice(0, 2).join(' | ')} ${sansGabarit.slice(0, 2).join(' | ')} ; non couverts : ${nonCouverts.slice(0, 3).join(' | ')}`);
     /* LA CARTE, FAITE TOURNER : ses phrases d'état, dans l'ordre ; « pas
        compté » dit DANS LA CARTE aussi, sur la liste comme sur un échec ; et
        LES PARTIES À MONTRER (relecture de 2b-1, ECR-1) dans les TROIS cas :
@@ -8405,37 +8435,31 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     const garde = (o) => { const c = ca(o); return [c.parties.devis.garder, c.parties.entreprise.garder]; };
     const ecriture = { etat: P.etatDeLaListe({ enBase: true, enRoute: true, lue: lue2 }) };
     const lectureApres = { etat: P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RD }), relecture: RD, enLecture: true };
-    const retourEntreprise = { etat: P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RE }), relecture: RE, enLecture: true };
-    /* LE RETOUR DE « MON ENTREPRISE » QUAND LE RÉGIME DE TVA A CHANGÉ
-       (relecture 2 de 2b-1, REL-2) : ce contrôle CONSACRAIT « Ce devis »
-       montré au retour, quel que soit le changement. Or le régime décide
-       des points du DEVIS (rang 3) : passer en franchise transforme un devis
-       « sans aucun point » en un devis à deux points, et la carte disait
-       « Ce devis : rien ne manque » le temps de la lecture. Les causes
-       viennent de `causesAuRetourDeLEntreprise`, FAITE TOURNER plus bas. */
-    const relectureDe = (causes) => ({ devis: causes.includes('devis'), entreprise: causes.includes('entreprise') });
-    const RR = relectureDe(P.causesAuRetourDeLEntreprise({ regimeDeLaListe: 'reel', regime: 'franchise' }));
-    const retourRegimeChange = { etat: P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RR }), relecture: RR, enLecture: true };
-    const RI = relectureDe(P.causesAuRetourDeLEntreprise({ regimeDeLaListe: 'reel', regime: 'reel' }));
-    const retourRegimeInchange = { etat: P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RI }), relecture: RI, enLecture: true };
+    /* LE RETOUR DE « MON ENTREPRISE » relit TOUJOURS les deux causes
+       (relecture 4 de 2b-1, 06/11/2026, la décision « simplifier ») : c'est
+       un temps « en route », et les DEUX parties se taisent jusqu'au retour
+       de la liste. Ce contrôle consacrait d'abord « Ce devis » montré au
+       retour quel que soit le changement (relecture 2, REL-2 : le régime de
+       TVA décide de ses points), puis une comparaison de régimes qui décidait
+       s'il se taisait — elle se trompait dans deux courses (relecture 3,
+       RELIRE3-2 et RELIRE3-3). La ligne dit alors « Mise à jour de la
+       liste… » : rien ne prouve qu'on a changé quoi que ce soit dans « Mon
+       entreprise ». */
+    const retourEntreprise = { etat: P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RDE }), relecture: RDE, enLecture: true };
     verifier('…`ceQueDitLaCarte`, FAIT TOURNER sur les TROIS cas de la relecture (ECR-1) : pendant une écriture du devis ET pendant la lecture '
       + 'qui la suit, « Ce devis » cède la place à « Ce devis : la liste se met à jour. » et « Votre entreprise » reste ; au retour de « Mon '
-      + 'entreprise », l’inverse ; sinon les deux se montrent ; JAMAIS rien sur un échec, une lecture ou un brouillon pas en base',
+      + 'entreprise », les DEUX se taisent (relecture 4 : toujours les deux causes), et la ligne dit « Mise à jour de la liste… » ; sinon les '
+      + 'deux se montrent ; JAMAIS rien sur un échec, une lecture ou un brouillon pas en base',
     egal(montre(ecriture), [true, false, true]) && egal(aLaPlace(ecriture), [D.CE_DEVIS_SE_MET_A_JOUR, null])
       && lectureApres.etat === 'en_route' && egal(montre(lectureApres), [true, false, true]) && egal(aLaPlace(lectureApres), [D.CE_DEVIS_SE_MET_A_JOUR, null])
-      && retourEntreprise.etat === 'liste' && egal(montre(retourEntreprise), [true, true, false])
-      && egal(aLaPlace(retourEntreprise), [null, D.ENTREPRISE_SE_MET_A_JOUR]) && egal(textes(retourEntreprise), [])
-      /* REL-2 : régime INCHANGÉ, « Ce devis » reste (E-6) ; régime CHANGÉ,
-         « Ce devis » se tait aussi, et l'état est « en route ». */
-      && retourRegimeInchange.etat === 'liste' && egal(montre(retourRegimeInchange), [true, true, false])
-      && retourRegimeChange.etat === 'en_route' && egal(montre(retourRegimeChange), [true, false, false])
-      && egal(aLaPlace(retourRegimeChange), [D.CE_DEVIS_SE_MET_A_JOUR, D.ENTREPRISE_SE_MET_A_JOUR])
-      && P.texteDeLaLigneRemise({ lue: lue2, ...retourRegimeChange }).contenu === D.LISTE_EN_ROUTE
+      && retourEntreprise.etat === 'en_route' && egal(montre(retourEntreprise), [true, false, false])
+      && egal(aLaPlace(retourEntreprise), [D.CE_DEVIS_SE_MET_A_JOUR, D.ENTREPRISE_SE_MET_A_JOUR]) && egal(textes(retourEntreprise), [])
+      && P.texteDeLaLigneRemise({ lue: lue2, ...retourEntreprise }).contenu === D.LISTE_MISE_A_JOUR
       && egal(montre({ etat: 'en_route', relecture: RE }), [true, false, false])
       && egal(montre({ etat: 'liste' }), [true, true, true]) && egal(aLaPlace({ etat: 'liste' }), [null, null])
       && ['echec', 'lecture', 'pas_en_base'].every((e) => egal(montre({ etat: e }), [false, false, false]) && egal(aLaPlace({ etat: e }), [null, null]))
       && egal(montre({ etat: 'en_route', lue: null }), [false, false, false]) && egal(aLaPlace({ etat: 'en_route', lue: null }), [null, null]),
-    json([montre(ecriture), montre(lectureApres), montre(retourEntreprise), montre(retourRegimeChange), montre(retourRegimeInchange)]));
+    json([montre(ecriture), montre(lectureApres), montre(retourEntreprise)]));
     /* LA PLACE DES PARTIES QUI SE TAISENT (relecture 2 de 2b-1, REL-3) : une
        partie périmée n'est plus RETIRÉE — tout ce qui la suivait remontait
        puis redescendait (le premier bouton de « Votre entreprise » passait
@@ -8452,10 +8476,10 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       return x.garder !== (c.montrerLaListe && !x.montrer) || (x.garder ? !x.phrase : x.phrase !== null) || (x.garder && x.montrer);
     }));
     verifier('…REL-3 : une partie qui se tait est GARDÉE (montée invisible, sous sa phrase) quand une liste sûre existe — « Ce devis » '
-      + 'pendant une écriture et la lecture qui la suit, « Votre entreprise » pendant la relecture de l’entreprise, les deux au retour '
-      + 'd’un régime changé — et JAMAIS sans liste ; `garder` n’est jamais vrai pour une partie qui se lit',
-    egal(garde(ecriture), [true, false]) && egal(garde(lectureApres), [true, false]) && egal(garde(retourEntreprise), [false, true])
-      && egal(garde(retourRegimeChange), [true, true]) && egal(garde({ etat: 'liste' }), [false, false])
+      + 'pendant une écriture et la lecture qui la suit, les DEUX pendant la relecture qui suit « Mon entreprise » — et JAMAIS sans '
+      + 'liste ; `garder` n’est jamais vrai pour une partie qui se lit',
+    egal(garde(ecriture), [true, false]) && egal(garde(lectureApres), [true, false]) && egal(garde(retourEntreprise), [true, true])
+      && egal(garde({ etat: 'liste' }), [false, false])
       && ['echec', 'lecture', 'pas_en_base'].every((e) => egal(garde({ etat: e }), [false, false]))
       && egal(garde({ etat: 'en_route', lue: null }), [false, false]) && egal(garde({ etat: 'en_route', lue: null, relecture: RDE }), [false, false])
       && grille.length === 40 && incoherents.length === 0,
@@ -8463,8 +8487,15 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     verifier('…et ses phrases d’état, dans l’ordre : en route, la phrase EXACTE du contrat EN TÊTE seulement quand aucune liste ne se '
       + 'montre — avec une liste, « Ce devis : la liste se met à jour. » le dit à SA place (REL-3 : une phrase d’en-tête qui disparaissait '
       + 'au retour faisait remonter tout ce qui la suit) ; ce qui n’est pas compté est DIT ; « mise à jour » pour une relecture sans cause '
-      + 'seulement ; sur un brouillon pas en base, ce qu’il porte (ECR-3) ou « Écrivez une première ligne »',
+      + 'seulement ; la relecture qui suit « Mon entreprise », sans liste, « Mise à jour de la liste… » ; sur un brouillon pas en base, ce '
+      + 'qu’il porte (ECR-3) ou « Écrivez une première ligne »',
     egal(textes({ etat: 'en_route' }), []) && egal(textes({ etat: 'en_route', lue: null }), [D.LISTE_EN_ROUTE])
+      /* la relecture qui suit « Mon entreprise », sans liste à montrer (un
+         échec avant) : « Mise à jour de la liste… » en tête, jamais « Des
+         changements partent » (relecture 4) ; avec une liste, rien en tête */
+      && egal(textes({ etat: 'en_route', lue: null, relecture: RDE }), [D.LISTE_MISE_A_JOUR])
+      && egal(textes({ etat: 'en_route', lue: null, relecture: RDE, pasCompte: pc }), [D.LISTE_MISE_A_JOUR, pc])
+      && egal(textes({ etat: 'en_route', relecture: RDE }), [])
       && egal(textes({ etat: 'en_route', pasCompte: pc }), [pc]) && egal(textes({ etat: 'en_route', lue: null, pasCompte: pc }), [D.LISTE_EN_ROUTE, pc])
       && egal(textes({ etat: 'en_route', pasCompte: pc }), textes({ etat: 'liste', pasCompte: pc }))
       && egal(textes({ etat: 'liste', pasCompte: pc }), [pc]) && egal(textes({ etat: 'echec', pasCompte: pc }), [pc])
@@ -8473,129 +8504,33 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       && egal(textes({ etat: 'pas_en_base', pasCompte: pcNeuf }), [pcNeuf])
       && egal(textes({ etat: 'lecture', lue: null }), [D.LISTE_EN_LECTURE]),
     json([textes({ etat: 'en_route', pasCompte: pc }), textes({ etat: 'liste', pasCompte: pc })]));
-    /* CE QUE RELIT LE RETOUR DE « MON ENTREPRISE » (REL-2), FAIT TOURNER.
-       CE CONTRÔLE CONSACRAIT UN ÉCART (relecture 3 de 2b-1, RELIRE-1) : il
-       EXIGEAIT que « réel » suivi d'un ÉCHEC ou d'une LECTURE du régime
-       relise « devis » — l'inconnu comptait comme « non déclaré » (`null`),
-       et un échec de lecture relisait la liste deux fois sans que rien ait
-       changé, l'effaçant sur un réseau coupé. Désormais : « devis » seulement
-       si les DEUX régimes sont connus et différents ; l'inconnu est une marque
-       À PART (`REGIME_INCONNU`), ni `null` ni `undefined` ; et le filet — une
-       liste dont le régime est encore inconnu au retour relit « devis » aussi. */
-    const cr = (regimeDeLaListe, regime) => P.causesAuRetourDeLEntreprise({ regimeDeLaListe, regime });
-    const DEUX = ['devis', 'entreprise'];
-    const UNE = ['entreprise'];
-    const INC = P.REGIME_INCONNU;
-    verifier('…REL-2 et RELIRE-1, `causesAuRetourDeLEntreprise` : régime changé entre deux régimes CONNUS (réel → franchise, franchise → '
-      + 'réel, non déclaré → réel, réel → non déclaré) → « devis » ET « entreprise » ; inchangé → « entreprise » seule ; un régime INCONNU '
-      + 'maintenant (réel → échec, réel → lecture, non déclaré → lecture, réel → jamais lu) → « entreprise » seule ; le filet : une liste '
-      + 'lue sous l’inconnu → les deux ; sans liste sûre (`undefined`) → « entreprise » seule ; `regimePourLaListe` rend « franchise », '
-      + '« reel », null (non déclaré) ou `REGIME_INCONNU` — jamais null pour un échec, une lecture ou un régime jamais lu',
-    egal(cr('reel', 'franchise'), DEUX) && egal(cr('franchise', 'reel'), DEUX) && egal(cr(null, 'reel'), DEUX) && egal(cr('reel', null), DEUX)
-      && egal(cr('reel', 'reel'), UNE) && egal(cr('franchise', 'franchise'), UNE) && egal(cr(null, null), UNE)
-      && egal(cr('reel', { echec: true }), UNE) && egal(cr('reel', { chargement: true }), UNE) && egal(cr(null, { chargement: true }), UNE)
-      && egal(cr('reel', undefined), UNE) && egal(cr('franchise', { echec: true }), UNE)
-      && egal(cr(INC, 'reel'), DEUX) && egal(cr(INC, { echec: true }), DEUX) && egal(cr({ echec: true }, 'reel'), DEUX)
-      /* le filet se juge sur le régime NORMALISÉ de la liste, quel qu'il soit
-         — un objet de lecture ou d'échec, et un régime inconnu maintenant
-         (banc de la relecture 3, N13 : comparer l'objet brut à la marque
-         passait au vert) */
-      && egal(cr({ echec: true }, { echec: true }), DEUX) && egal(cr({ chargement: true }, { chargement: true }), DEUX)
-      && egal(cr({ chargement: true }, undefined), DEUX)
-      && egal(cr(undefined, 'franchise'), UNE) && egal(cr(undefined, { echec: true }), UNE) && egal(P.causesAuRetourDeLEntreprise(), UNE)
-      && INC === 'inconnu' && INC !== null && INC !== undefined
-      && ['reel', 'franchise', null].every((r) => P.regimePourLaListe(r) === r)
-      && [undefined, { echec: true }, { chargement: true }, 'autre', 0, '', INC].every((r) => P.regimePourLaListe(r) === INC),
-    json([cr('reel', { echec: true }), cr('reel', { chargement: true }), cr(INC, 'reel'), P.regimePourLaListe({ echec: true })]));
-    /* L'EFFET DU RÉGIME, FAIT TOURNER (relecture 3 de 2b-1, RELIRE-1, et sa
-       contre-vérification) : la saisie applique `decisionDuRegime` et
-       `regimeAdopte` (son effet est figé ENTIER plus bas, pour qu'on n'y
-       glisse rien) ; la DÉCISION, elle, se juge sur les scénarios de la
-       contre-vérification, joués par une petite saisie simulée qui fait
-       exactement ce que fait l'écran : `regimeRef` normalisé au montage,
-       le régime relevé au DÉPART de chaque lecture, adopté au RETOUR
-       (`regimeAdopte`), l'effet sur chaque régime reçu, et le retour de
-       « Mon entreprise » (`causesAuRetourDeLEntreprise`). On compte les
-       relectures AVEC la cause « devis » (celles qui font dire « Des
-       changements partent » et taire « Ce devis »).
-         S1 réel, liste ; échec de lecture ; réel — rien n'a changé → 0 ;
-         S2 réel ; échec ; liste ; lecture ; réel (« Réessayer ») → 0 ;
-         S3 monté sous une lecture ; liste partie ; non déclaré ; liste
-            revenue ; franchise déclarée ; retour — CHANGÉ → 1 ;
-         S3b la même, liste revenue AVANT le régime → 1 ;
-         S4 réel, liste ; franchise ; retour — CHANGÉ (REL-2) → 1 ;
-         S5 monté en échec, liste ; « Mon entreprise » lit réel ; retour → 0 ;
-         S6 le filet : monté en échec, liste, « Mon entreprise » ne lit rien,
-            retour → 1 ;
-         S7 réel, liste ; échec ; franchise — CHANGÉ malgré l'échec → 1. */
-    const jouer = (suite) => {
-      const st = { connu: P.regimePourLaListe(suite[0][1]), regime: suite[0][1], motifs: null, regimeListe: undefined, enVol: null, devis: 0, lectures: 0 };
-      const lire = (causes) => {
-        st.lectures += 1;
-        if (causes.includes('devis')) st.devis += 1;
-        st.motifs = [];
-        st.regimeListe = P.regimeAdopte(P.regimePourLaListe(st.connu), st.connu);
-      };
-      suite.slice(1).forEach(([op, v]) => {
-        if (op === 'regime') {
-          st.regime = v;
-          const d = P.decisionDuRegime({ connu: st.connu, regimeDeLaListe: st.regimeListe, listeSure: Array.isArray(st.motifs), regime: v });
-          st.connu = d.connu;
-          if (d.regimeDeLaListe !== st.regimeListe) st.regimeListe = P.regimeAdopte(st.regimeListe, d.connu);
-          if (d.causes.length > 0) lire(d.causes);
-        } else if (op === 'part') {
-          st.lectures += 1;
-          st.enVol = P.regimePourLaListe(st.connu);
-        } else if (op === 'revient') {
-          st.motifs = [];
-          st.regimeListe = P.regimeAdopte(st.enVol, st.connu);
-          st.enVol = null;
-        } else if (op === 'retour') {
-          const c = P.causesAuRetourDeLEntreprise({ regimeDeLaListe: Array.isArray(st.motifs) ? st.regimeListe : undefined, regime: st.regime });
-          lire(c);
-        }
-      });
-      return st;
-    };
-    const SCENARIOS = {
-      S1: [[['monte', 'reel'], ['part'], ['revient'], ['regime', { echec: true }], ['regime', 'reel']], 0],
-      S2: [[['monte', 'reel'], ['regime', { echec: true }], ['part'], ['revient'], ['regime', { chargement: true }], ['regime', 'reel']], 0],
-      S3: [[['monte', { chargement: true }], ['part'], ['regime', null], ['revient'], ['regime', 'franchise'], ['retour']], 1],
-      S3b: [[['monte', { chargement: true }], ['part'], ['revient'], ['regime', null], ['regime', 'franchise'], ['retour']], 1],
-      S4: [[['monte', 'reel'], ['part'], ['revient'], ['regime', 'franchise'], ['retour']], 1],
-      S5: [[['monte', { echec: true }], ['part'], ['revient'], ['regime', 'reel'], ['retour']], 0],
-      S6: [[['monte', { echec: true }], ['part'], ['revient'], ['retour']], 1],
-      S7: [[['monte', 'reel'], ['part'], ['revient'], ['regime', { echec: true }], ['regime', 'franchise']], 1],
-    };
-    const joues = Object.fromEntries(Object.entries(SCENARIOS).map(([k, [suite]]) => [k, jouer(suite).devis]));
-    const fauxScenarios = Object.entries(SCENARIOS).filter(([k, [, attendu]]) => joues[k] !== attendu).map(([k]) => `${k} : ${joues[k]}`);
-    /* …et la décision, case par case : un inconnu ne change RIEN (ni le
-       dernier connu, ni la liste, ni une relecture) ; le même régime non
-       plus ; un nouveau sans liste sûre devient le dernier connu ; une liste
-       lue sous l'inconnu ADOPTE ; une liste lue sous un autre régime connu se
-       relit avec les deux causes. */
-    const dr = (o) => P.decisionDuRegime(o);
-    const casDecision = [
-      [dr({ connu: 'reel', regimeDeLaListe: 'reel', listeSure: true, regime: { echec: true } }), { connu: 'reel', regimeDeLaListe: 'reel', causes: [] }],
-      [dr({ connu: 'reel', regimeDeLaListe: 'reel', listeSure: true, regime: { chargement: true } }), { connu: 'reel', regimeDeLaListe: 'reel', causes: [] }],
-      [dr({ connu: 'reel', regimeDeLaListe: 'reel', listeSure: true, regime: undefined }), { connu: 'reel', regimeDeLaListe: 'reel', causes: [] }],
-      [dr({ connu: 'reel', regimeDeLaListe: 'reel', listeSure: true, regime: 'reel' }), { connu: 'reel', regimeDeLaListe: 'reel', causes: [] }],
-      [dr({ connu: INC, regimeDeLaListe: undefined, listeSure: false, regime: null }), { connu: null, causes: [] }],
-      [dr({ connu: INC, regimeDeLaListe: INC, listeSure: true, regime: 'reel' }), { connu: 'reel', regimeDeLaListe: 'reel', causes: [] }],
-      [dr({ connu: INC, regimeDeLaListe: INC, listeSure: true, regime: null }), { connu: null, regimeDeLaListe: null, causes: [] }],
-      [dr({ connu: 'reel', regimeDeLaListe: 'reel', listeSure: true, regime: 'franchise' }), { connu: 'franchise', regimeDeLaListe: 'reel', causes: DEUX }],
-      [dr({ connu: null, regimeDeLaListe: null, listeSure: true, regime: 'reel' }), { connu: 'reel', regimeDeLaListe: null, causes: DEUX }],
-      [dr({ connu: INC, regimeDeLaListe: INC, listeSure: true, regime: { echec: true } }), { connu: INC, regimeDeLaListe: INC, causes: [] }],
-    ].filter(([r, a]) => !egal(r, a)).map(([r, a]) => `${json(r)} ≠ ${json(a)}`);
-    verifier('…RELIRE-1, `decisionDuRegime` FAITE TOURNER sur les scénarios de la contre-vérification de la relecture 3 : un régime INCONNU '
-      + '(une lecture du régime en cours ou ratée) ne relit RIEN et ne change pas le dernier connu (S1, S2 : 0) ; une liste lue pendant ce '
-      + 'temps PREND le premier régime connu, sans relecture (S5 : 0), y compris s’il arrive PENDANT la lecture (`regimeAdopte`) — sans '
-      + 'rouvrir REL-2 (S3, S3b, S4 : 1) ; le filet relit « devis » quand le régime de la liste est encore inconnu au retour (S6 : 1) ; un '
-      + 'échec suivi d’un AUTRE régime relit (S7 : 1) ; et la décision, case par case',
-    fauxScenarios.length === 0 && casDecision.length === 0
-      && P.regimeAdopte(INC, 'reel') === 'reel' && P.regimeAdopte(INC, INC) === INC && P.regimeAdopte('franchise', 'reel') === 'franchise'
-      && P.regimeAdopte(undefined, 'reel') === undefined && P.regimeAdopte(null, 'reel') === null && P.regimeAdopte(INC, { echec: true }) === INC,
-    `${fauxScenarios.join(' | ')} ${casDecision.join(' | ')}`);
+    /* LE RÉGIME DE TVA N'EST PLUS SUIVI PAR LA LISTE (relecture 4 de 2b-1,
+       06/11/2026, la décision « simplifier ») : la liste est calculée par la
+       BASE, qui lit le régime DANS la base au moment de la lecture — une
+       liste lue est toujours juste pour le régime que la base avait alors.
+       Ce que le téléphone sait du régime (pas encore lu, en lecture, en
+       échec) ne la rend jamais fausse, et le régime de la base ne change que
+       par « Mon entreprise », dont la fermeture relit les deux causes. Toute
+       la machinerie qui suivait le régime de la liste — une marque de
+       l'inconnu, sa normalisation, l'adoption d'un régime arrivé pendant une
+       lecture, la décision d'un régime reçu, la comparaison au retour de
+       « Mon entreprise », une référence dans l'écran, un régime rangé avec la
+       liste, et la dernière liste lue gardée pour les gabarits — est retirée,
+       et ses contrôles avec elle (les scénarios S1 à S7, la table de
+       décision, les formes figées). « Un régime inconnu ne relit rien et
+       n'efface pas une liste juste » (relecture 3, RELIRE-1) devient vrai PAR
+       CONSTRUCTION : rien n'écoute plus le régime (vérifié plus bas, sur la
+       saisie). Ce contrôle refuse qu'une trace en revienne, dans le code ET
+       dans les commentaires des trois fichiers. */
+    const RETIRES = ['REGIME_INCONNU', 'regimePourLaListe', 'regimeAdopte', 'decisionDuRegime', 'causesAuRetourDeLEntreprise', 'regimeRef',
+      'regimeLu', 'derniereLue', 'ENTREPRISE_A_JOUR_SUR_LA_LIGNE', 'RELECTURE_DE_L_ENTREPRISE', 'liste.regime', 'liste.derniere', 'l.derniere'];
+    const traces = ['src/lib/devis.js', 'src/components/PourRemettre.js', 'src/screens/SaisieDevisScreen.js']
+      .flatMap((f) => RETIRES.filter((nom) => new RegExp(`(?<![\\w.])${nom.replace(/\./g, '\\.')}\\b`).test(lire(f))).map((nom) => `${f} : ${nom}`));
+    verifier('…la machinerie du régime attachée à la liste est RETIRÉE (relecture 4, « simplifier ») : aucun de ses noms n’est exporté par '
+      + '`devis.js`, ni écrit — code ou commentaire — dans `devis.js`, `PourRemettre.js` et la saisie ; un régime reçu ne relit donc rien, '
+      + 'par construction (l’effet qui l’écoutait n’existe plus, vérifié plus bas)',
+    traces.length === 0 && RETIRES.filter((nom) => !nom.includes('.')).every((nom) => !(nom in D)),
+    traces.join(' | '));
     const l3 = D.lireMotifsDeRemise([
       { rang: 1, cle: 'devis_client' }, { rang: 6, cle: 'devis_validite' },
       { rang: 101, cle: 'identite' }, { rang: 102, cle: 'conso_mediateur' },
@@ -8605,7 +8540,10 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       + 'particulier (D-B)',
     P.phraseDesEndroits(l3) === 'ce devis — 2 points · votre entreprise — 2 points'
     && P.phraseDesEndroits(D.lireMotifsDeRemise([{ rang: 101, cle: 'identite' }], { sections: E.SECTION_DU_MOTIF })) === 'ce devis — aucun point · votre entreprise — 1 point'
-    && P.phraseDesEndroits(l3, { relecture: RE }) === 'ce devis — 2 points · votre entreprise — mise à jour…'
+    /* plus de forme « mise à jour… » sur la ligne (relecture 4) : une
+       option passée est ignorée, et aucun gabarit ne la porte */
+    && P.phraseDesEndroits(l3, { relecture: RE }) === P.phraseDesEndroits(l3)
+    && D.GABARITS_DE_LA_LIGNE.every((g) => !/votre entreprise — mise à jour/.test(g))
     && egal(P.comptesParEndroit({ comptes: { devis: 1, entreprise: 1, particulier: 1 }, avis: [1, 2, 3] }), { devis: 1, entreprise: 2, dontParticulier: 1 })
     && !/avis/.test(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'comptesParEndroit') || 'avis'), P.phraseDesEndroits(l3));
     /* LE TITRE DE L'ENTREPRISE DIT COMBIEN SONT DUS À UN PARTICULIER
@@ -8836,7 +8774,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const ligne = sansEspaces(corpsDeFonction(PR, 'LigneRemise') || '');
   verifier('la LIGNE (haut et bas) dit ce que décide `texteDeLaLigneRemise` (fait tourner plus haut), et rien d’autre : aucune phrase '
     + 'ni aucun compte écrit dans le composant ; `ouvrir` ouvre la carte, `reessayer` RELIT, sinon ce n’est PAS une cible',
-  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, derniere, \}\); const \{ contenu, compte, gabarits, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
+  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, \}\); const \{ contenu, compte, gabarits, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
     && !/phraseDesEndroits|LISTE_|MISE_A_JOUR|\bpoints\(/.test(ligne) && /if \(!action\) \{ return <View/.test(ligne)
     /* LA PHRASE ET LE DÉCOMPTE (décision D-A), le décompte à la ligne ; ET
        LES GABARITS (relecture 2 de 2b-1, REL-1 ; D-A bis, 06/11) : quand
@@ -8851,11 +8789,14 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        posé par-dessus : il ne peut ni déborder ni chevaucher ce qui suit,
        même agrandi dans les réglages du téléphone. Rien n'est coupé :
        aucun `numberOfLines` dans cette branche (le texte lu est l'un des
-       gabarits ou plus court que chacun, vérifié plus haut). Sans gabarit,
+       gabarits ou composé de leurs pièces les plus larges, vérifié plus haut). Sans gabarit,
        deux lignes réservées, comme avant. Plus aucune « troisième ligne »
        réservée : c'était elle qui sautait (92 → 74 points). */
     && ligne.includes('const dit = texteDeLaLigneRemise({ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, '
-      + 'derniere, }); const { contenu, compte, gabarits, aDire } = dit;')
+      + '}); const { contenu, compte, gabarits, aDire } = dit;')
+    /* …et elle ne reçoit plus la dernière liste lue (relecture 4) : les
+       gabarits n'en dépendent plus */
+    && !/\bderniere\b/.test(sansCommentairesJs(corpsDeFonction(PR, 'LigneRemise') || ''))
     && ligne.includes("const styleTexte = variante === 'bas' ? s.ligneTexteBas : s.ligneTexte; const texte = compte ? `${contenu}\\n${compte}` : contenu;")
     && ligne.includes('{gabarits ? ( <View style={s.superpose}> {gabarits.map((g, i) => ( <View key={`gabarit-${i}`} '
       + 'style={[s.couche, i > 0 && s.coucheSuivante, s.gabarit]} aria-hidden accessibilityElementsHidden '
@@ -8908,9 +8849,8 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   /^=> \{ const f = fileRef\.current; if \(!f \|\| !f\.devisEnBase\(\)\) return;/.test(lireListe)
     && lireListe.indexOf('const g = f.generation();') > 0 && lireListe.indexOf('const g = f.generation();') < lireListe.indexOf('api.motifsRefusRemise(f.devisId())')
     && /if \(g !== f\.generation\(\)\) \{/.test(lireListe)
-    && lireListe.includes('setListe((l) => (r.erreur ? { motifs: null, erreur: r.erreur, enLecture: false, relecture: AUCUNE_RELECTURE, '
-      + 'regime: undefined, derniere: l.derniere, } : { motifs: lues, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE, '
-      + 'regime: lues ? regimeAdopte(regimeLu, regimeRef.current) : undefined, derniere: lues || l.derniere, }));')
+    && lireListe.includes('setListe(r.erreur ? { motifs: null, erreur: r.erreur, enLecture: false, relecture: AUCUNE_RELECTURE, '
+      + '} : { motifs: lues, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE, });')
     && lireListe.includes('const lues = !r.erreur && Array.isArray(r.motifs) ? r.motifs : null;'),
   lireListe.slice(0, 160));
   /* …ET LA GARDE ÉCARTE VRAIMENT (relecture de 2b-1, PAR-4) : le contrôle
@@ -8922,8 +8862,8 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   verifier('…la garde de génération de `lireLaListe` ÉCARTE la réponse : le bloc entier — attendre la file, relire si cette lecture est '
     + 'toujours la dernière, puis `return;` — se tient ENTRE la garde et `setListe`',
   lireListe.includes('if (g !== f.generation()) { f.attendre(DELAI_ECRITURE).then(() => { if (monte.current && n === lectureListe.current) '
-    + 'lireLaListe(); }); return; } const lues = !r.erreur && Array.isArray(r.motifs) ? r.motifs : null; setListe((l) => (r.erreur ? {')
-    && (lireListe.match(/setListe\(\(l\) => \(r\.erreur/g) || []).length === 1
+    + 'lireLaListe(); }); return; } const lues = !r.erreur && Array.isArray(r.motifs) ? r.motifs : null; setListe(r.erreur ? {')
+    && (lireListe.match(/setListe\(r\.erreur/g) || []).length === 1
     && lireListe.indexOf('return; } const lues') > lireListe.indexOf('if (g !== f.generation())'),
   lireListe.slice(lireListe.indexOf('if (g !=='), lireListe.indexOf('if (g !==') + 220));
   /* …ET UNE RÉPONSE PÉRIMÉE N'EST JAMAIS POSÉE (banc indépendant de 2b-1,
@@ -8948,14 +8888,13 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      échec. L'état et les deux composants la reçoivent. */
   verifier('…la lecture NOTE ce qu’elle relit : `\'devis\'` après une écriture confirmée, `\'entreprise\'` au retour de « Mon entreprise » ; '
     + 'les causes s’ajoutent jusqu’au retour, et s’effacent au retour (liste ou échec) ; l’état, la ligne et la carte la reçoivent',
-  lireListe.includes("const causes = Array.isArray(cause) ? cause : [cause]; const regimeLu = regimePourLaListe(regimeRef.current); "
+  lireListe.includes("const causes = Array.isArray(cause) ? cause : [cause]; "
     + "setListe((l) => ({ ...l, erreur: null, enLecture: true, relecture: { devis: l.relecture.devis || causes.includes('devis'), "
     + "entreprise: l.relecture.entreprise || causes.includes('entreprise'), }, }));")
-    && lireListe.indexOf('const regimeLu = ') < lireListe.indexOf('api.motifsRefusRemise(')
     && (lireListe.match(/relecture: AUCUNE_RELECTURE/g) || []).length === 2
     && /const AUCUNE_RELECTURE = Object\.freeze\(\{ devis: false, entreprise: false \}\);/.test(saE)
     && saE.includes('const [liste, setListe] = useState({ motifs: null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE, '
-      + 'regime: undefined, derniere: null, }); const regimeRef = useRef(regimePourLaListe(regime));')
+      + '}); const lectureListe = useRef(0);')
     && (saE.match(/relecture=\{liste\.relecture\}/g) || []).length === 2 && /relecture: liste\.relecture,/.test(saE),
   lireListe.slice(0, 400));
   /* LES RELECTURES (critique E-1, E-5, B11) : à l'ouverture d'un devis en
@@ -8970,48 +8909,60 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        `includes` laissait passer une ligne glissée AVANT la garde —
        `lireLaListe(['devis', 'entreprise'])` à chaque retour —, et « Ce
        devis » se taisait sans que le régime ait changé. */
+    /* …ET IL RELIT TOUJOURS LES DEUX CAUSES, une fois par retour (relecture
+       4 de 2b-1, 06/11/2026 : la décision « simplifier » — la base calcule
+       la liste avec SON régime, il suffit de relire). */
     && effetRetour === 'useEffect(() => { if (retourEntrepriseVu.current === retourEntreprise) return; retourEntrepriseVu.current = '
-      + 'retourEntreprise; lireLaListe(causesAuRetourDeLEntreprise({ regimeDeLaListe: Array.isArray(liste.motifs) ? liste.regime : undefined, '
-      + 'regime, })); }, [retourEntreprise])'
+      + "retourEntreprise; lireLaListe(['devis', 'entreprise']); }, [retourEntreprise])"
     && appels(SA, 'useEffect').map(sansEspaces).filter((a) => /\[retourEntreprise\]\)$/.test(a)).length === 1
     && (saE.match(/onReessayer=\{lireLaListe\}/g) || []).length === 2
     && /ligneRemise=\{ligneRemise\('haut'\)\}/.test(saE) && /rangeeRemise=\{ligneRemise\('bas'\)\}/.test(saE));
-  /* LE RÉGIME DE TVA ET LA DERNIÈRE LISTE LUE (relecture 2 de 2b-1, REL-1 et
-     REL-2 ; relecture 3, RELIRE-1), LUS DANS LA SAISIE : chaque liste sûre
-     retient le régime pour lequel elle a été lue (relevé au DÉPART de la
-     lecture, normalisé par `regimePourLaListe` — jamais un objet de lecture
-     ou d'échec, jamais `null` pour l'inconnu — et ADOPTÉ au retour si un
-     régime connu est arrivé pendant la lecture, `regimeAdopte`) ; le retour
-     de « Mon entreprise » relit avec les causes de
-     `causesAuRetourDeLEntreprise` (vérifié au-dessus) ; et l'effet du régime
-     APPLIQUE `decisionDuRegime` (faite tourner au-dessus sur les scénarios
-     S1 à S7) — rien d'autre : le dernier connu, l'adoption par l'état le plus
-     récent, la relecture avec ses causes —, déclaré AVANT celui du retour,
-     pour que la référence soit à jour quand il relit. La référence part du
-     régime NORMALISÉ (`useRef(regimePourLaListe(regime))`). La dernière
-     liste LUE (`derniere`), gardée même après un échec, n'alimente que les
-     gabarits de la ligne (`derniere={derniereLue}`), jamais la carte ni
-     l'état. */
-  const effetRegime = appels(SA, 'useEffect').map(sansEspaces).find((a) => /\[regime\]\)$/.test(a)) || '';
-  verifier('…REL-2 et RELIRE-1 : la liste retient le régime pour lequel elle a été lue ; l’effet du régime APPLIQUE `decisionDuRegime` '
-    + '(un régime inconnu ne fait rien, une liste lue sous l’inconnu adopte le premier régime connu, un régime connu CHANGÉ relit avec les '
-    + 'deux causes), déclaré avant celui du retour ; REL-1 : la dernière liste lue nourrit les SEULS gabarits de la ligne',
-  /* L'EFFET ENTIER (banc de la relecture 2, R13) : avec `includes`, une ligne
-     glissée AVANT la garde relisait le devis à chaque changement de la
-     propriété — un objet de lecture (`{ chargement: true }`) compris —, et
-     « Des changements partent » s'affichait sans que rien ne parte. Et UN
-     SEUL effet du régime. */
-  effetRegime === 'useEffect(() => { const d = decisionDuRegime({ connu: regimeRef.current, regimeDeLaListe: liste.regime, '
-    + 'listeSure: Array.isArray(liste.motifs), regime, }); regimeRef.current = d.connu; if (d.regimeDeLaListe !== liste.regime) '
-    + 'setListe((l) => ({ ...l, regime: regimeAdopte(l.regime, d.connu) })); if (d.causes.length > 0) lireLaListe(d.causes); }, [regime])'
-    && appels(SA, 'useEffect').map(sansEspaces).filter((a) => /\[regime\]\)$/.test(a)).length === 1
-    && saE.indexOf(effetRegime.slice(0, 60)) >= 0 && saE.indexOf(effetRegime.slice(0, 60)) < saE.indexOf('const retourEntrepriseVu = useRef(retourEntreprise);')
-    && (saE.match(/regimeRef\.current = /g) || []).length === 1
-    && saE.includes('const derniereLue = useMemo(() => (Array.isArray(liste.derniere) ? lireMotifsDeRemise(liste.derniere, '
-      + '{ sections: SECTION_DU_MOTIF }) : null), [liste.derniere]);')
-    && balises(SA, 'LigneRemise').length === 1 && balises(SA, 'LigneRemise').every((b) => /derniere=\{derniereLue\}/.test(b))
-    && balises(SA, 'PourRemettre').every((b) => !/derniere/.test(b)) && !/lue: derniereLue|lue=\{derniereLue\}/.test(saE),
-  effetRegime.slice(0, 200));
+  /* UN CHANGEMENT DU RÉGIME NE RELIT RIEN ET N'EFFACE RIEN (relecture 4 de
+     2b-1, 06/11/2026) : aucun effet de la saisie n'écoute plus la propriété
+     `regime` (ni seule, ni parmi d'autres), et la liste n'y range ni le
+     régime ni la dernière liste lue — elle a ses quatre champs. Ce contrôle
+     figeait l'effet du régime ENTIER (banc de la relecture 2, R13) ; il
+     refuse désormais qu'un effet sur le régime revienne : un tel effet qui
+     relirait (« Des changements partent » sans que rien ne parte) ou
+     effacerait (une liste juste perdue sur un réseau coupé) était
+     exactement le défaut de la relecture 3 (RELIRE-1). Les DEUX seules
+     écritures de la liste sont celles de `lireLaListe` (son départ et son
+     retour). La ligne et la carte ne reçoivent plus `derniere` : les
+     gabarits n'en dépendent plus.
+     BANC DE LA RELECTURE 4 (N3) : ce contrôle ne regardait que `useEffect`.
+     Un `useLayoutEffect(() => { lectureListe.current += 1; }, [regime])` —
+     ni `lireLaListe`, ni `setListe` — passait au vert : il JETTE la lecture
+     en vol à chaque régime reçu (sa réponse n'est plus « la dernière »), et
+     la liste restait « en lecture » pour toujours quand la lecture du régime
+     levait à l'ouverture. Désormais : AUCUN crochet de React (effets,
+     `useMemo`, `useCallback`) n'a `regime` dans ses dépendances, et les trois
+     GARDES de `lireLaListe` — `lectureListe`, `monte`, `fileRef` — n'ont que
+     leurs écritures connues (une chacune : la numérotation dans
+     `lireLaListe`, le démontage, l'ouverture), sans alias de la référence.
+     Ce qui relit (`lireLaListe`, liste fermée plus bas), ce qui efface
+     (`setListe`, deux) et ce qui jette une lecture (ces gardes) sont donc
+     fermés quelle que soit la dépendance — `regime`, ou ce qui en dérive
+     (`franchise`, `reel`). */
+  const CROCHETS_REACT = ['useEffect', 'useLayoutEffect', 'useInsertionEffect', 'useMemo', 'useCallback'];
+  const effetsDuRegime = CROCHETS_REACT.flatMap((c) => appels(SA, c)).map(sansEspaces).filter((a) => /\[[^\]]*\bregime\b[^\]]*\]\)$/.test(a));
+  /* toute affectation composée compte (`+=`, mais aussi `^=`, `**=`, `&&=`, `??=`… :
+     banc de la relecture 4, N3f et N3g, qui passaient quand seules `+=`, `-=`,
+     la multiplication et la division étaient comptées) */
+  const ecritures = (ref) => (saE.match(new RegExp(`(?:\\+\\+|--)\\s*${ref}\\.current\\b|\\b${ref}\\.current\\s*(?:\\+\\+|--|(?:\\*\\*|<<|>>>?|&&|\\|\\||\\?\\?|[-+*/%&|^])?=(?!=))`, 'g')) || []).length;
+  /* la référence elle-même ne s'écrit nulle part ailleurs que dans sa déclaration (ni alias, ni prop, ni argument) */
+  const alias = (ref) => (saE.match(new RegExp(`\\b${ref}\\b(?!\\.current\\b)`, 'g')) || []).length !== 1 || !saE.includes(`const ${ref} = useRef(`);
+  const gardesFermees = ecritures('lectureListe') === 1 && (lireListe.match(/\blectureListe\.current \+= 1;/g) || []).length === 1
+    && ecritures('monte') === 1 && saE.includes('useEffect(() => () => { monte.current = false; }, []);')
+    && ecritures('fileRef') === 1 && ['lectureListe', 'monte', 'fileRef'].every((r) => !alias(r));
+  verifier('…un changement de la propriété `regime` ne relit RIEN et n’efface RIEN : aucun crochet de la saisie ne l’écoute (effets, `useMemo`, '
+    + '`useCallback`), la liste n’a que ses champs `motifs`, `erreur`, `enLecture`, `relecture` (ni régime, ni dernière liste lue), '
+    + '`lireLaListe` est seule à l’écrire, ses gardes (`lectureListe`, `monte`, `fileRef`) n’ont que leurs écritures connues — rien ne jette une '
+    + 'lecture en vol —, et ni la ligne ni la carte ne reçoivent `derniere`',
+  effetsDuRegime.length === 0 && gardesFermees
+    && (saE.match(/\bsetListe\(/g) || []).length === 2 && (lireListe.match(/\bsetListe\(/g) || []).length === 2
+    && balises(SA, 'LigneRemise').length === 1 && balises(SA, 'LigneRemise').every((b) => !/derniere/.test(b))
+    && balises(SA, 'PourRemettre').every((b) => !/derniere/.test(b)) && !/\bliste\.(regime|derniere)\b/.test(saE),
+  json([effetsDuRegime, ['lectureListe', 'monte', 'fileRef'].map((r) => [r, ecritures(r), alias(r)])]));
   /* QUI RELIT LA LISTE : une liste FERMÉE (banc de la relecture 2 de 2b-1,
      R5b et R15). Les vérifications au-dessus tiennent chaque appel CONNU,
      pas celui qu'on AJOUTE : un second effet sur le retour de « Mon
@@ -9028,13 +8979,13 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     '(); }); return; } const lues = ', //                   la garde de génération relit la DERNIÈRE lecture
     "('devis'); } else if (ev.type === 'totaux_illisibles')", // une écriture du devis confirmée
     '(); })(); return () => {', //                          l'ouverture d'un devis en base
-    '(d.causes); }, [regime]);', //                         le régime de TVA a changé (REL-2, RELIRE-1)
-    '(causesAuRetourDeLEntreprise({ regimeDeLaListe: ', //  le retour de « Mon entreprise »
+    "(['devis', 'entreprise']); }, [retourEntreprise]);", // le retour de « Mon entreprise » (les deux causes, toujours)
     '} />', //                                              « Réessayer » de la ligne (en haut et en bas)
     '} onFermer={fermerCarte} />', //                       « Réessayer » de la carte
   ];
-  verifier('…et RIEN D’AUTRE ne relit la liste : les huit occurrences de `lireLaListe` dans la saisie, dans l’ordre (la définition, la garde '
-    + 'de génération, l’écriture confirmée, l’ouverture, le régime changé, le retour de « Mon entreprise », « Réessayer » ×2) — un appel '
+  verifier('…et RIEN D’AUTRE ne relit la liste : les sept occurrences de `lireLaListe` dans la saisie, dans l’ordre (la définition, la garde '
+    + 'de génération, l’écriture confirmée, l’ouverture, le retour de « Mon entreprise », « Réessayer » ×2 — plus aucune sur un changement '
+    + 'du régime, relecture 4) — un appel '
     + 'de plus, ou un alias, rougit (banc de la relecture 2 : un second effet qui relisait « devis » à chaque retour passait au vert)',
   usagesDeLireLaListe.length === USAGES_DE_LIRE_LA_LISTE.length
     && USAGES_DE_LIRE_LA_LISTE.every((u, i) => usagesDeLireLaListe[i].startsWith(u)),
@@ -9057,7 +9008,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       /* relecture 3 (D-A bis, 06/11) : le saut « mise à jour… » est tranché */
       /une décision du propriétaire, pas une correction/, /Ce qui RESTE, mesuré le 06\/11 : à 390 points/,
       /* banc de la relecture 3 (M32) : rien n'est posé en position absolue */
-      /position absolue/],
+      /position absolue/,
+      /* relecture 4 (RELIRE3-1) : la place ne dépend plus des nombres — ces
+         phrases n'étaient vraies que pour « aucun point » */
+      /Plus rien ne bouge, jamais/, /≈ 110 points à 393/, /sous ses DEUX formes/, /DEUX GABARITS, LE PLUS GRAND/,
+      /* relecture 4 (la décision « simplifier ») : rien ne relit plus l'entreprise seule */
+      /Une relecture de la seule ENTREPRISE ne change pas l'état/],
     'src/components/PourRemettre.js': [/TROIS dans un seul état/, /\(`lignes`\)/, /« Ce devis »,? (?:lui, )?reste(?: juste)?\./,
       /* relecture 3 (D-A bis, point 3) : plus rien n'est posé en position absolue, le gabarit n'est plus seul */
       /`s\.parDessus`/, /est celle du gabarit, à toutes les largeurs/,
@@ -9066,10 +9022,14 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
          passait. Plus rien n'est posé en position absolue dans ce fichier :
          la seule mention permise est l'HISTOIRE de la phrase d'une partie
          (« Posée en position absolue, elle débordait »). */
-      /(?<!Posée en )position absolue/],
+      /(?<!Posée en )position absolue/,
+      /* relecture 4 (RELIRE3-1) */
+      /« phrase \+ décompte » de la liste lue, sous ses deux formes/, /SA HAUTEUR NE BOUGE PAS TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ\s/],
     'src/screens/SaisieDevisScreen.js': [/se relit ne s'affiche pas tant que la liste/, /« Ce devis »,? (?:lui, )?reste(?: juste)?\./,
       /* relecture 3 (RELIRE-1) */
-      /un objet neuf ne relance rien s'il ne change pas ce qu'on sait/, /ratée\) compte comme `null`/, /position absolue/],
+      /un objet neuf ne relance rien s'il ne change pas ce qu'on sait/, /ratée\) compte comme `null`/, /position absolue/,
+      /* relecture 4 : plus de comparaison de régimes au retour de « Mon entreprise » */
+      /la seule cause « entreprise »/, /SAUF si les deux régimes sont CONNUS/],
   };
   const perimees = Object.entries(PHRASES_PERIMEES).flatMap(([f, rs]) => rs.filter((r) => r.test(brut(f))).map((r) => `${f} : ${r}`));
   verifier('…les commentaires que la relecture 2 a corrigés ne reviennent pas à leur version FAUSSE (trois lignes réservées « dans cet état '
@@ -9087,10 +9047,10 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     const fin = i < 0 ? -1 : brutSaisie.indexOf('*/', i);
     return i >= 0 && fin > i && brutSaisie.slice(fin + 2).trimStart().startsWith(suite) && brutSaisie.indexOf(titre, i + 1) < 0;
   };
-  verifier('…et chaque commentaire est au-dessus de SON effet : « LE RÉGIME DE TVA REÇU » juste avant l’effet du régime, « « MON ENTREPRISE » '
-    + 'VIENT DE SE FERMER » juste avant le retour de « Mon entreprise » (le banc de la relecture 2 les avait trouvés emmêlés)',
-  accroche("/* LE RÉGIME DE TVA REÇU", 'useEffect(() => { const d = decisionDuRegime(')
-    && accroche("/* « MON ENTREPRISE » VIENT DE SE FERMER", 'const retourEntrepriseVu = useRef(retourEntreprise); useEffect(() => {'),
+  verifier('…et le commentaire « « MON ENTREPRISE » VIENT DE SE FERMER » est juste au-dessus du retour de « Mon entreprise » (le banc de '
+    + 'la relecture 2 l’avait trouvé emmêlé avec l’effet du régime) — et celui de l’effet du régime, retiré avec lui (relecture 4), n’est plus là',
+  accroche("/* « MON ENTREPRISE » VIENT DE SE FERMER", 'const retourEntrepriseVu = useRef(retourEntreprise); useEffect(() => {')
+    && !brutSaisie.includes('LE RÉGIME DE TVA REÇU'),
   brutSaisie.slice(brutSaisie.indexOf('« MON ENTREPRISE » VIENT DE SE FERMER'), brutSaisie.indexOf('« MON ENTREPRISE » VIENT DE SE FERMER') + 900));
   /* OUVRIR LA LISTE ENREGISTRE D'ABORD CE QUI EST OUVERT (trou trouvé par le
      banc du lot 2b-1, Q16) : un délai tapé dans l'en-tête sans avoir quitté

@@ -108,7 +108,6 @@ import {
   cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, creerRenvoisAutomatiques, phraseDuRejeu, echecsDeLaFile,
   echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
   lireMotifsDeRemise, avisDuDevis, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe, ceQueLaListeNeComptePas,
-  regimePourLaListe, regimeAdopte, decisionDuRegime, causesAuRetourDeLEntreprise,
 } from '../lib/devis';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
@@ -589,38 +588,24 @@ export default function SaisieDevisScreen({
        erreur   : l'échec de la dernière lecture ;
        enLecture: une lecture est partie ;
        relecture: ce que la lecture EN COURS relit parce que cela vient de
-                  changer — `devis` (une écriture du devis confirmée) ou
-                  `entreprise` (« Mon entreprise » refermée). La partie qui
-                  se relit ne se lit pas tant que la liste n'est pas
-                  revenue : elle peut mentir (relecture de 2b-1, ECR-1) ;
-       regime   : le régime de TVA pour lequel la liste sûre a été lue
-                  (`regimePourLaListe` : 'franchise', 'reel', null — non
-                  déclaré —, ou `REGIME_INCONNU` quand la lecture du régime
-                  était en cours ou ratée), relevé au DÉPART de la lecture —
-                  `undefined` sans liste sûre. Une liste lue sous l'inconnu
-                  prend le premier régime connu, sans relecture
-                  (`regimeAdopte`, relecture 3 de 2b-1, RELIRE-1). Il décide
-                  des points du devis : s'il a changé au retour de « Mon
-                  entreprise », « Ce devis » se relit aussi (relecture 2 de
-                  2b-1, REL-2) ;
-       derniere : la dernière liste LUE, GARDÉE même quand un échec efface
-                  `motifs` — elle ne sert qu'au GABARIT de la ligne, qui ne
-                  se lit pas : sa hauteur ne saute pas d'un état à l'autre
-                  tant que quelque chose n'est pas compté (relecture 2, REL-1).
+                  changer — `devis` (une écriture du devis confirmée), ou les
+                  DEUX (« Mon entreprise » refermée). La partie qui se relit
+                  ne se lit pas tant que la liste n'est pas revenue : elle
+                  peut mentir (relecture de 2b-1, ECR-1).
+     LE RÉGIME DE TVA N'Y EST PAS (relecture 4 de 2b-1, 06/11/2026) : la
+     liste est calculée par la BASE, qui lit le régime DANS la base au moment
+     de la lecture (`motifs_refus_remise`) — une liste lue est toujours juste
+     pour le régime que la base avait alors, et ce que le TÉLÉPHONE sait du
+     régime (pas encore lu, en lecture, en échec) ne la rend jamais fausse.
+     Le régime de la base ne change que par « Mon entreprise », dont la
+     fermeture relit tout. Un changement de la propriété `regime` ne relit
+     donc rien et n'efface rien.
      `lectureListe` numérote les lectures : seule la DERNIÈRE partie
      s'affiche. `monte` : une réponse qui arrive après le démontage ne
      touche à rien. */
   const [liste, setListe] = useState({
-    motifs: null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE, regime: undefined, derniere: null,
+    motifs: null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE,
   });
-  /* LE DERNIER RÉGIME CONNU DE L'ÉCRAN — une RÉFÉRENCE : `lireLaListe` est
-     aussi appelée par la file, avec la version de l'ouverture ; elle relève
-     le régime au départ de chaque lecture (REL-2). Normalisé
-     (`regimePourLaListe`) : `REGIME_INCONNU` tant qu'aucun régime n'est
-     connu, puis le dernier CONNU — une lecture du régime en cours ou ratée
-     ne le change pas (relecture 3 de 2b-1, RELIRE-1). Tenue à jour par
-     l'effet du régime, plus bas. */
-  const regimeRef = useRef(regimePourLaListe(regime));
   const lectureListe = useRef(0);
   const monte = useRef(true);
   useEffect(() => () => { monte.current = false; }, []);
@@ -763,9 +748,9 @@ export default function SaisieDevisScreen({
      entreprise » refermée : la partie « Votre entreprise » se relit).
      Les causes S'AJOUTENT tant qu'aucune liste n'est revenue : une lecture
      en remplace une autre, pas ce que l'autre devait relire. Une cause, ou
-     une liste de causes (`causesAuRetourDeLEntreprise` : les deux, quand le
-     régime de TVA a changé — REL-2). « Réessayer » passe l'événement de
-     l'appui, jamais l'une de ces deux chaînes. */
+     une liste de causes (les deux, au retour de « Mon entreprise »).
+     « Réessayer » passe l'événement de l'appui, jamais l'une de ces deux
+     chaînes. */
   const lireLaListe = (cause = null) => {
     const f = fileRef.current;
     if (!f || !f.devisEnBase()) return;
@@ -773,10 +758,6 @@ export default function SaisieDevisScreen({
     const n = lectureListe.current;
     const g = f.generation();
     const causes = Array.isArray(cause) ? cause : [cause];
-    /* Le régime pour lequel CETTE lecture lit — relevé au départ (REL-2).
-       Si c'était l'inconnu et qu'un régime connu est arrivé PENDANT la
-       lecture, la liste revient avec lui (`regimeAdopte`, RELIRE-1). */
-    const regimeLu = regimePourLaListe(regimeRef.current);
     setListe((l) => ({
       ...l,
       erreur: null,
@@ -798,17 +779,17 @@ export default function SaisieDevisScreen({
         }
         /* UN ÉCHEC EFFACE LA LISTE : celle d'avant date d'avant l'écriture
            qui a lancé cette lecture, elle n'est plus sûre. L'écran dit
-           « Liste non lue », jamais « rien ne manque ». Seul le GABARIT de
-           la ligne la garde (`derniere`, REL-1) : il ne se lit pas. */
+           « Liste non lue », jamais « rien ne manque ». La HAUTEUR de la
+           ligne, elle, ne dépend d'aucune liste (`GABARITS_DE_LA_LIGNE`,
+           devis.js) : rien n'est à garder pour elle. */
         const lues = !r.erreur && Array.isArray(r.motifs) ? r.motifs : null;
-        setListe((l) => (r.erreur
+        setListe(r.erreur
           ? {
-            motifs: null, erreur: r.erreur, enLecture: false, relecture: AUCUNE_RELECTURE, regime: undefined, derniere: l.derniere,
+            motifs: null, erreur: r.erreur, enLecture: false, relecture: AUCUNE_RELECTURE,
           }
           : {
             motifs: lues, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE,
-            regime: lues ? regimeAdopte(regimeLu, regimeRef.current) : undefined, derniere: lues || l.derniere,
-          }));
+          });
       });
   };
 
@@ -973,32 +954,6 @@ export default function SaisieDevisScreen({
     };
   }, [tentative]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* LE RÉGIME DE TVA REÇU (relecture 2 de 2b-1, REL-2 ; relecture 3,
-     RELIRE-1) — CE QU'IL FAIT SE DÉCIDE DANS `decisionDuRegime` (devis.js),
-     que `verifier-devis` fait tourner sur les scénarios de la
-     contre-vérification ; ici, on applique :
-       - un régime INCONNU (une lecture en cours ou ratée, `{ chargement }`,
-         `{ echec }`) ne fait RIEN : ni relecture, ni changement du dernier
-         régime connu (`regimeRef`). Avant, il comptait comme « non
-         déclaré » : un échec de lecture du régime relisait la liste deux
-         fois sans que rien ait changé, et l'effaçait sur un réseau coupé ;
-       - un régime connu NOUVEAU devient le dernier connu ; une liste sûre
-         lue sous l'inconnu l'ADOPTE sans relecture ; lue sous un AUTRE régime
-         connu, elle se relit avec les DEUX causes — le régime décide des
-         points du DEVIS (rang 3), et « Ce devis » se tait jusqu'au retour.
-     L'adoption passe par l'état le plus récent (`regimeAdopte` dans
-     `setListe`) : une lecture revenue entre-temps garde son régime.
-     Déclaré AVANT le retour de « Mon entreprise » : la référence est à jour
-     quand celui-ci relit. */
-  useEffect(() => {
-    const d = decisionDuRegime({
-      connu: regimeRef.current, regimeDeLaListe: liste.regime, listeSure: Array.isArray(liste.motifs), regime,
-    });
-    regimeRef.current = d.connu;
-    if (d.regimeDeLaListe !== liste.regime) setListe((l) => ({ ...l, regime: regimeAdopte(l.regime, d.connu) }));
-    if (d.causes.length > 0) lireLaListe(d.causes);
-  }, [regime]); // eslint-disable-line react-hooks/exhaustive-deps
-
   /* « MON ENTREPRISE » VIENT DE SE FERMER (lot 2b-1, critique E-1) : elle
      écrit par d'autres chemins que la file — la fiche, les assurances, les
      tarifs, la preuve VIES —, aucune écriture du devis ne relirait donc la
@@ -1010,18 +965,19 @@ export default function SaisieDevisScreen({
   useEffect(() => {
     if (retourEntrepriseVu.current === retourEntreprise) return;
     retourEntrepriseVu.current = retourEntreprise;
-    /* La partie « Votre entreprise » se relit : jusqu'au retour, la carte
-       ne la lit pas — elle date d'avant ce qu'on vient d'y écrire (ECR-1).
-       « Ce devis » reste juste, SAUF si les deux régimes sont CONNUS et ont
-       changé depuis la dernière liste sûre : il se relit aussi (REL-2,
-       `causesAuRetourDeLEntreprise`) ; et, par prudence, si la liste a été
-       lue sous un régime encore inconnu (le filet, RELIRE-1). Un régime
-       inconnu maintenant ne relit pas « Ce devis ». Sans liste sûre,
-       `undefined` : la seule cause « entreprise ». */
-    lireLaListe(causesAuRetourDeLEntreprise({
-      regimeDeLaListe: Array.isArray(liste.motifs) ? liste.regime : undefined,
-      regime,
-    }));
+    /* TOUJOURS LES DEUX CAUSES, une fois par retour (relecture 4 de 2b-1,
+       06/11/2026) : « Votre entreprise » date d'avant ce qu'on vient
+       peut-être d'y écrire, et « Ce devis » aussi — le régime de TVA, qui
+       s'écrit là, décide de ses points (relecture 2, REL-2). Jusqu'au retour
+       de la liste, la carte ne lit ni l'une ni l'autre (ECR-1 ; leur place
+       est gardée, REL-3), et la ligne dit « Mise à jour de la liste… » :
+       rien ne prouve qu'on y a changé quoi que ce soit (`phraseEnRoute`).
+       Avant, la saisie comparait le régime de la liste et celui de l'écran
+       pour ne relire « Ce devis » que s'il avait changé : cette comparaison
+       courait après des lectures du régime en cours ou ratées, et se
+       trompait dans deux courses (relecture 3, RELIRE3-2 et RELIRE3-3). La
+       base calcule la liste avec SON régime : il suffit de relire. */
+    lireLaListe(['devis', 'entreprise']);
   }, [retourEntreprise]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* LE CHAMP DE L'EN-TÊTE QUI PREND LE FOCUS — après le rendu qui a fermé
@@ -1744,9 +1700,6 @@ export default function SaisieDevisScreen({
      plus bas, une fois l'état de la liste connu. */
   const lue = useMemo(() => (Array.isArray(liste.motifs)
     ? lireMotifsDeRemise(liste.motifs, { sections: SECTION_DU_MOTIF }) : null), [liste.motifs]);
-  /* …et la dernière liste LUE, pour le seul gabarit de la ligne (REL-1). */
-  const derniereLue = useMemo(() => (Array.isArray(liste.derniere)
-    ? lireMotifsDeRemise(liste.derniere, { sections: SECTION_DU_MOTIF }) : null), [liste.derniere]);
 
   if (etat === 'impossible') {
     return <View style={s.centre}><Text style={s.texteCentre}>{IDENTIFIANT_IMPOSSIBLE}</Text></View>;
@@ -1839,7 +1792,6 @@ export default function SaisieDevisScreen({
       enLecture={liste.enLecture}
       pasCompte={pasCompte}
       relecture={liste.relecture}
-      derniere={derniereLue}
       erreurReessayable={listeReessayable}
       erreurPhrase={erreurListe}
       onOuvrir={ouvrirPourRemettre}

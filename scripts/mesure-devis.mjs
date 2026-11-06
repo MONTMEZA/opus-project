@@ -188,6 +188,7 @@ import { fabriquerDevisDemo, fabriquerPostesDemo, DEVIS_DEMO_IDS } from '../src/
 import {
   totauxDevis, sousTotaux, totalLigne, validerLigne, trierLignes, UNITES, cleDeLigne,
   MENTION_FRANCHISE, PHRASE_RETENUE, DELAI_PAR_DEFAUT, avertissementDelai, coherenceRegime, tauxLisible,
+  GABARITS_DE_LA_LIGNE, CHIFFRE_LE_PLUS_LARGE,
 } from '../src/lib/devis.js';
 import { cleDeRapprochement } from '../src/lib/rapprochement.js';
 import {
@@ -246,6 +247,15 @@ const net = (t) => String(t || '').replace(/[  ]/g, ' ');
 const PAS_COMPTE_1 = '1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste.';
 /* …et pendant que des changements partent (annexe B.8). */
 const EN_ROUTE_LIGNE = 'Des changements partent : la liste sera à jour juste après.';
+/* …et pendant la relecture qui suit la fermeture de « Mon entreprise »
+   (relecture 4, 06/11/2026 : la ligne ne dit plus que cela, que quelque
+   chose ait changé ou non). */
+const MISE_A_JOUR_LIGNE = 'Mise à jour de la liste…';
+/* Le nombre de gabarits de la ligne tant que quelque chose n'est pas compté
+   sur un devis en base (`GABARITS_DE_LA_LIGNE`, relecture 4) : trois
+   phrases × quatre décomptes, plus trois phrases d'état. Écrit en toutes
+   lettres ici, comparé à la liste du code par le balayage. */
+const NB_GABARITS = 15;
 const euros = (c) => (c == null ? '—' : net(centimesLisibles(c)));
 
 /* ======================================================================== */
@@ -347,10 +357,13 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
   window.__opusModule = (chemin) => {
     const ms = window.__r && window.__r.getModules ? window.__r.getModules() : null;
     if (!ms) return null;
-    for (const [, m] of (ms instanceof Map ? ms.entries() : Object.entries(ms))) {
-      if (m && m.isInitialized && m.verboseName === chemin) return m.publicModule.exports;
-    }
-    return null;
+    const tous = [...(ms instanceof Map ? ms.entries() : Object.entries(ms))].map(([, m]) => m);
+    const exact = tous.find((m) => m && m.isInitialized && m.verboseName === chemin);
+    if (exact) return exact.publicModule.exports;
+    /* Une COPIE du dépôt dont `node_modules` est un lien : Metro nomme ces
+       modules par leur chemin réel (`../opus-project/node_modules/…`). */
+    const suffixe = tous.filter((m) => m && m.isInitialized && typeof m.verboseName === 'string' && m.verboseName.endsWith(`/${chemin}`));
+    return suffixe.length === 1 ? suffixe[0].publicModule.exports : null;
   };
   /* CHAQUE PERTE DE FOCUS, ET SA CAUSE : un `blur()` venu du
      `dismissKeyboard` de react-native-web (la fin d'un défilement) n'est
@@ -1296,16 +1309,19 @@ await section('Un prix à 0 sans « Offert »', async () => {
     .getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '').includes(PAS_COMPTE_1), 4000);
   verifier('…et la ligne « Pour le remettre » le dit : « 1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste. »', !!pasCompteLu);
   /* D-A (décision du 05/11, relecture de 2b-1, ECR-4) : dans cet état, la
-     ligne du haut dit la phrase ET le décompte de la dernière liste sûre,
-     sur TROIS lignes réservées — au lieu de deux —, seulement dans cet état.
-     Rien n'y est coupé. À 375 et 320 points, le décompte passe sur une
-     quatrième ligne : mesuré, et dit au propriétaire. */
+     ligne du haut dit la phrase ET le décompte de la dernière liste sûre —
+     sur TROIS lignes à 390, quatre à 375 et 320 —, seulement dans cet état.
+     Rien n'y est coupé. On mesure le texte LU, la couche que voit l'artisan :
+     depuis la relecture 4 (06/11), la place est celle du plus grand des
+     gabarits FIXES (D-A bis), dont le premier dit « aucun point » des deux
+     côtés et passe à quatre lignes à 390 — le prendre pour le texte lu
+     faisait compter quatre lignes là où l'écran en montre trois. */
   const ligneDA = page.locator('[aria-label^="Pour le remettre"]').first();
   const lDA = net((await ligneDA.getAttribute('aria-label')) || '');
   verifier('…et son étiquette parlée garde le décompte de la dernière liste sûre (« Dernière liste : ce devis — … · votre entreprise — … »)',
     /^Pour le remettre : 1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste\. Dernière liste : ce devis — (aucun point|\d+ points?) · votre entreprise — (aucun point|\d+ points?)\. Ouvrir la liste$/.test(lDA), lDA);
   const mesurerDA = () => ligneDA.evaluate((e) => {
-    const t = [...e.querySelectorAll('div')].filter((d) => d.children.length === 0 && d.innerText.length > 20)[0];
+    const t = [...e.querySelectorAll('div')].filter((d) => d.children.length === 0 && d.innerText.length > 20 && !d.closest('[aria-hidden="true"]'))[0];
     return {
       h: Math.round(e.getBoundingClientRect().height),
       lignes: t ? Math.round(t.scrollHeight / parseFloat(getComputedStyle(t).lineHeight)) : 0,
@@ -4271,21 +4287,23 @@ await section('La carte : le premier bouton de « Votre entreprise » ne bouge p
   await attendre(400);
 });
 
-/* REL-2 : LE RÉGIME DE TVA CHANGÉ DANS « MON ENTREPRISE » FAIT RELIRE LA
-   LISTE — dès l'enregistrement, « Mon entreprise » encore ouverte, puis à sa
-   fermeture —, et un enregistrement qui NE change PAS le régime ne relit
-   rien de plus que la fermeture. Ce que le navigateur ne montre pas : « Ce
-   devis » qui se tait pendant cette lecture — la lecture de démonstration
-   n'a aucune pause (`motifsRefusRemiseDemo`), elle revient avant la
-   première image. Ce transitoire n'est tenu que par `verifier-devis` ; ici,
-   on COMPTE les lectures (`__opusListe.lectures`), ce qui prouve le
-   branchement de la saisie, et on regarde la carte au retour. EXACTEMENT
-   une à chaque geste, et pas « au moins une » (banc de la relecture 2,
-   R5b) : une seconde lecture, c'est quelque chose d'AUTRE qui relit — un
-   second effet sur le retour, qui relisait « devis » à chaque retour et
-   faisait taire « Ce devis » sans que le régime ait changé, passait au
-   vert. */
-await section('Le régime changé dans « Mon entreprise » relit la liste, ouverte puis fermée (relecture 2, REL-2)', async () => {
+/* REL-2, SIMPLIFIÉ (relecture 4 de 2b-1, 06/11/2026) : LE RETOUR DE « MON
+   ENTREPRISE » RELIT LA LISTE, UNE FOIS, AVEC SES DEUX CAUSES — que le
+   régime de TVA ait changé ou non. La liste est calculée par la BASE, avec
+   le régime qu'elle a au moment de la lecture, et le régime ne s'écrit que
+   dans « Mon entreprise » : sa fermeture suffit. Avant (relecture 2), un
+   enregistrement qui changeait le régime relisait aussi la liste « Mon
+   entreprise » encore ouverte, par un effet qui suivait le régime reçu — la
+   machinerie de la relecture 3 (régime de la liste, adoption, inconnu) en
+   est née, et elle se trompait dans deux courses. Ici, on COMPTE les
+   lectures (`__opusListe.lectures`), ce qui prouve le branchement de la
+   saisie : RIEN tant que « Mon entreprise » est ouverte, régime changé ou
+   non, et EXACTEMENT une lecture à sa fermeture (une seconde, c'est
+   quelque chose d'AUTRE qui relit — banc de la relecture 2, R5b). Ce que
+   le navigateur ne montre pas ici : « Ce devis » et « Votre entreprise »
+   qui se taisent pendant cette lecture — la lecture de démonstration n'a
+   aucune pause ; la section D-A bis la RETIENT et les regarde. */
+await section('« Mon entreprise » refermée relit la liste UNE fois, régime changé ou non ; rien tant qu’elle est ouverte (relecture 4, REL-2)', async () => {
   const tailleAvant = page.viewportSize();
   await page.setViewportSize({ width: 390, height: 844 });
   await attendre(400);
@@ -4313,7 +4331,7 @@ await section('Le régime changé dans « Mon entreprise » relit la liste, ouve
     await toucher(parLibelle('Fermer « Mon entreprise »'));
     await attendre(1200);
   };
-  /* 1. Même régime (réel → réel) : enregistrer ne relit rien ; fermer relit. */
+  /* 1. Même régime (réel → réel) : enregistrer ne relit rien ; fermer relit, une fois. */
   await ouvrirParLaCarte();
   let l0 = await lectures();
   await toucher(page.getByRole('radio', { name: /^Régime réel/ }).first());
@@ -4322,7 +4340,7 @@ await section('Le régime changé dans « Mon entreprise » relit la liste, ouve
   l0 = await lectures();
   await fermer();
   const memeFermee = (await lectures()) - l0;
-  /* 2. Régime changé (réel → franchise) : enregistrer relit, fermer relit. */
+  /* 2. Régime changé (réel → franchise) : enregistrer ne relit rien non plus ; fermer relit, une fois. */
   await toucher(parLibelle('Revenir au devis')).catch(() => {});
   await attendre(400);
   await ouvrirParLaCarte();
@@ -4338,8 +4356,8 @@ await section('Le régime changé dans « Mon entreprise » relit la liste, ouve
     + `régime changé (réel → franchise) : ${changeOuverte} puis ${changeFermee}`);
   verifier(`un enregistrement qui ne change PAS le régime ne relit pas la liste tant que « Mon entreprise » est ouverte (${memeOuverte}), `
     + `sa fermeture la relit UNE fois (${memeFermee})`, memeOuverte === 0 && memeFermee === 1);
-  verifier(`le régime CHANGÉ relit la liste UNE fois dès l’enregistrement, « Mon entreprise » encore ouverte (${changeOuverte}), et sa `
-    + `fermeture la relit UNE fois encore (${changeFermee})`, changeOuverte === 1 && changeFermee === 1);
+  verifier(`le régime CHANGÉ (réel → franchise) ne relit RIEN non plus tant que « Mon entreprise » est ouverte (${changeOuverte}) — rien `
+    + `n’écoute plus le régime (relecture 4) —, et sa fermeture relit la liste UNE fois (${changeFermee})`, changeOuverte === 0 && changeFermee === 1);
   await capture('62-rel2-carte-franchise');
   noter('la carte au retour, en franchise', carteFranchise.slice(carteFranchise.indexOf(TITRE_LISTE), carteFranchise.indexOf(TITRE_LISTE) + 300));
   /* Le ménage : retour au réel, par le bandeau du régime. */
@@ -4355,8 +4373,11 @@ await section('Le régime changé dans « Mon entreprise » relit la liste, ouve
   await toucher(page.getByRole('radio', { name: /^Régime réel/ }).first());
   await enregistrer();
   const retourReel = (await lectures()) - l0;
+  l0 = await lectures();
   await fermer();
-  verifier(`…et le retour au réel relit aussi, UNE fois, « Mon entreprise » encore ouverte (${retourReel})`, retourReel === 1);
+  const retourReelFerme = (await lectures()) - l0;
+  verifier(`…et le retour au réel ne relit rien « Mon entreprise » encore ouverte (${retourReel}), puis UNE fois à sa fermeture (${retourReelFerme})`,
+    retourReel === 0 && retourReelFerme === 1);
   await ecouterLaListe(false);
   await toucher(parLibelle('Revenir en arrière'));
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
@@ -4404,11 +4425,10 @@ const regimeDeLaSaisie = () => page.evaluate(() => {
   while (f) { if (f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps) return JSON.stringify(f.memoizedProps.regime); f = f.return; }
   return '?';
 });
-/* LA LISTE DE LA SAISIE, lue par la même fibre : le régime pour lequel la
-   liste sûre a été lue (`liste.regime`), et si elle est sûre (banc de la
-   relecture 3 : sans elle, la section « LÈVE » ne savait pas sous quel régime
-   la liste avait été lue — et elle l'était sous le « réel » gardé en
-   mémoire, pas sous l'inconnu qu'elle annonçait). */
+/* LA LISTE DE LA SAISIE, lue par la même fibre : si elle est SÛRE (une liste
+   lue, pas un échec ni une lecture en cours), et si elle porte encore un
+   régime — elle ne le doit plus (relecture 4, 06/11/2026 : la base calcule
+   la liste avec le sien, et la saisie ne le retient plus à côté). */
 const listeDeLaSaisie = () => page.evaluate(() => {
   const el = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
   if (!el) return null;
@@ -4417,22 +4437,37 @@ const listeDeLaSaisie = () => page.evaluate(() => {
   while (f && !(f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps)) f = f.return;
   for (let h = f && f.memoizedState; h; h = h.next) {
     const v = h.memoizedState;
-    if (v && typeof v === 'object' && 'motifs' in v && 'derniere' in v && 'relecture' in v) {
-      return { regime: v.regime === undefined ? 'undefined' : JSON.stringify(v.regime), sure: Array.isArray(v.motifs) };
+    if (v && typeof v === 'object' && 'motifs' in v && 'relecture' in v && 'enLecture' in v) {
+      return { sure: Array.isArray(v.motifs), regimeDansLaListe: 'regime' in v || 'derniere' in v };
     }
   }
   return null;
 });
-/* Un enregistreur, à chaque image : l'étiquette de la ligne du haut, et la
-   hauteur des deux lignes (haut, bas). */
+/* Un enregistreur, à chaque image : l'étiquette de la ligne du haut, la
+   hauteur des deux lignes (haut, bas) — et le texte que la ligne du haut
+   MONTRE (banc de la relecture 4, N9 et N10b) : les textes de la ligne qui
+   ne sont pas sous un `aria-hidden` (les gabarits le sont), son titre
+   « Pour le remettre » retiré. Sans lui, la mesure ne lisait que
+   l'étiquette parlée : une ligne qui montrait la phrase SANS le décompte
+   (D-A), ou « Des changements partent » pendant que VoiceOver disait « Mise
+   à jour de la liste… », passait au vert. */
 const enregistrerLesLignes = () => page.evaluate(() => {
   window.__opusLignes = [];
   window.__opusLignesFin = false;
   let prec = '';
+  const montre = (l) => {
+    const cache = l.querySelector('[aria-hidden="true"]');
+    if (cache) {
+      const lu = [...cache.parentElement.children].find((e) => e.getAttribute('aria-hidden') !== 'true');
+      return lu ? (lu.querySelector('[dir]') || lu).textContent : null;
+    }
+    const textes = [...l.querySelectorAll('[dir]')];
+    return textes.length > 1 ? textes[textes.length - 1].textContent : null;
+  };
   const pas = () => {
     const ls = [...document.querySelectorAll('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]')];
     const v = [ls[0] ? (ls[0].getAttribute('aria-label') || '') : '', ls[0] ? Math.round(ls[0].getBoundingClientRect().height) : -1,
-      ls.length > 1 ? Math.round(ls[ls.length - 1].getBoundingClientRect().height) : -1];
+      ls.length > 1 ? Math.round(ls[ls.length - 1].getBoundingClientRect().height) : -1, ls[0] ? montre(ls[0]) : null];
     const k = JSON.stringify(v);
     if (k !== prec) { window.__opusLignes.push(v); prec = k; }
     if (!window.__opusLignesFin) requestAnimationFrame(pas);
@@ -4440,6 +4475,41 @@ const enregistrerLesLignes = () => page.evaluate(() => {
   requestAnimationFrame(pas);
 });
 const lireLesLignes = () => page.evaluate(() => { window.__opusLignesFin = true; return window.__opusLignes; });
+/* CE QUE LA LIGNE DIT, recalculé depuis ce qu'elle MONTRE (banc de la
+   relecture 4) — la règle de `texteDeLaLigneRemise` écrite une seconde fois,
+   EXPRÈS : la phrase, le décompte sous elle (« Dernière liste : »), puis
+   « Ouvrir la liste » quand la ligne est une cible ; une phrase qui finit par
+   « . » ou « … » n'en reçoit pas un second. Une image dont l'étiquette n'est
+   pas celle-là montre une chose et en dit une autre. */
+const finDePhrase = (t) => (/[.…]$/.test(t) ? ' ' : '. ');
+const etiquetteDuVisible = (v, cible) => {
+  const [contenu, ...reste] = String(v).split('\n');
+  const compte = reste.join(' ');
+  let dit = contenu;
+  if (compte) dit = `${dit}${finDePhrase(dit)}Dernière liste : ${compte}`;
+  return `Pour le remettre : ${cible ? `${dit}${finDePhrase(dit)}Ouvrir la liste` : dit}`;
+};
+const desaccordsDesImages = (vu) => vu.filter(([l, , , v]) => /^Pour le remettre : /.test(l) && v !== null && v !== undefined
+  && net(l) !== net(etiquetteDuVisible(v, /Ouvrir la liste$/.test(net(l))))).map(([l, , , v]) => `${JSON.stringify(v)} ≠ ${JSON.stringify(l)}`);
+/* LA CARTE RELEVÉE (banc de la relecture 4, N11) : le haut de « Ce devis »
+   (son titre, ou la phrase posée à sa place) DANS le contenu qui défile —
+   compté depuis le grand titre de la carte, pour ne pas mesurer le
+   défilement —, et combien de phrases d'état « en route » la carte écrit
+   en tête (la ligne de la saisie, dessous, n'est pas comptée). */
+const releveDeLaCarte = () => page.evaluate(() => {
+  let carte = document.querySelector('[aria-label="Revenir au devis"]');
+  while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
+  if (!carte) return null;
+  const lisible = (e) => { let x = e; while (x) { if (getComputedStyle(x).opacity === '0' || x.getAttribute('aria-hidden') === 'true') return false; x = x.parentElement; } return true; };
+  const feuilles = [...carte.querySelectorAll('*')].filter((d) => d.children.length === 0 && (d.innerText || '').trim()).filter(lisible);
+  const haut = (re) => { const f = feuilles.find((d) => re.test(d.innerText)); return f ? f.getBoundingClientRect().top : null; };
+  const titre = haut(/^Ce qu’il manque pour remettre ce devis$/);
+  const ceDevis = haut(/^Ce devis — |^Ce devis : la liste se met à jour\.$/);
+  return {
+    ceDevis: titre !== null && ceDevis !== null ? Math.round(ceDevis - titre) : null,
+    enTete: feuilles.filter((d) => /^(Des changements partent|Mise à jour de la liste…)/.test(d.innerText)).length,
+  };
+});
 const BANDEAU_REGIME = 'Votre régime de TVA n’a pas pu être lu.';
 /* CE QUI SE VOIT DANS LES COUCHES DE LA LIGNE (banc de la relecture 3) : les
    hauteurs ne disent ni qu'un gabarit est VISIBLE (« mise à jour… » qui
@@ -4472,14 +4542,26 @@ const regarderLesCouches = () => page.evaluate(() => {
   });
 });
 
-/* RELIRE-1 : UN RÉGIME INCONNU N'EST JAMAIS « NON DÉCLARÉ » ET NE RELIT
-   RIEN. `lireRegime` passe le régime à `{ echec: true }` au bout de 8 s,
-   même en lecture discrète, et le remet à « réel » si la réponse arrive
-   ensuite. Avant : l'inconnu comptait comme `null`, la liste se relisait
-   DEUX fois sans que rien ait changé (« Des changements partent », « Ce
-   devis » qui se tait), et sur un réseau coupé la liste juste était
-   EFFACÉE. Le setter de `monRegime` est appelé comme `lireRegime`. */
-await section('Une lecture du régime qui échoue puis revient (réel → échec → réel) ne relit pas la liste (relecture 3, RELIRE-1)', async () => {
+/* UN CHANGEMENT DU RÉGIME DE TVA REÇU NE RELIT RIEN ET N'EFFACE RIEN
+   (relecture 4 de 2b-1, 06/11/2026, la décision « simplifier »). La liste est
+   calculée par la BASE, avec le régime que la base a au moment de la
+   lecture : ce que le téléphone sait du régime (pas encore lu, en lecture,
+   en échec) ne la rend jamais fausse. Rien n'écoute donc plus le régime ;
+   c'est le retour de « Mon entreprise », seul endroit où il s'écrit, qui
+   relit (section REL-2 et D-A bis). Avant (relecture 3, RELIRE-1), un échec
+   de lecture du régime relisait la liste deux fois sans que rien ait changé,
+   et l'effaçait sur un réseau coupé ; la correction d'alors suivait le
+   régime de la liste, et se trompait dans deux courses. Le setter de
+   `monRegime` d'OpusApp est appelé exactement comme `lireRegime` le fait :
+     1. réel → échec → réel, chargement → réel, non déclaré → franchise →
+        réel : AUCUNE lecture, la liste reste, et la ligne ne dit jamais « Des
+        changements partent » ni « Mise à jour de la liste… » ;
+     2. la même suite, réseau coupé : la liste n'est ni relue ni EFFACÉE ;
+     3. le vrai chemin : la lecture du régime LÈVE à l'ouverture d'un devis,
+        la liste part pendant ce temps et reste RETENUE, « Réessayer » sur le
+        bandeau du régime ramène « réel » pendant qu'elle est en vol, puis
+        elle revient : UNE lecture en tout, et la liste est sûre. */
+await section('Un régime de TVA reçu — échec, lecture, non déclaré, franchise — ne relit rien et n’efface rien (relecture 4)', async () => {
   const tailleAvant = page.viewportSize();
   await page.setViewportSize({ width: 390, height: 844 });
   await attendre(400);
@@ -4489,130 +4571,64 @@ await section('Une lecture du régime qui échoue puis revient (réel → échec
   exiger((await regimeDeLaSaisie()) === '"reel"', 'la saisie a le régime « réel »');
   exiger((await trouverLeSetterDuRegime()) === 1, 'le setter du régime d’OpusApp est trouvé par la fibre, et lui seul');
   await ecouterLaListe(true);
+  const suite = async () => {
+    const vus = [];
+    for (const v of [{ echec: true }, 'reel', { chargement: true }, 'reel', null, 'franchise', 'reel']) {
+      await poserRegime(v);
+      await attendre(700);
+      vus.push([JSON.stringify(v), await regimeDeLaSaisie(), await libelleLigne()]);
+    }
+    return vus;
+  };
   await enregistrerLesLignes();
   const l0 = await lectures();
-  await poserRegime({ echec: true });
-  await jusqua(async () => (await texte()).includes(BANDEAU_REGIME), 3000);
-  const echecVu = (await texte()).includes(BANDEAU_REGIME);
-  await attendre(1200);
-  const l1 = await lectures();
-  await poserRegime('reel');
-  await attendre(1500);
-  const l2 = await lectures();
-  const vu = await lireLesLignes();
-  const enRoute = vu.filter(([l]) => /Des changements partent/.test(l));
-  noter('lectures de la liste', `réel → échec : ${l1 - l0} ; échec → réel : ${l2 - l1} ; images de la ligne : ${vu.length}`);
-  verifier('réel → échec (le bandeau « Votre régime de TVA n’a pas pu être lu » a bien été vu) → réel : AUCUNE lecture de la liste, et la '
-    + 'ligne ne dit jamais « Des changements partent » (S1 de la contre-vérification)',
-  echecVu && l1 - l0 === 0 && l2 - l1 === 0 && enRoute.length === 0 && vu.every(([l]) => COMPTE.test(net(l))),
-  `échec vu : ${echecVu} ; lectures ${l1 - l0} puis ${l2 - l1} ; images « en route » : ${enRoute.length} ; ${JSON.stringify(vu.map(([l]) => net(l).slice(18, 70)))}`);
-  /* …ET SUR UN RÉSEAU COUPÉ (B2 de la relecture 3) : la liste juste n'est
-     pas effacée — rien ne la relit. */
-  await page.evaluate(() => { window.__opusListe.casser = 'reseau'; });
-  const l3 = await lectures();
-  await poserRegime({ echec: true });
-  await attendre(1200);
-  const pendant = await libelleLigne();
-  await poserRegime('reel');
-  await attendre(1200);
-  const apres = await libelleLigne();
-  const l4 = await lectures();
-  verifier(`réseau coupé, réel → échec → réel : la liste « Pour le remettre » n’est ni relue ni EFFACÉE (« ${pendant.slice(0, 80)}… »)`,
-    COMPTE.test(pendant) && COMPTE.test(apres) && l4 - l3 === 0, `${pendant} | ${apres} | lectures ${l4 - l3}`);
-  await page.evaluate(() => { window.__opusListe.casser = null; });
-  await ecouterLaListe(false);
-  await capture('63-relire1-setter');
-  await toucher(parLibelle('Revenir en arrière'));
-  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
-  await page.setViewportSize(tailleAvant);
-  await attendre(400);
-});
-
-/* RELIRE-1, LE VRAI CHEMIN (N3 de la contre-vérification) : la lecture
-   DÉMO du régime lève à l'ouverture d'un devis (comme un `fetch` hors
-   réseau : `ouvrirDevis` → `lireRegime` → `avecDelai` rejette → `{ echec:
-   true }`), la liste est lue pendant ce temps, puis « Réessayer » sur le
-   bandeau du régime (`{ chargement: true }` → « réel ») : rien n'a changé
-   en base, la liste ne se relit pas. Avant : une lecture de plus. */
-await section('La lecture du régime qui LÈVE à l’ouverture d’un devis, puis « Réessayer » : la liste ne se relit pas (relecture 3, RELIRE-1)', async () => {
-  const tailleAvant = page.viewportSize();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await attendre(400);
-  /* LA LECTURE CASSÉE AVANT « MES DEVIS » (banc de la relecture 3) : posée
-     après, le régime « réel » déjà lu restait en mémoire, la relecture de
-     l'ouverture était DISCRÈTE (il ne passait à l'échec qu'après), et la
-     liste était lue sous le « réel » — la section ne mesurait pas ce que son
-     titre annonce. Cassée avant, la lecture de « Mes devis » échoue : le
-     régime n'est plus une chaîne, l'ouverture le relit en entier
-     (`{ chargement }`), et la liste est VRAIMENT lue sous l'inconnu. Avec
-     les défauts remis à la main — l'adoption retirée (O4), `regimeAdopte`
-     qui n'adopte plus (M6), l'effet qui n'applique plus l'adoption (M10) —,
-     cette section passait au vert. */
-  await page.evaluate(() => { window.__opusRegime.casses = 0; window.__opusRegime.casser = true; });
-  await allerAMesDevis();
-  await ecouterLaListe(true);
-  const l0 = await lectures();
-  await ouvrirLeDevis('Muret de clôture');
-  await jusqua(async () => COMPTE.test(await libelleLigne()) && (await texte()).includes(BANDEAU_REGIME), 8000);
+  const vus = await suite();
   await attendre(800);
   const l1 = await lectures();
-  const casses = await page.evaluate(() => window.__opusRegime.casses);
-  await page.evaluate(() => { window.__opusRegime.casser = false; });
-  noter('à l’ouverture', `lectures du régime cassées : ${casses} ; liste lue ${l1 - l0} fois ; régime vu par la saisie : ${await regimeDeLaSaisie()}`);
-  const listeAvant = await listeDeLaSaisie();
-  noter('la liste à l’ouverture', JSON.stringify(listeAvant));
-  exiger(casses >= 1 && (await texte()).includes(BANDEAU_REGIME) && l1 - l0 === 1,
-    'la lecture du régime a levé, le bandeau « régime non lu » est là, et la liste a été lue UNE fois');
-  exiger(!!listeAvant && listeAvant.sure && listeAvant.regime === '"inconnu"',
-    `la liste sûre a été lue sous le régime INCONNU (\`REGIME_INCONNU\`), pas sous un régime gardé en mémoire (${JSON.stringify(listeAvant)})`);
-  await capture('64-relire1-regime-leve');
-  await enregistrerLesLignes();
-  await toucher(page.getByRole('button', { name: 'Réessayer', exact: true }).first());
-  await jusqua(async () => !(await texte()).includes(BANDEAU_REGIME), 5000);
-  await attendre(1500);
-  const l2 = await lectures();
-  const vu = await lireLesLignes();
-  const regimeApres = await regimeDeLaSaisie();
+  const images = await lireLesLignes();
+  const parlantes = images.filter(([l]) => /Des changements partent|Mise à jour de la liste…/.test(l));
   const listeApres = await listeDeLaSaisie();
-  noter('après « Réessayer »', `régime ${regimeApres} ; liste ${JSON.stringify(listeApres)} ; lectures de plus : ${l2 - l1} ; images de la ligne : ${JSON.stringify(vu.map(([l]) => net(l).slice(18, 70)))}`);
-  verifier('« Réessayer » le régime (échec → lecture → réel) ne relit PAS une liste lue pendant l’échec : rien n’a changé en base (S2 / '
-    + 'N3), la ligne ne dit jamais « Des changements partent », et la liste ADOPTE le régime arrivé (« réel »), sans relecture',
-  regimeApres === '"reel"' && !(await texte()).includes(BANDEAU_REGIME) && l2 - l1 === 0
-    && vu.every(([l]) => !/Des changements partent/.test(l)) && !!listeApres && listeApres.sure && listeApres.regime === '"reel"',
-  `${l2 - l1} lecture(s) de plus ; régime ${regimeApres} ; liste ${JSON.stringify(listeApres)}`);
+  noter('les régimes reçus, vus par la saisie', JSON.stringify(vus.map(([v, r]) => [v, r])));
+  noter('lectures de la liste', `${l1 - l0} ; images de la ligne : ${images.length}`);
+  verifier('réel → échec → réel → lecture → réel → non déclaré → franchise → réel, par le setter d’OpusApp (chaque régime a bien été reçu '
+    + 'par la saisie) : AUCUNE lecture de la liste, la liste reste sûre — et ne porte aucun régime —, et la ligne garde son compte à chaque '
+    + 'image — jamais « Des changements partent », jamais « Mise à jour de la liste… »',
+  l1 - l0 === 0 && parlantes.length === 0 && images.length >= 1 && images.every(([l]) => COMPTE.test(net(l)))
+    && vus.every(([v, r]) => r === v) && !!listeApres && listeApres.sure && listeApres.regimeDansLaListe === false,
+  `${l1 - l0} lecture(s) ; ${JSON.stringify(parlantes.slice(0, 3))} ; ${JSON.stringify(vus.filter(([v, r]) => r !== v))} ; ${JSON.stringify(listeApres)}`);
+  /* 2. réseau coupé : rien ne relit, donc rien n'efface. */
+  await page.evaluate(() => { window.__opusListe.casser = 'reseau'; });
+  const l2 = await lectures();
+  const vusCoupe = await suite();
+  await attendre(800);
+  const l3 = await lectures();
+  await page.evaluate(() => { window.__opusListe.casser = null; });
+  verifier('…la même suite, RÉSEAU COUPÉ : la liste « Pour le remettre » n’est ni relue ni EFFACÉE (la ligne garde son compte à chaque régime)',
+    l3 - l2 === 0 && vusCoupe.every(([, , l]) => COMPTE.test(l)), `${l3 - l2} lecture(s) ; ${JSON.stringify(vusCoupe.map(([v, , l]) => [v, l.slice(0, 60)]))}`);
   await ecouterLaListe(false);
+  await capture('63-regime-ne-relit-rien');
   await toucher(parLibelle('Revenir en arrière'));
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
-  await page.setViewportSize(tailleAvant);
-  await attendre(400);
-});
-
-/* RELIRE-1, LE RÉGIME QUI ARRIVE PENDANT LA LECTURE (banc de la relecture
-   3 ; point 3 de la correction retenue) : la liste part sous l'inconnu, le
-   vrai régime arrive AVANT qu'elle revienne — il n'y a pas encore de liste
-   sûre, l'effet du régime ne peut rien adopter —, et c'est le RETOUR de la
-   lecture qui doit prendre le régime connu (`regimeAdopte(regimeLu,
-   regimeRef.current)`). Sans cette moitié, la liste restait « inconnue » et
-   le filet la relisait au prochain retour de « Mon entreprise ». La lecture
-   de démonstration est RETENUE (`__opusListe.retenir`) le temps de poser le
-   régime. */
-await section('Le régime qui arrive PENDANT la lecture de la liste : elle revient avec lui, sans relecture (relecture 3, RELIRE-1)', async () => {
-  const tailleAvant = page.viewportSize();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await attendre(400);
+  /* 3. le vrai chemin : la lecture du régime LÈVE à l'ouverture (cassée AVANT
+     « Mes devis » : sans cela, le « réel » déjà lu restait en mémoire — le
+     banc de la relecture 3), la liste est RETENUE, « Réessayer » ramène le
+     régime pendant qu'elle est en vol, puis on la relâche. */
   await page.evaluate(() => { window.__opusRegime.casses = 0; window.__opusRegime.casser = true; });
   await allerAMesDevis();
   await ecouterLaListe(true);
   await page.evaluate(() => { window.__opusListe.retenir = true; window.__opusListe.retenues = []; });
-  const l0 = await lectures();
+  const l4 = await lectures();
   await ouvrirLeDevis('Muret de clôture');
   await jusqua(async () => (await texte()).includes(BANDEAU_REGIME)
     && (await page.evaluate(() => window.__opusListe.retenues.length)) >= 1, 8000);
   const retenues = await page.evaluate(() => window.__opusListe.retenues.length);
+  const casses = await page.evaluate(() => window.__opusRegime.casses);
   const listeEnVol = await listeDeLaSaisie();
   await page.evaluate(() => { window.__opusRegime.casser = false; });
-  exiger(retenues >= 1 && !!listeEnVol && !listeEnVol.sure && (await texte()).includes(BANDEAU_REGIME),
-    `la lecture du régime a levé, la lecture de la liste est partie et RETENUE, sans liste sûre (${JSON.stringify(listeEnVol)})`);
+  exiger(casses >= 1 && retenues >= 1 && !!listeEnVol && !listeEnVol.sure && (await texte()).includes(BANDEAU_REGIME),
+    `la lecture du régime a levé (${casses}), le bandeau « régime non lu » est là, la lecture de la liste est partie et RETENUE, sans liste sûre `
+    + `(${JSON.stringify(listeEnVol)})`);
+  await capture('64-regime-leve');
   await toucher(page.getByRole('button', { name: 'Réessayer', exact: true }).first());
   await jusqua(async () => !(await texte()).includes(BANDEAU_REGIME), 5000);
   await attendre(600);
@@ -4620,16 +4636,17 @@ await section('Le régime qui arrive PENDANT la lecture de la liste : elle revie
   await enregistrerLesLignes();
   await page.evaluate(() => { window.__opusListe.retenir = false; window.__opusListe.retenues.splice(0).forEach((f) => f()); });
   await jusqua(async () => COMPTE.test(await libelleLigne()), 5000);
-  await attendre(1200);
-  const l1 = await lectures();
+  await attendre(1500);
+  const l5 = await lectures();
   const vu = await lireLesLignes();
-  const listeApres = await listeDeLaSaisie();
+  const listeRevenue = await listeDeLaSaisie();
   await ecouterLaListe(false);
-  noter('le régime arrivé pendant la lecture', `régime ${regimePendant} ; liste au retour ${JSON.stringify(listeApres)} ; lectures ${l1 - l0}`);
-  verifier('le régime « réel » arrivé PENDANT une lecture partie sous l’inconnu : la liste revient AVEC lui (« reel »), lue UNE fois, sans '
-    + 'relecture, et la ligne ne dit jamais « Des changements partent »',
-  regimePendant === '"reel"' && !!listeApres && listeApres.sure && listeApres.regime === '"reel"' && l1 - l0 === 1
-    && vu.every(([l]) => !/Des changements partent/.test(l)), `${JSON.stringify(listeApres)} ; ${l1 - l0} lecture(s)`);
+  noter('le régime revenu pendant la lecture', `régime ${regimePendant} ; liste ${JSON.stringify(listeRevenue)} ; lectures ${l5 - l4}`);
+  verifier('la lecture du régime qui LÈVE à l’ouverture, puis « Réessayer » (échec → lecture → réel) PENDANT que la liste est en vol : UNE '
+    + 'lecture de la liste en tout, elle revient sûre, et la ligne ne dit jamais « Des changements partent » — rien n’a changé en base',
+  regimePendant === '"reel"' && l5 - l4 === 1 && !!listeRevenue && listeRevenue.sure
+    && vu.every(([l]) => !/Des changements partent|Mise à jour de la liste…/.test(l)),
+  `${l5 - l4} lecture(s) ; ${JSON.stringify(listeRevenue)} ; ${JSON.stringify(vu.map(([l]) => net(l).slice(18, 70)))}`);
   await toucher(parLibelle('Revenir en arrière'));
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
   await page.setViewportSize(tailleAvant);
@@ -4638,25 +4655,27 @@ await section('Le régime qui arrive PENDANT la lecture de la liste : elle revie
 
 /* D-A BIS (décision du propriétaire, 06/11/2026, « garder la grande
    place ») : AU RETOUR DE « MON ENTREPRISE », UNE LIGNE INCOMPLÈTE, LA
-   LIGNE DU HAUT NE BOUGE PAS PENDANT LA RELECTURE — À AUCUNE LARGEUR. Le
-   décompte dit alors « votre entreprise — mise à jour… » : avec UN gabarit
-   qui le suivait, la ligne du haut grandissait d'une ligne (≈ 92 → 110)
-   de 381 à 407 points de large — l'iPhone 16 du propriétaire (393)
-   compris —, et la ligne du bas (88 → 104) de 329 à 352, le temps de la
-   relecture : 51 largeurs sur 121, mesuré sur le code d'avant. La lecture de démonstration est
-   RETENUE (`__opusListe.retenir`) le temps de mesurer : la vraie lecture,
-   partie par le vrai geste (fermer « Mon entreprise »).
+   LIGNE DU HAUT NE BOUGE PAS PENDANT LA RELECTURE — À AUCUNE LARGEUR. La
+   ligne dit alors « Mise à jour de la liste… », seule (relecture 4 : la
+   relecture qui suit « Mon entreprise » est un état « en route », avec ses
+   deux causes), et sa hauteur est celle du plus grand des gabarits FIXES
+   (`GABARITS_DE_LA_LIGNE`), qui ne dépendent ni de la liste lue, ni des
+   nombres, ni de la phrase. La lecture de démonstration est RETENUE
+   (`__opusListe.retenir`) le temps de mesurer : la vraie lecture, partie
+   par le vrai geste (fermer « Mon entreprise »).
      1. de 320 à 440 points, point par point, la hauteur des deux lignes SANS
         relecture ;
      2. la relecture partie (« Mon entreprise » refermée), un enregistreur à
-        chaque image à 393 ;
+        chaque image à 393 — UNE lecture, et la carte où « Ce devis » ET
+        « Votre entreprise » se taisent ;
      3. de 320 à 440, point par point, la même mesure PENDANT la relecture ;
      4. la relecture relâchée : rien n'a bougé à aucune image.
    Et la LARGEUR qu'a la ligne dans la saisie, sur un écran de 320 et de
-   393 : le banc du texte agrandi, plus bas, la reprend (une ligne n'a pas
-   la largeur de l'écran — les gouttières et son cadre en prennent). */
+   393 : le balayage et le banc du texte agrandi, plus bas, la reprennent
+   (une ligne n'a pas la largeur de l'écran — les gouttières et son cadre en
+   prennent). */
 const LARGEUR_DE_LA_LIGNE = {};
-await section('D-A bis : au retour de « Mon entreprise », une ligne incomplète — la ligne du haut ne bouge pas pendant la relecture, de 320 à 440 points (relecture 3)', async () => {
+await section('D-A bis : au retour de « Mon entreprise », une ligne incomplète — la ligne du haut ne bouge pas pendant la relecture, de 320 à 440 points (relectures 3 et 4)', async () => {
   const tailleAvant = page.viewportSize();
   await page.setViewportSize({ width: 393, height: 852 });
   await attendre(400);
@@ -4702,6 +4721,8 @@ await section('D-A bis : au retour de « Mon entreprise », une ligne incomplèt
      la lecture retenue. */
   await toucher(ligneHaut());
   await page.getByText(TITRE_LISTE, { exact: true }).first().waitFor({ timeout: 5000 });
+  await attendre(400);
+  const carteAvant = await releveDeLaCarte();
   await toucher(page.locator('[aria-label^="Compléter dans « Mon entreprise »"]').first());
   await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) > 0, 5000);
   await attendre(600);
@@ -4710,20 +4731,30 @@ await section('D-A bis : au retour de « Mon entreprise », une ligne incomplèt
   /* L'enregistreur à 393 : AVANT la fermeture, puis PENDANT la relecture —
      arrêté avant le balayage (qui change la largeur), repris après. */
   await enregistrerLesLignes();
+  const lRetour = await lectures();
   await toucher(parLibelle('Fermer « Mon entreprise »'));
-  const retenue = await jusqua(async () => /votre entreprise — mise à jour…/.test(await libelleLigne()), 4000);
+  const retenue = await jusqua(async () => (await libelleLigne()) === `Pour le remettre : ${MISE_A_JOUR_LIGNE} Ouvrir la liste`, 4000);
+  await attendre(400);
+  const carteRetenue = await texteLu();
+  const cartePendant = await releveDeLaCarte();
+  const lecturesRetour = (await lectures()) - lRetour;
+  const retenuesRetour = await page.evaluate(() => window.__opusListe.retenues.length);
   await toucher(parLibelle('Revenir au devis')).catch(() => {});
   await attendre(600);
   const vuAvant = await lireLesLignes();
-  exiger(!!retenue && (await page.evaluate(() => window.__opusListe.retenues.length)) >= 1,
-    'la relecture de « Mon entreprise » est partie et RETENUE : la ligne dit « votre entreprise — mise à jour… »');
+  exiger(!!retenue && retenuesRetour >= 1,
+    `la relecture de « Mon entreprise » est partie et RETENUE : la ligne dit « ${MISE_A_JOUR_LIGNE} », seule`);
+  verifier(`au retour de « Mon entreprise » : UNE lecture (${lecturesRetour}, ${retenuesRetour} retenue), et dans la carte « Ce devis » ET « Votre `
+    + 'entreprise » se taisent — « Ce devis : la liste se met à jour. », « Votre entreprise : la liste se met à jour. » (les deux causes)',
+  lecturesRetour === 1 && retenuesRetour === 1 && carteRetenue.includes('Ce devis : la liste se met à jour.')
+    && carteRetenue.includes('Votre entreprise : la liste se met à jour.'), carteRetenue.slice(0, 400));
   const pendant = await balayer();
   const couchesPendant = await regarderLesCouches();
   const libellePendant = await libelleLigne();
   await enregistrerLesLignes();
   await attendre(300);
   await page.evaluate(() => { window.__opusListe.retenir = false; window.__opusListe.retenues.splice(0).forEach((f) => f()); });
-  await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `) && !/mise à jour…/.test(await libelleLigne()), 4000);
+  await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `) && !(await libelleLigne()).includes(MISE_A_JOUR_LIGNE), 4000);
   await attendre(500);
   const vu = [...vuAvant, ...(await lireLesLignes())];
   await ecouterLaListe(false);
@@ -4731,7 +4762,7 @@ await section('D-A bis : au retour de « Mon entreprise », une ligne incomplèt
     .map((L) => `${L} : ${sans[L].join('/')} → ${pendant[L].join('/')}`);
   const hautsVus = [...new Set(vu.map(([, h]) => h))];
   const basVus = [...new Set(vu.map(([, , h]) => h))];
-  const relectureVue = vu.some(([l]) => /mise à jour…/.test(l));
+  const relectureVue = vu.some(([l]) => net(l).includes(MISE_A_JOUR_LIGNE));
   const plage = (i) => [...new Set(Object.values(sans).map((h) => h[i]))].sort((a, b) => a - b);
   noter('hauteur de la ligne du haut, sans relecture', `393 : ${sans[393][0]} points ; 440 : ${sans[440][0]} ; 320 : ${sans[320][0]} ; `
     + `valeurs prises de 320 à 440 : ${plage(0).join(', ')} (ligne du bas : ${plage(1).join(', ')})`);
@@ -4745,14 +4776,29 @@ await section('D-A bis : au retour de « Mon entreprise », une ligne incomplèt
     + `(${hautsVus.join(', ')}), celle du bas aussi (${basVus.join(', ')}) — et la relecture a bien été vue`,
   hautsVus.length === 1 && basVus.length === 1 && relectureVue && vu.length >= 2, JSON.stringify(vu.map(([l, h, b]) => [h, b, net(l).slice(18, 60)])));
   const fautesCouches = [...couchesSans.map((c, i) => ['sans', i, c]), ...couchesPendant.map((c, i) => ['pendant', i, c])]
-    .filter(([, , c]) => c.gabarits !== 2 || c.visibles !== 0 || c.luOpacite !== 1 || c.dehors === null || c.dehors > 1)
+    .filter(([, , c]) => c.gabarits !== NB_GABARITS || c.visibles !== 0 || c.luOpacite !== 1 || c.dehors === null || c.dehors > 1)
     .map(([q, i, c]) => `${q}/${i ? 'bas' : 'haut'} : ${JSON.stringify(c)}`);
-  verifier('à 393, sans puis pendant la relecture : dans les deux lignes, DEUX gabarits INVISIBLES (opacité réelle nulle) et le texte lu '
-    + 'VISIBLE, dans la boîte de la ligne (banc de la relecture 3)',
+  verifier(`à 393, sans puis pendant la relecture : dans les deux lignes, les ${NB_GABARITS} gabarits fixes INVISIBLES (opacité réelle nulle) et `
+    + 'le texte lu VISIBLE, dans la boîte de la ligne (banc de la relecture 3)',
   fautesCouches.length === 0 && couchesSans.length === 2 && couchesPendant.length === 2,
   `${fautesCouches.join(' | ')} ${JSON.stringify([couchesSans, couchesPendant])}`);
-  verifier(`la hauteur réservée (D-A bis) : ≈ 110 points à 393 (${sans[393][0]}), et la plus grande des deux formes à 440 (${sans[440][0]})`,
+  verifier(`la hauteur réservée (D-A bis) : ≈ 110 points à 393 (${sans[393][0]}), et jamais plus à 440 (${sans[440][0]})`,
     Math.abs(sans[393][0] - 110) <= 2 && sans[440][0] > 0 && sans[440][0] <= sans[393][0], `${sans[393][0]} / ${sans[440][0]}`);
+  /* LA CARTE NE BOUGE PAS, ET NE DIT RIEN EN TÊTE, pendant la relecture qui
+     suit « Mon entreprise » (banc de la relecture 4, N11) : une liste se
+     montre, ce sont les phrases posées À LA PLACE des parties qui le disent
+     (REL-3) — une phrase d'en-tête qui paraît puis disparaît fait descendre
+     puis remonter tout ce qui la suit. */
+  noter('la carte avant « Mon entreprise » / pendant la relecture', `${JSON.stringify(carteAvant)} / ${JSON.stringify(cartePendant)}`);
+  verifier(`la carte pendant la relecture qui suit « Mon entreprise » : aucune phrase « en route » en tête (${cartePendant && cartePendant.enTete}), `
+    + `et « Ce devis » (sa phrase, posée à la place de son titre) au MÊME endroit qu’avant (${carteAvant && carteAvant.ceDevis} → ${cartePendant && cartePendant.ceDevis})`,
+  !!carteAvant && !!cartePendant && carteAvant.enTete === 0 && cartePendant.enTete === 0 && carteAvant.ceDevis !== null
+    && cartePendant.ceDevis !== null && Math.abs(carteAvant.ceDevis - cartePendant.ceDevis) <= 1, JSON.stringify([carteAvant, cartePendant]));
+  const desaccords = desaccordsDesImages(vu);
+  verifier(`à chaque image, avant, pendant et après la relecture : ce que la ligne du haut MONTRE est ce qu’elle DIT — la phrase ET le décompte `
+    + `(D-A), puis « ${MISE_A_JOUR_LIGNE} » seule (${desaccords.length} désaccord(s))`,
+  desaccords.length === 0 && vu.some(([, , , v]) => v === MISE_A_JOUR_LIGNE) && vu.some(([, , , v]) => /\nce devis — /.test(v || '')),
+  desaccords.slice(0, 4).join(' | '));
   await capture('65-dabis-393');
   /* Le ménage : la ligne incomplète part, on revient à « Mes devis ». */
   await toucher(parLibelle('Ligne incomplète. La compléter'));
@@ -4763,6 +4809,332 @@ await section('D-A bis : au retour de « Mon entreprise », une ligne incomplèt
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
   await page.setViewportSize(tailleAvant);
   await attendre(400);
+});
+
+/* RELIRE3-1 (relecture 4 de 2b-1, 06/11/2026) : LA VRAIE TRANSITION, À 393.
+   Avant, les gabarits de la ligne se calculaient sur les NOMBRES de la liste
+   lue : à 393 (l'iPhone 16 du propriétaire), une ligne incomplète, le
+   dernier point du devis corrigé (« 1 point » → « aucun point ») faisait
+   passer la ligne du haut de 92 à 110 points — la décision D-A bis (« plus
+   rien ne bouge, jamais ») n'était tenue que pour « aucun point ». Ici, le
+   vrai geste : une ligne incomplète, le délai d'exécution VIDÉ (le devis
+   gagne son point « délai »), puis REMIS (il le perd), un enregistreur à
+   chaque image : la ligne du haut et celle du bas ne prennent qu'UNE
+   hauteur, et les deux décomptes, comme « Des changements partent », ont
+   bien été vus. */
+await section('À 393, une ligne incomplète : le dernier point du devis corrigé (« 1 point » → « aucun point ») ne fait pas bouger la ligne (relecture 4, RELIRE3-1)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await jusqua(async () => /^Pour le remettre : ce devis — aucun point · /.test(await libelleLigne()), 6000);
+  await toucher(page.getByRole('button', { name: 'Ajouter un poste chiffré', exact: true }).first());
+  await attendre(400);
+  await page.locator('[aria-label="Désignation de la ligne"]').last().fill('Chaperon T');
+  await fermerCarte();
+  exiger(!!(await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : ce devis — aucun point · `), 4000)),
+    'une ligne incomplète, « ce devis — aucun point » : la ligne du haut dit la phrase ET le décompte (D-A)');
+  const delai = parLibelle('Délai d’exécution');
+  await delai.scrollIntoViewIfNeeded();
+  await attendre(400);
+  const ancien = await delai.inputValue();
+  exiger(!!ancien, `le délai d’exécution du « Muret de clôture » est rempli (« ${ancien} »)`);
+  await enregistrerLesLignes();
+  /* LA LECTURE QUI SUIT L'ÉCRITURE, RETENUE (banc de la relecture 4, M12) :
+     la lecture de démonstration revient avant la première image, et ce temps-
+     là ne se peignait jamais — une ligne qui y disait « Mise à jour de la
+     liste… » (la phrase du retour de « Mon entreprise ») passait au vert. */
+  await page.evaluate(() => { window.__opusListe.retenir = true; window.__opusListe.retenues = []; });
+  await viderEtTaper(delai, '');
+  await delai.evaluate((e) => e.blur());
+  const relueRetenue = await jusqua(async () => (await page.evaluate(() => window.__opusListe.retenues.length)) >= 1, DELAI_ECRITURE + 3000);
+  await attendre(300);
+  const libelleRelecture = await libelleLigne();
+  await page.evaluate(() => { window.__opusListe.retenir = false; window.__opusListe.retenues.splice(0).forEach((f) => f()); });
+  const unPoint = await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : ce devis — 1 point · `), DELAI_ECRITURE + 3000);
+  await attendre(400);
+  await viderEtTaper(delai, ancien);
+  await delai.evaluate((e) => e.blur());
+  const aucun = await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : ce devis — aucun point · `), DELAI_ECRITURE + 3000);
+  await attendre(600);
+  const vu = await lireLesLignes();
+  const remis = (await delai.inputValue()) === ancien;
+  const hautsVus = [...new Set(vu.map(([, h]) => h))];
+  const basVus = [...new Set(vu.map(([, , b]) => b))];
+  const unVu = vu.some(([l]) => net(l).includes('Dernière liste : ce devis — 1 point · '));
+  const aucunVu = vu.some(([l]) => net(l).includes('Dernière liste : ce devis — aucun point · '));
+  const enRouteVu = vu.some(([l]) => net(l).includes(EN_ROUTE_LIGNE));
+  noter('à 393, le délai vidé puis remis', `ligne du haut ${JSON.stringify(hautsVus)}, du bas ${JSON.stringify(basVus)}, ${vu.length} image(s) : `
+    + JSON.stringify(vu.map(([l, h, b]) => [h, b, net(l).slice(18, 75)])));
+  verifier('à 393, une ligne incomplète, le délai VIDÉ (« ce devis — 1 point ») puis REMIS (« aucun point »), « Des changements partent » vu '
+    + `entre les deux : la ligne du haut garde UNE hauteur à chaque image (${hautsVus.join(', ')}), celle du bas aussi (${basVus.join(', ')}) — 0 écart`,
+  !!unPoint && !!aucun && remis && unVu && aucunVu && enRouteVu && hautsVus.length === 1 && basVus.length === 1 && basVus[0] > 0,
+  `1 point ${!!unPoint}/${unVu}, aucun ${!!aucun}/${aucunVu}, en route ${enRouteVu}, délai remis ${remis}`);
+  verifier(`…et cette hauteur est la place gardée (D-A bis) : ≈ 110 points en haut à 393 (${hautsVus[0]})`,
+    hautsVus.length === 1 && Math.abs(hautsVus[0] - 110) <= 2, JSON.stringify(hautsVus));
+  verifier(`…pendant la lecture qui SUIT l’écriture du délai (retenue), la ligne dit « Des changements partent » — jamais « ${MISE_A_JOUR_LIGNE} », `
+    + `la phrase du seul retour de « Mon entreprise » — ni à cette image, ni à aucune autre (« ${libelleRelecture.slice(18, 80)} »)`,
+  !!relueRetenue && libelleRelecture === `Pour le remettre : ${EN_ROUTE_LIGNE} Ouvrir la liste`
+    && !vu.some(([l]) => net(l).includes(MISE_A_JOUR_LIGNE)), libelleRelecture);
+  const desaccords = desaccordsDesImages(vu);
+  verifier(`…et à chaque image, ce que la ligne du haut MONTRE est ce qu’elle DIT : la phrase et le décompte sous elle, puis « Des changements `
+    + `partent » seule (${desaccords.length} désaccord(s))`,
+  desaccords.length === 0 && vu.some(([, , , v]) => v === EN_ROUTE_LIGNE)
+    && vu.some(([, , , v]) => (v || '').includes('\nce devis — 1 point · ')) && vu.some(([, , , v]) => (v || '').includes('\nce devis — aucun point · ')),
+  desaccords.slice(0, 4).join(' | '));
+  await capture('66-relire31-transition-393');
+  /* Le ménage : la ligne incomplète part, on revient à « Mes devis ». */
+  await toucher(parLibelle('Ligne incomplète. La compléter'));
+  await toucher(parLibelle('Retirer cette ligne'));
+  await toucher(parLibelle('Confirmer : retirer cette ligne'));
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 2000);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* HORS DE LA DÉCISION D-A BIS, À DIRE AU PROPRIÉTAIRE (relecture 4) : LE
+   BROUILLON NEUF QUI ENTRE EN BASE avec une ligne incomplète. Tant qu'il
+   n'est pas en base, la ligne dit « 1 ligne n’est pas encore enregistrée :
+   la liste se calculera ensuite. » sans rien réserver (il n'y a ni liste ni
+   décompte à venir tant qu'aucune ligne n'est partie) ; dès qu'une ligne
+   complète l'y fait entrer, la place réservée s'applique. Le vrai geste, à
+   393 : une ligne laissée incomplète, puis une ligne complète ; un
+   enregistreur à chaque image relève les deux phases. On MESURE et on NOTE
+   le saut — la décision ne le couvre pas — et l'on exige seulement que,
+   une fois en base, plus rien ne bouge. */
+await section('À 393, un brouillon NEUF qui entre en base avec une ligne incomplète : le saut mesuré (hors de D-A bis), puis plus rien ne bouge (relecture 4)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await toucher(page.getByText('Nouveau devis', { exact: true }).first());
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(900);
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  await taper('Ligne laissée incomplète');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '0');
+  await toucher(parLibelle('TVA à 20 %'));
+  await fermerCarte();
+  await attendre(600);
+  exiger((await libelleLigne()) === 'Pour le remettre : 1 ligne n’est pas encore enregistrée : la liste se calculera ensuite.',
+    'un brouillon neuf, une ligne incomplète : la ligne dit « 1 ligne n’est pas encore enregistrée : la liste se calculera ensuite. »');
+  await enregistrerLesLignes();
+  await attendre(300);
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  await taper('Ligne complète');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '100');
+  await toucher(parLibelle('TVA à 20 %'));
+  await fermerCarte();
+  const enBase = await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `), DELAI_ECRITURE + 3000);
+  await attendre(800);
+  const vu = await lireLesLignes();
+  const avant = vu.filter(([l]) => net(l).includes('pas encore enregistrée'));
+  const apres = vu.slice(vu.findIndex(([l]) => !net(l).includes('pas encore enregistrée')));
+  const h = (lst, i) => [...new Set(lst.map((x) => x[i]))];
+  noter('à 393, le brouillon neuf avant puis après son entrée en base', `avant : haut ${JSON.stringify(h(avant, 1))}, bas ${JSON.stringify(h(avant, 2))} ; `
+    + `en base : haut ${JSON.stringify(h(apres, 1))}, bas ${JSON.stringify(h(apres, 2))} ; ${JSON.stringify(vu.map(([l, a, b]) => [a, b, net(l).slice(18, 70)]))}`);
+  verifier('le brouillon neuf entre en base (« Dernière liste : » apparaît) : le SAUT de « pas encore en base » à la place réservée est mesuré '
+    + `(haut ${h(avant, 1).join(', ')} → ${h(apres, 1).join(', ')}, bas ${h(avant, 2).join(', ')} → ${h(apres, 2).join(', ')} — hors de la décision, `
+    + 'à dire au propriétaire), puis, une fois en base, la ligne ne prend plus qu’UNE hauteur',
+  !!enBase && avant.length >= 1 && apres.length >= 1 && h(avant, 1).length === 1 && h(apres, 1).length === 1 && h(apres, 2).length === 1,
+  JSON.stringify(vu.map(([l, a, b]) => [a, b, net(l).slice(18, 70)])));
+  await capture('67-neuf-entre-en-base');
+  await toucher(bouton('Supprimer ce brouillon'));
+  await toucher(bouton('Confirmer la suppression de ce brouillon'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  exiger(!(await dansLaSaisie()), 'le brouillon d’essai est supprimé');
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* RELIRE3-1 (relecture 4) : LE BALAYAGE. Les VRAIS `LigneRemise` (haut et
+   bas), rendus dans une colonne de la largeur qu'a la ligne dans la saisie
+   (l'écran moins ses gouttières, relevées par la section D-A bis), de 320 à
+   440 points d'écran, point par point : pour CHAQUE largeur, tant que
+   quelque chose n'est pas compté sur un devis en base, UNE hauteur — quels
+   que soient l'état (liste, en route, relecture d'une écriture, relecture
+   après « Mon entreprise », lecture — la première comprise —, échec, OP027),
+   les nombres (0, 1, 2, 10, 100 et 508 points pour le devis ; 0, 5 et 21
+   pour l'entreprise) et la phrase (1, 2, 12, 100 et 500 lignes, l'en-tête).
+   Puis le PRIX, noté largeur par largeur : la hauteur réservée, celle d'une
+   ligne où rien n'est « pas compté », et celle d'un brouillon PAS ENCORE EN
+   BASE (hors de la décision D-A bis : à dire au propriétaire). Et la
+   police : le chiffre le plus large d'Inter, à la taille du texte de
+   chaque ligne, est bien `CHIFFRE_LE_PLUS_LARGE` (si une police changeait,
+   « 444 » ne serait plus le nombre le plus large). */
+await section('De 320 à 440 points, tant que quelque chose n’est pas compté : UNE hauteur par largeur, quels que soient l’état, les nombres et la phrase (relecture 4, RELIRE3-1)', async () => {
+  exiger(GABARITS_DE_LA_LIGNE.length === NB_GABARITS, `la ligne a ${NB_GABARITS} gabarits fixes (${GABARITS_DE_LA_LIGNE.length})`);
+  const gouttiere = 393 - LARGEUR_DE_LA_LIGNE[393];
+  exiger(LARGEUR_DE_LA_LIGNE[393] > 0 && 320 - LARGEUR_DE_LA_LIGNE[320] === gouttiere,
+    `la ligne a la largeur de l’écran moins ${gouttiere} points, à 320 comme à 393 (${LARGEUR_DE_LA_LIGNE[320]} / ${LARGEUR_DE_LA_LIGNE[393]})`);
+  const res = await page.evaluate(async ({ gouttiere: g }) => {
+    const mod = window.__opusModule;
+    const React = mod('node_modules/react/index.js');
+    const client = mod('node_modules/react-dom/client.js');
+    const PR = mod('src/components/PourRemettre.js');
+    const D = mod('src/lib/devis.js');
+    if (!React || !client || !PR || !D) return { erreur: 'modules introuvables' };
+    const lue = (d, e) => ({ comptes: { devis: d, entreprise: e, particulier: 0 } });
+    const phrases = [
+      ...[1, 2, 12, 100, 500].map((n) => [`${n}l`, D.ceQueLaListeNeComptePas({ nbLignes: n })]),
+      ['entete', D.ceQueLaListeNeComptePas({ entete: true })],
+    ];
+    const RD = { devis: true, entreprise: false };
+    const RDE = { devis: true, entreprise: true };
+    const cas = [];
+    for (const [np, pc] of phrases) {
+      for (const d of [0, 1, 2, 10, 100, 508]) {
+        for (const e of [0, 5, 21]) {
+          const L = lue(d, e);
+          cas.push([`${d}/${e}/${np}/liste`, { etat: 'liste', lue: L, pasCompte: pc }]);
+          cas.push([`${d}/${e}/${np}/frappe`, { etat: 'en_route', lue: L, pasCompte: pc }]);
+          cas.push([`${d}/${e}/${np}/relecture-devis`, { etat: 'en_route', lue: L, pasCompte: pc, relecture: RD, enLecture: true }]);
+          cas.push([`${d}/${e}/${np}/retour-entreprise`, { etat: 'en_route', lue: L, pasCompte: pc, relecture: RDE, enLecture: true }]);
+        }
+      }
+      cas.push([`-/-/${np}/lecture`, { etat: 'lecture', lue: null, pasCompte: pc }]);
+      cas.push([`-/-/${np}/echec`, { etat: 'echec', lue: null, pasCompte: pc }]);
+      cas.push([`-/-/${np}/op027`, { etat: 'echec', lue: null, pasCompte: pc, erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas, ou il n’est pas le vôtre.' }]);
+    }
+    /* LE TEXTE QU'AUCUN GABARIT NE PRÉVOIT (banc de la relecture 4, M6) : le
+       texte lu est la DERNIÈRE couche de la superposition, il agrandit donc la
+       place au lieu de déborder (`devis.js`, « une phrase de refus définitif
+       plus longue que prévu »). Sorti du calcul — posé en position absolue,
+       au même endroit —, il débordait sur ce qui suit, et aucun des cas
+       ci-dessus ne le voyait : aucun de leurs textes n'est plus haut que les
+       gabarits. Un refus de cinq phrases le montre. */
+    const REFUS_LONG = Array(5).fill('Ce devis n’existe pas, ou il n’est pas le vôtre.').join(' ');
+    const temoins = [
+      ['temoin/refus-long', { etat: 'echec', lue: null, pasCompte: phrases[0][1], erreurReessayable: false, erreurPhrase: REFUS_LONG }],
+      ['temoin/sans-pas-compte', { etat: 'liste', lue: lue(2, 5) }],
+      ['temoin/pas-en-base-1', { etat: 'pas_en_base', pasCompte: D.ceQueLaListeNeComptePas({ nbLignes: 1, enBase: false }) }],
+      ['temoin/pas-en-base-2', { etat: 'pas_en_base', pasCompte: D.ceQueLaListeNeComptePas({ nbLignes: 2, enBase: false }) }],
+    ];
+    const vieux = document.getElementById('opus-banc-balayage');
+    if (vieux) vieux.remove();
+    const hote = document.createElement('div');
+    hote.id = 'opus-banc-balayage';
+    Object.assign(hote.style, {
+      position: 'fixed', left: '0px', top: '0px', width: `${393 - g}px`, height: '400000px', zIndex: '99999', background: '#fff', overflow: 'hidden',
+    });
+    document.body.appendChild(hote);
+    const racine = client.createRoot(hote);
+    const h = React.createElement;
+    /* Une COLONNE ÉTIRÉE, comme la saisie (voir le texte agrandi). */
+    const elems = ['haut', 'bas'].flatMap((v) => [...cas, ...temoins].map(([nom, p]) => h('div', {
+      key: `${v}:${nom}`, 'data-cas': `${v}:${nom}`, style: { display: 'flex', flexDirection: 'column', width: '100%' },
+    }, h(PR.LigneRemise, { variante: v, onOuvrir: () => {}, onReessayer: () => {}, ...p }))));
+    racine.render(h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', width: '100%' } }, ...elems));
+    await new Promise((ok) => { setTimeout(ok, 800); });
+    const parLargeur = {};
+    const debords = [];
+    for (let L = 320; L <= 440; L += 1) {
+      hote.style.width = `${L - g}px`;
+      await new Promise((ok) => { requestAnimationFrame(() => requestAnimationFrame(ok)); });
+      const r = { haut: {}, bas: {} };
+      for (const el of hote.querySelectorAll('[data-cas]')) {
+        const [v, ...reste] = el.getAttribute('data-cas').split(':');
+        const ligne = el.firstElementChild;
+        r[v][reste.join(':')] = Math.round(ligne.getBoundingClientRect().height);
+        /* …et de combien le texte LU sort de la boîte de la ligne, par le bas */
+        const cache = ligne.querySelector('[aria-hidden="true"]');
+        const lu = cache ? [...cache.parentElement.children].find((e) => e.getAttribute('aria-hidden') !== 'true') : null;
+        const t = lu ? (lu.querySelector('[dir]') || lu) : null;
+        if (t) {
+          const deborde = Math.round(t.getBoundingClientRect().bottom - ligne.getBoundingClientRect().bottom);
+          if (deborde > 1) debords.push(`${L}/${v}:${reste.join(':')} (${deborde})`);
+        }
+      }
+      parLargeur[L] = r;
+    }
+    /* LA POLICE du texte de chaque ligne (la couche lue), et la largeur de
+       chaque chiffre à cette police (canvas). */
+    hote.style.width = `${393 - g}px`;
+    await new Promise((ok) => { requestAnimationFrame(() => requestAnimationFrame(ok)); });
+    const cv = document.createElement('canvas').getContext('2d');
+    const polices = {};
+    for (const v of ['haut', 'bas']) {
+      const ligne = hote.querySelector(`[data-cas="${v}:0/5/1l/liste"]`).firstElementChild;
+      const cache = ligne.querySelector('[aria-hidden="true"]');
+      const lu = [...cache.parentElement.children].find((e) => e.getAttribute('aria-hidden') !== 'true');
+      const t = lu.querySelector('[dir]') || lu;
+      const cs = getComputedStyle(t);
+      const police = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      cv.font = police;
+      polices[v] = {
+        police,
+        chargee: document.fonts.check(police, '0123456789'),
+        chiffres: Object.fromEntries([...'0123456789'].map((c) => [c, Math.round(cv.measureText(c).width * 100) / 100])),
+      };
+    }
+    racine.unmount();
+    hote.remove();
+    return { parLargeur, polices, nbCas: cas.length, nbTemoins: temoins.length, debords };
+  }, { gouttiere });
+  exiger(!res.erreur, `les vrais composants se rendent dans la page (${res.erreur || 'React, react-dom, PourRemettre'})`);
+  const largeurs = Object.keys(res.parLargeur).map(Number).sort((a, b) => a - b);
+  const fautes = [];
+  const reserve = { haut: {}, bas: {} };
+  for (const L of largeurs) {
+    for (const v of ['haut', 'bas']) {
+      const r = res.parLargeur[L][v];
+      const hs = [...new Set(Object.entries(r).filter(([k]) => !k.startsWith('temoin/')).map(([, x]) => x))];
+      if (hs.length !== 1) {
+        const parH = {};
+        Object.entries(r).filter(([k]) => !k.startsWith('temoin/')).forEach(([k, x]) => { (parH[x] = parH[x] || []).push(k); });
+        fautes.push(`${L}/${v} : ${Object.entries(parH).map(([x, ks]) => `${x} (${ks.length}, ex. ${ks[0]})`).join(' ; ')}`);
+      }
+      reserve[v][L] = hs[0];
+    }
+  }
+  verifier(`de 320 à 440 points, point par point (${largeurs.length} largeurs), ${res.nbCas} cas par ligne — états, nombres et phrases : UNE `
+    + `seule hauteur par largeur, en haut comme en bas (${fautes.length} écart(s))`,
+  fautes.length === 0 && largeurs.length === 121 && res.nbCas === 6 * 18 * 4 + 6 * 3, fautes.slice(0, 8).join(' | '));
+  /* Le PRIX, en plages de largeurs : la hauteur réservée, la ligne
+     ordinaire (sans rien de « pas compté »), le brouillon pas en base. */
+  const plages = (f) => {
+    const out = [];
+    for (const L of largeurs) {
+      const x = f(L);
+      const der = out[out.length - 1];
+      if (der && der[2] === x) der[1] = L; else out.push([L, L, x]);
+    }
+    return out.map(([a, b, x]) => `${a === b ? a : `${a}–${b}`} : ${x}`).join(' ; ');
+  };
+  for (const v of ['haut', 'bas']) {
+    noter(`ligne du ${v}, hauteur RÉSERVÉE (quelque chose n’est pas compté, devis en base)`, plages((L) => reserve[v][L]));
+    noter(`ligne du ${v}, une ligne ordinaire (rien de « pas compté »)`, plages((L) => res.parLargeur[L][v]['temoin/sans-pas-compte']));
+    noter(`ligne du ${v}, un brouillon PAS ENCORE EN BASE, une ligne incomplète (hors de D-A bis)`,
+      plages((L) => res.parLargeur[L][v]['temoin/pas-en-base-1']));
+  }
+  /* LE TEXTE LU NE DÉBORDE JAMAIS DE SA LIGNE, aucun cas, aucune largeur —
+     pas même un refus qu'aucun gabarit ne prévoit, qui doit AGRANDIR la
+     place (banc de la relecture 4, M6). */
+  const refusLong = res.parLargeur[393].haut['temoin/refus-long'];
+  verifier(`de 320 à 440 points, le texte lu ne sort jamais de sa ligne par le bas — pas même un refus de cinq phrases qu’aucun gabarit ne `
+    + `prévoit, qui agrandit la place (à 393 : ${refusLong} points au lieu de ${reserve.haut[393]}) au lieu de déborder (${res.debords.length} débord(s))`,
+  res.debords.length === 0 && refusLong > reserve.haut[393], res.debords.slice(0, 6).join(' | '));
+  verifier(`à 393 (l’iPhone 16 du propriétaire) : la ligne du haut réserve ≈ 110 points (${reserve.haut[393]}), celle du bas ${reserve.bas[393]}`,
+    Math.abs(reserve.haut[393] - 110) <= 2 && reserve.bas[393] > 0, `${reserve.haut[393]} / ${reserve.bas[393]}`);
+  const fautesPolice = ['haut', 'bas'].flatMap((v) => {
+    const p = res.polices[v];
+    const max = Math.max(...Object.values(p.chiffres));
+    const out = [];
+    if (!p.chargee) out.push(`${v} : la police « ${p.police} » n’est pas chargée`);
+    if (!/Inter/.test(p.police)) out.push(`${v} : la police n’est pas Inter (${p.police})`);
+    if (p.chiffres[CHIFFRE_LE_PLUS_LARGE] + 0.01 < max) out.push(`${v} : « ${CHIFFRE_LE_PLUS_LARGE} » (${p.chiffres[CHIFFRE_LE_PLUS_LARGE]}) n’est pas le plus large (${max})`);
+    return out;
+  });
+  noter('la largeur des chiffres, à la police de chaque ligne', JSON.stringify(['haut', 'bas'].map((v) => [res.polices[v].police, res.polices[v].chiffres])));
+  verifier(`la police du texte de la ligne est Inter, chargée, et « ${CHIFFRE_LE_PLUS_LARGE} » y est le chiffre le plus large, en haut comme en bas `
+    + '(ce sur quoi reposent les gabarits)', fautesPolice.length === 0, fautesPolice.join(' | '));
 });
 
 /* LE TEXTE AGRANDI (relecture 3 de 2b-1 ; banc de la relecture 2, point 2) :
@@ -4776,8 +5148,9 @@ await section('D-A bis : au retour de « Mon entreprise », une ligne incomplèt
    page.
      - la carte : « Votre entreprise — aucun point » (un titre SEUL, le seul
        cas où la partie gardée est plus courte que sa phrase), pendant la
-       relecture de « Mon entreprise » ; la phrase ne doit jamais descendre
-       sous la place gardée, ni sur « À vérifier » qui suit ;
+       relecture de « Mon entreprise » — un état « en route », ses deux
+       causes (relecture 4) ; la phrase ne doit jamais descendre sous la
+       place gardée, ni sur « À vérifier » qui suit ;
      - la ligne : ses états tant qu'une ligne n'est pas comptée (liste,
        relecture de l'entreprise, en route, lecture, échec, OP027) — UNE
        hauteur pour tous, et le texte lu jamais plus haut que le plus haut
@@ -4803,23 +5176,23 @@ await section('Le texte agrandi (×1 à ×2) : la phrase d’une partie qui se r
     window.__opusBancRacine = racine;
     const lue = D.lireMotifsDeRemise([{ rang: 1, cle: 'devis_client', phrase: 'Choisissez le client de ce devis.', nature: 'loi' }],
       { sections: E.SECTION_DU_MOTIF });
-    const RE = { devis: false, entreprise: true };
+    const RDE = { devis: true, entreprise: true };
     const pc = D.ceQueLaListeNeComptePas({ nbLignes: 1 });
     const h = React.createElement;
     if (quoi === 'carte') {
       racine.render(h(PR.default, {
-        etat: 'liste', lue, relecture: RE, enLecture: true, pasCompte: null,
+        etat: 'en_route', lue, relecture: RDE, enLecture: true, pasCompte: null,
         avis: [{ cle: 'avis_objet', phrase: D.AVIS_DU_DEVIS.avis_objet }], lignes: [], chiffrerPossible: true,
         onAgir: () => {}, onReessayer: () => {}, onFermer: () => {},
       }));
     } else {
       const etats = [
         { etat: 'liste', lue },
-        { etat: 'liste', lue, relecture: RE, enLecture: true },
+        { etat: 'en_route', lue, relecture: RDE, enLecture: true },
         { etat: 'en_route', lue },
-        { etat: 'lecture', lue: null, derniere: lue },
-        { etat: 'echec', lue: null, derniere: lue },
-        { etat: 'echec', lue: null, derniere: lue, erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas, ou il n’est pas le vôtre.' },
+        { etat: 'lecture', lue: null },
+        { etat: 'echec', lue: null },
+        { etat: 'echec', lue: null, erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas, ou il n’est pas le vôtre.' },
       ];
       /* Une COLONNE ÉTIRÉE, comme la saisie : la ligne est un bouton, qui
          dans un simple bloc se dimensionnerait sur son contenu — et une
@@ -4920,16 +5293,54 @@ await section('Le texte agrandi (×1 à ×2) : la phrase d’une partie qui se r
     const out = [];
     if (hs.length !== 1) out.push(`${r.largeur}/${r.k}/${v} : hauteurs ${hs.join(', ')}`);
     six.forEach((l, i) => {
-      if (l.gabarits !== 2) out.push(`${r.largeur}/${r.k}/${v}/${i} : ${l.gabarits} gabarit(s)`);
+      if (l.gabarits !== NB_GABARITS) out.push(`${r.largeur}/${r.k}/${v}/${i} : ${l.gabarits} gabarit(s)`);
       if (l.depasse === null || l.depasse > 1) out.push(`${r.largeur}/${r.k}/${v}/${i} : le texte lu dépasse de ${l.depasse}`);
       if (l.coupe !== false) out.push(`${r.largeur}/${r.k}/${v}/${i} : le texte lu est COUPÉ`);
     });
     return out;
   }));
   verifier('la ligne (en haut et en bas) : dans ses six états tant qu’une ligne n’est pas comptée — liste, relecture de « Mon entreprise », '
-    + 'en route, lecture, échec, OP027 — UNE seule hauteur, DEUX gabarits, et le texte lu jamais plus bas que le plus haut d’entre eux ni coupé, texte '
+    + `en route, lecture, échec, OP027 — UNE seule hauteur, les ${NB_GABARITS} gabarits fixes, et le texte lu jamais plus bas que le plus haut d’entre eux ni coupé, texte `
     + `agrandi de ×1 à ×2, la ligne large de ${largeursLigne.join(', ')} points`, fautes.length === 0 && resLigne.length === largeursLigne.length * 5
     && resLigne.every((r) => r.lignes.length === 12), fautes.slice(0, 10).join(' | '));
+  /* LA TÊTE DE LA CARTE QUAND AUCUNE LISTE NE SE MONTRE (banc de la
+     relecture 4, N12) : un échec avant, puis le retour de « Mon entreprise »
+     — un état que la démonstration n'atteint pas par un geste (sans liste,
+     la carte n'a aucun bouton vers « Mon entreprise »). La vraie carte,
+     rendue avec ses vrais états : « Mise à jour de la liste… » en tête pour
+     la relecture qui suit « Mon entreprise », « Des changements partent »
+     pour une écriture du devis — jamais l'une à la place de l'autre. */
+  const tetes = await page.evaluate(async () => {
+    const mod = window.__opusModule;
+    const React = mod('node_modules/react/index.js');
+    const client = mod('node_modules/react-dom/client.js');
+    const PR = mod('src/components/PourRemettre.js');
+    const D = mod('src/lib/devis.js');
+    if (!React || !client || !PR || !D) return null;
+    const out = {};
+    for (const [nom, relecture] of [['retour', { devis: true, entreprise: true }], ['ecriture', { devis: true, entreprise: false }]]) {
+      const hote = document.createElement('div');
+      Object.assign(hote.style, { position: 'fixed', left: '0px', top: '0px', width: '393px', height: '1800px', zIndex: '99999', background: '#fff' });
+      document.body.appendChild(hote);
+      const racine = client.createRoot(hote);
+      racine.render(React.createElement(PR.default, {
+        etat: 'en_route', lue: null, relecture, enLecture: true, pasCompte: D.ceQueLaListeNeComptePas({ nbLignes: 1 }),
+        avis: [], lignes: [], chiffrerPossible: true, onAgir: () => {}, onReessayer: () => {}, onFermer: () => {},
+      }));
+      await new Promise((ok) => { setTimeout(ok, 250); });
+      const lisible = (e) => !e.closest('[aria-hidden="true"]');
+      out[nom] = [...hote.querySelectorAll('*')].filter((e) => e.children.length === 0 && (e.textContent || '').trim() && lisible(e))
+        .map((e) => e.textContent.trim()).filter((t) => /^(Des changements partent|Mise à jour de la liste…)/.test(t));
+      racine.unmount();
+      hote.remove();
+    }
+    return out;
+  });
+  noter('la tête de la carte sans liste, en route', JSON.stringify(tetes));
+  verifier(`la carte sans liste à montrer : en tête, « ${MISE_A_JOUR_LIGNE} » pour la relecture qui suit « Mon entreprise », « Des changements `
+    + 'partent » pour une écriture du devis — une seule phrase chaque fois, jamais l’une à la place de l’autre',
+  !!tetes && JSON.stringify(tetes.retour) === JSON.stringify([MISE_A_JOUR_LIGNE]) && JSON.stringify(tetes.ecriture) === JSON.stringify([EN_ROUTE_LIGNE]),
+  JSON.stringify(tetes));
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {

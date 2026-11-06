@@ -30,9 +30,11 @@
  *      devis : la liste se met à jour. » se lit à sa place ; elle disait
  *      « ne chiffre encore aucun travail » sous un poste qu'on venait
  *      d'écrire (relecture de 2b-1, ECR-1). Au retour de « Mon
- *      entreprise », l'inverse : c'est « Votre entreprise » qui se relit —
- *      et « Ce devis » aussi quand le régime de TVA a changé (relecture 2,
- *      REL-2). UNE PARTIE QUI SE TAIT GARDE SA PLACE (relecture 2, REL-3) :
+ *      entreprise », les DEUX parties se relisent — « Votre entreprise », et
+ *      « Ce devis », dont le régime de TVA écrit là décide des points
+ *      (relecture 2, REL-2) —, et la ligne dit « Mise à jour de la liste… » :
+ *      rien ne prouve qu'on y a changé quoi que ce soit (relecture 4,
+ *      06/11/2026). UNE PARTIE QUI SE TAIT GARDE SA PLACE (relecture 2, REL-3) :
  *      elle reste montée, invisible et cachée à VoiceOver, sous sa phrase —
  *      rien de ce qui suit ne remonte puis ne redescend sous le doigt ;
  *   3. la lecture a échoué : « Liste non lue — Réessayer », JAMAIS « rien ne
@@ -93,18 +95,20 @@ import {
  * dit la phrase ET le décompte (décision D-A du propriétaire, 05/11/2026 au
  * soir).
  *
- * SA HAUTEUR NE BOUGE PAS TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ
- * (relecture 2 de 2b-1, REL-1 ; décision D-A bis du propriétaire, le
- * 06/11/2026) : `texteDeLaLigneRemise` rend alors des `gabarits` — « phrase
- * + décompte » de la liste lue, sous ses deux formes (« votre entreprise —
- * 5 points » et « votre entreprise — mise à jour… ») —, posés dans le flux,
- * INVISIBLES (opacité nulle, aucun toucher, cachés à VoiceOver), et ce que
- * la ligne dit vraiment est posé PAR-DESSUS. La ligne fait la hauteur du
- * PLUS GRAND, à toute largeur : avec un seul gabarit qui suivait la
- * relecture de « Mon entreprise », elle grandissait d'une ligne le temps de
- * cette relecture (≈ 92 → 110 points de 381 à 407 points de large, l'iPhone
- * 16 compris ; la ligne du bas, 88 → 104 de 329 à 352). Sans mesure ni
- * course.
+ * TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ SUR UN DEVIS EN BASE, SA HAUTEUR
+ * NE DÉPEND NI DE L'ÉTAT, NI DES NOMBRES, NI DE LA PHRASE (relecture 2 de
+ * 2b-1, REL-1 ; décision D-A bis du propriétaire, le 06/11/2026 ; relecture
+ * 4, RELIRE3-1) : `texteDeLaLigneRemise` rend alors la liste FIXE
+ * `GABARITS_DE_LA_LIGNE` — les plus longs des textes que la ligne peut
+ * prendre dans ces états —, posés dans le flux, INVISIBLES (opacité nulle,
+ * aucun toucher, cachés à VoiceOver), et ce que la ligne dit vraiment est
+ * posé PAR-DESSUS. La ligne fait la hauteur du PLUS GRAND, à toute largeur.
+ * Avant, les gabarits suivaient les nombres de la dernière liste lue : la
+ * ligne du haut passait de 92 à 110 points à 393 quand le dernier point du
+ * devis était corrigé, et à la première lecture il n'y en avait aucun.
+ * Sans mesure ni course. Ce qui la change encore (hors de la décision) : la
+ * phrase « pas compté » qui apparaît ou disparaît, et le passage d'un
+ * brouillon « pas encore en base » à « en base ».
  *
  * LA SUPERPOSITION (`s.superpose`) : une RANGÉE dont chaque couche fait
  * toute la largeur, les suivantes ramenées sous la première par une marge de
@@ -125,12 +129,12 @@ import {
  */
 export function LigneRemise({
   variante = 'haut', etat, lue, erreurReessayable = true, erreurPhrase = null, enLecture = false, pasCompte = null,
-  relecture = null, derniere = null, onOuvrir, onReessayer,
+  relecture = null, onOuvrir, onReessayer,
 }) {
   /* TOUT ce que la ligne dit se décide dans `texteDeLaLigneRemise`
      (devis.js), que `verifier-devis` fait tourner. */
   const dit = texteDeLaLigneRemise({
-    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, derniere,
+    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture,
   });
   const { contenu, compte, gabarits, aDire } = dit;
   let action = null;
@@ -146,7 +150,7 @@ export function LigneRemise({
         <Text style={variante === 'bas' ? s.ligneTitreBas : s.ligneTitre}>{TITRE_POUR_REMETTRE}</Text>
         {gabarits ? (
           /* LES GABARITS DONNENT LA HAUTEUR — le plus grand —, le texte lu
-             est posé dessus (REL-1, D-A bis). */
+             est posé dessus (REL-1, D-A bis, RELIRE3-1). */
           <View style={s.superpose}>
             {gabarits.map((g, i) => (
               <View
@@ -312,9 +316,9 @@ export default function PourRemettre({
      (devis.js). La dernière liste sûre se montre en `liste` ET en
      `en_route` ; jamais sur un échec, ni avant la première lecture. Mais
      une PARTIE PÉRIMÉE ne se lit pas (ECR-1) : « Ce devis » pendant
-     qu'une écriture du devis part puis se relit (ou que le régime de TVA a
-     changé, REL-2), « Votre entreprise » pendant que « Mon entreprise » se
-     relit — une phrase la remplace, posée sur sa place gardée (REL-3). */
+     qu'une écriture du devis part puis se relit, les DEUX parties pendant la
+     relecture qui suit « Mon entreprise » (le régime de TVA s'y écrit, REL-2)
+     — une phrase la remplace, posée sur sa place gardée (REL-3). */
   const { phrases, montrerLaListe: montrer, parties: aMontrer } = ceQueDitLaCarte({
     etat, lue, enLecture, pasCompte, relecture,
   });
