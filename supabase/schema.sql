@@ -14358,17 +14358,34 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  liste, jamais une seconde écriture de la règle. Rien n'est remis en 2b :
 --  aujourd'hui elle ne bloque rien, elle renseigne.
 --
+--  CE QU'ELLE NE FAIT PAS : VERROUILLER (relecture de 2b-1, BASE-4,
+--  mesurée à deux sessions). Elle est `stable` et ne verrouille rien, et
+--  c'est juste pour une lecture. Mais une remise qui l'appellerait PUIS
+--  écrirait laisserait passer, entre les deux, la suppression du dernier
+--  poste : un devis sans poste serait remis. LA REMISE DE 2c prendra donc
+--  `for update` sur le devis, appellera CETTE fonction dans un ORDRE
+--  SUIVANT (une fonction `stable` lit l'instantané de l'ordre qui l'appelle),
+--  puis posera le statut, le tout dans la MÊME transaction. Et le figeage
+--  des lignes lira le statut du devis sous `for key share`, JAMAIS sous
+--  `for share` : deux écritures de lignes simultanées s'interbloquaient
+--  alors avec le `for no key update` de `recalcule_devis` (mesuré, 40P01).
+--  À éprouver à deux sessions en 2c, avant de construire la remise.
+--
 --  « RIEN NE MANQUE » = ZÉRO LIGNE. Et seulement cela : une lecture qui
 --  échoue, ou un brouillon que la base n'a pas encore (rien tapé), n'est
 --  JAMAIS « rien ne manque ». C'est l'écran qui le tient (il n'appelle pas
 --  la fonction pour un brouillon pas encore en base, qui rendrait OP027).
 --
 --  TROIS NATURES, et l'écran dit laquelle (cahier 2b, §2.1) :
---    loi         la loi le demande, ici et maintenant ;
---    prudence    Opus ne connaît pas encore le cas (pour qui le client
---                commande, si le devis est un dépannage…) : il compte le
---                plus protecteur. Ces motifs-là se lèveront quand le fait
---                qui les décide sera dit (étapes 2b-2 à 2b-4) ;
+--    loi         la loi le demande, dans le cas que la phrase dit ;
+--    prudence    Opus ne sait pas encore si le devis est dans le cas qui
+--                décide (un dépannage, une réparation ou un entretien
+--                signé dans vos locaux, un service à la personne), ou il
+--                ne sait pas encore imprimer ce que la loi permet (une
+--                ligne sans TVA au régime réel) : il compte le plus
+--                protecteur. Ces motifs-là se lèveront quand le fait qui
+--                les décide sera dit (étapes 2b-2 à 2b-4), ou quand Opus
+--                saura l'imprimer ;
 --    regle_opus  une règle PLUS STRICTE que la loi, choisie par le
 --                propriétaire. LE 05/11/2026, IL EN A GARDÉ QUATRE : relire le
 --                SIRET chaque année (`entreprise_ancienne`), le n° de TVA
@@ -14376,9 +14393,21 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --                (`conso_tva_intra`), les frais de déplacement dits sur tous
 --                les devis (`frais_deplacement`), et le délai d'exécution
 --                écrit sur tous les devis (`devis_delai`, que 2b-2 ne lèvera
---                donc pas, et sa phrase le dit). Et la TVA à 10 % ou 5,5 % :
---                « tout permettre » — AUCUN motif de taux réduit ; c'est 2c
---                qui imprimera la certification que le client signe.
+--                donc pas, et sa phrase le dit). LE SOIR DU 05/11, il en a
+--                fait DEUX DE PLUS (relecture de 2b-1, TXT-4 ; il a choisi
+--                l'option recommandée) : un client choisi (`devis_client`)
+--                et au moins un poste (`devis_lignes`), sur tous les devis.
+--                La loi ne les demande que dans certains cas — le nom du
+--                client pour un dépannage, une réparation ou un entretien
+--                signé dans vos locaux et pour les services à la personne
+--                (arrêté du 24/01/2017, art. 4-I ; arrêté du 17/03/2015,
+--                art. 7 4°), la description des travaux et leur prix pour
+--                un particulier (code de la consommation, L. 111-1 1° et
+--                2°) ; chaque phrase dit ce cas, puis « Opus le demande pour
+--                tous vos devis ». SIX RÈGLES D'OPUS en tout. Et la TVA à
+--                10 % ou 5,5 % : « tout permettre » — AUCUN motif de taux
+--                réduit ; c'est 2c qui imprimera la certification que le
+--                client signe.
 --  Tout le reste est un AVIS, qui ne bloque rien.
 --
 --  LES AVIS NE SONT PAS ICI, et c'est voulu (critique B6) : la remise de 2c
@@ -14425,12 +14454,22 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  réservait à une garde d'urgence restée sans objet : si elle naît en
 --  2b-3, elle prendra OP028.
 --
---  « VIDE » = `null`, ET C'EST EXACT ICI. `tient_le_devis()` (49.6, point 1)
---  range un objet, une adresse, une ville ou un délai faits de blancs comme
---  `null`, et un code postal fait d'espaces aussi : aucune chaîne vide n'est
---  jamais rangée dans ces colonnes. Les tester par `is null` suffit, sans
---  recopier une huitième fois la classe de blancs — l'essai le prouve en
---  écrivant des espaces et une espace insécable par le chemin d'un client.
+--  « VIDE » = `null`, AU SENS DE LA CLASSE DE BLANCS DU PROJET.
+--  `tient_le_devis()` (49.6, point 1) range comme `null` un objet, une
+--  adresse, une ville ou un délai faits des seuls blancs de LA CLASSE que le
+--  projet recopie (l'espace, la tabulation, les retours à la ligne, et les
+--  invisibles U+00A0, U+200B à U+200D, U+2060, U+FEFF), et un code postal
+--  fait d'espaces aussi : aucune chaîne vide n'est jamais rangée dans ces
+--  colonnes. Les tester par `is null` suffit, sans recopier une huitième
+--  fois la classe — l'essai le prouve en écrivant des espaces et une espace
+--  insécable par le chemin d'un client. MAIS LA LISTE VÉRIFIE UNE PRÉSENCE,
+--  PAS UN SENS (relecture de 2b-1, BASE-1) : un délai fait d'un AUTRE
+--  invisible (U+3000, U+202F, U+2028…) est rangé tel quel et passe pour
+--  écrit, comme un délai fait d'un seul « . ». L'essai le FIGE (cas 5 : un
+--  délai d'un seul U+3000 ne rend pas `devis_delai`) et le miroir rend la
+--  même chose (`cas-remise.json`). Élargir la classe se fera dans TOUTES ses
+--  copies à la fois (lot de consolidation, `docs/A-FAIRE.md`) ; et c'est 2c
+--  qui refusera, à l'impression, un délai ou un lieu sans lettre ni chiffre.
 --
 --  « RAMENÉ » : EN EUROS SEULEMENT, et la condition est celle de l'écran
 --  (`effetDeLaReduction`, `effetDeLAcompte`, `src/lib/devis.js`) : la
@@ -14440,12 +14479,30 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  POURCENTAGE ne peut jamais être ramené (borné à 100 % : prouvé sur
 --  140 007 cas, critique B8) ; aucun pourcentage n'est donc recalculé ici.
 --  Aucune phrase ne porte de montant : la base ne formate pas d'euros, et la
---  carte « Conditions » dit déjà « Ramenée à … ».
+--  carte « Conditions » dit déjà « Ramenée à … ». La phrase de la réduction
+--  dit « le total des postes » : c'est à lui que la base la compare (le
+--  brut des postes), ce sont les mots de la carte « Conditions », et elle
+--  ne dit pas « HT », que la base ne sait pas (le régime peut manquer) ;
+--  « le total du devis » se comparait à l'œil au total TTC, plus grand
+--  (relecture de 2b-1, BASE-3).
 --
---  RÉGIME ↔ TAUX : la règle de `coherenceRegime()` (`src/lib/devis.js`),
---  UNE LIGNE PAR LIGNE FAUTIVE — un poste ou une option, offerte comprise,
---  à un taux non nul en franchise, ou à 0 au régime réel. Elle se lit dans
---  les LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
+--  RÉGIME ↔ TAUX : la règle de `ligneContreditLeRegime()` (`src/lib/devis.js`,
+--  que `coherenceRegime()` appelle aussi), UNE LIGNE PAR LIGNE FAUTIVE — un
+--  poste ou une option, offerte comprise —, et DEUX CLÉS au rang 3, parce
+--  que la loi ne dit pas la même chose des deux cas (relecture de 2b-1,
+--  TXT-1) :
+--    `devis_taux_franchise` (loi) : en franchise, une ligne à un taux non
+--      nul — un franchisé ne fait apparaître la TVA sur aucune facture ni
+--      aucun document qui en tient lieu (CGI, art. 293 E II) ;
+--    `devis_taux_sans_tva` (prudence) : au régime réel, une ligne à 0. La
+--      loi le PERMET dans quelques cas — la sous-traitance de travaux de
+--      construction pour un preneur assujetti, où c'est le preneur qui
+--      acquitte la TVA (CGI, art. 283 2 nonies, l'autoliquidation) —, mais
+--      Opus ne sait pas encore imprimer un tel devis : il bloque, et il le
+--      dit comme une prudence, jamais comme la loi.
+--  Un devis n'a qu'un régime : toutes ses lignes fautives portent la même
+--  clé, dans l'ordre `ordre, id`, en UNE boucle. Elle se lit dans les
+--  LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
 --  critique B7). Régime non déclaré : aucun motif de ligne — celui de
 --  l'entreprise, `regime_tva`, le dit déjà.
 --
@@ -14457,11 +14514,22 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  LES MOTIFS DE L'ENTREPRISE : rang `100 + position` dans
 --  `emetteur_incomplet()`, clé et phrase = les deux moitiés de « clé:
 --  phrase », coupées au PREMIER « : » (deux-points et espace). Nature :
---  `regle_opus` pour les trois règles de l'entreprise que le propriétaire a
---  gardées, `prudence` pour la profession réglementée (la loi demande titre,
---  État et ordre, qu'Opus ne sait pas encore écrire), `loi` pour les autres.
---  Les onze motifs `conso_` restent TOUS en 2b-1 : Opus ne sait pas encore
---  pour qui le client commande (2b-2).
+--    `regle_opus` pour les trois règles de l'entreprise que le propriétaire
+--      a gardées le 05/11 ;
+--    `prudence` pour la profession réglementée (la loi demande titre, État
+--      et ordre, qu'Opus ne sait pas encore écrire) et pour le régime de TVA
+--      (`regime_tva` : aucune loi ne demande de déclarer son régime à Opus ;
+--      c'est Opus qui en a besoin pour imprimer la TVA ou la mention de
+--      franchise — relecture de 2b-1, TXT-7) ;
+--    `loi` pour les autres, `registre` compris (la loi demande la mention
+--      quand l'entreprise est immatriculée, et la phrase le dit).
+--  Les onze motifs `conso_` restent TOUS en 2b-1. Neuf sont en `loi` : la
+--  loi les demande pour un devis à un particulier, et chaque phrase commence
+--  par « Pour un devis à un particulier ». Comme Opus ne sait pas encore
+--  pour qui le client commande (2b-2), c'est l'ÉCRAN qui les range, par
+--  prudence, sous « Mentions dues à un particulier » ; leur nature reste la
+--  loi (relecture de 2b-1, BASE-2). `conso_tva_intra` reste une règle
+--  d'Opus (réponse du 05/11) et `conso_profession_reglementee` une prudence.
 --
 --  LES PHRASES sont écrites en CARACTÈRES — l'apostrophe typographique ’,
 --  les espaces ordinaires avant « : », comme celles d'`emetteur_incomplet()`
@@ -14542,34 +14610,41 @@ begin
   -- 4. Les motifs du devis, rang par rang.
   ligne_id := null;
   if v_client is null then
-    rang := 1; cle := 'devis_client'; nature := 'loi';
-    phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client.';
+    rang := 1; cle := 'devis_client'; nature := 'regle_opus';
+    phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.';
     return next;
   end if;
   if not v_un_poste then
-    rang := 2; cle := 'devis_lignes'; nature := 'loi';
-    phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste.';
+    rang := 2; cle := 'devis_lignes'; nature := 'regle_opus';
+    phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.';
     return next;
   end if;
+  -- Un devis n'a qu'un régime : toutes ses lignes fautives portent la même
+  -- clé (la franchise, ou le réel), dans l'ordre `ordre, id`.
   foreach v_ligne in array v_fautives loop
-    rang := 3; cle := 'devis_taux_regime'; nature := 'loi'; ligne_id := v_ligne;
-    phrase := 'Le taux de TVA de cette ligne ne correspond pas à votre régime de TVA : corrigez-la.';
+    if v_regime = 'franchise' then
+      rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne;
+      phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.';
+    else
+      rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne;
+      phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.';
+    end if;
     return next;
   end loop;
   ligne_id := null;
   if v_adresse is null and v_code_postal is null and v_ville is null then
     rang := 4; cle := 'devis_lieu'; nature := 'prudence';
-    phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.';
+    phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.';
     return next;
   end if;
   if v_delai is null then
     rang := 5; cle := 'devis_delai'; nature := 'regle_opus';
-    phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour un particulier et pour un devis signé chez le client ; Opus le demande pour tous vos devis.';
+    phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.';
     return next;
   end if;
   if v_validite is null then
     rang := 6; cle := 'devis_validite'; nature := 'prudence';
-    phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.';
+    phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.';
     return next;
   end if;
   if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then
@@ -14584,7 +14659,7 @@ begin
   end if;
   if v_remise_eur is not null and v_remise_eff < v_remise_eur then
     rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence';
-    phrase := 'La réduction en euros dépasse le total du devis : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.';
+    phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.';
     return next;
   end if;
 
@@ -14599,7 +14674,7 @@ begin
     phrase := substr(v_motif, char_length(cle) + 3);
     nature := case
       when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus'
-      when cle = 'conso_profession_reglementee' then 'prudence'
+      when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence'
       else 'loi'
     end;
     ligne_id := null;

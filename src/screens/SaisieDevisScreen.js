@@ -148,6 +148,10 @@ const CHAMPS_CONDITIONS = Object.freeze([
    est un UUID : il ne vaut jamais « conditions » ni « pour_remettre ». */
 const CARTE_CONDITIONS = 'conditions';
 
+/* Ce qu'une lecture de la liste « Pour le remettre » relit parce que cela
+   vient de changer : rien (lot 2b-1, relecture ECR-1). */
+const AUCUNE_RELECTURE = Object.freeze({ devis: false, entreprise: false });
+
 const uniteDe = (cle) => UNITES.find((u) => u.cle === cle) || null;
 const NIVEAU = { zone: 1, piece: 2 };
 
@@ -582,11 +586,18 @@ export default function SaisieDevisScreen({
                   dernière lecture a échoué — elle ne peut plus être dite
                   sûre) ;
        erreur   : l'échec de la dernière lecture ;
-       enLecture: une lecture est partie.
+       enLecture: une lecture est partie ;
+       relecture: ce que la lecture EN COURS relit parce que cela vient de
+                  changer — `devis` (une écriture du devis confirmée) ou
+                  `entreprise` (« Mon entreprise » refermée). La partie qui
+                  se relit ne s'affiche pas tant que la liste n'est pas
+                  revenue : elle peut mentir (relecture de 2b-1, ECR-1).
      `lectureListe` numérote les lectures : seule la DERNIÈRE partie
      s'affiche. `monte` : une réponse qui arrive après le démontage ne
      touche à rien. */
-  const [liste, setListe] = useState({ motifs: null, erreur: null, enLecture: false });
+  const [liste, setListe] = useState({
+    motifs: null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE,
+  });
   const lectureListe = useRef(0);
   const monte = useRef(true);
   useEffect(() => () => { monte.current = false; }, []);
@@ -722,14 +733,29 @@ export default function SaisieDevisScreen({
      sans cette garde, écrasait une valeur plus récente (I3, lot 1).
 
      Elle ne touche que des références et des fonctions d'état : la
-     version écoutée par la file depuis l'ouverture reste juste. */
-  const lireLaListe = () => {
+     version écoutée par la file depuis l'ouverture reste juste.
+
+     `cause` : ce qui vient de changer — `'devis'` (une écriture du devis
+     confirmée : la partie « Ce devis » se relit) ou `'entreprise'` (« Mon
+     entreprise » refermée : la partie « Votre entreprise » se relit).
+     Les causes S'AJOUTENT tant qu'aucune liste n'est revenue : une lecture
+     en remplace une autre, pas ce que l'autre devait relire. « Réessayer »
+     passe l'événement de l'appui, jamais l'une de ces deux chaînes. */
+  const lireLaListe = (cause = null) => {
     const f = fileRef.current;
     if (!f || !f.devisEnBase()) return;
     lectureListe.current += 1;
     const n = lectureListe.current;
     const g = f.generation();
-    setListe((l) => ({ ...l, erreur: null, enLecture: true }));
+    setListe((l) => ({
+      ...l,
+      erreur: null,
+      enLecture: true,
+      relecture: {
+        devis: l.relecture.devis || cause === 'devis',
+        entreprise: l.relecture.entreprise || cause === 'entreprise',
+      },
+    }));
     api.motifsRefusRemise(f.devisId())
       .then((motifs) => ({ motifs }), (erreur) => ({ erreur }))
       .then((r) => {
@@ -744,8 +770,12 @@ export default function SaisieDevisScreen({
            qui a lancé cette lecture, elle n'est plus sûre. L'écran dit
            « Liste non lue », jamais « rien ne manque ». */
         setListe(r.erreur
-          ? { motifs: null, erreur: r.erreur, enLecture: false }
-          : { motifs: Array.isArray(r.motifs) ? r.motifs : null, erreur: null, enLecture: false });
+          ? {
+            motifs: null, erreur: r.erreur, enLecture: false, relecture: AUCUNE_RELECTURE,
+          }
+          : {
+            motifs: Array.isArray(r.motifs) ? r.motifs : null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE,
+          });
       });
   };
 
@@ -799,8 +829,9 @@ export default function SaisieDevisScreen({
            distribuer d'abord. */
         Promise.resolve().then(() => { if (vivant) rejouerLePlafond(); });
         /* …ET LA LISTE « POUR LE REMETTRE » SE RELIT (lot 2b-1), sous la
-           même génération que ces totaux. */
-        lireLaListe();
+           même génération que ces totaux — la partie « Ce devis » se relit
+           (ECR-1) : jusqu'au retour, la carte ne la montre pas. */
+        lireLaListe('devis');
       } else if (ev.type === 'totaux_illisibles') {
         setTotauxIllisibles(true);
       } else if (ev.type === 'renomme' && ev.quoi === 'ligne') {
@@ -920,7 +951,10 @@ export default function SaisieDevisScreen({
   useEffect(() => {
     if (retourEntrepriseVu.current === retourEntreprise) return;
     retourEntrepriseVu.current = retourEntreprise;
-    lireLaListe();
+    /* La partie « Votre entreprise » se relit : jusqu'au retour, la carte
+       ne la montre pas — elle date d'avant ce qu'on vient d'y écrire
+       (ECR-1). « Ce devis », lui, reste juste. */
+    lireLaListe('entreprise');
   }, [retourEntreprise]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* LE CHAMP DE L'EN-TÊTE QUI PREND LE FOCUS — après le rendu qui a fermé
@@ -1639,11 +1673,10 @@ export default function SaisieDevisScreen({
 
   /* « POUR LE REMETTRE » : ce que la base a rendu, rangé en trois parties
      comptées (`lireMotifsDeRemise`, devis.js), avec la table des sections
-     d'« Mon entreprise » — la même que `PretAEmettre` ; et les AVIS, calculés
-     ici sur ce que l'écran a, jamais comptés. */
+     d'« Mon entreprise » — la même que `PretAEmettre`. Les AVIS se calculent
+     plus bas, une fois l'état de la liste connu. */
   const lue = useMemo(() => (Array.isArray(liste.motifs)
     ? lireMotifsDeRemise(liste.motifs, { sections: SECTION_DU_MOTIF }) : null), [liste.motifs]);
-  const avis = useMemo(() => avisDuDevis({ devis, lignes, totaux }), [devis, lignes, totaux]);
 
   if (etat === 'impossible') {
     return <View style={s.centre}><Text style={s.texteCentre}>{IDENTIFIANT_IMPOSSIBLE}</Text></View>;
@@ -1705,10 +1738,18 @@ export default function SaisieDevisScreen({
     champOuvert,
     erreur: liste.erreur,
     lue,
+    relecture: liste.relecture,
   });
   const pasCompte = ceQueLaListeNeComptePas({
     nbLignes: nbNonEnregistrees,
     entete: !!attente.devisErreur || Object.keys(erreursEntete).length > 0,
+    enBase: attente.devisEnBase,
+  });
+  /* LES AVIS, calculés ici sur ce que l'écran a, jamais comptés — et
+     « ce devis ne coûte rien » se tait tant que la liste n'est pas sûre
+     (relecture de 2b-1, PAR-8). */
+  const avis = avisDuDevis({
+    devis, lignes, totaux, etat: etatListe, pasCompte,
   });
   let erreurListe = null;
   if (liste.erreur) {
@@ -1727,6 +1768,7 @@ export default function SaisieDevisScreen({
       lue={lue}
       enLecture={liste.enLecture}
       pasCompte={pasCompte}
+      relecture={liste.relecture}
       erreurReessayable={listeReessayable}
       erreurPhrase={erreurListe}
       onOuvrir={ouvrirPourRemettre}
@@ -2101,6 +2143,7 @@ export default function SaisieDevisScreen({
           lue={lue}
           enLecture={liste.enLecture}
           pasCompte={pasCompte}
+          relecture={liste.relecture}
           erreurPhrase={erreurListe}
           erreurReessayable={listeReessayable}
           avis={avis}

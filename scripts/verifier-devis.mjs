@@ -4248,7 +4248,8 @@ console.log('\n  27. `api.js` : la forme, la liste fermée, la file, la mémoire
      AUTRE fonction appelée par `.rpc(` rougit encore. */
   /* LA SECONDE EXCEPTION, NOMMÉE (lot 2b-1, 05/11/2026) :
      `motifs_refus_remise`, qui lit le RÉGIME de TVA (`emetteur.regime_tva`)
-     pour juger le taux de chaque ligne (`devis_taux_regime`) et appelle
+     pour juger le taux de chaque ligne (`devis_taux_franchise`,
+     `devis_taux_sans_tva`) et appelle
      `emetteur_incomplet` pour les motifs de l'entreprise. La règle a changé,
      et elle est écrite ici sous sa forme la plus étroite : dans la section
      49, `emetteur` n'est nommé QUE par elle, une seule fois, pour UNE
@@ -7572,7 +7573,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   };
 
   /* ---------------- a. LA FORME ENTIÈRE ---------------- */
-  const FORME_MOTIFS_REFUS_REMISE = String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_regime text; v_un_poste boolean; v_fautives uuid[]; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0))), '{}') into v_un_poste, v_fautives from public.devis_lignes l where l.devis_id = p_devis; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'loi'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'loi'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste.'; return next; end if; foreach v_ligne in array v_fautives loop rang := 3; cle := 'devis_taux_regime'; nature := 'loi'; ligne_id := v_ligne; phrase := 'Le taux de TVA de cette ligne ne correspond pas à votre régime de TVA : corrigez-la.'; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour un particulier et pour un devis signé chez le client ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total du devis : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when cle = 'conso_profession_reglementee' then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
+  const FORME_MOTIFS_REFUS_REMISE = String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_regime text; v_un_poste boolean; v_fautives uuid[]; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0))), '{}') into v_un_poste, v_fautives from public.devis_lignes l where l.devis_id = p_devis; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; foreach v_ligne in array v_fautives loop if v_regime = 'franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
   const defsMRR = FONCTIONS.filter((f) => f.nom === 'motifs_refus_remise');
   const vuMRR = defsMRR.length === 1 ? `${sansEspaces(defsMRR[0].attributs)} $$ ${sansEspaces(defsMRR[0].corps)} $$` : `(${defsMRR.length} définition(s) dans le fichier)`;
   verifier('a. `motifs_refus_remise` a EXACTEMENT la forme du contrat, relue et éprouvée par l’essai et `cas-remise.json` — une seule '
@@ -7597,9 +7598,15 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
 
   /* ---------------- b. LES PHRASES, OCTET POUR OCTET ---------------- */
   /* LA TABLE DU CONTRAT (annexe B.2) : clé, rang, nature, écrits ici en
-     toutes lettres — une TROISIÈME écriture, qui garde les deux autres. */
+     toutes lettres — une TROISIÈME écriture, qui garde les deux autres.
+     DIX CLÉS SUR NEUF RANGS depuis la relecture de 2b-1 (05/11/2026) : le
+     rang 3 est coupé en deux (TXT-1) — `devis_taux_franchise`, la loi,
+     `devis_taux_sans_tva`, une prudence (l'autoliquidation le permet) ; et
+     `devis_client`, `devis_lignes` sont des RÈGLES D'OPUS (décision D-C du
+     propriétaire, le soir du 05/11, constat TXT-4). */
   const CONTRAT_B2 = [
-    ['devis_client', 1, 'loi'], ['devis_lignes', 2, 'loi'], ['devis_taux_regime', 3, 'loi'],
+    ['devis_client', 1, 'regle_opus'], ['devis_lignes', 2, 'regle_opus'],
+    ['devis_taux_franchise', 3, 'loi'], ['devis_taux_sans_tva', 3, 'prudence'],
     ['devis_lieu', 4, 'prudence'], ['devis_delai', 5, 'regle_opus'], ['devis_validite', 6, 'prudence'],
     ['devis_acompte_nature', 7, 'prudence'], ['devis_acompte_ramene', 8, 'prudence'], ['devis_reduction_ramenee', 9, 'prudence'],
   ];
@@ -7607,31 +7614,79 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     .map((m) => ({ cle: m[2], rang: Number(m[1]), nature: m[3], phrase: m[4].replace(/''/g, "'") }));
   const motifsJs = Object.entries(D.MOTIFS_DEVIS || {}).map(([cle, m]) => ({ cle, rang: m.rang, nature: m.nature, phrase: m.phrase }))
     .sort((a, b) => a.rang - b.rang);
-  verifier('b. les NEUF motifs du devis : mêmes clés, rangs, natures et phrases dans `schema.sql` et dans `MOTIFS_DEVIS` (devis.js) — '
-    + 'octet pour octet, dans l’ordre des rangs', motifsSql.length === 9 && egal(motifsSql, motifsJs),
-  motifsSql.length !== 9 ? `${motifsSql.length} motif(s) lus dans la fonction`
+  verifier('b. les DIX motifs du devis (neuf rangs) : mêmes clés, rangs, natures et phrases dans `schema.sql` et dans `MOTIFS_DEVIS` '
+    + '(devis.js) — octet pour octet, dans l’ordre des rangs', motifsSql.length === 10 && egal(motifsSql, motifsJs),
+  motifsSql.length !== 10 ? `${motifsSql.length} motif(s) lus dans la fonction`
     : motifsSql.filter((m, i) => !egal(m, motifsJs[i])).map((m) => `${m.cle} : SQL ${json(m)} ≠ JS ${json(motifsJs.find((j) => j.cle === m.cle))}`).join(' | '));
-  verifier('…et ce sont les clés, rangs et natures du CONTRAT (annexe B.2) : `devis_delai` est une RÈGLE D’OPUS (réponse 2 du 05/11), '
-    + '`devis_lieu`, `devis_validite`, la nature et les « ramenés » des PRUDENCES, aucun `devis_taux_reduit` (réponse 3)',
+  verifier('…et ce sont les clés, rangs et natures du CONTRAT (annexe B.2) : `devis_delai`, `devis_client` et `devis_lignes` sont des '
+    + 'RÈGLES D’OPUS (réponses du 05/11), le rang 3 a deux clés (la franchise, la loi ; le réel sans TVA, une prudence), `devis_lieu`, '
+    + '`devis_validite`, la nature et les « ramenés » des PRUDENCES, aucun `devis_taux_reduit` (réponse 3) ni `devis_taux_regime` (coupé en deux)',
   egal(motifsSql.map((m) => [m.cle, m.rang, m.nature]), CONTRAT_B2) && egal(motifsJs.map((m) => [m.cle, m.rang, m.nature]), CONTRAT_B2)
-    && !('devis_taux_reduit' in (D.MOTIFS_DEVIS || {})) && !/devis_taux_reduit/.test(SQL), json(motifsSql.map((m) => [m.cle, m.rang, m.nature])));
+    && !('devis_taux_reduit' in (D.MOTIFS_DEVIS || {})) && !/devis_taux_reduit/.test(SQL)
+    && !('devis_taux_regime' in (D.MOTIFS_DEVIS || {})) && !/devis_taux_regime/.test(SQL), json(motifsSql.map((m) => [m.cle, m.rang, m.nature])));
+  /* UNE NATURE SE DIT DANS LA PHRASE (relecture de 2b-1, TXT-4, TXT-5, TXT-6,
+     TXT-1) : une règle d'Opus du devis dit, après le cas où la loi la
+     demande, « Opus le demande pour tous vos devis » ; une prudence de lieu
+     ou de validité dit le cas qui décide — « signé dans vos locaux », « les
+     services à la personne » — et « Opus ne sait pas encore » ; la prudence
+     du taux nomme l'autoliquidation ; une phrase qui dit la loi sans dire
+     « pour tous vos devis » ne porte pas la nature d'une règle d'Opus, et
+     inversement. Les phrases changées le 05/11 au soir sont écrites ici EN
+     TOUTES LETTRES (un sabotage qui changerait la fonction, le miroir ET la
+     forme ci-dessus ensemble passerait sinon). */
+  const PHRASES_DU_05_11 = {
+    devis_client: 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une '
+      + 'réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.',
+    devis_lignes: 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et '
+      + 'leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.',
+    devis_taux_franchise: 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.',
+    devis_taux_sans_tva: 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en '
+      + 'autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.',
+    devis_lieu: 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos '
+      + 'locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.',
+    devis_delai: 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le '
+      + 'demande pour tous vos devis.',
+    devis_validite: 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien '
+      + 'signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.',
+    devis_reduction_ramenee: 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis '
+      + 'dise ce que vous voulez.',
+  };
+  const phrasesFausses = Object.entries(PHRASES_DU_05_11)
+    .filter(([cle, ph]) => (D.MOTIFS_DEVIS[cle] || {}).phrase !== ph || !(motifsSql.find((m) => m.cle === cle) || {}).phrase
+      || motifsSql.find((m) => m.cle === cle).phrase !== ph).map(([cle]) => cle);
+  const natureDitePasLaPhrase = motifsJs.filter((m) => (m.nature === 'regle_opus') !== /Opus le demande pour tous vos devis\.$/.test(m.phrase)
+    || (m.nature === 'prudence' && /La loi l[ae] demande/.test(m.phrase) && !/Opus ne sait pas encore/.test(m.phrase))).map((m) => m.cle);
+  verifier('…les phrases changées par la relecture du 05/11 (client, lignes, les deux taux, lieu, délai, validité, réduction) sont, '
+    + 'MOT POUR MOT, celles écrites ici, des deux côtés ; et une règle d’Opus — et elle seule — finit par « Opus le demande pour tous vos '
+    + 'devis. » ; une prudence qui cite la loi dit qu’Opus ne sait pas encore ; la réduction se compare au « total des postes », '
+    + 'jamais au « total du devis »',
+  phrasesFausses.length === 0 && natureDitePasLaPhrase.length === 0
+    && !/dépasse le total du devis : Opus l’a ramenée/.test(SQL) && !/pour un particulier et pour un devis signé chez le client/.test(SQL),
+  `phrases : ${phrasesFausses.join(', ') || '—'} ; nature ≠ phrase : ${natureDitePasLaPhrase.join(', ') || '—'}`);
   const fauteDeForme = motifsJs.filter((m) => /\d|€|'|[\u00a0\u202f]|\\/.test(m.phrase) || !/[.]$/.test(m.phrase) || !/’/.test(m.phrase + '’'));
   verifier('…aucune phrase ne porte de chiffre, d’euro, d’apostrophe DROITE, d’espace insécable ni de barre oblique : la base ne met pas '
-    + 'de montant en forme, et l’apostrophe est typographique, comme dans `emetteur_incomplet()`', motifsJs.length === 9
+    + 'de montant en forme, et l’apostrophe est typographique, comme dans `emetteur_incomplet()`', motifsJs.length === 10
     && fauteDeForme.length === 0, fauteDeForme.map((m) => m.cle).join(', '));
   /* Les natures de l'ENTREPRISE (annexe B.3) : `regle_opus` pour les trois
      règles d'Opus gardées le 05/11, `prudence` pour la profession
-     réglementée, `loi` sinon — lues dans le `case` de la fonction et
-     comparées à `NATURE_DU_MOTIF_ENTREPRISE`. */
-  const caseNat = /nature := case when cle in \(((?:'\w+'(?:, )?)+)\) then 'regle_opus' when cle = '(\w+)' then 'prudence' else 'loi' end;/.exec(sansEspaces(corpsMRRbrut));
+     réglementée ET le régime de TVA (relecture de 2b-1, TXT-7 : aucune loi
+     ne demande de déclarer son régime à Opus), `loi` sinon — `registre`
+     compris —, lues dans le `case` de la fonction et comparées à
+     `NATURE_DU_MOTIF_ENTREPRISE`. */
+  const caseNat = /nature := case when cle in \(((?:'\w+'(?:, )?)+)\) then 'regle_opus' when cle in \(((?:'\w+'(?:, )?)+)\) then 'prudence' else 'loi' end;/.exec(sansEspaces(corpsMRRbrut));
   const natSql = caseNat ? Object.fromEntries([
-    ...caseNat[1].split(', ').map((x) => [x.replace(/'/g, ''), 'regle_opus']), [caseNat[2], 'prudence']]) : null;
+    ...caseNat[1].split(', ').map((x) => [x.replace(/'/g, ''), 'regle_opus']),
+    ...caseNat[2].split(', ').map((x) => [x.replace(/'/g, ''), 'prudence'])]) : null;
   const natJs = D.NATURE_DU_MOTIF_ENTREPRISE || {};
   const triee = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b]) => a.localeCompare(b)));
   verifier('…les natures des motifs de l’entreprise sont les MÊMES des deux côtés : `entreprise_ancienne`, `conso_tva_intra`, '
-    + '`frais_deplacement` en règle d’Opus, `conso_profession_reglementee` en prudence, toute autre clé en loi',
+    + '`frais_deplacement` en règle d’Opus, `conso_profession_reglementee` et `regime_tva` en prudence, toute autre clé en loi '
+    + '(`registre` et les neuf autres `conso_` compris)',
   !!natSql && egal(triee(natSql), triee(natJs))
-    && egal(triee(natJs), triee({ entreprise_ancienne: 'regle_opus', conso_tva_intra: 'regle_opus', frais_deplacement: 'regle_opus', conso_profession_reglementee: 'prudence' }))
+    && egal(triee(natJs), triee({ entreprise_ancienne: 'regle_opus', conso_tva_intra: 'regle_opus', frais_deplacement: 'regle_opus',
+      conso_profession_reglementee: 'prudence', regime_tva: 'prudence' }))
+    && D.natureDuMotifEntreprise('regime_tva') === 'prudence' && D.natureDuMotifEntreprise('registre') === 'loi'
+    && D.natureDuMotifEntreprise('conso_mediateur') === 'loi'
     && D.natureDuMotifEntreprise('identite') === 'loi' && D.natureDuMotifEntreprise('cle_inconnue') === 'loi'
     && D.natureDuMotifEntreprise('__proto__') === 'loi',
   `SQL ${json(natSql)} | JS ${json(natJs)}`);
@@ -7673,12 +7728,17 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      où la typographie le veut. */
   const B8 = {
     MENTIONS_PARTICULIER_PAR_PRUDENCE: 'Opus ne sait pas encore pour qui le client commande : dans le doute, il compte ce qu’on doit à un particulier.',
-    PAS_ENCORE_VERIFIE: 'Pas encore vérifié : pour qui le client commande, le moment de la signature, l’urgence, la garantie décennale, le prix du devis et les déchets de chantier.',
+    PAS_ENCORE_VERIFIE: 'Pas encore vérifié : pour qui le client commande, le moment de la signature, l’urgence, la garantie décennale, si le devis lui-même est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, et si les travaux concernent un immeuble neuf.',
     RIEN_NE_MANQUE_POUR_CE_DEVIS: 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.',
     LISTE_AVANT_LA_PREMIERE_LIGNE: 'Écrivez une première ligne : la liste se calculera ensuite.',
     LISTE_EN_ROUTE: 'Des changements partent : la liste sera à jour juste après.',
     LISTE_NON_LUE: 'Liste non lue — Réessayer',
-    AIDE_TAUX_REDUIT: 'À 10 % ou 5,5 %, le client certifiera sur le devis que le logement a plus de deux ans : Opus imprimera cette phrase avec la place de signer.',
+    AIDE_TAUX_REDUIT: 'À 10 % ou 5,5 %, le client devra certifier sur le devis que les conditions du taux réduit sont remplies : un logement achevé depuis plus de deux ans, des travaux qui ne créent pas un immeuble neuf et n’agrandissent pas la surface de plus de 10 % ; à 5,5 %, des travaux de rénovation énergétique. Opus imprimera la certification prévue par la loi, avec la place de signer.',
+    /* La relecture de 2b-1 (05/11/2026) : une partie qui se relit (ECR-1),
+       un brouillon pas en base qui porte quelque chose (ECR-3). */
+    CE_DEVIS_SE_MET_A_JOUR: 'Ce devis : la liste se met à jour.',
+    ENTREPRISE_SE_MET_A_JOUR: 'Votre entreprise : la liste se met à jour.',
+    ENTETE_PAS_ENCORE_ENREGISTRE: 'Un champ du devis n’est pas encore enregistré : la liste se calculera ensuite.',
   };
   const B8faux = Object.entries(B8).filter(([k, v]) => net(D[k]) !== v).map(([k]) => k);
   verifier('…les phrases de l’écran (annexe B.8) sont celles du contrat, mot pour mot', B8faux.length === 0, B8faux.join(', '));
@@ -7688,9 +7748,31 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      perd — « 10 » finirait une ligne et « % » commencerait la suivante. Et
      elles sont ÉCRITES `\u00a0` dans le source, comme toutes les insécables
      de `devis.js` : un caractère invisible collé ne se relit pas. */
-  verifier('…l’aide du taux réduit garde ses deux espaces INSÉCABLES avant « % », écrites `\\u00a0` dans le source',
-    D.AIDE_TAUX_REDUIT === `À 10${'\u00a0'}% ou 5,5${'\u00a0'}%, le client certifiera sur le devis que le logement a plus de deux ans : Opus imprimera cette phrase avec la place de signer.`
-    && /export const AIDE_TAUX_REDUIT = 'À 10\\u00a0% ou 5,5\\u00a0%, /.test(lire('src/lib/devis.js')));
+  /* …ET ELLE NOMME LES CONDITIONS À CERTIFIER (relecture de 2b-1, TXT-3) :
+     elle ne nommait que « le logement a plus de deux ans » — un artisan
+     pouvait en déduire le 10 % pour une extension —, et promettait
+     d'imprimer « cette phrase ». Comparée EXACTEMENT, insécables comprises :
+     les QUATRE espaces entre un nombre et « % ». */
+  const nb = '\u00a0';
+  verifier('…l’aide du taux réduit nomme les conditions (deux ans, ni immeuble neuf ni plus de 10 % de surface, rénovation énergétique à '
+    + '5,5 %), promet « la certification prévue par la loi » — et garde ses QUATRE espaces INSÉCABLES avant « % », écrites `\\u00a0` dans le source',
+  D.AIDE_TAUX_REDUIT === `À 10${nb}% ou 5,5${nb}%, le client devra certifier sur le devis que les conditions du taux réduit sont remplies : un `
+    + 'logement achevé depuis plus de deux ans, des travaux qui ne créent pas un immeuble neuf et n’agrandissent pas la surface de plus '
+    + `de 10${nb}% ; à 5,5${nb}%, des travaux de rénovation énergétique. Opus imprimera la certification prévue par la loi, avec la place de signer.`
+    && /export const AIDE_TAUX_REDUIT = 'À 10\\u00a0% ou 5,5\\u00a0%, /.test(lire('src/lib/devis.js'))
+    && (D.AIDE_TAUX_REDUIT.match(/\d \u00a0?%/g) || []).length === 0 && (D.AIDE_TAUX_REDUIT.match(/\u00a0%/g) || []).length === 4
+    && !/cette phrase/.test(D.AIDE_TAUX_REDUIT), JSON.stringify(D.AIDE_TAUX_REDUIT));
+  /* …ET SES QUATRE INSÉCABLES SONT TOUTES ÉCRITES EN SÉQUENCE (banc
+     indépendant de 2b-1, 05/11/2026 au soir) : la vérification ci-dessus ne
+     relisait la forme écrite que des DEUX premières. La quatrième collée en
+     caractère invisible rendait la même valeur, et passait tout — or « un
+     caractère invisible collé ne se relit pas », et l'outil d'édition de ces
+     sessions en fabrique (CLAUDE.md, lot 1). Le SOURCE de la constante,
+     relu entier : quatre séquences, aucun caractère U+00A0 ni U+202F. */
+  const sourceAide = (/export const AIDE_TAUX_REDUIT = [\s\S]*?;\n/.exec(lire('src/lib/devis.js')) || [''])[0];
+  verifier('…et ses QUATRE insécables sont écrites `\\u00a0` dans le source de la constante — aucune n’y est collée en caractère invisible',
+    sourceAide.length > 200 && (sourceAide.match(/\\u00a0/g) || []).length === 4 && !/[\u00a0\u202f]/.test(sourceAide),
+  `${(sourceAide.match(/\\u00a0/g) || []).length} séquence(s), ${(sourceAide.match(/[\u00a0\u202f]/g) || []).length} caractère(s) invisible(s)`);
   verifier('…les étiquettes de nature disent « La loi », « Par prudence », « Règle d’Opus » — et les avis (B.7) leurs deux phrases',
     egal(D.ETIQUETTE_DE_NATURE, { loi: 'La loi', prudence: 'Par prudence', regle_opus: 'Règle d’Opus' })
     && egal(Object.fromEntries(Object.entries(D.AVIS_DU_DEVIS || {}).map(([k, v]) => [k, net(v)])), {
@@ -7699,12 +7781,18 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     }) && egal(D.NATURES_DE_MOTIF, ['loi', 'prudence', 'regle_opus']));
   /* « PAS ENCORE VÉRIFIÉ » NE PROMET RIEN (critique E-11) : aucune date,
      aucun « prochain lot », aucun « bientôt » — on dit ce qui manque, pas
-     quand. Et il nomme les SIX faits que 2b-1 ne vérifie pas (critique D2 :
-     sans eux, « rien ne manque » mentirait). */
+     quand. Et il nomme les HUIT faits que 2b-1 ne vérifie pas (critique D2 :
+     sans eux, « rien ne manque » mentirait) — le label RGE et l'immeuble
+     neuf depuis la relecture de 2b-1 (TXT-2), et « si le devis lui-même
+     est payant » à la place du « prix du devis », qui se lisait comme le
+     total. */
   const pev = net(D.PAS_ENCORE_VERIFIE);
-  verifier('…« Pas encore vérifié » nomme les six faits que 2b-1 ne vérifie pas, et n’annonce ni date ni lot',
-    ['pour qui le client commande', 'le moment de la signature', 'l’urgence', 'la garantie décennale', 'le prix du devis', 'les déchets de chantier']
-      .every((x) => pev.includes(x)) && !/bient[oô]t|prochain|lot\b|\b20\d\d\b|\d{1,2}\/\d{1,2}|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre/i.test(pev), pev);
+  verifier('…« Pas encore vérifié » nomme les HUIT faits que 2b-1 ne vérifie pas (dont le label RGE et l’immeuble neuf), jamais « le prix du '
+    + 'devis », et n’annonce ni date ni lot',
+  ['pour qui le client commande', 'le moment de la signature', 'l’urgence', 'la garantie décennale', 'si le devis lui-même est payant',
+    'les déchets de chantier', 'le label RGE pour des travaux d’énergie', 'si les travaux concernent un immeuble neuf']
+    .every((x) => pev.includes(x)) && !/le prix du devis/.test(pev)
+    && !/bient[oô]t|prochain|lot\b|\b20\d\d\b|\d{1,2}\/\d{1,2}|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre/i.test(pev), pev);
 
   /* ---------------- OP027 — le même refus, des deux côtés ---------------- */
   const op027 = [...SQL.matchAll(/raise\s+exception\s+'((?:[^']|'')*)'\s+using\s+errcode\s*=\s*'OP027'/gi)].map((m) => m[1].replace(/''/g, "'"));
@@ -7721,6 +7809,21 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   ERR.estUnRefusDefinitif({ code: 'OP027' }) === true && ERR.estUnRefusDefinitif({ code: 'OP028' }) === false
     && msgOp027.includes(ERR.REFUS_REMISE.OP027) && /la fonction « motifs_refus_remise » lui manque/.test(msgAbsente)
     && !/does not exist/.test(msgAbsente), `${msgOp027} | ${msgAbsente}`);
+  /* …MAIS UNE FAUTE DE PROGRAMMATION N'EST PAS UNE BASE EN RETARD
+     (relecture de 2b-1, TXT-8) : 42883 dit aussi « une fonction de
+     PostgreSQL appelée avec de mauvais types » et « un opérateur
+     introuvable ». L'écran les imputait à la base et disait de rejouer
+     `schema.sql`. Seule une fonction QUALIFIÉE « public. » — la forme d'un
+     appel de l'application — est une base en retard ; les autres suivent le
+     chemin ordinaire. Les trois messages, FAITS TOURNER. */
+  const enRetard = (msg) => /lui manque|n’a pas encore reçu la mise à jour|schema\.sql/.test(msg);
+  const msgLower = ERR.messageClair({ code: '42883', message: 'function lower(integer) does not exist' }, 'La liste');
+  const msgOperateur = ERR.messageClair({ code: '42883', message: 'operator does not exist: uuid = text' }, 'La liste');
+  verifier('…et `messageClair` ne prend pour une base en retard QUE la fonction qualifiée « public. » : « function lower(integer) does not '
+    + 'exist » et « operator does not exist » suivent le chemin ordinaire',
+  enRetard(msgAbsente) && !enRetard(msgLower) && !enRetard(msgOperateur)
+    && enRetard(ERR.messageClair({ code: '42883', message: 'function public.emetteur_incomplet(uuid) does not exist' }, 'La liste')),
+  `${msgLower} | ${msgOperateur}`);
 
   /* ---------------- c. LES CAS DE PARITÉ, JOUÉS PAR LE MIROIR ---------------- */
   /* Engendrés par `scripts/generer-cas-remise.mjs`, qui fait jouer la VRAIE
@@ -7750,22 +7853,39 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      passerait « zéro écart ». Chaque motif du devis y apparaît SEUL au moins
      une fois ; chaque nature ; « rien ne manque » ; un motif de
      l'entreprise ; trois lignes fautives dans un même devis, ÉCRITES dans un
-     autre ordre que celui du devis (le miroir doit les ranger lui-même). */
+     autre ordre que celui du devis (le miroir doit les ranger lui-même) — en
+     franchise ET au réel, puisque le rang 3 a deux clés (relecture de 2b-1,
+     TXT-1) ; et D4-c sur un devis NEUF VIDE venu d'une urgence, puis d'une
+     demande et d'une urgence (PAR-6) : chaque motif du devis y est éprouvé
+     contre l'origine. */
   const seul = (k) => casR.some((c) => c.attendu.length === 1 && c.attendu[0].cle === k);
   const natures = new Set(casR.flatMap((c) => c.attendu.map((a) => a.nature)));
-  const desordre = casR.some((c) => {
-    const ix = c.attendu.filter((a) => a.cle === 'devis_taux_regime').map((a) => a.ligne_id);
+  const desordreDe = (cle) => casR.some((c) => {
+    const ix = c.attendu.filter((a) => a.cle === cle).map((a) => a.ligne_id);
     return ix.length >= 3 && ix.some((v, i) => i > 0 && v < ix[i - 1]);
   });
+  const desordre = desordreDe('devis_taux_franchise') && desordreDe('devis_taux_sans_tva');
+  const CLES_DU_NEUF = 'devis_client,devis_lignes,devis_lieu,devis_delai,devis_validite';
+  const neufVide = (source, demande, urgence) => casR.some((c) => c.devis && c.devis.source === source
+    && !!c.devis.quoteRequestId === demande && !!c.devis.sosRequestId === urgence && c.lignes.length === 0
+    && c.attendu.filter((a) => a.rang < 100).map((a) => a.cle).join() === CLES_DU_NEUF);
+  const d4cNeufs = neufVide('manuelle', false, false) && neufVide('urgence', false, true) && neufVide('demande', true, true);
+  /* BASE-1 : le délai fait d'un seul U+3000 (hors de la classe de blancs)
+     est FIGÉ dans le fichier engendré — sans motif `devis_delai`. Sans cette
+     exigence, retirer le cas du générateur passait au vert (banc du 05/11). */
+  const u3000 = casR.some((c) => c.devis && c.devis.delaiExecution === '\u3000'
+    && !c.attendu.some((a) => a.cle === 'devis_delai'));
   const clesDevisApp = Object.keys(D.rowToDevis({})).sort();
   const formeApp = casR.every((c) => egal(Object.keys(c.devis || {}).sort(), clesDevisApp) && Array.isArray(c.lignes) && Array.isArray(c.motifsEmetteur));
   const nonCouverts = CONTRAT_B2.map(([k]) => k).filter((k) => !seul(k));
   verifier('…et ils COUVRENT la règle : chaque motif du devis seul au moins une fois, les trois natures, au moins un devis où rien ne '
-    + 'manque, un motif de l’entreprise, trois lignes fautives rangées autrement qu’écrites — et le devis est dans la forme de l’application '
+    + 'manque, un motif de l’entreprise, trois lignes fautives rangées autrement qu’écrites (en franchise ET au réel), le devis NEUF VIDE '
+    + 'ouvert à la main, venu d’une urgence, venu d’une demande et d’une urgence (D4-c), le délai fait d’un seul U+3000 sans motif (BASE-1) '
+    + '— et le devis est dans la forme de l’application '
     + '(`rowToDevis`)',
   nonCouverts.length === 0 && ['loi', 'prudence', 'regle_opus'].every((n) => natures.has(n))
-    && casR.some((c) => c.attendu.length === 0) && casR.some((c) => c.attendu.some((a) => a.rang > 100)) && desordre && formeApp,
-  `non couverts seuls : ${nonCouverts.join(', ') || '—'} ; natures ${json([...natures])} ; désordre ${desordre} ; forme ${formeApp}`);
+    && casR.some((c) => c.attendu.length === 0) && casR.some((c) => c.attendu.some((a) => a.rang > 100)) && desordre && d4cNeufs && u3000 && formeApp,
+  `non couverts seuls : ${nonCouverts.join(', ') || '—'} ; natures ${json([...natures])} ; désordre ${desordre} ; neufs D4-c ${d4cNeufs} ; U+3000 ${u3000} ; forme ${formeApp}`);
   let PKG = {};
   try { PKG = JSON.parse(lire('package.json')); } catch (e) { PKG = {}; }
   const GEN = sansCommentairesJs(lireSiExiste('scripts/generer-cas-remise.mjs') || '');
@@ -7792,6 +7912,62 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && egal(M({ ...complet, acompteCentimes: 500, acompteNature: 'arrhes' }, [poste20]), [])
     && egal(M({ ...complet, acompteCentimes: 500 }, [poste20]), ['devis_acompte_nature']),
   json(M({ ...complet, delaiExecution: ' \u00a0\u200b ' }, [poste20])));
+  /* LES BORDS DE `devis_lieu`, EN TOUTES LETTRES (relecture de 2b-1, PAR-7).
+     Ils n'étaient gardés que par un cas du fichier ENGENDRÉ (`cas-remise.json`,
+     « le code postal seul ») : un miroir réduit à l'adresse et à la ville, et
+     un fichier récrit à la main d'après lui, passaient au vert — la parité
+     n'est rattachée à la base que par `generer-cas-remise --verifier`, qui
+     demande PostgreSQL et ne tourne pas ici (`docs/A-FAIRE.md` §2.3). Un
+     seul des trois suffit ; les trois vides, et seulement eux, font le motif.
+     ET LA LISTE VÉRIFIE UNE PRÉSENCE, PAS UN SENS (BASE-1) : un délai fait
+     d'un seul U+3000 — hors de la classe de blancs du projet — passe pour
+     écrit, comme la base le range (cas 62 du fichier, cas 5 de l'essai). */
+  const sansLieu = { ...complet, lieuVille: null };
+  verifier('les bords de `devis_lieu`, écrits ici et FAITS TOURNER : le code postal seul, la ville seule, l’adresse seule → aucun motif ; '
+    + 'les trois vides → `devis_lieu` ; un délai d’un seul U+3000 → pas de `devis_delai` (une présence, pas un sens)',
+  egal(M({ ...sansLieu, lieuCodePostal: '13410' }, [poste20]), [])
+    && egal(M({ ...sansLieu, lieuVille: 'Lambesc' }, [poste20]), [])
+    && egal(M({ ...sansLieu, lieuAdresse: '4 rue de l’Essai' }, [poste20]), [])
+    && egal(M({ ...sansLieu, lieuAdresse: null, lieuCodePostal: null }, [poste20]), ['devis_lieu'])
+    && egal(M({ ...sansLieu, lieuAdresse: '', lieuCodePostal: '', lieuVille: '' }, [poste20]), ['devis_lieu'])
+    && egal(M({ ...complet, delaiExecution: '\u3000' }, [poste20]), []),
+  json([M({ ...sansLieu, lieuCodePostal: '13410' }, [poste20]), M({ ...complet, delaiExecution: '\u3000' }, [poste20])]));
+  /* LES AUTRES BORDS DU MIROIR, EN TOUTES LETTRES (banc indépendant de 2b-1,
+     05/11/2026 au soir — le trou de PAR-7 hors du lieu). Comme ceux de
+     `devis_lieu`, ils n'étaient gardés que par des cas du fichier ENGENDRÉ :
+     un miroir faux ET `cas-remise.json` récrit d'après lui passaient tous les
+     contrôles — l'acompte en euros « ramené » à égalité, une OPTION comptée
+     pour un poste, la nature exigée sur un acompte en euros seulement. La
+     parité n'est rattachée à la base que par `generer-cas-remise --verifier`,
+     qui demande PostgreSQL et ne tourne pas ici (`docs/A-FAIRE.md` §2.3).
+     Les sorties attendues sont celles que la VRAIE fonction a rendues (cas 8,
+     30, 35, 36 et 39 de `cas-remise.json`, relevés sur PostgreSQL 16). */
+  verifier('les autres bords du miroir, écrits ici et FAITS TOURNER : un acompte EN EUROS égal au TTC n’est pas ramené, un centime de plus '
+    + 'l’est, un TTC de 0 le ramène ; une OPTION seule ne chiffre aucun travail (`devis_lignes`), un poste OFFERT seul en est un ; un '
+    + 'acompte EN POURCENTAGE sans nature rend `devis_acompte_nature`, comme un acompte en euros',
+  egal(M({ ...complet, acompteCentimes: 100000, acompteNature: 'acompte', acompteTtcCentimes: 100000 }, [poste20]), [])
+    && egal(M({ ...complet, acompteCentimes: 100001, acompteNature: 'acompte', acompteTtcCentimes: 100000 }, [poste20]), ['devis_acompte_ramene'])
+    && egal(M({ ...complet, acompteCentimes: 5000, acompteNature: 'acompte', acompteTtcCentimes: 0 }, [poste20]), ['devis_acompte_ramene'])
+    && egal(M({ ...complet, acompteCentiemes: 3000, acompteTtcCentimes: 30000 }, [poste20]), ['devis_acompte_nature'])
+    && egal(M(complet, [{ id: 'o', type: 'option', tauxTvaCentiemes: 2000, ordre: 1000 }]), ['devis_lignes'])
+    && egal(M(complet, [{ id: 'p', type: 'poste', tauxTvaCentiemes: 2000, ordre: 1000, offert: true }]), []),
+  json([M({ ...complet, acompteCentimes: 100000, acompteNature: 'acompte', acompteTtcCentimes: 100000 }, [poste20]),
+    M(complet, [{ id: 'o', type: 'option', tauxTvaCentiemes: 2000, ordre: 1000 }]), M({ ...complet, acompteCentiemes: 3000, acompteTtcCentimes: 30000 }, [poste20])]));
+  /* LE RANG 3 A DEUX CLÉS, CHOISIES PAR LE RÉGIME (TXT-1) : en franchise
+     `devis_taux_franchise` (la loi), au réel `devis_taux_sans_tva` (une
+     prudence), dans l'ordre des lignes, en une boucle ; régime inconnu :
+     aucune. */
+  const lt = (id, type, t, ordre) => ({ id, type, tauxTvaCentiemes: t, ordre, prixUnitaireCentimes: 100 });
+  const rang3 = (regime, lignes) => D.motifsDeRemise({ devis: complet, lignes, regime }).filter((m) => m.rang === 3)
+    .map((m) => `${m.cle}:${m.nature}:${m.ligneId}`).join();
+  verifier('le rang 3, FAIT TOURNER : en franchise chaque ligne taxée rend `devis_taux_franchise` (la loi), au réel chaque ligne à 0 rend '
+    + '`devis_taux_sans_tva` (une prudence), dans l’ordre `ordre, id` ; régime inconnu, aucune',
+  rang3('franchise', [lt('b', 'poste', 2000, 2), lt('a', 'option', 550, 2), lt('c', 'poste', 0, 1)])
+      === 'devis_taux_franchise:loi:a,devis_taux_franchise:loi:b'
+    && rang3('reel', [lt('b', 'poste', 0, 2), lt('a', 'option', 0, 2), lt('c', 'poste', 2000, 1)])
+      === 'devis_taux_sans_tva:prudence:a,devis_taux_sans_tva:prudence:b'
+    && rang3(null, [lt('b', 'poste', 0, 2), lt('a', 'option', 2000, 2)]) === '',
+  `${rang3('franchise', [lt('b', 'poste', 2000, 2), lt('a', 'option', 550, 2)])} | ${rang3('reel', [lt('b', 'poste', 0, 2)])}`);
   /* RÉGIME ↔ TAUX : UNE règle (`ligneContreditLeRegime`), lue par le motif ET
      par la bande du haut (`coherenceRegime`) — elles ne se contredisent pas. */
   const cR = corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'coherenceRegime') || '';
@@ -7806,24 +7982,40 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && !D.ligneContreditLeRegime(L('piece', 2000), 'franchise') && !D.ligneContreditLeRegime({ type: 'poste', tauxTvaCentiemes: null }, 'franchise'));
   /* LA TRADUCTION D'UNE LIGNE RENDUE PAR POSTGREST. */
   verifier('`rowToMotifDeRemise` traduit une ligne de PostgREST (`ligne_id` → `ligneId`), sans rien inventer',
-    egal(D.rowToMotifDeRemise({ rang: 3, cle: 'devis_taux_regime', phrase: 'p', nature: 'loi', ligne_id: 'x' }),
-      { rang: 3, cle: 'devis_taux_regime', phrase: 'p', nature: 'loi', ligneId: 'x' })
+    egal(D.rowToMotifDeRemise({ rang: 3, cle: 'devis_taux_franchise', phrase: 'p', nature: 'loi', ligne_id: 'x' }),
+      { rang: 3, cle: 'devis_taux_franchise', phrase: 'p', nature: 'loi', ligneId: 'x' })
     && egal(D.rowToMotifDeRemise(null), { rang: null, cle: null, phrase: null, nature: null, ligneId: null }));
   /* LES AVIS NE SONT PAS DES MOTIFS (critique B6) : ils ne vivent pas dans la
      fonction, et leurs clés ne sont jamais celles d'un motif. */
-  verifier('les AVIS ne bloquent rien : `avisDuDevis` est pur (objet vide → `avis_objet` ; au moins un poste et un TTC relu à 0 → '
-    + '`avis_gratuit` ; TTC inconnu → rien ; pas de devis → rien), aucune clé `avis_` dans la fonction de la base ni parmi les motifs',
-  egal(D.avisDuDevis({ devis: { objet: '  ' }, lignes: [poste20], totaux: { ttc: 0 } }).map((a) => a.cle), ['avis_objet', 'avis_gratuit'])
-    && egal(D.avisDuDevis({ devis: { objet: 'Mur', totalTtcCentimes: 0 }, lignes: [poste20] }).map((a) => a.cle), ['avis_gratuit'])
-    && egal(D.avisDuDevis({ devis: { objet: 'Mur' }, lignes: [poste20] }), [])
-    && egal(D.avisDuDevis({ devis: { objet: 'Mur' }, lignes: [], totaux: { ttc: 0 } }), [])
+  verifier('les AVIS ne bloquent rien : `avisDuDevis` est pur (objet vide → `avis_objet` ; au moins un poste et un TTC relu à 0, sur une liste '
+    + 'SÛRE → `avis_gratuit` ; TTC inconnu → rien ; pas de devis → rien), aucune clé `avis_` dans la fonction de la base ni parmi les motifs',
+  egal(D.avisDuDevis({ devis: { objet: '  ' }, lignes: [poste20], totaux: { ttc: 0 }, etat: 'liste' }).map((a) => a.cle), ['avis_objet', 'avis_gratuit'])
+    && egal(D.avisDuDevis({ devis: { objet: 'Mur', totalTtcCentimes: 0 }, lignes: [poste20], etat: 'liste' }).map((a) => a.cle), ['avis_gratuit'])
+    && egal(D.avisDuDevis({ devis: { objet: 'Mur' }, lignes: [poste20], etat: 'liste' }), [])
+    && egal(D.avisDuDevis({ devis: { objet: 'Mur' }, lignes: [], totaux: { ttc: 0 }, etat: 'liste' }), [])
     && egal(D.avisDuDevis({ devis: null }), [])
     && !/avis_/.test(corpsMRRbrut) && !Object.keys(D.MOTIFS_DEVIS || {}).some((k) => /^avis_/.test(k)));
+  /* « CE DEVIS NE COÛTE RIEN » SE TAIT TANT QUE LA LISTE N'EST PAS SÛRE
+     (relecture de 2b-1, PAR-8) : le cas du relecteur — une seule ligne,
+     un poste PAS ENREGISTRÉ, et un TTC de la base à 0 — faisait dire à la
+     même carte « 1 ligne n’est pas enregistrée », « ne chiffre encore aucun
+     travail » ET « ne coûte rien au client ». Tu : en route, en lecture, en
+     échec, sur un brouillon pas en base, quand quelque chose n'est pas
+     compté — et sans état du tout. */
+  const pasEnregistre = D.ceQueLaListeNeComptePas({ nbLignes: 1 });
+  const gratuit = (o) => D.avisDuDevis({ devis: { objet: 'x' }, lignes: [{ type: 'poste', prixUnitaireCentimes: 5000 }], totaux: { ttc: 0 }, ...o })
+    .map((a) => a.cle);
+  verifier('…et « ce devis ne coûte rien » se TAIT tant que la liste n’est pas SÛRE : un seul poste pas enregistré et un TTC de base à 0 ne '
+    + 'le font pas dire ; ni en route, ni en lecture, ni en échec, ni sans état',
+  egal(gratuit({ etat: 'liste', pasCompte: pasEnregistre }), []) && egal(gratuit({ etat: 'en_route' }), [])
+    && egal(gratuit({ etat: 'lecture' }), []) && egal(gratuit({ etat: 'echec' }), []) && egal(gratuit({}), [])
+    && egal(gratuit({ etat: 'pas_en_base' }), []) && egal(gratuit({ etat: 'liste' }), ['avis_gratuit']),
+  json([gratuit({ etat: 'liste', pasCompte: pasEnregistre }), gratuit({ etat: 'liste' })]));
   /* LA LISTE RANGÉE POUR L'ÉCRAN — par endroit, et une clé inconnue
      s'affiche quand même, sans jamais passer pour une mention secondaire. */
   const liste = [
     { rang: 1, cle: 'devis_client', phrase: 'a', nature: 'loi', ligneId: null },
-    { rang: 3, cle: 'devis_taux_regime', phrase: 'b', nature: 'loi', ligneId: 'L9' },
+    { rang: 3, cle: 'devis_taux_franchise', phrase: 'b', nature: 'loi', ligneId: 'L9' },
     { rang: 101, cle: 'identite', phrase: 'c', nature: 'loi', ligneId: null },
     { rang: 102, cle: 'conso_mediateur', phrase: 'd', nature: 'loi', ligneId: null },
     { rang: 103, cle: 'conso_nouvelle_cle', phrase: 'e', nature: 'loi', ligneId: null },
@@ -7837,13 +8029,24 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   egal(lue.comptes, { devis: 3, entreprise: 2, particulier: 1 }) && lue.total === 6
     && lue.parties.particulier.map((p) => p.cle).join() === 'conso_mediateur'
     && lue.parties.entreprise.map((p) => p.cle).join() === 'identite,conso_nouvelle_cle'
-    && lue.parties.devis.map((p) => p.cle).join() === 'devis_client,devis_taux_regime,devis_cle_nouvelle'
+    && lue.parties.devis.map((p) => p.cle).join() === 'devis_client,devis_taux_franchise,devis_cle_nouvelle'
     && lue.parties.devis[2].phrase.length > 10 && lue.parties.devis[2].nature === null
     && egal(lue.parties.devis[1].endroit, { endroit: 'ligne', ligneId: 'L9' })
     && egal(lue.parties.entreprise[0].endroit, { endroit: 'entreprise', section: E.SECTION_DU_MOTIF.identite })
     && sans.parties.entreprise.every((p) => p.endroit === null) && sans.comptes.particulier === 0
     && egal(D.lireMotifsDeRemise([]).comptes, { devis: 0, entreprise: 0, particulier: 0 }),
   json(lue.comptes));
+  /* LA BASE FAIT FOI (relecture de 2b-1, PAR-2) : la phrase et la nature
+     RENDUES s'affichent, jamais celles du miroir — une base plus récente que
+     l'application dit ce qu'elle a décidé. Remplacer l'une par
+     `MOTIFS_DEVIS[cle]` passait tous les contrôles. */
+  const rendue = D.lireMotifsDeRemise([{ rang: 4, cle: 'devis_lieu', phrase: 'Phrase rendue par la base.', nature: 'loi' }]);
+  verifier('…la phrase et la nature RENDUES par la base s’affichent, jamais celles du miroir : « a » reste « a », et `devis_lieu` rendu '
+    + '« loi » (le miroir dit « prudence ») reste « loi », étiqueté « La loi »',
+  lue.parties.devis[0].phrase === 'a' && lue.parties.devis[1].phrase === 'b'
+    && rendue.parties.devis[0].phrase === 'Phrase rendue par la base.' && rendue.parties.devis[0].nature === 'loi'
+    && rendue.parties.devis[0].etiquette === 'La loi' && D.MOTIFS_DEVIS.devis_lieu.nature !== 'loi',
+  json(rendue.parties.devis[0]));
   /* UN BOUTON PAR POINT DE L'ENTREPRISE (critique E-8) : chaque motif
      d'`emetteur.js` qui a une section mène à « Mon entreprise » sur ELLE. */
   const sansEndroit = E.MOTIFS.filter((m) => m.section).filter((m) => {
@@ -7859,7 +8062,8 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   CONTRAT_B2.every(([k]) => !!D.ENDROIT_DU_MOTIF[k])
     && egal(D.endroitDuMotif({ cle: 'devis_validite' }), { endroit: 'conditions', champ: 'validite' })
     && egal(D.endroitDuMotif({ cle: 'devis_acompte_nature' }), { endroit: 'conditions', champ: 'nature' })
-    && egal(D.endroitDuMotif({ cle: 'devis_taux_regime', ligneId: null }), { endroit: 'lignes' })
+    && egal(D.endroitDuMotif({ cle: 'devis_taux_franchise', ligneId: null }), { endroit: 'lignes' })
+    && egal(D.endroitDuMotif({ cle: 'devis_taux_sans_tva', ligneId: 'L2' }), { endroit: 'ligne', ligneId: 'L2' })
     && D.endroitDuMotif({ cle: 'inconnue' }) === null);
 
   /* ---------------- d. L'ESSAI SQL ---------------- */
@@ -7887,7 +8091,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      juge rendait 0 écart sur 120 valeurs au lieu de 126). Trois gardes :
        - les 33 variables des refus DÉCLARÉES D'AVANCE (« jamais relevé ») :
          un cas retiré laisse un `f`, pas une erreur de syntaxe ;
-       - le nombre de valeurs jugées ANNONCÉ (`VALEURS_ANNONCEES`, 126), et
+       - le nombre de valeurs jugées ANNONCÉ (`VALEURS_ANNONCEES`, 126,
+         puis 130 depuis la relecture de 2b-1 : les deux clés du rang 3,
+         et le délai d'un seul U+3000), et
          CHAQUE valeur jugée passée par `pg_temp.v(…)`, qui avance une
          séquence temporaire (aucun `rollback` ne l'annule) ;
        - un jugement final EN SQL qui compare le compte à l'annonce. */
@@ -7901,15 +8107,31 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       return i >= 0 && j > i;
     }));
   const valeursAnnoncees = Number((/\\set\s+VALEURS_ANNONCEES\s+(\d+)/.exec(essE) || [])[1]);
-  verifier('…il ANNONCE ses 126 valeurs jugées, les COMPTE (chaque valeur passe par `pg_temp.v`, une séquence que `rollback` n’annule '
+  verifier('…il ANNONCE ses 130 valeurs jugées, les COMPTE (chaque valeur passe par `pg_temp.v`, une séquence que `rollback` n’annule '
     + 'pas) et un jugement final EN SQL refuse un autre compte ; les 33 variables des refus sont déclarées d’avance (un cas retiré laisse '
     + 'un `f`, pas une autre erreur)',
-  valeursAnnoncees === 126 && /JUGE EXACTEMENT 126 VALEURS/.test(brutE)
+  valeursAnnoncees === 130 && /JUGE EXACTEMENT 130 VALEURS/.test(brutE)
     && /create temporary sequence essai_valeurs;/.test(essE)
     && /create function pg_temp\.v\(x anyelement\) returns anyelement\s+language plpgsql volatile security definer as \$v\$\s+begin\s+perform nextval\('pg_temp\.essai_valeurs'\);\s+return x;\s+end;\s+\$v\$;/.test(essE)
     && /select pg_temp\.valeurs_jugees\(\) = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,/.test(essE)
     && aliasJuges === enveloppes + 1 && declarees,
   `${aliasJuges} colonne(s) jugée(s), ${enveloppes} enveloppée(s), annonce ${valeursAnnoncees}, déclarées d’avance : ${declarees}`);
+  /* …ET IL ÉPROUVE CE QUE LA RELECTURE DE 2b-1 A CHANGÉ — pas seulement son
+     compte (banc indépendant, 05/11/2026 au soir) : le cas 3 a ramené à
+     `count(*) = 5`, le cas 3 b à `count(*) = 2`, ou le délai d'un seul U+3000
+     remplacé par « x », gardaient les 130 valeurs et passaient tout — l'essai,
+     `cas-remise.json`, `npm run verifier`. La nature ET la phrase de CHAQUE
+     clé du rang 3 sont jugées, mot pour mot celles de `MOTIFS_DEVIS` ; et le
+     délai d'un seul U+3000 est rangé tel quel, PUIS la liste ne dit rien. */
+  const juge3 = (n, cle, alias) => `select pg_temp.v(count(*) = ${n} and bool_and(nature = '${D.MOTIFS_DEVIS[cle].nature}' and phrase = '${D.MOTIFS_DEVIS[cle].phrase.replace(/'/g, "''")}')) as ${alias} from public.motifs_refus_remise(:D1) where rang = 3;`;
+  const essEs = sansEspaces(essE);
+  const u3000Essai = "update public.devis set delai_execution = chr(12288), generation = 5 where id = :D1; select pg_temp.v(delai_execution = chr(12288)) as u3000_range_tel_quel_attendu_t from public.devis where id = :D1; execute motifs(:D1, '—'); rollback;";
+  verifier('…et il JUGE ce que la relecture a changé, pas seulement son compte : la nature et la phrase de `devis_taux_franchise` (cas 3 a) et de '
+    + '`devis_taux_sans_tva` (cas 3 b), mot pour mot celles de `MOTIFS_DEVIS` ; un délai d’un seul U+3000 rangé tel quel, puis aucune ligne (cas 5)',
+  essEs.includes(juge3(5, 'devis_taux_franchise', 'franchise_la_loi_attendu_t'))
+    && essEs.includes(juge3(2, 'devis_taux_sans_tva', 'reel_sans_tva_prudence_attendu_t'))
+    && essEs.includes(u3000Essai),
+  `3 a ${essEs.includes(juge3(5, 'devis_taux_franchise', 'franchise_la_loi_attendu_t'))}, 3 b ${essEs.includes(juge3(2, 'devis_taux_sans_tva', 'reel_sans_tva_prudence_attendu_t'))}, cas 5 ${essEs.includes(u3000Essai)}`);
   /* LA PREUVE QUI COMPTE POUR D4-c EST LA PROPRIÉTÉ (critique B5) : trois
      devis identiques sauf leurs liens et leur source, comparés sur leur
      signature ENTIÈRE ; et le catalogue relu (`prosrc`, `prosecdef`). */
@@ -7931,12 +8153,22 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /if \(fonctionAbsente\(error\)\) error\.baseEnRetard = true; leverLecture\(error\);/.test(sup)
     && /if \(!Array\.isArray\(data\)\) \{ throw new Error\(/.test(sup) && /return data\.map\(rowToMotifDeRemise\);/.test(sup)
     && !/return \[\]/.test(sup) && !/catch\s*\(/.test(sup)
-    && /code === 'PGRST202' \|\| erreur\.code === '42883'/.test(sansEspaces(corpsDeFonction(API40, 'fonctionAbsente') || '')),
+    /* « Cette fonction n'existe pas » : PGRST202, ou 42883 QUAND c'est
+       `motifs_refus_remise` (relecture de 2b-1, TXT-8) — jamais un
+       opérateur ni une fonction appelée avec de mauvais types, qui ne sont
+       pas une base en retard. */
+    && sansEspaces(corpsDeFonction(API40, 'fonctionAbsente') || '') === "{ if (!erreur) return false; if (erreur.code === 'PGRST202') return true; "
+      + "return erreur.code === '42883' && /function (public\\.)?motifs_refus_remise\\(/.test(String(erreur.message || '')); }",
   sup.slice(0, 200));
   verifier('…la démonstration fait tourner le MIROIR sur sa propre base, avec la MÊME lecture de l’entreprise que « Mon entreprise » '
-    + '(`entreeDesMotifsEmetteurDemo`) ; un devis inconnu y rend OP027, avec la phrase de la base',
+    + '(`entreeDesMotifsEmetteurDemo`) ET le RÉGIME de la fiche de démonstration ; un devis inconnu y rend OP027, avec la phrase de la base',
   /if \(!lu\) throw new ErreurDeLaBase\('OP027', REFUS_REMISE\.OP027\);/.test(demo) && /motifsDeRemise\(\{/.test(demo)
     && /motifsEmetteur: motifsEmetteur\(entreeDesMotifsEmetteurDemo\(moi\)\)/.test(demo)
+    /* LE RÉGIME (relecture de 2b-1, PAR-5) : sans lui (`regime: null`), la
+       démonstration ne signalait plus jamais une ligne dont le taux
+       contredit le régime, alors que la base le signale — et rien ne
+       rougissait. */
+    && /regime: regimeEtSaDate\(ficheEmetteurDemo\(moi\)\)\.regime,/.test(demo)
     && /motifsEmetteur\(entreeDesMotifsEmetteurDemo\(moiEnDemo\(\)\)\)/.test(sansEspaces(corpsDeFonction(API40, 'emetteurIncompletDemo') || '')));
   /* LES DEUX BROUILLONS DE LA DÉMONSTRATION (cahier §3.4) : l'un où « Ce
      devis » est complet, l'autre où manquent la validité et la nature de
@@ -7976,6 +8208,10 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   {
     const lue2 = D.lireMotifsDeRemise([{ rang: 1, cle: 'devis_client', phrase: 'x', nature: 'loi' }]);
     const err = new Error('x');
+    /* Ce que la lecture en cours relit (relecture de 2b-1, ECR-1) : une
+       écriture du devis confirmée, ou « Mon entreprise » refermée. */
+    const RD = { devis: true, entreprise: false };
+    const RE = { devis: false, entreprise: true };
     const etats = [
       P.etatDeLaListe({ enBase: false, enRoute: true, erreur: err, lue: lue2 }),
       P.etatDeLaListe({ enBase: true, enRoute: true, erreur: err, lue: lue2 }),
@@ -7985,69 +8221,139 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       P.etatDeLaListe({ enBase: true }),
       P.etatDeLaListe({ enBase: true, lue: lue2 }),
       P.etatDeLaListe(),
+      /* LE VRAI ÉTAT D'ÉCHEC (relecture de 2b-1, PAR-1) : l'écran EFFACE la
+         liste sur un échec (`lireLaListe` pose `motifs: null`), donc `lue`
+         est nul. Le contrôle ne jugeait qu'un échec avec une liste déjà lue :
+         permuter les deux tests d'`etatDeLaListe` laissait tout échec sur
+         « Lecture de la liste… » pour toujours, sans « Réessayer », au vert. */
+      P.etatDeLaListe({ enBase: true, erreur: err }),
+      P.etatDeLaListe({ enBase: true, erreur: err, lue: null, champOuvert: false }),
+      /* LA LECTURE QUI SUIT UNE ÉCRITURE DU DEVIS fait partie du même temps
+         (ECR-1) : `en_route`, liste lue ou non ; celle qui suit « Mon
+         entreprise » ne change pas l'état. */
+      P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RD }),
+      P.etatDeLaListe({ enBase: true, relecture: RD }),
+      P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RE }),
+      P.etatDeLaListe({ enBase: false, relecture: RD }),
     ];
     verifier('…`etatDeLaListe`, FAIT TOURNER, dans l’ordre du cahier (§3.1) : pas en base AVANT TOUT ; des changements en route — une '
-      + 'écriture, OU un champ de l’en-tête tapé et pas quitté — AVANT l’échec ; JAMAIS « liste » sur un échec ; rien de lu → « lecture »',
-    egal(etats, ['pas_en_base', 'en_route', 'en_route', 'echec', 'en_route', 'lecture', 'liste', 'pas_en_base']), json(etats));
+      + 'écriture, un champ de l’en-tête tapé et pas quitté, OU la lecture qui suit une écriture du devis — AVANT l’échec ; JAMAIS « liste » '
+      + 'sur un échec ; le VRAI échec (liste effacée, `lue` nul) → « echec » ; rien de lu → « lecture » ; la relecture de l’entreprise ne '
+      + 'change pas l’état',
+    egal(etats, ['pas_en_base', 'en_route', 'en_route', 'echec', 'en_route', 'lecture', 'liste', 'pas_en_base',
+      'echec', 'echec', 'en_route', 'en_route', 'liste', 'pas_en_base']), json(etats));
     /* CE QUE LA LISTE NE COMPTE PAS (écart 8) : LE compte du pied, dit en
-       toutes lettres — et l'en-tête refusé, quand aucune ligne ne l'est. */
+       toutes lettres — et l'en-tête refusé, quand aucune ligne ne l'est. Sur
+       un brouillon PAS ENCORE EN BASE (ECR-3), la liste se calculera
+       ensuite : il n'y en a aucune. */
     const nc = P.ceQueLaListeNeComptePas;
     verifier('…`ceQueLaListeNeComptePas`, FAIT TOURNER : « 1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste. », '
-      + 'le pluriel, l’en-tête refusé quand aucune ligne ne l’est, et RIEN quand tout est enregistré',
+      + 'le pluriel, l’en-tête refusé quand aucune ligne ne l’est, RIEN quand tout est enregistré — et sur un brouillon PAS EN BASE, « … pas '
+      + 'encore enregistrée(s) : la liste se calculera ensuite. », avec le même compte',
     nc({ nbLignes: 1 }) === '1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste.'
     && nc({ nbLignes: 3, entete: true }) === '3 lignes ne sont pas enregistrées : elles ne sont pas comptées dans cette liste.'
     && nc({ entete: true }) === 'Un champ du devis n’est pas enregistré : il n’est pas compté dans cette liste.'
-    && nc({}) === null && nc({ nbLignes: 0, entete: false }) === null && nc() === null && nc({ nbLignes: -2 }) === null,
-    json([nc({ nbLignes: 1 }), nc({ nbLignes: 2 }), nc({ entete: true })]));
+    && nc({}) === null && nc({ nbLignes: 0, entete: false }) === null && nc() === null && nc({ nbLignes: -2 }) === null
+    && nc({ nbLignes: 1, enBase: false }) === '1 ligne n’est pas encore enregistrée : la liste se calculera ensuite.'
+    && nc({ nbLignes: 2, entete: true, enBase: false }) === '2 lignes ne sont pas encore enregistrées : la liste se calculera ensuite.'
+    && nc({ entete: true, enBase: false }) === 'Un champ du devis n’est pas encore enregistré : la liste se calculera ensuite.'
+    && nc({ enBase: false }) === null && nc({ nbLignes: 1, enBase: true }) === nc({ nbLignes: 1 }),
+    json([nc({ nbLignes: 1 }), nc({ nbLignes: 2 }), nc({ entete: true }), nc({ nbLignes: 1, enBase: false })]));
     /* LA LIGNE (en haut et en bas), FAITE TOURNER : la phrase EXACTE du
-       contrat en route (B.8), le compte d'avant gardé dans l'étiquette
-       parlée ; « pas compté » DEVANT le compte ; pas en base, ce n'est pas
-       une cible ; en échec, « Réessayer » ; « mise à jour » seulement pendant
-       une RELECTURE (rien ne part). */
+       contrat en route (B.8), SEULE — à l'écran et dans l'étiquette parlée
+       (ECR-1 : le compte d'avant disait « ce devis — aucun point » juste
+       après qu'on avait vidé le délai) ; « pas compté » DEVANT le compte,
+       et LE COMPTE AVEC LUI, sur trois lignes (décision D-A) ; pas en base,
+       ce n'est pas une cible, et une ligne pas enregistrée le dit (ECR-3) ;
+       en échec, « Réessayer » ; « mise à jour » seulement pendant une
+       RELECTURE sans cause ; pendant la relecture de l'entreprise, son
+       compte ne se dit pas. */
     const lig = (o) => P.texteDeLaLigneRemise({ lue: lue2, ...o });
     const enRoute = lig({ etat: 'en_route' });
     const pc = nc({ nbLignes: 1 });
+    const pcNeuf = nc({ nbLignes: 1, enBase: false });
+    const pcNeuf2 = nc({ nbLignes: 2, enBase: false });
+    const compte2 = 'ce devis — 1 point · votre entreprise — aucun point';
     const parLigne = [
-      [lig({ etat: 'pas_en_base' }), D.LISTE_AVANT_LA_PREMIERE_LIGNE, null],
-      [enRoute, D.LISTE_EN_ROUTE, 'ouvrir'],
-      [lig({ etat: 'en_route', lue: null }), D.LISTE_EN_ROUTE, 'ouvrir'],
-      [lig({ etat: 'en_route', pasCompte: pc }), D.LISTE_EN_ROUTE, 'ouvrir'],
-      [lig({ etat: 'echec' }), D.LISTE_NON_LUE, 'reessayer'],
-      [lig({ etat: 'echec', erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas.' }), 'Ce devis n’existe pas.', 'ouvrir'],
-      [lig({ etat: 'echec', pasCompte: pc }), D.LISTE_NON_LUE, 'reessayer'],
-      [lig({ etat: 'lecture', lue: null }), D.LISTE_EN_LECTURE, 'ouvrir'],
-      [lig({ etat: 'liste' }), 'ce devis — 1 point · votre entreprise — aucun point', 'ouvrir'],
-      [lig({ etat: 'liste', enLecture: true }), 'ce devis — 1 point · votre entreprise — aucun point · mise à jour…', 'ouvrir'],
-      [lig({ etat: 'liste', pasCompte: pc }), pc, 'ouvrir'],
+      [lig({ etat: 'pas_en_base' }), D.LISTE_AVANT_LA_PREMIERE_LIGNE, null, null],
+      [lig({ etat: 'pas_en_base', pasCompte: pcNeuf }), '1 ligne n’est pas encore enregistrée : la liste se calculera ensuite.', null, null],
+      [lig({ etat: 'pas_en_base', pasCompte: pcNeuf2 }), '2 lignes ne sont pas encore enregistrées : la liste se calculera ensuite.', null, null],
+      [enRoute, D.LISTE_EN_ROUTE, 'ouvrir', null],
+      [lig({ etat: 'en_route', lue: null }), D.LISTE_EN_ROUTE, 'ouvrir', null],
+      [lig({ etat: 'en_route', pasCompte: pc }), D.LISTE_EN_ROUTE, 'ouvrir', null],
+      [lig({ etat: 'en_route', relecture: RD, enLecture: true }), D.LISTE_EN_ROUTE, 'ouvrir', null],
+      [lig({ etat: 'echec' }), D.LISTE_NON_LUE, 'reessayer', null],
+      [lig({ etat: 'echec', erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas.' }), 'Ce devis n’existe pas.', 'ouvrir', null],
+      [lig({ etat: 'echec', pasCompte: pc }), D.LISTE_NON_LUE, 'reessayer', null],
+      [lig({ etat: 'lecture', lue: null }), D.LISTE_EN_LECTURE, 'ouvrir', null],
+      [lig({ etat: 'lecture', lue: null, pasCompte: pc }), pc, 'ouvrir', null],
+      [lig({ etat: 'liste' }), compte2, 'ouvrir', null],
+      [lig({ etat: 'liste', enLecture: true }), `${compte2} · mise à jour…`, 'ouvrir', null],
+      [lig({ etat: 'liste', pasCompte: pc }), pc, 'ouvrir', compte2],
+      [lig({ etat: 'liste', relecture: RE, enLecture: true }), 'ce devis — 1 point · votre entreprise — mise à jour…', 'ouvrir', null],
+      [lig({ etat: 'liste', relecture: RE, enLecture: true, pasCompte: pc }), pc, 'ouvrir', 'ce devis — 1 point · votre entreprise — mise à jour…'],
     ];
-    const lignesFausses = parLigne.filter(([r, c, a]) => !r || r.contenu !== c || r.action !== a).map(([r]) => json(r));
+    const lignesFausses = parLigne.filter(([r, c, a, k]) => !r || r.contenu !== c || r.action !== a || r.compte !== k
+      || r.lignes !== (k ? 3 : 2)).map(([r]) => json(r));
     verifier('…`texteDeLaLigneRemise`, FAIT TOURNER : en route, la phrase EXACTE « Des changements partent : la liste sera à jour juste '
-      + 'après. » (jamais « · mise à jour… », réservé à une relecture) ; ce que la liste ne compte pas passe DEVANT le compte ; pas en '
-      + 'base → pas une cible ; échec → « Réessayer »',
+      + 'après. » SEULE (jamais le compte d’avant, ni à l’écran ni dans l’étiquette parlée — ECR-1) ; ce que la liste ne compte pas passe '
+      + 'DEVANT le compte, ET le compte reste, sur TROIS lignes (D-A) ; pas en base → pas une cible, et une ligne pas enregistrée le dit '
+      + '(ECR-3) ; échec → « Réessayer » ; relecture de l’entreprise → jamais son ancien compte',
     lignesFausses.length === 0 && D.LISTE_EN_ROUTE === 'Des changements partent : la liste sera à jour juste après.'
-      && enRoute.aDire === 'Pour le remettre : Des changements partent : la liste sera à jour juste après. Dernière liste : ce devis — 1 point · votre entreprise — aucun point. Ouvrir la liste'
-      && lig({ etat: 'liste', pasCompte: pc }).aDire.includes('ce devis — 1 point')
+      && enRoute.aDire === 'Pour le remettre : Des changements partent : la liste sera à jour juste après. Ouvrir la liste'
+      && !/Dernière liste|point/.test(lig({ etat: 'en_route', pasCompte: pc }).aDire)
+      && lig({ etat: 'liste', pasCompte: pc }).aDire === `Pour le remettre : ${pc} Dernière liste : ${compte2}. Ouvrir la liste`
       && lig({ etat: 'pas_en_base' }).aDire === 'Pour le remettre : Écrivez une première ligne : la liste se calculera ensuite.'
+      && lig({ etat: 'pas_en_base', pasCompte: pcNeuf }).aDire === `Pour le remettre : ${pcNeuf}`
       && lig({ etat: 'echec' }).aDire === 'Liste de ce qu’il manque non lue. Réessayer'
-      && lig({ etat: 'liste' }).aDire === 'Pour le remettre : ce devis — 1 point · votre entreprise — aucun point. Ouvrir la liste'
-      && lig({ etat: 'liste', enLecture: true }).aDire === 'Pour le remettre : ce devis — 1 point · votre entreprise — aucun point · mise à jour… Ouvrir la liste',
+      && lig({ etat: 'liste' }).aDire === `Pour le remettre : ${compte2}. Ouvrir la liste`
+      && lig({ etat: 'liste', enLecture: true }).aDire === `Pour le remettre : ${compte2} · mise à jour… Ouvrir la liste`,
     lignesFausses.join(' | '));
-    /* LA CARTE, FAITE TOURNER : la dernière liste sûre en `liste` ET en
-       `en_route` — jamais sur un échec ni avant la première lecture ; ses
-       phrases d'état, dans l'ordre ; « pas compté » dit DANS LA CARTE aussi,
-       sur la liste comme sur un échec. */
+    /* LA CARTE, FAITE TOURNER : ses phrases d'état, dans l'ordre ; « pas
+       compté » dit DANS LA CARTE aussi, sur la liste comme sur un échec ; et
+       LES PARTIES À MONTRER (relecture de 2b-1, ECR-1) dans les TROIS cas :
+         1. une écriture du devis part (`en_route`) : « Ce devis » cède la
+            place à sa phrase, « Votre entreprise » reste ;
+         2. la lecture qui SUIT cette écriture : l'état reste `en_route`
+            (`etatDeLaListe`), même partage ;
+         3. le retour de « Mon entreprise » : l'inverse — « Votre
+            entreprise » (et ses mentions dues à un particulier) cède la
+            place, « Ce devis » reste.
+       CE QUI A CHANGÉ, ET POURQUOI : ce contrôle exigeait que la liste se
+       montre EN ENTIER en `en_route` (« elle ne clignote pas pendant un
+       envoi », E-6). La relecture a montré que la partie « Ce devis » de
+       cette liste mentait pendant l'envoi : « ne chiffre encore aucun
+       travail » sous un poste qu'on venait d'écrire, « rien ne manque »
+       juste après avoir vidé le délai. `montrerLaListe` reste vrai en
+       `en_route` — la partie JUSTE ne clignote pas —, mais la partie
+       périmée ne se montre plus. */
     const ca = (o) => P.ceQueDitLaCarte({ lue: lue2, ...o });
     const textes = (o) => ca(o).phrases.map((x) => x.texte);
-    verifier('…`ceQueDitLaCarte`, FAIT TOURNER : la liste se montre en `liste` et en `en_route` (sans clignoter), JAMAIS sur un échec, '
-      + 'une lecture ou un brouillon pas en base ; en route, la phrase EXACTE du contrat ; ce qui n’est pas compté est DIT',
-    ca({ etat: 'liste' }).montrerLaListe === true && ca({ etat: 'en_route' }).montrerLaListe === true
-      && ca({ etat: 'echec' }).montrerLaListe === false && ca({ etat: 'lecture' }).montrerLaListe === false
-      && ca({ etat: 'pas_en_base' }).montrerLaListe === false && ca({ etat: 'en_route', lue: null }).montrerLaListe === false
-      && egal(textes({ etat: 'en_route' }), [D.LISTE_EN_ROUTE])
+    const montre = (o) => { const c = ca(o); return [c.montrerLaListe, c.parties.devis.montrer, c.parties.entreprise.montrer]; };
+    const aLaPlace = (o) => { const c = ca(o); return [c.parties.devis.phrase, c.parties.entreprise.phrase]; };
+    const ecriture = { etat: P.etatDeLaListe({ enBase: true, enRoute: true, lue: lue2 }) };
+    const lectureApres = { etat: P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RD }), relecture: RD, enLecture: true };
+    const retourEntreprise = { etat: P.etatDeLaListe({ enBase: true, lue: lue2, relecture: RE }), relecture: RE, enLecture: true };
+    verifier('…`ceQueDitLaCarte`, FAIT TOURNER sur les TROIS cas de la relecture (ECR-1) : pendant une écriture du devis ET pendant la lecture '
+      + 'qui la suit, « Ce devis » cède la place à « Ce devis : la liste se met à jour. » et « Votre entreprise » reste ; au retour de « Mon '
+      + 'entreprise », l’inverse ; sinon les deux se montrent ; JAMAIS rien sur un échec, une lecture ou un brouillon pas en base',
+    egal(montre(ecriture), [true, false, true]) && egal(aLaPlace(ecriture), [D.CE_DEVIS_SE_MET_A_JOUR, null])
+      && lectureApres.etat === 'en_route' && egal(montre(lectureApres), [true, false, true]) && egal(aLaPlace(lectureApres), [D.CE_DEVIS_SE_MET_A_JOUR, null])
+      && retourEntreprise.etat === 'liste' && egal(montre(retourEntreprise), [true, true, false])
+      && egal(aLaPlace(retourEntreprise), [null, D.ENTREPRISE_SE_MET_A_JOUR]) && egal(textes(retourEntreprise), [])
+      && egal(montre({ etat: 'en_route', relecture: RE }), [true, false, false])
+      && egal(montre({ etat: 'liste' }), [true, true, true]) && egal(aLaPlace({ etat: 'liste' }), [null, null])
+      && ['echec', 'lecture', 'pas_en_base'].every((e) => egal(montre({ etat: e }), [false, false, false]) && egal(aLaPlace({ etat: e }), [null, null]))
+      && egal(montre({ etat: 'en_route', lue: null }), [false, false, false]) && egal(aLaPlace({ etat: 'en_route', lue: null }), [null, null]),
+    json([montre(ecriture), montre(lectureApres), montre(retourEntreprise)]));
+    verifier('…et ses phrases d’état, dans l’ordre : en route, la phrase EXACTE du contrat ; ce qui n’est pas compté est DIT ; « mise à jour » '
+      + 'pour une relecture sans cause seulement ; sur un brouillon pas en base, ce qu’il porte (ECR-3) ou « Écrivez une première ligne »',
+    egal(textes({ etat: 'en_route' }), [D.LISTE_EN_ROUTE])
       && egal(textes({ etat: 'en_route', pasCompte: pc }), [D.LISTE_EN_ROUTE, pc])
       && egal(textes({ etat: 'liste', pasCompte: pc }), [pc]) && egal(textes({ etat: 'echec', pasCompte: pc }), [pc])
       && egal(textes({ etat: 'liste' }), []) && egal(textes({ etat: 'liste', enLecture: true }), [D.LISTE_MISE_A_JOUR])
-      && egal(textes({ etat: 'pas_en_base', pasCompte: pc }), [D.LISTE_AVANT_LA_PREMIERE_LIGNE])
+      && egal(textes({ etat: 'pas_en_base' }), [D.LISTE_AVANT_LA_PREMIERE_LIGNE])
+      && egal(textes({ etat: 'pas_en_base', pasCompte: pcNeuf }), [pcNeuf])
       && egal(textes({ etat: 'lecture', lue: null }), [D.LISTE_EN_LECTURE]),
     json([textes({ etat: 'en_route', pasCompte: pc }), textes({ etat: 'liste', pasCompte: pc })]));
     const l3 = D.lireMotifsDeRemise([
@@ -8055,14 +8361,37 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       { rang: 101, cle: 'identite' }, { rang: 102, cle: 'conso_mediateur' },
     ], { sections: E.SECTION_DU_MOTIF });
     verifier('…le compte se dit PAR ENDROIT (« ce devis — 2 points · votre entreprise — 2 points ») : les mentions dues à un particulier '
-      + 'comptent avec l’entreprise, les AVIS jamais',
+      + 'comptent avec l’entreprise, les AVIS jamais ; `comptesParEndroit` dit aussi combien de points de l’entreprise sont dus à un '
+      + 'particulier (D-B)',
     P.phraseDesEndroits(l3) === 'ce devis — 2 points · votre entreprise — 2 points'
     && P.phraseDesEndroits(D.lireMotifsDeRemise([{ rang: 101, cle: 'identite' }], { sections: E.SECTION_DU_MOTIF })) === 'ce devis — aucun point · votre entreprise — 1 point'
-    && egal(P.comptesParEndroit({ comptes: { devis: 1, entreprise: 1, particulier: 1 }, avis: [1, 2, 3] }), { devis: 1, entreprise: 2 })
+    && P.phraseDesEndroits(l3, { relecture: RE }) === 'ce devis — 2 points · votre entreprise — mise à jour…'
+    && egal(P.comptesParEndroit({ comptes: { devis: 1, entreprise: 1, particulier: 1 }, avis: [1, 2, 3] }), { devis: 1, entreprise: 2, dontParticulier: 1 })
     && !/avis/.test(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'comptesParEndroit') || 'avis'), P.phraseDesEndroits(l3));
+    /* LE TITRE DE L'ENTREPRISE DIT COMBIEN SONT DUS À UN PARTICULIER
+       (décision D-B du propriétaire, 05/11/2026 au soir, relecture ECR-6) :
+       on comptait 2 points sous un titre qui en annonçait 5. Les accords,
+       FAITS TOURNER ; et UNE seule écriture du compte (`comptesParEndroit`). */
+    const tit = (devis, entreprise, particulier) => P.titresDesParties({ comptes: { devis, entreprise, particulier } });
+    const corpsTitres = sansEspaces(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'titresDesParties') || '');
+    verifier('…les titres de la carte (D-B) : « Votre entreprise — 5 points, dont 3 dus à un particulier », « 1 point, dont 1 dû », « 2 points, '
+      + 'dont 1 dû » ; sans point dû à un particulier, « Votre entreprise — N points » ; « Ce devis — N points » — et le compte vient de '
+      + '`comptesParEndroit`, une seule écriture',
+    tit(0, 2, 3).entreprise === 'Votre entreprise — 5 points, dont 3 dus à un particulier'
+    && tit(1, 0, 1).entreprise === 'Votre entreprise — 1 point, dont 1 dû à un particulier'
+    && tit(0, 1, 1).entreprise === 'Votre entreprise — 2 points, dont 1 dû à un particulier'
+    && tit(0, 0, 2).entreprise === 'Votre entreprise — 2 points, dont 2 dus à un particulier'
+    && tit(0, 2, 0).entreprise === 'Votre entreprise — 2 points' && tit(0, 1, 0).entreprise === 'Votre entreprise — 1 point'
+    && tit(0, 0, 0).entreprise === 'Votre entreprise — aucun point'
+    && tit(0, 0, 0).devis === 'Ce devis — aucun point' && tit(1, 0, 0).devis === 'Ce devis — 1 point' && tit(3, 0, 0).devis === 'Ce devis — 3 points'
+    && /const c = comptesParEndroit\(lue\);/.test(corpsTitres) && !/\.comptes\b/.test(corpsTitres),
+    json([tit(0, 2, 3), tit(1, 0, 1), tit(0, 1, 1)]));
     const tva = (E.MOTIFS.find((m) => m.cle === 'conso_tva_intra') || {}).phrase || '';
     const pp = P.premierePhrase(tva);
-    const court = P.premierePhrase(D.MOTIFS_DEVIS.devis_lieu.phrase);
+    /* Une phrase COURTE du contrat : depuis la relecture du 05/11, celles du
+       lieu (203 caractères) et de la validité (216) dépassent le seuil et
+       montrent leur première phrase ; celle du délai (141) reste entière. */
+    const court = P.premierePhrase(D.MOTIFS_DEVIS.devis_delai.phrase);
     verifier('…« Lire la suite » au-delà de 200 caractères : la phrase de la TVA (plus de 600) montre sa première phrase ; une phrase courte se '
       + 'montre ENTIÈRE ; « L. 111-1 » ne coupe pas',
     tva.length > 600 && pp.suite === true && pp.debut.length < tva.length && tva.startsWith(pp.debut) && /[.!?]$/.test(pp.debut)
@@ -8070,31 +8399,127 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && P.premierePhrase(`${'x'.repeat(190)} chez M. Dupont (code de la consommation, L. 111-1). Fin ici.`).debut.endsWith('L. 111-1).'),
     pp.debut.slice(0, 120));
     const act = (endroit, opts = {}) => P.actionDuPoint({ endroit }, opts);
-    verifier('…`actionDuPoint`, FAIT TOURNER : un bouton par endroit connu — le client, le délai, le lieu, la validité, la nature, la ligne '
-      + 'QUI EXISTE, un poste SI l’on peut chiffrer, « Mon entreprise » SI la section existe — et AUCUN sinon (une cible qui ne mène nulle '
-      + 'part est pire que pas de cible)',
+    verifier('…`actionDuPoint`, FAIT TOURNER : un bouton par endroit connu — le client, le délai, le lieu, la validité, la nature, l’acompte, '
+      + 'la réduction, la ligne QUI EXISTE, un poste SI l’on peut chiffrer, « Mon entreprise » SI la section existe — et AUCUN sinon (une '
+      + 'cible qui ne mène nulle part est pire que pas de cible)',
     act({ endroit: 'client' }).libelle === 'Choisir le client' && act({ endroit: 'delai' }).libelle === 'Écrire le délai'
     && act({ endroit: 'lieu' }).libelle === 'Écrire le lieu' && act({ endroit: 'conditions', champ: 'validite' }).libelle === 'Choisir la validité'
     && act({ endroit: 'conditions', champ: 'nature' }).libelle === 'Choisir : acompte ou arrhes'
+    && act({ endroit: 'conditions', champ: 'acompte' }).libelle === 'Corriger l’acompte'
+    && act({ endroit: 'conditions', champ: 'reduction' }).libelle === 'Corriger la réduction'
     && act({ endroit: 'ligne', ligneId: 'L' }, { ligneExiste: (id) => id === 'L' }).libelle === 'Ouvrir cette ligne'
     && act({ endroit: 'ligne', ligneId: 'M' }, { ligneExiste: (id) => id === 'L' }) === null
     && act({ endroit: 'lignes' }, { chiffrerPossible: true }).libelle === 'Ajouter un poste' && act({ endroit: 'lignes' }) === null
     && act({ endroit: 'entreprise', section: 'tva' }).libelle === 'Compléter dans « Mon entreprise »'
     && act({ endroit: 'entreprise', section: null }) === null && act({ endroit: 'autre' }) === null && P.actionDuPoint({ endroit: null }) === null);
+    /* DES ÉTIQUETTES PARLÉES DISTINCTES (relecture de 2b-1, ECR-5) : les cinq
+       points de l'entreprise portaient tous « Compléter dans « Mon
+       entreprise » », les deux points ramenés « Corriger dans les
+       conditions » — au rotor « Boutons », rien ne disait lequel corrige
+       quoi. L'étiquette COMMENCE par le libellé affiché (Contrôle vocal), y
+       ajoute le NOM de la section visée — jamais la phrase entière (672
+       caractères pour la TVA). Chaque motif d'`emetteur.js` qui a une
+       section, FAIT TOURNER. */
+    const ptsEntreprise = E.MOTIFS.filter((m) => m.section).map((m) => {
+      const l = D.lireMotifsDeRemise([{ rang: 101, cle: m.cle, phrase: m.phrase, nature: 'loi' }], { sections: E.SECTION_DU_MOTIF });
+      const pt = [...l.parties.entreprise, ...l.parties.particulier][0];
+      return { cle: m.cle, section: m.section, a: P.actionDuPoint(pt) };
+    });
+    /* SECONDE MESURE (05/11, au navigateur) : le premier jet regroupait
+       par SECTION, et la liste du « Muret de clôture » montrait deux fois
+       « … : Vos conditions » (modalités de paiement, réclamations) — au
+       vert. La propriété se juge par MOTIF : deux motifs de l'entreprise ne
+       partagent jamais une étiquette, hors des deux paires d'adresses, qui
+       mènent au même champ et qu'`emetteur.js` ne rend jamais ensemble. */
+    const PAIRES = [['adresse_etablissement', 'conso_adresse_etablissement'], ['adresse_siege', 'conso_adresse_siege']];
+    const memePaire = (a, b) => PAIRES.some((p) => p.includes(a) && p.includes(b));
+    const parEtiquette = new Map();
+    ptsEntreprise.forEach(({ cle, a }) => { if (a) parEtiquette.set(a.aDire, [...(parEtiquette.get(a.aDire) || []), cle]); });
+    const partagees = [...parEtiquette.entries()].filter(([, cles]) => cles.length > 1
+      && !(cles.length === 2 && memePaire(cles[0], cles[1])));
+    const sectionsMotifs = E.MOTIFS.filter((m) => m.section).map((m) => m.section);
+    const sectionsPartagees = new Set(sectionsMotifs.filter((x, i) => sectionsMotifs.indexOf(x) !== i));
+    const attendue = (cle, section) => {
+      const base = `Compléter dans « Mon entreprise » : ${D.NOM_DES_SECTIONS[section]}`;
+      return sectionsPartagees.has(section) ? `${base}, ${D.CHAMP_DU_MOTIF[cle]}` : base;
+    };
+    const fautifs = ptsEntreprise.filter(({ cle, section, a }) => !a || !a.aDire.startsWith(`${a.libelle} : `)
+      || a.aDire !== attendue(cle, section) || a.aDire.length > 90).map((x) => x.cle);
+    /* Aucune entrée de `CHAMP_DU_MOTIF` pour un motif qui n'existe pas, ou
+       dont la section n'est visée par aucun autre ; et le champ nommé est
+       celui de l'ÉCRAN quand c'en est un — son libellé dans « Mon
+       entreprise », à la majuscule près. */
+    const orphelins = Object.keys(D.CHAMP_DU_MOTIF).filter((k) => {
+      const m = E.MOTIFS.find((x) => x.cle === k);
+      return !m || !sectionsPartagees.has(m.section);
+    });
+    const ficheLibelles = lire('src/components/FicheEmetteur.js');
+    const identiteLibelles = lire('src/components/IdentiteEntreprise.js');
+    /* Une entrée absente de `CHAMP_DU_MOTIF` doit faire ROUGIR cette
+       vérification, pas PLANTER le contrôle (banc indépendant de 2b-1,
+       05/11/2026 au soir : vider ou amputer le dictionnaire levait un
+       TypeError ici, et les vérifications qui suivent n'étaient plus
+       lancées — « un contrôle qui plante ne vérifie rien »). */
+    const majuscule = (t) => (typeof t === 'string' && t.length > 0
+      ? t.charAt(0).toUpperCase() + t.slice(1) : '« entrée absente de CHAMP_DU_MOTIF »');
+    const champsEcran =['adresse_etablissement', 'adresse_siege', 'conso_telephone', 'conso_email',
+      'conso_modalites_paiement', 'conso_modalites_execution', 'conso_reclamations'];
+    const champsAbsents = champsEcran.filter((k) => !ficheLibelles.includes(`<Text style={s.label}>${majuscule(D.CHAMP_DU_MOTIF[k])}</Text>`))
+      .concat(identiteLibelles.includes(`libelle="${majuscule(D.CHAMP_DU_MOTIF.conso_tva_intra)}"`) ? [] : ['conso_tva_intra']);
+    const ptCond = (cle) => P.actionDuPoint({ cle, endroit: { endroit: 'entreprise', section: 'conditions' } });
+    verifier('…chaque bouton « Compléter dans « Mon entreprise » » DIT sa section à VoiceOver (« … : Capital social », « … : TVA »), et son '
+      + 'CHAMP quand la section en porte plusieurs (« … : Vos conditions, modalités de paiement ») ; commence par son libellé affiché, '
+      + 'jamais la phrase du point ; deux motifs, deux étiquettes — hors des deux paires d’adresses ; la ligne fautive dit sa désignation',
+    fautifs.length === 0 && partagees.length === 0 && orphelins.length === 0 && champsAbsents.length === 0 && parEtiquette.size >= 15
+      && act({ endroit: 'entreprise', section: 'capital' }).aDire === 'Compléter dans « Mon entreprise » : Capital social'
+      && act({ endroit: 'entreprise', section: 'contact' }).aDire === 'Compléter dans « Mon entreprise » : Pour vous joindre'
+      && act({ endroit: 'entreprise', section: 'tva' }).aDire === 'Compléter dans « Mon entreprise » : TVA'
+      && ptCond('conso_modalites_paiement').aDire === 'Compléter dans « Mon entreprise » : Vos conditions, modalités de paiement'
+      && ptCond('conso_reclamations').aDire === 'Compléter dans « Mon entreprise » : Vos conditions, réclamations'
+      && ptCond('conso_reclamations').libelle === 'Compléter dans « Mon entreprise »'
+      && act({ endroit: 'ligne', ligneId: 'L' }, { ligneExiste: () => true, designation: 'Dalle béton' }).aDire === 'Ouvrir cette ligne : « Dalle béton »'
+      && act({ endroit: 'conditions', champ: 'acompte' }).aDire === 'Corriger l’acompte'
+      && act({ endroit: 'conditions', champ: 'reduction' }).aDire === 'Corriger la réduction'
+      && act({ endroit: 'client' }).aDire === 'Choisir le client',
+    `${fautifs.join(', ')} | partagées ${json(partagees)} | orphelins ${json(orphelins)} | absents ${json(champsAbsents)} | ${parEtiquette.size}`);
+    /* …ET LES NOMS DES SECTIONS SONT CEUX DE L'ÉCRAN : une COPIE dans
+       `devis.js` (il n'importe pas les écrans), comparée ici aux titres de
+       `FicheEmetteur.js` (`<Section ancre="…" titre="…">`) et au bloc
+       d'identité (« Votre entreprise », `IdentiteEntreprise.js`). */
+    const ficheE = lire('src/components/FicheEmetteur.js');
+    const titresEcran = Object.fromEntries([...ficheE.matchAll(/<Section ancre="([a-z_]+)" titre="([^"]+)"/g)].map((m) => [m[1], m[2]]));
+    const identiteE = sansCommentairesJs(lire('src/components/IdentiteEntreprise.js'));
+    verifier('…les noms des sections (`NOM_DES_SECTIONS`, devis.js) sont EXACTEMENT les titres de « Mon entreprise » : ceux de '
+      + '`FicheEmetteur.js`, et « Votre entreprise » pour le bloc d’identité ; chaque section d’un motif a le sien',
+    egal(Object.entries({ ...titresEcran, entreprise: 'Votre entreprise' }).sort(), Object.entries(D.NOM_DES_SECTIONS).sort())
+      && /<Text style=\{s\.titre\}>Votre entreprise<\/Text>/.test(identiteE)
+      && E.MOTIFS.filter((m) => m.section).every((m) => typeof D.NOM_DES_SECTIONS[m.section] === 'string'),
+    `${json(titresEcran)} | ${json(D.NOM_DES_SECTIONS)}`);
   }
   /* « RIEN NE MANQUE » N'EST DIT QUE SUR UNE LISTE LUE, et toujours avec
      « Pas encore vérifié » (critique D2) : la carte ne montre les parties
      que si `lue` existe ET que l'état est `liste` ou `en_route` — jamais sur
-     un échec, jamais sur un brouillon pas en base. */
+     un échec, jamais sur un brouillon pas en base. ET CHAQUE PARTIE SE
+     MONTRE SEULEMENT SI ELLE N'EST PAS PÉRIMÉE (relecture de 2b-1, ECR-1) :
+     « Ce devis » sous `aMontrer.devis.montrer`, sinon SA phrase ; « Votre
+     entreprise » ET ses mentions dues à un particulier sous
+     `aMontrer.entreprise.montrer`, sinon SA phrase. Les titres viennent de
+     `titresDesParties` (D-B). */
   const prE = sansEspaces(PR);
+  const brancheEntreprise = (/\{aMontrer\.entreprise\.montrer \? \([\s\S]*?\{aMontrer\.entreprise\.phrase\}<\/Text>\}/.exec(prE) || [''])[0];
   verifier('la carte ne dit « rien ne manque » QUE dans la partie « Ce devis » d’une liste LUE (`montrer`, décidé par `ceQueDitLaCarte` : '
-    + '`lue` ET l’état `liste` ou `en_route`), UNE fois, immédiatement suivi de « Pas encore vérifié » ; ses phrases d’état sont celles de '
-    + '`ceQueDitLaCarte`, et aucune n’est écrite dans le composant',
-  /const \{ phrases, montrerLaListe: montrer \} = ceQueDitLaCarte\(\{ etat, lue, enLecture, pasCompte, \}\); const parties = montrer \? lue\.parties : null;/.test(prE)
+    + '`lue` ET l’état `liste` ou `en_route`) ET quand cette partie n’est PAS périmée (`aMontrer.devis.montrer`, ECR-1), UNE fois, '
+    + 'immédiatement suivi de « Pas encore vérifié » ; une partie périmée cède la place à SA phrase ; les mentions dues à un particulier '
+    + 'vivent DANS la partie de l’entreprise ; ses phrases d’état sont celles de `ceQueDitLaCarte`, et aucune n’est écrite dans le composant',
+  /const \{ phrases, montrerLaListe: montrer, parties: aMontrer \} = ceQueDitLaCarte\(\{ etat, lue, enLecture, pasCompte, relecture, \}\); const parties = montrer \? lue\.parties : null; const titres = montrer \? titresDesParties\(lue\) : null;/.test(prE)
     && /\{phrases\.map\(\(p\) => \( <Text key=\{p\.texte\}/.test(prE)
-    && !/LISTE_EN_ROUTE|LISTE_AVANT_LA_PREMIERE_LIGNE|LISTE_EN_LECTURE|LISTE_MISE_A_JOUR|ceQueLaListeNeComptePas\(/.test(PR)
+    && !/LISTE_EN_ROUTE|LISTE_AVANT_LA_PREMIERE_LIGNE|LISTE_EN_LECTURE|LISTE_MISE_A_JOUR|CE_DEVIS_SE_MET_A_JOUR|ENTREPRISE_SE_MET_A_JOUR|ceQueLaListeNeComptePas\(|\bpoints\(/.test(PR)
     && (prE.match(/\{RIEN_NE_MANQUE_POUR_CE_DEVIS\}/g) || []).length === 1
-    && /\{!!parties && \( <> .*?parties\.devis\.length === 0 \? \( <View style=\{s\.rien\}> <Text style=\{s\.rienTexte\}>\{RIEN_NE_MANQUE_POUR_CE_DEVIS\}<\/Text> (?:\{ ?\} )?<Text style=\{s\.aide\}>\{PAS_ENCORE_VERIFIE\}<\/Text> <\/View> \) : parties\.devis\.map\(rendrePoint\)\}/.test(prE));
+    && /\{!!parties && \( <> \{aMontrer\.devis\.montrer \? \( <> <Text style=\{s\.titre\} accessibilityRole="header">\{titres\.devis\}<\/Text> \{parties\.devis\.length === 0 \? \( <View style=\{s\.rien\}> <Text style=\{s\.rienTexte\}>\{RIEN_NE_MANQUE_POUR_CE_DEVIS\}<\/Text> (?:\{ ?\} )?<Text style=\{s\.aide\}>\{PAS_ENCORE_VERIFIE\}<\/Text> <\/View> \) : parties\.devis\.map\(rendrePoint\)\} <\/> \) : <Text style=\{s\.seRelit\} accessibilityRole="header">\{aMontrer\.devis\.phrase\}<\/Text>\} \{aMontrer\.entreprise\.montrer \? \( <> <Text style=\{s\.titre\} accessibilityRole="header">\{titres\.entreprise\}<\/Text> \{parties\.entreprise\.map\(rendrePoint\)\}/.test(prE)
+    && /\{parties\.particulier\.length > 0 && \( <> <Text style=\{s\.sousTitre\} accessibilityRole="header">Mentions dues à un particulier<\/Text> <Text style=\{s\.aide\}>\{MENTIONS_PARTICULIER_PAR_PRUDENCE\}<\/Text> \{parties\.particulier\.map\(rendrePoint\)\} <\/> \)\} <\/> \) : <Text style=\{s\.seRelit\} accessibilityRole="header">\{aMontrer\.entreprise\.phrase\}<\/Text>\}/.test(brancheEntreprise)
+    && (prE.match(/parties\.particulier\.map\(rendrePoint\)/g) || []).length === 1
+    && (prE.match(/\{titres\.(?:devis|entreprise)\}/g) || []).length === 2,
+  brancheEntreprise.slice(0, 200) || prE.slice(prE.indexOf('{!!parties'), prE.indexOf('{!!parties') + 300));
   /* AUCUN « RIEN NE MANQUE » ÉCRIT EN DUR dans les écrans du devis : la seule
      phrase permise est la constante, et une phrase qui le NIE (« ce n'est
      pas que rien ne manque »). */
@@ -8123,9 +8548,17 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const ligne = sansEspaces(corpsDeFonction(PR, 'LigneRemise') || '');
   verifier('la LIGNE (haut et bas) dit ce que décide `texteDeLaLigneRemise` (fait tourner plus haut), et rien d’autre : aucune phrase '
     + 'ni aucun compte écrit dans le composant ; `ouvrir` ouvre la carte, `reessayer` RELIT, sinon ce n’est PAS une cible',
-  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, \}\); const \{ contenu, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
-    && !/phraseDesEndroits|LISTE_|MISE_A_JOUR/.test(ligne) && /if \(!action\) \{ return <View/.test(ligne)
-    && /numberOfLines=\{3\}>\{contenu\}<\/Text>/.test(ligne), ligne.slice(0, 300));
+  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, \}\); const \{ contenu, compte, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
+    && !/phraseDesEndroits|LISTE_|MISE_A_JOUR|\bpoints\(/.test(ligne) && /if \(!action\) \{ return <View/.test(ligne)
+    /* LA PHRASE ET LE DÉCOMPTE (décision D-A) : trois lignes RÉSERVÉES quand
+       `texteDeLaLigneRemise` le dit (`lignes`), le décompte à la ligne,
+       et une ligne de plus permise au texte, pour qu'il ne soit JAMAIS
+       coupé à 320 points (mesuré : la phrase et le décompte y prennent
+       quatre lignes) ; deux sinon. */
+    && /const trois = dit\.lignes === 3; let styleTexte = variante === 'bas' \? s\.ligneTexteBas : s\.ligneTexte; if \(trois\) styleTexte = \[styleTexte, variante === 'bas' \? s\.troisLignesBas : s\.troisLignes\];/.test(ligne)
+    && /<Text style=\{styleTexte\} numberOfLines=\{trois \? 4 : 3\}>\{compte \? `\$\{contenu\}\\n\$\{compte\}` : contenu\}<\/Text>/.test(ligne)
+    && /troisLignes: \{ minHeight: 3 \* interligne\(T\.courant\) \}, troisLignesBas: \{ minHeight: 3 \* interligne\(T\.petit\) \},/.test(prE)
+    && /minHeight: 2 \* interligne\(T\.courant\),/.test(prE), ligne.slice(0, 300));
   verifier('…et la carte, en échec, propose « Liste non lue — Réessayer » (`onReessayer`), sans liste dessous',
     /\{etat === 'echec' && \( <View style=\{s\.echec\}> \{erreurReessayable \? \( <Pressable onPress=\{onReessayer\}[^]*?\{LISTE_NON_LUE\}/.test(prE));
   /* UN BOUTON PAR POINT : chaque point de chaque partie est rendu par
@@ -8133,21 +8566,84 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   verifier('chaque point des trois parties est rendu par `rendrePoint`, et chacun porte SON bouton (`onAgir(point)`) — les avis à part, '
     + 'jamais comptés', /parties\.entreprise\.map\(rendrePoint\)/.test(prE) && /parties\.particulier\.map\(rendrePoint\)/.test(prE)
     && /parties\.devis\.map\(rendrePoint\)/.test(prE) && /onPress=\{\(\) => onAgir\(point\)\}/.test(prE)
-    && /action=\{actionDuPoint\(p, \{ chiffrerPossible, ligneExiste \}\)\}/.test(prE)
+    && /action=\{actionDuPoint\(p, \{ chiffrerPossible, ligneExiste, designation \}\)\}/.test(prE)
+    /* L'ÉTIQUETTE PARLÉE DU BOUTON est celle d'`actionDuPoint` (ECR-5) :
+       le libellé ET sa section, jamais le libellé seul pour tous. */
+    && /accessibilityLabel=\{action\.aDire \|\| action\.libelle\}/.test(prE) && !/accessibilityLabel=\{action\.libelle\}/.test(prE)
     && /\{avis\.map\(\(a\) => <Text key=\{a\.cle\}/.test(prE)
-    && /const comptes = montrer \? comptesParEndroit\(lue\) : null;/.test(prE)
+    && /const titres = montrer \? titresDesParties\(lue\) : null;/.test(prE) && !/comptesParEndroit/.test(PR)
     && (prE.match(/\bavis\.length\b/g) || []).length === 1 && /etat !== 'pas_en_base' && avis\.length > 0 && \(/.test(prE));
+  /* …ET CHAQUE POINT DIT CE QU'IL DOIT DIRE (banc indépendant de 2b-1,
+     05/11/2026 au soir) : rien ne relisait le corps du point. « Lire la
+     suite » qui ne dépliait plus la phrase (`ouvert` retiré), passait tout ;
+     la désignation de la ligne fautive retirée de sous son point n'était
+     refusée que PAR HASARD, par le cliquet du linter (une variable devenue
+     inutilisée) — gardée en usage (`{!!designation && null}`), elle passait
+     aussi. Le corps du point, ENTIER, ligne à ligne. */
+  const corpsPoint = sansEspaces(corpsDeFonction(PR, 'Point') || '');
+  verifier('…et chaque point dit ce qu’il doit dire : la phrase ENTIÈRE une fois « Lire la suite » touché (son début avant), la '
+    + 'désignation de la ligne fautive écrite sous lui, « Lire la suite » / « Réduire » qui bascule',
+  corpsPoint.includes('const [ouvert, setOuvert] = useState(false); const { debut, suite } = premierePhrase(point.phrase);')
+    && corpsPoint.includes('<Text style={s.phrase}>{ouvert || !suite ? point.phrase : debut}</Text>')
+    && corpsPoint.includes('{!!designation && <Text style={s.designation} numberOfLines={2}>{`« ${designation} »`}</Text>}')
+    && corpsPoint.includes('{suite && ( <Pressable onPress={() => setOuvert((o) => !o)}')
+    && corpsPoint.includes("accessibilityLabel={ouvert ? 'Réduire ce point' : 'Lire la suite de ce point'} accessibilityState={{ expanded: ouvert }}")
+    && corpsPoint.includes("<Text style={s.suiteTexte}>{ouvert ? 'Réduire' : 'Lire la suite'}</Text>")
+    && corpsPoint.split('point.phrase').length - 1 === 2 && corpsPoint.split('designation').length - 1 === 3,
+  corpsPoint.slice(0, 300));
 
   const SA = ECR.saisie;
   const saE = sansEspaces(SA);
-  const lireListe = sansEspaces(corpsFleche(SA, 'const lireLaListe = () =>'));
+  const lireListe = sansEspaces(corpsFleche(SA, 'const lireLaListe = (cause = null) =>'));
   verifier('la saisie ne demande JAMAIS la liste d’un brouillon qui n’est pas en base (la fonction rendrait OP027), et garde la réponse '
     + 'sous la MÊME garde que les totaux : la génération relevée AVANT l’appel, une réponse partie avant une écriture ÉCARTÉE',
   /^=> \{ const f = fileRef\.current; if \(!f \|\| !f\.devisEnBase\(\)\) return;/.test(lireListe)
     && lireListe.indexOf('const g = f.generation();') > 0 && lireListe.indexOf('const g = f.generation();') < lireListe.indexOf('api.motifsRefusRemise(f.devisId())')
     && /if \(g !== f\.generation\(\)\) \{/.test(lireListe)
-    && /setListe\(r\.erreur \? \{ motifs: null, erreur: r\.erreur, enLecture: false \}/.test(lireListe),
+    && /setListe\(r\.erreur \? \{ motifs: null, erreur: r\.erreur, enLecture: false, relecture: AUCUNE_RELECTURE, \}/.test(lireListe),
   lireListe.slice(0, 160));
+  /* …ET LA GARDE ÉCARTE VRAIMENT (relecture de 2b-1, PAR-4) : le contrôle
+     voyait le `if`, pas son effet — sans le `return;`, une liste lue AVANT
+     une écriture partie pendant la lecture était posée comme liste sûre.
+     Le bloc ENTIER, de la garde à `setListe`, avec son `return;` entre les
+     deux ; et la relecture qui suit ne repart que si aucune autre lecture
+     n'est partie depuis. */
+  verifier('…la garde de génération de `lireLaListe` ÉCARTE la réponse : le bloc entier — attendre la file, relire si cette lecture est '
+    + 'toujours la dernière, puis `return;` — se tient ENTRE la garde et `setListe`',
+  lireListe.includes('if (g !== f.generation()) { f.attendre(DELAI_ECRITURE).then(() => { if (monte.current && n === lectureListe.current) '
+    + 'lireLaListe(); }); return; } setListe(r.erreur ? {')
+    && (lireListe.match(/setListe\(r\.erreur/g) || []).length === 1
+    && lireListe.indexOf('return; } setListe(r.erreur') > lireListe.indexOf('if (g !== f.generation())'),
+  lireListe.slice(lireListe.indexOf('if (g !=='), lireListe.indexOf('if (g !==') + 220));
+  /* …ET UNE RÉPONSE PÉRIMÉE N'EST JAMAIS POSÉE (banc indépendant de 2b-1,
+     05/11/2026 au soir) : le contrôle tenait la garde de GÉNÉRATION, pas
+     celle qui la précède. Sans `n !== lectureListe.current`, la réponse
+     d'une lecture qu'une autre a remplacée (un « Réessayer », une relecture
+     après une écriture, le retour de « Mon entreprise ») était posée si elle
+     revenait la DERNIÈRE — une liste plus ancienne par-dessus une plus
+     récente —, et rien ne rougissait. La première ligne du traitement de la
+     réponse, ENTIÈRE, avant la garde de génération. */
+  verifier('…et la réponse d’une lecture PÉRIMÉE (une autre lecture est partie depuis, l’écran est démonté, la file a changé) n’est '
+    + 'jamais posée : `if (!monte.current || n !== lectureListe.current || fileRef.current !== f) return;` ouvre le traitement de la réponse, '
+    + 'avant la garde de génération',
+  lireListe.includes('.then((r) => { if (!monte.current || n !== lectureListe.current || fileRef.current !== f) return; if (g !== f.generation()) {')
+    && lireListe.indexOf('const n = lectureListe.current;') > 0 && lireListe.indexOf('const n = lectureListe.current;') < lireListe.indexOf('api.motifsRefusRemise(')
+    && (lireListe.match(/lectureListe\.current \+= 1;/g) || []).length === 1,
+  lireListe.slice(lireListe.indexOf('.then((r)'), lireListe.indexOf('.then((r)') + 160));
+  /* CE QUE LA LECTURE RELIT (relecture de 2b-1, ECR-1) : la cause, notée en
+     la lançant — `'devis'` après une écriture du devis (la relecture des
+     totaux), `'entreprise'` au retour de « Mon entreprise » —, S'AJOUTE
+     tant qu'aucune liste n'est revenue, et s'efface au retour, liste ou
+     échec. L'état et les deux composants la reçoivent. */
+  verifier('…la lecture NOTE ce qu’elle relit : `\'devis\'` après une écriture confirmée, `\'entreprise\'` au retour de « Mon entreprise » ; '
+    + 'les causes s’ajoutent jusqu’au retour, et s’effacent au retour (liste ou échec) ; l’état, la ligne et la carte la reçoivent',
+  lireListe.includes("setListe((l) => ({ ...l, erreur: null, enLecture: true, relecture: { devis: l.relecture.devis || cause === 'devis', "
+    + "entreprise: l.relecture.entreprise || cause === 'entreprise', }, }));")
+    && (lireListe.match(/relecture: AUCUNE_RELECTURE/g) || []).length === 2
+    && /const AUCUNE_RELECTURE = Object\.freeze\(\{ devis: false, entreprise: false \}\);/.test(saE)
+    && /const \[liste, setListe\] = useState\(\{ motifs: null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE, \}\);/.test(saE)
+    && (saE.match(/relecture=\{liste\.relecture\}/g) || []).length === 2 && /relecture: liste\.relecture,/.test(saE),
+  lireListe.slice(0, 400));
   /* LES RELECTURES (critique E-1, E-5, B11) : à l'ouverture d'un devis en
      base, après chaque relecture des totaux, au retour de « Mon
      entreprise », sur « Réessayer » — en haut ET dans la carte. */
@@ -8155,8 +8651,8 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const effetRetour = appels(SA, 'useEffect').map(sansEspaces).find((a) => /\[retourEntreprise\]\)$/.test(a)) || '';
   verifier('la liste se RELIT : à l’ouverture d’un devis en base (après `setEtat(\'pret\')`), après chaque relecture des totaux, au retour '
     + 'de « Mon entreprise » (`retourEntreprise`, et pas à la valeur de départ), et sur « Réessayer » — en haut, en bas ET dans la carte',
-  /lireLaListe\(\);/.test(brancheTotaux) && /setEtat\('pret'\); lireLaListe\(\);/.test(saE)
-    && /if \(retourEntrepriseVu\.current === retourEntreprise\) return; retourEntrepriseVu\.current = retourEntreprise; lireLaListe\(\);/.test(effetRetour)
+  /lireLaListe\('devis'\);/.test(brancheTotaux) && /setEtat\('pret'\); lireLaListe\(\);/.test(saE)
+    && /if \(retourEntrepriseVu\.current === retourEntreprise\) return; retourEntrepriseVu\.current = retourEntreprise; lireLaListe\('entreprise'\);/.test(effetRetour)
     && (saE.match(/onReessayer=\{lireLaListe\}/g) || []).length === 2
     && /ligneRemise=\{ligneRemise\('haut'\)\}/.test(saE) && /rangeeRemise=\{ligneRemise\('bas'\)\}/.test(saE));
   /* OUVRIR LA LISTE ENREGISTRE D'ABORD CE QUI EST OUVERT (trou trouvé par le
@@ -8190,8 +8686,17 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   verifier('la saisie : « des changements partent » pendant une écriture (`attente.enCours`) ET pendant la frappe d’un champ de l’en-tête '
     + '(`champOuvert`, que l’en-tête signale par `onFrappe`) ; ce que la liste ne compte pas vient de `ceQueLaListeNeComptePas` avec LE '
     + 'compte du pied (`nbNonEnregistrees`), et passe à la ligne ET à la carte',
-  /const etatListe = etatDeLaListe\(\{ enBase: attente\.devisEnBase, enRoute: attente\.enCours, champOuvert, erreur: liste\.erreur, lue, \}\);/.test(saE)
-    && /const pasCompte = ceQueLaListeNeComptePas\(\{ nbLignes: nbNonEnregistrees, entete: !!attente\.devisErreur \|\| Object\.keys\(erreursEntete\)\.length > 0, \}\);/.test(saE)
+  /const etatListe = etatDeLaListe\(\{ enBase: attente\.devisEnBase, enRoute: attente\.enCours, champOuvert, erreur: liste\.erreur, lue, relecture: liste\.relecture, \}\);/.test(saE)
+    && /const pasCompte = ceQueLaListeNeComptePas\(\{ nbLignes: nbNonEnregistrees, entete: !!attente\.devisErreur \|\| Object\.keys\(erreursEntete\)\.length > 0, enBase: attente\.devisEnBase, \}\);/.test(saE)
+    /* LES AVIS, une fois l'état connu (PAR-8) ; et « Réessayer » JAMAIS
+       sur un refus définitif (PAR-3 : retirer la garde laissait OP027
+       « Liste non lue — Réessayer », un bouton qui relit sans fin le même
+       refus, et rien ne rougissait). */
+    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, \}\);/.test(saE)
+    && saE.indexOf('const avis = avisDuDevis(') > saE.indexOf('const pasCompte = ceQueLaListeNeComptePas(')
+    && !/useMemo\(\(\) => avisDuDevis/.test(saE)
+    && (saE.match(/const listeReessayable = !!liste\.erreur && !estUnRefusDefinitif\(liste\.erreur\);/g) || []).length === 1
+    && (saE.match(/erreurReessayable=\{listeReessayable\}/g) || []).length === 2
     && /const suffixe = suffixeDuPied\(\{ nbNonEnregistrees,/.test(saE)
     && (saE.match(/pasCompte=\{pasCompte\}/g) || []).length === 2
     && /const \[champOuvert, setChampOuvert\] = useState\(false\);/.test(saE) && /onFrappe=\{setChampOuvert\}/.test(saE)
@@ -8205,6 +8710,21 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /\} else \{ signalerFrappe\(true\); \}/.test(corpsEntete)
     && (corpsEntete.match(/frappeFinie\(\);/g) || []).length >= 4,
   `${champsFrappe.length} champ(s) qui signalent la frappe`);
+  /* QUITTER LA RUE L'ENREGISTRE (relecture de 2b-1, ECR-2) : une rue tapée
+     sans choisir de suggestion signalait « champ ouvert », et rien ne
+     l'enregistrait ni ne retirait le signal — « Des changements partent »
+     restait sans que rien ne parte. `ChampVille` reçoit un `onBlur`
+     FACULTATIF, sans valeur par défaut (les six autres écrans ne le passent
+     pas : pour eux, rien ne change), qu'il passe à son champ ; l'en-tête y
+     branche `enregistrerLieu`, qui enregistre ET retire le signal. */
+  const champVille = sansEspaces(sansCommentairesJs(lire('src/components/ChampVille.js')));
+  const rueDuLieu = sansEspaces(balises(ECR.entete, 'ChampVille').find((b) => /type="rue"/.test(b)) || '');
+  verifier('…et QUITTER la rue l’enregistre : `ChampVille` passe un `onBlur` FACULTATIF (sans valeur par défaut) à son champ, et l’en-tête '
+    + 'y branche `enregistrerLieu` (qui enregistre le lieu et retire le signal de frappe)',
+  /type = 'municipality', style, maxLength, onBlur, \}, ref\) \{/.test(champVille) && /maxLength=\{maxLength\} onBlur=\{onBlur\} \/>/.test(champVille)
+    && /onBlur=\{enregistrerLieu\}/.test(rueDuLieu)
+    && /const enregistrerLieu = \(\) => \{ const l = lire\(\); onEnregistrer\(\{ lieuAdresse: l\.lieuAdresse, lieuCodePostal: l\.lieuCodePostal, lieuVille: l\.lieuVille \}\); frappeFinie\(\); \};/.test(corpsEntete),
+  rueDuLieu.slice(0, 200));
   /* LE RETOUR À LA LISTE DEPUIS « CONDITIONS » (critique E-13) : ouverte
      depuis la liste sur son champ, la carte y RAMÈNE ; ouverte autrement,
      elle revient au devis. */
@@ -8223,6 +8743,18 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /case 'ligne': if \(!lignesRef\.current\.some\(/.test(agir) && /case 'lieu': case 'delai':/.test(agir)
     && /focusChamp: \(champ\) => \{ const cible = \{ lieu: refRue, delai: refDelai \}\[champ\];/.test(sansEspaces(ECR.entete))
     && /ref=\{refRue\}/.test(ECR.entete) && /\{ligneRemise\}/.test(ECR.entete));
+  /* …ET « OUVRIR CETTE LIGNE » OUVRE CETTE LIGNE-LÀ (banc indépendant de
+     2b-1, 05/11/2026 au soir) : le contrôle voyait la garde (`some`), pas
+     ce qu'elle ouvre — `ouvrirCarte(lignesRef.current[0].id)` ouvrait la
+     PREMIÈRE ligne du devis à la place de la fautive, et passait tout. Les
+     deux cas qui ouvrent une carte, ENTIERS : la ligne fautive, ou le poste
+     qu'on vient d'insérer, et « ‹ Liste » qui ramène. */
+  verifier('…« Ouvrir cette ligne » ouvre la ligne FAUTIVE (`e.ligneId`), « Chiffrer un poste » le poste qu’il vient d’insérer, et '
+    + 'l’une comme l’autre ramène à la liste',
+  agir.includes("case 'ligne': if (!lignesRef.current.some((l) => String(l.id) === String(e.ligneId))) return; ouvrirCarte(e.ligneId); poserRetour(CARTE_POUR_REMETTRE); return;")
+    && agir.includes("case 'lignes': { if (!(Array.isArray(propositions) && propositions.length > 0)) return; if (carteRef.current) enregistrerCarte(); const id = inserer('poste', null); if (!id) return; ouvrirCarte(id); poserRetour(CARTE_POUR_REMETTRE); return; }")
+    && agir.split('ouvrirCarte(').length - 1 === 2,
+  agir.slice(agir.indexOf("case 'ligne'"), agir.indexOf("case 'ligne'") + 240));
   /* L'AIDE SOUS UN TAUX RÉDUIT (réponse 3 du 05/11 : « tout permettre ») :
      sous 10 % et 5,5 % seulement, jamais un refus. */
   verifier('l’aide du taux réduit s’affiche sous 10 % et 5,5 % SEULEMENT (une aide, pas un refus)',

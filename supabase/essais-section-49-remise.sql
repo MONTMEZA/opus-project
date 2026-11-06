@@ -42,13 +42,23 @@
 --  remplacerait la sienne dans le compte (constat T01 de la vérification du
 --  lot 2b-1 : le cas 12 h retiré, le fichier écrivait encore 11 erreurs).
 --
---  ET IL JUGE EXACTEMENT 126 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
---  puis une 127e qui les compte (cas 15) : chaque valeur jugée passe par
+--  ET IL JUGE EXACTEMENT 130 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
+--  puis une 131e qui les compte (cas 15) : chaque valeur jugée passe par
 --  `pg_temp.v(…)`, qui avance une séquence temporaire — qu'aucun `rollback`
 --  n'annule. Une valeur qui ne s'est pas calculée (un ordre en erreur, une
 --  transaction déjà annulée, un cas retiré) manque au compte, et le cas 15
---  vaut `f`. Joué comme ci-dessus, le juge relit 127 colonnes `…_attendu_`
+--  vaut `f`. Joué comme ci-dessus, le juge relit 131 colonnes `…_attendu_`
 --  et AUCUN écart ; une autre somme est un ÉCHEC.
+--
+--  CE QUE LA RELECTURE DE 2b-1 A CHANGÉ (05/11/2026, au soir) : le motif de
+--  rang 3 est coupé en DEUX clés (TXT-1) — `devis_taux_franchise` (la loi)
+--  et `devis_taux_sans_tva` (une prudence : l'autoliquidation le permet) — ;
+--  `devis_client` et `devis_lignes` sont des RÈGLES D'OPUS (décision D-C du
+--  propriétaire, TXT-4) ; `regime_tva` est une prudence (TXT-7) ; les
+--  phrases du lieu, du délai, de la validité et de la réduction disent le
+--  droit plus exactement (TXT-5, TXT-6, BASE-3) ; et le cas 5 FIGE qu'un
+--  délai fait d'un seul U+3000 passe pour écrit (BASE-1 : la liste vérifie
+--  une présence, pas un sens). Quatre valeurs de plus (126 → 130).
 --
 --  LES RÈGLES DE L'ESSAI 49 VALENT ICI : chaque cas dans son `begin …
 --  rollback`, construisant son propre état ; chaque ordre qui doit échouer
@@ -99,13 +109,13 @@
 -- Le message d'OP027, écrit une fois : celui que tous les refus doivent porter.
 \set MSG_OP027 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
 
--- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 126. Toute valeur
+-- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 130. Toute valeur
 -- jugée passe par `pg_temp.v(…)`, qui avance une SÉQUENCE temporaire — une
 -- séquence n'est pas annulée par `rollback` : une valeur calculée dans un
 -- cas annulé compte, une valeur qui n'a pas pu se calculer (un ordre en
 -- erreur, une transaction déjà annulée, une variable indéfinie) ne compte
 -- pas. Le jugement final (cas 15) compare le compte à l'annonce.
-\set VALEURS_ANNONCEES 126
+\set VALEURS_ANNONCEES 130
 create temporary sequence essai_valeurs;
 -- `security definer` : la séquence appartient à `postgres`, et la valeur se
 -- calcule aussi sous `authenticated`, `service_role` et `anon`. Elle vit dans
@@ -236,14 +246,15 @@ prepare motifs(uuid, text) as
   select coalesce(string_agg(m.cle, ',' order by m.o), '—') as cles,
          pg_temp.v(coalesce(string_agg(m.cle, ',' order by m.o), '—') = $2) as motifs_attendu_t
     from public.motifs_refus_remise($1) with ordinality as m(rang, cle, phrase, nature, ligne_id, o);
--- Les lignes désignées par les motifs de LIGNE, dans l'ordre de sortie.
+-- Les lignes désignées par les motifs de LIGNE (le rang 3 : ses deux clés,
+-- `devis_taux_franchise` et `devis_taux_sans_tva`), dans l'ordre de sortie.
 -- Toute la liste est lue (pas seulement les motifs de ligne) : un motif qui
 -- n'est pas de ligne et qui porterait une ligne serait vu.
 prepare fautives(uuid, text) as
   select pg_temp.v(coalesce(string_agg(m.ligne_id::text, ',' order by m.o)
-                    filter (where m.cle = 'devis_taux_regime'), '—') = $2) as lignes_attendu_t,
-         pg_temp.v(count(*) filter (where m.cle = 'devis_taux_regime' and m.ligne_id is null)) as sans_ligne_attendu_0,
-         pg_temp.v(count(*) filter (where m.cle <> 'devis_taux_regime' and m.ligne_id is not null)) as ligne_en_trop_attendu_0
+                    filter (where m.rang = 3), '—') = $2) as lignes_attendu_t,
+         pg_temp.v(count(*) filter (where m.rang = 3 and m.ligne_id is null)) as sans_ligne_attendu_0,
+         pg_temp.v(count(*) filter (where m.rang <> 3 and m.ligne_id is not null)) as ligne_en_trop_attendu_0
     from public.motifs_refus_remise($1) with ordinality as m(rang, cle, phrase, nature, ligne_id, o);
 -- LES TROIS LISTES du cas 13 : chacune réduite à sa SIGNATURE complète —
 -- rang, clé, nature, phrase, et l'ORDRE de la ligne désignée (pas son
@@ -336,11 +347,12 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 3 a. devis_taux_regime en FRANCHISE — UNE ligne par ligne fautive (poste ET option, offerte comprise), dans l’ordre « ordre, id » ==='
+\echo '=== 3 a. devis_taux_franchise (LA LOI) en FRANCHISE — UNE ligne par ligne fautive (poste ET option, offerte comprise), dans l’ordre « ordre, id » ==='
 \echo '    lignes : zone (sans taux) ; L1 poste 0 % (juste) ; L2 poste 20 % ordre 2000 ; L3 option 10 % ordre 3000 ;'
 \echo '             L4 poste OFFERT 5,5 % ordre 4000 ; L5 poste 20 % ordre 1500 (écrit APRÈS, rangé AVANT) ;'
 \echo '             L6 option 20 % ordre 4000 (même ordre que L4 : L4 < L6 par identifiant)'
-\echo '    attendu : cinq devis_taux_regime désignant L5, L2, L3, L4, L6 ; puis chaque ligne remise à 0 → « — »'
+\echo '    attendu : cinq devis_taux_franchise désignant L5, L2, L3, L4, L6, nature loi et la phrase du contrat ;'
+\echo '              puis chaque ligne remise à 0 → « — »'
 -- ==========================================================================
 begin;
 execute fiche_a('franchise');
@@ -355,8 +367,12 @@ execute chiffree(:L3, :D1, 3000, 'option', 10000, 1000, false, 5);
 execute chiffree(:L4, :D1, 4000, 'poste', 4500, 550, true, 6);
 execute chiffree(:L5, :D1, 1500, 'poste', 10000, 2000, false, 7);
 execute chiffree(:L6, :D1, 4000, 'option', 10000, 2000, false, 8);
-execute motifs(:D1, 'devis_taux_regime,devis_taux_regime,devis_taux_regime,devis_taux_regime,devis_taux_regime');
+execute motifs(:D1, 'devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise');
 execute fautives(:D1, concat_ws(',', :L5::text, :L2::text, :L3::text, :L4::text, :L6::text));
+select pg_temp.v(count(*) = 5 and bool_and(nature = 'loi'
+         and phrase = 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'))
+         as franchise_la_loi_attendu_t
+  from public.motifs_refus_remise(:D1) where rang = 3;
 update public.devis_lignes set taux_tva_centiemes = 0, generation = 9  where id = :L2;
 update public.devis_lignes set taux_tva_centiemes = 0, generation = 10 where id = :L3;
 update public.devis_lignes set taux_tva_centiemes = 0, generation = 11 where id = :L4;
@@ -367,8 +383,11 @@ execute motifs(:D1, '—');
 rollback;
 
 \echo ''
-\echo '=== 3 b. devis_taux_regime au RÉEL — une ligne chiffrée à 0 (poste offert, option) est fautive ; 20 % est juste ==='
-\echo '    attendu : devis_taux_regime ×2 (L2, L3), puis conso_tva_intra de l’entreprise (A n’a aucun n° de TVA) ;'
+\echo '=== 3 b. devis_taux_sans_tva (UNE PRUDENCE) au RÉEL — une ligne chiffrée à 0 (poste offert, option) est fautive ; 20 % est juste ==='
+\echo '    (la loi permet une ligne sans TVA dans quelques cas — la sous-traitance en autoliquidation, CGI 283 2 nonies —'
+\echo '     qu’Opus ne sait pas encore imprimer : ce n’est pas « la loi », c’est une prudence)'
+\echo '    attendu : devis_taux_sans_tva ×2 (L2, L3), nature prudence et la phrase du contrat, puis conso_tva_intra de'
+\echo '              l’entreprise (A n’a aucun n° de TVA) ;'
 \echo '              les deux lignes passées à 20 % et 10 % → il ne reste que conso_tva_intra'
 -- ==========================================================================
 begin;
@@ -380,8 +399,12 @@ execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 2000, false, 2);
 execute chiffree(:L2, :D1, 2000, 'poste', 4500, 0, true, 3);
 execute chiffree(:L3, :D1, 3000, 'option', 10000, 0, false, 4);
-execute motifs(:D1, 'devis_taux_regime,devis_taux_regime,conso_tva_intra');
+execute motifs(:D1, 'devis_taux_sans_tva,devis_taux_sans_tva,conso_tva_intra');
 execute fautives(:D1, concat_ws(',', :L2::text, :L3::text));
+select pg_temp.v(count(*) = 2 and bool_and(nature = 'prudence'
+         and phrase = 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'))
+         as reel_sans_tva_prudence_attendu_t
+  from public.motifs_refus_remise(:D1) where rang = 3;
 update public.devis_lignes set taux_tva_centiemes = 2000, generation = 5 where id = :L2;
 update public.devis_lignes set taux_tva_centiemes = 1000, generation = 6 where id = :L3;
 execute motifs(:D1, 'conso_tva_intra');
@@ -398,13 +421,13 @@ set local request.jwt.claim.sub = :A;
 execute devis_complet(:D1);
 execute chiffree(:L1, :D1, 1000, 'poste', 100000, 2000, false, 2);
 execute chiffree(:L2, :D1, 2000, 'option', 10000, 0, false, 3);
-select pg_temp.v(count(*) filter (where cle = 'devis_taux_regime')) as taux_regime_sans_fiche_attendu_0,
+select pg_temp.v(count(*) filter (where rang = 3)) as taux_regime_sans_fiche_attendu_0,
        pg_temp.v(count(*) filter (where cle = 'regime_tva')) as regime_tva_attendu_1
   from public.motifs_refus_remise(:D1);
 reset role;
 execute fiche_a(null);
 set local role authenticated;
-select pg_temp.v(count(*) filter (where cle = 'devis_taux_regime')) as taux_regime_fiche_sans_regime_attendu_0,
+select pg_temp.v(count(*) filter (where rang = 3)) as taux_regime_fiche_sans_regime_attendu_0,
        pg_temp.v(count(*) filter (where cle = 'regime_tva')) as regime_tva_attendu_1
   from public.motifs_refus_remise(:D1);
 rollback;
@@ -442,7 +465,11 @@ rollback;
 -- ==========================================================================
 \echo ''
 \echo '=== 5. devis_delai — des blancs ne sont pas un délai ; c’est une RÈGLE D’OPUS (réponse du 05/11) ==='
-\echo '    attendu : delai rangé vide ; devis_delai, nature regle_opus, rang 5 ; puis « — »'
+\echo '    attendu : delai rangé vide ; devis_delai, nature regle_opus, rang 5 ; puis « — » ;'
+\echo '    puis un délai fait d’un SEUL U+3000 (espace idéographique, HORS de la classe de blancs du projet) : rangé tel'
+\echo '    quel, et la liste ne dit PAS devis_delai — elle vérifie une présence, pas un sens (relecture de 2b-1, BASE-1).'
+\echo '    Ce cas FIGE le comportement d’aujourd’hui : il changera, avec lui, le jour où la classe sera élargie dans'
+\echo '    toutes ses copies (lot de consolidation) ; c’est 2c qui refusera à l’impression un délai sans lettre ni chiffre.'
 -- ==========================================================================
 begin;
 execute fiche_a('franchise');
@@ -457,6 +484,9 @@ execute motifs(:D1, 'devis_delai');
 select pg_temp.v(rang = 5 and nature = 'regle_opus' and ligne_id is null) as rang_nature_attendu_t
   from public.motifs_refus_remise(:D1) where cle = 'devis_delai';
 update public.devis set delai_execution = 'Deux semaines', generation = 4 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set delai_execution = chr(12288), generation = 5 where id = :D1;
+select pg_temp.v(delai_execution = chr(12288)) as u3000_range_tel_quel_attendu_t from public.devis where id = :D1;
 execute motifs(:D1, '—');
 rollback;
 
@@ -569,11 +599,12 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 10. LES NEUF MOTIFS À LA FOIS — rangs 1 à 9, natures, phrases au CARACTÈRE près, aucune ligne en trop ==='
+\echo '=== 10. LES NEUF RANGS À LA FOIS — rangs 1 à 9, natures, phrases au CARACTÈRE près, aucune ligne en trop ==='
 \echo '    un devis NEUF de A (franchise, entreprise complète) : aucun client, aucun lieu, ni délai, ni validité ;'
 \echo '    une OPTION à 20 % (fautive en franchise, et pas un poste) ; un acompte de 50,00 € sans nature'
 \echo '    (ramené : le TTC vaut 0) ; une réduction de 1,00 € (ramenée : le brut vaut 0)'
-\echo '    attendu : rangs 1,2,3,4,5,6,7,8,9 ; chaque phrase = celle du contrat (annexe B.2 du cahier 2b) ;'
+\echo '    attendu : rangs 1,2,3,4,5,6,7,8,9 (le rang 3 sous sa clé de franchise) ; chaque phrase = celle du contrat'
+\echo '              (annexe B.2 du cahier 2b, revue le 05/11 au soir : DIX clés sur neuf rangs) ;'
 \echo '              ligne_id posée sur le seul motif 3 ; aucune phrase ne porte de chiffre, d’euro,'
 \echo '              d’apostrophe droite, d’espace insécable ni de barre oblique inverse'
 -- ==========================================================================
@@ -585,24 +616,25 @@ set local request.jwt.claim.sub = :A;
 insert into public.devis (id, pro_id, acompte_centimes, remise_centimes, generation)
 values (:D1, :A, 5000, 100, 1);
 execute chiffree(:L1, :D1, 1000, 'option', 10000, 2000, false, 2);
-execute motifs(:D1, 'devis_client,devis_lignes,devis_taux_regime,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee');
+execute motifs(:D1, 'devis_client,devis_lignes,devis_taux_franchise,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee');
 with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(rang, cle, phrase, nature, ligne_id, o)),
      contrat(rang, cle, nature, phrase) as (values
-  (1, 'devis_client',            'loi',        'Ce devis ne s’adresse encore à personne : choisissez le client.'),
-  (2, 'devis_lignes',            'loi',        'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste.'),
-  (3, 'devis_taux_regime',       'loi',        'Le taux de TVA de cette ligne ne correspond pas à votre régime de TVA : corrigez-la.'),
-  (4, 'devis_lieu',              'prudence',   'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.'),
-  (5, 'devis_delai',             'regle_opus', 'Écrivez le délai d’exécution des travaux. La loi le demande pour un particulier et pour un devis signé chez le client ; Opus le demande pour tous vos devis.'),
-  (6, 'devis_validite',          'prudence',   'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien, et Opus ne sait pas encore si ce devis en est un.'),
+  (1, 'devis_client',            'regle_opus', 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'),
+  (2, 'devis_lignes',            'regle_opus', 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'),
+  (3, 'devis_taux_franchise',    'loi',        'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'),
+  (3, 'devis_taux_sans_tva',     'prudence',   'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'),
+  (4, 'devis_lieu',              'prudence',   'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'),
+  (5, 'devis_delai',             'regle_opus', 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'),
+  (6, 'devis_validite',          'prudence',   'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'),
   (7, 'devis_acompte_nature',    'prudence',   'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'),
   (8, 'devis_acompte_ramene',    'prudence',   'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'),
-  (9, 'devis_reduction_ramenee', 'prudence',   'La réduction en euros dépasse le total du devis : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'))
+  (9, 'devis_reduction_ramenee', 'prudence',   'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'))
 select pg_temp.v((select count(*) from m)) as lignes_attendu_9,
        pg_temp.v((select string_agg(rang::text, ',' order by o) from m) = '1,2,3,4,5,6,7,8,9') as rangs_dans_l_ordre_attendu_t,
        pg_temp.v((select count(*) from m join contrat c using (rang)
          where m.cle = c.cle and m.nature = c.nature and m.phrase = c.phrase)) as conformes_au_contrat_attendu_9,
-       pg_temp.v((select bool_and((m.ligne_id is not null) = (m.cle = 'devis_taux_regime')) from m)) as ligne_id_seulement_au_3_attendu_t,
-       pg_temp.v((select ligne_id = :L1 from m where cle = 'devis_taux_regime')) as la_bonne_ligne_attendu_t,
+       pg_temp.v((select bool_and((m.ligne_id is not null) = (m.rang = 3)) from m)) as ligne_id_seulement_au_3_attendu_t,
+       pg_temp.v((select ligne_id = :L1 from m where rang = 3)) as la_bonne_ligne_attendu_t,
        pg_temp.v((select bool_and(phrase !~ '[0-9€]' and position('''' in phrase) = 0
                         and position(chr(160) in phrase) = 0 and position(chr(8239) in phrase) = 0
                         and position(chr(92) in phrase) = 0) from m)) as phrases_propres_attendu_t,
@@ -614,7 +646,8 @@ rollback;
 \echo ''
 \echo '=== 11 a. LES MOTIFS DE L’ENTREPRISE — rang 100 + position, clé et phrase = les deux moitiés coupées au PREMIER « : » ==='
 \echo '    A sans fiche « Mon entreprise » ni frais : ses 11 motifs, dans l’ordre d’emetteur_incomplet(A),'
-\echo '    rangs 101 à 111 ; frais_deplacement en regle_opus, les autres en loi ; aucun ligne_id ;'
+\echo '    rangs 101 à 111 ; frais_deplacement en regle_opus, regime_tva en prudence (relecture de 2b-1, TXT-7 : aucune'
+\echo '    loi ne demande de déclarer son régime à Opus), les autres en loi — registre compris ; aucun ligne_id ;'
 \echo '    et « cle: phrase » recomposée = l’élément d’emetteur_incomplet, au caractère près'
 -- ==========================================================================
 begin;
@@ -631,7 +664,7 @@ select pg_temp.v((select count(*) from m)) as motifs_entreprise_attendu_11,
        pg_temp.v((select string_agg(rang::text, ',' order by o) from m)
          = '101,102,103,104,105,106,107,108,109,110,111') as rangs_attendu_t,
        pg_temp.v((select string_agg(cle || '=' || nature, ',' order by o) from m)
-         = 'registre=loi,capital=loi,conso_telephone=loi,conso_email=loi,regime_tva=loi,conso_mediateur=loi,'
+         = 'registre=loi,capital=loi,conso_telephone=loi,conso_email=loi,regime_tva=prudence,conso_mediateur=loi,'
            'conso_garantie_legale=loi,conso_modalites_paiement=loi,conso_modalites_execution=loi,'
            'conso_reclamations=loi,frais_deplacement=regle_opus') as cles_natures_attendu_t,
        pg_temp.v((select count(*) filter (where ligne_id is not null) from m)) as ligne_id_attendu_0,
@@ -871,12 +904,12 @@ execute chiffree('f4930000-0000-4000-8000-0000000000b2', :DY, 2000, 'option', 10
 execute chiffree('f4930000-0000-4000-8000-0000000000c1', :DZ, 1000, 'poste',  100000, 0,    false, 2);
 execute chiffree('f4930000-0000-4000-8000-0000000000c2', :DZ, 2000, 'option', 10000,  2000, false, 3);
 \echo '-- état 1 (attendu : cles_attendu_t t, x_y_z_identiques_attendu_t t)'
-execute trois_listes(:DX, :DY, :DZ, 'devis_taux_regime,devis_delai,devis_validite,devis_acompte_nature');
+execute trois_listes(:DX, :DY, :DZ, 'devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature');
 \echo '-- état 1, après que P a bloqué A (attendu : t, t — la liste ne voit pas le blocage)'
 set local request.jwt.claim.sub = :P;
 insert into public.blocages (bloqueur_id, bloque_id) values (:P, :A);
 set local request.jwt.claim.sub = :A;
-execute trois_listes(:DX, :DY, :DZ, 'devis_taux_regime,devis_delai,devis_validite,devis_acompte_nature');
+execute trois_listes(:DX, :DY, :DZ, 'devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature');
 \echo '-- état 2, tout corrigé sur les trois devis (attendu : cles « — », t, t)'
 update public.devis set delai_execution = 'Deux semaines', validite_jours = 30, acompte_nature = 'arrhes', generation = 4
  where id in (:DX, :DY, :DZ);
@@ -957,9 +990,9 @@ select pg_temp.v(count(*) filter (where has_function_privilege('anon', p.oid, 'e
 
 -- ==========================================================================
 \echo ''
-\echo '=== 15. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et 126) ==='
+\echo '=== 15. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et 130) ==='
 \echo '    Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs'
-\echo '    manquent, et ceci vaut f. C’est la 127e colonne « …_attendu_ » du fichier.'
+\echo '    manquent, et ceci vaut f. C’est la 131e colonne « …_attendu_ » du fichier.'
 -- ==========================================================================
 select pg_temp.valeurs_jugees() = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,
        pg_temp.valeurs_jugees() as valeurs_jugees;

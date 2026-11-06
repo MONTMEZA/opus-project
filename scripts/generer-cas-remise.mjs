@@ -103,6 +103,12 @@ const ENTREPRISES = {
   franchise: [FICHE('franchise'), FRAIS(3500)],
   // Au régime réel, A n'a aucun n° de TVA : conso_tva_intra (règle d'Opus).
   reel: [FICHE('reel'), FRAIS(3500)],
+  // Au régime réel AVEC un n° de TVA connu de l'annuaire (posé en
+  // superutilisateur ; FR78000049007 est le numéro CALCULÉ du SIREN fictif
+  // 000049007) : rien ne manque à l'entreprise, et un motif de ligne au réel
+  // (`devis_taux_sans_tva`) peut être le SEUL de la liste.
+  reel_tva: [FICHE('reel'), FRAIS(3500),
+    `update public.entreprise_registre set tva = 'FR78000049007' where pro_id = '${A}' and retiree_le is null;`],
   vide: [],
   sans_regime: [FICHE(null), FRAIS(3500)],
   sans_frais: [FICHE('franchise')],
@@ -149,7 +155,8 @@ const SITUATIONS = [
   { nom: 'une option seule (à 0)', e: 'franchise', lignes: [option(22000, 0)] },
   { nom: 'un poste OFFERT seul : c’est un poste', e: 'franchise', lignes: [poste(4500, 0, { offert: true })] },
   { nom: 'une réserve et un poste', e: 'franchise', lignes: [titre('reserve'), poste(100000, 0)] },
-  // --- devis_taux_regime
+  // --- rang 3 : devis_taux_franchise (la loi) et devis_taux_sans_tva (une
+  //     prudence) — deux clés depuis la relecture de 2b-1 (TXT-1)
   { nom: 'franchise, un poste à 20 %', e: 'franchise', lignes: [poste(100000, 2000)] },
   { nom: 'franchise, une option à 10 % (et un poste juste)', e: 'franchise', lignes: [poste(100000, 0), option(10000, 1000)] },
   { nom: 'franchise, un poste OFFERT à 5,5 %', e: 'franchise', lignes: [poste(100000, 0), poste(4500, 550, { offert: true })] },
@@ -224,7 +231,7 @@ const SITUATIONS = [
     devis: { remise_centimes: 100000 }, lignes: [poste(30000, 2000), poste(30000, 1000)] },
   // --- combinaisons
   { nom: 'un devis NEUF (rien de dit) : client, lignes, lieu, délai, validité', e: 'franchise', devis: VIDE, lignes: [] },
-  { nom: 'les neuf motifs du devis à la fois', e: 'franchise',
+  { nom: 'les neuf rangs du devis à la fois (le rang 3 en franchise)', e: 'franchise',
     devis: { ...VIDE, acompte_centimes: 5000, remise_centimes: 100 }, lignes: [option(10000, 2000)] },
   { nom: 'un devis neuf et AUCUNE fiche : les motifs du devis puis ceux de l’entreprise', e: 'vide', devis: VIDE, lignes: [] },
   // --- les motifs de l'entreprise
@@ -239,6 +246,30 @@ const SITUATIONS = [
     devis: { sos_request_id: SA, source: 'urgence', delai_execution: null }, lignes: UN_POSTE_0 },
   { nom: 'D4-c : devis ouvert à la main, sans délai', e: 'franchise',
     devis: { source: 'manuelle', delai_execution: null }, lignes: UN_POSTE_0 },
+  // --- ajoutés par la correction de la relecture de 2b-1 (05/11/2026), À LA
+  //     FIN pour que les numéros des cas déjà là ne bougent pas
+  // TXT-1 : au régime réel, une ligne à 0 est une PRUDENCE (la sous-traitance
+  // en autoliquidation la permet) — seule de la liste quand l'entreprise a un
+  // n° de TVA connu ; et la même avec une option offerte et une fautive au
+  // MÊME ordre, départagées par l'identifiant.
+  { nom: 'réel avec n° de TVA, un poste à 0 : devis_taux_sans_tva seul (une prudence)', e: 'reel_tva', lignes: [poste(100000, 0)] },
+  { nom: 'réel avec n° de TVA, trois fautives (poste, option offerte, option) dont deux au même ordre', e: 'reel_tva',
+    lignes: [poste(10000, 0, { ordre: 3000 }), poste(10000, 2000, { ordre: 500 }), option(10000, 0, { ordre: 1000, id: 9, offert: true }),
+      option(10000, 0, { ordre: 1000, id: 8 })] },
+  // BASE-1 : la liste vérifie une PRÉSENCE, pas un sens. Un délai fait d'un
+  // seul U+3000 (espace idéographique, hors de la classe de blancs du
+  // projet) est rangé tel quel par la base, et ne rend PAS devis_delai. Le
+  // miroir doit rendre la même chose : ce cas FIGE le comportement actuel,
+  // jusqu'à ce que la classe soit élargie dans toutes ses copies à la fois.
+  { nom: 'délai fait d’un seul U+3000 — hors de la classe de blancs, rangé tel quel : pas de devis_delai', e: 'franchise',
+    devis: { delai_execution: '\u3000' }, lignes: UN_POSTE_0 },
+  // PAR-6 : D4-c sur un devis NEUF VIDE (aucun client, lieu, délai, validité,
+  // aucun poste) : chacun des motifs du devis est alors éprouvé contre chaque
+  // origine — le cas « un devis NEUF » plus haut est celui ouvert à la main.
+  { nom: 'D4-c : devis NEUF VIDE venu d’une urgence', e: 'franchise',
+    devis: { ...VIDE, sos_request_id: SA, source: 'urgence' }, lignes: [] },
+  { nom: 'D4-c : devis NEUF VIDE venu d’une demande ET d’une urgence', e: 'franchise',
+    devis: { ...VIDE, quote_request_id: QA, sos_request_id: SA, source: 'demande' }, lignes: [] },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -364,7 +395,7 @@ const cas = SITUATIONS.map((s, k) => {
    au moins une fois, chaque nature, un cas où rien ne manque, et des motifs
    de l'entreprise. Un fichier qui ne couvre plus quelque chose rougit à la
    génération, pas au premier défaut. */
-const CLES_DU_DEVIS = ['devis_client', 'devis_lignes', 'devis_taux_regime', 'devis_lieu', 'devis_delai',
+const CLES_DU_DEVIS = ['devis_client', 'devis_lignes', 'devis_taux_franchise', 'devis_taux_sans_tva', 'devis_lieu', 'devis_delai',
   'devis_validite', 'devis_acompte_nature', 'devis_acompte_ramene', 'devis_reduction_ramenee'];
 for (const cle of CLES_DU_DEVIS) {
   if (!cas.some((c) => c.attendu.length > 0 && c.attendu.filter((m) => m.rang < 100).every((m) => m.cle === cle)

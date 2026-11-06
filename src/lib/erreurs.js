@@ -980,11 +980,18 @@ export function messageClair(e, quoi = '', { rienAffiche = false } = {}) {
      exist », qui sortait tel quel, en anglais (mesuré par l'essai du calcul
      de 2b-1). Seul le texte « function … does not exist » est visé, pas le
      code : 42883 désigne aussi un OPÉRATEUR introuvable (« operator does not
-     exist: uuid = text »), qui n'est pas une base en retard. */
+     exist: uuid = text »), qui n'est pas une base en retard.
+     ET SEULEMENT UNE FONCTION QUALIFIÉE « public. » (relecture de 2b-1,
+     TXT-8) : c'est la forme que prend un appel de l'application, mesurée
+     (« function public.motifs_refus_remise(uuid) does not exist »). Une
+     fonction de PostgreSQL appelée avec de mauvais types — « function
+     lower(integer) does not exist » — est une faute de programmation, pas
+     une base en retard : l'écran l'imputait à la base, et disait de rejouer
+     `schema.sql`. Elle suit désormais le chemin ordinaire. */
   if (code === 'PGRST204' || code === '42703' || code === 'PGRST205' || code === '42P01'
     || m.includes('in the schema cache')
     || /column "?[a-z0-9_.]+"? does not exist/.test(m) || /relation "?[a-z0-9_.]+"? does not exist/.test(m)
-    || /function "?[a-z0-9_.]+"?\(.*\) does not exist/.test(m)) {
+    || /function "?public\.[a-z0-9_]+"?\(.*\) does not exist/.test(m)) {
     const colonne = (brut.match(/the '([a-z0-9_]+)' column/i)
       || brut.match(/column "?(?:[a-z0-9_]+\.)?([a-z0-9_]+)"? does not exist/i) || [])[1];
     const table = colonne ? null : (brut.match(/the table '(?:[a-z0-9_]+\.)?([a-z0-9_]+)'/i)

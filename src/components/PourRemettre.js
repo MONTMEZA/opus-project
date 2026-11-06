@@ -21,11 +21,16 @@
  * (devis.js), jamais par une condition écrite dans un rendu :
  *   1. le brouillon n'est pas encore en base : AUCUN appel, et une phrase
  *      (la fonction rendrait OP027 pour un devis qu'elle ne trouve pas) ;
- *   2. des changements partent (une écriture en route, ou un champ de
- *      l'en-tête tapé et pas encore quitté) : la DERNIÈRE liste sûre reste
- *      affichée dans la carte — elle ne clignote pas (E-6) —, et la ligne
- *      comme la carte disent « Des changements partent : la liste sera à
- *      jour juste après. » (annexe B.8) ;
+ *   2. des changements partent (une écriture du devis en route, la lecture
+ *      qui la suit, ou un champ de l'en-tête tapé et pas encore quitté) :
+ *      la ligne et la carte disent « Des changements partent : la liste
+ *      sera à jour juste après. » (annexe B.8). La carte garde « Votre
+ *      entreprise » — une écriture du devis ne la change pas, elle ne
+ *      clignote pas (E-6) —, mais la partie « Ce devis » de la dernière
+ *      liste cède la place à « Ce devis : la liste se met à jour. » : elle
+ *      disait « ne chiffre encore aucun travail » sous un poste qu'on venait
+ *      d'écrire (relecture de 2b-1, ECR-1). Au retour de « Mon
+ *      entreprise », l'inverse : c'est « Votre entreprise » qui se relit ;
  *   3. la lecture a échoué : « Liste non lue — Réessayer », JAMAIS « rien ne
  *      manque ». Un travail qui n'a pas pu se faire ne ressemble pas à un
  *      travail fait (la règle de « Pour moi », 05/10) ;
@@ -40,7 +45,9 @@
  * entreprise » restera allumée tant que son n° de TVA est refusé par VIES :
  * un compteur unique ne s'éteindrait jamais, et un voyant qui ne s'éteint
  * jamais cesse d'être lu. Les mentions dues à un particulier se corrigent
- * dans « Mon entreprise » : elles comptent dans « votre entreprise ».
+ * dans « Mon entreprise » : elles comptent dans « votre entreprise », et le
+ * titre de la carte dit combien (« Votre entreprise — 5 points, dont 3 dus
+ * à un particulier », décision D-B du propriétaire, 05/11/2026 au soir).
  *
  * LES AVIS NE COMPTENT JAMAIS : ils s'affichent à part, sous la liste.
  *
@@ -65,7 +72,7 @@ import {
 import { ChevronRight } from './icons';
 import {
   PAS_ENCORE_VERIFIE, RIEN_NE_MANQUE_POUR_CE_DEVIS, LISTE_NON_LUE, MENTIONS_PARTICULIER_PAR_PRUDENCE,
-  TITRE_POUR_REMETTRE, points, comptesParEndroit, premierePhrase, actionDuPoint,
+  TITRE_POUR_REMETTRE, titresDesParties, premierePhrase, actionDuPoint,
   texteDeLaLigneRemise, ceQueDitLaCarte,
 } from '../lib/devis';
 
@@ -78,8 +85,11 @@ import {
  * orange de lecture) ou `'bas'` (sous « Conditions », la forme de sa
  * rangée). Son texte tient sur DEUX lignes RÉSERVÉES : qu'une écriture
  * passe, et la ligne ne grandit pas — la liste ne saute pas sous le doigt
- * (E-6). Aucune `accessibilityLiveRegion` : elle parlerait à chaque ligne
- * quittée.
+ * (E-6). TROIS dans un seul état, quand quelque chose n'est pas compté sur
+ * un devis en base : la phrase ET le décompte (décision D-A du
+ * propriétaire, 05/11/2026 au soir) — `texteDeLaLigneRemise` le dit
+ * (`lignes`). Aucune `accessibilityLiveRegion` : elle parlerait à chaque
+ * ligne quittée.
  *
  * En ÉCHEC (réessayable), la ligne EST le bouton « Réessayer » : elle
  * n'ouvre rien (E-19). Pas encore en base, elle n'est PAS une cible : il
@@ -88,23 +98,29 @@ import {
  */
 export function LigneRemise({
   variante = 'haut', etat, lue, erreurReessayable = true, erreurPhrase = null, enLecture = false, pasCompte = null,
-  onOuvrir, onReessayer,
+  relecture = null, onOuvrir, onReessayer,
 }) {
   /* TOUT ce que la ligne dit se décide dans `texteDeLaLigneRemise`
      (devis.js), que `verifier-devis` fait tourner. */
   const dit = texteDeLaLigneRemise({
-    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte,
+    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture,
   });
-  const { contenu, aDire } = dit;
+  const { contenu, compte, aDire } = dit;
   let action = null;
   if (dit.action === 'ouvrir') action = onOuvrir;
   else if (dit.action === 'reessayer') action = onReessayer;
+  /* Trois lignes RÉSERVÉES quand la phrase et le décompte s'affichent
+     ensemble (D-A) ; deux sinon. Le décompte va à la ligne : il ne se
+     colle pas à la fin d'une phrase. */
+  const trois = dit.lignes === 3;
+  let styleTexte = variante === 'bas' ? s.ligneTexteBas : s.ligneTexte;
+  if (trois) styleTexte = [styleTexte, variante === 'bas' ? s.troisLignesBas : s.troisLignes];
 
   const corps = (
     <>
       <View style={s.ligneCorps}>
         <Text style={variante === 'bas' ? s.ligneTitreBas : s.ligneTitre}>{TITRE_POUR_REMETTRE}</Text>
-        <Text style={variante === 'bas' ? s.ligneTexteBas : s.ligneTexte} numberOfLines={3}>{contenu}</Text>
+        <Text style={styleTexte} numberOfLines={trois ? 4 : 3}>{compte ? `${contenu}\n${compte}` : contenu}</Text>
       </View>
       {!!action && <ChevronRight size={16} color={C.accent2} />}
     </>
@@ -154,7 +170,7 @@ function Point({
         <Pressable
           onPress={() => onAgir(point)}
           accessibilityRole="button"
-          accessibilityLabel={action.libelle}
+          accessibilityLabel={action.aDire || action.libelle}
           style={({ pressed }) => [s.action, pressed && APPUI.plein]}
         >
           <Text style={s.actionTexte}>{action.libelle}</Text>
@@ -178,33 +194,38 @@ function Point({
  * où il faut.
  */
 export default function PourRemettre({
-  etat, lue = null, erreurPhrase = null, erreurReessayable = true, enLecture = false, pasCompte = null, avis = [],
-  lignes = [], chiffrerPossible = false, onAgir, onReessayer, onFermer,
+  etat, lue = null, erreurPhrase = null, erreurReessayable = true, enLecture = false, pasCompte = null, relecture = null,
+  avis = [], lignes = [], chiffrerPossible = false, onAgir, onReessayer, onFermer,
 }) {
   const ligneExiste = (id) => !!id && lignes.some((l) => String(l.id) === String(id));
   const designationDe = (id) => {
     const l = lignes.find((x) => String(x.id) === String(id));
     return l && l.designation ? l.designation : null;
   };
-  const rendrePoint = (p, i) => (
-    <Point
-      key={`${p.cle || 'inconnu'}-${p.ligneId || ''}-${i}`}
-      point={p}
-      action={actionDuPoint(p, { chiffrerPossible, ligneExiste })}
-      designation={p.endroit && p.endroit.endroit === 'ligne' ? designationDe(p.endroit.ligneId) : null}
-      onAgir={onAgir}
-    />
-  );
+  const rendrePoint = (p, i) => {
+    const designation = p.endroit && p.endroit.endroit === 'ligne' ? designationDe(p.endroit.ligneId) : null;
+    return (
+      <Point
+        key={`${p.cle || 'inconnu'}-${p.ligneId || ''}-${i}`}
+        point={p}
+        action={actionDuPoint(p, { chiffrerPossible, ligneExiste, designation })}
+        designation={designation}
+        onAgir={onAgir}
+      />
+    );
+  };
 
-  /* CE QUE DIT LA CARTE, et si elle montre la liste : `ceQueDitLaCarte`
+  /* CE QUE DIT LA CARTE, et ce qu'elle montre de la liste : `ceQueDitLaCarte`
      (devis.js). La dernière liste sûre se montre en `liste` ET en
-     `en_route` (elle ne clignote pas pendant un envoi) ; jamais sur un
-     échec, ni avant la première lecture. */
-  const { phrases, montrerLaListe: montrer } = ceQueDitLaCarte({
-    etat, lue, enLecture, pasCompte,
+     `en_route` ; jamais sur un échec, ni avant la première lecture. Mais
+     une PARTIE PÉRIMÉE ne se montre pas (ECR-1) : « Ce devis » pendant
+     qu'une écriture du devis part puis se relit, « Votre entreprise »
+     pendant que « Mon entreprise » se relit — une phrase la remplace. */
+  const { phrases, montrerLaListe: montrer, parties: aMontrer } = ceQueDitLaCarte({
+    etat, lue, enLecture, pasCompte, relecture,
   });
   const parties = montrer ? lue.parties : null;
-  const comptes = montrer ? comptesParEndroit(lue) : null;
+  const titres = montrer ? titresDesParties(lue) : null;
 
   return (
     /* MODALE pour VoiceOver, comme la carte d'une ligne et « Conditions » :
@@ -257,30 +278,40 @@ export default function PourRemettre({
 
         {!!parties && (
           <>
-            {/* 1. CE DEVIS */}
-            <Text style={s.titre} accessibilityRole="header">{`Ce devis — ${points(comptes.devis)}`}</Text>
-            {parties.devis.length === 0 ? (
-              <View style={s.rien}>
-                <Text style={s.rienTexte}>{RIEN_NE_MANQUE_POUR_CE_DEVIS}</Text>
-                {/* Sans cette phrase, « rien ne manque » mentirait (D2). */}
-                <Text style={s.aide}>{PAS_ENCORE_VERIFIE}</Text>
-              </View>
-            ) : parties.devis.map(rendrePoint)}
+            {/* 1. CE DEVIS — ou, s'il se relit, la phrase qui le dit : ni
+                ses points, ni leurs boutons, ni « rien ne manque » (ECR-1). */}
+            {aMontrer.devis.montrer ? (
+              <>
+                <Text style={s.titre} accessibilityRole="header">{titres.devis}</Text>
+                {parties.devis.length === 0 ? (
+                  <View style={s.rien}>
+                    <Text style={s.rienTexte}>{RIEN_NE_MANQUE_POUR_CE_DEVIS}</Text>
+                    {/* Sans cette phrase, « rien ne manque » mentirait (D2). */}
+                    <Text style={s.aide}>{PAS_ENCORE_VERIFIE}</Text>
+                  </View>
+                ) : parties.devis.map(rendrePoint)}
+              </>
+            ) : <Text style={s.seRelit} accessibilityRole="header">{aMontrer.devis.phrase}</Text>}
 
             {/* 2. VOTRE ENTREPRISE — un bouton PAR point, qui ouvre « Mon
-                entreprise » sur sa section. */}
-            <Text style={s.titre} accessibilityRole="header">{`Votre entreprise — ${points(comptes.entreprise)}`}</Text>
-            {parties.entreprise.map(rendrePoint)}
-
-            {/* 3. LES MENTIONS DUES À UN PARTICULIER — par prudence, tant
-                qu'Opus ne sait pas pour qui le client commande. */}
-            {parties.particulier.length > 0 && (
+                entreprise » sur sa section ; son titre dit combien sont dus
+                à un particulier (D-B). Ou, si elle se relit, la phrase. */}
+            {aMontrer.entreprise.montrer ? (
               <>
-                <Text style={s.sousTitre} accessibilityRole="header">Mentions dues à un particulier</Text>
-                <Text style={s.aide}>{MENTIONS_PARTICULIER_PAR_PRUDENCE}</Text>
-                {parties.particulier.map(rendrePoint)}
+                <Text style={s.titre} accessibilityRole="header">{titres.entreprise}</Text>
+                {parties.entreprise.map(rendrePoint)}
+
+                {/* 3. LES MENTIONS DUES À UN PARTICULIER — par prudence, tant
+                    qu'Opus ne sait pas pour qui le client commande. */}
+                {parties.particulier.length > 0 && (
+                  <>
+                    <Text style={s.sousTitre} accessibilityRole="header">Mentions dues à un particulier</Text>
+                    <Text style={s.aide}>{MENTIONS_PARTICULIER_PAR_PRUDENCE}</Text>
+                    {parties.particulier.map(rendrePoint)}
+                  </>
+                )}
               </>
-            )}
+            ) : <Text style={s.seRelit} accessibilityRole="header">{aMontrer.entreprise.phrase}</Text>}
           </>
         )}
 
@@ -322,6 +353,10 @@ const s = StyleSheet.create({
     fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit),
     minHeight: 2 * interligne(T.petit),
   },
+  /* TROIS LIGNES RÉSERVÉES, dans le seul état « quelque chose n'est pas
+     compté » d'un devis en base : la phrase et le décompte (D-A). */
+  troisLignes: { minHeight: 3 * interligne(T.courant) },
+  troisLignesBas: { minHeight: 3 * interligne(T.petit) },
 
   /* LA CARTE prend l'écran, comme « Conditions ». */
   ecran: { ...StyleSheet.absoluteFillObject, backgroundColor: C.surface, zIndex: 20 },
@@ -339,6 +374,10 @@ const s = StyleSheet.create({
   titre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, marginTop: S.lg },
   sousTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2, marginTop: S.md },
   etatTexte: { fontFamily: F.inter6, fontSize: T.courant, color: C.ink, lineHeight: interligne(T.courant) },
+  /* UNE PARTIE QUI SE RELIT : à la place de son titre, à la même hauteur. */
+  seRelit: {
+    fontFamily: F.inter6, fontSize: T.courant, color: C.muted, lineHeight: interligne(T.courant), marginTop: S.lg,
+  },
   echec: { gap: S.sm },
   erreur: { fontFamily: F.inter, fontSize: T.courant, color: C.bad, lineHeight: interligne(T.courant) },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },

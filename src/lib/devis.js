@@ -1962,7 +1962,8 @@ export function coherenceRegime(lignes, etatRegime) {
   }
   /* Une ligne sans taux encore (incomplète, pas enregistrée) ne contredit rien.
      La règle de chaque ligne est `ligneContreditLeRegime` (plus bas) : UNE
-     écriture, que le motif `devis_taux_regime` (lot 2b-1) lit aussi —
+     écriture, que les motifs `devis_taux_franchise` et `devis_taux_sans_tva`
+     (lot 2b-1) lisent aussi —
      cette phrase et la liste « Ce qu'il manque » ne doivent jamais se
      contredire. */
   if (regime === 'franchise' && chiffrees.some((l) => ligneContreditLeRegime(l, 'franchise'))) {
@@ -3284,8 +3285,9 @@ export function tauxHorairePropose(etatTarifs, etatRegime) {
  * abusif (code de la consommation, art. R. 212-2, 7°). Ce n'est pas une
  * règle d'Opus de plus : les règles plus strictes que la loi sont celles que
  * le propriétaire a choisies le 05/11 (le SIRET relu chaque année, le n° de
- * TVA reconnu par VIES, les frais de déplacement et le délai d'exécution
- * dits sur tous les devis — `NATURE_DU_MOTIF_ENTREPRISE`, `MOTIFS_DEVIS`).
+ * TVA reconnu par VIES, les frais de déplacement, le délai d'exécution, un
+ * client choisi et au moins un poste, sur tous les devis —
+ * `NATURE_DU_MOTIF_ENTREPRISE`, `MOTIFS_DEVIS`).
  * Cette phrase disait « la seule … est la relecture annuelle du SIRET » :
  * c'était vrai avant le lot 2b.
  */
@@ -3317,15 +3319,21 @@ export function avertissementDelai(texte) {
  * endroits ne vaut que si un contrôle tient les deux.
  *
  * TROIS SORTES DE MOTIFS, et l'écran dit laquelle (§2.1 du cahier) :
- *   - `loi` : la loi le demande ;
- *   - `prudence` : Opus ne connaît pas encore le cas (pour qui le client
- *     commande, quel travail c'est), et il compte le plus protecteur ;
+ *   - `loi` : la loi le demande, dans le cas que la phrase dit ;
+ *   - `prudence` : Opus ne sait pas encore si le devis est dans le cas qui
+ *     décide (quel travail c'est, où il est signé), ou il ne sait pas encore
+ *     imprimer ce que la loi permet (une ligne sans TVA au régime réel) : il
+ *     compte le plus protecteur. « Pour qui le client commande » n'est PAS
+ *     une prudence de nature : les mentions dues à un particulier sont de
+ *     la loi (leur phrase le dit), et c'est l'ÉCRAN qui les range à part,
+ *     par prudence (relecture de 2b-1, BASE-2) ;
  *   - `regle_opus` : une règle plus stricte que la loi, que le propriétaire
  *     a CHOISIE le 05/11 (le SIRET relu chaque année, le n° de TVA reconnu
  *     par VIES, les frais de déplacement et le délai d'exécution dits sur
- *     tous les devis). Elle se dit comme un choix d'Opus, jamais comme la
- *     loi : une règle d'Opus présentée comme la loi serait une information
- *     fausse donnée à l'artisan.
+ *     tous les devis ; puis, le soir même, un client choisi et au moins un
+ *     poste sur tous les devis — six en tout). Elle se dit comme un choix
+ *     d'Opus, jamais comme la loi : une règle d'Opus présentée comme la loi
+ *     serait une information fausse donnée à l'artisan.
  * UN AVIS N'EST PAS UN MOTIF : il ne bloque rien. C'est pour ça qu'il ne
  * vit PAS dans la fonction de la base (critique B6) : aucun avis ne doit
  * pouvoir, un jour, bloquer une remise par erreur. `avisDuDevis`, plus bas.
@@ -3335,8 +3343,11 @@ export function avertissementDelai(texte) {
 export const NATURES_DE_MOTIF = Object.freeze(['loi', 'prudence', 'regle_opus']);
 
 /**
- * LES NEUF MOTIFS DU DEVIS (annexe B.2), recopiés OCTET POUR OCTET de la
- * fonction de la base : le rang (l'ordre de la liste), la nature, la phrase.
+ * LES DIX MOTIFS DU DEVIS, SUR NEUF RANGS (annexe B.2), recopiés OCTET POUR
+ * OCTET de la fonction de la base : le rang (l'ordre de la liste), la
+ * nature, la phrase. Le rang 3 porte DEUX clés (relecture de 2b-1, TXT-1) :
+ * la loi ne dit pas la même chose d'une ligne taxée en franchise et d'une
+ * ligne sans TVA au régime réel.
  *
  * Trois règles de forme, et aucune n'est cosmétique :
  *   - AUCUN montant dans une phrase : la base ne met pas d'euros en forme,
@@ -3349,46 +3360,71 @@ export const NATURES_DE_MOTIF = Object.freeze(['loi', 'prudence', 'regle_opus'])
  *     connecteur Supabase change une séquence d'échappement écrite dans le
  *     SQL (CLAUDE.md).
  *
- * `devis_delai` est une RÈGLE D'OPUS (réponse du propriétaire du 05/11) :
- * la loi ne demande le délai que pour un particulier, et pour un devis
- * signé chez le client ; sa phrase le dit, et elle ne sera pas levée par
- * l'étape 2b-2. `devis_lieu` et `devis_validite` sont des PRUDENCES : l'arrêté
- * du 24/01/2017 ne les demande que pour un dépannage, une réparation ou un
- * entretien, et Opus ne sait pas encore si le devis en est un (2b-4).
+ * LES RÈGLES D'OPUS DU DEVIS (réponses du propriétaire du 05/11) :
+ *   - `devis_delai` : la loi demande le délai pour la plupart des devis à
+ *     un particulier (code de la consommation, L. 111-1 3° et L. 221-5 I
+ *     3°), pas pour tous ; sa phrase le dit, et 2b-2 ne la lèvera pas ;
+ *   - `devis_client` et `devis_lignes` (le soir du 05/11, relecture de
+ *     2b-1, TXT-4) : la loi demande le nom du client pour un dépannage, une
+ *     réparation ou un entretien signé dans vos locaux et pour les services
+ *     à la personne (arrêté du 24/01/2017, art. 4-I ; arrêté du 17/03/2015,
+ *     art. 7 4°), la description des travaux et leur prix pour un
+ *     particulier (L. 111-1 1° et 2°) ; Opus les demande pour tous les devis,
+ *     et chaque phrase le dit.
+ * LES PRUDENCES : `devis_lieu` et `devis_validite` — l'arrêté du 24/01/2017
+ * ne les demande que pour un dépannage, une réparation ou un entretien
+ * SIGNÉ DANS VOS LOCAUX (art. 4-I : « conclue en établissement
+ * commercial » ; le 4-II, hors établissement, ne les nomme pas), et l'arrêté
+ * du 17/03/2015 pour les services à la personne (art. 7 1° et 5°) : Opus ne
+ * sait pas encore si le devis en est un (2b-4) ; `devis_taux_sans_tva` —
+ * la loi permet une ligne sans TVA au régime réel dans quelques cas
+ * (l'autoliquidation de la sous-traitance, CGI art. 283 2 nonies), qu'Opus
+ * ne sait pas encore imprimer ; et la nature de l'acompte et les deux
+ * « ramenés », où Opus ne sait pas ce que l'artisan voulait.
  */
 export const MOTIFS_DEVIS = Object.freeze({
   devis_client: Object.freeze({
     rang: 1,
-    nature: 'loi',
-    phrase: 'Ce devis ne s’adresse encore à personne : choisissez le client.',
+    nature: 'regle_opus',
+    phrase: 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un '
+      + 'dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus '
+      + 'le demande pour tous vos devis.',
   }),
   devis_lignes: Object.freeze({
     rang: 2,
-    nature: 'loi',
-    phrase: 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste.',
+    nature: 'regle_opus',
+    phrase: 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les '
+      + 'travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.',
   }),
-  devis_taux_regime: Object.freeze({
+  devis_taux_franchise: Object.freeze({
     rang: 3,
     nature: 'loi',
-    phrase: 'Le taux de TVA de cette ligne ne correspond pas à votre régime de TVA : corrigez-la.',
+    phrase: 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.',
+  }),
+  devis_taux_sans_tva: Object.freeze({
+    rang: 3,
+    nature: 'prudence',
+    phrase: 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en '
+      + 'autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.',
   }),
   devis_lieu: Object.freeze({
     rang: 4,
     nature: 'prudence',
-    phrase: 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien, et '
-      + 'Opus ne sait pas encore si ce devis en est un.',
+    phrase: 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé '
+      + 'dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.',
   }),
   devis_delai: Object.freeze({
     rang: 5,
     nature: 'regle_opus',
-    phrase: 'Écrivez le délai d’exécution des travaux. La loi le demande pour un particulier et pour un devis signé '
-      + 'chez le client ; Opus le demande pour tous vos devis.',
+    phrase: 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; '
+      + 'Opus le demande pour tous vos devis.',
   }),
   devis_validite: Object.freeze({
     rang: 6,
     nature: 'prudence',
     phrase: 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un '
-      + 'entretien, et Opus ne sait pas encore si ce devis en est un.',
+      + 'entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en '
+      + 'est un.',
   }),
   devis_acompte_nature: Object.freeze({
     rang: 7,
@@ -3405,7 +3441,7 @@ export const MOTIFS_DEVIS = Object.freeze({
   devis_reduction_ramenee: Object.freeze({
     rang: 9,
     nature: 'prudence',
-    phrase: 'La réduction en euros dépasse le total du devis : Opus l’a ramenée. Corrigez-la pour que le devis dise '
+    phrase: 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise '
       + 'ce que vous voulez.',
   }),
 });
@@ -3418,15 +3454,26 @@ export const MOTIFS_DEVIS = Object.freeze({
  * Seules les EXCEPTIONS sont écrites ici ; tout autre motif est `loi`.
  * Trois règles d'Opus (le SIRET relu chaque année, le n° de TVA reconnu par
  * VIES, les frais de déplacement dits sur tous les devis — gardées par le
- * propriétaire le 05/11), et une PRUDENCE : la profession réglementée. La
- * loi demande titre, État et ordre (R. 111-2), Opus ne sait pas encore les
- * écrire ; ce n'est pas la loi qui bloque, c'est ce qu'Opus ne sait pas.
+ * propriétaire le 05/11), et deux PRUDENCES :
+ *   - la profession réglementée : la loi demande titre, État et ordre
+ *     (R. 111-2), Opus ne sait pas encore les écrire ; ce n'est pas la loi
+ *     qui bloque, c'est ce qu'Opus ne sait pas ;
+ *   - le régime de TVA (`regime_tva`, relecture de 2b-1, TXT-7) : aucune loi
+ *     ne demande de DÉCLARER son régime à Opus ; c'est Opus qui en a besoin
+ *     pour imprimer la TVA ou la mention de franchise. « La loi — Déclarez
+ *     votre régime de TVA » aurait attribué à la loi ce qu'Opus demande.
+ * `registre` reste `loi` (la loi demande la mention quand l'entreprise est
+ * immatriculée, et la phrase le dit) ; `conso_tva_intra` reste une règle
+ * d'Opus (réponse du 05/11), même quand AUCUN numéro n'est écrit — cas où
+ * c'est la loi qui le demande : à présenter au propriétaire, pas à trancher
+ * seul.
  */
 export const NATURE_DU_MOTIF_ENTREPRISE = Object.freeze({
   entreprise_ancienne: 'regle_opus',
   conso_tva_intra: 'regle_opus',
   frais_deplacement: 'regle_opus',
   conso_profession_reglementee: 'prudence',
+  regime_tva: 'prudence',
 });
 
 /** Le rang du premier motif de l'entreprise, moins un : les rangs du devis
@@ -3467,12 +3514,17 @@ export function couperMotifEntreprise(brut) {
 }
 
 /**
- * UNE LIGNE CONTREDIT-ELLE LE RÉGIME DE TVA ? — la règle de
- * `devis_taux_regime`, ligne par ligne, et celle de `coherenceRegime`, qui
- * l'appelle : UNE écriture. Un poste OU une option (une option non commandée
- * porte quand même un taux qui s'imprimera), offerte comprise :
- *   - en franchise, tout taux autre que 0 (CGI 293 B : pas de TVA facturée) ;
- *   - au régime réel, un taux de 0 (un taux est dû) ;
+ * UNE LIGNE CONTREDIT-ELLE LE RÉGIME DE TVA ? — la règle des motifs de
+ * rang 3, ligne par ligne, et celle de `coherenceRegime`, qui l'appelle :
+ * UNE écriture. Un poste OU une option (une option non commandée porte quand
+ * même un taux qui s'imprimera), offerte comprise :
+ *   - en franchise, tout taux autre que 0 (CGI 293 E II : pas de TVA sur
+ *     une facture ni sur un document qui en tient lieu) — `devis_taux_franchise`,
+ *     la loi ;
+ *   - au régime réel, un taux de 0 — `devis_taux_sans_tva`, une PRUDENCE :
+ *     la loi le permet dans quelques cas (l'autoliquidation de la
+ *     sous-traitance, CGI 283 2 nonies), qu'Opus ne sait pas encore
+ *     imprimer (relecture de 2b-1, TXT-1) ;
  *   - régime non déclaré, en lecture ou en échec : jamais — on ne juge pas
  *     ce qu'on ne connaît pas, et le motif `regime_tva` de l'entreprise dit
  *     déjà qu'il manque.
@@ -3527,7 +3579,11 @@ export function motifsDeRemise({ devis = null, lignes = [], regime = null, motif
 
   if (!present(d.clientId)) motif('devis_client');
   if (!tri.some((l) => typeDe(l) === 'poste')) motif('devis_lignes');
-  tri.forEach((l) => { if (ligneContreditLeRegime(l, regime)) motif('devis_taux_regime', l.id ?? null); });
+  /* Un devis n'a qu'un régime : toutes ses lignes fautives portent la même
+     clé, dans l'ordre des lignes (`ordre`, puis `id`) — UNE boucle, comme la
+     base. `ligneContreditLeRegime` ne rend vrai qu'en franchise ou au réel. */
+  const cleDuTaux = regime === 'franchise' ? 'devis_taux_franchise' : 'devis_taux_sans_tva';
+  tri.forEach((l) => { if (ligneContreditLeRegime(l, regime)) motif(cleDuTaux, l.id ?? null); });
   if (!present(d.lieuAdresse) && !present(d.lieuCodePostal) && !present(d.lieuVille)) motif('devis_lieu');
   if (!present(d.delaiExecution)) motif('devis_delai');
   if (!present(d.validiteJours)) motif('devis_validite');
@@ -3589,7 +3645,8 @@ export const ETIQUETTE_DE_NATURE = Object.freeze({
 export const ENDROIT_DU_MOTIF = Object.freeze({
   devis_client: Object.freeze({ endroit: 'client' }),
   devis_lignes: Object.freeze({ endroit: 'lignes' }),
-  devis_taux_regime: Object.freeze({ endroit: 'ligne' }),
+  devis_taux_franchise: Object.freeze({ endroit: 'ligne' }),
+  devis_taux_sans_tva: Object.freeze({ endroit: 'ligne' }),
   devis_lieu: Object.freeze({ endroit: 'lieu' }),
   devis_delai: Object.freeze({ endroit: 'delai' }),
   devis_validite: Object.freeze({ endroit: 'conditions', champ: 'validite' }),
@@ -3720,16 +3777,30 @@ export const AVIS_DU_DEVIS = Object.freeze({
  *     (`totaux.ttc`, sinon `devis.totalTtcCentimes`) ; inconnu, on se tait :
  *     on n'avertit pas sur un total qu'on n'a pas lu.
  * Sans devis (un brouillon pas encore en base), aucun avis.
+ *
+ * `avis_gratuit` SE TAIT tant que la liste n'est pas SÛRE : l'état de la
+ * liste (`etat`, celui d'`etatDeLaListe`) n'est pas `liste`, ou quelque
+ * chose n'y est pas compté (`pasCompte`). POURQUOI (relecture de 2b-1,
+ * PAR-8) : les lignes de l'écran comptent une ligne pas encore enregistrée,
+ * le TTC de la base, lui, ne la connaît pas encore — il vaut 0. La même
+ * carte disait alors, en même temps, « 1 ligne n’est pas enregistrée »,
+ * « Ce devis ne chiffre encore aucun travail » et « Ce devis ne coûte rien
+ * au client : vérifiez que c’est voulu. ». C'est la règle des motifs : on ne
+ * juge que la dernière liste sûre. Sans `etat`, on se tait aussi : un appel
+ * qui l'oublie ne doit pas ramener le défaut.
  */
-export function avisDuDevis({ devis = null, lignes = [], totaux = null } = {}) {
+export function avisDuDevis({
+  devis = null, lignes = [], totaux = null, etat = null, pasCompte = null,
+} = {}) {
   if (!devis) return [];
   const avis = [];
   if (texteNet(devis.objet) === null) avis.push({ cle: 'avis_objet', phrase: AVIS_DU_DEVIS.avis_objet });
+  const sure = etat === 'liste' && !pasCompte;
   const aUnPoste = (Array.isArray(lignes) ? lignes : []).some((l) => typeDe(l) === 'poste');
   let ttc = null;
   if (totaux && present(totaux.ttc)) ttc = Number(totaux.ttc);
   else if (present(devis.totalTtcCentimes)) ttc = Number(devis.totalTtcCentimes);
-  if (aUnPoste && ttc === 0) avis.push({ cle: 'avis_gratuit', phrase: AVIS_DU_DEVIS.avis_gratuit });
+  if (sure && aUnPoste && ttc === 0) avis.push({ cle: 'avis_gratuit', phrase: AVIS_DU_DEVIS.avis_gratuit });
   return avis;
 }
 
@@ -3746,9 +3817,17 @@ export const MENTIONS_PARTICULIER_PAR_PRUDENCE = 'Opus ne sait pas encore pour q
  * CE QU'OPUS NE VÉRIFIE PAS ENCORE — dit sous « rien ne manque » (critique
  * D2 : sans cette phrase, « rien ne manque » mentirait). Aucune date, aucun
  * « prochain lot » (critique E-11) : on dit ce qui manque, pas quand.
+ *
+ * HUIT FAITS depuis la relecture de 2b-1 (TXT-2, 05/11/2026) : le label RGE
+ * (ses obligations, C. consom. L. 224-114 et L. 224-115) et l'immeuble neuf
+ * (qui écarte le taux réduit, CGI 279-0 bis 2) manquaient — une ligne à 10 %
+ * sur un immeuble neuf affichait « rien ne manque ». Et « le prix du devis »
+ * se lisait comme le TOTAL : la loi parle du caractère payant ou gratuit du
+ * devis LUI-MÊME (arrêté du 24/01/2017, art. 4-I).
  */
 export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : pour qui le client commande, le moment de la signature, '
-  + 'l’urgence, la garantie décennale, le prix du devis et les déchets de chantier.';
+  + 'l’urgence, la garantie décennale, si le devis lui-même est payant, les déchets de chantier, le label RGE '
+  + 'pour des travaux d’énergie, et si les travaux concernent un immeuble neuf.';
 
 /** Rien ne manque pour CE devis — jamais « rien ne manque » tout court. */
 export const RIEN_NE_MANQUE_POUR_CE_DEVIS = 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.';
@@ -3784,18 +3863,41 @@ export const TITRE_POUR_REMETTRE = 'Pour le remettre';
 /** La première lecture, pas encore revenue. */
 export const LISTE_EN_LECTURE = 'Lecture de la liste…';
 
-/** Une RELECTURE repart (après une écriture confirmée, au retour de « Mon
- *  entreprise ») : la liste affichée reste, et ceci le dit, sans changer de
- *  place. Ce n'est PAS « des changements partent » : rien ne part, on lit. */
+/** Une RELECTURE repart sans qu'on sache ce qui a changé (aucune cause
+ *  notée) : la liste affichée reste, et ceci le dit, sans changer de place.
+ *  Ce n'est PAS « des changements partent » : rien ne part, on lit. */
 export const LISTE_MISE_A_JOUR = 'Mise à jour de la liste…';
 
 /* La même chose sur la ligne, à la suite du compte : une MENTION, qui ne
    change pas la hauteur de la ligne (E-6). */
 const MISE_A_JOUR_DE_LA_LIGNE = ' · mise à jour…';
 
+/**
+ * CE QUE LA CARTE DIT À LA PLACE D'UNE PARTIE QUE LA LISTE RELIT (relecture
+ * de 2b-1, ECR-1). Pendant qu'une écriture DU DEVIS part, puis pendant la
+ * lecture qui la suit, la partie « Ce devis » de la dernière liste peut
+ * mentir : « Ce devis ne chiffre encore aucun travail » sous un poste qu'on
+ * vient d'écrire, « Ce devis : rien ne manque » juste après avoir vidé le
+ * délai (mesuré au navigateur, 300 ms en démonstration — jusqu'à 8 s sur la
+ * vraie base). Au retour de « Mon entreprise », c'est l'inverse : la partie
+ * « Votre entreprise » date d'avant ce qu'on vient d'y écrire, « Ce devis »
+ * reste juste. La partie périmée ne s'affiche pas — ni ses points, ni leurs
+ * boutons, ni « rien ne manque » —, cette phrase la remplace.
+ */
+export const CE_DEVIS_SE_MET_A_JOUR = 'Ce devis : la liste se met à jour.';
+export const ENTREPRISE_SE_MET_A_JOUR = 'Votre entreprise : la liste se met à jour.';
+
+/* Le compte de l'entreprise sur la ligne, pendant que la liste relit « Mon
+   entreprise » : jamais l'ancien nombre. */
+const ENTREPRISE_A_JOUR_SUR_LA_LIGNE = 'mise à jour…';
+
 /** Un champ de l'EN-TÊTE refusé (par l'écran ou par la base) : la base a
  *  gardé l'ancienne valeur, que la liste juge. */
 export const ENTETE_PAS_COMPTE = 'Un champ du devis n’est pas enregistré : il n’est pas compté dans cette liste.';
+
+/** …et la même chose sur un brouillon que la base n'a pas encore : il n'y a
+ *  aucune liste, elle se calculera quand il sera enregistré. */
+export const ENTETE_PAS_ENCORE_ENREGISTRE = 'Un champ du devis n’est pas encore enregistré : la liste se calculera ensuite.';
 
 /**
  * CE QUE LA LISTE NE COMPTE PAS, dit en toutes lettres — ou `null`.
@@ -3804,7 +3906,13 @@ export const ENTETE_PAS_COMPTE = 'Un champ du devis n’est pas enregistré : il
  *                refusées ou en échec. On n'en invente pas un second : deux
  *                comptes d'une même vérité finissent par se contredire (la
  *                leçon des voyants du 04/10) ;
- *   `entete`   : un champ de l'en-tête refusé.
+ *   `entete`   : un champ de l'en-tête refusé ;
+ *   `enBase`   : le brouillon est-il en base ? Sinon il n'y a AUCUNE liste
+ *                (aucun appel tant qu'il n'est pas en base) : la phrase dit
+ *                que la liste se calculera ensuite. Avant (relecture de
+ *                2b-1, ECR-3), un brouillon neuf qui portait une ligne
+ *                incomplète disait « Écrivez une première ligne » sous une
+ *                ligne visible — la phrase du brouillon où rien n'est tapé.
  *
  * POURQUOI (vérification de construction du lot 2b-1, écart 8) : la base ne
  * voit pas une ligne qu'elle a refusée. Le seul poste d'un devis refusé, la
@@ -3813,8 +3921,13 @@ export const ENTETE_PAS_COMPTE = 'Un champ du devis n’est pas enregistré : il
  * n'est pas DIT pourquoi. Les lignes passent avant l'en-tête : ce sont elles
  * que la liste juge le plus (le poste, le taux).
  */
-export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false } = {}) {
+export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false, enBase = true } = {}) {
   const n = Number.isSafeInteger(nbLignes) && nbLignes > 0 ? nbLignes : 0;
+  if (!enBase) {
+    if (n === 1) return '1 ligne n’est pas encore enregistrée : la liste se calculera ensuite.';
+    if (n > 1) return `${n} lignes ne sont pas encore enregistrées : la liste se calculera ensuite.`;
+    return entete ? ENTETE_PAS_ENCORE_ENREGISTRE : null;
+  }
   if (n === 1) return '1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste.';
   if (n > 1) return `${n} lignes ne sont pas enregistrées : elles ne sont pas comptées dans cette liste.`;
   return entete ? ENTETE_PAS_COMPTE : null;
@@ -3824,13 +3937,21 @@ export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false } = {}) {
  * L'ÉTAT DE LA LISTE — l'ordre du cahier (§3.1), et rien d'autre ne décide :
  *   1. `pas_en_base` : le brouillon n'existe pas encore en base — AUCUN
  *      appel (la fonction rendrait OP027) ;
- *   2. `en_route`    : des changements partent — une écriture en vol ou en
- *      attente (`enRoute`), ou un champ de l'en-tête ouvert et tapé mais pas
- *      encore quitté (`champOuvert`) : la dernière liste sûre reste, avec
- *      « Des changements partent… » (annexe B.8) ;
+ *   2. `en_route`    : des changements DU DEVIS partent — une écriture en
+ *      vol ou en attente (`enRoute`), un champ de l'en-tête ouvert et tapé
+ *      mais pas encore quitté (`champOuvert`), OU la lecture qui suit une
+ *      écriture du devis (`relecture.devis`) : ce temps-là n'est fini qu'au
+ *      retour de la liste de CETTE génération (relecture de 2b-1, ECR-1 —
+ *      sinon la ligne disait « ce devis — aucun point · mise à jour… »
+ *      juste après qu'on avait vidé le délai) ;
  *   3. `echec`       : la DERNIÈRE lecture a échoué ;
  *   4. `lecture`     : rien de lu encore ;
  *   5. `liste`.
+ * `relecture` : `{ devis, entreprise }` — ce que la lecture EN COURS relit
+ * parce que cela vient de changer (la saisie le note en lançant la lecture :
+ * une écriture du devis confirmée, ou « Mon entreprise » refermée). Une
+ * relecture de l'ENTREPRISE ne change pas l'état : « Ce devis » reste juste,
+ * c'est la carte qui masque « Votre entreprise » (`ceQueDitLaCarte`).
  * Ce qui n'est PAS ENREGISTRÉ (une ligne refusée, rien ne part) n'est pas
  * un état : rien ne le relira tout seul, la liste lue reste juste pour ce
  * que la base a — `ceQueLaListeNeComptePas` le DIT à côté, dans n'importe
@@ -3845,10 +3966,10 @@ export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false } = {}) {
  * qui ne montre aucune partie sur un échec.
  */
 export function etatDeLaListe({
-  enBase = false, enRoute = false, champOuvert = false, erreur = null, lue = null,
+  enBase = false, enRoute = false, champOuvert = false, erreur = null, lue = null, relecture = null,
 } = {}) {
   if (!enBase) return 'pas_en_base';
-  if (enRoute || champOuvert) return 'en_route';
+  if (enRoute || champOuvert || !!(relecture && relecture.devis)) return 'en_route';
   if (erreur) return 'echec';
   if (!lue) return 'lecture';
   return 'liste';
@@ -3861,42 +3982,86 @@ export function points(n) {
 }
 
 /** Le compte PAR ENDROIT : le devis, et l'entreprise (ses mentions dues à
- *  un particulier comprises — elles se corrigent au même endroit). Les AVIS
- *  ne comptent jamais. */
+ *  un particulier comprises — elles se corrigent au même endroit), avec
+ *  combien de ces points sont dus à un particulier (`dontParticulier`,
+ *  décision D-B du propriétaire, le 05/11/2026 au soir). Les AVIS ne
+ *  comptent jamais. UNE seule écriture de ce compte : la ligne, le titre de
+ *  la carte et l'étiquette parlée le lisent tous ici. */
 export function comptesParEndroit(lue) {
   const c = (lue && lue.comptes) || {};
-  return { devis: c.devis || 0, entreprise: (c.entreprise || 0) + (c.particulier || 0) };
+  const dontParticulier = c.particulier || 0;
+  return { devis: c.devis || 0, entreprise: (c.entreprise || 0) + dontParticulier, dontParticulier };
 }
 
-/** « ce devis — 2 points · votre entreprise — 1 point ». */
-export function phraseDesEndroits(lue) {
+/** « ce devis — 2 points · votre entreprise — 1 point ». Pendant que la
+ *  liste relit « Mon entreprise » (`relecture.entreprise`), le compte de
+ *  l'entreprise ne se dit pas : « votre entreprise — mise à jour… ». */
+export function phraseDesEndroits(lue, { relecture = null } = {}) {
   const c = comptesParEndroit(lue);
-  return `ce devis — ${points(c.devis)} · votre entreprise — ${points(c.entreprise)}`;
+  const ent = relecture && relecture.entreprise ? ENTREPRISE_A_JOUR_SUR_LA_LIGNE : points(c.entreprise);
+  return `ce devis — ${points(c.devis)} · votre entreprise — ${ent}`;
 }
 
 /**
- * CE QUE DIT LA LIGNE (en haut et en bas) : `{ contenu, action, aDire }`.
- *   `action` : `'ouvrir'` (la carte), `'reessayer'` (relire) ou `null` (pas
- *              une cible : il n'y a rien à ouvrir) ;
- *   `aDire`  : l'étiquette pour VoiceOver.
+ * LES TITRES DES PARTIES DE LA CARTE : `{ devis, entreprise }`.
+ * DÉCISION D-B DU PROPRIÉTAIRE (05/11/2026 au soir, relecture ECR-6) : le
+ * titre de l'entreprise dit combien de ses points sont dus à un particulier
+ * — « Votre entreprise — 5 points, dont 3 dus à un particulier » —, parce
+ * que ces trois-là s'affichent sous un sous-titre à eux : on comptait 2
+ * points sous un titre qui en annonçait 5. Le 5 reste le compte de la ligne
+ * (une seule écriture, `comptesParEndroit`) ; jamais un titre à 2.
+ * Accords : « 1 point, dont 1 dû », « 2 points, dont 1 dû », « dont 3 dus ».
+ */
+export function titresDesParties(lue) {
+  const c = comptesParEndroit(lue);
+  const m = c.dontParticulier;
+  const dont = m > 0 ? `, dont ${m} ${m > 1 ? 'dus' : 'dû'} à un particulier` : '';
+  return {
+    devis: `Ce devis — ${points(c.devis)}`,
+    entreprise: `Votre entreprise — ${points(c.entreprise)}${dont}`,
+  };
+}
+
+/**
+ * CE QUE DIT LA LIGNE (en haut et en bas) : `{ contenu, compte, lignes,
+ * action, aDire }`.
+ *   `contenu` : la phrase (ou le compte, quand tout est compté) ;
+ *   `compte`  : le DÉCOMPTE affiché SOUS la phrase, ou `null` ;
+ *   `lignes`  : les lignes RÉSERVÉES au texte — 2, ou 3 quand la phrase et
+ *               le décompte s'affichent ensemble ;
+ *   `action`  : `'ouvrir'` (la carte), `'reessayer'` (relire) ou `null` (pas
+ *               une cible : il n'y a rien à ouvrir) ;
+ *   `aDire`   : l'étiquette pour VoiceOver.
  *
- * En `en_route`, la ligne dit la phrase EXACTE du contrat (B.8), « Des
- * changements partent : la liste sera à jour juste après. », et le compte de
- * la dernière liste sûre reste dans l'étiquette parlée : DEUX lignes
- * réservées ne portent pas les deux phrases à 320 points de large, et c'est
- * la carte qui garde la liste entière — elle ne clignote pas.
- * Ce que la liste ne compte pas (`pasCompte`) passe devant le compte : le
- * compte d'avant pourrait dire « aucun travail » sous une ligne visible.
+ * QUAND QUELQUE CHOSE N'EST PAS COMPTÉ, sur un devis EN BASE (`pasCompte`,
+ * état `liste`) : la phrase ET le décompte de la dernière liste sûre, sur
+ * TROIS lignes réservées — DÉCISION D-A DU PROPRIÉTAIRE (05/11/2026 au
+ * soir, relecture ECR-4). Cet état DURE (une ligne incomplète est l'état
+ * ordinaire d'un chiffrage en cours), et le compte disparaissait de l'écran
+ * pendant tout ce temps. Trois lignes dans CET état seulement : ailleurs,
+ * deux, et la ligne ne saute pas d'un état à l'autre (E-6).
+ *
+ * EN `en_route`, LA PHRASE SEULE, « Des changements partent : la liste
+ * sera à jour juste après. », à l'écran ET dans l'étiquette parlée : le
+ * compte d'avant pourrait dire « ce devis — aucun point » juste après qu'on
+ * a vidé le délai (relecture de 2b-1, ECR-1) — c'est le défaut que la carte
+ * ne montre plus, VoiceOver ne doit pas le dire non plus.
+ *
+ * Ce que la liste ne compte pas (`pasCompte`) passe devant le compte. Sur un
+ * brouillon PAS ENCORE EN BASE, il dit que la liste se calculera ensuite
+ * (`ceQueLaListeNeComptePas({ enBase: false })`, ECR-3) ; « Écrivez une
+ * première ligne » reste pour le brouillon où rien n'est tapé.
  */
 export function texteDeLaLigneRemise({
-  etat, lue = null, enLecture = false, erreurReessayable = true, erreurPhrase = null, pasCompte = null,
+  etat, lue = null, enLecture = false, erreurReessayable = true, erreurPhrase = null, pasCompte = null, relecture = null,
 } = {}) {
   let contenu;
+  let compte = null;
   let action = 'ouvrir';
   let aDire = null;
-  let compte = null;
+  const relitEntreprise = !!(relecture && relecture.entreprise);
   if (etat === 'pas_en_base') {
-    contenu = LISTE_AVANT_LA_PREMIERE_LIGNE;
+    contenu = pasCompte || LISTE_AVANT_LA_PREMIERE_LIGNE;
     action = null;
   } else if (etat === 'echec') {
     if (erreurReessayable) {
@@ -3910,12 +4075,11 @@ export function texteDeLaLigneRemise({
     contenu = pasCompte || LISTE_EN_LECTURE;
   } else if (etat === 'en_route') {
     contenu = LISTE_EN_ROUTE;
-    compte = lue ? phraseDesEndroits(lue) : null;
   } else if (pasCompte) {
     contenu = pasCompte;
-    compte = lue ? phraseDesEndroits(lue) : null;
+    compte = lue ? phraseDesEndroits(lue, { relecture }) : null;
   } else {
-    contenu = `${phraseDesEndroits(lue)}${enLecture ? MISE_A_JOUR_DE_LA_LIGNE : ''}`;
+    contenu = `${phraseDesEndroits(lue, { relecture })}${enLecture && !relitEntreprise ? MISE_A_JOUR_DE_LA_LIGNE : ''}`;
   }
   if (!aDire) {
     /* Une phrase qui finit déjà par un point, ou par « … », n'en reçoit pas
@@ -3925,29 +4089,60 @@ export function texteDeLaLigneRemise({
     if (compte) dit = `${dit}${fin(dit)}Dernière liste : ${compte}`;
     aDire = `${TITRE_POUR_REMETTRE} : ${action ? `${dit}${fin(dit)}Ouvrir la liste` : dit}`;
   }
-  return { contenu, action, aDire };
+  return {
+    contenu, compte, lignes: compte ? 3 : 2, action, aDire,
+  };
 }
 
 /**
- * CE QUE DIT LA CARTE, au-dessus des parties : `{ phrases, montrerLaListe }`.
- * `phrases` : `[{ texte, ton }]`, dans l'ordre — `ton` vaut `'etat'` (une
- * phrase d'état), `'aide'` (discrète) ou `'erreur'`. La DERNIÈRE liste sûre
- * se montre en `liste` ET en `en_route` (elle ne clignote pas pendant un
- * envoi) ; jamais sur un échec, ni avant la première lecture, ni sur un
- * brouillon pas en base. L'échec lui-même (« Réessayer », la phrase de
- * l'erreur) est dessiné par la carte : ce n'est pas une phrase, c'est un
- * bouton.
+ * CE QUE DIT LA CARTE, au-dessus des parties et à leur place :
+ * `{ phrases, montrerLaListe, parties: { devis, entreprise } }`.
+ *   `phrases` : `[{ texte, ton }]`, dans l'ordre — `ton` vaut `'etat'` (une
+ *               phrase d'état), `'aide'` (discrète) ou `'erreur'` ;
+ *   `montrerLaListe` : quelque chose de la dernière liste sûre s'affiche —
+ *               en `liste` et en `en_route`, jamais sur un échec, ni avant
+ *               la première lecture, ni sur un brouillon pas en base ;
+ *   `parties.devis`, `parties.entreprise` : `{ montrer, phrase }` — la
+ *               partie s'affiche (`montrer`), ou cette `phrase` la
+ *               remplace ; `entreprise` porte aussi les mentions dues à un
+ *               particulier.
+ *
+ * UNE PARTIE PÉRIMÉE NE S'AFFICHE PAS (relecture de 2b-1, ECR-1) :
+ *   - en `en_route` (une écriture du devis part, ou la lecture qui la
+ *     suit), « Ce devis » cède la place à « Ce devis : la liste se met à
+ *     jour. » — ni ses points, ni leurs boutons, ni « rien ne manque » ;
+ *     « Votre entreprise » reste : une écriture du devis ne la change pas ;
+ *   - pendant la relecture de « Mon entreprise » (`relecture.entreprise`),
+ *     l'inverse : « Votre entreprise » et les mentions dues à un particulier
+ *     cèdent la place à « Votre entreprise : la liste se met à jour. »,
+ *     « Ce devis » reste.
+ * La partie juste ne clignote pas (E-6) ; la partie périmée ne ment pas.
+ * L'échec lui-même (« Réessayer », la phrase de l'erreur) est dessiné par la
+ * carte : ce n'est pas une phrase, c'est un bouton.
  */
 export function ceQueDitLaCarte({
-  etat, lue = null, enLecture = false, pasCompte = null,
+  etat, lue = null, enLecture = false, pasCompte = null, relecture = null,
 } = {}) {
+  const relitEntreprise = !!(relecture && relecture.entreprise);
   const phrases = [];
-  if (etat === 'pas_en_base') phrases.push({ texte: LISTE_AVANT_LA_PREMIERE_LIGNE, ton: 'etat' });
+  if (etat === 'pas_en_base') phrases.push({ texte: pasCompte || LISTE_AVANT_LA_PREMIERE_LIGNE, ton: 'etat' });
   else if (etat === 'lecture') phrases.push({ texte: LISTE_EN_LECTURE, ton: 'etat' });
   else if (etat === 'en_route') phrases.push({ texte: LISTE_EN_ROUTE, ton: 'etat' });
-  else if (etat === 'liste' && enLecture) phrases.push({ texte: LISTE_MISE_A_JOUR, ton: 'aide' });
+  else if (etat === 'liste' && enLecture && !relitEntreprise) phrases.push({ texte: LISTE_MISE_A_JOUR, ton: 'aide' });
   if (pasCompte && etat !== 'pas_en_base') phrases.push({ texte: pasCompte, ton: 'etat' });
-  return { phrases, montrerLaListe: !!lue && (etat === 'liste' || etat === 'en_route') };
+  const montrerLaListe = !!lue && (etat === 'liste' || etat === 'en_route');
+  const partie = (perimee, phrase) => {
+    if (!montrerLaListe) return { montrer: false, phrase: null };
+    return perimee ? { montrer: false, phrase } : { montrer: true, phrase: null };
+  };
+  return {
+    phrases,
+    montrerLaListe,
+    parties: {
+      devis: partie(etat === 'en_route', CE_DEVIS_SE_MET_A_JOUR),
+      entreprise: partie(relitEntreprise, ENTREPRISE_SE_MET_A_JOUR),
+    },
+  };
 }
 
 /**
@@ -3976,40 +4171,132 @@ export function premierePhrase(texte) {
 }
 
 /**
- * L'ACTION D'UN POINT — son libellé, ou `null` quand l'écran ne sait mener
- * nulle part (une clé inconnue, la profession réglementée, ou un poste à
- * ajouter alors que le régime de TVA ne permet pas encore de chiffrer).
- * `ligneExiste` : la ligne fautive est-elle à l'écran ? Sinon, aucune
- * cible : ouvrir une carte sur une ligne absente montrerait un écran vide.
+ * LES NOMS DES SECTIONS DE « MON ENTREPRISE », tels que leurs titres les
+ * écrivent (`<Section ancre="…" titre="…">` dans `FicheEmetteur.js` ; le
+ * bloc d'identité, `entreprise`, s'intitule « Votre entreprise » dans
+ * `IdentiteEntreprise.js`). Ils servent l'étiquette parlée d'un bouton
+ * « Compléter dans « Mon entreprise » » (relecture de 2b-1, ECR-5 : les cinq
+ * points de l'entreprise portaient la MÊME étiquette, et au rotor
+ * « Boutons » rien ne disait lequel corrige quoi). Une COPIE, parce que ce
+ * fichier n'importe pas les écrans : `verifier-devis` la compare aux titres
+ * des deux fichiers, et refuse qu'elle diverge.
  */
-export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = () => false } = {}) {
+export const NOM_DES_SECTIONS = Object.freeze({
+  entreprise: 'Votre entreprise',
+  identite: 'Votre nom sur le devis',
+  immatriculation: 'Où votre entreprise est immatriculée',
+  capital: 'Capital social',
+  adresses: 'Adresses',
+  contact: 'Pour vous joindre',
+  tva: 'TVA',
+  assurances: 'Assurances',
+  mediateur: 'Médiateur de la consommation',
+  garanties: 'Garanties',
+  conditions: 'Vos conditions',
+  frais: 'Vos tarifs',
+  affiche: 'Afficher mes tarifs',
+});
+
+/**
+ * LE CHAMP VISÉ, quand plusieurs motifs mènent à la MÊME section de « Mon
+ * entreprise » (relecture de 2b-1, ECR-5, mesuré au navigateur le 05/11 :
+ * « Vos conditions » revenait deux fois dans la liste du « Muret de
+ * clôture », pour les modalités de paiement et pour les réclamations). Le
+ * nom du champ tel que son libellé l'écrit à l'écran, en minuscule après la
+ * virgule — « Compléter dans « Mon entreprise » : Vos conditions, modalités
+ * de paiement ». Les deux paires d'adresses (`adresse_etablissement` et
+ * `conso_adresse_etablissement`, `adresse_siege` et `conso_adresse_siege`)
+ * mènent au même champ, et `emetteur.js` ne les rend jamais ensemble : même
+ * étiquette, et c'est juste. Une section qu'un seul motif vise (le capital,
+ * la TVA, le médiateur…) n'en a pas besoin. `verifier-devis` exige qu'aucun
+ * motif de l'entreprise ne partage son étiquette avec un autre, hors de ces
+ * deux paires.
+ */
+export const CHAMP_DU_MOTIF = Object.freeze({
+  entreprise: 'la rattacher',
+  identite: 'nom légal',
+  entreprise_ancienne: '« Mettre à jour »',
+  conso_tva_intra: 'n° de TVA intracommunautaire',
+  adresse_etablissement: 'adresse de votre établissement',
+  conso_adresse_etablissement: 'adresse de votre établissement',
+  adresse_siege: 'adresse du siège',
+  conso_adresse_siege: 'adresse du siège',
+  conso_telephone: 'téléphone',
+  conso_email: 'e-mail',
+  conso_modalites_paiement: 'modalités de paiement',
+  conso_modalites_execution: 'modalités d’exécution',
+  conso_reclamations: 'réclamations',
+});
+
+/**
+ * L'ACTION D'UN POINT — `{ libelle, aDire }`, ou `null` quand l'écran ne
+ * sait mener nulle part (une clé inconnue, la profession réglementée, ou un
+ * poste à ajouter alors que le régime de TVA ne permet pas encore de
+ * chiffrer). `ligneExiste` : la ligne fautive est-elle à l'écran ? Sinon,
+ * aucune cible : ouvrir une carte sur une ligne absente montrerait un écran
+ * vide. `designation` : celle de la ligne fautive, pour l'étiquette parlée.
+ *
+ * `aDire` (relecture de 2b-1, ECR-5) : l'étiquette pour VoiceOver. Deux
+ * boutons qui mènent à deux endroits ne portent jamais la même : le libellé,
+ * plus le NOM de la section visée de « Mon entreprise » (« Compléter dans
+ * « Mon entreprise » : Capital social »), plus le CHAMP quand la section en
+ * porte plusieurs (`CHAMP_DU_MOTIF`), ou la ligne visée. Elle COMMENCE
+ * par le libellé affiché : qui dit à voix haute ce qu'il voit doit être
+ * compris (Contrôle vocal). Jamais la phrase entière du point — celle de la
+ * TVA fait 672 caractères. Les deux corrections des conditions, elles,
+ * disent leur champ À L'ÉCRAN aussi : « Corriger l’acompte », « Corriger la
+ * réduction ».
+ */
+export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = () => false, designation = null } = {}) {
   const e = point && point.endroit;
   if (!e) return null;
+  const seul = (libelle) => ({ libelle, aDire: libelle });
   switch (e.endroit) {
-    case 'client': return { libelle: 'Choisir le client' };
-    case 'lignes': return chiffrerPossible ? { libelle: 'Ajouter un poste' } : null;
-    case 'ligne': return ligneExiste(e.ligneId) ? { libelle: 'Ouvrir cette ligne' } : null;
-    case 'lieu': return { libelle: 'Écrire le lieu' };
-    case 'delai': return { libelle: 'Écrire le délai' };
+    case 'client': return seul('Choisir le client');
+    case 'lignes': return chiffrerPossible ? seul('Ajouter un poste') : null;
+    case 'ligne':
+      if (!ligneExiste(e.ligneId)) return null;
+      return { libelle: 'Ouvrir cette ligne', aDire: designation ? `Ouvrir cette ligne : « ${designation} »` : 'Ouvrir cette ligne' };
+    case 'lieu': return seul('Écrire le lieu');
+    case 'delai': return seul('Écrire le délai');
     case 'conditions':
-      if (e.champ === 'validite') return { libelle: 'Choisir la validité' };
-      if (e.champ === 'nature') return { libelle: 'Choisir : acompte ou arrhes' };
-      return { libelle: 'Corriger dans les conditions' };
-    case 'entreprise':
-      return e.section ? { libelle: 'Compléter dans « Mon entreprise »' } : null;
+      if (e.champ === 'validite') return seul('Choisir la validité');
+      if (e.champ === 'nature') return seul('Choisir : acompte ou arrhes');
+      if (e.champ === 'acompte') return seul('Corriger l’acompte');
+      if (e.champ === 'reduction') return seul('Corriger la réduction');
+      return seul('Corriger dans les conditions');
+    case 'entreprise': {
+      if (!e.section) return null;
+      const libelle = 'Compléter dans « Mon entreprise »';
+      const nom = aLaCle(NOM_DES_SECTIONS, e.section) ? NOM_DES_SECTIONS[e.section] : null;
+      const champ = point && aLaCle(CHAMP_DU_MOTIF, point.cle) ? CHAMP_DU_MOTIF[point.cle] : null;
+      if (!nom) return { libelle, aDire: libelle };
+      return { libelle, aDire: champ ? `${libelle} : ${nom}, ${champ}` : `${libelle} : ${nom}` };
+    }
     default: return null;
   }
 }
 
 /**
  * L'aide sous un taux de 10 % ou de 5,5 % (réponse 3 du propriétaire, le
- * 05/11 : « tout permettre ») : le client certifiera, SUR le devis, que le
- * logement a plus de deux ans (CGI 279-0 bis 3 et 278-0 bis A IV, depuis
- * 2025) ; Opus imprimera cette certification, avec la place de signer, à
- * la remise (2c). Aucun motif ne bloque un taux réduit.
- * Les espaces avant « % » sont INSÉCABLES, comme toutes les aides de ce
- * fichier qui écrivent un pourcentage : « 10 » ne doit pas finir une ligne
- * et « % » commencer la suivante.
+ * 05/11 : « tout permettre ») : le client certifiera, SUR le devis, que les
+ * conditions du taux réduit sont remplies (CGI 279-0 bis 3 et 278-0 bis A
+ * IV) ; Opus imprimera cette certification, avec la place de signer, à la
+ * remise (2c). Aucun motif ne bloque un taux réduit.
+ *
+ * RÉÉCRITE LE 05/11/2026 (relecture de 2b-1, TXT-3) : elle ne nommait que
+ * « le logement a plus de deux ans ». À 10 %, le client certifie aussi que
+ * les travaux ne créent pas un immeuble neuf et n'agrandissent pas la
+ * surface de plus de 10 % (279-0 bis 2 et 3) ; à 5,5 %, des travaux de
+ * rénovation énergétique (278-0 bis A I). Un artisan pouvait en déduire le
+ * 10 % pour une extension. Et « Opus imprimera cette phrase » engageait le
+ * texte de 2c : c'est « la certification prévue par la loi ». Le texte est à
+ * soumettre au juriste (cahier §8) ; le CIBS (2027) n'a pas été lu.
+ * Les espaces entre un nombre et « % » sont INSÉCABLES, comme toutes les
+ * aides de ce fichier qui écrivent un pourcentage : « 10 » ne doit pas
+ * finir une ligne et « % » commencer la suivante.
  */
-export const AIDE_TAUX_REDUIT = 'À 10\u00a0% ou 5,5\u00a0%, le client certifiera sur le devis que le logement a plus '
-  + 'de deux ans : Opus imprimera cette phrase avec la place de signer.';
+export const AIDE_TAUX_REDUIT = 'À 10\u00a0% ou 5,5\u00a0%, le client devra certifier sur le devis que les conditions du '
+  + 'taux réduit sont remplies : un logement achevé depuis plus de deux ans, des travaux qui ne créent pas un immeuble '
+  + 'neuf et n’agrandissent pas la surface de plus de 10\u00a0% ; à 5,5\u00a0%, des travaux de rénovation énergétique. '
+  + 'Opus imprimera la certification prévue par la loi, avec la place de signer.';

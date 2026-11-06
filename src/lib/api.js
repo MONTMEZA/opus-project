@@ -3363,9 +3363,17 @@ export const unDevis = hasSupabase ? unDevisSupabase : unDevisDemo;
    lecture que « Mon entreprise » (`entreeDesMotifsEmetteurDemo`). Le devis
    d'un autre, ou un devis inconnu, y rend OP027 avec la phrase de la base.
    -------------------------------------------------------------------------- */
-/** « Cette fonction n'existe pas » : PGRST202 (PostgREST) ou 42883 (PostgreSQL). */
+/** « Cette fonction n'existe pas » : PGRST202 (PostgREST), ou 42883
+ *  (PostgreSQL) quand c'est CETTE fonction qui manque. 42883 dit aussi « un
+ *  OPÉRATEUR introuvable » ou « une fonction appelée avec de mauvais types »
+ *  — « operator does not exist », « function lower(integer) does not
+ *  exist » : une faute de programmation, pas une base en retard (relecture
+ *  de 2b-1, TXT-8). */
 function fonctionAbsente(erreur) {
-  return !!erreur && (erreur.code === 'PGRST202' || erreur.code === '42883');
+  if (!erreur) return false;
+  if (erreur.code === 'PGRST202') return true;
+  return erreur.code === '42883'
+    && /function (public\.)?motifs_refus_remise\(/.test(String(erreur.message || ''));
 }
 
 async function motifsRefusRemiseSupabase(devisId) {

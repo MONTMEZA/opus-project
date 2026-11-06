@@ -39,6 +39,12 @@
  *
  * `forwardRef` : c'est par là que « Suivant » sur le clavier atteint ce
  * champ depuis le précédent.
+ *
+ * `onBlur` (FACULTATIF, 05/11/2026) : appelé quand on quitte le champ. Le
+ * lieu des travaux d'un devis s'y enregistre — une rue tapée sans choisir de
+ * suggestion, puis quittée, laissait « Des changements partent » à l'écran
+ * sans que rien ne parte (relecture du lot 2b-1, ECR-2). Les autres écrans
+ * ne le passent pas : pour eux, rien ne change.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
@@ -51,7 +57,7 @@ import { chercher } from '../lib/adresse';
 
 const ChampVille = React.forwardRef(function ChampVille({
   valeur, onChange, placeholder = 'Commencez à taper votre ville...',
-  type = 'municipality', style, maxLength,
+  type = 'municipality', style, maxLength, onBlur,
 }, ref) {
   /* Un mode d'adresse affiche le libellé ENTIER dans la liste, parce que
      c'est le seul moyen de voir que la suggestion n'est pas ce qu'on a
@@ -117,6 +123,7 @@ const ChampVille = React.forwardRef(function ChampVille({
           onChangeText={saisir}
           placeholder={placeholder}
           maxLength={maxLength}
+          onBlur={onBlur}
         />
         {cherche && <ActivityIndicator size="small" color={C.muted} style={s.spinner} />}
         {choisi && !cherche && <Check size={14} color={C.ok} style={s.coche} />}

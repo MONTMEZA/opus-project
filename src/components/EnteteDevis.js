@@ -10,10 +10,12 @@
  *
  * IL TIENT SON PROPRE ÉTAT ET NE REMONTE QU'À LA FIN D'UNE SAISIE : un champ
  * quitté (`onBlur`), une suggestion d'adresse choisie, un appui (le délai par
- * défaut). `ChampVille` n'a pas d'`onBlur` et remonte CHAQUE lettre — c'est
- * ce composant-ci qui absorbe ces appels : il est petit, l'écran entier ne se
- * redessine pas. `ChampVille` n'est pas modifié (six écrans et
- * `verifier-adresse` en dépendent).
+ * défaut). `ChampVille` remonte CHAQUE lettre — c'est ce composant-ci qui
+ * absorbe ces appels : il est petit, l'écran entier ne se redessine pas. Il
+ * reçoit un `onBlur` FACULTATIF depuis la relecture du lot 2b-1 (ECR-2) :
+ * une rue tapée sans choisir de suggestion s'enregistre en quittant le
+ * champ — sinon « Des changements partent » restait à l'écran sans que
+ * rien ne parte. Les six autres écrans qui l'utilisent ne le passent pas.
  *
  * L'écran le LIT aussi (`lire()`, `enregistrer()`) au moment où l'on ouvre
  * une carte et à la garde de sortie : un lieu tapé sans choisir de
@@ -216,12 +218,18 @@ const EnteteDevis = forwardRef(function EnteteDevis({
       {/* La liste montre l'adresse ENTIÈRE : la Base Adresse ne dit jamais
           « introuvable », elle rend une AUTRE adresse — on lit, et on sait.
           Un choix remplit les trois cases, et s'enregistre aussitôt. */}
+      {/* QUITTER LA RUE l'ENREGISTRE (ECR-2), comme le code postal et la
+          ville : une rue tapée sans choisir de suggestion signalait « Des
+          changements partent » sans que rien ne parte jamais. Un appui sur
+          une suggestion quitte d'abord le champ (le texte tapé s'enregistre),
+          PUIS choisit : le lieu de la suggestion part en dernier. */}
       <ChampVille
         ref={refRue}
         type="rue"
         placeholder="N° et rue"
         valeur={lieu.lieuAdresse}
         maxLength={LONGUEURS.lieuAdresse}
+        onBlur={enregistrerLieu}
         onChange={(l) => {
           const choisi = !!(l && (l.codePostal || l.ville));
           poserLieu({

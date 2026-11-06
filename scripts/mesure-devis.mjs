@@ -297,6 +297,11 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
      (`ecrire`) est allongée, et seulement quand on le demande. */
   const origine = window.setTimeout.bind(window);
   window.__opusSuspendreEcritures = false;
+  /* …et LA RALENTIR sans la perdre (relecture de 2b-1, ECR-1) : une durée en
+     millisecondes, plus courte que le délai de la file (8 s), pour que
+     l'écriture parte, reste EN ROUTE le temps d'une mesure, puis revienne.
+     `null` = la vraie pause. */
+  window.__opusPauseEcritures = null;
   /* LA BASE DE POSTES (lot P) : chaque requête de postes de la
      démonstration attend `pausePostes` dans `attendrePostes`. On les
      COMPTE, et on peut allonger leur pause le temps d'une mesure
@@ -311,6 +316,9 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
     if (ms === pause && /\becrire\b/.test(String(new Error().stack))) window.__opusEcritures += 1;
     if (window.__opusSuspendreEcritures && ms === pause && /\becrire\b/.test(String(new Error().stack))) {
       return origine(f, 60000, ...reste);
+    }
+    if (window.__opusPauseEcritures != null && ms === pause && /\becrire\b/.test(String(new Error().stack))) {
+      return origine(f, window.__opusPauseEcritures, ...reste);
     }
     if (ms === pausePostes && /\battendrePostes\b/.test(String(new Error().stack))) {
       window.__opusRequetesPostes += 1;
@@ -1247,6 +1255,35 @@ await section('Un prix à 0 sans « Offert »', async () => {
   const pasCompteLu = await jusqua(async () => net((await page.locator('[aria-label^="Pour le remettre"]').first()
     .getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '').includes(PAS_COMPTE_1), 4000);
   verifier('…et la ligne « Pour le remettre » le dit : « 1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste. »', !!pasCompteLu);
+  /* D-A (décision du 05/11, relecture de 2b-1, ECR-4) : dans cet état, la
+     ligne du haut dit la phrase ET le décompte de la dernière liste sûre,
+     sur TROIS lignes réservées — au lieu de deux —, seulement dans cet état.
+     Rien n'y est coupé. À 375 et 320 points, le décompte passe sur une
+     quatrième ligne : mesuré, et dit au propriétaire. */
+  const ligneDA = page.locator('[aria-label^="Pour le remettre"]').first();
+  const lDA = net((await ligneDA.getAttribute('aria-label')) || '');
+  verifier('…et son étiquette parlée garde le décompte de la dernière liste sûre (« Dernière liste : ce devis — … · votre entreprise — … »)',
+    /^Pour le remettre : 1 ligne n’est pas enregistrée : elle n’est pas comptée dans cette liste\. Dernière liste : ce devis — (aucun point|\d+ points?) · votre entreprise — (aucun point|\d+ points?)\. Ouvrir la liste$/.test(lDA), lDA);
+  const mesurerDA = () => ligneDA.evaluate((e) => {
+    const t = [...e.querySelectorAll('div')].filter((d) => d.children.length === 0 && d.innerText.length > 20)[0];
+    return {
+      h: Math.round(e.getBoundingClientRect().height),
+      lignes: t ? Math.round(t.scrollHeight / parseFloat(getComputedStyle(t).lineHeight)) : 0,
+      coupe: !t || t.scrollHeight > t.clientHeight + 1,
+      decompte: !!t && /ce devis — /.test(t.innerText),
+    };
+  });
+  const da390 = await mesurerDA();
+  const tailleAvantDA = page.viewportSize();
+  await page.setViewportSize({ width: 320, height: 568 });
+  await attendre(500);
+  const da320 = await mesurerDA();
+  await page.setViewportSize(tailleAvantDA);
+  await attendre(500);
+  noter('ligne du haut, phrase + décompte (D-A)', `390 : ${JSON.stringify(da390)} ; 320 : ${JSON.stringify(da320)}`);
+  verifier(`…à 390, la phrase et le décompte À L’ÉCRAN, sur TROIS lignes, rien de coupé (${da390.h} points, ${da390.lignes} lignes)`,
+    da390.decompte && da390.lignes === 3 && !da390.coupe && da390.h >= TOUCHE - 0.5);
+  verifier(`…à 320, rien de coupé non plus (${da320.h} points, ${da320.lignes} lignes)`, da320.decompte && da320.lignes <= 4 && !da320.coupe);
   await toucher(c);
   verifier('« La compléter » rouvre sa carte', await carteOuverte());
   await viderEtTaper(parLibelle('Prix unitaire HT'), '180');
@@ -1785,8 +1822,28 @@ await section('La carte « Conditions » : réduction, acompte, validité, puis 
     && page.getByLabel('Réduction, en pour cent', { exact: true }).inputValue(), 3000);
   verifier(`« Corriger » ROUVRE la carte, le texte tapé est revenu (« ${champ || '—'} »), avec sa phrase`,
     champ === '150' && /Un pourcentage ne dépasse pas 100 %\./.test(await texte()));
-  /* On remet le devis comme on l'a trouvé : sans réduction ni acompte. */
+  /* On remet le devis comme on l'a trouvé : sans réduction ni acompte.
+     LE PIÈGE DE `react-native-web` (en tête de ce fichier), PROVOQUÉ ICI PAR
+     D-A (relecture de 2b-1, 05/11) : la réduction refusée, la ligne du haut
+     dit la phrase ET le décompte sur trois lignes ; vidée, elle revient à
+     deux. La saisie, sous la carte, rapetisse de 18 points AU-DESSUS de ce
+     qu'elle montre : Chrome la fait défiler d'autant pour garder sa vue
+     (l'« ancrage » du défilement), et `on-drag` reprend aussitôt le focus du
+     champ qu'on vient de toucher. iOS n'ancre pas le défilement et ne ferme
+     le clavier qu'au début d'un glissement du doigt : on DISTINGUE donc la
+     cause (`rnw`), on le note, et l'appui attend la fin de ce défilement. */
   await viderEtTaper(parLibelle('Réduction, en pour cent'), '');
+  await page.evaluate(() => { window.__opusBlurs = []; });
+  await toucher(acomptePct());
+  const actifAcompte = () => page.evaluate(() => /en pour cent$/.test((document.activeElement && document.activeElement.getAttribute('aria-label')) || '')
+    && !/^Réduction/.test(document.activeElement.getAttribute('aria-label')));
+  if (!(await actifAcompte())) {
+    const blurs = await page.evaluate(() => window.__opusBlurs.slice());
+    verifier('le focus de l’acompte, perdu, ne l’a été QUE par `react-native-web` (fin de défilement, `on-drag`) — aucun code d’Opus',
+      blurs.length > 0 && blurs.every((x) => x.rnw || /^Réduction/.test(x.qui)), JSON.stringify(blurs));
+    noter('focus de l’acompte repris par react-native-web après le changement de hauteur de la ligne du haut (D-A) — pas un défaut d’iOS', JSON.stringify(blurs));
+    await attendre(300);
+  }
   await viderEtTaper(acomptePct(), '');
   await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
   const vide = await jusqua(async () => !/Réduction|Arrhes/.test(net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => 'x'))), DELAI_ECRITURE + 3000);
@@ -3591,9 +3648,13 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
      bouge pas : deux lignes réservées. */
   const objet = parLibelle('Objet du devis');
   await objet.fill('Muret de clôture (rehaussé)');
-  const pendantFrappe = await jusqua(async () => (await libelleLigne()).startsWith(`Pour le remettre : ${EN_ROUTE_LIGNE}`), 3000);
+  /* Relecture de 2b-1, ECR-1 : pendant l'envoi, la PHRASE seule — le compte
+     d'avant ne se dit plus, ni à l'écran ni à VoiceOver : il pouvait dire
+     « ce devis — aucun point » au-dessus d'un poste qu'on venait d'écrire. */
+  const EN_ROUTE_DITE = `Pour le remettre : ${EN_ROUTE_LIGNE} Ouvrir la liste`;
+  const pendantFrappe = await jusqua(async () => (await libelleLigne()) === EN_ROUTE_DITE, 3000);
   verifier('pendant la FRAPPE (champ pas encore quitté), la ligne dit « Des changements partent : la liste sera à jour juste après. », '
-    + 'et garde le compte d’avant dans son étiquette parlée', !!pendantFrappe && (await libelleLigne()).includes('Dernière liste : ce devis — aucun point'),
+    + 'et RIEN de la liste d’avant, pas même dans son étiquette parlée', !!pendantFrappe && !(await libelleLigne()).includes('Dernière liste'),
   await libelleLigne());
   await objet.evaluate((e) => e.blur());
   const vus = new Set();
@@ -3605,7 +3666,7 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
     if (bx) hs.add(Math.round(bx.height));
     await attendre(40);
   }
-  const enRouteVu = (v) => v.startsWith(`Pour le remettre : ${EN_ROUTE_LIGNE} Dernière liste : ce devis — aucun point`);
+  const enRouteVu = (v) => v === EN_ROUTE_DITE;
   verifier('pendant l’envoi, la ligne dit « Des changements partent… » ou garde son compte — jamais « Lecture… », ni « non lue », ni '
     + '« rien ne manque »',
   [...vus].every((v) => enRouteVu(v) || (COMPTE.test(v) && COMPTE.exec(v)[1] === 'aucun point' && nombre(COMPTE.exec(v)[2]) === pointsEntreprise)),
@@ -3621,13 +3682,28 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
   verifier('la carte : « Ce devis — aucun point », puis « Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui. »',
     t.includes('Ce devis — aucun point') && t.includes('Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.'));
   verifier('…et JUSTE SOUS elle, « Pas encore vérifié : … » (sans elle, « rien ne manque » mentirait)',
-    t.includes('Pas encore vérifié : pour qui le client commande, le moment de la signature, l’urgence, la garantie décennale, le prix du devis et les déchets de chantier.')
+    t.includes('Pas encore vérifié : pour qui le client commande, le moment de la signature, l’urgence, la garantie décennale, si le devis lui-même '
+      + 'est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, et si les travaux concernent un immeuble neuf.')
     && t.indexOf('Pas encore vérifié') > t.indexOf('rien ne manque'));
   verifier(`…« Votre entreprise — ${pointsEntreprise} points », puis les mentions dues à un particulier, sous leur phrase de prudence`,
     t.includes(`Votre entreprise — ${pointsEntreprise} point`) && t.includes('Mentions dues à un particulier')
     && t.indexOf('Opus ne sait pas encore pour qui le client commande') > t.indexOf('Mentions dues à un particulier'));
-  const completer = await page.getByRole('button', { name: 'Compléter dans « Mon entreprise »', exact: true }).count();
-  verifier(`…UN bouton par point de l’entreprise (${completer} pour ${pointsEntreprise})`, completer === pointsEntreprise);
+  /* D-B (décision du 05/11) : le titre de la partie dit combien de ses
+     points sont dus à un particulier, et l'accord suit le nombre (« 1 point,
+     dont 1 dû », « 2 points, dont 1 dû », « 5 points, dont 3 dus »). Le
+     compte DONT est celui des points rangés sous « Mentions dues à un
+     particulier » : leurs étiquettes de nature, lues après ce sous-titre. */
+  const titreE = (t.match(/Votre entreprise — (\d+) points?(?:, dont (\d+) (dus|dû) à un particulier)?/) || []);
+  const sousParticulier = (t.slice(t.indexOf('Mentions dues à un particulier')).match(/\b(La loi|Par prudence|Règle d’Opus)\b/g) || []).length;
+  verifier(`…le titre « ${titreE[0]} » : ${sousParticulier} point(s) sous « Mentions dues à un particulier », et l’accord suit le nombre`,
+    !!titreE[0] && Number(titreE[1]) === pointsEntreprise && sousParticulier > 0 && Number(titreE[2]) === sousParticulier
+    && titreE[3] === (sousParticulier > 1 ? 'dus' : 'dû'), titreE[0]);
+  /* ECR-5 : chaque bouton dit À VoiceOver la section (et le champ) qu'il
+     ouvre ; deux boutons, deux étiquettes. */
+  const completers = await page.getByRole('button', { name: /^Compléter dans « Mon entreprise » : / }).evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  verifier(`…UN bouton par point de l’entreprise (${completers.length} pour ${pointsEntreprise}), chacun avec SON étiquette parlée `
+    + `(${completers.length} distinctes ?)`, completers.length === pointsEntreprise && new Set(completers).size === completers.length
+    && (await page.getByRole('button', { name: 'Compléter dans « Mon entreprise »', exact: true }).count()) === 0, JSON.stringify(completers));
   const natures = t.match(/\b(La loi|Par prudence|Règle d’Opus)\b/g) || [];
   verifier(`…chaque point dit sa NATURE (${natures.length} étiquettes, dont « Règle d’Opus » pour les frais de déplacement)`,
     natures.length === pointsEntreprise && natures.includes('Règle d’Opus'), natures.join(', '));
@@ -3644,13 +3720,13 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
   /* « MON ENTREPRISE » : ouverte d'un point, elle ne relit rien ; sa
      FERMETURE relit la liste (critique E-1). */
   const avantME = await lectures();
-  await toucher(page.getByRole('button', { name: 'Compléter dans « Mon entreprise »', exact: true }).first());
+  await toucher(page.getByRole('button', { name: /^Compléter dans « Mon entreprise » : / }).first());
   await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
   verifier(`« Compléter » ouvre « Mon entreprise », sans relire la liste (${(await lectures()) - avantME})`,
     (await parLibelle('Fermer « Mon entreprise »').count()) === 1 && (await lectures()) - avantME === 0);
   await capture('42-remettre-mon-entreprise');
   await toucher(parLibelle('Fermer « Mon entreprise »'));
-  await jusqua(async () => (await lectures()) - avantME >= 1, 4000);
+  await jusqua(async () => (await lectures()) - avantME >= 1 && (await texte()).includes(`Votre entreprise — ${pointsEntreprise} point`), 4000);
   verifier(`…sa FERMETURE relit la liste (${(await lectures()) - avantME} lecture), et la carte est toujours là`,
     (await lectures()) - avantME === 1 && (await enCarte()) && (await texte()).includes(`Votre entreprise — ${pointsEntreprise} point`));
   await toucher(parLibelle('Revenir au devis'));
@@ -3742,12 +3818,18 @@ await section('« Terrasse en bois » : compléter un point depuis la liste, le 
 
   /* L'AIDE DU TAUX RÉDUIT (réponse 3 du 05/11) : sous 10 %, pas sous 20 %. */
   await toucher(page.locator('button[aria-label^="Platelage de terrasse"]').first());
-  verifier('une ligne à 10 % : l’aide « le client certifiera sur le devis… » sous le taux',
-    (await texte()).includes('le client certifiera sur le devis que le logement a plus de deux ans : Opus imprimera cette phrase avec la place de signer.'));
+  /* TXT-3 (relecture de 2b-1) : l'aide dit les CONDITIONS du taux réduit,
+     écrites ici en toutes lettres — une mesure qui l'importerait du code ne
+     vérifierait rien. */
+  const AIDE_TAUX = 'À 10 % ou 5,5 %, le client devra certifier sur le devis que les conditions du taux réduit sont remplies : un logement '
+    + 'achevé depuis plus de deux ans, des travaux qui ne créent pas un immeuble neuf et n’agrandissent pas la surface de plus de 10 % ; à 5,5 %, '
+    + 'des travaux de rénovation énergétique. Opus imprimera la certification prévue par la loi, avec la place de signer.';
+  verifier('une ligne à 10 % : l’aide « le client devra certifier sur le devis que les conditions du taux réduit sont remplies… » sous le taux',
+    (await texte()).includes(AIDE_TAUX));
   await capture('47-remettre-aide-taux-reduit');
   await toucher(bouton(/^TVA à 20/));
   await attendre(400);
-  verifier('…et elle disparaît à 20 %', !(await texte()).includes('le client certifiera sur le devis'));
+  verifier('…et elle disparaît à 20 %', !(await texte()).includes('le client devra certifier sur le devis'));
   await toucher(bouton(/^TVA à 10/));
   await fermerCarte();
   await toucher(parLibelle('Revenir en arrière'));
@@ -3798,8 +3880,38 @@ await section('Un brouillon NEUF : aucune lecture avant qu’il soit en base, pu
   verifier('« Ajouter un poste » ouvre une carte de ligne, dont le retour dit « ‹ Liste »',
     (await parLibelle(RETOUR_LISTE_CARTE).count()) === 1 && (await texte()).includes('‹ Liste'));
   await capture('50-remettre-poste-depuis-la-liste');
+  /* ECR-1 (relecture de 2b-1) : la ligne écrite DEPUIS la liste part au
+     retour ; pendant son envoi, la partie « Ce devis » de la carte se tait
+     (« Ce devis : la liste se met à jour. ») au lieu de redire « Ce devis ne
+     chiffre encore aucun travail » sous un poste qu'on vient d'écrire. On
+     relève la carte toutes les 10 ms, dans la page. */
+  await taper('Chaperon de muret');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  /* Les écritures RALENTIES (2,5 s, sous les 8 s de la file) : la ligne part
+     en quittant le prix, et reste en route pendant qu'on revient à la liste —
+     sans cela, la démonstration écrit plus vite que le doigt ne revient, et
+     l'état « en route » ne se voit jamais. */
+  await page.evaluate(() => { window.__opusPauseEcritures = 2500; });
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '45');
+  await toucher(parLibelle('TVA à 20 %'));
+  await page.evaluate((titre) => {
+    window.__opusCarte = [];
+    let prec = null;
+    window.__opusCarteMinuteur = setInterval(() => {
+      const t = document.body.innerText;
+      const i = t.indexOf(titre);
+      const v = i >= 0 ? t.slice(i, i + 600) : null;
+      if (v && v !== prec) { window.__opusCarte.push(v); prec = v; }
+    }, 10);
+  }, TITRE_LISTE);
   await toucher(parLibelle(RETOUR_LISTE_CARTE));
   verifier('…et ce retour ramène à la LISTE', await enCarte());
+  await jusqua(async () => /Ce devis — \d+ points?/.test(await texte()) && !(await texte()).includes('Ce devis : la liste se met à jour.'), DELAI_ECRITURE + 2000);
+  const vuesCarte = net(JSON.stringify(await page.evaluate(() => { clearInterval(window.__opusCarteMinuteur); window.__opusPauseEcritures = null; return window.__opusCarte; })));
+  verifier('…pendant l’envoi de la ligne, la carte ne dit JAMAIS « Ce devis ne chiffre encore aucun travail », et dit « Ce devis : la liste se met à jour. »',
+    !vuesCarte.includes('Ce devis ne chiffre encore aucun travail') && vuesCarte.includes('Ce devis : la liste se met à jour.'), vuesCarte.slice(0, 400));
+  verifier('…puis la liste relue ne réclame plus de poste', !(await texte()).includes('Ce devis ne chiffre encore aucun travail'));
   await toucher(parLibelle('Revenir au devis'));
   /* LE DÉLAI : effacé, son point revient ; « Écrire le délai » ferme la
      liste et donne le focus au champ (E-16). */
@@ -3860,6 +3972,41 @@ await section('Une lecture COUPÉE : jamais « rien ne manque », « Réessayer 
   verifier('la ligne du haut garde la MÊME hauteur dans tous les états mesurés (liste, pas en base, échec) : rien ne saute sous le doigt',
     hauteursLigne.length >= 3 && new Set(hauteursLigne.map(([, h]) => h)).size === 1, JSON.stringify(hauteursLigne));
   await ecouterLaListe(false);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+});
+
+await section('Un brouillon NEUF dont la première ligne est incomplète : « 1 ligne n’est pas encore enregistrée : la liste se calculera ensuite. » (ECR-3)', async () => {
+  /* Relecture de 2b-1, ECR-3 : avant, la ligne du haut disait « elle n’est
+     pas comptée dans cette liste » — alors qu'AUCUNE liste n'existe tant que
+     le brouillon n'est pas en base. */
+  await allerAMesDevis();
+  await toucher(page.getByText('Nouveau devis', { exact: true }).first());
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(900);
+  await toucher(parLibelle('Ajouter un poste chiffré'));
+  await taper('Ligne laissée incomplète');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '0');
+  await toucher(parLibelle('TVA à 20 %'));
+  await fermerCarte();
+  await attendre(600);
+  verifier('la ligne reste « Incomplète — La compléter »', (await page.getByLabel('Ligne incomplète. La compléter', { exact: true }).count()) === 1);
+  const l = await libelleLigne();
+  verifier('la ligne du haut : « 1 ligne n’est pas encore enregistrée : la liste se calculera ensuite. » — jamais « pas comptée dans cette liste »',
+    l === 'Pour le remettre : 1 ligne n’est pas encore enregistrée : la liste se calculera ensuite.' && !(await texte()).includes('pas comptée dans cette liste'), l);
+  verifier('…ce n’est PAS une cible (il n’y a rien à ouvrir)', (await page.getByRole('button', { name: /^Pour le remettre/ }).count()) === 0);
+  const h = Math.round((await ligneHaut().boundingBox()).height);
+  const hPasEnBase = (hauteursLigne.find(([k]) => k === 'pas en base') || [])[1];
+  verifier(`…et la MÊME hauteur que « pas en base » (${h} pour ${hPasEnBase})`, h === hPasEnBase);
+  await capture('54-remettre-neuf-ligne-incomplete');
+  await toucher(parLibelle('Ligne incomplète. La compléter'));
+  await toucher(parLibelle('Retirer cette ligne'));
+  await toucher(parLibelle('Confirmer : retirer cette ligne'));
+  verifier('la ligne retirée, la ligne du haut revient à « Écrivez une première ligne… »',
+    !!(await jusqua(async () => (await libelleLigne()) === 'Pour le remettre : Écrivez une première ligne : la liste se calculera ensuite.', 3000)),
+    await libelleLigne());
   await toucher(parLibelle('Revenir en arrière'));
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
 });
