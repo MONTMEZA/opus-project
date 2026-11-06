@@ -3987,23 +3987,107 @@ export function etatDeLaListe({
 }
 
 /**
- * LE RÉGIME POUR LEQUEL UNE LISTE EST LUE (relecture 2 de 2b-1, REL-2) :
- * `'franchise'`, `'reel'` ou `null`, et rien d'autre. Le régime que l'écran
- * reçoit vaut aussi `undefined` (pas encore lu), `{ chargement: true }` ou
- * `{ echec: true }` : ce ne sont pas des régimes, ils deviennent `null`. Un
- * objet ne se retient jamais tel quel — un objet neuf à chaque lecture ne
- * serait jamais « le même », et l'on relirait sans fin.
+ * LE RÉGIME INCONNU (relecture 3 de 2b-1, RELIRE-1, 06/11/2026) : une
+ * lecture du régime EN COURS (`{ chargement: true }`), RATÉE
+ * (`{ echec: true }`) ou pas encore faite (`undefined`). Ce n'est PAS « non
+ * déclaré » (`null`) : la règle du projet le dit — un échec n'est JAMAIS
+ * « non déclaré ». Une marque À PART, et jamais `undefined`, qui veut déjà
+ * dire « pas de liste sûre » (`liste.regime` après un échec, et la première
+ * ligne de `causesAuRetourDeLEntreprise`).
+ *
+ * POURQUOI (mesuré au navigateur par la relecture 3) : `lireRegime` passe le
+ * régime à `{ echec: true }` au bout de 8 s, même en lecture discrète, et le
+ * remet à « réel » si la réponse arrive ensuite. Pris pour `null`, cet échec
+ * faisait relire la liste DEUX fois sans que rien ait changé — la ligne
+ * disait « Des changements partent » alors que rien ne partait, « Ce devis »
+ * se taisait, et sur un réseau coupé la liste juste était EFFACÉE (« Liste
+ * de ce qu’il manque non lue »).
+ */
+export const REGIME_INCONNU = 'inconnu';
+
+/**
+ * LE RÉGIME POUR LEQUEL UNE LISTE EST LUE (relecture 2 de 2b-1, REL-2 ;
+ * relecture 3, RELIRE-1) : `'franchise'`, `'reel'`, `null` (non déclaré), ou
+ * `REGIME_INCONNU` — et rien d'autre. Le régime que l'écran reçoit vaut aussi
+ * `undefined` (pas encore lu), `{ chargement: true }` ou `{ echec: true }` :
+ * ils deviennent `REGIME_INCONNU`, jamais `null`. Un objet ne se retient
+ * jamais tel quel — un objet neuf à chaque lecture ne serait jamais « le
+ * même », et l'on relirait sans fin.
  */
 export function regimePourLaListe(regime) {
-  return regime === 'franchise' || regime === 'reel' ? regime : null;
+  return regime === 'franchise' || regime === 'reel' || regime === null ? regime : REGIME_INCONNU;
+}
+
+/**
+ * UNE LISTE LUE SOUS L'INCONNU PREND LE PREMIER RÉGIME CONNU (relecture 3
+ * de 2b-1, RELIRE-1) : `regimeDeLaListe` s'il est connu (ou `undefined`, pas
+ * de liste sûre), sinon `connu` — le dernier régime connu de l'écran, qui
+ * peut être encore l'inconnu.
+ *
+ * POURQUOI ADOPTER SANS RELIRE : le premier régime connu qui suit un inconnu
+ * vient toujours d'une LECTURE — `lireRegime`, ou « Mon entreprise », qui
+ * remonte ce qu'elle lit (`surEmetteur`) avant tout enregistrement. Il dit
+ * donc ce que la base avait quand la liste a été lue, à moins qu'un
+ * enregistrement ne l'ait changé depuis ; et un enregistrement de « Mon
+ * entreprise » relit la liste de toute façon à sa fermeture (et, s'il ne
+ * relisait rien, le filet de `causesAuRetourDeLEntreprise`). Sans cette
+ * adoption, une liste lue sous l'inconnu n'aurait JAMAIS de régime connu, et
+ * « ne relire que si les deux régimes sont connus » rouvrait REL-2 :
+ * l'artisan au régime non déclaré qui déclare la franchise gardait « Ce
+ * devis : rien ne manque » au-dessus de lignes devenues fautives
+ * (contre-vérification de la relecture 3, scénario S3).
+ *
+ * Elle sert DEUX fois : au retour d'une lecture partie sous l'inconnu (un
+ * régime connu est arrivé PENDANT la lecture), et dans l'effet du régime
+ * (`decisionDuRegime`).
+ */
+export function regimeAdopte(regimeDeLaListe, connu) {
+  return regimeDeLaListe === REGIME_INCONNU ? regimePourLaListe(connu) : regimeDeLaListe;
+}
+
+/**
+ * CE QUE FAIT UN RÉGIME REÇU (l'effet du régime de la saisie ; relecture 3
+ * de 2b-1, RELIRE-1) — une fonction PURE, que `verifier-devis` FAIT TOURNER
+ * sur les scénarios de la contre-vérification, au lieu de figer le texte
+ * d'un effet.
+ *   `connu`           : le dernier régime CONNU de l'écran (`regimeRef`) —
+ *                       `'franchise'`, `'reel'`, `null` ou `REGIME_INCONNU`
+ *                       tant qu'aucun n'est arrivé ;
+ *   `regimeDeLaListe` : le régime de la dernière liste sûre (`liste.regime`) ;
+ *   `listeSure`       : une liste sûre est-elle là ;
+ *   `regime`          : le régime que l'écran vient de recevoir.
+ * Rend `{ connu, regimeDeLaListe, causes }` : le nouveau dernier connu, le
+ * régime de la liste (adopté, ou le même), et les causes d'une relecture
+ * (`[]` : aucune).
+ *
+ *   - un régime INCONNU (lecture en cours ou ratée) ne fait RIEN : ni
+ *     relecture, ni changement du dernier connu ;
+ *   - le même régime que le dernier connu ne fait rien ;
+ *   - un régime connu NOUVEAU devient le dernier connu ; puis, si une liste
+ *     sûre est là : lue sous l'inconnu, elle l'ADOPTE sans relecture
+ *     (`regimeAdopte`) ; lue sous le même, rien ; lue sous un AUTRE régime
+ *     connu, elle se relit avec les deux causes — le régime décide des
+ *     points du DEVIS (REL-2).
+ */
+export function decisionDuRegime({
+  connu = REGIME_INCONNU, regimeDeLaListe, listeSure = false, regime,
+} = {}) {
+  const avant = regimePourLaListe(connu);
+  const recu = regimePourLaListe(regime);
+  if (recu === REGIME_INCONNU || recu === avant) return { connu: avant, regimeDeLaListe, causes: [] };
+  if (!listeSure) return { connu: recu, regimeDeLaListe, causes: [] };
+  const adopte = regimeAdopte(regimeDeLaListe, recu);
+  if (adopte === recu) return { connu: recu, regimeDeLaListe: adopte, causes: [] };
+  return { connu: recu, regimeDeLaListe, causes: ['devis', 'entreprise'] };
 }
 
 /**
  * CE QUE RELIT LE RETOUR DE « MON ENTREPRISE » (relecture 2 de 2b-1,
- * REL-2) : `['entreprise']`, ou `['devis', 'entreprise']`.
+ * REL-2 ; relecture 3, RELIRE-1) : `['entreprise']`, ou `['devis',
+ * 'entreprise']`.
  *   `regimeDeLaListe` : le régime pour lequel la dernière liste sûre a été
- *                       lue (`regimePourLaListe`) — `undefined` quand il n'y
- *                       a PAS de liste sûre ;
+ *                       lue (`regimePourLaListe`, adopté par `regimeAdopte`)
+ *                       — `undefined` quand il n'y a PAS de liste sûre ;
  *   `regime`          : celui que l'écran a maintenant.
  *
  * POURQUOI : le régime de TVA appartient à l'entreprise, mais il décide des
@@ -4015,8 +4099,18 @@ export function regimePourLaListe(regime) {
  * base). Le régime a changé : « Ce devis » se tait aussi
  * (`CE_DEVIS_SE_MET_A_JOUR`), et la ligne dit la phrase « en route ». Il n'a
  * pas changé : « Ce devis » reste — la partie juste ne clignote pas (E-6).
- * Les deux régimes passent par `regimePourLaListe` : un régime inconnu
- * (lecture en cours ou ratée) compte comme `null`.
+ *
+ * « DEVIS » SEULEMENT SI LES DEUX RÉGIMES SONT CONNUS ET DIFFÉRENTS
+ * (relecture 3, RELIRE-1) : un régime inconnu maintenant (une lecture en
+ * cours ou ratée) ne relit rien — « réel » puis un échec de lecture n'est
+ * pas un changement de régime. Avant, l'inconnu comptait comme `null`, et un
+ * échec de lecture relisait « Ce devis » sans que rien ait changé.
+ *
+ * LE FILET : une liste dont le régime est ENCORE inconnu au retour (aucun
+ * régime connu n'est arrivé depuis sa lecture : la lecture du régime a raté,
+ * et « Mon entreprise » n'a rien pu lire non plus) relit « devis » aussi.
+ * Prudence, cas rare : on ne sait pas pour quel régime « Ce devis » a été
+ * jugé.
  *
  * Sans liste sûre, la seule cause `'entreprise'` : aucune partie n'est
  * montrée, et une cause `'devis'` ferait dire « Des changements partent »
@@ -4029,7 +4123,11 @@ export function regimePourLaListe(regime) {
  */
 export function causesAuRetourDeLEntreprise({ regimeDeLaListe, regime } = {}) {
   if (regimeDeLaListe === undefined) return ['entreprise'];
-  return regimePourLaListe(regimeDeLaListe) === regimePourLaListe(regime) ? ['entreprise'] : ['devis', 'entreprise'];
+  const deLaListe = regimePourLaListe(regimeDeLaListe);
+  if (deLaListe === REGIME_INCONNU) return ['devis', 'entreprise'];
+  const maintenant = regimePourLaListe(regime);
+  if (maintenant === REGIME_INCONNU || maintenant === deLaListe) return ['entreprise'];
+  return ['devis', 'entreprise'];
 }
 
 /** « aucun point », « 1 point », « 3 points ». */
@@ -4079,28 +4177,32 @@ export function titresDesParties(lue) {
   };
 }
 
+/* Le décompte tel que la ligne le dit pendant que la liste relit « Mon
+   entreprise » — pour le gabarit qui en réserve la place (D-A bis). */
+const RELECTURE_DE_L_ENTREPRISE = Object.freeze({ devis: false, entreprise: true });
+
 /**
- * CE QUE DIT LA LIGNE (en haut et en bas) : `{ contenu, compte, gabarit,
+ * CE QUE DIT LA LIGNE (en haut et en bas) : `{ contenu, compte, gabarits,
  * action, aDire }`.
- *   `contenu` : la phrase (ou le compte, quand tout est compté) ;
- *   `compte`  : le DÉCOMPTE affiché SOUS la phrase, ou `null` ;
- *   `gabarit` : le texte qui DONNE LA HAUTEUR de la ligne, posé invisible
- *               dans son flux (le texte lu est posé par-dessus), ou `null`
- *               — la ligne réserve alors ses deux lignes ordinaires ;
- *   `action`  : `'ouvrir'` (la carte), `'reessayer'` (relire) ou `null` (pas
- *               une cible : il n'y a rien à ouvrir) ;
- *   `aDire`   : l'étiquette pour VoiceOver.
+ *   `contenu`  : la phrase (ou le compte, quand tout est compté) ;
+ *   `compte`   : le DÉCOMPTE affiché SOUS la phrase, ou `null` ;
+ *   `gabarits` : les textes qui DONNENT LA HAUTEUR de la ligne, posés
+ *                invisibles dans son flux — la ligne prend la hauteur du
+ *                PLUS GRAND, à toute largeur, et le texte lu est posé
+ *                par-dessus —, ou `null` : la ligne réserve alors ses deux
+ *                lignes ordinaires ;
+ *   `action`   : `'ouvrir'` (la carte), `'reessayer'` (relire) ou `null` (pas
+ *                une cible : il n'y a rien à ouvrir) ;
+ *   `aDire`    : l'étiquette pour VoiceOver.
  *   `derniere` (en entrée) : la dernière liste LUE (`lireMotifsDeRemise`),
  *               gardée même quand un échec l'a effacée de l'écran — elle ne
- *               sert QU'AU gabarit, qui ne se lit pas.
+ *               sert QU'AUX gabarits, qui ne se lisent pas.
  *
  * QUAND QUELQUE CHOSE N'EST PAS COMPTÉ, sur un devis EN BASE (`pasCompte`,
  * état `liste`) : la phrase ET le décompte de la dernière liste sûre —
  * DÉCISION D-A DU PROPRIÉTAIRE (05/11/2026 au soir, relecture ECR-4). Cet
  * état DURE (une ligne incomplète est l'état ordinaire d'un chiffrage en
  * cours), et le compte disparaissait de l'écran pendant tout ce temps.
- * Mesuré : trois lignes à 390 points (≈ 92 points), QUATRE à 375 et 320
- * (≈ 110 points), rien de coupé.
  *
  * ET LA HAUTEUR NE BOUGE PLUS TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ
  * (relecture 2 de 2b-1, REL-1). Avant, la ligne réservait trois lignes dans
@@ -4108,29 +4210,36 @@ export function titresDesParties(lue) {
  * avec une ligne incomplète, elle passait de 92 à 74 points (110 à 74 à 375
  * et 320), puis revenait au retour de la liste — tout ce qui est dessous,
  * le champ où l'on tape compris, montait puis redescendait sous le doigt
- * (mesuré au navigateur). D-A a été décidée sur « ≈ 92 au lieu de 74 », pas
- * sur ce va-et-vient. Désormais, tant que `pasCompte` persiste sur un devis
- * en base et qu'une liste a été lue, le `gabarit` vaut « phrase + décompte »
- * de cette liste dans TOUS les états (`liste`, `en_route`, `lecture`,
- * `echec`) : la ligne le pose invisible et pose ce qu'elle dit vraiment
- * par-dessus. Sa hauteur est exactement celle de « phrase + décompte », à
- * toutes les largeurs, sans mesure ni course ; ce que la ligne DIT ne change
- * pas (D-A, ECR-1). Le décompte du gabarit suit la relecture de l'entreprise
- * (« mise à jour… ») comme celui qu'on lit : dans l'état `liste`, le texte
- * lu et le gabarit sont le MÊME texte. Ce qui RESTE, mesuré le 06/11 : à
- * 390 points, « votre entreprise — mise à jour… » passe à la ligne là où
- * « 5 points » tenait — la ligne du haut grandit d'une ligne (≈ 92 → 110)
- * le temps de cette relecture, au retour de « Mon entreprise ». Le tenir,
- * c'est réserver la plus longue des deux formes (≈ 110 à 390 dans tout
- * l'état « pas compté ») ou raccourcir ce que la ligne dit : une décision
- * du propriétaire, pas une correction (voir les restes de la relecture 2).
+ * (mesuré au navigateur). Tant que `pasCompte` persiste sur un devis en base
+ * et qu'une liste a été lue, les `gabarits` valent « phrase + décompte » de
+ * cette liste dans TOUS les états (`liste`, `en_route`, `lecture`,
+ * `echec`) : la ligne les pose invisibles et pose ce qu'elle dit vraiment
+ * par-dessus. Ce que la ligne DIT ne change pas (D-A, ECR-1).
+ *
+ * DEUX GABARITS, LE PLUS GRAND DONNE LA HAUTEUR — DÉCISION D-A BIS DU
+ * PROPRIÉTAIRE (06/11/2026, « garder la grande place ») : le décompte se dit
+ * de deux façons — « votre entreprise — 5 points », et « votre entreprise —
+ * mise à jour… » pendant que la liste relit « Mon entreprise » (relecture 3
+ * de 2b-1, RELIRE-2). Avec un seul gabarit, qui suivait la relecture, la
+ * ligne du haut grandissait d'une ligne le temps de cette relecture (≈ 92 →
+ * 110 points), de 381 à 407 points de large — l'iPhone 16 du propriétaire
+ * (393) compris —, puis revenait ; et la ligne du bas (88 → 104 points) de
+ * 329 à 352, que la mesure à trois largeurs de la relecture 2 n'avait pas
+ * vue : 51 largeurs sur 121 bougeaient. Les deux formes sont maintenant TOUJOURS
+ * réservées, quelle que soit la relecture : la liste des gabarits est la
+ * MÊME dans tous les états tant que `pasCompte` persiste, et la ligne fait
+ * la hauteur de la plus haute à toute largeur (mesuré au navigateur de 320 à
+ * 440 points, point par point : aucune hauteur ne change pendant la
+ * relecture ; ≈ 110 points à 393). Le prix, décidé : une ligne vide sous le
+ * décompte en temps normal, aux largeurs où « mise à jour… » passerait à la
+ * ligne. Plus rien ne bouge, jamais.
  *
  * EN `en_route`, LA PHRASE SEULE, « Des changements partent : la liste
  * sera à jour juste après. », à l'écran ET dans l'étiquette parlée : le
  * compte d'avant pourrait dire « ce devis — aucun point » juste après qu'on
  * a vidé le délai (relecture de 2b-1, ECR-1) — c'est le défaut que la carte
- * ne montre plus, VoiceOver ne doit pas le dire non plus. Le gabarit, lui,
- * ne se lit ni ne se dit.
+ * ne montre plus, VoiceOver ne doit pas le dire non plus. Les gabarits, eux,
+ * ne se lisent ni ne se disent.
  *
  * Ce que la liste ne compte pas (`pasCompte`) passe devant le compte. Sur un
  * brouillon PAS ENCORE EN BASE, il dit que la liste se calculera ensuite
@@ -4176,15 +4285,19 @@ export function texteDeLaLigneRemise({
     if (compte) dit = `${dit}${fin(dit)}Dernière liste : ${compte}`;
     aDire = `${TITRE_POUR_REMETTRE} : ${action ? `${dit}${fin(dit)}Ouvrir la liste` : dit}`;
   }
-  /* LE GABARIT (REL-1) : « phrase + décompte » de la liste lue — la liste
-     de l'écran si elle est là (dans l'état `liste`, c'est alors le texte
-     même qu'on lit), sinon la dernière lue — tant que quelque chose n'est
-     pas compté sur un devis en base. */
+  /* LES GABARITS (REL-1, D-A bis) : « phrase + décompte » de la liste lue —
+     la liste de l'écran si elle est là, sinon la dernière lue —, sous ses
+     DEUX formes (le compte de l'entreprise, puis « mise à jour… »), quelle
+     que soit la relecture en cours, tant que quelque chose n'est pas compté
+     sur un devis en base. Dans l'état `liste`, le texte lu est l'un d'eux. */
   const pourLeGabarit = lue || derniere;
-  const gabarit = etat !== 'pas_en_base' && pasCompte && pourLeGabarit
-    ? `${pasCompte}\n${phraseDesEndroits(pourLeGabarit, { relecture })}` : null;
+  const gabarits = etat !== 'pas_en_base' && pasCompte && pourLeGabarit
+    ? [
+      `${pasCompte}\n${phraseDesEndroits(pourLeGabarit)}`,
+      `${pasCompte}\n${phraseDesEndroits(pourLeGabarit, { relecture: RELECTURE_DE_L_ENTREPRISE })}`,
+    ] : null;
   return {
-    contenu, compte, gabarit, action, aDire,
+    contenu, compte, gabarits, action, aDire,
   };
 }
 

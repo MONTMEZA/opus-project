@@ -373,7 +373,9 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
      (`entreeDesMotifsEmetteurDemo`) est sur son chemin. La pile n'est lue
      que pendant les sections du lot (`__opusListe.ecoute`) : `new Date()`
      est partout, et lire une pile coûte. */
-  window.__opusListe = { ecoute: false, lectures: 0, casser: null };
+  window.__opusListe = {
+    ecoute: false, lectures: 0, casser: null, retenir: false, retenues: [],
+  };
   const DateOrigine = window.Date;
   window.Date = new Proxy(DateOrigine, {
     construct(t, args) {
@@ -389,6 +391,44 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
       return Reflect.construct(t, args);
     },
   });
+  /* …ET LA RETENIR (relecture 3 de 2b-1, D-A bis) : la lecture de
+     démonstration revient avant la première image, et l'état « relecture de
+     Mon entreprise » ne se PEINT jamais — on ne pouvait donc pas mesurer la
+     ligne pendant cette relecture. Quand `retenir` est vrai, le `.then` que
+     `lireLaListe` pose sur la lecture est retenu (la pile le nomme) jusqu'à
+     ce que la mesure le relâche (`retenues`) : la VRAIE lecture, partie par
+     le vrai geste, attend simplement plus longtemps, comme sur un réseau
+     lent. Le `.then` suivant de la même chaîne passe (`__opusRetenue`). */
+  const thenOrigine = Promise.prototype.then;
+  // eslint-disable-next-line no-extend-native
+  Promise.prototype.then = function thenTrace(a, b) {
+    const l = window.__opusListe;
+    if (l && l.retenir && !this.__opusRetenue && /\blireLaListe\b/.test(String(new Error().stack))) {
+      const origine = this;
+      const retenue = new Promise((ok, ko) => { l.retenues.push(() => thenOrigine.call(origine, ok, ko)); });
+      const suite = thenOrigine.call(retenue, a, b);
+      suite.__opusRetenue = true;
+      return suite;
+    }
+    return thenOrigine.call(this, a, b);
+  };
+  /* LA LECTURE DU RÉGIME DE DÉMONSTRATION QUI LÈVE (relecture 3 de 2b-1,
+     RELIRE-1, la section N3 de sa contre-vérification) : comme un `fetch`
+     hors réseau. `monEmetteurDemo` passe par `Array.prototype.map` (la copie
+     de la fiche) : quand `casser` est vrai, et seulement si la pile nomme
+     `monEmetteurDemo`, cet appel lève. Tout le reste est le vrai code :
+     `ouvrirDevis` → `lireRegime` → `avecDelai` rejette → `{ echec: true }`. */
+  window.__opusRegime = { casser: false, casses: 0 };
+  const mapOrigine = Array.prototype.map;
+  // eslint-disable-next-line no-extend-native
+  Array.prototype.map = function mapTrace(...a) {
+    const r = window.__opusRegime;
+    if (r && r.casser && /\bmonEmetteurDemo\b/.test(String(new Error().stack))) {
+      r.casses += 1;
+      throw new TypeError('Network request failed');
+    }
+    return mapOrigine.apply(this, a);
+  };
 }, { pause: PAUSE_DEMO, pausePostes: PAUSE_POSTES });
 const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
@@ -4079,18 +4119,26 @@ await section('La ligne « Pour le remettre » garde sa hauteur pendant la frapp
       const pas = () => {
         const l = ligne();
         const d = defile();
-        /* Le texte LU, posé par-dessus le gabarit, ne doit jamais en sortir
-           (ni coupé, ni débordant) : on mesure de combien il dépasse. */
+        /* Le texte LU, posé en couche sur les gabarits, ne doit jamais
+           donner la hauteur (D-A bis : la hauteur est celle du PLUS GRAND
+           gabarit) : on mesure de combien sa couche dépasse le plus haut
+           d'entre eux. Les gabarits sont les couches cachées
+           (`aria-hidden`) ; le texte lu, la couche qui ne l'est pas. */
         const cache = l && l.querySelector('[aria-hidden="true"]');
         const boite = cache && cache.parentElement;
-        const lu = boite && [...boite.children].find((e) => e !== cache);
-        const deborde = lu ? Math.round(lu.getBoundingClientRect().bottom - boite.getBoundingClientRect().bottom) : 0;
+        const couches = boite ? [...boite.children] : [];
+        const gabarits = couches.filter((e) => e.getAttribute('aria-hidden') === 'true');
+        const lu = couches.find((e) => e.getAttribute('aria-hidden') !== 'true');
+        const plusHaut = gabarits.reduce((m, e) => Math.max(m, e.getBoundingClientRect().height), 0);
+        const deborde = lu ? Math.round(lu.getBoundingClientRect().height - plusHaut) : 0;
         /* …ET NI COUPÉ (banc de la relecture 2, A9) : un `numberOfLines`
            posé sur le texte lu le tronquait à 320 et 375 — il ne
            débordait plus, donc rien ne rougissait, alors que le titre de
            la vérification promettait « sans être coupé ». Un texte tronqué
-           par react-native-web a plus de contenu que de place. */
-        const coupe = lu ? lu.scrollHeight > lu.clientHeight + 1 : false;
+           par react-native-web a plus de contenu que de place : on le
+           mesure sur le TEXTE de la couche, pas sur la couche. */
+        const texteLuDOM = lu && (lu.querySelector('[dir]') || lu);
+        const coupe = texteLuDOM ? texteLuDOM.scrollHeight > texteLuDOM.clientHeight + 1 : false;
         const v = [l ? Math.round(l.getBoundingClientRect().height) : -1, d ? Math.round(d.scrollTop) : -1,
           l ? (l.getAttribute('aria-label') || '') : '', document.activeElement ? (document.activeElement.getAttribute('aria-label') || '') : '',
           deborde, coupe];
@@ -4121,7 +4169,8 @@ await section('La ligne « Pour le remettre » garde sa hauteur pendant la frapp
     verifier(`${L}×${H} : …et RIEN ne défile sous le doigt (${defilements.join(', ')})`, defilements.length === 1, JSON.stringify(defilements));
     const debords = vu.map(([, , , , x]) => x).filter((x) => x > 0);
     const coupes = vu.filter(([, , , , , c]) => c).map(([, , l]) => net(l).slice(18, 60));
-    verifier(`${L}×${H} : …et le texte lu ne sort JAMAIS du gabarit, à aucune image (il est posé par-dessus, sans être coupé)`,
+    verifier(`${L}×${H} : …et le texte lu ne dépasse JAMAIS le plus haut des gabarits, à aucune image (il est posé en couche par-dessus, sans `
+      + 'être coupé)',
       debords.length === 0 && coupes.length === 0 && vu.some(([, , , , x]) => x !== undefined), JSON.stringify({ debords, coupes }));
     await capture(`60-rel1-ligne-${L}`);
     /* Le ménage : la ligne incomplète part, on revient à « Mes devis ». */
@@ -4313,6 +4362,574 @@ await section('Le régime changé dans « Mon entreprise » relit la liste, ouve
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
   await page.setViewportSize(tailleAvant);
   await attendre(400);
+});
+
+/* ======================================================================== */
+/*  RELECTURE 3 DE 2b-1 (06/11/2026) : RELIRE-1, D-A bis, le texte agrandi  */
+/* ======================================================================== */
+/* LE SETTER DE `monRegime` D'OPUSAPP, retrouvé par la fibre React de la
+   saisie (la méthode de la relecture 3 et de sa contre-vérification) : on
+   l'appelle exactement comme le fait `lireRegime`. Il doit être UNIQUE. */
+const trouverLeSetterDuRegime = () => page.evaluate(() => {
+  const el = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+  if (!el) return 0;
+  const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$'));
+  let f = el[k];
+  let saisie = null;
+  while (f) {
+    if (f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps) { saisie = f; break; }
+    f = f.return;
+  }
+  if (!saisie) return 0;
+  const regime = saisie.memoizedProps.regime;
+  let g = saisie.return;
+  const cands = [];
+  while (g) {
+    if (typeof g.type === 'function' && g.memoizedState && g.memoizedState.next !== undefined) {
+      let h = g.memoizedState;
+      while (h) { if (h.queue && h.queue.dispatch && h.memoizedState === regime) cands.push(h); h = h.next; }
+      if (cands.length) break;
+    }
+    g = g.return;
+  }
+  window.__poserRegime = cands.length === 1 ? cands[0].queue.dispatch : null;
+  return cands.length;
+});
+const poserRegime = (v) => page.evaluate((x) => window.__poserRegime(x), v);
+const regimeDeLaSaisie = () => page.evaluate(() => {
+  const el = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+  if (!el) return 'pas de ligne';
+  const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$'));
+  let f = el[k];
+  while (f) { if (f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps) return JSON.stringify(f.memoizedProps.regime); f = f.return; }
+  return '?';
+});
+/* LA LISTE DE LA SAISIE, lue par la même fibre : le régime pour lequel la
+   liste sûre a été lue (`liste.regime`), et si elle est sûre (banc de la
+   relecture 3 : sans elle, la section « LÈVE » ne savait pas sous quel régime
+   la liste avait été lue — et elle l'était sous le « réel » gardé en
+   mémoire, pas sous l'inconnu qu'elle annonçait). */
+const listeDeLaSaisie = () => page.evaluate(() => {
+  const el = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+  if (!el) return null;
+  const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$'));
+  let f = el[k];
+  while (f && !(f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps)) f = f.return;
+  for (let h = f && f.memoizedState; h; h = h.next) {
+    const v = h.memoizedState;
+    if (v && typeof v === 'object' && 'motifs' in v && 'derniere' in v && 'relecture' in v) {
+      return { regime: v.regime === undefined ? 'undefined' : JSON.stringify(v.regime), sure: Array.isArray(v.motifs) };
+    }
+  }
+  return null;
+});
+/* Un enregistreur, à chaque image : l'étiquette de la ligne du haut, et la
+   hauteur des deux lignes (haut, bas). */
+const enregistrerLesLignes = () => page.evaluate(() => {
+  window.__opusLignes = [];
+  window.__opusLignesFin = false;
+  let prec = '';
+  const pas = () => {
+    const ls = [...document.querySelectorAll('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]')];
+    const v = [ls[0] ? (ls[0].getAttribute('aria-label') || '') : '', ls[0] ? Math.round(ls[0].getBoundingClientRect().height) : -1,
+      ls.length > 1 ? Math.round(ls[ls.length - 1].getBoundingClientRect().height) : -1];
+    const k = JSON.stringify(v);
+    if (k !== prec) { window.__opusLignes.push(v); prec = k; }
+    if (!window.__opusLignesFin) requestAnimationFrame(pas);
+  };
+  requestAnimationFrame(pas);
+});
+const lireLesLignes = () => page.evaluate(() => { window.__opusLignesFin = true; return window.__opusLignes; });
+const BANDEAU_REGIME = 'Votre régime de TVA n’a pas pu être lu.';
+/* CE QUI SE VOIT DANS LES COUCHES DE LA LIGNE (banc de la relecture 3) : les
+   hauteurs ne disent ni qu'un gabarit est VISIBLE (« mise à jour… » qui
+   transparaît sous le texte lu, si son opacité nulle saute), ni que le texte
+   lu est encore À L'ÉCRAN (toutes les couches ramenées de −100 %, le premier
+   gabarit compris : la ligne partait à gauche, hors de la vue, sans qu'une
+   seule hauteur change). Pour chaque ligne : le nombre de gabarits, combien
+   ont une opacité RÉELLE (le produit de leurs ancêtres) non nulle, celle du
+   texte lu, et de combien il sort de la boîte de la ligne. */
+const regarderLesCouches = () => page.evaluate(() => {
+  const opacite = (e) => {
+    let o = 1;
+    for (let x = e; x && x.nodeType === 1; x = x.parentElement) o *= parseFloat(getComputedStyle(x).opacity || '1');
+    return Math.round(o * 100) / 100;
+  };
+  return [...document.querySelectorAll('[aria-label^="Pour le remettre"]')].map((l) => {
+    const r = l.getBoundingClientRect();
+    const cache = l.querySelector('[aria-hidden="true"]');
+    const couches = cache ? [...cache.parentElement.children] : [];
+    const gabs = couches.filter((e) => e.getAttribute('aria-hidden') === 'true');
+    const lu = couches.find((e) => e.getAttribute('aria-hidden') !== 'true');
+    const t = lu ? (lu.querySelector('[dir]') || lu) : null;
+    const tr = t ? t.getBoundingClientRect() : null;
+    return {
+      gabarits: gabs.length,
+      visibles: gabs.filter((g) => opacite(g) > 0).length,
+      luOpacite: t ? opacite(t) : null,
+      dehors: tr ? Math.max(Math.round(r.left - tr.left), Math.round(tr.right - r.right), 0) : null,
+    };
+  });
+});
+
+/* RELIRE-1 : UN RÉGIME INCONNU N'EST JAMAIS « NON DÉCLARÉ » ET NE RELIT
+   RIEN. `lireRegime` passe le régime à `{ echec: true }` au bout de 8 s,
+   même en lecture discrète, et le remet à « réel » si la réponse arrive
+   ensuite. Avant : l'inconnu comptait comme `null`, la liste se relisait
+   DEUX fois sans que rien ait changé (« Des changements partent », « Ce
+   devis » qui se tait), et sur un réseau coupé la liste juste était
+   EFFACÉE. Le setter de `monRegime` est appelé comme `lireRegime`. */
+await section('Une lecture du régime qui échoue puis revient (réel → échec → réel) ne relit pas la liste (relecture 3, RELIRE-1)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await jusqua(async () => COMPTE.test(await libelleLigne()), 6000);
+  exiger((await regimeDeLaSaisie()) === '"reel"', 'la saisie a le régime « réel »');
+  exiger((await trouverLeSetterDuRegime()) === 1, 'le setter du régime d’OpusApp est trouvé par la fibre, et lui seul');
+  await ecouterLaListe(true);
+  await enregistrerLesLignes();
+  const l0 = await lectures();
+  await poserRegime({ echec: true });
+  await jusqua(async () => (await texte()).includes(BANDEAU_REGIME), 3000);
+  const echecVu = (await texte()).includes(BANDEAU_REGIME);
+  await attendre(1200);
+  const l1 = await lectures();
+  await poserRegime('reel');
+  await attendre(1500);
+  const l2 = await lectures();
+  const vu = await lireLesLignes();
+  const enRoute = vu.filter(([l]) => /Des changements partent/.test(l));
+  noter('lectures de la liste', `réel → échec : ${l1 - l0} ; échec → réel : ${l2 - l1} ; images de la ligne : ${vu.length}`);
+  verifier('réel → échec (le bandeau « Votre régime de TVA n’a pas pu être lu » a bien été vu) → réel : AUCUNE lecture de la liste, et la '
+    + 'ligne ne dit jamais « Des changements partent » (S1 de la contre-vérification)',
+  echecVu && l1 - l0 === 0 && l2 - l1 === 0 && enRoute.length === 0 && vu.every(([l]) => COMPTE.test(net(l))),
+  `échec vu : ${echecVu} ; lectures ${l1 - l0} puis ${l2 - l1} ; images « en route » : ${enRoute.length} ; ${JSON.stringify(vu.map(([l]) => net(l).slice(18, 70)))}`);
+  /* …ET SUR UN RÉSEAU COUPÉ (B2 de la relecture 3) : la liste juste n'est
+     pas effacée — rien ne la relit. */
+  await page.evaluate(() => { window.__opusListe.casser = 'reseau'; });
+  const l3 = await lectures();
+  await poserRegime({ echec: true });
+  await attendre(1200);
+  const pendant = await libelleLigne();
+  await poserRegime('reel');
+  await attendre(1200);
+  const apres = await libelleLigne();
+  const l4 = await lectures();
+  verifier(`réseau coupé, réel → échec → réel : la liste « Pour le remettre » n’est ni relue ni EFFACÉE (« ${pendant.slice(0, 80)}… »)`,
+    COMPTE.test(pendant) && COMPTE.test(apres) && l4 - l3 === 0, `${pendant} | ${apres} | lectures ${l4 - l3}`);
+  await page.evaluate(() => { window.__opusListe.casser = null; });
+  await ecouterLaListe(false);
+  await capture('63-relire1-setter');
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* RELIRE-1, LE VRAI CHEMIN (N3 de la contre-vérification) : la lecture
+   DÉMO du régime lève à l'ouverture d'un devis (comme un `fetch` hors
+   réseau : `ouvrirDevis` → `lireRegime` → `avecDelai` rejette → `{ echec:
+   true }`), la liste est lue pendant ce temps, puis « Réessayer » sur le
+   bandeau du régime (`{ chargement: true }` → « réel ») : rien n'a changé
+   en base, la liste ne se relit pas. Avant : une lecture de plus. */
+await section('La lecture du régime qui LÈVE à l’ouverture d’un devis, puis « Réessayer » : la liste ne se relit pas (relecture 3, RELIRE-1)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(400);
+  /* LA LECTURE CASSÉE AVANT « MES DEVIS » (banc de la relecture 3) : posée
+     après, le régime « réel » déjà lu restait en mémoire, la relecture de
+     l'ouverture était DISCRÈTE (il ne passait à l'échec qu'après), et la
+     liste était lue sous le « réel » — la section ne mesurait pas ce que son
+     titre annonce. Cassée avant, la lecture de « Mes devis » échoue : le
+     régime n'est plus une chaîne, l'ouverture le relit en entier
+     (`{ chargement }`), et la liste est VRAIMENT lue sous l'inconnu. Avec
+     les défauts remis à la main — l'adoption retirée (O4), `regimeAdopte`
+     qui n'adopte plus (M6), l'effet qui n'applique plus l'adoption (M10) —,
+     cette section passait au vert. */
+  await page.evaluate(() => { window.__opusRegime.casses = 0; window.__opusRegime.casser = true; });
+  await allerAMesDevis();
+  await ecouterLaListe(true);
+  const l0 = await lectures();
+  await ouvrirLeDevis('Muret de clôture');
+  await jusqua(async () => COMPTE.test(await libelleLigne()) && (await texte()).includes(BANDEAU_REGIME), 8000);
+  await attendre(800);
+  const l1 = await lectures();
+  const casses = await page.evaluate(() => window.__opusRegime.casses);
+  await page.evaluate(() => { window.__opusRegime.casser = false; });
+  noter('à l’ouverture', `lectures du régime cassées : ${casses} ; liste lue ${l1 - l0} fois ; régime vu par la saisie : ${await regimeDeLaSaisie()}`);
+  const listeAvant = await listeDeLaSaisie();
+  noter('la liste à l’ouverture', JSON.stringify(listeAvant));
+  exiger(casses >= 1 && (await texte()).includes(BANDEAU_REGIME) && l1 - l0 === 1,
+    'la lecture du régime a levé, le bandeau « régime non lu » est là, et la liste a été lue UNE fois');
+  exiger(!!listeAvant && listeAvant.sure && listeAvant.regime === '"inconnu"',
+    `la liste sûre a été lue sous le régime INCONNU (\`REGIME_INCONNU\`), pas sous un régime gardé en mémoire (${JSON.stringify(listeAvant)})`);
+  await capture('64-relire1-regime-leve');
+  await enregistrerLesLignes();
+  await toucher(page.getByRole('button', { name: 'Réessayer', exact: true }).first());
+  await jusqua(async () => !(await texte()).includes(BANDEAU_REGIME), 5000);
+  await attendre(1500);
+  const l2 = await lectures();
+  const vu = await lireLesLignes();
+  const regimeApres = await regimeDeLaSaisie();
+  const listeApres = await listeDeLaSaisie();
+  noter('après « Réessayer »', `régime ${regimeApres} ; liste ${JSON.stringify(listeApres)} ; lectures de plus : ${l2 - l1} ; images de la ligne : ${JSON.stringify(vu.map(([l]) => net(l).slice(18, 70)))}`);
+  verifier('« Réessayer » le régime (échec → lecture → réel) ne relit PAS une liste lue pendant l’échec : rien n’a changé en base (S2 / '
+    + 'N3), la ligne ne dit jamais « Des changements partent », et la liste ADOPTE le régime arrivé (« réel »), sans relecture',
+  regimeApres === '"reel"' && !(await texte()).includes(BANDEAU_REGIME) && l2 - l1 === 0
+    && vu.every(([l]) => !/Des changements partent/.test(l)) && !!listeApres && listeApres.sure && listeApres.regime === '"reel"',
+  `${l2 - l1} lecture(s) de plus ; régime ${regimeApres} ; liste ${JSON.stringify(listeApres)}`);
+  await ecouterLaListe(false);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* RELIRE-1, LE RÉGIME QUI ARRIVE PENDANT LA LECTURE (banc de la relecture
+   3 ; point 3 de la correction retenue) : la liste part sous l'inconnu, le
+   vrai régime arrive AVANT qu'elle revienne — il n'y a pas encore de liste
+   sûre, l'effet du régime ne peut rien adopter —, et c'est le RETOUR de la
+   lecture qui doit prendre le régime connu (`regimeAdopte(regimeLu,
+   regimeRef.current)`). Sans cette moitié, la liste restait « inconnue » et
+   le filet la relisait au prochain retour de « Mon entreprise ». La lecture
+   de démonstration est RETENUE (`__opusListe.retenir`) le temps de poser le
+   régime. */
+await section('Le régime qui arrive PENDANT la lecture de la liste : elle revient avec lui, sans relecture (relecture 3, RELIRE-1)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(400);
+  await page.evaluate(() => { window.__opusRegime.casses = 0; window.__opusRegime.casser = true; });
+  await allerAMesDevis();
+  await ecouterLaListe(true);
+  await page.evaluate(() => { window.__opusListe.retenir = true; window.__opusListe.retenues = []; });
+  const l0 = await lectures();
+  await ouvrirLeDevis('Muret de clôture');
+  await jusqua(async () => (await texte()).includes(BANDEAU_REGIME)
+    && (await page.evaluate(() => window.__opusListe.retenues.length)) >= 1, 8000);
+  const retenues = await page.evaluate(() => window.__opusListe.retenues.length);
+  const listeEnVol = await listeDeLaSaisie();
+  await page.evaluate(() => { window.__opusRegime.casser = false; });
+  exiger(retenues >= 1 && !!listeEnVol && !listeEnVol.sure && (await texte()).includes(BANDEAU_REGIME),
+    `la lecture du régime a levé, la lecture de la liste est partie et RETENUE, sans liste sûre (${JSON.stringify(listeEnVol)})`);
+  await toucher(page.getByRole('button', { name: 'Réessayer', exact: true }).first());
+  await jusqua(async () => !(await texte()).includes(BANDEAU_REGIME), 5000);
+  await attendre(600);
+  const regimePendant = await regimeDeLaSaisie();
+  await enregistrerLesLignes();
+  await page.evaluate(() => { window.__opusListe.retenir = false; window.__opusListe.retenues.splice(0).forEach((f) => f()); });
+  await jusqua(async () => COMPTE.test(await libelleLigne()), 5000);
+  await attendre(1200);
+  const l1 = await lectures();
+  const vu = await lireLesLignes();
+  const listeApres = await listeDeLaSaisie();
+  await ecouterLaListe(false);
+  noter('le régime arrivé pendant la lecture', `régime ${regimePendant} ; liste au retour ${JSON.stringify(listeApres)} ; lectures ${l1 - l0}`);
+  verifier('le régime « réel » arrivé PENDANT une lecture partie sous l’inconnu : la liste revient AVEC lui (« reel »), lue UNE fois, sans '
+    + 'relecture, et la ligne ne dit jamais « Des changements partent »',
+  regimePendant === '"reel"' && !!listeApres && listeApres.sure && listeApres.regime === '"reel"' && l1 - l0 === 1
+    && vu.every(([l]) => !/Des changements partent/.test(l)), `${JSON.stringify(listeApres)} ; ${l1 - l0} lecture(s)`);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* D-A BIS (décision du propriétaire, 06/11/2026, « garder la grande
+   place ») : AU RETOUR DE « MON ENTREPRISE », UNE LIGNE INCOMPLÈTE, LA
+   LIGNE DU HAUT NE BOUGE PAS PENDANT LA RELECTURE — À AUCUNE LARGEUR. Le
+   décompte dit alors « votre entreprise — mise à jour… » : avec UN gabarit
+   qui le suivait, la ligne du haut grandissait d'une ligne (≈ 92 → 110)
+   de 381 à 407 points de large — l'iPhone 16 du propriétaire (393)
+   compris —, et la ligne du bas (88 → 104) de 329 à 352, le temps de la
+   relecture : 51 largeurs sur 121, mesuré sur le code d'avant. La lecture de démonstration est
+   RETENUE (`__opusListe.retenir`) le temps de mesurer : la vraie lecture,
+   partie par le vrai geste (fermer « Mon entreprise »).
+     1. de 320 à 440 points, point par point, la hauteur des deux lignes SANS
+        relecture ;
+     2. la relecture partie (« Mon entreprise » refermée), un enregistreur à
+        chaque image à 393 ;
+     3. de 320 à 440, point par point, la même mesure PENDANT la relecture ;
+     4. la relecture relâchée : rien n'a bougé à aucune image.
+   Et la LARGEUR qu'a la ligne dans la saisie, sur un écran de 320 et de
+   393 : le banc du texte agrandi, plus bas, la reprend (une ligne n'a pas
+   la largeur de l'écran — les gouttières et son cadre en prennent). */
+const LARGEUR_DE_LA_LIGNE = {};
+await section('D-A bis : au retour de « Mon entreprise », une ligne incomplète — la ligne du haut ne bouge pas pendant la relecture, de 320 à 440 points (relecture 3)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await jusqua(async () => COMPTE.test(await libelleLigne()), 6000);
+  await toucher(page.getByRole('button', { name: 'Ajouter un poste chiffré', exact: true }).first());
+  await attendre(400);
+  await page.locator('[aria-label="Désignation de la ligne"]').last().fill('Chaperon F');
+  await fermerCarte();
+  exiger(!!(await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `), 4000)),
+    'une ligne incomplète : la ligne du haut dit la phrase ET le décompte (D-A)');
+  const hauteurs = () => page.evaluate(() => {
+    const ls = [...document.querySelectorAll('[aria-label^="Pour le remettre"]')];
+    return [ls[0] ? ls[0].getBoundingClientRect().height : -1, ls.length > 1 ? ls[ls.length - 1].getBoundingClientRect().height : -1]
+      .map((h) => Math.round(h));
+  });
+  const balayer = async () => {
+    const r = {};
+    for (let L = 320; L <= 440; L += 1) {
+      await page.setViewportSize({ width: L, height: 852 });
+      await page.evaluate(() => new Promise((ok) => { requestAnimationFrame(() => requestAnimationFrame(ok)); }));
+      r[L] = await hauteurs();
+    }
+    await page.setViewportSize({ width: 393, height: 852 });
+    await attendre(300);
+    return r;
+  };
+  const sans = await balayer();
+  const couchesSans = await regarderLesCouches();
+  for (const L of [320, 393]) {
+    await page.setViewportSize({ width: L, height: 852 });
+    await page.evaluate(() => new Promise((ok) => { requestAnimationFrame(() => requestAnimationFrame(ok)); }));
+    LARGEUR_DE_LA_LIGNE[L] = await page.evaluate(() => {
+      const l = document.querySelector('[aria-label^="Pour le remettre"]');
+      return l ? Math.round(l.getBoundingClientRect().width) : null;
+    });
+  }
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(300);
+  noter('la largeur de la ligne dans la saisie', `écran de 320 : ${LARGEUR_DE_LA_LIGNE[320]} points ; de 393 : ${LARGEUR_DE_LA_LIGNE[393]}`);
+  /* LA RELECTURE : « Mon entreprise » ouverte par la carte, puis fermée,
+     la lecture retenue. */
+  await toucher(ligneHaut());
+  await page.getByText(TITRE_LISTE, { exact: true }).first().waitFor({ timeout: 5000 });
+  await toucher(page.locator('[aria-label^="Compléter dans « Mon entreprise »"]').first());
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) > 0, 5000);
+  await attendre(600);
+  await ecouterLaListe(true);
+  await page.evaluate(() => { window.__opusListe.retenir = true; window.__opusListe.retenues = []; });
+  /* L'enregistreur à 393 : AVANT la fermeture, puis PENDANT la relecture —
+     arrêté avant le balayage (qui change la largeur), repris après. */
+  await enregistrerLesLignes();
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  const retenue = await jusqua(async () => /votre entreprise — mise à jour…/.test(await libelleLigne()), 4000);
+  await toucher(parLibelle('Revenir au devis')).catch(() => {});
+  await attendre(600);
+  const vuAvant = await lireLesLignes();
+  exiger(!!retenue && (await page.evaluate(() => window.__opusListe.retenues.length)) >= 1,
+    'la relecture de « Mon entreprise » est partie et RETENUE : la ligne dit « votre entreprise — mise à jour… »');
+  const pendant = await balayer();
+  const couchesPendant = await regarderLesCouches();
+  const libellePendant = await libelleLigne();
+  await enregistrerLesLignes();
+  await attendre(300);
+  await page.evaluate(() => { window.__opusListe.retenir = false; window.__opusListe.retenues.splice(0).forEach((f) => f()); });
+  await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `) && !/mise à jour…/.test(await libelleLigne()), 4000);
+  await attendre(500);
+  const vu = [...vuAvant, ...(await lireLesLignes())];
+  await ecouterLaListe(false);
+  const ecarts = Object.keys(sans).filter((L) => sans[L][0] !== pendant[L][0] || sans[L][1] !== pendant[L][1])
+    .map((L) => `${L} : ${sans[L].join('/')} → ${pendant[L].join('/')}`);
+  const hautsVus = [...new Set(vu.map(([, h]) => h))];
+  const basVus = [...new Set(vu.map(([, , h]) => h))];
+  const relectureVue = vu.some(([l]) => /mise à jour…/.test(l));
+  const plage = (i) => [...new Set(Object.values(sans).map((h) => h[i]))].sort((a, b) => a - b);
+  noter('hauteur de la ligne du haut, sans relecture', `393 : ${sans[393][0]} points ; 440 : ${sans[440][0]} ; 320 : ${sans[320][0]} ; `
+    + `valeurs prises de 320 à 440 : ${plage(0).join(', ')} (ligne du bas : ${plage(1).join(', ')})`);
+  noter('pendant la relecture, à 393', `« ${libellePendant.slice(0, 150)}… »`);
+  noter('images à 393, avant / pendant / après la relecture', `ligne du haut ${JSON.stringify(hautsVus)}, du bas ${JSON.stringify(basVus)}, `
+    + `${vu.length} image(s), relecture vue : ${relectureVue}`);
+  verifier(`de 320 à 440 points, point par point (121 largeurs) : la hauteur des deux lignes est la MÊME pendant la relecture de « Mon `
+    + `entreprise » que sans elle — à AUCUNE largeur ne change (${ecarts.length} écart(s))`,
+  ecarts.length === 0 && Object.keys(sans).length === 121, ecarts.slice(0, 12).join(' | '));
+  verifier(`à 393 (l’iPhone 16 du propriétaire), à chaque image avant, pendant et après la relecture : la ligne du haut garde UNE hauteur `
+    + `(${hautsVus.join(', ')}), celle du bas aussi (${basVus.join(', ')}) — et la relecture a bien été vue`,
+  hautsVus.length === 1 && basVus.length === 1 && relectureVue && vu.length >= 2, JSON.stringify(vu.map(([l, h, b]) => [h, b, net(l).slice(18, 60)])));
+  const fautesCouches = [...couchesSans.map((c, i) => ['sans', i, c]), ...couchesPendant.map((c, i) => ['pendant', i, c])]
+    .filter(([, , c]) => c.gabarits !== 2 || c.visibles !== 0 || c.luOpacite !== 1 || c.dehors === null || c.dehors > 1)
+    .map(([q, i, c]) => `${q}/${i ? 'bas' : 'haut'} : ${JSON.stringify(c)}`);
+  verifier('à 393, sans puis pendant la relecture : dans les deux lignes, DEUX gabarits INVISIBLES (opacité réelle nulle) et le texte lu '
+    + 'VISIBLE, dans la boîte de la ligne (banc de la relecture 3)',
+  fautesCouches.length === 0 && couchesSans.length === 2 && couchesPendant.length === 2,
+  `${fautesCouches.join(' | ')} ${JSON.stringify([couchesSans, couchesPendant])}`);
+  verifier(`la hauteur réservée (D-A bis) : ≈ 110 points à 393 (${sans[393][0]}), et la plus grande des deux formes à 440 (${sans[440][0]})`,
+    Math.abs(sans[393][0] - 110) <= 2 && sans[440][0] > 0 && sans[440][0] <= sans[393][0], `${sans[393][0]} / ${sans[440][0]}`);
+  await capture('65-dabis-393');
+  /* Le ménage : la ligne incomplète part, on revient à « Mes devis ». */
+  await toucher(parLibelle('Ligne incomplète. La compléter'));
+  await toucher(parLibelle('Retirer cette ligne'));
+  await toucher(parLibelle('Confirmer : retirer cette ligne'));
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 2000);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* LE TEXTE AGRANDI (relecture 3 de 2b-1 ; banc de la relecture 2, point 2) :
+   la phrase d'une partie qui se relit, et le texte lu de la ligne, ne
+   doivent JAMAIS déborder sur ce qui suit — même avec un texte agrandi dans
+   les réglages du téléphone. `react-native-web` ne suit pas ce réglage
+   (`fontScale`) : on le SIMULE comme le fait iOS — la taille et
+   l'interligne de chaque texte multipliés par k, les marges et les boîtes
+   non —, sur les VRAIS composants (`PourRemettre`, `LigneRemise`), rendus
+   avec les polices de l'application dans une racine React posée sur la
+   page.
+     - la carte : « Votre entreprise — aucun point » (un titre SEUL, le seul
+       cas où la partie gardée est plus courte que sa phrase), pendant la
+       relecture de « Mon entreprise » ; la phrase ne doit jamais descendre
+       sous la place gardée, ni sur « À vérifier » qui suit ;
+     - la ligne : ses états tant qu'une ligne n'est pas comptée (liste,
+       relecture de l'entreprise, en route, lecture, échec, OP027) — UNE
+       hauteur pour tous, et le texte lu jamais plus haut que le plus haut
+       des gabarits. */
+await section('Le texte agrandi (×1 à ×2) : la phrase d’une partie qui se relit et le texte lu de la ligne ne débordent jamais (relecture 3)', async () => {
+  const rendre = (o) => page.evaluate(async ({ largeur, k, quoi }) => {
+    const mod = window.__opusModule;
+    const React = mod('node_modules/react/index.js');
+    const client = mod('node_modules/react-dom/client.js');
+    const PR = mod('src/components/PourRemettre.js');
+    const D = mod('src/lib/devis.js');
+    const E = mod('src/lib/emetteur.js');
+    if (!React || !client || !PR || !D || !E) return { erreur: 'modules introuvables' };
+    const vieux = document.getElementById('opus-banc-texte');
+    if (vieux) { if (window.__opusBancRacine) window.__opusBancRacine.unmount(); vieux.remove(); }
+    const hote = document.createElement('div');
+    hote.id = 'opus-banc-texte';
+    Object.assign(hote.style, {
+      position: 'fixed', left: '0px', top: '0px', width: `${largeur}px`, height: '1800px', zIndex: '99999', background: '#fff', overflow: 'hidden',
+    });
+    document.body.appendChild(hote);
+    const racine = client.createRoot(hote);
+    window.__opusBancRacine = racine;
+    const lue = D.lireMotifsDeRemise([{ rang: 1, cle: 'devis_client', phrase: 'Choisissez le client de ce devis.', nature: 'loi' }],
+      { sections: E.SECTION_DU_MOTIF });
+    const RE = { devis: false, entreprise: true };
+    const pc = D.ceQueLaListeNeComptePas({ nbLignes: 1 });
+    const h = React.createElement;
+    if (quoi === 'carte') {
+      racine.render(h(PR.default, {
+        etat: 'liste', lue, relecture: RE, enLecture: true, pasCompte: null,
+        avis: [{ cle: 'avis_objet', phrase: D.AVIS_DU_DEVIS.avis_objet }], lignes: [], chiffrerPossible: true,
+        onAgir: () => {}, onReessayer: () => {}, onFermer: () => {},
+      }));
+    } else {
+      const etats = [
+        { etat: 'liste', lue },
+        { etat: 'liste', lue, relecture: RE, enLecture: true },
+        { etat: 'en_route', lue },
+        { etat: 'lecture', lue: null, derniere: lue },
+        { etat: 'echec', lue: null, derniere: lue },
+        { etat: 'echec', lue: null, derniere: lue, erreurReessayable: false, erreurPhrase: 'Ce devis n’existe pas, ou il n’est pas le vôtre.' },
+      ];
+      /* Une COLONNE ÉTIRÉE, comme la saisie : la ligne est un bouton, qui
+         dans un simple bloc se dimensionnerait sur son contenu — et une
+         couche de 100 % n'a de sens que dans un parent de largeur imposée. */
+      racine.render(h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', width: '100%' } },
+        ...['haut', 'bas'].flatMap((variante) => etats.map((e, i) => h(PR.LigneRemise, {
+          key: `${variante}-${i}`, variante, pasCompte: pc, onOuvrir: () => {}, onReessayer: () => {}, ...e,
+        })))));
+    }
+    await new Promise((ok) => { setTimeout(ok, 250); });
+    /* LE RÉGLAGE DU TÉLÉPHONE, SIMULÉ : chaque texte, sa taille et son
+       interligne multipliés par k (iOS le fait pour tout texte qui
+       l'accepte, et rien dans `src/` ne le refuse). */
+    if (k !== 1) {
+      [...hote.querySelectorAll('*')].forEach((el) => {
+        if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) return;
+        const cs = getComputedStyle(el);
+        const fs = parseFloat(cs.fontSize);
+        const lh = parseFloat(cs.lineHeight);
+        el.style.fontSize = `${fs * k}px`;
+        if (!Number.isNaN(lh)) el.style.lineHeight = `${lh * k}px`;
+      });
+      await new Promise((ok) => { requestAnimationFrame(() => requestAnimationFrame(ok)); });
+    }
+    const feuille = (t) => [...hote.querySelectorAll('*')].find((e) => e.children.length === 0 && (e.textContent || '').trim() === t);
+    if (quoi === 'carte') {
+      const phrase = feuille(D.ENTREPRISE_SE_MET_A_JOUR);
+      const titreGarde = [...hote.querySelectorAll('*')].find((e) => e.children.length === 0 && /^Votre entreprise — aucun point/.test(e.textContent || ''));
+      const aVerifier = feuille('À vérifier');
+      if (!phrase || !titreGarde || !aVerifier) return { erreur: `phrase ${!!phrase}, titre gardé ${!!titreGarde}, « À vérifier » ${!!aVerifier}` };
+      const blocAvis = aVerifier.parentElement;
+      const partieGardee = titreGarde.closest('[aria-hidden="true"]');
+      const p = phrase.getBoundingClientRect();
+      return {
+        chevauche: Math.round(p.bottom - blocAvis.getBoundingClientRect().top),
+        /* > 0 : la phrase est PLUS HAUTE que la partie gardée — le cas que la
+           superposition doit tenir. */
+        phrasePlusHaute: partieGardee ? Math.round(p.bottom - partieGardee.getBoundingClientRect().bottom) : null,
+        lignesPhrase: Math.round(p.height / parseFloat(getComputedStyle(phrase).lineHeight)),
+      };
+    }
+    const lignes = [...hote.querySelectorAll('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]')];
+    return {
+      lignes: lignes.map((l) => {
+        const cache = l.querySelector('[aria-hidden="true"]');
+        const couches = cache ? [...cache.parentElement.children] : [];
+        const gabs = couches.filter((e) => e.getAttribute('aria-hidden') === 'true');
+        const lu = couches.find((e) => e.getAttribute('aria-hidden') !== 'true') || null;
+        const plusHaut = gabs.reduce((m, e) => Math.max(m, e.getBoundingClientRect().height), 0);
+        /* Le texte lu, MESURÉ seul (sa boîte peut être étirée) : le bas de
+           son dernier caractère. */
+        const texteLu = lu ? (lu.querySelector('[dir]') || lu) : null;
+        const dessous = texteLu ? texteLu.getBoundingClientRect().bottom : 0;
+        return {
+          hauteur: Math.round(l.getBoundingClientRect().height),
+          depasse: texteLu && cache ? Math.round(dessous - (cache.parentElement.getBoundingClientRect().top + plusHaut)) : null,
+          /* …ET NI COUPÉ (banc de la relecture 3, N6) : un `numberOfLines`
+             sur le texte lu le tronquait sous un texte agrandi — il ne
+             dépassait plus, donc rien ne rougissait. Un texte tronqué par
+             react-native-web a plus de contenu que de place. */
+          coupe: texteLu ? texteLu.scrollHeight > texteLu.clientHeight + 1 : null,
+          gabarits: gabs.length,
+        };
+      }),
+    };
+  }, o);
+  const effacer = () => page.evaluate(() => {
+    const vieux = document.getElementById('opus-banc-texte');
+    if (vieux) { if (window.__opusBancRacine) window.__opusBancRacine.unmount(); vieux.remove(); }
+  });
+  const resCarte = [];
+  const resLigne = [];
+  /* La carte prend l'écran : 320 et 393. La ligne, elle, a la largeur
+     qu'elle a DANS LA SAISIE sur ces deux écrans (mesurée par la section
+     D-A bis), plus 320 et 393 — sans quoi le banc la jugerait plus large
+     qu'elle n'est, et ne verrait pas le saut de 393 (≈ 92 → 110). */
+  const largeursLigne = [...new Set([LARGEUR_DE_LA_LIGNE[320], LARGEUR_DE_LA_LIGNE[393], 320, 393].filter((x) => x > 0))].sort((x, y) => x - y);
+  exiger(LARGEUR_DE_LA_LIGNE[320] > 0 && LARGEUR_DE_LA_LIGNE[393] > 0,
+    `la largeur de la ligne dans la saisie est connue (écran de 320 : ${LARGEUR_DE_LA_LIGNE[320]} ; de 393 : ${LARGEUR_DE_LA_LIGNE[393]})`);
+  for (const k of [1, 1.3, 1.5, 1.75, 2]) {
+    for (const largeur of [320, 393]) resCarte.push({ largeur, k, ...(await rendre({ largeur, k, quoi: 'carte' })) });
+    for (const largeur of largeursLigne) resLigne.push({ largeur, k, ...(await rendre({ largeur, k, quoi: 'ligne' })) });
+  }
+  await effacer();
+  const erreurs = [...resCarte, ...resLigne].filter((r) => r.erreur).map((r) => `${r.largeur}/${r.k} : ${r.erreur}`);
+  exiger(erreurs.length === 0, `les vrais composants se rendent dans la page (${erreurs.join(' | ') || 'React, react-dom, PourRemettre'})`);
+  noter('la carte, « Votre entreprise — aucun point » pendant la relecture [largeur, k, lignes de la phrase, phrase sous la partie gardée, '
+    + 'chevauchement de « À vérifier »]', JSON.stringify(resCarte.map((r) => [r.largeur, r.k, r.lignesPhrase, r.phrasePlusHaute, r.chevauche])));
+  const phrasePlusHaute = resCarte.filter((r) => r.phrasePlusHaute > 0);
+  verifier(`la carte : la phrase « Votre entreprise : la liste se met à jour. » ne descend JAMAIS sur « À vérifier », texte agrandi de ×1 à ×2, `
+    + `à 320 et 393 — y compris les ${phrasePlusHaute.length} cas où elle est plus haute que la partie gardée (un titre seul)`,
+  phrasePlusHaute.length > 0 && resCarte.every((r) => r.chevauche <= 0),
+  JSON.stringify(resCarte.filter((r) => r.chevauche > 0).map((r) => [r.largeur, r.k, r.chevauche])));
+  noter('la ligne, six états × haut/bas [largeur, k, hauteurs]', JSON.stringify(resLigne.map((r) => [r.largeur, r.k, r.lignes.map((l) => l.hauteur)])));
+  const fautes = resLigne.flatMap((r) => ['haut', 'bas'].flatMap((v, j) => {
+    const six = r.lignes.slice(j * 6, j * 6 + 6);
+    const hs = [...new Set(six.map((l) => l.hauteur))];
+    const out = [];
+    if (hs.length !== 1) out.push(`${r.largeur}/${r.k}/${v} : hauteurs ${hs.join(', ')}`);
+    six.forEach((l, i) => {
+      if (l.gabarits !== 2) out.push(`${r.largeur}/${r.k}/${v}/${i} : ${l.gabarits} gabarit(s)`);
+      if (l.depasse === null || l.depasse > 1) out.push(`${r.largeur}/${r.k}/${v}/${i} : le texte lu dépasse de ${l.depasse}`);
+      if (l.coupe !== false) out.push(`${r.largeur}/${r.k}/${v}/${i} : le texte lu est COUPÉ`);
+    });
+    return out;
+  }));
+  verifier('la ligne (en haut et en bas) : dans ses six états tant qu’une ligne n’est pas comptée — liste, relecture de « Mon entreprise », '
+    + 'en route, lecture, échec, OP027 — UNE seule hauteur, DEUX gabarits, et le texte lu jamais plus bas que le plus haut d’entre eux ni coupé, texte '
+    + `agrandi de ×1 à ×2, la ligne large de ${largeursLigne.join(', ')} points`, fautes.length === 0 && resLigne.length === largeursLigne.length * 5
+    && resLigne.every((r) => r.lignes.length === 12), fautes.slice(0, 10).join(' | '));
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {

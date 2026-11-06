@@ -91,20 +91,32 @@ import {
  * passe, et la ligne ne grandit pas — la liste ne saute pas sous le doigt
  * (E-6). Quand quelque chose n'est pas compté sur un devis en base, elle
  * dit la phrase ET le décompte (décision D-A du propriétaire, 05/11/2026 au
- * soir) : trois lignes à 390 points, quatre à 375 et 320.
+ * soir).
  *
  * SA HAUTEUR NE BOUGE PAS TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ
- * (relecture 2 de 2b-1, REL-1) : `texteDeLaLigneRemise` rend alors un
- * `gabarit` — « phrase + décompte » de la liste lue —, posé dans le flux,
- * INVISIBLE (opacité nulle, aucun toucher, caché à VoiceOver), et ce que la
- * ligne dit vraiment est posé PAR-DESSUS. Avant, elle réservait trois lignes
- * puis deux à la première lettre tapée dans l'en-tête (92 → 74 points à
- * 390, 110 → 74 à 320), et tout ce qui est dessous, le champ où l'on tape
- * compris, montait puis redescendait. Sans mesure ni course : la hauteur
- * est celle du gabarit, à toutes les largeurs. Ni le gabarit ni le texte lu
- * ne sont coupés (`numberOfLines` n'y est pas) : le texte lu est toujours
- * plus court que le gabarit dans ces états (`verifier-devis` le compte).
- * Aucune `accessibilityLiveRegion` : elle parlerait à chaque ligne quittée.
+ * (relecture 2 de 2b-1, REL-1 ; décision D-A bis du propriétaire, le
+ * 06/11/2026) : `texteDeLaLigneRemise` rend alors des `gabarits` — « phrase
+ * + décompte » de la liste lue, sous ses deux formes (« votre entreprise —
+ * 5 points » et « votre entreprise — mise à jour… ») —, posés dans le flux,
+ * INVISIBLES (opacité nulle, aucun toucher, cachés à VoiceOver), et ce que
+ * la ligne dit vraiment est posé PAR-DESSUS. La ligne fait la hauteur du
+ * PLUS GRAND, à toute largeur : avec un seul gabarit qui suivait la
+ * relecture de « Mon entreprise », elle grandissait d'une ligne le temps de
+ * cette relecture (≈ 92 → 110 points de 381 à 407 points de large, l'iPhone
+ * 16 compris ; la ligne du bas, 88 → 104 de 329 à 352). Sans mesure ni
+ * course.
+ *
+ * LA SUPERPOSITION (`s.superpose`) : une RANGÉE dont chaque couche fait
+ * toute la largeur, les suivantes ramenées sous la première par une marge de
+ * −100 %. Une rangée prend la hauteur de son élément le PLUS HAUT — dans
+ * `react-native-web` (la boîte flexible du navigateur) comme dans Yoga
+ * (iOS, Android) — et une marge en pourcentage se calcule sur la largeur du
+ * parent dans les deux. Le texte lu est l'une des couches, la dernière : il
+ * ne peut donc ni déborder ni chevaucher ce qui suit, même agrandi dans les
+ * réglages du téléphone ; et comme il n'est jamais plus long que les
+ * gabarits (`verifier-devis` le compte), il ne change pas la hauteur. Rien
+ * n'est coupé (`numberOfLines` n'y est pas). Aucune
+ * `accessibilityLiveRegion` : elle parlerait à chaque ligne quittée.
  *
  * En ÉCHEC (réessayable), la ligne EST le bouton « Réessayer » : elle
  * n'ouvre rien (E-19). Pas encore en base, elle n'est PAS une cible : il
@@ -120,7 +132,7 @@ export function LigneRemise({
   const dit = texteDeLaLigneRemise({
     etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, derniere,
   });
-  const { contenu, compte, gabarit, aDire } = dit;
+  const { contenu, compte, gabarits, aDire } = dit;
   let action = null;
   if (dit.action === 'ouvrir') action = onOuvrir;
   else if (dit.action === 'reessayer') action = onReessayer;
@@ -132,18 +144,24 @@ export function LigneRemise({
     <>
       <View style={s.ligneCorps}>
         <Text style={variante === 'bas' ? s.ligneTitreBas : s.ligneTitre}>{TITRE_POUR_REMETTRE}</Text>
-        {gabarit ? (
-          /* LE GABARIT DONNE LA HAUTEUR, le texte lu est posé dessus (REL-1). */
-          <View>
-            <View
-              style={s.gabarit}
-              aria-hidden
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-            >
-              <Text style={styleTexte}>{gabarit}</Text>
+        {gabarits ? (
+          /* LES GABARITS DONNENT LA HAUTEUR — le plus grand —, le texte lu
+             est posé dessus (REL-1, D-A bis). */
+          <View style={s.superpose}>
+            {gabarits.map((g, i) => (
+              <View
+                key={`gabarit-${i}`}
+                style={[s.couche, i > 0 && s.coucheSuivante, s.gabarit]}
+                aria-hidden
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              >
+                <Text style={styleTexte}>{g}</Text>
+              </View>
+            ))}
+            <View style={[s.couche, s.coucheSuivante]}>
+              <Text style={styleTexte}>{texte}</Text>
             </View>
-            <Text style={[styleTexte, s.parDessus]}>{texte}</Text>
           </View>
         ) : <Text style={styleTexte} numberOfLines={3}>{texte}</Text>}
       </View>
@@ -221,22 +239,36 @@ function Point({
  * (mesuré au navigateur, liste revenue identique). Jamais ESTOMPÉE : on y
  * lirait des points périmés (ECR-1).
  *
+ * LA PLACE EST LA PLUS GRANDE DES DEUX (relecture 3 de 2b-1, banc de la
+ * relecture 2, point 2) : la phrase est une COUCHE de la même superposition
+ * que la partie gardée (`s.superpose`, la technique de la ligne). Posée en
+ * position absolue, elle débordait sur ce qui suit quand elle était plus
+ * haute que la partie gardée — « Votre entreprise — aucun point », un titre
+ * seul, avec un texte agrandi dans les réglages du téléphone : la phrase
+ * passe sur deux lignes avant le titre. La place prend maintenant la
+ * hauteur de la plus haute des deux.
+ *
  * LE MÊME ARBRE dans les deux cas : la partie ne se démonte pas en se
- * relisant — un point déplié par « Lire la suite » le reste.
+ * relisant — un point déplié par « Lire la suite » le reste. Elle est
+ * toujours la PREMIÈRE couche ; la phrase, quand elle est là, la seconde.
  */
 function Partie({ partie, children }) {
   const garder = !!partie.garder;
   return (
-    <View>
+    <View style={s.superpose}>
       <View
-        style={[s.partie, garder && s.cachee]}
+        style={[s.partie, s.couche, garder && s.cachee]}
         aria-hidden={garder}
         accessibilityElementsHidden={garder}
         importantForAccessibility={garder ? 'no-hide-descendants' : 'auto'}
       >
         {children}
       </View>
-      {garder && <Text style={[s.seRelit, s.parDessus]} accessibilityRole="header">{partie.phrase}</Text>}
+      {garder && (
+        <View style={[s.couche, s.coucheSuivante]}>
+          <Text style={s.seRelit} accessibilityRole="header">{partie.phrase}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -414,13 +446,23 @@ const s = StyleSheet.create({
     fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit),
     minHeight: 2 * interligne(T.petit),
   },
-  /* LE GABARIT DE LA LIGNE (REL-1) : dans le flux, il donne la hauteur ; on
-     ne le voit pas, on ne le touche pas, VoiceOver ne le lit pas. Le texte
-     lu est posé dessus, en haut. */
+  /* LES GABARITS DE LA LIGNE (REL-1, D-A bis) : dans le flux, le plus grand
+     donne la hauteur ; on ne les voit pas, on ne les touche pas, VoiceOver
+     ne les lit pas. */
   gabarit: { opacity: 0, pointerEvents: 'none' },
-  parDessus: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-  },
+  /* LA SUPERPOSITION (la ligne et les parties de la carte) : une RANGÉE
+     prend la hauteur de son élément le plus haut ; chaque couche fait toute
+     la largeur, et les suivantes reviennent sous la première par une marge
+     de −100 % (calculée sur la largeur du parent, dans le navigateur comme
+     dans Yoga). Le texte lu, ou la phrase d'une partie qui se relit, est une
+     couche : il ne déborde jamais sur ce qui suit, il agrandit la place.
+     Elle suppose un parent de LARGEUR IMPOSÉE (une colonne étirée, comme la
+     saisie et la carte) : dans un parent qui se dimensionne sur son contenu,
+     des pourcentages ne veulent plus rien dire (constaté au banc du texte
+     agrandi : un bouton de `react-native-web` se rétrécit sur son texte). */
+  superpose: { flexDirection: 'row', alignItems: 'flex-start' },
+  couche: { width: '100%' },
+  coucheSuivante: { marginLeft: '-100%' },
 
   /* LA CARTE prend l'écran, comme « Conditions ». */
   ecran: { ...StyleSheet.absoluteFillObject, backgroundColor: C.surface, zIndex: 20 },
@@ -445,7 +487,7 @@ const s = StyleSheet.create({
      touche pas. VoiceOver ne la lit pas (`aria-hidden`, posé avec elle). */
   cachee: { opacity: 0, pointerEvents: 'none' },
   /* UNE PARTIE QUI SE RELIT : sa phrase à la place de son titre, à la même
-     hauteur, posée sur la partie gardée. */
+     hauteur (la même marge du haut), en couche sur la partie gardée. */
   seRelit: {
     fontFamily: F.inter6, fontSize: T.courant, color: C.muted, lineHeight: interligne(T.courant), marginTop: S.lg,
   },
