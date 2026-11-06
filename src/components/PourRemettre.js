@@ -23,14 +23,18 @@
  *      (la fonction rendrait OP027 pour un devis qu'elle ne trouve pas) ;
  *   2. des changements partent (une écriture du devis en route, la lecture
  *      qui la suit, ou un champ de l'en-tête tapé et pas encore quitté) :
- *      la ligne et la carte disent « Des changements partent : la liste
- *      sera à jour juste après. » (annexe B.8). La carte garde « Votre
- *      entreprise » — une écriture du devis ne la change pas, elle ne
- *      clignote pas (E-6) —, mais la partie « Ce devis » de la dernière
- *      liste cède la place à « Ce devis : la liste se met à jour. » : elle
- *      disait « ne chiffre encore aucun travail » sous un poste qu'on venait
+ *      la ligne dit « Des changements partent : la liste sera à jour juste
+ *      après. » (annexe B.8). La carte garde « Votre entreprise » — une
+ *      écriture du devis ne la change pas, elle ne clignote pas (E-6) —,
+ *      mais la partie « Ce devis » de la dernière liste se tait : « Ce
+ *      devis : la liste se met à jour. » se lit à sa place ; elle disait
+ *      « ne chiffre encore aucun travail » sous un poste qu'on venait
  *      d'écrire (relecture de 2b-1, ECR-1). Au retour de « Mon
- *      entreprise », l'inverse : c'est « Votre entreprise » qui se relit ;
+ *      entreprise », l'inverse : c'est « Votre entreprise » qui se relit —
+ *      et « Ce devis » aussi quand le régime de TVA a changé (relecture 2,
+ *      REL-2). UNE PARTIE QUI SE TAIT GARDE SA PLACE (relecture 2, REL-3) :
+ *      elle reste montée, invisible et cachée à VoiceOver, sous sa phrase —
+ *      rien de ce qui suit ne remonte puis ne redescend sous le doigt ;
  *   3. la lecture a échoué : « Liste non lue — Réessayer », JAMAIS « rien ne
  *      manque ». Un travail qui n'a pas pu se faire ne ressemble pas à un
  *      travail fait (la règle de « Pour moi », 05/10) ;
@@ -85,11 +89,22 @@ import {
  * orange de lecture) ou `'bas'` (sous « Conditions », la forme de sa
  * rangée). Son texte tient sur DEUX lignes RÉSERVÉES : qu'une écriture
  * passe, et la ligne ne grandit pas — la liste ne saute pas sous le doigt
- * (E-6). TROIS dans un seul état, quand quelque chose n'est pas compté sur
- * un devis en base : la phrase ET le décompte (décision D-A du
- * propriétaire, 05/11/2026 au soir) — `texteDeLaLigneRemise` le dit
- * (`lignes`). Aucune `accessibilityLiveRegion` : elle parlerait à chaque
- * ligne quittée.
+ * (E-6). Quand quelque chose n'est pas compté sur un devis en base, elle
+ * dit la phrase ET le décompte (décision D-A du propriétaire, 05/11/2026 au
+ * soir) : trois lignes à 390 points, quatre à 375 et 320.
+ *
+ * SA HAUTEUR NE BOUGE PAS TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ
+ * (relecture 2 de 2b-1, REL-1) : `texteDeLaLigneRemise` rend alors un
+ * `gabarit` — « phrase + décompte » de la liste lue —, posé dans le flux,
+ * INVISIBLE (opacité nulle, aucun toucher, caché à VoiceOver), et ce que la
+ * ligne dit vraiment est posé PAR-DESSUS. Avant, elle réservait trois lignes
+ * puis deux à la première lettre tapée dans l'en-tête (92 → 74 points à
+ * 390, 110 → 74 à 320), et tout ce qui est dessous, le champ où l'on tape
+ * compris, montait puis redescendait. Sans mesure ni course : la hauteur
+ * est celle du gabarit, à toutes les largeurs. Ni le gabarit ni le texte lu
+ * ne sont coupés (`numberOfLines` n'y est pas) : le texte lu est toujours
+ * plus court que le gabarit dans ces états (`verifier-devis` le compte).
+ * Aucune `accessibilityLiveRegion` : elle parlerait à chaque ligne quittée.
  *
  * En ÉCHEC (réessayable), la ligne EST le bouton « Réessayer » : elle
  * n'ouvre rien (E-19). Pas encore en base, elle n'est PAS une cible : il
@@ -98,29 +113,39 @@ import {
  */
 export function LigneRemise({
   variante = 'haut', etat, lue, erreurReessayable = true, erreurPhrase = null, enLecture = false, pasCompte = null,
-  relecture = null, onOuvrir, onReessayer,
+  relecture = null, derniere = null, onOuvrir, onReessayer,
 }) {
   /* TOUT ce que la ligne dit se décide dans `texteDeLaLigneRemise`
      (devis.js), que `verifier-devis` fait tourner. */
   const dit = texteDeLaLigneRemise({
-    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture,
+    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, derniere,
   });
-  const { contenu, compte, aDire } = dit;
+  const { contenu, compte, gabarit, aDire } = dit;
   let action = null;
   if (dit.action === 'ouvrir') action = onOuvrir;
   else if (dit.action === 'reessayer') action = onReessayer;
-  /* Trois lignes RÉSERVÉES quand la phrase et le décompte s'affichent
-     ensemble (D-A) ; deux sinon. Le décompte va à la ligne : il ne se
-     colle pas à la fin d'une phrase. */
-  const trois = dit.lignes === 3;
-  let styleTexte = variante === 'bas' ? s.ligneTexteBas : s.ligneTexte;
-  if (trois) styleTexte = [styleTexte, variante === 'bas' ? s.troisLignesBas : s.troisLignes];
+  /* Le décompte va à la ligne : il ne se colle pas à la fin d'une phrase. */
+  const styleTexte = variante === 'bas' ? s.ligneTexteBas : s.ligneTexte;
+  const texte = compte ? `${contenu}\n${compte}` : contenu;
 
   const corps = (
     <>
       <View style={s.ligneCorps}>
         <Text style={variante === 'bas' ? s.ligneTitreBas : s.ligneTitre}>{TITRE_POUR_REMETTRE}</Text>
-        <Text style={styleTexte} numberOfLines={trois ? 4 : 3}>{compte ? `${contenu}\n${compte}` : contenu}</Text>
+        {gabarit ? (
+          /* LE GABARIT DONNE LA HAUTEUR, le texte lu est posé dessus (REL-1). */
+          <View>
+            <View
+              style={s.gabarit}
+              aria-hidden
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <Text style={styleTexte}>{gabarit}</Text>
+            </View>
+            <Text style={[styleTexte, s.parDessus]}>{texte}</Text>
+          </View>
+        ) : <Text style={styleTexte} numberOfLines={3}>{texte}</Text>}
       </View>
       {!!action && <ChevronRight size={16} color={C.accent2} />}
     </>
@@ -181,6 +206,42 @@ function Point({
 }
 
 /* ========================================================================== */
+/*  UNE PARTIE DE LA LISTE — lue, ou qui se relit en gardant sa place          */
+/* ========================================================================== */
+
+/**
+ * `partie` : ce que rend `ceQueDitLaCarte` pour elle — `{ montrer, phrase,
+ * garder }`. Lue (`montrer`), elle se montre. Pendant qu'elle se relit
+ * (`garder`), la DERNIÈRE LISTE SÛRE de cette partie reste MONTÉE dans le
+ * flux, INVISIBLE (opacité nulle, aucun toucher), CACHÉE à VoiceOver et à
+ * TalkBack, et sa phrase (« Ce devis : la liste se met à jour. ») est posée
+ * PAR-DESSUS (relecture 2 de 2b-1, REL-3). Retirée, elle faisait remonter
+ * tout ce qui la suit, puis redescendre au retour de la liste : le premier
+ * bouton de « Votre entreprise » passait de y = 400 à y = 470 sous le doigt
+ * (mesuré au navigateur, liste revenue identique). Jamais ESTOMPÉE : on y
+ * lirait des points périmés (ECR-1).
+ *
+ * LE MÊME ARBRE dans les deux cas : la partie ne se démonte pas en se
+ * relisant — un point déplié par « Lire la suite » le reste.
+ */
+function Partie({ partie, children }) {
+  const garder = !!partie.garder;
+  return (
+    <View>
+      <View
+        style={[s.partie, garder && s.cachee]}
+        aria-hidden={garder}
+        accessibilityElementsHidden={garder}
+        importantForAccessibility={garder ? 'no-hide-descendants' : 'auto'}
+      >
+        {children}
+      </View>
+      {garder && <Text style={[s.seRelit, s.parDessus]} accessibilityRole="header">{partie.phrase}</Text>}
+    </View>
+  );
+}
+
+/* ========================================================================== */
 /*  LA CARTE                                                                  */
 /* ========================================================================== */
 
@@ -218,9 +279,10 @@ export default function PourRemettre({
   /* CE QUE DIT LA CARTE, et ce qu'elle montre de la liste : `ceQueDitLaCarte`
      (devis.js). La dernière liste sûre se montre en `liste` ET en
      `en_route` ; jamais sur un échec, ni avant la première lecture. Mais
-     une PARTIE PÉRIMÉE ne se montre pas (ECR-1) : « Ce devis » pendant
-     qu'une écriture du devis part puis se relit, « Votre entreprise »
-     pendant que « Mon entreprise » se relit — une phrase la remplace. */
+     une PARTIE PÉRIMÉE ne se lit pas (ECR-1) : « Ce devis » pendant
+     qu'une écriture du devis part puis se relit (ou que le régime de TVA a
+     changé, REL-2), « Votre entreprise » pendant que « Mon entreprise » se
+     relit — une phrase la remplace, posée sur sa place gardée (REL-3). */
   const { phrases, montrerLaListe: montrer, parties: aMontrer } = ceQueDitLaCarte({
     etat, lue, enLecture, pasCompte, relecture,
   });
@@ -279,39 +341,38 @@ export default function PourRemettre({
         {!!parties && (
           <>
             {/* 1. CE DEVIS — ou, s'il se relit, la phrase qui le dit : ni
-                ses points, ni leurs boutons, ni « rien ne manque » (ECR-1). */}
-            {aMontrer.devis.montrer ? (
-              <>
-                <Text style={s.titre} accessibilityRole="header">{titres.devis}</Text>
-                {parties.devis.length === 0 ? (
-                  <View style={s.rien}>
-                    <Text style={s.rienTexte}>{RIEN_NE_MANQUE_POUR_CE_DEVIS}</Text>
-                    {/* Sans cette phrase, « rien ne manque » mentirait (D2). */}
-                    <Text style={s.aide}>{PAS_ENCORE_VERIFIE}</Text>
-                  </View>
-                ) : parties.devis.map(rendrePoint)}
-              </>
-            ) : <Text style={s.seRelit} accessibilityRole="header">{aMontrer.devis.phrase}</Text>}
+                ses points, ni leurs boutons, ni « rien ne manque » ne se
+                lisent (ECR-1), mais la partie GARDE SA PLACE, invisible
+                (REL-3 : `Partie`). */}
+            <Partie partie={aMontrer.devis}>
+              <Text style={s.titre} accessibilityRole="header">{titres.devis}</Text>
+              {parties.devis.length === 0 ? (
+                <View style={s.rien}>
+                  <Text style={s.rienTexte}>{RIEN_NE_MANQUE_POUR_CE_DEVIS}</Text>
+                  {/* Sans cette phrase, « rien ne manque » mentirait (D2). */}
+                  <Text style={s.aide}>{PAS_ENCORE_VERIFIE}</Text>
+                </View>
+              ) : parties.devis.map(rendrePoint)}
+            </Partie>
 
             {/* 2. VOTRE ENTREPRISE — un bouton PAR point, qui ouvre « Mon
                 entreprise » sur sa section ; son titre dit combien sont dus
-                à un particulier (D-B). Ou, si elle se relit, la phrase. */}
-            {aMontrer.entreprise.montrer ? (
-              <>
-                <Text style={s.titre} accessibilityRole="header">{titres.entreprise}</Text>
-                {parties.entreprise.map(rendrePoint)}
+                à un particulier (D-B). Ou, si elle se relit, la phrase, sur
+                sa place gardée. */}
+            <Partie partie={aMontrer.entreprise}>
+              <Text style={s.titre} accessibilityRole="header">{titres.entreprise}</Text>
+              {parties.entreprise.map(rendrePoint)}
 
-                {/* 3. LES MENTIONS DUES À UN PARTICULIER — par prudence, tant
-                    qu'Opus ne sait pas pour qui le client commande. */}
-                {parties.particulier.length > 0 && (
-                  <>
-                    <Text style={s.sousTitre} accessibilityRole="header">Mentions dues à un particulier</Text>
-                    <Text style={s.aide}>{MENTIONS_PARTICULIER_PAR_PRUDENCE}</Text>
-                    {parties.particulier.map(rendrePoint)}
-                  </>
-                )}
-              </>
-            ) : <Text style={s.seRelit} accessibilityRole="header">{aMontrer.entreprise.phrase}</Text>}
+              {/* 3. LES MENTIONS DUES À UN PARTICULIER — par prudence, tant
+                  qu'Opus ne sait pas pour qui le client commande. */}
+              {parties.particulier.length > 0 && (
+                <>
+                  <Text style={s.sousTitre} accessibilityRole="header">Mentions dues à un particulier</Text>
+                  <Text style={s.aide}>{MENTIONS_PARTICULIER_PAR_PRUDENCE}</Text>
+                  {parties.particulier.map(rendrePoint)}
+                </>
+              )}
+            </Partie>
           </>
         )}
 
@@ -353,10 +414,13 @@ const s = StyleSheet.create({
     fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit),
     minHeight: 2 * interligne(T.petit),
   },
-  /* TROIS LIGNES RÉSERVÉES, dans le seul état « quelque chose n'est pas
-     compté » d'un devis en base : la phrase et le décompte (D-A). */
-  troisLignes: { minHeight: 3 * interligne(T.courant) },
-  troisLignesBas: { minHeight: 3 * interligne(T.petit) },
+  /* LE GABARIT DE LA LIGNE (REL-1) : dans le flux, il donne la hauteur ; on
+     ne le voit pas, on ne le touche pas, VoiceOver ne le lit pas. Le texte
+     lu est posé dessus, en haut. */
+  gabarit: { opacity: 0, pointerEvents: 'none' },
+  parDessus: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+  },
 
   /* LA CARTE prend l'écran, comme « Conditions ». */
   ecran: { ...StyleSheet.absoluteFillObject, backgroundColor: C.surface, zIndex: 20 },
@@ -374,7 +438,14 @@ const s = StyleSheet.create({
   titre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, marginTop: S.lg },
   sousTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2, marginTop: S.md },
   etatTexte: { fontFamily: F.inter6, fontSize: T.courant, color: C.ink, lineHeight: interligne(T.courant) },
-  /* UNE PARTIE QUI SE RELIT : à la place de son titre, à la même hauteur. */
+  /* UNE PARTIE : ses enfants espacés comme ceux du contenu (`gap`), qu'ils
+     soient lus ou gardés invisibles. */
+  partie: { gap: S.sm },
+  /* …GARDÉE pendant qu'elle se relit (REL-3) : on ne la voit pas, on ne la
+     touche pas. VoiceOver ne la lit pas (`aria-hidden`, posé avec elle). */
+  cachee: { opacity: 0, pointerEvents: 'none' },
+  /* UNE PARTIE QUI SE RELIT : sa phrase à la place de son titre, à la même
+     hauteur, posée sur la partie gardée. */
   seRelit: {
     fontFamily: F.inter6, fontSize: T.courant, color: C.muted, lineHeight: interligne(T.courant), marginTop: S.lg,
   },

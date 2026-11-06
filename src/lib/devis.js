@@ -3881,8 +3881,16 @@ const MISE_A_JOUR_DE_LA_LIGNE = ' · mise à jour…';
  * délai (mesuré au navigateur, 300 ms en démonstration — jusqu'à 8 s sur la
  * vraie base). Au retour de « Mon entreprise », c'est l'inverse : la partie
  * « Votre entreprise » date d'avant ce qu'on vient d'y écrire, « Ce devis »
- * reste juste. La partie périmée ne s'affiche pas — ni ses points, ni leurs
- * boutons, ni « rien ne manque » —, cette phrase la remplace.
+ * reste juste — SAUF si le régime de TVA a changé : il décide des points du
+ * devis, et « Ce devis » se tait aussi (relecture 2 de 2b-1, REL-2,
+ * `causesAuRetourDeLEntreprise`). La partie périmée ne se LIT pas — ni ses
+ * points, ni leurs boutons, ni « rien ne manque » —, cette phrase la
+ * remplace. Mais elle GARDE SA PLACE (relecture 2, REL-3) : la dernière
+ * liste sûre de cette partie reste montée, INVISIBLE (opacité nulle, aucun
+ * toucher, cachée à VoiceOver), et la phrase est posée par-dessus — sinon
+ * tout ce qui suit remontait puis redescendait sous le doigt (70 points
+ * mesurés au navigateur, liste revenue identique). Jamais estompée : une
+ * liste estompée montrerait encore des points périmés (ECR-1).
  */
 export const CE_DEVIS_SE_MET_A_JOUR = 'Ce devis : la liste se met à jour.';
 export const ENTREPRISE_SE_MET_A_JOUR = 'Votre entreprise : la liste se met à jour.';
@@ -3950,8 +3958,11 @@ export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false, enBase =
  * `relecture` : `{ devis, entreprise }` — ce que la lecture EN COURS relit
  * parce que cela vient de changer (la saisie le note en lançant la lecture :
  * une écriture du devis confirmée, ou « Mon entreprise » refermée). Une
- * relecture de l'ENTREPRISE ne change pas l'état : « Ce devis » reste juste,
- * c'est la carte qui masque « Votre entreprise » (`ceQueDitLaCarte`).
+ * relecture de la seule ENTREPRISE ne change pas l'état : « Ce devis » reste
+ * juste, c'est la carte qui masque « Votre entreprise » (`ceQueDitLaCarte`).
+ * Quand le régime de TVA a changé, la saisie relit AUSSI le devis (les deux
+ * causes, `causesAuRetourDeLEntreprise` — relecture 2 de 2b-1, REL-2) : l'état
+ * passe alors en `en_route`, comme après une écriture du devis.
  * Ce qui n'est PAS ENREGISTRÉ (une ligne refusée, rien ne part) n'est pas
  * un état : rien ne le relira tout seul, la liste lue reste juste pour ce
  * que la base a — `ceQueLaListeNeComptePas` le DIT à côté, dans n'importe
@@ -3973,6 +3984,52 @@ export function etatDeLaListe({
   if (erreur) return 'echec';
   if (!lue) return 'lecture';
   return 'liste';
+}
+
+/**
+ * LE RÉGIME POUR LEQUEL UNE LISTE EST LUE (relecture 2 de 2b-1, REL-2) :
+ * `'franchise'`, `'reel'` ou `null`, et rien d'autre. Le régime que l'écran
+ * reçoit vaut aussi `undefined` (pas encore lu), `{ chargement: true }` ou
+ * `{ echec: true }` : ce ne sont pas des régimes, ils deviennent `null`. Un
+ * objet ne se retient jamais tel quel — un objet neuf à chaque lecture ne
+ * serait jamais « le même », et l'on relirait sans fin.
+ */
+export function regimePourLaListe(regime) {
+  return regime === 'franchise' || regime === 'reel' ? regime : null;
+}
+
+/**
+ * CE QUE RELIT LE RETOUR DE « MON ENTREPRISE » (relecture 2 de 2b-1,
+ * REL-2) : `['entreprise']`, ou `['devis', 'entreprise']`.
+ *   `regimeDeLaListe` : le régime pour lequel la dernière liste sûre a été
+ *                       lue (`regimePourLaListe`) — `undefined` quand il n'y
+ *                       a PAS de liste sûre ;
+ *   `regime`          : celui que l'écran a maintenant.
+ *
+ * POURQUOI : le régime de TVA appartient à l'entreprise, mais il décide des
+ * points du DEVIS (rang 3 de `motifs_refus_remise()` : `devis_taux_franchise`
+ * et `devis_taux_sans_tva`). Relire avec la seule cause `'entreprise'`
+ * laissait « Ce devis » montrer la liste d'avant le changement — « Ce devis :
+ * rien ne manque » au-dessus de deux lignes devenues fautives —, le temps
+ * de la lecture (instantané en démonstration, jusqu'à 8 s sur la vraie
+ * base). Le régime a changé : « Ce devis » se tait aussi
+ * (`CE_DEVIS_SE_MET_A_JOUR`), et la ligne dit la phrase « en route ». Il n'a
+ * pas changé : « Ce devis » reste — la partie juste ne clignote pas (E-6).
+ * Les deux régimes passent par `regimePourLaListe` : un régime inconnu
+ * (lecture en cours ou ratée) compte comme `null`.
+ *
+ * Sans liste sûre, la seule cause `'entreprise'` : aucune partie n'est
+ * montrée, et une cause `'devis'` ferait dire « Des changements partent »
+ * alors que rien ne part.
+ *
+ * LA RÈGLE POUR LES LOTS SUIVANTS : tout fait de « Mon entreprise » que
+ * lira un jour la partie « devis » de `motifs_refus_remise()` (section 49.9
+ * de `schema.sql`) devra entrer dans cette comparaison. Aujourd'hui, seul
+ * le régime de TVA.
+ */
+export function causesAuRetourDeLEntreprise({ regimeDeLaListe, regime } = {}) {
+  if (regimeDeLaListe === undefined) return ['entreprise'];
+  return regimePourLaListe(regimeDeLaListe) === regimePourLaListe(regime) ? ['entreprise'] : ['devis', 'entreprise'];
 }
 
 /** « aucun point », « 1 point », « 3 points ». */
@@ -4023,37 +4080,67 @@ export function titresDesParties(lue) {
 }
 
 /**
- * CE QUE DIT LA LIGNE (en haut et en bas) : `{ contenu, compte, lignes,
+ * CE QUE DIT LA LIGNE (en haut et en bas) : `{ contenu, compte, gabarit,
  * action, aDire }`.
  *   `contenu` : la phrase (ou le compte, quand tout est compté) ;
  *   `compte`  : le DÉCOMPTE affiché SOUS la phrase, ou `null` ;
- *   `lignes`  : les lignes RÉSERVÉES au texte — 2, ou 3 quand la phrase et
- *               le décompte s'affichent ensemble ;
+ *   `gabarit` : le texte qui DONNE LA HAUTEUR de la ligne, posé invisible
+ *               dans son flux (le texte lu est posé par-dessus), ou `null`
+ *               — la ligne réserve alors ses deux lignes ordinaires ;
  *   `action`  : `'ouvrir'` (la carte), `'reessayer'` (relire) ou `null` (pas
  *               une cible : il n'y a rien à ouvrir) ;
  *   `aDire`   : l'étiquette pour VoiceOver.
+ *   `derniere` (en entrée) : la dernière liste LUE (`lireMotifsDeRemise`),
+ *               gardée même quand un échec l'a effacée de l'écran — elle ne
+ *               sert QU'AU gabarit, qui ne se lit pas.
  *
  * QUAND QUELQUE CHOSE N'EST PAS COMPTÉ, sur un devis EN BASE (`pasCompte`,
- * état `liste`) : la phrase ET le décompte de la dernière liste sûre, sur
- * TROIS lignes réservées — DÉCISION D-A DU PROPRIÉTAIRE (05/11/2026 au
- * soir, relecture ECR-4). Cet état DURE (une ligne incomplète est l'état
- * ordinaire d'un chiffrage en cours), et le compte disparaissait de l'écran
- * pendant tout ce temps. Trois lignes dans CET état seulement : ailleurs,
- * deux, et la ligne ne saute pas d'un état à l'autre (E-6).
+ * état `liste`) : la phrase ET le décompte de la dernière liste sûre —
+ * DÉCISION D-A DU PROPRIÉTAIRE (05/11/2026 au soir, relecture ECR-4). Cet
+ * état DURE (une ligne incomplète est l'état ordinaire d'un chiffrage en
+ * cours), et le compte disparaissait de l'écran pendant tout ce temps.
+ * Mesuré : trois lignes à 390 points (≈ 92 points), QUATRE à 375 et 320
+ * (≈ 110 points), rien de coupé.
+ *
+ * ET LA HAUTEUR NE BOUGE PLUS TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ
+ * (relecture 2 de 2b-1, REL-1). Avant, la ligne réservait trois lignes dans
+ * cet état et deux en `en_route` : à la PREMIÈRE lettre tapée dans l'en-tête
+ * avec une ligne incomplète, elle passait de 92 à 74 points (110 à 74 à 375
+ * et 320), puis revenait au retour de la liste — tout ce qui est dessous,
+ * le champ où l'on tape compris, montait puis redescendait sous le doigt
+ * (mesuré au navigateur). D-A a été décidée sur « ≈ 92 au lieu de 74 », pas
+ * sur ce va-et-vient. Désormais, tant que `pasCompte` persiste sur un devis
+ * en base et qu'une liste a été lue, le `gabarit` vaut « phrase + décompte »
+ * de cette liste dans TOUS les états (`liste`, `en_route`, `lecture`,
+ * `echec`) : la ligne le pose invisible et pose ce qu'elle dit vraiment
+ * par-dessus. Sa hauteur est exactement celle de « phrase + décompte », à
+ * toutes les largeurs, sans mesure ni course ; ce que la ligne DIT ne change
+ * pas (D-A, ECR-1). Le décompte du gabarit suit la relecture de l'entreprise
+ * (« mise à jour… ») comme celui qu'on lit : dans l'état `liste`, le texte
+ * lu et le gabarit sont le MÊME texte. Ce qui RESTE, mesuré le 06/11 : à
+ * 390 points, « votre entreprise — mise à jour… » passe à la ligne là où
+ * « 5 points » tenait — la ligne du haut grandit d'une ligne (≈ 92 → 110)
+ * le temps de cette relecture, au retour de « Mon entreprise ». Le tenir,
+ * c'est réserver la plus longue des deux formes (≈ 110 à 390 dans tout
+ * l'état « pas compté ») ou raccourcir ce que la ligne dit : une décision
+ * du propriétaire, pas une correction (voir les restes de la relecture 2).
  *
  * EN `en_route`, LA PHRASE SEULE, « Des changements partent : la liste
  * sera à jour juste après. », à l'écran ET dans l'étiquette parlée : le
  * compte d'avant pourrait dire « ce devis — aucun point » juste après qu'on
  * a vidé le délai (relecture de 2b-1, ECR-1) — c'est le défaut que la carte
- * ne montre plus, VoiceOver ne doit pas le dire non plus.
+ * ne montre plus, VoiceOver ne doit pas le dire non plus. Le gabarit, lui,
+ * ne se lit ni ne se dit.
  *
  * Ce que la liste ne compte pas (`pasCompte`) passe devant le compte. Sur un
  * brouillon PAS ENCORE EN BASE, il dit que la liste se calculera ensuite
  * (`ceQueLaListeNeComptePas({ enBase: false })`, ECR-3) ; « Écrivez une
- * première ligne » reste pour le brouillon où rien n'est tapé.
+ * première ligne » reste pour le brouillon où rien n'est tapé. Aucun
+ * gabarit : il n'y a aucune liste.
  */
 export function texteDeLaLigneRemise({
   etat, lue = null, enLecture = false, erreurReessayable = true, erreurPhrase = null, pasCompte = null, relecture = null,
+  derniere = null,
 } = {}) {
   let contenu;
   let compte = null;
@@ -4089,8 +4176,15 @@ export function texteDeLaLigneRemise({
     if (compte) dit = `${dit}${fin(dit)}Dernière liste : ${compte}`;
     aDire = `${TITRE_POUR_REMETTRE} : ${action ? `${dit}${fin(dit)}Ouvrir la liste` : dit}`;
   }
+  /* LE GABARIT (REL-1) : « phrase + décompte » de la liste lue — la liste
+     de l'écran si elle est là (dans l'état `liste`, c'est alors le texte
+     même qu'on lit), sinon la dernière lue — tant que quelque chose n'est
+     pas compté sur un devis en base. */
+  const pourLeGabarit = lue || derniere;
+  const gabarit = etat !== 'pas_en_base' && pasCompte && pourLeGabarit
+    ? `${pasCompte}\n${phraseDesEndroits(pourLeGabarit, { relecture })}` : null;
   return {
-    contenu, compte, lignes: compte ? 3 : 2, action, aDire,
+    contenu, compte, gabarit, action, aDire,
   };
 }
 
@@ -4102,21 +4196,42 @@ export function texteDeLaLigneRemise({
  *   `montrerLaListe` : quelque chose de la dernière liste sûre s'affiche —
  *               en `liste` et en `en_route`, jamais sur un échec, ni avant
  *               la première lecture, ni sur un brouillon pas en base ;
- *   `parties.devis`, `parties.entreprise` : `{ montrer, phrase }` — la
- *               partie s'affiche (`montrer`), ou cette `phrase` la
- *               remplace ; `entreprise` porte aussi les mentions dues à un
- *               particulier.
+ *   `parties.devis`, `parties.entreprise` : `{ montrer, phrase, garder }` —
+ *               la partie se lit (`montrer`), ou cette `phrase` se lit à sa
+ *               place ; `garder` : la partie de la dernière liste sûre reste
+ *               MONTÉE, INVISIBLE et cachée à VoiceOver, sous la phrase, pour
+ *               garder sa place. `entreprise` porte aussi les mentions dues à
+ *               un particulier.
  *
- * UNE PARTIE PÉRIMÉE NE S'AFFICHE PAS (relecture de 2b-1, ECR-1) :
+ * UNE PARTIE PÉRIMÉE NE SE LIT PAS (relecture de 2b-1, ECR-1) :
  *   - en `en_route` (une écriture du devis part, ou la lecture qui la
  *     suit), « Ce devis » cède la place à « Ce devis : la liste se met à
  *     jour. » — ni ses points, ni leurs boutons, ni « rien ne manque » ;
  *     « Votre entreprise » reste : une écriture du devis ne la change pas ;
  *   - pendant la relecture de « Mon entreprise » (`relecture.entreprise`),
- *     l'inverse : « Votre entreprise » et les mentions dues à un particulier
- *     cèdent la place à « Votre entreprise : la liste se met à jour. »,
- *     « Ce devis » reste.
- * La partie juste ne clignote pas (E-6) ; la partie périmée ne ment pas.
+ *     « Votre entreprise » et les mentions dues à un particulier cèdent la
+ *     place à « Votre entreprise : la liste se met à jour. ». « Ce devis »
+ *     reste, sauf si le régime de TVA a changé : la saisie relit alors aussi
+ *     le devis (REL-2), et l'état est `en_route`.
+ *
+ * MAIS ELLE GARDE SA PLACE (relecture 2 de 2b-1, REL-3) : quand une liste
+ * sûre existe (`montrerLaListe`), la partie périmée reste montée, invisible
+ * (`garder`), et sa phrase est posée par-dessus. Avant, la partie était
+ * RETIRÉE : tout ce qui la suivait remontait puis redescendait au retour de
+ * la liste — le premier bouton de « Votre entreprise » passait de y = 400 à
+ * y = 470 au moment où l'on pouvait appuyer dessus (mesuré au navigateur,
+ * liste revenue IDENTIQUE). Jamais estompée : elle montrerait des points
+ * périmés (ECR-1). Sans liste sûre, rien n'est monté : il n'y a rien à
+ * garder. Quand la liste revient VRAIMENT différente, ce qui suit bouge
+ * encore d'autant : c'est un vrai changement, il ne se corrige pas.
+ *
+ * « DES CHANGEMENTS PARTENT » N'EST EN TÊTE QUE SANS LISTE À MONTRER (REL-3,
+ * le même mouvement) : avec une liste, c'est « Ce devis : la liste se met à
+ * jour. », À LA PLACE de « Ce devis », qui le dit. Une phrase d'en-tête qui
+ * paraissait puis disparaissait au retour de la liste faisait remonter tout
+ * ce qui la suit de sa hauteur. Sans liste (un échec avant, puis une
+ * écriture), elle reste en tête : c'est la seule chose à dire.
+ *
  * L'échec lui-même (« Réessayer », la phrase de l'erreur) est dessiné par la
  * carte : ce n'est pas une phrase, c'est un bouton.
  */
@@ -4124,16 +4239,16 @@ export function ceQueDitLaCarte({
   etat, lue = null, enLecture = false, pasCompte = null, relecture = null,
 } = {}) {
   const relitEntreprise = !!(relecture && relecture.entreprise);
+  const montrerLaListe = !!lue && (etat === 'liste' || etat === 'en_route');
   const phrases = [];
   if (etat === 'pas_en_base') phrases.push({ texte: pasCompte || LISTE_AVANT_LA_PREMIERE_LIGNE, ton: 'etat' });
   else if (etat === 'lecture') phrases.push({ texte: LISTE_EN_LECTURE, ton: 'etat' });
-  else if (etat === 'en_route') phrases.push({ texte: LISTE_EN_ROUTE, ton: 'etat' });
+  else if (etat === 'en_route' && !montrerLaListe) phrases.push({ texte: LISTE_EN_ROUTE, ton: 'etat' });
   else if (etat === 'liste' && enLecture && !relitEntreprise) phrases.push({ texte: LISTE_MISE_A_JOUR, ton: 'aide' });
   if (pasCompte && etat !== 'pas_en_base') phrases.push({ texte: pasCompte, ton: 'etat' });
-  const montrerLaListe = !!lue && (etat === 'liste' || etat === 'en_route');
   const partie = (perimee, phrase) => {
-    if (!montrerLaListe) return { montrer: false, phrase: null };
-    return perimee ? { montrer: false, phrase } : { montrer: true, phrase: null };
+    if (!montrerLaListe) return { montrer: false, phrase: null, garder: false };
+    return perimee ? { montrer: false, phrase, garder: true } : { montrer: true, phrase: null, garder: false };
   };
   return {
     phrases,

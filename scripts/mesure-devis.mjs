@@ -3895,11 +3895,19 @@ await section('Un brouillon NEUF : aucune lecture avant qu’il soit en base, pu
   await page.evaluate(() => { window.__opusPauseEcritures = 2500; });
   await viderEtTaper(parLibelle('Prix unitaire HT'), '45');
   await toucher(parLibelle('TVA à 20 %'));
+  /* Ce que la carte DIT : depuis la relecture 2 (REL-3), la partie « Ce
+     devis » qui se tait reste montée, invisible et cachée à VoiceOver
+     (`aria-hidden`) — `innerText` la lirait quand même. On la retire le
+     temps de lire, comme `texteLu` plus bas. */
   await page.evaluate((titre) => {
     window.__opusCarte = [];
     let prec = null;
     window.__opusCarteMinuteur = setInterval(() => {
+      const caches = [...document.querySelectorAll('[aria-hidden="true"]')];
+      const avant = caches.map((e) => e.style.display);
+      caches.forEach((e) => { e.style.display = 'none'; });
       const t = document.body.innerText;
+      caches.forEach((e, i) => { e.style.display = avant[i]; });
       const i = t.indexOf(titre);
       const v = i >= 0 ? t.slice(i, i + 600) : null;
       if (v && v !== prec) { window.__opusCarte.push(v); prec = v; }
@@ -4009,6 +4017,302 @@ await section('Un brouillon NEUF dont la première ligne est incomplète : « 1 
     await libelleLigne());
   await toucher(parLibelle('Revenir en arrière'));
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+});
+
+/* ======================================================================== */
+/*  RELECTURE 2 DE 2b-1 (06/11) — CE QUI NE DOIT PLUS BOUGER SOUS LE DOIGT   */
+/* ======================================================================== */
+/* Ce que la page MONTRE et ce qu'elle DIT, sans ce qui est gardé invisible :
+   une partie qui se relit, ou le gabarit de la ligne du haut, restent dans
+   le flux à opacité nulle et cachés à l'accessibilité (`aria-hidden`).
+   `innerText` les lit quand même : on les retire le temps de lire. */
+const texteLu = async () => net(await page.evaluate(() => {
+  const caches = [...document.querySelectorAll('[aria-hidden="true"]')];
+  const avant = caches.map((e) => e.style.display);
+  caches.forEach((e) => { e.style.display = 'none'; });
+  const t = document.body.innerText;
+  caches.forEach((e, i) => { e.style.display = avant[i]; });
+  return t;
+}));
+
+/* REL-1 : LA LIGNE DU HAUT NE SAUTE PLUS À LA PREMIÈRE LETTRE TAPÉE DANS
+   L'EN-TÊTE quand une ligne du devis est incomplète (état « pas compté »,
+   décision D-A). Avant : 92 → 74 points à 390, 110 → 74 à 375 et 320, à la
+   première frappe dans le délai, puis retour au retour de la liste — tout
+   ce qui est dessous bougeait (au navigateur, le défilement compensait et
+   le champ perdait le focus). Un enregistreur dans la page relève, à chaque
+   image, la hauteur de la ligne, le défilement et l'étiquette de la ligne :
+   la hauteur et le défilement ne doivent prendre qu'UNE valeur, avant,
+   pendant (l'état « en route » doit avoir été VU — sinon la mesure ne
+   prouve rien) et après le retour de la liste. */
+await section('La ligne « Pour le remettre » garde sa hauteur pendant la frappe dans l’en-tête, une ligne incomplète (relecture 2, REL-1)', async () => {
+  const tailleAvant = page.viewportSize();
+  for (const [L, H] of [[390, 844], [375, 667], [320, 568]]) {
+    await page.setViewportSize({ width: L, height: H });
+    await attendre(500);
+    await allerAMesDevis();
+    await ouvrirLeDevis('Muret de clôture');
+    await jusqua(async () => COMPTE.test(await libelleLigne()), 6000);
+    await toucher(page.getByRole('button', { name: 'Ajouter un poste chiffré', exact: true }).first());
+    await attendre(400);
+    await page.locator('[aria-label="Désignation de la ligne"]').last().fill(`Chaperon ${L}`);
+    await fermerCarte();
+    const da = await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `), 4000);
+    verifier(`${L}×${H} : une ligne incomplète — la ligne du haut dit la phrase ET le décompte (D-A)`, !!da, await libelleLigne());
+    const delai = parLibelle('Délai d’exécution');
+    await delai.scrollIntoViewIfNeeded();
+    await attendre(500);
+    await page.evaluate(() => {
+      window.__opusLigne = [];
+      const ligne = () => document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+      const champ = () => document.querySelector('[aria-label="Délai d’exécution"]');
+      const defile = () => {
+        let e = champ();
+        while (e && e !== document.body) {
+          if (/(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight) return e;
+          e = e.parentElement;
+        }
+        return document.scrollingElement;
+      };
+      let prec = '';
+      window.__opusLigneFin = false;
+      const pas = () => {
+        const l = ligne();
+        const d = defile();
+        /* Le texte LU, posé par-dessus le gabarit, ne doit jamais en sortir
+           (ni coupé, ni débordant) : on mesure de combien il dépasse. */
+        const cache = l && l.querySelector('[aria-hidden="true"]');
+        const boite = cache && cache.parentElement;
+        const lu = boite && [...boite.children].find((e) => e !== cache);
+        const deborde = lu ? Math.round(lu.getBoundingClientRect().bottom - boite.getBoundingClientRect().bottom) : 0;
+        /* …ET NI COUPÉ (banc de la relecture 2, A9) : un `numberOfLines`
+           posé sur le texte lu le tronquait à 320 et 375 — il ne
+           débordait plus, donc rien ne rougissait, alors que le titre de
+           la vérification promettait « sans être coupé ». Un texte tronqué
+           par react-native-web a plus de contenu que de place. */
+        const coupe = lu ? lu.scrollHeight > lu.clientHeight + 1 : false;
+        const v = [l ? Math.round(l.getBoundingClientRect().height) : -1, d ? Math.round(d.scrollTop) : -1,
+          l ? (l.getAttribute('aria-label') || '') : '', document.activeElement ? (document.activeElement.getAttribute('aria-label') || '') : '',
+          deborde, coupe];
+        const k = JSON.stringify(v);
+        if (k !== prec) { window.__opusLigne.push(v); prec = k; }
+        if (!window.__opusLigneFin) requestAnimationFrame(pas);
+      };
+      requestAnimationFrame(pas);
+    });
+    await toucher(delai);
+    await page.keyboard.press('End');
+    await taper('x');
+    await attendre(600);
+    await delai.evaluate((e) => e.blur());
+    await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `)
+      && (await page.evaluate(() => window.__opusLigne.some(([, , l]) => /Des changements partent/.test(l)))), DELAI_ECRITURE + 2000);
+    await attendre(400);
+    const vu = await page.evaluate(() => { window.__opusLigneFin = true; return window.__opusLigne; });
+    const hauteurs = [...new Set(vu.map(([h]) => h))];
+    const defilements = [...new Set(vu.map(([, d]) => d))];
+    const enRouteVu = vu.some(([, , l]) => net(l) === `Pour le remettre : ${EN_ROUTE_LIGNE} Ouvrir la liste`);
+    const retourVu = net(vu[vu.length - 1][2]).includes(`${PAS_COMPTE_1} Dernière liste : `);
+    noter(`ligne du haut à ${L}×${H}, avant / pendant / après la première frappe`, `hauteurs ${JSON.stringify(hauteurs)}, défilement `
+      + `${JSON.stringify(defilements)}, focus gardé pendant la frappe : ${vu.filter(([, , l]) => /Des changements partent/.test(l)).some(([, , , a]) => a === 'Délai d’exécution')}`);
+    verifier(`${L}×${H} : la hauteur de la ligne du haut ne bouge PAS pendant la frappe dans le délai, ni au retour de la liste `
+      + `(${hauteurs.join(', ')} points) — et l’état « Des changements partent » a bien été vu`, hauteurs.length === 1 && enRouteVu && retourVu,
+    JSON.stringify(vu.map(([h, d, l]) => [h, d, net(l).slice(18, 60)])));
+    verifier(`${L}×${H} : …et RIEN ne défile sous le doigt (${defilements.join(', ')})`, defilements.length === 1, JSON.stringify(defilements));
+    const debords = vu.map(([, , , , x]) => x).filter((x) => x > 0);
+    const coupes = vu.filter(([, , , , , c]) => c).map(([, , l]) => net(l).slice(18, 60));
+    verifier(`${L}×${H} : …et le texte lu ne sort JAMAIS du gabarit, à aucune image (il est posé par-dessus, sans être coupé)`,
+      debords.length === 0 && coupes.length === 0 && vu.some(([, , , , x]) => x !== undefined), JSON.stringify({ debords, coupes }));
+    await capture(`60-rel1-ligne-${L}`);
+    /* Le ménage : la ligne incomplète part, on revient à « Mes devis ». */
+    await toucher(parLibelle('Ligne incomplète. La compléter'));
+    await toucher(parLibelle('Retirer cette ligne'));
+    await toucher(parLibelle('Confirmer : retirer cette ligne'));
+    await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 2000);
+    await toucher(parLibelle('Revenir en arrière'));
+    await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  }
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* REL-3 : DANS LA CARTE, LA PARTIE « CE DEVIS » QUI SE RELIT GARDE SA PLACE.
+   Avant : elle était retirée pendant la relecture, et tout ce qui la suit
+   remontait puis redescendait — le premier bouton de « Votre entreprise »
+   passait de y = 400 à y = 470 (390×844), alors que la liste revenait
+   IDENTIQUE (« x » ajouté au délai, la carte ouverte aussitôt). La place est
+   maintenant gardée par la dernière liste sûre, montée INVISIBLE et cachée
+   à l'accessibilité, sous « Ce devis : la liste se met à jour. ». */
+await section('La carte : le premier bouton de « Votre entreprise » ne bouge pas pendant une relecture du devis (relecture 2, REL-3)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await jusqua(async () => COMPTE.test(await libelleLigne()) && COMPTE.exec(await libelleLigne())[1] === 'aucun point', 6000);
+  const delai = parLibelle('Délai d’exécution');
+  await toucher(delai);
+  await page.keyboard.press('End');
+  await taper(' x');
+  await attendre(150);
+  await page.evaluate(() => {
+    window.__opusCarteRel3 = [];
+    window.__opusCarteRel3Fin = false;
+    const lisible = (e) => { let x = e; while (x) { if (getComputedStyle(x).opacity === '0' || x.getAttribute('aria-hidden') === 'true') return false; x = x.parentElement; } return true; };
+    let prec = '';
+    const pas = () => {
+      const b = [...document.querySelectorAll('[role="button"]')].filter(lisible)
+        .find((e) => /^Compléter dans « Mon entreprise »/.test(e.getAttribute('aria-label') || ''));
+      /* Toutes les FEUILLES qui portent du texte, pas seulement les `div` :
+         un titre (`accessibilityRole="header"`) est rendu en `h1`…`h6`. */
+      const feuilles = [...document.querySelectorAll('body *')].filter((d) => d.children.length === 0 && (d.innerText || '').trim());
+      const lus = feuilles.filter(lisible).map((d) => d.innerText);
+      const gardes = feuilles.filter((d) => !lisible(d)).map((d) => d.innerText);
+      /* LA PHRASE EST POSÉE À LA PLACE DU TITRE GARDÉ (banc de la relecture
+         2, C10) : l'écart entre le haut de « Ce devis : la liste se met à
+         jour. » et celui du titre « Ce devis — … », gardé invisible dessous.
+         Sans la marge du titre, la phrase montait de 16 points, et rien ne
+         le voyait. */
+      const phrase = feuilles.filter(lisible).find((d) => d.innerText === 'Ce devis : la liste se met à jour.');
+      const titreGarde = feuilles.filter((d) => !lisible(d)).find((d) => /^Ce devis — /.test(d.innerText));
+      const dy = phrase && titreGarde ? Math.round(phrase.getBoundingClientRect().top - titreGarde.getBoundingClientRect().top) : null;
+      /* …ET LA PARTIE GARDÉE EST INVISIBLE, PAS ESTOMPÉE (banc de la
+         relecture 2, C2) : cachée à l'accessibilité mais à 35 % d'opacité,
+         elle montrait encore « Ce devis — … » et « rien ne manque » sous la
+         phrase — ce qu'ECR-1 interdit — et la mesure, qui tenait pour
+         illisible tout ce qui est `aria-hidden`, ne le voyait pas. On
+         calcule l'opacité RÉELLE de chaque feuille de la partie gardée. */
+      const opacite = (e) => { let o = 1; let x = e; while (x) { o *= Number(getComputedStyle(x).opacity); x = x.parentElement; } return o; };
+      const estompes = feuilles.filter((f) => !lisible(f) && /^Ce devis — |rien ne manque/.test(f.innerText) && opacite(f) > 0.01).length;
+      const v = [b ? Math.round(b.getBoundingClientRect().y) : null, lus.includes('Ce devis : la liste se met à jour.'),
+        lus.some((t) => /^Ce devis — /.test(t)), lus.some((t) => /rien ne manque/.test(t)), gardes.some((t) => /^Ce devis — /.test(t)),
+        lus.filter((t) => /^Des changements partent/.test(t)).length, dy, estompes];
+      const k = JSON.stringify(v);
+      if (k !== prec) { window.__opusCarteRel3.push(v); prec = k; }
+      if (!window.__opusCarteRel3Fin) requestAnimationFrame(pas);
+    };
+    requestAnimationFrame(pas);
+  });
+  await toucher(ligneHaut());
+  await page.getByText(TITRE_LISTE, { exact: true }).first().waitFor({ timeout: 5000 });
+  await jusqua(async () => { const t = await texteLu(); return t.includes('Ce devis — aucun point') && !t.includes('Ce devis : la liste se met à jour.'); },
+    DELAI_ECRITURE + 2000);
+  await attendre(400);
+  const vu = await page.evaluate(() => { window.__opusCarteRel3Fin = true; return window.__opusCarteRel3; });
+  const ys = [...new Set(vu.map(([y]) => y).filter((y) => y !== null))];
+  const pendant = vu.filter(([, relit]) => relit);
+  noter('premier bouton « Compléter dans « Mon entreprise » » pendant la relecture du devis (390×844)',
+    `y ${JSON.stringify(ys)} ; images : ${JSON.stringify(vu)}`);
+  verifier(`le premier bouton de « Votre entreprise » ne bouge PAS pendant la relecture du devis qui rend la même liste (y = ${ys.join(', ')}) — `
+    + 'et la relecture a bien été vue (« Ce devis : la liste se met à jour. »)', ys.length === 1 && pendant.length > 0
+    && vu[vu.length - 1][2] && !vu[vu.length - 1][1], JSON.stringify(vu));
+  verifier('…pendant la relecture, la partie « Ce devis » est GARDÉE invisible (ni « Ce devis — … » ni « rien ne manque » ne se lisent, mais '
+    + 'la partie est montée, cachée à l’accessibilité, à opacité NULLE — jamais estompée), et « Des changements partent » n’est pas écrit en '
+    + 'tête de la carte',
+  pendant.every(([, , titreLu, rienLu, garde, enTete, , estompes]) => !titreLu && !rienLu && garde && enTete <= 2 && estompes === 0),
+  JSON.stringify(pendant));
+  verifier('…et « Ce devis : la liste se met à jour. » est posée À LA PLACE du titre qu’elle remplace (le même haut, à un point près, '
+    + `à chaque image : ${JSON.stringify([...new Set(pendant.map(([, , , , , , dy]) => dy))])})`,
+  pendant.every(([, , , , , , dy]) => dy !== null && Math.abs(dy) <= 1), JSON.stringify(pendant));
+  await capture('61-rel3-carte-apres');
+  await toucher(parLibelle('Revenir au devis'));
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* REL-2 : LE RÉGIME DE TVA CHANGÉ DANS « MON ENTREPRISE » FAIT RELIRE LA
+   LISTE — dès l'enregistrement, « Mon entreprise » encore ouverte, puis à sa
+   fermeture —, et un enregistrement qui NE change PAS le régime ne relit
+   rien de plus que la fermeture. Ce que le navigateur ne montre pas : « Ce
+   devis » qui se tait pendant cette lecture — la lecture de démonstration
+   n'a aucune pause (`motifsRefusRemiseDemo`), elle revient avant la
+   première image. Ce transitoire n'est tenu que par `verifier-devis` ; ici,
+   on COMPTE les lectures (`__opusListe.lectures`), ce qui prouve le
+   branchement de la saisie, et on regarde la carte au retour. EXACTEMENT
+   une à chaque geste, et pas « au moins une » (banc de la relecture 2,
+   R5b) : une seconde lecture, c'est quelque chose d'AUTRE qui relit — un
+   second effet sur le retour, qui relisait « devis » à chaque retour et
+   faisait taire « Ce devis » sans que le régime ait changé, passait au
+   vert. */
+await section('Le régime changé dans « Mon entreprise » relit la liste, ouverte puis fermée (relecture 2, REL-2)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await jusqua(async () => COMPTE.test(await libelleLigne()), 6000);
+  await ecouterLaListe(true);
+  const ouvrirParLaCarte = async () => {
+    await toucher(ligneHaut());
+    await page.getByText(TITRE_LISTE, { exact: true }).first().waitFor({ timeout: 5000 });
+    await toucher(page.locator('[aria-label^="Compléter dans « Mon entreprise »"]').first());
+    await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) > 0, 5000);
+    await attendre(600);
+    if ((await page.getByRole('radio', { name: /^Régime réel/ }).count()) === 0) {
+      await toucher(bouton(/^(Compléter|Modifier) mes informations de devis$/));
+    }
+    await page.getByRole('radio', { name: /^Régime réel/ }).first().waitFor({ timeout: 5000 });
+  };
+  const enregistrer = async () => {
+    await toucher(bouton('Enregistrer mes informations de devis'));
+    await jusqua(async () => (await bouton(/^(Compléter|Modifier) mes informations de devis$/).count()) > 0, 5000);
+    await attendre(800);
+  };
+  const fermer = async () => {
+    await toucher(parLibelle('Fermer « Mon entreprise »'));
+    await attendre(1200);
+  };
+  /* 1. Même régime (réel → réel) : enregistrer ne relit rien ; fermer relit. */
+  await ouvrirParLaCarte();
+  let l0 = await lectures();
+  await toucher(page.getByRole('radio', { name: /^Régime réel/ }).first());
+  await enregistrer();
+  const memeOuverte = (await lectures()) - l0;
+  l0 = await lectures();
+  await fermer();
+  const memeFermee = (await lectures()) - l0;
+  /* 2. Régime changé (réel → franchise) : enregistrer relit, fermer relit. */
+  await toucher(parLibelle('Revenir au devis')).catch(() => {});
+  await attendre(400);
+  await ouvrirParLaCarte();
+  l0 = await lectures();
+  await toucher(page.getByRole('radio', { name: /^Franchise en base de TVA/ }).first());
+  await enregistrer();
+  const changeOuverte = (await lectures()) - l0;
+  l0 = await lectures();
+  await fermer();
+  const changeFermee = (await lectures()) - l0;
+  const carteFranchise = (await texteLu()).replace(/\s+/g, ' ');
+  noter('lectures de la liste, « Mon entreprise » ouverte puis fermée', `régime inchangé : ${memeOuverte} puis ${memeFermee} ; `
+    + `régime changé (réel → franchise) : ${changeOuverte} puis ${changeFermee}`);
+  verifier(`un enregistrement qui ne change PAS le régime ne relit pas la liste tant que « Mon entreprise » est ouverte (${memeOuverte}), `
+    + `sa fermeture la relit UNE fois (${memeFermee})`, memeOuverte === 0 && memeFermee === 1);
+  verifier(`le régime CHANGÉ relit la liste UNE fois dès l’enregistrement, « Mon entreprise » encore ouverte (${changeOuverte}), et sa `
+    + `fermeture la relit UNE fois encore (${changeFermee})`, changeOuverte === 1 && changeFermee === 1);
+  await capture('62-rel2-carte-franchise');
+  noter('la carte au retour, en franchise', carteFranchise.slice(carteFranchise.indexOf(TITRE_LISTE), carteFranchise.indexOf(TITRE_LISTE) + 300));
+  /* Le ménage : retour au réel, par le bandeau du régime. */
+  await toucher(parLibelle('Revenir au devis')).catch(() => {});
+  await attendre(400);
+  await toucher(parLibelle('Ouvrir Mon entreprise, section TVA'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) > 0, 5000);
+  await attendre(600);
+  if ((await page.getByRole('radio', { name: /^Régime réel/ }).count()) === 0) {
+    await toucher(bouton(/^(Compléter|Modifier) mes informations de devis$/));
+  }
+  l0 = await lectures();
+  await toucher(page.getByRole('radio', { name: /^Régime réel/ }).first());
+  await enregistrer();
+  const retourReel = (await lectures()) - l0;
+  await fermer();
+  verifier(`…et le retour au réel relit aussi, UNE fois, « Mon entreprise » encore ouverte (${retourReel})`, retourReel === 1);
+  await ecouterLaListe(false);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {
