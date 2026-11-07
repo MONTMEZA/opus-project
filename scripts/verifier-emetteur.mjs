@@ -1755,6 +1755,39 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     iCroix > 0 && vues.length === 1 && listes.length === 1 && iCroix < vues[0].index && iCroix < listes[0].index
     && /minWidth: TOUCHE/.test(styleCroix) && /minHeight: TOUCHE/.test(styleCroix),
     'un `hitSlop` ne se mesure pas au navigateur ; une croix sous le clavier n’est plus une sortie');
+  /* « QUITTER SANS ENREGISTRER » ATTEND COMME LA CROIX (relecture 5 de 2b-1,
+     RELIRE4-A, 07/11/2026). Le bouton de la bande appelait `onFermer`
+     DIRECTEMENT : touché pendant un envoi, il fermait la fenêtre alors que
+     l'écriture partie aboutissait quand même — « un renoncement qui n'en est
+     pas un », que le commentaire de `fermer` dit corrigé depuis le 18/10. Et
+     la saisie d'un devis, qui relit « Pour le remettre » à la fermeture,
+     relisait AVANT que le nouveau régime de TVA soit en base : plus rien ne
+     relisait ensuite. Les TROIS sorties — la croix, le geste de retour
+     d'Android (`onRequestClose`), le bouton de la bande — passent donc par
+     `fermer`, qui attend l'envoi en cours et le dit ; `onFermer` n'est appelé
+     qu'au bout de `fermer`, une seule fois.
+     ET `fermer` TOUT ENTIÈRE, sa FORME (banc de la relecture 5, M6 et M6e) :
+     ses trois gardes, puis `onFermer()`, et RIEN d'autre — les textes
+     affichés mis à part (ils sont tenus ailleurs). Chercher la présence des
+     trois gardes laissait passer une branche de plus : « si la bande est
+     ouverte, la replier » (ou la rouvrir) en tête ou au bout de `fermer`, et
+     « Quitter sans enregistrer » ne fermait plus rien quand rien ne part. */
+  const bandeQuitter = (me.match(/\{quitter && \([\s\S]*?\n\s{8}\)\}/) || [''])[0];
+  const corpsFermer = (me.match(/const fermer = \(\) => \{([\s\S]*?)\n {2}\};/) || ['', ''])[1];
+  const formeDeFermer = corpsFermer.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/\s+/g, ' ').trim();
+  const FORME_DE_FERMER = "if (occupe || occupeAssurance) { afficher('' + ''); return; } if (occupeTva) { afficher('', ''); return; } "
+    + "if (!quitter && aDesChangements()) { setQuitter(true); retour.avertissement(); retour.annoncer(''); return; } onFermer();";
+  verifier('…« Quitter sans enregistrer » passe par `fermer`, comme la croix et le geste de retour d’Android : pendant un envoi, il '
+    + 'attend et le dit ; `onFermer` n’est appelé que par `fermer` (relecture 5 de 2b-1, RELIRE4-A)',
+  /label="Quitter sans enregistrer" onPress=\{fermer\}/.test(bandeQuitter)
+    && /onRequestClose=\{fermer\}/.test(me)
+    && /accessibilityLabel="Fermer « Mon entreprise »"/.test(me) && (me.match(/onPress=\{fermer\}/g) || []).length === 2
+    && !/onPress=\{onFermer\}|onPress=\{\(\) => onFermer\(\)\}/.test(me)
+    && (me.match(/\bonFermer\(\)/g) || []).length === 1 && /\n {4}onFermer\(\);$/.test(corpsFermer)
+    && /if \(occupe \|\| occupeAssurance\) \{/.test(corpsFermer) && /if \(occupeTva\) \{/.test(corpsFermer)
+    && /if \(!quitter && aDesChangements\(\)\) \{/.test(corpsFermer)
+    && formeDeFermer === FORME_DE_FERMER && (me.match(/\bconst fermer = /g) || []).length === 1,
+  `touché pendant un envoi, le bouton de la bande fermait la fenêtre ; l’écriture aboutissait quand même, et la saisie avait déjà relu ; forme de \`fermer\` : ${formeDeFermer}`);
 
   /* Une liste virtualisée n'entre dans AUCUN `ScrollView` de même
      orientation : on cherche une `<FlatList` entre l'ouverture et la

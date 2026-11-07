@@ -348,7 +348,11 @@ export default function MonEntreprise({
      « Enregistré »), et, touchée PENDANT l'envoi, la croix proposait
      « Quitter sans enregistrer » alors que l'écriture partie aboutissait
      quand même. Un renoncement qui n'en est pas un. Donc : chaque succès et
-     chaque changement de mode la referme, et pendant un envoi on attend. */
+     chaque changement de mode la referme, et pendant un envoi on attend.
+     LES TROIS SORTIES PASSENT ICI — la croix, le geste de retour d'Android,
+     et « Quitter sans enregistrer » de la bande (relecture 5 de 2b-1,
+     RELIRE4-A, 07/11/2026 : ce bouton appelait `onFermer` directement, et
+     touché pendant un envoi il fermait quand même). */
   const fermer = () => {
     if (occupe || occupeAssurance) {
       afficher('Enregistrement en cours : attendez qu’il se termine. L’interrompre ne '
@@ -586,7 +590,12 @@ export default function MonEntreprise({
             <Text style={s.quitterTexte}>Vos modifications ne sont pas enregistrées.</Text>
             <View style={s.quitterBoutons}>
               <BtnMini outline label="Rester" onPress={() => setQuitter(false)} style={s.cible} />
-              <BtnMain ton="danger" label="Quitter sans enregistrer" onPress={onFermer} />
+              {/* PAR `fermer`, COMME LA CROIX (relecture 5 de 2b-1, RELIRE4-A) :
+                  pendant un envoi, il attend et le dit — l'écriture partie
+                  aboutirait quand même, et la saisie d'un devis relirait sa
+                  liste avant elle. Sans envoi, `quitter` est déjà vrai :
+                  `fermer` ferme, sans rien enregistrer. */}
+              <BtnMain ton="danger" label="Quitter sans enregistrer" onPress={fermer} />
             </View>
           </View>
         )}

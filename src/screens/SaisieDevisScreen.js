@@ -108,6 +108,7 @@ import {
   cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, creerRenvoisAutomatiques, phraseDuRejeu, echecsDeLaFile,
   echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
   lireMotifsDeRemise, avisDuDevis, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe, ceQueLaListeNeComptePas,
+  garderLaPlace,
 } from '../lib/devis';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
@@ -598,8 +599,12 @@ export default function SaisieDevisScreen({
      pour le régime que la base avait alors, et ce que le TÉLÉPHONE sait du
      régime (pas encore lu, en lecture, en échec) ne la rend jamais fausse.
      Le régime de la base ne change que par « Mon entreprise », dont la
-     fermeture relit tout. Un changement de la propriété `regime` ne relit
-     donc rien et n'efface rien.
+     fermeture relit tout : ses trois sorties — la croix, le geste de retour
+     d'Android, « Quitter sans enregistrer » — attendent la fin d'un envoi en
+     cours (relecture 5 de 2b-1, RELIRE4-A : le bouton de la bande fermait
+     pendant l'envoi, et la relecture partait avant l'écriture du régime).
+     Un changement de la propriété `regime` ne relit donc rien et n'efface
+     rien.
      `lectureListe` numérote les lectures : seule la DERNIÈRE partie
      s'affiche. `monte` : une réponse qui arrive après le démontage ne
      touche à rien. */
@@ -609,6 +614,12 @@ export default function SaisieDevisScreen({
   const lectureListe = useRef(0);
   const monte = useRef(true);
   useEffect(() => () => { monte.current = false; }, []);
+  /* LA PLACE GARDÉE DE LA LIGNE « POUR LE REMETTRE » (relecture 5 de 2b-1,
+     RELIRE4-C, 07/11/2026) : `null`, ou la liste lue au dernier rendu où
+     quelque chose n'était pas compté (`garderLaPlace`, devis.js). Un ÉTAT,
+     remis à jour pendant le rendu, plus bas, une fois l'état de la liste
+     connu ; aucune référence n'est lue pendant le rendu. */
+  const [placeGardee, setPlaceGardee] = useState(null);
   /* OÙ REVIENT LA CARTE OUVERTE DEPUIS LA LISTE : `CARTE_POUR_REMETTRE`, ou
      `null` (au devis). Une RÉFÉRENCE (`fermerCarte` la lit) et un état (le
      libellé « ‹ Liste » de la carte). Une seule valeur (critique E-13). */
@@ -1768,6 +1779,22 @@ export default function SaisieDevisScreen({
     entete: !!attente.devisErreur || Object.keys(erreursEntete).length > 0,
     enBase: attente.devisEnBase,
   });
+  /* LA PLACE DE LA LIGNE NE SE REND QU'AU RETOUR D'UNE LISTE QUI COMPTE TOUT
+     (relecture 5 de 2b-1, RELIRE4-C) : « Réessayer » remet une écriture en
+     route, `pasCompte` se tait — et la ligne tombait de 110 à 74 points à
+     393 avant de remonter, la rangée touchée bougeant sous le doigt. La
+     mémoire se remet à jour PENDANT le rendu, quand elle change (la forme que
+     React prévoit pour ce qui dépend du rendu d'avant) : `garderLaPlace` rend
+     le même objet quand rien ne change, ce rendu de plus est donc le
+     dernier. Et elle ne se rend pas sous une carte ou une feuille ouverte
+     (`couverte`) : la liste qui revient pendant qu'on écrit dans la carte
+     faisait défiler la liste au navigateur, et le clavier se fermait sur le
+     champ qu'on venait de toucher. Elle se rend à leur fermeture. */
+  const place = garderLaPlace({
+    gardee: placeGardee, etat: etatListe, pasCompte, enBase: attente.devisEnBase, liste: liste.motifs,
+    couverte: !!carte || !!feuille,
+  });
+  if (place !== placeGardee) setPlaceGardee(place);
   /* LES AVIS, calculés ici sur ce que l'écran a, jamais comptés — et
      « ce devis ne coûte rien » se tait tant que la liste n'est pas sûre
      (relecture de 2b-1, PAR-8). */
@@ -1792,6 +1819,7 @@ export default function SaisieDevisScreen({
       enLecture={liste.enLecture}
       pasCompte={pasCompte}
       relecture={liste.relecture}
+      garder={!!place}
       erreurReessayable={listeReessayable}
       erreurPhrase={erreurListe}
       onOuvrir={ouvrirPourRemettre}

@@ -106,9 +106,19 @@ import {
  * Avant, les gabarits suivaient les nombres de la dernière liste lue : la
  * ligne du haut passait de 92 à 110 points à 393 quand le dernier point du
  * devis était corrigé, et à la première lecture il n'y en avait aucun.
- * Sans mesure ni course. Ce qui la change encore (hors de la décision) : la
- * phrase « pas compté » qui apparaît ou disparaît, et le passage d'un
- * brouillon « pas encore en base » à « en base ».
+ * Sans mesure ni course. ET LA PLACE NE SE REND QU'AU RETOUR D'UNE LISTE QUI
+ * COMPTE TOUT (relecture 5, RELIRE4-C, 07/11/2026) : la saisie la garde
+ * (`garder`, la mémoire de `garderLaPlace`, devis.js) pendant qu'une
+ * écriture renvoyée après un échec repart — « Réessayer » sur une ligne ou
+ * sur l'en-tête, le renvoi d'un retrait ou du plafond —, alors que la phrase
+ * « pas compté » s'est tue : avant, la ligne tombait à 74 points à 393 puis
+ * remontait à 110, et la rangée qu'on venait de toucher bougeait sous le
+ * doigt. Ce qui la change encore, et c'est tout : elle se RÉSERVE quand
+ * quelque chose cesse d'être compté, elle se REND au retour d'une liste qui
+ * compte tout — ou à la fermeture de la carte ou de la feuille qui couvrait
+ * la liste quand celle-ci est revenue —, et un brouillon « pas encore en
+ * base » qui y entre avec une ligne incomplète saute une fois à la place
+ * réservée.
  *
  * LA SUPERPOSITION (`s.superpose`) : une RANGÉE dont chaque couche fait
  * toute la largeur, les suivantes ramenées sous la première par une marge de
@@ -129,12 +139,12 @@ import {
  */
 export function LigneRemise({
   variante = 'haut', etat, lue, erreurReessayable = true, erreurPhrase = null, enLecture = false, pasCompte = null,
-  relecture = null, onOuvrir, onReessayer,
+  relecture = null, garder = false, onOuvrir, onReessayer,
 }) {
   /* TOUT ce que la ligne dit se décide dans `texteDeLaLigneRemise`
      (devis.js), que `verifier-devis` fait tourner. */
   const dit = texteDeLaLigneRemise({
-    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture,
+    etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, garder,
   });
   const { contenu, compte, gabarits, aDire } = dit;
   let action = null;

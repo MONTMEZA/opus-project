@@ -149,7 +149,12 @@
  *
  * CE QU'IL NE PEUT PAS DIRE
  * -------------------------
- * C'est Chromium et `react-native-web`, pas un iPhone : ni le clavier (et
+ * C'est Chromium et `react-native-web`, pas un iPhone. Chromium compense
+ * ce qui change hors de l'écran (overflow-anchor), iOS non : une mesure de
+ * position éteint l'ancrage (`sansAncrage`, relecture 5 de 2b-1, RELIRE4-D) —
+ * sinon une ligne qui change de hauteur au-dessus de la vue ne déplace rien
+ * ici, et tout sur l'iPhone. Les HAUTEURS, elles, ne dépendent pas de
+ * l'ancrage. Et ni le clavier (et
  * donc ni le pied caché pendant la frappe, ni la virgule du pavé décimal),
  * ni le pouce, ni les chiffres tabulaires rendus par iOS, ni
  * `automaticallyAdjustKeyboardInsets` (que `react-native-web` jette). Et
@@ -452,6 +457,30 @@ page.on('console', (m) => { if (m.type() === 'error') erreursPage.push(`console 
 const attendre = (ms) => page.waitForTimeout(ms);
 const capture = async (nom) => { if (DOSSIER) await page.screenshot({ path: `${DOSSIER}/${nom}.png` }); };
 const texte = async () => net(await page.evaluate(() => document.body.innerText));
+/* L'ANCRAGE DU DÉFILEMENT (relecture 5 de 2b-1, RELIRE4-D, 07/11/2026) :
+   Chromium compense ce qui change hors de l'écran (`overflow-anchor`) — une
+   ligne sortie de l'écran par le haut qui grandit ou rétrécit, et il corrige
+   le `scrollTop` : rien de visible ne bouge. iOS non : `UIScrollView` n'a pas
+   cet ancrage, et la `FlatList` de la saisie n'a pas
+   `maintainVisibleContentPosition` — tout ce qui est dessous bouge. Une
+   mesure de POSITION l'éteint d'abord : `sansAncrage` pose
+   `overflowAnchor = 'none'` sur le défileur de la saisie, et sur ceux de la
+   carte ouverte s'il y en a une (une carte prend l'écran : ses défileurs sont
+   dedans). Il rend ce qu'il a posé, pour que la mesure l'exige. */
+const sansAncrage = () => page.evaluate(() => {
+  const defile = (x) => x.scrollHeight > x.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(x).overflowY);
+  let saisie = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+  while (saisie && !defile(saisie)) saisie = saisie.parentElement;
+  if (saisie) saisie.style.overflowAnchor = 'none';
+  let carte = document.querySelector('[aria-label="Revenir au devis"], [aria-label$="et revenir au devis"]');
+  while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
+  const dansLaCarte = carte ? [...carte.querySelectorAll('*')].filter(defile) : [];
+  dansLaCarte.forEach((x) => { x.style.overflowAnchor = 'none'; });
+  return {
+    saisie: saisie ? getComputedStyle(saisie).overflowAnchor : null,
+    carte: carte ? dansLaCarte.map((x) => getComputedStyle(x).overflowAnchor) : null,
+  };
+});
 
 /** Attendre qu'une condition (évaluée côté Node) devienne vraie. */
 const jusqua = async (f, ms = 6000, pas = 150) => {
@@ -4950,6 +4979,195 @@ await section('À 393, un brouillon NEUF qui entre en base avec une ligne incomp
   await toucher(bouton('Confirmer la suppression de ce brouillon'));
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
   exiger(!(await dansLaSaisie()), 'le brouillon d’essai est supprimé');
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* RELIRE4-C (relecture 5 de 2b-1, 07/11/2026) : « RÉESSAYER » NE REND PAS LA
+   PLACE. Une écriture renvoyée après un échec (une ligne, l'en-tête) repart
+   « en cours » : elle n'est plus comptée parmi ce qui n'est pas enregistré, la
+   phrase « pas compté » disparaît — et, avant la correction, la place réservée
+   avec elle (110 → 74 → 110 à 393, quand l'envoi ne revient toujours pas). La
+   place ne se rend désormais qu'au RETOUR d'une liste qui compte tout
+   (`garderLaPlace`, devis.js), jamais au départ d'une écriture.
+   La mesure, à 393 (l'iPhone 16 du propriétaire) puis à 320, sur une écriture
+   qui NE REVIENT PAS (`__opusSuspendreEcritures`) : échec → « Réessayer » →
+   échec, puis « Réessayer » qui RÉUSSIT, la lecture qui suit RETENUE
+   (`__opusListe.retenir`) puis relâchée. Un enregistreur, à chaque image : la
+   HAUTEUR des deux lignes (elle ne dépend pas de l'ancrage du défilement) et la
+   POSITION de ce qu'on vient de toucher — la rangée « Muret en blocs », ou le
+   champ « Délai d'exécution » —, l'ancrage du défilement ÉTEINT
+   (`sansAncrage`) : Chromium compense ce qui change hors de l'écran, iOS non. */
+const PHASE = (p) => page.evaluate((v) => { window.__opusPlacePhase = v; }, p);
+const enregistrerLaPlace = (selCible) => page.evaluate((sel) => {
+  window.__opusPlace = [];
+  window.__opusPlaceFin = false;
+  window.__opusPlacePhase = window.__opusPlacePhase || 'debut';
+  let prec = '';
+  const pas = () => {
+    const ls = [...document.querySelectorAll('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]')];
+    const c = document.querySelector(sel);
+    let d = ls[0];
+    while (d && !(d.scrollHeight > d.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(d).overflowY))) d = d.parentElement;
+    const v = [window.__opusPlacePhase,
+      ls[0] ? Math.round(ls[0].getBoundingClientRect().height) : -1,
+      ls.length > 1 ? Math.round(ls[ls.length - 1].getBoundingClientRect().height) : -1,
+      c ? Math.round(c.getBoundingClientRect().top) : null,
+      ls[0] ? (ls[0].getAttribute('aria-label') || '') : '',
+      d ? getComputedStyle(d).overflowAnchor : null];
+    const k = JSON.stringify(v);
+    if (k !== prec) { window.__opusPlace.push(v); prec = k; }
+    if (!window.__opusPlaceFin) requestAnimationFrame(pas);
+  };
+  requestAnimationFrame(pas);
+}, selCible);
+const lireLaPlace = () => page.evaluate(() => { window.__opusPlaceFin = true; return window.__opusPlace; });
+const JUSTE_A_393 = { 393: 110, 320: 128 };
+
+/* Échec → « Réessayer » → échec, puis « Réessayer » qui réussit : `provoquer`
+   pose l'écriture qui ne revient pas et attend son échec ; `reessayer` touche
+   le « Réessayer » de cette écriture ; `echecVu` dit qu'elle est de nouveau en
+   échec ; `remettre` défait le geste, écritures rendues. */
+const renvoiSansBouger = async ({
+  quoi, largeur, selCible, provoquer, reessayer, echecVu, remettre,
+}) => {
+  await page.setViewportSize({ width: largeur, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await ecouterLaListe(true);
+  exiger(!!(await jusqua(async () => COMPTE.test(await libelleLigne()), 6000)),
+    `à ${largeur}, « Muret de clôture » : tout est compté (la ligne du haut dit le compte)`);
+  const ordinaire = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  await page.evaluate(() => { window.__opusSuspendreEcritures = true; window.__opusPlacePhase = 'echec1'; });
+  const etat = await provoquer();
+  exiger(!!(await jusqua(echecVu, 2 * DELAI_ECRITURE + 5000)), `à ${largeur}, ${quoi} : l’écriture qui ne revient pas est en échec, « Réessayer » s’affiche`);
+  await attendre(500);
+  const ancre = await sansAncrage();
+  exiger(ancre.saisie === 'none', `à ${largeur}, l’ancrage du défilement de la saisie est éteint (${JSON.stringify(ancre)})`);
+  await enregistrerLaPlace(selCible);
+  await attendre(300);
+  await PHASE('renvoi');
+  await reessayer();
+  await attendre(300);
+  const enRouteVu = (await libelleLigne()).includes(EN_ROUTE_LIGNE);
+  const reechec = await jusqua(echecVu, 2 * DELAI_ECRITURE + 5000);
+  await PHASE('echec2');
+  await attendre(500);
+  /* « Réessayer » qui RÉUSSIT, la lecture qui suit RETENUE. */
+  await page.evaluate(() => {
+    window.__opusSuspendreEcritures = false;
+    window.__opusListe.retenir = true;
+    window.__opusListe.retenues = [];
+    window.__opusPlacePhase = 'reussite';
+  });
+  await reessayer();
+  const retenue = await jusqua(async () => (await page.evaluate(() => window.__opusListe.retenues.length)) >= 1, DELAI_ECRITURE + 3000);
+  await attendre(400);
+  const pendant = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  await page.evaluate(() => {
+    window.__opusPlacePhase = 'relache';
+    window.__opusListe.retenir = false;
+    window.__opusListe.retenues.splice(0).forEach((f) => f());
+  });
+  const revenue = await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await attendre(600);
+  const vu = await lireLaPlace();
+  const avantRetour = vu.filter(([p]) => p !== 'relache');
+  const apresRetour = vu.filter(([p]) => p === 'relache');
+  const hauts = [...new Set(avantRetour.map((x) => x[1]))];
+  const bas = [...new Set(avantRetour.map((x) => x[2]))];
+  const positions = [...new Set(avantRetour.map((x) => x[3]))];
+  const ancres = [...new Set(vu.map((x) => x[5]))];
+  const finale = vu.length ? vu[vu.length - 1][1] : null;
+  const changements = vu.filter((x, i) => i > 0 && x[1] !== vu[i - 1][1]).length;
+  /* La première image où la place est rendue : dans la phase relâchée, et ce
+     qu'elle DIT est le compte revenu (la liste qui compte tout). */
+  const rendue = vu.findIndex((x) => x[1] !== hauts[0]);
+  noter(`à ${largeur}, ${quoi}`, `ordinaire ${ordinaire} ; avant le retour de la liste : haut ${JSON.stringify(hauts)}, bas ${JSON.stringify(bas)}, `
+    + `position ${JSON.stringify(positions)} ; pendant la lecture retenue ${pendant} ; après : haut ${JSON.stringify([...new Set(apresRetour.map((x) => x[1]))])} ; `
+    + `ancrage ${JSON.stringify(ancres)} ; ${vu.length} image(s) : ${JSON.stringify(vu.map(([p, h, b, y, l]) => [p, h, b, y, net(l).slice(18, 60)]))}`);
+  verifier(`à ${largeur}, ${quoi} : échec → « Réessayer » → échec, puis « Réessayer » qui réussit, jusqu’au RETOUR de la liste — la ligne du haut `
+    + `garde UNE hauteur à chaque image (${hauts.join(', ')}), la place réservée (≈ ${JUSTE_A_393[largeur]}), celle du bas aussi (${bas.join(', ')})`,
+  !!reechec && !!retenue && enRouteVu && hauts.length === 1 && bas.length === 1 && Math.abs(hauts[0] - JUSTE_A_393[largeur]) <= 2
+    && pendant === hauts[0] && avantRetour.some(([p]) => p === 'renvoi') && avantRetour.some(([p]) => p === 'reussite'),
+  `réechec ${!!reechec}, lecture retenue ${!!retenue}, « Des changements partent » au renvoi ${enRouteVu}, pendant la lecture retenue ${pendant} ; `
+    + JSON.stringify(vu.map(([p, h, b]) => [p, h, b])));
+  verifier(`à ${largeur}, ${quoi} : ce qu’on vient de toucher ne bouge pas sous le doigt, l’ancrage du défilement ÉTEINT (comme iOS) — `
+    + `position ${positions.join(', ')}`,
+  positions.length === 1 && positions[0] !== null && ancres.length === 1 && ancres[0] === 'none', JSON.stringify(vu.map(([p, , , y]) => [p, y])));
+  verifier(`à ${largeur}, ${quoi} : la place ne se REND qu’au retour d’une liste qui compte tout — une fois (${hauts[0]} → ${finale}, la hauteur `
+    + `ordinaire ${ordinaire}), jamais avant que la lecture retenue soit relâchée`,
+  !!revenue && changements === 1 && finale === ordinaire && rendue > 0 && vu[rendue][0] === 'relache'
+    && COMPTE.test(net(vu[rendue][4])) && apresRetour.length >= 1,
+  JSON.stringify(vu.map(([p, h, , , l]) => [p, h, net(l).slice(18, 50)])));
+  await remettre(etat);
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await attendre(600);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+};
+
+await section('RELIRE4-C : une LIGNE dont l’envoi ne revient pas, « Réessayer », de nouveau en échec, puis qui réussit — la ligne « Pour le remettre » ne bouge pas avant le retour d’une liste qui compte tout, à 393 et 320 (relecture 5)', async () => {
+  const tailleAvant = page.viewportSize();
+  const RANGEE = 'button[aria-label^="Muret en blocs"]';
+  const REESSAYER = 'Ligne non enregistrée. Réessayer';
+  for (const largeur of [393, 320]) {
+    await renvoiSansBouger({
+      quoi: 'une ligne renvoyée',
+      largeur,
+      selCible: RANGEE,
+      provoquer: async () => {
+        await toucher(page.locator(RANGEE).first());
+        await attendre(500);
+        const ancienne = await parLibelle('Quantité').inputValue();
+        await viderEtTaper(parLibelle('Quantité'), ancienne === '3' ? '4' : '3');
+        await toucher(parLibelle('Prix unitaire HT'));
+        await fermerCarte();
+        return ancienne;
+      },
+      reessayer: () => toucher(parLibelle(REESSAYER)),
+      echecVu: async () => (await page.getByLabel(REESSAYER, { exact: true }).count()) >= 1,
+      remettre: async (ancienne) => {
+        await toucher(page.locator(RANGEE).first());
+        await attendre(500);
+        await viderEtTaper(parLibelle('Quantité'), ancienne);
+        await toucher(parLibelle('Prix unitaire HT'));
+        await fermerCarte();
+      },
+    });
+  }
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('RELIRE4-C : l’EN-TÊTE dont l’envoi ne revient pas (le délai d’exécution), « Réessayer » de la bande, de nouveau en échec, puis qui réussit — même règle, à 393 et 320 (relecture 5)', async () => {
+  const tailleAvant = page.viewportSize();
+  const DELAI = '[aria-label="Délai d’exécution"]';
+  const reessayerBande = () => page.getByRole('button', { name: 'Réessayer', exact: true });
+  for (const largeur of [393, 320]) {
+    await renvoiSansBouger({
+      quoi: 'l’en-tête renvoyé',
+      largeur,
+      selCible: DELAI,
+      provoquer: async () => {
+        const delai = parLibelle('Délai d’exécution');
+        await delai.scrollIntoViewIfNeeded();
+        await attendre(400);
+        const ancien = await delai.inputValue();
+        await viderEtTaper(delai, `${ancien} (essai)`);
+        await delai.evaluate((e) => e.blur());
+        return ancien;
+      },
+      reessayer: () => toucher(reessayerBande().first()),
+      echecVu: async () => (await reessayerBande().count()) >= 1,
+      remettre: async (ancien) => {
+        const delai = parLibelle('Délai d’exécution');
+        await viderEtTaper(delai, ancien);
+        await delai.evaluate((e) => e.blur());
+      },
+    });
+  }
   await page.setViewportSize(tailleAvant);
   await attendre(400);
 });
