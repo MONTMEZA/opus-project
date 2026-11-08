@@ -119,6 +119,22 @@
  *      seulement : `reessayer(cle, { retenues: true })`, que fait le renvoi
  *      du plafond (`rejouerLesRefusDuPlafond`, devis.js). Un « Réessayer »
  *      ordinaire renvoie le reste, jamais le refus tenu.
+ *
+ * CE QUE L'ÉCRAN DOIT SAVOIR D'UN RENVOI (relecture 6 de 2b-1, 07/11/2026).
+ *  18. une écriture RENVOYÉE APRÈS UN ÉCHEC — `reessayer()`, que ce soit un
+ *      « Réessayer » de l'artisan (une ligne, l'en-tête, un retrait) ou le
+ *      renvoi automatique du plafond — porte une marque (`renvoi`) tant
+ *      qu'elle est EN ROUTE ; `renvoisEnRoute()` rend leurs clés. La marque
+ *      tombe dès que l'entrée quitte « en cours » (enregistrée, locale, de
+ *      nouveau en échec) ou disparaît. Pourquoi : l'état seul ne dit pas
+ *      d'où vient un « en cours », et la ligne « Pour le remettre » doit
+ *      garder sa grande place pendant un renvoi — la phrase « pas compté »
+ *      s'y tait, puisque plus rien n'est en échec (devis.js,
+ *      `garderLaPlace`). Un renvoi fait quand le devis n'est PAS en base ne
+ *      porte pas la marque : rien n'y est réservé, et rien ne doit l'être à
+ *      son entrée en base. Une écriture qui n'est pas un renvoi (l'artisan
+ *      corrige la ligne ou l'en-tête à la main après un échec) n'en porte
+ *      pas non plus : c'est un nouveau geste.
  * Ce qui reste, et la base le dit aussi :
  *   - la CRÉATION d'un brouillon arrivée après sa suppression le fait
  *     réapparaître (rien au-dessus d'un devis ne porte d'horloge) — VIDE le
@@ -387,6 +403,9 @@ export function creerFileEcriture({
   const poser = (e, etat, erreur = null, { retenu = false } = {}) => {
     e.etat = etat;
     e.erreur = erreur;
+    /* Un renvoi n'est plus « en route » dès qu'il quitte « en cours » (18) :
+       la marque tombe AVANT l'événement, que l'écran lit aussitôt. */
+    if (etat !== 'en_cours') e.renvoi = false;
     prevenir(retenu ? { type: 'etat', cle: e.cle, etat, erreur, retenu: true } : { type: 'etat', cle: e.cle, etat, erreur });
   };
   /* UN GESTE DE L'ARTISAN sur cette clé (N1) : compté, jamais remis à
@@ -866,6 +885,10 @@ export function creerFileEcriture({
           if (retenues === true) e.tenue = null;
           e.dejaReparti = false;
           if (automatique !== true) unGeste(e);
+          /* LA MARQUE DU RENVOI (18), posée AVANT `enfiler` : l'événement
+             « en cours » qu'il annonce la porte déjà. Seulement si le devis
+             est en base. */
+          e.renvoi = !supprime && Boolean(entrees.get(DEVIS).confirme);
           enfiler(c);
         }
       });
@@ -989,6 +1012,15 @@ export function creerFileEcriture({
       let n = 0;
       entrees.forEach((e, c) => { if (c !== DEVIS && (e.locale || e.etat !== 'enregistree')) n += 1; });
       return n;
+    },
+    /** Les clés dont une écriture RENVOYÉE APRÈS UN ÉCHEC (`reessayer()`,
+     *  devis en base) est encore en route (18) — ce que l'écran recopie dans
+     *  son état d'attente après chaque événement. */
+    renvoisEnRoute() {
+      if (supprime) return [];
+      const r = [];
+      entrees.forEach((e, c) => { if (e.renvoi && e.etat === 'en_cours') r.push(c); });
+      return r;
     },
     /** Plus rien en vol ni en attente ? */
     vide: estVide,

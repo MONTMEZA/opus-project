@@ -108,7 +108,6 @@ import {
   cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, creerRenvoisAutomatiques, phraseDuRejeu, echecsDeLaFile,
   echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
   lireMotifsDeRemise, avisDuDevis, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe, ceQueLaListeNeComptePas,
-  garderLaPlace,
 } from '../lib/devis';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
@@ -553,7 +552,7 @@ export default function SaisieDevisScreen({
   }));
   const [totauxIllisibles, setTotauxIllisibles] = useState(false);
   const [attente, setAttente] = useState({
-    nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0,
+    nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0,
   });
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
@@ -614,12 +613,6 @@ export default function SaisieDevisScreen({
   const lectureListe = useRef(0);
   const monte = useRef(true);
   useEffect(() => () => { monte.current = false; }, []);
-  /* LA PLACE GARDÉE DE LA LIGNE « POUR LE REMETTRE » (relecture 5 de 2b-1,
-     RELIRE4-C, 07/11/2026) : `null`, ou la liste lue au dernier rendu où
-     quelque chose n'était pas compté (`garderLaPlace`, devis.js). Un ÉTAT,
-     remis à jour pendant le rendu, plus bas, une fois l'état de la liste
-     connu ; aucune référence n'est lue pendant le rendu. */
-  const [placeGardee, setPlaceGardee] = useState(null);
   /* OÙ REVIENT LA CARTE OUVERTE DEPUIS LA LISTE : `CARTE_POUR_REMETTRE`, ou
      `null` (au devis). Une RÉFÉRENCE (`fermerCarte` la lit) et un état (le
      libellé « ‹ Liste » de la carte). Une seule valeur (critique E-13). */
@@ -707,6 +700,11 @@ export default function SaisieDevisScreen({
          celui d'un CHAMP (`phraseEchecDuDevis`), pas du brouillon. */
       devisEnBase: f.devisEnBase(),
       retraitsEnEchec: retraits,
+      /* Les écritures RENVOYÉES APRÈS UN ÉCHEC encore en route (relecture 6
+         de 2b-1) : la ligne « Pour le remettre » garde sa grande place
+         pendant ce temps (`garderLaPlace`, devis.js). Lues ICI, après chaque
+         événement de la file — jamais par une référence pendant le rendu. */
+      renvoisEnRoute: f.renvoisEnRoute().length,
       /* Ceux que « Réessayer » de leur bande peut renvoyer : jamais un refus
          définitif (TC-1). */
       retraitsRenvoyables: retraitsARenvoyer(f.entreesVoulues().map((x) => ({ ...x, erreur: f.erreurDe(x.cle) })),
@@ -1779,22 +1777,14 @@ export default function SaisieDevisScreen({
     entete: !!attente.devisErreur || Object.keys(erreursEntete).length > 0,
     enBase: attente.devisEnBase,
   });
-  /* LA PLACE DE LA LIGNE NE SE REND QU'AU RETOUR D'UNE LISTE QUI COMPTE TOUT
-     (relecture 5 de 2b-1, RELIRE4-C) : « Réessayer » remet une écriture en
-     route, `pasCompte` se tait — et la ligne tombait de 110 à 74 points à
-     393 avant de remonter, la rangée touchée bougeant sous le doigt. La
-     mémoire se remet à jour PENDANT le rendu, quand elle change (la forme que
-     React prévoit pour ce qui dépend du rendu d'avant) : `garderLaPlace` rend
-     le même objet quand rien ne change, ce rendu de plus est donc le
-     dernier. Et elle ne se rend pas sous une carte ou une feuille ouverte
-     (`couverte`) : la liste qui revient pendant qu'on écrit dans la carte
-     faisait défiler la liste au navigateur, et le clavier se fermait sur le
-     champ qu'on venait de toucher. Elle se rend à leur fermeture. */
-  const place = garderLaPlace({
-    gardee: placeGardee, etat: etatListe, pasCompte, enBase: attente.devisEnBase, liste: liste.motifs,
-    couverte: !!carte || !!feuille,
-  });
-  if (place !== placeGardee) setPlaceGardee(place);
+  /* LA PLACE DE LA LIGNE, SANS MÉMOIRE (relecture 6 de 2b-1) : la ligne la
+     réserve tant que quelque chose n'est pas compté (`pasCompte`) OU qu'une
+     écriture renvoyée après un échec est en route (`renvoi`, que la file dit
+     dans `attente`) — `garderLaPlace`, appelée par `texteDeLaLigneRemise`.
+     « Réessayer » ne la fait donc plus tomber (RELIRE4-C), et ce qui cesse
+     d'être compté sans écriture la rend au geste, jamais au retour d'une
+     liste sans rapport (RELIRE5-R1). Rien ne se retient d'un rendu au
+     suivant. */
   /* LES AVIS, calculés ici sur ce que l'écran a, jamais comptés — et
      « ce devis ne coûte rien » se tait tant que la liste n'est pas sûre
      (relecture de 2b-1, PAR-8). */
@@ -1819,7 +1809,7 @@ export default function SaisieDevisScreen({
       enLecture={liste.enLecture}
       pasCompte={pasCompte}
       relecture={liste.relecture}
-      garder={!!place}
+      renvoi={attente.renvoisEnRoute > 0}
       erreurReessayable={listeReessayable}
       erreurPhrase={erreurListe}
       onOuvrir={ouvrirPourRemettre}
@@ -1935,12 +1925,25 @@ export default function SaisieDevisScreen({
     />
   );
 
+  /* GLISSER LA LISTE REFERME LE CLAVIER (`on-drag`) — SAUF QUAND UNE CARTE
+     OU UNE FEUILLE LA COUVRE (relecture 6 de 2b-1) : on ne peut plus la
+     glisser, et ce qui change sous elles change sa hauteur (la place de la
+     ligne « Pour le remettre » qui se rend ou se réserve, une rangée qui
+     passe en échec). Au navigateur, Chromium compense ce défilement
+     (`overflow-anchor`) et `react-native-web` ferme le clavier à la fin de
+     TOUT défilement : le champ de la carte qu'on était en train de remplir
+     perdait la main (mesuré : « Poste suivant » sur la seule ligne
+     incomplète, un renvoi qui réussit pendant qu'on tape — `mesure-devis`).
+     iOS ne ferme le clavier qu'à un glissement du doigt, impossible sous la
+     carte : rien n'y change. Une condition du rendu, pas une mémoire. */
+  const glisserFermeLeClavier = carte || feuille ? 'none' : 'on-drag';
+
   return (
     <View style={s.ecran}>
       <FlatList
         ref={refListe}
         {...CLAVIER}
-        keyboardDismissMode="on-drag"
+        keyboardDismissMode={glisserFermeLeClavier}
         data={visibles}
         keyExtractor={(l) => String(l.id)}
         renderItem={({ item }) => (

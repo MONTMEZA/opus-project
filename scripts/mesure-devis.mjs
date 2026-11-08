@@ -1908,27 +1908,26 @@ await section('La carte « Conditions » : réduction, acompte, validité, puis 
   verifier(`« Corriger » ROUVRE la carte, le texte tapé est revenu (« ${champ || '—'} »), avec sa phrase`,
     champ === '150' && /Un pourcentage ne dépasse pas 100 %\./.test(await texte()));
   /* On remet le devis comme on l'a trouvé : sans réduction ni acompte.
-     LE PIÈGE DE `react-native-web` (en tête de ce fichier), PROVOQUÉ ICI PAR
-     D-A (relecture de 2b-1, 05/11) : la réduction refusée, la ligne du haut
-     dit la phrase ET le décompte sur trois lignes ; vidée, elle revient à
-     deux. La saisie, sous la carte, rapetisse de 18 points AU-DESSUS de ce
-     qu'elle montre : Chrome la fait défiler d'autant pour garder sa vue
-     (l'« ancrage » du défilement), et `on-drag` reprend aussitôt le focus du
-     champ qu'on vient de toucher. iOS n'ancre pas le défilement et ne ferme
-     le clavier qu'au début d'un glissement du doigt : on DISTINGUE donc la
-     cause (`rnw`), on le note, et l'appui attend la fin de ce défilement. */
+     LE PIÈGE DE `react-native-web` (en tête de ce fichier), QUE CE GESTE
+     PROVOQUAIT : la réduction refusée, la place de la ligne du haut est
+     réservée ; vidée, la réduction n'est plus refusée et la place se REND —
+     au geste, sous la carte « Conditions » (relecture 6 : la règle sans
+     mémoire). La saisie, sous la carte, rapetisse AU-DESSUS de ce qu'elle
+     montre : Chrome la fait défiler d'autant pour garder sa vue (l'« ancrage »
+     du défilement), et `on-drag` reprenait aussitôt le focus du champ qu'on
+     venait de toucher. La liste ne ferme plus le clavier tant qu'une carte la
+     couvre (`glisserFermeLeClavier`, SaisieDevisScreen.js) : le champ de
+     l'acompte GARDE la main, et aucun `blur()` ne part — vérifié à chaque
+     passage, sans condition. */
   await viderEtTaper(parLibelle('Réduction, en pour cent'), '');
   await page.evaluate(() => { window.__opusBlurs = []; });
   await toucher(acomptePct());
-  const actifAcompte = () => page.evaluate(() => /en pour cent$/.test((document.activeElement && document.activeElement.getAttribute('aria-label')) || '')
+  await attendre(400);
+  const actifAcompte = await page.evaluate(() => /en pour cent$/.test((document.activeElement && document.activeElement.getAttribute('aria-label')) || '')
     && !/^Réduction/.test(document.activeElement.getAttribute('aria-label')));
-  if (!(await actifAcompte())) {
-    const blurs = await page.evaluate(() => window.__opusBlurs.slice());
-    verifier('le focus de l’acompte, perdu, ne l’a été QUE par `react-native-web` (fin de défilement, `on-drag`) — aucun code d’Opus',
-      blurs.length > 0 && blurs.every((x) => x.rnw || /^Réduction/.test(x.qui)), JSON.stringify(blurs));
-    noter('focus de l’acompte repris par react-native-web après le changement de hauteur de la ligne du haut (D-A) — pas un défaut d’iOS', JSON.stringify(blurs));
-    await attendre(300);
-  }
+  const blursAcompte = await page.evaluate(() => window.__opusBlurs.slice());
+  verifier('la réduction vidée (la place se rend sous la carte), le champ de l’acompte GARDE la main — aucun `blur()` de `react-native-web`',
+    actifAcompte && blursAcompte.every((x) => !x.rnw && /^Réduction/.test(x.qui)), JSON.stringify(blursAcompte));
   await viderEtTaper(acomptePct(), '');
   await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
   const vide = await jusqua(async () => !/Réduction|Arrhes/.test(net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => 'x'))), DELAI_ECRITURE + 3000);
@@ -4987,9 +4986,13 @@ await section('À 393, un brouillon NEUF qui entre en base avec une ligne incomp
    PLACE. Une écriture renvoyée après un échec (une ligne, l'en-tête) repart
    « en cours » : elle n'est plus comptée parmi ce qui n'est pas enregistré, la
    phrase « pas compté » disparaît — et, avant la correction, la place réservée
-   avec elle (110 → 74 → 110 à 393, quand l'envoi ne revient toujours pas). La
-   place ne se rend désormais qu'au RETOUR d'une liste qui compte tout
-   (`garderLaPlace`, devis.js), jamais au départ d'une écriture.
+   avec elle (110 → 74 → 110 à 393, quand l'envoi ne revient toujours pas).
+   LA RÈGLE, SANS MÉMOIRE (relecture 6, `garderLaPlace`, devis.js) : la place
+   reste réservée tant que quelque chose n'est pas compté OU qu'une écriture
+   renvoyée après un échec est en route (la file le dit) ; elle se REND à la
+   RÉUSSITE de l'écriture renvoyée — le saut nommé « ce n'est plus pas
+   compté » —, jamais au départ d'un renvoi, et le retour de la liste ne la
+   change plus.
    La mesure, à 393 (l'iPhone 16 du propriétaire) puis à 320, sur une écriture
    qui NE REVIENT PAS (`__opusSuspendreEcritures`) : échec → « Réessayer » →
    échec, puis « Réessayer » qui RÉUSSIT, la lecture qui suit RETENUE
@@ -4997,8 +5000,10 @@ await section('À 393, un brouillon NEUF qui entre en base avec une ligne incomp
    HAUTEUR des deux lignes (elle ne dépend pas de l'ancrage du défilement) et la
    POSITION de ce qu'on vient de toucher — la rangée « Muret en blocs », ou le
    champ « Délai d'exécution » —, l'ancrage du défilement ÉTEINT
-   (`sansAncrage`) : Chromium compense ce qui change hors de l'écran, iOS non. */
-const PHASE = (p) => page.evaluate((v) => { window.__opusPlacePhase = v; }, p);
+   (`sansAncrage`) : Chromium compense ce qui change hors de l'écran, iOS non.
+   Chaque image porte aussi son heure (`performance.now()`, en dernier : elle
+   ne compte pas pour dire qu'une image a changé). */
+const PHASE = (p) => page.evaluate((v) => { window.__opusPlacePhase = v; window.__opusPlaceHeure = performance.now(); }, p);
 const enregistrerLaPlace = (selCible) => page.evaluate((sel) => {
   window.__opusPlace = [];
   window.__opusPlaceFin = false;
@@ -5016,12 +5021,14 @@ const enregistrerLaPlace = (selCible) => page.evaluate((sel) => {
       ls[0] ? (ls[0].getAttribute('aria-label') || '') : '',
       d ? getComputedStyle(d).overflowAnchor : null];
     const k = JSON.stringify(v);
-    if (k !== prec) { window.__opusPlace.push(v); prec = k; }
+    if (k !== prec) { window.__opusPlace.push([...v, Math.round(performance.now())]); prec = k; }
     if (!window.__opusPlaceFin) requestAnimationFrame(pas);
   };
   requestAnimationFrame(pas);
 }, selCible);
 const lireLaPlace = () => page.evaluate(() => { window.__opusPlaceFin = true; return window.__opusPlace; });
+/* L'heure du dernier `PHASE(…)` : celle du geste qu'on vient de poser. */
+const heureDeLaPhase = () => page.evaluate(() => Math.round(window.__opusPlaceHeure || 0));
 const JUSTE_A_393 = { 393: 110, 320: 128 };
 
 /* Échec → « Réessayer » → échec, puis « Réessayer » qui réussit : `provoquer`
@@ -5073,34 +5080,45 @@ const renvoiSansBouger = async ({
   const revenue = await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
   await attendre(600);
   const vu = await lireLaPlace();
-  const avantRetour = vu.filter(([p]) => p !== 'relache');
+  /* JUSQU'À LA RÉUSSITE DU RENVOI : tant que la première image où la ligne
+     change n'est pas venue. C'est À LA RÉUSSITE (phase « reussite », la
+     lecture qui suit encore RETENUE) que la place se rend — une fois, le saut
+     nommé « ce n'est plus pas compté » —, puis rien ne bouge plus, ni la
+     ligne ni ce qu'on a touché, au retour de la liste (phase « relache »). */
+  const rendue = vu.findIndex((x, i) => i > 0 && x[1] !== vu[0][1]);
+  const avantReussite = rendue > 0 ? vu.slice(0, rendue) : vu;
+  const apresReussite = rendue > 0 ? vu.slice(rendue) : [];
   const apresRetour = vu.filter(([p]) => p === 'relache');
-  const hauts = [...new Set(avantRetour.map((x) => x[1]))];
-  const bas = [...new Set(avantRetour.map((x) => x[2]))];
-  const positions = [...new Set(avantRetour.map((x) => x[3]))];
+  const hauts = [...new Set(avantReussite.map((x) => x[1]))];
+  const bas = [...new Set(avantReussite.map((x) => x[2]))];
+  const positions = [...new Set(avantReussite.map((x) => x[3]))];
   const ancres = [...new Set(vu.map((x) => x[5]))];
   const finale = vu.length ? vu[vu.length - 1][1] : null;
   const changements = vu.filter((x, i) => i > 0 && x[1] !== vu[i - 1][1]).length;
-  /* La première image où la place est rendue : dans la phase relâchée, et ce
-     qu'elle DIT est le compte revenu (la liste qui compte tout). */
-  const rendue = vu.findIndex((x) => x[1] !== hauts[0]);
-  noter(`à ${largeur}, ${quoi}`, `ordinaire ${ordinaire} ; avant le retour de la liste : haut ${JSON.stringify(hauts)}, bas ${JSON.stringify(bas)}, `
-    + `position ${JSON.stringify(positions)} ; pendant la lecture retenue ${pendant} ; après : haut ${JSON.stringify([...new Set(apresRetour.map((x) => x[1]))])} ; `
+  const positionsApres = [...new Set(apresReussite.map((x) => x[3]))];
+  noter(`à ${largeur}, ${quoi}`, `ordinaire ${ordinaire} ; jusqu’à la réussite du renvoi : haut ${JSON.stringify(hauts)}, bas ${JSON.stringify(bas)}, `
+    + `position ${JSON.stringify(positions)} ; pendant la lecture retenue ${pendant} ; au retour : haut ${JSON.stringify([...new Set(apresRetour.map((x) => x[1]))])} ; `
+    + `le saut nommé : ${rendue > 0 ? `${vu[rendue - 1][1]} → ${vu[rendue][1]} (position ${vu[rendue - 1][3]} → ${vu[rendue][3]}), phase « ${vu[rendue][0]} »` : 'aucun'} ; `
     + `ancrage ${JSON.stringify(ancres)} ; ${vu.length} image(s) : ${JSON.stringify(vu.map(([p, h, b, y, l]) => [p, h, b, y, net(l).slice(18, 60)]))}`);
-  verifier(`à ${largeur}, ${quoi} : échec → « Réessayer » → échec, puis « Réessayer » qui réussit, jusqu’au RETOUR de la liste — la ligne du haut `
-    + `garde UNE hauteur à chaque image (${hauts.join(', ')}), la place réservée (≈ ${JUSTE_A_393[largeur]}), celle du bas aussi (${bas.join(', ')})`,
+  verifier(`à ${largeur}, ${quoi} : échec → « Réessayer » → échec, puis « Réessayer » qui réussit, jusqu’à la RÉUSSITE du renvoi — la ligne du haut `
+    + `garde UNE hauteur à chaque image (${hauts.join(', ')}), la place réservée (≈ ${JUSTE_A_393[largeur]}), celle du bas aussi (${bas.join(', ')}) ; `
+    + 'le renvoi en route dit « Des changements partent » à cette hauteur',
   !!reechec && !!retenue && enRouteVu && hauts.length === 1 && bas.length === 1 && Math.abs(hauts[0] - JUSTE_A_393[largeur]) <= 2
-    && pendant === hauts[0] && avantRetour.some(([p]) => p === 'renvoi') && avantRetour.some(([p]) => p === 'reussite'),
-  `réechec ${!!reechec}, lecture retenue ${!!retenue}, « Des changements partent » au renvoi ${enRouteVu}, pendant la lecture retenue ${pendant} ; `
+    && avantReussite.some(([p]) => p === 'renvoi') && avantReussite.some(([p]) => p === 'echec2')
+    && avantReussite.some(([p, , , , l]) => p === 'reussite' && net(l).includes(EN_ROUTE_LIGNE)),
+  `réechec ${!!reechec}, lecture retenue ${!!retenue}, « Des changements partent » au renvoi ${enRouteVu} ; `
     + JSON.stringify(vu.map(([p, h, b]) => [p, h, b])));
-  verifier(`à ${largeur}, ${quoi} : ce qu’on vient de toucher ne bouge pas sous le doigt, l’ancrage du défilement ÉTEINT (comme iOS) — `
-    + `position ${positions.join(', ')}`,
+  verifier(`à ${largeur}, ${quoi} : jusqu’à la réussite du renvoi, ce qu’on vient de toucher ne bouge pas sous le doigt, l’ancrage du défilement `
+    + `ÉTEINT (comme iOS) — position ${positions.join(', ')}`,
   positions.length === 1 && positions[0] !== null && ancres.length === 1 && ancres[0] === 'none', JSON.stringify(vu.map(([p, , , y]) => [p, y])));
-  verifier(`à ${largeur}, ${quoi} : la place ne se REND qu’au retour d’une liste qui compte tout — une fois (${hauts[0]} → ${finale}, la hauteur `
-    + `ordinaire ${ordinaire}), jamais avant que la lecture retenue soit relâchée`,
-  !!revenue && changements === 1 && finale === ordinaire && rendue > 0 && vu[rendue][0] === 'relache'
-    && COMPTE.test(net(vu[rendue][4])) && apresRetour.length >= 1,
-  JSON.stringify(vu.map(([p, h, , , l]) => [p, h, net(l).slice(18, 50)])));
+  verifier(`à ${largeur}, ${quoi} : la place se REND à la RÉUSSITE de l’écriture renvoyée — une fois (${hauts[0]} → ${finale}, la hauteur `
+    + `ordinaire ${ordinaire}), la lecture qui suit encore retenue, ce qu’on a touché déplacé d’autant, une fois — puis le RETOUR de la `
+    + 'liste ne fait plus rien bouger',
+  !!revenue && changements === 1 && finale === ordinaire && rendue > 0 && vu[rendue][0] === 'reussite' && pendant === ordinaire
+    && positionsApres.length === 1 && positionsApres[0] === positions[0] - (hauts[0] - ordinaire)
+    && apresRetour.length >= 1 && apresRetour.every((x) => x[1] === ordinaire && x[3] === positionsApres[0])
+    && COMPTE.test(net(apresRetour[apresRetour.length - 1][4])),
+  JSON.stringify(vu.map(([p, h, , y, l]) => [p, h, y, net(l).slice(18, 50)])));
   await remettre(etat);
   await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
   await attendre(600);
@@ -5108,7 +5126,7 @@ const renvoiSansBouger = async ({
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
 };
 
-await section('RELIRE4-C : une LIGNE dont l’envoi ne revient pas, « Réessayer », de nouveau en échec, puis qui réussit — la ligne « Pour le remettre » ne bouge pas avant le retour d’une liste qui compte tout, à 393 et 320 (relecture 5)', async () => {
+await section('RELIRE4-C : une LIGNE dont l’envoi ne revient pas, « Réessayer », de nouveau en échec, puis qui réussit — la ligne « Pour le remettre » ne bouge pas avant la réussite du renvoi, à 393 et 320 (relectures 5 et 6)', async () => {
   const tailleAvant = page.viewportSize();
   const RANGEE = 'button[aria-label^="Muret en blocs"]';
   const REESSAYER = 'Ligne non enregistrée. Réessayer';
@@ -5141,7 +5159,7 @@ await section('RELIRE4-C : une LIGNE dont l’envoi ne revient pas, « Réessaye
   await attendre(400);
 });
 
-await section('RELIRE4-C : l’EN-TÊTE dont l’envoi ne revient pas (le délai d’exécution), « Réessayer » de la bande, de nouveau en échec, puis qui réussit — même règle, à 393 et 320 (relecture 5)', async () => {
+await section('RELIRE4-C : l’EN-TÊTE dont l’envoi ne revient pas (le délai d’exécution), « Réessayer » de la bande, de nouveau en échec, puis qui réussit — même règle, à 393 et 320 (relectures 5 et 6)', async () => {
   const tailleAvant = page.viewportSize();
   const DELAI = '[aria-label="Délai d’exécution"]';
   const reessayerBande = () => page.getByRole('button', { name: 'Réessayer', exact: true });
@@ -5168,6 +5186,398 @@ await section('RELIRE4-C : l’EN-TÊTE dont l’envoi ne revient pas (le délai
       },
     });
   }
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* RELIRE5-R1 (relecture 6 de 2b-1, 07/11/2026) : CE QUI CESSE D'ÊTRE COMPTÉ
+   SANS ÉCRITURE REND LA PLACE AU GESTE. La relecture 5 gardait la place
+   jusqu'au retour d'une liste neuve ; or une ligne jamais envoyée qu'on
+   retire, une valeur remise à celle de la base, un champ de l'en-tête rétabli
+   n'écrivent rien — aucune liste ne revient —, et la place se rendait au
+   retour d'une liste SANS RAPPORT, sous le doigt (le champ « Délai
+   d'exécution » qu'on venait de quitter montait de 36 points). Règle sans
+   mémoire : la place se rend au geste lui-même, et le retour d'une liste
+   ensuite ne fait plus rien bouger. Pour chaque cas, à chaque image : la
+   hauteur des deux lignes et la position du champ « Délai d'exécution »,
+   l'ancrage ÉTEINT ; puis une écriture sans rapport (le délai tapé et
+   quitté), dont la liste revient. */
+const DELAI_CHAMP = '[aria-label="Délai d’exécution"]';
+const renduAuGeste = async ({
+  quoi, largeur, preparer, geste, apres = async () => {}, focusAttendu = null,
+}) => {
+  await page.setViewportSize({ width: largeur, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await ecouterLaListe(true);
+  exiger(!!(await jusqua(async () => COMPTE.test(await libelleLigne()), 6000)),
+    `à ${largeur}, ${quoi} : « Muret de clôture » — tout est compté au départ`);
+  const ordinaire = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  await preparer();
+  exiger(!!(await jusqua(async () => !COMPTE.test(await libelleLigne()), 4000)), `à ${largeur}, ${quoi} : quelque chose n’est pas compté`);
+  await attendre(600);
+  const reservee = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  const ancre = await sansAncrage();
+  exiger(ancre.saisie === 'none', `à ${largeur}, ${quoi} : l’ancrage du défilement de la saisie est éteint (${JSON.stringify(ancre)})`);
+  await PHASE('avant');
+  await enregistrerLaPlace(DELAI_CHAMP);
+  const lecturesAvant = await lectures();
+  const ecrituresAvant = await page.evaluate(() => window.__opusEcritures);
+  await page.evaluate(() => { window.__opusBlurs = []; });
+  await PHASE('geste');
+  const tGeste = await heureDeLaPhase();
+  await geste();
+  await attendre(250);
+  /* Ce qu'on vient de toucher garde la main (la place se rend pendant le
+     geste, parfois sous la carte encore ouverte). */
+  const focusApres = await page.evaluate(() => (document.activeElement && document.activeElement.getAttribute('aria-label')) || null);
+  const blursGeste = await page.evaluate(() => window.__opusBlurs.filter((b) => b.rnw).length);
+  await PHASE('apres');
+  await attendre(2500);
+  const lecturesGeste = (await lectures()) - lecturesAvant;
+  const ecrituresGeste = (await page.evaluate(() => window.__opusEcritures)) - ecrituresAvant;
+  await apres();
+  /* Le délai à 300 points du haut de l'écran : la ligne du haut sort par le
+     haut, comme quand on remplit l'en-tête. */
+  await PHASE('defile');
+  await page.evaluate((sel) => {
+    const l = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+    let d = l;
+    while (d && !(d.scrollHeight > d.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(d).overflowY))) d = d.parentElement;
+    const c = document.querySelector(sel);
+    if (d && c) d.scrollTop += c.getBoundingClientRect().top - 300;
+  }, DELAI_CHAMP);
+  await attendre(600);
+  const lecturesEcriture = await lectures();
+  const delai = parLibelle('Délai d’exécution');
+  const ancien = await delai.inputValue();
+  await PHASE('ecriture');
+  await viderEtTaper(delai, `${ancien} (r1)`);
+  await delai.evaluate((e) => e.blur());
+  const revenue = await jusqua(async () => (await lectures()) > lecturesEcriture && COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await attendre(1500);
+  const vu = await lireLaPlace();
+  await viderEtTaper(delai, ancien);
+  await delai.evaluate((e) => e.blur());
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await attendre(800);
+  const premiere = vu.find((x) => x[1] === ordinaire);
+  const ensuite = vu.filter(([p]) => p === 'apres' || p === 'defile' || p === 'ecriture');
+  const pendantEcriture = vu.filter(([p]) => p === 'ecriture');
+  const positionsEcriture = [...new Set(pendantEcriture.map((x) => x[3]))];
+  noter(`à ${largeur}, ${quoi}`, `ordinaire ${ordinaire}, réservée ${reservee} ; rendue à ${premiere ? `${premiere[6] - tGeste} ms du geste, phase « ${premiere[0]} »` : 'jamais'} ; `
+    + `écritures pendant le geste ${ecrituresGeste}, lectures ${lecturesGeste} ; liste revenue après l’écriture du délai ${!!revenue} ; `
+    + `${vu.length} image(s) : ${JSON.stringify(vu.map(([p, h, b, y, l, , t]) => [p, h, b, y, t - tGeste, net(l).slice(18, 56)]))}`);
+  verifier(`à ${largeur}, ${quoi} : rien n’est plus « pas compté » et RIEN N’EST PARTI — la ligne reprend sa hauteur ordinaire (${ordinaire}) AU GESTE `
+    + `(${premiere ? `${premiere[6] - tGeste} ms` : 'jamais'}), pas au retour d’une liste`,
+  Math.abs(reservee - JUSTE_A_393[largeur]) <= 2 && !!premiere && premiere[0] === 'geste' && premiere[6] - tGeste <= 900
+    && ecrituresGeste === 0 && lecturesGeste === 0,
+  JSON.stringify(vu.map(([p, h, , , , , t]) => [p, h, t - tGeste])));
+  if (focusAttendu) {
+    verifier(`à ${largeur}, ${quoi} : ce qu’on vient de toucher (« ${focusAttendu} ») garde la main pendant que la place se rend — `
+      + 'aucun `blur()` de `react-native-web`', focusApres === focusAttendu && blursGeste === 0, `focus ${focusApres}, blurs ${blursGeste}`);
+  }
+  verifier(`à ${largeur}, ${quoi} : ENSUITE, une écriture sans rapport (le délai) et le retour de SA liste ne font plus rien bouger — la ligne du `
+    + `haut reste à ${ordinaire}, celle du bas aussi, le champ du délai reste à ${positionsEcriture.join(', ')} (l’ancrage éteint)`,
+  !!revenue && ensuite.length > 0 && ensuite.every((x) => x[1] === ordinaire) && new Set(ensuite.map((x) => x[2])).size === 1
+    && pendantEcriture.length >= 1 && positionsEcriture.length === 1 && positionsEcriture[0] !== null
+    && new Set(vu.map((x) => x[5])).size === 1 && vu[0][5] === 'none',
+  JSON.stringify(ensuite.map(([p, h, b, y]) => [p, h, b, y])));
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+};
+
+await section('RELIRE5-R1 et R1c : une ligne incomplète, JAMAIS ENVOYÉE, puis retirée — la place se rend AU GESTE, et une écriture sans rapport ne fait plus rien bouger, à 393 et 320 (relecture 6)', async () => {
+  const tailleAvant = page.viewportSize();
+  for (const largeur of [393, 320]) {
+    await renduAuGeste({
+      quoi: 'une ligne incomplète retirée',
+      largeur,
+      preparer: async () => {
+        await toucher(page.getByRole('button', { name: 'Ajouter un poste chiffré', exact: true }).first());
+        await attendre(400);
+        await page.locator('[aria-label="Désignation de la ligne"]').last().fill('Essai relecture six');
+        await fermerCarte();
+        exiger(!!(await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `), 4000)),
+          `à ${largeur} : la ligne incomplète n’est pas comptée (la phrase ET le décompte)`);
+        await toucher(parLibelle('Ligne incomplète. La compléter'));
+        await toucher(parLibelle('Retirer cette ligne'));
+      },
+      geste: () => toucher(parLibelle('Confirmer : retirer cette ligne')),
+    });
+  }
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('RELIRE5-R1b : un prix mis à 0 sans « Offert » (refusé par l’écran), puis REMIS à sa valeur en base — rien ne part : la place se rend AU GESTE (relecture 6)', async () => {
+  const tailleAvant = page.viewportSize();
+  const RANGEE = 'button[aria-label^="Muret en blocs"]';
+  let ancien = null;
+  await renduAuGeste({
+    quoi: 'un prix refusé, remis',
+    largeur: 393,
+    preparer: async () => {
+      await toucher(page.locator(RANGEE).first());
+      await attendre(500);
+      ancien = await parLibelle('Prix unitaire HT').inputValue();
+      await viderEtTaper(parLibelle('Prix unitaire HT'), '0');
+      await toucher(parLibelle('Quantité'));
+      await fermerCarte();
+      exiger(!!(await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `), 4000)),
+        'le prix refusé : la ligne n’est pas comptée');
+      await toucher(parLibelle('Ligne incomplète. La compléter'));
+      await attendre(500);
+      await viderEtTaper(parLibelle('Prix unitaire HT'), ancien);
+    },
+    /* Le geste : quitter le prix (la quantité touchée) — la carte relit la
+       ligne, remise comme en base, et rien ne part. La carte est encore
+       ouverte : la place se rend DESSOUS. */
+    geste: () => toucher(parLibelle('Quantité')),
+    focusAttendu: 'Quantité',
+    apres: () => fermerCarte(),
+  });
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('RELIRE5-R1d : un champ de l’EN-TÊTE refusé (un code postal de quatre chiffres), puis RÉTABLI — rien ne part : la place se rend AU GESTE (relecture 6)', async () => {
+  const tailleAvant = page.viewportSize();
+  let avant = null;
+  await renduAuGeste({
+    quoi: 'un code postal refusé, rétabli',
+    largeur: 393,
+    preparer: async () => {
+      const cp = parLibelle('Code postal du lieu des travaux');
+      await cp.scrollIntoViewIfNeeded();
+      avant = await cp.inputValue();
+      await viderEtTaper(cp, '1310');
+      await toucher(parLibelle('Objet du devis'));
+      await viderEtTaper(parLibelle('Code postal du lieu des travaux'), avant);
+    },
+    geste: () => toucher(parLibelle('Objet du devis')),
+    focusAttendu: 'Objet du devis',
+  });
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* SOUS UNE CARTE OUVERTE (relecture 6 de 2b-1) : la place peut se rendre ou se
+   réserver pendant qu'une carte couvre la liste — « Poste suivant » sur la
+   seule ligne incomplète (elle part, la carte suivante s'ouvre), un renvoi qui
+   réussit, une écriture qui échoue pendant qu'on tape. Au navigateur, Chromium
+   compense le défilement de la liste sous la carte, et `react-native-web`
+   fermait alors le clavier (`on-drag`) : le champ de la carte perdait la main,
+   et ce qu'on tapait partait nulle part. La liste ne ferme plus le clavier
+   tant qu'une carte ou une feuille la couvre (`glisserFermeLeClavier`,
+   SaisieDevisScreen.js). Ici : la place change bien SOUS la carte (le saut
+   nommé), et tout ce qu'on tape arrive, sans un seul `blur()`. */
+const enregistrerSousLaCarte = (champ) => page.evaluate((lab) => {
+  window.__sous = [];
+  window.__sousFin = false;
+  window.__opusBlurs = [];
+  let prec = '';
+  const pas = () => {
+    const l = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+    const champs = [...document.querySelectorAll(`[aria-label="${lab}"]`)];
+    const a = document.activeElement;
+    const v = [l ? Math.round(l.getBoundingClientRect().height) : -1, a ? (a.getAttribute('aria-label') || a.tagName) : null,
+      champs.length ? champs[champs.length - 1].value : null];
+    const k = JSON.stringify(v);
+    if (k !== prec) { window.__sous.push(v); prec = k; }
+    if (!window.__sousFin) requestAnimationFrame(pas);
+  };
+  requestAnimationFrame(pas);
+}, champ);
+const lireSousLaCarte = () => page.evaluate(() => { window.__sousFin = true; return { images: window.__sous, blurs: window.__opusBlurs.slice() }; });
+const defilerLaSaisie = (y) => page.evaluate((v) => {
+  const l = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
+  let d = l;
+  while (d && !(d.scrollHeight > d.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(d).overflowY))) d = d.parentElement;
+  if (d) d.scrollTop = v;
+}, y);
+
+/* La SEULE ligne incomplète, complétée DANS sa carte : la quantité, l'unité,
+   puis le prix — et l'on quitte le prix, soit par « Poste suivant » (la ligne
+   part, la carte neuve s'ouvre, sa désignation prend la main), soit en
+   touchant la quantité (la carte reste ouverte). La ligne part au moment où
+   l'on quitte le prix : rien n'est plus « pas compté », la place se rend sous
+   la carte. */
+const completeeDansLaCarte = async ({ fin }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await ecouterLaListe(true);
+  exiger(!!(await jusqua(async () => COMPTE.test(await libelleLigne()), 6000)), '« Muret de clôture » : tout est compté au départ');
+  await toucher(page.getByRole('button', { name: 'Ajouter un poste chiffré', exact: true }).first());
+  await attendre(400);
+  await page.locator('[aria-label="Désignation de la ligne"]').last().fill('Essai ligne complétée');
+  await fermerCarte();
+  exiger(!!(await jusqua(async () => (await libelleLigne()).includes(`${PAS_COMPTE_1} Dernière liste : `), 4000)), 'la ligne incomplète n’est pas comptée');
+  await attendre(600);
+  await defilerLaSaisie(300);
+  await attendre(400);
+  await toucher(parLibelle('Ligne incomplète. La compléter'));
+  await attendre(500);
+  await toucher(parLibelle('Quantité'));
+  await taper('2');
+  await toucher(parLibelle('mètre linéaire'));
+  await toucher(parLibelle('Prix unitaire HT'));
+  await taper('10');
+  const champ = fin === 'suivant' ? 'Désignation de la ligne' : 'Quantité';
+  await enregistrerSousLaCarte(champ);
+  if (fin === 'suivant') await toucher(parLibelle(SUIVANT));
+  else {
+    await toucher(parLibelle('Quantité'));
+    await page.keyboard.press('End');
+  }
+  await attendre(300);
+  const tape = fin === 'suivant' ? 'Neuve' : '5';
+  for (const c of tape) { await page.keyboard.type(c); await attendre(250); }
+  await attendre(1500);
+  const vu = await lireSousLaCarte();
+  const valeur = await page.locator(`[aria-label="${champ}"]`).last().inputValue().catch(() => null);
+  /* Ménage : la ligne neuve (« Poste suivant »), puis celle qui est partie. */
+  if (fin === 'suivant') {
+    await toucher(parLibelle('Retirer cette ligne'));
+    await toucher(parLibelle('Confirmer : retirer cette ligne'));
+    await attendre(800);
+    await toucher(page.locator('button[aria-label^="Essai ligne complétée"]').first());
+    await attendre(400);
+  }
+  await toucher(parLibelle('Retirer cette ligne'));
+  await toucher(parLibelle('Confirmer : retirer cette ligne'));
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await attendre(800);
+  exiger((await page.locator('button[aria-label^="Essai ligne complétée"]').count()) === 0, 'la ligne d’essai est retirée');
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  return { vu, valeur, champ };
+};
+
+await section('Sous une carte ouverte : la seule ligne incomplète, complétée DANS sa carte (on quitte le prix pour la quantité) — la place se rend sous la carte, et la quantité garde la main (relecture 6)', async () => {
+  const tailleAvant = page.viewportSize();
+  const { vu, valeur } = await completeeDansLaCarte({ fin: 'champ' });
+  const hauts = [...new Set(vu.images.map((x) => x[0]))];
+  noter('une ligne complétée dans sa carte, 393', `hauteurs ${JSON.stringify(hauts)} ; quantité « ${valeur} » ; ${JSON.stringify(vu)}`);
+  verifier('la ligne complétée DANS sa carte part : la place se REND sous la carte encore ouverte (110 → 74, le saut nommé) — la quantité '
+    + `qu’on vient de toucher garde la main et reçoit ce qu’on tape (« ${valeur} »), sans un seul \`blur()\``,
+  JSON.stringify(hauts) === JSON.stringify([JUSTE_A_393[393], 74]) && valeur === '25' && vu.blurs.length === 0
+    && vu.images[vu.images.length - 1][1] === 'Quantité', JSON.stringify(vu));
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('Sous une carte ouverte : « Poste suivant » sur la seule ligne incomplète, complétée dans sa carte — la place se rend sous la carte neuve, et son champ garde la main (relecture 6)', async () => {
+  const tailleAvant = page.viewportSize();
+  const { vu, valeur } = await completeeDansLaCarte({ fin: 'suivant' });
+  const hauts = [...new Set(vu.images.map((x) => x[0]))];
+  noter('« Poste suivant », 393', `hauteurs ${JSON.stringify(hauts)} ; tapé « ${valeur} » ; ${JSON.stringify(vu)}`);
+  verifier('« Poste suivant » sur la seule ligne incomplète : elle part, et la place se REND sous la carte neuve (110 → 74, le saut nommé) — '
+    + `la désignation de la carte neuve garde la main et reçoit tout ce qu’on tape (« ${valeur} »), sans un seul \`blur()\``,
+  JSON.stringify(hauts) === JSON.stringify([JUSTE_A_393[393], 74]) && valeur === 'Neuve' && vu.blurs.length === 0
+    && vu.images[vu.images.length - 1][1] === 'Désignation de la ligne', JSON.stringify(vu));
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* Une écriture qui ne revient pas sur « Muret en blocs », puis la carte de
+   « Crépi gratté » ouverte, son prix tapé chiffre par chiffre. `renvoi` :
+   « Réessayer » d'abord (l'écriture renvoyée réussit 4 s plus tard, pendant
+   la frappe) ; sinon, l'échec arrive pendant la frappe. */
+const sousLaCarte = async ({ renvoi }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await ecouterLaListe(true);
+  exiger(!!(await jusqua(async () => COMPTE.test(await libelleLigne()), 6000)), '« Muret de clôture » : tout est compté au départ');
+  const RANGEE = 'button[aria-label^="Muret en blocs"]';
+  const REESSAYER = 'Ligne non enregistrée. Réessayer';
+  await page.evaluate(() => { window.__opusSuspendreEcritures = true; });
+  await toucher(page.locator(RANGEE).first());
+  await attendre(500);
+  const ancienne = await parLibelle('Quantité').inputValue();
+  await viderEtTaper(parLibelle('Quantité'), ancienne === '3' ? '4' : '3');
+  await toucher(parLibelle('Prix unitaire HT'));
+  await fermerCarte();
+  if (renvoi) {
+    exiger(!!(await jusqua(async () => (await page.getByLabel(REESSAYER, { exact: true }).count()) >= 1, 2 * DELAI_ECRITURE + 5000)),
+      'l’écriture qui ne revient pas est en échec, « Réessayer » s’affiche');
+    await attendre(500);
+    await page.evaluate(() => { window.__opusSuspendreEcritures = false; window.__opusPauseEcritures = 4000; });
+    await defilerLaSaisie(300);
+    await attendre(400);
+    await toucher(parLibelle(REESSAYER));
+  } else {
+    await attendre(300);
+    await defilerLaSaisie(300);
+    await attendre(400);
+  }
+  await enregistrerSousLaCarte('Prix unitaire HT');
+  await toucher(page.locator('button[aria-label^="Crépi gratté"]').first());
+  await attendre(400);
+  const prix = parLibelle('Prix unitaire HT');
+  const ancienPrix = await prix.inputValue();
+  await toucher(prix);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Backspace');
+  /* Un chiffre toutes les 1,9 s, jusqu'à ce que la place ait changé sous la
+     carte ; puis deux de plus. */
+  const avant = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  let tape = '';
+  const change = async () => (await page.evaluate((h) => (window.__sous || []).some((x) => x[0] !== h), avant));
+  for (let i = 0; i < 12 && !(await change()); i += 1) { const c = String((i % 9) + 1); tape += c; await page.keyboard.type(c); await attendre(1900); }
+  for (const c of '55') { tape += c; await page.keyboard.type(c); await attendre(900); }
+  await attendre(1200);
+  const vu = await lireSousLaCarte();
+  const valeur = await prix.inputValue();
+  await page.evaluate(() => { window.__opusPauseEcritures = null; window.__opusSuspendreEcritures = false; });
+  /* Ménage : le prix de « Crépi gratté », puis la quantité de « Muret en blocs ». */
+  await viderEtTaper(prix, ancienPrix);
+  await toucher(parLibelle('Quantité'));
+  await fermerCarte();
+  await attendre(1500);
+  if (!renvoi) {
+    await jusqua(async () => (await page.getByLabel(REESSAYER, { exact: true }).count()) >= 1, 2 * DELAI_ECRITURE + 5000);
+  }
+  await toucher(page.locator(RANGEE).first());
+  await attendre(500);
+  await viderEtTaper(parLibelle('Quantité'), ancienne);
+  await toucher(parLibelle('Prix unitaire HT'));
+  await fermerCarte();
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await attendre(800);
+  exiger(COMPTE.test(await libelleLigne()), '« Muret de clôture » est remis comme on l’a trouvé (tout compté)');
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  return { vu, valeur, tape, avant };
+};
+
+await section('Sous une carte ouverte : un renvoi qui RÉUSSIT pendant qu’on tape un prix — la place se rend sous la carte, et tout ce qu’on tape arrive (relecture 6)', async () => {
+  const tailleAvant = page.viewportSize();
+  const { vu, valeur, tape, avant } = await sousLaCarte({ renvoi: true });
+  const hauts = [...new Set(vu.images.map((x) => x[0]))];
+  noter('un renvoi qui réussit sous la carte, 393', `hauteurs ${JSON.stringify(hauts)} ; tapé « ${tape} », lu « ${valeur} » ; ${JSON.stringify(vu)}`);
+  verifier(`sous la carte de « Crépi gratté », le renvoi réussit : la place se REND (${avant} → 74, à la réussite) — le prix reçoit tout ce `
+    + `qu’on tape (« ${tape} »), le champ garde la main, sans un seul \`blur()\``,
+  avant === JUSTE_A_393[393] && JSON.stringify(hauts) === JSON.stringify([JUSTE_A_393[393], 74]) && valeur.replace(/\D/g, '') === tape
+    && vu.blurs.length === 0 && vu.images[vu.images.length - 1][1] === 'Prix unitaire HT', JSON.stringify(vu));
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('Sous une carte ouverte : une écriture qui ÉCHOUE pendant qu’on tape un prix — la place se réserve sous la carte, et tout ce qu’on tape arrive (relecture 6)', async () => {
+  const tailleAvant = page.viewportSize();
+  const { vu, valeur, tape, avant } = await sousLaCarte({ renvoi: false });
+  const hauts = [...new Set(vu.images.map((x) => x[0]))];
+  noter('une écriture qui échoue sous la carte, 393', `hauteurs ${JSON.stringify(hauts)} ; tapé « ${tape} », lu « ${valeur} » ; ${JSON.stringify(vu)}`);
+  verifier(`sous la carte de « Crépi gratté », l’écriture de « Muret en blocs » échoue : la place se RÉSERVE (${avant} → ${JUSTE_A_393[393]}, le saut `
+    + `nommé) — le prix reçoit tout ce qu’on tape (« ${tape} »), le champ garde la main, sans un seul \`blur()\``,
+  avant === 74 && JSON.stringify(hauts) === JSON.stringify([74, JUSTE_A_393[393]]) && valeur.replace(/\D/g, '') === tape
+    && vu.blurs.length === 0 && vu.images[vu.images.length - 1][1] === 'Prix unitaire HT', JSON.stringify(vu));
   await page.setViewportSize(tailleAvant);
   await attendre(400);
 });

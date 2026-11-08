@@ -4071,7 +4071,9 @@ const LE_PLUS_LARGE_EN_DEUX_CHIFFRES = Number(CHIFFRE_LE_PLUS_LARGE.repeat(2));
  * LES GABARITS DE LA LIGNE — UNE LISTE FIXE, la même dans TOUS les états où
  * quelque chose n'est pas compté sur un devis en base (liste, en route,
  * lecture, échec, OP027, la relecture qui suit « Mon entreprise »), qu'une
- * liste ait été lue ou non, quels que soient les nombres et la phrase.
+ * liste ait été lue ou non, quels que soient les nombres et la phrase — et
+ * pendant qu'une écriture renvoyée après un échec est en route (la règle :
+ * `garderLaPlace`, plus bas).
  * DÉCISION D-A BIS DU PROPRIÉTAIRE (06/11/2026, « garder la grande place ») :
  * la ligne réserve la hauteur du PLUS LONG des textes qu'elle peut prendre
  * dans ces états, même si cela lui fait 110 points au lieu de 92 sur son
@@ -4123,64 +4125,58 @@ export const GABARITS_DE_LA_LIGNE = Object.freeze([
 ]);
 
 /**
- * LA PLACE GARDÉE DE LA LIGNE, d'un rendu au suivant (relecture 5 de 2b-1,
- * RELIRE4-C, 07/11/2026) : `null` (rien n'est réservé) ou `{ depuis }`, la
- * liste lue (`liste.motifs` de la saisie, une liste neuve à chaque lecture
- * revenue, `null` après un échec) du DERNIER rendu où quelque chose n'était
- * pas compté. La saisie la garde dans un état, et la remet à jour pendant le
- * rendu quand elle change (`garderLaPlace` rend le MÊME objet quand rien ne
- * change : sinon la mise à jour reviendrait à chaque rendu).
+ * LA RÈGLE DE LA PLACE, SANS MÉMOIRE (relecture 6 de 2b-1, 07/11/2026) : la
+ * ligne réserve ses gabarits (`GABARITS_DE_LA_LIGNE`) SI ET SEULEMENT SI le
+ * devis est EN BASE et que
+ *   - quelque chose n'est pas compté (`pasCompte` : une ligne incomplète ou
+ *     refusée par l'écran, une écriture en échec — un retrait compris —, un
+ *     champ de l'en-tête refusé ou en échec), OU
+ *   - une écriture RENVOYÉE APRÈS UN ÉCHEC est en route (`renvoi` : la file
+ *     le dit, `renvoisEnRoute()`, file-ecriture.js — « Réessayer » sur une
+ *     ligne, sur l'en-tête, sur un retrait, et le renvoi automatique du
+ *     plafond).
+ * Elle se calcule à CHAQUE RENDU, sur ce que la saisie et la file savent
+ * déjà : rien ne se retient d'un rendu au suivant.
  *
- * POURQUOI UNE MÉMOIRE. `pasCompte` ne voit que ce qui n'est pas enregistré
- * MAINTENANT — une ligne incomplète, une écriture en échec, un champ refusé —,
- * jamais une écriture EN ROUTE : « Réessayer » sur une ligne en échec la
- * remet en route, la phrase « pas compté » disparaît, et la place réservée
- * disparaissait avec elle (110 → 74 → 110 points à 393, l'envoi ne revenant
- * toujours pas ; mesuré au navigateur, la rangée « Réessayer » qu'on vient de
- * toucher remontait de 36 points). Le renvoi de l'en-tête, d'un retrait, le
- * renvoi automatique d'un refus du plafond faisaient de même. D-A bis (« plus
- * rien ne bouge, jamais », tant que quelque chose n'est pas compté) ne se
- * tient donc qu'avec une mémoire.
+ * POURQUOI LE RENVOI. `pasCompte` ne voit que ce qui n'est pas enregistré
+ * MAINTENANT : « Réessayer » remet l'écriture « en cours », la phrase « pas
+ * compté » se tait — et la ligne tombait de 110 à 74 points à 393 avant de
+ * remonter, la rangée qu'on venait de toucher bougeant sous le doigt
+ * (relecture 5, RELIRE4-C). Un renvoi en route compte donc comme ce qui
+ * n'est pas compté : échec → « Réessayer » → échec, la place ne bouge pas.
  *
- * LA RÈGLE, une seule : la place réservée ne se REND qu'au RETOUR d'une liste
- * qui compte tout — l'état `liste`, sans `pasCompte`, avec une liste lue
- * APRÈS le dernier rendu où quelque chose n'était pas compté —, jamais au
- * départ d'une écriture. Donc :
- *   - un brouillon pas encore en base : rien n'est réservé ;
- *   - quelque chose n'est pas compté : la place est réservée, sur la liste du
- *     moment ;
- *   - sinon, elle reste réservée tant que la liste lue est la même : en route
- *     (le renvoi, la lecture qui suit une écriture, celle qui suit « Mon
- *     entreprise », un champ de l'en-tête ouvert), en lecture, en échec, et
- *     même en `liste` entre la fin d'une écriture et la relecture qu'elle
- *     lance (l'ancienne liste y est encore affichée) ;
- *   - une liste NEUVE qui revient et compte tout : la place se rend — mais
- *     PAS tant qu'une carte ou une feuille couvre la liste (`couverte`) :
- *     elle se rend à leur fermeture. La liste revient quand elle veut, et
- *     l'artisan écrit peut-être dans la carte à cet instant. Au navigateur,
- *     la ligne qui rétrécit sous la carte fait défiler la liste (Chromium
- *     compense, `overflow-anchor`), et le `ScrollView` de `react-native-web`
- *     ferme le clavier à tout défilement : le champ qu'on venait de toucher
- *     perdait la main, et ce qu'on y tapait partait nulle part (mesuré le
- *     07/11 : « Surface du sol », 17 m² perdus, dans `mesure-devis`). Sur
- *     l'iPhone, la liste ne défile pas d'elle-même : elle bouge sous la
- *     carte, et le résultat, à la fermeture, est le même qu'en se rendant à
- *     ce moment-là.
- * Ce qui la change encore se dit, et rien d'autre : la place se RÉSERVE quand
- * quelque chose cesse d'être compté (74 → 110 points à 393 en haut) ; elle se
- * REND au retour d'une liste qui compte tout, une fois — ou, si une carte ou
- * une feuille la couvrait, à leur fermeture ; et un brouillon qui
- * entre en base avec une ligne incomplète saute une fois à la place réservée.
- * Une relecture des totaux ratée ne relit pas la liste : la place reste alors
- * réservée jusqu'à la prochaine liste lue — elle ne bouge pas.
+ * POURQUOI PLUS DE MÉMOIRE. La relecture 5 gardait la place jusqu'au RETOUR
+ * d'une liste neuve (une mémoire tenue par la saisie). Or rien ne relit la
+ * liste quand ce qui n'était pas compté disparaît SANS écriture — une ligne
+ * jamais envoyée qu'on retire, une valeur remise à celle de la base, un champ
+ * de l'en-tête rétabli : la place restait réservée, puis se rendait au retour
+ * d'une liste SANS RAPPORT, sous le doigt (le champ « Délai d'exécution »
+ * qu'on venait de quitter montait de 36 points ; relecture 6, RELIRE5-R1).
+ * Sans mémoire, elle se rend AU GESTE, comme avant le 07/11, et aucune liste
+ * qui revient ensuite ne la fait plus bouger.
+ *
+ * LES SAUTS QUI RESTENT, et c'est tout — ils sont HORS de la décision D-A bis
+ * (« plus rien ne bouge », TANT QUE quelque chose n'est pas compté), parce
+ * qu'ils sont le passage même de « tout compté » à « quelque chose n'est pas
+ * compté », et le retour :
+ *   - DEVENIR « pas compté » (une ligne laissée incomplète ou refusée, une
+ *     écriture qui échoue, un champ refusé) : la place se RÉSERVE (74 → 110
+ *     points à 393 en haut, 128 à 320) ;
+ *   - CESSER de l'être : la place se REND (110 → 74) — AU GESTE quand rien ne
+ *     part (la ligne retirée, la valeur remise, le champ rétabli) ou quand une
+ *     nouvelle écriture part (la ligne complétée, le champ corrigé) ; À LA
+ *     RÉUSSITE de l'écriture renvoyée après un échec (« Réessayer », le
+ *     renvoi du plafond) ;
+ *   - un brouillon « pas encore en base » qui y ENTRE avec une ligne
+ *     incomplète saute une fois à la place réservée (rien n'est réservé tant
+ *     qu'il n'est pas en base : il n'a pas de liste).
+ * Rien d'autre ne la change : ni l'état de la liste (en route, lecture,
+ * échec, OP027, la relecture qui suit « Mon entreprise »), ni ses nombres, ni
+ * sa phrase, ni le retour d'une liste, ni une carte ou une feuille ouverte
+ * par-dessus.
  */
-export function garderLaPlace({
-  gardee = null, etat, pasCompte = null, enBase = false, liste = null, couverte = false,
-} = {}) {
-  if (!enBase) return null;
-  if (pasCompte) return gardee && gardee.depuis === liste ? gardee : { depuis: liste };
-  if (gardee && etat === 'liste' && liste !== gardee.depuis && !couverte) return null;
-  return gardee || null;
+export function garderLaPlace({ enBase = false, pasCompte = null, renvoi = false } = {}) {
+  return !!enBase && (!!pasCompte || renvoi === true);
 }
 
 /**
@@ -4188,13 +4184,12 @@ export function garderLaPlace({
  * action, aDire }`.
  *   `contenu`  : la phrase (ou le compte, quand tout est compté) ;
  *   `compte`   : le DÉCOMPTE affiché SOUS la phrase, ou `null` ;
- *   `gabarits` : `GABARITS_DE_LA_LIGNE` quand quelque chose n'est pas compté
- *                sur un devis en base, ou que la place est encore GARDÉE
- *                (`garder`, `garderLaPlace` : jusqu'au retour d'une liste qui
- *                compte tout) — ils donnent la hauteur de la ligne, le plus
- *                grand ; posés invisibles dans son flux, le texte lu
- *                par-dessus —, sinon `null` : la ligne réserve alors ses deux
- *                lignes ordinaires ;
+ *   `gabarits` : `GABARITS_DE_LA_LIGNE` quand `garderLaPlace` le dit — sur
+ *                un devis en base, quelque chose n'est pas compté, ou une
+ *                écriture renvoyée après un échec est en route (`renvoi`) —
+ *                ils donnent la hauteur de la ligne, le plus grand ; posés
+ *                invisibles dans son flux, le texte lu par-dessus —, sinon
+ *                `null` : la ligne réserve alors ses deux lignes ordinaires ;
  *   `action`   : `'ouvrir'` (la carte), `'reessayer'` (relire) ou `null` (pas
  *                une cible : il n'y a rien à ouvrir) ;
  *   `aDire`    : l'étiquette pour VoiceOver.
@@ -4215,18 +4210,22 @@ export function garderLaPlace({
  * cas par ligne), avec 0, 1, 2, 10, 100 et 508 points pour le devis, 0, 5 et
  * 21 pour l'entreprise, et les phrases de 1 à 500 lignes et de l'en-tête
  * (`mesure-devis`) ; et à 393, la vraie transition « 1 point » → « aucun
- * point » ne la fait pas bouger. ET ELLE NE SE REND QU'AU RETOUR D'UNE
- * LISTE QUI COMPTE TOUT (relecture 5, RELIRE4-C, 07/11/2026 : `garder`, la
- * mémoire de `garderLaPlace`), jamais au départ d'une écriture — « Réessayer »
- * sur une ligne ou sur l'en-tête en échec, le renvoi d'un retrait, le renvoi
- * automatique du plafond ne la font plus bouger. Ce qui la change encore, et
- * c'est tout : elle se RÉSERVE quand quelque chose cesse d'être compté (une
- * ligne devient incomplète ou n'est pas enregistrée, un champ est refusé :
- * 74 → 110 points à 393 en haut) ; elle se REND au retour d'une liste qui
- * compte tout (la ligne complétée ou enregistrée, une fois relue) ; et un
- * brouillon « pas encore en base » qui y entre avec une ligne incomplète saute
- * une fois à la place réservée (sa phrase n'est pas la même, et il n'a pas de
- * liste). Ce que la ligne DIT ne change pas (D-A, ECR-1).
+ * point » ne la fait pas bouger. ET UN RENVOI NE LA REND PAS (relecture 5,
+ * RELIRE4-C ; règle sans mémoire de la relecture 6, `garderLaPlace`) :
+ * « Réessayer » sur une ligne, sur l'en-tête ou sur un retrait en échec, le
+ * renvoi automatique du plafond — la phrase « pas compté » se tait, mais la
+ * place reste réservée tant que l'écriture renvoyée est en route
+ * (`renvoi`). Ce qui la change encore, et c'est tout (les sauts nommés de
+ * `garderLaPlace`) : elle se RÉSERVE quand quelque chose devient « pas
+ * compté » (une ligne laissée incomplète ou refusée, une écriture qui
+ * échoue, un champ refusé : 74 → 110 points à 393 en haut) ; elle se REND
+ * quand rien ne l'est plus — au geste (une ligne retirée, une valeur remise,
+ * un champ rétabli ; une ligne complétée ou un champ corrigé qui partent),
+ * ou à la réussite d'une écriture renvoyée ; et un brouillon « pas encore en
+ * base » qui y entre avec une ligne incomplète saute une fois à la place
+ * réservée (sa phrase n'est pas la même, et il n'a pas de liste). Le retour
+ * d'une liste, lui, ne la change jamais. Ce que la ligne DIT ne change pas
+ * (D-A, ECR-1).
  *
  * EN `en_route`, LA PHRASE SEULE, à l'écran ET dans l'étiquette parlée
  * (`phraseEnRoute` : « Des changements partent : la liste sera à jour juste
@@ -4244,7 +4243,7 @@ export function garderLaPlace({
  */
 export function texteDeLaLigneRemise({
   etat, lue = null, enLecture = false, erreurReessayable = true, erreurPhrase = null, pasCompte = null, relecture = null,
-  garder = false,
+  renvoi = false,
 } = {}) {
   let contenu;
   let compte = null;
@@ -4279,13 +4278,11 @@ export function texteDeLaLigneRemise({
     if (compte) dit = `${dit}${fin(dit)}Dernière liste : ${compte}`;
     aDire = `${TITRE_POUR_REMETTRE} : ${action ? `${dit}${fin(dit)}Ouvrir la liste` : dit}`;
   }
-  /* LES GABARITS (REL-1, D-A bis, RELIRE3-1) : la liste FIXE, tant que
-     quelque chose n'est pas compté sur un devis en base — sans regarder ni
-     la liste lue, ni les nombres, ni la phrase, ni l'état —, ET tant que la
-     place est GARDÉE (`garder`, la mémoire de `garderLaPlace`, relecture 5,
-     RELIRE4-C) : une écriture renvoyée ne la rend pas, seul le retour d'une
-     liste qui compte tout la rend. */
-  const gabarits = etat !== 'pas_en_base' && (pasCompte || garder) ? GABARITS_DE_LA_LIGNE : null;
+  /* LES GABARITS (REL-1, D-A bis, RELIRE3-1) : la liste FIXE, quand
+     `garderLaPlace` le dit — sans regarder ni la liste lue, ni les nombres,
+     ni la phrase, ni l'état (hors « pas en base ») —, une seule écriture de
+     la règle (relecture 6). */
+  const gabarits = garderLaPlace({ enBase: etat !== 'pas_en_base', pasCompte, renvoi }) ? GABARITS_DE_LA_LIGNE : null;
   return {
     contenu, compte, gabarits, action, aDire,
   };

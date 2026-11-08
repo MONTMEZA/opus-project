@@ -1638,6 +1638,250 @@ process.on('unhandledRejection', (e) => { plantagesDeLaFile.push((e && e.stack) 
       json(locale) === json(['locale', 1]) && b.journal.length === 0 && f.enAttente() === 0 && f.etatDe('L9') === null,
       `${json(locale)} ${json(resume(b))}`);
   }
+  /* j bis. LA MARQUE DU RENVOI (relecture 6 de 2b-1, 18) : `renvoisEnRoute()`
+     rend les clés dont une écriture RENVOYÉE APRÈS UN ÉCHEC (`reessayer()`,
+     devis en base) est en route. La marque est posée AVANT l'événement « en
+     cours » et retirée AVANT l'événement qui le quitte : l'écran, qui la
+     recopie à chaque événement (`majAttente`), ne voit jamais l'une sans
+     l'autre. Une écriture ordinaire d'une ligne en échec n'est pas un renvoi ;
+     un renvoi fait avant que le devis soit en base n'en porte pas. */
+  {
+    const refus = () => Object.assign(new Error('refus'), { code: '23514' });
+    const b = fausseBase();
+    b.commandes.push({ quand: (op) => op.id === 'L1', erreur: refus() });
+    const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('X')] });
+    const vus = [];
+    f.abonner((e) => { if (e.type === 'etat') vus.push(`${e.cle}:${e.etat}:${json(f.renvoisEnRoute())}`); });
+    f.ligne(ligne('L1'));
+    await f.attendre(300);
+    const apresEchec = json(f.renvoisEnRoute());
+    /* 1. le renvoi, puis de nouveau en échec */
+    b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: refus() });
+    f.reessayer('L1');
+    const pendant1 = json(f.renvoisEnRoute());
+    await f.attendre(400);
+    const apresReechec = json(f.renvoisEnRoute());
+    /* 1 bis. une CORRECTION À LA MAIN de la ligne de nouveau en échec (elle
+       échoue encore) : un nouveau geste, pas un renvoi — la marque est tombée
+       avec le second échec, et ne revient pas avec l'écriture ordinaire */
+    b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: refus() });
+    f.modifierLigne('L1', { prixUnitaireCentimes: 5 });
+    const corrigeeALaMain = json(f.renvoisEnRoute());
+    await f.attendre(400);
+    /* 2. le renvoi qui réussit */
+    b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+    f.reessayer('L1');
+    const pendant2 = json(f.renvoisEnRoute());
+    await f.attendre(400);
+    const apresReussite = json(f.renvoisEnRoute());
+    /* 2 bis. une écriture ORDINAIRE de la même ligne, après le renvoi réussi :
+       pas un renvoi — une marque restée collée réserverait la place à chaque
+       modification qui suit */
+    b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+    f.modifierLigne('L1', { prixUnitaireCentimes: 3 });
+    const apresRenvoiOrdinaire = json(f.renvoisEnRoute());
+    await f.attendre(400);
+    /* 3. une écriture ORDINAIRE d'une ligne en échec : pas un renvoi */
+    b.commandes.push({ quand: (op) => op.id === 'X', erreur: refus() });
+    f.modifierLigne('X', { prixUnitaireCentimes: 1 });
+    await f.attendre(300);
+    b.commandes.push({ quand: (op) => op.id === 'X', avant: 30 });
+    f.modifierLigne('X', { prixUnitaireCentimes: 2 });
+    const ordinaire = json(f.renvoisEnRoute());
+    await f.attendre(400);
+    /* 4. l'en-tête renvoyé, et le renvoi automatique (le plafond) */
+    b.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: refus() });
+    f.devis({ objet: 'Essai' });
+    await f.attendre(300);
+    b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30 });
+    f.reessayer('devis', { retenues: true, automatique: true });
+    const pendantEntete = json(f.renvoisEnRoute());
+    await f.attendre(400);
+    /* 5. un retrait renvoyé : marqué jusqu'à sa suppression */
+    b.commandes.push({ quand: (op) => op.id === 'X' && op.action === 'supprimer', erreur: refus() });
+    f.retirerLigne('X');
+    await f.attendre(300);
+    b.commandes.push({ quand: (op) => op.id === 'X' && op.action === 'supprimer', avant: 30 });
+    f.reessayer('X');
+    const pendantRetrait = json(f.renvoisEnRoute());
+    await f.attendre(400);
+    const apresRetrait = json(f.renvoisEnRoute());
+    /* 6. un renvoi quand le devis n'est PAS en base : aucune marque, même à
+       son entrée en base pendant le renvoi de la ligne */
+    const b2 = fausseBase();
+    b2.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: refus() });
+    const f2 = fabriquer(b2);
+    const vus2 = [];
+    f2.abonner((e) => { if (e.type === 'etat') vus2.push(json(f2.renvoisEnRoute())); });
+    f2.ligne(ligne('L2'));
+    await f2.attendre(300);
+    b2.commandes.push({ quand: (op) => op.id === 'L2', avant: 30 });
+    f2.reessayer();
+    const pendantHorsBase = json(f2.renvoisEnRoute());
+    await f2.attendre(400);
+    /* 7. le devis supprimé : plus rien */
+    const b3 = fausseBase();
+    b3.commandes.push({ quand: (op) => op.id === 'L3', erreur: refus() });
+    const f3 = fabriquer(b3, { devisEnBase: true });
+    f3.ligne(ligne('L3'));
+    await f3.attendre(300);
+    b3.commandes.push({ quand: (op) => op.id === 'L3', avant: 30 });
+    f3.reessayer('L3');
+    const avantSuppression = json(f3.renvoisEnRoute());
+    await f3.supprimerDevis().catch(() => null);
+    const apresSuppression = json(f3.renvoisEnRoute());
+    /* (« en cours » est annoncé deux fois : à l'entrée dans la file, puis au départ de la requête.) */
+    const tousL1 = vus.filter((v) => v.startsWith('L1:'));
+    const evenementsL1 = tousL1.filter((v, i) => i === 0 || v !== tousL1[i - 1]);
+    verifier('j bis. la MARQUE DU RENVOI (relecture 6) : `renvoisEnRoute()` rend la clé d’une écriture renvoyée après un échec tant qu’elle '
+      + 'est en route — une ligne, l’en-tête (renvoi automatique du plafond compris), un retrait —, plus rien dès qu’elle réussit, échoue de '
+      + 'nouveau ou disparaît ; l’événement « en cours » la porte déjà, celui qui le quitte ne la porte plus ; une écriture ORDINAIRE d’une '
+      + 'ligne en échec n’est pas un renvoi, ni la correction à la main d’une ligne dont le renvoi a échoué, ni une modification qui suit un '
+      + 'renvoi réussi (la marque ne reste pas collée) ; un renvoi fait avant que le devis soit en base ne porte aucune marque ; le devis '
+      + 'supprimé, rien',
+    apresEchec === '[]' && pendant1 === '["L1"]' && apresReechec === '[]' && corrigeeALaMain === '[]' && pendant2 === '["L1"]'
+      && apresReussite === '[]' && apresRenvoiOrdinaire === '[]'
+      && f.etatDe('L1') === 'enregistree' && ordinaire === '[]' && pendantEntete === '["devis"]' && pendantRetrait === '["X"]'
+      && apresRetrait === '[]' && f.etatDe('X') === null && json(f.renvoisEnRoute()) === '[]'
+      && pendantHorsBase === '[]' && vus2.every((v) => v === '[]') && f2.etatDe('L2') === 'enregistree'
+      && avantSuppression === '["L3"]' && apresSuppression === '[]'
+      && json(evenementsL1) === json(['L1:en_cours:[]', 'L1:echec:[]', 'L1:en_cours:["L1"]', 'L1:echec:[]', 'L1:en_cours:[]',
+        'L1:echec:[]', 'L1:en_cours:["L1"]', 'L1:enregistree:[]', 'L1:en_cours:[]', 'L1:enregistree:[]']),
+    json({
+      apresEchec, pendant1, apresReechec, corrigeeALaMain, pendant2, apresReussite, apresRenvoiOrdinaire, ordinaire, pendantEntete,
+      pendantRetrait, apresRetrait,
+      pendantHorsBase, vus2, avantSuppression, apresSuppression, evenementsL1,
+    }));
+  }
+  /* j ter. LA MARQUE DU RENVOI, ce que j bis ne jouait pas (banc de la
+     relecture 6 de 2b-1, 08/11/2026 : huit sabotages de la file y passaient
+     au vert) :
+       a. l'EN-TÊTE renvoyé À LA MAIN (« Réessayer » de la bande, sans
+          `automatique`) — j bis ne le renvoyait que par le plafond : une
+          marque réservée au renvoi automatique passait ; puis une écriture
+          ORDINAIRE de l'en-tête après ce renvoi réussi — une marque restée
+          collée sur le seul `devis` passait ;
+       b. une LIGNE refusée renvoyée par le plafond (`automatique`) — j bis
+          ne le faisait que pour l'en-tête ;
+       c. une ligne rendue « locale » PENDANT son renvoi (incomplète), puis
+          écrite à la main — une marque que « locale » n'ôtait pas
+          réservait la place pendant cette écriture ordinaire ;
+       d. `reessayer()` SANS clé, devis en base : chaque échec renvoyé est
+          marqué (aucun appelant de l'écran aujourd'hui — la bande passe une
+          clé, TC-1 —, mais c'est le contrat du point 18) ;
+       e. un renvoi de l'en-tête qui ATTEND derrière une autre écriture
+          quand le devis est supprimé : plus rien après la suppression (la
+          garde `supprime` de `renvoisEnRoute()`, que le cas 7 de j bis
+          n'atteignait pas : sa marque était déjà tombée) ;
+       f. « Réessayer » sur une ligne qui n'est PAS en échec (un appui arrivé
+          après que le renvoi automatique l'a déjà enregistrée) : rien ne
+          part, rien n'est marqué — et l'écriture ordinaire qui suit ne
+          réserve pas la place (une marque posée avant le test de l'état
+          restait collée jusque-là). */
+  {
+    const refus = () => Object.assign(new Error('refus'), { code: '23514' });
+    const vu = {};
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('X')] });
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: refus() });
+      f.devis({ objet: 'Essai' });
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30 });
+      f.reessayer('devis');
+      vu.aBande = json(f.renvoisEnRoute());
+      await f.attendre(400);
+      vu.aApres = json(f.renvoisEnRoute());
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30 });
+      f.devis({ objet: 'Essai 2' });
+      vu.aOrdinaire = json(f.renvoisEnRoute());
+      await f.attendre(400);
+      vu.aEtat = f.etatDe('devis');
+    }
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true });
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: refus() });
+      f.ligne(ligne('L1'));
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      f.reessayer('L1', { retenues: true, automatique: true });
+      vu.bAuto = json(f.renvoisEnRoute());
+      await f.attendre(400);
+      vu.bApres = json(f.renvoisEnRoute());
+    }
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: refus() });
+      f.modifierLigne('L1', { prixUnitaireCentimes: 7 });
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      f.reessayer('L1');
+      vu.cRenvoi = json(f.renvoisEnRoute());
+      f.marquerLocale('L1', { prixUnitaireCentimes: 0 });
+      vu.cLocale = json(f.renvoisEnRoute());
+      await f.attendre(400);
+      vu.cEtatLocale = f.etatDe('L1');
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      f.modifierLigne('L1', { prixUnitaireCentimes: 9 });
+      vu.cOrdinaire = json(f.renvoisEnRoute());
+      await f.attendre(400);
+      vu.cEtat = f.etatDe('L1');
+    }
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true });
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: refus() });
+      b.commandes.push({ quand: (op) => op.id === 'L2', erreur: refus() });
+      f.ligne(ligne('L1'));
+      f.ligne(ligne('L2', { ordre: 2000 }));
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      b.commandes.push({ quand: (op) => op.id === 'L2', avant: 30 });
+      f.reessayer();
+      vu.dTout = json(f.renvoisEnRoute().sort());
+      await f.attendre(400);
+      vu.dApres = json(f.renvoisEnRoute());
+    }
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('X')] });
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: refus() });
+      f.devis({ objet: 'Essai' });
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'X', avant: 30 });
+      f.modifierLigne('X', { prixUnitaireCentimes: 3 });
+      f.reessayer('devis');
+      vu.eEnAttente = json(f.renvoisEnRoute());
+      vu.eSupprime = await f.supprimerDevis().then(() => true, (x) => String(x));
+      vu.eApres = json(f.renvoisEnRoute());
+    }
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      f.reessayer('L1');
+      vu.fRien = json(f.renvoisEnRoute());
+      vu.fJournal = b.journal.length;
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      f.modifierLigne('L1', { prixUnitaireCentimes: 11 });
+      vu.fOrdinaire = json(f.renvoisEnRoute());
+      await f.attendre(400);
+    }
+    verifier('j ter. …la MARQUE DU RENVOI, là où j bis ne regardait pas (banc de la relecture 6) : l’en-tête renvoyé À LA MAIN (la '
+      + 'bande) est marqué, et une écriture ordinaire de l’en-tête après sa réussite ne l’est plus ; une LIGNE renvoyée par le plafond '
+      + '(`automatique`) est marquée ; une ligne rendue « locale » pendant son renvoi perd la marque, et l’écriture à la main qui suit ne '
+      + 'la reprend pas ; `reessayer()` sans clé marque chaque échec renvoyé ; un renvoi de l’en-tête qui attend derrière une autre '
+      + 'écriture ne survit pas à la suppression du devis ; « Réessayer » sur une ligne qui n’est pas en échec ne marque rien, ni '
+      + 'l’écriture ordinaire qui suit',
+    vu.aBande === '["devis"]' && vu.aApres === '[]' && vu.aOrdinaire === '[]' && vu.aEtat === 'enregistree'
+      && vu.bAuto === '["L1"]' && vu.bApres === '[]'
+      && vu.cRenvoi === '["L1"]' && vu.cLocale === '[]' && vu.cEtatLocale === 'locale' && vu.cOrdinaire === '[]' && vu.cEtat === 'enregistree'
+      && vu.dTout === '["L1","L2"]' && vu.dApres === '[]'
+      && vu.eEnAttente === '["devis"]' && vu.eSupprime === true && vu.eApres === '[]'
+      && vu.fRien === '[]' && vu.fJournal === 0 && vu.fOrdinaire === '[]',
+    json(vu));
+  }
   /* k. JAMAIS d'upsert : l'insertion porte la ligne ENTIÈRE, la modification seulement ce qui change. */
   {
     const b = fausseBase();
@@ -4693,9 +4937,12 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
   verifier('aucun défilement horizontal dans les écrans du devis (`horizontal`)', TOUS_ECRANS.every((t) => !/\bhorizontal\b/.test(t)));
   const liste = balises(ECR.saisie, 'FlatList')[0] || '';
   const defile = balises(ECR.carte, 'ScrollView')[0] || '';
-  verifier('la liste des lignes ET la carte portent `{...CLAVIER}` et `keyboardDismissMode="on-drag"` (glisser referme le pavé '
-    + 'décimal, qui n’a aucune touche pour le faire)',
-    [liste, defile].every((b) => /\{\.\.\.CLAVIER\}/.test(b) && /keyboardDismissMode="on-drag"/.test(b)),
+  verifier('la liste des lignes ET la carte portent `{...CLAVIER}` ; glisser referme le pavé décimal, qui n’a aucune touche pour le faire : '
+    + '`keyboardDismissMode="on-drag"` sur la carte, et sur la liste tant que ni carte ni feuille ne la couvre (`glisserFermeLeClavier`, '
+    + 'relecture 6)',
+    [liste, defile].every((b) => /\{\.\.\.CLAVIER\}/.test(b)) && /keyboardDismissMode="on-drag"/.test(defile)
+    && /keyboardDismissMode=\{glisserFermeLeClavier\}/.test(liste)
+    && ECR.saisie.includes("const glisserFermeLeClavier = carte || feuille ? 'none' : 'on-drag';"),
     `liste : ${liste.slice(0, 120)} | carte : ${defile.slice(0, 120)}`);
   verifier('aucun `KeyboardAvoidingView` dans les écrans du devis (avec `CLAVIER`, l’inset compterait DEUX FOIS)',
     TOUS_ECRANS.every((t) => !/KeyboardAvoidingView/.test(t)));
@@ -8410,49 +8657,40 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       && String(pointsDuDevisMax).length <= 3 && String(pointsEntrepriseMax).length <= 2 && String(D.LIGNES_MAX).length <= 3
       && nonCouverts.length === 0 && largeDe('ce devis — 1 point · votre entreprise — 5 points') === decomptesG[1],
     `${horsDeLaListe.slice(0, 2).join(' | ')} ${sansGabarit.slice(0, 2).join(' | ')} ; non couverts : ${nonCouverts.slice(0, 3).join(' | ')}`);
-    /* LA PLACE NE SE REND QU'AU RETOUR D'UNE LISTE QUI COMPTE TOUT (relecture 5
-       de 2b-1, RELIRE4-C, 07/11/2026). « Réessayer » remet une écriture en
-       route : `pasCompte` se tait (il ne voit que ce qui n'est pas enregistré
-       MAINTENANT), et la ligne du haut tombait de 110 à 74 points à 393 avant
-       de remonter — la rangée qu'on venait de toucher bougeait sous le doigt.
-       `garderLaPlace`, FAITE TOURNER comme la saisie la fait tourner : rendu
-       après rendu, avec la mémoire du rendu d'avant, puis ce que la ligne
-       réserve (`texteDeLaLigneRemise` avec `garder`). « G » : les gabarits, la
-       place réservée (110 points en haut à 393) ; « — » : les deux lignes
-       ordinaires (74). Les suites :
-         1. une ligne en échec → « Réessayer » → de nouveau en échec : G G G ;
-         2. …→ « Réessayer » qui réussit : G jusqu'au RETOUR de la liste — y
-            compris l'instant entre la fin de l'écriture et la relecture qu'elle
-            lance, où l'ANCIENNE liste est encore en `liste` —, puis — ;
-         3. une ligne incomplète, puis complétée : G, puis — au retour ;
-         4. tout compté, puis une écriture : — partout ;
-         5. un brouillon pas en base : rien de réservé, même « pas compté » ;
-            puis son entrée en base avec une ligne incomplète : G (le saut
-            nommé) ; ou, tout compté, rien — y compris quand une ligne y a
-            été incomplète puis complétée AVANT l'entrée en base (rien ne
-            s'y retient) ;
-         6. un champ de l'en-tête ouvert (« en route », sans écriture) ou une
-            carte ouverte puis refermée : la mémoire tient — `garderLaPlace` ne
-            regarde pas les cartes, la saisie la fait tourner à chaque rendu ;
-            tout compté, rien ne se réserve ;
-         7. la lecture de la liste en échec, puis relue : G jusqu'à la liste
-            NEUVE ; et une ligne devenue incomplète PENDANT l'échec (aucune
-            liste à retenir : la mémoire vaut `{ depuis: null }`), puis
-            complétée : G jusqu'à la première liste revenue — sans elle, la
-            ligne tombait à 74 dès le départ de l'écriture (banc de la
-            relecture 5, M2b : une réservation réservée aux états où une
-            liste est lue passait toutes les suites) ;
-         8. le champ de l'en-tête refusé, le retour de « Mon entreprise » (ses
-            deux causes) pendant ce temps : G jusqu'au retour d'une liste qui
-            compte tout ;
-         9. une liste qui compte tout revient pendant qu'une carte ou une
-            feuille couvre la liste (`couverte`) : G jusqu'à leur FERMETURE —
-            sous elles, la ligne qui rétrécit faisait défiler la liste au
-            navigateur, et le clavier se fermait sur le champ de la carte
-            (mesuré le 07/11 dans `mesure-devis`, « Surface du sol ») ;
-       et la mémoire est STABLE : rejouée sur ce qu'elle vient de rendre, avec
-       les mêmes entrées, elle rend le MÊME objet — sinon la saisie, qui la
-       remet à jour pendant le rendu, se rendrait sans fin. */
+    /* LA RÈGLE DE LA PLACE, SANS MÉMOIRE (relecture 6 de 2b-1, 07/11/2026 :
+       décision d'architecture). La ligne réserve ses gabarits SI ET SEULEMENT
+       SI le devis est en base et que quelque chose n'est pas compté OU qu'une
+       écriture renvoyée après un échec est en route (`renvoi`, la file le
+       dit). `garderLaPlace`, FAITE TOURNER rendu par rendu — chaque rendu ne
+       voit QUE ses entrées : aucune mémoire, rien ne se retient d'un rendu au
+       suivant —, puis ce que la ligne réserve (`texteDeLaLigneRemise` avec
+       `renvoi`). « G » : les gabarits, la place réservée (110 points en haut à
+       393) ; « — » : les deux lignes ordinaires (74). Les suites :
+         1. une ligne en échec → « Réessayer » → de nouveau en échec : G G G
+            (RELIRE4-C : le renvoi en route ne rend pas la place) ;
+         2. …→ « Réessayer » qui réussit : G G, puis — DÈS LA RÉUSSITE (l'instant
+            où l'ancienne liste est encore là compris), et le retour de la liste
+            ne change plus rien : le saut nommé « ce n'est plus pas compté » ;
+         3. une ligne incomplète, puis complétée (elle part, ce n'est pas un
+            renvoi) : la place se rend au geste ;
+         4-6. ce qui cesse d'être compté SANS ÉCRITURE — une ligne incomplète
+            retirée, une valeur refusée remise (carte ouverte), un champ de
+            l'en-tête refusé puis rétabli : — au geste, et rien ensuite. Ces
+            suites ne consacrent PAS RELIRE5-R1 (la place qui attendait une
+            liste neuve) : elles l'interdisent ;
+         7. tout compté, puis une écriture : — partout ;
+         8. un brouillon pas en base : rien de réservé, même « pas compté »,
+            même un renvoi ; puis son entrée en base avec une ligne incomplète :
+            G (le saut nommé) ; ou, tout compté, rien ;
+         9. sous une carte ouverte : la règle ne regarde pas les cartes — la
+            place se réserve ou se rend sans attendre leur fermeture (la saisie
+            n'y éteint que la fermeture du clavier par la liste,
+            `glisserFermeLeClavier`) ;
+        10. un renvoi qui réussit, puis la lecture de la liste en échec : la
+            place est déjà rendue, l'échec de la lecture ne la réserve pas ;
+            une ligne devenue incomplète PENDANT l'échec, puis complétée ;
+        11. l'en-tête refusé et le retour de « Mon entreprise » : G tant que le
+            champ est refusé, — dès qu'il est corrigé (une écriture neuve). */
     {
       const L1 = [{ cle: 'l1' }];
       const L2 = [{ cle: 'l2' }];
@@ -8460,65 +8698,82 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       const pc1 = nc({ nbLignes: 1 });
       const pcE = nc({ entete: true });
       const pcNeuf = nc({ nbLignes: 1, enBase: false });
-      const rendus = (suite) => {
-        let gardee = null;
-        const instables = [];
-        const vu = suite.map((r) => {
-          const o = { enBase: true, pasCompte: null, liste: null, relecture: null, couverte: false, ...r };
-          const entree = { etat: o.etat, pasCompte: o.pasCompte, enBase: o.enBase, liste: o.liste, couverte: o.couverte };
-          const place = P.garderLaPlace({ gardee, ...entree });
-          if (P.garderLaPlace({ gardee: place, ...entree }) !== place) instables.push(o.etat);
-          gardee = place;
-          const t = P.texteDeLaLigneRemise({
-            etat: o.etat, lue: o.liste ? lue2 : null, pasCompte: o.pasCompte, relecture: o.relecture, garder: !!place,
-          });
-          if (t.gabarits === D.GABARITS_DE_LA_LIGNE) return 'G';
-          return t.gabarits === null ? '—' : '?';
-        }).join(' ');
-        return instables.length ? `instable (${instables.join(', ')})` : vu;
-      };
+      const rendus = (suite) => suite.map((r) => {
+        const o = {
+          enBase: true, pasCompte: null, liste: null, relecture: null, renvoi: false, ...r,
+        };
+        const regle = P.garderLaPlace({ enBase: o.enBase, pasCompte: o.pasCompte, renvoi: o.renvoi });
+        const t = P.texteDeLaLigneRemise({
+          etat: o.etat, lue: o.liste ? lue2 : null, pasCompte: o.pasCompte, relecture: o.relecture, renvoi: o.renvoi,
+        });
+        if ((t.gabarits === D.GABARITS_DE_LA_LIGNE) !== regle) return '?';
+        if (t.gabarits === D.GABARITS_DE_LA_LIGNE) return 'G';
+        return t.gabarits === null ? '—' : '?';
+      }).join(' ');
       const L = (liste, o = {}) => ({ etat: 'liste', liste, ...o });
       const R = (liste, o = {}) => ({ etat: 'en_route', liste, ...o });
+      const carte = { carte: true };
       const suites = [
-        ['échec → renvoi → échec', [L(L1, { pasCompte: pc1 }), R(L1), L(L1, { pasCompte: pc1 })], 'G G G'],
-        ['échec → renvoi → réussite', [L(L1, { pasCompte: pc1 }), R(L1), L(L1), R(L1, { relecture: RD }), L(L2)], 'G G G G —'],
-        ['incomplète → complétée', [L(L1), L(L1, { pasCompte: pc1 }), R(L1), L(L1), R(L1, { relecture: RD }), L(L2)], '— G G G G —'],
+        ['échec → renvoi → échec', [L(L1, { pasCompte: pc1 }), R(L1, { renvoi: true }), L(L1, { pasCompte: pc1 })], 'G G G'],
+        ['échec → renvoi → réussite', [L(L1, { pasCompte: pc1 }), R(L1, { renvoi: true }), L(L1), R(L1, { relecture: RD }), L(L2)],
+          'G G — — —'],
+        ['échec → renvoi → échec → renvoi → réussite', [L(L1, { pasCompte: pc1 }), R(L1, { renvoi: true }), L(L1, { pasCompte: pc1 }),
+          R(L1, { renvoi: true }), R(L1, { relecture: RD }), L(L2)], 'G G G G — —'],
+        ['incomplète → complétée (elle part)', [L(L1), L(L1, { pasCompte: pc1 }), R(L1), L(L1), R(L1, { relecture: RD }), L(L2)],
+          '— G — — — —'],
+        ['incomplète → retirée sans écriture', [L(L1), L(L1, { pasCompte: pc1 }), L(L1), R(L1), L(L2)], '— G — — —'],
+        ['refusée → remise sans écriture, carte ouverte', [L(L1), L(L1, { pasCompte: pc1 }), L(L1, { pasCompte: pc1, ...carte }),
+          L(L1, { ...carte }), L(L1)], '— G G — —'],
+        ['en-tête refusé → rétabli sans écriture', [L(L1), R(L1, { pasCompte: pcE }), L(L1, { pasCompte: pcE }), R(L1, { pasCompte: pcE }),
+          L(L1), R(L1), L(L2)], '— G G G — — —'],
         ['tout compté → écriture', [L(L1), R(L1), L(L1), R(L1, { relecture: RD }), L(L2)], '— — — — —'],
         ['brouillon pas en base, puis en base avec une ligne incomplète', [{ etat: 'pas_en_base', enBase: false },
-          { etat: 'pas_en_base', enBase: false, pasCompte: pcNeuf }, R(null, { pasCompte: pc1 }), { etat: 'lecture', pasCompte: pc1 },
-          L(L1, { pasCompte: pc1 })], '— — G G G'],
+          { etat: 'pas_en_base', enBase: false, pasCompte: pcNeuf }, { etat: 'pas_en_base', enBase: false, renvoi: true },
+          R(null, { pasCompte: pc1 }), { etat: 'lecture', pasCompte: pc1 }, L(L1, { pasCompte: pc1 })], '— — — G G G'],
         ['brouillon pas en base, puis en base tout compté', [{ etat: 'pas_en_base', enBase: false }, R(null), { etat: 'lecture' }, L(L1)],
           '— — — —'],
         ['brouillon pas en base, une ligne incomplète puis complétée, puis en base tout compté', [
           { etat: 'pas_en_base', enBase: false, pasCompte: pcNeuf }, { etat: 'pas_en_base', enBase: false }, R(null), { etat: 'lecture' },
           L(L1)], '— — — — —'],
-        ['un champ ouvert, une carte ouverte', [L(L1, { pasCompte: pc1 }), R(L1), R(L1), L(L1, { pasCompte: pc1 }), R(L1), L(L1)], 'G G G G G G'],
+        ['sous une carte ouverte : se réserve et se rend sans attendre sa fermeture', [L(L1, { ...carte }),
+          L(L1, { pasCompte: pc1, ...carte }), R(L1, { renvoi: true, ...carte }), L(L1, { ...carte }), L(L1)], '— G G — —'],
         ['tout compté, un champ ouvert', [L(L1), R(L1), L(L1)], '— — —'],
-        ['la lecture en échec, puis relue', [L(L1, { pasCompte: pc1 }), R(L1), { etat: 'echec' }, { etat: 'lecture' }, L(L2)], 'G G G G —'],
+        ['un renvoi qui réussit, puis la lecture en échec, puis relue', [L(L1, { pasCompte: pc1 }), R(L1, { renvoi: true }), { etat: 'echec' },
+          { etat: 'lecture' }, L(L2)], 'G G — — —'],
         ['la lecture en échec, une ligne devenue incomplète PENDANT l’échec, puis complétée', [{ etat: 'echec' },
-          { etat: 'echec', pasCompte: pc1 }, R(null), R(null, { relecture: RD }), L(L1)], '— G G G —'],
-        ['l’en-tête refusé, puis le retour de « Mon entreprise »', [L(L1, { pasCompte: pcE }), R(L1, { pasCompte: pcE, relecture: RDE }),
-          L(L2, { pasCompte: pcE }), R(L2), L(L2), R(L2, { relecture: RD }), L(L3)], 'G G G G G G —'],
-        ['une liste qui compte tout revient sous une carte ouverte : la place se rend à sa fermeture', [L(L1, { pasCompte: pc1 }),
-          R(L1, { couverte: true }), L(L1, { couverte: true }), R(L1, { relecture: RD, couverte: true }), L(L2, { couverte: true }),
-          L(L2, { couverte: true }), L(L2)], 'G G G G G G —'],
-        ['…de même sous une feuille, et une liste neuve qui ne compte pas tout reste réservée à la fermeture', [L(L1, { pasCompte: pc1 }),
-          L(L2, { pasCompte: pc1, couverte: true }), L(L2, { pasCompte: pc1 }), R(L2), L(L3)], 'G G G G —'],
+          { etat: 'echec', pasCompte: pc1 }, R(null), R(null, { relecture: RD }), L(L1)], '— G — — —'],
+        ['l’en-tête refusé, le retour de « Mon entreprise », puis le champ corrigé', [L(L1, { pasCompte: pcE }),
+          R(L1, { pasCompte: pcE, relecture: RDE }), L(L2, { pasCompte: pcE }), R(L2), L(L2), R(L2, { relecture: RD }), L(L3)],
+          'G G G — — — —'],
+        ['un retrait en échec, renvoyé, qui réussit', [L(L1, { pasCompte: pc1 }), R(L1, { renvoi: true }), R(L1, { relecture: RD }), L(L2)],
+          'G G — —'],
       ];
       const faux = suites.map(([nom, suite, attendu]) => [nom, rendus(suite), attendu]).filter(([, vu, attendu]) => vu !== attendu);
-      verifier('…RELIRE4-C (relecture 5) : la place réservée ne se rend qu’au RETOUR d’une liste qui compte tout, jamais au départ d’une '
-        + 'écriture — `garderLaPlace`, FAITE TOURNER rendu après rendu sur quatorze suites (échec → renvoi → échec : G G G ; → réussite : G '
-        + 'jusqu’au retour, l’instant entre l’écriture et sa relecture compris ; incomplète → complétée ; tout compté → écriture : rien ; '
-        + 'brouillon pas en base, puis en base — une ligne incomplète puis complétée AVANT d’y entrer n’y réserve rien ; un champ ou une carte ouverts ; la lecture en échec puis relue, et une ligne devenue incomplète pendant cet échec ; l’en-tête refusé et le '
-        + 'retour de « Mon entreprise » ; une liste qui revient sous une carte ou une feuille ouverte : la place se rend à leur fermeture, pas avant) ; la mémoire est stable (rejouée sur elle-même, elle rend le même objet) ; et `garder` seul ne '
-        + 'réserve rien sur un brouillon pas en base',
-      faux.length === 0 && P.garderLaPlace() === null && P.garderLaPlace({ enBase: false, pasCompte: pcNeuf, liste: null }) === null
-        && P.garderLaPlace({ gardee: { depuis: L1 }, etat: 'liste', enBase: true, liste: L2, couverte: true }) !== null
-        && P.garderLaPlace({ gardee: { depuis: L1 }, etat: 'liste', enBase: true, liste: L2 }) === null
-        && P.texteDeLaLigneRemise({ etat: 'pas_en_base', garder: true }).gabarits === null
-        && P.texteDeLaLigneRemise({ etat: 'en_route', lue: lue2, garder: true }).gabarits === D.GABARITS_DE_LA_LIGNE
-        && P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, garder: true }).contenu === compte2,
-      faux.map(([nom, vu, attendu]) => `${nom} : ${vu} au lieu de ${attendu}`).join(' | '));
+      const corpsRegle = sansEspaces(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'garderLaPlace') || '');
+      verifier('…la place de la ligne suit UNE RÈGLE SANS MÉMOIRE (relecture 6) : `garderLaPlace` — devis en base ET (quelque chose n’est pas '
+        + 'compté OU une écriture renvoyée après un échec est en route) —, FAITE TOURNER rendu par rendu sur dix-sept suites (échec → renvoi → '
+        + 'échec : G G G ; → réussite : rendue À LA RÉUSSITE ; une ligne complétée ; ce qui cesse d’être compté SANS écriture — une ligne '
+        + 'retirée, une valeur remise, un champ rétabli — : rendue AU GESTE ; tout compté ; un brouillon pas en base ; sous une carte ouverte, '
+        + 'sans attendre sa fermeture ; un renvoi puis la lecture en échec ; l’en-tête refusé et « Mon entreprise » ; un retrait renvoyé) ; '
+        + 'la ligne réserve exactement quand la règle le dit ; elle ne prend ni mémoire, ni liste, ni état, ni carte ; `renvoi` doit valoir '
+        + '`true` ; et un renvoi seul ne réserve rien sur un brouillon pas en base',
+      faux.length === 0 && P.garderLaPlace() === false && P.garderLaPlace({ enBase: true }) === false
+        && P.garderLaPlace({ enBase: true, pasCompte: pc1 }) === true && P.garderLaPlace({ enBase: true, renvoi: true }) === true
+        && P.garderLaPlace({ enBase: true, renvoi: 1 }) === false && P.garderLaPlace({ enBase: false, pasCompte: pcNeuf }) === false
+        && P.garderLaPlace({ enBase: false, renvoi: true }) === false
+        && corpsRegle === '{ return !!enBase && (!!pasCompte || renvoi === true); }'
+        && (sansEspaces(sansCommentairesJs(lire('src/lib/devis.js'))).match(/function garderLaPlace\(/g) || []).length === 1
+        && sansEspaces(sansCommentairesJs(lire('src/lib/devis.js')))
+          .includes('export function garderLaPlace({ enBase = false, pasCompte = null, renvoi = false } = {}) {')
+        && P.texteDeLaLigneRemise({ etat: 'pas_en_base', renvoi: true }).gabarits === null
+        && P.texteDeLaLigneRemise({ etat: 'en_route', lue: lue2, renvoi: true }).gabarits === D.GABARITS_DE_LA_LIGNE
+        && P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, renvoi: true }).contenu === compte2
+        && P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2, garder: true }).gabarits === null
+        && P.texteDeLaLigneRemise({ etat: 'liste', lue: lue2 }).gabarits === null
+        && sansEspaces(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'texteDeLaLigneRemise') || '')
+          .includes("const gabarits = garderLaPlace({ enBase: etat !== 'pas_en_base', pasCompte, renvoi }) ? GABARITS_DE_LA_LIGNE : null;")
+        && /export function texteDeLaLigneRemise\(\{[^}]*\brelecture = null,\s+renvoi = false,\s*\}/.test(sansCommentairesJs(lire('src/lib/devis.js'))),
+      `${faux.map(([nom, vu, attendu]) => `${nom} : ${vu} au lieu de ${attendu}`).join(' | ')} ; règle : ${corpsRegle.slice(0, 200)}`);
     }
     /* LA CARTE, FAITE TOURNER : ses phrases d'état, dans l'ordre ; « pas
        compté » dit DANS LA CARTE aussi, sur la liste comme sur un échec ; et
@@ -8884,7 +9139,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const ligne = sansEspaces(corpsDeFonction(PR, 'LigneRemise') || '');
   verifier('la LIGNE (haut et bas) dit ce que décide `texteDeLaLigneRemise` (fait tourner plus haut), et rien d’autre : aucune phrase '
     + 'ni aucun compte écrit dans le composant ; `ouvrir` ouvre la carte, `reessayer` RELIT, sinon ce n’est PAS une cible',
-  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, garder, \}\); const \{ contenu, compte, gabarits, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
+  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, renvoi, \}\); const \{ contenu, compte, gabarits, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
     && !/phraseDesEndroits|LISTE_|MISE_A_JOUR|\bpoints\(/.test(ligne) && /if \(!action\) \{ return <View/.test(ligne)
     /* LA PHRASE ET LE DÉCOMPTE (décision D-A), le décompte à la ligne ; ET
        LES GABARITS (relecture 2 de 2b-1, REL-1 ; D-A bis, 06/11) : quand
@@ -8903,16 +9158,18 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        deux lignes réservées, comme avant. Plus aucune « troisième ligne »
        réservée : c'était elle qui sautait (92 → 74 points). */
     && ligne.includes('const dit = texteDeLaLigneRemise({ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, '
-      + 'garder, }); const { contenu, compte, gabarits, aDire } = dit;')
+      + 'renvoi, }); const { contenu, compte, gabarits, aDire } = dit;')
     /* …et elle ne reçoit plus la dernière liste lue (relecture 4) : les
        gabarits n'en dépendent plus */
     && !/\bderniere\b/.test(sansCommentairesJs(corpsDeFonction(PR, 'LigneRemise') || ''))
-    /* …et SANS `garder`, elle ne réserve RIEN (banc de la relecture 5, N10) :
-       un `garder = true` par défaut passait tout — la saisie le donne
+    /* …et SANS `renvoi`, elle ne réserve RIEN de plus que « pas compté »
+       (banc de la relecture 5, N10, pour l'ancien `garder`) : un
+       `renvoi = true` par défaut passait tout — la saisie le donne
        toujours, mais le prochain appelant qui l'oublierait réserverait la
        place pour toujours, et le balayage de `mesure-devis` ne fait que
        NOTER la hauteur ordinaire de son témoin. */
-    && /export function LigneRemise\(\{[^}]*\brelecture = null, garder = false, onOuvrir, onReessayer,\s*\}\)/.test(sansCommentairesJs(PR))
+    && /export function LigneRemise\(\{[^}]*\brelecture = null, renvoi = false, onOuvrir, onReessayer,\s*\}\)/.test(sansCommentairesJs(PR))
+    && !/\bgarder\b/.test(sansCommentairesJs(corpsDeFonction(PR, 'LigneRemise') || ''))
     && ligne.includes("const styleTexte = variante === 'bas' ? s.ligneTexteBas : s.ligneTexte; const texte = compte ? `${contenu}\\n${compte}` : contenu;")
     && ligne.includes('{gabarits ? ( <View style={s.superpose}> {gabarits.map((g, i) => ( <View key={`gabarit-${i}`} '
       + 'style={[s.couche, i > 0 && s.coucheSuivante, s.gabarit]} aria-hidden accessibilityElementsHidden '
@@ -9131,7 +9388,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       /* relecture 4 (la décision « simplifier ») : rien ne relit plus l'entreprise seule */
       /Une relecture de la seule ENTREPRISE ne change pas l'état/,
       /* relecture 5 (RELIRE4-C) : la place ne se rend plus quand la phrase « pas compté » disparaît */
-      /qui APPARAÎT ou DISPARAÎT/],
+      /qui APPARAÎT ou DISPARAÎT/,
+      /* relecture 6 (RELIRE5-R1) : plus de mémoire, la place ne se rend plus « au retour d'une liste » */
+      /LA PLACE GARDÉE/, /POURQUOI UNE MÉMOIRE/, /ne se REND qu.au RETOUR d.une liste/, /NE SE REND QU.AU RETOUR D.UNE/,
+      /la mémoire de `garderLaPlace`/,
+      /* banc de la relecture 6 : les deux formes de l'ancienne règle « couverte », qui disaient le contraire du code */
+      /elle se REND au retour d.une liste qui/, /à leur fermeture/],
     'src/components/PourRemettre.js': [/TROIS dans un seul état/, /\(`lignes`\)/, /« Ce devis »,? (?:lui, )?reste(?: juste)?\./,
       /* relecture 3 (D-A bis, point 3) : plus rien n'est posé en position absolue, le gabarit n'est plus seul */
       /`s\.parDessus`/, /est celle du gabarit, à toutes les largeurs/,
@@ -9144,12 +9406,20 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       /* relecture 4 (RELIRE3-1) */
       /« phrase \+ décompte » de la liste lue, sous ses deux formes/, /SA HAUTEUR NE BOUGE PAS TANT QUE QUELQUE CHOSE N'EST PAS COMPTÉ\s/,
       /* relecture 5 (RELIRE4-C) */
-      /phrase « pas compté » qui apparaît ou disparaît, et le passage/],
+      /phrase « pas compté » qui apparaît ou disparaît, et le passage/,
+      /* relecture 6 (RELIRE5-R1) */
+      /NE SE REND QU.AU RETOUR D.UNE LISTE/, /la mémoire de `garderLaPlace`/, /elle se REND au retour d.une liste qui/,
+      /* banc de la relecture 6 */
+      /à la fermeture de la carte ou de la feuille/],
     'src/screens/SaisieDevisScreen.js': [/se relit ne s'affiche pas tant que la liste/, /« Ce devis »,? (?:lui, )?reste(?: juste)?\./,
       /* relecture 3 (RELIRE-1) */
       /un objet neuf ne relance rien s'il ne change pas ce qu'on sait/, /ratée\) compte comme `null`/, /position absolue/,
       /* relecture 4 : plus de comparaison de régimes au retour de « Mon entreprise » */
-      /la seule cause « entreprise »/, /SAUF si les deux régimes sont CONNUS/],
+      /la seule cause « entreprise »/, /SAUF si les deux régimes sont CONNUS/,
+      /* relecture 6 (RELIRE5-R1) */
+      /LA PLACE GARDÉE/, /NE SE REND QU.AU RETOUR D.UNE LISTE/, /`placeGardee`/,
+      /* banc de la relecture 6 */
+      /ne se rend pas sous une carte/, /se rend à leur fermeture/, /\(`couverte`\)/],
   };
   const perimees = Object.entries(PHRASES_PERIMEES).flatMap(([f, rs]) => rs.filter((r) => r.test(brut(f))).map((r) => `${f} : ${r}`));
   verifier('…les commentaires que la relecture 2 a corrigés ne reviennent pas à leur version FAUSSE (trois lignes réservées « dans cet état '
@@ -9218,32 +9488,46 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && (saE.match(/pasCompte=\{pasCompte\}/g) || []).length === 2
     && /const \[champOuvert, setChampOuvert\] = useState\(false\);/.test(saE) && /onFrappe=\{setChampOuvert\}/.test(saE)
     && !/\bnonParties\b/.test(saE) && !/enRoute=\{attente\.enCours\}/.test(saE));
-  /* LA MÉMOIRE DE LA PLACE, DANS LA SAISIE (relecture 5 de 2b-1, RELIRE4-C,
-     07/11/2026) : un ÉTAT, déclaré avec les autres crochets — AVANT les
-     sorties anticipées (« Lecture impossible »…), sinon React n'appellerait
-     plus le même nombre de crochets d'un rendu à l'autre —, remis à jour
-     PENDANT le rendu une fois l'état de la liste et `pasCompte` connus, par
-     `garderLaPlace` seule et sur `liste.motifs` (la liste revenue) ; aucune
-     référence (lire une référence pendant le rendu est ce que le cliquet du
-     linter refuse) ; et la ligne — le même composant en haut et en bas —
-     reçoit `garder={!!place}`. Sans elle, « Réessayer » rendait la place. */
-  const iEtatPlace = SA.indexOf('const [placeGardee, setPlaceGardee] = useState(null);');
-  const iSortieAnticipee = SA.indexOf("if (etat === 'impossible') {");
-  const iPlace = saE.indexOf('const place = garderLaPlace(');
-  verifier('la saisie GARDE la place de la ligne jusqu’au retour d’une liste qui compte tout (RELIRE4-C) : un état `placeGardee` déclaré '
-    + 'avant les sorties anticipées, remis à jour pendant le rendu par `garderLaPlace` (après `pasCompte`, avant la ligne ; couverte par une '
-    + 'carte ou une feuille ouverte), aucune autre '
-    + 'écriture, aucune référence ; la ligne reçoit `garder={!!place}`, une fois',
-  iEtatPlace > 0 && iSortieAnticipee > iEtatPlace
-    && (SA.match(/const \[placeGardee, setPlaceGardee\] = useState\(null\);/g) || []).length === 1
-    && saE.includes('const place = garderLaPlace({ gardee: placeGardee, etat: etatListe, pasCompte, enBase: attente.devisEnBase, '
-      + 'liste: liste.motifs, couverte: !!carte || !!feuille, }); if (place !== placeGardee) setPlaceGardee(place);')
-    && iPlace > saE.indexOf('const pasCompte = ceQueLaListeNeComptePas(') && iPlace < saE.indexOf('const ligneRemise = (variante) =>')
-    && (SA.match(/\bsetPlaceGardee\b/g) || []).length === 2 && (SA.match(/\bplaceGardee\b/g) || []).length === 3
-    && (SA.match(/\bgarderLaPlace\(/g) || []).length === 1 && !/\bplace(?:Gardee)?Ref\b/.test(SA)
-    && balises(SA, 'LigneRemise').length === 1 && balises(SA, 'LigneRemise').every((b) => /garder=\{!!place\}/.test(b))
-    && (SA.match(/\bgarder=\{/g) || []).length === 1,
-  `${iEtatPlace} / ${iSortieAnticipee} / ${iPlace}`);
+  /* LA PLACE DE LA LIGNE, DANS LA SAISIE : AUCUNE MÉMOIRE (relecture 6 de
+     2b-1). La relecture 5 y avait mis un état `placeGardee`, remis à jour
+     pendant le rendu, qui ne rendait la place qu'au retour d'une liste
+     neuve : ce qui cessait d'être compté sans écriture ne la rendait plus
+     (RELIRE5-R1). La saisie ne garde plus rien : la ligne reçoit `pasCompte`
+     et `renvoi`, et `garderLaPlace` (devis.js, appelée par
+     `texteDeLaLigneRemise`) décide à chaque rendu. `renvoi` vient de
+     l'ÉTAT d'attente (`attente.renvoisEnRoute`), que `majAttente` recopie
+     de la file (`renvoisEnRoute()`) après chaque événement — jamais d'une
+     référence lue pendant le rendu (le cliquet du linter). Et la liste ne
+     ferme plus le clavier quand une carte ou une feuille la couvre
+     (`glisserFermeLeClavier`) : la place y change de hauteur, et le
+     défilement qu'en tire Chromium fermait le clavier du champ de la carte. */
+  const balisesLigne = balises(SA, 'LigneRemise');
+  const iMaj = saE.indexOf('const majAttente = () => {');
+  const corpsMaj = iMaj >= 0 ? saE.slice(iMaj, saE.indexOf('};', iMaj)) : '';
+  verifier('la saisie ne GARDE plus la place (relecture 6) : aucun état ni aucune référence de la place, aucun appel à `garderLaPlace` '
+    + 'dans l’écran, aucun `garder=` ; la ligne — UNE balise, en haut et en bas — reçoit `renvoi={attente.renvoisEnRoute > 0}`, que '
+    + '`majAttente` recopie de la file (`f.renvoisEnRoute().length`) et que l’état d’attente initialise à 0 ; et la liste ne ferme plus le '
+    + 'clavier sous une carte ou une feuille (`keyboardDismissMode={glisserFermeLeClavier}`, `carte || feuille ? \'none\' : \'on-drag\'`) ; '
+    + 'et l’ouverture recopie l’état de la file (`majAttente()`) avant `setEtat(\'pret\')`',
+  !/\bplaceGardee\b|\bsetPlaceGardee\b|\bplace(?:Gardee)?Ref\b/.test(SA) && !/\bgarderLaPlace\b/.test(saE) && !/\bgarder=\{/.test(saE)
+    && balisesLigne.length === 1 && balisesLigne.every((b) => /\brenvoi=\{attente\.renvoisEnRoute > 0\}/.test(b))
+    && (saE.match(/\brenvoi=\{/g) || []).length === 1
+    && /renvoisEnRoute: f\.renvoisEnRoute\(\)\.length,/.test(corpsMaj)
+    && /const \[attente, setAttente\] = useState\(\{ nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0, \}\);/.test(saE)
+    && (saE.match(/\brenvoisEnRoute\b/g) || []).length === 4
+    && !/fileRef\.current\.renvoisEnRoute|fileRef\.current && fileRef\.current\.renvoisEnRoute/.test(saE)
+    && saE.includes("const glisserFermeLeClavier = carte || feuille ? 'none' : 'on-drag';")
+    && (saE.match(/keyboardDismissMode=\{glisserFermeLeClavier\}/g) || []).length === 1
+    /* …et l'OUVERTURE relit la file AVANT que l'écran se dise prêt (banc de
+       la relecture 6, N15 : retirer cet appel passait) — une file qui a
+       survécu à l'écran, quitté pendant un renvoi, garde sa marque, et
+       l'écran ne la voit qu'en recopiant l'état d'attente à l'ouverture ;
+       sans lui, le premier rendu croit aussi le brouillon « pas en base ». */
+    && (saE.match(/majAttente\(\); setEtat\('pret'\); lireLaListe\(\);/g) || []).length === 1
+    && saE.indexOf('fileRef.current = f; desabonner = f.abonner(ecouter);') >= 0
+    && saE.indexOf('fileRef.current = f; desabonner = f.abonner(ecouter);') < saE.indexOf("majAttente(); setEtat('pret'); lireLaListe();"),
+  `${balisesLigne.length} balise(s) ; renvoisEnRoute ×${(saE.match(/\brenvoisEnRoute\b/g) || []).length} ; ouverture `
+    + `${saE.indexOf('fileRef.current = f; desabonner = f.abonner(ecouter);')} < ${saE.indexOf("majAttente(); setEtat('pret'); lireLaListe();")}`);
   verifier('…et l’en-tête signale la frappe UNE fois (`surPremiereFrappe` sur l’objet, le code postal, la ville et le délai ; la première '
     + 'lettre de la rue), et la retire quand le champ s’enregistre (chaque `onBlur`, le lieu, `enregistrer()`), réarmant ses champs',
   champsFrappe.length === 4
