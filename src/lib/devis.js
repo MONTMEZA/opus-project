@@ -4132,9 +4132,13 @@ export const GABARITS_DE_LA_LIGNE = Object.freeze([
  *     refusée par l'écran, une écriture en échec — un retrait compris —, un
  *     champ de l'en-tête refusé ou en échec), OU
  *   - une écriture RENVOYÉE APRÈS UN ÉCHEC est en route (`renvoi` : la file
- *     le dit, `renvoisEnRoute()`, file-ecriture.js — « Réessayer » sur une
- *     ligne, sur l'en-tête, sur un retrait, et le renvoi automatique du
- *     plafond).
+ *     le dit, `renvoisEnRoute()`, file-ecriture.js, point 18 — « Réessayer »
+ *     sur une ligne, sur l'en-tête, sur un retrait, le renvoi automatique du
+ *     plafond ; et, depuis la relecture 7 (08/11/2026), la même écriture
+ *     renvoyée par une autre porte : la carte d'une ligne en échec fermée
+ *     sans rien changer, un retrait en échec retiré de nouveau, le reste
+ *     d'un refus partiel de l'en-tête, une écriture de l'en-tête pendant
+ *     qu'un refus du plafond est tenu à part).
  * Elle se calcule à CHAQUE RENDU, sur ce que la saisie et la file savent
  * déjà : rien ne se retient d'un rendu au suivant.
  *
@@ -4164,16 +4168,22 @@ export const GABARITS_DE_LA_LIGNE = Object.freeze([
  *     points à 393 en haut, 128 à 320) ;
  *   - CESSER de l'être : la place se REND (110 → 74) — AU GESTE quand rien ne
  *     part (la ligne retirée, la valeur remise, le champ rétabli) ou quand une
- *     nouvelle écriture part (la ligne complétée, le champ corrigé) ; À LA
- *     RÉUSSITE de l'écriture renvoyée après un échec (« Réessayer », le
- *     renvoi du plafond) ;
+ *     nouvelle écriture part (la ligne complétée, le champ corrigé — une
+ *     VRAIE correction, qui change une valeur) ; QUAND L'ENTRÉE RENVOYÉE
+ *     QUITTE « EN COURS » (« Réessayer », le renvoi du plafond, ou la même
+ *     écriture renvoyée par une autre porte) — à la réussite du renvoi, ou à
+ *     la fin de ce qui a été voulu PENDANT son vol (une correction ou un
+ *     retrait faits pendant le renvoi : la marque les suit, et une
+ *     correction qui échoue ne fait aucun rebond ; relecture 7, RELIRE6-3) ;
  *   - un brouillon « pas encore en base » qui y ENTRE avec une ligne
  *     incomplète saute une fois à la place réservée (rien n'est réservé tant
  *     qu'il n'est pas en base : il n'a pas de liste).
  * Rien d'autre ne la change : ni l'état de la liste (en route, lecture,
  * échec, OP027, la relecture qui suit « Mon entreprise »), ni ses nombres, ni
  * sa phrase, ni le retour d'une liste, ni une carte ou une feuille ouverte
- * par-dessus.
+ * par-dessus. Et une écriture renvoyée TELLE QUELLE après un échec, par
+ * quelque porte que ce soit, n'est pas une « nouvelle écriture » : c'est un
+ * renvoi (relecture 7, RELIRE6-1).
  */
 export function garderLaPlace({ enBase = false, pasCompte = null, renvoi = false } = {}) {
   return !!enBase && (!!pasCompte || renvoi === true);
@@ -4213,17 +4223,21 @@ export function garderLaPlace({ enBase = false, pasCompte = null, renvoi = false
  * point » ne la fait pas bouger. ET UN RENVOI NE LA REND PAS (relecture 5,
  * RELIRE4-C ; règle sans mémoire de la relecture 6, `garderLaPlace`) :
  * « Réessayer » sur une ligne, sur l'en-tête ou sur un retrait en échec, le
- * renvoi automatique du plafond — la phrase « pas compté » se tait, mais la
- * place reste réservée tant que l'écriture renvoyée est en route
- * (`renvoi`). Ce qui la change encore, et c'est tout (les sauts nommés de
- * `garderLaPlace`) : elle se RÉSERVE quand quelque chose devient « pas
- * compté » (une ligne laissée incomplète ou refusée, une écriture qui
- * échoue, un champ refusé : 74 → 110 points à 393 en haut) ; elle se REND
+ * renvoi automatique du plafond, et la même écriture renvoyée par une autre
+ * porte (la carte d'une ligne en échec fermée sans rien changer, le reste
+ * d'un refus partiel de l'en-tête ; relecture 7) — la phrase « pas compté »
+ * se tait, mais la place reste réservée tant que l'écriture renvoyée est en
+ * route (`renvoi`), ce qui a été voulu pendant son vol compris. Ce qui la
+ * change encore, et c'est tout (les sauts nommés de `garderLaPlace`) : elle
+ * se RÉSERVE quand quelque chose devient « pas compté » (une ligne laissée
+ * incomplète ou refusée, une écriture qui échoue, un champ refusé : 74 → 110
+ * points à 393 en haut) ; elle se REND
  * quand rien ne l'est plus — au geste (une ligne retirée, une valeur remise,
  * un champ rétabli ; une ligne complétée ou un champ corrigé qui partent),
- * ou à la réussite d'une écriture renvoyée ; et un brouillon « pas encore en
- * base » qui y entre avec une ligne incomplète saute une fois à la place
- * réservée (sa phrase n'est pas la même, et il n'a pas de liste). Le retour
+ * ou quand une entrée renvoyée quitte « en cours » (à la réussite du renvoi,
+ * ou à la fin de ce qui a été voulu pendant son vol) ; et un brouillon « pas
+ * encore en base » qui y entre avec une ligne incomplète saute une fois à
+ * la place réservée (sa phrase n'est pas la même, et il n'a pas de liste). Le retour
  * d'une liste, lui, ne la change jamais. Ce que la ligne DIT ne change pas
  * (D-A, ECR-1).
  *

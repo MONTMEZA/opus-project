@@ -1882,6 +1882,468 @@ process.on('unhandledRejection', (e) => { plantagesDeLaFile.push((e && e.stack) 
       && vu.fRien === '[]' && vu.fJournal === 0 && vu.fOrdinaire === '[]',
     json(vu));
   }
+  /* j quater. LA MARQUE DU RENVOI, PAR LES AUTRES PORTES (relecture 7 de
+     2b-1, 08/11/2026 : RELIRE6-1, RELIRE6-2, RELIRE6-3). La carte d'une
+     ligne EN ÉCHEC fermée SANS RIEN CHANGER renvoyait la même écriture sans
+     la marque : la place se rendait au départ, puis se réservait au nouvel
+     échec (110 → 74 → 110 points à 393, mesuré au navigateur). Même chose
+     pour le reste d'un refus partiel de l'en-tête (16) quand une écriture
+     attendait derrière lui. On fait tourner la VRAIE file, et la VRAIE règle
+     de la place (`garderLaPlace` sur `ceQueLaListeNeComptePas` et
+     `renvoisEnRoute()`) recalculée à CHAQUE événement — plus strict que
+     l'écran, qui regroupe les événements d'une même tâche :
+       a. une réécriture INCHANGÉE d'une ligne en échec est un renvoi — par
+          `ligne()` (la carte fermée), par `modifierLigne()` (mêmes valeurs,
+          ou rien), pour une modification partie sans réponse, une insertion
+          partie sans réponse, un interblocage deux fois : marquée, et la
+          place ne bouge pas jusqu'au nouvel échec ;
+       b. une réécriture CHANGÉE (le prix corrigé) n'en est pas un : aucune
+          marque, le saut nommé (rendue au départ, réservée au nouvel échec) ;
+       c. une ligne refusée DÉFINITIVEMENT, la carte fermée sans changer :
+          `renvoyerLaLigne` ne la renvoie pas — aucune écriture, rien ne
+          bouge ;
+       d. le reste d'un refus partiel (16) est marqué, avec et sans une
+          écriture derrière l'en-tête : la place se réserve AU REFUS et ne
+          bouge plus — et la ligne qui attendait passe AVANT le reste (remis
+          en fin de file) ;
+       e. une écriture faite PENDANT le vol d'un renvoi garde la marque
+          jusqu'à ce que l'entrée quitte « en cours » (RELIRE6-3) : réussie,
+          la place se rend à sa réussite ; ratée, elle ne s'est jamais rendue
+          (aucun rebond) — et si c'est le RENVOI qui échoue, ce qui a été
+          voulu pendant son vol repart AVEC la marque : la même écriture
+          remise (« Poste suivant » enregistre la carte, puis `ouvrirCarte`
+          l'enregistre encore : 110 → 74 → 110 au navigateur, avant), ou une
+          correction ;
+       f. l'EN-TÊTE : une réécriture inchangée après un échec est marquée ; un
+          AUTRE champ changé pendant qu'un refus est TENU (16) l'est aussi —
+          la réduction reste hors du compte quoi qu'il arrive à l'écriture ;
+          la réduction elle-même changée, ou un champ changé sans refus
+          tenu, ne l'est pas (le saut nommé) ;
+       g. le RETRAIT : retirer de nouveau une ligne dont la suppression a
+          échoué est marqué ; retirer une ligne en échec qui ne l'était pas ne
+          l'est pas ;
+       h. un devis qui n'est PAS en base : aucune marque, même inchangée. */
+  {
+    const reseau = () => new TypeError('Failed to fetch');
+    const deadlock = () => Object.assign(new Error('deadlock detected'), { code: '40P01' });
+    const prix23514 = () => Object.assign(new Error('new row violates check constraint "devis_ligne_prix_check"'), { code: '23514' });
+    const plafondJq = () => Object.assign(new Error('new row for relation "devis" violates check constraint "devis_plafond_check"'), { code: '23514' });
+    /* La place, recalculée à chaque événement « etat », comme `majAttente`
+       puis le rendu : G (réservée) ou — (ordinaire), les répétitions
+       fondues ; la première est celle du moment où l'on commence à suivre. */
+    const suivre = (f) => {
+      const vu = [];
+      const place = () => {
+        const etats = f.etats();
+        const n = Object.keys(etats).filter((k) => etats[k] === 'echec' || etats[k] === 'locale').length;
+        const pasCompte = D.ceQueLaListeNeComptePas({ nbLignes: n, entete: f.etatDe('devis') === 'echec', enBase: f.devisEnBase() });
+        return D.garderLaPlace({ enBase: f.devisEnBase(), pasCompte, renvoi: f.renvoisEnRoute().length > 0 }) ? 'G' : '—';
+      };
+      vu.push(place());
+      f.abonner((e) => {
+        if (e.type !== 'etat' && e.type !== 'supprimee') return;
+        const p = place();
+        if (vu[vu.length - 1] !== p) vu.push(p);
+      });
+      return () => vu.join('');
+    };
+    const avecAPart = { aPart: D.colonnesDuRefus, paires: D.PAIRES_DEVIS };
+    const vu = {};
+    /* a. réécritures inchangées */
+    const inchangee = async (nom, { erreur, porte, neuve = false }) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: neuve ? [] : [ligne('L1')] });
+      const place = suivre(f);
+      const v1 = neuve ? ligne('L1') : ligne('L1', { quantiteMilliemes: 2000 });
+      const fois = erreur === deadlock ? 2 : 1;
+      for (let i = 0; i < fois; i += 1) {
+        b.commandes.push(erreur === 'pendre' ? { quand: (op) => op.id === 'L1', pendre: true } : { quand: (op) => op.id === 'L1', erreur: erreur() });
+      }
+      f.ligne(v1);
+      await f.attendre(300);
+      const avant = f.etatDe('L1');
+      const n0 = b.journal.length;
+      /* Le renvoi échoue de nouveau — pour l'insertion sans réponse, par le
+         réseau, AVANT d'arriver (sinon la base, qui l'a déjà, rendrait 23505
+         et la relecture la dirait enregistrée). */
+      for (let i = 0; i < fois; i += 1) {
+        b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: erreur === 'pendre' ? reseau() : erreur() });
+      }
+      if (porte === 'ligne') f.ligne({ ...v1 });
+      else if (porte === 'rien') f.modifierLigne('L1', {});
+      else f.modifierLigne('L1', { quantiteMilliemes: v1.quantiteMilliemes });
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      vu[nom] = { avant, juste, apres: json(f.renvoisEnRoute()), etat: f.etatDe('L1'), parties: b.journal.length - n0, place: place() };
+    };
+    await inchangee('aLigne', { erreur: reseau, porte: 'ligne' });
+    await inchangee('aModifier', { erreur: reseau, porte: 'modifier' });
+    await inchangee('aRien', { erreur: reseau, porte: 'rien' });
+    await inchangee('aInsertion', { erreur: 'pendre', porte: 'ligne', neuve: true });
+    await inchangee('aInterblocage', { erreur: deadlock, porte: 'modifier' });
+    /* b. réécritures changées */
+    const changee = async (nom, porte) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const place = suivre(f);
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: reseau() });
+      f.ligne(ligne('L1', { quantiteMilliemes: 2000 }));
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: reseau() });
+      if (porte === 'ligne') f.ligne(ligne('L1', { quantiteMilliemes: 2000, prixUnitaireCentimes: 4200 }));
+      else f.modifierLigne('L1', { prixUnitaireCentimes: 4200 });
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      vu[nom] = { juste, etat: f.etatDe('L1'), place: place() };
+    };
+    await changee('bLigne', 'ligne');
+    await changee('bModifier', 'modifier');
+    /* c. un refus définitif, la carte fermée sans changer (le chemin de
+       `enregistrerLigne` : `refusDeLaLigne`, `renvoyerLaLigne`, puis `ligne`) */
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const place = suivre(f);
+      const v1 = ligne('L1', { quantiteMilliemes: 2000 });
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: prix23514() });
+      f.ligne(v1);
+      await f.attendre(300);
+      const refus = D.refusDeLaLigne({ definitif: ERR.estUnRefusDefinitif(f.erreurDe('L1')), devisEnBase: f.devisEnBase() });
+      const n0 = b.journal.length;
+      const part = D.renvoyerLaLigne({ valeurs: { ...v1 }, derniere: v1, etat: f.etatDe('L1'), refus });
+      if (part) f.ligne({ ...v1 });
+      await f.attendre(300);
+      vu.cDefinitif = { refus, part, parties: b.journal.length - n0, etat: f.etatDe('L1'), place: place() };
+    }
+    /* d. le reste d'un refus partiel (16) */
+    const resteDuRefus = async (nom, derriere) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')], ...avecAPart });
+      const place = suivre(f);
+      b.commandes.push({ quand: (op) => op.quoi === 'devis' && 'remiseCentiemes' in (op.valeurs || {}), avant: 30, erreur: plafondJq() });
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30 });
+      if (derriere) b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      const marques = [];
+      f.abonner((e) => { if (e.type === 'etat' && e.cle === 'devis' && e.etat === 'en_cours') marques.push(json(f.renvoisEnRoute())); });
+      f.devis({ objet: 'Objet 2', remiseCentiemes: 5000 });
+      if (derriere) f.modifierLigne('L1', { quantiteMilliemes: 3000 });
+      await f.attendre(400);
+      vu[nom] = {
+        place: place(), marques, etat: f.etatDe('devis'), retenue: !!f.retenueDe('devis'), l1: f.etatDe('L1'),
+        ordre: b.journal.map((o) => `${o.quoi}:${Object.keys(o.valeurs || {}).join(',')}`),
+      };
+    };
+    await resteDuRefus('dDerriere', true);
+    await resteDuRefus('dSeul', false);
+    /* e. une écriture faite PENDANT le vol d'un renvoi */
+    const pendantLeVol = async (nom, rate) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const place = suivre(f);
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: reseau() });
+      f.ligne(ligne('L1', { quantiteMilliemes: 2000 }));
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      b.commandes.push(rate ? { quand: (op) => op.id === 'L1', avant: 30, erreur: reseau() } : { quand: (op) => op.id === 'L1', avant: 30 });
+      const apresLeRenvoi = [];
+      f.abonner((e) => { if (e.type === 'etat' && e.cle === 'L1') apresLeRenvoi.push(`${e.etat}:${json(f.renvoisEnRoute())}`); });
+      f.reessayer('L1');
+      f.modifierLigne('L1', { prixUnitaireCentimes: 2500 });
+      await f.attendre(400);
+      vu[nom] = { place: place(), suite: apresLeRenvoi.filter((x, i) => i === 0 || x !== apresLeRenvoi[i - 1]), etat: f.etatDe('L1') };
+    };
+    await pendantLeVol('eReussie', false);
+    await pendantLeVol('eRatee', true);
+    /* …le renvoi lui-même ÉCHOUE, et ce qui a été voulu pendant son vol
+       repart : le chemin de « Poste suivant » (la carte enregistrée deux
+       fois, la seconde pendant le vol de la première), puis une correction */
+    const renvoiRate = async (nom, change) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const place = suivre(f);
+      const v1 = ligne('L1', { quantiteMilliemes: 2000 });
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: reseau() });
+      f.ligne(v1);
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: reseau() });
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: reseau() });
+      const suite = [];
+      f.abonner((e) => { if (e.type === 'etat' && e.cle === 'L1') suite.push(`${e.etat}:${json(f.renvoisEnRoute())}`); });
+      f.ligne({ ...v1 });
+      f.ligne(change ? { ...v1, prixUnitaireCentimes: 4300 } : { ...v1 });
+      await f.attendre(400);
+      vu[nom] = { place: place(), parties: b.journal.filter((o) => o.id === 'L1').length, etat: f.etatDe('L1'),
+        suite: suite.filter((x, i) => i === 0 || x !== suite[i - 1]) };
+    };
+    await renvoiRate('eRenvoiRateMeme', false);
+    await renvoiRate('eRenvoiRateCorrige', true);
+    /* f. l'en-tête */
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const place = suivre(f);
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: reseau() });
+      f.devis({ delaiExecution: 'Trois semaines' });
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30, erreur: reseau() });
+      f.devis({ delaiExecution: 'Trois semaines' });
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      vu.fInchange = { juste, place: place(), etat: f.etatDe('devis') };
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30, erreur: reseau() });
+      const place2 = suivre(f);
+      f.devis({ delaiExecution: 'Quatre semaines' });
+      vu.fChange = { juste: json(f.renvoisEnRoute()) };
+      await f.attendre(300);
+      vu.fChange.place = place2();
+    }
+    /* …un renvoi de l'en-tête qui échoue, RIEN n'attendant derrière : la
+       marque tombe pour de bon — la suppression du brouillon qui suit n'est
+       pas un renvoi */
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: reseau() });
+      f.devis({ objet: 'Essai' });
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30, erreur: reseau() });
+      f.reessayer('devis');
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.quoi === 'devis' && op.action === 'supprimer', avant: 30 });
+      const fin = f.supprimerDevis().then(() => true, (x) => String(x));
+      await pause(10);
+      vu.fSuppression = { etat: f.etatDe('devis'), juste: json(f.renvoisEnRoute()) };
+      vu.fSuppression.fin = await fin;
+    }
+    const tenue = async (nom, geste) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')], ...avecAPart });
+      b.commandes.push({ quand: (op) => op.quoi === 'devis' && 'remiseCentiemes' in (op.valeurs || {}), erreur: plafondJq() });
+      f.devis({ objet: 'Objet 2', remiseCentiemes: 5000 });
+      await f.attendre(300);
+      const avant = { etat: f.etatDe('devis'), retenue: !!f.retenueDe('devis') };
+      const place = suivre(f);
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30 });
+      f.devis(geste);
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      vu[nom] = { avant, juste, place: place(), etat: f.etatDe('devis'), retenue: !!f.retenueDe('devis') };
+    };
+    await tenue('fTenueObjet', { objet: 'Objet 3' });
+    await tenue('fTenueReduction', { remiseCentiemes: 2000 });
+    /* g. le retrait */
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1'), ligne('L2', { ordre: 2000 })] });
+      const place = suivre(f);
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: reseau() });
+      f.retirerLigne('L1');
+      await f.attendre(300);
+      const avant = { etat: f.etatDe('L1'), retiree: f.retiree('L1') };
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: reseau() });
+      f.retirerLigne('L1');
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      vu.gDeNouveau = { avant, juste, place: place(), etat: f.etatDe('L1') };
+      /* une ligne en échec (une modification), puis retirée : un nouveau geste */
+      b.commandes.push({ quand: (op) => op.id === 'L2', erreur: reseau() });
+      f.modifierLigne('L2', { prixUnitaireCentimes: 7 });
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L2', avant: 30 });
+      f.retirerLigne('L2');
+      vu.gPremier = { juste: json(f.renvoisEnRoute()) };
+      await f.attendre(300);
+      vu.gPremier.etat = f.etatDe('L2');
+    }
+    /* h. hors base */
+    {
+      const b = fausseBase();
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: Object.assign(new Error('refus'), { code: '42501' }) });
+      const f = fabriquer(b);
+      f.ligne(ligne('L1'));
+      await f.attendre(300);
+      const avant = [f.etatDe('devis'), f.etatDe('L1'), f.devisEnBase()];
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30, erreur: Object.assign(new Error('refus'), { code: '42501' }) });
+      f.ligne(ligne('L1'));
+      vu.hHorsBase = { avant, juste: json(f.renvoisEnRoute()) };
+      await f.attendre(300);
+    }
+    const inchangeesOk = ['aLigne', 'aModifier', 'aRien', 'aInsertion', 'aInterblocage'].every((k) => vu[k].avant === 'echec'
+      && vu[k].juste === '["L1"]' && vu[k].apres === '[]' && vu[k].etat === 'echec' && vu[k].parties >= 1 && vu[k].place === '—G');
+    verifier('j quater. la MARQUE DU RENVOI par les AUTRES PORTES (relecture 7, RELIRE6-1, -2, -3), la place recalculée à CHAQUE événement : '
+      + 'une réécriture INCHANGÉE d’une ligne en échec (`ligne()`, `modifierLigne()` mêmes valeurs ou rien ; une modification ou une insertion '
+      + 'sans réponse, un interblocage deux fois) est marquée et la place ne bouge pas ; CHANGÉE, elle ne l’est pas (le saut nommé) ; un refus '
+      + 'définitif refermé sans changer n’envoie rien ; le reste d’un refus partiel est marqué, avec ou sans écriture derrière (la ligne qui '
+      + 'attendait passe AVANT lui) ; une écriture faite PENDANT le vol d’un renvoi reste marquée jusqu’à la sortie de « en cours », sans '
+      + 'rebond si elle échoue, et repart marquée si c’est le renvoi qui échoue (« Poste suivant », la carte enregistrée deux fois) ; '
+      + 'l’en-tête réécrit inchangé, ou changé pendant qu’un refus est TENU, est marqué — la réduction changée ou un '
+      + 'champ changé sans refus tenu ne l’est pas ; retirer DE NOUVEAU un retrait en échec est marqué, retirer une ligne en échec ne l’est pas ; '
+      + 'hors base, rien',
+    inchangeesOk
+      && ['bLigne', 'bModifier'].every((k) => vu[k].juste === '[]' && vu[k].etat === 'echec' && vu[k].place === '—G—G')
+      && vu.cDefinitif.refus && vu.cDefinitif.part === false && vu.cDefinitif.parties === 0 && vu.cDefinitif.etat === 'echec' && vu.cDefinitif.place === '—G'
+      && ['dDerriere', 'dSeul'].every((k) => vu[k].place === '—G' && vu[k].etat === 'echec' && vu[k].retenue
+        && vu[k].marques.length >= 2 && vu[k].marques[vu[k].marques.length - 1] === '["devis"]')
+      && json(vu.dDerriere.ordre) === json(['devis:objet,remiseCentiemes', 'ligne:quantiteMilliemes', 'devis:objet'])
+      && vu.dDerriere.l1 === 'enregistree' && json(vu.dSeul.ordre) === json(['devis:objet,remiseCentiemes', 'devis:objet'])
+      && vu.eReussie.place === '—G—' && vu.eReussie.etat === 'enregistree'
+      && json(vu.eReussie.suite) === json(['en_cours:["L1"]', 'enregistree:[]'])
+      && vu.eRatee.place === '—G' && vu.eRatee.etat === 'echec' && json(vu.eRatee.suite) === json(['en_cours:["L1"]', 'echec:[]'])
+      && ['eRenvoiRateMeme', 'eRenvoiRateCorrige'].every((k) => vu[k].place === '—G' && vu[k].parties === 3 && vu[k].etat === 'echec'
+        && json(vu[k].suite) === json(['en_cours:["L1"]', 'echec:[]', 'en_cours:["L1"]', 'echec:[]']))
+      && vu.fInchange.juste === '["devis"]' && vu.fInchange.place === '—G' && vu.fInchange.etat === 'echec'
+      && vu.fChange.juste === '[]' && vu.fChange.place === 'G—G'
+      && vu.fSuppression.etat === 'en_cours' && vu.fSuppression.juste === '[]' && vu.fSuppression.fin === true
+      && vu.fTenueObjet.avant.etat === 'echec' && vu.fTenueObjet.avant.retenue && vu.fTenueObjet.juste === '["devis"]'
+      && vu.fTenueObjet.place === 'G' && vu.fTenueObjet.etat === 'echec' && vu.fTenueObjet.retenue
+      && vu.fTenueReduction.juste === '[]' && vu.fTenueReduction.place === 'G—' && vu.fTenueReduction.etat === 'enregistree' && !vu.fTenueReduction.retenue
+      && vu.gDeNouveau.avant.etat === 'echec' && vu.gDeNouveau.avant.retiree && vu.gDeNouveau.juste === '["L1"]'
+      && vu.gDeNouveau.place === '—G' && vu.gDeNouveau.etat === 'echec'
+      && vu.gPremier.juste === '[]' && vu.gPremier.etat === null
+      && json(vu.hHorsBase.avant) === json(['echec', 'echec', false]) && vu.hHorsBase.juste === '[]',
+    json(vu));
+  }
+  /* j quinquies. CE QUI N'EST PAS UN RENVOI NE PORTE PAS LA MARQUE (banc de
+     la relecture 7 de 2b-1, 08/11/2026). « j quater » prouvait qu'une
+     réécriture INCHANGÉE d'une entrée en échec est marquée ; rien ne
+     prouvait les gardes qui disent ce qui n'en est PAS une, et le banc les a
+     retirées une à une sans qu'aucun contrôle ne rougisse :
+       a. une colonne de l'en-tête JAMAIS voulue avant, écrite après un échec
+          (`changements` lu à l'envers ne la voyait pas) ;
+       b. la réduction tenue sur la PAIRE ENTIÈRE — les deux colonnes, comme
+          l'écran les a (`PAIRES_DEVIS`) —, puis le pourcentage changé : un
+          nouveau geste, même si l'autre colonne de la paire, elle, n'a pas
+          bougé (`some` au lieu de `every` dans `tenueGardee`) ; l'objet
+          changé, lui, reste marqué (le refus tenu le restera) ;
+       c. une ligne RETIRÉE en échec, remise telle quelle — par `ligne()` et
+          par `modifierLigne()` : la remettre est un nouveau geste ;
+       d. une ligne « LOCALE » et en échec — rendue incomplète pendant son
+          vol, qui échoue —, remise telle quelle : par `ligne()` (le geste
+          « L'abandonner » de l'écran, `abandonnerIncompletes`) et par
+          `modifierLigne()` ;
+       e. une réécriture inchangée PENDANT un vol ORDINAIRE (rien n'est en
+          échec) : la carte enregistrée deux fois par « Poste suivant » sur
+          une ligne qui n'a pas échoué, par `ligne()`, par `modifierLigne()`,
+          et l'en-tête par `devis()` — sans la garde « en échec », la place
+          se réservait pendant une écriture ordinaire (mesuré par la vraie
+          file). */
+  {
+    const reseau = () => new TypeError('Failed to fetch');
+    const plafondJq = () => Object.assign(new Error('new row for relation "devis" violates check constraint "devis_plafond_check"'), { code: '23514' });
+    const vu = {};
+    /* a. une colonne jamais voulue */
+    {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', erreur: reseau() });
+      f.devis({ objet: 'Essai' });
+      await f.attendre(300);
+      const avant = { etat: f.etatDe('devis'), voulue: 'delaiExecution' in ((f.entreesVoulues().find((e) => e.cle === 'devis') || {}).voulu || {}) };
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30 });
+      f.devis({ delaiExecution: 'Trois semaines' });
+      vu.aNouvelle = { avant, juste: json(f.renvoisEnRoute()) };
+      await f.attendre(300);
+      vu.aNouvelle.etat = f.etatDe('devis');
+    }
+    /* b. la paire entière tenue */
+    const paire = async (geste) => {
+      const b = fausseBase();
+      const f = fabriquer(b, {
+        devisEnBase: true, devis: { source: 'manuelle', objet: 'O', remiseCentiemes: null, remiseCentimes: null },
+        lignesEnBase: [ligne('L1')], aPart: D.colonnesDuRefus, paires: D.PAIRES_DEVIS,
+      });
+      b.commandes.push({ quand: (op) => op.quoi === 'devis' && 'remiseCentiemes' in (op.valeurs || {}), erreur: plafondJq() });
+      f.devis({ objet: 'O2', remiseCentiemes: 5000 });
+      await f.attendre(300);
+      const d = f.entreesVoulues().find((e) => e.cle === 'devis') || {};
+      const avant = { etat: f.etatDe('devis'), tenue: json(d.tenue) };
+      b.commandes.push({ quand: (op) => op.quoi === 'devis', avant: 30 });
+      f.devis(geste);
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      return { avant, juste };
+    };
+    vu.bPourcentage = await paire({ remiseCentiemes: 2000 });
+    vu.bObjet = await paire({ objet: 'O3' });
+    /* c. une ligne retirée en échec, remise telle quelle (ses colonnes devenues inconnues : elle repart) */
+    const retireeRemise = async (porte) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const v = ligne('L1', { quantiteMilliemes: 2000 });
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: reseau() });
+      f.ligne(v);
+      await f.attendre(300);
+      b.commandes.push({ quand: (op) => op.id === 'L1', erreur: reseau() });
+      f.retirerLigne('L1');
+      await f.attendre(300);
+      const avant = { etat: f.etatDe('L1'), retiree: f.retiree('L1') };
+      const n0 = b.journal.length;
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      if (porte === 'ligne') f.ligne({ ...v }); else f.modifierLigne('L1', {});
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      return { avant, juste, parties: b.journal.length - n0, etat: f.etatDe('L1') };
+    };
+    vu.cLigne = await retireeRemise('ligne');
+    vu.cModifier = await retireeRemise('modifier');
+    /* d. une ligne « locale » et en échec, remise telle quelle */
+    const localeRemise = async (porte) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const v = ligne('L1', { quantiteMilliemes: 2000 });
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30, erreur: reseau() });
+      f.ligne(v);
+      await pause(5);
+      f.marquerLocale('L1', { ...v, prixUnitaireCentimes: null });
+      await f.attendre(300);
+      const e = f.entreesVoulues().find((x) => x.cle === 'L1') || {};
+      const avant = { etat: f.etatDe('L1'), locale: e.locale === true };
+      const n0 = b.journal.length;
+      b.commandes.push({ quand: (op) => op.id === 'L1', avant: 30 });
+      if (porte === 'ligne') f.ligne({ ...v }); else f.modifierLigne('L1', {});
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      return { avant, juste, parties: b.journal.length - n0, etat: f.etatDe('L1') };
+    };
+    vu.dLigne = await localeRemise('ligne');
+    vu.dModifier = await localeRemise('modifier');
+    /* e. une réécriture inchangée pendant un vol ORDINAIRE */
+    const pendantUnVolOrdinaire = async (porte) => {
+      const b = fausseBase();
+      const f = fabriquer(b, { devisEnBase: true, lignesEnBase: [ligne('L1')] });
+      const v = ligne('L1', { quantiteMilliemes: 2000 });
+      const cle = porte === 'devis' ? 'devis' : 'L1';
+      b.commandes.push({ quand: (op) => (cle === 'devis' ? op.quoi === 'devis' : op.id === 'L1'), avant: 30 });
+      const vus = [];
+      f.abonner((x) => { if (x.type === 'etat') vus.push(json(f.renvoisEnRoute())); });
+      if (porte === 'devis') f.devis({ objet: 'Essai' }); else f.ligne(v);
+      await pause(5);
+      const pendant = f.etatDe(cle);
+      if (porte === 'devis') f.devis({ objet: 'Essai' });
+      else if (porte === 'ligne') f.ligne({ ...v });
+      else f.modifierLigne('L1', {});
+      const juste = json(f.renvoisEnRoute());
+      await f.attendre(300);
+      return { pendant, juste, jamais: vus.every((x) => x === '[]'), etat: f.etatDe(cle) };
+    };
+    vu.eLigne = await pendantUnVolOrdinaire('ligne');
+    vu.eModifier = await pendantUnVolOrdinaire('modifier');
+    vu.eDevis = await pendantUnVolOrdinaire('devis');
+    verifier('j quinquies. CE QUI N’EST PAS UN RENVOI ne porte pas la marque (banc de la relecture 7) : une colonne de l’en-tête jamais '
+      + 'voulue, écrite après un échec ; la réduction tenue sur la PAIRE ENTIÈRE puis le pourcentage changé (l’objet changé, lui, reste '
+      + 'marqué) ; une ligne RETIRÉE en échec remise telle quelle, par `ligne()` et `modifierLigne()` ; une ligne « LOCALE » en échec remise '
+      + 'telle quelle (« L’abandonner ») ; une réécriture inchangée pendant un vol ORDINAIRE — ligne, modification, en-tête',
+    vu.aNouvelle.avant.etat === 'echec' && vu.aNouvelle.avant.voulue === false && vu.aNouvelle.juste === '[]' && vu.aNouvelle.etat === 'enregistree'
+      && ['bPourcentage', 'bObjet'].every((k) => vu[k].avant.etat === 'echec' && vu[k].avant.tenue === json(['remiseCentiemes', 'remiseCentimes']))
+      && vu.bPourcentage.juste === '[]' && vu.bObjet.juste === '["devis"]'
+      && ['cLigne', 'cModifier'].every((k) => vu[k].avant.etat === 'echec' && vu[k].avant.retiree === true && vu[k].juste === '[]'
+        && vu[k].parties >= 1 && vu[k].etat === 'enregistree')
+      && ['dLigne', 'dModifier'].every((k) => vu[k].avant.etat === 'echec' && vu[k].avant.locale === true && vu[k].juste === '[]'
+        && vu[k].parties >= 1 && vu[k].etat === 'enregistree')
+      && ['eLigne', 'eModifier', 'eDevis'].every((k) => vu[k].pendant === 'en_cours' && vu[k].juste === '[]' && vu[k].jamais
+        && vu[k].etat === 'enregistree'),
+    json(vu));
+  }
   /* k. JAMAIS d'upsert : l'insertion porte la ligne ENTIÈRE, la modification seulement ce qui change. */
   {
     const b = fausseBase();
@@ -9393,7 +9855,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       /LA PLACE GARDÉE/, /POURQUOI UNE MÉMOIRE/, /ne se REND qu.au RETOUR d.une liste/, /NE SE REND QU.AU RETOUR D.UNE/,
       /la mémoire de `garderLaPlace`/,
       /* banc de la relecture 6 : les deux formes de l'ancienne règle « couverte », qui disaient le contraire du code */
-      /elle se REND au retour d.une liste qui/, /à leur fermeture/],
+      /elle se REND au retour d.une liste qui/, /à leur fermeture/,
+      /* banc de la relecture 7 (RELIRE6-1, -3) : la place ne se rend plus « à la réussite » seulement, et un renvoi
+         n'est plus une liste de quatre portes */
+      /À LA RÉUSSITE de l.écriture renvoyée/, /ou à la réussite d.une écriture renvoyée/,
+      /sur un retrait, et le renvoi automatique du plafond\)/, /renvoi automatique du plafond — la phrase « pas compté »/,
+      /quatre renvois/],
     'src/components/PourRemettre.js': [/TROIS dans un seul état/, /\(`lignes`\)/, /« Ce devis »,? (?:lui, )?reste(?: juste)?\./,
       /* relecture 3 (D-A bis, point 3) : plus rien n'est posé en position absolue, le gabarit n'est plus seul */
       /`s\.parDessus`/, /est celle du gabarit, à toutes les largeurs/,
@@ -9410,7 +9877,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       /* relecture 6 (RELIRE5-R1) */
       /NE SE REND QU.AU RETOUR D.UNE LISTE/, /la mémoire de `garderLaPlace`/, /elle se REND au retour d.une liste qui/,
       /* banc de la relecture 6 */
-      /à la fermeture de la carte ou de la feuille/],
+      /à la fermeture de la carte ou de la feuille/,
+      /* banc de la relecture 7 */
+      /ou à la réussite d.une écriture renvoyée/, /le renvoi du plafond —, la saisie passe/, /quatre renvois/],
     'src/screens/SaisieDevisScreen.js': [/se relit ne s'affiche pas tant que la liste/, /« Ce devis »,? (?:lui, )?reste(?: juste)?\./,
       /* relecture 3 (RELIRE-1) */
       /un objet neuf ne relance rien s'il ne change pas ce qu'on sait/, /ratée\) compte comme `null`/, /position absolue/,
@@ -9419,7 +9888,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       /* relecture 6 (RELIRE5-R1) */
       /LA PLACE GARDÉE/, /NE SE REND QU.AU RETOUR D.UNE LISTE/, /`placeGardee`/,
       /* banc de la relecture 6 */
-      /ne se rend pas sous une carte/, /se rend à leur fermeture/, /\(`couverte`\)/],
+      /ne se rend pas sous une carte/, /se rend à leur fermeture/, /\(`couverte`\)/,
+      /* banc de la relecture 7 */
+      /quatre renvois/],
+    /* banc de la relecture 7 : le point 18 de la file disait qu'une écriture qui n'est pas « Réessayer » n'est pas un
+       renvoi (« n'en porte pas non plus ») — la carte d'une ligne en échec fermée sans rien changer en est un */
+    'src/lib/file-ecriture.js': [/n.en porte\s+pas non plus : c.est un nouveau geste/, /quatre renvois/],
   };
   const perimees = Object.entries(PHRASES_PERIMEES).flatMap(([f, rs]) => rs.filter((r) => r.test(brut(f))).map((r) => `${f} : ${r}`));
   verifier('…les commentaires que la relecture 2 a corrigés ne reviennent pas à leur version FAUSSE (trois lignes réservées « dans cet état '

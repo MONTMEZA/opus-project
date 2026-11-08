@@ -132,9 +132,31 @@
  *      s'y tait, puisque plus rien n'est en échec (devis.js,
  *      `garderLaPlace`). Un renvoi fait quand le devis n'est PAS en base ne
  *      porte pas la marque : rien n'y est réservé, et rien ne doit l'être à
- *      son entrée en base. Une écriture qui n'est pas un renvoi (l'artisan
- *      corrige la ligne ou l'en-tête à la main après un échec) n'en porte
- *      pas non plus : c'est un nouveau geste.
+ *      son entrée en base. Ce qu'on a voulu PENDANT le vol d'un renvoi (une
+ *      correction, un retrait, la même écriture remise) repart sans que
+ *      l'entrée quitte « en cours » : la marque le suit, et la place ne se
+ *      rend qu'à sa fin — un aller-retour plus tard, mais sans rebond si
+ *      cette écriture échoue (relecture 7, RELIRE6-3 : c'est voulu). Et si
+ *      c'est le RENVOI qui échoue, ce qui a été voulu pendant son vol repart
+ *      AVEC la marque (« Poste suivant » enregistre la carte, puis
+ *      `ouvrirCarte` l'enregistre encore, pendant le vol de la première).
+ *      SONT AUSSI DES RENVOIS, et portent la marque (relecture 7 de 2b-1,
+ *      08/11/2026, RELIRE6-1 et RELIRE6-2 — la place faisait 110 → 74 → 110
+ *      points à 393, mesuré) :
+ *        - une écriture d'une entrée EN ÉCHEC qui ne change RIEN à ce qui est
+ *          voulu (`ligne()`, `modifierLigne()`, `devis()`) : la carte d'une
+ *          ligne en échec fermée sans rien toucher renvoie la même écriture,
+ *          c'est « Réessayer » par une autre porte ;
+ *        - retirer DE NOUVEAU une ligne dont la suppression a échoué ;
+ *        - le reste d'un refus partiel de l'en-tête (16), remis en fin de
+ *          file, et toute écriture de l'en-tête EN ÉCHEC pendant qu'un refus
+ *          est TENU et le restera : la réduction refusée reste hors du
+ *          compte quoi qu'il arrive à l'écriture.
+ *      Une écriture d'une entrée EN ÉCHEC qui CHANGE quelque chose (l'artisan
+ *      corrige la ligne ou l'en-tête à la main, retire une ligne qui ne
+ *      l'était pas, change la réduction refusée) n'en porte pas : c'est un
+ *      nouveau geste, et la marque posée sur le reste d'un refus partiel en
+ *      attente tombe avec lui (`marquerSiRenvoi`).
  * Ce qui reste, et la base le dit aussi :
  *   - la CRÉATION d'un brouillon arrivée après sa suppression le fait
  *     réapparaître (rien au-dessus d'un devis ne porte d'horloge) — VIDE le
@@ -411,6 +433,29 @@ export function creerFileEcriture({
   /* UN GESTE DE L'ARTISAN sur cette clé (N1) : compté, jamais remis à
      zéro — `gestesDe`. */
   const unGeste = (e) => { e.gestes = (Number.isInteger(e.gestes) ? e.gestes : 0) + 1; };
+  /* LA MARQUE DU RENVOI ne se pose que sur un devis EN BASE (18). */
+  const devisEnBaseIci = () => !supprime && Boolean(entrees.get(DEVIS).confirme);
+  /* Ce qu'un refus TIENT à part (16) le restera-t-il après cette écriture ?
+     Oui tant que l'écran veut encore la valeur refusée — la même règle que
+     `operation` (`meme`). */
+  const tenueGardee = (e) => Boolean(e.tenue) && e.tenue.colonnes.every((c) => Object.is(
+    e.voulu[c] === undefined ? null : e.voulu[c], e.tenue.valeurs[c] === undefined ? null : e.tenue.valeurs[c],
+  ));
+  /* UNE ÉCRITURE D'UNE ENTRÉE EN ÉCHEC QUI NE CHANGE RIEN EST UN RENVOI (18,
+     relecture 7 de 2b-1, 08/11/2026) : la carte d'une ligne en échec fermée
+     sans rien toucher renvoie la MÊME écriture — c'est « Réessayer » par une
+     autre porte. Sans la marque, la place se rendait au départ puis se
+     réservait au nouvel échec (110 → 74 → 110 points à 393, mesuré). Une
+     écriture qui CHANGE quelque chose est un nouveau geste : pas de marque —
+     et une marque posée sur l'entrée en échec (le reste d'un refus partiel,
+     16) tombe, pour que le saut nommé « le champ corrigé part » ait lieu.
+     `avant` : ce qui était voulu avant le geste. `garde` : quelque chose
+     restera hors du compte quoi qu'il arrive (un refus tenu, 16). */
+  const marquerSiRenvoi = (e, enEchec, avant, garde = false) => {
+    if (!enEchec) return;
+    const rienNeChange = Object.keys(changements(e.voulu, avant)).length === 0;
+    e.renvoi = (rienNeChange || garde) && devisEnBaseIci();
+  };
   const estVide = () => attente.length === 0 && enVol === null && enRelecture === 0;
   const verifierFermetures = () => {
     if (!estVide()) return;
@@ -602,6 +647,8 @@ export function creerFileEcriture({
     }
     let fini = false;
     let dejaEnBase = false;
+    /* La marque du renvoi au départ (18) : voir après le vol. */
+    const etaitRenvoi = e.renvoi === true;
     try {
       if (op.lever) {
         await envoyer({ quoi: 'devis', action: 'modifier', id: entrees.get(DEVIS).voulu.id, valeurs: {}, generation: op.leverA, lever: true });
@@ -663,10 +710,27 @@ export function creerFileEcriture({
           && !attente.includes(e.cle)) {
           e.dejaReparti = true;
           attente.push(e.cle);
+          /* LE RESTE PART AVEC LA MARQUE (18, relecture 7, RELIRE6-2) : la
+             réduction tenue reste hors du compte quoi qu'il arrive à ce
+             reste. Sans la marque, une écriture qui attendait derrière
+             l'en-tête rendait son échec seul, puis le départ du reste
+             rendait la place, et son retour la réservait de nouveau. Remis
+             EN FIN de file : la ligne qui attendait passe d'abord. */
+          e.renvoi = devisEnBaseIci();
         }
       }
     }
     liberer();
+    /* CE QUI A ÉTÉ VOULU PENDANT LE VOL D'UN RENVOI QUI ÉCHOUE repart AVEC la
+       marque (18, relecture 7 de 2b-1) : la même écriture remise pendant le
+       vol — « Poste suivant » enregistre la carte, puis `ouvrirCarte`
+       l'enregistre ENCORE, la première partie — ou une correction. Sans la
+       marque, l'échec du renvoi la rendait « en cours » ordinaire dans la
+       même tâche : la place se rendait, puis se réservait au nouvel échec
+       (110 → 74 → 110 à 393, mesuré au navigateur). Comme pendant un renvoi
+       qui réussit, la marque suit l'entrée jusqu'à ce qu'elle quitte « en
+       cours » pour de bon — aucun rebond. */
+    if (!fini && etaitRenvoi && e.etat === 'echec' && attente.includes(e.cle)) e.renvoi = devisEnBaseIci();
 
     if (fini) {
       aRelire = true;
@@ -784,9 +848,14 @@ export function creerFileEcriture({
     devis(valeurs) {
       refuserSiSupprime();
       const e = entrees.get(DEVIS);
+      const avant = e.voulu;
+      const enEchec = e.etat === 'echec';
       e.voulu = { ...e.voulu, ...valeurs, id: e.voulu.id };
       e.dejaReparti = false;
       unGeste(e);
+      /* Rien de changé, ou un refus TENU qui le restera (l'objet changé
+         pendant que la réduction refusée attend) : un renvoi (18). */
+      marquerSiRenvoi(e, enEchec, avant, tenueGardee(e));
       enfiler(DEVIS);
     },
 
@@ -798,10 +867,13 @@ export function creerFileEcriture({
       const ancienne = entrees.get(valeurs.id);
       const devisIdCourant = entrees.get(DEVIS).voulu.id;
       if (ancienne) {
+        const avant = ancienne.voulu;
+        const enEchec = ancienne.etat === 'echec' && !ancienne.retire && !ancienne.locale;
         ancienne.voulu = { ...ancienne.voulu, ...valeurs, devisId: devisIdCourant };
         ancienne.retire = false;
         ancienne.locale = false;
         unGeste(ancienne);
+        marquerSiRenvoi(ancienne, enEchec, avant);
       } else {
         entrees.set(valeurs.id, {
           cle: valeurs.id, voulu: { ...valeurs, devisId: devisIdCourant }, confirme: null,
@@ -816,10 +888,13 @@ export function creerFileEcriture({
       refuserSiSupprime();
       const e = entrees.get(id);
       if (!e) throw new Error('Cette ligne n’est pas connue de la file : envoyez-la entière.');
+      const avant = e.voulu;
+      const enEchec = e.etat === 'echec' && !e.retire && !e.locale;
       e.voulu = { ...e.voulu, ...changementsVoulus, id };
       e.retire = false;
       e.locale = false;
       unGeste(e);
+      marquerSiRenvoi(e, enEchec, avant);
       enfiler(id);
     },
 
@@ -828,10 +903,16 @@ export function creerFileEcriture({
       refuserSiSupprime();
       const e = entrees.get(id);
       if (!e) return;
+      /* Retirer DE NOUVEAU une ligne dont la suppression a échoué ne change
+         rien : un renvoi (18). Retirer une ligne en échec qui ne l'était pas
+         est un nouveau geste. */
+      const enEchec = e.etat === 'echec' && !e.locale;
+      const dejaRetiree = Boolean(e.retire);
       e.retire = true;
       /* Retirer n'est pas « locale » : l'artisan veut qu'elle parte. */
       e.locale = false;
       unGeste(e);
+      if (enEchec) e.renvoi = dejaRetiree && devisEnBaseIci();
       if (!e.confirme && !e.peutEtreInseree && enVol !== id) {
         /* Jamais en base : rien à supprimer, et surtout pas de devis à
            créer pour l'occasion. */

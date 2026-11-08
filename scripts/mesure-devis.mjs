@@ -692,6 +692,10 @@ const BANDEAU = 'Chiffrage — ce brouillon ne part pas encore.';
 const dansLaSaisie = async () => (await texte()).includes(BANDEAU);
 
 const section = async (titre, f) => {
+  /* `SEULEMENT=<expression>` : ne jouer que les sections dont le titre la
+     contient — pour le travail ; « Le démarrage » est toujours joué (il
+     ouvre l'application). Sans la variable, tout est joué. */
+  if (process.env.SEULEMENT && titre !== 'Le démarrage' && !new RegExp(process.env.SEULEMENT).test(titre)) return;
   console.log(`\n${titre}`);
   try {
     await f();
@@ -4989,10 +4993,13 @@ await section('À 393, un brouillon NEUF qui entre en base avec une ligne incomp
    avec elle (110 → 74 → 110 à 393, quand l'envoi ne revient toujours pas).
    LA RÈGLE, SANS MÉMOIRE (relecture 6, `garderLaPlace`, devis.js) : la place
    reste réservée tant que quelque chose n'est pas compté OU qu'une écriture
-   renvoyée après un échec est en route (la file le dit) ; elle se REND à la
-   RÉUSSITE de l'écriture renvoyée — le saut nommé « ce n'est plus pas
-   compté » —, jamais au départ d'un renvoi, et le retour de la liste ne la
-   change plus.
+   renvoyée après un échec est en route (la file le dit) ; elle se REND quand
+   l'entrée renvoyée quitte « en cours » — ici, rien n'étant voulu pendant
+   son vol, à la RÉUSSITE de l'écriture renvoyée : le saut nommé « ce n'est
+   plus pas compté » —, jamais au départ d'un renvoi, et le retour de la
+   liste ne la change plus. (Les autres portes du même renvoi — la carte
+   quittée sans rien changer, le reste d'un refus partiel — : plus bas,
+   RELIRE6-S1, CONTRA, CONTRA2.)
    La mesure, à 393 (l'iPhone 16 du propriétaire) puis à 320, sur une écriture
    qui NE REVIENT PAS (`__opusSuspendreEcritures`) : échec → « Réessayer » →
    échec, puis « Réessayer » qui RÉUSSIT, la lecture qui suit RETENUE
@@ -5969,6 +5976,236 @@ await section('Le texte agrandi (×1 à ×2) : la phrase d’une partie qui se r
     + 'partent » pour une écriture du devis — une seule phrase chaque fois, jamais l’une à la place de l’autre',
   !!tetes && JSON.stringify(tetes.retour) === JSON.stringify([MISE_A_JOUR_LIGNE]) && JSON.stringify(tetes.ecriture) === JSON.stringify([EN_ROUTE_LIGNE]),
   JSON.stringify(tetes));
+});
+
+const json = (x) => JSON.stringify(x);
+/* RELIRE6-1 (relecture 7 de 2b-1, 08/11/2026) : LA CARTE D'UNE LIGNE EN
+   ÉCHEC, QUITTÉE SANS RIEN CHANGER, RENVOIE LA MÊME ÉCRITURE — c'est
+   « Réessayer » par une autre porte, et la place ne bouge pas plus. Avant la
+   correction (la file ne marquait que `reessayer()`), l'écriture repartait
+   sans la marque du renvoi : la place se rendait au départ puis se réservait
+   au nouvel échec — 110 → 74 → 110 à 393, 128 → 74 → 128 à 320, la rangée
+   touchée bougeant de 36 points (mesuré par la relecture et la
+   contre-vérification). Sur une écriture qui NE REVIENT PAS
+   (`__opusSuspendreEcritures`) : la ligne « Muret en blocs » passe en échec ;
+   sa carte est rouverte, puis quittée SANS RIEN CHANGER — par « ‹ » ou par
+   « Poste suivant » —, ou, en référence, « Réessayer » est touché sur sa
+   rangée. À chaque image, la hauteur de la ligne du haut et la position de
+   la rangée, l'ancrage du défilement ÉTEINT ; jusqu'au nouvel échec. */
+const carteEnEchecSansChanger = async ({ largeur, porte, ouverte = 800 }) => {
+  const RANGEE = 'button[aria-label^="Muret en blocs"]';
+  const REESSAYER = 'Ligne non enregistrée. Réessayer';
+  await page.setViewportSize({ width: largeur, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await ecouterLaListe(true);
+  exiger(!!(await jusqua(async () => COMPTE.test(await libelleLigne()), 6000)), `à ${largeur}, ${porte} : tout est compté au départ`);
+  const ordinaire = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  await page.evaluate(() => { window.__opusSuspendreEcritures = true; window.__opusPlacePhase = 'provoquer'; });
+  await toucher(page.locator(RANGEE).first());
+  await attendre(500);
+  const ancienne = await parLibelle('Quantité').inputValue();
+  await viderEtTaper(parLibelle('Quantité'), ancienne === '3' ? '4' : '3');
+  await toucher(parLibelle('Prix unitaire HT'));
+  await fermerCarte();
+  exiger(!!(await jusqua(async () => (await page.getByLabel(REESSAYER, { exact: true }).count()) >= 1, 2 * DELAI_ECRITURE + 5000)),
+    `à ${largeur}, ${porte} : la ligne est en échec`);
+  await attendre(500);
+  const ancre = await sansAncrage();
+  exiger(ancre.saisie === 'none', `à ${largeur}, ${porte} : l’ancrage du défilement de la saisie est éteint (${JSON.stringify(ancre)})`);
+  await enregistrerLaPlace(RANGEE);
+  await attendre(300);
+  const avant = await page.evaluate(() => window.__opusEcritures);
+  const reservee = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  if (porte === 'reessayer') {
+    await PHASE('reessayer');
+    await toucher(parLibelle(REESSAYER));
+  } else {
+    await PHASE('carte-ouverte');
+    await toucher(page.locator(RANGEE).first());
+    await attendre(ouverte);
+    await PHASE(`quitter-${porte}`);
+    if (porte === 'suivant') {
+      await toucher(parLibelle(SUIVANT));
+      await attendre(600);
+      await PHASE('carte-vierge-fermee');
+      await fermerCarte();
+    } else {
+      await fermerCarte();
+    }
+  }
+  await attendre(400);
+  const parties = (await page.evaluate(() => window.__opusEcritures)) - avant;
+  const reechec = await jusqua(async () => (await page.getByLabel(REESSAYER, { exact: true }).count()) >= 1, 2 * DELAI_ECRITURE + 5000);
+  await PHASE('reechec');
+  await attendre(800);
+  const vu = await lireLaPlace();
+  const images = vu.map((x) => [x[0], x[1], x[3], x[6]]);
+  const changements = images.filter((x, i) => i > 0 && x[1] !== images[i - 1][1]).map((x) => `${images[images.indexOf(x) - 1][1]}→${x[1]} (${x[0]})`);
+  /* La rangée, quand elle est à l'écran (une carte ouverte la couvre). */
+  const positions = [...new Set(images.filter((x) => x[2] !== null && x[1] !== -1).map((x) => x[2]))];
+  noter(`à ${largeur}, ${porte}`, `ordinaire ${ordinaire}, réservée ${reservee}, écritures parties ${parties}, de nouveau en échec ${!!reechec} ; `
+    + `${images.length} image(s) [phase, haut, rangée, ms] : ${JSON.stringify(images)}`);
+  verifier(`à ${largeur}, ${porte === 'reessayer' ? '« Réessayer » (la référence)' : `la carte quittée SANS RIEN CHANGER par ${porte === 'suivant' ? '« Poste suivant »' : '« ‹ »'}`} : `
+    + `la même écriture repart (${parties}), échoue de nouveau — et la ligne du haut ne bouge pas, à la place réservée (${reservee} ≈ `
+    + `${JUSTE_A_393[largeur]}), la rangée touchée non plus (changements : ${changements.join(', ') || 'aucun'})`,
+  !!reechec && parties >= 1 && Math.abs(reservee - JUSTE_A_393[largeur]) <= 2 && changements.length === 0
+    && images.every((x) => x[1] === reservee || x[1] === -1) && positions.length === 1,
+  JSON.stringify(images));
+  /* remettre */
+  await page.evaluate(() => { window.__opusSuspendreEcritures = false; });
+  if (await page.getByLabel(REESSAYER, { exact: true }).count()) await toucher(parLibelle(REESSAYER));
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await toucher(page.locator(RANGEE).first());
+  await attendre(500);
+  await viderEtTaper(parLibelle('Quantité'), ancienne);
+  await toucher(parLibelle('Prix unitaire HT'));
+  await fermerCarte();
+  await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 3000);
+  await attendre(600);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+};
+
+await section('RELIRE6-S1 : une ligne en échec, sa carte ouverte puis fermée SANS RIEN CHANGER (« ‹ »), l’écriture ne revient toujours pas — la ligne « Pour le remettre » ne bouge pas, à 393 et 320 (relecture 7)', async () => {
+  const tailleAvant = page.viewportSize();
+  for (const largeur of [393, 320]) await carteEnEchecSansChanger({ largeur, porte: 'retour', ouverte: 1000 });
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('CONTRA RELIRE6-1 : la carte d’une ligne en échec quittée sans rien changer (« ‹ », « Poste suivant »), et « Réessayer » en référence — la ligne ne bouge pas, à 393 et 320 (relecture 7)', async () => {
+  const tailleAvant = page.viewportSize();
+  for (const largeur of [393, 320]) {
+    for (const porte of ['retour', 'suivant', 'reessayer']) await carteEnEchecSansChanger({ largeur, porte });
+  }
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* RELIRE6-2 (relecture 7 de 2b-1) : LE RESTE D'UN REFUS PARTIEL DE L'EN-TÊTE
+   (point 16 de la file) PART AVEC LA MARQUE DU RENVOI. Un devis tout près du
+   plafond (90 000 000,00 € HT réduit de 50 %), les écritures ralenties à
+   7 s (`__opusPauseEcritures`) : pendant l'envoi de l'objet « A », l'objet
+   « B », la réduction RETIRÉE (le plafond la refusera), puis une petite
+   ligne modifiée, qui attend DERRIÈRE l'en-tête. Le refus tient la réduction
+   à part ; le reste (l'objet « B ») est remis EN FIN de file, après la
+   ligne. Avant la correction : 74 → 110 au refus (le saut nommé), puis
+   110 → 74 au départ du reste, 74 → 110 à son retour — la réduction n'avait
+   jamais cessé d'être hors du compte (mesuré par la contre-vérification).
+   Après : la place se réserve AU REFUS, et ne bouge plus. */
+const refusPartielUneLigneDerriere = async (largeur) => {
+  const OBJET = `Plafond ${largeur}`;
+  await page.setViewportSize({ width: largeur, height: 852 });
+  await attendre(400);
+  const sansEnvoi = async () => jusqua(async () => !/enregistrement…|Enregistrement en cours/.test(await texte()), DELAI_ECRITURE + 3000);
+  const nouveauPoste = async (libelle, designation, prix) => {
+    await toucher(parLibelle(libelle));
+    await taper(designation);
+    await toucher(parLibelle('forfait'));
+    await viderEtTaper(parLibelle('Quantité'), '1');
+    await viderEtTaper(parLibelle('Prix unitaire HT'), prix);
+    await toucher(parLibelle('TVA à 20 %'));
+    await fermerCarte();
+    await sansEnvoi();
+    await attendre(PAUSE_DEMO + 400);
+  };
+  await allerAMesDevis();
+  await toucher(bouton('Nouveau devis'));
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(600);
+  await viderEtTaper(parLibelle('Objet du devis'), OBJET);
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '50');
+  await toucher(parLibelle('Valable 30 jours'));
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+  await sansEnvoi();
+  await nouveauPoste('Ajouter un premier poste chiffré', 'Gros œuvre', '90000000');
+  await nouveauPoste('Ajouter un poste chiffré', 'Petit poste', '100');
+  await ecouterLaListe(true);
+  exiger(!!(await jusqua(async () => COMPTE.test(await libelleLigne()), 8000)), `à ${largeur} : tout est compté au départ`);
+  const ordinaire = await ligneHaut().evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  const ancre = await sansAncrage();
+  exiger(ancre.saisie === 'none', `à ${largeur} : l’ancrage du défilement de la saisie est éteint (${JSON.stringify(ancre)})`);
+  await page.evaluate(() => { window.__opusPlacePhase = 'depart'; });
+  await enregistrerLaPlace('button[aria-label^="Petit poste"]');
+  await attendre(300);
+  await page.evaluate(() => { window.__opusPauseEcritures = 7000; });
+  const t0 = Date.now();
+  await PHASE('W1-objet-A');
+  await viderEtTaper(parLibelle('Objet du devis'), 'A');
+  await toucher(parLibelle('Délai d’exécution'));
+  await PHASE('objet-B');
+  await viderEtTaper(parLibelle('Objet du devis'), 'B');
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  await PHASE('reduction-retiree');
+  await viderEtTaper(parLibelle('Réduction, en pour cent'), '');
+  await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+  const tC = Date.now() - t0;
+  await PHASE('ligne-derriere');
+  await toucher(page.locator('button[aria-label^="Petit poste"]').first());
+  await attendre(400);
+  await viderEtTaper(parLibelle('Quantité'), '2');
+  await toucher(parLibelle('Prix unitaire HT'));
+  await fermerCarte();
+  const tD = Date.now() - t0;
+  await PHASE('attente');
+  /* FINI quand plus rien n'est en route (la ligne du haut ne dit plus « Des
+     changements partent ») et que le refus du plafond est dit : le reste est
+     revenu, et le refus tenu re-posé. */
+  const auRepos = async () => (await texte()).includes('dépasserait') && !(await libelleLigne()).includes(EN_ROUTE_LIGNE);
+  const fini = await jusqua(auRepos, 45000, 300);
+  await attendre(1500);
+  const vu = await lireLaPlace();
+  await page.evaluate(() => { window.__opusPauseEcritures = null; });
+  const images = vu.map((x) => [x[0], x[1], x[3], x[6]]);
+  const suite = images.filter((x, i) => i === 0 || x[1] !== images[i - 1][1]).map((x) => x[1]);
+  const changements = images.filter((x, i) => i > 0 && x[1] !== images[i - 1][1]).map((x) => `${images[images.indexOf(x) - 1][1]}→${x[1]} (${x[0]}, ${x[3]} ms)`);
+  const reservee = suite.length ? suite[suite.length - 1] : null;
+  const t = await texte();
+  /* L'objet « B » et la réduction retirée PENDANT l'envoi de « A » (7 s) :
+     ils partent ENSEMBLE, et le plafond refuse la réduction ; la ligne
+     modifiée AVANT que cet envoi-là revienne (14 s) : elle attend derrière
+     l'en-tête au moment du refus. */
+  noter(`à ${largeur}`, `ordinaire ${ordinaire} ; gestes finis à ${tC} ms (< 7 000) et ${tD} ms (< 14 000) ; changements de la ligne du haut : `
+    + `${changements.join(' ; ') || 'aucun'} ; ce que dit l’écran : ${(t.match(/[^\n]*réduction[^\n]*/gi) || []).slice(0, 2).join(' | ').slice(0, 240)}`);
+  verifier(`à ${largeur}, le refus PARTIEL de l’en-tête par le plafond, une ligne en attente DERRIÈRE lui : la place se réserve AU REFUS `
+    + `(${ordinaire} → ${reservee} ≈ ${JUSTE_A_393[largeur]}, le saut nommé), puis ne bouge plus — ni quand la ligne revient et que le reste `
+    + `part, ni à son retour (suite des hauteurs : ${suite.join(' → ')})`,
+  !!fini && tC < 7000 && tD < 14000 && json(suite) === json([ordinaire, reservee]) && Math.abs(reservee - JUSTE_A_393[largeur]) <= 2
+    && t.includes('dépasserait'),
+  JSON.stringify(images));
+  /* …PUIS UN AUTRE CHAMP DE L'EN-TÊTE CHANGÉ pendant que la réduction refusée
+     est TENUE (relecture 7, « corriger ») : l'objet part seul, la réduction
+     reste hors du compte quoi qu'il arrive — la file marque cette écriture
+     comme un renvoi. Avant : 110 → 74 → 110 le temps de l'envoi de l'objet. */
+  await enregistrerLaPlace('button[aria-label^="Petit poste"]');
+  await attendre(300);
+  const e0 = await page.evaluate(() => window.__opusEcritures);
+  await PHASE('objet-C');
+  await viderEtTaper(parLibelle('Objet du devis'), 'C');
+  await parLibelle('Objet du devis').evaluate((e) => e.blur());
+  const reposC = await jusqua(async () => (await page.evaluate(() => window.__opusEcritures)) - e0 >= 1 && await auRepos(), DELAI_ECRITURE + 3000);
+  await attendre(800);
+  const vuC = await lireLaPlace();
+  const partiesC = (await page.evaluate(() => window.__opusEcritures)) - e0;
+  const hautsC = [...new Set(vuC.map((x) => x[1]).filter((h) => h !== -1))];
+  verifier(`à ${largeur}, …puis l’OBJET changé pendant que la réduction refusée est tenue : l’objet part (${partiesC} écriture), la réduction `
+    + `reste refusée — et la ligne du haut ne bouge pas (${hautsC.join(', ')})`,
+  !!reposC && partiesC >= 1 && hautsC.length === 1 && Math.abs(hautsC[0] - JUSTE_A_393[largeur]) <= 2,
+  JSON.stringify(vuC.map((x) => [x[0], x[1], x[6]])));
+  /* Ménage : le brouillon d'essai s'en va. */
+  await toucher(bouton('Supprimer ce brouillon'));
+  await toucher(bouton('Confirmer la suppression de ce brouillon'));
+  await jusqua(async () => !(await dansLaSaisie()), 8000);
+  exiger(!(await dansLaSaisie()) && !(await texte()).includes(OBJET), `à ${largeur} : le brouillon d’essai est supprimé`);
+};
+await section('CONTRA2 RELIRE6-2 : le refus partiel de l’en-tête par le plafond, une ligne en attente derrière lui — la ligne « Pour le remettre » se réserve au refus et ne bouge plus, à 393 et 320 (relecture 7)', async () => {
+  const tailleAvant = page.viewportSize();
+  for (const largeur of [393, 320]) await refusPartielUneLigneDerriere(largeur);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {

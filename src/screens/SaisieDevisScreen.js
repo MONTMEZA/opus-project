@@ -1106,7 +1106,11 @@ export default function SaisieDevisScreen({
     poserErreur(valeurs.id, null);
     /* UNE LIGNE REFUSÉE DÉFINITIVEMENT, INCHANGÉE, NE REPART PAS (point 1) :
        fermer sa carte la renvoyait telle quelle, et la base la refusait
-       pareil (mesuré). Changée, elle part. */
+       pareil (mesuré). Changée, elle part. Une ligne en échec NON définitif
+       (le réseau, un interblocage), inchangée, repart : c'est la file qui la
+       tient pour un RENVOI et le marque (file-ecriture.js, point 18 ;
+       relecture 7, RELIRE6-1) — la ligne « Pour le remettre » garde sa
+       place, comme pour « Réessayer ». */
     if (!renvoyerLaLigne({
       valeurs, derniere: derniereEnvoyee.current[valeurs.id], etat: f.etatDe(valeurs.id), refus: definitifsRef.current[valeurs.id],
     })) return false;
@@ -1781,7 +1785,8 @@ export default function SaisieDevisScreen({
      réserve tant que quelque chose n'est pas compté (`pasCompte`) OU qu'une
      écriture renvoyée après un échec est en route (`renvoi`, que la file dit
      dans `attente`) — `garderLaPlace`, appelée par `texteDeLaLigneRemise`.
-     « Réessayer » ne la fait donc plus tomber (RELIRE4-C), et ce qui cesse
+     « Réessayer » ne la fait donc plus tomber (RELIRE4-C), ni la carte d'une
+     ligne en échec fermée sans rien changer (RELIRE6-1), et ce qui cesse
      d'être compté sans écriture la rend au geste, jamais au retour d'une
      liste sans rapport (RELIRE5-R1). Rien ne se retient d'un rendu au
      suivant. */

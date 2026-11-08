@@ -110,14 +110,18 @@ import {
  * RELIRE4-C ; règle SANS MÉMOIRE de la relecture 6, `garderLaPlace`,
  * devis.js) : pendant qu'une écriture renvoyée après un échec est en route —
  * « Réessayer » sur une ligne, sur l'en-tête ou sur un retrait, le renvoi du
- * plafond —, la saisie passe `renvoi` (ce que la file dit dans son état
+ * plafond, la même écriture renvoyée par une autre porte (la carte d'une
+ * ligne en échec fermée sans rien changer, le reste d'un refus partiel de
+ * l'en-tête ; relecture 7) —, la saisie passe `renvoi` (ce que la file dit dans son état
  * d'attente), et la place reste réservée alors que la phrase « pas compté »
  * s'est tue : avant, la ligne tombait à 74 points à 393 puis remontait à
  * 110, et la rangée qu'on venait de toucher bougeait sous le doigt. Ce qui la
  * change encore, et c'est tout : elle se RÉSERVE quand quelque chose devient
  * « pas compté » ; elle se REND quand rien ne l'est plus — au geste (une
  * ligne retirée sans avoir été envoyée, une valeur remise, un champ rétabli,
- * une ligne complétée qui part), ou à la réussite d'une écriture renvoyée ;
+ * une ligne complétée qui part), ou quand une entrée renvoyée quitte « en
+ * cours » (à la réussite du renvoi, ou à la fin de ce qui a été voulu
+ * pendant son vol) ;
  * et un brouillon « pas encore en base » qui y entre avec une ligne
  * incomplète saute une fois à la place réservée. Le retour d'une liste ne la
  * change jamais.
