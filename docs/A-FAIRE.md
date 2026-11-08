@@ -2159,7 +2159,9 @@ construisant le lot 1, d'avant le module ou hors de son périmètre :
   mais des lignes portent un taux… »), et rien ne corrige les lignes à votre
   place. Relevé sur la vraie base le 22-23/10. C'est le refus de remise du
   lot 2 qui le tiendra : au lot 1, la base ne lit pas le régime (cahier §1.5,
-  C3).
+  C3). **Depuis l'étape 2b-1 (08/11), la liste « Ce qu'il manque » le dit**
+  (`devis_taux_franchise`, une ligne par ligne fautive) ; c'est la remise de
+  2c qui le refusera.
 - [ ] **Le figeage** : le statut (aujourd'hui `'brouillon'` seul), le numéro,
   la copie de l'émetteur et du client — **dont le régime de TVA, figé sur le
   devis** —, `OP003`, et le refus de remise d'un devis sans régime déclaré ou
@@ -2184,10 +2186,12 @@ construisant le lot 1, d'avant le module ou hors de son périmètre :
 - [ ] **« jour » n'est dans aucun cas de `supabase/cas-devis.json`** (44 cas,
   relevé le 23/10) : l'essai 49 insère une ligne dans chacune des sept unités,
   mais aucun cas joué à la fois par JavaScript et par PostgreSQL ne la tient.
-- [ ] **`verifier-devis` interdit `public.devis` à la lettre dans les fonctions
+- [x] **`verifier-devis` interdit `public.devis` à la lettre dans les fonctions
   de motifs** (D4-c). Au lot 2, `motifs_refus_remise` devra lire le devis : la
   vérification se resserrera alors sur la colonne `source` et les deux liens,
-  comme le dit le contrôle.
+  comme le dit le contrôle. **Fait à l'étape 2b-1 (05/11)** : elle peut nommer
+  `public.devis`, jamais `source` ni un lien, et l'essai 49-remise prouve la
+  propriété (deux devis identiques sauf leurs liens rendent la même liste).
 
 **La Base Adresse Nationale change d'adresse — à migrer :**
 
@@ -2223,12 +2227,16 @@ construisant le lot 1, d'avant le module ou hors de son périmètre :
   du texte ne verra jamais toutes les formes qu'un SQL peut prendre. Tant que
   ce n'est pas automatisé, une régression qui passe les contrôles ne se voit
   qu'au prochain rejeu.
-- [ ] **La relecture SÉCURITÉ du 2e tour de l'étape 3 n'a jamais été rendue**
+- [x] **La relecture SÉCURITÉ du 2e tour de l'étape 3 n'a jamais été rendue**
   (le conteneur a redémarré pendant qu'elle tournait). Les deux importants du
   1er tour sont corrigés et mesurés ; au 2e tour, la relecture SQL a rejoué
   les cascades, `OP014` et `OP017`, et celle des essais les acteurs adverses.
   Aucun compte rendu suivant ne dit qu'elle ait été relancée : à relancer
-  avant le lot 2, ou à acter.
+  avant le lot 2, ou à acter. **Faite le 05/11** : la relecture adverse de
+  l'étape 2b-1, angle « base et sécurité », a relu la section 49 ENTIÈRE (un
+  autre artisan lit 0 ligne et n'écrit rien chez A ; insérer une ligne dans
+  son devis rend 42501) ; ses constats sont corrigés ou rangés dans « Après
+  l'étape 2b-1 ».
 - [ ] **Les deux preuves SIRET « essai » restent en base** : réutilisées,
   mises à jour pour six heures, pour l'essai du 22-23/10 ; le connecteur
   refuse un `delete`, elles expirent d'elles-mêmes. Ce sont celles de l'essai
@@ -3036,6 +3044,196 @@ documents de travail de la session, pas dans le dépôt) :
   met à jour, avec sa raison ») au lieu de laisser croire l'aide cachée. Le
   jour où une aide recevra un style conditionnel, le contrôle s'apprend en
   même temps.
+
+### Après l'étape 2b-1 — ce qui reste (08/11/2026)
+
+> **La migration de 2b-1 est APPLIQUÉE sur la vraie base depuis le
+> 08/11/2026 à 16 h 44**, avec votre accord, Opus fermé (CLAUDE.md, « Ce
+> qu'il manque pour remettre ce devis — étape 2b-1 »). Les avertissements
+> « ne faites pas `git pull` avant la migration 2b-1 » des commits de
+> l'étape ne valent plus : `git pull`, puis `npx expo start -c`, suffisent
+> (aucun module natif).
+>
+> **Et la règle du 08/11, « Accélérer »** : une seule relecture par étape ;
+> seul un défaut qui perd des données, affiche quelque chose de faux ou
+> touche à la sécurité relance un tour. Les petits défauts d'affichage dans
+> des cas rares viennent ICI, avec leur mesure. Les comptes rendus cités
+> (`BANC7-X1`, `RELIRE…`) sont des documents de travail de la session, pas
+> dans le dépôt.
+
+**À essayer sur votre iPhone** (le build de développement, après
+`git pull` et `npx expo start -c`) — rien de 2b-1 n'y a encore tourné :
+
+- [ ] Un devis où une ligne est incomplète : la ligne « Pour le remettre »,
+  sous le bandeau, est plus haute (≈ 110 points sur votre iPhone 16) et
+  **ne bouge pas** pendant que vous tapez dans l'en-tête. Rien n'est coupé.
+  C'est le prix de « garder la grande place » (06/11) : à juger à l'œil.
+- [ ] Retirez cette ligne incomplète, puis tapez le délai : la ligne reprend
+  sa hauteur ordinaire au retrait, et rien ne bouge ensuite.
+- [ ] Touchez la ligne : la carte s'ouvre. « Écrire le délai » donne la main
+  au champ (le clavier monte) ; « Choisir la validité » ouvre « Conditions »
+  sur ce champ, et « ‹ » revient à la liste ; « Lire la suite » se touche au
+  pouce.
+- [ ] Un bouton de « Votre entreprise » ouvre « Mon entreprise » sur sa
+  section ; en la refermant, la ligne dit « Mise à jour de la liste… », puis
+  le compte revient. **« Votre entreprise » reste allumée tant que VIES
+  refuse votre n° de TVA : c'est attendu.**
+- [ ] En mode Avion, changez une ligne : elle passe « Non enregistrée —
+  Réessayer » (tout de suite, ou au bout de quelques secondes) et la ligne
+  du haut grandit une fois. Réseau revenu, « Réessayer » — ou fermer sa carte sans rien changer :
+  **rien ne bouge** avant qu'elle soit enregistrée.
+- [ ] VoiceOver sur la carte (chaque bouton dit son libellé, puis où il
+  mène ; rien d'invisible n'est lu), et un texte agrandi (Réglages →
+  Accessibilité) : rien ne se chevauche.
+
+**Défauts d'affichage connus, dans des cas rares** (décision « Accélérer ») :
+
+- [ ] **BANC7-X1** — un devis près du plafond (99 999 999,99 €) dont vous
+  changez l'objet pendant l'envoi d'une réduction que le plafond refuse :
+  la ligne fait 74 → 110 → 74 → 110 au lieu de 74 → 110, et la rangée
+  dessous bouge deux fois de 36 points. La réduction n'a jamais cessé d'être
+  hors du compte. La correction tient en trois lignes de
+  `src/lib/file-ecriture.js`, dans la branche du refus partiel : quand
+  l'en-tête attend déjà et que le refus est tenu, marquer le reste comme un
+  renvoi (`else if (aPartIci.length && attente.includes(e.cle) &&
+  tenueGardee(e)) e.renvoi = devisEnBaseIci();`). À poser AVEC son cas dans
+  `verifier-devis` et sa mesure dans `mesure-devis`.
+- [ ] **« Réessayer » sur une ligne rendue incomplète pendant un envoi qui a
+  échoué** renvoie la dernière version VALIDE, pas ce que l'écran montre
+  (lu dans le code, non mesuré à l'écran). À trancher : voulu (la version en base revient), ou ne pas offrir
+  « Réessayer » sur une telle ligne.
+- [ ] **« Poste suivant » enregistre la carte deux fois** (`posteSuivant`,
+  puis `ouvrirCarte`) : sans dommage aujourd'hui (la même valeur), mais une
+  écriture de trop sur une ligne en échec. À corriger dans l'écran.
+- [ ] **Une écriture ordinaire qui échoue pendant que la même attend
+  derrière elle** n'est pas marquée comme un renvoi ; aucun saut ne se voit
+  parce que React rend ensemble l'échec et le départ suivant. Fragile : si
+  la file attendait un jour quoi que ce soit entre les deux, la ligne
+  battrait 110 → 74 → 110 (même chose pour le reste d'un refus partiel).
+- [ ] **« Mon entreprise » ouverte par-dessus la saisie** n'est ni une carte
+  ni une feuille de l'écran : une écriture qui finit pendant que vous y
+  tapez change la hauteur de la ligne dessous ; au navigateur, le clavier
+  peut se fermer (lu dans le code, non reproduit). À juger sur l'iPhone ; la parade serait de dire à la saisie qu'une
+  fenêtre la couvre.
+- [ ] **Le rattachement d'un SIRET n'est pas gardé par la fermeture de
+  « Mon entreprise »** (lot 0a, antérieur) : on peut la fermer pendant, la
+  liste se relit avant lui, et « Votre entreprise » reste celle d'avant
+  jusqu'à la relecture suivante (lu dans le code, non reproduit).
+- [ ] **Entre la fin d'une écriture et la relecture des totaux**, la ligne
+  dit le compte d'avant comme s'il était sûr, le temps d'une requête (jamais
+  vu en démonstration, où tout est instantané) ; et une relecture des totaux
+  RATÉE laisse la grande place jusqu'à la liste suivante.
+- [ ] **Un message en anglais possible** : une erreur 42883 non qualifiée
+  (« function … does not exist ») suit le chemin ordinaire, son texte brut
+  derrière la phrase générique — dans un cas qui ne devrait jamais arriver.
+
+**À vous de trancher, ou à vous montrer :**
+
+- [ ] **Le n° de TVA absent est-il « la loi » ou « une règle d'Opus » ?**
+  `conso_tva_intra` est étiqueté « Règle d'Opus » (votre réponse du 05/11) ;
+  or quand AUCUN numéro n'est écrit, c'est la loi qui le demande (R. 111-2
+  5°) — la règle d'Opus n'est que la reconnaissance par VIES. Couper en deux
+  motifs, ou commencer la phrase par la loi.
+- [ ] **128 points au lieu de 110 sur un écran de 320** (le plus petit
+  iPhone) : la place réservée vient de la phrase « 444 lignes ne sont pas
+  enregistrées… ». Dire « Plusieurs lignes… » au-delà de 100 la ramènerait
+  à 110.
+- [ ] **Les deux sauts qui restent** : quand quelque chose cesse d'être
+  compté, la ligne grandit une fois (36 points en haut, 16 en bas à 393), et
+  un brouillon neuf qui entre en base avec une ligne incomplète saute une
+  fois (74 → 110). C'est hors de « garder la grande place » : à voir au doigt.
+- [ ] **Annoncer à VoiceOver qu'un compte change pendant que la carte est
+  ouverte** (une région « live »), sans rien faire clignoter : pas fait.
+
+**Au juriste** (n'empêche pas de construire : rien ne sort avant 2c) :
+
+- [ ] **L'aide du taux réduit** (`AIDE_TAUX_REDUIT`) : à 5,5 %, la loi dit
+  « achevés depuis AU MOINS deux ans » (l'aide : « plus de deux ans ») et
+  vise des locaux « destinés à être affectés » à l'habitation (l'aide : « un
+  logement ») ; le IV ne fait certifier que les conditions du I ; et ces
+  conditions passent au CIBS le 01/01/2027 (pas lu). Une aide, pas le texte imprimé : la
+  certification de 2c s'écrit avec lui.
+- [ ] **Le taux à 0 au réel** : CGI 283 2 nonies (l'autoliquidation de la
+  sous-traitance) n'a été suivi que jusqu'au 29/07/2026 ; la mention de
+  facture (CGI ann. II, 242 nonies A) pas du tout ; et la portée de 293 E II
+  sur un DEVIS (« aucun autre document en tenant lieu ») — Opus le traite
+  par prudence comme une facture.
+- [ ] **L'arrêté de 2017 (4-I) face à un client professionnel** (Q-J6) : le
+  lieu, la validité et le nom y sont-ils dus ?
+
+**Pour 2b-2 à 2b-4, et pour 2c — les règles à tenir :**
+
+- [ ] **Un fait de l'entreprise que lira la partie « devis » de la liste**
+  (aujourd'hui, le seul est le régime de TVA) s'écrit dans « Mon
+  entreprise », dont la fermeture relit les deux parties. Un geste qui
+  l'écrirait ailleurs doit relire les deux, sinon « Ce devis : rien ne
+  manque » revient le temps d'une lecture au-dessus de lignes fautives.
+- [ ] **2b-4, services à la personne** : l'adresse du client deviendra un
+  motif (arrêté du 17/03/2015, art. 7 4° : « le nom et l'adresse »). Ne PAS
+  ajouter l'adresse à la phrase de `devis_client`, qui ne vérifie que le
+  client choisi.
+- [ ] **2b-2** : le motif « taux réduit sur un immeuble neuf » (CGI 279-0
+  bis 2), et un avis pour le SIREN d'un client professionnel. **2b-3** : si
+  la garde d'urgence naît, elle prend `OP028`.
+- [ ] **Les gabarits de la ligne ont des bornes** : 500 lignes (OP014), 508
+  motifs pour le devis, 21 pour l'entreprise. Un lot qui dépasserait 999 ou
+  99 leur fait gagner un chiffre ; `CHIFFRE_LE_PLUS_LARGE` (« 4 » en Inter)
+  se remesure avec toute nouvelle police ; et la superposition suppose un
+  parent de largeur imposée.
+- [ ] **2c, la remise ne doit pas lire PUIS écrire** : la liste ne verrouille
+  rien. Dans UNE transaction : `for update` sur le devis, `motifs_refus_remise()`
+  dans un ordre SUIVANT, puis le statut ; le figeage des lignes sous
+  `for key share`, jamais `for share` (interblocage mesuré, 40P01). À
+  éprouver à deux sessions avant de construire.
+- [ ] **2c, un délai ou un lieu sans lettre ni chiffre** sera refusé à la
+  remise : la liste vérifie une présence, pas un sens (un délai fait d'une
+  espace U+3000 n'est pas « vide »). Et la classe de blancs s'élargit dans
+  TOUTES ses copies ensemble, jamais une seule (lot de consolidation).
+- [ ] **2c imprime la certification du taux réduit** (CGI 279-0 bis 3,
+  278-0 bis A IV), avec la place de signer, et refuse la remise à une
+  personne qui vous a bloqué, avec sa propre phrase : la liste ne peut pas
+  la voir (elle ne lit jamais l'origine du devis).
+- [ ] **Au lot de consolidation** : `MISE_A_JOUR_DE_LA_LIGNE` (« · mise à
+  jour… ») ne semble plus atteinte par aucun geste (relevé le 06/11) — à
+  revérifier, puis retirer ou rebrancher ; trois espaces insécables de
+  `devis.js` (l. 724, 729, 732, messages du lot 2a) sont collées en
+  caractère, pas en séquence ; et la politique des lignes de devis parcourt
+  tous les devis (36 ms à 102 000 devis, mesuré) — un défaut existant.
+
+**Contrôles et méthode :**
+
+- [ ] **`npm run verifier` ne joue aucun SQL** (§2.3) : la parité base ↔
+  téléphone ne tient que par `node scripts/generer-cas-remise.mjs
+  --verifier`, et l'essai 49-remise par un rejeu à la main. Un travail de CI
+  avec un service PostgreSQL qui lance les deux. D'ici là, les bords trouvés
+  par le banc sont écrits en toutes lettres dans `verifier-devis`, mais un
+  bord que personne n'a pensé à écrire n'est gardé que par le fichier
+  engendré.
+- [ ] **Un essai SQL peut être affaibli en tautologie sans changer son
+  compte** : les cas 10, 11 a et 13 de l'essai 49-remise ne sont gardés que
+  par la relecture humaine (relevé par le banc du 05/11). Seul un rejeu en CI contre un schéma saboté le
+  verrait.
+- [ ] **`mesure-devis` n'est pas dans `npm run verifier`** : à lancer avant
+  toute livraison qui touche l'écran du devis (`SEULEMENT=<expression>` en
+  filtre). Son balayage NOTE ses témoins « ligne ordinaire » et « brouillon
+  pas en base » (74 / 72) sans les comparer : à transformer en vérification.
+  Toute mesure de position nouvelle appelle `sansAncrage()` (Chromium
+  compense un changement de hauteur, iOS non).
+- [ ] **Des états ne se voient pas en démonstration** (sa lecture de la
+  liste n'a aucune pause) : « Votre entreprise : la liste se met à jour »,
+  le compte d'avant pendant la relecture des totaux. Et la lecture du régime
+  qui échoue n'est provoquée que par des crochets de `mesure-devis` posés
+  sur des NOMS de fonctions (`monEmetteurDemo`, `lireLaListe`) : une pause
+  nommée et un « régime qui lève » dans `api.js` seraient plus solides.
+- [ ] **Les commentaires ne sont gardés que contre les phrases fausses
+  CONNUES** (`PHRASES_PERIMEES`) : une phrase fausse neuve passe.
+- [ ] **Les gabarits de la ligne qui ne servent à rien dans Chromium**
+  (« 44 points », la phrase de l'en-tête…) sont des assurances pour iOS ou
+  une autre police : à garder tant que l'iPhone ne prouve pas le contraire.
+- [ ] **Pour le prochain essai sur la vraie base** : déclarer le régime de
+  TVA AVANT d'écrire un poste — la base refuse un poste sans taux sous un
+  régime non déclaré, et le script du 08/11 l'avait oublié (2 échecs sur
+  44, les siens).
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 

@@ -2112,7 +2112,11 @@ un blocage de 7 jours à qui n'y est pas soumis coûte de l'argent à l'artisan.
 
 **Et `regime_tva` est NULLABLE avec un état « non déclaré ».**
 `preparer_remise_devis()` **refuse tant que le régime n'a pas été déclaré**, et
-au lot 2 elle refuse le régime **réel**.
+au lot 2 elle refuse le régime **réel**. **[Revu le 05/11/2026, lot 2b, réponse 3
+du propriétaire, « Tout permettre » : le lot 2 ne refuse PAS le réel ni les taux
+réduits. 2c imprimera une certification simple que le client signe (CGI 279-0
+bis 3, 278-0 bis A IV), texte à faire relire ; le lot 3 garde la version
+complète. Voir 10.18.]**
 
 > **Ce n'est pas une amputation si vous êtes en franchise** : votre devis est
 > conforme sans un seul taux, avec la mention de l'art. 293 B. Un faux 20 %
@@ -3184,7 +3188,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 - **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
 - **Lot 1** **(FAIT le 23/10/2026 — 10.16 ; la main-d'œuvre y est un drapeau SANS contrainte d'unité)** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
 - **Lot P — la base de postes** **(FAIT le 25/10/2026 — 10.17 ; aucune colonne métier, tranché le 23/10)** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier devait s'y trancher avant (10.6) : c'est fait, aucune.
-- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b et 2c restent)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
+- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b découpé en quatre étapes le 05/11, dont 2b-1 FAITE le 08/11 — voir 10.18 ; 2b-2 à 2b-4 et 2c restent)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
 - **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
 - **Lot 5** : trois modèles au lieu de cinq.
 
@@ -3549,7 +3553,7 @@ Posées par le cahier du lot 1 (son §9), avant de construire :
 
 | question | réponse | ce qu'elle change |
 |---|---|---|
-| **Q1** — au régime réel, l'écran propose-t-il le choix du taux (20 %, 10 %, 5,5 %) ligne par ligne dès le lot 1 ? | **oui, dès maintenant** | rien de pré-coché sur la première ligne ; chaque ligne suivante reprend le taux de la précédente **du même type** (un poste celui du dernier poste, une option celui de la dernière option). En franchise : aucun taux affiché, la mention « TVA non applicable, article 293 B du CGI » à la place de la TVA. Régime non déclaré : seulement des titres et des réserves, et un bandeau qui ouvre « Mon entreprise ». Un régime qui n'a pas pu être LU ne s'affiche **jamais** « non déclaré ». **Ce n'est tenu que par l'écran** : la base accepte une ligne chiffrée quel que soit le régime, et c'est le refus de remise du lot 2 qui le tiendra. Rien ne part : le lot 2 refusera d'envoyer un devis au régime réel tant que le lot 3 n'aura pas ajouté la certification du client pour 10 % et 5,5 % |
+| **Q1** — au régime réel, l'écran propose-t-il le choix du taux (20 %, 10 %, 5,5 %) ligne par ligne dès le lot 1 ? | **oui, dès maintenant** | rien de pré-coché sur la première ligne ; chaque ligne suivante reprend le taux de la précédente **du même type** (un poste celui du dernier poste, une option celui de la dernière option). En franchise : aucun taux affiché, la mention « TVA non applicable, article 293 B du CGI » à la place de la TVA. Régime non déclaré : seulement des titres et des réserves, et un bandeau qui ouvre « Mon entreprise ». Un régime qui n'a pas pu être LU ne s'affiche **jamais** « non déclaré ». **Ce n'est tenu que par l'écran** : la base accepte une ligne chiffrée quel que soit le régime, et c'est le refus de remise du lot 2 qui le tiendra. Rien ne part : le lot 2 refusera d'envoyer un devis au régime réel tant que le lot 3 n'aura pas ajouté la certification du client pour 10 % et 5,5 % **[revu le 05/11/2026 (lot 2b, réponse 3, « Tout permettre ») : le lot 2 ne refuse pas le réel ; 2c imprime une certification simple que le client signe — voir 10.18]** |
 | **Q2** — faut-il d'autres unités que m², mètre linéaire, m³, unité, heure et forfait ? | **ajouter « jour »** | **sept** clés en liste fermée : `m2`, `m`, `m3`, `u`, `h`, `jour`, `forfait` (`devis_ligne_unite_check`). L'écran montre « m linéaire » et « unité » ; **« ml » ne s'affiche ni ne s'enregistre jamais**. La liste « m², ml, m³, u, h, forfait… » de 10.3 est corrigée sur place (l.2921) |
 | **Q3** — voulez-vous pouvoir faire une remise sur un devis ? (une remise COMMERCIALE, une réduction de prix — à ne pas confondre avec la remise du devis au client, qui est le lot 2) | **une remise sur le TOTAL du devis** | elle se construit **au lot 2, avant le PDF** — pas au lot 1. Elle demande une règle de répartition entre les taux, écrite et éprouvée avant la première colonne : sans la règle du plus fort reste, l'exemple de la lecture argent donne 334 au lieu de 333. Le prix avant remise reste écrit (BOFiP §220). Le lot 1 ne pose **aucune colonne de remise** — aucune colonne sans lecteur — et rien qui l'empêche : `devis_tva` est recalculée **en entier** par la base à chaque écriture, donc une remise répartie s'y ajoutera sans réécrire de devis |
 | **Q4** — vos devis déduisent-ils parfois une prime (CEE, une aide) du prix à payer ? | **jamais** | rien à prévoir. Et le chiffrage refuse toute ligne négative |
@@ -3704,7 +3708,8 @@ les relectures l'ont rendu nécessaire : l'horloge (OP015, OP016), OP017,
   points importants du premier tour sont corrigés et mesurés ; la relecture
   SQL du second tour a rejoué les cascades, OP014 et OP017, et celle des
   essais les acteurs adverses — mais aucune relecture de sécurité n'a relu
-  l'état final.
+  l'état final. **[Faite le 05/11/2026 : la relecture adverse de l'étape 2b-1,
+  angle « base et sécurité », a relu la section 49 entière.]**
 - **Aucun vrai devis** : la vraie base en compte 0 après le ménage.
 
 #### Ce qui reste ouvert
@@ -3802,7 +3807,9 @@ statut du propriétaire) ; et `A-FAIRE.md`, `AUDIT-ADDENDUM-QR.md`,
 #### Ce que la construction a ajouté, et que le lot 2 doit savoir
 
 - **`OP018` est pris** (le plafond de postes) ; le prochain code libre est
-  `OP019`. `OP003` reste réservé au devis remis.
+  `OP019`. `OP003` reste réservé au devis remis. **[Périmé : OP019 à OP026 ont
+  été pris par le lot S, et OP027 par l'étape 2b-1 (« Ce devis n'existe pas, ou
+  il n'est pas le vôtre. ») ; le prochain code libre est `OP028` — voir 10.18.]**
 - **La clé de rapprochement est une règle à DEUX écritures**, et la SQL est
   ENGENDRÉE depuis `src/lib/rapprochement.js` (`npm run
   generer-rapprochement`). La changer demande la procédure de la section 50.0 :
@@ -3845,4 +3852,37 @@ ou supprimer un fichier de l'espace `devis` ») est `verifier-stockage`, qui
 range déjà `devis` parmi les espaces figés. Restent S-b, S-c et S-d (CLAUDE.md,
 « Le stockage et le badge suspendu — lot S-a »).
 
-**Le lot S est terminé le 02/11/2026** (`docs/CAHIER-LOT-S.md`), et **le sous-lot 2a — la réduction, l'acompte, la validité — est FAIT le 04/11/2026**, appliqué sur la vraie base et essayé sur l'iPhone (CLAUDE.md, « Réduction, acompte, validité — lot 2a » ; le cahier : `docs/CAHIER-LOT-2A.md`). Suivent 2b, puis 2c.
+**Le lot S est terminé le 02/11/2026** (`docs/CAHIER-LOT-S.md`), et **le sous-lot 2a — la réduction, l'acompte, la validité — est FAIT le 04/11/2026**, appliqué sur la vraie base et essayé sur l'iPhone (CLAUDE.md, « Réduction, acompte, validité — lot 2a » ; le cahier : `docs/CAHIER-LOT-2A.md`). Suivent 2b, puis 2c. **Le 08/11/2026, l'étape 2b-1 — « Ce qu'il manque pour remettre ce devis » — est faite (10.18).**
+
+### 10.18 L'étape 2b-1 — FAITE le 08/11/2026, et les décisions des 05, 06 et 08/11
+
+Le lot 2b (« ce que le devis doit dire ») est découpé en quatre étapes. **2b-1,
+« Ce qu'il manque pour remettre ce devis », est sur la vraie base depuis le
+08/11/2026 à 16 h 44** (migration `lot_2b_1_motifs_refus_remise`). Le cahier :
+`docs/CAHIER-LOT-2B-1.md` ; ce qui est construit et vérifié : CLAUDE.md, « Ce
+qu'il manque pour remettre ce devis — étape 2b-1 » ; ce qui reste :
+`docs/A-FAIRE.md`, « Après l'étape 2b-1 ».
+
+| décision | réponse du propriétaire | ce qu'elle change au plan |
+|---|---|---|
+| le découpage de 2b (05/11) | **quatre étapes**, chacune essayée sur l'iPhone | 2b-1 la liste ; 2b-2 pour qui le client commande, et quand c'est signé ; 2b-3 les lignes (urgence, décennale) ; 2b-4 ce que coûte le devis et ce qu'il laisse (devis payant, déchets, RGE) ; puis 2c (numéro, PDF, aperçu, remise) |
+| les règles d'Opus plus strictes que la loi (05/11) | **les quatre** : SIRET relu chaque année, TVA reconnue par VIES, frais de déplacement et délai d'exécution sur tous les devis | `devis_delai` est permanent : 2b-2 ne le lèvera pas |
+| D-C (05/11 au soir) | le client et au moins un poste deviennent **aussi** des règles d'Opus | **six** règles d'Opus en tout ; leur phrase dit quand la loi le demande, puis « Opus le demande pour tous vos devis. » |
+| la TVA à 10 % et 5,5 % (05/11) | **« Tout permettre »** | aucun motif de taux réduit ; 2c imprime une certification simple, avec la place de signer (au juriste) ; l. 2115 et Q1 de 10.16 corrigées ; 2b-2 ajoutera « taux réduit sur un immeuble neuf » (CGI 279-0 bis 2) |
+| où voir la liste (05/11) | **en haut et en bas** | une ligne sous le bandeau, une rangée sous « Conditions », une carte plein écran |
+| D-A et D-B (05/11 au soir) | la ligne dit la phrase ET le décompte ; « Votre entreprise — 5 points, dont 3 dus à un particulier » | — |
+| D-A bis (06/11) | **« garder la grande place »** | tant que quelque chose n'est pas compté sur un devis en base, la ligne réserve la hauteur du plus long de ses textes possibles (110 points sur un iPhone 16) |
+| « Accélérer » (08/11) | **une seule relecture par étape** | seul un défaut qui perd des données, affiche quelque chose de faux ou touche à la sécurité relance un tour ; les petits défauts d'affichage rares vont dans A-FAIRE |
+
+Ce que 2b-2 à 2c doivent savoir :
+
+- **`motifs_refus_remise(p_devis)` (section 49.9) est la SEULE règle de la
+  remise.** Sa forme de retour (`rang, cle, phrase, nature, ligne_id`) ne peut
+  plus changer sans un `drop function`, que le connecteur refuse : chaque étape
+  y AJOUTE ses motifs, sans toucher sa signature. Les avis restent hors d'elle.
+- **Un fait de 2b naît vide** : un motif, ou le cas le plus protecteur appliqué
+  d'office — jamais une contrainte de la base.
+- **`OP027` est pris** ; le prochain code libre est **`OP028`**.
+- **La remise de 2c ne lit pas PUIS écrit** : `for update` sur le devis, la
+  fonction dans un ordre suivant, puis le statut, dans une transaction (A-FAIRE,
+  « Après l'étape 2b-1 »).

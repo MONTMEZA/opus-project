@@ -10942,6 +10942,193 @@ file d'écriture elle-même (ses requêtes reproduites à la main). **Aucun vrai
 devis n'a été remis** : c'est le lot 2c. La suite — le juriste, l'écran, les
 contrôles — est dans `docs/A-FAIRE.md`, « Après le lot 2a — ce qui reste ».
 
+### Ce qu'il manque pour remettre ce devis — étape 2b-1 (05-08/11/2026)
+
+> **LA RÈGLE DE MÉTHODE, décidée par le propriétaire le 08/11/2026
+> (« Accélérer »), et elle vaut pour toutes les étapes suivantes :** UNE
+> seule relecture adverse par étape. Seul un défaut qui **perd des
+> données**, **affiche quelque chose de faux** ou **touche à la sécurité**
+> relance un tour de corrections. Les petits défauts d'affichage dans des
+> cas rares vont dans `docs/A-FAIRE.md`, avec leur mesure, et l'étape
+> avance.
+>
+> Pourquoi : 2b-1 a pris **sept tours de corrections**, du 05 au 08/11, et
+> chaque relecture trouvait un cas plus rare où la ligne « Pour le
+> remettre » bougeait de quelques points. Un essai sur l'iPhone vaut plus
+> qu'un huitième tour.
+
+Section 49.9 de `schema.sql`, `src/lib/devis.js` (`MOTIFS_DEVIS`,
+`motifsDeRemise`, `garderLaPlace`), `src/components/PourRemettre.js`,
+`src/lib/file-ecriture.js` (point 18), `supabase/cas-remise.json` (engendré
+par `scripts/generer-cas-remise.mjs`), `supabase/essais-section-49-remise.sql`.
+Le cahier, archivé tel qu'il a servi : `docs/CAHIER-LOT-2B-1.md`.
+
+Le lot 2b (« ce que le devis doit dire ») est découpé en **quatre étapes**
+(décision du 05/11), chacune avec sa migration, sa relecture et son essai
+sur l'iPhone : **2b-1** la liste « Ce qu'il manque pour remettre ce devis » ;
+2b-2 pour qui le client commande et quand c'est signé ; 2b-3 les lignes
+(urgence, décennale) ; 2b-4 ce que coûte le devis et ce qu'il laisse (devis
+payant, déchets, RGE). **Rien n'est remis en 2b** : la liste renseigne, et
+la remise de 2c refusera tant qu'elle n'est pas vide — la MÊME liste, jamais
+une seconde écriture de la règle. Aucun module natif : `git pull` puis
+`npx expo start -c`.
+
+#### Ce qui est construit
+
+- **`motifs_refus_remise(p_devis)`** rend une ligne par motif (`rang`,
+  `cle`, `phrase`, `nature`, `ligne_id`) : dix clés sur neuf rangs pour le
+  devis (client, poste, taux en franchise, taux sans TVA au réel — une ligne
+  par ligne fautive —, lieu, délai, validité, nature de l'acompte, acompte et
+  réduction ramenés), puis les 21 motifs d'`emetteur_incomplet()` au rang
+  100 + leur position. `stable`, `security invoker`, colonnes nommées une à
+  une ; elle ne lit **jamais** l'origine du devis (D4-c : l'essai prouve que
+  deux devis identiques sauf leurs liens rendent la même liste). Les AVIS
+  (« ce devis n'a pas de titre ») vivent dans l'écran : aucun ne pourra
+  bloquer une remise.
+- **OP027** — « Ce devis n'existe pas, ou il n'est pas le vôtre. » — pour le
+  devis d'un autre comme pour un devis inventé, d'où qu'on l'appelle : la
+  garde est écrite DANS la lecture (`est_mon_entreprise`) ; la RLS seule
+  rendait un autre code hors du rôle `authenticated`. **Le prochain code
+  libre est OP028** (OP027 change de sens par rapport au cahier 2a).
+- **Trois natures, et l'écran dit laquelle** : « La loi » ; « Par
+  prudence » (Opus ne sait pas encore, il compte le cas le plus protecteur) ;
+  « Règle d'Opus », plus stricte que la loi, choisie par le propriétaire.
+  **Six règles d'Opus** : le SIRET relu chaque année, la TVA reconnue par
+  VIES, les frais de déplacement et le délai d'exécution sur tous les devis
+  (05/11) ; le client et au moins un poste (décision D-C, 05/11 au soir),
+  dont la phrase dit quand la loi le demande, puis « Opus le demande pour
+  tous vos devis. ».
+- **La TVA à 10 % et 5,5 % : « Tout permettre »** (05/11). Aucun motif ne
+  bloque un taux réduit : 2c imprimera une certification simple que le
+  client signe ; d'ici là, une aide sous le taux (`AIDE_TAUX_REDUIT`, au
+  juriste). Le plan disait « le lot 2 refuse le réel » : corrigé.
+- **La liste en haut ET en bas** (05/11) : « Pour le remettre : ce devis —
+  2 points · votre entreprise — 1 point » sous le bandeau, une rangée sous
+  « Conditions ». Un appui ouvre une carte plein écran : « Ce devis », un
+  bouton par point qui mène au champ ; « Votre entreprise — 5 points, dont 3
+  dus à un particulier » (D-B), un bouton par point vers « Mon entreprise »,
+  et, dedans, les mentions dues à un particulier, par prudence, tant qu'Opus
+  ne sait pas pour qui le client commande (2b-2). **Le compte se dit par
+  endroit**, jamais en un seul nombre : tant que VIES refuse le n° de TVA du
+  propriétaire, « votre entreprise » reste allumée, et un compteur unique
+  ne s'éteindrait jamais.
+
+#### Ce qu'il ne faut pas redécouvrir
+
+> **La base est la SEULE autorité ; le miroir se prouve sur SA sortie.**
+> `motifsDeRemise()` redit la règle pour la démonstration ;
+> `generer-cas-remise` fait jouer 64 situations par la VRAIE fonction sur un
+> PostgreSQL local, et `verifier-devis` exige zéro écart. Le banc a trouvé
+> deux miroirs faux qui passaient tout, accompagnés d'un `cas-remise.json`
+> récrit d'après eux : la parité ne tient que par `--verifier`, à la main.
+
+> **Une liste vide ne dit « rien ne manque » que si elle a été LUE.** Une
+> lecture ratée dit « Liste de ce qu'il manque non lue. Réessayer » ; un
+> brouillon pas encore en base n'appelle rien (la base rendrait OP027) ; une
+> ligne pas enregistrée se dit À CÔTÉ du décompte (décision D-A) ; pendant
+> qu'une écriture part, « Ce devis » se TAIT — la dernière liste sûre aurait
+> dit « ne chiffre encore aucun travail » sous le poste qu'on venait
+> d'écrire. Et même lue, « Ce devis : rien ne manque de ce qu'Opus vérifie
+> aujourd'hui » est suivi de ce qui n'est PAS encore vérifié.
+
+> **La place de la ligne suit une règle SANS MÉMOIRE** (`garderLaPlace`,
+> calculée à chaque rendu). Décision D-A bis du 06/11, « garder la grande
+> place » : tant que quelque chose n'est pas compté, la ligne réserve la
+> hauteur du plus long de ses textes possibles — quinze gabarits FIXES, qui
+> ne dépendent ni de l'état, ni des nombres, ni de la phrase (110 points en
+> haut et 88 en bas sur l'iPhone 16 du propriétaire, au lieu de 74 et 72).
+> Réservée si et seulement si le devis est en base ET (quelque chose n'est
+> pas compté OU une écriture renvoyée après un échec est en route). Une
+> MÉMOIRE, essayée au tour 5, ne se rendait plus quand ce qui n'était pas
+> compté disparaissait SANS écriture, puis se rendait plus tard, sous le
+> doigt. Les seuls sauts : devenir « pas compté » (36 points en haut, 16 en
+> bas à 393), cesser de l'être, et le brouillon qui entre en base.
+
+> **Une écriture d'une entrée EN ÉCHEC qui ne change rien est un RENVOI**
+> (point 18 de la file). « Réessayer » porte une marque ; mais fermer sans
+> rien toucher la carte d'une ligne en échec, retirer de nouveau une ligne
+> dont la suppression a échoué, le reste d'un refus partiel du plafond, ou
+> ce qui a été voulu pendant le vol d'un renvoi qui échoue renvoient la même
+> écriture par une AUTRE porte — sans la marque, la ligne faisait 110 → 74 →
+> 110 sous le doigt. Une écriture qui CHANGE quelque chose reste un nouveau
+> geste. La marque n'est qu'un signal d'affichage : ni ce qui part, ni
+> l'ordre des envois ne changent.
+
+> **Le régime de TVA ne fait rien relire.** La base calcule la liste avec le
+> régime qu'ELLE a : ce que le téléphone en sait ne la rend jamais fausse.
+> Le régime ne s'écrit que dans « Mon entreprise », dont la fermeture relit
+> toujours tout, une fois — et ses trois sorties attendent la fin d'un envoi
+> (« Quitter sans enregistrer » partait pendant l'enregistrement, et la
+> relecture passait avant l'écriture). Une machinerie de suivi du régime,
+> posée aux tours 2 et 3, se trompait dans deux courses : retirée au tour 4.
+
+Deux pièges du NAVIGATEUR : Chromium compense un changement de hauteur hors
+de l'écran en faisant défiler, iOS non — une mesure de POSITION éteint
+l'ancrage (`sansAncrage()`) ; `react-native-web` ferme le clavier à TOUT
+défilement — la liste ne le ferme plus sous une carte.
+
+#### La migration et l'essai sur la vraie base
+
+Une fonction, ses droits, son commentaire — aucune colonne, aucune donnée
+touchée —, construits depuis `schema.sql`, simulés sur l'imitation
+`5405f8b`, envoyés sous forme GARDÉE (un bloc `do` qui compare le md5 du
+corps, `155f83c4…`, et n'exécute rien s'il diffère). Relevé AVANT : la
+fonction absente, les colonnes et signatures qu'elle lit présentes,
+`emetteur_incomplet`, `est_mon_entreprise` et `mes_entreprises` identiques à
+l'imitation, aucun client connecté. **Appliquée le 08/11/2026 à 16 h 44
+(heure de Paris)** — migration `lot_2b_1_motifs_refus_remise`, version
+`20261108154438` en UTC —, avec l'accord du propriétaire, Opus fermé.
+Relevé APRÈS : identique à la simulation (corps `33cd8e5d…`, droits
+`postgres`, `authenticated`, `service_role` seulement, commentaire
+`fa173776…`), au numéro interne du langage `plpgsql` près (13612 en local,
+13619 sur la vraie base). **Les avertissements des commits de l'étape
+(« NE PAS FAIRE `git pull` AVANT LA MIGRATION 2b-1 ») ne valent plus.**
+
+Puis par le chemin de l'application (curl), deux artisans jetables à Brest
+(SIRET fictifs, les preuves `essai` déjà en base réutilisées), supprimés
+ensuite :
+
+| | résultat |
+|---|---|
+| chaque motif du devis allumé puis éteint (client, poste, taux au réel et en franchise avec la ligne visée, lieu, délai, validité, nature de l'acompte, acompte et réduction ramenés) | conforme |
+| à CHAQUE pas, la liste de la base contre `motifsDeRemise` | identique au caractère près |
+| les motifs de l'entreprise | après ceux du devis (rangs > 100) |
+| l'autre artisan, sur le devis de A · sur un devis inventé | OP027 · OP027, la même phrase |
+| un visiteur · l'autre artisan lit le devis de A | 401 · 42501 · `[]` |
+
+**42 vérifications justes.** Deux ont échoué, et c'était le SCRIPT : il
+attendait qu'un poste sans taux s'enregistre avant que le régime soit
+déclaré ; la base le refuse (`devis_ligne_forme_check`), comme voulu depuis
+le lot 1. Pour le prochain essai : déclarer le régime d'abord. Base revenue
+à 14 comptes / 3 devis / 11 lignes, aucun compte jetable.
+
+Vérifié aussi, sur la version poussée : `npm run verifier` (56, code 0),
+`verifier-devis` 537, le linter à 32, `mesure-devis` 734 au navigateur en
+démonstration, `generer-cas-remise --verifier` 64, les essais 49-remise
+(11 erreurs, 131 valeurs justes) et 49 (79), les paquets iOS et Android.
+
+#### L'incident du 07/11 : la base arrêtée, les connecteurs muets
+
+La vraie base a reçu « fast shutdown request » le 07/11 à 21 h 44 (heure de
+Paris) — arrêtée par Supabase, pas par nous ; sa page d'état ne disait rien.
+Le 08/11, les deux connecteurs expiraient (« Connection terminated due to
+connection timeout ») pendant que `get_project` disait `ACTIVE_HEALTHY` ; la
+base a redémarré à 16 h 42, pendant les essais de connexion. **Quand les
+connecteurs expirent, lire les journaux (`query_logs` sur `postgres_logs`)
+avant de conclure.** La cause du redémarrage n'est pas établie.
+
+#### Ce qui n'a PAS été vérifié
+
+**Rien sur l'iPhone** : le geste au doigt, les 110 points à 393 et les
+sauts, le focus du clavier sur le délai et le lieu, VoiceOver sur la carte
+et les gabarits cachés, le texte agrandi (simulé dans Chromium), Yoga,
+Hermes. **L'écran n'a tourné qu'en démonstration** ; sur la vraie base,
+seule la fonction a été appelée. Et un défaut connu reste, par la décision
+« Accélérer » : **BANC7-X1** — un devis près du plafond, dont l'objet change
+pendant le vol d'une réduction refusée, fait encore bouger la ligne une fois
+(correction de trois lignes prête). La suite : `docs/A-FAIRE.md`, « Après
+l'étape 2b-1 — ce qui reste ».
+
 ## L'icône d'Opus — le logo du propriétaire (02/11/2026)
 
 Remise par lui le 02/11 : le casque de chantier et le mot « OPUS », en encre
