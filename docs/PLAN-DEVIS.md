@@ -3886,3 +3886,17 @@ Ce que 2b-2 à 2c doivent savoir :
 - **La remise de 2c ne lit pas PUIS écrit** : `for update` sur le devis, la
   fonction dans un ordre suivant, puis le statut, dans une transaction (A-FAIRE,
   « Après l'étape 2b-1 »).
+
+### 10.19 Les décisions du 09/11/2026 — avant l'étape 2b-2
+
+Prises après l'essai de 2b-1 sur l'iPhone. Elles changent 2b-2 et 2c, et en
+ajoutent un lot.
+
+| décision | réponse du propriétaire | ce qu'elle change au plan |
+|---|---|---|
+| le n° de TVA que VIES refuse (09/11) | **une déclaration sur l'honneur**, par **une case à cocher** : « Je certifie sur l'honneur que ce numéro est celui que l'administration fiscale a attribué à mon entreprise. » | la règle d'Opus « TVA reconnue par VIES » gagne une porte de sortie, que la base date et garde comme preuve ; le numéro déclaré s'imprime ; Opus continue de dire à l'artisan seul que VIES ne le reconnaît pas, et il peut le faire recontrôler ; les contrôles de forme, de clé et de SIREN restent. Construit en **2b-2**. Les textes légaux qui disent « Aucune vérification par un humain n'existe encore pour cette décision » sont à réécrire avec elle (`VERSION`) |
+| pour qui le client commande, quand la fiche dit « particulier » (09/11) | **Opus propose, l'artisan confirme** | la fiche propose « pour lui-même, à titre privé » ; un appui confirme ; rien n'est déduit de `clients.type` |
+| une SCI, un syndic, une association sans activité professionnelle (09/11) | **comme un particulier**, par prudence | toutes les mentions dues à un particulier ; la question reste au juriste (Q-J5) |
+| le moment de la signature (09/11) | pas de question en 2b-2 : **les devis restent « en attente », et l'artisan les classe lui-même** | 2b-2 n'ajoute PAS la question « quand le devis a-t-il été signé ? » : le cas le plus protecteur (hors établissement : rétractation, formulaire, aucun paiement avant le 8e jour) vaut pour tous les devis, comme aujourd'hui. La question revient à la remise (2c) si elle est encore utile |
+| le tri des devis remis (09/11) | **« en attente », puis « à modifier », « accepté », « refusé », rangés dans des zones à part ; rien n'est perdu, l'artisan peut revenir dessus et changer** | en **2c**, avec la remise. Un devis remis est figé : « à modifier » fait une NOUVELLE version, reliée à la première, jamais une retouche du devis que le client a reçu |
+| la signature par le client dans Opus, et l'artisan prévenu quand le client ouvre le devis (09/11) | **après 2c, en lot à part** | un lot nouveau, après l'avis du juriste : accepter dans Opus, c'est conclure le contrat par Opus (L. 221-13, L. 221-14, D. 221-5, L. 111-7, C. civ. 1127-1 et 1127-2), la signature doit prouver qui a signé quoi et quand, et le client d'un devis est une fiche du carnet, souvent sans compte (une page ouverte par un lien, ou le lien fiche ↔ compte de l'addendum QR, qui ne se construit pas encore) |

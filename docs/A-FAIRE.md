@@ -3045,6 +3045,25 @@ documents de travail de la session, pas dans le dépôt) :
   jour où une aide recevra un style conditionnel, le contrôle s'apprend en
   même temps.
 
+### Les décisions du 09/11/2026 — ce qu'elles ajoutent à faire
+
+Le détail : `docs/PLAN-DEVIS.md` 10.19.
+
+- [ ] **2b-2 : la déclaration sur l'honneur du n° de TVA** que VIES refuse
+  (une case à cocher, datée par la base, gardée comme preuve) ; réécrire les
+  textes légaux qui disent « Aucune vérification par un humain n'existe
+  encore pour cette décision ».
+- [ ] **2b-2 : « pour qui le client commande »**, proposé depuis une fiche
+  « particulier » et confirmé par l'artisan ; SCI, syndic et association
+  traités comme un particulier. Pas de question sur le moment de la
+  signature : le cas le plus protecteur reste.
+- [ ] **2c : le tri des devis remis** — « en attente », « à modifier »,
+  « accepté », « refusé », dans des zones à part, réversible ; « à modifier »
+  fait une nouvelle version, jamais une retouche du devis remis.
+- [ ] **Après 2c, un lot à part : la signature par le client dans Opus**,
+  et l'artisan prévenu quand le client ouvre le devis — après l'avis du
+  juriste (régime à distance, preuve de la signature, client sans compte).
+
 ### Après l'étape 2b-1 — ce qui reste (08/11/2026)
 
 > **La migration de 2b-1 est APPLIQUÉE sur la vraie base depuis le
