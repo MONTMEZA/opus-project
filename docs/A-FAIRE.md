@@ -139,6 +139,38 @@ pour les sauvegardes, le contrat de sous-traitance du carnet de clients si le
 carnet est ouvert. Le détail : la section suivante, et la conversation du
 09/11.
 
+**Ouverture confirmée le 09/11 : réseau social + devis + facture.** Le
+propriétaire : « il faudra surtout que toute la sécurité soit parfaite ».
+D'où un **lot « Sécurité avant ouverture »**, en décembre, APRÈS les derniers
+changements de code (un audit fait trop tôt se refait) :
+
+1. une relecture adverse de TOUTE la base, comme le lot S mais d'un bloc :
+   chaque table, chaque droit, chaque fonction `security definer`, le
+   stockage, les fonctions Edge ; et les alertes de sécurité de Supabase ;
+2. le compte d'administration d'Opus protégé par une double
+   authentification (Supabase sait la demander : un code à six chiffres) ;
+3. un anti-robot à l'inscription (Supabase sait poser un captcha) et les
+   limites de débit de l'authentification relues ;
+4. les restes connus : les droits d'ÉCRITURE de table de `anon` sur 25
+   tables (la RLS les arrête, un `revoke` les retire), `loadAll` qui avale
+   l'échec de `mes_conversations` ;
+5. les métadonnées des photos et vidéos envoyées (position GPS du
+   téléphone dans les photos d'un chantier chez un client) : vérifier
+   qu'elles sont retirées, pour les photos réduites ET pour les vidéos
+   envoyées à Cloudinary — NON VÉRIFIÉ au 09/11 ;
+6. une sauvegarde de la base RESTAURÉE pour de vrai, une fois ;
+7. le paragraphe « Cookies et traceurs » de `legal.js` relu contre ce qui
+   aura été ajouté (rapport de plantage, notifications push) : aujourd'hui
+   l'application ne pose aucun cookie ni traceur, donc **aucune fenêtre de
+   consentement n'est due** ; un outil qui suivrait les gens la rendrait
+   obligatoire ;
+8. si le budget le permet, un test d'intrusion par un professionnel
+   extérieur.
+
+Et ce que le propriétaire peut faire **dès maintenant** : la double
+authentification sur ses comptes Supabase, GitHub, Apple, Google et IONOS
+— ce sont les clés de toute la maison.
+
 ### 1.0 bis Avant d'ouvrir : éprouver Opus comme il sera VRAIMENT utilisé
 
 Décidé avec le propriétaire le 15/10/2026 : « je ne veux pas que le jour où
