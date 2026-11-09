@@ -119,6 +119,26 @@ Les deux restes relevés pendant le diagnostic sont **traités le 17/10**
 visionneuse qui montait dix lecteurs — et, trouvé en chemin, la grille du
 portfolio qui en créait un par vidéo sans aperçu.
 
+### 1.0 ter L'ouverture visée : janvier 2027 (décidé le 09/11/2026)
+
+Le propriétaire, le 09/11, après avoir lu ce qu'il reste au devis et à la
+facture : « on attend, on avance sur Opus, on essaiera une mise en ligne
+janvier 2027 ». Pas de bêta avant. D'ici là, tout ce qui se construit reste
+en `STATUT = 'essai'`.
+
+Ce que ça demande, en **décembre 2026** au plus tard : le lot « Ouverture »
+(versions de test TestFlight et Google Play, rapport de plantage, notifications
+push, essai à grande échelle sur une copie de la base, inscription avec
+confirmation par e-mail essayée pour de vrai, devis et carnet cachés s'ils ne
+sont pas finis), et les gestes qui n'appartiennent qu'à lui : l'éditeur d'Opus
+(sa SARL ou non), la boîte `contact@opus-project.com`, les deux réglages
+Supabase (confirmation par e-mail, mots de passe compromis), le retrait des
+anciennes données de démonstration de la vraie base (5 fiches aux noms
+d'entreprises réelles, 2 fausses publicités), Supabase en formule payante
+pour les sauvegardes, le contrat de sous-traitance du carnet de clients si le
+carnet est ouvert. Le détail : la section suivante, et la conversation du
+09/11.
+
 ### 1.0 bis Avant d'ouvrir : éprouver Opus comme il sera VRAIMENT utilisé
 
 Décidé avec le propriétaire le 15/10/2026 : « je ne veux pas que le jour où
