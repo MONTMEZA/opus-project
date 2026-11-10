@@ -1888,6 +1888,9 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
   reconnaît. Mesuré ce jour-là : un numéro calculé depuis le SIREN n'est pas
   un numéro actif, et celui de la société du propriétaire est REFUSÉ par
   VIES. Le détail est dans CLAUDE.md, « Le n° de TVA écrit à la main ».
+  **Depuis le 10/11/2026 (étape 2b-2)**, Opus le garde aussi quand
+  l'artisan le DÉCLARE sur l'honneur, après un refus de VIES ou trois
+  contrôles sans réponse.
 - [ ] **AVANT LA MISE EN LIGNE : une révision par un humain des refus de
   VIES.** Ne pas imprimer un numéro refusé, et à terme refuser la remise d'un
   devis à un particulier faute de numéro, est une décision automatique (RGPD,
@@ -1895,11 +1898,21 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
   vérification humaine n'existe encore. Le modèle existe — la porte de
   secours du SIRET (`demandes_pro`). À construire avant que `STATUT` quitte
   `'essai'`.
+  **Depuis le 10/11/2026 (étape 2b-2)**, la règle a une porte de sortie : la
+  déclaration sur l'honneur, que l'artisan retire tant que c'est elle qui
+  fait imprimer le numéro. Les textes disent désormais « personne chez Opus
+  ne revoit les refus de VIES ». La révision par un humain reste à faire,
+  sauf si le juriste juge la déclaration suffisante (J1, « Après l'étape
+  2b-2 »).
 - [ ] **Geste du propriétaire, pour sa propre société** : faire activer son
   n° de TVA intracommunautaire — son espace professionnel sur impots.gouv.fr
   le montre, son service des impôts des entreprises l'active. Une fois actif,
   « Écrire mon numéro de TVA » le fait reconnaître par VIES. Tant qu'il ne
   l'est pas, ses devis à des particuliers ne peuvent pas porter de numéro.
+  **Depuis le 10/11/2026**, une seconde porte : s'il est SÛR du numéro (son
+  espace professionnel le montre, ou un courrier de son service des
+  impôts), il peut le déclarer sur l'honneur après le refus ; la
+  déclaration l'engage. Relevé le 10/11 : il ne l'a pas encore fait.
 - [ ] **VIES n'a pas de date d'expiration dans Opus** (décision du 18/10 :
   une seule règle plus stricte que la loi). Un numéro désactivé après sa
   reconnaissance s'imprime encore, avec la date du contrôle. À reposer si un
@@ -3101,14 +3114,16 @@ documents de travail de la session, pas dans le dépôt) :
 
 Le détail : `docs/PLAN-DEVIS.md` 10.19.
 
-- [ ] **2b-2 : la déclaration sur l'honneur du n° de TVA** que VIES refuse
+- [x] **2b-2 : la déclaration sur l'honneur du n° de TVA** que VIES refuse
   (une case à cocher, datée par la base, gardée comme preuve) ; réécrire les
   textes légaux qui disent « Aucune vérification par un humain n'existe
-  encore pour cette décision ».
-- [ ] **2b-2 : « pour qui le client commande »**, proposé depuis une fiche
+  encore pour cette décision ». **Fait le 10/11/2026** (étape 2b-2, plus
+  bas).
+- [x] **2b-2 : « pour qui le client commande »**, proposé depuis une fiche
   « particulier » et confirmé par l'artisan ; SCI, syndic et association
   traités comme un particulier. Pas de question sur le moment de la
-  signature : le cas le plus protecteur reste.
+  signature : le cas le plus protecteur reste. **Fait le 10/11/2026**
+  (« À quel titre ? »).
 - [ ] **2c : le tri des devis remis** — « en attente », « à modifier »,
   « accepté », « refusé », dans des zones à part, réversible ; « à modifier »
   fait une nouvelle version, jamais une retouche du devis remis.
@@ -3243,9 +3258,11 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
   motif (arrêté du 17/03/2015, art. 7 4° : « le nom et l'adresse »). Ne PAS
   ajouter l'adresse à la phrase de `devis_client`, qui ne vérifie que le
   client choisi.
-- [ ] **2b-2** : le motif « taux réduit sur un immeuble neuf » (CGI 279-0
-  bis 2), et un avis pour le SIREN d'un client professionnel. **2b-3** : si
-  la garde d'urgence naît, elle prend `OP028`.
+- [x] **2b-2** : le motif « taux réduit sur un immeuble neuf » (CGI 279-0
+  bis 2), et un avis pour le SIREN d'un client professionnel. **Faits le
+  10/11/2026** : `devis_taux_reduit_neuf`, et l'avis `avis_siret_client`,
+  qui demande d'ajouter son SIRET à sa fiche.
+- [ ] **2b-3** : si la garde d'urgence naît, elle prend `OP028`.
 - [ ] **Les gabarits de la ligne ont des bornes** : 500 lignes (OP014), 508
   motifs pour le devis, 21 pour l'entreprise. Un lot qui dépasserait 999 ou
   99 leur fait gagner un chiffre ; `CHIFFRE_LE_PLUS_LARGE` (« 4 » en Inter)
@@ -3305,6 +3322,276 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
   TVA AVANT d'écrire un poste — la base refuse un poste sans taux sous un
   régime non déclaré, et le script du 08/11 l'avait oublié (2 échecs sur
   44, les siens).
+
+### Après l'étape 2b-2 — ce qui reste (10/11/2026)
+
+> **La migration de 2b-2 est APPLIQUÉE sur la vraie base depuis le
+> 10/11/2026 à 11 h 10**, avec votre accord, Opus fermé, et la fonction
+> `tva` v2 est déployée juste après (CLAUDE.md, « À quel titre, le chantier,
+> la TVA déclarée — étape 2b-2 »). Les avertissements « NE PAS FAIRE `git
+> pull` AVANT LA MIGRATION 2b-2 » des commits `6710ff3` et `06ed217` ne
+> valent plus : `git pull`, puis `npx expo start -c`, suffisent (aucun module
+> natif). L'essai sur la vraie base a rendu 54 vérifications justes sur 54.
+>
+> **Règle « Accélérer »** : une seule relecture. Elle a trouvé un seul
+> défaut grave (T1, corrigé dans `06ed217`) ; les petits défauts ci-dessous
+> n'ont pas été corrigés, chacun avec son fichier, prêts à traiter. Leurs
+> noms (M…, E…, N…, T…) viennent des comptes rendus de la session, qui ne
+> sont pas dans le dépôt.
+
+**À essayer sur votre iPhone** (le build de développement, après `git pull`
+et `npx expo start -c`) — rien de 2b-2 n'y a encore tourné :
+
+- [ ] « Mon entreprise » → TVA, après un refus de VIES : le bloc « Vous êtes
+  sûr de ce numéro ? » apparaît SOUS le bouton VIES, qui ne bouge pas ; la
+  case se coche au pouce ; case décochée, « Déclarer ce numéro sur
+  l'honneur » dit pourquoi.
+- [ ] Après la déclaration — **seulement si vous êtes sûr de votre numéro**
+  (voir « Un geste à vous », juste après cette liste : une déclaration faite
+  sur votre vrai compte vous engage pour de vrai, et la retirer l'efface sans
+  laisser de trace). Sinon, laissez ce point de côté : la déclaration a été
+  essayée sur la vraie base avec un compte jetable, et en démonstration au
+  navigateur. La phrase est en vert ; « Votre entreprise » perd un point ;
+  « Faire contrôler de nouveau par VIES », refusé, laisse la déclaration ;
+  « Retirer cette déclaration » se fait en deux appuis.
+- [ ] Un devis à un client particulier : la proposition se lit, « Oui, à
+  titre privé » s'enregistre, le point « Dites à quel titre… » s'éteint, et
+  **rien ne saute sous le doigt** dans le bloc. Changez de client : la
+  question revient.
+- [ ] Sur un client de votre carnet, ouvrez la feuille des réponses
+  (« Autre réponse », sous la proposition) : elle commence par « À titre
+  privé… », puis l'association, la copropriété ou la société civile ; la
+  réponse qui retire des mentions est en DERNIER. (La « SCI » du cahier est
+  celle du carnet de démonstration : relevé le 05/11, votre carnet n'avait
+  que des particuliers.)
+- [ ] « Le chantier » → « Oui » à la première question : la confirmation se
+  lit en entier, les deux boutons se touchent au pouce, « confirmé le … »
+  s'affiche ; revenez à « Non ».
+- [ ] Au régime réel, « Oui » à la question TVA et une ligne à 10 % : le
+  point sur la ligne, et ses deux boutons y mènent ; revenez ensuite à
+  « Non » (sinon le point reste sur votre brouillon).
+- [ ] La ligne « Pour le remettre » garde sa hauteur (≈ 110 points sur votre
+  iPhone 16), la rangée « Le chantier » aussi.
+- [ ] VoiceOver : la case dit « case à cocher », cochée ou non ; la feuille
+  des quatre réponses se parcourt dans l'ordre, la réponse choisie annoncée.
+- [ ] **Ce que vous verrez sans rien toucher** : vos 3 brouillons portent
+  « Dites à quel titre ce client commande » en tête de « Pour le remettre ».
+  C'est votre règle P1, pas un défaut.
+
+**Un geste à vous, pour votre propre numéro** : ne cochez la case que si
+**votre espace professionnel sur impots.gouv.fr** montre ce numéro, ou un
+courrier de votre service des impôts. Un numéro qui se calcule depuis le
+SIREN n'est pas un numéro attribué (mesuré le 20/10). Une déclaration faite
+sur votre vrai compte vous engage pour de vrai. Et Opus n'accepte la
+déclaration que dans les trois heures qui suivent un refus de VIES (ou après
+trois contrôles restés sans réponse) : le refus mesuré le 20/10 ne compte
+plus, il faut d'abord refaire « Faire contrôler par VIES ». Relevé le 10/11 :
+aucune preuve de TVA sur la vraie base.
+
+**Défauts connus, non corrigés — la base et la fonction `tva`** :
+
+- [ ] **M1 — la garde I1 se contourne depuis l'éditeur SQL**
+  (`supabase/schema.sql`, `tient_la_preuve_tva`, branche `declaration`) :
+  `set local role service_role` (ou `session_replication_role`, ou le
+  déclencheur désactivé) pose une déclaration sur un vrai compte. Il faut
+  l'accès complet ; seul le commentaire de la section (« elle est
+  REFUSÉE ») en dit trop.
+- [ ] **M2 — une course rétrograde une preuve VIES en déclaration**
+  (`supabase/functions/tva/index.ts`, l'écriture de `declarer`) : deux
+  appareils, un contrôle reconnu puis une déclaration commencée avant ;
+  `vies_le` est perdue et la note dit « VIES ne l'avait pas reconnu ». Le
+  numéro s'imprime dans les deux cas ; « Faire contrôler de nouveau »
+  répare. Accepté par le cahier (§2.10).
+- [ ] **M4 — P5 atteinte avec une seule requête par contrôle**
+  (`supabase/functions/tva/index.ts`, la boucle des essais à VIES) : quand
+  la limite globale refuse les reprises, ou que VIES est en panne. Rien
+  n'est gagné pour un fraudeur ; seule l'explication « chaque contrôle
+  essaie quatre fois » est fausse dans ces cas.
+- [ ] **M5 — les compteurs `tva-muet:` et `tva-refus:` ne sont purgés
+  qu'après un contrôle qui appelle VIES** (`index.ts`, `purger`) : les
+  textes le disent déjà (« aucune durée maximale ne peut être promise »).
+- [ ] **M6 — `declarer` et `retirer` n'ont aucune limite** (`index.ts`) :
+  voulu (la limite protège VIES, qu'elles n'appellent pas) ; à savoir avant
+  l'ouverture.
+- [ ] **Un refus retenu qui n'a pas pu s'écrire fait répondre
+  `non_refuse`** (`index.ts`) : la phrase dit de recontrôler, elle ne
+  contredit plus l'écran ; le reste est reporté (cahier, critique base M7).
+
+**Défauts connus, non corrigés — l'écran** :
+
+- [ ] **E1 — un échec de `declarer` ou de `retirer` (réseau, délai, panne)
+  est dit comme un contrôle par VIES** (`src/components/SaisieTva.js`,
+  `recevoir()` ; `src/lib/declaration-tva.js`, `declarationOfferte` ;
+  `src/lib/tva.js`, `suiteSansReponse`) ; sur `lent`, « Déclaré … » peut
+  rester affiché après un retrait jusqu'à la réouverture. Correction petite :
+  relire la fiche sur `lent`, et une phrase d'échec propre à ces deux
+  actions.
+- [ ] **E2 — la bande d'échec de l'en-tête nomme « l'objet, le lieu, le
+  délai ou les conditions »** quand c'est « À quel titre ? » ou « Le
+  chantier » qui n'est pas parti (`src/lib/devis.js`,
+  `phraseEchecDuDevis`). Incomplète, pas contraire ; deux comparaisons mot
+  pour mot de `verifier-devis` à mettre à jour avec elle.
+- [ ] **E3 — recontrôler un numéro DÉCLARÉ que VIES refuse s'affiche en
+  rouge, avec la vibration d'échec** (`src/lib/declaration-tva.js`,
+  `presentationDeLIssueTva`) : le texte est exact (la déclaration reste),
+  seul le ton dit échec. À vous montrer.
+- [ ] **E4 — entre la confirmation d'une écriture et le retour des totaux,
+  « Pour le remettre » remontre l'ancienne liste** (`SaisieDevisScreen.js`,
+  `file-ecriture.js`, `relire`) : transitoire, hérité de 2b-1, invisible en
+  démonstration.
+- [ ] **E6 — `declarer` qui rend `reconnu` ou `deja_reconnu` ne met pas à
+  jour la preuve affichée** (`src/components/MonEntreprise.js`,
+  `declarerTva`) : deux appareils ; la base est juste, rouvrir « Mon
+  entreprise » répare.
+- [ ] **E7 — la carte « Le chantier » dit « Pas enregistré » sans bouton
+  « Réessayer »** (`src/components/ChantierDevis.js`) : il faut revenir à la
+  bande du devis. Rien n'est perdu.
+- [ ] **E8 — l'application nouvelle face à la fonction `tva` v1**
+  (`src/lib/api.js`) : relance un contrôle en boucle. Sans objet tant que
+  l'ordre « base, fonction, `git pull` » est tenu — à redire à chaque
+  migration qui touche `tva`.
+- [ ] **N1 — l'annuaire qui publie un numéro APRÈS une déclaration**
+  (`SaisieTva.js` ; `src/lib/emetteur.js`, `numeroTvaImprime`) : lu, pas
+  joué. La déclaration reste en base et dans l'export, sans effet ni bouton ;
+  si l'annuaire cesse de publier, elle reprend effet sans un mot.
+- [ ] **N2 — « Retirer » depuis un écran périmé retire la déclaration d'un
+  AUTRE numéro** (`index.ts`, `retirer` ne filtre pas le numéro) : lu, pas
+  joué ; l'état final est juste, le message parle du mauvais numéro.
+- [ ] **N3 — deux précisions** (`src/lib/declaration-tva.js`,
+  `DECLARATION_ECRAN.explication` : « vous pourrez la retirer », sans
+  l'exception d'une déclaration jointe ; la note `vies` de `SaisieTva` ne dit
+  pas qu'une ancienne déclaration y est jointe). Rien d'affiché n'est faux.
+- [ ] **La démonstration ne montre pas la déclaration depuis le pro de
+  démonstration** : son entreprise a un numéro publié par l'annuaire. Le
+  chemin (celui que joue `scripts/mesure-devis.mjs`) : Profil → « Se
+  déconnecter », « JE SUIS UN PARTICULIER », puis Profil → « Je suis
+  artisan : passer en compte professionnel » → « Afficher les numéros
+  d'essai » → « Essayer Entreprise active (entrepreneur individuel, sans
+  nom) » (l'entreprise d'essai sans numéro publié), et le formulaire
+  jusqu'à « Passer en compte professionnel ». Ensuite « Mon entreprise » →
+  « Écrire mon numéro de TVA » : tapez `FRAB000004242`, que la
+  démonstration de VIES refuse, et la case de la déclaration apparaît.
+- [ ] **La phrase des mentions pour « pour son entreprise » n'a été vue
+  nulle part à l'écran** : l'entreprise de démonstration a ses deux adresses,
+  donc la sous-partie disparaît. Seul `verifier-devis` la tient.
+
+**Défauts connus, non corrigés — les textes** :
+
+- [ ] **T3 — après une déclaration faite sous P5, le message `declare`
+  parle comme après un refus** (`src/lib/tva.js`, `case 'declare'`) :
+  « si votre service des impôts le corrige ou l'active… » envoie faire
+  corriger un numéro peut-être bon.
+- [ ] **T4 et T5 — les suffixes P5** (`src/lib/tva.js`,
+  `suiteSansReponse`) : celui de `bloque` dit « qu'après une réponse de
+  VIES », inexact pour une panne ; celui de `reseau` laisse croire que la
+  demande non partie compte parmi les trois.
+- [ ] **T6 — la règle P5 est dite sans sa fenêtre de 24 heures**
+  (`src/data/legal.js`, « Une décision automatique ») : un contrôle de plus,
+  au pire.
+- [ ] **T7 — l'aide de la nature de l'acompte affirme 14 jours de
+  rétractation pour une association** (`src/lib/devis.js`,
+  `aidesDeLAcompte`), juste au-dessus de la phrase de prudence. Sens
+  protecteur.
+- [ ] **T8 — l'aide de la question 1 du chantier ne dit pas qu'une
+  extension, une véranda ou une annexe n'est pas un « bâtiment neuf »**
+  (`src/lib/devis.js`, `LE_CHANTIER.q1.aide`) : « Dans le doute, gardez
+  « Non » » limite le risque. Au juriste, avec J6.
+- [ ] **E5 / T2 — « La loi » sur chaque mention due à un particulier, sous
+  « Opus les compte toutes, par prudence »** (réponse « pour son entreprise
+  de 5 salariés au plus, hors de son activité principale » ;
+  `src/lib/devis.js`, `natureDuMotifEntreprise`) : la convention de 2b-1
+  (l'étiquette dit d'où vient l'obligation). Rien à corriger ; au juriste,
+  avec J4.
+- [ ] **L'essai 49 finit par « 73 refus attendus »** alors que 79 sortent
+  (`supabase/essais-section-49.sql`, antérieur à 2b-2).
+
+**Reporté par le cahier** (`docs/CAHIER-LOT-2B-2.md`, §7) :
+
+- [ ] la déclaration quand VIES BLOQUE Opus tout entier (aujourd'hui, elle
+  n'est pas proposée) ;
+- [ ] un historique des déclarations, et leur retrait par l'administration ;
+- [ ] le motif « logement achevé depuis moins de deux ans » ; l'avis
+  « chantier neuf pour les droits du client, mais pas pour la TVA, avec un
+  taux réduit » ; le filtrage exact pour un petit professionnel sur un
+  chantier neuf ;
+- [ ] la phrase de `conso_mediateur` (« démarché » → les mots de L. 221-3) ;
+  un bouton « Ouvrir sa fiche » sous l'avis du SIRET d'un client ; les trois
+  phrases de motif de plus de 200 caractères (`devis_client`, `devis_lieu`,
+  `devis_validite`) dont la consigne passe derrière « Lire la suite » ;
+- [ ] **la ré-acceptation des CGU** : toujours absente, alors que `VERSION`
+  a encore changé (`'2026-11-10'`).
+
+**À vous de trancher** :
+
+- [ ] **Détacher une déclaration jointe à une preuve VIES ?** Aujourd'hui,
+  quand VIES reconnaît ensuite le même numéro, elle ne se retire plus (les
+  textes le disent). La rendre retirable « à tout moment » demande une
+  migration (déclencheur, action `retirer`, essai 48, banc). Et avec elle :
+  **faut-il garder une trace d'une déclaration retirée** (T9) ? Aujourd'hui
+  le retrait efface tout, alors que les CGU permettent de fermer le compte
+  d'une fausse déclaration — sans effet avant 2c, qui figera le texte coché
+  sur chaque devis remis.
+- [ ] **Une association qui répond « Oui » au chantier neuf** : l'aide de
+  l'acompte du chantier neuf l'emporte sur celle de la prudence (choix fait
+  à la construction, à confirmer).
+- [ ] **Le ton rouge d'E3**, ci-dessus.
+
+**Au juriste** (n'empêche pas de construire : rien ne sort avant 2c ; le
+détail est au §1.5 du cahier) :
+
+- [ ] **J1** — la déclaration suffit-elle comme garantie de l'article 22 du
+  RGPD, y compris après trois contrôles sans réponse ? Si oui, « la révision
+  par un humain des refus de VIES » (plus haut, « Après le lot 0a ») se
+  ferme.
+- [ ] **J2** — la responsabilité d'Opus, qui imprime sur la seule parole de
+  l'artisan un numéro que VIES ne reconnaît pas ; un numéro attribué mais
+  refusé par VIES sur un devis ; la conservation de la déclaration après la
+  suppression du compte, face à un devis remis (et T9).
+- [ ] **J3** — le n° de TVA sur un devis à un professionnel ; R. 123-237
+  face à un artisan au seul RNE (les deux adresses restent comptées).
+- [ ] **J4** — ce que L. 221-3 étend exactement au petit professionnel, et
+  les deux exemples de la feuille.
+- [ ] **J5** — SCI, syndic, association traités comme un particulier.
+- [ ] **J6** — où commence la « transformation importante » ; un seul corps
+  d'état sur une construction neuve (et T8).
+- [ ] **J7** — le texte de la confirmation du « Oui », l'énoncé des
+  sanctions, le régime de paiement des contrats de construction du CCH.
+- [ ] **J8** — à 5,5 %, la certification et les autres taux réduits sur un
+  bâtiment neuf ; la reprise de ces articles dans le CIBS au 01/01/2027.
+- [ ] **J9** (pour 2c) — imprimer la qualité du client ; affirmer l'absence
+  de rétractation sur un chantier neuf, ou seulement omettre les blocs.
+- [ ] **J10** — la date à partir de laquelle le SIREN du client doit figurer
+  sur une facture.
+- [ ] **J11** (comptable) — la liste et la proportion du second œuvre.
+
+**Pour 2b-3, 2b-4 et 2c — les règles à tenir** :
+
+- [ ] **2b-3** : la garde d'urgence prend `OP028` ; le motif « acompte à la
+  signature » devra lire `chantier_neuf_conso`.
+- [ ] **2c** fige sur chaque devis remis : le n° de TVA, sa source
+  (annuaire, VIES, déclaration), sa date et le texte coché ; une COPIE de la
+  réponse VALABLE « à quel titre » (jamais redérivée de `client_id`, qu'une
+  cascade peut vider) ; le chantier et la date du « Oui ». Et il tranche :
+  une nouvelle version redemande-t-elle la confirmation du chantier neuf ?
+- [ ] **Toute migration qui touche la fonction `tva`** : la base, puis la
+  fonction, puis `git pull`.
+
+**Contrôles et méthode** :
+
+- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+  comptes à relire après 2b-2 sont l'essai 48 (22 erreurs, 78 justes), le
+  49-remise (13, 188) et le 49-conditions (27, 40) ; la parité base ↔
+  téléphone tient par deux moitiés : la base contre
+  `supabase/cas-remise.json`, par `node scripts/generer-cas-remise.mjs
+  --verifier` (85 cas, à la main), et le miroir contre ce fichier, par
+  `verifier-devis` (qui, lui, est dans `npm run verifier`).
+- [ ] **`mesure-devis` n'est pas dans `npm run verifier`** (788 mesures au
+  10/11) : à lancer avant toute livraison qui touche l'écran du devis ou
+  « Mon entreprise » → TVA.
+- [ ] **Savoir quel contrôle voit quoi** : `cas-remise --verifier` rejoue la
+  vraie base, il ne voit pas le miroir (c'est `verifier-devis`) ; un essai
+  qui lit un fichier voisin (`cas-*.json`, `schema.sql`) se rejoue avec ce
+  fichier.
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 

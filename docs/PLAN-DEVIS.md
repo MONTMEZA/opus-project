@@ -3188,7 +3188,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 - **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
 - **Lot 1** **(FAIT le 23/10/2026 — 10.16 ; la main-d'œuvre y est un drapeau SANS contrainte d'unité)** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
 - **Lot P — la base de postes** **(FAIT le 25/10/2026 — 10.17 ; aucune colonne métier, tranché le 23/10)** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier devait s'y trancher avant (10.6) : c'est fait, aucune.
-- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b découpé en quatre étapes le 05/11, dont 2b-1 FAITE le 08/11 — voir 10.18 ; 2b-2 à 2b-4 et 2c restent)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
+- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b découpé en quatre étapes le 05/11, dont 2b-1 FAITE le 08/11 et 2b-2 FAITE le 10/11 — voir 10.18 et 10.20 ; 2b-3, 2b-4 et 2c restent)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
 - **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
 - **Lot 5** : trois modèles au lieu de cinq.
 
@@ -3900,3 +3900,64 @@ ajoutent un lot.
 | le moment de la signature (09/11) | pas de question en 2b-2 : **les devis restent « en attente », et l'artisan les classe lui-même** | 2b-2 n'ajoute PAS la question « quand le devis a-t-il été signé ? » : le cas le plus protecteur (hors établissement : rétractation, formulaire, aucun paiement avant le 8e jour) vaut pour tous les devis, comme aujourd'hui. La question revient à la remise (2c) si elle est encore utile |
 | le tri des devis remis (09/11) | **« en attente », puis « à modifier », « accepté », « refusé », rangés dans des zones à part ; rien n'est perdu, l'artisan peut revenir dessus et changer** | en **2c**, avec la remise. Un devis remis est figé : « à modifier » fait une NOUVELLE version, reliée à la première, jamais une retouche du devis que le client a reçu |
 | la signature par le client dans Opus, et l'artisan prévenu quand le client ouvre le devis (09/11) | **après 2c, en lot à part** | un lot nouveau, après l'avis du juriste : accepter dans Opus, c'est conclure le contrat par Opus (L. 221-13, L. 221-14, D. 221-5, L. 111-7, C. civ. 1127-1 et 1127-2), la signature doit prouver qui a signé quoi et quand, et le client d'un devis est une fiche du carnet, souvent sans compte (une page ouverte par un lien, ou le lien fiche ↔ compte de l'addendum QR, qui ne se construit pas encore) |
+
+### 10.20 L'étape 2b-2 — FAITE le 10/11/2026 : à quel titre, le chantier, la TVA déclarée
+
+**Sur la vraie base depuis le 10/11/2026 à 11 h 10** (migration
+`lot_2b_2_a_quel_titre_chantier_tva_declaree`), la fonction Edge `tva` v2
+déployée juste après ; essai réel par le chemin de l'application : 54
+vérifications justes sur 54. Le cahier : `docs/CAHIER-LOT-2B-2.md` ; ce qui
+est construit et vérifié : CLAUDE.md, « À quel titre, le chantier, la TVA
+déclarée — étape 2b-2 » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape
+2b-2 ». **Rien n'est remis, imprimé ni numéroté** : c'est 2c.
+
+| question (09/11 au soir) | réponse du propriétaire | ce qu'elle change au plan |
+|---|---|---|
+| P1 — empêcher la remise tant qu'on n'a pas dit à quel titre le client commande ? | **« Oui, bloquer »** | le motif `devis_pour_qui` ; **sept** règles d'Opus en tout |
+| P2 — « Le chantier », deux questions, avec ces mots ? | **« Oui, ces deux questions »** | « pour les droits de votre client » (bâtiment neuf ou transformation importante : confirmation datée) et « pour la TVA » (chantier qui crée un bâtiment neuf : le motif `devis_taux_reduit_neuf`, « Par prudence » jusqu'au lot 3) |
+| P4 — ce que risque une fausse déclaration | **« Oui, cette phrase »** | une ligne des CGU, « Ce qui est interdit » : le compte peut être fermé |
+| P5 — la déclaration quand VIES ne répond pas | **« Oui, après 3 essais sans réponse »** | trois contrôles sans réponse en 24 h, le premier et le dernier séparés d'une heure au moins, comptés par la fonction Edge ; un blocage d'Opus par VIES ne compte pas |
+
+Ce que 2b-3, 2b-4 et 2c doivent savoir :
+
+- **`motifs_refus_remise()` porte désormais 12 clés sur 9 rangs** pour le
+  devis, signature inchangée ; le rang 1 est exclusif (`devis_client` OU
+  `devis_pour_qui`) et une ligne porte au plus UNE clé de rang 3, donc les
+  bornes des gabarits (508 et 21) tiennent. **`OP028` reste libre** : la
+  garde d'urgence de 2b-3 le prendra, et le motif « acompte à la signature »
+  devra lire `chantier_neuf_conso`.
+- **La réponse « à quel titre » ne vaut que pour son client** (`pour_qui`
+  quand `client_id` n'est pas vide et vaut `pour_qui_client`). **2c en fige
+  une COPIE calculée à la remise**, jamais redérivée de `client_id`, qu'une
+  cascade peut vider ; il fige aussi le chantier et la date du « Oui ».
+- **2c fige sur chaque devis remis le n° de TVA, sa source (annuaire, VIES,
+  déclaration), sa date et le texte coché** (décision du 09/11 au soir) ;
+  imprime la certification du taux réduit ; décide de l'impression de la
+  rétractation selon la réponse (au juriste, J9) ; et tranche si une
+  nouvelle version d'un devis redemande la confirmation du chantier neuf.
+- **Le moment de la signature reste sans question** : le cas le plus
+  protecteur vaut pour tous les devis.
+- **Une migration qui touche la fonction `tva` suit l'ordre : la base, puis
+  la fonction, puis `git pull`.**
+
+**Les questions laissées au propriétaire** :
+
+1. **Le retrait d'une déclaration jointe à une preuve VIES.** Quand VIES
+   reconnaît ensuite le même numéro, la déclaration reste jointe à sa preuve
+   et ne se retire plus ; elle reprend effet si VIES le refuse de nouveau.
+   Les textes le disent depuis la relecture (T1). Permettre de la DÉTACHER
+   demanderait une migration (le déclencheur `tient_la_preuve_tva`, l'action
+   `retirer`, l'essai 48, le banc de `verifier-tva`) — et va avec une
+   question de fond : faut-il garder une trace d'une déclaration retirée
+   (aujourd'hui, le retrait efface la ligne entière) ?
+2. **À lui montrer, puis à trancher** : recontrôler un numéro déclaré que
+   VIES refuse s'affiche en rouge, avec la vibration d'échec, alors que le
+   texte dit que la déclaration reste ; et, pour une association qui répond
+   « Oui » au chantier neuf, c'est l'aide du chantier neuf qui l'emporte sur
+   la prudence (choix de la construction, à confirmer).
+
+**La suite** : 2b-3 (l'urgence par ligne, la décennale, l'attestation) ;
+2b-4 (devis payant ou gratuit, déchets, arrêté de 2017, RGE ; l'adresse du
+client pour les services à la personne) ; 2c (numéro, aperçu au format
+final, PDF, remise, tri des devis remis) ; puis, en lot à part, la
+signature par le client dans Opus.
