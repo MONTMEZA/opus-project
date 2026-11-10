@@ -1385,8 +1385,9 @@ console.log('\nLes mots — chaque message est FAIT TOURNER');
       ['deja_reconnu', {}, 'VIES a reconnu un autre numéro de votre entreprise : c’est lui qui s’imprime sur vos devis. S’il n’est '
         + 'plus valable, faites-le contrôler de nouveau.'],
       ['retire', {}, 'Votre déclaration est retirée : ce numéro ne s’imprimera plus sur vos devis.'],
-      ['rien_a_retirer', {}, 'Il n’y a plus de déclaration à retirer : elle a déjà été retirée, ou VIES a reconnu votre numéro '
-        + 'entre-temps.'],
+      ['rien_a_retirer', {}, 'Il n’y a rien à retirer : votre déclaration a déjà été retirée ou remplacée par un autre numéro, '
+        + 'ou VIES a reconnu ce numéro entre-temps — elle reste alors jointe à sa preuve, sans pouvoir être retirée, et reprend '
+        + 'effet s’il le refuse de nouveau.'],
       ['refuse', { declare_le: '2026-10-19T22:30:00+00:00', peutDeclarer: true, regime: 'reel' },
         'VIES ne reconnaît pas ce numéro. Votre déclaration sur l’honneur du 20/10/2026 reste enregistrée : il continue de '
         + 's’imprimer sur vos devis. Si vous savez qu’il est faux, retirez votre déclaration.'],
@@ -1921,7 +1922,8 @@ const verifierTextesLegaux = () => {
   verifier('…et le recours : la déclaration sur l’honneur (après un refus ou trois contrôles sans réponse), qui engage, et qui se retire',
     /S’il le refuse, ou s’il ne répond pas à trois contrôles en plus d’une heure, vous pouvez déclarer sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à votre entreprise/.test(decision)
     && /Cette déclaration vous engage\./.test(decision)
-    && /Vous pouvez retirer votre déclaration à tout moment\./.test(decision)
+    && /Vous pouvez retirer votre déclaration tant que c’est elle qui fait imprimer ce numéro sur vos devis\. Si VIES reconnaît ensuite ce même numéro, elle reste jointe à sa preuve et ne peut plus être retirée ; elle reprend effet s’il le refuse de nouveau, et vous pouvez alors la retirer\./.test(decision)
+    && !/à tout moment/.test(decision)
     && /Opus contrôle la forme du numéro et qu’il désigne bien votre entreprise, mais pas qu’il vous a été attribué/.test(decision)
     && !/S’il ne le reconnaît pas, Opus ne l’imprime pas/.test(decision));
   verifier('« Sources » : gardé si VIES le reconnaît, sinon seulement sur la déclaration de l’entreprise — plus « n’est gardé que si VIES »',

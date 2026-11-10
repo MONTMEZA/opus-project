@@ -48,7 +48,11 @@ export const VERSION = '2026-11-10';
        reconnaît » : récrit entier (critique « droit » B2), avec la base de
        la déclaration, et celle du compte des contrôles restés sans réponse ;
      - « UNE DÉCISION AUTOMATIQUE » : la règle d'Opus gagne une porte de
-       sortie et un retrait ; « Aucune vérification par un humain n'existe
+       sortie et un retrait — tant que c'est la déclaration qui fait
+       imprimer le numéro : jointe à une preuve de VIES du même numéro,
+       elle ne se retire pas, et reprend effet s'il le refuse de nouveau
+       (relecture du 10/11, T1 : le texte disait « à tout moment ») ;
+       « Aucune vérification par un humain n'existe
        encore » devient « personne chez Opus ne revoit les refus de VIES »,
        avec ce qu'Opus contrôle et ne contrôle pas (M6), « quelques heures
        après un refus » (M5), et les clients qu'Opus traite comme des
@@ -1749,7 +1753,10 @@ export const CONFIDENTIALITE = [
       + 'déclaration, son texte et sa date, et imprime alors ce numéro sur vos devis. Cette '
       + 'déclaration vous engage. Opus contrôle la forme du numéro et qu’il désigne bien '
       + 'votre entreprise, mais pas qu’il vous a été attribué ; et personne chez Opus ne '
-      + 'revoit les refus de VIES. Vous pouvez retirer votre déclaration à tout moment. Tant '
+      + 'revoit les refus de VIES. Vous pouvez retirer votre déclaration tant que c’est elle qui '
+      + 'fait imprimer ce numéro sur vos devis. Si VIES reconnaît ensuite ce même numéro, elle '
+      + 'reste jointe à sa preuve et ne peut plus être retirée ; elle reprend effet s’il le '
+      + 'refuse de nouveau, et vous pouvez alors la retirer. Tant '
       + 'que vous n’avez ni numéro reconnu ni déclaration, au régime réel de TVA, « Mon '
       + 'entreprise » vous signale qu’il manque une information pour vos devis à des '
       + 'particuliers, et, quand Opus permettra de remettre des devis, il ne vous laissera '

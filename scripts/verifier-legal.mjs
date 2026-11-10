@@ -2607,7 +2607,7 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
   /* LA PARTIE TVA DE « UNE DÉCISION AUTOMATIQUE », ENTIÈRE : de « Le numéro
      de TVA que vous écrivez » à « Enfin, » (la partie du badge). Une phrase
      glissée au milieu — « un humain peut revoir… », un délai — se voit. */
-  const DECISION_TVA = 'Le numéro de TVA que vous écrivez suit une autre règle, et c’est une règle d’Opus : Opus le fait contrôler par VIES, le service de la Commission européenne qui interroge l’administration fiscale française. S’il le reconnaît, Opus l’imprime sur vos devis. S’il le refuse, ou s’il ne répond pas à trois contrôles en plus d’une heure, vous pouvez déclarer sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à votre entreprise : Opus garde cette déclaration, son texte et sa date, et imprime alors ce numéro sur vos devis. Cette déclaration vous engage. Opus contrôle la forme du numéro et qu’il désigne bien votre entreprise, mais pas qu’il vous a été attribué ; et personne chez Opus ne revoit les refus de VIES. Vous pouvez retirer votre déclaration à tout moment. Tant que vous n’avez ni numéro reconnu ni déclaration, au régime réel de TVA, « Mon entreprise » vous signale qu’il manque une information pour vos devis à des particuliers, et, quand Opus permettra de remettre des devis, il ne vous laissera pas en remettre un à un particulier, ni à un client qu’Opus traite comme tel — une association, une copropriété, une société civile, ou une entreprise de 5 salariés au plus pour des travaux hors de son activité principale —, tant qu’elle manque. Votre service des impôts des entreprises peut activer ou corriger votre numéro auprès de l’administration fiscale, et vous pouvez le faire contrôler de nouveau, quelques heures après un refus. Si vous relevez en réalité de la franchise en base de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé.';
+  const DECISION_TVA = 'Le numéro de TVA que vous écrivez suit une autre règle, et c’est une règle d’Opus : Opus le fait contrôler par VIES, le service de la Commission européenne qui interroge l’administration fiscale française. S’il le reconnaît, Opus l’imprime sur vos devis. S’il le refuse, ou s’il ne répond pas à trois contrôles en plus d’une heure, vous pouvez déclarer sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à votre entreprise : Opus garde cette déclaration, son texte et sa date, et imprime alors ce numéro sur vos devis. Cette déclaration vous engage. Opus contrôle la forme du numéro et qu’il désigne bien votre entreprise, mais pas qu’il vous a été attribué ; et personne chez Opus ne revoit les refus de VIES. Vous pouvez retirer votre déclaration tant que c’est elle qui fait imprimer ce numéro sur vos devis. Si VIES reconnaît ensuite ce même numéro, elle reste jointe à sa preuve et ne peut plus être retirée ; elle reprend effet s’il le refuse de nouveau, et vous pouvez alors la retirer. Tant que vous n’avez ni numéro reconnu ni déclaration, au régime réel de TVA, « Mon entreprise » vous signale qu’il manque une information pour vos devis à des particuliers, et, quand Opus permettra de remettre des devis, il ne vous laissera pas en remettre un à un particulier, ni à un client qu’Opus traite comme tel — une association, une copropriété, une société civile, ou une entreprise de 5 salariés au plus pour des travaux hors de son activité principale —, tant qu’elle manque. Votre service des impôts des entreprises peut activer ou corriger votre numéro auprès de l’administration fiscale, et vous pouvez le faire contrôler de nouveau, quelques heures après un refus. Si vous relevez en réalité de la franchise en base de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé.';
   const iTva = decision.indexOf('Le numéro de TVA que vous écrivez');
   const iBadge = decision.indexOf(' Enfin, ', iTva);
   const partieTva = iTva >= 0 && iBadge > iTva ? decision.slice(iTva, iBadge) : '';
@@ -2627,9 +2627,12 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
     /Aucune vérification par un humain n’existe encore/,
     /S’il ne le reconnaît pas, Opus ne l’imprime pas/,
     /ne le garde que si VIES le reconnaît/,
+    /* « à tout moment » était faux (relecture du 10/11, T1) : une déclaration
+       jointe à une preuve VIES du même numéro ne se retire pas. */
+    /retirer votre déclaration à tout moment/,
   ];
   const revenues = FAUSSES.filter((m) => m.test(tousTextes2b2)).map(String);
-  verifier('aucune phrase devenue fausse avec la déclaration ne revient (« gardé que si VIES », « aucune administration », « Aucune vérification par un humain », « ne l’imprime pas »)',
+  verifier('aucune phrase devenue fausse avec la déclaration ne revient (« gardé que si VIES », « aucune administration », « Aucune vérification par un humain », « ne l’imprime pas », « retirer votre déclaration à tout moment »)',
     revenues.length === 0, revenues.join(' · '));
 
   /* « CERTIFIÉ » NULLE PART, et LA CASE JAMAIS RECOPIÉE. */
@@ -2660,7 +2663,7 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
      preuves qui ne sont pas des déclarations. */
   const edgeTva = readFileSync('supabase/functions/tva/index.ts', 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  verifier('« effacée si vous la retirez » : `retirer` supprime la ligne `declaration` du compte, et elle seule',
+  verifier('« effacée si vous la retirez » : `retirer` supprime la ligne `declaration` du compte, et elle seule — une déclaration jointe à une preuve VIES « ne peut plus être retirée »',
     /\.from\('preuves_tva'\)\s*\.delete\(\)\s*\.eq\('pro_id', moi\)\s*\.eq\('source', 'declaration'\)/.test(edgeTva));
   verifier('« reprend effet s’il le refuse de nouveau » : un refus fait renaître la déclaration (`source: \'declaration\'`), et le retrait du contrôle épargne les déclarations',
     /\.update\(\{\s*source: 'declaration',\s*vies_le: null\s*\}\)/.test(edgeTva)

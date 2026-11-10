@@ -25,8 +25,11 @@
  * `DECLARATION_TVA`. La fonction Edge garde la déclaration, son texte et sa
  * date (posée par la base), et le numéro s'imprime sur ses devis. Elle
  * seule peut l'écrire : elle seule sait qu'une réponse de VIES a eu lieu.
- * Il peut la RETIRER à tout moment. La section 3 bis porte ce qui en
- * décide.
+ * Il peut la RETIRER tant que c'est elle qui fait imprimer le numéro :
+ * quand VIES reconnaît ensuite ce même numéro, elle reste JOINTE à sa
+ * preuve (le déclencheur la garde), le retrait ne la touche pas
+ * (`rien_a_retirer`), et elle reprend effet si VIES le refuse de nouveau.
+ * La section 3 bis porte ce qui en décide.
  *
  * CE FICHIER N'IMPORTE RIEN, ET C'EST UNE RÈGLE
  * ---------------------------------------------
@@ -721,8 +724,12 @@ export function messageTva(issue, details) {
       };
     case 'rien_a_retirer':
       return {
-        texte: 'Il n’y a plus de déclaration à retirer : elle a déjà été retirée, ou VIES a reconnu '
-          + 'votre numéro entre-temps.',
+        /* « Il n'y a plus de déclaration » était faux (relecture du 10/11,
+           T1) : quand VIES a reconnu le numéro déclaré, la déclaration
+           reste en base, JOINTE à sa preuve — le retrait ne la vise pas. */
+        texte: 'Il n’y a rien à retirer : votre déclaration a déjà été retirée ou remplacée par un '
+          + 'autre numéro, ou VIES a reconnu ce numéro entre-temps — elle reste alors jointe à sa '
+          + 'preuve, sans pouvoir être retirée, et reprend effet s’il le refuse de nouveau.',
         action: null,
       };
 
